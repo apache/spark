@@ -574,6 +574,24 @@ class StreamingDeduplicationSuite extends StateStoreMetricsTest {
       matchPVals = true
     )
   }
+
+  test("test that avro encoding is not supported") {
+    val inputData = MemoryStream[String]
+    val result = inputData.toDS().dropDuplicates()
+
+    val ex = intercept[Exception] {
+      withSQLConf(SQLConf.STREAMING_STATE_STORE_ENCODING_FORMAT.key -> "avro") {
+        testStream(result, Append)(
+          AddData(inputData, "a"),
+          CheckLastBatch("a"),
+          assertNumStateRows(total = 1, updated = 1),
+          AddData(inputData, "a"),
+          CheckLastBatch(),
+          assertNumStateRows(total = 1, updated = 0))
+      }
+    }
+    assert(ex.getMessage.contains("State store encoding format as avro is not supported"))
+  }
 }
 
 @SlowSQLTest

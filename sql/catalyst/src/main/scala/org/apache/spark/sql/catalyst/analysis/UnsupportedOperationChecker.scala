@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import java.util.Locale
+
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys.{ANALYSIS_ERROR, QUERY_PLAN}
 import org.apache.spark.sql.AnalysisException
@@ -140,6 +142,37 @@ object UnsupportedOperationChecker extends Logging {
     }
   }
 
+  private def checkAvroSupportForStatefulOperator(p: LogicalPlan): Boolean = p match {
+    // TODO: remove operators from this list as support for avro encoding is added
+    case s: Aggregate if s.isStreaming => false
+    // Since the Distinct node will be replaced to Aggregate in the optimizer rule
+    // [[ReplaceDistinctWithAggregate]], here we also need to check all Distinct node by
+    // assuming it as Aggregate.
+    case d @ Distinct(_: LogicalPlan) if d.isStreaming => false
+    case _ @ Join(left, right, _, _, _) if left.isStreaming && right.isStreaming => false
+    case f: FlatMapGroupsWithState if f.isStreaming => false
+    case f: FlatMapGroupsInPandasWithState if f.isStreaming => false
+    case d: Deduplicate if d.isStreaming => false
+    case d: DeduplicateWithinWatermark if d.isStreaming => false
+    case _ => true
+  }
+
+  // Rule to check that avro encoding format is not supported in case any
+  // non-transformWithState stateful streaming operators are present in the query.
+  def checkSupportedStoreEncodingFormats(plan: LogicalPlan): Unit = {
+    val storeEncodingFormat = SQLConf.get.stateStoreEncodingFormat
+    if (storeEncodingFormat.toLowerCase(Locale.ROOT) == "avro") {
+      plan.foreach { subPlan =>
+        if (!checkAvroSupportForStatefulOperator(subPlan)) {
+          val errorMsg = "State store encoding format as avro is not supported for " +
+            "all stateful operators within this query. Please use unsaferow as " +
+            "the encoding format till all stateful operators support avro encoding."
+          throwError(errorMsg)(plan)
+        }
+      }
+    }
+  }
+
   def checkForStreaming(plan: LogicalPlan, outputMode: OutputMode): Unit = {
     if (!plan.isStreaming) {
       throwError(
@@ -198,6 +231,11 @@ object UnsupportedOperationChecker extends Logging {
         "Multiple applyInPandasWithStates are not supported on a streaming " +
           "DataFrames/Datasets")(plan)
     }
+
+    // check to see that if store encoding format is set to true, then we have no stateful
+    // operators in the query or only variants of operators that support avro encoding such as
+    // transformWithState.
+    checkSupportedStoreEncodingFormats(plan)
 
     val aggregates = collectStreamingAggregates(plan)
     // Disallow some output mode
