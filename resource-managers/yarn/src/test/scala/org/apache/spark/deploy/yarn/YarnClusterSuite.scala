@@ -86,6 +86,34 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
     |    sc.stop()
     """.stripMargin
 
+  private val TEST_CONNECT_PYFILE = """
+    |import mod1, mod2
+    |import sys
+    |from operator import add
+    |
+    |from pyspark.sql import SparkSession
+    |from pyspark.sql.functions import udf
+    |if __name__ == "__main__":
+    |    if len(sys.argv) != 2:
+    |        print >> sys.stderr, "Usage: test.py [result file]"
+    |        exit(-1)
+    |    spark = SparkSession.builder.config(
+    |        "spark.api.mode", "connect").master("yarn").getOrCreate()
+    |    assert "connect" in str(spark)
+    |    status = open(sys.argv[1],'w')
+    |    result = "failure"
+    |    @udf
+    |    def test():
+    |        return mod1.func() * mod2.func()
+    |    df = spark.range(10).select(test())
+    |    cnt = df.count()
+    |    if cnt == 10:
+    |        result = "success"
+    |    status.write(result)
+    |    status.close()
+    |    spark.stop()
+    """.stripMargin
+
   private val TEST_PYMODULE = """
     |def func():
     |    return 42
@@ -237,6 +265,14 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
     testPySpark(false)
   }
 
+  test("run Python application with Spark Connect in yarn-client mode") {
+    testPySpark(true, extraConf = Map("spark.api.mode" -> "connect"), script = TEST_CONNECT_PYFILE)
+  }
+
+  test("run Python application with Spark Connect in yarn-cluster mode") {
+    testPySpark(false, extraConf = Map("spark.api.mode" -> "connect"), script = TEST_CONNECT_PYFILE)
+  }
+
   test("run Python application in yarn-cluster mode using " +
     "spark.yarn.appMasterEnv to override local envvar") {
     testPySpark(
@@ -370,10 +406,11 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
   private def testPySpark(
       clientMode: Boolean,
       extraConf: Map[String, String] = Map(),
-      extraEnv: Map[String, String] = Map()): Unit = {
+      extraEnv: Map[String, String] = Map(),
+      script: String = TEST_PYFILE): Unit = {
     assume(isPythonAvailable)
     val primaryPyFile = new File(tempDir, "test.py")
-    Files.asCharSink(primaryPyFile, StandardCharsets.UTF_8).write(TEST_PYFILE)
+    Files.asCharSink(primaryPyFile, StandardCharsets.UTF_8).write(script)
 
     // When running tests, let's not assume the user has built the assembly module, which also
     // creates the pyspark archive. Instead, let's use PYSPARK_ARCHIVES_PATH to point at the
