@@ -80,4 +80,4 @@ RUN python3.12 -m pip install --ignore-installed blinker>=1.6.2 # mlflow needs t
 RUN python3.12 -m pip install $BASIC_PIP_PKGS unittest-xml-reporting $CONNECT_PIP_PKGS lxml && \
     python3.12 -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu && \
     python3.12 -m pip install torcheval && \
-    python3.12 -m pip cache purge
+    python3.12 -m pip cache purge \
