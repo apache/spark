@@ -1807,6 +1807,7 @@ def _test() -> None:
     globs = pyspark.sql.streaming.readwriter.__dict__.copy()
     globs["spark"] = (
         SparkSession.builder.master("local[4]")
+        .config("spark.api.mode", "classic")
         .appName("sql.streaming.readwriter tests")
         .getOrCreate()
     )

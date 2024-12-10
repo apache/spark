@@ -207,7 +207,10 @@ def _test() -> None:
 
     globs = pyspark.sql.avro.functions.__dict__.copy()
     spark = (
-        SparkSession.builder.master("local[4]").appName("sql.avro.functions tests").getOrCreate()
+        SparkSession.builder.master("local[4]")
+        .config("spark.api.mode", "classic")
+        .appName("sql.avro.functions tests")
+        .getOrCreate()
     )
     globs["spark"] = spark
     (failure_count, test_count) = doctest.testmod(

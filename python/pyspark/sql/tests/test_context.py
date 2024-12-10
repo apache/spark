@@ -45,7 +45,11 @@ class HiveContextSQLTests(ReusedSQLTestCase):
             cls.tearDownClass()
             cls.hive_available = False
         if cls.hive_available:
-            cls.spark = SparkSession.builder.enableHiveSupport().getOrCreate()
+            cls.spark = (
+                SparkSession.builder.config("spark.api.mode", "classic")
+                .enableHiveSupport()
+                .getOrCreate()
+            )
 
         os.unlink(cls.tempdir.name)
         if cls.hive_available:
@@ -177,7 +181,7 @@ class SQLContextTests(unittest.TestCase):
         sql_context = None
         try:
             sc = SparkContext("local[4]", "SQLContextTests")
-            sql_context = SQLContext.getOrCreate(sc)
+            sql_context = SQLContext._get_or_create(sc, **{"spark.api.mode": "classic"})
             assert isinstance(sql_context, SQLContext)
         finally:
             if sql_context is not None:

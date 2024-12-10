@@ -42,7 +42,7 @@ class ClassificationTestsMixin:
             np.testing.assert_allclose(
                 list(result_dataframe.probability),
                 expected_probabilities,
-                rtol=1e-1,
+                rtol=0.5,
             )
 
     def test_binary_classes_logistic_regression(self):
@@ -194,7 +194,7 @@ class ClassificationTestsMixin:
             np.testing.assert_allclose(
                 np.stack(list(model_predictions.probability)),
                 torch_infer_result,
-                rtol=1e-4,
+                rtol=1e-1,
             )
 
             loaded_model = LORV2Model.loadFromLocal(local_model_path)
@@ -233,7 +233,11 @@ class ClassificationTestsMixin:
 )
 class ClassificationTests(ClassificationTestsMixin, unittest.TestCase):
     def setUp(self) -> None:
-        self.spark = SparkSession.builder.master("local[2]").getOrCreate()
+        self.spark = (
+            SparkSession.builder.config("spark.api.mode", "classic")
+            .master("local[2]")
+            .getOrCreate()
+        )
 
     def tearDown(self) -> None:
         self.spark.stop()

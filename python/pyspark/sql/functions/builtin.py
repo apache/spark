@@ -26053,7 +26053,10 @@ def _test() -> None:
 
     globs = pyspark.sql.functions.builtin.__dict__.copy()
     spark = (
-        SparkSession.builder.master("local[4]").appName("sql.functions.builtin tests").getOrCreate()
+        SparkSession.builder.master("local[4]")
+        .config("spark.api.mode", "classic")
+        .appName("sql.functions.builtin tests")
+        .getOrCreate()
     )
     sc = spark.sparkContext
     globs["sc"] = sc

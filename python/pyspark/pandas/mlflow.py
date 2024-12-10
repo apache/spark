@@ -214,7 +214,10 @@ def _test() -> None:
     globs = pyspark.pandas.mlflow.__dict__.copy()
     globs["ps"] = pyspark.pandas
     spark = (
-        SparkSession.builder.master("local[4]").appName("pyspark.pandas.mlflow tests").getOrCreate()
+        SparkSession.builder.master("local[4]")
+        .config("spark.api.mode", "classic")
+        .appName("pyspark.pandas.mlflow tests")
+        .getOrCreate()
     )
     (failure_count, test_count) = doctest.testmod(
         pyspark.pandas.mlflow,

@@ -373,6 +373,7 @@ def _test() -> None:
     globs["ps"] = pyspark.pandas
     spark = (
         SparkSession.builder.master("local[4]")
+        .config("spark.api.mode", "classic")
         .appName("pyspark.pandas.sql_processor tests")
         .getOrCreate()
     )

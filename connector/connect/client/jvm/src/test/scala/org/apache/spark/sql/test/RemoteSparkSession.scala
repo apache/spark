@@ -70,6 +70,7 @@ object SparkConnectServerUtils {
     command += "--driver-class-path" += connectJar
     command += "--class" += "org.apache.spark.sql.connect.SimpleSparkConnectService"
     command += "--conf" += s"spark.connect.grpc.binding.port=$port"
+    command += "--conf" += "spark.api.mode=classic"
     command ++= testConfigs
     command ++= debugConfigs
     command += connectJar

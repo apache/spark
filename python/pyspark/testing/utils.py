@@ -210,7 +210,9 @@ class PySparkTestCase(unittest.TestCase):
 
         self._old_sys_path = list(sys.path)
         class_name = self.__class__.__name__
-        self.sc = SparkContext("local[4]", class_name)
+        conf = SparkConf()
+        conf.set("spark.api.mode", "classic")
+        self.sc = SparkContext("local[4]", class_name, conf=conf)
 
     def tearDown(self):
         self.sc.stop()
@@ -223,7 +225,9 @@ class ReusedPySparkTestCase(unittest.TestCase):
         """
         Override this in subclasses to supply a more specific conf
         """
-        return SparkConf()
+        conf = SparkConf()
+        conf.set("spark.api.mode", "classic")
+        return conf
 
     @classmethod
     def setUpClass(cls):
@@ -1052,7 +1056,12 @@ def _test() -> None:
     import pyspark.testing.utils
 
     globs = pyspark.testing.utils.__dict__.copy()
-    spark = SparkSession.builder.master("local[4]").appName("testing.utils tests").getOrCreate()
+    spark = (
+        SparkSession.builder.master("local[4]")
+        .config("spark.api.mode", "classic")
+        .appName("testing.utils tests")
+        .getOrCreate()
+    )
     globs["spark"] = spark
     (failure_count, test_count) = doctest.testmod(
         pyspark.testing.utils,

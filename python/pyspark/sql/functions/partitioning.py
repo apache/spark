@@ -234,6 +234,7 @@ def _test() -> None:
     globs = pyspark.sql.functions.partitioning.__dict__.copy()
     spark = (
         SparkSession.builder.master("local[4]")
+        .config("spark.api.mode", "classic")
         .appName("sql.functions.partitioning tests")
         .getOrCreate()
     )
