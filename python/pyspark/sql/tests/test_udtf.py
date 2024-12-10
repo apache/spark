@@ -1050,9 +1050,10 @@ class BaseUDTFTestsMixin:
     def test_udtf_with_table_argument_query(self):
         func = self.udtf_for_table_argument()
         self.spark.udtf.register("test_udtf", func)
+        df = self.spark.range(8)
         assertDataFrameEqual(
             self.spark.sql("SELECT * FROM test_udtf(TABLE (SELECT id FROM range(0, 8)))"),
-            [Row(a=6), Row(a=7)],
+            func(df.asTable()),
         )
 
     def udtf_for_table_argument(self):
@@ -1063,6 +1064,36 @@ class BaseUDTFTestsMixin:
 
         func = udtf(TestUDTF, returnType="a: int")
         return func
+
+    def test_df_asTable_chaining_methods(self):
+        class TestUDTF:
+            def eval(self, row: Row):
+                yield row["key"], row["value"]
+
+            def terminate(self):
+                if False:
+                    yield
+
+        func = udtf(TestUDTF, returnType="key: int, value: string")
+        df = self.spark.createDataFrame([(1, "a"), (1, "b"), (2, "c"), (2, "d")], ["key", "value"])
+        assertDataFrameEqual(
+            func(df.asTable().partitionBy(df.key).orderBy(df.value)),
+            [
+                Row(key=1, value="a"),
+                Row(key=1, value="b"),
+                Row(key=2, value="c"),
+                Row(key=2, value="d"),
+            ],
+        )
+        assertDataFrameEqual(
+            func(df.asTable().withSinglePartition()),
+            [
+                Row(key=1, value="a"),
+                Row(key=1, value="b"),
+                Row(key=2, value="c"),
+                Row(key=2, value="d"),
+            ],
+        )
 
     def test_udtf_with_int_and_table_argument_query(self):
         class TestUDTF:
