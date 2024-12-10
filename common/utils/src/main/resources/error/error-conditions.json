@@ -758,6 +758,12 @@
     ],
     "sqlState" : "22018"
   },
+  "CORRUPTED_CATALOG_FUNCTION" : {
+    "message" : [
+      "Cannot convert the catalog function '<identifier>' into a SQL function due to corrupted function information in catalog. If the function is not a SQL function, please make sure the class name '<className>' is loadable."
+    ],
+    "sqlState" : "0A000"
+  },
   "CREATE_PERMANENT_VIEW_WITHOUT_ALIAS" : {
     "message" : [
       "Not allowed to create the permanent view <name> without explicitly assigning an alias for the expression <attr>."
@@ -3654,6 +3660,12 @@
     ],
     "sqlState" : "4274K"
   },
+  "NAMED_PARAMETERS_NOT_SUPPORTED_FOR_SQL_UDFS" : {
+    "message" : [
+      "Cannot call function <functionName> because named argument references are not supported. In this case, the named argument reference was <argument>."
+    ],
+    "sqlState" : "0A000"
+  },
   "NAMED_PARAMETER_SUPPORT_DISABLED" : {
     "message" : [
       "Cannot call function <functionName> because named argument references are not enabled here.",
@@ -5873,6 +5885,11 @@
       "NOT_NULL_ON_FUNCTION_PARAMETERS" : {
         "message" : [
           "Cannot specify NOT NULL on function parameters: <input>"
+        ]
+      },
+      "PROPERTY_TOO_LARGE" : {
+        "message" : [
+          "Cannot convert user defined routine <name> to catalog function: routine properties too large."
         ]
       },
       "RETURN_COLUMN_COUNT_MISMATCH" : {

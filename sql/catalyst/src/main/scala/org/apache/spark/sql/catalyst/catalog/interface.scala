@@ -62,7 +62,9 @@ import org.apache.spark.util.ArrayImplicits._
 case class CatalogFunction(
     identifier: FunctionIdentifier,
     className: String,
-    resources: Seq[FunctionResource])
+    resources: Seq[FunctionResource]) {
+  val isUserDefinedFunction: Boolean = UserDefinedFunction.isUserDefinedFunction(className)
+}
 
 
 /**
