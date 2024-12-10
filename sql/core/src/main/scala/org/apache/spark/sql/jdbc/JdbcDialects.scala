@@ -279,7 +279,7 @@ abstract class JdbcDialect extends Serializable with Logging {
     case _ => value
   }
 
-  private[jdbc] class JDBCSQLBuilder extends V2ExpressionSQLBuilder {  
+  private[jdbc] class JDBCSQLBuilder extends V2ExpressionSQLBuilder {
     // Some dialects do not support boolean type and this convenient util function is
     // provided to generate SQL string without boolean values.
     protected def inputToSQLNoBool(input: Expression): String = input match {
