@@ -59,6 +59,7 @@ trait LogKey {
  */
 private[spark] object LogKeys {
   case object ACCUMULATOR_ID extends LogKey
+  case object ACCURACY extends LogKey
   case object ACL_ENABLED extends LogKey
   case object ACTUAL_NUM_FILES extends LogKey
   case object ACTUAL_PARTITION_COLUMN extends LogKey
@@ -222,6 +223,7 @@ private[spark] object LogKeys {
   case object END_VERSION extends LogKey
   case object ENGINE extends LogKey
   case object EPOCH extends LogKey
+  case object EPR extends LogKey
   case object ERROR extends LogKey
   case object ESTIMATOR_PARAM_MAP extends LogKey
   case object EVALUATED_FILTERS extends LogKey
