@@ -142,7 +142,11 @@ class LateralColumnAliasSuiteBase extends QueryTest with SharedSparkSession {
     checkAnswer(
       sql(s"SELECT avg(bonus) AS dept, dept, avg(salary) " +
         s"FROM $testTable GROUP BY dept ORDER BY dept"),
-      Row(1100, 1, 9500.0) :: Row(1250, 2, 11000) :: Row(1200, 6, 12000) :: Nil
+      if (lcaEnabled) {
+        Row(1100, 1, 9500.0) :: Row(1200, 6, 12000) :: Row(1250, 2, 11000) :: Nil
+      } else {
+        Row(1100, 1, 9500.0) :: Row(1250, 2, 11000) :: Row(1200, 6, 12000) :: Nil
+      }
     )
 
     checkAnswer(
@@ -672,9 +676,11 @@ class LateralColumnAliasSuite extends LateralColumnAliasSuiteBase {
     checkAnswer(
       sql(s"SELECT avg(bonus) AS dept, dept, avg(salary) AS a, a + 10 AS b " +
         s"FROM $testTable GROUP BY dept ORDER BY dept"),
-      Row(1100, 1, 9500, 9510) :: Row(1250, 2, 11000, 11010) :: Row(1200, 6, 12000, 12010) :: Nil
+      Row(1100, 1, 9500, 9510) :: Row(1200, 6, 12000, 12010) :: Row(1250, 2, 11000, 11010) :: Nil
     )
     // order by is resolved by aggregate's child
+    // TODO: The case below is an invalid case, 2 dept in select conflicts actually, but the `dept`
+    // in order by bypasses them to get resolved from `from` clause
     checkAnswer(
       sql(s"SELECT avg(bonus) AS dept, dept, avg(salary) AS a, a + 10 AS b " +
         s"FROM $testTable GROUP BY dept ORDER BY max(name)"),
@@ -683,7 +689,13 @@ class LateralColumnAliasSuite extends LateralColumnAliasSuiteBase {
     checkAnswer(
       sql(s"SELECT avg(bonus) AS dept, dept, avg(salary) AS a, a " + // no extra calculation
         s"FROM $testTable GROUP BY dept ORDER BY dept"),
-      Row(1100, 1, 9500, 9500) :: Row(1250, 2, 11000, 11000) :: Row(1200, 6, 12000, 12000) :: Nil
+      Row(1100, 1, 9500, 9500) :: Row(1200, 6, 12000, 12000) :: Row(1250, 2, 11000, 11000) :: Nil
+    )
+
+    checkDuplicatedAliasErrorHelper(
+      s"SELECT avg(bonus) AS dept2, dept as dept2, avg(salary) AS a, a " +
+        s"FROM $testTable GROUP BY dept2 ORDER BY dept2",
+      parameters = Map("name" -> "`dept2`", "n" -> "2")
     )
     checkAnswer(
       sql(s"SELECT dept as a, a " + // even no extra function resolution
