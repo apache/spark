@@ -706,40 +706,41 @@ class MlRelation(google.protobuf.message.Message):
         ) -> typing_extensions.Literal["obj_ref", "transformer"] | None: ...
 
     TRANSFORM_FIELD_NUMBER: builtins.int
-    FETCH_ATTR_FIELD_NUMBER: builtins.int
+    FETCH_FIELD_NUMBER: builtins.int
     @property
     def transform(self) -> global___MlRelation.Transform: ...
     @property
-    def fetch_attr(self) -> global___FetchAttr: ...
+    def fetch(self) -> global___Fetch: ...
     def __init__(
         self,
         *,
         transform: global___MlRelation.Transform | None = ...,
-        fetch_attr: global___FetchAttr | None = ...,
+        fetch: global___Fetch | None = ...,
     ) -> None: ...
     def HasField(
         self,
         field_name: typing_extensions.Literal[
-            "fetch_attr", b"fetch_attr", "ml_type", b"ml_type", "transform", b"transform"
+            "fetch", b"fetch", "ml_type", b"ml_type", "transform", b"transform"
         ],
     ) -> builtins.bool: ...
     def ClearField(
         self,
         field_name: typing_extensions.Literal[
-            "fetch_attr", b"fetch_attr", "ml_type", b"ml_type", "transform", b"transform"
+            "fetch", b"fetch", "ml_type", b"ml_type", "transform", b"transform"
         ],
     ) -> None: ...
     def WhichOneof(
         self, oneof_group: typing_extensions.Literal["ml_type", b"ml_type"]
-    ) -> typing_extensions.Literal["transform", "fetch_attr"] | None: ...
+    ) -> typing_extensions.Literal["transform", "fetch"] | None: ...
 
 global___MlRelation = MlRelation
 
-class FetchAttr(google.protobuf.message.Message):
+class Fetch(google.protobuf.message.Message):
     """Message for fetching attribute from object on the server side.
-    FetchAttr can be represented as a Relation or a ML command
-    Eg, model.coefficients, model.summary.weightedPrecision
-    or model.summary.roc which returns a DataFrame
+    Fetch can be represented as a Relation or a ML command
+    Command: model.coefficients, model.summary.weightedPrecision which
+    returns the final literal result
+    Relation: model.summary.roc which returns a DataFrame (Relation
     """
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
@@ -785,21 +786,19 @@ class FetchAttr(google.protobuf.message.Message):
         """
     method: builtins.str
     """(Required) the method name. Eg, "coefficients" of the model
-    and "weightedPrecision" of "model.summary"
+    and "weightedPrecision" of the "model.summary"
     """
     @property
     def args(
         self,
-    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
-        global___FetchAttr.Args
-    ]:
-        """(Optional) the parameters of the method"""
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___Fetch.Args]:
+        """(Optional) the arguments of the method"""
     def __init__(
         self,
         *,
         obj_ref: pyspark.sql.connect.proto.ml_common_pb2.ObjectRef | None = ...,
         method: builtins.str = ...,
-        args: collections.abc.Iterable[global___FetchAttr.Args] | None = ...,
+        args: collections.abc.Iterable[global___Fetch.Args] | None = ...,
     ) -> None: ...
     def HasField(
         self, field_name: typing_extensions.Literal["obj_ref", b"obj_ref"]
@@ -811,7 +810,7 @@ class FetchAttr(google.protobuf.message.Message):
         ],
     ) -> None: ...
 
-global___FetchAttr = FetchAttr
+global___Fetch = Fetch
 
 class Unknown(google.protobuf.message.Message):
     """Used for testing purposes only."""

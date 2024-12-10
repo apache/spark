@@ -20,9 +20,9 @@ package org.apache.spark.sql.connect.ml
 import java.util.ServiceLoader
 
 import scala.collection.immutable.HashSet
-import scala.jdk.CollectionConverters.{IterableHasAsScala, MapHasAsScala}
+import scala.jdk.CollectionConverters._
 
-import org.apache.commons.lang3.reflect.MethodUtils.{invokeMethod, invokeStaticMethod}
+import org.apache.commons.lang3.reflect.MethodUtils.invokeMethod
 
 import org.apache.spark.connect.proto
 import org.apache.spark.ml.{Estimator, Transformer}
@@ -33,23 +33,28 @@ import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.connect.common.LiteralValueProtoConverter
 import org.apache.spark.sql.connect.planner.SparkConnectPlanner
 import org.apache.spark.sql.connect.service.SessionHolder
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{SparkClassUtils, Utils}
 
 private[ml] object MLUtils {
 
-  private lazy val estimators: Map[String, Class[_]] = {
+  /**
+   * Load the registered ML operators via ServiceLoader
+   *
+   * @param mlCls
+   *   the operator class
+   * @return
+   *   a Map with name and class
+   */
+  private def loadOperators(mlCls: Class[_]): Map[String, Class[_]] = {
     val loader = Utils.getContextOrSparkClassLoader
-    val serviceLoader = ServiceLoader.load(classOf[Estimator[_]], loader)
+    val serviceLoader = ServiceLoader.load(mlCls, loader)
     val providers = serviceLoader.asScala.toList
     providers.map(est => est.getClass.getName -> est.getClass).toMap
   }
 
-  private lazy val transformers: Map[String, Class[_]] = {
-    val loader = Utils.getContextOrSparkClassLoader
-    val serviceLoader = ServiceLoader.load(classOf[Transformer], loader)
-    val providers = serviceLoader.asScala.toList
-    providers.map(est => est.getClass.getName -> est.getClass).toMap
-  }
+  private lazy val estimators = loadOperators(classOf[Estimator[_]])
+
+  private lazy val transformers = loadOperators(classOf[Transformer])
 
   def deserializeVector(vector: proto.Vector): Vector = {
     if (vector.hasDense) {
@@ -76,11 +81,19 @@ private[ml] object MLUtils {
     }
   }
 
+  /**
+   * Set the parameters to the ML instance
+   *
+   * @param instance
+   *   an ML operator
+   * @param params
+   *   the parameters of the ML operator
+   */
   def setInstanceParams(instance: Params, params: proto.MlParams): Unit = {
     params.getParamsMap.asScala.foreach { case (name, paramProto) =>
       val p = instance.getParam(name)
       val value = if (paramProto.hasLiteral) {
-        convertParamValue(
+        reconcileParam(
           p.paramValueClassTag.runtimeClass,
           LiteralValueProtoConverter.toCatalystValue(paramProto.getLiteral))
       } else if (paramProto.hasVector) {
@@ -94,27 +107,43 @@ private[ml] object MLUtils {
     }
   }
 
-  private def convertArray(paramType: Class[_], array: Array[_]): Array[_] = {
-    if (paramType == classOf[Byte]) {
+  /**
+   * Convert the array from Object[] to Array[_]
+   * @param elementType
+   *   the element type of the array
+   * @param array
+   *   to be reconciled
+   * @return
+   *   the reconciled array
+   */
+  private def reconcileArray(elementType: Class[_], array: Array[_]): Array[_] = {
+    if (elementType == classOf[Byte]) {
       array.map(_.asInstanceOf[Byte])
-    } else if (paramType == classOf[Short]) {
+    } else if (elementType == classOf[Short]) {
       array.map(_.asInstanceOf[Short])
-    } else if (paramType == classOf[Int]) {
+    } else if (elementType == classOf[Int]) {
       array.map(_.asInstanceOf[Int])
-    } else if (paramType == classOf[Long]) {
+    } else if (elementType == classOf[Long]) {
       array.map(_.asInstanceOf[Long])
-    } else if (paramType == classOf[Float]) {
+    } else if (elementType == classOf[Float]) {
       array.map(_.asInstanceOf[Float])
-    } else if (paramType == classOf[Double]) {
+    } else if (elementType == classOf[Double]) {
       array.map(_.asInstanceOf[Double])
-    } else if (paramType == classOf[String]) {
+    } else if (elementType == classOf[String]) {
       array.map(_.asInstanceOf[String])
     } else {
-      array
+      throw MlUnsupportedException(
+        s"array element type unsupported, " +
+          s"found ${elementType.getName}")
     }
   }
 
-  private def convertParamValue(paramType: Class[_], value: Any): Any = {
+  /**
+   * Reconcile the parameter value given the provided parameter type. Currently, support
+   * byte/short/int/long/float/double/string and array. Note that, array of array is not supported
+   * yet.
+   */
+  private def reconcileParam(paramType: Class[_], value: Any): Any = {
     // Some cases the param type might be mismatched with the value type.
     // Because in python side we only have int / float type for numeric params.
     // e.g.:
@@ -137,14 +166,22 @@ private[ml] object MLUtils {
       value.asInstanceOf[java.lang.Number].floatValue()
     } else if (paramType == classOf[Double]) {
       value.asInstanceOf[java.lang.Number].doubleValue()
+    } else if (paramType == classOf[Boolean]) {
+      value.asInstanceOf[Boolean]
+    } else if (paramType == classOf[String]) {
+      value.asInstanceOf[String]
     } else if (paramType.isArray) {
       val compType = paramType.getComponentType
-      val array = value.asInstanceOf[Array[_]].map { e =>
-        convertParamValue(compType, e)
+      if (compType.isArray) {
+        throw MlUnsupportedException(s"Array of array unsupported")
+      } else {
+        val array = value.asInstanceOf[Array[_]].map { e =>
+          reconcileParam(compType, e)
+        }
+        reconcileArray(compType, array)
       }
-      convertArray(compType, array)
     } else {
-      value
+      throw MlUnsupportedException(s"Unsupported parameter type, found ${paramType.getName}")
     }
   }
 
@@ -152,6 +189,43 @@ private[ml] object MLUtils {
     val planner = new SparkConnectPlanner(sessionHolder)
     val plan = planner.transformRelation(relation)
     Dataset.ofRows(sessionHolder.session, plan)
+  }
+
+  /**
+   * Get the instance according to the provided proto information.
+   *
+   * @param name
+   *   The name of the instance (either estimator or transformer).
+   * @param uid
+   *   The unique identifier for the instance.
+   * @param instanceMap
+   *   A map of instance names to constructors.
+   * @param params
+   *   Optional parameters for the instance.
+   * @tparam T
+   *   The type of the instance (Estimator or Transformer).
+   * @return
+   *   The instance of the requested type.
+   * @throws MlUnsupportedException
+   *   If the instance is not supported.
+   */
+  private def getInstance[T](
+      name: String,
+      uid: String,
+      instanceMap: Map[String, Class[_]],
+      params: Option[proto.MlParams]): T = {
+    if (instanceMap.isEmpty || !instanceMap.contains(name)) {
+      throw MlUnsupportedException(s"Unsupported ML operator, found $name")
+    }
+
+    val instance = instanceMap(name)
+      .getConstructor(classOf[String])
+      .newInstance(uid)
+      .asInstanceOf[T]
+
+    // Set parameters for the instance if they are provided
+    params.foreach(p => MLUtils.setInstanceParams(instance.asInstanceOf[Params], p))
+    instance
   }
 
   /**
@@ -165,28 +239,9 @@ private[ml] object MLUtils {
    *   the estimator
    */
   def getEstimator(operator: proto.MlOperator, params: Option[proto.MlParams]): Estimator[_] = {
-    // TODO support plugin
-    // Get the estimator according to the operator name
     val name = operator.getName
-    if (estimators.isEmpty || !estimators.contains(name)) {
-      throw MlUnsupportedException(s"Unsupported Estimator, found ${name}")
-    }
     val uid = operator.getUid
-    val estimator: Estimator[_] = estimators(name)
-      .getConstructor(classOf[String])
-      .newInstance(uid)
-      .asInstanceOf[Estimator[_]]
-
-    // Set parameters for the estimator
-    params.foreach(p => MLUtils.setInstanceParams(estimator, p))
-    estimator
-  }
-
-  def load(className: String, path: String): Object = {
-    // scalastyle:off classforname
-    val clazz = Class.forName(className)
-    // scalastyle:on classforname
-    invokeStaticMethod(clazz, "load", path)
+    getInstance[Estimator[_]](name, uid, estimators, params)
   }
 
   /**
@@ -198,20 +253,25 @@ private[ml] object MLUtils {
    *   a transformer
    */
   def getTransformer(transformProto: proto.MlRelation.Transform): Transformer = {
-    // Get the transformer name
     val name = transformProto.getTransformer.getName
-    if (transformers.isEmpty || !transformers.contains(name)) {
-      throw MlUnsupportedException(s"Unsupported Transformer, found $name")
-    }
     val uid = transformProto.getTransformer.getUid
-    val transformer = transformers(name)
-      .getConstructor(classOf[String])
-      .newInstance(uid)
-      .asInstanceOf[Transformer]
-
     val params = transformProto.getParams
-    MLUtils.setInstanceParams(transformer, params)
-    transformer
+    getInstance[Transformer](name, uid, transformers, Some(params))
+  }
+
+  /**
+   * Call "load: function on the ML operator given the operator name
+   *
+   * @param className
+   *   the ML operator name
+   * @param path
+   *   the path to be loaded
+   * @return
+   *   the ML instance
+   */
+  def load(className: String, path: String): Object = {
+    val loadedMethod = SparkClassUtils.classForName(className).getMethod("load", classOf[String])
+    loadedMethod.invoke(null, path)
   }
 
   // Since we're using reflection way to get the attribute, in order not to
@@ -278,7 +338,7 @@ private[ml] object MLUtils {
     invokeMethod(obj, methodName, args, parameterTypes)
   }
 
-  def write(instance: MLWritable, writeProto: proto.MlCommand.Writer): Unit = {
+  def write(instance: MLWritable, writeProto: proto.MlCommand.Write): Unit = {
     val writer = if (writeProto.getShouldOverwrite) {
       instance.write.overwrite()
     } else {

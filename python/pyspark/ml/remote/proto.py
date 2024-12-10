@@ -71,6 +71,6 @@ class AttributeRelation(LogicalPlan):
 
     def plan(self, session: "SparkConnectClient") -> pb2.Relation:
         plan = self._create_proto_relation()
-        plan.ml_relation.fetch_attr.obj_ref.CopyFrom(pb2.ObjectRef(id=self._ref_id))
-        plan.ml_relation.fetch_attr.method = self._method
+        plan.ml_relation.fetch.obj_ref.CopyFrom(pb2.ObjectRef(id=self._ref_id))
+        plan.ml_relation.fetch.method = self._method
         return plan

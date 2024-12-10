@@ -198,7 +198,7 @@ class MlOperator(google.protobuf.message.Message):
 global___MlOperator = MlOperator
 
 class ObjectRef(google.protobuf.message.Message):
-    """Represents a reference to THE cached object which could be a model
+    """Represents a reference to the cached object which could be a model
     or summary evaluated by a model
     """
 

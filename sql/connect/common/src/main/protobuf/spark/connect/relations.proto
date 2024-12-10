@@ -113,7 +113,7 @@ message Relation {
 message MlRelation {
   oneof ml_type {
     Transform transform = 1;
-    FetchAttr fetch_attr = 2;
+    Fetch fetch = 2;
   }
   // Relation to represent transform(input) of the operator
   // which could be a cached model or a new transformer
@@ -132,17 +132,18 @@ message MlRelation {
 }
 
 // Message for fetching attribute from object on the server side.
-// FetchAttr can be represented as a Relation or a ML command
-// Eg, model.coefficients, model.summary.weightedPrecision
-// or model.summary.roc which returns a DataFrame
-message FetchAttr {
+// Fetch can be represented as a Relation or a ML command
+// Command: model.coefficients, model.summary.weightedPrecision which
+// returns the final literal result
+// Relation: model.summary.roc which returns a DataFrame (Relation
+message Fetch {
   // (Required) reference to the object on the server side or
   // the intermediate attribute of the model. eg, "model.summary"
   ObjectRef obj_ref = 1;
   // (Required) the method name. Eg, "coefficients" of the model
-  // and "weightedPrecision" of "model.summary"
+  // and "weightedPrecision" of the "model.summary"
   string method = 2;
-  // (Optional) the parameters of the method
+  // (Optional) the arguments of the method
   repeated Args args = 3;
 
   message Args {

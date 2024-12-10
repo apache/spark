@@ -57,7 +57,7 @@ message MlOperator {
   }
 }
 
-// Represents a reference to THE cached object which could be a model
+// Represents a reference to the cached object which could be a model
 // or summary evaluated by a model
 message ObjectRef {
   // The ID is used to lookup the object on the server side.

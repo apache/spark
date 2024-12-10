@@ -21,6 +21,8 @@ import org.apache.spark.annotation.Since
 
 /**
  * Trait for the Summary
+ * All the summaries should extend from this Summary in order to
+ * support connect.
  */
 @Since("4.0.0")
 private[spark] trait Summary

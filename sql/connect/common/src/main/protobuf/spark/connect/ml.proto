@@ -30,10 +30,10 @@ option java_package = "org.apache.spark.connect.proto";
 message MlCommand {
   oneof command {
     Fit fit = 1;
-    FetchAttr fetch_attr = 2;
+    Fetch fetch = 2;
     Delete delete = 3;
-    Writer write = 4;
-    Reader read = 5;
+    Write write = 4;
+    Read read = 5;
   }
 
   // Command for estimator.fit(dataset)
@@ -53,7 +53,7 @@ message MlCommand {
   }
 
   // Command to write ML operator
-  message Writer {
+  message Write {
     // It could be an estimator/evaluator or the cached model
     oneof type {
       // Estimator or evaluator
@@ -72,7 +72,7 @@ message MlCommand {
   }
 
   // Command to load ML operator.
-  message Reader {
+  message Read {
     // ML operator information
     MlOperator operator = 1;
     // Load the ML instance from the input path

@@ -27,7 +27,7 @@ import org.apache.spark.sql.connect.service.SessionHolder
 private[ml] object Serializer {
 
   /**
-   * Serialize the ML parameters, currently only support Vector/Matrix and literals
+   * Serialize the ML parameters, currently support Vector/Matrix and literals
    * @param data
    *   the value of parameter
    * @return
@@ -84,7 +84,7 @@ private[ml] object Serializer {
   }
 
   def deserializeMethodArguments(
-      args: Array[proto.FetchAttr.Args],
+      args: Array[proto.Fetch.Args],
       sessionHolder: SessionHolder): Array[(Object, Class[_])] = {
     args.map { arg =>
       if (arg.hasParam) {

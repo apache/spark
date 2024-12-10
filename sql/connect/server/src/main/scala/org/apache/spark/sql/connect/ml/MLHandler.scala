@@ -41,9 +41,9 @@ private class AttributeHelper(
 
   private val methodChain = method.map(n => s"$objIdentifier.$n").getOrElse(objIdentifier)
   private val methodChains = methodChain.split("\\.")
-  private val modelId = methodChains.head
+  private val objId = methodChains.head
 
-  protected lazy val instance = sessionHolder.mlCache.get(modelId)
+  protected lazy val instance = sessionHolder.mlCache.get(objId)
   private lazy val methods = methodChains.slice(1, methodChains.length)
 
   def getAttribute: Any = {
@@ -88,26 +88,26 @@ private class ModelAttributeHelper(
 private object AttributeHelper {
   def apply(
       sessionHolder: SessionHolder,
-      modelId: String,
+      objId: String,
       method: Option[String] = None,
-      args: Array[proto.FetchAttr.Args] = Array.empty): AttributeHelper = {
+      args: Array[proto.Fetch.Args] = Array.empty): AttributeHelper = {
     val tmp = deserializeMethodArguments(args, sessionHolder)
     val argValues = tmp.map(_._1)
     val argClasses = tmp.map(_._2)
-    new AttributeHelper(sessionHolder, modelId, method, argValues, argClasses)
+    new AttributeHelper(sessionHolder, objId, method, argValues, argClasses)
   }
 }
 
 private object ModelAttributeHelper {
   def apply(
       sessionHolder: SessionHolder,
-      modelId: String,
+      objId: String,
       method: Option[String] = None,
-      args: Array[proto.FetchAttr.Args] = Array.empty): ModelAttributeHelper = {
+      args: Array[proto.Fetch.Args] = Array.empty): ModelAttributeHelper = {
     val tmp = deserializeMethodArguments(args, sessionHolder)
     val argValues = tmp.map(_._1)
     val argClasses = tmp.map(_._2)
-    new ModelAttributeHelper(sessionHolder, modelId, method, argValues, argClasses)
+    new ModelAttributeHelper(sessionHolder, objId, method, argValues, argClasses)
   }
 }
 
@@ -137,12 +137,12 @@ object MLHandler extends Logging {
               .setObjRef(proto.ObjectRef.newBuilder().setId(id)))
           .build()
 
-      case proto.MlCommand.CommandCase.FETCH_ATTR =>
-        val args = mlCommand.getFetchAttr.getArgsList.asScala.toArray
+      case proto.MlCommand.CommandCase.FETCH =>
+        val args = mlCommand.getFetch.getArgsList.asScala.toArray
         val helper = AttributeHelper(
           sessionHolder,
-          mlCommand.getFetchAttr.getObjRef.getId,
-          Option(mlCommand.getFetchAttr.getMethod),
+          mlCommand.getFetch.getObjRef.getId,
+          Option(mlCommand.getFetch.getMethod),
           args)
         val attrResult = helper.getAttribute
         attrResult match {
@@ -155,10 +155,10 @@ object MLHandler extends Logging {
         }
 
       case proto.MlCommand.CommandCase.DELETE =>
-        val modelId = mlCommand.getDelete.getObjRef.getId
+        val objId = mlCommand.getDelete.getObjRef.getId
         var result = false
-        if (!modelId.contains(".")) {
-          mlCache.remove(modelId)
+        if (!objId.contains(".")) {
+          mlCache.remove(objId)
           result = true
         }
         proto.MlCommandResult
@@ -172,9 +172,9 @@ object MLHandler extends Logging {
 
       case proto.MlCommand.CommandCase.WRITE =>
         mlCommand.getWrite.getTypeCase match {
-          case proto.MlCommand.Writer.TypeCase.OBJ_REF => // save a model
-            val modelId = mlCommand.getWrite.getObjRef.getId
-            val model = mlCache.get(modelId).asInstanceOf[Model[_]]
+          case proto.MlCommand.Write.TypeCase.OBJ_REF => // save a model
+            val objId = mlCommand.getWrite.getObjRef.getId
+            val model = mlCache.get(objId).asInstanceOf[Model[_]]
             val copiedModel = model.copy(ParamMap.empty).asInstanceOf[Model[_]]
             MLUtils.setInstanceParams(copiedModel, mlCommand.getWrite.getParams)
 
@@ -184,7 +184,7 @@ object MLHandler extends Logging {
             }
 
           // save an estimator/evaluator/transformer
-          case proto.MlCommand.Writer.TypeCase.OPERATOR =>
+          case proto.MlCommand.Write.TypeCase.OPERATOR =>
             val writer = mlCommand.getWrite
             if (writer.getOperator.getType == proto.MlOperator.OperatorType.ESTIMATOR) {
               val estimator = MLUtils.getEstimator(writer.getOperator, Some(writer.getParams))
@@ -262,11 +262,11 @@ object MLHandler extends Logging {
         }
 
       // Get the attribute from a cached object which could be a model or summary
-      case proto.MlRelation.MlTypeCase.FETCH_ATTR =>
+      case proto.MlRelation.MlTypeCase.FETCH =>
         val helper = AttributeHelper(
           sessionHolder,
-          relation.getFetchAttr.getObjRef.getId,
-          Option(relation.getFetchAttr.getMethod))
+          relation.getFetch.getObjRef.getId,
+          Option(relation.getFetch.getMethod))
         helper.getAttribute.asInstanceOf[DataFrame]
 
       case other => throw MlUnsupportedException(s"$other not supported")

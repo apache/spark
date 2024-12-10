@@ -36,7 +36,7 @@ private[connect] class MLCache extends Logging {
    *   the key
    */
   def register(obj: Object): String = {
-    val objectId = UUID.randomUUID().toString.takeRight(12)
+    val objectId = UUID.randomUUID().toString
     cachedModel.put(objectId, obj)
     objectId
   }

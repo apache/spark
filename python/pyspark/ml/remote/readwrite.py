@@ -49,7 +49,7 @@ class RemoteMLWriter(MLWriter):
             model = cast("JavaModel", self._instance)
             params = serialize_ml_params(model, session.client)
             assert isinstance(model._java_obj, str)
-            writer = pb2.MlCommand.Writer(
+            writer = pb2.MlCommand.Write(
                 obj_ref=pb2.ObjectRef(id=model._java_obj),
                 params=params,
                 path=path,
@@ -60,7 +60,7 @@ class RemoteMLWriter(MLWriter):
             estimator = cast("JavaEstimator", self._instance)
             params = serialize_ml_params(estimator, session.client)
             assert isinstance(estimator._java_obj, str)
-            writer = pb2.MlCommand.Writer(
+            writer = pb2.MlCommand.Write(
                 operator=pb2.MlOperator(
                     name=estimator._java_obj, uid=estimator.uid, type=pb2.MlOperator.ESTIMATOR
                 ),
@@ -104,7 +104,7 @@ class RemoteMLReader(MLReader[RL]):
 
         command = pb2.Command()
         command.ml_command.read.CopyFrom(
-            pb2.MlCommand.Reader(
+            pb2.MlCommand.Read(
                 operator=pb2.MlOperator(name=java_qualified_class_name, type=ml_type), path=path
             )
         )
