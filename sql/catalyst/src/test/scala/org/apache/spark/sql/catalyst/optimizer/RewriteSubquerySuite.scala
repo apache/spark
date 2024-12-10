@@ -21,8 +21,9 @@ import org.apache.spark.sql.catalyst.QueryPlanningTracker
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions.{IsNull, ListQuery, Not}
+import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.{ExistenceJoin, LeftSemi, PlanTest}
-import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{Join, LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 
 
@@ -78,5 +79,15 @@ class RewriteSubquerySuite extends PlanTest {
     val tracker = new QueryPlanningTracker
     Optimize.executeAndTrack(query.analyze, tracker)
     assert(tracker.rules(RewritePredicateSubquery.ruleName).numEffectiveInvocations == 0)
+  }
+
+  test("SPARK-50091: Don't put aggregate expression in join condition") {
+    val relation1 = LocalRelation($"c1".int, $"c2".int, $"c3".int)
+    val relation2 = LocalRelation($"col1".int, $"col2".int, $"col3".int)
+    val query = relation2.select(sum($"col2").in(ListQuery(relation1.select($"c3"))))
+
+    val optimized = Optimize.execute(query.analyze)
+    val join = optimized.find(_.isInstanceOf[Join]).get.asInstanceOf[Join]
+    assert(!join.condition.get.exists(_.isInstanceOf[AggregateExpression]))
   }
 }
