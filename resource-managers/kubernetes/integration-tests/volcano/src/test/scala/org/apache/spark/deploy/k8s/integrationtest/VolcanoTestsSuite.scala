@@ -28,8 +28,8 @@ import scala.concurrent.Future
 import scala.jdk.CollectionConverters._
 
 import io.fabric8.kubernetes.api.model.{HasMetadata, Pod, Quantity}
+import io.fabric8.volcano.api.model.scheduling.v1beta1.{Queue, QueueBuilder}
 import io.fabric8.volcano.client.VolcanoClient
-import io.fabric8.volcano.scheduling.v1beta1.{Queue, QueueBuilder}
 import org.scalatest.BeforeAndAfterEach
 import org.scalatest.concurrent.Eventually
 
@@ -202,6 +202,29 @@ private[spark] trait VolcanoTestsSuite extends BeforeAndAfterEach { k8sSuite: Ku
       .getItems.asScala
   }
 
+  private def getAllPods(
+      role: String,
+      groupLocator: String): Unit = {
+    val res = kubernetesTestComponents.kubernetesClient
+      .pods()
+      .inNamespace(kubernetesTestComponents.namespace)
+      .withLabel("spark-group-locator", groupLocator)
+      .withLabel("spark-role", role)
+      .list()
+      .getItems.asScala
+    // scalastyle:off println
+    println("---------------------------------------------------")
+    println(s"Pods size: ${res.size}")
+    res.foreach(pod => {
+      println(pod.getApiVersion)
+      // println(pod.getStatus)
+      println(pod.getStatus.getPhase)
+      // println(pod)
+    })
+    println("---------------------------------------------------")
+    // scalastyle:on println
+  }
+
   def runJobAndVerify(
       batchSuffix: String,
       groupLoc: Option[String] = None,
@@ -330,12 +353,21 @@ private[spark] trait VolcanoTestsSuite extends BeforeAndAfterEach { k8sSuite: Ku
     (1 until jobNum).map { completedNum =>
       Eventually.eventually(TIMEOUT, INTERVAL) {
         val pendingPods = getPods(role = "driver", groupName, statusPhase = "Pending")
+        getAllPods(role = "driver", groupName)
+        // scalastyle:off println
+        println(s"pendingPods size: ${pendingPods.size}, " +
+          s"jobNum - completedNum: ${jobNum - completedNum}")
+        // scalastyle:on println
         assert(pendingPods.size === jobNum - completedNum)
       }
     }
     // All jobs succeeded finally
     Eventually.eventually(TIMEOUT, INTERVAL) {
       val succeededPods = getPods(role = "driver", groupName, statusPhase = "Succeeded")
+      getAllPods(role = "driver", groupName)
+      // scalastyle:off println
+      println(s"succeededPods size: ${succeededPods.size}, jobNum: $jobNum")
+      // scalastyle:on println
       assert(succeededPods.size === jobNum)
     }
   }
@@ -372,6 +404,9 @@ private[spark] trait VolcanoTestsSuite extends BeforeAndAfterEach { k8sSuite: Ku
   }
 
   test("SPARK-38187: Run SparkPi Jobs with minMemory", k8sTestTag, volcanoTag) {
+    // scalastyle:off println
+    println("SPARK-38187: Run SparkPi Jobs with minMemory start.")
+    // scalastyle:on println
     val groupName = generateGroupName("min-mem")
     // Create a queue with 3G memory capacity
     createOrReplaceQueue(name = "queue-3g", memory = Some("3Gi"))
@@ -386,6 +421,9 @@ private[spark] trait VolcanoTestsSuite extends BeforeAndAfterEach { k8sSuite: Ku
       }
     }
     verifyJobsSucceededOneByOne(jobNum, groupName)
+    // scalastyle:off println
+    println("SPARK-38187: Run SparkPi Jobs with minMemory end.")
+    // scalastyle:on println
   }
 
   test("SPARK-38188: Run SparkPi jobs with 2 queues (only 1 enabled)", k8sTestTag, volcanoTag) {
@@ -478,7 +516,7 @@ private[spark] trait VolcanoTestsSuite extends BeforeAndAfterEach { k8sSuite: Ku
         assert(pods.size === 1)
         val conditions = pods.head.getStatus.getConditions.asScala
         val scheduledTime
-          = conditions.filter(_.getType === "PodScheduled").head.getLastTransitionTime
+        = conditions.filter(_.getType === "PodScheduled").head.getLastTransitionTime
         m += (p -> Instant.parse(scheduledTime))
       }
       // high --> medium --> low

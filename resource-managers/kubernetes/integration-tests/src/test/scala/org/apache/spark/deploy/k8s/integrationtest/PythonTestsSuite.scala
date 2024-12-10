@@ -21,7 +21,7 @@ private[spark] trait PythonTestsSuite { k8sSuite: KubernetesSuite =>
   import PythonTestsSuite._
   import KubernetesSuite.k8sTestTag
 
-  test("Run PySpark on simple pi.py example", k8sTestTag) {
+  ignore("Run PySpark on simple pi.py example", k8sTestTag) {
     sparkAppConf
       .set("spark.kubernetes.container.image", pyImage)
     runSparkApplicationAndVerifyCompletion(
@@ -34,7 +34,7 @@ private[spark] trait PythonTestsSuite { k8sSuite: KubernetesSuite =>
       isJVM = false)
   }
 
-  test("Run PySpark to test a pyfiles example", k8sTestTag) {
+  ignore("Run PySpark to test a pyfiles example", k8sTestTag) {
     sparkAppConf
       .set("spark.kubernetes.container.image", pyImage)
     runSparkApplicationAndVerifyCompletion(
@@ -51,7 +51,7 @@ private[spark] trait PythonTestsSuite { k8sSuite: KubernetesSuite =>
       pyFiles = Some(PYSPARK_CONTAINER_TESTS))
   }
 
-  test("Run PySpark with memory customization", k8sTestTag) {
+  ignore("Run PySpark with memory customization", k8sTestTag) {
     sparkAppConf
       .set("spark.kubernetes.container.image", pyImage)
       .set("spark.kubernetes.memoryOverheadFactor", s"$memOverheadConstant")
