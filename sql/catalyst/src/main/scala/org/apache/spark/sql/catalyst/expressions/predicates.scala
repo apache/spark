@@ -17,8 +17,10 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import scala.collection.immutable
 import scala.collection.immutable.TreeSet
 
+import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
@@ -29,9 +31,10 @@ import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LeafNode, LogicalPlan, Project, Union}
 import org.apache.spark.sql.catalyst.trees.TreePattern._
-import org.apache.spark.sql.catalyst.util.TypeUtils
+import org.apache.spark.sql.catalyst.util.{CollationFactory, TypeUtils}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.ArrayImplicits._
 
 /**
@@ -266,10 +269,8 @@ trait PredicateHelper extends AliasHelper with Logging {
   }
 
   // If one expression and its children are null intolerant, it is null intolerant.
-  protected def isNullIntolerant(expr: Expression): Boolean = expr match {
-    case e: NullIntolerant => e.children.forall(isNullIntolerant)
-    case _ => false
-  }
+  protected def isNullIntolerant(expr: Expression): Boolean =
+    expr.nullIntolerant && expr.children.forall(isNullIntolerant)
 
   protected def outputWithNullability(
       output: Seq[Attribute],
@@ -314,7 +315,8 @@ trait PredicateHelper extends AliasHelper with Logging {
   since = "1.0.0",
   group = "predicate_funcs")
 case class Not(child: Expression)
-  extends UnaryExpression with Predicate with ImplicitCastInputTypes with NullIntolerant {
+  extends UnaryExpression with Predicate with ImplicitCastInputTypes {
+  override def nullIntolerant: Boolean = true
 
   override def toString: String = s"NOT $child"
 
@@ -607,6 +609,9 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
   require(hset != null, "hset could not be null")
 
   override def toString: String = {
+    if (!child.resolved) {
+      return s"$child INSET (values with unresolved data types)"
+    }
     val listString = hset.toSeq
       .map(elem => Literal(elem, child.dataType).toString)
       // Sort elements for deterministic behaviours
@@ -655,6 +660,9 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
   }
 
   @transient lazy val set: Set[Any] = child.dataType match {
+    case st: StringType if !st.isUTF8BinaryCollation =>
+      new InSet.CollationAwareSet(
+        hset.asInstanceOf[Set[UTF8String]], st.collationId).asInstanceOf[Set[Any]]
     case t: AtomicType if !t.isInstanceOf[BinaryType] => hset
     case _: NullType => hset
     case _ =>
@@ -765,6 +773,26 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
   }
 
   override protected def withNewChildInternal(newChild: Expression): InSet = copy(child = newChild)
+}
+
+object InSet {
+  class CollationAwareSet(inputSet: Set[UTF8String], collationId: Int)
+    extends immutable.Set[UTF8String] with Serializable {
+    private val keySet: Set[UTF8String] = inputSet.map { s =>
+      if (s == null) null
+      else CollationFactory.getCollationKey(s, collationId)
+    }
+    override def incl(elem: UTF8String): CollationAwareSet =
+      throw SparkUnsupportedOperationException()
+    override def excl(elem: UTF8String): CollationAwareSet =
+      throw SparkUnsupportedOperationException()
+    override def iterator: Iterator[UTF8String] = throw SparkUnsupportedOperationException()
+    override def contains(elem: UTF8String): Boolean = {
+      assert(elem != null, "InSet guarantees non-null input")
+      val elemKey = CollationFactory.getCollationKey(elem, collationId)
+      keySet.contains(elemKey)
+    }
+  }
 }
 
 @ExpressionDescription(
@@ -1044,8 +1072,8 @@ object Equality {
   since = "1.0.0",
   group = "predicate_funcs")
 case class EqualTo(left: Expression, right: Expression)
-    extends BinaryComparison with NullIntolerant {
-
+    extends BinaryComparison {
+  override def nullIntolerant: Boolean = true
   override def symbol: String = "="
 
   // +---------+---------+---------+---------+
@@ -1193,8 +1221,8 @@ case class EqualNull(left: Expression, right: Expression, replacement: Expressio
   since = "1.0.0",
   group = "predicate_funcs")
 case class LessThan(left: Expression, right: Expression)
-    extends BinaryComparison with NullIntolerant {
-
+    extends BinaryComparison {
+  override def nullIntolerant: Boolean = true
   override def symbol: String = "<"
 
   protected override def nullSafeEval(input1: Any, input2: Any): Any = ordering.lt(input1, input2)
@@ -1228,8 +1256,8 @@ case class LessThan(left: Expression, right: Expression)
   since = "1.0.0",
   group = "predicate_funcs")
 case class LessThanOrEqual(left: Expression, right: Expression)
-    extends BinaryComparison with NullIntolerant {
-
+    extends BinaryComparison {
+  override def nullIntolerant: Boolean = true
   override def symbol: String = "<="
 
   protected override def nullSafeEval(input1: Any, input2: Any): Any = ordering.lteq(input1, input2)
@@ -1263,7 +1291,8 @@ case class LessThanOrEqual(left: Expression, right: Expression)
   since = "1.0.0",
   group = "predicate_funcs")
 case class GreaterThan(left: Expression, right: Expression)
-    extends BinaryComparison with NullIntolerant {
+    extends BinaryComparison {
+  override def nullIntolerant: Boolean = true
 
   override def symbol: String = ">"
 
@@ -1298,7 +1327,8 @@ case class GreaterThan(left: Expression, right: Expression)
   since = "1.0.0",
   group = "predicate_funcs")
 case class GreaterThanOrEqual(left: Expression, right: Expression)
-    extends BinaryComparison with NullIntolerant {
+    extends BinaryComparison {
+  override def nullIntolerant: Boolean = true
 
   override def symbol: String = ">="
 

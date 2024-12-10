@@ -367,8 +367,8 @@ object FunctionRegistry {
     expressionGeneratorBuilderOuter("explode_outer", ExplodeExpressionBuilder),
     expression[Greatest]("greatest"),
     expression[If]("if"),
-    expression[Inline]("inline"),
-    expressionGeneratorOuter[Inline]("inline_outer"),
+    expressionBuilder("inline", InlineExpressionBuilder),
+    expressionGeneratorBuilderOuter("inline_outer", InlineExpressionBuilder),
     expression[IsNaN]("isnan"),
     expression[Nvl]("ifnull", setAlias = true),
     expression[IsNull]("isnull"),
@@ -379,8 +379,8 @@ object FunctionRegistry {
     expression[NullIfZero]("nullifzero"),
     expression[Nvl]("nvl"),
     expression[Nvl2]("nvl2"),
-    expression[PosExplode]("posexplode"),
-    expressionGeneratorOuter[PosExplode]("posexplode_outer"),
+    expressionBuilder("posexplode", PosExplodeExpressionBuilder),
+    expressionGeneratorBuilderOuter("posexplode_outer", PosExplodeExpressionBuilder),
     expression[Rand]("rand"),
     expression[Rand]("random", true, Some("3.0.0")),
     expression[Randn]("randn"),
@@ -466,6 +466,7 @@ object FunctionRegistry {
     expression[TryAesDecrypt]("try_aes_decrypt"),
     expression[TryReflect]("try_reflect"),
     expression[TryUrlDecode]("try_url_decode"),
+    expression[TryMakeInterval]("try_make_interval"),
 
     // aggregate functions
     expression[HyperLogLogPlusPlus]("approx_count_distinct"),
@@ -505,6 +506,8 @@ object FunctionRegistry {
     expression[CollectList]("collect_list"),
     expression[CollectList]("array_agg", true, Some("3.3.0")),
     expression[CollectSet]("collect_set"),
+    expression[ListAgg]("listagg"),
+    expression[ListAgg]("string_agg", setAlias = true),
     expressionBuilder("count_min_sketch", CountMinSketchAggExpressionBuilder),
     expression[BoolAnd]("every", true),
     expression[BoolAnd]("bool_and"),
@@ -615,6 +618,7 @@ object FunctionRegistry {
     expression[UrlEncode]("url_encode"),
     expression[UrlDecode]("url_decode"),
     expression[ParseUrl]("parse_url"),
+    expression[TryParseUrl]("try_parse_url"),
 
     // datetime functions
     expression[AddMonths]("add_months"),
@@ -664,10 +668,15 @@ object FunctionRegistry {
     expression[WindowTime]("window_time"),
     expression[MakeDate]("make_date"),
     expression[MakeTimestamp]("make_timestamp"),
+    expression[TryMakeTimestamp]("try_make_timestamp"),
     expression[MonthName]("monthname"),
     // We keep the 2 expression builders below to have different function docs.
     expressionBuilder("make_timestamp_ntz", MakeTimestampNTZExpressionBuilder, setAlias = true),
     expressionBuilder("make_timestamp_ltz", MakeTimestampLTZExpressionBuilder, setAlias = true),
+    expressionBuilder(
+      "try_make_timestamp_ntz", TryMakeTimestampNTZExpressionBuilder, setAlias = true),
+    expressionBuilder(
+      "try_make_timestamp_ltz", TryMakeTimestampLTZExpressionBuilder, setAlias = true),
     expression[MakeInterval]("make_interval"),
     expression[MakeDTInterval]("make_dt_interval"),
     expression[MakeYMInterval]("make_ym_interval"),
@@ -875,6 +884,7 @@ object FunctionRegistry {
     // Avro
     expression[FromAvro]("from_avro"),
     expression[ToAvro]("to_avro"),
+    expression[SchemaOfAvro]("schema_of_avro"),
 
     // Protobuf
     expression[FromProtobuf]("from_protobuf"),
@@ -895,9 +905,20 @@ object FunctionRegistry {
   /** Registry for internal functions used by Connect and the Column API. */
   private[sql] val internal: SimpleFunctionRegistry = new SimpleFunctionRegistry
 
-  private def registerInternalExpression[T <: Expression : ClassTag](name: String): Unit = {
-    val (info, builder) = FunctionRegistryBase.build(name, None)
-    internal.internalRegisterFunction(FunctionIdentifier(name), info, builder)
+  private def registerInternalExpression[T <: Expression : ClassTag](
+      name: String,
+      setAlias: Boolean = false): Unit = {
+    val (info, builder) = FunctionRegistryBase.build[T](name, None)
+    val newBuilder = if (setAlias) {
+      (expressions: Seq[Expression]) => {
+        val expr = builder(expressions)
+        expr.setTagValue(FUNC_ALIAS, name)
+        expr
+      }
+    } else {
+      builder
+    }
+    internal.internalRegisterFunction(FunctionIdentifier(name), info, newBuilder)
   }
 
   registerInternalExpression[Product]("product")
@@ -911,6 +932,7 @@ object FunctionRegistry {
   registerInternalExpression[Days]("days")
   registerInternalExpression[Hours]("hours")
   registerInternalExpression[UnwrapUDT]("unwrap_udt")
+  registerInternalExpression[MonotonicallyIncreasingID]("distributed_id", setAlias = true)
   registerInternalExpression[DistributedSequenceID]("distributed_sequence_id")
   registerInternalExpression[PandasProduct]("pandas_product")
   registerInternalExpression[PandasStddev]("pandas_stddev")
@@ -1154,16 +1176,16 @@ object TableFunctionRegistry {
     logicalPlan[Range]("range"),
     generatorBuilder("explode", ExplodeGeneratorBuilder),
     generatorBuilder("explode_outer", ExplodeOuterGeneratorBuilder),
-    generator[Inline]("inline"),
-    generator[Inline]("inline_outer", outer = true),
+    generatorBuilder("inline", InlineGeneratorBuilder),
+    generatorBuilder("inline_outer", InlineOuterGeneratorBuilder),
     generator[JsonTuple]("json_tuple"),
-    generator[PosExplode]("posexplode"),
-    generator[PosExplode]("posexplode_outer", outer = true),
+    generatorBuilder("posexplode", PosExplodeGeneratorBuilder),
+    generatorBuilder("posexplode_outer", PosExplodeOuterGeneratorBuilder),
     generator[Stack]("stack"),
     generator[Collations]("collations"),
     generator[SQLKeywords]("sql_keywords"),
-    generator[VariantExplode]("variant_explode"),
-    generator[VariantExplode]("variant_explode_outer", outer = true)
+    generatorBuilder("variant_explode", VariantExplodeGeneratorBuilder),
+    generatorBuilder("variant_explode_outer", VariantExplodeOuterGeneratorBuilder)
   )
 
   val builtin: SimpleTableFunctionRegistry = {

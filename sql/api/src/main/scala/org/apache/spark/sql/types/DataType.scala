@@ -105,6 +105,13 @@ abstract class DataType extends AbstractDataType {
    */
   private[spark] def existsRecursively(f: (DataType) => Boolean): Boolean = f(this)
 
+  /**
+   * Recursively applies the provided partial function `f` to transform this DataType tree.
+   */
+  private[spark] def transformRecursively(f: PartialFunction[DataType, DataType]): DataType = {
+    if (f.isDefinedAt(this)) f(this) else this
+  }
+
   final override private[sql] def defaultConcreteType: DataType = this
 
   override private[sql] def acceptsType(other: DataType): Boolean = sameType(other)
@@ -440,28 +447,7 @@ object DataType {
   private[sql] def equalsIgnoreCompatibleCollation(from: DataType, to: DataType): Boolean = {
     (from, to) match {
       // String types with possibly different collations are compatible.
-      case (_: StringType, _: StringType) => true
-
-      case (ArrayType(fromElement, fromContainsNull), ArrayType(toElement, toContainsNull)) =>
-        (fromContainsNull == toContainsNull) &&
-        equalsIgnoreCompatibleCollation(fromElement, toElement)
-
-      case (
-            MapType(fromKey, fromValue, fromContainsNull),
-            MapType(toKey, toValue, toContainsNull)) =>
-        fromContainsNull == toContainsNull &&
-        // Map keys cannot change collation.
-        fromKey == toKey &&
-        equalsIgnoreCompatibleCollation(fromValue, toValue)
-
-      case (StructType(fromFields), StructType(toFields)) =>
-        fromFields.length == toFields.length &&
-        fromFields.zip(toFields).forall { case (fromField, toField) =>
-          fromField.name == toField.name &&
-          fromField.nullable == toField.nullable &&
-          fromField.metadata == toField.metadata &&
-          equalsIgnoreCompatibleCollation(fromField.dataType, toField.dataType)
-        }
+      case (a: StringType, b: StringType) => a.constraint == b.constraint
 
       case (fromDataType, toDataType) => fromDataType == toDataType
     }

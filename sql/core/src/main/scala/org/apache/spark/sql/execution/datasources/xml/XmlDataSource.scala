@@ -25,6 +25,7 @@ import scala.util.control.NonFatal
 import org.apache.commons.lang3.exception.ExceptionUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
+import org.apache.hadoop.hdfs.BlockMissingException
 import org.apache.hadoop.mapreduce.Job
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat
 
@@ -190,6 +191,7 @@ object MultiLineXmlDataSource extends XmlDataSource {
             Iterator.empty[String]
           case NonFatal(e) =>
             ExceptionUtils.getRootCause(e) match {
+              case e: BlockMissingException => throw e
               case _: RuntimeException | _: IOException if parsedOptions.ignoreCorruptFiles =>
                 logWarning("Skipped the rest of the content in the corrupted file", e)
                 Iterator.empty[String]

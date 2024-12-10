@@ -19,34 +19,20 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.catalyst.expressions.{AliasHelper, EvalHelper, Expression}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
-import org.apache.spark.sql.catalyst.plans.logical.{CTERelationRef, LogicalPlan, SubqueryAlias}
-import org.apache.spark.sql.catalyst.rules.{Rule, RuleExecutor}
-import org.apache.spark.sql.catalyst.trees.TreePattern.{UNRESOLVED_IDENTIFIER, UNRESOLVED_IDENTIFIER_WITH_CTE}
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.trees.TreePattern.UNRESOLVED_IDENTIFIER
 import org.apache.spark.sql.types.StringType
 
 /**
  * Resolves the identifier expressions and builds the original plans/expressions.
  */
-class ResolveIdentifierClause(earlyBatches: Seq[RuleExecutor[LogicalPlan]#Batch])
-  extends Rule[LogicalPlan] with AliasHelper with EvalHelper {
-
-  private val executor = new RuleExecutor[LogicalPlan] {
-    override def batches: Seq[Batch] = earlyBatches.asInstanceOf[Seq[Batch]]
-  }
+object ResolveIdentifierClause extends Rule[LogicalPlan] with AliasHelper with EvalHelper {
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
-    _.containsAnyPattern(UNRESOLVED_IDENTIFIER, UNRESOLVED_IDENTIFIER_WITH_CTE)) {
+    _.containsPattern(UNRESOLVED_IDENTIFIER)) {
     case p: PlanWithUnresolvedIdentifier if p.identifierExpr.resolved && p.childrenResolved =>
-      executor.execute(p.planBuilder.apply(evalIdentifierExpr(p.identifierExpr), p.children))
-    case u @ UnresolvedWithCTERelations(p, cteRelations) =>
-      this.apply(p) match {
-        case u @ UnresolvedRelation(Seq(table), _, _) =>
-          cteRelations.find(r => plan.conf.resolver(r._1, table)).map { case (_, d) =>
-            // Add a `SubqueryAlias` for hint-resolving rules to match relation names.
-            SubqueryAlias(table, CTERelationRef(d.id, d.resolved, d.output, d.isStreaming))
-          }.getOrElse(u)
-        case other => other
-      }
+      p.planBuilder.apply(evalIdentifierExpr(p.identifierExpr), p.children)
     case other =>
       other.transformExpressionsWithPruning(_.containsAnyPattern(UNRESOLVED_IDENTIFIER)) {
         case e: ExpressionWithUnresolvedIdentifier if e.identifierExpr.resolved =>

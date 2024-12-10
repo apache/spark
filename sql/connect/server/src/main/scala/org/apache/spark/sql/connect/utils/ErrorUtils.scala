@@ -114,8 +114,8 @@ private[connect] object ErrorUtils extends Logging {
         case sparkThrowable: SparkThrowable =>
           val sparkThrowableBuilder = FetchErrorDetailsResponse.SparkThrowable
             .newBuilder()
-          if (sparkThrowable.getErrorClass != null) {
-            sparkThrowableBuilder.setErrorClass(sparkThrowable.getErrorClass)
+          if (sparkThrowable.getCondition != null) {
+            sparkThrowableBuilder.setErrorClass(sparkThrowable.getCondition)
           }
           for (queryCtx <- sparkThrowable.getQueryContext) {
             val builder = FetchErrorDetailsResponse.QueryContext
@@ -193,7 +193,7 @@ private[connect] object ErrorUtils extends Logging {
         if (state != null && state.nonEmpty) {
           errorInfo.putMetadata("sqlState", state)
         }
-        val errorClass = e.getErrorClass
+        val errorClass = e.getCondition
         if (errorClass != null && errorClass.nonEmpty) {
           val messageParameters = JsonMethods.compact(
             JsonMethods.render(map2jvalue(e.getMessageParameters.asScala.toMap)))

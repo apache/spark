@@ -60,7 +60,7 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
   }
 
   def mergeStatementWithoutWhenClauseError(ctx: MergeIntoTableContext): Throwable = {
-    new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0008", ctx)
+    new ParseException(errorClass = "MERGE_WITHOUT_WHEN", ctx)
   }
 
   def nonLastMatchedClauseOmitConditionError(ctx: MergeIntoTableContext): Throwable = {
@@ -82,8 +82,40 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
       ctx)
   }
 
+  def clausesWithPipeOperatorsUnsupportedError(
+      ctx: QueryOrganizationContext,
+      clauses: String): Throwable = {
+    new ParseException(
+      errorClass = "UNSUPPORTED_FEATURE.CLAUSE_WITH_PIPE_OPERATORS",
+      messageParameters = Map("clauses" -> clauses),
+      ctx)
+  }
+
+  def multipleQueryResultClausesWithPipeOperatorsUnsupportedError(
+      ctx: QueryOrganizationContext,
+      clause1: String,
+      clause2: String): Throwable = {
+    new ParseException(
+      errorClass = "MULTIPLE_QUERY_RESULT_CLAUSES_WITH_PIPE_OPERATORS",
+      messageParameters = Map("clause1" -> clause1, "clause2" -> clause2),
+      ctx)
+  }
+
   def combinationQueryResultClausesUnsupportedError(ctx: QueryOrganizationContext): Throwable = {
     new ParseException(errorClass = "UNSUPPORTED_FEATURE.COMBINATION_QUERY_RESULT_CLAUSES", ctx)
+  }
+
+  def pipeOperatorAggregateUnsupportedCaseError(
+      caseArgument: String,
+      ctx: ParserRuleContext): Throwable = {
+    new ParseException(
+      errorClass = "UNSUPPORTED_FEATURE.PIPE_OPERATOR_AGGREGATE_UNSUPPORTED_CASE",
+      messageParameters = Map("case" -> caseArgument),
+      ctx)
+  }
+
+  def windowClauseInPipeOperatorWhereClauseNotAllowedError(ctx: ParserRuleContext): Throwable = {
+    new ParseException(errorClass = "NOT_ALLOWED_IN_PIPE_OPERATOR_WHERE.WINDOW_CLAUSE", ctx)
   }
 
   def distributeByUnsupportedError(ctx: QueryOrganizationContext): Throwable = {
@@ -265,9 +297,16 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
       from: String,
       to: String,
       ctx: ParserRuleContext): Throwable = {
+    val intervalInput = ctx.getText()
+    val pattern = "'([^']*)'".r
+    val input = pattern.findFirstMatchIn(intervalInput) match {
+      case Some(m) => m.group(1)
+      case None => ""
+    }
+
     new ParseException(
-      errorClass = "_LEGACY_ERROR_TEMP_0028",
-      messageParameters = Map("from" -> from, "to" -> to),
+      errorClass = "INVALID_INTERVAL_FORMAT.UNSUPPORTED_FROM_TO_EXPRESSION",
+      messageParameters = Map("input" -> input, "from" -> from, "to" -> to),
       ctx)
   }
 
@@ -452,7 +491,7 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
 
   def duplicateCteDefinitionNamesError(duplicateNames: String, ctx: CtesContext): Throwable = {
     new ParseException(
-      errorClass = "_LEGACY_ERROR_TEMP_0038",
+      errorClass = "DUPLICATED_CTE_NAMES",
       messageParameters = Map("duplicateNames" -> duplicateNames),
       ctx)
   }
@@ -462,8 +501,8 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
       command = Option(sqlText),
       start = position,
       stop = position,
-      errorClass = "_LEGACY_ERROR_TEMP_0039",
-      messageParameters = Map.empty)
+      errorClass = "INVALID_SQL_SYNTAX.UNSUPPORTED_SQL_STATEMENT",
+      messageParameters = Map("sqlText" -> sqlText))
   }
 
   def invalidIdentifierError(ident: String, ctx: ParserRuleContext): Throwable = {
@@ -513,11 +552,14 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
   }
 
   def unexpectedFormatForResetConfigurationError(ctx: ResetConfigurationContext): Throwable = {
-    new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0043", ctx)
+    new ParseException(errorClass = "INVALID_RESET_COMMAND_FORMAT", ctx)
   }
 
-  def intervalValueOutOfRangeError(ctx: IntervalContext): Throwable = {
-    new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0044", ctx)
+  def intervalValueOutOfRangeError(input: String, ctx: IntervalContext): Throwable = {
+    new ParseException(
+      errorClass = "INVALID_INTERVAL_FORMAT.TIMEZONE_INTERVAL_OUT_OF_RANGE",
+      messageParameters = Map("input" -> input),
+      ctx)
   }
 
   def invalidTimeZoneDisplacementValueError(ctx: SetTimeZoneContext): Throwable = {

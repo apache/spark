@@ -17,6 +17,8 @@
 import unittest
 
 from pyspark.testing.connectutils import should_test_connect
+from pyspark.sql.tests.test_udtf import BaseUDTFTestsMixin, UDTFArrowTestsMixin
+from pyspark.testing.connectutils import ReusedConnectTestCase
 
 if should_test_connect:
     from pyspark import sql
@@ -24,10 +26,7 @@ if should_test_connect:
 
     sql.udtf.UserDefinedTableFunction = UserDefinedTableFunction
     from pyspark.sql.connect.functions import lit, udtf
-
-from pyspark.sql.tests.test_udtf import BaseUDTFTestsMixin, UDTFArrowTestsMixin
-from pyspark.testing.connectutils import ReusedConnectTestCase
-from pyspark.errors.exceptions.connect import SparkConnectGrpcException, PythonException
+    from pyspark.errors.exceptions.connect import SparkConnectGrpcException, PythonException
 
 
 class UDTFParityTests(BaseUDTFTestsMixin, ReusedConnectTestCase):
@@ -85,6 +84,14 @@ class UDTFParityTests(BaseUDTFTestsMixin, ReusedConnectTestCase):
 
     def _add_file(self, path):
         self.spark.addArtifacts(path, file=True)
+
+    @unittest.skip("SPARK-50134: Support Spark Connect")
+    def test_udtf_with_lateral_join_dataframe(self):
+        super().test_udtf_with_lateral_join_dataframe()
+
+    @unittest.skip("SPARK-50134: Support Spark Connect")
+    def test_udtf_with_conditional_return_dataframe(self):
+        super().test_udtf_with_conditional_return_dataframe()
 
 
 class ArrowUDTFParityTests(UDTFArrowTestsMixin, UDTFParityTests):

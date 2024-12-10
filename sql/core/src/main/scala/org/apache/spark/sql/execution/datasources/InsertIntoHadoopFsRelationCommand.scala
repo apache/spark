@@ -84,6 +84,9 @@ case class InsertIntoHadoopFsRelationCommand(
         outputColumnNames,
         sparkSession.sessionState.conf.caseSensitiveAnalysis)
     }
+    if (!conf.allowCollationsInMapKeys) {
+      SchemaUtils.checkNoCollationsInMapKeys(query.schema)
+    }
 
     val hadoopConf = sparkSession.sessionState.newHadoopConfWithOptions(options)
     val fs = outputPath.getFileSystem(hadoopConf)

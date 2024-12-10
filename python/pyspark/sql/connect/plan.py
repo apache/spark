@@ -40,7 +40,6 @@ import json
 import pickle
 from threading import Lock
 from inspect import signature, isclass
-import warnings
 
 import pyarrow as pa
 
@@ -50,6 +49,7 @@ from pyspark.sql.types import DataType
 
 import pyspark.sql.connect.proto as proto
 from pyspark.sql.column import Column
+from pyspark.sql.connect.logging import logger
 from pyspark.sql.connect.proto import base_pb2 as spark_dot_connect_dot_base__pb2
 from pyspark.sql.connect.conversion import storage_level_to_proto
 from pyspark.sql.connect.expressions import Expression
@@ -205,7 +205,7 @@ class LogicalPlan:
                     try:
                         params[name] = getattr(self, "_" + name)
                     except AttributeError:
-                        pass  # Simpy ignore
+                        pass  # Simply ignore
         return params
 
     def print(self, indent: int = 0) -> str:
@@ -596,7 +596,7 @@ class CachedRemoteRelation(LogicalPlan):
                         metadata = session.client._builder.metadata()
                         channel(req, metadata=metadata)  # type: ignore[arg-type]
             except Exception as e:
-                warnings.warn(f"RemoveRemoteCachedRelation failed with exception: {e}.")
+                logger.warn(f"RemoveRemoteCachedRelation failed with exception: {e}.")
 
 
 class Hint(LogicalPlan):
@@ -1347,6 +1347,20 @@ class Transpose(LogicalPlan):
         if self.index_columns is not None and len(self.index_columns) > 0:
             for index_column in self.index_columns:
                 plan.transpose.index_columns.append(index_column.to_plan(session))
+        return plan
+
+
+class UnresolvedTableValuedFunction(LogicalPlan):
+    def __init__(self, name: str, args: Sequence[Column]):
+        super().__init__(None)
+        self._name = name
+        self._args = args
+
+    def plan(self, session: "SparkConnectClient") -> proto.Relation:
+        plan = self._create_proto_relation()
+        plan.unresolved_table_valued_function.function_name = self._name
+        for arg in self._args:
+            plan.unresolved_table_valued_function.arguments.append(arg.to_plan(session))
         return plan
 
 

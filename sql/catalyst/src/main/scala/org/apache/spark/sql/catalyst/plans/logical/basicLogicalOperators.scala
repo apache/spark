@@ -948,7 +948,8 @@ trait CTEInChildren extends LogicalPlan {
 
 case class WithWindowDefinition(
     windowDefinitions: Map[String, WindowSpecDefinition],
-    child: LogicalPlan) extends UnaryNode {
+    child: LogicalPlan,
+    forPipeSQL: Boolean) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
   final override val nodePatterns: Seq[TreePattern] = Seq(WITH_WINDOW_DEFINITION)
   override protected def withNewChildInternal(newChild: LogicalPlan): WithWindowDefinition =
@@ -964,7 +965,8 @@ case class WithWindowDefinition(
 case class Sort(
     order: Seq[SortOrder],
     global: Boolean,
-    child: LogicalPlan) extends UnaryNode {
+    child: LogicalPlan,
+    hint: Option[SortHint] = None) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
   override def maxRows: Option[Long] = child.maxRows
   override def maxRowsPerPartition: Option[Long] = {
@@ -1216,7 +1218,8 @@ case class Range(
 case class Aggregate(
     groupingExpressions: Seq[Expression],
     aggregateExpressions: Seq[NamedExpression],
-    child: LogicalPlan)
+    child: LogicalPlan,
+    hint: Option[AggregateHint] = None)
   extends UnaryNode {
 
   override lazy val resolved: Boolean = {
@@ -1283,7 +1286,8 @@ case class Window(
     windowExpressions: Seq[NamedExpression],
     partitionSpec: Seq[Expression],
     orderSpec: Seq[SortOrder],
-    child: LogicalPlan) extends UnaryNode {
+    child: LogicalPlan,
+    hint: Option[WindowHint] = None) extends UnaryNode {
   override def maxRows: Option[Long] = child.maxRows
   override def output: Seq[Attribute] =
     child.output ++ windowExpressions.map(_.toAttribute)
@@ -2029,6 +2033,9 @@ case class Deduplicate(
 }
 
 case class DeduplicateWithinWatermark(keys: Seq[Attribute], child: LogicalPlan) extends UnaryNode {
+  // Ensure that references include event time columns so they are not pruned away.
+  override def references: AttributeSet = AttributeSet(keys) ++
+    AttributeSet(child.output.filter(_.metadata.contains(EventTimeWatermark.delayKey)))
   override def maxRows: Option[Long] = child.maxRows
   override def output: Seq[Attribute] = child.output
   final override val nodePatterns: Seq[TreePattern] = Seq(DISTINCT_LIKE)
@@ -2116,7 +2123,7 @@ case class LateralJoin(
     joinType: JoinType,
     condition: Option[Expression]) extends UnaryNode {
 
-  override lazy val allAttributes: AttributeSeq = left.output ++ right.plan.output
+  override def allAttributes: AttributeSeq = left.output ++ right.plan.output
 
   require(Seq(Inner, LeftOuter, Cross).contains(joinType),
     s"Unsupported lateral join type $joinType")
