@@ -1756,14 +1756,10 @@ case class SubqueryAlias(
   }
 
   override def metadataOutput: Seq[Attribute] = {
-    // Propagate metadata columns from leaf nodes through a chain of `SubqueryAlias`.
-    if (child.isInstanceOf[LeafNode] || child.isInstanceOf[SubqueryAlias]) {
-      val qualifierList = identifier.qualifier :+ alias
-      val nonHiddenMetadataOutput = child.metadataOutput.filter(!_.qualifiedAccessOnly)
-      nonHiddenMetadataOutput.map(_.withQualifier(qualifierList))
-    } else {
-      Nil
-    }
+    // Propagate metadata columns
+    val qualifierList = identifier.qualifier :+ alias
+    val nonHiddenMetadataOutput = child.metadataOutput.filter(!_.qualifiedAccessOnly)
+    nonHiddenMetadataOutput.map(_.withQualifier(qualifierList))
   }
 
   override def maxRows: Option[Long] = child.maxRows
