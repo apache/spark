@@ -2206,10 +2206,15 @@ class SparkConnectPlanner(
       rel.getAggregateExpressionsList.asScala.toSeq, input, Some(initialDS))
     val finalDS = modifiedDSOpt.getOrElse(initialDS)
     val namedColumns = aggExprs.map { expr =>
-      val any = finalDS.vEncoder
-      val asTyped = Column(expr).as(any).expr
-      val typedColumnExpr = TypedAggUtils.withInputType(asTyped, any, finalDS.dataAttributes)
-      Column(typedColumnExpr).named
+      val vEncoder = finalDS.vEncoder
+      val asTyped = Column(expr).as(vEncoder).expr
+      val typedColumnExpr = TypedAggUtils.withInputType(
+        asTyped,
+        vEncoder,
+        finalDS.dataAttributes,
+        // Attach the new output schema (after applying map_values) to expressions such as UDAF.
+        replaceInputInfo = true)
+      toNamedExpression(typedColumnExpr)
     }
     logical.Aggregate(finalDS.groupingAttributes, keyColumn +: namedColumns, finalDS.analyzed)
   }
@@ -2303,14 +2308,12 @@ class SparkConnectPlanner(
 
   private def transformTypedMapValuesExpression(
       fun: proto.Expression.UnresolvedFunction,
-      initialDS: UntypedKeyValueGroupedDataset
-  ): (UntypedKeyValueGroupedDataset, Seq[Expression]) = {
+      initialDS: UntypedKeyValueGroupedDataset): (UntypedKeyValueGroupedDataset) = {
     require(fun.getFunctionName == "map_values")
     if (fun.getArgumentsCount <= 1) {
       throw InvalidPlanInput("map_values requires a single child expression")
     }
     val udfExpr = fun.getArgumentsList.get(0)
-    val otherExprs = fun.getArgumentsList.asScala.drop(1)
     if (!udfExpr.hasCommonInlineUserDefinedFunction ||
       !udfExpr.getCommonInlineUserDefinedFunction.hasScalarScalaUdf) {
       throw InvalidPlanInput(s"map_values should carry a scalar scala udf, but got $udfExpr")
@@ -2326,11 +2329,10 @@ class SparkConnectPlanner(
       initialDS.dataAttributes)
     val projected = Project(withNewData.newColumns ++ initialDS.groupingAttributes, withNewData)
     val analyzed = session.sessionState.executePlan(projected).analyzed
-    val finalDS = initialDS.copy(
+    initialDS.copy(
       vEncoder = udf.outEnc,
       analyzed = analyzed,
       dataAttributes = withNewData.newColumns)
-    (finalDS, otherExprs.map(transformExpression).toSeq)
   }
 
   private def transformExpressionsWithTypedUnresolvedExpression(
@@ -2345,10 +2347,12 @@ class SparkConnectPlanner(
           case "reduce" =>
             Some(transformTypedReduceExpression(expr.getUnresolvedFunction, plan.output))
           case "map_values" =>
-            val (ds, otherExprs) =
-              transformTypedMapValuesExpression(expr.getUnresolvedFunction, initialDS.get)
-            modifiedDS = Some(ds)
-            otherExprs
+            require(initialDS.isDefined,
+              "A UntypedKeyValueGroupedDataset must be provided for map_values expression.")
+            modifiedDS =
+              Some(transformTypedMapValuesExpression(expr.getUnresolvedFunction, initialDS.get))
+            // map_values is a special case, it doesn't return an expression.
+            None
           case _ =>
             Some(transformExpression(expr, Some(plan)))
         }

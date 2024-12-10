@@ -48,10 +48,11 @@ private[sql] object TypedAggUtils {
   private[sql] def withInputType[T <: Expression](
       expr: T,
       inputEncoder: ExpressionEncoder[_],
-      inputAttributes: Seq[Attribute]): T = {
+      inputAttributes: Seq[Attribute],
+      replaceInputInfo: Boolean = false): T = {
     val unresolvedDeserializer = UnresolvedDeserializer(inputEncoder.deserializer, inputAttributes)
     val transformed = expr transform {
-      case ta: TypedAggregateExpression if ta.inputDeserializer.isEmpty =>
+      case ta: TypedAggregateExpression if (replaceInputInfo || ta.inputDeserializer.isEmpty) =>
         ta.withInputInfo(
           deser = unresolvedDeserializer,
           cls = inputEncoder.clsTag.runtimeClass,

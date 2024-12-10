@@ -463,9 +463,7 @@ private class KeyValueGroupedDatasetImpl[K, V, IK, IV](
     val aggCols: Seq[Column] = valueMapFunc match {
       case Some(func) =>
         val udf = SparkUserDefinedFunction(func, ivEncoder :: Nil, vEncoder).apply(col("*"))
-        // The mapValues fn is defined as: mapValuesUdf, [aggExprs]+,
-        // Upon receiving this fn, split it into mapValuesUdf and [aggExprs]+.
-        Seq(Column.fn("map_values", udf +: columns: _*))
+        Seq(Column.fn("map_values", udf)) ++ columns
       case None =>
         columns
     }
