@@ -192,7 +192,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
     )
   }
 
-  private def isContainsUnsupportedLCA(e: Expression, operator: LogicalPlan): Boolean = {
+  private def containsUnsupportedLCA(e: Expression, operator: LogicalPlan): Boolean = {
     e.containsPattern(LATERAL_COLUMN_ALIAS_REFERENCE) && operator.expressions.exists {
       case a: Alias
         if e.collect { case l: LateralColumnAliasReference => l.nameParts.head }.contains(a.name) =>
@@ -369,7 +369,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
           case GetMapValue(map, key: Attribute) if isMapWithStringKey(map) && !key.resolved =>
             failUnresolvedAttribute(operator, key, "UNRESOLVED_MAP_KEY")
 
-          case e: Expression if isContainsUnsupportedLCA(e, operator) =>
+          case e: Expression if containsUnsupportedLCA(e, operator) =>
             val lcaRefNames =
               e.collect { case lcaRef: LateralColumnAliasReference => lcaRef.name }.distinct
             failAnalysis(
