@@ -146,12 +146,12 @@ class StatefulProcessorApiClient:
             # TODO(SPARK-49233): Classify user facing errors.
             raise PySparkRuntimeError(f"Error initializing value state: " f"{response_message[1]}")
         # Reconstruct the schema from the response message if the original schema is string.
-        schema_struct = schema
         if isinstance(schema, str):
             str_schema = response_message[2]
             schema_dict = json.loads(str_schema)
-            schema_struct = StructType.fromJson(schema_dict)
-        return schema_struct
+            return StructType.fromJson(schema_dict)
+        else:
+            return schema
 
     def get_list_state(
         self, state_name: str, schema: Union[StructType, str], ttl_duration_ms: Optional[int]
@@ -176,12 +176,12 @@ class StatefulProcessorApiClient:
             # TODO(SPARK-49233): Classify user facing errors.
             raise PySparkRuntimeError(f"Error initializing list state: " f"{response_message[1]}")
         # Reconstruct the schema from the response message if the original schema is string.
-        schema_struct = schema
         if isinstance(schema, str):
             str_schema = response_message[2]
             schema_dict = json.loads(str_schema)
-            schema_struct = StructType.fromJson(schema_dict)
-        return schema_struct
+            return StructType.fromJson(schema_dict)
+        else:
+            return schema
 
     def register_timer(self, expiry_time_stamp_ms: int) -> None:
         import pyspark.sql.streaming.proto.StateMessage_pb2 as stateMessage
@@ -325,16 +325,18 @@ class StatefulProcessorApiClient:
             # TODO(SPARK-49233): Classify user facing errors.
             raise PySparkRuntimeError(f"Error initializing map state: " f"{response_message[1]}")
         # Reconstruct the schema from the response message if the original schema is string.
-        user_key_schema_struct = user_key_schema
         if isinstance(user_key_schema, str):
             user_key_str_schema = response_message[2]
             user_key_schema_dict = json.loads(user_key_str_schema)
             user_key_schema_struct = StructType.fromJson(user_key_schema_dict)
-        value_schema_struct = value_schema
+        else:
+            user_key_schema_struct = user_key_schema
         if isinstance(value_schema, str):
             value_str_schema = response_message[3]
             value_schema_dict = json.loads(value_str_schema)
             value_schema_struct = StructType.fromJson(value_schema_dict)
+        else:
+            value_schema_struct = value_schema
         return user_key_schema_struct, value_schema_struct
 
     def delete_if_exists(self, state_name: str) -> None:
