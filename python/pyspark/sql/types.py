@@ -1561,16 +1561,17 @@ class StructType(DataType):
         if is_remote():
             from pyspark.sql.connect.session import SparkSession
 
-            return (
-                SparkSession.getActiveSession()
-                ._client._analyze(method="json_to_ddl", json_string=self.json())
-                .ddl_string
-            )
+            session = SparkSession.getActiveSession()
+            assert session is not None
+            return session._client._analyze(  # type: ignore[return-value]
+                method="json_to_ddl", json_string=self.json()
+            ).ddl_string
 
         else:
             from py4j.java_gateway import JVMView
 
             sc = get_active_spark_context()
+            assert sc._jvm is not None
             return cast(JVMView, sc._jvm).PythonSQLUtils.jsonToDDL(self.json())
 
 
