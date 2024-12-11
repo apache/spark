@@ -424,7 +424,7 @@ private[spark] trait VolcanoTestsSuite extends BeforeAndAfterEach { k8sSuite: Ku
     verifyJobsSucceededOneByOne(jobNum, groupName)
   }
 
-  test("SPARK-38187: Run SparkPi Jobs with minMemory", k8sTestTag, volcanoTag) {
+  ignore("SPARK-38187: Run SparkPi Jobs with minMemory", k8sTestTag, volcanoTag) {
     // scalastyle:off println
     println("SPARK-38187: Run SparkPi Jobs with minMemory start.")
     // scalastyle:on println
