@@ -181,7 +181,7 @@ class NoOpStatementExec extends LeafStatementExec {
  * @param label
  *   Label set by user to CompoundBody or None otherwise.
  * @param isScope
- *   Flag that indicates whether Compound Body
+ *   Flag that indicates whether Compound Body is scope or not.
  * @param context
  *   SqlScriptingExecutionContext keeps the execution state of current script.
  */
@@ -192,10 +192,14 @@ class CompoundBodyExec(
     context: SqlScriptingExecutionContext)
   extends NonLeafStatementExec {
 
+  private object ScopeStatus extends Enumeration {
+    type ScopeStatus = Value
+    val NotEntered, Inside, Exited = Value
+  }
+
   private var localIterator = statements.iterator
   private var curr = if (localIterator.hasNext) Some(localIterator.next()) else None
-  private var scopeEntered = false
-  private var scopeExited = false
+  private var scopeStatus = ScopeStatus.NotEntered
 
   /**
    * Enter scope represented by this compound statement.
@@ -204,11 +208,10 @@ class CompoundBodyExec(
    * iteration, but it should be executed only once when compound body that represent
    * scope is encountered for the first time.
    */
-  protected def enterScope(): Unit = {
+  def enterScope(): Unit = {
     // This check makes this operation idempotent.
-    if (isScope && !scopeEntered) {
-      scopeEntered = true
-      scopeExited = false
+    if (isScope && scopeStatus == ScopeStatus.NotEntered) {
+      scopeStatus = ScopeStatus.Inside
       context.enterScope(label.get)
     }
   }
@@ -220,9 +223,8 @@ class CompoundBodyExec(
    */
   protected def exitScope(): Unit = {
     // This check makes this operation idempotent.
-    if (isScope && scopeEntered && !scopeExited) {
-      scopeExited = true
-      scopeEntered = false
+    if (isScope && scopeStatus == ScopeStatus.Inside) {
+      scopeStatus = ScopeStatus.Exited
       context.exitScope(label.get)
     }
   }
@@ -297,8 +299,7 @@ class CompoundBodyExec(
     localIterator = statements.iterator
     curr = if (localIterator.hasNext) Some(localIterator.next()) else None
     stopIteration = false
-    scopeEntered = false
-    scopeExited = false
+    scopeStatus = ScopeStatus.NotEntered
   }
 
   /** Actions to do when LEAVE statement is encountered, to stop the execution of this compound. */

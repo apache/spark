@@ -41,7 +41,10 @@ class SqlScriptingExecution(
   private val context: SqlScriptingExecutionContext = {
     val ctx = new SqlScriptingExecutionContext()
     val executionPlan = interpreter.buildExecutionPlan(sqlScript, args, ctx)
-    ctx.frames.addOne(new SqlScriptingExecutionFrame(executionPlan))
+    // Add frame which represents SQL Script to the context.
+    ctx.frames.addOne(new SqlScriptingExecutionFrame(executionPlan.getTreeIterator))
+    // Enter the scope of the top level compound.
+    executionPlan.enterScope()
     ctx
   }
 
