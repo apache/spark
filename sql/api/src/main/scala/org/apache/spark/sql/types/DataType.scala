@@ -106,7 +106,7 @@ abstract class DataType extends AbstractDataType {
 
       // Only override TimestampType; TimestampType_NTZ type is already timestamp_ntz
       case _: TimestampType =>
-        s"""{"type": "timestamp_ltz"}"""
+        """{"type": "timestamp_ltz"}"""
 
       case yearMonthIntervalType: YearMonthIntervalType =>
         def getFieldName(field: Byte): String = {

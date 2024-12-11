@@ -98,7 +98,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DESCRIBE_COL_JSON_UNSUPPORTED",
+  "errorClass" : "UNSUPPORTED_FEATURE.DESC_TABLE_COLUMN_JSON",
   "sqlState" : "0A000"
 }
 
@@ -1038,7 +1038,7 @@ DESC FORMATTED t2 as json
 -- !query schema
 struct<json_metadata:string,:string,:string>
 -- !query output
-{"table_name":"t2","catalog_names":["spark_catalog"],"database_names":["default"],"qualified_name":"spark_catalog.default.t2","columns":[{"id":1,"name":"a","type":{"type":"string"}},{"id":2,"name":"b","type":{"type":"integer"}},{"id":3,"name":"c","type":{"type":"string"}},{"id":4,"name":"d","type":{"type":"string"}}],"bucket_columns":["a"],"sort_columns":["b"],"location":"file:[not included in comparison]/{warehouse_dir}/t2","storage_properties":{"a":"1","b":"2","password":"*********(redacted)"},"created_time":"2024-12-11T00:53:06.763Z","last_access":"UNKNOWN","created_by":"Spark 4.0.0-SNAPSHOT","type":"MANAGED","provider":"parquet","comment":"table_comment","table_properties":{"password":"*********(redacted)","t":"test"},"partition_provider":"Catalog","partition_columns":["c","d"]}
+{"table_name":"t2","catalog_names":["spark_catalog"],"database_names":["default"],"qualified_name":"spark_catalog.default.t2","columns":[{"id":1,"name":"a","type":{"type":"string"}},{"id":2,"name":"b","type":{"type":"integer"}},{"id":3,"name":"c","type":{"type":"string"}},{"id":4,"name":"d","type":{"type":"string"}}],"bucket_columns":["a"],"sort_columns":["b"],"location":"file:[not included in comparison]/{warehouse_dir}/t2","storage_properties":{"a":"1","b":"2","password":"*********(redacted)"},"created_time":"2024-12-11T18:05:58.019Z","last_access":"UNKNOWN","created_by":"Spark 4.0.0-SNAPSHOT","type":"MANAGED","provider":"parquet","comment":"table_comment","table_properties":{"password":"*********(redacted)","t":"test"},"partition_provider":"Catalog","partition_columns":["c","d"]}
 
 
 -- !query

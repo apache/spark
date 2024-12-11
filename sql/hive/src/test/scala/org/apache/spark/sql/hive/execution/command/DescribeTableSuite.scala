@@ -326,7 +326,7 @@ class DescribeTableSuite extends v1.DescribeTableSuiteBase with CommandSuiteBase
 
       checkError(
         exception = error,
-        condition = "DESCRIBE_COL_JSON_UNSUPPORTED")
+        condition = "UNSUPPORTED_FEATURE.DESC_TABLE_COLUMN_JSON")
     }
   }
 

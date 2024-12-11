@@ -49,7 +49,7 @@ private[sql] trait CompilationErrors extends DataTypeErrorsBase {
 
   def describeColJsonUnsupportedError(): AnalysisException = {
     new AnalysisException(
-      errorClass = "DESCRIBE_COL_JSON_UNSUPPORTED",
+      errorClass = "UNSUPPORTED_FEATURE.DESC_TABLE_COLUMN_JSON",
       messageParameters = Map.empty)
   }
 

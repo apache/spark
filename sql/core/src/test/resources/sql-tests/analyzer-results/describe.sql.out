@@ -77,7 +77,7 @@ DESC FORMATTED t a AS JSON
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DESCRIBE_COL_JSON_UNSUPPORTED",
+  "errorClass" : "UNSUPPORTED_FEATURE.DESC_TABLE_COLUMN_JSON",
   "sqlState" : "0A000"
 }
 
