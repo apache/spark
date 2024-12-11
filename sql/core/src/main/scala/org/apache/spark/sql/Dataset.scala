@@ -1564,7 +1564,8 @@ class Dataset[T] private[sql](
   /** @inheritdoc */
   def storageLevel: StorageLevel = {
     sparkSession.sharedState.cacheManager.lookupCachedData(this).map { cachedData =>
-      cachedData.cachedRepresentation.cacheBuilder.storageLevel
+      cachedData.cachedRepresentation.fold(CacheManager.inMemoryRelationExtractor, identity).
+        cacheBuilder.storageLevel
     }.getOrElse(StorageLevel.NONE)
   }
 
