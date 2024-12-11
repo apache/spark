@@ -357,6 +357,9 @@ object CollationTypeCoercion {
     case collate: Collate =>
       Some(addContextToStringType(collate.dataType, Explicit))
 
+    case expr @ (_: NamedExpression | _: SubqueryExpression | _: VariableReference) =>
+      Some(addContextToStringType(expr.dataType, Implicit))
+
     case cast: Cast =>
       if (isUserDefined(cast) && isComplexType(cast.dataType)) {
         // since we can't use collate clause with complex types
@@ -365,9 +368,6 @@ object CollationTypeCoercion {
       } else {
         Some(addContextToStringType(cast.dataType, Default))
       }
-
-    case expr @ (_: Alias | _: SubqueryExpression | _: AttributeReference | _: VariableReference) =>
-      Some(addContextToStringType(expr.dataType, Implicit))
 
     case lit: Literal =>
       Some(addContextToStringType(lit.dataType, Default))

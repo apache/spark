@@ -1878,6 +1878,7 @@ class SparkContext(config: SparkConf) extends Logging {
         if (uri.getFragment != null) uri.getFragment else source.getName)
       logInfo(
         log"Unpacking an archive ${MDC(LogKeys.PATH, path)}" +
+          log" (${MDC(LogKeys.BYTE_SIZE, source.length)} bytes)" +
           log" from ${MDC(LogKeys.SOURCE_PATH, source.getAbsolutePath)}" +
           log" to ${MDC(LogKeys.DESTINATION_PATH, dest.getAbsolutePath)}")
       Utils.deleteRecursively(dest)

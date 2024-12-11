@@ -115,6 +115,61 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("empty begin end block") {
+    val sqlScript =
+      """
+        |BEGIN
+        |END
+        |""".stripMargin
+    val expected = Seq.empty[Seq[Row]]
+    verifySqlScriptResult(sqlScript, expected)
+  }
+
+  test("empty begin end blocks") {
+    val sqlScript =
+      """
+        |BEGIN
+        | BEGIN
+        | END;
+        | BEGIN
+        | END;
+        |END
+        |""".stripMargin
+    val expected = Seq.empty[Seq[Row]]
+    verifySqlScriptResult(sqlScript, expected)
+  }
+
+  test("empty begin end blocks with single statement") {
+    val sqlScript =
+      """
+        |BEGIN
+        | BEGIN
+        | END;
+        | SELECT 1;
+        | BEGIN
+        | END;
+        |END
+        |""".stripMargin
+    val expected = Seq(Seq(Row(1)))
+    verifySqlScriptResult(sqlScript, expected)
+  }
+
+  test("empty begin end blocks - nested") {
+    val sqlScript =
+      """
+        |BEGIN
+        | BEGIN
+        |   BEGIN
+        |   END;
+        |   BEGIN
+        |   END;
+        | END;
+        |END
+        |""".stripMargin
+    val expected = Seq.empty[Seq[Row]]
+    verifySqlScriptResult(sqlScript, expected)
+  }
+
   test("session vars - set and read (SET VAR)") {
     val sqlScript =
       """
@@ -242,6 +297,40 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
         |END
         |""".stripMargin
     val expected = Seq(Seq(Row(42)))
+    verifySqlScriptResult(commands, expected)
+  }
+
+  test("if - empty body") {
+    val commands =
+      """
+        |BEGIN
+        | IF 1=1 THEN
+        |   BEGIN
+        |   END;
+        | END IF;
+        |END
+        |""".stripMargin
+    val expected = Seq.empty[Seq[Row]]
+    verifySqlScriptResult(commands, expected)
+  }
+
+  test("if - nested empty body") {
+    val commands =
+      """
+        |BEGIN
+        | IF 1=1 THEN
+        |   BEGIN
+        |     BEGIN
+        |     END;
+        |   END;
+        |   BEGIN
+        |     BEGIN
+        |     END;
+        |   END;
+        | END IF;
+        |END
+        |""".stripMargin
+    val expected = Seq.empty[Seq[Row]]
     verifySqlScriptResult(commands, expected)
   }
 
@@ -391,6 +480,42 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
         |END
         |""".stripMargin
     val expected = Seq(Seq(Row(42)))
+    verifySqlScriptResult(commands, expected)
+  }
+
+  test("searched case - empty body") {
+    val commands =
+      """
+        |BEGIN
+        | CASE
+        |   WHEN 1 = 1 THEN
+        |     BEGIN
+        |     END;
+        | END CASE;
+        |END
+        |""".stripMargin
+    val expected = Seq.empty[Seq[Row]]
+    verifySqlScriptResult(commands, expected)
+  }
+
+  test("searched case - nested empty body") {
+    val commands =
+      """
+        |BEGIN
+        | CASE
+        |   WHEN 1 = 1 THEN
+        |     BEGIN
+        |       BEGIN
+        |       END;
+        |     END;
+        |     BEGIN
+        |       BEGIN
+        |       END;
+        |     END;
+        | END CASE;
+        |END
+        |""".stripMargin
+    val expected = Seq.empty[Seq[Row]]
     verifySqlScriptResult(commands, expected)
   }
 
@@ -591,6 +716,42 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
         |END
         |""".stripMargin
     val expected = Seq(Seq(Row(42)))
+    verifySqlScriptResult(commands, expected)
+  }
+
+  test("simple case - empty body") {
+    val commands =
+      """
+        |BEGIN
+        | CASE 1
+        |   WHEN 1 THEN
+        |     BEGIN
+        |     END;
+        | END CASE;
+        |END
+        |""".stripMargin
+    val expected = Seq.empty[Seq[Row]]
+    verifySqlScriptResult(commands, expected)
+  }
+
+  test("simple case - nested empty body") {
+    val commands =
+      """
+        |BEGIN
+        | CASE 1
+        |   WHEN 1 THEN
+        |     BEGIN
+        |       BEGIN
+        |       END;
+        |     END;
+        |     BEGIN
+        |       BEGIN
+        |       END;
+        |     END;
+        | END CASE;
+        |END
+        |""".stripMargin
+    val expected = Seq.empty[Seq[Row]]
     verifySqlScriptResult(commands, expected)
   }
 
@@ -987,6 +1148,42 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
       Seq.empty[Row], // set i
       Seq.empty[Row] // drop i
     )
+    verifySqlScriptResult(commands, expected)
+  }
+
+  test("repeat - empty body") {
+    val commands =
+      """
+        |BEGIN
+        | REPEAT
+        |   BEGIN
+        |   END;
+        | UNTIL 1 = 1
+        | END REPEAT;
+        |END
+        |""".stripMargin
+
+    val expected = Seq.empty[Seq[Row]]
+    verifySqlScriptResult(commands, expected)
+  }
+
+  test("repeat - nested empty body") {
+    val commands =
+      """
+        |BEGIN
+        | REPEAT
+        |   BEGIN
+        |     BEGIN
+        |     END;
+        |   END;
+        |   BEGIN
+        |   END;
+        | UNTIL 1 = 1
+        | END REPEAT;
+        |END
+        |""".stripMargin
+
+    val expected = Seq.empty[Seq[Row]]
     verifySqlScriptResult(commands, expected)
   }
 
@@ -1800,7 +1997,7 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("for statement empty result") {
+  test("for statement - empty result") {
     withTable("t") {
       val sqlScript =
         """
@@ -1814,6 +2011,64 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
 
       val expected = Seq(
         Seq.empty[Row] // create table
+      )
+      verifySqlScriptResult(sqlScript, expected)
+    }
+  }
+
+  test("for statement - empty body") {
+    withTable("t") {
+      val sqlScript =
+        """
+          |BEGIN
+          | CREATE TABLE t (intCol INT, stringCol STRING, doubleCol DOUBLE) using parquet;
+          | INSERT INTO t VALUES (1, 'first', 1.0);
+          | FOR row AS SELECT * FROM t DO
+          |   BEGIN
+          |   END;
+          | END FOR;
+          |END
+          |""".stripMargin
+
+      val expected = Seq(
+        Seq.empty[Row], // create table
+        Seq.empty[Row], // insert
+        Seq.empty[Row], // drop local var
+        Seq.empty[Row], // drop local var
+        Seq.empty[Row], // drop local var
+        Seq.empty[Row] // drop local var
+      )
+      verifySqlScriptResult(sqlScript, expected)
+    }
+  }
+
+  test("for statement - nested empty body") {
+    withTable("t") {
+      val sqlScript =
+        """
+          |BEGIN
+          | CREATE TABLE t (intCol INT, stringCol STRING, doubleCol DOUBLE) using parquet;
+          | INSERT INTO t VALUES (1, 'first', 1.0);
+          | FOR row AS SELECT * FROM t DO
+          |   BEGIN
+          |     BEGIN
+          |     END;
+          |   END;
+          |   BEGIN
+          |     BEGIN
+          |     END;
+          |   END;
+          | END FOR;
+          |END
+          |""".stripMargin
+
+      val expected = Seq(
+        Seq.empty[Row], // create table
+        Seq.empty[Row], // insert
+        Seq.empty[Row], // drop local var
+        Seq.empty[Row], // drop local var
+        Seq.empty[Row], // drop local var
+        Seq.empty[Row] // drop local var
       )
       verifySqlScriptResult(sqlScript, expected)
     }

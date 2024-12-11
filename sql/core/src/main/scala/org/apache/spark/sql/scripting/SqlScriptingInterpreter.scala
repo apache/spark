@@ -94,6 +94,14 @@ case class SqlScriptingInterpreter(session: SparkSession) {
           isScope,
           context)
 
+        val statements =
+          collection.map(st => transformTreeIntoExecutable(st, args)) ++ dropVariables match {
+            case Nil => Seq(new NoOpStatementExec)
+            case s => s
+          }
+
+        new CompoundBodyExec(statements, label)
+
       case IfElseStatement(conditions, conditionalBodies, elseBody) =>
         val conditionsExec = conditions.map(condition =>
           new SingleStatementExec(

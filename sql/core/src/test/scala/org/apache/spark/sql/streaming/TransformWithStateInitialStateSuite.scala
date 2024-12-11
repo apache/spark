@@ -47,6 +47,8 @@ case class UnionUnflattenInitialStateRow(
 abstract class StatefulProcessorWithInitialStateTestClass[V]
     extends StatefulProcessorWithInitialState[
         String, InitInputRow, (String, String, Double), V] {
+  import implicits._
+
   @transient var _valState: ValueState[Double] = _
   @transient var _listState: ListState[Double] = _
   @transient var _mapState: MapState[Double, Int] = _
@@ -54,13 +56,9 @@ abstract class StatefulProcessorWithInitialStateTestClass[V]
   override def init(
       outputMode: OutputMode,
       timeMode: TimeMode): Unit = {
-    _valState = getHandle.getValueState[Double]("testValueInit", Encoders.scalaDouble,
-      TTLConfig.NONE)
-    _listState = getHandle.getListState[Double]("testListInit", Encoders.scalaDouble,
-      TTLConfig.NONE)
-    _mapState = getHandle.getMapState[Double, Int](
-      "testMapInit", Encoders.scalaDouble, Encoders.scalaInt,
-        TTLConfig.NONE)
+    _valState = getHandle.getValueState[Double]("testValueInit", TTLConfig.NONE)
+    _listState = getHandle.getListState[Double]("testListInit", TTLConfig.NONE)
+    _mapState = getHandle.getMapState[Double, Int]("testMapInit", TTLConfig.NONE)
   }
 
   override def handleInputRows(
