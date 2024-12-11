@@ -173,8 +173,6 @@ class JDBCRDD(
     offset: Int)
   extends RDD[InternalRow](sc, Nil) {
 
-  def getExternalEngineQuery: String = generateJdbcQuery(None)
-
   def generateJdbcQuery(partition: Option[JDBCPartition]): String = {
     // H2's JDBC driver does not support the setSchema() method.  We pass a
     // fully-qualified table name in the SELECT statement.  I don't know how to
@@ -202,6 +200,10 @@ class JDBCRDD(
    * Retrieve the list of partitions corresponding to this RDD.
    */
   override def getPartitions: Array[Partition] = partitions
+
+  override def getExternalEngineQuery: String = {
+    generateJdbcQuery(partition = None)
+  }
 
   /**
    * Runs the SQL query against the JDBC driver.
