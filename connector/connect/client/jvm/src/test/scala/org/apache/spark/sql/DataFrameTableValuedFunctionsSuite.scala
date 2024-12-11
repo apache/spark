@@ -205,8 +205,7 @@ class DataFrameTableValuedFunctionsSuite extends QueryTest with RemoteSparkSessi
     checkAnswer(actual, expected)
   }
 
-  // TODO(SPARK-50063): Support VARIANT in Spark Connect Scala client
-  ignore("variant_explode") {
+  test("variant_explode") {
     val actual1 = spark.tvf.variant_explode(parse_json(lit("""["hello", "world"]""")))
     val expected1 =
       spark.sql("""SELECT * FROM variant_explode(parse_json('["hello", "world"]'))""")
@@ -237,8 +236,7 @@ class DataFrameTableValuedFunctionsSuite extends QueryTest with RemoteSparkSessi
     checkAnswer(actual6, expected6)
   }
 
-  // TODO(SPARK-50063): Support VARIANT in Spark Connect Scala client
-  ignore("variant_explode_outer") {
+  test("variant_explode_outer") {
     val actual1 = spark.tvf.variant_explode_outer(parse_json(lit("""["hello", "world"]""")))
     val expected1 =
       spark.sql("""SELECT * FROM variant_explode_outer(parse_json('["hello", "world"]'))""")

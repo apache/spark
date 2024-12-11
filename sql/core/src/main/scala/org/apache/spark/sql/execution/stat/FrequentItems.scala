@@ -22,13 +22,13 @@ import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInputStream, Da
 import scala.collection.mutable
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{functions, DataFrame}
+import org.apache.spark.sql.{functions, Column, DataFrame}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Expression, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.expressions.aggregate.{ImperativeAggregate, TypedImperativeAggregate}
 import org.apache.spark.sql.catalyst.trees.UnaryLike
 import org.apache.spark.sql.catalyst.util.GenericArrayData
-import org.apache.spark.sql.internal.ExpressionUtils.{column, expression}
+import org.apache.spark.sql.classic.ClassicConversions._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
@@ -52,13 +52,15 @@ object FrequentItems extends Logging {
       df: DataFrame,
       cols: Seq[String],
       support: Double): DataFrame = {
+    import df.sparkSession.expression
     require(support >= 1e-4 && support <= 1.0, s"Support must be in [1e-4, 1], but got $support.")
 
     // number of max items to keep counts for
     val sizeOfMap = (1 / support).toInt
 
     val frequentItemCols = cols.map { col =>
-      column(new CollectFrequentItems(functions.col(col), sizeOfMap)).as(s"${col}_freqItems")
+      Column(new CollectFrequentItems(expression(functions.col(col)), sizeOfMap))
+        .as(s"${col}_freqItems")
     }
 
     df.select(frequentItemCols: _*)

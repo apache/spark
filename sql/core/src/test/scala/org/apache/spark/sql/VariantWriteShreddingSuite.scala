@@ -179,6 +179,17 @@ class VariantWriteShreddingSuite extends SparkFunSuite with ExpressionEvalHelper
     // Not an object
     testWithSchema(obj, ArrayType(StructType.fromDDL("a int, b string")),
       Row(obj.getMetadata, untypedValue(obj), null))
+
+    // Similar to the case above where "b" was not in the shredding schema, but with the unshredded
+    // value being an object. Check that the copied value has correct dictionary IDs.
+    val obj2 = parseJson("""{"a": 1, "b": {"c": "hello"}}""")
+    val residual2 = untypedValue("""{"b": {"c": "hello"}}""")
+    // First byte is the type, second is number of fields, and the third is the ID for "b"
+    residual2(2) = 1
+    // Followed by 2 bytes for offsets, inner object type and number of fields, then ID for "c".
+    residual2(7) = 2
+    testWithSchema(obj2, StructType.fromDDL("a int, c string"),
+      Row(obj2.getMetadata, residual2, Row(Row(null, 1), Row(null, null))))
   }
 
   test("shredding as array") {

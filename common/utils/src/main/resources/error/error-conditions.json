@@ -275,7 +275,7 @@
       },
       "INVALID_CHANGE_LOG_READER_VERSION" : {
         "message" : [
-          "The change log reader version cannot be <version>."
+          "The change log reader version cannot be <version>. The checkpoint probably is from a future Spark version, please upgrade your Spark."
         ]
       },
       "INVALID_CHANGE_LOG_WRITER_VERSION" : {
@@ -1476,6 +1476,11 @@
         "message" : [
           "Data type mismatches when reading Parquet column <column>. Expected Spark type <expectedType>, actual Parquet type <actualType>."
         ]
+      },
+      "UNSUPPORTED_FILE_SYSTEM" : {
+        "message" : [
+          "The file system <fileSystemClass> hasn't implemented <method>."
+        ]
       }
     },
     "sqlState" : "KD001"
@@ -2627,29 +2632,6 @@
     ],
     "sqlState" : "22006"
   },
-  "INVALID_INVERSE_DISTRIBUTION_FUNCTION" : {
-    "message" : [
-      "Invalid inverse distribution function <funcName>."
-    ],
-    "subClass" : {
-      "DISTINCT_UNSUPPORTED" : {
-        "message" : [
-          "Cannot use DISTINCT with WITHIN GROUP."
-        ]
-      },
-      "WITHIN_GROUP_MISSING" : {
-        "message" : [
-          "WITHIN GROUP is required for inverse distribution function."
-        ]
-      },
-      "WRONG_NUM_ORDERINGS" : {
-        "message" : [
-          "Requires <expectedNum> orderings in WITHIN GROUP but got <actualNum>."
-        ]
-      }
-    },
-    "sqlState" : "42K0K"
-  },
   "INVALID_JAVA_IDENTIFIER_AS_FIELD_NAME" : {
     "message" : [
       "<fieldName> is not a valid identifier of Java and cannot be used as field name",
@@ -3364,6 +3346,34 @@
     ],
     "sqlState" : "42601"
   },
+  "INVALID_WITHIN_GROUP_EXPRESSION" : {
+    "message" : [
+      "Invalid function <funcName> with WITHIN GROUP."
+    ],
+    "subClass" : {
+      "DISTINCT_UNSUPPORTED" : {
+        "message" : [
+          "The function does not support DISTINCT with WITHIN GROUP."
+        ]
+      },
+      "MISMATCH_WITH_DISTINCT_INPUT" : {
+        "message" : [
+          "The function is invoked with DISTINCT and WITHIN GROUP but expressions <funcArg> and <orderingExpr> do not match. The WITHIN GROUP ordering expression must be picked from the function inputs."
+        ]
+      },
+      "WITHIN_GROUP_MISSING" : {
+        "message" : [
+          "WITHIN GROUP is required for the function."
+        ]
+      },
+      "WRONG_NUM_ORDERINGS" : {
+        "message" : [
+          "The function requires <expectedNum> orderings in WITHIN GROUP but got <actualNum>."
+        ]
+      }
+    },
+    "sqlState" : "42K0K"
+  },
   "INVALID_WRITER_COMMIT_MESSAGE" : {
     "message" : [
       "The data source writer has generated an invalid number of commit messages. Expected exactly one writer commit message from each task, but received <detail>."
@@ -3563,6 +3573,12 @@
       "Detected multiple data sources with the name <provider> (<sourceNames>). Please specify the fully qualified class name or remove <externalSource> from the classpath."
     ],
     "sqlState" : "42710"
+  },
+  "MULTI_ALIAS_WITHOUT_GENERATOR" : {
+    "message" : [
+      "Multi part aliasing (<names>) is not supported with <expr> as it is not a generator function."
+    ],
+    "sqlState" : "42K0E"
   },
   "MULTI_SOURCES_UNSUPPORTED_FOR_EXPRESSION" : {
     "message" : [
@@ -4748,12 +4764,6 @@
     ],
     "sqlState" : "42KD9"
   },
-  "UNANALYZABLE_EXPRESSION" : {
-    "message" : [
-      "The plan contains an unanalyzable expression <expr> that holds the analysis."
-    ],
-    "sqlState" : "03000"
-  },
   "UNBOUND_SQL_PARAMETER" : {
     "message" : [
       "Found the unbound parameter: <name>. Please, fix `args` and provide a mapping of the parameter to either a SQL literal or collection constructor functions such as `map()`, `array()`, `struct()`."
@@ -5189,6 +5199,11 @@
           "The SQL pipe operator syntax using |> does not support <clauses>."
         ]
       },
+      "COLLATIONS_IN_MAP_KEYS" : {
+        "message" : [
+          "Collated strings for keys of maps"
+        ]
+      },
       "COMBINATION_QUERY_RESULT_CLAUSES" : {
         "message" : [
           "Combination of ORDER BY/SORT BY/DISTRIBUTE BY/CLUSTER BY."
@@ -5244,6 +5259,11 @@
           "Referencing lateral column alias <lca> in the aggregate query both with window expressions and with having clause. Please rewrite the aggregate query by removing the having clause or removing lateral alias reference in the SELECT list."
         ]
       },
+      "LATERAL_COLUMN_ALIAS_IN_GENERATOR" : {
+        "message" : [
+          "Referencing a lateral column alias <lca> in generator expression <generatorExpr>."
+        ]
+      },
       "LATERAL_COLUMN_ALIAS_IN_GROUP_BY" : {
         "message" : [
           "Referencing a lateral column alias via GROUP BY alias/ALL is not supported yet."
@@ -5292,6 +5312,11 @@
       "PARAMETER_MARKER_IN_UNEXPECTED_STATEMENT" : {
         "message" : [
           "Parameter markers are not allowed in <statement>."
+        ]
+      },
+      "PARTITION_BY_VARIANT" : {
+        "message" : [
+          "Cannot use VARIANT producing expressions to partition a DataFrame, but the type of expression <expr> is <dataType>."
         ]
       },
       "PARTITION_WITH_NESTED_COLUMN_IS_UNSUPPORTED" : {
@@ -5361,6 +5386,11 @@
           "Cannot have MAP type columns in DataFrame which calls set operations (INTERSECT, EXCEPT, etc.), but the type of column <colName> is <dataType>."
         ]
       },
+      "SET_OPERATION_ON_VARIANT_TYPE" : {
+        "message" : [
+          "Cannot have VARIANT type columns in DataFrame which calls set operations (INTERSECT, EXCEPT, etc.), but the type of column <colName> is <dataType>."
+        ]
+      },
       "SET_PROPERTIES_AND_DBPROPERTIES" : {
         "message" : [
           "set PROPERTIES and DBPROPERTIES at the same time."
@@ -5379,6 +5409,11 @@
       "SQL_SCRIPTING" : {
         "message" : [
           "SQL Scripting is under development and not all features are supported. SQL Scripting enables users to write procedural SQL including control flow and error handling. To enable existing features set <sqlScriptingEnabled> to `true`."
+        ]
+      },
+      "SQL_SCRIPTING_WITH_POSITIONAL_PARAMETERS" : {
+        "message" : [
+          "Positional parameters are not supported with SQL Scripting."
         ]
       },
       "STATE_STORE_MULTIPLE_COLUMN_FAMILIES" : {

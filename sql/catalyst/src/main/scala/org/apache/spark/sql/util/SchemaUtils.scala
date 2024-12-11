@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, NamedExpression}
 import org.apache.spark.sql.connector.expressions.{BucketTransform, FieldReference, NamedTransform, Transform}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
-import org.apache.spark.sql.types.{ArrayType, DataType, MapType, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{ArrayType, DataType, MapType, NoConstraint, StringType, StructField, StructType}
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.SparkSchemaUtils
 
@@ -304,6 +304,17 @@ private[spark] object SchemaUtils {
     }
   }
 
+  def checkNoCollationsInMapKeys(schema: DataType): Unit = schema match {
+    case m: MapType =>
+      if (hasNonUTF8BinaryCollation(m.keyType)) {
+        throw QueryCompilationErrors.collatedStringsInMapKeysNotSupportedError()
+      }
+      checkNoCollationsInMapKeys(m.valueType)
+    case s: StructType => s.fields.foreach(field => checkNoCollationsInMapKeys(field.dataType))
+    case a: ArrayType => checkNoCollationsInMapKeys(a.elementType)
+    case _ =>
+  }
+
   /**
    * Replaces any collated string type with non collated StringType
    * recursively in the given data type.
@@ -317,7 +328,7 @@ private[spark] object SchemaUtils {
       StructType(fields.map { field =>
         field.copy(dataType = replaceCollatedStringWithString(field.dataType))
       })
-    case _: StringType => StringType
+    case st: StringType if st.constraint == NoConstraint => StringType
     case _ => dt
   }
 }
