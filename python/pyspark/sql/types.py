@@ -1555,6 +1555,26 @@ class StructType(DataType):
             field._build_formatted_string(prefix, stringConcat, depth)
         return stringConcat.toString()
 
+    def toDDL(self) -> str:
+        from pyspark.sql.utils import is_remote
+
+        if is_remote():
+            from pyspark.sql.connect.session import SparkSession
+
+            return (
+                SparkSession.active()
+                ._client._analyze(method="json_to_ddl", json_string=self.json())
+                .ddl_string
+            )
+
+        else:
+            from py4j.java_gateway import JVMView
+
+            sc = get_active_spark_context()
+            return cast(JVMView, sc._jvm).org.apache.spark.sql.api.python.PythonSQLUtils.toDDL(
+                self.json()
+            )
+
 
 class VariantType(AtomicType):
     """
