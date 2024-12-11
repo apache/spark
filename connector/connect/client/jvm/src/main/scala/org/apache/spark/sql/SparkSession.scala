@@ -616,8 +616,8 @@ object SparkSession extends api.BaseSparkSessionCompanion with Logging {
         Option(System.getenv("SPARK_HOME")).map(Paths.get(_, "sbin", "start-connect-server.sh"))
 
       if (server.isEmpty &&
-          maybeConnectScript.exists(Files.exists(_)) &&
-          remoteString.isDefined) {
+        maybeConnectScript.exists(Files.exists(_)) &&
+        remoteString.isDefined) {
         server = Some {
           val args =
             Seq(maybeConnectScript.get.toString, "--master", remoteString.get) ++ sparkOptions

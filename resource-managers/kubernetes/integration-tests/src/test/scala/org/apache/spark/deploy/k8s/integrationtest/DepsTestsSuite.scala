@@ -284,11 +284,21 @@ private[spark] trait DepsTestsSuite { k8sSuite: KubernetesSuite =>
     }
   }
 
+  test("Launcher python client with Spark Connect", k8sTestTag, MinikubeTag) {
+    val pySparkFiles = Utils.getTestFileAbsolutePath("pyfiles.py", sparkHomeDir)
+    sparkAppConf.set("spark.api.mode", "connect")
+    testPython(
+      pySparkFiles,
+      Seq("Python runtime version check for executor is: True")
+      appArgs = Array(sparkAppConf.get("spark.master")))
+  }
+
   private def testPython(
       pySparkFiles: String,
       expectedDriverLogs: Seq[String],
       depsFile: Option[String] = None,
-      env: Map[String, String] = Map.empty[String, String]): Unit = {
+      env: Map[String, String] = Map.empty[String, String],
+      appArgs: Array[String] = Array("python3")): Unit = {
     tryDepsTest {
       sparkAppConf.set("spark.kubernetes.container.image", pyImage)
       runSparkApplicationAndVerifyCompletion(
