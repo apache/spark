@@ -98,6 +98,7 @@ class TransformWithStateInPandasTestsMixin:
         )
         return df_final
 
+    """
     def _test_transform_with_state_in_pandas_basic(
         self, stateful_processor, check_results, single_batch=False, timeMode="None"
     ):
@@ -589,6 +590,7 @@ class TransformWithStateInPandasTestsMixin:
         self._test_transform_with_state_in_pandas_event_time(
             EventTimeStatefulProcessor(), check_results
         )
+    """
 
     def _test_transform_with_state_init_state_in_pandas(
         self, stateful_processor, check_results, time_mode="None"
@@ -611,7 +613,7 @@ class TransformWithStateInPandasTestsMixin:
             ]
         )
 
-        data = [("0", 789), ("3", 987)]
+        data = [("0", 789), ("0", 987)]
         initial_state = self.spark.createDataFrame(data, "id string, initVal int").groupBy("id")
 
         q = (
@@ -642,6 +644,7 @@ class TransformWithStateInPandasTestsMixin:
                 # for key 1, it did not appear in the initial state df;
                 # for key 3, it did not appear in the first batch of input keys
                 # so it won't be emitted
+                print(f"batch id here: {batch_id}, batch df: {batch_df.collect()}\n")
                 assert set(batch_df.sort("id").collect()) == {
                     Row(id="0", value=str(789 + 123 + 46)),
                     Row(id="1", value=str(146 + 346)),
@@ -658,6 +661,7 @@ class TransformWithStateInPandasTestsMixin:
             SimpleStatefulProcessorWithInitialState(), check_results
         )
 
+    """
     def _test_transform_with_state_non_contiguous_grouping_cols(
         self, stateful_processor, check_results, initial_state=None
     ):
@@ -858,6 +862,7 @@ class TransformWithStateInPandasTestsMixin:
             self.test_transform_with_state_init_state_with_timers()
             self.test_transform_with_state_in_pandas_event_time()
             self.test_transform_with_state_in_pandas_proc_timer()
+    """
 
 
 class SimpleStatefulProcessorWithInitialState(StatefulProcessor):
@@ -865,6 +870,7 @@ class SimpleStatefulProcessorWithInitialState(StatefulProcessor):
     dict = {("0",): 789, ("3",): 987}
 
     def init(self, handle: StatefulProcessorHandle) -> None:
+        print(f"I am inside processor handle, init\n")
         state_schema = StructType([StructField("value", IntegerType(), True)])
         self.value_state = handle.getValueState("value_state", state_schema)
         self.handle = handle

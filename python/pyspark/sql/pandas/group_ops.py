@@ -562,6 +562,11 @@ class PandasGroupedOpsMixin:
         ) -> Iterator["PandasDataFrameLike"]:
             handle = StatefulProcessorHandle(statefulProcessorApiClient)
 
+            if mode == TransformWithStateInPandasFuncMode.PRE_INIT:
+                raise Exception(f"I am here, pre init\n")
+                statefulProcessor.init(handle)
+                return iter([])
+
             if statefulProcessorApiClient.handle_state == StatefulProcessorHandleState.CREATED:
                 statefulProcessor.init(handle)
                 statefulProcessorApiClient.set_handle_state(
@@ -607,6 +612,15 @@ class PandasGroupedOpsMixin:
              `initialStates` is initialized to the positional value as None.
             """
             handle = StatefulProcessorHandle(statefulProcessorApiClient)
+
+            if mode == TransformWithStateInPandasFuncMode.PRE_INIT:
+                statefulProcessorApiClient.set_handle_state(
+                    StatefulProcessorHandleState.PRE_INIT
+                )
+                statefulProcessor.init(handle)
+                # raise Exception(f"I am here, after pre init\n")
+                # return a dummy results, no return value is needed
+                return iter([])
 
             if statefulProcessorApiClient.handle_state == StatefulProcessorHandleState.CREATED:
                 statefulProcessor.init(handle)

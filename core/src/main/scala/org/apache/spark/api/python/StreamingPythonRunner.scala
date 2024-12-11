@@ -48,10 +48,10 @@ private[spark] class StreamingPythonRunner(
   protected val bufferSize: Int = conf.get(BUFFER_SIZE)
   protected val authSocketTimeout = conf.get(PYTHON_AUTH_SOCKET_TIMEOUT)
 
-  private val envVars: java.util.Map[String, String] = func.envVars
-  private val pythonExec: String = func.pythonExec
-  private var pythonWorker: Option[PythonWorker] = None
-  private var pythonWorkerFactory: Option[PythonWorkerFactory] = None
+  protected val envVars: java.util.Map[String, String] = func.envVars
+  protected val pythonExec: String = func.pythonExec
+  protected var pythonWorker: Option[PythonWorker] = None
+  protected var pythonWorkerFactory: Option[PythonWorkerFactory] = None
   protected val pythonVer: String = func.pythonVer
 
   /**

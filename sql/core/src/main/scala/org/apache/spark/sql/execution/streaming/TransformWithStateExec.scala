@@ -459,6 +459,7 @@ case class TransformWithStateExec(
       stateSchemaVersion: Int): List[StateSchemaValidationResult] = {
     assert(stateSchemaVersion >= 3)
     val newSchemas = getColFamilySchemas()
+    // driverprocessor.init() called
     val stateSchemaDir = stateSchemaDirPath()
     val newStateSchemaFilePath =
       new Path(stateSchemaDir, s"${batchId}_${UUID.randomUUID().toString}")
@@ -483,6 +484,7 @@ case class TransformWithStateExec(
         }
       case None => None
     }
+    // state schema file written here, writing the new schema list we passed here
     List(StateSchemaCompatibilityChecker.
       validateAndMaybeEvolveStateSchema(getStateInfo, hadoopConf,
       newSchemas.values.toList, session.sessionState, stateSchemaVersion,
