@@ -54,6 +54,7 @@ RUN apt-get update && apt-get install -y \
     pkg-config \
     qpdf \
     tzdata \
+    software-properties-common \
     wget \
     zlib1g-dev \
     && apt-get autoremove --purge -y \
