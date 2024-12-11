@@ -44,6 +44,8 @@ class SqlScriptingExecution(
     // Add frame which represents SQL Script to the context.
     ctx.frames.addOne(new SqlScriptingExecutionFrame(executionPlan.getTreeIterator))
     // Enter the scope of the top level compound.
+    // We don't need to exit this scope explicitly as it will be done automatically
+    // when the frame is removed during iteration.
     executionPlan.enterScope()
     ctx
   }

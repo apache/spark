@@ -40,7 +40,7 @@ case class SqlScriptingInterpreter(session: SparkSession) {
    * @param args
    *   A map of parameter names to SQL literal expressions.
    * @return
-   *   Iterator through collection of statements to be executed.
+   *   Top level CompoundBodyExec representing SQL Script to be executed.
    */
   def buildExecutionPlan(
       compound: CompoundBody,
