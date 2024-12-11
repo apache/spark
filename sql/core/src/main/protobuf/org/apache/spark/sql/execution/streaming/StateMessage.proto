@@ -41,6 +41,13 @@ message StateResponseWithLongTypeVal {
   int64 value = 3;
 }
 
+message StateResponseWithStringTypeVal {
+  int32 statusCode = 1;
+  string errorMessage = 2;
+  string value = 3;
+  string additionalValue = 4;
+}
+
 message StatefulProcessorCall {
   oneof method {
     SetHandleState setHandleState = 1;
@@ -93,9 +100,11 @@ message GetWatermark {
 
 message StateCallCommand {
   string stateName = 1;
-  string schema = 2;
-  string mapStateValueSchema = 3;
-  TTLConfig ttl = 4;
+  string jsonSchema = 2;
+  string stringSchema = 3;
+  string mapStateValueJsonSchema = 4;
+  string mapStateValueStringSchema = 5;
+  TTLConfig ttl = 6;
 }
 
 message TimerStateCallCommand {

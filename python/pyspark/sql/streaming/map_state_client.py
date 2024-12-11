@@ -35,14 +35,8 @@ class MapStateClient:
         value_schema: Union[StructType, str],
     ) -> None:
         self._stateful_processor_api_client = stateful_processor_api_client
-        if isinstance(user_key_schema, str):
-            self.user_key_schema = cast(StructType, _parse_datatype_string(user_key_schema))
-        else:
-            self.user_key_schema = user_key_schema
-        if isinstance(value_schema, str):
-            self.value_schema = cast(StructType, _parse_datatype_string(value_schema))
-        else:
-            self.value_schema = value_schema
+        self.user_key_schema = user_key_schema
+        self.value_schema = value_schema
         # Dictionaries to store the mapping between iterator id and a tuple of pandas DataFrame
         # and the index of the last row that was read.
         self.user_key_value_pair_iterator_cursors: Dict[str, Tuple["PandasDataFrameLike", int]] = {}

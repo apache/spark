@@ -69,11 +69,9 @@ class ValueStateClient:
             # TODO(SPARK-49233): Classify user facing errors.
             raise PySparkRuntimeError(f"Error getting value state: " f"{response_message[1]}")
 
-    def update(self, state_name: str, schema: Union[StructType, str], value: Tuple) -> None:
+    def update(self, state_name: str, schema: StructType, value: Tuple) -> None:
         import pyspark.sql.streaming.proto.StateMessage_pb2 as stateMessage
 
-        if isinstance(schema, str):
-            schema = cast(StructType, _parse_datatype_string(schema))
         bytes = self._stateful_processor_api_client._serialize_to_bytes(schema, value)
         update_call = stateMessage.ValueStateUpdate(value=bytes)
         value_state_call = stateMessage.ValueStateCall(

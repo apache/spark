@@ -54,7 +54,7 @@ class _HandleState:
 class _HandleStateEnumTypeWrapper(
     google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[_HandleState.ValueType],
     builtins.type,
-):  # noqa: F821
+):
     DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
     CREATED: _HandleState.ValueType  # 0
     INITIALIZED: _HandleState.ValueType  # 1
@@ -192,6 +192,41 @@ class StateResponseWithLongTypeVal(google.protobuf.message.Message):
     ) -> None: ...
 
 global___StateResponseWithLongTypeVal = StateResponseWithLongTypeVal
+
+class StateResponseWithStringTypeVal(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    STATUSCODE_FIELD_NUMBER: builtins.int
+    ERRORMESSAGE_FIELD_NUMBER: builtins.int
+    VALUE_FIELD_NUMBER: builtins.int
+    ADDITIONALVALUE_FIELD_NUMBER: builtins.int
+    statusCode: builtins.int
+    errorMessage: builtins.str
+    value: builtins.str
+    additionalValue: builtins.str
+    def __init__(
+        self,
+        *,
+        statusCode: builtins.int = ...,
+        errorMessage: builtins.str = ...,
+        value: builtins.str = ...,
+        additionalValue: builtins.str = ...,
+    ) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "additionalValue",
+            b"additionalValue",
+            "errorMessage",
+            b"errorMessage",
+            "statusCode",
+            b"statusCode",
+            "value",
+            b"value",
+        ],
+    ) -> None: ...
+
+global___StateResponseWithStringTypeVal = StateResponseWithStringTypeVal
 
 class StatefulProcessorCall(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
@@ -496,32 +531,42 @@ class StateCallCommand(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
     STATENAME_FIELD_NUMBER: builtins.int
-    SCHEMA_FIELD_NUMBER: builtins.int
-    MAPSTATEVALUESCHEMA_FIELD_NUMBER: builtins.int
+    JSONSCHEMA_FIELD_NUMBER: builtins.int
+    STRINGSCHEMA_FIELD_NUMBER: builtins.int
+    MAPSTATEVALUEJSONSCHEMA_FIELD_NUMBER: builtins.int
+    MAPSTATEVALUESTRINGSCHEMA_FIELD_NUMBER: builtins.int
     TTL_FIELD_NUMBER: builtins.int
     stateName: builtins.str
-    schema: builtins.str
-    mapStateValueSchema: builtins.str
+    jsonSchema: builtins.str
+    stringSchema: builtins.str
+    mapStateValueJsonSchema: builtins.str
+    mapStateValueStringSchema: builtins.str
     @property
     def ttl(self) -> global___TTLConfig: ...
     def __init__(
         self,
         *,
         stateName: builtins.str = ...,
-        schema: builtins.str = ...,
-        mapStateValueSchema: builtins.str = ...,
+        jsonSchema: builtins.str = ...,
+        stringSchema: builtins.str = ...,
+        mapStateValueJsonSchema: builtins.str = ...,
+        mapStateValueStringSchema: builtins.str = ...,
         ttl: global___TTLConfig | None = ...,
     ) -> None: ...
     def HasField(self, field_name: typing_extensions.Literal["ttl", b"ttl"]) -> builtins.bool: ...
     def ClearField(
         self,
         field_name: typing_extensions.Literal[
-            "mapStateValueSchema",
-            b"mapStateValueSchema",
-            "schema",
-            b"schema",
+            "jsonSchema",
+            b"jsonSchema",
+            "mapStateValueJsonSchema",
+            b"mapStateValueJsonSchema",
+            "mapStateValueStringSchema",
+            b"mapStateValueStringSchema",
             "stateName",
             b"stateName",
+            "stringSchema",
+            b"stringSchema",
             "ttl",
             b"ttl",
         ],

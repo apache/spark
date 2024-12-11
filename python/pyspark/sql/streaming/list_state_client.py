@@ -105,11 +105,9 @@ class ListStateClient:
         pandas_row = pandas_df.iloc[index]
         return tuple(pandas_row)
 
-    def append_value(self, state_name: str, schema: Union[StructType, str], value: Tuple) -> None:
+    def append_value(self, state_name: str, schema: StructType, value: Tuple) -> None:
         import pyspark.sql.streaming.proto.StateMessage_pb2 as stateMessage
 
-        if isinstance(schema, str):
-            schema = cast(StructType, _parse_datatype_string(schema))
         bytes = self._stateful_processor_api_client._serialize_to_bytes(schema, value)
         append_value_call = stateMessage.AppendValue(value=bytes)
         list_state_call = stateMessage.ListStateCall(
@@ -125,13 +123,9 @@ class ListStateClient:
             # TODO(SPARK-49233): Classify user facing errors.
             raise PySparkRuntimeError(f"Error updating value state: " f"{response_message[1]}")
 
-    def append_list(
-        self, state_name: str, schema: Union[StructType, str], values: List[Tuple]
-    ) -> None:
+    def append_list(self, state_name: str, schema: StructType, values: List[Tuple]) -> None:
         import pyspark.sql.streaming.proto.StateMessage_pb2 as stateMessage
 
-        if isinstance(schema, str):
-            schema = cast(StructType, _parse_datatype_string(schema))
         append_list_call = stateMessage.AppendList()
         list_state_call = stateMessage.ListStateCall(
             stateName=state_name, appendList=append_list_call
@@ -148,11 +142,9 @@ class ListStateClient:
             # TODO(SPARK-49233): Classify user facing errors.
             raise PySparkRuntimeError(f"Error updating value state: " f"{response_message[1]}")
 
-    def put(self, state_name: str, schema: Union[StructType, str], values: List[Tuple]) -> None:
+    def put(self, state_name: str, schema: StructType, values: List[Tuple]) -> None:
         import pyspark.sql.streaming.proto.StateMessage_pb2 as stateMessage
 
-        if isinstance(schema, str):
-            schema = cast(StructType, _parse_datatype_string(schema))
         put_call = stateMessage.ListStatePut()
         list_state_call = stateMessage.ListStateCall(stateName=state_name, listStatePut=put_call)
         state_variable_request = stateMessage.StateVariableRequest(listStateCall=list_state_call)
