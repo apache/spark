@@ -267,9 +267,17 @@ private[spark] trait VolcanoTestsSuite extends BeforeAndAfterEach { k8sSuite: Ku
     val appLoc = s"${appLocator}${batchSuffix}"
     val podName = s"${driverPodName}-${batchSuffix}"
     // create new configuration for every job
+    // scalastyle:off println
+    println(s"Successfully createVolcanoSparkConf, " +
+      s"podName: $podName, appLoc: $appLoc, " +
+      s"groupLoc: $groupLoc, queue: $queue, " +
+      s"conf, begin")
     val conf = createVolcanoSparkConf(podName, appLoc, groupLoc, queue, driverTemplate,
       driverPodGroupTemplate)
-    // scalastyle:off println
+    println(s"Successfully createVolcanoSparkConf, " +
+      s"podName: $podName, appLoc: $appLoc, " +
+      s"groupLoc: $groupLoc, queue: $queue, " +
+      s"conf, end")
     println(s"Successfully createVolcanoSparkConf, " +
       s"podName: $podName, appLoc: $appLoc, " +
       s"groupLoc: $groupLoc, queue: $queue, " +
@@ -378,6 +386,7 @@ private[spark] trait VolcanoTestsSuite extends BeforeAndAfterEach { k8sSuite: Ku
     (1 until jobNum).map { completedNum =>
       Eventually.eventually(TIMEOUT, INTERVAL) {
         val pendingPods = getPods(role = "driver", groupName, statusPhase = "Pending")
+        printAllResource()
         printAllPods(role = "driver", groupName)
         // scalastyle:off println
         println(s"pendingPods size: ${pendingPods.size}, " +
@@ -389,6 +398,7 @@ private[spark] trait VolcanoTestsSuite extends BeforeAndAfterEach { k8sSuite: Ku
     // All jobs succeeded finally
     Eventually.eventually(TIMEOUT, INTERVAL) {
       val succeededPods = getPods(role = "driver", groupName, statusPhase = "Succeeded")
+      printAllResource()
       printAllPods(role = "driver", groupName)
       // scalastyle:off println
       println(s"succeededPods size: ${succeededPods.size}, jobNum: $jobNum")
@@ -483,7 +493,11 @@ private[spark] trait VolcanoTestsSuite extends BeforeAndAfterEach { k8sSuite: Ku
       Future {
         val queueName = s"queue${i % 2}"
         val groupName = generateGroupName(queueName)
+        // scalastyle:off println
+        println(s"runJobAndVerify begin, i: $i, groupName: $groupName, queueName: $queueName")
         runJobAndVerify(i.toString, Option(groupName), Option(queueName))
+        println(s"runJobAndVerify end, i: $i, groupName: $groupName, queueName: $queueName")
+        // scalastyle:on println
       }
     }
     // There are two `Succeeded` jobs and two `Pending` jobs
