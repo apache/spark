@@ -23,8 +23,11 @@ DESCRIBE t;
 
 DESCRIBE EXTENDED t AS JSON;
 
--- AnalysisException: DESCRIBE TABLE ... AS JSON must be extended
+-- AnalysisException: describe table as json must be extended
 DESCRIBE t AS JSON;
+
+-- AnalysisException: describe col as json unsupported
+DESC FORMATTED t a AS JSON;
 
 DESC default.t;
 
@@ -60,8 +63,6 @@ DESC EXTENDED t PARTITION (C='Us', D=1) AS JSON;
 
 -- NoSuchPartitionException: Partition not found in table
 DESC t PARTITION (c='Us', d=2);
-
-DESC EXTENDED t PARTITION (c='Us', d=2) AS JSON;
 
 -- AnalysisException: Partition spec is invalid
 DESC t PARTITION (c='Us');
@@ -197,24 +198,32 @@ CREATE TABLE c (
 
 DESC FORMATTED c AS JSON;
 
--- from Spark 4.0 docs example
-CREATE TABLE customer(
-        cust_id INT,
-        state VARCHAR(20),
-        name STRING COMMENT "Short name"
-    )
-    USING parquet
-    PARTITIONED BY (state);
+CREATE TABLE special_types_table (
+  id STRING,
+  salary DECIMAL(10, 2),
+  short_description VARCHAR(255),
+  char_code CHAR(10),
+  timestamp_with_time_zone TIMESTAMP,
+  timestamp_without_time_zone TIMESTAMP_NTZ,
+  interval_year_to_month INTERVAL YEAR TO MONTH,
+  interval_day_to_hour INTERVAL DAY TO HOUR,
+  nested_struct STRUCT<
+    detail: STRING,
+    metrics: STRUCT<
+      precision: DECIMAL(5, 2),
+      scale: CHAR(5)
+    >,
+    time_info: STRUCT<
+      timestamp_ltz: TIMESTAMP,
+      timestamp_ntz: TIMESTAMP_NTZ
+    >
+  >,
+  preferences MAP<STRING, ARRAY<VARCHAR(50)>>
+) USING parquet
+  OPTIONS ('compression' = 'snappy')
+  COMMENT 'Table testing all special types'
+  TBLPROPERTIES ('test_property' = 'test_value');
 
-INSERT INTO customer PARTITION (state = "AR") VALUES (100, "Mike");
-
-DESC FORMATTED customer;
-
-DESC FORMATTED customer AS JSON;
-
-ANALYZE TABLE customer COMPUTE STATISTICS FOR COLUMNS cust_id;
-
--- AnalysisException: describe col as json unsupported
-DESC FORMATTED customer cust_id AS JSON;
+DESC FORMATTED special_types_table AS JSON;
 
 

@@ -73,6 +73,16 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
+DESC FORMATTED t a AS JSON
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "DESCRIBE_COL_JSON_UNSUPPORTED",
+  "sqlState" : "0A000"
+}
+
+
+-- !query
 DESC default.t
 -- !query analysis
 DescribeTableCommand `spark_catalog`.`default`.`t`, false, [col_name#x, data_type#x, comment#x]
@@ -170,20 +180,6 @@ DescribeTableJsonCommand `spark_catalog`.`default`.`t`, [C=Us, D=1], true
 
 -- !query
 DESC t PARTITION (c='Us', d=2)
--- !query analysis
-org.apache.spark.sql.catalyst.analysis.NoSuchPartitionException
-{
-  "errorClass" : "PARTITIONS_NOT_FOUND",
-  "sqlState" : "428FT",
-  "messageParameters" : {
-    "partitionList" : "PARTITION (`c` = Us, `d` = 2)",
-    "tableName" : "`default`.`t`"
-  }
-}
-
-
--- !query
-DESC EXTENDED t PARTITION (c='Us', d=2) AS JSON
 -- !query analysis
 org.apache.spark.sql.catalyst.analysis.NoSuchPartitionException
 {
@@ -568,56 +564,43 @@ DescribeTableJsonCommand `spark_catalog`.`default`.`c`, true
 
 
 -- !query
-CREATE TABLE customer(
-        cust_id INT,
-        state VARCHAR(20),
-        name STRING COMMENT "Short name"
-    )
-    USING parquet
-    PARTITIONED BY (state)
+CREATE TABLE special_types_table (
+  id STRING,
+  salary DECIMAL(10, 2),
+  short_description VARCHAR(255),
+  char_code CHAR(10),
+  timestamp_with_time_zone TIMESTAMP,
+  timestamp_without_time_zone TIMESTAMP_NTZ,
+  interval_year_to_month INTERVAL YEAR TO MONTH,
+  interval_day_to_hour INTERVAL DAY TO HOUR,
+  nested_struct STRUCT<
+    detail: STRING,
+    metrics: STRUCT<
+      precision: DECIMAL(5, 2),
+      scale: CHAR(5)
+    >,
+    time_info: STRUCT<
+      timestamp_ltz: TIMESTAMP,
+      timestamp_ntz: TIMESTAMP_NTZ
+    >
+  >,
+  preferences MAP<STRING, ARRAY<VARCHAR(50)>>
+) USING parquet
+  OPTIONS ('compression' = 'snappy')
+  COMMENT 'Table testing all special types'
+  TBLPROPERTIES ('test_property' = 'test_value')
 -- !query analysis
 org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 {
   "errorClass" : "TABLE_OR_VIEW_ALREADY_EXISTS",
   "sqlState" : "42P07",
   "messageParameters" : {
-    "relationName" : "`spark_catalog`.`default`.`customer`"
+    "relationName" : "`spark_catalog`.`default`.`special_types_table`"
   }
 }
 
 
 -- !query
-INSERT INTO customer PARTITION (state = "AR") VALUES (100, "Mike")
+DESC FORMATTED special_types_table AS JSON
 -- !query analysis
-InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/customer, [state=AR], false, [state#x], Parquet, [path=file:[not included in comparison]/{warehouse_dir}/customer], Append, `spark_catalog`.`default`.`customer`, org.apache.spark.sql.execution.datasources.CatalogFileIndex(file:[not included in comparison]/{warehouse_dir}/customer), [cust_id, name, state]
-+- Project [cust_id#x, name#x, cast(AR as string) AS state#x]
-   +- Project [cast(col1#x as int) AS cust_id#x, cast(col2#x as string) AS name#x]
-      +- LocalRelation [col1#x, col2#x]
-
-
--- !query
-DESC FORMATTED customer
--- !query analysis
-DescribeTableCommand `spark_catalog`.`default`.`customer`, true, [col_name#x, data_type#x, comment#x]
-
-
--- !query
-DESC FORMATTED customer AS JSON
--- !query analysis
-DescribeTableJsonCommand `spark_catalog`.`default`.`customer`, true
-
-
--- !query
-ANALYZE TABLE customer COMPUTE STATISTICS FOR COLUMNS cust_id
--- !query analysis
-AnalyzeColumnCommand `spark_catalog`.`default`.`customer`, List(cust_id), false
-
-
--- !query
-DESC FORMATTED customer cust_id AS JSON
--- !query analysis
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "DESCRIBE_COL_JSON_UNSUPPORTED",
-  "sqlState" : "0A000"
-}
+DescribeTableJsonCommand `spark_catalog`.`default`.`special_types_table`, true

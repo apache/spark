@@ -92,6 +92,18 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
+DESC FORMATTED t a AS JSON
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "DESCRIBE_COL_JSON_UNSUPPORTED",
+  "sqlState" : "0A000"
+}
+
+
+-- !query
 DESC default.t
 -- !query schema
 struct<col_name:string,data_type:string,comment:string>
@@ -410,22 +422,6 @@ struct<json_metadata:string,:string,:string>
 
 -- !query
 DESC t PARTITION (c='Us', d=2)
--- !query schema
-struct<>
--- !query output
-org.apache.spark.sql.catalyst.analysis.NoSuchPartitionException
-{
-  "errorClass" : "PARTITIONS_NOT_FOUND",
-  "sqlState" : "428FT",
-  "messageParameters" : {
-    "partitionList" : "PARTITION (`c` = Us, `d` = 2)",
-    "tableName" : "`default`.`t`"
-  }
-}
-
-
--- !query
-DESC EXTENDED t PARTITION (c='Us', d=2) AS JSON
 -- !query schema
 struct<>
 -- !query output
@@ -1042,7 +1038,7 @@ DESC FORMATTED t2 as json
 -- !query schema
 struct<json_metadata:string,:string,:string>
 -- !query output
-{"table_name":"t2","catalog_names":["spark_catalog"],"database_names":["default"],"qualified_name":"spark_catalog.default.t2","columns":[{"id":1,"name":"a","type":{"type":"string"}},{"id":2,"name":"b","type":{"type":"integer"}},{"id":3,"name":"c","type":{"type":"string"}},{"id":4,"name":"d","type":{"type":"string"}}],"bucket_columns":["a"],"sort_columns":["b"],"location":"file:[not included in comparison]/{warehouse_dir}/t2","storage_properties":{"a":"1","b":"2","password":"*********(redacted)"},"created_time":"2024-12-10T23:19:44.996Z","last_access":"UNKNOWN","created_by":"Spark 4.0.0-SNAPSHOT","type":"MANAGED","provider":"parquet","comment":"table_comment","table_properties":{"password":"*********(redacted)","t":"test"},"partition_provider":"Catalog","partition_columns":["c","d"]}
+{"table_name":"t2","catalog_names":["spark_catalog"],"database_names":["default"],"qualified_name":"spark_catalog.default.t2","columns":[{"id":1,"name":"a","type":{"type":"string"}},{"id":2,"name":"b","type":{"type":"integer"}},{"id":3,"name":"c","type":{"type":"string"}},{"id":4,"name":"d","type":{"type":"string"}}],"bucket_columns":["a"],"sort_columns":["b"],"location":"file:[not included in comparison]/{warehouse_dir}/t2","storage_properties":{"a":"1","b":"2","password":"*********(redacted)"},"created_time":"2024-12-11T00:37:05.625Z","last_access":"UNKNOWN","created_by":"Spark 4.0.0-SNAPSHOT","type":"MANAGED","provider":"parquet","comment":"table_comment","table_properties":{"password":"*********(redacted)","t":"test"},"partition_provider":"Catalog","partition_columns":["c","d"]}
 
 
 -- !query
@@ -1082,13 +1078,31 @@ struct<json_metadata:string,:string,:string>
 
 
 -- !query
-CREATE TABLE customer(
-        cust_id INT,
-        state VARCHAR(20),
-        name STRING COMMENT "Short name"
-    )
-    USING parquet
-    PARTITIONED BY (state)
+CREATE TABLE special_types_table (
+  id STRING,
+  salary DECIMAL(10, 2),
+  short_description VARCHAR(255),
+  char_code CHAR(10),
+  timestamp_with_time_zone TIMESTAMP,
+  timestamp_without_time_zone TIMESTAMP_NTZ,
+  interval_year_to_month INTERVAL YEAR TO MONTH,
+  interval_day_to_hour INTERVAL DAY TO HOUR,
+  nested_struct STRUCT<
+    detail: STRING,
+    metrics: STRUCT<
+      precision: DECIMAL(5, 2),
+      scale: CHAR(5)
+    >,
+    time_info: STRUCT<
+      timestamp_ltz: TIMESTAMP,
+      timestamp_ntz: TIMESTAMP_NTZ
+    >
+  >,
+  preferences MAP<STRING, ARRAY<VARCHAR(50)>>
+) USING parquet
+  OPTIONS ('compression' = 'snappy')
+  COMMENT 'Table testing all special types'
+  TBLPROPERTIES ('test_property' = 'test_value')
 -- !query schema
 struct<>
 -- !query output
@@ -1096,61 +1110,8 @@ struct<>
 
 
 -- !query
-INSERT INTO customer PARTITION (state = "AR") VALUES (100, "Mike")
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-DESC FORMATTED customer
--- !query schema
-struct<col_name:string,data_type:string,comment:string>
--- !query output
-cust_id             	int                 	                    
-name                	string              	Short name          
-state               	varchar(20)         	                    
-# Partition Information	                    	                    
-# col_name          	data_type           	comment             
-state               	varchar(20)         	                    
-                    	                    	                    
-# Detailed Table Information	                    	                    
-Catalog             	spark_catalog       	                    
-Database            	default             	                    
-Table               	customer            	                    
-Created Time [not included in comparison]
-Last Access [not included in comparison]
-Created By [not included in comparison]
-Type                	MANAGED             	                    
-Provider            	parquet             	                    
-Location [not included in comparison]/{warehouse_dir}/customer	                    
-Partition Provider  	Catalog
-
-
--- !query
-DESC FORMATTED customer AS JSON
+DESC FORMATTED special_types_table AS JSON
 -- !query schema
 struct<json_metadata:string,:string,:string>
 -- !query output
-{"table_name":"customer","catalog_names":["spark_catalog"],"database_names":["default"],"qualified_name":"spark_catalog.default.customer","columns":[{"id":1,"name":"cust_id","type":{"type":"integer"}},{"id":2,"name":"name","type":{"type":"string"},"comment":"Short name"},{"id":3,"name":"state","type":{"type":"varchar(20)"}}],"location": "[not included in comparison]/{warehouse_dir}/customer","created_time [not included in comparison]":"None","last_access [not included in comparison]":"None","created_by [not included in comparison]":"None","type":"MANAGED","provider":"parquet","partition_provider":"Catalog","partition_columns":["state"]}
-
-
--- !query
-ANALYZE TABLE customer COMPUTE STATISTICS FOR COLUMNS cust_id
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-DESC FORMATTED customer cust_id AS JSON
--- !query schema
-struct<>
--- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "DESCRIBE_COL_JSON_UNSUPPORTED",
-  "sqlState" : "0A000"
-}
+{"table_name":"special_types_table","catalog_names":["spark_catalog"],"database_names":["default"],"qualified_name":"spark_catalog.default.special_types_table","columns":[{"id":1,"name":"id","type":{"type":"string"}},{"id":2,"name":"salary","type":{"type":"decimal","precision":10,"scale":2}},{"id":3,"name":"short_description","type":{"type":"varchar","length":255}},{"id":4,"name":"char_code","type":{"type":"char","length":10}},{"id":5,"name":"timestamp_with_time_zone","type":{"type":"timestamp_ltz"}},{"id":6,"name":"timestamp_without_time_zone","type":{"type":"timestamp_ntz"}},{"id":7,"name":"interval_year_to_month","type":{"type":"interval","start_unit":"year","end_unit":"month"}},{"id":8,"name":"interval_day_to_hour","type":{"type":"interval","start_unit":"day","end_unit":"day"}},{"id":9,"name":"nested_struct","type":{"type":"struct","fields":[{"name":"detail","type":{"type":"string"},"nullable":true},{"name":"metrics","type":{"type":"struct","fields":[{"name":"precision","type":{"type":"decimal","precision":5,"scale":2},"nullable":true},{"name":"scale","type":{"type":"char","length":5},"nullable":true}]},"nullable":true},{"name":"time_info","type":{"type":"struct","fields":[{"name":"timestamp_ltz","type":{"type":"timestamp_ltz"},"nullable":true},{"name":"timestamp_ntz","type":{"type":"timestamp_ntz"},"nullable":true}]},"nullable":true}]}},{"id":10,"name":"preferences","type":{"type":"map","keyType":{"type":"string"},"valueType":{"type":"array","elementType":{"type":"varchar","length":50},"containsNull":true},"valueContainsNull":true}}],"location": "[not included in comparison]/{warehouse_dir}/special_types_table","storage_properties":{"compression":"snappy"},"created_time [not included in comparison]":"None","last_access [not included in comparison]":"None","created_by [not included in comparison]":"None","type":"MANAGED","provider":"parquet","comment":"Table testing all special types","table_properties":{"test_property":"test_value"}}

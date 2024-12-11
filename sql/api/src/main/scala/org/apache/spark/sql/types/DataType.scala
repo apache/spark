@@ -73,7 +73,7 @@ abstract class DataType extends AbstractDataType {
   def prettyJson: String = pretty(render(jsonValue))
 
   /** Util to recursively form JSON representation of data type, used for DESCRIBE AS JSON.
-   * Differs from `json` by adding additional fields for complex types. */
+   * Differs from `json` by overriding the JSON representation of some types. */
   def jsonType: String = {
     this match {
       case arrayType: ArrayType =>
@@ -94,7 +94,37 @@ abstract class DataType extends AbstractDataType {
         }.mkString(", ")
         s"""{"type": "struct", "fields": [$fieldsJson]}"""
 
-      // Base case for simple types
+      case decimalType: DecimalType =>
+        s"""{"type": "decimal", "precision": ${decimalType.precision},
+           |"scale": ${decimalType.scale}}""".stripMargin
+
+      case varcharType: VarcharType =>
+        s"""{"type": "varchar", "length": ${varcharType.length}}"""
+
+      case charType: CharType =>
+        s"""{"type": "char", "length": ${charType.length}}"""
+
+      // Only override TimestampType; TimestampType_NTZ type is already timestamp_ntz
+      case _: TimestampType =>
+        s"""{"type": "timestamp_ltz"}"""
+
+      case yearMonthIntervalType: YearMonthIntervalType =>
+        def getFieldName(field: Byte): String = {
+          YearMonthIntervalType.fieldToString(field)
+        }
+        val startUnit = getFieldName(yearMonthIntervalType.startField)
+        val endUnit = getFieldName(yearMonthIntervalType.endField)
+        s"""{"type": "interval", "start_unit": "$startUnit", "end_unit": "$endUnit"}"""
+
+      case dayTimeIntervalType: DayTimeIntervalType =>
+        def getFieldName(field: Byte): String = {
+          DayTimeIntervalType.fieldToString(field)
+        }
+        val startUnit = getFieldName(dayTimeIntervalType.startField)
+        val endUnit = getFieldName(dayTimeIntervalType.startField)
+        s"""{"type": "interval", "start_unit": "$startUnit", "end_unit": "$endUnit"}"""
+
+      // Base case for other simple types
       case _ =>
         s"""{"type": "$typeName"}"""
     }
