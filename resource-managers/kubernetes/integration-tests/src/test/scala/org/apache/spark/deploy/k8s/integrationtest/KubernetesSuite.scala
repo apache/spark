@@ -484,7 +484,7 @@ class KubernetesSuite extends SparkFunSuite
       pyFiles,
       env)
     // scalastyle:off println
-    println(s"SparkAppLauncher.launch, isJVM: $isJVM, appArguments: $appArguments")
+    println(s"SparkAppLauncher.launch end, isJVM: $isJVM, appArguments: $appArguments")
     // scalastyle:on println
 
     val driverPod = kubernetesTestComponents.kubernetesClient

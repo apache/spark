@@ -135,13 +135,20 @@ private[spark] object SparkAppLauncher extends Logging {
       commandLine ++= appArguments.appArgs
     }
     println(s"Launching a spark app with command line: ${commandLine.mkString(" ")}")
-    val outputs = ProcessUtils.executeProcess(commandLine.toArray, timeoutSecs, env = env)
-    println("-----------------------Output Begin-----------------------")
-    println(s"Launching a spark app with command line: ${commandLine.mkString(" ")}")
-    outputs.foreach(line => {
-      println(line)
-    })
-    println("-----------------------Output End-----------------------")
     // scalastyle:on println
+    val thread = new Thread(new Runnable {
+      override def run(): Unit = {
+        // scalastyle:off println
+        val outputs = ProcessUtils.executeProcess(commandLine.toArray, timeoutSecs, env = env)
+        println("-----------------------Output Begin-----------------------")
+        println(s"Launching a spark app with command line: ${commandLine.mkString(" ")}")
+        outputs.foreach(line => {
+          println(line)
+        })
+        println("-----------------------Output End-----------------------")
+        // scalastyle:on println
+      }
+    })
+    thread.start()
   }
 }

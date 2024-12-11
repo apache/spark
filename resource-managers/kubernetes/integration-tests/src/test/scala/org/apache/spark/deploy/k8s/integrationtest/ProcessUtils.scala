@@ -42,7 +42,8 @@ object ProcessUtils extends Logging {
     val proc = pb.start()
     val outputLines = new ArrayBuffer[String]
     // scalastyle:off println
-    println(s"ProcessUtils begin fullCommand: ${fullCommand.mkString(", ")} , env: $env")
+    println(s"ProcessUtils begin fullCommand: ${fullCommand.mkString(", ")} , env: $env, " +
+      s"timeout: $timeout")
     // scalastyle:on println
     val resource = proc.getInputStream
     try {

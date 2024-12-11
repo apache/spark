@@ -268,16 +268,14 @@ private[spark] trait VolcanoTestsSuite extends BeforeAndAfterEach { k8sSuite: Ku
     val podName = s"${driverPodName}-${batchSuffix}"
     // create new configuration for every job
     // scalastyle:off println
-    println(s"Successfully createVolcanoSparkConf, " +
+    println(s"createVolcanoSparkConf begin, " +
       s"podName: $podName, appLoc: $appLoc, " +
-      s"groupLoc: $groupLoc, queue: $queue, " +
-      s"conf, begin")
+      s"groupLoc: $groupLoc, queue: $queue,")
     val conf = createVolcanoSparkConf(podName, appLoc, groupLoc, queue, driverTemplate,
       driverPodGroupTemplate)
-    println(s"Successfully createVolcanoSparkConf, " +
+    println(s"createVolcanoSparkConf end, " +
       s"podName: $podName, appLoc: $appLoc, " +
-      s"groupLoc: $groupLoc, queue: $queue, " +
-      s"conf, end")
+      s"groupLoc: $groupLoc, queue: $queue")
     println(s"Successfully createVolcanoSparkConf, " +
       s"podName: $podName, appLoc: $appLoc, " +
       s"groupLoc: $groupLoc, queue: $queue, " +
@@ -295,7 +293,7 @@ private[spark] trait VolcanoTestsSuite extends BeforeAndAfterEach { k8sSuite: Ku
       )
     } else {
       // scalastyle:off println
-      println(s"Successfully runSparkPiAndVerifyCompletion, " +
+      println(s"Will runSparkPiAndVerifyCompletion, " +
         s"podName: $podName, appLoc: $appLoc, " +
         s"groupLoc: $groupLoc, queue: $queue, " +
         s"driverTemplate: $driverTemplate, driverPodGroupTemplate: $driverPodGroupTemplate")
