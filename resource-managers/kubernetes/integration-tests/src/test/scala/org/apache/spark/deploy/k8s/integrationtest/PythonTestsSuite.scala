@@ -67,6 +67,36 @@ private[spark] trait PythonTestsSuite { k8sSuite: KubernetesSuite =>
       isJVM = false,
       pyFiles = Some(PYSPARK_CONTAINER_TESTS))
   }
+
+  test("Run PySpark with memory customization", k8sTestTag) {
+    sparkAppConf
+      .set("spark.kubernetes.container.image", pyImage)
+      .set("spark.kubernetes.memoryOverheadFactor", s"$memOverheadConstant")
+      .set("spark.executor.pyspark.memory", s"${additionalMemory}m")
+    runSparkApplicationAndVerifyCompletion(
+      appResource = PYSPARK_MEMORY_CHECK,
+      mainClass = "",
+      expectedDriverLogOnCompletion = Seq(
+        "PySpark Worker Memory Check is: True"),
+      appArgs = Array(s"$additionalMemoryInBytes"),
+      driverPodChecker = doDriverMemoryCheck,
+      executorPodChecker = doExecutorMemoryCheck,
+      isJVM = false,
+      pyFiles = Some(PYSPARK_CONTAINER_TESTS))
+  }
+
+  test("Run PySpark with Spark Connect", k8sTestTag) {
+    sparkAppConf.set("spark.kubernetes.container.image", pyImage)
+    sparkAppConf.set("spark.api.mode", "connect")
+    runSparkApplicationAndVerifyCompletion(
+      appResource = Utils.getTestFileAbsolutePath("pyfiles.py", sparkHomeDir),
+      mainClass = "",
+      expectedDriverLogOnCompletion = Seq("Python runtime version check for executor is: True"),
+      appArgs = Array(sparkAppConf.get("spark.master")),
+      driverPodChecker = doBasicDriverPyPodCheck,
+      executorPodChecker = doBasicExecutorPyPodCheck,
+      isJVM = false)
+  }
 }
 
 private[spark] object PythonTestsSuite {
