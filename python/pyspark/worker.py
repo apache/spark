@@ -358,7 +358,7 @@ def wrap_cogrouped_map_arrow_udf(f, return_type, argspec, runner_conf):
             key = tuple(c[0] for c in key_table.columns)
             result = f(key, left_value_table, right_value_table)
 
-        verify_arrow_result(result, _assign_cols_by_name, expected_cols_and_types)
+        verify_arrow_table(result, _assign_cols_by_name, expected_cols_and_types)
 
         return result.to_batches()
 
