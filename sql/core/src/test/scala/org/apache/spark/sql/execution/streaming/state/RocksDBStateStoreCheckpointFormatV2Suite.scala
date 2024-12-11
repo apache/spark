@@ -34,7 +34,6 @@ object CkptIdCollectingStateStoreWrapper {
 
   // Method to add a string (checkpoint ID) to the list in a synchronized way
   def addCheckpointInfo(checkpointID: StateStoreCheckpointInfo): Unit = synchronized {
-    println(s"wei== added new ckpt info: $checkpointID")
     checkpointInfos = checkpointID :: checkpointInfos
   }
 
