@@ -289,7 +289,7 @@ private[spark] trait DepsTestsSuite { k8sSuite: KubernetesSuite =>
     sparkAppConf.set("spark.api.mode", "connect")
     testPython(
       pySparkFiles,
-      Seq("Python runtime version check for executor is: True")
+      Seq("Python runtime version check for executor is: True"),
       appArgs = Array(sparkAppConf.get("spark.master")))
   }
 
