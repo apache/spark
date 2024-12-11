@@ -220,7 +220,7 @@ class CompoundBodyExec(
    */
   protected def exitScope(): Unit = {
     // This check makes this operation idempotent.
-    if (isScope && !scopeExited) {
+    if (isScope && scopeEntered && !scopeExited) {
       scopeExited = true
       scopeEntered = false
       context.exitScope(label.get)
