@@ -1038,7 +1038,15 @@ DESC FORMATTED t2 as json
 -- !query schema
 struct<json_metadata:string,:string,:string>
 -- !query output
-{"table_name":"t2","catalog_names":["spark_catalog"],"database_names":["default"],"qualified_name":"spark_catalog.default.t2","columns":[{"id":1,"name":"a","type":{"type":"string"}},{"id":2,"name":"b","type":{"type":"integer"}},{"id":3,"name":"c","type":{"type":"string"}},{"id":4,"name":"d","type":{"type":"string"}}],"bucket_columns":["a"],"sort_columns":["b"],"location":"file:[not included in comparison]/{warehouse_dir}/t2","storage_properties":{"a":"1","b":"2","password":"*********(redacted)"},"created_time":"2024-12-11T00:37:05.625Z","last_access":"UNKNOWN","created_by":"Spark 4.0.0-SNAPSHOT","type":"MANAGED","provider":"parquet","comment":"table_comment","table_properties":{"password":"*********(redacted)","t":"test"},"partition_provider":"Catalog","partition_columns":["c","d"]}
+{"table_name":"t2","catalog_names":["spark_catalog"],"database_names":["default"],"qualified_name":"spark_catalog.default.t2","columns":[{"id":1,"name":"a","type":{"type":"string"}},{"id":2,"name":"b","type":{"type":"integer"}},{"id":3,"name":"c","type":{"type":"string"}},{"id":4,"name":"d","type":{"type":"string"}}],"bucket_columns":["a"],"sort_columns":["b"],"location":"file:[not included in comparison]/{warehouse_dir}/t2","storage_properties":{"a":"1","b":"2","password":"*********(redacted)"},"created_time":"2024-12-11T00:53:06.763Z","last_access":"UNKNOWN","created_by":"Spark 4.0.0-SNAPSHOT","type":"MANAGED","provider":"parquet","comment":"table_comment","table_properties":{"password":"*********(redacted)","t":"test"},"partition_provider":"Catalog","partition_columns":["c","d"]}
+
+
+-- !query
+DROP TABLE t2
+-- !query schema
+struct<>
+-- !query output
+
 
 
 -- !query
@@ -1075,6 +1083,14 @@ DESC FORMATTED c AS JSON
 struct<json_metadata:string,:string,:string>
 -- !query output
 {"table_name":"c","catalog_names":["spark_catalog"],"database_names":["default"],"qualified_name":"spark_catalog.default.c","columns":[{"id":1,"name":"nested_struct","type":{"type":"struct","fields":[{"name":"name","type":{"type":"string"},"nullable":true},{"name":"age","type":{"type":"integer"},"nullable":true},{"name":"contact","type":{"type":"struct","fields":[{"name":"email","type":{"type":"string"},"nullable":true},{"name":"phone_numbers","type":{"type":"array","elementType":{"type":"string"},"containsNull":true},"nullable":true},{"name":"addresses","type":{"type":"array","elementType":{"type":"struct","fields":[{"name":"street","type":{"type":"string"},"nullable":true},{"name":"city","type":{"type":"string"},"nullable":true},{"name":"zip","type":{"type":"integer"},"nullable":true}]},"containsNull":true},"nullable":true}]},"nullable":true}]}},{"id":2,"name":"preferences","type":{"type":"map","keyType":{"type":"string"},"valueType":{"type":"array","elementType":{"type":"string"},"containsNull":true},"valueContainsNull":true}},{"id":3,"name":"id","type":{"type":"string"}}],"location": "[not included in comparison]/{warehouse_dir}/c","storage_properties":{"option1":"value1","option2":"value2"},"created_time [not included in comparison]":"None","last_access [not included in comparison]":"None","created_by [not included in comparison]":"None","type":"MANAGED","provider":"parquet","comment":"A table with nested complex types","table_properties":{"password":"*********(redacted)","property1":"value1"},"partition_provider":"Catalog","partition_columns":["id"]}
+
+
+-- !query
+DROP TABLE c
+-- !query schema
+struct<>
+-- !query output
+
 
 
 -- !query
@@ -1115,3 +1131,11 @@ DESC FORMATTED special_types_table AS JSON
 struct<json_metadata:string,:string,:string>
 -- !query output
 {"table_name":"special_types_table","catalog_names":["spark_catalog"],"database_names":["default"],"qualified_name":"spark_catalog.default.special_types_table","columns":[{"id":1,"name":"id","type":{"type":"string"}},{"id":2,"name":"salary","type":{"type":"decimal","precision":10,"scale":2}},{"id":3,"name":"short_description","type":{"type":"varchar","length":255}},{"id":4,"name":"char_code","type":{"type":"char","length":10}},{"id":5,"name":"timestamp_with_time_zone","type":{"type":"timestamp_ltz"}},{"id":6,"name":"timestamp_without_time_zone","type":{"type":"timestamp_ntz"}},{"id":7,"name":"interval_year_to_month","type":{"type":"interval","start_unit":"year","end_unit":"month"}},{"id":8,"name":"interval_day_to_hour","type":{"type":"interval","start_unit":"day","end_unit":"day"}},{"id":9,"name":"nested_struct","type":{"type":"struct","fields":[{"name":"detail","type":{"type":"string"},"nullable":true},{"name":"metrics","type":{"type":"struct","fields":[{"name":"precision","type":{"type":"decimal","precision":5,"scale":2},"nullable":true},{"name":"scale","type":{"type":"char","length":5},"nullable":true}]},"nullable":true},{"name":"time_info","type":{"type":"struct","fields":[{"name":"timestamp_ltz","type":{"type":"timestamp_ltz"},"nullable":true},{"name":"timestamp_ntz","type":{"type":"timestamp_ntz"},"nullable":true}]},"nullable":true}]}},{"id":10,"name":"preferences","type":{"type":"map","keyType":{"type":"string"},"valueType":{"type":"array","elementType":{"type":"varchar","length":50},"containsNull":true},"valueContainsNull":true}}],"location": "[not included in comparison]/{warehouse_dir}/special_types_table","storage_properties":{"compression":"snappy"},"created_time [not included in comparison]":"None","last_access [not included in comparison]":"None","created_by [not included in comparison]":"None","type":"MANAGED","provider":"parquet","comment":"Table testing all special types","table_properties":{"test_property":"test_value"}}
+
+
+-- !query
+DROP TABLE special_types_table
+-- !query schema
+struct<>
+-- !query output
+

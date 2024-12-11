@@ -21,7 +21,6 @@ import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.types.{MetadataBuilder, StringType}
 
 private[sql] object DescribeCommandSchema {
-  // TODO asl3: remove the unecessary attribute fields
   def describeTableAttributes(asJson: Boolean): Seq[AttributeReference] = {
     if (asJson) {
       Seq(

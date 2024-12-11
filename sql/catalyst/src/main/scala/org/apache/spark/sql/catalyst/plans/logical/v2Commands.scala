@@ -710,7 +710,6 @@ case class DescribeColumn(
 
 object DescribeColumn {
   def getOutputAttrs: Seq[Attribute] = DescribeCommandSchema.describeColumnAttributes()
-
 }
 
 /**

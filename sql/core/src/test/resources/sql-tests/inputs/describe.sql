@@ -173,6 +173,8 @@ DESC t2;
 
 DESC FORMATTED t2 as json;
 
+DROP TABLE t2;
+
 CREATE TABLE c (
   id STRING,
   nested_struct STRUCT<
@@ -197,6 +199,8 @@ CREATE TABLE c (
 
 
 DESC FORMATTED c AS JSON;
+
+DROP TABLE c;
 
 CREATE TABLE special_types_table (
   id STRING,
@@ -225,5 +229,7 @@ CREATE TABLE special_types_table (
   TBLPROPERTIES ('test_property' = 'test_value');
 
 DESC FORMATTED special_types_table AS JSON;
+
+DROP TABLE special_types_table;
 
 

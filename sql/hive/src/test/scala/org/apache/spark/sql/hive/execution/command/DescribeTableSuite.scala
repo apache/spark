@@ -276,7 +276,6 @@ class DescribeTableSuite extends v1.DescribeTableSuiteBase with CommandSuiteBase
     }
   }
 
-  // TODO: Should temp view have no other fields?
   test("DESCRIBE AS JSON temp view") {
     withNamespaceAndTable("ns", "table") { t =>
       val tableCreationStr =
@@ -538,12 +537,4 @@ case class Field(
   name: String,
   `type`: Type,
   nullable: Option[Boolean] = None
-)
-
-/** Represents JSON output of DESCRIBE TABLE <col_name> AS JSON  */
-case class ColumnJson(
-  id: Int,
-  name: String,
-  `type`: Type,
-  default_value: Option[String] = None
 )

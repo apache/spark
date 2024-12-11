@@ -502,14 +502,7 @@ TBLPROPERTIES (
     password 'password'
 )
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
-{
-  "errorClass" : "TABLE_OR_VIEW_ALREADY_EXISTS",
-  "sqlState" : "42P07",
-  "messageParameters" : {
-    "relationName" : "`spark_catalog`.`default`.`t2`"
-  }
-}
+CreateDataSourceTableCommand `spark_catalog`.`default`.`t2`, false
 
 
 -- !query
@@ -522,6 +515,13 @@ DescribeTableCommand `spark_catalog`.`default`.`t2`, false, [col_name#x, data_ty
 DESC FORMATTED t2 as json
 -- !query analysis
 DescribeTableJsonCommand `spark_catalog`.`default`.`t2`, true
+
+
+-- !query
+DROP TABLE t2
+-- !query analysis
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.t2
 
 
 -- !query
@@ -547,20 +547,20 @@ CREATE TABLE c (
   COMMENT 'A table with nested complex types'
   TBLPROPERTIES ('property1' = 'value1', 'password' = 'password')
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
-{
-  "errorClass" : "TABLE_OR_VIEW_ALREADY_EXISTS",
-  "sqlState" : "42P07",
-  "messageParameters" : {
-    "relationName" : "`spark_catalog`.`default`.`c`"
-  }
-}
+CreateDataSourceTableCommand `spark_catalog`.`default`.`c`, false
 
 
 -- !query
 DESC FORMATTED c AS JSON
 -- !query analysis
 DescribeTableJsonCommand `spark_catalog`.`default`.`c`, true
+
+
+-- !query
+DROP TABLE c
+-- !query analysis
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.c
 
 
 -- !query
@@ -590,17 +590,17 @@ CREATE TABLE special_types_table (
   COMMENT 'Table testing all special types'
   TBLPROPERTIES ('test_property' = 'test_value')
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
-{
-  "errorClass" : "TABLE_OR_VIEW_ALREADY_EXISTS",
-  "sqlState" : "42P07",
-  "messageParameters" : {
-    "relationName" : "`spark_catalog`.`default`.`special_types_table`"
-  }
-}
+CreateDataSourceTableCommand `spark_catalog`.`default`.`special_types_table`, false
 
 
 -- !query
 DESC FORMATTED special_types_table AS JSON
 -- !query analysis
 DescribeTableJsonCommand `spark_catalog`.`default`.`special_types_table`, true
+
+
+-- !query
+DROP TABLE special_types_table
+-- !query analysis
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.special_types_table

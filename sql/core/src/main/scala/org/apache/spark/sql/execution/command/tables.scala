@@ -856,9 +856,9 @@ case class DescribeTableJsonCommand(
   }
 
   private def describeColsJson(
-                                schema: StructType,
-                                buffer: ArrayBuffer[Row],
-                                header: Boolean): Unit = {
+    schema: StructType,
+    buffer: ArrayBuffer[Row],
+    header: Boolean): Unit = {
 
     val defaultValuesMap = Option(ResolveDefaultColumns.getDescribeMetadata(schema))
       .getOrElse(Seq.empty)
