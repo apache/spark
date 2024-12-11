@@ -90,7 +90,7 @@ case class SqlScriptingInterpreter(session: SparkSession) {
           .reverse
 
         val statements = collection
-            .map(st => transformTreeIntoExecutable(st, args, context)) ++ dropVariables match {
+          .map(st => transformTreeIntoExecutable(st, args, context)) ++ dropVariables match {
             case Nil => Seq(new NoOpStatementExec)
             case s => s
           }
