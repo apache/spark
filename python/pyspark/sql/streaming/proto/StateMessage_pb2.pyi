@@ -54,7 +54,7 @@ class _HandleState:
 class _HandleStateEnumTypeWrapper(
     google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[_HandleState.ValueType],
     builtins.type,
-):
+):  # noqa: F821
     DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
     CREATED: _HandleState.ValueType  # 0
     INITIALIZED: _HandleState.ValueType  # 1
