@@ -349,7 +349,7 @@ class GroupedMapInArrowTestsMixin:
         self.assertEqual(df2.join(df2).count(), 1)
 
 
-class GroupedMapInArrowTests(GroupedMapInArrowTestsMixin):
+class GroupedMapInArrowTests(GroupedMapInArrowTestsMixin, ReusedSQLTestCase):
     @classmethod
     def setUpClass(cls):
         ReusedSQLTestCase.setUpClass()
