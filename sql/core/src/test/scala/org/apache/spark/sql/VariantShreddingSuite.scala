@@ -155,7 +155,16 @@ class VariantShreddingSuite extends QueryTest with SharedSparkSession with Parqu
       Row(metadata(Nil), null, Array(Row(null, null))))
     checkException(path, "v", "MALFORMED_VARIANT")
     // Shredded field must not be null.
-    writeRows(path, writeSchema(StructType.fromDDL("a int")),
+    // Construct the schema manually, because SparkShreddingUtils.variantShreddingSchema will make
+    // `a` non-nullable, which would prevent us from writing the file.
+    val schema = StructType(Seq(StructField("v", StructType(Seq(
+      StructField("metadata", BinaryType),
+      StructField("value", BinaryType),
+      StructField("typed_value", StructType(Seq(
+        StructField("a", StructType(Seq(
+          StructField("value", BinaryType),
+          StructField("typed_value", BinaryType))))))))))))
+    writeRows(path, schema,
       Row(metadata(Seq("a")), null, Row(null)))
     checkException(path, "v", "MALFORMED_VARIANT")
     // `value` must not contain any shredded field.
