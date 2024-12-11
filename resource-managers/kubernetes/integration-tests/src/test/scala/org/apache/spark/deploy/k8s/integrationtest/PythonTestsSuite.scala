@@ -72,13 +72,14 @@ private[spark] trait PythonTestsSuite { k8sSuite: KubernetesSuite =>
     sparkAppConf.set("spark.kubernetes.container.image", pyImage)
     sparkAppConf.set("spark.api.mode", "connect")
     runSparkApplicationAndVerifyCompletion(
-      appResource = Utils.getTestFileAbsolutePath("pyfiles.py", sparkHomeDir),
+      appResource = PYSPARK_CONNECT_FILES,
       mainClass = "",
       expectedDriverLogOnCompletion = Seq("Python runtime version check for executor is: True"),
       appArgs = Array(sparkAppConf.get("spark.master")),
       driverPodChecker = doBasicDriverPyPodCheck,
       executorPodChecker = doBasicExecutorPyPodCheck,
-      isJVM = false)
+      isJVM = false,
+      pyFiles = Some(PYSPARK_CONTAINER_TESTS))
   }
 }
 
@@ -87,6 +88,7 @@ private[spark] object PythonTestsSuite {
   val PYSPARK_PI: String = CONTAINER_LOCAL_PYSPARK + "pi.py"
   val TEST_LOCAL_PYSPARK: String = "local:///opt/spark/tests/"
   val PYSPARK_FILES: String = TEST_LOCAL_PYSPARK + "pyfiles.py"
+  val PYSPARK_CONNECT_FILES: String = TEST_LOCAL_PYSPARK + "pyfiles_connect.py"
   val PYSPARK_CONTAINER_TESTS: String = TEST_LOCAL_PYSPARK + "py_container_checks.py"
   val PYSPARK_MEMORY_CHECK: String = TEST_LOCAL_PYSPARK + "worker_memory_check.py"
 }
