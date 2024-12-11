@@ -155,6 +155,29 @@ private[spark] trait VolcanoTestsSuite extends BeforeAndAfterEach { k8sSuite: Ku
     testResources += resource
   }
 
+  private def printAllResource(): Unit = {
+    val queues = kubernetesTestComponents.kubernetesClient.adapt(classOf[VolcanoClient])
+      .queues()
+      .inNamespace(kubernetesTestComponents.namespace)
+      .list()
+      .getItems.asScala
+    // scalastyle:off println
+    println("---------------------------------------------------")
+    println(s"All Queues size: ${queues.size}.")
+    queues.foreach(queue => {
+      println(s"queue status: ${queue.getStatus}, " +
+        s"spec: ${queue.getSpec}, " +
+        s"namespace: ${queue.getMetadata.getNamespace}, " +
+        s"name: ${queue.getMetadata.getName}, " +
+        s"spark-group-locator: " +
+        s"${queue.getMetadata.getLabels.getOrDefault("spark-group-locator", "N/A")}, " +
+        s"spark-role: " +
+        s"${queue.getMetadata.getLabels.getOrDefault("spark-role", "N/A")}")
+    })
+    println("---------------------------------------------------")
+    // scalastyle:on println
+  }
+
   private def createOrReplaceQueue(name: String,
       cpu: Option[String] = None,
       memory: Option[String] = None): Unit = {
@@ -220,7 +243,7 @@ private[spark] trait VolcanoTestsSuite extends BeforeAndAfterEach { k8sSuite: Ku
       .getItems.asScala
     // scalastyle:off println
     println("---------------------------------------------------")
-    println(s"Role Pods size: ${rolePods.size}, all Pods size: ${pods.size}.")
+    println(s"Role $role Pods size: ${rolePods.size}, all Pods size: ${pods.size}.")
     pods.foreach(pod => {
       println(s"pod status: ${pod.getStatus.getPhase}, " +
         s"namespace: ${pod.getMetadata.getNamespace}, " +
@@ -451,6 +474,7 @@ private[spark] trait VolcanoTestsSuite extends BeforeAndAfterEach { k8sSuite: Ku
     // Disabled queue0 and enabled queue1
     createOrReplaceQueue(name = "queue0", cpu = Some("0.001"))
     createOrReplaceQueue(name = "queue1")
+    printAllResource()
     val QUEUE_NUMBER = 2
     // Submit jobs into disabled queue0 and enabled queue1
     // By default is 4 (2 jobs in each queue)
@@ -464,6 +488,7 @@ private[spark] trait VolcanoTestsSuite extends BeforeAndAfterEach { k8sSuite: Ku
     }
     // There are two `Succeeded` jobs and two `Pending` jobs
     Eventually.eventually(TIMEOUT, INTERVAL) {
+      printAllResource()
       printAllPods("driver", s"${GROUP_PREFIX}queue1")
       val completedPods = getPods("driver", s"${GROUP_PREFIX}queue1", "Succeeded")
       assert(completedPods.size === jobNum/2)
