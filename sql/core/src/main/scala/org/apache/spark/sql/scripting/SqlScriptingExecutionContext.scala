@@ -30,14 +30,14 @@ class SqlScriptingExecutionContext {
 
   def enterScope(label: String): Unit = {
     if (frames.isEmpty) {
-      throw SparkException.internalError(s"Cannot enter scope: no frames.")
+      throw SparkException.internalError("Cannot enter scope: no frames.")
     }
     frames.last.enterScope(label)
   }
 
   def exitScope(label: String): Unit = {
     if (frames.isEmpty) {
-      throw SparkException.internalError(s"Cannot exit scope: no frames.")
+      throw SparkException.internalError("Cannot exit scope: no frames.")
     }
     frames.last.exitScope(label)
   }
@@ -68,7 +68,7 @@ class SqlScriptingExecutionFrame(
 
   def exitScope(label: String): Unit = {
     if (scopes.isEmpty) {
-      throw SparkException.internalError(s"Cannot exit scope: no scopes to exit.")
+      throw SparkException.internalError("Cannot exit scope: no scopes to exit.")
     }
 
     // Remove all scopes until the one with the given label.

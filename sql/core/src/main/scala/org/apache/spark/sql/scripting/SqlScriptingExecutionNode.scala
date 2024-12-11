@@ -194,12 +194,12 @@ class CompoundBodyExec(
 
   private object ScopeStatus extends Enumeration {
     type ScopeStatus = Value
-    val NotEntered, Inside, Exited = Value
+    val NOT_ENTERED, INSIDE, EXITED = Value
   }
 
   private var localIterator = statements.iterator
   private var curr = if (localIterator.hasNext) Some(localIterator.next()) else None
-  private var scopeStatus = ScopeStatus.NotEntered
+  private var scopeStatus = ScopeStatus.NOT_ENTERED
 
   /**
    * Enter scope represented by this compound statement.
@@ -210,8 +210,8 @@ class CompoundBodyExec(
    */
   def enterScope(): Unit = {
     // This check makes this operation idempotent.
-    if (isScope && scopeStatus == ScopeStatus.NotEntered) {
-      scopeStatus = ScopeStatus.Inside
+    if (isScope && scopeStatus == ScopeStatus.NOT_ENTERED) {
+      scopeStatus = ScopeStatus.INSIDE
       context.enterScope(label.get)
     }
   }
@@ -223,8 +223,8 @@ class CompoundBodyExec(
    */
   protected def exitScope(): Unit = {
     // This check makes this operation idempotent.
-    if (isScope && scopeStatus == ScopeStatus.Inside) {
-      scopeStatus = ScopeStatus.Exited
+    if (isScope && scopeStatus == ScopeStatus.INSIDE) {
+      scopeStatus = ScopeStatus.EXITED
       context.exitScope(label.get)
     }
   }
@@ -299,7 +299,7 @@ class CompoundBodyExec(
     localIterator = statements.iterator
     curr = if (localIterator.hasNext) Some(localIterator.next()) else None
     stopIteration = false
-    scopeStatus = ScopeStatus.NotEntered
+    scopeStatus = ScopeStatus.NOT_ENTERED
   }
 
   /** Actions to do when LEAVE statement is encountered, to stop the execution of this compound. */
