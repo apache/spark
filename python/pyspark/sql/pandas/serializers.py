@@ -744,7 +744,6 @@ class CogroupArrowUDFSerializer(ArrowStreamGroupUDFSerializer):
             dataframes_in_group = read_int(stream)
 
             if dataframes_in_group == 2:
-                # We need to fully load the left batches, but we can lazily load the right batches
                 batches1 = [batch for batch in ArrowStreamSerializer.load_stream(self, stream)]
                 batches2 = [batch for batch in ArrowStreamSerializer.load_stream(self, stream)]
                 yield batches1, batches2
