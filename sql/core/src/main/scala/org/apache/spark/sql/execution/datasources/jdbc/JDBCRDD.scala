@@ -203,7 +203,7 @@ class JDBCRDD(
    */
   override def getPartitions: Array[Partition] = partitions
 
-  override def getExternalEngineQuery: String = {
+  def getExternalEngineQuery: String = {
     generateJdbcQuery(partition = None)
   }
 
