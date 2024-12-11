@@ -41,18 +41,30 @@ object ProcessUtils extends Logging {
     pb.redirectErrorStream(true)
     val proc = pb.start()
     val outputLines = new ArrayBuffer[String]
-    Utils.tryWithResource(proc.getInputStream)(
-      Source.fromInputStream(_, StandardCharsets.UTF_8.name()).getLines().foreach { line =>
+    // scalastyle:off println
+    println(s"ProcessUtils begin fullCommand: ${fullCommand.mkString(", ")} , env: $env")
+    // scalastyle:on println
+    val resource = proc.getInputStream
+    try {
+      Source.fromInputStream(resource, StandardCharsets.UTF_8.name()).getLines().foreach { line =>
         if (dumpOutput) {
           // scalastyle:off println
-          println(line)
+          println("ProcessUtils log: " + line)
           logInfo(line)
           // scalastyle:on println
         }
         outputLines += line
-      })
+      }
+    } catch {
+      case ex: Exception =>
+        ex.printStackTrace()
+    } finally {
+      resource.close()
+    }
     assert(proc.waitFor(timeout, TimeUnit.SECONDS),
       s"Timed out while executing ${fullCommand.mkString(" ")}")
+    println(s"ProcessUtils end fullCommand: ${fullCommand.mkString(", ")} , env: $env, " +
+      s"exitValue: ${proc.exitValue}")
     assert(proc.exitValue == 0,
       s"Failed to execute -- ${fullCommand.mkString(" ")} --" +
         s"${if (dumpErrors) "\n" + outputLines.mkString("\n")}")
