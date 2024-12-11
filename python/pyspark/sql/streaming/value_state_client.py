@@ -14,10 +14,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from typing import Union, cast, Tuple, Optional
+from typing import Tuple, Optional
 
 from pyspark.sql.streaming.stateful_processor_api_client import StatefulProcessorApiClient
-from pyspark.sql.types import StructType, _parse_datatype_string
+from pyspark.sql.types import StructType
 from pyspark.errors import PySparkRuntimeError
 
 __all__ = ["ValueStateClient"]

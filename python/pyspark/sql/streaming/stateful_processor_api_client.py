@@ -18,14 +18,13 @@ from enum import Enum
 import json
 import os
 import socket
-from typing import Any, Dict, List, Union, Optional, cast, Tuple, Iterator
+from typing import Any, Dict, List, Union, Optional, Tuple, Iterator
 
 from pyspark.serializers import write_int, read_int, UTF8Deserializer
 from pyspark.sql.pandas.serializers import ArrowStreamSerializer
 from pyspark.sql.types import (
     StructType,
     TYPE_CHECKING,
-    _parse_datatype_string,
     Row,
 )
 from pyspark.sql.pandas.types import convert_pandas_using_numpy_type

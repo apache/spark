@@ -14,10 +14,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from typing import Dict, Iterator, Union, cast, Tuple, Optional
+from typing import Dict, Iterator, Tuple, Optional
 
 from pyspark.sql.streaming.stateful_processor_api_client import StatefulProcessorApiClient
-from pyspark.sql.types import StructType, TYPE_CHECKING, _parse_datatype_string
+from pyspark.sql.types import StructType, TYPE_CHECKING
 from pyspark.errors import PySparkRuntimeError
 import uuid
 
@@ -31,8 +31,8 @@ class MapStateClient:
     def __init__(
         self,
         stateful_processor_api_client: StatefulProcessorApiClient,
-        user_key_schema: Union[StructType, str],
-        value_schema: Union[StructType, str],
+        user_key_schema: StructType,
+        value_schema: StructType,
     ) -> None:
         self._stateful_processor_api_client = stateful_processor_api_client
         self.user_key_schema = user_key_schema
