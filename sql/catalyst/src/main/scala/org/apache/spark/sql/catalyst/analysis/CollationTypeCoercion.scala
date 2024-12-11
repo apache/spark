@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.catalyst.analysis.CollationStrength.{Default, Explicit, Implicit}
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion.haveSameType
-import org.apache.spark.sql.catalyst.expressions.{SubqueryExpression, _}
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Project}
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.errors.QueryCompilationErrors
