@@ -1571,7 +1571,7 @@ class StructType(DataType):
             from py4j.java_gateway import JVMView
 
             sc = get_active_spark_context()
-            return cast(JVMView, sc._jvm).org.apache.spark.sql.api.python.PythonSQLUtils.toDDL(
+            return cast(JVMView, sc._jvm).PythonSQLUtils.jsonToDDL(
                 self.json()
             )
 

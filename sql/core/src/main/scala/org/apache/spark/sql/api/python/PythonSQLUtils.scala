@@ -144,7 +144,7 @@ private[sql] object PythonSQLUtils extends Logging {
     }
   }
 
-  def toDDL(json: String): String = {
+  def jsonToDDL(json: String): String = {
     DataType.fromJson(json).asInstanceOf[StructType].toDDL
   }
 
