@@ -26,6 +26,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, Expression, PythonUDF, SortOrder}
+import org.apache.spark.sql.catalyst.plans.logical.ProcessingTime
 import org.apache.spark.sql.catalyst.plans.physical.Distribution
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.execution.{BinaryExecNode, CoGroupedIterator, SparkPlan}
@@ -71,6 +72,8 @@ case class TransformWithStateInPandasExec(
     initialStateGroupingAttrs: Seq[Attribute],
     initialStateSchema: StructType)
   extends BinaryExecNode with StateStoreWriter with WatermarkSupport {
+
+  override def shortName: String = "transformWithStateInPandasExec"
 
   private val pythonUDF = functionExpr.asInstanceOf[PythonUDF]
   private val pythonFunction = pythonUDF.func
@@ -124,6 +127,37 @@ case class TransformWithStateInPandasExec(
       stateSchemaVersion: Int): List[StateSchemaValidationResult] = {
     // TODO(SPARK-49212): Implement schema evolution support
     List.empty
+  }
+
+  override def shouldRunAnotherBatch(newInputWatermark: Long): Boolean = {
+    if (timeMode == ProcessingTime) {
+      // TODO SPARK-50180: check if we can return true only if actual timers are registered,
+      //  or there is expired state
+      true
+    } else if (outputMode == OutputMode.Append || outputMode == OutputMode.Update) {
+      eventTimeWatermarkForEviction.isDefined &&
+        newInputWatermark > eventTimeWatermarkForEviction.get
+    } else {
+      false
+    }
+  }
+
+  /**
+   * Controls watermark propagation to downstream modes. If timeMode is
+   * ProcessingTime, the output rows cannot be interpreted in eventTime, hence
+   * this node will not propagate watermark in this timeMode.
+   *
+   * For timeMode EventTime, output watermark is same as input Watermark because
+   * transformWithState does not allow users to set the event time column to be
+   * earlier than the watermark.
+   */
+  override def produceOutputWatermark(inputWatermarkMs: Long): Option[Long] = {
+    timeMode match {
+      case ProcessingTime =>
+        None
+      case _ =>
+        Some(inputWatermarkMs)
+    }
   }
 
   override def customStatefulOperatorMetrics: Seq[StatefulOperatorCustomMetric] = {
@@ -214,8 +248,15 @@ case class TransformWithStateInPandasExec(
     val updatesStartTimeNs = currentTimeNs
 
     val (dedupAttributes, argOffsets) = resolveArgOffsets(child.output, groupingAttributes)
-    val data =
-      groupAndProject(dataIterator, groupingAttributes, child.output, dedupAttributes)
+    // If timeout is based on event time, then filter late data based on watermark
+    val filteredIter = watermarkPredicateForDataForLateEvents match {
+      case Some(predicate) =>
+        applyRemovingRowsOlderThanWatermark(dataIterator, predicate)
+      case _ =>
+        dataIterator
+    }
+
+    val data = groupAndProject(filteredIter, groupingAttributes, child.output, dedupAttributes)
 
     val processorHandle = new StatefulProcessorHandleImpl(store, getStateInfo.queryRunId,
       groupingKeyExprEncoder, timeMode, isStreaming = true, batchTimestampMs, metrics)
