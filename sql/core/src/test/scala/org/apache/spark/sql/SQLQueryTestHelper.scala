@@ -144,7 +144,7 @@ trait SQLQueryTestHelper extends Logging {
     val df = session.sql(sql)
     val schema = df.schema.catalogString
     // Get answer, but also get rid of the #1234 expression ids that show up in explain plans
-    val answer = if (sql.contains("AS JSON")) {
+    val answer = if (sql.toLowerCase().contains("as json")) {
       SQLExecution.withNewExecutionId(df.queryExecution, Some(sql)) {
         hiveResultString(df.queryExecution.executedPlan).map(replaceNotIncludedMsgJson)
       }
