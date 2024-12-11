@@ -1097,6 +1097,18 @@ private[hive] object HiveClientImpl extends Logging {
     new FieldSchema(c.name, typeString, c.getComment().orNull)
   }
 
+  /**
+   * This a a variant of `DataType.catalogString` that does the same thing in general but
+   * it will not quote the field names in the struct type. HMS API uses unquoted field names
+   * to store the schema of a struct type. This is fine if we in the write path, we might encounter
+   * issues in the read path to parse the unquoted schema strings in the Spark SQL parser. You can
+   * see the tricks we play in the `getSparkSQLDataType` method to handle this. To avoid the
+   * flakiness of those tricks, we quote the field names, make them unrecognized by HMS API, and
+   * then store them in custom spark properties in a fallback way.
+   *
+   * And the reason we don't add quoting in `DataType.catalogString` directly is that we don't
+   * want to break the compatibility of the existing query output schema.
+   */
   def catalogString(dataType: DataType): String = dataType match {
     case ArrayType(et, _) => s"array<${catalogString(et)}>"
     case MapType(k, v, _) => s"map<${catalogString(k)},${catalogString(v)}>"
