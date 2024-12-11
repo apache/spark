@@ -3170,6 +3170,14 @@ abstract class Dataset[T] extends Serializable {
   def toJSON: Dataset[String]
 
   /**
+   * Returns the content of the Dataset as a Dataset of JSON strings respecting specified
+   * `jsonOptions`.
+   *
+   * @since 4.0.0
+   */
+  def toJSON(jsonOptions: Map[String, String]): Dataset[String]
+
+  /**
    * Returns a best-effort snapshot of the files that compose this Dataset. This method simply
    * asks each constituent BaseRelation for its respective files and takes the union of all
    * results. Depending on the source relations, this may not find all input files. Duplicates are
