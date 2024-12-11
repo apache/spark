@@ -21,6 +21,7 @@ import java.util.UUID
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.util.control.NonFatal
 
 import org.apache.spark.{SparkEnv, SparkSQLException}
 import org.apache.spark.connect.proto
@@ -237,7 +238,14 @@ private[connect] class ExecuteHolder(
         // it does.
         responseObserver.removeAll()
         // post closed to UI
-        eventsManager.postClosed()
+        try {
+          eventsManager.postClosed()
+        } catch {
+          // Catching the exception to prevent the wrong error code from being returned to the
+          // user: SPARK-49688. The issue was fixed by completely refactoring the code in Spark 4.0.
+          case e: Throwable if NonFatal.apply(e) =>
+            logError(s"Error posting closed event to UI: ${e.getMessage()}")
+        }
       }
       // interrupt any attached grpcResponseSenders
       grpcResponseSenders.foreach(_.interrupt())
