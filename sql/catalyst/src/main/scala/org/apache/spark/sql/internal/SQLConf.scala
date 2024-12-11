@@ -3999,7 +3999,7 @@ object SQLConf {
       .createWithDefault(true)
 
   val ARTIFACTS_SESSION_ISOLATION_ALWAYS_APPLY_CLASSLOADER =
-    buildConf("spark.sql.artifact.isolation.always.apply.classloader")
+    buildConf("spark.sql.artifact.isolation.alwaysApplyClassloader")
       .internal()
       .doc("When enabled, the classloader holding per-session artifacts will always be applied " +
         "during SQL executions (useful for Spark Connect). When disabled, the classloader will " +
@@ -4545,6 +4545,15 @@ object SQLConf {
       .version("4.0.0")
       .booleanConf
       .createWithDefault(false)
+
+  val VARIANT_ALLOW_READING_SHREDDED =
+    buildConf("spark.sql.variant.allowReadingShredded")
+      .internal()
+      .doc("When true, the Parquet reader is allowed to read shredded or unshredded variant. " +
+        "When false, it only reads unshredded variant.")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(true)
 
   val LEGACY_CSV_ENABLE_DATE_TIME_PARSING_FALLBACK =
     buildConf("spark.sql.legacy.csv.enableDateTimeParsingFallback")

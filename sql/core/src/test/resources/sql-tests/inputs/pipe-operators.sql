@@ -71,6 +71,60 @@ create temporary view windowTestData as select * from values
   (3, 1L, 1.0D, date("2017-08-01"), timestamp_seconds(1501545600), null)
   AS testData(val, val_long, val_double, val_date, val_timestamp, cate);
 
+-- FROM operators: positive tests.
+----------------------------------
+
+-- FromClause alone.
+from t;
+
+-- Table alone.
+table t;
+
+-- Selecting from a constant.
+from t
+|> select 1 as x;
+
+-- Selecting using a table alias.
+from t as t_alias
+|> select t_alias.x;
+
+-- Selecting using a table alias.
+from t as t_alias
+|> select t_alias.x as tx, t_alias.y as ty
+|> where ty = 'def'
+|> select tx;
+
+-- Selecting from multiple relations.
+from t, other
+|> select t.x + other.a as z;
+
+-- Selecting from multiple relations with join.
+from t join other on (t.x = other.a)
+|> select t.x + other.a as z;
+
+-- Selecting from lateral view.
+from t lateral view explode(array(100, 101)) as ly
+|> select t.x + ly as z;
+
+-- Selecting struct fields.
+from st
+|> select col.i1;
+
+-- Selecting struct fields using a table alias.
+from st as st_alias
+|> select st_alias.col.i1;
+
+-- Selecting from a VALUES list.
+from values (0), (1) tab(col)
+|> select col as x;
+
+-- FROM operators: negative tests.
+----------------------------------
+
+-- It is not possible to use the FROM operator accepting an input relation.
+from t
+|> from t;
+
 -- SELECT operators: positive tests.
 ---------------------------------------
 
@@ -1158,13 +1212,12 @@ order by c_customer_id
 limit 100;
 
 with customer_total_return as
-  (table store_returns
+  (from store_returns
   |> join date_dim
   |> where sr_returned_date_sk = d_date_sk and d_year = 2000
   |> aggregate sum(sr_return_amt) as ctr_total_return
        group by sr_customer_sk as ctr_customer_sk, sr_store_sk as ctr_store_sk)
-table customer_total_return
-|> as ctr1
+from customer_total_return ctr1
 |> join store
 |> join customer
 |> where ctr1.ctr_total_return >
@@ -1466,13 +1519,12 @@ where asceding.rnk = descending.rnk
 order by asceding.rnk
 limit 100;
 
-table store_sales
-|> as ss1
+from store_sales ss1
 |> where ss_store_sk = 4
 |> aggregate avg(ss_net_profit) rank_col
      group by ss_item_sk as item_sk
 |> where rank_col > 0.9 * (
-     table store_sales
+     from store_sales
      |> where ss_store_sk = 4
           and ss_addr_sk is null
      |> aggregate avg(ss_net_profit) rank_col
@@ -1487,8 +1539,7 @@ table store_sales
 |> where rnk < 11
 |> as asceding
 |> join (
-     table store_sales
-     |> as ss1
+     from store_sales ss1
      |> where ss_store_sk = 4
      |> aggregate avg(ss_net_profit) rank_col
           group by ss_item_sk as item_sk

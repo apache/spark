@@ -383,6 +383,21 @@ class Dataset[T] private[sql] (
     }
   }
 
+  // TODO(SPARK-50134): Support Lateral Join API in Spark Connect
+  // scalastyle:off not.implemented.error.usage
+  /** @inheritdoc */
+  def lateralJoin(right: DS[_]): DataFrame = ???
+
+  /** @inheritdoc */
+  def lateralJoin(right: DS[_], joinExprs: Column): DataFrame = ???
+
+  /** @inheritdoc */
+  def lateralJoin(right: DS[_], joinType: String): DataFrame = ???
+
+  /** @inheritdoc */
+  def lateralJoin(right: DS[_], joinExprs: Column, joinType: String): DataFrame = ???
+  // scalastyle:on not.implemented.error.usage
+
   override protected def sortInternal(global: Boolean, sortCols: Seq[Column]): Dataset[T] = {
     val sortExprs = sortCols.map { c =>
       ColumnNodeToProtoConverter(c.sortOrder).getSortOrder
