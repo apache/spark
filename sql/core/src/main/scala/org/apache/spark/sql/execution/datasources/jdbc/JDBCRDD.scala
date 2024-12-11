@@ -173,6 +173,8 @@ class JDBCRDD(
     offset: Int)
   extends RDD[InternalRow](sc, Nil) {
 
+  private lazy val dialect = JdbcDialects.get(url)
+
   def generateJdbcQuery(partition: Option[JDBCPartition]): String = {
     // H2's JDBC driver does not support the setSchema() method.  We pass a
     // fully-qualified table name in the SELECT statement.  I don't know how to
