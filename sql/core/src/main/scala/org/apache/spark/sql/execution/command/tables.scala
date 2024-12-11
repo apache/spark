@@ -787,7 +787,7 @@ case class DescribeTableCommand(
 /**
  * Command that looks like
  * {{{
- *   DESCRIBE [EXTENDED|FORMATTED] table_name partitionSpec?;
+ *   DESCRIBE [EXTENDED|FORMATTED] table_name partitionSpec? [AS JSON];
  * }}}
  */
 case class DescribeTableJsonCommand(
@@ -801,7 +801,6 @@ case class DescribeTableJsonCommand(
     val result = new ArrayBuffer[Row]
     val catalog = sparkSession.sessionState.catalog
 
-    // Define `schema` based on the table type
     val schema = if (catalog.isTempView(table)) {
       if (partitionSpec.nonEmpty) {
         throw QueryCompilationErrors.descPartitionNotAllowedOnTempView(table.identifier)
@@ -889,7 +888,6 @@ case class DescribeTableJsonCommand(
     val normalizedKey = normalizeStr(key)
 
     val currentJson = buffer.headOption.map(row => parse(row.getString(0))).getOrElse(JObject())
-    // If key does not already exist, add to JSON
     if ((currentJson \ normalizedKey) == JNothing) {
       val updatedJson = currentJson merge JObject(normalizedKey -> value)
       val jsonString = compact(render(updatedJson))
@@ -929,7 +927,6 @@ case class DescribeTableJsonCommand(
     val excludedTableInfo = Set("catalog", "schema", "database", "table", "location",
       "serde_library", "inputformat", "outputformat")
 
-    // Bucket info
     table.bucketSpec match {
       case Some(spec) =>
         spec.toJsonLinkedHashMap.map { case (key, value) =>
@@ -938,7 +935,7 @@ case class DescribeTableJsonCommand(
               case scala.util.Success(parsedJson) =>
                 parsedJson
               case scala.util.Failure(_) =>
-                JString(value) // Fallback to JString if parsing fails
+                JString(value)
             }
 
           addKeyValueToJson(buffer, key, jsonValue)
@@ -951,7 +948,7 @@ case class DescribeTableJsonCommand(
           case scala.util.Success(parsedJson) =>
             parsedJson
           case scala.util.Failure(_) =>
-            JString(value) // Fallback to JString if parsing fails
+            JString(value)
         }
 
       addKeyValueToJson(buffer, key, jsonValue)
@@ -967,7 +964,7 @@ case class DescribeTableJsonCommand(
           case scala.util.Success(parsedJson) =>
             parsedJson
           case scala.util.Failure(_) =>
-            JString(value) // Fallback to JString if parsing fails
+            JString(value)
         }
 
       addKeyValueToJson(buffer, key, jsonValue)
@@ -999,7 +996,7 @@ case class DescribeTableJsonCommand(
           case scala.util.Success(parsedJson) =>
             parsedJson
           case scala.util.Failure(_) =>
-            JString(value) // Fallback to JString if parsing fails
+            JString(value)
         }
 
       addKeyValueToJson(buffer, key, jsonValue)
@@ -1017,13 +1014,12 @@ case class DescribeTableJsonCommand(
           case scala.util.Success(parsedJson) =>
             parsedJson
           case scala.util.Failure(_) =>
-            JString(value) // Fallback to JString if parsing fails
+            JString(value)
         }
 
       addKeyValueToJson(buffer, key, jsonValue)
     }
 
-    // Bucket info
     metadata.bucketSpec match {
       case Some(spec) =>
         spec.toJsonLinkedHashMap.map { case (key, value) =>
@@ -1032,7 +1028,7 @@ case class DescribeTableJsonCommand(
               case scala.util.Success(parsedJson) =>
                 parsedJson
               case scala.util.Failure(_) =>
-                JString(value) // Fallback to JString if parsing fails
+                JString(value)
             }
 
           addKeyValueToJson(buffer, key, jsonValue)
@@ -1045,7 +1041,7 @@ case class DescribeTableJsonCommand(
           case scala.util.Success(parsedJson) =>
             parsedJson
           case scala.util.Failure(_) =>
-            JString(value) // Fallback to JString if parsing fails
+            JString(value)
         }
 
       addKeyValueToJson(buffer, key, jsonValue)
