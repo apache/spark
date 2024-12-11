@@ -51,7 +51,7 @@ class FilePartitionReader[T](
           case e: FileNotFoundException if ignoreMissingFiles =>
             logWarning(s"Skipped missing file.", e)
             currentReader = null
-          case e: AccessControlException | BlockMissingException =>
+          case e @ (_ : AccessControlException | _ : BlockMissingException) =>
             throw FileDataSourceV2.attachFilePath(file.urlEncodedPath, e)
           case e @ (_: RuntimeException | _: IOException) if ignoreCorruptFiles =>
             logWarning(
@@ -69,7 +69,7 @@ class FilePartitionReader[T](
     val hasNext = try {
       currentReader != null && currentReader.next()
     } catch {
-      case e: AccessControlException | BlockMissingException =>
+      case e @ (_ : AccessControlException | _ : BlockMissingException) =>
         throw FileDataSourceV2.attachFilePath(currentReader.file.urlEncodedPath, e)
       case e @ (_: RuntimeException | _: IOException) if ignoreCorruptFiles =>
         logWarning(log"Skipped the rest of the content in the corrupted file: " +

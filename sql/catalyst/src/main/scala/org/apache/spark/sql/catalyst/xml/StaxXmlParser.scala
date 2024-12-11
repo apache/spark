@@ -657,7 +657,7 @@ class XmlTokenizer(
             e)
         case NonFatal(e) =>
           ExceptionUtils.getRootCause(e) match {
-            case _: AccessControlException | BlockMissingException =>
+            case _: AccessControlException | _: BlockMissingException =>
               reader.close()
               reader = null
               throw e
