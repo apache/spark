@@ -1683,9 +1683,9 @@ object SQLConf {
 
   val V2_BUCKETING_SORTING_ENABLED =
     buildConf("spark.sql.sources.v2.bucketing.sorting.enabled")
-      .doc(s"When turned on, Spark will recognize the specific distribution reported by" +
-        s"a V2 data source through SupportsReportPartitioning, and will try to avoid a shuffle if" +
-        s"possible when sorting by those columns. This config requires " +
+      .doc(s"When turned on, Spark will recognize the specific distribution reported by " +
+        s"a V2 data source through SupportsReportPartitioning, and will try to avoid a shuffle " +
+        s"if possible when sorting by those columns. This config requires " +
         s"${V2_BUCKETING_ENABLED.key} to be enabled.")
       .version("4.0.0")
       .booleanConf
