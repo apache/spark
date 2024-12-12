@@ -148,7 +148,7 @@ class RewriteWithExpressionSuite extends PlanTest {
         // The first Project contains the common expression of the outer With
         .select(star(), rewrittenOuterExpr)
         // The second Project contains the common expression of the inner With, which does not
-        // references the common expression of the outer With.
+        // reference the common expression of the outer With.
         .select(star(), (a + a).as("_common_expr_2"))
         // The final Project contains the final result expression, which references both common
         // expressions.
