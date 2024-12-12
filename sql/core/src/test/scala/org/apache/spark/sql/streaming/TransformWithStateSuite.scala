@@ -571,6 +571,62 @@ class TransformWithStateSuite extends StateStoreMetricsTest
     }
   }
 
+  test("transformWithState - upcasting should succeed") {
+    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+      classOf[RocksDBStateStoreProvider].getName,
+      SQLConf.SHUFFLE_PARTITIONS.key ->
+        TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString) {
+      withTempDir { chkptDir =>
+        val dirPath = chkptDir.getCanonicalPath
+        val inputData = MemoryStream[String]
+        val result1 = inputData.toDS()
+          .groupByKey(x => x)
+          .transformWithState(new RunningCountStatefulProcessorInt(),
+            TimeMode.None(),
+            OutputMode.Update())
+
+        testStream(result1, OutputMode.Update())(
+          StartStream(checkpointLocation = dirPath),
+          AddData(inputData, "a"),
+          CheckNewAnswer(("a", "1")),
+          Execute { q =>
+            assert(q.lastProgress.stateOperators(0).customMetrics.get("numValueStateVars") > 0)
+            assert(q.lastProgress.stateOperators(0).customMetrics.get("numRegisteredTimers") == 0)
+            assert(q.lastProgress.stateOperators(0).numRowsUpdated === 1)
+          },
+          AddData(inputData, "a", "b"),
+          CheckNewAnswer(("a", "2"), ("b", "1")),
+          StopStream,
+          StartStream(checkpointLocation = dirPath),
+          AddData(inputData, "a", "b"), // should remove state for "a" and not return anything for a
+          CheckNewAnswer(("b", "2")),
+          StopStream,
+          Execute { q =>
+            assert(q.lastProgress.stateOperators(0).numRowsUpdated === 1)
+            assert(q.lastProgress.stateOperators(0).numRowsRemoved === 1)
+          },
+          StartStream(checkpointLocation = dirPath),
+          AddData(inputData, "a", "c"), // should recreate state for "a" and return count as 1 and
+          CheckNewAnswer(("a", "1"), ("c", "1"))
+        )
+
+        logError(s"### starting query 2")
+        val result2 = inputData.toDS()
+          .groupByKey(x => x)
+          .transformWithState(new RunningCountStatefulProcessor(),
+            TimeMode.None(),
+            OutputMode.Update())
+
+        testStream(result2, OutputMode.Update())(
+          StartStream(checkpointLocation = dirPath),
+          AddData(inputData, "a"),
+          CheckNewAnswer(("a", "2")),
+          StopStream
+        )
+      }
+    }
+  }
+
   test("transformWithState - streaming with rocksdb and processing time timer " +
    "should succeed") {
     withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->

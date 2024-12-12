@@ -482,12 +482,14 @@ case class TransformWithStateExec(
         }
       case None => None
     }
+
     List(StateSchemaCompatibilityChecker.
       validateAndMaybeEvolveStateSchema(getStateInfo, hadoopConf,
       newSchemas.values.toList, session.sessionState, stateSchemaVersion,
       storeName = StateStoreId.DEFAULT_STORE_NAME,
       oldSchemaFilePath = oldStateSchemaFilePath,
-      newSchemaFilePath = Some(newStateSchemaFilePath)))
+      newSchemaFilePath = Some(newStateSchemaFilePath),
+      usingAvro = session.sessionState.conf.stateStoreEncodingFormat == "avro"))
   }
 
   override def stateSchemaMapping(
@@ -612,7 +614,8 @@ case class TransformWithStateExec(
           NoPrefixKeyStateEncoderSpec(keyEncoder.schema),
           session.sessionState,
           Some(session.streams.stateStoreCoordinator),
-          useColumnFamilies = true
+          useColumnFamilies = true,
+          stateSchemaMetadata = stateSchemaMetadata
         ) {
           case (store: StateStore, singleIterator: Iterator[InternalRow]) =>
             processData(store, singleIterator)

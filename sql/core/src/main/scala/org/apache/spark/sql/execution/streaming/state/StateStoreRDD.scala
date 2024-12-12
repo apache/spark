@@ -133,7 +133,7 @@ class StateStoreRDD[T: ClassTag, U: ClassTag](
       storeProviderId, keySchema, valueSchema, keyStateEncoderSpec, storeVersion,
       uniqueId.map(_.apply(partition.index).head),
       useColumnFamilies, storeConf, hadoopConfBroadcast.value.value,
-      useMultipleValuesPerKey)
+      useMultipleValuesPerKey, stateSchemaMetadata)
     storeUpdateFunction(store, inputIter)
   }
 }

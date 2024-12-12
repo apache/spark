@@ -17,14 +17,16 @@
 
 package org.apache.spark.sql.execution.streaming.state
 
+import scala.jdk.CollectionConverters.IterableHasAsJava
 import scala.util.Try
 
+import org.apache.avro.SchemaValidatorBuilder
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FSDataInputStream, Path}
 
 import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.internal.{Logging, LogKeys, MDC}
-import org.apache.spark.sql.avro.{AvroDeserializer, AvroSerializer}
+import org.apache.spark.sql.avro.{AvroDeserializer, AvroSerializer, SchemaConverters}
 import org.apache.spark.sql.catalyst.util.UnsafeRowUtils
 import org.apache.spark.sql.execution.streaming.{CheckpointFileManager, StatefulOperatorStateInfo}
 import org.apache.spark.sql.execution.streaming.state.SchemaHelper.{SchemaReader, SchemaWriter}
@@ -38,21 +40,8 @@ case class StateSchemaValidationResult(
     schemaPath: String
 )
 
-/**
- * An Avro-based encoder used for serializing between UnsafeRow and Avro
- *  byte arrays in RocksDB state stores.
- *
- * This encoder is primarily utilized by [[RocksDBStateStoreProvider]] and [[RocksDBStateEncoder]]
- * to handle serialization and deserialization of state store data.
- *
- * @param keySerializer Serializer for converting state store keys to Avro format
- * @param keyDeserializer Deserializer for converting Avro-encoded keys back to UnsafeRow
- * @param valueSerializer Serializer for converting state store values to Avro format
- * @param valueDeserializer Deserializer for converting Avro-encoded values back to UnsafeRow
- * @param suffixKeySerializer Optional serializer for handling suffix keys in Avro format
- * @param suffixKeyDeserializer Optional deserializer for converting Avro-encoded suffix
- *                              keys back to UnsafeRow
- */
+// Avro encoder that is used by the RocksDBStateStoreProvider and RocksDBStateEncoder
+// in order to serialize from UnsafeRow to a byte array of Avro encoding.
 case class AvroEncoder(
   keySerializer: AvroSerializer,
   keyDeserializer: AvroDeserializer,
@@ -153,7 +142,8 @@ class StateSchemaCompatibilityChecker(
   private def check(
       oldSchema: StateStoreColFamilySchema,
       newSchema: StateStoreColFamilySchema,
-      ignoreValueSchema: Boolean) : Unit = {
+      ignoreValueSchema: Boolean,
+      usingAvro: Boolean) : Boolean = {
     val (storedKeySchema, storedValueSchema) = (oldSchema.keySchema,
       oldSchema.valueSchema)
     val (keySchema, valueSchema) = (newSchema.keySchema, newSchema.valueSchema)
@@ -161,14 +151,28 @@ class StateSchemaCompatibilityChecker(
     if (storedKeySchema.equals(keySchema) &&
       (ignoreValueSchema || storedValueSchema.equals(valueSchema))) {
       // schema is exactly same
+      false
     } else if (!schemasCompatible(storedKeySchema, keySchema)) {
       throw StateStoreErrors.stateStoreKeySchemaNotCompatible(storedKeySchema.toString,
         keySchema.toString)
+    } else if (!ignoreValueSchema && usingAvro) {
+      // By this point, we know that old value schema is not equal to new value schema
+      val oldAvroSchema = SchemaConverters.toAvroType(storedValueSchema)
+      val newAvroSchema = SchemaConverters.toAvroType(valueSchema)
+
+      val validator = new SchemaValidatorBuilder().canReadStrategy.validateAll()
+      // This will throw a SchemaValidation exception if the schema has evolved in an
+      // unacceptable way.
+      validator.validate(newAvroSchema, Iterable(oldAvroSchema).asJava)
+      // If no exception is thrown, then we know that the schema evolved in an
+      // acceptable way
+      true
     } else if (!ignoreValueSchema && !schemasCompatible(storedValueSchema, valueSchema)) {
       throw StateStoreErrors.stateStoreValueSchemaNotCompatible(storedValueSchema.toString,
         valueSchema.toString)
     } else {
       logInfo("Detected schema change which is compatible. Allowing to put rows.")
+      true
     }
   }
 
@@ -182,7 +186,8 @@ class StateSchemaCompatibilityChecker(
   def validateAndMaybeEvolveStateSchema(
       newStateSchema: List[StateStoreColFamilySchema],
       ignoreValueSchema: Boolean,
-      stateSchemaVersion: Int): Boolean = {
+      stateSchemaVersion: Int,
+      usingAvro: Boolean): Boolean = {
     val existingStateSchemaList = getExistingKeyAndValueSchema()
     val newStateSchemaList = newStateSchema
 
@@ -197,18 +202,18 @@ class StateSchemaCompatibilityChecker(
       }.toMap
       // For each new state variable, we want to compare it to the old state variable
       // schema with the same name
-      newStateSchemaList.foreach { newSchema =>
-        existingSchemaMap.get(newSchema.colFamilyName).foreach { existingStateSchema =>
-          check(existingStateSchema, newSchema, ignoreValueSchema)
-        }
+      val hasEvolvedSchema = newStateSchemaList.exists { newSchema =>
+        existingSchemaMap.get(newSchema.colFamilyName)
+          .exists(existingSchema => check(existingSchema, newSchema, ignoreValueSchema, usingAvro))
       }
       val colFamiliesAddedOrRemoved =
         (newStateSchemaList.map(_.colFamilyName).toSet != existingSchemaMap.keySet)
-      if (stateSchemaVersion == SCHEMA_FORMAT_V3 && colFamiliesAddedOrRemoved) {
+      val newSchemaFileWritten = hasEvolvedSchema || colFamiliesAddedOrRemoved
+      if (stateSchemaVersion == SCHEMA_FORMAT_V3 && newSchemaFileWritten) {
         createSchemaFile(newStateSchemaList.sortBy(_.colFamilyName), stateSchemaVersion)
       }
       // TODO: [SPARK-49535] Write Schema files after schema has changed for StateSchemaV3
-      colFamiliesAddedOrRemoved
+      newSchemaFileWritten
     }
   }
 
@@ -270,7 +275,8 @@ object StateSchemaCompatibilityChecker extends Logging {
       extraOptions: Map[String, String] = Map.empty,
       storeName: String = StateStoreId.DEFAULT_STORE_NAME,
       oldSchemaFilePath: Option[Path] = None,
-      newSchemaFilePath: Option[Path] = None): StateSchemaValidationResult = {
+      newSchemaFilePath: Option[Path] = None,
+      usingAvro: Boolean = false): StateSchemaValidationResult = {
     // SPARK-47776: collation introduces the concept of binary (in)equality, which means
     // in some collation we no longer be able to just compare the binary format of two
     // UnsafeRows to determine equality. For example, 'aaa' and 'AAA' can be "semantically"
@@ -301,7 +307,7 @@ object StateSchemaCompatibilityChecker extends Logging {
     val result = Try(
       checker.validateAndMaybeEvolveStateSchema(newStateSchema,
         ignoreValueSchema = !storeConf.formatValidationCheckValue,
-        stateSchemaVersion = stateSchemaVersion)
+        stateSchemaVersion = stateSchemaVersion, usingAvro)
     ).toEither.fold(Some(_),
       hasEvolvedSchema => {
         evolvedSchema = hasEvolvedSchema

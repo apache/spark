@@ -378,6 +378,7 @@ private[sql] class RocksDBStateStoreProvider
     this.hadoopConf = hadoopConf
     this.useColumnFamilies = useColumnFamilies
     this.stateStoreEncoding = storeConf.stateStoreEncodingFormat
+    this.stateSchemaBroadcast = stateSchemaMetadata
 
     if (useMultipleValuesPerKey) {
       require(useColumnFamilies, "Multiple values per key support requires column families to be" +
@@ -482,6 +483,30 @@ private[sql] class RocksDBStateStoreProvider
   @volatile private var hadoopConf: Configuration = _
   @volatile private var useColumnFamilies: Boolean = _
   @volatile private var stateStoreEncoding: String = _
+  @volatile private var stateSchemaBroadcast: Option[Broadcast[StateSchemaMetadata]] = _
+
+  def getSchemaFromId(colFamilyName: String, schemaId: Int): StateSchemaMetadataValue = {
+    if (stateSchemaBroadcast.isDefined) {
+      val metadata = stateSchemaBroadcast.get.value
+      metadata.schemas(schemaId)(
+        StateSchemaMetadataKey(
+          schemaId,
+          colFamilyName,
+          hadoopConf.get(StreamExecution.RUN_ID_KEY)
+        )
+      )
+    } else {
+      null
+    }
+  }
+
+  def getCurrentSchemaId: Int = {
+    if (stateSchemaBroadcast.isDefined) {
+      stateSchemaBroadcast.get.value.currentSchemaId
+    } else {
+      -1
+    }
+  }
 
   private[sql] lazy val rocksDB = {
     val dfsRootDir = stateStoreId.storeCheckpointLocation().toString
@@ -616,6 +641,7 @@ object RocksDBStateStoreProvider {
   val STATE_ENCODING_NUM_VERSION_BYTES = 1
   val STATE_ENCODING_VERSION: Byte = 0
   val VIRTUAL_COL_FAMILY_PREFIX_BYTES = 2
+  val STATE_ROW_SCHEMA_ID_PREFIX_BYTES = 4
 
   private val MAX_AVRO_ENCODERS_IN_CACHE = 1000
   // Add the cache at companion object level so it persists across provider instances

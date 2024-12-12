@@ -55,9 +55,20 @@ object StateStoreEncoding {
   case object Avro extends StateStoreEncoding
 }
 
+case class StateSchemaMetadataKey(
+    schemaId: Int,
+    colFamilyName: String,
+    queryRunId: String
+)
+
+case class StateSchemaMetadataValue(
+    avroSchema: Schema,
+    valueSchema: StructType
+)
+
 case class StateSchemaMetadata(
   currentSchemaId: Int,
-  schemas: Map[Int, Map[String, Schema]]
+  schemas: Map[Int, Map[StateSchemaMetadataKey, StateSchemaMetadataValue]]
 )
 
 /**
@@ -821,7 +832,8 @@ object StateStore extends Logging {
           storeProviderId,
           StateStoreProvider.createAndInit(
             storeProviderId, keySchema, valueSchema, keyStateEncoderSpec,
-            useColumnFamilies, storeConf, hadoopConf, useMultipleValuesPerKey)
+            useColumnFamilies, storeConf, hadoopConf, useMultipleValuesPerKey,
+            stateSchemaMetadata)
         )
       }
 

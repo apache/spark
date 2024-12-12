@@ -40,7 +40,7 @@ import org.apache.spark.sql.execution.datasources.v2.state.metadata.StateMetadat
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeLike
 import org.apache.spark.sql.execution.python.{FlatMapGroupsInPandasWithStateExec, TransformWithStateInPandasExec}
 import org.apache.spark.sql.execution.streaming.sources.WriteToMicroBatchDataSourceV1
-import org.apache.spark.sql.execution.streaming.state.{OperatorStateMetadataReader, OperatorStateMetadataV1, OperatorStateMetadataV2, OperatorStateMetadataWriter, StateSchemaCompatibilityChecker, StateSchemaMetadata}
+import org.apache.spark.sql.execution.streaming.state.{OperatorStateMetadataReader, OperatorStateMetadataV1, OperatorStateMetadataV2, OperatorStateMetadataWriter, StateSchemaCompatibilityChecker, StateSchemaMetadata, StateSchemaMetadataKey, StateSchemaMetadataValue}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.util.{SerializableConfiguration, Utils}
@@ -261,11 +261,20 @@ class IncrementalExecution(
               case tws: TransformWithStateExec =>
                 val stateSchemaMetadata = createStateSchemaMetadata(stateSchemaMapping.head)
                 val ssmBc = sparkSession.sparkContext.broadcast(stateSchemaMetadata)
+                logStateSchemaMetadata(stateSchemaMetadata)
                 tws.copy(stateSchemaMetadata = Some(ssmBc))
               case _ => ssw
             }
           case _ => statefulOp
         }
+    }
+  }
+
+  def logStateSchemaMetadata(metadata: StateSchemaMetadata): Unit = {
+    metadata.schemas.foreach { case (schemaId, keyValueMap) =>
+      keyValueMap.foreach { case (key, value) =>
+        logError(s"### Key: $key, Value: $value")
+      }
     }
   }
 
@@ -277,7 +286,10 @@ class IncrementalExecution(
       val inStream = fm.open(new Path(stateSchemaPath))
       val colFamilySchemas =
         StateSchemaCompatibilityChecker.readSchemaFile(inStream).map { schema =>
-          schema.colFamilyName -> SchemaConverters.toAvroType(schema.valueSchema)
+          StateSchemaMetadataKey(
+            stateSchemaId, schema.colFamilyName, runId.toString) ->
+            StateSchemaMetadataValue(
+              SchemaConverters.toAvroType(schema.valueSchema), schema.valueSchema)
         }.toMap
       stateSchemaId -> colFamilySchemas
     }

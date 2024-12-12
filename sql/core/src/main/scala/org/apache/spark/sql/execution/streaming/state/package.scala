@@ -89,7 +89,8 @@ package object state {
         storeCoordinator,
         useColumnFamilies,
         extraOptions,
-        useMultipleValuesPerKey)
+        useMultipleValuesPerKey,
+        stateSchemaMetadata)
     }
     // scalastyle:on
 
