@@ -35,27 +35,47 @@ class SqlScriptingExecution(
     session: SparkSession,
     args: Map[String, Expression]) extends Iterator[DataFrame] {
 
-  // Build the execution plan for the script.
-  private val executionPlan: Iterator[CompoundStatementExec] =
-    SqlScriptingInterpreter(session).buildExecutionPlan(sqlScript, args)
+  private val interpreter = SqlScriptingInterpreter(session)
 
-  private var current = getNextResult
+  // Frames to keep what is being executed.
+  private val context: SqlScriptingExecutionContext = {
+    val ctx = new SqlScriptingExecutionContext()
+    val executionPlan = interpreter.buildExecutionPlan(sqlScript, args, ctx)
+    // Add frame which represents SQL Script to the context.
+    ctx.frames.addOne(new SqlScriptingExecutionFrame(executionPlan.getTreeIterator))
+    // Enter the scope of the top level compound.
+    // We don't need to exit this scope explicitly as it will be done automatically
+    // when the frame is removed during iteration.
+    executionPlan.enterScope()
+    ctx
+  }
+
+  private var current: Option[DataFrame] = getNextResult
 
   override def hasNext: Boolean = current.isDefined
 
   override def next(): DataFrame = {
-    if (!hasNext) throw SparkException.internalError("No more elements to iterate through.")
-    val nextDataFrame = current.get
-    current = getNextResult
-    nextDataFrame
+    current match {
+      case None => throw SparkException.internalError("No more elements to iterate through.")
+      case Some(result) =>
+        current = getNextResult
+        result
+    }
+  }
+
+  /** Helper method to iterate get next statements from the first available frame. */
+  private def getNextStatement: Option[CompoundStatementExec] = {
+    while (context.frames.nonEmpty && !context.frames.last.hasNext) {
+      context.frames.remove(context.frames.size - 1)
+    }
+    if (context.frames.nonEmpty) {
+      return Some(context.frames.last.next())
+    }
+    None
   }
 
   /** Helper method to iterate through statements until next result statement is encountered. */
   private def getNextResult: Option[DataFrame] = {
-
-    def getNextStatement: Option[CompoundStatementExec] =
-      if (executionPlan.hasNext) Some(executionPlan.next()) else None
-
     var currentStatement = getNextStatement
     // While we don't have a result statement, execute the statements.
     while (currentStatement.isDefined) {
