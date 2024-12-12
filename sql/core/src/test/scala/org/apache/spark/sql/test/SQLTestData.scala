@@ -18,6 +18,7 @@
 package org.apache.spark.sql.test
 
 import java.nio.charset.StandardCharsets
+import java.sql.{Date, Timestamp}
 import java.time.{Duration, Period}
 
 import org.apache.spark.rdd.RDD
@@ -159,6 +160,18 @@ private[sql] trait SQLTestData { self =>
       ArrayData(Seq(1, 2, 3), Seq(Seq(1, 2, 3))) ::
       ArrayData(Seq(2, 3, 4), Seq(Seq(2, 3, 4))) :: Nil)
     rdd.toDF().createOrReplaceTempView("arrayData")
+    rdd
+  }
+
+  protected lazy val timestampData: RDD[Timestamp] = {
+    val rdd = spark.sparkContext.parallelize(
+      Timestamp.valueOf("2015-02-01 23:50:59.123456") :: Nil)
+    rdd
+  }
+
+  protected lazy val dateData: RDD[Date] = {
+    val rdd = spark.sparkContext.parallelize(
+      Date.valueOf("2015-02-01") :: Nil)
     rdd
   }
 

@@ -1672,13 +1672,18 @@ class Dataset[T] private[sql](
 
   /** @inheritdoc */
   override def toJSON: Dataset[String] = {
+    toJSON(Map.empty[String, String])
+  }
+
+  /** @inheritdoc */
+  override def toJSON(jsonOptions: Map[String, String]): Dataset[String] = {
     val rowSchema = exprEnc.schema
     val sessionLocalTimeZone = sparkSession.sessionState.conf.sessionLocalTimeZone
     mapPartitions { iter =>
       val writer = new CharArrayWriter()
       // create the Generator without separator inserted between 2 records
       val gen = new JacksonGenerator(rowSchema, writer,
-        new JSONOptions(Map.empty[String, String], sessionLocalTimeZone))
+        new JSONOptions(jsonOptions, sessionLocalTimeZone))
 
       new Iterator[String] {
         private val toRow = exprEnc.createSerializer()

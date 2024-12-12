@@ -4001,6 +4001,26 @@ abstract class JsonSuite
       "{\"key\":90000001,\"value\":\"Hey there\"}"
     )
   }
+
+  test("SPARK-50548: Dataset toJSON method works properly with options") {
+    val jsonOptions = Map[String, String](
+      "dateFormat" -> "dd.MM.yyyy",
+      "timestampFormat" -> "dd.MM.yyyy HH:mm:ss.SSSSSS")
+
+    // Use encoder for java.sql.Timestamp to ensure proper timestamp encoding.
+    val timestampDataSet =
+      spark.createDataset(timestampData)(Encoders.TIMESTAMP).toJSON(jsonOptions).collect()
+
+    // Use encoder for java.sql.Date to ensure proper date encoding.
+    val dateDataSet =
+      spark.createDataset(dateData)(Encoders.DATE).toJSON(jsonOptions).collect()
+
+    // Verify that the timestamp was correctly formatted respecting the jsonOptions.
+    assert(timestampDataSet.head === "{\"value\":\"01.02.2015 23:50:59.123456\"}")
+
+    // Verify that the date was correctly formatted respecting the jsonOptions.
+    assert(dateDataSet.head === "{\"value\":\"01.02.2015\"}")
+  }
 }
 
 class JsonV1Suite extends JsonSuite {
