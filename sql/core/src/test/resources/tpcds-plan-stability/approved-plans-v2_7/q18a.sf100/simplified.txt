@@ -17,9 +17,9 @@ TakeOrderedAndProject [ca_country,ca_state,ca_county,i_item_id,agg1,agg2,agg3,ag
                                 Project [cs_bill_customer_sk,cs_quantity,cs_list_price,cs_sales_price,cs_coupon_amt,cs_net_profit,cd_dep_count,i_item_id]
                                   BroadcastHashJoin [cs_item_sk,i_item_sk]
                                     Project [cs_bill_customer_sk,cs_item_sk,cs_quantity,cs_list_price,cs_sales_price,cs_coupon_amt,cs_net_profit,cd_dep_count]
-                                      BroadcastHashJoin [cs_sold_date_sk,d_date_sk]
-                                        Project [cs_bill_customer_sk,cs_item_sk,cs_quantity,cs_list_price,cs_sales_price,cs_coupon_amt,cs_net_profit,cs_sold_date_sk,cd_dep_count]
-                                          BroadcastHashJoin [cs_bill_cdemo_sk,cd_demo_sk]
+                                      BroadcastHashJoin [cs_bill_cdemo_sk,cd_demo_sk]
+                                        Project [cs_bill_customer_sk,cs_bill_cdemo_sk,cs_item_sk,cs_quantity,cs_list_price,cs_sales_price,cs_coupon_amt,cs_net_profit]
+                                          BroadcastHashJoin [cs_sold_date_sk,d_date_sk]
                                             Filter [cs_bill_cdemo_sk,cs_bill_customer_sk,cs_item_sk]
                                               ColumnarToRow
                                                 InputAdapter
@@ -33,15 +33,15 @@ TakeOrderedAndProject [ca_country,ca_state,ca_county,i_item_id,agg1,agg2,agg3,ag
                                                                 InputAdapter
                                                                   Scan parquet spark_catalog.default.date_dim [d_date_sk,d_year]
                                             InputAdapter
-                                              BroadcastExchange #4
-                                                WholeStageCodegen (1)
-                                                  Project [cd_demo_sk,cd_dep_count]
-                                                    Filter [cd_gender,cd_education_status,cd_demo_sk]
-                                                      ColumnarToRow
-                                                        InputAdapter
-                                                          Scan parquet spark_catalog.default.customer_demographics [cd_demo_sk,cd_gender,cd_education_status,cd_dep_count]
+                                              ReusedExchange [d_date_sk] #3
                                         InputAdapter
-                                          ReusedExchange [d_date_sk] #3
+                                          BroadcastExchange #4
+                                            WholeStageCodegen (2)
+                                              Project [cd_demo_sk,cd_dep_count]
+                                                Filter [cd_gender,cd_education_status,cd_demo_sk]
+                                                  ColumnarToRow
+                                                    InputAdapter
+                                                      Scan parquet spark_catalog.default.customer_demographics [cd_demo_sk,cd_gender,cd_education_status,cd_dep_count]
                                     InputAdapter
                                       BroadcastExchange #5
                                         WholeStageCodegen (3)
@@ -180,87 +180,91 @@ TakeOrderedAndProject [ca_country,ca_state,ca_county,i_item_id,agg1,agg2,agg3,ag
                                         Sort [cd_demo_sk]
                                           InputAdapter
                                             ReusedExchange [cd_demo_sk] #9
-    WholeStageCodegen (50)
+    WholeStageCodegen (56)
       HashAggregate [i_item_id,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count] [avg(agg1),avg(agg2),avg(agg3),avg(agg4),avg(agg5),avg(agg6),avg(agg7),ca_country,ca_state,county,agg1,agg2,agg3,agg4,agg5,agg6,agg7,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count]
         InputAdapter
           Exchange [i_item_id] #18
-            WholeStageCodegen (49)
+            WholeStageCodegen (55)
               HashAggregate [i_item_id,agg1,agg2,agg3,agg4,agg5,agg6,agg7] [sum,count,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count]
                 Project [i_item_id,cs_quantity,cs_list_price,cs_coupon_amt,cs_sales_price,cs_net_profit,c_birth_year,cd_dep_count]
-                  BroadcastHashJoin [cs_item_sk,i_item_sk]
-                    Project [cs_item_sk,cs_quantity,cs_list_price,cs_sales_price,cs_coupon_amt,cs_net_profit,cd_dep_count,c_birth_year]
-                      BroadcastHashJoin [cs_bill_customer_sk,c_customer_sk]
-                        Project [cs_bill_customer_sk,cs_item_sk,cs_quantity,cs_list_price,cs_sales_price,cs_coupon_amt,cs_net_profit,cd_dep_count]
-                          BroadcastHashJoin [cs_sold_date_sk,d_date_sk]
-                            Project [cs_bill_customer_sk,cs_item_sk,cs_quantity,cs_list_price,cs_sales_price,cs_coupon_amt,cs_net_profit,cs_sold_date_sk,cd_dep_count]
-                              BroadcastHashJoin [cs_bill_cdemo_sk,cd_demo_sk]
-                                Filter [cs_bill_cdemo_sk,cs_bill_customer_sk,cs_item_sk]
-                                  ColumnarToRow
-                                    InputAdapter
-                                      Scan parquet spark_catalog.default.catalog_sales [cs_bill_customer_sk,cs_bill_cdemo_sk,cs_item_sk,cs_quantity,cs_list_price,cs_sales_price,cs_coupon_amt,cs_net_profit,cs_sold_date_sk]
-                                        ReusedSubquery [d_date_sk] #1
-                                InputAdapter
-                                  ReusedExchange [cd_demo_sk,cd_dep_count] #4
-                            InputAdapter
-                              ReusedExchange [d_date_sk] #3
-                        InputAdapter
-                          BroadcastExchange #19
-                            WholeStageCodegen (47)
-                              Project [c_customer_sk,c_birth_year]
-                                BroadcastHashJoin [c_current_cdemo_sk,cd_demo_sk]
-                                  InputAdapter
-                                    BroadcastExchange #20
-                                      WholeStageCodegen (46)
-                                        Project [c_customer_sk,c_current_cdemo_sk,c_birth_year]
-                                          BroadcastHashJoin [c_current_addr_sk,ca_address_sk]
-                                            Project [c_customer_sk,c_current_cdemo_sk,c_current_addr_sk,c_birth_year]
-                                              Filter [c_birth_month,c_customer_sk,c_current_cdemo_sk,c_current_addr_sk]
-                                                ColumnarToRow
-                                                  InputAdapter
-                                                    Scan parquet spark_catalog.default.customer [c_customer_sk,c_current_cdemo_sk,c_current_addr_sk,c_birth_month,c_birth_year]
-                                            InputAdapter
-                                              BroadcastExchange #21
-                                                WholeStageCodegen (45)
-                                                  Project [ca_address_sk]
-                                                    Filter [ca_state,ca_address_sk]
-                                                      ColumnarToRow
-                                                        InputAdapter
-                                                          Scan parquet spark_catalog.default.customer_address [ca_address_sk,ca_state]
-                                  Filter [cd_demo_sk]
-                                    ColumnarToRow
-                                      InputAdapter
-                                        Scan parquet spark_catalog.default.customer_demographics [cd_demo_sk]
+                  SortMergeJoin [cs_bill_customer_sk,c_customer_sk]
                     InputAdapter
-                      ReusedExchange [i_item_sk,i_item_id] #5
-    WholeStageCodegen (58)
+                      WholeStageCodegen (47)
+                        Sort [cs_bill_customer_sk]
+                          InputAdapter
+                            ReusedExchange [cs_bill_customer_sk,cs_quantity,cs_list_price,cs_sales_price,cs_coupon_amt,cs_net_profit,cd_dep_count,i_item_id] #2
+                    InputAdapter
+                      WholeStageCodegen (54)
+                        Sort [c_customer_sk]
+                          InputAdapter
+                            Exchange [c_customer_sk] #19
+                              WholeStageCodegen (53)
+                                Project [c_customer_sk,c_birth_year]
+                                  SortMergeJoin [c_current_cdemo_sk,cd_demo_sk]
+                                    InputAdapter
+                                      WholeStageCodegen (50)
+                                        Sort [c_current_cdemo_sk]
+                                          InputAdapter
+                                            Exchange [c_current_cdemo_sk] #20
+                                              WholeStageCodegen (49)
+                                                Project [c_customer_sk,c_current_cdemo_sk,c_birth_year]
+                                                  BroadcastHashJoin [c_current_addr_sk,ca_address_sk]
+                                                    Project [c_customer_sk,c_current_cdemo_sk,c_current_addr_sk,c_birth_year]
+                                                      Filter [c_birth_month,c_customer_sk,c_current_cdemo_sk,c_current_addr_sk]
+                                                        ColumnarToRow
+                                                          InputAdapter
+                                                            Scan parquet spark_catalog.default.customer [c_customer_sk,c_current_cdemo_sk,c_current_addr_sk,c_birth_month,c_birth_year]
+                                                    InputAdapter
+                                                      BroadcastExchange #21
+                                                        WholeStageCodegen (48)
+                                                          Project [ca_address_sk]
+                                                            Filter [ca_state,ca_address_sk]
+                                                              ColumnarToRow
+                                                                InputAdapter
+                                                                  Scan parquet spark_catalog.default.customer_address [ca_address_sk,ca_state]
+                                    InputAdapter
+                                      WholeStageCodegen (52)
+                                        Sort [cd_demo_sk]
+                                          InputAdapter
+                                            ReusedExchange [cd_demo_sk] #9
+    WholeStageCodegen (70)
       HashAggregate [sum,count,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count] [avg(agg1),avg(agg2),avg(agg3),avg(agg4),avg(agg5),avg(agg6),avg(agg7),i_item_id,ca_country,ca_state,county,agg1,agg2,agg3,agg4,agg5,agg6,agg7,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count]
         InputAdapter
           Exchange #22
-            WholeStageCodegen (57)
+            WholeStageCodegen (69)
               HashAggregate [agg1,agg2,agg3,agg4,agg5,agg6,agg7] [sum,count,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count]
                 Project [cs_quantity,cs_list_price,cs_coupon_amt,cs_sales_price,cs_net_profit,c_birth_year,cd_dep_count]
-                  BroadcastHashJoin [cs_bill_customer_sk,c_customer_sk]
-                    Project [cs_bill_customer_sk,cs_quantity,cs_list_price,cs_sales_price,cs_coupon_amt,cs_net_profit,cd_dep_count]
-                      BroadcastHashJoin [cs_item_sk,i_item_sk]
-                        Project [cs_bill_customer_sk,cs_item_sk,cs_quantity,cs_list_price,cs_sales_price,cs_coupon_amt,cs_net_profit,cd_dep_count]
-                          BroadcastHashJoin [cs_sold_date_sk,d_date_sk]
-                            Project [cs_bill_customer_sk,cs_item_sk,cs_quantity,cs_list_price,cs_sales_price,cs_coupon_amt,cs_net_profit,cs_sold_date_sk,cd_dep_count]
-                              BroadcastHashJoin [cs_bill_cdemo_sk,cd_demo_sk]
-                                Filter [cs_bill_cdemo_sk,cs_bill_customer_sk,cs_item_sk]
-                                  ColumnarToRow
-                                    InputAdapter
-                                      Scan parquet spark_catalog.default.catalog_sales [cs_bill_customer_sk,cs_bill_cdemo_sk,cs_item_sk,cs_quantity,cs_list_price,cs_sales_price,cs_coupon_amt,cs_net_profit,cs_sold_date_sk]
-                                        ReusedSubquery [d_date_sk] #1
-                                InputAdapter
-                                  ReusedExchange [cd_demo_sk,cd_dep_count] #4
-                            InputAdapter
-                              ReusedExchange [d_date_sk] #3
-                        InputAdapter
-                          BroadcastExchange #23
-                            WholeStageCodegen (53)
-                              Filter [i_item_sk]
-                                ColumnarToRow
-                                  InputAdapter
-                                    Scan parquet spark_catalog.default.item [i_item_sk]
+                  SortMergeJoin [cs_bill_customer_sk,c_customer_sk]
                     InputAdapter
-                      ReusedExchange [c_customer_sk,c_birth_year] #19
+                      WholeStageCodegen (61)
+                        Sort [cs_bill_customer_sk]
+                          InputAdapter
+                            Exchange [cs_bill_customer_sk] #23
+                              WholeStageCodegen (60)
+                                Project [cs_bill_customer_sk,cs_quantity,cs_list_price,cs_sales_price,cs_coupon_amt,cs_net_profit,cd_dep_count]
+                                  BroadcastHashJoin [cs_bill_cdemo_sk,cd_demo_sk]
+                                    Project [cs_bill_customer_sk,cs_bill_cdemo_sk,cs_quantity,cs_list_price,cs_sales_price,cs_coupon_amt,cs_net_profit]
+                                      BroadcastHashJoin [cs_item_sk,i_item_sk]
+                                        Project [cs_bill_customer_sk,cs_bill_cdemo_sk,cs_item_sk,cs_quantity,cs_list_price,cs_sales_price,cs_coupon_amt,cs_net_profit]
+                                          BroadcastHashJoin [cs_sold_date_sk,d_date_sk]
+                                            Filter [cs_bill_cdemo_sk,cs_bill_customer_sk,cs_item_sk]
+                                              ColumnarToRow
+                                                InputAdapter
+                                                  Scan parquet spark_catalog.default.catalog_sales [cs_bill_customer_sk,cs_bill_cdemo_sk,cs_item_sk,cs_quantity,cs_list_price,cs_sales_price,cs_coupon_amt,cs_net_profit,cs_sold_date_sk]
+                                                    ReusedSubquery [d_date_sk] #1
+                                            InputAdapter
+                                              ReusedExchange [d_date_sk] #3
+                                        InputAdapter
+                                          BroadcastExchange #24
+                                            WholeStageCodegen (58)
+                                              Filter [i_item_sk]
+                                                ColumnarToRow
+                                                  InputAdapter
+                                                    Scan parquet spark_catalog.default.item [i_item_sk]
+                                    InputAdapter
+                                      ReusedExchange [cd_demo_sk,cd_dep_count] #4
+                    InputAdapter
+                      WholeStageCodegen (68)
+                        Sort [c_customer_sk]
+                          InputAdapter
+                            ReusedExchange [c_customer_sk,c_birth_year] #19

@@ -25,11 +25,11 @@ TakeOrderedAndProject (31)
                :     +- BroadcastExchange (19)
                :        +- * Filter (18)
                :           +- * ColumnarToRow (17)
-               :              +- Scan parquet spark_catalog.default.date_dim (16)
+               :              +- Scan parquet spark_catalog.default.store (16)
                +- BroadcastExchange (25)
                   +- * Filter (24)
                      +- * ColumnarToRow (23)
-                        +- Scan parquet spark_catalog.default.store (22)
+                        +- Scan parquet spark_catalog.default.date_dim (22)
 
 
 (1) Scan parquet spark_catalog.default.store_returns
@@ -101,83 +101,83 @@ Join condition: None
 Output [3]: [sr_returned_date_sk#4, ss_store_sk#9, ss_sold_date_sk#11]
 Input [9]: [sr_item_sk#1, sr_customer_sk#2, sr_ticket_number#3, sr_returned_date_sk#4, ss_item_sk#7, ss_customer_sk#8, ss_store_sk#9, ss_ticket_number#10, ss_sold_date_sk#11]
 
-(16) Scan parquet spark_catalog.default.date_dim
-Output [1]: [d_date_sk#12]
-Batched: true
-Location [not included in comparison]/{warehouse_dir}/date_dim]
-PushedFilters: [IsNotNull(d_date_sk)]
-ReadSchema: struct<d_date_sk:int>
-
-(17) ColumnarToRow [codegen id : 6]
-Input [1]: [d_date_sk#12]
-
-(18) Filter [codegen id : 6]
-Input [1]: [d_date_sk#12]
-Condition : isnotnull(d_date_sk#12)
-
-(19) BroadcastExchange
-Input [1]: [d_date_sk#12]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [plan_id=3]
-
-(20) BroadcastHashJoin [codegen id : 8]
-Left keys [1]: [ss_sold_date_sk#11]
-Right keys [1]: [d_date_sk#12]
-Join type: Inner
-Join condition: None
-
-(21) Project [codegen id : 8]
-Output [3]: [sr_returned_date_sk#4, ss_store_sk#9, ss_sold_date_sk#11]
-Input [4]: [sr_returned_date_sk#4, ss_store_sk#9, ss_sold_date_sk#11, d_date_sk#12]
-
-(22) Scan parquet spark_catalog.default.store
-Output [11]: [s_store_sk#13, s_store_name#14, s_company_id#15, s_street_number#16, s_street_name#17, s_street_type#18, s_suite_number#19, s_city#20, s_county#21, s_state#22, s_zip#23]
+(16) Scan parquet spark_catalog.default.store
+Output [11]: [s_store_sk#12, s_store_name#13, s_company_id#14, s_street_number#15, s_street_name#16, s_street_type#17, s_suite_number#18, s_city#19, s_county#20, s_state#21, s_zip#22]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store]
 PushedFilters: [IsNotNull(s_store_sk)]
 ReadSchema: struct<s_store_sk:int,s_store_name:string,s_company_id:int,s_street_number:string,s_street_name:string,s_street_type:string,s_suite_number:string,s_city:string,s_county:string,s_state:string,s_zip:string>
 
+(17) ColumnarToRow [codegen id : 6]
+Input [11]: [s_store_sk#12, s_store_name#13, s_company_id#14, s_street_number#15, s_street_name#16, s_street_type#17, s_suite_number#18, s_city#19, s_county#20, s_state#21, s_zip#22]
+
+(18) Filter [codegen id : 6]
+Input [11]: [s_store_sk#12, s_store_name#13, s_company_id#14, s_street_number#15, s_street_name#16, s_street_type#17, s_suite_number#18, s_city#19, s_county#20, s_state#21, s_zip#22]
+Condition : isnotnull(s_store_sk#12)
+
+(19) BroadcastExchange
+Input [11]: [s_store_sk#12, s_store_name#13, s_company_id#14, s_street_number#15, s_street_name#16, s_street_type#17, s_suite_number#18, s_city#19, s_county#20, s_state#21, s_zip#22]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [plan_id=3]
+
+(20) BroadcastHashJoin [codegen id : 8]
+Left keys [1]: [ss_store_sk#9]
+Right keys [1]: [s_store_sk#12]
+Join type: Inner
+Join condition: None
+
+(21) Project [codegen id : 8]
+Output [12]: [sr_returned_date_sk#4, ss_sold_date_sk#11, s_store_name#13, s_company_id#14, s_street_number#15, s_street_name#16, s_street_type#17, s_suite_number#18, s_city#19, s_county#20, s_state#21, s_zip#22]
+Input [14]: [sr_returned_date_sk#4, ss_store_sk#9, ss_sold_date_sk#11, s_store_sk#12, s_store_name#13, s_company_id#14, s_street_number#15, s_street_name#16, s_street_type#17, s_suite_number#18, s_city#19, s_county#20, s_state#21, s_zip#22]
+
+(22) Scan parquet spark_catalog.default.date_dim
+Output [1]: [d_date_sk#23]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/date_dim]
+PushedFilters: [IsNotNull(d_date_sk)]
+ReadSchema: struct<d_date_sk:int>
+
 (23) ColumnarToRow [codegen id : 7]
-Input [11]: [s_store_sk#13, s_store_name#14, s_company_id#15, s_street_number#16, s_street_name#17, s_street_type#18, s_suite_number#19, s_city#20, s_county#21, s_state#22, s_zip#23]
+Input [1]: [d_date_sk#23]
 
 (24) Filter [codegen id : 7]
-Input [11]: [s_store_sk#13, s_store_name#14, s_company_id#15, s_street_number#16, s_street_name#17, s_street_type#18, s_suite_number#19, s_city#20, s_county#21, s_state#22, s_zip#23]
-Condition : isnotnull(s_store_sk#13)
+Input [1]: [d_date_sk#23]
+Condition : isnotnull(d_date_sk#23)
 
 (25) BroadcastExchange
-Input [11]: [s_store_sk#13, s_store_name#14, s_company_id#15, s_street_number#16, s_street_name#17, s_street_type#18, s_suite_number#19, s_city#20, s_county#21, s_state#22, s_zip#23]
+Input [1]: [d_date_sk#23]
 Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [plan_id=4]
 
 (26) BroadcastHashJoin [codegen id : 8]
-Left keys [1]: [ss_store_sk#9]
-Right keys [1]: [s_store_sk#13]
+Left keys [1]: [ss_sold_date_sk#11]
+Right keys [1]: [d_date_sk#23]
 Join type: Inner
 Join condition: None
 
 (27) Project [codegen id : 8]
-Output [12]: [ss_sold_date_sk#11, sr_returned_date_sk#4, s_store_name#14, s_company_id#15, s_street_number#16, s_street_name#17, s_street_type#18, s_suite_number#19, s_city#20, s_county#21, s_state#22, s_zip#23]
-Input [14]: [sr_returned_date_sk#4, ss_store_sk#9, ss_sold_date_sk#11, s_store_sk#13, s_store_name#14, s_company_id#15, s_street_number#16, s_street_name#17, s_street_type#18, s_suite_number#19, s_city#20, s_county#21, s_state#22, s_zip#23]
+Output [12]: [ss_sold_date_sk#11, sr_returned_date_sk#4, s_store_name#13, s_company_id#14, s_street_number#15, s_street_name#16, s_street_type#17, s_suite_number#18, s_city#19, s_county#20, s_state#21, s_zip#22]
+Input [13]: [sr_returned_date_sk#4, ss_sold_date_sk#11, s_store_name#13, s_company_id#14, s_street_number#15, s_street_name#16, s_street_type#17, s_suite_number#18, s_city#19, s_county#20, s_state#21, s_zip#22, d_date_sk#23]
 
 (28) HashAggregate [codegen id : 8]
-Input [12]: [ss_sold_date_sk#11, sr_returned_date_sk#4, s_store_name#14, s_company_id#15, s_street_number#16, s_street_name#17, s_street_type#18, s_suite_number#19, s_city#20, s_county#21, s_state#22, s_zip#23]
-Keys [10]: [s_store_name#14, s_company_id#15, s_street_number#16, s_street_name#17, s_street_type#18, s_suite_number#19, s_city#20, s_county#21, s_state#22, s_zip#23]
+Input [12]: [ss_sold_date_sk#11, sr_returned_date_sk#4, s_store_name#13, s_company_id#14, s_street_number#15, s_street_name#16, s_street_type#17, s_suite_number#18, s_city#19, s_county#20, s_state#21, s_zip#22]
+Keys [10]: [s_store_name#13, s_company_id#14, s_street_number#15, s_street_name#16, s_street_type#17, s_suite_number#18, s_city#19, s_county#20, s_state#21, s_zip#22]
 Functions [5]: [partial_sum(CASE WHEN ((sr_returned_date_sk#4 - ss_sold_date_sk#11) <= 30) THEN 1 ELSE 0 END), partial_sum(CASE WHEN (((sr_returned_date_sk#4 - ss_sold_date_sk#11) > 30) AND ((sr_returned_date_sk#4 - ss_sold_date_sk#11) <= 60)) THEN 1 ELSE 0 END), partial_sum(CASE WHEN (((sr_returned_date_sk#4 - ss_sold_date_sk#11) > 60) AND ((sr_returned_date_sk#4 - ss_sold_date_sk#11) <= 90)) THEN 1 ELSE 0 END), partial_sum(CASE WHEN (((sr_returned_date_sk#4 - ss_sold_date_sk#11) > 90) AND ((sr_returned_date_sk#4 - ss_sold_date_sk#11) <= 120)) THEN 1 ELSE 0 END), partial_sum(CASE WHEN ((sr_returned_date_sk#4 - ss_sold_date_sk#11) > 120) THEN 1 ELSE 0 END)]
 Aggregate Attributes [5]: [sum#24, sum#25, sum#26, sum#27, sum#28]
-Results [15]: [s_store_name#14, s_company_id#15, s_street_number#16, s_street_name#17, s_street_type#18, s_suite_number#19, s_city#20, s_county#21, s_state#22, s_zip#23, sum#29, sum#30, sum#31, sum#32, sum#33]
+Results [15]: [s_store_name#13, s_company_id#14, s_street_number#15, s_street_name#16, s_street_type#17, s_suite_number#18, s_city#19, s_county#20, s_state#21, s_zip#22, sum#29, sum#30, sum#31, sum#32, sum#33]
 
 (29) Exchange
-Input [15]: [s_store_name#14, s_company_id#15, s_street_number#16, s_street_name#17, s_street_type#18, s_suite_number#19, s_city#20, s_county#21, s_state#22, s_zip#23, sum#29, sum#30, sum#31, sum#32, sum#33]
-Arguments: hashpartitioning(s_store_name#14, s_company_id#15, s_street_number#16, s_street_name#17, s_street_type#18, s_suite_number#19, s_city#20, s_county#21, s_state#22, s_zip#23, 5), ENSURE_REQUIREMENTS, [plan_id=5]
+Input [15]: [s_store_name#13, s_company_id#14, s_street_number#15, s_street_name#16, s_street_type#17, s_suite_number#18, s_city#19, s_county#20, s_state#21, s_zip#22, sum#29, sum#30, sum#31, sum#32, sum#33]
+Arguments: hashpartitioning(s_store_name#13, s_company_id#14, s_street_number#15, s_street_name#16, s_street_type#17, s_suite_number#18, s_city#19, s_county#20, s_state#21, s_zip#22, 5), ENSURE_REQUIREMENTS, [plan_id=5]
 
 (30) HashAggregate [codegen id : 9]
-Input [15]: [s_store_name#14, s_company_id#15, s_street_number#16, s_street_name#17, s_street_type#18, s_suite_number#19, s_city#20, s_county#21, s_state#22, s_zip#23, sum#29, sum#30, sum#31, sum#32, sum#33]
-Keys [10]: [s_store_name#14, s_company_id#15, s_street_number#16, s_street_name#17, s_street_type#18, s_suite_number#19, s_city#20, s_county#21, s_state#22, s_zip#23]
+Input [15]: [s_store_name#13, s_company_id#14, s_street_number#15, s_street_name#16, s_street_type#17, s_suite_number#18, s_city#19, s_county#20, s_state#21, s_zip#22, sum#29, sum#30, sum#31, sum#32, sum#33]
+Keys [10]: [s_store_name#13, s_company_id#14, s_street_number#15, s_street_name#16, s_street_type#17, s_suite_number#18, s_city#19, s_county#20, s_state#21, s_zip#22]
 Functions [5]: [sum(CASE WHEN ((sr_returned_date_sk#4 - ss_sold_date_sk#11) <= 30) THEN 1 ELSE 0 END), sum(CASE WHEN (((sr_returned_date_sk#4 - ss_sold_date_sk#11) > 30) AND ((sr_returned_date_sk#4 - ss_sold_date_sk#11) <= 60)) THEN 1 ELSE 0 END), sum(CASE WHEN (((sr_returned_date_sk#4 - ss_sold_date_sk#11) > 60) AND ((sr_returned_date_sk#4 - ss_sold_date_sk#11) <= 90)) THEN 1 ELSE 0 END), sum(CASE WHEN (((sr_returned_date_sk#4 - ss_sold_date_sk#11) > 90) AND ((sr_returned_date_sk#4 - ss_sold_date_sk#11) <= 120)) THEN 1 ELSE 0 END), sum(CASE WHEN ((sr_returned_date_sk#4 - ss_sold_date_sk#11) > 120) THEN 1 ELSE 0 END)]
 Aggregate Attributes [5]: [sum(CASE WHEN ((sr_returned_date_sk#4 - ss_sold_date_sk#11) <= 30) THEN 1 ELSE 0 END)#34, sum(CASE WHEN (((sr_returned_date_sk#4 - ss_sold_date_sk#11) > 30) AND ((sr_returned_date_sk#4 - ss_sold_date_sk#11) <= 60)) THEN 1 ELSE 0 END)#35, sum(CASE WHEN (((sr_returned_date_sk#4 - ss_sold_date_sk#11) > 60) AND ((sr_returned_date_sk#4 - ss_sold_date_sk#11) <= 90)) THEN 1 ELSE 0 END)#36, sum(CASE WHEN (((sr_returned_date_sk#4 - ss_sold_date_sk#11) > 90) AND ((sr_returned_date_sk#4 - ss_sold_date_sk#11) <= 120)) THEN 1 ELSE 0 END)#37, sum(CASE WHEN ((sr_returned_date_sk#4 - ss_sold_date_sk#11) > 120) THEN 1 ELSE 0 END)#38]
-Results [15]: [s_store_name#14, s_company_id#15, s_street_number#16, s_street_name#17, s_street_type#18, s_suite_number#19, s_city#20, s_county#21, s_state#22, s_zip#23, sum(CASE WHEN ((sr_returned_date_sk#4 - ss_sold_date_sk#11) <= 30) THEN 1 ELSE 0 END)#34 AS 30 days #39, sum(CASE WHEN (((sr_returned_date_sk#4 - ss_sold_date_sk#11) > 30) AND ((sr_returned_date_sk#4 - ss_sold_date_sk#11) <= 60)) THEN 1 ELSE 0 END)#35 AS 31 - 60 days #40, sum(CASE WHEN (((sr_returned_date_sk#4 - ss_sold_date_sk#11) > 60) AND ((sr_returned_date_sk#4 - ss_sold_date_sk#11) <= 90)) THEN 1 ELSE 0 END)#36 AS 61 - 90 days #41, sum(CASE WHEN (((sr_returned_date_sk#4 - ss_sold_date_sk#11) > 90) AND ((sr_returned_date_sk#4 - ss_sold_date_sk#11) <= 120)) THEN 1 ELSE 0 END)#37 AS 91 - 120 days #42, sum(CASE WHEN ((sr_returned_date_sk#4 - ss_sold_date_sk#11) > 120) THEN 1 ELSE 0 END)#38 AS >120 days #43]
+Results [15]: [s_store_name#13, s_company_id#14, s_street_number#15, s_street_name#16, s_street_type#17, s_suite_number#18, s_city#19, s_county#20, s_state#21, s_zip#22, sum(CASE WHEN ((sr_returned_date_sk#4 - ss_sold_date_sk#11) <= 30) THEN 1 ELSE 0 END)#34 AS 30 days #39, sum(CASE WHEN (((sr_returned_date_sk#4 - ss_sold_date_sk#11) > 30) AND ((sr_returned_date_sk#4 - ss_sold_date_sk#11) <= 60)) THEN 1 ELSE 0 END)#35 AS 31 - 60 days #40, sum(CASE WHEN (((sr_returned_date_sk#4 - ss_sold_date_sk#11) > 60) AND ((sr_returned_date_sk#4 - ss_sold_date_sk#11) <= 90)) THEN 1 ELSE 0 END)#36 AS 61 - 90 days #41, sum(CASE WHEN (((sr_returned_date_sk#4 - ss_sold_date_sk#11) > 90) AND ((sr_returned_date_sk#4 - ss_sold_date_sk#11) <= 120)) THEN 1 ELSE 0 END)#37 AS 91 - 120 days #42, sum(CASE WHEN ((sr_returned_date_sk#4 - ss_sold_date_sk#11) > 120) THEN 1 ELSE 0 END)#38 AS >120 days #43]
 
 (31) TakeOrderedAndProject
-Input [15]: [s_store_name#14, s_company_id#15, s_street_number#16, s_street_name#17, s_street_type#18, s_suite_number#19, s_city#20, s_county#21, s_state#22, s_zip#23, 30 days #39, 31 - 60 days #40, 61 - 90 days #41, 91 - 120 days #42, >120 days #43]
-Arguments: 100, [s_store_name#14 ASC NULLS FIRST, s_company_id#15 ASC NULLS FIRST, s_street_number#16 ASC NULLS FIRST, s_street_name#17 ASC NULLS FIRST, s_street_type#18 ASC NULLS FIRST, s_suite_number#19 ASC NULLS FIRST, s_city#20 ASC NULLS FIRST, s_county#21 ASC NULLS FIRST, s_state#22 ASC NULLS FIRST, s_zip#23 ASC NULLS FIRST], [s_store_name#14, s_company_id#15, s_street_number#16, s_street_name#17, s_street_type#18, s_suite_number#19, s_city#20, s_county#21, s_state#22, s_zip#23, 30 days #39, 31 - 60 days #40, 61 - 90 days #41, 91 - 120 days #42, >120 days #43]
+Input [15]: [s_store_name#13, s_company_id#14, s_street_number#15, s_street_name#16, s_street_type#17, s_suite_number#18, s_city#19, s_county#20, s_state#21, s_zip#22, 30 days #39, 31 - 60 days #40, 61 - 90 days #41, 91 - 120 days #42, >120 days #43]
+Arguments: 100, [s_store_name#13 ASC NULLS FIRST, s_company_id#14 ASC NULLS FIRST, s_street_number#15 ASC NULLS FIRST, s_street_name#16 ASC NULLS FIRST, s_street_type#17 ASC NULLS FIRST, s_suite_number#18 ASC NULLS FIRST, s_city#19 ASC NULLS FIRST, s_county#20 ASC NULLS FIRST, s_state#21 ASC NULLS FIRST, s_zip#22 ASC NULLS FIRST], [s_store_name#13, s_company_id#14, s_street_number#15, s_street_name#16, s_street_type#17, s_suite_number#18, s_city#19, s_county#20, s_state#21, s_zip#22, 30 days #39, 31 - 60 days #40, 61 - 90 days #41, 91 - 120 days #42, >120 days #43]
 
 ===== Subqueries =====
 

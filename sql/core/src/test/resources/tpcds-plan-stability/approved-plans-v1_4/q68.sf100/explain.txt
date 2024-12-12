@@ -28,17 +28,17 @@ TakeOrderedAndProject (47)
                         :        +- * BroadcastHashJoin Inner BuildRight (33)
                         :           :- * Project (27)
                         :           :  +- * BroadcastHashJoin Inner BuildRight (26)
-                        :           :     :- * Project (20)
-                        :           :     :  +- * BroadcastHashJoin Inner BuildRight (19)
+                        :           :     :- * Project (24)
+                        :           :     :  +- * BroadcastHashJoin Inner BuildRight (23)
                         :           :     :     :- * Filter (17)
                         :           :     :     :  +- * ColumnarToRow (16)
                         :           :     :     :     +- Scan parquet spark_catalog.default.store_sales (15)
-                        :           :     :     +- ReusedExchange (18)
-                        :           :     +- BroadcastExchange (25)
-                        :           :        +- * Project (24)
-                        :           :           +- * Filter (23)
-                        :           :              +- * ColumnarToRow (22)
-                        :           :                 +- Scan parquet spark_catalog.default.store (21)
+                        :           :     :     +- BroadcastExchange (22)
+                        :           :     :        +- * Project (21)
+                        :           :     :           +- * Filter (20)
+                        :           :     :              +- * ColumnarToRow (19)
+                        :           :     :                 +- Scan parquet spark_catalog.default.store (18)
+                        :           :     +- ReusedExchange (25)
                         :           +- BroadcastExchange (32)
                         :              +- * Project (31)
                         :                 +- * Filter (30)
@@ -125,50 +125,50 @@ Input [9]: [ss_customer_sk#7, ss_hdemo_sk#8, ss_addr_sk#9, ss_store_sk#10, ss_ti
 Input [9]: [ss_customer_sk#7, ss_hdemo_sk#8, ss_addr_sk#9, ss_store_sk#10, ss_ticket_number#11, ss_ext_sales_price#12, ss_ext_list_price#13, ss_ext_tax#14, ss_sold_date_sk#15]
 Condition : (((isnotnull(ss_store_sk#10) AND isnotnull(ss_hdemo_sk#8)) AND isnotnull(ss_addr_sk#9)) AND isnotnull(ss_customer_sk#7))
 
-(18) ReusedExchange [Reuses operator id: 52]
-Output [1]: [d_date_sk#17]
-
-(19) BroadcastHashJoin [codegen id : 10]
-Left keys [1]: [ss_sold_date_sk#15]
-Right keys [1]: [d_date_sk#17]
-Join type: Inner
-Join condition: None
-
-(20) Project [codegen id : 10]
-Output [8]: [ss_customer_sk#7, ss_hdemo_sk#8, ss_addr_sk#9, ss_store_sk#10, ss_ticket_number#11, ss_ext_sales_price#12, ss_ext_list_price#13, ss_ext_tax#14]
-Input [10]: [ss_customer_sk#7, ss_hdemo_sk#8, ss_addr_sk#9, ss_store_sk#10, ss_ticket_number#11, ss_ext_sales_price#12, ss_ext_list_price#13, ss_ext_tax#14, ss_sold_date_sk#15, d_date_sk#17]
-
-(21) Scan parquet spark_catalog.default.store
-Output [2]: [s_store_sk#18, s_city#19]
+(18) Scan parquet spark_catalog.default.store
+Output [2]: [s_store_sk#17, s_city#18]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store]
 PushedFilters: [In(s_city, [Fairview,Midway]), IsNotNull(s_store_sk)]
 ReadSchema: struct<s_store_sk:int,s_city:string>
 
-(22) ColumnarToRow [codegen id : 8]
-Input [2]: [s_store_sk#18, s_city#19]
+(19) ColumnarToRow [codegen id : 7]
+Input [2]: [s_store_sk#17, s_city#18]
 
-(23) Filter [codegen id : 8]
-Input [2]: [s_store_sk#18, s_city#19]
-Condition : (s_city#19 IN (Midway,Fairview) AND isnotnull(s_store_sk#18))
+(20) Filter [codegen id : 7]
+Input [2]: [s_store_sk#17, s_city#18]
+Condition : (s_city#18 IN (Midway,Fairview) AND isnotnull(s_store_sk#17))
 
-(24) Project [codegen id : 8]
-Output [1]: [s_store_sk#18]
-Input [2]: [s_store_sk#18, s_city#19]
+(21) Project [codegen id : 7]
+Output [1]: [s_store_sk#17]
+Input [2]: [s_store_sk#17, s_city#18]
 
-(25) BroadcastExchange
-Input [1]: [s_store_sk#18]
+(22) BroadcastExchange
+Input [1]: [s_store_sk#17]
 Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=4]
 
-(26) BroadcastHashJoin [codegen id : 10]
+(23) BroadcastHashJoin [codegen id : 10]
 Left keys [1]: [ss_store_sk#10]
-Right keys [1]: [s_store_sk#18]
+Right keys [1]: [s_store_sk#17]
+Join type: Inner
+Join condition: None
+
+(24) Project [codegen id : 10]
+Output [8]: [ss_customer_sk#7, ss_hdemo_sk#8, ss_addr_sk#9, ss_ticket_number#11, ss_ext_sales_price#12, ss_ext_list_price#13, ss_ext_tax#14, ss_sold_date_sk#15]
+Input [10]: [ss_customer_sk#7, ss_hdemo_sk#8, ss_addr_sk#9, ss_store_sk#10, ss_ticket_number#11, ss_ext_sales_price#12, ss_ext_list_price#13, ss_ext_tax#14, ss_sold_date_sk#15, s_store_sk#17]
+
+(25) ReusedExchange [Reuses operator id: 52]
+Output [1]: [d_date_sk#19]
+
+(26) BroadcastHashJoin [codegen id : 10]
+Left keys [1]: [ss_sold_date_sk#15]
+Right keys [1]: [d_date_sk#19]
 Join type: Inner
 Join condition: None
 
 (27) Project [codegen id : 10]
 Output [7]: [ss_customer_sk#7, ss_hdemo_sk#8, ss_addr_sk#9, ss_ticket_number#11, ss_ext_sales_price#12, ss_ext_list_price#13, ss_ext_tax#14]
-Input [9]: [ss_customer_sk#7, ss_hdemo_sk#8, ss_addr_sk#9, ss_store_sk#10, ss_ticket_number#11, ss_ext_sales_price#12, ss_ext_list_price#13, ss_ext_tax#14, s_store_sk#18]
+Input [9]: [ss_customer_sk#7, ss_hdemo_sk#8, ss_addr_sk#9, ss_ticket_number#11, ss_ext_sales_price#12, ss_ext_list_price#13, ss_ext_tax#14, ss_sold_date_sk#15, d_date_sk#19]
 
 (28) Scan parquet spark_catalog.default.household_demographics
 Output [3]: [hd_demo_sk#20, hd_dep_count#21, hd_vehicle_count#22]
@@ -274,25 +274,25 @@ BroadcastExchange (52)
 
 
 (48) Scan parquet spark_catalog.default.date_dim
-Output [3]: [d_date_sk#17, d_year#38, d_dom#39]
+Output [3]: [d_date_sk#19, d_year#38, d_dom#39]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
 PushedFilters: [IsNotNull(d_dom), GreaterThanOrEqual(d_dom,1), LessThanOrEqual(d_dom,2), In(d_year, [1999,2000,2001]), IsNotNull(d_date_sk)]
 ReadSchema: struct<d_date_sk:int,d_year:int,d_dom:int>
 
 (49) ColumnarToRow [codegen id : 1]
-Input [3]: [d_date_sk#17, d_year#38, d_dom#39]
+Input [3]: [d_date_sk#19, d_year#38, d_dom#39]
 
 (50) Filter [codegen id : 1]
-Input [3]: [d_date_sk#17, d_year#38, d_dom#39]
-Condition : ((((isnotnull(d_dom#39) AND (d_dom#39 >= 1)) AND (d_dom#39 <= 2)) AND d_year#38 IN (1999,2000,2001)) AND isnotnull(d_date_sk#17))
+Input [3]: [d_date_sk#19, d_year#38, d_dom#39]
+Condition : ((((isnotnull(d_dom#39) AND (d_dom#39 >= 1)) AND (d_dom#39 <= 2)) AND d_year#38 IN (1999,2000,2001)) AND isnotnull(d_date_sk#19))
 
 (51) Project [codegen id : 1]
-Output [1]: [d_date_sk#17]
-Input [3]: [d_date_sk#17, d_year#38, d_dom#39]
+Output [1]: [d_date_sk#19]
+Input [3]: [d_date_sk#19, d_year#38, d_dom#39]
 
 (52) BroadcastExchange
-Input [1]: [d_date_sk#17]
+Input [1]: [d_date_sk#19]
 Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=8]
 
 
