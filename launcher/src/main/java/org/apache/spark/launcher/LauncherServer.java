@@ -225,7 +225,7 @@ class LauncherServer implements Closeable {
     try {
       while (running) {
         final Socket client = server.accept();
-        TimerTask timeout = new TimerTask() {
+        TimerTask timerTask = new TimerTask() {
           @Override
           public void run() {
             LOG.warning("Timed out waiting for hello message from client.");
@@ -236,7 +236,7 @@ class LauncherServer implements Closeable {
             }
           }
         };
-        ServerConnection clientConnection = new ServerConnection(client, timeout);
+        ServerConnection clientConnection = new ServerConnection(client, timerTask);
         Thread clientThread = factory.newThread(clientConnection);
         clientConnection.setConnectionThread(clientThread);
         synchronized (clients) {
@@ -247,9 +247,9 @@ class LauncherServer implements Closeable {
         // 0 is used for testing to avoid issues with clock resolution / thread scheduling,
         // and force an immediate timeout.
         if (timeoutMs > 0) {
-          timeoutTimer.schedule(timeout, timeoutMs);
+          timeoutTimer.schedule(timerTask, timeoutMs);
         } else {
-          timeout.run();
+          timerTask.run();
         }
 
         clientThread.start();

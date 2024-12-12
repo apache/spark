@@ -160,7 +160,7 @@ private[spark] object ThreadUtils {
   }
 
   /**
-   * Wrapper over newSingleThreadExecutor.
+   * Wrapper over newFixedThreadPool with single daemon thread.
    */
   def newDaemonSingleThreadExecutor(threadName: String): ThreadPoolExecutor = {
     val threadFactory = new ThreadFactoryBuilder().setDaemon(true).setNameFormat(threadName).build()
@@ -189,10 +189,22 @@ private[spark] object ThreadUtils {
   }
 
   /**
-   * Wrapper over ScheduledThreadPoolExecutor.
+   * Wrapper over ScheduledThreadPoolExecutor the pool with daemon threads.
    */
   def newDaemonSingleThreadScheduledExecutor(threadName: String): ScheduledExecutorService = {
     val threadFactory = new ThreadFactoryBuilder().setDaemon(true).setNameFormat(threadName).build()
+    val executor = new ScheduledThreadPoolExecutor(1, threadFactory)
+    // By default, a cancelled task is not automatically removed from the work queue until its delay
+    // elapses. We have to enable it manually.
+    executor.setRemoveOnCancelPolicy(true)
+    executor
+  }
+
+  /**
+   * Wrapper over ScheduledThreadPoolExecutor the pool with non-daemon threads.
+   */
+  def newSingleThreadScheduledExecutor(threadName: String): ScheduledThreadPoolExecutor = {
+    val threadFactory = new ThreadFactoryBuilder().setNameFormat(threadName).build()
     val executor = new ScheduledThreadPoolExecutor(1, threadFactory)
     // By default, a cancelled task is not automatically removed from the work queue until its delay
     // elapses. We have to enable it manually.
