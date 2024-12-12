@@ -82,7 +82,7 @@ class VariantWriteShreddingSuite extends SparkFunSuite with ExpressionEvalHelper
       StructField("typed_value", TimestampNTZType, nullable = true)))
     val arrayType = ArrayType(StructType(Seq(
       StructField("value", BinaryType, nullable = true),
-      StructField("typed_value", StringType, nullable = true))))
+      StructField("typed_value", StringType, nullable = true))), containsNull = false)
     val fieldB = StructType(Seq(
       StructField("value", BinaryType, nullable = true),
       StructField("typed_value", arrayType, nullable = true)))
