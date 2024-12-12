@@ -286,7 +286,7 @@ class RocksDB(
    * The changelog file is named as version_stateStoreCkptId.changelog
    * @param version version of the changelog file, used to load changelog file.
    * @param stateStoreCkptId uniqueId of the changelog file, used to load changelog file.
-   * @return
+   * @return the lineage stored in the changelog file
    */
   private def getLineageFromChangelogFile(
       version: Long,
@@ -347,8 +347,8 @@ class RocksDB(
           latestSnapshotVersionsAndUniqueId match {
             case Some(pair) => (pair._1, Option(pair._2))
             case None if currVersionLineage.head.version == 1L =>
-              logWarning(log"Cannot find latest snapshot based on lineage but first version " +
-                log"is 1, use 0 as default. Lineage ${MDC(LogKeys.LINEAGE, lineageManager)}")
+              logDebug(log"Cannot find latest snapshot based on lineage but first version " +
+                log"is 1, use 0 as default. Lineage: ${MDC(LogKeys.LINEAGE, lineageManager)}")
               (0L, None)
             case _ =>
               throw QueryExecutionErrors.cannotFindBaseSnapshotCheckpoint(
@@ -376,10 +376,10 @@ class RocksDB(
       openLocalRocksDB(metadata)
 
       if (loadedVersion != version) {
-        val versionsAndUniqueIds = currVersionLineage
-          .filter(_.version > loadedVersion)
-          .filter(_.version <= version)
-          .map(i => (i.version, Option(i.checkpointUniqueId)))
+        val versionsAndUniqueIds = currVersionLineage.collect {
+            case i if i.version > loadedVersion && i.version <= version =>
+              (i.version, Option(i.checkpointUniqueId))
+          }
         replayChangelog(versionsAndUniqueIds)
         loadedVersion = version
         lineageManager.resetLineage(currVersionLineage)
@@ -421,7 +421,10 @@ class RocksDB(
     // (e.g. with default minDeltasForSnapshot, there is only 1_uuid1.changelog, no 1_uuid1.zip)
     // It should end with exactly one version before the change log's version.
     changelogWriter = Some(fileManager.getChangeLogWriter(
-      version + 1, useColumnFamilies, sessionStateStoreCkptId, Some(currVersionLineage)))
+      version + 1,
+      useColumnFamilies,
+      sessionStateStoreCkptId,
+      Some(currVersionLineage)))
   }
   this
 }
@@ -433,8 +436,10 @@ class RocksDB(
       if (loadedVersion != version) {
         closeDB(ignoreException = false)
         val latestSnapshotVersion = fileManager.getLatestSnapshotVersion(version)
-        val metadata = fileManager.loadCheckpointFromDfs(latestSnapshotVersion,
-          workingDir, rocksDBFileMapping)
+        val metadata = fileManager.loadCheckpointFromDfs(
+          latestSnapshotVersion,
+          workingDir,
+          rocksDBFileMapping)
 
         loadedVersion = latestSnapshotVersion
 
@@ -818,8 +823,11 @@ class RocksDB(
           // If changelog checkpointing is enabled, snapshot will be uploaded asynchronously
           // during state store maintenance.
           snapshot = Some(createSnapshot(
-            checkpointDir, newVersion, colFamilyNameToIdMap.asScala.toMap,
-            maxColumnFamilyId.get().toShort, sessionStateStoreCkptId))
+            checkpointDir,
+            newVersion,
+            colFamilyNameToIdMap.asScala.toMap,
+            maxColumnFamilyId.get().toShort,
+            sessionStateStoreCkptId))
           lastSnapshotVersion = newVersion
         }
       }

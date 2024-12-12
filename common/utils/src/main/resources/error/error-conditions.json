@@ -235,7 +235,7 @@
     "subClass" : {
       "CANNOT_FIND_BASE_SNAPSHOT_CHECKPOINT" : {
         "message" : [
-          "Cannot find a base snapshot checkpoint. lineage: <lineage>."
+          "Cannot find a base snapshot checkpoint with lineage: <lineage>."
         ]
       },
       "CANNOT_READ_CHECKPOINT" : {

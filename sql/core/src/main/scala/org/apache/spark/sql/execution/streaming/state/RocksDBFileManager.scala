@@ -367,11 +367,9 @@ class RocksDBFileManager(
     if (fm.exists(path)) {
       fm.list(path, onlyZipFiles)
         .map(_.getPath.getName.stripSuffix(".zip").split("_"))
-        .filter {
-          case Array(ver, id) => lineage.contains(LineageItem(ver.toLong, id))
-        }
-        .map {
-          case Array(version, uniqueId) => (version.toLong, uniqueId)
+        .collect {
+          case Array(ver, id) if lineage.contains(LineageItem(ver.toLong, id)) =>
+            (ver.toLong, id)
         }
         .sortBy(_._1)
         .reverse
@@ -387,16 +385,18 @@ class RocksDBFileManager(
     if (fm.exists(path)) {
       val files = fm.list(path).map(_.getPath)
       val changelogFileVersions = files.filter(onlyChangelogFiles.accept)
-        .map(_.getName.stripSuffix(".changelog").split("_"))
-        .map {
-          case Array(version, _) => version.toLong
-          case Array(version) => version.toLong
+        .map { fileName =>
+          fileName.getName.stripSuffix(".changelog").split("_") match {
+            case Array(version, _) => version.toLong
+            case Array(version) => version.toLong
+          }
         }
       val snapshotFileVersions = files.filter(onlyZipFiles.accept)
-        .map(_.getName.stripSuffix(".zip").split("_"))
-        .map {
-          case Array(version, _) => version.toLong
-          case Array(version) => version.toLong
+        .map { fileName =>
+          fileName.getName.stripSuffix(".zip").split("_") match {
+            case Array(version, _) => version.toLong
+            case Array(version) => version.toLong
+          }
         }
       val versions = changelogFileVersions ++ snapshotFileVersions
       versions.foldLeft(0L)(math.max)

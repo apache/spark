@@ -598,15 +598,18 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
 
   // A rocksdb instance with changelog checkpointing enabled should be able to load
   // an existing checkpoint without changelog.
-  testWithColumnFamilies(
+  testWithStateStoreCheckpointIdsAndColumnFamilies(
     "RocksDB: changelog checkpointing backward compatibility",
-    TestWithChangelogCheckpointingEnabled) { colFamiliesEnabled =>
+    TestWithChangelogCheckpointingEnabled) { (enableStateStoreCheckpointIds, colFamiliesEnabled) =>
     val remoteDir = Utils.createTempDir().toString
     new File(remoteDir).delete() // to make sure that the directory gets created
     val disableChangelogCheckpointingConf =
       dbConf.copy(enableChangelogCheckpointing = false, minVersionsToRetain = 30)
+    val versionToUniqueId = new mutable.HashMap[Long, String]()
     withDB(remoteDir, conf = disableChangelogCheckpointingConf,
-      useColumnFamilies = colFamiliesEnabled) { db =>
+      useColumnFamilies = colFamiliesEnabled,
+      enableStateStoreCheckpointIds = enableStateStoreCheckpointIds,
+      versionToUniqueId = versionToUniqueId) { db =>
       for (version <- 1 to 30) {
         db.load(version - 1)
         db.put(version.toString, version.toString)
@@ -622,7 +625,9 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
       dbConf.copy(enableChangelogCheckpointing = true, minVersionsToRetain = 30,
         minDeltasForSnapshot = 1)
     withDB(remoteDir, conf = enableChangelogCheckpointingConf,
-      useColumnFamilies = colFamiliesEnabled) { db =>
+      useColumnFamilies = colFamiliesEnabled,
+      enableStateStoreCheckpointIds = enableStateStoreCheckpointIds,
+      versionToUniqueId = versionToUniqueId) { db =>
       for (version <- 1 to 30) {
         db.load(version)
         assert(db.iterator().map(toStr).toSet === Set((version.toString, version.toString)))
@@ -650,7 +655,13 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
       // Check that snapshots and changelogs get purged correctly.
       db.doMaintenance()
       assert(snapshotVersionsPresent(remoteDir) === Seq(30, 60))
-      assert(changelogVersionsPresent(remoteDir) === (30 to 60))
+      if (enableStateStoreCheckpointIds) {
+        // recommit version 60 creates another changelog file with different unique id
+        assert(changelogVersionsPresent(remoteDir) === (30 to 60) :+ 60)
+      } else {
+        assert(changelogVersionsPresent(remoteDir) === (30 to 60))
+      }
+
       // Verify the content of retained versions.
       for (version <- 30 to 60) {
         db.load(version, readOnly = true)
@@ -661,16 +672,19 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
 
   // A rocksdb instance with changelog checkpointing disabled should be able to load
   // an existing checkpoint with changelog.
-  testWithColumnFamilies(
+  testWithStateStoreCheckpointIdsAndColumnFamilies(
     "RocksDB: changelog checkpointing forward compatibility",
-    TestWithChangelogCheckpointingEnabled) { colFamiliesEnabled =>
+    TestWithChangelogCheckpointingEnabled) { (enableStateStoreCheckpointIds, colFamiliesEnabled) =>
     val remoteDir = Utils.createTempDir().toString
     new File(remoteDir).delete() // to make sure that the directory gets created
     val enableChangelogCheckpointingConf =
       dbConf.copy(enableChangelogCheckpointing = true, minVersionsToRetain = 20,
         minDeltasForSnapshot = 3)
+    val versionToUniqueId = new mutable.HashMap[Long, String]()
     withDB(remoteDir, conf = enableChangelogCheckpointingConf,
-      useColumnFamilies = colFamiliesEnabled) { db =>
+      useColumnFamilies = colFamiliesEnabled,
+      enableStateStoreCheckpointIds = enableStateStoreCheckpointIds,
+      versionToUniqueId = versionToUniqueId) { db =>
       for (version <- 1 to 30) {
         db.load(version - 1)
         db.put(version.toString, version.toString)
@@ -685,7 +699,9 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
       dbConf.copy(enableChangelogCheckpointing = false, minVersionsToRetain = 20,
         minDeltasForSnapshot = 1)
     withDB(remoteDir, conf = disableChangelogCheckpointingConf,
-      useColumnFamilies = colFamiliesEnabled) { db =>
+      useColumnFamilies = colFamiliesEnabled,
+      enableStateStoreCheckpointIds = enableStateStoreCheckpointIds,
+      versionToUniqueId = versionToUniqueId) { db =>
       for (version <- 1 to 30) {
         db.load(version)
         assert(db.iterator().map(toStr).toSet === Set((version.toString, version.toString)))
