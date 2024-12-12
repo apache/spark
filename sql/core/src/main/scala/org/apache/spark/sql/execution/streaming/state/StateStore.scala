@@ -24,6 +24,7 @@ import javax.annotation.concurrent.GuardedBy
 import scala.collection.mutable
 import scala.util.control.NonFatal
 
+import org.apache.avro.Schema
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.json4s.{JInt, JString}
@@ -32,6 +33,7 @@ import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods.{compact, render}
 
 import org.apache.spark.{SparkContext, SparkEnv, SparkException}
+import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.catalyst.util.UnsafeRowUtils
@@ -52,6 +54,22 @@ object StateStoreEncoding {
   case object UnsafeRow extends StateStoreEncoding
   case object Avro extends StateStoreEncoding
 }
+
+case class StateSchemaMetadataKey(
+    schemaId: Int,
+    colFamilyName: String,
+    queryRunId: String
+)
+
+case class StateSchemaMetadataValue(
+    avroSchema: Schema,
+    valueSchema: StructType
+)
+
+case class StateSchemaMetadata(
+  currentSchemaId: Int,
+  schemas: Map[Int, Map[StateSchemaMetadataKey, StateSchemaMetadataValue]]
+)
 
 /**
  * Base trait for a versioned key-value store which provides read operations. Each instance of a
@@ -426,7 +444,8 @@ trait StateStoreProvider {
       useColumnFamilies: Boolean,
       storeConfs: StateStoreConf,
       hadoopConf: Configuration,
-      useMultipleValuesPerKey: Boolean = false): Unit
+      useMultipleValuesPerKey: Boolean = false,
+      stateSchemaMetadata: Option[Broadcast[StateSchemaMetadata]] = None): Unit
 
   /**
    * Return the id of the StateStores this provider will generate.
@@ -493,10 +512,11 @@ object StateStoreProvider {
       useColumnFamilies: Boolean,
       storeConf: StateStoreConf,
       hadoopConf: Configuration,
-      useMultipleValuesPerKey: Boolean): StateStoreProvider = {
+      useMultipleValuesPerKey: Boolean,
+      stateSchemaMetadata: Option[Broadcast[StateSchemaMetadata]] = None): StateStoreProvider = {
     val provider = create(storeConf.providerClass)
     provider.init(providerId.storeId, keySchema, valueSchema, keyStateEncoderSpec,
-      useColumnFamilies, storeConf, hadoopConf, useMultipleValuesPerKey)
+      useColumnFamilies, storeConf, hadoopConf, useMultipleValuesPerKey, stateSchemaMetadata)
     provider
   }
 
@@ -766,6 +786,7 @@ object StateStore extends Logging {
     storeProvider.getReadStore(version, stateStoreCkptId)
   }
 
+  // scalastyle:off
   /** Get or create a store associated with the id. */
   def get(
       storeProviderId: StateStoreProviderId,
@@ -777,15 +798,19 @@ object StateStore extends Logging {
       useColumnFamilies: Boolean,
       storeConf: StateStoreConf,
       hadoopConf: Configuration,
-      useMultipleValuesPerKey: Boolean = false): StateStore = {
+      useMultipleValuesPerKey: Boolean = false,
+      stateSchemaMetadata: Option[Broadcast[StateSchemaMetadata]] = None
+   ): StateStore = {
     if (version < 0) {
       throw QueryExecutionErrors.unexpectedStateStoreVersion(version)
     }
     hadoopConf.set(StreamExecution.RUN_ID_KEY, storeProviderId.queryRunId.toString)
     val storeProvider = getStateStoreProvider(storeProviderId, keySchema, valueSchema,
-      keyStateEncoderSpec, useColumnFamilies, storeConf, hadoopConf, useMultipleValuesPerKey)
+      keyStateEncoderSpec, useColumnFamilies, storeConf, hadoopConf,
+      useMultipleValuesPerKey, stateSchemaMetadata)
     storeProvider.getStore(version, stateStoreCkptId)
   }
+  // scalastyle:on
 
   private def getStateStoreProvider(
       storeProviderId: StateStoreProviderId,
@@ -795,7 +820,8 @@ object StateStore extends Logging {
       useColumnFamilies: Boolean,
       storeConf: StateStoreConf,
       hadoopConf: Configuration,
-      useMultipleValuesPerKey: Boolean): StateStoreProvider = {
+      useMultipleValuesPerKey: Boolean,
+      stateSchemaMetadata: Option[Broadcast[StateSchemaMetadata]] = None): StateStoreProvider = {
     loadedProviders.synchronized {
       startMaintenanceIfNeeded(storeConf)
 
@@ -806,7 +832,8 @@ object StateStore extends Logging {
           storeProviderId,
           StateStoreProvider.createAndInit(
             storeProviderId, keySchema, valueSchema, keyStateEncoderSpec,
-            useColumnFamilies, storeConf, hadoopConf, useMultipleValuesPerKey)
+            useColumnFamilies, storeConf, hadoopConf, useMultipleValuesPerKey,
+            stateSchemaMetadata)
         )
       }
 
