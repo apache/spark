@@ -83,10 +83,18 @@ private[sql] class RocksDBStateStoreProvider
       val avroEnc = getAvroEnc(
         stateStoreEncoding, avroEncCacheKey, keyStateEncoderSpec, valueSchema)
 
+      val provider = RocksDBStateStoreProvider.this
+      val columnFamilyInfo = Some(ColumnFamilyInfo(colFamilyName, newColFamilyId))
       keyValueEncoderMap.putIfAbsent(colFamilyName,
-        (RocksDBStateEncoder.getKeyEncoder(keyStateEncoderSpec, useColumnFamilies,
-          Some(newColFamilyId), avroEnc), RocksDBStateEncoder.getValueEncoder(valueSchema,
-          useMultipleValuesPerKey, avroEnc)))
+        (
+          RocksDBStateEncoder.getKeyEncoder(
+            provider, keyStateEncoderSpec, useColumnFamilies,
+            columnFamilyInfo, avroEnc),
+          RocksDBStateEncoder.getValueEncoder(
+            provider, valueSchema, useMultipleValuesPerKey,
+            useColumnFamilies, columnFamilyInfo, avroEnc)
+        )
+      )
     }
 
     override def get(key: UnsafeRow, colFamilyName: String): UnsafeRow = {
@@ -394,10 +402,18 @@ private[sql] class RocksDBStateStoreProvider
     val avroEnc = getAvroEnc(
       stateStoreEncoding, avroEncCacheKey, keyStateEncoderSpec, valueSchema)
 
-    keyValueEncoderMap.putIfAbsent(StateStore.DEFAULT_COL_FAMILY_NAME,
-      (RocksDBStateEncoder.getKeyEncoder(keyStateEncoderSpec,
-        useColumnFamilies, defaultColFamilyId, avroEnc),
-        RocksDBStateEncoder.getValueEncoder(valueSchema, useMultipleValuesPerKey, avroEnc)))
+    val provider = RocksDBStateStoreProvider.this
+    val columnFamilyInfo = Some(ColumnFamilyInfo(colFamilyName, defaultColFamilyId.get))
+    keyValueEncoderMap.putIfAbsent(colFamilyName,
+      (
+        RocksDBStateEncoder.getKeyEncoder(
+          provider, keyStateEncoderSpec, useColumnFamilies,
+          columnFamilyInfo, avroEnc),
+        RocksDBStateEncoder.getValueEncoder(
+          provider, valueSchema, useMultipleValuesPerKey,
+          useColumnFamilies, columnFamilyInfo, avroEnc)
+      )
+    )
   }
 
   override def stateStoreId: StateStoreId = stateStoreId_
@@ -610,6 +626,7 @@ object RocksDBStateStoreProvider {
   val STATE_ENCODING_NUM_VERSION_BYTES = 1
   val STATE_ENCODING_VERSION: Byte = 0
   val VIRTUAL_COL_FAMILY_PREFIX_BYTES = 2
+  val SCHEMA_ID_PREFIX_BYTES = 2
 
   private val MAX_AVRO_ENCODERS_IN_CACHE = 1000
   private val AVRO_ENCODER_LIFETIME_HOURS = 1L
