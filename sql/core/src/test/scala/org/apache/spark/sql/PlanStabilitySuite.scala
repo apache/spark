@@ -32,6 +32,7 @@ import org.apache.spark.sql.execution.exchange.{Exchange, ReusedExchangeExec, Va
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.tags.ExtendedSQLTest
 
+
 // scalastyle:off line.size.limit
 /**
  * Check that TPC-DS SparkPlans don't change.
@@ -97,14 +98,34 @@ trait PlanStabilitySuite extends DisableAdaptiveExecutionSuite {
     }
     new File(goldenFilePath, goldenFileName)
   }
+  class MatchResult(val isMatch: Boolean, val simplifiedMatch: Boolean, val explainedMatch: Boolean,
+    val expectedSimplified: String, val expectedExplain: String)
 
-  private def isApproved(
-      dir: File, actualSimplifiedPlan: String, actualExplain: String): Boolean = {
-    val simplifiedFile = new File(dir, "simplified.txt")
-    val expectedSimplified = FileUtils.readFileToString(simplifiedFile, StandardCharsets.UTF_8)
-    lazy val explainFile = new File(dir, "explain.txt")
-    lazy val expectedExplain = FileUtils.readFileToString(explainFile, StandardCharsets.UTF_8)
-    expectedSimplified == actualSimplifiedPlan && expectedExplain == actualExplain
+  private def isApproved(dir: File, actualSimplifiedPlan: String, actualExplain: String):
+  MatchResult =
+  {
+    val goldenFileName = "simplified.txt"
+    val file = new File(dir, goldenFileName)
+    val expectedSimplified = FileUtils.readFileToString(file, StandardCharsets.UTF_8)
+    val goldenExplainFileName = "explain.txt"
+    val explainFile = new File(dir, goldenExplainFileName)
+    val expectedExplain = FileUtils.readFileToString(explainFile, StandardCharsets.UTF_8)
+    val explainedMatch = expectedExplain == actualExplain
+    val simplifiedMatch = expectedSimplified == actualSimplifiedPlan
+    val matched = explainedMatch && simplifiedMatch
+    if (!matched) {
+      if (!simplifiedMatch) {
+        logError("actual simplified found=" + actualSimplifiedPlan)
+        logError("expected simplified found=" + expectedSimplified)
+      }
+      if (!explainedMatch) {
+        logError("actual explain found=" + actualExplain)
+        logError("expected explain found=" + expectedExplain)
+      }
+    }
+    new MatchResult(matched, simplifiedMatch, explainedMatch, expectedSimplified,
+        expectedExplain)
+
   }
 
   /**
@@ -119,7 +140,8 @@ trait PlanStabilitySuite extends DisableAdaptiveExecutionSuite {
   private def generateGoldenFile(plan: SparkPlan, name: String, explain: String): Unit = {
     val dir = getDirForTest(name)
     val simplified = getSimplifiedPlan(plan)
-    val foundMatch = dir.exists() && isApproved(dir, simplified, explain)
+
+    val foundMatch = dir.exists() && isApproved(dir, simplified, explain).isMatch
 
     if (!foundMatch) {
       FileUtils.deleteDirectory(dir)
@@ -137,9 +159,9 @@ trait PlanStabilitySuite extends DisableAdaptiveExecutionSuite {
     val dir = getDirForTest(name)
     val tempDir = FileUtils.getTempDirectory
     val actualSimplified = getSimplifiedPlan(plan)
-    val foundMatch = isApproved(dir, actualSimplified, explain)
+    val matchResult = isApproved(dir, actualSimplified, explain)
 
-    if (!foundMatch) {
+    if (!matchResult.isMatch) {
       // show diff with last approved
       val approvedSimplifiedFile = new File(dir, "simplified.txt")
       val approvedExplainFile = new File(dir, "explain.txt")
@@ -147,19 +169,28 @@ trait PlanStabilitySuite extends DisableAdaptiveExecutionSuite {
       val actualSimplifiedFile = new File(tempDir, s"$name.actual.simplified.txt")
       val actualExplainFile = new File(tempDir, s"$name.actual.explain.txt")
 
-      val approvedSimplified = FileUtils.readFileToString(
-        approvedSimplifiedFile, StandardCharsets.UTF_8)
       // write out for debugging
       FileUtils.writeStringToFile(actualSimplifiedFile, actualSimplified, StandardCharsets.UTF_8)
       FileUtils.writeStringToFile(actualExplainFile, explain, StandardCharsets.UTF_8)
+      val builder = new StringBuilder
+      if (!matchResult.simplifiedMatch) {
+        builder.append("simplified plans did not match").append("\n actual simplified =\n").
+          append(actualSimplified).append("\n\n approved simplified=\n").
+          append(matchResult.expectedSimplified)
+      }
 
+      if (!matchResult.explainedMatch) {
+        builder.append("explain plans did not match").append("\n actual explain =\n").
+          append(explain).append("\n\n approved explain=\n").
+          append(matchResult.expectedExplain)
+      }
       fail(
         s"""
           |Plans did not match:
           |last approved simplified plan: ${approvedSimplifiedFile.getAbsolutePath}
           |last approved explain plan: ${approvedExplainFile.getAbsolutePath}
           |
-          |$approvedSimplified
+          |${builder.toString()}
           |
           |actual simplified plan: ${actualSimplifiedFile.getAbsolutePath}
           |actual explain plan: ${actualExplainFile.getAbsolutePath}
