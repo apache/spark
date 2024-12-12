@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.parser
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 
-import scala.collection.mutable.{ArrayBuffer, ListBuffer, Set}
+import scala.collection.mutable.{ArrayBuffer, HashMap, ListBuffer, Set}
 import scala.jdk.CollectionConverters._
 import scala.util.{Left, Right}
 
@@ -142,21 +142,102 @@ class AstBuilder extends DataTypeAstBuilder
     }
   }
 
+  override def visitConditionValue(ctx: ConditionValueContext): String = {
+    Option(ctx.multipartIdentifier()).map(_.getText)
+      .getOrElse(ctx.stringLit().getText).replace("'", "")
+  }
+
+  override def visitConditionValueList(ctx: ConditionValueListContext): Seq[String] = {
+    Option(ctx.SQLEXCEPTION()).map(_ => Seq("SQLEXCEPTION")).getOrElse {
+      Option(ctx.NOT()).map(_ => Seq("NOT FOUND")).getOrElse {
+        val buff = scala.collection.mutable.Set[String]()
+        ctx.conditionValues.forEach { conditionValue =>
+          val elem = visit(conditionValue).asInstanceOf[String]
+          if (buff(elem)) {
+            throw SqlScriptingErrors.duplicateSqlStateForSameHandler(CurrentOrigin.get, elem)
+          }
+          buff += elem
+        }
+        buff.toSeq
+      }
+    }
+  }
+
+  override def visitDeclareCondition(ctx: DeclareConditionContext): ErrorCondition = {
+    val conditionName = ctx.multipartIdentifier().getText
+    val conditionValue = Option(ctx.stringLit()).map(_.getText.replace("'", "")).getOrElse("45000")
+
+    val sqlStateRegex = "^[A-Za-z0-9]{5}$".r
+    assert(sqlStateRegex.findFirstIn(conditionValue).isDefined)
+
+    ErrorCondition(conditionName, conditionValue)
+  }
+
+  def visitDeclareHandlerImpl(
+      ctx: DeclareHandlerContext, labelCtx: SqlScriptingLabelContext): ErrorHandler = {
+    val conditions = visit(ctx.conditionValueList()).asInstanceOf[Seq[String]]
+    val handlerType = Option(ctx.EXIT()).map(_ => HandlerType.EXIT).getOrElse(HandlerType.CONTINUE)
+
+    val body = if (!ctx.compoundBody().isEmpty) {
+      visitCompoundBodyImpl(
+        ctx.compoundBody(),
+        None,
+        allowVarDeclare = true,
+        labelCtx,
+        isScope = false)
+    } else {
+      val logicalPlan = visitChildren(ctx).asInstanceOf[LogicalPlan]
+      CompoundBody(Seq(SingleStatement(parsedPlan = logicalPlan)), None, isScope = false)
+    }
+
+    ErrorHandler(conditions, body, handlerType)
+  }
+
   override def visitSingleCompoundStatement(ctx: SingleCompoundStatementContext): CompoundBody = {
     val labelCtx = new SqlScriptingLabelContext()
-    Option(ctx.compoundBody())
-      .map(visitCompoundBodyImpl(_, None, allowVarDeclare = true, labelCtx))
-      .getOrElse(CompoundBody(Seq.empty, None))
+    val labelText = labelCtx.enterLabeledScope(None, None)
+
+    val script = Option(ctx.compoundBody())
+      .map(visitCompoundBodyImpl(
+        _,
+        Some(labelText),
+        allowVarDeclare = true,
+        labelCtx,
+        isScope = true
+      )).getOrElse(CompoundBody(Seq.empty, Some(labelText), isScope = true))
+
+    labelCtx.exitLabeledScope(None)
+    script
   }
 
   private def visitCompoundBodyImpl(
       ctx: CompoundBodyContext,
       label: Option[String],
       allowVarDeclare: Boolean,
-      labelCtx: SqlScriptingLabelContext): CompoundBody = {
+      labelCtx: SqlScriptingLabelContext,
+      isScope: Boolean): CompoundBody = {
     val buff = ListBuffer[CompoundPlanStatement]()
-    ctx.compoundStatements.forEach(
-      compoundStatement => buff += visitCompoundStatementImpl(compoundStatement, labelCtx))
+    val handlers = ListBuffer[ErrorHandler]()
+    val conditions = HashMap[String, String]()
+    val sqlStates = Set[String]()
+
+    ctx.compoundStatements.forEach(compoundStatement => {
+      val stmt = visitCompoundStatementImpl(compoundStatement, labelCtx)
+      stmt match {
+        case handler: ErrorHandler => handlers += handler
+        case condition: ErrorCondition =>
+          if (conditions.contains(condition.conditionName)) {
+            throw SqlScriptingErrors.duplicateConditionNameForDifferentSqlState(
+              CurrentOrigin.get, condition.conditionName)
+          }
+          conditions += condition.conditionName -> condition.value
+          sqlStates += condition.value
+        case s => buff += s
+      }
+    })
+
+//    ctx.compoundStatements.forEach(
+//      compoundStatement => buff += visitCompoundStatementImpl(compoundStatement, labelCtx))
 
     val compoundStatements = buff.toList
 
@@ -185,7 +266,7 @@ class AstBuilder extends DataTypeAstBuilder
       case _ =>
     }
 
-    CompoundBody(buff.toSeq, label)
+    CompoundBody(buff.toSeq, label, isScope, handlers.toSeq, conditions)
   }
 
   private def visitBeginEndCompoundBlockImpl(
@@ -194,8 +275,13 @@ class AstBuilder extends DataTypeAstBuilder
     val labelText =
       labelCtx.enterLabeledScope(Option(ctx.beginLabel()), Option(ctx.endLabel()))
     val body = Option(ctx.compoundBody())
-      .map(visitCompoundBodyImpl(_, Some(labelText), allowVarDeclare = true, labelCtx))
-      .getOrElse(CompoundBody(Seq.empty, Some(labelText)))
+      .map(visitCompoundBodyImpl(
+        _,
+        Some(labelText),
+        allowVarDeclare = true,
+        labelCtx,
+        isScope = true
+      )).getOrElse(CompoundBody(Seq.empty, Some(labelText), isScope = true))
     labelCtx.exitLabeledScope(Option(ctx.beginLabel()))
     body
   }
@@ -227,6 +313,8 @@ class AstBuilder extends DataTypeAstBuilder
                 visitSimpleCaseStatementImpl(simpleCaseContext, labelCtx)
               case forStatementContext: ForStatementContext =>
                 visitForStatementImpl(forStatementContext, labelCtx)
+              case declareHandlerContext: DeclareHandlerContext =>
+                visitDeclareHandlerImpl(declareHandlerContext, labelCtx)
               case stmt => visit(stmt).asInstanceOf[CompoundPlanStatement]
             }
           } else {
@@ -246,10 +334,12 @@ class AstBuilder extends DataTypeAstBuilder
             OneRowRelation()))
       }),
       conditionalBodies = ctx.conditionalBodies.asScala.toList.map(
-        body => visitCompoundBodyImpl(body, None, allowVarDeclare = false, labelCtx)
+        body =>
+          visitCompoundBodyImpl(body, None, allowVarDeclare = false, labelCtx, isScope = false)
       ),
       elseBody = Option(ctx.elseBody).map(
-        body => visitCompoundBodyImpl(body, None, allowVarDeclare = false, labelCtx)
+        body =>
+          visitCompoundBodyImpl(body, None, allowVarDeclare = false, labelCtx, isScope = false)
       )
     )
   }
@@ -266,7 +356,13 @@ class AstBuilder extends DataTypeAstBuilder
         Project(
           Seq(Alias(expression(boolExpr), "condition")()),
           OneRowRelation()))}
-    val body = visitCompoundBodyImpl(ctx.compoundBody(), None, allowVarDeclare = false, labelCtx)
+    val body = visitCompoundBodyImpl(
+      ctx.compoundBody(),
+      None,
+      allowVarDeclare = false,
+      labelCtx,
+      isScope = false
+    )
     labelCtx.exitLabeledScope(Option(ctx.beginLabel()))
 
     WhileStatement(condition, body, Some(labelText))
@@ -283,7 +379,8 @@ class AstBuilder extends DataTypeAstBuilder
     })
     val conditionalBodies =
       ctx.conditionalBodies.asScala.toList.map(
-        body => visitCompoundBodyImpl(body, None, allowVarDeclare = false, labelCtx)
+        body =>
+          visitCompoundBodyImpl(body, None, allowVarDeclare = false, labelCtx, isScope = false)
       )
 
     if (conditions.length != conditionalBodies.length) {
@@ -296,7 +393,8 @@ class AstBuilder extends DataTypeAstBuilder
       conditions = conditions,
       conditionalBodies = conditionalBodies,
       elseBody = Option(ctx.elseBody).map(
-        body => visitCompoundBodyImpl(body, None, allowVarDeclare = false, labelCtx)
+        body =>
+          visitCompoundBodyImpl(body, None, allowVarDeclare = false, labelCtx, isScope = false)
       ))
   }
 
@@ -313,7 +411,8 @@ class AstBuilder extends DataTypeAstBuilder
     })
     val conditionalBodies =
       ctx.conditionalBodies.asScala.toList.map(
-        body => visitCompoundBodyImpl(body, None, allowVarDeclare = false, labelCtx)
+        body =>
+          visitCompoundBodyImpl(body, None, allowVarDeclare = false, labelCtx, isScope = false)
       )
 
     if (conditions.length != conditionalBodies.length) {
@@ -326,7 +425,8 @@ class AstBuilder extends DataTypeAstBuilder
       conditions = conditions,
       conditionalBodies = conditionalBodies,
       elseBody = Option(ctx.elseBody).map(
-        body => visitCompoundBodyImpl(body, None, allowVarDeclare = false, labelCtx)
+        body =>
+          visitCompoundBodyImpl(body, None, allowVarDeclare = false, labelCtx, isScope = false)
       ))
   }
 
@@ -342,7 +442,13 @@ class AstBuilder extends DataTypeAstBuilder
         Project(
           Seq(Alias(expression(boolExpr), "condition")()),
           OneRowRelation()))}
-    val body = visitCompoundBodyImpl(ctx.compoundBody(), None, allowVarDeclare = false, labelCtx)
+    val body = visitCompoundBodyImpl(
+      ctx.compoundBody(),
+      None,
+      allowVarDeclare = false,
+      labelCtx,
+      isScope = false
+    )
     labelCtx.exitLabeledScope(Option(ctx.beginLabel()))
 
     RepeatStatement(condition, body, Some(labelText))
@@ -358,7 +464,13 @@ class AstBuilder extends DataTypeAstBuilder
       SingleStatement(visitQuery(queryCtx))
     }
     val varName = Option(ctx.multipartIdentifier()).map(_.getText)
-    val body = visitCompoundBodyImpl(ctx.compoundBody(), None, allowVarDeclare = false, labelCtx)
+    val body = visitCompoundBodyImpl(
+      ctx.compoundBody(),
+      None,
+      allowVarDeclare = false,
+      labelCtx,
+      isScope = false
+    )
     labelCtx.exitLabeledScope(Option(ctx.beginLabel()))
 
     ForStatement(query, varName, body, Some(labelText))
@@ -431,7 +543,13 @@ class AstBuilder extends DataTypeAstBuilder
       labelCtx: SqlScriptingLabelContext): LoopStatement = {
     val labelText =
       labelCtx.enterLabeledScope(Option(ctx.beginLabel()), Option(ctx.endLabel()))
-    val body = visitCompoundBodyImpl(ctx.compoundBody(), None, allowVarDeclare = false, labelCtx)
+    val body = visitCompoundBodyImpl(
+      ctx.compoundBody(),
+      None,
+      allowVarDeclare = false,
+      labelCtx,
+      isScope = false
+    )
     labelCtx.exitLabeledScope(Option(ctx.beginLabel()))
 
     LoopStatement(body, Some(labelText))

@@ -448,15 +448,16 @@ class SparkSession private(
     val sse = new SqlScriptingExecution(script, this, args)
     var result: Option[Seq[Row]] = None
 
-    while (sse.hasNext) {
-      sse.withErrorHandling {
-        val df = sse.next()
-        if (sse.hasNext) {
-          df.write.format("noop").mode("overwrite").save()
-        } else {
-          // Collect results from the last DataFrame.
-          result = Some(df.collect().toSeq)
-        }
+    var executionInProgress: Boolean = true
+
+    while (executionInProgress) {
+      executionInProgress = false
+        while (sse.hasNext) {
+          val df = sse.next()
+          sse.withErrorHandling {
+            result = Some(df.collect().toSeq)
+          }
+          executionInProgress = true
       }
     }
 
