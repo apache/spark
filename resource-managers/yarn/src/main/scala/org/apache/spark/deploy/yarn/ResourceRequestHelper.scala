@@ -130,6 +130,28 @@ private object ResourceRequestHelper extends Logging {
   }
 
   /**
+   * Validates sparkConf and throw a IllegalArgumentException if SUBMIT_JAVA_OPTION_PURE_MODE is
+   * true
+   * @param sparkConf
+   */
+  def validateJavaOptions(sparkConf: SparkConf): Unit = {
+    if (sparkConf.get(SUBMIT_JAVA_OPTION_PURE_MODE)) {
+      val javaOptionsToCheck = List(
+        "spark.driver.defaultJavaOptions",
+        "spark.driver.extraJavaOptions",
+        "spark.executor.defaultJavaOptions",
+        "spark.executor.extraJavaOptions"
+      ).foreach { option =>
+        if (sparkConf.getOption(option).isDefined) {
+          val msg = s"$option parameters cannot be set, because the pure mode config " +
+            s"spark.executor.javaOptionPureMode is enabled. "
+          throw new IllegalArgumentException(msg)
+        }
+      }
+    }
+  }
+
+  /**
    * Sets resource amount with the corresponding unit to the passed resource object.
    * @param resources resource values to set
    * @param resource resource object to update
