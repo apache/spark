@@ -144,6 +144,10 @@ private[sql] object PythonSQLUtils extends Logging {
     }
   }
 
+  def jsonToDDL(json: String): String = {
+    DataType.fromJson(json).asInstanceOf[StructType].toDDL
+  }
+
   def unresolvedNamedLambdaVariable(name: String): Column =
     Column(internal.UnresolvedNamedLambdaVariable.apply(name))
 

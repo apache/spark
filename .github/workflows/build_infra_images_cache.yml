@@ -33,6 +33,7 @@ on:
     - 'dev/spark-test-image/python-309/Dockerfile'
     - 'dev/spark-test-image/python-310/Dockerfile'
     - 'dev/spark-test-image/python-312/Dockerfile'
+    - 'dev/spark-test-image/python-313/Dockerfile'
     - '.github/workflows/build_infra_images_cache.yml'
   # Create infra image when cutting down branches/tags
   create:
@@ -144,3 +145,16 @@ jobs:
       - name: Image digest (PySpark with Python 3.12)
         if: hashFiles('dev/spark-test-image/python-312/Dockerfile') != ''
         run: echo ${{ steps.docker_build_pyspark_python_312.outputs.digest }}
+      - name: Build and push (PySpark with Python 3.13)
+        if: hashFiles('dev/spark-test-image/python-313/Dockerfile') != ''
+        id: docker_build_pyspark_python_313
+        uses: docker/build-push-action@v6
+        with:
+          context: ./dev/spark-test-image/python-313/
+          push: true
+          tags: ghcr.io/apache/spark/apache-spark-github-action-image-pyspark-python-313-cache:${{ github.ref_name }}-static
+          cache-from: type=registry,ref=ghcr.io/apache/spark/apache-spark-github-action-image-pyspark-python-313-cache:${{ github.ref_name }}
+          cache-to: type=registry,ref=ghcr.io/apache/spark/apache-spark-github-action-image-pyspark-python-313-cache:${{ github.ref_name }},mode=max
+      - name: Image digest (PySpark with Python 3.13)
+        if: hashFiles('dev/spark-test-image/python-313/Dockerfile') != ''
+        run: echo ${{ steps.docker_build_pyspark_python_313.outputs.digest }}
