@@ -669,10 +669,10 @@ object SparkSession extends api.BaseSparkSessionCompanion with Logging {
     private var interceptor: Option[ClientInterceptor] = None
     private var client: SparkConnectClient = _
     private lazy val builder = {
-      val b = SparkConnectClient.builder()
+      val b = SparkConnectClient.builder().loadFromEnvironment()
       connectionString.foreach(b.connectionString)
       interceptor.foreach(b.interceptor)
-      b.loadFromEnvironment()
+      b
     }
 
     /** @inheritdoc */
