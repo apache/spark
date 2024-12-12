@@ -81,8 +81,11 @@ case object SparkShreddingUtils {
           StructField(TypedValueFieldName, arrayShreddingSchema, nullable = true)
         )
       case StructType(fields) =>
+        // The field name level is always non-nullable: Variant null values are represented in the
+        // "value" columna as "00", and missing values are represented by setting both "value" and
+        // "typed_value" to null.
         val objectShreddingSchema = StructType(fields.map(f =>
-            f.copy(dataType = variantShreddingSchema(f.dataType, false))))
+            f.copy(dataType = variantShreddingSchema(f.dataType, false), nullable = false)))
         Seq(
           StructField(VariantValueFieldName, BinaryType, nullable = true),
           StructField(TypedValueFieldName, objectShreddingSchema, nullable = true)
