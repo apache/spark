@@ -112,6 +112,7 @@ object SparkKubernetesClientFactory extends Logging {
     logDebug("Kubernetes client config: " +
       new ObjectMapper().writerWithDefaultPrettyPrinter().writeValueAsString(config))
     new KubernetesClientBuilder()
+      .withHttpClientFactory(new SparkVertxHttpClientFactory())
       .withConfig(config)
       .build()
   }
