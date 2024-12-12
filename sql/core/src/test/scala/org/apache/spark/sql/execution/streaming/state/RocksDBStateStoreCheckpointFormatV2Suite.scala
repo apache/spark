@@ -182,7 +182,7 @@ class CkptIdCollectingStateStoreProviderWrapper extends StateStoreProvider {
 // return their own state store checkpointID. This can happen because of task retry or
 // speculative execution.
 class RocksDBStateStoreCheckpointFormatV2Suite extends StreamTest
-  with AlsoTestWithChangelogCheckpointingEnabled {
+  with AlsoTestWithRocksDBFeatures {
   import testImplicits._
 
   val providerClassName = classOf[CkptIdCollectingStateStoreProviderWrapper].getCanonicalName
@@ -445,11 +445,12 @@ class RocksDBStateStoreCheckpointFormatV2Suite extends StreamTest
     val numBatches = checkpointInfoList.size / 8
 
     // We don't pass batch versions that would need base checkpoint IDs because we don't know
-    // batchIDs for that. We only know that there are 3 batches without it.
+    // batchIDs for that. We only know that there are 1 batches without it.
+    // The two checkpoint IDs in between are stored in the commit log.
     validateCheckpointInfo(numBatches, 4, Set())
     assert(CkptIdCollectingStateStoreWrapper
       .getStateStoreCheckpointInfos
-      .count(_.baseStateStoreCkptId.isDefined) == (numBatches - 3) * 8)
+      .count(_.baseStateStoreCkptId.isDefined) == (numBatches - 1) * 8)
   }
 
   testWithCheckpointInfoTracked(s"checkpointFormatVersion2 validate DropDuplicates") {

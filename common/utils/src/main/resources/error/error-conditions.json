@@ -233,6 +233,11 @@
       "An error occurred during loading state."
     ],
     "subClass" : {
+      "CANNOT_FIND_BASE_SNAPSHOT_CHECKPOINT" : {
+        "message" : [
+          "Cannot find a base snapshot checkpoint with lineage: <lineage>."
+        ]
+      },
       "CANNOT_READ_CHECKPOINT" : {
         "message" : [
           "Cannot read RocksDB checkpoint metadata. Expected <expectedVersion>, but found <actualVersion>."
