@@ -459,30 +459,29 @@ class SubqueryTestsMixin:
                     ),
                 )
 
-    def test_scalar_subquery_with_outer_reference_errors(self):
+    def test_scalar_subquery_with_missing_outer_reference(self):
         with self.tempView("l", "r"):
             self.df1.createOrReplaceTempView("l")
             self.df2.createOrReplaceTempView("r")
 
-            with self.subTest("missing `outer()`"):
-                with self.assertRaises(AnalysisException) as pe:
-                    self.spark.table("l").select(
-                        "a",
-                        (
-                            self.spark.table("r")
-                            .where(sf.col("c") == sf.col("a"))
-                            .select(sf.sum("d"))
-                            .scalar()
-                        ),
-                    ).collect()
+            with self.assertRaises(AnalysisException) as pe:
+                self.spark.table("l").select(
+                    "a",
+                    (
+                        self.spark.table("r")
+                        .where(sf.col("c") == sf.col("a"))
+                        .select(sf.sum("d"))
+                        .scalar()
+                    ),
+                ).collect()
 
-                self.check_error(
-                    exception=pe.exception,
-                    errorClass="UNRESOLVED_COLUMN.WITH_SUGGESTION",
-                    messageParameters={"objectName": "`a`", "proposal": "`c`, `d`"},
-                    query_context_type=QueryContextType.DataFrame,
-                    fragment="col",
-                )
+            self.check_error(
+                exception=pe.exception,
+                errorClass="UNRESOLVED_COLUMN.WITH_SUGGESTION",
+                messageParameters={"objectName": "`a`", "proposal": "`c`, `d`"},
+                query_context_type=QueryContextType.DataFrame,
+                fragment="col",
+            )
 
     def table1(self):
         t1 = self.spark.sql("VALUES (0, 1), (1, 2) AS t1(c1, c2)")

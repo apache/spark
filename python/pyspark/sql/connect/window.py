@@ -30,6 +30,7 @@ from pyspark.sql.connect.functions import builtin as F
 
 if TYPE_CHECKING:
     from pyspark.sql.connect._typing import ColumnOrName
+    from pyspark.sql.connect.plan import LogicalPlan
 
 __all__ = ["Window", "WindowSpec"]
 
@@ -121,6 +122,15 @@ class WindowSpec(ParentWindowSpec):
             orderSpec=self._orderSpec,
             frame=WindowFrame(isRowFrame=False, start=start, end=end),
         )
+
+    @property
+    def _references(self) -> Sequence["LogicalPlan"]:
+        refs = []
+        for p in self._partitionSpec:
+            refs.extend(p.references)
+        for s in self._orderSpec:
+            refs.extend(s.references)
+        return refs
 
     def __repr__(self) -> str:
         strs: List[str] = []
