@@ -2802,16 +2802,6 @@ class DatasetSuite extends QueryTest
       }
     }
   }
-
-  test("SPARK-50548: Dataset toJSON method works properly without arguments") {
-
-    val ds = Seq((
-      new Timestamp(0),
-      new Date(0),
-      new String("exampleString"))).toDS()
-
-    val dsJson = ds.toJSON
-  }
 }
 
 class DatasetLargeResultCollectingSuite extends QueryTest

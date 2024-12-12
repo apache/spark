@@ -1195,6 +1195,11 @@ class Dataset[T] private[sql] (
     select(to_json(struct(col("*")))).as(StringEncoder)
   }
 
+  /** @inheritdoc */
+  def toJSON(jsonOptions: Map[String, String]): Dataset[String] = {
+    select(to_json(struct(col("*")), jsonOptions)).as(StringEncoder)
+  }
+
   private[sql] def analyze: proto.AnalyzePlanResponse = {
     sparkSession.analyze(plan, proto.AnalyzePlanRequest.AnalyzeCase.SCHEMA)
   }
