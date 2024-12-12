@@ -926,13 +926,13 @@ class PlanResolutionSuite extends AnalysisTest {
           comparePlans(parsed2, expected2)
         } else {
           parsed1 match {
-            case DescribeRelation(_: ResolvedTable, _, isExtended, _) =>
+            case DescribeRelation(_: ResolvedTable, _, isExtended, _, _) =>
               assert(!isExtended)
             case _ => fail("Expect DescribeTable, but got:\n" + parsed1.treeString)
           }
 
           parsed2 match {
-            case DescribeRelation(_: ResolvedTable, _, isExtended, _) =>
+            case DescribeRelation(_: ResolvedTable, _, isExtended, _, _) =>
               assert(isExtended)
             case _ => fail("Expect DescribeTable, but got:\n" + parsed2.treeString)
           }
@@ -947,7 +947,7 @@ class PlanResolutionSuite extends AnalysisTest {
           comparePlans(parsed3, expected3)
         } else {
           parsed3 match {
-            case DescribeRelation(_: ResolvedTable, partitionSpec, isExtended, _) =>
+            case DescribeRelation(_: ResolvedTable, partitionSpec, isExtended, _, _) =>
               assert(!isExtended)
               assert(partitionSpec == Map("a" -> "1"))
             case _ => fail("Expect DescribeTable, but got:\n" + parsed2.treeString)
@@ -959,6 +959,55 @@ class PlanResolutionSuite extends AnalysisTest {
     val sql4 = "DESC TABLE v"
     val parsed4 = parseAndResolve(sql4)
     assert(parsed4.isInstanceOf[DescribeTableCommand])
+  }
+
+  test("DESCRIBE AS JSON relation") {
+    Seq("v1Table" -> true, "v2Table" -> false, "testcat.tab" -> false).foreach {
+      case (tblName, useV1Command) =>
+        val sql1 = s"DESC TABLE $tblName AS JSON"
+        val sql2 = s"DESC TABLE EXTENDED $tblName AS JSON"
+        val parsed1 = parseAndResolve(sql1)
+        val parsed2 = parseAndResolve(sql2)
+        if (useV1Command) {
+          val expected1 = DescribeTableCommand(
+            TableIdentifier(tblName, Some("default"), Some(SESSION_CATALOG_NAME)),
+            Map.empty, false, parsed1.output)
+          val expected2 = DescribeTableCommand(
+            TableIdentifier(tblName, Some("default"), Some(SESSION_CATALOG_NAME)),
+            Map.empty, true, parsed2.output)
+
+          comparePlans(parsed1, expected1)
+          comparePlans(parsed2, expected2)
+        } else {
+          parsed1 match {
+            case DescribeRelation(_: ResolvedTable, _, isExtended, asJson, _) =>
+              assert(!isExtended && asJson)
+            case _ => fail("Expect DescribeTable, but got:\n" + parsed1.treeString)
+          }
+
+          parsed2 match {
+            case DescribeRelation(_: ResolvedTable, _, isExtended, asJson, _) =>
+              assert(isExtended && asJson)
+            case _ => fail("Expect DescribeTable, but got:\n" + parsed2.treeString)
+          }
+        }
+
+        val sql3 = s"DESC TABLE $tblName PARTITION(a=1) AS JSON"
+        val parsed3 = parseAndResolve(sql3)
+        if (useV1Command) {
+          val expected3 = DescribeTableCommand(
+            TableIdentifier(tblName, Some("default"), Some(SESSION_CATALOG_NAME)),
+            Map("a" -> "1"), false, parsed3.output)
+          comparePlans(parsed3, expected3)
+        } else {
+          parsed3 match {
+            case DescribeRelation(_: ResolvedTable, partitionSpec, isExtended, asJson, _) =>
+              assert(!isExtended && asJson)
+              assert(partitionSpec == Map("a" -> "1"))
+            case _ => fail("Expect DescribeTable, but got:\n" + parsed2.treeString)
+          }
+        }
+    }
   }
 
   test("DELETE FROM") {
@@ -1497,7 +1546,7 @@ class PlanResolutionSuite extends AnalysisTest {
         case AppendData(r: DataSourceV2Relation, _, _, _, _, _) =>
           assert(r.catalog.exists(_ == catalog))
           assert(r.identifier.exists(_.name() == tableIdent))
-        case DescribeRelation(r: ResolvedTable, _, _, _) =>
+        case DescribeRelation(r: ResolvedTable, _, _, _, _) =>
           assert(r.catalog == catalog)
           assert(r.identifier.name() == tableIdent)
         case ShowTableProperties(r: ResolvedTable, _, _) =>
