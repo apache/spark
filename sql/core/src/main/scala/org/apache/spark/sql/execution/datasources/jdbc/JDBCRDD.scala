@@ -157,7 +157,7 @@ object JDBCRDD extends Logging {
  * Both the driver code and the workers must be able to access the database; the driver
  * needs to fetch the schema while the workers need to fetch the data.
  */
-private[jdbc] class JDBCRDD(
+class JDBCRDD(
     sc: SparkContext,
     getConnection: Int => Connection,
     schema: StructType,
@@ -173,10 +173,39 @@ private[jdbc] class JDBCRDD(
     offset: Int)
   extends RDD[InternalRow](sc, Nil) {
 
+  private lazy val dialect = JdbcDialects.get(url)
+
+  def generateJdbcQuery(partition: Option[JDBCPartition]): String = {
+    // H2's JDBC driver does not support the setSchema() method.  We pass a
+    // fully-qualified table name in the SELECT statement.  I don't know how to
+    // talk about a table in a completely portable way.
+    var builder = dialect
+      .getJdbcSQLQueryBuilder(options)
+      .withPredicates(predicates, partition.getOrElse(JDBCPartition(whereClause = null, idx = 1)))
+      .withColumns(columns)
+      .withSortOrders(sortOrders)
+      .withLimit(limit)
+      .withOffset(offset)
+
+    groupByColumns.foreach { groupByKeys =>
+      builder = builder.withGroupByColumns(groupByKeys)
+    }
+
+    sample.foreach { tableSampleInfo =>
+      builder = builder.withTableSample(tableSampleInfo)
+    }
+
+    builder.build()
+  }
+
   /**
    * Retrieve the list of partitions corresponding to this RDD.
    */
   override def getPartitions: Array[Partition] = partitions
+
+  def getExternalEngineQuery: String = {
+    generateJdbcQuery(partition = None)
+  }
 
   /**
    * Runs the SQL query against the JDBC driver.
