@@ -17,10 +17,10 @@
 
 package org.apache.spark.sql.scripting
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkException, SparkThrowable}
 import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.Expression
-import org.apache.spark.sql.catalyst.plans.logical.{CommandResult, CompoundBody}
+import org.apache.spark.sql.catalyst.plans.logical.{CommandResult, CompoundBody, HandlerType}
 
 /**
  * SQL scripting executor - executes script and returns result statements.
@@ -35,38 +35,86 @@ class SqlScriptingExecution(
     session: SparkSession,
     args: Map[String, Expression]) extends Iterator[DataFrame] {
 
-  // Build the execution plan for the script.
-  private val executionPlan: Iterator[CompoundStatementExec] =
-    SqlScriptingInterpreter(session).buildExecutionPlan(sqlScript, args)
+  private val interpreter = SqlScriptingInterpreter(session)
 
-  private var current = getNextResult
+  // Frames to keep what is being executed.
+  private val context: SqlScriptingExecutionContext = {
+    val ctx = new SqlScriptingExecutionContext()
+    val executionPlan = interpreter.buildExecutionPlan(sqlScript, args, ctx)
+    // Add frame which represents SQL Script to the context.
+    ctx.frames.addOne(new SqlScriptingExecutionFrame(executionPlan))
+    // Enter the scope of the top level compound.
+    // We don't need to exit this scope explicitly as it will be done automatically
+    // when the frame is removed during iteration.
+    executionPlan.enterScope()
+    ctx
+  }
 
-  override def hasNext: Boolean = current.isDefined
+  private var current: Option[DataFrame] = None
+
+  override def hasNext: Boolean = {
+    try {
+      current = getNextResult
+    } catch {
+      case e: SparkThrowable =>
+        handleException(e)
+        hasNext
+      case exception: Exception =>
+        throw exception
+    }
+    current.isDefined
+  }
 
   override def next(): DataFrame = {
-    if (!hasNext) throw SparkException.internalError("No more elements to iterate through.")
-    val nextDataFrame = current.get
-    current = getNextResult
-    nextDataFrame
+    if (current.isEmpty) {
+      throw SparkException.internalError("No more elements to iterate through.")
+    }
+
+    current.get
+  }
+
+  /** Helper method to iterate get next statements from the first available frame. */
+  private def getNextStatement: Option[CompoundStatementExec] = {
+    while (context.frames.nonEmpty && !context.frames.last.hasNext) {
+      val lastFrame = context.frames.last
+      context.frames.remove(context.frames.size - 1)
+
+      if (lastFrame.isExitHandler && context.frames.nonEmpty) {
+        var execPlan: CompoundBodyExec = context.frames.last.executionPlan
+        while (execPlan.curr.get.isInstanceOf[CompoundBodyExec]) {
+          execPlan = execPlan.curr.get.asInstanceOf[CompoundBodyExec]
+        }
+        execPlan.curr = Some(new LeaveStatementExec(lastFrame.scopeToExit.get))
+      }
+
+      if (lastFrame.isContinueHandler && context.frames.nonEmpty) {
+        var execPlan: CompoundBodyExec = context.frames.last.executionPlan
+        while (execPlan.curr.get.isInstanceOf[CompoundBodyExec]) {
+          execPlan = execPlan.curr.get.asInstanceOf[CompoundBodyExec]
+        }
+        if (execPlan.curr.get.isInstanceOf[IfElseStatementExec]) {
+          execPlan.curr = None
+        }
+      }
+
+    }
+    if (context.frames.nonEmpty) {
+      return Some(context.frames.last.next())
+    }
+    None
   }
 
   /** Helper method to iterate through statements until next result statement is encountered. */
   private def getNextResult: Option[DataFrame] = {
-
-    def getNextStatement: Option[CompoundStatementExec] =
-      if (executionPlan.hasNext) Some(executionPlan.next()) else None
-
     var currentStatement = getNextStatement
     // While we don't have a result statement, execute the statements.
     while (currentStatement.isDefined) {
       currentStatement match {
         case Some(stmt: SingleStatementExec) if !stmt.isExecuted =>
-          withErrorHandling {
-            val df = stmt.buildDataFrame(session)
-            df.logicalPlan match {
-              case _: CommandResult => // pass
-              case _ => return Some(df) // If the statement is a result, return it to the caller.
-            }
+          val df = stmt.buildDataFrame(session)
+          df.logicalPlan match {
+            case _: CommandResult => // pass
+            case _ => return Some(df) // If the statement is a result, return it to the caller.
           }
         case _ => // pass
       }
@@ -75,18 +123,31 @@ class SqlScriptingExecution(
     None
   }
 
-  private def handleException(e: Throwable): Unit = {
-    // Rethrow the exception.
-    // TODO: SPARK-48353 Add error handling for SQL scripts
-    throw e
+  private def handleException(e: SparkThrowable): Unit = {
+    context.findHandler(e.getSqlState) match {
+      case Some(handler) =>
+        context.frames.addOne(
+          new SqlScriptingExecutionFrame(
+            handler.body,
+            isExitHandler = handler.handlerType == HandlerType.EXIT,
+            isContinueHandler = handler.handlerType == HandlerType.CONTINUE,
+            handler.scopeToExit
+          )
+        )
+      case None =>
+        throw e.asInstanceOf[Throwable]
+    }
   }
 
   def withErrorHandling(f: => Unit): Unit = {
     try {
       f
     } catch {
-      case e: Throwable =>
-        handleException(e)
+      case e: SparkThrowable =>
+        handleException(e) // Try to find a handler for the exception.
+      case exception: Exception =>
+        // Throw the exception as is.
+        throw exception
     }
   }
 }
