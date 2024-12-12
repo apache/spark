@@ -282,22 +282,6 @@ class ProcedureSuite extends QueryTest with SharedSparkSession with BeforeAndAft
     assert(e.getMessage.contains("required arguments should come before optional arguments"))
   }
 
-  test("INOUT parameters are not supported") {
-    catalog.createProcedure(Identifier.of(Array("ns"), "procedure"), UnboundInoutProcedure)
-    val e = intercept[SparkException] {
-      sql("CALL cat.ns.procedure(1)")
-    }
-    assert(e.getMessage.contains(" Unsupported parameter mode: INOUT"))
-  }
-
-  test("OUT parameters are not supported") {
-    catalog.createProcedure(Identifier.of(Array("ns"), "procedure"), UnboundOutProcedure)
-    val e = intercept[SparkException] {
-      sql("CALL cat.ns.procedure(1)")
-    }
-    assert(e.getMessage.contains("Unsupported parameter mode: OUT"))
-  }
-
   test("EXPLAIN") {
     catalog.createProcedure(Identifier.of(Array("ns"), "sum"), UnboundNonExecutableSum)
     val explain1 = sql("EXPLAIN CALL cat.ns.sum(5, 5)").head().get(0)
