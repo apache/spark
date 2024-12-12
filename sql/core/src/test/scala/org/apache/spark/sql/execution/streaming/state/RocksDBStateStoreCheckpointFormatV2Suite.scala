@@ -631,6 +631,10 @@ class RocksDBStateStoreCheckpointFormatV2Suite extends StreamTest
   }
 
 
+  // This test verifies when there are two job launched inside the
+  // foreachBatch function (write to multiple sinks).
+  // When this happens, the unique ids actually stored in the commit log should be the the same
+  // as those recorded by CkptIdCollectingStateStoreWrapper
   testWithCheckpointInfoTracked(s"checkpointFormatVersion2 validate ID - two jobs launched") {
     withTempDir { checkpointDir =>
       val inputData = MemoryStream[Int]
@@ -711,8 +715,9 @@ class RocksDBStateStoreCheckpointFormatV2Suite extends StreamTest
     }
   }
 
-  // This test verifies when there are task retries, the unique ids actually stored in
-  // the commit log is the same as those recorded by CkptIdCollectingStateStoreWrapper
+  // This test verifies when there are task retries using foreachBatch.
+  // When retry happens, the unique ids actually stored in the commit log should be the the same
+  // as those recorded by CkptIdCollectingStateStoreWrapper
   testWithCheckpointInfoTracked(s"checkpointFormatVersion2 validate ID - task retry") {
     withTempDir { checkpointDir =>
       val inputData = MemoryStream[Int]
@@ -809,6 +814,9 @@ class RocksDBStateStoreCheckpointFormatV2Suite extends StreamTest
     }
   }
 
+  // This test verifies when there are task retries using foreach.
+  // When retry happens, the unique ids actually stored in the commit log should be the the same
+  // as those recorded by CkptIdCollectingStateStoreWrapper
   testWithCheckpointInfoTracked(s"checkpointFormatVersion2 validate ID - task retry - foreach") {
     withTempDir { checkpointDir =>
       val inputData = MemoryStream[Int]
