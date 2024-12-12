@@ -37,19 +37,10 @@ class MariaDBKrbIntegrationSuite extends DockerKrbJDBCIntegrationSuite {
   override protected val userName = s"mariadb/$dockerIp"
   override protected val keytabFileName = "mariadb.keytab"
 
-  override val db = new DatabaseOnDocker {
-    override val imageName = sys.env.getOrElse("MARIADB_DOCKER_IMAGE_NAME", "mariadb:10.6.19")
-    override val env = Map(
-      "MYSQL_ROOT_PASSWORD" -> "rootpass"
-    )
-    override val usesIpc = false
-    override val jdbcPort = 3306
+  override val db = new MariaDBDatabaseOnDocker() {
 
     override def getJdbcUrl(ip: String, port: Int): String =
       s"jdbc:mysql://$ip:$port/mysql?user=$principal"
-
-    override def getEntryPoint: Option[String] =
-      Some("/docker-entrypoint/mariadb-docker-entrypoint.sh")
 
     override def beforeContainerStart(
         hostConfigBuilder: HostConfig,
