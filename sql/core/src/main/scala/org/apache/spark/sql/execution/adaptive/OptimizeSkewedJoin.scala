@@ -119,22 +119,26 @@ case class OptimizeSkewedJoin(ensureRequirements: EnsureRequirements)
     val rightSizes = right.mapStats.get.bytesByPartitionId
     assert(leftSizes.length == rightSizes.length)
     val numPartitions = leftSizes.length
+
+    val nonEmptyLeftSizes = leftSizes.filter(_ > 0)
+    val nonEmptyRightSizes = rightSizes.filter(_ > 0)
+
     // We use the median size of the original shuffle partitions to detect skewed partitions.
-    val leftMedSize = Utils.median(leftSizes, false)
-    val rightMedSize = Utils.median(rightSizes, false)
+    val leftMedSize = Utils.median(nonEmptyLeftSizes, false)
+    val rightMedSize = Utils.median(nonEmptyRightSizes, false)
     logDebug(
       s"""
          |Optimizing skewed join.
          |Left side partitions size info:
-         |${getSizeInfo(leftMedSize, leftSizes)}
+         |${getSizeInfo(leftMedSize, nonEmptyLeftSizes)}
          |Right side partitions size info:
-         |${getSizeInfo(rightMedSize, rightSizes)}
+         |${getSizeInfo(rightMedSize, nonEmptyRightSizes)}
       """.stripMargin)
 
     val leftSkewThreshold = getSkewThreshold(leftMedSize)
     val rightSkewThreshold = getSkewThreshold(rightMedSize)
-    val leftTargetSize = targetSize(leftSizes, leftSkewThreshold)
-    val rightTargetSize = targetSize(rightSizes, rightSkewThreshold)
+    val leftTargetSize = targetSize(nonEmptyLeftSizes, leftSkewThreshold)
+    val rightTargetSize = targetSize(nonEmptyRightSizes, rightSkewThreshold)
 
     val leftSidePartitions = mutable.ArrayBuffer.empty[ShufflePartitionSpec]
     val rightSidePartitions = mutable.ArrayBuffer.empty[ShufflePartitionSpec]
