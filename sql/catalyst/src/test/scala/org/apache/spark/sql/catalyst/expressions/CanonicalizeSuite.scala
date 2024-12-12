@@ -360,11 +360,11 @@ class CanonicalizeSuite extends SparkFunSuite {
 
     val buildQueryPlan1 = testRelation.where("a".attr > 10).select($"b".attr * Literal(5)).analyze
     val buildKeys1 = Seq(buildQueryPlan1.output.head)
-    val dps1 = DynamicPruningSubquery(pruneKey, buildQueryPlan1, buildKeys1, 0, true)
+    val dps1 = DynamicPruningSubquery(pruneKey, buildQueryPlan1, buildKeys1, Seq(0), true)
 
     val buildQueryPlan2 = testRelation.where("a".attr > 10).select($"b".attr * Literal(5)).analyze
     val buildKeys2 = Seq(buildQueryPlan2.output.head)
-    val dps2 = DynamicPruningSubquery(pruneKey, buildQueryPlan2, buildKeys2, 0, true)
+    val dps2 = DynamicPruningSubquery(pruneKey, buildQueryPlan2, buildKeys2, Seq(0), true)
 
     assert(dps1.canonicalized == dps2.canonicalized)
   }
