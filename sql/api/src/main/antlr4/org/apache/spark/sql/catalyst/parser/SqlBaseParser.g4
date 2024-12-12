@@ -2033,6 +2033,7 @@ nonReserved
     | IS
     | ITEMS
     | ITERATE
+    | JSON
     | KEYS
     | LANGUAGE
     | LAST

@@ -238,21 +238,21 @@ class DescribeTableSuite extends v1.DescribeTableSuiteBase with CommandSuiteBase
   test("DESCRIBE AS JSON default values") {
     withNamespaceAndTable("ns", "table") { t =>
       val tableCreationStr =
-        """
-          |CREATE TABLE d (a STRING DEFAULT 'default-value', b INT DEFAULT 42)
+        s"""
+          |CREATE TABLE $t (a STRING DEFAULT 'default-value', b INT DEFAULT 42)
           |USING parquet COMMENT 'table_comment'
           |""".stripMargin
       spark.sql(tableCreationStr)
-      val descriptionDf = spark.sql(s"DESC EXTENDED d AS JSON")
+      val descriptionDf = spark.sql(s"DESC EXTENDED $t AS JSON")
       val firstRow = descriptionDf.select("json_metadata").head()
       val jsonValue = firstRow.getString(0)
       val parsedOutput = parse(jsonValue).extract[DescribeTableJson]
 
       val expectedOutput = DescribeTableJson(
-        table_name = Some("d"),
+        table_name = Some("table"),
         catalog_names = Some(List("spark_catalog")),
         database_names = Some(List("default")),
-        qualified_name = Some("spark_catalog.default.d"),
+        qualified_name = Some("spark_catalog.default.table"),
         columns = Some(List(
           TableColumn(1, "a", Type("string"), default_value = Some("'default-value'")),
           TableColumn(2, "b", Type("integer"), default_value = Some("42"))
@@ -279,8 +279,8 @@ class DescribeTableSuite extends v1.DescribeTableSuiteBase with CommandSuiteBase
   test("DESCRIBE AS JSON temp view") {
     withNamespaceAndTable("ns", "table") { t =>
       val tableCreationStr =
-        """
-          |CREATE TABLE t (a STRING, b INT, c STRING, d STRING) USING parquet
+        s"""
+          |CREATE TABLE $t (a STRING, b INT, c STRING, d STRING) USING parquet
           |  OPTIONS (a '1', b '2', password 'password')
           |  PARTITIONED BY (c, d) CLUSTERED BY (a) SORTED BY (b ASC) INTO 2 BUCKETS
           |  COMMENT 'table_comment'
@@ -309,8 +309,8 @@ class DescribeTableSuite extends v1.DescribeTableSuiteBase with CommandSuiteBase
   test("DESCRIBE AS JSON for column throws Analysis Exception") {
     withNamespaceAndTable("ns", "table") { t =>
       val tableCreationStr =
-        """
-          |CREATE TABLE customer(
+        s"""
+          |CREATE TABLE $t(
           |        cust_id INT,
           |        state VARCHAR(20),
           |        name STRING COMMENT "Short name"
@@ -333,8 +333,8 @@ class DescribeTableSuite extends v1.DescribeTableSuiteBase with CommandSuiteBase
   test("DESCRIBE AS JSON complex types") {
     withNamespaceAndTable("ns", "table") { t =>
       val tableCreationStr =
-        """
-          |CREATE TABLE c (
+        s"""
+          |CREATE TABLE $t (
           |  id STRING,
           |  nested_struct STRUCT<
           |    name: STRING,
@@ -357,16 +357,16 @@ class DescribeTableSuite extends v1.DescribeTableSuiteBase with CommandSuiteBase
           |  TBLPROPERTIES ('property1' = 'value1', 'password' = 'password')
         """.stripMargin
       spark.sql(tableCreationStr)
-      val descriptionDf = spark.sql(s"DESCRIBE EXTENDED c AS JSON")
+      val descriptionDf = spark.sql(s"DESCRIBE EXTENDED $t AS JSON")
       val firstRow = descriptionDf.select("json_metadata").head()
       val jsonValue = firstRow.getString(0)
       val parsedOutput = parse(jsonValue).extract[DescribeTableJson]
 
       val expectedOutput = DescribeTableJson(
-        table_name = Some("c"),
+        table_name = Some("table"),
         catalog_names = Some(List("spark_catalog")),
         database_names = Some(List("default")),
-        qualified_name = Some("spark_catalog.default.c"),
+        qualified_name = Some("spark_catalog.default.table"),
         columns = Some(List(
           TableColumn(
             id = 1,
