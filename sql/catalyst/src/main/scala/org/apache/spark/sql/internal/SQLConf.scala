@@ -767,6 +767,13 @@ object SQLConf {
       .checkValue(_ > 0, "The initial number of partitions must be positive.")
       .createOptional
 
+  lazy val ALLOW_COLLATIONS_IN_MAP_KEYS =
+    buildConf("spark.sql.collation.allowInMapKeys")
+      .doc("Allow for non-UTF8_BINARY collated strings inside of map's keys")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(false)
+
   lazy val TRIM_COLLATION_ENABLED =
     buildConf("spark.sql.collation.trim.enabled")
       .internal()
@@ -777,15 +784,6 @@ object SQLConf {
       .version("4.0.0")
       .booleanConf
       .createWithDefault(Utils.isTesting)
-
-  val ALLOW_READING_UNKNOWN_COLLATIONS =
-    buildConf(SqlApiConfHelper.ALLOW_READING_UNKNOWN_COLLATIONS)
-      .internal()
-      .doc("Enables spark to read unknown collation name as UTF8_BINARY. If the config is " +
-        "not enabled, when spark encounters an unknown collation name, it will throw an error.")
-      .version("4.0.0")
-      .booleanConf
-      .createWithDefault(false)
 
   val DEFAULT_COLLATION =
     buildConf(SqlApiConfHelper.DEFAULT_COLLATION)
@@ -3330,6 +3328,17 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val PYTHON_UDF_ARROW_CONCURRENCY_LEVEL =
+    buildConf("spark.sql.execution.pythonUDF.arrow.concurrency.level")
+      .doc("The level of concurrency to execute Arrow-optimized Python UDF. " +
+        "This can be useful if Python UDFs use I/O intensively.")
+      .version("4.0.0")
+      .intConf
+      .checkValue(_ > 1,
+        "The value of spark.sql.execution.pythonUDF.arrow.concurrency.level" +
+          " must be more than one.")
+      .createOptional
+
   val PYTHON_TABLE_UDF_ARROW_ENABLED =
     buildConf("spark.sql.execution.pythonUDTF.arrow.enabled")
       .doc("Enable Arrow optimization for Python UDTFs.")
@@ -3990,7 +3999,7 @@ object SQLConf {
       .createWithDefault(true)
 
   val ARTIFACTS_SESSION_ISOLATION_ALWAYS_APPLY_CLASSLOADER =
-    buildConf("spark.sql.artifact.isolation.always.apply.classloader")
+    buildConf("spark.sql.artifact.isolation.alwaysApplyClassloader")
       .internal()
       .doc("When enabled, the classloader holding per-session artifacts will always be applied " +
         "during SQL executions (useful for Spark Connect). When disabled, the classloader will " +
@@ -4536,6 +4545,15 @@ object SQLConf {
       .version("4.0.0")
       .booleanConf
       .createWithDefault(false)
+
+  val VARIANT_ALLOW_READING_SHREDDED =
+    buildConf("spark.sql.variant.allowReadingShredded")
+      .internal()
+      .doc("When true, the Parquet reader is allowed to read shredded or unshredded variant. " +
+        "When false, it only reads unshredded variant.")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(true)
 
   val LEGACY_CSV_ENABLE_DATE_TIME_PARSING_FALLBACK =
     buildConf("spark.sql.legacy.csv.enableDateTimeParsingFallback")
@@ -5583,17 +5601,17 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
     }
   }
 
+  def allowCollationsInMapKeys: Boolean = getConf(ALLOW_COLLATIONS_IN_MAP_KEYS)
+
   def trimCollationEnabled: Boolean = getConf(TRIM_COLLATION_ENABLED)
 
   override def defaultStringType: StringType = {
     if (getConf(DEFAULT_COLLATION).toUpperCase(Locale.ROOT) == "UTF8_BINARY") {
       StringType
     } else {
-      StringType(CollationFactory.collationNameToId(getConf(DEFAULT_COLLATION)))
+      StringType(getConf(DEFAULT_COLLATION))
     }
   }
-
-  override def allowReadingUnknownCollations: Boolean = getConf(ALLOW_READING_UNKNOWN_COLLATIONS)
 
   def adaptiveExecutionEnabled: Boolean = getConf(ADAPTIVE_EXECUTION_ENABLED)
 
@@ -6007,6 +6025,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def pythonUDFProfiler: Option[String] = getConf(PYTHON_UDF_PROFILER)
 
   def pythonUDFWorkerFaulthandlerEnabled: Boolean = getConf(PYTHON_UDF_WORKER_FAULTHANLDER_ENABLED)
+
+  def pythonUDFArrowConcurrencyLevel: Option[Int] = getConf(PYTHON_UDF_ARROW_CONCURRENCY_LEVEL)
 
   def pysparkPlotMaxRows: Int = getConf(PYSPARK_PLOT_MAX_ROWS)
 

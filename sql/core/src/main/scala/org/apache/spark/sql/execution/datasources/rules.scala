@@ -22,6 +22,7 @@ import java.util.Locale
 import scala.collection.mutable.{HashMap, HashSet}
 import scala.jdk.CollectionConverters._
 
+import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.{AnalysisException, SaveMode, SparkSession}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog._
@@ -54,6 +55,10 @@ class ResolveSQLOnFile(sparkSession: SparkSession) extends Rule[LogicalPlan] {
             val ds = resolveDataSource(u)
             Some(LogicalRelation(ds.resolveRelation()))
           } catch {
+            case e: SparkUnsupportedOperationException =>
+              u.failAnalysis(
+                errorClass = e.getCondition,
+                messageParameters = e.getMessageParameters.asScala.toMap)
             case _: ClassNotFoundException => None
             case e: Exception if !e.isInstanceOf[AnalysisException] =>
               // the provider is valid, but failed to create a logical plan
@@ -338,6 +343,9 @@ case class PreprocessTableCreation(catalog: SessionCatalog) extends Rule[Logical
     SchemaUtils.checkSchemaColumnNameDuplication(
       schema,
       conf.caseSensitiveAnalysis)
+    if (!conf.allowCollationsInMapKeys) {
+      SchemaUtils.checkNoCollationsInMapKeys(schema)
+    }
 
     val normalizedPartCols = normalizePartitionColumns(schema, table)
     val normalizedBucketSpec = normalizeBucketSpec(schema, table)

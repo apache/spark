@@ -611,16 +611,15 @@ object RocksDBStateStoreProvider {
   val VIRTUAL_COL_FAMILY_PREFIX_BYTES = 2
 
   private val MAX_AVRO_ENCODERS_IN_CACHE = 1000
+  private val AVRO_ENCODER_LIFETIME_HOURS = 1L
 
   // Add the cache at companion object level so it persists across provider instances
-  private val dataEncoderCache: NonFateSharingCache[String, RocksDBDataEncoder] = {
-    val guavaCache = CacheBuilder.newBuilder()
-      .maximumSize(MAX_AVRO_ENCODERS_IN_CACHE)  // Adjust size based on your needs
-      .expireAfterAccess(1, TimeUnit.HOURS)  // Optional: Add expiration if needed
-      .build[String, RocksDBDataEncoder]()
-
-    new NonFateSharingCache(guavaCache)
-  }
+  private val avroEncoderMap: NonFateSharingCache[String, AvroEncoder] =
+    NonFateSharingCache(
+      maximumSize = MAX_AVRO_ENCODERS_IN_CACHE,
+      expireAfterAccessTime = AVRO_ENCODER_LIFETIME_HOURS,
+      expireAfterAccessTimeUnit = TimeUnit.HOURS
+    )
 
   /**
    * Creates and returns a data encoder for the state store based on the specified encoding type.

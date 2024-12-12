@@ -51,6 +51,7 @@ object RuleIdCollection {
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveAggregateFunctions" ::
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveAliases" ::
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveBinaryArithmetic" ::
+      "org.apache.spark.sql.catalyst.analysis.ResolveCollationName" ::
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveDeserializer" ::
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveEncodersInUDF" ::
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveFunctions" ::

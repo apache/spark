@@ -175,16 +175,6 @@ object DataTypeProtoConverter {
             proto.DataType.Decimal.newBuilder().setPrecision(precision).setScale(scale).build())
           .build()
 
-      case s: StringType =>
-        proto.DataType
-          .newBuilder()
-          .setString(
-            proto.DataType.String
-              .newBuilder()
-              .setCollation(CollationFactory.fetchCollation(s.collationId).collationName)
-              .build())
-          .build()
-
       case CharType(length) =>
         proto.DataType
           .newBuilder()
@@ -195,6 +185,17 @@ object DataTypeProtoConverter {
         proto.DataType
           .newBuilder()
           .setVarChar(proto.DataType.VarChar.newBuilder().setLength(length).build())
+          .build()
+
+      // StringType must be matched after CharType and VarcharType
+      case s: StringType =>
+        proto.DataType
+          .newBuilder()
+          .setString(
+            proto.DataType.String
+              .newBuilder()
+              .setCollation(CollationFactory.fetchCollation(s.collationId).collationName)
+              .build())
           .build()
 
       case DateType => ProtoDataTypes.DateType

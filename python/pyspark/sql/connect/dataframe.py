@@ -686,6 +686,22 @@ class DataFrame(ParentDataFrame):
             session=self._session,
         )
 
+    def lateralJoin(
+        self,
+        other: ParentDataFrame,
+        on: Optional[Column] = None,
+        how: Optional[str] = None,
+    ) -> ParentDataFrame:
+        self._check_same_session(other)
+        if how is not None and isinstance(how, str):
+            how = how.lower().replace("_", "")
+        return DataFrame(
+            plan.LateralJoin(
+                left=self._plan, right=cast(plan.LogicalPlan, other._plan), on=on, how=how
+            ),
+            session=self._session,
+        )
+
     def _joinAsOf(
         self,
         other: ParentDataFrame,

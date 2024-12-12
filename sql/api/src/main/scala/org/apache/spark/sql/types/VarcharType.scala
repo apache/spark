@@ -16,14 +16,19 @@
  */
 package org.apache.spark.sql.types
 
+import org.json4s.JsonAST.{JString, JValue}
+
 import org.apache.spark.annotation.Experimental
+import org.apache.spark.sql.catalyst.util.CollationFactory
 
 @Experimental
-case class VarcharType(length: Int) extends AtomicType {
+case class VarcharType(length: Int)
+    extends StringType(CollationFactory.UTF8_BINARY_COLLATION_ID, MaxLength(length)) {
   require(length >= 0, "The length of varchar type cannot be negative.")
 
   override def defaultSize: Int = length
   override def typeName: String = s"varchar($length)"
+  override def jsonValue: JValue = JString(typeName)
   override def toString: String = s"VarcharType($length)"
   private[spark] override def asNullable: VarcharType = this
 }

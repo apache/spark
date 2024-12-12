@@ -24,7 +24,7 @@ import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row, SaveMode, SparkSession, SQLContext}
-import org.apache.spark.sql.QueryTest.withPhysicalPlansCaptured
+import org.apache.spark.sql.QueryTest.withQueryExecutionsCaptured
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -213,8 +213,8 @@ class V1WriteFallbackSuite extends QueryTest with SharedSparkSession with Before
         .getOrCreate()
 
       def captureWrite(sparkSession: SparkSession)(thunk: => Unit): SparkPlan = {
-        val physicalPlans = withPhysicalPlansCaptured(sparkSession, thunk)
-        val v1FallbackWritePlans = physicalPlans.filter {
+        val queryExecutions = withQueryExecutionsCaptured(sparkSession)(thunk)
+        val v1FallbackWritePlans = queryExecutions.map(_.executedPlan).filter {
           case _: AppendDataExecV1 | _: OverwriteByExpressionExecV1 => true
           case _ => false
         }
