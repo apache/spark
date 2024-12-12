@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.catalyst.analysis.CollationStrength.{Default, Explicit, Implicit}
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion.haveSameType
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Project}
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types.{ArrayType, DataType, MapType, StringType, StructType}
@@ -172,12 +173,45 @@ object CollationTypeCoercion {
         expr match {
           case lit: Literal => lit.copy(dataType = newDataType)
           case cast: Cast => cast.copy(dataType = newDataType)
+          case subquery: SubqueryExpression =>
+            changeTypeInSubquery(subquery, newType)
+
           case _ => Cast(expr, newDataType)
         }
 
       case _ =>
         expr
     }
+  }
+
+  /**
+   * Changes the data type of the expression in the subquery to the given `newType`.
+   * Currently only supports subqueries with [[Project]] and [[Aggregate]] plan.
+   */
+  private def changeTypeInSubquery(
+      subqueryExpression: SubqueryExpression,
+      newType: DataType): SubqueryExpression = {
+
+    def transformNamedExpressions(ex: NamedExpression): NamedExpression = {
+      changeType(ex, newType) match {
+        case named: NamedExpression => named
+        case other => Alias(other, ex.name)()
+      }
+    }
+
+    val newPlan = subqueryExpression.plan match {
+      case project: Project =>
+        val newProjectList = project.projectList.map(transformNamedExpressions)
+        project.copy(projectList = newProjectList)
+
+      case agg: Aggregate =>
+        val newAggregateExpressions = agg.aggregateExpressions.map(transformNamedExpressions)
+        agg.copy(aggregateExpressions = newAggregateExpressions)
+
+      case other => other
+    }
+
+    subqueryExpression.withNewPlan(newPlan)
   }
 
   /**
