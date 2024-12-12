@@ -35,7 +35,7 @@ import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.execution.{BinaryExecNode, CoGroupedIterator, SparkPlan}
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.python.PandasGroupUtils.{executePython, groupAndProject, resolveArgOffsets}
-import org.apache.spark.sql.execution.streaming.{StatefulOperatorCustomMetric, StatefulOperatorCustomSumMetric, StatefulOperatorPartitioning, StatefulOperatorStateInfo, StatefulProcessorHandleImpl, StateStoreWriter, WatermarkSupport}
+import org.apache.spark.sql.execution.streaming.{DriverStatefulProcessorHandleImpl, StatefulOperatorCustomMetric, StatefulOperatorCustomSumMetric, StatefulOperatorPartitioning, StatefulOperatorStateInfo, StatefulProcessorHandleImpl, StateStoreWriter, WatermarkSupport}
 import org.apache.spark.sql.execution.streaming.StreamingSymmetricHashJoinHelper.StateStoreAwareZipPartitionsHelper
 import org.apache.spark.sql.execution.streaming.state.{NoPrefixKeyStateEncoderSpec, RocksDBStateStoreProvider, StateSchemaValidationResult, StateStore, StateStoreConf, StateStoreId, StateStoreOps, StateStoreProvider, StateStoreProviderId}
 import org.apache.spark.sql.internal.SQLConf
@@ -82,7 +82,6 @@ case class TransformWithStateInPandasExec(
   extends BinaryExecNode with StateStoreWriter with WatermarkSupport {
 
   override def shortName: String = "transformWithStateInPandasExec"
-
   private val pythonUDF = functionExpr.asInstanceOf[PythonUDF]
   private val pythonFunction = pythonUDF.func
   private val chainedFunc =
@@ -91,6 +90,7 @@ case class TransformWithStateInPandasExec(
   private val sessionLocalTimeZone = conf.sessionLocalTimeZone
   private val pythonRunnerConf = ArrowPythonRunner.getPythonRunnerConfMap(conf)
   private[this] val jobArtifactUUID = JobArtifactSet.getCurrentJobArtifactState.map(_.uuid)
+  private val (dedupAttributes, argOffsets) = resolveArgOffsets(child.output, groupingAttributes)
 
   private val groupingKeyStructFields = groupingAttributes
     .map(a => StructField(a.name, a.dataType, a.nullable))
@@ -108,6 +108,28 @@ case class TransformWithStateInPandasExec(
 
   // Each state variable has its own schema, this is a dummy one.
   protected val schemaForValueRow: StructType = new StructType().add("value", BinaryType)
+
+  /*
+  override def operatorStateMetadataVersion: Int = 2
+
+  /** Metadata of this stateful operator and its states stores.
+   * Written during IncrementalExecution */
+  override def operatorStateMetadata(
+      stateSchemaPaths: List[String]): OperatorStateMetadata = {
+    val info = getStateInfo
+    val operatorInfo = OperatorInfoV1(info.operatorId, shortName)
+    // stateSchemaFilePath should be populated at this point
+    val stateStoreInfo =
+      Array(StateStoreMetadataV2(
+        StateStoreId.DEFAULT_STORE_NAME, 0, info.numPartitions, stateSchemaPaths.head))
+
+    val operatorProperties = TransformWithStateOperatorProperties(
+      timeMode.toString,
+      outputMode.toString,
+      getStateVariableInfos().values.toList
+    )
+    OperatorStateMetadataV2(operatorInfo, stateStoreInfo, operatorProperties.json)
+  } */
 
   /**
    * Distribute by grouping attributes - We need the underlying data and the initial state data
@@ -133,7 +155,25 @@ case class TransformWithStateInPandasExec(
       hadoopConf: Configuration,
       batchId: Long,
       stateSchemaVersion: Int): List[StateSchemaValidationResult] = {
-    // TODO(SPARK-49212): Implement schema evolution support
+    val driverProcessorHandle = new DriverStatefulProcessorHandleImpl(
+      timeMode, groupingKeyExprEncoder)
+
+    val runner = new TransformWithStateInPandasPythonPreInitRunner(
+      pythonFunction,
+      "pyspark.sql.streaming.transform_with_state_driver_worker",
+      sessionLocalTimeZone,
+      groupingKeySchema,
+      driverProcessorHandle
+    )
+    runner.init()
+    try {
+      runner.process()
+    } catch {
+      case e: Throwable =>
+        throw new Exception(s"Exception happens when calling statefulProcessor.init()," +
+        s" exception: $e")
+    }
+    runner.stop()
     List.empty
   }
 
@@ -315,7 +355,6 @@ case class TransformWithStateInPandasExec(
     val currentTimeNs = System.nanoTime
     val updatesStartTimeNs = currentTimeNs
 
-    val (dedupAttributes, argOffsets) = resolveArgOffsets(child.output, groupingAttributes)
     // If timeout is based on event time, then filter late data based on watermark
     val filteredIter = watermarkPredicateForDataForLateEvents match {
       case Some(predicate) =>

@@ -33,7 +33,7 @@ import org.apache.spark.sql.api.python.PythonSQLUtils
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
-import org.apache.spark.sql.execution.streaming.{ImplicitGroupingKeyTracker, StatefulProcessorHandleImpl, StatefulProcessorHandleState, StateVariableType}
+import org.apache.spark.sql.execution.streaming.{ImplicitGroupingKeyTracker, StatefulProcessorHandleImpl, StatefulProcessorHandleImplBase, StatefulProcessorHandleState, StateVariableType}
 import org.apache.spark.sql.execution.streaming.state.StateMessage.{HandleState, ImplicitGroupingKeyRequest, ListStateCall, MapStateCall, StatefulProcessorCall, StateRequest, StateResponse, StateResponseWithLongTypeVal, StateVariableRequest, TimerRequest, TimerStateCallCommand, TimerValueRequest, ValueStateCall}
 import org.apache.spark.sql.streaming.{ListState, MapState, TTLConfig, ValueState}
 import org.apache.spark.sql.types.{BinaryType, LongType, StructField, StructType}
@@ -52,7 +52,7 @@ import org.apache.spark.util.Utils
  */
 class TransformWithStateInPandasStateServer(
     stateServerSocket: ServerSocket,
-    statefulProcessorHandle: StatefulProcessorHandleImpl,
+    statefulProcessorHandle: StatefulProcessorHandleImplBase,
     groupingKeySchema: StructType,
     timeZoneId: String,
     errorOnDuplicatedFieldNames: Boolean,
@@ -137,6 +137,7 @@ class TransformWithStateInPandasStateServer(
 
   def run(): Unit = {
     val listeningSocket = stateServerSocket.accept()
+    println(s"I am inside JVM, actually here getting accept")
     inputStream = new DataInputStream(
       new BufferedInputStream(listeningSocket.getInputStream))
     outputStream = new DataOutputStream(
@@ -214,11 +215,13 @@ class TransformWithStateInPandasStateServer(
         // API and it will only be used by `group_ops` once per partition, we won't
         // need to worry about different function calls will interleaved and hence
         // this implementation is safe
+        assert(statefulProcessorHandle.isInstanceOf[StatefulProcessorHandleImpl])
         val expiryRequest = message.getExpiryTimerRequest()
         val expiryTimestamp = expiryRequest.getExpiryTimestampMs
         if (!expiryTimestampIter.isDefined) {
           expiryTimestampIter =
-            Option(statefulProcessorHandle.getExpiredTimers(expiryTimestamp))
+            Option(statefulProcessorHandle
+              .asInstanceOf[StatefulProcessorHandleImpl].getExpiredTimers(expiryTimestamp))
         }
         // expiryTimestampIter could be None in the TWSPandasServerSuite
         if (!expiryTimestampIter.isDefined || !expiryTimestampIter.get.hasNext) {
@@ -267,6 +270,10 @@ class TransformWithStateInPandasStateServer(
       case StatefulProcessorCall.MethodCase.SETHANDLESTATE =>
         val requestedState = message.getSetHandleState.getState
         requestedState match {
+          case HandleState.PRE_INIT =>
+            logInfo(log"set handle state to Pre-init")
+            println(s"i am here jvm server, preinit")
+            statefulProcessorHandle.setHandleState(StatefulProcessorHandleState.PRE_INIT)
           case HandleState.CREATED =>
             logInfo(log"set handle state to Created")
             statefulProcessorHandle.setHandleState(StatefulProcessorHandleState.CREATED)
