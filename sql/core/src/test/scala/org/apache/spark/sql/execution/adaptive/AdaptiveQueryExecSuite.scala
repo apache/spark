@@ -19,12 +19,11 @@ package org.apache.spark.sql.execution.adaptive
 
 import java.io.File
 import java.net.URI
-
 import org.apache.logging.log4j.Level
 import org.scalatest.PrivateMethodTester
 import org.scalatest.time.SpanSugar._
-
 import org.apache.spark.SparkException
+import org.apache.spark.internal.config
 import org.apache.spark.rdd.RDD
 import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent, SparkListenerJobStart}
 import org.apache.spark.shuffle.sort.SortShuffleManager
@@ -2693,6 +2692,40 @@ class AdaptiveQueryExecSuite
         assert(shuffles2.size == 4)
         val smj2 = findTopLevelSortMergeJoin(adaptive2)
         assert(smj2.size == 2 && smj2.forall(_.isSkewJoin))
+      }
+    }
+  }
+
+  test("MapStatus RowCount optimize skewed job") {
+    spark.sparkContext.conf.set(
+      config.SHUFFLE_MAP_STATUS_ROW_COUNT_OPTIMIZE_SKEWED_JOB, true)
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+      SQLConf.SKEW_JOIN_SKEWED_PARTITION_THRESHOLD.key -> "100",
+      SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "100",
+      SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_NUM.key -> "1",
+      SQLConf.SHUFFLE_PARTITIONS.key -> "10") {
+      withTempView("skewData1", "skewData2") {
+        spark
+          .range(0, 1000, 1, 10)
+          .selectExpr("id % 3 as key1", "id % 3 as value1")
+          .createOrReplaceTempView("skewData1")
+        spark
+          .range(0, 1000, 1, 10)
+          .selectExpr("id % 1 as key2", "id as value2")
+          .createOrReplaceTempView("skewData2")
+
+        // skewedJoin doesn't happen in last stage
+        val (_, adaptive1) =
+          runAdaptiveAndVerifyResult("SELECT key1 FROM skewData1 JOIN skewData2 ON key1 = key2 ")
+        val shuffles1 = collect(adaptive1) {
+          case s: ShuffleExchangeExec => s
+        }
+        assert(shuffles1.size == 2)
+        val smj = findTopLevelSortMergeJoin(adaptive1)
+        assert(smj.size == 1 && smj.last.isSkewJoin)
+
       }
     }
   }
