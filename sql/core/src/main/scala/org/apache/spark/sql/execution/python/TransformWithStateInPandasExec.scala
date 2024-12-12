@@ -32,9 +32,9 @@ import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.execution.{BinaryExecNode, CoGroupedIterator, SparkPlan}
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.python.PandasGroupUtils.{executePython, groupAndProject, resolveArgOffsets}
-import org.apache.spark.sql.execution.streaming.{DriverStatefulProcessorHandleImpl, StatefulOperatorCustomMetric, StatefulOperatorCustomSumMetric, StatefulOperatorPartitioning, StatefulOperatorStateInfo, StatefulProcessorHandleImpl, StateStoreWriter, WatermarkSupport}
+import org.apache.spark.sql.execution.streaming.{DriverStatefulProcessorHandleImpl, StatefulOperatorCustomMetric, StatefulOperatorCustomSumMetric, StatefulOperatorPartitioning, StatefulOperatorStateInfo, StatefulProcessorHandleImpl, StateStoreWriter, TransformWithStateOperatorMetadataUtils, TransformWithStateVariableInfo, WatermarkSupport}
 import org.apache.spark.sql.execution.streaming.StreamingSymmetricHashJoinHelper.StateStoreAwareZipPartitionsHelper
-import org.apache.spark.sql.execution.streaming.state.{NoPrefixKeyStateEncoderSpec, StateSchemaValidationResult, StateStore, StateStoreConf, StateStoreId, StateStoreOps, StateStoreProviderId}
+import org.apache.spark.sql.execution.streaming.state.{NoPrefixKeyStateEncoderSpec, OperatorStateMetadata, StateSchemaValidationResult, StateStore, StateStoreColFamilySchema, StateStoreConf, StateStoreId, StateStoreOps, StateStoreProviderId}
 import org.apache.spark.sql.streaming.{OutputMode, TimeMode}
 import org.apache.spark.sql.types.{BinaryType, StructField, StructType}
 import org.apache.spark.util.{CompletionIterator, SerializableConfiguration}
@@ -71,7 +71,10 @@ case class TransformWithStateInPandasExec(
     initialState: SparkPlan,
     initialStateGroupingAttrs: Seq[Attribute],
     initialStateSchema: StructType)
-  extends BinaryExecNode with StateStoreWriter with WatermarkSupport {
+  extends BinaryExecNode
+  with StateStoreWriter
+  with WatermarkSupport
+  with TransformWithStateOperatorMetadataUtils {
 
   override def shortName: String = "transformWithStateInPandasExec"
   private val pythonUDF = functionExpr.asInstanceOf[PythonUDF]
@@ -101,27 +104,12 @@ case class TransformWithStateInPandasExec(
   // Each state variable has its own schema, this is a dummy one.
   protected val schemaForValueRow: StructType = new StructType().add("value", BinaryType)
 
-  /*
   override def operatorStateMetadataVersion: Int = 2
 
   /** Metadata of this stateful operator and its states stores.
    * Written during IncrementalExecution */
-  override def operatorStateMetadata(
-      stateSchemaPaths: List[String]): OperatorStateMetadata = {
-    val info = getStateInfo
-    val operatorInfo = OperatorInfoV1(info.operatorId, shortName)
-    // stateSchemaFilePath should be populated at this point
-    val stateStoreInfo =
-      Array(StateStoreMetadataV2(
-        StateStoreId.DEFAULT_STORE_NAME, 0, info.numPartitions, stateSchemaPaths.head))
-
-    val operatorProperties = TransformWithStateOperatorProperties(
-      timeMode.toString,
-      outputMode.toString,
-      getStateVariableInfos().values.toList
-    )
-    OperatorStateMetadataV2(operatorInfo, stateStoreInfo, operatorProperties.json)
-  } */
+  private val driverProcessorHandle: DriverStatefulProcessorHandleImpl =
+    new DriverStatefulProcessorHandleImpl(timeMode, groupingKeyExprEncoder)
 
   /**
    * Distribute by grouping attributes - We need the underlying data and the initial state data
@@ -143,13 +131,23 @@ case class TransformWithStateInPandasExec(
     groupingAttributes.map(SortOrder(_, Ascending)),
     initialStateGroupingAttrs.map(SortOrder(_, Ascending)))
 
+  override def getColFamilySchemas(): Map[String, StateStoreColFamilySchema] = {
+    driverProcessorHandle.getColumnFamilySchemas
+  }
+
+  override def getStateVariableInfos(): Map[String, TransformWithStateVariableInfo] = {
+    driverProcessorHandle.getStateVariableInfos
+  }
+
+  override def operatorStateMetadata(
+      stateSchemaPaths: List[String]): OperatorStateMetadata = {
+    getOperatorStateMetadata(stateSchemaPaths, getStateInfo, shortName, timeMode, outputMode)
+  }
+
   override def validateAndMaybeEvolveStateSchema(
       hadoopConf: Configuration,
       batchId: Long,
       stateSchemaVersion: Int): List[StateSchemaValidationResult] = {
-    val driverProcessorHandle = new DriverStatefulProcessorHandleImpl(
-      timeMode, groupingKeyExprEncoder)
-
     val runner = new TransformWithStateInPandasPythonPreInitRunner(
       pythonFunction,
       "pyspark.sql.streaming.transform_with_state_driver_worker",
@@ -166,7 +164,9 @@ case class TransformWithStateInPandasExec(
         s" exception: $e")
     }
     runner.stop()
-    List.empty
+
+    validateAndWriteStateSchema(hadoopConf, batchId, stateSchemaVersion, getStateInfo,
+      stateSchemaDirPath(), session, operatorStateMetadataVersion)
   }
 
   override def shouldRunAnotherBatch(newInputWatermark: Long): Boolean = {

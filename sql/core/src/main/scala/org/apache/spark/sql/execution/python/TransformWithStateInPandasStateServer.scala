@@ -137,7 +137,6 @@ class TransformWithStateInPandasStateServer(
 
   def run(): Unit = {
     val listeningSocket = stateServerSocket.accept()
-    println(s"I am inside JVM, actually here getting accept")
     inputStream = new DataInputStream(
       new BufferedInputStream(listeningSocket.getInputStream))
     outputStream = new DataOutputStream(
@@ -272,7 +271,6 @@ class TransformWithStateInPandasStateServer(
         requestedState match {
           case HandleState.PRE_INIT =>
             logInfo(log"set handle state to Pre-init")
-            println(s"i am here jvm server, preinit")
             statefulProcessorHandle.setHandleState(StatefulProcessorHandleState.PRE_INIT)
           case HandleState.CREATED =>
             logInfo(log"set handle state to Created")

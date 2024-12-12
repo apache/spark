@@ -618,8 +618,10 @@ class PandasGroupedOpsMixin:
                     StatefulProcessorHandleState.PRE_INIT
                 )
                 statefulProcessor.init(handle)
-                # raise Exception(f"I am here, after pre init\n")
-                # return a dummy results, no return value is needed
+                # return a dummy results, no return value is needed for pre init
+
+                # TODO figure out why we need to call close here in Scala side
+                # statefulProcessor.close()
                 return iter([])
 
             if statefulProcessorApiClient.handle_state == StatefulProcessorHandleState.CREATED:

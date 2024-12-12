@@ -177,12 +177,11 @@ abstract class TransformWithStateInPandasPythonBaseRunner[I](
   extends BasePythonRunner[I, ColumnarBatch](funcs.map(_._1), evalType, argOffsets, jobArtifactUUID)
   with PythonArrowInput[I]
   with BasicPythonArrowOutput
+  with TransformWithStateInPandasPythonRunnerUtils
   with Logging {
 
   protected val sqlConf = SQLConf.get
   protected val arrowMaxRecordsPerBatch = sqlConf.arrowMaxRecordsPerBatch
-
-  private var stateServerSocketPort: Int = 0
 
   override protected val workerConf: Map[String, String] = initialWorkerConf +
     (SQLConf.ARROW_EXECUTION_MAX_RECORDS_PER_BATCH.key -> arrowMaxRecordsPerBatch.toString)
@@ -205,21 +204,7 @@ abstract class TransformWithStateInPandasPythonBaseRunner[I](
       inputIterator: Iterator[I],
       partitionIndex: Int,
       context: TaskContext): Iterator[ColumnarBatch] = {
-    var stateServerSocket: ServerSocket = null
-    var failed = false
-    try {
-      stateServerSocket = new ServerSocket( /* port = */ 0,
-        /* backlog = */ 1)
-      stateServerSocketPort = stateServerSocket.getLocalPort
-    } catch {
-      case e: Throwable =>
-        failed = true
-        throw e
-    } finally {
-      if (failed) {
-        closeServerSocketChannelSilently(stateServerSocket)
-      }
-    }
+    initStateServer()
 
     val executor = ThreadUtils.newDaemonSingleThreadExecutor("stateConnectionListenerThread")
     val executionContext = ExecutionContext.fromExecutor(executor)
@@ -239,24 +224,9 @@ abstract class TransformWithStateInPandasPythonBaseRunner[I](
     super.compute(inputIterator, partitionIndex, context)
   }
 
-  private def closeServerSocketChannelSilently(stateServerSocket: ServerSocket): Unit = {
-    try {
-      logInfo(log"closing the state server socket")
-      stateServerSocket.close()
-    } catch {
-      case e: Exception =>
-        logError(log"failed to close state server socket", e)
-    }
-  }
-
   override protected def writeUDF(dataOut: DataOutputStream): Unit = {
     PythonUDFRunner.writeUDFs(dataOut, funcs, argOffsets, None)
   }
-}
-
-object TransformWithStateInPandasPythonRunner {
-  type InType = (InternalRow, Iterator[InternalRow])
-  type GroupedInType = (InternalRow, Iterator[InternalRow], Iterator[InternalRow])
 }
 
 class TransformWithStateInPandasPythonPreInitRunner(
@@ -264,26 +234,22 @@ class TransformWithStateInPandasPythonPreInitRunner(
     workerModule: String,
     timeZoneId: String,
     groupingKeySchema: StructType,
-    processorHandleImpl: DriverStatefulProcessorHandleImpl
-  )
+    processorHandleImpl: DriverStatefulProcessorHandleImpl)
   extends StreamingPythonRunner(func, "", "", workerModule)
+  with TransformWithStateInPandasPythonRunnerUtils
   with Logging {
-
   protected val sqlConf = SQLConf.get
 
-  private var stateServerSocketPort: Int = 0
   private var dataIn: DataInputStream = _
   private var dataOut: DataOutputStream = _
 
   private var daemonThread: Thread = _
-  private var stateServerSocket: ServerSocket = _
 
   override def init(): (DataOutputStream, DataInputStream) = {
     val env = SparkEnv.get
 
     val localdir = env.blockManager.diskBlockManager.localDirs.map(f => f.getPath()).mkString(",")
     envVars.put("SPARK_LOCAL_DIRS", localdir)
-
     envVars.put("SPARK_AUTH_SOCKET_TIMEOUT", authSocketTimeout.toString)
     envVars.put("SPARK_BUFFER_SIZE", bufferSize.toString)
 
@@ -339,20 +305,7 @@ class TransformWithStateInPandasPythonPreInitRunner(
   }
 
   private def startStateServer(): Unit = {
-    var failed = false
-    try {
-      stateServerSocket = new ServerSocket(/* port = */ 0,
-        /* backlog = */ 1)
-      stateServerSocketPort = stateServerSocket.getLocalPort
-    } catch {
-      case e: Throwable =>
-        failed = true
-        throw e
-    } finally {
-      if (failed) {
-        closeServerSocketChannelSilently(stateServerSocket)
-      }
-    }
+    initStateServer()
 
     daemonThread = new Thread {
       override def run(): Unit = {
@@ -371,8 +324,29 @@ class TransformWithStateInPandasPythonPreInitRunner(
     daemonThread.setName("stateConnectionListenerThread")
     daemonThread.start()
   }
+}
 
-  private def closeServerSocketChannelSilently(stateServerSocket: ServerSocket): Unit = {
+trait TransformWithStateInPandasPythonRunnerUtils extends Logging{
+  protected var stateServerSocketPort: Int = 0
+  protected var stateServerSocket: ServerSocket = null
+  protected def initStateServer(): Unit = {
+    var failed = false
+    try {
+      stateServerSocket = new ServerSocket(/* port = */ 0,
+        /* backlog = */ 1)
+      stateServerSocketPort = stateServerSocket.getLocalPort
+    } catch {
+      case e: Throwable =>
+        failed = true
+        throw e
+    } finally {
+      if (failed) {
+        closeServerSocketChannelSilently(stateServerSocket)
+      }
+    }
+  }
+
+  protected def closeServerSocketChannelSilently(stateServerSocket: ServerSocket): Unit = {
     try {
       logInfo(log"closing the state server socket")
       stateServerSocket.close()
@@ -381,4 +355,9 @@ class TransformWithStateInPandasPythonPreInitRunner(
         logError(log"failed to close state server socket", e)
     }
   }
+}
+
+object TransformWithStateInPandasPythonRunner {
+  type InType = (InternalRow, Iterator[InternalRow])
+  type GroupedInType = (InternalRow, Iterator[InternalRow], Iterator[InternalRow])
 }

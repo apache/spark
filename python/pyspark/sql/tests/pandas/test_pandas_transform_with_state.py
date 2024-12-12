@@ -613,7 +613,7 @@ class TransformWithStateInPandasTestsMixin:
             ]
         )
 
-        data = [("0", 789), ("0", 987)]
+        data = [("0", 789), ("3", 987)]
         initial_state = self.spark.createDataFrame(data, "id string, initVal int").groupBy("id")
 
         q = (
@@ -870,7 +870,6 @@ class SimpleStatefulProcessorWithInitialState(StatefulProcessor):
     dict = {("0",): 789, ("3",): 987}
 
     def init(self, handle: StatefulProcessorHandle) -> None:
-        print(f"I am inside processor handle, init\n")
         state_schema = StructType([StructField("value", IntegerType(), True)])
         self.value_state = handle.getValueState("value_state", state_schema)
         self.handle = handle
