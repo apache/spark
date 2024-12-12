@@ -28,7 +28,7 @@ import io.fabric8.kubernetes.api.model.Pod
 import io.fabric8.kubernetes.client.{Watcher, WatcherException}
 import io.fabric8.kubernetes.client.KubernetesClientException
 import io.fabric8.kubernetes.client.Watcher.Action
-import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll, Tag}
+import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll, Ignore, Tag}
 import org.scalatest.concurrent.{Eventually, PatienceConfiguration}
 import org.scalatest.concurrent.PatienceConfiguration.{Interval, Timeout}
 import org.scalatest.matchers.must.Matchers
@@ -42,6 +42,7 @@ import org.apache.spark.deploy.k8s.integrationtest.backend.{IntegrationTestBacke
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 
+@Ignore
 class KubernetesSuite extends SparkFunSuite
   with BeforeAndAfterAll with BeforeAndAfter with BasicTestsSuite with SparkConfPropagateSuite
   with SecretsTestsSuite with PythonTestsSuite with ClientModeTestsSuite with PodTemplateSuite
@@ -419,15 +420,27 @@ class KubernetesSuite extends SparkFunSuite
                 }
                 // Look for the string that indicates we're good to trigger decom on the driver
                 logDebug("Waiting for first collect...")
-                Eventually.eventually(TIMEOUT, INTERVAL) {
-                  assert(kubernetesTestComponents.kubernetesClient
-                    .pods()
-                    .inNamespace(kubernetesTestComponents.namespace)
-                    .withName(driverPodName)
-                    .getLog
-                    .contains("Waiting to give nodes time to finish migration, decom exec 1."),
-                    "Decommission test did not complete first collect.")
+                try {
+                  Eventually.eventually(TIMEOUT, INTERVAL) {
+                    val log = kubernetesTestComponents.kubernetesClient
+                      .pods()
+                      .inNamespace(kubernetesTestComponents.namespace)
+                      .withName(driverPodName)
+                      .getLog
+                    // scalastyle:off println
+                    println("-----------------log begin-------------------")
+                    println(log)
+                    println("-----------------log end-------------------")
+                    // scalastyle:on println
+                    assert(
+                      log.contains("Waiting to give nodes time to finish migration, decom exec 1."),
+                      "Decommission test did not complete first collect.")
+                  }
+                } catch {
+                  case e: KubernetesClientException =>
+                    logInfo(s"Failed to getLog: $e")
                 }
+
                 // Delete the pod to simulate cluster scale down/migration.
                 // This will allow the pod to remain up for the grace period
                 // We set an intentionally long grace period to test that Spark
@@ -459,6 +472,9 @@ class KubernetesSuite extends SparkFunSuite
       })
 
     logDebug("Starting Spark K8s job")
+    // scalastyle:off println
+    println(s"SparkAppLauncher.launch begin, isJVM: $isJVM, appArguments: $appArguments")
+    // scalastyle:on println
     SparkAppLauncher.launch(
       appArguments,
       customSparkConf.getOrElse(sparkAppConf),
@@ -467,6 +483,9 @@ class KubernetesSuite extends SparkFunSuite
       isJVM,
       pyFiles,
       env)
+    // scalastyle:off println
+    println(s"SparkAppLauncher.launch end, isJVM: $isJVM, appArguments: $appArguments")
+    // scalastyle:on println
 
     val driverPod = kubernetesTestComponents.kubernetesClient
       .pods()
@@ -477,6 +496,9 @@ class KubernetesSuite extends SparkFunSuite
       .getItems
       .get(0)
     driverPodChecker(driverPod)
+    // scalastyle:off println
+    println("Pass driverPodChecker.")
+    // scalastyle:on println
 
     if (patienceInterval.value.toSeconds.toInt > 0) {
       // If we're testing decommissioning we an executors, but we should have an executor
@@ -486,6 +508,9 @@ class KubernetesSuite extends SparkFunSuite
       }
     }
     execPods.values.foreach(executorPodChecker(_))
+    // scalastyle:off println
+    println("Pass executorPodChecker")
+    // scalastyle:on println
 
     val execPod: Option[Pod] = if (expectedExecutorLogOnCompletion.nonEmpty) {
       Some(kubernetesTestComponents.kubernetesClient

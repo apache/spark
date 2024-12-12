@@ -20,4 +20,4 @@ spec:
   queue: queue-3g
   minMember: 1
   minResources:
-    memory: "3Gi"
+    memory: 3Gi

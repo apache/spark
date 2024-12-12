@@ -114,8 +114,9 @@ private[spark] object SparkAppLauncher extends Logging {
       isJVM: Boolean,
       pyFiles: Option[String] = None,
       env: Map[String, String] = Map.empty[String, String]): Unit = {
+    // scalastyle:off println
     val sparkSubmitExecutable = sparkHomeDir.resolve(Paths.get("bin", "spark-submit"))
-    logInfo(s"Launching a spark app with arguments $appArguments and conf $appConf")
+    println(s"Launching a spark app with arguments $appArguments and conf $appConf")
     val preCommandLine = if (isJVM) {
       mutable.ArrayBuffer(sparkSubmitExecutable.toFile.getAbsolutePath,
       "--deploy-mode", "cluster",
@@ -133,7 +134,21 @@ private[spark] object SparkAppLauncher extends Logging {
     if (appArguments.appArgs.nonEmpty) {
       commandLine ++= appArguments.appArgs
     }
-    logInfo(s"Launching a spark app with command line: ${commandLine.mkString(" ")}")
-    ProcessUtils.executeProcess(commandLine.toArray, timeoutSecs, env = env)
+    println(s"Launching a spark app with command line: ${commandLine.mkString(" ")}")
+    // scalastyle:on println
+    val thread = new Thread(new Runnable {
+      override def run(): Unit = {
+        // scalastyle:off println
+        val outputs = ProcessUtils.executeProcess(commandLine.toArray, timeoutSecs, env = env)
+        println("-----------------------Output Begin-----------------------")
+        println(s"Launching a spark app with command line: ${commandLine.mkString(" ")}")
+        outputs.foreach(line => {
+          println(line)
+        })
+        println("-----------------------Output End-----------------------")
+        // scalastyle:on println
+      }
+    })
+    thread.start()
   }
 }

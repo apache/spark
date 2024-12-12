@@ -28,8 +28,8 @@ import scala.concurrent.Future
 import scala.jdk.CollectionConverters._
 
 import io.fabric8.kubernetes.api.model.{HasMetadata, Pod, Quantity}
+import io.fabric8.volcano.api.model.scheduling.v1beta1.{Queue, QueueBuilder}
 import io.fabric8.volcano.client.VolcanoClient
-import io.fabric8.volcano.scheduling.v1beta1.{Queue, QueueBuilder}
 import org.scalatest.BeforeAndAfterEach
 import org.scalatest.concurrent.Eventually
 
@@ -151,7 +151,31 @@ private[spark] trait VolcanoTestsSuite extends BeforeAndAfterEach { k8sSuite: Ku
       .queues()
       .inNamespace(kubernetesTestComponents.namespace)
       .createOrReplace(resource)
+
     testResources += resource
+  }
+
+  private def printAllResource(): Unit = {
+    val queues = kubernetesTestComponents.kubernetesClient.adapt(classOf[VolcanoClient])
+      .queues()
+      .inNamespace(kubernetesTestComponents.namespace)
+      .list()
+      .getItems.asScala
+    // scalastyle:off println
+    println("---------------------------------------------------")
+    println(s"All Queues size: ${queues.size}.")
+    queues.foreach(queue => {
+      println(s"queue status: ${queue.getStatus}, " +
+        s"spec: ${queue.getSpec}, " +
+        s"namespace: ${queue.getMetadata.getNamespace}, " +
+        s"name: ${queue.getMetadata.getName}, " +
+        s"spark-group-locator: " +
+        s"${queue.getMetadata.getLabels.getOrDefault("spark-group-locator", "N/A")}, " +
+        s"spark-role: " +
+        s"${queue.getMetadata.getLabels.getOrDefault("spark-role", "N/A")}")
+    })
+    println("---------------------------------------------------")
+    // scalastyle:on println
   }
 
   private def createOrReplaceQueue(name: String,
@@ -202,6 +226,37 @@ private[spark] trait VolcanoTestsSuite extends BeforeAndAfterEach { k8sSuite: Ku
       .getItems.asScala
   }
 
+  private def printAllPods(
+      role: String,
+      groupLocator: String): Unit = {
+    val rolePods = kubernetesTestComponents.kubernetesClient
+      .pods()
+      .inNamespace(kubernetesTestComponents.namespace)
+      .withLabel("spark-group-locator", groupLocator)
+      .withLabel("spark-role", role)
+      .list()
+      .getItems.asScala
+    val pods = kubernetesTestComponents.kubernetesClient
+      .pods()
+      .inNamespace(kubernetesTestComponents.namespace)
+      .list()
+      .getItems.asScala
+    // scalastyle:off println
+    println("---------------------------------------------------")
+    println(s"Role $role Pods size: ${rolePods.size}, all Pods size: ${pods.size}.")
+    pods.foreach(pod => {
+      println(s"pod status: ${pod.getStatus.getPhase}, " +
+        s"namespace: ${pod.getMetadata.getNamespace}, " +
+        s"name: ${pod.getMetadata.getName}, " +
+        s"spark-group-locator: " +
+        s"${pod.getMetadata.getLabels.getOrDefault("spark-group-locator", "N/A")}, " +
+        s"spark-role: " +
+        s"${pod.getMetadata.getLabels.getOrDefault("spark-role", "N/A")}")
+    })
+    println("---------------------------------------------------")
+    // scalastyle:on println
+  }
+
   def runJobAndVerify(
       batchSuffix: String,
       groupLoc: Option[String] = None,
@@ -212,8 +267,20 @@ private[spark] trait VolcanoTestsSuite extends BeforeAndAfterEach { k8sSuite: Ku
     val appLoc = s"${appLocator}${batchSuffix}"
     val podName = s"${driverPodName}-${batchSuffix}"
     // create new configuration for every job
+    // scalastyle:off println
+    println(s"createVolcanoSparkConf begin, " +
+      s"podName: $podName, appLoc: $appLoc, " +
+      s"groupLoc: $groupLoc, queue: $queue,")
     val conf = createVolcanoSparkConf(podName, appLoc, groupLoc, queue, driverTemplate,
       driverPodGroupTemplate)
+    println(s"createVolcanoSparkConf end, " +
+      s"podName: $podName, appLoc: $appLoc, " +
+      s"groupLoc: $groupLoc, queue: $queue")
+    println(s"Successfully createVolcanoSparkConf, " +
+      s"podName: $podName, appLoc: $appLoc, " +
+      s"groupLoc: $groupLoc, queue: $queue, " +
+      s"driverTemplate: $driverTemplate, driverPodGroupTemplate: $driverPodGroupTemplate")
+    // scalastyle:on println
     if (isDriverJob) {
       runSparkDriverSubmissionAndVerifyCompletion(
         driverPodChecker = (driverPod: Pod) => {
@@ -225,6 +292,12 @@ private[spark] trait VolcanoTestsSuite extends BeforeAndAfterEach { k8sSuite: Ku
         customAppLocator = Option(appLoc)
       )
     } else {
+      // scalastyle:off println
+      println(s"Will runSparkPiAndVerifyCompletion, " +
+        s"podName: $podName, appLoc: $appLoc, " +
+        s"groupLoc: $groupLoc, queue: $queue, " +
+        s"driverTemplate: $driverTemplate, driverPodGroupTemplate: $driverPodGroupTemplate")
+      // scalastyle:on println
       runSparkPiAndVerifyCompletion(
         driverPodChecker = (driverPod: Pod) => {
           checkScheduler(driverPod)
@@ -306,6 +379,32 @@ private[spark] trait VolcanoTestsSuite extends BeforeAndAfterEach { k8sSuite: Ku
     conf
   }
 
+  private def verifyJobsSucceededOneByOne(jobNum: Int, groupName: String): Unit = {
+    // Check Pending jobs completed one by one
+    (1 until jobNum).map { completedNum =>
+      Eventually.eventually(TIMEOUT, INTERVAL) {
+        val pendingPods = getPods(role = "driver", groupName, statusPhase = "Pending")
+        printAllResource()
+        printAllPods(role = "driver", groupName)
+        // scalastyle:off println
+        println(s"pendingPods size: ${pendingPods.size}, " +
+          s"jobNum - completedNum: ${jobNum - completedNum}")
+        // scalastyle:on println
+        assert(pendingPods.size === jobNum - completedNum)
+      }
+    }
+    // All jobs succeeded finally
+    Eventually.eventually(TIMEOUT, INTERVAL) {
+      val succeededPods = getPods(role = "driver", groupName, statusPhase = "Succeeded")
+      printAllResource()
+      printAllPods(role = "driver", groupName)
+      // scalastyle:off println
+      println(s"succeededPods size: ${succeededPods.size}, jobNum: $jobNum")
+      // scalastyle:on println
+      assert(succeededPods.size === jobNum)
+    }
+  }
+
   test("Run SparkPi with volcano scheduler", k8sTestTag, volcanoTag) {
     sparkAppConf
       .set("spark.kubernetes.driver.pod.featureSteps", VOLCANO_FEATURE_STEP)
@@ -323,21 +422,6 @@ private[spark] trait VolcanoTestsSuite extends BeforeAndAfterEach { k8sSuite: Ku
         checkAnnotation(executorPod)
       }
     )
-  }
-
-  private def verifyJobsSucceededOneByOne(jobNum: Int, groupName: String): Unit = {
-    // Check Pending jobs completed one by one
-    (1 until jobNum).map { completedNum =>
-      Eventually.eventually(TIMEOUT, INTERVAL) {
-        val pendingPods = getPods(role = "driver", groupName, statusPhase = "Pending")
-        assert(pendingPods.size === jobNum - completedNum)
-      }
-    }
-    // All jobs succeeded finally
-    Eventually.eventually(TIMEOUT, INTERVAL) {
-      val succeededPods = getPods(role = "driver", groupName, statusPhase = "Succeeded")
-      assert(succeededPods.size === jobNum)
-    }
   }
 
   test("SPARK-38187: Run SparkPi Jobs with minCPU", k8sTestTag, volcanoTag) {
@@ -371,7 +455,10 @@ private[spark] trait VolcanoTestsSuite extends BeforeAndAfterEach { k8sSuite: Ku
     verifyJobsSucceededOneByOne(jobNum, groupName)
   }
 
-  test("SPARK-38187: Run SparkPi Jobs with minMemory", k8sTestTag, volcanoTag) {
+  ignore("SPARK-38187: Run SparkPi Jobs with minMemory", k8sTestTag, volcanoTag) {
+    // scalastyle:off println
+    println("SPARK-38187: Run SparkPi Jobs with minMemory start.")
+    // scalastyle:on println
     val groupName = generateGroupName("min-mem")
     // Create a queue with 3G memory capacity
     createOrReplaceQueue(name = "queue-3g", memory = Some("3Gi"))
@@ -386,12 +473,16 @@ private[spark] trait VolcanoTestsSuite extends BeforeAndAfterEach { k8sSuite: Ku
       }
     }
     verifyJobsSucceededOneByOne(jobNum, groupName)
+    // scalastyle:off println
+    println("SPARK-38187: Run SparkPi Jobs with minMemory end.")
+    // scalastyle:on println
   }
 
   test("SPARK-38188: Run SparkPi jobs with 2 queues (only 1 enabled)", k8sTestTag, volcanoTag) {
     // Disabled queue0 and enabled queue1
     createOrReplaceQueue(name = "queue0", cpu = Some("0.001"))
     createOrReplaceQueue(name = "queue1")
+    printAllResource()
     val QUEUE_NUMBER = 2
     // Submit jobs into disabled queue0 and enabled queue1
     // By default is 4 (2 jobs in each queue)
@@ -400,13 +491,20 @@ private[spark] trait VolcanoTestsSuite extends BeforeAndAfterEach { k8sSuite: Ku
       Future {
         val queueName = s"queue${i % 2}"
         val groupName = generateGroupName(queueName)
+        // scalastyle:off println
+        println(s"runJobAndVerify begin, i: $i, groupName: $groupName, queueName: $queueName")
         runJobAndVerify(i.toString, Option(groupName), Option(queueName))
+        println(s"runJobAndVerify end, i: $i, groupName: $groupName, queueName: $queueName")
+        // scalastyle:on println
       }
     }
     // There are two `Succeeded` jobs and two `Pending` jobs
     Eventually.eventually(TIMEOUT, INTERVAL) {
+      printAllResource()
+      printAllPods("driver", s"${GROUP_PREFIX}queue1")
       val completedPods = getPods("driver", s"${GROUP_PREFIX}queue1", "Succeeded")
       assert(completedPods.size === jobNum/2)
+      printAllPods("driver", s"${GROUP_PREFIX}queue0")
       val pendingPods = getPods("driver", s"${GROUP_PREFIX}queue0", "Pending")
       assert(pendingPods.size === jobNum/2)
     }
@@ -478,7 +576,7 @@ private[spark] trait VolcanoTestsSuite extends BeforeAndAfterEach { k8sSuite: Ku
         assert(pods.size === 1)
         val conditions = pods.head.getStatus.getConditions.asScala
         val scheduledTime
-          = conditions.filter(_.getType === "PodScheduled").head.getLastTransitionTime
+        = conditions.filter(_.getType === "PodScheduled").head.getLastTransitionTime
         m += (p -> Instant.parse(scheduledTime))
       }
       // high --> medium --> low

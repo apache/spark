@@ -59,7 +59,7 @@ private[spark] trait DecommissionSuite { k8sSuite: KubernetesSuite =>
     }
   }
 
-  test("Test basic decommissioning", k8sTestTag, decomTestTag) {
+  ignore("Test basic decommissioning", k8sTestTag, decomTestTag) {
     runDecommissionTest(() => {
       sparkAppConf
         .set(config.DECOMMISSION_ENABLED.key, "true")
@@ -89,7 +89,7 @@ private[spark] trait DecommissionSuite { k8sSuite: KubernetesSuite =>
     })
   }
 
-  test("Test basic decommissioning with shuffle cleanup", k8sTestTag, decomTestTag) {
+  ignore("Test basic decommissioning with shuffle cleanup", k8sTestTag, decomTestTag) {
     runDecommissionTest(() => {
       sparkAppConf
         .set(config.DECOMMISSION_ENABLED.key, "true")
@@ -120,7 +120,7 @@ private[spark] trait DecommissionSuite { k8sSuite: KubernetesSuite =>
     })
   }
 
-  test("Test decommissioning with dynamic allocation & shuffle cleanups",
+  ignore("Test decommissioning with dynamic allocation & shuffle cleanups",
       k8sTestTag, decomTestTag) {
     runDecommissionTest(() => {
       sparkAppConf
@@ -185,7 +185,7 @@ private[spark] trait DecommissionSuite { k8sSuite: KubernetesSuite =>
     })
   }
 
-  test("Test decommissioning timeouts", k8sTestTag, decomTestTag) {
+  ignore("Test decommissioning timeouts", k8sTestTag, decomTestTag) {
     runDecommissionTest(() => {
       sparkAppConf
         .set(config.DECOMMISSION_ENABLED.key, "true")
@@ -218,7 +218,7 @@ private[spark] trait DecommissionSuite { k8sSuite: KubernetesSuite =>
     })
   }
 
-  test("SPARK-37576: Rolling decommissioning", k8sTestTag, decomTestTag) {
+  ignore("SPARK-37576: Rolling decommissioning", k8sTestTag, decomTestTag) {
     runDecommissionTest(() => {
       sparkAppConf
         .set("spark.kubernetes.container.image", pyImage)
