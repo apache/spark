@@ -371,6 +371,48 @@ class DataFrameSuite extends QueryTest
     }
   }
 
+  test("SPARK-50525 - cannot partition by map columns") {
+    val df = sql("select map(id, id) as m, id % 5 as id from range(0, 100, 1, 5)")
+    // map column
+    checkError(
+      exception = intercept[AnalysisException](df.repartition(5, col("m"))),
+      condition = "UNSUPPORTED_FEATURE.PARTITION_BY_MAP",
+      parameters = Map(
+        "expr" -> "m",
+        "dataType" -> "\"MAP<BIGINT, BIGINT>\"")
+    )
+    // map producing expression
+    checkError(
+      exception = intercept[AnalysisException](df.repartition(5, map(col("id"), col("id")))),
+      condition = "UNSUPPORTED_FEATURE.PARTITION_BY_MAP",
+      parameters = Map(
+        "expr" -> "map(id, id)",
+        "dataType" -> "\"MAP<BIGINT, BIGINT>\"")
+    )
+    // Partitioning by non-map column works
+    try {
+      df.repartition(5, col("id")).collect()
+    } catch {
+      case e: Exception =>
+        fail(s"Expected no exception to be thrown but an exception was thrown: ${e.getMessage}")
+    }
+    // SQL
+    withTempView("tv") {
+      df.createOrReplaceTempView("tv")
+      checkError(
+        exception = intercept[AnalysisException](sql("SELECT * FROM tv DISTRIBUTE BY m")),
+        condition = "UNSUPPORTED_FEATURE.PARTITION_BY_MAP",
+        parameters = Map(
+          "expr" -> "tv.m",
+          "dataType" -> "\"MAP<BIGINT, BIGINT>\""),
+        context = ExpectedContext(
+          fragment = "DISTRIBUTE BY m",
+          start = 17,
+          stop = 31)
+      )
+    }
+  }
+
   test("repartition with SortOrder") {
     // passing SortOrder expressions to .repartition() should result in an informative error
 
