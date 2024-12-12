@@ -805,7 +805,7 @@ jobs:
           python3.11 -m pip list
       - name: Build Spark
         run: |
-          ./build/sbt -Phive -Phive-thriftserver Test/package
+          ./build/sbt -Phive -Phive-thriftserver clean package
       #      - name: PySpark Classic
       #        shell: 'script -q -e -c "bash {0}"'
       #        run: |
@@ -819,18 +819,24 @@ jobs:
       - name: Spark Shell Classic
         shell: 'script -q -e -c "bash {0}"'
         run: |
-          echo 'spark.range(1024).count()' | ./bin/spark-shell > tmp.log
-          grep 'res0.*Long.*1024' tmp.log
+          echo 'spark.range(1024).count()' | ./bin/spark-shell > spark-shell-repl.log
+          grep 'res0.*Long.*1024' spark-shell-repl.log
       - name: Spark Shell Connect
         shell: 'script -q -e -c "bash {0}"'
         run: |
-          echo 'spark.range(1024).count()' | ./bin/spark-shell --remote local > tmp.log
-          grep 'res0.*Long.*1024' tmp.log
+          echo 'spark.range(1024).count()' | ./bin/spark-shell --remote local > spark-connect-repl.log
+          grep 'res0.*Long.*1024' spark-connect-repl.log
       - name: Spark SQL
         shell: 'script -q -e -c "bash {0}"'
         run: |
-          echo 'SELECT 1023 + 1;' | ./bin/spark-sql > tmp.log
-          grep '1024' tmp.log
+          echo 'SELECT 1023 + 1;' | ./bin/spark-sql > spark-sql-repl.log
+          grep '1024' spark-sql-repl.log
+      - name: Upload log files
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: repl-tests-result
+          path: "*-repl.log"
 
   # Static analysis
   lint:
