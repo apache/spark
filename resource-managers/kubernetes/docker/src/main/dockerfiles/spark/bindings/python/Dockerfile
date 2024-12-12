@@ -32,6 +32,7 @@ RUN mkdir ${SPARK_HOME}/python
 RUN apt-get update && \
     apt install -y python3 python3-pip && \
     pip3 install --upgrade pip setuptools && \
+    pip3 install 'numpy>=1.20.0' pyarrow pandas scipy unittest-xml-reporting 'lxml==4.9.4' 'grpcio==1.67.0' 'grpcio-status==1.67.0' 'protobuf==5.28.3' && \
     # Removed the .cache to save space
     rm -rf /root/.cache && rm -rf /var/cache/apt/* && rm -rf /var/lib/apt/lists/*
 
