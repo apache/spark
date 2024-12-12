@@ -494,6 +494,7 @@ class AnalyzeResult:
         is_same_semantics: Optional[bool],
         semantic_hash: Optional[int],
         storage_level: Optional[StorageLevel],
+        spark_web_url: Optional[str],
     ):
         self.schema = schema
         self.explain_string = explain_string
@@ -506,6 +507,7 @@ class AnalyzeResult:
         self.is_same_semantics = is_same_semantics
         self.semantic_hash = semantic_hash
         self.storage_level = storage_level
+        self.spark_web_url = spark_web_url
 
     @classmethod
     def fromProto(cls, pb: Any) -> "AnalyzeResult":
@@ -520,6 +522,7 @@ class AnalyzeResult:
         is_same_semantics: Optional[bool] = None
         semantic_hash: Optional[int] = None
         storage_level: Optional[StorageLevel] = None
+        spark_web_url: Optional[str] = None
 
         if pb.HasField("schema"):
             schema = types.proto_schema_to_pyspark_data_type(pb.schema.schema)
@@ -547,6 +550,8 @@ class AnalyzeResult:
             pass
         elif pb.HasField("get_storage_level"):
             storage_level = proto_to_storage_level(pb.get_storage_level.storage_level)
+        elif pb.HasField("spark_web_url"):
+            spark_web_url = pb.spark_web_url
         else:
             raise SparkConnectException("No analyze result found!")
 
@@ -562,6 +567,7 @@ class AnalyzeResult:
             is_same_semantics,
             semantic_hash,
             storage_level,
+            spark_web_url,
         )
 
 
@@ -1284,6 +1290,8 @@ class SparkConnectClient(object):
                 req.unpersist.blocking = cast(bool, kwargs.get("blocking"))
         elif method == "get_storage_level":
             req.get_storage_level.relation.CopyFrom(cast(pb2.Relation, kwargs.get("relation")))
+        elif method == "spark_web_url":
+            req.spark_web_url.SetInParent()
         else:
             raise PySparkValueError(
                 errorClass="UNSUPPORTED_OPERATION",
