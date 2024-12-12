@@ -27,7 +27,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.annotation.Evolving
 import org.apache.spark.api.java.function.VoidFunction2
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.analysis.UnresolvedIdentifier
+import org.apache.spark.sql.catalyst.analysis.{RelationWrapper, UnresolvedIdentifier}
 import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnDefinition, CreateTable, OptionList, UnresolvedTableSpec}
@@ -164,6 +164,7 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) extends api.DataStr
         Array(ClusterByTransform(colNames.map(col => FieldReference(col)))).toImmutableArraySeq
       }.getOrElse(partitioningColumns.getOrElse(Nil).asTransforms.toImmutableArraySeq)
 
+      implicit val withRelations: Set[RelationWrapper] = Set.empty
       /**
        * Note, currently the new table creation by this API doesn't fully cover the V2 table.
        * TODO (SPARK-33638): Full support of v2 table creation
@@ -225,6 +226,7 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) extends api.DataStr
         throw QueryCompilationErrors.queryNameNotSpecifiedForMemorySinkError()
       }
       val sink = new MemorySink()
+      implicit val withRelations: Set[RelationWrapper] = Set.empty
       val resultDf = Dataset.ofRows(ds.sparkSession,
         MemoryPlan(sink, DataTypeUtils.toAttributes(ds.schema)))
       val recoverFromCheckpoint = outputMode == OutputMode.Complete()
