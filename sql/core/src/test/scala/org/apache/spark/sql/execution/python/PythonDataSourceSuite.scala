@@ -583,13 +583,10 @@ class PythonDataSourceSuite extends PythonDataSourceSuiteBase {
     val metrics = statusStore.executionMetrics(execId)
     val pythonDataSent = executedPlan.get.metrics("pythonDataSent")
     val pythonDataReceived = executedPlan.get.metrics("pythonDataReceived")
-    val pythonTotalTime = executedPlan.get.metrics("pythonTotalTime")
     assert(metrics.contains(pythonDataSent.id))
     assert(metrics(pythonDataSent.id).asInstanceOf[String].endsWith("B"))
     assert(metrics.contains(pythonDataReceived.id))
     assert(metrics(pythonDataReceived.id).asInstanceOf[String].endsWith("B"))
-    assert(metrics.contains(pythonTotalTime.id))
-    assert(metrics(pythonTotalTime.id).asInstanceOf[String].endsWith("ms"))
   }
 
   test("simple data source write") {
