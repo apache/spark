@@ -204,7 +204,7 @@ object DecisionTreeModel extends Loader[DecisionTreeModel] with Logging {
       // TODO: Fix this issue for real.
       val memThreshold = 768
       if (sc.isLocal) {
-        val driverMemory = sc.getConf.getOption("spark.driver.memory")
+        val driverMemory = sc.getReadOnlyConf.getOption("spark.driver.memory")
           .orElse(Option(System.getenv("SPARK_DRIVER_MEMORY")))
           .map(Utils.memoryStringToMb)
           .getOrElse(Utils.DEFAULT_DRIVER_MEM_MB)
