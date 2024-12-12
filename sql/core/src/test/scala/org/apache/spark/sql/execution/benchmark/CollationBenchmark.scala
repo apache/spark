@@ -185,6 +185,48 @@ abstract class CollationBenchmarkBase extends BenchmarkBase {
     }
     benchmark.run(relativeTime = true)
   }
+
+  def benchmarkInitCap(
+      collationTypes: Seq[String],
+      utf8Strings: Seq[UTF8String]): Unit = {
+    type CollationId = Int
+    type InitCapEstimator = (UTF8String, CollationId) => Unit
+    def skipCollationTypeFilter: Any => Boolean = _ => true
+    def createBenchmark(
+        implName: String,
+        impl: InitCapEstimator,
+        collationTypeFilter: String => Boolean): Unit = {
+      val benchmark = new Benchmark(
+        s"collation unit benchmarks - initCap using impl $implName",
+        utf8Strings.size * 10,
+        warmupTime = 10.seconds,
+        output = output)
+      collationTypes.filter(collationTypeFilter).foreach { collationType => {
+        val collationId = CollationFactory.collationNameToId(collationType)
+        benchmark.addCase(collationType) { _ =>
+          utf8Strings.foreach { s =>
+            impl(s.repeat(1_000), collationId)
+          }
+        }
+      }
+      }
+      benchmark.run(relativeTime = true)
+    }
+
+    createBenchmark(
+      "execICU",
+      (s, collationId) => CollationSupport.InitCap.execICU(s, collationId),
+      collationType => CollationFactory.fetchCollation(collationType).collator != null)
+    createBenchmark(
+      "execBinaryICU",
+      (s, _) => CollationSupport.InitCap.execBinaryICU(s), skipCollationTypeFilter)
+    createBenchmark(
+      "execBinary",
+      (s, _) => CollationSupport.InitCap.execBinary(s), skipCollationTypeFilter)
+    createBenchmark(
+      "execLowercase",
+      (s, _) => CollationSupport.InitCap.execLowercase(s), skipCollationTypeFilter)
+  }
 }
 
 /**
@@ -219,6 +261,7 @@ object CollationBenchmark extends CollationBenchmarkBase {
     benchmarkContains(collationTypes, inputs)
     benchmarkStartsWith(collationTypes, inputs)
     benchmarkEndsWith(collationTypes, inputs)
+    benchmarkInitCap(collationTypes, inputs)
   }
 }
 
@@ -248,5 +291,6 @@ object CollationNonASCIIBenchmark extends CollationBenchmarkBase {
     benchmarkContains(collationTypes, inputs)
     benchmarkStartsWith(collationTypes, inputs)
     benchmarkEndsWith(collationTypes, inputs)
+    benchmarkInitCap(collationTypes, inputs)
   }
 }

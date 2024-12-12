@@ -58,6 +58,14 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
   }
 
   /**
+   * Create a multi-part identifier.
+   */
+  override def visitMultipartIdentifier(ctx: MultipartIdentifierContext): Seq[String] =
+    withOrigin(ctx) {
+      ctx.parts.asScala.map(_.getText).toSeq
+    }
+
+  /**
    * Resolve/create a primitive type.
    */
   override def visitPrimitiveDataType(ctx: PrimitiveDataTypeContext): DataType = withOrigin(ctx) {
@@ -76,10 +84,11 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
       case (TIMESTAMP_LTZ, Nil) => TimestampType
       case (STRING, Nil) =>
         typeCtx.children.asScala.toSeq match {
-          case Seq(_) => SqlApiConf.get.defaultStringType
+          case Seq(_) => StringType
           case Seq(_, ctx: CollateClauseContext) =>
-            val collationName = visitCollateClause(ctx)
-            val collationId = CollationFactory.collationNameToId(collationName)
+            val collationNameParts = visitCollateClause(ctx).toArray
+            val collationId = CollationFactory.collationNameToId(
+              CollationFactory.resolveFullyQualifiedName(collationNameParts))
             StringType(collationId)
         }
       case (CHARACTER | CHAR, length :: Nil) => CharType(length.getText.toInt)
@@ -219,8 +228,8 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
   /**
    * Returns a collation name.
    */
-  override def visitCollateClause(ctx: CollateClauseContext): String = withOrigin(ctx) {
-    ctx.identifier.getText
+  override def visitCollateClause(ctx: CollateClauseContext): Seq[String] = withOrigin(ctx) {
+    visitMultipartIdentifier(ctx.collationName)
   }
 
   /**

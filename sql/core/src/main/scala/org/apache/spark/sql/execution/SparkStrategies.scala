@@ -607,7 +607,12 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
             // [COUNT(DISTINCT bar), COUNT(DISTINCT foo)] is disallowed because those two distinct
             // aggregates have different column expressions.
             val distinctExpressions =
-              functionsWithDistinct.head.aggregateFunction.children.filterNot(_.foldable)
+            functionsWithDistinct.head.aggregateFunction.children
+              .filterNot(_.foldable)
+              .map {
+                case s: SortOrder => s.child
+                case e => e
+              }
             val normalizedNamedDistinctExpressions = distinctExpressions.map { e =>
               // Ideally this should be done in `NormalizeFloatingNumbers`, but we do it here
               // because `distinctExpressions` is not extracted during logical phase.
@@ -789,8 +794,8 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   object TransformWithStateInPandasStrategy extends Strategy {
     override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case t @ TransformWithStateInPandas(
-      func, _, outputAttrs, outputMode, timeMode, child,
-      hasInitialState, initialState, _, initialStateSchema) =>
+        func, _, outputAttrs, outputMode, timeMode, child,
+        hasInitialState, initialState, _, initialStateSchema) =>
         val execPlan = TransformWithStateInPandasExec(
           func, t.leftAttributes, outputAttrs, outputMode, timeMode,
           stateInfo = None,
@@ -798,6 +803,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           eventTimeWatermarkForLateEvents = None,
           eventTimeWatermarkForEviction = None,
           planLater(child),
+          isStreaming = true,
           hasInitialState,
           planLater(initialState),
           t.rightAttributes,
@@ -962,6 +968,12 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           keyEncoder, outputObjAttr, planLater(child), hasInitialState,
           initialStateGroupingAttrs, initialStateDataAttrs,
           initialStateDeserializer, planLater(initialState)) :: Nil
+      case t @ TransformWithStateInPandas(
+        func, _, outputAttrs, outputMode, timeMode, child,
+        hasInitialState, initialState, _, initialStateSchema) =>
+        TransformWithStateInPandasExec.generateSparkPlanForBatchQueries(func,
+          t.leftAttributes, outputAttrs, outputMode, timeMode, planLater(child), hasInitialState,
+          planLater(initialState), t.rightAttributes, initialStateSchema) :: Nil
 
       case _: FlatMapGroupsInPandasWithState =>
         // TODO(SPARK-40443): support applyInPandasWithState in batch query

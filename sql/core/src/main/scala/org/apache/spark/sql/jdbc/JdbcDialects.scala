@@ -42,6 +42,7 @@ import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
 import org.apache.spark.sql.connector.catalog.index.TableIndex
 import org.apache.spark.sql.connector.expressions.{Expression, Literal, NamedReference}
 import org.apache.spark.sql.connector.expressions.aggregate.AggregateFunc
+import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.connector.util.V2ExpressionSQLBuilder
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.jdbc.{DriverRegistry, JDBCOptions, JdbcOptionsInWrite, JdbcUtils}
@@ -377,6 +378,18 @@ abstract class JdbcDialect extends Serializable with Logging {
   }
 
   private[jdbc] class JDBCSQLBuilder extends V2ExpressionSQLBuilder {
+    // Some dialects do not support boolean type and this convenient util function is
+    // provided to generate SQL string without boolean values.
+    protected def inputToSQLNoBool(input: Expression): String = input match {
+      case p: Predicate if p.name() == "ALWAYS_TRUE" => "1"
+      case p: Predicate if p.name() == "ALWAYS_FALSE" => "0"
+      case p: Predicate => predicateToIntSQL(inputToSQL(p))
+      case _ => inputToSQL(input)
+    }
+
+    protected def predicateToIntSQL(input: String): String =
+      "CASE WHEN " + input + " THEN 1 ELSE 0 END"
+
     override def visitLiteral(literal: Literal[_]): String = {
       Option(literal.value()).map(v =>
         compileValue(CatalystTypeConverters.convertToScala(v, literal.dataType())).toString)

@@ -31,10 +31,11 @@ import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.expressions.{Cast, Expression, ExprId, PythonUDF}
 import org.apache.spark.sql.catalyst.plans.SQLHelper
+import org.apache.spark.sql.classic.ClassicConversions._
 import org.apache.spark.sql.execution.datasources.v2.python.UserDefinedPythonDataSource
 import org.apache.spark.sql.execution.python.{UserDefinedPythonFunction, UserDefinedPythonTableFunction}
 import org.apache.spark.sql.expressions.SparkUserDefinedFunction
-import org.apache.spark.sql.internal.ExpressionUtils.{column, expression}
+import org.apache.spark.sql.internal.ExpressionUtils.expression
 import org.apache.spark.sql.internal.UserDefinedFunctionUtils.toScalaUDF
 import org.apache.spark.sql.types.{DataType, IntegerType, NullType, StringType, StructType, VariantType}
 import org.apache.spark.util.ArrayImplicits._
@@ -1592,7 +1593,7 @@ object IntegratedUDFTestUtils extends SQLHelper {
       Cast(toScalaUDF(udf, Cast(expr, StringType) :: Nil), rt)
     }
 
-    def apply(exprs: Column*): Column = builder(exprs.map(expression))
+    def apply(exprs: Column*): Column = Column(builder(exprs.map(expression)))
 
     val prettyName: String = "Scala UDF"
   }

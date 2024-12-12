@@ -95,13 +95,8 @@ private[sql] object Dataset {
   def ofRows(sparkSession: SparkSession, logicalPlan: LogicalPlan): DataFrame =
     sparkSession.withActive {
       val qe = sparkSession.sessionState.executePlan(logicalPlan)
-      val encoder = if (qe.isLazyAnalysis) {
-        RowEncoder.encoderFor(new StructType())
-      } else {
-        qe.assertAnalyzed()
-        RowEncoder.encoderFor(qe.analyzed.schema)
-      }
-      new Dataset[Row](qe, encoder)
+      if (!qe.isLazyAnalysis) qe.assertAnalyzed()
+      new Dataset[Row](qe, () => RowEncoder.encoderFor(qe.analyzed.schema))
     }
 
   def ofRows(
@@ -111,13 +106,8 @@ private[sql] object Dataset {
     sparkSession.withActive {
       val qe = new QueryExecution(
         sparkSession, logicalPlan, shuffleCleanupMode = shuffleCleanupMode)
-      val encoder = if (qe.isLazyAnalysis) {
-        RowEncoder.encoderFor(new StructType())
-      } else {
-        qe.assertAnalyzed()
-        RowEncoder.encoderFor(qe.analyzed.schema)
-      }
-      new Dataset[Row](qe, encoder)
+      if (!qe.isLazyAnalysis) qe.assertAnalyzed()
+      new Dataset[Row](qe, () => RowEncoder.encoderFor(qe.analyzed.schema))
     }
 
   /** A variant of ofRows that allows passing in a tracker so we can track query parsing time. */
@@ -129,13 +119,8 @@ private[sql] object Dataset {
     : DataFrame = sparkSession.withActive {
     val qe = new QueryExecution(
       sparkSession, logicalPlan, tracker, shuffleCleanupMode = shuffleCleanupMode)
-    val encoder = if (qe.isLazyAnalysis) {
-      RowEncoder.encoderFor(new StructType())
-    } else {
-      qe.assertAnalyzed()
-      RowEncoder.encoderFor(qe.analyzed.schema)
-    }
-    new Dataset[Row](qe, encoder)
+    if (!qe.isLazyAnalysis) qe.assertAnalyzed()
+    new Dataset[Row](qe, () => RowEncoder.encoderFor(qe.analyzed.schema))
   }
 }
 
@@ -229,7 +214,7 @@ private[sql] object Dataset {
 @Stable
 class Dataset[T] private[sql](
     @DeveloperApi @Unstable @transient val queryExecution: QueryExecution,
-    @DeveloperApi @Unstable @transient val encoder: Encoder[T])
+    @transient encoderGenerator: () => Encoder[T])
   extends api.Dataset[T] {
   type DS[U] = Dataset[U]
 
@@ -240,7 +225,7 @@ class Dataset[T] private[sql](
     queryExecution.sparkSession
   }
 
-  import sparkSession.RichColumn
+  import sparkSession.toRichColumn
 
   // A globally unique id of this Dataset.
   private[sql] val id = Dataset.curId.getAndIncrement()
@@ -251,6 +236,10 @@ class Dataset[T] private[sql](
 
   // Note for Spark contributors: if adding or updating any action in `Dataset`, please make sure
   // you wrap it with `withNewExecutionId` if this actions doesn't call other action.
+
+  private[sql] def this(queryExecution: QueryExecution, encoder: Encoder[T]) = {
+    this(queryExecution, () => encoder)
+  }
 
   def this(sparkSession: SparkSession, logicalPlan: LogicalPlan, encoder: Encoder[T]) = {
     this(sparkSession.sessionState.executePlan(logicalPlan), encoder)
@@ -274,6 +263,8 @@ class Dataset[T] private[sql](
     }
   }
 
+  @DeveloperApi @Unstable @transient lazy val encoder: Encoder[T] = encoderGenerator()
+
   /**
    * Expose the encoder as implicit so it can be used to construct new Dataset objects that have
    * the same external type.
@@ -289,9 +280,9 @@ class Dataset[T] private[sql](
 
   // The resolved `ExpressionEncoder` which can be used to turn rows to objects of type T, after
   // collecting rows to the driver side.
-  private lazy val resolvedEnc = {
-    exprEnc.resolveAndBind(logicalPlan.output, sparkSession.sessionState.analyzer)
-  }
+  private lazy val resolvedEnc = exprEnc.resolveAndBind(
+    queryExecution.commandExecuted.output, sparkSession.sessionState.analyzer)
+
 
   private implicit def classTag: ClassTag[T] = encoder.clsTag
 
@@ -718,6 +709,38 @@ class Dataset[T] private[sql](
     new Dataset(sparkSession, joinWith, joinEncoder)
   }
 
+  private[sql] def lateralJoin(
+      right: DS[_], joinExprs: Option[Column], joinType: JoinType): DataFrame = {
+    withPlan {
+      LateralJoin(
+        logicalPlan,
+        LateralSubquery(right.logicalPlan),
+        joinType,
+        joinExprs.map(_.expr)
+      )
+    }
+  }
+
+  /** @inheritdoc */
+  def lateralJoin(right: DS[_]): DataFrame = {
+    lateralJoin(right, None, Inner)
+  }
+
+  /** @inheritdoc */
+  def lateralJoin(right: DS[_], joinExprs: Column): DataFrame = {
+    lateralJoin(right, Some(joinExprs), Inner)
+  }
+
+  /** @inheritdoc */
+  def lateralJoin(right: DS[_], joinType: String): DataFrame = {
+    lateralJoin(right, None, LateralJoinType(joinType))
+  }
+
+  /** @inheritdoc */
+  def lateralJoin(right: DS[_], joinExprs: Column, joinType: String): DataFrame = {
+    lateralJoin(right, Some(joinExprs), LateralJoinType(joinType))
+  }
+
   // TODO(SPARK-22947): Fix the DataFrame API.
   private[sql] def joinAsOf(
       other: Dataset[_],
@@ -1005,16 +1028,12 @@ class Dataset[T] private[sql](
 
   /** @inheritdoc */
   def scalar(): Column = {
-    Column(ExpressionColumnNode(
-      ScalarSubqueryExpr(SubExprUtils.removeLazyOuterReferences(logicalPlan),
-        hasExplicitOuterRefs = true)))
+    Column(ExpressionColumnNode(ScalarSubqueryExpr(logicalPlan)))
   }
 
   /** @inheritdoc */
   def exists(): Column = {
-    Column(ExpressionColumnNode(
-      Exists(SubExprUtils.removeLazyOuterReferences(logicalPlan),
-        hasExplicitOuterRefs = true)))
+    Column(ExpressionColumnNode(Exists(logicalPlan)))
   }
 
   /** @inheritdoc */

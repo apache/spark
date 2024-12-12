@@ -971,7 +971,7 @@ case class DateFormatClass(left: Expression, right: Expression, timeZoneId: Opti
   override def dataType: DataType = SQLConf.get.defaultStringType
 
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(TimestampType, StringTypeWithCollation)
+    Seq(TimestampType, StringTypeWithCollation(supportsTrimCollation = true))
 
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Option(timeZoneId))
@@ -1279,10 +1279,13 @@ abstract class ToTimestamp
   override def forTimestampNTZ: Boolean = left.dataType == TimestampNTZType
 
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(TypeCollection(
-      StringTypeWithCollation, DateType, TimestampType, TimestampNTZType
-    ),
-      StringTypeWithCollation)
+    Seq(
+      TypeCollection(
+        StringTypeWithCollation(supportsTrimCollation = true),
+        DateType,
+        TimestampType,
+        TimestampNTZType),
+      StringTypeWithCollation(supportsTrimCollation = true))
 
   override def dataType: DataType = LongType
   override def nullable: Boolean = if (failOnError) children.exists(_.nullable) else true
@@ -1454,7 +1457,7 @@ case class FromUnixTime(sec: Expression, format: Expression, timeZoneId: Option[
   override def nullable: Boolean = true
 
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(LongType, StringTypeWithCollation)
+    Seq(LongType, StringTypeWithCollation(supportsTrimCollation = true))
 
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Option(timeZoneId))
@@ -1566,7 +1569,7 @@ case class NextDay(
   def this(left: Expression, right: Expression) = this(left, right, SQLConf.get.ansiEnabled)
 
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(DateType, StringTypeWithCollation)
+    Seq(DateType, StringTypeWithCollation(supportsTrimCollation = true))
 
   override def dataType: DataType = DateType
   override def nullable: Boolean = true
@@ -1781,7 +1784,7 @@ sealed trait UTCTimestamp extends BinaryExpression with ImplicitCastInputTypes {
   val funcName: String
 
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(TimestampType, StringTypeWithCollation)
+    Seq(TimestampType, StringTypeWithCollation(supportsTrimCollation = true))
   override def dataType: DataType = TimestampType
 
   override def nullSafeEval(time: Any, timezone: Any): Any = {
@@ -2123,8 +2126,11 @@ case class ParseToDate(
     // Note: ideally this function should only take string input, but we allow more types here to
     // be backward compatible.
     TypeCollection(
-      StringTypeWithCollation, DateType, TimestampType, TimestampNTZType) +:
-      format.map(_ => StringTypeWithCollation).toSeq
+      StringTypeWithCollation(supportsTrimCollation = true),
+        DateType,
+        TimestampType,
+        TimestampNTZType) +:
+      format.map(_ => StringTypeWithCollation(supportsTrimCollation = true)).toSeq
   }
 
   override protected def withNewChildrenInternal(
@@ -2195,10 +2201,15 @@ case class ParseToTimestamp(
   override def inputTypes: Seq[AbstractDataType] = {
     // Note: ideally this function should only take string input, but we allow more types here to
     // be backward compatible.
-    val types = Seq(StringTypeWithCollation, DateType, TimestampType, TimestampNTZType)
+    val types = Seq(
+      StringTypeWithCollation(
+        supportsTrimCollation = true),
+        DateType,
+        TimestampType,
+        TimestampNTZType)
     TypeCollection(
       (if (dataType.isInstanceOf[TimestampType]) types :+ NumericType else types): _*
-    ) +: format.map(_ => StringTypeWithCollation).toSeq
+    ) +: format.map(_ => StringTypeWithCollation(supportsTrimCollation = true)).toSeq
   }
 
   override protected def withNewChildrenInternal(
@@ -2329,7 +2340,7 @@ case class TruncDate(date: Expression, format: Expression)
   override def right: Expression = format
 
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(DateType, StringTypeWithCollation)
+    Seq(DateType, StringTypeWithCollation(supportsTrimCollation = true))
   override def dataType: DataType = DateType
   override def prettyName: String = "trunc"
   override val instant = date
@@ -2399,7 +2410,7 @@ case class TruncTimestamp(
   override def right: Expression = timestamp
 
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(StringTypeWithCollation, TimestampType)
+    Seq(StringTypeWithCollation(supportsTrimCollation = true), TimestampType)
   override def dataType: TimestampType = TimestampType
   override def prettyName: String = "date_trunc"
   override val instant = timestamp
@@ -2800,7 +2811,7 @@ case class MakeTimestamp(
   // casted into decimal safely, we use DecimalType(16, 6) which is wider than DecimalType(10, 0).
   override def inputTypes: Seq[AbstractDataType] =
     Seq(IntegerType, IntegerType, IntegerType, IntegerType, IntegerType, DecimalType(16, 6)) ++
-    timezone.map(_ => StringTypeWithCollation)
+    timezone.map(_ => StringTypeWithCollation(supportsTrimCollation = true))
   override def nullable: Boolean = if (failOnError) children.exists(_.nullable) else true
 
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
@@ -3333,7 +3344,10 @@ case class ConvertTimezone(
   override def third: Expression = sourceTs
 
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(StringTypeWithCollation, StringTypeWithCollation, TimestampNTZType)
+    Seq(
+      StringTypeWithCollation(supportsTrimCollation = true),
+      StringTypeWithCollation(supportsTrimCollation = true),
+      TimestampNTZType)
   override def dataType: DataType = TimestampNTZType
 
   override def nullSafeEval(srcTz: Any, tgtTz: Any, micros: Any): Any = {
