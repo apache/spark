@@ -958,6 +958,20 @@ case class Sort(
   override protected def withNewChildInternal(newChild: LogicalPlan): Sort = copy(child = newChild)
 }
 
+/**
+ * A special Sort node whose underlying Sort would not be eliminated
+ * by [[org.apache.spark.sql.catalyst.optimizer.EliminateSorts]].
+ */
+case class NoEliminateSort(
+    order: Seq[SortOrder],
+    global: Boolean,
+    child: LogicalPlan,
+    hint: Option[SortHint] = None) extends UnaryNode {
+  override def output: Seq[Attribute] = child.output
+  override protected def withNewChildInternal(newChild: LogicalPlan): NoEliminateSort =
+    copy(child = newChild)
+}
+
 /** Factory for constructing new `Range` nodes. */
 object Range {
   def apply(start: Long, end: Long, step: Long, numSlices: Int): Range = {

@@ -2731,6 +2731,25 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       }
     }
   }
+
+  test("SPARK-50469: V1Writes should respect the output ordering") {
+    withTable("t1") {
+      withTempView("t2") {
+        val df = scala.util.Random.shuffle((1 to 1000).map(i => (i, "part_val"))).toDF("key", "val")
+        df.createOrReplaceTempView("t2")
+
+        sql("CREATE TABLE t1 (key Int, part String) USING parquet PARTITIONED BY (part)")
+        sql(
+          """
+            |INSERT OVERWRITE TABLE t1 PARTITION(part)
+            |SELECT /*+ REPARTITION(1) */ key, val from t2 SORT BY (key)
+            |""".stripMargin)
+
+        // Swap the test parameters to ensure data order is verified.
+        checkAnswer(df.select("key", "val").sort("key"), sql("SELECT key, part from t1"))
+      }
+    }
+  }
 }
 
 class FileExistingTestFileSystem extends RawLocalFileSystem {
