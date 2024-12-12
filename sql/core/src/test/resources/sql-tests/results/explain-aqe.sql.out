@@ -1152,7 +1152,7 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 == Optimized Logical Plan ==
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/explain_temp5, false, [val#x], Parquet, [path=file:[not included in comparison]/{warehouse_dir}/explain_temp5], Append, `spark_catalog`.`default`.`explain_temp5`, org.apache.spark.sql.execution.datasources.CatalogFileIndex(file:[not included in comparison]/{warehouse_dir}/explain_temp5), [key, val]
 +- WriteFiles
-   +- Sort [val#x ASC NULLS FIRST], false
+   +- NoEliminateSort [val#x ASC NULLS FIRST], false
       +- Project [key#x, empty2null(val#x) AS val#x]
          +- Relation spark_catalog.default.explain_temp4[key#x,val#x] parquet
 
