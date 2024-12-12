@@ -417,6 +417,8 @@ sparkR.session <- function(
     overrideEnvs(sparkConfigMap, paramMap)
   }
 
+  sparkConfigMap[["spark.api.mode"]] <- "classic"
+
   deployMode <- ""
   if (exists("spark.submit.deployMode", envir = sparkConfigMap)) {
     deployMode <- sparkConfigMap[["spark.submit.deployMode"]]

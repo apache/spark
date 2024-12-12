@@ -491,7 +491,12 @@ def _test() -> None:
     import pyspark.sql.udf
 
     globs = pyspark.sql.udtf.__dict__.copy()
-    spark = SparkSession.builder.master("local[4]").appName("sql.udtf tests").getOrCreate()
+    spark = (
+        SparkSession.builder.master("local[4]")
+        .config("spark.api.mode", "classic")
+        .appName("sql.udtf tests")
+        .getOrCreate()
+    )
     globs["spark"] = spark
     (failure_count, test_count) = doctest.testmod(
         pyspark.sql.udtf, globs=globs, optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE

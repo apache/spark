@@ -369,7 +369,12 @@ def _test() -> None:
     import pyspark.core.broadcast
 
     globs = pyspark.core.broadcast.__dict__.copy()
-    spark = SparkSession.builder.master("local[4]").appName("broadcast tests").getOrCreate()
+    spark = (
+        SparkSession.builder.config("spark.api.mode", "classic")
+        .master("local[4]")
+        .appName("broadcast tests")
+        .getOrCreate()
+    )
     globs["spark"] = spark
 
     (failure_count, test_count) = doctest.testmod(pyspark.core.broadcast, globs=globs)

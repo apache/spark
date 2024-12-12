@@ -43,13 +43,13 @@ rm -fr docs
 mkdir docs
 
 echo "Generating SQL API Markdown files."
-"$SPARK_HOME/bin/spark-submit" gen-sql-api-docs.py
+"$SPARK_HOME/bin/spark-submit" --conf spark.api.mode=classic gen-sql-api-docs.py
 
 echo "Generating SQL configuration table HTML file."
-"$SPARK_HOME/bin/spark-submit" gen-sql-config-docs.py
+"$SPARK_HOME/bin/spark-submit" --conf spark.api.mode=classic gen-sql-config-docs.py
 
 echo "Generating HTML files for SQL function table and examples."
-"$SPARK_HOME/bin/spark-submit" gen-sql-functions-docs.py
+"$SPARK_HOME/bin/spark-submit" --conf spark.api.mode=classic gen-sql-functions-docs.py
 
 echo "Generating HTML files for SQL API documentation."
 mkdocs build --clean

@@ -52,6 +52,7 @@ class QueryExecutionListenerTests(
             # Note that 'spark.sql.queryExecutionListeners' is a static immutable configuration.
             cls.spark = (
                 SparkSession.builder.master("local[4]")
+                .config("spark.api.mode", "classic")
                 .appName(cls.__name__)
                 .config(
                     "spark.sql.queryExecutionListeners",

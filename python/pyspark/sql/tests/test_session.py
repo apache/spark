@@ -91,7 +91,9 @@ class SparkSessionTests3(unittest.TestCase, PySparkErrorTestUtils):
             messageParameters={},
         )
 
-        spark = SparkSession.builder.master("local").getOrCreate()
+        spark = (
+            SparkSession.builder.master("local").config("spark.api.mode", "classic").getOrCreate()
+        )
         try:
             activeSession = SparkSession.getActiveSession()
             df = activeSession.createDataFrame([(1, "Alice")], ["age", "name"])
@@ -104,7 +106,9 @@ class SparkSessionTests3(unittest.TestCase, PySparkErrorTestUtils):
     def test_get_active_session_when_no_active_session(self):
         active = SparkSession.getActiveSession()
         self.assertEqual(active, None)
-        spark = SparkSession.builder.master("local").getOrCreate()
+        spark = (
+            SparkSession.builder.master("local").config("spark.api.mode", "classic").getOrCreate()
+        )
         active = SparkSession.getActiveSession()
         self.assertEqual(active, spark)
         spark.stop()
@@ -112,7 +116,12 @@ class SparkSessionTests3(unittest.TestCase, PySparkErrorTestUtils):
         self.assertEqual(active, None)
 
     def test_spark_session(self):
-        spark = SparkSession.builder.master("local").config("some-config", "v2").getOrCreate()
+        spark = (
+            SparkSession.builder.master("local")
+            .config("spark.api.mode", "classic")
+            .config("some-config", "v2")
+            .getOrCreate()
+        )
         try:
             self.assertEqual(spark.conf.get("some-config"), "v2")
             self.assertEqual(spark.sparkContext._conf.get("some-config"), "v2")
@@ -145,14 +154,18 @@ class SparkSessionTests3(unittest.TestCase, PySparkErrorTestUtils):
             spark.stop()
 
     def test_global_default_session(self):
-        spark = SparkSession.builder.master("local").getOrCreate()
+        spark = (
+            SparkSession.builder.master("local").config("spark.api.mode", "classic").getOrCreate()
+        )
         try:
             self.assertEqual(SparkSession.builder.getOrCreate(), spark)
         finally:
             spark.stop()
 
     def test_default_and_active_session(self):
-        spark = SparkSession.builder.master("local").getOrCreate()
+        spark = (
+            SparkSession.builder.master("local").config("spark.api.mode", "classic").getOrCreate()
+        )
         activeSession = spark._jvm.SparkSession.getActiveSession()
         defaultSession = spark._jvm.SparkSession.getDefaultSession()
         try:
@@ -161,7 +174,12 @@ class SparkSessionTests3(unittest.TestCase, PySparkErrorTestUtils):
             spark.stop()
 
     def test_config_option_propagated_to_existing_session(self):
-        session1 = SparkSession.builder.master("local").config("spark-config1", "a").getOrCreate()
+        session1 = (
+            SparkSession.builder.master("local")
+            .config("spark.api.mode", "classic")
+            .config("spark-config1", "a")
+            .getOrCreate()
+        )
         self.assertEqual(session1.conf.get("spark-config1"), "a")
         session2 = SparkSession.builder.config("spark-config1", "b").getOrCreate()
         try:
@@ -171,7 +189,9 @@ class SparkSessionTests3(unittest.TestCase, PySparkErrorTestUtils):
             session1.stop()
 
     def test_new_session(self):
-        session = SparkSession.builder.master("local").getOrCreate()
+        session = (
+            SparkSession.builder.master("local").config("spark.api.mode", "classic").getOrCreate()
+        )
         newSession = session.newSession()
         try:
             self.assertNotEqual(session, newSession)
@@ -180,16 +200,22 @@ class SparkSessionTests3(unittest.TestCase, PySparkErrorTestUtils):
             newSession.stop()
 
     def test_create_new_session_if_old_session_stopped(self):
-        session = SparkSession.builder.master("local").getOrCreate()
+        session = (
+            SparkSession.builder.master("local").config("spark.api.mode", "classic").getOrCreate()
+        )
         session.stop()
-        newSession = SparkSession.builder.master("local").getOrCreate()
+        newSession = (
+            SparkSession.builder.master("local").config("spark.api.mode", "classic").getOrCreate()
+        )
         try:
             self.assertNotEqual(session, newSession)
         finally:
             newSession.stop()
 
     def test_create_new_session_with_statement(self):
-        with SparkSession.builder.master("local").getOrCreate() as session:
+        with SparkSession.builder.master("local").config(
+            "spark.api.mode", "classic"
+        ).getOrCreate() as session:
             session.range(5).collect()
 
     def test_active_session_with_None_and_not_None_context(self):
@@ -222,7 +248,9 @@ class SparkSessionTests3(unittest.TestCase, PySparkErrorTestUtils):
                 SparkSession.builder.appName("test").getOrCreate()
 
     def test_unsupported_api(self):
-        with SparkSession.builder.master("local").getOrCreate() as session:
+        with SparkSession.builder.master("local").config(
+            "spark.api.mode", "classic"
+        ).getOrCreate() as session:
             unsupported = [
                 (lambda: session.client, "client"),
                 (session.addArtifacts, "addArtifact(s)"),
@@ -280,7 +308,12 @@ class SparkSessionTests5(unittest.TestCase):
         # the SparkSession is restarted.
         sql_context = SQLContext.getOrCreate(self.spark.sparkContext)
         self.spark.stop()
-        spark = SparkSession.builder.master("local[4]").appName(self.sc.appName).getOrCreate()
+        spark = (
+            SparkSession.builder.master("local[4]")
+            .config("spark.api.mode", "classic")
+            .appName(self.sc.appName)
+            .getOrCreate()
+        )
         new_sql_context = SQLContext.getOrCreate(spark.sparkContext)
 
         self.assertIsNot(new_sql_context, sql_context)
@@ -295,7 +328,12 @@ class SparkSessionTests5(unittest.TestCase):
     def test_sqlcontext_with_stopped_sparkcontext(self):
         # SPARK-30856: test initialization via SparkSession when only the SparkContext is stopped
         self.sc.stop()
-        spark = SparkSession.builder.master("local[4]").appName(self.sc.appName).getOrCreate()
+        spark = (
+            SparkSession.builder.master("local[4]")
+            .config("spark.api.mode", "classic")
+            .appName(self.sc.appName)
+            .getOrCreate()
+        )
         self.sc = spark.sparkContext
         self.assertIs(SQLContext.getOrCreate(self.sc).sparkSession, spark)
 
@@ -575,6 +613,7 @@ class SparkExtensionsTest(unittest.TestCase):
         # Note that 'spark.sql.extensions' is a static immutable configuration.
         cls.spark = (
             SparkSession.builder.master("local[4]")
+            .config("spark.api.mode", "classic")
             .appName(cls.__name__)
             .config("spark.sql.extensions", "org.apache.spark.sql.MyExtensions")
             .getOrCreate()

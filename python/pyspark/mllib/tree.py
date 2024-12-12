@@ -874,7 +874,12 @@ def _test() -> None:
     globs = globals().copy()
     from pyspark.sql import SparkSession
 
-    spark = SparkSession.builder.master("local[4]").appName("mllib.tree tests").getOrCreate()
+    spark = (
+        SparkSession.builder.master("local[4]")
+        .config("spark.api.mode", "classic")
+        .appName("mllib.tree tests")
+        .getOrCreate()
+    )
     globs["sc"] = spark.sparkContext
     (failure_count, test_count) = doctest.testmod(
         globs=globs, optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE

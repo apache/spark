@@ -1249,7 +1249,10 @@ def _test() -> None:
 
     globs = pyspark.sql.catalog.__dict__.copy()
     globs["spark"] = (
-        SparkSession.builder.master("local[4]").appName("sql.catalog tests").getOrCreate()
+        SparkSession.builder.master("local[4]")
+        .config("spark.api.mode", "classic")
+        .appName("sql.catalog tests")
+        .getOrCreate()
     )
     (failure_count, test_count) = doctest.testmod(
         pyspark.sql.catalog,

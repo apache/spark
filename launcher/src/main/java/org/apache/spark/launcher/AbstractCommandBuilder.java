@@ -63,7 +63,7 @@ abstract class AbstractCommandBuilder {
   /**
    * Indicate if the current app submission has to use Spark Connect.
    */
-  protected boolean isRemote = System.getenv().containsKey("SPARK_REMOTE");
+  protected boolean isRemote = true;
 
   AbstractCommandBuilder() {
     this.appArgs = new ArrayList<>();
