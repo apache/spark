@@ -18,6 +18,7 @@
 package org.apache.spark.sql
 
 import java.nio.charset.StandardCharsets
+import java.sql.{Date, Timestamp}
 import java.text.SimpleDateFormat
 import java.time.{Duration, LocalDateTime, Period}
 import java.util.Locale
@@ -485,7 +486,7 @@ class CsvFunctionsSuite extends QueryTest with SharedSparkSession {
   test("SPARK-32968: bad csv input with csv pruning optimization") {
     Seq("true", "false").foreach { enabled =>
       withSQLConf(SQLConf.CSV_EXPRESSION_OPTIMIZATION.key -> enabled) {
-        val df = sparkContext.parallelize(Seq("1,\u0001\u0000\u0001234")).toDF("csv")
+        val df = sparkContext.parallelize(Seq("1,\u0001\u0000\u0001234X")).toDF("csv")
           .selectExpr("from_csv(csv, 'a int, b int', map('mode', 'failfast')) as parsed")
 
         checkError(
@@ -810,5 +811,79 @@ class CsvFunctionsSuite extends QueryTest with SharedSparkSession {
     checkAnswer(actual2, Row("2,Alice," +
       "\"[{math -> 100, english -> 200, science -> -}, " +
       "{math -> 300, english -> 400, science -> 500}]\""))
+  }
+
+  test("SPARK-50110: When there are spaces before and after the data, parse should succeed") {
+    // float
+    val df1 = sql("select from_csv('1, 1', 'a INT, b FLOAT')")
+    val expected1 = Row(Row(1, 1.0))
+    checkAnswer(df1, expected1)
+
+    // double
+    val df2 = sql("select from_csv('1, 1', 'a INT, b DOUBLE')")
+    val expected2 = Row(Row(1, 1.0))
+    checkAnswer(df2, expected2)
+
+    // byte
+    val df3 = sql("select from_csv('1, 1', 'a INT, b TINYINT')")
+    val expected3 = Row(Row(1, 1))
+    checkAnswer(df3, expected3)
+
+    // short
+    val df4 = sql("select from_csv('1, 1', 'a INT, b SMALLINT')")
+    val expected4 = Row(Row(1, 1))
+    checkAnswer(df4, expected4)
+
+    // int
+    val df5 = sql("select from_csv('1, 1', 'a INT, b INT')")
+    val expected5 = Row(Row(1, 1))
+    checkAnswer(df5, expected5)
+
+    // long
+    val df6 = sql("select from_csv('1, 1', 'a INT, b LONG')")
+    val expected6 = Row(Row(1, 1))
+    checkAnswer(df6, expected6)
+
+    // boolean
+    val df7 = sql("select from_csv('1, true', 'a INT, b BOOLEAN')")
+    val expected7 = Row(Row(1, true))
+    checkAnswer(df7, expected7)
+
+    // decimal
+    val df8 = sql("select from_csv('1, 1', 'a INT, b DECIMAL(9, 2)')")
+    val expected8 = Row(Row(1, 1))
+    checkAnswer(df8, expected8)
+
+    // date
+    val df9 = sql("select from_csv('1, 1970-01-01', 'a INT, b DATE')")
+    val expected9 = Row(Row(1, Date.valueOf("1970-01-01")))
+    checkAnswer(df9, expected9)
+
+    // timestamp
+    val df10 = sql("select from_csv('1, 1970-01-01 23:00:00', 'a INT, b TIMESTAMP')")
+    val expected10 = Row(Row(1, Timestamp.valueOf("1970-01-01 23:00:00")))
+    checkAnswer(df10, expected10)
+
+    // timestamp_ntz
+    val df11 = sql("select from_csv('1, 1970-01-01T23:00:00.000', 'a INT, b TIMESTAMP_NTZ')")
+    val expected11 = Row(Row(1, LocalDateTime.parse("1970-01-01T23:00:00.000")))
+    checkAnswer(df11, expected11)
+
+    // interval
+    val df12 = sql("select from_csv('1, INTERVAL 1 MONTH 1 DAY', 'a INT, b INTERVAL')")
+    val expected12 = Row(Row(1, new CalendarInterval(1, 1, 0)))
+    checkAnswer(df12, expected12)
+
+    // interval year to month
+    val df13 = sql("select from_csv('1, INTERVAL \\'1-0\\' YEAR TO MONTH', " +
+      "'a INT, b INTERVAL YEAR TO MONTH')")
+    val expected13 = Row(Row(1, Period.of(1, 0, 0)))
+    checkAnswer(df13, expected13)
+
+    // interval day to hour
+    val df14 = sql("select from_csv('1, INTERVAL \\'1 02\\' DAY TO HOUR', " +
+      "'a INT, b INTERVAL DAY TO HOUR')")
+    val expected14 = Row(Row(1, Duration.ofDays(1).plusHours(2)))
+    checkAnswer(df14, expected14)
   }
 }
