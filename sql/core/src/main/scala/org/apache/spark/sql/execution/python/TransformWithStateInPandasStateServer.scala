@@ -35,7 +35,7 @@ import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.execution.streaming.{ImplicitGroupingKeyTracker, StatefulProcessorHandleImpl, StatefulProcessorHandleState, StateVariableType}
-import org.apache.spark.sql.execution.streaming.state.StateMessage.{HandleState, ImplicitGroupingKeyRequest, ListStateCall, MapStateCall, StatefulProcessorCall, StateRequest, StateResponse, StateResponseWithLongTypeVal, StateResponseWithStringTypeVal, StateVariableRequest, TimerRequest, TimerStateCallCommand, TimerValueRequest, ValueStateCall}
+import org.apache.spark.sql.execution.streaming.state.StateMessage.{HandleState, ImplicitGroupingKeyRequest, ListStateCall, MapStateCall, StatefulProcessorCall, StateRequest, StateResponse, StateResponseWithLongTypeVal, StateResponseWithStringTypeVal, StateVariableRequest, TimerRequest, TimerStateCallCommand, TimerValueRequest, UtilsRequest, ValueStateCall}
 import org.apache.spark.sql.streaming.{ListState, MapState, TTLConfig, ValueState}
 import org.apache.spark.sql.types.{BinaryType, LongType, StructField, StructType}
 import org.apache.spark.sql.util.ArrowUtils
@@ -187,6 +187,19 @@ class TransformWithStateInPandasStateServer(
         handleStateVariableRequest(message.getStateVariableRequest)
       case StateRequest.MethodCase.TIMERREQUEST =>
         handleTimerRequest(message.getTimerRequest)
+      case StateRequest.MethodCase.UTILSREQUEST =>
+        handleUtilsRequest(message.getUtilsRequest)
+      case _ =>
+        throw new IllegalArgumentException("Invalid method call")
+    }
+  }
+
+  private[sql] def handleUtilsRequest(message: UtilsRequest): Unit = {
+    message.getMethodCase match {
+      case UtilsRequest.MethodCase.PARSESTRINGSCHEMA =>
+        val stringSchema = message.getParseStringSchema.getSchema
+        val schema = CatalystSqlParser.parseTableSchema(stringSchema)
+        sendResponseWithStringVal(0, null, schema.json)
       case _ =>
         throw new IllegalArgumentException("Invalid method call")
     }
@@ -288,22 +301,14 @@ class TransformWithStateInPandasStateServer(
         sendResponse(0)
       case StatefulProcessorCall.MethodCase.GETVALUESTATE =>
         val stateName = message.getGetValueState.getStateName
-        val schema = if (!message.getGetValueState.getJsonSchema.isEmpty) {
-          StructType.fromString(message.getGetValueState.getJsonSchema)
-        } else {
-          CatalystSqlParser.parseTableSchema(message.getGetValueState.getStringSchema)
-        }
+        val schema = message.getGetValueState.getSchema
         val ttlDurationMs = if (message.getGetValueState.hasTtl) {
           Some(message.getGetValueState.getTtl.getDurationMs)
         } else None
         initializeStateVariable(stateName, schema, StateVariableType.ValueState, ttlDurationMs)
       case StatefulProcessorCall.MethodCase.GETLISTSTATE =>
         val stateName = message.getGetListState.getStateName
-        val schema = if (!message.getGetListState.getJsonSchema.isEmpty) {
-          StructType.fromString(message.getGetListState.getJsonSchema)
-        } else {
-          CatalystSqlParser.parseTableSchema(message.getGetListState.getStringSchema)
-        }
+        val schema = message.getGetListState.getSchema
         val ttlDurationMs = if (message.getGetListState.hasTtl) {
           Some(message.getGetListState.getTtl.getDurationMs)
         } else {
@@ -312,16 +317,8 @@ class TransformWithStateInPandasStateServer(
         initializeStateVariable(stateName, schema, StateVariableType.ListState, ttlDurationMs)
       case StatefulProcessorCall.MethodCase.GETMAPSTATE =>
         val stateName = message.getGetMapState.getStateName
-        val userKeySchema = if (!message.getGetMapState.getJsonSchema.isEmpty) {
-          StructType.fromString(message.getGetMapState.getJsonSchema)
-        } else {
-          CatalystSqlParser.parseTableSchema(message.getGetMapState.getStringSchema)
-        }
-        val valueSchema = if (!message.getGetMapState.getMapStateValueJsonSchema.isEmpty) {
-          StructType.fromString(message.getGetMapState.getMapStateValueJsonSchema)
-        } else {
-          CatalystSqlParser.parseTableSchema(message.getGetMapState.getMapStateValueStringSchema)
-        }
+        val userKeySchema = message.getGetMapState.getSchema
+        val valueSchema = message.getGetMapState.getMapStateValueSchema
         val ttlDurationMs = if (message.getGetMapState.hasTtl) {
           Some(message.getGetMapState.getTtl.getDurationMs)
         } else None
@@ -612,10 +609,11 @@ class TransformWithStateInPandasStateServer(
 
   private def initializeStateVariable(
       stateName: String,
-      schema: StructType,
+      schemaString: String,
       stateType: StateVariableType.StateVariableType,
       ttlDurationMs: Option[Int],
-      mapStateValueSchema: StructType = null): Unit = {
+      mapStateValueSchemaString: String = null): Unit = {
+    val schema = StructType.fromString(schemaString)
     val expressionEncoder = ExpressionEncoder(schema).resolveAndBind()
     stateType match {
       case StateVariableType.ValueState => if (!valueStates.contains(stateName)) {
@@ -628,7 +626,7 @@ class TransformWithStateInPandasStateServer(
           }
           valueStates.put(stateName,
             ValueStateInfo(state, schema, expressionEncoder.createDeserializer()))
-          sendResponseWithStringVal(0, null, schema.json)
+          sendResponse(0)
         } else {
           sendResponse(1, s"Value state $stateName already exists")
         }
@@ -644,25 +642,26 @@ class TransformWithStateInPandasStateServer(
         listStates.put(stateName,
           ListStateInfo(state, schema, expressionEncoder.createDeserializer(),
             expressionEncoder.createSerializer()))
-        sendResponseWithStringVal(0, null, schema.json)
+        sendResponse(0)
       } else {
         sendResponse(1, s"List state $stateName already exists")
       }
 
       case StateVariableType.MapState => if (!mapStates.contains(stateName)) {
-        val valueExpressionEncoder = ExpressionEncoder(mapStateValueSchema).resolveAndBind()
+        val valueSchema = StructType.fromString(mapStateValueSchemaString)
+        val valueExpressionEncoder = ExpressionEncoder(valueSchema).resolveAndBind()
         val state = if (ttlDurationMs.isEmpty) {
           statefulProcessorHandle.getMapState[Row, Row](stateName,
-            Encoders.row(schema), Encoders.row(mapStateValueSchema), TTLConfig.NONE)
+            Encoders.row(schema), Encoders.row(valueSchema), TTLConfig.NONE)
         } else {
           statefulProcessorHandle.getMapState[Row, Row](stateName, Encoders.row(schema),
-            Encoders.row(mapStateValueSchema), TTLConfig(Duration.ofMillis(ttlDurationMs.get)))
+            Encoders.row(valueSchema), TTLConfig(Duration.ofMillis(ttlDurationMs.get)))
         }
         mapStates.put(stateName,
-          MapStateInfo(state, schema, mapStateValueSchema, expressionEncoder.createDeserializer(),
+          MapStateInfo(state, schema, valueSchema, expressionEncoder.createDeserializer(),
             expressionEncoder.createSerializer(), valueExpressionEncoder.createDeserializer(),
             valueExpressionEncoder.createSerializer()))
-        sendResponseWithStringVal(0, null, schema.json, mapStateValueSchema.json)
+        sendResponse(0)
       } else {
         sendResponse(1, s"Map state $stateName already exists")
       }
@@ -708,16 +707,12 @@ class TransformWithStateInPandasStateServer(
     def sendResponseWithStringVal(
         status: Int,
         errorMessage: String = null,
-        stringVal: String,
-        additionalStringVal: String = null): Unit = {
+        stringVal: String): Unit = {
       val responseMessageBuilder = StateResponseWithStringTypeVal.newBuilder().setStatusCode(status)
       if (status != 0 && errorMessage != null) {
         responseMessageBuilder.setErrorMessage(errorMessage)
       }
       responseMessageBuilder.setValue(stringVal)
-      if (additionalStringVal != null) {
-        responseMessageBuilder.setAdditionalValue(additionalStringVal)
-      }
       val responseMessage = responseMessageBuilder.build()
       val responseMessageBytes = responseMessage.toByteArray
       val byteLength = responseMessageBytes.length

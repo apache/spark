@@ -79,6 +79,7 @@ class StateRequest(google.protobuf.message.Message):
     STATEVARIABLEREQUEST_FIELD_NUMBER: builtins.int
     IMPLICITGROUPINGKEYREQUEST_FIELD_NUMBER: builtins.int
     TIMERREQUEST_FIELD_NUMBER: builtins.int
+    UTILSREQUEST_FIELD_NUMBER: builtins.int
     version: builtins.int
     @property
     def statefulProcessorCall(self) -> global___StatefulProcessorCall: ...
@@ -88,6 +89,8 @@ class StateRequest(google.protobuf.message.Message):
     def implicitGroupingKeyRequest(self) -> global___ImplicitGroupingKeyRequest: ...
     @property
     def timerRequest(self) -> global___TimerRequest: ...
+    @property
+    def utilsRequest(self) -> global___UtilsRequest: ...
     def __init__(
         self,
         *,
@@ -96,6 +99,7 @@ class StateRequest(google.protobuf.message.Message):
         stateVariableRequest: global___StateVariableRequest | None = ...,
         implicitGroupingKeyRequest: global___ImplicitGroupingKeyRequest | None = ...,
         timerRequest: global___TimerRequest | None = ...,
+        utilsRequest: global___UtilsRequest | None = ...,
     ) -> None: ...
     def HasField(
         self,
@@ -110,6 +114,8 @@ class StateRequest(google.protobuf.message.Message):
             b"statefulProcessorCall",
             "timerRequest",
             b"timerRequest",
+            "utilsRequest",
+            b"utilsRequest",
         ],
     ) -> builtins.bool: ...
     def ClearField(
@@ -125,6 +131,8 @@ class StateRequest(google.protobuf.message.Message):
             b"statefulProcessorCall",
             "timerRequest",
             b"timerRequest",
+            "utilsRequest",
+            b"utilsRequest",
             "version",
             b"version",
         ],
@@ -137,6 +145,7 @@ class StateRequest(google.protobuf.message.Message):
             "stateVariableRequest",
             "implicitGroupingKeyRequest",
             "timerRequest",
+            "utilsRequest",
         ]
         | None
     ): ...
@@ -199,30 +208,20 @@ class StateResponseWithStringTypeVal(google.protobuf.message.Message):
     STATUSCODE_FIELD_NUMBER: builtins.int
     ERRORMESSAGE_FIELD_NUMBER: builtins.int
     VALUE_FIELD_NUMBER: builtins.int
-    ADDITIONALVALUE_FIELD_NUMBER: builtins.int
     statusCode: builtins.int
     errorMessage: builtins.str
     value: builtins.str
-    additionalValue: builtins.str
     def __init__(
         self,
         *,
         statusCode: builtins.int = ...,
         errorMessage: builtins.str = ...,
         value: builtins.str = ...,
-        additionalValue: builtins.str = ...,
     ) -> None: ...
     def ClearField(
         self,
         field_name: typing_extensions.Literal[
-            "additionalValue",
-            b"additionalValue",
-            "errorMessage",
-            b"errorMessage",
-            "statusCode",
-            b"statusCode",
-            "value",
-            b"value",
+            "errorMessage", b"errorMessage", "statusCode", b"statusCode", "value", b"value"
         ],
     ) -> None: ...
 
@@ -527,46 +526,79 @@ class GetWatermark(google.protobuf.message.Message):
 
 global___GetWatermark = GetWatermark
 
+class UtilsRequest(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    PARSESTRINGSCHEMA_FIELD_NUMBER: builtins.int
+    @property
+    def parseStringSchema(self) -> global___ParseStringSchema: ...
+    def __init__(
+        self,
+        *,
+        parseStringSchema: global___ParseStringSchema | None = ...,
+    ) -> None: ...
+    def HasField(
+        self,
+        field_name: typing_extensions.Literal[
+            "method", b"method", "parseStringSchema", b"parseStringSchema"
+        ],
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "method", b"method", "parseStringSchema", b"parseStringSchema"
+        ],
+    ) -> None: ...
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["method", b"method"]
+    ) -> typing_extensions.Literal["parseStringSchema"] | None: ...
+
+global___UtilsRequest = UtilsRequest
+
+class ParseStringSchema(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    SCHEMA_FIELD_NUMBER: builtins.int
+    schema: builtins.str
+    def __init__(
+        self,
+        *,
+        schema: builtins.str = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing_extensions.Literal["schema", b"schema"]) -> None: ...
+
+global___ParseStringSchema = ParseStringSchema
+
 class StateCallCommand(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
     STATENAME_FIELD_NUMBER: builtins.int
-    JSONSCHEMA_FIELD_NUMBER: builtins.int
-    STRINGSCHEMA_FIELD_NUMBER: builtins.int
-    MAPSTATEVALUEJSONSCHEMA_FIELD_NUMBER: builtins.int
-    MAPSTATEVALUESTRINGSCHEMA_FIELD_NUMBER: builtins.int
+    SCHEMA_FIELD_NUMBER: builtins.int
+    MAPSTATEVALUESCHEMA_FIELD_NUMBER: builtins.int
     TTL_FIELD_NUMBER: builtins.int
     stateName: builtins.str
-    jsonSchema: builtins.str
-    stringSchema: builtins.str
-    mapStateValueJsonSchema: builtins.str
-    mapStateValueStringSchema: builtins.str
+    schema: builtins.str
+    mapStateValueSchema: builtins.str
     @property
     def ttl(self) -> global___TTLConfig: ...
     def __init__(
         self,
         *,
         stateName: builtins.str = ...,
-        jsonSchema: builtins.str = ...,
-        stringSchema: builtins.str = ...,
-        mapStateValueJsonSchema: builtins.str = ...,
-        mapStateValueStringSchema: builtins.str = ...,
+        schema: builtins.str = ...,
+        mapStateValueSchema: builtins.str = ...,
         ttl: global___TTLConfig | None = ...,
     ) -> None: ...
     def HasField(self, field_name: typing_extensions.Literal["ttl", b"ttl"]) -> builtins.bool: ...
     def ClearField(
         self,
         field_name: typing_extensions.Literal[
-            "jsonSchema",
-            b"jsonSchema",
-            "mapStateValueJsonSchema",
-            b"mapStateValueJsonSchema",
-            "mapStateValueStringSchema",
-            b"mapStateValueStringSchema",
+            "mapStateValueSchema",
+            b"mapStateValueSchema",
+            "schema",
+            b"schema",
             "stateName",
             b"stateName",
-            "stringSchema",
-            b"stringSchema",
             "ttl",
             b"ttl",
         ],

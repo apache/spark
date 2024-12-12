@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
 import org.apache.spark.sql.execution.streaming.{StatefulProcessorHandleImpl, StatefulProcessorHandleState}
 import org.apache.spark.sql.execution.streaming.state.StateMessage
-import org.apache.spark.sql.execution.streaming.state.StateMessage.{AppendList, AppendValue, Clear, ContainsKey, DeleteTimer, Exists, ExpiryTimerRequest, Get, GetProcessingTime, GetValue, GetWatermark, HandleState, Keys, ListStateCall, ListStateGet, ListStatePut, ListTimers, MapStateCall, RegisterTimer, RemoveKey, SetHandleState, StateCallCommand, StatefulProcessorCall, TimerRequest, TimerStateCallCommand, TimerValueRequest, UpdateValue, Values, ValueStateCall, ValueStateUpdate}
+import org.apache.spark.sql.execution.streaming.state.StateMessage.{AppendList, AppendValue, Clear, ContainsKey, DeleteTimer, Exists, ExpiryTimerRequest, Get, GetProcessingTime, GetValue, GetWatermark, HandleState, Keys, ListStateCall, ListStateGet, ListStatePut, ListTimers, MapStateCall, ParseStringSchema, RegisterTimer, RemoveKey, SetHandleState, StateCallCommand, StatefulProcessorCall, TimerRequest, TimerStateCallCommand, TimerValueRequest, UpdateValue, UtilsRequest, Values, ValueStateCall, ValueStateUpdate}
 import org.apache.spark.sql.streaming.{ListState, MapState, TTLConfig, ValueState}
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 
@@ -117,7 +117,7 @@ class TransformWithStateInPandasStateServerSuite extends SparkFunSuite with Befo
     test(s"get value state, useTTL=$useTTL") {
       val stateCallCommandBuilder = StateCallCommand.newBuilder()
         .setStateName("newName")
-        .setJsonSchema("StructType(List(StructField(value,IntegerType,true)))")
+        .setSchema("StructType(List(StructField(value,IntegerType,true)))")
       if (useTTL) {
         stateCallCommandBuilder.setTtl(StateMessage.TTLConfig.newBuilder().setDurationMs(1000))
       }
@@ -133,7 +133,7 @@ class TransformWithStateInPandasStateServerSuite extends SparkFunSuite with Befo
         verify(statefulProcessorHandle).getValueState[Row](any[String], any[Encoder[Row]],
           any[TTLConfig])
       }
-      verify(outputStream).writeInt(argThat((x: Int) => x > 0))
+      verify(outputStream).writeInt(0)
     }
   }
 
@@ -141,7 +141,7 @@ class TransformWithStateInPandasStateServerSuite extends SparkFunSuite with Befo
     test(s"get list state, useTTL=$useTTL") {
       val stateCallCommandBuilder = StateCallCommand.newBuilder()
         .setStateName("newName")
-        .setStringSchema("value int")
+        .setSchema("StructType(List(StructField(value,IntegerType,true)))")
       if (useTTL) {
         stateCallCommandBuilder.setTtl(StateMessage.TTLConfig.newBuilder().setDurationMs(1000))
       }
@@ -157,7 +157,7 @@ class TransformWithStateInPandasStateServerSuite extends SparkFunSuite with Befo
         verify(statefulProcessorHandle).getListState[Row](any[String], any[Encoder[Row]],
           any[TTLConfig])
       }
-      verify(outputStream).writeInt(argThat((x: Int) => x > 0))
+      verify(outputStream).writeInt(0)
     }
   }
 
@@ -165,8 +165,8 @@ class TransformWithStateInPandasStateServerSuite extends SparkFunSuite with Befo
     test(s"get map state, useTTL=$useTTL") {
       val stateCallCommandBuilder = StateCallCommand.newBuilder()
         .setStateName("newName")
-        .setJsonSchema("StructType(List(StructField(value,IntegerType,true)))")
-        .setMapStateValueStringSchema("value int")
+        .setSchema("StructType(List(StructField(value,IntegerType,true)))")
+        .setMapStateValueSchema("StructType(List(StructField(value,IntegerType,true)))")
       if (useTTL) {
         stateCallCommandBuilder.setTtl(StateMessage.TTLConfig.newBuilder().setDurationMs(1000))
       }
@@ -182,7 +182,7 @@ class TransformWithStateInPandasStateServerSuite extends SparkFunSuite with Befo
         verify(statefulProcessorHandle).getMapState[Row, Row](any[String], any[Encoder[Row]],
           any[Encoder[Row]], any[TTLConfig])
       }
-      verify(outputStream).writeInt(argThat((x: Int) => x > 0))
+      verify(outputStream).writeInt(0)
     }
   }
 
@@ -572,6 +572,16 @@ class TransformWithStateInPandasStateServerSuite extends SparkFunSuite with Befo
     verify(statefulProcessorHandle, times(1)).listTimers()
     verify(arrowStreamWriter).writeRow(any)
     verify(arrowStreamWriter).finalizeCurrentArrowBatch()
+  }
+
+  test("utils request - parse string schema") {
+    val message = UtilsRequest.newBuilder().setParseStringSchema(
+      ParseStringSchema.newBuilder().setSchema(
+        "value int"
+      ).build()
+    ).build()
+    stateServer.handleUtilsRequest(message)
+    verify(outputStream).writeInt(argThat((x: Int) => x > 0))
   }
 
   private def getIntegerRow(value: Int): Row = {

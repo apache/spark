@@ -125,63 +125,49 @@ class StatefulProcessorApiClient:
 
     def get_value_state(
         self, state_name: str, schema: Union[StructType, str], ttl_duration_ms: Optional[int]
-    ) -> StructType:
+    ) -> None:
         import pyspark.sql.streaming.proto.StateMessage_pb2 as stateMessage
+
+        if isinstance(schema, str):
+            schema = self._parse_string_schema(schema)
 
         state_call_command = stateMessage.StateCallCommand()
         state_call_command.stateName = state_name
-        if isinstance(schema, str):
-            state_call_command.stringSchema = schema
-        else:
-            state_call_command.jsonSchema = schema.json()
+        state_call_command.schema = schema.json()
         if ttl_duration_ms is not None:
             state_call_command.ttl.durationMs = ttl_duration_ms
         call = stateMessage.StatefulProcessorCall(getValueState=state_call_command)
         message = stateMessage.StateRequest(statefulProcessorCall=call)
 
         self._send_proto_message(message.SerializeToString())
-        response_message = self._receive_proto_message_with_string_value()
+        response_message = self._receive_proto_message()
         status = response_message[0]
         if status != 0:
             # TODO(SPARK-49233): Classify user facing errors.
             raise PySparkRuntimeError(f"Error initializing value state: " f"{response_message[1]}")
-        # Reconstruct the schema from the response message if the original schema is string.
-        if isinstance(schema, str):
-            str_schema = response_message[2]
-            schema_dict = json.loads(str_schema)
-            return StructType.fromJson(schema_dict)
-        else:
-            return schema
 
     def get_list_state(
         self, state_name: str, schema: Union[StructType, str], ttl_duration_ms: Optional[int]
-    ) -> StructType:
+    ) -> None:
         import pyspark.sql.streaming.proto.StateMessage_pb2 as stateMessage
+
+        if isinstance(schema, str):
+            schema = self._parse_string_schema(schema)
 
         state_call_command = stateMessage.StateCallCommand()
         state_call_command.stateName = state_name
-        if isinstance(schema, str):
-            state_call_command.stringSchema = schema
-        else:
-            state_call_command.jsonSchema = schema.json()
+        state_call_command.schema = schema.json()
         if ttl_duration_ms is not None:
             state_call_command.ttl.durationMs = ttl_duration_ms
         call = stateMessage.StatefulProcessorCall(getListState=state_call_command)
         message = stateMessage.StateRequest(statefulProcessorCall=call)
 
         self._send_proto_message(message.SerializeToString())
-        response_message = self._receive_proto_message_with_string_value()
+        response_message = self._receive_proto_message()
         status = response_message[0]
         if status != 0:
             # TODO(SPARK-49233): Classify user facing errors.
             raise PySparkRuntimeError(f"Error initializing list state: " f"{response_message[1]}")
-        # Reconstruct the schema from the response message if the original schema is string.
-        if isinstance(schema, str):
-            str_schema = response_message[2]
-            schema_dict = json.loads(str_schema)
-            return StructType.fromJson(schema_dict)
-        else:
-            return schema
 
     def register_timer(self, expiry_time_stamp_ms: int) -> None:
         import pyspark.sql.streaming.proto.StateMessage_pb2 as stateMessage
@@ -300,44 +286,29 @@ class StatefulProcessorApiClient:
         user_key_schema: Union[StructType, str],
         value_schema: Union[StructType, str],
         ttl_duration_ms: Optional[int],
-    ) -> Tuple[StructType, StructType]:
+    ) -> None:
         import pyspark.sql.streaming.proto.StateMessage_pb2 as stateMessage
+
+        if isinstance(user_key_schema, str):
+            user_key_schema = self._parse_string_schema(user_key_schema)
+        if isinstance(value_schema, str):
+            value_schema = self._parse_string_schema(value_schema)
 
         state_call_command = stateMessage.StateCallCommand()
         state_call_command.stateName = state_name
-        if isinstance(user_key_schema, str):
-            state_call_command.stringSchema = user_key_schema
-        else:
-            state_call_command.jsonSchema = user_key_schema.json()
-        if isinstance(value_schema, str):
-            state_call_command.mapStateValueStringSchema = value_schema
-        else:
-            state_call_command.mapStateValueJsonSchema = value_schema.json()
+        state_call_command.schema = user_key_schema.json()
+        state_call_command.mapStateValueSchema = value_schema.json()
         if ttl_duration_ms is not None:
             state_call_command.ttl.durationMs = ttl_duration_ms
         call = stateMessage.StatefulProcessorCall(getMapState=state_call_command)
         message = stateMessage.StateRequest(statefulProcessorCall=call)
 
         self._send_proto_message(message.SerializeToString())
-        response_message = self._receive_proto_message_with_string_value()
+        response_message = self._receive_proto_message()
         status = response_message[0]
         if status != 0:
             # TODO(SPARK-49233): Classify user facing errors.
             raise PySparkRuntimeError(f"Error initializing map state: " f"{response_message[1]}")
-        # Reconstruct the schema from the response message if the original schema is string.
-        if isinstance(user_key_schema, str):
-            user_key_str_schema = response_message[2]
-            user_key_schema_dict = json.loads(user_key_str_schema)
-            user_key_schema_struct = StructType.fromJson(user_key_schema_dict)
-        else:
-            user_key_schema_struct = user_key_schema
-        if isinstance(value_schema, str):
-            value_str_schema = response_message[3]
-            value_schema_dict = json.loads(value_str_schema)
-            value_schema_struct = StructType.fromJson(value_schema_dict)
-        else:
-            value_schema_struct = value_schema
-        return user_key_schema_struct, value_schema_struct
 
     def delete_if_exists(self, state_name: str) -> None:
         import pyspark.sql.streaming.proto.StateMessage_pb2 as stateMessage
@@ -422,14 +393,14 @@ class StatefulProcessorApiClient:
         message.ParseFromString(bytes)
         return message.statusCode, message.errorMessage, message.value
 
-    def _receive_proto_message_with_string_value(self) -> Tuple[int, str, str, str]:
+    def _receive_proto_message_with_string_value(self) -> Tuple[int, str, str]:
         import pyspark.sql.streaming.proto.StateMessage_pb2 as stateMessage
 
         length = read_int(self.sockfile)
         bytes = self.sockfile.read(length)
         message = stateMessage.StateResponseWithStringTypeVal()
         message.ParseFromString(bytes)
-        return message.statusCode, message.errorMessage, message.value, message.additionalValue
+        return message.statusCode, message.errorMessage, message.value
 
     def _receive_str(self) -> str:
         return self.utf8_deserializer.loads(self.sockfile)
@@ -473,6 +444,24 @@ class StatefulProcessorApiClient:
 
     def _read_arrow_state(self) -> Any:
         return self.serializer.load_stream(self.sockfile)
+
+    # Parse a string schema into a StructType schema. This method will perform an API call to
+    # JVM side to parse the schema string.
+    def _parse_string_schema(self, schema: str) -> StructType:
+        import pyspark.sql.streaming.proto.StateMessage_pb2 as stateMessage
+
+        parse_string_schema_call = stateMessage.ParseStringSchema(schema=schema)
+        utils_request = stateMessage.UtilsRequest(parseStringSchema=parse_string_schema_call)
+        message = stateMessage.StateRequest(utilsRequest=utils_request)
+
+        self._send_proto_message(message.SerializeToString())
+        response_message = self._receive_proto_message_with_string_value()
+        status = response_message[0]
+        if status != 0:
+            # TODO(SPARK-49233): Classify user facing errors.
+            raise PySparkRuntimeError(f"Error parsing string schema: " f"{response_message[1]}")
+        else:
+            return StructType.fromJson(json.loads(response_message[2]))
 
 
 class ListTimerIterator:

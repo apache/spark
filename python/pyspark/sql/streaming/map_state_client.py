@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from typing import Dict, Iterator, Tuple, Optional
+from typing import Dict, Iterator, Union, Tuple, Optional
 
 from pyspark.sql.streaming.stateful_processor_api_client import StatefulProcessorApiClient
 from pyspark.sql.types import StructType, TYPE_CHECKING
@@ -31,12 +31,22 @@ class MapStateClient:
     def __init__(
         self,
         stateful_processor_api_client: StatefulProcessorApiClient,
-        user_key_schema: StructType,
-        value_schema: StructType,
+        user_key_schema: Union[StructType, str],
+        value_schema: Union[StructType, str],
     ) -> None:
         self._stateful_processor_api_client = stateful_processor_api_client
-        self.user_key_schema = user_key_schema
-        self.value_schema = value_schema
+        if isinstance(user_key_schema, str):
+            self.user_key_schema = self._stateful_processor_api_client._parse_string_schema(
+                user_key_schema
+            )
+        else:
+            self.user_key_schema = user_key_schema
+        if isinstance(value_schema, str):
+            self.value_schema = self._stateful_processor_api_client._parse_string_schema(
+                value_schema
+            )
+        else:
+            self.value_schema = value_schema
         # Dictionaries to store the mapping between iterator id and a tuple of pandas DataFrame
         # and the index of the last row that was read.
         self.user_key_value_pair_iterator_cursors: Dict[str, Tuple["PandasDataFrameLike", int]] = {}

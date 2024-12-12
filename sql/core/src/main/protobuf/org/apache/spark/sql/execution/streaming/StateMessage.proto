@@ -26,6 +26,7 @@ message StateRequest {
     StateVariableRequest stateVariableRequest = 3;
     ImplicitGroupingKeyRequest implicitGroupingKeyRequest = 4;
     TimerRequest timerRequest = 5;
+    UtilsRequest utilsRequest = 6;
   }
 }
 
@@ -45,7 +46,6 @@ message StateResponseWithStringTypeVal {
   int32 statusCode = 1;
   string errorMessage = 2;
   string value = 3;
-  string additionalValue = 4;
 }
 
 message StatefulProcessorCall {
@@ -98,13 +98,21 @@ message GetProcessingTime {
 message GetWatermark {
 }
 
+message UtilsRequest {
+  oneof method {
+    ParseStringSchema parseStringSchema = 1;
+  }
+}
+
+message ParseStringSchema {
+  string schema = 1;
+}
+
 message StateCallCommand {
   string stateName = 1;
-  string jsonSchema = 2;
-  string stringSchema = 3;
-  string mapStateValueJsonSchema = 4;
-  string mapStateValueStringSchema = 5;
-  TTLConfig ttl = 6;
+  string schema = 2;
+  string mapStateValueSchema = 3;
+  TTLConfig ttl = 4;
 }
 
 message TimerStateCallCommand {
