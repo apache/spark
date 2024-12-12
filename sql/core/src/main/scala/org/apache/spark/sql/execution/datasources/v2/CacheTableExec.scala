@@ -89,6 +89,7 @@ case class CacheTableAsSelectExec(
       name = TableIdentifier(tempViewName),
       userSpecifiedColumns = Nil,
       comment = None,
+      collation = None,
       properties = Map.empty,
       originalText = Some(originalText),
       plan = query,
