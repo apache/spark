@@ -14,11 +14,10 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.internal
-
-import UserDefinedFunctionUtils.toScalaUDF
+package org.apache.spark.sql.util
 
 import org.apache.spark.SparkException
+import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.sql.{Column, Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.{analysis, expressions, CatalystTypeConverters}
 import org.apache.spark.sql.catalyst.analysis.{MultiAlias, UnresolvedAlias}
@@ -32,6 +31,8 @@ import org.apache.spark.sql.execution.SparkSqlParser
 import org.apache.spark.sql.execution.aggregate.{ScalaAggregator, ScalaUDAF, TypedAggregateExpression}
 import org.apache.spark.sql.execution.analysis.DetectAmbiguousSelfJoin
 import org.apache.spark.sql.expressions.{Aggregator, SparkUserDefinedFunction, UserDefinedAggregateFunction, UserDefinedAggregator}
+import org.apache.spark.sql.internal._
+import org.apache.spark.sql.internal.UserDefinedFunctionUtils.toScalaUDF
 import org.apache.spark.sql.types.{DataType, NullType}
 
 /**
@@ -248,7 +249,8 @@ private[sql] trait ColumnNodeToExpressionConverter extends (ColumnNode => Expres
   }
 }
 
-private[sql] object ColumnNodeToExpressionConverter extends ColumnNodeToExpressionConverter {
+@DeveloperApi
+object ColumnNodeToExpressionConverter extends ColumnNodeToExpressionConverter {
   override protected def parser: ParserInterface = {
     SparkSession.getActiveSession.map(_.sessionState.sqlParser).getOrElse {
       new SparkSqlParser()
@@ -261,7 +263,8 @@ private[sql] object ColumnNodeToExpressionConverter extends ColumnNodeToExpressi
 /**
  * [[ColumnNode]] wrapper for an [[Expression]].
  */
-private[sql] case class ExpressionColumnNode private(
+@DeveloperApi
+case class ExpressionColumnNode private(
     expression: Expression,
     override val origin: Origin = CurrentOrigin.get) extends ColumnNode {
   override def normalize(): ExpressionColumnNode = {
@@ -282,7 +285,7 @@ private[sql] object ExpressionColumnNode {
   }
 }
 
-private[internal] case class ColumnNodeExpression private(node: ColumnNode) extends Unevaluable {
+private[sql] case class ColumnNodeExpression private(node: ColumnNode) extends Unevaluable {
   override def nullable: Boolean = true
   override def dataType: DataType = NullType
   override def children: Seq[Expression] = Nil
