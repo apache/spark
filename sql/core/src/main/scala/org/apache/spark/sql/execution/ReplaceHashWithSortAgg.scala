@@ -75,6 +75,7 @@ object ReplaceHashWithSortAgg extends Rule[SparkPlan] {
                 partialAgg.child.outputOrdering, sortAgg.requiredChildOrdering.head)) {
               sortAgg.copy(
                 aggregateExpressions = sortAgg.aggregateExpressions.map(_.copy(mode = Complete)),
+                initialInputBufferOffset = 0,
                 child = partialAgg.child)
             } else {
               hashAgg
