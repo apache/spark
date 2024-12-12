@@ -31,6 +31,8 @@ if __name__ == "__main__":
         .master(sys.argv[1]) \
         .getOrCreate()
 
+    assert "connect" in str(spark)
+
     # Check python executable at executors
     spark.udf.register("get_sys_ver",
                        lambda: "%d.%d" % sys.version_info[:2], StringType())
