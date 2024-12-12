@@ -46,7 +46,7 @@ class ValueState:
     """
 
     def __init__(
-        self, value_state_client: ValueStateClient, state_name: str, schema: Union[StructType, str]
+        self, value_state_client: ValueStateClient, state_name: str, schema: StructType
     ) -> None:
         self._value_state_client = value_state_client
         self._state_name = state_name
@@ -128,7 +128,7 @@ class ListState:
     """
 
     def __init__(
-        self, list_state_client: ListStateClient, state_name: str, schema: Union[StructType, str]
+        self, list_state_client: ListStateClient, state_name: str, schema: StructType
     ) -> None:
         self._list_state_client = list_state_client
         self._state_name = state_name
@@ -274,8 +274,12 @@ class StatefulProcessorHandle:
             resets the expiration time to current processing time plus ttlDuration.
             If ttl is not specified the state will never expire.
         """
-        self.stateful_processor_api_client.get_value_state(state_name, schema, ttl_duration_ms)
-        return ValueState(ValueStateClient(self.stateful_processor_api_client), state_name, schema)
+        schema_struct = self.stateful_processor_api_client.get_value_state(
+            state_name, schema, ttl_duration_ms
+        )
+        return ValueState(
+            ValueStateClient(self.stateful_processor_api_client), state_name, schema_struct
+        )
 
     def getListState(
         self, state_name: str, schema: Union[StructType, str], ttl_duration_ms: Optional[int] = None
@@ -298,8 +302,12 @@ class StatefulProcessorHandle:
             resets the expiration time to current processing time plus ttlDuration.
             If ttl is not specified the state will never expire.
         """
-        self.stateful_processor_api_client.get_list_state(state_name, schema, ttl_duration_ms)
-        return ListState(ListStateClient(self.stateful_processor_api_client), state_name, schema)
+        schema_struct = self.stateful_processor_api_client.get_list_state(
+            state_name, schema, ttl_duration_ms
+        )
+        return ListState(
+            ListStateClient(self.stateful_processor_api_client), state_name, schema_struct
+        )
 
     def getMapState(
         self,
@@ -329,11 +337,16 @@ class StatefulProcessorHandle:
             resets the expiration time to current processing time plus ttlDuration.
             If ttl is not specified the state will never expire.
         """
-        self.stateful_processor_api_client.get_map_state(
+        (
+            user_key_schema_struct,
+            value_schema_struct,
+        ) = self.stateful_processor_api_client.get_map_state(
             state_name, user_key_schema, value_schema, ttl_duration_ms
         )
         return MapState(
-            MapStateClient(self.stateful_processor_api_client, user_key_schema, value_schema),
+            MapStateClient(
+                self.stateful_processor_api_client, user_key_schema_struct, value_schema_struct
+            ),
             state_name,
         )
 
