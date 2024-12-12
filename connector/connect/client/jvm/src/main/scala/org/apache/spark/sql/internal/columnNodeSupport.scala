@@ -167,6 +167,15 @@ object ColumnNodeToProtoConverter extends (ColumnNode => proto.Expression) {
       case LazyExpression(child, _) =>
         builder.getLazyExpressionBuilder.setChild(apply(child, e))
 
+      case SubqueryExpressionNode(relation, subqueryType, _) =>
+        val b = builder.getSubqueryExpressionBuilder
+        b.setSubqueryType(subqueryType match {
+          case SubqueryType.SCALAR => proto.SubqueryExpression.SubqueryType.SUBQUERY_TYPE_SCALAR
+          case SubqueryType.EXISTS => proto.SubqueryExpression.SubqueryType.SUBQUERY_TYPE_EXISTS
+        })
+        assert(relation.hasCommon && relation.getCommon.hasPlanId)
+        b.setPlanId(relation.getCommon.getPlanId)
+
       case ProtoColumnNode(e, _) =>
         return e
 
@@ -212,9 +221,68 @@ object ColumnNodeToProtoConverter extends (ColumnNode => proto.Expression) {
   }
 }
 
+object ColumnNodeUtil {
+  def collectReferences(nodes: Seq[ColumnNode]): Seq[proto.Relation] = {
+    nodes.flatMap {
+      case UnresolvedFunction(_, arguments, _, _, _, _) =>
+        collectReferences(arguments)
+      case Alias(child, _, _, _) =>
+        collectReferences(Seq(child))
+      case Cast(child, _, _, _) =>
+        collectReferences(Seq(child))
+      case Window(windowFunction, windowSpec, _) =>
+        collectReferences(
+          Seq(windowFunction) ++ windowSpec.partitionColumns ++ windowSpec.sortColumns) ++
+          windowSpec.frame.toSeq.flatMap { frame =>
+            collectReferences(frame.lower) ++
+              collectReferences(frame.upper)
+          }
+      case UnresolvedExtractValue(child, extraction, _) =>
+        collectReferences(Seq(child, extraction))
+      case UpdateFields(structExpression, _, valueExpression, _) =>
+        collectReferences(Seq(structExpression) ++ valueExpression.toSeq)
+      case LambdaFunction(function, _, _) =>
+        collectReferences(Seq(function))
+      case InvokeInlineUserDefinedFunction(_, args, _, _) =>
+        collectReferences(args)
+      case CaseWhenOtherwise(branches, otherwise, _) =>
+        collectReferences(branches.flatMap { case (condition, value) =>
+          Seq(condition, value)
+        } ++ otherwise.toSeq)
+      case LazyExpression(child, _) =>
+        collectReferences(Seq(child))
+      case SubqueryExpressionNode(query, _, _) =>
+        Seq(query)
+      case _ => Seq.empty
+    }
+  }
+
+  private def collectReferences(boundary: WindowFrame.FrameBoundary): Seq[proto.Relation] = {
+    boundary match {
+      case WindowFrame.Value(value) => collectReferences(Seq(value))
+      case _ => Seq.empty
+    }
+  }
+}
+
 case class ProtoColumnNode(
     expr: proto.Expression,
     override val origin: Origin = CurrentOrigin.get)
     extends ColumnNode {
   override def sql: String = expr.toString
+}
+
+sealed trait SubqueryType
+
+object SubqueryType {
+  case object SCALAR extends SubqueryType
+  case object EXISTS extends SubqueryType
+}
+
+case class SubqueryExpressionNode(
+    relation: proto.Relation,
+    subqueryType: SubqueryType,
+    override val origin: Origin = CurrentOrigin.get)
+    extends ColumnNode {
+  override def sql: String = s"$subqueryType ($relation)"
 }

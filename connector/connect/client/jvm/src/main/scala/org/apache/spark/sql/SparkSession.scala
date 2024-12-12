@@ -46,7 +46,7 @@ import org.apache.spark.sql.connect.client.{ClassFinder, CloseableIterator, Spar
 import org.apache.spark.sql.connect.client.SparkConnectClient.Configuration
 import org.apache.spark.sql.connect.client.arrow.ArrowSerializer
 import org.apache.spark.sql.functions.lit
-import org.apache.spark.sql.internal.{CatalogImpl, ConnectRuntimeConfig, SessionCleaner, SessionState, SharedState, SqlApiConf}
+import org.apache.spark.sql.internal.{CatalogImpl, ColumnNodeUtil, ConnectRuntimeConfig, SessionCleaner, SessionState, SharedState, SqlApiConf}
 import org.apache.spark.sql.internal.ColumnNodeToProtoConverter.{toExpr, toTypedExpr}
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.streaming.DataStreamReader
@@ -333,12 +333,39 @@ class SparkSession private[sql] (
 
   @Since("4.0.0")
   @DeveloperApi
+  def newDataFrame(references: Seq[Column])(f: proto.Relation.Builder => Unit): DataFrame = {
+    newDataset(UnboundRowEncoder, references)(f)
+  }
+
+  @Since("4.0.0")
+  @DeveloperApi
   def newDataset[T](encoder: AgnosticEncoder[T])(
       f: proto.Relation.Builder => Unit): Dataset[T] = {
+    newDataset[T](encoder, Seq.empty)(f)
+  }
+
+  @Since("4.0.0")
+  @DeveloperApi
+  def newDataset[T](encoder: AgnosticEncoder[T], cols: Seq[Column])(
+      f: proto.Relation.Builder => Unit): Dataset[T] = {
+    val references = ColumnNodeUtil.collectReferences(cols.map(_.node))
+
     val builder = proto.Relation.newBuilder()
     f(builder)
     builder.getCommonBuilder.setPlanId(planIdGenerator.getAndIncrement())
-    val plan = proto.Plan.newBuilder().setRoot(builder).build()
+
+    val rootBuilder = if (references.length == 0) {
+      builder
+    } else {
+      val rootBuilder = proto.Relation.newBuilder()
+      rootBuilder.getWithRelationsBuilder
+        .setRoot(builder)
+        .addAllReferences(references.asJava)
+      rootBuilder.getCommonBuilder.setPlanId(planIdGenerator.getAndIncrement())
+      rootBuilder
+    }
+
+    val plan = proto.Plan.newBuilder().setRoot(rootBuilder).build()
     new Dataset[T](this, plan, encoder)
   }
 
