@@ -25,7 +25,6 @@ import org.apache.spark.sql.catalyst.plans.logical.{CTEInChildren, CTERelationDe
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.command.{DataWritingCommand, LeafRunnableCommand}
-import org.apache.spark.sql.hive.execution.InsertIntoHiveTable.BY_CTAS
 
 /**
  * Create table and insert the query result into it.
@@ -99,15 +98,14 @@ case class CreateHiveTableAsSelectCommand(
       tableExists: Boolean): DataWritingCommand = {
     // For CTAS, there is no static partition values to insert.
     val partition = tableDesc.partitionColumnNames.map(_ -> None).toMap
-    val insertHive = InsertIntoHiveTable(
+    InsertIntoHiveTable(
       tableDesc,
       partition,
       query,
       overwrite = false,
       ifPartitionNotExists = false,
-      outputColumnNames = outputColumnNames)
-    insertHive.setTagValue(BY_CTAS, ())
-    insertHive
+      outputColumnNames = outputColumnNames,
+      isCtas = true)
   }
 
   override def argString(maxFields: Int): String = {
