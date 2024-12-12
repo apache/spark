@@ -434,26 +434,26 @@ class VariantSuite extends QueryTest with SharedSparkSession with ExpressionEval
 
     checkError(
       exception = intercept[AnalysisException] {
-        spark.sql("select parse_json('') order by 1")
+        spark.sql("select parse_json('') v order by 1")
       },
       condition = "DATATYPE_MISMATCH.INVALID_ORDERING_TYPE",
       parameters = Map(
         "functionName" -> "`sortorder`",
         "dataType" -> "\"VARIANT\"",
-        "sqlExpr" -> "\"parse_json() ASC NULLS FIRST\""),
-      context = ExpectedContext(fragment = "order by 1", start = 22, stop = 31)
+        "sqlExpr" -> "\"v ASC NULLS FIRST\""),
+      context = ExpectedContext(fragment = "order by 1", start = 24, stop = 33)
     )
 
     checkError(
       exception = intercept[AnalysisException] {
-        spark.sql("select parse_json('') sort by 1")
+        spark.sql("select parse_json('') v sort by 1")
       },
       condition = "DATATYPE_MISMATCH.INVALID_ORDERING_TYPE",
       parameters = Map(
         "functionName" -> "`sortorder`",
         "dataType" -> "\"VARIANT\"",
-        "sqlExpr" -> "\"parse_json() ASC NULLS FIRST\""),
-      context = ExpectedContext(fragment = "sort by 1", start = 22, stop = 30)
+        "sqlExpr" -> "\"v ASC NULLS FIRST\""),
+      context = ExpectedContext(fragment = "sort by 1", start = 24, stop = 32)
     )
 
     checkError(
