@@ -23,7 +23,6 @@ import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable
 import org.apache.spark.sql.catalyst.catalog.CatalogTable.VIEW_STORING_ANALYZED_PLAN
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, TypedImperativeAggregate}
-import org.apache.spark.sql.catalyst.optimizer.EliminateSorts
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, RangePartitioning, RoundRobinPartitioning, SinglePartition}
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
@@ -1010,7 +1009,8 @@ case class Sort(
 }
 
 /**
- * A special Sort node whose underlying Sort would not be eliminated by [[EliminateSorts]].
+ * A special Sort node whose underlying Sort would not be eliminated
+ * by [[org.apache.spark.sql.catalyst.optimizer.EliminateSorts]].
  */
 case class NoEliminateSort(
     order: Seq[SortOrder],
