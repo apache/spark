@@ -98,6 +98,7 @@ jobs:
             sparkr=`./dev/is-changed.py -m sparkr`
             tpcds=`./dev/is-changed.py -m sql`
             docker=`./dev/is-changed.py -m docker-integration-tests`
+            repl=true
             buf=true
             ui=true
             docs=true
@@ -108,6 +109,7 @@ jobs:
             sparkr=false
             tpcds=false
             docker=false
+            repl=true
             buf=false
             ui=false
             docs=false
@@ -125,6 +127,7 @@ jobs:
               \"docs\" : \"$docs\",
               \"yarn\" : \"$yarn\",
               \"k8s-integration-tests\" : \"$kubernetes\",
+              \"repl\" : \"$repl\",
               \"buf\" : \"$buf\",
               \"ui\" : \"$ui\",
             }"
@@ -768,6 +771,61 @@ jobs:
     - name: Python CodeGen check
       if: inputs.branch != 'branch-3.5'
       run: ./dev/check-protos.py
+
+  repl:
+    needs: [precondition]
+    if: (!cancelled()) && fromJson(needs.precondition.outputs.required).repl == 'true'
+    name: Check REPL (bin/pyspark, bin/spark-shell and bin/spark-sql)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Spark repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          repository: apache/spark
+          ref: ${{ inputs.branch }}
+      - name: Sync the current branch with the latest in Apache Spark
+        if: github.repository != 'apache/spark'
+        run: |
+          git fetch https://github.com/$GITHUB_REPOSITORY.git ${GITHUB_REF#refs/heads/}
+          git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
+          git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
+      - name: Install Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies for PySpark
+        run: |
+          python3.11 -m pip install ipython numpy scipy 'protobuf==5.28.3' 'pyarrow>=18.0.0' 'six==1.16.0' 'pandas==2.2.3' 'grpcio==1.67.0' 'grpcio-status==1.67.0' 'protobuf==5.28.3' 'googleapis-common-protos==1.65.0'
+          python3.11 -m pip list
+      - name: Build Spark
+        run: |
+          ./build/sbt -Phive -Phive-thriftserver Test/package
+      - name: PySpark Classic REPL
+        shell: 'script -q -e -c "bash {0}"'
+        run: |
+          echo 'spark.range(1024).count()' | ./bin/pyspark > tmp.log
+          grep 'Out.*1.*1024' tmp.log
+      - name: PySpark Connect REPL
+        shell: 'script -q -e -c "bash {0}"'
+        run: |
+          echo 'spark.range(1024).count()' | ./bin/pyspark --remote local > tmp.log
+          grep 'Out.*1.*1024' tmp.log
+      - name: Spark Shell Classic REPL
+        shell: 'script -q -e -c "bash {0}"'
+        run: |
+          echo 'spark.range(1024).count()' | ./bin/spark-shell > tmp.log
+          grep 'res0.*Long.*1024' tmp.log
+      - name: Spark Shell Connect REPL
+        shell: 'script -q -e -c "bash {0}"'
+        run: |
+          echo 'spark.range(1024).count()' | ./bin/spark-shell --remote local > tmp.log
+          grep 'res0.*Long.*1024' tmp.log
+      - name: Spark SQL REPL
+        shell: 'script -q -e -c "bash {0}"'
+        run: |
+          echo 'SELECT 1023 + 1;' | ./bin/spark-sql > tmp.log
+          grep '1024' tmp.log
 
   # Static analysis
   lint:
