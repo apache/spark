@@ -20,6 +20,7 @@ package org.apache.spark.sql
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.sql.catalyst.plans.AsOfJoinDirection
+import org.apache.spark.sql.catalyst.plans.logical.AsOfJoin
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSparkSession
@@ -191,5 +192,24 @@ class DataFrameAsOfJoinSuite extends QueryTest
         Row(10, "z", "c", 5, "y", "b")
       )
     )
+  }
+
+  test("SPARK-47217: Dedup of relations can impact projected columns resolution") {
+    val (df1, df2) = prepareForAsOfJoin()
+    val join1 = df1.join(df2, df1.col("a") === df2.col("a")).select(df2.col("a"), df1.col("b"),
+      df2.col("b"), df1.col("a").as("aa"))
+
+    // In stock spark this would throw ambiguous column exception, even though it is not ambiguous
+    val asOfjoin2 = join1.joinAsOf(
+      df1, df1.col("a"), join1.col("a"), usingColumns = Seq.empty,
+      joinType = "left", tolerance = null, allowExactMatches = false, direction = "nearest")
+
+    asOfjoin2.queryExecution.assertAnalyzed()
+
+    val testDf = asOfjoin2.select(df1.col("a"))
+    val analyzed = testDf.queryExecution.analyzed
+    val attributeRefToCheck = analyzed.output.head
+    assert(analyzed.children(0).asInstanceOf[AsOfJoin].right.outputSet.
+      contains(attributeRefToCheck))
   }
 }

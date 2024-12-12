@@ -33,7 +33,6 @@ import org.apache.spark.sql.catalyst.util.MetadataColumnHelper
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.types.{DataType, StructType}
 
-
 abstract class LogicalPlan
   extends QueryPlan[LogicalPlan]
   with AnalysisHelper
@@ -217,6 +216,10 @@ object LogicalPlan {
   //    to the old code path.
   private[spark] val PLAN_ID_TAG = TreeNodeTag[Long]("plan_id")
   private[spark] val IS_METADATA_COL = TreeNodeTag[Unit]("is_metadata_col")
+  private[spark] val DATASET_ID_TAG = TreeNodeTag[mutable.HashSet[Long]]("dataset_id")
+  private[spark] val UNRESOLVED_ATTRIBUTE_MD_TAG = TreeNodeTag[AttributeReference]("orig-attr")
+  private[spark] val DATASET_ID_KEY = "__dataset_id"
+  private[spark] val COL_POS_KEY = "__col_position"
 }
 
 /**
