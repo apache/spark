@@ -85,7 +85,7 @@ abstract class StateRowPrefixEncoder(
     0
   }
 
-  private val numPrefixBytes = numColFamilyBytes + schemaIdBytes
+  def getNumPrefixBytes = numColFamilyBytes + schemaIdBytes
 
   def getCurrentSchemaId: Short = 0
 
@@ -107,7 +107,7 @@ abstract class StateRowPrefixEncoder(
 
   def encodeStateRowWithPrefix(data: Array[Byte]): Array[Byte] = {
     // Create result array big enough for all prefixes plus data
-    val result = new Array[Byte](numPrefixBytes + data.length)
+    val result = new Array[Byte](getNumPrefixBytes + data.length)
     var offset = Platform.BYTE_ARRAY_OFFSET
 
     // Write column family ID if enabled
@@ -160,10 +160,10 @@ abstract class StateRowPrefixEncoder(
 
 
   def decodeStateRowData(stateRow: Array[Byte]): Array[Byte] = {
-    val offset = Platform.BYTE_ARRAY_OFFSET + numPrefixBytes
+    val offset = Platform.BYTE_ARRAY_OFFSET + getNumPrefixBytes
 
     // Extract the actual data
-    val dataLength = stateRow.length - numPrefixBytes
+    val dataLength = stateRow.length - getNumPrefixBytes
     val data = new Array[Byte](dataLength)
     Platform.copyMemory(
       stateRow, offset,
@@ -210,10 +210,10 @@ object RocksDBStateEncoder extends Logging {
       avroEnc: Option[AvroEncoder] = None): RocksDBValueStateEncoder = {
     if (useMultipleValuesPerKey) {
       new MultiValuedStateEncoder(
-        provider, valueSchema, useColumnFamilies, columnFamilyInfo, avroEnc)
+        provider, valueSchema, columnFamilyInfo, avroEnc)
     } else {
       new SingleValueStateEncoder(
-        provider, valueSchema, useColumnFamilies, columnFamilyInfo, avroEnc)
+        provider, valueSchema, columnFamilyInfo, avroEnc)
     }
   }
 
@@ -319,8 +319,11 @@ class PrefixKeyScanStateEncoder(
     columnFamilyInfo: Option[ColumnFamilyInfo] = None,
     avroEnc: Option[AvroEncoder] = None)
   extends StateRowPrefixEncoder(
-    provider, useColumnFamilies, columnFamilyInfo, avroEnc.isDefined)
-  with RocksDBKeyStateEncoder {
+    provider,
+    useColumnFamilies,
+    columnFamilyInfo,
+    supportSchemaEvolution = avroEnc.isDefined
+  ) with RocksDBKeyStateEncoder with Logging {
 
   import RocksDBStateEncoder._
 
@@ -517,8 +520,11 @@ class RangeKeyScanStateEncoder(
     columnFamilyInfo: Option[ColumnFamilyInfo] = None,
     avroEnc: Option[AvroEncoder] = None)
   extends StateRowPrefixEncoder(
-    provider, useColumnFamilies, columnFamilyInfo, avroEnc.isDefined)
-  with RocksDBKeyStateEncoder with Logging {
+    provider,
+    useColumnFamilies,
+    columnFamilyInfo,
+    supportSchemaEvolution = avroEnc.isDefined
+  ) with RocksDBKeyStateEncoder with Logging {
 
   import RocksDBStateEncoder._
 
@@ -1196,8 +1202,11 @@ class NoPrefixKeyStateEncoder(
     columnFamilyInfo: Option[ColumnFamilyInfo] = None,
     avroEnc: Option[AvroEncoder] = None)
   extends StateRowPrefixEncoder(
-    provider, useColumnFamilies, columnFamilyInfo, avroEnc.isDefined)
-  with RocksDBKeyStateEncoder with Logging {
+    provider,
+    useColumnFamilies,
+    columnFamilyInfo,
+    supportSchemaEvolution = avroEnc.isDefined
+  ) with RocksDBKeyStateEncoder with Logging {
 
   import RocksDBStateEncoder._
 
@@ -1289,12 +1298,14 @@ class NoPrefixKeyStateEncoder(
 class MultiValuedStateEncoder(
     provider: RocksDBStateStoreProvider,
     valueSchema: StructType,
-    useColumnFamilies: Boolean,
     columnFamilyInfo: Option[ColumnFamilyInfo],
     avroEnc: Option[AvroEncoder] = None)
   extends StateRowPrefixEncoder(
-    provider, useColumnFamilies, columnFamilyInfo, avroEnc.isDefined)
-  with RocksDBValueStateEncoder with Logging {
+    provider,
+    useColumnFamilies = false,
+    columnFamilyInfo,
+    supportSchemaEvolution = avroEnc.isDefined
+  ) with RocksDBValueStateEncoder with Logging {
 
   import RocksDBStateEncoder._
 
@@ -1305,7 +1316,6 @@ class MultiValuedStateEncoder(
   private val valueProj = UnsafeProjection.create(valueSchema)
 
   override def encodeValue(row: UnsafeRow): Array[Byte] = {
-    // First encode the row using either Avro or UnsafeRow encoding
     val rowBytes = if (usingAvroEncoding) {
       encodeUnsafeRowToAvro(row, avroEnc.get.valueSerializer, valueAvroType, out)
     } else {
@@ -1324,7 +1334,6 @@ class MultiValuedStateEncoder(
     // Add metadata prefixes
     encodeStateRowWithPrefix(dataWithLength)
   }
-
   override def decodeValue(valueBytes: Array[Byte]): UnsafeRow = {
     if (valueBytes == null) {
       null
@@ -1355,24 +1364,24 @@ class MultiValuedStateEncoder(
     if (valueBytes == null) {
       Seq().iterator
     } else {
-      // First decode the metadata prefixes
-      val data = decodeStateRowData(valueBytes)
 
       new Iterator[UnsafeRow] {
         private var pos: Int = Platform.BYTE_ARRAY_OFFSET
-        private val maxPos = Platform.BYTE_ARRAY_OFFSET + data.length
+        private val maxPos = Platform.BYTE_ARRAY_OFFSET + valueBytes.length
 
         override def hasNext: Boolean = pos < maxPos
 
         override def next(): UnsafeRow = {
+          // Eat prefix bytes
+          pos += getNumPrefixBytes
           // Get value length
-          val numBytes = Platform.getInt(data, pos)
+          val numBytes = Platform.getInt(valueBytes, pos)
           pos += java.lang.Integer.BYTES
 
           // Extract value bytes
           val encodedValue = new Array[Byte](numBytes)
           Platform.copyMemory(
-            data, pos,
+            valueBytes, pos,
             encodedValue, Platform.BYTE_ARRAY_OFFSET,
             numBytes
           )
@@ -1411,12 +1420,14 @@ class MultiValuedStateEncoder(
 class SingleValueStateEncoder(
     provider: RocksDBStateStoreProvider,
     valueSchema: StructType,
-    useColumnFamilies: Boolean,
     columnFamilyInfo: Option[ColumnFamilyInfo],
     avroEnc: Option[AvroEncoder] = None)
   extends StateRowPrefixEncoder(
-    provider, useColumnFamilies, columnFamilyInfo, avroEnc.isDefined)
-  with RocksDBValueStateEncoder with Logging {
+    provider,
+    useColumnFamilies = false,
+    columnFamilyInfo,
+    supportSchemaEvolution = avroEnc.isDefined
+  ) with RocksDBValueStateEncoder with Logging {
 
   import RocksDBStateEncoder._
 
