@@ -488,7 +488,7 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
   }
 
   override def toString: String = {
-    val limit = SQLConf.get.numMaxValuesInToStringOfInSet
+    val limit = SQLConf.get.maxToStringFields
     if (list.length <= limit) {
       s"$value IN ${list.mkString("(", ",", ")")}"
     } else {
@@ -619,7 +619,7 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
     if (!child.resolved) {
       return s"$child INSET (values with unresolved data types)"
     }
-    val limit = SQLConf.get.numMaxValuesInToStringOfInSet
+    val limit = SQLConf.get.maxToStringFields
     if (hset.size <= limit) {
       val listString = hset.toSeq
         .map(elem => Literal(elem, child.dataType).toString)
