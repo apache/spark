@@ -504,6 +504,22 @@ class PandasGroupedOpsMixin:
         if isinstance(outputStructType, str):
             outputStructType = cast(StructType, _parse_datatype_string(outputStructType))
 
+        def handle_pre_init(
+            statefulProcessorApiClient: StatefulProcessorApiClient
+        ) -> Iterator["PandasDataFrameLike"]:
+            # driver handle is different from the handle used on executors
+            driver_handle = StatefulProcessorHandle(statefulProcessorApiClient)
+            statefulProcessorApiClient.set_handle_state(
+                StatefulProcessorHandleState.PRE_INIT
+            )
+            statefulProcessor.init(driver_handle)
+
+            # TODO figure out why we need to call close here in Scala side
+            # statefulProcessor.close()
+
+            # return a dummy results, no return value is needed for pre init
+            return iter([])
+
         def handle_data_rows(
             statefulProcessorApiClient: StatefulProcessorApiClient,
             key: Any,
@@ -560,12 +576,10 @@ class PandasGroupedOpsMixin:
             key: Any,
             inputRows: Iterator["PandasDataFrameLike"],
         ) -> Iterator["PandasDataFrameLike"]:
-            handle = StatefulProcessorHandle(statefulProcessorApiClient)
-
             if mode == TransformWithStateInPandasFuncMode.PRE_INIT:
-                raise Exception(f"I am here, pre init\n")
-                statefulProcessor.init(handle)
-                return iter([])
+                return handle_pre_init(statefulProcessorApiClient)
+
+            handle = StatefulProcessorHandle(statefulProcessorApiClient)
 
             if statefulProcessorApiClient.handle_state == StatefulProcessorHandleState.CREATED:
                 statefulProcessor.init(handle)
@@ -611,18 +625,10 @@ class PandasGroupedOpsMixin:
             - `initialStates` is None, while `inputRows` is not empty. This is not first batch.
              `initialStates` is initialized to the positional value as None.
             """
-            handle = StatefulProcessorHandle(statefulProcessorApiClient)
-
             if mode == TransformWithStateInPandasFuncMode.PRE_INIT:
-                statefulProcessorApiClient.set_handle_state(
-                    StatefulProcessorHandleState.PRE_INIT
-                )
-                statefulProcessor.init(handle)
-                # return a dummy results, no return value is needed for pre init
+                return handle_pre_init(statefulProcessorApiClient)
 
-                # TODO figure out why we need to call close here in Scala side
-                # statefulProcessor.close()
-                return iter([])
+            handle = StatefulProcessorHandle(statefulProcessorApiClient)
 
             if statefulProcessorApiClient.handle_state == StatefulProcessorHandleState.CREATED:
                 statefulProcessor.init(handle)

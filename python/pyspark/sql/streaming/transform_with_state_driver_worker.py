@@ -29,12 +29,9 @@ from pyspark import worker
 from pyspark.util import handle_worker_exception
 from typing import IO
 from pyspark.worker_util import check_python_version
-from pyspark.sql.streaming.stateful_processor_api_client import (
-    StatefulProcessorApiClient,
-    StatefulProcessorHandleState,
-)
+from pyspark.sql.streaming.stateful_processor_api_client import StatefulProcessorApiClient
 from pyspark.sql.streaming.stateful_processor_util import TransformWithStateInPandasFuncMode
-from pyspark.sql.types import StructType, _parse_datatype_string
+from pyspark.sql.types import StructType
 
 pickle_ser = CPickleSerializer()
 utf8_deserializer = UTF8Deserializer()
@@ -65,7 +62,6 @@ def main(infile: IO, outfile: IO) -> None:
             stateful_processor_api_client = StatefulProcessorApiClient(state_server_port, key_schema)
             process(stateful_processor_api_client, TransformWithStateInPandasFuncMode.PRE_INIT,
                     None, iter([]))
-            # raise Exception(f"{log_name} after process tws, stateful_processor_api_client: {stateful_processor_api_client}\n")
             write_int(0, outfile)
             outfile.flush()
     except Exception as e:
