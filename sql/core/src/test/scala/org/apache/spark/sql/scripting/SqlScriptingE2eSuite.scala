@@ -35,15 +35,10 @@ import org.apache.spark.sql.test.SharedSparkSession
  */
 class SqlScriptingE2eSuite extends QueryTest with SharedSparkSession {
   // Helpers
-  private def verifySqlScriptResult(sqlText: String, expected: Seq[Row]): Unit = {
-    val df = spark.sql(sqlText)
-    checkAnswer(df, expected)
-  }
-
-  private def verifySqlScriptResultWithNamedParams(
+  private def verifySqlScriptResult(
       sqlText: String,
       expected: Seq[Row],
-      args: Map[String, Any]): Unit = {
+      args: Map[String, Any] = Map.empty): Unit = {
     val df = spark.sql(sqlText, args)
     checkAnswer(df, expected)
   }
@@ -137,7 +132,7 @@ class SqlScriptingE2eSuite extends QueryTest with SharedSparkSession {
       "param_2" -> "greater",
       "param_3" -> "smaller"
     )
-    verifySqlScriptResultWithNamedParams(sqlScriptText, Seq(Row("smaller")), args)
+    verifySqlScriptResult(sqlScriptText, Seq(Row("smaller")), args)
   }
 
   test("positional params") {
@@ -176,7 +171,7 @@ class SqlScriptingE2eSuite extends QueryTest with SharedSparkSession {
     val args: Map[String, Any] = Map("param" -> 5)
     checkError(
       exception = intercept[AnalysisException] {
-        spark.sql(sqlScriptText, args).asInstanceOf[CompoundBody]
+        spark.sql(sqlScriptText, args)
       },
       condition = "UNBOUND_SQL_PARAMETER",
       parameters = Map("name" -> "_16"),

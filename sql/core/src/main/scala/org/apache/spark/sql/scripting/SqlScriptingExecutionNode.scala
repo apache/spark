@@ -19,12 +19,15 @@ package org.apache.spark.sql.scripting
 
 import java.util
 
+import scala.collection.mutable.HashMap
+
 import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
 import org.apache.spark.sql.catalyst.analysis.{NameParameterizedQuery, UnresolvedAttribute, UnresolvedIdentifier}
 import org.apache.spark.sql.catalyst.expressions.{Alias, CreateArray, CreateMap, CreateNamedStruct, Expression, Literal}
 import org.apache.spark.sql.catalyst.plans.logical.{CreateVariable, DefaultValueExpression, DropVariable, LogicalPlan, OneRowRelation, Project, SetVariable}
+import org.apache.spark.sql.catalyst.plans.logical.HandlerType.HandlerType
 import org.apache.spark.sql.catalyst.trees.{Origin, WithOrigin}
 import org.apache.spark.sql.errors.SqlScriptingErrors
 import org.apache.spark.sql.types.BooleanType
@@ -189,7 +192,8 @@ class CompoundBodyExec(
     statements: Seq[CompoundStatementExec],
     label: Option[String] = None,
     isScope: Boolean,
-    context: SqlScriptingExecutionContext)
+    context: SqlScriptingExecutionContext,
+    conditionHandlerMap: HashMap[String, ErrorHandlerExec] = HashMap())
   extends NonLeafStatementExec {
 
   private object ScopeStatus extends Enumeration {
@@ -198,7 +202,8 @@ class CompoundBodyExec(
   }
 
   private var localIterator = statements.iterator
-  private var curr = if (localIterator.hasNext) Some(localIterator.next()) else None
+  var curr: Option[CompoundStatementExec] =
+    if (localIterator.hasNext) Some(localIterator.next()) else None
   private var scopeStatus = ScopeStatus.NOT_ENTERED
 
   /**
@@ -212,7 +217,7 @@ class CompoundBodyExec(
     // This check makes this operation idempotent.
     if (isScope && scopeStatus == ScopeStatus.NOT_ENTERED) {
       scopeStatus = ScopeStatus.INSIDE
-      context.enterScope(label.get)
+      context.enterScope(label.get, conditionHandlerMap)
     }
   }
 
@@ -962,4 +967,39 @@ class ForStatementExec(
     interrupted = false
     body.reset()
   }
+}
+
+/**
+ * Executable node for ErrorHandlerStatement.
+ * @param body Executable CompoundBody of the error handler.
+ */
+class ErrorHandlerExec(
+    val body: CompoundBodyExec,
+    val handlerType: HandlerType,
+    val scopeToExit: Option[String]) extends NonLeafStatementExec {
+
+  override def getTreeIterator: Iterator[CompoundStatementExec] = body.getTreeIterator
+
+  override def reset(): Unit = body.reset()
+}
+
+/**
+ * Logical operator for Signal Statement.
+ * @param errorCondition Name of the error condition/SQL State for error that will be thrown.
+ * @param sqlState SQL State of the error that will be thrown.
+ * @param messageText Text of the error message.
+ */
+class SignalStatementExec(
+    val errorCondition: Option[String] = None,
+    val sqlState: Option[String] = None,
+    val messageText: String) extends LeafStatementExec {
+
+  def getParamMap: Map[String, String] = {
+    Map("errorMessage" -> messageText)
+  }
+
+  /**
+   * Reset execution of the current node.
+   */
+  override def reset(): Unit = ()
 }

@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.parser
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.expressions.{Alias, EqualTo, Expression, In, Literal, ScalarSubquery}
 import org.apache.spark.sql.catalyst.plans.SQLHelper
-import org.apache.spark.sql.catalyst.plans.logical.{CaseStatement, CompoundBody, CreateVariable, ForStatement, IfElseStatement, IterateStatement, LeaveStatement, LoopStatement, Project, RepeatStatement, SingleStatement, WhileStatement}
+import org.apache.spark.sql.catalyst.plans.logical.{CaseStatement, CompoundBody, CreateVariable, ErrorHandler, ForStatement, IfElseStatement, IterateStatement, LeaveStatement, LoopStatement, Project, RepeatStatement, SingleStatement, WhileStatement}
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLId
 import org.apache.spark.sql.exceptions.SqlScriptingException
 import org.apache.spark.sql.internal.SQLConf
@@ -2300,6 +2300,65 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     assert(nestedForStmt.body.collection.head.isInstanceOf[SingleStatement])
     assert(nestedForStmt.body.collection.
       head.asInstanceOf[SingleStatement].getText == "SELECT 3")
+  }
+
+//  test("declare condition: default sqlstate") {
+//    val sqlScriptText =
+//      """
+//        |BEGIN
+//        |  DECLARE test CONDITION;
+//        |END""".stripMargin
+//    val tree = parsePlan(sqlScriptText).asInstanceOf[CompoundBody]
+//    assert(tree.conditions.size == 1)
+//    assert(tree.conditions("test").equals("45000")) // Default SQLSTATE
+//  }
+
+  test("declare condition: custom sqlstate") {
+    val sqlScriptText =
+      """
+        |BEGIN
+        |  SELECT 1;
+        |  DECLARE test CONDITION FOR '12000';
+        |END""".stripMargin
+    val tree = parsePlan(sqlScriptText).asInstanceOf[CompoundBody]
+    assert(tree.conditions.size == 1)
+    assert(tree.conditions("test").equals("12000"))
+  }
+
+  test("declare handler") {
+    val sqlScriptText =
+      """
+        |BEGIN
+        |  DECLARE CONTINUE HANDLER FOR test BEGIN SELECT 1; END;
+        |END""".stripMargin
+    val tree = parsePlan(sqlScriptText).asInstanceOf[CompoundBody]
+    assert(tree.handlers.length == 1)
+    assert(tree.handlers.head.isInstanceOf[ErrorHandler])
+  }
+
+  test("declare handler single statement") {
+    val sqlScriptText =
+      """
+        |BEGIN
+        |  DECLARE CONTINUE HANDLER FOR test SELECT 1;
+        |END""".stripMargin
+    val tree = parsePlan(sqlScriptText).asInstanceOf[CompoundBody]
+    assert(tree.handlers.length == 1)
+    assert(tree.handlers.head.isInstanceOf[ErrorHandler])
+  }
+
+  test("declare handler duplicate sqlState") {
+    val sqlScriptText =
+      """
+        |BEGIN
+        |  DECLARE CONTINUE HANDLER FOR test, test BEGIN SELECT 1; END;
+        |END""".stripMargin
+    checkError(
+      exception = intercept[SqlScriptingException] {
+        parsePlan(sqlScriptText)
+      },
+      condition = "DUPLICATE_SQL_STATE_FOR_SAME_HANDLER",
+      parameters = Map("sqlState" -> "test"))
   }
 
   // Helper methods

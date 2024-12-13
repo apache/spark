@@ -133,4 +133,30 @@ private[sql] object SqlScriptingErrors {
       cause = null,
       messageParameters = Map("labelName" -> toSQLStmt(labelName)))
   }
+
+  def duplicateHandlerForSameSqlState(origin: Origin, sqlState: String): Throwable = {
+    new SqlScriptingException(
+      origin = origin,
+      errorClass = "DUPLICATE_HANDLER_FOR_SAME_SQL_STATE",
+      cause = null,
+      messageParameters = Map("sqlState" -> sqlState))
+  }
+
+  def duplicateSqlStateForSameHandler(origin: Origin, sqlState: String): Throwable = {
+    new SqlScriptingException(
+      origin = origin,
+      errorClass = "DUPLICATE_SQL_STATE_FOR_SAME_HANDLER",
+      cause = null,
+      messageParameters = Map("sqlState" -> sqlState))
+  }
+
+  def duplicateConditionNameForDifferentSqlState(
+      origin: Origin,
+      conditionName: String): Throwable = {
+    new SqlScriptingException(
+      origin = origin,
+      errorClass = "DUPLICATE_CONDITION_NAME_FOR_DIFFERENT_SQL_STATE",
+      cause = null,
+      messageParameters = Map("conditionName" -> conditionName))
+  }
 }
