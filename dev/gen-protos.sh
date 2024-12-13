@@ -17,6 +17,9 @@
 # limitations under the License.
 #
 
+# Make sure you run `pip install -r dev/requirements.txt` before running this script.
+# Also make sure to have python in your PATH.
+
 set -ex
 
 SPARK_HOME="$(cd "`dirname $0`"/..; pwd)"
