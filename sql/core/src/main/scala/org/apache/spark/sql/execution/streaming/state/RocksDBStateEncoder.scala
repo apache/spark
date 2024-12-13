@@ -110,18 +110,18 @@ abstract class StateRowPrefixEncoder(
     val result = new Array[Byte](numPrefixBytes + data.length)
     var offset = Platform.BYTE_ARRAY_OFFSET
 
-    // Write schema ID if enabled
-    if (supportSchemaEvolution) {
-      val schemaId = getCurrentSchemaId
-      Platform.putShort(result, offset, schemaId)
-      offset += SCHEMA_ID_PREFIX_BYTES
-    }
-
     // Write column family ID if enabled
     if (useColumnFamilies) {
       val colFamilyId = columnFamilyInfo.get.virtualColumnFamilyId
       Platform.putShort(result, offset, colFamilyId)
       offset += VIRTUAL_COL_FAMILY_PREFIX_BYTES
+    }
+
+    // Write schema ID if enabled
+    if (supportSchemaEvolution) {
+      val schemaId = getCurrentSchemaId
+      Platform.putShort(result, offset, schemaId)
+      offset += SCHEMA_ID_PREFIX_BYTES
     }
 
     // Write the actual data
@@ -137,19 +137,19 @@ abstract class StateRowPrefixEncoder(
   def decodeStateRowPrefix(stateRow: Array[Byte]): StateRowPrefix = {
     var offset = Platform.BYTE_ARRAY_OFFSET
 
-    // Read schema ID if present
-    val schemaId = if (supportSchemaEvolution) {
+    // Read column family ID if present
+    val colFamilyId = if (useColumnFamilies) {
       val id = Platform.getShort(stateRow, offset)
-      offset += SCHEMA_ID_PREFIX_BYTES
+      offset += VIRTUAL_COL_FAMILY_PREFIX_BYTES
       Some(id)
     } else {
       None
     }
 
-    // Read column family ID if present
-    val colFamilyId = if (useColumnFamilies) {
+    // Read schema ID if present
+    val schemaId = if (supportSchemaEvolution) {
       val id = Platform.getShort(stateRow, offset)
-      offset += VIRTUAL_COL_FAMILY_PREFIX_BYTES
+      offset += SCHEMA_ID_PREFIX_BYTES
       Some(id)
     } else {
       None
@@ -518,7 +518,7 @@ class RangeKeyScanStateEncoder(
     avroEnc: Option[AvroEncoder] = None)
   extends StateRowPrefixEncoder(
     provider, useColumnFamilies, columnFamilyInfo, avroEnc.isDefined)
-  with RocksDBKeyStateEncoder {
+  with RocksDBKeyStateEncoder with Logging {
 
   import RocksDBStateEncoder._
 
@@ -1039,7 +1039,7 @@ class RangeKeyScanStateEncoder(
   }
 
   override def encodeKey(row: UnsafeRow): Array[Byte] = {
-    // Encode the prefix key with range scan ordering
+    // First encode the range scan ordered prefix key
     val prefixKey = extractPrefixKey(row)
     val rangeScanKeyEncoded = if (avroEnc.isDefined) {
       encodePrefixKeyForRangeScan(prefixKey, rangeScanAvroType)
@@ -1047,9 +1047,9 @@ class RangeKeyScanStateEncoder(
       encodeUnsafeRow(encodePrefixKeyForRangeScan(prefixKey))
     }
 
-    // Create combined data array based on whether we have remaining keys
-    val combinedData = if (orderingOrdinals.length < keySchema.length) {
-      // Encode remaining key part
+    // Now handle any remaining key parts
+    val data = if (orderingOrdinals.length < keySchema.length) {
+      // We have remaining key parts to encode
       val remainingEncoded = if (avroEnc.isDefined) {
         encodeUnsafeRowToAvro(
           remainingKeyProjection(row),
@@ -1061,41 +1061,47 @@ class RangeKeyScanStateEncoder(
         encodeUnsafeRow(remainingKeyProjection(row))
       }
 
-      // Combine range scan key and remaining key
-      val data = new Array[Byte](4 + rangeScanKeyEncoded.length + remainingEncoded.length)
-      Platform.putInt(data, Platform.BYTE_ARRAY_OFFSET, rangeScanKeyEncoded.length)
+      // Combine range scan key and remaining key with length prefix
+      val combinedData = new Array[Byte](4 + rangeScanKeyEncoded.length + remainingEncoded.length)
+
+      // Write length of range scan key
+      Platform.putInt(combinedData, Platform.BYTE_ARRAY_OFFSET, rangeScanKeyEncoded.length)
+
+      // Write range scan key
       Platform.copyMemory(
         rangeScanKeyEncoded, Platform.BYTE_ARRAY_OFFSET,
-        data, Platform.BYTE_ARRAY_OFFSET + 4,
+        combinedData, Platform.BYTE_ARRAY_OFFSET + 4,
         rangeScanKeyEncoded.length
       )
+      // Write remaining key
       Platform.copyMemory(
         remainingEncoded, Platform.BYTE_ARRAY_OFFSET,
-        data, Platform.BYTE_ARRAY_OFFSET + 4 + rangeScanKeyEncoded.length,
+        combinedData, Platform.BYTE_ARRAY_OFFSET + 4 + rangeScanKeyEncoded.length,
         remainingEncoded.length
       )
-      data
+
+      combinedData
     } else {
-      // Only range scan key exists, no remaining key
-      val data = new Array[Byte](4 + rangeScanKeyEncoded.length)
-      Platform.putInt(data, Platform.BYTE_ARRAY_OFFSET, rangeScanKeyEncoded.length)
+      // No remaining key parts - just add length prefix to range scan key
+      val combinedData = new Array[Byte](4 + rangeScanKeyEncoded.length)
+      Platform.putInt(combinedData, Platform.BYTE_ARRAY_OFFSET, rangeScanKeyEncoded.length)
       Platform.copyMemory(
         rangeScanKeyEncoded, Platform.BYTE_ARRAY_OFFSET,
-        data, Platform.BYTE_ARRAY_OFFSET + 4,
+        combinedData, Platform.BYTE_ARRAY_OFFSET + 4,
         rangeScanKeyEncoded.length
       )
-      data
+      combinedData
     }
 
-    // Add metadata prefixes and return result
-    encodeStateRowWithPrefix(combinedData)
+    // Add metadata prefixes (schema ID and column family ID if enabled)
+    encodeStateRowWithPrefix(data)
   }
 
   override def decodeKey(keyBytes: Array[Byte]): UnsafeRow = {
-    // First decode the metadata prefixes and get the actual key data
+    // First decode metadata prefixes to get the actual key data
     val keyData = decodeStateRowData(keyBytes)
 
-    // Get prefix key length and extract prefix key bytes
+    // Get range scan key length and extract it
     val prefixKeyEncodedLen = Platform.getInt(keyData, Platform.BYTE_ARRAY_OFFSET)
     val prefixKeyEncoded = new Array[Byte](prefixKeyEncodedLen)
     Platform.copyMemory(
@@ -1104,7 +1110,7 @@ class RangeKeyScanStateEncoder(
       prefixKeyEncodedLen
     )
 
-    // Decode the range-scan prefix key
+    // Decode the range scan prefix key
     val prefixKeyDecoded = if (avroEnc.isDefined) {
       decodePrefixKeyForRangeScan(prefixKeyEncoded, rangeScanAvroType)
     } else {
@@ -1113,7 +1119,7 @@ class RangeKeyScanStateEncoder(
     }
 
     if (orderingOrdinals.length < keySchema.length) {
-      // Calculate and extract remaining key bytes
+      // We have remaining key parts to decode
       val remainingKeyEncodedLen = keyData.length - 4 - prefixKeyEncodedLen
       val remainingKeyEncoded = new Array[Byte](remainingKeyEncodedLen)
       Platform.copyMemory(
@@ -1137,24 +1143,24 @@ class RangeKeyScanStateEncoder(
         )
       }
 
-      // Combine prefix and remaining keys
+      // Combine the parts and restore full key
       val joined = joinedRowOnKey.withLeft(prefixKeyDecoded).withRight(remainingKeyDecoded)
       restoreKeyProjection(joined)
     } else {
-      // If no remaining key, return just the prefix key
+      // No remaining key parts - return just the prefix key
       prefixKeyDecoded
     }
   }
 
   override def encodePrefixKey(prefixKey: UnsafeRow): Array[Byte] = {
-    // Encode the prefix key with range scan ordering
+    // First encode the range scan ordered prefix
     val rangeScanKeyEncoded = if (avroEnc.isDefined) {
       encodePrefixKeyForRangeScan(prefixKey, rangeScanAvroType)
     } else {
       encodeUnsafeRow(encodePrefixKeyForRangeScan(prefixKey))
     }
 
-    // Create data array with length prefix
+    // Add length prefix
     val dataWithLength = new Array[Byte](4 + rangeScanKeyEncoded.length)
     Platform.putInt(dataWithLength, Platform.BYTE_ARRAY_OFFSET, rangeScanKeyEncoded.length)
     Platform.copyMemory(
@@ -1163,7 +1169,7 @@ class RangeKeyScanStateEncoder(
       rangeScanKeyEncoded.length
     )
 
-    // Add metadata prefixes and return result
+    // Add metadata prefixes
     encodeStateRowWithPrefix(dataWithLength)
   }
 
