@@ -729,7 +729,8 @@ object ViewHelper extends SQLConfHelper with Logging {
     val uncache = getRawTempView(name.table).map { r =>
       needsToUncache(r, aliasedPlan)
     }.getOrElse(false)
-    val storeAnalyzedPlanForView = conf.storeAnalyzedPlanForView || originalText.isEmpty
+    val storeAnalyzedPlanForView = session.sessionState.conf.storeAnalyzedPlanForView ||
+      originalText.isEmpty
     if (replace && uncache) {
       logDebug(s"Try to uncache ${name.quotedString} before replacing.")
       if (!storeAnalyzedPlanForView) {
