@@ -26,7 +26,7 @@ import io.vertx.core.file.FileSystemOptions;
 
 public class SparkVertxHttpClientFactory implements HttpClient.Factory {
 
-  private volatile static SparkVertxHttpClientFactory INSTANCE;
+  private static volatile SparkVertxHttpClientFactory INSTANCE;
 
   private final Vertx vertx;
 
@@ -47,7 +47,7 @@ public class SparkVertxHttpClientFactory implements HttpClient.Factory {
 
   @Override
   public Builder newBuilder() {
-    return new VertxHttpClientBuilder<>(this, this.vertx);
+    return new VertxHttpClientBuilder<>(this, vertx);
   }
 
   private static synchronized Vertx createVertxInstance() {
@@ -57,10 +57,9 @@ public class SparkVertxHttpClientFactory implements HttpClient.Factory {
     try {
       System.setProperty("vertx.disableDnsResolver", "true");
       vertx = Vertx.vertx((new VertxOptions().setUseDaemonThread(true))
-          .setUseDaemonThread(true)
-          .setFileSystemOptions((new FileSystemOptions())
-              .setFileCachingEnabled(false)
-              .setClassPathResolvingEnabled(false)));
+        .setFileSystemOptions((new FileSystemOptions())
+        .setFileCachingEnabled(false)
+        .setClassPathResolvingEnabled(false)));
     } finally {
       if (originalValue == null) {
         System.clearProperty("vertx.disableDnsResolver");
