@@ -391,10 +391,6 @@ private[sql] class RocksDBStateStoreProvider
     rocksDB // lazy initialization
     var defaultColFamilyId: Option[Short] = None
 
-    if (useColumnFamilies) {
-      defaultColFamilyId = Some(rocksDB.createColFamilyIfAbsent(StateStore.DEFAULT_COL_FAMILY_NAME))
-    }
-
     val colFamilyName = StateStore.DEFAULT_COL_FAMILY_NAME
     // Create cache key using store ID to avoid collisions
     val avroEncCacheKey = s"${getRunId(hadoopConf)}_${stateStoreId.operatorId}_" +
@@ -402,8 +398,12 @@ private[sql] class RocksDBStateStoreProvider
     val avroEnc = getAvroEnc(
       stateStoreEncoding, avroEncCacheKey, keyStateEncoderSpec, valueSchema)
 
+    if (useColumnFamilies) {
+      defaultColFamilyId = Some(rocksDB.createColFamilyIfAbsent(StateStore.DEFAULT_COL_FAMILY_NAME))
+      val columnFamilyInfo = Some(ColumnFamilyInfo(colFamilyName, defaultColFamilyId.get))
+    }
+
     val provider = RocksDBStateStoreProvider.this
-    val columnFamilyInfo = Some(ColumnFamilyInfo(colFamilyName, defaultColFamilyId.get))
     keyValueEncoderMap.putIfAbsent(colFamilyName,
       (
         RocksDBStateEncoder.getKeyEncoder(
