@@ -177,22 +177,71 @@ class DataType(google.protobuf.message.Message):
     class String(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
+        class Constraint(google.protobuf.message.Message):
+            DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+            FIXED_LENGTH_FIELD_NUMBER: builtins.int
+            MAX_LENGTH_FIELD_NUMBER: builtins.int
+            fixed_length: builtins.int
+            max_length: builtins.int
+            def __init__(
+                self,
+                *,
+                fixed_length: builtins.int = ...,
+                max_length: builtins.int = ...,
+            ) -> None: ...
+            def HasField(
+                self,
+                field_name: typing_extensions.Literal[
+                    "fixed_length", b"fixed_length", "max_length", b"max_length", "value", b"value"
+                ],
+            ) -> builtins.bool: ...
+            def ClearField(
+                self,
+                field_name: typing_extensions.Literal[
+                    "fixed_length", b"fixed_length", "max_length", b"max_length", "value", b"value"
+                ],
+            ) -> None: ...
+            def WhichOneof(
+                self, oneof_group: typing_extensions.Literal["value", b"value"]
+            ) -> typing_extensions.Literal["fixed_length", "max_length"] | None: ...
+
         TYPE_VARIATION_REFERENCE_FIELD_NUMBER: builtins.int
         COLLATION_FIELD_NUMBER: builtins.int
+        CONSTRAINT_FIELD_NUMBER: builtins.int
         type_variation_reference: builtins.int
         collation: builtins.str
+        @property
+        def constraint(self) -> global___DataType.String.Constraint: ...
         def __init__(
             self,
             *,
             type_variation_reference: builtins.int = ...,
             collation: builtins.str = ...,
+            constraint: global___DataType.String.Constraint | None = ...,
         ) -> None: ...
+        def HasField(
+            self,
+            field_name: typing_extensions.Literal[
+                "_constraint", b"_constraint", "constraint", b"constraint"
+            ],
+        ) -> builtins.bool: ...
         def ClearField(
             self,
             field_name: typing_extensions.Literal[
-                "collation", b"collation", "type_variation_reference", b"type_variation_reference"
+                "_constraint",
+                b"_constraint",
+                "collation",
+                b"collation",
+                "constraint",
+                b"constraint",
+                "type_variation_reference",
+                b"type_variation_reference",
             ],
         ) -> None: ...
+        def WhichOneof(
+            self, oneof_group: typing_extensions.Literal["_constraint", b"_constraint"]
+        ) -> typing_extensions.Literal["constraint"] | None: ...
 
     class Binary(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
