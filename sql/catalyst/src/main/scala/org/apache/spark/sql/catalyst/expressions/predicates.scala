@@ -490,7 +490,7 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
   override def toString: String = {
     val limit = SQLConf.get.optimizerInSetMemberLoggingLimit
     if (list.length <= limit) {
-      s"$value IN ${list.mkString("(", ", ", ")")}"
+      s"$value IN ${list.mkString("(", ",", ")")}"
     } else {
       s"$value IN ${list.take(limit).mkString("(", ",", ", ...)")}"
     }
