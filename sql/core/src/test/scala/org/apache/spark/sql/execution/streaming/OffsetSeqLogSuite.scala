@@ -148,17 +148,30 @@ class OffsetSeqLogSuite extends SharedSparkSession {
       Some("avro"))
   }
 
-  private def verifyOffsetLogEntry(checkpointDir: String, encodingFormat: String): Unit = {
+  // Verify whether entry exists within the offset log and has the right value or that we pick up
+  // the correct default values when populating the session conf.
+  private def verifyOffsetLogEntry(
+      checkpointDir: String,
+      entryExists: Boolean,
+      encodingFormat: String): Unit = {
     val log = new OffsetSeqLog(spark, s"$checkpointDir/offsets")
     val latestBatchId = log.getLatestBatchId()
     assert(latestBatchId.isDefined, "No offset log entries found in the checkpoint location")
 
     // Read the latest offset log
     val offsetSeq = log.get(latestBatchId.get).get
-    val encodingFormatOpt = offsetSeq.metadata.get.conf.get(
-      SQLConf.STREAMING_STATE_STORE_ENCODING_FORMAT.key)
-    assert(encodingFormatOpt.isDefined, "No store encoding format found in the offset log entry")
-    assert(encodingFormatOpt.get == encodingFormat)
+    val offsetSeqMetadata = offsetSeq.metadata.get
+
+    if (entryExists) {
+      val encodingFormatOpt = offsetSeqMetadata.conf.get(
+        SQLConf.STREAMING_STATE_STORE_ENCODING_FORMAT.key)
+      assert(encodingFormatOpt.isDefined, "No store encoding format found in the offset log entry")
+      assert(encodingFormatOpt.get == encodingFormat)
+    }
+
+    val clonedSqlConf = spark.sessionState.conf.clone()
+    OffsetSeqMetadata.setSessionConf(offsetSeqMetadata, clonedSqlConf)
+    assert(clonedSqlConf.stateStoreEncodingFormat == encodingFormat)
   }
 
   // verify that checkpoint created with different store encoding formats are read correctly
@@ -168,8 +181,19 @@ class OffsetSeqLogSuite extends SharedSparkSession {
         val resourceUri = this.getClass.getResource(
         "/structured-streaming/checkpoint-version-4.0.0-tws-" + storeEncodingFormat + "/").toURI
         FileUtils.copyDirectory(new File(resourceUri), checkpointDir.getCanonicalFile)
-        verifyOffsetLogEntry(checkpointDir.getAbsolutePath, storeEncodingFormat)
+        verifyOffsetLogEntry(checkpointDir.getAbsolutePath, entryExists = true,
+          storeEncodingFormat)
       }
+    }
+  }
+
+  test("verify format values from old checkpoint with Spark version 3.5.1") {
+    withTempDir { checkpointDir =>
+      val resourceUri = this.getClass.getResource(
+        "/structured-streaming/checkpoint-version-3.5.1-streaming-deduplication/").toURI
+      FileUtils.copyDirectory(new File(resourceUri), checkpointDir.getCanonicalFile)
+      verifyOffsetLogEntry(checkpointDir.getAbsolutePath, entryExists = false,
+        "unsaferow")
     }
   }
 }
