@@ -478,7 +478,10 @@ case class TransformWithStateExec(
       case Some(metadata) =>
         metadata match {
           case v2: OperatorStateMetadataV2 =>
-            Some(new Path(v2.stateStoreInfo.head.stateSchemaFilePath))
+            val stateSchemaFilePaths = v2.stateStoreInfo.head.stateSchemaFilePaths
+            val stateSchemaId = stateSchemaFilePaths.keys.max
+            val stateSchemaFilePath = stateSchemaFilePaths(stateSchemaId)
+            Some(new Path(stateSchemaFilePath))
           case _ => None
         }
       case None => None
@@ -493,13 +496,16 @@ case class TransformWithStateExec(
 
   /** Metadata of this stateful operator and its states stores. */
   override def operatorStateMetadata(
-      stateSchemaPaths: List[String]): OperatorStateMetadata = {
+      stateSchemaPaths: List[Map[Int, String]]): OperatorStateMetadata = {
     val info = getStateInfo
     val operatorInfo = OperatorInfoV1(info.operatorId, shortName)
     // stateSchemaFilePath should be populated at this point
+
     val stateStoreInfo =
-      Array(StateStoreMetadataV2(
-        StateStoreId.DEFAULT_STORE_NAME, 0, info.numPartitions, stateSchemaPaths.head))
+      Array(
+        StateStoreMetadataV2(
+          StateStoreId.DEFAULT_STORE_NAME,
+          0, info.numPartitions, stateSchemaPaths.head.keys.max, stateSchemaPaths.head))
 
     val operatorProperties = TransformWithStateOperatorProperties(
       timeMode.toString,
