@@ -301,7 +301,6 @@ class OperatorStateMetadataV2Writer(
     if (fm.exists(metadataFilePath)) return
 
     fm.mkdirs(metadataFilePath.getParent)
-    logError(s"### metadataFilePath: $metadataFilePath")
     val outputStream = fm.createAtomic(metadataFilePath, overwriteIfPossible = false)
     OperatorStateMetadataUtils.writeMetadata(outputStream, operatorMetadata, metadataFilePath)
   }
@@ -348,7 +347,6 @@ class OperatorStateMetadataV2Reader(
 
   override def read(): Option[OperatorStateMetadata] = {
     val batches = listOperatorMetadataBatches()
-    logError(s"### batches: ${batches.mkString("Array(", ", ", ")")}")
     val lastBatchId = batches.filter(_ <= batchId).lastOption
     if (lastBatchId.isEmpty) {
       throw StateDataSourceErrors.failedToReadOperatorMetadata(stateCheckpointPath.toString,

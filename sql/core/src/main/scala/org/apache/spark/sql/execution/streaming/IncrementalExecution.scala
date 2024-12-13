@@ -226,11 +226,11 @@ class IncrementalExecution(
         statefulOp match {
           case ssw: StateStoreWriter =>
             // validate metadata
-            if (isFirstBatch && currentBatchId != 0) {
+            val oldMetadata = if (isFirstBatch && currentBatchId != 0) {
               // If we are restarting from a different checkpoint directory
               // there may be a mismatch between the stateful operators in the
               // physical plan and the metadata.
-              val oldMetadata = try {
+              try {
                 OperatorStateMetadataReader.createReader(
                   new Path(checkpointLocation, ssw.getStateInfo.operatorId.toString),
                   hadoopConf, ssw.operatorStateMetadataVersion, currentBatchId - 1).read()
@@ -241,20 +241,22 @@ class IncrementalExecution(
                     log"versions: ${MDC(ERROR, e.getMessage)}")
                 None
               }
-              val stateSchemaMapping = ssw.stateSchemaMapping(schemaValidationResult,
-                oldMetadata)
-              val metadata = ssw.operatorStateMetadata(stateSchemaMapping)
-              oldMetadata match {
-                case Some(oldMetadata) => ssw.validateNewMetadata(oldMetadata, metadata)
-                case None =>
-              }
-              val metadataWriter = OperatorStateMetadataWriter.createWriter(
-                new Path(checkpointLocation, ssw.getStateInfo.operatorId.toString),
-                hadoopConf,
-                ssw.operatorStateMetadataVersion,
-                Some(currentBatchId))
-              metadataWriter.write(metadata)
+            } else {
+              None
             }
+            val stateSchemaMapping = ssw.stateSchemaMapping(schemaValidationResult,
+              oldMetadata)
+            val metadata = ssw.operatorStateMetadata(stateSchemaMapping)
+            oldMetadata match {
+              case Some(oldMetadata) => ssw.validateNewMetadata(oldMetadata, metadata)
+              case None =>
+            }
+            val metadataWriter = OperatorStateMetadataWriter.createWriter(
+              new Path(checkpointLocation, ssw.getStateInfo.operatorId.toString),
+              hadoopConf,
+              ssw.operatorStateMetadataVersion,
+              Some(currentBatchId))
+            metadataWriter.write(metadata)
           case _ =>
         }
         statefulOp
