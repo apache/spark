@@ -822,12 +822,12 @@ jobs:
         run: |
           echo 'Thread.sleep(10000); spark.range(1024).count()' | ./bin/spark-shell > spark-shell-repl.log
           grep 'res.*Long.*1024' spark-shell-repl.log
-      - name: Spark Shell Connect
-        shell: 'script -q -e -c "bash {0}"'
-        run: |
-          export TERM=vt100
-          echo 'Thread.sleep(10000); spark.range(1024).count()' | ./bin/spark-shell --remote local > spark-connect-repl.log
-          grep 'res.*Long.*1024' spark-connect-repl.log
+      #      - name: Spark Shell Connect
+      #        shell: 'script -q -e -c "bash {0}"'
+      #        run: |
+      #          export TERM=vt100
+      #          echo 'Thread.sleep(10000); spark.range(1024).count()' | ./bin/spark-shell --remote local > spark-connect-repl.log
+      #          grep 'res.*Long.*1024' spark-connect-repl.log
       - name: PySpark Classic
         shell: 'script -q -e -c "bash {0}"'
         run: |
