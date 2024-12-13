@@ -82,7 +82,6 @@ class TestMapStateProcessor
  */
 class TransformWithMapStateSuite extends StreamTest
   with AlsoTestWithRocksDBFeatures with AlsoTestWithEncodingTypes {
-
   import testImplicits._
 
   private def testMapStateWithNullUserKey(inputMapRow: InputMapRow): Unit = {
