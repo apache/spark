@@ -36,6 +36,8 @@ jobs:
       hadoop: hadoop3
       envs: >-
         {
+          "PYSPARK_IMAGE_TO_TEST": "python-311",
+          "PYTHON_TO_TEST": "python3.11",
           "SPARK_ANSI_SQL_MODE": "false",
         }
       jobs: >-
