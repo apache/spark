@@ -17,18 +17,36 @@
 
 package org.apache.spark.deploy.k8s;
 
+import io.fabric8.kubernetes.client.http.HttpClient;
+import io.fabric8.kubernetes.client.http.HttpClient.Builder;
 import io.fabric8.kubernetes.client.vertx.VertxHttpClientBuilder;
-import io.fabric8.kubernetes.client.vertx.VertxHttpClientFactory;
 import io.vertx.core.Vertx;
 import io.vertx.core.VertxOptions;
 import io.vertx.core.file.FileSystemOptions;
 
-public class SparkVertxHttpClientFactory extends VertxHttpClientFactory {
+public class SparkVertxHttpClientFactory implements HttpClient.Factory {
 
-  private final Vertx vertx = createVertxInstance();
+  private volatile static SparkVertxHttpClientFactory INSTANCE;
+
+  private final Vertx vertx;
+
+  private SparkVertxHttpClientFactory() {
+    this.vertx = createVertxInstance();
+  }
+
+  public static SparkVertxHttpClientFactory instance() {
+    if (INSTANCE == null) {
+      synchronized (SparkVertxHttpClientFactory.class) {
+        if (INSTANCE == null) {
+          INSTANCE = new SparkVertxHttpClientFactory();
+        }
+      }
+    }
+    return INSTANCE;
+  }
 
   @Override
-  public VertxHttpClientBuilder<VertxHttpClientFactory> newBuilder() {
+  public Builder newBuilder() {
     return new VertxHttpClientBuilder<>(this, this.vertx);
   }
 
@@ -38,18 +56,17 @@ public class SparkVertxHttpClientFactory extends VertxHttpClientFactory {
     Vertx vertx;
     try {
       System.setProperty("vertx.disableDnsResolver", "true");
-      vertx = Vertx.vertx((new VertxOptions())
-        .setUseDaemonThread(true)
-        .setFileSystemOptions((new FileSystemOptions())
-        .setFileCachingEnabled(false)
-        .setClassPathResolvingEnabled(false)));
+      vertx = Vertx.vertx((new VertxOptions().setUseDaemonThread(true))
+          .setUseDaemonThread(true)
+          .setFileSystemOptions((new FileSystemOptions())
+              .setFileCachingEnabled(false)
+              .setClassPathResolvingEnabled(false)));
     } finally {
       if (originalValue == null) {
         System.clearProperty("vertx.disableDnsResolver");
       } else {
         System.setProperty("vertx.disableDnsResolver", originalValue);
       }
-
     }
 
     return vertx;

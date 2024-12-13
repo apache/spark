@@ -17,10 +17,11 @@
 package org.apache.spark.deploy.k8s.features
 
 import io.fabric8.kubernetes.api.model._
+import io.fabric8.kubernetes.client.KubernetesClientBuilder
 import io.fabric8.volcano.api.model.scheduling.v1beta1.{PodGroup, PodGroupSpec}
 import io.fabric8.volcano.client.DefaultVolcanoClient
 
-import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesDriverConf, KubernetesExecutorConf, SparkPod}
+import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesDriverConf, KubernetesExecutorConf, SparkPod, SparkVertxHttpClientFactory}
 import org.apache.spark.internal.Logging
 
 private[spark] class VolcanoFeatureStep extends KubernetesDriverCustomFeatureConfigStep
@@ -46,7 +47,8 @@ private[spark] class VolcanoFeatureStep extends KubernetesDriverCustomFeatureCon
         "for executor.")
       return Seq.empty
     }
-    lazy val client = new DefaultVolcanoClient
+    lazy val client = new DefaultVolcanoClient(new KubernetesClientBuilder()
+      .withHttpClientFactory(SparkVertxHttpClientFactory.instance).build())
     val template = kubernetesConf.getOption(POD_GROUP_TEMPLATE_FILE_KEY)
     val pg = template.map(client.podGroups.load(_).item).getOrElse(new PodGroup())
     var metadata = pg.getMetadata
