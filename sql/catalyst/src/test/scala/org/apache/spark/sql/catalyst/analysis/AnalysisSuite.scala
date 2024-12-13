@@ -777,6 +777,14 @@ class AnalysisSuite extends AnalysisTest with Matchers {
         PosExplode($"list"), Seq("first_pos", "first_val")), Seq("second_pos", "second_val"))))
   }
 
+  test("SPARK-50497 Non-generator function with multiple aliases") {
+    assertAnalysisErrorCondition(parsePlan("SELECT 'length' (a)"),
+      "MULTI_ALIAS_WITHOUT_GENERATOR",
+      Map("expr" -> "\"length\"", "names" -> "a"),
+      Array(ExpectedContext("SELECT 'length' (a)", 0, 18))
+    )
+  }
+
   test("SPARK-24151: CURRENT_DATE, CURRENT_TIMESTAMP should be case insensitive") {
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
       val input = Project(Seq(

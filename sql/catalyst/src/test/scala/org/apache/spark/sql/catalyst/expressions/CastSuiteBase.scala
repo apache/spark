@@ -1015,6 +1015,17 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
+  test("disallow type conversions between calendar interval type and char/varchar types") {
+    Seq(CharType(10), VarcharType(10))
+      .foreach { typ =>
+      verifyCastFailure(
+        cast(Literal.default(CalendarIntervalType), typ),
+        DataTypeMismatch(
+          "CAST_WITHOUT_SUGGESTION",
+          Map("srcType" -> "\"INTERVAL\"", "targetType" -> toSQLType(typ))))
+    }
+  }
+
   test("SPARK-35720: cast string to timestamp without timezone") {
     specialTs.foreach { s =>
       val expectedTs = LocalDateTime.parse(s)

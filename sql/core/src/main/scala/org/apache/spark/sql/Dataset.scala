@@ -733,12 +733,12 @@ class Dataset[T] private[sql](
 
   /** @inheritdoc */
   def lateralJoin(right: DS[_], joinType: String): DataFrame = {
-    lateralJoin(right, None, JoinType(joinType))
+    lateralJoin(right, None, LateralJoinType(joinType))
   }
 
   /** @inheritdoc */
   def lateralJoin(right: DS[_], joinExprs: Column, joinType: String): DataFrame = {
-    lateralJoin(right, Some(joinExprs), JoinType(joinType))
+    lateralJoin(right, Some(joinExprs), LateralJoinType(joinType))
   }
 
   // TODO(SPARK-22947): Fix the DataFrame API.
