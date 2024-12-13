@@ -80,6 +80,10 @@ class UDTFParityTests(BaseUDTFTestsMixin, ReusedConnectTestCase):
     def test_df_asTable(self):
         super().test_df_asTable()
 
+    @unittest.skip("TODO(SPARK-50393): support df.asTable() in Spark Connect")
+    def test_df_asTable_chaining_methods(self):
+        super().test_df_asTable_chaining_methods()
+
     def _add_pyfile(self, path):
         self.spark.addArtifacts(path, pyfile=True)
 
