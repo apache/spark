@@ -24,7 +24,7 @@ class TableArg(
     val expression: FunctionTableSubqueryArgumentExpression,
     private val sparkSession: SparkSession
 )  extends UDTFArgument {
-  import sparkSession.RichColumn
+  import sparkSession.toRichColumn
 
   def partitionBy(cols: Seq[Column]): TableArg = {
     if (expression.withSinglePartition) {
