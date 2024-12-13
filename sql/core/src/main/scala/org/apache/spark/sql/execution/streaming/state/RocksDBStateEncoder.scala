@@ -51,11 +51,6 @@ sealed trait RocksDBValueStateEncoder {
   def decodeValues(valueBytes: Array[Byte]): Iterator[UnsafeRow]
 }
 
-case class StateSchemaMetadataValue(
-    avroSchema: Schema,
-    sqlSchema: StructType
-)
-
 case class ColumnFamilyInfo(
     colFamilyName: String,
     virtualColumnFamilyId: Short
@@ -66,6 +61,29 @@ case class StateRowPrefix(
     columnFamilyId: Option[Short]
 )
 
+/**
+ * Base encoder class that handles common prefix encoding/decoding operations for state store rows.
+ * This encoder manages the addition and extraction of metadata prefixes (schema ID and
+ * column family ID) to state store rows, providing a consistent way to handle state data versioning
+ * and organization across different encoder implementations.
+ *
+ * The encoder supports two types of optional prefixes:
+ * 1. Column Family ID (when column families are enabled):
+ *    - Uses VIRTUAL_COL_FAMILY_PREFIX_BYTES to store the virtual column family identifier
+ *    - Enables organization of state data into different column families
+ *
+ * 2. Schema ID (when schema evolution is enabled):
+ *    - Uses SCHEMA_ID_PREFIX_BYTES to store the schema version identifier
+ *    - Facilitates schema evolution by tracking schema versions of stored data
+ *
+ * The encoded row format with all prefixes enabled is:
+ * [Column Family ID (optional)] [Schema ID (optional)] [Actual Data]
+ *
+ * @param provider The RocksDBStateStoreProvider instance managing this encoder
+ * @param useColumnFamilies Whether column families are enabled for this encoder
+ * @param columnFamilyInfo Optional information about the column family when enabled
+ * @param supportSchemaEvolution Whether schema evolution is enabled for this encoder
+ */
 abstract class StateRowPrefixEncoder(
     provider: RocksDBStateStoreProvider,
     useColumnFamilies: Boolean,
@@ -85,11 +103,9 @@ abstract class StateRowPrefixEncoder(
     0
   }
 
-  def getNumPrefixBytes = numColFamilyBytes + schemaIdBytes
+  def getNumPrefixBytes: Int = numColFamilyBytes + schemaIdBytes
 
   def getCurrentSchemaId: Short = 0
-
-  def getSchemaById(schemaId: Short): StateSchemaMetadataValue = null
 
   val out = new ByteArrayOutputStream
   /**
