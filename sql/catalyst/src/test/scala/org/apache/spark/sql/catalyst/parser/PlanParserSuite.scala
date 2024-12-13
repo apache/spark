@@ -58,7 +58,6 @@ class PlanParserSuite extends AnalysisTest {
 
   private def cte(
       plan: LogicalPlan,
-      allowRecursion: Boolean,
       namedPlans: (String, (LogicalPlan, Seq[String]))*): UnresolvedWith = {
     val ctes = namedPlans.map {
       case (name, (cte, columnAliases)) =>
@@ -69,7 +68,7 @@ class PlanParserSuite extends AnalysisTest {
         }
         name -> SubqueryAlias(name, subquery)
     }
-    UnresolvedWith(plan, ctes, allowRecursion)
+    UnresolvedWith(plan, ctes)
   }
 
   test("single comment case one") {
@@ -284,14 +283,13 @@ class PlanParserSuite extends AnalysisTest {
   test("common table expressions") {
     assertEqual(
       "with cte1 as (select * from a) select * from cte1",
-      cte(table("cte1").select(star()), false, "cte1" -> ((table("a").select(star()), Seq.empty))))
+      cte(table("cte1").select(star()), "cte1" -> ((table("a").select(star()), Seq.empty))))
     assertEqual(
       "with cte1 (select 1) select * from cte1",
-      cte(table("cte1").select(star()), false, "cte1" -> ((OneRowRelation().select(1), Seq.empty))))
+      cte(table("cte1").select(star()), "cte1" -> ((OneRowRelation().select(1), Seq.empty))))
     assertEqual(
       "with cte1 (select 1), cte2 as (select * from cte1) select * from cte2",
       cte(table("cte2").select(star()),
-        false,
         "cte1" -> ((OneRowRelation().select(1), Seq.empty)),
         "cte2" -> ((table("cte1").select(star()), Seq.empty))))
     val sql = "with cte1 (select 1), cte1 as (select 1 from cte1) select * from cte1"
@@ -1418,7 +1416,6 @@ class PlanParserSuite extends AnalysisTest {
         |SELECT * FROM cte1
       """.stripMargin,
       cte(table("cte1").select(star()),
-        false,
         "cte1" -> ((table("testcat", "db", "tab").select(star()), Seq.empty))))
 
     assertEqual(
@@ -1429,7 +1426,7 @@ class PlanParserSuite extends AnalysisTest {
   test("CTE with column alias") {
     assertEqual(
       "WITH t(x) AS (SELECT c FROM a) SELECT * FROM t",
-      cte(table("t").select(star()), false, "t" -> ((table("a").select($"c"), Seq("x")))))
+      cte(table("t").select(star()), "t" -> ((table("a").select($"c"), Seq("x")))))
   }
 
   test("statement containing terminal semicolons") {
