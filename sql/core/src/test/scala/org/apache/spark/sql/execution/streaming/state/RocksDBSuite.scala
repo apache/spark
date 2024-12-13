@@ -1710,6 +1710,74 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
     }
   }
 
+  Seq(true, false).foreach { schemaEvolutionEnabled =>
+    testWithColumnFamilies(s"test that state row prefix encoding works as expected" +
+      s" with schema evolution set to $schemaEvolutionEnabled",
+      TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
+      withTempDir { dir =>
+        val sqlConf = SQLConf.get.clone()
+        val dbConf = RocksDBConf(StateStoreConf(sqlConf))
+
+        val colFamilyInfo = if (colFamiliesEnabled) {
+          Some(ColumnFamilyInfo("dummyColFamily", 1))
+        } else {
+          None
+        }
+
+        val remoteDir = dir.getCanonicalPath
+        withDB(remoteDir, conf = dbConf, useColumnFamilies = colFamiliesEnabled) { db =>
+          db.load(0)
+
+          val keyRowPrefixEncoder = new TestStateRowPrefixEncoder(
+            useColumnFamilies = colFamiliesEnabled,
+            colFamilyInfo, supportSchemaEvolution = schemaEvolutionEnabled)
+
+          val valueRowPrefixEncoder = new TestStateRowPrefixEncoder(
+            false, None, supportSchemaEvolution = schemaEvolutionEnabled)
+
+          // Create some test data with known prefix values
+          val testData = "test data".getBytes
+          val encodedKey = keyRowPrefixEncoder.encodeStateRowWithPrefix(testData)
+          val encodedValue = valueRowPrefixEncoder.encodeStateRowWithPrefix(testData)
+
+          // Write to DB
+          db.put(encodedKey, encodedValue)
+          db.commit()
+
+          // Read back and verify prefixes
+          val retrievedValue = db.get(encodedKey)
+
+          // Verify key prefixes
+          val keyPrefix = keyRowPrefixEncoder.decodeStateRowPrefix(encodedKey)
+          assert(keyPrefix.schemaId.isDefined == schemaEvolutionEnabled)
+          if (schemaEvolutionEnabled) {
+            assert(keyPrefix.schemaId.get === keyRowPrefixEncoder.getCurrentSchemaId)
+          }
+          if (colFamiliesEnabled) {
+            assert(keyPrefix.columnFamilyId.isDefined)
+            assert(keyPrefix.columnFamilyId.get === 1)
+          } else {
+            assert(keyPrefix.columnFamilyId.isEmpty)
+          }
+
+          // Verify value prefixes
+          val valuePrefix = valueRowPrefixEncoder.decodeStateRowPrefix(retrievedValue)
+          assert(valuePrefix.schemaId.isDefined == schemaEvolutionEnabled)
+          if (schemaEvolutionEnabled) {
+            assert(valuePrefix.schemaId.get === valueRowPrefixEncoder.getCurrentSchemaId)
+          }
+          assert(valuePrefix.columnFamilyId.isEmpty) // Values don't have column family IDs
+
+          // Verify the actual data after stripping prefixes
+          val retrievedKeyData = keyRowPrefixEncoder.decodeStateRowData(encodedKey)
+          val retrievedValueData = valueRowPrefixEncoder.decodeStateRowData(retrievedValue)
+          assert(retrievedKeyData === testData)
+          assert(retrievedValueData === testData)
+        }
+      }
+    }
+  }
+
   Seq("test", "true").foreach { maxOpenFiles =>
     testWithColumnFamilies(s"SPARK-39781: adding invalid max_open_files=$maxOpenFiles config " +
       "property for RocksDB state store instance should fail",

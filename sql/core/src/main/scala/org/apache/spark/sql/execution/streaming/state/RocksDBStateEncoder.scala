@@ -84,7 +84,7 @@ case class StateRowPrefix(
  * @param columnFamilyInfo Optional information about the column family when enabled
  * @param supportSchemaEvolution Whether schema evolution is enabled for this encoder
  */
-abstract class StateRowPrefixEncoder(
+class StateRowPrefixEncoder(
     provider: RocksDBStateStoreProvider,
     useColumnFamilies: Boolean,
     columnFamilyInfo: Option[ColumnFamilyInfo],
@@ -189,6 +189,13 @@ abstract class StateRowPrefixEncoder(
     data
   }
 }
+
+class TestStateRowPrefixEncoder(
+    useColumnFamilies: Boolean,
+    columnFamilyInfo: Option[ColumnFamilyInfo],
+    supportSchemaEvolution: Boolean
+) extends StateRowPrefixEncoder(
+  null, useColumnFamilies, columnFamilyInfo, supportSchemaEvolution)
 
 object RocksDBStateEncoder extends Logging {
   def getKeyEncoder(
