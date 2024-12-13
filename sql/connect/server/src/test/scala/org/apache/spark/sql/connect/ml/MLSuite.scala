@@ -201,59 +201,101 @@ class MLSuite extends SparkFunSuite with SparkConnectPlanTest {
       assert(lrModel.getMaxIter === 2)
 
       // Fetch double attribute
-      val fetchInterceptCommand = proto.MlCommand
+      val interceptCommand = proto.MlCommand
         .newBuilder()
         .setFetch(
           proto.Fetch
             .newBuilder()
             .setObjRef(proto.ObjectRef.newBuilder().setId(modelId))
-            .setMethod("intercept"))
+            .addMethods(proto.Fetch.Method.newBuilder().setMethod("intercept")))
         .build()
-      val interceptResult = MLHandler.handleMlCommand(sessionHolder, fetchInterceptCommand)
+      val interceptResult = MLHandler.handleMlCommand(sessionHolder, interceptCommand)
       assert(interceptResult.getParam.getLiteral.getDouble === lrModel.intercept)
 
       // Fetch Vector attribute
-      val fetchCoefficientsCommand = proto.MlCommand
+      val coefficientsCommand = proto.MlCommand
         .newBuilder()
         .setFetch(
           proto.Fetch
             .newBuilder()
             .setObjRef(proto.ObjectRef.newBuilder().setId(modelId))
-            .setMethod("coefficients"))
+            .addMethods(proto.Fetch.Method.newBuilder().setMethod("coefficients")))
         .build()
-      val coefficientsResult = MLHandler.handleMlCommand(sessionHolder, fetchCoefficientsCommand)
+      val coefficientsResult = MLHandler.handleMlCommand(sessionHolder, coefficientsCommand)
       val deserializedCoefficients =
         MLUtils.deserializeVector(coefficientsResult.getParam.getVector)
       assert(deserializedCoefficients === lrModel.coefficients)
 
       // Fetch Matrix attribute
-      val fetchCoefficientsMatrixCommand = proto.MlCommand
+      val coefficientsMatrixCommand = proto.MlCommand
         .newBuilder()
         .setFetch(
           proto.Fetch
             .newBuilder()
             .setObjRef(proto.ObjectRef.newBuilder().setId(modelId))
-            .setMethod("coefficientMatrix"))
+            .addMethods(proto.Fetch.Method.newBuilder().setMethod("coefficientMatrix")))
         .build()
       val coefficientsMatrixResult =
-        MLHandler.handleMlCommand(sessionHolder, fetchCoefficientsMatrixCommand)
+        MLHandler.handleMlCommand(sessionHolder, coefficientsMatrixCommand)
       val deserializedCoefficientsMatrix =
         MLUtils.deserializeMatrix(coefficientsMatrixResult.getParam.getMatrix)
       assert(lrModel.coefficientMatrix === deserializedCoefficientsMatrix)
 
+      // Predict with sparse vector
+      val sparseVector = Vectors.dense(Array(0.0, 2.0)).toSparse
+      val predictCommand = proto.MlCommand
+        .newBuilder()
+        .setFetch(
+          proto.Fetch
+            .newBuilder()
+            .setObjRef(proto.ObjectRef.newBuilder().setId(modelId))
+            .addMethods(
+              proto.Fetch.Method
+                .newBuilder()
+                .setMethod("predict")
+                .addArgs(proto.Fetch.Method.Args
+                  .newBuilder()
+                  .setParam(Serializer.serializeParam(sparseVector)))))
+        .build()
+      val predictResult = MLHandler.handleMlCommand(sessionHolder, predictCommand)
+      val predictValue = predictResult.getParam.getLiteral.getDouble
+      assert(lrModel.predict(sparseVector) === predictValue)
+
       // The loaded model doesn't have summary
       if (hasSummary) {
         // Fetch summary attribute
-        val fetchSummaryAttrCommand = proto.MlCommand
+        val accuracyCommand = proto.MlCommand
           .newBuilder()
           .setFetch(
             proto.Fetch
               .newBuilder()
-              .setObjRef(proto.ObjectRef.newBuilder().setId(modelId + ".summary"))
-              .setMethod("accuracy"))
+              .setObjRef(proto.ObjectRef.newBuilder().setId(modelId))
+              .addMethods(proto.Fetch.Method.newBuilder().setMethod("summary"))
+              .addMethods(proto.Fetch.Method.newBuilder().setMethod("accuracy")))
           .build()
-        val accuracyResult = MLHandler.handleMlCommand(sessionHolder, fetchSummaryAttrCommand)
+        val accuracyResult = MLHandler.handleMlCommand(sessionHolder, accuracyCommand)
         assert(lrModel.summary.accuracy === accuracyResult.getParam.getLiteral.getDouble)
+
+        val weightedFMeasureCommand = proto.MlCommand
+          .newBuilder()
+          .setFetch(
+            proto.Fetch
+              .newBuilder()
+              .setObjRef(proto.ObjectRef.newBuilder().setId(modelId))
+              .addMethods(proto.Fetch.Method.newBuilder().setMethod("summary"))
+              .addMethods(
+                proto.Fetch.Method
+                  .newBuilder()
+                  .setMethod("weightedFMeasure")
+                  .addArgs(proto.Fetch.Method.Args
+                    .newBuilder()
+                    .setParam(Serializer.serializeParam(2.5)))))
+          .build()
+        val weightedFMeasureResult =
+          MLHandler.handleMlCommand(sessionHolder, weightedFMeasureCommand)
+        assert(
+          lrModel.summary.weightedFMeasure(2.5) ===
+            weightedFMeasureResult.getParam.getLiteral.getDouble)
       }
     }
 

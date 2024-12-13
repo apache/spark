@@ -74,9 +74,9 @@ def serialize(client: "SparkConnectClient", *args: Any) -> List[Any]:
     result = []
     for arg in args:
         if isinstance(arg, ConnectDataFrame):
-            result.append(pb2.Fetch.Args(input=arg._plan.plan(client)))
+            result.append(pb2.Fetch.Method.Args(input=arg._plan.plan(client)))
         else:
-            result.append(pb2.Fetch.Args(param=serialize_param(arg, client)))
+            result.append(pb2.Fetch.Method.Args(param=serialize_param(arg, client)))
     return result
 
 

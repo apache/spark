@@ -740,74 +740,89 @@ class Fetch(google.protobuf.message.Message):
     Fetch can be represented as a Relation or a ML command
     Command: model.coefficients, model.summary.weightedPrecision which
     returns the final literal result
-    Relation: model.summary.roc which returns a DataFrame (Relation
+    Relation: model.summary.roc which returns a DataFrame (Relation)
     """
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-    class Args(google.protobuf.message.Message):
+    class Method(google.protobuf.message.Message):
+        """Represents a method with inclusion of method name and its arguments"""
+
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-        PARAM_FIELD_NUMBER: builtins.int
-        INPUT_FIELD_NUMBER: builtins.int
+        class Args(google.protobuf.message.Message):
+            DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+            PARAM_FIELD_NUMBER: builtins.int
+            INPUT_FIELD_NUMBER: builtins.int
+            @property
+            def param(self) -> pyspark.sql.connect.proto.ml_common_pb2.Param: ...
+            @property
+            def input(self) -> global___Relation: ...
+            def __init__(
+                self,
+                *,
+                param: pyspark.sql.connect.proto.ml_common_pb2.Param | None = ...,
+                input: global___Relation | None = ...,
+            ) -> None: ...
+            def HasField(
+                self,
+                field_name: typing_extensions.Literal[
+                    "args_type", b"args_type", "input", b"input", "param", b"param"
+                ],
+            ) -> builtins.bool: ...
+            def ClearField(
+                self,
+                field_name: typing_extensions.Literal[
+                    "args_type", b"args_type", "input", b"input", "param", b"param"
+                ],
+            ) -> None: ...
+            def WhichOneof(
+                self, oneof_group: typing_extensions.Literal["args_type", b"args_type"]
+            ) -> typing_extensions.Literal["param", "input"] | None: ...
+
+        METHOD_FIELD_NUMBER: builtins.int
+        ARGS_FIELD_NUMBER: builtins.int
+        method: builtins.str
+        """(Required) the method name"""
         @property
-        def param(self) -> pyspark.sql.connect.proto.ml_common_pb2.Param: ...
-        @property
-        def input(self) -> global___Relation: ...
+        def args(
+            self,
+        ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+            global___Fetch.Method.Args
+        ]:
+            """(Optional) the arguments of the method"""
         def __init__(
             self,
             *,
-            param: pyspark.sql.connect.proto.ml_common_pb2.Param | None = ...,
-            input: global___Relation | None = ...,
+            method: builtins.str = ...,
+            args: collections.abc.Iterable[global___Fetch.Method.Args] | None = ...,
         ) -> None: ...
-        def HasField(
-            self,
-            field_name: typing_extensions.Literal[
-                "args_type", b"args_type", "input", b"input", "param", b"param"
-            ],
-        ) -> builtins.bool: ...
         def ClearField(
-            self,
-            field_name: typing_extensions.Literal[
-                "args_type", b"args_type", "input", b"input", "param", b"param"
-            ],
+            self, field_name: typing_extensions.Literal["args", b"args", "method", b"method"]
         ) -> None: ...
-        def WhichOneof(
-            self, oneof_group: typing_extensions.Literal["args_type", b"args_type"]
-        ) -> typing_extensions.Literal["param", "input"] | None: ...
 
     OBJ_REF_FIELD_NUMBER: builtins.int
-    METHOD_FIELD_NUMBER: builtins.int
-    ARGS_FIELD_NUMBER: builtins.int
+    METHODS_FIELD_NUMBER: builtins.int
     @property
     def obj_ref(self) -> pyspark.sql.connect.proto.ml_common_pb2.ObjectRef:
-        """(Required) reference to the object on the server side or
-        the intermediate attribute of the model. eg, "model.summary"
-        """
-    method: builtins.str
-    """(Required) the method name. Eg, "coefficients" of the model
-    and "weightedPrecision" of the "model.summary"
-    """
+        """(Required) reference to the object on the server side"""
     @property
-    def args(
+    def methods(
         self,
-    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___Fetch.Args]:
-        """(Optional) the arguments of the method"""
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___Fetch.Method]:
+        """(Required) the calling method chains"""
     def __init__(
         self,
         *,
         obj_ref: pyspark.sql.connect.proto.ml_common_pb2.ObjectRef | None = ...,
-        method: builtins.str = ...,
-        args: collections.abc.Iterable[global___Fetch.Args] | None = ...,
+        methods: collections.abc.Iterable[global___Fetch.Method] | None = ...,
     ) -> None: ...
     def HasField(
         self, field_name: typing_extensions.Literal["obj_ref", b"obj_ref"]
     ) -> builtins.bool: ...
     def ClearField(
-        self,
-        field_name: typing_extensions.Literal[
-            "args", b"args", "method", b"method", "obj_ref", b"obj_ref"
-        ],
+        self, field_name: typing_extensions.Literal["methods", b"methods", "obj_ref", b"obj_ref"]
     ) -> None: ...
 
 global___Fetch = Fetch

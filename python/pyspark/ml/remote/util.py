@@ -16,7 +16,7 @@
 #
 import functools
 import os
-from typing import Any, cast, TypeVar, Callable, TYPE_CHECKING, Type
+from typing import Any, cast, TypeVar, Callable, TYPE_CHECKING, Type, List, Union
 
 import pyspark.sql.connect.proto as pb2
 from pyspark.ml.remote.serialize import serialize_ml_params, serialize, deserialize
@@ -28,6 +28,16 @@ if TYPE_CHECKING:
     from pyspark.ml.util import JavaMLReadable, JavaMLWritable
 
 FuncT = TypeVar("FuncT", bound=Callable[..., Any])
+
+
+def _extract_id_methods(obj_identifier: str) -> Union[str, List[pb2.Fetch.Method]]:
+    """Extract the obj reference id and the methods. Eg, model.summary"""
+    method_chain = obj_identifier.split(".")
+    obj_ref = method_chain[0]
+    methods: List[pb2.Fetch.Method] = []
+    if len(method_chain) > 1:
+        methods = [pb2.Fetch.Method(method=m) for m in method_chain[1:]]
+    return obj_ref, methods
 
 
 def try_remote_intermediate_result(f: FuncT) -> FuncT:
@@ -57,10 +67,16 @@ def try_remote_attribute_relation(f: FuncT) -> FuncT:
             from pyspark.sql.connect.session import SparkSession
             from pyspark.sql.connect.dataframe import DataFrame as ConnectDataFrame
 
-            assert isinstance(self._java_obj, str)
-            plan = AttributeRelation(self._java_obj, f.__name__)
             session = SparkSession.getActiveSession()
             assert session is not None
+
+            assert isinstance(self._java_obj, str)
+
+            obj_ref, methods = _extract_id_methods(self._java_obj)
+            methods.append(
+                pb2.Fetch.Method(method=f.__name__, args=serialize(session.client, *args))
+            )
+            plan = AttributeRelation(obj_ref, methods)
             return ConnectDataFrame(plan, session)
         else:
             return f(self, *args, **kwargs)
@@ -158,13 +174,11 @@ def try_remote_call(f: FuncT) -> FuncT:
             session = SparkSession.getActiveSession()
             assert session is not None
             assert isinstance(self._java_obj, str)
+            obj_ref, methods = _extract_id_methods(self._java_obj)
+            methods.append(pb2.Fetch.Method(method=name, args=serialize(session.client, *args)))
             command = pb2.Command()
             command.ml_command.fetch.CopyFrom(
-                pb2.Fetch(
-                    obj_ref=pb2.ObjectRef(id=self._java_obj),
-                    method=name,
-                    args=serialize(session.client, *args),
-                )
+                pb2.Fetch(obj_ref=pb2.ObjectRef(id=obj_ref), methods=methods)
             )
             (_, properties, _) = session.client.execute_command(command)
             ml_command_result = properties["ml_command_result"]

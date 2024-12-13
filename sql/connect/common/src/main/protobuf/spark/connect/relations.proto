@@ -135,21 +135,25 @@ message MlRelation {
 // Fetch can be represented as a Relation or a ML command
 // Command: model.coefficients, model.summary.weightedPrecision which
 // returns the final literal result
-// Relation: model.summary.roc which returns a DataFrame (Relation
+// Relation: model.summary.roc which returns a DataFrame (Relation)
 message Fetch {
-  // (Required) reference to the object on the server side or
-  // the intermediate attribute of the model. eg, "model.summary"
+  // (Required) reference to the object on the server side
   ObjectRef obj_ref = 1;
-  // (Required) the method name. Eg, "coefficients" of the model
-  // and "weightedPrecision" of the "model.summary"
-  string method = 2;
-  // (Optional) the arguments of the method
-  repeated Args args = 3;
+  // (Required) the calling method chains
+  repeated Method methods = 2;
 
-  message Args {
-    oneof args_type {
-      Param param = 1;
-      Relation input = 2;
+  // Represents a method with inclusion of method name and its arguments
+  message Method {
+    // (Required) the method name
+    string method = 1;
+    // (Optional) the arguments of the method
+    repeated Args args = 2;
+
+    message Args {
+      oneof args_type {
+        Param param = 1;
+        Relation input = 2;
+      }
     }
   }
 }

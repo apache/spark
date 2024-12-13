@@ -29,51 +29,38 @@ import org.apache.spark.sql.connect.common.LiteralValueProtoConverter
 import org.apache.spark.sql.connect.ml.Serializer.deserializeMethodArguments
 import org.apache.spark.sql.connect.service.SessionHolder
 
+private case class Method(
+    name: String,
+    argValues: Array[Object] = Array.empty,
+    argClasses: Array[Class[_]] = Array.empty)
+
 /**
  * Helper function to get the attribute from an object by reflection
  */
 private class AttributeHelper(
     val sessionHolder: SessionHolder,
-    val objIdentifier: String,
-    val method: Option[String],
-    val argValues: Array[Object] = Array.empty,
-    val argClasses: Array[Class[_]] = Array.empty) {
-
-  private val methodChain = method.map(n => s"$objIdentifier.$n").getOrElse(objIdentifier)
-  private val methodChains = methodChain.split("\\.")
-  private val objId = methodChains.head
-
-  protected lazy val instance = sessionHolder.mlCache.get(objId)
-  private lazy val methods = methodChains.slice(1, methodChains.length)
-
+    val objRef: String,
+    val methods: Array[Method]) {
+  protected lazy val instance = sessionHolder.mlCache.get(objRef)
+  // Get the attribute by reflection
   def getAttribute: Any = {
     assert(methods.length >= 1)
-    if (argValues.length == 0) {
-      methods.foldLeft(instance) { (obj, attribute) =>
-        MLUtils.invokeMethodAllowed(obj, attribute)
-      }
-    } else {
-      val lastMethod = methods.last
-      if (methods.length == 1) {
-        MLUtils.invokeMethodAllowed(instance, lastMethod, argValues, argClasses)
+    methods.foldLeft(instance) { (obj, m) =>
+      if (m.argValues.isEmpty) {
+        MLUtils.invokeMethodAllowed(obj, m.name)
       } else {
-        val prevMethods = methods.slice(0, methods.length - 1)
-        val finalObj = prevMethods.foldLeft(instance) { (obj, attribute) =>
-          MLUtils.invokeMethodAllowed(obj, attribute)
-        }
-        MLUtils.invokeMethodAllowed(finalObj, lastMethod, argValues, argClasses)
+        MLUtils.invokeMethodAllowed(obj, m.name, m.argValues, m.argClasses)
       }
     }
   }
 }
 
+// Model specific attribute helper with transform supported
 private class ModelAttributeHelper(
     sessionHolder: SessionHolder,
-    objIdentifier: String,
-    method: Option[String],
-    argValues: Array[Object] = Array.empty,
-    argClasses: Array[Class[_]] = Array.empty)
-    extends AttributeHelper(sessionHolder, objIdentifier, method, argValues, argClasses) {
+    objRef: String,
+    methods: Array[Method])
+    extends AttributeHelper(sessionHolder, objRef, methods) {
 
   def transform(relation: proto.MlRelation.Transform): DataFrame = {
     // Create a copied model to avoid concurrently modify model params.
@@ -86,15 +73,20 @@ private class ModelAttributeHelper(
 }
 
 private object AttributeHelper {
+  def parseMethods(
+      sessionHolder: SessionHolder,
+      methodsProto: Array[proto.Fetch.Method] = Array.empty): Array[Method] = {
+    methodsProto.map { m =>
+      val (argValues, argClasses) =
+        deserializeMethodArguments(m.getArgsList.asScala.toArray, sessionHolder).unzip
+      Method(m.getMethod, argValues, argClasses)
+    }
+  }
   def apply(
       sessionHolder: SessionHolder,
       objId: String,
-      method: Option[String] = None,
-      args: Array[proto.Fetch.Args] = Array.empty): AttributeHelper = {
-    val tmp = deserializeMethodArguments(args, sessionHolder)
-    val argValues = tmp.map(_._1)
-    val argClasses = tmp.map(_._2)
-    new AttributeHelper(sessionHolder, objId, method, argValues, argClasses)
+      methodsProto: Array[proto.Fetch.Method] = Array.empty): AttributeHelper = {
+    new AttributeHelper(sessionHolder, objId, parseMethods(sessionHolder, methodsProto))
   }
 }
 
@@ -102,17 +94,16 @@ private object ModelAttributeHelper {
   def apply(
       sessionHolder: SessionHolder,
       objId: String,
-      method: Option[String] = None,
-      args: Array[proto.Fetch.Args] = Array.empty): ModelAttributeHelper = {
-    val tmp = deserializeMethodArguments(args, sessionHolder)
-    val argValues = tmp.map(_._1)
-    val argClasses = tmp.map(_._2)
-    new ModelAttributeHelper(sessionHolder, objId, method, argValues, argClasses)
+      methodsProto: Array[proto.Fetch.Method] = Array.empty): ModelAttributeHelper = {
+    new ModelAttributeHelper(
+      sessionHolder,
+      objId,
+      AttributeHelper.parseMethods(sessionHolder, methodsProto))
   }
 }
 
 // MLHandler is a utility to group all ML operations
-object MLHandler extends Logging {
+private[connect] object MLHandler extends Logging {
   def handleMlCommand(
       sessionHolder: SessionHolder,
       mlCommand: proto.MlCommand): proto.MlCommandResult = {
@@ -138,12 +129,10 @@ object MLHandler extends Logging {
           .build()
 
       case proto.MlCommand.CommandCase.FETCH =>
-        val args = mlCommand.getFetch.getArgsList.asScala.toArray
         val helper = AttributeHelper(
           sessionHolder,
           mlCommand.getFetch.getObjRef.getId,
-          Option(mlCommand.getFetch.getMethod),
-          args)
+          mlCommand.getFetch.getMethodsList.asScala.toArray)
         val attrResult = helper.getAttribute
         attrResult match {
           case s: Summary =>
@@ -255,7 +244,10 @@ object MLHandler extends Logging {
           // transform on a cached model
           case proto.MlRelation.Transform.OperatorCase.OBJ_REF =>
             val helper =
-              ModelAttributeHelper(sessionHolder, relation.getTransform.getObjRef.getId, None)
+              ModelAttributeHelper(
+                sessionHolder,
+                relation.getTransform.getObjRef.getId,
+                Array.empty)
             helper.transform(relation.getTransform)
 
           case other => throw new IllegalArgumentException(s"$other not supported")
@@ -266,7 +258,7 @@ object MLHandler extends Logging {
         val helper = AttributeHelper(
           sessionHolder,
           relation.getFetch.getObjRef.getId,
-          Option(relation.getFetch.getMethod))
+          relation.getFetch.getMethodsList.asScala.toArray)
         helper.getAttribute.asInstanceOf[DataFrame]
 
       case other => throw MlUnsupportedException(s"$other not supported")

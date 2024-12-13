@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from typing import Optional, TYPE_CHECKING
+from typing import Optional, TYPE_CHECKING, List
 
 import pyspark.sql.connect.proto as pb2
 from pyspark.sql.connect.plan import LogicalPlan
@@ -64,13 +64,13 @@ class AttributeRelation(LogicalPlan):
     could be a model or a summary. This attribute returns a DataFrame.
     """
 
-    def __init__(self, ref_id: str, method: str) -> None:
+    def __init__(self, ref_id: str, methods: List[pb2.Fetch.Method]) -> None:
         super().__init__(None)
         self._ref_id = ref_id
-        self._method = method
+        self._methods = methods
 
     def plan(self, session: "SparkConnectClient") -> pb2.Relation:
         plan = self._create_proto_relation()
         plan.ml_relation.fetch.obj_ref.CopyFrom(pb2.ObjectRef(id=self._ref_id))
-        plan.ml_relation.fetch.method = self._method
+        plan.ml_relation.fetch.methods.extend(self._methods)
         return plan
