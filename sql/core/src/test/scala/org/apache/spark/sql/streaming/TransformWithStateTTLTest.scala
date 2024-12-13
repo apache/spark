@@ -21,7 +21,7 @@ import java.sql.Timestamp
 import java.time.Duration
 
 import org.apache.spark.sql.execution.streaming.MemoryStream
-import org.apache.spark.sql.execution.streaming.state.{AlsoTestWithEncodingTypes, RocksDBStateStoreProvider}
+import org.apache.spark.sql.execution.streaming.state.{AlsoTestWithChangelogCheckpointingEnabled, AlsoTestWithEncodingTypes, RocksDBStateStoreProvider}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.util.StreamManualClock
 
@@ -41,7 +41,7 @@ case class OutputEvent(
  * Test suite base for TransformWithState with TTL support.
  */
 abstract class TransformWithStateTTLTest
-  extends StreamTest
+  extends StreamTest with AlsoTestWithChangelogCheckpointingEnabled
   with AlsoTestWithEncodingTypes {
   import testImplicits._
 

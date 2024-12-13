@@ -60,18 +60,94 @@ sealed trait RocksDBValueStateEncoder {
  * by the callers. The metadata in each row does not need to be written as Avro or UnsafeRow,
  * but the actual data provided by the caller does.
  */
+/** Interface for encoding and decoding state store data between UnsafeRow and raw bytes.
+ *
+ * @note All encode methods expect non-null input rows. Handling of null values is left to the
+ * implementing classes.
+ */
 trait DataEncoder {
+  /** Encodes a complete key row into bytes. Used as the primary key for state lookups.
+   *
+   * @param row An UnsafeRow containing all key columns as defined in the keySchema
+   * @return Serialized byte array representation of the key
+   */
   def encodeKey(row: UnsafeRow): Array[Byte]
+
+  /** Encodes the non-prefix portion of a key row. Used with prefix scan and
+   * range scan state lookups where the key is split into prefix and remaining portions.
+   *
+   * For prefix scans: Encodes columns after the prefix columns
+   * For range scans: Encodes columns not included in the ordering columns
+   *
+   * @param row An UnsafeRow containing only the remaining key columns
+   * @return Serialized byte array of the remaining key portion
+   * @throws UnsupportedOperationException if called on an encoder that doesn't support split keys
+   */
   def encodeRemainingKey(row: UnsafeRow): Array[Byte]
+
+  /** Encodes key columns used for range scanning, ensuring proper sort order in RocksDB.
+   *
+   * This method handles special encoding for numeric types to maintain correct sort order:
+   * - Adds sign byte markers for numeric types
+   * - Flips bits for negative floating point values
+   * - Preserves null ordering
+   *
+   * @param row An UnsafeRow containing the columns needed for range scan
+   *            (specified by orderingOrdinals)
+   * @return Serialized bytes that will maintain correct sort order in RocksDB
+   * @throws UnsupportedOperationException if called on an encoder that doesn't support range scans
+   */
   def encodePrefixKeyForRangeScan(row: UnsafeRow): Array[Byte]
+
+  /** Encodes a value row into bytes.
+   *
+   * @param row An UnsafeRow containing the value columns as defined in the valueSchema
+   * @return Serialized byte array representation of the value
+   */
   def encodeValue(row: UnsafeRow): Array[Byte]
 
+  /** Decodes a complete key from its serialized byte form.
+   *
+   * For NoPrefixKeyStateEncoder: Decodes the entire key
+   * For PrefixKeyScanStateEncoder: Decodes only the prefix portion
+   *
+   * @param bytes Serialized byte array containing the encoded key
+   * @return UnsafeRow containing the decoded key columns
+   * @throws UnsupportedOperationException for unsupported encoder types
+   */
   def decodeKey(bytes: Array[Byte]): UnsafeRow
+
+  /** Decodes the remaining portion of a split key from its serialized form.
+   *
+   * For PrefixKeyScanStateEncoder: Decodes columns after the prefix
+   * For RangeKeyScanStateEncoder: Decodes non-ordering columns
+   *
+   * @param bytes Serialized byte array containing the encoded remaining key portion
+   * @return UnsafeRow containing the decoded remaining key columns
+   * @throws UnsupportedOperationException if called on an encoder that doesn't support split keys
+   */
   def decodeRemainingKey(bytes: Array[Byte]): UnsafeRow
+
+  /** Decodes range scan key bytes back into an UnsafeRow, preserving proper ordering.
+   *
+   * This method reverses the special encoding done by encodePrefixKeyForRangeScan:
+   * - Interprets sign byte markers
+   * - Reverses bit flipping for negative floating point values
+   * - Handles null values
+   *
+   * @param bytes Serialized byte array containing the encoded range scan key
+   * @return UnsafeRow containing the decoded range scan columns
+   * @throws UnsupportedOperationException if called on an encoder that doesn't support range scans
+   */
   def decodePrefixKeyForRangeScan(bytes: Array[Byte]): UnsafeRow
+
+  /** Decodes a value from its serialized byte form.
+   *
+   * @param bytes Serialized byte array containing the encoded value
+   * @return UnsafeRow containing the decoded value columns
+   */
   def decodeValue(bytes: Array[Byte]): UnsafeRow
 }
-
 abstract class RocksDBDataEncoder(
     keyStateEncoderSpec: KeyStateEncoderSpec,
     valueSchema: StructType) extends DataEncoder {
@@ -789,37 +865,43 @@ abstract class RocksDBKeyStateEncoderBase(
   }
 }
 
+/** Factory object for creating state encoders used by RocksDB state store.
+ *
+ * The encoders created by this object handle serialization and deserialization of state data,
+ * supporting both key and value encoding with various access patterns
+ * (e.g., prefix scan, range scan).
+ */
 object RocksDBStateEncoder extends Logging {
+
+  /** Creates a key encoder based on the specified encoding strategy and configuration.
+   *
+   * @param dataEncoder The underlying encoder that handles the actual data encoding/decoding
+   * @param keyStateEncoderSpec Specification defining the key encoding strategy
+   *                            (no prefix, prefix scan, or range scan)
+   * @param useColumnFamilies Whether to use RocksDB column families for storage
+   * @param virtualColFamilyId Optional column family identifier when column families are enabled
+   * @return A configured RocksDBKeyStateEncoder instance
+   */
   def getKeyEncoder(
       dataEncoder: RocksDBDataEncoder,
       keyStateEncoderSpec: KeyStateEncoderSpec,
       useColumnFamilies: Boolean,
-      virtualColFamilyId: Option[Short] = None,
-      avroEnc: Option[AvroEncoder] = None): RocksDBKeyStateEncoder = {
-    // Return the key state encoder based on the requested type
-    keyStateEncoderSpec match {
-      case NoPrefixKeyStateEncoderSpec(keySchema) =>
-        new NoPrefixKeyStateEncoder(dataEncoder, keySchema, useColumnFamilies, virtualColFamilyId)
-
-      case PrefixKeyScanStateEncoderSpec(keySchema, numColsPrefixKey) =>
-        new PrefixKeyScanStateEncoder(dataEncoder, keySchema, numColsPrefixKey,
-          useColumnFamilies, virtualColFamilyId)
-
-      case RangeKeyScanStateEncoderSpec(keySchema, orderingOrdinals) =>
-        new RangeKeyScanStateEncoder(dataEncoder, keySchema, orderingOrdinals,
-          useColumnFamilies, virtualColFamilyId)
-
-      case _ =>
-        throw new IllegalArgumentException(s"Unsupported key state encoder spec: " +
-          s"$keyStateEncoderSpec")
-    }
+      virtualColFamilyId: Option[Short] = None): RocksDBKeyStateEncoder = {
+    keyStateEncoderSpec.toEncoder(dataEncoder, useColumnFamilies, virtualColFamilyId)
   }
 
+  /** Creates a value encoder that supports either single or multiple values per key.
+   *
+   * @param dataEncoder The underlying encoder that handles the actual data encoding/decoding
+   * @param valueSchema Schema defining the structure of values to be encoded
+   * @param useMultipleValuesPerKey If true, creates an encoder that can handle multiple values
+   *                                per key; if false, creates an encoder for single values
+   * @return A configured RocksDBValueStateEncoder instance
+   */
   def getValueEncoder(
       dataEncoder: RocksDBDataEncoder,
       valueSchema: StructType,
-      useMultipleValuesPerKey: Boolean,
-      avroEnc: Option[AvroEncoder] = None): RocksDBValueStateEncoder = {
+      useMultipleValuesPerKey: Boolean): RocksDBValueStateEncoder = {
     if (useMultipleValuesPerKey) {
       new MultiValuedStateEncoder(dataEncoder, valueSchema)
     } else {
@@ -827,6 +909,14 @@ object RocksDBStateEncoder extends Logging {
     }
   }
 
+  /** Encodes a virtual column family ID into a byte array suitable for RocksDB.
+   *
+   * This method creates a fixed-size byte array prefixed with the virtual column family ID,
+   * which is used to partition data within RocksDB.
+   *
+   * @param virtualColFamilyId The column family identifier to encode
+   * @return A byte array containing the encoded column family ID
+   */
   def getColumnFamilyIdBytes(virtualColFamilyId: Short): Array[Byte] = {
     val encodedBytes = new Array[Byte](VIRTUAL_COL_FAMILY_PREFIX_BYTES)
     Platform.putShort(encodedBytes, Platform.BYTE_ARRAY_OFFSET, virtualColFamilyId)
@@ -870,18 +960,6 @@ class PrefixKeyScanStateEncoder(
       BoundReference(x._2, x._1.dataType, x._1.nullable))
     UnsafeProjection.create(refs)
   }
-
-  // Prefix Key schema and projection definitions used by the Avro Serializers
-  // and Deserializers
-  private val prefixKeySchema = StructType(keySchema.take(numColsPrefixKey))
-  private lazy val prefixKeyAvroType = SchemaConverters.toAvroType(prefixKeySchema)
-  private val prefixKeyProj = UnsafeProjection.create(prefixKeySchema)
-
-  // Remaining Key schema and projection definitions used by the Avro Serializers
-  // and Deserializers
-  private val remainingKeySchema = StructType(keySchema.drop(numColsPrefixKey))
-  private lazy val remainingKeyAvroType = SchemaConverters.toAvroType(remainingKeySchema)
-  private val remainingKeyProj = UnsafeProjection.create(remainingKeySchema)
 
   // This is quite simple to do - just bind sequentially, as we don't change the order.
   private val restoreKeyProjection: UnsafeProjection = UnsafeProjection.create(keySchema)
@@ -1055,22 +1133,6 @@ class RangeKeyScanStateEncoder(
     }
     UnsafeProjection.create(refs)
   }
-
-  private val rangeScanAvroSchema = StateStoreColumnFamilySchemaUtils.convertForRangeScan(
-    StructType(rangeScanKeyFieldsWithOrdinal.map(_._1).toArray))
-
-  private lazy val rangeScanAvroType = SchemaConverters.toAvroType(rangeScanAvroSchema)
-
-  private val rangeScanAvroProjection = UnsafeProjection.create(rangeScanAvroSchema)
-
-  // Existing remainder key schema stuff
-  private val remainingKeySchema = StructType(
-    0.to(keySchema.length - 1).diff(orderingOrdinals).map(keySchema(_))
-  )
-
-  private lazy val remainingKeyAvroType = SchemaConverters.toAvroType(remainingKeySchema)
-
-  private val remainingKeyAvroProjection = UnsafeProjection.create(remainingKeySchema)
 
   // Reusable objects
   private val joinedRowOnKey = new JoinedRow()

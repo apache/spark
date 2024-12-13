@@ -325,6 +325,18 @@ sealed trait KeyStateEncoderSpec {
   def keySchema: StructType
   def jsonValue: JValue
   def json: String = compact(render(jsonValue))
+
+  /** Creates a RocksDBKeyStateEncoder for this specification.
+   *
+   * @param dataEncoder The encoder to handle the actual data encoding/decoding
+   * @param useColumnFamilies Whether to use RocksDB column families
+   * @param virtualColFamilyId Optional column family ID when column families are used
+   * @return A RocksDBKeyStateEncoder configured for this spec
+   */
+  def toEncoder(
+      dataEncoder: RocksDBDataEncoder,
+      useColumnFamilies: Boolean,
+      virtualColFamilyId: Option[Short]): RocksDBKeyStateEncoder
 }
 
 object KeyStateEncoderSpec {
@@ -348,6 +360,14 @@ case class NoPrefixKeyStateEncoderSpec(keySchema: StructType) extends KeyStateEn
   override def jsonValue: JValue = {
     ("keyStateEncoderType" -> JString("NoPrefixKeyStateEncoderSpec"))
   }
+
+  override def toEncoder(
+      dataEncoder: RocksDBDataEncoder,
+      useColumnFamilies: Boolean,
+      virtualColFamilyId: Option[Short]): RocksDBKeyStateEncoder = {
+    new NoPrefixKeyStateEncoder(
+      dataEncoder, keySchema, useColumnFamilies, virtualColFamilyId)
+  }
 }
 
 case class PrefixKeyScanStateEncoderSpec(
@@ -356,6 +376,14 @@ case class PrefixKeyScanStateEncoderSpec(
   if (numColsPrefixKey == 0 || numColsPrefixKey >= keySchema.length) {
     throw StateStoreErrors.incorrectNumOrderingColsForPrefixScan(numColsPrefixKey.toString)
   }
+  override def toEncoder(
+      dataEncoder: RocksDBDataEncoder,
+      useColumnFamilies: Boolean,
+      virtualColFamilyId: Option[Short]): RocksDBKeyStateEncoder = {
+    new PrefixKeyScanStateEncoder(
+      dataEncoder, keySchema, numColsPrefixKey, useColumnFamilies, virtualColFamilyId)
+  }
+
 
   override def jsonValue: JValue = {
     ("keyStateEncoderType" -> JString("PrefixKeyScanStateEncoderSpec")) ~
@@ -369,6 +397,14 @@ case class RangeKeyScanStateEncoderSpec(
     orderingOrdinals: Seq[Int]) extends KeyStateEncoderSpec {
   if (orderingOrdinals.isEmpty || orderingOrdinals.length > keySchema.length) {
     throw StateStoreErrors.incorrectNumOrderingColsForRangeScan(orderingOrdinals.length.toString)
+  }
+
+  override def toEncoder(
+      dataEncoder: RocksDBDataEncoder,
+      useColumnFamilies: Boolean,
+      virtualColFamilyId: Option[Short]): RocksDBKeyStateEncoder = {
+    new RangeKeyScanStateEncoder(
+      dataEncoder, keySchema, orderingOrdinals, useColumnFamilies, virtualColFamilyId)
   }
 
   override def jsonValue: JValue = {

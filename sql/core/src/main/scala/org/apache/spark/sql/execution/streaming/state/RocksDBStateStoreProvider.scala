@@ -82,10 +82,18 @@ private[sql] class RocksDBStateStoreProvider
       val dataEncoder = getDataEncoder(
         stateStoreEncoding, dataEncoderCacheKey, keyStateEncoderSpec, valueSchema)
 
-      keyValueEncoderMap.putIfAbsent(colFamilyName,
-        (RocksDBStateEncoder.getKeyEncoder(dataEncoder, keyStateEncoderSpec, useColumnFamilies,
-          Some(newColFamilyId)), RocksDBStateEncoder.getValueEncoder(dataEncoder, valueSchema,
-          useMultipleValuesPerKey)))
+      val keyEncoder = RocksDBStateEncoder.getKeyEncoder(
+        dataEncoder,
+        keyStateEncoderSpec,
+        useColumnFamilies,
+        Some(newColFamilyId)
+      )
+      val valueEncoder = RocksDBStateEncoder.getValueEncoder(
+        dataEncoder,
+        valueSchema,
+        useMultipleValuesPerKey
+      )
+      keyValueEncoderMap.putIfAbsent(colFamilyName, (keyEncoder, valueEncoder))
     }
 
     override def get(key: UnsafeRow, colFamilyName: String): UnsafeRow = {
@@ -392,10 +400,18 @@ private[sql] class RocksDBStateStoreProvider
     val dataEncoder = getDataEncoder(
       stateStoreEncoding, dataEncoderCacheKey, keyStateEncoderSpec, valueSchema)
 
-    keyValueEncoderMap.putIfAbsent(StateStore.DEFAULT_COL_FAMILY_NAME,
-      (RocksDBStateEncoder.getKeyEncoder(dataEncoder, keyStateEncoderSpec,
-        useColumnFamilies, defaultColFamilyId),
-        RocksDBStateEncoder.getValueEncoder(dataEncoder, valueSchema, useMultipleValuesPerKey)))
+    val keyEncoder = RocksDBStateEncoder.getKeyEncoder(
+      dataEncoder,
+      keyStateEncoderSpec,
+      useColumnFamilies,
+      defaultColFamilyId
+    )
+    val valueEncoder = RocksDBStateEncoder.getValueEncoder(
+      dataEncoder,
+      valueSchema,
+      useMultipleValuesPerKey
+    )
+    keyValueEncoderMap.putIfAbsent(StateStore.DEFAULT_COL_FAMILY_NAME, (keyEncoder, valueEncoder))
   }
 
   override def stateStoreId: StateStoreId = stateStoreId_
@@ -642,28 +658,20 @@ object RocksDBStateStoreProvider {
       encoderCacheKey: String,
       keyStateEncoderSpec: KeyStateEncoderSpec,
       valueSchema: StructType): RocksDBDataEncoder = {
-
-    stateStoreEncoding match {
-      case "avro" =>
-        RocksDBStateStoreProvider.dataEncoderCache.get(
-          encoderCacheKey,
-          new java.util.concurrent.Callable[AvroStateEncoder] {
-            override def call(): AvroStateEncoder = {
-              val avroEncoder = createAvroEnc(keyStateEncoderSpec, valueSchema)
-              new AvroStateEncoder(keyStateEncoderSpec, valueSchema, avroEncoder)
-            }
+    assert(Set("avro", "unsaferow").contains(stateStoreEncoding))
+    RocksDBStateStoreProvider.dataEncoderCache.get(
+      encoderCacheKey,
+      new java.util.concurrent.Callable[RocksDBDataEncoder] {
+        override def call(): RocksDBDataEncoder = {
+          if (stateStoreEncoding == "avro") {
+            val avroEncoder = createAvroEnc(keyStateEncoderSpec, valueSchema)
+            new AvroStateEncoder(keyStateEncoderSpec, valueSchema, avroEncoder)
+          } else {
+            new UnsafeRowDataEncoder(keyStateEncoderSpec, valueSchema)
           }
-        )
-      case "unsaferow" =>
-        RocksDBStateStoreProvider.dataEncoderCache.get(
-          encoderCacheKey,
-          new java.util.concurrent.Callable[UnsafeRowDataEncoder] {
-            override def call(): UnsafeRowDataEncoder = {
-              new UnsafeRowDataEncoder(keyStateEncoderSpec, valueSchema)
-            }
-          }
-        )
-    }
+        }
+      }
+    )
   }
 
   private def getRunId(hadoopConf: Configuration): String = {
