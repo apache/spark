@@ -144,14 +144,27 @@ class AstBuilder extends DataTypeAstBuilder
 
   override def visitSingleCompoundStatement(ctx: SingleCompoundStatementContext): CompoundBody = {
     val labelCtx = new SqlScriptingLabelContext()
-    visitCompoundBodyImpl(ctx.compoundBody(), None, allowVarDeclare = true, labelCtx)
+    val labelText = labelCtx.enterLabeledScope(None, None)
+
+    val script = Option(ctx.compoundBody())
+      .map(visitCompoundBodyImpl(
+        _,
+        Some(labelText),
+        allowVarDeclare = true,
+        labelCtx,
+        isScope = true
+      )).getOrElse(CompoundBody(Seq.empty, Some(labelText), isScope = true))
+
+    labelCtx.exitLabeledScope(None)
+    script
   }
 
   private def visitCompoundBodyImpl(
       ctx: CompoundBodyContext,
       label: Option[String],
       allowVarDeclare: Boolean,
-      labelCtx: SqlScriptingLabelContext): CompoundBody = {
+      labelCtx: SqlScriptingLabelContext,
+      isScope: Boolean): CompoundBody = {
     val buff = ListBuffer[CompoundPlanStatement]()
     ctx.compoundStatements.forEach(
       compoundStatement => buff += visitCompoundStatementImpl(compoundStatement, labelCtx))
@@ -183,7 +196,7 @@ class AstBuilder extends DataTypeAstBuilder
       case _ =>
     }
 
-    CompoundBody(buff.toSeq, label)
+    CompoundBody(buff.toSeq, label, isScope)
   }
 
   private def visitBeginEndCompoundBlockImpl(
@@ -191,12 +204,14 @@ class AstBuilder extends DataTypeAstBuilder
       labelCtx: SqlScriptingLabelContext): CompoundBody = {
     val labelText =
       labelCtx.enterLabeledScope(Option(ctx.beginLabel()), Option(ctx.endLabel()))
-    val body = visitCompoundBodyImpl(
-      ctx.compoundBody(),
-      Some(labelText),
-      allowVarDeclare = true,
-      labelCtx
-    )
+    val body = Option(ctx.compoundBody())
+      .map(visitCompoundBodyImpl(
+        _,
+        Some(labelText),
+        allowVarDeclare = true,
+        labelCtx,
+        isScope = true
+      )).getOrElse(CompoundBody(Seq.empty, Some(labelText), isScope = true))
     labelCtx.exitLabeledScope(Option(ctx.beginLabel()))
     body
   }
@@ -247,10 +262,12 @@ class AstBuilder extends DataTypeAstBuilder
             OneRowRelation()))
       }),
       conditionalBodies = ctx.conditionalBodies.asScala.toList.map(
-        body => visitCompoundBodyImpl(body, None, allowVarDeclare = false, labelCtx)
+        body =>
+          visitCompoundBodyImpl(body, None, allowVarDeclare = false, labelCtx, isScope = false)
       ),
       elseBody = Option(ctx.elseBody).map(
-        body => visitCompoundBodyImpl(body, None, allowVarDeclare = false, labelCtx)
+        body =>
+          visitCompoundBodyImpl(body, None, allowVarDeclare = false, labelCtx, isScope = false)
       )
     )
   }
@@ -267,7 +284,13 @@ class AstBuilder extends DataTypeAstBuilder
         Project(
           Seq(Alias(expression(boolExpr), "condition")()),
           OneRowRelation()))}
-    val body = visitCompoundBodyImpl(ctx.compoundBody(), None, allowVarDeclare = false, labelCtx)
+    val body = visitCompoundBodyImpl(
+      ctx.compoundBody(),
+      None,
+      allowVarDeclare = false,
+      labelCtx,
+      isScope = false
+    )
     labelCtx.exitLabeledScope(Option(ctx.beginLabel()))
 
     WhileStatement(condition, body, Some(labelText))
@@ -284,7 +307,8 @@ class AstBuilder extends DataTypeAstBuilder
     })
     val conditionalBodies =
       ctx.conditionalBodies.asScala.toList.map(
-        body => visitCompoundBodyImpl(body, None, allowVarDeclare = false, labelCtx)
+        body =>
+          visitCompoundBodyImpl(body, None, allowVarDeclare = false, labelCtx, isScope = false)
       )
 
     if (conditions.length != conditionalBodies.length) {
@@ -297,7 +321,8 @@ class AstBuilder extends DataTypeAstBuilder
       conditions = conditions,
       conditionalBodies = conditionalBodies,
       elseBody = Option(ctx.elseBody).map(
-        body => visitCompoundBodyImpl(body, None, allowVarDeclare = false, labelCtx)
+        body =>
+          visitCompoundBodyImpl(body, None, allowVarDeclare = false, labelCtx, isScope = false)
       ))
   }
 
@@ -314,7 +339,8 @@ class AstBuilder extends DataTypeAstBuilder
     })
     val conditionalBodies =
       ctx.conditionalBodies.asScala.toList.map(
-        body => visitCompoundBodyImpl(body, None, allowVarDeclare = false, labelCtx)
+        body =>
+          visitCompoundBodyImpl(body, None, allowVarDeclare = false, labelCtx, isScope = false)
       )
 
     if (conditions.length != conditionalBodies.length) {
@@ -327,7 +353,8 @@ class AstBuilder extends DataTypeAstBuilder
       conditions = conditions,
       conditionalBodies = conditionalBodies,
       elseBody = Option(ctx.elseBody).map(
-        body => visitCompoundBodyImpl(body, None, allowVarDeclare = false, labelCtx)
+        body =>
+          visitCompoundBodyImpl(body, None, allowVarDeclare = false, labelCtx, isScope = false)
       ))
   }
 
@@ -343,7 +370,13 @@ class AstBuilder extends DataTypeAstBuilder
         Project(
           Seq(Alias(expression(boolExpr), "condition")()),
           OneRowRelation()))}
-    val body = visitCompoundBodyImpl(ctx.compoundBody(), None, allowVarDeclare = false, labelCtx)
+    val body = visitCompoundBodyImpl(
+      ctx.compoundBody(),
+      None,
+      allowVarDeclare = false,
+      labelCtx,
+      isScope = false
+    )
     labelCtx.exitLabeledScope(Option(ctx.beginLabel()))
 
     RepeatStatement(condition, body, Some(labelText))
@@ -359,7 +392,13 @@ class AstBuilder extends DataTypeAstBuilder
       SingleStatement(visitQuery(queryCtx))
     }
     val varName = Option(ctx.multipartIdentifier()).map(_.getText)
-    val body = visitCompoundBodyImpl(ctx.compoundBody(), None, allowVarDeclare = false, labelCtx)
+    val body = visitCompoundBodyImpl(
+      ctx.compoundBody(),
+      None,
+      allowVarDeclare = false,
+      labelCtx,
+      isScope = false
+    )
     labelCtx.exitLabeledScope(Option(ctx.beginLabel()))
 
     ForStatement(query, varName, body, Some(labelText))
@@ -432,7 +471,13 @@ class AstBuilder extends DataTypeAstBuilder
       labelCtx: SqlScriptingLabelContext): LoopStatement = {
     val labelText =
       labelCtx.enterLabeledScope(Option(ctx.beginLabel()), Option(ctx.endLabel()))
-    val body = visitCompoundBodyImpl(ctx.compoundBody(), None, allowVarDeclare = false, labelCtx)
+    val body = visitCompoundBodyImpl(
+      ctx.compoundBody(),
+      None,
+      allowVarDeclare = false,
+      labelCtx,
+      isScope = false
+    )
     labelCtx.exitLabeledScope(Option(ctx.beginLabel()))
 
     LoopStatement(body, Some(labelText))
@@ -549,7 +594,10 @@ class AstBuilder extends DataTypeAstBuilder
         optionalMap(body.queryOrganization)(withQueryResultClauses(_, _, forPipeOperators = false))
     }
     // If there are multiple SELECT just UNION them together into one query.
-    if (selects.length == 1) {
+    if (selects.length == 0) {
+      // This is a "FROM <tableName>" clause with no other syntax.
+      from
+    } else if (selects.length == 1) {
       selects.head
     } else {
       Union(selects.toSeq)

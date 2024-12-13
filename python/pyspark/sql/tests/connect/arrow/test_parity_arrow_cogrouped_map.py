@@ -15,23 +15,21 @@
 # limitations under the License.
 #
 
-from pyspark.sql.tests.pandas.test_pandas_map import MapInPandasTestsMixin
+import unittest
+
+from pyspark.sql.tests.arrow.test_arrow_cogrouped_map import CogroupedMapInArrowTestsMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
-class MapInPandasParityTests(
-    MapInPandasTestsMixin,
-    ReusedConnectTestCase,
-):
+class CogroupedMapInArrowParityTests(CogroupedMapInArrowTestsMixin, ReusedConnectTestCase):
     pass
 
 
 if __name__ == "__main__":
-    import unittest
-    from pyspark.sql.tests.connect.test_parity_pandas_map import *  # noqa: F401
+    from pyspark.sql.tests.connect.arrow.test_parity_arrow_cogrouped_map import *  # noqa: F401
 
     try:
-        import xmlrunner  # type: ignore[import]
+        import xmlrunner
 
         testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:

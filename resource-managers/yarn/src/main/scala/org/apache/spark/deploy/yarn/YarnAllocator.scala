@@ -529,7 +529,7 @@ private[yarn] class YarnAllocator(
             log"${MDC(LogKeys.MEMORY_SIZE, resource.getMemorySize)} MB memory."
           if (resource.getResources.nonEmpty) {
             requestContainerMessage = requestContainerMessage +
-              log" with custom resources: ${MDC(LogKeys.RESOURCE, resource)}"
+              log" with custom resources: ${MDC(LogKeys.YARN_RESOURCE, resource)}"
           }
           logInfo(requestContainerMessage)
         }

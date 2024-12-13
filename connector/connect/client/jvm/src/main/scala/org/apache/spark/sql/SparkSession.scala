@@ -301,7 +301,9 @@ class SparkSession private[sql] (
 
   // scalastyle:off
   /** @inheritdoc */
-  object implicits extends SQLImplicits(this)
+  object implicits extends SQLImplicits {
+    override protected def session: SparkSession = SparkSession.this
+  }
   // scalastyle:on
 
   /** @inheritdoc */

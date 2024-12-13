@@ -34,6 +34,8 @@ import org.apache.spark.sql.types.DataTypes;
 import org.apache.spark.sql.types.MapType;
 import org.apache.spark.sql.types.StructType;
 import org.apache.spark.sql.types.VariantType;
+import org.apache.spark.types.variant.VariantSchema;
+import org.apache.spark.unsafe.types.VariantVal;
 
 /**
  * Contains necessary information representing a Parquet column, either of primitive or nested type.
@@ -42,6 +44,11 @@ final class ParquetColumnVector {
   private final ParquetColumn column;
   private final List<ParquetColumnVector> children;
   private final WritableColumnVector vector;
+
+  // Describes the file schema of the Parquet variant column. When it is not null, `children`
+  // contains only one child that reads the underlying file content. This `ParquetColumnVector`
+  // should assemble Spark variant values from the file content.
+  private VariantSchema variantSchema;
 
   /**
    * Repetition & Definition levels
@@ -101,7 +108,18 @@ final class ParquetColumnVector {
       }
     }
 
-    if (isPrimitive) {
+    if (column.variantFileType().isDefined()) {
+      ParquetColumn fileContentCol = column.variantFileType().get();
+      WritableColumnVector fileContent = memoryMode == MemoryMode.OFF_HEAP
+          ? new OffHeapColumnVector(capacity, fileContentCol.sparkType())
+          : new OnHeapColumnVector(capacity, fileContentCol.sparkType());
+      ParquetColumnVector contentVector = new ParquetColumnVector(fileContentCol,
+          fileContent, capacity, memoryMode, missingColumns, false, null);
+      children.add(contentVector);
+      variantSchema = SparkShreddingUtils.buildVariantSchema(fileContentCol.sparkType());
+      repetitionLevels = contentVector.repetitionLevels;
+      definitionLevels = contentVector.definitionLevels;
+    } else if (isPrimitive) {
       if (column.repetitionLevel() > 0) {
         repetitionLevels = allocateLevelsVector(capacity, memoryMode);
       }
@@ -167,6 +185,26 @@ final class ParquetColumnVector {
    * This is a no-op for primitive columns.
    */
   void assemble() {
+    if (variantSchema != null) {
+      children.get(0).assemble();
+      WritableColumnVector fileContent = children.get(0).getValueVector();
+      int numRows = fileContent.getElementsAppended();
+      vector.reset();
+      vector.reserve(numRows);
+      WritableColumnVector valueChild = vector.getChild(0);
+      WritableColumnVector metadataChild = vector.getChild(1);
+      for (int i = 0; i < numRows; ++i) {
+        if (fileContent.isNullAt(i)) {
+          vector.appendStruct(true);
+        } else {
+          vector.appendStruct(false);
+          VariantVal v = SparkShreddingUtils.rebuild(fileContent.getStruct(i), variantSchema);
+          valueChild.appendByteArray(v.getValue(), 0, v.getValue().length);
+          metadataChild.appendByteArray(v.getMetadata(), 0, v.getMetadata().length);
+        }
+      }
+      return;
+    }
     // nothing to do if the column itself is missing
     if (vector.isAllNull()) return;
 
