@@ -1075,7 +1075,7 @@
   },
   "UNSUPPORTED_JOIN_TYPE": {
     "message": [
-      "Unsupported join type: <join_type>. Supported join types include: 'inner', 'outer', 'full', 'fullouter', 'full_outer', 'leftouter', 'left', 'left_outer', 'rightouter', 'right', 'right_outer', 'leftsemi', 'left_semi', 'semi', 'leftanti', 'left_anti', 'anti', 'cross'."
+      "Unsupported join type: '<typ>'. Supported join types include: <supported>."
     ]
   },
   "UNSUPPORTED_LITERAL": {

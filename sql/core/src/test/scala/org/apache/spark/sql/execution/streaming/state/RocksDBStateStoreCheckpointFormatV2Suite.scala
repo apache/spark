@@ -708,7 +708,7 @@ class RocksDBStateStoreCheckpointFormatV2Suite extends StreamTest
         checkpointInfoList: Iterable[StateStoreCheckpointInfo]
         ): Option[Iterable[StateStoreCheckpointInfo]] = {
       val allPossibleCheckpointInfoList = checkpointInfoList
-        .groupBy(x => (x.partitionId, x.batchVersion)).values.map(_.headOption)
+        .groupBy(x => (x.partitionId, x.batchVersion)).values.transpose
 
      var ret: Option[Iterable[StateStoreCheckpointInfo]] = None
      for (elem <- allPossibleCheckpointInfoList) {
@@ -803,63 +803,14 @@ class RocksDBStateStoreCheckpointFormatV2Suite extends StreamTest
       query.stop()
 
       val checkpointInfoList = CkptIdCollectingStateStoreWrapper.getStateStoreCheckpointInfos
-      // scalastyle:off line.size.limit
-      // Since every task is retried once, for each partition in each batch, we should have two
-      // state store checkpointInfo. Since these infos are appended sequentially, we can group them
-      // by partitionId and batchVersion, and pick the first one as they are the retried ones.
-      // e.g.
-      // [Picked] StateStoreCheckpointInfo[partitionId=1, batchVersion=2, stateStoreCkptId=Some(a9d5afec-0e8d-4473-b948-6c55513aa509), baseStateStoreCkptId=Some(061f7c53-b300-477a-a599-5387d55e315a)]
-      // [Picked] StateStoreCheckpointInfo[partitionId=0, batchVersion=2, stateStoreCkptId=Some(879cc517-6b85-4dae-abba-794bf2dbab82), baseStateStoreCkptId=Some(513726e7-2448-41a6-a874-92053c5cf86b)]
-      // StateStoreCheckpointInfo[partitionId=1, batchVersion=2, stateStoreCkptId=Some(7f4ad39f-d019-4ca2-8cf4-300379821cd6), baseStateStoreCkptId=Some(061f7c53-b300-477a-a599-5387d55e315a)]
-      // StateStoreCheckpointInfo[partitionId=0, batchVersion=2, stateStoreCkptId=Some(9dc215fe-54f9-4dc1-a59b-a8734f359e46), baseStateStoreCkptId=Some(513726e7-2448-41a6-a874-92053c5cf86b)]
-      // scalastyle:on line.size.limit
-      val pickedCheckpointInfoList = checkpointInfoList
-        .groupBy(x => (x.partitionId, x.batchVersion)).map(_._2.head)
 
-      Seq(0, 1).foreach {
-        partitionId =>
-          val stateStoreCkptIds = pickedCheckpointInfoList
-            .filter(_.partitionId == partitionId).map(_.stateStoreCkptId)
-          val baseStateStoreCkptIds = pickedCheckpointInfoList
-            .filter(_.partitionId == partitionId).map(_.baseStateStoreCkptId)
+      val pickedCheckpointInfoList = pickCheckpointInfoFromCommitLog(
+        checkpointDir,
+        checkpointInfoList)
 
-          // Verify lineage for each partition across batches. Below should satisfy because
-          // these ids are stored in the following manner:
-          // stateStoreCkptIds: id3, id2, id1
-          // baseStateStoreCkptIds:  id2, id1, None
-          // Below checks [id2, id1] are the same,
-          // which is the lineage for this partition across batches
-          assert(stateStoreCkptIds.drop(1).iterator
-            .sameElements(baseStateStoreCkptIds.dropRight(1)))
-      }
+      assert(pickedCheckpointInfoList.isDefined, "No lineage information matches with commit log")
 
-      val versionToUniqueIdFromStateStore = Seq(1, 2).map {
-        batchVersion =>
-          val res = pickedCheckpointInfoList
-            .filter(_.batchVersion == batchVersion).map(_.stateStoreCkptId.get)
-
-          // batch Id is batchVersion - 1
-          batchVersion - 1 -> res.toArray
-      }.toMap
-
-      val commitLogPath = new Path(
-        new Path(checkpointDir.getAbsolutePath), "commits").toString
-
-      val commitLog = new CommitLog(spark, commitLogPath)
-      val metadata_ = commitLog.get(Some(0), Some(1)).map(_._2)
-
-      val versionToUniqueIdFromCommitLog = metadata_.zipWithIndex.map { case (metadata, idx) =>
-        // Use stateUniqueIds(0) because there is only one state operator
-        val res2 = metadata.stateUniqueIds(0).map { uniqueIds =>
-            uniqueIds(0)
-        }
-        idx -> res2
-      }.toMap
-
-      versionToUniqueIdFromCommitLog.foreach {
-        case (version, uniqueIds) =>
-          assert(versionToUniqueIdFromStateStore(version).sorted.sameElements(uniqueIds.sorted))
-      }
+      checkpointInfoLineageVerification(pickedCheckpointInfoList.get)
     }
   }
 
@@ -911,63 +862,14 @@ class RocksDBStateStoreCheckpointFormatV2Suite extends StreamTest
       query.stop()
 
       val checkpointInfoList = CkptIdCollectingStateStoreWrapper.getStateStoreCheckpointInfos
-      // scalastyle:off line.size.limit
-      // Since every task is retried once, for each partition in each batch, we should have two
-      // state store checkpointInfo. Since these infos are appended sequentially, we can group them
-      // by partitionId and batchVersion, and pick the first one as they are the retried ones.
-      // e.g.
-      // [Picked] StateStoreCheckpointInfo[partitionId=1, batchVersion=2, stateStoreCkptId=Some(a9d5afec-0e8d-4473-b948-6c55513aa509), baseStateStoreCkptId=Some(061f7c53-b300-477a-a599-5387d55e315a)]
-      // [Picked] StateStoreCheckpointInfo[partitionId=0, batchVersion=2, stateStoreCkptId=Some(879cc517-6b85-4dae-abba-794bf2dbab82), baseStateStoreCkptId=Some(513726e7-2448-41a6-a874-92053c5cf86b)]
-      // StateStoreCheckpointInfo[partitionId=1, batchVersion=2, stateStoreCkptId=Some(7f4ad39f-d019-4ca2-8cf4-300379821cd6), baseStateStoreCkptId=Some(061f7c53-b300-477a-a599-5387d55e315a)]
-      // StateStoreCheckpointInfo[partitionId=0, batchVersion=2, stateStoreCkptId=Some(9dc215fe-54f9-4dc1-a59b-a8734f359e46), baseStateStoreCkptId=Some(513726e7-2448-41a6-a874-92053c5cf86b)]
-      // scalastyle:on line.size.limit
-      val pickedCheckpointInfoList = checkpointInfoList
-        .groupBy(x => (x.partitionId, x.batchVersion)).map(_._2.head)
 
-      Seq(0, 1).foreach {
-        partitionId =>
-          val stateStoreCkptIds = pickedCheckpointInfoList
-            .filter(_.partitionId == partitionId).map(_.stateStoreCkptId)
-          val baseStateStoreCkptIds = pickedCheckpointInfoList
-            .filter(_.partitionId == partitionId).map(_.baseStateStoreCkptId)
+      val pickedCheckpointInfoList = pickCheckpointInfoFromCommitLog(
+        checkpointDir,
+        checkpointInfoList)
 
-          // Verify lineage for each partition across batches. Below should satisfy because
-          // these ids are stored in the following manner:
-          // stateStoreCkptIds: id3, id2, id1
-          // baseStateStoreCkptIds:  id2, id1, None
-          // Below checks [id2, id1] are the same,
-          // which is the lineage for this partition across batches
-          assert(stateStoreCkptIds.drop(1).iterator
-            .sameElements(baseStateStoreCkptIds.dropRight(1)))
-      }
+      assert(pickedCheckpointInfoList.isDefined, "No lineage information matches with commit log")
 
-      val versionToUniqueIdFromStateStore = Seq(1, 2).map {
-        batchVersion =>
-          val res = pickedCheckpointInfoList
-            .filter(_.batchVersion == batchVersion).map(_.stateStoreCkptId.get)
-
-          // batch Id is batchVersion - 1
-          batchVersion - 1 -> res.toArray
-      }.toMap
-
-      val commitLogPath = new Path(
-        new Path(checkpointDir.getAbsolutePath), "commits").toString
-
-      val commitLog = new CommitLog(spark, commitLogPath)
-      val metadata_ = commitLog.get(Some(0), Some(1)).map(_._2)
-
-      val versionToUniqueIdFromCommitLog = metadata_.zipWithIndex.map { case (metadata, idx) =>
-        // Use stateUniqueIds(0) because there is only one state operator
-        val res2 = metadata.stateUniqueIds(0).map { uniqueIds =>
-          uniqueIds(0)
-        }
-        idx -> res2
-      }.toMap
-
-      versionToUniqueIdFromCommitLog.foreach {
-        case (version, uniqueIds) =>
-          assert(versionToUniqueIdFromStateStore(version).sorted.sameElements(uniqueIds.sorted))
-      }
+      checkpointInfoLineageVerification(pickedCheckpointInfoList.get)
     }
   }
 
@@ -1121,6 +1023,7 @@ class RocksDBStateStoreCheckpointFormatV2Suite extends StreamTest
 
     // We don't pass batch versions that would need base checkpoint IDs because we don't know
     // batchIDs for that. We only know that there are 1 batches without it.
+    // The two checkpoint IDs in between are stored in the commit log.
     validateCheckpointInfo(numBatches, 4, Set())
     assert(CkptIdCollectingStateStoreWrapper
       .getStateStoreCheckpointInfos
@@ -1215,36 +1118,5 @@ class RocksDBStateStoreCheckpointFormatV2Suite extends StreamTest
       )
     }
     validateCheckpointInfo(6, 1, Set(2, 4, 6))
-  }
-
-  test("checkpointFormatVersion2 validate transformWithState") {
-    withTempDir { checkpointDir =>
-      val inputData = MemoryStream[String]
-      val result = inputData.toDS()
-        .groupByKey(x => x)
-        .transformWithState(new RunningCountStatefulProcessor(),
-          TimeMode.None(),
-          OutputMode.Update())
-
-      testStream(result, Update())(
-        StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
-        AddData(inputData, "a"),
-        CheckNewAnswer(("a", "1")),
-        Execute { q =>
-          assert(q.lastProgress.stateOperators(0).customMetrics.get("numValueStateVars") > 0)
-          assert(q.lastProgress.stateOperators(0).customMetrics.get("numRegisteredTimers") == 0)
-        },
-        AddData(inputData, "a", "b"),
-        CheckNewAnswer(("a", "2"), ("b", "1")),
-        StopStream,
-        StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
-        AddData(inputData, "a", "b"), // should remove state for "a" and not return anything for a
-        CheckNewAnswer(("b", "2")),
-        StopStream,
-        StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
-        AddData(inputData, "a", "c"), // should recreate state for "a" and return count as 1 and
-        CheckNewAnswer(("a", "1"), ("c", "1"))
-      )
-    }
   }
 }
