@@ -820,26 +820,26 @@ jobs:
       - name: Spark Shell Classic
         shell: 'script -q -e -c "bash {0}"'
         run: |
-          echo 'spark.range(1024).count()' | ./bin/spark-shell > spark-shell-repl.log
-          grep 'res0.*Long.*1024' spark-shell-repl.log
+          echo 'Thread.sleep(10000); spark.range(1024).count()' | ./bin/spark-shell > spark-shell-repl.log
+          grep 'res.*Long.*1024' spark-shell-repl.log
       - name: Spark Shell Connect
         shell: 'script -q -e -c "bash {0}"'
         run: |
           export TERM=vt100
-          echo 'spark.range(1024).count()' | ./bin/spark-shell --remote local > spark-connect-repl.log
-          grep 'res0.*Long.*1024' spark-connect-repl.log
+          echo 'Thread.sleep(10000); spark.range(1024).count()' | ./bin/spark-shell --remote local > spark-connect-repl.log
+          grep 'res.*Long.*1024' spark-connect-repl.log
       - name: PySpark Classic
         shell: 'script -q -e -c "bash {0}"'
         run: |
           export SPARK_HOME=$(pwd)
-          echo 'spark.range(1024).count()' | ./bin/pyspark > pyspark-repl.log
-          grep 'Out.*1.*1024' pyspark-repl.log
+          echo 'import time \ntime.sleep(10) \nspark.range(1024).count()' | ./bin/pyspark > pyspark-repl.log
+          grep 'Out.*1024' pyspark-repl.log
       - name: PySpark Connect
         shell: 'script -q -e -c "bash {0}"'
         run: |
           export SPARK_HOME=$(pwd)
-          echo 'spark.range(1024).count()' | ./bin/pyspark --remote local > pyspark-connect-repl.log
-          grep 'Out.*1.*1024' pyspark-connect-repl.log
+          echo 'import time \ntime.sleep(10) \nspark.range(1024).count()' | ./bin/pyspark --remote local > pyspark-connect-repl.log
+          grep 'Out.*1024' pyspark-connect-repl.log
       - name: Upload log files
         if: always()
         uses: actions/upload-artifact@v4
