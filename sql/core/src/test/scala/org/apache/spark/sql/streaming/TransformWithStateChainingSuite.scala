@@ -293,10 +293,7 @@ class TransformWithStateChainingSuite extends StreamTest
           testStream(result, OutputMode.Append())(
             AddData(inputData, InputEventRow("k1", timestamp("2024-02-01 00:00:00"), "e1"),
               InputEventRow("k1", timestamp("2024-02-01 00:00:00"), "e1")),
-            CheckNewAnswer(OutputRow("k1", timestamp("2024-02-01 00:00:00"), 2)),
-            Execute("assertWatermarkEquals") { q =>
-              assertWatermarkEquals(q, timestamp("2024-01-31 23:59:00"))
-            }
+            ProcessAllAvailable()
           )
         }
         assert(ex.getMessage.contains("State store encoding format as avro is not supported"))

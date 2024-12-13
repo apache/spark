@@ -142,19 +142,20 @@ object UnsupportedOperationChecker extends Logging {
     }
   }
 
-  private def checkAvroSupportForStatefulOperator(p: LogicalPlan): Boolean = p match {
+  private def checkAvroSupportForStatefulOperator(p: LogicalPlan): Option[String] = p match {
     // TODO: remove operators from this list as support for avro encoding is added
-    case s: Aggregate if s.isStreaming => false
+    case s: Aggregate if s.isStreaming => Some("aggregation")
     // Since the Distinct node will be replaced to Aggregate in the optimizer rule
     // [[ReplaceDistinctWithAggregate]], here we also need to check all Distinct node by
     // assuming it as Aggregate.
-    case d @ Distinct(_: LogicalPlan) if d.isStreaming => false
-    case _ @ Join(left, right, _, _, _) if left.isStreaming && right.isStreaming => false
-    case f: FlatMapGroupsWithState if f.isStreaming => false
-    case f: FlatMapGroupsInPandasWithState if f.isStreaming => false
-    case d: Deduplicate if d.isStreaming => false
-    case d: DeduplicateWithinWatermark if d.isStreaming => false
-    case _ => true
+    case d @ Distinct(_: LogicalPlan) if d.isStreaming => Some("distinct")
+    case _ @ Join(left, right, _, _, _) if left.isStreaming && right.isStreaming => Some("join")
+    case f: FlatMapGroupsWithState if f.isStreaming => Some("flatMapGroupsWithState")
+    case f: FlatMapGroupsInPandasWithState if f.isStreaming =>
+      Some("applyInPandasWithState")
+    case d: Deduplicate if d.isStreaming => Some("dropDuplicates")
+    case d: DeduplicateWithinWatermark if d.isStreaming => Some("dropDuplicatesWithinWatermark")
+    case _ => None
   }
 
   // Rule to check that avro encoding format is not supported in case any
@@ -163,10 +164,10 @@ object UnsupportedOperationChecker extends Logging {
     val storeEncodingFormat = SQLConf.get.stateStoreEncodingFormat
     if (storeEncodingFormat.toLowerCase(Locale.ROOT) == "avro") {
       plan.foreach { subPlan =>
-        if (!checkAvroSupportForStatefulOperator(subPlan)) {
+        val operatorOpt = checkAvroSupportForStatefulOperator(subPlan)
+        if (operatorOpt.isDefined) {
           val errorMsg = "State store encoding format as avro is not supported for " +
-            "all stateful operators within this query. Please use unsaferow as " +
-            "the encoding format till all stateful operators support avro encoding."
+            s"operator=${operatorOpt.get} used within the query"
           throwError(errorMsg)(plan)
         }
       }

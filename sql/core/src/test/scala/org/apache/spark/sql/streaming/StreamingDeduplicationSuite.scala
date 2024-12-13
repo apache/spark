@@ -583,11 +583,8 @@ class StreamingDeduplicationSuite extends StateStoreMetricsTest {
       withSQLConf(SQLConf.STREAMING_STATE_STORE_ENCODING_FORMAT.key -> "avro") {
         testStream(result, Append)(
           AddData(inputData, "a"),
-          CheckLastBatch("a"),
-          assertNumStateRows(total = 1, updated = 1),
-          AddData(inputData, "a"),
-          CheckLastBatch(),
-          assertNumStateRows(total = 1, updated = 0))
+          ProcessAllAvailable()
+        )
       }
     }
     assert(ex.getMessage.contains("State store encoding format as avro is not supported"))

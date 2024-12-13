@@ -887,16 +887,8 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
       withSQLConf(SQLConf.STREAMING_STATE_STORE_ENCODING_FORMAT.key -> "avro") {
         testStream(aggregated, Update)(
           AddData(inputData, 3),
-          CheckLastBatch((3, 1)),
-          AddData(inputData, 3, 2),
-          CheckLastBatch((3, 2), (2, 1)),
-          StopStream,
-          StartStream(),
-          AddData(inputData, 3, 2, 1),
-          CheckLastBatch((3, 3), (2, 2), (1, 1)),
-          // By default we run in new tuple mode.
-          AddData(inputData, 4, 4, 4, 4),
-          CheckLastBatch((4, 4)))
+          ProcessAllAvailable()
+        )
       }
     }
     assert(ex.getMessage.contains("State store encoding format as avro is not supported"))
