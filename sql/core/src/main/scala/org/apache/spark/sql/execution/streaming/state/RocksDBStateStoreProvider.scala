@@ -398,9 +398,11 @@ private[sql] class RocksDBStateStoreProvider
     val avroEnc = getAvroEnc(
       stateStoreEncoding, avroEncCacheKey, keyStateEncoderSpec, valueSchema)
 
-    if (useColumnFamilies) {
+    val columnFamilyInfo = if (useColumnFamilies) {
       defaultColFamilyId = Some(rocksDB.createColFamilyIfAbsent(StateStore.DEFAULT_COL_FAMILY_NAME))
-      val columnFamilyInfo = Some(ColumnFamilyInfo(colFamilyName, defaultColFamilyId.get))
+      Some(ColumnFamilyInfo(colFamilyName, defaultColFamilyId.get))
+    } else {
+      None
     }
 
     val provider = RocksDBStateStoreProvider.this
