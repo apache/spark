@@ -351,31 +351,24 @@ class StateStoreChangelogReaderFactory(
     case f: FileNotFoundException =>
       throw QueryExecutionErrors.failedToReadStreamingStateFileError(fileToRead, f)
   }
-  protected var input: DataInputStream = decompressStream(sourceStream)
-  protected var version: Short = -1
+  protected val input: DataInputStream = decompressStream(sourceStream)
 
-  private def readVersion(): Short = {
+  private lazy val readVersion: Short = {
     try {
-      if (version > 0) {
-        return version
-      }
       val versionStr = input.readUTF()
       // Versions in the first line are prefixed with "v", e.g. "v2"
       // Since there is no version written for version 1,
       // return 1 if first line doesn't start with "v"
       if (!versionStr.startsWith("v")) {
-        version = 1
+        1
       } else {
-        version = versionStr.stripPrefix("v").toShort
+        versionStr.stripPrefix("v").toShort
       }
-      version
     } catch {
       // When there is no record being written in the changelog file in V1,
       // the file contains a single int -1 meaning EOF, then the above readUTF()
       // throws with EOFException and we return version 1.
-      case _: java.io.EOFException =>
-        version = 1
-        version
+      case _: java.io.EOFException => 1
     }
   }
 
