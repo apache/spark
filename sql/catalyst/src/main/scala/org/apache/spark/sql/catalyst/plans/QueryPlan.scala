@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.plans
 
 import java.util.IdentityHashMap
+import java.util.concurrent.atomic.AtomicReference
 
 import scala.collection.mutable
 
@@ -95,11 +96,22 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
    * All Attributes that appear in expressions from this operator.  Note that this set does not
    * include attributes that are implicitly referenced by being passed through to the output tuple.
    */
-  def references: AttributeSet = _references()
+  def references: AttributeSet = {
+    val refs = __references.get()
+    if (refs == null) {
+      val newRefs = AttributeSet(expressions.flatMap(_.references))
+      __references.compareAndSet(null, newRefs)
+      newRefs
+    } else {
+      refs
+    }
+  }
 
   private val _references = new TransientLazy({
     AttributeSet(expressions) -- producedAttributes
   })
+
+  private val __references: AtomicReference[AttributeSet] = new AtomicReference(null)
 
   /**
    * Returns true when the all the expressions in the current node as well as all of its children
