@@ -225,7 +225,6 @@ class IncrementalExecution(
         // write out the state schema paths to the metadata file
         statefulOp match {
           case ssw: StateStoreWriter =>
-            val metadata = ssw.operatorStateMetadata(stateSchemaPaths)
             // validate metadata
             if (isFirstBatch && currentBatchId != 0) {
               // If we are restarting from a different checkpoint directory
@@ -242,17 +241,20 @@ class IncrementalExecution(
                     log"versions: ${MDC(ERROR, e.getMessage)}")
                 None
               }
+              val stateSchemaMapping = ssw.stateSchemaMapping(schemaValidationResult,
+                oldMetadata)
+              val metadata = ssw.operatorStateMetadata(stateSchemaMapping)
               oldMetadata match {
                 case Some(oldMetadata) => ssw.validateNewMetadata(oldMetadata, metadata)
                 case None =>
               }
-            }
-            val metadataWriter = OperatorStateMetadataWriter.createWriter(
+              val metadataWriter = OperatorStateMetadataWriter.createWriter(
                 new Path(checkpointLocation, ssw.getStateInfo.operatorId.toString),
                 hadoopConf,
                 ssw.operatorStateMetadataVersion,
                 Some(currentBatchId))
-            metadataWriter.write(metadata)
+              metadataWriter.write(metadata)
+            }
           case _ =>
         }
         statefulOp

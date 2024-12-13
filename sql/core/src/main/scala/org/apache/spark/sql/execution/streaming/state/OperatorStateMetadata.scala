@@ -288,7 +288,7 @@ class OperatorStateMetadataV1Reader(
 class OperatorStateMetadataV2Writer(
     stateCheckpointPath: Path,
     hadoopConf: Configuration,
-    currentBatchId: Long) extends OperatorStateMetadataWriter {
+    currentBatchId: Long) extends OperatorStateMetadataWriter with Logging {
 
   private val metadataFilePath = OperatorStateMetadataV2.metadataFilePath(
     stateCheckpointPath, currentBatchId)
@@ -301,6 +301,7 @@ class OperatorStateMetadataV2Writer(
     if (fm.exists(metadataFilePath)) return
 
     fm.mkdirs(metadataFilePath.getParent)
+    logError(s"### metadataFilePath: $metadataFilePath")
     val outputStream = fm.createAtomic(metadataFilePath, overwriteIfPossible = false)
     OperatorStateMetadataUtils.writeMetadata(outputStream, operatorMetadata, metadataFilePath)
   }
@@ -309,7 +310,7 @@ class OperatorStateMetadataV2Writer(
 class OperatorStateMetadataV2Reader(
     stateCheckpointPath: Path,
     hadoopConf: Configuration,
-    batchId: Long) extends OperatorStateMetadataReader {
+    batchId: Long) extends OperatorStateMetadataReader with Logging {
 
   // Check that the requested batchId is available in the checkpoint directory
   val baseCheckpointDir = stateCheckpointPath.getParent.getParent
@@ -347,6 +348,7 @@ class OperatorStateMetadataV2Reader(
 
   override def read(): Option[OperatorStateMetadata] = {
     val batches = listOperatorMetadataBatches()
+    logError(s"### batches: ${batches.mkString("Array(", ", ", ")")}")
     val lastBatchId = batches.filter(_ <= batchId).lastOption
     if (lastBatchId.isEmpty) {
       throw StateDataSourceErrors.failedToReadOperatorMetadata(stateCheckpointPath.toString,
