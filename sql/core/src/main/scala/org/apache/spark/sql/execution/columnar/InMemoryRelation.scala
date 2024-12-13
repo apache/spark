@@ -226,14 +226,16 @@ case class CachedRDDBuilder(
   }
 
   def cachedColumnBuffers: RDD[CachedBatch] = {
-    if (_cachedColumnBuffers == null) {
-      synchronized {
-        if (_cachedColumnBuffers == null) {
-          _cachedColumnBuffers = buildBuffers()
-        }
-      }
+    val cached = _cachedColumnBuffers
+    if (cached != null) {
+      return cached
     }
-    _cachedColumnBuffers
+    synchronized {
+      if (_cachedColumnBuffers == null) {
+        _cachedColumnBuffers = buildBuffers()
+      }
+      _cachedColumnBuffers
+    }
   }
 
   def clearCache(blocking: Boolean = false): Unit = {
