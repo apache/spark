@@ -866,7 +866,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
               summary = j.origin.context.summary)
 
           // TODO: although map type is not orderable, technically map type should be able to be
-          //   used in equality comparison, remove this type check once we support it.
+          // used in equality comparison, remove this type check once we support it.
           case o if mapColumnInSetOperation(o).isDefined =>
             val mapCol = mapColumnInSetOperation(o).get
             o.failAnalysis(
@@ -889,7 +889,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
             o.failAnalysis(
               errorClass = "UNSUPPORTED_FEATURE.PARTITION_BY_VARIANT",
               messageParameters = Map(
-                "expr" -> variantExpr.sql,
+                "expr" -> toSQLExpr(variantExpr),
                 "dataType" -> toSQLType(variantExpr.dataType)))
 
           case o if mapExprInPartitionExpression(o).isDefined =>
@@ -897,7 +897,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
             o.failAnalysis(
               errorClass = "UNSUPPORTED_FEATURE.PARTITION_BY_MAP",
               messageParameters = Map(
-                "expr" -> mapExpr.sql,
+                "expr" -> toSQLExpr(mapExpr),
                 "dataType" -> toSQLType(mapExpr.dataType)))
 
           case o if o.expressions.exists(!_.deterministic) &&
