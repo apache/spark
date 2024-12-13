@@ -350,6 +350,7 @@ private[spark] object LogKeys {
   case object KEYTAB extends LogKey
   case object KEYTAB_FILE extends LogKey
   case object KILL_EXECUTORS extends LogKey
+  case object KINESIS_REASON extends LogKey
   case object LABEL_COLUMN extends LogKey
   case object LARGEST_CLUSTER_INDEX extends LogKey
   case object LAST_ACCESS_TIME extends LogKey
@@ -701,6 +702,7 @@ private[spark] object LogKeys {
   case object RULE_EXECUTOR_NAME extends LogKey
   case object RULE_NAME extends LogKey
   case object RUN_ID extends LogKey
+  case object RUN_ID_STRING extends LogKey
   case object SCALA_VERSION extends LogKey
   case object SCALING_DOWN_RATIO extends LogKey
   case object SCALING_UP_RATIO extends LogKey
@@ -884,6 +886,7 @@ private[spark] object LogKeys {
   case object WRITE_JOB_UUID extends LogKey
   case object XML_SCHEDULING_MODE extends LogKey
   case object XSD_PATH extends LogKey
+  case object YARN_RESOURCE extends LogKey
   case object YOUNG_GENERATION_GC extends LogKey
   case object ZERO_TIME extends LogKey
 }
