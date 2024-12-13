@@ -104,6 +104,7 @@ if TYPE_CHECKING:
     from pyspark.sql.connect.session import SparkSession
     from pyspark.pandas.frame import DataFrame as PandasOnSparkDataFrame
     from pyspark.sql.metrics import ExecutionInfo
+    from pyspark.sql.table_arg import TableArg
 
 
 class DataFrame(ParentDataFrame):
