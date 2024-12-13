@@ -164,7 +164,7 @@ object TransformWithStateOperatorProperties extends Logging {
   }
 }
 
-trait TransformWithStateOperatorMetadataUtils extends Logging {
+trait TransformWithStateMetadataUtils extends Logging {
   def getColFamilySchemas(): Map[String, StateStoreColFamilySchema]
 
   def getStateVariableInfos(): Map[String, TransformWithStateVariableInfo]
@@ -194,10 +194,11 @@ trait TransformWithStateOperatorMetadataUtils extends Logging {
       batchId: Long,
       stateSchemaVersion: Int,
       info: StatefulOperatorStateInfo,
-      stateSchemaDir: Path,
       session: SparkSession,
       operatorStateMetadataVersion: Int = 2): List[StateSchemaValidationResult] = {
+    assert(stateSchemaVersion >= 3)
     val newSchemas = getColFamilySchemas()
+    val stateSchemaDir = stateSchemaDirPath(info)
     val newStateSchemaFilePath =
       new Path(stateSchemaDir, s"${batchId}_${UUID.randomUUID().toString}")
     val metadataPath = new Path(info.checkpointLocation, s"${info.operatorId}")
@@ -208,7 +209,7 @@ trait TransformWithStateOperatorMetadataUtils extends Logging {
     } catch {
       // If this is the first time we are running the query, there will be no metadata
       // and this error is expected. In this case, we return None.
-      case ex: Exception if batchId == 0 =>
+      case _: Exception if batchId == 0 =>
         None
     }
 
@@ -228,5 +229,32 @@ trait TransformWithStateOperatorMetadataUtils extends Logging {
         storeName = StateStoreId.DEFAULT_STORE_NAME,
         oldSchemaFilePath = oldStateSchemaFilePath,
         newSchemaFilePath = Some(newStateSchemaFilePath)))
+  }
+
+  def validateNewMetadataForTWS(
+      oldOperatorMetadata: OperatorStateMetadata,
+      newOperatorMetadata: OperatorStateMetadata): Unit = {
+    (oldOperatorMetadata, newOperatorMetadata) match {
+      case (
+        oldMetadataV2: OperatorStateMetadataV2,
+        newMetadataV2: OperatorStateMetadataV2) =>
+        val oldOperatorProps = TransformWithStateOperatorProperties.fromJson(
+          oldMetadataV2.operatorPropertiesJson)
+        val newOperatorProps = TransformWithStateOperatorProperties.fromJson(
+          newMetadataV2.operatorPropertiesJson)
+        TransformWithStateOperatorProperties.validateOperatorProperties(
+          oldOperatorProps, newOperatorProps)
+      case (_, _) =>
+    }
+  }
+
+  private def stateSchemaDirPath(info: StatefulOperatorStateInfo): Path = {
+    val storeName = StateStoreId.DEFAULT_STORE_NAME
+    val stateCheckpointPath =
+      new Path(info.checkpointLocation, s"${info.operatorId.toString}")
+
+    val stateSchemaPath = new Path(stateCheckpointPath, "_stateSchema")
+    val storeNamePath = new Path(stateSchemaPath, storeName)
+    storeNamePath
   }
 }

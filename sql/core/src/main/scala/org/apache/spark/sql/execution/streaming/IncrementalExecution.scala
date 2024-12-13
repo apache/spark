@@ -217,6 +217,9 @@ class IncrementalExecution(
           case _: TransformWithStateExec =>
             sparkSession.sessionState.conf.
               getConf(SQLConf.STREAMING_TRANSFORM_WITH_STATE_OP_STATE_SCHEMA_VERSION)
+          case _: TransformWithStateInPandasExec =>
+            sparkSession.sessionState.conf.
+              getConf(SQLConf.STREAMING_TRANSFORM_WITH_STATE_OP_STATE_SCHEMA_VERSION)
           case _ => STATE_SCHEMA_DEFAULT_VERSION
         }
         val schemaValidationResult = statefulOp.

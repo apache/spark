@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.execution.{BinaryExecNode, CoGroupedIterator, SparkPlan}
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.python.PandasGroupUtils.{executePython, groupAndProject, resolveArgOffsets}
-import org.apache.spark.sql.execution.streaming.{DriverStatefulProcessorHandleImpl, StatefulOperatorCustomMetric, StatefulOperatorCustomSumMetric, StatefulOperatorPartitioning, StatefulOperatorStateInfo, StatefulProcessorHandleImpl, StateStoreWriter, TransformWithStateOperatorMetadataUtils, TransformWithStateVariableInfo, WatermarkSupport}
+import org.apache.spark.sql.execution.streaming.{DriverStatefulProcessorHandleImpl, StatefulOperatorCustomMetric, StatefulOperatorCustomSumMetric, StatefulOperatorPartitioning, StatefulOperatorStateInfo, StatefulProcessorHandleImpl, StateStoreWriter, TransformWithStateMetadataUtils, TransformWithStateVariableInfo, WatermarkSupport}
 import org.apache.spark.sql.execution.streaming.StreamingSymmetricHashJoinHelper.StateStoreAwareZipPartitionsHelper
 import org.apache.spark.sql.execution.streaming.state.{NoPrefixKeyStateEncoderSpec, OperatorStateMetadata, StateSchemaValidationResult, StateStore, StateStoreColFamilySchema, StateStoreConf, StateStoreId, StateStoreOps, StateStoreProviderId}
 import org.apache.spark.sql.streaming.{OutputMode, TimeMode}
@@ -74,7 +74,7 @@ case class TransformWithStateInPandasExec(
   extends BinaryExecNode
   with StateStoreWriter
   with WatermarkSupport
-  with TransformWithStateOperatorMetadataUtils {
+  with TransformWithStateMetadataUtils {
 
   override def shortName: String = "transformWithStateInPandasExec"
   private val pythonUDF = functionExpr.asInstanceOf[PythonUDF]
@@ -106,6 +106,14 @@ case class TransformWithStateInPandasExec(
 
   override def operatorStateMetadataVersion: Int = 2
 
+  override def getColFamilySchemas(): Map[String, StateStoreColFamilySchema] = {
+    driverProcessorHandle.getColumnFamilySchemas
+  }
+
+  override def getStateVariableInfos(): Map[String, TransformWithStateVariableInfo] = {
+    driverProcessorHandle.getStateVariableInfos
+  }
+
   /** Metadata of this stateful operator and its states stores.
    * Written during IncrementalExecution */
   private val driverProcessorHandle: DriverStatefulProcessorHandleImpl =
@@ -131,17 +139,15 @@ case class TransformWithStateInPandasExec(
     groupingAttributes.map(SortOrder(_, Ascending)),
     initialStateGroupingAttrs.map(SortOrder(_, Ascending)))
 
-  override def getColFamilySchemas(): Map[String, StateStoreColFamilySchema] = {
-    driverProcessorHandle.getColumnFamilySchemas
-  }
-
-  override def getStateVariableInfos(): Map[String, TransformWithStateVariableInfo] = {
-    driverProcessorHandle.getStateVariableInfos
-  }
-
   override def operatorStateMetadata(
       stateSchemaPaths: List[String]): OperatorStateMetadata = {
     getOperatorStateMetadata(stateSchemaPaths, getStateInfo, shortName, timeMode, outputMode)
+  }
+
+  override def validateNewMetadata(
+      oldOperatorMetadata: OperatorStateMetadata,
+      newOperatorMetadata: OperatorStateMetadata): Unit = {
+    validateNewMetadataForTWS(oldOperatorMetadata, newOperatorMetadata)
   }
 
   override def validateAndMaybeEvolveStateSchema(
@@ -166,7 +172,7 @@ case class TransformWithStateInPandasExec(
     runner.stop()
 
     validateAndWriteStateSchema(hadoopConf, batchId, stateSchemaVersion, getStateInfo,
-      stateSchemaDirPath(), session, operatorStateMetadataVersion)
+      session, operatorStateMetadataVersion)
   }
 
   override def shouldRunAnotherBatch(newInputWatermark: Long): Boolean = {
