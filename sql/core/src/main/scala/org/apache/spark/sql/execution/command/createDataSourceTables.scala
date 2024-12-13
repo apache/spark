@@ -170,7 +170,8 @@ case class CreateDataSourceTableAsSelectCommand(
       }
 
       saveDataIntoTable(
-        sparkSession, table, table.storage.locationUri, SaveMode.Append, tableExists = true)
+        sparkSession, table, table.storage.locationUri, SaveMode.Append,
+        tableExists = true, isCtas = true)
     } else {
       table.storage.locationUri.foreach { p =>
         DataWritingCommand.assertEmptyRootPath(p, mode, sparkSession.sessionState.newHadoopConf())
@@ -183,7 +184,7 @@ case class CreateDataSourceTableAsSelectCommand(
         table.storage.locationUri
       }
       val result = saveDataIntoTable(
-        sparkSession, table, tableLocation, SaveMode.Overwrite, tableExists = false)
+        sparkSession, table, tableLocation, SaveMode.Overwrite, tableExists = false, isCtas = true)
       val tableSchema = CharVarcharUtils.getRawSchema(
         removeInternalMetadata(result.schema), sessionState.conf)
       val newTable = table.copy(
@@ -217,7 +218,8 @@ case class CreateDataSourceTableAsSelectCommand(
       table: CatalogTable,
       tableLocation: Option[URI],
       mode: SaveMode,
-      tableExists: Boolean): BaseRelation = {
+      tableExists: Boolean,
+      isCtas: Boolean): BaseRelation = {
     // Create the relation based on the input logical plan: `query`.
     val pathOption = tableLocation.map("path" -> CatalogUtils.URIToString(_))
     val dataSource = DataSource(
@@ -229,7 +231,7 @@ case class CreateDataSourceTableAsSelectCommand(
       catalogTable = if (tableExists) Some(table) else None)
 
     try {
-      dataSource.writeAndRead(mode, query, outputColumnNames)
+      dataSource.writeAndRead(mode, query, outputColumnNames, isCtas)
     } catch {
       case ex: AnalysisException =>
         logError(log"Failed to write to table " +

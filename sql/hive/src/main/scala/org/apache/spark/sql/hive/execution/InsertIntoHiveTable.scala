@@ -28,7 +28,6 @@ import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, SortOrder}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.SparkPlan
@@ -78,7 +77,8 @@ case class InsertIntoHiveTable(
     bucketSpec: Option[BucketSpec],
     options: Map[String, String],
     fileFormat: FileFormat,
-    @transient hiveTmpPath: HiveTempPath
+    @transient hiveTmpPath: HiveTempPath,
+    isCtas: Boolean
   ) extends SaveAsHiveFile with V1WriteCommand with V1WritesHiveUtils {
 
   override def staticPartitions: TablePartitionSpec = {
@@ -237,18 +237,14 @@ case class InsertIntoHiveTable(
 
 object InsertIntoHiveTable extends V1WritesHiveUtils {
 
-  /**
-   * A tag to identify if this command is created by a CTAS.
-   */
-  val BY_CTAS = TreeNodeTag[Unit]("by_ctas")
-
   def apply(
       table: CatalogTable,
       partition: Map[String, Option[String]],
       query: LogicalPlan,
       overwrite: Boolean,
       ifPartitionNotExists: Boolean,
-      outputColumnNames: Seq[String]): InsertIntoHiveTable = {
+      outputColumnNames: Seq[String],
+      isCtas: Boolean): InsertIntoHiveTable = {
     val sparkSession = SparkSession.getActiveSession.orNull
     val hiveQlTable = HiveClientImpl.toHiveTable(table)
     // Have to pass the TableDesc object to RDD.mapPartitions and then instantiate new serializer
@@ -274,6 +270,6 @@ object InsertIntoHiveTable extends V1WritesHiveUtils {
     val options = getOptionsWithHiveBucketWrite(bucketSpec)
 
     new InsertIntoHiveTable(table, partition, query, overwrite, ifPartitionNotExists,
-      outputColumnNames, partitionColumns, bucketSpec, options, fileFormat, hiveTempPath)
+      outputColumnNames, partitionColumns, bucketSpec, options, fileFormat, hiveTempPath, isCtas)
   }
 }

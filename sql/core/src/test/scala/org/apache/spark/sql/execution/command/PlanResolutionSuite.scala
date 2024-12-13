@@ -1235,7 +1235,7 @@ class PlanResolutionSuite extends AnalysisTest {
       case InsertIntoStatement(
         _, _, _,
         UnresolvedInlineTable(_, Seq(Seq(UnresolvedAttribute(Seq("DEFAULT"))))),
-        _, _, _) =>
+        _, _, _, _) =>
 
       case _ => fail("Expect UpdateTable, but got:\n" + parsed1.treeString)
     }
@@ -1243,7 +1243,7 @@ class PlanResolutionSuite extends AnalysisTest {
       case InsertIntoStatement(
         _, _, _,
         Project(Seq(UnresolvedAttribute(Seq("DEFAULT"))), _),
-        _, _, _) =>
+        _, _, _, _) =>
 
       case _ => fail("Expect UpdateTable, but got:\n" + parsed1.treeString)
     }
@@ -1253,7 +1253,7 @@ class PlanResolutionSuite extends AnalysisTest {
     val sql1 = "INSERT INTO testcat.defaultvalues VALUES (DEFAULT, DEFAULT)"
     parseAndResolve(sql1) match {
       // The top-most Project just adds aliases.
-      case AppendData(_: DataSourceV2Relation, Project(_, l: LocalRelation), _, _, _, _) =>
+      case AppendData(_: DataSourceV2Relation, Project(_, l: LocalRelation), _, _, _, _, _) =>
         assert(l.data.length == 1)
         val row = l.data.head
         assert(row.numFields == 2)
@@ -1291,7 +1291,7 @@ class PlanResolutionSuite extends AnalysisTest {
     val overwriteSql = s"INSERT OVERWRITE $tblName(i, s) VALUES (3, 'a')"
     val overwriteParsed = parseAndResolve(overwriteSql)
     insertParsed match {
-      case AppendData(_: DataSourceV2Relation, _, _, isByName, _, _) =>
+      case AppendData(_: DataSourceV2Relation, _, _, isByName, _, _, _) =>
         assert(isByName)
       case _ => fail("Expected AppendData, but got:\n" + insertParsed.treeString)
     }
@@ -1494,7 +1494,7 @@ class PlanResolutionSuite extends AnalysisTest {
         case Project(_, AsDataSourceV2Relation(r)) =>
           assert(r.catalog.exists(_ == catalog))
           assert(r.identifier.exists(_.name() == tableIdent))
-        case AppendData(r: DataSourceV2Relation, _, _, _, _, _) =>
+        case AppendData(r: DataSourceV2Relation, _, _, _, _, _, _) =>
           assert(r.catalog.exists(_ == catalog))
           assert(r.identifier.exists(_.name() == tableIdent))
         case DescribeRelation(r: ResolvedTable, _, _, _) =>

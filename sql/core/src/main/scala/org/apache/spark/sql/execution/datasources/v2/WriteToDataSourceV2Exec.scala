@@ -632,7 +632,7 @@ private[v2] trait V2CreateTableAsSelectBaseExec extends LeafV2CommandExec {
       query: LogicalPlan): Seq[InternalRow] = {
     Utils.tryWithSafeFinallyAndFailureCallbacks({
       val relation = DataSourceV2Relation.create(table, Some(catalog), Some(ident))
-      val append = AppendData.byPosition(relation, query, writeOptions)
+      val append = AppendData.byPosition(relation, query, writeOptions, isCtas = true)
       val qe = session.sessionState.executePlan(append)
       qe.assertCommandExecuted()
 
