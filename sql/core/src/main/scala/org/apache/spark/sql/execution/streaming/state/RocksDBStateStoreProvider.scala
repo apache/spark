@@ -23,7 +23,6 @@ import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
 
 import scala.util.control.NonFatal
 
-import com.google.common.cache.CacheBuilder
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
@@ -614,7 +613,7 @@ object RocksDBStateStoreProvider {
   private val AVRO_ENCODER_LIFETIME_HOURS = 1L
 
   // Add the cache at companion object level so it persists across provider instances
-  private val avroEncoderMap: NonFateSharingCache[String, AvroEncoder] =
+  private val dataEncoderCache: NonFateSharingCache[String, RocksDBDataEncoder] =
     NonFateSharingCache(
       maximumSize = MAX_AVRO_ENCODERS_IN_CACHE,
       expireAfterAccessTime = AVRO_ENCODER_LIFETIME_HOURS,

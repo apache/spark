@@ -852,7 +852,6 @@ class PrefixKeyScanStateEncoder(
     virtualColFamilyId: Option[Short] = None)
   extends RocksDBKeyStateEncoderBase(useColumnFamilies, virtualColFamilyId) with Logging {
 
-  private val usingAvroEncoding = avroEnc.isDefined
   private val prefixKeyFieldsWithIdx: Seq[(StructField, Int)] = {
     keySchema.zipWithIndex.take(numColsPrefixKey)
   }
