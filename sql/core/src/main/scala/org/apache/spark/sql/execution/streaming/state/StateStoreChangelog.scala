@@ -379,7 +379,7 @@ class StateStoreChangelogReaderFactory(
   def constructChangelogReader(): StateStoreChangelogReader = {
     var reader: StateStoreChangelogReader = null
     try {
-      reader = readVersion() match {
+      reader = readVersion match {
         case 1 => new StateStoreChangelogReaderV1(fm, fileToRead, compressionCodec)
         case 2 => new StateStoreChangelogReaderV2(fm, fileToRead, compressionCodec)
         case 3 => new StateStoreChangelogReaderV3(fm, fileToRead, compressionCodec)
@@ -389,7 +389,7 @@ class StateStoreChangelogReaderFactory(
     } finally {
       if (input != null) {
         input.close()
-        input = null
+        // input is not set to null because it is effectively lazy.
       }
     }
     reader
