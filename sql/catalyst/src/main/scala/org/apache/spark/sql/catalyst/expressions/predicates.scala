@@ -487,7 +487,14 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
     }
   }
 
-  override def toString: String = s"$value IN ${list.mkString("(", ",", ")")}"
+  override def toString: String = {
+    val limit = SQLConf.get.optimizerInSetMemberLoggingLimit
+    if (list.length <= limit) {
+      s"$value IN ${list.mkString("(", ", ", ")")}"
+    } else {
+      s"$value IN ${list.take(limit).mkString("(", ",", ", ...)")}"
+    }
+  }
 
   override def eval(input: InternalRow): Any = {
     if (list.isEmpty && !legacyNullInEmptyBehavior) {
@@ -612,12 +619,21 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
     if (!child.resolved) {
       return s"$child INSET (values with unresolved data types)"
     }
-    val listString = hset.toSeq
-      .map(elem => Literal(elem, child.dataType).toString)
-      // Sort elements for deterministic behaviours
-      .sorted
-      .mkString(", ")
-    s"$child INSET $listString"
+    val limit = SQLConf.get.optimizerInSetMemberLoggingLimit
+    if (hset.size <= limit) {
+      val listString = hset.toSeq
+        .map(elem => Literal(elem, child.dataType).toString)
+        // Sort elements for deterministic behaviours
+        .sorted
+        .mkString(", ")
+      s"$child INSET $listString"
+    } else {
+      // Skip sorting if there are many elements.
+      val listString = hset.take(limit).toSeq
+        .map(elem => Literal(elem, child.dataType).toString)
+        .mkString(", ")
+      s"$child INSET $listString, ..."
+    }
   }
 
   @transient private[this] lazy val hasNull: Boolean = hset.contains(null)

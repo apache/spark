@@ -291,6 +291,15 @@ object SQLConf {
         "for using switch statements in InSet must be non-negative and less than or equal to 600")
       .createWithDefault(400)
 
+  val OPTIMIZER_INSET_MEMBER_LOGGING_LIMIT =
+    buildConf("spark.sql.optimizer.inSetMemberLoggingLimit")
+      .internal()
+      .doc("The maximum number of set members to log for InSet and In.")
+      .version("4.0.0")
+      .intConf
+      .checkValue(limit => limit > 0, "The limit for logging set members must be positive")
+      .createWithDefault(100)
+
   val PLAN_CHANGE_LOG_LEVEL = buildConf("spark.sql.planChangeLog.level")
     .internal()
     .doc("Configures the log level for logging the change from the original plan to the new " +
@@ -5467,6 +5476,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def optimizerInSetConversionThreshold: Int = getConf(OPTIMIZER_INSET_CONVERSION_THRESHOLD)
 
   def optimizerInSetSwitchThreshold: Int = getConf(OPTIMIZER_INSET_SWITCH_THRESHOLD)
+
+  def optimizerInSetMemberLoggingLimit: Int = getConf(OPTIMIZER_INSET_MEMBER_LOGGING_LIMIT)
 
   def planChangeLogLevel: String = getConf(PLAN_CHANGE_LOG_LEVEL)
 

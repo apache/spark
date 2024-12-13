@@ -674,4 +674,17 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkInAndInSet(In(Literal(Double.NaN),
       Seq(Literal(Double.NaN), Literal(2d), Literal.create(null, DoubleType))), true)
   }
+
+  test("In and InSet logging limits") {
+    withSQLConf(SQLConf.OPTIMIZER_INSET_MEMBER_LOGGING_LIMIT.key -> 1.toString) {
+      assert(In(Literal(1), Seq(Literal(1), Literal(2))).toString === "1 IN (1, ...)")
+      assert(In(Literal(1), Seq(Literal(1))).toString === "1 IN (1)")
+      assert(InSet(Literal(1), Set(1, 2)).toString === "1 INSET 1, ...")
+      assert(InSet(Literal(1), Set(1)).toString === "1 INSET 1")
+    }
+
+    assertThrows[IllegalArgumentException] {
+      SQLConf.get.setConfString(SQLConf.OPTIMIZER_INSET_MEMBER_LOGGING_LIMIT.key, (-1).toString)
+    }
+  }
 }
