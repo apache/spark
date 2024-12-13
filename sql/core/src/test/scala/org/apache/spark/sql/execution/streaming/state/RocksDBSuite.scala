@@ -670,6 +670,85 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
     }
   }
 
+  testWithChangelogCheckpointingEnabled("RocksDB Fault Tolerance: correctly handle when there " +
+    "are multiple snapshot files for the same version") {
+    val enableStateStoreCheckpointIds = true
+    val useColumnFamily = true
+    val remoteDir = Utils.createTempDir().toString
+    new File(remoteDir).delete() // to make sure that the directory gets created
+    val enableChangelogCheckpointingConf =
+      dbConf.copy(enableChangelogCheckpointing = true, minVersionsToRetain = 20,
+        minDeltasForSnapshot = 3)
+
+    // Simulate when there are multiple snapshot files for the same version
+    // The first DB writes to version 0 with uniqueId
+    val versionToUniqueId1 = new mutable.HashMap[Long, String]()
+    withDB(remoteDir, conf = enableChangelogCheckpointingConf,
+      useColumnFamilies = useColumnFamily,
+      enableStateStoreCheckpointIds = enableStateStoreCheckpointIds,
+      versionToUniqueId = versionToUniqueId1) { db =>
+      db.load(0)
+      db.put("a", "1")
+      db.commit()
+
+      // Add some change log files after the snapshot
+      for (version <- 2 to 5) {
+        db.load(version - 1)
+        db.put(version.toString, version.toString) // update "1" -> "1", "2" -> "2", ...
+        db.commit()
+      }
+
+      // doMaintenance uploads the snapshot
+      db.doMaintenance()
+
+      for (version <- 6 to 10) {
+        db.load(version - 1)
+        db.put(version.toString, version.toString)
+        db.commit()
+      }
+    }
+
+    // The second DB writes to version 0 with another uniqueId
+    val versionToUniqueId2 = new mutable.HashMap[Long, String]()
+    withDB(remoteDir, conf = enableChangelogCheckpointingConf,
+      useColumnFamilies = useColumnFamily,
+      enableStateStoreCheckpointIds = enableStateStoreCheckpointIds,
+      versionToUniqueId = versionToUniqueId2) { db =>
+      db.load(0)
+      db.put("b", "2")
+      db.commit()
+      // Add some change log files after the snapshot
+      for (version <- 2 to 5) {
+        db.load(version - 1)
+        db.put(version.toString, (version + 1).toString) // update "1" -> "1", "2" -> "2", ...
+        db.commit()
+      }
+
+      // doMaintenance uploads the snapshot
+      db.doMaintenance()
+
+      for (version <- 6 to 10) {
+        db.load(version - 1)
+        db.put(version.toString, (version + 1).toString)
+        db.commit()
+      }
+    }
+
+    // During a load() with linage from the first rocksDB,
+    // the DB should load with data in the first db
+    withDB(remoteDir, conf = enableChangelogCheckpointingConf,
+      useColumnFamilies = useColumnFamily,
+      enableStateStoreCheckpointIds = enableStateStoreCheckpointIds,
+      versionToUniqueId = versionToUniqueId1) { db =>
+      db.load(10)
+      assert(toStr(db.get("a")) === "1")
+      for (version <- 2 to 10) {
+        // "1" -> "1", "2" -> "2", ...
+        assert(toStr(db.get(version.toString)) === version.toString)
+      }
+    }
+  }
+
   // A rocksdb instance with changelog checkpointing disabled should be able to load
   // an existing checkpoint with changelog.
   testWithStateStoreCheckpointIdsAndColumnFamilies(
