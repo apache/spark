@@ -27,7 +27,7 @@ import org.apache.avro.generic.{GenericData, GenericDatumReader, GenericDatumWri
 import org.apache.avro.io.{DecoderFactory, EncoderFactory}
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.avro.{AvroDeserializer, AvroSerializer, SchemaConverters}
+import org.apache.spark.sql.avro.{AvroDeserializer, AvroOptions, AvroSerializer, SchemaConverters}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{BoundReference, JoinedRow, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.expressions.codegen.UnsafeRowWriter
@@ -423,10 +423,10 @@ class UnsafeRowDataEncoder(
 
 class AvroStateEncoder(
     keyStateEncoderSpec: KeyStateEncoderSpec,
-    valueSchema: StructType,
-    avroEncoder: AvroEncoder) extends RocksDBDataEncoder(keyStateEncoderSpec, valueSchema)
+    valueSchema: StructType) extends RocksDBDataEncoder(keyStateEncoderSpec, valueSchema)
     with Logging {
 
+  private val avroEncoder = createAvroEnc(keyStateEncoderSpec, valueSchema)
   // Avro schema used by the avro encoders
   private lazy val keyAvroType: Schema = SchemaConverters.toAvroType(keySchema)
   private lazy val keyProj = UnsafeProjection.create(keySchema)
@@ -477,6 +477,80 @@ class AvroStateEncoder(
   private lazy val remainingKeyAvroType = SchemaConverters.toAvroType(remainingKeySchema)
 
   private lazy val remainingKeyAvroProjection = UnsafeProjection.create(remainingKeySchema)
+
+
+
+  private def getAvroSerializer(schema: StructType): AvroSerializer = {
+    val avroType = SchemaConverters.toAvroType(schema)
+    new AvroSerializer(schema, avroType, nullable = false)
+  }
+
+  private def getAvroDeserializer(schema: StructType): AvroDeserializer = {
+    val avroType = SchemaConverters.toAvroType(schema)
+    val avroOptions = AvroOptions(Map.empty)
+    new AvroDeserializer(avroType, schema,
+      avroOptions.datetimeRebaseModeInRead, avroOptions.useStableIdForUnionType,
+      avroOptions.stableIdPrefixForUnionType, avroOptions.recursiveFieldMaxDepth)
+  }
+
+  /**
+   * Creates an AvroEncoder that handles both key and value serialization/deserialization.
+   * This method sets up the complete encoding infrastructure needed for state store operations.
+   *
+   * The encoder handles different key encoding specifications:
+   * - NoPrefixKeyStateEncoderSpec: Simple key encoding without prefix
+   * - PrefixKeyScanStateEncoderSpec: Keys with prefix for efficient scanning
+   * - RangeKeyScanStateEncoderSpec: Keys with ordering requirements for range scans
+   *
+   * For prefix scan cases, it also creates separate encoders for the suffix portion of keys.
+   *
+   * @param keyStateEncoderSpec Specification for how to encode keys
+   * @param valueSchema Schema for the values to be encoded
+   * @return An AvroEncoder containing all necessary serializers and deserializers
+   */
+  private def createAvroEnc(
+                             keyStateEncoderSpec: KeyStateEncoderSpec,
+                             valueSchema: StructType
+                           ): AvroEncoder = {
+    val valueSerializer = getAvroSerializer(valueSchema)
+    val valueDeserializer = getAvroDeserializer(valueSchema)
+
+    // Get key schema based on encoder spec type
+    val keySchema = keyStateEncoderSpec match {
+      case NoPrefixKeyStateEncoderSpec(schema) =>
+        schema
+      case PrefixKeyScanStateEncoderSpec(schema, numColsPrefixKey) =>
+        StructType(schema.take(numColsPrefixKey))
+      case RangeKeyScanStateEncoderSpec(schema, orderingOrdinals) =>
+        val remainingSchema = {
+          0.until(schema.length).diff(orderingOrdinals).map { ordinal =>
+            schema(ordinal)
+          }
+        }
+        StructType(remainingSchema)
+    }
+
+    // Handle suffix key schema for prefix scan case
+    val suffixKeySchema = keyStateEncoderSpec match {
+      case PrefixKeyScanStateEncoderSpec(schema, numColsPrefixKey) =>
+        Some(StructType(schema.drop(numColsPrefixKey)))
+      case _ =>
+        None
+    }
+
+    val keySerializer = getAvroSerializer(keySchema)
+    val keyDeserializer = getAvroDeserializer(keySchema)
+
+    // Create the AvroEncoder with all components
+    AvroEncoder(
+      keySerializer,
+      keyDeserializer,
+      valueSerializer,
+      valueDeserializer,
+      suffixKeySchema.map(getAvroSerializer),
+      suffixKeySchema.map(getAvroDeserializer)
+    )
+  }
 
   /**
    * This method takes an UnsafeRow, and serializes to a byte array using Avro encoding.
