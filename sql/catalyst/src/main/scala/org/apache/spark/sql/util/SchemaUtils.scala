@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, NamedExpression}
 import org.apache.spark.sql.connector.expressions.{BucketTransform, FieldReference, NamedTransform, Transform}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
-import org.apache.spark.sql.types.{ArrayType, DataType, IndeterminateStringType, NoConstraint, MapType, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{ArrayType, DataType, IndeterminateStringType, MapType, NoConstraint, StringType, StructField, StructType}
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.SparkSchemaUtils
 
