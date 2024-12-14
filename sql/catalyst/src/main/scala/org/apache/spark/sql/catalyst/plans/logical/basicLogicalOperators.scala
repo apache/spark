@@ -376,10 +376,13 @@ case class Intersect(
 
   final override val nodePatterns: Seq[TreePattern] = Seq(INTERSECT)
 
-  override def output: Seq[Attribute] =
-    left.output.zip(right.output).map { case (leftAttr, rightAttr) =>
-      leftAttr.withNullability(leftAttr.nullable && rightAttr.nullable)
+  override def output: Seq[Attribute] = {
+    if (conf.getConf(SQLConf.LAZY_SET_OPERATOR_OUTPUT)) {
+      lazyOutput
+    } else {
+      computeOutput()
     }
+  }
 
   override def metadataOutput: Seq[Attribute] = Nil
 
@@ -396,6 +399,14 @@ case class Intersect(
 
   override protected def withNewChildrenInternal(
     newLeft: LogicalPlan, newRight: LogicalPlan): Intersect = copy(left = newLeft, right = newRight)
+
+  private lazy val lazyOutput: Seq[Attribute] = computeOutput()
+
+  /** We don't use right.output because those rows get excluded from the set. */
+  private def computeOutput(): Seq[Attribute] =
+    left.output.zip(right.output).map { case (leftAttr, rightAttr) =>
+      leftAttr.withNullability(leftAttr.nullable && rightAttr.nullable)
+    }
 }
 
 case class Except(
@@ -403,8 +414,14 @@ case class Except(
     right: LogicalPlan,
     isAll: Boolean) extends SetOperation(left, right) {
   override def nodeName: String = getClass.getSimpleName + ( if ( isAll ) " All" else "" )
-  /** We don't use right.output because those rows get excluded from the set. */
-  override def output: Seq[Attribute] = left.output
+
+  override def output: Seq[Attribute] = {
+    if (conf.getConf(SQLConf.LAZY_SET_OPERATOR_OUTPUT)) {
+      lazyOutput
+    } else {
+      computeOutput()
+    }
+  }
 
   override def metadataOutput: Seq[Attribute] = Nil
 
@@ -416,6 +433,11 @@ case class Except(
 
   override protected def withNewChildrenInternal(
     newLeft: LogicalPlan, newRight: LogicalPlan): Except = copy(left = newLeft, right = newRight)
+
+  private lazy val lazyOutput: Seq[Attribute] = computeOutput()
+
+  /** We don't use right.output because those rows get excluded from the set. */
+  private def computeOutput(): Seq[Attribute] = left.output
 }
 
 /** Factory for constructing new `Union` nodes. */
@@ -479,18 +501,11 @@ case class Union(
       AttributeSet.fromAttributeSets(children.map(_.outputSet)).size
   }
 
-  // updating nullability to make all the children consistent
   override def output: Seq[Attribute] = {
-    children.map(_.output).transpose.map { attrs =>
-      val firstAttr = attrs.head
-      val nullable = attrs.exists(_.nullable)
-      val newDt = attrs.map(_.dataType).reduce(StructType.unionLikeMerge)
-      if (firstAttr.dataType == newDt) {
-        firstAttr.withNullability(nullable)
-      } else {
-        AttributeReference(firstAttr.name, newDt, nullable, firstAttr.metadata)(
-          firstAttr.exprId, firstAttr.qualifier)
-      }
+    if (conf.getConf(SQLConf.LAZY_SET_OPERATOR_OUTPUT)) {
+      lazyOutput
+    } else {
+      computeOutput()
     }
   }
 
@@ -507,6 +522,23 @@ case class Union(
           case (l, r) => DataType.equalsStructurally(l.dataType, r.dataType, true)
         })
     children.length > 1 && !(byName || allowMissingCol) && childrenResolved && allChildrenCompatible
+  }
+
+  private lazy val lazyOutput: Seq[Attribute] = computeOutput()
+
+  // updating nullability to make all the children consistent
+  private def computeOutput(): Seq[Attribute] = {
+    children.map(_.output).transpose.map { attrs =>
+      val firstAttr = attrs.head
+      val nullable = attrs.exists(_.nullable)
+      val newDt = attrs.map(_.dataType).reduce(StructType.unionLikeMerge)
+      if (firstAttr.dataType == newDt) {
+        firstAttr.withNullability(nullable)
+      } else {
+        AttributeReference(firstAttr.name, newDt, nullable, firstAttr.metadata)(
+          firstAttr.exprId, firstAttr.qualifier)
+      }
+    }
   }
 
   /**

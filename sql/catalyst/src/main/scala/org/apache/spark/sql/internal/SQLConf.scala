@@ -5306,6 +5306,19 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val LAZY_SET_OPERATOR_OUTPUT = buildConf("spark.sql.lazySetOperatorOutput.enabled")
+    .internal()
+    .doc(
+      "When set to true, Except/Intersect/Union operator's output will be a lazy val. It " +
+      "is a performance optimization for querires with a large number of stacked set operators. " +
+      "This is because of rules like WidenSetOperationTypes that traverse the logical plan tree " +
+      "and call output on each Except/Intersect/Union node. Such traversal has quadratic " +
+      "complexity: O(number_of_nodes * (1 + 2 + 3  + ... + number_of_nodes))."
+    )
+    .version("4.0.0")
+    .booleanConf
+    .createWithDefault(true)
+
   /**
    * Holds information about keys that have been deprecated.
    *
