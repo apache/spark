@@ -100,9 +100,13 @@ class TransformWithStateInPandasTestsMixin:
         return df_final
 
     def _test_transform_with_state_in_pandas_basic(
-        self, stateful_processor, check_results, single_batch=False,
-            timeMode="None", checkpoint_path=None,
-            initial_state=None
+        self,
+        stateful_processor,
+        check_results,
+        single_batch=False,
+        timeMode="None",
+        checkpoint_path=None,
+        initial_state=None,
     ):
         input_path = tempfile.mkdtemp()
         if checkpoint_path is None:
@@ -132,7 +136,7 @@ class TransformWithStateInPandasTestsMixin:
                 outputStructType=output_schema,
                 outputMode="Update",
                 timeMode=timeMode,
-                initialState=initial_state
+                initialState=initial_state,
             )
             .writeStream.queryName("this_query")
             .option("checkpointLocation", checkpoint_path)
@@ -920,58 +924,89 @@ class TransformWithStateInPandasTestsMixin:
                 # check for state metadata source
                 metadata_df = self.spark.read.format("state-metadata").load(checkpoint_path)
                 assert set(
-                    metadata_df.select("operatorId", "operatorName", "stateStoreName", "numPartitions",
-                                       "minBatchId", "maxBatchId").collect()) == {
-                    Row(operatorId=0, operatorName="transformWithStateInPandasExec", stateStoreName="default",
-                        numPartitions=5, minBatchId=0, maxBatchId=0)
+                    metadata_df.select(
+                        "operatorId",
+                        "operatorName",
+                        "stateStoreName",
+                        "numPartitions",
+                        "minBatchId",
+                        "maxBatchId",
+                    ).collect()
+                ) == {
+                    Row(
+                        operatorId=0,
+                        operatorName="transformWithStateInPandasExec",
+                        stateStoreName="default",
+                        numPartitions=5,
+                        minBatchId=0,
+                        maxBatchId=0,
+                    )
                 }
-                operator_properties_json_obj = json.loads(metadata_df.select("operatorProperties").collect()[0][0])
-                assert(operator_properties_json_obj["timeMode"] == "ProcessingTime")
-                assert(operator_properties_json_obj["outputMode"] == "Update")
+                operator_properties_json_obj = json.loads(
+                    metadata_df.select("operatorProperties").collect()[0][0]
+                )
+                assert operator_properties_json_obj["timeMode"] == "ProcessingTime"
+                assert operator_properties_json_obj["outputMode"] == "Update"
 
                 state_var_list = operator_properties_json_obj["stateVariables"]
-                assert(len(state_var_list) == 3)
+                assert len(state_var_list) == 3
                 for state_var in state_var_list:
                     if state_var["stateName"] == "mapState":
-                        assert(state_var["stateVariableType"] == "MapState")
-                        assert(state_var["ttlEnabled"])
+                        assert state_var["stateVariableType"] == "MapState"
+                        assert state_var["ttlEnabled"]
                     elif state_var["stateName"] == "listState":
-                        assert(state_var["stateVariableType"] == "ListState")
-                        assert(not state_var["ttlEnabled"])
+                        assert state_var["stateVariableType"] == "ListState"
+                        assert not state_var["ttlEnabled"]
                     else:
-                        assert(state_var["stateName"] == "$procTimers_keyToTimestamp")
-                        assert(state_var["stateVariableType"] == "TimerState")
+                        assert state_var["stateName"] == "$procTimers_keyToTimestamp"
+                        assert state_var["stateVariableType"] == "TimerState"
 
                 # check for state data source
-                map_state_df = self.spark.read.format("statestore")\
-                    .option("path", checkpoint_path)\
-                    .option("stateVarName", "mapState")\
+                map_state_df = (
+                    self.spark.read.format("statestore")
+                    .option("path", checkpoint_path)
+                    .option("stateVarName", "mapState")
                     .load()
-                assert set(map_state_df
-                           .selectExpr("key.id AS groupingKey", "user_map_key.name AS mapKey",
-                                       "user_map_value.value.count AS mapValue").sort("groupingKey").collect()) == {
+                )
+                assert set(
+                    map_state_df.selectExpr(
+                        "key.id AS groupingKey",
+                        "user_map_key.name AS mapKey",
+                        "user_map_value.value.count AS mapValue",
+                    )
+                    .sort("groupingKey")
+                    .collect()
+                ) == {
                     Row(groupingKey="0", mapKey="key2", mapValue=2),
-                    Row(groupingKey="1", mapKey="key2", mapValue=2)
+                    Row(groupingKey="1", mapKey="key2", mapValue=2),
                 }
 
-                ttl_df = map_state_df.selectExpr("user_map_value.ttlExpirationMs AS TTLVal").collect()
+                ttl_df = map_state_df.selectExpr(
+                    "user_map_value.ttlExpirationMs AS TTLVal"
+                ).collect()
                 # check if there are two rows containing TTL value in map state dataframe
-                assert(len(ttl_df) == 2)
+                assert len(ttl_df) == 2
                 # check if two rows are of the same TTL value
-                assert(len(set(ttl_df)) == 1)
+                assert len(set(ttl_df)) == 1
 
-                list_state_df = self.spark.read.format("statestore") \
-                    .option("path", checkpoint_path) \
-                    .option("stateVarName", "listState") \
+                list_state_df = (
+                    self.spark.read.format("statestore")
+                    .option("path", checkpoint_path)
+                    .option("stateVarName", "listState")
                     .load()
-                assert(list_state_df.isEmpty())
+                )
+                assert list_state_df.isEmpty()
 
                 for q in self.spark.streams.active:
                     q.stop()
 
         self._test_transform_with_state_in_pandas_basic(
-            MapStateLargeTTLProcessor(), check_results, True, "processingTime",
-            checkpoint_path=checkpoint_path, initial_state=None
+            MapStateLargeTTLProcessor(),
+            check_results,
+            True,
+            "processingTime",
+            checkpoint_path=checkpoint_path,
+            initial_state=None,
         )
 
         # run the same test suite again but with no-op initial state
@@ -981,8 +1016,12 @@ class TransformWithStateInPandasTestsMixin:
             "id"
         )
         self._test_transform_with_state_in_pandas_basic(
-            MapStateLargeTTLProcessor(), check_results, True, "processingTime",
-            checkpoint_path=checkpoint_path, initial_state=initial_state
+            MapStateLargeTTLProcessor(),
+            check_results,
+            True,
+            "processingTime",
+            checkpoint_path=checkpoint_path,
+            initial_state=initial_state,
         )
 
     # run the same test suites again but with single shuffle partition

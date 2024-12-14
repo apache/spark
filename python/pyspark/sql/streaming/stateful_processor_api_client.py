@@ -50,12 +50,14 @@ class StatefulProcessorHandleState(Enum):
 
 class StatefulProcessorApiClient:
     def __init__(
-            self, state_server_port: int, key_schema: StructType, is_driver: bool = False) -> None:
+        self, state_server_port: int, key_schema: StructType, is_driver: bool = False
+    ) -> None:
         self.key_schema = key_schema
         self._client_socket = socket.socket()
         self._client_socket.connect(("localhost", state_server_port))
         self.sockfile = self._client_socket.makefile(
-            "rwb", int(os.environ.get("SPARK_BUFFER_SIZE", 65536)))
+            "rwb", int(os.environ.get("SPARK_BUFFER_SIZE", 65536))
+        )
         if is_driver:
             self.handle_state = StatefulProcessorHandleState.PRE_INIT
         else:

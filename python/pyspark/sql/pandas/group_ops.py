@@ -505,13 +505,11 @@ class PandasGroupedOpsMixin:
             outputStructType = cast(StructType, _parse_datatype_string(outputStructType))
 
         def handle_pre_init(
-            statefulProcessorApiClient: StatefulProcessorApiClient
+            statefulProcessorApiClient: StatefulProcessorApiClient,
         ) -> Iterator["PandasDataFrameLike"]:
             # driver handle is different from the handle used on executors
             driver_handle = StatefulProcessorHandle(statefulProcessorApiClient)
-            statefulProcessorApiClient.set_handle_state(
-                StatefulProcessorHandleState.PRE_INIT
-            )
+            statefulProcessorApiClient.set_handle_state(StatefulProcessorHandleState.PRE_INIT)
             statefulProcessor.init(driver_handle)
 
             # TODO figure out why we need to call close here in Scala side

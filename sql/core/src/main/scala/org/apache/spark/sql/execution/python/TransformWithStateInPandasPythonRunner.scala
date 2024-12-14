@@ -25,8 +25,8 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.arrow.vector.VectorSchemaRoot
 import org.apache.arrow.vector.ipc.ArrowStreamWriter
+import org.apache.spark.{SparkEnv, SparkException, TaskContext}
 
-import org.apache.spark.{SparkEnv, TaskContext}
 import org.apache.spark.api.python.{BasePythonRunner, ChainedPythonFunctions, PythonFunction, PythonRDD, PythonWorker, PythonWorkerFactory, PythonWorkerUtils, StreamingPythonRunner}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
@@ -316,7 +316,8 @@ class TransformWithStateInPandasPythonPreInitRunner(
             sqlConf.arrowTransformWithStateInPandasMaxRecordsPerBatch).run()
         } catch {
           case e: Exception =>
-            throw new Exception(s"Driver daemon thread interrupted, exception: $e")
+            throw new SparkException("TransformWithStateInPandas state server " +
+              "daemon thread exited unexpectedly (crashed)", e)
         }
       }
     }

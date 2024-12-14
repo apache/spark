@@ -22,7 +22,7 @@ import scala.concurrent.duration.NANOSECONDS
 
 import org.apache.hadoop.conf.Configuration
 
-import org.apache.spark.JobArtifactSet
+import org.apache.spark.{JobArtifactSet, SparkException}
 import org.apache.spark.api.python.{ChainedPythonFunctions, PythonEvalType}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
@@ -162,6 +162,7 @@ case class TransformWithStateInPandasExec(
       hadoopConf: Configuration,
       batchId: Long,
       stateSchemaVersion: Int): List[StateSchemaValidationResult] = {
+    // Start a python runner on driver, and execute pre-init UDF on the runner
     val runner = new TransformWithStateInPandasPythonPreInitRunner(
       pythonFunction,
       "pyspark.sql.streaming.transform_with_state_driver_worker",
@@ -169,13 +170,15 @@ case class TransformWithStateInPandasExec(
       groupingKeySchema,
       driverProcessorHandle
     )
+    // runner initialization
     runner.init()
     try {
+      // execute UDF on the python runner
       runner.process()
     } catch {
       case e: Throwable =>
-        throw new Exception(s"Exception happens when calling statefulProcessor.init()," +
-        s" exception: $e")
+        throw new SparkException("TransformWithStateInPandas driver worker " +
+          "exited unexpectedly (crashed)", e)
     }
     runner.stop()
 

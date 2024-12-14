@@ -43,9 +43,9 @@ def main(infile: IO, outfile: IO) -> None:
     log_name = "Streaming TransformWithStateInPandas Python worker"
 
     def process(processor, mode, key, input):
-        # raise Exception(f"I am inside process, key: {key}, func: {func}")
+        print(f"{log_name} Started execution of UDF: {func}.\n")
         func(processor, mode, key, input)
-        print(f"{log_name} Completed tws udf\n")
+        print(f"{log_name} Completed execution of UDF: {func}.\n")
 
     try:
         func, return_type = worker.read_command(pickle_ser, infile)
@@ -54,14 +54,22 @@ def main(infile: IO, outfile: IO) -> None:
         outfile.flush()
 
         while True:
-            # Handle errors inside Python worker. Write 0 to outfile if no errors and write -2 with
-            # traceback string if error occurs.
             state_server_port = read_int(infile)
             key_schema = StructType.fromJson(json.loads(utf8_deserializer.loads(infile)))
+            print(
+                f"{log_name} received parameters for UDF. State server port: {state_server_port}, "
+                f"key schema: {key_schema}.\n"
+            )
 
-            stateful_processor_api_client = StatefulProcessorApiClient(state_server_port, key_schema)
-            process(stateful_processor_api_client, TransformWithStateInPandasFuncMode.PRE_INIT,
-                    None, iter([]))
+            stateful_processor_api_client = StatefulProcessorApiClient(
+                state_server_port, key_schema
+            )
+            process(
+                stateful_processor_api_client,
+                TransformWithStateInPandasFuncMode.PRE_INIT,
+                None,
+                iter([]),
+            )
             write_int(0, outfile)
             outfile.flush()
     except Exception as e:
