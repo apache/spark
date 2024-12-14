@@ -19,6 +19,8 @@ package org.apache.spark.sql.execution.streaming
 
 import java.io.File
 
+import org.apache.commons.io.FileUtils
+
 import org.apache.spark.sql.catalyst.util.stringToFile
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -128,5 +130,70 @@ class OffsetSeqLogSuite extends SharedSparkSession {
     val input = getClass.getResource(s"/structured-streaming/$dir")
     val log = new OffsetSeqLog(spark, input.toString)
     log.getLatest().get
+  }
+
+  // SPARK-50526 - sanity tests to ensure that values are set correctly for state store
+  // encoding format within OffsetSeqMetadata
+  test("offset log records defaults to unsafeRow for store encoding format") {
+    val offsetSeqMetadata = OffsetSeqMetadata.apply(batchWatermarkMs = 0, batchTimestampMs = 0,
+      spark.conf)
+    assert(offsetSeqMetadata.conf.get(SQLConf.STREAMING_STATE_STORE_ENCODING_FORMAT.key) ===
+      Some("unsaferow"))
+  }
+
+  test("offset log uses the store encoding format set in the conf") {
+    val offsetSeqMetadata = OffsetSeqMetadata.apply(batchWatermarkMs = 0, batchTimestampMs = 0,
+      Map(SQLConf.STREAMING_STATE_STORE_ENCODING_FORMAT.key -> "avro"))
+    assert(offsetSeqMetadata.conf.get(SQLConf.STREAMING_STATE_STORE_ENCODING_FORMAT.key) ===
+      Some("avro"))
+  }
+
+  // Verify whether entry exists within the offset log and has the right value or that we pick up
+  // the correct default values when populating the session conf.
+  private def verifyOffsetLogEntry(
+      checkpointDir: String,
+      entryExists: Boolean,
+      encodingFormat: String): Unit = {
+    val log = new OffsetSeqLog(spark, s"$checkpointDir/offsets")
+    val latestBatchId = log.getLatestBatchId()
+    assert(latestBatchId.isDefined, "No offset log entries found in the checkpoint location")
+
+    // Read the latest offset log
+    val offsetSeq = log.get(latestBatchId.get).get
+    val offsetSeqMetadata = offsetSeq.metadata.get
+
+    if (entryExists) {
+      val encodingFormatOpt = offsetSeqMetadata.conf.get(
+        SQLConf.STREAMING_STATE_STORE_ENCODING_FORMAT.key)
+      assert(encodingFormatOpt.isDefined, "No store encoding format found in the offset log entry")
+      assert(encodingFormatOpt.get == encodingFormat)
+    }
+
+    val clonedSqlConf = spark.sessionState.conf.clone()
+    OffsetSeqMetadata.setSessionConf(offsetSeqMetadata, clonedSqlConf)
+    assert(clonedSqlConf.stateStoreEncodingFormat == encodingFormat)
+  }
+
+  // verify that checkpoint created with different store encoding formats are read correctly
+  Seq("unsaferow", "avro").foreach { storeEncodingFormat =>
+    test(s"verify format values from checkpoint loc - $storeEncodingFormat") {
+      withTempDir { checkpointDir =>
+        val resourceUri = this.getClass.getResource(
+        "/structured-streaming/checkpoint-version-4.0.0-tws-" + storeEncodingFormat + "/").toURI
+        FileUtils.copyDirectory(new File(resourceUri), checkpointDir.getCanonicalFile)
+        verifyOffsetLogEntry(checkpointDir.getAbsolutePath, entryExists = true,
+          storeEncodingFormat)
+      }
+    }
+  }
+
+  test("verify format values from old checkpoint with Spark version 3.5.1") {
+    withTempDir { checkpointDir =>
+      val resourceUri = this.getClass.getResource(
+        "/structured-streaming/checkpoint-version-3.5.1-streaming-deduplication/").toURI
+      FileUtils.copyDirectory(new File(resourceUri), checkpointDir.getCanonicalFile)
+      verifyOffsetLogEntry(checkpointDir.getAbsolutePath, entryExists = false,
+        "unsaferow")
+    }
   }
 }
