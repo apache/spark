@@ -101,10 +101,12 @@ class TransformWithStateInPandasTestsMixin:
 
     def _test_transform_with_state_in_pandas_basic(
         self, stateful_processor, check_results, single_batch=False,
-            timeMode="None", checkpoint_path=tempfile.mktemp(),
+            timeMode="None", checkpoint_path=None,
             initial_state=None
     ):
         input_path = tempfile.mkdtemp()
+        if checkpoint_path is None:
+            checkpoint_path = tempfile.mkdtemp()
         self._prepare_test_resource1(input_path)
         if not single_batch:
             time.sleep(2)
