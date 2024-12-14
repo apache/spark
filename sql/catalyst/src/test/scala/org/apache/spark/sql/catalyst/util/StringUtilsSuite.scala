@@ -137,7 +137,7 @@ class StringUtilsSuite extends SparkFunSuite with SQLHelper {
     assert(orderSuggestedIdentifiersBySimilarity(baseString, testStrings) === expectedOutput)
   }
 
-  test("truncated string") {
+  test("SPARK-50579: truncated string") {
     assert(truncatedString(Seq.empty, ", ", -1) === "")
     assert(truncatedString(Seq("a"), ", ", -1) === "... 1 more fields")
     assert(truncatedString(Seq("B"), "(", ", ", ")", -1) === "(... 1 more fields)")
