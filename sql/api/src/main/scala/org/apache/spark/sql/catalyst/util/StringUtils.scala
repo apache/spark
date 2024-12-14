@@ -92,8 +92,8 @@ object SparkStringUtils extends Logging {
       }
       val numFields = math.max(0, maxFields)
       val restNum = seq.length - numFields
-      val ending = ( if (numFields == 0) "" else sep ) +
-        ( if (restNum == 0) "" else s"... $restNum more fields" ) + end
+      val ending = (if (numFields == 0) "" else sep) +
+        (if (restNum == 0) "" else s"... $restNum more fields") + end
       seq.take(numFields).mkString(start, sep, ending)
     } else {
       seq.mkString(start, sep, end)
