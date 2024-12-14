@@ -19,8 +19,9 @@ package org.apache.spark.sql.execution.streaming.state
 
 import scala.util.Try
 
+import org.apache.avro.Schema
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.Path
+import org.apache.hadoop.fs.{FSDataInputStream, Path}
 
 import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.internal.{Logging, LogKeys, MDC}
@@ -36,6 +37,22 @@ import org.apache.spark.sql.types.{DataType, StructType}
 case class StateSchemaValidationResult(
     evolvedSchema: Boolean,
     schemaPath: String
+)
+
+case class StateSchemaMetadataKey(
+    schemaId: Int,
+    colFamilyName: String,
+    queryRunId: String
+)
+
+case class StateSchemaMetadataValue(
+    avroSchema: Schema,
+    valueSchema: StructType
+)
+
+case class StateSchemaMetadata(
+    currentSchemaId: Short,
+    schemas: Map[Short, Map[StateSchemaMetadataKey, StateSchemaMetadataValue]]
 )
 
 /**
@@ -90,17 +107,7 @@ class StateSchemaCompatibilityChecker(
 
   def readSchemaFile(): List[StateStoreColFamilySchema] = {
     val inStream = fm.open(schemaFileLocation)
-    try {
-      val versionStr = inStream.readUTF()
-      val schemaReader = SchemaReader.createSchemaReader(versionStr)
-      schemaReader.read(inStream)
-    } catch {
-      case e: Throwable =>
-        logError(log"Fail to read schema file from ${MDC(LogKeys.PATH, schemaFileLocation)}", e)
-        throw e
-    } finally {
-      inStream.close()
-    }
+    StateSchemaCompatibilityChecker.readSchemaFile(inStream)
   }
 
   /**
@@ -226,9 +233,23 @@ class StateSchemaCompatibilityChecker(
     new Path(new Path(storeCpLocation, "_metadata"), "schema")
 }
 
-object StateSchemaCompatibilityChecker {
+object StateSchemaCompatibilityChecker extends Logging {
 
   val SCHEMA_FORMAT_V3: Int = 3
+
+  def readSchemaFile(inStream: FSDataInputStream): List[StateStoreColFamilySchema] = {
+    try {
+      val versionStr = inStream.readUTF()
+      val schemaReader = SchemaReader.createSchemaReader(versionStr)
+      schemaReader.read(inStream)
+    } catch {
+      case e: Throwable =>
+        logError(log"Fail to read schema file", e)
+        throw e
+    } finally {
+      inStream.close()
+    }
+  }
 
   private def disallowBinaryInequalityColumn(schema: StructType): Unit = {
     if (!UnsafeRowUtils.isBinaryStable(schema)) {

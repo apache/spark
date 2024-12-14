@@ -496,7 +496,7 @@ case class TransformWithStateExec(
 
   /** Metadata of this stateful operator and its states stores. */
   override def operatorStateMetadata(
-      stateSchemaPaths: List[Map[Int, String]]): OperatorStateMetadata = {
+      stateSchemaPaths: List[Map[Short, String]]): OperatorStateMetadata = {
     val info = getStateInfo
     val operatorInfo = OperatorInfoV1(info.operatorId, shortName)
     // stateSchemaFilePath should be populated at this point

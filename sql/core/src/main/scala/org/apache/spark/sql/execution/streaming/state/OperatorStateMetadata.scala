@@ -52,7 +52,7 @@ case class StateStoreMetadataV2(
     numColsPrefixKey: Int,
     numPartitions: Int,
     stateSchemaId: Int,
-    stateSchemaFilePaths: Map[Int, String])
+    stateSchemaFilePaths: Map[Short, String])
   extends StateStoreMetadata with Serializable
 
 object StateStoreMetadataV2 {
