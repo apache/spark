@@ -56,10 +56,13 @@ public class SparkVertxHttpClientFactory implements HttpClient.Factory {
     Vertx vertx;
     try {
       System.setProperty("vertx.disableDnsResolver", "true");
-      vertx = Vertx.vertx((new VertxOptions().setUseDaemonThread(true))
-        .setFileSystemOptions((new FileSystemOptions())
-        .setFileCachingEnabled(false)
-        .setClassPathResolvingEnabled(false)));
+      vertx = Vertx.vertx(new VertxOptions()
+        .setUseDaemonThread(true)
+        .setFileSystemOptions(new FileSystemOptions()
+          .setFileCachingEnabled(false)
+          .setClassPathResolvingEnabled(false)
+        )
+      );
     } finally {
       if (originalValue == null) {
         System.clearProperty("vertx.disableDnsResolver");
