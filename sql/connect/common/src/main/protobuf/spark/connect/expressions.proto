@@ -467,7 +467,7 @@ message SubqueryExpression {
   SubqueryType subquery_type = 2;
 
   enum SubqueryType {
-    SUBQUERY_TYPE_INVALID = 0;
+    SUBQUERY_TYPE_UNKNOWN = 0;
     SUBQUERY_TYPE_SCALAR = 1;
     SUBQUERY_TYPE_EXISTS = 2;
   }

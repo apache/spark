@@ -3744,27 +3744,32 @@ class SparkConnectPlanner(
     // Wrap the plan to keep the original planId.
     val plan = Project(Seq(UnresolvedStar(None)), transformRelation(getWithRelations.getRoot))
 
-    val relations = getWithRelations.getReferencesList.asScala.map {
-      case ref if ref.hasCommon && ref.getCommon.hasPlanId =>
+    val relations = getWithRelations.getReferencesList.asScala.map { ref =>
+      if (ref.hasCommon && ref.getCommon.hasPlanId) {
         val planId = ref.getCommon.getPlanId
         val plan = transformRelation(ref)
         planId -> plan
-      case _ => throw InvalidPlanInput("Invalid WithRelation reference")
+      } else {
+        throw InvalidPlanInput("Invalid WithRelation reference")
+      }
     }.toMap
 
+    val missingPlanIds = mutable.Set.empty[Long]
     val withRelations = plan
       .transformAllExpressionsWithPruning(_.containsPattern(TreePattern.UNRESOLVED_PLAN_ID)) {
-        case u: UnresolvedPlanId if relations.contains(u.planId) =>
-          u.withPlan(relations(u.planId))
+        case u: UnresolvedPlanId =>
+          if (relations.contains(u.planId)) {
+            u.withPlan(relations(u.planId))
+          } else {
+            missingPlanIds += u.planId
+            u
+          }
       }
-    val missingPlanIds = withRelations
-      .flatMap(_.expressions.flatMap(_.collect { case u: UnresolvedPlanId =>
-        u.planId
-      }))
-      .toSet
     assertPlan(
       missingPlanIds.isEmpty,
-      s"Missing relation in WithRelations: $missingPlanIds not in ${relations.keys}")
+      "Missing relation in WithRelations: " +
+        s"${missingPlanIds.mkString("(", ", ", ")")} not in " +
+        s"${relations.keys.mkString("(", ", ", ")")}")
     withRelations
   }
 

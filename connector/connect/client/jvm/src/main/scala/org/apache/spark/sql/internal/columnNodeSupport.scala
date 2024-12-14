@@ -221,55 +221,12 @@ object ColumnNodeToProtoConverter extends (ColumnNode => proto.Expression) {
   }
 }
 
-object ColumnNodeUtil {
-  def collectReferences(nodes: Seq[ColumnNode]): Seq[proto.Relation] = {
-    nodes.flatMap {
-      case UnresolvedFunction(_, arguments, _, _, _, _) =>
-        collectReferences(arguments)
-      case Alias(child, _, _, _) =>
-        collectReferences(Seq(child))
-      case Cast(child, _, _, _) =>
-        collectReferences(Seq(child))
-      case Window(windowFunction, windowSpec, _) =>
-        collectReferences(
-          Seq(windowFunction) ++ windowSpec.partitionColumns ++ windowSpec.sortColumns) ++
-          windowSpec.frame.toSeq.flatMap { frame =>
-            collectReferences(frame.lower) ++
-              collectReferences(frame.upper)
-          }
-      case UnresolvedExtractValue(child, extraction, _) =>
-        collectReferences(Seq(child, extraction))
-      case UpdateFields(structExpression, _, valueExpression, _) =>
-        collectReferences(Seq(structExpression) ++ valueExpression.toSeq)
-      case LambdaFunction(function, _, _) =>
-        collectReferences(Seq(function))
-      case InvokeInlineUserDefinedFunction(_, args, _, _) =>
-        collectReferences(args)
-      case CaseWhenOtherwise(branches, otherwise, _) =>
-        collectReferences(branches.flatMap { case (condition, value) =>
-          Seq(condition, value)
-        } ++ otherwise.toSeq)
-      case LazyExpression(child, _) =>
-        collectReferences(Seq(child))
-      case SubqueryExpressionNode(query, _, _) =>
-        Seq(query)
-      case _ => Seq.empty
-    }
-  }
-
-  private def collectReferences(boundary: WindowFrame.FrameBoundary): Seq[proto.Relation] = {
-    boundary match {
-      case WindowFrame.Value(value) => collectReferences(Seq(value))
-      case _ => Seq.empty
-    }
-  }
-}
-
 case class ProtoColumnNode(
     expr: proto.Expression,
     override val origin: Origin = CurrentOrigin.get)
     extends ColumnNode {
   override def sql: String = expr.toString
+  override private[internal] def children: Seq[ColumnNodeLike] = Seq.empty
 }
 
 sealed trait SubqueryType
@@ -284,5 +241,9 @@ case class SubqueryExpressionNode(
     subqueryType: SubqueryType,
     override val origin: Origin = CurrentOrigin.get)
     extends ColumnNode {
-  override def sql: String = s"$subqueryType ($relation)"
+  override def sql: String = subqueryType match {
+    case SubqueryType.SCALAR => s"($relation)"
+    case _ => s"$subqueryType ($relation)"
+  }
+  override private[internal] def children: Seq[ColumnNodeLike] = Seq.empty
 }

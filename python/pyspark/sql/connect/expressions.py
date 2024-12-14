@@ -23,7 +23,6 @@ from typing import (
     TYPE_CHECKING,
     Any,
     Callable,
-    List,
     Union,
     Sequence,
     Tuple,
@@ -131,8 +130,13 @@ class Expression:
         return plan
 
     @property
-    def references(self) -> Sequence["LogicalPlan"]:
+    def children(self) -> Sequence["Expression"]:
         return []
+
+    def foreach(self, f: Callable[["Expression"], None]) -> None:
+        f(self)
+        for c in self.children:
+            c.foreach(f)
 
 
 class CaseWhen(Expression):
@@ -169,14 +173,14 @@ class CaseWhen(Expression):
         return unresolved_function.to_plan(session)
 
     @property
-    def references(self) -> Sequence["LogicalPlan"]:
-        refs = []
+    def children(self) -> Sequence["Expression"]:
+        children = []
         for branch in self._branches:
-            refs.extend(branch[0].references)
-            refs.extend(branch[1].references)
+            children.append(branch[0])
+            children.append(branch[1])
         if self._else_value is not None:
-            refs.extend(self._else_value.references)
-        return refs
+            children.append(self._else_value)
+        return children
 
     def __repr__(self) -> str:
         _cases = "".join([f" WHEN {c} THEN {v}" for c, v in self._branches])
@@ -213,8 +217,8 @@ class ColumnAlias(Expression):
             return exp
 
     @property
-    def references(self) -> Sequence["LogicalPlan"]:
-        return self._child.references
+    def children(self) -> Sequence["Expression"]:
+        return [self._child]
 
     def __repr__(self) -> str:
         return f"{self._child} AS {','.join(self._alias)}"
@@ -643,8 +647,8 @@ class SortOrder(Expression):
         return sort
 
     @property
-    def references(self) -> Sequence["LogicalPlan"]:
-        return self._child.references
+    def children(self) -> Sequence["Expression"]:
+        return [self._child]
 
 
 class UnresolvedFunction(Expression):
@@ -674,11 +678,8 @@ class UnresolvedFunction(Expression):
         return fun
 
     @property
-    def references(self) -> Sequence["LogicalPlan"]:
-        refs = []
-        for arg in self._args:
-            refs.extend(arg.references)
-        return refs
+    def children(self) -> Sequence["Expression"]:
+        return self._args
 
     def __repr__(self) -> str:
         # Default print handling:
@@ -761,12 +762,12 @@ class CommonInlineUserDefinedFunction(Expression):
         function_name: str,
         function: Union[PythonUDF, JavaUDF],
         deterministic: bool = False,
-        arguments: Sequence[Expression] = [],
+        arguments: Optional[Sequence[Expression]] = None,
     ):
         super().__init__()
         self._function_name = function_name
         self._deterministic = deterministic
-        self._arguments = arguments
+        self._arguments: Sequence[Expression] = arguments or []
         self._function = function
 
     def to_plan(self, session: "SparkConnectClient") -> "proto.Expression":
@@ -802,11 +803,8 @@ class CommonInlineUserDefinedFunction(Expression):
         return expr
 
     @property
-    def references(self) -> Sequence["LogicalPlan"]:
-        refs: List["LogicalPlan"] = []
-        for arg in self._arguments:
-            refs.extend(arg.references)
-        return refs
+    def children(self) -> Sequence["Expression"]:
+        return self._arguments
 
     def __repr__(self) -> str:
         return f"{self._function_name}({', '.join([str(arg) for arg in self._arguments])})"
@@ -838,11 +836,8 @@ class WithField(Expression):
         return expr
 
     @property
-    def references(self) -> Sequence["LogicalPlan"]:
-        refs: List["LogicalPlan"] = []
-        refs.extend(self._structExpr.references)
-        refs.extend(self._valueExpr.references)
-        return refs
+    def children(self) -> Sequence["Expression"]:
+        return [self._structExpr, self._valueExpr]
 
     def __repr__(self) -> str:
         return f"update_field({self._structExpr}, {self._fieldName}, {self._valueExpr})"
@@ -869,10 +864,8 @@ class DropField(Expression):
         return expr
 
     @property
-    def references(self) -> Sequence["LogicalPlan"]:
-        refs: List["LogicalPlan"] = []
-        refs.extend(self._structExpr.references)
-        return refs
+    def children(self) -> Sequence["Expression"]:
+        return [self._structExpr]
 
     def __repr__(self) -> str:
         return f"drop_field({self._structExpr}, {self._fieldName})"
@@ -899,11 +892,8 @@ class UnresolvedExtractValue(Expression):
         return expr
 
     @property
-    def references(self) -> Sequence["LogicalPlan"]:
-        refs: List["LogicalPlan"] = []
-        refs.extend(self._child.references)
-        refs.extend(self._extraction.references)
-        return refs
+    def children(self) -> Sequence["Expression"]:
+        return [self._child, self._extraction]
 
     def __repr__(self) -> str:
         return f"{self._child}['{self._extraction}']"
@@ -965,8 +955,8 @@ class CastExpression(Expression):
         return fun
 
     @property
-    def references(self) -> Sequence["LogicalPlan"]:
-        return self._expr.references
+    def children(self) -> Sequence["Expression"]:
+        return [self._expr]
 
     def __repr__(self) -> str:
         # We cannot guarantee the string representations be exactly the same, e.g.
@@ -1052,12 +1042,8 @@ class LambdaFunction(Expression):
         return expr
 
     @property
-    def references(self) -> Sequence["LogicalPlan"]:
-        refs: List["LogicalPlan"] = []
-        refs.extend(self._function.references)
-        for arg in self._arguments:
-            refs.extend(arg.references)
-        return refs
+    def children(self) -> Sequence["Expression"]:
+        return [self._function] + self._arguments
 
     def __repr__(self) -> str:
         return (
@@ -1169,11 +1155,10 @@ class WindowExpression(Expression):
         return expr
 
     @property
-    def references(self) -> Sequence["LogicalPlan"]:
-        refs: List["LogicalPlan"] = []
-        refs.extend(self._windowFunction.references)
-        refs.extend(self._windowSpec._references)
-        return refs
+    def children(self) -> Sequence["Expression"]:
+        return (
+            [self._windowFunction] + self._windowSpec._partitionSpec + self._windowSpec._orderSpec
+        )
 
     def __repr__(self) -> str:
         return f"WindowExpression({str(self._windowFunction)}, ({str(self._windowSpec)}))"
@@ -1206,11 +1191,8 @@ class CallFunction(Expression):
         return expr
 
     @property
-    def references(self) -> Sequence["LogicalPlan"]:
-        refs: List["LogicalPlan"] = []
-        for arg in self._args:
-            refs.extend(arg.references)
-        return refs
+    def children(self) -> Sequence["Expression"]:
+        return self._args
 
     def __repr__(self) -> str:
         if len(self._args) > 0:
@@ -1236,8 +1218,8 @@ class NamedArgumentExpression(Expression):
         return expr
 
     @property
-    def references(self) -> Sequence["LogicalPlan"]:
-        return self._value.references
+    def children(self) -> Sequence["Expression"]:
+        return [self._value]
 
     def __repr__(self) -> str:
         return f"{self._key} => {self._value}"
@@ -1255,8 +1237,8 @@ class LazyExpression(Expression):
         return expr
 
     @property
-    def references(self) -> Sequence["LogicalPlan"]:
-        return self._expr.references
+    def children(self) -> Sequence["Expression"]:
+        return [self._expr]
 
     def __repr__(self) -> str:
         return f"lazy({self._expr})"
@@ -1273,16 +1255,12 @@ class SubqueryExpression(Expression):
 
     def to_plan(self, session: "SparkConnectClient") -> proto.Expression:
         expr = self._create_proto_expression()
-        expr.subquery_expression.plan_id = self._plan._plan_id_with_rel or self._plan._plan_id
+        expr.subquery_expression.plan_id = self._plan._plan_id
         if self._subquery_type == "scalar":
             expr.subquery_expression.subquery_type = proto.SubqueryExpression.SUBQUERY_TYPE_SCALAR
         elif self._subquery_type == "exists":
             expr.subquery_expression.subquery_type = proto.SubqueryExpression.SUBQUERY_TYPE_EXISTS
         return expr
-
-    @property
-    def references(self) -> Sequence["LogicalPlan"]:
-        return [self._plan]
 
     def __repr__(self) -> str:
         return f"SubqueryExpression({self._plan}, {self._subquery_type})"

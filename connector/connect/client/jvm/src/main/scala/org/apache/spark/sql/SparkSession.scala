@@ -46,7 +46,7 @@ import org.apache.spark.sql.connect.client.{ClassFinder, CloseableIterator, Spar
 import org.apache.spark.sql.connect.client.SparkConnectClient.Configuration
 import org.apache.spark.sql.connect.client.arrow.ArrowSerializer
 import org.apache.spark.sql.functions.lit
-import org.apache.spark.sql.internal.{CatalogImpl, ColumnNodeUtil, ConnectRuntimeConfig, SessionCleaner, SessionState, SharedState, SqlApiConf}
+import org.apache.spark.sql.internal.{CatalogImpl, ConnectRuntimeConfig, SessionCleaner, SessionState, SharedState, SqlApiConf, SubqueryExpressionNode}
 import org.apache.spark.sql.internal.ColumnNodeToProtoConverter.{toExpr, toTypedExpr}
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.streaming.DataStreamReader
@@ -325,18 +325,57 @@ class SparkSession private[sql] (
     }
   }
 
+  /**
+   * Create a DataFrame including the proto plan built by the given function.
+   *
+   * @param f
+   *   The function to build the proto plan.
+   * @return
+   *   The DataFrame created from the proto plan.
+   */
   @Since("4.0.0")
   @DeveloperApi
   def newDataFrame(f: proto.Relation.Builder => Unit): DataFrame = {
     newDataset(UnboundRowEncoder)(f)
   }
 
+  /**
+   * Create a DataFrame including the proto plan built by the given function.
+   *
+   * When there are columns referring to other Dataset or DataFrame, the plan will be wrapped with
+   * a `WithRelation`.
+   *
+   * {{{
+   *   with_relations [id 10]
+   *     root: plan  [id 9]  using columns referring to other Dataset or DataFrame, holding plan ids
+   *     reference:
+   *          refs#1: [id 8]  plan for the reference 1
+   *          refs#2: [id 5]  plan for the reference 2
+   * }}}
+   *
+   * @param cols
+   *   The columns to be used in the DataFrame.
+   * @param f
+   *   The function to build the proto plan.
+   * @return
+   *   The DataFrame created from the proto plan.
+   */
   @Since("4.0.0")
   @DeveloperApi
-  def newDataFrame(references: Seq[Column])(f: proto.Relation.Builder => Unit): DataFrame = {
-    newDataset(UnboundRowEncoder, references)(f)
+  def newDataFrame(cols: Seq[Column])(f: proto.Relation.Builder => Unit): DataFrame = {
+    newDataset(UnboundRowEncoder, cols)(f)
   }
 
+  /**
+   * Create a Dataset including the proto plan built by the given function.
+   *
+   * @param encoder
+   *   The encoder for the Dataset.
+   * @param f
+   *   The function to build the proto plan.
+   * @return
+   *   The Dataset created from the proto plan.
+   */
   @Since("4.0.0")
   @DeveloperApi
   def newDataset[T](encoder: AgnosticEncoder[T])(
@@ -344,11 +383,36 @@ class SparkSession private[sql] (
     newDataset[T](encoder, Seq.empty)(f)
   }
 
+  /**
+   * Create a Dataset including the proto plan built by the given function.
+   *
+   * When there are columns referring to other Dataset or DataFrame, the plan will be wrapped with
+   * a `WithRelation`.
+   *
+   * {{{
+   *   with_relations [id 10]
+   *     root: plan  [id 9]  using columns referring to other Dataset or DataFrame, holding plan ids
+   *     reference:
+   *          refs#1: [id 8]  plan for the reference 1
+   *          refs#2: [id 5]  plan for the reference 2
+   * }}}
+   *
+   * @param encoder
+   *   The encoder for the Dataset.
+   * @param cols
+   *   The columns to be used in the DataFrame.
+   * @param f
+   *   The function to build the proto plan.
+   * @return
+   *   The Dataset created from the proto plan.
+   */
   @Since("4.0.0")
   @DeveloperApi
   def newDataset[T](encoder: AgnosticEncoder[T], cols: Seq[Column])(
       f: proto.Relation.Builder => Unit): Dataset[T] = {
-    val references = ColumnNodeUtil.collectReferences(cols.map(_.node))
+    val references = cols.flatMap(_.node.collect { case n: SubqueryExpressionNode =>
+      n.relation
+    })
 
     val builder = proto.Relation.newBuilder()
     f(builder)

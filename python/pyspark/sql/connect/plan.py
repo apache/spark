@@ -52,7 +52,7 @@ from pyspark.sql.column import Column
 from pyspark.sql.connect.logging import logger
 from pyspark.sql.connect.proto import base_pb2 as spark_dot_connect_dot_base__pb2
 from pyspark.sql.connect.conversion import storage_level_to_proto
-from pyspark.sql.connect.expressions import Expression
+from pyspark.sql.connect.expressions import Expression, SubqueryExpression
 from pyspark.sql.connect.types import pyspark_types_to_proto_types, UnparsedDataType
 from pyspark.errors import (
     AnalysisException,
@@ -77,13 +77,17 @@ class LogicalPlan:
         self, child: Optional["LogicalPlan"], references: Optional[Sequence["LogicalPlan"]] = None
     ) -> None:
         self._child = child
-        self._plan_id = LogicalPlan._fresh_plan_id()
+        self._original_plan_id = LogicalPlan._fresh_plan_id()
 
         self._references: Sequence["LogicalPlan"] = references or []
         self._plan_id_with_rel: Optional[int] = None
         if len(self._references) > 0:
             assert all(isinstance(r, LogicalPlan) for r in self._references)
             self._plan_id_with_rel = LogicalPlan._fresh_plan_id()
+
+    @property
+    def _plan_id(self) -> int:
+        return self._plan_id_with_rel or self._original_plan_id
 
     @staticmethod
     def _fresh_plan_id() -> int:
@@ -97,7 +101,7 @@ class LogicalPlan:
 
     def _create_proto_relation(self) -> proto.Relation:
         plan = proto.Relation()
-        plan.common.plan_id = self._plan_id
+        plan.common.plan_id = self._original_plan_id
         return plan
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:  # type: ignore[empty-body]
@@ -145,14 +149,21 @@ class LogicalPlan:
             return self._child.observations
 
     @staticmethod
-    def _collect_references(cols: Sequence[Column]) -> Sequence["LogicalPlan"]:
-        return list(
-            {
-                ref._plan_id: ref
-                for c in cols
-                for ref in c._expr.references  # type: ignore[attr-defined]
-            }.values()
-        )
+    def _collect_references(
+        cols_or_exprs: Sequence[Union[Column, Expression]]
+    ) -> Sequence["LogicalPlan"]:
+        references: List[LogicalPlan] = []
+
+        def append_reference(e: Expression) -> None:
+            if isinstance(e, SubqueryExpression):
+                references.append(e._plan)
+
+        for col_or_expr in cols_or_exprs:
+            if isinstance(col_or_expr, Column):
+                col_or_expr._expr.foreach(append_reference)
+            else:
+                col_or_expr.foreach(append_reference)
+        return references
 
     def _with_relations(
         self, root: proto.Relation, relations: Sequence[proto.Relation]
@@ -2590,7 +2601,7 @@ class CommonInlineUserDefinedTableFunction(LogicalPlan):
         deterministic: bool,
         arguments: Sequence[Expression],
     ) -> None:
-        super().__init__(None, [ref for arg in arguments for ref in arg.references])
+        super().__init__(None, self._collect_references(arguments))
         self._function_name = function_name
         self._deterministic = deterministic
         self._arguments = arguments

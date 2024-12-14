@@ -1853,12 +1853,12 @@ class SubqueryExpression(google.protobuf.message.Message):
         builtins.type,
     ):  # noqa: F821
         DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
-        SUBQUERY_TYPE_INVALID: SubqueryExpression._SubqueryType.ValueType  # 0
+        SUBQUERY_TYPE_UNKNOWN: SubqueryExpression._SubqueryType.ValueType  # 0
         SUBQUERY_TYPE_SCALAR: SubqueryExpression._SubqueryType.ValueType  # 1
         SUBQUERY_TYPE_EXISTS: SubqueryExpression._SubqueryType.ValueType  # 2
 
     class SubqueryType(_SubqueryType, metaclass=_SubqueryTypeEnumTypeWrapper): ...
-    SUBQUERY_TYPE_INVALID: SubqueryExpression.SubqueryType.ValueType  # 0
+    SUBQUERY_TYPE_UNKNOWN: SubqueryExpression.SubqueryType.ValueType  # 0
     SUBQUERY_TYPE_SCALAR: SubqueryExpression.SubqueryType.ValueType  # 1
     SUBQUERY_TYPE_EXISTS: SubqueryExpression.SubqueryType.ValueType  # 2
 

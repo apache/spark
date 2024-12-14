@@ -123,15 +123,6 @@ class WindowSpec(ParentWindowSpec):
             frame=WindowFrame(isRowFrame=False, start=start, end=end),
         )
 
-    @property
-    def _references(self) -> Sequence["LogicalPlan"]:
-        refs = []
-        for p in self._partitionSpec:
-            refs.extend(p.references)
-        for s in self._orderSpec:
-            refs.extend(s.references)
-        return refs
-
     def __repr__(self) -> str:
         strs: List[str] = []
         if len(self._partitionSpec) > 0:
