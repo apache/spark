@@ -148,6 +148,7 @@ trait DataEncoder {
    */
   def decodeValue(bytes: Array[Byte]): UnsafeRow
 }
+
 abstract class RocksDBDataEncoder(
     keyStateEncoderSpec: KeyStateEncoderSpec,
     valueSchema: StructType) extends DataEncoder {
