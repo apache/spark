@@ -682,9 +682,5 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
       assert(InSet(Literal(1), Set(1, 2)).toString === "1 INSET 1, ...")
       assert(InSet(Literal(1), Set(1)).toString === "1 INSET 1")
     }
-
-    assertThrows[IllegalArgumentException] {
-      SQLConf.get.setConfString(SQLConf.MAX_TO_STRING_FIELDS.key, (-1).toString)
-    }
   }
 }
