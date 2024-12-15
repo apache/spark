@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.datasources
 
 import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.catalyst.expressions.{Ascending, AttributeReference, NullsFirst, SortOrder}
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, NoEliminateSort, Sort}
+import org.apache.spark.sql.catalyst.plans.logical.{Clustering, LogicalPlan, Sort}
 import org.apache.spark.sql.execution.{QueryExecution, SortExec}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanExec
 import org.apache.spark.sql.internal.SQLConf
@@ -94,7 +94,7 @@ trait V1WriteCommandSuiteBase extends SQLTestUtils {
     // Check whether exists a logical sort node of the write query.
     // If user specified sort matches required ordering, the sort node may not at the top of query.
     def isSort(plan: LogicalPlan): Boolean =
-      plan.isInstanceOf[Sort] || plan.isInstanceOf[NoEliminateSort]
+      plan.isInstanceOf[Sort] || plan.isInstanceOf[Clustering]
     assert(optimizedPlan.exists(isSort(_)) == hasLogicalSort,
       s"Expect hasLogicalSort: $hasLogicalSort, Actual: ${optimizedPlan.exists(isSort(_))}")
 
