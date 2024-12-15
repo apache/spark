@@ -77,7 +77,7 @@ class BlockTTLIntegrationSuite extends SparkFunSuite with LocalSparkContext
   }
 
   test(s"Test that shuffle blocks are tracked properly and removed after TTL") {
-    val ttl = 150L
+    val ttl = 250L
     val conf = new SparkConf()
       .setAppName("test-blockmanager-decommissioner")
       .setMaster("local-cluster[2, 1, 1024]")
@@ -87,16 +87,19 @@ class BlockTTLIntegrationSuite extends SparkFunSuite with LocalSparkContext
     sc.setLogLevel("DEBUG")
     TestUtils.waitUntilExecutorsUp(sc, 2, 60000)
     val managerMasterEndpoint = lookupBlockManagerMasterEndpoint(sc)
+    val mapOutputTracker = lookupMapOutputTrackerMaster(sc)
+    // Make sure it's empty at the start
     assert(managerMasterEndpoint.rddAccessTime.isEmpty)
+    assert(mapOutputTracker.shuffleAccessTime.isEmpty)
     // Make some cache blocks
     val input = sc.parallelize(1.to(100)).groupBy(_ % 10)
     input.count()
-    // Check that the shuffle blocks were NOT registered with the TTL tracker.
+    // Make sure we've got the tracker threads defined
+    assert(mapOutputTracker.cleanerThreadpool.isDefined)
+    // Check that the shuffle blocks were NOT registered with the RDD TTL tracker.
     assert(managerMasterEndpoint.rddAccessTime.isEmpty)
     // Check that the shuffle blocks are registered with the map output TTL
-    val mapOutputTracker = lookupMapOutputTrackerMaster(sc)
     assert(!mapOutputTracker.shuffleAccessTime.isEmpty)
-    assert(mapOutputTracker.cleanerThreadpool.isDefined)
     // Wait for it to expire.
     Thread.sleep(2 * ttl)
     // It should be expired!
