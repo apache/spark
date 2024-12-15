@@ -21,7 +21,7 @@ import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Alias, Ascending, Attribute, AttributeMap, AttributeSet, BitwiseAnd, Empty2Null, Expression, HiveHash, Literal, NamedExpression, Pmod, SortOrder}
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, NoEliminateSort, Project}
+import org.apache.spark.sql.catalyst.plans.logical.{Clustering, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.SparkPlan
@@ -107,7 +107,7 @@ object V1Writes extends Rule[LogicalPlan] with SQLConfHelper {
     if (orderingMatched) {
       empty2NullPlan
     } else {
-      NoEliminateSort(requiredOrdering, global = false, empty2NullPlan)
+      Clustering(requiredOrdering, global = false, empty2NullPlan)
     }
   }
 }

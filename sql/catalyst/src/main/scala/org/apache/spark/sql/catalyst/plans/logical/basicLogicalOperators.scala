@@ -1009,16 +1009,17 @@ case class Sort(
 }
 
 /**
- * A special Sort node whose underlying Sort would not be eliminated
- * by [[org.apache.spark.sql.catalyst.optimizer.EliminateSorts]].
+ * @param cluster The clustering expressions
+ * @param global  True means global clustering apply for entire data set,
+ *                False means clustering only apply within the partition.
+ * @param child   Child logical plan
  */
-case class NoEliminateSort(
-    order: Seq[SortOrder],
+case class Clustering(
+    cluster: Seq[SortOrder],
     global: Boolean,
-    child: LogicalPlan,
-    hint: Option[SortHint] = None) extends UnaryNode {
+    child: LogicalPlan) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
-  override protected def withNewChildInternal(newChild: LogicalPlan): NoEliminateSort =
+  override protected def withNewChildInternal(newChild: LogicalPlan): Clustering =
     copy(child = newChild)
 }
 
