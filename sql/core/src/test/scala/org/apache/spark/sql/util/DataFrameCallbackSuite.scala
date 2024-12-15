@@ -20,7 +20,7 @@ package org.apache.spark.sql.util
 import java.lang.{Long => JLong}
 import scala.collection.mutable.ArrayBuffer
 import org.apache.spark._
-import org.apache.spark.sql.{Dataset, Encoder, Encoders, QueryTest, Row, SparkSession, functions}
+import org.apache.spark.sql.{functions, Dataset, Encoder, Encoders, QueryTest, Row, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan, Project}
 import org.apache.spark.sql.execution.{QueryExecution, WholeStageCodegenExec}
@@ -29,7 +29,6 @@ import org.apache.spark.sql.execution.command.{CreateDataSourceTableAsSelectComm
 import org.apache.spark.sql.execution.datasources.InsertIntoHadoopFsRelationCommand
 import org.apache.spark.sql.execution.datasources.json.JsonFileFormat
 import org.apache.spark.sql.expressions.Aggregator
-import org.apache.spark.sql.functions.{expr, udaf}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StringType
@@ -341,7 +340,7 @@ class DataFrameCallbackSuite extends QueryTest
 
   test("SPARK-50581: support observe with udaf") {
     withUserDefinedFunction(("someUdaf", true)) {
-      spark.udf.register("someUdaf", udaf(new Aggregator[JLong, JLong, JLong] {
+      spark.udf.register("someUdaf", functions.udaf(new Aggregator[JLong, JLong, JLong] {
         def zero: JLong = 0L
         def reduce(b: JLong, a: JLong): JLong = a + b
         def merge(b1: JLong, b2: JLong): JLong = b1 + b2
