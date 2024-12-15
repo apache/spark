@@ -52,8 +52,9 @@ private[connect] class ExecuteGrpcResponseSender[T <: Message](
 
   private var interrupted = false
 
-  // Time at which this sender should finish if the response stream is not finished by then.
-  private var deadlineTimeNs = Long.MaxValue
+  // Time at which this sender should finish if the response stream is not finished by then. The
+  // value is updated on each execute call.
+  private var deadlineTimeNs = 0L
 
   // Signal to wake up when grpcCallObserver.isReady()
   private val grpcCallObserverReadySignal = new Object
@@ -172,6 +173,24 @@ private[connect] class ExecuteGrpcResponseSender[T <: Message](
   }
 
   /**
+   * Update the deadline for this sender. The deadline is the time when this sender should finish.
+   */
+  private def updateDeadlineTimeNs(startTime: Long): Unit = {
+    if (executeHolder.reattachable) {
+      val confSize =
+        SparkEnv.get.conf.get(CONNECT_EXECUTE_REATTACHABLE_SENDER_MAX_STREAM_DURATION)
+      if (confSize > 0) {
+        deadlineTimeNs = startTime + confSize * NANOS_PER_MILLIS
+        return
+      }
+    }
+
+    // We cannot use Long.MaxValue as the default timeout duration, because System.nanoTime() may
+    // return a negative value. We use 180 days as the maximum duration.
+    deadlineTimeNs = startTime + (1000L * 60L * 60L * 24L * 180L * NANOS_PER_MILLIS)
+  }
+
+  /**
    * Attach to the executionObserver, consume responses from it, and send them to grpcObserver.
    *
    * In non reattachable execution, it will keep sending responses until the query finishes. In
@@ -188,19 +207,12 @@ private[connect] class ExecuteGrpcResponseSender[T <: Message](
       log"Starting for opId=${MDC(OP_ID, executeHolder.operationId)}, " +
         log"reattachable=${MDC(REATTACHABLE, executeHolder.reattachable)}, " +
         log"lastConsumedStreamIndex=${MDC(STREAM_ID, lastConsumedStreamIndex)}")
+
     val startTime = System.nanoTime()
+    updateDeadlineTimeNs(startTime)
 
     var nextIndex = lastConsumedStreamIndex + 1
     var finished = false
-
-    // Time at which this sender should finish if the response stream is not finished by then.
-    deadlineTimeNs = if (!executeHolder.reattachable) {
-      Long.MaxValue
-    } else {
-      val confSize =
-        SparkEnv.get.conf.get(CONNECT_EXECUTE_REATTACHABLE_SENDER_MAX_STREAM_DURATION)
-      if (confSize > 0) System.nanoTime() + confSize * NANOS_PER_MILLIS else Long.MaxValue
-    }
 
     // Maximum total size of responses. The response which tips over this threshold will be sent.
     val maximumResponseSize: Long = if (!executeHolder.reattachable) {
@@ -241,15 +253,13 @@ private[connect] class ExecuteGrpcResponseSender[T <: Message](
           // The state of interrupted, response and lastIndex are changed under executionObserver
           // monitor, and will notify upon state change.
           if (response.isEmpty) {
-            var timeout = Math.max(1, deadlineTimeMillis - System.currentTimeMillis())
+            var timeoutNs = Math.max(1, deadlineTimeNs - System.nanoTime())
             // Wake up more frequently to send the progress updates.
             val progressTimeout = executeHolder.sessionHolder.session.sessionState.conf
               .getConf(CONNECT_PROGRESS_REPORT_INTERVAL)
             // If the progress feature is disabled, wait for the deadline.
-            val timeoutNs = if (progressTimeout > 0L) {
-              Math.min(progressTimeout, timeout) * NANOS_PER_MILLIS
-            } else {
-              timeout * NANOS_PER_MILLIS
+            if (progressTimeout > 0L) {
+              timeoutNs = Math.min(progressTimeout * NANOS_PER_MILLIS, timeoutNS)
             }
             logTrace(s"Wait for response to become available with timeout=$timeoutNs ns.")
             executionObserver.responseLock.wait(timeoutNs / NANOS_PER_MILLIS)
