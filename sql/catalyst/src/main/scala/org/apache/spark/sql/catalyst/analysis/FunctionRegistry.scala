@@ -613,6 +613,7 @@ object FunctionRegistry {
     expression[MakeValidUTF8]("make_valid_utf8"),
     expression[ValidateUTF8]("validate_utf8"),
     expression[TryValidateUTF8]("try_validate_utf8"),
+    expression[Quote]("quote"),
 
     // url functions
     expression[UrlEncode]("url_encode"),

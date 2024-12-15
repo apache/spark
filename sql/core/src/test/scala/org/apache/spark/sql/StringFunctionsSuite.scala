@@ -1452,4 +1452,21 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
         Seq(Row("abc", "def")))
     }
   }
+
+  test("SPARK-50582: string quote function") {
+    val df = Seq(("Don't")).toDF("value")
+
+    checkAnswer(
+      df.select(quote($"value")),
+      Row("'Don\\'t'"))
+
+    checkAnswer(
+      df.selectExpr("quote('Spark')"),
+      Row("'Spark'")
+    )
+
+    checkAnswer(
+      df.selectExpr("quote(NULL)"),
+      Row(null))
+  }
 }

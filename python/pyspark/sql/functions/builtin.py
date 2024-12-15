@@ -17100,6 +17100,36 @@ def collation(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("collation", col)
 
 
+@_try_remote_functions
+def quote(col: "ColumnOrName") -> Column:
+    r"""Returns `str` enclosed by single quotes and each instance of single quote in it is preceded by a backslash.
+
+    .. versionadded:: 4.0.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or column name
+        target column to be quoted.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        quoted string
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame(["Don't"], "STRING")
+    >>> df.select("*", sf.quote("value")).show()
+    +-----+------------+
+    |value|quote(value)|
+    +-----+------------+
+    |Don't|    'Don\'t'|
+    +-----+------------+
+    """
+    return _invoke_function_over_columns("quote", col)
+
+
 # ---------------------- Collection functions ------------------------------
 
 

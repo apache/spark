@@ -2277,3 +2277,27 @@ select try_validate_utf8(x'80')
 struct<try_validate_utf8(X'80'):string>
 -- !query output
 NULL
+
+
+-- !query
+select quote('Spark')
+-- !query schema
+struct<quote(Spark):string>
+-- !query output
+'Spark'
+
+
+-- !query
+select quote("Don't")
+-- !query schema
+struct<quote(Don't):string>
+-- !query output
+'Don\'t'
+
+
+-- !query
+select quote(NULL)
+-- !query schema
+struct<quote(NULL):string>
+-- !query output
+NULL
