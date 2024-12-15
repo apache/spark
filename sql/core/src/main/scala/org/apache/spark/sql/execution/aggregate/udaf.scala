@@ -519,6 +519,7 @@ case class ScalaAggregator[IN, BUF, OUT](
   def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): ScalaAggregator[IN, BUF, OUT] =
     copy(inputAggBufferOffset = newInputAggBufferOffset)
 
+  @transient
   private[this] lazy val inputProjection = UnsafeProjection.create(children)
 
   def createAggregationBuffer(): BUF = agg.zero
