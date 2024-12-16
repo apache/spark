@@ -58,18 +58,15 @@ class ReattachableExecuteSuite extends SparkConnectServerTest {
 
   test("reattach after connection expired") {
     withClient { client =>
-      val iter = client.execute(buildPlan(MEDIUM_RESULTS_QUERY))
-      val operationId = getReattachableIterator(iter).operationId
-      // open the iterator
-      iter.next()
-
-      SparkConnectService.invalidateSession(defaultUserId, defaultSessionId)
       withRawBlockingStub { stub =>
-        val iter2 = stub.reattachExecute(buildReattachExecuteRequest(operationId, None))
+        // emulate session expiration
+        SparkConnectService.invalidateSession(defaultUserId, defaultSessionId)
 
-        // session closed, bound to fail
+        // session closed, bound to fail immediately
+        val operationId = UUID.randomUUID().toString
+        val iter = stub.reattachExecute(buildReattachExecuteRequest(operationId, None))
         val e = intercept[StatusRuntimeException] {
-          while (iter2.hasNext) iter2.next()
+          iter.next()
         }
         assert(e.getMessage.contains("INVALID_HANDLE.SESSION_NOT_FOUND"))
       }
