@@ -30,7 +30,6 @@ from pyspark.sql.connect.functions import builtin as F
 
 if TYPE_CHECKING:
     from pyspark.sql.connect._typing import ColumnOrName
-    from pyspark.sql.connect.plan import LogicalPlan
 
 __all__ = ["Window", "WindowSpec"]
 

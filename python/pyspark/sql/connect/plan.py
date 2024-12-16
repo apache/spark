@@ -77,7 +77,7 @@ class LogicalPlan:
         self, child: Optional["LogicalPlan"], references: Optional[Sequence["LogicalPlan"]] = None
     ) -> None:
         self._child = child
-        self._original_plan_id = LogicalPlan._fresh_plan_id()
+        self._root_plan_id = LogicalPlan._fresh_plan_id()
 
         self._references: Sequence["LogicalPlan"] = references or []
         self._plan_id_with_rel: Optional[int] = None
@@ -87,7 +87,7 @@ class LogicalPlan:
 
     @property
     def _plan_id(self) -> int:
-        return self._plan_id_with_rel or self._original_plan_id
+        return self._plan_id_with_rel or self._root_plan_id
 
     @staticmethod
     def _fresh_plan_id() -> int:
@@ -101,7 +101,7 @@ class LogicalPlan:
 
     def _create_proto_relation(self) -> proto.Relation:
         plan = proto.Relation()
-        plan.common.plan_id = self._original_plan_id
+        plan.common.plan_id = self._root_plan_id
         return plan
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:  # type: ignore[empty-body]

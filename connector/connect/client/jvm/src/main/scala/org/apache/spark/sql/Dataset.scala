@@ -445,7 +445,7 @@ class Dataset[T] private[sql] (
         .addAllParameters(parameters.map(p => functions.lit(p).expr).asJava)
     }
 
-  private[sql] def getPlanId: Option[Long] =
+  private def getPlanId: Option[Long] =
     if (plan.getRoot.hasCommon && plan.getRoot.getCommon.hasPlanId) {
       Option(plan.getRoot.getCommon.getPlanId)
     } else {

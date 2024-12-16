@@ -162,11 +162,7 @@ class SparkConnectPlanner(
         case proto.Relation.RelTypeCase.AGGREGATE => transformAggregate(rel.getAggregate)
         case proto.Relation.RelTypeCase.SQL => transformSql(rel.getSql)
         case proto.Relation.RelTypeCase.WITH_RELATIONS =>
-          if (isValidSQLWithRefs(rel.getWithRelations)) {
-            transformSqlWithRefs(rel.getWithRelations)
-          } else {
-            transformWithRelations(rel.getWithRelations)
-          }
+          transformWithRelations(rel.getWithRelations)
         case proto.Relation.RelTypeCase.LOCAL_RELATION =>
           transformLocalRelation(rel.getLocalRelation)
         case proto.Relation.RelTypeCase.SAMPLE => transformSample(rel.getSample)
@@ -3741,36 +3737,40 @@ class SparkConnectPlanner(
   }
 
   private def transformWithRelations(getWithRelations: proto.WithRelations): LogicalPlan = {
-    // Wrap the plan to keep the original planId.
-    val plan = Project(Seq(UnresolvedStar(None)), transformRelation(getWithRelations.getRoot))
+    if (isValidSQLWithRefs(getWithRelations)) {
+      transformSqlWithRefs(getWithRelations)
+    } else {
+      // Wrap the plan to keep the original planId.
+      val plan = Project(Seq(UnresolvedStar(None)), transformRelation(getWithRelations.getRoot))
 
-    val relations = getWithRelations.getReferencesList.asScala.map { ref =>
-      if (ref.hasCommon && ref.getCommon.hasPlanId) {
-        val planId = ref.getCommon.getPlanId
-        val plan = transformRelation(ref)
-        planId -> plan
-      } else {
-        throw InvalidPlanInput("Invalid WithRelation reference")
-      }
-    }.toMap
+      val relations = getWithRelations.getReferencesList.asScala.map { ref =>
+        if (ref.hasCommon && ref.getCommon.hasPlanId) {
+          val planId = ref.getCommon.getPlanId
+          val plan = transformRelation(ref)
+          planId -> plan
+        } else {
+          throw InvalidPlanInput("Invalid WithRelation reference")
+        }
+      }.toMap
 
-    val missingPlanIds = mutable.Set.empty[Long]
-    val withRelations = plan
-      .transformAllExpressionsWithPruning(_.containsPattern(TreePattern.UNRESOLVED_PLAN_ID)) {
-        case u: UnresolvedPlanId =>
-          if (relations.contains(u.planId)) {
-            u.withPlan(relations(u.planId))
-          } else {
-            missingPlanIds += u.planId
-            u
-          }
-      }
-    assertPlan(
-      missingPlanIds.isEmpty,
-      "Missing relation in WithRelations: " +
-        s"${missingPlanIds.mkString("(", ", ", ")")} not in " +
-        s"${relations.keys.mkString("(", ", ", ")")}")
-    withRelations
+      val missingPlanIds = mutable.Set.empty[Long]
+      val withRelations = plan
+        .transformAllExpressionsWithPruning(_.containsPattern(TreePattern.UNRESOLVED_PLAN_ID)) {
+          case u: UnresolvedPlanId =>
+            if (relations.contains(u.planId)) {
+              u.withPlan(relations(u.planId))
+            } else {
+              missingPlanIds += u.planId
+              u
+            }
+        }
+      assertPlan(
+        missingPlanIds.isEmpty,
+        "Missing relation in WithRelations: " +
+          s"${missingPlanIds.mkString("(", ", ", ")")} not in " +
+          s"${relations.keys.mkString("(", ", ", ")")}")
+      withRelations
+    }
   }
 
   private def assertPlan(assertion: Boolean, message: => String = ""): Unit = {
