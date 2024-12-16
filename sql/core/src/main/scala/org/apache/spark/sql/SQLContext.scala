@@ -17,9 +17,9 @@
 
 package org.apache.spark.sql
 
-import scala.reflect.runtime.universe.TypeTag
+import java.util.{List => JList, Map => JMap, Properties}
 
-import _root_.java.util.{List => JavaList, Map => JavaMap, Properties}
+import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.annotation.{DeveloperApi, Experimental, Stable, Unstable}
@@ -178,7 +178,7 @@ class SQLContext private[sql] (override val sparkSession: SparkSession)
   override def createDataset[T: Encoder](data: RDD[T]): Dataset[T] = super.createDataset(data)
 
   /** @inheritdoc */
-  override def createDataset[T: Encoder](data: JavaList[T]): Dataset[T] =
+  override def createDataset[T: Encoder](data: JList[T]): Dataset[T] =
     super.createDataset(data)
 
   /** @inheritdoc */
@@ -188,7 +188,7 @@ class SQLContext private[sql] (override val sparkSession: SparkSession)
 
   /** @inheritdoc */
   @DeveloperApi
-  override def createDataFrame(rows: JavaList[Row], schema: StructType): Dataset[Row] =
+  override def createDataFrame(rows: JList[Row], schema: StructType): Dataset[Row] =
     super.createDataFrame(rows, schema)
 
   /** @inheritdoc */
@@ -200,7 +200,7 @@ class SQLContext private[sql] (override val sparkSession: SparkSession)
     super.createDataFrame(rdd, beanClass)
 
   /** @inheritdoc */
-  override def createDataFrame(data: JavaList[_], beanClass: Class[_]): Dataset[Row] =
+  override def createDataFrame(data: JList[_], beanClass: Class[_]): Dataset[Row] =
     super.createDataFrame(data, beanClass)
 
   /** @inheritdoc */
@@ -219,7 +219,7 @@ class SQLContext private[sql] (override val sparkSession: SparkSession)
   override def createExternalTable(
       tableName: String,
       source: String,
-      options: JavaMap[String, String]): Dataset[Row] = {
+      options: JMap[String, String]): Dataset[Row] = {
     super.createExternalTable(tableName, source, options)
   }
 
@@ -236,7 +236,7 @@ class SQLContext private[sql] (override val sparkSession: SparkSession)
       tableName: String,
       source: String,
       schema: StructType,
-      options: JavaMap[String, String]): Dataset[Row] = {
+      options: JMap[String, String]): Dataset[Row] = {
     super.createExternalTable(tableName, source, schema, options)
   }
 
@@ -335,7 +335,7 @@ class SQLContext private[sql] (override val sparkSession: SparkSession)
   override def load(path: String, source: String): Dataset[Row] = super.load(path, source)
 
   /** @inheritdoc */
-  override def load(source: String, options: JavaMap[String, String]): Dataset[Row] =
+  override def load(source: String, options: JMap[String, String]): Dataset[Row] =
     super.load(source, options)
 
   /** @inheritdoc */
@@ -346,7 +346,7 @@ class SQLContext private[sql] (override val sparkSession: SparkSession)
   override def load(
       source: String,
       schema: StructType,
-      options: JavaMap[String, String]): Dataset[Row] = {
+      options: JMap[String, String]): Dataset[Row] = {
     super.load(source, schema, options)
   }
 

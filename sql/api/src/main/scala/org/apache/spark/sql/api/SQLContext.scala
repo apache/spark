@@ -20,7 +20,7 @@ package org.apache.spark.sql.api
 import scala.collection.immutable
 import scala.reflect.runtime.universe.TypeTag
 
-import _root_.java.util.{List => JavaList, Map => JavaMap, Properties}
+import _root_.java.util.{List => JList, Map => JMap, Properties}
 
 import org.apache.spark.SparkContext
 import org.apache.spark.annotation.{DeveloperApi, Experimental, Stable, Unstable}
@@ -332,7 +332,7 @@ abstract class SQLContext private[sql] (val sparkSession: SparkSession)
   }
 
   /**
-   * Creates a [[Dataset]] from a `JavaList` of a given type. This method requires an encoder (to
+   * Creates a [[Dataset]] from a `JList` of a given type. This method requires an encoder (to
    * convert a JVM object of type `T` to and from the internal Spark SQL representation) that is
    * generally created automatically through implicits from a `SparkSession`, or can be created
    * explicitly by calling static methods on [[org.apache.spark.sql.Encoders Encoders]].
@@ -347,7 +347,7 @@ abstract class SQLContext private[sql] (val sparkSession: SparkSession)
    * @since 2.0.0
    * @group dataset
    */
-  def createDataset[T: Encoder](data: JavaList[T]): Dataset[T] = {
+  def createDataset[T: Encoder](data: JList[T]): Dataset[T] = {
     sparkSession.createDataset(data)
   }
 
@@ -366,7 +366,7 @@ abstract class SQLContext private[sql] (val sparkSession: SparkSession)
   }
 
   /**
-   * :: DeveloperApi :: Creates a `DataFrame` from a `JavaList` containing
+   * :: DeveloperApi :: Creates a `DataFrame` from a `JList` containing
    * [[org.apache.spark.sql.Row Row]]s using the given schema. It is important to make sure that
    * the structure of every [[org.apache.spark.sql.Row Row]] of the provided List matches the
    * provided schema. Otherwise, there will be runtime exception.
@@ -375,7 +375,7 @@ abstract class SQLContext private[sql] (val sparkSession: SparkSession)
    * @since 1.6.0
    */
   @DeveloperApi
-  def createDataFrame(rows: JavaList[Row], schema: StructType): Dataset[Row] = {
+  def createDataFrame(rows: JList[Row], schema: StructType): Dataset[Row] = {
     sparkSession.createDataFrame(rows, schema)
   }
 
@@ -411,7 +411,7 @@ abstract class SQLContext private[sql] (val sparkSession: SparkSession)
    * @group dataframes
    * @since 1.6.0
    */
-  def createDataFrame(data: JavaList[_], beanClass: Class[_]): Dataset[Row] = {
+  def createDataFrame(data: JList[_], beanClass: Class[_]): Dataset[Row] = {
     sparkSession.createDataFrame(data, beanClass)
   }
 
@@ -474,7 +474,7 @@ abstract class SQLContext private[sql] (val sparkSession: SparkSession)
   def createExternalTable(
       tableName: String,
       source: String,
-      options: JavaMap[String, String]): Dataset[Row] = {
+      options: JMap[String, String]): Dataset[Row] = {
     sparkSession.catalog.createTable(tableName, source, options)
   }
 
@@ -505,7 +505,7 @@ abstract class SQLContext private[sql] (val sparkSession: SparkSession)
       tableName: String,
       source: String,
       schema: StructType,
-      options: JavaMap[String, String]): Dataset[Row] = {
+      options: JMap[String, String]): Dataset[Row] = {
     sparkSession.catalog.createTable(tableName, source, schema, options)
   }
 
@@ -871,7 +871,7 @@ abstract class SQLContext private[sql] (val sparkSession: SparkSession)
    *   As of 1.4.0, replaced by `read().format(source).options(options).load()`.
    */
   @deprecated("Use read.format(source).options(options).load() instead.", "1.4.0")
-  def load(source: String, options: JavaMap[String, String]): Dataset[Row] = {
+  def load(source: String, options: JMap[String, String]): Dataset[Row] = {
     read.options(options).format(source).load()
   }
 
@@ -897,7 +897,7 @@ abstract class SQLContext private[sql] (val sparkSession: SparkSession)
    *   As of 1.4.0, replaced by `read().format(source).schema(schema).options(options).load()`.
    */
   @deprecated("Use read.format(source).schema(schema).options(options).load() instead.", "1.4.0")
-  def load(source: String, schema: StructType, options: JavaMap[String, String]): Dataset[Row] = {
+  def load(source: String, schema: StructType, options: JMap[String, String]): Dataset[Row] = {
     read.format(source).schema(schema).options(options).load()
   }
 
