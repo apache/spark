@@ -602,17 +602,24 @@ class TransformWithStateInPandasTestsMixin:
         )
 
     def _test_transform_with_state_init_state_in_pandas(
-        self, stateful_processor, check_results, time_mode="None"
+        self,
+        stateful_processor,
+        check_results,
+        time_mode="None",
+        checkpoint_path=None,
+        initial_state=None,
     ):
         input_path = tempfile.mkdtemp()
+        if checkpoint_path is None:
+            checkpoint_path = tempfile.mkdtemp()
         self._prepare_test_resource1(input_path)
         time.sleep(2)
         self._prepare_input_data(input_path + "/text-test2.txt", [0, 3], [67, 12])
 
-        df = self._build_test_df(input_path)
-
         for q in self.spark.streams.active:
             q.stop()
+
+        df = self._build_test_df(input_path)
         self.assertTrue(df.isStreaming)
 
         output_schema = StructType(
@@ -622,8 +629,9 @@ class TransformWithStateInPandasTestsMixin:
             ]
         )
 
-        data = [("0", 789), ("3", 987)]
-        initial_state = self.spark.createDataFrame(data, "id string, initVal int").groupBy("id")
+        if initial_state is None:
+            data = [("0", 789), ("3", 987)]
+            initial_state = self.spark.createDataFrame(data, "id string, initVal int").groupBy("id")
 
         q = (
             df.groupBy("id")
@@ -635,6 +643,7 @@ class TransformWithStateInPandasTestsMixin:
                 initialState=initial_state,
             )
             .writeStream.queryName("this_query")
+            .option("checkpointLocation", checkpoint_path)
             .foreachBatch(check_results)
             .outputMode("update")
             .start()
@@ -1024,12 +1033,70 @@ class TransformWithStateInPandasTestsMixin:
             initial_state=initial_state,
         )
 
+    def test_transform_with_state_restart_with_multiple_rows_init_state(self):
+        def check_results(batch_df, _):
+            assert set(batch_df.sort("id").collect()) == {
+                Row(id="0", countAsString="2"),
+                Row(id="1", countAsString="2"),
+            }
+
+        def check_results_for_new_query(batch_df, batch_id):
+            if batch_id == 0:
+                assert set(batch_df.sort("id").collect()) == {
+                    Row(id="0", value=str(123 + 46)),
+                    Row(id="1", value=str(146 + 346)),
+                }
+            else:
+                assert set(batch_df.sort("id").collect()) == {
+                    Row(id="0", value=str(123 + 46 + 67)),
+                    Row(id="3", value=str(12)),
+                }
+                # verify values in initial state is appended into list state for all keys
+                df = (
+                    self.spark.read.format("statestore")
+                    .option("path", new_checkpoint_path)
+                    .option("stateVarName", "list_state")
+                    .load()
+                ).selectExpr("key.id AS id", "list_element.value AS value")
+
+                def dataframe_to_value_list(output_df):
+                    return [
+                        row["value"] for row in output_df.sort("value").select("value").collect()
+                    ]
+
+                assert dataframe_to_value_list(df.filter(df.id == "0")) == [20, 20, 111, 120, 120]
+                assert dataframe_to_value_list(df.filter(df.id == "1")) == [20, 20, 111, 120, 120]
+
+        # run a tws query and read state data source dataframe from its checkpoint
+        checkpoint_path = tempfile.mkdtemp()
+        self._test_transform_with_state_in_pandas_basic(
+            ListStateProcessor(), check_results, True, checkpoint_path=checkpoint_path
+        )
+        list_state_df = (
+            self.spark.read.format("statestore")
+            .option("path", checkpoint_path)
+            .option("stateVarName", "listState1")
+            .load()
+        ).selectExpr("key.id AS id", "list_element.temperature AS initVal")
+        init_df = list_state_df.groupBy("id")
+
+        # run a new tws query and pass state data source dataframe as initial state
+        # multiple rows exist in the initial state with the same grouping key
+        new_checkpoint_path = tempfile.mkdtemp()
+        self._test_transform_with_state_init_state_in_pandas(
+            StatefulProcessorWithListStateInitialState(),
+            check_results_for_new_query,
+            checkpoint_path=new_checkpoint_path,
+            initial_state=init_df,
+        )
+
     # run the same test suites again but with single shuffle partition
     def test_transform_with_state_with_timers_single_partition(self):
         with self.sql_conf({"spark.sql.shuffle.partitions": "1"}):
             self.test_transform_with_state_init_state_with_timers()
             self.test_transform_with_state_in_pandas_event_time()
             self.test_transform_with_state_in_pandas_proc_timer()
+            test_transform_with_state_restart_with_multiple_rows_init_state()
 
 
 class SimpleStatefulProcessorWithInitialState(StatefulProcessor):
@@ -1085,6 +1152,17 @@ class StatefulProcessorWithInitialStateTimers(SimpleStatefulProcessorWithInitial
     def handleInitialState(self, key, initialState, timer_values) -> None:
         super().handleInitialState(key, initialState, timer_values)
         self.handle.registerTimer(timer_values.get_current_processing_time_in_ms() - 1)
+
+
+class StatefulProcessorWithListStateInitialState(SimpleStatefulProcessorWithInitialState):
+    def init(self, handle: StatefulProcessorHandle) -> None:
+        super().init(handle)
+        list_ele_schema = StructType([StructField("value", IntegerType(), True)])
+        self.list_state = handle.getListState("list_state", list_ele_schema)
+
+    def handleInitialState(self, key, initialState, timer_values) -> None:
+        for val in initialState["initVal"].tolist():
+            self.list_state.append_value((val,))
 
 
 # A stateful processor that output the max event time it has seen. Register timer for
