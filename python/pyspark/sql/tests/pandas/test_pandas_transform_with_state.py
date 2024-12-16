@@ -1096,7 +1096,7 @@ class TransformWithStateInPandasTestsMixin:
             self.test_transform_with_state_init_state_with_timers()
             self.test_transform_with_state_in_pandas_event_time()
             self.test_transform_with_state_in_pandas_proc_timer()
-            test_transform_with_state_restart_with_multiple_rows_init_state()
+            self.test_transform_with_state_restart_with_multiple_rows_init_state()
 
 
 class SimpleStatefulProcessorWithInitialState(StatefulProcessor):
