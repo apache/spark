@@ -17102,7 +17102,8 @@ def collation(col: "ColumnOrName") -> Column:
 
 @_try_remote_functions
 def quote(col: "ColumnOrName") -> Column:
-    r"""Returns `str` enclosed by single quotes and each instance of single quote in it is preceded by a backslash.
+    r"""Returns `str` enclosed by single quotes and each instance of
+    single quote in it is preceded by a backslash.
 
     .. versionadded:: 4.0.0
 
