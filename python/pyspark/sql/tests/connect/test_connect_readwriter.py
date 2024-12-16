@@ -146,6 +146,16 @@ class SparkConnectReadWriterTests(SparkConnectSQLTestCase):
                 self.connect.read.parquet(d).toPandas(), self.spark.read.parquet(d).toPandas()
             )
 
+    def test_parquet_compression_option(self):
+        # SPARK-50537: Fix compression option being overwritten in df.write.parquet
+        with tempfile.TemporaryDirectory(prefix="test_parquet") as d:
+            self.connect.range(10).write.mode("overwrite").option("compression", "gzip").parquet(d)
+            self.assertTrue(any(file.endswith(".gz.parquet") for file in os.listdir(d)))
+            # Read the Parquet file as a DataFrame.
+            self.assert_eq(
+                self.connect.read.parquet(d).toPandas(), self.spark.read.parquet(d).toPandas()
+            )
+
     def test_text(self):
         # SPARK-41849: Implement DataFrameReader.text
         with tempfile.TemporaryDirectory(prefix="test_text") as d:

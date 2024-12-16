@@ -24,7 +24,7 @@ LABEL org.opencontainers.image.ref.name="Apache Spark Infra Image For PySpark wi
 # Overwrite this label to avoid exposing the underlying Ubuntu OS version label
 LABEL org.opencontainers.image.version=""
 
-ENV FULL_REFRESH_DATE 20241119
+ENV FULL_REFRESH_DATE 20241205
 
 ENV DEBIAN_FRONTEND noninteractive
 ENV DEBCONF_NONINTERACTIVE_SEEN true
@@ -51,29 +51,27 @@ RUN apt-get update && apt-get install -y \
     libtiff5-dev \
     libxml2-dev \
     openjdk-17-jdk-headless \
-    pandoc \
     pkg-config \
     qpdf \
+    tzdata \
     software-properties-common \
     wget \
-    zlib1g-dev \
-    && rm -rf /var/lib/apt/lists/*
+    zlib1g-dev
 
 # Install Python 3.9
 RUN add-apt-repository ppa:deadsnakes/ppa
 RUN apt-get update && apt-get install -y \
-    python3.9 python3.9-distutils \
+    python3.9 \
+    python3.9-distutils \
+    && apt-get autoremove --purge -y \
+    && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
 ARG BASIC_PIP_PKGS="numpy pyarrow>=18.0.0 six==1.16.0 pandas==2.2.3 scipy plotly>=4.8 mlflow>=2.8.1 coverage matplotlib openpyxl memory-profiler>=0.61.0 scikit-learn>=1.3.2"
 # Python deps for Spark Connect
-ARG CONNECT_PIP_PKGS="grpcio==1.67.0 grpcio-status==1.67.0 protobuf==5.28.3 googleapis-common-protos==1.65.0 graphviz==0.20.3"
+ARG CONNECT_PIP_PKGS="grpcio==1.67.0 grpcio-status==1.67.0 protobuf==5.29.1 googleapis-common-protos==1.65.0 graphviz==0.20.3"
 
-# Install Python 3.9
-RUN add-apt-repository ppa:deadsnakes/ppa
-RUN apt-get update && apt-get install -y \
-    python3.9 python3.9-distutils \
-    && rm -rf /var/lib/apt/lists/*
+# Install Python 3.9 packages
 RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.9
 RUN python3.9 -m pip install --ignore-installed blinker>=1.6.2 # mlflow needs this
 RUN python3.9 -m pip install --force $BASIC_PIP_PKGS unittest-xml-reporting $CONNECT_PIP_PKGS && \

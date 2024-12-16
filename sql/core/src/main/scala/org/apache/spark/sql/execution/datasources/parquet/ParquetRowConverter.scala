@@ -535,7 +535,16 @@ private[parquet] class ParquetRowConverter(
           wrappedUpdater)
 
       case t: VariantType =>
-        new ParquetVariantConverter(parquetType.asGroupType(), updater)
+        if (SQLConf.get.getConf(SQLConf.VARIANT_ALLOW_READING_SHREDDED)) {
+          // Infer a Spark type from `parquetType`. This piece of code is copied from
+          // `ParquetArrayConverter`.
+          val messageType = Types.buildMessage().addField(parquetType).named("foo")
+          val column = new ColumnIOFactory().getColumnIO(messageType)
+          val parquetSparkType = schemaConverter.convertField(column.getChild(0)).sparkType
+          new ParquetVariantConverter(parquetType.asGroupType(), parquetSparkType, updater)
+        } else {
+          new ParquetUnshreddedVariantConverter(parquetType.asGroupType(), updater)
+        }
 
       case t =>
         throw QueryExecutionErrors.cannotCreateParquetConverterForDataTypeError(
@@ -845,8 +854,8 @@ private[parquet] class ParquetRowConverter(
     }
   }
 
-  /** Parquet converter for Variant */
-  private final class ParquetVariantConverter(
+  /** Parquet converter for unshredded Variant */
+  private final class ParquetUnshreddedVariantConverter(
      parquetType: GroupType,
      updater: ParentContainerUpdater)
     extends ParquetGroupConverter(updater) {
@@ -895,6 +904,41 @@ private[parquet] class ParquetRowConverter(
     override def start(): Unit = {
       currentValue = null
       currentMetadata = null
+    }
+  }
+
+  /** Parquet converter for Variant (shredded or unshredded) */
+  private final class ParquetVariantConverter(
+     parquetType: GroupType,
+     parquetSparkType: DataType,
+     updater: ParentContainerUpdater)
+    extends ParquetGroupConverter(updater) {
+
+    private[this] var currentRow: Any = _
+    private[this] val variantSchema = SparkShreddingUtils.buildVariantSchema(parquetSparkType)
+    // A struct converter that reads the underlying file data.
+    private[this] val fileConverter = new ParquetRowConverter(
+      schemaConverter,
+      parquetType,
+      parquetSparkType.asInstanceOf[StructType],
+      convertTz,
+      datetimeRebaseSpec,
+      int96RebaseSpec,
+      new ParentContainerUpdater {
+        override def set(value: Any): Unit = currentRow = value
+      })
+
+    override def getConverter(fieldIndex: Int): Converter = fileConverter.getConverter(fieldIndex)
+
+    override def end(): Unit = {
+      fileConverter.end()
+      val v = SparkShreddingUtils.rebuild(currentRow.asInstanceOf[InternalRow], variantSchema)
+      updater.set(v)
+    }
+
+    override def start(): Unit = {
+      fileConverter.start()
+      currentRow = null
     }
   }
 
