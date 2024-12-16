@@ -166,9 +166,9 @@ class LogicalPlan:
         return references
 
     def _with_relations(
-        self, root: proto.Relation, relations: Sequence[proto.Relation]
+        self, root: proto.Relation, session: "SparkConnectClient"
     ) -> proto.Relation:
-        if len(relations) == 0:
+        if len(self._references) == 0:
             return root
         else:
             # build new plan like
@@ -181,7 +181,7 @@ class LogicalPlan:
             assert isinstance(self._plan_id_with_rel, int)
             plan.common.plan_id = self._plan_id_with_rel
             plan.with_relations.root.CopyFrom(root)
-            plan.with_relations.references.extend(relations)
+            plan.with_relations.references.extend([ref.plan(session) for ref in self._references])
             return plan
 
     def _parameters_to_print(self, parameters: Mapping[str, Any]) -> Mapping[str, Any]:
@@ -532,7 +532,7 @@ class Project(LogicalPlan):
         plan.project.input.CopyFrom(self._child.plan(session))
         plan.project.expressions.extend([c.to_plan(session) for c in self._columns])
 
-        return self._with_relations(plan, [ref.plan(session) for ref in self._references])
+        return self._with_relations(plan, session)
 
 
 class WithColumns(LogicalPlan):
@@ -580,7 +580,7 @@ class WithColumns(LogicalPlan):
                 alias.metadata = self._metadata[i]
             plan.with_columns.aliases.append(alias)
 
-        return self._with_relations(plan, [ref.plan(session) for ref in self._references])
+        return self._with_relations(plan, session)
 
 
 class WithWatermark(LogicalPlan):
@@ -674,7 +674,7 @@ class Hint(LogicalPlan):
         plan.hint.input.CopyFrom(self._child.plan(session))
         plan.hint.name = self._name
         plan.hint.parameters.extend([param.to_plan(session) for param in self._parameters])
-        return self._with_relations(plan, [ref.plan(session) for ref in self._references])
+        return self._with_relations(plan, session)
 
 
 class Filter(LogicalPlan):
@@ -687,7 +687,7 @@ class Filter(LogicalPlan):
         plan = self._create_proto_relation()
         plan.filter.input.CopyFrom(self._child.plan(session))
         plan.filter.condition.CopyFrom(self.filter.to_plan(session))
-        return self._with_relations(plan, [ref.plan(session) for ref in self._references])
+        return self._with_relations(plan, session)
 
 
 class Limit(LogicalPlan):
@@ -773,7 +773,7 @@ class Sort(LogicalPlan):
         plan.sort.input.CopyFrom(self._child.plan(session))
         plan.sort.order.extend([c.to_plan(session).sort_order for c in self.columns])
         plan.sort.is_global = self.is_global
-        return self._with_relations(plan, [ref.plan(session) for ref in self._references])
+        return self._with_relations(plan, session)
 
 
 class Drop(LogicalPlan):
@@ -799,7 +799,7 @@ class Drop(LogicalPlan):
                 plan.drop.columns.append(c.to_plan(session))
             else:
                 plan.drop.column_names.append(c)
-        return self._with_relations(plan, [ref.plan(session) for ref in self._references])
+        return self._with_relations(plan, session)
 
 
 class Sample(LogicalPlan):
@@ -917,7 +917,7 @@ class Aggregate(LogicalPlan):
                         grouping_set=[c.to_plan(session) for c in grouping_set]
                     )
                 )
-        return self._with_relations(plan, [ref.plan(session) for ref in self._references])
+        return self._with_relations(plan, session)
 
 
 class Join(LogicalPlan):
@@ -1009,7 +1009,7 @@ class Join(LogicalPlan):
                     merge_column = functools.reduce(lambda c1, c2: c1 & c2, self.on)
                     plan.join.join_condition.CopyFrom(cast(Column, merge_column).to_plan(session))
         plan.join.join_type = self.how
-        return self._with_relations(plan, [ref.plan(session) for ref in self._references])
+        return self._with_relations(plan, session)
 
     @property
     def observations(self) -> Dict[str, "Observation"]:
@@ -1102,7 +1102,7 @@ class AsOfJoin(LogicalPlan):
         plan.as_of_join.allow_exact_matches = self.allow_exact_matches
         plan.as_of_join.direction = self.direction
 
-        return self._with_relations(plan, [ref.plan(session) for ref in self._references])
+        return self._with_relations(plan, session)
 
     @property
     def observations(self) -> Dict[str, "Observation"]:
@@ -1177,7 +1177,7 @@ class LateralJoin(LogicalPlan):
         if self.on is not None:
             plan.lateral_join.join_condition.CopyFrom(self.on.to_plan(session))
         plan.lateral_join.join_type = self.how
-        return self._with_relations(plan, [ref.plan(session) for ref in self._references])
+        return self._with_relations(plan, session)
 
     @property
     def observations(self) -> Dict[str, "Observation"]:
@@ -1320,7 +1320,7 @@ class RepartitionByExpression(LogicalPlan):
             plan.repartition_by_expression.input.CopyFrom(self._child.plan(session))
         if self.num_partitions is not None:
             plan.repartition_by_expression.num_partitions = self.num_partitions
-        return self._with_relations(plan, [ref.plan(session) for ref in self._references])
+        return self._with_relations(plan, session)
 
 
 class SubqueryAlias(LogicalPlan):
@@ -1396,7 +1396,7 @@ class SQL(LogicalPlan):
             for k, arg in self._named_args.items():
                 plan.sql.named_arguments[k].CopyFrom(arg.to_plan(session))
 
-        return self._with_relations(plan, [v.plan(session) for v in self._references])
+        return self._with_relations(plan, session)
 
     def command(self, session: "SparkConnectClient") -> proto.Command:
         cmd = proto.Command()
@@ -1485,7 +1485,7 @@ class Unpivot(LogicalPlan):
             plan.unpivot.values.values.extend([v.to_plan(session) for v in self.values])
         plan.unpivot.variable_column_name = self.variable_column_name
         plan.unpivot.value_column_name = self.value_column_name
-        return self._with_relations(plan, [ref.plan(session) for ref in self._references])
+        return self._with_relations(plan, session)
 
 
 class Transpose(LogicalPlan):
@@ -1506,7 +1506,7 @@ class Transpose(LogicalPlan):
         if self.index_columns is not None and len(self.index_columns) > 0:
             for index_column in self.index_columns:
                 plan.transpose.index_columns.append(index_column.to_plan(session))
-        return self._with_relations(plan, [ref.plan(session) for ref in self._references])
+        return self._with_relations(plan, session)
 
 
 class UnresolvedTableValuedFunction(LogicalPlan):
@@ -1520,7 +1520,7 @@ class UnresolvedTableValuedFunction(LogicalPlan):
         plan.unresolved_table_valued_function.function_name = self._name
         for arg in self._args:
             plan.unresolved_table_valued_function.arguments.append(arg.to_plan(session))
-        return plan
+        return self._with_relations(plan, session)
 
 
 class CollectMetrics(LogicalPlan):
@@ -1547,7 +1547,7 @@ class CollectMetrics(LogicalPlan):
             else str(self._observation._name)
         )
         plan.collect_metrics.metrics.extend([e.to_plan(session) for e in self._exprs])
-        return self._with_relations(plan, [ref.plan(session) for ref in self._references])
+        return self._with_relations(plan, session)
 
     @property
     def observations(self) -> Dict[str, "Observation"]:
@@ -1653,10 +1653,7 @@ class NAReplace(LogicalPlan):
                 replacement.old_value.CopyFrom(old_value.to_plan(session).literal)
                 replacement.new_value.CopyFrom(new_value.to_plan(session).literal)
                 plan.replace.replacements.append(replacement)
-        return self._with_relations(
-            plan,
-            [ref.plan(session) for ref in self._references],
-        )
+        return self._with_relations(plan, session)
 
 
 class StatSummary(LogicalPlan):
@@ -1797,7 +1794,7 @@ class StatSampleBy(LogicalPlan):
                 fraction.fraction = float(v)
                 plan.sample_by.fractions.append(fraction)
         plan.sample_by.seed = self._seed
-        return self._with_relations(plan, [ref.plan(session) for ref in self._references])
+        return self._with_relations(plan, session)
 
 
 class StatCorr(LogicalPlan):
@@ -2457,7 +2454,7 @@ class GroupMap(LogicalPlan):
             [c.to_plan(session) for c in self._grouping_cols]
         )
         plan.group_map.func.CopyFrom(self._function.to_plan_udf(session))
-        return self._with_relations(plan, [ref.plan(session) for ref in self._references])
+        return self._with_relations(plan, session)
 
 
 class CoGroupMap(LogicalPlan):
@@ -2498,7 +2495,7 @@ class CoGroupMap(LogicalPlan):
             [c.to_plan(session) for c in self._other_grouping_cols]
         )
         plan.co_group_map.func.CopyFrom(self._function.to_plan_udf(session))
-        return self._with_relations(plan, [ref.plan(session) for ref in self._references])
+        return self._with_relations(plan, session)
 
 
 class ApplyInPandasWithState(LogicalPlan):
@@ -2537,7 +2534,7 @@ class ApplyInPandasWithState(LogicalPlan):
         plan.apply_in_pandas_with_state.state_schema = self._state_schema
         plan.apply_in_pandas_with_state.output_mode = self._output_mode
         plan.apply_in_pandas_with_state.timeout_conf = self._timeout_conf
-        return self._with_relations(plan, [ref.plan(session) for ref in self._references])
+        return self._with_relations(plan, session)
 
 
 class PythonUDTF:
@@ -2618,7 +2615,7 @@ class CommonInlineUserDefinedTableFunction(LogicalPlan):
         plan.common_inline_user_defined_table_function.python_udtf.CopyFrom(
             self._function.to_plan(session)
         )
-        return self._with_relations(plan, [ref.plan(session) for ref in self._references])
+        return self._with_relations(plan, session)
 
     def udtf_plan(
         self, session: "SparkConnectClient"

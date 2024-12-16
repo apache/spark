@@ -832,6 +832,19 @@ class SubqueryTestsMixin:
                 ),
             )
 
+    def test_subquery_with_generator_and_tvf(self):
+        with self.tempView("t1"):
+            t1 = self.table1()
+
+            assertDataFrameEqual(
+                self.spark.range(1).select(sf.explode(t1.select(sf.collect_list("c2")).scalar())),
+                self.spark.sql("""SELECT EXPLODE((SELECT COLLECT_LIST(c2) FROM t1))"""),
+            )
+            assertDataFrameEqual(
+                self.spark.tvf.explode(t1.select(sf.collect_list("c2")).scalar()),
+                self.spark.sql("""SELECT * FROM EXPLODE((SELECT COLLECT_LIST(c2) FROM t1))"""),
+            )
+
 
 class SubqueryTests(SubqueryTestsMixin, ReusedSQLTestCase):
     pass

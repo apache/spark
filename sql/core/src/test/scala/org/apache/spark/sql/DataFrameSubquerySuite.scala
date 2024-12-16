@@ -664,4 +664,19 @@ class DataFrameSubquerySuite extends QueryTest with SharedSparkSession {
       )
     }
   }
+
+  test("subquery with generator / table-valued functions") {
+    withView("t1") {
+      val t1 = table1()
+
+      checkAnswer(
+        spark.range(1).select(explode(t1.select(collect_list("c2")).scalar())),
+        sql("SELECT EXPLODE((SELECT COLLECT_LIST(c2) FROM t1))")
+      )
+      checkAnswer(
+        spark.tvf.explode(t1.select(collect_list("c2")).scalar()),
+        sql("SELECT * FROM EXPLODE((SELECT COLLECT_LIST(c2) FROM t1))")
+      )
+    }
+  }
 }
