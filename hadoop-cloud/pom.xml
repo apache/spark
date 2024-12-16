@@ -34,6 +34,7 @@
   </description>
   <properties>
     <sbt.project.name>hadoop-cloud</sbt.project.name>
+    <okio.version>1.17.6</okio.version>
   </properties>
 
   <dependencies>
@@ -190,6 +191,11 @@
       <artifactId>jetty-util-ajax</artifactId>
       <version>${jetty.version}</version>
       <scope>${hadoop.deps.scope}</scope>
+    </dependency>
+    <dependency>
+      <groupId>com.squareup.okio</groupId>
+      <artifactId>okio</artifactId>
+      <version>${okio.version}</version>
     </dependency>
   </dependencies>
 
