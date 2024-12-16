@@ -83,15 +83,14 @@ private[sql] class RocksDBStateStoreProvider
       val avroEnc = getAvroEnc(
         stateStoreEncoding, avroEncCacheKey, keyStateEncoderSpec, valueSchema)
 
-      val provider = RocksDBStateStoreProvider.this
       val columnFamilyInfo = Some(ColumnFamilyInfo(colFamilyName, newColFamilyId))
       keyValueEncoderMap.putIfAbsent(colFamilyName,
         (
           RocksDBStateEncoder.getKeyEncoder(
-            provider, keyStateEncoderSpec, useColumnFamilies,
+            keyStateEncoderSpec, useColumnFamilies,
             columnFamilyInfo, avroEnc),
           RocksDBStateEncoder.getValueEncoder(
-            provider, valueSchema, useMultipleValuesPerKey,
+            valueSchema, useMultipleValuesPerKey,
             useColumnFamilies, columnFamilyInfo, avroEnc)
         )
       )
@@ -405,14 +404,13 @@ private[sql] class RocksDBStateStoreProvider
       None
     }
 
-    val provider = RocksDBStateStoreProvider.this
     keyValueEncoderMap.putIfAbsent(colFamilyName,
       (
         RocksDBStateEncoder.getKeyEncoder(
-          provider, keyStateEncoderSpec, useColumnFamilies,
+          keyStateEncoderSpec, useColumnFamilies,
           columnFamilyInfo, avroEnc),
         RocksDBStateEncoder.getValueEncoder(
-          provider, valueSchema, useMultipleValuesPerKey,
+          valueSchema, useMultipleValuesPerKey,
           useColumnFamilies, columnFamilyInfo, avroEnc)
       )
     )
@@ -683,7 +681,7 @@ object RocksDBStateStoreProvider {
       avroOptions.stableIdPrefixForUnionType, avroOptions.recursiveFieldMaxDepth)
   }
 
-  private def createAvroEnc(
+  private[sql] def createAvroEnc(
       keyStateEncoderSpec: KeyStateEncoderSpec,
       valueSchema: StructType
   ): AvroEncoder = {
