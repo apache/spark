@@ -33,8 +33,9 @@ import org.apache.spark.sql.api.python.PythonSQLUtils
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
+import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.execution.streaming.{ImplicitGroupingKeyTracker, StatefulProcessorHandleImpl, StatefulProcessorHandleState, StateVariableType}
-import org.apache.spark.sql.execution.streaming.state.StateMessage.{HandleState, ImplicitGroupingKeyRequest, ListStateCall, MapStateCall, StatefulProcessorCall, StateRequest, StateResponse, StateResponseWithLongTypeVal, StateVariableRequest, TimerRequest, TimerStateCallCommand, TimerValueRequest, ValueStateCall}
+import org.apache.spark.sql.execution.streaming.state.StateMessage.{HandleState, ImplicitGroupingKeyRequest, ListStateCall, MapStateCall, StatefulProcessorCall, StateRequest, StateResponse, StateResponseWithLongTypeVal, StateResponseWithStringTypeVal, StateVariableRequest, TimerRequest, TimerStateCallCommand, TimerValueRequest, UtilsRequest, ValueStateCall}
 import org.apache.spark.sql.streaming.{ListState, MapState, TTLConfig, ValueState}
 import org.apache.spark.sql.types.{BinaryType, LongType, StructField, StructType}
 import org.apache.spark.sql.util.ArrowUtils
@@ -186,6 +187,19 @@ class TransformWithStateInPandasStateServer(
         handleStateVariableRequest(message.getStateVariableRequest)
       case StateRequest.MethodCase.TIMERREQUEST =>
         handleTimerRequest(message.getTimerRequest)
+      case StateRequest.MethodCase.UTILSREQUEST =>
+        handleUtilsRequest(message.getUtilsRequest)
+      case _ =>
+        throw new IllegalArgumentException("Invalid method call")
+    }
+  }
+
+  private[sql] def handleUtilsRequest(message: UtilsRequest): Unit = {
+    message.getMethodCase match {
+      case UtilsRequest.MethodCase.PARSESTRINGSCHEMA =>
+        val stringSchema = message.getParseStringSchema.getSchema
+        val schema = CatalystSqlParser.parseTableSchema(stringSchema)
+        sendResponseWithStringVal(0, null, schema.json)
       case _ =>
         throw new IllegalArgumentException("Invalid method call")
     }
@@ -683,6 +697,22 @@ class TransformWithStateInPandasStateServer(
         responseMessageBuilder.setErrorMessage(errorMessage)
       }
       responseMessageBuilder.setValue(longVal)
+      val responseMessage = responseMessageBuilder.build()
+      val responseMessageBytes = responseMessage.toByteArray
+      val byteLength = responseMessageBytes.length
+      outputStream.writeInt(byteLength)
+      outputStream.write(responseMessageBytes)
+    }
+
+    def sendResponseWithStringVal(
+        status: Int,
+        errorMessage: String = null,
+        stringVal: String): Unit = {
+      val responseMessageBuilder = StateResponseWithStringTypeVal.newBuilder().setStatusCode(status)
+      if (status != 0 && errorMessage != null) {
+        responseMessageBuilder.setErrorMessage(errorMessage)
+      }
+      responseMessageBuilder.setValue(stringVal)
       val responseMessage = responseMessageBuilder.build()
       val responseMessageBytes = responseMessage.toByteArray
       val byteLength = responseMessageBytes.length

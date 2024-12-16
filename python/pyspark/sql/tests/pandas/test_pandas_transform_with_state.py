@@ -1061,8 +1061,9 @@ class SimpleStatefulProcessor(StatefulProcessor, unittest.TestCase):
     batch_id = 0
 
     def init(self, handle: StatefulProcessorHandle) -> None:
+        # Test both string type and struct type schemas
+        self.num_violations_state = handle.getValueState("numViolations", "value int")
         state_schema = StructType([StructField("value", IntegerType(), True)])
-        self.num_violations_state = handle.getValueState("numViolations", state_schema)
         self.temp_state = handle.getValueState("tempState", state_schema)
         handle.deleteIfExists("tempState")
 
@@ -1253,9 +1254,8 @@ class ListStateLargeTTLProcessor(ListStateProcessor):
 
 class MapStateProcessor(StatefulProcessor):
     def init(self, handle: StatefulProcessorHandle):
-        key_schema = StructType([StructField("name", StringType(), True)])
-        value_schema = StructType([StructField("count", IntegerType(), True)])
-        self.map_state = handle.getMapState("mapState", key_schema, value_schema)
+        # Test string type schemas
+        self.map_state = handle.getMapState("mapState", "name string", "count int")
 
     def handleInputRows(self, key, rows, timer_values) -> Iterator[pd.DataFrame]:
         count = 0

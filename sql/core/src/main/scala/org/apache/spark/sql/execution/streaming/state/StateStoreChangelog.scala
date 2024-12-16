@@ -353,7 +353,7 @@ class StateStoreChangelogReaderFactory(
   }
   protected val input: DataInputStream = decompressStream(sourceStream)
 
-  private def readVersion(): Short = {
+  private lazy val changeLogVersion: Short = {
     try {
       val versionStr = input.readUTF()
       // Versions in the first line are prefixed with "v", e.g. "v2"
@@ -379,7 +379,7 @@ class StateStoreChangelogReaderFactory(
   def constructChangelogReader(): StateStoreChangelogReader = {
     var reader: StateStoreChangelogReader = null
     try {
-      reader = readVersion() match {
+      reader = changeLogVersion match {
         case 1 => new StateStoreChangelogReaderV1(fm, fileToRead, compressionCodec)
         case 2 => new StateStoreChangelogReaderV2(fm, fileToRead, compressionCodec)
         case 3 => new StateStoreChangelogReaderV3(fm, fileToRead, compressionCodec)
@@ -389,6 +389,7 @@ class StateStoreChangelogReaderFactory(
     } finally {
       if (input != null) {
         input.close()
+        // input is not set to null because it is effectively lazy.
       }
     }
     reader
