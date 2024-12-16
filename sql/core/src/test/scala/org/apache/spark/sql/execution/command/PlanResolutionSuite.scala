@@ -964,31 +964,19 @@ class PlanResolutionSuite extends AnalysisTest {
   test("DESCRIBE AS JSON relation") {
     Seq("v1Table" -> true, "v2Table" -> false, "testcat.tab" -> false).foreach {
       case (tblName, useV1Command) =>
-        val sql1 = s"DESC TABLE $tblName AS JSON"
-        val sql2 = s"DESC TABLE EXTENDED $tblName AS JSON"
-        val parsed1 = parseAndResolve(sql1)
-        val parsed2 = parseAndResolve(sql2)
+        val sql = s"DESC TABLE EXTENDED $tblName AS JSON"
+        val parsed = parseAndResolve(sql)
         if (useV1Command) {
-          val expected1 = DescribeTableCommand(
-            TableIdentifier(tblName, Some("default"), Some(SESSION_CATALOG_NAME)),
-            Map.empty, false, parsed1.output)
           val expected2 = DescribeTableCommand(
             TableIdentifier(tblName, Some("default"), Some(SESSION_CATALOG_NAME)),
-            Map.empty, true, parsed2.output)
+            Map.empty, true, parsed.output)
 
-          comparePlans(parsed1, expected1)
-          comparePlans(parsed2, expected2)
+          comparePlans(parsed, expected2)
         } else {
-          parsed1 match {
-            case DescribeRelation(_: ResolvedTable, _, isExtended, asJson, _) =>
-              assert(!isExtended && asJson)
-            case _ => fail("Expect DescribeTable, but got:\n" + parsed1.treeString)
-          }
-
-          parsed2 match {
+          parsed match {
             case DescribeRelation(_: ResolvedTable, _, isExtended, asJson, _) =>
               assert(isExtended && asJson)
-            case _ => fail("Expect DescribeTable, but got:\n" + parsed2.treeString)
+            case _ => fail("Expect DescribeTable, but got:\n" + parsed.treeString)
           }
         }
 

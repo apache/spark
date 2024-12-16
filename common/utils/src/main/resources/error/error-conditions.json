@@ -5221,14 +5221,14 @@
           "Attach a comment to the namespace <namespace>."
         ]
       },
-      "DESC_TABLE_COLUMN_PARTITION" : {
-        "message" : [
-          "DESC TABLE COLUMN for a specific partition."
-        ]
-      },
       "DESC_TABLE_COLUMN_JSON" : {
         "message" : [
           "DESC TABLE COLUMN AS JSON not supported for individual columns."
+        ]
+      },
+      "DESC_TABLE_COLUMN_PARTITION" : {
+        "message" : [
+          "DESC TABLE COLUMN for a specific partition."
         ]
       },
       "DROP_DATABASE" : {

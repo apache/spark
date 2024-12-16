@@ -72,8 +72,10 @@ abstract class DataType extends AbstractDataType {
   /** The pretty (i.e. indented) JSON representation of this data type. */
   def prettyJson: String = pretty(render(jsonValue))
 
-  /** Util to recursively form JSON representation of data type, used for DESCRIBE AS JSON.
-   * Differs from `json` by overriding the JSON representation of some types. */
+  /**
+   * Util to recursively form JSON representation of data type, used for DESCRIBE AS JSON. Differs
+   * from `json` by overriding the JSON representation of some types.
+   */
   def jsonType: String = {
     this match {
       case arrayType: ArrayType =>
@@ -88,10 +90,12 @@ abstract class DataType extends AbstractDataType {
            |"valueContainsNull": ${mapType.valueContainsNull}}""".stripMargin
 
       case structType: StructType =>
-        val fieldsJson = structType.fields.map { field =>
-          val fieldTypeJson = field.dataType.jsonType
-          s"""{"name": "${field.name}", "type": $fieldTypeJson, "nullable": ${field.nullable}}"""
-        }.mkString(", ")
+        val fieldsJson = structType.fields
+          .map { field =>
+            val fieldTypeJson = field.dataType.jsonType
+            s"""{"name": "${field.name}", "type": $fieldTypeJson, "nullable": ${field.nullable}}"""
+          }
+          .mkString(", ")
         s"""{"type": "struct", "fields": [$fieldsJson]}"""
 
       case decimalType: DecimalType =>

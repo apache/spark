@@ -251,8 +251,8 @@ class DescribeTableSuite extends v1.DescribeTableSuiteBase with CommandSuiteBase
       val expectedOutput = DescribeTableJson(
         table_name = Some("table"),
         catalog_names = Some(List("spark_catalog")),
-        database_names = Some(List("default")),
-        qualified_name = Some("spark_catalog.default.table"),
+        database_names = Some(List("ns")),
+        qualified_name = Some("spark_catalog.ns.table"),
         columns = Some(List(
           TableColumn(1, "a", Type("string"), default_value = Some("'default-value'")),
           TableColumn(2, "b", Type("integer"), default_value = Some("42"))
@@ -365,8 +365,8 @@ class DescribeTableSuite extends v1.DescribeTableSuiteBase with CommandSuiteBase
       val expectedOutput = DescribeTableJson(
         table_name = Some("table"),
         catalog_names = Some(List("spark_catalog")),
-        database_names = Some(List("default")),
-        qualified_name = Some("spark_catalog.default.table"),
+        database_names = Some(List("ns")),
+        qualified_name = Some("spark_catalog.ns.table"),
         columns = Some(List(
           TableColumn(
             id = 1,
