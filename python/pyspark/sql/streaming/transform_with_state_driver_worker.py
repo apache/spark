@@ -41,14 +41,19 @@ def main(infile: IO, outfile: IO) -> None:
     check_python_version(infile)
 
     log_name = "Streaming TransformWithStateInPandas Python worker"
+    print(f"Starting {log_name}.\n")
 
     def process(processor, mode, key, input):
-        print(f"{log_name} Started execution of UDF: {func}.\n")
+        print(f"{log_name} Starting execution of UDF: {func}.\n")
         func(processor, mode, key, input)
         print(f"{log_name} Completed execution of UDF: {func}.\n")
 
     try:
         func, return_type = worker.read_command(pickle_ser, infile)
+        print(
+            f"{log_name} finish init stage of Python runner. Received UDF from JVM: {func}, "
+            f"received return type of UDF: {return_type}.\n"
+        )
         # send signal for getting args
         write_int(0, outfile)
         outfile.flush()
