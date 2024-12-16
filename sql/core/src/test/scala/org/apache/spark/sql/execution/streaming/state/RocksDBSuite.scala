@@ -39,12 +39,16 @@ import org.scalatest.Tag
 import org.apache.spark.{SparkConf, SparkException, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.io.CompressionCodec
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.UnsafeProjection
 import org.apache.spark.sql.catalyst.util.quietly
 import org.apache.spark.sql.execution.streaming.{CheckpointFileManager, CreateAtomicTestManager, FileContextBasedCheckpointFileManager, FileSystemBasedCheckpointFileManager}
 import org.apache.spark.sql.execution.streaming.CheckpointFileManager.{CancellableFSDataOutputStream, RenameBasedFSDataOutputStream}
+import org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider.createAvroEnc
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.STREAMING_CHECKPOINT_FILE_MANAGER_CLASS
 import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
+import org.apache.spark.sql.types._
 import org.apache.spark.tags.SlowSQLTest
 import org.apache.spark.util.{ThreadUtils, Utils}
 import org.apache.spark.util.ArrayImplicits._
@@ -1893,11 +1897,11 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
         withDB(remoteDir, conf = dbConf, useColumnFamilies = colFamiliesEnabled) { db =>
           db.load(0)
 
-          val keyRowPrefixEncoder = new TestStateRowPrefixEncoder(
+          val keyRowPrefixEncoder = new StateRowPrefixEncoder(
             useColumnFamilies = colFamiliesEnabled,
             colFamilyInfo, supportSchemaEvolution = schemaEvolutionEnabled)
 
-          val valueRowPrefixEncoder = new TestStateRowPrefixEncoder(
+          val valueRowPrefixEncoder = new StateRowPrefixEncoder(
             false, None, supportSchemaEvolution = schemaEvolutionEnabled)
 
           // Create some test data with known prefix values
@@ -1938,6 +1942,126 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
           val retrievedValueData = valueRowPrefixEncoder.decodeStateRowData(retrievedValue)
           assert(retrievedKeyData === testData)
           assert(retrievedValueData === testData)
+        }
+      }
+    }
+  }
+
+  Seq(true, false).foreach { schemaEvolutionEnabled =>
+    testWithColumnFamilies(
+      s"verify RocksDB key and value encoders with schema evolution set to $schemaEvolutionEnabled",
+      TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
+      withTempDir { dir =>
+        val sqlConf = SQLConf.get.clone()
+        val dbConf = RocksDBConf(StateStoreConf(sqlConf))
+
+        // Define test schemas
+        val keySchema = StructType(Seq(
+          StructField("k1", IntegerType),
+          StructField("k2", IntegerType)
+        ))
+        val valueSchema = StructType(Seq(
+          StructField("v1", LongType),
+          StructField("v2", BooleanType)
+        ))
+
+        val colFamilyInfo = if (colFamiliesEnabled) {
+          Some(ColumnFamilyInfo("testFamily", 1))
+        } else {
+          None
+        }
+
+        // Create test data
+        val keyProj = UnsafeProjection.create(keySchema)
+        val keyRow = keyProj.apply(InternalRow(42, 24))
+
+        val valueProj = UnsafeProjection.create(valueSchema)
+        val valueRow = valueProj.apply(InternalRow(123L, true))
+
+
+        val remoteDir = dir.getCanonicalPath
+
+        Seq(
+          ("NoPrefixKey", NoPrefixKeyStateEncoderSpec(keySchema)),
+          ("PrefixKey", PrefixKeyScanStateEncoderSpec(keySchema, 1)),
+          ("RangeKey", RangeKeyScanStateEncoderSpec(keySchema, Seq(0)))
+        ).foreach { case (encoderType, keySpec) =>
+          Seq(true, false).foreach { useMultipleValues =>
+            withDB(remoteDir, conf = dbConf, useColumnFamilies = colFamiliesEnabled) { db =>
+              db.load(0)
+              val avroEnc = if (schemaEvolutionEnabled) {
+                Some(createAvroEnc(keySpec, valueSchema))
+              } else {
+                None
+              }
+              val keyEncoder = RocksDBStateEncoder.getKeyEncoder(
+                keyStateEncoderSpec = keySpec,
+                useColumnFamilies = colFamiliesEnabled,
+                columnFamilyInfo = colFamilyInfo,
+                avroEnc
+              )
+
+              // Test both single and multi-value encoders
+              val valueEncoder = RocksDBStateEncoder.getValueEncoder(
+                valueSchema = valueSchema,
+                useMultipleValuesPerKey = useMultipleValues,
+                useColumnFamilies = colFamiliesEnabled,
+                columnFamilyInfo = colFamilyInfo,
+                avroEnc
+              )
+
+              // Encode and write to DB
+              val encodedKey = keyEncoder.encodeKey(keyRow)
+              val encodedValue = valueEncoder.encodeValue(valueRow)
+              db.put(encodedKey, encodedValue)
+              db.commit()
+
+              // Read and decode
+              val retrievedValue = db.get(encodedKey)
+              val decodedKey = keyEncoder.decodeKey(encodedKey)
+              val decodedValue = valueEncoder.decodeValue(retrievedValue)
+
+              // Verify key contents
+              assert(decodedKey.getInt(0) === 42)
+              assert(decodedKey.getInt(1) === 24)
+
+              // Verify value contents
+              assert(decodedValue.getLong(0) === 123L)
+              assert(decodedValue.getBoolean(1) === true)
+
+              // Verify schema evolution prefix if enabled
+              if (schemaEvolutionEnabled) {
+                val keyPrefix = keyEncoder.asInstanceOf[StateRowPrefixEncoder]
+                  .decodeStateRowPrefix(encodedKey)
+                assert(keyPrefix.schemaId.isDefined == schemaEvolutionEnabled)
+                assert(keyPrefix.schemaId.get === 0) // default schema ID
+
+                val valuePrefix = valueEncoder.asInstanceOf[StateRowPrefixEncoder]
+                  .decodeStateRowPrefix(encodedValue)
+                assert(valuePrefix.schemaId.isDefined == schemaEvolutionEnabled)
+                assert(valuePrefix.schemaId.get === 0)
+              }
+
+              // Verify column family prefix if enabled
+              if (colFamiliesEnabled) {
+                val keyPrefix = keyEncoder.asInstanceOf[StateRowPrefixEncoder]
+                  .decodeStateRowPrefix(encodedKey)
+                assert(keyPrefix.columnFamilyId.isDefined)
+                assert(keyPrefix.columnFamilyId.get === 1)
+              }
+
+              // Additional verification for multi-valued encoder
+              if (useMultipleValues) {
+                // Verify we can decode multiple values
+                val valueIter = valueEncoder.decodeValues(retrievedValue)
+                assert(valueIter.hasNext)
+                val firstValue = valueIter.next()
+                assert(firstValue.getLong(0) === 123L)
+                assert(firstValue.getBoolean(1) === true)
+                assert(!valueIter.hasNext)
+              }
+            }
+          }
         }
       }
     }
