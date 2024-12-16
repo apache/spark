@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LeafNode, LogicalPlan, Project, Union}
 import org.apache.spark.sql.catalyst.trees.TreePattern._
+import org.apache.spark.sql.catalyst.util.SparkStringUtils.truncatedString
 import org.apache.spark.sql.catalyst.util.{CollationFactory, TypeUtils}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -487,13 +488,8 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
     }
   }
 
-  override def simpleString(maxFields: Int): String = {
-    if (list.length <= maxFields) {
-      s"$value IN ${list.mkString("(", ",", ")")}"
-    } else {
-      s"$value IN ${list.take(maxFields).mkString("(", ",", ", ...)")}"
-    }
-  }
+  override def simpleString(maxFields: Int): String =
+    s"$value IN ${truncatedString(list, "(", ", ", ")", maxFields)}"
 
   override def toString: String = simpleString(Int.MaxValue)
 
@@ -628,11 +624,12 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
         .mkString(", ")
       s"$child INSET $listString"
     } else {
-      // Skip sorting if there are many elements.
+      // Skip sorting if there are many elements. Do not use truncatedString because we would have
+      // to convert elements we do not print to Literals.
       val listString = hset.take(maxFields).toSeq
         .map(elem => Literal(elem, child.dataType).toString)
         .mkString(", ")
-      s"$child INSET $listString, ..."
+      s"$child INSET $listString, ... ${hset.size - maxFields} more fields"
     }
   }
 
