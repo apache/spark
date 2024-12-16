@@ -20,6 +20,7 @@ package org.apache.spark.storage
 import scala.jdk.CollectionConverters._
 
 import org.scalatest.concurrent.Eventually
+import org.scalatest.time._
 
 import org.apache.spark._
 import org.apache.spark.internal.config
@@ -28,6 +29,9 @@ import org.apache.spark.util.ResetSystemProperties
 
 class BlockTTLIntegrationSuite extends SparkFunSuite with LocalSparkContext
     with ResetSystemProperties with Eventually {
+
+  implicit override val patienceConfig: PatienceConfig =
+    PatienceConfig(timeout = scaled(Span(20, Seconds)), interval = scaled(Span(5, Millis)))
 
   val numExecs = 3
   val numParts = 3
@@ -79,7 +83,7 @@ class BlockTTLIntegrationSuite extends SparkFunSuite with LocalSparkContext
   test(s"Test that shuffle blocks are tracked properly and removed after TTL") {
     val ttl = 250L
     val conf = new SparkConf()
-      .setAppName("test-blockmanager-decommissioner")
+      .setAppName("test-blockmanager-ttls-shuffle-only")
       .setMaster("local-cluster[2, 1, 1024]")
       .set(config.SPARK_TTL_BLOCK_CLEANER, ttl)
       .set(config.SPARK_TTL_SHUFFLE_BLOCK_CLEANER, ttl)
@@ -99,20 +103,19 @@ class BlockTTLIntegrationSuite extends SparkFunSuite with LocalSparkContext
     // Check that the shuffle blocks were NOT registered with the RDD TTL tracker.
     assert(managerMasterEndpoint.rddAccessTime.isEmpty)
     // Check that the shuffle blocks are registered with the map output TTL
-    assert(!mapOutputTracker.shuffleAccessTime.isEmpty)
-    // Wait for it to expire.
-    Thread.sleep(2 * ttl)
+    eventually { assert(!mapOutputTracker.shuffleAccessTime.isEmpty) }
     // It should be expired!
     val t = System.currentTimeMillis()
-    assert(mapOutputTracker.shuffleAccessTime.isEmpty,
-      s"We should have no blocks since we are now at time ${t} with ttl of ${ttl}")
+    eventually { assert(
+      mapOutputTracker.shuffleAccessTime.isEmpty,
+      s"We should have no blocks since we are now at time ${t} with ttl of ${ttl}") }
   }
 
 
   test(s"Test that all blocks are tracked properly and removed after TTL") {
     val ttl = 250L
     val conf = new SparkConf()
-      .setAppName("test-blockmanager-decommissioner")
+      .setAppName("test-blockmanager-ttls-enabled")
       .setMaster("local-cluster[2, 1, 1024]")
       .set(config.SPARK_TTL_BLOCK_CLEANER, ttl)
       .set(config.SPARK_TTL_SHUFFLE_BLOCK_CLEANER, ttl)
@@ -123,23 +126,26 @@ class BlockTTLIntegrationSuite extends SparkFunSuite with LocalSparkContext
     val mapOutputTracker = lookupMapOutputTrackerMaster(sc)
     assert(managerMasterEndpoint.rddAccessTime.isEmpty)
     // Make some cache blocks
-    val input = sc.parallelize(1.to(100)).groupBy(_ % 10).cache()
-    input.count()
+    val input = sc.parallelize(1.to(100)).groupBy(_ % 10)
+    val cachedInput = input.cache()
+    cachedInput.count()
     // Check that we have both shuffle & RDD blocks registered
-    assert(!managerMasterEndpoint.rddAccessTime.isEmpty)
-    assert(!mapOutputTracker.shuffleAccessTime.isEmpty)
-    // Wait for it to expire.
-    Thread.sleep(2 * ttl)
+    eventually { assert(!managerMasterEndpoint.rddAccessTime.isEmpty) }
+    eventually { assert(!mapOutputTracker.shuffleAccessTime.isEmpty) }
     // Both should be expired!
     val t = System.currentTimeMillis()
-    assert(mapOutputTracker.shuffleAccessTime.isEmpty,
-      s"We should have no blocks since we are now at time ${t} with ttl of ${ttl}")
-    assert(managerMasterEndpoint.rddAccessTime.isEmpty,
-      s"We should have no blocks since we are now at time ${t} with ttl of ${ttl}")
+    eventually {
+      assert(mapOutputTracker.shuffleAccessTime.isEmpty,
+        s"We should have no blocks since we are now at time ${t} with ttl of ${ttl}")
+      assert(managerMasterEndpoint.rddAccessTime.isEmpty,
+        s"We should have no blocks since we are now at time ${t} with ttl of ${ttl}")
+    }
     // And redoing the count should work and everything should come back.
     input.count()
-    assert(!managerMasterEndpoint.rddAccessTime.isEmpty)
-    assert(!mapOutputTracker.shuffleAccessTime.isEmpty)
+    eventually {
+      assert(!managerMasterEndpoint.rddAccessTime.isEmpty)
+      assert(!mapOutputTracker.shuffleAccessTime.isEmpty)
+    }
   }
 
   test(s"Test that blocks TTLS are not tracked when not enabled") {
