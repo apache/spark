@@ -99,7 +99,6 @@ case class StateRowPrefix(
  * The encoded row format with all prefixes enabled is:
  * [Column Family ID (optional)] [Schema ID (optional)] [Actual Data]
  *
- * @param provider The RocksDBStateStoreProvider instance managing this encoder
  * @param useColumnFamilies Whether column families are enabled for this encoder
  * @param columnFamilyInfo Optional information about the column family when enabled
  * @param supportSchemaEvolution Whether schema evolution is enabled for this encoder
