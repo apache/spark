@@ -279,15 +279,14 @@ abstract class OneToOneTTLState(
     var numValuesExpired = 0L
 
     ttlEvictionIterator().foreach { ttlKey =>
-      // Delete from secondary index
-      deleteFromTTLIndex(ttlKey)
-      // Delete from primary index
       store.remove(toTTLRow(ttlKey).elementKey, stateName)
+      deleteFromTTLIndex(ttlKey)
+
+      TWSMetricsUtils.incrementMetric(metrics, "numRemovedStateRows", 2L)
 
       numValuesExpired += 1
     }
 
-    TWSMetricsUtils.incrementMetric(metrics, "numRemovedStateRows", numValuesExpired)
     numValuesExpired
   }
 
@@ -297,9 +296,9 @@ abstract class OneToOneTTLState(
       val existingExpirationMs = existingPrimaryValue.getLong(1)
 
       store.remove(elementKey, stateName)
-      TWSMetricsUtils.incrementMetric(metrics, "numRemovedStateRows")
-
       deleteFromTTLIndex(existingExpirationMs, elementKey)
+
+      TWSMetricsUtils.incrementMetric(metrics, "numRemovedStateRows", 2L)
     }
   }
 }
@@ -508,10 +507,15 @@ abstract class OneToManyTTLState(
       val numValuesExpired = valueExpirationResult.numValuesExpired
       val newEntryCount = entryCountBeforeExpirations - numValuesExpired
 
-      TWSMetricsUtils.incrementMetric(metrics, "numRemovedStateRows", numValuesExpired)
-
       if (newEntryCount == 0) {
+        assert(valueExpirationResult.newMinExpirationMs.isEmpty, "Entry count was 0, but a new " +
+          "minimum expiration for the list was defined. This should never happen.")
         removeEntryCount(elementKey)
+
+        // We removed the record from the TTL index, minimum index, and the state variable's
+        // clearExpiredValues method should have removed from the primary index. We just removed
+        // the entry from the count index, leading to 4 total removals for this state variable.
+        TWSMetricsUtils.incrementMetric(metrics, "numRemovedStateRows", 4L)
       } else {
         updateEntryCount(elementKey, newEntryCount)
       }
@@ -528,11 +532,11 @@ abstract class OneToManyTTLState(
       val existingMinExpiration = existingMinExpirationUnsafeRow.getLong(0)
 
       store.remove(elementKey, stateName)
-      TWSMetricsUtils.incrementMetric(metrics, "numRemovedStateRows", getEntryCount(elementKey))
       removeEntryCount(elementKey)
-
       store.remove(elementKey, MIN_INDEX)
       deleteFromTTLIndex(existingMinExpiration, elementKey)
+
+      TWSMetricsUtils.incrementMetric(metrics, "numRemovedStateRows", 4L)
     }
   }
 

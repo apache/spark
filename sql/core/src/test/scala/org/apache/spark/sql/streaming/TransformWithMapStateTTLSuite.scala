@@ -168,6 +168,8 @@ class MapStateTTLProcessor(ttlConfig: TTLConfig)
       iter.foreach { elem =>
         results = MapOutputEvent(key, elem._1, elem._2, isTTLValue = false, -1) :: results
       }
+    } else if (row.action == "clear") {
+      mapState.clear()
     }
 
     results.iterator
@@ -219,7 +221,17 @@ class TransformWithMapStateTTLSuite extends TransformWithStateTTLTest {
         AdvanceManualClock(30 * 1000),
         CheckNewAnswer(MapOutputEvent("k1", "key2", 2, isTTLValue = false, -1)),
         Execute { q =>
-          assert(q.lastProgress.stateOperators(0).numRowsRemoved === 1)
+          assert(q.lastProgress.stateOperators(0).numRowsRemoved === 2)
+          assert(q.lastProgress.stateOperators(0).customMetrics
+            .get("numValuesRemovedDueToTTLExpiry") == 1)
+        },
+        AddData(inputStream, MapInputEvent("k1", "", "clear", -1)),
+        AdvanceManualClock(1 * 1000),
+        CheckNewAnswer(),
+        Execute { q =>
+          assert(q.lastProgress.stateOperators(0).numRowsRemoved === 2)
+          assert(q.lastProgress.stateOperators(0).customMetrics
+            .get("numValuesRemovedDueToTTLExpiry") == 0)
         },
         StopStream
       )

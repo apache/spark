@@ -305,7 +305,9 @@ class TransformWithListStateTTLSuite extends TransformWithStateTTLTest
           OutputEvent("k1", 6, isTTLValue = false, -1)
         ),
         Execute { q =>
-          assert(q.lastProgress.stateOperators(0).numRowsRemoved === 3)
+          assert(q.lastProgress.stateOperators(0).numRowsRemoved === 0)
+          assert(q.lastProgress.stateOperators(0).customMetrics
+            .get("numValuesRemovedDueToTTLExpiry") === 3)
         },
         // ensure that expired elements are no longer in state
         AddData(inputStream, InputEvent("k1", "get_without_enforcing_ttl", -1, null)),
@@ -319,7 +321,15 @@ class TransformWithListStateTTLSuite extends TransformWithStateTTLTest
         AdvanceManualClock(1 * 1000),
         CheckNewAnswer(
           OutputEvent("k1", -1, isTTLValue = true, 109000)
-        )
+        ),
+        AddData(inputStream, InputEvent("k1", "clear", -1, null)),
+        AdvanceManualClock(1 * 1000),
+        CheckNewAnswer(),
+        Execute { q =>
+          assert(q.lastProgress.stateOperators(0).numRowsRemoved === 4)
+          assert(q.lastProgress.stateOperators(0).customMetrics
+            .get("numValuesRemovedDueToTTLExpiry") === 0)
+        }
       )
     }
   }

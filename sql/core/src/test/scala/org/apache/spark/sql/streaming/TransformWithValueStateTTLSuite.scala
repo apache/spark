@@ -246,6 +246,11 @@ class TransformWithValueStateTTLSuite extends TransformWithStateTTLTest {
         AdvanceManualClock(1 * 1000),
         // validate ttlKey is expired, bot noTtlKey is still present
         CheckNewAnswer(OutputEvent(noTtlKey, 2, isTTLValue = false, -1)),
+        Execute { q =>
+          assert(q.lastProgress.stateOperators(0).numRowsRemoved === 2)
+          assert(q.lastProgress.stateOperators(0).customMetrics
+            .get("numValuesRemovedDueToTTLExpiry") == 1)
+        },
         // validate ttl value is removed in the value state column family
         AddData(inputStream, InputEvent(ttlKey, "get_ttl_value_from_state", -1)),
         AdvanceManualClock(1 * 1000),
@@ -260,7 +265,18 @@ class TransformWithValueStateTTLSuite extends TransformWithStateTTLTest {
         AdvanceManualClock(60 * 1000),
         CheckNewAnswer(OutputEvent(noTtlKey, 2, isTTLValue = false, -1)),
         Execute { q =>
+          assert(q.lastProgress.stateOperators(0).numRowsRemoved === 2)
+          assert(q.lastProgress.stateOperators(0).customMetrics
+            .get("numValuesRemovedDueToTTLExpiry") == 1)
+        },
+        AddData(inputStream, InputEvent(noTtlKey, "clear", -1)),
+        AdvanceManualClock(1 * 1000),
+        CheckNewAnswer(),
+        Execute { q =>
+          assert(q.lastProgress.stateOperators(0).numRowsTotal === 0)
           assert(q.lastProgress.stateOperators(0).numRowsRemoved === 1)
+          assert(q.lastProgress.stateOperators(0).customMetrics
+            .get("numValuesRemovedDueToTTLExpiry") == 0)
         }
       )
     }
