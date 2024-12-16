@@ -676,11 +676,11 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("In and InSet logging limits") {
-    withSQLConf(SQLConf.MAX_TO_STRING_FIELDS.key -> 1.toString) {
-      assert(In(Literal(1), Seq(Literal(1), Literal(2))).toString === "1 IN (1, ...)")
-      assert(In(Literal(1), Seq(Literal(1))).toString === "1 IN (1)")
-      assert(InSet(Literal(1), Set(1, 2)).toString === "1 INSET 1, ...")
-      assert(InSet(Literal(1), Set(1)).toString === "1 INSET 1")
-    }
+    assert(In(Literal(1), Seq(Literal(1), Literal(2))).simpleString(1) === "1 IN (1, ...)")
+    assert(In(Literal(1), Seq(Literal(1), Literal(2))).simpleString(2) === "1 IN (1,2)")
+    assert(In(Literal(1), Seq(Literal(1))).simpleString(1) === "1 IN (1)")
+    assert(InSet(Literal(1), Set(1, 2)).simpleString(1) === "1 INSET 1, ...")
+    assert(InSet(Literal(1), Set(1, 2)).simpleString(2) === "1 INSET 1, 2")
+    assert(InSet(Literal(1), Set(1)).simpleString(1) === "1 INSET 1")
   }
 }

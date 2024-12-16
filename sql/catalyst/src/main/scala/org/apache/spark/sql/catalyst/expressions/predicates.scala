@@ -495,7 +495,7 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
     }
   }
 
-  override def toString: String = simpleString(SQLConf.get.maxToStringFields)
+  override def toString: String = simpleString(Int.MaxValue)
 
   override def eval(input: InternalRow): Any = {
     if (list.isEmpty && !legacyNullInEmptyBehavior) {
@@ -636,7 +636,7 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
     }
   }
 
-  override def toString: String = simpleString(SQLConf.get.maxToStringFields)
+  override def toString: String = simpleString(Int.MaxValue)
 
   @transient private[this] lazy val hasNull: Boolean = hset.contains(null)
   @transient private[this] lazy val isNaN: Any => Boolean = child.dataType match {
