@@ -23,6 +23,7 @@ import "spark/connect/expressions.proto";
 
 option java_multiple_files = true;
 option java_package = "org.apache.spark.connect.proto";
+option go_package = "internal/generated";
 
 // MlParams stores param settings for ML Estimator / Transformer / Evaluator
 message MlParams {
