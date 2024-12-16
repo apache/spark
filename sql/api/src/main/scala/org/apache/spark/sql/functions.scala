@@ -5075,8 +5075,8 @@ object functions {
   def right(str: Column, len: Column): Column = Column.fn("right", str, len)
 
   /**
-   * Returns `str` enclosed by single quotes and
-   * each instance of single quote in it is preceded by a backslash.
+   * Returns `str` enclosed by single quotes and each instance of single quote in it is preceded
+   * by a backslash.
    *
    * @group string_funcs
    * @since 4.0.0
