@@ -107,7 +107,7 @@ object V1Writes extends Rule[LogicalPlan] with SQLConfHelper {
     if (orderingMatched) {
       empty2NullPlan
     } else {
-      Clustering(requiredOrdering, global = false, empty2NullPlan)
+      Clustering(requiredOrdering, empty2NullPlan)
     }
   }
 }
