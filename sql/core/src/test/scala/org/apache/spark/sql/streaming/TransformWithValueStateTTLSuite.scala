@@ -238,16 +238,14 @@ class TransformWithValueStateTTLSuite extends TransformWithStateTTLTest {
         AddData(inputStream, InputEvent(noTtlKey, "get_values_in_ttl_state", -1)),
         AdvanceManualClock(1 * 1000),
         CheckNewAnswer(OutputEvent(ttlKey, -1, isTTLValue = true, 61000)),
-        // advance clock after expiry
-        AdvanceManualClock(60 * 1000),
         AddData(inputStream, InputEvent(ttlKey, "get", -1)),
         AddData(inputStream, InputEvent(noTtlKey, "get", -1)),
         // advance clock to trigger processing
-        AdvanceManualClock(1 * 1000),
-        // validate ttlKey is expired, bot noTtlKey is still present
+        AdvanceManualClock(60 * 1000),
+        // validate ttlKey is expired, but noTtlKey is still present
         CheckNewAnswer(OutputEvent(noTtlKey, 2, isTTLValue = false, -1)),
         Execute { q =>
-          assert(q.lastProgress.stateOperators(0).numRowsRemoved === 2)
+           assert(q.lastProgress.stateOperators(0).numRowsRemoved === 2)
           assert(q.lastProgress.stateOperators(0).customMetrics
             .get("numValuesRemovedDueToTTLExpiry") == 1)
         },
