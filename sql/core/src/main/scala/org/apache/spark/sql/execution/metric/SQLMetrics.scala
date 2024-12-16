@@ -84,6 +84,10 @@ class SQLMetric(
     }
   }
 
+  def subtract(v: Long): Unit = {
+    _value -= v
+  }
+
   // We can set a double value to `SQLMetric` which stores only long value, if it is
   // average metrics.
   def set(v: Double): Unit = if (v >= 0) {

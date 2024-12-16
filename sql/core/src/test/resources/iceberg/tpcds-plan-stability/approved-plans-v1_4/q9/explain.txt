@@ -1,0 +1,606 @@
+== Physical Plan ==
+* Project (3)
++- * Filter (2)
+   +- BatchScan spark_catalog.default.reason (1)
+
+
+(1) BatchScan spark_catalog.default.reason
+Output [1]: [r_reason_sk#1]
+spark_catalog.default.reason [scan class = SparkBatchQueryScan] [filters=r_reason_sk IS NOT NULL, r_reason_sk = 1], [runtimeFilters=[]], caseSensitive=false,[ Broadcast Var UNUSED =]
+
+(2) Filter [codegen id : 1]
+Input [1]: [r_reason_sk#1]
+Condition : (isnotnull(r_reason_sk#1) AND (r_reason_sk#1 = 1))
+
+(3) Project [codegen id : 1]
+Output [5]: [CASE WHEN (Subquery scalar-subquery#2, [id=#3] > 62316685) THEN Subquery scalar-subquery#4, [id=#5] ELSE Subquery scalar-subquery#6, [id=#7] END AS bucket1#8, CASE WHEN (Subquery scalar-subquery#9, [id=#10] > 19045798) THEN Subquery scalar-subquery#11, [id=#12] ELSE Subquery scalar-subquery#13, [id=#14] END AS bucket2#15, CASE WHEN (Subquery scalar-subquery#16, [id=#17] > 365541424) THEN Subquery scalar-subquery#18, [id=#19] ELSE Subquery scalar-subquery#20, [id=#21] END AS bucket3#22, CASE WHEN (Subquery scalar-subquery#23, [id=#24] > 216357808) THEN Subquery scalar-subquery#25, [id=#26] ELSE Subquery scalar-subquery#27, [id=#28] END AS bucket4#29, CASE WHEN (Subquery scalar-subquery#30, [id=#31] > 184483884) THEN Subquery scalar-subquery#32, [id=#33] ELSE Subquery scalar-subquery#34, [id=#35] END AS bucket5#36]
+Input [1]: [r_reason_sk#1]
+
+===== Subqueries =====
+
+Subquery:1 Hosting operator id = 3 Hosting Expression = Subquery scalar-subquery#2, [id=#3]
+* HashAggregate (9)
++- Exchange (8)
+   +- * HashAggregate (7)
+      +- * Project (6)
+         +- * Filter (5)
+            +- BatchScan spark_catalog.default.store_sales (4)
+
+
+(4) BatchScan spark_catalog.default.store_sales
+Output [1]: [ss_quantity#37]
+spark_catalog.default.store_sales [scan class = SparkBatchQueryScan] [filters=ss_quantity IS NOT NULL, ss_quantity >= 1, ss_quantity <= 20], [runtimeFilters=[]], caseSensitive=false,[ Broadcast Var UNUSED =]
+
+(5) Filter [codegen id : 1]
+Input [1]: [ss_quantity#37]
+Condition : ((isnotnull(ss_quantity#37) AND (ss_quantity#37 >= 1)) AND (ss_quantity#37 <= 20))
+
+(6) Project [codegen id : 1]
+Output: []
+Input [1]: [ss_quantity#37]
+
+(7) HashAggregate [codegen id : 1]
+Input: []
+Keys: []
+Functions [1]: [partial_count(1)]
+Aggregate Attributes [1]: [count#38]
+Results [1]: [count#39]
+
+(8) Exchange
+Input [1]: [count#39]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=1]
+
+(9) HashAggregate [codegen id : 2]
+Input [1]: [count#39]
+Keys: []
+Functions [1]: [count(1)]
+Aggregate Attributes [1]: [count(1)#40]
+Results [1]: [count(1)#40 AS count(1)#41]
+
+Subquery:2 Hosting operator id = 3 Hosting Expression = Subquery scalar-subquery#4, [id=#5]
+* HashAggregate (15)
++- Exchange (14)
+   +- * HashAggregate (13)
+      +- * Project (12)
+         +- * Filter (11)
+            +- BatchScan spark_catalog.default.store_sales (10)
+
+
+(10) BatchScan spark_catalog.default.store_sales
+Output [2]: [ss_quantity#42, ss_ext_discount_amt#43]
+spark_catalog.default.store_sales [scan class = SparkBatchQueryScan] [filters=ss_quantity IS NOT NULL, ss_quantity >= 1, ss_quantity <= 20], [runtimeFilters=[]], caseSensitive=false,[ Broadcast Var UNUSED =]
+
+(11) Filter [codegen id : 1]
+Input [2]: [ss_quantity#42, ss_ext_discount_amt#43]
+Condition : ((isnotnull(ss_quantity#42) AND (ss_quantity#42 >= 1)) AND (ss_quantity#42 <= 20))
+
+(12) Project [codegen id : 1]
+Output [1]: [ss_ext_discount_amt#43]
+Input [2]: [ss_quantity#42, ss_ext_discount_amt#43]
+
+(13) HashAggregate [codegen id : 1]
+Input [1]: [ss_ext_discount_amt#43]
+Keys: []
+Functions [1]: [partial_avg(UnscaledValue(ss_ext_discount_amt#43))]
+Aggregate Attributes [2]: [sum#44, count#45]
+Results [2]: [sum#46, count#47]
+
+(14) Exchange
+Input [2]: [sum#46, count#47]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=2]
+
+(15) HashAggregate [codegen id : 2]
+Input [2]: [sum#46, count#47]
+Keys: []
+Functions [1]: [avg(UnscaledValue(ss_ext_discount_amt#43))]
+Aggregate Attributes [1]: [avg(UnscaledValue(ss_ext_discount_amt#43))#48]
+Results [1]: [cast((avg(UnscaledValue(ss_ext_discount_amt#43))#48 / 100.0) as decimal(11,6)) AS avg(ss_ext_discount_amt)#49]
+
+Subquery:3 Hosting operator id = 3 Hosting Expression = Subquery scalar-subquery#6, [id=#7]
+* HashAggregate (21)
++- Exchange (20)
+   +- * HashAggregate (19)
+      +- * Project (18)
+         +- * Filter (17)
+            +- BatchScan spark_catalog.default.store_sales (16)
+
+
+(16) BatchScan spark_catalog.default.store_sales
+Output [2]: [ss_quantity#50, ss_net_paid#51]
+spark_catalog.default.store_sales [scan class = SparkBatchQueryScan] [filters=ss_quantity IS NOT NULL, ss_quantity >= 1, ss_quantity <= 20], [runtimeFilters=[]], caseSensitive=false,[ Broadcast Var UNUSED =]
+
+(17) Filter [codegen id : 1]
+Input [2]: [ss_quantity#50, ss_net_paid#51]
+Condition : ((isnotnull(ss_quantity#50) AND (ss_quantity#50 >= 1)) AND (ss_quantity#50 <= 20))
+
+(18) Project [codegen id : 1]
+Output [1]: [ss_net_paid#51]
+Input [2]: [ss_quantity#50, ss_net_paid#51]
+
+(19) HashAggregate [codegen id : 1]
+Input [1]: [ss_net_paid#51]
+Keys: []
+Functions [1]: [partial_avg(UnscaledValue(ss_net_paid#51))]
+Aggregate Attributes [2]: [sum#52, count#53]
+Results [2]: [sum#54, count#55]
+
+(20) Exchange
+Input [2]: [sum#54, count#55]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=3]
+
+(21) HashAggregate [codegen id : 2]
+Input [2]: [sum#54, count#55]
+Keys: []
+Functions [1]: [avg(UnscaledValue(ss_net_paid#51))]
+Aggregate Attributes [1]: [avg(UnscaledValue(ss_net_paid#51))#56]
+Results [1]: [cast((avg(UnscaledValue(ss_net_paid#51))#56 / 100.0) as decimal(11,6)) AS avg(ss_net_paid)#57]
+
+Subquery:4 Hosting operator id = 3 Hosting Expression = Subquery scalar-subquery#9, [id=#10]
+* HashAggregate (27)
++- Exchange (26)
+   +- * HashAggregate (25)
+      +- * Project (24)
+         +- * Filter (23)
+            +- BatchScan spark_catalog.default.store_sales (22)
+
+
+(22) BatchScan spark_catalog.default.store_sales
+Output [1]: [ss_quantity#58]
+spark_catalog.default.store_sales [scan class = SparkBatchQueryScan] [filters=ss_quantity IS NOT NULL, ss_quantity >= 21, ss_quantity <= 40], [runtimeFilters=[]], caseSensitive=false,[ Broadcast Var UNUSED =]
+
+(23) Filter [codegen id : 1]
+Input [1]: [ss_quantity#58]
+Condition : ((isnotnull(ss_quantity#58) AND (ss_quantity#58 >= 21)) AND (ss_quantity#58 <= 40))
+
+(24) Project [codegen id : 1]
+Output: []
+Input [1]: [ss_quantity#58]
+
+(25) HashAggregate [codegen id : 1]
+Input: []
+Keys: []
+Functions [1]: [partial_count(1)]
+Aggregate Attributes [1]: [count#59]
+Results [1]: [count#60]
+
+(26) Exchange
+Input [1]: [count#60]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=4]
+
+(27) HashAggregate [codegen id : 2]
+Input [1]: [count#60]
+Keys: []
+Functions [1]: [count(1)]
+Aggregate Attributes [1]: [count(1)#61]
+Results [1]: [count(1)#61 AS count(1)#62]
+
+Subquery:5 Hosting operator id = 3 Hosting Expression = Subquery scalar-subquery#11, [id=#12]
+* HashAggregate (33)
++- Exchange (32)
+   +- * HashAggregate (31)
+      +- * Project (30)
+         +- * Filter (29)
+            +- BatchScan spark_catalog.default.store_sales (28)
+
+
+(28) BatchScan spark_catalog.default.store_sales
+Output [2]: [ss_quantity#63, ss_ext_discount_amt#64]
+spark_catalog.default.store_sales [scan class = SparkBatchQueryScan] [filters=ss_quantity IS NOT NULL, ss_quantity >= 21, ss_quantity <= 40], [runtimeFilters=[]], caseSensitive=false,[ Broadcast Var UNUSED =]
+
+(29) Filter [codegen id : 1]
+Input [2]: [ss_quantity#63, ss_ext_discount_amt#64]
+Condition : ((isnotnull(ss_quantity#63) AND (ss_quantity#63 >= 21)) AND (ss_quantity#63 <= 40))
+
+(30) Project [codegen id : 1]
+Output [1]: [ss_ext_discount_amt#64]
+Input [2]: [ss_quantity#63, ss_ext_discount_amt#64]
+
+(31) HashAggregate [codegen id : 1]
+Input [1]: [ss_ext_discount_amt#64]
+Keys: []
+Functions [1]: [partial_avg(UnscaledValue(ss_ext_discount_amt#64))]
+Aggregate Attributes [2]: [sum#65, count#66]
+Results [2]: [sum#67, count#68]
+
+(32) Exchange
+Input [2]: [sum#67, count#68]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=5]
+
+(33) HashAggregate [codegen id : 2]
+Input [2]: [sum#67, count#68]
+Keys: []
+Functions [1]: [avg(UnscaledValue(ss_ext_discount_amt#64))]
+Aggregate Attributes [1]: [avg(UnscaledValue(ss_ext_discount_amt#64))#69]
+Results [1]: [cast((avg(UnscaledValue(ss_ext_discount_amt#64))#69 / 100.0) as decimal(11,6)) AS avg(ss_ext_discount_amt)#70]
+
+Subquery:6 Hosting operator id = 3 Hosting Expression = Subquery scalar-subquery#13, [id=#14]
+* HashAggregate (39)
++- Exchange (38)
+   +- * HashAggregate (37)
+      +- * Project (36)
+         +- * Filter (35)
+            +- BatchScan spark_catalog.default.store_sales (34)
+
+
+(34) BatchScan spark_catalog.default.store_sales
+Output [2]: [ss_quantity#71, ss_net_paid#72]
+spark_catalog.default.store_sales [scan class = SparkBatchQueryScan] [filters=ss_quantity IS NOT NULL, ss_quantity >= 21, ss_quantity <= 40], [runtimeFilters=[]], caseSensitive=false,[ Broadcast Var UNUSED =]
+
+(35) Filter [codegen id : 1]
+Input [2]: [ss_quantity#71, ss_net_paid#72]
+Condition : ((isnotnull(ss_quantity#71) AND (ss_quantity#71 >= 21)) AND (ss_quantity#71 <= 40))
+
+(36) Project [codegen id : 1]
+Output [1]: [ss_net_paid#72]
+Input [2]: [ss_quantity#71, ss_net_paid#72]
+
+(37) HashAggregate [codegen id : 1]
+Input [1]: [ss_net_paid#72]
+Keys: []
+Functions [1]: [partial_avg(UnscaledValue(ss_net_paid#72))]
+Aggregate Attributes [2]: [sum#73, count#74]
+Results [2]: [sum#75, count#76]
+
+(38) Exchange
+Input [2]: [sum#75, count#76]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=6]
+
+(39) HashAggregate [codegen id : 2]
+Input [2]: [sum#75, count#76]
+Keys: []
+Functions [1]: [avg(UnscaledValue(ss_net_paid#72))]
+Aggregate Attributes [1]: [avg(UnscaledValue(ss_net_paid#72))#77]
+Results [1]: [cast((avg(UnscaledValue(ss_net_paid#72))#77 / 100.0) as decimal(11,6)) AS avg(ss_net_paid)#78]
+
+Subquery:7 Hosting operator id = 3 Hosting Expression = Subquery scalar-subquery#16, [id=#17]
+* HashAggregate (45)
++- Exchange (44)
+   +- * HashAggregate (43)
+      +- * Project (42)
+         +- * Filter (41)
+            +- BatchScan spark_catalog.default.store_sales (40)
+
+
+(40) BatchScan spark_catalog.default.store_sales
+Output [1]: [ss_quantity#79]
+spark_catalog.default.store_sales [scan class = SparkBatchQueryScan] [filters=ss_quantity IS NOT NULL, ss_quantity >= 41, ss_quantity <= 60], [runtimeFilters=[]], caseSensitive=false,[ Broadcast Var UNUSED =]
+
+(41) Filter [codegen id : 1]
+Input [1]: [ss_quantity#79]
+Condition : ((isnotnull(ss_quantity#79) AND (ss_quantity#79 >= 41)) AND (ss_quantity#79 <= 60))
+
+(42) Project [codegen id : 1]
+Output: []
+Input [1]: [ss_quantity#79]
+
+(43) HashAggregate [codegen id : 1]
+Input: []
+Keys: []
+Functions [1]: [partial_count(1)]
+Aggregate Attributes [1]: [count#80]
+Results [1]: [count#81]
+
+(44) Exchange
+Input [1]: [count#81]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=7]
+
+(45) HashAggregate [codegen id : 2]
+Input [1]: [count#81]
+Keys: []
+Functions [1]: [count(1)]
+Aggregate Attributes [1]: [count(1)#82]
+Results [1]: [count(1)#82 AS count(1)#83]
+
+Subquery:8 Hosting operator id = 3 Hosting Expression = Subquery scalar-subquery#18, [id=#19]
+* HashAggregate (51)
++- Exchange (50)
+   +- * HashAggregate (49)
+      +- * Project (48)
+         +- * Filter (47)
+            +- BatchScan spark_catalog.default.store_sales (46)
+
+
+(46) BatchScan spark_catalog.default.store_sales
+Output [2]: [ss_quantity#84, ss_ext_discount_amt#85]
+spark_catalog.default.store_sales [scan class = SparkBatchQueryScan] [filters=ss_quantity IS NOT NULL, ss_quantity >= 41, ss_quantity <= 60], [runtimeFilters=[]], caseSensitive=false,[ Broadcast Var UNUSED =]
+
+(47) Filter [codegen id : 1]
+Input [2]: [ss_quantity#84, ss_ext_discount_amt#85]
+Condition : ((isnotnull(ss_quantity#84) AND (ss_quantity#84 >= 41)) AND (ss_quantity#84 <= 60))
+
+(48) Project [codegen id : 1]
+Output [1]: [ss_ext_discount_amt#85]
+Input [2]: [ss_quantity#84, ss_ext_discount_amt#85]
+
+(49) HashAggregate [codegen id : 1]
+Input [1]: [ss_ext_discount_amt#85]
+Keys: []
+Functions [1]: [partial_avg(UnscaledValue(ss_ext_discount_amt#85))]
+Aggregate Attributes [2]: [sum#86, count#87]
+Results [2]: [sum#88, count#89]
+
+(50) Exchange
+Input [2]: [sum#88, count#89]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=8]
+
+(51) HashAggregate [codegen id : 2]
+Input [2]: [sum#88, count#89]
+Keys: []
+Functions [1]: [avg(UnscaledValue(ss_ext_discount_amt#85))]
+Aggregate Attributes [1]: [avg(UnscaledValue(ss_ext_discount_amt#85))#90]
+Results [1]: [cast((avg(UnscaledValue(ss_ext_discount_amt#85))#90 / 100.0) as decimal(11,6)) AS avg(ss_ext_discount_amt)#91]
+
+Subquery:9 Hosting operator id = 3 Hosting Expression = Subquery scalar-subquery#20, [id=#21]
+* HashAggregate (57)
++- Exchange (56)
+   +- * HashAggregate (55)
+      +- * Project (54)
+         +- * Filter (53)
+            +- BatchScan spark_catalog.default.store_sales (52)
+
+
+(52) BatchScan spark_catalog.default.store_sales
+Output [2]: [ss_quantity#92, ss_net_paid#93]
+spark_catalog.default.store_sales [scan class = SparkBatchQueryScan] [filters=ss_quantity IS NOT NULL, ss_quantity >= 41, ss_quantity <= 60], [runtimeFilters=[]], caseSensitive=false,[ Broadcast Var UNUSED =]
+
+(53) Filter [codegen id : 1]
+Input [2]: [ss_quantity#92, ss_net_paid#93]
+Condition : ((isnotnull(ss_quantity#92) AND (ss_quantity#92 >= 41)) AND (ss_quantity#92 <= 60))
+
+(54) Project [codegen id : 1]
+Output [1]: [ss_net_paid#93]
+Input [2]: [ss_quantity#92, ss_net_paid#93]
+
+(55) HashAggregate [codegen id : 1]
+Input [1]: [ss_net_paid#93]
+Keys: []
+Functions [1]: [partial_avg(UnscaledValue(ss_net_paid#93))]
+Aggregate Attributes [2]: [sum#94, count#95]
+Results [2]: [sum#96, count#97]
+
+(56) Exchange
+Input [2]: [sum#96, count#97]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=9]
+
+(57) HashAggregate [codegen id : 2]
+Input [2]: [sum#96, count#97]
+Keys: []
+Functions [1]: [avg(UnscaledValue(ss_net_paid#93))]
+Aggregate Attributes [1]: [avg(UnscaledValue(ss_net_paid#93))#98]
+Results [1]: [cast((avg(UnscaledValue(ss_net_paid#93))#98 / 100.0) as decimal(11,6)) AS avg(ss_net_paid)#99]
+
+Subquery:10 Hosting operator id = 3 Hosting Expression = Subquery scalar-subquery#23, [id=#24]
+* HashAggregate (63)
++- Exchange (62)
+   +- * HashAggregate (61)
+      +- * Project (60)
+         +- * Filter (59)
+            +- BatchScan spark_catalog.default.store_sales (58)
+
+
+(58) BatchScan spark_catalog.default.store_sales
+Output [1]: [ss_quantity#100]
+spark_catalog.default.store_sales [scan class = SparkBatchQueryScan] [filters=ss_quantity IS NOT NULL, ss_quantity >= 61, ss_quantity <= 80], [runtimeFilters=[]], caseSensitive=false,[ Broadcast Var UNUSED =]
+
+(59) Filter [codegen id : 1]
+Input [1]: [ss_quantity#100]
+Condition : ((isnotnull(ss_quantity#100) AND (ss_quantity#100 >= 61)) AND (ss_quantity#100 <= 80))
+
+(60) Project [codegen id : 1]
+Output: []
+Input [1]: [ss_quantity#100]
+
+(61) HashAggregate [codegen id : 1]
+Input: []
+Keys: []
+Functions [1]: [partial_count(1)]
+Aggregate Attributes [1]: [count#101]
+Results [1]: [count#102]
+
+(62) Exchange
+Input [1]: [count#102]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=10]
+
+(63) HashAggregate [codegen id : 2]
+Input [1]: [count#102]
+Keys: []
+Functions [1]: [count(1)]
+Aggregate Attributes [1]: [count(1)#103]
+Results [1]: [count(1)#103 AS count(1)#104]
+
+Subquery:11 Hosting operator id = 3 Hosting Expression = Subquery scalar-subquery#25, [id=#26]
+* HashAggregate (69)
++- Exchange (68)
+   +- * HashAggregate (67)
+      +- * Project (66)
+         +- * Filter (65)
+            +- BatchScan spark_catalog.default.store_sales (64)
+
+
+(64) BatchScan spark_catalog.default.store_sales
+Output [2]: [ss_quantity#105, ss_ext_discount_amt#106]
+spark_catalog.default.store_sales [scan class = SparkBatchQueryScan] [filters=ss_quantity IS NOT NULL, ss_quantity >= 61, ss_quantity <= 80], [runtimeFilters=[]], caseSensitive=false,[ Broadcast Var UNUSED =]
+
+(65) Filter [codegen id : 1]
+Input [2]: [ss_quantity#105, ss_ext_discount_amt#106]
+Condition : ((isnotnull(ss_quantity#105) AND (ss_quantity#105 >= 61)) AND (ss_quantity#105 <= 80))
+
+(66) Project [codegen id : 1]
+Output [1]: [ss_ext_discount_amt#106]
+Input [2]: [ss_quantity#105, ss_ext_discount_amt#106]
+
+(67) HashAggregate [codegen id : 1]
+Input [1]: [ss_ext_discount_amt#106]
+Keys: []
+Functions [1]: [partial_avg(UnscaledValue(ss_ext_discount_amt#106))]
+Aggregate Attributes [2]: [sum#107, count#108]
+Results [2]: [sum#109, count#110]
+
+(68) Exchange
+Input [2]: [sum#109, count#110]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=11]
+
+(69) HashAggregate [codegen id : 2]
+Input [2]: [sum#109, count#110]
+Keys: []
+Functions [1]: [avg(UnscaledValue(ss_ext_discount_amt#106))]
+Aggregate Attributes [1]: [avg(UnscaledValue(ss_ext_discount_amt#106))#111]
+Results [1]: [cast((avg(UnscaledValue(ss_ext_discount_amt#106))#111 / 100.0) as decimal(11,6)) AS avg(ss_ext_discount_amt)#112]
+
+Subquery:12 Hosting operator id = 3 Hosting Expression = Subquery scalar-subquery#27, [id=#28]
+* HashAggregate (75)
++- Exchange (74)
+   +- * HashAggregate (73)
+      +- * Project (72)
+         +- * Filter (71)
+            +- BatchScan spark_catalog.default.store_sales (70)
+
+
+(70) BatchScan spark_catalog.default.store_sales
+Output [2]: [ss_quantity#113, ss_net_paid#114]
+spark_catalog.default.store_sales [scan class = SparkBatchQueryScan] [filters=ss_quantity IS NOT NULL, ss_quantity >= 61, ss_quantity <= 80], [runtimeFilters=[]], caseSensitive=false,[ Broadcast Var UNUSED =]
+
+(71) Filter [codegen id : 1]
+Input [2]: [ss_quantity#113, ss_net_paid#114]
+Condition : ((isnotnull(ss_quantity#113) AND (ss_quantity#113 >= 61)) AND (ss_quantity#113 <= 80))
+
+(72) Project [codegen id : 1]
+Output [1]: [ss_net_paid#114]
+Input [2]: [ss_quantity#113, ss_net_paid#114]
+
+(73) HashAggregate [codegen id : 1]
+Input [1]: [ss_net_paid#114]
+Keys: []
+Functions [1]: [partial_avg(UnscaledValue(ss_net_paid#114))]
+Aggregate Attributes [2]: [sum#115, count#116]
+Results [2]: [sum#117, count#118]
+
+(74) Exchange
+Input [2]: [sum#117, count#118]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=12]
+
+(75) HashAggregate [codegen id : 2]
+Input [2]: [sum#117, count#118]
+Keys: []
+Functions [1]: [avg(UnscaledValue(ss_net_paid#114))]
+Aggregate Attributes [1]: [avg(UnscaledValue(ss_net_paid#114))#119]
+Results [1]: [cast((avg(UnscaledValue(ss_net_paid#114))#119 / 100.0) as decimal(11,6)) AS avg(ss_net_paid)#120]
+
+Subquery:13 Hosting operator id = 3 Hosting Expression = Subquery scalar-subquery#30, [id=#31]
+* HashAggregate (81)
++- Exchange (80)
+   +- * HashAggregate (79)
+      +- * Project (78)
+         +- * Filter (77)
+            +- BatchScan spark_catalog.default.store_sales (76)
+
+
+(76) BatchScan spark_catalog.default.store_sales
+Output [1]: [ss_quantity#121]
+spark_catalog.default.store_sales [scan class = SparkBatchQueryScan] [filters=ss_quantity IS NOT NULL, ss_quantity >= 81, ss_quantity <= 100], [runtimeFilters=[]], caseSensitive=false,[ Broadcast Var UNUSED =]
+
+(77) Filter [codegen id : 1]
+Input [1]: [ss_quantity#121]
+Condition : ((isnotnull(ss_quantity#121) AND (ss_quantity#121 >= 81)) AND (ss_quantity#121 <= 100))
+
+(78) Project [codegen id : 1]
+Output: []
+Input [1]: [ss_quantity#121]
+
+(79) HashAggregate [codegen id : 1]
+Input: []
+Keys: []
+Functions [1]: [partial_count(1)]
+Aggregate Attributes [1]: [count#122]
+Results [1]: [count#123]
+
+(80) Exchange
+Input [1]: [count#123]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=13]
+
+(81) HashAggregate [codegen id : 2]
+Input [1]: [count#123]
+Keys: []
+Functions [1]: [count(1)]
+Aggregate Attributes [1]: [count(1)#124]
+Results [1]: [count(1)#124 AS count(1)#125]
+
+Subquery:14 Hosting operator id = 3 Hosting Expression = Subquery scalar-subquery#32, [id=#33]
+* HashAggregate (87)
++- Exchange (86)
+   +- * HashAggregate (85)
+      +- * Project (84)
+         +- * Filter (83)
+            +- BatchScan spark_catalog.default.store_sales (82)
+
+
+(82) BatchScan spark_catalog.default.store_sales
+Output [2]: [ss_quantity#126, ss_ext_discount_amt#127]
+spark_catalog.default.store_sales [scan class = SparkBatchQueryScan] [filters=ss_quantity IS NOT NULL, ss_quantity >= 81, ss_quantity <= 100], [runtimeFilters=[]], caseSensitive=false,[ Broadcast Var UNUSED =]
+
+(83) Filter [codegen id : 1]
+Input [2]: [ss_quantity#126, ss_ext_discount_amt#127]
+Condition : ((isnotnull(ss_quantity#126) AND (ss_quantity#126 >= 81)) AND (ss_quantity#126 <= 100))
+
+(84) Project [codegen id : 1]
+Output [1]: [ss_ext_discount_amt#127]
+Input [2]: [ss_quantity#126, ss_ext_discount_amt#127]
+
+(85) HashAggregate [codegen id : 1]
+Input [1]: [ss_ext_discount_amt#127]
+Keys: []
+Functions [1]: [partial_avg(UnscaledValue(ss_ext_discount_amt#127))]
+Aggregate Attributes [2]: [sum#128, count#129]
+Results [2]: [sum#130, count#131]
+
+(86) Exchange
+Input [2]: [sum#130, count#131]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=14]
+
+(87) HashAggregate [codegen id : 2]
+Input [2]: [sum#130, count#131]
+Keys: []
+Functions [1]: [avg(UnscaledValue(ss_ext_discount_amt#127))]
+Aggregate Attributes [1]: [avg(UnscaledValue(ss_ext_discount_amt#127))#132]
+Results [1]: [cast((avg(UnscaledValue(ss_ext_discount_amt#127))#132 / 100.0) as decimal(11,6)) AS avg(ss_ext_discount_amt)#133]
+
+Subquery:15 Hosting operator id = 3 Hosting Expression = Subquery scalar-subquery#34, [id=#35]
+* HashAggregate (93)
++- Exchange (92)
+   +- * HashAggregate (91)
+      +- * Project (90)
+         +- * Filter (89)
+            +- BatchScan spark_catalog.default.store_sales (88)
+
+
+(88) BatchScan spark_catalog.default.store_sales
+Output [2]: [ss_quantity#134, ss_net_paid#135]
+spark_catalog.default.store_sales [scan class = SparkBatchQueryScan] [filters=ss_quantity IS NOT NULL, ss_quantity >= 81, ss_quantity <= 100], [runtimeFilters=[]], caseSensitive=false,[ Broadcast Var UNUSED =]
+
+(89) Filter [codegen id : 1]
+Input [2]: [ss_quantity#134, ss_net_paid#135]
+Condition : ((isnotnull(ss_quantity#134) AND (ss_quantity#134 >= 81)) AND (ss_quantity#134 <= 100))
+
+(90) Project [codegen id : 1]
+Output [1]: [ss_net_paid#135]
+Input [2]: [ss_quantity#134, ss_net_paid#135]
+
+(91) HashAggregate [codegen id : 1]
+Input [1]: [ss_net_paid#135]
+Keys: []
+Functions [1]: [partial_avg(UnscaledValue(ss_net_paid#135))]
+Aggregate Attributes [2]: [sum#136, count#137]
+Results [2]: [sum#138, count#139]
+
+(92) Exchange
+Input [2]: [sum#138, count#139]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=15]
+
+(93) HashAggregate [codegen id : 2]
+Input [2]: [sum#138, count#139]
+Keys: []
+Functions [1]: [avg(UnscaledValue(ss_net_paid#135))]
+Aggregate Attributes [1]: [avg(UnscaledValue(ss_net_paid#135))#140]
+Results [1]: [cast((avg(UnscaledValue(ss_net_paid#135))#140 / 100.0) as decimal(11,6)) AS avg(ss_net_paid)#141]
+
+

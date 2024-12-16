@@ -1,0 +1,277 @@
+== Physical Plan ==
+TakeOrderedAndProject (43)
++- * HashAggregate (42)
+   +- Exchange (41)
+      +- * HashAggregate (40)
+         +- * Project (39)
+            +- * BroadcastHashJoin Inner BuildRight (38)
+               :- * Project (33)
+               :  +- * BroadcastHashJoin Inner BuildRight (32)
+               :     :- * Project (27)
+               :     :  +- * BroadcastHashJoin LeftSemi BuildRight (26)
+               :     :     :- * BroadcastHashJoin LeftSemi BuildRight (11)
+               :     :     :  :- * Project (3)
+               :     :     :  :  +- * Filter (2)
+               :     :     :  :     +- BatchScan spark_catalog.default.customer (1)
+               :     :     :  +- BroadcastExchange (10)
+               :     :     :     +- * Project (9)
+               :     :     :        +- * BroadcastHashJoin Inner BuildRight (8)
+               :     :     :           :- * Project (6)
+               :     :     :           :  +- * Filter (5)
+               :     :     :           :     +- BatchScan spark_catalog.default.store_sales (4)
+               :     :     :           +- ReusedExchange (7)
+               :     :     +- BroadcastExchange (25)
+               :     :        +- Union (24)
+               :     :           :- * Project (17)
+               :     :           :  +- * BroadcastHashJoin Inner BuildRight (16)
+               :     :           :     :- * Project (14)
+               :     :           :     :  +- * Filter (13)
+               :     :           :     :     +- BatchScan spark_catalog.default.web_sales (12)
+               :     :           :     +- ReusedExchange (15)
+               :     :           +- * Project (23)
+               :     :              +- * BroadcastHashJoin Inner BuildRight (22)
+               :     :                 :- * Project (20)
+               :     :                 :  +- * Filter (19)
+               :     :                 :     +- BatchScan spark_catalog.default.catalog_sales (18)
+               :     :                 +- ReusedExchange (21)
+               :     +- BroadcastExchange (31)
+               :        +- * Project (30)
+               :           +- * Filter (29)
+               :              +- BatchScan spark_catalog.default.customer_address (28)
+               +- BroadcastExchange (37)
+                  +- * Project (36)
+                     +- * Filter (35)
+                        +- BatchScan spark_catalog.default.customer_demographics (34)
+
+
+(1) BatchScan spark_catalog.default.customer
+Output [3]: [c_customer_sk#1, c_current_cdemo_sk#2, c_current_addr_sk#3]
+spark_catalog.default.customer [scan class = SparkBatchQueryScan] [filters=c_current_addr_sk IS NOT NULL, c_current_cdemo_sk IS NOT NULL], [runtimeFilters=[]], caseSensitive=false,[ Broadcast Var UNUSED =]
+
+(2) Filter [codegen id : 9]
+Input [3]: [c_customer_sk#1, c_current_cdemo_sk#2, c_current_addr_sk#3]
+Condition : (isnotnull(c_current_addr_sk#3) AND isnotnull(c_current_cdemo_sk#2))
+
+(3) Project [codegen id : 9]
+Output [3]: [c_customer_sk#1, c_current_cdemo_sk#2, c_current_addr_sk#3]
+Input [3]: [c_customer_sk#1, c_current_cdemo_sk#2, c_current_addr_sk#3]
+
+(4) BatchScan spark_catalog.default.store_sales
+Output [23]: [ss_sold_date_sk#4, ss_sold_time_sk#5, ss_item_sk#6, ss_customer_sk#7, ss_cdemo_sk#8, ss_hdemo_sk#9, ss_addr_sk#10, ss_store_sk#11, ss_promo_sk#12, ss_ticket_number#13, ss_quantity#14, ss_wholesale_cost#15, ss_list_price#16, ss_sales_price#17, ss_ext_discount_amt#18, ss_ext_sales_price#19, ss_ext_wholesale_cost#20, ss_ext_list_price#21, ss_ext_tax#22, ss_coupon_amt#23, ss_net_paid#24, ss_net_paid_inc_tax#25, ss_net_profit#26]
+spark_catalog.default.store_sales [scan class = SparkBatchQueryScan] [filters=ss_sold_date_sk IS NOT NULL], [runtimeFilters=[]], caseSensitive=false,[ Broadcast Var UNUSED =]
+
+(5) Filter [codegen id : 2]
+Input [23]: [ss_sold_date_sk#4, ss_sold_time_sk#5, ss_item_sk#6, ss_customer_sk#7, ss_cdemo_sk#8, ss_hdemo_sk#9, ss_addr_sk#10, ss_store_sk#11, ss_promo_sk#12, ss_ticket_number#13, ss_quantity#14, ss_wholesale_cost#15, ss_list_price#16, ss_sales_price#17, ss_ext_discount_amt#18, ss_ext_sales_price#19, ss_ext_wholesale_cost#20, ss_ext_list_price#21, ss_ext_tax#22, ss_coupon_amt#23, ss_net_paid#24, ss_net_paid_inc_tax#25, ss_net_profit#26]
+Condition : isnotnull(ss_sold_date_sk#4)
+
+(6) Project [codegen id : 2]
+Output [2]: [ss_sold_date_sk#4, ss_customer_sk#7]
+Input [23]: [ss_sold_date_sk#4, ss_sold_time_sk#5, ss_item_sk#6, ss_customer_sk#7, ss_cdemo_sk#8, ss_hdemo_sk#9, ss_addr_sk#10, ss_store_sk#11, ss_promo_sk#12, ss_ticket_number#13, ss_quantity#14, ss_wholesale_cost#15, ss_list_price#16, ss_sales_price#17, ss_ext_discount_amt#18, ss_ext_sales_price#19, ss_ext_wholesale_cost#20, ss_ext_list_price#21, ss_ext_tax#22, ss_coupon_amt#23, ss_net_paid#24, ss_net_paid_inc_tax#25, ss_net_profit#26]
+
+(7) ReusedExchange [Reuses operator id: 47]
+Output [1]: [d_date_sk#27]
+
+(8) BroadcastHashJoin [codegen id : 2]
+Left keys [1]: [ss_sold_date_sk#4]
+Right keys [1]: [d_date_sk#27]
+Join condition: None
+
+(9) Project [codegen id : 2]
+Output [1]: [ss_customer_sk#7]
+Input [3]: [ss_sold_date_sk#4, ss_customer_sk#7, d_date_sk#27]
+
+(10) BroadcastExchange
+Input [1]: [ss_customer_sk#7]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=1]
+
+(11) BroadcastHashJoin [codegen id : 9]
+Left keys [1]: [c_customer_sk#1]
+Right keys [1]: [ss_customer_sk#7]
+Join condition: None
+
+(12) BatchScan spark_catalog.default.web_sales
+Output [2]: [ws_sold_date_sk#28, ws_bill_customer_sk#29]
+spark_catalog.default.web_sales [scan class = SparkBatchQueryScan] [filters=ws_sold_date_sk IS NOT NULL], [runtimeFilters=[]], caseSensitive=false,[ Broadcast Var UNUSED =]
+
+(13) Filter [codegen id : 4]
+Input [2]: [ws_sold_date_sk#28, ws_bill_customer_sk#29]
+Condition : isnotnull(ws_sold_date_sk#28)
+
+(14) Project [codegen id : 4]
+Output [2]: [ws_sold_date_sk#28, ws_bill_customer_sk#29]
+Input [2]: [ws_sold_date_sk#28, ws_bill_customer_sk#29]
+
+(15) ReusedExchange [Reuses operator id: 51]
+Output [1]: [d_date_sk#30]
+
+(16) BroadcastHashJoin [codegen id : 4]
+Left keys [1]: [ws_sold_date_sk#28]
+Right keys [1]: [d_date_sk#30]
+Join condition: None
+
+(17) Project [codegen id : 4]
+Output [1]: [ws_bill_customer_sk#29 AS customer_sk#31]
+Input [3]: [ws_sold_date_sk#28, ws_bill_customer_sk#29, d_date_sk#30]
+
+(18) BatchScan spark_catalog.default.catalog_sales
+Output [2]: [cs_sold_date_sk#32, cs_ship_customer_sk#33]
+spark_catalog.default.catalog_sales [scan class = SparkBatchQueryScan] [filters=cs_sold_date_sk IS NOT NULL], [runtimeFilters=[]], caseSensitive=false,[ Broadcast Var UNUSED =]
+
+(19) Filter [codegen id : 6]
+Input [2]: [cs_sold_date_sk#32, cs_ship_customer_sk#33]
+Condition : isnotnull(cs_sold_date_sk#32)
+
+(20) Project [codegen id : 6]
+Output [2]: [cs_sold_date_sk#32, cs_ship_customer_sk#33]
+Input [2]: [cs_sold_date_sk#32, cs_ship_customer_sk#33]
+
+(21) ReusedExchange [Reuses operator id: 51]
+Output [1]: [d_date_sk#34]
+
+(22) BroadcastHashJoin [codegen id : 6]
+Left keys [1]: [cs_sold_date_sk#32]
+Right keys [1]: [d_date_sk#34]
+Join condition: None
+
+(23) Project [codegen id : 6]
+Output [1]: [cs_ship_customer_sk#33 AS customer_sk#35]
+Input [3]: [cs_sold_date_sk#32, cs_ship_customer_sk#33, d_date_sk#34]
+
+(24) Union
+
+(25) BroadcastExchange
+Input [1]: [customer_sk#31]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=2]
+
+(26) BroadcastHashJoin [codegen id : 9]
+Left keys [1]: [c_customer_sk#1]
+Right keys [1]: [customer_sk#31]
+Join condition: None
+
+(27) Project [codegen id : 9]
+Output [2]: [c_current_cdemo_sk#2, c_current_addr_sk#3]
+Input [3]: [c_customer_sk#1, c_current_cdemo_sk#2, c_current_addr_sk#3]
+
+(28) BatchScan spark_catalog.default.customer_address
+Output [2]: [ca_address_sk#36, ca_county#37]
+spark_catalog.default.customer_address [scan class = SparkBatchQueryScan] [filters=ca_county IN ('Walker County', 'Richland County', 'Gaines County', 'Douglas County', 'Dona Ana County'), ca_address_sk IS NOT NULL], [runtimeFilters=[]], caseSensitive=false,[ Broadcast Var UNUSED =]
+
+(29) Filter [codegen id : 7]
+Input [2]: [ca_address_sk#36, ca_county#37]
+Condition : (ca_county#37 IN (Walker County,Richland County,Gaines County,Douglas County,Dona Ana County) AND isnotnull(ca_address_sk#36))
+
+(30) Project [codegen id : 7]
+Output [1]: [ca_address_sk#36]
+Input [2]: [ca_address_sk#36, ca_county#37]
+
+(31) BroadcastExchange
+Input [1]: [ca_address_sk#36]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=3]
+
+(32) BroadcastHashJoin [codegen id : 9]
+Left keys [1]: [c_current_addr_sk#3]
+Right keys [1]: [ca_address_sk#36]
+Join condition: None
+
+(33) Project [codegen id : 9]
+Output [1]: [c_current_cdemo_sk#2]
+Input [3]: [c_current_cdemo_sk#2, c_current_addr_sk#3, ca_address_sk#36]
+
+(34) BatchScan spark_catalog.default.customer_demographics
+Output [9]: [cd_demo_sk#38, cd_gender#39, cd_marital_status#40, cd_education_status#41, cd_purchase_estimate#42, cd_credit_rating#43, cd_dep_count#44, cd_dep_employed_count#45, cd_dep_college_count#46]
+spark_catalog.default.customer_demographics [scan class = SparkBatchQueryScan] [filters=cd_demo_sk IS NOT NULL], [runtimeFilters=[]], caseSensitive=false,[ Broadcast Var UNUSED =]
+
+(35) Filter [codegen id : 8]
+Input [9]: [cd_demo_sk#38, cd_gender#39, cd_marital_status#40, cd_education_status#41, cd_purchase_estimate#42, cd_credit_rating#43, cd_dep_count#44, cd_dep_employed_count#45, cd_dep_college_count#46]
+Condition : isnotnull(cd_demo_sk#38)
+
+(36) Project [codegen id : 8]
+Output [9]: [cd_demo_sk#38, cd_gender#39, cd_marital_status#40, cd_education_status#41, cd_purchase_estimate#42, cd_credit_rating#43, cd_dep_count#44, cd_dep_employed_count#45, cd_dep_college_count#46]
+Input [9]: [cd_demo_sk#38, cd_gender#39, cd_marital_status#40, cd_education_status#41, cd_purchase_estimate#42, cd_credit_rating#43, cd_dep_count#44, cd_dep_employed_count#45, cd_dep_college_count#46]
+
+(37) BroadcastExchange
+Input [9]: [cd_demo_sk#38, cd_gender#39, cd_marital_status#40, cd_education_status#41, cd_purchase_estimate#42, cd_credit_rating#43, cd_dep_count#44, cd_dep_employed_count#45, cd_dep_college_count#46]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=4]
+
+(38) BroadcastHashJoin [codegen id : 9]
+Left keys [1]: [c_current_cdemo_sk#2]
+Right keys [1]: [cd_demo_sk#38]
+Join condition: None
+
+(39) Project [codegen id : 9]
+Output [8]: [cd_gender#39, cd_marital_status#40, cd_education_status#41, cd_purchase_estimate#42, cd_credit_rating#43, cd_dep_count#44, cd_dep_employed_count#45, cd_dep_college_count#46]
+Input [10]: [c_current_cdemo_sk#2, cd_demo_sk#38, cd_gender#39, cd_marital_status#40, cd_education_status#41, cd_purchase_estimate#42, cd_credit_rating#43, cd_dep_count#44, cd_dep_employed_count#45, cd_dep_college_count#46]
+
+(40) HashAggregate [codegen id : 9]
+Input [8]: [cd_gender#39, cd_marital_status#40, cd_education_status#41, cd_purchase_estimate#42, cd_credit_rating#43, cd_dep_count#44, cd_dep_employed_count#45, cd_dep_college_count#46]
+Keys [8]: [cd_gender#39, cd_marital_status#40, cd_education_status#41, cd_purchase_estimate#42, cd_credit_rating#43, cd_dep_count#44, cd_dep_employed_count#45, cd_dep_college_count#46]
+Functions [1]: [partial_count(1)]
+Aggregate Attributes [1]: [count#47]
+Results [9]: [cd_gender#39, cd_marital_status#40, cd_education_status#41, cd_purchase_estimate#42, cd_credit_rating#43, cd_dep_count#44, cd_dep_employed_count#45, cd_dep_college_count#46, count#48]
+
+(41) Exchange
+Input [9]: [cd_gender#39, cd_marital_status#40, cd_education_status#41, cd_purchase_estimate#42, cd_credit_rating#43, cd_dep_count#44, cd_dep_employed_count#45, cd_dep_college_count#46, count#48]
+Arguments: hashpartitioning(cd_gender#39, cd_marital_status#40, cd_education_status#41, cd_purchase_estimate#42, cd_credit_rating#43, cd_dep_count#44, cd_dep_employed_count#45, cd_dep_college_count#46, 5), ENSURE_REQUIREMENTS, [plan_id=5]
+
+(42) HashAggregate [codegen id : 10]
+Input [9]: [cd_gender#39, cd_marital_status#40, cd_education_status#41, cd_purchase_estimate#42, cd_credit_rating#43, cd_dep_count#44, cd_dep_employed_count#45, cd_dep_college_count#46, count#48]
+Keys [8]: [cd_gender#39, cd_marital_status#40, cd_education_status#41, cd_purchase_estimate#42, cd_credit_rating#43, cd_dep_count#44, cd_dep_employed_count#45, cd_dep_college_count#46]
+Functions [1]: [count(1)]
+Aggregate Attributes [1]: [count(1)#49]
+Results [14]: [cd_gender#39, cd_marital_status#40, cd_education_status#41, count(1)#49 AS cnt1#50, cd_purchase_estimate#42, count(1)#49 AS cnt2#51, cd_credit_rating#43, count(1)#49 AS cnt3#52, cd_dep_count#44, count(1)#49 AS cnt4#53, cd_dep_employed_count#45, count(1)#49 AS cnt5#54, cd_dep_college_count#46, count(1)#49 AS cnt6#55]
+
+(43) TakeOrderedAndProject
+Input [14]: [cd_gender#39, cd_marital_status#40, cd_education_status#41, cnt1#50, cd_purchase_estimate#42, cnt2#51, cd_credit_rating#43, cnt3#52, cd_dep_count#44, cnt4#53, cd_dep_employed_count#45, cnt5#54, cd_dep_college_count#46, cnt6#55]
+Arguments: 100, [cd_gender#39 ASC NULLS FIRST, cd_marital_status#40 ASC NULLS FIRST, cd_education_status#41 ASC NULLS FIRST, cd_purchase_estimate#42 ASC NULLS FIRST, cd_credit_rating#43 ASC NULLS FIRST, cd_dep_count#44 ASC NULLS FIRST, cd_dep_employed_count#45 ASC NULLS FIRST, cd_dep_college_count#46 ASC NULLS FIRST], [cd_gender#39, cd_marital_status#40, cd_education_status#41, cnt1#50, cd_purchase_estimate#42, cnt2#51, cd_credit_rating#43, cnt3#52, cd_dep_count#44, cnt4#53, cd_dep_employed_count#45, cnt5#54, cd_dep_college_count#46, cnt6#55]
+
+===== Subqueries =====
+
+Subquery:1 Hosting operator id = 4 Hosting Expression = ss_sold_date_sk#4 IN dynamicpruning#56
+BroadcastExchange (47)
++- * Project (46)
+   +- * Filter (45)
+      +- BatchScan spark_catalog.default.date_dim (44)
+
+
+(44) BatchScan spark_catalog.default.date_dim
+Output [28]: [d_date_sk#27, d_date_id#57, d_date#58, d_month_seq#59, d_week_seq#60, d_quarter_seq#61, d_year#62, d_dow#63, d_moy#64, d_dom#65, d_qoy#66, d_fy_year#67, d_fy_quarter_seq#68, d_fy_week_seq#69, d_day_name#70, d_quarter_name#71, d_holiday#72, d_weekend#73, d_following_holiday#74, d_first_dom#75, d_last_dom#76, d_same_day_ly#77, d_same_day_lq#78, d_current_day#79, d_current_week#80, d_current_month#81, d_current_quarter#82, d_current_year#83]
+spark_catalog.default.date_dim [scan class = SparkBatchQueryScan] [filters=d_year IS NOT NULL, d_moy IS NOT NULL, d_year = 2002, d_moy >= 4, d_moy <= 7, d_date_sk IS NOT NULL], [runtimeFilters=[]], caseSensitive=false,[ Broadcast Var UNUSED =]
+
+(45) Filter [codegen id : 1]
+Input [28]: [d_date_sk#27, d_date_id#57, d_date#58, d_month_seq#59, d_week_seq#60, d_quarter_seq#61, d_year#62, d_dow#63, d_moy#64, d_dom#65, d_qoy#66, d_fy_year#67, d_fy_quarter_seq#68, d_fy_week_seq#69, d_day_name#70, d_quarter_name#71, d_holiday#72, d_weekend#73, d_following_holiday#74, d_first_dom#75, d_last_dom#76, d_same_day_ly#77, d_same_day_lq#78, d_current_day#79, d_current_week#80, d_current_month#81, d_current_quarter#82, d_current_year#83]
+Condition : (((((isnotnull(d_year#62) AND isnotnull(d_moy#64)) AND (d_year#62 = 2002)) AND (d_moy#64 >= 4)) AND (d_moy#64 <= 7)) AND isnotnull(d_date_sk#27))
+
+(46) Project [codegen id : 1]
+Output [1]: [d_date_sk#27]
+Input [28]: [d_date_sk#27, d_date_id#57, d_date#58, d_month_seq#59, d_week_seq#60, d_quarter_seq#61, d_year#62, d_dow#63, d_moy#64, d_dom#65, d_qoy#66, d_fy_year#67, d_fy_quarter_seq#68, d_fy_week_seq#69, d_day_name#70, d_quarter_name#71, d_holiday#72, d_weekend#73, d_following_holiday#74, d_first_dom#75, d_last_dom#76, d_same_day_ly#77, d_same_day_lq#78, d_current_day#79, d_current_week#80, d_current_month#81, d_current_quarter#82, d_current_year#83]
+
+(47) BroadcastExchange
+Input [1]: [d_date_sk#27]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=6]
+
+Subquery:2 Hosting operator id = 12 Hosting Expression = ws_sold_date_sk#28 IN dynamicpruning#84
+BroadcastExchange (51)
++- * Project (50)
+   +- * Filter (49)
+      +- BatchScan spark_catalog.default.date_dim (48)
+
+
+(48) BatchScan spark_catalog.default.date_dim
+Output [3]: [d_date_sk#30, d_year#85, d_moy#86]
+spark_catalog.default.date_dim [scan class = SparkBatchQueryScan] [filters=d_year IS NOT NULL, d_moy IS NOT NULL, d_year = 2002, d_moy >= 4, d_moy <= 7, d_date_sk IS NOT NULL], [runtimeFilters=[]], caseSensitive=false,[ Broadcast Var UNUSED =]
+
+(49) Filter [codegen id : 1]
+Input [3]: [d_date_sk#30, d_year#85, d_moy#86]
+Condition : (((((isnotnull(d_year#85) AND isnotnull(d_moy#86)) AND (d_year#85 = 2002)) AND (d_moy#86 >= 4)) AND (d_moy#86 <= 7)) AND isnotnull(d_date_sk#30))
+
+(50) Project [codegen id : 1]
+Output [1]: [d_date_sk#30]
+Input [3]: [d_date_sk#30, d_year#85, d_moy#86]
+
+(51) BroadcastExchange
+Input [1]: [d_date_sk#30]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=7]
+
+Subquery:3 Hosting operator id = 18 Hosting Expression = cs_sold_date_sk#32 IN dynamicpruning#84
+
+

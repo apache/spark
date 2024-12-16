@@ -19,6 +19,8 @@ package org.apache.spark.sql.execution
 
 import java.util.Locale
 
+import scala.collection.mutable
+
 import org.apache.spark.{SparkException, SparkUnsupportedOperationException}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{execution, AnalysisException, Strategy}
@@ -37,11 +39,13 @@ import org.apache.spark.sql.execution.columnar.{InMemoryRelation, InMemoryTableS
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources.{WriteFiles, WriteFilesExec}
 import org.apache.spark.sql.execution.exchange.{REBALANCE_PARTITIONS_BY_COL, REBALANCE_PARTITIONS_BY_NONE, REPARTITION_BY_COL, REPARTITION_BY_NUM, ShuffleExchangeExec}
+import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, SELF_PUSH}
 import org.apache.spark.sql.execution.python._
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.sources.MemoryPlan
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.OutputMode
+
 
 /**
  * Converts a logical plan into zero or more SparkPlans.  This API is exposed for experimenting
@@ -169,9 +173,9 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
    *     Supports both equi-joins and non-equi-joins.
    *     Supports only inner like joins.
    */
-  object JoinSelection extends Strategy with JoinSelectionHelper {
+  class JoinSelection extends Strategy with JoinSelectionHelper {
     private val hintErrorHandler = conf.hintErrorHandler
-
+    private val broadcastedCanonicalizedSubplans = mutable.Set.empty[LogicalPlan]
     private def checkHintBuildSide(
         onlyLookingAtHint: Boolean,
         buildSide: Option[BuildSide],
@@ -204,8 +208,27 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           "no equi-join keys")
       }
     }
+    def apply(plan: LogicalPlan): Seq[SparkPlan] = this.applyLocal(plan, checkHashHint = true)
 
-    def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+    def applyLocal(plan: LogicalPlan, checkHashHint: Boolean): Seq[SparkPlan] = plan match {
+      case j: Join
+        if checkHashHint &&
+          j.getTagValue(Join.PRESERVE_JOIN_WITH_SELF_PUSH_HASH).isDefined =>
+        val (buildSide, originalBuildLp) =
+          j.getTagValue(Join.PRESERVE_JOIN_WITH_SELF_PUSH_HASH).get
+        val hintInfo = Option(HintInfo(Option(BROADCAST)))
+        val joinWithHint = buildSide match {
+          case BuildRight => j.copy(hint = JoinHint(None, hintInfo))
+          case BuildLeft => j.copy(hint = JoinHint(hintInfo, None))
+        }
+        val bhj = this
+          .applyLocal(joinWithHint, checkHashHint = false)
+          .head
+          .asInstanceOf[BroadcastHashJoinExec]
+          .copy(bcVarPushNode = SELF_PUSH)
+        bhj.preserveLogicalJoinAsHashSelfPush(Option(originalBuildLp))
+
+        bhj :: Nil
 
       // If it is an equi-join, we first look at the join hints w.r.t. the following order:
       //   1. broadcast hint: pick broadcast hash join if the join type is supported. If both sides
@@ -231,18 +254,27 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         val hashJoinSupport = hashJoinSupported(leftKeys, rightKeys)
         def createBroadcastHashJoin(onlyLookingAtHint: Boolean) = {
           if (hashJoinSupport) {
-            val buildSide = getBroadcastBuildSide(j, onlyLookingAtHint, conf)
+            val buildSide = getBroadcastBuildSide(j, onlyLookingAtHint, conf,
+              broadcastedCanonicalizedSubplans)
             checkHintBuildSide(onlyLookingAtHint, buildSide, joinType, hint, true)
             buildSide.map {
               buildSide =>
-                Seq(joins.BroadcastHashJoinExec(
-                  leftKeys,
-                  rightKeys,
-                  joinType,
-                  buildSide,
-                  nonEquiCond,
-                  planLater(left),
-                  planLater(right)))
+                if (conf.preferAsBuildSideLegAlreadyBroadcasted) {
+                  buildSide match {
+                    case BuildRight => broadcastedCanonicalizedSubplans += right.canonicalized
+
+                    case BuildLeft => broadcastedCanonicalizedSubplans += left.canonicalized
+                  }
+                }
+                Seq(
+                  joins.BroadcastHashJoinExec(
+                    leftKeys,
+                    rightKeys,
+                    joinType,
+                    buildSide,
+                    nonEquiCond,
+                    planLater(left),
+                    planLater(right)))
             }
           } else {
             None
@@ -303,7 +335,8 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
               // Build the smaller side unless the join requires a particular build side
               // (e.g. NO_BROADCAST_AND_REPLICATION hint)
               val requiredBuildSide = getBroadcastNestedLoopJoinBuildSide(hint, joinType)
-              val buildSide = requiredBuildSide.getOrElse(getSmallerSide(left, right))
+              val buildSide = requiredBuildSide.getOrElse(getSmallerSide(left, right,
+                mutable.Set.empty))
               Seq(joins.BroadcastNestedLoopJoinExec(
                 planLater(left), planLater(right), buildSide, joinType, j.condition))
             }
@@ -342,13 +375,18 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case logical.Join(left, right, joinType, condition, hint) =>
         checkHintNonEquiJoin(hint)
         val desiredBuildSide = if (joinType.isInstanceOf[InnerLike] || joinType == FullOuter) {
-          getSmallerSide(left, right)
+          getSmallerSide(left, right, broadcastedCanonicalizedSubplans)
         } else {
           // For perf reasons, `BroadcastNestedLoopJoinExec` prefers to broadcast left side if
           // it's a right join, and broadcast right side if it's a left join.
           // TODO: revisit it. If left side is much smaller than the right side, it may be better
           // to broadcast the left side even if it's a left join.
-          if (canBuildBroadcastLeft(joinType)) BuildLeft else BuildRight
+          if (canBuildBroadcastLeft(joinType) &&
+              !broadcastedCanonicalizedSubplans.contains(right.canonicalized)) {
+            BuildLeft
+          } else {
+            BuildRight
+          }
         }
 
         def createBroadcastNLJoin(onlyLookingAtHint: Boolean) = {
@@ -375,8 +413,20 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           }
 
           maybeBuildSide.map { buildSide =>
-            Seq(joins.BroadcastNestedLoopJoinExec(
-              planLater(left), planLater(right), buildSide, joinType, condition))
+            if (conf.preferAsBuildSideLegAlreadyBroadcasted) {
+              buildSide match {
+                case BuildRight => broadcastedCanonicalizedSubplans += right.canonicalized
+
+                case BuildLeft => broadcastedCanonicalizedSubplans += left.canonicalized
+              }
+            }
+            Seq(
+              joins.BroadcastNestedLoopJoinExec(
+                planLater(left),
+                planLater(right),
+                buildSide,
+                joinType,
+                condition))
           }
         }
 

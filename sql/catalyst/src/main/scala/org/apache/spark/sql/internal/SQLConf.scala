@@ -986,6 +986,60 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val PREFER_BROADCAST_VAR_PUSHDOWN_OVER_DPP =
+    buildConf("spark.sql.execution.broadcastHashJoin.preferBroadcastVarPushDownOverDPP")
+      .internal()
+      .doc("For BroadcastHashJoin prefer the leg whose plan has already been broadcasted once," +
+        " for BuildSide. This has a bug in code so it is defaulted to false")
+      .version("3.1.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  val PREFER_AS_BUILDSIDE_LEG_ALREADY_BROADCASTED =
+    buildConf("spark.sql.execution.broadcastHashJoin.preferAsBuildSideLegAlreadyBroadcasted")
+      .internal()
+      .doc("For BroadcastHashJoin prefer the leg whose plan has already been broadcasted once," +
+        " for BuildSide")
+      .version("3.1.0")
+      .booleanConf
+      .createWithDefault(true)
+
+  val USE_AGGS_NONTRIVIAL_FILTERS_TO_SELECT_BHJ_STRATEGY =
+    buildConf("spark.sql.execution.broadcastHashJoin.useAggsNonTrivialFiltersToSelectBHJStrategy")
+      .internal()
+      .doc("Use presence of Aggregates and non trivial filters to pick HashJoin")
+      .version("3.1.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  val CONSIDER_PUSHED_BROADCASTVAR_ON_BATCHSCAN_AS_PRUNABLITY =
+    buildConf(
+      "spark.sql.execution.broadcastHashJoin.considerPushedBroadcastVarOnBatchScanAsPrunablity")
+      .internal()
+      .doc("Use presence of pushed broadcast var as a prunable filter")
+      .version("3.1.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  val PUSH_BROADCASTED_JOIN_KEYS_AS_FILTER_TO_SCAN =
+    buildConf("spark.sql.execution.broadcastHashJoin.pushKeysAsFilterToScan")
+      .internal()
+      .doc("Pushes the join keys from build side of broascasted relation as In clause," +
+        " to the scan of stream side")
+      .version("3.1.0")
+      .booleanConf
+      .createWithDefault(true)
+
+  val PREFER_REUSE_EXCHANGE_OVER_BROADCAST_VAR_PUSHDOWN =
+    buildConf("spark.sql.execution.broadcastHashJoin.preferReuseExchangeOverBroadcastVarPushdown")
+      .internal()
+      .doc("The build side legs under BroadcastExchangeExec may be reusable unless broadcast var " +
+        "push down make them non identical preventing reuse of exchange operator. default is" +
+        " false ")
+      .version("3.1.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val PROPAGATE_DISTINCT_KEYS_ENABLED =
     buildConf("spark.sql.optimizer.propagateDistinctKeys.enabled")
       .internal()
@@ -6205,6 +6259,23 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def coalesceBucketsInJoinMaxBucketRatio: Int =
     getConf(SQLConf.COALESCE_BUCKETS_IN_JOIN_MAX_BUCKET_RATIO)
+
+  def preferAsBuildSideLegAlreadyBroadcasted: Boolean =
+    getConf(PREFER_AS_BUILDSIDE_LEG_ALREADY_BROADCASTED)
+
+  def useAggsNonTrivialFiltersToSelectBHJStrategy: Boolean =
+    getConf(USE_AGGS_NONTRIVIAL_FILTERS_TO_SELECT_BHJ_STRATEGY)
+
+  def considerPushedBroadcastvarOnBatchscanAsPrunablity: Boolean =
+    getConf(CONSIDER_PUSHED_BROADCASTVAR_ON_BATCHSCAN_AS_PRUNABLITY)
+
+  def pushBroadcastedJoinKeysASFilterToScan: Boolean =
+    getConf(PUSH_BROADCASTED_JOIN_KEYS_AS_FILTER_TO_SCAN)
+
+  def preferReuseExchangeOverBroadcastVarPushdown: Boolean =
+    getConf(PREFER_REUSE_EXCHANGE_OVER_BROADCAST_VAR_PUSHDOWN)
+
+  def preferBroadcastVarPushdownOverDPP: Boolean = getConf(PREFER_BROADCAST_VAR_PUSHDOWN_OVER_DPP)
 
   def optimizeNullAwareAntiJoin: Boolean =
     getConf(SQLConf.OPTIMIZE_NULL_AWARE_ANTI_JOIN)

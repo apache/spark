@@ -30,7 +30,7 @@ import org.apache.spark.util.ArrayImplicits._
 
 class ColumnarToRowEvaluatorFactory(
     childOutput: Seq[Attribute],
-    numOutputRows: SQLMetric,
+    val numOutputRows: SQLMetric,
     numInputBatches: SQLMetric)
     extends PartitionEvaluatorFactory[ColumnarBatch, InternalRow] {
 

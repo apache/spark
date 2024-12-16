@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.planning.{ExtractEquiJoinKeys, ExtractSingl
 import org.apache.spark.sql.catalyst.plans.LeftAnti
 import org.apache.spark.sql.catalyst.plans.logical.{Join, LogicalPlan}
 import org.apache.spark.sql.execution.{joins, SparkPlan}
-import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, BroadcastNestedLoopJoinExec}
+import org.apache.spark.sql.execution.joins.{BCVarPushNodeType, BroadcastHashJoinExec, BroadcastNestedLoopJoinExec, PASS_THROUGH, SELF_PUSH}
 
 /**
  * Strategy for plans containing [[LogicalQueryStage]] nodes:
@@ -41,19 +41,56 @@ object LogicalQueryStageStrategy extends Strategy {
     case _ => false
   }
 
+  def bcVarPushType(preserveBuildPlan: Boolean): BCVarPushNodeType = if (preserveBuildPlan) {
+      SELF_PUSH
+    } else {
+      PASS_THROUGH
+    }
+
   def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
     case ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, otherCondition, _,
           left, right, hint)
-        if isBroadcastStage(left) || isBroadcastStage(right) =>
-      val buildSide = if (isBroadcastStage(left)) BuildLeft else BuildRight
-      Seq(BroadcastHashJoinExec(
-        leftKeys, rightKeys, joinType, buildSide, otherCondition, planLater(left),
-        planLater(right)))
+      if isBroadcastStage(left) || isBroadcastStage(right) =>
+      val preserveBuildPlan = plan.getTagValue(Join.PRESERVE_JOIN_WITH_SELF_PUSH_HASH)
+      val (buildSide, bcVarPush) = if (isBroadcastStage(left)) {
+        (BuildLeft, bcVarPushType(preserveBuildPlan.isDefined))
+      } else {
+        (BuildRight, bcVarPushType(preserveBuildPlan.isDefined))
+      }
+
+      val newbhj = BroadcastHashJoinExec(
+        leftKeys,
+        rightKeys,
+        joinType,
+        buildSide,
+        otherCondition,
+        planLater(left),
+        planLater(right),
+        bcVarPushNode = bcVarPush)
+
+      preserveBuildPlan.foreach { case (_, originalBuildLp) =>
+        newbhj.preserveLogicalJoinAsHashSelfPush(Option(originalBuildLp))
+      }
+      Seq(newbhj)
 
     case j @ ExtractSingleColumnNullAwareAntiJoin(leftKeys, rightKeys)
         if isBroadcastStage(j.right) =>
-      Seq(joins.BroadcastHashJoinExec(leftKeys, rightKeys, LeftAnti, BuildRight,
-        None, planLater(j.left), planLater(j.right), isNullAwareAntiJoin = true))
+      val preserveBuildPlan = plan.getTagValue(Join.PRESERVE_JOIN_WITH_SELF_PUSH_HASH)
+      val bcVarPush = bcVarPushType(preserveBuildPlan.isDefined)
+      val newbhj = joins.BroadcastHashJoinExec(
+        leftKeys,
+        rightKeys,
+        LeftAnti,
+        BuildRight,
+        None,
+        planLater(j.left),
+        planLater(j.right),
+        isNullAwareAntiJoin = true,
+        bcVarPushNode = bcVarPush)
+      preserveBuildPlan.foreach { case (_, originalBuildLp) =>
+        newbhj.preserveLogicalJoinAsHashSelfPush(Option(originalBuildLp))
+      }
+      Seq(newbhj)
 
     case j @ Join(left, right, joinType, condition, _)
         if isBroadcastStage(left) || isBroadcastStage(right) =>
