@@ -18,7 +18,9 @@
 package org.apache.spark.sql.util
 
 import java.lang.{Long => JLong}
+
 import scala.collection.mutable.ArrayBuffer
+
 import org.apache.spark._
 import org.apache.spark.sql.{functions, Dataset, Encoder, Encoders, QueryTest, Row, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
