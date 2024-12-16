@@ -125,7 +125,7 @@
     <!-- make sure to update IsolatedClientLoader whenever this version is changed -->
     <hadoop.version>3.4.1</hadoop.version>
     <!-- SPARK-41247: When updating `protobuf.version`, also need to update `protoVersion` in `SparkBuild.scala` -->
-    <protobuf.version>4.28.3</protobuf.version>
+    <protobuf.version>4.29.1</protobuf.version>
     <protoc-jar-maven-plugin.version>3.11.4</protoc-jar-maven-plugin.version>
     <zookeeper.version>3.9.3</zookeeper.version>
     <curator.version>5.7.1</curator.version>
@@ -137,7 +137,7 @@
     <kafka.version>3.9.0</kafka.version>
     <!-- After 10.17.1.0, the minimum required version is JDK19 -->
     <derby.version>10.16.1.1</derby.version>
-    <parquet.version>1.14.4</parquet.version>
+    <parquet.version>1.15.0</parquet.version>
     <orc.version>2.0.3</orc.version>
     <orc.classifier>shaded-protobuf</orc.classifier>
     <jetty.version>11.0.24</jetty.version>
@@ -151,7 +151,7 @@
     If you change codahale.metrics.version, you also need to change
     the link to metrics.dropwizard.io in docs/monitoring.md.
     -->
-    <codahale.metrics.version>4.2.28</codahale.metrics.version>
+    <codahale.metrics.version>4.2.29</codahale.metrics.version>
     <!-- Should be consistent with SparkBuild.scala and docs -->
     <avro.version>1.12.0</avro.version>
     <aws.kinesis.client.version>1.12.0</aws.kinesis.client.version>
@@ -180,8 +180,8 @@
     <scalafmt.validateOnly>true</scalafmt.validateOnly>
     <scalafmt.changedOnly>true</scalafmt.changedOnly>
     <codehaus.jackson.version>1.9.13</codehaus.jackson.version>
-    <fasterxml.jackson.version>2.18.1</fasterxml.jackson.version>
-    <fasterxml.jackson.databind.version>2.18.1</fasterxml.jackson.databind.version>
+    <fasterxml.jackson.version>2.18.2</fasterxml.jackson.version>
+    <fasterxml.jackson.databind.version>2.18.2</fasterxml.jackson.databind.version>
     <ws.xmlschema.version>2.3.1</ws.xmlschema.version>
     <snappy.version>1.1.10.7</snappy.version>
     <netlib.ludovic.dev.version>3.0.3</netlib.ludovic.dev.version>
@@ -195,7 +195,7 @@
     <!-- org.apache.commons/commons-pool2/-->
     <commons-pool2.version>2.12.0</commons-pool2.version>
     <datanucleus-core.version>4.1.17</datanucleus-core.version>
-    <guava.version>33.2.1-jre</guava.version>
+    <guava.version>33.3.1-jre</guava.version>
     <gson.version>2.11.0</gson.version>
     <janino.version>3.1.9</janino.version>
     <jersey.version>3.0.16</jersey.version>
@@ -214,7 +214,7 @@
     <bouncycastle.version>1.79</bouncycastle.version>
     <tink.version>1.15.0</tink.version>
     <datasketches.version>6.1.1</datasketches.version>
-    <netty.version>4.1.114.Final</netty.version>
+    <netty.version>4.1.115.Final</netty.version>
     <netty-tcnative.version>2.0.69.Final</netty-tcnative.version>
     <icu4j.version>76.1</icu4j.version>
     <junit-jupiter.version>5.11.3</junit-jupiter.version>
@@ -229,7 +229,7 @@
     ./python/pyspark/sql/pandas/utils.py, ./python/packaging/classic/setup.py
     and ./python/packaging/connect/setup.py too.
     -->
-    <arrow.version>18.0.0</arrow.version>
+    <arrow.version>18.1.0</arrow.version>
     <ammonite.version>3.0.0</ammonite.version>
     <jjwt.version>0.12.6</jjwt.version>
 
@@ -295,7 +295,7 @@
     <spark.test.docker.removePulledImage>true</spark.test.docker.removePulledImage>
 
     <!-- Version used in Connect -->
-    <connect.guava.version>33.2.1-jre</connect.guava.version>
+    <connect.guava.version>33.3.1-jre</connect.guava.version>
     <guava.failureaccess.version>1.0.2</guava.failureaccess.version>
     <io.grpc.version>1.67.1</io.grpc.version>
     <mima.version>1.1.4</mima.version>
@@ -3225,7 +3225,7 @@
             -->
             <groupId>com.puppycrawl.tools</groupId>
             <artifactId>checkstyle</artifactId>
-            <version>10.20.0</version>
+            <version>10.20.2</version>
           </dependency>
         </dependencies>
         <executions>

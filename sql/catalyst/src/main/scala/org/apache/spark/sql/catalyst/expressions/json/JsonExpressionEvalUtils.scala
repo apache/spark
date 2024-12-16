@@ -32,34 +32,6 @@ import org.apache.spark.sql.types.{ArrayType, DataType, MapType, StructField, St
 import org.apache.spark.unsafe.types.{UTF8String, VariantVal}
 import org.apache.spark.util.Utils
 
-object JsonExpressionEvalUtils {
-
-  def schemaOfJson(
-      jsonFactory: JsonFactory,
-      jsonOptions: JSONOptions,
-      jsonInferSchema: JsonInferSchema,
-      json: UTF8String): UTF8String = {
-    val dt = Utils.tryWithResource(CreateJacksonParser.utf8String(jsonFactory, json)) { parser =>
-      parser.nextToken()
-      // To match with schema inference from JSON datasource.
-      jsonInferSchema.inferField(parser) match {
-        case st: StructType =>
-          jsonInferSchema.canonicalizeType(st, jsonOptions).getOrElse(StructType(Nil))
-        case at: ArrayType if at.elementType.isInstanceOf[StructType] =>
-          jsonInferSchema
-            .canonicalizeType(at.elementType, jsonOptions)
-            .map(ArrayType(_, containsNull = at.containsNull))
-            .getOrElse(ArrayType(StructType(Nil), containsNull = at.containsNull))
-        case other: DataType =>
-          jsonInferSchema.canonicalizeType(other, jsonOptions).getOrElse(
-            SQLConf.get.defaultStringType)
-      }
-    }
-
-    UTF8String.fromString(dt.sql)
-  }
-}
-
 case class JsonToStructsEvaluator(
     options: Map[String, String],
     nullableSchema: DataType,
@@ -104,6 +76,7 @@ case class JsonToStructsEvaluator(
   }
 
   final def evaluate(json: UTF8String): Any = {
+    if (json == null) return null
     nullableSchema match {
       case _: VariantType =>
         VariantExpressionEvalUtils.parseJson(json,
@@ -161,6 +134,38 @@ case class StructsToJsonEvaluator(
   }
 }
 
+case class SchemaOfJsonEvaluator(options: Map[String, String]) {
+  @transient
+  private lazy val jsonOptions = new JSONOptions(options, "UTC")
+
+  @transient
+  private lazy val jsonFactory = jsonOptions.buildJsonFactory()
+
+  @transient
+  private lazy val jsonInferSchema = new JsonInferSchema(jsonOptions)
+
+  final def evaluate(json: UTF8String): Any = {
+    val dt = Utils.tryWithResource(CreateJacksonParser.utf8String(jsonFactory, json)) { parser =>
+      parser.nextToken()
+      // To match with schema inference from JSON datasource.
+      jsonInferSchema.inferField(parser) match {
+        case st: StructType =>
+          jsonInferSchema.canonicalizeType(st, jsonOptions).getOrElse(StructType(Nil))
+        case at: ArrayType if at.elementType.isInstanceOf[StructType] =>
+          jsonInferSchema
+            .canonicalizeType(at.elementType, jsonOptions)
+            .map(ArrayType(_, containsNull = at.containsNull))
+            .getOrElse(ArrayType(StructType(Nil), containsNull = at.containsNull))
+        case other: DataType =>
+          jsonInferSchema.canonicalizeType(other, jsonOptions).getOrElse(
+            SQLConf.get.defaultStringType)
+      }
+    }
+
+    UTF8String.fromString(dt.sql)
+  }
+}
+
 /**
  * The expression `JsonTuple` will utilize it to support codegen.
  */
@@ -170,7 +175,7 @@ case class JsonTupleEvaluator(fieldsLength: Int) {
 
   // If processing fails this shared value will be returned.
   @transient private lazy val nullRow: Seq[InternalRow] =
-    new GenericInternalRow(Array.ofDim[Any](fieldsLength)) :: Nil
+  new GenericInternalRow(Array.ofDim[Any](fieldsLength)) :: Nil
 
   private def parseRow(parser: JsonParser, fieldNames: Seq[String]): Seq[InternalRow] = {
     // Only objects are supported.

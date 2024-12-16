@@ -479,6 +479,29 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
       driverConf.set(EXECUTOR_ID, arguments.executorId)
       cfg.logLevel.foreach(logLevel => Utils.setLogLevelIfNeeded(logLevel))
 
+      // Set executor memory related config here according to resource profile
+      if (cfg.resourceProfile.id != ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID) {
+        cfg.resourceProfile
+          .executorResources
+          .foreach {
+            case (ResourceProfile.OFFHEAP_MEM, request) =>
+              driverConf.set(MEMORY_OFFHEAP_SIZE.key, request.amount.toString + "m")
+              logInfo(log"Set executor off-heap memory to " +
+                log"${MDC(LogKeys.EXECUTOR_MEMORY_OFFHEAP, request)}")
+            case (ResourceProfile.MEMORY, request) =>
+              driverConf.set(EXECUTOR_MEMORY.key, request.amount.toString + "m")
+              logInfo(log"Set executor memory to ${MDC(LogKeys.EXECUTOR_MEMORY_SIZE, request)}")
+            case (ResourceProfile.OVERHEAD_MEM, request) =>
+              // Maybe don't need to set this since it's nearly used by tasks.
+              driverConf.set(EXECUTOR_MEMORY_OVERHEAD.key, request.amount.toString + "m")
+              logInfo(log"Set executor memory_overhead to " +
+                log"${MDC(LogKeys.EXECUTOR_MEMORY_OVERHEAD_SIZE, request)}")
+            case (ResourceProfile.CORES, request) =>
+              driverConf.set(EXECUTOR_CORES.key, request.amount.toString)
+              logInfo(log"Set executor cores to ${MDC(LogKeys.NUM_EXECUTOR_CORES, request)}")
+            case _ =>
+          }
+      }
       val env = SparkEnv.createExecutorEnv(driverConf, arguments.executorId, arguments.bindAddress,
         arguments.hostname, arguments.cores, cfg.ioEncryptionKey, isLocal = false)
       // Set the application attemptId in the BlockStoreClient if available.

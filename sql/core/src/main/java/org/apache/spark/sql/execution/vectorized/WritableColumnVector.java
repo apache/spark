@@ -97,7 +97,7 @@ public abstract class WritableColumnVector extends ColumnVector {
   }
 
   @Override
-  public void closeIfNotWritable() {
+  public void closeIfFreeable() {
     // no-op
   }
 
