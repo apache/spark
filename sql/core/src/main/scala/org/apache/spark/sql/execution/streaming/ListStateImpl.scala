@@ -40,13 +40,7 @@ class ListStateImpl[S](
      keyExprEnc: ExpressionEncoder[Any],
      valEncoder: ExpressionEncoder[Any],
      metrics: Map[String, SQLMetric] = Map.empty)
-  extends ListStateMetricsImpl
-  with ListState[S]
-  with Logging {
-
-  override def stateStore: StateStore = store
-  override def baseStateName: String = stateName
-  override def exprEncSchema: StructType = keyExprEnc.schema
+  extends ListState[S] with Logging {
 
   private val stateTypesEncoder = StateTypesEncoder(keyExprEnc, valEncoder, stateName)
 
@@ -85,7 +79,6 @@ class ListStateImpl[S](
 
      val encodedKey = stateTypesEncoder.encodeGroupingKey()
      var isFirst = true
-     var entryCount = 0L
      TWSMetricsUtils.resetMetric(metrics, "numUpdatedStateRows")
 
      newState.foreach { v =>
@@ -96,21 +89,17 @@ class ListStateImpl[S](
        } else {
          store.merge(encodedKey, encodedValue, stateName)
        }
-       entryCount += 1
        TWSMetricsUtils.incrementMetric(metrics, "numUpdatedStateRows")
      }
-     updateEntryCount(encodedKey, entryCount)
    }
 
    /** Append an entry to the list. */
    override def appendValue(newState: S): Unit = {
      StateStoreErrors.requireNonNullStateValue(newState, stateName)
      val encodedKey = stateTypesEncoder.encodeGroupingKey()
-     val entryCount = getEntryCount(encodedKey)
      store.merge(encodedKey,
          stateTypesEncoder.encodeValue(newState), stateName)
      TWSMetricsUtils.incrementMetric(metrics, "numUpdatedStateRows")
-     updateEntryCount(encodedKey, entryCount + 1)
    }
 
    /** Append an entire list to the existing value. */
@@ -118,23 +107,18 @@ class ListStateImpl[S](
      validateNewState(newState)
 
      val encodedKey = stateTypesEncoder.encodeGroupingKey()
-     var entryCount = getEntryCount(encodedKey)
      newState.foreach { v =>
        val encodedValue = stateTypesEncoder.encodeValue(v)
        store.merge(encodedKey, encodedValue, stateName)
-       entryCount += 1
        TWSMetricsUtils.incrementMetric(metrics, "numUpdatedStateRows")
      }
-     updateEntryCount(encodedKey, entryCount)
    }
 
    /** Remove this state. */
    override def clear(): Unit = {
      val encodedKey = stateTypesEncoder.encodeGroupingKey()
      store.remove(encodedKey, stateName)
-     val entryCount = getEntryCount(encodedKey)
-     TWSMetricsUtils.incrementMetric(metrics, "numRemovedStateRows", entryCount)
-     removeEntryCount(encodedKey)
+     TWSMetricsUtils.incrementMetric(metrics, "numRemovedStateRows", 1L)
    }
 
    private def validateNewState(newState: Array[S]): Unit = {

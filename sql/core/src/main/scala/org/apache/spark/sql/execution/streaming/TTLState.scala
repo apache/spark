@@ -353,17 +353,6 @@ abstract class OneToManyTTLState(
   // Projects a Long into an UnsafeRow
   private val minIndexValueProjector = UnsafeProjection.create(MIN_INDEX_VALUE_SCHEMA)
 
-  // Schema of the entry count index: elementKey -> count
-  private val COUNT_INDEX = "$count_" + stateName
-  private val COUNT_INDEX_VALUE_SCHEMA: StructType =
-    StructType(Seq(StructField("count", LongType, nullable = false)))
-  private val countIndexValueProjector = UnsafeProjection.create(COUNT_INDEX_VALUE_SCHEMA)
-
-  // Reused internal row that we use to create an UnsafeRow with the schema of
-  // COUNT_INDEX_VALUE_SCHEMA and the desired value. It is not thread safe (although, anyway,
-  // this class is not thread safe).
-  private val reusedCountIndexValueRow = new GenericInternalRow(1)
-
   store.createColFamilyIfAbsent(
     MIN_INDEX,
     MIN_INDEX_SCHEMA,
@@ -372,49 +361,10 @@ abstract class OneToManyTTLState(
     isInternal = true
   )
 
-  store.createColFamilyIfAbsent(
-    COUNT_INDEX,
-    elementKeySchema,
-    COUNT_INDEX_VALUE_SCHEMA,
-    NoPrefixKeyStateEncoderSpec(elementKeySchema),
-    isInternal = true
-  )
-
-  // Helper method to get the number of entries in the list state for a given element key
-  private def getEntryCount(elementKey: UnsafeRow): Long = {
-    val countRow = store.get(elementKey, COUNT_INDEX)
-    if (countRow != null) {
-      countRow.getLong(0)
-    } else {
-      0L
-    }
-  }
-
-  // Helper function to update the number of entries in the list state for a given element key
-  private def updateEntryCount(elementKey: UnsafeRow, updatedCount: Long): Unit = {
-    reusedCountIndexValueRow.setLong(0, updatedCount)
-    store.put(elementKey,
-      countIndexValueProjector(reusedCountIndexValueRow.asInstanceOf[InternalRow]),
-      COUNT_INDEX
-    )
-  }
-
-  // Helper function to remove the number of entries in the list state for a given element key
-  private def removeEntryCount(elementKey: UnsafeRow): Unit = {
-    store.remove(elementKey, COUNT_INDEX)
-  }
-
   private def writePrimaryIndexEntries(
       overwritePrimaryIndex: Boolean,
       elementKey: UnsafeRow,
       elementValues: Iterator[UnsafeRow]): Unit = {
-    val initialEntryCount = if (overwritePrimaryIndex) {
-      removeEntryCount(elementKey)
-      0
-    } else {
-      getEntryCount(elementKey)
-    }
-
     // Manually keep track of the count so that we can update the count index. We don't
     // want to call elementValues.size since that will try to re-read the iterator.
     var numNewElements = 0
@@ -433,7 +383,6 @@ abstract class OneToManyTTLState(
     }
 
     TWSMetricsUtils.incrementMetric(metrics, "numUpdatedStateRows", numNewElements)
-    updateEntryCount(elementKey, initialEntryCount + numNewElements)
   }
 
   private[sql] def updatePrimaryAndSecondaryIndices(
@@ -500,27 +449,13 @@ abstract class OneToManyTTLState(
         insertIntoTTLIndex(newExpirationMs, elementKey)
       }
 
-      // If we have records [foo, bar, baz] and bar and baz are expiring, then, the
-      // entryCountBeforeExpirations would be 3. The numValuesExpired would be 2, and so the
-      // newEntryCount would be 3 - 2 = 1.
-      val entryCountBeforeExpirations = getEntryCount(elementKey)
-      val numValuesExpired = valueExpirationResult.numValuesExpired
-      val newEntryCount = entryCountBeforeExpirations - numValuesExpired
-
-      if (newEntryCount == 0) {
-        assert(valueExpirationResult.newMinExpirationMs.isEmpty, "Entry count was 0, but a new " +
-          "minimum expiration for the list was defined. This should never happen.")
-        removeEntryCount(elementKey)
-
+      if (valueExpirationResult.newMinExpirationMs.isEmpty) {
         // We removed the record from the TTL index, minimum index, and the state variable's
-        // clearExpiredValues method should have removed from the primary index. We just removed
-        // the entry from the count index, leading to 4 total removals for this state variable.
-        TWSMetricsUtils.incrementMetric(metrics, "numRemovedStateRows", 4L)
-      } else {
-        updateEntryCount(elementKey, newEntryCount)
+        // clearExpiredValues method should have removed from the primary index.
+        TWSMetricsUtils.incrementMetric(metrics, "numRemovedStateRows", 3L)
       }
 
-      totalNumValuesExpired += numValuesExpired
+      totalNumValuesExpired += valueExpirationResult.numValuesExpired
     }
 
     totalNumValuesExpired
@@ -532,11 +467,10 @@ abstract class OneToManyTTLState(
       val existingMinExpiration = existingMinExpirationUnsafeRow.getLong(0)
 
       store.remove(elementKey, stateName)
-      removeEntryCount(elementKey)
       store.remove(elementKey, MIN_INDEX)
       deleteFromTTLIndex(existingMinExpiration, elementKey)
 
-      TWSMetricsUtils.incrementMetric(metrics, "numRemovedStateRows", 4L)
+      TWSMetricsUtils.incrementMetric(metrics, "numRemovedStateRows", 3L)
     }
   }
 
