@@ -85,6 +85,7 @@ from pyspark.sql.connect.expressions import (
 from pyspark.sql.connect.functions import builtin as F
 from pyspark.sql.pandas.types import from_arrow_schema, to_arrow_schema
 from pyspark.sql.pandas.functions import _validate_pandas_udf  # type: ignore[attr-defined]
+from pyspark.sql.table_arg import TableArg
 
 
 if TYPE_CHECKING:
@@ -103,7 +104,6 @@ if TYPE_CHECKING:
     from pyspark.sql.connect.session import SparkSession
     from pyspark.pandas.frame import DataFrame as PandasOnSparkDataFrame
     from pyspark.sql.metrics import ExecutionInfo
-    from pyspark.sql.table_arg import TableArg
 
 
 class DataFrame(ParentDataFrame):
@@ -1801,7 +1801,7 @@ class DataFrame(ParentDataFrame):
             self._session,
         )
 
-    def asTable(self) -> "TableArg":
+    def asTable(self) -> TableArg:
         # TODO(SPARK-50393): Support DataFrame conversion to table argument in Spark Connect
         raise PySparkNotImplementedError(
             errorClass="NOT_IMPLEMENTED",
