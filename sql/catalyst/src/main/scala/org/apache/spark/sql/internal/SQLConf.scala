@@ -4819,9 +4819,9 @@ object SQLConf {
     .createWithDefault(false)
 
   val PRESERVE_CHAR_VARCHAR_TYPE_INFO = buildConf("spark.sql.preserveCharVarcharTypeInfo")
-    .doc("When true, Spark treats CHAR/VARCHAR type differently than STRING type, which is the " +
-      "opposite of its behavior in Spark 3.0 and earlier versions. This means length check for " +
-      "CHAR/VARCHAR type and padding for CHAR type when writing data to the table.")
+    .doc("When true, Spark does not replace CHAR/VARCHAR types the STRING type, which is the " +
+      "default behavior of Spark 3.0 and earlier versions. This means the length checks for " +
+      "CHAR/VARCHAR types is enforced and CHAR type is also properly padded.")
     .version("4.0.0")
     .booleanConf
     .createWithDefault(false)
