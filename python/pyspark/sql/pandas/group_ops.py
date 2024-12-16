@@ -515,7 +515,7 @@ class PandasGroupedOpsMixin:
             statefulProcessor.init(driver_handle)
 
             # This method is used for the driver-side stateful processor after we have collected all the necessary
-            # schemas. This instance of the stateful processor won't be used again.
+            # schemas. This instance of the DriverStatefulProcessorHandleImpl won't be used again on JVM.
             statefulProcessor.close()
 
             # return a dummy results, no return value is needed for pre init
