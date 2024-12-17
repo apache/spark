@@ -489,7 +489,7 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
   }
 
   override def simpleString(maxFields: Int): String =
-    s"$value IN ${truncatedString(list, "(", ", ", ")", maxFields)}"
+    s"$value IN ${truncatedString(list, "(", ",", ")", maxFields)}"
 
   override def toString: String = simpleString(Int.MaxValue)
 
