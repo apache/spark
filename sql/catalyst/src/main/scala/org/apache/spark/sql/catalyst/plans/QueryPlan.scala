@@ -33,7 +33,6 @@ import org.apache.spark.sql.catalyst.trees.TreePatternBits
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, StructType}
-import org.apache.spark.util.TransientLazy
 import org.apache.spark.util.collection.BitSet
 
 /**
@@ -97,21 +96,17 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
    * include attributes that are implicitly referenced by being passed through to the output tuple.
    */
   def references: AttributeSet = {
-    val refs = __references.get()
+    val refs = _references.get()
     if (refs == null) {
-      val newRefs = AttributeSet(expressions.flatMap(_.references))
-      __references.compareAndSet(null, newRefs)
+      val newRefs = AttributeSet(expressions) -- producedAttributes
+      _references.compareAndSet(null, newRefs)
       newRefs
     } else {
       refs
     }
   }
 
-  private val _references = new TransientLazy({
-    AttributeSet(expressions) -- producedAttributes
-  })
-
-  private val __references: AtomicReference[AttributeSet] = new AtomicReference(null)
+  private val _references: AtomicReference[AttributeSet] = new AtomicReference(null)
 
   /**
    * Returns true when the all the expressions in the current node as well as all of its children
