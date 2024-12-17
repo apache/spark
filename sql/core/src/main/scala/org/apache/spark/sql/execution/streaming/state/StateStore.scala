@@ -376,6 +376,7 @@ case class PrefixKeyScanStateEncoderSpec(
   if (numColsPrefixKey == 0 || numColsPrefixKey >= keySchema.length) {
     throw StateStoreErrors.incorrectNumOrderingColsForPrefixScan(numColsPrefixKey.toString)
   }
+
   override def toEncoder(
       dataEncoder: RocksDBDataEncoder,
       useColumnFamilies: Boolean,

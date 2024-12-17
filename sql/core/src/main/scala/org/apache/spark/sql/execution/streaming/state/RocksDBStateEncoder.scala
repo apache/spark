@@ -60,20 +60,17 @@ sealed trait RocksDBValueStateEncoder {
  * by the callers. The metadata in each row does not need to be written as Avro or UnsafeRow,
  * but the actual data provided by the caller does.
  */
-/** Interface for encoding and decoding state store data between UnsafeRow and raw bytes.
- *
- * @note All encode methods expect non-null input rows. Handling of null values is left to the
- * implementing classes.
- */
 trait DataEncoder {
-  /** Encodes a complete key row into bytes. Used as the primary key for state lookups.
+  /**
+   * Encodes a complete key row into bytes. Used as the primary key for state lookups.
    *
    * @param row An UnsafeRow containing all key columns as defined in the keySchema
    * @return Serialized byte array representation of the key
    */
   def encodeKey(row: UnsafeRow): Array[Byte]
 
-  /** Encodes the non-prefix portion of a key row. Used with prefix scan and
+  /**
+   * Encodes the non-prefix portion of a key row. Used with prefix scan and
    * range scan state lookups where the key is split into prefix and remaining portions.
    *
    * For prefix scans: Encodes columns after the prefix columns
@@ -85,7 +82,8 @@ trait DataEncoder {
    */
   def encodeRemainingKey(row: UnsafeRow): Array[Byte]
 
-  /** Encodes key columns used for range scanning, ensuring proper sort order in RocksDB.
+  /**
+   * Encodes key columns used for range scanning, ensuring proper sort order in RocksDB.
    *
    * This method handles special encoding for numeric types to maintain correct sort order:
    * - Adds sign byte markers for numeric types
@@ -99,14 +97,16 @@ trait DataEncoder {
    */
   def encodePrefixKeyForRangeScan(row: UnsafeRow): Array[Byte]
 
-  /** Encodes a value row into bytes.
+  /**
+   * Encodes a value row into bytes.
    *
    * @param row An UnsafeRow containing the value columns as defined in the valueSchema
    * @return Serialized byte array representation of the value
    */
   def encodeValue(row: UnsafeRow): Array[Byte]
 
-  /** Decodes a complete key from its serialized byte form.
+  /**
+   * Decodes a complete key from its serialized byte form.
    *
    * For NoPrefixKeyStateEncoder: Decodes the entire key
    * For PrefixKeyScanStateEncoder: Decodes only the prefix portion
@@ -117,7 +117,8 @@ trait DataEncoder {
    */
   def decodeKey(bytes: Array[Byte]): UnsafeRow
 
-  /** Decodes the remaining portion of a split key from its serialized form.
+  /**
+   * Decodes the remaining portion of a split key from its serialized form.
    *
    * For PrefixKeyScanStateEncoder: Decodes columns after the prefix
    * For RangeKeyScanStateEncoder: Decodes non-ordering columns
@@ -128,7 +129,8 @@ trait DataEncoder {
    */
   def decodeRemainingKey(bytes: Array[Byte]): UnsafeRow
 
-  /** Decodes range scan key bytes back into an UnsafeRow, preserving proper ordering.
+  /**
+   * Decodes range scan key bytes back into an UnsafeRow, preserving proper ordering.
    *
    * This method reverses the special encoding done by encodePrefixKeyForRangeScan:
    * - Interprets sign byte markers
@@ -141,7 +143,8 @@ trait DataEncoder {
    */
   def decodePrefixKeyForRangeScan(bytes: Array[Byte]): UnsafeRow
 
-  /** Decodes a value from its serialized byte form.
+  /**
+   * Decodes a value from its serialized byte form.
    *
    * @param bytes Serialized byte array containing the encoded value
    * @return UnsafeRow containing the decoded value columns
@@ -479,8 +482,6 @@ class AvroStateEncoder(
 
   private lazy val remainingKeyAvroProjection = UnsafeProjection.create(remainingKeySchema)
 
-
-
   private def getAvroSerializer(schema: StructType): AvroSerializer = {
     val avroType = SchemaConverters.toAvroType(schema)
     new AvroSerializer(schema, avroType, nullable = false)
@@ -510,9 +511,8 @@ class AvroStateEncoder(
    * @return An AvroEncoder containing all necessary serializers and deserializers
    */
   private def createAvroEnc(
-                             keyStateEncoderSpec: KeyStateEncoderSpec,
-                             valueSchema: StructType
-                           ): AvroEncoder = {
+      keyStateEncoderSpec: KeyStateEncoderSpec,
+      valueSchema: StructType): AvroEncoder = {
     val valueSerializer = getAvroSerializer(valueSchema)
     val valueDeserializer = getAvroDeserializer(valueSchema)
 
@@ -900,6 +900,7 @@ abstract class RocksDBKeyStateEncoderBase(
     if (useColumnFamilies) VIRTUAL_COL_FAMILY_PREFIX_BYTES else 0
 
   val out = new ByteArrayOutputStream
+
   /**
    * Get Byte Array for the virtual column family id that is used as prefix for
    * key state rows.
@@ -940,7 +941,8 @@ abstract class RocksDBKeyStateEncoderBase(
   }
 }
 
-/** Factory object for creating state encoders used by RocksDB state store.
+/**
+ * Factory object for creating state encoders used by RocksDB state store.
  *
  * The encoders created by this object handle serialization and deserialization of state data,
  * supporting both key and value encoding with various access patterns
@@ -948,7 +950,8 @@ abstract class RocksDBKeyStateEncoderBase(
  */
 object RocksDBStateEncoder extends Logging {
 
-  /** Creates a key encoder based on the specified encoding strategy and configuration.
+  /**
+   * Creates a key encoder based on the specified encoding strategy and configuration.
    *
    * @param dataEncoder The underlying encoder that handles the actual data encoding/decoding
    * @param keyStateEncoderSpec Specification defining the key encoding strategy
@@ -965,7 +968,8 @@ object RocksDBStateEncoder extends Logging {
     keyStateEncoderSpec.toEncoder(dataEncoder, useColumnFamilies, virtualColFamilyId)
   }
 
-  /** Creates a value encoder that supports either single or multiple values per key.
+  /**
+   * Creates a value encoder that supports either single or multiple values per key.
    *
    * @param dataEncoder The underlying encoder that handles the actual data encoding/decoding
    * @param valueSchema Schema defining the structure of values to be encoded
@@ -984,7 +988,8 @@ object RocksDBStateEncoder extends Logging {
     }
   }
 
-  /** Encodes a virtual column family ID into a byte array suitable for RocksDB.
+  /**
+   * Encodes a virtual column family ID into a byte array suitable for RocksDB.
    *
    * This method creates a fixed-size byte array prefixed with the virtual column family ID,
    * which is used to partition data within RocksDB.
