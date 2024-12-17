@@ -24,7 +24,8 @@ import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Literal, TransformExpression}
 import org.apache.spark.sql.catalyst.plans.physical
-import org.apache.spark.sql.connector.catalog.{Column, Identifier, InMemoryTableCatalog}
+import org.apache.spark.sql.catalyst.plans.physical.KeyGroupedPartitioning
+import org.apache.spark.sql.connector.catalog.{Column, Identifier, InMemoryTableCatalog, PartitionInternalRow}
 import org.apache.spark.sql.connector.catalog.functions._
 import org.apache.spark.sql.connector.distributions.Distributions
 import org.apache.spark.sql.connector.expressions._
@@ -37,6 +38,7 @@ import org.apache.spark.sql.execution.joins.SortMergeJoinExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf._
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
 class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
   private val functions = Seq(
@@ -195,10 +197,16 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
       s"(2, 'ccc', CAST('2020-01-01' AS timestamp))")
 
     val df = sql(s"SELECT * FROM testcat.ns.$table")
-    val distribution = physical.ClusteredDistribution(
-      Seq(TransformExpression(TruncateFunction, Seq(attr("data"), Literal(2)))))
+    val transformExpression = Seq(TransformExpression(
+      TruncateFunction, Seq(attr("data"), Literal(2))))
+    val distribution = physical.ClusteredDistribution(transformExpression)
+    val partValues = Seq(
+      PartitionInternalRow(Array(UTF8String.fromString("aa"))),
+      PartitionInternalRow(Array(UTF8String.fromString("bb"))),
+      PartitionInternalRow(Array(UTF8String.fromString("cc"))))
+    val partitioning = new KeyGroupedPartitioning(transformExpression, 3, partValues, partValues)
 
-    checkQueryPlan(df, distribution, physical.UnknownPartitioning(0))
+    checkQueryPlan(df, distribution, partitioning)
   }
 
   /**
@@ -2502,6 +2510,45 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
       )
       val scans = collectScans(df.queryExecution.executedPlan)
       assert(scans.forall(_.inputRDD.partitions.length == 2))
+    }
+  }
+
+  test("SPARK-50593: Support truncate transform") {
+    val partitions: Array[Transform] = Array(
+      Expressions.apply("truncate", Expressions.column("data"), Expressions.literal(2))
+    )
+
+    // create a table with 3 partitions, partitioned by `truncate` transform
+    createTable("table", columns, partitions)
+    sql(s"INSERT INTO testcat.ns.table VALUES " +
+      s"(0, 'aaa', CAST('2022-01-01' AS timestamp)), " +
+      s"(1, 'bbb', CAST('2021-01-01' AS timestamp)), " +
+      s"(2, 'ccc', CAST('2020-01-01' AS timestamp))")
+
+    createTable("table2", columns2, partitions)
+    sql(s"INSERT INTO testcat.ns.table2 VALUES " +
+      s"(1, 5, 'aaa')," +
+      s"(5, 10, 'bbb')," +
+      s"(20, 40, 'bbb')," +
+      s"(40, 80, 'ddd')")
+
+    withSQLConf(
+      SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true") {
+
+      val df =
+        sql(
+          selectWithMergeJoinHint("table", "table2") +
+          "id, store_id, dept_id " +
+          "FROM testcat.ns.table JOIN testcat.ns.table2 " +
+          "ON table.data = table2.data " +
+          "SORT BY id, store_id, dept_id")
+      val shuffles = collectShuffles(df.queryExecution.executedPlan)
+      assert(shuffles.isEmpty, "should not add shuffle for both sides of the join")
+      checkAnswer(df,
+        Seq(Row(0, 1, 5), Row(1, 5, 10), Row(1, 20, 40))
+      )
+      val scans = collectScans(df.queryExecution.executedPlan)
+      assert(scans.forall(_.inputRDD.partitions.length == 4))
     }
   }
 }
