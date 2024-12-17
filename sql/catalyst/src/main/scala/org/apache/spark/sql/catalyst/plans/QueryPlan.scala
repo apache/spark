@@ -18,7 +18,6 @@
 package org.apache.spark.sql.catalyst.plans
 
 import java.util.IdentityHashMap
-import java.util.concurrent.atomic.AtomicReference
 
 import scala.collection.mutable
 
@@ -33,6 +32,7 @@ import org.apache.spark.sql.catalyst.trees.TreePatternBits
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, StructType}
+import org.apache.spark.util.TransientAtomicRef
 import org.apache.spark.util.collection.BitSet
 
 /**
@@ -95,18 +95,10 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
    * All Attributes that appear in expressions from this operator.  Note that this set does not
    * include attributes that are implicitly referenced by being passed through to the output tuple.
    */
-  def references: AttributeSet = {
-    val refs = _references.get()
-    if (refs == null) {
-      val newRefs = AttributeSet(expressions) -- producedAttributes
-      _references.compareAndSet(null, newRefs)
-      newRefs
-    } else {
-      refs
-    }
-  }
+  def references: AttributeSet = _references()
 
-  private val _references: AtomicReference[AttributeSet] = new AtomicReference(null)
+  private val _references: TransientAtomicRef[AttributeSet] =
+    new TransientAtomicRef({ AttributeSet(expressions) -- producedAttributes })
 
   /**
    * Returns true when the all the expressions in the current node as well as all of its children
