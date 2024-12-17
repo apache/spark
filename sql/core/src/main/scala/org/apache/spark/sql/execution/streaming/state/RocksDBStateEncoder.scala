@@ -1011,8 +1011,6 @@ object RocksDBStateEncoder extends Logging {
  * @param keySchema - schema of the key to be encoded
  * @param numColsPrefixKey - number of columns to be used for prefix key
  * @param useColumnFamilies - if column family is enabled for this encoder
- * @param avroEnc - if Avro encoding is specified for this StateEncoder, this encoder will
- *                be defined
  */
 class PrefixKeyScanStateEncoder(
     dataEncoder: RocksDBDataEncoder,
@@ -1138,8 +1136,6 @@ class PrefixKeyScanStateEncoder(
  * @param keySchema - schema of the key to be encoded
  * @param orderingOrdinals - the ordinals for which the range scan is constructed
  * @param useColumnFamilies - if column family is enabled for this encoder
- * @param avroEnc - if Avro encoding is specified for this StateEncoder, this encoder will
- *                be defined
  */
 class RangeKeyScanStateEncoder(
     dataEncoder: RocksDBDataEncoder,
