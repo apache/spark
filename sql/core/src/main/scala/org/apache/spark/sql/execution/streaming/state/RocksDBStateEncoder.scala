@@ -59,6 +59,8 @@ sealed trait RocksDBValueStateEncoder {
  * headers, footers and other metadata, but they also have data that is provided
  * by the callers. The metadata in each row does not need to be written as Avro or UnsafeRow,
  * but the actual data provided by the caller does.
+ * The classes that use this trait require specialized partial encoding which makes them much
+ * easier to cache and use, which is why each DataEncoder deals with multiple schemas.
  */
 trait DataEncoder {
   /**
