@@ -21,7 +21,7 @@ import scala.collection.mutable
 import scala.reflect.classTag
 
 import org.apache.spark.sql.{AnalysisException, Row}
-import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{BinaryEncoder, BoxedBooleanEncoder, BoxedByteEncoder, BoxedDoubleEncoder, BoxedFloatEncoder, BoxedIntEncoder, BoxedLongEncoder, BoxedShortEncoder, CalendarIntervalEncoder, DateEncoder, DayTimeIntervalEncoder, EncoderField, InstantEncoder, IterableEncoder, JavaDecimalEncoder, LocalDateEncoder, LocalDateTimeEncoder, MapEncoder, NullEncoder, RowEncoder => AgnosticRowEncoder, StringEncoder, TimestampEncoder, UDTEncoder, VariantEncoder, YearMonthIntervalEncoder}
+import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{BinaryEncoder, BoxedBooleanEncoder, BoxedByteEncoder, BoxedDoubleEncoder, BoxedFloatEncoder, BoxedIntEncoder, BoxedLongEncoder, BoxedShortEncoder, CalendarIntervalEncoder, CharEncoder, DateEncoder, DayTimeIntervalEncoder, EncoderField, InstantEncoder, IterableEncoder, JavaDecimalEncoder, LocalDateEncoder, LocalDateTimeEncoder, MapEncoder, NullEncoder, RowEncoder => AgnosticRowEncoder, StringEncoder, TimestampEncoder, UDTEncoder, VarcharEncoder, VariantEncoder, YearMonthIntervalEncoder}
 import org.apache.spark.sql.errors.{DataTypeErrorsBase, ExecutionErrors}
 import org.apache.spark.sql.internal.SqlApiConf
 import org.apache.spark.sql.types._
@@ -80,6 +80,12 @@ object RowEncoder extends DataTypeErrorsBase {
       case DoubleType => BoxedDoubleEncoder
       case dt: DecimalType => JavaDecimalEncoder(dt, lenientSerialization = true)
       case BinaryType => BinaryEncoder
+      case CharType(_) | VarcharType(_) if !SqlApiConf.get.preserveCharVarcharTypeInfo =>
+          throw new AnalysisException(
+            errorClass = "UNSUPPORTED_DATA_TYPE_FOR_ENCODER",
+            messageParameters = Map("dataType" -> toSQLType(dataType)))
+      case CharType(length) => CharEncoder(length)
+      case VarcharType(length) => VarcharEncoder(length)
       case _: StringType => StringEncoder
       case TimestampType if SqlApiConf.get.datetimeJava8ApiEnabled => InstantEncoder(lenient)
       case TimestampType => TimestampEncoder(lenient)

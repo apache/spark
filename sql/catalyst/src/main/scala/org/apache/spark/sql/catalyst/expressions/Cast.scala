@@ -314,6 +314,13 @@ object Cast extends QueryErrorsBase {
     case _ if from == to => true
     case (NullType, _) => true
     case (_: NumericType, _: NumericType) => true
+    case (_: AtomicType, CharType(_) | VarcharType(_))
+      if !SQLConf.get.preserveCharVarcharTypeInfo => false
+    case (CharType(a), CharType(b)) => a <= b
+    case (CharType(a), VarcharType(b)) => a <= b
+    case (VarcharType(a), VarcharType(b)) => a <= b
+    case (_: AtomicType, CharType(_) | VarcharType(_)) => false
+    case (_: CalendarIntervalType, CharType(_) | VarcharType(_)) => false
     case (_: AtomicType, _: StringType) => true
     case (_: CalendarIntervalType, _: StringType) => true
     case (_: DatetimeType, _: DatetimeType) => true

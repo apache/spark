@@ -87,7 +87,9 @@ object ExpressionEncoder {
       }
       constructProjection(row).get(0, anyObjectType).asInstanceOf[T]
     } catch {
-      case e: SparkRuntimeException if e.getCondition == "NOT_NULL_ASSERT_VIOLATION" =>
+      case e: SparkRuntimeException if
+        e.getCondition == "NOT_NULL_ASSERT_VIOLATION" ||
+        e.getCondition == "EXCEED_LIMIT_LENGTH" =>
         throw e
       case e: Exception =>
         throw QueryExecutionErrors.expressionDecodingError(e, expressions)
