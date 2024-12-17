@@ -86,6 +86,31 @@ trait CharVarcharTestSuite extends QueryTest with SQLTestUtils {
     }
   }
 
+  test("preserve char/varchar type info") {
+    Seq(CharType(5), VarcharType(5)).foreach { typ =>
+      withSQLConf(SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> "true") {
+        withTable("t") {
+          val name = typ.typeName
+          sql(s"CREATE TABLE t(i STRING, c $name) USING $format")
+          spark.table("t").schema == StructType(Seq(
+            StructField("i", StringType, nullable = true),
+            StructField("c", StringType, nullable = true))
+          )
+        }
+        withSQLConf(SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true") {
+          withTable("t") {
+            val name = typ.typeName
+            sql(s"CREATE TABLE t(i STRING, c $name) USING $format")
+            spark.table("t").schema == StructType(Seq(
+              StructField("i", StringType, nullable = true),
+              StructField("c", typ, nullable = true))
+            )
+          }
+        }
+      }
+    }
+  }
+
   test("char type values should be padded or trimmed: partitioned columns") {
     // via dynamic partitioned columns
     withTable("t") {
