@@ -164,6 +164,12 @@ object TransformWithStateOperatorProperties extends Logging {
   }
 }
 
+/**
+ * This trait contains utils functions related to TransformWithState metadata.
+ * This is used both in Scala and Python side of TransformWithState metadata support when calling
+ * `init()` with DriverStatefulProcessorHandleImpl, and get the state schema and state metadata
+ * on driver during physical planning phase.
+ */
 trait TransformWithStateMetadataUtils extends Logging {
   def getColFamilySchemas(): Map[String, StateStoreColFamilySchema]
 

@@ -229,6 +229,10 @@ abstract class TransformWithStateInPandasPythonBaseRunner[I](
   }
 }
 
+/**
+ * TransformWithStateInPandas driver side Python runner. Similar as executor side runner,
+ * will start a new daemon thread on the Python runner to run state server.
+ */
 class TransformWithStateInPandasPythonPreInitRunner(
     func: PythonFunction,
     workerModule: String,
@@ -327,6 +331,10 @@ class TransformWithStateInPandasPythonPreInitRunner(
   }
 }
 
+/**
+ * TransformWithStateInPandas Python runner utils functions for handling a state server
+ * in a new daemon thread.
+ */
 trait TransformWithStateInPandasPythonRunnerUtils extends Logging{
   protected var stateServerSocketPort: Int = 0
   protected var stateServerSocket: ServerSocket = null
