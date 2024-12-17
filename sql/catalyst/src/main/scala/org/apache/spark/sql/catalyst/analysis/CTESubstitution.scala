@@ -123,7 +123,7 @@ object CTESubstitution extends Rule[LogicalPlan] {
       startOfQuery: Boolean = true): Unit = {
     val resolver = conf.resolver
     plan match {
-      case UnresolvedWith(child, relations) =>
+      case UnresolvedWith(child, relations, _) =>
         val newNames = ArrayBuffer.empty[String]
         newNames ++= outerCTERelationNames
         relations.foreach {
@@ -149,7 +149,7 @@ object CTESubstitution extends Rule[LogicalPlan] {
       plan: LogicalPlan,
       cteDefs: ArrayBuffer[CTERelationDef]): LogicalPlan = {
     plan.resolveOperatorsUp {
-      case UnresolvedWith(child, relations) =>
+      case UnresolvedWith(child, relations, _) =>
         val resolvedCTERelations =
           resolveCTERelations(relations, isLegacy = true, forceInline = false, Seq.empty, cteDefs)
         substituteCTE(child, alwaysInline = true, resolvedCTERelations)
@@ -202,7 +202,7 @@ object CTESubstitution extends Rule[LogicalPlan] {
     var firstSubstituted: Option[LogicalPlan] = None
     val newPlan = plan.resolveOperatorsDownWithPruning(
         _.containsAnyPattern(UNRESOLVED_WITH, PLAN_EXPRESSION)) {
-      case UnresolvedWith(child: LogicalPlan, relations) =>
+      case UnresolvedWith(child: LogicalPlan, relations, _) =>
         val resolvedCTERelations =
           resolveCTERelations(relations, isLegacy = false, forceInline, outerCTEDefs, cteDefs) ++
             outerCTEDefs
