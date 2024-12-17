@@ -42,13 +42,9 @@ class TableArg(
 
   def orderBy(cols: Seq[Column]): TableArg = {
     val orderByExpressions = cols.map { col =>
-      col.expr match {
+      col.node match {
         case sortOrder: SortOrder => sortOrder
         case expr: Expression => SortOrder(expr, Ascending)
-        case other =>
-          throw new IllegalArgumentException(
-            s"Unsupported expression type in orderBy: ${other.getClass.getName}"
-          )
       }
     }
     new TableArg(expression.copy(orderByExpressions = orderByExpressions),
