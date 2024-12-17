@@ -48,6 +48,7 @@ SELECT randstr(CAST(10 AS TINYINT), 0) AS result;
 SELECT randstr(CAST(10 AS BIGINT), 0) AS result;
 SELECT randstr(1.0F, 0) AS result;
 SELECT randstr(1.0D, 0) AS result;
+SELECT randstr(cast(1 AS DECIMAL(10, 2)), 0) AS result;
 SELECT randstr(10, 0) AS result FROM VALUES (0), (1), (2) tab(col);
 SELECT randstr(10) IS NOT NULL AS result;
 -- Negative test cases for the randstr random number generator.
