@@ -129,7 +129,7 @@ class DescribeTableSuite extends v1.DescribeTableSuiteBase with CommandSuiteBase
 
       val expectedOutput = DescribeTableJson(
         table_name = Some("table"),
-        catalog_names = Some(List(SESSION_CATALOG_NAME)),
+        catalog_name = Some(SESSION_CATALOG_NAME),
         database_names = Some(List("ns")),
         qualified_name = Some(s"spark_catalog.ns.table"),
         columns = Some(List(
@@ -191,7 +191,7 @@ class DescribeTableSuite extends v1.DescribeTableSuiteBase with CommandSuiteBase
 
       val expectedOutput = DescribeTableJson(
         table_name = Some("table"),
-        catalog_names = Some(List("spark_catalog")),
+        catalog_name = Some("spark_catalog"),
         database_names = Some(List("ns")),
         qualified_name = Some("spark_catalog.ns.table"),
         columns = Some(List(
@@ -250,7 +250,7 @@ class DescribeTableSuite extends v1.DescribeTableSuiteBase with CommandSuiteBase
 
       val expectedOutput = DescribeTableJson(
         table_name = Some("table"),
-        catalog_names = Some(List("spark_catalog")),
+        catalog_name = Some("spark_catalog"),
         database_names = Some(List("ns")),
         qualified_name = Some("spark_catalog.ns.table"),
         columns = Some(List(
@@ -366,7 +366,7 @@ class DescribeTableSuite extends v1.DescribeTableSuiteBase with CommandSuiteBase
 
       val expectedOutput = DescribeTableJson(
         table_name = Some("table"),
-        catalog_names = Some(List("spark_catalog")),
+        catalog_name = Some("spark_catalog"),
         database_names = Some(List("ns")),
         qualified_name = Some("spark_catalog.ns.table"),
         columns = Some(List(
@@ -492,7 +492,7 @@ class DescribeTableSuite extends v1.DescribeTableSuiteBase with CommandSuiteBase
 /** Represents JSON output of DESCRIBE TABLE AS JSON  */
 case class DescribeTableJson(
   table_name: Option[String] = None,
-  catalog_names: Option[List[String]] = Some(Nil),
+  catalog_name: Option[String] = None,
   database_names: Option[List[String]] = Some(Nil),
   qualified_name: Option[String] = None,
   columns: Option[List[TableColumn]] = Some(Nil),

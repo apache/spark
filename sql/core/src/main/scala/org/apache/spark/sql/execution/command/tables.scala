@@ -784,9 +784,9 @@ case class DescribeTableJsonCommand(
 
       addKeyValueToJson(result, "table_name", JString(metadata.identifier.table))
 
-      val catalogNameArr = table.catalog.map(s => s""""$s"""").mkString("[", ",", "]")
+      val catalogName = table.catalog.map(s => s""""$s"""").getOrElse("")
       val databaseNameArr = table.database.map(s => s""""$s"""").mkString("[", ",", "]")
-      addKeyValueToJson(result, "catalog_names", parse(catalogNameArr))
+      addKeyValueToJson(result, "catalog_name", parse(catalogName))
       addKeyValueToJson(result, "database_names", parse(databaseNameArr))
       val catalogFullName = table.catalog.mkString(".")
       val databaseFullName = table.database.mkString(".")

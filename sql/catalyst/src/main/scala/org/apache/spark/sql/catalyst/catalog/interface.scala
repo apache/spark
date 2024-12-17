@@ -191,10 +191,12 @@ case class CatalogTablePartition(
       map.put("Partition Parameters", s"{$paramString}")
     }
 
-    map.put("Created Time", s""""${new Date(createTime).toString}"""")
+    map.put("Created Time",
+      s""""${DateTimeUtils.microsToInstant(DateTimeUtils.millisToMicros(createTime)).toString}"""")
 
     val lastAccess = if (lastAccessTime <= 0) "\"UNKNOWN\""
-    else s""""${new Date(lastAccessTime).toString}""""
+    else s""""${DateTimeUtils.microsToInstant(
+      DateTimeUtils.millisToMicros(lastAccessTime)).toString}""""
 
     map.put("Last Access", lastAccess)
 
@@ -668,15 +670,21 @@ case class CatalogTable(
       .map(s => s""""$s"""")
       .mkString("[", ", ", "]")
 
+//    val lastAccess =
+//      if (lastAccessTime <= 0) "\"UNKNOWN\""
+//      else s""""${new Date(lastAccessTime).toInstant.toString}""""
+
     val lastAccess =
       if (lastAccessTime <= 0) "\"UNKNOWN\""
-      else s""""${new Date(lastAccessTime).toInstant.toString}""""
+      else s""""${DateTimeUtils.microsToInstant(
+        DateTimeUtils.millisToMicros(lastAccessTime)).toString}""""
 
     identifier.catalog.foreach(catalog => map.put("Catalog", s""""$catalog""""))
     identifier.database.foreach(database => map.put("Database", s""""$database""""))
     map.put("Table", s""""${identifier.table}"""")
     if (owner != null && owner.nonEmpty) map.put("Owner", s""""$owner"""")
-    map.put("Created Time", s""""${new Date(createTime).toInstant.toString}"""")
+    map.put("Created Time",
+      s""""${DateTimeUtils.microsToInstant(DateTimeUtils.millisToMicros(createTime)).toString}"""")
     map.put("Last Access", lastAccess)
     map.put("Created By", s""""Spark $createVersion"""")
     map.put("Type", s""""${tableType.name}"""")

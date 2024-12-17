@@ -74,50 +74,52 @@ to return the metadata pertaining to a partition or column respectively.
 
   **Schema:**
   
-  Note that only non-null fields will be included in the JSON schema.
+  Notes:
+  * All string fields will be contained in double-quotes "...".
+  * Only non-null fields will be included in the JSON output.
   
-  ```sql
-  {
-    "table_name": "<table_name>",
-    "catalog_name": [...],
-    "database_name": [...],
-    "qualified_name": "<qualified_name>"
-    "type": "<table_type>",
-    "provider": "<provider>",
-    "columns": [
-      {
-      "id": 1,
-      "name": "<name>",
-      "type": <type_json>,
+    ```sql
+    {
+      "table_name": "<table_name>",
+      "catalog_name": [...],
+      "database_names": [...],
+      "qualified_name": "<qualified_name>"
+      "type": "<table_type>",
+      "provider": "<provider>",
+      "columns": [
+        {
+        "id": 1,
+        "name": "<name>",
+        "type": <type_json>,
+        "comment": "<comment>",
+        "default": "<default_val>"
+        }
+      ],
+      "partition_values": {
+        "<col_name>": "<val>"
+      },
+      "location": "<path>",
+      "view_definition": "<view_defn>",
+      "owner": "<owner>",
       "comment": "<comment>",
-      "default": "<default_val>"
-      }
-    ],
-    "partition_values": {
-      "<col_name>": "<val>"
-    },
-    "location": "<path>",
-    "view_definition": "<view_defn>",
-    "owner": "<owner>",
-    "comment": "<comment>",
-    "table_properties": {
-      "property1": "<property1>",
-      "property2": "<property2>"
-    },
-    "storage_properties": {
-      "property1": "<property1>",
-      "property2": "<property2>"
-    },
-    "serde_library": "<serde_library>",
-    "inputformat": "<input_format>",
-    "outputformt": "<output_format>",
-    "bucket_columns": [<col_name>],
-    "sort_columns": [<col_name>],
-    "created_time": "<timestamp>",
-    "last_access": "<timestamp>",
-    "partition_provider": "<partition_provider>"
-  }
-  ```
+      "table_properties": {
+        "property1": "<property1>",
+        "property2": "<property2>"
+      },
+      "storage_properties": {
+        "property1": "<property1>",
+        "property2": "<property2>"
+      },
+      "serde_library": "<serde_library>",
+      "inputformat": "<input_format>",
+      "outputformt": "<output_format>",
+      "bucket_columns": [<col_name>],
+      "sort_columns": [<col_name>],
+      "created_time": "<timestamp>",
+      "last_access": "<timestamp>",
+      "partition_provider": "<partition_provider>"
+    }
+    ```
 
 ### Examples
 
@@ -233,7 +235,7 @@ DESCRIBE customer salesdb.customer.name;
 
 -- Returns the table metadata in JSON format.
 DESC FORMATTED customer AS JSON;
-{"table_name":"customer","catalog_names":["spark_catalog"],"database_names":["default"],"qualified_name":"spark_catalog.default.customer","columns":[{"id":1,"name":"cust_id","type":{"type":"integer"}},{"id":2,"name":"name","type":{"type":"string"},"comment":"Short name"},{"id":3,"name":"state","type":{"type":"varchar(20)"}}],"location": "file:/tmp/salesdb.db/custom...","created_time":"2020-04-07T14:05:43Z","last_access":"UNKNOWN","created_by":"None","type":"MANAGED","provider":"parquet","partition_provider":"Catalog","partition_columns":["state"]}
+{"table_name":"customer","catalog_name":"spark_catalog","database_names":["default"],"qualified_name":"spark_catalog.default.customer","columns":[{"id":1,"name":"cust_id","type":{"type":"integer"}},{"id":2,"name":"name","type":{"type":"string"},"comment":"Short name"},{"id":3,"name":"state","type":{"type":"varchar(20)"}}],"location": "file:/tmp/salesdb.db/custom...","created_time":"2020-04-07T14:05:43Z","last_access":"UNKNOWN","created_by":"None","type":"MANAGED","provider":"parquet","partition_provider":"Catalog","partition_columns":["state"]}
 ```
 
 ### Related Statements
