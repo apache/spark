@@ -4107,6 +4107,12 @@
     ],
     "sqlState" : "38000"
   },
+  "RANDSTR_LENGTH_NOT_POSITIVE_OR_ZERO" : {
+    "message" : [
+      "The RANDSTR function desired string length must be positive or zero. Please provide an updated string length and then retry the query or command again."
+    ],
+    "sqlState" : "42K0G"
+  },
   "RECURSIVE_PROTOBUF_SCHEMA" : {
     "message" : [
       "Found recursive reference in Protobuf schema, which can not be processed by Spark by default: <fieldDescriptor>. try setting the option `recursive.fields.max.depth` 1 to 10. Going beyond 10 levels of recursion is not allowed."

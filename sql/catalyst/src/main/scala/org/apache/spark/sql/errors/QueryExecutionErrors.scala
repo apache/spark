@@ -2902,4 +2902,10 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       )
     )
   }
+
+  def randstrLengthNotPositiveOrZero(): SparkRuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "RANDSTR_LENGTH_NOT_POSITIVE_OR_ZERO",
+      messageParameters = Map.empty)
+  }
 }

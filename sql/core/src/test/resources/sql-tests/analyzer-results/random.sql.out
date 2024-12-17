@@ -296,6 +296,30 @@ SELECT randstr(10S, 0) AS result
 
 
 -- !query
+SELECT randstr(CAST(10 AS TINYINT), 0) AS result
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT randstr(CAST(10 AS BIGINT), 0) AS result
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT randstr(1.0F, 0) AS result
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT randstr(1.0D, 0) AS result
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
 SELECT randstr(10, 0) AS result FROM VALUES (0), (1), (2) tab(col)
 -- !query analysis
 [Analyzer test output redacted due to nondeterminism]
@@ -310,121 +334,31 @@ SELECT randstr(10) IS NOT NULL AS result
 -- !query
 SELECT randstr(10L, 0) AS result
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
-  "sqlState" : "42K09",
-  "messageParameters" : {
-    "inputSql" : "\"10\"",
-    "inputType" : "\"BIGINT\"",
-    "paramIndex" : "first",
-    "requiredType" : "INT or SMALLINT",
-    "sqlExpr" : "\"randstr(10, 0)\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 22,
-    "fragment" : "randstr(10L, 0)"
-  } ]
-}
+[Analyzer test output redacted due to nondeterminism]
 
 
 -- !query
 SELECT randstr(10.0F, 0) AS result
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
-  "sqlState" : "42K09",
-  "messageParameters" : {
-    "inputSql" : "\"10.0\"",
-    "inputType" : "\"FLOAT\"",
-    "paramIndex" : "first",
-    "requiredType" : "INT or SMALLINT",
-    "sqlExpr" : "\"randstr(10.0, 0)\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 24,
-    "fragment" : "randstr(10.0F, 0)"
-  } ]
-}
+[Analyzer test output redacted due to nondeterminism]
 
 
 -- !query
 SELECT randstr(10.0D, 0) AS result
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
-  "sqlState" : "42K09",
-  "messageParameters" : {
-    "inputSql" : "\"10.0\"",
-    "inputType" : "\"DOUBLE\"",
-    "paramIndex" : "first",
-    "requiredType" : "INT or SMALLINT",
-    "sqlExpr" : "\"randstr(10.0, 0)\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 24,
-    "fragment" : "randstr(10.0D, 0)"
-  } ]
-}
+[Analyzer test output redacted due to nondeterminism]
 
 
 -- !query
 SELECT randstr(NULL, 0) AS result
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
-  "sqlState" : "42K09",
-  "messageParameters" : {
-    "inputSql" : "\"NULL\"",
-    "inputType" : "\"VOID\"",
-    "paramIndex" : "first",
-    "requiredType" : "INT or SMALLINT",
-    "sqlExpr" : "\"randstr(NULL, 0)\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 23,
-    "fragment" : "randstr(NULL, 0)"
-  } ]
-}
+[Analyzer test output redacted due to nondeterminism]
 
 
 -- !query
 SELECT randstr(0, NULL) AS result
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
-  "sqlState" : "42K09",
-  "messageParameters" : {
-    "inputSql" : "\"NULL\"",
-    "inputType" : "\"VOID\"",
-    "paramIndex" : "second",
-    "requiredType" : "INT or SMALLINT",
-    "sqlExpr" : "\"randstr(0, NULL)\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 23,
-    "fragment" : "randstr(0, NULL)"
-  } ]
-}
+[Analyzer test output redacted due to nondeterminism]
 
 
 -- !query
@@ -437,7 +371,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "messageParameters" : {
     "inputExpr" : "\"col\"",
     "inputName" : "`length`",
-    "inputType" : "INT or SMALLINT",
+    "inputType" : "integer",
     "sqlExpr" : "\"randstr(col, 0)\""
   },
   "queryContext" : [ {
@@ -460,7 +394,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "messageParameters" : {
     "inputExpr" : "\"col\"",
     "inputName" : "`seed`",
-    "inputType" : "INT or SMALLINT",
+    "inputType" : "integer",
     "sqlExpr" : "\"randstr(10, col)\""
   },
   "queryContext" : [ {
@@ -494,3 +428,9 @@ org.apache.spark.sql.AnalysisException
     "fragment" : "randstr(10, 0, 1)"
   } ]
 }
+
+
+-- !query
+SELECT randstr(-1, 0) AS result
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]

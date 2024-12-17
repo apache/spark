@@ -330,7 +330,8 @@ object Uniform {
   group = "string_funcs")
 case class RandStr(
     length: Expression, override val seedExpression: Expression, hideSeed: Boolean)
-  extends ExpressionWithRandomSeed with BinaryLike[Expression] with Nondeterministic {
+  extends ExpressionWithRandomSeed with BinaryLike[Expression] with Nondeterministic
+    with ImplicitCastInputTypes {
   def this(length: Expression) =
     this(length, UnresolvedSeed, hideSeed = true)
   def this(length: Expression, seedExpression: Expression) =
@@ -341,6 +342,8 @@ case class RandStr(
   override def stateful: Boolean = true
   override def left: Expression = length
   override def right: Expression = seedExpression
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(IntegerType, LongType)
 
   /**
    * Record ID within each partition. By being transient, the Random Number Generator is
@@ -366,31 +369,17 @@ case class RandStr(
   }
 
   override def checkInputDataTypes(): TypeCheckResult = {
-    var result: TypeCheckResult = TypeCheckResult.TypeCheckSuccess
-    def requiredType = "INT or SMALLINT"
-    Seq((length, "length", 0),
-      (seedExpression, "seed", 1)).foreach {
-      case (expr: Expression, name: String, index: Int) =>
-        if (result == TypeCheckResult.TypeCheckSuccess) {
-          if (!expr.foldable) {
-            result = DataTypeMismatch(
-              errorSubClass = "NON_FOLDABLE_INPUT",
-              messageParameters = Map(
-                "inputName" -> toSQLId(name),
-                "inputType" -> requiredType,
-                "inputExpr" -> toSQLExpr(expr)))
-          } else expr.dataType match {
-            case _: ShortType | _: IntegerType =>
-            case _: LongType if index == 1 =>
-            case _ =>
-              result = DataTypeMismatch(
-                errorSubClass = "UNEXPECTED_INPUT_TYPE",
-                messageParameters = Map(
-                  "paramIndex" -> ordinalNumber(index),
-                  "requiredType" -> requiredType,
-                  "inputSql" -> toSQLExpr(expr),
-                  "inputType" -> toSQLType(expr.dataType)))
-          }
+    var result: TypeCheckResult = super.checkInputDataTypes()
+    Seq((length, "length"),
+      (seedExpression, "seed")).foreach {
+      case (expr: Expression, name: String) =>
+        if (result == TypeCheckResult.TypeCheckSuccess && !expr.foldable) {
+          result = DataTypeMismatch(
+            errorSubClass = "NON_FOLDABLE_INPUT",
+            messageParameters = Map(
+              "inputName" -> toSQLId(name),
+              "inputType" -> "integer",
+              "inputExpr" -> toSQLExpr(expr)))
         }
     }
     result
