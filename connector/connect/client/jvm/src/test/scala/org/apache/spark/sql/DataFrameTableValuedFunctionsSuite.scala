@@ -21,6 +21,7 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.{QueryTest, RemoteSparkSession}
 
 class DataFrameTableValuedFunctionsSuite extends QueryTest with RemoteSparkSession {
+  import testImplicits._
 
   test("explode") {
     val actual1 = spark.tvf.explode(array(lit(1), lit(2)))
@@ -48,6 +49,30 @@ class DataFrameTableValuedFunctionsSuite extends QueryTest with RemoteSparkSessi
     val actual6 = spark.tvf.explode(lit(null).cast("map<string, int>"))
     val expected6 = spark.sql("SELECT * FROM explode(null :: map<string, int>)")
     checkAnswer(actual6, expected6)
+  }
+
+  test("explode - lateral join") {
+    withView("t1", "t3") {
+      sql("CREATE VIEW t1(c1, c2) AS VALUES (0, 1), (1, 2)")
+      sql(
+        "CREATE VIEW t3(c1, c2) AS " +
+          "VALUES (0, ARRAY(0, 1)), (1, ARRAY(2)), (2, ARRAY()), (null, ARRAY(4))")
+      val t1 = spark.table("t1")
+      val t3 = spark.table("t3")
+
+      checkAnswer(
+        t1.lateralJoin(spark.tvf.explode(array($"c1".outer(), $"c2".outer()))),
+        sql("SELECT * FROM t1, LATERAL EXPLODE(ARRAY(c1, c2)) t2(c3)"))
+      checkAnswer(
+        t3.lateralJoin(spark.tvf.explode($"c2".outer())),
+        sql("SELECT * FROM t3, LATERAL EXPLODE(c2) t2(v)"))
+      checkAnswer(
+        spark.tvf
+          .explode(array(lit(1), lit(2)))
+          .toDF("v")
+          .lateralJoin(spark.range(1).select($"v".outer() + lit(1))),
+        sql("SELECT * FROM EXPLODE(ARRAY(1, 2)) t(v), LATERAL (SELECT v + 1)"))
+    }
   }
 
   test("explode_outer") {
@@ -78,6 +103,30 @@ class DataFrameTableValuedFunctionsSuite extends QueryTest with RemoteSparkSessi
     checkAnswer(actual6, expected6)
   }
 
+  test("explode_outer - lateral join") {
+    withView("t1", "t3") {
+      sql("CREATE VIEW t1(c1, c2) AS VALUES (0, 1), (1, 2)")
+      sql(
+        "CREATE VIEW t3(c1, c2) AS " +
+          "VALUES (0, ARRAY(0, 1)), (1, ARRAY(2)), (2, ARRAY()), (null, ARRAY(4))")
+      val t1 = spark.table("t1")
+      val t3 = spark.table("t3")
+
+      checkAnswer(
+        t1.lateralJoin(spark.tvf.explode_outer(array($"c1".outer(), $"c2".outer()))),
+        sql("SELECT * FROM t1, LATERAL EXPLODE_OUTER(ARRAY(c1, c2)) t2(c3)"))
+      checkAnswer(
+        t3.lateralJoin(spark.tvf.explode_outer($"c2".outer())),
+        sql("SELECT * FROM t3, LATERAL EXPLODE_OUTER(c2) t2(v)"))
+      checkAnswer(
+        spark.tvf
+          .explode_outer(array(lit(1), lit(2)))
+          .toDF("v")
+          .lateralJoin(spark.range(1).select($"v".outer() + lit(1))),
+        sql("SELECT * FROM EXPLODE_OUTER(ARRAY(1, 2)) t(v), LATERAL (SELECT v + 1)"))
+    }
+  }
+
   test("inline") {
     val actual1 = spark.tvf.inline(array(struct(lit(1), lit("a")), struct(lit(2), lit("b"))))
     val expected1 = spark.sql("SELECT * FROM inline(array(struct(1, 'a'), struct(2, 'b')))")
@@ -96,6 +145,25 @@ class DataFrameTableValuedFunctionsSuite extends QueryTest with RemoteSparkSessi
       "SELECT * FROM " +
         "inline(array(named_struct('a', 1, 'b', 2), null, named_struct('a', 3, 'b', 4)))")
     checkAnswer(actual3, expected3)
+  }
+
+  test("inline - lateral join") {
+    withView("array_struct") {
+      sql("""
+          |CREATE VIEW array_struct(id, arr) AS VALUES
+          |    (1, ARRAY(STRUCT(1, 'a'), STRUCT(2, 'b'))),
+          |    (2, ARRAY()),
+          |    (3, ARRAY(STRUCT(3, 'c')))
+          |""".stripMargin)
+      val arrayStruct = spark.table("array_struct")
+
+      checkAnswer(
+        arrayStruct.lateralJoin(spark.tvf.inline($"arr".outer())),
+        sql("SELECT * FROM array_struct JOIN LATERAL INLINE(arr)"))
+      checkAnswer(
+        arrayStruct.lateralJoin(spark.tvf.inline($"arr".outer()), $"id" === $"col1", "left"),
+        sql("SELECT * FROM array_struct LEFT JOIN LATERAL INLINE(arr) t(k, v) ON id = k"))
+    }
   }
 
   test("inline_outer") {
@@ -119,6 +187,28 @@ class DataFrameTableValuedFunctionsSuite extends QueryTest with RemoteSparkSessi
     checkAnswer(actual3, expected3)
   }
 
+  test("inline_outer - lateral join") {
+    withView("array_struct") {
+      sql("""
+          |CREATE VIEW array_struct(id, arr) AS VALUES
+          |    (1, ARRAY(STRUCT(1, 'a'), STRUCT(2, 'b'))),
+          |    (2, ARRAY()),
+          |    (3, ARRAY(STRUCT(3, 'c')))
+          |""".stripMargin)
+      val arrayStruct = spark.table("array_struct")
+
+      checkAnswer(
+        arrayStruct.lateralJoin(spark.tvf.inline_outer($"arr".outer())),
+        sql("SELECT * FROM array_struct JOIN LATERAL INLINE_OUTER(arr)"))
+      checkAnswer(
+        arrayStruct.lateralJoin(
+          spark.tvf.inline_outer($"arr".outer()),
+          $"id" === $"col1",
+          "left"),
+        sql("SELECT * FROM array_struct LEFT JOIN LATERAL INLINE_OUTER(arr) t(k, v) ON id = k"))
+    }
+  }
+
   test("json_tuple") {
     val actual = spark.tvf.json_tuple(lit("""{"a":1,"b":2}"""), lit("a"), lit("b"))
     val expected = spark.sql("""SELECT * FROM json_tuple('{"a":1,"b":2}', 'a', 'b')""")
@@ -129,6 +219,54 @@ class DataFrameTableValuedFunctionsSuite extends QueryTest with RemoteSparkSessi
     }
     assert(ex.errorClass.get == "WRONG_NUM_ARGS.WITHOUT_SUGGESTION")
     assert(ex.messageParameters("functionName") == "`json_tuple`")
+  }
+
+  test("json_tuple - lateral join") {
+    withView("json_table") {
+      sql("""
+          |CREATE OR REPLACE TEMP VIEW json_table(key, jstring) AS VALUES
+          |    ('1', '{"f1": "1", "f2": "2", "f3": 3, "f5": 5.23}'),
+          |    ('2', '{"f1": "1", "f3": "3", "f2": 2, "f4": 4.01}'),
+          |    ('3', '{"f1": 3, "f4": "4", "f3": "3", "f2": 2, "f5": 5.01}'),
+          |    ('4', cast(null as string)),
+          |    ('5', '{"f1": null, "f5": ""}'),
+          |    ('6', '[invalid JSON string]')
+          |""".stripMargin)
+      val jsonTable = spark.table("json_table")
+
+      checkAnswer(
+        jsonTable
+          .as("t1")
+          .lateralJoin(
+            spark.tvf.json_tuple(
+              $"t1.jstring".outer(),
+              lit("f1"),
+              lit("f2"),
+              lit("f3"),
+              lit("f4"),
+              lit("f5")))
+          .select($"key", $"c0", $"c1", $"c2", $"c3", $"c4"),
+        sql(
+          "SELECT t1.key, t2.* FROM json_table t1, " +
+            "LATERAL json_tuple(t1.jstring, 'f1', 'f2', 'f3', 'f4', 'f5') t2"))
+      checkAnswer(
+        jsonTable
+          .as("t1")
+          .lateralJoin(
+            spark.tvf.json_tuple(
+              $"jstring".outer(),
+              lit("f1"),
+              lit("f2"),
+              lit("f3"),
+              lit("f4"),
+              lit("f5")))
+          .where($"c0".isNotNull)
+          .select($"key", $"c0", $"c1", $"c2", $"c3", $"c4"),
+        sql(
+          "SELECT t1.key, t2.* FROM json_table t1, " +
+            "LATERAL json_tuple(t1.jstring, 'f1', 'f2', 'f3', 'f4', 'f5') t2 " +
+            "WHERE t2.c0 IS NOT NULL"))
+    }
   }
 
   test("posexplode") {
@@ -159,6 +297,30 @@ class DataFrameTableValuedFunctionsSuite extends QueryTest with RemoteSparkSessi
     checkAnswer(actual6, expected6)
   }
 
+  test("posexplode - lateral join") {
+    withView("t1", "t3") {
+      sql("CREATE VIEW t1(c1, c2) AS VALUES (0, 1), (1, 2)")
+      sql(
+        "CREATE VIEW t3(c1, c2) AS " +
+          "VALUES (0, ARRAY(0, 1)), (1, ARRAY(2)), (2, ARRAY()), (null, ARRAY(4))")
+      val t1 = spark.table("t1")
+      val t3 = spark.table("t3")
+
+      checkAnswer(
+        t1.lateralJoin(spark.tvf.posexplode(array($"c1".outer(), $"c2".outer()))),
+        sql("SELECT * FROM t1, LATERAL POSEXPLODE(ARRAY(c1, c2))"))
+      checkAnswer(
+        t3.lateralJoin(spark.tvf.posexplode($"c2".outer())),
+        sql("SELECT * FROM t3, LATERAL POSEXPLODE(c2)"))
+      checkAnswer(
+        spark.tvf
+          .posexplode(array(lit(1), lit(2)))
+          .toDF("p", "v")
+          .lateralJoin(spark.range(1).select($"v".outer() + lit(1))),
+        sql("SELECT * FROM POSEXPLODE(ARRAY(1, 2)) t(p, v), LATERAL (SELECT v + 1)"))
+    }
+  }
+
   test("posexplode_outer") {
     val actual1 = spark.tvf.posexplode_outer(array(lit(1), lit(2)))
     val expected1 = spark.sql("SELECT * FROM posexplode_outer(array(1, 2))")
@@ -187,10 +349,60 @@ class DataFrameTableValuedFunctionsSuite extends QueryTest with RemoteSparkSessi
     checkAnswer(actual6, expected6)
   }
 
+  test("posexplode_outer - lateral join") {
+    withView("t1", "t3") {
+      sql("CREATE VIEW t1(c1, c2) AS VALUES (0, 1), (1, 2)")
+      sql(
+        "CREATE VIEW t3(c1, c2) AS " +
+          "VALUES (0, ARRAY(0, 1)), (1, ARRAY(2)), (2, ARRAY()), (null, ARRAY(4))")
+      val t1 = spark.table("t1")
+      val t3 = spark.table("t3")
+
+      checkAnswer(
+        t1.lateralJoin(spark.tvf.posexplode_outer(array($"c1".outer(), $"c2".outer()))),
+        sql("SELECT * FROM t1, LATERAL POSEXPLODE_OUTER(ARRAY(c1, c2))"))
+      checkAnswer(
+        t3.lateralJoin(spark.tvf.posexplode_outer($"c2".outer())),
+        sql("SELECT * FROM t3, LATERAL POSEXPLODE_OUTER(c2)"))
+      checkAnswer(
+        spark.tvf
+          .posexplode_outer(array(lit(1), lit(2)))
+          .toDF("p", "v")
+          .lateralJoin(spark.range(1).select($"v".outer() + lit(1))),
+        sql("SELECT * FROM POSEXPLODE_OUTER(ARRAY(1, 2)) t(p, v), LATERAL (SELECT v + 1)"))
+    }
+  }
+
   test("stack") {
     val actual = spark.tvf.stack(lit(2), lit(1), lit(2), lit(3))
     val expected = spark.sql("SELECT * FROM stack(2, 1, 2, 3)")
     checkAnswer(actual, expected)
+  }
+
+  test("stack - lateral join") {
+    withView("t1", "t3") {
+      sql("CREATE VIEW t1(c1, c2) AS VALUES (0, 1), (1, 2)")
+      sql(
+        "CREATE VIEW t3(c1, c2) AS " +
+          "VALUES (0, ARRAY(0, 1)), (1, ARRAY(2)), (2, ARRAY()), (null, ARRAY(4))")
+      val t1 = spark.table("t1")
+      val t3 = spark.table("t3")
+
+      checkAnswer(
+        t1.lateralJoin(
+          spark.tvf.stack(lit(2), lit("Key"), $"c1".outer(), lit("Value"), $"c2".outer()))
+          .select($"col0", $"col1"),
+        sql("SELECT t.* FROM t1, LATERAL stack(2, 'Key', c1, 'Value', c2) t"))
+      checkAnswer(
+        t1.lateralJoin(spark.tvf.stack(lit(1), $"c1".outer(), $"c2".outer()))
+          .select($"col0".as("x"), $"col1".as("y")),
+        sql("SELECT t.* FROM t1 JOIN LATERAL stack(1, c1, c2) t(x, y)"))
+      checkAnswer(
+        t1.join(t3, $"t1.c1" === $"t3.c1")
+          .lateralJoin(spark.tvf.stack(lit(1), $"t1.c2".outer(), $"t3.c2".outer()))
+          .select($"col0", $"col1"),
+        sql("SELECT t.* FROM t1 JOIN t3 ON t1.c1 = t3.c1 JOIN LATERAL stack(1, t1.c2, t3.c2) t"))
+    }
   }
 
   test("collations") {
@@ -205,8 +417,7 @@ class DataFrameTableValuedFunctionsSuite extends QueryTest with RemoteSparkSessi
     checkAnswer(actual, expected)
   }
 
-  // TODO(SPARK-50063): Support VARIANT in Spark Connect Scala client
-  ignore("variant_explode") {
+  test("variant_explode") {
     val actual1 = spark.tvf.variant_explode(parse_json(lit("""["hello", "world"]""")))
     val expected1 =
       spark.sql("""SELECT * FROM variant_explode(parse_json('["hello", "world"]'))""")
@@ -237,8 +448,28 @@ class DataFrameTableValuedFunctionsSuite extends QueryTest with RemoteSparkSessi
     checkAnswer(actual6, expected6)
   }
 
-  // TODO(SPARK-50063): Support VARIANT in Spark Connect Scala client
-  ignore("variant_explode_outer") {
+  test("variant_explode - lateral join") {
+    withView("variant_table") {
+      sql("""
+          |CREATE VIEW variant_table(id, v) AS
+          |SELECT id, parse_json(v) AS v FROM VALUES
+          |(0, '["hello", "world"]'), (1, '{"a": true, "b": 3.14}'),
+          |(2, '[]'), (3, '{}'),
+          |(4, NULL), (5, '1')
+          |AS t(id, v)
+          |""".stripMargin)
+      val variantTable = spark.table("variant_table")
+
+      checkAnswer(
+        variantTable
+          .as("t1")
+          .lateralJoin(spark.tvf.variant_explode($"v".outer()))
+          .select($"id", $"pos", $"key", $"value"),
+        sql("SELECT t1.id, t.* FROM variant_table AS t1, LATERAL variant_explode(v) AS t"))
+    }
+  }
+
+  test("variant_explode_outer") {
     val actual1 = spark.tvf.variant_explode_outer(parse_json(lit("""["hello", "world"]""")))
     val expected1 =
       spark.sql("""SELECT * FROM variant_explode_outer(parse_json('["hello", "world"]'))""")
@@ -267,5 +498,26 @@ class DataFrameTableValuedFunctionsSuite extends QueryTest with RemoteSparkSessi
     val actual6 = spark.tvf.variant_explode_outer(parse_json(lit("1")))
     val expected6 = spark.sql("SELECT * FROM variant_explode_outer(parse_json('1'))")
     checkAnswer(actual6, expected6)
+  }
+
+  test("variant_explode_outer - lateral join") {
+    withView("variant_table") {
+      sql("""
+          |CREATE VIEW variant_table(id, v) AS
+          |SELECT id, parse_json(v) AS v FROM VALUES
+          |(0, '["hello", "world"]'), (1, '{"a": true, "b": 3.14}'),
+          |(2, '[]'), (3, '{}'),
+          |(4, NULL), (5, '1')
+          |AS t(id, v)
+          |""".stripMargin)
+      val variantTable = spark.table("variant_table")
+
+      checkAnswer(
+        variantTable
+          .as("t1")
+          .lateralJoin(spark.tvf.variant_explode_outer($"v".outer()))
+          .select($"id", $"pos", $"key", $"value"),
+        sql("SELECT t1.id, t.* FROM variant_table AS t1, LATERAL variant_explode_outer(v) AS t"))
+    }
   }
 }

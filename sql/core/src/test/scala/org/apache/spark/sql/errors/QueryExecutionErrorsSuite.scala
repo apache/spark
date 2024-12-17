@@ -1258,6 +1258,22 @@ class QueryExecutionErrorsSuite
       )
     )
   }
+
+  test("SPARK-50485: Unwrap SparkThrowable in UEE thrown by tableRelationCache") {
+    withTable("t") {
+      sql("CREATE TABLE t (a INT)")
+      checkError(
+        exception = intercept[SparkUnsupportedOperationException] {
+          sql("ALTER TABLE t SET LOCATION 'https://mister/spark'")
+        },
+        condition = "FAILED_READ_FILE.UNSUPPORTED_FILE_SYSTEM",
+        parameters = Map(
+          "path" -> "https://mister/spark",
+          "fileSystemClass" -> "org.apache.hadoop.fs.http.HttpsFileSystem",
+          "method" -> "listStatus"))
+      sql("ALTER TABLE t SET LOCATION '/mister/spark'")
+    }
+  }
 }
 
 class FakeFileSystemSetPermission extends LocalFileSystem {

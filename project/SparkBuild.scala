@@ -89,7 +89,7 @@ object BuildCommons {
 
   // Google Protobuf version used for generating the protobuf.
   // SPARK-41247: needs to be consistent with `protobuf.version` in `pom.xml`.
-  val protoVersion = "4.28.3"
+  val protoVersion = "4.29.1"
   // GRPC version used for Spark Connect.
   val grpcVersion = "1.67.1"
 }
@@ -1057,7 +1057,7 @@ object KubernetesIntegrationTests {
  * Overrides to work around sbt's dependency resolution being different from Maven's.
  */
 object DependencyOverrides {
-  lazy val guavaVersion = sys.props.get("guava.version").getOrElse("33.1.0-jre")
+  lazy val guavaVersion = sys.props.get("guava.version").getOrElse("33.3.1-jre")
   lazy val settings = Seq(
     dependencyOverrides += "com.google.guava" % "guava" % guavaVersion,
     dependencyOverrides += "jline" % "jline" % "2.14.6",

@@ -900,6 +900,10 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
       checkPipeSelect("VALUES (0), (1) tab(col) |> SELECT col * 2 AS result")
       checkPipeSelect("TABLE t |> EXTEND X + 1 AS Y")
       checkPipeSelect("TABLE t |> EXTEND X + 1 AS Y, X + 2 Z")
+      checkPipeSelect("TABLE t |> EXTEND 1 AS z, 2 AS Z |> SET z = 1, Z = 2")
+      // FROM operators.
+      def checkPipeSelectFrom(query: String): Unit = check(query, Seq(PROJECT))
+      checkPipeSelectFrom("FROM t |> SELECT 1 AS X")
       // Basic WHERE operators.
       def checkPipeWhere(query: String): Unit = check(query, Seq(FILTER))
       checkPipeWhere("TABLE t |> WHERE X = 1")

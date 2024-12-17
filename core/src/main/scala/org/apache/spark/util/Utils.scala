@@ -103,7 +103,8 @@ private[spark] object Utils
   with SparkErrorUtils
   with SparkFileUtils
   with SparkSerDeUtils
-  with SparkStreamUtils {
+  with SparkStreamUtils
+  with SparkStringUtils {
 
   private val sparkUncaughtExceptionHandler = new SparkUncaughtExceptionHandler
   @volatile private var cachedLocalDir: String = ""
@@ -1354,8 +1355,10 @@ private[spark] object Utils
   val TRY_WITH_CALLER_STACKTRACE_FULL_STACKTRACE =
     "Full stacktrace of original doTryWithCallerStacktrace caller"
 
-  val TRY_WITH_CALLER_STACKTRACE_TRY_STACKTRACE =
-    "Stacktrace under doTryWithCallerStacktrace"
+  class OriginalTryStackTraceException()
+    extends Exception(TRY_WITH_CALLER_STACKTRACE_FULL_STACKTRACE) {
+    var doTryWithCallerStacktraceDepth: Int = 0
+  }
 
   /**
    * Use Try with stacktrace substitution for the caller retrieving the error.
@@ -1383,14 +1386,19 @@ private[spark] object Utils
         val commonSuffixLen = origStackTrace.reverse.zip(currentStackTrace.reverse).takeWhile {
           case (exElem, currentElem) => exElem == currentElem
         }.length
-        val belowEx = new Exception(TRY_WITH_CALLER_STACKTRACE_TRY_STACKTRACE)
-        belowEx.setStackTrace(origStackTrace.dropRight(commonSuffixLen))
-        ex.addSuppressed(belowEx)
-
-        // keep the full original stack trace in a suppressed exception.
-        val fullEx = new Exception(TRY_WITH_CALLER_STACKTRACE_FULL_STACKTRACE)
-        fullEx.setStackTrace(origStackTrace)
-        ex.addSuppressed(fullEx)
+        // Add the full stack trace of the original caller as the suppressed exception.
+        // It may already be there if it's a nested call to doTryWithCallerStacktrace.
+        val origEx = ex.getSuppressed.find { e =>
+          e.isInstanceOf[OriginalTryStackTraceException]
+        }.getOrElse {
+          val fullEx = new OriginalTryStackTraceException()
+          fullEx.setStackTrace(origStackTrace)
+          ex.addSuppressed(fullEx)
+          fullEx
+        }.asInstanceOf[OriginalTryStackTraceException]
+        // Update the depth of the stack of the current doTryWithCallerStacktrace, for stitching
+        // it with the stack of getTryWithCallerStacktrace.
+        origEx.doTryWithCallerStacktraceDepth = origStackTrace.size - commonSuffixLen
       case Success(_) => // nothing
     }
     t
@@ -1406,7 +1414,7 @@ private[spark] object Utils
    * Full stack trace of the original doTryWithCallerStacktrace caller can be retrieved with
    * ```
    * ex.getSuppressed.find { e =>
-   * e.getMessage == Utils.TRY_WITH_CALLER_STACKTRACE_FULL_STACKTRACE
+   *   e.isInstanceOf[Utils.OriginalTryStackTraceException]
    * }
    * ```
    *
@@ -1416,13 +1424,15 @@ private[spark] object Utils
    */
   def getTryWithCallerStacktrace[T](t: Try[T]): T = t match {
     case Failure(ex) =>
-      val belowStacktrace = ex.getSuppressed.find { e =>
+      val originalStacktraceEx = ex.getSuppressed.find { e =>
         // added in doTryWithCallerStacktrace
-        e.getMessage == TRY_WITH_CALLER_STACKTRACE_TRY_STACKTRACE
+        e.isInstanceOf[OriginalTryStackTraceException]
       }.getOrElse {
         // If we don't have the expected stacktrace information, just rethrow
         throw ex
-      }.getStackTrace
+      }.asInstanceOf[OriginalTryStackTraceException]
+      val belowStacktrace = originalStacktraceEx.getStackTrace
+        .take(originalStacktraceEx.doTryWithCallerStacktraceDepth)
       // We are modifying and throwing the original exception. It would be better if we could
       // return a copy, but we can't easily clone it and preserve. If this is accessed from
       // multiple threads that then look at the stack trace, this could break.
@@ -2512,7 +2522,7 @@ private[spark] object Utils
    *
    * @return whether it is local mode
    */
-  def isLocalMaster(conf: SparkConf): Boolean = {
+  def isLocalMaster(conf: ReadOnlySparkConf): Boolean = {
     val master = conf.get("spark.master", "")
     master == "local" || master.startsWith("local[")
   }
@@ -2596,7 +2606,7 @@ private[spark] object Utils
   /**
    * Return whether dynamic allocation is enabled in the given conf.
    */
-  def isDynamicAllocationEnabled(conf: SparkConf): Boolean = {
+  def isDynamicAllocationEnabled(conf: ReadOnlySparkConf): Boolean = {
     val dynamicAllocationEnabled = conf.get(DYN_ALLOCATION_ENABLED)
     dynamicAllocationEnabled &&
       (!isLocalMaster(conf) || conf.get(DYN_ALLOCATION_TESTING))
@@ -2799,10 +2809,6 @@ private[spark] object Utils
     }
   }
 
-  def stringToSeq(str: String): Seq[String] = {
-    str.split(",").map(_.trim()).filter(_.nonEmpty).toImmutableArraySeq
-  }
-
   /**
    * Create instances of extension classes.
    *
@@ -2983,7 +2989,7 @@ private[spark] object Utils
       return props
     }
     val resultProps = new Properties()
-    props.forEach((k, v) => resultProps.put(k, v))
+    resultProps.putAll(props.clone().asInstanceOf[Properties])
     resultProps
   }
 

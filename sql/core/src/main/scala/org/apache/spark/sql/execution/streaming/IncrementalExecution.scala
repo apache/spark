@@ -439,6 +439,23 @@ class IncrementalExecution(
               eventTimeWatermarkForEviction = iwEviction)
           ))
 
+      // UpdateEventTimeColumnExec is used to tag the eventTime column, and validate
+      // emitted rows adhere to watermark in the output of transformWithStateInp.
+      // Hence, this node shares the same watermark value as TransformWithStateInPandasExec.
+      // This is the same as above in TransformWithStateExec.
+      // The only difference is TransformWithStateInPandasExec is analysed slightly different
+      // with no SerializeFromObjectExec wrapper.
+      case UpdateEventTimeColumnExec(eventTime, delay, None, t: TransformWithStateInPandasExec)
+        if t.stateInfo.isDefined =>
+        val stateInfo = t.stateInfo.get
+        val iwLateEvents = inputWatermarkForLateEvents(stateInfo)
+        val iwEviction = inputWatermarkForEviction(stateInfo)
+
+        UpdateEventTimeColumnExec(eventTime, delay, iwLateEvents,
+          t.copy(
+            eventTimeWatermarkForLateEvents = iwLateEvents,
+            eventTimeWatermarkForEviction = iwEviction)
+        )
 
       case t: TransformWithStateExec if t.stateInfo.isDefined =>
         t.copy(

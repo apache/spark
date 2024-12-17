@@ -17,11 +17,18 @@
 
 package org.apache.spark.sql.streaming
 
-import java.io.{ByteArrayInputStream, FileInputStream, FileOutputStream}
+import java.io.{ByteArrayInputStream, FileInputStream, FileOutputStream, InputStream, OutputStream}
+import java.nio.charset.StandardCharsets.UTF_8
 import java.nio.file.Path
 
+import scala.io.{Source => IOSource}
+
+import org.json4s.{Formats, NoTypeHints}
+import org.json4s.jackson.Serialization
+
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.execution.streaming.{CommitLog, CommitMetadata}
+import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.execution.streaming.{CommitLog, CommitMetadata, HDFSMetadataLog}
 import org.apache.spark.sql.test.SharedSparkSession
 
 class CommitLogSuite extends SparkFunSuite with SharedSparkSession {
@@ -32,13 +39,8 @@ class CommitLogSuite extends SparkFunSuite with SharedSparkSession {
       "core",
       "src",
       "test",
-      "scala",
-      "org",
-      "apache",
-      "spark",
-      "sql",
-      "streaming",
       "resources",
+      "structured-streaming",
       "testCommitLogV2"
     )
   }
@@ -49,13 +51,8 @@ class CommitLogSuite extends SparkFunSuite with SharedSparkSession {
       "core",
       "src",
       "test",
-      "scala",
-      "org",
-      "apache",
-      "spark",
-      "sql",
-      "streaming",
       "resources",
+      "structured-streaming",
       "testCommitLogV1"
     )
   }
@@ -108,6 +105,57 @@ class CommitLogSuite extends SparkFunSuite with SharedSparkSession {
     assert(commitMetadata.nextBatchWatermarkMs === 233)
     assert(commitMetadata.stateUniqueIds === Map.empty)
   }
+
+  // Test an old version of Spark can ser-de the new version of commit log,
+  // but running under V1 (i.e. no stateUniqueIds)
+  test("v1 Serde backward compatibility") {
+    // This is the json created by a V1 commit log
+    val commitLogV1WithStateUniqueId = """v1
+                        |{"nextBatchWatermarkMs":1,"stateUniqueIds":{}}""".stripMargin
+    val inputStream: ByteArrayInputStream =
+      new ByteArrayInputStream(commitLogV1WithStateUniqueId.getBytes("UTF-8"))
+    val commitMetadata: CommitMetadataLegacy = new CommitLogLegacy(
+      spark, testCommitLogV1FilePath.toString).deserialize(inputStream)
+    assert(commitMetadata.nextBatchWatermarkMs === 1)
+  }
 }
 
+// DO-NOT-MODIFY-THE-CODE-BELOW
+// Below are the legacy commit log code carbon copied from Spark branch-3.5, except
+// adding a "Legacy" to the class names.
+case class CommitMetadataLegacy(nextBatchWatermarkMs: Long = 0) {
+  def json: String = Serialization.write(this)(CommitMetadataLegacy.format)
+}
 
+object CommitMetadataLegacy {
+  implicit val format: Formats = Serialization.formats(NoTypeHints)
+
+  def apply(json: String): CommitMetadataLegacy = Serialization.read[CommitMetadataLegacy](json)
+}
+
+class CommitLogLegacy(sparkSession: SparkSession, path: String)
+  extends HDFSMetadataLog[CommitMetadataLegacy](sparkSession, path) {
+
+  private val VERSION = 1
+  private val EMPTY_JSON = "{}"
+
+  override def deserialize(in: InputStream): CommitMetadataLegacy = {
+    // called inside a try-finally where the underlying stream is closed in the caller
+    val lines = IOSource.fromInputStream(in, UTF_8.name()).getLines()
+    if (!lines.hasNext) {
+      throw new IllegalStateException("Incomplete log file in the offset commit log")
+    }
+    validateVersion(lines.next().trim, VERSION)
+    val metadataJson = if (lines.hasNext) lines.next() else EMPTY_JSON
+    CommitMetadataLegacy(metadataJson)
+  }
+
+  override def serialize(metadata: CommitMetadataLegacy, out: OutputStream): Unit = {
+    // called inside a try-finally where the underlying stream is closed in the caller
+    out.write(s"v${VERSION}".getBytes(UTF_8))
+    out.write('\n')
+
+    // write metadata
+    out.write(metadata.json.getBytes(UTF_8))
+  }
+}

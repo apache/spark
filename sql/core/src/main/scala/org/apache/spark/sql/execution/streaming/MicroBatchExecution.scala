@@ -513,6 +513,7 @@ class MicroBatchExecution(
               execCtx.startOffsets ++= execCtx.endOffsets
               watermarkTracker.setWatermark(
                 math.max(watermarkTracker.currentWatermark, commitMetadata.nextBatchWatermarkMs))
+              currentStateStoreCkptId ++= commitMetadata.stateUniqueIds
             } else if (latestCommittedBatchId == latestBatchId - 1) {
               execCtx.endOffsets.foreach {
                 case (source: Source, end: Offset) =>
@@ -965,7 +966,8 @@ class MicroBatchExecution(
       updateStateStoreCkptId(execCtx, latestExecPlan)
     }
     execCtx.reportTimeTaken("commitOffsets") {
-      if (!commitLog.add(execCtx.batchId, CommitMetadata(watermarkTracker.currentWatermark))) {
+      if (!commitLog.add(execCtx.batchId,
+        CommitMetadata(watermarkTracker.currentWatermark, currentStateStoreCkptId.toMap))) {
         throw QueryExecutionErrors.concurrentStreamLogUpdate(execCtx.batchId)
       }
     }

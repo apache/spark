@@ -2044,13 +2044,13 @@ Project [1 AS 1#x]
 WITH v1 AS (SELECT var1 AS c1) SELECT c1 AS `1` FROM v1
 -- !query analysis
 WithCTE
-:- CTERelationDef xxxx, false
+:- CTERelationDef xxxx, false, false
 :  +- SubqueryAlias v1
 :     +- Project [variablereference(system.session.var1=1) AS c1#x]
 :        +- OneRowRelation
 +- Project [c1#x AS 1#x]
    +- SubqueryAlias v1
-      +- CTERelationRef xxxx, true, [c1#x], false
+      +- CTERelationRef xxxx, true, [c1#x], false, false
 
 
 -- !query
