@@ -287,7 +287,7 @@ class DescribeTableSuite extends v1.DescribeTableSuiteBase with CommandSuiteBase
           |  TBLPROPERTIES (t 'test', password 'password')
           |""".stripMargin
       spark.sql(tableCreationStr)
-      spark.sql("CREATE TEMPORARY VIEW temp_v AS SELECT * FROM t")
+      spark.sql(s"CREATE TEMPORARY VIEW temp_v AS SELECT * FROM $t")
       val descriptionDf = spark.sql(s"DESCRIBE EXTENDED temp_v AS JSON")
       val firstRow = descriptionDf.select("json_metadata").head()
       val jsonValue = firstRow.getString(0)
@@ -319,9 +319,9 @@ class DescribeTableSuite extends v1.DescribeTableSuiteBase with CommandSuiteBase
           |    PARTITIONED BY (state)
           |""".stripMargin
       spark.sql(tableCreationStr)
-      spark.sql("INSERT INTO customer PARTITION (state = \"AR\") VALUES (100, \"Mike\")")
+      spark.sql(s"INSERT INTO $t PARTITION (state = \"AR\") VALUES (100, \"Mike\")")
       val error = intercept[AnalysisException] {
-        spark.sql(s"DESCRIBE FORMATTED customer customer.name AS JSON")
+        spark.sql(s"DESCRIBE FORMATTED $t $t.name AS JSON")
       }
 
       checkError(
