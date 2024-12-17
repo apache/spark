@@ -25,7 +25,7 @@ if "%SPHINXBUILD%" == "" (
 set SOURCEDIR=source
 set BUILDDIR=build
 
-set PYTHONPATH=..;..\lib\py4j-0.10.9.7-src.zip
+set PYTHONPATH=..;..\lib\py4j-0.10.9.8-src.zip
 
 if "%1" == "" goto help
 
