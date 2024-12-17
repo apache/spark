@@ -609,6 +609,9 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
   require(hset != null, "hset could not be null")
 
   override def toString: String = {
+    if (!child.resolved) {
+      return s"$child INSET (values with unresolved data types)"
+    }
     val listString = hset.toSeq
       .map(elem => Literal(elem, child.dataType).toString)
       // Sort elements for deterministic behaviours

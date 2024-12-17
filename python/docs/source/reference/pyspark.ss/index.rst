@@ -20,7 +20,7 @@
 Structured Streaming
 ====================
 
-This page gives an overview of all public Structed Streaming API.
+This page gives an overview of all public Structured Streaming API.
 
 .. toctree::
     :maxdepth: 2

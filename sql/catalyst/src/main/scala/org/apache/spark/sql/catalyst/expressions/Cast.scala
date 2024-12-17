@@ -93,7 +93,9 @@ object Cast extends QueryErrorsBase {
 
     case (NullType, _) => true
 
+    case (_, CharType(_) | VarcharType(_)) => false
     case (_, _: StringType) => true
+    case (CharType(_) | VarcharType(_), _) => false
 
     case (_: StringType, _: BinaryType) => true
 
@@ -198,7 +200,9 @@ object Cast extends QueryErrorsBase {
 
     case (NullType, _) => true
 
+    case (_, CharType(_) | VarcharType(_)) => false
     case (_, _: StringType) => true
+    case (CharType(_) | VarcharType(_), _) => false
 
     case (_: StringType, BinaryType) => true
     case (_: IntegralType, BinaryType) => true
@@ -281,7 +285,7 @@ object Cast extends QueryErrorsBase {
   def needsTimeZone(from: DataType, to: DataType): Boolean = (from, to) match {
     case (VariantType, _) => true
     case (_: StringType, TimestampType) => true
-    case (TimestampType, StringType) => true
+    case (TimestampType, _: StringType) => true
     case (DateType, TimestampType) => true
     case (TimestampType, DateType) => true
     case (TimestampType, TimestampNTZType) => true
@@ -362,9 +366,10 @@ object Cast extends QueryErrorsBase {
     case (_, _) if from == to => false
     case (VariantType, _) => true
 
+    case (CharType(_) | VarcharType(_), BinaryType | _: StringType) => false
     case (_: StringType, BinaryType | _: StringType) => false
-    case (_: StringType, _) => true
-    case (_, _: StringType) => false
+    case (st: StringType, _) if st.constraint == NoConstraint => true
+    case (_, st: StringType) if st.constraint == NoConstraint => false
 
     case (TimestampType, ByteType | ShortType | IntegerType) => true
     case (FloatType | DoubleType, TimestampType) => true
