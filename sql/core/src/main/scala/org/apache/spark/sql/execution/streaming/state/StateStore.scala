@@ -326,7 +326,8 @@ sealed trait KeyStateEncoderSpec {
   def jsonValue: JValue
   def json: String = compact(render(jsonValue))
 
-  /** Creates a RocksDBKeyStateEncoder for this specification.
+  /**
+   * Creates a RocksDBKeyStateEncoder for this specification.
    *
    * @param dataEncoder The encoder to handle the actual data encoding/decoding
    * @param useColumnFamilies Whether to use RocksDB column families
