@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGe
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.trees.{BinaryLike, TernaryLike, UnaryLike}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{EXPRESSION_WITH_RANDOM_SEED, RUNTIME_REPLACEABLE, TreePattern}
-import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types._
 import org.apache.spark.util.random.XORShiftRandom
 
@@ -380,8 +380,6 @@ case class RandStr(
               "inputName" -> toSQLId(name),
               "inputType" -> "integer",
               "inputExpr" -> toSQLExpr(expr)))
-        } else if (result == TypeCheckResult.TypeCheckSuccess && expr.dataType == NullType) {
-          throw QueryExecutionErrors.unexpectedValueForLengthInFunctionError(prettyName, -1)
         }
     }
     result
