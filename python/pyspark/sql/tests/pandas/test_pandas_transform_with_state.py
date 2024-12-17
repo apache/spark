@@ -859,6 +859,54 @@ class TransformWithStateInPandasTestsMixin:
             self.test_transform_with_state_in_pandas_event_time()
             self.test_transform_with_state_in_pandas_proc_timer()
 
+    def test_transform_with_state_in_pandas_batch_query(self):
+        data = [("0", 123), ("0", 46), ("1", 146), ("1", 346)]
+        df = self.spark.createDataFrame(data, "id string, temperature int")
+
+        output_schema = StructType(
+            [
+                StructField("id", StringType(), True),
+                StructField("countAsString", StringType(), True),
+            ]
+        )
+        batch_result = df.groupBy("id").transformWithStateInPandas(
+            statefulProcessor=MapStateProcessor(),
+            outputStructType=output_schema,
+            outputMode="Update",
+            timeMode="None",
+        )
+        assert set(batch_result.sort("id").collect()) == {
+            Row(id="0", countAsString="2"),
+            Row(id="1", countAsString="2"),
+        }
+
+    def test_transform_with_state_in_pandas_batch_query_initial_state(self):
+        data = [("0", 123), ("0", 46), ("1", 146), ("1", 346)]
+        df = self.spark.createDataFrame(data, "id string, temperature int")
+
+        init_data = [("0", 789), ("3", 987)]
+        initial_state = self.spark.createDataFrame(init_data, "id string, initVal int").groupBy(
+            "id"
+        )
+
+        output_schema = StructType(
+            [
+                StructField("id", StringType(), True),
+                StructField("value", StringType(), True),
+            ]
+        )
+        batch_result = df.groupBy("id").transformWithStateInPandas(
+            statefulProcessor=SimpleStatefulProcessorWithInitialState(),
+            outputStructType=output_schema,
+            outputMode="Update",
+            timeMode="None",
+            initialState=initial_state,
+        )
+        assert set(batch_result.sort("id").collect()) == {
+            Row(id="0", value=str(789 + 123 + 46)),
+            Row(id="1", value=str(146 + 346)),
+        }
+
 
 class SimpleStatefulProcessorWithInitialState(StatefulProcessor):
     # this dict is the same as input initial state dataframe
@@ -1013,8 +1061,9 @@ class SimpleStatefulProcessor(StatefulProcessor, unittest.TestCase):
     batch_id = 0
 
     def init(self, handle: StatefulProcessorHandle) -> None:
+        # Test both string type and struct type schemas
+        self.num_violations_state = handle.getValueState("numViolations", "value int")
         state_schema = StructType([StructField("value", IntegerType(), True)])
-        self.num_violations_state = handle.getValueState("numViolations", state_schema)
         self.temp_state = handle.getValueState("tempState", state_schema)
         handle.deleteIfExists("tempState")
 
@@ -1205,9 +1254,8 @@ class ListStateLargeTTLProcessor(ListStateProcessor):
 
 class MapStateProcessor(StatefulProcessor):
     def init(self, handle: StatefulProcessorHandle):
-        key_schema = StructType([StructField("name", StringType(), True)])
-        value_schema = StructType([StructField("count", IntegerType(), True)])
-        self.map_state = handle.getMapState("mapState", key_schema, value_schema)
+        # Test string type schemas
+        self.map_state = handle.getMapState("mapState", "name string", "count int")
 
     def handleInputRows(self, key, rows, timer_values) -> Iterator[pd.DataFrame]:
         count = 0

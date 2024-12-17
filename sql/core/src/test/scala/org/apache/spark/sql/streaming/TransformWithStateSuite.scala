@@ -45,13 +45,13 @@ object TransformWithStateSuiteUtils {
 
 class RunningCountStatefulProcessor extends StatefulProcessor[String, String, (String, String)]
   with Logging {
+  import implicits._
   @transient protected var _countState: ValueState[Long] = _
 
   override def init(
       outputMode: OutputMode,
       timeMode: TimeMode): Unit = {
-    _countState = getHandle.getValueState[Long]("countState",
-      Encoders.scalaLong, TTLConfig.NONE)
+    _countState = getHandle.getValueState[Long]("countState", TTLConfig.NONE)
   }
 
   override def handleInputRows(
@@ -72,12 +72,13 @@ class RunningCountStatefulProcessor extends StatefulProcessor[String, String, (S
 class RunningCountStatefulProcessorWithTTL
   extends StatefulProcessor[String, String, (String, String)]
   with Logging {
+  import implicits._
   @transient protected var _countState: ValueState[Long] = _
 
   override def init(
       outputMode: OutputMode,
       timeMode: TimeMode): Unit = {
-    _countState = getHandle.getValueState[Long]("countState", Encoders.scalaLong,
+    _countState = getHandle.getValueState[Long]("countState",
       TTLConfig(Duration.ofMillis(1000)))
   }
 
@@ -384,20 +385,32 @@ class RunningCountStatefulProcessorWithError extends RunningCountStatefulProcess
 }
 
 // class for verify state schema is correctly written for all state var types
-class StatefulProcessorWithCompositeTypes extends RunningCountStatefulProcessor {
+class StatefulProcessorWithCompositeTypes(useImplicits: Boolean)
+  extends RunningCountStatefulProcessor {
+  import implicits._
   @transient private var _listState: ListState[TestClass] = _
   @transient private var _mapState: MapState[POJOTestClass, String] = _
 
   override def init(
       outputMode: OutputMode,
       timeMode: TimeMode): Unit = {
-    _countState = getHandle.getValueState[Long]("countState", Encoders.scalaLong,
-      TTLConfig.NONE)
-    _listState = getHandle.getListState[TestClass](
-      "listState", Encoders.product[TestClass], TTLConfig.NONE)
-    _mapState = getHandle.getMapState[POJOTestClass, String](
-      "mapState", Encoders.bean(classOf[POJOTestClass]), Encoders.STRING,
-      TTLConfig.NONE)
+
+    if (useImplicits) {
+      _countState = getHandle.getValueState[Long]("countState", TTLConfig.NONE)
+      _listState = getHandle.getListState[TestClass](
+        "listState", TTLConfig.NONE)
+      _mapState = getHandle.getMapState[POJOTestClass, String](
+        "mapState", Encoders.bean(classOf[POJOTestClass]), Encoders.STRING,
+        TTLConfig.NONE)
+    } else {
+      _countState = getHandle.getValueState[Long]("countState", Encoders.scalaLong,
+        TTLConfig.NONE)
+      _listState = getHandle.getListState[TestClass](
+        "listState", Encoders.product[TestClass], TTLConfig.NONE)
+      _mapState = getHandle.getMapState[POJOTestClass, String](
+        "mapState", Encoders.bean(classOf[POJOTestClass]), Encoders.STRING,
+        TTLConfig.NONE)
+    }
   }
 }
 
@@ -429,7 +442,7 @@ class SleepingTimerProcessor extends StatefulProcessor[String, String, String] {
  * Class that adds tests for transformWithState stateful streaming operator
  */
 class TransformWithStateSuite extends StateStoreMetricsTest
-  with AlsoTestWithChangelogCheckpointingEnabled with AlsoTestWithEncodingTypes {
+  with AlsoTestWithRocksDBFeatures with AlsoTestWithEncodingTypes {
 
   import testImplicits._
 
@@ -1037,85 +1050,87 @@ class TransformWithStateSuite extends StateStoreMetricsTest
     }
   }
 
-  test("transformWithState - verify StateSchemaV3 writes " +
-    "correct SQL schema of key/value") {
-    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
-      classOf[RocksDBStateStoreProvider].getName,
-      SQLConf.SHUFFLE_PARTITIONS.key ->
-        TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString) {
-      withTempDir { checkpointDir =>
-        val metadataPathPostfix = "state/0/_stateSchema/default"
-        val stateSchemaPath = new Path(checkpointDir.toString,
-          s"$metadataPathPostfix")
-        val hadoopConf = spark.sessionState.newHadoopConf()
-        val fm = CheckpointFileManager.create(stateSchemaPath, hadoopConf)
+  Seq(false, true).foreach { useImplicits =>
+    test("transformWithState - verify StateSchemaV3 writes " +
+      s"correct SQL schema of key/value with useImplicits=$useImplicits") {
+      withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+        classOf[RocksDBStateStoreProvider].getName,
+        SQLConf.SHUFFLE_PARTITIONS.key ->
+          TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString) {
+        withTempDir { checkpointDir =>
+          val metadataPathPostfix = "state/0/_stateSchema/default"
+          val stateSchemaPath = new Path(checkpointDir.toString,
+            s"$metadataPathPostfix")
+          val hadoopConf = spark.sessionState.newHadoopConf()
+          val fm = CheckpointFileManager.create(stateSchemaPath, hadoopConf)
 
-        val keySchema = new StructType().add("value", StringType)
-        val schema0 = StateStoreColFamilySchema(
-          "countState",
-          keySchema,
-          new StructType().add("value", LongType, false),
-          Some(NoPrefixKeyStateEncoderSpec(keySchema)),
-          None
-        )
-        val schema1 = StateStoreColFamilySchema(
-          "listState",
-          keySchema,
-          new StructType()
+          val keySchema = new StructType().add("value", StringType)
+          val schema0 = StateStoreColFamilySchema(
+            "countState",
+            keySchema,
+            new StructType().add("value", LongType, false),
+            Some(NoPrefixKeyStateEncoderSpec(keySchema)),
+            None
+          )
+          val schema1 = StateStoreColFamilySchema(
+            "listState",
+            keySchema,
+            new StructType()
               .add("id", LongType, false)
               .add("name", StringType),
-          Some(NoPrefixKeyStateEncoderSpec(keySchema)),
-          None
-        )
+            Some(NoPrefixKeyStateEncoderSpec(keySchema)),
+            None
+          )
 
-        val userKeySchema = new StructType()
-          .add("id", IntegerType, false)
-          .add("name", StringType)
-        val compositeKeySchema = new StructType()
-          .add("key", new StructType().add("value", StringType))
-          .add("userKey", userKeySchema)
-        val schema2 = StateStoreColFamilySchema(
-          "mapState",
-          compositeKeySchema,
-          new StructType().add("value", StringType),
-          Some(PrefixKeyScanStateEncoderSpec(compositeKeySchema, 1)),
-          Option(userKeySchema)
-        )
+          val userKeySchema = new StructType()
+            .add("id", IntegerType, false)
+            .add("name", StringType)
+          val compositeKeySchema = new StructType()
+            .add("key", new StructType().add("value", StringType))
+            .add("userKey", userKeySchema)
+          val schema2 = StateStoreColFamilySchema(
+            "mapState",
+            compositeKeySchema,
+            new StructType().add("value", StringType),
+            Some(PrefixKeyScanStateEncoderSpec(compositeKeySchema, 1)),
+            Option(userKeySchema)
+          )
 
-        val inputData = MemoryStream[String]
-        val result = inputData.toDS()
-          .groupByKey(x => x)
-          .transformWithState(new StatefulProcessorWithCompositeTypes(),
-            TimeMode.None(),
-            OutputMode.Update())
+          val inputData = MemoryStream[String]
+          val result = inputData.toDS()
+            .groupByKey(x => x)
+            .transformWithState(new StatefulProcessorWithCompositeTypes(useImplicits),
+              TimeMode.None(),
+              OutputMode.Update())
 
-        testStream(result, OutputMode.Update())(
-          StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
-          AddData(inputData, "a", "b"),
-          CheckNewAnswer(("a", "1"), ("b", "1")),
-          Execute { q =>
-            q.lastProgress.runId
-            val schemaFilePath = fm.list(stateSchemaPath).toSeq.head.getPath
-            val providerId = StateStoreProviderId(StateStoreId(
-              checkpointDir.getCanonicalPath, 0, 0), q.lastProgress.runId)
-            val checker = new StateSchemaCompatibilityChecker(providerId,
-              hadoopConf, Some(schemaFilePath))
-            val colFamilySeq = checker.readSchemaFile()
+          testStream(result, OutputMode.Update())(
+            StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
+            AddData(inputData, "a", "b"),
+            CheckNewAnswer(("a", "1"), ("b", "1")),
+            Execute { q =>
+              q.lastProgress.runId
+              val schemaFilePath = fm.list(stateSchemaPath).toSeq.head.getPath
+              val providerId = StateStoreProviderId(StateStoreId(
+                checkpointDir.getCanonicalPath, 0, 0), q.lastProgress.runId)
+              val checker = new StateSchemaCompatibilityChecker(providerId,
+                hadoopConf, Some(schemaFilePath))
+              val colFamilySeq = checker.readSchemaFile()
 
-            assert(TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS ==
-              q.lastProgress.stateOperators.head.customMetrics.get("numValueStateVars").toInt)
-            assert(TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS ==
-              q.lastProgress.stateOperators.head.customMetrics.get("numListStateVars").toInt)
-            assert(TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS ==
-              q.lastProgress.stateOperators.head.customMetrics.get("numMapStateVars").toInt)
+              assert(TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS ==
+                q.lastProgress.stateOperators.head.customMetrics.get("numValueStateVars").toInt)
+              assert(TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS ==
+                q.lastProgress.stateOperators.head.customMetrics.get("numListStateVars").toInt)
+              assert(TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS ==
+                q.lastProgress.stateOperators.head.customMetrics.get("numMapStateVars").toInt)
 
-            assert(colFamilySeq.length == 3)
-            assert(colFamilySeq.map(_.toString).toSet == Set(
-              schema0, schema1, schema2
-            ).map(_.toString))
-          },
-          StopStream
-        )
+              assert(colFamilySeq.length == 3)
+              assert(colFamilySeq.map(_.toString).toSet == Set(
+                schema0, schema1, schema2
+              ).map(_.toString))
+            },
+            StopStream
+          )
+        }
       }
     }
   }

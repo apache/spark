@@ -115,7 +115,7 @@ case class CallMethodViaReflection(
               "requiredType" -> toSQLType(
                 TypeCollection(BooleanType, ByteType, ShortType,
                   IntegerType, LongType, FloatType, DoubleType,
-                  StringTypeWithCollation)),
+                  StringTypeWithCollation(supportsTrimCollation = true))),
               "inputSql" -> toSQLExpr(e),
               "inputType" -> toSQLType(e.dataType))
           )

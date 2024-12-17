@@ -673,7 +673,7 @@ To use a custom metrics.properties for the application master and executors, upd
   <td>false</td>
   <td>
     Set to true for applications that have higher security requirements and prefer that their
-    secret is not saved in the db. The shuffle data of such applications wll not be recovered after
+    secret is not saved in the db. The shuffle data of such applications will not be recovered after
     the External Shuffle Service restarts.
   </td>
   <td>3.5.0</td>
@@ -853,7 +853,7 @@ will include a list of all tokens obtained, and their expiry details
 To start the Spark Shuffle Service on each `NodeManager` in your YARN cluster, follow these
 instructions:
 
-1. Build Spark with the [YARN profile](building-spark.html). Skip this step if you are using a
+1. Build Spark with the [YARN profile](building-spark.html#specifying-the-hadoop-version-and-enabling-yarn). Skip this step if you are using a
 pre-packaged distribution.
 1. Locate the `spark-<version>-yarn-shuffle.jar`. This should be under
 `$SPARK_HOME/common/network-yarn/target/scala-<version>` if you are building Spark yourself, and under

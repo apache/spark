@@ -179,7 +179,7 @@ Returns all the output rows from the source table unmodified.
 For example:
 
 ```sql
-CREATE TABLE t(a INT, b INT) AS VALUES (1, 2), (3, 4);
+CREATE TABLE t AS VALUES (1, 2), (3, 4) AS t(a, b);
 TABLE t;
 
 +---+---+
@@ -207,7 +207,7 @@ provided. You may provide the window specification in the `WINDOW` clause.
 For example:
 
 ```sql
-CREATE TABLE t(col INT) AS VALUES (0), (1);
+CREATE TABLE t AS VALUES (0), (1) AS t(col);
 
 FROM t
 |> SELECT col * 2 AS result;
