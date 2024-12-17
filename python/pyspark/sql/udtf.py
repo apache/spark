@@ -405,7 +405,7 @@ class UserDefinedTableFunction:
                 # Otherwise, convert it to a Java column
                 j_arg = _to_java_column(value)
             # Create a named argument expression
-            j_named_arg = jvm.PythonSQLUtils.namedArgumentExpression(key, j_arg)
+            j_named_arg = sc._jvm.PythonSQLUtils.namedArgumentExpression(key, j_arg)
             jkwargs.append(j_named_arg)
 
         judtf = self._judtf
