@@ -300,8 +300,9 @@ class TransformWithListStateSuite extends StreamTest
         CheckNewAnswer(("k5", "v5"), ("k5", "v6")),
         Execute { q =>
           assert(q.lastProgress.stateOperators(0).customMetrics.get("numListStateVars") > 0)
-          assert(q.lastProgress.stateOperators(0).numRowsUpdated === 2)
-          assert(q.lastProgress.stateOperators(0).numRowsRemoved === 2)
+          assert(q.lastProgress.stateOperators(0).numRowsUpdated === 6)
+          // The removal comes because emitAllInState clears the state.
+          assert(q.lastProgress.stateOperators(0).numRowsRemoved === 1)
         }
       )
     }

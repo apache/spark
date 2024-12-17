@@ -78,7 +78,6 @@ class ListStateImpl[S](
 
      val encodedKey = stateTypesEncoder.encodeGroupingKey()
      var isFirst = true
-     TWSMetricsUtils.resetMetric(metrics, "numUpdatedStateRows")
 
      newState.foreach { v =>
        val encodedValue = stateTypesEncoder.encodeValue(v)
@@ -117,7 +116,7 @@ class ListStateImpl[S](
    override def clear(): Unit = {
      val encodedKey = stateTypesEncoder.encodeGroupingKey()
      store.remove(encodedKey, stateName)
-     TWSMetricsUtils.incrementMetric(metrics, "numRemovedStateRows", 1L)
+     TWSMetricsUtils.incrementMetric(metrics, "numRemovedStateRows")
    }
 
    private def validateNewState(newState: Array[S]): Unit = {
