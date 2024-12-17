@@ -36,7 +36,8 @@ class SparkOptimizer(
 
   override def earlyScanPushDownRules: Seq[Rule[LogicalPlan]] =
     // TODO: move SchemaPruning into catalyst
-    Seq(SchemaPruning,
+    Seq(
+      SchemaPruning,
       GroupBasedRowLevelOperationScanPlanning,
       V1Writes,
       V2ScanRelationPushDown,
@@ -97,7 +98,8 @@ class SparkOptimizer(
     Batch("Replace CTE with Repartition", Once, ReplaceCTERefWithRepartition)))
 
   override def nonExcludableRules: Seq[String] = super.nonExcludableRules ++
-    Seq(ExtractPythonUDFFromJoinCondition.ruleName,
+    Seq(
+      ExtractPythonUDFFromJoinCondition.ruleName,
       ExtractPythonUDFFromAggregate.ruleName,
       ExtractGroupingPythonUDFFromAggregate.ruleName,
       ExtractPythonUDFs.ruleName,

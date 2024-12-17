@@ -77,7 +77,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
    * A helper method that takes as input a Seq of Batch or Seq[Batch], and flattens it out.
    */
   def flattenBatches(nestedBatchSequence: Seq[Any]): Seq[Batch] = {
-    assert(!Utils.isTesting || nestedBatchSequence.forall {
+    assert(nestedBatchSequence.forall {
       case _: Batch => true
       case s: Seq[_] => s.forall(_.isInstanceOf[Batch])
       case _ => false
@@ -284,7 +284,8 @@ abstract class Optimizer(catalogManager: CatalogManager)
    * (defaultBatches - (excludedRules - nonExcludableRules)).
    */
   def nonExcludableRules: Seq[String] =
-    Seq(FinishAnalysis.ruleName,
+    Seq(
+      FinishAnalysis.ruleName,
       RewriteDistinctAggregates.ruleName,
       ReplaceDeduplicateWithAggregate.ruleName,
       ReplaceIntersectWithSemiJoin.ruleName,
