@@ -48,10 +48,10 @@ class SparkOptimizer(
   override def preCBORules: Seq[Rule[LogicalPlan]] =
     Seq(OptimizeMetadataOnlyDeleteFromTable)
 
-  override def defaultBatches: Seq[Batch] =
-    flattenBatches(Seq(preOptimizationBatches,
-      super.defaultBatches,
-      Batch("Optimize Metadata Only Query", Once, OptimizeMetadataOnlyQuery(catalog)),
+  override def defaultBatches: Seq[Batch] = flattenBatches(Seq(
+    preOptimizationBatches,
+    super.defaultBatches,
+    Batch("Optimize Metadata Only Query", Once, OptimizeMetadataOnlyQuery(catalog)),
     Batch("PartitionPruning", Once,
       PartitionPruning,
       // We can't run `OptimizeSubqueries` in this batch, as it will optimize the subqueries
