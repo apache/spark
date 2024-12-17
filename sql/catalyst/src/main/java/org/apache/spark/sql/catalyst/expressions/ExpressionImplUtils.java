@@ -319,7 +319,7 @@ public class ExpressionImplUtils {
 
   public static UTF8String randStr(XORShiftRandom rng, int length) {
     if (length < 0) {
-      throw QueryExecutionErrors.randstrLengthNotPositiveOrZero();
+      throw QueryExecutionErrors.unexpectedValueForLengthInFunctionError("RANDSTR", length);
     }
     byte[] bytes = new byte[length];
     for (int i = 0; i < bytes.length; i++) {

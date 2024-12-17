@@ -450,8 +450,13 @@ struct<>
 -- !query output
 org.apache.spark.SparkRuntimeException
 {
-  "errorClass" : "RANDSTR_LENGTH_NOT_POSITIVE_OR_ZERO",
-  "sqlState" : "42K0G"
+  "errorClass" : "INVALID_PARAMETER_VALUE.LENGTH",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "functionName" : "`RANDSTR`",
+    "length" : "-1",
+    "parameter" : "`length`"
+  }
 }
 
 
@@ -545,6 +550,11 @@ struct<>
 -- !query output
 org.apache.spark.SparkRuntimeException
 {
-  "errorClass" : "RANDSTR_LENGTH_NOT_POSITIVE_OR_ZERO",
-  "sqlState" : "42K0G"
+  "errorClass" : "INVALID_PARAMETER_VALUE.LENGTH",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "functionName" : "`RANDSTR`",
+    "length" : "-1",
+    "parameter" : "`length`"
+  }
 }
