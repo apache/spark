@@ -319,7 +319,7 @@ trait StateStoreWriter
 
   /** Metadata of this stateful operator and its states stores. */
   def operatorStateMetadata(
-      stateSchemaPaths: List[Map[Int, String]] = List.empty): OperatorStateMetadata = {
+      stateSchemaPaths: List[Map[Short, String]] = List.empty): OperatorStateMetadata = {
     val info = getStateInfo
     val operatorInfo = OperatorInfoV1(info.operatorId, shortName)
     val stateStoreInfo =
@@ -329,11 +329,11 @@ trait StateStoreWriter
 
   def stateSchemaMapping(
       stateSchemaValidationResults: List[StateSchemaValidationResult],
-      oldMetadata: Option[OperatorStateMetadata]): List[Map[Int, String]] = {
+      oldMetadata: Option[OperatorStateMetadata]): List[Map[Short, String]] = {
     val validationResult = stateSchemaValidationResults.head
     val evolvedSchema = validationResult.evolvedSchema
     if (evolvedSchema) {
-      val (oldSchemaId, oldSchemaPaths): (Int, Map[Int, String]) = oldMetadata match {
+      val (oldSchemaId, oldSchemaPaths): (Short, Map[Short, String]) = oldMetadata match {
         case Some(v2: OperatorStateMetadataV2) =>
           val ssInfo = v2.stateStoreInfo.head
           (ssInfo.stateSchemaId, ssInfo.stateSchemaFilePaths)

@@ -51,8 +51,8 @@ case class StateStoreMetadataV2(
     storeName: String,
     numColsPrefixKey: Int,
     numPartitions: Int,
-    stateSchemaId: Int,
-    stateSchemaFilePaths: Map[Int, String])
+    stateSchemaId: Short,
+    stateSchemaFilePaths: Map[Short, String])
   extends StateStoreMetadata with Serializable
 
 object StateStoreMetadataV2 {
@@ -288,7 +288,7 @@ class OperatorStateMetadataV1Reader(
 class OperatorStateMetadataV2Writer(
     stateCheckpointPath: Path,
     hadoopConf: Configuration,
-    currentBatchId: Long) extends OperatorStateMetadataWriter with Logging {
+    currentBatchId: Long) extends OperatorStateMetadataWriter {
 
   private val metadataFilePath = OperatorStateMetadataV2.metadataFilePath(
     stateCheckpointPath, currentBatchId)
@@ -309,7 +309,7 @@ class OperatorStateMetadataV2Writer(
 class OperatorStateMetadataV2Reader(
     stateCheckpointPath: Path,
     hadoopConf: Configuration,
-    batchId: Long) extends OperatorStateMetadataReader with Logging {
+    batchId: Long) extends OperatorStateMetadataReader {
 
   // Check that the requested batchId is available in the checkpoint directory
   val baseCheckpointDir = stateCheckpointPath.getParent.getParent
