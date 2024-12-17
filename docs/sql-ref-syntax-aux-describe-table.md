@@ -61,6 +61,8 @@ to return the metadata pertaining to a partition or column respectively.
     and `col_name` are  mutually exclusive and can not be specified together. Currently
     nested columns are not allowed to be specified.
     
+    JSON format is not currently supported for individual columns.
+    
     **Syntax:** `[ database_name. ] [ table_name. ] column_name`
 
 * **AS JSON**
@@ -71,6 +73,8 @@ to return the metadata pertaining to a partition or column respectively.
   **Syntax:** `[ AS JSON ]`
 
   **Schema:**
+  
+  Note that only non-null fields will be included in the JSON schema.
   
   ```sql
   {

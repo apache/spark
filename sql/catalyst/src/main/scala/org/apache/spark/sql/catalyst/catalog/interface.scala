@@ -97,6 +97,9 @@ case class CatalogStorageFormat(
     map
   }
 
+  /** Util providing the JSON-compatible version of toLinkedHashMap, for serialization of fields
+   * to JSON format via json4s
+   */
   def toJsonLinkedHashMap: mutable.LinkedHashMap[String, String] = {
     val map = new mutable.LinkedHashMap[String, String]()
 
@@ -161,6 +164,9 @@ case class CatalogTablePartition(
     map
   }
 
+  /** Util providing the JSON-compatible version of toLinkedHashMap, for serialization of fields
+   * to JSON format via json4s
+   */
   def toJsonLinkedHashMap: mutable.LinkedHashMap[String, String] = {
     val map = new mutable.LinkedHashMap[String, String]()
 
@@ -366,6 +372,9 @@ case class BucketSpec(
     )
   }
 
+  /** Util providing the JSON-compatible version of toLinkedHashMap, for serialization of fields
+   * to JSON format via json4s
+   */
   def toJsonLinkedHashMap: mutable.LinkedHashMap[String, String] = {
     mutable.LinkedHashMap[String, String](
       "bucket_columns" -> bucketColumnNames.map(s => s""""$s"""").mkString("[", ", ", "]"),
@@ -637,6 +646,9 @@ case class CatalogTable(
     map
   }
 
+  /** Util providing the JSON-compatible version of toLinkedHashMap, for serialization of fields
+   * to JSON format via json4s
+   */
   def toJsonLinkedHashMap: mutable.LinkedHashMap[String, String] = {
     val map = new mutable.LinkedHashMap[String, String]()
 

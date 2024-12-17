@@ -613,19 +613,6 @@ abstract class DescribeCommandBase extends LeafRunnableCommand {
     buffer: ArrayBuffer[Row], column: String, dataType: String, comment: String): Unit = {
     buffer += Row(column, dataType, comment)
   }
-
-  protected def appendJson(buffer: ArrayBuffer[Row], key: String, jsonObject: String): Unit = {
-    val currentJson = buffer.headOption.map(row => parse(row.getString(0))).
-      getOrElse(parse("""{}"""))
-    val newJson = parse(jsonObject.replace(" ", ""))
-    val updatedJson = currentJson merge JObject(key -> newJson)
-
-    if (buffer.isEmpty) {
-      buffer += Row(compact(render(updatedJson)), "", "")
-    } else {
-      buffer(0) = Row(compact(render(updatedJson)), "", "")
-    }
-  }
 }
 /**
  * Command that looks like
@@ -678,28 +665,6 @@ case class DescribeTableCommand(
     }
 
     result.toSeq
-  }
-
-  def normalizeStr(str: String): String = {
-    str.toLowerCase().replace(" ", "_")
-  }
-
-
-  private def addKeyValueToJson(buffer: ArrayBuffer[Row], key: String, value: JValue): Unit = {
-    val normalizedKey = normalizeStr(key)
-
-    val currentJson = buffer.headOption.map(row => parse(row.getString(0))).getOrElse(JObject())
-    // If key does not already exist, add to JSON
-    if ((currentJson \ normalizedKey) == JNothing) {
-      val updatedJson = currentJson merge JObject(normalizedKey -> value)
-      val jsonString = compact(render(updatedJson))
-
-      if (buffer.isEmpty) {
-        buffer += Row(jsonString, "", "")
-      } else {
-        buffer(0) = Row(jsonString, "", "")
-      }
-    }
   }
 
   private def describePartitionInfo(table: CatalogTable, buffer: ArrayBuffer[Row]): Unit = {
@@ -801,25 +766,21 @@ case class DescribeTableJsonCommand(
     val result = new ArrayBuffer[Row]
     val catalog = sparkSession.sessionState.catalog
 
-    val schema = if (catalog.isTempView(table)) {
+    if (catalog.isTempView(table)) {
       if (partitionSpec.nonEmpty) {
         throw QueryCompilationErrors.descPartitionNotAllowedOnTempView(table.identifier)
       }
-      catalog.getTempViewOrPermanentTableMetadata(table).schema
+      val schema = catalog.getTempViewOrPermanentTableMetadata(table).schema
+      describeColsJson(schema, result, header = false)
     } else {
       val metadata = catalog.getTableRawMetadata(table)
-      if (metadata.schema.isEmpty) {
+      val schema = if (metadata.schema.isEmpty) {
         // In older versions of Spark,
         // the table schema can be empty and should be inferred at runtime.
         sparkSession.table(metadata.identifier).schema
       } else {
         metadata.schema
       }
-    }
-
-    // If not temp view, add additional fields
-    if (!catalog.isTempView(table)) {
-      val metadata = catalog.getTableRawMetadata(table)
 
       addKeyValueToJson(result, "table_name", JString(metadata.identifier.table))
 
@@ -843,11 +804,73 @@ case class DescribeTableJsonCommand(
       } else {
         describeFormattedTableInfoJson(metadata, result)
       }
-    } else {
-      describeColsJson(schema, result, header = false)
     }
 
     result.toSeq
+  }
+
+  /**
+   * Util to recursively form JSON string representation of data type, used for DESCRIBE AS JSON.
+   * Differs from `json` in DataType.scala by providing additional fields for some types.
+   */
+  def jsonType(dataType: DataType): String = {
+    dataType match {
+      case arrayType: ArrayType =>
+        val elementTypeJson = jsonType(arrayType.elementType)
+        s"""{"type": "array","elementType": $elementTypeJson,
+           |"containsNull": ${arrayType.containsNull}}""".stripMargin
+
+      case mapType: MapType =>
+        val keyTypeJson = jsonType(mapType.keyType)
+        val valueTypeJson = jsonType(mapType.valueType)
+        s"""{"type": "map","keyType": $keyTypeJson,"valueType": $valueTypeJson,
+           |"valueContainsNull": ${mapType.valueContainsNull}}""".stripMargin
+
+      case structType: StructType =>
+        val fieldsJson = structType.fields
+          .map { field =>
+            val fieldTypeJson = jsonType(field.dataType)
+            s"""{"name": "${field.name}", "type": $fieldTypeJson, "nullable": ${field.nullable}}"""
+          }
+          .mkString(", ")
+        s"""{"type": "struct", "fields": [$fieldsJson]}"""
+
+      case decimalType: DecimalType =>
+        s"""{"type": "decimal", "precision": ${decimalType.precision},
+           |"scale": ${decimalType.scale}}""".stripMargin
+
+      case varcharType: VarcharType =>
+        s"""{"type": "varchar", "length": ${varcharType.length}}"""
+
+      case charType: CharType =>
+        s"""{"type": "char", "length": ${charType.length}}"""
+
+      // Only override TimestampType; TimestampType_NTZ type is already timestamp_ntz
+      case _: TimestampType =>
+        """{"type": "timestamp_ltz"}"""
+
+      case yearMonthIntervalType: YearMonthIntervalType =>
+        def getFieldName(field: Byte): String = {
+          YearMonthIntervalType.fieldToString(field)
+        }
+
+        val startUnit = getFieldName(yearMonthIntervalType.startField)
+        val endUnit = getFieldName(yearMonthIntervalType.endField)
+        s"""{"type": "interval", "start_unit": "$startUnit", "end_unit": "$endUnit"}"""
+
+      case dayTimeIntervalType: DayTimeIntervalType =>
+        def getFieldName(field: Byte): String = {
+          DayTimeIntervalType.fieldToString(field)
+        }
+
+        val startUnit = getFieldName(dayTimeIntervalType.startField)
+        val endUnit = getFieldName(dayTimeIntervalType.startField)
+        s"""{"type": "interval", "start_unit": "$startUnit", "end_unit": "$endUnit"}"""
+
+      // Base case for other simple types
+      case _ =>
+        s"""{"type": "${dataType.typeName}"}"""
+    }
   }
 
   def normalizeStr(str: String): String = {
@@ -875,7 +898,7 @@ case class DescribeTableJsonCommand(
       s"""{
          |  "id": ${id + 1},
          |  "name": "${column.name}",
-         |  "type": ${column.dataType.jsonType}
+         |  "type": ${jsonType(column.dataType)}
          |  $commentField$defaultValueJson
          |}""".stripMargin
     }.mkString("[", ",", "]")
@@ -883,6 +906,18 @@ case class DescribeTableJsonCommand(
     addKeyValueToJson(buffer, "columns", parse(columnsJson))
   }
 
+  protected def appendJson(buffer: ArrayBuffer[Row], key: String, jsonObject: String): Unit = {
+    val currentJson = buffer.headOption.map(row => parse(row.getString(0))).
+      getOrElse(parse("""{}"""))
+    val newJson = parse(jsonObject.replace(" ", ""))
+    val updatedJson = currentJson merge JObject(key -> newJson)
+
+    if (buffer.isEmpty) {
+      buffer += Row(compact(render(updatedJson)), "", "")
+    } else {
+      buffer(0) = Row(compact(render(updatedJson)), "", "")
+    }
+  }
 
   private def addKeyValueToJson(buffer: ArrayBuffer[Row], key: String, value: JValue): Unit = {
     val normalizedKey = normalizeStr(key)
@@ -912,7 +947,7 @@ case class DescribeTableJsonCommand(
         val (path, field) = nestedFieldOpt.get
         s"""{
            |  "name": "${(path :+ field.name).map(quoteIfNeeded).mkString(".")}",
-           |  "type": ${field.dataType.jsonType},
+           |  "type": ${jsonType(field.dataType)},
            |  "comment": ${field.getComment().map(c => s""""$c"""").getOrElse("null")}
            |}""".stripMargin
       }.mkString("[", ",", "]")

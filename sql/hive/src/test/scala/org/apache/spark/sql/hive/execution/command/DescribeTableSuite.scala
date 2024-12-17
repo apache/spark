@@ -278,31 +278,33 @@ class DescribeTableSuite extends v1.DescribeTableSuiteBase with CommandSuiteBase
 
   test("DESCRIBE AS JSON temp view") {
     withNamespaceAndTable("ns", "table") { t =>
-      val tableCreationStr =
-        s"""
-          |CREATE TABLE $t (a STRING, b INT, c STRING, d STRING) USING parquet
-          |  OPTIONS (a '1', b '2', password 'password')
-          |  PARTITIONED BY (c, d) CLUSTERED BY (a) SORTED BY (b ASC) INTO 2 BUCKETS
-          |  COMMENT 'table_comment'
-          |  TBLPROPERTIES (t 'test', password 'password')
-          |""".stripMargin
-      spark.sql(tableCreationStr)
-      spark.sql(s"CREATE TEMPORARY VIEW temp_v AS SELECT * FROM $t")
-      val descriptionDf = spark.sql(s"DESCRIBE EXTENDED temp_v AS JSON")
-      val firstRow = descriptionDf.select("json_metadata").head()
-      val jsonValue = firstRow.getString(0)
-      val parsedOutput = parse(jsonValue).extract[DescribeTableJson]
+      withTempView("temp_view") {
+        val tableCreationStr =
+          s"""
+             |CREATE TABLE $t (a STRING, b INT, c STRING, d STRING) USING parquet
+             |  OPTIONS (a '1', b '2', password 'password')
+             |  PARTITIONED BY (c, d) CLUSTERED BY (a) SORTED BY (b ASC) INTO 2 BUCKETS
+             |  COMMENT 'table_comment'
+             |  TBLPROPERTIES (t 'test', password 'password')
+             |""".stripMargin
+        spark.sql(tableCreationStr)
+          spark.sql(s"CREATE TEMPORARY VIEW temp_view AS SELECT * FROM $t")
+        val descriptionDf = spark.sql(s"DESCRIBE EXTENDED temp_view AS JSON")
+        val firstRow = descriptionDf.select("json_metadata").head()
+        val jsonValue = firstRow.getString(0)
+        val parsedOutput = parse(jsonValue).extract[DescribeTableJson]
 
-      val expectedOutput = DescribeTableJson(
-        columns = Some(List(
-          TableColumn(1, "a", Type("string")),
-          TableColumn(2, "b", Type("integer")),
-          TableColumn(3, "c", Type("string")),
-          TableColumn(4, "d", Type("string"))
-        ))
-      )
+        val expectedOutput = DescribeTableJson(
+          columns = Some(List(
+            TableColumn(1, "a", Type("string")),
+            TableColumn(2, "b", Type("integer")),
+            TableColumn(3, "c", Type("string")),
+            TableColumn(4, "d", Type("string"))
+          ))
+        )
 
-      assert(expectedOutput == parsedOutput)
+        assert(expectedOutput == parsedOutput)
+      }
     }
   }
 
@@ -310,7 +312,7 @@ class DescribeTableSuite extends v1.DescribeTableSuiteBase with CommandSuiteBase
     withNamespaceAndTable("ns", "table") { t =>
       val tableCreationStr =
         s"""
-          |CREATE TABLE $t(
+          |CREATE TABLE ns.table(
           |        cust_id INT,
           |        state VARCHAR(20),
           |        name STRING COMMENT "Short name"
@@ -319,9 +321,9 @@ class DescribeTableSuite extends v1.DescribeTableSuiteBase with CommandSuiteBase
           |    PARTITIONED BY (state)
           |""".stripMargin
       spark.sql(tableCreationStr)
-      spark.sql(s"INSERT INTO $t PARTITION (state = \"AR\") VALUES (100, \"Mike\")")
+      spark.sql("INSERT INTO ns.table PARTITION (state = \"AR\") VALUES (100, \"Mike\")")
       val error = intercept[AnalysisException] {
-        spark.sql(s"DESCRIBE FORMATTED $t $t.name AS JSON")
+        spark.sql("DESCRIBE FORMATTED ns.table ns.table.name AS JSON")
       }
 
       checkError(
