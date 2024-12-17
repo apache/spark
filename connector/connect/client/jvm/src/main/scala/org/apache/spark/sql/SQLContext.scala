@@ -58,7 +58,10 @@ class SQLContext private[sql] (override val sparkSession: SparkSession)
   // Disable style checker so "implicits" object can start with lowercase i
 
   /** @inheritdoc */
-  object implicits extends SQLImplicits(this.sparkSession)
+  object implicits extends SQLImplicits {
+    /** @inheritdoc */
+    override protected def session: SparkSession = sparkSession
+  }
 
   // scalastyle:on
 
