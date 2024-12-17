@@ -81,8 +81,8 @@ class ProgressReporter(
 
     addNewProgress(newProgress)
     postEvent(new QueryProgressEvent(newProgress))
-    println(
-      s"Streaming query made progress: $newProgress")
+    logInfo(
+      log"Streaming query made progress: ${MDC(LogKeys.STREAMING_QUERY_PROGRESS, newProgress)}")
   }
 
   private def addNewProgress(newProgress: StreamingQueryProgress): Unit = {

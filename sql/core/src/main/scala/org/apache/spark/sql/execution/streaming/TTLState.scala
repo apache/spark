@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.streaming
 import java.time.Duration
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeProjection, UnsafeRow}
+import org.apache.spark.sql.catalyst.expressions.{UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.streaming.TransformWithStateKeyValueRowSchemaUtils._
 import org.apache.spark.sql.execution.streaming.state.{NoPrefixKeyStateEncoderSpec, RangeKeyScanStateEncoderSpec, StateStore}
@@ -365,8 +365,6 @@ abstract class OneToManyTTLState(
       overwritePrimaryIndex: Boolean,
       elementKey: UnsafeRow,
       elementValues: Iterator[UnsafeRow]): Unit = {
-    // Manually keep track of the count so that we can update the count index. We don't
-    // want to call elementValues.size since that will try to re-read the iterator.
     var numNewElements = 0
 
     // If we're overwriting the primary index, then we only need to put the first value,

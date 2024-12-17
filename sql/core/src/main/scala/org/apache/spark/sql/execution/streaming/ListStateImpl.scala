@@ -21,7 +21,6 @@ import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.streaming.state.{NoPrefixKeyStateEncoderSpec, StateStore, StateStoreErrors}
 import org.apache.spark.sql.streaming.ListState
-import org.apache.spark.sql.types.StructType
 
 /**
  * Provides concrete implementation for list of values associated with a state variable

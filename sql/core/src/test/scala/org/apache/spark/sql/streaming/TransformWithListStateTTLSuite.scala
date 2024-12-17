@@ -225,18 +225,18 @@ class TransformWithListStateTTLSuite extends TransformWithStateTTLTest
 
         // For each unique key that occurs t times, the MultiStatefulVariableTTLProcessor maintains:
         //    - Map state: t records in the primary, and t records in the TTL index
-        //    - List state: 1 record in the primary, TTL, min, and count indexes
+        //    - List state: 1 record in the primary, TTL, and min indexes
         //    - Value state: 1 record in the primary, and 1 record in the TTL index
         //
-        // So in total, that amounts to 2t + 4 + 2 = 2t + 6 records.
+        // So in total, that amounts to 2t + 3 + 2 = 2t + 5 records.
         //
         // In this test, we have 2 unique keys, and each key occurs 3 times. Thus, the total number
-        // of keys in state is 2 * (2t + 6) where t = 3, which is 24.
+        // of keys in state is 2 * (2t + 5) where t = 3, which is 22.
         //
         // The number of updated rows is the total across the last time assertNumStateRows
         // was called, and we only update numRowsUpdated for primary key updates. We ran 6 batches
         // and each wrote 3 primary keys, so the total number of updated rows is 6 * 3 = 18.
-        assertNumStateRows(total = 24, updated = 18)
+        assertNumStateRows(total = 22, updated = 18)
       )
     }
   }
@@ -322,11 +322,15 @@ class TransformWithListStateTTLSuite extends TransformWithStateTTLTest
         CheckNewAnswer(
           OutputEvent("k1", -1, isTTLValue = true, 109000)
         ),
-        AddData(inputStream, InputEvent("k1", "clear", -1, null)),
+        AddData(inputStream,
+          InputEvent("k1", "clear", -1, null),
+          InputEvent("k3", "append", 1),
+          InputEvent("k3", "clear", -1, null)
+        ),
         AdvanceManualClock(1 * 1000),
         CheckNewAnswer(),
         Execute { q =>
-          assert(q.lastProgress.stateOperators(0).numRowsRemoved === 4)
+          assert(q.lastProgress.stateOperators(0).numRowsRemoved === 6)
           assert(q.lastProgress.stateOperators(0).customMetrics
             .get("numValuesRemovedDueToTTLExpiry") === 0)
         }
@@ -557,12 +561,12 @@ class TransformWithListStateTTLSuite extends TransformWithStateTTLTest
           AdvanceManualClock((63 - 5) * 1000),
           CheckNewAnswer(),
 
-          // There should be 4 state rows left over: the primary, TTL, min-expiry, and count
-          // indexes for k2.
+          // There should be 4 state rows left over: the primary, TTL, and min-expiry indexes
+          // for k2.
           //
           // It's important to check with assertNumStateRows, since the InputEvents
           // only return values for the current grouping key, not the entirety of RocksDB.
-          assertNumStateRows(total = 4, updated = 4),
+          assertNumStateRows(total = 3, updated = 4),
 
           // The k1 calls should both return no values. However, the k2 calls should return
           // one record each. We put these into one AddData call since we want them all to
