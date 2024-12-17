@@ -16,13 +16,11 @@
  */
 package org.apache.spark.util
 
-import java.io.{IOException, ObjectInputStream}
 import java.util.concurrent.atomic.AtomicReference
 
-private[spark] class TransientAtomicRef[T <: AnyRef](compute: => T) extends Serializable {
+private[spark] class AtomicRef[T <: AnyRef](compute: => T) extends Serializable {
 
-  @transient
-  private var _atom: AtomicReference[T] = new AtomicReference(null.asInstanceOf[T])
+  private val _atom: AtomicReference[T] = new AtomicReference(null.asInstanceOf[T])
 
   def apply(): T = {
     val ref = _atom.get()
@@ -34,11 +32,5 @@ private[spark] class TransientAtomicRef[T <: AnyRef](compute: => T) extends Seri
     } else {
       ref
     }
-  }
-
-  @throws(classOf[IOException])
-  private def readObject(ois: ObjectInputStream): Unit = Utils.tryOrIOException {
-    ois.defaultReadObject()
-    _atom = new AtomicReference(null.asInstanceOf[T])
   }
 }
