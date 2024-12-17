@@ -335,7 +335,7 @@ trait StateStoreWriter
     val validationResult = stateSchemaValidationResults.head
     val evolvedSchema = validationResult.evolvedSchema
     if (evolvedSchema) {
-      val (oldSchemaId, oldSchemaPaths): (Int, Map[Int, String]) = oldMetadata match {
+      val (oldSchemaId, oldSchemaPaths): (Short, Map[Short, String]) = oldMetadata match {
         case Some(v2: OperatorStateMetadataV2) =>
           val ssInfo = v2.stateStoreInfo.head
           (ssInfo.stateSchemaId, ssInfo.stateSchemaFilePaths)
@@ -350,7 +350,7 @@ trait StateStoreWriter
           List(ssInfo.stateSchemaFilePaths)
         case _ =>
           // If no previous metadata and no evolution, start with schema ID 0
-          List(Map(0 -> validationResult.schemaPath))
+          List(Map(0.toShort -> validationResult.schemaPath))
       }
     }
   }

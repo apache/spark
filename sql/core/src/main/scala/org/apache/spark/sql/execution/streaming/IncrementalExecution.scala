@@ -19,13 +19,15 @@ package org.apache.spark.sql.execution.streaming
 
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicInteger
+
 import scala.collection.mutable.{Map => MutableMap}
+
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys.{BATCH_TIMESTAMP, ERROR}
-import org.apache.spark.sql.avro.SchemaConverters
 import org.apache.spark.sql.{SparkSession, Strategy}
+import org.apache.spark.sql.avro.SchemaConverters
 import org.apache.spark.sql.catalyst.QueryPlanningTracker
 import org.apache.spark.sql.catalyst.expressions.{CurrentBatchTimestamp, ExpressionWithRandomSeed}
 import org.apache.spark.sql.catalyst.plans.logical._

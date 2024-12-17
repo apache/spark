@@ -1733,10 +1733,12 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
           db.load(0)
 
           val keyRowPrefixEncoder = new StateRowPrefixEncoder(
+            0,
             useColumnFamilies = colFamiliesEnabled,
             colFamilyInfo, supportSchemaEvolution = schemaEvolutionEnabled)
 
           val valueRowPrefixEncoder = new StateRowPrefixEncoder(
+            0,
             false, None, supportSchemaEvolution = schemaEvolutionEnabled)
 
           // Create some test data with known prefix values
@@ -1830,19 +1832,21 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
                 None
               }
               val keyEncoder = RocksDBStateEncoder.getKeyEncoder(
+                0,
                 keyStateEncoderSpec = keySpec,
                 useColumnFamilies = colFamiliesEnabled,
                 columnFamilyInfo = colFamilyInfo,
-                avroEnc
+                avroEnc = avroEnc
               )
 
               // Test both single and multi-value encoders
               val valueEncoder = RocksDBStateEncoder.getValueEncoder(
+                0,
                 valueSchema = valueSchema,
                 useMultipleValuesPerKey = useMultipleValues,
                 useColumnFamilies = colFamiliesEnabled,
                 columnFamilyInfo = colFamilyInfo,
-                avroEnc
+                avroEnc = avroEnc
               )
 
               // Encode and write to DB

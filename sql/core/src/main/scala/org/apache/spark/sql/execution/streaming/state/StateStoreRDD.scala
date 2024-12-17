@@ -22,6 +22,7 @@ import java.util.UUID
 import scala.reflect.ClassTag
 
 import org.apache.spark.{Partition, TaskContext}
+import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.internal.SessionState
 import org.apache.spark.sql.types.StructType
@@ -73,6 +74,7 @@ class ReadStateStoreRDD[T: ClassTag, U: ClassTag](
     operatorId: Long,
     storeVersion: Long,
     stateStoreCkptIds: Option[Array[Array[String]]],
+    stateSchemaMetadata: Option[Broadcast[StateSchemaMetadata]],
     keySchema: StructType,
     valueSchema: StructType,
     keyStateEncoderSpec: KeyStateEncoderSpec,
@@ -91,7 +93,7 @@ class ReadStateStoreRDD[T: ClassTag, U: ClassTag](
     val inputIter = dataRDD.iterator(partition, ctxt)
     val store = StateStore.getReadOnly(
       storeProviderId, keySchema, valueSchema, keyStateEncoderSpec, storeVersion,
-      stateStoreCkptIds.map(_.apply(partition.index).head),
+      stateStoreCkptIds.map(_.apply(partition.index).head), stateSchemaMetadata,
       useColumnFamilies, storeConf, hadoopConfBroadcast.value.value)
     storeReadFunction(store, inputIter)
   }
@@ -110,6 +112,7 @@ class StateStoreRDD[T: ClassTag, U: ClassTag](
     operatorId: Long,
     storeVersion: Long,
     uniqueId: Option[Array[Array[String]]],
+    stateSchemaMetadata: Option[Broadcast[StateSchemaMetadata]],
     keySchema: StructType,
     valueSchema: StructType,
     keyStateEncoderSpec: KeyStateEncoderSpec,
@@ -129,7 +132,7 @@ class StateStoreRDD[T: ClassTag, U: ClassTag](
     val inputIter = dataRDD.iterator(partition, ctxt)
     val store = StateStore.get(
       storeProviderId, keySchema, valueSchema, keyStateEncoderSpec, storeVersion,
-      uniqueId.map(_.apply(partition.index).head),
+      uniqueId.map(_.apply(partition.index).head), stateSchemaMetadata,
       useColumnFamilies, storeConf, hadoopConfBroadcast.value.value,
       useMultipleValuesPerKey)
     storeUpdateFunction(store, inputIter)

@@ -105,6 +105,7 @@ abstract class StatePartitionReaderBase(
     val provider = StateStoreProvider.createAndInit(
       stateStoreProviderId, keySchema, valueSchema, keyStateEncoderSpec,
       useColumnFamilies = useColFamilies, storeConf, hadoopConf.value,
+      stateSchemaMetadata = None,
       useMultipleValuesPerKey = useMultipleValuesPerKey)
 
     val isInternal = partition.sourceOptions.readRegisteredTimers

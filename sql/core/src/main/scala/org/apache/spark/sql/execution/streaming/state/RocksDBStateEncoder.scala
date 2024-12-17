@@ -81,6 +81,11 @@ case class StateRowPrefix(
     columnFamilyId: Option[Short]
 )
 
+case class SchemaLookupInfo(
+    schemaId: Short,
+    stateStoreProviderId: StateStoreProviderId
+)
+
 /**
  * Base encoder class that handles common prefix encoding/decoding operations for state store rows.
  * This encoder manages the addition and extraction of metadata prefixes (schema ID and
@@ -104,6 +109,7 @@ case class StateRowPrefix(
  * @param supportSchemaEvolution Whether schema evolution is enabled for this encoder
  */
 class StateRowPrefixEncoder(
+    schemaLookupInfo: SchemaLookupInfo,
     useColumnFamilies: Boolean,
     columnFamilyInfo: Option[ColumnFamilyInfo],
     supportSchemaEvolution: Boolean
@@ -123,7 +129,17 @@ class StateRowPrefixEncoder(
 
   def getNumPrefixBytes: Int = numColFamilyBytes + schemaIdBytes
 
-  def getCurrentSchemaId: Short = 0
+  def getCurrentSchemaId: Short = schemaLookupInfo.schemaId
+
+  def getSchema(schemaId: Short): StateSchemaMetadataValue = {
+    RocksDBStateStoreProvider.stateSchemaMapping.getIfPresent(
+      StateSchemaMetadataKey(
+        schemaId,
+        columnFamilyInfo.get.colFamilyName,
+        schemaLookupInfo.stateStoreProviderId.queryRunId.toString
+      )
+    )
+  }
 
   val out = new ByteArrayOutputStream
   /**
@@ -209,6 +225,7 @@ class StateRowPrefixEncoder(
 
 object RocksDBStateEncoder extends Logging {
   def getKeyEncoder(
+      schemaId: Short,
       keyStateEncoderSpec: KeyStateEncoderSpec,
       useColumnFamilies: Boolean,
       columnFamilyInfo: Option[ColumnFamilyInfo] = None,
@@ -216,15 +233,15 @@ object RocksDBStateEncoder extends Logging {
     // Return the key state encoder based on the requested type
     keyStateEncoderSpec match {
       case NoPrefixKeyStateEncoderSpec(keySchema) =>
-        new NoPrefixKeyStateEncoder(
+        new NoPrefixKeyStateEncoder(schemaId,
           keySchema, useColumnFamilies, columnFamilyInfo, avroEnc)
 
       case PrefixKeyScanStateEncoderSpec(keySchema, numColsPrefixKey) =>
-        new PrefixKeyScanStateEncoder(keySchema, numColsPrefixKey,
+        new PrefixKeyScanStateEncoder(schemaId, keySchema, numColsPrefixKey,
           useColumnFamilies, columnFamilyInfo, avroEnc)
 
       case RangeKeyScanStateEncoderSpec(keySchema, orderingOrdinals) =>
-        new RangeKeyScanStateEncoder(keySchema, orderingOrdinals,
+        new RangeKeyScanStateEncoder(schemaId, keySchema, orderingOrdinals,
           useColumnFamilies, columnFamilyInfo, avroEnc)
 
       case _ =>
@@ -234,16 +251,17 @@ object RocksDBStateEncoder extends Logging {
   }
 
   def getValueEncoder(
+      schemaId: Short,
       valueSchema: StructType,
       useMultipleValuesPerKey: Boolean,
       useColumnFamilies: Boolean,
       columnFamilyInfo: Option[ColumnFamilyInfo] = None,
       avroEnc: Option[AvroEncoder] = None): RocksDBValueStateEncoder = {
     if (useMultipleValuesPerKey) {
-      new MultiValuedStateEncoder(
+      new MultiValuedStateEncoder(schemaId,
         valueSchema, columnFamilyInfo, avroEnc)
     } else {
-      new SingleValueStateEncoder(
+      new SingleValueStateEncoder(schemaId,
         valueSchema, columnFamilyInfo, avroEnc)
     }
   }
@@ -343,12 +361,14 @@ object RocksDBStateEncoder extends Logging {
  *                be defined
  */
 class PrefixKeyScanStateEncoder(
+    schemaId: Short,
     keySchema: StructType,
     numColsPrefixKey: Int,
     useColumnFamilies: Boolean = false,
     columnFamilyInfo: Option[ColumnFamilyInfo] = None,
     avroEnc: Option[AvroEncoder] = None)
   extends StateRowPrefixEncoder(
+    schemaId,
     useColumnFamilies,
     columnFamilyInfo,
     supportSchemaEvolution = avroEnc.isDefined
@@ -542,12 +562,14 @@ class PrefixKeyScanStateEncoder(
  *                be defined
  */
 class RangeKeyScanStateEncoder(
+    schemaId: Short,
     keySchema: StructType,
     orderingOrdinals: Seq[Int],
     useColumnFamilies: Boolean = false,
     columnFamilyInfo: Option[ColumnFamilyInfo] = None,
     avroEnc: Option[AvroEncoder] = None)
   extends StateRowPrefixEncoder(
+    schemaId,
     useColumnFamilies,
     columnFamilyInfo,
     supportSchemaEvolution = avroEnc.isDefined
@@ -1223,11 +1245,13 @@ class RangeKeyScanStateEncoder(
  *    then the generated array byte will be N+1 bytes.
  */
 class NoPrefixKeyStateEncoder(
+    schemaId: Short,
     keySchema: StructType,
     useColumnFamilies: Boolean = false,
     columnFamilyInfo: Option[ColumnFamilyInfo] = None,
     avroEnc: Option[AvroEncoder] = None)
   extends StateRowPrefixEncoder(
+    schemaId,
     useColumnFamilies,
     columnFamilyInfo,
     supportSchemaEvolution = avroEnc.isDefined
@@ -1321,10 +1345,12 @@ class NoPrefixKeyStateEncoder(
  * If the avroEnc is specified, we are using Avro encoding for this column family's values
  */
 class MultiValuedStateEncoder(
+    schemaId: Short,
     valueSchema: StructType,
     columnFamilyInfo: Option[ColumnFamilyInfo],
     avroEnc: Option[AvroEncoder] = None)
   extends StateRowPrefixEncoder(
+    schemaId,
     useColumnFamilies = false,
     columnFamilyInfo,
     supportSchemaEvolution = avroEnc.isDefined
@@ -1439,10 +1465,12 @@ class MultiValuedStateEncoder(
  * If the avroEnc is specified, we are using Avro encoding for this column family's values
  */
 class SingleValueStateEncoder(
+    schemaId: Short,
     valueSchema: StructType,
     columnFamilyInfo: Option[ColumnFamilyInfo],
     avroEnc: Option[AvroEncoder] = None)
   extends StateRowPrefixEncoder(
+    schemaId,
     useColumnFamilies = false,
     columnFamilyInfo,
     supportSchemaEvolution = avroEnc.isDefined

@@ -27,6 +27,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.{SparkConf, SparkEnv, SparkException}
+import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.io.CompressionCodec
@@ -86,10 +87,10 @@ private[sql] class RocksDBStateStoreProvider
       val columnFamilyInfo = Some(ColumnFamilyInfo(colFamilyName, newColFamilyId))
       keyValueEncoderMap.putIfAbsent(colFamilyName,
         (
-          RocksDBStateEncoder.getKeyEncoder(
+          RocksDBStateEncoder.getKeyEncoder(stateSchemaId,
             keyStateEncoderSpec, useColumnFamilies,
             columnFamilyInfo, avroEnc),
-          RocksDBStateEncoder.getValueEncoder(
+          RocksDBStateEncoder.getValueEncoder(stateSchemaId,
             valueSchema, useMultipleValuesPerKey,
             useColumnFamilies, columnFamilyInfo, avroEnc)
         )
@@ -373,7 +374,8 @@ private[sql] class RocksDBStateStoreProvider
       useColumnFamilies: Boolean,
       storeConf: StateStoreConf,
       hadoopConf: Configuration,
-      useMultipleValuesPerKey: Boolean = false): Unit = {
+      useMultipleValuesPerKey: Boolean = false,
+      stateSchemaMetadata: Option[Broadcast[StateSchemaMetadata]] = None): Unit = {
     this.stateStoreId_ = stateStoreId
     this.keySchema = keySchema
     this.valueSchema = valueSchema
@@ -397,6 +399,18 @@ private[sql] class RocksDBStateStoreProvider
     val avroEnc = getAvroEnc(
       stateStoreEncoding, avroEncCacheKey, keyStateEncoderSpec, valueSchema)
 
+    stateSchemaMetadata.foreach { broadcast =>
+      val metadata = broadcast.value
+      stateSchemaId = metadata.currentSchemaId
+      metadata.schemas.foreach { case (schemaId, mapping) =>
+        mapping.foreach { case (schemaKey, schemaValue) =>
+          stateSchemaMapping.get(schemaKey,
+            () => schemaValue
+          )
+        }
+      }
+    }
+
     val columnFamilyInfo = if (useColumnFamilies) {
       defaultColFamilyId = Some(rocksDB.createColFamilyIfAbsent(StateStore.DEFAULT_COL_FAMILY_NAME))
       Some(ColumnFamilyInfo(colFamilyName, defaultColFamilyId.get))
@@ -406,10 +420,10 @@ private[sql] class RocksDBStateStoreProvider
 
     keyValueEncoderMap.putIfAbsent(colFamilyName,
       (
-        RocksDBStateEncoder.getKeyEncoder(
+        RocksDBStateEncoder.getKeyEncoder(stateSchemaId,
           keyStateEncoderSpec, useColumnFamilies,
           columnFamilyInfo, avroEnc),
-        RocksDBStateEncoder.getValueEncoder(
+        RocksDBStateEncoder.getValueEncoder(stateSchemaId,
           valueSchema, useMultipleValuesPerKey,
           useColumnFamilies, columnFamilyInfo, avroEnc)
       )
@@ -492,6 +506,7 @@ private[sql] class RocksDBStateStoreProvider
   @volatile private var hadoopConf: Configuration = _
   @volatile private var useColumnFamilies: Boolean = _
   @volatile private var stateStoreEncoding: String = _
+  @volatile private var stateSchemaId: Short = _
 
   private[sql] lazy val rocksDB = {
     val dfsRootDir = stateStoreId.storeCheckpointLocation().toString
@@ -636,6 +651,15 @@ object RocksDBStateStoreProvider {
     NonFateSharingCache(
       maximumSize = MAX_AVRO_ENCODERS_IN_CACHE,
       expireAfterAccessTime = AVRO_ENCODER_LIFETIME_HOURS,
+      expireAfterAccessTimeUnit = TimeUnit.HOURS
+    )
+
+  // Add the cache at companion object level so it persists across provider instances
+  val stateSchemaMapping:
+    NonFateSharingCache[StateSchemaMetadataKey, StateSchemaMetadataValue] =
+    NonFateSharingCache(
+      maximumSize = 1000,
+      expireAfterAccessTime = 1L,
       expireAfterAccessTimeUnit = TimeUnit.HOURS
     )
 

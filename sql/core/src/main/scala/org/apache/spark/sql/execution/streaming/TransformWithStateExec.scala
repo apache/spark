@@ -571,6 +571,7 @@ case class TransformWithStateExec(
               NoPrefixKeyStateEncoderSpec(keyEncoder.schema),
               version = stateInfo.get.storeVersion,
               stateStoreCkptId = stateInfo.get.getStateStoreCkptId(partitionId).map(_.head),
+              stateSchemaMetadata = stateInfo.get.stateSchemaMetadata,
               useColumnFamilies = true,
               storeConf = storeConf,
               hadoopConf = hadoopConfBroadcast.value.value
@@ -640,6 +641,7 @@ case class TransformWithStateExec(
       keyEncoder.schema,
       DUMMY_VALUE_ROW_SCHEMA,
       NoPrefixKeyStateEncoderSpec(keyEncoder.schema),
+      stateSchemaMetadata = stateInfo.get.stateSchemaMetadata,
       useColumnFamilies = true,
       storeConf = storeConf,
       hadoopConf = hadoopConfBroadcast.value.value,
