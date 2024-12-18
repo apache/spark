@@ -224,18 +224,25 @@ class RocksDBStateStoreCheckpointFormatV2Suite extends StreamTest
     "spark.sql.streaming.stateStore.rocksdb.changelogCheckpointing.enabled" -> "false"
   val ckptv2 = SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key -> "2"
 
+  case class checkpointV2CompatibilityTest(
+    configsForFirstRun: Seq[(String, String)],
+    configsForSecondRun: Seq[(String, String)]
+  ) {
+    override def toString: String = "first run - " +
+      s"changeLogEnabled: ${configsForFirstRun(0)._2}, ckpt ver: ${configsForFirstRun(1)._2}" +
+      s" - second run - changeLogEnabled: ${configsForSecondRun(0)._2}, " +
+      s"ckpt ver: ${configsForSecondRun(1)._2}"
+  }
+
   val testConfigSetups = Seq(
     // Enable and disable changelog under ckpt v2
-    (Seq(changelogEnabled, ckptv2), Seq(changelogEnabled, ckptv2)),
-    (Seq(changelogDisabled, ckptv2), Seq(changelogDisabled, ckptv2))
+    checkpointV2CompatibilityTest(Seq(changelogEnabled, ckptv2), Seq(changelogEnabled, ckptv2)),
+    checkpointV2CompatibilityTest(Seq(changelogDisabled, ckptv2), Seq(changelogDisabled, ckptv2))
   )
 
-  testConfigSetups.foreach {
-    case (firstRunConfig, secondRunConfig) =>
-      testWithRocksDBStateStore("checkpointFormatVersion2 Backward Compatibility - simple agg - " +
-        s"first run: (changeLogEnabled, ckpt ver): " +
-        s"${firstRunConfig(0)._2}, ${firstRunConfig(1)._2}" +
-        s" - second run: ${secondRunConfig(0)._2}, ${secondRunConfig(1)._2}") {
+  testConfigSetups.foreach { testConfig =>
+    testWithRocksDBStateStore("checkpointFormatVersion2 Backward Compatibility - simple agg - " +
+      s"$testConfig") {
         withTempDir { checkpointDir =>
           val inputData = MemoryStream[Int]
           val aggregated =
@@ -245,7 +252,7 @@ class RocksDBStateStoreCheckpointFormatV2Suite extends StreamTest
               .agg(count("*"))
               .as[(Int, Long)]
 
-          withSQLConf(firstRunConfig: _*) {
+          withSQLConf(testConfig.configsForFirstRun: _*) {
             testStream(aggregated, Update)(
               StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
               AddData(inputData, 3),
@@ -267,7 +274,7 @@ class RocksDBStateStoreCheckpointFormatV2Suite extends StreamTest
             )
           }
 
-          withSQLConf(secondRunConfig: _*) {
+          withSQLConf(testConfig.configsForSecondRun: _*) {
             testStream(aggregated, Update)(
               StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
               AddData(inputData, 4),
@@ -278,12 +285,9 @@ class RocksDBStateStoreCheckpointFormatV2Suite extends StreamTest
       }
   }
 
-  testConfigSetups.foreach {
-    case (firstRunConfig, secondRunConfig) =>
-      testWithRocksDBStateStore("checkpointFormatVersion2 Backward Compatibility - dedup - " +
-        s"first run: (changeLogEnabled, ckpt ver): " +
-        s"${firstRunConfig(0)._2}, ${firstRunConfig(1)._2}" +
-        s" - second run: ${secondRunConfig(0)._2}, ${secondRunConfig(1)._2}") {
+  testConfigSetups.foreach { testConfig =>
+    testWithRocksDBStateStore("checkpointFormatVersion2 Backward Compatibility - dedup - " +
+      s"$testConfig") {
         withTempDir { checkpointDir =>
           val inputData = MemoryStream[Int]
           val deduplicated = inputData
@@ -291,7 +295,7 @@ class RocksDBStateStoreCheckpointFormatV2Suite extends StreamTest
             .dropDuplicates("value")
             .as[Int]
 
-          withSQLConf(firstRunConfig: _*) {
+          withSQLConf(testConfig.configsForFirstRun: _*) {
             testStream(deduplicated, Update)(
               StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
               AddData(inputData, 3),
@@ -314,7 +318,7 @@ class RocksDBStateStoreCheckpointFormatV2Suite extends StreamTest
             )
           }
 
-          withSQLConf(secondRunConfig: _*) {
+          withSQLConf(testConfig.configsForSecondRun: _*) {
             // crash recovery again
             testStream(deduplicated, Update)(
               StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
@@ -326,12 +330,9 @@ class RocksDBStateStoreCheckpointFormatV2Suite extends StreamTest
       }
   }
 
-  testConfigSetups.foreach {
-    case (firstRunConfig, secondRunConfig) =>
-      testWithRocksDBStateStore("checkpointFormatVersion2 Backward Compatibility - " +
-        s"FlatMapGroupsWithState - first run: (changeLogEnabled, ckpt ver): " +
-        s"${firstRunConfig(0)._2}, ${firstRunConfig(1)._2}" +
-        s" - second run: ${secondRunConfig(0)._2}, ${secondRunConfig(1)._2}") {
+  testConfigSetups.foreach { testConfig =>
+    testWithRocksDBStateStore("checkpointFormatVersion2 Backward Compatibility - " +
+      s"FlatMapGroupsWithState - $testConfig") {
         withTempDir { checkpointDir =>
           val stateFunc = (key: Int, values: Iterator[Int], state: GroupState[Int]) => {
             val count: Int = state.getOption.getOrElse(0) + values.size
@@ -350,7 +351,7 @@ class RocksDBStateStoreCheckpointFormatV2Suite extends StreamTest
             .flatMapGroupsWithState(OutputMode.Update, GroupStateTimeout.NoTimeout())(stateFunc)
 
 
-          withSQLConf(firstRunConfig: _*) {
+          withSQLConf(testConfig.configsForFirstRun: _*) {
             testStream(aggregated, Update)(
               StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
               AddData(inputData, 3),
@@ -371,7 +372,7 @@ class RocksDBStateStoreCheckpointFormatV2Suite extends StreamTest
             )
           }
 
-          withSQLConf(secondRunConfig: _*) {
+          withSQLConf(testConfig.configsForSecondRun: _*) {
             // crash recovery again
             // crash recovery again
             testStream(aggregated, Update)(
@@ -387,12 +388,9 @@ class RocksDBStateStoreCheckpointFormatV2Suite extends StreamTest
       }
   }
 
-  testConfigSetups.foreach {
-    case (firstRunConfig, secondRunConfig) =>
-      testWithRocksDBStateStore("checkpointFormatVersion2 Backward Compatibility - ss join - " +
-        s"first run: (changeLogEnabled, ckpt ver): " +
-        s"${firstRunConfig(0)._2}, ${firstRunConfig(1)._2}" +
-        s" - second run: ${secondRunConfig(0)._2}, ${secondRunConfig(1)._2}") {
+  testConfigSetups.foreach { testConfig =>
+    testWithRocksDBStateStore("checkpointFormatVersion2 Backward Compatibility - ss join - " +
+      s"$testConfig") {
         withTempDir { checkpointDir =>
           val inputData1 = MemoryStream[Int]
           val inputData2 = MemoryStream[Int]
@@ -402,7 +400,7 @@ class RocksDBStateStoreCheckpointFormatV2Suite extends StreamTest
 
           val joined = df1.join(df2, df1("value") === df2("value"))
 
-          withSQLConf(firstRunConfig: _*) {
+          withSQLConf(testConfig.configsForFirstRun: _*) {
             testStream(joined, OutputMode.Append)(
               StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
               AddData(inputData1, 3, 2),
@@ -429,7 +427,7 @@ class RocksDBStateStoreCheckpointFormatV2Suite extends StreamTest
             )
           }
 
-          withSQLConf(secondRunConfig: _*) {
+          withSQLConf(testConfig.configsForSecondRun: _*) {
             // recovery again
             testStream(joined, OutputMode.Append)(
               StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
@@ -455,12 +453,9 @@ class RocksDBStateStoreCheckpointFormatV2Suite extends StreamTest
   }
 
 
-  testConfigSetups.foreach {
-    case (firstRunConfig, secondRunConfig) =>
-      testWithRocksDBStateStore("checkpointFormatVersion2 Backward Compatibility - " +
-        "transformWithState - first run: (changeLogEnabled, ckpt ver): " +
-        s"${firstRunConfig(0)._2}, ${firstRunConfig(1)._2}" +
-        s" - second run: ${secondRunConfig(0)._2}, ${secondRunConfig(1)._2}") {
+  testConfigSetups.foreach { testConfig =>
+    testWithRocksDBStateStore("checkpointFormatVersion2 Backward Compatibility - " +
+      s"transformWithState - $testConfig") {
         withTempDir { checkpointDir =>
           val inputData = MemoryStream[String]
           val result = inputData.toDS()
@@ -469,7 +464,7 @@ class RocksDBStateStoreCheckpointFormatV2Suite extends StreamTest
               TimeMode.None(),
               OutputMode.Update())
 
-          withSQLConf(firstRunConfig: _*) {
+          withSQLConf(testConfig.configsForFirstRun: _*) {
             testStream(result, Update())(
               StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
               AddData(inputData, "a"),
@@ -493,7 +488,7 @@ class RocksDBStateStoreCheckpointFormatV2Suite extends StreamTest
             )
           }
 
-          withSQLConf(secondRunConfig: _*) {
+          withSQLConf(testConfig.configsForSecondRun: _*) {
             testStream(result, Update())(
               StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
               // should recreate state for "a" and return count as 1 and
@@ -722,41 +717,46 @@ class RocksDBStateStoreCheckpointFormatV2Suite extends StreamTest
   // as those recorded by CkptIdCollectingStateStoreWrapper
   testWithCheckpointInfoTracked(s"checkpointFormatVersion2 validate ID - two jobs launched") {
     withTempDir { checkpointDir =>
-      val inputData = MemoryStream[Int]
-      val aggregated =
-        inputData
-          .toDF()
-          .groupBy($"value")
-          .agg(count("*"))
+      withTable("wei_test_t1") {
+        withTable("wei_test_t2") {
+          val inputData = MemoryStream[Int]
+          val aggregated =
+            inputData
+              .toDF()
+              .groupBy($"value")
+              .agg(count("*"))
 
-      val writer = (ds: DataFrame, batchId: Long) => {
-        ds.write.mode("append").saveAsTable("wei_test_t1")
-        ds.write.mode("append").saveAsTable("wei_test_t2")
+          val writer = (ds: DataFrame, batchId: Long) => {
+            ds.write.mode("append").save("wei_test_t1")
+            ds.write.mode("append").save("wei_test_t2")
+          }
+
+          val query = aggregated.writeStream
+            .foreachBatch(writer)
+            .option("checkpointLocation", checkpointDir.getAbsolutePath)
+            .outputMode("update")
+            .start()
+
+          inputData.addData(1 to 100)
+          query.processAllAvailable()
+
+          inputData.addData(1 to 100)
+          query.processAllAvailable()
+
+          query.stop()
+
+          val checkpointInfoList = CkptIdCollectingStateStoreWrapper.getStateStoreCheckpointInfos
+
+          val pickedCheckpointInfoList = pickCheckpointInfoFromCommitLog(
+            checkpointDir,
+            checkpointInfoList)
+
+          assert(pickedCheckpointInfoList.isDefined,
+            "No lineage information matches with commit log")
+
+          checkpointInfoLineageVerification(pickedCheckpointInfoList.get)
+        }
       }
-
-      val query = aggregated.writeStream
-        .foreachBatch(writer)
-        .option("checkpointLocation", checkpointDir.getAbsolutePath)
-        .outputMode("update")
-        .start()
-
-      inputData.addData(1 to 100)
-      query.processAllAvailable()
-
-      inputData.addData(1 to 100)
-      query.processAllAvailable()
-
-      query.stop()
-
-      val checkpointInfoList = CkptIdCollectingStateStoreWrapper.getStateStoreCheckpointInfos
-
-      val pickedCheckpointInfoList = pickCheckpointInfoFromCommitLog(
-        checkpointDir,
-        checkpointInfoList)
-
-      assert(pickedCheckpointInfoList.isDefined, "No lineage information matches with commit log")
-
-      checkpointInfoLineageVerification(pickedCheckpointInfoList.get)
     }
   }
 
