@@ -30,7 +30,6 @@ import org.apache.spark.{SparkConf, SparkEnv, SparkException}
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.io.CompressionCodec
-import org.apache.spark.sql.avro.{AvroDeserializer, AvroOptions, AvroSerializer, SchemaConverters}
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.streaming.{CheckpointFileManager, StreamExecution}
@@ -76,17 +75,28 @@ private[sql] class RocksDBStateStoreProvider
         isInternal: Boolean = false): Unit = {
       verifyColFamilyCreationOrDeletion("create_col_family", colFamilyName, isInternal)
       val newColFamilyId = rocksDB.createColFamilyIfAbsent(colFamilyName)
-      // Create cache key using store ID to avoid collisions
-      val avroEncCacheKey = s"${getRunId(hadoopConf)}_${stateStoreId.operatorId}_" +
-        s"${stateStoreId.partitionId}_$colFamilyName"
+      val dataEncoderCacheKey = StateRowEncoderCacheKey(
+        queryRunId = getRunId(hadoopConf),
+        operatorId = stateStoreId.operatorId,
+        partitionId = stateStoreId.partitionId,
+        stateStoreName = stateStoreId.storeName,
+        colFamilyName = colFamilyName)
 
-      val avroEnc = getAvroEnc(
-        stateStoreEncoding, avroEncCacheKey, keyStateEncoderSpec, valueSchema)
+      val dataEncoder = getDataEncoder(
+        stateStoreEncoding, dataEncoderCacheKey, keyStateEncoderSpec, valueSchema)
 
-      keyValueEncoderMap.putIfAbsent(colFamilyName,
-        (RocksDBStateEncoder.getKeyEncoder(keyStateEncoderSpec, useColumnFamilies,
-          Some(newColFamilyId), avroEnc), RocksDBStateEncoder.getValueEncoder(valueSchema,
-          useMultipleValuesPerKey, avroEnc)))
+      val keyEncoder = RocksDBStateEncoder.getKeyEncoder(
+        dataEncoder,
+        keyStateEncoderSpec,
+        useColumnFamilies,
+        Some(newColFamilyId)
+      )
+      val valueEncoder = RocksDBStateEncoder.getValueEncoder(
+        dataEncoder,
+        valueSchema,
+        useMultipleValuesPerKey
+      )
+      keyValueEncoderMap.putIfAbsent(colFamilyName, (keyEncoder, valueEncoder))
     }
 
     override def get(key: UnsafeRow, colFamilyName: String): UnsafeRow = {
@@ -387,17 +397,28 @@ private[sql] class RocksDBStateStoreProvider
       defaultColFamilyId = Some(rocksDB.createColFamilyIfAbsent(StateStore.DEFAULT_COL_FAMILY_NAME))
     }
 
-    val colFamilyName = StateStore.DEFAULT_COL_FAMILY_NAME
-    // Create cache key using store ID to avoid collisions
-    val avroEncCacheKey = s"${getRunId(hadoopConf)}_${stateStoreId.operatorId}_" +
-      s"${stateStoreId.partitionId}_$colFamilyName"
-    val avroEnc = getAvroEnc(
-      stateStoreEncoding, avroEncCacheKey, keyStateEncoderSpec, valueSchema)
+    val dataEncoderCacheKey = StateRowEncoderCacheKey(
+      queryRunId = getRunId(hadoopConf),
+      operatorId = stateStoreId.operatorId,
+      partitionId = stateStoreId.partitionId,
+      stateStoreName = stateStoreId.storeName,
+      colFamilyName = StateStore.DEFAULT_COL_FAMILY_NAME)
 
-    keyValueEncoderMap.putIfAbsent(StateStore.DEFAULT_COL_FAMILY_NAME,
-      (RocksDBStateEncoder.getKeyEncoder(keyStateEncoderSpec,
-        useColumnFamilies, defaultColFamilyId, avroEnc),
-        RocksDBStateEncoder.getValueEncoder(valueSchema, useMultipleValuesPerKey, avroEnc)))
+    val dataEncoder = getDataEncoder(
+      stateStoreEncoding, dataEncoderCacheKey, keyStateEncoderSpec, valueSchema)
+
+    val keyEncoder = RocksDBStateEncoder.getKeyEncoder(
+      dataEncoder,
+      keyStateEncoderSpec,
+      useColumnFamilies,
+      defaultColFamilyId
+    )
+    val valueEncoder = RocksDBStateEncoder.getValueEncoder(
+      dataEncoder,
+      valueSchema,
+      useMultipleValuesPerKey
+    )
+    keyValueEncoderMap.putIfAbsent(StateStore.DEFAULT_COL_FAMILY_NAME, (keyEncoder, valueEncoder))
   }
 
   override def stateStoreId: StateStoreId = stateStoreId_
@@ -605,6 +626,15 @@ private[sql] class RocksDBStateStoreProvider
   }
 }
 
+
+case class StateRowEncoderCacheKey(
+    queryRunId: String,
+    operatorId: Long,
+    partitionId: Int,
+    stateStoreName: String,
+    colFamilyName: String
+)
+
 object RocksDBStateStoreProvider {
   // Version as a single byte that specifies the encoding of the row data in RocksDB
   val STATE_ENCODING_NUM_VERSION_BYTES = 1
@@ -615,30 +645,48 @@ object RocksDBStateStoreProvider {
   private val AVRO_ENCODER_LIFETIME_HOURS = 1L
 
   // Add the cache at companion object level so it persists across provider instances
-  private val avroEncoderMap: NonFateSharingCache[String, AvroEncoder] =
+  private val dataEncoderCache: NonFateSharingCache[StateRowEncoderCacheKey, RocksDBDataEncoder] =
     NonFateSharingCache(
       maximumSize = MAX_AVRO_ENCODERS_IN_CACHE,
       expireAfterAccessTime = AVRO_ENCODER_LIFETIME_HOURS,
       expireAfterAccessTimeUnit = TimeUnit.HOURS
     )
 
-  def getAvroEnc(
+  /**
+   * Creates and returns a data encoder for the state store based on the specified encoding type.
+   * This method handles caching of encoders to improve performance by reusing encoder instances
+   * when possible.
+   *
+   * The method supports two encoding types:
+   * - Avro: Uses Apache Avro for serialization with schema evolution support
+   * - UnsafeRow: Uses Spark's internal row format for optimal performance
+   *
+   * @param stateStoreEncoding The encoding type to use ("avro" or "unsaferow")
+   * @param encoderCacheKey A unique key for caching the encoder instance, typically combining
+   *                       query ID, operator ID, partition ID, and column family name
+   * @param keyStateEncoderSpec Specification for how to encode keys, including schema and any
+   *                           prefix/range scan requirements
+   * @param valueSchema The schema for the values to be encoded
+   * @return A RocksDBDataEncoder instance configured for the specified encoding type
+   */
+  def getDataEncoder(
       stateStoreEncoding: String,
-      avroEncCacheKey: String,
+      encoderCacheKey: StateRowEncoderCacheKey,
       keyStateEncoderSpec: KeyStateEncoderSpec,
-      valueSchema: StructType): Option[AvroEncoder] = {
-
-    stateStoreEncoding match {
-      case "avro" => Some(
-        RocksDBStateStoreProvider.avroEncoderMap.get(
-          avroEncCacheKey,
-          new java.util.concurrent.Callable[AvroEncoder] {
-            override def call(): AvroEncoder = createAvroEnc(keyStateEncoderSpec, valueSchema)
+      valueSchema: StructType): RocksDBDataEncoder = {
+    assert(Set("avro", "unsaferow").contains(stateStoreEncoding))
+    RocksDBStateStoreProvider.dataEncoderCache.get(
+      encoderCacheKey,
+      new java.util.concurrent.Callable[RocksDBDataEncoder] {
+        override def call(): RocksDBDataEncoder = {
+          if (stateStoreEncoding == "avro") {
+            new AvroStateEncoder(keyStateEncoderSpec, valueSchema)
+          } else {
+            new UnsafeRowDataEncoder(keyStateEncoderSpec, valueSchema)
           }
-        )
-      )
-      case "unsaferow" => None
-    }
+        }
+      }
+    )
   }
 
   private def getRunId(hadoopConf: Configuration): String = {
@@ -649,53 +697,6 @@ object RocksDBStateStoreProvider {
       assert(Utils.isTesting, "Failed to find query id/batch Id in task context")
       UUID.randomUUID().toString
     }
-  }
-
-  private def getAvroSerializer(schema: StructType): AvroSerializer = {
-    val avroType = SchemaConverters.toAvroType(schema)
-    new AvroSerializer(schema, avroType, nullable = false)
-  }
-
-  private def getAvroDeserializer(schema: StructType): AvroDeserializer = {
-    val avroType = SchemaConverters.toAvroType(schema)
-    val avroOptions = AvroOptions(Map.empty)
-    new AvroDeserializer(avroType, schema,
-      avroOptions.datetimeRebaseModeInRead, avroOptions.useStableIdForUnionType,
-      avroOptions.stableIdPrefixForUnionType, avroOptions.recursiveFieldMaxDepth)
-  }
-
-  private def createAvroEnc(
-      keyStateEncoderSpec: KeyStateEncoderSpec,
-      valueSchema: StructType
-  ): AvroEncoder = {
-    val valueSerializer = getAvroSerializer(valueSchema)
-    val valueDeserializer = getAvroDeserializer(valueSchema)
-    val keySchema = keyStateEncoderSpec match {
-      case NoPrefixKeyStateEncoderSpec(schema) =>
-        schema
-      case PrefixKeyScanStateEncoderSpec(schema, numColsPrefixKey) =>
-        StructType(schema.take(numColsPrefixKey))
-      case RangeKeyScanStateEncoderSpec(schema, orderingOrdinals) =>
-        val remainingSchema = {
-          0.until(schema.length).diff(orderingOrdinals).map { ordinal =>
-            schema(ordinal)
-          }
-        }
-        StructType(remainingSchema)
-    }
-    val suffixKeySchema = keyStateEncoderSpec match {
-      case PrefixKeyScanStateEncoderSpec(schema, numColsPrefixKey) =>
-        Some(StructType(schema.drop(numColsPrefixKey)))
-      case _ => None
-    }
-    AvroEncoder(
-      getAvroSerializer(keySchema),
-      getAvroDeserializer(keySchema),
-      valueSerializer,
-      valueDeserializer,
-      suffixKeySchema.map(getAvroSerializer),
-      suffixKeySchema.map(getAvroDeserializer)
-    )
   }
 
   // Native operation latencies report as latency in microseconds

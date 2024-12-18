@@ -24,7 +24,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.sql.{Encoders, Row}
 import org.apache.spark.sql.execution.streaming.MemoryStream
-import org.apache.spark.sql.execution.streaming.state.{AlsoTestWithChangelogCheckpointingEnabled, AlsoTestWithEncodingTypes, RocksDBFileManager, RocksDBStateStoreProvider, TestClass}
+import org.apache.spark.sql.execution.streaming.state.{AlsoTestWithEncodingTypes, AlsoTestWithRocksDBFeatures, RocksDBFileManager, RocksDBStateStoreProvider, TestClass}
 import org.apache.spark.sql.functions.{col, explode, timestamp_seconds}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.{InputMapRow, ListState, MapInputEvent, MapOutputEvent, MapStateTTLProcessor, MaxEventTimeStatefulProcessor, OutputMode, RunningCountStatefulProcessor, RunningCountStatefulProcessorWithProcTimeTimerUpdates, StatefulProcessor, StateStoreMetricsTest, TestMapStateProcessor, TimeMode, TimerValues, TransformWithStateSuiteUtils, Trigger, TTLConfig, ValueState}
@@ -126,7 +126,7 @@ class SessionGroupsStatefulProcessorWithTTL extends
  * Test suite to verify integration of state data source reader with the transformWithState operator
  */
 class StateDataSourceTransformWithStateSuite extends StateStoreMetricsTest
-  with AlsoTestWithChangelogCheckpointingEnabled with AlsoTestWithEncodingTypes {
+  with AlsoTestWithRocksDBFeatures with AlsoTestWithEncodingTypes {
 
   import testImplicits._
 
@@ -1085,7 +1085,7 @@ class StateDataSourceTransformWithStateSuite extends StateStoreMetricsTest
       Utils.deleteRecursively(new File(changelogFilePath))
 
       // Write the retained entry back to the changelog
-      val changelogWriter = fileManager.getChangeLogWriter(3, true)
+      val changelogWriter = fileManager.getChangeLogWriter(3)
       changelogWriter.put(retainEntry._2, retainEntry._3)
       changelogWriter.commit()
 
