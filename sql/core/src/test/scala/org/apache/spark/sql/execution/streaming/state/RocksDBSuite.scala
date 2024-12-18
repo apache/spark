@@ -708,6 +708,8 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
       }
     }
 
+    assert(versionToUniqueId1.nonEmpty)
+
     // The second DB writes to version 0 with another uniqueId
     val versionToUniqueId2 = new mutable.HashMap[Long, String]()
     withDB(remoteDir, conf = enableChangelogCheckpointingConf,
@@ -733,6 +735,8 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
         db.commit()
       }
     }
+
+    assert(versionToUniqueId2.nonEmpty)
 
     // During a load() with linage from the first rocksDB,
     // the DB should load with data in the first db
