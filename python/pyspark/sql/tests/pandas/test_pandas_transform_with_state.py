@@ -369,18 +369,15 @@ class TransformWithStateInPandasTestsMixin:
                 for q in self.spark.streams.active:
                     q.stop()
             if batch_id == 0 or batch_id == 1:
-                time.sleep(8)
+                time.sleep(4)
 
         input_dir = tempfile.TemporaryDirectory()
         input_path = input_dir.name
         try:
             df = self._build_test_df(input_path)
             self._prepare_input_data(input_path + "/batch1.txt", [1, 0], [0, 0])
-            time.sleep(2)
             self._prepare_input_data(input_path + "/batch2.txt", [1, 0], [0, 0])
-            time.sleep(2)
             self._prepare_input_data(input_path + "/batch3.txt", [1, 0], [0, 0])
-            time.sleep(2)
             for q in self.spark.streams.active:
                 q.stop()
             output_schema = StructType(
