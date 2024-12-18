@@ -53,7 +53,7 @@ class ResolveSQLOnFile(sparkSession: SparkSession) extends Rule[LogicalPlan] {
 
   object UnresolvedRelationResolution {
     def unapply(plan: LogicalPlan): Option[LogicalPlan] = {
-      plan match {
+      val result = plan match {
         case u: UnresolvedRelation if maybeSQLFile(u) =>
           try {
             val ds = resolveDataSource(u)
@@ -75,6 +75,17 @@ class ResolveSQLOnFile(sparkSession: SparkSession) extends Rule[LogicalPlan] {
         case _ =>
           None
       }
+      result.foreach(resolvedRelation => plan match {
+        case unresolvedRelation: UnresolvedRelation =>
+          // We put the resolved relation into the [[AnalyzerBridgeState]] for
+          // it to be later reused by the single-pass [[Resolver]] to avoid resolving the
+          // relation metadata twice.
+          AnalysisContext.get.getSinglePassResolverBridgeState.map { bridgeState =>
+            bridgeState.relationsWithResolvedMetadata.put(unresolvedRelation, resolvedRelation)
+          }
+        case _ =>
+      })
+      result
     }
   }
 
