@@ -1339,6 +1339,7 @@ class SingleValueStateEncoder(
       valueBytes, Platform.BYTE_ARRAY_OFFSET + STATE_ROW_SCHEMA_ID_PREFIX_BYTES,
       actualValueBytes, Platform.BYTE_ARRAY_OFFSET,
       actualValueBytes.length)
+    logError(s"### currentSchemaId: ${getCurrentSchemaId}")
     logError(s"### schemaId: ${schemaId}")
     logError(s"### schemaMetadataValue: ${schemaMetadataValue}")
 

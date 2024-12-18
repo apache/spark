@@ -299,6 +299,25 @@ object SchemaConverters extends Logging {
     }
   }
 
+  def getDefaultValue(dataType: DataType): Any = dataType match {
+    case BooleanType => false
+    case ByteType | ShortType | IntegerType => 0
+    case LongType => 0L
+    case FloatType => 0.0f
+    case DoubleType => 0.0
+    case StringType => ""
+    case BinaryType => java.nio.ByteBuffer.allocate(0)
+    case ArrayType(_, _) => new java.util.ArrayList[Any]()
+    case MapType(_, _, _) => new java.util.HashMap[String, Any]()
+    case _: StructType => null  // For nested structs
+    case _: DecimalType => java.nio.ByteBuffer.allocate(0)
+    case DateType => 0
+    case TimestampType => 0L
+    case TimestampNTZType => 0L
+    case NullType => null
+    case _ => null
+  }
+
   /**
    * Converts a Spark SQL schema to a corresponding Avro schema.
    *
@@ -308,7 +327,8 @@ object SchemaConverters extends Logging {
       catalystType: DataType,
       nullable: Boolean = false,
       recordName: String = "topLevelRecord",
-      nameSpace: String = "")
+      nameSpace: String = "",
+      withDefaults: Boolean = true)
     : Schema = {
     val builder = SchemaBuilder.builder()
 
@@ -350,7 +370,12 @@ object SchemaConverters extends Logging {
         st.foreach { f =>
           val fieldAvroType =
             toAvroType(f.dataType, f.nullable, f.name, childNameSpace)
-          fieldsAssembler.name(f.name).`type`(fieldAvroType).noDefault()
+          val defaultValue = if (withDefaults) {
+            getDefaultValue(f.dataType)
+          } else {
+            null
+          }
+          fieldsAssembler.name(f.name).`type`(fieldAvroType).withDefault(defaultValue)
         }
         fieldsAssembler.endRecord()
 
