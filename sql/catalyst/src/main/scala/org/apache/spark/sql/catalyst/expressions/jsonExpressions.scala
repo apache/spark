@@ -470,9 +470,6 @@ case class JsonTuple(children: Seq[Expression])
     }.toIndexedSeq
   }
 
-  // And count the number of foldable fields, we'll use this later to optimize evaluation.
-  @transient private lazy val constantFields: Int = foldableFieldNames.count(_ != null)
-
   override def elementSchema: StructType = StructType(fieldExpressions.zipWithIndex.map {
     case (_, idx) => StructField(s"c$idx", children.head.dataType, nullable = true)
   })
@@ -497,117 +494,51 @@ case class JsonTuple(children: Seq[Expression])
   }
 
   @transient
-  private lazy val evaluator: JsonTupleEvaluator = JsonTupleEvaluator(fieldExpressions.length)
+  private lazy val evaluator: JsonTupleEvaluator = JsonTupleEvaluator(foldableFieldNames)
 
   override def eval(input: InternalRow): IterableOnce[InternalRow] = {
     val json = jsonExpr.eval(input).asInstanceOf[UTF8String]
-
-    // Evaluate the field names as String rather than UTF8String to
-    // optimize lookups from the json token, which is also a String.
-    val fieldNames = if (constantFields == fieldExpressions.length) {
-      // Typically the user will provide the field names as foldable expressions
-      // so we can use the cached copy.
-      foldableFieldNames.map(_.orNull)
-    } else if (constantFields == 0) {
-      // None are foldable so all field names need to be evaluated from the input row.
-      fieldExpressions.map { expr =>
-        Option(expr.eval(input)).map(_.asInstanceOf[UTF8String].toString).orNull
-      }
-    } else {
-      // If there is a mix of constant and non-constant expressions
-      // prefer the cached copy when available.
-      foldableFieldNames.zip(fieldExpressions).map {
-        case (null, expr) =>
-          Option(expr.eval(input)).map(_.asInstanceOf[UTF8String].toString).orNull
-        case (fieldName, _) => fieldName.orNull
-      }
-    }
-
-    evaluator.evaluate(json, fieldNames)
-  }
-
-  private def genFieldNamesCode(
-      ctx: CodegenContext,
-      refFoldableFieldNames: String,
-      fieldNamesTerm: String): String = {
-
-    def getFoldableFieldName(refIndexedSeq: String, i: Int): String = {
-      s"(String)((scala.Option<String>)$refIndexedSeq.apply($i)).get();"
-    }
-
-    val (fieldNamesEval, setFieldNames) = if (constantFields == fieldExpressions.length) {
-      // All field names are foldable, so we can use the cached copy.
-      val s = foldableFieldNames.zipWithIndex.map {
-        case (v, i) =>
-          if (v != null && v.isDefined) {
-            s"$fieldNamesTerm[$i] = ${getFoldableFieldName(refFoldableFieldNames, i)};"
-          } else {
-            s"$fieldNamesTerm[$i] = null;"
-          }
-      }
-      (Seq.empty[ExprCode], s)
-    } else if (constantFields == 0) {
-      // None are foldable so all field names need to be evaluated from the input row.
-      val f = fieldExpressions.map(_.genCode(ctx))
-      val s = f.zipWithIndex.map {
-        case (exprCode, i) =>
-          s"""
-             |if (${exprCode.isNull}) {
-             |  $fieldNamesTerm[$i] = null;
-             |} else {
-             |  $fieldNamesTerm[$i] = ${exprCode.value}.toString();
-             |}
-             |""".stripMargin
-      }
-      (f, s)
-    } else {
-      // If there is a mix of constant and non-constant field name,
-      // prefer the cached copy when available.
-      val codes = foldableFieldNames.zip(fieldExpressions).zipWithIndex.map {
-        case ((null, expr: Expression), i) =>
-          val f = expr.genCode(ctx)
-          val s =
-            s"""
-               |if (${f.isNull}) {
-               |  $fieldNamesTerm[$i] = null;
-               |} else {
-               |  $fieldNamesTerm[$i] = ${f.value}.toString();
-               |}
-               |""".stripMargin
-          (Some(f), s)
-        case ((v: Option[String], _), i) =>
-          val s = if (v.isDefined) {
-            s"$fieldNamesTerm[$i] = ${getFoldableFieldName(refFoldableFieldNames, i)};"
-          } else {
-            s"$fieldNamesTerm[$i] = null;"
-          }
-          (None, s)
-      }
-      (codes.filter(c => c._1.isDefined).map(c => c._1.get), codes.map(c => c._2))
-    }
-
-    s"""
-       |String[] $fieldNamesTerm = new String[${fieldExpressions.length}];
-       |${fieldNamesEval.map(_.code).mkString("\n")}
-       |${setFieldNames.mkString("\n")}
-       |""".stripMargin
+    val fields = fieldExpressions.map(_.eval(input).asInstanceOf[UTF8String])
+    evaluator.evaluate(json, fields)
   }
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val refEvaluator = ctx.addReferenceObj("evaluator", evaluator)
-    val refFoldableFieldNames = ctx.addReferenceObj("foldableFieldNames", foldableFieldNames)
-    val wrapperClass = classOf[Seq[_]].getName
+    val jsonTerm = ctx.freshName("json")
     val jsonEval = jsonExpr.genCode(ctx)
-    val fieldNamesTerm = ctx.freshName("fieldNames")
-    val fieldNamesCode = genFieldNamesCode(ctx, refFoldableFieldNames, fieldNamesTerm)
-    val fieldNamesClz = classOf[ArraySeq[_]].getName
+    val fieldsTerm = ctx.freshName("fields")
+    val fieldsEval = fieldExpressions.map(_.genCode(ctx))
+    val arraySeqClass = classOf[ArraySeq[_]].getName
+    val wrapperClass = classOf[IterableOnce[_]].getName
+    val setJson =
+      s"""
+         |if (${jsonEval.isNull}) {
+         |  $jsonTerm = null;
+         |} else {
+         |  $jsonTerm = ${jsonEval.value};
+         |}
+         |""".stripMargin
+    val setFields = fieldsEval.zipWithIndex.map {
+      case (fieldEval, idx) =>
+        s"""
+           |if (${fieldEval.isNull}) {
+           |  $fieldsTerm[$idx] = null;
+           |} else {
+           |  $fieldsTerm[$idx] = ${fieldEval.value};
+           |}
+           |""".stripMargin
+    }
     ev.copy(code =
       code"""
+         |UTF8String $jsonTerm = null;
+         |UTF8String[] $fieldsTerm = new UTF8String[${fieldExpressions.length - 1}];
          |${jsonEval.code}
-         |$fieldNamesCode
+         |${fieldsEval.map(_.code).mkString("\n")}
+         |$setJson
+         |${setFields.mkString("\n")}
          |boolean ${ev.isNull} = false;
-         |$wrapperClass<InternalRow> ${ev.value} = $refEvaluator.evaluate(
-         |  ${jsonEval.value}, new $fieldNamesClz.ofRef($fieldNamesTerm));
+         |$wrapperClass<InternalRow> ${ev.value} =
+         |  $refEvaluator.evaluate($jsonTerm, new $arraySeqClass.ofRef($fieldsTerm));
          |""".stripMargin)
   }
 
