@@ -31,7 +31,7 @@ class TableArg(UDTFArgument):
     def __init__(self, j_table_arg: "JavaObject"):
         self._j_table_arg = j_table_arg
 
-    def partitionBy(self, *cols: "ColumnOrName"):
+    def partitionBy(self, *cols: "ColumnOrName") -> "TableArg":
         sc = get_active_spark_context()
         if len(cols) == 1 and isinstance(cols[0], list):
             cols = cols[0]
@@ -39,7 +39,7 @@ class TableArg(UDTFArgument):
         new_j_table_arg = self._j_table_arg.partitionBy(j_cols)
         return TableArg(new_j_table_arg)
 
-    def orderBy(self, *cols: "ColumnOrName"):
+    def orderBy(self, *cols: "ColumnOrName") -> "TableArg":
         sc = get_active_spark_context()
         if len(cols) == 1 and isinstance(cols[0], list):
             cols = cols[0]
@@ -47,6 +47,6 @@ class TableArg(UDTFArgument):
         new_j_table_arg = self._j_table_arg.orderBy(j_cols)
         return TableArg(new_j_table_arg)
 
-    def withSinglePartition(self):
+    def withSinglePartition(self) -> "TableArg":
         new_j_table_arg = self._j_table_arg.withSinglePartition()
         return TableArg(new_j_table_arg)
