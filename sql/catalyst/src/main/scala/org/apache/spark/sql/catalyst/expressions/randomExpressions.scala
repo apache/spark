@@ -232,6 +232,8 @@ case class Uniform(min: Expression, max: Expression, seedExpression: Expression,
         if Seq(first, second).forall(integer) => IntegerType
       case (_, ShortType) | (ShortType, _)
         if Seq(first, second).forall(integer) => ShortType
+      case (_, ByteType) | (ByteType, _)
+        if Seq(first, second).forall(integer) => ByteType
       case (_, DoubleType) | (DoubleType, _) => DoubleType
       case (_, FloatType) | (FloatType, _) => FloatType
       case (_, d: DecimalType) => d
@@ -243,7 +245,7 @@ case class Uniform(min: Expression, max: Expression, seedExpression: Expression,
   }
 
   private def integer(t: DataType): Boolean = t match {
-    case _: ShortType | _: IntegerType | _: LongType => true
+    case _: ByteType | _: ShortType | _: IntegerType | _: LongType => true
     case _ => false
   }
 
@@ -268,7 +270,7 @@ case class Uniform(min: Expression, max: Expression, seedExpression: Expression,
                 "inputExpr" -> toSQLExpr(expr)))
           } else expr.dataType match {
             case _: ShortType | _: IntegerType | _: LongType | _: FloatType | _: DoubleType |
-                 _: DecimalType | _: NullType =>
+                 _: DecimalType | _: ByteType | _: NullType =>
             case _ =>
               result = DataTypeMismatch(
                 errorSubClass = "UNEXPECTED_INPUT_TYPE",

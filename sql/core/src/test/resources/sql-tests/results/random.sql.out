@@ -148,6 +148,22 @@ struct<result:bigint>
 
 
 -- !query
+SELECT uniform(0, cast(10 as tinyint), 0) AS result
+-- !query schema
+struct<result:int>
+-- !query output
+7
+
+
+-- !query
+SELECT uniform(0, cast(10 as bigint), 0) AS result
+-- !query schema
+struct<result:bigint>
+-- !query output
+7
+
+
+-- !query
 SELECT uniform(0, 10S, 0) AS result
 -- !query schema
 struct<result:int>
@@ -236,6 +252,30 @@ SELECT uniform(10, 20.0F) IS NOT NULL AS result
 struct<result:boolean>
 -- !query output
 true
+
+
+-- !query
+SELECT uniform(-10L, 10L, 0) AS result
+-- !query schema
+struct<result:bigint>
+-- !query output
+5
+
+
+-- !query
+SELECT uniform(-20L, -10L, 0) AS result
+-- !query schema
+struct<result:bigint>
+-- !query output
+-12
+
+
+-- !query
+SELECT uniform(-20L, -10L, -10) AS result
+-- !query schema
+struct<result:bigint>
+-- !query output
+-17
 
 
 -- !query

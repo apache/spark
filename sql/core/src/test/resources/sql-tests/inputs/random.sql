@@ -22,6 +22,8 @@ SELECT uniform(0, 1, 0) AS result;
 SELECT uniform(0, 10, 0) AS result;
 SELECT uniform(0L, 10L, 0) AS result;
 SELECT uniform(0, 10L, 0) AS result;
+SELECT uniform(0, cast(10 as tinyint), 0) AS result;
+SELECT uniform(0, cast(10 as bigint), 0) AS result;
 SELECT uniform(0, 10S, 0) AS result;
 SELECT uniform(10, 20, 0) AS result;
 SELECT uniform(10.0F, 20.0F, 0) AS result;
@@ -34,6 +36,9 @@ SELECT uniform(10.0D, 20.0D, CAST(3 / 7 AS LONG)) AS result;
 SELECT uniform(10, 20.0F, 0) AS result;
 SELECT uniform(10, 20, 0) AS result FROM VALUES (0), (1), (2) tab(col);
 SELECT uniform(10, 20.0F) IS NOT NULL AS result;
+SELECT uniform(-10L, 10L, 0) AS result;
+SELECT uniform(-20L, -10L, 0) AS result;
+SELECT uniform(-20L, -10L, -10) AS result;
 -- Negative test cases for the uniform random number generator.
 SELECT uniform(NULL, 1, 0) AS result;
 SELECT uniform(0, NULL, 0) AS result;

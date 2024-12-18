@@ -120,6 +120,18 @@ SELECT uniform(0, 10L, 0) AS result
 
 
 -- !query
+SELECT uniform(0, cast(10 as tinyint), 0) AS result
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT uniform(0, cast(10 as bigint), 0) AS result
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
 SELECT uniform(0, 10S, 0) AS result
 -- !query analysis
 [Analyzer test output redacted due to nondeterminism]
@@ -182,6 +194,24 @@ SELECT uniform(10, 20, 0) AS result FROM VALUES (0), (1), (2) tab(col)
 
 -- !query
 SELECT uniform(10, 20.0F) IS NOT NULL AS result
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT uniform(-10L, 10L, 0) AS result
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT uniform(-20L, -10L, 0) AS result
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT uniform(-20L, -10L, -10) AS result
 -- !query analysis
 [Analyzer test output redacted due to nondeterminism]
 
