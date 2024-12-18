@@ -833,10 +833,12 @@ object View {
  * @param child The final query of this CTE.
  * @param cteRelations A sequence of pair (alias, the CTE definition) that this CTE defined
  *                     Each CTE can see the base tables and the previously defined CTEs only.
+ * @param allowRecursion A boolean flag if recursion is allowed.
  */
 case class UnresolvedWith(
     child: LogicalPlan,
-    cteRelations: Seq[(String, SubqueryAlias)]) extends UnaryNode {
+    cteRelations: Seq[(String, SubqueryAlias)],
+    allowRecursion: Boolean = false) extends UnaryNode {
   final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_WITH)
 
   override def output: Seq[Attribute] = child.output
@@ -862,12 +864,19 @@ case class UnresolvedWith(
  *                                   pushdown to help ensure rule idempotency.
  * @param underSubquery If true, it means we don't need to add a shuffle for this CTE relation as
  *                      subquery reuse will be applied to reuse CTE relation output.
+ * @param recursive If true, then this CTE Definition is recursive - it contains a self-reference.
+ * @param recursionAnchor A helper plan node that temporary stores the anchor term of recursive
+ *                        definitions. In the beginning of recursive resolution the `ResolveWithCTE`
+ *                        rule updates this parameter and once it is resolved the same rule resolves
+ *                        the recursive [[CTERelationRef]] references and removes this parameter.
  */
 case class CTERelationDef(
     child: LogicalPlan,
     id: Long = CTERelationDef.newId,
     originalPlanWithPredicates: Option[(LogicalPlan, Seq[Expression])] = None,
-    underSubquery: Boolean = false) extends UnaryNode {
+    underSubquery: Boolean = false,
+    recursive: Boolean = false,
+    recursionAnchor: Option[LogicalPlan] = None) extends UnaryNode {
 
   final override val nodePatterns: Seq[TreePattern] = Seq(CTE)
 
@@ -891,13 +900,15 @@ object CTERelationDef {
  *                             de-duplication.
  * @param statsOpt             The optional statistics inferred from the corresponding CTE
  *                             definition.
+ * @param recursive            If this is a recursive reference.
  */
 case class CTERelationRef(
     cteId: Long,
     _resolved: Boolean,
     override val output: Seq[Attribute],
     override val isStreaming: Boolean,
-    statsOpt: Option[Statistics] = None) extends LeafNode with MultiInstanceRelation {
+    statsOpt: Option[Statistics] = None,
+    recursive: Boolean = false) extends LeafNode with MultiInstanceRelation {
 
   final override val nodePatterns: Seq[TreePattern] = Seq(CTE)
 

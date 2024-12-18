@@ -111,10 +111,7 @@ object SparkKubernetesClientFactory extends Logging {
       }.build()
     logDebug("Kubernetes client config: " +
       new ObjectMapper().writerWithDefaultPrettyPrinter().writeValueAsString(config))
-    new KubernetesClientBuilder()
-      .withHttpClientFactory(SparkVertxHttpClientFactory.instance)
-      .withConfig(config)
-      .build()
+    new KubernetesClientBuilder().withConfig(config).build()
   }
 
   private implicit class OptionConfigurableConfigBuilder(val configBuilder: ConfigBuilder)

@@ -22,7 +22,7 @@ import java.lang.{Long => JLong}
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark._
-import org.apache.spark.sql.{functions, Dataset, QueryTest, Row, SparkSession}
+import org.apache.spark.sql.{functions, Dataset, Encoder, Encoders, QueryTest, Row, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan, Project}
 import org.apache.spark.sql.execution.{QueryExecution, WholeStageCodegenExec}
@@ -30,6 +30,7 @@ import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.command.{CreateDataSourceTableAsSelectCommand, LeafRunnableCommand}
 import org.apache.spark.sql.execution.datasources.InsertIntoHadoopFsRelationCommand
 import org.apache.spark.sql.execution.datasources.json.JsonFileFormat
+import org.apache.spark.sql.expressions.Aggregator
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StringType
@@ -336,6 +337,51 @@ class DataFrameCallbackSuite extends QueryTest
           avg($"id").cast("int").as("avg_val"))
 
       validateObservedMetrics(df)
+    }
+  }
+
+  test("SPARK-50581: support observe with udaf") {
+    withUserDefinedFunction(("someUdaf", true)) {
+      spark.udf.register("someUdaf", functions.udaf(new Aggregator[JLong, JLong, JLong] {
+        def zero: JLong = 0L
+        def reduce(b: JLong, a: JLong): JLong = a + b
+        def merge(b1: JLong, b2: JLong): JLong = b1 + b2
+        def finish(r: JLong): JLong = r
+        def bufferEncoder: Encoder[JLong] = Encoders.LONG
+        def outputEncoder: Encoder[JLong] = Encoders.LONG
+      }))
+
+      val df = spark.range(100)
+
+      val metricMaps = ArrayBuffer.empty[Map[String, Row]]
+      val listener = new QueryExecutionListener {
+        override def onSuccess(funcName: String, qe: QueryExecution, duration: Long): Unit = {
+          if (qe.observedMetrics.nonEmpty) {
+            metricMaps += qe.observedMetrics
+          }
+        }
+
+        override def onFailure(funcName: String, qe: QueryExecution, exception: Exception): Unit = {
+          // No-op
+        }
+      }
+      try {
+        spark.listenerManager.register(listener)
+
+        // udaf usage in observe is not working (serialization exception)
+        df.observe(
+            name = "my_metrics",
+            expr("someUdaf(id)").as("agg")
+          )
+          .collect()
+
+        sparkContext.listenerBus.waitUntilEmpty()
+        assert(metricMaps.size === 1)
+        assert(metricMaps.head("my_metrics") === Row(4950L))
+
+      } finally {
+        spark.listenerManager.unregister(listener)
+      }
     }
   }
 
