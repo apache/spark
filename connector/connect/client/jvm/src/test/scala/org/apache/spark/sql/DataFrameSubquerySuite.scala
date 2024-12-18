@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.SparkRuntimeException
+import org.apache.spark.{SparkException, SparkRuntimeException}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.{QueryTest, RemoteSparkSession}
 
@@ -574,12 +574,89 @@ class DataFrameSubquerySuite extends QueryTest with RemoteSparkSession {
 
       checkAnswer(
         spark.range(1).select(explode(t1.select(collect_list("c2")).scalar())),
-        sql("SELECT EXPLODE((SELECT COLLECT_LIST(c2) FROM t1))")
-      )
+        sql("SELECT EXPLODE((SELECT COLLECT_LIST(c2) FROM t1))"))
       checkAnswer(
         spark.tvf.explode(t1.select(collect_list("c2")).scalar()),
-        sql("SELECT * FROM EXPLODE((SELECT COLLECT_LIST(c2) FROM t1))")
-      )
+        sql("SELECT * FROM EXPLODE((SELECT COLLECT_LIST(c2) FROM t1))"))
+    }
+  }
+
+  test("subquery in join condition") {
+    withView("t1", "t2") {
+      val t1 = table1()
+      val t2 = table2()
+
+      checkAnswer(
+        t1.join(t2, $"t1.c1" === t1.select(max("c1")).scalar()).toDF("c1", "c2", "c3", "c4"),
+        sql("SELECT * FROM t1 JOIN t2 ON t1.c1 = (SELECT MAX(c1) FROM t1)")
+          .toDF("c1", "c2", "c3", "c4"))
+    }
+  }
+
+  test("subquery in unpivot") {
+    withView("t1", "t2") {
+      val t1 = table1()
+      val t2 = table2()
+
+      checkError(
+        intercept[AnalysisException] {
+          t1.unpivot(Array(t2.exists()), "c1", "c2").collect()
+        },
+        "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.UNSUPPORTED_IN_EXISTS_SUBQUERY",
+        parameters = Map("treeNode" -> "(?s)'Unpivot.*"),
+        matchPVals = true)
+      checkError(
+        intercept[AnalysisException] {
+          t1.unpivot(Array($"c1"), Array(t2.exists()), "c1", "c2").collect()
+        },
+        "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.UNSUPPORTED_IN_EXISTS_SUBQUERY",
+        parameters = Map("treeNode" -> "(?s)Expand.*"),
+        matchPVals = true)
+    }
+  }
+
+  test("subquery in transpose") {
+    withView("t1") {
+      val t1 = table1()
+
+      checkError(
+        intercept[AnalysisException] {
+          t1.transpose(t1.select(max("c1")).scalar()).collect()
+        },
+        "TRANSPOSE_INVALID_INDEX_COLUMN",
+        parameters = Map("reason" -> "Index column must be an atomic attribute"))
+    }
+  }
+
+  test("subquery in withColumns") {
+    withView("t1") {
+      val t1 = table1()
+
+      // TODO(SPARK-50601): Fix the SparkConnectPlanner to support this case
+      checkError(
+        intercept[SparkException] {
+          t1.withColumn("scalar", spark.range(1).select($"c1".outer() + $"c2".outer()).scalar())
+            .collect()
+        },
+        "INTERNAL_ERROR",
+        parameters = Map("message" -> "Found the unresolved operator: .*"),
+        matchPVals = true)
+    }
+  }
+
+  test("subquery in drop") {
+    withView("t1") {
+      val t1 = table1()
+
+      checkAnswer(t1.drop(spark.range(1).select(lit("c1")).scalar()), t1)
+    }
+  }
+
+  test("subquery in repartition") {
+    withView("t1") {
+      val t1 = table1()
+
+      checkAnswer(t1.repartition(spark.range(1).select(lit(1)).scalar()), t1)
     }
   }
 }

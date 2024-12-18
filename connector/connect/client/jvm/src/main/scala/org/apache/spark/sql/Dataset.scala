@@ -522,7 +522,7 @@ class Dataset[T] private[sql] (
       valuesOption: Option[Array[Column]],
       variableColumnName: String,
       valueColumnName: String): DataFrame = {
-    sparkSession.newDataFrame(valuesOption.toSeq.flatten) { builder =>
+    sparkSession.newDataFrame(ids.toSeq ++ valuesOption.toSeq.flatten) { builder =>
       val unpivot = builder.getUnpivotBuilder
         .setInput(plan.getRoot)
         .addAllIds(ids.toImmutableArraySeq.map(_.expr).asJava)

@@ -845,6 +845,77 @@ class SubqueryTestsMixin:
                 self.spark.sql("""SELECT * FROM EXPLODE((SELECT COLLECT_LIST(c2) FROM t1))"""),
             )
 
+    def test_subquery_in_join_condition(self):
+        with self.tempView("t1", "t2"):
+            t1 = self.table1()
+            t2 = self.table2()
+
+            assertDataFrameEqual(
+                t1.join(t2, sf.col("t1.c1") == t1.select(sf.max("c1")).scalar()),
+                self.spark.sql("""SELECT * FROM t1 JOIN t2 ON t1.c1 = (SELECT MAX(c1) FROM t1)"""),
+            )
+
+    def test_subquery_in_unpivot(self):
+        self.check_subquery_in_unpivot(QueryContextType.DataFrame, "exists")
+
+    def check_subquery_in_unpivot(self, query_context_type, fragment):
+        with self.tempView("t1", "t2"):
+            t1 = self.table1()
+            t2 = self.table2()
+
+            with self.assertRaises(AnalysisException) as pe:
+                t1.unpivot("c1", t2.exists(), "c1", "c2").collect()
+
+            self.check_error(
+                exception=pe.exception,
+                errorClass=(
+                    "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.UNSUPPORTED_IN_EXISTS_SUBQUERY"
+                ),
+                messageParameters={"treeNode": "Expand.*"},
+                query_context_type=query_context_type,
+                fragment=fragment,
+                matchPVals=True,
+            )
+
+    def test_subquery_in_transpose(self):
+        with self.tempView("t1"):
+            t1 = self.table1()
+
+            with self.assertRaises(AnalysisException) as pe:
+                t1.transpose(t1.select(sf.max("c1")).scalar()).collect()
+
+            self.check_error(
+                exception=pe.exception,
+                errorClass="TRANSPOSE_INVALID_INDEX_COLUMN",
+                messageParameters={"reason": "Index column must be an atomic attribute"},
+            )
+
+    def test_subquery_in_with_columns(self):
+        with self.tempView("t1"):
+            t1 = self.table1()
+
+            assertDataFrameEqual(
+                t1.withColumn(
+                    "scalar",
+                    self.spark.range(1)
+                    .select(sf.col("c1").outer() + sf.col("c2").outer())
+                    .scalar(),
+                ),
+                t1.withColumn("scalar", sf.col("c1") + sf.col("c2")),
+            )
+
+    def test_subquery_in_drop(self):
+        with self.tempView("t1"):
+            t1 = self.table1()
+
+            assertDataFrameEqual(t1.drop(self.spark.range(1).select(sf.lit("c1")).scalar()), t1)
+
+    def test_subquery_in_repartition(self):
+        with self.tempView("t1"):
+            t1 = self.table1()
+
+            assertDataFrameEqual(t1.repartition(self.spark.range(1).select(sf.lit(1)).scalar()), t1)
+
 
 class SubqueryTests(SubqueryTestsMixin, ReusedSQLTestCase):
     pass

@@ -338,6 +338,7 @@ class PySparkErrorTestUtils:
         messageParameters: Optional[Dict[str, str]] = None,
         query_context_type: Optional[QueryContextType] = None,
         fragment: Optional[str] = None,
+        matchPVals: bool = False,
     ):
         query_context = exception.getQueryContext()
         assert bool(query_context) == (query_context_type is not None), (
@@ -361,9 +362,30 @@ class PySparkErrorTestUtils:
         # Test message parameters
         expected = messageParameters
         actual = exception.getMessageParameters()
-        self.assertEqual(
-            expected, actual, f"Expected message parameters was '{expected}', got '{actual}'"
-        )
+        if matchPVals:
+            self.assertEqual(
+                len(expected),
+                len(actual),
+                "Expected message parameters count does not match actual message parameters count"
+                f": {len(expected)}, {len(actual)}.",
+            )
+            for key, value in expected.items():
+                self.assertIn(
+                    key,
+                    actual,
+                    f"Expected message parameter key '{key}' was not found "
+                    "in actual message parameters.",
+                )
+                self.assertRegex(
+                    actual[key],
+                    value,
+                    f"Expected message parameter value '{value}' does not match actual message "
+                    f"parameter value '{actual[key]}'.",
+                ),
+        else:
+            self.assertEqual(
+                expected, actual, f"Expected message parameters was '{expected}', got '{actual}'"
+            )
 
         # Test query context
         if query_context:
