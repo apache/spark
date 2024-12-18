@@ -74,7 +74,7 @@ class FileStreamSource(
   private val optionsForInnerDataSource = sourceOptions.optionMapWithoutPath ++ {
     val pathOption =
       if (!SparkHadoopUtil.get.isGlobPath(new Path(path)) && options.contains("path") &&
-          !options.contains(FileIndexOptions.BASE_PATH_PARAM)) {
+          !CaseInsensitiveMap(options).contains(FileIndexOptions.BASE_PATH_PARAM)) {
         Map(FileIndexOptions.BASE_PATH_PARAM -> path)
       } else {
         Map()
