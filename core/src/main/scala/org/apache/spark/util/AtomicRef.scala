@@ -20,15 +20,15 @@ import java.util.concurrent.atomic.AtomicReference
 
 private[spark] class AtomicRef[T <: AnyRef](compute: => T) extends Serializable {
 
-  private val _atom: AtomicReference[T] = new AtomicReference(null.asInstanceOf[T])
+  private val atomicRef: AtomicReference[T] = new AtomicReference(null.asInstanceOf[T])
 
   def apply(): T = {
-    val ref = _atom.get()
+    val ref = atomicRef.get()
     if (ref == null) {
       val newRef: T = compute
       assert(newRef != null, "computed value cannot be null.")
-      _atom.compareAndSet(null.asInstanceOf[T], newRef)
-      newRef
+      atomicRef.compareAndSet(null.asInstanceOf[T], newRef)
+      atomicRef.get()
     } else {
       ref
     }
