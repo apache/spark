@@ -184,9 +184,6 @@ class CkptIdCollectingStateStoreProviderWrapper extends StateStoreProvider {
     innerProvider.supportedCustomMetrics
 }
 
-// TODO add a test case for two of the tasks for the same shuffle partitions to finish and
-// return their own state store checkpointID. This can happen because of task retry or
-// speculative execution.
 class RocksDBStateStoreCheckpointFormatV2Suite extends StreamTest
   with AlsoTestWithRocksDBFeatures {
   import testImplicits._
@@ -225,7 +222,6 @@ class RocksDBStateStoreCheckpointFormatV2Suite extends StreamTest
     "spark.sql.streaming.stateStore.rocksdb.changelogCheckpointing.enabled" -> "true"
   val changelogDisabled =
     "spark.sql.streaming.stateStore.rocksdb.changelogCheckpointing.enabled" -> "false"
-  val ckptv1 = SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key -> "1"
   val ckptv2 = SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key -> "2"
 
   val testConfigSetups = Seq(
