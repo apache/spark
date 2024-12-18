@@ -910,9 +910,9 @@ class AvroStateEncoder(
  *                              between different column families
  */
 case class ColumnFamilyInfo(
-                             colFamilyName: String,
-                             virtualColumnFamilyId: Short
-                           )
+    colFamilyName: String,
+    virtualColumnFamilyId: Short
+)
 
 /**
  * Metadata prefixes stored at the beginning of encoded state rows.
@@ -927,9 +927,9 @@ case class ColumnFamilyInfo(
  *                       different column families in RocksDB.
  */
 case class StateRowPrefix(
-                           schemaId: Option[Short],
-                           columnFamilyId: Option[Short]
-                         )
+    schemaId: Option[Short],
+    columnFamilyId: Option[Short]
+)
 
 /**
  * Base encoder class that handles common prefix encoding/decoding operations for state store rows.
@@ -1487,9 +1487,9 @@ class NoPrefixKeyStateEncoder(
 
   override def encodeKey(row: UnsafeRow): Array[Byte] = {
     if (!useColumnFamilies) {
-      dataEncoder.encodeKey(row)
+      encodeStateRowWithPrefix(dataEncoder.encodeKey(row))
     } else {
-      // First encode the row with either Avro or UnsafeRow encoding
+      // First encode the row with the data encoder
       val rowBytes = dataEncoder.encodeKey(row)
 
       // Create data array with version byte
@@ -1507,7 +1507,9 @@ class NoPrefixKeyStateEncoder(
   }
 
   override def decodeKey(keyBytes: Array[Byte]): UnsafeRow = {
-    if (keyBytes == null) {
+    if (!useColumnFamilies) {
+      dataEncoder.decodeKey(decodeStateRowData(keyBytes))
+    } else if (keyBytes == null) {
       null
     } else {
       // First decode the metadata prefixes
@@ -1516,7 +1518,7 @@ class NoPrefixKeyStateEncoder(
       // Skip version byte to get to actual data
       val dataLength = dataWithVersion.length - STATE_ENCODING_NUM_VERSION_BYTES
 
-      // Extract the data bytes and decode
+      // Extract data bytes and decode using data encoder
       val dataBytes = new Array[Byte](dataLength)
       Platform.copyMemory(
         dataWithVersion, Platform.BYTE_ARRAY_OFFSET + STATE_ENCODING_NUM_VERSION_BYTES,
