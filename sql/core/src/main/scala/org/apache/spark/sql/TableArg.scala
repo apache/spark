@@ -42,7 +42,7 @@ class TableArg(
 
   def orderBy(cols: Seq[Column]): TableArg = {
     val orderByExpressions = cols.map { col =>
-      col.node match {
+      col.expr match {
         case sortOrder: SortOrder => sortOrder
         case expr: Expression => SortOrder(expr, Ascending)
       }
