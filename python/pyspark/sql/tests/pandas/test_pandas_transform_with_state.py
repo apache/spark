@@ -1156,14 +1156,20 @@ class TransformWithStateInPandasTestsMixin:
                     .option("readChangeFeed", True)
                     .option("changeStartBatchId", 0)
                     .load()
-                ).selectExpr("change_type", "key.id AS groupingKey", "value.value AS value", "partition_id")
+                ).selectExpr(
+                    "change_type", "key.id AS groupingKey", "value.value AS value", "partition_id"
+                )
 
-                assert value_state_df.select("change_type", "groupingKey", "value").sort("groupingKey").collect() == [
+                assert value_state_df.select("change_type", "groupingKey", "value").sort(
+                    "groupingKey"
+                ).collect() == [
                     Row(change_type="update", groupingKey="0", value=1),
                     Row(change_type="update", groupingKey="1", value=2),
                 ]
 
-                partition_id_list = [row["partition_id"] for row in value_state_df.select("partition_id").collect()]
+                partition_id_list = [
+                    row["partition_id"] for row in value_state_df.select("partition_id").collect()
+                ]
 
                 for partition_id in partition_id_list:
                     # check for state data source and snapshotStartBatchId options
@@ -1176,11 +1182,17 @@ class TransformWithStateInPandasTestsMixin:
                         .load()
                     )
 
-                    assert value_state_df.select("partition_id", "groupingKey", "value")\
-                           .filter(value_state_df["partition_id"] == partition_id).sort("groupingKey").collect() ==\
-                           state_snapshot_df.selectExpr(
-                               "partition_id", "key.id AS groupingKey", "value.value AS value")\
-                           .sort("groupingKey").collect()
+                    assert (
+                        value_state_df.select("partition_id", "groupingKey", "value")
+                        .filter(value_state_df["partition_id"] == partition_id)
+                        .sort("groupingKey")
+                        .collect()
+                        == state_snapshot_df.selectExpr(
+                            "partition_id", "key.id AS groupingKey", "value.value AS value"
+                        )
+                        .sort("groupingKey")
+                        .collect()
+                    )
 
                 for q in self.spark.streams.active:
                     q.stop()
