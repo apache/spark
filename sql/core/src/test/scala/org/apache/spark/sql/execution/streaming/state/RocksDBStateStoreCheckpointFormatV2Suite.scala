@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.streaming.state
 import org.apache.hadoop.conf.Configuration
 import org.scalatest.Tag
 
+import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.functions.count
@@ -145,7 +146,9 @@ class CkptIdCollectingStateStoreProviderWrapper extends StateStoreProvider {
       useColumnFamilies: Boolean,
       storeConfs: StateStoreConf,
       hadoopConf: Configuration,
-      useMultipleValuesPerKey: Boolean = false): Unit = {
+      useMultipleValuesPerKey: Boolean = false,
+      stateSchemaBroadcast: Option[Broadcast[StateSchemaMetadata]] = None
+  ): Unit = {
     innerProvider.init(
       stateStoreId,
       keySchema,

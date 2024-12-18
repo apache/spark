@@ -32,6 +32,7 @@ import org.apache.hadoop.conf.Configuration
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.{SparkConf, SparkContext, TaskContext, TestUtils}
+import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.plans.logical.{Range, RepartitionByExpression}
@@ -42,7 +43,7 @@ import org.apache.spark.sql.execution.{LocalLimitExec, SimpleMode, SparkPlan}
 import org.apache.spark.sql.execution.command.ExplainCommand
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.sources.{ContinuousMemoryStream, ForeachBatchUserFuncException, MemorySink}
-import org.apache.spark.sql.execution.streaming.state.{KeyStateEncoderSpec, StateStore, StateStoreConf, StateStoreId, StateStoreProvider}
+import org.apache.spark.sql.execution.streaming.state.{KeyStateEncoderSpec, StateSchemaMetadata, StateStore, StateStoreConf, StateStoreId, StateStoreProvider}
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -1479,7 +1480,9 @@ class TestStateStoreProvider extends StateStoreProvider {
       useColumnFamilies: Boolean,
       storeConfs: StateStoreConf,
       hadoopConf: Configuration,
-      useMultipleValuesPerKey: Boolean = false): Unit = {
+      useMultipleValuesPerKey: Boolean = false,
+      stateSchemaBroadcast: Option[Broadcast[StateSchemaMetadata]] = None
+  ): Unit = {
     throw new Exception("Successfully instantiated")
   }
 

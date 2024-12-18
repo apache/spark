@@ -38,6 +38,7 @@ import org.scalatest.time.SpanSugar._
 
 import org.apache.spark._
 import org.apache.spark.LocalSparkContext._
+import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.util.quietly
@@ -65,7 +66,9 @@ class MaintenanceErrorOnCertainPartitionsProvider extends HDFSBackedStateStorePr
       useColumnFamilies: Boolean,
       storeConfs: StateStoreConf,
       hadoopConf: Configuration,
-      useMultipleValuesPerKey: Boolean = false): Unit = {
+      useMultipleValuesPerKey: Boolean = false,
+      stateSchemaBroadcast: Option[Broadcast[StateSchemaMetadata]] = None
+  ): Unit = {
     id = stateStoreId
 
     super.init(

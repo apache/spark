@@ -27,6 +27,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.SparkContext
+import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.AnalysisException
@@ -74,7 +75,8 @@ case class StatefulOperatorStateInfo(
     operatorId: Long,
     storeVersion: Long,
     numPartitions: Int,
-    stateStoreCkptIds: Option[Array[Array[String]]] = None) {
+    stateStoreCkptIds: Option[Array[Array[String]]] = None,
+    stateSchemasBroadcast: Option[Broadcast[StateSchemaMetadata]] = None) {
 
   def getStateStoreCkptId(partitionId: Int): Option[Array[String]] = {
     stateStoreCkptIds.map(_(partitionId))
@@ -319,12 +321,38 @@ trait StateStoreWriter
 
   /** Metadata of this stateful operator and its states stores. */
   def operatorStateMetadata(
-      stateSchemaPaths: List[String] = List.empty): OperatorStateMetadata = {
+      stateSchemaPaths: List[Map[Short, String]] = List.empty): OperatorStateMetadata = {
     val info = getStateInfo
     val operatorInfo = OperatorInfoV1(info.operatorId, shortName)
     val stateStoreInfo =
       Array(StateStoreMetadataV1(StateStoreId.DEFAULT_STORE_NAME, 0, info.numPartitions))
     OperatorStateMetadataV1(operatorInfo, stateStoreInfo)
+  }
+
+  def stateSchemaMapping(
+      stateSchemaValidationResults: List[StateSchemaValidationResult],
+      oldMetadata: Option[OperatorStateMetadata]): List[Map[Short, String]] = {
+    val validationResult = stateSchemaValidationResults.head
+    val evolvedSchema = validationResult.evolvedSchema
+    if (evolvedSchema) {
+      val (oldSchemaId, oldSchemaPaths): (Short, Map[Short, String]) = oldMetadata match {
+        case Some(v2: OperatorStateMetadataV2) =>
+          val ssInfo = v2.stateStoreInfo.head
+          (ssInfo.stateSchemaId, ssInfo.stateSchemaFilePaths)
+        case _ => (-1, Map.empty)
+      }
+      List(oldSchemaPaths + (oldSchemaId + 1 -> validationResult.schemaPath))
+    } else {
+      oldMetadata match {
+        case Some(v2: OperatorStateMetadataV2) =>
+          // If schema hasn't evolved, keep existing mappings
+          val ssInfo = v2.stateStoreInfo.head
+          List(ssInfo.stateSchemaFilePaths)
+        case _ =>
+          // If no previous metadata and no evolution, start with schema ID 0
+          List(Map(0 -> validationResult.schemaPath))
+      }
+    }
   }
 
   /** Set the operator level metrics */
@@ -1071,7 +1099,7 @@ case class SessionWindowStateStoreSaveExec(
   }
 
   override def operatorStateMetadata(
-      stateSchemaPaths: List[String] = List.empty): OperatorStateMetadata = {
+      stateSchemaPaths: List[Map[Short, String]] = List.empty): OperatorStateMetadata = {
     val info = getStateInfo
     val operatorInfo = OperatorInfoV1(info.operatorId, shortName)
     val stateStoreInfo = Array(StateStoreMetadataV1(
