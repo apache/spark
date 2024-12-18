@@ -59,6 +59,7 @@ class SQLContext private[sql] (override val sparkSession: SparkSession)
 
   /** @inheritdoc */
   object implicits extends SQLImplicits {
+
     /** @inheritdoc */
     override protected def session: SparkSession = sparkSession
   }
