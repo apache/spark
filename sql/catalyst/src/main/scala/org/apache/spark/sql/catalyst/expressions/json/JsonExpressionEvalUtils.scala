@@ -180,20 +180,20 @@ case class JsonTupleEvaluator(foldableFields: IndexedSeq[Option[String]]) {
   // And count the number of foldable fields, we'll use this later to optimize evaluation.
   @transient private lazy val constantFields: Int = foldableFields.count(_ != null)
 
-  private def getCachedFields(fieldNames: Seq[UTF8String]): Seq[String] = {
+  private def getCachedFields(fields: Seq[UTF8String]): Seq[String] = {
     // Evaluate the field names as String rather than UTF8String to
     // optimize lookups from the json token, which is also a String.
-    if (constantFields == fieldNames.length) {
+    if (constantFields == fields.length) {
       // Typically the user will provide the field names as foldable expressions
       // so we can use the cached copy.
       foldableFields.map(_.orNull)
     } else if (constantFields == 0) {
       // None are foldable so all field names need to be evaluated from the input row.
-      fieldNames.map { f => Option(f.toString).orNull }
+      fields.map { f => Option(f.toString).orNull }
     } else {
       // If there is a mix of constant and non-constant expressions
       // prefer the cached copy when available.
-      foldableFields.zip(fieldNames).map {
+      foldableFields.zip(fields).map {
         case (null, f) => Option(f.toString).orNull
         case (fieldName, _) => fieldName.orNull
       }
