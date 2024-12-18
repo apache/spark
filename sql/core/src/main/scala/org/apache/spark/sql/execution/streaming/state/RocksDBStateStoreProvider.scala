@@ -696,6 +696,9 @@ object RocksDBStateStoreProvider {
     )
   }
 
+  private[sql] def clearDataEncoderCache: Unit =
+    RocksDBStateStoreProvider.dataEncoderCache.invalidateAll()
+
   private def getRunId(hadoopConf: Configuration): String = {
     val runId = hadoopConf.get(StreamExecution.RUN_ID_KEY)
     if (runId != null) {
