@@ -27,6 +27,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.{SparkConf, SparkEnv, SparkException}
+import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.io.CompressionCodec
@@ -91,7 +92,7 @@ private[sql] class RocksDBStateStoreProvider
             columnFamilyInfo, avroEnc),
           RocksDBStateEncoder.getValueEncoder(
             valueSchema, useMultipleValuesPerKey,
-            useColumnFamilies, columnFamilyInfo, avroEnc)
+            useColumnFamilies, columnFamilyInfo, avroEnc, stateSchemaMetadata)
         )
       )
     }
@@ -373,7 +374,9 @@ private[sql] class RocksDBStateStoreProvider
       useColumnFamilies: Boolean,
       storeConf: StateStoreConf,
       hadoopConf: Configuration,
-      useMultipleValuesPerKey: Boolean = false): Unit = {
+      useMultipleValuesPerKey: Boolean = false,
+      stateSchemaBroadcast: Option[Broadcast[StateSchemaMetadata]] = None
+  ): Unit = {
     this.stateStoreId_ = stateStoreId
     this.keySchema = keySchema
     this.valueSchema = valueSchema
@@ -381,6 +384,7 @@ private[sql] class RocksDBStateStoreProvider
     this.hadoopConf = hadoopConf
     this.useColumnFamilies = useColumnFamilies
     this.stateStoreEncoding = storeConf.stateStoreEncodingFormat
+    this.stateSchemaMetadata = stateSchemaBroadcast
 
     if (useMultipleValuesPerKey) {
       require(useColumnFamilies, "Multiple values per key support requires column families to be" +
@@ -411,7 +415,7 @@ private[sql] class RocksDBStateStoreProvider
           columnFamilyInfo, avroEnc),
         RocksDBStateEncoder.getValueEncoder(
           valueSchema, useMultipleValuesPerKey,
-          useColumnFamilies, columnFamilyInfo, avroEnc)
+          useColumnFamilies, columnFamilyInfo, avroEnc, stateSchemaMetadata)
       )
     )
   }
@@ -492,6 +496,7 @@ private[sql] class RocksDBStateStoreProvider
   @volatile private var hadoopConf: Configuration = _
   @volatile private var useColumnFamilies: Boolean = _
   @volatile private var stateStoreEncoding: String = _
+  @volatile private var stateSchemaMetadata: Option[Broadcast[StateSchemaMetadata]] = _
 
   private[sql] lazy val rocksDB = {
     val dfsRootDir = stateStoreId.storeCheckpointLocation().toString
@@ -631,11 +636,21 @@ object RocksDBStateStoreProvider {
   private val MAX_AVRO_ENCODERS_IN_CACHE = 1000
   private val AVRO_ENCODER_LIFETIME_HOURS = 1L
 
+  private val MAX_SCHEMA_METADATA_IN_CACHE = 1000
+  private val SCHEMA_METADATA_LIFETIME_HOURS = 1L
+
   // Add the cache at companion object level so it persists across provider instances
   private val avroEncoderMap: NonFateSharingCache[String, AvroEncoder] =
     NonFateSharingCache(
       maximumSize = MAX_AVRO_ENCODERS_IN_CACHE,
       expireAfterAccessTime = AVRO_ENCODER_LIFETIME_HOURS,
+      expireAfterAccessTimeUnit = TimeUnit.HOURS
+    )
+
+  private val schemaMetadataCache: NonFateSharingCache[String, StateSchemaMetadata] =
+    NonFateSharingCache(
+      maximumSize = MAX_SCHEMA_METADATA_IN_CACHE,
+      expireAfterAccessTime = SCHEMA_METADATA_LIFETIME_HOURS,
       expireAfterAccessTimeUnit = TimeUnit.HOURS
     )
 

@@ -2031,12 +2031,12 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
 
               // Verify schema evolution prefix if enabled
               if (schemaEvolutionEnabled) {
-                val keyPrefix = keyEncoder.asInstanceOf[StateRowPrefixEncoder]
+                val keyPrefix = keyEncoder.prefixEncoder
                   .decodeStateRowPrefix(encodedKey)
                 assert(keyPrefix.schemaId.isDefined == schemaEvolutionEnabled)
                 assert(keyPrefix.schemaId.get === 0) // default schema ID
 
-                val valuePrefix = valueEncoder.asInstanceOf[StateRowPrefixEncoder]
+                val valuePrefix = valueEncoder.prefixEncoder
                   .decodeStateRowPrefix(encodedValue)
                 assert(valuePrefix.schemaId.isDefined == schemaEvolutionEnabled)
                 assert(valuePrefix.schemaId.get === 0)
@@ -2044,7 +2044,7 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
 
               // Verify column family prefix if enabled
               if (colFamiliesEnabled) {
-                val keyPrefix = keyEncoder.asInstanceOf[StateRowPrefixEncoder]
+                val keyPrefix = keyEncoder.prefixEncoder
                   .decodeStateRowPrefix(encodedKey)
                 assert(keyPrefix.columnFamilyId.isDefined)
                 assert(keyPrefix.columnFamilyId.get === 1)

@@ -27,6 +27,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.SparkContext
+import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.AnalysisException
@@ -74,7 +75,8 @@ case class StatefulOperatorStateInfo(
     operatorId: Long,
     storeVersion: Long,
     numPartitions: Int,
-    stateStoreCkptIds: Option[Array[Array[String]]] = None) {
+    stateStoreCkptIds: Option[Array[Array[String]]] = None,
+    stateSchemasBroadcast: Option[Broadcast[StateSchemaMetadata]] = None) {
 
   def getStateStoreCkptId(partitionId: Int): Option[Array[String]] = {
     stateStoreCkptIds.map(_(partitionId))
