@@ -103,8 +103,8 @@ trait CharVarcharTestSuite extends QueryTest with SQLTestUtils {
         (Seq(char_varchar_as_string -> "false", preserve_char_varchar -> "false"), StringType),
         (Seq(char_varchar_as_string -> "false", preserve_char_varchar -> "true"), typ),
         (Seq(char_varchar_as_string -> "true", preserve_char_varchar -> "false"), StringType),
-        (Seq(char_varchar_as_string -> "true", preserve_char_varchar -> "true"), typ),
-      )) { expectedType =>
+        (Seq(char_varchar_as_string -> "true", preserve_char_varchar -> "true"), typ))) {
+        expectedType =>
         withTable("t") {
           val name = typ.typeName
           sql(s"CREATE TABLE t(i STRING, c $name) USING $format")
