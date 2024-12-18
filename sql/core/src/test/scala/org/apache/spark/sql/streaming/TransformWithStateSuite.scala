@@ -71,7 +71,13 @@ class RunningCountStatefulProcessor extends StatefulProcessor[String, String, (S
 
 case class TwoLongs(
     value: Long,
-    value2: Long)
+    value2: Long
+)
+
+case class NestedLongs(
+    value: Long,
+    value2: TwoLongs
+)
 
 class RunningCountStatefulProcessorTwoLongs
   extends StatefulProcessor[String, String, (String, String)] with Logging {
@@ -98,6 +104,34 @@ class RunningCountStatefulProcessorTwoLongs
     }
   }
 }
+
+class RunningCountStatefulProcessorNestedLongs
+  extends StatefulProcessor[String, String, (String, String)] with Logging {
+  @transient protected var _countState: ValueState[NestedLongs] = _
+
+  override def init(
+      outputMode: OutputMode,
+      timeMode: TimeMode): Unit = {
+    _countState = getHandle.getValueState[NestedLongs]("countState",
+      Encoders.product[NestedLongs], TTLConfig.NONE)
+  }
+
+  override def handleInputRows(
+      key: String,
+      inputRows: Iterator[String],
+      timerValues: TimerValues): Iterator[(String, String)] = {
+    val count = _countState.getOption().getOrElse(
+      NestedLongs(0L, TwoLongs(0L, 0L))).value + 1
+    if (count == 3) {
+      _countState.clear()
+      Iterator.empty
+    } else {
+      _countState.update(NestedLongs(count, TwoLongs(0L, 0L)))
+      Iterator((key, count.toString))
+    }
+  }
+}
+
 
 class RunningCountStatefulProcessorWithTTL
   extends StatefulProcessor[String, String, (String, String)]
@@ -699,7 +733,7 @@ class TransformWithStateSuite extends StateStoreMetricsTest
         logError(s"### starting query 2")
         val result2 = inputData.toDS()
           .groupByKey(x => x)
-          .transformWithState(new RunningCountStatefulProcessorTwoLongs(),
+          .transformWithState(new RunningCountStatefulProcessorNestedLongs(),
             TimeMode.None(),
             OutputMode.Update())
 
