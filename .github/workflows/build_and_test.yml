@@ -437,7 +437,8 @@ jobs:
         id: docker_build_docs
         uses: docker/build-push-action@v6
         with:
-          context: ./dev/spark-test-image/docs/
+          context: .
+          file: ./dev/spark-test-image/docs/Dockerfile
           push: true
           tags: |
             ${{ needs.precondition.outputs.image_docs_url }}
@@ -448,7 +449,8 @@ jobs:
         id: docker_build_lint
         uses: docker/build-push-action@v6
         with:
-          context: ./dev/spark-test-image/lint/
+          context: .
+          file: ./dev/spark-test-image/lint/Dockerfile
           push: true
           tags: |
             ${{ needs.precondition.outputs.image_lint_url }}
@@ -459,7 +461,8 @@ jobs:
         id: docker_build_sparkr
         uses: docker/build-push-action@v6
         with:
-          context: ./dev/spark-test-image/sparkr/
+          context: .
+          file: ./dev/spark-test-image/sparkr/Dockerfile
           push: true
           tags: |
             ${{ needs.precondition.outputs.image_sparkr_url }}
