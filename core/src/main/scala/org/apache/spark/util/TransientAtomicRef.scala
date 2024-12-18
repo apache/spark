@@ -22,15 +22,15 @@ import java.util.concurrent.atomic.AtomicReference
 private[spark] class TransientAtomicRef[T <: AnyRef](compute: => T) extends Serializable {
 
   @transient
-  private var _atom: AtomicReference[T] = new AtomicReference(null.asInstanceOf[T])
+  private var atomicRef: AtomicReference[T] = new AtomicReference(null.asInstanceOf[T])
 
   def apply(): T = {
-    val ref = _atom.get()
+    val ref = atomicRef.get()
     if (ref == null) {
       val newRef: T = compute
       assert(newRef != null, "computed value cannot be null.")
-      _atom.compareAndSet(null.asInstanceOf[T], newRef)
-      newRef
+      atomicRef.compareAndSet(null.asInstanceOf[T], newRef)
+      atomicRef.get()
     } else {
       ref
     }
@@ -39,6 +39,6 @@ private[spark] class TransientAtomicRef[T <: AnyRef](compute: => T) extends Seri
   @throws(classOf[IOException])
   private def readObject(ois: ObjectInputStream): Unit = Utils.tryOrIOException {
     ois.defaultReadObject()
-    _atom = new AtomicReference(null.asInstanceOf[T])
+    atomicRef = new AtomicReference(null.asInstanceOf[T])
   }
 }
