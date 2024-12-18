@@ -80,13 +80,11 @@ object RowEncoder extends DataTypeErrorsBase {
       case DoubleType => BoxedDoubleEncoder
       case dt: DecimalType => JavaDecimalEncoder(dt, lenientSerialization = true)
       case BinaryType => BinaryEncoder
-      case CharType(_) | VarcharType(_) if !SqlApiConf.get.preserveCharVarcharTypeInfo =>
-          throw new AnalysisException(
-            errorClass = "UNSUPPORTED_DATA_TYPE_FOR_ENCODER",
-            messageParameters = Map("dataType" -> toSQLType(dataType)))
-      case CharType(length) => CharEncoder(length)
-      case VarcharType(length) => VarcharEncoder(length)
-      case _: StringType => StringEncoder
+      case CharType(length) if SqlApiConf.get.preserveCharVarcharTypeInfo =>
+        CharEncoder(length)
+      case VarcharType(length) if SqlApiConf.get.preserveCharVarcharTypeInfo =>
+        VarcharEncoder(length)
+      case s: StringType if s.constraint == NoConstraint => StringEncoder
       case TimestampType if SqlApiConf.get.datetimeJava8ApiEnabled => InstantEncoder(lenient)
       case TimestampType => TimestampEncoder(lenient)
       case TimestampNTZType => LocalDateTimeEncoder

@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{ArrayEncoder, Bo
 import org.apache.spark.sql.catalyst.encoders.EncoderUtils.{externalDataTypeFor, isNativeEncoder, lenientExternalDataTypeFor}
 import org.apache.spark.sql.catalyst.expressions.{BoundReference, CheckOverflow, CreateNamedStruct, Expression, IsNull, KnownNotNull, Literal, UnsafeArrayData}
 import org.apache.spark.sql.catalyst.expressions.objects._
-import org.apache.spark.sql.catalyst.util.{ArrayData, DateTimeUtils, GenericArrayData, IntervalUtils}
+import org.apache.spark.sql.catalyst.util.{ArrayData, CharVarcharCodegenUtils, DateTimeUtils, GenericArrayData, IntervalUtils}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -64,20 +64,32 @@ object SerializerBuildHelper {
   }
 
   def createSerializerForChar(inputObject: Expression, length: Int): Expression = {
-    StaticInvoke(
+    val expr = StaticInvoke(
       classOf[UTF8String],
-      CharType(length),
+      StringType,
       "fromString",
       inputObject :: Nil,
+      returnNullable = false)
+    StaticInvoke(
+      classOf[CharVarcharCodegenUtils],
+      CharType(length),
+      "charTypeWriteSideCheck",
+      expr :: Literal(length) :: Nil,
       returnNullable = false)
   }
 
   def createSerializerForVarchar(inputObject: Expression, length: Int): Expression = {
-    StaticInvoke(
+    val expr = StaticInvoke(
       classOf[UTF8String],
-      VarcharType(length),
+      StringType,
       "fromString",
       inputObject :: Nil,
+      returnNullable = false)
+    StaticInvoke(
+      classOf[CharVarcharCodegenUtils],
+      VarcharType(length),
+      "varcharTypeWriteSideCheck",
+      expr :: Literal(length) :: Nil,
       returnNullable = false)
   }
 
