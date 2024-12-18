@@ -239,9 +239,7 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest
         sql("select to_timestamp('abc', 'yyyy-MM-dd HH:mm:ss')").collect()
       },
       condition = "CANNOT_PARSE_TIMESTAMP",
-      parameters = Map(
-        "message" -> "Text 'abc' could not be parsed at index 0",
-        "ansiConfig" -> ansiConf)
+      parameters = Map("message" -> "Text 'abc' could not be parsed at index 0")
     )
   }
 
