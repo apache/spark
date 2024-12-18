@@ -25,6 +25,11 @@ SELECT uniform(0, 10L, 0) AS result;
 SELECT uniform(0, 10S, 0) AS result;
 SELECT uniform(10, 20, 0) AS result;
 SELECT uniform(10.0F, 20.0F, 0) AS result;
+SELECT uniform(10.0F, 20.0F, 0.0F) AS result;
+SELECT uniform(10.0F, 20.0F, 0.0D) AS result;
+SELECT uniform(cast(10 as decimal(10, 3)), cast(20 as decimal(10, 3)), 0.0D) AS result;
+SELECT uniform(cast(10 as decimal(10, 3)), cast(20 as decimal(10, 3)), cast(0 as decimal(10, 3)))
+  AS result;
 SELECT uniform(10.0D, 20.0D, CAST(3 / 7 AS LONG)) AS result;
 SELECT uniform(10, 20.0F, 0) AS result;
 SELECT uniform(10, 20, 0) AS result FROM VALUES (0), (1), (2) tab(col);
@@ -37,6 +42,9 @@ SELECT uniform(10, 20, col) AS result FROM VALUES (0), (1), (2) tab(col);
 SELECT uniform(col, 10, 0) AS result FROM VALUES (0), (1), (2) tab(col);
 SELECT uniform(10) AS result;
 SELECT uniform(10, 20, 30, 40) AS result;
+SELECT uniform('abc', 10, 0) AS result;
+SELECT uniform(0, 'def', 0) AS result;
+SELECT uniform(0, 10, 'ghi') AS result;
 
 -- The randstr random string generation function supports generating random strings within a
 -- specified length. We use a seed of zero for these queries to keep tests deterministic.

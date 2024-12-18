@@ -172,6 +172,39 @@ struct<result:float>
 
 
 -- !query
+SELECT uniform(10.0F, 20.0F, 0.0F) AS result
+-- !query schema
+struct<result:float>
+-- !query output
+17.604954
+
+
+-- !query
+SELECT uniform(10.0F, 20.0F, 0.0D) AS result
+-- !query schema
+struct<result:float>
+-- !query output
+17.604954
+
+
+-- !query
+SELECT uniform(cast(10 as decimal(10, 3)), cast(20 as decimal(10, 3)), 0.0D) AS result
+-- !query schema
+struct<result:decimal(10,3)>
+-- !query output
+17.605
+
+
+-- !query
+SELECT uniform(cast(10 as decimal(10, 3)), cast(20 as decimal(10, 3)), cast(0 as decimal(10, 3)))
+  AS result
+-- !query schema
+struct<result:decimal(10,3)>
+-- !query output
+17.605
+
+
+-- !query
 SELECT uniform(10.0D, 20.0D, CAST(3 / 7 AS LONG)) AS result
 -- !query schema
 struct<result:double>
@@ -325,6 +358,84 @@ org.apache.spark.sql.AnalysisException
     "startIndex" : 8,
     "stopIndex" : 30,
     "fragment" : "uniform(10, 20, 30, 40)"
+  } ]
+}
+
+
+-- !query
+SELECT uniform('abc', 10, 0) AS result
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"abc\"",
+    "inputType" : "\"STRING\"",
+    "paramIndex" : "first",
+    "requiredType" : "integer or floating-point",
+    "sqlExpr" : "\"uniform(abc, 10, 0)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 28,
+    "fragment" : "uniform('abc', 10, 0)"
+  } ]
+}
+
+
+-- !query
+SELECT uniform(0, 'def', 0) AS result
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"def\"",
+    "inputType" : "\"STRING\"",
+    "paramIndex" : "second",
+    "requiredType" : "integer or floating-point",
+    "sqlExpr" : "\"uniform(0, def, 0)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 27,
+    "fragment" : "uniform(0, 'def', 0)"
+  } ]
+}
+
+
+-- !query
+SELECT uniform(0, 10, 'ghi') AS result
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"ghi\"",
+    "inputType" : "\"STRING\"",
+    "paramIndex" : "third",
+    "requiredType" : "integer or floating-point",
+    "sqlExpr" : "\"uniform(0, 10, ghi)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 28,
+    "fragment" : "uniform(0, 10, 'ghi')"
   } ]
 }
 
