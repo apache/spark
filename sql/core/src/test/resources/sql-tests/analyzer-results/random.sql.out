@@ -440,3 +440,9 @@ org.apache.spark.sql.AnalysisException
 SELECT randstr(-1, 0) AS result
 -- !query analysis
 [Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT randstr(10, "a") AS result FROM VALUES (0) tab(a)
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]

@@ -23,7 +23,7 @@ import java.sql.{Date, Timestamp}
 import scala.reflect.runtime.universe.runtimeMirror
 import scala.util.Random
 
-import org.apache.spark.{QueryContextType, SPARK_DOC_ROOT, SparkException, SparkRuntimeException}
+import org.apache.spark.{QueryContextType, SPARK_DOC_ROOT, SparkException, SparkNumberFormatException, SparkRuntimeException}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.expressions.{Expression, Literal, UnaryExpression}
@@ -458,14 +458,12 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     val df = Seq((0)).toDF("a")
     var expr = randstr(lit(10), lit("a"))
     checkError(
-      intercept[AnalysisException](df.select(expr)),
-      condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+      intercept[SparkNumberFormatException](df.select(expr).collect()),
+      condition = "CAST_INVALID_INPUT",
       parameters = Map(
-        "sqlExpr" -> "\"randstr(10, a)\"",
-        "paramIndex" -> "second",
-        "inputSql" -> "\"a\"",
-        "inputType" -> "\"STRING\"",
-        "requiredType" -> "INT or SMALLINT"),
+        "expression" -> "'a'",
+        "sourceType" -> "\"STRING\"",
+        "targetType" -> "\"BIGINT\""),
       context = ExpectedContext(
         contextType = QueryContextType.DataFrame,
         fragment = "randstr",
@@ -480,7 +478,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       condition = "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
       parameters = Map(
         "inputName" -> "`length`",
-        "inputType" -> "INT or SMALLINT",
+        "inputType" -> "integer",
         "inputExpr" -> "\"a\"",
         "sqlExpr" -> "\"randstr(a, 10)\""),
       context = ExpectedContext(

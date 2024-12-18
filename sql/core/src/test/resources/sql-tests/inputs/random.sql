@@ -61,3 +61,4 @@ SELECT randstr(col, 0) AS result FROM VALUES (0), (1), (2) tab(col);
 SELECT randstr(10, col) AS result FROM VALUES (0), (1), (2) tab(col);
 SELECT randstr(10, 0, 1) AS result;
 SELECT randstr(-1, 0) AS result;
+SELECT randstr(10, "a") AS result FROM VALUES (0) tab(a);
