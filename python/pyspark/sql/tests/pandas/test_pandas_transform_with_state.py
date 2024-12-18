@@ -1117,7 +1117,8 @@ class TransformWithStateInPandasTestsMixin:
             initial_state=None,
         )
 
-    # This test covers value state variable and read change feed, snapshotStartBatchId related options
+    # This test covers value state variable and read change feed,
+    # snapshotStartBatchId related options
     def test_transform_with_value_state_metadata(self):
         checkpoint_path = tempfile.mktemp()
 

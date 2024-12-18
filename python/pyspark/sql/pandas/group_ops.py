@@ -508,14 +508,15 @@ class PandasGroupedOpsMixin:
             statefulProcessorApiClient: StatefulProcessorApiClient,
         ) -> Iterator["PandasDataFrameLike"]:
             # Driver handle is different from the handle used on executors;
-            # On JVM side, we will use `DriverStatefulProcessorHandleImpl` for driver handle which will only be used
-            # for handling init() and get the state schema on the driver.
+            # On JVM side, we will use `DriverStatefulProcessorHandleImpl` for driver handle which
+            # will only be used for handling init() and get the state schema on the driver.
             driver_handle = StatefulProcessorHandle(statefulProcessorApiClient)
             statefulProcessorApiClient.set_handle_state(StatefulProcessorHandleState.PRE_INIT)
             statefulProcessor.init(driver_handle)
 
-            # This method is used for the driver-side stateful processor after we have collected all the necessary
-            # schemas. This instance of the DriverStatefulProcessorHandleImpl won't be used again on JVM.
+            # This method is used for the driver-side stateful processor after we have collected
+            # all the necessary schemas. This instance of the DriverStatefulProcessorHandleImpl
+            # won't be used again on JVM.
             statefulProcessor.close()
 
             # return a dummy results, no return value is needed for pre init
