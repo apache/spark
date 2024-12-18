@@ -224,8 +224,9 @@ private[spark] object HiveUtils extends Logging {
   val QUOTE_HIVE_STRUCT_FIELD_NAME =
     buildConf("spark.sql.hive.quoteHiveStructFieldName")
       .doc("When true, for a column defined in struct type, when it contains special characters " +
-        "in the field name, Spark will quote it for verification. E.g. struct<x:int,y.z:int>" +
-        " is read as struct<`x`:int,`y.z`:int> for verification.")
+        "in the field name, Spark will quote it for verification. " +
+        "E.g. struct&lt;x:int,y.z:int&gt; is read as " +
+        "struct&lt;&#96;x&#96;:int,&#96;y.z&#96;:int&gt; for verification.")
       .version("4.0.0")
       .booleanConf
       .createWithDefault(false)
