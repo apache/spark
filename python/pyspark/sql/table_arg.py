@@ -18,7 +18,7 @@
 from typing import TYPE_CHECKING
 
 from pyspark.sql.classic.column import _to_java_column, _to_seq
-from pyspark.sql.udtf_argument import UDTFArgument
+from pyspark.sql.tvf_argument import TableValuedFunctionArgument
 from pyspark.sql.utils import get_active_spark_context
 
 
@@ -27,7 +27,7 @@ if TYPE_CHECKING:
     from pyspark.sql._typing import ColumnOrName
 
 
-class TableArg(UDTFArgument):
+class TableArg(TableValuedFunctionArgument):
     def __init__(self, j_table_arg: "JavaObject"):
         self._j_table_arg = j_table_arg
 
