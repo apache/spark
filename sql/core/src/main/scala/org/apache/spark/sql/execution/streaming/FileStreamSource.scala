@@ -34,7 +34,7 @@ import org.apache.spark.sql.classic.{DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.connector.read.streaming
 import org.apache.spark.sql.connector.read.streaming.{ReadAllAvailable, ReadLimit, ReadMaxBytes, ReadMaxFiles, SupportsAdmissionControl, SupportsTriggerAvailableNow}
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.execution.datasources.{DataSource, InMemoryFileIndex, LogicalRelation}
+import org.apache.spark.sql.execution.datasources.{DataSource, FileIndexOptions, InMemoryFileIndex, LogicalRelation}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.ArrayImplicits._
@@ -73,8 +73,9 @@ class FileStreamSource(
 
   private val optionsForInnerDataSource = sourceOptions.optionMapWithoutPath ++ {
     val pathOption =
-      if (!SparkHadoopUtil.get.isGlobPath(new Path(path)) && options.contains("path")) {
-        Map("basePath" -> path)
+      if (!SparkHadoopUtil.get.isGlobPath(new Path(path)) && options.contains("path") &&
+          !options.contains(FileIndexOptions.BASE_PATH_PARAM)) {
+        Map(FileIndexOptions.BASE_PATH_PARAM -> path)
       } else {
         Map()
       }
