@@ -22,6 +22,7 @@ import java.util.UUID
 import scala.reflect.ClassTag
 
 import org.apache.spark.{Partition, TaskContext}
+import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.internal.SessionState
 import org.apache.spark.sql.types.StructType
@@ -117,7 +118,8 @@ class StateStoreRDD[T: ClassTag, U: ClassTag](
     @transient private val storeCoordinator: Option[StateStoreCoordinatorRef],
     useColumnFamilies: Boolean = false,
     extraOptions: Map[String, String] = Map.empty,
-    useMultipleValuesPerKey: Boolean = false)
+    useMultipleValuesPerKey: Boolean = false,
+    stateSchemaMetadata: Option[Broadcast[StateSchemaMetadata]] = None)
   extends BaseStateStoreRDD[T, U](dataRDD, checkpointLocation, queryRunId, operatorId,
     sessionState, storeCoordinator, extraOptions) {
 
@@ -131,7 +133,7 @@ class StateStoreRDD[T: ClassTag, U: ClassTag](
       storeProviderId, keySchema, valueSchema, keyStateEncoderSpec, storeVersion,
       uniqueId.map(_.apply(partition.index).head),
       useColumnFamilies, storeConf, hadoopConfBroadcast.value.value,
-      useMultipleValuesPerKey)
+      useMultipleValuesPerKey, stateSchemaMetadata)
     storeUpdateFunction(store, inputIter)
   }
 }

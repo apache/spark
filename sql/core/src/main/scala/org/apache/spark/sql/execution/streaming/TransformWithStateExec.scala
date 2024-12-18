@@ -75,7 +75,8 @@ case class TransformWithStateExec(
     initialStateGroupingAttrs: Seq[Attribute],
     initialStateDataAttrs: Seq[Attribute],
     initialStateDeserializer: Expression,
-    initialState: SparkPlan)
+    initialState: SparkPlan,
+    stateSchemaMetadata: Option[Broadcast[StateSchemaMetadata]] = None)
   extends BinaryExecNode with StateStoreWriter with WatermarkSupport with ObjectProducerExec {
 
   override def shortName: String = "transformWithStateExec"
@@ -478,28 +479,59 @@ case class TransformWithStateExec(
       case Some(metadata) =>
         metadata match {
           case v2: OperatorStateMetadataV2 =>
-            Some(new Path(v2.stateStoreInfo.head.stateSchemaFilePath))
+            val ssInfo = v2.stateStoreInfo.head
+            val stateSchemaFilePath = ssInfo.stateSchemaFilePaths(ssInfo.stateSchemaId)
+            Some(new Path(stateSchemaFilePath))
           case _ => None
         }
       case None => None
     }
+
     List(StateSchemaCompatibilityChecker.
       validateAndMaybeEvolveStateSchema(getStateInfo, hadoopConf,
       newSchemas.values.toList, session.sessionState, stateSchemaVersion,
       storeName = StateStoreId.DEFAULT_STORE_NAME,
       oldSchemaFilePath = oldStateSchemaFilePath,
-      newSchemaFilePath = Some(newStateSchemaFilePath)))
+      newSchemaFilePath = Some(newStateSchemaFilePath),
+      usingAvro = session.sessionState.conf.stateStoreEncodingFormat == "avro"))
+  }
+
+  override def stateSchemaMapping(
+      stateSchemaValidationResults: List[StateSchemaValidationResult],
+      oldMetadata: Option[OperatorStateMetadata]): List[Map[Int, String]] = {
+    val validationResult = stateSchemaValidationResults.head
+    val evolvedSchema = validationResult.evolvedSchema
+    if (evolvedSchema) {
+      val (oldSchemaId, oldSchemaPaths): (Int, Map[Int, String]) = oldMetadata match {
+        case Some(v2: OperatorStateMetadataV2) =>
+          val ssInfo = v2.stateStoreInfo.head
+          (ssInfo.stateSchemaId, ssInfo.stateSchemaFilePaths)
+        case _ => (-1, Map.empty)
+      }
+      List(oldSchemaPaths + (oldSchemaId + 1 -> validationResult.schemaPath))
+    } else {
+      oldMetadata match {
+        case Some(v2: OperatorStateMetadataV2) =>
+          // If schema hasn't evolved, keep existing mappings
+          val ssInfo = v2.stateStoreInfo.head
+          List(ssInfo.stateSchemaFilePaths)
+        case _ =>
+          // If no previous metadata and no evolution, start with schema ID 0
+          List(Map(0 -> validationResult.schemaPath))
+      }
+    }
   }
 
   /** Metadata of this stateful operator and its states stores. */
   override def operatorStateMetadata(
-      stateSchemaPaths: List[String]): OperatorStateMetadata = {
+      stateSchemaPaths: List[Map[Int, String]]): OperatorStateMetadata = {
     val info = getStateInfo
     val operatorInfo = OperatorInfoV1(info.operatorId, shortName)
     // stateSchemaFilePath should be populated at this point
+    val maxId = stateSchemaPaths.head.keys.max
     val stateStoreInfo =
       Array(StateStoreMetadataV2(
-        StateStoreId.DEFAULT_STORE_NAME, 0, info.numPartitions, stateSchemaPaths.head))
+        StateStoreId.DEFAULT_STORE_NAME, 0, info.numPartitions, maxId, stateSchemaPaths.head))
 
     val operatorProperties = TransformWithStateOperatorProperties(
       timeMode.toString,
@@ -586,7 +618,8 @@ case class TransformWithStateExec(
           NoPrefixKeyStateEncoderSpec(keyEncoder.schema),
           session.sessionState,
           Some(session.streams.stateStoreCoordinator),
-          useColumnFamilies = true
+          useColumnFamilies = true,
+          stateSchemaMetadata = stateSchemaMetadata
         ) {
           case (store: StateStore, singleIterator: Iterator[InternalRow]) =>
             processData(store, singleIterator)
