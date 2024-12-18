@@ -281,8 +281,7 @@ class TransformWithStateInPandasPythonPreInitRunner(
       val errMessage = PythonWorkerUtils.readUTF(dataIn)
       throw streamingPythonRunnerInitializationFailure(resFromPython, errMessage)
     }
-    logInfo("Runner initialization succeeded (returned" +
-      s" $resFromPython).")
+    logInfo("Driver Python Runner initialization succeeded.")
 
     // start state server, update socket port
     startStateServer()
