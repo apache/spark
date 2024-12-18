@@ -50,6 +50,7 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
  */
 @Evolving
 final class DataStreamReader private[sql](sparkSession: SparkSession) extends api.DataStreamReader {
+
   /** @inheritdoc */
   def format(source: String): this.type = {
     this.source = source
@@ -126,16 +127,17 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends ap
               sparkSession,
               StreamingRelationV2(
                 Some(provider), source, table, dsOptions,
-                toAttributes(table.columns.asSchema), None, None, v1Relation))
+                toAttributes(table.columns.asSchema), None, None, v1Relation))(Set.empty)
 
           // fallback to v1
           // TODO (SPARK-27483): we should move this fallback logic to an analyzer rule.
-          case _ => Dataset.ofRows(sparkSession, StreamingRelation(v1DataSource))
+          case _ =>
+            Dataset.ofRows(sparkSession, StreamingRelation(v1DataSource))(Set.empty)
         }
 
       case _ =>
         // Code path for data source v1.
-        Dataset.ofRows(sparkSession, StreamingRelation(v1DataSource))
+        Dataset.ofRows(sparkSession, StreamingRelation(v1DataSource))(Set.empty)
     }
   }
 
@@ -157,7 +159,7 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends ap
       UnresolvedRelation(
         identifier,
         new CaseInsensitiveStringMap(extraOptions.toMap.asJava),
-        isStreaming = true))
+        isStreaming = true))(Set.empty)
   }
 
   override protected def assertNoSpecifiedSchema(operation: String): Unit = {
