@@ -19,11 +19,31 @@ package org.apache.spark.sql.execution.datasources.parquet
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.util.GenericArrayData
+import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types._
 import org.apache.spark.types.variant._
 import org.apache.spark.unsafe.types._
+
+case class SparkShreddedRow(row: SpecializedGetters) extends ShreddingUtils.ShreddedRow {
+  override def isNullAt(ordinal: Int): Boolean = row.isNullAt(ordinal)
+  override def getBoolean(ordinal: Int): Boolean = row.getBoolean(ordinal)
+  override def getByte(ordinal: Int): Byte = row.getByte(ordinal)
+  override def getShort(ordinal: Int): Short = row.getShort(ordinal)
+  override def getInt(ordinal: Int): Int = row.getInt(ordinal)
+  override def getLong(ordinal: Int): Long = row.getLong(ordinal)
+  override def getFloat(ordinal: Int): Float = row.getFloat(ordinal)
+  override def getDouble(ordinal: Int): Double = row.getDouble(ordinal)
+  override def getDecimal(ordinal: Int, precision: Int, scale: Int): java.math.BigDecimal =
+    row.getDecimal(ordinal, precision, scale).toJavaBigDecimal
+  override def getString(ordinal: Int): String = row.getUTF8String(ordinal).toString
+  override def getBinary(ordinal: Int): Array[Byte] = row.getBinary(ordinal)
+  override def getStruct(ordinal: Int, numFields: Int): SparkShreddedRow =
+    SparkShreddedRow(row.getStruct(ordinal, numFields))
+  override def getArray(ordinal: Int): SparkShreddedRow =
+    SparkShreddedRow(row.getArray(ordinal))
+  override def numElements(): Int = row.asInstanceOf[ArrayData].numElements()
+}
 
 case object SparkShreddingUtils {
   val VariantValueFieldName = "value";
@@ -53,16 +73,21 @@ case object SparkShreddingUtils {
    */
   def variantShreddingSchema(dataType: DataType, isTopLevel: Boolean = true): StructType = {
     val fields = dataType match {
-      case ArrayType(elementType, containsNull) =>
+      case ArrayType(elementType, _) =>
+        // Always set containsNull to false. One of value or typed_value must always be set for
+        // array elements.
         val arrayShreddingSchema =
-          ArrayType(variantShreddingSchema(elementType, false), containsNull)
+          ArrayType(variantShreddingSchema(elementType, false), containsNull = false)
         Seq(
           StructField(VariantValueFieldName, BinaryType, nullable = true),
           StructField(TypedValueFieldName, arrayShreddingSchema, nullable = true)
         )
       case StructType(fields) =>
+        // The field name level is always non-nullable: Variant null values are represented in the
+        // "value" columna as "00", and missing values are represented by setting both "value" and
+        // "typed_value" to null.
         val objectShreddingSchema = StructType(fields.map(f =>
-            f.copy(dataType = variantShreddingSchema(f.dataType, false))))
+            f.copy(dataType = variantShreddingSchema(f.dataType, false), nullable = false)))
         Seq(
           StructField(VariantValueFieldName, BinaryType, nullable = true),
           StructField(TypedValueFieldName, objectShreddingSchema, nullable = true)
@@ -216,5 +241,10 @@ case object SparkShreddingUtils {
     VariantShreddingWriter.castShredded(v, schema, new SparkShreddedResultBuilder())
         .asInstanceOf[SparkShreddedResult]
         .row
+  }
+
+  def rebuild(row: InternalRow, schema: VariantSchema): VariantVal = {
+    val v = ShreddingUtils.rebuild(SparkShreddedRow(row), schema)
+    new VariantVal(v.getValue, v.getMetadata)
   }
 }

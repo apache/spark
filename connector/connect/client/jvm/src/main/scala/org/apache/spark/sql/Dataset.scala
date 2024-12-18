@@ -383,20 +383,44 @@ class Dataset[T] private[sql] (
     }
   }
 
-  // TODO(SPARK-50134): Support Lateral Join API in Spark Connect
-  // scalastyle:off not.implemented.error.usage
-  /** @inheritdoc */
-  def lateralJoin(right: DS[_]): DataFrame = ???
+  private def lateralJoin(
+      right: DS[_],
+      joinExprs: Option[Column],
+      joinType: String): DataFrame = {
+    val joinTypeValue = toJoinType(joinType)
+    joinTypeValue match {
+      case proto.Join.JoinType.JOIN_TYPE_INNER | proto.Join.JoinType.JOIN_TYPE_LEFT_OUTER |
+          proto.Join.JoinType.JOIN_TYPE_CROSS =>
+      case _ =>
+        throw new IllegalArgumentException(s"Unsupported lateral join type $joinType")
+    }
+    sparkSession.newDataFrame { builder =>
+      val lateralJoinBuilder = builder.getLateralJoinBuilder
+      lateralJoinBuilder.setLeft(plan.getRoot).setRight(right.plan.getRoot)
+      joinExprs.foreach(c => lateralJoinBuilder.setJoinCondition(c.expr))
+      lateralJoinBuilder.setJoinType(joinTypeValue)
+    }
+  }
 
   /** @inheritdoc */
-  def lateralJoin(right: DS[_], joinExprs: Column): DataFrame = ???
+  def lateralJoin(right: DS[_]): DataFrame = {
+    lateralJoin(right, None, "inner")
+  }
 
   /** @inheritdoc */
-  def lateralJoin(right: DS[_], joinType: String): DataFrame = ???
+  def lateralJoin(right: DS[_], joinExprs: Column): DataFrame = {
+    lateralJoin(right, Some(joinExprs), "inner")
+  }
 
   /** @inheritdoc */
-  def lateralJoin(right: DS[_], joinExprs: Column, joinType: String): DataFrame = ???
-  // scalastyle:on not.implemented.error.usage
+  def lateralJoin(right: DS[_], joinType: String): DataFrame = {
+    lateralJoin(right, None, joinType)
+  }
+
+  /** @inheritdoc */
+  def lateralJoin(right: DS[_], joinExprs: Column, joinType: String): DataFrame = {
+    lateralJoin(right, Some(joinExprs), joinType)
+  }
 
   override protected def sortInternal(global: Boolean, sortCols: Seq[Column]): Dataset[T] = {
     val sortExprs = sortCols.map { c =>

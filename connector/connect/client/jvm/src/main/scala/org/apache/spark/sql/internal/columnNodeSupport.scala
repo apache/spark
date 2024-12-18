@@ -164,6 +164,9 @@ object ColumnNodeToProtoConverter extends (ColumnNode => proto.Expression) {
           b.addArguments(apply(value, e))
         }
 
+      case LazyExpression(child, _) =>
+        builder.getLazyExpressionBuilder.setChild(apply(child, e))
+
       case ProtoColumnNode(e, _) =>
         return e
 
