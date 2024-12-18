@@ -85,11 +85,13 @@ private[sql] class RocksDBStateStoreProvider
       val dataEncoder = getDataEncoder(
         stateStoreEncoding, dataEncoderCacheKey, keyStateEncoderSpec, valueSchema)
 
+      val columnFamilyInfo = Some(ColumnFamilyInfo(colFamilyName, newColFamilyId))
+
       val keyEncoder = RocksDBStateEncoder.getKeyEncoder(
         dataEncoder,
         keyStateEncoderSpec,
         useColumnFamilies,
-        Some(newColFamilyId)
+        columnFamilyInfo
       )
       val valueEncoder = RocksDBStateEncoder.getValueEncoder(
         dataEncoder,
@@ -407,11 +409,18 @@ private[sql] class RocksDBStateStoreProvider
     val dataEncoder = getDataEncoder(
       stateStoreEncoding, dataEncoderCacheKey, keyStateEncoderSpec, valueSchema)
 
+    val columnFamilyInfo = if (useColumnFamilies) {
+      defaultColFamilyId = Some(rocksDB.createColFamilyIfAbsent(StateStore.DEFAULT_COL_FAMILY_NAME))
+      Some(ColumnFamilyInfo(StateStore.DEFAULT_COL_FAMILY_NAME, defaultColFamilyId.get))
+    } else {
+      None
+    }
+
     val keyEncoder = RocksDBStateEncoder.getKeyEncoder(
       dataEncoder,
       keyStateEncoderSpec,
       useColumnFamilies,
-      defaultColFamilyId
+      columnFamilyInfo
     )
     val valueEncoder = RocksDBStateEncoder.getValueEncoder(
       dataEncoder,
