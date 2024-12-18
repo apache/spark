@@ -16,12 +16,12 @@
 #
 
 
-class UDTFArgument:
+class TableValuedFunctionArgument:
     """
-    Base class for arguments passed to User-Defined Table Functions (UDTFs).
+    Base class for arguments passed to Table Valued Functions.
 
     This class is intentionally left empty and serves as a marker to achieve
-    parity with the Scala `UDTFArgument` trait.
+    parity with the Scala `TableValuedFunctionArgument` trait.
     """
 
     pass

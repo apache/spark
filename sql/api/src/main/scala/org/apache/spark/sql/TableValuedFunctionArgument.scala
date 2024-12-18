@@ -17,4 +17,4 @@
 
 package org.apache.spark.sql
 
-trait UDTFArgument
+trait TableValuedFunctionArgument

@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.expressions.{Ascending, Expression, Functio
 class TableArg(
     val expression: FunctionTableSubqueryArgumentExpression,
     private val sparkSession: SparkSession
-)  extends UDTFArgument {
+)  extends TableValuedFunctionArgument {
   import sparkSession.toRichColumn
 
   def partitionBy(cols: Seq[Column]): TableArg = {
