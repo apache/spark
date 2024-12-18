@@ -70,6 +70,12 @@
     ],
     "sqlState" : "42000"
   },
+  "AMBIGUOUS_RESOLVER_EXTENSION" : {
+    "message" : [
+      "The single-pass analyzer cannot process this query or command because the extension choice for <operator> is ambiguous: <extensions>."
+    ],
+    "sqlState" : "XX000"
+  },
   "ARITHMETIC_OVERFLOW" : {
     "message" : [
       "<message>.<alternative> If necessary set <config> to \"false\" to bypass this error."
@@ -1658,6 +1664,39 @@
       "Sketches have different `lgConfigK` values: <left> and <right>. Set the `allowDifferentLgConfigK` parameter to true to call <function> with different `lgConfigK` values."
     ],
     "sqlState" : "22000"
+  },
+  "HYBRID_ANALYZER_EXCEPTION" : {
+    "message" : [
+      "An failure occurred when attempting to resolve a query or command with both the legacy fixed-point analyzer as well as the single-pass resolver."
+    ],
+    "subClass" : {
+      "FIXED_POINT_FAILED_SINGLE_PASS_SUCCEEDED" : {
+        "message" : [
+          "Fixed-point resolution failed, but single-pass resolution succeeded.",
+          "Single-pass analyzer output:",
+          "<singlePassOutput>"
+        ]
+      },
+      "LOGICAL_PLAN_COMPARISON_MISMATCH" : {
+        "message" : [
+          "Outputs of fixed-point and single-pass analyzers do not match.",
+          "Fixed-point analyzer output:",
+          "<fixedPointOutput>",
+          "Single-pass analyzer output:",
+          "<singlePassOutput>"
+        ]
+      },
+      "OUTPUT_SCHEMA_COMPARISON_MISMATCH" : {
+        "message" : [
+          "Output schemas of fixed-point and single-pass analyzers do not match.",
+          "Fixed-point analyzer output schema:",
+          "<fixedPointOutputSchema>",
+          "Single-pass analyzer output schema:",
+          "<singlePassOutputSchema>"
+        ]
+      }
+    },
+    "sqlState" : "XX000"
   },
   "IDENTIFIER_TOO_MANY_NAME_PARTS" : {
     "message" : [
@@ -5657,6 +5696,12 @@
         ]
       }
     },
+    "sqlState" : "0A000"
+  },
+  "UNSUPPORTED_SINGLE_PASS_ANALYZER_FEATURE" : {
+    "message" : [
+      "The single-pass analyzer cannot process this query or command because it does not yet support <feature>."
+    ],
     "sqlState" : "0A000"
   },
   "UNSUPPORTED_STREAMING_OPERATOR_WITHOUT_WATERMARK" : {
