@@ -36,10 +36,10 @@ to return the metadata pertaining to a partition or column respectively.
 
 * **format**
 
-    Specifies the optional format of describe output. If `EXTENDED` is specified
+    Specifies the optional format of describe output. If `EXTENDED` or `FORMATTED` is specified
     then additional metadata information (such as parent database, owner, and access time)
-    is returned. If `EXTENDED` is specified, then the metadata can be returned in JSON format 
-    by specifying `AS JSON` at the end of the statement.
+    is returned. Also if `EXTENDED` or `FORMATTED` is specified, then the metadata can be returned 
+    in JSON format by specifying `AS JSON` at the end of the statement.
 
 * **table_identifier**
 
@@ -67,8 +67,8 @@ to return the metadata pertaining to a partition or column respectively.
 
 * **AS JSON**
 
-  An optional parameter to return the table metadata in JSON format. Only supported when EXTENDED
-  format is specified.
+  An optional parameter to return the table metadata in JSON format. Only supported when `EXTENDED`
+  or `FORMATTED` format is specified.
 
   **Syntax:** `[ AS JSON ]`
 
@@ -81,8 +81,8 @@ to return the metadata pertaining to a partition or column respectively.
     ```sql
     {
       "table_name": "<table_name>",
-      "catalog_name": [...],
-      "database_names": [...],
+      "catalog_name": "<catalog_name>",
+      "namespaces": [...],
       "qualified_name": "<qualified_name>"
       "type": "<table_type>",
       "provider": "<provider>",
@@ -235,7 +235,7 @@ DESCRIBE customer salesdb.customer.name;
 
 -- Returns the table metadata in JSON format.
 DESC FORMATTED customer AS JSON;
-{"table_name":"customer","catalog_name":"spark_catalog","database_names":["default"],"qualified_name":"spark_catalog.default.customer","columns":[{"id":1,"name":"cust_id","type":{"type":"integer"}},{"id":2,"name":"name","type":{"type":"string"},"comment":"Short name"},{"id":3,"name":"state","type":{"type":"varchar(20)"}}],"location": "file:/tmp/salesdb.db/custom...","created_time":"2020-04-07T14:05:43Z","last_access":"UNKNOWN","created_by":"None","type":"MANAGED","provider":"parquet","partition_provider":"Catalog","partition_columns":["state"]}
+{"table_name":"customer","catalog_name":"spark_catalog","namespaces":["default"],"qualified_name":"spark_catalog.default.customer","columns":[{"id":1,"name":"cust_id","type":{"type":"integer"}},{"id":2,"name":"name","type":{"type":"string"},"comment":"Short name"},{"id":3,"name":"state","type":{"type":"varchar(20)"}}],"location": "file:/tmp/salesdb.db/custom...","created_time":"2020-04-07T14:05:43Z","last_access":"UNKNOWN","created_by":"None","type":"MANAGED","provider":"parquet","partition_provider":"Catalog","partition_columns":["state"]}
 ```
 
 ### Related Statements

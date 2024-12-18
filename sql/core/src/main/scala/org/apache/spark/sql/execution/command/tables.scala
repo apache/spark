@@ -787,7 +787,7 @@ case class DescribeTableJsonCommand(
       val catalogName = table.catalog.map(s => s""""$s"""").getOrElse("")
       val databaseNameArr = table.database.map(s => s""""$s"""").mkString("[", ",", "]")
       addKeyValueToJson(result, "catalog_name", parse(catalogName))
-      addKeyValueToJson(result, "database_names", parse(databaseNameArr))
+      addKeyValueToJson(result, "namespaces", parse(databaseNameArr))
       val catalogFullName = table.catalog.mkString(".")
       val databaseFullName = table.database.mkString(".")
       val qualifiedName = s"$catalogFullName.$databaseFullName.${table.table}"

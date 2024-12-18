@@ -176,7 +176,7 @@ case class CatalogTablePartition(
         case s: String => s""""$s""""
         case _ => v
       }
-      s""""${k}": $valueStr"""
+      s""""$k": $valueStr"""
     }.mkString(", ")
     map.put("Partition Values", s"{$specJson}")
 
@@ -186,7 +186,7 @@ case class CatalogTablePartition(
 
     if (parameters.nonEmpty) {
       val paramString = SQLConf.get.redactOptions(parameters)
-        .map { case (k, v) => s""""${k}": $v""" }
+        .map { case (k, v) => s""""$k": $v""" }
         .mkString(", ")
       map.put("Partition Parameters", s"{$paramString}")
     }
@@ -206,14 +206,14 @@ case class CatalogTablePartition(
   }
 
   override def toString: String = {
-    toLinkedHashMap.map { case ((key, value)) =>
+    toLinkedHashMap.map { case (key, value) =>
       if (value.isEmpty) key else s"$key: $value"
     }.mkString("CatalogPartition(\n\t", "\n\t", ")")
   }
 
   /** Readable string representation for the CatalogTablePartition. */
   def simpleString: String = {
-    toLinkedHashMap.map { case ((key, value)) =>
+    toLinkedHashMap.map { case (key, value) =>
       if (value.isEmpty) key else s"$key: $value"
     }.mkString("", "\n", "")
   }
@@ -669,10 +669,6 @@ case class CatalogTable(
     val partitionColumns = partitionColumnNames
       .map(s => s""""$s"""")
       .mkString("[", ", ", "]")
-
-//    val lastAccess =
-//      if (lastAccessTime <= 0) "\"UNKNOWN\""
-//      else s""""${new Date(lastAccessTime).toInstant.toString}""""
 
     val lastAccess =
       if (lastAccessTime <= 0) "\"UNKNOWN\""
