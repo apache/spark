@@ -15,17 +15,22 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.util
+package org.apache.spark.sql.catalyst.analysis.resolver
 
-import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.util.truncatedString
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 
-class UtilSuite extends SparkFunSuite {
-  test("truncatedString") {
-    assert(truncatedString(Nil, "[", ", ", "]", 2) == "[]")
-    assert(truncatedString(Seq(1, 2), "[", ", ", "]", 2) == "[1, 2]")
-    assert(truncatedString(Seq(1, 2, 3), "[", ", ", "]", 2) == "[1, ... 2 more fields]")
-    assert(truncatedString(Seq(1, 2, 3), "[", ", ", "]", -5) == "[, ... 3 more fields]")
-    assert(truncatedString(Seq(1, 2, 3), ", ", 10) == "1, 2, 3")
+/**
+ * A mixin trait for all operator resolvers that need to resolve their children.
+ */
+trait ResolvesOperatorChildren {
+
+  /**
+   * Resolves generic [[LogicalPlan]] children and returns its copy with children resolved.
+   */
+  protected def withResolvedChildren[OperatorType <: LogicalPlan](
+      unresolvedOperator: OperatorType,
+      resolve: LogicalPlan => LogicalPlan): OperatorType = {
+    val newChildren = unresolvedOperator.children.map(resolve(_))
+    unresolvedOperator.withNewChildren(newChildren).asInstanceOf[OperatorType]
   }
 }

@@ -27,7 +27,7 @@ import scala.util.control.NonFatal
 import org.apache.spark.SparkException
 import org.apache.spark.api.python.{PythonException, PythonWorkerUtils, SimplePythonFunction, SpecialLengths, StreamingPythonRunner}
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKeys.{DATAFRAME_ID, QUERY_ID, RUN_ID, SESSION_ID}
+import org.apache.spark.internal.LogKeys.{DATAFRAME_ID, QUERY_ID, RUN_ID_STRING, SESSION_ID}
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.connect.service.SessionHolder
 import org.apache.spark.sql.connect.service.SparkConnectService
@@ -203,7 +203,7 @@ object StreamingForeachBatchHelper extends Logging {
       Option(cleanerCache.remove(key)).foreach { cleaner =>
         logInfo(
           log"Cleaning up runner for queryId ${MDC(QUERY_ID, key.queryId)} " +
-            log"runId ${MDC(RUN_ID, key.runId)}.")
+            log"runId ${MDC(RUN_ID_STRING, key.runId)}.")
         cleaner.close()
       }
     }
