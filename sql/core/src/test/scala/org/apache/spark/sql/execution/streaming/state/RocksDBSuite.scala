@@ -688,7 +688,7 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
       enableStateStoreCheckpointIds = enableStateStoreCheckpointIds,
       versionToUniqueId = versionToUniqueId1) { db =>
       db.load(0)
-      db.put("a", "1")
+      db.put("a", "1") // write key a here
       db.commit()
 
       // Add some change log files after the snapshot
@@ -715,12 +715,12 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
       enableStateStoreCheckpointIds = enableStateStoreCheckpointIds,
       versionToUniqueId = versionToUniqueId2) { db =>
       db.load(0)
-      db.put("b", "2")
+      db.put("b", "2") // write key b here
       db.commit()
       // Add some change log files after the snapshot
       for (version <- 2 to 5) {
         db.load(version - 1)
-        db.put(version.toString, (version + 1).toString) // update "1" -> "1", "2" -> "2", ...
+        db.put(version.toString, (version + 1).toString) // update "1" -> "2", "2" -> "3", ...
         db.commit()
       }
 
@@ -743,8 +743,27 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
       db.load(10)
       assert(toStr(db.get("a")) === "1")
       for (version <- 2 to 10) {
-        // "1" -> "1", "2" -> "2", ...
+        // first time we write version -> version
+        // second time we write version -> version + 1
+        // here since we are loading from the first db lineage, we should see version -> version
         assert(toStr(db.get(version.toString)) === version.toString)
+      }
+    }
+
+    // During a load() with linage from the second rocksDB,
+    // the DB should load with data in the second db
+    withDB(remoteDir, conf = enableChangelogCheckpointingConf,
+      useColumnFamilies = useColumnFamily,
+      enableStateStoreCheckpointIds = enableStateStoreCheckpointIds,
+      versionToUniqueId = versionToUniqueId2) { db =>
+      db.load(10)
+      assert(toStr(db.get("b")) === "2")
+      for (version <- 2 to 10) {
+        // first time we write version -> version
+        // second time we write version -> version + 1
+        // here since we are loading from the second db lineage,
+        // we should see version -> version + 1
+        assert(toStr(db.get(version.toString)) === (version + 1).toString)
       }
     }
   }
