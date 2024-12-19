@@ -161,6 +161,9 @@ abstract class Optimizer(catalogManager: CatalogManager)
     val operatorOptimizationBatch: Seq[Batch] = Seq(
       Batch("Operator Optimization before Inferring Filters", fixedPoint,
         operatorOptimizationRuleSet: _*),
+      Batch("Rewrite With expression", fixedPoint,
+        RewriteWithExpression,
+        CollapseProject),
       Batch("Infer Filters", Once,
         InferFiltersFromGenerate,
         InferFiltersFromConstraints),
@@ -168,7 +171,10 @@ abstract class Optimizer(catalogManager: CatalogManager)
         operatorOptimizationRuleSet: _*),
       Batch("Push extra predicate through join", fixedPoint,
         PushExtraPredicateThroughJoin,
-        PushDownPredicates))
+        PushDownPredicates),
+      Batch("Rewrite With expression", fixedPoint,
+        RewriteWithExpression,
+        CollapseProject))
 
     val batches: Seq[Batch] = flattenBatches(Seq(
     Batch("Finish Analysis", FixedPoint(1), FinishAnalysis),
@@ -1811,7 +1817,9 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
     case Filter(condition, project @ Project(fields, grandChild))
       if fields.forall(_.deterministic) && canPushThroughCondition(grandChild, condition) =>
       val aliasMap = getAliasMap(project)
-      project.copy(child = Filter(replaceAlias(condition, aliasMap), grandChild))
+      val replacedByWith =
+        rewriteExpressionsByWith(splitConjunctivePredicates(condition), aliasMap)
+      project.copy(child = Filter(replaceAlias(replacedByWith.reduce(And), aliasMap), grandChild))
 
     // We can push down deterministic predicate through Aggregate, including throwable predicate.
     // If we can push down a filter through Aggregate, it means the filter only references the
@@ -1831,8 +1839,8 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
       }
 
       if (pushDown.nonEmpty) {
-        val pushDownPredicate = pushDown.reduce(And)
-        val replaced = replaceAlias(pushDownPredicate, aliasMap)
+        val replacedByWith = rewriteExpressionsByWith(pushDown, aliasMap)
+        val replaced = replaceAlias(replacedByWith.reduce(And), aliasMap)
         val newAggregate = aggregate.copy(child = Filter(replaced, aggregate.child))
         // If there is no more filter to stay up, just eliminate the filter.
         // Otherwise, create "Filter(stayUp) <- Aggregate <- Filter(pushDownPredicate)".
@@ -1976,6 +1984,28 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
     !condition.exists {
       case s: SubqueryExpression => s.plan.outputSet.intersect(attributes).nonEmpty
       case _ => false
+    }
+  }
+
+  private def rewriteExpressionsByWith(
+      exprs: Seq[Expression],
+      aliasMap: AttributeMap[Alias]): Seq[Expression] = {
+    exprs.map(rewriteExpressionByWith(_, aliasMap))
+  }
+
+  private def rewriteExpressionByWith(
+      expr: Expression,
+      aliasMap: AttributeMap[Alias]): Expression = {
+    val replaceMap = expr.collect { case a: Attribute => a }
+      .groupBy(identity)
+      .transform((_, v) => v.size)
+      .filter(_._2 > 1)
+      .map(m => m._1 -> trimAliases(aliasMap.getOrElse(m._1, m._1)))
+      .filter(m => !CollapseProject.isCheap(m._2))
+    if (replaceMap.nonEmpty) {
+      With(expr, replaceMap)
+    } else {
+      expr
     }
   }
 }
