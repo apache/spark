@@ -1064,6 +1064,28 @@ def collect_set(col: "ColumnOrName") -> Column:
 collect_set.__doc__ = pysparkfuncs.collect_set.__doc__
 
 
+def listagg(col: "ColumnOrName", delimiter: Optional[Union[Column, str, bytes]] = None) -> Column:
+    if delimiter is None:
+        return _invoke_function_over_columns("listagg", col)
+    else:
+        return _invoke_function_over_columns("listagg", col, lit(delimiter))
+
+
+listagg.__doc__ = pysparkfuncs.listagg.__doc__
+
+
+def listagg_distinct(
+    col: "ColumnOrName", delimiter: Optional[Union[Column, str, bytes]] = None
+) -> Column:
+    if delimiter is None:
+        return _invoke_function_over_columns("listagg_distinct", col)
+    else:
+        return _invoke_function_over_columns("listagg_distinct", col, lit(delimiter))
+
+
+listagg_distinct.__doc__ = pysparkfuncs.listagg_distinct.__doc__
+
+
 def corr(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("corr", col1, col2)
 
