@@ -94,7 +94,7 @@ case class WriteFilesExec(
     rddWithNonEmptyPartitions.mapPartitionsInternal { iterator =>
       val sparkStageId = TaskContext.get().stageId()
       val sparkPartitionId = TaskContext.get().partitionId()
-      val sparkAttemptNumber = TaskContext.get().taskAttemptId().toInt & Int.MaxValue
+      val sparkAttemptNumber = Math.abs(TaskContext.get().taskAttemptId().toInt)
 
       val ret = FileFormatWriter.executeTask(
         description,
