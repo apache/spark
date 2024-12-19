@@ -72,6 +72,13 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
       messageParameters = messageParameters)
   }
 
+  def relationNotFound(u: UnresolvedRelation): Nothing = {
+    u.getTagValue(UnresolvedRelation.RESOLUTION_ERROR) match {
+      case Some(ex) => throw ex
+      case _ => u.tableNotFound(u.multipartIdentifier)
+    }
+  }
+
   protected def hasMapType(dt: DataType): Boolean = {
     dt.existsRecursively(_.isInstanceOf[MapType])
   }
@@ -261,12 +268,11 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
     // top-down traversal.
     plan.foreach {
       case InsertIntoStatement(u: UnresolvedRelation, _, _, _, _, _, _) =>
-        u.tableNotFound(u.multipartIdentifier)
+        relationNotFound(u)
 
       // TODO (SPARK-27484): handle streaming write commands when we have them.
       case write: V2WriteCommand if write.table.isInstanceOf[UnresolvedRelation] =>
-        val tblName = write.table.asInstanceOf[UnresolvedRelation].multipartIdentifier
-        write.table.tableNotFound(tblName)
+        relationNotFound(write.table.asInstanceOf[UnresolvedRelation])
 
       // We should check for trailing comma errors first, since we would get less obvious
       // unresolved column errors if we do it bottom up
@@ -300,7 +306,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
         u.tableNotFound(u.multipartIdentifier)
 
       case u: UnresolvedRelation =>
-        u.tableNotFound(u.multipartIdentifier)
+        relationNotFound(u)
 
       case u: UnresolvedFunctionName =>
         val catalogPath = (currentCatalog.name +: catalogManager.currentNamespace).mkString(".")
@@ -527,7 +533,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
 
         operator match {
           case RelationTimeTravel(u: UnresolvedRelation, _, _) =>
-            u.tableNotFound(u.multipartIdentifier)
+            relationNotFound(u)
 
           case etw: EventTimeWatermark =>
             etw.eventTime.dataType match {
