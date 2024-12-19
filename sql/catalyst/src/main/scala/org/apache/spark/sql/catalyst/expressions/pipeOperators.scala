@@ -18,41 +18,56 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateFunction
-import org.apache.spark.sql.catalyst.trees.TreePattern.{PIPE_OPERATOR_SELECT, RUNTIME_REPLACEABLE, TreePattern}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 
 /**
- * Represents a SELECT clause when used with the |> SQL pipe operator.
- * We use this to make sure that no aggregate functions exist in the SELECT expressions.
+ * Represents an expression when used with a SQL pipe operator.
+ * We use this to check invariants about whether aggregate functions may exist in these expressions.
+ * @param child The child expression.
+ * @param isAggregate Whether the pipe operator is |> AGGREGATE.
+ *                    If true, the child expression must contain at least one aggregate function.
+ *                    If false, the child expression must not contain any aggregate functions.
+ * @param clause The clause of the pipe operator. This is used to generate error messages.
  */
-case class PipeSelect(child: Expression)
+case class PipeExpression(child: Expression, isAggregate: Boolean, clause: String)
   extends UnaryExpression with RuntimeReplaceable {
-  final override val nodePatterns: Seq[TreePattern] = Seq(PIPE_OPERATOR_SELECT, RUNTIME_REPLACEABLE)
-  override def withNewChildInternal(newChild: Expression): Expression = PipeSelect(newChild)
+  override def withNewChildInternal(newChild: Expression): Expression =
+    PipeExpression(newChild, isAggregate, clause)
   override lazy val replacement: Expression = {
-    def visit(e: Expression): Unit = e match {
-      case a: AggregateFunction =>
-        // If we used the pipe operator |> SELECT clause to specify an aggregate function, this is
-        // invalid; return an error message instructing the user to use the pipe operator
-        // |> AGGREGATE clause for this purpose instead.
-        throw QueryCompilationErrors.pipeOperatorSelectContainsAggregateFunction(a)
-      case _: WindowExpression =>
-        // Window functions are allowed in pipe SELECT operators, so do not traverse into children.
-      case _ =>
-        e.children.foreach(visit)
+    val firstAggregateFunction: Option[AggregateFunction] = findFirstAggregate(child)
+    if (isAggregate && firstAggregateFunction.isEmpty) {
+      throw QueryCompilationErrors.pipeOperatorAggregateExpressionContainsNoAggregateFunction(child)
+    } else if (!isAggregate) {
+      firstAggregateFunction.foreach { a =>
+        throw QueryCompilationErrors.pipeOperatorContainsAggregateFunction(a, clause)
+      }
     }
-    visit(child)
     child
+  }
+
+  /** Returns the first aggregate function in the given expression, or None if not found. */
+  private def findFirstAggregate(e: Expression): Option[AggregateFunction] = e match {
+    case a: AggregateFunction =>
+      Some(a)
+    case _: WindowExpression =>
+      // Window functions are allowed in these pipe operators, so do not traverse into children.
+      None
+    case _ =>
+      e.children.flatMap(findFirstAggregate).headOption
   }
 }
 
 object PipeOperators {
   // These are definitions of query result clauses that can be used with the pipe operator.
+  val aggregateClause = "AGGREGATE"
   val clusterByClause = "CLUSTER BY"
   val distributeByClause = "DISTRIBUTE BY"
+  val extendClause = "EXTEND"
   val limitClause = "LIMIT"
   val offsetClause = "OFFSET"
   val orderByClause = "ORDER BY"
+  val selectClause = "SELECT"
+  val setClause = "SET"
   val sortByClause = "SORT BY"
   val sortByDistributeByClause = "SORT BY ... DISTRIBUTE BY ..."
   val windowClause = "WINDOW"

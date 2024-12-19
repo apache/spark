@@ -20,7 +20,11 @@ package org.apache.spark.sql.jdbc.v2
 import java.sql.Connection
 
 import org.apache.spark.{SparkConf, SparkSQLFeatureNotSupportedException}
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.execution.{RowDataSourceScanExec, SparkPlan}
+import org.apache.spark.sql.execution.datasources.jdbc.JDBCRDD
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
 import org.apache.spark.sql.jdbc.MsSQLServerDatabaseOnDocker
 import org.apache.spark.sql.types._
@@ -36,6 +40,17 @@ import org.apache.spark.tags.DockerTest
  */
 @DockerTest
 class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest {
+
+  def getExternalEngineQuery(executedPlan: SparkPlan): String = {
+    getExternalEngineRdd(executedPlan).asInstanceOf[JDBCRDD].getExternalEngineQuery
+  }
+
+  def getExternalEngineRdd(executedPlan: SparkPlan): RDD[InternalRow] = {
+    val queryNode = executedPlan.collect { case r: RowDataSourceScanExec =>
+      r
+    }.head
+    queryNode.rdd
+  }
 
   override def excluded: Seq[String] = Seq(
     "simple scan with OFFSET",
@@ -145,5 +160,69 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JD
         |WHERE deptString = 'first'
         |""".stripMargin)
     assert(df.collect().length == 2)
+  }
+
+  test("SPARK-50087: SqlServer handle booleans in CASE WHEN test") {
+    val df = sql(
+      s"""|SELECT * FROM $catalogName.employee
+          |WHERE CASE WHEN name = 'Legolas' THEN name = 'Elf' ELSE NOT (name = 'Wizard') END
+          |""".stripMargin
+    )
+
+    // scalastyle:off
+    assert(getExternalEngineQuery(df.queryExecution.executedPlan) ==
+      """SELECT  "dept","name","salary","bonus" FROM "employee"  WHERE (CASE WHEN ("name" = 'Legolas') THEN IIF(("name" = 'Elf'), 1, 0) ELSE IIF(("name" <> 'Wizard'), 1, 0) END = 1)  """
+    )
+    // scalastyle:on
+    df.collect()
+  }
+
+  test("SPARK-50087: SqlServer handle booleans in CASE WHEN with always true test") {
+    val df = sql(
+      s"""|SELECT * FROM $catalogName.employee
+          |WHERE CASE WHEN (name = 'Legolas') THEN (name = 'Elf') ELSE (1=1) END
+          |""".stripMargin
+    )
+
+    // scalastyle:off
+    assert(getExternalEngineQuery(df.queryExecution.executedPlan) ==
+      """SELECT  "dept","name","salary","bonus" FROM "employee"  WHERE (CASE WHEN ("name" = 'Legolas') THEN IIF(("name" = 'Elf'), 1, 0) ELSE 1 END = 1)  """
+    )
+    // scalastyle:on
+    df.collect()
+  }
+
+  test("SPARK-50087: SqlServer handle booleans in nested CASE WHEN test") {
+    val df = sql(
+      s"""|SELECT * FROM $catalogName.employee
+          |WHERE CASE WHEN (name = 'Legolas') THEN
+          | CASE WHEN (name = 'Elf') THEN (name = 'Elrond') ELSE (name = 'Gandalf') END
+          | ELSE (name = 'Sauron') END
+          |""".stripMargin
+    )
+
+    // scalastyle:off
+    assert(getExternalEngineQuery(df.queryExecution.executedPlan) ==
+      """SELECT  "dept","name","salary","bonus" FROM "employee"  WHERE (CASE WHEN ("name" = 'Legolas') THEN IIF((CASE WHEN ("name" = 'Elf') THEN IIF(("name" = 'Elrond'), 1, 0) ELSE IIF(("name" = 'Gandalf'), 1, 0) END = 1), 1, 0) ELSE IIF(("name" = 'Sauron'), 1, 0) END = 1)  """
+    )
+    // scalastyle:on
+    df.collect()
+  }
+
+  test("SPARK-50087: SqlServer handle non-booleans in nested CASE WHEN test") {
+    val df = sql(
+      s"""|SELECT * FROM $catalogName.employee
+          |WHERE CASE WHEN (name = 'Legolas') THEN
+          | CASE WHEN (name = 'Elf') THEN 'Elf' ELSE 'Wizard' END
+          | ELSE 'Sauron' END = name
+          |""".stripMargin
+    )
+
+    // scalastyle:off
+    assert(getExternalEngineQuery(df.queryExecution.executedPlan) ==
+      """SELECT  "dept","name","salary","bonus" FROM "employee"  WHERE ("name" IS NOT NULL) AND ((CASE WHEN "name" = 'Legolas' THEN CASE WHEN "name" = 'Elf' THEN 'Elf' ELSE 'Wizard' END ELSE 'Sauron' END) = "name")  """
+    )
+    // scalastyle:on
+    df.collect()
   }
 }

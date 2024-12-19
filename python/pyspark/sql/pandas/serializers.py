@@ -36,6 +36,7 @@ from pyspark.sql.pandas.types import (
     _create_converter_from_pandas,
     _create_converter_to_pandas,
 )
+from pyspark.sql.streaming.stateful_processor_util import TransformWithStateInPandasFuncMode
 from pyspark.sql.types import (
     DataType,
     StringType,
@@ -1197,7 +1198,11 @@ class TransformWithStateInPandasSerializer(ArrowStreamPandasUDFSerializer):
         data_batches = generate_data_batches(_batches)
 
         for k, g in groupby(data_batches, key=lambda x: x[0]):
-            yield (k, g)
+            yield (TransformWithStateInPandasFuncMode.PROCESS_DATA, k, g)
+
+        yield (TransformWithStateInPandasFuncMode.PROCESS_TIMER, None, None)
+
+        yield (TransformWithStateInPandasFuncMode.COMPLETE, None, None)
 
     def dump_stream(self, iterator, stream):
         """
@@ -1281,4 +1286,8 @@ class TransformWithStateInPandasInitStateSerializer(TransformWithStateInPandasSe
         data_batches = generate_data_batches(_batches)
 
         for k, g in groupby(data_batches, key=lambda x: x[0]):
-            yield (k, g)
+            yield (TransformWithStateInPandasFuncMode.PROCESS_DATA, k, g)
+
+        yield (TransformWithStateInPandasFuncMode.PROCESS_TIMER, None, None)
+
+        yield (TransformWithStateInPandasFuncMode.COMPLETE, None, None)

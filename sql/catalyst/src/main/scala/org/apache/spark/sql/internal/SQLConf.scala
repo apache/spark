@@ -767,6 +767,13 @@ object SQLConf {
       .checkValue(_ > 0, "The initial number of partitions must be positive.")
       .createOptional
 
+  lazy val ALLOW_COLLATIONS_IN_MAP_KEYS =
+    buildConf("spark.sql.collation.allowInMapKeys")
+      .doc("Allow for non-UTF8_BINARY collated strings inside of map's keys")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(false)
+
   lazy val TRIM_COLLATION_ENABLED =
     buildConf("spark.sql.collation.trim.enabled")
       .internal()
@@ -777,15 +784,6 @@ object SQLConf {
       .version("4.0.0")
       .booleanConf
       .createWithDefault(Utils.isTesting)
-
-  val ALLOW_READING_UNKNOWN_COLLATIONS =
-    buildConf(SqlApiConfHelper.ALLOW_READING_UNKNOWN_COLLATIONS)
-      .internal()
-      .doc("Enables spark to read unknown collation name as UTF8_BINARY. If the config is " +
-        "not enabled, when spark encounters an unknown collation name, it will throw an error.")
-      .version("4.0.0")
-      .booleanConf
-      .createWithDefault(false)
 
   val DEFAULT_COLLATION =
     buildConf(SqlApiConfHelper.DEFAULT_COLLATION)
@@ -2230,6 +2228,17 @@ object SQLConf {
       .intConf
       .createWithDefault(1)
 
+  val STREAMING_STATE_STORE_ENCODING_FORMAT =
+    buildConf("spark.sql.streaming.stateStore.encodingFormat")
+      .doc("The encoding format used for stateful operators to store information " +
+        "in the state store")
+      .version("4.0.0")
+      .stringConf
+      .transform(_.toLowerCase(Locale.ROOT))
+      .checkValue(v => Set("unsaferow", "avro").contains(v),
+        "Valid values are 'unsaferow' and 'avro'")
+      .createWithDefault("unsaferow")
+
   val STATE_STORE_COMPRESSION_CODEC =
     buildConf("spark.sql.streaming.stateStore.compression.codec")
       .internal()
@@ -3319,6 +3328,17 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val PYTHON_UDF_ARROW_CONCURRENCY_LEVEL =
+    buildConf("spark.sql.execution.pythonUDF.arrow.concurrency.level")
+      .doc("The level of concurrency to execute Arrow-optimized Python UDF. " +
+        "This can be useful if Python UDFs use I/O intensively.")
+      .version("4.0.0")
+      .intConf
+      .checkValue(_ > 1,
+        "The value of spark.sql.execution.pythonUDF.arrow.concurrency.level" +
+          " must be more than one.")
+      .createOptional
+
   val PYTHON_TABLE_UDF_ARROW_ENABLED =
     buildConf("spark.sql.execution.pythonUDTF.arrow.enabled")
       .doc("Enable Arrow optimization for Python UDTFs.")
@@ -3422,6 +3442,15 @@ object SQLConf {
         "When this conf is not set, the value from `spark.redaction.string.regex` is used.")
       .version("2.3.0")
       .fallbackConf(org.apache.spark.internal.config.STRING_REDACTION_PATTERN)
+
+  val SQL_SCRIPTING_ENABLED =
+    buildConf("spark.sql.scripting.enabled")
+      .doc("SQL Scripting feature is under development and its use should be done under this " +
+        "feature flag. SQL Scripting enables users to write procedural SQL including control " +
+        "flow and error handling.")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(false)
 
   val CONCAT_BINARY_AS_STRING = buildConf("spark.sql.function.concatBinaryAsString")
     .doc("When this option is set to false and all inputs are binary, `functions.concat` returns " +
@@ -4583,7 +4612,7 @@ object SQLConf {
       .doc("When LEGACY, Spark will rebase INT96 timestamps from Proleptic Gregorian calendar to " +
         "the legacy hybrid (Julian + Gregorian) calendar when writing Parquet files. " +
         "When CORRECTED, Spark will not do rebase and write the timestamps as it is. " +
-        "When EXCEPTION, which is the default, Spark will fail the writing if it sees ancient " +
+        "When EXCEPTION, Spark will fail the writing if it sees ancient " +
         "timestamps that are ambiguous between the two calendars.")
       .version("3.1.0")
       .stringConf
@@ -4597,7 +4626,7 @@ object SQLConf {
       .doc("When LEGACY, Spark will rebase dates/timestamps from Proleptic Gregorian calendar " +
         "to the legacy hybrid (Julian + Gregorian) calendar when writing Parquet files. " +
         "When CORRECTED, Spark will not do rebase and write the dates/timestamps as it is. " +
-        "When EXCEPTION, which is the default, Spark will fail the writing if it sees " +
+        "When EXCEPTION, Spark will fail the writing if it sees " +
         "ancient dates/timestamps that are ambiguous between the two calendars. " +
         "This config influences on writes of the following parquet logical types: DATE, " +
         "TIMESTAMP_MILLIS, TIMESTAMP_MICROS. The INT96 type has the separate config: " +
@@ -4614,7 +4643,7 @@ object SQLConf {
       .doc("When LEGACY, Spark will rebase INT96 timestamps from the legacy hybrid (Julian + " +
         "Gregorian) calendar to Proleptic Gregorian calendar when reading Parquet files. " +
         "When CORRECTED, Spark will not do rebase and read the timestamps as it is. " +
-        "When EXCEPTION, which is the default, Spark will fail the reading if it sees ancient " +
+        "When EXCEPTION, Spark will fail the reading if it sees ancient " +
         "timestamps that are ambiguous between the two calendars. This config is only effective " +
         "if the writer info (like Spark, Hive) of the Parquet files is unknown.")
       .version("3.1.0")
@@ -4629,7 +4658,7 @@ object SQLConf {
       .doc("When LEGACY, Spark will rebase dates/timestamps from the legacy hybrid (Julian + " +
         "Gregorian) calendar to Proleptic Gregorian calendar when reading Parquet files. " +
         "When CORRECTED, Spark will not do rebase and read the dates/timestamps as it is. " +
-        "When EXCEPTION, which is the default, Spark will fail the reading if it sees " +
+        "When EXCEPTION, Spark will fail the reading if it sees " +
         "ancient dates/timestamps that are ambiguous between the two calendars. This config is " +
         "only effective if the writer info (like Spark, Hive) of the Parquet files is unknown. " +
         "This config influences on reads of the following parquet logical types: DATE, " +
@@ -4648,7 +4677,7 @@ object SQLConf {
       .doc("When LEGACY, Spark will rebase dates/timestamps from Proleptic Gregorian calendar " +
         "to the legacy hybrid (Julian + Gregorian) calendar when writing Avro files. " +
         "When CORRECTED, Spark will not do rebase and write the dates/timestamps as it is. " +
-        "When EXCEPTION, which is the default, Spark will fail the writing if it sees " +
+        "When EXCEPTION, Spark will fail the writing if it sees " +
         "ancient dates/timestamps that are ambiguous between the two calendars.")
       .version("3.0.0")
       .stringConf
@@ -4662,7 +4691,7 @@ object SQLConf {
       .doc("When LEGACY, Spark will rebase dates/timestamps from the legacy hybrid (Julian + " +
         "Gregorian) calendar to Proleptic Gregorian calendar when reading Avro files. " +
         "When CORRECTED, Spark will not do rebase and read the dates/timestamps as it is. " +
-        "When EXCEPTION, which is the default, Spark will fail the reading if it sees " +
+        "When EXCEPTION, Spark will fail the reading if it sees " +
         "ancient dates/timestamps that are ambiguous between the two calendars. This config is " +
         "only effective if the writer info (like Spark, Hive) of the Avro files is unknown.")
       .version("3.0.0")
@@ -5563,17 +5592,17 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
     }
   }
 
+  def allowCollationsInMapKeys: Boolean = getConf(ALLOW_COLLATIONS_IN_MAP_KEYS)
+
   def trimCollationEnabled: Boolean = getConf(TRIM_COLLATION_ENABLED)
 
   override def defaultStringType: StringType = {
     if (getConf(DEFAULT_COLLATION).toUpperCase(Locale.ROOT) == "UTF8_BINARY") {
       StringType
     } else {
-      StringType(CollationFactory.collationNameToId(getConf(DEFAULT_COLLATION)))
+      StringType(getConf(DEFAULT_COLLATION))
     }
   }
-
-  override def allowReadingUnknownCollations: Boolean = getConf(ALLOW_READING_UNKNOWN_COLLATIONS)
 
   def adaptiveExecutionEnabled: Boolean = getConf(ADAPTIVE_EXECUTION_ENABLED)
 
@@ -5597,6 +5626,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def stateStoreCompressionCodec: String = getConf(STATE_STORE_COMPRESSION_CODEC)
 
   def stateStoreCheckpointFormatVersion: Int = getConf(STATE_STORE_CHECKPOINT_FORMAT_VERSION)
+
+  def stateStoreEncodingFormat: String = getConf(STREAMING_STATE_STORE_ENCODING_FORMAT)
 
   def checkpointRenamedFileCheck: Boolean = getConf(CHECKPOINT_RENAMEDFILE_CHECK_ENABLED)
 
@@ -5985,6 +6016,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def pythonUDFProfiler: Option[String] = getConf(PYTHON_UDF_PROFILER)
 
   def pythonUDFWorkerFaulthandlerEnabled: Boolean = getConf(PYTHON_UDF_WORKER_FAULTHANLDER_ENABLED)
+
+  def pythonUDFArrowConcurrencyLevel: Option[Int] = getConf(PYTHON_UDF_ARROW_CONCURRENCY_LEVEL)
 
   def pysparkPlotMaxRows: Int = getConf(PYSPARK_PLOT_MAX_ROWS)
 

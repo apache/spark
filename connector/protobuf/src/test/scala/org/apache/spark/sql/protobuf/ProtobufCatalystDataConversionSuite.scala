@@ -29,6 +29,7 @@ import org.apache.spark.sql.protobuf.utils.{ProtobufUtils, SchemaConverters}
 import org.apache.spark.sql.sources.{EqualTo, Not}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.util.{ProtobufUtils => CommonProtobufUtils}
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.ArrayImplicits._
 
@@ -39,7 +40,7 @@ class ProtobufCatalystDataConversionSuite
     with ProtobufTestBase {
 
   private val testFileDescFile = protobufDescriptorFile("catalyst_types.desc")
-  private val testFileDesc = ProtobufUtils.readDescriptorFileContent(testFileDescFile)
+  private val testFileDesc = CommonProtobufUtils.readDescriptorFileContent(testFileDescFile)
   private val javaClassNamePrefix = "org.apache.spark.sql.protobuf.protos.CatalystTypes$"
 
   private def checkResultWithEval(
@@ -47,7 +48,7 @@ class ProtobufCatalystDataConversionSuite
       descFilePath: String,
       messageName: String,
       expected: Any): Unit = {
-    val descBytes = ProtobufUtils.readDescriptorFileContent(descFilePath)
+    val descBytes = CommonProtobufUtils.readDescriptorFileContent(descFilePath)
     withClue("(Eval check with Java class name)") {
       val className = s"$javaClassNamePrefix$messageName"
       checkEvaluation(
@@ -72,7 +73,7 @@ class ProtobufCatalystDataConversionSuite
       actualSchema: String,
       badSchema: String): Unit = {
 
-    val descBytes = ProtobufUtils.readDescriptorFileContent(descFilePath)
+    val descBytes = CommonProtobufUtils.readDescriptorFileContent(descFilePath)
     val binary = CatalystDataToProtobuf(data, actualSchema, Some(descBytes))
 
     intercept[Exception] {

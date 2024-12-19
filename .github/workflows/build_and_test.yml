@@ -55,6 +55,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       GITHUB_PREV_SHA: ${{ github.event.before }}
+      PYSPARK_IMAGE_TO_TEST: ''
     outputs:
       required: ${{ steps.set-outputs.outputs.required }}
       image_url: ${{ steps.infra-image-outputs.outputs.image_url }}
@@ -64,6 +65,8 @@ jobs:
       image_lint_url_link: ${{ steps.infra-image-link.outputs.image_lint_url_link }}
       image_sparkr_url: ${{ steps.infra-image-sparkr-outputs.outputs.image_sparkr_url }}
       image_sparkr_url_link: ${{ steps.infra-image-link.outputs.image_sparkr_url_link }}
+      image_pyspark_url: ${{ steps.infra-image-pyspark-outputs.outputs.image_pyspark_url }}
+      image_pyspark_url_link: ${{ steps.infra-image-link.outputs.image_pyspark_url_link }}
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v4
@@ -164,8 +167,19 @@ jobs:
         IMG_NAME="apache-spark-ci-image-sparkr:${{ inputs.branch }}-${{ github.run_id }}"
         IMG_URL="ghcr.io/$REPO_OWNER/$IMG_NAME"
         echo "image_sparkr_url=$IMG_URL" >> $GITHUB_OUTPUT
+    - name: Generate infra image URL (PySpark ${{ env.PYSPARK_IMAGE_TO_TEST }})
+      id: infra-image-pyspark-outputs
+      if: ${{ env.PYSPARK_IMAGE_TO_TEST }}
+      env: ${{ fromJSON(inputs.envs) }}
+      run: |
+        # Convert to lowercase to meet Docker repo name requirement
+        REPO_OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+        IMG_NAME="apache-spark-ci-image-pyspark-${{ env.PYSPARK_IMAGE_TO_TEST }}:${{ inputs.branch }}-${{ github.run_id }}"
+        IMG_URL="ghcr.io/$REPO_OWNER/$IMG_NAME"
+        echo "image_pyspark_url=$IMG_URL" >> $GITHUB_OUTPUT
     - name: Link the docker images
       id: infra-image-link
+      env: ${{ fromJSON(inputs.envs) }}
       run: |
         # Set the image URL for job "docs"
         # Should delete the link and directly use image_docs_url after SPARK 3.x EOL
@@ -173,10 +187,16 @@ jobs:
           echo "image_docs_url_link=${{ steps.infra-image-outputs.outputs.image_url }}" >> $GITHUB_OUTPUT
           echo "image_lint_url_link=${{ steps.infra-image-outputs.outputs.image_url }}" >> $GITHUB_OUTPUT
           echo "image_sparkr_url_link=${{ steps.infra-image-outputs.outputs.image_url }}" >> $GITHUB_OUTPUT
+          echo "image_pyspark_url_link=${{ steps.infra-image-outputs.outputs.image_url }}" >> $GITHUB_OUTPUT
         else
           echo "image_docs_url_link=${{ steps.infra-image-docs-outputs.outputs.image_docs_url }}" >> $GITHUB_OUTPUT
           echo "image_lint_url_link=${{ steps.infra-image-lint-outputs.outputs.image_lint_url }}" >> $GITHUB_OUTPUT
           echo "image_sparkr_url_link=${{ steps.infra-image-sparkr-outputs.outputs.image_sparkr_url }}" >> $GITHUB_OUTPUT
+          if [[ "${{ env.PYSPARK_IMAGE_TO_TEST }}" != "" ]]; then
+            echo "image_pyspark_url_link=${{ steps.infra-image-pyspark-outputs.outputs.image_pyspark_url }}" >> $GITHUB_OUTPUT
+          else
+            echo "image_pyspark_url_link=${{ steps.infra-image-outputs.outputs.image_url }}" >> $GITHUB_OUTPUT
+          fi
         fi
 
   # Build: build Spark and run the tests for specified modules.
@@ -360,6 +380,8 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       packages: write
+    env:
+      PYSPARK_IMAGE_TO_TEST: ''
     steps:
       - name: Login to GitHub Container Registry
         uses: docker/login-action@v3
@@ -428,6 +450,18 @@ jobs:
             ${{ needs.precondition.outputs.image_sparkr_url }}
           # Use the infra image cache to speed up
           cache-from: type=registry,ref=ghcr.io/apache/spark/apache-spark-github-action-image-sparkr-cache:${{ inputs.branch }}
+      - name: Build and push (PySpark ${{ env.PYSPARK_IMAGE_TO_TEST }})
+        if: ${{ env.PYSPARK_IMAGE_TO_TEST }}
+        id: docker_build_pyspark
+        env: ${{ fromJSON(inputs.envs) }}
+        uses: docker/build-push-action@v6
+        with:
+          context: ./dev/spark-test-image/${{ env.PYSPARK_IMAGE_TO_TEST }}/
+          push: true
+          tags: |
+            ${{ needs.precondition.outputs.image_pyspark_url }}
+          # Use the infra image cache to speed up
+          cache-from: type=registry,ref=ghcr.io/apache/spark/apache-spark-github-action-image-pyspark-${{ env.PYSPARK_IMAGE_TO_TEST }}-cache:${{ inputs.branch }}
 
 
   pyspark:
@@ -438,7 +472,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 180
     container:
-      image: ${{ needs.precondition.outputs.image_url }}
+      image: ${{ needs.precondition.outputs.image_pyspark_url_link }}
     strategy:
       fail-fast: false
       matrix:

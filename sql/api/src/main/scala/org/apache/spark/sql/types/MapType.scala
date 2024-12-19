@@ -89,6 +89,18 @@ case class MapType(keyType: DataType, valueType: DataType, valueContainsNull: Bo
   override private[spark] def existsRecursively(f: (DataType) => Boolean): Boolean = {
     f(this) || keyType.existsRecursively(f) || valueType.existsRecursively(f)
   }
+
+  override private[spark] def transformRecursively(
+      f: PartialFunction[DataType, DataType]): DataType = {
+    if (f.isDefinedAt(this)) {
+      f(this)
+    } else {
+      MapType(
+        keyType.transformRecursively(f),
+        valueType.transformRecursively(f),
+        valueContainsNull)
+    }
+  }
 }
 
 /**

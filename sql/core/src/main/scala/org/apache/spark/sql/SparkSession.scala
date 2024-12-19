@@ -20,9 +20,9 @@ package org.apache.spark.sql
 import java.net.URI
 import java.nio.file.Paths
 import java.util.{ServiceLoader, UUID}
-import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 
+import scala.collection.mutable
 import scala.concurrent.duration.DurationInt
 import scala.jdk.CollectionConverters._
 import scala.reflect.runtime.universe.TypeTag
@@ -42,19 +42,21 @@ import org.apache.spark.sql.catalog.Catalog
 import org.apache.spark.sql.catalyst._
 import org.apache.spark.sql.catalyst.analysis.{NameParameterizedQuery, PosParameterizedQuery, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.encoders._
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression, NamedExpression}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression}
 import org.apache.spark.sql.catalyst.parser.ParserInterface
-import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Range}
+import org.apache.spark.sql.catalyst.plans.logical.{CompoundBody, LocalRelation, LogicalPlan, Range}
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.ExternalCommandRunner
-import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.errors.{QueryCompilationErrors, SqlScriptingErrors}
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.command.ExternalCommandExecutor
 import org.apache.spark.sql.execution.datasources.{DataSource, LogicalRelation}
 import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.internal._
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
+import org.apache.spark.sql.scripting.SqlScriptingExecution
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.streaming._
 import org.apache.spark.sql.types.{DataType, StructType}
@@ -96,7 +98,7 @@ class SparkSession private(
     @transient private[sql] val extensions: SparkSessionExtensions,
     @transient private[sql] val initialSessionOptions: Map[String, String],
     @transient private val parentManagedJobTags: Map[String, String])
-  extends api.SparkSession with Logging { self =>
+  extends api.SparkSession with Logging with classic.ColumnConversions { self =>
 
   // The call site where this SparkSession was constructed.
   private val creationSite: CallSite = Utils.getCallSite()
@@ -134,13 +136,33 @@ class SparkSession private(
   private[sql] lazy val sessionJobTag = s"spark-session-$sessionUUID"
 
   /**
+   * A UUID that is unique on the thread level. Used by managedJobTags to make sure that a same
+   * tag from two threads does not overlap in the underlying SparkContext/SQLExecution.
+   */
+  private[sql] lazy val threadUuid = new InheritableThreadLocal[String] {
+    override def childValue(parent: String): String = parent
+
+    override def initialValue(): String = UUID.randomUUID().toString
+  }
+
+  /**
    * A map to hold the mapping from user-defined tags to the real tags attached to Jobs.
-   * Real tag have the current session ID attached: `"tag1" -> s"spark-session-$sessionUUID-tag1"`.
+   * Real tag have the current session ID attached:
+   *   tag1 -> spark-session-$sessionUUID-thread-$threadUuid-tag1
+   *
    */
   @transient
-  private[sql] lazy val managedJobTags: ConcurrentHashMap[String, String] = {
-    new ConcurrentHashMap(parentManagedJobTags.asJava)
-  }
+  private[sql] lazy val managedJobTags = new InheritableThreadLocal[mutable.Map[String, String]] {
+      override def childValue(parent: mutable.Map[String, String]): mutable.Map[String, String] = {
+        // Note: make a clone such that changes in the parent tags aren't reflected in
+        // those of the children threads.
+        parent.clone()
+      }
+
+      override def initialValue(): mutable.Map[String, String] = {
+        mutable.Map(parentManagedJobTags.toSeq: _*)
+      }
+    }
 
   /** @inheritdoc */
   def version: String = SPARK_VERSION
@@ -243,10 +265,10 @@ class SparkSession private(
       Some(sessionState),
       extensions,
       Map.empty,
-      managedJobTags.asScala.toMap)
+      managedJobTags.get().toMap)
     result.sessionState // force copy of SessionState
     result.sessionState.artifactManager // force copy of ArtifactManager and its resources
-    result.managedJobTags // force copy of userDefinedToRealTagsMap
+    result.managedJobTags // force copy of managedJobTags
     result
   }
 
@@ -412,6 +434,42 @@ class SparkSession private(
    * ----------------- */
 
   /**
+   * Executes given script and return the result of the last statement.
+   * If script contains no queries, an empty `DataFrame` is returned.
+   *
+   * @param script A SQL script to execute.
+   * @param args A map of parameter names to SQL literal expressions.
+   *
+   * @return The result as a `DataFrame`.
+   */
+  private def executeSqlScript(
+      script: CompoundBody,
+      args: Map[String, Expression] = Map.empty): DataFrame = {
+    val sse = new SqlScriptingExecution(script, this, args)
+    var result: Option[Seq[Row]] = None
+
+    while (sse.hasNext) {
+      sse.withErrorHandling {
+        val df = sse.next()
+        if (sse.hasNext) {
+          df.write.format("noop").mode("overwrite").save()
+        } else {
+          // Collect results from the last DataFrame.
+          result = Some(df.collect().toSeq)
+        }
+      }
+    }
+
+    if (result.isEmpty) {
+      emptyDataFrame
+    } else {
+      val attributes = DataTypeUtils.toAttributes(result.get.head.schema)
+      Dataset.ofRows(
+        self, LocalRelation.fromExternalRows(attributes, result.get))
+    }
+  }
+
+  /**
    * Executes a SQL query substituting positional parameters by the given arguments,
    * returning the result as a `DataFrame`.
    * This API eagerly runs DDL/DML commands, but not for SELECT queries.
@@ -430,17 +488,33 @@ class SparkSession private(
     withActive {
       val plan = tracker.measurePhase(QueryPlanningTracker.PARSING) {
         val parsedPlan = sessionState.sqlParser.parsePlan(sqlText)
-        if (args.nonEmpty) {
-          PosParameterizedQuery(parsedPlan, args.map(lit(_).expr).toImmutableArraySeq)
-        } else {
-          parsedPlan
+        parsedPlan match {
+          case compoundBody: CompoundBody =>
+            if (args.nonEmpty) {
+              // Positional parameters are not supported for SQL scripting.
+              throw SqlScriptingErrors.positionalParametersAreNotSupportedWithSqlScripting()
+            }
+            compoundBody
+          case logicalPlan: LogicalPlan =>
+            if (args.nonEmpty) {
+              PosParameterizedQuery(logicalPlan, args.map(lit(_).expr).toImmutableArraySeq)
+            } else {
+              logicalPlan
+            }
         }
       }
-      Dataset.ofRows(self, plan, tracker)
+
+      plan match {
+        case compoundBody: CompoundBody =>
+          // Execute the SQL script.
+          executeSqlScript(compoundBody)
+        case logicalPlan: LogicalPlan =>
+          // Execute the standalone SQL statement.
+          Dataset.ofRows(self, plan, tracker)
+      }
     }
 
   /** @inheritdoc */
-  @Experimental
   def sql(sqlText: String, args: Array[_]): DataFrame = {
     sql(sqlText, args, new QueryPlanningTracker)
   }
@@ -468,23 +542,34 @@ class SparkSession private(
     withActive {
       val plan = tracker.measurePhase(QueryPlanningTracker.PARSING) {
         val parsedPlan = sessionState.sqlParser.parsePlan(sqlText)
-        if (args.nonEmpty) {
-          NameParameterizedQuery(parsedPlan, args.transform((_, v) => lit(v).expr))
-        } else {
-          parsedPlan
+        parsedPlan match {
+          case compoundBody: CompoundBody =>
+            compoundBody
+          case logicalPlan: LogicalPlan =>
+            if (args.nonEmpty) {
+              NameParameterizedQuery(logicalPlan, args.transform((_, v) => lit(v).expr))
+            } else {
+              logicalPlan
+            }
         }
       }
-      Dataset.ofRows(self, plan, tracker)
+
+      plan match {
+        case compoundBody: CompoundBody =>
+          // Execute the SQL script.
+          executeSqlScript(compoundBody, args.transform((_, v) => lit(v).expr))
+        case logicalPlan: LogicalPlan =>
+          // Execute the standalone SQL statement.
+          Dataset.ofRows(self, plan, tracker)
+      }
     }
 
   /** @inheritdoc */
-  @Experimental
   def sql(sqlText: String, args: Map[String, Any]): DataFrame = {
     sql(sqlText, args, new QueryPlanningTracker)
   }
 
   /** @inheritdoc */
-  @Experimental
   override def sql(sqlText: String, args: java.util.Map[String, Any]): DataFrame = {
     sql(sqlText, args.asScala.toMap)
   }
@@ -550,17 +635,17 @@ class SparkSession private(
   /** @inheritdoc */
   override def addTag(tag: String): Unit = {
     SparkContext.throwIfInvalidTag(tag)
-    managedJobTags.put(tag, s"spark-session-$sessionUUID-$tag")
+    managedJobTags.get().put(tag, s"spark-session-$sessionUUID-thread-${threadUuid.get()}-$tag")
   }
 
   /** @inheritdoc */
-  override def removeTag(tag: String): Unit = managedJobTags.remove(tag)
+  override def removeTag(tag: String): Unit = managedJobTags.get().remove(tag)
 
   /** @inheritdoc */
-  override def getTags(): Set[String] = managedJobTags.keys().asScala.toSet
+  override def getTags(): Set[String] = managedJobTags.get().keySet.toSet
 
   /** @inheritdoc */
-  override def clearTags(): Unit = managedJobTags.clear()
+  override def clearTags(): Unit = managedJobTags.get().clear()
 
   /**
    * Request to interrupt all currently running SQL operations of this session.
@@ -589,9 +674,8 @@ class SparkSession private(
    * @since 4.0.0
    */
   override def interruptTag(tag: String): Seq[String] = {
-    val realTag = managedJobTags.get(tag)
-    if (realTag == null) return Seq.empty
-    doInterruptTag(realTag, s"part of cancelled job tags $tag")
+    val realTag = managedJobTags.get().get(tag)
+    realTag.map(doInterruptTag(_, s"part of cancelled job tags $tag")).getOrElse(Seq.empty)
   }
 
   private def doInterruptTag(tag: String, reason: String): Seq[String] = {
@@ -713,23 +797,11 @@ class SparkSession private(
       .getOrElse(sparkContext.defaultParallelism)
   }
 
-  private[sql] object Converter extends ColumnNodeToExpressionConverter with Serializable {
-    override protected def parser: ParserInterface = sessionState.sqlParser
-    override protected def conf: SQLConf = sessionState.conf
-  }
-
-  private[sql] def expression(e: Column): Expression = Converter(e.node)
-
-  private[sql] implicit class RichColumn(val column: Column) {
-    /**
-     * Returns the expression for this column.
-     */
-    def expr: Expression = Converter(column.node)
-    /**
-     * Returns the expression for this column either with an existing or auto assigned name.
-     */
-    def named: NamedExpression = ExpressionUtils.toNamed(expr)
-  }
+  override protected[sql] val converter: ColumnNodeToExpressionConverter =
+    new ColumnNodeToExpressionConverter with Serializable {
+      override protected def parser: ParserInterface = sessionState.sqlParser
+      override protected def conf: SQLConf = sessionState.conf
+    }
 
   private[sql] lazy val observationManager = new ObservationManager(this)
 

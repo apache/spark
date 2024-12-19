@@ -22,7 +22,7 @@ import java.util.Locale
 import org.apache.spark.{SparkException, SparkUnsupportedOperationException}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{execution, AnalysisException, Strategy}
-import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.{ExtendedAnalysisException, InternalRow}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, BuildSide, JoinSelectionHelper, NormalizeFloatingNumbers}
@@ -607,7 +607,12 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
             // [COUNT(DISTINCT bar), COUNT(DISTINCT foo)] is disallowed because those two distinct
             // aggregates have different column expressions.
             val distinctExpressions =
-              functionsWithDistinct.head.aggregateFunction.children.filterNot(_.foldable)
+            functionsWithDistinct.head.aggregateFunction.children
+              .filterNot(_.foldable)
+              .map {
+                case s: SortOrder => s.child
+                case e => e
+              }
             val normalizedNamedDistinctExpressions = distinctExpressions.map { e =>
               // Ideally this should be done in `NormalizeFloatingNumbers`, but we do it here
               // because `distinctExpressions` is not extracted during logical phase.
@@ -966,6 +971,14 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case _: FlatMapGroupsInPandasWithState =>
         // TODO(SPARK-40443): support applyInPandasWithState in batch query
         throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3176")
+      case t: TransformWithStateInPandas =>
+        // TODO(SPARK-50428): support TransformWithStateInPandas in batch query
+        throw new ExtendedAnalysisException(
+          new AnalysisException(
+            "_LEGACY_ERROR_TEMP_3102",
+            Map(
+              "msg" -> "TransformWithStateInPandas is not supported with batch DataFrames/Datasets")
+          ), plan = t)
       case logical.CoGroup(
           f, key, lObj, rObj, lGroup, rGroup, lAttr, rAttr, lOrder, rOrder, oAttr, left, right) =>
         execution.CoGroupExec(
