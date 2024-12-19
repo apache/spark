@@ -63,9 +63,11 @@ class SparkSqlAstBuilder extends AstBuilder {
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
   private val configKeyValueDef = """([a-zA-Z_\d\\.:]+)\s*=([^;]*);*""".r
-  private val configKeyDef = """([a-zA-Z_\d\\.:]+)$""".r
+  private val configKeyDef = """([a-zA-Z_\d\\.:]+);*$""".r
   private val configValueDef = """([^;]*);*""".r
   private val strLiteralDef = """(".*?[^\\]"|'.*?[^\\]'|[^ \n\r\t"']+)""".r
+  private val vOption = """-v;*""".r
+  private val onlySemiColon = """;*""".r
 
   private def withCatalogIdentClause(
       ctx: CatalogIdentifierReferenceContext,
@@ -97,7 +99,7 @@ class SparkSqlAstBuilder extends AstBuilder {
     if (ctx.configKey() != null) {
       val keyStr = ctx.configKey().getText
       if (ctx.EQ() != null) {
-        remainder(ctx.EQ().getSymbol, ctx).trim match {
+        remainder(ctx.EQ().getSymbol).trim match {
           case configValueDef(valueStr) => SetCommand(Some(keyStr -> Option(valueStr)))
           case other => throw QueryParsingErrors.invalidPropertyValueForSetQuotedConfigurationError(
             other, keyStr, ctx)
@@ -106,14 +108,14 @@ class SparkSqlAstBuilder extends AstBuilder {
         SetCommand(Some(keyStr -> None))
       }
     } else {
-      remainder(ctx.SET.getSymbol, ctx).trim match {
+      remainder(ctx.SET.getSymbol).trim match {
         case configKeyValueDef(key, value) =>
           SetCommand(Some(key -> Option(value.trim)))
         case configKeyDef(key) =>
           SetCommand(Some(key -> None))
-        case s if s == "-v" =>
+        case vOption() =>
           SetCommand(Some("-v" -> None))
-        case s if s.isEmpty =>
+        case onlySemiColon() =>
           SetCommand(None)
         case _ => throw QueryParsingErrors.unexpectedFormatForSetConfigurationError(ctx)
       }
@@ -146,7 +148,7 @@ class SparkSqlAstBuilder extends AstBuilder {
    */
   override def visitResetConfiguration(
       ctx: ResetConfigurationContext): LogicalPlan = withOrigin(ctx) {
-    remainder(ctx.RESET.getSymbol, ctx).trim match {
+    remainder(ctx.RESET.getSymbol).trim match {
       case configKeyDef(key) =>
         ResetCommand(Some(key))
       case s if s.trim.isEmpty =>
@@ -244,7 +246,7 @@ class SparkSqlAstBuilder extends AstBuilder {
   }
 
   private def extractUnquotedResourcePath(ctx: RefreshResourceContext): String = withOrigin(ctx) {
-    val unquotedPath = remainder(ctx.REFRESH.getSymbol, ctx).trim
+    val unquotedPath = remainder(ctx.REFRESH.getSymbol).trim
     validate(
       unquotedPath != null && !unquotedPath.isEmpty,
       "Resource paths cannot be empty in REFRESH statements. Use / to match everything",
@@ -467,7 +469,7 @@ class SparkSqlAstBuilder extends AstBuilder {
    *  - '/path/to/fileOrJar'
    */
   override def visitManageResource(ctx: ManageResourceContext): LogicalPlan = withOrigin(ctx) {
-    val rawArg = remainder(ctx.identifier, ctx).trim
+    val rawArg = remainder(ctx.identifier).trim
     val maybePaths = strLiteralDef.findAllIn(rawArg).toSeq.map {
       case p if p.startsWith("\"") || p.startsWith("'") => unescapeSQLString(p)
       case p => p
