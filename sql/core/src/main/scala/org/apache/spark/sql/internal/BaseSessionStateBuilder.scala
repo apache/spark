@@ -200,11 +200,6 @@ abstract class BaseSessionStateBuilder(
   protected def analyzer: Analyzer = new Analyzer(catalogManager) {
     override val hintResolutionRules: Seq[Rule[LogicalPlan]] =
       customHintResolutionRules
-<<<<<<< HEAD
-    override val extendedResolutionRules: Seq[Rule[LogicalPlan]] = {
-      new ResolveDataSource(session) +:
-        new FindDataSourceTable(session) +:
-=======
 
     override val singlePassResolverExtensions: Seq[ResolverExtension] = Seq(
       new DataSourceResolver(session)
@@ -215,8 +210,8 @@ abstract class BaseSessionStateBuilder(
     )
 
     override val extendedResolutionRules: Seq[Rule[LogicalPlan]] =
-      new FindDataSourceTable(session) +:
->>>>>>> 7f6d554a493330744113fa7934236d0dc5a90bc0
+      new ResolveDataSource(session) +:
+        new FindDataSourceTable(session) +:
         new ResolveSQLOnFile(session) +:
         new FallBackFileSourceV2(session) +:
         ResolveEncodersInScalaAgg +:
@@ -226,7 +221,6 @@ abstract class BaseSessionStateBuilder(
         new ResolveTranspose(session) +:
         new InvokeProcedures(session) +:
         customResolutionRules
-    }
 
     override val postHocResolutionRules: Seq[Rule[LogicalPlan]] =
       DetectAmbiguousSelfJoin +:
