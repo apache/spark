@@ -542,6 +542,10 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
       .option("doubleOpt", 6.7)
       .load("/test")
 
+    assert(
+      !df.queryExecution.logical.resolved,
+      "DataFrameReader should create an unresolved plan")
+
     assert(LastOptions.parameters("intOpt") == "56")
     assert(LastOptions.parameters("boolOpt") == "false")
     assert(LastOptions.parameters("doubleOpt") == "6.7")
@@ -606,10 +610,13 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
   }
 
   test("load API") {
-    spark.read.format("org.apache.spark.sql.test").load()
-    spark.read.format("org.apache.spark.sql.test").load(dir)
-    spark.read.format("org.apache.spark.sql.test").load(dir, dir, dir)
-    spark.read.format("org.apache.spark.sql.test").load(Seq(dir, dir): _*)
+    def assertFirstUnresolved(df: DataFrame): Unit = {
+      assert(!df.queryExecution.logical.resolved)
+    }
+    assertFirstUnresolved(spark.read.format("org.apache.spark.sql.test").load())
+    assertFirstUnresolved(spark.read.format("org.apache.spark.sql.test").load(dir))
+    assertFirstUnresolved(spark.read.format("org.apache.spark.sql.test").load(dir, dir, dir))
+    assertFirstUnresolved(spark.read.format("org.apache.spark.sql.test").load(Seq(dir, dir): _*))
     Option(dir).map(spark.read.format("org.apache.spark.sql.test").load)
   }
 
@@ -896,6 +903,7 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
       expectedSchema: StructType): Unit = {
     checkAnswer(df, spark.createDataset(expectedResult).toDF())
     assert(df.schema === expectedSchema)
+    assert(!df.queryExecution.logical.resolved, "Should've created an unresolved plan")
   }
 
   test("saveAsTable with mode Append should not fail if the table not exists " +
