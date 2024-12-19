@@ -25,3 +25,4 @@ class TransformWithStateInPandasFuncMode(Enum):
     PROCESS_DATA = 1
     PROCESS_TIMER = 2
     COMPLETE = 3
+    PRE_INIT = 4
