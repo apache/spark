@@ -210,7 +210,9 @@ class RocksDBStateStoreCheckpointFormatV2Suite extends StreamTest
       withSQLConf(
         (SQLConf.STATE_STORE_PROVIDER_CLASS.key -> providerClassName),
         (SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key -> "2"),
-        (SQLConf.SHUFFLE_PARTITIONS.key, "2")) {
+        (SQLConf.SHUFFLE_PARTITIONS.key, "2"),
+        (SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.key, "2")
+      ) {
         testBody
       }
       // in case tests have any code that needs to execute after every test
@@ -236,12 +238,12 @@ class RocksDBStateStoreCheckpointFormatV2Suite extends StreamTest
 
   val testConfigSetups = Seq(
     // Enable and disable changelog under ckpt v2
-    checkpointV2CompatibilityTest(Seq(changelogEnabled, ckptv2), Seq(changelogEnabled, ckptv2)),
-    checkpointV2CompatibilityTest(Seq(changelogDisabled, ckptv2), Seq(changelogDisabled, ckptv2))
+    checkpointV2CompatibilityTest(Seq(changelogEnabled, ckptv2), Seq(changelogDisabled, ckptv2)),
+    checkpointV2CompatibilityTest(Seq(changelogDisabled, ckptv2), Seq(changelogEnabled, ckptv2))
   )
 
   testConfigSetups.foreach { testConfig =>
-    testWithRocksDBStateStore("checkpointFormatVersion2 Backward Compatibility - simple agg - " +
+    testWithRocksDBStateStore("checkpointFormatVersion2 Compatibility - simple agg - " +
       s"$testConfig") {
         withTempDir { checkpointDir =>
           val inputData = MemoryStream[Int]
@@ -259,6 +261,8 @@ class RocksDBStateStoreCheckpointFormatV2Suite extends StreamTest
               CheckLastBatch((3, 1)),
               AddData(inputData, 3, 2),
               CheckLastBatch((3, 2), (2, 1)),
+              AddData(inputData, 10),
+              CheckLastBatch((10, 1)),
               StopStream
             )
 
@@ -285,8 +289,146 @@ class RocksDBStateStoreCheckpointFormatV2Suite extends StreamTest
       }
   }
 
+  testWithRocksDBStateStore("checkpointFormatVersion2 Compatibility - simple agg - " +
+    "v2 - changelog on -> off -> on") {
+    withTempDir { checkpointDir =>
+      val inputData = MemoryStream[Int]
+      val aggregated =
+        inputData
+          .toDF()
+          .groupBy($"value")
+          .agg(count("*"))
+          .as[(Int, Long)]
+
+      withSQLConf(changelogEnabled, ckptv2) {
+        testStream(aggregated, Update)(
+          StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
+          AddData(inputData, 3),
+          CheckLastBatch((3, 1)),
+          AddData(inputData, 3, 2),
+          CheckLastBatch((3, 2), (2, 1)),
+          StopStream
+        )
+
+        testStream(aggregated, Update)(
+          StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
+          AddData(inputData, 3, 2, 1),
+          CheckLastBatch((3, 3), (2, 2), (1, 1)),
+          // By default we run in new tuple mode.
+          AddData(inputData, 4, 4, 4, 4),
+          CheckLastBatch((4, 4)),
+          AddData(inputData, 5, 5),
+          CheckLastBatch((5, 2)),
+          StopStream
+        )
+      }
+
+      withSQLConf(changelogDisabled, ckptv2) {
+        testStream(aggregated, Update)(
+          StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
+          AddData(inputData, 4),
+          CheckLastBatch((4, 5)),
+          AddData(inputData, 4),
+          CheckLastBatch((4, 6)),
+          StopStream
+        )
+
+        testStream(aggregated, Update)(
+          StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
+          AddData(inputData, 6, 7, 8),
+          CheckLastBatch((6, 1), (7, 1), (8, 1)),
+          AddData(inputData, 4, 4, 4, 4),
+          CheckLastBatch((4, 10)),
+          AddData(inputData, 5, 5),
+          CheckLastBatch((5, 4)),
+          StopStream
+        )
+      }
+
+      withSQLConf(changelogDisabled, ckptv2) {
+        testStream(aggregated, Update)(
+          StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
+          AddData(inputData, 3, 2, 1),
+          CheckLastBatch((3, 4), (2, 3), (1, 2)),
+          AddData(inputData, 4),
+          CheckLastBatch((4, 11)),
+          StopStream
+        )
+      }
+    }
+  }
+
+  testWithRocksDBStateStore("checkpointFormatVersion2 Compatibility - simple agg - " +
+    "v2 - changelog off -> on -> off") {
+    withTempDir { checkpointDir =>
+      val inputData = MemoryStream[Int]
+      val aggregated =
+        inputData
+          .toDF()
+          .groupBy($"value")
+          .agg(count("*"))
+          .as[(Int, Long)]
+
+      withSQLConf(changelogDisabled, ckptv2) {
+        testStream(aggregated, Update)(
+          StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
+          AddData(inputData, 3),
+          CheckLastBatch((3, 1)),
+          AddData(inputData, 3, 2),
+          CheckLastBatch((3, 2), (2, 1)),
+          StopStream
+        )
+
+        testStream(aggregated, Update)(
+          StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
+          AddData(inputData, 3, 2, 1),
+          CheckLastBatch((3, 3), (2, 2), (1, 1)),
+          // By default we run in new tuple mode.
+          AddData(inputData, 4, 4, 4, 4),
+          CheckLastBatch((4, 4)),
+          AddData(inputData, 5, 5),
+          CheckLastBatch((5, 2)),
+          StopStream
+        )
+      }
+
+      withSQLConf(changelogEnabled, ckptv2) {
+        testStream(aggregated, Update)(
+          StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
+          AddData(inputData, 4),
+          CheckLastBatch((4, 5)),
+          AddData(inputData, 4),
+          CheckLastBatch((4, 6)),
+          StopStream
+        )
+
+        testStream(aggregated, Update)(
+          StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
+          AddData(inputData, 6, 7, 8),
+          CheckLastBatch((6, 1), (7, 1), (8, 1)),
+          AddData(inputData, 4, 4, 4, 4),
+          CheckLastBatch((4, 10)),
+          AddData(inputData, 5, 5),
+          CheckLastBatch((5, 4)),
+          StopStream
+        )
+      }
+
+      withSQLConf(changelogDisabled, ckptv2) {
+        testStream(aggregated, Update)(
+          StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
+          AddData(inputData, 3, 2, 1),
+          CheckLastBatch((3, 4), (2, 3), (1, 2)),
+          AddData(inputData, 4),
+          CheckLastBatch((4, 11)),
+          StopStream
+        )
+      }
+    }
+  }
+
   testConfigSetups.foreach { testConfig =>
-    testWithRocksDBStateStore("checkpointFormatVersion2 Backward Compatibility - dedup - " +
+    testWithRocksDBStateStore("checkpointFormatVersion2 Compatibility - dedup - " +
       s"$testConfig") {
         withTempDir { checkpointDir =>
           val inputData = MemoryStream[Int]
@@ -331,7 +473,7 @@ class RocksDBStateStoreCheckpointFormatV2Suite extends StreamTest
   }
 
   testConfigSetups.foreach { testConfig =>
-    testWithRocksDBStateStore("checkpointFormatVersion2 Backward Compatibility - " +
+    testWithRocksDBStateStore("checkpointFormatVersion2 Compatibility - " +
       s"FlatMapGroupsWithState - $testConfig") {
         withTempDir { checkpointDir =>
           val stateFunc = (key: Int, values: Iterator[Int], state: GroupState[Int]) => {
@@ -389,7 +531,7 @@ class RocksDBStateStoreCheckpointFormatV2Suite extends StreamTest
   }
 
   testConfigSetups.foreach { testConfig =>
-    testWithRocksDBStateStore("checkpointFormatVersion2 Backward Compatibility - ss join - " +
+    testWithRocksDBStateStore("checkpointFormatVersion2 Compatibility - ss join - " +
       s"$testConfig") {
         withTempDir { checkpointDir =>
           val inputData1 = MemoryStream[Int]
@@ -454,7 +596,7 @@ class RocksDBStateStoreCheckpointFormatV2Suite extends StreamTest
 
 
   testConfigSetups.foreach { testConfig =>
-    testWithRocksDBStateStore("checkpointFormatVersion2 Backward Compatibility - " +
+    testWithRocksDBStateStore("checkpointFormatVersion2 Compatibility - " +
       s"transformWithState - $testConfig") {
         withTempDir { checkpointDir =>
           val inputData = MemoryStream[String]
