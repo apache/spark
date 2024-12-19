@@ -50,7 +50,11 @@ import org.apache.spark.sql.internal.SQLConf
  *          plans and output schemas, and return the resolved plan from the fixed-point Analyzer.
  *   - Otherwise we run the legacy analyzer.
  * */
-class HybridAnalyzer(legacyAnalyzer: Analyzer, resolverGuard: ResolverGuard, resolver: Resolver)
+class HybridAnalyzer(
+    legacyAnalyzer: Analyzer,
+    resolverGuard: ResolverGuard,
+    resolver: Resolver,
+    checkSupportedSinglePassFeatures: Boolean = true)
     extends SQLConfHelper {
   private var singlePassResolutionDuration: Option[Long] = None
   private var fixedPointResolutionDuration: Option[Long] = None
@@ -58,7 +62,7 @@ class HybridAnalyzer(legacyAnalyzer: Analyzer, resolverGuard: ResolverGuard, res
   def apply(plan: LogicalPlan, tracker: QueryPlanningTracker): LogicalPlan = {
     val dualRun =
       conf.getConf(SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER) &&
-      resolverGuard.apply(plan)
+      checkResolverGuard(plan)
 
     withTrackedAnalyzerBridgeState(dualRun) {
       if (dualRun) {
@@ -70,6 +74,9 @@ class HybridAnalyzer(legacyAnalyzer: Analyzer, resolverGuard: ResolverGuard, res
       }
     }
   }
+
+  private def checkResolverGuard(plan: LogicalPlan): Boolean =
+    !checkSupportedSinglePassFeatures || resolverGuard.apply(plan)
 
   def getSinglePassResolutionDuration: Option[Long] = singlePassResolutionDuration
 
@@ -152,7 +159,8 @@ class HybridAnalyzer(legacyAnalyzer: Analyzer, resolverGuard: ResolverGuard, res
         }
       case None =>
         singlePassException match {
-          case Some(singlePassEx: ExplicitlyUnsupportedResolverFeature) =>
+          case Some(singlePassEx: ExplicitlyUnsupportedResolverFeature)
+              if checkSupportedSinglePassFeatures =>
             fixedPointResult.get
           case Some(singlePassEx) =>
             throw singlePassEx
