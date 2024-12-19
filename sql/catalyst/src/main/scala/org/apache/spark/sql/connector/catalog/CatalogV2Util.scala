@@ -53,6 +53,7 @@ private[sql] object CatalogV2Util {
    */
   val TABLE_RESERVED_PROPERTIES =
     Seq(TableCatalog.PROP_COMMENT,
+      TableCatalog.PROP_COLLATION,
       TableCatalog.PROP_LOCATION,
       TableCatalog.PROP_PROVIDER,
       TableCatalog.PROP_OWNER,
@@ -459,7 +460,7 @@ private[sql] object CatalogV2Util {
   def convertTableProperties(t: TableSpec): Map[String, String] = {
     val props = convertTableProperties(
       t.properties, t.options, t.serde, t.location, t.comment,
-      t.provider, t.external)
+      t.collation, t.provider, t.external)
     withDefaultOwnership(props)
   }
 
@@ -469,6 +470,7 @@ private[sql] object CatalogV2Util {
       serdeInfo: Option[SerdeInfo],
       location: Option[String],
       comment: Option[String],
+      collation: Option[String],
       provider: Option[String],
       external: Boolean = false): Map[String, String] = {
     properties ++
@@ -478,6 +480,7 @@ private[sql] object CatalogV2Util {
       (if (external) Some(TableCatalog.PROP_EXTERNAL -> "true") else None) ++
       provider.map(TableCatalog.PROP_PROVIDER -> _) ++
       comment.map(TableCatalog.PROP_COMMENT -> _) ++
+      collation.map(TableCatalog.PROP_COLLATION -> _) ++
       location.map(TableCatalog.PROP_LOCATION -> _)
   }
 

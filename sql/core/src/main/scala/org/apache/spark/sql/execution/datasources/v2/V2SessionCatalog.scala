@@ -239,7 +239,8 @@ class V2SessionCatalog(catalog: SessionCatalog)
         maybeClusterBySpec.map(
           clusterBySpec => ClusterBySpec.toProperty(newSchema, clusterBySpec, conf.resolver)),
       tracksPartitionsInCatalog = conf.manageFilesourcePartitions,
-      comment = Option(properties.get(TableCatalog.PROP_COMMENT)))
+      comment = Option(properties.get(TableCatalog.PROP_COMMENT)),
+      collation = Option(properties.get(TableCatalog.PROP_COLLATION)))
 
     try {
       catalog.createTable(tableDesc, ignoreIfExists = false)
@@ -290,6 +291,7 @@ class V2SessionCatalog(catalog: SessionCatalog)
     val schema = CatalogV2Util.applySchemaChanges(
       catalogTable.schema, changes, catalogTable.provider, "ALTER TABLE")
     val comment = properties.get(TableCatalog.PROP_COMMENT)
+    val collation = properties.get(TableCatalog.PROP_COLLATION)
     val owner = properties.getOrElse(TableCatalog.PROP_OWNER, catalogTable.owner)
     val location = properties.get(TableCatalog.PROP_LOCATION).map(CatalogUtils.stringToURI)
     val storage = if (location.isDefined) {
@@ -303,7 +305,7 @@ class V2SessionCatalog(catalog: SessionCatalog)
       catalog.alterTable(
         catalogTable.copy(
           properties = finalProperties, schema = schema, owner = owner, comment = comment,
-          storage = storage))
+          collation = collation, storage = storage))
     } catch {
       case _: NoSuchTableException =>
         throw QueryCompilationErrors.noSuchTableError(ident)
