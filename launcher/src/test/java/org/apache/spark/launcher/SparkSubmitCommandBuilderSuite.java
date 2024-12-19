@@ -103,6 +103,62 @@ public class SparkSubmitCommandBuilderSuite extends BaseSuite {
   }
 
   @Test
+  public void testExtraJavaOptionsSanitization() throws Exception {
+    // SPARK-50240: Test to check extra Java options inputs are sanitized
+    Map<String, String> env = new HashMap<>();
+    List<String> sparkSubmitArgs = Arrays.asList(
+            parser.MASTER,
+            "local",
+            parser.CONF,
+            "spark.executor.extraJavaOptions=`touch /tmp/evil` -Xmx2g",
+            parser.CONF,
+            "spark.driver.extraJavaOptions=`rm -rf /` -Xms1g",
+            SparkLauncher.NO_RESOURCE
+    );
+    List<String> cmd = buildCommand(sparkSubmitArgs, env);
+
+    String executorExtraJavaOptions = null;
+    String driverExtraJavaOptions = null;
+    for (int i = 0; i < cmd.size(); i++) {
+      if (cmd.get(i).equals(parser.CONF)) {
+        String confArg = cmd.get(i + 1);
+        if (confArg.startsWith("spark.executor.extraJavaOptions=")) {
+          executorExtraJavaOptions = confArg.substring("spark.executor.extraJavaOptions=".length());
+        } else if (confArg.startsWith("spark.driver.extraJavaOptions=")) {
+          driverExtraJavaOptions = confArg.substring("spark.driver.extraJavaOptions=".length());
+        }
+        i += 1; // Skip the value since we've already processed it
+      }
+    }
+
+    assertNotNull(executorExtraJavaOptions, "spark.executor.extraJavaOptions should be set");
+    assertFalse(executorExtraJavaOptions.contains("`"), "Should not contain `");
+    assertFalse(executorExtraJavaOptions.contains("$"), "Should not contain $");
+    assertFalse(executorExtraJavaOptions.contains("&"), "Should not contain &");
+    assertFalse(executorExtraJavaOptions.contains("|"), "Should not contain |");
+    assertFalse(executorExtraJavaOptions.contains("<"), "Should not contain <");
+    assertFalse(executorExtraJavaOptions.contains(">"), "Should not contain >");
+    assertFalse(executorExtraJavaOptions.contains("*"), "Should not contain *");
+    assertFalse(executorExtraJavaOptions.contains("?"), "Should not contain ?");
+
+    assertTrue(executorExtraJavaOptions.contains("-Xmx2g"), "Valid options should pass");
+
+    assertNotNull(driverExtraJavaOptions, "spark.driver.extraJavaOptions should be set");
+    assertFalse(driverExtraJavaOptions.contains("`"), "Should not contain `");
+    assertFalse(driverExtraJavaOptions.contains("$"), "Should not contain $");
+    assertFalse(driverExtraJavaOptions.contains("&"), "Should not contain &");
+    assertFalse(driverExtraJavaOptions.contains("|"), "Should not contain |");
+    assertFalse(driverExtraJavaOptions.contains("<"), "Should not contain <");
+    assertFalse(driverExtraJavaOptions.contains(">"), "Should not contain >");
+    assertFalse(driverExtraJavaOptions.contains("*"), "Should not contain *");
+    assertFalse(driverExtraJavaOptions.contains("?"), "Should not contain ?");
+
+    assertTrue(driverExtraJavaOptions.contains("-Xms1g"), "Valid options should pass");
+  }
+
+
+
+  @Test
   public void testCliKillAndStatus() throws Exception {
     List<String> params = Arrays.asList("driver-20160531171222-0000");
     testCLIOpts(null, parser.STATUS, params);
