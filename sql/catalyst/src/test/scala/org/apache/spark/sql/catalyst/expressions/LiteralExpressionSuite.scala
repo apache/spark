@@ -25,7 +25,7 @@ import java.util.TimeZone
 import scala.collection.mutable
 import scala.reflect.runtime.universe.TypeTag
 
-import org.apache.spark.{SparkException, SparkFunSuite}
+import org.apache.spark.{SparkException, SparkFunSuite, SparkRuntimeException}
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, ScalaReflection}
 import org.apache.spark.sql.catalyst.encoders.ExamplePointUDT
@@ -164,6 +164,42 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Literal.create(""), "")
     checkEvaluation(Literal.create("test"), "test")
     checkEvaluation(Literal.create("\u0000"), "\u0000")
+  }
+
+  test("char literals") {
+    withSQLConf(SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true") {
+      val typ = CharType(5)
+      checkEvaluation(Literal.create("", typ), "     ")
+      checkEvaluation(Literal.create("test", typ), "test ")
+      checkEvaluation(Literal.create("test      ", typ), "test ")
+      checkEvaluation(Literal.create("\u0000", typ), "\u0000    ")
+
+      checkError(
+        exception = intercept[SparkRuntimeException]({
+          Literal.create("123456", typ)
+        }),
+        condition = "EXCEED_LIMIT_LENGTH",
+        parameters = Map("limit" -> "5")
+      )
+    }
+  }
+
+  test("varchar literals") {
+    withSQLConf(SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true") {
+      val typ = VarcharType(5)
+      checkEvaluation(Literal.create("", typ), "")
+      checkEvaluation(Literal.create("test", typ), "test")
+      checkEvaluation(Literal.create("test     ", typ), "test ")
+      checkEvaluation(Literal.create("\u0000", typ), "\u0000")
+
+      checkError(
+        exception = intercept[SparkRuntimeException]({
+          Literal.create("123456", typ)
+        }),
+        condition = "EXCEED_LIMIT_LENGTH",
+        parameters = Map("limit" -> "5")
+      )
+    }
   }
 
   test("sum two literals") {

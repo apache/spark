@@ -505,4 +505,24 @@ class RowEncoderSuite extends CodegenInterpretedPlanTest {
       }
     }
   }
+
+  test("do not allow deserializing too long strings into char/varchar") {
+    Seq(CharType(5), VarcharType(5)).foreach { typ =>
+      withSQLConf(SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true") {
+        val fromSchema = new StructType().add("c", StringType)
+        val fromEncoder = ExpressionEncoder(fromSchema).resolveAndBind()
+        val toSchema = new StructType().add("c", typ)
+        val toEncoder = ExpressionEncoder(toSchema).resolveAndBind()
+        val value = "abcdef"
+        val row = toRow(fromEncoder, Row(value))
+        checkError(
+          exception = intercept[SparkRuntimeException]({
+            val value = fromRow(toEncoder, row)
+          }),
+          condition = "EXCEED_LIMIT_LENGTH",
+          parameters = Map("limit" -> "5")
+        )
+      }
+    }
+  }
 }
