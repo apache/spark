@@ -7,9 +7,9 @@ TakeOrderedAndProject [w_warehouse_name,i_item_id,inv_before,inv_after]
             WholeStageCodegen (4)
               HashAggregate [w_warehouse_name,i_item_id,d_date,inv_quantity_on_hand] [sum,sum,sum,sum]
                 Project [inv_quantity_on_hand,w_warehouse_name,i_item_id,d_date]
-                  BroadcastHashJoin [inv_warehouse_sk,w_warehouse_sk]
-                    Project [inv_warehouse_sk,inv_quantity_on_hand,i_item_id,d_date]
-                      BroadcastHashJoin [inv_date_sk,d_date_sk]
+                  BroadcastHashJoin [inv_date_sk,d_date_sk]
+                    Project [inv_quantity_on_hand,inv_date_sk,i_item_id,w_warehouse_name]
+                      BroadcastHashJoin [inv_warehouse_sk,w_warehouse_sk]
                         Project [inv_warehouse_sk,inv_quantity_on_hand,inv_date_sk,i_item_id]
                           BroadcastHashJoin [inv_item_sk,i_item_sk]
                             Filter [inv_warehouse_sk,inv_item_sk]
@@ -32,11 +32,11 @@ TakeOrderedAndProject [w_warehouse_name,i_item_id,inv_before,inv_after]
                                         InputAdapter
                                           Scan parquet spark_catalog.default.item [i_item_sk,i_item_id,i_current_price]
                         InputAdapter
-                          ReusedExchange [d_date_sk,d_date] #2
+                          BroadcastExchange #4
+                            WholeStageCodegen (2)
+                              Filter [w_warehouse_sk]
+                                ColumnarToRow
+                                  InputAdapter
+                                    Scan parquet spark_catalog.default.warehouse [w_warehouse_sk,w_warehouse_name]
                     InputAdapter
-                      BroadcastExchange #4
-                        WholeStageCodegen (3)
-                          Filter [w_warehouse_sk]
-                            ColumnarToRow
-                              InputAdapter
-                                Scan parquet spark_catalog.default.warehouse [w_warehouse_sk,w_warehouse_name]
+                      ReusedExchange [d_date_sk,d_date] #2

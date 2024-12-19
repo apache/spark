@@ -49,9 +49,9 @@ TakeOrderedAndProject [c_last_name,ss_ticket_number,c_first_name,ca_city,bought_
                                         Project [ss_customer_sk,ss_addr_sk,ss_ticket_number,ss_ext_sales_price,ss_ext_list_price,ss_ext_tax]
                                           BroadcastHashJoin [ss_hdemo_sk,hd_demo_sk]
                                             Project [ss_customer_sk,ss_hdemo_sk,ss_addr_sk,ss_ticket_number,ss_ext_sales_price,ss_ext_list_price,ss_ext_tax]
-                                              BroadcastHashJoin [ss_store_sk,s_store_sk]
-                                                Project [ss_customer_sk,ss_hdemo_sk,ss_addr_sk,ss_store_sk,ss_ticket_number,ss_ext_sales_price,ss_ext_list_price,ss_ext_tax]
-                                                  BroadcastHashJoin [ss_sold_date_sk,d_date_sk]
+                                              BroadcastHashJoin [ss_sold_date_sk,d_date_sk]
+                                                Project [ss_customer_sk,ss_hdemo_sk,ss_addr_sk,ss_ticket_number,ss_ext_sales_price,ss_ext_list_price,ss_ext_tax,ss_sold_date_sk]
+                                                  BroadcastHashJoin [ss_store_sk,s_store_sk]
                                                     Filter [ss_store_sk,ss_hdemo_sk,ss_addr_sk,ss_customer_sk]
                                                       ColumnarToRow
                                                         InputAdapter
@@ -65,15 +65,15 @@ TakeOrderedAndProject [c_last_name,ss_ticket_number,c_first_name,ca_city,bought_
                                                                         InputAdapter
                                                                           Scan parquet spark_catalog.default.date_dim [d_date_sk,d_year,d_dom]
                                                     InputAdapter
-                                                      ReusedExchange [d_date_sk] #6
+                                                      BroadcastExchange #7
+                                                        WholeStageCodegen (7)
+                                                          Project [s_store_sk]
+                                                            Filter [s_city,s_store_sk]
+                                                              ColumnarToRow
+                                                                InputAdapter
+                                                                  Scan parquet spark_catalog.default.store [s_store_sk,s_city]
                                                 InputAdapter
-                                                  BroadcastExchange #7
-                                                    WholeStageCodegen (8)
-                                                      Project [s_store_sk]
-                                                        Filter [s_city,s_store_sk]
-                                                          ColumnarToRow
-                                                            InputAdapter
-                                                              Scan parquet spark_catalog.default.store [s_store_sk,s_city]
+                                                  ReusedExchange [d_date_sk] #6
                                             InputAdapter
                                               BroadcastExchange #8
                                                 WholeStageCodegen (9)
