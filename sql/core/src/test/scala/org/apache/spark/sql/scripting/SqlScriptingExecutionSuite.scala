@@ -17,10 +17,13 @@
 
 package org.apache.spark.sql.scripting
 
+import scala.collection.mutable.ListBuffer
+
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.logical.CompoundBody
+import org.apache.spark.sql.exceptions.{SqlScriptingException, SqlScriptingUserRaisedException}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
@@ -43,7 +46,22 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
       args: Map[String, Expression] = Map.empty): Seq[Array[Row]] = {
     val compoundBody = spark.sessionState.sqlParser.parsePlan(sqlText).asInstanceOf[CompoundBody]
     val sse = new SqlScriptingExecution(compoundBody, spark, args)
-    sse.map { df => df.collect() }.toList
+
+    val result: ListBuffer[Array[Row]] = ListBuffer.empty
+    var executionInProgress: Boolean = true
+
+    while (executionInProgress) {
+      executionInProgress = false
+      while (sse.hasNext) {
+        val df = sse.next()
+        sse.withErrorHandling {
+          result.addOne(df.collect())
+        }
+        executionInProgress = true
+      }
+    }
+
+    result.toSeq
   }
 
   private def verifySqlScriptResult(sqlText: String, expected: Seq[Seq[Row]]): Unit = {
@@ -53,6 +71,350 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
       case (actualAnswer, expectedAnswer) =>
         assert(actualAnswer.sameElements(expectedAnswer))
     }
+  }
+
+  // Handler tests
+  test("duplicate handler") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE flag INT = -1;
+        |  DECLARE zero_division CONDITION FOR '22012';
+        |  DECLARE CONTINUE HANDLER FOR zero_division
+        |  BEGIN
+        |    SET VAR flag = 1;
+        |  END;
+        |  DECLARE CONTINUE HANDLER FOR '22012'
+        |  BEGIN
+        |    SET VAR flag = 2;
+        |  END;
+        |  SELECT 1/0;
+        |  SELECT flag;
+        |END
+        |""".stripMargin
+    checkError(
+      exception = intercept[SqlScriptingException] {
+        verifySqlScriptResult(sqlScript, Seq.empty)
+      },
+      condition = "DUPLICATE_HANDLER_FOR_SAME_SQL_STATE",
+      parameters = Map("sqlState" -> "22012"))
+  }
+
+  test("handler - continue resolve in the same block") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE flag INT = -1;
+        |  DECLARE zero_division CONDITION FOR '22012';
+        |  DECLARE CONTINUE HANDLER FOR zero_division
+        |  BEGIN
+        |    SELECT flag;
+        |    SET VAR flag = 1;
+        |  END;
+        |  SELECT 2;
+        |  SELECT 3;
+        |  SELECT 1/0;
+        |  SELECT 4;
+        |  SELECT flag;
+        |END
+        |""".stripMargin
+    val expected = Seq(
+      Seq(Row(2)),    // select
+      Seq(Row(3)),    // select
+      Seq(Row(-1)),   // select flag
+      Seq(Row(4)),    // select
+      Seq(Row(1))     // select
+    )
+    verifySqlScriptResult(sqlScript, expected = expected)
+  }
+
+  test("handler - exit resolve in the same block") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE OR REPLACE VARIABLE flag INT = -1;
+        |  scope_to_exit: BEGIN
+        |    DECLARE zero_division CONDITION FOR '22012';
+        |    DECLARE EXIT HANDLER FOR zero_division
+        |    BEGIN
+        |      SELECT flag;
+        |      SET VAR flag = 1;
+        |    END;
+        |    SELECT 2;
+        |    SELECT 3;
+        |    SELECT 1/0;
+        |    SELECT 4;
+        |    SELECT 5;
+        |  END;
+        |  SELECT flag;
+        |END
+        |""".stripMargin
+    val expected = Seq(
+      Seq(Row(2)),    // select
+      Seq(Row(3)),    // select
+      Seq(Row(-1)),   // select flag
+      Seq(Row(1))     // select flag from the outer body
+    )
+    verifySqlScriptResult(sqlScript, expected = expected)
+  }
+
+  test("handler - exit resolve in the same block when if condition fails") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE OR REPLACE VARIABLE flag INT = -1;
+        |  scope_to_exit: BEGIN
+        |    DECLARE zero_division CONDITION FOR '22012';
+        |    DECLARE EXIT HANDLER FOR zero_division
+        |    BEGIN
+        |      SELECT flag;
+        |      SET VAR flag = 1;
+        |    END;
+        |    SELECT 2;
+        |    SELECT 3;
+        |    IF 1 > 1/0 THEN
+        |      SELECT 10;
+        |    END IF;
+        |    SELECT 4;
+        |    SELECT 5;
+        |  END;
+        |  SELECT flag;
+        |END
+        |""".stripMargin
+    val expected = Seq(
+      Seq(Row(2)),    // select
+      Seq(Row(3)),    // select
+      Seq(Row(-1)),   // select flag
+      Seq(Row(1))     // select flag from the outer body
+    )
+    verifySqlScriptResult(sqlScript, expected = expected)
+  }
+
+  ignore("handler - continue resolve in the same block when if condition fails") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE OR REPLACE VARIABLE flag INT = -1;
+        |  scope_to_exit: BEGIN
+        |    DECLARE zero_division CONDITION FOR '22012';
+        |    DECLARE CONTINUE HANDLER FOR zero_division
+        |    BEGIN
+        |      SELECT flag;
+        |      SET VAR flag = 1;
+        |    END;
+        |    SELECT 2;
+        |    SELECT 3;
+        |    IF 1 > 1/0 THEN
+        |      SELECT 10;
+        |    END IF;
+        |    SELECT 4;
+        |    SELECT 5;
+        |  END;
+        |  SELECT flag;
+        |END
+        |""".stripMargin
+    val expected = Seq(
+      Seq(Row(2)),    // select
+      Seq(Row(3)),    // select
+      Seq(Row(-1)),   // select flag
+      Seq(Row(4)),   // select flag
+      Seq(Row(5)),   // select flag
+      Seq(Row(1))     // select flag from the outer body
+    )
+    verifySqlScriptResult(sqlScript, expected = expected)
+  }
+
+  test("handler - continue catch-all in the same block") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE flag INT = -1;
+        |  DECLARE zero_division CONDITION FOR '22012';
+        |  DECLARE CONTINUE HANDLER FOR zero_division
+        |  BEGIN
+        |    SELECT flag;
+        |    SET VAR flag = 1;
+        |  END;
+        |  SELECT 2;
+        |  BEGIN
+        |    SELECT 3;
+        |    BEGIN
+        |      DECLARE CONTINUE HANDLER FOR SQLEXCEPTION
+        |      BEGIN
+        |        SELECT flag;
+        |        SET VAR flag = 2;
+        |      END;
+        |      SELECT 4;
+        |      SELECT 1/0;
+        |      SELECT 5;
+        |    END;
+        |    SELECT 6;
+        |  END;
+        |  SELECT 7;
+        |  SELECT flag;
+        |END
+        |""".stripMargin
+    val expected = Seq(
+      Seq(Row(2)),    // select
+      Seq(Row(3)),    // select
+      Seq(Row(4)),    // select
+      Seq(Row(-1)),   // select flag
+      Seq(Row(5)),    // select
+      Seq(Row(6)),    // select
+      Seq(Row(7)),    // select
+      Seq(Row(2))     // select
+    )
+    verifySqlScriptResult(sqlScript, expected = expected)
+  }
+
+  test("handler - continue resolve in outer block") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE flag INT = -1;
+        |  DECLARE zero_division CONDITION FOR '22012';
+        |  DECLARE CONTINUE HANDLER FOR zero_division
+        |  BEGIN
+        |    SELECT flag;
+        |    SET VAR flag = 1;
+        |  END;
+        |  SELECT 2;
+        |  BEGIN
+        |    SELECT 3;
+        |    BEGIN
+        |      SELECT 4;
+        |      SELECT 1/0;
+        |      SELECT 5;
+        |    END;
+        |    SELECT 6;
+        |  END;
+        |  SELECT 7;
+        |  SELECT flag;
+        |END
+        |""".stripMargin
+    val expected = Seq(
+      Seq(Row(2)),    // select
+      Seq(Row(3)),    // select
+      Seq(Row(4)),    // select
+      Seq(Row(-1)),   // select flag
+      Seq(Row(5)),    // select
+      Seq(Row(6)),    // select
+      Seq(Row(7)),    // select
+      Seq(Row(1))     // select
+    )
+    verifySqlScriptResult(sqlScript, expected = expected)
+  }
+
+  test("handler - continue resolve in the same block nested") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE flag INT = -1;
+        |  SELECT 2;
+        |  BEGIN
+        |    SELECT 3;
+        |    BEGIN
+        |      DECLARE zero_division CONDITION FOR '22012';
+        |      DECLARE CONTINUE HANDLER FOR zero_division
+        |      BEGIN
+        |        SELECT flag;
+        |        SET VAR flag = 1;
+        |      END;
+        |      SELECT 4;
+        |      SELECT 1/0;
+        |      SELECT 5;
+        |    END;
+        |    SELECT 6;
+        |  END;
+        |  SELECT 7;
+        |  SELECT flag;
+        |END
+        |""".stripMargin
+    val expected = Seq(
+      Seq(Row(2)),    // select
+      Seq(Row(3)),    // select
+      Seq(Row(4)),    // select
+      Seq(Row(-1)),   // select flag
+      Seq(Row(5)),    // select
+      Seq(Row(6)),    // select
+      Seq(Row(7)),    // select
+      Seq(Row(1))     // select
+    )
+    verifySqlScriptResult(sqlScript, expected = expected)
+  }
+
+  test("handler - exit resolve in outer block") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE flag INT = -1;
+        |  l1: BEGIN
+        |    DECLARE zero_division CONDITION FOR '22012';
+        |    DECLARE EXIT HANDLER FOR zero_division
+        |    BEGIN
+        |      SELECT flag;
+        |      SET VAR flag = 1;
+        |    END;
+        |    SELECT 2;
+        |    SELECT 3;
+        |    l2: BEGIN
+        |      SELECT 4;
+        |      SELECT 1/0;
+        |      SELECT 5;
+        |    END;
+        |    SELECT 6;
+        |  END;
+        |  SELECT flag;
+        |END
+        |""".stripMargin
+    val expected = Seq(
+      Seq(Row(2)),    // select
+      Seq(Row(3)),    // select
+      Seq(Row(4)),    // select
+      Seq(Row(-1)),   // select flag
+      Seq(Row(1))     // select flag from the outer body
+    )
+    verifySqlScriptResult(sqlScript, expected = expected)
+  }
+
+  test("handler - exit catch-all in the same block") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE flag INT = -1;
+        |  l1: BEGIN
+        |    DECLARE zero_division CONDITION FOR '22012';
+        |    DECLARE EXIT HANDLER FOR zero_division
+        |    BEGIN
+        |      SELECT flag;
+        |      SET VAR flag = 1;
+        |    END;
+        |    SELECT 2;
+        |    SELECT 3;
+        |    l2: BEGIN
+        |      DECLARE EXIT HANDLER FOR SQLEXCEPTION
+        |      BEGIN
+        |        SELECT flag;
+        |        SET VAR flag = 2;
+        |      END;
+        |      SELECT 4;
+        |      SELECT 1/0;
+        |      SELECT 5;
+        |    END;
+        |    SELECT 6;
+        |  END;
+        |  SELECT flag;
+        |END
+        |""".stripMargin
+    val expected = Seq(
+      Seq(Row(2)),    // select
+      Seq(Row(3)),    // select
+      Seq(Row(4)),    // select
+      Seq(Row(-1)),   // select flag
+      Seq(Row(6)),   // select
+      Seq(Row(2))     // select flag from the outer body
+    )
+    verifySqlScriptResult(sqlScript, expected = expected)
   }
 
   // Tests
@@ -105,6 +467,65 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
         |END
         |""".stripMargin
     val expected = Seq(Seq(Row(2)))
+    verifySqlScriptResult(sqlScript, expected)
+  }
+
+  test("signal statement") {
+    val sqlScript =
+      """
+        |BEGIN
+        |DECLARE var = 1;
+        |SIGNAL SQLSTATE VALUE '45000' SET MESSAGE_TEXT = 'Testing signal statement.';
+        |SET VAR var = var + 1;
+        |SELECT var;
+        |END
+        |""".stripMargin
+    checkError(
+      exception = intercept[SqlScriptingUserRaisedException] {
+        verifySqlScriptResult(sqlScript, Seq.empty)
+      },
+      condition = "USER_RAISED_EXCEPTION",
+      sqlState = "45000",
+      parameters = Map.empty)
+  }
+
+  test("signal statement with condition") {
+    val sqlScript =
+      """
+        |BEGIN
+        |DECLARE var = 1;
+        |SIGNAL DATA_SOURCE_EXTERNAL_ERROR SET MESSAGE_TEXT = 'Testing signal statement with condition.';
+        |SET VAR var = var + 1;
+        |SELECT var;
+        |END
+        |""".stripMargin
+    checkError(
+      exception = intercept[SqlScriptingUserRaisedException] {
+        verifySqlScriptResult(sqlScript, Seq.empty)
+      },
+      condition = "DATA_SOURCE_EXTERNAL_ERROR",
+      sqlState = "KD010",
+      parameters = Map.empty)
+  }
+
+  test("signal statement - handler") {
+    val sqlScript =
+      """
+        |BEGIN
+        |DECLARE flag = -1;
+        |DECLARE CONTINUE HANDLER FOR SQLEXCEPTION
+        |BEGIN
+        |  SELECT flag;
+        |  SET VAR flag = 1;
+        |END;
+        |SIGNAL SQLSTATE VALUE '45000' SET MESSAGE_TEXT = 'Testing signal statement.';
+        |SELECT flag;
+        |END
+        |""".stripMargin
+    val expected = Seq(
+      Seq(Row(-1)), // select flag in handler
+      Seq(Row(1)) // select flag at the end of script
+    )
     verifySqlScriptResult(sqlScript, expected)
   }
 
