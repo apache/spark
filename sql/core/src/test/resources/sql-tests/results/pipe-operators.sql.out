@@ -641,7 +641,7 @@ struct<x:int,y:string,z:int>
 table t
 |> extend 1
 -- !query schema
-struct<x:int,y:string,pipeexpression(1):int>
+struct<x:int,y:string,1:int>
 -- !query output
 0	abc	1
 1	def	1
@@ -2788,7 +2788,7 @@ struct<1:int,2:int>
 table t
 |> aggregate sum(x)
 -- !query schema
-struct<pipeexpression(sum(x)):bigint>
+struct<sum(x):bigint>
 -- !query output
 1
 
@@ -2864,7 +2864,7 @@ struct<x:int>
 table other
 |> aggregate a + count(b) group by a
 -- !query schema
-struct<a:int,pipeexpression((a + count(b))):bigint>
+struct<a:int,(a + count(b)):bigint>
 -- !query output
 1	3
 2	3
