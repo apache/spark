@@ -188,8 +188,7 @@ class SparkSession private[sql] (
     throw ConnectClientUnsupportedErrors.sessionState()
 
   /** @inheritdoc */
-  override def sqlContext: SQLContext =
-    throw ConnectClientUnsupportedErrors.sqlContext()
+  override val sqlContext: SQLContext = new SQLContext(this)
 
   /** @inheritdoc */
   override def listenerManager: ExecutionListenerManager =
