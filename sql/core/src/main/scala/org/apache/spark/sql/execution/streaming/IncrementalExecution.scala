@@ -225,13 +225,12 @@ class IncrementalExecution(
         // write out the state schema paths to the metadata file
         statefulOp match {
           case ssw: StateStoreWriter =>
-            val metadata = ssw.operatorStateMetadata(stateSchemaPaths)
             // validate metadata
-            if (isFirstBatch && currentBatchId != 0) {
+            val oldMetadata = if (isFirstBatch && currentBatchId != 0) {
               // If we are restarting from a different checkpoint directory
               // there may be a mismatch between the stateful operators in the
               // physical plan and the metadata.
-              val oldMetadata = try {
+              try {
                 OperatorStateMetadataReader.createReader(
                   new Path(checkpointLocation, ssw.getStateInfo.operatorId.toString),
                   hadoopConf, ssw.operatorStateMetadataVersion, currentBatchId - 1).read()
@@ -242,16 +241,21 @@ class IncrementalExecution(
                     log"versions: ${MDC(ERROR, e.getMessage)}")
                 None
               }
-              oldMetadata match {
-                case Some(oldMetadata) => ssw.validateNewMetadata(oldMetadata, metadata)
-                case None =>
-              }
+            } else {
+              None
+            }
+            val stateSchemaMapping = ssw.stateSchemaMapping(schemaValidationResult,
+              oldMetadata)
+            val metadata = ssw.operatorStateMetadata(stateSchemaMapping)
+            oldMetadata match {
+              case Some(oldMetadata) => ssw.validateNewMetadata(oldMetadata, metadata)
+              case None =>
             }
             val metadataWriter = OperatorStateMetadataWriter.createWriter(
-                new Path(checkpointLocation, ssw.getStateInfo.operatorId.toString),
-                hadoopConf,
-                ssw.operatorStateMetadataVersion,
-                Some(currentBatchId))
+              new Path(checkpointLocation, ssw.getStateInfo.operatorId.toString),
+              hadoopConf,
+              ssw.operatorStateMetadataVersion,
+              Some(currentBatchId))
             metadataWriter.write(metadata)
           case _ =>
         }
