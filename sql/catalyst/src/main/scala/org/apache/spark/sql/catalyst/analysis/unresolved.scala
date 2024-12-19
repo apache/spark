@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, UnaryNode}
+import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
@@ -153,6 +154,9 @@ object UnresolvedRelation {
   // An internal option of `UnresolvedRelation` to specify the required write privileges when
   // writing data to this relation.
   val REQUIRED_WRITE_PRIVILEGES = "__required_write_privileges__"
+
+  // A tag to store the original error when resolving the `UnresolvedRelation`.
+  val RESOLUTION_ERROR = new TreeNodeTag[Throwable]("resolutionError")
 
   def apply(
       tableIdentifier: TableIdentifier,
