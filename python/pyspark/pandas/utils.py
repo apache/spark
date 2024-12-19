@@ -484,14 +484,7 @@ def default_session() -> SparkSession:
     # Turn ANSI off when testing the pandas API on Spark since
     # the behavior of pandas API on Spark follows pandas, not SQL.
     if is_testing():
-        spark.conf.set("spark.sql.ansi.enabled", False)
-    if spark.conf.get("spark.sql.ansi.enabled") == "true":
-        log_advice(
-            "The config 'spark.sql.ansi.enabled' is set to True. "
-            "This can cause unexpected behavior "
-            "from pandas API on Spark since pandas API on Spark follows "
-            "the behavior of pandas, not SQL."
-        )
+        spark.conf.set("spark.sql.ansi.enabled", True)
 
     return spark
 
