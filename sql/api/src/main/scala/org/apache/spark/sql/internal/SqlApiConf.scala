@@ -65,7 +65,11 @@ private[sql] object SqlApiConf {
   def get: SqlApiConf = SqlApiConfHelper.getConfGetter.get()()
 
   // Force load SQLConf. This will trigger the installation of a confGetter that points to SQLConf.
-  Try(SparkClassUtils.classForName("org.apache.spark.sql.internal.SQLConf$"))
+  Try {
+    SqlApiConfHelper.setConfGetter(() =>
+      SparkClassUtils.classForName("org.apache.spark.sql.internal.SQLConf$")
+        .getMethod("get").invoke(null).asInstanceOf[SqlApiConf])
+  }
 }
 
 /**
