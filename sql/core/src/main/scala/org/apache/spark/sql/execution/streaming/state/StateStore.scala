@@ -337,7 +337,7 @@ sealed trait KeyStateEncoderSpec {
   def toEncoder(
       dataEncoder: RocksDBDataEncoder,
       useColumnFamilies: Boolean,
-      virtualColFamilyId: Option[Short]): RocksDBKeyStateEncoder
+      columnFamilyInfo: Option[ColumnFamilyInfo]): RocksDBKeyStateEncoder
 }
 
 object KeyStateEncoderSpec {
@@ -365,9 +365,9 @@ case class NoPrefixKeyStateEncoderSpec(keySchema: StructType) extends KeyStateEn
   override def toEncoder(
       dataEncoder: RocksDBDataEncoder,
       useColumnFamilies: Boolean,
-      virtualColFamilyId: Option[Short]): RocksDBKeyStateEncoder = {
+      columnFamilyInfo: Option[ColumnFamilyInfo]): RocksDBKeyStateEncoder = {
     new NoPrefixKeyStateEncoder(
-      dataEncoder, keySchema, useColumnFamilies, virtualColFamilyId)
+      dataEncoder, keySchema, useColumnFamilies, columnFamilyInfo)
   }
 }
 
@@ -381,9 +381,9 @@ case class PrefixKeyScanStateEncoderSpec(
   override def toEncoder(
       dataEncoder: RocksDBDataEncoder,
       useColumnFamilies: Boolean,
-      virtualColFamilyId: Option[Short]): RocksDBKeyStateEncoder = {
+      columnFamilyInfo: Option[ColumnFamilyInfo]): RocksDBKeyStateEncoder = {
     new PrefixKeyScanStateEncoder(
-      dataEncoder, keySchema, numColsPrefixKey, useColumnFamilies, virtualColFamilyId)
+      dataEncoder, keySchema, numColsPrefixKey, useColumnFamilies, columnFamilyInfo)
   }
 
 
@@ -404,9 +404,9 @@ case class RangeKeyScanStateEncoderSpec(
   override def toEncoder(
       dataEncoder: RocksDBDataEncoder,
       useColumnFamilies: Boolean,
-      virtualColFamilyId: Option[Short]): RocksDBKeyStateEncoder = {
+      columnFamilyInfo: Option[ColumnFamilyInfo]): RocksDBKeyStateEncoder = {
     new RangeKeyScanStateEncoder(
-      dataEncoder, keySchema, orderingOrdinals, useColumnFamilies, virtualColFamilyId)
+      dataEncoder, keySchema, orderingOrdinals, useColumnFamilies, columnFamilyInfo)
   }
 
   override def jsonValue: JValue = {

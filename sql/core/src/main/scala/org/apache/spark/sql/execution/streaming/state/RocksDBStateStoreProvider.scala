@@ -85,11 +85,13 @@ private[sql] class RocksDBStateStoreProvider
       val dataEncoder = getDataEncoder(
         stateStoreEncoding, dataEncoderCacheKey, keyStateEncoderSpec, valueSchema)
 
+      val columnFamilyInfo = Some(ColumnFamilyInfo(colFamilyName, newColFamilyId))
+
       val keyEncoder = RocksDBStateEncoder.getKeyEncoder(
         dataEncoder,
         keyStateEncoderSpec,
         useColumnFamilies,
-        Some(newColFamilyId)
+        columnFamilyInfo
       )
       val valueEncoder = RocksDBStateEncoder.getValueEncoder(
         dataEncoder,
@@ -407,11 +409,18 @@ private[sql] class RocksDBStateStoreProvider
     val dataEncoder = getDataEncoder(
       stateStoreEncoding, dataEncoderCacheKey, keyStateEncoderSpec, valueSchema)
 
+    val columnFamilyInfo = if (useColumnFamilies) {
+      defaultColFamilyId = Some(rocksDB.createColFamilyIfAbsent(StateStore.DEFAULT_COL_FAMILY_NAME))
+      Some(ColumnFamilyInfo(StateStore.DEFAULT_COL_FAMILY_NAME, defaultColFamilyId.get))
+    } else {
+      None
+    }
+
     val keyEncoder = RocksDBStateEncoder.getKeyEncoder(
       dataEncoder,
       keyStateEncoderSpec,
       useColumnFamilies,
-      defaultColFamilyId
+      columnFamilyInfo
     )
     val valueEncoder = RocksDBStateEncoder.getValueEncoder(
       dataEncoder,
@@ -640,6 +649,7 @@ object RocksDBStateStoreProvider {
   val STATE_ENCODING_NUM_VERSION_BYTES = 1
   val STATE_ENCODING_VERSION: Byte = 0
   val VIRTUAL_COL_FAMILY_PREFIX_BYTES = 2
+  val SCHEMA_ID_PREFIX_BYTES = 2
 
   private val MAX_AVRO_ENCODERS_IN_CACHE = 1000
   private val AVRO_ENCODER_LIFETIME_HOURS = 1L
@@ -688,6 +698,9 @@ object RocksDBStateStoreProvider {
       }
     )
   }
+
+  private[sql] def clearDataEncoderCache: Unit =
+    RocksDBStateStoreProvider.dataEncoderCache.invalidateAll()
 
   private def getRunId(hadoopConf: Configuration): String = {
     val runId = hadoopConf.get(StreamExecution.RUN_ID_KEY)
