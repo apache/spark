@@ -17,6 +17,7 @@
 
 import os
 import json
+from typing import Any, Iterator, TYPE_CHECKING
 
 from pyspark.util import local_connect_and_auth
 from pyspark.serializers import (
@@ -33,6 +34,11 @@ from pyspark.sql.streaming.stateful_processor_api_client import StatefulProcesso
 from pyspark.sql.streaming.stateful_processor_util import TransformWithStateInPandasFuncMode
 from pyspark.sql.types import StructType
 
+if TYPE_CHECKING:
+    from pyspark.sql.pandas._typing import (
+        DataFrameLike as PandasDataFrameLike,
+    )
+
 pickle_ser = CPickleSerializer()
 utf8_deserializer = UTF8Deserializer()
 
@@ -43,7 +49,12 @@ def main(infile: IO, outfile: IO) -> None:
     log_name = "Streaming TransformWithStateInPandas Python worker"
     print(f"Starting {log_name}.\n")
 
-    def process(processor, mode, key, input):
+    def process(
+        processor: StatefulProcessorApiClient,
+        mode: TransformWithStateInPandasFuncMode,
+        key: Any,
+        input: Iterator["PandasDataFrameLike"],
+    ) -> None:
         print(f"{log_name} Starting execution of UDF: {func}.\n")
         func(processor, mode, key, input)
         print(f"{log_name} Completed execution of UDF: {func}.\n")
