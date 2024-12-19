@@ -189,12 +189,12 @@ case class JsonTupleEvaluator(foldableFieldNames: Array[Option[String]]) {
       foldableFieldNames.map(_.orNull)
     } else if (constantFields == 0) {
       // None are foldable so all field names need to be evaluated from the input row.
-      fields.map { f => Option(f.toString).orNull }
+      fields.map { f => if (f != null) f.toString else null }
     } else {
       // If there is a mix of constant and non-constant expressions
       // prefer the cached copy when available.
       foldableFieldNames.zip(fields).map {
-        case (null, f) => Option(f.toString).orNull
+        case (null, f) => if (f != null) f.toString else null
         case (fieldName, _) => fieldName.orNull
       }
     }
