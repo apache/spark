@@ -19,7 +19,6 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.io._
 
-import scala.collection.immutable.ArraySeq
 import scala.util.parsing.combinator.RegexParsers
 
 import com.fasterxml.jackson.core._
@@ -463,11 +462,11 @@ case class JsonTuple(children: Seq[Expression])
   @transient private lazy val fieldExpressions: Seq[Expression] = children.tail
 
   // Eagerly evaluate any foldable the field names.
-  @transient private lazy val foldableFieldNames: IndexedSeq[Option[String]] = {
+  @transient private lazy val foldableFieldNames: Array[Option[String]] = {
     fieldExpressions.map {
       case expr if expr.foldable => Option(expr.eval()).map(_.asInstanceOf[UTF8String].toString)
       case _ => null
-    }.toIndexedSeq
+    }.toArray
   }
 
   override def elementSchema: StructType = StructType(fieldExpressions.zipWithIndex.map {
@@ -498,17 +497,16 @@ case class JsonTuple(children: Seq[Expression])
 
   override def eval(input: InternalRow): IterableOnce[InternalRow] = {
     val json = jsonExpr.eval(input).asInstanceOf[UTF8String]
-    val fields = fieldExpressions.map(_.eval(input).asInstanceOf[UTF8String])
-    evaluator.evaluate(json, fields)
+    val filedNames = fieldExpressions.map(_.eval(input).asInstanceOf[UTF8String]).toArray
+    evaluator.evaluate(json, filedNames)
   }
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val refEvaluator = ctx.addReferenceObj("evaluator", evaluator)
     val jsonTerm = ctx.freshName("json")
     val jsonEval = jsonExpr.genCode(ctx)
-    val fieldsTerm = ctx.freshName("fields")
-    val fieldsEval = fieldExpressions.map(_.genCode(ctx))
-    val arraySeqClass = classOf[ArraySeq[_]].getName
+    val filedNamesTerm = ctx.freshName("fieldNames")
+    val fieldNamesEval = fieldExpressions.map(_.genCode(ctx))
     val wrapperClass = classOf[IterableOnce[_]].getName
     val setJson =
       s"""
@@ -518,27 +516,27 @@ case class JsonTuple(children: Seq[Expression])
          |  $jsonTerm = ${jsonEval.value};
          |}
          |""".stripMargin
-    val setFields = fieldsEval.zipWithIndex.map {
-      case (fieldEval, idx) =>
+    val setFieldNames = fieldNamesEval.zipWithIndex.map {
+      case (fieldNameEval, idx) =>
         s"""
-           |if (${fieldEval.isNull}) {
-           |  $fieldsTerm[$idx] = null;
+           |if (${fieldNameEval.isNull}) {
+           |  $filedNamesTerm[$idx] = null;
            |} else {
-           |  $fieldsTerm[$idx] = ${fieldEval.value};
+           |  $filedNamesTerm[$idx] = ${fieldNameEval.value};
            |}
            |""".stripMargin
     }
     ev.copy(code =
       code"""
          |UTF8String $jsonTerm = null;
-         |UTF8String[] $fieldsTerm = new UTF8String[${fieldExpressions.length - 1}];
+         |UTF8String[] $filedNamesTerm = new UTF8String[${fieldExpressions.length}];
          |${jsonEval.code}
-         |${fieldsEval.map(_.code).mkString("\n")}
+         |${fieldNamesEval.map(_.code).mkString("\n")}
          |$setJson
-         |${setFields.mkString("\n")}
+         |${setFieldNames.mkString("\n")}
          |boolean ${ev.isNull} = false;
          |$wrapperClass<InternalRow> ${ev.value} =
-         |  $refEvaluator.evaluate($jsonTerm, new $arraySeqClass.ofRef($fieldsTerm));
+         |  $refEvaluator.evaluate($jsonTerm, $filedNamesTerm);
          |""".stripMargin)
   }
 

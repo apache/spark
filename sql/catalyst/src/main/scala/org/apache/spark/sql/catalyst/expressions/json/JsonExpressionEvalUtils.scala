@@ -169,38 +169,38 @@ case class SchemaOfJsonEvaluator(options: Map[String, String]) {
 /**
  * The expression `JsonTuple` will utilize it to support codegen.
  */
-case class JsonTupleEvaluator(foldableFields: IndexedSeq[Option[String]]) {
+case class JsonTupleEvaluator(foldableFieldNames: Array[Option[String]]) {
 
   import SharedFactory._
 
   // If processing fails this shared value will be returned.
   @transient private lazy val nullRow: Seq[InternalRow] =
-    new GenericInternalRow(Array.ofDim[Any](foldableFields.length)) :: Nil
+    new GenericInternalRow(Array.ofDim[Any](foldableFieldNames.length)) :: Nil
 
   // And count the number of foldable fields, we'll use this later to optimize evaluation.
-  @transient private lazy val constantFields: Int = foldableFields.count(_ != null)
+  @transient private lazy val constantFields: Int = foldableFieldNames.count(_ != null)
 
-  private def getCachedFields(fields: Seq[UTF8String]): Seq[String] = {
+  private def getFieldNameStrings(fields: Array[UTF8String]): Array[String] = {
     // Evaluate the field names as String rather than UTF8String to
     // optimize lookups from the json token, which is also a String.
     if (constantFields == fields.length) {
       // Typically the user will provide the field names as foldable expressions
       // so we can use the cached copy.
-      foldableFields.map(_.orNull)
+      foldableFieldNames.map(_.orNull)
     } else if (constantFields == 0) {
       // None are foldable so all field names need to be evaluated from the input row.
       fields.map { f => Option(f.toString).orNull }
     } else {
       // If there is a mix of constant and non-constant expressions
       // prefer the cached copy when available.
-      foldableFields.zip(fields).map {
+      foldableFieldNames.zip(fields).map {
         case (null, f) => Option(f.toString).orNull
         case (fieldName, _) => fieldName.orNull
       }
     }
   }
 
-  private def parseRow(parser: JsonParser, fieldNames: Seq[String]): Seq[InternalRow] = {
+  private def parseRow(parser: JsonParser, fieldNames: Array[String]): Seq[InternalRow] = {
     // Only objects are supported.
     if (parser.nextToken() != JsonToken.START_OBJECT) return nullRow
 
@@ -265,13 +265,13 @@ case class JsonTupleEvaluator(foldableFields: IndexedSeq[Option[String]]) {
     }
   }
 
-  final def evaluate(json: UTF8String, fields: Seq[UTF8String]): Seq[InternalRow] = {
+  final def evaluate(json: UTF8String, fieldNames: Array[UTF8String]): Seq[InternalRow] = {
     if (json == null) return nullRow
     try {
       /* We know the bytes are UTF-8 encoded. Pass a Reader to avoid having Jackson
       detect character encoding which could fail for some malformed strings. */
       Utils.tryWithResource(CreateJacksonParser.utf8String(jsonFactory, json)) { parser =>
-        parseRow(parser, getCachedFields(fields))
+        parseRow(parser, getFieldNameStrings(fieldNames))
       }
     } catch {
       case _: JsonProcessingException => nullRow
