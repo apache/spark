@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.catalog.{CatalogStatistics, CatalogTableTyp
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DatetimeType, _}
 
 
@@ -140,6 +141,7 @@ case class AnalyzeColumnCommand(
     case DoubleType | FloatType => true
     case BooleanType => true
     case _: DatetimeType => true
+    case CharType(_) | VarcharType(_) if !SQLConf.get.preserveCharVarcharTypeInfo => false
     case BinaryType | _: StringType => true
     case _ => false
   }
