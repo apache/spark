@@ -1594,6 +1594,22 @@ package object config {
       .checkValue(v => v > 0, "The threshold should be positive.")
       .createWithDefault(10000000)
 
+  private[spark] val SHUFFLE_MAP_STATUS_ROW_COUNT_OPTIMIZE_SKEWED_JOB =
+    ConfigBuilder("spark.shuffle.mapStatus.rowCount.optimize.skewed.job")
+      .internal()
+      .doc("MapStaus use rowCount metrics optimize skewed job")
+      .version("2.3.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  private[spark] val SHUFFLE_MAP_STATUS_ROW_COUNT_METRICS_CHCEK =
+    ConfigBuilder("spark.shuffle.mapStatus.rowCount.metrics.check")
+      .internal()
+      .doc("MapStaus use metrics check rowCount")
+      .version("2.3.0")
+      .booleanConf
+      .createWithDefault(true)
+
   private[spark] val MAX_RESULT_SIZE = ConfigBuilder("spark.driver.maxResultSize")
     .doc("Size limit for results.")
     .version("1.2.0")
