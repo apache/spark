@@ -38,6 +38,8 @@ private[protobuf] class CachedQuantileSerializer extends ProtobufSerDe[CachedQua
       .setGettingResultTime(data.gettingResultTime)
       .setSchedulerDelay(data.schedulerDelay)
       .setPeakExecutionMemory(data.peakExecutionMemory)
+      .setPeakOnHeapExecutionMemory(data.peakOnHeapExecutionMemory)
+      .setPeakOffHeapExecutionMemory(data.peakOffHeapExecutionMemory)
       .setMemoryBytesSpilled(data.memoryBytesSpilled)
       .setDiskBytesSpilled(data.diskBytesSpilled)
       .setBytesRead(data.bytesRead)
@@ -87,6 +89,8 @@ private[protobuf] class CachedQuantileSerializer extends ProtobufSerDe[CachedQua
       gettingResultTime = binary.getGettingResultTime,
       schedulerDelay = binary.getSchedulerDelay,
       peakExecutionMemory = binary.getPeakExecutionMemory,
+      peakOnHeapExecutionMemory = binary.getPeakOnHeapExecutionMemory,
+      peakOffHeapExecutionMemory = binary.getPeakOffHeapExecutionMemory,
       memoryBytesSpilled = binary.getMemoryBytesSpilled,
       diskBytesSpilled = binary.getDiskBytesSpilled,
       bytesRead = binary.getBytesRead,
