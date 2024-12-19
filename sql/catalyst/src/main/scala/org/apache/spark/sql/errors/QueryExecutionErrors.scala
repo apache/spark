@@ -225,8 +225,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       errorClass = "INVALID_ARRAY_INDEX",
       messageParameters = Map(
         "indexValue" -> toSQLValue(index, IntegerType),
-        "arraySize" -> toSQLValue(numElements, IntegerType),
-        "ansiConfig" -> toSQLConf(SQLConf.ANSI_ENABLED.key)),
+        "arraySize" -> toSQLValue(numElements, IntegerType)),
       context = getQueryContext(context),
       summary = getSummary(context))
   }
@@ -239,8 +238,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       errorClass = "INVALID_ARRAY_INDEX_IN_ELEMENT_AT",
       messageParameters = Map(
         "indexValue" -> toSQLValue(index, IntegerType),
-        "arraySize" -> toSQLValue(numElements, IntegerType),
-        "ansiConfig" -> toSQLConf(SQLConf.ANSI_ENABLED.key)),
+        "arraySize" -> toSQLValue(numElements, IntegerType)),
       context = getQueryContext(context),
       summary = getSummary(context))
   }
@@ -271,8 +269,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
     new SparkDateTimeException(
       errorClass = "CANNOT_PARSE_TIMESTAMP",
       messageParameters = Map(
-        "message" -> e.getMessage,
-        "ansiConfig" -> toSQLConf(SQLConf.ANSI_ENABLED.key)),
+        "message" -> e.getMessage),
       context = Array.empty,
       summary = "")
   }

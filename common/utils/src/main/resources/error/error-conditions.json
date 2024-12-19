@@ -70,6 +70,12 @@
     ],
     "sqlState" : "42000"
   },
+  "AMBIGUOUS_RESOLVER_EXTENSION" : {
+    "message" : [
+      "The single-pass analyzer cannot process this query or command because the extension choice for <operator> is ambiguous: <extensions>."
+    ],
+    "sqlState" : "XX000"
+  },
   "ARITHMETIC_OVERFLOW" : {
     "message" : [
       "<message>.<alternative> If necessary set <config> to \"false\" to bypass this error."
@@ -371,7 +377,7 @@
   },
   "CANNOT_PARSE_TIMESTAMP" : {
     "message" : [
-      "<message>. If necessary set <ansiConfig> to \"false\" to bypass this error."
+      "<message>. Use `try_to_timestamp` to tolerate invalid input string and return NULL instead."
     ],
     "sqlState" : "22007"
   },
@@ -1659,6 +1665,39 @@
     ],
     "sqlState" : "22000"
   },
+  "HYBRID_ANALYZER_EXCEPTION" : {
+    "message" : [
+      "An failure occurred when attempting to resolve a query or command with both the legacy fixed-point analyzer as well as the single-pass resolver."
+    ],
+    "subClass" : {
+      "FIXED_POINT_FAILED_SINGLE_PASS_SUCCEEDED" : {
+        "message" : [
+          "Fixed-point resolution failed, but single-pass resolution succeeded.",
+          "Single-pass analyzer output:",
+          "<singlePassOutput>"
+        ]
+      },
+      "LOGICAL_PLAN_COMPARISON_MISMATCH" : {
+        "message" : [
+          "Outputs of fixed-point and single-pass analyzers do not match.",
+          "Fixed-point analyzer output:",
+          "<fixedPointOutput>",
+          "Single-pass analyzer output:",
+          "<singlePassOutput>"
+        ]
+      },
+      "OUTPUT_SCHEMA_COMPARISON_MISMATCH" : {
+        "message" : [
+          "Output schemas of fixed-point and single-pass analyzers do not match.",
+          "Fixed-point analyzer output schema:",
+          "<fixedPointOutputSchema>",
+          "Single-pass analyzer output schema:",
+          "<singlePassOutputSchema>"
+        ]
+      }
+    },
+    "sqlState" : "XX000"
+  },
   "IDENTIFIER_TOO_MANY_NAME_PARTS" : {
     "message" : [
       "<identifier> is not a valid identifier as it has more than 2 name parts."
@@ -2092,13 +2131,13 @@
   },
   "INVALID_ARRAY_INDEX" : {
     "message" : [
-      "The index <indexValue> is out of bounds. The array has <arraySize> elements. Use the SQL function `get()` to tolerate accessing element at invalid index and return NULL instead. If necessary set <ansiConfig> to \"false\" to bypass this error."
+      "The index <indexValue> is out of bounds. The array has <arraySize> elements. Use the SQL function `get()` to tolerate accessing element at invalid index and return NULL instead."
     ],
     "sqlState" : "22003"
   },
   "INVALID_ARRAY_INDEX_IN_ELEMENT_AT" : {
     "message" : [
-      "The index <indexValue> is out of bounds. The array has <arraySize> elements. Use `try_element_at` to tolerate accessing element at invalid index and return NULL instead. If necessary set <ansiConfig> to \"false\" to bypass this error."
+      "The index <indexValue> is out of bounds. The array has <arraySize> elements. Use `try_element_at` to tolerate accessing element at invalid index and return NULL instead."
     ],
     "sqlState" : "22003"
   },
@@ -5051,11 +5090,6 @@
         "message" : [
           "Access to the SparkContext."
         ]
-      },
-      "SESSION_SQL_CONTEXT" : {
-        "message" : [
-          "Access to the SparkSession SQL Context."
-        ]
       }
     },
     "sqlState" : "0A000"
@@ -5657,6 +5691,12 @@
         ]
       }
     },
+    "sqlState" : "0A000"
+  },
+  "UNSUPPORTED_SINGLE_PASS_ANALYZER_FEATURE" : {
+    "message" : [
+      "The single-pass analyzer cannot process this query or command because it does not yet support <feature>."
+    ],
     "sqlState" : "0A000"
   },
   "UNSUPPORTED_STREAMING_OPERATOR_WITHOUT_WATERMARK" : {
