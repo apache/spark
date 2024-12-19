@@ -43,7 +43,8 @@ class StringType private[sql] (
    * equality and hashing).
    */
   private[sql] def supportsBinaryEquality: Boolean =
-    CollationFactory.fetchCollation(collationId).supportsBinaryEquality
+    collationId == CollationFactory.UTF8_BINARY_COLLATION_ID ||
+      CollationFactory.fetchCollation(collationId).supportsBinaryEquality
 
   private[sql] def supportsLowercaseEquality: Boolean =
     CollationFactory.fetchCollation(collationId).supportsLowercaseEquality
