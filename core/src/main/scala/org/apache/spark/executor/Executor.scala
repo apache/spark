@@ -467,6 +467,7 @@ private[spark] class Executor(
       if (!isLocal) {
         env.stop()
       }
+      defaultSessionState.urlClassLoader.close(); // see [SPARK-50628]
     }
   }
 
