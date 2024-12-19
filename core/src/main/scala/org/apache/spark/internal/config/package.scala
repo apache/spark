@@ -1594,6 +1594,22 @@ package object config {
       .checkValue(v => v > 0, "The threshold should be positive.")
       .createWithDefault(10000000)
 
+  private[spark] val SHUFFLE_OPTIMIZE_COMPRESSED_MAP_STATUS =
+    ConfigBuilder("spark.shuffle.optimize.compressed.map.status")
+      .internal()
+      .doc("Using CompressedMapStatus optimize skewed job.")
+      .version("2.3.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  private[spark] val SHUFFLE_OPTIMIZE_COMPRESSED_CONVERT_HIGHLY_MAP_STATUS =
+    ConfigBuilder("spark.shuffle.optimize.compressed.convert.highly.map.status")
+      .internal()
+      .doc("CompressedMapStatus Convert to HighlyCompressedMapStatus for reduce Driver memory")
+      .version("2.3.0")
+      .booleanConf
+      .createWithDefault(false)
+
   private[spark] val MAX_RESULT_SIZE = ConfigBuilder("spark.driver.maxResultSize")
     .doc("Size limit for results.")
     .version("1.2.0")
