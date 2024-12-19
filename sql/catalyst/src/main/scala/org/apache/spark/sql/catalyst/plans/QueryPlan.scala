@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.plans
 
+import java.lang.{Boolean => JBoolean}
 import java.util.IdentityHashMap
 
 import scala.collection.mutable
@@ -32,7 +33,7 @@ import org.apache.spark.sql.catalyst.trees.TreePatternBits
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, StructType}
-import org.apache.spark.util.TransientLazy
+import org.apache.spark.util.{AtomicRef, TransientAtomicRef}
 import org.apache.spark.util.collection.BitSet
 
 /**
@@ -54,8 +55,10 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
   /**
    * Returns the set of attributes that are output by this node.
    */
-  @transient
-  lazy val outputSet: AttributeSet = AttributeSet(output)
+  def outputSet: AttributeSet = _outputSet.apply()
+
+  private val _outputSet: TransientAtomicRef[AttributeSet] =
+    new TransientAtomicRef({ AttributeSet(output) })
 
   /**
    * Returns the output ordering that this plan generates, although the semantics differ in logical
@@ -65,7 +68,9 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
   def outputOrdering: Seq[SortOrder] = Nil
 
   // Override `treePatternBits` to propagate bits for its expressions.
-  override lazy val treePatternBits: BitSet = {
+  override def treePatternBits: BitSet = _treePatternBits.apply()
+
+  private val _treePatternBits: AtomicRef[BitSet] = new AtomicRef[BitSet]({
     val bits: BitSet = getDefaultTreePatternBits
     // Propagate expressions' pattern bits
     val exprIterator = expressions.iterator
@@ -73,7 +78,7 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
       bits.union(exprIterator.next().treePatternBits)
     }
     bits
-  }
+  })
 
   /**
    * The set of all attributes that are input to this operator by its children.
@@ -97,16 +102,18 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
    */
   def references: AttributeSet = _references()
 
-  private val _references = new TransientLazy({
-    AttributeSet(expressions) -- producedAttributes
-  })
+  private val _references: TransientAtomicRef[AttributeSet] =
+    new TransientAtomicRef({ AttributeSet(expressions) -- producedAttributes })
 
   /**
    * Returns true when the all the expressions in the current node as well as all of its children
    * are deterministic
    */
-  lazy val deterministic: Boolean = expressions.forall(_.deterministic) &&
-    children.forall(_.deterministic)
+  def deterministic: Boolean = _deterministic.apply()
+
+  private val _deterministic: AtomicRef[JBoolean] = new AtomicRef[JBoolean]({
+    expressions.forall(_.deterministic) && children.forall(_.deterministic)
+  })
 
   /**
    * Attributes that are referenced by expressions but not provided by this node's children.
@@ -427,7 +434,11 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
     }
   }
 
-  lazy val schema: StructType = DataTypeUtils.fromAttributes(output)
+  def schema: StructType = _schema.apply()
+
+  private val _schema: AtomicRef[StructType] = new AtomicRef[StructType]({
+    DataTypeUtils.fromAttributes(output)
+  })
 
   /** Returns the output schema in the tree format. */
   def schemaString: String = schema.treeString
@@ -480,11 +491,13 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
   /**
    * All the top-level subqueries of the current plan node. Nested subqueries are not included.
    */
-  @transient lazy val subqueries: Seq[PlanType] = {
+  def subqueries: Seq[PlanType] = _subqueries.apply()
+
+  private val _subqueries: TransientAtomicRef[Seq[PlanType]] = new TransientAtomicRef({
     expressions.filter(_.containsPattern(PLAN_EXPRESSION)).flatMap(_.collect {
       case e: PlanExpression[_] => e.plan.asInstanceOf[PlanType]
     })
-  }
+  })
 
   /**
    * All the subqueries of the current plan node and all its children. Nested subqueries are also
@@ -620,7 +633,9 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
    * Plan nodes that require special canonicalization should override [[doCanonicalize()]].
    * They should remove expressions cosmetic variations themselves.
    */
-  @transient final lazy val canonicalized: PlanType = {
+  def canonicalized: PlanType = _canonicalized.apply()
+
+  private val _canonicalized: TransientAtomicRef[PlanType] = new TransientAtomicRef({
     var plan = doCanonicalize()
     // If the plan has not been changed due to canonicalization, make a copy of it so we don't
     // mutate the original plan's _isCanonicalizedPlan flag.
@@ -629,7 +644,7 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
     }
     plan._isCanonicalizedPlan = true
     plan
-  }
+  })
 
   /**
    * Defines how the canonicalization should work for the current plan.
