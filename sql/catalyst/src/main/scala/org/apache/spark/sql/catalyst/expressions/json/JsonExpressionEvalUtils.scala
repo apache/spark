@@ -265,7 +265,7 @@ case class JsonTupleEvaluator(foldableFieldNames: Array[Option[String]]) {
     }
   }
 
-  final def evaluate(json: UTF8String, fieldNames: Array[UTF8String]): Seq[InternalRow] = {
+  final def evaluate(json: UTF8String, fieldNames: Array[UTF8String]): IterableOnce[InternalRow] = {
     if (json == null) return nullRow
     try {
       /* We know the bytes are UTF-8 encoded. Pass a Reader to avoid having Jackson
