@@ -19,16 +19,14 @@ package org.apache.spark.sql.catalyst
 
 import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.catalyst.util.{ArrayData, MapData}
-import org.apache.spark.sql.types.{DataType, Decimal, StructType}
+import org.apache.spark.sql.types.{DataType, Decimal}
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String, VariantVal}
 
 /**
  * An [[InternalRow]] that projects particular columns from another [[InternalRow]] without copying
  * the underlying data.
  */
-case class ProjectingInternalRow(schema: StructType,
-    colOrdinals: IndexedSeq[Int]) extends InternalRow {
-  assert(schema.size == colOrdinals.size)
+case class ProjectingInternalRow(colOrdinals: IndexedSeq[Int]) extends InternalRow {
 
   private var row: InternalRow = _
 
@@ -44,7 +42,7 @@ case class ProjectingInternalRow(schema: StructType,
 
   override def copy(): InternalRow = {
     val newRow = if (row != null) row.copy() else null
-    val newProjection = ProjectingInternalRow(schema, colOrdinals)
+    val newProjection = ProjectingInternalRow(colOrdinals)
     newProjection.project(newRow)
     newProjection
   }
@@ -119,7 +117,7 @@ case class ProjectingInternalRow(schema: StructType,
 }
 
 object ProjectingInternalRow {
-  def apply(schema: StructType, colOrdinals: Seq[Int]): ProjectingInternalRow = {
-    new ProjectingInternalRow(schema, colOrdinals.toIndexedSeq)
+  def apply(colOrdinals: Seq[Int]): ProjectingInternalRow = {
+    new ProjectingInternalRow(colOrdinals.toIndexedSeq)
   }
 }

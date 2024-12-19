@@ -49,12 +49,34 @@ public interface DeltaWriter<T> extends DataWriter<T> {
   void update(T metadata, T id, T row) throws IOException;
 
   /**
+   * Inserts a new row with metadata.
+   * <p>
+   * This method is used by row-level operations to handle metadata associated with updates
+   * that are split into deletes and inserts. For new records added during a MERGE operation,
+   * metadata column values are set to {@code null}.
+   *
+   * @param metadata values for metadata columns
+   * @param row a row to insert
+   * @throws IOException if failure happens during disk/network IO like writing files
+   *
+   * @since 4.0.0
+   */
+  default void insert(T metadata, T row) throws IOException {
+    insert(row);
+  }
+
+  /**
    * Inserts a new row.
    *
    * @param row a row to insert
    * @throws IOException if failure happens during disk/network IO like writing files
    */
   void insert(T row) throws IOException;
+
+  @Override
+  default void write(T metadata, T row) throws IOException {
+    insert(metadata, row);
+  }
 
   @Override
   default void write(T row) throws IOException {

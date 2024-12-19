@@ -18,13 +18,69 @@
 package org.apache.spark.sql.connector
 
 import org.apache.spark.sql.{AnalysisException, Row}
+import org.apache.spark.sql.types.StructType
 
 class DeltaBasedDeleteFromTableSuite extends DeleteFromTableSuiteBase {
+
+  import testImplicits._
 
   override protected lazy val extraTableProps: java.util.Map[String, String] = {
     val props = new java.util.HashMap[String, String]()
     props.put("supports-deltas", "true")
     props
+  }
+
+  test("delete handles metadata columns correctly") {
+    createAndInitTable("pk INT NOT NULL, id INT, dep STRING",
+      """{ "pk": 1, "id": 1, "dep": "hr" }
+        |{ "pk": 2, "id": 2, "dep": "software" }
+        |{ "pk": 3, "id": 3, "dep": "hr" }
+        |{ "pk": 4, "id": 4, "dep": "hr" }
+        |""".stripMargin)
+
+    sql(s"DELETE FROM $tableNameAsString WHERE id IN (1, 100)")
+
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString"),
+      Row(2, 2, "software") :: Row(3, 3, "hr") :: Row(4, 4, "hr") :: Nil)
+
+    checkLastWriteInfo(
+      expectedRowIdSchema = Some(StructType(Array(PK_FIELD))),
+      expectedMetadataSchema = Some(StructType(Array(PARTITION_FIELD, INDEX_FIELD_NULLABLE))))
+
+    checkLastWriteLog(deleteWriteLogEntry(id = 1, metadata = Row("hr", null)))
+  }
+
+  test("delete with subquery handles metadata columns correctly") {
+    withTempView("updated_dep") {
+      createAndInitTable("pk INT NOT NULL, id INT, dep STRING",
+        """{ "pk": 1, "id": 1, "dep": "hr" }
+          |{ "pk": 2, "id": 2, "dep": "software" }
+          |{ "pk": 3, "id": 3, "dep": "hr" }
+          |{ "pk": 4, "id": 4, "dep": "hr" }
+          |""".stripMargin)
+
+      val updatedDepDF = Seq(Some("hr"), Some("it")).toDF()
+      updatedDepDF.createOrReplaceTempView("updated_dep")
+
+      sql(
+        s"""DELETE FROM $tableNameAsString
+           |WHERE
+           | id IN (1, 100)
+           | AND
+           | dep IN (SELECT * FROM updated_dep)
+           |""".stripMargin)
+
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString"),
+        Row(2, 2, "software") :: Row(3, 3, "hr") :: Row(4, 4, "hr") :: Nil)
+
+      checkLastWriteInfo(
+        expectedRowIdSchema = Some(StructType(Array(PK_FIELD))),
+        expectedMetadataSchema = Some(StructType(Array(PARTITION_FIELD, INDEX_FIELD_NULLABLE))))
+
+      checkLastWriteLog(deleteWriteLogEntry(id = 1, metadata = Row("hr", null)))
+    }
   }
 
   test("delete with nondeterministic conditions") {

@@ -20,10 +20,9 @@ package org.apache.spark.sql.catalyst.analysis
 import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.ProjectingInternalRow
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, AttributeSet, Expression, ExprId, Literal, V2ExpressionUtils}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, AttributeSet, Expression, ExprId, Literal, MetadataAttribute, NamedExpression, V2ExpressionUtils}
 import org.apache.spark.sql.catalyst.plans.logical.{Assignment, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.RowDeltaUtils._
 import org.apache.spark.sql.catalyst.util.WriteDeltaProjections
 import org.apache.spark.sql.connector.catalog.SupportsRowLevelOperations
@@ -103,7 +102,31 @@ trait RewriteRowLevelCommand extends Rule[LogicalPlan] {
       metadataAttrs: Seq[Attribute],
       originalRowIdValues: Seq[Expression] = Seq.empty): Seq[Expression] = {
     val rowValues = buildDeltaDeleteRowValues(rowAttrs, rowIdAttrs)
-    Seq(Literal(DELETE_OPERATION)) ++ rowValues ++ metadataAttrs ++ originalRowIdValues
+    val metadataValues = nullifyMetadataOnDelete(metadataAttrs)
+    Seq(Literal(DELETE_OPERATION)) ++ rowValues ++ metadataValues ++ originalRowIdValues
+  }
+
+  protected def nullifyMetadataOnDelete(attrs: Seq[Attribute]): Seq[NamedExpression] = {
+    nullifyMetadata(attrs, MetadataAttribute.isPreservedOnDelete)
+  }
+
+  protected def nullifyMetadataOnUpdate(attrs: Seq[Attribute]): Seq[NamedExpression] = {
+    nullifyMetadata(attrs, MetadataAttribute.isPreservedOnUpdate)
+  }
+
+  private def nullifyMetadataOnInsertAsUpdate(attrs: Seq[Attribute]): Seq[NamedExpression] = {
+    nullifyMetadata(attrs, MetadataAttribute.isPreservedOnInsertAsUpdate)
+  }
+
+  private def nullifyMetadata(
+      attrs: Seq[Attribute],
+      shouldPreserve: Attribute => Boolean): Seq[NamedExpression] = {
+    attrs.map {
+      case MetadataAttribute(attr) if !shouldPreserve(attr) =>
+        Alias(Literal(null, attr.dataType), attr.name)(explicitMetadata = Some(attr.metadata))
+      case attr =>
+        attr
+    }
   }
 
   private def buildDeltaDeleteRowValues(
@@ -132,7 +155,18 @@ trait RewriteRowLevelCommand extends Rule[LogicalPlan] {
       metadataAttrs: Seq[Attribute],
       originalRowIdValues: Seq[Expression]): Seq[Expression] = {
     val rowValues = assignments.map(_.value)
-    Seq(Literal(UPDATE_OPERATION)) ++ rowValues ++ metadataAttrs ++ originalRowIdValues
+    val metadataValues = nullifyMetadataOnUpdate(metadataAttrs)
+    Seq(Literal(UPDATE_OPERATION)) ++ rowValues ++ metadataValues ++ originalRowIdValues
+  }
+
+  protected def deltaInsertAsUpdateOutput(
+      assignments: Seq[Assignment],
+      metadataAttrs: Seq[Attribute],
+      originalRowIdValues: Seq[Expression] = Seq.empty): Seq[Expression] = {
+    val rowValues = assignments.map(_.value)
+    val metadataValues = nullifyMetadataOnInsertAsUpdate(metadataAttrs)
+    val extraNullValues = originalRowIdValues.map(e => Literal(null, e.dataType))
+    Seq(Literal(INSERT_OPERATION)) ++ rowValues ++ metadataValues ++ extraNullValues
   }
 
   protected def buildWriteDeltaProjections(
@@ -163,8 +197,7 @@ trait RewriteRowLevelCommand extends Rule[LogicalPlan] {
       attrs: Seq[Attribute]): ProjectingInternalRow = {
 
     val colOrdinals = attrs.map(attr => findColOrdinal(plan, attr.name))
-    val schema = DataTypeUtils.fromAttributes(attrs)
-    ProjectingInternalRow(schema, colOrdinals)
+    ProjectingInternalRow(colOrdinals)
   }
 
   // if there are assignment to row ID attributes, original values are projected as special columns
@@ -177,8 +210,7 @@ trait RewriteRowLevelCommand extends Rule[LogicalPlan] {
       val originalValueIndex = findColOrdinal(plan, ORIGINAL_ROW_ID_VALUE_PREFIX + attr.name)
       if (originalValueIndex != -1) originalValueIndex else findColOrdinal(plan, attr.name)
     }
-    val schema = DataTypeUtils.fromAttributes(rowIdAttrs)
-    ProjectingInternalRow(schema, colOrdinals)
+    ProjectingInternalRow(colOrdinals)
   }
 
   private def findColOrdinal(plan: LogicalPlan, name: String): Int = {

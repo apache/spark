@@ -64,6 +64,23 @@ import org.apache.spark.sql.connector.metric.CustomTaskMetric;
  */
 @Evolving
 public interface DataWriter<T> extends Closeable {
+  /**
+   * Writes one record with metadata.
+   * <p>
+   * This method is used by group-based row-level operations to handle metadata for records
+   * that are updated or copied. For new records added during a MERGE operation, metadata
+   * column values are set to {@code null}.
+   * <p>
+   * If this method fails (by throwing an exception), {@link #abort()} will be called and this
+   * data writer is considered to have been failed.
+   *
+   * @throws IOException if failure happens during disk/network IO like writing files.
+   *
+   * @since 4.0.0
+   */
+  default void write(T metadata, T record) throws IOException {
+    write(record);
+  }
 
   /**
    * Writes one record.
