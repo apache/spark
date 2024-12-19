@@ -17,21 +17,22 @@
 
 package org.apache.spark.sql.execution.python
 
-import java.io.DataOutputStream
+import java.io.{BufferedInputStream, BufferedOutputStream, DataInputStream, DataOutputStream}
 import java.net.ServerSocket
 
 import scala.concurrent.ExecutionContext
+import scala.jdk.CollectionConverters._
 
 import org.apache.arrow.vector.VectorSchemaRoot
 import org.apache.arrow.vector.ipc.ArrowStreamWriter
 
-import org.apache.spark.TaskContext
-import org.apache.spark.api.python.{BasePythonRunner, ChainedPythonFunctions, PythonRDD}
+import org.apache.spark.{SparkEnv, SparkException, TaskContext}
+import org.apache.spark.api.python.{BasePythonRunner, ChainedPythonFunctions, PythonFunction, PythonRDD, PythonWorker, PythonWorkerFactory, PythonWorkerUtils, StreamingPythonRunner}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.python.TransformWithStateInPandasPythonRunner.{GroupedInType, InType}
-import org.apache.spark.sql.execution.streaming.StatefulProcessorHandleImpl
+import org.apache.spark.sql.execution.streaming.{DriverStatefulProcessorHandleImpl, StatefulProcessorHandleImpl}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.vectorized.ColumnarBatch
@@ -177,12 +178,11 @@ abstract class TransformWithStateInPandasPythonBaseRunner[I](
     funcs.map(_._1), evalType, argOffsets, jobArtifactUUID, pythonMetrics)
   with PythonArrowInput[I]
   with BasicPythonArrowOutput
+  with TransformWithStateInPandasPythonRunnerUtils
   with Logging {
 
   protected val sqlConf = SQLConf.get
   protected val arrowMaxRecordsPerBatch = sqlConf.arrowMaxRecordsPerBatch
-
-  private var stateServerSocketPort: Int = 0
 
   override protected val workerConf: Map[String, String] = initialWorkerConf +
     (SQLConf.ARROW_EXECUTION_MAX_RECORDS_PER_BATCH.key -> arrowMaxRecordsPerBatch.toString)
@@ -205,21 +205,7 @@ abstract class TransformWithStateInPandasPythonBaseRunner[I](
       inputIterator: Iterator[I],
       partitionIndex: Int,
       context: TaskContext): Iterator[ColumnarBatch] = {
-    var stateServerSocket: ServerSocket = null
-    var failed = false
-    try {
-      stateServerSocket = new ServerSocket( /* port = */ 0,
-        /* backlog = */ 1)
-      stateServerSocketPort = stateServerSocket.getLocalPort
-    } catch {
-      case e: Throwable =>
-        failed = true
-        throw e
-    } finally {
-      if (failed) {
-        closeServerSocketChannelSilently(stateServerSocket)
-      }
-    }
+    initStateServer()
 
     val executor = ThreadUtils.newDaemonSingleThreadExecutor("stateConnectionListenerThread")
     val executionContext = ExecutionContext.fromExecutor(executor)
@@ -239,7 +225,137 @@ abstract class TransformWithStateInPandasPythonBaseRunner[I](
     super.compute(inputIterator, partitionIndex, context)
   }
 
-  private def closeServerSocketChannelSilently(stateServerSocket: ServerSocket): Unit = {
+  override protected def writeUDF(dataOut: DataOutputStream): Unit = {
+    PythonUDFRunner.writeUDFs(dataOut, funcs, argOffsets, None)
+  }
+}
+
+/**
+ * TransformWithStateInPandas driver side Python runner. Similar as executor side runner,
+ * will start a new daemon thread on the Python runner to run state server.
+ */
+class TransformWithStateInPandasPythonPreInitRunner(
+    func: PythonFunction,
+    workerModule: String,
+    timeZoneId: String,
+    groupingKeySchema: StructType,
+    processorHandleImpl: DriverStatefulProcessorHandleImpl)
+  extends StreamingPythonRunner(func, "", "", workerModule)
+  with TransformWithStateInPandasPythonRunnerUtils
+  with Logging {
+  protected val sqlConf = SQLConf.get
+
+  private var dataIn: DataInputStream = _
+  private var dataOut: DataOutputStream = _
+
+  private var daemonThread: Thread = _
+
+  override def init(): (DataOutputStream, DataInputStream) = {
+    val env = SparkEnv.get
+
+    val localdir = env.blockManager.diskBlockManager.localDirs.map(f => f.getPath()).mkString(",")
+    envVars.put("SPARK_LOCAL_DIRS", localdir)
+    envVars.put("SPARK_AUTH_SOCKET_TIMEOUT", authSocketTimeout.toString)
+    envVars.put("SPARK_BUFFER_SIZE", bufferSize.toString)
+
+    val workerFactory =
+      new PythonWorkerFactory(pythonExec, workerModule, envVars.asScala.toMap, false)
+    val (worker: PythonWorker, _) = workerFactory.createSimpleWorker(blockingMode = true)
+    pythonWorker = Some(worker)
+    pythonWorkerFactory = Some(workerFactory)
+
+    val stream = new BufferedOutputStream(
+      pythonWorker.get.channel.socket().getOutputStream, bufferSize)
+    dataOut = new DataOutputStream(stream)
+
+    PythonWorkerUtils.writePythonVersion(pythonVer, dataOut)
+
+    // Send the user function to python process
+    PythonWorkerUtils.writePythonFunction(func, dataOut)
+    dataOut.flush()
+
+    dataIn = new DataInputStream(
+      new BufferedInputStream(pythonWorker.get.channel.socket().getInputStream, bufferSize))
+
+    val resFromPython = dataIn.readInt()
+    if (resFromPython != 0) {
+      val errMessage = PythonWorkerUtils.readUTF(dataIn)
+      throw streamingPythonRunnerInitializationFailure(resFromPython, errMessage)
+    }
+    logInfo("Driver Python Runner initialization succeeded.")
+
+    // start state server, update socket port
+    startStateServer()
+    (dataOut, dataIn)
+  }
+
+  def process(): Unit = {
+    // Also write the port number for state server
+    dataOut.writeInt(stateServerSocketPort)
+    PythonWorkerUtils.writeUTF(groupingKeySchema.json, dataOut)
+    dataOut.flush()
+
+    val resFromPython = dataIn.readInt()
+    if (resFromPython != 0) {
+      val errMessage = PythonWorkerUtils.readUTF(dataIn)
+      throw streamingPythonRunnerInitializationFailure(resFromPython, errMessage)
+    }
+  }
+
+  override def stop(): Unit = {
+    super.stop()
+    closeServerSocketChannelSilently(stateServerSocket)
+    daemonThread.stop()
+  }
+
+  private def startStateServer(): Unit = {
+    initStateServer()
+
+    daemonThread = new Thread {
+      override def run(): Unit = {
+        try {
+          new TransformWithStateInPandasStateServer(stateServerSocket, processorHandleImpl,
+            groupingKeySchema, timeZoneId, errorOnDuplicatedFieldNames = true,
+            largeVarTypes = sqlConf.arrowUseLargeVarTypes,
+            sqlConf.arrowTransformWithStateInPandasMaxRecordsPerBatch).run()
+        } catch {
+          case e: Exception =>
+            throw new SparkException("TransformWithStateInPandas state server " +
+              "daemon thread exited unexpectedly (crashed)", e)
+        }
+      }
+    }
+    daemonThread.setDaemon(true)
+    daemonThread.setName("stateConnectionListenerThread")
+    daemonThread.start()
+  }
+}
+
+/**
+ * TransformWithStateInPandas Python runner utils functions for handling a state server
+ * in a new daemon thread.
+ */
+trait TransformWithStateInPandasPythonRunnerUtils extends Logging{
+  protected var stateServerSocketPort: Int = 0
+  protected var stateServerSocket: ServerSocket = null
+  protected def initStateServer(): Unit = {
+    var failed = false
+    try {
+      stateServerSocket = new ServerSocket(/* port = */ 0,
+        /* backlog = */ 1)
+      stateServerSocketPort = stateServerSocket.getLocalPort
+    } catch {
+      case e: Throwable =>
+        failed = true
+        throw e
+    } finally {
+      if (failed) {
+        closeServerSocketChannelSilently(stateServerSocket)
+      }
+    }
+  }
+
+  protected def closeServerSocketChannelSilently(stateServerSocket: ServerSocket): Unit = {
     try {
       logInfo(log"closing the state server socket")
       stateServerSocket.close()
@@ -247,10 +363,6 @@ abstract class TransformWithStateInPandasPythonBaseRunner[I](
       case e: Exception =>
         logError(log"failed to close state server socket", e)
     }
-  }
-
-  override protected def writeUDF(dataOut: DataOutputStream): Unit = {
-    PythonUDFRunner.writeUDFs(dataOut, funcs, argOffsets, None)
   }
 }
 
