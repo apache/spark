@@ -1193,7 +1193,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    * @return the position of the first occurrence of the empty substr (now, always 0)
    */
   public int indexOfEmpty(int start) {
-    return 0; // TODO: Fix this behaviour (SPARK-48284)
+    return start >= numChars() ? 0 : start;
   }
 
   /**
