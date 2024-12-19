@@ -20,6 +20,7 @@ import org.apache.spark.annotation.Unstable
 import org.apache.spark.sql.{ExperimentalMethods, SparkSession, UDFRegistration, _}
 import org.apache.spark.sql.artifact.ArtifactManager
 import org.apache.spark.sql.catalyst.analysis.{Analyzer, EvalSubqueriesForTimeTravel, FunctionRegistry, InvokeProcedures, ReplaceCharWithVarchar, ResolveDataSource, ResolveSessionCatalog, ResolveTranspose, TableFunctionRegistry}
+import org.apache.spark.sql.catalyst.analysis.resolver.ResolverExtension
 import org.apache.spark.sql.catalyst.catalog.{FunctionExpressionBuilder, SessionCatalog}
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.optimizer.Optimizer
@@ -199,9 +200,23 @@ abstract class BaseSessionStateBuilder(
   protected def analyzer: Analyzer = new Analyzer(catalogManager) {
     override val hintResolutionRules: Seq[Rule[LogicalPlan]] =
       customHintResolutionRules
+<<<<<<< HEAD
     override val extendedResolutionRules: Seq[Rule[LogicalPlan]] = {
       new ResolveDataSource(session) +:
         new FindDataSourceTable(session) +:
+=======
+
+    override val singlePassResolverExtensions: Seq[ResolverExtension] = Seq(
+      new DataSourceResolver(session)
+    )
+
+    override val singlePassMetadataResolverExtensions: Seq[ResolverExtension] = Seq(
+      new FileResolver(session)
+    )
+
+    override val extendedResolutionRules: Seq[Rule[LogicalPlan]] =
+      new FindDataSourceTable(session) +:
+>>>>>>> 7f6d554a493330744113fa7934236d0dc5a90bc0
         new ResolveSQLOnFile(session) +:
         new FallBackFileSourceV2(session) +:
         ResolveEncodersInScalaAgg +:

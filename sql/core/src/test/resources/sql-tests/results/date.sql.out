@@ -207,7 +207,6 @@ org.apache.spark.SparkDateTimeException
   "errorClass" : "CANNOT_PARSE_TIMESTAMP",
   "sqlState" : "22007",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "message" : "Invalid date 'February 29' as '1970' is not a leap year"
   }
 }
