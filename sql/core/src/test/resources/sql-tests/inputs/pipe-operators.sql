@@ -998,6 +998,33 @@ select 1 as x, 2 as y
 select 3 as x, 4 as y
 |> aggregate group by 1, 2;
 
+values (3, 4) as tab(x, y)
+|> aggregate sum(y) group by 1;
+
+values (3, 4), (5, 4) as tab(x, y)
+|> aggregate sum(y) group by 1;
+
+select 3 as x, 4 as y
+|> aggregate sum(y) group by 1, 1;
+
+select 1 as `1`, 2 as `2`
+|> aggregate sum(`2`) group by `1`;
+
+select 3 as x, 4 as y
+|> aggregate sum(y) group by 2;
+
+select 3 as x, 4 as y, 5 as z
+|> aggregate sum(y) group by 2;
+
+select 3 as x, 4 as y, 5 as z
+|> aggregate sum(y) group by 3;
+
+select 3 as x, 4 as y, 5 as z
+|> aggregate sum(y) group by 2, 3;
+
+select 3 as x, 4 as y, 5 as z
+|> aggregate sum(y) group by 1, 2, 3;
+
 -- Basic table aggregation.
 table t
 |> aggregate sum(x);
