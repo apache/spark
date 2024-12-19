@@ -30,14 +30,24 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
 
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =
-      Batch("InferAndPushDownFilters", FixedPoint(100),
+      Batch("PushDownFilters", FixedPoint(100),
         PushPredicateThroughJoin,
-        PushPredicateThroughNonJoin,
+        PushPredicateThroughNonJoin) ::
+      Batch("Rewrite With expression", FixedPoint(10),
+        RewriteWithExpression,
+        CollapseProject) ::
+      Batch("InferFilters", Once,
         InferFiltersFromConstraints,
         CombineFilters,
         SimplifyBinaryComparison,
         BooleanSimplification,
-        PruneFilters) :: Nil
+        PruneFilters) ::
+      Batch("PushDownFilters", FixedPoint(100),
+        PushPredicateThroughJoin,
+        PushPredicateThroughNonJoin) ::
+      Batch("Rewrite With expression", FixedPoint(10),
+        RewriteWithExpression,
+        CollapseProject) :: Nil
   }
 
   val testRelation = LocalRelation($"a".int, $"b".int, $"c".int)
@@ -144,21 +154,24 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
   }
 
   test("inner join with alias: alias contains multiple attributes") {
-    val t1 = testRelation.subquery("t1")
-    val t2 = testRelation.subquery("t2")
+    withSQLConf(SQLConf.USE_COMMON_EXPR_ID_FOR_ALIAS.key -> "false") {
+      val t1 = testRelation.subquery("t1")
+      val t2 = testRelation.subquery("t2")
 
-    val originalQuery = t1.select($"a", Coalesce(Seq($"a", $"b")).as("int_col")).as("t")
-      .join(t2, Inner, Some("t.a".attr === "t2.a".attr && "t.int_col".attr === "t2.a".attr))
-      .analyze
-    val correctAnswer = t1
-      .where(IsNotNull($"a") && IsNotNull(Coalesce(Seq($"a", $"b"))) &&
-        $"a" === Coalesce(Seq($"a", $"b")))
-      .select($"a", Coalesce(Seq($"a", $"b")).as("int_col")).as("t")
-      .join(t2.where(IsNotNull($"a")), Inner,
-        Some("t.a".attr === "t2.a".attr && "t.int_col".attr === "t2.a".attr))
-      .analyze
-    val optimized = Optimize.execute(originalQuery)
-    comparePlans(optimized, correctAnswer)
+      val originalQuery = t1.select($"a", Coalesce(Seq($"a", $"b")).as("int_col")).as("t")
+        .join(t2, Inner, Some("t.a".attr === "t2.a".attr && "t.int_col".attr === "t2.a".attr))
+        .analyze
+      val correctAnswer = t1
+        .select($"a", $"b", $"c", Coalesce(Seq($"a", $"b")) as "_common_expr_0")
+        .where(IsNotNull($"a") && IsNotNull($"_common_expr_0") &&
+          $"a" === $"_common_expr_0")
+        .select($"a", Coalesce(Seq($"a", $"b")).as("int_col")).as("t")
+        .join(t2.where(IsNotNull($"a")), Inner,
+          Some("t.a".attr === "t2.a".attr && "t.int_col".attr === "t2.a".attr))
+        .analyze
+      val optimized = Optimize.execute(originalQuery)
+      comparePlans(optimized, correctAnswer)
+    }
   }
 
   test("inner join with alias: alias contains single attributes") {
