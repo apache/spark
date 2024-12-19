@@ -43,10 +43,7 @@ BUILD_DEPENDENCIES_MVN_FLAG="-am"
 HADOOP_PROFILE="hadoop-3"
 MVN="$TEST_ROOT_DIR/build/mvn"
 
-SCALA_VERSION=$("$MVN" help:evaluate -Dexpression=scala.binary.version 2>/dev/null\
-    | grep -v "INFO"\
-    | grep -v "WARNING"\
-    | tail -n 1)
+SCALA_VERSION=$("$MVN" help:evaluate -q -DforceStdout -Dexpression=scala.binary.version)
 
 export SCALA_VERSION
 echo $SCALA_VERSION
