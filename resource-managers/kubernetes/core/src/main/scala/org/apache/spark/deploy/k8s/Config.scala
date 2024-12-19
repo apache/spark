@@ -148,6 +148,13 @@ private[spark] object Config extends Logging {
       .version("2.3.0")
       .fallbackConf(CONTAINER_IMAGE)
 
+  val EXECUTOR_RANDOM_BLOCK_MANAGER_PORT =
+    ConfigBuilder("spark.kubernetes.executor.random.blockManager")
+      .doc("Using random blockmanager port when init executor.")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val CONTAINER_IMAGE_PULL_POLICY =
     ConfigBuilder("spark.kubernetes.container.image.pullPolicy")
       .doc("Kubernetes image pull policy. Valid values are Always, Never, and IfNotPresent.")
