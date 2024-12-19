@@ -1814,17 +1814,18 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
     // state and all the input rows processed before. In another word, the order of input rows
     // matters for non-deterministic expressions, while pushing down predicates changes the order.
     // This also applies to Aggregate.
-    case Filter(condition, project@Project(fields, grandChild))
+    case Filter(condition, project @ Project(fields, grandChild))
       if fields.forall(_.deterministic) && canPushThroughCondition(grandChild, condition) =>
       val aliasMap = getAliasMap(project)
-      val replacedByWith = rewriteExpressionByWith(condition, aliasMap)
-      project.copy(child = Filter(replaceAlias(replacedByWith, aliasMap), grandChild))
+      val replacedByWith =
+        rewriteExpressionsByWith(splitConjunctivePredicates(condition), aliasMap)
+      project.copy(child = Filter(replaceAlias(replacedByWith.reduce(And), aliasMap), grandChild))
 
     // We can push down deterministic predicate through Aggregate, including throwable predicate.
     // If we can push down a filter through Aggregate, it means the filter only references the
     // grouping keys or constants. The Aggregate operator can't reduce distinct values of grouping
     // keys so the filter won't see any new data after push down.
-    case filter@Filter(condition, aggregate: Aggregate)
+    case filter @ Filter(condition, aggregate: Aggregate)
       if aggregate.aggregateExpressions.forall(_.deterministic)
         && aggregate.groupingExpressions.nonEmpty =>
       val aliasMap = getAliasMap(aggregate)

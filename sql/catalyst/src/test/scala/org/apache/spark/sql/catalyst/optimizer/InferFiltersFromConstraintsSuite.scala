@@ -30,24 +30,14 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
 
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =
-      Batch("Push Down Filters before Inferring Filters", FixedPoint(100),
+      Batch("InferAndPushDownFilters", FixedPoint(100),
         PushPredicateThroughJoin,
-        PushPredicateThroughNonJoin) ::
-      Batch("rewrite With expression", FixedPoint(100),
-        RewriteWithExpression,
-        CollapseProject)::
-      Batch("Infer Filters", Once,
+        PushPredicateThroughNonJoin,
         InferFiltersFromConstraints,
         CombineFilters,
         SimplifyBinaryComparison,
         BooleanSimplification,
-        PruneFilters) ::
-      Batch("Push Down Filters", FixedPoint(100),
-        PushPredicateThroughJoin,
-        PushPredicateThroughNonJoin) ::
-      Batch("Rewrite With expression", FixedPoint(100),
-          RewriteWithExpression,
-          CollapseProject) :: Nil
+        PruneFilters) :: Nil
   }
 
   val testRelation = LocalRelation($"a".int, $"b".int, $"c".int)
@@ -161,9 +151,8 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
       .join(t2, Inner, Some("t.a".attr === "t2.a".attr && "t.int_col".attr === "t2.a".attr))
       .analyze
     val correctAnswer = t1
-      .select($"a", $"b", $"c", Coalesce(Seq($"a", $"b")).as("_common_expr_0"))
-      .where(IsNotNull($"a") && IsNotNull($"_common_expr_0") &&
-        $"a" === $"_common_expr_0")
+      .where(IsNotNull($"a") && IsNotNull(Coalesce(Seq($"a", $"b"))) &&
+        $"a" === Coalesce(Seq($"a", $"b")))
       .select($"a", Coalesce(Seq($"a", $"b")).as("int_col")).as("t")
       .join(t2.where(IsNotNull($"a")), Inner,
         Some("t.a".attr === "t2.a".attr && "t.int_col".attr === "t2.a".attr))
