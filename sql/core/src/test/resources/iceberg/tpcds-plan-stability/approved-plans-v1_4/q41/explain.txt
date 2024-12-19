@@ -1,0 +1,106 @@
+== Physical Plan ==
+TakeOrderedAndProject (18)
++- * HashAggregate (17)
+   +- Exchange (16)
+      +- * HashAggregate (15)
+         +- * Project (14)
+            +- * BroadcastHashJoin Inner BuildRight (13)
+               :- * Project (3)
+               :  +- * Filter (2)
+               :     +- BatchScan spark_catalog.default.item (1)
+               +- BroadcastExchange (12)
+                  +- * Project (11)
+                     +- * Filter (10)
+                        +- * HashAggregate (9)
+                           +- Exchange (8)
+                              +- * HashAggregate (7)
+                                 +- * Project (6)
+                                    +- * Filter (5)
+                                       +- BatchScan spark_catalog.default.item (4)
+
+
+(1) BatchScan spark_catalog.default.item
+Output [3]: [i_manufact_id#1, i_manufact#2, i_product_name#3]
+spark_catalog.default.item [scan class = SparkBatchQueryScan] [filters=i_manufact_id IS NOT NULL, i_manufact_id >= 738, i_manufact_id <= 778, i_manufact IS NOT NULL], [runtimeFilters=[]], caseSensitive=false,[ Broadcast Var UNUSED =]
+
+(2) Filter [codegen id : 3]
+Input [3]: [i_manufact_id#1, i_manufact#2, i_product_name#3]
+Condition : (((isnotnull(i_manufact_id#1) AND (i_manufact_id#1 >= 738)) AND (i_manufact_id#1 <= 778)) AND isnotnull(i_manufact#2))
+
+(3) Project [codegen id : 3]
+Output [2]: [i_manufact#2, i_product_name#3]
+Input [3]: [i_manufact_id#1, i_manufact#2, i_product_name#3]
+
+(4) BatchScan spark_catalog.default.item
+Output [5]: [i_category#4, i_manufact#5, i_size#6, i_color#7, i_units#8]
+spark_catalog.default.item [scan class = SparkBatchQueryScan] [filters=(((i_category = 'Women' AND ((((i_color = 'powder' OR i_color = 'khaki') AND (i_units = 'Ounce' OR i_units = 'Oz')) AND (i_size = 'medium' OR i_size = 'extra large')) OR (((i_color = 'brown' OR i_color = 'honeydew') AND (i_units = 'Bunch' OR i_units = 'Ton')) AND (i_size = 'N/A' OR i_size = 'small')))) OR (i_category = 'Men' AND ((((i_color = 'floral' OR i_color = 'deep') AND (i_units = 'N/A' OR i_units = 'Dozen')) AND (i_size = 'petite' OR i_size = 'large')) OR (((i_color = 'light' OR i_color = 'cornflower') AND (i_units = 'Box' OR i_units = 'Pound')) AND (i_size = 'medium' OR i_size = 'extra large'))))) OR ((i_category = 'Women' AND ((((i_color = 'midnight' OR i_color = 'snow') AND (i_units = 'Pallet' OR i_units = 'Gross')) AND (i_size = 'medium' OR i_size = 'extra large')) OR (((i_color = 'cyan' OR i_color = 'papaya') AND (i_units = 'Cup' OR i_units = 'Dram')) AND (i_size = 'N/A' OR i_size = 'small')))) OR (i_category = 'Men' AND ((((i_color = 'orange' OR i_color = 'frosted') AND (i_units = 'Each' OR i_units = 'Tbl')) AND (i_size = 'petite' OR i_size = 'large')) OR (((i_color = 'forest' OR i_color = 'ghost') AND (i_units = 'Lb' OR i_units = 'Bundle')) AND (i_size = 'medium' OR i_size = 'extra large'))))))], [runtimeFilters=[]], caseSensitive=false,[ Broadcast Var UNUSED =]
+
+(5) Filter [codegen id : 1]
+Input [5]: [i_category#4, i_manufact#5, i_size#6, i_color#7, i_units#8]
+Condition : (((((i_category#4 = Women) AND (((((i_color#7 = powder) OR (i_color#7 = khaki)) AND ((i_units#8 = Ounce) OR (i_units#8 = Oz))) AND ((i_size#6 = medium) OR (i_size#6 = extra large))) OR ((((i_color#7 = brown) OR (i_color#7 = honeydew)) AND ((i_units#8 = Bunch) OR (i_units#8 = Ton))) AND ((i_size#6 = N/A) OR (i_size#6 = small))))) OR ((i_category#4 = Men) AND (((((i_color#7 = floral) OR (i_color#7 = deep)) AND ((i_units#8 = N/A) OR (i_units#8 = Dozen))) AND ((i_size#6 = petite) OR (i_size#6 = large))) OR ((((i_color#7 = light) OR (i_color#7 = cornflower)) AND ((i_units#8 = Box) OR (i_units#8 = Pound))) AND ((i_size#6 = medium) OR (i_size#6 = extra large)))))) OR (((i_category#4 = Women) AND (((((i_color#7 = midnight) OR (i_color#7 = snow)) AND ((i_units#8 = Pallet) OR (i_units#8 = Gross))) AND ((i_size#6 = medium) OR (i_size#6 = extra large))) OR ((((i_color#7 = cyan) OR (i_color#7 = papaya)) AND ((i_units#8 = Cup) OR (i_units#8 = Dram))) AND ((i_size#6 = N/A) OR (i_size#6 = small))))) OR ((i_category#4 = Men) AND (((((i_color#7 = orange) OR (i_color#7 = frosted)) AND ((i_units#8 = Each) OR (i_units#8 = Tbl))) AND ((i_size#6 = petite) OR (i_size#6 = large))) OR ((((i_color#7 = forest) OR (i_color#7 = ghost)) AND ((i_units#8 = Lb) OR (i_units#8 = Bundle))) AND ((i_size#6 = medium) OR (i_size#6 = extra large))))))) AND isnotnull(i_manufact#5))
+
+(6) Project [codegen id : 1]
+Output [1]: [i_manufact#5]
+Input [5]: [i_category#4, i_manufact#5, i_size#6, i_color#7, i_units#8]
+
+(7) HashAggregate [codegen id : 1]
+Input [1]: [i_manufact#5]
+Keys [1]: [i_manufact#5]
+Functions [1]: [partial_count(1)]
+Aggregate Attributes [1]: [count#9]
+Results [2]: [i_manufact#5, count#10]
+
+(8) Exchange
+Input [2]: [i_manufact#5, count#10]
+Arguments: hashpartitioning(i_manufact#5, 5), ENSURE_REQUIREMENTS, [plan_id=1]
+
+(9) HashAggregate [codegen id : 2]
+Input [2]: [i_manufact#5, count#10]
+Keys [1]: [i_manufact#5]
+Functions [1]: [count(1)]
+Aggregate Attributes [1]: [count(1)#11]
+Results [2]: [count(1)#11 AS item_cnt#12, i_manufact#5]
+
+(10) Filter [codegen id : 2]
+Input [2]: [item_cnt#12, i_manufact#5]
+Condition : (item_cnt#12 > 0)
+
+(11) Project [codegen id : 2]
+Output [1]: [i_manufact#5]
+Input [2]: [item_cnt#12, i_manufact#5]
+
+(12) BroadcastExchange
+Input [1]: [i_manufact#5]
+Arguments: HashedRelationBroadcastMode(List(input[0, string, true]),false), [plan_id=2]
+
+(13) BroadcastHashJoin [codegen id : 3]
+Left keys [1]: [i_manufact#2]
+Right keys [1]: [i_manufact#5]
+Join condition: None
+
+(14) Project [codegen id : 3]
+Output [1]: [i_product_name#3]
+Input [3]: [i_manufact#2, i_product_name#3, i_manufact#5]
+
+(15) HashAggregate [codegen id : 3]
+Input [1]: [i_product_name#3]
+Keys [1]: [i_product_name#3]
+Functions: []
+Aggregate Attributes: []
+Results [1]: [i_product_name#3]
+
+(16) Exchange
+Input [1]: [i_product_name#3]
+Arguments: hashpartitioning(i_product_name#3, 5), ENSURE_REQUIREMENTS, [plan_id=3]
+
+(17) HashAggregate [codegen id : 4]
+Input [1]: [i_product_name#3]
+Keys [1]: [i_product_name#3]
+Functions: []
+Aggregate Attributes: []
+Results [1]: [i_product_name#3]
+
+(18) TakeOrderedAndProject
+Input [1]: [i_product_name#3]
+Arguments: 100, [i_product_name#3 ASC NULLS FIRST], [i_product_name#3]
+

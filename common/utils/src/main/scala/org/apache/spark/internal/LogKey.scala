@@ -90,6 +90,7 @@ private[spark] object LogKeys {
   case object BARRIER_ID extends LogKey
   case object BATCH_ID extends LogKey
   case object BATCH_NAME extends LogKey
+  case object BATCH_SCAN_EXEC extends LogKey
   case object BATCH_TIMES extends LogKey
   case object BATCH_TIMESTAMP extends LogKey
   case object BATCH_WRITE extends LogKey
@@ -453,6 +454,7 @@ private[spark] object LogKeys {
   case object NODES extends LogKey
   case object NODE_LOCATION extends LogKey
   case object NON_BUILT_IN_CONNECTORS extends LogKey
+  case object NON_PARTITION_ATTRIBUTES extends LogKey
   case object NORM extends LogKey
   case object NUM_ADDED_PARTITIONS extends LogKey
   case object NUM_APPS extends LogKey

@@ -1,0 +1,79 @@
+TakeOrderedAndProject [ca_state,cd_gender,cd_marital_status,cd_dep_count,cd_dep_employed_count,cd_dep_college_count,cnt1,avg(cd_dep_count),max(cd_dep_count),sum(cd_dep_count),cnt2,avg(cd_dep_employed_count),max(cd_dep_employed_count),sum(cd_dep_employed_count),cnt3,avg(cd_dep_college_count),max(cd_dep_college_count),sum(cd_dep_college_count)]
+  WholeStageCodegen (10)
+    HashAggregate [ca_state,cd_gender,cd_marital_status,cd_dep_count,cd_dep_employed_count,cd_dep_college_count,count,sum,count,max,sum,sum,count,max,sum,sum,count,max,sum] [count(1),avg(cd_dep_count),max(cd_dep_count),sum(cd_dep_count),avg(cd_dep_employed_count),max(cd_dep_employed_count),sum(cd_dep_employed_count),avg(cd_dep_college_count),max(cd_dep_college_count),sum(cd_dep_college_count),cnt1,avg(cd_dep_count),max(cd_dep_count),sum(cd_dep_count),cnt2,avg(cd_dep_employed_count),max(cd_dep_employed_count),sum(cd_dep_employed_count),cnt3,avg(cd_dep_college_count),max(cd_dep_college_count),sum(cd_dep_college_count),count,sum,count,max,sum,sum,count,max,sum,sum,count,max,sum]
+      InputAdapter
+        Exchange [ca_state,cd_gender,cd_marital_status,cd_dep_count,cd_dep_employed_count,cd_dep_college_count] #1
+          WholeStageCodegen (9)
+            HashAggregate [ca_state,cd_gender,cd_marital_status,cd_dep_count,cd_dep_employed_count,cd_dep_college_count] [count,sum,count,max,sum,sum,count,max,sum,sum,count,max,sum,count,sum,count,max,sum,sum,count,max,sum,sum,count,max,sum]
+              Project [ca_state,cd_gender,cd_marital_status,cd_dep_count,cd_dep_employed_count,cd_dep_college_count]
+                BroadcastHashJoin [c_current_cdemo_sk,cd_demo_sk]
+                  Project [c_current_cdemo_sk,ca_state]
+                    BroadcastHashJoin [c_current_addr_sk,ca_address_sk]
+                      Project [c_current_cdemo_sk,c_current_addr_sk]
+                        BroadcastHashJoin [c_customer_sk,customsk]
+                          BroadcastHashJoin [c_customer_sk,ss_customer_sk]
+                            Project [c_customer_sk,c_current_cdemo_sk,c_current_addr_sk]
+                              Filter [c_current_addr_sk,c_current_cdemo_sk]
+                                InputAdapter
+                                  BatchScan spark_catalog.default.customer [c_customer_sk,c_current_cdemo_sk,c_current_addr_sk]
+                            InputAdapter
+                              BroadcastExchange #2
+                                WholeStageCodegen (2)
+                                  Project [ss_customer_sk]
+                                    BroadcastHashJoin [ss_sold_date_sk,d_date_sk]
+                                      Project [ss_sold_date_sk,ss_customer_sk]
+                                        Filter [ss_sold_date_sk]
+                                          InputAdapter
+                                            BatchScan spark_catalog.default.store_sales [ss_sold_date_sk,ss_sold_time_sk,ss_item_sk,ss_customer_sk,ss_cdemo_sk,ss_hdemo_sk,ss_addr_sk,ss_store_sk,ss_promo_sk,ss_ticket_number,ss_quantity,ss_wholesale_cost,ss_list_price,ss_sales_price,ss_ext_discount_amt,ss_ext_sales_price,ss_ext_wholesale_cost,ss_ext_list_price,ss_ext_tax,ss_coupon_amt,ss_net_paid,ss_net_paid_inc_tax,ss_net_profit]
+                                              SubqueryBroadcast [d_date_sk] #1
+                                                BroadcastExchange #3
+                                                  WholeStageCodegen (1)
+                                                    Project [d_date_sk]
+                                                      Filter [d_year,d_qoy,d_date_sk]
+                                                        InputAdapter
+                                                          BatchScan spark_catalog.default.date_dim [d_date_sk,d_date_id,d_date,d_month_seq,d_week_seq,d_quarter_seq,d_year,d_dow,d_moy,d_dom,d_qoy,d_fy_year,d_fy_quarter_seq,d_fy_week_seq,d_day_name,d_quarter_name,d_holiday,d_weekend,d_following_holiday,d_first_dom,d_last_dom,d_same_day_ly,d_same_day_lq,d_current_day,d_current_week,d_current_month,d_current_quarter,d_current_year]
+                                      InputAdapter
+                                        ReusedExchange [d_date_sk] #3
+                          InputAdapter
+                            BroadcastExchange #4
+                              Union
+                                WholeStageCodegen (4)
+                                  Project [ws_bill_customer_sk]
+                                    BroadcastHashJoin [ws_sold_date_sk,d_date_sk]
+                                      Project [ws_sold_date_sk,ws_bill_customer_sk]
+                                        Filter [ws_sold_date_sk]
+                                          InputAdapter
+                                            BatchScan spark_catalog.default.web_sales [ws_sold_date_sk,ws_bill_customer_sk]
+                                              SubqueryBroadcast [d_date_sk] #2
+                                                BroadcastExchange #5
+                                                  WholeStageCodegen (1)
+                                                    Project [d_date_sk]
+                                                      Filter [d_year,d_qoy,d_date_sk]
+                                                        InputAdapter
+                                                          BatchScan spark_catalog.default.date_dim [d_date_sk,d_year,d_qoy]
+                                      InputAdapter
+                                        ReusedExchange [d_date_sk] #5
+                                WholeStageCodegen (6)
+                                  Project [cs_ship_customer_sk]
+                                    BroadcastHashJoin [cs_sold_date_sk,d_date_sk]
+                                      Project [cs_sold_date_sk,cs_ship_customer_sk]
+                                        Filter [cs_sold_date_sk]
+                                          InputAdapter
+                                            BatchScan spark_catalog.default.catalog_sales [cs_sold_date_sk,cs_ship_customer_sk]
+                                              ReusedSubquery [d_date_sk] #2
+                                      InputAdapter
+                                        ReusedExchange [d_date_sk] #5
+                      InputAdapter
+                        BroadcastExchange #6
+                          WholeStageCodegen (7)
+                            Project [ca_address_sk,ca_state]
+                              Filter [ca_address_sk]
+                                InputAdapter
+                                  BatchScan spark_catalog.default.customer_address [ca_address_sk,ca_state]
+                  InputAdapter
+                    BroadcastExchange #7
+                      WholeStageCodegen (8)
+                        Project [cd_demo_sk,cd_gender,cd_marital_status,cd_dep_count,cd_dep_employed_count,cd_dep_college_count]
+                          Filter [cd_demo_sk]
+                            InputAdapter
+                              BatchScan spark_catalog.default.customer_demographics [cd_demo_sk,cd_gender,cd_marital_status,cd_dep_count,cd_dep_employed_count,cd_dep_college_count]
