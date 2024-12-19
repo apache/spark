@@ -2023,7 +2023,11 @@ case class RebalancePartitions(
   override def output: Seq[Attribute] = child.output
   override val nodePatterns: Seq[TreePattern] = Seq(REBALANCE_PARTITIONS)
 
-  override val partitioning: Partitioning = super.partitioning
+  override val partitioning: Partitioning = if (numPartitions == 1) {
+    SinglePartition
+  } else {
+    super.partitioning
+  }
 
   override protected def withNewChildInternal(newChild: LogicalPlan): RebalancePartitions =
     copy(child = newChild)
