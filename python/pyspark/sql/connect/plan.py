@@ -76,6 +76,15 @@ class LogicalPlan:
     def __init__(
         self, child: Optional["LogicalPlan"], references: Optional[Sequence["LogicalPlan"]] = None
     ) -> None:
+        """
+
+        Parameters
+        ----------
+        child : :class:`LogicalPlan`, optional.
+            The child logical plan.
+        references : list of :class:`LogicalPlan`, optional.
+            The list of logical plans that are referenced as subqueries in this logical plan.
+        """
         self._child = child
         self._root_plan_id = LogicalPlan._fresh_plan_id()
 
@@ -171,7 +180,7 @@ class LogicalPlan:
         if len(self._references) == 0:
             return root
         else:
-            # build new plan like
+            # When there are references to other DataFrame, e.g., subqueries, build new plan like:
             # with_relations [id 10]
             #     root: plan  [id 9]
             #     reference:

@@ -76,6 +76,7 @@ trait ColumnNodeLike {
     f(this)
     children.foreach(_.foreach(f))
   }
+
   private[sql] def collect[A](pf: PartialFunction[ColumnNodeLike, A]): Seq[A] = {
     val ret = new collection.mutable.ArrayBuffer[A]()
     val lifted = pf.lift
