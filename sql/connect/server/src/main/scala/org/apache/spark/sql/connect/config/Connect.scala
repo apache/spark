@@ -265,6 +265,20 @@ object Connect {
       .booleanConf
       .createWithDefault(true)
 
+  val CONNECT_SERVER_IDLE_TIMEOUT =
+    buildConf("spark.connect.server.idleTimeout")
+      .doc(
+        """
+          |Configures idle timeout of Spark  Connect Server.
+          |If the server does not receive any new RPC requests or sessions within
+          |this timeout duration, it will shut down automatically.
+          |Set to 0 to disable.
+          |""".stripMargin
+      )
+      .version("4.0.0")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .createWithDefaultString("0")
+
   val CONNECT_GRPC_MAX_METADATA_SIZE =
     buildStaticConf("spark.connect.grpc.maxMetadataSize")
       .doc(
@@ -301,4 +315,5 @@ object Connect {
       .internal()
       .booleanConf
       .createWithDefault(true)
+
 }
