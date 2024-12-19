@@ -670,6 +670,108 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
     }
   }
 
+  testWithChangelogCheckpointingEnabled("RocksDB Fault Tolerance: correctly handle when there " +
+    "are multiple snapshot files for the same version") {
+    val enableStateStoreCheckpointIds = true
+    val useColumnFamily = true
+    val remoteDir = Utils.createTempDir().toString
+    new File(remoteDir).delete() // to make sure that the directory gets created
+    val enableChangelogCheckpointingConf =
+      dbConf.copy(enableChangelogCheckpointing = true, minVersionsToRetain = 20,
+        minDeltasForSnapshot = 3)
+
+    // Simulate when there are multiple snapshot files for the same version
+    // The first DB writes to version 0 with uniqueId
+    val versionToUniqueId1 = new mutable.HashMap[Long, String]()
+    withDB(remoteDir, conf = enableChangelogCheckpointingConf,
+      useColumnFamilies = useColumnFamily,
+      enableStateStoreCheckpointIds = enableStateStoreCheckpointIds,
+      versionToUniqueId = versionToUniqueId1) { db =>
+      db.load(0, versionToUniqueId1.get(0))
+      db.put("a", "1") // write key a here
+      db.commit()
+
+      // Add some change log files after the snapshot
+      for (version <- 2 to 5) {
+        db.load(version - 1, versionToUniqueId1.get(version - 1))
+        db.put(version.toString, version.toString) // update "1" -> "1", "2" -> "2", ...
+        db.commit()
+      }
+
+      // doMaintenance uploads the snapshot
+      db.doMaintenance()
+
+      for (version <- 6 to 10) {
+        db.load(version - 1, versionToUniqueId1.get(version - 1))
+        db.put(version.toString, version.toString)
+        db.commit()
+      }
+    }
+
+    assert(versionToUniqueId1.nonEmpty)
+
+    // The second DB writes to version 0 with another uniqueId
+    val versionToUniqueId2 = new mutable.HashMap[Long, String]()
+    withDB(remoteDir, conf = enableChangelogCheckpointingConf,
+      useColumnFamilies = useColumnFamily,
+      enableStateStoreCheckpointIds = enableStateStoreCheckpointIds,
+      versionToUniqueId = versionToUniqueId2) { db =>
+      db.load(0, versionToUniqueId2.get(0))
+      db.put("b", "2") // write key b here
+      db.commit()
+      // Add some change log files after the snapshot
+      for (version <- 2 to 5) {
+        db.load(version - 1, versionToUniqueId2.get(version - 1))
+        db.put(version.toString, (version + 1).toString) // update "1" -> "2", "2" -> "3", ...
+        db.commit()
+      }
+
+      // doMaintenance uploads the snapshot
+      db.doMaintenance()
+
+      for (version <- 6 to 10) {
+        db.load(version - 1, versionToUniqueId2.get(version - 1))
+        db.put(version.toString, (version + 1).toString)
+        db.commit()
+      }
+    }
+
+    assert(versionToUniqueId2.nonEmpty)
+
+    // During a load() with linage from the first rocksDB,
+    // the DB should load with data in the first db
+    withDB(remoteDir, conf = enableChangelogCheckpointingConf,
+      useColumnFamilies = useColumnFamily,
+      enableStateStoreCheckpointIds = enableStateStoreCheckpointIds,
+      versionToUniqueId = versionToUniqueId1) { db =>
+      db.load(10, versionToUniqueId1.get(10))
+      assert(toStr(db.get("a")) === "1")
+      for (version <- 2 to 10) {
+        // first time we write version -> version
+        // second time we write version -> version + 1
+        // here since we are loading from the first db lineage, we should see version -> version
+        assert(toStr(db.get(version.toString)) === version.toString)
+      }
+    }
+
+    // During a load() with linage from the second rocksDB,
+    // the DB should load with data in the second db
+    withDB(remoteDir, conf = enableChangelogCheckpointingConf,
+      useColumnFamilies = useColumnFamily,
+      enableStateStoreCheckpointIds = enableStateStoreCheckpointIds,
+      versionToUniqueId = versionToUniqueId2) { db =>
+      db.load(10, versionToUniqueId2.get(10))
+      assert(toStr(db.get("b")) === "2")
+      for (version <- 2 to 10) {
+        // first time we write version -> version
+        // second time we write version -> version + 1
+        // here since we are loading from the second db lineage,
+        // we should see version -> version + 1
+        assert(toStr(db.get(version.toString)) === (version + 1).toString)
+      }
+    }
+  }
+
   // A rocksdb instance with changelog checkpointing disabled should be able to load
   // an existing checkpoint with changelog.
   testWithStateStoreCheckpointIdsAndColumnFamilies(
@@ -2947,7 +3049,10 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
         version: Long,
         ckptId: Option[String] = None,
         readOnly: Boolean = false): RocksDB = {
-      super.load(version, versionToUniqueId.get(version), readOnly)
+      ckptId match {
+        case Some(_) => super.load(version, ckptId, readOnly)
+        case None => super.load(version, versionToUniqueId.get(version), readOnly)
+      }
     }
 
     override def commit(): Long = {
@@ -2968,6 +3073,11 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
       hadoopConf: Configuration = hadoopConf,
       useColumnFamilies: Boolean = false,
       enableStateStoreCheckpointIds: Boolean = false,
+      // versionToUniqueId is used in checkpoint format v2, it simulates the lineage
+      // stored in the commit log. The lineage will be automatically updated in db.commit()
+      // When testing V2, please create a versionToUniqueId map
+      // and call versionToUniqueId.get(version) in the db.load() function.
+      // In V1, versionToUniqueId is not used and versionToUniqueId.get(version) returns None.
       versionToUniqueId : mutable.Map[Long, String] = mutable.Map[Long, String](),
       localDir: File = Utils.createTempDir())(
       func: RocksDB => T): T = {
@@ -2991,7 +3101,7 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
           loggingId = s"[Thread-${Thread.currentThread.getId}]",
           useColumnFamilies = useColumnFamilies)
       }
-      db.load(version)
+      db.load(version, versionToUniqueId.get(version))
       func(db)
     } finally {
       if (db != null) {
