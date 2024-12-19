@@ -503,19 +503,10 @@ case class JsonTuple(children: Seq[Expression])
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val refEvaluator = ctx.addReferenceObj("evaluator", evaluator)
-    val jsonTerm = ctx.freshName("json")
     val jsonEval = jsonExpr.genCode(ctx)
     val filedNamesTerm = ctx.freshName("fieldNames")
     val fieldNamesEval = fieldExpressions.map(_.genCode(ctx))
     val wrapperClass = classOf[IterableOnce[_]].getName
-    val setJson =
-      s"""
-         |if (${jsonEval.isNull}) {
-         |  $jsonTerm = null;
-         |} else {
-         |  $jsonTerm = ${jsonEval.value};
-         |}
-         |""".stripMargin
     val setFieldNames = fieldNamesEval.zipWithIndex.map {
       case (fieldNameEval, idx) =>
         s"""
@@ -528,15 +519,13 @@ case class JsonTuple(children: Seq[Expression])
     }
     ev.copy(code =
       code"""
-         |UTF8String $jsonTerm = null;
          |UTF8String[] $filedNamesTerm = new UTF8String[${fieldExpressions.length}];
          |${jsonEval.code}
          |${fieldNamesEval.map(_.code).mkString("\n")}
-         |$setJson
          |${setFieldNames.mkString("\n")}
          |boolean ${ev.isNull} = false;
          |$wrapperClass<InternalRow> ${ev.value} =
-         |  $refEvaluator.evaluate($jsonTerm, $filedNamesTerm);
+         |  $refEvaluator.evaluate(${jsonEval.value}, $filedNamesTerm);
          |""".stripMargin)
   }
 
