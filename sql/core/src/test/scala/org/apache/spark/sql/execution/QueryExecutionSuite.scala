@@ -416,11 +416,14 @@ class QueryExecutionSuite extends SharedSparkSession {
       assert(!trackerAnalyzed.phases.keySet.contains(QueryPlanningTracker.PLANNING))
       assert(plan != null)
     }
-    def readyForExecution(trackerFromCallback: QueryPlanningTracker): Unit = {
+    def readyForExecution(
+        trackerFromCallback: QueryPlanningTracker,
+        optimizedPlan: LogicalPlan): Unit = {
       trackerReadyForExecution = trackerFromCallback
       assert(trackerReadyForExecution.phases.keySet.contains(QueryPlanningTracker.ANALYSIS))
       assert(!trackerReadyForExecution.phases.keySet.contains(QueryPlanningTracker.OPTIMIZATION))
       assert(!trackerReadyForExecution.phases.keySet.contains(QueryPlanningTracker.PLANNING))
+      assert(optimizedPlan != null)
     }
     def assertAnalyzed(): Unit = {
       assert(trackerAnalyzed != null)
@@ -454,11 +457,14 @@ class QueryExecutionSuite extends SharedSparkSession {
       assert(!trackerAnalyzed.phases.keySet.contains(QueryPlanningTracker.PLANNING))
       assert(plan != null)
     }
-    def readyForExecution(trackerFromCallback: QueryPlanningTracker): Unit = {
+    def readyForExecution(
+        trackerFromCallback: QueryPlanningTracker,
+        optimizedPlan: LogicalPlan): Unit = {
       trackerReadyForExecution = trackerFromCallback
       assert(trackerReadyForExecution.phases.keySet.contains(QueryPlanningTracker.ANALYSIS))
       assert(trackerReadyForExecution.phases.keySet.contains(QueryPlanningTracker.OPTIMIZATION))
       assert(trackerReadyForExecution.phases.keySet.contains(QueryPlanningTracker.PLANNING))
+      assert(optimizedPlan != null)
     }
     def assertAnalyzed(): Unit = {
       assert(trackerAnalyzed != null)

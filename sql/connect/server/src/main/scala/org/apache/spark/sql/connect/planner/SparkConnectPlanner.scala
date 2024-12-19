@@ -2503,7 +2503,7 @@ class SparkConnectPlanner(
       metrics.addAllMetrics(MetricGenerator.transformPlan(df).asJava)
     } else {
       // No execution triggered for relations. Manually set ready
-      tracker.setReadyForExecution()
+      tracker.setReadyForExecution(df.logicalPlan)
       result.setRelation(relation)
     }
     executeHolder.eventsManager.postFinished(Some(rows.size))
@@ -2888,7 +2888,7 @@ class SparkConnectPlanner(
     val tracker = executeHolder.eventsManager.createQueryPlanningTracker()
     val dataset = Dataset.ofRows(session, plan, tracker)
     // Call manually as writeStream does not trigger ReadyForExecution
-    tracker.setReadyForExecution()
+    tracker.setReadyForExecution(dataset.logicalPlan)
 
     val writer = dataset.writeStream
 
