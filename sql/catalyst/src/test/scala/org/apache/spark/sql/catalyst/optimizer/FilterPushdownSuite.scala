@@ -45,7 +45,10 @@ class FilterPushdownSuite extends PlanTest {
         CollapseProject) ::
       Batch("Push extra predicate through join", FixedPoint(10),
         PushExtraPredicateThroughJoin,
-        PushDownPredicates) :: Nil
+        PushDownPredicates) ::
+      Batch("Rewrite With expression", FixedPoint(10),
+        RewriteWithExpression,
+        CollapseProject) :: Nil
   }
 
   val attrA = $"a".int
@@ -1538,5 +1541,32 @@ class FilterPushdownSuite extends PlanTest {
     val correctAnswer = x.where(IsNotNull(Sequence($"x.a", $"x.b", None)) && $"x.c" > 1)
       .analyze
     comparePlans(optimizedQueryWithoutStep, correctAnswer)
+  }
+
+  test("SPARK-49202: avoid extra expression duplication when push filter") {
+    // through project
+    val originalQuery1 = testRelation
+      .select($"a" + $"b" as "add")
+      .where($"add" + $"add" > 10)
+    val optimized1 = Optimize.execute(originalQuery1.analyze)
+    val correctAnswer1 = testRelation
+      .select($"a", $"b", $"c", $"a" + $"b" as "_common_expr_0")
+      .where($"_common_expr_0" + $"_common_expr_0" > 10)
+      .select($"a" + $"b" as "add")
+      .analyze
+    comparePlans(optimized1, correctAnswer1)
+
+    // through aggregate
+    val originalQuery2 = testRelation
+      .groupBy($"a")($"a", $"a" + $"a" as "add", count(1) as "ct")
+      .where($"add" + $"add" > 10)
+    val optimized2 = Optimize.execute(originalQuery2.analyze)
+    val correctAnswer2 = testRelation
+      .select($"a", $"b", $"c", $"a" + $"a" as "_common_expr_1")
+      .where($"_common_expr_1" + $"_common_expr_1" > 10)
+      .select($"a", $"b", $"c")
+      .groupBy($"a")($"a", $"a" + $"a" as "add", count(1) as "ct")
+      .analyze
+    comparePlans(optimized2, correctAnswer2)
   }
 }

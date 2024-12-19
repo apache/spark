@@ -112,6 +112,15 @@ object With {
     With(replaced(commonExprRefs), commonExprDefs)
   }
 
+  def apply(expr: Expression, replaceMap: Map[Attribute, Expression]): With = {
+    val commonExprDefsMap = replaceMap.map(m => m._1 -> CommonExpressionDef(m._2))
+    val commonExprRefsMap = commonExprDefsMap.map(m => m._1 -> new CommonExpressionRef(m._2))
+    val replaced = expr.transform {
+      case a: Attribute if commonExprRefsMap.contains(a) => commonExprRefsMap(a)
+    }
+    With(replaced, commonExprDefsMap.values.toSeq)
+  }
+
   private[sql] def childContainsUnsupportedAggExpr(withExpr: With): Boolean = {
     lazy val commonExprIds = withExpr.defs.map(_.id).toSet
     withExpr.child.exists {
