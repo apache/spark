@@ -37,7 +37,7 @@
       <dependencies>
         <dependency>
           <groupId>io.fabric8</groupId>
-          <artifactId>volcano-model-v1beta1</artifactId>
+          <artifactId>volcano-model</artifactId>
           <version>${kubernetes-client.version}</version>
         </dependency>
         <dependency>
@@ -105,11 +105,6 @@
       <scope>test</scope>
     </dependency>
 
-    <dependency>
-      <groupId>io.fabric8</groupId>
-      <artifactId>kubernetes-httpclient-okhttp</artifactId>
-      <version>${kubernetes-client.version}</version>
-    </dependency>
     <dependency>
       <groupId>io.fabric8</groupId>
       <artifactId>kubernetes-client</artifactId>
