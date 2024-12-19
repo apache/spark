@@ -63,9 +63,11 @@ class SparkSqlAstBuilder extends AstBuilder {
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
   private val configKeyValueDef = """([a-zA-Z_\d\\.:]+)\s*=([^;]*);*""".r
-  private val configKeyDef = """([a-zA-Z_\d\\.:]+)$""".r
+  private val configKeyDef = """([a-zA-Z_\d\\.:]+);*$""".r
   private val configValueDef = """([^;]*);*""".r
   private val strLiteralDef = """(".*?[^\\]"|'.*?[^\\]'|[^ \n\r\t"']+)""".r
+  private val vOption = """-v;*""".r
+  private val onlySemiColon = """;*""".r
 
   private def withCatalogIdentClause(
       ctx: CatalogIdentifierReferenceContext,
@@ -111,9 +113,9 @@ class SparkSqlAstBuilder extends AstBuilder {
           SetCommand(Some(key -> Option(value.trim)))
         case configKeyDef(key) =>
           SetCommand(Some(key -> None))
-        case s if s == "-v" =>
+        case vOption() =>
           SetCommand(Some("-v" -> None))
-        case s if s.isEmpty =>
+        case onlySemiColon() =>
           SetCommand(None)
         case _ => throw QueryParsingErrors.unexpectedFormatForSetConfigurationError(ctx)
       }
