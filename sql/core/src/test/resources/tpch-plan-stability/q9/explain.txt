@@ -118,7 +118,7 @@ Input [8]: [l_orderkey#3, l_partkey#4, l_suppkey#5, l_quantity#6, l_extendedpric
 Output [3]: [ps_partkey#11, ps_suppkey#12, ps_supplycost#13]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/partsupp]
-PushedFilters: [IsNotNull(ps_suppkey), IsNotNull(ps_partkey)]
+PushedFilters: [IsNotNull(ps_partkey), IsNotNull(ps_suppkey)]
 ReadSchema: struct<ps_partkey:bigint,ps_suppkey:bigint,ps_supplycost:decimal(10,0)>
 
 (18) ColumnarToRow [codegen id : 3]
@@ -126,7 +126,7 @@ Input [3]: [ps_partkey#11, ps_suppkey#12, ps_supplycost#13]
 
 (19) Filter [codegen id : 3]
 Input [3]: [ps_partkey#11, ps_suppkey#12, ps_supplycost#13]
-Condition : (isnotnull(ps_suppkey#12) AND isnotnull(ps_partkey#11))
+Condition : (isnotnull(ps_partkey#11) AND isnotnull(ps_suppkey#12))
 
 (20) BroadcastExchange
 Input [3]: [ps_partkey#11, ps_suppkey#12, ps_supplycost#13]
