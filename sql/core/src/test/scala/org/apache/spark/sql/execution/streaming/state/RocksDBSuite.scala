@@ -687,13 +687,13 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
       useColumnFamilies = useColumnFamily,
       enableStateStoreCheckpointIds = enableStateStoreCheckpointIds,
       versionToUniqueId = versionToUniqueId1) { db =>
-      db.load(0)
+      db.load(0, versionToUniqueId1.get(0))
       db.put("a", "1") // write key a here
       db.commit()
 
       // Add some change log files after the snapshot
       for (version <- 2 to 5) {
-        db.load(version - 1)
+        db.load(version - 1, versionToUniqueId1.get(version - 1))
         db.put(version.toString, version.toString) // update "1" -> "1", "2" -> "2", ...
         db.commit()
       }
@@ -702,7 +702,7 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
       db.doMaintenance()
 
       for (version <- 6 to 10) {
-        db.load(version - 1)
+        db.load(version - 1, versionToUniqueId1.get(version - 1))
         db.put(version.toString, version.toString)
         db.commit()
       }
@@ -716,12 +716,12 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
       useColumnFamilies = useColumnFamily,
       enableStateStoreCheckpointIds = enableStateStoreCheckpointIds,
       versionToUniqueId = versionToUniqueId2) { db =>
-      db.load(0)
+      db.load(0, versionToUniqueId2.get(0))
       db.put("b", "2") // write key b here
       db.commit()
       // Add some change log files after the snapshot
       for (version <- 2 to 5) {
-        db.load(version - 1)
+        db.load(version - 1, versionToUniqueId2.get(version - 1))
         db.put(version.toString, (version + 1).toString) // update "1" -> "2", "2" -> "3", ...
         db.commit()
       }
@@ -730,7 +730,7 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
       db.doMaintenance()
 
       for (version <- 6 to 10) {
-        db.load(version - 1)
+        db.load(version - 1, versionToUniqueId2.get(version - 1))
         db.put(version.toString, (version + 1).toString)
         db.commit()
       }
@@ -744,7 +744,7 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
       useColumnFamilies = useColumnFamily,
       enableStateStoreCheckpointIds = enableStateStoreCheckpointIds,
       versionToUniqueId = versionToUniqueId1) { db =>
-      db.load(10)
+      db.load(10, versionToUniqueId1.get(10))
       assert(toStr(db.get("a")) === "1")
       for (version <- 2 to 10) {
         // first time we write version -> version
@@ -760,7 +760,7 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
       useColumnFamilies = useColumnFamily,
       enableStateStoreCheckpointIds = enableStateStoreCheckpointIds,
       versionToUniqueId = versionToUniqueId2) { db =>
-      db.load(10)
+      db.load(10, versionToUniqueId2.get(10))
       assert(toStr(db.get("b")) === "2")
       for (version <- 2 to 10) {
         // first time we write version -> version
@@ -3044,13 +3044,6 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
       val versionToUniqueId : mutable.Map[Long, String] = mutable.Map[Long, String]())
     extends RocksDB(dfsRootDir, conf, localRootDir, hadoopConf, loggingId,
       useColumnFamilies, enableStateStoreCheckpointIds = true) {
-
-    override def load(
-        version: Long,
-        ckptId: Option[String] = None,
-        readOnly: Boolean = false): RocksDB = {
-      super.load(version, versionToUniqueId.get(version), readOnly)
-    }
 
     override def commit(): Long = {
       val ret = super.commit()
