@@ -5090,11 +5090,6 @@
         "message" : [
           "Access to the SparkContext."
         ]
-      },
-      "SESSION_SQL_CONTEXT" : {
-        "message" : [
-          "Access to the SparkSession SQL Context."
-        ]
       }
     },
     "sqlState" : "0A000"
