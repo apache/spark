@@ -49,15 +49,20 @@ import org.apache.spark.sql.types._
   group = "agg_funcs",
   since = "3.4.0")
 case class AnyValue(child: Expression, ignoreNulls: Boolean)
-  extends AggregateFunction with ExpectsInputTypes with RuntimeReplaceableAggregate
-    with UnaryLike[Expression] {
+  extends AggregateFunction
+  with ExpectsInputTypes
+  with SupportsIgnoreNulls
+  with RuntimeReplaceableAggregate
+  with UnaryLike[Expression] {
   override lazy val replacement: Expression = First(child, ignoreNulls)
 
   def this(child: Expression) = this(child, false)
 
   def this(child: Expression, ignoreNullsExpr: Expression) = {
-    this(child, FirstLast.validateIgnoreNullExpr(ignoreNullsExpr, "any_value"))
+    this(child, SupportsIgnoreNulls.validateIgnoreNullExpr(ignoreNullsExpr, "any_value"))
   }
+
+  override def withIgnoreNulls(ignoreNulls: Boolean): AnyValue = copy(ignoreNulls = ignoreNulls)
 
   override protected def withNewChildInternal(newChild: Expression): AnyValue =
     copy(child = newChild)
