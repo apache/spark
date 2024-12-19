@@ -21,10 +21,13 @@ import java.util.Collections
 
 import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.sql.{DataFrame, Encoders, QueryTest}
-import org.apache.spark.sql.catalyst.expressions.DynamicPruningExpression
+import org.apache.spark.sql.{DataFrame, Encoders, QueryTest, Row}
+import org.apache.spark.sql.QueryTest.sameRows
+import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
+import org.apache.spark.sql.catalyst.expressions.{DynamicPruningExpression, GenericRowWithSchema}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
-import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Column, Identifier, InMemoryRowLevelOperationTable, InMemoryRowLevelOperationTableCatalog}
+import org.apache.spark.sql.catalyst.util.METADATA_COL_ATTR_KEY
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Column, Delete, Identifier, InMemoryRowLevelOperationTable, InMemoryRowLevelOperationTableCatalog, Insert, MetadataColumn, Operation, Reinsert, Update, Write}
 import org.apache.spark.sql.connector.expressions.LogicalExpressions.{identity, reference}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.execution.{InSubqueryExec, QueryExecution, SparkPlan}
@@ -32,7 +35,7 @@ import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{IntegerType, MetadataBuilder, StringType, StructField, StructType}
 import org.apache.spark.sql.util.QueryExecutionListener
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.ArrayImplicits._
@@ -50,6 +53,30 @@ abstract class RowLevelOperationSuiteBase
     spark.sessionState.catalogManager.reset()
     spark.sessionState.conf.unsetConf("spark.sql.catalog.cat")
   }
+
+  protected final val PK_FIELD = StructField("pk", IntegerType, nullable = false)
+  protected final val PARTITION_FIELD = StructField(
+    "_partition",
+    StringType,
+    nullable = false,
+    metadata = new MetadataBuilder()
+      .putString(METADATA_COL_ATTR_KEY, "_partition")
+      .putString("comment", "Partition key used to store the row")
+      .putBoolean(MetadataColumn.PRESERVE_ON_UPDATE, value = true)
+      .putBoolean(MetadataColumn.PRESERVE_ON_REINSERT, value = true)
+      .build())
+  protected final val PARTITION_FIELD_NULLABLE = PARTITION_FIELD.copy(nullable = true)
+  protected final val INDEX_FIELD = StructField(
+    "index",
+    IntegerType,
+    nullable = false,
+    metadata = new MetadataBuilder()
+      .putString(METADATA_COL_ATTR_KEY, "index")
+      .putString("comment", "Metadata column used to conflict with a data column")
+      .putBoolean(MetadataColumn.PRESERVE_ON_DELETE, value = false)
+      .putBoolean(MetadataColumn.PRESERVE_ON_UPDATE, value = false)
+      .build())
+  protected final val INDEX_FIELD_NULLABLE = INDEX_FIELD.copy(nullable = true)
 
   protected val namespace: Array[String] = Array("ns1")
   protected val ident: Identifier = Identifier.of(namespace, "test_table")
@@ -176,4 +203,77 @@ abstract class RowLevelOperationSuiteBase
     }
     assert(actualPartitions == expectedPartitions, "replaced partitions must match")
   }
+
+  protected def checkLastWriteInfo(
+      expectedRowSchema: StructType = new StructType(),
+      expectedRowIdSchema: Option[StructType] = None,
+      expectedMetadataSchema: Option[StructType] = None): Unit = {
+    val info = table.lastWriteInfo
+    assert(info.schema == expectedRowSchema, "row schema must match")
+    val actualRowIdSchema = Option(info.rowIdSchema.orElse(null))
+    assert(actualRowIdSchema == expectedRowIdSchema, "row ID schema must match")
+    val actualMetadataSchema = Option(info.metadataSchema.orElse(null))
+    assert(actualMetadataSchema == expectedMetadataSchema, "metadata schema must match")
+  }
+
+  protected def checkLastWriteLog(expectedEntries: WriteLogEntry*): Unit = {
+    val entryType = new StructType()
+      .add(StructField("operation", StringType))
+      .add(StructField("id", IntegerType))
+      .add(StructField(
+        "metadata",
+        new StructType(Array(
+          StructField("_partition", StringType),
+          StructField("_index", IntegerType)))))
+      .add(StructField("data", table.schema))
+
+    val expectedEntriesAsRows = expectedEntries.map { entry =>
+      new GenericRowWithSchema(
+        values = Array(
+          entry.operation.toString,
+          entry.id.orNull,
+          entry.metadata.orNull,
+          entry.data.orNull),
+        schema = entryType)
+    }
+
+    val encoder = ExpressionEncoder(entryType)
+    val deserializer = encoder.resolveAndBind().createDeserializer()
+    val actualEntriesAsRows = table.lastWriteLog.map(deserializer)
+
+    sameRows(expectedEntriesAsRows, actualEntriesAsRows) match {
+      case Some(errMsg) => fail(s"Write log contains unexpected entries: $errMsg")
+      case None => // OK
+    }
+  }
+
+  protected def writeLogEntry(data: Row): WriteLogEntry = {
+    WriteLogEntry(operation = Write, data = Some(data))
+  }
+
+  protected def writeWithMetadataLogEntry(metadata: Row, data: Row): WriteLogEntry = {
+    WriteLogEntry(operation = Write, metadata = Some(metadata), data = Some(data))
+  }
+
+  protected def deleteWriteLogEntry(id: Int, metadata: Row): WriteLogEntry = {
+    WriteLogEntry(operation = Delete, id = Some(id), metadata = Some(metadata))
+  }
+
+  protected def updateWriteLogEntry(id: Int, metadata: Row, data: Row): WriteLogEntry = {
+    WriteLogEntry(operation = Update, id = Some(id), metadata = Some(metadata), data = Some(data))
+  }
+
+  protected def reinsertWriteLogEntry(metadata: Row, data: Row): WriteLogEntry = {
+    WriteLogEntry(operation = Reinsert, metadata = Some(metadata), data = Some(data))
+  }
+
+  protected def insertWriteLogEntry(data: Row): WriteLogEntry = {
+    WriteLogEntry(operation = Insert, data = Some(data))
+  }
+
+  case class WriteLogEntry(
+      operation: Operation,
+      id: Option[Int] = None,
+      metadata: Option[Row] = None,
+      data: Option[Row] = None)
 }
