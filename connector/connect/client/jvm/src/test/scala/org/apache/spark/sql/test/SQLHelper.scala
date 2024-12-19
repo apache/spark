@@ -22,6 +22,7 @@ import java.util.UUID
 import org.scalatest.Assertions.fail
 
 import org.apache.spark.sql.{AnalysisException, DataFrame, SparkSession, SQLImplicits}
+import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
 import org.apache.spark.util.{SparkErrorUtils, SparkFileUtils}
 
 trait SQLHelper {
@@ -108,6 +109,22 @@ trait SQLHelper {
     path.delete()
     try f(path)
     finally SparkFileUtils.deleteRecursively(path)
+  }
+
+  /**
+   * Drops temporary view `viewNames` after calling `f`.
+   */
+  protected def withTempView(viewNames: String*)(f: => Unit): Unit = {
+    SparkErrorUtils.tryWithSafeFinally(f) {
+      viewNames.foreach { viewName =>
+        try spark.catalog.dropTempView(viewName)
+        catch {
+          // If the test failed part way, we don't want to mask the failure by failing to remove
+          // temp views that never got created.
+          case _: NoSuchTableException =>
+        }
+      }
+    }
   }
 
   /**
