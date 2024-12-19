@@ -488,4 +488,21 @@ class RowEncoderSuite extends CodegenInterpretedPlanTest {
     val data = Row(mutable.ArraySeq.make(Array(Row("key", "value".getBytes))))
     val row = encoder.createSerializer()(data)
   }
+
+  test("do not allow serializing too long strings into char/varchar") {
+    Seq(CharType(5), VarcharType(5)).foreach { typ =>
+      withSQLConf(SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true") {
+        val schema = new StructType().add("c", typ)
+        val encoder = ExpressionEncoder(schema).resolveAndBind()
+        val value = "abcdef"
+        checkError(
+          exception = intercept[SparkRuntimeException]({
+            val row = toRow(encoder, Row(value))
+          }),
+          condition = "EXCEED_LIMIT_LENGTH",
+          parameters = Map("limit" -> "5")
+        )
+      }
+    }
+  }
 }
