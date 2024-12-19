@@ -3045,6 +3045,16 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
     extends RocksDB(dfsRootDir, conf, localRootDir, hadoopConf, loggingId,
       useColumnFamilies, enableStateStoreCheckpointIds = true) {
 
+    override def load(
+        version: Long,
+        ckptId: Option[String] = None,
+        readOnly: Boolean = false): RocksDB = {
+      ckptId match {
+        case Some(_) => super.load(version, ckptId, readOnly)
+        case None => super.load(version, versionToUniqueId.get(version), readOnly)
+      }
+    }
+
     override def commit(): Long = {
       val ret = super.commit()
       // update versionToUniqueId from lineageManager
@@ -3063,6 +3073,11 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
       hadoopConf: Configuration = hadoopConf,
       useColumnFamilies: Boolean = false,
       enableStateStoreCheckpointIds: Boolean = false,
+      // versionToUniqueId is used in checkpoint format v2, it simulates the lineage
+      // stored in the commit log. The lineage will be automatically updated in db.commit()
+      // When testing V2, please create a versionToUniqueId map
+      // and call versionToUniqueId.get(version) in the db.load() function.
+      // In V1, versionToUniqueId is not used and versionToUniqueId.get(version) returns None.
       versionToUniqueId : mutable.Map[Long, String] = mutable.Map[Long, String](),
       localDir: File = Utils.createTempDir())(
       func: RocksDB => T): T = {
@@ -3086,7 +3101,7 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
           loggingId = s"[Thread-${Thread.currentThread.getId}]",
           useColumnFamilies = useColumnFamilies)
       }
-      db.load(version)
+      db.load(version, versionToUniqueId.get(version))
       func(db)
     } finally {
       if (db != null) {
