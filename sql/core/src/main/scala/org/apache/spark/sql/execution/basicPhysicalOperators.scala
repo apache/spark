@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReferences
 import org.apache.spark.sql.catalyst.expressions.codegen._
+import org.apache.spark.sql.catalyst.plans.UnionEquality
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
@@ -683,7 +684,7 @@ case class RangeExec(range: org.apache.spark.sql.catalyst.plans.logical.Range)
  * If we change how this is implemented physically, we'd need to update
  * [[org.apache.spark.sql.catalyst.plans.logical.Union.maxRowsPerPartition]].
  */
-case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan {
+case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan with UnionEquality[SparkPlan] {
   // updating nullability to make all the children consistent
   override def output: Seq[Attribute] = {
     children.map(_.output).transpose.map { attrs =>
@@ -698,6 +699,14 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan {
       }
     }
   }
+
+  override def equals(obj: Any): Boolean = obj match {
+    case that: UnionExec => this.positionAgnosticEquals(that)
+
+    case _ => false
+  }
+
+  override def hashCode(): Int = this.positionAgnosticHashCode
 
   protected override def doExecute(): RDD[InternalRow] =
     sparkContext.union(children.map(_.execute()))
