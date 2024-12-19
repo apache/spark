@@ -43,7 +43,8 @@ class SparkOptimizer(
       V2ScanRelationPushDown,
       V2ScanPartitioningAndOrdering,
       V2Writes,
-      PruneFileSourcePartitions)
+      PruneFileSourcePartitions,
+      PushVariantIntoScan)
 
   override def preCBORules: Seq[Rule[LogicalPlan]] =
     Seq(OptimizeMetadataOnlyDeleteFromTable)
@@ -95,8 +96,7 @@ class SparkOptimizer(
       EliminateLimits,
       ConstantFolding),
     Batch("User Provided Optimizers", fixedPoint, experimentalMethods.extraOptimizations: _*),
-    Batch("Replace CTE with Repartition", Once, ReplaceCTERefWithRepartition),
-    Batch("Push Variant Into Scan", Once, PushVariantIntoScan)))
+    Batch("Replace CTE with Repartition", Once, ReplaceCTERefWithRepartition)))
 
   override def nonExcludableRules: Seq[String] = super.nonExcludableRules ++
     Seq(

@@ -143,8 +143,11 @@ class VariantInRelation {
   // Find eligible variants recursively. `attrId` is the root attribute id.
   // `path` is the current struct access path. `dataType` is the child data type after extracting
   // `path` from the root attribute struct.
-  def addVariantFields(attrId: ExprId, dataType: DataType, defaultValue: Any,
-                       path: Seq[Int]): Unit = {
+  def addVariantFields(
+      attrId: ExprId,
+      dataType: DataType,
+      defaultValue: Any,
+      path: Seq[Int]): Unit = {
     dataType match {
       // TODO(SHREDDING): non-null default value is not yet supported.
       case _: VariantType if defaultValue == null =>
@@ -195,8 +198,9 @@ class VariantInRelation {
   }
 
   // Add a requested field to a variant column.
-  private def addField(map: HashMap[RequestedVariantField, Int],
-                       field: RequestedVariantField): Unit = {
+  private def addField(
+      map: HashMap[RequestedVariantField, Int],
+      field: RequestedVariantField): Unit = {
     val idx = map.size
     map.getOrElseUpdate(field, idx)
   }
@@ -227,8 +231,9 @@ class VariantInRelation {
     case _ => expr.children.foreach(collectRequestedFields)
   }
 
-  def rewriteExpr(expr: Expression,
-                  attributeMap: Map[ExprId, AttributeReference]): Expression = {
+  def rewriteExpr(
+      expr: Expression,
+      attributeMap: Map[ExprId, AttributeReference]): Expression = {
     def rewriteAttribute(expr: Expression): Expression = expr.transformDown {
       case a: Attribute => attributeMap.getOrElse(a.exprId, a)
     }
@@ -275,11 +280,12 @@ object PushVariantIntoScan extends Rule[LogicalPlan] {
     }
   }
 
-  private def rewritePlan(originalPlan: LogicalPlan,
-                          projectList: Seq[NamedExpression],
-                          filters: Seq[Expression],
-                          relation: LogicalRelation,
-                          hadoopFsRelation: HadoopFsRelation): LogicalPlan = {
+  private def rewritePlan(
+      originalPlan: LogicalPlan,
+      projectList: Seq[NamedExpression],
+      filters: Seq[Expression],
+      relation: LogicalRelation,
+      hadoopFsRelation: HadoopFsRelation): LogicalPlan = {
     val variants = new VariantInRelation
     val defaultValues = ResolveDefaultColumns.existenceDefaultValues(hadoopFsRelation.schema)
     // I'm not aware of any case that an attribute `relation.output` can have a different data type
