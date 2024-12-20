@@ -264,15 +264,17 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
-   val ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER =
-     buildConf("spark.sql.analyzer.singlePassResolver.dualRunWithLegacy")
-       .internal()
-       .doc("When true, run both analyzers to check if single-pass Analyzer correctly produces" +
-         " the same analyzed plan as the fixed-point Analyzer for the existing set of features" +
-         " defined in the ResolverGuard")
-        .version("4.0.0")
-       .booleanConf
-       .createWithDefault(false)
+  val ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER =
+    buildConf("spark.sql.analyzer.singlePassResolver.dualRunWithLegacy")
+      .internal()
+      .doc(
+        "When true, run both analyzers to check if single-pass Analyzer correctly produces " +
+        "the same analyzed plan as the fixed-point Analyzer for the existing set of features " +
+        "defined in the ResolverGuard"
+      )
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(false)
 
   val ANALYZER_SINGLE_PASS_RESOLVER_VALIDATION_ENABLED =
     buildConf("spark.sql.analyzer.singlePassResolver.validationEnabled")
