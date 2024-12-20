@@ -318,9 +318,6 @@ public class ExpressionImplUtils {
   }
 
   public static UTF8String randStr(XORShiftRandom rng, int length) {
-    if (length < 0) {
-      throw QueryExecutionErrors.unexpectedValueForLengthInFunctionError("RANDSTR", length);
-    }
     byte[] bytes = new byte[length];
     for (int i = 0; i < bytes.length; i++) {
       // We generate a random number between 0 and 61, inclusive. Between the 62 different choices

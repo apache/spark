@@ -420,6 +420,14 @@ true
 
 
 -- !query
+SELECT randstr(1, -1) AS result
+-- !query schema
+struct<result:string>
+-- !query output
+S
+
+
+-- !query
 SELECT randstr(10L, 0) AS result
 -- !query schema
 struct<result:string>
@@ -448,13 +456,12 @@ SELECT randstr(NULL, 0) AS result
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.SparkRuntimeException
+org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_PARAMETER_VALUE.LENGTH",
+  "errorClass" : "INVALID_PARAMETER_VALUE.NULL",
   "sqlState" : "22023",
   "messageParameters" : {
-    "functionName" : "`RANDSTR`",
-    "length" : "-1",
+    "functionName" : "`randstr`",
     "parameter" : "`length`"
   }
 }
@@ -553,7 +560,7 @@ org.apache.spark.SparkRuntimeException
   "errorClass" : "INVALID_PARAMETER_VALUE.LENGTH",
   "sqlState" : "22023",
   "messageParameters" : {
-    "functionName" : "`RANDSTR`",
+    "functionName" : "`randstr`",
     "length" : "-1",
     "parameter" : "`length`"
   }
@@ -565,14 +572,16 @@ SELECT randstr(10, "a") AS result FROM VALUES (0) tab(a)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.SparkNumberFormatException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "CAST_INVALID_INPUT",
-  "sqlState" : "22018",
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
   "messageParameters" : {
-    "expression" : "'a'",
-    "sourceType" : "\"STRING\"",
-    "targetType" : "\"BIGINT\""
+    "inputSql" : "\"a\"",
+    "inputType" : "\"STRING\"",
+    "paramIndex" : "second",
+    "requiredType" : "(\"INT\" or \"BIGINT\")",
+    "sqlExpr" : "\"randstr(10, a)\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -580,5 +589,31 @@ org.apache.spark.SparkNumberFormatException
     "startIndex" : 8,
     "stopIndex" : 23,
     "fragment" : "randstr(10, \"a\")"
+  } ]
+}
+
+
+-- !query
+SELECT randstr(10, 1.5) AS result FROM VALUES (0) tab(a)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"1.5\"",
+    "inputType" : "\"DECIMAL(2,1)\"",
+    "paramIndex" : "second",
+    "requiredType" : "(\"INT\" or \"BIGINT\")",
+    "sqlExpr" : "\"randstr(10, 1.5)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 23,
+    "fragment" : "randstr(10, 1.5)"
   } ]
 }

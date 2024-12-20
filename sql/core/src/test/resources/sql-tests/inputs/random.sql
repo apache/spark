@@ -39,7 +39,7 @@ SELECT uniform(10) AS result;
 SELECT uniform(10, 20, 30, 40) AS result;
 
 -- The randstr random string generation function supports generating random strings within a
--- specified length. We use a seed of zero for these queries to keep tests deterministic.
+-- specified length. We use a seed of zero for most queries to keep tests deterministic.
 SELECT randstr(1, 0) AS result;
 SELECT randstr(5, 0) AS result;
 SELECT randstr(10, 0) AS result;
@@ -51,6 +51,7 @@ SELECT randstr(1.0D, 0) AS result;
 SELECT randstr(cast(1 AS DECIMAL(10, 2)), 0) AS result;
 SELECT randstr(10, 0) AS result FROM VALUES (0), (1), (2) tab(col);
 SELECT randstr(10) IS NOT NULL AS result;
+SELECT randstr(1, -1) AS result;
 -- Negative test cases for the randstr random number generator.
 SELECT randstr(10L, 0) AS result;
 SELECT randstr(10.0F, 0) AS result;
@@ -62,3 +63,4 @@ SELECT randstr(10, col) AS result FROM VALUES (0), (1), (2) tab(col);
 SELECT randstr(10, 0, 1) AS result;
 SELECT randstr(-1, 0) AS result;
 SELECT randstr(10, "a") AS result FROM VALUES (0) tab(a);
+SELECT randstr(10, 1.5) AS result FROM VALUES (0) tab(a);

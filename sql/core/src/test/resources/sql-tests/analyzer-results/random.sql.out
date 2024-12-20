@@ -338,6 +338,12 @@ SELECT randstr(10) IS NOT NULL AS result
 
 
 -- !query
+SELECT randstr(1, -1) AS result
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
 SELECT randstr(10L, 0) AS result
 -- !query analysis
 [Analyzer test output redacted due to nondeterminism]
@@ -445,4 +451,46 @@ SELECT randstr(-1, 0) AS result
 -- !query
 SELECT randstr(10, "a") AS result FROM VALUES (0) tab(a)
 -- !query analysis
-[Analyzer test output redacted due to nondeterminism]
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"a\"",
+    "inputType" : "\"STRING\"",
+    "paramIndex" : "second",
+    "requiredType" : "(\"INT\" or \"BIGINT\")",
+    "sqlExpr" : "\"randstr(10, a)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 23,
+    "fragment" : "randstr(10, \"a\")"
+  } ]
+}
+
+
+-- !query
+SELECT randstr(10, 1.5) AS result FROM VALUES (0) tab(a)
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"1.5\"",
+    "inputType" : "\"DECIMAL(2,1)\"",
+    "paramIndex" : "second",
+    "requiredType" : "(\"INT\" or \"BIGINT\")",
+    "sqlExpr" : "\"randstr(10, 1.5)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 23,
+    "fragment" : "randstr(10, 1.5)"
+  } ]
+}
