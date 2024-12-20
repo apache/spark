@@ -1077,10 +1077,15 @@ listagg.__doc__ = pysparkfuncs.listagg.__doc__
 def listagg_distinct(
     col: "ColumnOrName", delimiter: Optional[Union[Column, str, bytes]] = None
 ) -> Column:
-    if delimiter is None:
-        return _invoke_function_over_columns("listagg_distinct", col)
-    else:
-        return _invoke_function_over_columns("listagg_distinct", col, lit(delimiter))
+    from pyspark.sql.connect.column import Column as ConnectColumn
+    args = [col]
+    if delimiter is not None:
+        args += [lit(delimiter)]
+
+    _exprs = [_to_col(c)._expr for c in args]
+    return ConnectColumn(
+        UnresolvedFunction("listagg", _exprs, is_distinct=True)
+    )
 
 
 listagg_distinct.__doc__ = pysparkfuncs.listagg_distinct.__doc__
