@@ -364,6 +364,8 @@ __all__ = [  # noqa: F405
     "kurtosis",
     "last",
     "last_value",
+    "listagg",
+    "listagg_distinct",
     "max",
     "max_by",
     "mean",

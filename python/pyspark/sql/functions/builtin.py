@@ -1863,7 +1863,7 @@ def listagg(col: "ColumnOrName", delimiter: Optional[Union[Column, str, bytes]] 
     ----------
     col : :class:`~pyspark.sql.Column` or column name
         target column to compute on.
-    delimiter : :class:`~pyspark.sql.Column` or str, optional
+    delimiter : :class:`~pyspark.sql.Column`, literal string or bytes, optional
         the delimiter to separate the values. The default value is None.
 
     Returns
@@ -1939,7 +1939,7 @@ def listagg_distinct(
     ----------
     col : :class:`~pyspark.sql.Column` or column name
         target column to compute on.
-    delimiter : :class:`~pyspark.sql.Column` or str, optional
+    delimiter : :class:`~pyspark.sql.Column`, literal string or bytes, optional
         the delimiter to separate the values. The default value is None.
 
     Returns
