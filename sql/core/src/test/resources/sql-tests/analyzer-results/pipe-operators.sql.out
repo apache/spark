@@ -2697,19 +2697,32 @@ Union false, false
 
 
 -- !query
-values (0, 1) tab(x, y)
+values (2, 'xyz') tab(x, y)
 |> union table t
 |> where x = 0
 -- !query analysis
-Distinct
-+- Union false, false
-   :- Project [x#x, cast(y#x as bigint) AS y#xL]
-   :  +- SubqueryAlias tab
-   :     +- LocalRelation [x#x, y#x]
-   +- Project [x#x, cast(y#x as bigint) AS y#xL]
-      +- Filter (x#x = 0)
+Filter (x#x = 0)
++- SubqueryAlias __auto_generated_subquery_name
+   +- Distinct
+      +- Union false, false
+         :- SubqueryAlias tab
+         :  +- LocalRelation [x#x, y#x]
          +- SubqueryAlias spark_catalog.default.t
             +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
+values (2, 'xyz') tab(x, y)
+|> union table t
+|> drop x
+-- !query analysis
+Project [y#x]
++- Distinct
+   +- Union false, false
+      :- SubqueryAlias tab
+      :  +- LocalRelation [x#x, y#x]
+      +- SubqueryAlias spark_catalog.default.t
+         +- Relation spark_catalog.default.t[x#x,y#x] csv
 
 
 -- !query

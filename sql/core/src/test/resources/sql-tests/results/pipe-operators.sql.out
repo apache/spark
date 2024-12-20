@@ -2362,29 +2362,25 @@ struct<x:int,y:string>
 
 
 -- !query
-values (0, 1) tab(x, y)
+values (2, 'xyz') tab(x, y)
 |> union table t
 |> where x = 0
 -- !query schema
-struct<>
+struct<x:int,y:string>
 -- !query output
-org.apache.spark.SparkNumberFormatException
-{
-  "errorClass" : "CAST_INVALID_INPUT",
-  "sqlState" : "22018",
-  "messageParameters" : {
-    "expression" : "'abc'",
-    "sourceType" : "\"STRING\"",
-    "targetType" : "\"BIGINT\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 55,
-    "fragment" : "values (0, 1) tab(x, y)\n|> union table t\n|> where x = 0"
-  } ]
-}
+0	abc
+
+
+-- !query
+values (2, 'xyz') tab(x, y)
+|> union table t
+|> drop x
+-- !query schema
+struct<y:string>
+-- !query output
+abc
+def
+xyz
 
 
 -- !query

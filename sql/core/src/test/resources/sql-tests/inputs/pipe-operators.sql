@@ -843,9 +843,16 @@ values (0, 'abc') tab(x, y)
 |> union all table t;
 
 -- Union distinct with a VALUES list.
-values (0, 1) tab(x, y)
+-- The |> WHERE operator applies to the result of the |> UNION operator, not to the "table t" input.
+values (2, 'xyz') tab(x, y)
 |> union table t
 |> where x = 0;
+
+-- Union distinct with a VALUES list.
+-- The |> DROP operator applies to the result of the |> UNION operator, not to the "table t" input.
+values (2, 'xyz') tab(x, y)
+|> union table t
+|> drop x;
 
 -- Union all with a table subquery on both the source and target sides.
 (select * from t)
