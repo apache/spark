@@ -627,7 +627,6 @@ case class EnsureRequirements(
       distribution: ClusteredDistribution): Option[KeyGroupedShuffleSpec] = {
     def tryCreate(partitioning: KeyGroupedPartitioning): Option[KeyGroupedShuffleSpec] = {
       val attributes = partitioning.expressions.flatMap(_.collectLeaves())
-        .filter(KeyGroupedPartitioning.isReference)
       val clustering = distribution.clustering
 
       val satisfies = if (SQLConf.get.getConf(SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION)) {

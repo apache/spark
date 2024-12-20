@@ -383,13 +383,11 @@ case class KeyGroupedPartitioning(
           } else {
             // We'll need to find leaf attributes from the partition expressions first.
             val attributes = expressions.flatMap(_.collectLeaves())
-              .filter(KeyGroupedPartitioning.isReference)
 
             if (SQLConf.get.v2BucketingAllowJoinKeysSubsetOfPartitionKeys) {
               // check that join keys (required clustering keys)
               // overlap with partition keys (KeyGroupedPartitioning attributes)
-              requiredClustering.exists(x => attributes.exists(_.semanticEquals(x))) &&
-                  expressions.forall(_.collectLeaves().size == 1)
+              requiredClustering.exists(x => attributes.exists(_.semanticEquals(x)))
             } else {
               attributes.forall(x => requiredClustering.exists(_.semanticEquals(x)))
             }
@@ -792,9 +790,16 @@ case class KeyGroupedShuffleSpec(
       distKeyToPos.getOrElseUpdate(distKey.canonicalized, mutable.BitSet.empty).add(distKeyPos)
     }
     partitioning.expressions.map { e =>
-      val leaves = e.collectLeaves().filter(KeyGroupedPartitioning.isReference)
-      assert(leaves.size == 1, s"Expected exactly one child from $e, but found ${leaves.size}")
-      distKeyToPos.getOrElse(leaves.head.canonicalized, mutable.BitSet.empty)
+      val leaves = e.collectLeaves()
+      val attrs = leaves.filter(KeyGroupedPartitioning.isReference)
+      assert(leaves.size == 1 || attrs.size == 1,
+        s"Expected exactly one reference or child from $e, but found ${leaves.size}")
+      val head = if (attrs.size == 1) {
+        attrs.head
+      } else {
+        leaves.head
+      }
+      distKeyToPos.getOrElse(head.canonicalized, mutable.BitSet.empty)
     }
   }
 
