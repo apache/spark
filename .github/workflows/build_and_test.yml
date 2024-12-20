@@ -609,6 +609,7 @@ jobs:
       if: fromJSON(inputs.envs).PYSPARK_CODECOV == 'true'
       uses: codecov/codecov-action@v4
       with:
+        token: ${{ secrets.CODECOV_TOKEN }}
         files: ./python/coverage.xml
         flags: unittests
         name: PySpark
