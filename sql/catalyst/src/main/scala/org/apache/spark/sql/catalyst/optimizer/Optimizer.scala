@@ -2007,6 +2007,10 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
     !expr.containsPattern(PLAN_EXPRESSION)
   }
 
+  /**
+   * Use [[With]] to rewrite expression which contains attribute that are not cheap and be consumed
+   * multiple times.
+   */
   private def rewriteByWith(
       expr: Expression,
       aliasMap: AttributeMap[Alias]): Expression = {
