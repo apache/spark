@@ -181,7 +181,7 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
     } else {
       // if the operator is transformWithState, then a state variable argument is mandatory
       if (stateStoreMetadata.size == 1 &&
-        !twsShortNameSeq.contains(stateStoreMetadata.head.operatorName)) {
+        twsShortNameSeq.contains(stateStoreMetadata.head.operatorName)) {
         throw StateDataSourceErrors.requiredOptionUnspecified("stateVarName")
       }
     }
