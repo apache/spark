@@ -957,6 +957,28 @@ case class UnresolvedOrdinal(ordinal: Int)
 }
 
 /**
+ * Represents an unresolved ordinal used in the GROUP BY clause of a SQL pipe aggregate operator
+ * ("|> AGGREGATE").
+ *
+ * In this context, the ordinal refers to the one-based position of the column in the input
+ * relation. Note that this behavior is different from GROUP BY ordinals in regular SQL, wherein the
+ * ordinal refers to the one-based position of the column in the SELECT clause.
+ *
+ * For example:
+ * {{{
+ *   values ('abc', 'def') tab(x, y)
+ *   |> aggregate sum(x) group by 2
+ * }}}
+ * @param ordinal ordinal starts from 1, instead of 0
+ */
+case class UnresolvedPipeAggregateOrdinal(ordinal: Int)
+  extends LeafExpression with Unevaluable with NonSQLExpression {
+  override def dataType: DataType = throw new UnresolvedException("dataType")
+  override def nullable: Boolean = throw new UnresolvedException("nullable")
+  override lazy val resolved = false
+}
+
+/**
  * Represents unresolved having clause, the child for it can be Aggregate, GroupingSets, Rollup
  * and Cube. It is turned by the analyzer into a Filter.
  */

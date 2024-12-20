@@ -1523,7 +1523,7 @@ operatorPipeRightSide
     | unpivotClause pivotClause?
     | sample
     | joinRelation
-    | operator=(UNION | EXCEPT | SETMINUS | INTERSECT) setQuantifier? right=queryTerm
+    | operator=(UNION | EXCEPT | SETMINUS | INTERSECT) setQuantifier? right=queryPrimary
     | queryOrganization
     | AGGREGATE namedExpressionSeq? aggregationClause?
     ;
