@@ -1540,6 +1540,78 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 
 
 -- !query
+table t
+|> select x, length(y) as z
+|> limit 1000
+|> where x + length(y) < 4
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`y`",
+    "proposal" : "`x`, `z`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 71,
+    "stopIndex" : 71,
+    "fragment" : "y"
+  } ]
+}
+
+
+-- !query
+table t
+|> select x, length(y) as z
+|> limit 1000 offset 1
+|> where x + length(y) < 4
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`y`",
+    "proposal" : "`x`, `z`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 80,
+    "stopIndex" : 80,
+    "fragment" : "y"
+  } ]
+}
+
+
+-- !query
+table t
+|> select x, length(y) as z
+|> order by x, y
+|> where x + length(y) < 4
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`y`",
+    "proposal" : "`x`, `z`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 52,
+    "stopIndex" : 52,
+    "fragment" : "y"
+  } ]
+}
+
+
+-- !query
 (select x, sum(length(y)) as sum_len from t group by x)
 |> where sum(length(y)) = 3
 -- !query analysis
@@ -2891,10 +2963,9 @@ table t
 -- !query analysis
 GlobalLimit 1
 +- LocalLimit 1
-   +- SubqueryAlias __auto_generated_subquery_name
-      +- Sort [x#x ASC NULLS FIRST], true
-         +- SubqueryAlias spark_catalog.default.t
-            +- Relation spark_catalog.default.t[x#x,y#x] csv
+   +- Sort [x#x ASC NULLS FIRST], true
+      +- SubqueryAlias spark_catalog.default.t
+         +- Relation spark_catalog.default.t[x#x,y#x] csv
 
 
 -- !query

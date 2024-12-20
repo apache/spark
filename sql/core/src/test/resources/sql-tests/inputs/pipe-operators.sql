@@ -542,6 +542,21 @@ table t
 |> select x, length(y) as z
 |> where x + length(y) < 4;
 
+table t
+|> select x, length(y) as z
+|> limit 1000
+|> where x + length(y) < 4;
+
+table t
+|> select x, length(y) as z
+|> limit 1000 offset 1
+|> where x + length(y) < 4;
+
+table t
+|> select x, length(y) as z
+|> order by x, y
+|> where x + length(y) < 4;
+
 -- If the WHERE clause wants to filter rows produced by an aggregation, it is not valid to try to
 -- refer to the aggregate functions directly; it is necessary to use aliases instead.
 (select x, sum(length(y)) as sum_len from t group by x)
