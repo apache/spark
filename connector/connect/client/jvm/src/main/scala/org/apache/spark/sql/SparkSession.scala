@@ -341,9 +341,8 @@ class SparkSession private[sql] (
   /**
    * Create a DataFrame including the proto plan built by the given function.
    *
-   * Use this method when columns are used to create a new DataFrame.
-   * When there are columns referring to other Dataset or DataFrame, the plan will be wrapped with
-   * a `WithRelation`.
+   * Use this method when columns are used to create a new DataFrame. When there are columns
+   * referring to other Dataset or DataFrame, the plan will be wrapped with a `WithRelation`.
    *
    * {{{
    *   with_relations [id 10]
@@ -386,9 +385,8 @@ class SparkSession private[sql] (
   /**
    * Create a Dataset including the proto plan built by the given function.
    *
-   * Use this method when columns are used to create a new Dataset.
-   * When there are columns referring to other Dataset or DataFrame, the plan will be wrapped with
-   * a `WithRelation`.
+   * Use this method when columns are used to create a new Dataset. When there are columns
+   * referring to other Dataset or DataFrame, the plan will be wrapped with a `WithRelation`.
    *
    * {{{
    *   with_relations [id 10]
