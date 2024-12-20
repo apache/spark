@@ -1078,13 +1078,14 @@ def listagg_distinct(
     col: "ColumnOrName", delimiter: Optional[Union[Column, str, bytes]] = None
 ) -> Column:
     from pyspark.sql.connect.column import Column as ConnectColumn
+
     args = [col]
     if delimiter is not None:
         args += [lit(delimiter)]
 
     _exprs = [_to_col(c)._expr for c in args]
     return ConnectColumn(
-        UnresolvedFunction("listagg", _exprs, is_distinct=True)
+        UnresolvedFunction("listagg", _exprs, is_distinct=True)  # type: ignore[arg-type]
     )
 
 
