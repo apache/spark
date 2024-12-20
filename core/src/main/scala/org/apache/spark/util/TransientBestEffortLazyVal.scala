@@ -17,28 +17,29 @@
 package org.apache.spark.util
 
 import java.io.{IOException, ObjectInputStream}
-import java.util.concurrent.atomic.AtomicReference
 
-private[spark] class TransientAtomicRef[T <: AnyRef](compute: => T) extends Serializable {
+private[spark] class TransientBestEffortLazyVal[T <: AnyRef](
+    private[this] val compute: () => T) extends Serializable {
 
   @transient
-  private var atomicRef: AtomicReference[T] = new AtomicReference(null.asInstanceOf[T])
+  private[this] var cached: T = null.asInstanceOf[T]
+
+  @volatile
+  private[this] var computed: Boolean = false
 
   def apply(): T = {
-    val ref = atomicRef.get()
-    if (ref == null) {
-      val newRef: T = compute
-      assert(newRef != null, "computed value cannot be null.")
-      atomicRef.compareAndSet(null.asInstanceOf[T], newRef)
-      atomicRef.get()
-    } else {
-      ref
+    val c = computed
+    if (!c) {
+      val result = compute()
+      cached = result
+      computed = true
     }
+    cached
   }
 
   @throws(classOf[IOException])
   private def readObject(ois: ObjectInputStream): Unit = Utils.tryOrIOException {
     ois.defaultReadObject()
-    atomicRef = new AtomicReference(null.asInstanceOf[T])
+    computed = false
   }
 }

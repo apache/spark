@@ -16,21 +16,18 @@
  */
 package org.apache.spark.util
 
-import java.util.concurrent.atomic.AtomicReference
+private[spark] class BestEffortLazyVal[T <: AnyRef](
+    @volatile private[this] var compute: () => T) extends Serializable {
 
-private[spark] class AtomicRef[T <: AnyRef](compute: => T) extends Serializable {
-
-  private val atomicRef: AtomicReference[T] = new AtomicReference(null.asInstanceOf[T])
+  private[this] var cached: T = null.asInstanceOf[T]
 
   def apply(): T = {
-    val ref = atomicRef.get()
-    if (ref == null) {
-      val newRef: T = compute
-      assert(newRef != null, "computed value cannot be null.")
-      atomicRef.compareAndSet(null.asInstanceOf[T], newRef)
-      atomicRef.get()
-    } else {
-      ref
+    val f = compute
+    if (f != null) {
+      val result = f()
+      cached = result
+      compute = null
     }
+    cached
   }
 }
