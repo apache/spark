@@ -49,8 +49,8 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.util.{AtomicRef, Utils}
 import org.apache.spark.util.ArrayImplicits._
+import org.apache.spark.util.Utils
 import org.apache.spark.util.collection.BitSet
 
 /** Used by [[TreeNode.getNodeNumbered]] when traversing the tree for a given number */
@@ -112,10 +112,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
    * A BitSet of tree patterns for this TreeNode and its subtree. If this TreeNode and its
    * subtree contains a pattern `P`, the corresponding bit for `P.id` is set in this BitSet.
    */
-  override def treePatternBits: BitSet = _treePatternBits.apply()
-
-  private val _treePatternBits: AtomicRef[BitSet] =
-    new AtomicRef[BitSet]({ getDefaultTreePatternBits })
+  override lazy val treePatternBits: BitSet = getDefaultTreePatternBits
 
   /**
    * A BitSet of rule ids to record ineffective rules for this TreeNode and its subtree.
