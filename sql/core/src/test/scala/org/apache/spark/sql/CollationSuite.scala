@@ -2175,9 +2175,4 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
       sql(s"CREATE TABLE t (c STRING COLLATE system.builtin.UTF8_LCASE)")
     }
   }
-
-  test("dsadasda") {
-    sql("set;").show()
-    sql("set spark.sql.ansi.enabled;").show()
-  }
 }
