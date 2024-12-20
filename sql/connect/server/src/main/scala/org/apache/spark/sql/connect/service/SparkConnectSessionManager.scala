@@ -187,6 +187,15 @@ class SparkConnectSessionManager extends Logging {
   }
 
   /**
+   * Returns the most recent last access time across all active sessions.
+   */
+  def getLastActivityTime: Long = {
+    sessionStore.values().asScala
+      .map(_.getSessionHolderInfo.lastAccessTimeMs)
+      .foldLeft(0L)(Math.max)
+  }
+
+  /**
    * Schedules periodic maintenance checks if it is not already scheduled.
    *
    * The checks are looking to remove sessions that expired.
