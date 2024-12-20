@@ -130,7 +130,8 @@ class DescribeTableSuite extends v1.DescribeTableSuiteBase with CommandSuiteBase
       val expectedOutput = DescribeTableJson(
         table_name = Some("table"),
         catalog_name = Some(SESSION_CATALOG_NAME),
-        database_names = Some(List("ns")),
+        namespace = Some(List("ns")),
+        schema_name = Some("ns"),
         qualified_name = Some(s"spark_catalog.ns.table"),
         columns = Some(List(
           TableColumn(1, "a", Type("string")),
@@ -192,7 +193,8 @@ class DescribeTableSuite extends v1.DescribeTableSuiteBase with CommandSuiteBase
       val expectedOutput = DescribeTableJson(
         table_name = Some("table"),
         catalog_name = Some("spark_catalog"),
-        database_names = Some(List("ns")),
+        namespace = Some(List("ns")),
+        schema_name = Some("ns"),
         qualified_name = Some("spark_catalog.ns.table"),
         columns = Some(List(
           TableColumn(1, "a", Type("string")),
@@ -251,7 +253,8 @@ class DescribeTableSuite extends v1.DescribeTableSuiteBase with CommandSuiteBase
       val expectedOutput = DescribeTableJson(
         table_name = Some("table"),
         catalog_name = Some("spark_catalog"),
-        database_names = Some(List("ns")),
+        namespace = Some(List("ns")),
+        schema_name = Some("ns"),
         qualified_name = Some("spark_catalog.ns.table"),
         columns = Some(List(
           TableColumn(1, "a", Type("string"), default_value = Some("'default-value'")),
@@ -367,7 +370,8 @@ class DescribeTableSuite extends v1.DescribeTableSuiteBase with CommandSuiteBase
       val expectedOutput = DescribeTableJson(
         table_name = Some("table"),
         catalog_name = Some("spark_catalog"),
-        database_names = Some(List("ns")),
+        namespace = Some(List("ns")),
+        schema_name = Some("ns"),
         qualified_name = Some("spark_catalog.ns.table"),
         columns = Some(List(
           TableColumn(
@@ -493,7 +497,8 @@ class DescribeTableSuite extends v1.DescribeTableSuiteBase with CommandSuiteBase
 case class DescribeTableJson(
   table_name: Option[String] = None,
   catalog_name: Option[String] = None,
-  database_names: Option[List[String]] = Some(Nil),
+  namespace: Option[List[String]] = Some(Nil),
+  schema_name: Option[String] = None,
   qualified_name: Option[String] = None,
   columns: Option[List[TableColumn]] = Some(Nil),
   owner: Option[String] = None,

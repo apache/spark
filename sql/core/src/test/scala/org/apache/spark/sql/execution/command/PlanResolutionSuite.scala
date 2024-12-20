@@ -967,9 +967,9 @@ class PlanResolutionSuite extends AnalysisTest {
         val sql = s"DESC TABLE EXTENDED $tblName AS JSON"
         val parsed = parseAndResolve(sql)
         if (useV1Command) {
-          val expected2 = DescribeTableCommand(
+          val expected2 = DescribeTableJsonCommand(
             TableIdentifier(tblName, Some("default"), Some(SESSION_CATALOG_NAME)),
-            Map.empty, true, parsed.output)
+            Map.empty, true)
 
           comparePlans(parsed, expected2)
         } else {
@@ -983,14 +983,14 @@ class PlanResolutionSuite extends AnalysisTest {
         val sql2 = s"DESC TABLE EXTENDED $tblName PARTITION(a=1) AS JSON"
         val parsed2 = parseAndResolve(sql2)
         if (useV1Command) {
-          val expected2 = DescribeTableCommand(
+          val expected2 = DescribeTableJsonCommand(
             TableIdentifier(tblName, Some("default"), Some(SESSION_CATALOG_NAME)),
-            Map("a" -> "1"), false, parsed2.output)
+            Map("a" -> "1"), true)
           comparePlans(parsed2, expected2)
         } else {
           parsed2 match {
             case DescribeRelation(_: ResolvedTable, partitionSpec, isExtended, asJson, _) =>
-              assert(!isExtended && asJson)
+              assert(isExtended && asJson)
               assert(partitionSpec == Map("a" -> "1"))
             case _ => fail("Expect DescribeTable, but got:\n" + parsed2.treeString)
           }

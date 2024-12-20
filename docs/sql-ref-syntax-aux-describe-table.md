@@ -74,15 +74,15 @@ to return the metadata pertaining to a partition or column respectively.
 
   **Schema:**
   
-  Notes:
-  * All string fields will be contained in double-quotes "...".
-  * Only non-null fields will be included in the JSON output.
+  Below is the full JSON schema. 
+  In practice only non-null fields are included in the JSON output (see Examples section).
   
     ```sql
     {
       "table_name": "<table_name>",
       "catalog_name": "<catalog_name>",
-      "namespaces": [...],
+      "schema_name": "<schema_name>",
+      "namespaces": ["<schema_name>"],
       "qualified_name": "<qualified_name>"
       "type": "<table_type>",
       "provider": "<provider>",
@@ -113,8 +113,8 @@ to return the metadata pertaining to a partition or column respectively.
       "serde_library": "<serde_library>",
       "inputformat": "<input_format>",
       "outputformt": "<output_format>",
-      "bucket_columns": [<col_name>],
-      "sort_columns": [<col_name>],
+      "bucket_columns": ["<col_name>"],
+      "sort_columns": ["<col_name>"],
       "created_time": "<timestamp>",
       "last_access": "<timestamp>",
       "partition_provider": "<partition_provider>"
