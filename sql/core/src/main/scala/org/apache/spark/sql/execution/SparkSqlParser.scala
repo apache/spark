@@ -62,9 +62,9 @@ class SparkSqlAstBuilder extends AstBuilder {
   import org.apache.spark.sql.catalyst.parser.ParserUtils._
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
-  private val configKeyValueDef = """([a-zA-Z_\d\\.:]+)\s*=([^;]*)""".r
-  private val configKeyDef = """([a-zA-Z_\d\\.:]+)$""".r
-  private val configValueDef = """([^;]*)""".r
+  private val configKeyValueDef = """([a-zA-Z_\d\\.:]+)\s*=([^;]*);*""".r
+  private val configKeyDef = """([a-zA-Z_\d\\.:]+)\s*$""".r
+  private val configValueDef = """([^;]*);*""".r
   private val strLiteralDef = """(".*?[^\\]"|'.*?[^\\]'|[^ \n\r\t"']+)""".r
 
   private def withCatalogIdentClause(
@@ -111,9 +111,9 @@ class SparkSqlAstBuilder extends AstBuilder {
           SetCommand(Some(key -> Option(value.trim)))
         case configKeyDef(key) =>
           SetCommand(Some(key -> None))
-        case s if s == "-v" =>
+        case s if s.trim == "-v" =>
           SetCommand(Some("-v" -> None))
-        case s if s.isEmpty =>
+        case s if s.trim.isEmpty =>
           SetCommand(None)
         case _ => throw QueryParsingErrors.unexpectedFormatForSetConfigurationError(ctx)
       }
@@ -127,7 +127,8 @@ class SparkSqlAstBuilder extends AstBuilder {
       SetCommand(Some(ctx.configKey().getText -> Option(ctx.configValue().getText)))
     } else {
       val valueStr = ctx.configValue().getText
-      val keyCandidate = interval(ctx.SET().getSymbol, ctx.EQ().getSymbol).trim
+      val keyCandidate =
+        interval(ctx.SET().getSymbol, ctx.EQ().getSymbol).trim.replaceAll(";+$", "")
       keyCandidate match {
         case configKeyDef(key) => SetCommand(Some(key -> Option(valueStr)))
         case _ => throw QueryParsingErrors.invalidPropertyKeyForSetQuotedConfigurationError(
@@ -146,7 +147,7 @@ class SparkSqlAstBuilder extends AstBuilder {
    */
   override def visitResetConfiguration(
       ctx: ResetConfigurationContext): LogicalPlan = withOrigin(ctx) {
-    remainder(ctx.RESET.getSymbol).trim match {
+    remainder(ctx.RESET.getSymbol).trim.replaceAll(";+$", "") match {
       case configKeyDef(key) =>
         ResetCommand(Some(key))
       case s if s.trim.isEmpty =>
