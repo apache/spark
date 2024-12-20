@@ -6185,7 +6185,6 @@ class AstBuilder extends DataTypeAstBuilder
           // clause returns the GROUP BY expressions followed by the list of aggregate functions.
           val newGroupingExpressions = ArrayBuffer.empty[Expression]
           val newAggregateExpressions = ArrayBuffer.empty[NamedExpression]
-          var numGroupByOrdinalReferences = 0
           a.groupingExpressions.foreach {
             case n: NamedExpression =>
               newGroupingExpressions += n
@@ -6196,8 +6195,7 @@ class AstBuilder extends DataTypeAstBuilder
             // [[ResolveOrdinalInOrderByAndGroupBy]] rule detect the ordinal in the aggregate list
             // and replace it with the corresponding attribute from the child operator.
             case Literal(v: Int, IntegerType) if conf.groupByOrdinal =>
-              numGroupByOrdinalReferences += 1
-              newGroupingExpressions += UnresolvedOrdinal(numGroupByOrdinalReferences)
+              newGroupingExpressions += UnresolvedOrdinal(newAggregateExpressions.length + 1)
               newAggregateExpressions += UnresolvedAlias(UnresolvedPipeAggregateOrdinal(v), None)
             case e: Expression =>
               newGroupingExpressions += e

@@ -3196,6 +3196,15 @@ Aggregate [x#x, y#x, z#x], [x#x, y#x, z#x, pipeexpression(sum(y#x), true, AGGREG
 
 
 -- !query
+select 3 as x, 4 as y, 5 as z
+|> aggregate sum(y) group by x, 2, 3
+-- !query analysis
+Aggregate [x#x, y#x, z#x], [x#x, y#x, z#x, pipeexpression(sum(y#x), true, AGGREGATE) AS pipeexpression(sum(y))#xL]
++- Project [3 AS x#x, 4 AS y#x, 5 AS z#x]
+   +- OneRowRelation
+
+
+-- !query
 table t
 |> aggregate sum(x)
 -- !query analysis

@@ -2867,6 +2867,15 @@ struct<x:int,y:int,z:int,pipeexpression(sum(y)):bigint>
 
 
 -- !query
+select 3 as x, 4 as y, 5 as z
+|> aggregate sum(y) group by x, 2, 3
+-- !query schema
+struct<x:int,y:int,z:int,pipeexpression(sum(y)):bigint>
+-- !query output
+3	4	5	4
+
+
+-- !query
 table t
 |> aggregate sum(x)
 -- !query schema

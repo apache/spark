@@ -1025,6 +1025,9 @@ select 3 as x, 4 as y, 5 as z
 select 3 as x, 4 as y, 5 as z
 |> aggregate sum(y) group by 1, 2, 3;
 
+select 3 as x, 4 as y, 5 as z
+|> aggregate sum(y) group by x, 2, 3;
+
 -- Basic table aggregation.
 table t
 |> aggregate sum(x);
