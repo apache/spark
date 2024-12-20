@@ -114,9 +114,11 @@ object With {
 
   def apply(expr: Expression, replaceMap: Map[Attribute, Expression]): With = {
     val commonExprDefsMap = replaceMap.map(m => m._1 -> CommonExpressionDef(m._2))
-    val commonExprRefsMap = commonExprDefsMap.map(m => m._1 -> new CommonExpressionRef(m._2))
+    val commonExprRefsMap =
+      AttributeMap(commonExprDefsMap.map(m => m._1 -> new CommonExpressionRef(m._2)))
     val replaced = expr.transform {
-      case a: Attribute if commonExprRefsMap.contains(a) => commonExprRefsMap(a)
+      case a: Attribute if commonExprRefsMap.contains(a) =>
+        commonExprRefsMap.get(a).get
     }
     With(replaced, commonExprDefsMap.values.toSeq)
   }

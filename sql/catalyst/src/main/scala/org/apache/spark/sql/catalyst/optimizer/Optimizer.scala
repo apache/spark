@@ -1817,9 +1817,8 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
     case Filter(condition, project @ Project(fields, grandChild))
       if fields.forall(_.deterministic) && canPushThroughCondition(grandChild, condition) =>
       val aliasMap = getAliasMap(project)
-      val replacedByWith =
-        rewriteExpressionsByWith(splitConjunctivePredicates(condition), aliasMap)
-      project.copy(child = Filter(replaceAlias(replacedByWith.reduce(And), aliasMap), grandChild))
+      val replacedByWith = rewriteConditionByWith(condition, aliasMap)
+      project.copy(child = Filter(replaceAlias(replacedByWith, aliasMap), grandChild))
 
     // We can push down deterministic predicate through Aggregate, including throwable predicate.
     // If we can push down a filter through Aggregate, it means the filter only references the
@@ -1839,7 +1838,7 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
       }
 
       if (pushDown.nonEmpty) {
-        val replacedByWith = rewriteExpressionsByWith(pushDown, aliasMap)
+        val replacedByWith = rewriteConditionByWith(pushDown, aliasMap)
         val replaced = replaceAlias(replacedByWith.reduce(And), aliasMap)
         val newAggregate = aggregate.copy(child = Filter(replaced, aggregate.child))
         // If there is no more filter to stay up, just eliminate the filter.
@@ -1987,26 +1986,43 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
     }
   }
 
-  private def rewriteExpressionsByWith(
-      exprs: Seq[Expression],
+  private def rewriteConditionByWith(
+      cond: Seq[Expression],
       aliasMap: AttributeMap[Alias]): Seq[Expression] = {
-    exprs.map(rewriteExpressionByWith(_, aliasMap))
+    if (!SQLConf.get.getConf(SQLConf.ALWAYS_INLINE_COMMON_EXPR)) {
+      cond.map(rewriteByWith(_, aliasMap))
+    } else cond
   }
 
-  private def rewriteExpressionByWith(
+  private def rewriteConditionByWith(
+      cond: Expression,
+      aliasMap: AttributeMap[Alias]): Expression = {
+    if (!SQLConf.get.getConf(SQLConf.ALWAYS_INLINE_COMMON_EXPR)) {
+      splitConjunctivePredicates(cond).map(rewriteByWith(_, aliasMap)).reduce(And)
+    } else cond
+  }
+
+  // With does not support inline subquery
+  private def canRewriteByWith(expr: Expression): Boolean = {
+    !expr.containsPattern(PLAN_EXPRESSION)
+  }
+
+  private def rewriteByWith(
       expr: Expression,
       aliasMap: AttributeMap[Alias]): Expression = {
+    if (!canRewriteByWith(expr)) {
+      return expr
+    }
     val replaceMap = expr.collect { case a: Attribute => a }
       .groupBy(identity)
       .transform((_, v) => v.size)
-      .filter(_._2 > 1)
+      .filter(m => aliasMap.contains(m._1) && m._2 > 1)
       .map(m => m._1 -> trimAliases(aliasMap.getOrElse(m._1, m._1)))
       .filter(m => !CollapseProject.isCheap(m._2))
-    if (replaceMap.nonEmpty) {
-      With(expr, replaceMap)
-    } else {
-      expr
+    if (replaceMap.isEmpty) {
+      return expr
     }
+    With(expr, replaceMap)
   }
 }
 
