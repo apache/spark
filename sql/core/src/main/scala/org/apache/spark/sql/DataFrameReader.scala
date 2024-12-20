@@ -21,19 +21,22 @@ import java.util.Properties
 
 import scala.jdk.CollectionConverters._
 
+import org.apache.spark.Partition
 import org.apache.spark.annotation.Stable
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.csv.{CSVHeaderChecker, CSVOptions, UnivocityParser}
 import org.apache.spark.sql.catalyst.expressions.ExprUtils
-import org.apache.spark.sql.catalyst.json.{CreateJacksonParser, JacksonParser, JSONOptions}
+import org.apache.spark.sql.catalyst.json.{CreateJacksonParser, JSONOptions, JacksonParser}
 import org.apache.spark.sql.catalyst.plans.logical.{UnresolvedDataSource, UnresolvedJDBCRelation}
 import org.apache.spark.sql.catalyst.util.FailureSafeParser
 import org.apache.spark.sql.catalyst.xml.{StaxXmlParser, XmlOptions}
 import org.apache.spark.sql.classic.ClassicConversions._
 import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.datasources.csv._
+import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JDBCPartition, JDBCRelation}
 import org.apache.spark.sql.execution.datasources.json.JsonUtils.checkJsonSchema
 import org.apache.spark.sql.execution.datasources.json.TextInputJsonDataSource
 import org.apache.spark.sql.execution.datasources.xml.TextInputXmlDataSource
@@ -130,7 +133,12 @@ class DataFrameReader private[sql](sparkSession: SparkSession)
     assertNoSpecifiedSchema("jdbc")
     // connectionProperties should override settings in extraOptions.
     val params = extraOptions ++ connectionProperties.asScala
-    Dataset.ofRows(sparkSession, UnresolvedJDBCRelation(url, table, predicates, params))
+    val options = new JDBCOptions(url, table, params)
+    val parts: Array[Partition] = predicates.zipWithIndex.map { case (part, i) =>
+      JDBCPartition(part, i): Partition
+    }
+    val relation = JDBCRelation(parts, options)(sparkSession)
+    sparkSession.baseRelationToDataFrame(relation)
   }
 
   /** @inheritdoc */

@@ -29,12 +29,3 @@ case class UnresolvedDataSource(
     override val isStreaming: Boolean,
     paths: Seq[String])
   extends UnresolvedLeafNode
-
-/** Created in the DataFrameReader.jdbc method */
-case class UnresolvedJDBCRelation(
-    url: String,
-    table: String,
-    predicates: Array[String],
-    extraOptions: CaseInsensitiveMap[String])
-  extends UnresolvedLeafNode
-

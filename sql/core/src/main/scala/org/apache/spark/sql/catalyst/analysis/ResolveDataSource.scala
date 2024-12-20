@@ -21,9 +21,8 @@ import java.util.Locale
 
 import scala.jdk.CollectionConverters._
 
-import org.apache.spark.Partition
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, UnresolvedDataSource, UnresolvedJDBCRelation}
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, UnresolvedDataSource}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
@@ -33,7 +32,6 @@ import org.apache.spark.sql.connector.catalog.TableCapability._
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.{DataSource, LogicalRelation}
-import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JDBCPartition, JDBCRelation}
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Utils, FileDataSourceV2}
 import org.apache.spark.sql.execution.datasources.v2.python.PythonDataSourceV2
 import org.apache.spark.sql.execution.streaming.StreamingRelation
@@ -121,13 +119,6 @@ class ResolveDataSource(sparkSession: SparkSession) extends Rule[LogicalPlan] {
           StreamingRelation(v1DataSource)
       }
 
-    case UnresolvedJDBCRelation(url, table, predicates, extraOptions) =>
-      // JDBC relation created in DataFrameReader
-      val options = new JDBCOptions(url, table, extraOptions.toMap)
-      val parts: Array[Partition] = predicates.zipWithIndex.map { case (part, i) =>
-        JDBCPartition(part, i): Partition
-      }
-      LogicalRelation(JDBCRelation(parts, options)(sparkSession))
   }
 
   private def loadV1BatchSource(
