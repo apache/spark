@@ -4635,6 +4635,15 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val PUSH_VARIANT_INTO_SCAN =
+    buildConf("spark.sql.variant.pushVariantIntoScan")
+      .internal()
+      .doc("When true, replace variant type in the scan schema with a struct containing " +
+        "requested fields.")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val LEGACY_CSV_ENABLE_DATE_TIME_PARSING_FALLBACK =
     buildConf("spark.sql.legacy.csv.enableDateTimeParsingFallback")
       .internal()
