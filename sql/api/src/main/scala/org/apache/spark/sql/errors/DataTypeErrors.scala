@@ -132,7 +132,7 @@ private[sql] object DataTypeErrors extends DataTypeErrorsBase {
 
   def attributeNameSyntaxError(name: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1049",
+      errorClass = "INVALID_ATTRIBUTE_NAME_SYNTAX",
       messageParameters = Map("name" -> name))
   }
 

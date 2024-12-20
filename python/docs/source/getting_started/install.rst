@@ -177,7 +177,7 @@ PySpark requires the following dependencies.
 ========================== ========================= =============================
 Package                    Supported version         Note
 ========================== ========================= =============================
-`py4j`                     >=0.10.9.7                Required to interact with JVM
+`py4j`                     >=0.10.9.8                Required to interact with JVM
 ========================== ========================= =============================
 
 Additional libraries that enhance functionality but are not included in the installation packages:
@@ -208,9 +208,9 @@ Package                    Supported version Note
 ========================== ================= ==========================
 `pandas`                   >=2.0.0           Required for Spark Connect
 `pyarrow`                  >=10.0.0          Required for Spark Connect
-`grpcio`                   >=1.62.0          Required for Spark Connect
-`grpcio-status`            >=1.62.0          Required for Spark Connect
-`googleapis-common-protos` >=1.56.4          Required for Spark Connect
+`grpcio`                   >=1.67.0          Required for Spark Connect
+`grpcio-status`            >=1.67.0          Required for Spark Connect
+`googleapis-common-protos` >=1.65.0          Required for Spark Connect
 `graphviz`                 >=0.20            Optional for Spark Connect
 ========================== ================= ==========================
 

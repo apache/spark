@@ -173,7 +173,7 @@ class EncoderResolutionSuite extends PlanTest {
     val exception = intercept[SparkRuntimeException] {
       fromRow(InternalRow(new GenericArrayData(Array(1, null))))
     }
-    assert(exception.getErrorClass == "NOT_NULL_ASSERT_VIOLATION")
+    assert(exception.getCondition == "NOT_NULL_ASSERT_VIOLATION")
   }
 
   test("the real number of fields doesn't match encoder schema: tuple encoder") {

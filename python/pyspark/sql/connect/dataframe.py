@@ -86,10 +86,6 @@ from pyspark.sql.connect.functions import builtin as F
 from pyspark.sql.pandas.types import from_arrow_schema, to_arrow_schema
 from pyspark.sql.pandas.functions import _validate_pandas_udf  # type: ignore[attr-defined]
 
-try:
-    from pyspark.sql.plot import PySparkPlotAccessor
-except ImportError:
-    PySparkPlotAccessor = None  # type: ignore
 
 if TYPE_CHECKING:
     from pyspark.sql.connect._typing import (
@@ -690,6 +686,22 @@ class DataFrame(ParentDataFrame):
             session=self._session,
         )
 
+    def lateralJoin(
+        self,
+        other: ParentDataFrame,
+        on: Optional[Column] = None,
+        how: Optional[str] = None,
+    ) -> ParentDataFrame:
+        self._check_same_session(other)
+        if how is not None and isinstance(how, str):
+            how = how.lower().replace("_", "")
+        return DataFrame(
+            plan.LateralJoin(
+                left=self._plan, right=cast(plan.LogicalPlan, other._plan), on=on, how=how
+            ),
+            session=self._session,
+        )
+
     def _joinAsOf(
         self,
         other: ParentDataFrame,
@@ -781,53 +793,14 @@ class DataFrame(ParentDataFrame):
         fraction: Optional[Union[int, float]] = None,
         seed: Optional[int] = None,
     ) -> ParentDataFrame:
-        # For the cases below:
-        #   sample(True, 0.5 [, seed])
-        #   sample(True, fraction=0.5 [, seed])
-        #   sample(withReplacement=False, fraction=0.5 [, seed])
-        is_withReplacement_set = type(withReplacement) == bool and isinstance(fraction, float)
-
-        # For the case below:
-        #   sample(faction=0.5 [, seed])
-        is_withReplacement_omitted_kwargs = withReplacement is None and isinstance(fraction, float)
-
-        # For the case below:
-        #   sample(0.5 [, seed])
-        is_withReplacement_omitted_args = isinstance(withReplacement, float)
-
-        if not (
-            is_withReplacement_set
-            or is_withReplacement_omitted_kwargs
-            or is_withReplacement_omitted_args
-        ):
-            argtypes = [type(arg).__name__ for arg in [withReplacement, fraction, seed]]
-            raise PySparkTypeError(
-                errorClass="NOT_BOOL_OR_FLOAT_OR_INT",
-                messageParameters={
-                    "arg_name": "withReplacement (optional), "
-                    + "fraction (required) and seed (optional)",
-                    "arg_type": ", ".join(argtypes),
-                },
-            )
-
-        if is_withReplacement_omitted_args:
-            if fraction is not None:
-                seed = cast(int, fraction)
-            fraction = withReplacement
-            withReplacement = None
-
-        if withReplacement is None:
-            withReplacement = False
-
-        seed = int(seed) if seed is not None else random.randint(0, sys.maxsize)
-
+        _w, _f, _s = self._preapare_args_for_sample(withReplacement, fraction, seed)
         res = DataFrame(
             plan.Sample(
                 child=self._plan,
                 lower_bound=0.0,
-                upper_bound=fraction,  # type: ignore[arg-type]
-                with_replacement=withReplacement,  # type: ignore[arg-type]
-                seed=seed,
+                upper_bound=_f,
+                with_replacement=_w,
+                seed=_s,
             ),
             session=self._session,
         )
@@ -1827,6 +1800,20 @@ class DataFrame(ParentDataFrame):
             self._session,
         )
 
+    def scalar(self) -> Column:
+        # TODO(SPARK-50134): Implement this method
+        raise PySparkNotImplementedError(
+            errorClass="NOT_IMPLEMENTED",
+            messageParameters={"feature": "scalar()"},
+        )
+
+    def exists(self) -> Column:
+        # TODO(SPARK-50134): Implement this method
+        raise PySparkNotImplementedError(
+            errorClass="NOT_IMPLEMENTED",
+            messageParameters={"feature": "exists()"},
+        )
+
     @property
     def schema(self) -> StructType:
         # Schema caching is correct in most cases. Connect is lazy by nature. This means that
@@ -2173,8 +2160,10 @@ class DataFrame(ParentDataFrame):
         assert isinstance(checkpointed._plan, plan.CachedRemoteRelation)
         return checkpointed
 
-    def localCheckpoint(self, eager: bool = True) -> ParentDataFrame:
-        cmd = plan.Checkpoint(child=self._plan, local=True, eager=eager)
+    def localCheckpoint(
+        self, eager: bool = True, storageLevel: Optional[StorageLevel] = None
+    ) -> ParentDataFrame:
+        cmd = plan.Checkpoint(child=self._plan, local=True, eager=eager, storage_level=storageLevel)
         _, properties, self._execution_info = self._session.client.execute_command(
             cmd.command(self._session.client)
         )
@@ -2203,7 +2192,9 @@ class DataFrame(ParentDataFrame):
         return self._execution_info
 
     @property
-    def plot(self) -> PySparkPlotAccessor:
+    def plot(self) -> "PySparkPlotAccessor":  # type: ignore[name-defined] # noqa: F821
+        from pyspark.sql.plot import PySparkPlotAccessor
+
         return PySparkPlotAccessor(self)
 
 
@@ -2286,6 +2277,10 @@ def _test() -> None:
     if not is_remote_only():
         del pyspark.sql.dataframe.DataFrame.toJSON.__doc__
         del pyspark.sql.dataframe.DataFrame.rdd.__doc__
+
+    # TODO(SPARK-50134): Support subquery in connect
+    del pyspark.sql.dataframe.DataFrame.scalar.__doc__
+    del pyspark.sql.dataframe.DataFrame.exists.__doc__
 
     globs["spark"] = (
         PySparkSession.builder.appName("sql.connect.dataframe tests")

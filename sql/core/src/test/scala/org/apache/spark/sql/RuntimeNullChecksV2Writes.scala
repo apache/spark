@@ -64,7 +64,7 @@ class RuntimeNullChecksV2Writes extends QueryTest with SQLTestUtils with SharedS
           sql("INSERT INTO t VALUES ('txt', null)")
         }
       }
-      assert(e.getErrorClass == "NOT_NULL_ASSERT_VIOLATION")
+      assert(e.getCondition == "NOT_NULL_ASSERT_VIOLATION")
     }
   }
 
@@ -404,7 +404,7 @@ class RuntimeNullChecksV2Writes extends QueryTest with SQLTestUtils with SharedS
 
   private def assertNotNullException(e: SparkRuntimeException, colPath: Seq[String]): Unit = {
     e.getCause match {
-      case _ if e.getErrorClass == "NOT_NULL_ASSERT_VIOLATION" =>
+      case _ if e.getCondition == "NOT_NULL_ASSERT_VIOLATION" =>
       case other =>
         fail(s"Unexpected exception cause: $other")
     }

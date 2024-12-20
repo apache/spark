@@ -296,7 +296,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
     val exception = SparkException.internalError("testpurpose")
     testSerialization(
       new QueryTerminatedEvent(UUID.randomUUID, UUID.randomUUID,
-        Some(exception.getMessage), Some(exception.getErrorClass)))
+        Some(exception.getMessage), Some(exception.getCondition)))
   }
 
   test("only one progress event per interval when no data") {

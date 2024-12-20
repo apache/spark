@@ -20,6 +20,7 @@ package org.apache.spark.sql
 import java.io.{File, FilenameFilter}
 import java.nio.file.{Files, Paths}
 import java.time.{Duration, LocalDateTime, Period}
+import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.collection.mutable.HashSet
 import scala.concurrent.duration._
@@ -1787,6 +1788,47 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
         Row(0, 1, 0, 1) :: Row(1, 2, 1, 2) :: Nil)
       assert(getNumInMemoryRelations(df) == 1)
     }
+  }
 
+  Seq(true, false).foreach { callerEnableAQE =>
+    test(s"SPARK-49982: AQE negative caching with in memory table cache - callerEnableAQE=" +
+      callerEnableAQE) {
+      val triggered = new AtomicBoolean(false)
+      val func: Long => Boolean = (i: Long) => {
+        if (!triggered.get()) {
+          throw new Exception("SPARK-49982")
+        }
+        i % 2 == 0
+      }
+      withUserDefinedFunction("func" -> true) {
+        spark.udf.register("func", func)
+        // make sure the cached plan is AQE plan
+        withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
+          val df1 = spark.range(1024).select($"id".as("key1"))
+          val df2 = spark.range(2048).select($"id".as("key2"))
+            .withColumn("group_key", $"key2" % 1024)
+          val df = df1.filter(expr("func(key1)")).hint("MERGE").join(df2, $"key1" === $"key2")
+          df.cache()
+          try {
+            withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> callerEnableAQE.toString) {
+              val finalDf1 = df.groupBy($"group_key").agg("key1" -> "count")
+              val finalDf2 = df.groupBy($"group_key").agg("key1" -> "avg")
+              intercept[Throwable] {
+                finalDf1.collect()
+              }
+              triggered.set(true)
+              // Collect again on the same df will trigger AQE negative caching
+              intercept[Throwable] {
+                finalDf1.collect()
+              }
+              // Collect on a different df will use the refreshed InMemoryRelation
+              finalDf2.collect()
+            }
+          } finally {
+            df.unpersist(blocking = true)
+          }
+        }
+      }
+    }
   }
 }

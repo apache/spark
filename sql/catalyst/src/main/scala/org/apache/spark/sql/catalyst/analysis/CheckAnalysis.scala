@@ -24,7 +24,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.SubExprUtils._
-import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, AggregateFunction, Median, PercentileCont, PercentileDisc}
+import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, AggregateFunction, ListAgg, Median, PercentileCont, PercentileDisc}
 import org.apache.spark.sql.catalyst.optimizer.{BooleanSimplification, DecorrelateInnerQuery, InlineCTE}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -76,6 +76,10 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
     dt.existsRecursively(_.isInstanceOf[MapType])
   }
 
+  protected def hasVariantType(dt: DataType): Boolean = {
+    dt.existsRecursively(_.isInstanceOf[VariantType])
+  }
+
   protected def mapColumnInSetOperation(plan: LogicalPlan): Option[Attribute] = plan match {
     case _: Intersect | _: Except | _: Distinct =>
       plan.output.find(a => hasMapType(a.dataType))
@@ -83,6 +87,21 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
       d.keys.find(a => hasMapType(a.dataType))
     case _ => None
   }
+
+  protected def variantColumnInSetOperation(plan: LogicalPlan): Option[Attribute] = plan match {
+    case _: Intersect | _: Except | _: Distinct =>
+      plan.output.find(a => hasVariantType(a.dataType))
+    case d: Deduplicate =>
+      d.keys.find(a => hasVariantType(a.dataType))
+    case _ => None
+  }
+
+  protected def variantExprInPartitionExpression(plan: LogicalPlan): Option[Expression] =
+    plan match {
+      case r: RepartitionByExpression =>
+        r.partitionExpressions.find(e => hasVariantType(e.dataType))
+      case _ => None
+    }
 
   private def checkLimitLikeClause(name: String, limitExpr: Expression): Unit = {
     limitExpr match {
@@ -173,6 +192,45 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
     )
   }
 
+  private def containsUnsupportedLCA(e: Expression, operator: LogicalPlan): Boolean = {
+    e.containsPattern(LATERAL_COLUMN_ALIAS_REFERENCE) && operator.expressions.exists {
+      case a: Alias
+        if e.collect { case l: LateralColumnAliasReference => l.nameParts.head }.contains(a.name) =>
+        a.exists(_.isInstanceOf[Generator])
+      case _ => false
+    }
+  }
+
+  /**
+   * Checks for errors in a `SELECT` clause, such as a trailing comma or an empty select list.
+   *
+   * @param plan The logical plan of the query.
+   * @param starRemoved Whether a '*' (wildcard) was removed from the select list.
+   * @throws AnalysisException if the select list is empty or ends with a trailing comma.
+   */
+  protected def checkTrailingCommaInSelect(
+      plan: LogicalPlan,
+      starRemoved: Boolean = false): Unit = {
+    val exprList = plan match {
+      case proj: Project if proj.projectList.nonEmpty =>
+        proj.projectList
+      case agg: Aggregate if agg.aggregateExpressions.nonEmpty =>
+        agg.aggregateExpressions
+      case _ =>
+        Seq.empty
+    }
+
+    exprList.lastOption match {
+      case Some(Alias(UnresolvedAttribute(Seq(name)), _)) =>
+        if (name.equalsIgnoreCase("FROM") && plan.exists(_.isInstanceOf[OneRowRelation])) {
+          if (exprList.size > 1  || starRemoved) {
+            throw QueryCompilationErrors.trailingCommaInSelectError(exprList.last.origin)
+          }
+        }
+      case _ =>
+    }
+  }
+
   def checkAnalysis(plan: LogicalPlan): Unit = {
     // We should inline all CTE relations to restore the original plan shape, as the analysis check
     // may need to match certain plan shapes. For dangling CTE relations, they will still be kept
@@ -209,6 +267,13 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
       case write: V2WriteCommand if write.table.isInstanceOf[UnresolvedRelation] =>
         val tblName = write.table.asInstanceOf[UnresolvedRelation].multipartIdentifier
         write.table.tableNotFound(tblName)
+
+      // We should check for trailing comma errors first, since we would get less obvious
+      // unresolved column errors if we do it bottom up
+      case proj: Project =>
+        checkTrailingCommaInSelect(proj)
+      case agg: Aggregate =>
+        checkTrailingCommaInSelect(agg)
 
       case _ =>
     }
@@ -303,6 +368,14 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
           // surrounded with single quotes, or there is a typo in the attribute name.
           case GetMapValue(map, key: Attribute) if isMapWithStringKey(map) && !key.resolved =>
             failUnresolvedAttribute(operator, key, "UNRESOLVED_MAP_KEY")
+
+          case e: Expression if containsUnsupportedLCA(e, operator) =>
+            val lcaRefNames =
+              e.collect { case lcaRef: LateralColumnAliasReference => lcaRef.name }.distinct
+            failAnalysis(
+              errorClass = "UNSUPPORTED_FEATURE.LATERAL_COLUMN_ALIAS_IN_GENERATOR",
+              messageParameters =
+                Map("lca" -> toSQLId(lcaRefNames), "generatorExpr" -> toSQLExpr(e)))
         }
 
         // Fail if we still have an unresolved all in group by. This needs to run before the
@@ -386,10 +459,23 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
                 "funcName" -> toSQLExpr(wf),
                 "windowExpr" -> toSQLExpr(w)))
 
+          case agg @ AggregateExpression(listAgg: ListAgg, _, _, _, _)
+            if agg.isDistinct && listAgg.needSaveOrderValue =>
+            throw QueryCompilationErrors.functionAndOrderExpressionMismatchError(
+              listAgg.prettyName, listAgg.child, listAgg.orderExpressions)
+
           case w: WindowExpression =>
             // Only allow window functions with an aggregate expression or an offset window
             // function or a Pandas window UDF.
             w.windowFunction match {
+              case agg @ AggregateExpression(fun: ListAgg, _, _, _, _)
+                // listagg(...) WITHIN GROUP (ORDER BY ...) OVER (ORDER BY ...) is unsupported
+                if fun.orderingFilled && (w.windowSpec.orderSpec.nonEmpty ||
+                  w.windowSpec.frameSpecification !=
+                  SpecifiedWindowFrame(RowFrame, UnboundedPreceding, UnboundedFollowing)) =>
+                agg.failAnalysis(
+                  errorClass = "INVALID_WINDOW_SPEC_FOR_AGGREGATION_FUNC",
+                  messageParameters = Map("aggFunc" -> toSQLExpr(agg.aggregateFunction)))
               case agg @ AggregateExpression(
                 _: PercentileCont | _: PercentileDisc | _: Median, _, _, _, _)
                 if w.windowSpec.orderSpec.nonEmpty || w.windowSpec.frameSpecification !=
@@ -420,6 +506,10 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
               errorClass = "UNBOUND_SQL_PARAMETER",
               messageParameters = Map("name" -> p.name))
 
+          case ma @ MultiAlias(child, names) if child.resolved && !child.isInstanceOf[Generator] =>
+            ma.failAnalysis(
+              errorClass = "MULTI_ALIAS_WITHOUT_GENERATOR",
+              messageParameters = Map("expr" -> toSQLExpr(child), "names" -> names.mkString(", ")))
           case _ =>
         })
 
@@ -561,7 +651,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
           case up: Unpivot if up.canBeCoercioned && !up.valuesTypeCoercioned =>
             throw QueryCompilationErrors.unpivotValueDataTypeMismatchError(up.values.get)
 
-          case Sort(orders, _, _) =>
+          case Sort(orders, _, _, _) =>
             orders.foreach { order =>
               if (!RowOrdering.isOrderable(order.dataType)) {
                 order.failAnalysis(
@@ -570,7 +660,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
               }
             }
 
-          case Window(_, partitionSpec, _, _) =>
+          case Window(_, partitionSpec, _, _, _) =>
             // Both `partitionSpec` and `orderSpec` must be orderable. We only need an extra check
             // for `partitionSpec` here because `orderSpec` has the type check itself.
             partitionSpec.foreach { p =>
@@ -720,7 +810,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
           case p @ Project(projectList, _) =>
             checkForUnspecifiedWindow(projectList)
 
-          case agg@Aggregate(_, aggregateExpressions, _) if
+          case agg@Aggregate(_, aggregateExpressions, _, _) if
             PlanHelper.specialExpressionsInUnsupportedOperator(agg).isEmpty =>
             checkForUnspecifiedWindow(aggregateExpressions)
 
@@ -777,6 +867,23 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
               messageParameters = Map(
                 "colName" -> toSQLId(mapCol.name),
                 "dataType" -> toSQLType(mapCol.dataType)))
+
+          // TODO: Remove this type check once we support Variant ordering
+          case o if variantColumnInSetOperation(o).isDefined =>
+            val variantCol = variantColumnInSetOperation(o).get
+            o.failAnalysis(
+              errorClass = "UNSUPPORTED_FEATURE.SET_OPERATION_ON_VARIANT_TYPE",
+              messageParameters = Map(
+                "colName" -> toSQLId(variantCol.name),
+                "dataType" -> toSQLType(variantCol.dataType)))
+
+          case o if variantExprInPartitionExpression(o).isDefined =>
+            val variantExpr = variantExprInPartitionExpression(o).get
+            o.failAnalysis(
+              errorClass = "UNSUPPORTED_FEATURE.PARTITION_BY_VARIANT",
+              messageParameters = Map(
+                "expr" -> variantExpr.sql,
+                "dataType" -> toSQLType(variantExpr.dataType)))
 
           case o if o.expressions.exists(!_.deterministic) &&
             !operatorAllowsNonDeterministicExpressions(o) &&
@@ -1489,15 +1596,23 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
         alter.conf.resolver)
     }
 
+    def checkNoCollationsInMapKeys(colsToAdd: Seq[QualifiedColType]): Unit = {
+      if (!alter.conf.allowCollationsInMapKeys) {
+        colsToAdd.foreach(col => SchemaUtils.checkNoCollationsInMapKeys(col.dataType))
+      }
+    }
+
     alter match {
       case AddColumns(table: ResolvedTable, colsToAdd) =>
         colsToAdd.foreach { colToAdd =>
           checkColumnNotExists("add", colToAdd.name, table.schema)
         }
         checkColumnNameDuplication(colsToAdd)
+        checkNoCollationsInMapKeys(colsToAdd)
 
       case ReplaceColumns(_: ResolvedTable, colsToAdd) =>
         checkColumnNameDuplication(colsToAdd)
+        checkNoCollationsInMapKeys(colsToAdd)
 
       case RenameColumn(table: ResolvedTable, col: ResolvedFieldName, newName) =>
         checkColumnNotExists("rename", col.path :+ newName, table.schema)
@@ -1538,7 +1653,6 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
             case (VarcharType(l1), VarcharType(l2)) => l1 <= l2
             case _ => Cast.canUpCast(from, to)
           }
-
           if (!canAlterColumnType(field.dataType, newDataType)) {
             alter.failAnalysis(
               errorClass = "NOT_SUPPORTED_CHANGE_COLUMN",
@@ -1584,7 +1698,7 @@ class PreemptedError() {
   // errors have the lowest priority.
   def set(error: Exception with SparkThrowable, priority: Option[Int] = None): Unit = {
     val calculatedPriority = priority.getOrElse {
-      error.getErrorClass match {
+      error.getCondition match {
         case c if c.startsWith("INTERNAL_ERROR") => 1
         case _ => 2
       }

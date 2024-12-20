@@ -26,16 +26,20 @@ import scala.util.control.NonFatal
 
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.api.java.function._
 import org.apache.spark.connect.proto
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders._
 import org.apache.spark.sql.catalyst.expressions.OrderUtils
+import org.apache.spark.sql.connect.ConnectClientUnsupportedErrors
 import org.apache.spark.sql.connect.ConnectConversions._
 import org.apache.spark.sql.connect.client.SparkResult
 import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, StorageLevelProtoConverter}
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLId
+import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.expressions.SparkUserDefinedFunction
 import org.apache.spark.sql.functions.{struct, to_json}
 import org.apache.spark.sql.internal.{ColumnNodeToProtoConverter, DataFrameWriterImpl, DataFrameWriterV2Impl, MergeIntoWriterImpl, ToScalaUDF, UDFAdaptors, UnresolvedAttribute, UnresolvedRegex}
@@ -379,6 +383,45 @@ class Dataset[T] private[sql] (
     }
   }
 
+  private def lateralJoin(
+      right: DS[_],
+      joinExprs: Option[Column],
+      joinType: String): DataFrame = {
+    val joinTypeValue = toJoinType(joinType)
+    joinTypeValue match {
+      case proto.Join.JoinType.JOIN_TYPE_INNER | proto.Join.JoinType.JOIN_TYPE_LEFT_OUTER |
+          proto.Join.JoinType.JOIN_TYPE_CROSS =>
+      case _ =>
+        throw new IllegalArgumentException(s"Unsupported lateral join type $joinType")
+    }
+    sparkSession.newDataFrame { builder =>
+      val lateralJoinBuilder = builder.getLateralJoinBuilder
+      lateralJoinBuilder.setLeft(plan.getRoot).setRight(right.plan.getRoot)
+      joinExprs.foreach(c => lateralJoinBuilder.setJoinCondition(c.expr))
+      lateralJoinBuilder.setJoinType(joinTypeValue)
+    }
+  }
+
+  /** @inheritdoc */
+  def lateralJoin(right: DS[_]): DataFrame = {
+    lateralJoin(right, None, "inner")
+  }
+
+  /** @inheritdoc */
+  def lateralJoin(right: DS[_], joinExprs: Column): DataFrame = {
+    lateralJoin(right, Some(joinExprs), "inner")
+  }
+
+  /** @inheritdoc */
+  def lateralJoin(right: DS[_], joinType: String): DataFrame = {
+    lateralJoin(right, None, joinType)
+  }
+
+  /** @inheritdoc */
+  def lateralJoin(right: DS[_], joinExprs: Column, joinType: String): DataFrame = {
+    lateralJoin(right, Some(joinExprs), joinType)
+  }
+
   override protected def sortInternal(global: Boolean, sortCols: Seq[Column]): Dataset[T] = {
     val sortExprs = sortCols.map { c =>
       ColumnNodeToProtoConverter(c.sortOrder).getSortOrder
@@ -580,6 +623,19 @@ class Dataset[T] private[sql] (
   /** @inheritdoc */
   def transpose(): DataFrame =
     buildTranspose(Seq.empty)
+
+  // TODO(SPARK-50134): Support scalar Subquery API in Spark Connect
+  // scalastyle:off not.implemented.error.usage
+  /** @inheritdoc */
+  def scalar(): Column = {
+    ???
+  }
+
+  /** @inheritdoc */
+  def exists(): Column = {
+    ???
+  }
+  // scalastyle:on not.implemented.error.usage
 
   /** @inheritdoc */
   def limit(n: Int): Dataset[T] = sparkSession.newDataset(agnosticEncoder) { builder =>
@@ -1113,13 +1169,20 @@ class Dataset[T] private[sql] (
   }
 
   /** @inheritdoc */
-  protected def checkpoint(eager: Boolean, reliableCheckpoint: Boolean): Dataset[T] = {
+  protected def checkpoint(
+      eager: Boolean,
+      reliableCheckpoint: Boolean,
+      storageLevel: Option[StorageLevel]): Dataset[T] = {
     sparkSession.newDataset(agnosticEncoder) { builder =>
       val command = sparkSession.newCommand { builder =>
-        builder.getCheckpointCommandBuilder
+        val checkpointBuilder = builder.getCheckpointCommandBuilder
           .setLocal(!reliableCheckpoint)
           .setEager(eager)
           .setRelation(this.plan.getRoot)
+        storageLevel.foreach { storageLevel =>
+          checkpointBuilder.setStorageLevel(
+            StorageLevelProtoConverter.toConnectProtoType(storageLevel))
+        }
       }
       val responseIter = sparkSession.execute(command)
       try {
@@ -1303,6 +1366,10 @@ class Dataset[T] private[sql] (
   override def localCheckpoint(eager: Boolean): Dataset[T] = super.localCheckpoint(eager)
 
   /** @inheritdoc */
+  override def localCheckpoint(eager: Boolean, storageLevel: StorageLevel): Dataset[T] =
+    super.localCheckpoint(eager, storageLevel)
+
+  /** @inheritdoc */
   override def joinWith[U](other: Dataset[U], condition: Column): Dataset[(T, U)] =
     super.joinWith(other, condition)
 
@@ -1463,4 +1530,13 @@ class Dataset[T] private[sql] (
       func: MapFunction[T, K],
       encoder: Encoder[K]): KeyValueGroupedDataset[K, T] =
     super.groupByKey(func, encoder).asInstanceOf[KeyValueGroupedDataset[K, T]]
+
+  /** @inheritdoc */
+  override def rdd: RDD[T] = throw ConnectClientUnsupportedErrors.rdd()
+
+  /** @inheritdoc */
+  override def toJavaRDD: JavaRDD[T] = throw ConnectClientUnsupportedErrors.rdd()
+
+  override def queryExecution: QueryExecution =
+    throw ConnectClientUnsupportedErrors.queryExecution()
 }

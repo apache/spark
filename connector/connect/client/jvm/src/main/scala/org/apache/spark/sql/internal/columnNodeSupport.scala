@@ -52,9 +52,10 @@ object ColumnNodeToProtoConverter extends (ColumnNode => proto.Expression) {
       case Literal(value, Some(dataType), _) =>
         builder.setLiteral(toLiteralProtoBuilder(value, dataType))
 
-      case UnresolvedAttribute(unparsedIdentifier, planId, isMetadataColumn, _) =>
+      case u @ UnresolvedAttribute(unparsedIdentifier, planId, isMetadataColumn, _) =>
+        val escapedName = u.sql
         val b = builder.getUnresolvedAttributeBuilder
-          .setUnparsedIdentifier(unparsedIdentifier)
+          .setUnparsedIdentifier(escapedName)
         if (isMetadataColumn) {
           // We only set this field when it is needed. If we would always set it,
           // too many of the verbatims we use for testing would have to be regenerated.
@@ -162,6 +163,9 @@ object ColumnNodeToProtoConverter extends (ColumnNode => proto.Expression) {
         otherwise.foreach { value =>
           b.addArguments(apply(value, e))
         }
+
+      case LazyExpression(child, _) =>
+        builder.getLazyExpressionBuilder.setChild(apply(child, e))
 
       case ProtoColumnNode(e, _) =>
         return e

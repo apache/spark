@@ -62,6 +62,7 @@ private[spark] object PythonEvalType {
   val SQL_GROUPED_MAP_ARROW_UDF = 209
   val SQL_COGROUPED_MAP_ARROW_UDF = 210
   val SQL_TRANSFORM_WITH_STATE_PANDAS_UDF = 211
+  val SQL_TRANSFORM_WITH_STATE_PANDAS_INIT_STATE_UDF = 212
 
   val SQL_TABLE_UDF = 300
   val SQL_ARROW_TABLE_UDF = 301
@@ -84,6 +85,8 @@ private[spark] object PythonEvalType {
     case SQL_TABLE_UDF => "SQL_TABLE_UDF"
     case SQL_ARROW_TABLE_UDF => "SQL_ARROW_TABLE_UDF"
     case SQL_TRANSFORM_WITH_STATE_PANDAS_UDF => "SQL_TRANSFORM_WITH_STATE_PANDAS_UDF"
+    case SQL_TRANSFORM_WITH_STATE_PANDAS_INIT_STATE_UDF =>
+      "SQL_TRANSFORM_WITH_STATE_PANDAS_INIT_STATE_UDF"
   }
 }
 
@@ -106,7 +109,8 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
     protected val funcs: Seq[ChainedPythonFunctions],
     protected val evalType: Int,
     protected val argOffsets: Array[Array[Int]],
-    protected val jobArtifactUUID: Option[String])
+    protected val jobArtifactUUID: Option[String],
+    protected val metrics: Map[String, AccumulatorV2[Long, Long]])
   extends Logging {
 
   require(funcs.length == argOffsets.length, "argOffsets should have the same length as funcs")
@@ -519,6 +523,9 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
         log"boot = ${MDC(LogKeys.BOOT_TIME, boot)}, " +
         log"init = ${MDC(LogKeys.INIT_TIME, init)}, " +
         log"finish = ${MDC(LogKeys.FINISH_TIME, finish)}")
+      metrics.get("pythonBootTime").foreach(_.add(boot))
+      metrics.get("pythonInitTime").foreach(_.add(init))
+      metrics.get("pythonTotalTime").foreach(_.add(total))
       val memoryBytesSpilled = stream.readLong()
       val diskBytesSpilled = stream.readLong()
       context.taskMetrics().incMemoryBytesSpilled(memoryBytesSpilled)
@@ -821,7 +828,7 @@ private[spark] object PythonRunner {
 private[spark] class PythonRunner(
     funcs: Seq[ChainedPythonFunctions], jobArtifactUUID: Option[String])
   extends BasePythonRunner[Array[Byte], Array[Byte]](
-    funcs, PythonEvalType.NON_UDF, Array(Array(0)), jobArtifactUUID) {
+    funcs, PythonEvalType.NON_UDF, Array(Array(0)), jobArtifactUUID, Map.empty) {
 
   protected override def newWriter(
       env: SparkEnv,

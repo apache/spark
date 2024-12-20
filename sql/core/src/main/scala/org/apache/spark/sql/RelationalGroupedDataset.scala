@@ -21,7 +21,7 @@ import org.apache.spark.SparkRuntimeException
 import org.apache.spark.annotation.Stable
 import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.broadcast.Broadcast
-import org.apache.spark.sql.catalyst.analysis.UnresolvedAlias
+import org.apache.spark.sql.catalyst.analysis.{UnresolvedAlias, UnresolvedAttribute}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.util.toPrettySQL
 import org.apache.spark.sql.classic.ClassicConversions._
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.QueryExecution
-import org.apache.spark.sql.internal.ExpressionUtils.{column, generateAlias}
+import org.apache.spark.sql.internal.ExpressionUtils.generateAlias
 import org.apache.spark.sql.internal.TypedAggUtils.withInputType
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.{NumericType, StructType}
@@ -114,7 +114,7 @@ class RelationalGroupedDataset protected[sql](
         namedExpr
       }
     }
-    columnExprs.map(column)
+    columnExprs.map(Column(_))
   }
 
   /** @inheritdoc */
@@ -238,7 +238,7 @@ class RelationalGroupedDataset protected[sql](
       broadcastVars: Array[Broadcast[Object]],
       outputSchema: StructType): DataFrame = {
       val groupingNamedExpressions = groupingExprs.map(alias)
-      val groupingCols = groupingNamedExpressions.map(column)
+      val groupingCols = groupingNamedExpressions.map(Column(_))
       val groupingDataFrame = df.select(groupingCols : _*)
       val groupingAttributes = groupingNamedExpressions.map(_.toAttribute)
       Dataset.ofRows(
@@ -474,25 +474,86 @@ class RelationalGroupedDataset protected[sql](
       func: Column,
       outputStructType: StructType,
       outputModeStr: String,
-      timeModeStr: String): DataFrame = {
-    val groupingNamedExpressions = groupingExprs.map {
-      case ne: NamedExpression => ne
-      case other => Alias(other, other.toString)()
+      timeModeStr: String,
+      initialState: RelationalGroupedDataset,
+      eventTimeColumnName: String): DataFrame = {
+    def exprToAttr(expr: Seq[Expression]): Seq[Attribute] = {
+      expr.map {
+        case ne: NamedExpression => ne
+        case other => Alias(other, other.toString)()
+      }.map(_.toAttribute)
     }
-    val groupingAttrs = groupingNamedExpressions.map(_.toAttribute)
+
+    val groupingAttrs = exprToAttr(groupingExprs)
     val outputAttrs = toAttributes(outputStructType)
     val outputMode = InternalOutputModes(outputModeStr)
     val timeMode = TimeModes(timeModeStr)
+    // Place grouping attributes at the front of output so we can
+    // refer to them correctly in the following planning phase;
+    // will perform dedup in the physical operator
+    val leftChild = df.logicalPlan
+    val left = df.sparkSession.sessionState.executePlan(
+      Project(groupingAttrs ++ leftChild.output, leftChild)).analyzed
 
-    val plan = TransformWithStateInPandas(
-      func.expr,
-      groupingAttrs,
-      outputAttrs,
-      outputMode,
-      timeMode,
-      child = df.logicalPlan
+    val plan: LogicalPlan = if (initialState == null) {
+      TransformWithStateInPandas(
+        func.expr,
+        groupingAttrs.length,
+        outputAttrs,
+        outputMode,
+        timeMode,
+        child = left,
+        hasInitialState = false,
+        /* The followings are dummy variables because hasInitialState is false */
+        initialState = LocalRelation(Seq.empty[Attribute]),
+        initGroupingAttrsLen = 0,
+        initialStateSchema = new StructType()
+      )
+    } else {
+      val initGroupingAttrs = exprToAttr(initialState.groupingExprs)
+
+      val rightChild = initialState.df.logicalPlan
+
+      val right = initialState.df.sparkSession.sessionState.executePlan(
+        Project(initGroupingAttrs ++ rightChild.output, rightChild)).analyzed
+
+      TransformWithStateInPandas(
+        func.expr,
+        groupingAttributesLen = groupingAttrs.length,
+        outputAttrs,
+        outputMode,
+        timeMode,
+        child = left,
+        hasInitialState = true,
+        initialState = right,
+        initGroupingAttrsLen = initGroupingAttrs.length,
+        initialStateSchema = initialState.df.schema
+      )
+    }
+    if (eventTimeColumnName.isEmpty) {
+      Dataset.ofRows(df.sparkSession, plan)
+    } else {
+      updateEventTimeColumnAfterTransformWithState(plan, eventTimeColumnName)
+    }
+  }
+
+  /**
+   * Creates a new dataset with updated eventTimeColumn after the transformWithState
+   * logical node.
+   */
+  private def updateEventTimeColumnAfterTransformWithState(
+      transformWithStateInPandas: LogicalPlan,
+      eventTimeColumnName: String): DataFrame = {
+    val transformWithStateDataset = Dataset.ofRows(
+      df.sparkSession,
+      transformWithStateInPandas
     )
-    Dataset.ofRows(df.sparkSession, plan)
+
+    Dataset.ofRows(df.sparkSession,
+      UpdateEventTimeWatermarkColumn(
+        UnresolvedAttribute(eventTimeColumnName),
+        None,
+        transformWithStateDataset.logicalPlan))
   }
 
   override def toString: String = {

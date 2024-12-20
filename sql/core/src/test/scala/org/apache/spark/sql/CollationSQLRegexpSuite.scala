@@ -111,15 +111,17 @@ class CollationSQLRegexpSuite
     }
     val tableNameLcase = "T_LCASE"
     withTable(tableNameLcase) {
-      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> "UTF8_LCASE") {
-        sql(s"CREATE TABLE IF NOT EXISTS $tableNameLcase(c STRING) using PARQUET")
-        sql(s"INSERT INTO $tableNameLcase(c) VALUES('ABC')")
-        checkAnswer(sql(s"select c like 'ab%' FROM $tableNameLcase"), Row(true))
-        checkAnswer(sql(s"select c like '%bc' FROM $tableNameLcase"), Row(true))
-        checkAnswer(sql(s"select c like 'a%c' FROM $tableNameLcase"), Row(true))
-        checkAnswer(sql(s"select c like '%b%' FROM $tableNameLcase"), Row(true))
-        checkAnswer(sql(s"select c like 'abc' FROM $tableNameLcase"), Row(true))
-      }
+      sql(s"""
+           |CREATE TABLE IF NOT EXISTS $tableNameLcase(
+           |  c STRING COLLATE UTF8_LCASE
+           |) using PARQUET
+           |""".stripMargin)
+      sql(s"INSERT INTO $tableNameLcase(c) VALUES('ABC')")
+      checkAnswer(sql(s"select c like 'ab%' FROM $tableNameLcase"), Row(true))
+      checkAnswer(sql(s"select c like '%bc' FROM $tableNameLcase"), Row(true))
+      checkAnswer(sql(s"select c like 'a%c' FROM $tableNameLcase"), Row(true))
+      checkAnswer(sql(s"select c like '%b%' FROM $tableNameLcase"), Row(true))
+      checkAnswer(sql(s"select c like 'abc' FROM $tableNameLcase"), Row(true))
     }
   }
 
@@ -430,7 +432,9 @@ class CollationSQLRegexpSuite
         sql(s"SELECT regexp_replace(collate('ABCDE','$c1'), '.c.', collate('FFF','$c2'))")
       },
       condition = "COLLATION_MISMATCH.EXPLICIT",
-      parameters = Map("explicitTypes" -> "`string`, `string collate UTF8_LCASE`")
+      parameters = Map(
+        "explicitTypes" -> """"STRING", "STRING COLLATE UTF8_LCASE""""
+      )
     )
     // Unsupported collations
     case class RegExpReplaceTestFail(l: String, r: String, c: String)
@@ -446,7 +450,8 @@ class CollationSQLRegexpSuite
         },
         condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
         parameters = Map(
-          "sqlExpr" -> "\"regexp_replace(collate(ABCDE, UNICODE_CI), .c., FFF, 1)\"",
+          "sqlExpr" ->
+            """"regexp_replace(collate(ABCDE, UNICODE_CI), .c., 'FFF' collate UNICODE_CI, 1)"""",
           "paramIndex" -> "first",
           "inputSql" -> "\"collate(ABCDE, UNICODE_CI)\"",
           "inputType" -> "\"STRING COLLATE UNICODE_CI\"",

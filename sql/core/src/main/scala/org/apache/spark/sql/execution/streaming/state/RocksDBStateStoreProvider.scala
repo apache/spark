@@ -18,7 +18,8 @@
 package org.apache.spark.sql.execution.streaming.state
 
 import java.io._
-import java.util.concurrent.ConcurrentHashMap
+import java.util.UUID
+import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
 
 import scala.util.control.NonFatal
 
@@ -31,9 +32,9 @@ import org.apache.spark.internal.LogKeys._
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.execution.streaming.CheckpointFileManager
+import org.apache.spark.sql.execution.streaming.{CheckpointFileManager, StreamExecution}
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{NonFateSharingCache, Utils}
 
 private[sql] class RocksDBStateStoreProvider
   extends StateStoreProvider with Logging with Closeable
@@ -74,10 +75,28 @@ private[sql] class RocksDBStateStoreProvider
         isInternal: Boolean = false): Unit = {
       verifyColFamilyCreationOrDeletion("create_col_family", colFamilyName, isInternal)
       val newColFamilyId = rocksDB.createColFamilyIfAbsent(colFamilyName)
-      keyValueEncoderMap.putIfAbsent(colFamilyName,
-        (RocksDBStateEncoder.getKeyEncoder(keyStateEncoderSpec, useColumnFamilies,
-          Some(newColFamilyId)), RocksDBStateEncoder.getValueEncoder(valueSchema,
-          useMultipleValuesPerKey)))
+      val dataEncoderCacheKey = StateRowEncoderCacheKey(
+        queryRunId = getRunId(hadoopConf),
+        operatorId = stateStoreId.operatorId,
+        partitionId = stateStoreId.partitionId,
+        stateStoreName = stateStoreId.storeName,
+        colFamilyName = colFamilyName)
+
+      val dataEncoder = getDataEncoder(
+        stateStoreEncoding, dataEncoderCacheKey, keyStateEncoderSpec, valueSchema)
+
+      val keyEncoder = RocksDBStateEncoder.getKeyEncoder(
+        dataEncoder,
+        keyStateEncoderSpec,
+        useColumnFamilies,
+        Some(newColFamilyId)
+      )
+      val valueEncoder = RocksDBStateEncoder.getValueEncoder(
+        dataEncoder,
+        valueSchema,
+        useMultipleValuesPerKey
+      )
+      keyValueEncoderMap.putIfAbsent(colFamilyName, (keyEncoder, valueEncoder))
     }
 
     override def get(key: UnsafeRow, colFamilyName: String): UnsafeRow = {
@@ -305,6 +324,11 @@ private[sql] class RocksDBStateStoreProvider
       }
     }
 
+    override def getStateStoreCheckpointInfo(): StateStoreCheckpointInfo = {
+      val checkpointInfo = rocksDB.getLatestCheckpointInfo(id.partitionId)
+      checkpointInfo
+    }
+
     override def hasCommitted: Boolean = state == COMMITTED
 
     override def toString: String = {
@@ -359,6 +383,7 @@ private[sql] class RocksDBStateStoreProvider
     this.storeConf = storeConf
     this.hadoopConf = hadoopConf
     this.useColumnFamilies = useColumnFamilies
+    this.stateStoreEncoding = storeConf.stateStoreEncodingFormat
 
     if (useMultipleValuesPerKey) {
       require(useColumnFamilies, "Multiple values per key support requires column families to be" +
@@ -372,24 +397,44 @@ private[sql] class RocksDBStateStoreProvider
       defaultColFamilyId = Some(rocksDB.createColFamilyIfAbsent(StateStore.DEFAULT_COL_FAMILY_NAME))
     }
 
-    keyValueEncoderMap.putIfAbsent(StateStore.DEFAULT_COL_FAMILY_NAME,
-      (RocksDBStateEncoder.getKeyEncoder(keyStateEncoderSpec,
-        useColumnFamilies, defaultColFamilyId),
-        RocksDBStateEncoder.getValueEncoder(valueSchema, useMultipleValuesPerKey)))
+    val dataEncoderCacheKey = StateRowEncoderCacheKey(
+      queryRunId = getRunId(hadoopConf),
+      operatorId = stateStoreId.operatorId,
+      partitionId = stateStoreId.partitionId,
+      stateStoreName = stateStoreId.storeName,
+      colFamilyName = StateStore.DEFAULT_COL_FAMILY_NAME)
+
+    val dataEncoder = getDataEncoder(
+      stateStoreEncoding, dataEncoderCacheKey, keyStateEncoderSpec, valueSchema)
+
+    val keyEncoder = RocksDBStateEncoder.getKeyEncoder(
+      dataEncoder,
+      keyStateEncoderSpec,
+      useColumnFamilies,
+      defaultColFamilyId
+    )
+    val valueEncoder = RocksDBStateEncoder.getValueEncoder(
+      dataEncoder,
+      valueSchema,
+      useMultipleValuesPerKey
+    )
+    keyValueEncoderMap.putIfAbsent(StateStore.DEFAULT_COL_FAMILY_NAME, (keyEncoder, valueEncoder))
   }
 
   override def stateStoreId: StateStoreId = stateStoreId_
 
-  override def getStore(version: Long): StateStore = {
+  override def getStore(version: Long, uniqueId: Option[String] = None): StateStore = {
     try {
       if (version < 0) {
         throw QueryExecutionErrors.unexpectedStateStoreVersion(version)
       }
-      rocksDB.load(version)
+      rocksDB.load(
+        version,
+        stateStoreCkptId = if (storeConf.enableStateStoreCheckpointIds) uniqueId else None)
       new RocksDBStateStore(version)
     }
     catch {
-      case e: SparkException if e.getErrorClass.contains("CANNOT_LOAD_STATE_STORE") =>
+      case e: SparkException if e.getCondition.contains("CANNOT_LOAD_STATE_STORE") =>
         throw e
       case e: OutOfMemoryError =>
         throw QueryExecutionErrors.notEnoughMemoryToLoadStore(
@@ -400,16 +445,19 @@ private[sql] class RocksDBStateStoreProvider
     }
   }
 
-  override def getReadStore(version: Long): StateStore = {
+  override def getReadStore(version: Long, uniqueId: Option[String] = None): StateStore = {
     try {
       if (version < 0) {
         throw QueryExecutionErrors.unexpectedStateStoreVersion(version)
       }
-      rocksDB.load(version, true)
+      rocksDB.load(
+        version,
+        stateStoreCkptId = if (storeConf.enableStateStoreCheckpointIds) uniqueId else None,
+        readOnly = true)
       new RocksDBStateStore(version)
     }
     catch {
-      case e: SparkException if e.getErrorClass.contains("CANNOT_LOAD_STATE_STORE") =>
+      case e: SparkException if e.getCondition.contains("CANNOT_LOAD_STATE_STORE") =>
         throw e
       case e: OutOfMemoryError =>
         throw QueryExecutionErrors.notEnoughMemoryToLoadStore(
@@ -448,6 +496,7 @@ private[sql] class RocksDBStateStoreProvider
   @volatile private var storeConf: StateStoreConf = _
   @volatile private var hadoopConf: Configuration = _
   @volatile private var useColumnFamilies: Boolean = _
+  @volatile private var stateStoreEncoding: String = _
 
   private[sql] lazy val rocksDB = {
     val dfsRootDir = stateStoreId.storeCheckpointLocation().toString
@@ -456,7 +505,7 @@ private[sql] class RocksDBStateStoreProvider
     val sparkConf = Option(SparkEnv.get).map(_.conf).getOrElse(new SparkConf)
     val localRootDir = Utils.createTempDir(Utils.getLocalDir(sparkConf), storeIdStr)
     new RocksDB(dfsRootDir, RocksDBConf(storeConf), localRootDir, hadoopConf, storeIdStr,
-      useColumnFamilies)
+      useColumnFamilies, storeConf.enableStateStoreCheckpointIds)
   }
 
   private val keyValueEncoderMap = new java.util.concurrent.ConcurrentHashMap[String,
@@ -577,11 +626,78 @@ private[sql] class RocksDBStateStoreProvider
   }
 }
 
+
+case class StateRowEncoderCacheKey(
+    queryRunId: String,
+    operatorId: Long,
+    partitionId: Int,
+    stateStoreName: String,
+    colFamilyName: String
+)
+
 object RocksDBStateStoreProvider {
   // Version as a single byte that specifies the encoding of the row data in RocksDB
   val STATE_ENCODING_NUM_VERSION_BYTES = 1
   val STATE_ENCODING_VERSION: Byte = 0
   val VIRTUAL_COL_FAMILY_PREFIX_BYTES = 2
+
+  private val MAX_AVRO_ENCODERS_IN_CACHE = 1000
+  private val AVRO_ENCODER_LIFETIME_HOURS = 1L
+
+  // Add the cache at companion object level so it persists across provider instances
+  private val dataEncoderCache: NonFateSharingCache[StateRowEncoderCacheKey, RocksDBDataEncoder] =
+    NonFateSharingCache(
+      maximumSize = MAX_AVRO_ENCODERS_IN_CACHE,
+      expireAfterAccessTime = AVRO_ENCODER_LIFETIME_HOURS,
+      expireAfterAccessTimeUnit = TimeUnit.HOURS
+    )
+
+  /**
+   * Creates and returns a data encoder for the state store based on the specified encoding type.
+   * This method handles caching of encoders to improve performance by reusing encoder instances
+   * when possible.
+   *
+   * The method supports two encoding types:
+   * - Avro: Uses Apache Avro for serialization with schema evolution support
+   * - UnsafeRow: Uses Spark's internal row format for optimal performance
+   *
+   * @param stateStoreEncoding The encoding type to use ("avro" or "unsaferow")
+   * @param encoderCacheKey A unique key for caching the encoder instance, typically combining
+   *                       query ID, operator ID, partition ID, and column family name
+   * @param keyStateEncoderSpec Specification for how to encode keys, including schema and any
+   *                           prefix/range scan requirements
+   * @param valueSchema The schema for the values to be encoded
+   * @return A RocksDBDataEncoder instance configured for the specified encoding type
+   */
+  def getDataEncoder(
+      stateStoreEncoding: String,
+      encoderCacheKey: StateRowEncoderCacheKey,
+      keyStateEncoderSpec: KeyStateEncoderSpec,
+      valueSchema: StructType): RocksDBDataEncoder = {
+    assert(Set("avro", "unsaferow").contains(stateStoreEncoding))
+    RocksDBStateStoreProvider.dataEncoderCache.get(
+      encoderCacheKey,
+      new java.util.concurrent.Callable[RocksDBDataEncoder] {
+        override def call(): RocksDBDataEncoder = {
+          if (stateStoreEncoding == "avro") {
+            new AvroStateEncoder(keyStateEncoderSpec, valueSchema)
+          } else {
+            new UnsafeRowDataEncoder(keyStateEncoderSpec, valueSchema)
+          }
+        }
+      }
+    )
+  }
+
+  private def getRunId(hadoopConf: Configuration): String = {
+    val runId = hadoopConf.get(StreamExecution.RUN_ID_KEY)
+    if (runId != null) {
+      runId
+    } else {
+      assert(Utils.isTesting, "Failed to find query id/batch Id in task context")
+      UUID.randomUUID().toString
+    }
+  }
 
   // Native operation latencies report as latency in microseconds
   // as SQLMetrics support millis. Convert the value to millis

@@ -40,7 +40,6 @@ import json
 import pickle
 from threading import Lock
 from inspect import signature, isclass
-import warnings
 
 import pyarrow as pa
 
@@ -50,6 +49,7 @@ from pyspark.sql.types import DataType
 
 import pyspark.sql.connect.proto as proto
 from pyspark.sql.column import Column
+from pyspark.sql.connect.logging import logger
 from pyspark.sql.connect.proto import base_pb2 as spark_dot_connect_dot_base__pb2
 from pyspark.sql.connect.conversion import storage_level_to_proto
 from pyspark.sql.connect.expressions import Expression
@@ -205,7 +205,7 @@ class LogicalPlan:
                     try:
                         params[name] = getattr(self, "_" + name)
                     except AttributeError:
-                        pass  # Simpy ignore
+                        pass  # Simply ignore
         return params
 
     def print(self, indent: int = 0) -> str:
@@ -596,7 +596,7 @@ class CachedRemoteRelation(LogicalPlan):
                         metadata = session.client._builder.metadata()
                         channel(req, metadata=metadata)  # type: ignore[arg-type]
             except Exception as e:
-                warnings.warn(f"RemoveRemoteCachedRelation failed with exception: {e}.")
+                logger.warn(f"RemoveRemoteCachedRelation failed with exception: {e}.")
 
 
 class Hint(LogicalPlan):
@@ -893,7 +893,35 @@ class Join(LogicalPlan):
         else:
             raise AnalysisException(
                 errorClass="UNSUPPORTED_JOIN_TYPE",
-                messageParameters={"join_type": how},
+                messageParameters={
+                    "typ": how,
+                    "supported": (
+                        "'"
+                        + "', '".join(
+                            [
+                                "inner",
+                                "outer",
+                                "full",
+                                "fullouter",
+                                "full_outer",
+                                "leftouter",
+                                "left",
+                                "left_outer",
+                                "rightouter",
+                                "right",
+                                "right_outer",
+                                "leftsemi",
+                                "left_semi",
+                                "semi",
+                                "leftanti",
+                                "left_anti",
+                                "anti",
+                                "cross",
+                            ]
+                        )
+                        + "'"
+                    ),
+                },
             )
         self.how = join_type
 
@@ -1021,6 +1049,74 @@ class AsOfJoin(LogicalPlan):
         <ul>
             <li>
                 <b>AsOfJoin</b><br />
+                Left: {self.left._repr_html_()}
+                Right: {self.right._repr_html_()}
+            </li>
+        </uL>
+        """
+
+
+class LateralJoin(LogicalPlan):
+    def __init__(
+        self,
+        left: Optional[LogicalPlan],
+        right: LogicalPlan,
+        on: Optional[Column],
+        how: Optional[str],
+    ) -> None:
+        super().__init__(left)
+        self.left = cast(LogicalPlan, left)
+        self.right = right
+        self.on = on
+        if how is None:
+            join_type = proto.Join.JoinType.JOIN_TYPE_INNER
+        elif how == "inner":
+            join_type = proto.Join.JoinType.JOIN_TYPE_INNER
+        elif how in ["leftouter", "left"]:
+            join_type = proto.Join.JoinType.JOIN_TYPE_LEFT_OUTER
+        elif how == "cross":
+            join_type = proto.Join.JoinType.JOIN_TYPE_CROSS
+        else:
+            raise AnalysisException(
+                errorClass="UNSUPPORTED_JOIN_TYPE",
+                messageParameters={
+                    "typ": how,
+                    "supported": (
+                        "'"
+                        + "', '".join(["inner", "leftouter", "left", "left_outer", "cross"])
+                        + "'"
+                    ),
+                },
+            )
+        self.how = join_type
+
+    def plan(self, session: "SparkConnectClient") -> proto.Relation:
+        plan = self._create_proto_relation()
+        plan.lateral_join.left.CopyFrom(self.left.plan(session))
+        plan.lateral_join.right.CopyFrom(self.right.plan(session))
+        if self.on is not None:
+            plan.lateral_join.join_condition.CopyFrom(self.on.to_plan(session))
+        plan.lateral_join.join_type = self.how
+        return plan
+
+    @property
+    def observations(self) -> Dict[str, "Observation"]:
+        return dict(**super().observations, **self.right.observations)
+
+    def print(self, indent: int = 0) -> str:
+        i = " " * indent
+        o = " " * (indent + LogicalPlan.INDENT)
+        n = indent + LogicalPlan.INDENT * 2
+        return (
+            f"{i}<LateralJoin on={self.on} how={self.how}>\n{o}"
+            f"left=\n{self.left.print(n)}\n{o}right=\n{self.right.print(n)}"
+        )
+
+    def _repr_html_(self) -> str:
+        return f"""
+        <ul>
+            <li>
+                <b>LateralJoin</b><br />
                 Left: {self.left._repr_html_()}
                 Right: {self.right._repr_html_()}
             </li>
@@ -1347,6 +1443,20 @@ class Transpose(LogicalPlan):
         if self.index_columns is not None and len(self.index_columns) > 0:
             for index_column in self.index_columns:
                 plan.transpose.index_columns.append(index_column.to_plan(session))
+        return plan
+
+
+class UnresolvedTableValuedFunction(LogicalPlan):
+    def __init__(self, name: str, args: Sequence[Column]):
+        super().__init__(None)
+        self._name = name
+        self._args = args
+
+    def plan(self, session: "SparkConnectClient") -> proto.Relation:
+        plan = self._create_proto_relation()
+        plan.unresolved_table_valued_function.function_name = self._name
+        for arg in self._args:
+            plan.unresolved_table_valued_function.arguments.append(arg.to_plan(session))
         return plan
 
 
@@ -1868,21 +1978,29 @@ class RemoveRemoteCachedRelation(LogicalPlan):
 
 
 class Checkpoint(LogicalPlan):
-    def __init__(self, child: Optional["LogicalPlan"], local: bool, eager: bool) -> None:
+    def __init__(
+        self,
+        child: Optional["LogicalPlan"],
+        local: bool,
+        eager: bool,
+        storage_level: Optional[StorageLevel] = None,
+    ) -> None:
         super().__init__(child)
         self._local = local
         self._eager = eager
+        self._storage_level = storage_level
 
     def command(self, session: "SparkConnectClient") -> proto.Command:
         cmd = proto.Command()
         assert self._child is not None
-        cmd.checkpoint_command.CopyFrom(
-            proto.CheckpointCommand(
-                relation=self._child.plan(session),
-                local=self._local,
-                eager=self._eager,
-            )
+        checkpoint_command = proto.CheckpointCommand(
+            relation=self._child.plan(session),
+            local=self._local,
+            eager=self._eager,
         )
+        if self._storage_level is not None:
+            checkpoint_command.storage_level.CopyFrom(storage_level_to_proto(self._storage_level))
+        cmd.checkpoint_command.CopyFrom(checkpoint_command)
         return cmd
 
 
