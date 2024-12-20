@@ -2784,6 +2784,17 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
     Map.empty
   )
 
+  def invalidFileExtensionError(functionName: String, fileExtension: String): RuntimeException = {
+    new SparkIllegalArgumentException(
+      errorClass = "INVALID_PARAMETER_VALUE.FILE_EXTENSION",
+      messageParameters = Map(
+        "functionName" -> toSQLId(functionName),
+        "parameter" -> toSQLId("fileExtension"),
+        "fileExtension" -> toSQLId(fileExtension),
+        "acceptable" -> "File extension is limited to exactly 3 letters (e.g. csv, tsv, etc...)"))
+  }
+
+
   def invalidCharsetError(functionName: String, charset: String): RuntimeException = {
     new SparkIllegalArgumentException(
       errorClass = "INVALID_PARAMETER_VALUE.CHARSET",
