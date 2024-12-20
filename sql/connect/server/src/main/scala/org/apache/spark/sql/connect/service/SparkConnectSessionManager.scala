@@ -190,7 +190,9 @@ class SparkConnectSessionManager extends Logging {
    * Returns the most recent last access time across all active sessions.
    */
   def getLastActivityTime: Long = {
-    sessionStore.values().asScala
+    sessionStore
+      .values()
+      .asScala
       .map(_.getSessionHolderInfo.lastAccessTimeMs)
       .foldLeft(0L)(Math.max)
   }

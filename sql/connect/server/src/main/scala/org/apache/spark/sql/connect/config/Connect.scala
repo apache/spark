@@ -267,14 +267,12 @@ object Connect {
 
   val CONNECT_SERVER_IDLE_TIMEOUT =
     buildConf("spark.connect.server.idleTimeout")
-      .doc(
-        """
+      .doc("""
           |Configures idle timeout of Spark  Connect Server.
           |If the server does not receive any new RPC requests or sessions within
           |this timeout duration, it will shut down automatically.
           |Set to 0 to disable.
-          |""".stripMargin
-      )
+          |""".stripMargin)
       .version("4.0.0")
       .timeConf(TimeUnit.MILLISECONDS)
       .createWithDefaultString("0")

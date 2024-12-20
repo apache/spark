@@ -411,15 +411,19 @@ object SparkConnectService extends Logging {
   }
   def startIdleMonitor(globalIdleTimeoutMs: Long): Unit = {
     if (globalIdleTimeoutMs > 0) {
-      idleMonitorExecutor.scheduleAtFixedRate(() => {
-        val lastActivityTime = SparkConnectService.sessionManager.getLastActivityTime
-        val currentTime = System.currentTimeMillis()
+      idleMonitorExecutor.scheduleAtFixedRate(
+        () => {
+          val lastActivityTime = SparkConnectService.sessionManager.getLastActivityTime
+          val currentTime = System.currentTimeMillis()
 
-        if (currentTime - lastActivityTime > globalIdleTimeoutMs) {
-          logInfo("Global idle timeout reached. Shutting down Spark Connect service.")
-          stop()
-        }
-      }, globalIdleTimeoutMs, globalIdleTimeoutMs, TimeUnit.MILLISECONDS)
+          if (currentTime - lastActivityTime > globalIdleTimeoutMs) {
+            logInfo("Global idle timeout reached. Shutting down Spark Connect service.")
+            stop()
+          }
+        },
+        globalIdleTimeoutMs,
+        globalIdleTimeoutMs,
+        TimeUnit.MILLISECONDS)
     }
   }
 
