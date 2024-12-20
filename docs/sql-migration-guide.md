@@ -22,6 +22,10 @@ license: |
 * Table of contents
 {:toc}
 
+## Upgrading from Spark SQL 3.5.3 to 3.5.4
+
+- Since Spark 3.5.4, when reading SQL tables hits `org.apache.hadoop.security.AccessControlException` and `org.apache.hadoop.hdfs.BlockMissingException`, the exception will be thrown and fail the task, even if `spark.sql.files.ignoreCorruptFiles` is set to `true`.
+
 ## Upgrading from Spark SQL 3.5.1 to 3.5.2
 
 - Since 3.5.2, MySQL JDBC datasource will read TINYINT UNSIGNED as ShortType, while in 3.5.1, it was wrongly read as ByteType.
