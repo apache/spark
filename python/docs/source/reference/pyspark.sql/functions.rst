@@ -478,6 +478,8 @@ Aggregate Functions
     stddev
     stddev_pop
     stddev_samp
+    string_agg
+    string_agg_distinct
     sum
     sum_distinct
     try_avg

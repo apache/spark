@@ -1092,6 +1092,36 @@ def listagg_distinct(
 listagg_distinct.__doc__ = pysparkfuncs.listagg_distinct.__doc__
 
 
+def string_agg(
+    col: "ColumnOrName", delimiter: Optional[Union[Column, str, bytes]] = None
+) -> Column:
+    if delimiter is None:
+        return _invoke_function_over_columns("string_agg", col)
+    else:
+        return _invoke_function_over_columns("string_agg", col, lit(delimiter))
+
+
+string_agg.__doc__ = pysparkfuncs.string_agg.__doc__
+
+
+def string_agg_distinct(
+    col: "ColumnOrName", delimiter: Optional[Union[Column, str, bytes]] = None
+) -> Column:
+    from pyspark.sql.connect.column import Column as ConnectColumn
+
+    args = [col]
+    if delimiter is not None:
+        args += [lit(delimiter)]
+
+    _exprs = [_to_col(c)._expr for c in args]
+    return ConnectColumn(
+        UnresolvedFunction("string_agg", _exprs, is_distinct=True)  # type: ignore[arg-type]
+    )
+
+
+string_agg_distinct.__doc__ = pysparkfuncs.string_agg_distinct.__doc__
+
+
 def corr(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("corr", col1, col2)
 

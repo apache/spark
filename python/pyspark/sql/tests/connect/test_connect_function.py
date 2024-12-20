@@ -592,6 +592,8 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
             (CF.collect_set, SF.collect_set),
             (CF.listagg, SF.listagg),
             (CF.listagg_distinct, SF.listagg_distinct),
+            (CF.string_agg, SF.string_agg),
+            (CF.string_agg_distinct, SF.string_agg_distinct),
             (CF.count, SF.count),
             (CF.first, SF.first),
             (CF.kurtosis, SF.kurtosis),
