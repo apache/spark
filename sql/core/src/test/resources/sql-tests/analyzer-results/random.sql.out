@@ -150,26 +150,25 @@ SELECT uniform(10.0F, 20.0F, 0) AS result
 
 
 -- !query
-SELECT uniform(10.0F, 20.0F, 0.0F) AS result
+SELECT uniform(cast(10 as decimal(10, 3)), cast(20 as decimal(10, 3)), 0) AS result
 -- !query analysis
 [Analyzer test output redacted due to nondeterminism]
 
 
 -- !query
-SELECT uniform(10.0F, 20.0F, 0.0D) AS result
+SELECT uniform(cast(10 as decimal(10, 3)), cast(20 as decimal(11, 4)), 0) AS result
 -- !query analysis
 [Analyzer test output redacted due to nondeterminism]
 
 
 -- !query
-SELECT uniform(cast(10 as decimal(10, 3)), cast(20 as decimal(10, 3)), 0.0D) AS result
+SELECT uniform(10, cast(20 as decimal(10, 3)), 0) AS result
 -- !query analysis
 [Analyzer test output redacted due to nondeterminism]
 
 
 -- !query
-SELECT uniform(cast(10 as decimal(10, 3)), cast(20 as decimal(10, 3)), cast(0 as decimal(10, 3)))
-  AS result
+SELECT uniform(cast(10 as decimal(10, 3)), 20, 0) AS result
 -- !query analysis
 [Analyzer test output redacted due to nondeterminism]
 
@@ -230,6 +229,18 @@ SELECT uniform(0, NULL, 0) AS result
 
 -- !query
 SELECT uniform(0, 1, NULL) AS result
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT uniform(NULL, NULL, 0) AS result
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT uniform(NULL, NULL, NULL) AS result
 -- !query analysis
 [Analyzer test output redacted due to nondeterminism]
 
@@ -327,6 +338,78 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
+SELECT uniform(10.0F, 20.0F, 0.0F) AS result
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"0.0\"",
+    "inputType" : "\"FLOAT\"",
+    "paramIndex" : "third",
+    "requiredType" : "(\"INT\" or \"BIGINT\")",
+    "sqlExpr" : "\"uniform(10.0, 20.0, 0.0)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 34,
+    "fragment" : "uniform(10.0F, 20.0F, 0.0F)"
+  } ]
+}
+
+
+-- !query
+SELECT uniform(10.0F, 20.0F, 0.0D) AS result
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"0.0\"",
+    "inputType" : "\"DOUBLE\"",
+    "paramIndex" : "third",
+    "requiredType" : "(\"INT\" or \"BIGINT\")",
+    "sqlExpr" : "\"uniform(10.0, 20.0, 0.0)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 34,
+    "fragment" : "uniform(10.0F, 20.0F, 0.0D)"
+  } ]
+}
+
+
+-- !query
+SELECT uniform(cast(10 as decimal(10, 3)), cast(20 as decimal(10, 3)), cast(0 as decimal(10, 3)))
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"CAST(0 AS DECIMAL(10,3))\"",
+    "inputType" : "\"DECIMAL(10,3)\"",
+    "paramIndex" : "third",
+    "requiredType" : "(\"INT\" or \"BIGINT\")",
+    "sqlExpr" : "\"uniform(CAST(10 AS DECIMAL(10,3)), CAST(20 AS DECIMAL(10,3)), CAST(0 AS DECIMAL(10,3)))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 97,
+    "fragment" : "uniform(cast(10 as decimal(10, 3)), cast(20 as decimal(10, 3)), cast(0 as decimal(10, 3)))"
+  } ]
+}
+
+
+-- !query
 SELECT uniform('abc', 10, 0) AS result
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
@@ -337,7 +420,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "inputSql" : "\"abc\"",
     "inputType" : "\"STRING\"",
     "paramIndex" : "first",
-    "requiredType" : "integer or floating-point",
+    "requiredType" : "(\"TINYINT\" or \"SMALLINT\" or \"INT\" or \"BIGINT\" or \"FLOAT\" or \"DOUBLE\" or \"DECIMAL\")",
     "sqlExpr" : "\"uniform(abc, 10, 0)\""
   },
   "queryContext" : [ {
@@ -361,7 +444,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "inputSql" : "\"def\"",
     "inputType" : "\"STRING\"",
     "paramIndex" : "second",
-    "requiredType" : "integer or floating-point",
+    "requiredType" : "(\"TINYINT\" or \"SMALLINT\" or \"INT\" or \"BIGINT\" or \"FLOAT\" or \"DOUBLE\" or \"DECIMAL\")",
     "sqlExpr" : "\"uniform(0, def, 0)\""
   },
   "queryContext" : [ {
@@ -385,7 +468,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "inputSql" : "\"ghi\"",
     "inputType" : "\"STRING\"",
     "paramIndex" : "third",
-    "requiredType" : "integer or floating-point",
+    "requiredType" : "(\"INT\" or \"BIGINT\")",
     "sqlExpr" : "\"uniform(0, 10, ghi)\""
   },
   "queryContext" : [ {

@@ -49,9 +49,6 @@ trait RDG extends Expression with ExpressionWithRandomSeed {
   @transient protected lazy val seed: Long = seedExpression match {
     case e if e.dataType == IntegerType => e.eval().asInstanceOf[Int]
     case e if e.dataType == LongType => e.eval().asInstanceOf[Long]
-    case e if e.dataType == FloatType => e.eval().asInstanceOf[Float].toLong
-    case e if e.dataType == DoubleType => e.eval().asInstanceOf[Double].toLong
-    case e if e.dataType.isInstanceOf[DecimalType] => e.eval().asInstanceOf[Decimal].toLong
   }
 
   override def nullable: Boolean = false
@@ -209,7 +206,7 @@ object Randn {
   since = "4.0.0",
   group = "math_funcs")
 case class Uniform(min: Expression, max: Expression, seedExpression: Expression, hideSeed: Boolean)
-  extends RuntimeReplaceable with TernaryLike[Expression] with RDG {
+  extends RuntimeReplaceable with TernaryLike[Expression] with RDG with ExpectsInputTypes {
   def this(min: Expression, max: Expression) =
     this(min, max, UnresolvedSeed, hideSeed = true)
   def this(min: Expression, max: Expression, seedExpression: Expression) =
@@ -219,23 +216,22 @@ case class Uniform(min: Expression, max: Expression, seedExpression: Expression,
   override val nodePatterns: Seq[TreePattern] =
     Seq(RUNTIME_REPLACEABLE, EXPRESSION_WITH_RANDOM_SEED)
 
+  override def inputTypes: Seq[AbstractDataType] = {
+    val minMaxTypes =
+      TypeCollection(ByteType, ShortType, IntegerType, LongType, FloatType, DoubleType, DecimalType)
+    val randomSeedTypes = TypeCollection(IntegerType, LongType)
+    Seq(minMaxTypes, minMaxTypes, randomSeedTypes)
+  }
+
   override def dataType: DataType = {
-    val first = min.dataType
-    val second = max.dataType
     (min.dataType, max.dataType) match {
       case _ if !seedExpression.resolved || seedExpression.dataType == NullType =>
         NullType
-      case (_, NullType) | (NullType, _) => NullType
-      case (_, LongType) | (LongType, _)
-        if Seq(first, second).forall(integer) => LongType
-      case (_, IntegerType) | (IntegerType, _)
-        if Seq(first, second).forall(integer) => IntegerType
-      case (_, ShortType) | (ShortType, _)
-        if Seq(first, second).forall(integer) => ShortType
-      case (_, ByteType) | (ByteType, _)
-        if Seq(first, second).forall(integer) => ByteType
-      case (_, DoubleType) | (DoubleType, _) => DoubleType
-      case (_, FloatType) | (FloatType, _) => FloatType
+      case (left: IntegralType, right: IntegralType) =>
+        if (UpCastRule.legalNumericPrecedence(left, right)) right else left
+      case (_: NumericType, DoubleType) | (DoubleType, _: NumericType) => DoubleType
+      case (_: NumericType, FloatType) | (FloatType, _: NumericType) => FloatType
+      case (lhs: DecimalType, rhs: DecimalType) => if (lhs.isWiderThan(rhs)) lhs else rhs
       case (_, d: DecimalType) => d
       case (d: DecimalType, _) => d
       case _ =>
@@ -244,42 +240,24 @@ case class Uniform(min: Expression, max: Expression, seedExpression: Expression,
     }
   }
 
-  private def integer(t: DataType): Boolean = t match {
-    case _: ByteType | _: ShortType | _: IntegerType | _: LongType => true
-    case _ => false
-  }
-
   override def sql: String = {
     s"uniform(${min.sql}, ${max.sql}${if (hideSeed) "" else s", ${seedExpression.sql}"})"
   }
 
   override def checkInputDataTypes(): TypeCheckResult = {
-    var result: TypeCheckResult = TypeCheckResult.TypeCheckSuccess
+    var result: TypeCheckResult = super.checkInputDataTypes()
     def requiredType = "integer or floating-point"
-    Seq((min, "min", 0),
-      (max, "max", 1),
-      (seedExpression, "seed", 2)).foreach {
-      case (expr: Expression, name: String, index: Int) =>
-        if (result == TypeCheckResult.TypeCheckSuccess) {
-          if (!expr.foldable) {
-            result = DataTypeMismatch(
-              errorSubClass = "NON_FOLDABLE_INPUT",
-              messageParameters = Map(
-                "inputName" -> toSQLId(name),
-                "inputType" -> requiredType,
-                "inputExpr" -> toSQLExpr(expr)))
-          } else expr.dataType match {
-            case _: ShortType | _: IntegerType | _: LongType | _: FloatType | _: DoubleType |
-                 _: DecimalType | _: ByteType | _: NullType =>
-            case _ =>
-              result = DataTypeMismatch(
-                errorSubClass = "UNEXPECTED_INPUT_TYPE",
-                messageParameters = Map(
-                  "paramIndex" -> ordinalNumber(index),
-                  "requiredType" -> requiredType,
-                  "inputSql" -> toSQLExpr(expr),
-                  "inputType" -> toSQLType(expr.dataType)))
-          }
+    Seq((min, "min"),
+      (max, "max"),
+      (seedExpression, "seed")).foreach {
+      case (expr: Expression, name: String) =>
+        if (result == TypeCheckResult.TypeCheckSuccess && !expr.foldable) {
+          result = DataTypeMismatch(
+            errorSubClass = "NON_FOLDABLE_INPUT",
+            messageParameters = Map(
+              "inputName" -> toSQLId(name),
+              "inputType" -> requiredType,
+              "inputExpr" -> toSQLExpr(expr)))
         }
     }
     result
