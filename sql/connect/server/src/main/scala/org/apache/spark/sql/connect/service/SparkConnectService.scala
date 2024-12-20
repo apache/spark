@@ -19,7 +19,9 @@ package org.apache.spark.sql.connect.service
 
 import java.net.InetSocketAddress
 import java.util.concurrent.{Executors, TimeUnit}
+
 import scala.jdk.CollectionConverters._
+
 import com.google.protobuf.Message
 import io.grpc.{BindableService, MethodDescriptor, Server, ServerMethodDefinition, ServerServiceDefinition}
 import io.grpc.MethodDescriptor.PrototypeMarshaller
@@ -28,6 +30,7 @@ import io.grpc.protobuf.ProtoUtils
 import io.grpc.protobuf.services.ProtoReflectionService
 import io.grpc.stub.StreamObserver
 import org.apache.commons.lang3.StringUtils
+
 import org.apache.spark.{SparkContext, SparkEnv}
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.{AddArtifactsRequest, AddArtifactsResponse, SparkConnectServiceGrpc}
