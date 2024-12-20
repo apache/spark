@@ -64,32 +64,20 @@ object SerializerBuildHelper {
   }
 
   def createSerializerForChar(inputObject: Expression, length: Int): Expression = {
-    val expr = StaticInvoke(
-      classOf[UTF8String],
-      StringType,
-      "fromString",
-      inputObject :: Nil,
-      returnNullable = false)
     StaticInvoke(
       classOf[CharVarcharCodegenUtils],
       CharType(length),
       "charTypeWriteSideCheck",
-      expr :: Literal(length) :: Nil,
+      createSerializerForString(inputObject) :: Literal(length) :: Nil,
       returnNullable = false)
   }
 
   def createSerializerForVarchar(inputObject: Expression, length: Int): Expression = {
-    val expr = StaticInvoke(
-      classOf[UTF8String],
-      StringType,
-      "fromString",
-      inputObject :: Nil,
-      returnNullable = false)
     StaticInvoke(
       classOf[CharVarcharCodegenUtils],
       VarcharType(length),
       "varcharTypeWriteSideCheck",
-      expr :: Literal(length) :: Nil,
+      createSerializerForString(inputObject) :: Literal(length) :: Nil,
       returnNullable = false)
   }
 

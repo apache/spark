@@ -176,8 +176,7 @@ object TableOutputResolver extends SQLConfHelper with Logging {
     if (canWriteValue) {
       val nullCheckedValue = checkNullability(value, attr, conf, colPath)
       val casted = cast(nullCheckedValue, attrTypeWithoutCharVarchar, conf, colPath.quoted)
-      val exprWithStrLenCheck = if ((conf.charVarcharAsString &&
-        !conf.preserveCharVarcharTypeInfo) || !attrTypeHasCharVarchar) {
+      val exprWithStrLenCheck = if (conf.charVarcharAsString || !attrTypeHasCharVarchar) {
         casted
       } else {
         CharVarcharUtils.stringLengthCheck(casted, attr.dataType)
@@ -542,8 +541,7 @@ object TableOutputResolver extends SQLConfHelper with Logging {
       val nullCheckedQueryExpr = checkNullability(queryExpr, tableAttr, conf, colPath)
       val udtUnwrapped = unwrapUDT(nullCheckedQueryExpr)
       val casted = cast(udtUnwrapped, attrTypeWithoutCharVarchar, conf, colPath.quoted)
-      val exprWithStrLenCheck = if ((conf.charVarcharAsString &&
-        !conf.preserveCharVarcharTypeInfo) || !attrTypeHasCharVarchar) {
+      val exprWithStrLenCheck = if (conf.charVarcharAsString || !attrTypeHasCharVarchar) {
         casted
       } else {
         CharVarcharUtils.stringLengthCheck(casted, tableAttr.dataType)
