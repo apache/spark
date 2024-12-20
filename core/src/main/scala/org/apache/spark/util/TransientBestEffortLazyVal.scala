@@ -16,30 +16,17 @@
  */
 package org.apache.spark.util
 
-import java.io.{IOException, ObjectInputStream}
-
 private[spark] class TransientBestEffortLazyVal[T <: AnyRef](
     private[this] val compute: () => T) extends Serializable {
 
-  @transient
-  private[this] var cached: T = null.asInstanceOf[T]
-
-  @volatile
-  private[this] var computed: Boolean = false
+  @transient @volatile private[this] var cached: T = null.asInstanceOf[T]
 
   def apply(): T = {
-    val c = computed
-    if (!c) {
+    if (cached == null) {
       val result = compute()
+      assert(result != null, "Computed value cannot be null.")
       cached = result
-      computed = true
     }
     cached
-  }
-
-  @throws(classOf[IOException])
-  private def readObject(ois: ObjectInputStream): Unit = Utils.tryOrIOException {
-    ois.defaultReadObject()
-    computed = false
   }
 }

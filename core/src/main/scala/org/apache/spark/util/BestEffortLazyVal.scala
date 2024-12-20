@@ -25,6 +25,7 @@ private[spark] class BestEffortLazyVal[T <: AnyRef](
     val f = compute
     if (f != null) {
       val result = f()
+      assert(result != null, "Computed value cannot be null.")
       cached = result
       compute = null
     }
