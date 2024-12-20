@@ -523,7 +523,8 @@ class SymmetricHashJoinStateManager(
         stateStoreProvider = StateStoreProvider.createAndInit(
           storeProviderId, keySchema, valueSchema, NoPrefixKeyStateEncoderSpec(keySchema),
           useColumnFamilies = false, storeConf, hadoopConf,
-          useMultipleValuesPerKey = false)
+          useMultipleValuesPerKey = false,
+          stateSchemaBroadcast = stateInfo.get.stateSchemasBroadcast)
         if (snapshotStartVersion.isDefined) {
           if (!stateStoreProvider.isInstanceOf[SupportsFineGrainedReplay]) {
             throw StateStoreErrors.stateStoreProviderDoesNotSupportFineGrainedReplay(

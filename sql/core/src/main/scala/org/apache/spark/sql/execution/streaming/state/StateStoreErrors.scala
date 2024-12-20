@@ -183,6 +183,11 @@ object StateStoreErrors {
     StateStoreInvalidVariableTypeChange = {
     new StateStoreInvalidVariableTypeChange(stateName, oldType, newType)
   }
+
+  def maxValueSchemaEvolutionChangesExceeded(maxChanges: Int):
+    StateStoreMaxValueSchemaEvolutionChangesExceeded = {
+    new StateStoreMaxValueSchemaEvolutionChangesExceeded(maxChanges)
+  }
 }
 
 class StateStoreDuplicateStateVariableDefined(stateVarName: String)
@@ -353,3 +358,8 @@ class StateStoreProviderDoesNotSupportFineGrainedReplay(inputClass: String)
   extends SparkUnsupportedOperationException(
     errorClass = "STATE_STORE_PROVIDER_DOES_NOT_SUPPORT_FINE_GRAINED_STATE_REPLAY",
     messageParameters = Map("inputClass" -> inputClass))
+
+class StateStoreMaxValueSchemaEvolutionChangesExceeded(maxChanges: Int)
+  extends SparkUnsupportedOperationException(
+    errorClass = "STATE_STORE_MAX_VALUE_SCHEMA_EVOLUTION_CHANGES_EXCEEDED",
+    messageParameters = Map("maxChanges" -> maxChanges.toString))

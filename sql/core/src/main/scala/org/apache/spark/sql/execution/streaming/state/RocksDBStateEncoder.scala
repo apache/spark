@@ -126,8 +126,7 @@ case class StateRowPrefix(
 class StateRowPrefixEncoder(
     useColumnFamilies: Boolean,
     columnFamilyInfo: Option[ColumnFamilyInfo],
-    supportSchemaEvolution: Boolean
-) {
+    supportSchemaEvolution: Boolean) {
 
   private val numColFamilyBytes = if (useColumnFamilies) {
     VIRTUAL_COL_FAMILY_PREFIX_BYTES
@@ -250,8 +249,7 @@ object RocksDBStateEncoder extends Logging {
       keyStateEncoderSpec: KeyStateEncoderSpec,
       useColumnFamilies: Boolean,
       columnFamilyInfo: Option[ColumnFamilyInfo] = None,
-      avroEnc: Option[AvroEncoder] = None,
-  ): RocksDBKeyStateEncoder = {
+      avroEnc: Option[AvroEncoder] = None): RocksDBKeyStateEncoder = {
     // Return the key state encoder based on the requested type
     keyStateEncoderSpec match {
       case NoPrefixKeyStateEncoderSpec(keySchema) =>
@@ -278,8 +276,8 @@ object RocksDBStateEncoder extends Logging {
       useColumnFamilies: Boolean,
       columnFamilyInfo: Option[ColumnFamilyInfo] = None,
       avroEnc: Option[AvroEncoder] = None,
-      stateSchemaBroadcast: Option[Broadcast[StateSchemaMetadata]] = None
-  ): RocksDBValueStateEncoder = {
+      stateSchemaBroadcast: Option[Broadcast[StateSchemaMetadata]] = None)
+      : RocksDBValueStateEncoder = {
     if (useMultipleValuesPerKey) {
       new MultiValuedStateEncoder(
         valueSchema, columnFamilyInfo, avroEnc, stateSchemaBroadcast)
@@ -1274,8 +1272,7 @@ class NoPrefixKeyStateEncoder(
     keySchema: StructType,
     useColumnFamilies: Boolean = false,
     columnFamilyInfo: Option[ColumnFamilyInfo] = None,
-    avroEnc: Option[AvroEncoder] = None,
-  ) extends RocksDBKeyStateEncoder with Logging {
+    avroEnc: Option[AvroEncoder] = None) extends RocksDBKeyStateEncoder with Logging {
 
   import RocksDBStateEncoder._
 

@@ -4412,6 +4412,12 @@
     ],
     "sqlState" : "XXKST"
   },
+  "STATE_STORE_MAX_VALUE_SCHEMA_EVOLUTION_CHANGES_EXCEEDED": {
+    "message": [
+      "The number of state value schema evolution changes has exceeded max_limit=<maxChanges> changes."
+    ],
+    "sqlState": "42K06"
+  },
   "STATE_STORE_NULL_TYPE_ORDERING_COLS_NOT_SUPPORTED" : {
     "message" : [
       "Null type ordering column with name=<fieldName> at index=<index> is not supported for range scan encoder."

@@ -19,7 +19,6 @@ package org.apache.spark.sql.execution.streaming.state
 
 import scala.util.Try
 
-import org.apache.avro.Schema
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FSDataInputStream, Path}
 

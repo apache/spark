@@ -40,7 +40,7 @@ import org.apache.spark.sql.execution.datasources.v2.state.metadata.StateMetadat
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeLike
 import org.apache.spark.sql.execution.python.{FlatMapGroupsInPandasWithStateExec, TransformWithStateInPandasExec}
 import org.apache.spark.sql.execution.streaming.sources.WriteToMicroBatchDataSourceV1
-import org.apache.spark.sql.execution.streaming.state.{OperatorStateMetadataReader, OperatorStateMetadataV1, OperatorStateMetadataV2, OperatorStateMetadataWriter, StateSchemaCompatibilityChecker, StateSchemaMetadata, StateSchemaMetadataKey, StateSchemaMetadataValue}
+import org.apache.spark.sql.execution.streaming.state.{OperatorStateMetadataReader, OperatorStateMetadataV1, OperatorStateMetadataV2, OperatorStateMetadataWriter, StateSchemaCompatibilityChecker, StateSchemaMetadata, StateSchemaMetadataKey, StateSchemaMetadataValue, StateStoreErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.util.{SerializableConfiguration, Utils}
@@ -259,6 +259,7 @@ class IncrementalExecution(
             metadataWriter.write(metadata)
             ssw match {
               case tws: TransformWithStateExec =>
+                // shouldn't we pass all the entries in state schema mapping
                 val stateSchemaMetadata = createStateSchemaMetadata(stateSchemaMapping.head)
                 val ssmBc = sparkSession.sparkContext.broadcast(stateSchemaMetadata)
                 tws.copy(
@@ -289,6 +290,16 @@ class IncrementalExecution(
               SchemaConverters.toAvroType(schema.valueSchema), schema.valueSchema)
         }.toMap
       stateSchemaId -> colFamilySchemas
+    }
+
+    // if max number of transitions are exceeded, throw an exception
+    // TODO: we could support doing re-encoding inline in the future, in which case
+    // this limitation can be removed.
+    val maxStateValueSchemaChanges = sparkSession.sessionState.conf.
+      getConf(SQLConf.STREAMING_STATE_VALUE_MAX_SCHEMA_EVOLUTION_CHANGES)
+    val currSchemaId = stateSchemas.keys.max
+    if (currSchemaId > maxStateValueSchemaChanges) {
+      throw StateStoreErrors.maxValueSchemaEvolutionChangesExceeded(currSchemaId)
     }
     StateSchemaMetadata(stateSchemas.keys.max, stateSchemas)
   }

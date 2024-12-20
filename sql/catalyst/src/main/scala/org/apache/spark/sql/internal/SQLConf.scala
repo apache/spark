@@ -2212,6 +2212,14 @@ object SQLConf {
       .timeConf(TimeUnit.MILLISECONDS)
       .createWithDefault(TimeUnit.MINUTES.toMillis(1)) // 1 minute
 
+  val STREAMING_STATE_VALUE_MAX_SCHEMA_EVOLUTION_CHANGES =
+    buildConf("spark.sql.streaming.stateStore.valueSchemaEvolution.maxChanges")
+      .internal()
+      .doc("The maximum number of schema evolution changes allowed for state value schema.")
+      .version("3.1.0")
+      .intConf
+      .createWithDefault(16)
+
   val STREAMING_TRANSFORM_WITH_STATE_OP_STATE_SCHEMA_VERSION =
     buildConf("spark.sql.streaming.transformWithState.stateSchemaVersion")
       .doc("The version of the state schema used by the transformWithState operator")
@@ -5625,6 +5633,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def coalesceShufflePartitionsEnabled: Boolean = getConf(COALESCE_PARTITIONS_ENABLED)
 
   def minBatchesToRetain: Int = getConf(MIN_BATCHES_TO_RETAIN)
+
+  def maxStateValueSchemaEvolutionChanges: Int =
+    getConf(STREAMING_STATE_VALUE_MAX_SCHEMA_EVOLUTION_CHANGES)
 
   def ratioExtraSpaceAllowedInCheckpoint: Double = getConf(RATIO_EXTRA_SPACE_ALLOWED_IN_CHECKPOINT)
 

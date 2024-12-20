@@ -102,10 +102,12 @@ abstract class StatePartitionReaderBase(
     val useMultipleValuesPerKey = SchemaUtil.checkVariableType(stateVariableInfoOpt,
       StateVariableType.ListState)
 
+    // TODO: fix state data source reader to work with broadcast schema
     val provider = StateStoreProvider.createAndInit(
       stateStoreProviderId, keySchema, valueSchema, keyStateEncoderSpec,
       useColumnFamilies = useColFamilies, storeConf, hadoopConf.value,
-      useMultipleValuesPerKey = useMultipleValuesPerKey)
+      useMultipleValuesPerKey = useMultipleValuesPerKey,
+      stateSchemaBroadcast = None)
 
     val isInternal = partition.sourceOptions.readRegisteredTimers
 

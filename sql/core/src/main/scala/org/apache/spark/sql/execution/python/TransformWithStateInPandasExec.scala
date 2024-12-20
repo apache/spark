@@ -292,7 +292,8 @@ case class TransformWithStateInPandasExec(
       useColumnFamilies = true,
       storeConf = storeConf,
       hadoopConf = hadoopConfBroadcast.value.value,
-      useMultipleValuesPerKey = true)
+      useMultipleValuesPerKey = true,
+      stateSchemaBroadcast = getStateInfo.stateSchemasBroadcast)
 
     val store = stateStoreProvider.getStore(0, None)
     val outputIterator = f(store)
