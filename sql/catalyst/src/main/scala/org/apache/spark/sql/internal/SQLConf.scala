@@ -3419,6 +3419,14 @@ object SQLConf {
           " must be more than one.")
       .createOptional
 
+  val PYTHON_UDF_ARROW_CONCURRENCY_MODE =
+    buildConf("spark.sql.execution.pythonUDF.arrow.concurrency.mode")
+      .doc("The mode of concurrency to execute Arrow-optimized Python UDF. " +
+        "The mode can be 'thread' or 'process'.")
+      .stringConf
+      .checkValues(Set("thread", "process"))
+      .createWithDefaultString("thread")
+
   val PYTHON_TABLE_UDF_ARROW_ENABLED =
     buildConf("spark.sql.execution.pythonUDTF.arrow.enabled")
       .doc("Enable Arrow optimization for Python UDTFs.")
@@ -6132,6 +6140,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def pythonUDFWorkerFaulthandlerEnabled: Boolean = getConf(PYTHON_UDF_WORKER_FAULTHANLDER_ENABLED)
 
   def pythonUDFArrowConcurrencyLevel: Option[Int] = getConf(PYTHON_UDF_ARROW_CONCURRENCY_LEVEL)
+
+  def pythonUDFArrowConcurrencyMode: String = getConf(PYTHON_UDF_ARROW_CONCURRENCY_MODE)
 
   def pysparkPlotMaxRows: Int = getConf(PYSPARK_PLOT_MAX_ROWS)
 

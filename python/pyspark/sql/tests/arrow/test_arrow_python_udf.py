@@ -238,10 +238,10 @@ class PythonUDFArrowTests(PythonUDFArrowTestsMixin, ReusedSQLTestCase):
             super(PythonUDFArrowTests, cls).tearDownClass()
 
 
-class AsyncPythonUDFArrowTests(PythonUDFArrowTests):
+class AsyncThreadPythonUDFArrowTests(PythonUDFArrowTests):
     @classmethod
     def setUpClass(cls):
-        super(AsyncPythonUDFArrowTests, cls).setUpClass()
+        super(AsyncThreadPythonUDFArrowTests, cls).setUpClass()
         cls.spark.conf.set("spark.sql.execution.pythonUDF.arrow.concurrency.level", "4")
 
     @classmethod
@@ -249,7 +249,23 @@ class AsyncPythonUDFArrowTests(PythonUDFArrowTests):
         try:
             cls.spark.conf.unset("spark.sql.execution.pythonUDF.arrow.concurrency.level")
         finally:
-            super(AsyncPythonUDFArrowTests, cls).tearDownClass()
+            super(AsyncThreadPythonUDFArrowTests, cls).tearDownClass()
+
+
+class AsyncProcessPythonUDFArrowTests(PythonUDFArrowTests):
+    @classmethod
+    def setUpClass(cls):
+        super(AsyncProcessPythonUDFArrowTests, cls).setUpClass()
+        cls.spark.conf.set("spark.sql.execution.pythonUDF.arrow.concurrency.level", "4")
+        cls.spark.conf.set("spark.sql.execution.pythonUDF.arrow.concurrency.mode", "process")
+
+    @classmethod
+    def tearDownClass(cls):
+        try:
+            cls.spark.conf.unset("spark.sql.execution.pythonUDF.arrow.concurrency.level")
+            cls.spark.conf.set("spark.sql.execution.pythonUDF.arrow.concurrency.mode", "thread")
+        finally:
+            super(AsyncProcessPythonUDFArrowTests, cls).tearDownClass()
 
 
 if __name__ == "__main__":
