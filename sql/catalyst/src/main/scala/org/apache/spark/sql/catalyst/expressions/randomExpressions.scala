@@ -275,19 +275,15 @@ case class Uniform(min: Expression, max: Expression, seedExpression: Expression,
     Uniform(newFirst, newSecond, newThird, hideSeed)
 
   override def replacement: Expression = {
-    if (Seq(min, max, seedExpression).exists(_.dataType == NullType)) {
-      Literal(null)
-    } else {
-      def cast(e: Expression, to: DataType): Expression = if (e.dataType == to) e else Cast(e, to)
-      cast(Add(
-        cast(min, DoubleType),
-        Multiply(
-          Subtract(
-            cast(max, DoubleType),
-            cast(min, DoubleType)),
-          Rand(seed))),
-        dataType)
-    }
+    def cast(e: Expression, to: DataType): Expression = if (e.dataType == to) e else Cast(e, to)
+    cast(Add(
+      cast(min, DoubleType),
+      Multiply(
+        Subtract(
+          cast(If(IsNull(max), Literal(null, max.dataType), max), DoubleType),
+          cast(If(IsNull(min), Literal(null, min.dataType), min), DoubleType)),
+        Rand(seed))),
+      dataType)
   }
 }
 
