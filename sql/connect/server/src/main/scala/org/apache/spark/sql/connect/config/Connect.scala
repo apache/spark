@@ -313,5 +313,4 @@ object Connect {
       .internal()
       .booleanConf
       .createWithDefault(true)
-
 }

@@ -275,7 +275,6 @@ class SparkConnectService(debug: Boolean) extends AsyncService with BindableServ
     // Build the final ServerServiceDefinition and return it.
     builder.build()
   }
-
 }
 
 /**
