@@ -1796,3 +1796,24 @@ select try_validate_utf8(x'80')
 -- !query analysis
 Project [try_validate_utf8(cast(0x80 as string)) AS try_validate_utf8(X'80')#x]
 +- OneRowRelation
+
+
+-- !query
+select quote('Spark')
+-- !query analysis
+Project [quote(Spark) AS quote(Spark)#x]
++- OneRowRelation
+
+
+-- !query
+select quote("Don't")
+-- !query analysis
+Project [quote(Don't) AS quote(Don't)#x]
++- OneRowRelation
+
+
+-- !query
+select quote(NULL)
+-- !query analysis
+Project [quote(cast(null as string)) AS quote(NULL)#x]
++- OneRowRelation
