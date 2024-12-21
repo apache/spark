@@ -273,7 +273,7 @@ object Connect {
           |this timeout duration, it will shut down automatically.
           |Set to 0 to disable.
           |""".stripMargin)
-      .version("4.0.0")
+      .version("3.5.0")
       .timeConf(TimeUnit.MILLISECONDS)
       .createWithDefaultString("0")
 
