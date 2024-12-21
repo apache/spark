@@ -36,7 +36,11 @@ class IdleTimeoutTests(ReusedConnectTestCase):
         # Any call now should raise a SparkConnectException because there's no active session.
         with self.assertRaises(SparkConnectException) as e:
             self.spark.range(1).collect()
-            self.check_error(exception=e.exception, errorClass="NO_ACTIVE_SESSION", messageParameters={})
+            self.check_error(
+                exception=e.exception,
+                errorClass="NO_ACTIVE_SESSION",
+                messageParameters={},
+            )
 
 
 if __name__ == "__main__":
