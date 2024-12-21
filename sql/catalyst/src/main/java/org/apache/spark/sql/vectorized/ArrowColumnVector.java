@@ -162,6 +162,14 @@ public class ArrowColumnVector extends ColumnVector {
       accessor = new IntAccessor(intVector);
     } else if (vector instanceof BigIntVector bigIntVector) {
       accessor = new LongAccessor(bigIntVector);
+    } else if (vector instanceof UInt1Vector uInt1Vector) {
+      accessor = new UInt1Accessor(uInt1Vector);
+    } else if (vector instanceof UInt2Vector uInt2Vector) {
+      accessor = new UInt2Accessor(uInt2Vector);
+    } else if (vector instanceof UInt4Vector uInt4Vector) {
+      accessor = new UInt4Accessor(uInt4Vector);
+    } else if (vector instanceof UInt8Vector uInt8Vector) {
+      accessor = new UInt8Accessor(uInt8Vector);
     } else if (vector instanceof Float4Vector float4Vector) {
       accessor = new FloatAccessor(float4Vector);
     } else if (vector instanceof Float8Vector float8Vector) {
@@ -351,6 +359,66 @@ public class ArrowColumnVector extends ColumnVector {
     @Override
     final long getLong(int rowId) {
       return accessor.get(rowId);
+    }
+  }
+
+  static class UInt1Accessor extends ArrowVectorAccessor {
+
+    private final UInt1Vector accessor;
+
+    UInt1Accessor(UInt1Vector vector) {
+      super(vector);
+      this.accessor = vector;
+    }
+
+    @Override
+    final short getShort(int rowId) {
+      return (short)Byte.toUnsignedInt(accessor.get(rowId));
+    }
+  }
+
+  static class UInt2Accessor extends ArrowVectorAccessor {
+
+    private final UInt2Vector accessor;
+
+    UInt2Accessor(UInt2Vector vector) {
+      super(vector);
+      this.accessor = vector;
+    }
+
+    @Override
+    final int getInt(int rowId) {
+      return accessor.get(rowId);
+    }
+  }
+
+  static class UInt4Accessor extends ArrowVectorAccessor {
+
+    private final UInt4Vector accessor;
+
+    UInt4Accessor(UInt4Vector vector) {
+      super(vector);
+      this.accessor = vector;
+    }
+
+    @Override
+    final long getLong(int rowId) {
+      return Integer.toUnsignedLong(accessor.get(rowId));
+    }
+  }
+
+  static class UInt8Accessor extends ArrowVectorAccessor {
+
+    private final UInt8Vector accessor;
+
+    UInt8Accessor(UInt8Vector vector) {
+      super(vector);
+      this.accessor = vector;
+    }
+
+    @Override
+    final Decimal getDecimal(int rowId, int precision, int scale) {
+      return Decimal.apply(accessor.get(rowId), precision, scale);
     }
   }
 
