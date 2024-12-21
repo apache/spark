@@ -75,9 +75,6 @@ class HybridAnalyzer(
     }
   }
 
-  private def checkResolverGuard(plan: LogicalPlan): Boolean =
-    !checkSupportedSinglePassFeatures || resolverGuard.apply(plan)
-
   def getSinglePassResolutionDuration: Option[Long] = singlePassResolutionDuration
 
   def getFixedPointResolutionDuration: Option[Long] = fixedPointResolutionDuration
@@ -217,6 +214,9 @@ class HybridAnalyzer(
   private def normalizePlan(plan: LogicalPlan) = AnalysisHelper.allowInvokingTransformsInAnalyzer {
     NormalizePlan(plan)
   }
+
+  private def checkResolverGuard(plan: LogicalPlan): Boolean =
+    !checkSupportedSinglePassFeatures || resolverGuard.apply(plan)
 
   private def recordDuration[T](thunk: => T): (Long, T) = {
     val start = System.nanoTime()
