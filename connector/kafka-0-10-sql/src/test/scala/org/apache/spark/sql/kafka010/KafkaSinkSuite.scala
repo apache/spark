@@ -489,6 +489,67 @@ abstract class KafkaSinkBatchSuiteBase extends KafkaSinkSuiteBase {
     assert(partitionsInTopic(topic4) == partitionsInTopic1)
   }
 
+  test("SPARK-50160: batch - timestamp (from instant)") {
+    val topic = newTopic()
+    testUtils.createTopic(topic)
+
+    val range = 0 until 5
+    val startInstant = java.time.Instant.ofEpochMilli(1730286355550L)
+    val df = range
+      .map(n => {
+        val instant = startInstant.plusMillis(n)
+        (topic, s"$n", s"$n", instant)
+      })
+      .toDF("topic", "key", "value", "timestamp")
+
+    // default kafka partitioner
+    writeToKafka(df, topic)
+
+    val readTimestamps = createKafkaReader(topic)
+      .select("timestamp")
+      .map(_.getTimestamp(0))
+      .collect()
+      .toSet
+
+    range.foreach(n => {
+      val instant = startInstant.plusMillis(n)
+      val timestamp = java.sql.Timestamp.from(instant)
+      assert(readTimestamps.contains(timestamp))
+    })
+  }
+
+  test("SPARK-50160: batch - timestamp (from long/double)") {
+    val topic = newTopic()
+    testUtils.createTopic(topic)
+
+    val range = 0 until 5
+    val startEpochMilli = 1730286355550L
+    val startInstant = java.time.Instant.ofEpochMilli(startEpochMilli)
+    val df = range
+      .map(n => {
+        val instant = startEpochMilli + n
+        (topic, s"$n", s"$n", instant)
+      })
+      .toDF("topic", "key", "value", "timestamp")
+      // divide by 1000 to represent milliseconds as decimals
+      .withColumn("timestamp", $"timestamp"/1000L)
+
+    // default kafka partitioner
+    writeToKafka(df, topic)
+
+    val readTimestamps = createKafkaReader(topic)
+      .select("timestamp")
+      .map(_.getTimestamp(0))
+      .collect()
+      .toSet
+
+    range.foreach(n => {
+      val instant = startInstant.plusMillis(n)
+      val timestamp = java.sql.Timestamp.from(instant)
+      assert(readTimestamps.contains(timestamp))
+    })
+  }
+
   test("batch - null topic field value, and no topic option") {
     val df = Seq[(String, String)](null.asInstanceOf[String] -> "1").toDF("topic", "value")
     val ex = intercept[SparkException] {
