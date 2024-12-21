@@ -130,7 +130,7 @@ class QueryExecution(
       // and in most cases be the bulk of time and effort,
       // with the rest of processing of the root plan being just outputting command results,
       // for eagerly executed commands we mark this place as beginning of execution.
-      tracker.setReadyForExecution()
+      tracker.setReadyForExecution(p)
       val qe = sparkSession.sessionState.executePlan(p, mode)
       val result = QueryExecution.withInternalError(s"Eagerly executed $name failed.") {
         SQLExecution.withNewExecutionId(qe, Some(name)) {
@@ -221,7 +221,7 @@ class QueryExecution(
     }
     // Note: For eagerly executed command it might have already been called in
     // `eagerlyExecutedCommand` and is a noop here.
-    tracker.setReadyForExecution()
+    tracker.setReadyForExecution(optimizedPlan)
     plan
   }
 
