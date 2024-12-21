@@ -3358,6 +3358,66 @@ abstract class JsonSuite
     }
   }
 
+  test("SPARK-49893: Validate user schema nullability is respected when file is read") {
+    withSQLConf(SQLConf.RESPECT_USER_SCHEMA_NULLABILITY_FOR_FILE_DATA_SOURCES.key -> "true") {
+      val schema = StructType(Seq(
+        StructField("f1", LongType, nullable = true),
+        StructField("f2", LongType, nullable = false)
+      ))
+
+      val invalidFiles = Seq(
+        """ {"f1": 1200} """, // Field is missing
+        """ {"f1": 1200, "f2": null} """, // Field is null
+      )
+
+      invalidFiles.foreach(invalidFileContent => {
+        withTempPath(file => {
+            Seq(invalidFileContent).toDF()
+              .repartition(1)
+              .write
+              .text(file.getAbsolutePath)
+
+          val df = spark.read
+            .schema(schema)
+            .json(file.getAbsolutePath)
+
+          val schemaStr = df.schema.treeString
+          assert(schemaStr.contains("f2: string (nullable = false)"))
+
+          assertThrows[SparkException] {
+            df.collect()
+          }
+        })
+      })
+
+      // Sequence of tuples, where first tuple element is file content,
+      // while second tuple element is expected value after parsing
+      val validFiles = Seq(
+        (""" {"f1": 1200, "f2": 1000} """, 1000), // Non default value for non-nullable field f2
+        (""" {"f1": 1200, "f2": 0} """, 0), // Default value for non-nullable filed f2
+      )
+
+      validFiles.foreach {
+        case (validFileContent, expectedFieldValue) =>
+          withTempPath(file => {
+            Seq(validFileContent).toDF()
+              .repartition(1)
+              .write
+              .text(file.getAbsolutePath)
+
+            val df = spark.read
+              .schema(schema)
+              .json(file.getAbsolutePath)
+
+            val schemaStr = df.schema.treeString
+            assert(schemaStr.contains("f2: string (nullable = false)"))
+
+            checkAnswer(df, Row(1200, expectedFieldValue))
+          })
+      }
+    }
+  }
+
   test("SPARK-36379: proceed parsing with root nulls in permissive mode") {
     val exception = intercept[SparkException] {
       spark.read.option("mode", "failfast")
