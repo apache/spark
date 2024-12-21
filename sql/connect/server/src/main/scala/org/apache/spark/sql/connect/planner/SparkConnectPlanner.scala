@@ -957,7 +957,7 @@ class SparkConnectPlanner(
       // Most typed API takes one UDF input.
       // For the few that takes more than one inputs, e.g. grouping function mapping UDFs,
       // the first input which is the key of the grouping function.
-      assert(udf.inputEncoders.nonEmpty)
+      assertPlan(udf.inputEncoders.nonEmpty)
       val inEnc = udf.inputEncoders.head // single input encoder or key encoder
       TypedScalaUdf(udf.function, udf.outputEncoder, inEnc, inputAttrs)
     }
