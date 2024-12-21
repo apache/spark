@@ -14,6 +14,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import time
+import unittest
+
+from pyspark.errors.exceptions.connect import SparkConnectException
+from pyspark.testing.connectutils import (
+    should_test_connect,
+    connect_requirement_message,
+    ReusedConnectTestCase,
+)
+
 
 @unittest.skipIf(not should_test_connect, connect_requirement_message)
 class IdleTimeoutTests(ReusedConnectTestCase):
