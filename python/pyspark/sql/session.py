@@ -473,12 +473,6 @@ class SparkSession(SparkConversionMixin):
 
                 url = opts.get("spark.remote", os.environ.get("SPARK_REMOTE"))
 
-                if url is None:
-                    raise PySparkRuntimeError(
-                        errorClass="CONNECT_URL_NOT_SET",
-                        messageParameters={},
-                    )
-
                 os.environ["SPARK_CONNECT_MODE_ENABLED"] = "1"
                 opts["spark.remote"] = url
                 return RemoteSparkSession.builder.config(map=opts).getOrCreate()  # type: ignore
@@ -486,10 +480,13 @@ class SparkSession(SparkConversionMixin):
             from pyspark.core.context import SparkContext
 
             with self._lock:
+                is_api_mode_connect = opts.get("spark.api.mode", "classic").lower() == "connect"
+
                 if (
                     "SPARK_CONNECT_MODE_ENABLED" in os.environ
                     or "SPARK_REMOTE" in os.environ
                     or "spark.remote" in opts
+                    or is_api_mode_connect
                 ):
                     with SparkContext._lock:
                         from pyspark.sql.connect.session import SparkSession as RemoteSparkSession
@@ -498,7 +495,10 @@ class SparkSession(SparkConversionMixin):
                             SparkContext._active_spark_context is None
                             and SparkSession._instantiatedSession is None
                         ):
-                            url = opts.get("spark.remote", os.environ.get("SPARK_REMOTE"))
+                            if is_api_mode_connect:
+                                url = opts.get("spark.master", os.environ.get("MASTER"))
+                            else:
+                                url = opts.get("spark.remote", os.environ.get("SPARK_REMOTE"))
 
                             if url is None:
                                 raise PySparkRuntimeError(
@@ -506,7 +506,7 @@ class SparkSession(SparkConversionMixin):
                                     messageParameters={},
                                 )
 
-                            if url.startswith("local"):
+                            if url.startswith("local") or is_api_mode_connect:
                                 os.environ["SPARK_LOCAL_REMOTE"] = "1"
                                 RemoteSparkSession._start_connect_server(url, opts)
                                 url = "sc://localhost"
