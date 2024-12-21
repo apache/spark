@@ -316,7 +316,7 @@ class DataFrameSuite extends QueryTest
       exception = intercept[AnalysisException](df.repartition(5, col("v"))),
       condition = "UNSUPPORTED_FEATURE.PARTITION_BY_VARIANT",
       parameters = Map(
-        "expr" -> "v",
+        "expr" -> "\"v\"",
         "dataType" -> "\"VARIANT\"")
     )
     // nested variant column
@@ -324,7 +324,7 @@ class DataFrameSuite extends QueryTest
       exception = intercept[AnalysisException](df.repartition(5, col("s"))),
       condition = "UNSUPPORTED_FEATURE.PARTITION_BY_VARIANT",
       parameters = Map(
-        "expr" -> "s",
+        "expr" -> "\"s\"",
         "dataType" -> "\"STRUCT<v: VARIANT NOT NULL>\"")
     )
     // variant producing expression
@@ -333,7 +333,7 @@ class DataFrameSuite extends QueryTest
         intercept[AnalysisException](df.repartition(5, parse_json(col("id").cast("string")))),
       condition = "UNSUPPORTED_FEATURE.PARTITION_BY_VARIANT",
       parameters = Map(
-        "expr" -> "parse_json(CAST(id AS STRING))",
+        "expr" -> "\"parse_json(CAST(id AS STRING))\"",
         "dataType" -> "\"VARIANT\"")
     )
     // Partitioning by non-variant column works
@@ -350,7 +350,7 @@ class DataFrameSuite extends QueryTest
         exception = intercept[AnalysisException](sql("SELECT * FROM tv DISTRIBUTE BY v")),
         condition = "UNSUPPORTED_FEATURE.PARTITION_BY_VARIANT",
         parameters = Map(
-          "expr" -> "tv.v",
+          "expr" -> "\"v\"",
           "dataType" -> "\"VARIANT\""),
         context = ExpectedContext(
           fragment = "DISTRIBUTE BY v",
@@ -361,10 +361,45 @@ class DataFrameSuite extends QueryTest
         exception = intercept[AnalysisException](sql("SELECT * FROM tv DISTRIBUTE BY s")),
         condition = "UNSUPPORTED_FEATURE.PARTITION_BY_VARIANT",
         parameters = Map(
-          "expr" -> "tv.s",
+          "expr" -> "\"s\"",
           "dataType" -> "\"STRUCT<v: VARIANT NOT NULL>\""),
         context = ExpectedContext(
           fragment = "DISTRIBUTE BY s",
+          start = 17,
+          stop = 31)
+      )
+    }
+  }
+
+  test("SPARK-50525 - cannot partition by map columns") {
+    val df = sql("select map(id, id) as m, id % 5 as id from range(0, 100, 1, 5)")
+    // map column
+    checkError(
+      exception = intercept[AnalysisException](df.repartition(5, col("m"))),
+      condition = "UNSUPPORTED_FEATURE.PARTITION_BY_MAP",
+      parameters = Map(
+        "expr" -> "\"m\"",
+        "dataType" -> "\"MAP<BIGINT, BIGINT>\"")
+    )
+    // map producing expression
+    checkError(
+      exception = intercept[AnalysisException](df.repartition(5, map(col("id"), col("id")))),
+      condition = "UNSUPPORTED_FEATURE.PARTITION_BY_MAP",
+      parameters = Map(
+        "expr" -> "\"map(id, id)\"",
+        "dataType" -> "\"MAP<BIGINT, BIGINT>\"")
+    )
+    // SQL
+    withTempView("tv") {
+      df.createOrReplaceTempView("tv")
+      checkError(
+        exception = intercept[AnalysisException](sql("SELECT * FROM tv DISTRIBUTE BY m")),
+        condition = "UNSUPPORTED_FEATURE.PARTITION_BY_MAP",
+        parameters = Map(
+          "expr" -> "\"m\"",
+          "dataType" -> "\"MAP<BIGINT, BIGINT>\""),
+        context = ExpectedContext(
+          fragment = "DISTRIBUTE BY m",
           start = 17,
           stop = 31)
       )
