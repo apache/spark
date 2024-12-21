@@ -62,7 +62,7 @@ class OperatorStateMetadataSuite extends StreamTest with SharedSparkSession {
       assert(operatorMetadataV2.operatorPropertiesJson.nonEmpty)
       val stateStoreInfo = operatorMetadataV2.stateStoreInfo.head
       val expectedStateStoreInfo = expectedMetadataV2.stateStoreInfo.head
-      assert(stateStoreInfo.stateSchemaFilePath.nonEmpty)
+      assert(stateStoreInfo.stateSchemaFilePaths.nonEmpty)
       assert(stateStoreInfo.storeName == expectedStateStoreInfo.storeName)
       assert(stateStoreInfo.numPartitions == expectedStateStoreInfo.numPartitions)
     }
@@ -151,8 +151,8 @@ class OperatorStateMetadataSuite extends StreamTest with SharedSparkSession {
       // Assign some placeholder values to the state store metadata since they are generated
       // dynamically by the operator.
       val expectedMetadata = OperatorStateMetadataV2(OperatorInfoV1(0, "transformWithStateExec"),
-        Array(StateStoreMetadataV2("default", 0, numShufflePartitions, checkpointDir.toString)),
-        "")
+        Array(StateStoreMetadataV2(
+          "default", 0, numShufflePartitions, 0, Map(0 -> checkpointDir.toString))), "")
       checkOperatorStateMetadata(checkpointDir.toString, 0, expectedMetadata, 2)
 
       // Verify that the state store metadata is not available for invalid batches.
