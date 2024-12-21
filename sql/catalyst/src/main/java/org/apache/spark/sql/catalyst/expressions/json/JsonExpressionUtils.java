@@ -24,7 +24,6 @@ import java.util.List;
 import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.core.JsonToken;
 
-import org.apache.spark.sql.catalyst.expressions.SharedFactory;
 import org.apache.spark.sql.catalyst.json.CreateJacksonParser;
 import org.apache.spark.sql.catalyst.util.GenericArrayData;
 import org.apache.spark.unsafe.types.UTF8String;
