@@ -203,6 +203,14 @@ case class ShuffleQueryStageExec(
 
   override protected def doMaterialize(): Future[Any] = shuffle.submitShuffleJob()
 
+  private var useCoalesceShufflePartitions: Boolean = true
+
+  def getUseCoalesceShufflePartitions: Boolean = useCoalesceShufflePartitions
+
+  def setUseCoalesceShufflePartitions(useCoalesceShufflePartitions: Boolean): Unit = {
+    this.useCoalesceShufflePartitions = useCoalesceShufflePartitions
+  }
+
   override def newReuseInstance(
       newStageId: Int, newOutput: Seq[Attribute]): ExchangeQueryStageExec = {
     val reuse = ShuffleQueryStageExec(
