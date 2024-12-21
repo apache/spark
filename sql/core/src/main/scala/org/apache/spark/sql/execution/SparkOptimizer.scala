@@ -65,8 +65,6 @@ class SparkOptimizer(
       RewriteDistinctAggregates),
     Batch("Pushdown Filters from PartitionPruning", fixedPoint,
       PushDownPredicates),
-    Batch("Rewrite With expression", fixedPoint,
-      RewriteWithExpression),
     Batch("Cleanup filters that cannot be pushed down", Once,
       CleanupDynamicPruningFilters,
       // cleanup the unnecessary TrueLiteral predicates
@@ -90,8 +88,6 @@ class SparkOptimizer(
       PushPredicateThroughNonJoin,
       PushProjectionThroughLimit,
       RemoveNoopOperators),
-    Batch("Rewrite With expression", fixedPoint,
-      RewriteWithExpression),
     Batch("Infer window group limit", Once,
       InferWindowGroupLimit,
       LimitPushDown,
@@ -99,7 +95,9 @@ class SparkOptimizer(
       EliminateLimits,
       ConstantFolding),
     Batch("User Provided Optimizers", fixedPoint, experimentalMethods.extraOptimizations: _*),
-    Batch("Replace CTE with Repartition", Once, ReplaceCTERefWithRepartition)))
+    Batch("Replace CTE with Repartition", Once, ReplaceCTERefWithRepartition),
+    Batch("Rewrite With expression", fixedPoint,
+      RewriteWithExpression)))
 
   override def nonExcludableRules: Seq[String] = super.nonExcludableRules ++
     Seq(

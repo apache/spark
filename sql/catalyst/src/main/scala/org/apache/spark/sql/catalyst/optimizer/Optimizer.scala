@@ -161,9 +161,6 @@ abstract class Optimizer(catalogManager: CatalogManager)
     val operatorOptimizationBatch: Seq[Batch] = Seq(
       Batch("Operator Optimization before Inferring Filters", fixedPoint,
         operatorOptimizationRuleSet: _*),
-      Batch("Rewrite With expression", fixedPoint,
-        RewriteWithExpression,
-        CollapseProject),
       Batch("Infer Filters", Once,
         InferFiltersFromGenerate,
         InferFiltersFromConstraints),
@@ -275,7 +272,8 @@ abstract class Optimizer(catalogManager: CatalogManager)
       RemoveNoopOperators),
     // This batch must be executed after the `RewriteSubquery` batch, which creates joins.
     Batch("NormalizeFloatingNumbers", Once, NormalizeFloatingNumbers),
-    Batch("ReplaceUpdateFieldsExpression", Once, ReplaceUpdateFieldsExpression)))
+    Batch("ReplaceUpdateFieldsExpression", Once, ReplaceUpdateFieldsExpression),
+    ))
 
     // remove any batches with no rules. this may happen when subclasses do not add optional rules.
     batches.filter(_.rules.nonEmpty)
