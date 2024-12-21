@@ -55,7 +55,9 @@ class FlatMapGroupsWithStateStreamingSuite extends QueryTest with RemoteSparkSes
     val stateFunc =
       (key: String, values: Iterator[ClickEvent], state: GroupState[ClickState]) => {
         if (state.exists) throw new IllegalArgumentException("state.exists should be false")
-        Iterator(ClickState(key, values.size))
+        val newState = ClickState(key, values.size)
+        state.update(newState)
+        Iterator(newState)
       }
     spark.sql("DROP TABLE IF EXISTS my_sink")
 
@@ -96,7 +98,9 @@ class FlatMapGroupsWithStateStreamingSuite extends QueryTest with RemoteSparkSes
     val stateFunc =
       (key: String, values: Iterator[ClickEvent], state: GroupState[ClickState]) => {
         val currState = state.getOption.getOrElse(ClickState(key, 0))
-        Iterator(ClickState(key, currState.count + values.size))
+        val newState = ClickState(key, currState.count + values.size)
+        state.update(newState)
+        Iterator(newState)
       }
     val initialState = flatMapGroupsWithStateInitialStateData
       .toDS()
@@ -141,7 +145,9 @@ class FlatMapGroupsWithStateStreamingSuite extends QueryTest with RemoteSparkSes
     val stateFunc =
       (key: String, values: Iterator[ClickEvent], state: GroupState[ClickState]) => {
         if (state.exists) throw new IllegalArgumentException("state.exists should be false")
-        ClickState(key, values.size)
+        val newState = ClickState(key, values.size)
+        state.update(newState)
+        newState
       }
     spark.sql("DROP TABLE IF EXISTS my_sink")
 
@@ -183,7 +189,9 @@ class FlatMapGroupsWithStateStreamingSuite extends QueryTest with RemoteSparkSes
     val stateFunc =
       (key: String, values: Iterator[ClickEvent], state: GroupState[ClickState]) => {
         val currState = state.getOption.getOrElse(ClickState(key, 0))
-        ClickState(key, currState.count + values.size)
+        val newState = ClickState(key, currState.count + values.size)
+        state.update(newState)
+        newState
       }
     val initialState = flatMapGroupsWithStateInitialStateData
       .toDS()
