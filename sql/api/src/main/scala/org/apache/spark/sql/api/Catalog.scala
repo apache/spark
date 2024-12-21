@@ -21,6 +21,7 @@ import scala.jdk.CollectionConverters._
 
 import _root_.java.util
 
+import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalog.{CatalogMetadata, Column, Database, Function, Table}
@@ -523,6 +524,53 @@ abstract class Catalog {
       schema: StructType,
       description: String,
       options: Map[String, String]): Dataset[Row]
+
+  /**
+   * Update rows in a table that match a condition.
+   *
+   * Scala Example:
+   * {{{
+   *   catalog.update("source", Map("salary" -> lit(200)), $"salary" === 100)
+   * }}}
+   *
+   * @param tableName
+   *   is either a qualified or unqualified name that designates a table. If no database
+   *   identifier is provided, it refers to a table in the current database.
+   * @param assignments
+   *   A Map of column names to Column expressions representing the updates to be applied.
+   * @param condition
+   *   the update condition
+   * @since 4.1.0
+   */
+  def updateTable(
+      tableName: String,
+      assignments: Map[String, org.apache.spark.sql.Column],
+      condition: org.apache.spark.sql.Column): Unit =
+    throw new SparkUnsupportedOperationException(
+      errorClass = "_LEGACY_ERROR_TEMP_2041",
+      messageParameters = Map("methodName" -> "updateTable"))
+
+  /**
+   * Update rows in a table.
+   *
+   * Scala Example:
+   * {{{
+   *   catalog.update("source", Map("salary" -> lit(200)))
+   * }}}
+   *
+   * @param tableName
+   *   is either a qualified or unqualified name that designates a table. If no database
+   *   identifier is provided, it refers to a table in the current database.
+   * @param assignments
+   *   A Map of column names to Column expressions representing the updates to be applied.
+   * @since 4.1.0
+   */
+  def updateTable(
+      tableName: String,
+      assignments: Map[String, org.apache.spark.sql.Column]): Unit =
+    throw new SparkUnsupportedOperationException(
+      errorClass = "_LEGACY_ERROR_TEMP_2041",
+      messageParameters = Map("methodName" -> "updateTable"))
 
   /**
    * Drops the local temporary view with the given view name in the catalog. If the view has been

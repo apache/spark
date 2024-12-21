@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.{Expression, Literal}
 import org.apache.spark.sql.catalyst.parser.ParseException
-import org.apache.spark.sql.catalyst.plans.logical.{ColumnDefinition, CreateTable, LocalRelation, LogicalPlan, OptionList, RecoverPartitions, ShowFunctions, ShowNamespaces, ShowTables, UnresolvedTableSpec, View}
+import org.apache.spark.sql.catalyst.plans.logical.{Assignment, ColumnDefinition, CreateTable, LocalRelation, LogicalPlan, OptionList, RecoverPartitions, ShowFunctions, ShowNamespaces, ShowTables, UnresolvedTableSpec, UpdateTable, View}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.connector.catalog.{CatalogManager, SupportsNamespaces, TableCatalog}
@@ -38,6 +38,7 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.command.ShowTablesCommand
 import org.apache.spark.sql.execution.datasources.{DataSource, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
+import org.apache.spark.sql.functions.expr
 import org.apache.spark.sql.internal.connector.V1Function
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.storage.StorageLevel
@@ -884,6 +885,48 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
   }
 
   /**
+   * Update rows in a table that match a condition.
+   *
+   * Scala Example:
+   * {{{
+   *   catalog.update("source", Map("salary" -> lit(200)), $"salary" === 100)
+   * }}}
+   *
+   * @param tableName   is either a qualified or unqualified name that designates a table.
+   *                    If no database identifier is provided, it refers to a table in the
+   *                    current database.
+   * @param assignments A Map of column names to Column expressions representing the updates
+   *                    to be applied.
+   * @param condition   the update condition
+   * @since 4.1.0
+   */
+  override def updateTable(tableName: String,
+    assignments: Map[String, org.apache.spark.sql.Column],
+    condition: org.apache.spark.sql.Column): Unit
+  = updateInternal(tableName, assignments, Some(condition))
+
+
+  /**
+   * Update rows in a table.
+   *
+   * Scala Example:
+   * {{{
+   *   catalog.update("source", Map("salary" -> lit(200)))
+   * }}}
+   *
+   * @param tableName   is either a qualified or unqualified name that designates a table.
+   *                    If no database identifier is provided, it refers to a table in the
+   *                    current database.
+   * @param assignments A Map of column names to Column expressions representing the updates
+   *                    to be applied.
+   * @since 4.1.0
+   */
+  override def updateTable(
+    tableName: String,
+    assignments: Map[String, org.apache.spark.sql.Column]): Unit =
+    updateInternal(tableName, assignments, None)
+
+  /**
    * Refreshes the cache entry and the associated metadata for all Dataset (if any), that contain
    * the given data source path. Path matching is by prefix, i.e. "/" would invalidate
    * everything that is cached.
@@ -937,6 +980,21 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
     new CatalogMetadata(
       name = name,
       description = null)
+  }
+
+  private def updateInternal(
+    tableName: String,
+    assignments: Map[String, org.apache.spark.sql.Column],
+    condition: Option[org.apache.spark.sql.Column] = None): Unit = {
+    val multiPartIdent = sparkSession.sessionState.sqlParser.parseMultipartIdentifier(tableName)
+
+    val update = UpdateTable(
+      table = UnresolvedRelation(multiPartIdent),
+      assignments.map(x => Assignment(sparkSession.expression(expr(x._1)),
+        sparkSession.expression(x._2))).toSeq,
+      condition.map(sparkSession.expression))
+    val qe = sparkSession.sessionState.executePlan(update)
+    qe.assertCommandExecuted()
   }
 }
 
