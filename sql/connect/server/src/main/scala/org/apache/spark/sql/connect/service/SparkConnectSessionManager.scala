@@ -289,8 +289,10 @@ class SparkConnectSessionManager extends Logging {
    * Used for testing
    */
   private[connect] def invalidateAllSessions(): Unit = {
-    periodicMaintenance(defaultInactiveTimeoutMs = 0L, ignoreCustomTimeout = true)
-    assert(sessionStore.isEmpty)
+    sessionStore.forEach((key, sessionHolder) => {
+      removeSessionHolder(key)
+      shutdownSessionHolder(sessionHolder)
+    })
     closedSessionsCache.invalidateAll()
   }
 
