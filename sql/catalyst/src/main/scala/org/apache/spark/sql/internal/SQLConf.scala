@@ -2123,9 +2123,10 @@ object SQLConf {
     .createWithDefault(false)
 
   val IGNORE_INVALID_PARTITION_PATHS = buildConf("spark.sql.files.ignoreInvalidPartitionPaths")
-    .doc("Whether to ignore invalid partition paths that do not match <column>=<value>. When " +
-      "the option is enabled, table with two partition directories 'table/invalid' and " +
-      "'table/col=1' will only load the latter directory and ignore the invalid partition")
+    .doc("Whether to ignore invalid partition paths that do not match " +
+      "&lt;column&gt;=&lt;value&gt;. When the option is enabled, table with two partition " +
+      "directories 'table/invalid' and 'table/col=1' will only load the latter directory " +
+      "and ignore the invalid partition")
     .version("4.0.0")
     .booleanConf
     .createWithDefault(false)
