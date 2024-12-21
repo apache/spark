@@ -350,7 +350,7 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper with No
 
   override def classifyException(
       e: Throwable,
-      errorClass: String,
+      condition: String,
       messageParameters: Map[String, String],
       description: String,
       isRuntime: Boolean): Throwable with SparkThrowable = {
@@ -358,22 +358,22 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper with No
       case sqlException: SQLException =>
         sqlException.getErrorCode match {
           // ER_DUP_KEYNAME
-          case 1050 if errorClass == "FAILED_JDBC.RENAME_TABLE" =>
+          case 1050 if condition == "FAILED_JDBC.RENAME_TABLE" =>
             val newTable = messageParameters("newName")
             throw QueryCompilationErrors.tableAlreadyExistsError(newTable)
-          case 1061 if errorClass == "FAILED_JDBC.CREATE_INDEX" =>
+          case 1061 if condition == "FAILED_JDBC.CREATE_INDEX" =>
             val indexName = messageParameters("indexName")
             val tableName = messageParameters("tableName")
             throw new IndexAlreadyExistsException(indexName, tableName, cause = Some(e))
-          case 1091 if errorClass == "FAILED_JDBC.DROP_INDEX" =>
+          case 1091 if condition == "FAILED_JDBC.DROP_INDEX" =>
             val indexName = messageParameters("indexName")
             val tableName = messageParameters("tableName")
             throw new NoSuchIndexException(indexName, tableName, cause = Some(e))
           case _ =>
-            super.classifyException(e, errorClass, messageParameters, description, isRuntime)
+            super.classifyException(e, condition, messageParameters, description, isRuntime)
         }
       case unsupported: UnsupportedOperationException => throw unsupported
-      case _ => super.classifyException(e, errorClass, messageParameters, description, isRuntime)
+      case _ => super.classifyException(e, condition, messageParameters, description, isRuntime)
     }
   }
 
