@@ -126,21 +126,10 @@ if [ ! "$(command -v "$MVN")" ] ; then
     exit -1;
 fi
 
-VERSION=$("$MVN" help:evaluate -Dexpression=project.version $@ \
-    | grep -v "INFO"\
-    | grep -v "WARNING"\
-    | tail -n 1)
-SCALA_VERSION=$("$MVN" help:evaluate -Dexpression=scala.binary.version $@ \
-    | grep -v "INFO"\
-    | grep -v "WARNING"\
-    | tail -n 1)
-SPARK_HADOOP_VERSION=$("$MVN" help:evaluate -Dexpression=hadoop.version $@ \
-    | grep -v "INFO"\
-    | grep -v "WARNING"\
-    | tail -n 1)
-SPARK_HIVE=$("$MVN" help:evaluate -Dexpression=project.activeProfiles -pl sql/hive $@ \
-    | grep -v "INFO"\
-    | grep -v "WARNING"\
+VERSION=$("$MVN" help:evaluate -q -DforceStdout -Dexpression=project.version $@)
+SCALA_VERSION=$("$MVN" help:evaluate -q -DforceStdout -Dexpression=scala.binary.version $@)
+SPARK_HADOOP_VERSION=$("$MVN" help:evaluate -q -DforceStdout -Dexpression=hadoop.version $@)
+SPARK_HIVE=$("$MVN" help:evaluate -q -DforceStdout -Dexpression=project.activeProfiles -pl sql/hive $@ \
     | grep -F --count "<id>hive</id>";\
     # Reset exit status to 0, otherwise the script stops here if the last grep finds nothing\
     # because we use "set -o pipefail"

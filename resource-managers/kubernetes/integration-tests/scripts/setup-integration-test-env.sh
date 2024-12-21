@@ -95,10 +95,7 @@ fi
 # If there is a specific Spark image skip building and extraction/copy
 if [[ $IMAGE_TAG == "N/A" ]];
 then
-  VERSION=$("$MVN" help:evaluate -Dexpression=project.version \
-    | grep -v "INFO"\
-    | grep -v "WARNING"\
-    | tail -n 1)
+  VERSION=$("$MVN" help:evaluate -q -DforceStdout -Dexpression=project.version)
   IMAGE_TAG=${VERSION}_$(uuidgen)
   cd $SPARK_INPUT_DIR
 
