@@ -668,7 +668,8 @@ class SparkConnectPlanner(
   private def transformTypedGroupMap(
       rel: proto.GroupMap,
       commonUdf: proto.CommonInlineUserDefinedFunction): LogicalPlan = {
-    val udf = TypedScalaUdf(commonUdf)
+    val unpackedUdf = unpackUdf(commonUdf)
+    val udf = TypedScalaUdf(unpackedUdf, None)
     val ds = UntypedKeyValueGroupedDataset(
       rel.getInput,
       rel.getGroupingExpressionsList,
@@ -698,6 +699,13 @@ class SparkConnectPlanner(
         InternalOutputModes(rel.getOutputMode)
       }
 
+      val stateSchema = StructType.fromString(rel.getStateSchema)
+      val stateEncoder = TypedScalaUdf.encoderFor(
+        // the state agnostic encoder is the second element in the input encoders.
+        unpackedUdf.inputEncoders.tail.head,
+        "state",
+        Some(DataTypeUtils.toAttributes(stateSchema)))
+
       val flatMapGroupsWithState = if (hasInitialState) {
         new FlatMapGroupsWithState(
           udf.function
@@ -707,7 +715,7 @@ class SparkConnectPlanner(
           ds.groupingAttributes,
           ds.dataAttributes,
           udf.outputObjAttr,
-          initialDs.vEncoder.asInstanceOf[ExpressionEncoder[Any]],
+          stateEncoder.asInstanceOf[ExpressionEncoder[Any]],
           outputMode,
           rel.getIsMapGroupsWithState,
           timeoutConf,
@@ -726,7 +734,7 @@ class SparkConnectPlanner(
           ds.groupingAttributes,
           ds.dataAttributes,
           udf.outputObjAttr,
-          initialDs.vEncoder.asInstanceOf[ExpressionEncoder[Any]],
+          stateEncoder.asInstanceOf[ExpressionEncoder[Any]],
           outputMode,
           rel.getIsMapGroupsWithState,
           timeoutConf,
@@ -944,17 +952,21 @@ class SparkConnectPlanner(
       }
     }
 
-    def apply(
-        commonUdf: proto.CommonInlineUserDefinedFunction,
-        inputAttrs: Option[Seq[Attribute]] = None): TypedScalaUdf = {
-      val udf = unpackUdf(commonUdf)
+    def apply(udf: UdfPacket, inputAttrs: Option[Seq[Attribute]]): TypedScalaUdf = {
       // There might be more than one inputs, but we only interested in the first one.
       // Most typed API takes one UDF input.
       // For the few that takes more than one inputs, e.g. grouping function mapping UDFs,
       // the first input which is the key of the grouping function.
-      assertPlan(udf.inputEncoders.nonEmpty)
+      assert(udf.inputEncoders.nonEmpty)
       val inEnc = udf.inputEncoders.head // single input encoder or key encoder
       TypedScalaUdf(udf.function, udf.outputEncoder, inEnc, inputAttrs)
+    }
+
+    def apply(
+        commonUdf: proto.CommonInlineUserDefinedFunction,
+        inputAttrs: Option[Seq[Attribute]] = None): TypedScalaUdf = {
+      val udf = unpackUdf(commonUdf)
+      apply(udf, inputAttrs)
     }
 
     def encoderFor(
