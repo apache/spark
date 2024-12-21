@@ -173,15 +173,35 @@ def wrap_arrow_batch_udf(f, args_offsets, kwargs_offsets, return_type, runner_co
         result_func = lambda r: bytes(r) if r is not None else r  # noqa: E731
 
     if "spark.sql.execution.pythonUDF.arrow.concurrency.level" in runner_conf:
-        from concurrent.futures import ThreadPoolExecutor
+        from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor
 
         c = int(runner_conf["spark.sql.execution.pythonUDF.arrow.concurrency.level"])
+        async_mode = runner_conf.get("spark.sql.execution.pythonUDF.arrow.concurrency.mode").lower()
 
-        @fail_on_stopiteration
-        def evaluate(*args: pd.Series) -> pd.Series:
-            with ThreadPoolExecutor(max_workers=c) as pool:
-                return pd.Series(list(pool.map(lambda row: result_func(func(*row)), zip(*args))))
+        if async_mode == "thread":
+            @fail_on_stopiteration
+            def evaluate(*args: pd.Series) -> pd.Series:
+                with ThreadPoolExecutor(max_workers=c) as pool:
+                    return pd.Series(list(pool.map(lambda row: result_func(func(*row)), zip(*args))))
+        elif async_mode == "process":
+            def result_f(*row):
+                if type(return_type) == StringType:
+                    r = func(*row)
+                    str(r) if r is not None else r
+                elif type(return_type) == BinaryType:
+                    r = func(*row)
+                    bytes(r) if r is not None else r
+                else:
+                    func(*row)
 
+            @fail_on_stopiteration
+            def evaluate(*args: pd.Series) -> pd.Series:
+                with ProcessPoolExecutor(max_workers=c) as pool:
+                    return pd.Series(list(pool.map(result_f, zip(*args))))
+        else:
+            raise PySparkRuntimeError(
+                f"The concurrency mode of pythonUDF should be either 'thread' or 'process' but got {async_mode}."
+            )
     else:
 
         @fail_on_stopiteration
