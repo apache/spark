@@ -2802,6 +2802,56 @@ class DatasetSuite extends QueryTest
       }
     }
   }
+
+  test("SPARK-47193: SQL Conf is propagated for Dataset#rdd and Dataset#toLocalIterator") {
+    val defaultValue = SQLConf.JSON_ENABLE_PARTIAL_RESULTS.defaultValueString
+    val expected = if (defaultValue == "true") "false" else "true"
+    withSQLConf(SQLConf.JSON_ENABLE_PARTIAL_RESULTS.key -> expected) {
+      val df = Seq("test").toDF("a")
+      val test = df.map { _ =>
+        SQLConf.get.getConf(SQLConf.JSON_ENABLE_PARTIAL_RESULTS).toString
+      }
+      assert(test.collect()(0) == expected)
+      assert(test.rdd.collect()(0) == expected)
+
+      def shouldBeDefault: Unit = {
+        val res = spark.sparkContext.parallelize(0 until 1, 1).map { x =>
+          SQLConf.get.getConf(SQLConf.JSON_ENABLE_PARTIAL_RESULTS).toString
+        }.collect()
+        assert(res(0) == defaultValue)
+      }
+
+      // make sure that SQLConf on the executor is reset
+      shouldBeDefault
+
+      val exp = intercept[org.apache.spark.SparkException] {
+        df.map { _ =>
+          throw new RuntimeException("Forced failure")
+          "" // needs this for return value type
+        }.rdd.collect()
+      }
+      // make sure that SQLConf on the executor is reset after an exception
+      shouldBeDefault
+
+      val otherTest = df.map { _ =>
+        SQLConf.get.getConf(SQLConf.JSON_ENABLE_PARTIAL_RESULTS).toString
+      }
+      val zipped = test.rdd.zip(otherTest.rdd)
+      assert(zipped.collect()(0) == (expected, expected))
+      // make sure that SQLConf on the executor is reset after two SQLExecutionRDDs are processed
+      // on the same task
+      shouldBeDefault
+
+      val joined = test.join(otherTest, Seq("value"))
+      // this tests that we cover the case when jobs are sometimes launched simply
+      // by calling Dataset#rdd. For dataset `joined`, that's what happens
+      assert(joined.rdd.collect()(0).getString(0) == expected)
+      // make sure that SQLConf on the executor is reset
+      shouldBeDefault
+
+      assert(test.toLocalIterator().asScala.toIndexedSeq(0) == expected)
+    }
+  }
 }
 
 class DatasetLargeResultCollectingSuite extends QueryTest
