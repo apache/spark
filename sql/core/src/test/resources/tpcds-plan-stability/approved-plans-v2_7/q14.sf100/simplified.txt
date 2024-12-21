@@ -44,9 +44,9 @@ TakeOrderedAndProject [i_brand_id,i_class_id,i_category_id,channel,sales,number_
               WholeStageCodegen (37)
                 HashAggregate [i_brand_id,i_class_id,i_category_id,ss_quantity,ss_list_price] [sum,isEmpty,count,sum,isEmpty,count]
                   Project [ss_quantity,ss_list_price,i_brand_id,i_class_id,i_category_id]
-                    BroadcastHashJoin [ss_item_sk,i_item_sk]
-                      Project [ss_item_sk,ss_quantity,ss_list_price]
-                        BroadcastHashJoin [ss_sold_date_sk,d_date_sk]
+                    BroadcastHashJoin [ss_sold_date_sk,d_date_sk]
+                      Project [ss_quantity,ss_list_price,ss_sold_date_sk,i_brand_id,i_class_id,i_category_id]
+                        BroadcastHashJoin [ss_item_sk,i_item_sk]
                           BroadcastHashJoin [ss_item_sk,ss_item_sk]
                             Filter [ss_item_sk]
                               ColumnarToRow
@@ -168,17 +168,17 @@ TakeOrderedAndProject [i_brand_id,i_class_id,i_category_id,channel,sales,number_
                                                               InputAdapter
                                                                 ReusedExchange [i_item_sk,i_brand_id,i_class_id,i_category_id] #11
                           InputAdapter
-                            ReusedExchange [d_date_sk] #2
-                      InputAdapter
-                        BroadcastExchange #13
-                          WholeStageCodegen (36)
-                            BroadcastHashJoin [i_item_sk,ss_item_sk]
-                              Filter [i_item_sk,i_brand_id,i_class_id,i_category_id]
-                                ColumnarToRow
+                            BroadcastExchange #13
+                              WholeStageCodegen (35)
+                                BroadcastHashJoin [i_item_sk,ss_item_sk]
+                                  Filter [i_item_sk,i_brand_id,i_class_id,i_category_id]
+                                    ColumnarToRow
+                                      InputAdapter
+                                        Scan parquet spark_catalog.default.item [i_item_sk,i_brand_id,i_class_id,i_category_id]
                                   InputAdapter
-                                    Scan parquet spark_catalog.default.item [i_item_sk,i_brand_id,i_class_id,i_category_id]
-                              InputAdapter
-                                ReusedExchange [ss_item_sk] #3
+                                    ReusedExchange [ss_item_sk] #3
+                      InputAdapter
+                        ReusedExchange [d_date_sk] #2
       InputAdapter
         BroadcastExchange #15
           WholeStageCodegen (75)
@@ -190,9 +190,9 @@ TakeOrderedAndProject [i_brand_id,i_class_id,i_category_id,channel,sales,number_
                     WholeStageCodegen (74)
                       HashAggregate [i_brand_id,i_class_id,i_category_id,ss_quantity,ss_list_price] [sum,isEmpty,count,sum,isEmpty,count]
                         Project [ss_quantity,ss_list_price,i_brand_id,i_class_id,i_category_id]
-                          BroadcastHashJoin [ss_item_sk,i_item_sk]
-                            Project [ss_item_sk,ss_quantity,ss_list_price]
-                              BroadcastHashJoin [ss_sold_date_sk,d_date_sk]
+                          BroadcastHashJoin [ss_sold_date_sk,d_date_sk]
+                            Project [ss_quantity,ss_list_price,ss_sold_date_sk,i_brand_id,i_class_id,i_category_id]
+                              BroadcastHashJoin [ss_item_sk,i_item_sk]
                                 BroadcastHashJoin [ss_item_sk,ss_item_sk]
                                   Filter [ss_item_sk]
                                     ColumnarToRow
@@ -217,6 +217,6 @@ TakeOrderedAndProject [i_brand_id,i_class_id,i_category_id,channel,sales,number_
                                   InputAdapter
                                     ReusedExchange [ss_item_sk] #3
                                 InputAdapter
-                                  ReusedExchange [d_date_sk] #17
+                                  ReusedExchange [i_item_sk,i_brand_id,i_class_id,i_category_id] #13
                             InputAdapter
-                              ReusedExchange [i_item_sk,i_brand_id,i_class_id,i_category_id] #13
+                              ReusedExchange [d_date_sk] #17
