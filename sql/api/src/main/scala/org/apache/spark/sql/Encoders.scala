@@ -82,6 +82,20 @@ object Encoders {
   def DOUBLE: Encoder[java.lang.Double] = BoxedDoubleEncoder
 
   /**
+   * An encoder for nullable char type.
+   *
+   * @since 4.0.0
+   */
+  def CHAR(length: Int): Encoder[java.lang.String] = CharEncoder(length)
+
+  /**
+   * An encoder for nullable varchar type.
+   *
+   * @since 4.0.0
+   */
+  def VARCHAR(length: Int): Encoder[java.lang.String] = VarcharEncoder(length)
+
+  /**
    * An encoder for nullable string type.
    *
    * @since 1.6.0

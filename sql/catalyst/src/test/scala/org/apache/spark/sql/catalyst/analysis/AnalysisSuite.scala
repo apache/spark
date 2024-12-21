@@ -81,6 +81,24 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     }
   }
 
+  test(s"do not fail if a leaf node has char/varchar type output and " +
+    s"${SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key} is true") {
+    withSQLConf(SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true") {
+      val schema1 = new StructType().add("c", CharType(5))
+      val schema2 = new StructType().add("c", VarcharType(5))
+      val schema3 = new StructType().add("c", ArrayType(CharType(5)))
+      Seq(schema1, schema2, schema3).foreach { schema =>
+        val table = new InMemoryTable("t", schema, Array.empty, Map.empty[String, String].asJava)
+        DataSourceV2Relation(
+          table,
+          DataTypeUtils.toAttributes(schema),
+          None,
+          None,
+          CaseInsensitiveStringMap.empty()).analyze
+      }
+    }
+  }
+
   test("union project *") {
     val plan = (1 to 120)
       .map(_ => testRelation)

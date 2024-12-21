@@ -283,9 +283,11 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
     plan.foreachUp {
       case p if p.analyzed => // Skip already analyzed sub-plans
 
-      case leaf: LeafNode if leaf.output.map(_.dataType).exists(CharVarcharUtils.hasCharVarchar) =>
+      case leaf: LeafNode if !SQLConf.get.preserveCharVarcharTypeInfo &&
+        leaf.output.map(_.dataType).exists(CharVarcharUtils.hasCharVarchar) =>
         throw SparkException.internalError(
-          "Logical plan should not have output of char/varchar type: " + leaf)
+          s"Logical plan should not have output of char/varchar type when " +
+            s"${SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key} is false: " + leaf)
 
       case u: UnresolvedNamespace =>
         u.schemaNotFound(u.multipartIdentifier)

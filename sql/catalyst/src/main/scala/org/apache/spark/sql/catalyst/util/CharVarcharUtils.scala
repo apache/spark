@@ -164,7 +164,11 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
       case CharType(length) if charFuncName.isDefined =>
         StaticInvoke(
           classOf[CharVarcharCodegenUtils],
-          StringType,
+          if (SQLConf.get.preserveCharVarcharTypeInfo) {
+            CharType(length)
+          } else {
+            StringType
+          },
           charFuncName.get,
           expr :: Literal(length) :: Nil,
           returnNullable = false)
@@ -172,7 +176,11 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
       case VarcharType(length) if varcharFuncName.isDefined =>
         StaticInvoke(
           classOf[CharVarcharCodegenUtils],
-          StringType,
+          if (SQLConf.get.preserveCharVarcharTypeInfo) {
+            VarcharType(length)
+          } else {
+            StringType
+          },
           varcharFuncName.get,
           expr :: Literal(length) :: Nil,
           returnNullable = false)

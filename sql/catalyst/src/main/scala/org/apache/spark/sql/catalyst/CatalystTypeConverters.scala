@@ -66,6 +66,8 @@ object CatalystTypeConverters {
       case arrayType: ArrayType => ArrayConverter(arrayType.elementType)
       case mapType: MapType => MapConverter(mapType.keyType, mapType.valueType)
       case structType: StructType => StructConverter(structType)
+      case CharType(length) => new CharConverter(length)
+      case VarcharType(length) => new VarcharConverter(length)
       case _: StringType => StringConverter
       case DateType if SQLConf.get.datetimeJava8ApiEnabled => LocalDateConverter
       case DateType => DateConverter
@@ -294,6 +296,33 @@ object CatalystTypeConverters {
 
     override def toScalaImpl(row: InternalRow, column: Int): Row =
       toScala(row.getStruct(column, structType.size))
+  }
+
+  private class CharConverter(length: Int) extends CatalystTypeConverter[Any, String, UTF8String] {
+    override def toCatalystImpl(scalaValue: Any): UTF8String =
+      CharVarcharCodegenUtils.charTypeWriteSideCheck(
+        StringConverter.toCatalystImpl(scalaValue), length)
+    override def toScala(catalystValue: UTF8String): String = if (catalystValue == null) {
+      null
+    } else {
+      CharVarcharCodegenUtils.charTypeWriteSideCheck(catalystValue, length).toString
+    }
+    override def toScalaImpl(row: InternalRow, column: Int): String =
+      CharVarcharCodegenUtils.charTypeWriteSideCheck(row.getUTF8String(column), length).toString
+  }
+
+  private class VarcharConverter(length: Int)
+    extends CatalystTypeConverter[Any, String, UTF8String] {
+    override def toCatalystImpl(scalaValue: Any): UTF8String =
+      CharVarcharCodegenUtils.varcharTypeWriteSideCheck(
+        StringConverter.toCatalystImpl(scalaValue), length)
+    override def toScala(catalystValue: UTF8String): String = if (catalystValue == null) {
+      null
+    } else {
+      CharVarcharCodegenUtils.varcharTypeWriteSideCheck(catalystValue, length).toString
+    }
+    override def toScalaImpl(row: InternalRow, column: Int): String =
+      CharVarcharCodegenUtils.varcharTypeWriteSideCheck(row.getUTF8String(column), length).toString
   }
 
   private object StringConverter extends CatalystTypeConverter[Any, String, UTF8String] {
