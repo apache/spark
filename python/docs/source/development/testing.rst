@@ -38,6 +38,27 @@ After that, the PySpark test cases can be run via using ``python/run-tests``. Fo
 
 Note that you may set ``OBJC_DISABLE_INITIALIZE_FORK_SAFETY`` environment variable to ``YES`` if you are running tests on Mac OS.
 
+.. note::
+
+    If the Spark driver is unavailable, you can resolve the issue using the following methods:
+
+    **Set SPARK_LOCAL_IP**:
+
+    Configure the environment variable ``SPARK_LOCAL_IP`` to bind to the local address ``127.0.0.1``::
+
+        export SPARK_LOCAL_IP=127.0.0.1
+
+    Alternatively, run the Spark shell before executing tests.
+
+    **If the issue occurs**:
+
+    When Spark is installed but not yet initialized, you may encounter an error like this::
+
+        24/12/16 20:44:42 WARN Utils: Service 'sparkDriver' could not bind on a random free port. 
+        You may check whether configuring an appropriate binding address.
+        24/12/16 20:44:42 ERROR SparkContext: Error initializing SparkContext.
+
+
 Please see the guidance on how to |building_spark|_,
 `run tests for a module, or individual tests <https://spark.apache.org/developer-tools.html>`_.
 
