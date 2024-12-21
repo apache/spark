@@ -1678,6 +1678,22 @@ Apart from these, the following properties are also available, and may be useful
   <td>2.1.0</td>
 </tr>
 <tr>
+  <td><code>spark.ui.custom.driver.log.url</code></td>
+  <td>(none)</td>
+  <td>
+    Specifies custom Spark driver log URL for supporting external log service instead of using cluster
+    managers' application log URLs in Spark UI. Spark will support some path variables via patterns
+    which can vary on cluster manager. Please check the documentation for your cluster manager to
+    see which patterns are supported, if any. <p/>
+    Please note that this configuration also replaces original log urls in event log,
+    which will be also effective when accessing the application on history server. The new log urls must be
+    permanent, otherwise you might have dead link for driver log urls.
+    <p/>
+    For now, only K8s cluster manager supports this configuration.
+  </td>
+  <td>4.0.0</td>
+</tr>
+<tr>
   <td><code>spark.ui.custom.executor.log.url</code></td>
   <td>(none)</td>
   <td>
@@ -1689,7 +1705,7 @@ Apart from these, the following properties are also available, and may be useful
     which will be also effective when accessing the application on history server. The new log urls must be
     permanent, otherwise you might have dead link for executor log urls.
     <p/>
-    For now, only YARN and K8s cluster manager supports this configuration
+    For now, only YARN and K8s cluster manager supports this configuration.
   </td>
   <td>3.0.0</td>
 </tr>
