@@ -195,6 +195,7 @@ class BypassMergeSortShuffleWriterSuite
   }
 
   test("only generate temp shuffle file for non-empty partition") {
+    conf.set(config.SHUFFLE_MAP_STATUS_ROW_COUNT_OPTIMIZE_SKEWED_JOB.key, "true")
     // Using exception to test whether only non-empty partition creates temp shuffle file,
     // because temp shuffle file will only be cleaned after calling stop(false) in the failure
     // case, so we could use it to validate the temp shuffle files.
