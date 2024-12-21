@@ -1615,6 +1615,10 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     notSupportedForV2TablesError("ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]")
   }
 
+  def describeAsJsonNotSupportedForV2TablesError(): Throwable = {
+    notSupportedForV2TablesError("DESCRIBE TABLE AS JSON")
+  }
+
   def loadDataNotSupportedForV2TablesError(): Throwable = {
     notSupportedForV2TablesError("LOAD DATA")
   }
