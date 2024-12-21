@@ -126,7 +126,11 @@ class ResolveSQLOnFile(sparkSession: SparkSession) extends Rule[LogicalPlan] {
       // so we should leave it be for now.
       try {
         resolveDataSource(u)
-        throw QueryCompilationErrors.timeTravelUnsupportedError(toSQLId(u.multipartIdentifier))
+        u.setTagValue(
+          UnresolvedRelation.RESOLUTION_ERROR,
+          QueryCompilationErrors.timeTravelUnsupportedError(toSQLId(u.multipartIdentifier))
+        )
+        r
       } catch {
         case _: ClassNotFoundException => r
       }

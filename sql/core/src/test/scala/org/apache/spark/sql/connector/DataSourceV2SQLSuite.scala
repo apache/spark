@@ -3790,6 +3790,24 @@ class DataSourceV2SQLSuiteV1Filter
     }
   }
 
+  test("SPARK-50623: respect table lookup error from the catalog") {
+    withSQLConf(s"spark.sql.catalog.fixed_ns" -> classOf[FixedNamespaceCatalog].getName) {
+      withTable("fixed_ns.test_ns.t") {
+        sql("CREATE TABLE fixed_ns.test_ns.t(i INT)")
+        assert(spark.table("fixed_ns.test_ns.t").isEmpty)
+        sql("CREATE TABLE fixed_ns.wrong_ns.t(i INT)")
+        checkError(
+          exception = intercept[AnalysisException] {
+            spark.table("fixed_ns.wrong_ns.t")
+          },
+          condition = "SCHEMA_NOT_FOUND",
+          sqlState = "42704",
+          parameters = Map("schemaName" -> "`wrong_ns`")
+        )
+      }
+    }
+  }
+
   private def testNotSupportedV2Command(
       sqlCommand: String,
       sqlParams: String,
@@ -3908,5 +3926,17 @@ class FakeStagedTableCatalog extends InMemoryCatalog with StagingTableCatalog {
     }
     super.createTable(ident, columns, partitions, properties)
     null
+  }
+}
+
+class FixedNamespaceCatalog extends InMemoryCatalog {
+  override def tableExists(ident: Identifier): Boolean = tables.containsKey(ident)
+
+  override def loadTable(ident: Identifier): Table = {
+    if (ident.namespace().length == 1 && ident.namespace().head == "test_ns") {
+      super.loadTable(ident)
+    } else {
+      throw new NoSuchNamespaceException(ident.namespace())
+    }
   }
 }
