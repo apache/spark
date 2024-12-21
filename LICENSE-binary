@@ -287,6 +287,7 @@ io.netty:netty-transport-native-epoll
 io.netty:netty-transport-native-kqueue
 io.netty:netty-transport-native-unix-common
 io.vertx:vertx-auth-common
+io.vertx:vertx-core
 io.vertx:vertx-web-client
 io.vertx:vertx-web-common
 jakarta.inject:jakarta.inject-api
@@ -518,7 +519,6 @@ org.glassfish.jaxb:jaxb-runtime
 
 Eclipse Public License (EPL) 2.0
 --------------------------------
-io.vertx:vertx-core https://github.com/eclipse-vertx/vert.x
 jakarta.annotation:jakarta.annotation-api https://projects.eclipse.org/projects/ee4j.ca
 jakarta.servlet:jakarta.servlet-api https://projects.eclipse.org/projects/ee4j.servlet
 jakarta.ws.rs:jakarta.ws.rs-api https://github.com/eclipse-ee4j/jaxrs-api
