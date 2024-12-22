@@ -1036,26 +1036,9 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
     // If `AnalysisContext.catalogAndNamespace` is non-empty, analyzer will expand single-part names
     // with it, instead of current catalog and namespace.
     private def resolveViews(plan: LogicalPlan): LogicalPlan = plan match {
-      // The view's child should be a logical plan parsed from the `desc.viewText`, the variable
-      // `viewText` should be defined, or else we throw an error on the generation of the View
-      // operator.
-      case view @ View(desc, isTempView, child) if !child.resolved =>
-        // Resolve all the UnresolvedRelations and Views in the child.
-        val newChild = AnalysisContext.withAnalysisContext(desc) {
-          val nestedViewDepth = AnalysisContext.get.nestedViewDepth
-          val maxNestedViewDepth = AnalysisContext.get.maxNestedViewDepth
-          if (nestedViewDepth > maxNestedViewDepth) {
-            throw QueryCompilationErrors.viewDepthExceedsMaxResolutionDepthError(
-              desc.identifier, maxNestedViewDepth, view)
-          }
-          SQLConf.withExistingConf(View.effectiveSQLConf(desc.viewSQLConfigs, isTempView)) {
-            executeSameContext(child)
-          }
-        }
-        // Fail the analysis eagerly because outside AnalysisContext, the unresolved operators
-        // inside a view maybe resolved incorrectly.
-        checkAnalysis(newChild)
-        view.copy(child = newChild)
+      case view: View if !view.child.resolved =>
+        ViewResolution
+          .resolve(view, resolveChild = executeSameContext, checkAnalysis = checkAnalysis)
       case p @ SubqueryAlias(_, view: View) =>
         p.copy(child = resolveViews(view))
       case _ => plan
