@@ -393,6 +393,7 @@ jobs:
     if: >-
       fromJson(needs.precondition.outputs.required).pyspark == 'true' ||
       fromJson(needs.precondition.outputs.required).lint == 'true' ||
+      fromJson(needs.precondition.outputs.required).docs == 'true' ||
       fromJson(needs.precondition.outputs.required).sparkr == 'true'
     runs-on: ubuntu-latest
     permissions:
@@ -422,7 +423,8 @@ jobs:
         uses: docker/setup-qemu-action@v3
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
-      - name: Build and push
+      - name: Build and push for branch-3.5
+        if: inputs.branch == 'branch-3.5'
         id: docker_build
         uses: docker/build-push-action@v6
         with:
@@ -433,7 +435,7 @@ jobs:
           # Use the infra image cache to speed up
           cache-from: type=registry,ref=ghcr.io/apache/spark/apache-spark-github-action-image-cache:${{ inputs.branch }}
       - name: Build and push (Documentation)
-        if: hashFiles('dev/spark-test-image/docs/Dockerfile') != ''
+        if: ${{ inputs.branch != 'branch-3.5' && hashFiles('dev/spark-test-image/docs/Dockerfile') != '' }}
         id: docker_build_docs
         uses: docker/build-push-action@v6
         with:
@@ -444,7 +446,7 @@ jobs:
           # Use the infra image cache to speed up
           cache-from: type=registry,ref=ghcr.io/apache/spark/apache-spark-github-action-image-docs-cache:${{ inputs.branch }}
       - name: Build and push (Linter)
-        if: hashFiles('dev/spark-test-image/lint/Dockerfile') != ''
+        if: ${{ inputs.branch != 'branch-3.5' && hashFiles('dev/spark-test-image/lint/Dockerfile') != '' }}
         id: docker_build_lint
         uses: docker/build-push-action@v6
         with:
@@ -455,7 +457,7 @@ jobs:
           # Use the infra image cache to speed up
           cache-from: type=registry,ref=ghcr.io/apache/spark/apache-spark-github-action-image-lint-cache:${{ inputs.branch }}
       - name: Build and push (SparkR)
-        if: hashFiles('dev/spark-test-image/sparkr/Dockerfile') != ''
+        if: ${{ inputs.branch != 'branch-3.5' && hashFiles('dev/spark-test-image/sparkr/Dockerfile') != '' }}
         id: docker_build_sparkr
         uses: docker/build-push-action@v6
         with:
