@@ -25,7 +25,7 @@ FWDIR="$(cd "`dirname "$0"`"/..; pwd)"
 cd "$FWDIR"
 
 # Skip maven local resolver.
-export SKIP_LOCAL_M2=true
+# export SKIP_LOCAL_M2=true
 
 SPARK_PROFILES=${1:-"-Pkubernetes -Pyarn -Pspark-ganglia-lgpl -Pkinesis-asl -Phive-thriftserver -Phive"}
 TOOLS_CLASSPATH="$(build/sbt -DcopyDependencies=false "export tools/fullClasspath" | grep jar | tail -n1)"
