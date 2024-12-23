@@ -379,9 +379,6 @@ object CollationTypeCoercion {
     case collate: Collate =>
       Some(addContextToStringType(collate.dataType, Explicit))
 
-    case expr @ (_: NamedExpression | _: SubqueryExpression | _: VariableReference) =>
-      Some(addContextToStringType(expr.dataType, Implicit))
-
     case cast: Cast =>
       val castStrength = if (hasStringType(cast.child.dataType)) {
         Implicit
@@ -390,6 +387,9 @@ object CollationTypeCoercion {
       }
 
       Some(addContextToStringType(cast.dataType, castStrength))
+
+    case expr @ (_: NamedExpression | _: SubqueryExpression | _: VariableReference) =>
+      Some(addContextToStringType(expr.dataType, Implicit))
 
     case lit: Literal =>
       Some(addContextToStringType(lit.dataType, Default))
@@ -459,13 +459,6 @@ object CollationTypeCoercion {
       case (leftPriority, rightPriority) =>
         if (leftPriority < rightPriority) left
         else right
-    }
-  }
-
-  private def isComplexType(dataType: DataType): Boolean = {
-    dataType match {
-      case _: ArrayType | _: MapType | _: StructType => true
-      case _ => false
     }
   }
 }
