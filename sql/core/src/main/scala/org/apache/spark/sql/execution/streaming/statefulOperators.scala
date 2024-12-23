@@ -237,27 +237,28 @@ trait StateStoreWriter
   def stateSchemaMapping(
       stateSchemaValidationResults: List[StateSchemaValidationResult],
       oldMetadata: Option[OperatorStateMetadata]): List[Map[Short, String]] = {
+
+    def getExistingStateInfo(metadata: OperatorStateMetadataV2): (Short, Map[Short, String]) = {
+      val ssInfo = metadata.stateStoreInfo.head
+      (ssInfo.stateSchemaId, ssInfo.stateSchemaFilePaths)
+    }
+
     val validationResult = stateSchemaValidationResults.head
-    val evolvedSchema = validationResult.evolvedSchema
-    if (evolvedSchema) {
-      val (oldSchemaId, oldSchemaPaths): (Short, Map[Short, String]) = oldMetadata match {
-        case Some(v2: OperatorStateMetadataV2) =>
-          val ssInfo = v2.stateStoreInfo.head
-          (ssInfo.stateSchemaId, ssInfo.stateSchemaFilePaths)
-        case _ => (-1, Map.empty)
-      }
-      val nextSchemaId: Short = (oldSchemaId + 1).asInstanceOf[Short]
-      List(oldSchemaPaths + (nextSchemaId -> validationResult.schemaPath))
-    } else {
-      oldMetadata match {
-        case Some(v2: OperatorStateMetadataV2) =>
-          // If schema hasn't evolved, keep existing mappings
-          val ssInfo = v2.stateStoreInfo.head
-          List(ssInfo.stateSchemaFilePaths)
-        case _ =>
-          // If no previous metadata and no evolution, start with schema ID 0
-          List(Map(0.asInstanceOf[Short] -> validationResult.schemaPath))
-      }
+
+    def nextSchemaId(currentId: Short): Short = (currentId + 1).toShort
+
+    oldMetadata match {
+      case Some(v2: OperatorStateMetadataV2) =>
+        val (oldSchemaId, oldSchemaPaths) = getExistingStateInfo(v2)
+        if (validationResult.evolvedSchema) {
+          List(oldSchemaPaths + (nextSchemaId(oldSchemaId) -> validationResult.schemaPath))
+        } else {
+          List(oldSchemaPaths)
+        }
+
+      case _ =>
+        // No previous metadata - start with schema ID 0
+        List(Map(0.toShort -> validationResult.schemaPath))
     }
   }
 

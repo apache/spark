@@ -1746,6 +1746,8 @@ class SingleValueStateEncoder(
     }
     // First decode the metadata prefixes
     val prefix = decodeStateRowPrefix(valueBytes)
+    logError(s"### prefix: $prefix")
+    logError(s"### currentSchemaId: ${currentSchemaId}")
     val data = decodeStateRowData(valueBytes)
     // Decode the actual value using either Avro or UnsafeRow
     dataEncoder.decodeValue(data, prefix)

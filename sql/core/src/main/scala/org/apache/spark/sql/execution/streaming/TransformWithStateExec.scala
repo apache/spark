@@ -491,7 +491,8 @@ case class TransformWithStateExec(
       newSchemas.values.toList, session.sessionState, stateSchemaVersion,
       storeName = StateStoreId.DEFAULT_STORE_NAME,
       oldSchemaFilePath = oldStateSchemaFilePath,
-      newSchemaFilePath = Some(newStateSchemaFilePath)))
+      newSchemaFilePath = Some(newStateSchemaFilePath),
+      schemaEvolutionEnabled = supportsSchemaEvolution))
   }
 
   /** Metadata of this stateful operator and its states stores. */
