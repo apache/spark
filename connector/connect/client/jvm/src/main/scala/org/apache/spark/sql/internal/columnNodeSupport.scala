@@ -74,12 +74,12 @@ object ColumnNodeToProtoConverter extends (ColumnNode => proto.Expression) {
         planId.foreach(b.setPlanId)
 
       case UnresolvedFunction(
-      functionName,
-      arguments,
-      isDistinct,
-      isUserDefinedFunction,
-      isInternal,
-      _) =>
+          functionName,
+          arguments,
+          isDistinct,
+          isUserDefinedFunction,
+          isInternal,
+          _) =>
         builder.getUnresolvedFunctionBuilder
           .setFunctionName(functionName)
           .setIsUserDefinedFunction(isUserDefinedFunction)
