@@ -134,13 +134,15 @@ class ColumnNodeToProtoConverterSuite extends ConnectFunSuite {
         "db1.myAgg",
         Seq(UnresolvedAttribute("a")),
         isDistinct = true,
-        isUserDefinedFunction = true),
+        isUserDefinedFunction = true,
+        isInternal = true),
       expr(
         _.getUnresolvedFunctionBuilder
           .setFunctionName("db1.myAgg")
           .setIsDistinct(true)
           .setIsUserDefinedFunction(true)
-          .addArguments(attribute("a"))))
+          .addArguments(attribute("a"))
+      .setIsInternal(true)))
   }
 
   test("alias") {
