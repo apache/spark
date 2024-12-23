@@ -74,6 +74,7 @@ case class StatefulOperatorStateInfo(
     operatorId: Long,
     storeVersion: Long,
     numPartitions: Int,
+    stateSchemaMetadata: Option[StateSchemaBroadcast] = None,
     stateStoreCkptIds: Option[Array[Array[String]]] = None) {
 
   def getStateStoreCkptId(partitionId: Int): Option[Array[String]] = {
@@ -233,6 +234,35 @@ trait StateStoreWriter
     }
   }
 
+  def stateSchemaMapping(
+      stateSchemaValidationResults: List[StateSchemaValidationResult],
+      oldMetadata: Option[OperatorStateMetadata]): List[Map[Short, String]] = {
+    val validationResult = stateSchemaValidationResults.head
+    val evolvedSchema = validationResult.evolvedSchema
+    if (evolvedSchema) {
+      val (oldSchemaId, oldSchemaPaths): (Short, Map[Short, String]) = oldMetadata match {
+        case Some(v2: OperatorStateMetadataV2) =>
+          val ssInfo = v2.stateStoreInfo.head
+          (ssInfo.stateSchemaId, ssInfo.stateSchemaFilePaths)
+        case _ => (-1, Map.empty)
+      }
+      val nextSchemaId: Short = (oldSchemaId + 1).asInstanceOf[Short]
+      List(oldSchemaPaths + (nextSchemaId -> validationResult.schemaPath))
+    } else {
+      oldMetadata match {
+        case Some(v2: OperatorStateMetadataV2) =>
+          // If schema hasn't evolved, keep existing mappings
+          val ssInfo = v2.stateStoreInfo.head
+          List(ssInfo.stateSchemaFilePaths)
+        case _ =>
+          // If no previous metadata and no evolution, start with schema ID 0
+          List(Map(0.asInstanceOf[Short] -> validationResult.schemaPath))
+      }
+    }
+  }
+
+  def supportsSchemaEvolution: Boolean = false
+
   /**
    * Aggregator used for the executors to pass new state store checkpoints' IDs to driver.
    * For the general checkpoint ID workflow, see comments of
@@ -319,7 +349,7 @@ trait StateStoreWriter
 
   /** Metadata of this stateful operator and its states stores. */
   def operatorStateMetadata(
-      stateSchemaPaths: List[String] = List.empty): OperatorStateMetadata = {
+      stateSchemaPaths: List[Map[Short, String]] = List.empty): OperatorStateMetadata = {
     val info = getStateInfo
     val operatorInfo = OperatorInfoV1(info.operatorId, shortName)
     val stateStoreInfo =
@@ -1071,7 +1101,7 @@ case class SessionWindowStateStoreSaveExec(
   }
 
   override def operatorStateMetadata(
-      stateSchemaPaths: List[String] = List.empty): OperatorStateMetadata = {
+      stateSchemaPaths: List[Map[Short, String]] = List.empty): OperatorStateMetadata = {
     val info = getStateInfo
     val operatorInfo = OperatorInfoV1(info.operatorId, shortName)
     val stateStoreInfo = Array(StateStoreMetadataV1(
