@@ -2937,7 +2937,9 @@ private[spark] class DAGScheduler(
         } else {
           // This stage is only used by the job, so finish the stage if it is running.
           val stage = stageIdToStage(stageId)
-          if (runningStages.contains(stage)) {
+          val isRunningStage = runningStages.contains(stage) ||
+            (waitingStages.contains(stage) && taskScheduler.hasRunningTasks(stageId))
+          if (isRunningStage) {
             try { // killAllTaskAttempts will fail if a SchedulerBackend does not implement killTask
               taskScheduler.killAllTaskAttempts(stageId, shouldInterruptTaskThread(job), reason)
               if (legacyAbortStageAfterKillTasks) {

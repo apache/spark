@@ -121,4 +121,6 @@ private[spark] trait TaskScheduler {
    */
   def applicationAttemptId(): Option[String]
 
+
+  def hasRunningTasks(stageId: Int): Boolean
 }
