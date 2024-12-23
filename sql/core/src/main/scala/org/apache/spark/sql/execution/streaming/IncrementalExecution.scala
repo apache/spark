@@ -261,6 +261,7 @@ class IncrementalExecution(
             metadataWriter.write(metadata)
             if (ssw.supportsSchemaEvolution) {
               val stateSchemaMetadata = createStateSchemaMetadata(stateSchemaMapping.head)
+              stateSchemaMetadatas.put(ssw.getStateInfo.operatorId, stateSchemaMetadata)
               // Create new instance with copied fields but updated stateInfo
               ssw match {
                 case exec: TransformWithStateExec =>
@@ -607,10 +608,10 @@ class IncrementalExecution(
 
       // The rule below doesn't change the plan but can cause the side effect that
       // metadata/schema is written in the checkpoint directory of stateful operator.
-      planWithStateOpId transform StateSchemaAndOperatorMetadataRule.rule
+      val planWithSchemas = planWithStateOpId transform StateSchemaAndOperatorMetadataRule.rule
 
-      simulateWatermarkPropagation(planWithStateOpId)
-      planWithStateOpId transform WatermarkPropagationRule.rule
+      simulateWatermarkPropagation(planWithSchemas)
+      planWithSchemas transform WatermarkPropagationRule.rule
     }
   }
 

@@ -851,7 +851,8 @@ class MicroBatchExecution(
         execCtx.offsetSeqMetadata,
         watermarkPropagator,
         execCtx.previousContext.isEmpty,
-        currentStateStoreCkptId)
+        currentStateStoreCkptId,
+        stateSchemaMetadatas)
       execCtx.executionPlan.executedPlan // Force the lazy generation of execution plan
     }
 

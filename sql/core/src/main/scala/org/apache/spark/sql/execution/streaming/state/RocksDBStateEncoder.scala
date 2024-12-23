@@ -260,7 +260,7 @@ class UnsafeRowDataEncoder(
     keyStateEncoderSpec: KeyStateEncoderSpec,
     valueSchema: StructType,
     stateSchemaBroadcast: Option[StateSchemaBroadcast],
-    columnFamilyInfo: Option[ColumnFamilyInfo],
+    columnFamilyInfo: Option[ColumnFamilyInfo]
 ) extends RocksDBDataEncoder(
     keyStateEncoderSpec, valueSchema, stateSchemaBroadcast, columnFamilyInfo) {
 
@@ -1555,7 +1555,7 @@ class NoPrefixKeyStateEncoder(
   extends StateRowPrefixEncoder(
     useColumnFamilies,
     columnFamilyInfo,
-    supportSchemaEvolution = dataEncoder.supportsSchemaEvolution
+    supportSchemaEvolution = false
   ) with RocksDBKeyStateEncoder with Logging {
 
   override def encodeKey(row: UnsafeRow): Array[Byte] = {
@@ -1729,6 +1729,7 @@ class SingleValueStateEncoder(
     columnFamilyInfo = None,
     supportSchemaEvolution = dataEncoder.supportsSchemaEvolution
   ) with RocksDBValueStateEncoder with Logging {
+  assert(currentSchemaId.isDefined)
 
   override def getCurrentSchemaId: Option[Short] = currentSchemaId
 
