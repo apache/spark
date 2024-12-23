@@ -165,12 +165,6 @@ class StateSchemaCompatibilityChecker(
       (ignoreValueSchema || storedValueSchema.equals(valueSchema))) {
       // schema is exactly same
       false
-    } else if (!schemasCompatible(storedKeySchema, keySchema)) {
-      throw StateStoreErrors.stateStoreKeySchemaNotCompatible(storedKeySchema.toString,
-        keySchema.toString)
-    } else if (!ignoreValueSchema && !schemasCompatible(storedValueSchema, valueSchema)) {
-      throw StateStoreErrors.stateStoreValueSchemaNotCompatible(storedValueSchema.toString,
-        valueSchema.toString)
     } else if (!ignoreValueSchema && schemaEvolutionEnabled) {
       // By this point, we know that old value schema is not equal to new value schema
       val oldAvroSchema = SchemaConverters.toAvroType(storedValueSchema)
@@ -183,6 +177,12 @@ class StateSchemaCompatibilityChecker(
       // If no exception is thrown, then we know that the schema evolved in an
       // acceptable way
       true
+    } else if (!schemasCompatible(storedKeySchema, keySchema)) {
+      throw StateStoreErrors.stateStoreKeySchemaNotCompatible(storedKeySchema.toString,
+        keySchema.toString)
+    } else if (!ignoreValueSchema && !schemasCompatible(storedValueSchema, valueSchema)) {
+      throw StateStoreErrors.stateStoreValueSchemaNotCompatible(storedValueSchema.toString,
+        valueSchema.toString)
     } else {
       logInfo("Detected schema change which is compatible. Allowing to put rows.")
       true
