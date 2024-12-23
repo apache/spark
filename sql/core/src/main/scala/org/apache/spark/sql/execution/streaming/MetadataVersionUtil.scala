@@ -62,7 +62,7 @@ object MetadataVersionUtil {
       throw new IllegalStateException(s"Log file was malformed: failed to read correct log " +
         s"version from $text.")
     }
-    if (version < 0) {
+    if (version <= 0) {
       throw new IllegalStateException(s"Log file was malformed: failed to read correct log " +
         s"version from $text.")
     }
