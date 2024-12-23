@@ -2046,7 +2046,9 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
                 encodingType,
                 StateRowEncoderCacheKey("dummy-id", 0, 0, "storeName", "testFamily"),
                 keySpec,
-                valueSchema
+                valueSchema,
+                None,
+                None
               )
               val keyEncoder = RocksDBStateEncoder.getKeyEncoder(
                 dataEncoder,
@@ -2059,7 +2061,8 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
               val valueEncoder = RocksDBStateEncoder.getValueEncoder(
                 dataEncoder,
                 valueSchema = valueSchema,
-                useMultipleValuesPerKey = useMultipleValues
+                useMultipleValuesPerKey = useMultipleValues,
+                None
               )
 
               // Encode and write to DB
