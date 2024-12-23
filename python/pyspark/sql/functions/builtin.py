@@ -2124,7 +2124,7 @@ def string_agg_distinct(
     >>> df.select(sf.string_agg_distinct('strings', ', ')).show()
     +--------------------------------+
     |string_agg(DISTINCT strings, , )|
-    +------------------   -----------+
+    +--------------------------------+
     |                         a, b, c|
     +--------------------------------+
 
