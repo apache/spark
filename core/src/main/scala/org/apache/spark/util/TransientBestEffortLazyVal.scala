@@ -16,6 +16,22 @@
  */
 package org.apache.spark.util
 
+/**
+ * Construct to lazily initialize a variable, re-computation is allowed if multiple threads are
+ * trying to initialize it concurrently.
+ * This may be helpful for avoiding deadlocks in certain scenarios.
+ *
+ * @note
+ * This helper class has additional requirements on the compute function:
+ *   1) The compute function MUST not return null;
+ *   2) The compute function MUST be deterministic.
+ *
+ * @note
+ *   Scala 3 uses a different implementation of lazy vals which doesn't have this problem.
+ *   Please refer to <a
+ *   href="https://docs.scala-lang.org/scala3/reference/changed-features/lazy-vals-init.html">Lazy
+ *   Vals Initialization</a> for more details.
+ */
 private[spark] class TransientBestEffortLazyVal[T <: AnyRef](
     private[this] val compute: () => T) extends Serializable {
 
