@@ -1828,7 +1828,7 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
 
       // For each filter, expand the alias and check if the filter can be evaluated using
       // attributes produced by the aggregate operator's child operator.
-      val (pushDown, stayUp) = splitConjunctivePredicates(condition).partition { cond =>
+      val (pushDown, stayUp) = splitAndCombinePredicates(condition).partition { cond =>
         val replaced = replaceAlias(cond, aliasMap)
         cond.deterministic && cond.references.nonEmpty &&
           replaced.references.subsetOf(aggregate.child.outputSet)
@@ -1995,7 +1995,7 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
       cond: Expression,
       aliasMap: AttributeMap[Alias]): Expression = {
     if (!SQLConf.get.getConf(SQLConf.ALWAYS_INLINE_COMMON_EXPR)) {
-      splitConjunctivePredicates(cond).map(rewriteByWith(_, aliasMap)).reduce(And)
+      splitAndCombinePredicates(cond).map(rewriteByWith(_, aliasMap)).reduce(And)
     } else cond
   }
 

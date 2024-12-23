@@ -1549,11 +1549,11 @@ class FilterPushdownSuite extends PlanTest {
       // through project
       val originalQuery1 = testRelation
         .select($"a" + $"b" as "add")
-        .where($"add" + $"add" > 10)
+        .where($"add" + $"add" > 10 && $"add" < 10)
       val optimized1 = Optimize.execute(originalQuery1.analyze)
       val correctAnswer1 = testRelation
         .select($"a", $"b", $"c", $"a" + $"b" as "_common_expr_0")
-        .where($"_common_expr_0" + $"_common_expr_0" > 10)
+        .where($"_common_expr_0" + $"_common_expr_0" > 10 && $"_common_expr_0" < 10)
         .select($"a" + $"b" as "add")
         .analyze
       comparePlans(optimized1, correctAnswer1)
@@ -1561,11 +1561,11 @@ class FilterPushdownSuite extends PlanTest {
       // through aggregate
       val originalQuery2 = testRelation
         .groupBy($"a")($"a", $"a" + $"a" as "add", count(1) as "ct")
-        .where($"add" + $"add" > 10)
+        .where($"add" + $"add" > 10 && $"add" < 10)
       val optimized2 = Optimize.execute(originalQuery2.analyze)
       val correctAnswer2 = testRelation
         .select($"a", $"b", $"c", $"a" + $"a" as "_common_expr_0")
-        .where($"_common_expr_0" + $"_common_expr_0" > 10)
+        .where($"_common_expr_0" + $"_common_expr_0" > 10 && $"_common_expr_0" < 10)
         .select($"a", $"b", $"c")
         .groupBy($"a")($"a", $"a" + $"a" as "add", count(1) as "ct")
         .analyze
