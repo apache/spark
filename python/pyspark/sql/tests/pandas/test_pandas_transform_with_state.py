@@ -27,7 +27,7 @@ from typing import cast
 
 from pyspark import SparkConf
 from pyspark.errors import PySparkRuntimeError
-from pyspark.sql.functions import array_sort, col, split
+from pyspark.sql.functions import array_sort, col, explode, map_keys, split
 from pyspark.sql.types import StringType, StructType, StructField, Row, IntegerType, TimestampType
 from pyspark.testing import assertDataFrameEqual
 from pyspark.testing.sqlutils import (
@@ -979,18 +979,35 @@ class TransformWithStateInPandasTestsMixin:
                     .option("stateVarName", "mapState")
                     .load()
                 )
-                assert set(
-                    map_state_df.selectExpr(
-                        "key.id AS groupingKey",
-                        "user_map_key.name AS mapKey",
-                        "user_map_value.value.count AS mapValue",
-                    )
-                    .sort("groupingKey")
-                    .collect()
-                ) == {
+                assert map_state_df.selectExpr(
+                    "key.id AS groupingKey",
+                    "user_map_key.name AS mapKey",
+                    "user_map_value.value.count AS mapValue",
+                ).sort("groupingKey").collect() == [
                     Row(groupingKey="0", mapKey="key2", mapValue=2),
                     Row(groupingKey="1", mapKey="key2", mapValue=2),
-                }
+                ]
+
+                # check for map state with flatten option
+                map_state_df_non_flatten = (
+                    self.spark.read.format("statestore")
+                    .option("path", checkpoint_path)
+                    .option("stateVarName", "mapState")
+                    .option("flattenCollectionTypes", False)
+                    .load()
+                )
+                assert map_state_df_non_flatten.select(
+                    "key.id", explode(col("map_value")).alias("map_key", "map_value")
+                ).selectExpr(
+                    "id AS groupingKey",
+                    "map_key.name AS mapKey",
+                    "map_value.value.count AS mapValue",
+                ).sort(
+                    "groupingKey"
+                ).collect() == [
+                    Row(groupingKey="0", mapKey="key2", mapValue=2),
+                    Row(groupingKey="1", mapKey="key2", mapValue=2),
+                ]
 
                 ttl_df = map_state_df.selectExpr(
                     "user_map_value.ttlExpirationMs AS TTLVal"
@@ -1206,7 +1223,6 @@ class TransformWithStateInPandasTestsMixin:
                 checkpoint_path=checkpoint_path,
             )
 
-    """
     def test_transform_with_state_restart_with_multiple_rows_init_state(self):
         def check_results(batch_df, _):
             assert set(batch_df.sort("id").collect()) == {
@@ -1271,7 +1287,6 @@ class TransformWithStateInPandasTestsMixin:
             self.test_transform_with_state_in_pandas_event_time()
             self.test_transform_with_state_in_pandas_proc_timer()
             self.test_transform_with_state_restart_with_multiple_rows_init_state()
-    """
 
 
 class SimpleStatefulProcessorWithInitialState(StatefulProcessor):

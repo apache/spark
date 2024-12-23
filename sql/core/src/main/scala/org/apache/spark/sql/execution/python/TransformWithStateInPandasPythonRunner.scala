@@ -334,7 +334,7 @@ class TransformWithStateInPandasPythonPreInitRunner(
  * TransformWithStateInPandas Python runner utils functions for handling a state server
  * in a new daemon thread.
  */
-trait TransformWithStateInPandasPythonRunnerUtils extends Logging{
+trait TransformWithStateInPandasPythonRunnerUtils extends Logging {
   protected var stateServerSocketPort: Int = 0
   protected var stateServerSocket: ServerSocket = null
   protected def initStateServer(): Unit = {

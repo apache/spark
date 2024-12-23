@@ -69,25 +69,24 @@ def main(infile: IO, outfile: IO) -> None:
         write_int(0, outfile)
         outfile.flush()
 
-        while True:
-            state_server_port = read_int(infile)
-            key_schema = StructType.fromJson(json.loads(utf8_deserializer.loads(infile)))
-            print(
-                f"{log_name} received parameters for UDF. State server port: {state_server_port}, "
-                f"key schema: {key_schema}.\n"
-            )
+        # This driver runner will only be used on the first batch of a query,
+        # and the following code block should be only run once for each query run
+        state_server_port = read_int(infile)
+        key_schema = StructType.fromJson(json.loads(utf8_deserializer.loads(infile)))
+        print(
+            f"{log_name} received parameters for UDF. State server port: {state_server_port}, "
+            f"key schema: {key_schema}.\n"
+        )
 
-            stateful_processor_api_client = StatefulProcessorApiClient(
-                state_server_port, key_schema
-            )
-            process(
-                stateful_processor_api_client,
-                TransformWithStateInPandasFuncMode.PRE_INIT,
-                None,
-                iter([]),
-            )
-            write_int(0, outfile)
-            outfile.flush()
+        stateful_processor_api_client = StatefulProcessorApiClient(state_server_port, key_schema)
+        process(
+            stateful_processor_api_client,
+            TransformWithStateInPandasFuncMode.PRE_INIT,
+            None,
+            iter([]),
+        )
+        write_int(0, outfile)
+        outfile.flush()
     except Exception as e:
         handle_worker_exception(e, outfile)
         outfile.flush()

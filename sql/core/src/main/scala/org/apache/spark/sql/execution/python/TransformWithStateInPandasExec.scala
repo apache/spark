@@ -123,7 +123,8 @@ case class TransformWithStateInPandasExec(
   }
 
   /** Metadata of this stateful operator and its states stores.
-   * Written during IncrementalExecution */
+   * Written during IncrementalExecution. `validateAndMaybeEvolveStateSchema` will initialize
+   * `columnFamilySchemas` and `stateVariableInfos` during `init()` call on driver. */
   private val driverProcessorHandle: DriverStatefulProcessorHandleImpl =
     new DriverStatefulProcessorHandleImpl(timeMode, groupingKeyExprEncoder)
 
