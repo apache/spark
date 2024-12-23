@@ -35,7 +35,6 @@ import org.apache.spark.sql.types.MapType;
 import org.apache.spark.sql.types.StructType;
 import org.apache.spark.sql.types.VariantType;
 import org.apache.spark.types.variant.VariantSchema;
-import org.apache.spark.unsafe.types.VariantVal;
 
 /**
  * Contains necessary information representing a Parquet column, either of primitive or nested type.
