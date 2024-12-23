@@ -395,10 +395,6 @@ private[sql] class RocksDBStateStoreProvider
     rocksDB // lazy initialization
     var defaultColFamilyId: Option[Short] = None
 
-    if (useColumnFamilies) {
-      defaultColFamilyId = Some(rocksDB.createColFamilyIfAbsent(StateStore.DEFAULT_COL_FAMILY_NAME))
-    }
-
     val dataEncoderCacheKey = StateRowEncoderCacheKey(
       queryRunId = getRunId(hadoopConf),
       operatorId = stateStoreId.operatorId,
@@ -699,7 +695,7 @@ object RocksDBStateStoreProvider {
     )
   }
 
-  private[sql] def clearDataEncoderCache: Unit =
+  private[sql] def clearDataEncoderCache(): Unit =
     RocksDBStateStoreProvider.dataEncoderCache.invalidateAll()
 
   private def getRunId(hadoopConf: Configuration): String = {

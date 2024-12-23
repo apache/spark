@@ -1828,7 +1828,7 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
               } else {
                 "unsaferow"
               }
-              clearDataEncoderCache
+              clearDataEncoderCache()
               val dataEncoder = getDataEncoder(
                 encodingType,
                 StateRowEncoderCacheKey("dummy-id", 0, 0, "storeName", "testFamily"),

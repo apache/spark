@@ -976,6 +976,7 @@ class StateRowPrefixEncoder(
   def getCurrentSchemaId: Short = 0
 
   val out = new ByteArrayOutputStream
+
   /**
    * Get Byte Array for the virtual column family id that is used as prefix for
    * key state rows.
