@@ -38,9 +38,6 @@ object CollationTypeCoercion {
   }
 
   def apply(expression: Expression): Expression = expression match {
-    case cast: Cast if shouldRemoveCast(cast) =>
-      cast.child
-
     case ifExpr: If =>
       ifExpr.withNewChildren(
         ifExpr.predicate +: collateToSingleType(Seq(ifExpr.trueValue, ifExpr.falseValue))
@@ -145,22 +142,16 @@ object CollationTypeCoercion {
     case other => other
   }
 
-  /**
-   * If childType is collated and target is UTF8_BINARY, the collation of the output
-   * should be that of the childType.
-   */
-  private def shouldRemoveCast(cast: Cast): Boolean = {
-    val isChildTypeCollatedString = cast.child.dataType match {
-      case st: StringType => !st.isUTF8BinaryCollation
-      case _ => false
-    }
-    val targetType = cast.dataType
-
-    isUserDefined(cast) && isChildTypeCollatedString && targetType == StringType
-  }
-
   private def isUserDefined(cast: Cast): Boolean =
     cast.getTagValue(Cast.USER_SPECIFIED_CAST).isDefined
+
+  /**
+   * Returns true if the given data type has any StringType in it.
+   */
+  private def hasStringType(dt: DataType): Boolean = dt.existsRecursively {
+    case _: StringType => true
+    case _ => false
+  }
 
   /**
    * Changes the data type of the expression to the given `newType`.
@@ -395,13 +386,13 @@ object CollationTypeCoercion {
       Some(addContextToStringType(expr.dataType, Implicit))
 
     case cast: Cast =>
-      if (isUserDefined(cast) && isComplexType(cast.dataType)) {
-        // since we can't use collate clause with complex types
-        // user defined casts should be treated as implicit
-        Some(addContextToStringType(cast.dataType, Implicit))
+      val castStrength = if (hasStringType(cast.child.dataType)) {
+        Implicit
       } else {
-        Some(addContextToStringType(cast.dataType, Default))
+        Default
       }
+
+      Some(addContextToStringType(cast.dataType, castStrength))
 
     case lit: Literal =>
       Some(addContextToStringType(lit.dataType, Default))
