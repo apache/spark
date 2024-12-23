@@ -52,28 +52,65 @@ sealed trait RocksDBValueStateEncoder {
   def decodeValues(valueBytes: Array[Byte]): Iterator[UnsafeRow]
 }
 
-// This information is kept per-query, per-operator
+/**
+ * Broadcasts schema metadata information for stateful operators in a streaming query.
+ *
+ * This class provides a way to distribute schema evolution information to all executors
+ * via Spark's broadcast mechanism. Each stateful operator in a streaming query maintains
+ * its own instance of this class to track schema versions and evolution.
+ *
+ * @param broadcast Spark broadcast variable containing the schema metadata
+ */
 case class StateSchemaBroadcast(
     broadcast: Broadcast[StateSchemaMetadata]
 ) {
+  /** Returns the current schema version ID being used by this operator */
   def getCurrentSchemaId: Short = broadcast.value.currentSchemaId
 
+  /**
+   * Retrieves the schema information for a given column family and schema version
+   *
+   * @param key A combination of column family name and schema ID
+   * @return The corresponding schema metadata value containing both SQL and Avro schemas
+   */
   def getSchemaMetadataValue(key: StateSchemaMetadataKey): StateSchemaMetadataValue = {
     broadcast.value.activeSchemas(key)
   }
 }
 
-// VCF ID | numPrefixBytes | prefix | schemaId | whole key (prefix + remaining)
+/**
+ * Contains schema evolution metadata for a stateful operator.
+ *
+ * @param currentSchemaId The schema version currently being used for writing new state
+ * @param activeSchemas Map of all active schema versions, keyed by column family and schema ID.
+ *                      This includes both the current schema and any previous schemas that
+ *                      may still exist in the state store.
+ */
 case class StateSchemaMetadata(
     currentSchemaId: Short,
     activeSchemas: Map[StateSchemaMetadataKey, StateSchemaMetadataValue]
 )
 
+/**
+ * Composite key for looking up schema metadata, combining column family and schema version.
+ *
+ * @param colFamilyName Name of the RocksDB column family this schema applies to
+ * @param schemaId Version identifier for this schema
+ */
 case class StateSchemaMetadataKey(
     colFamilyName: String,
     schemaId: Short
 )
 
+/**
+ * Contains both SQL and Avro representations of a schema version.
+ *
+ * The SQL schema represents the logical structure while the Avro schema is used
+ * for evolution compatibility checking and serialization.
+ *
+ * @param sqlSchema The Spark SQL schema definition
+ * @param avroSchema The equivalent Avro schema used for compatibility checking
+ */
 case class StateSchemaMetadataValue(
     sqlSchema: StructType,
     avroSchema: Schema
