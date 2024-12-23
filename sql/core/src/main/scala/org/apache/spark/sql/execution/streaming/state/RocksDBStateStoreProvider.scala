@@ -394,7 +394,6 @@ private[sql] class RocksDBStateStoreProvider
     this.useColumnFamilies = useColumnFamilies
     this.stateStoreEncoding = storeConf.stateStoreEncodingFormat
     this.stateSchemaBroadcast = stateSchemaBroadcast
-    assert(stateSchemaBroadcast.isDefined)
 
     if (useMultipleValuesPerKey) {
       require(useColumnFamilies, "Multiple values per key support requires column families to be" +
