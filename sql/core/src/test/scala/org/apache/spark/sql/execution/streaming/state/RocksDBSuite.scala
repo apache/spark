@@ -1872,8 +1872,11 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
               if (schemaEvolutionEnabled) {
                 val keyPrefix = keyEncoder.asInstanceOf[StateRowPrefixEncoder]
                   .decodeStateRowPrefix(encodedKey)
-                assert(keyPrefix.schemaId.isDefined == schemaEvolutionEnabled)
-                assert(keyPrefix.schemaId.get === 0) // default schema ID
+                // schema ID is not enabled for prefix and range scan
+                if (keyEncoder.isInstanceOf[NoPrefixKeyStateEncoder]) {
+                  assert(keyPrefix.schemaId.isDefined == schemaEvolutionEnabled)
+                  assert(keyPrefix.schemaId.get === 0) // default schema ID
+                }
 
                 val valuePrefix = valueEncoder.asInstanceOf[StateRowPrefixEncoder]
                   .decodeStateRowPrefix(encodedValue)
