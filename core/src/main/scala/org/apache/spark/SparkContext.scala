@@ -252,6 +252,9 @@ class SparkContext(config: SparkConf) extends Logging {
 
   private[spark] def conf: SparkConf = _conf
 
+  /** Get a read-only reference to the spark conf. This is preferred version over [[getConf]]. */
+  def getReadOnlyConf: ReadOnlySparkConf = _conf
+
   /**
    * Return a copy of this SparkContext's configuration. The configuration ''cannot'' be
    * changed at runtime.
@@ -1878,6 +1881,7 @@ class SparkContext(config: SparkConf) extends Logging {
         if (uri.getFragment != null) uri.getFragment else source.getName)
       logInfo(
         log"Unpacking an archive ${MDC(LogKeys.PATH, path)}" +
+          log" (${MDC(LogKeys.BYTE_SIZE, source.length)} bytes)" +
           log" from ${MDC(LogKeys.SOURCE_PATH, source.getAbsolutePath)}" +
           log" to ${MDC(LogKeys.DESTINATION_PATH, dest.getAbsolutePath)}")
       Utils.deleteRecursively(dest)

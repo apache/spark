@@ -48,15 +48,15 @@ compoundOrSingleStatement
     ;
 
 singleCompoundStatement
-    : BEGIN compoundBody END SEMICOLON? EOF
+    : BEGIN compoundBody? END SEMICOLON? EOF
     ;
 
 beginEndCompoundBlock
-    : beginLabel? BEGIN compoundBody END endLabel?
+    : beginLabel? BEGIN compoundBody? END endLabel?
     ;
 
 compoundBody
-    : (compoundStatements+=compoundStatement SEMICOLON)*
+    : (compoundStatements+=compoundStatement SEMICOLON)+
     ;
 
 compoundStatement
@@ -648,7 +648,7 @@ sortItem
     ;
 
 fromStatement
-    : fromClause fromStatementBody+
+    : fromClause fromStatementBody*
     ;
 
 fromStatementBody
@@ -1233,7 +1233,7 @@ colPosition
     ;
 
 collateClause
-    : COLLATE collationName=identifier
+    : COLLATE collationName=multipartIdentifier
     ;
 
 type
@@ -1510,6 +1510,8 @@ operatorPipeRightSide
     : selectClause windowClause?
     | EXTEND extendList=namedExpressionSeq
     | SET operatorPipeSetAssignmentSeq
+    | DROP identifierSeq
+    | AS errorCapturingIdentifier
     // Note that the WINDOW clause is not allowed in the WHERE pipe operator, but we add it here in
     // the grammar simply for purposes of catching this invalid syntax and throwing a specific
     // dedicated error message.
@@ -1521,7 +1523,7 @@ operatorPipeRightSide
     | unpivotClause pivotClause?
     | sample
     | joinRelation
-    | operator=(UNION | EXCEPT | SETMINUS | INTERSECT) setQuantifier? right=queryTerm
+    | operator=(UNION | EXCEPT | SETMINUS | INTERSECT) setQuantifier? right=queryPrimary
     | queryOrganization
     | AGGREGATE namedExpressionSeq? aggregationClause?
     ;

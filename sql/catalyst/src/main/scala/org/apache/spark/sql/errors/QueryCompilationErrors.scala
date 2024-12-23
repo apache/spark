@@ -351,6 +351,12 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     )
   }
 
+  def collatedStringsInMapKeysNotSupportedError(): Throwable = {
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_FEATURE.COLLATIONS_IN_MAP_KEYS",
+      messageParameters = Map.empty)
+  }
+
   def trimCollationNotEnabledError(): Throwable = {
     new AnalysisException(
       errorClass = "UNSUPPORTED_FEATURE.TRIM_COLLATION",
@@ -4127,6 +4133,83 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     new AnalysisException(
       errorClass = "CANNOT_ASSIGN_EVENT_TIME_COLUMN_WITHOUT_WATERMARK",
       messageParameters = Map()
+    )
+  }
+
+  def unsupportedSinglePassAnalyzerFeature(feature: String): AnalysisException = {
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_SINGLE_PASS_ANALYZER_FEATURE",
+      messageParameters = Map("feature" -> feature)
+    )
+  }
+
+  def ambiguousResolverExtension(
+      operator: LogicalPlan,
+      extensionNames: Seq[String]): AnalysisException = {
+    new AnalysisException(
+      errorClass = "AMBIGUOUS_RESOLVER_EXTENSION",
+      messageParameters = Map(
+        "operator" -> operator.getClass.getName,
+        "extensions" -> extensionNames.mkString(", ")
+      )
+    )
+  }
+
+  def fixedPointFailedSinglePassSucceeded(
+      singlePassResult: LogicalPlan,
+      fixedPointException: Throwable): Throwable = {
+    new ExtendedAnalysisException(
+      new AnalysisException(
+        errorClass = "HYBRID_ANALYZER_EXCEPTION.FIXED_POINT_FAILED_SINGLE_PASS_SUCCEEDED",
+        messageParameters = Map("singlePassOutput" -> singlePassResult.toString),
+        cause = Some(fixedPointException)
+      ),
+      plan = singlePassResult
+    )
+  }
+
+  def hybridAnalyzerOutputSchemaComparisonMismatch(
+      fixedPointOutputSchema: StructType,
+      singlePassOutputSchema: StructType): Throwable = {
+
+    def structToString(struct: StructType) =
+      struct.fields.map(structFieldToStringWithMetadata(_)).mkString(",")
+
+    def structFieldToStringWithMetadata(sf: StructField) =
+      s"(${sf.name},${sf.dataType},${sf.nullable},${sf.metadata})"
+
+    new AnalysisException(
+      errorClass = "HYBRID_ANALYZER_EXCEPTION.OUTPUT_SCHEMA_COMPARISON_MISMATCH",
+      messageParameters = Map(
+        "fixedPointOutputSchema" -> structToString(fixedPointOutputSchema),
+        "singlePassOutputSchema" -> structToString(singlePassOutputSchema)
+      )
+    )
+  }
+
+  def hybridAnalyzerLogicalPlanComparisonMismatch(
+      fixedPointOutput: LogicalPlan,
+      singlePassOutput: LogicalPlan): Throwable = {
+    new AnalysisException(
+      errorClass = "HYBRID_ANALYZER_EXCEPTION.LOGICAL_PLAN_COMPARISON_MISMATCH",
+      messageParameters = Map(
+        "fixedPointOutput" -> fixedPointOutput.toString,
+        "singlePassOutput" -> singlePassOutput.toString
+      )
+    )
+  }
+
+  def resolutionValidationError(cause: Throwable, plan: LogicalPlan): Throwable = {
+    new ExtendedAnalysisException(
+      new AnalysisException(
+        errorClass = "INTERNAL_ERROR",
+        cause = Some(cause),
+        messageParameters = Map(
+          "message" -> ("The analysis phase failed with an internal error. Reason: " +
+            cause.getMessage)
+        )
+      ),
+      plan = plan
     )
   }
 

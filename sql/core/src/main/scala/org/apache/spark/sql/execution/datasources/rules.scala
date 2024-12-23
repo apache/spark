@@ -22,6 +22,7 @@ import java.util.Locale
 import scala.collection.mutable.{HashMap, HashSet}
 import scala.jdk.CollectionConverters._
 
+import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.{AnalysisException, SaveMode, SparkSession}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog._
@@ -36,6 +37,7 @@ import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.command.ViewHelper.generateViewProperties
 import org.apache.spark.sql.execution.datasources.{CreateTable => CreateTableV1}
 import org.apache.spark.sql.execution.datasources.v2.FileDataSourceV2
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.InsertableRelation
 import org.apache.spark.sql.types.{StructField, StructType}
 import org.apache.spark.sql.util.PartitioningUtils.normalizePartitionSpec
@@ -46,14 +48,21 @@ import org.apache.spark.util.ArrayImplicits._
  * Replaces [[UnresolvedRelation]]s if the plan is for direct query on files.
  */
 class ResolveSQLOnFile(sparkSession: SparkSession) extends Rule[LogicalPlan] {
+
+  override def conf: SQLConf = sparkSession.sessionState.conf
+
   object UnresolvedRelationResolution {
     def unapply(plan: LogicalPlan): Option[LogicalPlan] = {
-      plan match {
+      val result = plan match {
         case u: UnresolvedRelation if maybeSQLFile(u) =>
           try {
             val ds = resolveDataSource(u)
             Some(LogicalRelation(ds.resolveRelation()))
           } catch {
+            case e: SparkUnsupportedOperationException =>
+              u.failAnalysis(
+                errorClass = e.getCondition,
+                messageParameters = e.getMessageParameters.asScala.toMap)
             case _: ClassNotFoundException => None
             case e: Exception if !e.isInstanceOf[AnalysisException] =>
               // the provider is valid, but failed to create a logical plan
@@ -66,6 +75,17 @@ class ResolveSQLOnFile(sparkSession: SparkSession) extends Rule[LogicalPlan] {
         case _ =>
           None
       }
+      result.foreach(resolvedRelation => plan match {
+        case unresolvedRelation: UnresolvedRelation =>
+          // We put the resolved relation into the [[AnalyzerBridgeState]] for
+          // it to be later reused by the single-pass [[Resolver]] to avoid resolving the
+          // relation metadata twice.
+          AnalysisContext.get.getSinglePassResolverBridgeState.map { bridgeState =>
+            bridgeState.relationsWithResolvedMetadata.put(unresolvedRelation, resolvedRelation)
+          }
+        case _ =>
+      })
+      result
     }
   }
 
@@ -338,6 +358,9 @@ case class PreprocessTableCreation(catalog: SessionCatalog) extends Rule[Logical
     SchemaUtils.checkSchemaColumnNameDuplication(
       schema,
       conf.caseSensitiveAnalysis)
+    if (!conf.allowCollationsInMapKeys) {
+      SchemaUtils.checkNoCollationsInMapKeys(schema)
+    }
 
     val normalizedPartCols = normalizePartitionColumns(schema, table)
     val normalizedBucketSpec = normalizeBucketSpec(schema, table)
