@@ -84,7 +84,6 @@ DataFrame
     DataFrame.offset
     DataFrame.orderBy
     DataFrame.persist
-    DataFrame.plot
     DataFrame.printSchema
     DataFrame.randomSplit
     DataFrame.rdd
@@ -143,3 +142,11 @@ DataFrame
     DataFrameStatFunctions.crosstab
     DataFrameStatFunctions.freqItems
     DataFrameStatFunctions.sampleBy
+    # Document the plot property
+    .. autoattribute:: DataFrame.plot
+
+    # Document scatter as a method of PySparkPlotAccessor
+    .. automethod:: pyspark.sql.plot.PySparkPlotAccessor.scatter
+    .. automethod:: pyspark.sql.plot.PySparkPlotAccessor.line
+    .. automethod:: pyspark.sql.plot.PySparkPlotAccessor.bar
+    .. automethod:: pyspark.sql.plot.PySparkPlotAccessor.hist
