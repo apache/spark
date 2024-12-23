@@ -990,6 +990,14 @@ class StateRowPrefixEncoder(
     encodedBytes
   }
 
+  /**
+   * Encodes a state row by adding schema and column family ID prefixes if enabled.
+   *
+   * @param data The byte array containing the data to be prefixed
+   * @return A new byte array containing the prefixed data. If no prefixing is needed
+   *         (neither schema evolution nor column families are enabled), returns a copy
+   *         of the input array to maintain consistency with the prefixed case.
+   */
   def encodeStateRowWithPrefix(data: Array[Byte]): Array[Byte] = {
     // Create result array big enough for all prefixes plus data
     val result = new Array[Byte](getNumPrefixBytes + data.length)
