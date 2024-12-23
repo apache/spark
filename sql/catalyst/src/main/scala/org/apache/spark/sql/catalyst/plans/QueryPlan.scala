@@ -57,8 +57,7 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
    */
   def outputSet: AttributeSet = _outputSet.apply()
 
-  private val _outputSet: TransientBestEffortLazyVal[AttributeSet] =
-    new TransientBestEffortLazyVal(() => AttributeSet(output))
+  private val _outputSet = new TransientBestEffortLazyVal(() => AttributeSet(output))
 
   /**
    * Returns the output ordering that this plan generates, although the semantics differ in logical
@@ -100,8 +99,8 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
    */
   def references: AttributeSet = _references()
 
-  private val _references: TransientBestEffortLazyVal[AttributeSet] =
-    new TransientBestEffortLazyVal(() => AttributeSet(expressions) -- producedAttributes)
+  private val _references = new TransientBestEffortLazyVal(() =>
+    AttributeSet(expressions) -- producedAttributes)
 
   /**
    * Returns true when the all the expressions in the current node as well as all of its children
@@ -109,10 +108,8 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
    */
   def deterministic: Boolean = _deterministic.apply()
 
-  private val _deterministic: BestEffortLazyVal[JBoolean] =
-    new BestEffortLazyVal[JBoolean](
-      () => expressions.forall(_.deterministic) && children.forall(_.deterministic)
-    )
+  private val _deterministic = new BestEffortLazyVal[JBoolean](() =>
+    expressions.forall(_.deterministic) && children.forall(_.deterministic))
 
   /**
    * Attributes that are referenced by expressions but not provided by this node's children.
@@ -491,11 +488,10 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
    */
   def subqueries: Seq[PlanType] = _subqueries.apply()
 
-  private val _subqueries: TransientBestEffortLazyVal[Seq[PlanType]] =
-    new TransientBestEffortLazyVal(() =>
-      expressions.filter(_.containsPattern(PLAN_EXPRESSION)).flatMap(_.collect {
-        case e: PlanExpression[_] => e.plan.asInstanceOf[PlanType]
-      })
+  private val _subqueries = new TransientBestEffortLazyVal(() =>
+    expressions.filter(_.containsPattern(PLAN_EXPRESSION)).flatMap(_.collect {
+      case e: PlanExpression[_] => e.plan.asInstanceOf[PlanType]
+    })
   )
 
   /**
@@ -634,17 +630,16 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
    */
   def canonicalized: PlanType = _canonicalized.apply()
 
-  private val _canonicalized: TransientBestEffortLazyVal[PlanType] =
-    new TransientBestEffortLazyVal(() => {
-      var plan = doCanonicalize()
-      // If the plan has not been changed due to canonicalization, make a copy of it so we don't
-      // mutate the original plan's _isCanonicalizedPlan flag.
-      if (plan eq this) {
-        plan = plan.makeCopy(plan.mapProductIterator(x => x.asInstanceOf[AnyRef]))
-      }
-      plan._isCanonicalizedPlan = true
-      plan
-    })
+  private val _canonicalized = new TransientBestEffortLazyVal(() => {
+    var plan = doCanonicalize()
+    // If the plan has not been changed due to canonicalization, make a copy of it so we don't
+    // mutate the original plan's _isCanonicalizedPlan flag.
+    if (plan eq this) {
+      plan = plan.makeCopy(plan.mapProductIterator(x => x.asInstanceOf[AnyRef]))
+    }
+    plan._isCanonicalizedPlan = true
+    plan
+  })
 
   /**
    * Defines how the canonicalization should work for the current plan.
