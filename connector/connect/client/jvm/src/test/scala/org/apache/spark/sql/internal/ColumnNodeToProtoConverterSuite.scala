@@ -142,7 +142,7 @@ class ColumnNodeToProtoConverterSuite extends ConnectFunSuite {
           .setIsDistinct(true)
           .setIsUserDefinedFunction(true)
           .addArguments(attribute("a"))
-      .setIsInternal(true)))
+          .setIsInternal(true)))
   }
 
   test("alias") {
