@@ -344,16 +344,16 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
     case DescribeNamespace(ResolvedNamespace(catalog, ns, _), extended, output) =>
       DescribeNamespaceExec(output, catalog.asNamespaceCatalog, ns, extended) :: Nil
 
-    case DescribeRelation(r: ResolvedTable, partitionSpec, isExtended, asJson, output) =>
+    case DescribeRelationJson(_, _, _, _) =>
+      throw QueryCompilationErrors.describeAsJsonNotSupportedForV2TablesError()
+
+    case DescribeRelation(r: ResolvedTable, partitionSpec, isExtended, output) =>
       if (partitionSpec.nonEmpty) {
         throw QueryCompilationErrors.describeDoesNotSupportPartitionForV2TablesError()
       }
-      if (asJson) {
-        throw QueryCompilationErrors.describeAsJsonNotSupportedForV2TablesError()
-      }
       DescribeTableExec(output, r.table, isExtended) :: Nil
 
-    case DescribeColumn(r: ResolvedTable, column, isExtended, asJson, output) =>
+    case DescribeColumn(r: ResolvedTable, column, isExtended, output) =>
       column match {
         case c: Attribute =>
           DescribeColumnExec(output, c, isExtended, r.table) :: Nil

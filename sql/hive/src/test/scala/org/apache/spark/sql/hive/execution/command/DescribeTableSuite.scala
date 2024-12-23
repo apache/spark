@@ -132,7 +132,6 @@ class DescribeTableSuite extends v1.DescribeTableSuiteBase with CommandSuiteBase
         catalog_name = Some(SESSION_CATALOG_NAME),
         namespace = Some(List("ns")),
         schema_name = Some("ns"),
-        qualified_name = Some(s"spark_catalog.ns.table"),
         columns = Some(List(
           TableColumn(1, "a", Type("string")),
           TableColumn(2, "b", Type("integer")),
@@ -184,10 +183,8 @@ class DescribeTableSuite extends v1.DescribeTableSuiteBase with CommandSuiteBase
       spark.sql(tableCreationStr)
       spark.sql(s"ALTER TABLE $t ADD PARTITION (c='Us', d=1)")
       val descriptionDf = spark.sql(s"DESCRIBE FORMATTED $t PARTITION (c='Us', d=1) AS JSON")
-      print("\n **** descriptionDf: " + descriptionDf + "\n")
       val firstRow = descriptionDf.select("json_metadata").head()
       val jsonValue = firstRow.getString(0)
-      print("\n **** jsonValue: " + jsonValue + "\n")
       val parsedOutput = parse(jsonValue).extract[DescribeTableJson]
 
       val expectedOutput = DescribeTableJson(
@@ -195,7 +192,6 @@ class DescribeTableSuite extends v1.DescribeTableSuiteBase with CommandSuiteBase
         catalog_name = Some("spark_catalog"),
         namespace = Some(List("ns")),
         schema_name = Some("ns"),
-        qualified_name = Some("spark_catalog.ns.table"),
         columns = Some(List(
           TableColumn(1, "a", Type("string")),
           TableColumn(2, "b", Type("integer")),
@@ -255,7 +251,6 @@ class DescribeTableSuite extends v1.DescribeTableSuiteBase with CommandSuiteBase
         catalog_name = Some("spark_catalog"),
         namespace = Some(List("ns")),
         schema_name = Some("ns"),
-        qualified_name = Some("spark_catalog.ns.table"),
         columns = Some(List(
           TableColumn(1, "a", Type("string"), default_value = Some("'default-value'")),
           TableColumn(2, "b", Type("integer"), default_value = Some("42"))
@@ -372,7 +367,6 @@ class DescribeTableSuite extends v1.DescribeTableSuiteBase with CommandSuiteBase
         catalog_name = Some("spark_catalog"),
         namespace = Some(List("ns")),
         schema_name = Some("ns"),
-        qualified_name = Some("spark_catalog.ns.table"),
         columns = Some(List(
           TableColumn(
             id = 1,
@@ -499,7 +493,6 @@ case class DescribeTableJson(
   catalog_name: Option[String] = None,
   namespace: Option[List[String]] = Some(Nil),
   schema_name: Option[String] = None,
-  qualified_name: Option[String] = None,
   columns: Option[List[TableColumn]] = Some(Nil),
   owner: Option[String] = None,
   created_time: Option[String] = None,

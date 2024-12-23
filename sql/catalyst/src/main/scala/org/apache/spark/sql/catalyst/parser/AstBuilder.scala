@@ -5159,8 +5159,7 @@ class AstBuilder extends DataTypeAstBuilder
         DescribeColumn(
           relation,
           UnresolvedAttribute(ctx.describeColName.nameParts.asScala.map(_.getText).toSeq),
-          isExtended,
-          asJson)
+          isExtended)
       }
     } else {
       val partitionSpec = if (ctx.partitionSpec != null) {
@@ -5173,7 +5172,11 @@ class AstBuilder extends DataTypeAstBuilder
       } else {
         Map.empty[String, String]
       }
-      DescribeRelation(relation, partitionSpec, isExtended, asJson)
+      if (asJson) {
+        DescribeRelationJson(relation, partitionSpec, isExtended)
+      } else {
+        DescribeRelation(relation, partitionSpec, isExtended)
+      }
     }
   }
 

@@ -81,8 +81,7 @@ class DescribeTableParserSuite extends AnalysisTest {
         DescribeColumn(
           UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE", true),
           UnresolvedAttribute(Seq("col")),
-          isExtended = false,
-          asJson = true))
+          isExtended = true))
     }
 
     checkError(

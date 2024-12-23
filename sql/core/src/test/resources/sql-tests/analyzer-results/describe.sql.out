@@ -325,43 +325,43 @@ org.apache.spark.sql.AnalysisException
 -- !query
 EXPLAIN DESC t
 -- !query analysis
-ExplainCommand 'DescribeRelation false, false, [col_name#x, data_type#x, comment#x], SimpleMode
+ExplainCommand 'DescribeRelation false, [col_name#x, data_type#x, comment#x], SimpleMode
 
 
 -- !query
 EXPLAIN DESC EXTENDED t AS JSON
 -- !query analysis
-ExplainCommand 'DescribeRelation true, true, [col_name#x, data_type#x, comment#x], SimpleMode
+ExplainCommand 'DescribeRelationJson true, [json_metadata#x], SimpleMode
 
 
 -- !query
 EXPLAIN DESC EXTENDED t
 -- !query analysis
-ExplainCommand 'DescribeRelation true, false, [col_name#x, data_type#x, comment#x], SimpleMode
+ExplainCommand 'DescribeRelation true, [col_name#x, data_type#x, comment#x], SimpleMode
 
 
 -- !query
 EXPLAIN EXTENDED DESC t
 -- !query analysis
-ExplainCommand 'DescribeRelation false, false, [col_name#x, data_type#x, comment#x], ExtendedMode
+ExplainCommand 'DescribeRelation false, [col_name#x, data_type#x, comment#x], ExtendedMode
 
 
 -- !query
 EXPLAIN DESCRIBE t b
 -- !query analysis
-ExplainCommand 'DescribeColumn 'b, false, false, [info_name#x, info_value#x], SimpleMode
+ExplainCommand 'DescribeColumn 'b, false, [info_name#x, info_value#x], SimpleMode
 
 
 -- !query
 EXPLAIN DESCRIBE t PARTITION (c='Us', d=2)
 -- !query analysis
-ExplainCommand 'DescribeRelation [c=Us, d=2], false, false, [col_name#x, data_type#x, comment#x], SimpleMode
+ExplainCommand 'DescribeRelation [c=Us, d=2], false, [col_name#x, data_type#x, comment#x], SimpleMode
 
 
 -- !query
 EXPLAIN DESCRIBE EXTENDED t PARTITION (c='Us', d=2) AS JSON
 -- !query analysis
-ExplainCommand 'DescribeRelation [c=Us, d=2], true, true, [col_name#x, data_type#x, comment#x], SimpleMode
+ExplainCommand 'DescribeRelationJson [c=Us, d=2], true, [json_metadata#x], SimpleMode
 
 
 -- !query

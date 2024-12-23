@@ -83,7 +83,6 @@ to return the metadata pertaining to a partition or column respectively.
       "catalog_name": "<catalog_name>",
       "schema_name": "<schema_name>",
       "namespaces": ["<schema_name>"],
-      "qualified_name": "<qualified_name>"
       "type": "<table_type>",
       "provider": "<provider>",
       "columns": [
@@ -235,7 +234,7 @@ DESCRIBE customer salesdb.customer.name;
 
 -- Returns the table metadata in JSON format.
 DESC FORMATTED customer AS JSON;
-{"table_name":"customer","catalog_name":"spark_catalog","namespaces":["default"],"qualified_name":"spark_catalog.default.customer","columns":[{"id":1,"name":"cust_id","type":{"type":"integer"}},{"id":2,"name":"name","type":{"type":"string"},"comment":"Short name"},{"id":3,"name":"state","type":{"type":"varchar(20)"}}],"location": "file:/tmp/salesdb.db/custom...","created_time":"2020-04-07T14:05:43Z","last_access":"UNKNOWN","created_by":"None","type":"MANAGED","provider":"parquet","partition_provider":"Catalog","partition_columns":["state"]}
+{"table_name":"customer","catalog_name":"spark_catalog","namespaces":["default"],"columns":[{"id":1,"name":"cust_id","type":{"type":"integer"}},{"id":2,"name":"name","type":{"type":"string"},"comment":"Short name"},{"id":3,"name":"state","type":{"type":"varchar(20)"}}],"location": "file:/tmp/salesdb.db/custom...","created_time":"2020-04-07T14:05:43Z","last_access":"UNKNOWN","created_by":"None","type":"MANAGED","provider":"parquet","partition_provider":"Catalog","partition_columns":["state"]}
 ```
 
 ### Related Statements

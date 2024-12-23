@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, 
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Cast, EqualTo, Expression, InSubquery, IntegerLiteral, ListQuery, Literal, StringLiteral}
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
-import org.apache.spark.sql.catalyst.plans.logical.{AlterColumn, AnalysisOnlyCommand, AppendData, Assignment, CreateTable, CreateTableAsSelect, DeleteAction, DeleteFromTable, DescribeRelation, DropTable, InsertAction, InsertIntoStatement, LocalRelation, LogicalPlan, MergeIntoTable, OneRowRelation, OverwriteByExpression, OverwritePartitionsDynamic, Project, SetTableLocation, SetTableProperties, ShowTableProperties, SubqueryAlias, UnsetTableProperties, UpdateAction, UpdateTable}
+import org.apache.spark.sql.catalyst.plans.logical.{AlterColumn, AnalysisOnlyCommand, AppendData, Assignment, CreateTable, CreateTableAsSelect, DeleteAction, DeleteFromTable, DescribeRelation, DescribeRelationJson, DropTable, InsertAction, InsertIntoStatement, LocalRelation, LogicalPlan, MergeIntoTable, OneRowRelation, OverwriteByExpression, OverwritePartitionsDynamic, Project, SetTableLocation, SetTableProperties, ShowTableProperties, SubqueryAlias, UnsetTableProperties, UpdateAction, UpdateTable}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
 import org.apache.spark.sql.connector.FakeV2Provider
@@ -926,13 +926,13 @@ class PlanResolutionSuite extends AnalysisTest {
           comparePlans(parsed2, expected2)
         } else {
           parsed1 match {
-            case DescribeRelation(_: ResolvedTable, _, isExtended, _, _) =>
+            case DescribeRelation(_: ResolvedTable, _, isExtended, _) =>
               assert(!isExtended)
             case _ => fail("Expect DescribeTable, but got:\n" + parsed1.treeString)
           }
 
           parsed2 match {
-            case DescribeRelation(_: ResolvedTable, _, isExtended, _, _) =>
+            case DescribeRelation(_: ResolvedTable, _, isExtended, _) =>
               assert(isExtended)
             case _ => fail("Expect DescribeTable, but got:\n" + parsed2.treeString)
           }
@@ -947,7 +947,7 @@ class PlanResolutionSuite extends AnalysisTest {
           comparePlans(parsed3, expected3)
         } else {
           parsed3 match {
-            case DescribeRelation(_: ResolvedTable, partitionSpec, isExtended, _, _) =>
+            case DescribeRelation(_: ResolvedTable, partitionSpec, isExtended, _) =>
               assert(!isExtended)
               assert(partitionSpec == Map("a" -> "1"))
             case _ => fail("Expect DescribeTable, but got:\n" + parsed2.treeString)
@@ -974,8 +974,8 @@ class PlanResolutionSuite extends AnalysisTest {
           comparePlans(parsed, expected2)
         } else {
           parsed match {
-            case DescribeRelation(_: ResolvedTable, _, isExtended, asJson, _) =>
-              assert(isExtended && asJson)
+            case DescribeRelationJson(_: ResolvedTable, _, isExtended, _) =>
+              assert(isExtended)
             case _ => fail("Expect DescribeTable, but got:\n" + parsed.treeString)
           }
         }
@@ -989,8 +989,8 @@ class PlanResolutionSuite extends AnalysisTest {
           comparePlans(parsed2, expected2)
         } else {
           parsed2 match {
-            case DescribeRelation(_: ResolvedTable, partitionSpec, isExtended, asJson, _) =>
-              assert(isExtended && asJson)
+            case DescribeRelationJson(_: ResolvedTable, partitionSpec, isExtended, _) =>
+              assert(isExtended)
               assert(partitionSpec == Map("a" -> "1"))
             case _ => fail("Expect DescribeTable, but got:\n" + parsed2.treeString)
           }
@@ -1534,7 +1534,7 @@ class PlanResolutionSuite extends AnalysisTest {
         case AppendData(r: DataSourceV2Relation, _, _, _, _, _) =>
           assert(r.catalog.exists(_ == catalog))
           assert(r.identifier.exists(_.name() == tableIdent))
-        case DescribeRelation(r: ResolvedTable, _, _, _, _) =>
+        case DescribeRelation(r: ResolvedTable, _, _, _) =>
           assert(r.catalog == catalog)
           assert(r.identifier.name() == tableIdent)
         case ShowTableProperties(r: ResolvedTable, _, _) =>

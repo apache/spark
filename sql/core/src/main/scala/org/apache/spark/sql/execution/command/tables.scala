@@ -614,6 +614,7 @@ abstract class DescribeCommandBase extends LeafRunnableCommand {
     buffer += Row(column, dataType, comment)
   }
 }
+
 /**
  * Command that looks like
  * {{{
@@ -759,9 +760,8 @@ case class DescribeTableJsonCommand(
    table: TableIdentifier,
    partitionSpec: TablePartitionSpec,
    isExtended: Boolean)
-  extends DescribeCommandBase {
-
-  override val output = DescribeCommandSchema.describeTableAttributes(true)
+  extends LeafRunnableCommand {
+  override val output = DescribeCommandSchema.describeJsonTableAttributes()
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val result = new ArrayBuffer[Row]
     val catalog = sparkSession.sessionState.catalog
@@ -784,18 +784,11 @@ case class DescribeTableJsonCommand(
 
       addKeyValueToJson(result, "table_name", JString(metadata.identifier.table))
 
-      val catalogName = table.catalog.map(s => s""""$s"""").getOrElse("")
-      val schemaNameOpt = table.database.map(s => s""""$s"""")
-      val namespaceArr = schemaNameOpt.map(schemaName => s"""[$schemaName]""")
-      addKeyValueToJson(result, "catalog_name", parse(catalogName))
-      schemaNameOpt.foreach { schemaName =>
-        addKeyValueToJson(result, "namespace", parse(namespaceArr.get))
-        addKeyValueToJson(result, "schema_name", parse(schemaName))
+      table.catalog.foreach(catalog => addKeyValueToJson(result, "catalog_name", JString(catalog)))
+      table.database.foreach { db =>
+        addKeyValueToJson(result, "namespace", JArray(List(JString(db))))
+        addKeyValueToJson(result, "schema_name", JString(db))
       }
-      val catalogFullName = table.catalog.mkString(".")
-      val databaseFullName = table.database.mkString(".")
-      val qualifiedName = s"$catalogFullName.$databaseFullName.${table.table}"
-      addKeyValueToJson(result, "qualified_name", JString(qualifiedName))
 
       describeColsJson(schema, result, header = false)
 
@@ -917,9 +910,9 @@ case class DescribeTableJsonCommand(
     val updatedJson = currentJson merge JObject(key -> newJson)
 
     if (buffer.isEmpty) {
-      buffer += Row(compact(render(updatedJson)), "", "")
+      buffer += Row(compact(render(updatedJson)))
     } else {
-      buffer(0) = Row(compact(render(updatedJson)), "", "")
+      buffer(0) = Row(compact(render(updatedJson)))
     }
   }
 
@@ -932,9 +925,9 @@ case class DescribeTableJsonCommand(
       val jsonString = compact(render(updatedJson))
 
       if (buffer.isEmpty) {
-        buffer += Row(jsonString, "", "")
+        buffer += Row(jsonString)
       } else {
-        buffer(0) = Row(jsonString, "", "")
+        buffer(0) = Row(jsonString)
       }
     }
   }
@@ -1107,7 +1100,7 @@ case class DescribeTableJsonCommand(
 case class DescribeQueryCommand(queryText: String, plan: LogicalPlan)
   extends DescribeCommandBase with SupervisingCommand with CTEInChildren {
 
-  override val output = DescribeCommandSchema.describeTableAttributes(false)
+  override val output = DescribeCommandSchema.describeTableAttributes()
 
   override def simpleString(maxFields: Int): String = s"$nodeName $queryText".trim
 

@@ -21,17 +21,12 @@ import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.types.{MetadataBuilder, StringType}
 
 private[sql] object DescribeCommandSchema {
-  def describeTableAttributes(asJson: Boolean): Seq[AttributeReference] = {
-    if (asJson) {
-      Seq(
-        AttributeReference("json_metadata", StringType, nullable = false,
-          new MetadataBuilder().putString("comment", "JSON metadata of the table").build())(),
-        AttributeReference("", StringType, nullable = true,
-          new MetadataBuilder().putString("", "").build())(),
-        AttributeReference("", StringType, nullable = true,
-          new MetadataBuilder().putString("", "").build())()
-      )
-    } else {
+  def describeJsonTableAttributes(): Seq[AttributeReference] =
+    Seq(
+      AttributeReference("json_metadata", StringType, nullable = false,
+        new MetadataBuilder().putString("comment", "JSON metadata of the table").build())()
+    )
+  def describeTableAttributes(): Seq[AttributeReference] = {
       Seq(AttributeReference("col_name", StringType, nullable = false,
         new MetadataBuilder().putString("comment", "name of the column").build())(),
         AttributeReference("data_type", StringType, nullable = false,
@@ -39,7 +34,6 @@ private[sql] object DescribeCommandSchema {
         AttributeReference("comment", StringType, nullable = true,
           new MetadataBuilder().putString("comment", "comment of the column").build())())
     }
-  }
 
   def describeColumnAttributes(): Seq[AttributeReference] = Seq(
     AttributeReference("info_name", StringType, nullable = false,
