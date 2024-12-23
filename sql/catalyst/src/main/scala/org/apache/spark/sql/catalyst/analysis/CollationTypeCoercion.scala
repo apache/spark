@@ -142,9 +142,6 @@ object CollationTypeCoercion {
     case other => other
   }
 
-  private def isUserDefined(cast: Cast): Boolean =
-    cast.getTagValue(Cast.USER_SPECIFIED_CAST).isDefined
-
   /**
    * Returns true if the given data type has any StringType in it.
    */
