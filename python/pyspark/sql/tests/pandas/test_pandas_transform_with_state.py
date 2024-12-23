@@ -369,7 +369,7 @@ class TransformWithStateInPandasTestsMixin:
                 for q in self.spark.streams.active:
                     q.stop()
             if batch_id == 0 or batch_id == 1:
-                time.sleep(4)
+                time.sleep(5)
 
         input_dir = tempfile.TemporaryDirectory()
         input_path = input_dir.name
