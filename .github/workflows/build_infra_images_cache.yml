@@ -39,6 +39,7 @@ on:
     - '.github/workflows/build_infra_images_cache.yml'
   # Create infra image when cutting down branches/tags
   create:
+  workflow_dispatch:
 jobs:
   main:
     if: github.repository == 'apache/spark'

@@ -22,6 +22,7 @@ name: Build / Spark Connect Python-only (master-server, 35-client, Python 3.11)
 on:
   schedule:
     - cron: '0 21 * * *'
+  workflow_dispatch:
 
 jobs:
   # Build: build Spark and run the tests for specified modules using SBT
