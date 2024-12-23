@@ -3209,31 +3209,40 @@ class DDLParserSuite extends AnalysisTest {
     )
   }
 
+  private val testSuppCollations =
+    Seq("UTF8_BINARY", "UTF8_LCASE", "UNICODE", "UNICODE_CI", "UNICODE_CI_RTRIM", "sr", "sr_CI_AI")
+
   test("create table with default collation") {
-    comparePlans(parsePlan(
-      "CREATE TABLE t (c STRING) USING parquet DEFAULT COLLATION uNiCoDe"),
-      CreateTable(UnresolvedIdentifier(Seq("t")),
-        Seq(ColumnDefinition("c", StringType)),
-        Seq.empty[Transform],
-        UnresolvedTableSpec(Map.empty[String, String], Some("parquet"), OptionList(Seq.empty),
-          None, None, Some("UNICODE"), None, false), false))
+    testSuppCollations.foreach { collation =>
+      comparePlans(parsePlan(
+        s"CREATE TABLE t (c STRING) USING parquet DEFAULT COLLATION ${collation.toLowerCase()}"),
+        CreateTable(UnresolvedIdentifier(Seq("t")),
+          Seq(ColumnDefinition("c", StringType)),
+          Seq.empty[Transform],
+          UnresolvedTableSpec(Map.empty[String, String], Some("parquet"), OptionList(Seq.empty),
+            None, None, Some(collation), None, false), false))
+    }
   }
 
   test("replace table with default collation") {
-    comparePlans(parsePlan(
-      "REPLACE TABLE t (c STRING) USING parquet DEFAULT COLLATION uNiCoDe"),
-      ReplaceTable(UnresolvedIdentifier(Seq("t")),
-        Seq(ColumnDefinition("c", StringType)),
-        Seq.empty[Transform],
-        UnresolvedTableSpec(Map.empty[String, String], Some("parquet"), OptionList(Seq.empty),
-          None, None, Some("UNICODE"), None, false), false))
+    testSuppCollations.foreach { collation =>
+      comparePlans(parsePlan(
+        s"REPLACE TABLE t (c STRING) USING parquet DEFAULT COLLATION ${collation.toLowerCase()}"),
+        ReplaceTable(UnresolvedIdentifier(Seq("t")),
+          Seq(ColumnDefinition("c", StringType)),
+          Seq.empty[Transform],
+          UnresolvedTableSpec(Map.empty[String, String], Some("parquet"), OptionList(Seq.empty),
+            None, None, Some(collation), None, false), false))
+    }
   }
 
   test("alter table collation") {
-    comparePlans(parsePlan(
-      "ALTER TABLE t DEFAULT COLLATION uNiCoDe"),
-      AlterTableCollation(UnresolvedTable(Seq("t"),
-        "ALTER TABLE ... DEFAULT COLLATION"), "UNICODE")
-    )
+    testSuppCollations.foreach { collation =>
+      comparePlans(parsePlan(
+        s"ALTER TABLE t DEFAULT COLLATION ${collation.toLowerCase()}"),
+        AlterTableCollation(UnresolvedTable(Seq("t"),
+          "ALTER TABLE ... DEFAULT COLLATION"), collation)
+      )
+    }
   }
 }
