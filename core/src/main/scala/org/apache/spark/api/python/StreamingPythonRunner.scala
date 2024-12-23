@@ -68,7 +68,9 @@ private[spark] class StreamingPythonRunner(
 
     envVars.put("SPARK_AUTH_SOCKET_TIMEOUT", authSocketTimeout.toString)
     envVars.put("SPARK_BUFFER_SIZE", bufferSize.toString)
-    envVars.put("SPARK_CONNECT_LOCAL_URL", connectUrl)
+    if (!connectUrl.isEmpty) {
+      envVars.put("SPARK_CONNECT_LOCAL_URL", connectUrl)
+    }
 
     val workerFactory =
       new PythonWorkerFactory(pythonExec, workerModule, envVars.asScala.toMap, false)
@@ -83,7 +85,9 @@ private[spark] class StreamingPythonRunner(
     PythonWorkerUtils.writePythonVersion(pythonVer, dataOut)
 
     // Send sessionId
-    PythonRDD.writeUTF(sessionId, dataOut)
+    if (!sessionId.isEmpty) {
+      PythonRDD.writeUTF(sessionId, dataOut)
+    }
 
     // Send the user function to python process
     PythonWorkerUtils.writePythonFunction(func, dataOut)

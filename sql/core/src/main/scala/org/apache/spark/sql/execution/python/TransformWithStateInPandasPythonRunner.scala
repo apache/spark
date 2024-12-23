@@ -17,17 +17,16 @@
 
 package org.apache.spark.sql.execution.python
 
-import java.io.{BufferedInputStream, BufferedOutputStream, DataInputStream, DataOutputStream}
+import java.io.{DataInputStream, DataOutputStream}
 import java.net.ServerSocket
 
 import scala.concurrent.ExecutionContext
-import scala.jdk.CollectionConverters._
 
 import org.apache.arrow.vector.VectorSchemaRoot
 import org.apache.arrow.vector.ipc.ArrowStreamWriter
 
-import org.apache.spark.{SparkEnv, SparkException, TaskContext}
-import org.apache.spark.api.python.{BasePythonRunner, ChainedPythonFunctions, PythonFunction, PythonRDD, PythonWorker, PythonWorkerFactory, PythonWorkerUtils, StreamingPythonRunner}
+import org.apache.spark.{SparkException, TaskContext}
+import org.apache.spark.api.python.{BasePythonRunner, ChainedPythonFunctions, PythonFunction, PythonRDD, PythonWorkerUtils, StreamingPythonRunner}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.metric.SQLMetric
@@ -244,44 +243,15 @@ class TransformWithStateInPandasPythonPreInitRunner(
   with Logging {
   protected val sqlConf = SQLConf.get
 
-  private var dataIn: DataInputStream = _
   private var dataOut: DataOutputStream = _
+  private var dataIn: DataInputStream = _
 
   private var daemonThread: Thread = _
 
   override def init(): (DataOutputStream, DataInputStream) = {
-    val env = SparkEnv.get
-
-    val localdir = env.blockManager.diskBlockManager.localDirs.map(f => f.getPath()).mkString(",")
-    envVars.put("SPARK_LOCAL_DIRS", localdir)
-    envVars.put("SPARK_AUTH_SOCKET_TIMEOUT", authSocketTimeout.toString)
-    envVars.put("SPARK_BUFFER_SIZE", bufferSize.toString)
-
-    val workerFactory =
-      new PythonWorkerFactory(pythonExec, workerModule, envVars.asScala.toMap, false)
-    val (worker: PythonWorker, _) = workerFactory.createSimpleWorker(blockingMode = true)
-    pythonWorker = Some(worker)
-    pythonWorkerFactory = Some(workerFactory)
-
-    val stream = new BufferedOutputStream(
-      pythonWorker.get.channel.socket().getOutputStream, bufferSize)
-    dataOut = new DataOutputStream(stream)
-
-    PythonWorkerUtils.writePythonVersion(pythonVer, dataOut)
-
-    // Send the user function to python process
-    PythonWorkerUtils.writePythonFunction(func, dataOut)
-    dataOut.flush()
-
-    dataIn = new DataInputStream(
-      new BufferedInputStream(pythonWorker.get.channel.socket().getInputStream, bufferSize))
-
-    val resFromPython = dataIn.readInt()
-    if (resFromPython != 0) {
-      val errMessage = PythonWorkerUtils.readUTF(dataIn)
-      throw streamingPythonRunnerInitializationFailure(resFromPython, errMessage)
-    }
-    logInfo("Driver Python Runner initialization succeeded.")
+    val result = super.init()
+    dataOut = result._1
+    dataIn = result._2
 
     // start state server, update socket port
     startStateServer()
