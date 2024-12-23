@@ -43,6 +43,7 @@ object ColumnNodeToProtoConverter extends (ColumnNode => proto.Expression) {
   override def apply(node: ColumnNode): Expression = apply(node, None)
 
   private def apply(node: ColumnNode, e: Option[Encoder[_]]): proto.Expression = {
+    println(s"node: $node e: $e")
     val builder = proto.Expression.newBuilder()
     // TODO(SPARK-49273) support Origin in Connect Scala Client.
     node match {
@@ -146,7 +147,11 @@ object ColumnNodeToProtoConverter extends (ColumnNode => proto.Expression) {
             _) =>
         // TODO we should probably 'just' detect this particular scenario
         //  in the planner instead of wrapping it in a separate method.
-        val protoUdf = UdfToProtoUtils.toProto(UserDefinedAggregator(a, e.get))
+        val exp = proto.Expression.newBuilder()
+          .setUnresolvedAttribute(
+          proto.Expression.UnresolvedAttribute.newBuilder().setUnparsedIdentifier("k"))
+        val protoUdf = UdfToProtoUtils.toProto(
+          UserDefinedAggregator(a, e.get), Seq(exp.build()))
         builder.getTypedAggregateExpressionBuilder.setScalarScalaUdf(protoUdf.getScalarScalaUdf)
 
       case InvokeInlineUserDefinedFunction(udf: UserDefinedFunction, args, false, _) =>

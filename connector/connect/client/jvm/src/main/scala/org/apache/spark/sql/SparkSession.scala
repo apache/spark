@@ -340,6 +340,10 @@ class SparkSession private[sql] (
     new Dataset[T](this, plan, encoder)
   }
 
+  def newDataset[T](encoder: AgnosticEncoder[T], plan: proto.Plan): Dataset[T] = {
+    new Dataset[T](this, plan, encoder)
+  }
+
   private[sql] def newCommand[T](f: proto.Command.Builder => Unit): proto.Command = {
     val builder = proto.Command.newBuilder()
     f(builder)

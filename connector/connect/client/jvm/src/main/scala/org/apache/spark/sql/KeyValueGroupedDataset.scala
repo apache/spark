@@ -389,6 +389,7 @@ private class KeyValueGroupedDatasetImpl[K, V, IK, IV](
     private val ivEncoder: AgnosticEncoder[IV],
     private val vEncoder: AgnosticEncoder[V],
     private val groupingExprs: java.util.List[proto.Expression],
+    private val keyMapFunc: IV => IK,
     private val valueMapFunc: Option[IV => V],
     private val keysFunc: () => Dataset[IK])
     extends KeyValueGroupedDataset[K, V] {
@@ -402,6 +403,7 @@ private class KeyValueGroupedDatasetImpl[K, V, IK, IV](
       ivEncoder,
       vEncoder,
       groupingExprs,
+      keyMapFunc,
       valueMapFunc,
       keysFunc)
   }
@@ -414,6 +416,7 @@ private class KeyValueGroupedDatasetImpl[K, V, IK, IV](
       ivEncoder,
       agnosticEncoderFor[W],
       groupingExprs,
+      keyMapFunc,
       valueMapFunc
         .map(_.andThen(valueFunc))
         .orElse(Option(valueFunc.asInstanceOf[IV => W])),
@@ -460,21 +463,30 @@ private class KeyValueGroupedDatasetImpl[K, V, IK, IV](
   }
 
   override protected def aggUntyped(columns: TypedColumn[_, _]*): Dataset[_] = {
+    val originalDf = sparkSession.newDataset(ivEncoder, plan)
+
+    val e =
+      ProductEncoder.tuple(Seq(kEncoder, vEncoder)).asInstanceOf[Encoder[(IK, V)]]
+    val ddd = UDFAdaptors.mapValues(keyMapFunc, valueMapFunc)
+    val d = originalDf.mapPartitions(ddd)(e)
+    d.collect()
+    val sss = d.toDF("k", "v")
+
     val aggCols: Seq[Column] = valueMapFunc match {
       case Some(func) =>
-        val udf = SparkUserDefinedFunction(func, ivEncoder :: Nil, vEncoder).apply(col("*"))
-        Seq(Column.fn("map_values", udf)) ++ columns
+        columns
       case None =>
         columns
     }
     val rEnc = ProductEncoder.tuple(kEncoder +: columns.map(c => agnosticEncoderFor(c.encoder)))
-    sparkSession.newDataset(rEnc) { builder =>
+    val finall = sparkSession.newDataset(rEnc) { builder =>
       builder.getAggregateBuilder
-        .setInput(plan.getRoot)
+        .setInput(sss.plan.getRoot)
         .setGroupType(proto.Aggregate.GroupType.GROUP_TYPE_GROUPBY)
-        .addAllGroupingExpressions(groupingExprs)
+        .addAllGroupingExpressions(List(sss.col("k").typedExpr(kEncoder)).asJava)
         .addAllAggregateExpressions(aggCols.map(_.typedExpr(vEncoder)).asJava)
     }
+    finall
   }
 
   override def reduceGroups(f: (V, V) => V): Dataset[(K, V)] = {
@@ -564,6 +576,7 @@ private object KeyValueGroupedDatasetImpl {
       ds.agnosticEncoder,
       ds.agnosticEncoder,
       Arrays.asList(toExpr(gf.apply(col("*")))),
+      groupingFunc,
       None,
       () => ds.map(groupingFunc)(kEncoder))
   }
@@ -586,6 +599,7 @@ private object KeyValueGroupedDatasetImpl {
       vEncoder,
       vEncoder,
       (Seq(dummyGroupingFunc) ++ groupingExprs).map(toExpr).asJava,
+      UdfUtils.noOp[V, K](),
       None,
       () => df.select(groupingExprs: _*).as(kEncoder))
   }

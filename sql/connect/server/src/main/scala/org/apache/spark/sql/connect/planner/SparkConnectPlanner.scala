@@ -1731,6 +1731,7 @@ class SparkConnectPlanner(
    *   ScalaUDF.
    */
   private def transformScalaUDF(fun: proto.CommonInlineUserDefinedFunction): Expression = {
+    println(s"transformScalaUDF: $fun")
     val udf = fun.getScalarScalaUdf
     val udfPacket = unpackUdf(fun)
     if (udf.getAggregate) {
@@ -1739,7 +1740,7 @@ class SparkConnectPlanner(
         fun.getArgumentsList.asScala.map(transformExpression).toSeq)
         .toAggregateExpression()
     } else {
-      ScalaUDF(
+      val s = ScalaUDF(
         function = udfPacket.function,
         dataType = transformDataType(udf.getOutputType),
         children = fun.getArgumentsList.asScala.map(transformExpression).toSeq,
@@ -1748,6 +1749,8 @@ class SparkConnectPlanner(
         udfName = Option(fun.getFunctionName),
         nullable = udf.getNullable,
         udfDeterministic = fun.getDeterministic)
+      println(s"transformScalaUDF transformed: $s")
+      s
     }
   }
 
@@ -1873,6 +1876,7 @@ class SparkConnectPlanner(
   private def transformUnresolvedStar(star: proto.Expression.UnresolvedStar): Expression = {
     (star.hasUnparsedTarget, star.hasPlanId) match {
       case (false, false) =>
+        println(s"UnresolvedStar with plan id: ${star.getPlanId}")
         // functions.col("*")
         UnresolvedStar(None)
 
@@ -1887,6 +1891,7 @@ class SparkConnectPlanner(
         UnresolvedStar(Some(parts))
 
       case (false, true) =>
+        println(s"UnresolvedDataFrameStar with plan id: ${star.getPlanId}")
         // dataframe.col("*")
         UnresolvedDataFrameStar(star.getPlanId)
 

@@ -476,7 +476,7 @@ class KeyValueGroupedDatasetE2ETestSuite extends QueryTest with RemoteSparkSessi
     val values = ds
       .groupByKey(_._1)
       .mapValues(_._2 * 2) // value *= 2 to make sure `mapValues` is really applied
-      .agg(count("*"), IntSumAgg.toColumn)
+      .agg(count("v"), IntSumAgg.toColumn)
       .collect()
     assert(values === Array(("a", 2, 60), ("b", 2, 6), ("c", 1, 2)))
   }
