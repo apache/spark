@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.streaming
 import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.execution.streaming.TransformWithStateKeyValueRowSchemaUtils._
-import org.apache.spark.sql.execution.streaming.state.{NoPrefixKeyStateEncoderSpec, PrefixKeyScanStateEncoderSpec, StateStoreColFamilySchema}
+import org.apache.spark.sql.execution.streaming.state.{NoPrefixKeyStateEncoderSpec, PrefixKeyScanStateEncoderSpec, RangeKeyScanStateEncoderSpec, StateStoreColFamilySchema}
 import org.apache.spark.sql.types._
 
 object StateStoreColumnFamilySchemaUtils {
@@ -111,5 +111,16 @@ object StateStoreColumnFamilySchemaUtils {
       keySchema,
       valSchema,
       Some(PrefixKeyScanStateEncoderSpec(keySchema, 1)))
+  }
+
+  def getSecIndexTimerStateSchema(
+      stateName: String,
+      keySchema: StructType,
+      valSchema: StructType): StateStoreColFamilySchema = {
+    StateStoreColFamilySchema(
+      stateName,
+      keySchema,
+      valSchema,
+      Some(RangeKeyScanStateEncoderSpec(keySchema, Seq(0))))
   }
 }
