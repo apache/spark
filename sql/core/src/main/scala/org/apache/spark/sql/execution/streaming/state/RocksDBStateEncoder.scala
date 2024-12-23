@@ -1766,7 +1766,6 @@ class SingleValueStateEncoder(
     columnFamilyInfo = None,
     supportSchemaEvolution = dataEncoder.supportsSchemaEvolution
   ) with RocksDBValueStateEncoder with Logging {
-  assert(currentSchemaId.isDefined)
 
   override def getCurrentSchemaId: Option[Short] = currentSchemaId
 
@@ -1783,8 +1782,7 @@ class SingleValueStateEncoder(
     }
     // First decode the metadata prefixes
     val prefix = decodeStateRowPrefix(valueBytes)
-    logError(s"### prefix: $prefix")
-    logError(s"### currentSchemaId: ${currentSchemaId}")
+
     val data = decodeStateRowData(valueBytes)
     // Decode the actual value using either Avro or UnsafeRow
     dataEncoder.decodeValue(data, prefix)

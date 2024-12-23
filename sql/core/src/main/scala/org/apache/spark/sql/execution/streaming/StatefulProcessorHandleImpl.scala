@@ -376,6 +376,12 @@ class DriverStatefulProcessorHandleImpl(timeMode: TimeMode, keyExprEnc: Expressi
     val colFamilySchema = StateStoreColumnFamilySchemaUtils.
       getTimerStateSchema(stateName, timerEncoder.schemaForKeyRow, timerEncoder.schemaForValueRow)
     columnFamilySchemas.put(stateName, colFamilySchema)
+    val tsToKeyCFName = TimerStateUtils.getTimerStateSecIndexName(timeMode.toString)
+    val secondaryColFamilySchema = StateStoreColumnFamilySchemaUtils.
+      getSecIndexTimerStateSchema(
+        tsToKeyCFName, timerEncoder.keySchemaForSecIndex, timerEncoder.schemaForValueRow)
+    columnFamilySchemas.put(stateName, colFamilySchema)
+    columnFamilySchemas.put(tsToKeyCFName, secondaryColFamilySchema)
     val stateVariableInfo = TransformWithStateVariableUtils.getTimerState(stateName)
     stateVariableInfos.put(stateName, stateVariableInfo)
   }
