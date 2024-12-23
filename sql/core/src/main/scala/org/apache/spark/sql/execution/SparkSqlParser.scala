@@ -127,8 +127,7 @@ class SparkSqlAstBuilder extends AstBuilder {
       SetCommand(Some(ctx.configKey().getText -> Option(ctx.configValue().getText)))
     } else {
       val valueStr = ctx.configValue().getText
-      val keyCandidate =
-        interval(ctx.SET().getSymbol, ctx.EQ().getSymbol).trim.replaceAll(";+$", "")
+      val keyCandidate = interval(ctx.SET().getSymbol, ctx.EQ().getSymbol).trim
       keyCandidate match {
         case configKeyDef(key) => SetCommand(Some(key -> Option(valueStr)))
         case _ => throw QueryParsingErrors.invalidPropertyKeyForSetQuotedConfigurationError(
