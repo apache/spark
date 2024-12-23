@@ -506,6 +506,7 @@ case class TransformWithStateExec(
               NoPrefixKeyStateEncoderSpec(keyEncoder.schema),
               version = stateInfo.get.storeVersion,
               stateStoreCkptId = stateInfo.get.getStateStoreCkptId(partitionId).map(_.head),
+              stateSchemaBroadcast = stateInfo.get.stateSchemaMetadata,
               useColumnFamilies = true,
               storeConf = storeConf,
               hadoopConf = hadoopConfBroadcast.value.value
@@ -548,6 +549,8 @@ case class TransformWithStateExec(
     }
   }
 
+  override def supportsSchemaEvolution: Boolean = true
+
   /**
    * Create a new StateStore for given partitionId and instantiate a temp directory
    * on the executors. Process data and close the stateStore provider afterwards.
@@ -578,7 +581,8 @@ case class TransformWithStateExec(
       useColumnFamilies = true,
       storeConf = storeConf,
       hadoopConf = hadoopConfBroadcast.value.value,
-      useMultipleValuesPerKey = true)
+      useMultipleValuesPerKey = true,
+      stateSchemaBroadcast = stateInfo.get.stateSchemaMetadata)
 
     val store = stateStoreProvider.getStore(0, None)
     val outputIterator = f(store)

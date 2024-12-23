@@ -299,6 +299,7 @@ case class TransformWithStateInPandasExec(
               NoPrefixKeyStateEncoderSpec(schemaForKeyRow),
               version = stateInfo.get.storeVersion,
               stateStoreCkptId = stateInfo.get.getStateStoreCkptId(partitionId).map(_.head),
+              None,
               useColumnFamilies = true,
               storeConf = storeConf,
               hadoopConf = hadoopConfBroadcast.value.value
@@ -342,7 +343,8 @@ case class TransformWithStateInPandasExec(
       useColumnFamilies = true,
       storeConf = storeConf,
       hadoopConf = hadoopConfBroadcast.value.value,
-      useMultipleValuesPerKey = true)
+      useMultipleValuesPerKey = true,
+      stateSchemaBroadcast = None)
 
     val store = stateStoreProvider.getStore(0, None)
     val outputIterator = f(store)
