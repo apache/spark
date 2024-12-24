@@ -72,7 +72,7 @@ private[sql] object UpCastRule {
     case _ => false
   }
 
-  private def legalNumericPrecedence(from: DataType, to: DataType): Boolean = {
+  def legalNumericPrecedence(from: DataType, to: DataType): Boolean = {
     val fromPrecedence = numericPrecedence.indexOf(from)
     val toPrecedence = numericPrecedence.indexOf(to)
     fromPrecedence >= 0 && fromPrecedence < toPrecedence
