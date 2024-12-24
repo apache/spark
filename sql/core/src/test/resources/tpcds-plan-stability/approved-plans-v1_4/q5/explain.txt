@@ -60,14 +60,14 @@ TakeOrderedAndProject (74)
                               :     :  :     +- * ColumnarToRow (44)
                               :     :  :        +- Scan parquet spark_catalog.default.web_sales (43)
                               :     :  +- * Project (55)
-                              :     :     +- * BroadcastHashJoin Inner BuildLeft (54)
-                              :     :        :- BroadcastExchange (49)
-                              :     :        :  +- * ColumnarToRow (48)
-                              :     :        :     +- Scan parquet spark_catalog.default.web_returns (47)
-                              :     :        +- * Project (53)
-                              :     :           +- * Filter (52)
-                              :     :              +- * ColumnarToRow (51)
-                              :     :                 +- Scan parquet spark_catalog.default.web_sales (50)
+                              :     :     +- * BroadcastHashJoin Inner BuildRight (54)
+                              :     :        :- * ColumnarToRow (48)
+                              :     :        :  +- Scan parquet spark_catalog.default.web_returns (47)
+                              :     :        +- BroadcastExchange (53)
+                              :     :           +- * Project (52)
+                              :     :              +- * Filter (51)
+                              :     :                 +- * ColumnarToRow (50)
+                              :     :                    +- Scan parquet spark_catalog.default.web_sales (49)
                               :     +- ReusedExchange (57)
                               +- BroadcastExchange (63)
                                  +- * Filter (62)
@@ -299,30 +299,30 @@ Location: InMemoryFileIndex []
 PartitionFilters: [isnotnull(wr_returned_date_sk#96), dynamicpruningexpression(wr_returned_date_sk#96 IN dynamicpruning#5)]
 ReadSchema: struct<wr_item_sk:int,wr_order_number:int,wr_return_amt:decimal(7,2),wr_net_loss:decimal(7,2)>
 
-(48) ColumnarToRow [codegen id : 14]
+(48) ColumnarToRow [codegen id : 15]
 Input [5]: [wr_item_sk#92, wr_order_number#93, wr_return_amt#94, wr_net_loss#95, wr_returned_date_sk#96]
 
-(49) BroadcastExchange
-Input [5]: [wr_item_sk#92, wr_order_number#93, wr_return_amt#94, wr_net_loss#95, wr_returned_date_sk#96]
-Arguments: HashedRelationBroadcastMode(List((shiftleft(cast(input[0, int, true] as bigint), 32) | (cast(input[1, int, true] as bigint) & 4294967295))),false), [plan_id=5]
-
-(50) Scan parquet spark_catalog.default.web_sales
+(49) Scan parquet spark_catalog.default.web_sales
 Output [4]: [ws_item_sk#97, ws_web_site_sk#98, ws_order_number#99, ws_sold_date_sk#100]
 Batched: true
-Location [not included in comparison]/{warehouse_dir}/web_sales]
+Location: InMemoryFileIndex []
 PushedFilters: [IsNotNull(ws_item_sk), IsNotNull(ws_order_number), IsNotNull(ws_web_site_sk)]
 ReadSchema: struct<ws_item_sk:int,ws_web_site_sk:int,ws_order_number:int>
 
-(51) ColumnarToRow
+(50) ColumnarToRow [codegen id : 14]
 Input [4]: [ws_item_sk#97, ws_web_site_sk#98, ws_order_number#99, ws_sold_date_sk#100]
 
-(52) Filter
+(51) Filter [codegen id : 14]
 Input [4]: [ws_item_sk#97, ws_web_site_sk#98, ws_order_number#99, ws_sold_date_sk#100]
 Condition : ((isnotnull(ws_item_sk#97) AND isnotnull(ws_order_number#99)) AND isnotnull(ws_web_site_sk#98))
 
-(53) Project
+(52) Project [codegen id : 14]
 Output [3]: [ws_item_sk#97, ws_web_site_sk#98, ws_order_number#99]
 Input [4]: [ws_item_sk#97, ws_web_site_sk#98, ws_order_number#99, ws_sold_date_sk#100]
+
+(53) BroadcastExchange
+Input [3]: [ws_item_sk#97, ws_web_site_sk#98, ws_order_number#99]
+Arguments: HashedRelationBroadcastMode(List((shiftleft(cast(input[0, int, true] as bigint), 32) | (cast(input[2, int, true] as bigint) & 4294967295))),false), [plan_id=5]
 
 (54) BroadcastHashJoin [codegen id : 15]
 Left keys [2]: [wr_item_sk#92, wr_order_number#93]
