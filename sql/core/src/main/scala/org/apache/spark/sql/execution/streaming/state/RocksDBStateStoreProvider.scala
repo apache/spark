@@ -649,6 +649,7 @@ object RocksDBStateStoreProvider {
 
   private val MAX_AVRO_ENCODERS_IN_CACHE = 1000
   private val AVRO_ENCODER_LIFETIME_HOURS = 1L
+  private val DEFAULT_SCHEMA_IDS = StateSchemaInfo(0, 0)
 
   // Add the cache at companion object level so it persists across provider instances
   private val dataEncoderCache: NonFateSharingCache[StateRowEncoderCacheKey, RocksDBDataEncoder] =
@@ -686,9 +687,9 @@ object RocksDBStateStoreProvider {
       new java.util.concurrent.Callable[RocksDBDataEncoder] {
         override def call(): RocksDBDataEncoder = {
           if (stateStoreEncoding == "avro") {
-            new AvroStateEncoder(keyStateEncoderSpec, valueSchema)
+            new AvroStateEncoder(keyStateEncoderSpec, valueSchema, Some(DEFAULT_SCHEMA_IDS))
           } else {
-            new UnsafeRowDataEncoder(keyStateEncoderSpec, valueSchema)
+            new UnsafeRowDataEncoder(keyStateEncoderSpec, valueSchema, None)
           }
         }
       }
