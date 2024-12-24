@@ -48,10 +48,10 @@ private[spark] class StreamingPythonRunner(
   protected val bufferSize: Int = conf.get(BUFFER_SIZE)
   protected val authSocketTimeout = conf.get(PYTHON_AUTH_SOCKET_TIMEOUT)
 
-  private val envVars: java.util.Map[String, String] = func.envVars
-  private val pythonExec: String = func.pythonExec
-  private var pythonWorker: Option[PythonWorker] = None
-  private var pythonWorkerFactory: Option[PythonWorkerFactory] = None
+  protected val envVars: java.util.Map[String, String] = func.envVars
+  protected val pythonExec: String = func.pythonExec
+  protected var pythonWorker: Option[PythonWorker] = None
+  protected var pythonWorkerFactory: Option[PythonWorkerFactory] = None
   protected val pythonVer: String = func.pythonVer
 
   /**
@@ -68,7 +68,9 @@ private[spark] class StreamingPythonRunner(
 
     envVars.put("SPARK_AUTH_SOCKET_TIMEOUT", authSocketTimeout.toString)
     envVars.put("SPARK_BUFFER_SIZE", bufferSize.toString)
-    envVars.put("SPARK_CONNECT_LOCAL_URL", connectUrl)
+    if (!connectUrl.isEmpty) {
+      envVars.put("SPARK_CONNECT_LOCAL_URL", connectUrl)
+    }
 
     val workerFactory =
       new PythonWorkerFactory(pythonExec, workerModule, envVars.asScala.toMap, false)
@@ -83,7 +85,9 @@ private[spark] class StreamingPythonRunner(
     PythonWorkerUtils.writePythonVersion(pythonVer, dataOut)
 
     // Send sessionId
-    PythonRDD.writeUTF(sessionId, dataOut)
+    if (!sessionId.isEmpty) {
+      PythonRDD.writeUTF(sessionId, dataOut)
+    }
 
     // Send the user function to python process
     PythonWorkerUtils.writePythonFunction(func, dataOut)

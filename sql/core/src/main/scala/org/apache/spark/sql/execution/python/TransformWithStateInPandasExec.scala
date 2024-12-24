@@ -22,7 +22,7 @@ import scala.concurrent.duration.NANOSECONDS
 
 import org.apache.hadoop.conf.Configuration
 
-import org.apache.spark.JobArtifactSet
+import org.apache.spark.{JobArtifactSet, SparkException}
 import org.apache.spark.api.python.{ChainedPythonFunctions, PythonEvalType}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
@@ -35,9 +35,9 @@ import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.execution.{BinaryExecNode, CoGroupedIterator, SparkPlan}
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.python.PandasGroupUtils.{executePython, groupAndProject, resolveArgOffsets}
-import org.apache.spark.sql.execution.streaming.{StatefulOperatorCustomMetric, StatefulOperatorCustomSumMetric, StatefulOperatorPartitioning, StatefulOperatorStateInfo, StatefulProcessorHandleImpl, StateStoreWriter, WatermarkSupport}
+import org.apache.spark.sql.execution.streaming.{DriverStatefulProcessorHandleImpl, StatefulOperatorCustomMetric, StatefulOperatorCustomSumMetric, StatefulOperatorPartitioning, StatefulOperatorStateInfo, StatefulProcessorHandleImpl, StateStoreWriter, TransformWithStateMetadataUtils, TransformWithStateVariableInfo, WatermarkSupport}
 import org.apache.spark.sql.execution.streaming.StreamingSymmetricHashJoinHelper.StateStoreAwareZipPartitionsHelper
-import org.apache.spark.sql.execution.streaming.state.{NoPrefixKeyStateEncoderSpec, RocksDBStateStoreProvider, StateSchemaValidationResult, StateStore, StateStoreConf, StateStoreId, StateStoreOps, StateStoreProvider, StateStoreProviderId}
+import org.apache.spark.sql.execution.streaming.state.{NoPrefixKeyStateEncoderSpec, OperatorStateMetadata, RocksDBStateStoreProvider, StateSchemaValidationResult, StateStore, StateStoreColFamilySchema, StateStoreConf, StateStoreId, StateStoreOps, StateStoreProvider, StateStoreProviderId}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.{OutputMode, TimeMode}
 import org.apache.spark.sql.types.{BinaryType, StructField, StructType}
@@ -79,10 +79,12 @@ case class TransformWithStateInPandasExec(
     initialState: SparkPlan,
     initialStateGroupingAttrs: Seq[Attribute],
     initialStateSchema: StructType)
-  extends BinaryExecNode with StateStoreWriter with WatermarkSupport {
+  extends BinaryExecNode
+  with StateStoreWriter
+  with WatermarkSupport
+  with TransformWithStateMetadataUtils {
 
   override def shortName: String = "transformWithStateInPandasExec"
-
   private val pythonUDF = functionExpr.asInstanceOf[PythonUDF]
   private val pythonFunction = pythonUDF.func
   private val chainedFunc =
@@ -91,6 +93,7 @@ case class TransformWithStateInPandasExec(
   private val sessionLocalTimeZone = conf.sessionLocalTimeZone
   private val pythonRunnerConf = ArrowPythonRunner.getPythonRunnerConfMap(conf)
   private[this] val jobArtifactUUID = JobArtifactSet.getCurrentJobArtifactState.map(_.uuid)
+  private val (dedupAttributes, argOffsets) = resolveArgOffsets(child.output, groupingAttributes)
 
   private val groupingKeyStructFields = groupingAttributes
     .map(a => StructField(a.name, a.dataType, a.nullable))
@@ -108,6 +111,22 @@ case class TransformWithStateInPandasExec(
 
   // Each state variable has its own schema, this is a dummy one.
   protected val schemaForValueRow: StructType = new StructType().add("value", BinaryType)
+
+  override def operatorStateMetadataVersion: Int = 2
+
+  override def getColFamilySchemas(): Map[String, StateStoreColFamilySchema] = {
+    driverProcessorHandle.getColumnFamilySchemas
+  }
+
+  override def getStateVariableInfos(): Map[String, TransformWithStateVariableInfo] = {
+    driverProcessorHandle.getStateVariableInfos
+  }
+
+  /** Metadata of this stateful operator and its states stores.
+   * Written during IncrementalExecution. `validateAndMaybeEvolveStateSchema` will initialize
+   * `columnFamilySchemas` and `stateVariableInfos` during `init()` call on driver. */
+  private val driverProcessorHandle: DriverStatefulProcessorHandleImpl =
+    new DriverStatefulProcessorHandleImpl(timeMode, groupingKeyExprEncoder)
 
   /**
    * Distribute by grouping attributes - We need the underlying data and the initial state data
@@ -129,12 +148,43 @@ case class TransformWithStateInPandasExec(
     groupingAttributes.map(SortOrder(_, Ascending)),
     initialStateGroupingAttrs.map(SortOrder(_, Ascending)))
 
+  override def operatorStateMetadata(
+      stateSchemaPaths: List[String]): OperatorStateMetadata = {
+    getOperatorStateMetadata(stateSchemaPaths, getStateInfo, shortName, timeMode, outputMode)
+  }
+
+  override def validateNewMetadata(
+      oldOperatorMetadata: OperatorStateMetadata,
+      newOperatorMetadata: OperatorStateMetadata): Unit = {
+    validateNewMetadataForTWS(oldOperatorMetadata, newOperatorMetadata)
+  }
+
   override def validateAndMaybeEvolveStateSchema(
       hadoopConf: Configuration,
       batchId: Long,
       stateSchemaVersion: Int): List[StateSchemaValidationResult] = {
-    // TODO(SPARK-49212): Implement schema evolution support
-    List.empty
+    // Start a python runner on driver, and execute pre-init UDF on the runner
+    val runner = new TransformWithStateInPandasPythonPreInitRunner(
+      pythonFunction,
+      "pyspark.sql.streaming.transform_with_state_driver_worker",
+      sessionLocalTimeZone,
+      groupingKeySchema,
+      driverProcessorHandle
+    )
+    // runner initialization
+    runner.init()
+    try {
+      // execute UDF on the python runner
+      runner.process()
+    } catch {
+      case e: Throwable =>
+        throw new SparkException("TransformWithStateInPandas driver worker " +
+          "exited unexpectedly (crashed)", e)
+    }
+    runner.stop()
+
+    validateAndWriteStateSchema(hadoopConf, batchId, stateSchemaVersion, getStateInfo,
+      session, operatorStateMetadataVersion)
   }
 
   override def shouldRunAnotherBatch(newInputWatermark: Long): Boolean = {
@@ -315,7 +365,6 @@ case class TransformWithStateInPandasExec(
     val currentTimeNs = System.nanoTime
     val updatesStartTimeNs = currentTimeNs
 
-    val (dedupAttributes, argOffsets) = resolveArgOffsets(child.output, groupingAttributes)
     // If timeout is based on event time, then filter late data based on watermark
     val filteredIter = watermarkPredicateForDataForLateEvents match {
       case Some(predicate) =>
