@@ -93,6 +93,15 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
       parameters = Map.empty)
   }
 
+  test("SET with semi-colons") {
+    assertEqual(s"SET;", SetCommand(None))
+    assertEqual(s"SET    ;", SetCommand(None))
+    assertEqual(s"SET -v;", SetCommand(Some("-v" -> None)))
+    assertEqual(s"SET -v    ;", SetCommand(Some("-v" -> None)))
+    assertEqual(s"SET spark.sql.ansi.enabled;", SetCommand(Some("spark.sql.ansi.enabled" -> None)))
+    assertEqual(s"SET spark.sql.ansi.enabled ;", SetCommand(Some("spark.sql.ansi.enabled" -> None)))
+  }
+
   test("Report Error for invalid usage of SET command") {
     assertEqual("SET", SetCommand(None))
     assertEqual("SET -v", SetCommand(Some("-v", None)))
