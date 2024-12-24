@@ -985,9 +985,6 @@ case class ColumnFamilyInfo(
  * These prefixes allow for schema evolution and column family organization
  * in the state store.
  *
- * @param schemaId Optional schema version identifier used for schema evolution.
- *                 When present, allows tracking and handling different versions
- *                 of the state schema.
  * @param columnFamilyId Optional identifier for the virtual column family.
  *                       When present, allows organizing state data into
  *                       different column families in RocksDB.
@@ -996,28 +993,6 @@ case class StateRowPrefix(
     columnFamilyId: Option[Short]
 )
 
-/**
- * Base encoder class that handles common prefix encoding/decoding operations for state store rows.
- * This encoder manages the addition and extraction of metadata prefixes (schema ID and
- * column family ID) to state store rows, providing a consistent way to handle state data versioning
- * and organization across different encoder implementations.
- *
- * The encoder supports two types of optional prefixes:
- * 1. Column Family ID (when column families are enabled):
- *    - Uses VIRTUAL_COL_FAMILY_PREFIX_BYTES to store the virtual column family identifier
- *    - Enables organization of state data into different column families
- *
- * 2. Schema ID (when schema evolution is enabled):
- *    - Uses SCHEMA_ID_PREFIX_BYTES to store the schema version identifier
- *    - Facilitates schema evolution by tracking schema versions of stored data
- *
- * The encoded row format with all prefixes enabled is:
- * [Column Family ID (optional)] [Schema ID (optional)] [Actual Data]
- *
- * @param useColumnFamilies Whether column families are enabled for this encoder
- * @param columnFamilyInfo Optional information about the column family when enabled
- * @param supportSchemaEvolution Whether schema evolution is enabled for this encoder
- */
 class StateRowPrefixEncoder(
     useColumnFamilies: Boolean,
     columnFamilyInfo: Option[ColumnFamilyInfo]
@@ -1028,7 +1003,6 @@ class StateRowPrefixEncoder(
   } else {
     0
   }
-
 
   def getNumPrefixBytes: Int = numColFamilyBytes
 
