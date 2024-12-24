@@ -1,2 +1,2 @@
-v1
-{"nextBatchWatermarkMs":0}
+v2
+{"nextBatchWatermarkMs":0,"stateUniqueIds":{}}
