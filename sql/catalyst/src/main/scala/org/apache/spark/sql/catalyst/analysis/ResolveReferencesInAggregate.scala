@@ -113,10 +113,46 @@ class ResolveReferencesInAggregate(val catalogManager: CatalogManager) extends S
       groupExprs: Seq[Expression]): Seq[Expression] = {
     assert(selectList.forall(_.resolved))
     if (conf.groupByAliases) {
-      groupExprs.map { g =>
+      val resolvedGroupExprs = groupExprs.map { g =>
         g.transformWithPruning(_.containsPattern(UNRESOLVED_ATTRIBUTE)) {
           case u: UnresolvedAttribute =>
             selectList.find(ne => conf.resolver(ne.name, u.name)).getOrElse(u)
+        }
+      }
+      // The original integer literal may cause failures with a later Group BY
+      // ordinal resolution. So check and replace the integer literal with its index
+      checkIntegerLiteral(selectList, resolvedGroupExprs)
+    } else {
+      groupExprs
+    }
+  }
+
+  private def checkIntegerLiteral(
+      selectList: Seq[NamedExpression],
+      groupExprs: Seq[Expression]): Seq[Expression] = {
+    val containsIntegerLiteral = groupExprs.exists(expr =>
+      trimAliases(expr) match {
+        case IntegerLiteral(_) => true
+        case _ => false
+      })
+    if (containsIntegerLiteral) {
+      val selectListExprs: Seq[Expression] = selectList
+      if (selectListExprs.isEmpty) {
+        groupExprs
+      } else {
+        val selectListExprsMap = selectListExprs.zipWithIndex.map { case (expr, index) =>
+          (expr, index + 1)}.toMap
+        groupExprs.map { expr =>
+          trimAliases(expr) match {
+            // When expression is an integer literal, use an integer literal of the index instead.
+            case IntegerLiteral(_) =>
+              if (selectListExprsMap.contains(expr)) {
+                Literal(selectListExprsMap.getOrElse(expr, 0))
+              } else {
+                expr
+              }
+            case _ => expr
+          }
         }
       }
     } else {
