@@ -584,6 +584,7 @@ jobs:
         distribution: zulu
         java-version: ${{ matrix.java }}
     - name: List Python packages (${{ env.PYTHON_TO_TEST }})
+      if: ${{ env.PYTHON_TO_TEST != '' }}
       env: ${{ fromJSON(inputs.envs) }}
       shell: 'script -q -e -c "bash {0}"'
       run: |
