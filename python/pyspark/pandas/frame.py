@@ -43,8 +43,10 @@ from typing import (
     Tuple,
     Type,
     Union,
+    Literal,
     cast,
     no_type_check,
+    overload,
     TYPE_CHECKING,
 )
 import datetime
@@ -121,6 +123,7 @@ from pyspark.pandas.utils import (
     validate_arguments_and_invoke_function,
     validate_axis,
     validate_bool_kwarg,
+    validate_strict_bool,
     validate_how,
     validate_mode,
     verify_temp_column_name,
@@ -4198,6 +4201,27 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         else:
             return self._to_internal_pandas().style
 
+    @overload
+    def set_index(
+        self,
+        keys: Union[Name, List[Name]],
+        drop: bool = True,
+        append: bool = False,
+        inplace: Literal[False] = False,
+    ) -> "DataFrame":
+        ...
+
+    @overload
+    def set_index(
+        self,
+        keys: Union[Name, List[Name]],
+        drop: bool = True,
+        append: bool = False,
+        inplace: Literal[True] = True,
+    ) -> None:
+        ...
+
+    @overload
     def set_index(
         self,
         keys: Union[Name, List[Name]],
@@ -4205,6 +4229,15 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         append: bool = False,
         inplace: bool = False,
     ) -> Optional["DataFrame"]:
+        ...
+
+    def set_index(
+        self,
+        keys: Union[Name, List[Name]],
+        drop: bool = True,
+        append: bool = False,
+        inplace: bool = False,
+    ):
         """Set the DataFrame index (row labels) using one or more existing columns.
 
         Set the DataFrame index (row labels) using one or more existing
@@ -4267,7 +4300,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         2013  7     84
         2014  10    31
         """
-        inplace = validate_bool_kwarg(inplace, "inplace")
+        inplace = validate_strict_bool(validate_bool_kwarg(inplace, "inplace"))
         key_list: List[Label]
         if is_name_like_tuple(keys):
             key_list = [cast(Label, keys)]
@@ -4314,6 +4347,33 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         else:
             return DataFrame(internal)
 
+    @overload
+    def reset_index(
+        self,
+        level: Union[int, Name, List[Union[int, Name]]] = None,
+        drop: bool = False,
+        inplace: Literal[False] = False,
+    ) -> "DataFrame":
+        ...
+
+    @overload
+    def reset_index(
+        self,
+        level: Union[int, Name, List[Union[int, Name]]] = None,
+        drop: bool = False,
+        inplace: Literal[True] = True,
+    ) -> None:
+        ...
+
+    @overload
+    def reset_index(
+        self,
+        level: Union[int, Name, List[Union[int, Name]]] = None,
+        drop: bool = False,
+        inplace: bool = False,
+    ) -> Optional["DataFrame"]:
+        ...
+
     def reset_index(
         self,
         level: Optional[Union[int, Name, Sequence[Union[int, Name]]]] = None,
@@ -4321,7 +4381,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         inplace: bool = False,
         col_level: int = 0,
         col_fill: str = "",
-    ) -> Optional["DataFrame"]:
+    ):
         """Reset the index, or a level of it.
 
         For DataFrame with multi-level index, return new DataFrame with labeling information in
@@ -4464,7 +4524,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         lion           mammal   80.5     run
         monkey         mammal    NaN    jump
         """
-        inplace = validate_bool_kwarg(inplace, "inplace")
+        inplace = validate_strict_bool(validate_bool_kwarg(inplace, "inplace"))
         multi_index = self._internal.index_level > 1
 
         def rename(index: int) -> Label:
@@ -5869,6 +5929,39 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         """
         return DataFrame(self._internal)
 
+    @overload
+    def dropna(
+        self,
+        axis: int = 0,
+        how: str = "any",
+        thresh: Optional[int] = None,
+        subset: Optional[Union[Name, List[Name]]] = None,
+        inplace: Literal[False] = False,
+    ) -> "DataFrame":
+        ...
+
+    @overload
+    def dropna(
+        self,
+        axis: int = 0,
+        how: str = "any",
+        thresh: Optional[int] = None,
+        subset: Optional[Union[Name, List[Name]]] = None,
+        inplace: Literal[True] = True,
+    ) -> None:
+        ...
+
+    @overload
+    def dropna(
+        self,
+        axis: int = 0,
+        how: str = "any",
+        thresh: Optional[int] = None,
+        subset: Optional[Union[Name, List[Name]]] = None,
+        inplace: bool = False,
+    ) -> Optional["DataFrame"]:
+        ...
+
     def dropna(
         self,
         axis: Axis = 0,
@@ -5876,7 +5969,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         thresh: Optional[int] = None,
         subset: Optional[Union[Name, List[Name]]] = None,
         inplace: bool = False,
-    ) -> Optional["DataFrame"]:
+    ):
         """
         Remove missing values.
 
@@ -6080,6 +6173,29 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 return psdf
 
     # TODO: add 'limit' when value parameter exists
+    @overload
+    def fillna(
+        self,
+        value: Optional[Union[Any, Dict[Name, Any]]] = None,
+        method: Optional[str] = None,
+        axis: Optional[Axis] = None,
+        inplace: Literal[False] = False,
+        limit: Optional[int] = None,
+    ) -> "DataFrame":
+        ...
+
+    @overload
+    def fillna(
+        self,
+        value: Optional[Union[Any, Dict[Name, Any]]] = None,
+        method: Optional[str] = None,
+        axis: Optional[Axis] = None,
+        inplace: Literal[True] = True,
+        limit: Optional[int] = None,
+    ) -> None:
+        ...
+
+    @overload
     def fillna(
         self,
         value: Optional[Union[Any, Dict[Name, Any]]] = None,
@@ -6088,6 +6204,16 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         inplace: bool = False,
         limit: Optional[int] = None,
     ) -> Optional["DataFrame"]:
+        ...
+
+    def fillna(
+        self,
+        value: Optional[Union[Any, Dict[Name, Any]]] = None,
+        method: Optional[str] = None,
+        axis: Optional[Axis] = None,
+        inplace: bool = False,
+        limit: Optional[int] = None,
+    ):
         """Fill NA/NaN values.
 
         .. note:: the current implementation of 'method' parameter in fillna uses Spark's Window
@@ -6218,7 +6344,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         psdf = self._apply_series_op(op, should_resolve=(method is not None))
 
-        inplace = validate_bool_kwarg(inplace, "inplace")
+        inplace = validate_strict_bool(validate_bool_kwarg(inplace, "inplace"))
         if inplace:
             self._update_internal_frame(psdf._internal, check_same_anchor=False)
             return None
@@ -6269,6 +6395,31 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             should_resolve=True,
         )
 
+    @overload
+    def replace(
+        self,
+        to_replace: Optional[Union[Any, List, Tuple, Dict]] = None,
+        value: Optional[Any] = None,
+        inplace: Literal[False] = False,
+        limit: Optional[int] = None,
+        regex: bool = False,
+        method: str = "pad",
+    ) -> "DataFrame":
+        ...
+
+    @overload
+    def replace(
+        self,
+        to_replace: Optional[Union[Any, List, Tuple, Dict]] = None,
+        value: Optional[Any] = None,
+        inplace: Literal[True] = True,
+        limit: Optional[int] = None,
+        regex: bool = False,
+        method: str = "pad",
+    ) -> None:
+        ...
+
+    @overload
     def replace(
         self,
         to_replace: Optional[Union[Any, List, Tuple, Dict]] = None,
@@ -6278,6 +6429,17 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         regex: bool = False,
         method: str = "pad",
     ) -> Optional["DataFrame"]:
+        ...
+
+    def replace(
+        self,
+        to_replace: Optional[Union[Any, List, Tuple, Dict]] = None,
+        value: Optional[Any] = None,
+        inplace: bool = False,
+        limit: Optional[int] = None,
+        regex: bool = False,
+        method: str = "pad",
+    ):
         """
         Returns a new DataFrame replacing a value with another value.
 
@@ -6389,7 +6551,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             raise NotImplementedError("replace currently works only when limit=None")
         if regex is not False:
             raise NotImplementedError("replace currently doesn't supports regex")
-        inplace = validate_bool_kwarg(inplace, "inplace")
+        inplace = validate_strict_bool(validate_bool_kwarg(inplace, "inplace"))
 
         if value is not None and not isinstance(value, (int, float, str, list, tuple, dict)):
             raise TypeError("Unsupported type {}".format(type(value).__name__))
@@ -6436,7 +6598,9 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         else:
             return psdf
 
-    def clip(self, lower: Union[float, int] = None, upper: Union[float, int] = None) -> "DataFrame":
+    def clip(
+        self, lower: Optional[Union[float, int]] = None, upper: Optional[Union[float, int]] = None
+    ) -> "DataFrame":
         """
         Trim values at input threshold(s).
 
@@ -7707,6 +7871,29 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         sdf = self._internal.resolved_copy.spark_frame.sort(*by, natural_order_scol)
         return DataFrame(self._internal.with_new_sdf(sdf))
 
+    @overload
+    def sort_values(
+        self,
+        by: Union[Name, List[Name]],
+        ascending: Union[bool, List[bool]] = True,
+        inplace: Literal[False] = False,
+        na_position: str = "last",
+        ignore_index: bool = False,
+    ) -> "DataFrame":
+        ...
+
+    @overload
+    def sort_values(
+        self,
+        by: Union[Name, List[Name]],
+        ascending: Union[bool, List[bool]] = True,
+        inplace: Literal[True] = True,
+        na_position: str = "last",
+        ignore_index: bool = False,
+    ) -> None:
+        ...
+
+    @overload
     def sort_values(
         self,
         by: Union[Name, List[Name]],
@@ -7715,6 +7902,16 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         na_position: str = "last",
         ignore_index: bool = False,
     ) -> Optional["DataFrame"]:
+        ...
+
+    def sort_values(
+        self,
+        by: Union[Name, List[Name]],
+        ascending: Union[bool, List[bool]] = True,
+        inplace: bool = False,
+        na_position: str = "last",
+        ignore_index: bool = False,
+    ):
         """
         Sort by the values along either axis.
 
@@ -7800,7 +7997,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         4     D     7     2
         3  None     8     4
         """
-        inplace = validate_bool_kwarg(inplace, "inplace")
+        inplace = validate_strict_bool(validate_bool_kwarg(inplace, "inplace"))
         new_by = self._prepare_sort_by_scols(by)
 
         psdf = self._sort(by=new_by, ascending=ascending, na_position=na_position)
@@ -7813,16 +8010,55 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         else:
             return psdf.reset_index(drop=True) if ignore_index else psdf
 
+    @overload
+    def sort_index(
+        self,
+        axis: Axis = 0,
+        level: Optional[Union[int, List[int]]] = None,
+        ascending: bool = True,
+        inplace: Literal[False] = False,
+        kind: Optional[str] = None,
+        na_position: str = "last",
+        ignore_index: bool = False,
+    ) -> "DataFrame":
+        ...
+
+    @overload
+    def sort_index(
+        self,
+        axis: Axis = 0,
+        level: Optional[Union[int, List[int]]] = None,
+        ascending: bool = True,
+        inplace: Literal[True] = True,
+        kind: Optional[str] = None,
+        na_position: str = "last",
+        ignore_index: bool = False,
+    ) -> None:
+        ...
+
+    @overload
     def sort_index(
         self,
         axis: Axis = 0,
         level: Optional[Union[int, List[int]]] = None,
         ascending: bool = True,
         inplace: bool = False,
-        kind: str = None,
+        kind: Optional[str] = None,
         na_position: str = "last",
         ignore_index: bool = False,
     ) -> Optional["DataFrame"]:
+        ...
+
+    def sort_index(
+        self,
+        axis: Axis = 0,
+        level: Optional[Union[int, List[int]]] = None,
+        ascending: bool = True,
+        inplace: bool = False,
+        kind: Optional[str] = None,
+        na_position: str = "last",
+        ignore_index: bool = False,
+    ):
         """
         Sort object by labels (along an axis)
 
@@ -7917,7 +8153,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         2  1  2
         3  0  3
         """
-        inplace = validate_bool_kwarg(inplace, "inplace")
+        inplace = validate_strict_bool(validate_bool_kwarg(inplace, "inplace"))
         axis = validate_axis(axis)
         if axis != 0:
             raise NotImplementedError("No other axis than 0 are supported now")
@@ -9940,6 +10176,27 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         return result
 
+    @overload
+    def drop_duplicates(
+        self,
+        subset: Optional[Union[Name, List[Name]]] = None,
+        keep: Union[bool, str] = "first",
+        inplace: Literal[False] = False,
+        ignore_index: bool = False,
+    ) -> "DataFrame":
+        ...
+
+    @overload
+    def drop_duplicates(
+        self,
+        subset: Optional[Union[Name, List[Name]]] = None,
+        keep: Union[bool, str] = "first",
+        inplace: Literal[True] = True,
+        ignore_index: bool = False,
+    ) -> None:
+        ...
+
+    @overload
     def drop_duplicates(
         self,
         subset: Optional[Union[Name, List[Name]]] = None,
@@ -9947,6 +10204,15 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         inplace: bool = False,
         ignore_index: bool = False,
     ) -> Optional["DataFrame"]:
+        ...
+
+    def drop_duplicates(
+        self,
+        subset: Optional[Union[Name, List[Name]]] = None,
+        keep: Union[bool, str] = "first",
+        inplace: bool = False,
+        ignore_index: bool = False,
+    ):
         """
         Return DataFrame with duplicate rows removed, optionally only
         considering certain columns.
@@ -10021,7 +10287,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         3  2  c
         4  3  d
         """
-        inplace = validate_bool_kwarg(inplace, "inplace")
+        inplace = validate_strict_bool(validate_bool_kwarg(inplace, "inplace"))
 
         sdf, column = self._mark_duplicates(subset, keep)
 
@@ -11521,6 +11787,33 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         else:
             raise TypeError("Must pass either `items`, `like`, or `regex`")
 
+    @overload
+    def rename(
+        self,
+        mapper: Optional[Union[Dict, Callable[[Any], Any]]] = None,
+        index: Optional[Union[Dict, Callable[[Any], Any]]] = None,
+        columns: Optional[Union[Dict, Callable[[Any], Any]]] = None,
+        axis: Axis = "index",
+        inplace: Literal[False] = False,
+        level: Optional[int] = None,
+        errors: str = "ignore",
+    ) -> "DataFrame":
+        ...
+
+    @overload
+    def rename(
+        self,
+        mapper: Optional[Union[Dict, Callable[[Any], Any]]] = None,
+        index: Optional[Union[Dict, Callable[[Any], Any]]] = None,
+        columns: Optional[Union[Dict, Callable[[Any], Any]]] = None,
+        axis: Axis = "index",
+        inplace: Literal[True] = True,
+        level: Optional[int] = None,
+        errors: str = "ignore",
+    ) -> None:
+        ...
+
+    @overload
     def rename(
         self,
         mapper: Optional[Union[Dict, Callable[[Any], Any]]] = None,
@@ -11531,6 +11824,18 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         level: Optional[int] = None,
         errors: str = "ignore",
     ) -> Optional["DataFrame"]:
+        ...
+
+    def rename(
+        self,
+        mapper: Optional[Union[Dict, Callable[[Any], Any]]] = None,
+        index: Optional[Union[Dict, Callable[[Any], Any]]] = None,
+        columns: Optional[Union[Dict, Callable[[Any], Any]]] = None,
+        axis: Axis = "index",
+        inplace: bool = False,
+        level: Optional[int] = None,
+        errors: str = "ignore",
+    ):
         """
         Alter axes labels.
         Function / dict values must be unique (1-to-1). Labels not contained in a dict / Series
@@ -11764,14 +12069,47 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         else:
             return psdf
 
+    @overload
     def rename_axis(
         self,
         mapper: Union[Any, Sequence[Any], Dict[Name, Any], Callable[[Name], Any]] = None,
         index: Union[Any, Sequence[Any], Dict[Name, Any], Callable[[Name], Any]] = None,
         columns: Union[Any, Sequence[Any], Dict[Name, Any], Callable[[Name], Any]] = None,
         axis: Optional[Axis] = 0,
-        inplace: Optional[bool] = False,
+        inplace: Literal[False] = False,
+    ) -> "DataFrame":
+        ...
+
+    @overload
+    def rename_axis(
+        self,
+        mapper: Union[Any, Sequence[Any], Dict[Name, Any], Callable[[Name], Any]] = None,
+        index: Union[Any, Sequence[Any], Dict[Name, Any], Callable[[Name], Any]] = None,
+        columns: Union[Any, Sequence[Any], Dict[Name, Any], Callable[[Name], Any]] = None,
+        axis: Optional[Axis] = 0,
+        inplace: Literal[True] = True,
+    ) -> None:
+        ...
+
+    @overload
+    def rename_axis(
+        self,
+        mapper: Union[Any, Sequence[Any], Dict[Name, Any], Callable[[Name], Any]] = None,
+        index: Union[Any, Sequence[Any], Dict[Name, Any], Callable[[Name], Any]] = None,
+        columns: Union[Any, Sequence[Any], Dict[Name, Any], Callable[[Name], Any]] = None,
+        axis: Optional[Axis] = 0,
+        inplace: bool = False,
     ) -> Optional["DataFrame"]:
+        ...
+
+    def rename_axis(
+        self,
+        mapper: Union[Any, Sequence[Any], Dict[Name, Any], Callable[[Name], Any]] = None,
+        index: Union[Any, Sequence[Any], Dict[Name, Any], Callable[[Name], Any]] = None,
+        columns: Union[Any, Sequence[Any], Dict[Name, Any], Callable[[Name], Any]] = None,
+        axis: Optional[Axis] = 0,
+        inplace: bool = False,
+    ):
         """
         Set the name of the axis for the index or columns.
 
@@ -12456,7 +12794,19 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 quantile, name="quantile", numeric_only=numeric_only
             ).rename(qq)
 
+    @overload
+    def query(self, expr: str, inplace: Literal[False] = False) -> "DataFrame":
+        ...
+
+    @overload
+    def query(self, expr: str, inplace: Literal[True] = True) -> None:
+        ...
+
+    @overload
     def query(self, expr: str, inplace: bool = False) -> Optional["DataFrame"]:
+        ...
+
+    def query(self, expr: str, inplace: bool = False):
         """
         Query the columns of a DataFrame with a boolean expression.
 
@@ -12542,7 +12892,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             raise TypeError(
                 "expr must be a string to be evaluated, {} given".format(type(expr).__name__)
             )
-        inplace = validate_bool_kwarg(inplace, "inplace")
+        inplace = validate_strict_bool(validate_bool_kwarg(inplace, "inplace"))
 
         data_columns = [label[0] for label in self._internal.column_labels]
         sdf = self._internal.spark_frame.select(
@@ -12641,7 +12991,19 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         else:
             return cast(DataFrame, self.iloc[:, indices])
 
+    @overload
+    def eval(self, expr: str, inplace: Literal[False] = False) -> DataFrameOrSeries:
+        ...
+
+    @overload
+    def eval(self, expr: str, inplace: Literal[True] = True) -> None:
+        ...
+
+    @overload
     def eval(self, expr: str, inplace: bool = False) -> Optional[DataFrameOrSeries]:
+        ...
+
+    def eval(self, expr: str, inplace: bool = False):
         """
         Evaluate a string describing operations on DataFrame columns.
 
@@ -12722,7 +13084,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         if isinstance(self.columns, pd.MultiIndex):
             raise TypeError("`eval` is not supported for multi-index columns")
-        inplace = validate_bool_kwarg(inplace, "inplace")
+        inplace = validate_strict_bool(validate_bool_kwarg(inplace, "inplace"))
         should_return_series = False
         series_name = None
         should_return_scalar = False

@@ -758,6 +758,13 @@ def validate_bool_kwarg(value: Any, arg_name: str) -> Optional[bool]:
     return value
 
 
+def validate_strict_bool(value: Optional[bool]) -> bool:
+    """Ensures that argument is of type bool."""
+    if not isinstance(value, bool):
+        raise TypeError("Expected type bool, received type {}.".format(type(value).__name__))
+    return value
+
+
 def validate_how(how: str) -> str:
     """Check the given how for join is valid."""
     if how == "full":
