@@ -68,6 +68,10 @@ def launch_gateway(conf=None, popen_kwargs=None):
         command = [os.path.join(SPARK_HOME, script)]
         if conf:
             for k, v in conf.getAll():
+                # On windows escape & with triple carets to avoid it being removed by cmd.exe
+                if on_windows:
+                    v = v.replace("&", "^^^&")
+                
                 command += ["--conf", "%s=%s" % (k, v)]
         submit_args = os.environ.get("PYSPARK_SUBMIT_ARGS", "pyspark-shell")
         if os.environ.get("SPARK_TESTING"):

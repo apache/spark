@@ -23,5 +23,9 @@ rem environment, it just launches a new cmd to do the real work.
 rem disable randomized hash for string in Python 3.3+
 set PYTHONHASHSEED=0
 
+setlocal enabledelayedexpansion
 set CLASS=org.apache.spark.deploy.SparkSubmit
-"%~dp0spark-class2.cmd" %CLASS% %*
+set args=%*
+set args="!args:&=^^^&!"
+"%~dp0spark-class2.cmd" %CLASS% !args:~1,-1!
+endlocal
