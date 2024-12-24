@@ -285,7 +285,7 @@ statement
     | (DESC | DESCRIBE) namespace EXTENDED?
         identifierReference                                            #describeNamespace
     | (DESC | DESCRIBE) TABLE? option=(EXTENDED | FORMATTED)?
-        identifierReference partitionSpec? describeColName?            #describeRelation
+        identifierReference partitionSpec? describeColName? (AS JSON)? #describeRelation
     | (DESC | DESCRIBE) QUERY? query                                   #describeQuery
     | COMMENT ON namespace identifierReference IS
         comment                                                        #commentNamespace
@@ -1673,6 +1673,7 @@ ansiNonReserved
     | INVOKER
     | ITEMS
     | ITERATE
+    | JSON
     | KEYS
     | LANGUAGE
     | LAST
@@ -2032,6 +2033,7 @@ nonReserved
     | IS
     | ITEMS
     | ITERATE
+    | JSON
     | KEYS
     | LANGUAGE
     | LAST
