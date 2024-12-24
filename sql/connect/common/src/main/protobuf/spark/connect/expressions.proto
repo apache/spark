@@ -53,6 +53,7 @@ message Expression {
     MergeAction merge_action = 19;
     TypedAggregateExpression typed_aggregate_expression = 20;
     LazyExpression lazy_expression = 21;
+    SubqueryExpression subquery_expression = 22;
 
     // This field is used to mark extensions to the protocol. When plugins generate arbitrary
     // relations they can add them here. During the planning the correct resolution is done.
@@ -456,4 +457,18 @@ message MergeAction {
 message LazyExpression {
   // (Required) The expression to be marked as lazy.
   Expression child = 1;
+}
+
+message SubqueryExpression {
+  // (Required) The id of corresponding connect plan.
+  int64 plan_id = 1;
+
+  // (Required) The type of the subquery.
+  SubqueryType subquery_type = 2;
+
+  enum SubqueryType {
+    SUBQUERY_TYPE_UNKNOWN = 0;
+    SUBQUERY_TYPE_SCALAR = 1;
+    SUBQUERY_TYPE_EXISTS = 2;
+  }
 }

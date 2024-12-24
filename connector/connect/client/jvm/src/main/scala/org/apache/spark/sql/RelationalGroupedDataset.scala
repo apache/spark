@@ -45,7 +45,7 @@ class RelationalGroupedDataset private[sql] (
   import df.sparkSession.RichColumn
 
   protected def toDF(aggExprs: Seq[Column]): DataFrame = {
-    df.sparkSession.newDataFrame { builder =>
+    df.sparkSession.newDataFrame(groupingExprs ++ aggExprs) { builder =>
       val aggBuilder = builder.getAggregateBuilder
         .setInput(df.plan.getRoot)
       groupingExprs.foreach(c => aggBuilder.addGroupingExpressions(c.expr))
