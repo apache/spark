@@ -507,7 +507,9 @@ abstract class UnresolvedStarBase(target: Option[Seq[String]]) extends Star with
       childOperatorMetadataOutput: Seq[Attribute],
       resolve: (Seq[String], Resolver) => Option[NamedExpression],
       suggestedAttributes: Seq[Attribute],
-      resolver: Resolver): Seq[NamedExpression] = {
+      resolver: Resolver,
+      cleanupNestedAliasesDuringStructExpansion: Boolean = false
+  ): Seq[NamedExpression] = {
     // If there is no table specified, use all non-hidden input attributes.
     if (target.isEmpty) return childOperatorOutput
 
@@ -528,11 +530,22 @@ abstract class UnresolvedStarBase(target: Option[Seq[String]]) extends Star with
     // (i.e. [name].* is both a table and a struct), the struct path can always be qualified.
     val attribute = resolve(target.get, resolver)
     if (attribute.isDefined) {
+      // If cleanupNestedAliasesDuringStructExpansion is true, we remove nested aliases during
+      // struct expansion. This is something which is done in the CleanupAliases rule but for the
+      // single-pass analyzer it has to be done here to avoid additional tree traversals.
+      val normalizedAttribute = if (cleanupNestedAliasesDuringStructExpansion) {
+        attribute.get match {
+          case a: Alias => a.child
+          case other => other
+        }
+      } else {
+        attribute.get
+      }
       // This target resolved to an attribute in child. It must be a struct. Expand it.
-      attribute.get.dataType match {
+      normalizedAttribute.dataType match {
         case s: StructType => s.zipWithIndex.map {
           case (f, i) =>
-            val extract = GetStructField(attribute.get, i)
+            val extract = GetStructField(normalizedAttribute, i)
             Alias(extract, f.name)()
         }
 
@@ -941,6 +954,28 @@ case class UnresolvedOrdinal(ordinal: Int)
   override def nullable: Boolean = throw new UnresolvedException("nullable")
   override lazy val resolved = false
   final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_ORDINAL)
+}
+
+/**
+ * Represents an unresolved ordinal used in the GROUP BY clause of a SQL pipe aggregate operator
+ * ("|> AGGREGATE").
+ *
+ * In this context, the ordinal refers to the one-based position of the column in the input
+ * relation. Note that this behavior is different from GROUP BY ordinals in regular SQL, wherein the
+ * ordinal refers to the one-based position of the column in the SELECT clause.
+ *
+ * For example:
+ * {{{
+ *   values ('abc', 'def') tab(x, y)
+ *   |> aggregate sum(x) group by 2
+ * }}}
+ * @param ordinal ordinal starts from 1, instead of 0
+ */
+case class UnresolvedPipeAggregateOrdinal(ordinal: Int)
+  extends LeafExpression with Unevaluable with NonSQLExpression {
+  override def dataType: DataType = throw new UnresolvedException("dataType")
+  override def nullable: Boolean = throw new UnresolvedException("nullable")
+  override lazy val resolved = false
 }
 
 /**
