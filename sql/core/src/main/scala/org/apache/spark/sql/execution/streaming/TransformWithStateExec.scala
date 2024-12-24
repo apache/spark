@@ -478,7 +478,10 @@ case class TransformWithStateExec(
       case Some(metadata) =>
         metadata match {
           case v2: OperatorStateMetadataV2 =>
-            Some(new Path(v2.stateStoreInfo.head.stateSchemaFilePath))
+            val stateSchemaFilePaths = v2.stateStoreInfo.head.stateSchemaFilePaths
+            val stateSchemaId = stateSchemaFilePaths.keys.max
+            val stateSchemaFilePath = stateSchemaFilePaths(stateSchemaId)
+            Some(new Path(stateSchemaFilePath))
           case _ => None
         }
       case None => None
@@ -488,18 +491,21 @@ case class TransformWithStateExec(
       newSchemas.values.toList, session.sessionState, stateSchemaVersion,
       storeName = StateStoreId.DEFAULT_STORE_NAME,
       oldSchemaFilePath = oldStateSchemaFilePath,
-      newSchemaFilePath = Some(newStateSchemaFilePath)))
+      newSchemaFilePath = Some(newStateSchemaFilePath),
+      schemaEvolutionEnabled = supportsSchemaEvolution))
   }
 
   /** Metadata of this stateful operator and its states stores. */
   override def operatorStateMetadata(
-      stateSchemaPaths: List[String]): OperatorStateMetadata = {
+      stateSchemaPaths: List[Map[Short, String]] = List.empty): OperatorStateMetadata = {
     val info = getStateInfo
     val operatorInfo = OperatorInfoV1(info.operatorId, shortName)
     // stateSchemaFilePath should be populated at this point
     val stateStoreInfo =
-      Array(StateStoreMetadataV2(
-        StateStoreId.DEFAULT_STORE_NAME, 0, info.numPartitions, stateSchemaPaths.head))
+      Array(
+        StateStoreMetadataV2(
+          StateStoreId.DEFAULT_STORE_NAME,
+          0, info.numPartitions, stateSchemaPaths.head.keys.max, stateSchemaPaths.head))
 
     val operatorProperties = TransformWithStateOperatorProperties(
       timeMode.toString,
@@ -565,6 +571,7 @@ case class TransformWithStateExec(
               NoPrefixKeyStateEncoderSpec(keyEncoder.schema),
               version = stateInfo.get.storeVersion,
               stateStoreCkptId = stateInfo.get.getStateStoreCkptId(partitionId).map(_.head),
+              stateSchemaBroadcast = stateInfo.get.stateSchemaMetadata,
               useColumnFamilies = true,
               storeConf = storeConf,
               hadoopConf = hadoopConfBroadcast.value.value
@@ -607,6 +614,8 @@ case class TransformWithStateExec(
     }
   }
 
+  override def supportsSchemaEvolution: Boolean = true
+
   /**
    * Create a new StateStore for given partitionId and instantiate a temp directory
    * on the executors. Process data and close the stateStore provider afterwards.
@@ -637,7 +646,8 @@ case class TransformWithStateExec(
       useColumnFamilies = true,
       storeConf = storeConf,
       hadoopConf = hadoopConfBroadcast.value.value,
-      useMultipleValuesPerKey = true)
+      useMultipleValuesPerKey = true,
+      stateSchemaBroadcast = stateInfo.get.stateSchemaMetadata)
 
     val store = stateStoreProvider.getStore(0, None)
     val outputIterator = f(store)

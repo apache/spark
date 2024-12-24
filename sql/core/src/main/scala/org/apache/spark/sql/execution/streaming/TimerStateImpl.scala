@@ -43,6 +43,15 @@ object TimerStateUtils {
       TimerStateUtils.PROC_TIMERS_STATE_NAME + TimerStateUtils.KEY_TO_TIMESTAMP_CF
     }
   }
+
+  def getTimerStateSecIndexName(timeMode: String): String = {
+    assert(timeMode == TimeMode.EventTime.toString || timeMode == TimeMode.ProcessingTime.toString)
+    if (timeMode == TimeMode.EventTime.toString) {
+      TimerStateUtils.EVENT_TIMERS_STATE_NAME + TimerStateUtils.TIMESTAMP_TO_KEY_CF
+    } else {
+      TimerStateUtils.PROC_TIMERS_STATE_NAME + TimerStateUtils.TIMESTAMP_TO_KEY_CF
+    }
+  }
 }
 
 /**

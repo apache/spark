@@ -337,7 +337,7 @@ sealed trait KeyStateEncoderSpec {
   def toEncoder(
       dataEncoder: RocksDBDataEncoder,
       useColumnFamilies: Boolean,
-      virtualColFamilyId: Option[Short]): RocksDBKeyStateEncoder
+      columnFamilyInfo: Option[ColumnFamilyInfo]): RocksDBKeyStateEncoder
 }
 
 object KeyStateEncoderSpec {
@@ -365,9 +365,9 @@ case class NoPrefixKeyStateEncoderSpec(keySchema: StructType) extends KeyStateEn
   override def toEncoder(
       dataEncoder: RocksDBDataEncoder,
       useColumnFamilies: Boolean,
-      virtualColFamilyId: Option[Short]): RocksDBKeyStateEncoder = {
+      columnFamilyInfo: Option[ColumnFamilyInfo]): RocksDBKeyStateEncoder = {
     new NoPrefixKeyStateEncoder(
-      dataEncoder, keySchema, useColumnFamilies, virtualColFamilyId)
+      dataEncoder, keySchema, useColumnFamilies, columnFamilyInfo)
   }
 }
 
@@ -381,9 +381,9 @@ case class PrefixKeyScanStateEncoderSpec(
   override def toEncoder(
       dataEncoder: RocksDBDataEncoder,
       useColumnFamilies: Boolean,
-      virtualColFamilyId: Option[Short]): RocksDBKeyStateEncoder = {
+      columnFamilyInfo: Option[ColumnFamilyInfo]): RocksDBKeyStateEncoder = {
     new PrefixKeyScanStateEncoder(
-      dataEncoder, keySchema, numColsPrefixKey, useColumnFamilies, virtualColFamilyId)
+      dataEncoder, keySchema, numColsPrefixKey, useColumnFamilies, columnFamilyInfo)
   }
 
 
@@ -404,9 +404,9 @@ case class RangeKeyScanStateEncoderSpec(
   override def toEncoder(
       dataEncoder: RocksDBDataEncoder,
       useColumnFamilies: Boolean,
-      virtualColFamilyId: Option[Short]): RocksDBKeyStateEncoder = {
+      columnFamilyInfo: Option[ColumnFamilyInfo]): RocksDBKeyStateEncoder = {
     new RangeKeyScanStateEncoder(
-      dataEncoder, keySchema, orderingOrdinals, useColumnFamilies, virtualColFamilyId)
+      dataEncoder, keySchema, orderingOrdinals, useColumnFamilies, columnFamilyInfo)
   }
 
   override def jsonValue: JValue = {
@@ -465,7 +465,8 @@ trait StateStoreProvider {
       useColumnFamilies: Boolean,
       storeConfs: StateStoreConf,
       hadoopConf: Configuration,
-      useMultipleValuesPerKey: Boolean = false): Unit
+      useMultipleValuesPerKey: Boolean = false,
+      stateSchemaBroadcast: Option[StateSchemaBroadcast] = None): Unit
 
   /**
    * Return the id of the StateStores this provider will generate.
@@ -532,10 +533,12 @@ object StateStoreProvider {
       useColumnFamilies: Boolean,
       storeConf: StateStoreConf,
       hadoopConf: Configuration,
-      useMultipleValuesPerKey: Boolean): StateStoreProvider = {
+      useMultipleValuesPerKey: Boolean,
+      stateSchemaBroadcast: Option[StateSchemaBroadcast]
+  ): StateStoreProvider = {
     val provider = create(storeConf.providerClass)
     provider.init(providerId.storeId, keySchema, valueSchema, keyStateEncoderSpec,
-      useColumnFamilies, storeConf, hadoopConf, useMultipleValuesPerKey)
+      useColumnFamilies, storeConf, hadoopConf, useMultipleValuesPerKey, stateSchemaBroadcast)
     provider
   }
 
@@ -785,6 +788,7 @@ object StateStore extends Logging {
   @GuardedBy("loadedProviders")
   private var _coordRef: StateStoreCoordinatorRef = null
 
+  // scalastyle:off
   /** Get or create a read-only store associated with the id. */
   def getReadOnly(
       storeProviderId: StateStoreProviderId,
@@ -793,6 +797,7 @@ object StateStore extends Logging {
       keyStateEncoderSpec: KeyStateEncoderSpec,
       version: Long,
       stateStoreCkptId: Option[String],
+      stateSchemaBroadcast: Option[StateSchemaBroadcast],
       useColumnFamilies: Boolean,
       storeConf: StateStoreConf,
       hadoopConf: Configuration,
@@ -802,7 +807,8 @@ object StateStore extends Logging {
       throw QueryExecutionErrors.unexpectedStateStoreVersion(version)
     }
     val storeProvider = getStateStoreProvider(storeProviderId, keySchema, valueSchema,
-      keyStateEncoderSpec, useColumnFamilies, storeConf, hadoopConf, useMultipleValuesPerKey)
+      keyStateEncoderSpec, useColumnFamilies, storeConf, hadoopConf, useMultipleValuesPerKey,
+      stateSchemaBroadcast)
     storeProvider.getReadStore(version, stateStoreCkptId)
   }
 
@@ -814,6 +820,7 @@ object StateStore extends Logging {
       keyStateEncoderSpec: KeyStateEncoderSpec,
       version: Long,
       stateStoreCkptId: Option[String],
+      stateSchemaBroadcast: Option[StateSchemaBroadcast],
       useColumnFamilies: Boolean,
       storeConf: StateStoreConf,
       hadoopConf: Configuration,
@@ -824,9 +831,11 @@ object StateStore extends Logging {
     }
     hadoopConf.set(StreamExecution.RUN_ID_KEY, storeProviderId.queryRunId.toString)
     val storeProvider = getStateStoreProvider(storeProviderId, keySchema, valueSchema,
-      keyStateEncoderSpec, useColumnFamilies, storeConf, hadoopConf, useMultipleValuesPerKey)
+      keyStateEncoderSpec, useColumnFamilies, storeConf, hadoopConf, useMultipleValuesPerKey,
+      stateSchemaBroadcast)
     storeProvider.getStore(version, stateStoreCkptId)
   }
+  // scalastyle:on
 
   private def getStateStoreProvider(
       storeProviderId: StateStoreProviderId,
@@ -836,7 +845,8 @@ object StateStore extends Logging {
       useColumnFamilies: Boolean,
       storeConf: StateStoreConf,
       hadoopConf: Configuration,
-      useMultipleValuesPerKey: Boolean): StateStoreProvider = {
+      useMultipleValuesPerKey: Boolean,
+      stateSchemaBroadcast: Option[StateSchemaBroadcast]): StateStoreProvider = {
     loadedProviders.synchronized {
       startMaintenanceIfNeeded(storeConf)
 
@@ -847,7 +857,8 @@ object StateStore extends Logging {
           storeProviderId,
           StateStoreProvider.createAndInit(
             storeProviderId, keySchema, valueSchema, keyStateEncoderSpec,
-            useColumnFamilies, storeConf, hadoopConf, useMultipleValuesPerKey)
+            useColumnFamilies, storeConf, hadoopConf, useMultipleValuesPerKey,
+            stateSchemaBroadcast)
         )
       }
 

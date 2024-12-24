@@ -82,19 +82,28 @@ private[sql] class RocksDBStateStoreProvider
         stateStoreName = stateStoreId.storeName,
         colFamilyName = colFamilyName)
 
+      val columnFamilyInfo = Some(ColumnFamilyInfo(colFamilyName, newColFamilyId))
+
       val dataEncoder = getDataEncoder(
-        stateStoreEncoding, dataEncoderCacheKey, keyStateEncoderSpec, valueSchema)
+        stateStoreEncoding,
+        dataEncoderCacheKey,
+        keyStateEncoderSpec,
+        valueSchema,
+        stateSchemaBroadcast,
+        columnFamilyInfo
+      )
 
       val keyEncoder = RocksDBStateEncoder.getKeyEncoder(
         dataEncoder,
         keyStateEncoderSpec,
         useColumnFamilies,
-        Some(newColFamilyId)
+        columnFamilyInfo
       )
       val valueEncoder = RocksDBStateEncoder.getValueEncoder(
         dataEncoder,
         valueSchema,
-        useMultipleValuesPerKey
+        useMultipleValuesPerKey,
+        stateSchemaBroadcast.map(_.getCurrentSchemaId)
       )
       keyValueEncoderMap.putIfAbsent(colFamilyName, (keyEncoder, valueEncoder))
     }
@@ -376,7 +385,8 @@ private[sql] class RocksDBStateStoreProvider
       useColumnFamilies: Boolean,
       storeConf: StateStoreConf,
       hadoopConf: Configuration,
-      useMultipleValuesPerKey: Boolean = false): Unit = {
+      useMultipleValuesPerKey: Boolean = false,
+      stateSchemaBroadcast: Option[StateSchemaBroadcast]): Unit = {
     this.stateStoreId_ = stateStoreId
     this.keySchema = keySchema
     this.valueSchema = valueSchema
@@ -384,6 +394,7 @@ private[sql] class RocksDBStateStoreProvider
     this.hadoopConf = hadoopConf
     this.useColumnFamilies = useColumnFamilies
     this.stateStoreEncoding = storeConf.stateStoreEncodingFormat
+    this.stateSchemaBroadcast = stateSchemaBroadcast
 
     if (useMultipleValuesPerKey) {
       require(useColumnFamilies, "Multiple values per key support requires column families to be" +
@@ -404,19 +415,33 @@ private[sql] class RocksDBStateStoreProvider
       stateStoreName = stateStoreId.storeName,
       colFamilyName = StateStore.DEFAULT_COL_FAMILY_NAME)
 
+    val columnFamilyInfo = if (useColumnFamilies) {
+      defaultColFamilyId = Some(rocksDB.createColFamilyIfAbsent(StateStore.DEFAULT_COL_FAMILY_NAME))
+      Some(ColumnFamilyInfo(StateStore.DEFAULT_COL_FAMILY_NAME, defaultColFamilyId.get))
+    } else {
+      None
+    }
+
     val dataEncoder = getDataEncoder(
-      stateStoreEncoding, dataEncoderCacheKey, keyStateEncoderSpec, valueSchema)
+      stateStoreEncoding,
+      dataEncoderCacheKey,
+      keyStateEncoderSpec,
+      valueSchema,
+      stateSchemaBroadcast,
+      columnFamilyInfo
+    )
 
     val keyEncoder = RocksDBStateEncoder.getKeyEncoder(
       dataEncoder,
       keyStateEncoderSpec,
       useColumnFamilies,
-      defaultColFamilyId
+      columnFamilyInfo
     )
     val valueEncoder = RocksDBStateEncoder.getValueEncoder(
       dataEncoder,
       valueSchema,
-      useMultipleValuesPerKey
+      useMultipleValuesPerKey,
+      stateSchemaBroadcast.map(_.getCurrentSchemaId)
     )
     keyValueEncoderMap.putIfAbsent(StateStore.DEFAULT_COL_FAMILY_NAME, (keyEncoder, valueEncoder))
   }
@@ -497,6 +522,7 @@ private[sql] class RocksDBStateStoreProvider
   @volatile private var hadoopConf: Configuration = _
   @volatile private var useColumnFamilies: Boolean = _
   @volatile private var stateStoreEncoding: String = _
+  @volatile private var stateSchemaBroadcast: Option[StateSchemaBroadcast] = _
 
   private[sql] lazy val rocksDB = {
     val dfsRootDir = stateStoreId.storeCheckpointLocation().toString
@@ -640,6 +666,7 @@ object RocksDBStateStoreProvider {
   val STATE_ENCODING_NUM_VERSION_BYTES = 1
   val STATE_ENCODING_VERSION: Byte = 0
   val VIRTUAL_COL_FAMILY_PREFIX_BYTES = 2
+  val SCHEMA_ID_PREFIX_BYTES = 2
 
   private val MAX_AVRO_ENCODERS_IN_CACHE = 1000
   private val AVRO_ENCODER_LIFETIME_HOURS = 1L
@@ -673,21 +700,28 @@ object RocksDBStateStoreProvider {
       stateStoreEncoding: String,
       encoderCacheKey: StateRowEncoderCacheKey,
       keyStateEncoderSpec: KeyStateEncoderSpec,
-      valueSchema: StructType): RocksDBDataEncoder = {
+      valueSchema: StructType,
+      stateSchemaBroadcast: Option[StateSchemaBroadcast],
+      columnFamilyInfo: Option[ColumnFamilyInfo] = None): RocksDBDataEncoder = {
     assert(Set("avro", "unsaferow").contains(stateStoreEncoding))
     RocksDBStateStoreProvider.dataEncoderCache.get(
       encoderCacheKey,
       new java.util.concurrent.Callable[RocksDBDataEncoder] {
         override def call(): RocksDBDataEncoder = {
           if (stateStoreEncoding == "avro") {
-            new AvroStateEncoder(keyStateEncoderSpec, valueSchema)
+            new AvroStateEncoder(
+              keyStateEncoderSpec, valueSchema, stateSchemaBroadcast, columnFamilyInfo)
           } else {
-            new UnsafeRowDataEncoder(keyStateEncoderSpec, valueSchema)
+            new UnsafeRowDataEncoder(
+              keyStateEncoderSpec, valueSchema, stateSchemaBroadcast, columnFamilyInfo)
           }
         }
       }
     )
   }
+
+  private[sql] def clearDataEncoderCache: Unit =
+    RocksDBStateStoreProvider.dataEncoderCache.invalidateAll()
 
   private def getRunId(hadoopConf: Configuration): String = {
     val runId = hadoopConf.get(StreamExecution.RUN_ID_KEY)
