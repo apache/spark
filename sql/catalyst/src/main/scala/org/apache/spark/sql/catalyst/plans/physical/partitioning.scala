@@ -394,8 +394,7 @@ case class KeyGroupedPartitioning(
             if (SQLConf.get.v2BucketingAllowJoinKeysSubsetOfPartitionKeys) {
               // check that join keys (required clustering keys)
               // overlap with partition keys (KeyGroupedPartitioning attributes)
-              requiredClustering.exists(x => attributes.exists(_.semanticEquals(x))) &&
-                  expressions.forall(_.collectLeaves().size == 1)
+              requiredClustering.exists(x => attributes.exists(_.semanticEquals(x)))
             } else {
               attributes.forall(x => requiredClustering.exists(_.semanticEquals(x)))
             }
@@ -467,14 +466,7 @@ object KeyGroupedPartitioning {
 
   def supportsExpressions(expressions: Seq[Expression]): Boolean = {
     def isSupportedTransform(transform: TransformExpression): Boolean = {
-      transform.children.size == 1 && isReference(transform.children.head)
-    }
-
-    @tailrec
-    def isReference(e: Expression): Boolean = e match {
-      case _: Attribute => true
-      case g: GetStructField => isReference(g.child)
-      case _ => false
+      transform.children.count(isReference) == 1
     }
 
     expressions.forall {
@@ -482,6 +474,13 @@ object KeyGroupedPartitioning {
       case e: Expression if isReference(e) => true
       case _ => false
     }
+  }
+
+  @tailrec
+  def isReference(e: Expression): Boolean = e match {
+    case _: Attribute => true
+    case g: GetStructField => isReference(g.child)
+    case _ => false
   }
 }
 
@@ -802,8 +801,15 @@ case class KeyGroupedShuffleSpec(
     }
     partitioning.expressions.map { e =>
       val leaves = e.collectLeaves()
-      assert(leaves.size == 1, s"Expected exactly one child from $e, but found ${leaves.size}")
-      distKeyToPos.getOrElse(leaves.head.canonicalized, mutable.BitSet.empty)
+      val attrs = leaves.filter(KeyGroupedPartitioning.isReference)
+      assert(leaves.size == 1 || attrs.size == 1,
+        s"Expected exactly one reference or child from $e, but found ${leaves.size}")
+      val head = if (attrs.size == 1) {
+        attrs.head
+      } else {
+        leaves.head
+      }
+      distKeyToPos.getOrElse(head.canonicalized, mutable.BitSet.empty)
     }
   }
 
