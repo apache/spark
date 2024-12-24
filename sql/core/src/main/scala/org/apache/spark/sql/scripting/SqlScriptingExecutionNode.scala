@@ -181,7 +181,8 @@ class NoOpStatementExec extends LeafStatementExec {
  * @param label
  *   Label set by user to CompoundBody or None otherwise.
  * @param isScope
- *   Flag that indicates whether Compound Body is scope or not.
+ *   Flag indicating if the CompoundBody is a labeled scope.
+ *   Scopes are used for grouping local variables and exception handlers.
  * @param context
  *   SqlScriptingExecutionContext keeps the execution state of current script.
  */

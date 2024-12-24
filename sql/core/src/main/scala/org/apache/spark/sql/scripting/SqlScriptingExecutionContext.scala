@@ -63,7 +63,7 @@ class SqlScriptingExecutionFrame(
   }
 
   def enterScope(label: String): Unit = {
-    scopes.addOne(new SqlScriptingExecutionScope(label))
+    scopes.append(new SqlScriptingExecutionScope(label))
   }
 
   def exitScope(label: String): Unit = {
