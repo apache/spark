@@ -4647,7 +4647,7 @@ object SQLConf {
   val VARIANT_WRITE_SHREDDING_ENABLED =
     buildConf("spark.sql.variant.writeShredding.enabled")
       .internal()
-      .doc("When true, the Parquet reader is allowed to write shredded variant. ")
+      .doc("When true, the Parquet writer is allowed to write shredded variant. ")
       .version("4.0.0")
       .booleanConf
       .createWithDefault(false)
