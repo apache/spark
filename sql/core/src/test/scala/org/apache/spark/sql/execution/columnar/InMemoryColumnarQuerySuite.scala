@@ -619,4 +619,55 @@ class InMemoryColumnarQuerySuite extends QueryTest
 
     assert(exceptionCnt.get == 0)
   }
+
+  test("SPARK-50572: InMemoryRelation.cachedColumnBuffers should be thread-safe") {
+    val qe = spark.range(1).queryExecution
+    val plan = qe.executedPlan
+    val serializer = new TestCachedBatchSerializer(true, 1)
+    val cachedRDDBuilder = CachedRDDBuilder(serializer, MEMORY_ONLY, plan, None, qe.logical)
+
+    @volatile var stopped = false
+
+    val th1 = new Thread {
+      override def run(): Unit = {
+        while (!stopped) {
+          assert(cachedRDDBuilder.cachedColumnBuffers != null)
+        }
+      }
+    }
+
+    val th2 = new Thread {
+      override def run(): Unit = {
+        while (!stopped) {
+          cachedRDDBuilder.clearCache()
+        }
+      }
+    }
+
+    val th3 = new Thread {
+      override def run(): Unit = {
+        Thread.sleep(3000L)
+        stopped = true
+      }
+    }
+
+    val exceptionCnt = new AtomicInteger
+    val exceptionHandler: Thread.UncaughtExceptionHandler = (_: Thread, cause: Throwable) => {
+        exceptionCnt.incrementAndGet
+        fail(cause)
+      }
+
+    th1.setUncaughtExceptionHandler(exceptionHandler)
+    th2.setUncaughtExceptionHandler(exceptionHandler)
+    th1.start()
+    th2.start()
+    th3.start()
+    th1.join()
+    th2.join()
+    th3.join()
+
+    cachedRDDBuilder.clearCache()
+
+    assert(exceptionCnt.get == 0)
+  }
 }
