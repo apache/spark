@@ -1991,15 +1991,15 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
   private def rewriteConditionByWith(
       cond: Expression,
       aliasMap: AttributeMap[Alias]): Expression = {
-    val newAliasMap = cond.collect { case a: Attribute => a }
-      .groupBy(identity)
-      .transform((_, v) => v.size)
-      .filter(m => aliasMap.contains(m._1) && m._2 > 1)
-      .map(m => m._1 -> trimAliases(aliasMap.getOrElse(m._1, m._1)))
-      .filter(m => !CollapseProject.isCheap(m._2))
     if (!SQLConf.get.getConf(SQLConf.ALWAYS_INLINE_COMMON_EXPR)) {
+      val replaceWithMap = cond.collect { case a: Attribute => a }
+        .groupBy(identity)
+        .transform((_, v) => v.size)
+        .filter(m => aliasMap.contains(m._1) && m._2 > 1)
+        .map(m => m._1 -> trimAliases(aliasMap.getOrElse(m._1, m._1)))
+        .filter(m => !CollapseProject.isCheap(m._2))
       splitConjunctivePredicates(cond)
-        .map(rewriteByWith(_, AttributeMap(newAliasMap)))
+        .map(rewriteByWith(_, AttributeMap(replaceWithMap)))
         .reduce(And)
     } else cond
   }
@@ -2011,7 +2011,7 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
 
   private def rewriteByWith(
       expr: Expression,
-      replaceMap: Map[Attribute, Expression]): Expression = {
+      replaceMap: AttributeMap[Expression]): Expression = {
     if (!canRewriteByWith(expr)) {
       return expr
     }
