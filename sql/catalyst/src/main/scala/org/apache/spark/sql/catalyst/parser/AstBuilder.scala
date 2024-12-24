@@ -2763,20 +2763,6 @@ class AstBuilder extends DataTypeAstBuilder
    */
   override def visitCast(ctx: CastContext): Expression = withOrigin(ctx) {
     val rawDataType = typedVisit[DataType](ctx.dataType())
-    ctx.dataType() match {
-      case context: PrimitiveDataTypeContext =>
-        val typeCtx = context.`type`()
-        if (typeCtx.start.getType == STRING) {
-          typeCtx.children.asScala.toSeq match {
-            case Seq(_, cctx: CollateClauseContext) =>
-              throw QueryParsingErrors.dataTypeUnsupportedError(
-                rawDataType.typeName,
-                ctx.dataType().asInstanceOf[PrimitiveDataTypeContext])
-            case _ =>
-          }
-        }
-      case _ =>
-    }
     val dataType = CharVarcharUtils.replaceCharVarcharWithStringForCast(rawDataType)
     ctx.name.getType match {
       case SqlBaseParser.CAST =>
@@ -2796,20 +2782,6 @@ class AstBuilder extends DataTypeAstBuilder
    */
   override def visitCastByColon(ctx: CastByColonContext): Expression = withOrigin(ctx) {
     val rawDataType = typedVisit[DataType](ctx.dataType())
-    ctx.dataType() match {
-      case context: PrimitiveDataTypeContext =>
-        val typeCtx = context.`type`()
-        if (typeCtx.start.getType == STRING) {
-          typeCtx.children.asScala.toSeq match {
-            case Seq(_, cctx: CollateClauseContext) =>
-              throw QueryParsingErrors.dataTypeUnsupportedError(
-                rawDataType.typeName,
-                ctx.dataType().asInstanceOf[PrimitiveDataTypeContext])
-            case _ =>
-          }
-        }
-      case _ =>
-    }
     val dataType = CharVarcharUtils.replaceCharVarcharWithStringForCast(rawDataType)
     val cast = Cast(expression(ctx.primaryExpression), dataType)
     cast.setTagValue(Cast.USER_SPECIFIED_CAST, ())
@@ -6040,7 +6012,8 @@ class AstBuilder extends DataTypeAstBuilder
     // analyzer behave as if we had added the corresponding SQL clause after a table subquery
     // containing the input plan.
     def withSubqueryAlias(): LogicalPlan = left match {
-      case _: SubqueryAlias | _: UnresolvedRelation | _: Join | _: Filter =>
+      case _: SubqueryAlias | _: UnresolvedRelation | _: Join | _: Filter |
+           _: GlobalLimit | _: LocalLimit | _: Offset | _: Sort =>
         left
       case _ =>
         SubqueryAlias(SubqueryAlias.generateSubqueryName(), left)
@@ -6161,7 +6134,7 @@ class AstBuilder extends DataTypeAstBuilder
         "The AGGREGATE clause requires a list of aggregate expressions " +
           "or a list of grouping expressions, or both", ctx)
     }
-    // Visit each aggregate expression, and add a PipeAggregate expression on top of it to generate
+    // Visit each aggregate expression, and add a [[PipeExpression]] on top of it to generate
     // clear error messages if the expression does not contain at least one aggregate function.
     val aggregateExpressions: Seq[NamedExpression] =
       Option(ctx.namedExpressionSeq()).map { n: NamedExpressionSeqContext =>
@@ -6207,12 +6180,28 @@ class AstBuilder extends DataTypeAstBuilder
           a.aggregateExpressions.foreach(visit)
           // Prepend grouping keys to the list of aggregate functions, since operator pipe AGGREGATE
           // clause returns the GROUP BY expressions followed by the list of aggregate functions.
-          val namedGroupingExpressions: Seq[NamedExpression] =
-            a.groupingExpressions.map {
-              case n: NamedExpression => n
-              case e: Expression => UnresolvedAlias(e, None)
-            }
-          a.copy(aggregateExpressions = namedGroupingExpressions ++ a.aggregateExpressions)
+          val newGroupingExpressions = ArrayBuffer.empty[Expression]
+          val newAggregateExpressions = ArrayBuffer.empty[NamedExpression]
+          a.groupingExpressions.foreach {
+            case n: NamedExpression =>
+              newGroupingExpressions += n
+              newAggregateExpressions += n
+            // If the grouping expression is an integer literal, create [[UnresolvedOrdinal]] and
+            // [[UnresolvedPipeAggregateOrdinal]] expressions to represent it in the final grouping
+            // and aggregate expressions, respectively. This will let the
+            // [[ResolveOrdinalInOrderByAndGroupBy]] rule detect the ordinal in the aggregate list
+            // and replace it with the corresponding attribute from the child operator.
+            case Literal(v: Int, IntegerType) if conf.groupByOrdinal =>
+              newGroupingExpressions += UnresolvedOrdinal(newAggregateExpressions.length + 1)
+              newAggregateExpressions += UnresolvedAlias(UnresolvedPipeAggregateOrdinal(v), None)
+            case e: Expression =>
+              newGroupingExpressions += e
+              newAggregateExpressions += UnresolvedAlias(e, None)
+          }
+          newAggregateExpressions.appendAll(a.aggregateExpressions)
+          a.copy(
+            groupingExpressions = newGroupingExpressions.toSeq,
+            aggregateExpressions = newAggregateExpressions.toSeq)
       }
     }.getOrElse {
       // This is a table aggregation with no grouping expressions.

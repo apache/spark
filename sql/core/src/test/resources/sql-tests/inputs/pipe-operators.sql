@@ -542,6 +542,21 @@ table t
 |> select x, length(y) as z
 |> where x + length(y) < 4;
 
+table t
+|> select x, length(y) as z
+|> limit 1000
+|> where x + length(y) < 4;
+
+table t
+|> select x, length(y) as z
+|> limit 1000 offset 1
+|> where x + length(y) < 4;
+
+table t
+|> select x, length(y) as z
+|> order by x, y
+|> where x + length(y) < 4;
+
 -- If the WHERE clause wants to filter rows produced by an aggregation, it is not valid to try to
 -- refer to the aggregate functions directly; it is necessary to use aliases instead.
 (select x, sum(length(y)) as sum_len from t group by x)
@@ -843,9 +858,16 @@ values (0, 'abc') tab(x, y)
 |> union all table t;
 
 -- Union distinct with a VALUES list.
-values (0, 1) tab(x, y)
+-- The |> WHERE operator applies to the result of the |> UNION operator, not to the "table t" input.
+values (2, 'xyz') tab(x, y)
 |> union table t
 |> where x = 0;
+
+-- Union distinct with a VALUES list.
+-- The |> DROP operator applies to the result of the |> UNION operator, not to the "table t" input.
+values (2, 'xyz') tab(x, y)
+|> union table t
+|> drop x;
 
 -- Union all with a table subquery on both the source and target sides.
 (select * from t)
@@ -997,6 +1019,36 @@ select 1 as x, 2 as y
 -- Basic aggregation with group by ordinals.
 select 3 as x, 4 as y
 |> aggregate group by 1, 2;
+
+values (3, 4) as tab(x, y)
+|> aggregate sum(y) group by 1;
+
+values (3, 4), (5, 4) as tab(x, y)
+|> aggregate sum(y) group by 1;
+
+select 3 as x, 4 as y
+|> aggregate sum(y) group by 1, 1;
+
+select 1 as `1`, 2 as `2`
+|> aggregate sum(`2`) group by `1`;
+
+select 3 as x, 4 as y
+|> aggregate sum(y) group by 2;
+
+select 3 as x, 4 as y, 5 as z
+|> aggregate sum(y) group by 2;
+
+select 3 as x, 4 as y, 5 as z
+|> aggregate sum(y) group by 3;
+
+select 3 as x, 4 as y, 5 as z
+|> aggregate sum(y) group by 2, 3;
+
+select 3 as x, 4 as y, 5 as z
+|> aggregate sum(y) group by 1, 2, 3;
+
+select 3 as x, 4 as y, 5 as z
+|> aggregate sum(y) group by x, 2, 3;
 
 -- Basic table aggregation.
 table t
