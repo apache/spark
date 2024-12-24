@@ -71,7 +71,7 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 
-ARG BASIC_PIP_PKGS="numpy pyarrow==11.0.0 six==1.16.0 pandas==2.1.0 scipy scikit-learn coverage matplotlib openpyxl memory-profiler unittest-xml-reporting"
+ARG BASIC_PIP_PKGS="numpy==1.21 pyarrow==11.0.0 six==1.16.0 pandas==2.0.0 scipy scikit-learn coverage matplotlib openpyxl memory-profiler unittest-xml-reporting"
 # Python deps for Spark Connect
 ARG CONNECT_PIP_PKGS="grpcio==1.67.0 grpcio-status==1.67.0 googleapis-common-protos==1.65.0 graphviz==0.20 protobuf"
 
