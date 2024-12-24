@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 
-class NormalizePlanSuite extends SparkFunSuite{
+class NormalizePlanSuite extends SparkFunSuite {
 
   test("Normalize Project") {
     val baselineCol1 = $"col1".int
@@ -31,7 +31,11 @@ class NormalizePlanSuite extends SparkFunSuite{
     val testPlan = LocalRelation(testCol1).select(testCol1)
 
     assert(baselinePlan != testPlan)
-    assert(NormalizePlan(baselinePlan) == NormalizePlan(testPlan))
+    assert(
+      NormalizePlan(baselinePlan)
+      ==
+      NormalizePlan(testPlan)
+    )
   }
 
   test("Normalize ordering in a project list of an inner Project") {
@@ -41,6 +45,17 @@ class NormalizePlanSuite extends SparkFunSuite{
       LocalRelation($"col1".int, $"col2".string).select($"col2", $"col1").select($"col1")
 
     assert(baselinePlan != testPlan)
-    assert(NormalizePlan(baselinePlan) == NormalizePlan(testPlan))
+
+    assert(
+      NormalizePlan(baselinePlan, normalizeInnerProjectListOrder = false)
+      !=
+      NormalizePlan(testPlan, normalizeInnerProjectListOrder = false)
+    )
+
+    assert(
+      NormalizePlan(baselinePlan, normalizeInnerProjectListOrder = true)
+      ==
+      NormalizePlan(testPlan, normalizeInnerProjectListOrder = true)
+    )
   }
 }

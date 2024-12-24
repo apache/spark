@@ -23,8 +23,8 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.logical._
 
 object NormalizePlan extends PredicateHelper {
-  def apply(plan: LogicalPlan): LogicalPlan =
-    normalizePlan(normalizeExprIds(plan))
+  def apply(plan: LogicalPlan, normalizeInnerProjectListOrder: Boolean = false): LogicalPlan =
+    normalizePlan(normalizeExprIds(plan), normalizeInnerProjectListOrder)
 
   /**
    * Since attribute references are given globally unique ids during analysis,
@@ -69,7 +69,9 @@ object NormalizePlan extends PredicateHelper {
    * - Sample the seed will replaced by 0L.
    * - Join conditions will be resorted by hashCode.
    */
-  def normalizePlan(plan: LogicalPlan): LogicalPlan = {
+  def normalizePlan(
+      plan: LogicalPlan,
+      normalizeInnerProjectListOrder: Boolean = false): LogicalPlan = {
     plan transform {
       case Filter(condition: Expression, child: LogicalPlan) =>
         Filter(
@@ -95,7 +97,7 @@ object NormalizePlan extends PredicateHelper {
             .sortBy(_.hashCode())
             .reduce(And)
         Join(left, right, newJoinType, Some(newCondition), hint)
-      case Project(outerProjectList, innerProject: Project) =>
+      case Project(outerProjectList, innerProject: Project) if normalizeInnerProjectListOrder =>
         val normalizedInnerProjectList = normalizeProjectList(innerProject.projectList)
         val orderedInnerProjectList = normalizedInnerProjectList.sortBy(_.name)
         val newInnerProject =
