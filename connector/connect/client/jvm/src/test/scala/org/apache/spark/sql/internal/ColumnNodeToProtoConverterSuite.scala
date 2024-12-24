@@ -250,11 +250,12 @@ class ColumnNodeToProtoConverterSuite extends ConnectFunSuite {
       expr(
         _.getWindowBuilder
           .setWindowFunction(
-            expr(_.getUnresolvedFunctionBuilder
-              .setFunctionName("sum")
-              .setIsDistinct(false)
-              .addArguments(attribute("a"))
-              .setIsInternal(false)))
+            expr(
+              _.getUnresolvedFunctionBuilder
+                .setFunctionName("sum")
+                .setIsDistinct(false)
+                .addArguments(attribute("a"))
+                .setIsInternal(false)))
           .addPartitionSpec(attribute("b"))
           .addPartitionSpec(attribute("c"))
           .addOrderSpec(proto.Expression.SortOrder
