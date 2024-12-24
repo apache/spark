@@ -18,7 +18,8 @@
 package org.apache.spark.sql.catalyst.analysis.resolver
 
 import org.apache.spark.internal.{Logging, MDC, MessageWithContext}
-import org.apache.spark.internal.LogKeys.QUERY_PLAN
+import org.apache.spark.internal.LogKeys.{MESSAGE, QUERY_PLAN}
+import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util.sideBySide
 import org.apache.spark.sql.internal.SQLConf
@@ -27,32 +28,71 @@ import org.apache.spark.sql.internal.SQLConf
  * [[PlanLogger]] is used by the [[Resolver]] to log intermediate resolution results.
  */
 class PlanLogger extends Logging {
-  private val logLevel = SQLConf.get.planChangeLogLevel
+  private val planChangeLogLevel = SQLConf.get.planChangeLogLevel
+  private val expressionTreeChangeLogLevel = SQLConf.get.expressionTreeChangeLogLevel
 
-  /**
-   * Logs the transition from the `unresolvedPlan` to the `resolvedPlan`.
-   */
-  def log(unresolvedPlan: LogicalPlan, resolvedPlan: LogicalPlan): Unit = {
-    logBasedOnLevel(() => createMessage(unresolvedPlan, resolvedPlan))
+  def logPlanResolutionEvent(plan: LogicalPlan, event: String): Unit = {
+    log(() => log"""
+       |=== Plan resolution: ${MDC(MESSAGE, event)} ===
+       |${MDC(QUERY_PLAN, plan.treeString)}
+     """.stripMargin, planChangeLogLevel)
   }
 
-  private def createMessage(
-      unresolvedPlan: LogicalPlan,
-      resolvedPlan: LogicalPlan): MessageWithContext =
-    log"""
-       |=== Unresolved/resolved operator subtree ===
+  def logPlanResolution(unresolvedPlan: LogicalPlan, resolvedPlan: LogicalPlan): Unit = {
+    log(
+      () =>
+        log"""
+       |=== Unresolved plan -> Resolved plan ===
        |${MDC(
-           QUERY_PLAN,
-           sideBySide(unresolvedPlan.treeString, resolvedPlan.treeString).mkString("\n")
-         )}
-     """.stripMargin
-
-  private def logBasedOnLevel(createMessage: () => MessageWithContext): Unit = logLevel match {
-    case "TRACE" => logTrace(createMessage().message)
-    case "DEBUG" => logDebug(createMessage().message)
-    case "INFO" => logInfo(createMessage())
-    case "WARN" => logWarning(createMessage())
-    case "ERROR" => logError(createMessage())
-    case _ => logTrace(createMessage().message)
+               QUERY_PLAN,
+               sideBySide(
+                 unresolvedPlan.withNewChildren(resolvedPlan.children).treeString,
+                 resolvedPlan.treeString
+               ).mkString("\n")
+             )}
+     """.stripMargin,
+      planChangeLogLevel
+    )
   }
+
+  def logExpressionTreeResolutionEvent(expressionTree: Expression, event: String): Unit = {
+    log(
+      () => log"""
+       |=== Expression tree resolution: ${MDC(MESSAGE, event)} ===
+       |${MDC(QUERY_PLAN, expressionTree.treeString)}
+     """.stripMargin,
+      expressionTreeChangeLogLevel
+    )
+  }
+
+  def logExpressionTreeResolution(
+      unresolvedExpressionTree: Expression,
+      resolvedExpressionTree: Expression): Unit = {
+    log(
+      () =>
+        log"""
+       |=== Unresolved expression tree -> Resolved expression tree ===
+       |${MDC(
+               QUERY_PLAN,
+               sideBySide(
+                 unresolvedExpressionTree
+                   .withNewChildren(resolvedExpressionTree.children)
+                   .treeString,
+                 resolvedExpressionTree.treeString
+               ).mkString("\n")
+             )}
+     """.stripMargin,
+      expressionTreeChangeLogLevel
+    )
+  }
+
+  private def log(createMessage: () => MessageWithContext, logLevel: String): Unit =
+    logLevel match {
+      case "TRACE" => logTrace(createMessage().message)
+      case "DEBUG" => logDebug(createMessage().message)
+      case "INFO" => logInfo(createMessage())
+      case "WARN" => logWarning(createMessage())
+      case "ERROR" => logError(createMessage())
+      case _ => logTrace(createMessage().message)
+    }
 }

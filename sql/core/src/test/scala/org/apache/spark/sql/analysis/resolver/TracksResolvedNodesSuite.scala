@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.analysis.FunctionResolution
 import org.apache.spark.sql.catalyst.analysis.resolver.{
   ExpressionResolver,
   NameScopeStack,
+  PlanLogger,
   Resolver
 }
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Cast, ExprId}
@@ -127,7 +128,8 @@ class TracksResolvedNodesSuite extends QueryTest with SharedSparkSession {
       new FunctionResolution(
         spark.sessionState.catalogManager,
         Resolver.createRelationResolution(spark.sessionState.catalogManager)
-      )
+      ),
+      new PlanLogger
     )
   }
 }
