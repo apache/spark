@@ -21,6 +21,7 @@ import org.apache.spark.sql.catalyst.analysis.GetViewColumnByNameAndOrdinal
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.connector.read.streaming.SparkDataStream
 
 object NormalizePlan extends PredicateHelper {
   def apply(plan: LogicalPlan): LogicalPlan =
@@ -104,6 +105,8 @@ object NormalizePlan extends PredicateHelper {
       case Project(projectList, child) =>
         Project(normalizeProjectList(projectList), child)
       case c: KeepAnalyzedQuery => c.storeAnalyzedQuery()
+      case localRelation: LocalRelation =>
+        ComparableLocalRelation.fromLocalRelation(localRelation)
     }
   }
 
@@ -132,5 +135,35 @@ object NormalizePlan extends PredicateHelper {
     case GreaterThanOrEqual(l, r) if l.hashCode() > r.hashCode() => LessThanOrEqual(r, l)
     case LessThanOrEqual(l, r) if l.hashCode() > r.hashCode() => GreaterThanOrEqual(r, l)
     case _ => condition // Don't reorder.
+  }
+}
+
+/**
+ * A substitute for the [[LocalRelation]] that has comparable `data` field. [[LocalRelation]]'s
+ * `data` is incomparable for maps, because [[ArrayBasedMapData]] doesn't define [[equals]].
+ */
+case class ComparableLocalRelation(
+    override val output: Seq[Attribute],
+    data: Seq[Seq[Expression]],
+    override val isStreaming: Boolean,
+    stream: Option[SparkDataStream]) extends LeafNode
+
+object ComparableLocalRelation {
+  def fromLocalRelation(localRelation: LocalRelation): ComparableLocalRelation = {
+    val dataTypes = localRelation.output.map(_.dataType)
+    ComparableLocalRelation(
+      output = localRelation.output,
+      data = localRelation.data.map { row =>
+        if (row != null) {
+          row.toSeq(dataTypes).zip(dataTypes).map {
+            case (value, dataType) => Literal(value, dataType)
+          }
+        } else {
+          Seq.empty
+        }
+      },
+      isStreaming = localRelation.isStreaming,
+      stream = localRelation.stream
+    )
   }
 }
