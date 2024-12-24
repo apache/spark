@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGe
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.trees.{BinaryLike, TernaryLike, UnaryLike}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{EXPRESSION_WITH_RANDOM_SEED, RUNTIME_REPLACEABLE, TreePattern}
-import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.random.XORShiftRandom
 
@@ -330,7 +330,8 @@ object Uniform {
   group = "string_funcs")
 case class RandStr(
     length: Expression, override val seedExpression: Expression, hideSeed: Boolean)
-  extends ExpressionWithRandomSeed with BinaryLike[Expression] with Nondeterministic {
+  extends ExpressionWithRandomSeed with BinaryLike[Expression] with Nondeterministic
+    with ExpectsInputTypes {
   def this(length: Expression) =
     this(length, UnresolvedSeed, hideSeed = true)
   def this(length: Expression, seedExpression: Expression) =
@@ -341,6 +342,10 @@ case class RandStr(
   override def stateful: Boolean = true
   override def left: Expression = length
   override def right: Expression = seedExpression
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(
+    TypeCollection(ByteType, ShortType, IntegerType, LongType, FloatType, DoubleType, DecimalType),
+    TypeCollection(IntegerType, LongType))
 
   /**
    * Record ID within each partition. By being transient, the Random Number Generator is
@@ -366,39 +371,49 @@ case class RandStr(
   }
 
   override def checkInputDataTypes(): TypeCheckResult = {
-    var result: TypeCheckResult = TypeCheckResult.TypeCheckSuccess
-    def requiredType = "INT or SMALLINT"
-    Seq((length, "length", 0),
-      (seedExpression, "seed", 1)).foreach {
-      case (expr: Expression, name: String, index: Int) =>
-        if (result == TypeCheckResult.TypeCheckSuccess) {
-          if (!expr.foldable) {
-            result = DataTypeMismatch(
-              errorSubClass = "NON_FOLDABLE_INPUT",
-              messageParameters = Map(
-                "inputName" -> toSQLId(name),
-                "inputType" -> requiredType,
-                "inputExpr" -> toSQLExpr(expr)))
-          } else expr.dataType match {
-            case _: ShortType | _: IntegerType =>
-            case _: LongType if index == 1 =>
-            case _ =>
-              result = DataTypeMismatch(
-                errorSubClass = "UNEXPECTED_INPUT_TYPE",
-                messageParameters = Map(
-                  "paramIndex" -> ordinalNumber(index),
-                  "requiredType" -> requiredType,
-                  "inputSql" -> toSQLExpr(expr),
-                  "inputType" -> toSQLType(expr.dataType)))
-          }
+    var result: TypeCheckResult = super.checkInputDataTypes()
+    Seq((length, "length"),
+      (seedExpression, "seed")).foreach {
+      case (expr: Expression, name: String) =>
+        if (result == TypeCheckResult.TypeCheckSuccess && !expr.foldable) {
+          result = DataTypeMismatch(
+            errorSubClass = "NON_FOLDABLE_INPUT",
+            messageParameters = Map(
+              "inputName" -> toSQLId(name),
+              "inputType" -> "integer",
+              "inputExpr" -> toSQLExpr(expr)))
         }
     }
     result
   }
 
   override def evalInternal(input: InternalRow): Any = {
-    val numChars = length.eval(input).asInstanceOf[Number].intValue()
+    val numChars = lengthInteger()
     ExpressionImplUtils.randStr(rng, numChars)
+  }
+
+  private def lengthInteger(): Int = {
+    def throwNullArgumentError(): Nothing = {
+      throw QueryCompilationErrors.nullArgumentError(prettyName, "length")
+    }
+    val result = length.dataType match {
+      case _: DecimalType =>
+        val eval = length.eval().asInstanceOf[Decimal]
+        if (eval == null) {
+          throwNullArgumentError()
+        }
+        eval.toInt
+      case _ =>
+        val eval = length.eval().asInstanceOf[Number]
+        if (eval == null) {
+          throwNullArgumentError()
+        }
+        eval.intValue()
+    }
+    if (result < 0) {
+      throw QueryExecutionErrors.unexpectedValueForLengthInFunctionError(prettyName, result)
+    }
+    result
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -407,11 +422,12 @@ case class RandStr(
     ctx.addPartitionInitializationStatement(
       s"$rngTerm = new $className(${seed}L + partitionIndex);")
     val eval = length.genCode(ctx)
+    val numChars = lengthInteger()
     ev.copy(code =
       code"""
         |${eval.code}
         |UTF8String ${ev.value} =
-        |  ${classOf[ExpressionImplUtils].getName}.randStr($rngTerm, (int)(${eval.value}));
+        |  ${classOf[ExpressionImplUtils].getName}.randStr($rngTerm, $numChars);
         |boolean ${ev.isNull} = false;
         |""".stripMargin,
       isNull = FalseLiteral)
