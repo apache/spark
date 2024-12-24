@@ -273,11 +273,12 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
       nameParts.last.toLowerCase(Locale.ROOT)
     }
 
-   catalogManager.scriptingLocalVariableManager
+    catalogManager.scriptingLocalVariableManager
       .flatMap(_.get(variableName))
       .map { varDef =>
         VariableReference(
           nameParts,
+          // todo LOCALVARS: deal with this fakesystemcatalog situation
           FakeSystemCatalog,
           Identifier.of(Array(CatalogManager.SESSION_NAMESPACE), variableName),
           varDef)

@@ -42,7 +42,8 @@ class ScriptingVariableManager(context: SqlScriptingExecutionContext) extends Va
       overrideIfExists: Boolean): Unit = {
     // todo LOCALVARS: throw meaningful error, qualified name
     variables
-      .getOrElse(context.currentScope.label, throw Exception)
+//      .getOrElse(context.currentScope.label, throw Exception)
+      .get(context.currentScope.label).get
       .put(name, VariableDefinition(defaultValueSQL, initValue))
   }
 

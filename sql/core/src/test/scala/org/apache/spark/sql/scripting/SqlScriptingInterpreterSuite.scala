@@ -69,6 +69,25 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
     result.zip(expected).foreach { case (df, expectedAnswer) => checkAnswer(df, expectedAnswer) }
   }
 
+  test("testtest") {
+    val sqlScript =
+      """
+        |BEGIN
+        |DECLARE var = 1;
+        |SELECT var + var * 2;
+        |END
+        |""".stripMargin
+
+    val r = spark.sql(sqlScript).collect()
+
+    val expected = Seq(
+      Seq.empty[Row], // declare var
+      Seq(Row(1)), // select
+      Seq.empty[Row] // drop var
+    )
+//    verifySqlScriptResult(sqlScript, expected)
+  }
+
   // Tests
   test("multi statement - simple") {
     withTable("t") {
