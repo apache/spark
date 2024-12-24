@@ -2899,4 +2899,10 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       )
     )
   }
+
+  def unsafeCommandWhenSparkSessionStopped(command: String): SparkRuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "UNSAFE_COMMAND_WHEN_SPARK_SESSION_STOPPED",
+      messageParameters = Map("command" -> command))
+  }
 }
