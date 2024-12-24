@@ -209,6 +209,7 @@ final class DataFrameWriterImpl[T] private[sql](ds: Dataset[T]) extends DataFram
                 optionExpression = OptionList(Seq.empty),
                 location = extraOptions.get("path"),
                 comment = extraOptions.get(TableCatalog.PROP_COMMENT),
+                collation = extraOptions.get(TableCatalog.PROP_COLLATION),
                 serde = None,
                 external = false)
               runCommand(df.sparkSession) {
@@ -469,6 +470,7 @@ final class DataFrameWriterImpl[T] private[sql](ds: Dataset[T]) extends DataFram
           optionExpression = OptionList(Seq.empty),
           location = extraOptions.get("path"),
           comment = extraOptions.get(TableCatalog.PROP_COMMENT),
+          collation = extraOptions.get(TableCatalog.PROP_COLLATION),
           serde = None,
           external = false)
         ReplaceTableAsSelect(
@@ -489,6 +491,7 @@ final class DataFrameWriterImpl[T] private[sql](ds: Dataset[T]) extends DataFram
           optionExpression = OptionList(Seq.empty),
           location = extraOptions.get("path"),
           comment = extraOptions.get(TableCatalog.PROP_COMMENT),
+          collation = extraOptions.get(TableCatalog.PROP_COLLATION),
           serde = None,
           external = false)
 
