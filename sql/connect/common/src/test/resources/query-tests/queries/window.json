@@ -20,7 +20,8 @@
               "unresolvedAttribute": {
                 "unparsedIdentifier": "id"
               }
-            }]
+            }],
+            "isInternal": false
           }
         },
         "partitionSpec": [{
@@ -42,7 +43,8 @@
               "unresolvedAttribute": {
                 "unparsedIdentifier": "id"
               }
-            }]
+            }],
+            "isInternal": false
           }
         },
         "partitionSpec": [{
@@ -64,7 +66,8 @@
               "unresolvedAttribute": {
                 "unparsedIdentifier": "id"
               }
-            }]
+            }],
+            "isInternal": false
           }
         },
         "orderSpec": [{
@@ -94,7 +97,8 @@
               "unresolvedAttribute": {
                 "unparsedIdentifier": "id"
               }
-            }]
+            }],
+            "isInternal": false
           }
         },
         "orderSpec": [{
@@ -124,7 +128,8 @@
               "unresolvedAttribute": {
                 "unparsedIdentifier": "id"
               }
-            }]
+            }],
+            "isInternal": false
           }
         },
         "orderSpec": [{
@@ -163,7 +168,8 @@
               "unresolvedAttribute": {
                 "unparsedIdentifier": "id"
               }
-            }]
+            }],
+            "isInternal": false
           }
         },
         "orderSpec": [{
@@ -202,7 +208,8 @@
               "unresolvedAttribute": {
                 "unparsedIdentifier": "id"
               }
-            }]
+            }],
+            "isInternal": false
           }
         }
       }

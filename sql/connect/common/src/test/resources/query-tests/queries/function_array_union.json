@@ -33,9 +33,11 @@
               "literal": {
                 "integer": 3
               }
-            }]
+            }],
+            "isInternal": false
           }
-        }]
+        }],
+        "isInternal": false
       }
     }]
   }

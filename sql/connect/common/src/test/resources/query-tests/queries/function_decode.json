@@ -30,7 +30,8 @@
           "literal": {
             "string": "UTF-8"
           }
-        }]
+        }],
+        "isInternal": false
       }
     }]
   }

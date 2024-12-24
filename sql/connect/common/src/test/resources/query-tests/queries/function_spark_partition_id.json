@@ -13,7 +13,8 @@
     },
     "expressions": [{
       "unresolvedFunction": {
-        "functionName": "spark_partition_id"
+        "functionName": "spark_partition_id",
+        "isInternal": false
       }
     }]
   }

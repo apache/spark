@@ -25,7 +25,8 @@
               "literal": {
                 "integer": 10
               }
-            }]
+            }],
+            "isInternal": false
           }
         }, {
           "literal": {
@@ -42,7 +43,8 @@
               "literal": {
                 "integer": 20
               }
-            }]
+            }],
+            "isInternal": false
           }
         }, {
           "literal": {

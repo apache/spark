@@ -18,7 +18,8 @@
           "literal": {
             "integer": 1
           }
-        }]
+        }],
+        "isInternal": false
       }
     }]
   }

@@ -22,7 +22,8 @@
           "literal": {
             "string": "yyyy-MM-dd HH:mm:ss.SSSS"
           }
-        }]
+        }],
+        "isInternal": false
       }
     }]
   }

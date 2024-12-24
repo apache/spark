@@ -25,13 +25,15 @@
               "literal": {
                 "integer": 0
               }
-            }]
+            }],
+            "isInternal": false
           }
         }, {
           "literal": {
             "string": "id negative!"
           }
-        }]
+        }],
+        "isInternal": false
       }
     }]
   }

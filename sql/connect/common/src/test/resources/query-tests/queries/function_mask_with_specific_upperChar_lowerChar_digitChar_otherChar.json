@@ -34,7 +34,8 @@
           "literal": {
             "string": "*"
           }
-        }]
+        }],
+        "isInternal": false
       }
     }]
   }

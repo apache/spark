@@ -13,7 +13,8 @@
     },
     "expressions": [{
       "unresolvedFunction": {
-        "functionName": "now"
+        "functionName": "now",
+        "isInternal": false
       }
     }]
   }

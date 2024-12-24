@@ -13,7 +13,8 @@
     },
     "expressions": [{
       "unresolvedFunction": {
-        "functionName": "localtimestamp"
+        "functionName": "localtimestamp",
+        "isInternal": false
       }
     }]
   }

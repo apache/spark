@@ -13,7 +13,8 @@
     },
     "expressions": [{
       "unresolvedFunction": {
-        "functionName": "user"
+        "functionName": "user",
+        "isInternal": false
       }
     }]
   }

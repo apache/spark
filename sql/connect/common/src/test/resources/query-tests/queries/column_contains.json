@@ -22,7 +22,8 @@
           "literal": {
             "string": "baz"
           }
-        }]
+        }],
+        "isInternal": false
       }
     }]
   }

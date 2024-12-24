@@ -25,9 +25,11 @@
               "literal": {
                 "string": "yyyy-MM-dd"
               }
-            }]
+            }],
+            "isInternal": false
           }
-        }]
+        }],
+        "isInternal": false
       }
     }]
   }

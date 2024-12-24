@@ -34,7 +34,8 @@
           "literal": {
             "binary": "Q0RF"
           }
-        }]
+        }],
+        "isInternal": false
       }
     }]
   }

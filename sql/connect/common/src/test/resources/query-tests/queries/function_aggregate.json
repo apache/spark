@@ -35,7 +35,8 @@
                   "unresolvedNamedLambdaVariable": {
                     "nameParts": ["y_2"]
                   }
-                }]
+                }],
+                "isInternal": false
               }
             },
             "arguments": [{
@@ -55,7 +56,8 @@
               "nameParts": ["x_3"]
             }]
           }
-        }]
+        }],
+        "isInternal": false
       }
     }]
   }

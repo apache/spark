@@ -22,7 +22,8 @@
           "literal": {
             "string": "-04:00"
           }
-        }]
+        }],
+        "isInternal": false
       }
     }]
   }

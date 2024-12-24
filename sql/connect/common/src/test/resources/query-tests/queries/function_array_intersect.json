@@ -29,9 +29,11 @@
               "literal": {
                 "integer": 4
               }
-            }]
+            }],
+            "isInternal": false
           }
-        }]
+        }],
+        "isInternal": false
       }
     }]
   }

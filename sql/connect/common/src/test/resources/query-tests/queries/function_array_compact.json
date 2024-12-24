@@ -18,7 +18,8 @@
           "unresolvedAttribute": {
             "unparsedIdentifier": "e"
           }
-        }]
+        }],
+        "isInternal": false
       }
     }]
   }

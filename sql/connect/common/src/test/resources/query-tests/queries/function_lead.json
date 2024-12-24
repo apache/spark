@@ -32,7 +32,8 @@
               "literal": {
                 "boolean": true
               }
-            }]
+            }],
+            "isInternal": false
           }
         },
         "partitionSpec": [{

@@ -16,9 +16,11 @@
         "functionName": "unix_timestamp",
         "arguments": [{
           "unresolvedFunction": {
-            "functionName": "current_timestamp"
+            "functionName": "current_timestamp",
+            "isInternal": false
           }
-        }]
+        }],
+        "isInternal": false
       }
     }]
   }

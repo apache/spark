@@ -15,7 +15,8 @@
       "window": {
         "windowFunction": {
           "unresolvedFunction": {
-            "functionName": "percent_rank"
+            "functionName": "percent_rank",
+            "isInternal": false
           }
         },
         "partitionSpec": [{

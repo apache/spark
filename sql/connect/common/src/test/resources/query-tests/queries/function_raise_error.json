@@ -18,7 +18,8 @@
           "literal": {
             "string": "kaboom"
           }
-        }]
+        }],
+        "isInternal": false
       }
     }]
   }

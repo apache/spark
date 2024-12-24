@@ -30,7 +30,8 @@
           "literal": {
             "string": "3"
           }
-        }]
+        }],
+        "isInternal": false
       }
     }]
   }

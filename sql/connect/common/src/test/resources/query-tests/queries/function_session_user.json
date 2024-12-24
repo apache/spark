@@ -13,7 +13,8 @@
     },
     "expressions": [{
       "unresolvedFunction": {
-        "functionName": "session_user"
+        "functionName": "session_user",
+        "isInternal": false
       }
     }]
   }

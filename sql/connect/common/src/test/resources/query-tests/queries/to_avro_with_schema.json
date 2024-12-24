@@ -22,7 +22,8 @@
           "literal": {
             "string": "{\"type\": \"int\", \"name\": \"id\"}"
           }
-        }]
+        }],
+        "isInternal": false
       }
     }]
   }

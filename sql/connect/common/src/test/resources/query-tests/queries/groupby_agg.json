@@ -25,7 +25,8 @@
             "unparsedIdentifier": "a",
             "planId": "0"
           }
-        }]
+        }],
+        "isInternal": false
       }
     }, {
       "unresolvedFunction": {
@@ -35,7 +36,8 @@
             "unparsedIdentifier": "b",
             "planId": "0"
           }
-        }]
+        }],
+        "isInternal": false
       }
     }, {
       "unresolvedFunction": {
@@ -45,7 +47,8 @@
             "unparsedIdentifier": "b",
             "planId": "0"
           }
-        }]
+        }],
+        "isInternal": false
       }
     }, {
       "unresolvedFunction": {
@@ -55,7 +58,8 @@
             "unparsedIdentifier": "b",
             "planId": "0"
           }
-        }]
+        }],
+        "isInternal": false
       }
     }, {
       "unresolvedFunction": {
@@ -65,7 +69,8 @@
             "unparsedIdentifier": "b",
             "planId": "0"
           }
-        }]
+        }],
+        "isInternal": false
       }
     }, {
       "unresolvedFunction": {
@@ -75,7 +80,8 @@
             "unparsedIdentifier": "b",
             "planId": "0"
           }
-        }]
+        }],
+        "isInternal": false
       }
     }, {
       "unresolvedFunction": {
@@ -84,7 +90,8 @@
           "unresolvedStar": {
             "planId": "0"
           }
-        }]
+        }],
+        "isInternal": false
       }
     }, {
       "unresolvedFunction": {
@@ -94,7 +101,8 @@
             "unparsedIdentifier": "a",
             "planId": "0"
           }
-        }]
+        }],
+        "isInternal": false
       }
     }]
   }

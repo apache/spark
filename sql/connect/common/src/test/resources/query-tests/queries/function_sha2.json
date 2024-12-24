@@ -30,7 +30,8 @@
           "literal": {
             "integer": 512
           }
-        }]
+        }],
+        "isInternal": false
       }
     }]
   }

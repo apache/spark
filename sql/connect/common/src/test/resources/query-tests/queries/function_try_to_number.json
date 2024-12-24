@@ -22,7 +22,8 @@
           "literal": {
             "string": "99,999"
           }
-        }]
+        }],
+        "isInternal": false
       }
     }]
   }

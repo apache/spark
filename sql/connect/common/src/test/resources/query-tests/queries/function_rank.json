@@ -15,7 +15,8 @@
       "window": {
         "windowFunction": {
           "unresolvedFunction": {
-            "functionName": "rank"
+            "functionName": "rank",
+            "isInternal": false
           }
         },
         "partitionSpec": [{

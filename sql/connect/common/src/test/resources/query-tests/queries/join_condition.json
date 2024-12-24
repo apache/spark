@@ -46,7 +46,8 @@
           "unresolvedAttribute": {
             "unparsedIdentifier": "r.id"
           }
-        }]
+        }],
+        "isInternal": false
       }
     },
     "joinType": "JOIN_TYPE_LEFT_ANTI"

@@ -22,7 +22,8 @@
           "literal": {
             "string": "{\"type\":\"struct\",\"fields\":[{\"name\":\"id\",\"type\":\"long\",\"nullable\":true,\"metadata\":{}},{\"name\":\"a\",\"type\":\"integer\",\"nullable\":true,\"metadata\":{}},{\"name\":\"b\",\"type\":\"double\",\"nullable\":true,\"metadata\":{}}]}"
           }
-        }]
+        }],
+        "isInternal": false
       }
     }]
   }

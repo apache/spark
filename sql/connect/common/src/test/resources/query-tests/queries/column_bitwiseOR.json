@@ -22,7 +22,8 @@
           "literal": {
             "integer": 7
           }
-        }]
+        }],
+        "isInternal": false
       }
     }]
   }
