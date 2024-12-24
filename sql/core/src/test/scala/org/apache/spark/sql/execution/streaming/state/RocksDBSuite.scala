@@ -979,12 +979,12 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
         null, StateStore.DEFAULT_COL_FAMILY_NAME)
     }
 
-    changelogReader.closeIfNeeded()
-
     assert(entries.size == expectedEntries.size)
     entries.zip(expectedEntries).map{
       case (e1, e2) => assert(e1._1 === e2._1 && e1._2 === e2._2 && e1._3 === e2._3)
     }
+
+    changelogReader.closeIfNeeded()
   }
 
   testWithChangelogCheckpointingEnabled("RocksDBFileManager: StateStoreChangelogReaderFactory " +
@@ -1124,12 +1124,13 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
       (RecordType.DELETE_RECORD, j.toString.getBytes,
         null, StateStore.DEFAULT_COL_FAMILY_NAME)
     }
-    changelogReader.closeIfNeeded()
 
     assert(entries.size == expectedEntries.size)
     entries.zip(expectedEntries).map{
       case (e1, e2) => assert(e1._1 === e2._1 && e1._2 === e2._2 && e1._3 === e2._3)
     }
+
+    changelogReader.closeIfNeeded()
   }
 
   testWithChangelogCheckpointingEnabled(
@@ -1161,12 +1162,13 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
     } ++ (2 to 4).map { j =>
       (RecordType.DELETE_RECORD, j.toString.getBytes, null)
     }
-    changelogReader.closeIfNeeded()
 
     assert(entries.size == expectedEntries.size)
     entries.zip(expectedEntries).map{
       case (e1, e2) => assert(e1._1 === e2._1 && e1._2 === e2._2 && e1._3 === e2._3)
     }
+
+    changelogReader.closeIfNeeded()
   }
 
   testWithChangelogCheckpointingEnabled("RocksDBFileManager: read and write v2 changelog with " +
@@ -1206,12 +1208,13 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
     } ++ (2 to 4).map { j =>
       (RecordType.DELETE_RECORD, j.toString.getBytes, null)
     }
-    changelogReader.closeIfNeeded()
 
     assert(entries.size == expectedEntries.size)
     entries.zip(expectedEntries).map{
       case (e1, e2) => assert(e1._1 === e2._1 && e1._2 === e2._2 && e1._3 === e2._3)
     }
+
+    changelogReader.closeIfNeeded()
   }
 
   testWithColumnFamilies("RocksDBFileManager: create init dfs directory with " +
