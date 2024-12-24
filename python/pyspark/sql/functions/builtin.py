@@ -1852,6 +1852,314 @@ def sum_distinct(col: "ColumnOrName") -> Column:
 
 
 @_try_remote_functions
+def listagg(col: "ColumnOrName", delimiter: Optional[Union[Column, str, bytes]] = None) -> Column:
+    """
+    Aggregate function: returns the concatenation of non-null input values,
+    separated by the delimiter.
+
+    .. versionadded:: 4.0.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or column name
+        target column to compute on.
+    delimiter : :class:`~pyspark.sql.Column`, literal string or bytes, optional
+        the delimiter to separate the values. The default value is None.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        the column for computed results.
+
+    Examples
+    --------
+    Example 1: Using listagg function
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([('a',), ('b',), (None,), ('c',)], ['strings'])
+    >>> df.select(sf.listagg('strings')).show()
+    +----------------------+
+    |listagg(strings, NULL)|
+    +----------------------+
+    |                   abc|
+    +----------------------+
+
+    Example 2: Using listagg function with a delimiter
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([('a',), ('b',), (None,), ('c',)], ['strings'])
+    >>> df.select(sf.listagg('strings', ', ')).show()
+    +--------------------+
+    |listagg(strings, , )|
+    +--------------------+
+    |             a, b, c|
+    +--------------------+
+
+    Example 3: Using listagg function with a binary column and delimiter
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(b'\x01',), (b'\x02',), (None,), (b'\x03',)], ['bytes'])
+    >>> df.select(sf.listagg('bytes', b'\x42')).show()
+    +---------------------+
+    |listagg(bytes, X'42')|
+    +---------------------+
+    |     [01 42 02 42 03]|
+    +---------------------+
+
+    Example 4: Using listagg function on a column with all None values
+
+    >>> from pyspark.sql import functions as sf
+    >>> from pyspark.sql.types import StructType, StructField, StringType
+    >>> schema = StructType([StructField("strings", StringType(), True)])
+    >>> df = spark.createDataFrame([(None,), (None,), (None,), (None,)], schema=schema)
+    >>> df.select(sf.listagg('strings')).show()
+    +----------------------+
+    |listagg(strings, NULL)|
+    +----------------------+
+    |                  NULL|
+    +----------------------+
+    """
+    if delimiter is None:
+        return _invoke_function_over_columns("listagg", col)
+    else:
+        return _invoke_function_over_columns("listagg", col, lit(delimiter))
+
+
+@_try_remote_functions
+def listagg_distinct(
+    col: "ColumnOrName", delimiter: Optional[Union[Column, str, bytes]] = None
+) -> Column:
+    """
+    Aggregate function: returns the concatenation of distinct non-null input values,
+    separated by the delimiter.
+
+    .. versionadded:: 4.0.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or column name
+        target column to compute on.
+    delimiter : :class:`~pyspark.sql.Column`, literal string or bytes, optional
+        the delimiter to separate the values. The default value is None.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        the column for computed results.
+
+    Examples
+    --------
+    Example 1: Using listagg_distinct function
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([('a',), ('b',), (None,), ('c',), ('b',)], ['strings'])
+    >>> df.select(sf.listagg_distinct('strings')).show()
+    +-------------------------------+
+    |listagg(DISTINCT strings, NULL)|
+    +-------------------------------+
+    |                            abc|
+    +-------------------------------+
+
+    Example 2: Using listagg_distinct function with a delimiter
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([('a',), ('b',), (None,), ('c',), ('b',)], ['strings'])
+    >>> df.select(sf.listagg_distinct('strings', ', ')).show()
+    +-----------------------------+
+    |listagg(DISTINCT strings, , )|
+    +-----------------------------+
+    |                      a, b, c|
+    +-----------------------------+
+
+    Example 3: Using listagg_distinct function with a binary column and delimiter
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(b'\x01',), (b'\x02',), (None,), (b'\x03',), (b'\x02',)],
+    ...                            ['bytes'])
+    >>> df.select(sf.listagg_distinct('bytes', b'\x42')).show()
+    +------------------------------+
+    |listagg(DISTINCT bytes, X'42')|
+    +------------------------------+
+    |              [01 42 02 42 03]|
+    +------------------------------+
+
+    Example 4: Using listagg_distinct function on a column with all None values
+
+    >>> from pyspark.sql import functions as sf
+    >>> from pyspark.sql.types import StructType, StructField, StringType
+    >>> schema = StructType([StructField("strings", StringType(), True)])
+    >>> df = spark.createDataFrame([(None,), (None,), (None,), (None,)], schema=schema)
+    >>> df.select(sf.listagg_distinct('strings')).show()
+    +-------------------------------+
+    |listagg(DISTINCT strings, NULL)|
+    +-------------------------------+
+    |                           NULL|
+    +-------------------------------+
+    """
+    if delimiter is None:
+        return _invoke_function_over_columns("listagg_distinct", col)
+    else:
+        return _invoke_function_over_columns("listagg_distinct", col, lit(delimiter))
+
+
+@_try_remote_functions
+def string_agg(
+    col: "ColumnOrName", delimiter: Optional[Union[Column, str, bytes]] = None
+) -> Column:
+    """
+    Aggregate function: returns the concatenation of non-null input values,
+    separated by the delimiter.
+
+    An alias of :func:`listagg`.
+
+    .. versionadded:: 4.0.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or column name
+        target column to compute on.
+    delimiter : :class:`~pyspark.sql.Column`, literal string or bytes, optional
+        the delimiter to separate the values. The default value is None.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        the column for computed results.
+
+    Examples
+    --------
+    Example 1: Using string_agg function
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([('a',), ('b',), (None,), ('c',)], ['strings'])
+    >>> df.select(sf.string_agg('strings')).show()
+    +-------------------------+
+    |string_agg(strings, NULL)|
+    +-------------------------+
+    |                      abc|
+    +-------------------------+
+
+    Example 2: Using string_agg function with a delimiter
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([('a',), ('b',), (None,), ('c',)], ['strings'])
+    >>> df.select(sf.string_agg('strings', ', ')).show()
+    +-----------------------+
+    |string_agg(strings, , )|
+    +-----------------------+
+    |                a, b, c|
+    +-----------------------+
+
+    Example 3: Using string_agg function with a binary column and delimiter
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(b'\x01',), (b'\x02',), (None,), (b'\x03',)], ['bytes'])
+    >>> df.select(sf.string_agg('bytes', b'\x42')).show()
+    +------------------------+
+    |string_agg(bytes, X'42')|
+    +------------------------+
+    |        [01 42 02 42 03]|
+    +------------------------+
+
+    Example 4: Using string_agg function on a column with all None values
+
+    >>> from pyspark.sql import functions as sf
+    >>> from pyspark.sql.types import StructType, StructField, StringType
+    >>> schema = StructType([StructField("strings", StringType(), True)])
+    >>> df = spark.createDataFrame([(None,), (None,), (None,), (None,)], schema=schema)
+    >>> df.select(sf.string_agg('strings')).show()
+    +-------------------------+
+    |string_agg(strings, NULL)|
+    +-------------------------+
+    |                     NULL|
+    +-------------------------+
+    """
+    if delimiter is None:
+        return _invoke_function_over_columns("string_agg", col)
+    else:
+        return _invoke_function_over_columns("string_agg", col, lit(delimiter))
+
+
+@_try_remote_functions
+def string_agg_distinct(
+    col: "ColumnOrName", delimiter: Optional[Union[Column, str, bytes]] = None
+) -> Column:
+    """
+    Aggregate function: returns the concatenation of distinct non-null input values,
+    separated by the delimiter.
+
+    An alias of :func:`listagg_distinct`.
+
+    .. versionadded:: 4.0.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or column name
+        target column to compute on.
+    delimiter : :class:`~pyspark.sql.Column`, literal string or bytes, optional
+        the delimiter to separate the values. The default value is None.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        the column for computed results.
+
+    Examples
+    --------
+    Example 1: Using string_agg_distinct function
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([('a',), ('b',), (None,), ('c',), ('b',)], ['strings'])
+    >>> df.select(sf.string_agg_distinct('strings')).show()
+    +----------------------------------+
+    |string_agg(DISTINCT strings, NULL)|
+    +----------------------------------+
+    |                               abc|
+    +----------------------------------+
+
+    Example 2: Using string_agg_distinct function with a delimiter
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([('a',), ('b',), (None,), ('c',), ('b',)], ['strings'])
+    >>> df.select(sf.string_agg_distinct('strings', ', ')).show()
+    +--------------------------------+
+    |string_agg(DISTINCT strings, , )|
+    +--------------------------------+
+    |                         a, b, c|
+    +--------------------------------+
+
+    Example 3: Using string_agg_distinct function with a binary column and delimiter
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(b'\x01',), (b'\x02',), (None,), (b'\x03',), (b'\x02',)],
+    ...                            ['bytes'])
+    >>> df.select(sf.string_agg_distinct('bytes', b'\x42')).show()
+    +---------------------------------+
+    |string_agg(DISTINCT bytes, X'42')|
+    +---------------------------------+
+    |                 [01 42 02 42 03]|
+    +---------------------------------+
+
+    Example 4: Using string_agg_distinct function on a column with all None values
+
+    >>> from pyspark.sql import functions as sf
+    >>> from pyspark.sql.types import StructType, StructField, StringType
+    >>> schema = StructType([StructField("strings", StringType(), True)])
+    >>> df = spark.createDataFrame([(None,), (None,), (None,), (None,)], schema=schema)
+    >>> df.select(sf.string_agg_distinct('strings')).show()
+    +----------------------------------+
+    |string_agg(DISTINCT strings, NULL)|
+    +----------------------------------+
+    |                              NULL|
+    +----------------------------------+
+    """
+    if delimiter is None:
+        return _invoke_function_over_columns("string_agg_distinct", col)
+    else:
+        return _invoke_function_over_columns("string_agg_distinct", col, lit(delimiter))
+
+
+@_try_remote_functions
 def product(col: "ColumnOrName") -> Column:
     """
     Aggregate function: returns the product of the values in a group.

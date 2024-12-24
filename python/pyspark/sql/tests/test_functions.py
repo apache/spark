@@ -30,6 +30,7 @@ from pyspark.sql import Row, Window, functions as F, types
 from pyspark.sql.avro.functions import from_avro, to_avro
 from pyspark.sql.column import Column
 from pyspark.sql.functions.builtin import nullifzero, randstr, uniform, zeroifnull
+from pyspark.sql.types import StructType, StructField, StringType
 from pyspark.testing.sqlutils import ReusedSQLTestCase, SQLTestUtils
 from pyspark.testing.utils import have_numpy, assertDataFrameEqual
 
@@ -83,13 +84,7 @@ class FunctionsTestsMixin:
         missing_in_py = jvm_fn_set.difference(py_fn_set)
 
         # Functions that we expect to be missing in python until they are added to pyspark
-        expected_missing_in_py = {
-            # TODO(SPARK-50220): listagg functions will soon be added and removed from this list
-            "listagg_distinct",
-            "listagg",
-            "string_agg",
-            "string_agg_distinct",
-        }
+        expected_missing_in_py = set()
 
         self.assertEqual(
             expected_missing_in_py, missing_in_py, "Missing functions in pyspark not as expected"
@@ -1144,6 +1139,70 @@ class FunctionsTestsMixin:
             sorted(df.select(F.collect_list(df.value).alias("r")).collect()[0].r),
             ["1", "2", "2", "2"],
         )
+
+    def test_listagg_functions(self):
+        df = self.spark.createDataFrame(
+            [(1, "1"), (2, "2"), (None, None), (1, "2")], ["key", "value"]
+        )
+        df_with_bytes = self.spark.createDataFrame(
+            [(b"\x01",), (b"\x02",), (None,), (b"\x03",), (b"\x02",)], ["bytes"]
+        )
+        df_with_nulls = self.spark.createDataFrame(
+            [(None,), (None,), (None,), (None,), (None,)],
+            StructType([StructField("nulls", StringType(), True)]),
+        )
+        # listagg and string_agg are aliases
+        for listagg_ref in [F.listagg, F.string_agg]:
+            self.assertEqual(df.select(listagg_ref(df.key).alias("r")).collect()[0].r, "121")
+            self.assertEqual(df.select(listagg_ref(df.value).alias("r")).collect()[0].r, "122")
+            self.assertEqual(
+                df.select(listagg_ref(df.value, ",").alias("r")).collect()[0].r, "1,2,2"
+            )
+            self.assertEqual(
+                df_with_bytes.select(listagg_ref(df_with_bytes.bytes, b"\x42").alias("r"))
+                .collect()[0]
+                .r,
+                b"\x01\x42\x02\x42\x03\x42\x02",
+            )
+            self.assertEqual(
+                df_with_nulls.select(listagg_ref(df_with_nulls.nulls).alias("r")).collect()[0].r,
+                None,
+            )
+
+    def test_listagg_distinct_functions(self):
+        df = self.spark.createDataFrame(
+            [(1, "1"), (2, "2"), (None, None), (1, "2")], ["key", "value"]
+        )
+        df_with_bytes = self.spark.createDataFrame(
+            [(b"\x01",), (b"\x02",), (None,), (b"\x03",), (b"\x02",)], ["bytes"]
+        )
+        df_with_nulls = self.spark.createDataFrame(
+            [(None,), (None,), (None,), (None,), (None,)],
+            StructType([StructField("nulls", StringType(), True)]),
+        )
+        # listagg_distinct and string_agg_distinct are aliases
+        for listagg_distinct_ref in [F.listagg_distinct, F.string_agg_distinct]:
+            self.assertEqual(
+                df.select(listagg_distinct_ref(df.key).alias("r")).collect()[0].r, "12"
+            )
+            self.assertEqual(
+                df.select(listagg_distinct_ref(df.value).alias("r")).collect()[0].r, "12"
+            )
+            self.assertEqual(
+                df.select(listagg_distinct_ref(df.value, ",").alias("r")).collect()[0].r, "1,2"
+            )
+            self.assertEqual(
+                df_with_bytes.select(listagg_distinct_ref(df_with_bytes.bytes, b"\x42").alias("r"))
+                .collect()[0]
+                .r,
+                b"\x01\x42\x02\x42\x03",
+            )
+            self.assertEqual(
+                df_with_nulls.select(listagg_distinct_ref(df_with_nulls.nulls).alias("r"))
+                .collect()[0]
+                .r,
+                None,
+            )
 
     def test_datetime_functions(self):
         df = self.spark.range(1).selectExpr("'2017-01-22' as dateCol")
