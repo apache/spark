@@ -752,7 +752,7 @@ class SparkToParquetSchemaConverter(
           .addField(convertField(StructField("metadata", BinaryType, nullable = false)))
           .named(field.name)
 
-      case s: StructType if ParquetSchemaConverter.isVariantShreddingStruct(s) =>
+      case s: StructType if SparkShreddingUtils.isVariantShreddingStruct(s) =>
         // Variant struct takes a Variant and writes to Parquet as a shredded schema.
         val group = Types.buildGroup(repetition)
         s.fields.foreach { f =>
@@ -779,13 +779,6 @@ private[sql] object ParquetSchemaConverter {
 
   val EMPTY_MESSAGE: MessageType =
     Types.buildMessage().named(ParquetSchemaConverter.SPARK_PARQUET_SCHEMA_NAME)
-
-  // Used to annotate as metadata on the struct that replaces a VariantType when shredding.
-  val VARIANT_WRITE_SHREDDING_KEY: String = "__VARIANT_WRITE_SHREDDING_KEY"
-
-  def isVariantShreddingStruct(s: StructType): Boolean = {
-    s.fields.length > 0 && s.fields.forall(_.metadata.contains(VARIANT_WRITE_SHREDDING_KEY))
-  }
 
   def checkConversionRequirement(f: => Boolean, message: String): Unit = {
     if (!f) {

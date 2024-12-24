@@ -108,10 +108,7 @@ class ParquetWriteSupport extends WriteSupport[InternalRow] with Logging {
     this.shreddedSchema = if (shreddedSchemaString == null) {
       this.schema
     } else {
-      val v = StructType.fromString(shreddedSchemaString)
-      // A bit awkwardly, the schema string doesn't include metadata to identify which struct
-      // represents a Variant, so we need to retraverse the schema to annotate them.
-      updateSchemaForVariantShredding(this.schema, v).asInstanceOf[StructType]
+      StructType.fromString(shreddedSchemaString)
     }
     this.writeLegacyParquetFormat = {
       // `SQLConf.PARQUET_WRITE_LEGACY_FORMAT` should always be explicitly set in ParquetRelation
@@ -277,7 +274,7 @@ class ParquetWriteSupport extends WriteSupport[InternalRow] with Logging {
             }
           }
 
-      case s: StructType if ParquetSchemaConverter.isVariantShreddingStruct(s) =>
+      case s: StructType if SparkShreddingUtils.isVariantShreddingStruct(s) =>
         val fieldWriters = s.map(_.dataType).map(makeWriter).toArray[ValueWriter]
         val variantShreddingSchema = SparkShreddingUtils.buildVariantSchema(s)
         (row: SpecializedGetters, ordinal: Int) =>
@@ -533,36 +530,6 @@ class ParquetWriteSupport extends WriteSupport[InternalRow] with Logging {
     f
     recordConsumer.endField(field, index)
   }
-
-  /*
-   * For each struct in `shredded`, set metadata if the corresponding type in `unshredded` is
-   * VariantType. Aside from VariantType being possibly converted to an arbitrary input struct, the
-   * two schemas should be identical.
-   */
-  private def updateSchemaForVariantShredding(
-      unshredded: DataType,
-      shredded: DataType): DataType = {
-    (unshredded, shredded) match {
-      case (s1: StructType, s2: StructType) =>
-        assert(s1.fields.length == s2.fields.length)
-        val newFields = s1.fields.zip(s2.fields).map { case (f1, f2) =>
-          f1.copy(dataType = updateSchemaForVariantShredding(f1.dataType, f2.dataType))
-        }
-        StructType(newFields)
-      case (VariantType, s: StructType) =>
-        // Shredded Variant.
-        val newFields = s.fields.map { f =>
-          f.copy(metadata = new MetadataBuilder().putNull(
-            ParquetSchemaConverter.VARIANT_WRITE_SHREDDING_KEY).build())
-        }
-        StructType(newFields)
-      case (_, _) =>
-        // The caller should provide identical types in all other cases.
-        assert(unshredded == shredded)
-        shredded
-    }
-  }
-
 }
 
 object ParquetWriteSupport {

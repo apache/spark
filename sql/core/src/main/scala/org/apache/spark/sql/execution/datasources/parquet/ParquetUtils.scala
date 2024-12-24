@@ -478,7 +478,8 @@ object ParquetUtils extends Logging {
         sqlConf.getConf(SQLConf.VARIANT_FORCE_SHREDDING_SCHEMA_FOR_TEST)
       )
       val oneShreddingSchema = SparkShreddingUtils.variantShreddingSchema(simpleShreddingSchema)
-      Some(replaceVariantTypes(dataSchema, oneShreddingSchema))
+      val schemaWithMetadata = SparkShreddingUtils.addWriteShreddingMetadata(oneShreddingSchema)
+      Some(replaceVariantTypes(dataSchema, schemaWithMetadata))
     } else {
       None
     }
