@@ -161,6 +161,11 @@ abstract class Optimizer(catalogManager: CatalogManager)
     val operatorOptimizationBatch: Seq[Batch] = Seq(
       Batch("Operator Optimization before Inferring Filters", fixedPoint,
         operatorOptimizationRuleSet: _*),
+      // With expression will destroy infer filters, so need rewrite it before infer filters.
+      Batch("Merge With expression", fixedPoint, MergeWithExpression),
+      Batch("Rewrite With expression", fixedPoint,
+        RewriteWithExpression,
+        CollapseProject),
       Batch("Infer Filters", Once,
         InferFiltersFromGenerate,
         InferFiltersFromConstraints),
@@ -168,7 +173,11 @@ abstract class Optimizer(catalogManager: CatalogManager)
         operatorOptimizationRuleSet: _*),
       Batch("Push extra predicate through join", fixedPoint,
         PushExtraPredicateThroughJoin,
-        PushDownPredicates))
+        PushDownPredicates),
+      Batch("Merge With expression", fixedPoint, MergeWithExpression),
+      Batch("Rewrite With expression", fixedPoint,
+        RewriteWithExpression,
+        CollapseProject))
 
     val batches: Seq[Batch] = flattenBatches(Seq(
     Batch("Finish Analysis", FixedPoint(1), FinishAnalysis),
@@ -1811,7 +1820,8 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
     case Filter(condition, project @ Project(fields, grandChild))
       if fields.forall(_.deterministic) && canPushThroughCondition(grandChild, condition) =>
       val aliasMap = getAliasMap(project)
-      project.copy(child = Filter(replaceAlias(condition, aliasMap), grandChild))
+      val replacedByWith = rewriteConditionByWith(condition, aliasMap)
+      project.copy(child = Filter(replaceAlias(replacedByWith, aliasMap), grandChild))
 
     // We can push down deterministic predicate through Aggregate, including throwable predicate.
     // If we can push down a filter through Aggregate, it means the filter only references the
@@ -1831,8 +1841,8 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
       }
 
       if (pushDown.nonEmpty) {
-        val pushDownPredicate = pushDown.reduce(And)
-        val replaced = replaceAlias(pushDownPredicate, aliasMap)
+        val replacedByWith = rewriteConditionByWith(pushDown, aliasMap)
+        val replaced = replaceAlias(replacedByWith.reduce(And), aliasMap)
         val newAggregate = aggregate.copy(child = Filter(replaced, aggregate.child))
         // If there is no more filter to stay up, just eliminate the filter.
         // Otherwise, create "Filter(stayUp) <- Aggregate <- Filter(pushDownPredicate)".
@@ -1977,6 +1987,62 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
       case s: SubqueryExpression => s.plan.outputSet.intersect(attributes).nonEmpty
       case _ => false
     }
+  }
+
+  /**
+   * Use [[With]] to rewrite condition which contains attribute that are not cheap and be consumed
+   * multiple times. Each predicate generates one or 0 With. For facilitates subsequent merge
+   * [[With]], use the same CommonExpressionDef ids for different [[With]].
+   */
+  private def rewriteConditionByWith(
+      cond: Seq[Expression],
+      aliasMap: AttributeMap[Alias]): Seq[Expression] = {
+    if (!SQLConf.get.getConf(SQLConf.ALWAYS_INLINE_COMMON_EXPR)) {
+      val canRewriteConf = cond.filter(canRewriteByWith)
+      if (canRewriteConf.nonEmpty) {
+        val replaceWithMap = canRewriteConf.reduce(And)
+          .collect { case a: Attribute => a }
+          .groupBy(identity)
+          .transform((_, v) => v.size)
+          .filter(m => aliasMap.contains(m._1) && m._2 > 1)
+          .map(m => m._1 -> trimAliases(aliasMap.getOrElse(m._1, m._1)))
+          .filter(m => !CollapseProject.isCheap(m._2))
+        val defsMap = AttributeMap(replaceWithMap.map(m => m._1 -> CommonExpressionDef(m._2)))
+        val refsMap = AttributeMap(defsMap.map(m => m._1 -> new CommonExpressionRef(m._2)))
+        cond.map(rewriteByWith(_, defsMap, refsMap))
+      } else cond
+    } else cond
+  }
+
+  private def rewriteConditionByWith(
+      cond: Expression,
+      aliasMap: AttributeMap[Alias]): Expression = {
+    if (!SQLConf.get.getConf(SQLConf.ALWAYS_INLINE_COMMON_EXPR)) {
+      rewriteConditionByWith(splitConjunctivePredicates(cond), aliasMap).reduce(And)
+    } else cond
+  }
+
+  // With does not support inline subquery
+  private def canRewriteByWith(expr: Expression): Boolean = {
+    !expr.containsPattern(PLAN_EXPRESSION)
+  }
+
+  private def rewriteByWith(
+      expr: Expression,
+      defsMap: AttributeMap[CommonExpressionDef],
+      refsMap: AttributeMap[CommonExpressionRef]): Expression = {
+    if (!canRewriteByWith(expr)) {
+      return expr
+    }
+    val defs = mutable.HashSet.empty[CommonExpressionDef]
+    val replaced = expr.transform {
+      case a: Attribute if refsMap.contains(a) =>
+        defs.add(defsMap.get(a).get)
+        refsMap.get(a).get
+    }
+    if (defs.nonEmpty) {
+      With(replaced, defs.toSeq)
+    } else expr
   }
 }
 
