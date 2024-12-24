@@ -265,22 +265,36 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
       }
     }
 
-    if (maybeTempVariableName(nameParts)) {
-      val variableName = if (conf.caseSensitiveAnalysis) {
-        nameParts.last
-      } else {
-        nameParts.last.toLowerCase(Locale.ROOT)
-      }
-      catalogManager.tempVariableManager.get(variableName).map { varDef =>
+    // todo LOCALVARS: refactor to be more functional with getorelse or something
+
+    val variableName = if (conf.caseSensitiveAnalysis) {
+      nameParts.last
+    } else {
+      nameParts.last.toLowerCase(Locale.ROOT)
+    }
+
+   catalogManager.scriptingLocalVariableManager
+      .flatMap(_.get(variableName))
+      .map { varDef =>
         VariableReference(
           nameParts,
           FakeSystemCatalog,
           Identifier.of(Array(CatalogManager.SESSION_NAMESPACE), variableName),
           varDef)
       }
-    } else {
-      None
-    }
+      .orElse(
+        if (maybeTempVariableName(nameParts)) {
+          catalogManager.tempVariableManager.get(variableName).map { varDef =>
+            VariableReference(
+              nameParts,
+              FakeSystemCatalog,
+              Identifier.of(Array(CatalogManager.SESSION_NAMESPACE), variableName),
+              varDef)
+          }
+        } else {
+          None
+        }
+      )
   }
 
   // Resolves `UnresolvedAttribute` to its value.

@@ -26,6 +26,22 @@ import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.connector.catalog.CatalogManager.{SESSION_NAMESPACE, SYSTEM_CATALOG_NAME}
 import org.apache.spark.sql.errors.DataTypeErrorsBase
 
+trait VariableManager {
+  def create(
+    name: String,
+    defaultValueSQL: String,
+    initValue: Literal,
+    overrideIfExists: Boolean): Unit
+
+  def get(name: String): Option[VariableDefinition]
+
+  def remove(name: String): Boolean
+
+  def clear(): Unit
+
+  def isEmpty: Boolean
+}
+
 /**
  * A thread-safe manager for temporary SQL variables (that live in the schema `SYSTEM.SESSION`),
  * providing atomic operations to manage them, e.g. create, get, remove, etc.
@@ -33,7 +49,7 @@ import org.apache.spark.sql.errors.DataTypeErrorsBase
  * Note that, the variable name is always case-sensitive here, callers are responsible to format the
  * variable name w.r.t. case-sensitive config.
  */
-class TempVariableManager extends DataTypeErrorsBase {
+class TempVariableManager extends VariableManager with DataTypeErrorsBase {
 
   @GuardedBy("this")
   private val variables = new mutable.HashMap[String, VariableDefinition]
@@ -52,19 +68,20 @@ class TempVariableManager extends DataTypeErrorsBase {
     variables.put(name, VariableDefinition(defaultValueSQL, initValue))
   }
 
-  def get(name: String): Option[VariableDefinition] = synchronized {
+  override def get(name: String): Option[VariableDefinition] = synchronized {
     variables.get(name)
   }
 
-  def remove(name: String): Boolean = synchronized {
+  override def remove(name: String): Boolean = synchronized {
     variables.remove(name).isDefined
   }
 
-  def clear(): Unit = synchronized {
+  override def clear(): Unit = synchronized {
     variables.clear()
   }
 
-  def isEmpty: Boolean = synchronized {
+  // todo LOCALVARS: check what this is for with Vladimir
+  override def isEmpty: Boolean = synchronized {
     variables.isEmpty
   }
 }

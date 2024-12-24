@@ -42,6 +42,7 @@ class ResolveSetVariable(val catalogManager: CatalogManager) extends Rule[Logica
         case u: UnresolvedAttribute =>
           lookupVariable(u.nameParts) match {
             case Some(variable) => variable.copy(canFold = false)
+            // todo LOCALVARS: change system session to proper message
             case _ => throw unresolvedVariableError(u.nameParts, Seq("SYSTEM", "SESSION"))
           }
 
@@ -53,6 +54,9 @@ class ResolveSetVariable(val catalogManager: CatalogManager) extends Rule[Logica
       // Names are normalized when the variables are created.
       // No need for case insensitive comparison here.
       // TODO: we need to group by the qualified variable name once other catalogs support it.
+
+      // todo LOCALVARS: the todo above, although possibly not neceesary because it might work.
+      //  research further
       val dups = resolvedVars.groupBy(_.identifier.name).filter(kv => kv._2.length > 1)
       if (dups.nonEmpty) {
         throw new AnalysisException(

@@ -41,6 +41,9 @@ class SqlScriptingExecutionContext {
     }
     frames.last.exitScope(label)
   }
+
+  def currentFrame: SqlScriptingExecutionFrame = frames.last
+  def currentScope: SqlScriptingExecutionScope = currentFrame.currentScope
 }
 
 /**
@@ -53,7 +56,7 @@ class SqlScriptingExecutionFrame(
     executionPlan: Iterator[CompoundStatementExec]) extends Iterator[CompoundStatementExec] {
 
   // List of scopes that are currently active.
-  private val scopes: ListBuffer[SqlScriptingExecutionScope] = ListBuffer.empty
+  val scopes: ListBuffer[SqlScriptingExecutionScope] = ListBuffer.empty
 
   override def hasNext: Boolean = executionPlan.hasNext
 
@@ -80,6 +83,8 @@ class SqlScriptingExecutionFrame(
       scopes.remove(scopes.length - 1)
     }
   }
+
+  def currentScope: SqlScriptingExecutionScope = scopes.last
 }
 
 /**

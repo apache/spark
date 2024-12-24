@@ -259,5 +259,6 @@ case class ResolvedIdentifier(
 // A fake v2 catalog to hold temp views.
 object FakeSystemCatalog extends CatalogPlugin {
   override def initialize(name: String, options: CaseInsensitiveStringMap): Unit = {}
+  // todo LOCALVARS: why is this here
   override def name(): String = "system"
 }

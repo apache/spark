@@ -31,7 +31,9 @@ case class CreateVariableExec(name: String, defaultExpr: DefaultValueExpression,
   extends LeafV2CommandExec with ExpressionsEvaluator {
 
   override protected def run(): Seq[InternalRow] = {
-    val variableManager = session.sessionState.catalogManager.tempVariableManager
+    val scriptingVariableManager = session.sessionState.catalogManager.scriptingLocalVariableManager
+
+    val tempVariableManager = session.sessionState.catalogManager.tempVariableManager
     val exprs = prepareExpressions(Seq(defaultExpr.child), subExprEliminationEnabled = false)
     initializeExprs(exprs, 0)
     val initValue = Literal(exprs.head.eval(), defaultExpr.dataType)
@@ -40,8 +42,13 @@ case class CreateVariableExec(name: String, defaultExpr: DefaultValueExpression,
     } else {
       name.toLowerCase(Locale.ROOT)
     }
-    variableManager.create(
-      normalizedName, defaultExpr.originalSQL, initValue, replace)
+
+    // create local variable if we are in a script, otherwise create session variable
+    scriptingVariableManager.getOrElse(tempVariableManager)
+      .create(normalizedName, defaultExpr.originalSQL, initValue, replace)
+
+//    tempVariableManager.create(
+//      normalizedName, defaultExpr.originalSQL, initValue, replace)
     Nil
   }
 

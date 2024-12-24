@@ -50,6 +50,9 @@ class SqlScriptingExecution(
     ctx
   }
 
+  private val variableManager = new ScriptingVariableManager(context)
+  session.sessionState.catalogManager.scriptingLocalVariableManager = Some(variableManager)
+
   private var current: Option[DataFrame] = getNextResult
 
   override def hasNext: Boolean = current.isDefined

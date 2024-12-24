@@ -75,6 +75,7 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
 
   private def resolveVariableName(nameParts: Seq[String]): ResolvedIdentifier = {
     def ident: Identifier = Identifier.of(Array(CatalogManager.SESSION_NAMESPACE), nameParts.last)
+    // todo LOCALVARS: update to support local vars
     if (nameParts.length == 1) {
       ResolvedIdentifier(FakeSystemCatalog, ident)
     } else if (nameParts.length == 2) {

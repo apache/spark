@@ -18,10 +18,9 @@
 package org.apache.spark.sql.connector.catalog
 
 import scala.collection.mutable
-
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.SQLConfHelper
-import org.apache.spark.sql.catalyst.catalog.{SessionCatalog, TempVariableManager}
+import org.apache.spark.sql.catalyst.catalog.{SessionCatalog, TempVariableManager, VariableManager}
 import org.apache.spark.sql.catalyst.util.StringUtils
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
@@ -48,6 +47,9 @@ class CatalogManager(
 
   // TODO: create a real SYSTEM catalog to host `TempVariableManager` under the SESSION namespace.
   val tempVariableManager: TempVariableManager = new TempVariableManager
+
+  // todo LOCALVARS: should this be thread local
+  var scriptingLocalVariableManager: Option[VariableManager] = None
 
   def catalog(name: String): CatalogPlugin = synchronized {
     if (name.equalsIgnoreCase(SESSION_CATALOG_NAME)) {
@@ -159,6 +161,7 @@ class CatalogManager(
 
 private[sql] object CatalogManager {
   val SESSION_CATALOG_NAME: String = "spark_catalog"
+  // todo LOCALVARS: whats this
   val SYSTEM_CATALOG_NAME = "system"
   val SESSION_NAMESPACE = "session"
 }
