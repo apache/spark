@@ -2160,6 +2160,14 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     return UTF8String.fromBytes(sx);
   }
 
+  public UTF8String quote() {
+    final String qtChar = "'";
+    final String qtCharRep = "\\\\'";
+
+    String sp = toString().replaceAll(qtChar, qtCharRep);
+    return fromString(qtChar + sp + qtChar);
+  }
+
   @Override
   public void writeExternal(ObjectOutput out) throws IOException {
     byte[] bytes = getBytes();
