@@ -280,7 +280,7 @@ object StaticSQLConf {
     buildStaticConf("spark.sql.streaming.ui.enabledCustomMetricList")
       .internal()
       .doc("Configures a list of custom metrics on Structured Streaming UI, which are enabled. " +
-        "The list contains the name of the custom metrics separated by comma. In aggregation" +
+        "The list contains the name of the custom metrics separated by comma. In aggregation " +
         "only sum used. The list of supported custom metrics is state store provider specific " +
         "and it can be found out for example from query progress log entry.")
       .version("3.1.0")
