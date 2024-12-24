@@ -96,6 +96,9 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
         val defs = w.defs.map(rewriteWithExprAndInputPlans(_, inputPlans, isNestedWith = true))
         val refToExpr = mutable.HashMap.empty[CommonExpressionId, Expression]
         val childProjections = Array.fill(inputPlans.length)(mutable.ArrayBuffer.empty[Alias])
+        val refsCount = child.collect { case r: CommonExpressionRef => r}
+          .groupBy(_.id)
+          .transform((_, v) => v.size)
 
         defs.zipWithIndex.foreach { case (CommonExpressionDef(child, id), index) =>
           if (id.canonicalized) {
@@ -103,7 +106,7 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
               "Cannot rewrite canonicalized Common expression definitions")
           }
 
-          if (CollapseProject.isCheap(child)) {
+          if (CollapseProject.isCheap(child) || refsCount.getOrElse(id, 0) < 2) {
             refToExpr(id) = child
           } else {
             val childProjectionIndex = inputPlans.indexWhere(

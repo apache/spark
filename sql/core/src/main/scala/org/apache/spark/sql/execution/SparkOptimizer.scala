@@ -96,6 +96,7 @@ class SparkOptimizer(
       ConstantFolding),
     Batch("User Provided Optimizers", fixedPoint, experimentalMethods.extraOptimizations: _*),
     Batch("Replace CTE with Repartition", Once, ReplaceCTERefWithRepartition),
+    Batch("Merge With expression", Once, MergeWithExpression),
     Batch("Rewrite With expression", fixedPoint,
       RewriteWithExpression,
       CollapseProject)))

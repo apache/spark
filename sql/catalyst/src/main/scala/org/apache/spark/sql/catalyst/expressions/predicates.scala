@@ -108,14 +108,6 @@ trait PredicateHelper extends AliasHelper with Logging {
   }
 
   /**
-   * First split the predicates by And, then combine the predicates with the same references.
-   */
-  protected def splitAndCombinePredicates(condition: Expression): Seq[Expression] = {
-    val split = splitConjunctivePredicates(condition)
-    split.groupBy(_.references).map(_._2.reduce(And)).toSeq
-  }
-
-  /**
    * Find the origin of where the input references of expression exp were scanned in the tree of
    * plan, and if they originate from a single leaf node.
    * Returns optional tuple with Expression, undoing any projections and aliasing that has been done
