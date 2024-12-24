@@ -65,6 +65,6 @@ export SPARK_SCALA_VERSION=2.13
 #fi
 
 # Append jline option to enable the Beeline process to run in background.
-if [[ ( ! $(ps -o stat= -p $$) =~ "+" ) && ! ( -p /dev/stdin ) ]]; then
+if [ -e /usr/bin/tty -a "`tty`" != "not a tty" -a ! -p /dev/stdin ]; then
   export SPARK_BEELINE_OPTS="$SPARK_BEELINE_OPTS -Djline.terminal=jline.UnsupportedTerminal"
 fi
