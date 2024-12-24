@@ -16,10 +16,18 @@
  */
 package org.apache.spark.sql.catalyst.analysis
 
+import java.util.Locale
+
+import scala.collection.mutable
+
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.SQLConfHelper
-import org.apache.spark.sql.catalyst.expressions.SortOrder
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, LogicalPlan, Project, Sort}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Expression, ExtractValue, LateralColumnAliasReference, NamedExpression, SortOrder}
+import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.trees.TreePattern.UNRESOLVED_ATTRIBUTE
 import org.apache.spark.sql.connector.catalog.CatalogManager
+import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * A virtual rule to resolve [[UnresolvedAttribute]] in [[Sort]]. It's only used by the real
@@ -51,10 +59,10 @@ class ResolveReferencesInSort(val catalogManager: CatalogManager)
   extends SQLConfHelper with ColumnResolutionHelper {
 
   def apply(s: Sort): LogicalPlan = {
-    val resolvedBasic = s.order.map(resolveExpressionByPlanOutput(_, s.child))
+    val resolvedByLCA = resolveByLateralColumnAlias(s)
     val resolvedWithAgg = s.child match {
-      case Filter(_, agg: Aggregate) => resolvedBasic.map(resolveColWithAgg(_, agg))
-      case _ => resolvedBasic.map(resolveColWithAgg(_, s.child))
+      case Filter(_, agg: Aggregate) => resolvedByLCA.map(resolveColWithAgg(_, agg))
+      case _ => resolvedByLCA.map(resolveColWithAgg(_, s.child))
     }
     val (missingAttrResolved, newChild) = resolveExprsAndAddMissingAttrs(resolvedWithAgg, s.child)
     val orderByAllResolved = resolveOrderByAll(
@@ -67,6 +75,60 @@ class ResolveReferencesInSort(val catalogManager: CatalogManager)
       // Add missing attributes and then project them away.
       val newSort = s.copy(order = resolvedFinal, child = newChild)
       Project(s.child.output, newSort)
+    }
+  }
+
+  private def resolveByLateralColumnAlias(s: Sort): Seq[Expression] = {
+    if (!conf.getConf(SQLConf.LATERAL_COLUMN_ALIAS_IMPLICIT_ENABLED)) return s.order
+
+    val aliasMap = mutable.HashMap.empty[String, Either[Alias, Int]]
+    val lcaCandidates = s.child match {
+      case p: Project => p.projectList
+      case Filter(_, agg: Aggregate) => agg.aggregateExpressions
+      case agg: Aggregate => agg.aggregateExpressions
+      case _ => Nil
+    }
+    lcaCandidates.foreach {
+      case Alias(_: ExtractValue, _) =>
+      case a: Alias =>
+        val lowerCasedName = a.name.toLowerCase(Locale.ROOT)
+        aliasMap.get(lowerCasedName) match {
+          case Some(scala.util.Left(_)) =>
+            aliasMap(lowerCasedName) = scala.util.Right(2)
+          case Some(scala.util.Right(count)) =>
+            aliasMap(lowerCasedName) = scala.util.Right(count + 1)
+          case None =>
+            aliasMap += lowerCasedName -> scala.util.Left(a)
+        }
+      case _ =>
+    }
+
+    def resolve(e: Expression): Expression = {
+      e.transformUpWithPruning(_.containsAnyPattern(UNRESOLVED_ATTRIBUTE)) {
+        case u: UnresolvedAttribute =>
+          // Lateral column alias does not have qualifiers. We always use the first name part to
+          // look up lateral column aliases.
+          aliasMap.get(u.nameParts.head.toLowerCase(Locale.ROOT)).map {
+            case Left(alias) if alias.resolved =>
+              try {
+                val resolvedAttr =
+                  resolveExpressionByPlanOutput(u, s.child).asInstanceOf[NamedExpression]
+                LateralColumnAliasReference(resolvedAttr, u.nameParts, alias.toAttribute)
+              } catch {
+                case ae: AnalysisException =>
+                  logDebug(ae.getMessage)
+                  u
+              }
+            case Right(count) =>
+              throw QueryCompilationErrors.ambiguousLateralColumnAliasError(u.name, count)
+            case _ => u
+          }.getOrElse(resolveExpressionByPlanOutput(u, s.child))
+      }
+    }
+    if (aliasMap.nonEmpty) {
+      s.order.map(resolve)
+    } else {
+      s.order.map(resolveExpressionByPlanOutput(_, s.child))
     }
   }
 
