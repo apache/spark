@@ -25,7 +25,7 @@ import java.util.TimeZone
 import scala.collection.mutable
 import scala.reflect.runtime.universe.TypeTag
 
-import org.apache.spark.{SparkException, SparkFunSuite}
+import org.apache.spark.{SparkException, SparkFunSuite, SparkRuntimeException}
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, ScalaReflection}
 import org.apache.spark.sql.catalyst.encoders.ExamplePointUDT
@@ -91,16 +91,22 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     // ExamplePointUDT.sqlType is ArrayType(DoubleType, false).
     checkEvaluation(Literal.default(new ExamplePointUDT), Array())
 
+    withSQLConf(SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true") {
+      checkEvaluation(Literal.default(CharType(5)), "     ")
+      checkEvaluation(Literal.default(VarcharType(5)), "")
+    }
     // DateType without default value`
-    List(CharType(1), VarcharType(1)).foreach(errType => {
-      checkError(
-        exception = intercept[SparkException] {
-          Literal.default(errType)
-        },
-        condition = "INTERNAL_ERROR",
-        parameters = Map("message" -> s"No default value for type: ${toSQLType(errType)}.")
-      )
-    })
+    withSQLConf(SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "false") {
+      List(CharType(1), VarcharType(1)).foreach(errType => {
+        checkError(
+          exception = intercept[SparkException] {
+            Literal.default(errType)
+          },
+          condition = "INTERNAL_ERROR",
+          parameters = Map("message" -> s"No default value for type: ${toSQLType(errType)}.")
+        )
+      })
+    }
   }
 
   test("boolean literals") {
@@ -158,6 +164,42 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Literal.create(""), "")
     checkEvaluation(Literal.create("test"), "test")
     checkEvaluation(Literal.create("\u0000"), "\u0000")
+  }
+
+  test("char literals") {
+    withSQLConf(SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true") {
+      val typ = CharType(5)
+      checkEvaluation(Literal.create("", typ), "     ")
+      checkEvaluation(Literal.create("test", typ), "test ")
+      checkEvaluation(Literal.create("test      ", typ), "test ")
+      checkEvaluation(Literal.create("\u0000", typ), "\u0000    ")
+
+      checkError(
+        exception = intercept[SparkRuntimeException]({
+          Literal.create("123456", typ)
+        }),
+        condition = "EXCEED_LIMIT_LENGTH",
+        parameters = Map("limit" -> "5")
+      )
+    }
+  }
+
+  test("varchar literals") {
+    withSQLConf(SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true") {
+      val typ = VarcharType(5)
+      checkEvaluation(Literal.create("", typ), "")
+      checkEvaluation(Literal.create("test", typ), "test")
+      checkEvaluation(Literal.create("test     ", typ), "test ")
+      checkEvaluation(Literal.create("\u0000", typ), "\u0000")
+
+      checkError(
+        exception = intercept[SparkRuntimeException]({
+          Literal.create("123456", typ)
+        }),
+        condition = "EXCEED_LIMIT_LENGTH",
+        parameters = Map("limit" -> "5")
+      )
+    }
   }
 
   test("sum two literals") {
