@@ -30,7 +30,8 @@
           "unresolvedAttribute": {
             "unparsedIdentifier": "a"
           }
-        }]
+        }],
+        "isInternal": false
       }
     }]
   }

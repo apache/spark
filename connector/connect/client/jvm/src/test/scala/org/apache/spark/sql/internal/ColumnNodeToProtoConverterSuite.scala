@@ -128,7 +128,8 @@ class ColumnNodeToProtoConverterSuite extends ConnectFunSuite {
           .setFunctionName("+")
           .setIsDistinct(false)
           .addArguments(attribute("a"))
-          .addArguments(expr(_.getLiteralBuilder.setInteger(1)))))
+          .addArguments(expr(_.getLiteralBuilder.setInteger(1)))
+          .setIsInternal(false)))
     testConversion(
       UnresolvedFunction(
         "db1.myAgg",
@@ -252,7 +253,8 @@ class ColumnNodeToProtoConverterSuite extends ConnectFunSuite {
             expr(_.getUnresolvedFunctionBuilder
               .setFunctionName("sum")
               .setIsDistinct(false)
-              .addArguments(attribute("a"))))
+              .addArguments(attribute("a"))
+              .setIsInternal(false)))
           .addPartitionSpec(attribute("b"))
           .addPartitionSpec(attribute("c"))
           .addOrderSpec(proto.Expression.SortOrder
@@ -278,7 +280,8 @@ class ColumnNodeToProtoConverterSuite extends ConnectFunSuite {
               _.getUnresolvedFunctionBuilder
                 .setFunctionName("sum")
                 .setIsDistinct(false)
-                .addArguments(attribute("a"))))
+                .addArguments(attribute("a"))
+                .setIsInternal(false)))
           .addPartitionSpec(attribute("b"))
           .addPartitionSpec(attribute("c"))))
     testWindowFrame(
@@ -312,7 +315,8 @@ class ColumnNodeToProtoConverterSuite extends ConnectFunSuite {
               _.getUnresolvedFunctionBuilder
                 .setFunctionName("+")
                 .addArguments(expr(_.setUnresolvedNamedLambdaVariable(catX)))
-                .addArguments(attribute("y"))))
+                .addArguments(attribute("y"))
+                .setIsInternal(false)))
           .addArguments(catX)))
   }
 
@@ -332,7 +336,8 @@ class ColumnNodeToProtoConverterSuite extends ConnectFunSuite {
           .setFunctionName("when")
           .addArguments(attribute("c1"))
           .addArguments(expr(_.getLiteralBuilder.setString("r1")))
-          .addArguments(expr(_.getLiteralBuilder.setString("fallback")))))
+          .addArguments(expr(_.getLiteralBuilder.setString("fallback")))
+          .setIsInternal(false)))
   }
 
   test("extract field") {
