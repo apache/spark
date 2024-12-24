@@ -79,7 +79,7 @@ SELECT "SPARK SQL" AS col;
 +---------+
 |      col|
 +---------+
-|Spark SQL|
+|SPARK SQL|
 +---------+
 
 SELECT 'it\'s $10.' AS col;
