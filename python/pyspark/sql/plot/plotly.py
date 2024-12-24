@@ -48,13 +48,34 @@ def plot_pyspark(data: "DataFrame", kind: str, **kwargs: Any) -> "Figure":
 
 
 def plot_pie(data: "DataFrame", **kwargs: Any) -> "Figure":
-    # TODO(SPARK-49530): Support pie subplots with plotly backend
     from plotly import express
 
     pdf = PySparkPlotAccessor.plot_data_map["pie"](data)
     x = kwargs.pop("x", None)
     y = kwargs.pop("y", None)
-    fig = express.pie(pdf, values=y, names=x, **kwargs)
+    subplots = kwargs.pop("subplots", False)
+    if y is None and not subplots:
+        raise PySparkValueError(errorClass="UNSUPPORTED_PIE_PLOT_PARAM", messageParameters={})
+
+    numeric_ys = process_column_param(y, data)
+
+    if subplots:
+        # One pie chart per numeric column
+        from plotly.subplots import make_subplots
+
+        fig = make_subplots(
+            rows=1,
+            cols=len(numeric_ys),
+            # To accommodate domain-based trace - pie chart
+            specs=[[{"type": "domain"}] * len(numeric_ys)],
+        )
+        for i, y_col in enumerate(numeric_ys):
+            subplot_fig = express.pie(pdf, values=y_col, names=x, **kwargs)
+            fig.add_trace(
+                subplot_fig.data[0], row=1, col=i + 1
+            )  # A single pie chart has only one trace
+    else:
+        fig = express.pie(pdf, values=numeric_ys[0], names=x, **kwargs)
 
     return fig
 
