@@ -68,13 +68,17 @@ class CommitLogSuite extends SparkFunSuite with SharedSparkSession {
       val metadata = commitLog.deserialize(inputStream)
       // Array comparison are reference based, so we need to compare the elements
       assert(metadata.nextBatchWatermarkMs == commitMetadata.nextBatchWatermarkMs)
-      assert(metadata.stateUniqueIds.size == commitMetadata.stateUniqueIds.size)
-      commitMetadata.stateUniqueIds.foreach { case (operatorId, uniqueIds) =>
-        assert(metadata.stateUniqueIds.contains(operatorId))
-        assert(metadata.stateUniqueIds(operatorId).length == uniqueIds.length)
-        assert(metadata.stateUniqueIds(operatorId).zip(uniqueIds).forall {
-          case (a, b) => a.sameElements(b)
-        })
+      if (metadata.stateUniqueIds.isEmpty) {
+        assert(commitMetadata.stateUniqueIds.isEmpty)
+      } else {
+        assert(metadata.stateUniqueIds.get.size == commitMetadata.stateUniqueIds.get.size)
+        commitMetadata.stateUniqueIds.get.foreach { case (operatorId, uniqueIds) =>
+          assert(metadata.stateUniqueIds.get.contains(operatorId))
+          assert(metadata.stateUniqueIds.get(operatorId).length == uniqueIds.length)
+          assert(metadata.stateUniqueIds.get(operatorId).zip(uniqueIds).forall {
+            case (a, b) => a.sameElements(b)
+          })
+        }
       }
     }
   }
@@ -90,7 +94,7 @@ class CommitLogSuite extends SparkFunSuite with SharedSparkSession {
         0L -> Array(Array("unique_id1", "unique_id2"), Array("unique_id3", "unique_id4")),
           1L -> Array(Array("unique_id5", "unique_id6"), Array("unique_id7", "unique_id8"))
       )
-    val testMetadataV2 = CommitMetadata(0, testStateUniqueIds)
+    val testMetadataV2 = CommitMetadata(0, Some(testStateUniqueIds))
     testSerde(testMetadataV2, testCommitLogV2FilePath)
   }
 
@@ -103,7 +107,7 @@ class CommitLogSuite extends SparkFunSuite with SharedSparkSession {
     val commitMetadata: CommitMetadata = new CommitLog(
       spark, testCommitLogV1FilePath.toString).deserialize(inputStream)
     assert(commitMetadata.nextBatchWatermarkMs === 233)
-    assert(commitMetadata.stateUniqueIds === Map.empty)
+    assert(commitMetadata.stateUniqueIds === None)
   }
 
   // Test an old version of Spark can ser-de the new version of commit log,

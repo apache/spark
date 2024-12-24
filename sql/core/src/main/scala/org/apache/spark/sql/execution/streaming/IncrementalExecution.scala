@@ -64,7 +64,8 @@ class IncrementalExecution(
     val watermarkPropagator: WatermarkPropagator,
     val isFirstBatch: Boolean,
     val currentStateStoreCkptId:
-      MutableMap[Long, Array[Array[String]]] = MutableMap[Long, Array[Array[String]]]())
+      Option[MutableMap[Long, Array[Array[String]]]] =
+    Option(MutableMap[Long, Array[Array[String]]]()))
   extends QueryExecution(sparkSession, logicalPlan) with Logging {
 
   // Modified planner with stateful operations.
@@ -142,7 +143,7 @@ class IncrementalExecution(
       operatorId,
       currentBatchId,
       numStateStores,
-      currentStateStoreCkptId.get(operatorId))
+      currentStateStoreCkptId.flatMap(_.get(operatorId)))
     ret
   }
 
