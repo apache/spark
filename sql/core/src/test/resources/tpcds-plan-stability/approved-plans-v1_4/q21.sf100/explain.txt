@@ -134,16 +134,16 @@ Aggregate Attributes [2]: [sum(CASE WHEN (d_date#10 < 2000-03-11) THEN inv_quant
 Results [4]: [w_warehouse_name#12, i_item_id#7, sum(CASE WHEN (d_date#10 < 2000-03-11) THEN inv_quantity_on_hand#3 ELSE 0 END)#17 AS inv_before#19, sum(CASE WHEN (d_date#10 >= 2000-03-11) THEN inv_quantity_on_hand#3 ELSE 0 END)#18 AS inv_after#20]
 
 (23) Project [codegen id : 5]
-Output [5]: [w_warehouse_name#12, i_item_id#7, inv_before#19, inv_after#20, CASE WHEN (inv_before#19 > 0) THEN (cast(inv_after#20 as double) / cast(inv_before#19 as double)) END AS _common_expr_5#21]
+Output [5]: [w_warehouse_name#12, i_item_id#7, inv_before#19, inv_after#20, CASE WHEN (inv_before#19 > 0) THEN (cast(inv_after#20 as double) / cast(inv_before#19 as double)) END AS _common_expr_0#21]
 Input [4]: [w_warehouse_name#12, i_item_id#7, inv_before#19, inv_after#20]
 
 (24) Filter [codegen id : 5]
-Input [5]: [w_warehouse_name#12, i_item_id#7, inv_before#19, inv_after#20, _common_expr_5#21]
-Condition : ((isnotnull(_common_expr_5#21) AND (_common_expr_5#21 >= 0.666667)) AND (_common_expr_5#21 <= 1.5))
+Input [5]: [w_warehouse_name#12, i_item_id#7, inv_before#19, inv_after#20, _common_expr_0#21]
+Condition : ((isnotnull(_common_expr_0#21) AND (_common_expr_0#21 >= 0.666667)) AND (_common_expr_0#21 <= 1.5))
 
 (25) Project [codegen id : 5]
 Output [4]: [w_warehouse_name#12, i_item_id#7, inv_before#19, inv_after#20]
-Input [5]: [w_warehouse_name#12, i_item_id#7, inv_before#19, inv_after#20, _common_expr_5#21]
+Input [5]: [w_warehouse_name#12, i_item_id#7, inv_before#19, inv_after#20, _common_expr_0#21]
 
 (26) TakeOrderedAndProject
 Input [4]: [w_warehouse_name#12, i_item_id#7, inv_before#19, inv_after#20]
