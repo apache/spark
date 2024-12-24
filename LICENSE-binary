@@ -286,6 +286,10 @@ io.netty:netty-transport-classes-kqueue
 io.netty:netty-transport-native-epoll
 io.netty:netty-transport-native-kqueue
 io.netty:netty-transport-native-unix-common
+io.vertx:vertx-auth-common
+io.vertx:vertx-core
+io.vertx:vertx-web-client
+io.vertx:vertx-web-common
 jakarta.inject:jakarta.inject-api
 jakarta.validation:jakarta.validation-api
 javax.jdo:jdo-api
