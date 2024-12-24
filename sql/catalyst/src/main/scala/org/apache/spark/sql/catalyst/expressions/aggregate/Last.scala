@@ -51,13 +51,18 @@ import org.apache.spark.sql.types._
   group = "agg_funcs",
   since = "2.0.0")
 case class Last(child: Expression, ignoreNulls: Boolean)
-  extends DeclarativeAggregate with ExpectsInputTypes with UnaryLike[Expression] {
+  extends DeclarativeAggregate
+  with ExpectsInputTypes
+  with SupportsIgnoreNulls
+  with UnaryLike[Expression] {
 
   def this(child: Expression) = this(child, false)
 
   def this(child: Expression, ignoreNullsExpr: Expression) = {
-    this(child, FirstLast.validateIgnoreNullExpr(ignoreNullsExpr, "last"))
+    this(child, SupportsIgnoreNulls.validateIgnoreNullExpr(ignoreNullsExpr, "last"))
   }
+
+  override def withIgnoreNulls(ignoreNulls: Boolean): Last = copy(ignoreNulls = ignoreNulls)
 
   override def nullable: Boolean = true
 
