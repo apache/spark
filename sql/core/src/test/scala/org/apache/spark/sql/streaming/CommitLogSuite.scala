@@ -29,6 +29,7 @@ import org.json4s.jackson.Serialization
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.execution.streaming.{CommitLog, CommitMetadata, HDFSMetadataLog}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
 class CommitLogSuite extends SparkFunSuite with SharedSparkSession {
@@ -42,6 +43,18 @@ class CommitLogSuite extends SparkFunSuite with SharedSparkSession {
       "resources",
       "structured-streaming",
       "testCommitLogV2"
+    )
+  }
+
+  private def testCommitLogV2FilePathEmptyUniqueId: Path = {
+    getWorkspaceFilePath(
+      "sql",
+      "core",
+      "src",
+      "test",
+      "resources",
+      "structured-streaming",
+      "testCommitLogV2-empty-unique-id"
     )
   }
 
@@ -84,18 +97,29 @@ class CommitLogSuite extends SparkFunSuite with SharedSparkSession {
   }
 
   test("Basic Commit Log V1 SerDe") {
-    val testMetadataV1 = CommitMetadata(1)
-    testSerde(testMetadataV1, testCommitLogV1FilePath)
+    withSQLConf(SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key -> "1") {
+      val testMetadataV1 = CommitMetadata(1)
+      testSerde(testMetadataV1, testCommitLogV1FilePath)
+    }
   }
 
-  test("Basic Commit Log V2 SerDe") {
-    val testStateUniqueIds: Map[Long, Array[Array[String]]] =
-      Map(
-        0L -> Array(Array("unique_id1", "unique_id2"), Array("unique_id3", "unique_id4")),
-          1L -> Array(Array("unique_id5", "unique_id6"), Array("unique_id7", "unique_id8"))
-      )
-    val testMetadataV2 = CommitMetadata(0, Some(testStateUniqueIds))
-    testSerde(testMetadataV2, testCommitLogV2FilePath)
+  test("Basic Commit Log V2 SerDe - nonempty stateUniqueIds") {
+    withSQLConf(SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key -> "2") {
+      val testStateUniqueIds: Map[Long, Array[Array[String]]] =
+        Map(
+          0L -> Array(Array("unique_id1", "unique_id2"), Array("unique_id3", "unique_id4")),
+            1L -> Array(Array("unique_id5", "unique_id6"), Array("unique_id7", "unique_id8"))
+        )
+      val testMetadataV2 = CommitMetadata(0, Some(testStateUniqueIds))
+      testSerde(testMetadataV2, testCommitLogV2FilePath)
+    }
+  }
+
+  test("Basic Commit Log V2 SerDe - empty stateUniqueIds") {
+    withSQLConf(SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key -> "2") {
+      val testMetadataV2 = CommitMetadata(0, None)
+      testSerde(testMetadataV2, testCommitLogV2FilePathEmptyUniqueId)
+    }
   }
 
   // Old metadata structure with no state unique ids should not affect the deserialization
