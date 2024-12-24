@@ -756,6 +756,14 @@ class SparkToParquetSchemaConverter(
           .addField(convertField(StructField("metadata", BinaryType, nullable = false)))
           .named(field.name)
 
+      case s: StructType if SparkShreddingUtils.isVariantShreddingStruct(s) =>
+        // Variant struct takes a Variant and writes to Parquet as a shredded schema.
+        val group = Types.buildGroup(repetition)
+        s.fields.foreach { f =>
+          group.addField(convertField(f))
+        }
+        group.named(field.name)
+
       case StructType(fields) =>
         fields.foldLeft(Types.buildGroup(repetition)) { (builder, field) =>
           builder.addField(convertField(field))
