@@ -155,21 +155,18 @@ case class LogicalRDD(
     }
   }
 
-  override lazy val constraints: ExpressionSet = originConstraints.getOrElse(ExpressionSet())
-    // Subqueries can have non-deterministic results even when they only contain deterministic
-    // expressions (e.g. consider a LIMIT 1 subquery without an ORDER BY). Propagating predicates
-    // containing a subquery causes the subquery to be executed twice (as the result of the subquery
-    // in the checkpoint computation cannot be reused), which could result in incorrect results.
-    // Therefore we assume that all subqueries are non-deterministic, and we do not expose any
-    // constraints that contain a subquery.
-    .filterNot(SubqueryExpression.hasSubquery)
+  override lazy val constraints: ExpressionSet = originConstraints.getOrElse(
+    if (conf.constraintPropagationEnabled) {
+      new ConstraintSet()
+    } else {
+      ExpressionSet()
+    }).filterNot(SubqueryExpression.hasSubquery)
 
   override def withStream(stream: SparkDataStream): LogicalRDD = {
     copy(stream = Some(stream))(session, originStats, originConstraints)
   }
 
   override def getStream: Option[SparkDataStream] = stream
-
 }
 
 object LogicalRDD extends Logging {

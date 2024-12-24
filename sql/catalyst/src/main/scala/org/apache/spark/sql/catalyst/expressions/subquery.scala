@@ -325,13 +325,13 @@ object SubExprUtils extends PredicateHelper {
               child => getCorrelatedEquivalentInnerExpressions(child)))
           case LeftOuter => getCorrelatedEquivalentInnerExpressions(left)
           case RightOuter => getCorrelatedEquivalentInnerExpressions(right)
-          case FullOuter => ExpressionSet().empty
+          case FullOuter => ExpressionSet()
           case LeftSemi => getCorrelatedEquivalentInnerExpressions(left)
           case LeftAnti => getCorrelatedEquivalentInnerExpressions(left)
-          case _ => ExpressionSet().empty
+          case _ => ExpressionSet()
         }
 
-      case _: Union => ExpressionSet().empty
+      case _: Union => ExpressionSet()
       case Except(left, _, _) => getCorrelatedEquivalentInnerExpressions(left)
 
       case
@@ -355,7 +355,7 @@ object SubExprUtils extends PredicateHelper {
         ExpressionSet(plan.children.flatMap(child =>
           getCorrelatedEquivalentInnerExpressions(child)))
 
-      case _ => ExpressionSet().empty
+      case _ => ExpressionSet()
     }
   }
 
