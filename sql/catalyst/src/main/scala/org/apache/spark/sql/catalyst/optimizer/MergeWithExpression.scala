@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
-import scala.collection.mutable
-
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -34,7 +32,8 @@ object MergeWithExpression extends Rule[LogicalPlan] {
       case f @ Filter(cond, _) =>
         val newCond = cond.transformUpWithPruning(_.containsAllPatterns(AND, WITH_EXPRESSION)) {
           case And(left @ With(_, _), right @ With(_, _)) =>
-            mergeWith(left, right)
+            val defs = (left.defs ++ right.defs).distinct
+            With(And(left.child, right.child), defs)
           case And(left @ With(_, _), right) =>
             With(And(left.child, right), left.defs)
           case And(left, right @ With(_, _)) =>
@@ -42,28 +41,5 @@ object MergeWithExpression extends Rule[LogicalPlan] {
         }
         f.copy(condition = newCond)
     }
-  }
-
-  private def mergeWith(left: With, right: With): Expression = {
-    val newDefs = left.defs.toBuffer
-    val replaceMap = mutable.HashMap.empty[CommonExpressionId, CommonExpressionRef]
-    right.defs.foreach {rDef =>
-      val index = left.defs.indexWhere(lDef => rDef.child.fastEquals(lDef.child))
-      if (index == -1) {
-        newDefs.append(rDef)
-      } else {
-        replaceMap.put(rDef.id, new CommonExpressionRef(left.defs(index)))
-      }
-    }
-    val newChild = if (replaceMap.nonEmpty) {
-      val newRightChild = right.child.transform {
-        case r: CommonExpressionRef if replaceMap.contains(r.id) =>
-          replaceMap(r.id)
-      }
-      And(left.child, newRightChild)
-    } else {
-      And(left.child, right.child)
-    }
-    With(newChild, newDefs.toSeq)
   }
 }

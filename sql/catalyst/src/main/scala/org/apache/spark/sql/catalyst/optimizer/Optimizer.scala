@@ -1841,8 +1841,8 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
       }
 
       if (pushDown.nonEmpty) {
-        val replacedByWith = rewriteConditionByWith(pushDown.reduce(And), aliasMap)
-        val replaced = replaceAlias(replacedByWith, aliasMap)
+        val replacedByWith = rewriteConditionByWith(pushDown, aliasMap)
+        val replaced = replaceAlias(replacedByWith.reduce(And), aliasMap)
         val newAggregate = aggregate.copy(child = Filter(replaced, aggregate.child))
         // If there is no more filter to stay up, just eliminate the filter.
         // Otherwise, create "Filter(stayUp) <- Aggregate <- Filter(pushDownPredicate)".
@@ -1991,21 +1991,34 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
 
   /**
    * Use [[With]] to rewrite condition which contains attribute that are not cheap and be consumed
-   * multiple times.
+   * multiple times. Each predicate generates one or 0 With. For facilitates subsequent merge
+   * [[With]], use the same CommonExpressionDef ids for different [[With]].
    */
+  private def rewriteConditionByWith(
+      cond: Seq[Expression],
+      aliasMap: AttributeMap[Alias]): Seq[Expression] = {
+    if (!SQLConf.get.getConf(SQLConf.ALWAYS_INLINE_COMMON_EXPR)) {
+      val canRewriteConf = cond.filter(canRewriteByWith)
+      if (canRewriteConf.nonEmpty) {
+        val replaceWithMap = canRewriteConf.reduce(And)
+          .collect { case a: Attribute => a }
+          .groupBy(identity)
+          .transform((_, v) => v.size)
+          .filter(m => aliasMap.contains(m._1) && m._2 > 1)
+          .map(m => m._1 -> trimAliases(aliasMap.getOrElse(m._1, m._1)))
+          .filter(m => !CollapseProject.isCheap(m._2))
+        val defsMap = AttributeMap(replaceWithMap.map(m => m._1 -> CommonExpressionDef(m._2)))
+        val refsMap = AttributeMap(defsMap.map(m => m._1 -> new CommonExpressionRef(m._2)))
+        cond.map(rewriteByWith(_, defsMap, refsMap))
+      } else cond
+    } else cond
+  }
+
   private def rewriteConditionByWith(
       cond: Expression,
       aliasMap: AttributeMap[Alias]): Expression = {
     if (!SQLConf.get.getConf(SQLConf.ALWAYS_INLINE_COMMON_EXPR)) {
-      val replaceWithMap = cond.collect { case a: Attribute => a }
-        .groupBy(identity)
-        .transform((_, v) => v.size)
-        .filter(m => aliasMap.contains(m._1) && m._2 > 1)
-        .map(m => m._1 -> trimAliases(aliasMap.getOrElse(m._1, m._1)))
-        .filter(m => !CollapseProject.isCheap(m._2))
-      splitConjunctivePredicates(cond)
-        .map(rewriteByWith(_, AttributeMap(replaceWithMap)))
-        .reduce(And)
+      rewriteConditionByWith(splitConjunctivePredicates(cond), aliasMap).reduce(And)
     } else cond
   }
 
@@ -2016,16 +2029,20 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
 
   private def rewriteByWith(
       expr: Expression,
-      replaceMap: AttributeMap[Expression]): Expression = {
+      defsMap: AttributeMap[CommonExpressionDef],
+      refsMap: AttributeMap[CommonExpressionRef]): Expression = {
     if (!canRewriteByWith(expr)) {
       return expr
     }
-    val exprAttrSet = expr.collect { case a: Attribute => a }.toSet
-    val newReplaceMap = replaceMap.filter(x => exprAttrSet.contains(x._1))
-    if (newReplaceMap.isEmpty) {
-      return expr
+    val defs = mutable.HashSet.empty[CommonExpressionDef]
+    val replaced = expr.transform {
+      case a: Attribute if refsMap.contains(a) =>
+        defs.add(defsMap.get(a).get)
+        refsMap.get(a).get
     }
-    With(expr, newReplaceMap)
+    if (defs.nonEmpty) {
+      With(replaced, defs.toSeq)
+    } else expr
   }
 }
 

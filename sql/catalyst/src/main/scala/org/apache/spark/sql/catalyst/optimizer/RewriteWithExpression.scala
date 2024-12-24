@@ -96,7 +96,12 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
         val defs = w.defs.map(rewriteWithExprAndInputPlans(_, inputPlans, isNestedWith = true))
         val refToExpr = mutable.HashMap.empty[CommonExpressionId, Expression]
         val childProjections = Array.fill(inputPlans.length)(mutable.ArrayBuffer.empty[Alias])
-        val refsCount = child.collect { case r: CommonExpressionRef => r}
+        val refsCount = child.collect {
+            case r: CommonExpressionRef
+              if defs.exists {
+                case d: CommonExpressionDef => d.id == r.id
+              } => r
+          }
           .groupBy(_.id)
           .transform((_, v) => v.size)
 
