@@ -161,6 +161,11 @@ abstract class Optimizer(catalogManager: CatalogManager)
     val operatorOptimizationBatch: Seq[Batch] = Seq(
       Batch("Operator Optimization before Inferring Filters", fixedPoint,
         operatorOptimizationRuleSet: _*),
+      // With expression will destroy infer filters, so need rewrite it before infer filters.
+      Batch("Merge With expression", fixedPoint, MergeWithExpression),
+      Batch("Rewrite With expression", fixedPoint,
+        RewriteWithExpression,
+        CollapseProject),
       Batch("Infer Filters", Once,
         InferFiltersFromGenerate,
         InferFiltersFromConstraints),
@@ -169,7 +174,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
       Batch("Push extra predicate through join", fixedPoint,
         PushExtraPredicateThroughJoin,
         PushDownPredicates),
-      Batch("Merge With expression", Once, MergeWithExpression),
+      Batch("Merge With expression", fixedPoint, MergeWithExpression),
       Batch("Rewrite With expression", fixedPoint,
         RewriteWithExpression,
         CollapseProject))

@@ -47,7 +47,7 @@ class FilterPushdownSuite extends PlanTest {
       Batch("Push extra predicate through join", FixedPoint(10),
         PushExtraPredicateThroughJoin,
         PushDownPredicates) ::
-      Batch("Merge With expression", Once, MergeWithExpression) ::
+      Batch("Merge With expression", FixedPoint(10), MergeWithExpression) ::
       Batch("Rewrite With expression", FixedPoint(10),
         RewriteWithExpression,
         CollapseProject) :: Nil
