@@ -19,6 +19,7 @@ package org.apache.spark.ml.classification
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.linalg.Vector
+import org.apache.spark.ml.util.Summary
 import org.apache.spark.mllib.evaluation.{BinaryClassificationMetrics, MulticlassMetrics}
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.functions.{col, lit}
@@ -28,7 +29,7 @@ import org.apache.spark.sql.types.DoubleType
 /**
  * Abstraction for multiclass classification results for a given model.
  */
-private[classification] trait ClassificationSummary extends Serializable {
+private[classification] trait ClassificationSummary extends Summary with Serializable {
 
   /**
    * Dataframe output by the model's `transform` method.
