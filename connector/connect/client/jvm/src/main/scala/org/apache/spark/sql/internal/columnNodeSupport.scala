@@ -162,6 +162,7 @@ object ColumnNodeToProtoConverter extends (ColumnNode => proto.Expression) {
       case CaseWhenOtherwise(branches, otherwise, _) =>
         val b = builder.getUnresolvedFunctionBuilder
           .setFunctionName("when")
+          .setIsInternal(false)
         branches.foreach { case (condition, value) =>
           b.addArguments(apply(condition, e))
           b.addArguments(apply(value, e))
