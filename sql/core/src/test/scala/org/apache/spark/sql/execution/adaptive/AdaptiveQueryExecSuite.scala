@@ -938,8 +938,12 @@ class AdaptiveQueryExecSuite
           val error = intercept[SparkException] {
             joined.collect()
           }
-          assert((Seq(error) ++ Option(error.getCause) ++ error.getSuppressed()).exists(
-            e => e.getMessage() != null && e.getMessage().contains("coalesce test error")))
+          val errorMessages = (Seq(error) ++ Option(error.getCause) ++ error.getSuppressed())
+            .filter(e => e.getMessage != null).map(e => e.getMessage)
+          assert(errorMessages.exists(
+            e => e.contains("coalesce test error")),
+            s"Error messages should contain `coalesce test error`, " +
+              s"error messages: $errorMessages")
 
           val adaptivePlan = joined.queryExecution.executedPlan.asInstanceOf[AdaptiveSparkPlanExec]
 
