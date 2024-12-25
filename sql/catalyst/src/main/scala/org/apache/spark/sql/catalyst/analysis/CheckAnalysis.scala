@@ -702,13 +702,13 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
             operator.children.tail.zipWithIndex.foreach { case (child, ti) =>
               // Check the number of columns
               if (child.output.length != ref.length) {
-                e.failAnalysis(
-                  errorClass = "NUM_COLUMNS_MISMATCH",
-                  messageParameters = Map(
-                    "operator" -> toSQLStmt(operator.nodeName),
-                    "firstNumColumns" -> ref.length.toString,
-                    "invalidOrdinalNum" -> ordinalNumber(ti + 1),
-                    "invalidNumColumns" -> child.output.length.toString))
+                throw QueryCompilationErrors.numColumnsMismatch(
+                  operator = operator.nodeName,
+                  firstNumColumns = ref.length,
+                  invalidOrdinalNum = ti + 1,
+                  invalidNumColumns = child.output.length,
+                  origin = operator.origin
+                )
               }
 
               val dataTypesAreCompatibleFn = getDataTypesAreCompatibleFn(operator)
@@ -716,15 +716,15 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
               dataTypes(child).zip(ref).zipWithIndex.foreach { case ((dt1, dt2), ci) =>
                 // SPARK-18058: we shall not care about the nullability of columns
                 if (!dataTypesAreCompatibleFn(dt1, dt2)) {
-                  e.failAnalysis(
-                    errorClass = "INCOMPATIBLE_COLUMN_TYPE",
-                    messageParameters = Map(
-                      "operator" -> toSQLStmt(operator.nodeName),
-                      "columnOrdinalNumber" -> ordinalNumber(ci),
-                      "tableOrdinalNumber" -> ordinalNumber(ti + 1),
-                      "dataType1" -> toSQLType(dt1),
-                      "dataType2" -> toSQLType(dt2),
-                      "hint" -> extraHintForAnsiTypeCoercionPlan(operator)))
+                  throw QueryCompilationErrors.incompatibleColumnTypeError(
+                    operator = operator.nodeName,
+                    columnOrdinalNumber = ci,
+                    tableOrdinalNumber = ti + 1,
+                    dataType1 = dt1,
+                    dataType2 = dt2,
+                    hint = extraHintForAnsiTypeCoercionPlan(operator),
+                    origin = operator.origin
+                  )
                 }
               }
             }

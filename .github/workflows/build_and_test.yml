@@ -435,7 +435,7 @@ jobs:
           # Use the infra image cache to speed up
           cache-from: type=registry,ref=ghcr.io/apache/spark/apache-spark-github-action-image-cache:${{ inputs.branch }}
       - name: Build and push (Documentation)
-        if: ${{ inputs.branch != 'branch-3.5' && hashFiles('dev/spark-test-image/docs/Dockerfile') != '' }}
+        if: ${{ inputs.branch != 'branch-3.5' && fromJson(needs.precondition.outputs.required).docs == 'true' && hashFiles('dev/spark-test-image/docs/Dockerfile') != '' }}
         id: docker_build_docs
         uses: docker/build-push-action@v6
         with:
@@ -446,7 +446,7 @@ jobs:
           # Use the infra image cache to speed up
           cache-from: type=registry,ref=ghcr.io/apache/spark/apache-spark-github-action-image-docs-cache:${{ inputs.branch }}
       - name: Build and push (Linter)
-        if: ${{ inputs.branch != 'branch-3.5' && hashFiles('dev/spark-test-image/lint/Dockerfile') != '' }}
+        if: ${{ inputs.branch != 'branch-3.5' && fromJson(needs.precondition.outputs.required).lint == 'true' && hashFiles('dev/spark-test-image/lint/Dockerfile') != '' }}
         id: docker_build_lint
         uses: docker/build-push-action@v6
         with:
@@ -457,7 +457,7 @@ jobs:
           # Use the infra image cache to speed up
           cache-from: type=registry,ref=ghcr.io/apache/spark/apache-spark-github-action-image-lint-cache:${{ inputs.branch }}
       - name: Build and push (SparkR)
-        if: ${{ inputs.branch != 'branch-3.5' && hashFiles('dev/spark-test-image/sparkr/Dockerfile') != '' }}
+        if: ${{ inputs.branch != 'branch-3.5' && fromJson(needs.precondition.outputs.required).sparkr == 'true' && hashFiles('dev/spark-test-image/sparkr/Dockerfile') != '' }}
         id: docker_build_sparkr
         uses: docker/build-push-action@v6
         with:
@@ -468,7 +468,7 @@ jobs:
           # Use the infra image cache to speed up
           cache-from: type=registry,ref=ghcr.io/apache/spark/apache-spark-github-action-image-sparkr-cache:${{ inputs.branch }}
       - name: Build and push (PySpark with ${{ env.PYSPARK_IMAGE_TO_TEST }})
-        if: ${{ inputs.branch != 'branch-3.5' && env.PYSPARK_IMAGE_TO_TEST != '' }}
+        if: ${{ inputs.branch != 'branch-3.5' && fromJson(needs.precondition.outputs.required).pyspark == 'true' && env.PYSPARK_IMAGE_TO_TEST != '' }}
         id: docker_build_pyspark
         env: ${{ fromJSON(inputs.envs) }}
         uses: docker/build-push-action@v6
