@@ -17,48 +17,35 @@
 
 package org.apache.spark.sql.scripting
 
-import scala.collection.mutable
-
 import org.apache.spark.sql.catalyst.catalog.{VariableDefinition, VariableManager}
 import org.apache.spark.sql.catalyst.expressions.Literal
 
 
-// todo LOCALVARS: should this be thread safe / synchronized, also should probably be one per frame
-class ScriptingVariableManager(context: SqlScriptingExecutionContext) extends VariableManager{
-
-  // map from scope label to map from variable name to variable definition
-  private val variables = {
-    val map = new mutable.HashMap[String, mutable.HashMap[String, VariableDefinition]]
-    // probably unnecessary as when variable manager is initialized there are no scopes yet
-    context.currentFrame.scopes.foreach(scope =>
-      map.put(scope.label, new mutable.HashMap[String, VariableDefinition]))
-    map
-  }
+// todo LOCALVARS: should this be thread safe / synchronized (probably not since its one per script)
+class ScriptingVariableManager(context: SqlScriptingExecutionContext) extends VariableManager {
 
   override def create(
       name: String,
       defaultValueSQL: String,
       initValue: Literal,
       overrideIfExists: Boolean): Unit = {
-    // todo LOCALVARS: throw meaningful error, qualified name
-    variables
-//      .getOrElse(context.currentScope.label, throw Exception)
-      .get(context.currentScope.label).get
-      .put(name, VariableDefinition(defaultValueSQL, initValue))
+    // todo LOCALVARS: qualified name
+    context.currentScope.variables.put(name, VariableDefinition(defaultValueSQL, initValue))
   }
 
   override def get(name: String): Option[VariableDefinition] = {
-    // todo LOCALVAR: add support for qualified name
+    // todo LOCALVARS: add support for qualified name
     context.currentFrame.scopes
-      .findLast(scope => variables(scope.label).contains(name))
-      .map(scope => variables(scope.label)(name))
+      .findLast(_.variables.contains(name))
+      .map(_.variables(name))
   }
 
   override def remove(name: String): Boolean = {
     true
   }
 
-  override def clear(): Unit = variables.clear()
+  // todo LOCALVARS: do we need this
+  override def clear(): Unit = ()
 
-  override def isEmpty: Boolean = variables.values.forall(_.isEmpty)
+  override def isEmpty: Boolean = context.currentFrame.scopes.forall(_.variables.isEmpty)
 }

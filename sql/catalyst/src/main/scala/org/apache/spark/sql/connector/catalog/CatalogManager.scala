@@ -48,7 +48,7 @@ class CatalogManager(
   // TODO: create a real SYSTEM catalog to host `TempVariableManager` under the SESSION namespace.
   val tempVariableManager: TempVariableManager = new TempVariableManager
 
-  // todo LOCALVARS: should this be thread local
+  // todo LOCALVARS: should this be thread local (probably)
   var scriptingLocalVariableManager: Option[VariableManager] = None
 
   def catalog(name: String): CatalogPlugin = synchronized {

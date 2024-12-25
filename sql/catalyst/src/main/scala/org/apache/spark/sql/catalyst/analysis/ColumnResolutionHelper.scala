@@ -281,17 +281,17 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
           Identifier.of(Array(CatalogManager.SESSION_NAMESPACE), variableName),
           varDef)
       }
-      .orElse(Option.when(maybeTempVariableName(nameParts)) {
-        catalogManager.tempVariableManager
-          .get(variableName)
-          .map { varDef =>
-            VariableReference(
-              nameParts,
-              FakeSystemCatalog,
-              Identifier.of(Array(CatalogManager.SESSION_NAMESPACE), variableName),
-              varDef)
-          }
-        })
+//      .orElse(Option.when(maybeTempVariableName(nameParts)) {
+//        catalogManager.tempVariableManager
+//          .get(variableName)
+//          .map { varDef =>
+//            VariableReference(
+//              nameParts,
+//              FakeSystemCatalog,
+//              Identifier.of(Array(CatalogManager.SESSION_NAMESPACE), variableName),
+//              varDef)
+//          }
+//        })
   }
 
   // Resolves `UnresolvedAttribute` to its value.

@@ -17,9 +17,12 @@
 
 package org.apache.spark.sql.scripting
 
+import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
 
 import org.apache.spark.SparkException
+import org.apache.spark.sql.catalyst.catalog.VariableDefinition
+
 
 /**
  * SQL scripting execution context - keeps track of the current execution state.
@@ -93,4 +96,6 @@ class SqlScriptingExecutionFrame(
  * @param label
  *   Label of the scope.
  */
-class SqlScriptingExecutionScope(val label: String)
+class SqlScriptingExecutionScope(val label: String) {
+  val variables = new mutable.HashMap[String, VariableDefinition]
+}
