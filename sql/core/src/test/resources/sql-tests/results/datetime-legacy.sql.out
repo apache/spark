@@ -207,7 +207,6 @@ org.apache.spark.SparkDateTimeException
   "errorClass" : "CANNOT_PARSE_TIMESTAMP",
   "sqlState" : "22007",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "message" : "Unparseable date: \"02-29\""
   }
 }
@@ -1585,7 +1584,6 @@ org.apache.spark.SparkDateTimeException
   "errorClass" : "CANNOT_PARSE_TIMESTAMP",
   "sqlState" : "22007",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "message" : "Unparseable date: \"2019-10-06 10:11:12.\""
   }
 }
@@ -1601,7 +1599,6 @@ org.apache.spark.SparkDateTimeException
   "errorClass" : "CANNOT_PARSE_TIMESTAMP",
   "sqlState" : "22007",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "message" : "Unparseable date: \"2019-10-06 10:11:12.0\""
   }
 }
@@ -1617,7 +1614,6 @@ org.apache.spark.SparkDateTimeException
   "errorClass" : "CANNOT_PARSE_TIMESTAMP",
   "sqlState" : "22007",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "message" : "Unparseable date: \"2019-10-06 10:11:12.1\""
   }
 }
@@ -1633,7 +1629,6 @@ org.apache.spark.SparkDateTimeException
   "errorClass" : "CANNOT_PARSE_TIMESTAMP",
   "sqlState" : "22007",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "message" : "Unparseable date: \"2019-10-06 10:11:12.12\""
   }
 }
@@ -1649,7 +1644,6 @@ org.apache.spark.SparkDateTimeException
   "errorClass" : "CANNOT_PARSE_TIMESTAMP",
   "sqlState" : "22007",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "message" : "Unparseable date: \"2019-10-06 10:11:12.123UTC\""
   }
 }
@@ -1665,7 +1659,6 @@ org.apache.spark.SparkDateTimeException
   "errorClass" : "CANNOT_PARSE_TIMESTAMP",
   "sqlState" : "22007",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "message" : "Unparseable date: \"2019-10-06 10:11:12.1234\""
   }
 }
@@ -1681,7 +1674,6 @@ org.apache.spark.SparkDateTimeException
   "errorClass" : "CANNOT_PARSE_TIMESTAMP",
   "sqlState" : "22007",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "message" : "Unparseable date: \"2019-10-06 10:11:12.12345CST\""
   }
 }
@@ -1697,7 +1689,6 @@ org.apache.spark.SparkDateTimeException
   "errorClass" : "CANNOT_PARSE_TIMESTAMP",
   "sqlState" : "22007",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "message" : "Unparseable date: \"2019-10-06 10:11:12.123456PST\""
   }
 }
@@ -1713,7 +1704,6 @@ org.apache.spark.SparkDateTimeException
   "errorClass" : "CANNOT_PARSE_TIMESTAMP",
   "sqlState" : "22007",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "message" : "Unparseable date: \"2019-10-06 10:11:12.1234567PST\""
   }
 }
@@ -1729,7 +1719,6 @@ org.apache.spark.SparkDateTimeException
   "errorClass" : "CANNOT_PARSE_TIMESTAMP",
   "sqlState" : "22007",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "message" : "Unparseable date: \"123456 2019-10-06 10:11:12.123456PST\""
   }
 }
@@ -1745,7 +1734,6 @@ org.apache.spark.SparkDateTimeException
   "errorClass" : "CANNOT_PARSE_TIMESTAMP",
   "sqlState" : "22007",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "message" : "Unparseable date: \"223456 2019-10-06 10:11:12.123456PST\""
   }
 }
@@ -1761,7 +1749,6 @@ org.apache.spark.SparkDateTimeException
   "errorClass" : "CANNOT_PARSE_TIMESTAMP",
   "sqlState" : "22007",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "message" : "Unparseable date: \"2019-10-06 10:11:12.1234\""
   }
 }
@@ -1777,7 +1764,6 @@ org.apache.spark.SparkDateTimeException
   "errorClass" : "CANNOT_PARSE_TIMESTAMP",
   "sqlState" : "22007",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "message" : "Unparseable date: \"2019-10-06 10:11:12.123\""
   }
 }
@@ -1793,7 +1779,6 @@ org.apache.spark.SparkDateTimeException
   "errorClass" : "CANNOT_PARSE_TIMESTAMP",
   "sqlState" : "22007",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "message" : "Unparseable date: \"2019-10-06 10:11:12\""
   }
 }
@@ -1809,7 +1794,6 @@ org.apache.spark.SparkDateTimeException
   "errorClass" : "CANNOT_PARSE_TIMESTAMP",
   "sqlState" : "22007",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "message" : "Unparseable date: \"2019-10-06 10:11:12.12\""
   }
 }
@@ -1825,7 +1809,6 @@ org.apache.spark.SparkDateTimeException
   "errorClass" : "CANNOT_PARSE_TIMESTAMP",
   "sqlState" : "22007",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "message" : "Unparseable date: \"2019-10-06 10:11\""
   }
 }
@@ -1841,7 +1824,6 @@ org.apache.spark.SparkDateTimeException
   "errorClass" : "CANNOT_PARSE_TIMESTAMP",
   "sqlState" : "22007",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "message" : "Unparseable date: \"2019-10-06S10:11:12.12345\""
   }
 }
@@ -1857,7 +1839,6 @@ org.apache.spark.SparkDateTimeException
   "errorClass" : "CANNOT_PARSE_TIMESTAMP",
   "sqlState" : "22007",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "message" : "Unparseable date: \"12.12342019-10-06S10:11\""
   }
 }
@@ -1873,7 +1854,6 @@ org.apache.spark.SparkDateTimeException
   "errorClass" : "CANNOT_PARSE_TIMESTAMP",
   "sqlState" : "22007",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "message" : "Unparseable date: \"12.1232019-10-06S10:11\""
   }
 }
@@ -1889,7 +1869,6 @@ org.apache.spark.SparkDateTimeException
   "errorClass" : "CANNOT_PARSE_TIMESTAMP",
   "sqlState" : "22007",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "message" : "Unparseable date: \"12.1232019-10-06S10:11\""
   }
 }
@@ -1905,7 +1884,6 @@ org.apache.spark.SparkDateTimeException
   "errorClass" : "CANNOT_PARSE_TIMESTAMP",
   "sqlState" : "22007",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "message" : "Unparseable date: \"12.1234019-10-06S10:11\""
   }
 }
@@ -1977,7 +1955,6 @@ org.apache.spark.SparkDateTimeException
   "errorClass" : "CANNOT_PARSE_TIMESTAMP",
   "sqlState" : "22007",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "message" : "Unparseable date: \"02-29\""
   }
 }
@@ -2208,7 +2185,6 @@ org.apache.spark.SparkDateTimeException
   "errorClass" : "CANNOT_PARSE_TIMESTAMP",
   "sqlState" : "22007",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "message" : "Unparseable date: \"2019-10-06 A\""
   }
 }

@@ -323,19 +323,9 @@ class PlanParserSuite extends AnalysisTest {
     assertEqual(
       "from db.a select b, c where d < 1", table("db", "a").where($"d" < 1).select($"b", $"c"))
     assertEqual("from a select distinct b, c", Distinct(table("a").select($"b", $"c")))
-
-    // Weird "FROM table" queries, should be invalid anyway
-    val sql1 = "from a"
-    checkError(
-      exception = parseException(sql1),
-      condition = "PARSE_SYNTAX_ERROR",
-      parameters = Map("error" -> "end of input", "hint" -> ""))
-
-    val sql2 = "from (from a union all from b) c select *"
-    checkError(
-      exception = parseException(sql2),
-      condition = "PARSE_SYNTAX_ERROR",
-      parameters = Map("error" -> "'union'", "hint" -> ""))
+    assertEqual("from a", table("a"))
+    assertEqual("from (from a union all from b) c select *",
+      table("a").union(table("b")).subquery("c").select(star()))
   }
 
   test("multi select query") {

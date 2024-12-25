@@ -617,13 +617,13 @@ SELECT c1, (WITH t AS (SELECT 1 AS a) SELECT a + c1 FROM t) FROM t1
 -- !query analysis
 Project [c1#x, scalar-subquery#x [c1#x] AS scalarsubquery(c1)#x]
 :  +- WithCTE
-:     :- CTERelationDef xxxx, false
+:     :- CTERelationDef xxxx, false, false
 :     :  +- SubqueryAlias t
 :     :     +- Project [1 AS a#x]
 :     :        +- OneRowRelation
 :     +- Project [(a#x + outer(c1#x)) AS (a + outer(t1.c1))#x]
 :        +- SubqueryAlias t
-:           +- CTERelationRef xxxx, true, [a#x], false
+:           +- CTERelationRef xxxx, true, [a#x], false, false
 +- SubqueryAlias t1
    +- View (`t1`, [c1#x, c2#x])
       +- Project [cast(c1#x as int) AS c1#x, cast(c2#x as int) AS c2#x]
@@ -636,7 +636,7 @@ SELECT c1, (WITH t AS (SELECT * FROM t2 WHERE c1 = t1.c1) SELECT SUM(c2) FROM t)
 -- !query analysis
 Project [c1#x, scalar-subquery#x [c1#x] AS scalarsubquery(c1)#xL]
 :  +- WithCTE
-:     :- CTERelationDef xxxx, false
+:     :- CTERelationDef xxxx, false, false
 :     :  +- SubqueryAlias t
 :     :     +- Project [c1#x, c2#x]
 :     :        +- Filter (c1#x = outer(c1#x))
@@ -647,7 +647,7 @@ Project [c1#x, scalar-subquery#x [c1#x] AS scalarsubquery(c1)#xL]
 :     :                       +- LocalRelation [c1#x, c2#x]
 :     +- Aggregate [sum(c2#x) AS sum(c2)#xL]
 :        +- SubqueryAlias t
-:           +- CTERelationRef xxxx, true, [c1#x, c2#x], false
+:           +- CTERelationRef xxxx, true, [c1#x, c2#x], false, false
 +- SubqueryAlias t1
    +- View (`t1`, [c1#x, c2#x])
       +- Project [cast(c1#x as int) AS c1#x, cast(c2#x as int) AS c2#x]
@@ -664,7 +664,7 @@ SELECT c1, (
 -- !query analysis
 Project [c1#x, scalar-subquery#x [c1#x] AS scalarsubquery(c1)#xL]
 :  +- WithCTE
-:     :- CTERelationDef xxxx, false
+:     :- CTERelationDef xxxx, false, false
 :     :  +- SubqueryAlias t3
 :     :     +- Project [(c1#x + 1) AS c1#x, (c2#x + 1) AS c2#x]
 :     :        +- SubqueryAlias t2
@@ -672,15 +672,15 @@ Project [c1#x, scalar-subquery#x [c1#x] AS scalarsubquery(c1)#xL]
 :     :              +- Project [cast(c1#x as int) AS c1#x, cast(c2#x as int) AS c2#x]
 :     :                 +- SubqueryAlias t2
 :     :                    +- LocalRelation [c1#x, c2#x]
-:     :- CTERelationDef xxxx, false
+:     :- CTERelationDef xxxx, false, false
 :     :  +- SubqueryAlias t4
 :     :     +- Project [c1#x, c2#x]
 :     :        +- Filter (outer(c1#x) = c1#x)
 :     :           +- SubqueryAlias t3
-:     :              +- CTERelationRef xxxx, true, [c1#x, c2#x], false
+:     :              +- CTERelationRef xxxx, true, [c1#x, c2#x], false, false
 :     +- Aggregate [sum(c2#x) AS sum(c2)#xL]
 :        +- SubqueryAlias t4
-:           +- CTERelationRef xxxx, true, [c1#x, c2#x], false
+:           +- CTERelationRef xxxx, true, [c1#x, c2#x], false, false
 +- SubqueryAlias t1
    +- View (`t1`, [c1#x, c2#x])
       +- Project [cast(c1#x as int) AS c1#x, cast(c2#x as int) AS c2#x]
@@ -697,7 +697,7 @@ SELECT c1, (
 -- !query analysis
 Project [c1#x, scalar-subquery#x [c1#x] AS scalarsubquery(c1)#xL]
 :  +- WithCTE
-:     :- CTERelationDef xxxx, false
+:     :- CTERelationDef xxxx, false, false
 :     :  +- SubqueryAlias t
 :     :     +- Project [c1#x, c2#x]
 :     :        +- SubqueryAlias t2
@@ -713,10 +713,10 @@ Project [c1#x, scalar-subquery#x [c1#x] AS scalarsubquery(c1)#xL]
 :                    +- Union false, false
 :                       :- Project [c1#x, c2#x]
 :                       :  +- SubqueryAlias t
-:                       :     +- CTERelationRef xxxx, true, [c1#x, c2#x], false
+:                       :     +- CTERelationRef xxxx, true, [c1#x, c2#x], false, false
 :                       +- Project [c2#x, c1#x]
 :                          +- SubqueryAlias t
-:                             +- CTERelationRef xxxx, true, [c1#x, c2#x], false
+:                             +- CTERelationRef xxxx, true, [c1#x, c2#x], false, false
 +- SubqueryAlias t1
    +- View (`t1`, [c1#x, c2#x])
       +- Project [cast(c1#x as int) AS c1#x, cast(c2#x as int) AS c2#x]
@@ -732,7 +732,7 @@ SELECT * FROM t1 WHERE c1 > (
 )
 -- !query analysis
 WithCTE
-:- CTERelationDef xxxx, false
+:- CTERelationDef xxxx, false, false
 :  +- SubqueryAlias v
 :     +- Project [c1#x, c2#x]
 :        +- SubqueryAlias t2
@@ -743,7 +743,7 @@ WithCTE
 +- Project [c1#x, c2#x]
    +- Filter (cast(c1#x as bigint) > scalar-subquery#x [c1#x])
       :  +- WithCTE
-      :     :- CTERelationDef xxxx, false
+      :     :- CTERelationDef xxxx, false, false
       :     :  +- SubqueryAlias t
       :     :     +- Project [c1#x, c2#x]
       :     :        +- SubqueryAlias t2
@@ -756,9 +756,9 @@ WithCTE
       :           :  +- Aggregate [sum(c2#x) AS sum(c2)#xL]
       :           :     +- Filter (c1#x = outer(c1#x))
       :           :        +- SubqueryAlias t
-      :           :           +- CTERelationRef xxxx, true, [c1#x, c2#x], false
+      :           :           +- CTERelationRef xxxx, true, [c1#x, c2#x], false, false
       :           +- SubqueryAlias v
-      :              +- CTERelationRef xxxx, true, [c1#x, c2#x], false
+      :              +- CTERelationRef xxxx, true, [c1#x, c2#x], false, false
       +- SubqueryAlias t1
          +- View (`t1`, [c1#x, c2#x])
             +- Project [cast(c1#x as int) AS c1#x, cast(c2#x as int) AS c2#x]
@@ -771,7 +771,7 @@ WITH t AS (SELECT 1 AS a)
 SELECT c1, (SELECT a FROM t WHERE a = c1) FROM t1
 -- !query analysis
 WithCTE
-:- CTERelationDef xxxx, false
+:- CTERelationDef xxxx, false, false
 :  +- SubqueryAlias t
 :     +- Project [1 AS a#x]
 :        +- OneRowRelation
@@ -779,7 +779,7 @@ WithCTE
    :  +- Project [a#x]
    :     +- Filter (a#x = outer(c1#x))
    :        +- SubqueryAlias t
-   :           +- CTERelationRef xxxx, true, [a#x], false
+   :           +- CTERelationRef xxxx, true, [a#x], false, false
    +- SubqueryAlias t1
       +- View (`t1`, [c1#x, c2#x])
          +- Project [cast(c1#x as int) AS c1#x, cast(c2#x as int) AS c2#x]
@@ -1019,7 +1019,7 @@ SELECT (SELECT sum(1) FROM T WHERE a = col OR upper(col)= 'Y')
 FROM (SELECT null as col) as foo
 -- !query analysis
 WithCTE
-:- CTERelationDef xxxx, false
+:- CTERelationDef xxxx, false, false
 :  +- SubqueryAlias T
 :     +- Project [1 AS a#x]
 :        +- OneRowRelation
@@ -1027,7 +1027,7 @@ WithCTE
    :  +- Aggregate [sum(1) AS sum(1)#xL]
    :     +- Filter ((a#x = cast(outer(col#x) as int)) OR (upper(cast(outer(col#x) as string)) = Y))
    :        +- SubqueryAlias T
-   :           +- CTERelationRef xxxx, true, [a#x], false
+   :           +- CTERelationRef xxxx, true, [a#x], false, false
    +- SubqueryAlias foo
       +- Project [null AS col#x]
          +- OneRowRelation

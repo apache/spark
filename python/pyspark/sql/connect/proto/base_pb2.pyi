@@ -477,6 +477,21 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
             self, field_name: typing_extensions.Literal["relation", b"relation"]
         ) -> None: ...
 
+    class JsonToDDL(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        JSON_STRING_FIELD_NUMBER: builtins.int
+        json_string: builtins.str
+        """(Required) The JSON formatted string to be converted to DDL."""
+        def __init__(
+            self,
+            *,
+            json_string: builtins.str = ...,
+        ) -> None: ...
+        def ClearField(
+            self, field_name: typing_extensions.Literal["json_string", b"json_string"]
+        ) -> None: ...
+
     SESSION_ID_FIELD_NUMBER: builtins.int
     CLIENT_OBSERVED_SERVER_SIDE_SESSION_ID_FIELD_NUMBER: builtins.int
     USER_CONTEXT_FIELD_NUMBER: builtins.int
@@ -494,6 +509,7 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
     PERSIST_FIELD_NUMBER: builtins.int
     UNPERSIST_FIELD_NUMBER: builtins.int
     GET_STORAGE_LEVEL_FIELD_NUMBER: builtins.int
+    JSON_TO_DDL_FIELD_NUMBER: builtins.int
     session_id: builtins.str
     """(Required)
 
@@ -542,6 +558,8 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
     def unpersist(self) -> global___AnalyzePlanRequest.Unpersist: ...
     @property
     def get_storage_level(self) -> global___AnalyzePlanRequest.GetStorageLevel: ...
+    @property
+    def json_to_ddl(self) -> global___AnalyzePlanRequest.JsonToDDL: ...
     def __init__(
         self,
         *,
@@ -562,6 +580,7 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
         persist: global___AnalyzePlanRequest.Persist | None = ...,
         unpersist: global___AnalyzePlanRequest.Unpersist | None = ...,
         get_storage_level: global___AnalyzePlanRequest.GetStorageLevel | None = ...,
+        json_to_ddl: global___AnalyzePlanRequest.JsonToDDL | None = ...,
     ) -> None: ...
     def HasField(
         self,
@@ -588,6 +607,8 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
             b"is_local",
             "is_streaming",
             b"is_streaming",
+            "json_to_ddl",
+            b"json_to_ddl",
             "persist",
             b"persist",
             "same_semantics",
@@ -631,6 +652,8 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
             b"is_local",
             "is_streaming",
             b"is_streaming",
+            "json_to_ddl",
+            b"json_to_ddl",
             "persist",
             b"persist",
             "same_semantics",
@@ -680,6 +703,7 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
             "persist",
             "unpersist",
             "get_storage_level",
+            "json_to_ddl",
         ]
         | None
     ): ...
@@ -877,6 +901,20 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
             self, field_name: typing_extensions.Literal["storage_level", b"storage_level"]
         ) -> None: ...
 
+    class JsonToDDL(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        DDL_STRING_FIELD_NUMBER: builtins.int
+        ddl_string: builtins.str
+        def __init__(
+            self,
+            *,
+            ddl_string: builtins.str = ...,
+        ) -> None: ...
+        def ClearField(
+            self, field_name: typing_extensions.Literal["ddl_string", b"ddl_string"]
+        ) -> None: ...
+
     SESSION_ID_FIELD_NUMBER: builtins.int
     SERVER_SIDE_SESSION_ID_FIELD_NUMBER: builtins.int
     SCHEMA_FIELD_NUMBER: builtins.int
@@ -892,6 +930,7 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
     PERSIST_FIELD_NUMBER: builtins.int
     UNPERSIST_FIELD_NUMBER: builtins.int
     GET_STORAGE_LEVEL_FIELD_NUMBER: builtins.int
+    JSON_TO_DDL_FIELD_NUMBER: builtins.int
     session_id: builtins.str
     server_side_session_id: builtins.str
     """Server-side generated idempotency key that the client can use to assert that the server side
@@ -923,6 +962,8 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
     def unpersist(self) -> global___AnalyzePlanResponse.Unpersist: ...
     @property
     def get_storage_level(self) -> global___AnalyzePlanResponse.GetStorageLevel: ...
+    @property
+    def json_to_ddl(self) -> global___AnalyzePlanResponse.JsonToDDL: ...
     def __init__(
         self,
         *,
@@ -941,6 +982,7 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
         persist: global___AnalyzePlanResponse.Persist | None = ...,
         unpersist: global___AnalyzePlanResponse.Unpersist | None = ...,
         get_storage_level: global___AnalyzePlanResponse.GetStorageLevel | None = ...,
+        json_to_ddl: global___AnalyzePlanResponse.JsonToDDL | None = ...,
     ) -> None: ...
     def HasField(
         self,
@@ -957,6 +999,8 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
             b"is_local",
             "is_streaming",
             b"is_streaming",
+            "json_to_ddl",
+            b"json_to_ddl",
             "persist",
             b"persist",
             "result",
@@ -990,6 +1034,8 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
             b"is_local",
             "is_streaming",
             b"is_streaming",
+            "json_to_ddl",
+            b"json_to_ddl",
             "persist",
             b"persist",
             "result",
@@ -1029,6 +1075,7 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
             "persist",
             "unpersist",
             "get_storage_level",
+            "json_to_ddl",
         ]
         | None
     ): ...

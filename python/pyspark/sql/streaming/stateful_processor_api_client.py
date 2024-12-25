@@ -15,16 +15,16 @@
 # limitations under the License.
 #
 from enum import Enum
+import json
 import os
 import socket
-from typing import Any, Dict, List, Union, Optional, cast, Tuple, Iterator
+from typing import Any, Dict, List, Union, Optional, Tuple, Iterator
 
 from pyspark.serializers import write_int, read_int, UTF8Deserializer
 from pyspark.sql.pandas.serializers import ArrowStreamSerializer
 from pyspark.sql.types import (
     StructType,
     TYPE_CHECKING,
-    _parse_datatype_string,
     Row,
 )
 from pyspark.sql.pandas.types import convert_pandas_using_numpy_type
@@ -129,7 +129,7 @@ class StatefulProcessorApiClient:
         import pyspark.sql.streaming.proto.StateMessage_pb2 as stateMessage
 
         if isinstance(schema, str):
-            schema = cast(StructType, _parse_datatype_string(schema))
+            schema = self._parse_string_schema(schema)
 
         state_call_command = stateMessage.StateCallCommand()
         state_call_command.stateName = state_name
@@ -152,7 +152,7 @@ class StatefulProcessorApiClient:
         import pyspark.sql.streaming.proto.StateMessage_pb2 as stateMessage
 
         if isinstance(schema, str):
-            schema = cast(StructType, _parse_datatype_string(schema))
+            schema = self._parse_string_schema(schema)
 
         state_call_command = stateMessage.StateCallCommand()
         state_call_command.stateName = state_name
@@ -290,9 +290,9 @@ class StatefulProcessorApiClient:
         import pyspark.sql.streaming.proto.StateMessage_pb2 as stateMessage
 
         if isinstance(user_key_schema, str):
-            user_key_schema = cast(StructType, _parse_datatype_string(user_key_schema))
+            user_key_schema = self._parse_string_schema(user_key_schema)
         if isinstance(value_schema, str):
-            value_schema = cast(StructType, _parse_datatype_string(value_schema))
+            value_schema = self._parse_string_schema(value_schema)
 
         state_call_command = stateMessage.StateCallCommand()
         state_call_command.stateName = state_name
@@ -393,6 +393,15 @@ class StatefulProcessorApiClient:
         message.ParseFromString(bytes)
         return message.statusCode, message.errorMessage, message.value
 
+    def _receive_proto_message_with_string_value(self) -> Tuple[int, str, str]:
+        import pyspark.sql.streaming.proto.StateMessage_pb2 as stateMessage
+
+        length = read_int(self.sockfile)
+        bytes = self.sockfile.read(length)
+        message = stateMessage.StateResponseWithStringTypeVal()
+        message.ParseFromString(bytes)
+        return message.statusCode, message.errorMessage, message.value
+
     def _receive_str(self) -> str:
         return self.utf8_deserializer.loads(self.sockfile)
 
@@ -435,6 +444,24 @@ class StatefulProcessorApiClient:
 
     def _read_arrow_state(self) -> Any:
         return self.serializer.load_stream(self.sockfile)
+
+    # Parse a string schema into a StructType schema. This method will perform an API call to
+    # JVM side to parse the schema string.
+    def _parse_string_schema(self, schema: str) -> StructType:
+        import pyspark.sql.streaming.proto.StateMessage_pb2 as stateMessage
+
+        parse_string_schema_call = stateMessage.ParseStringSchema(schema=schema)
+        utils_request = stateMessage.UtilsRequest(parseStringSchema=parse_string_schema_call)
+        message = stateMessage.StateRequest(utilsRequest=utils_request)
+
+        self._send_proto_message(message.SerializeToString())
+        response_message = self._receive_proto_message_with_string_value()
+        status = response_message[0]
+        if status != 0:
+            # TODO(SPARK-49233): Classify user facing errors.
+            raise PySparkRuntimeError(f"Error parsing string schema: " f"{response_message[1]}")
+        else:
+            return StructType.fromJson(json.loads(response_message[2]))
 
 
 class ListTimerIterator:

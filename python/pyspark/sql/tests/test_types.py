@@ -2240,6 +2240,22 @@ class TypesTestsMixin:
             PySparkValueError, lambda: str(VariantVal(bytes([32, 10, 1, 0, 0, 0]), metadata))
         )
 
+    def test_to_ddl(self):
+        schema = StructType().add("a", NullType()).add("b", BooleanType()).add("c", BinaryType())
+        self.assertEqual(schema.toDDL(), "a VOID,b BOOLEAN,c BINARY")
+
+        schema = StructType().add("a", IntegerType()).add("b", StringType())
+        self.assertEqual(schema.toDDL(), "a INT,b STRING")
+
+        schema = StructType().add("a", FloatType()).add("b", LongType(), False)
+        self.assertEqual(schema.toDDL(), "a FLOAT,b BIGINT NOT NULL")
+
+        schema = StructType().add("a", ArrayType(DoubleType()), False).add("b", DateType())
+        self.assertEqual(schema.toDDL(), "a ARRAY<DOUBLE> NOT NULL,b DATE")
+
+        schema = StructType().add("a", TimestampType()).add("b", TimestampNTZType())
+        self.assertEqual(schema.toDDL(), "a TIMESTAMP,b TIMESTAMP_NTZ")
+
     def test_from_ddl(self):
         self.assertEqual(DataType.fromDDL("long"), LongType())
         self.assertEqual(
