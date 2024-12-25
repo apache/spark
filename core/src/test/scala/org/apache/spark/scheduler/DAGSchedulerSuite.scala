@@ -34,8 +34,8 @@ import org.roaringbitmap.RoaringBitmap
 import org.scalatest.concurrent.{Signaler, ThreadSignaler, TimeLimits}
 import org.scalatest.exceptions.TestFailedException
 import org.scalatest.time.SpanSugar._
-
 import org.apache.spark._
+
 import org.apache.spark.broadcast.BroadcastManager
 import org.apache.spark.executor.ExecutorMetrics
 import org.apache.spark.internal.config
@@ -185,6 +185,8 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
   private var firstInit: Boolean = _
   /** Set of TaskSets the DAGScheduler has requested executed. */
   val taskSets = scala.collection.mutable.Buffer[TaskSet]()
+  /** Track running tasks, key is the task's stageId of the task, value is the task's partitionId */
+  var runningTaskInfos = new HashMap[Int, HashSet[Int]]()
 
   /** Stages for which the DAGScheduler has called TaskScheduler.killAllTaskAttempts(). */
   val cancelledStages = new HashSet[Int]()
@@ -206,12 +208,16 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
       // normally done by TaskSetManager
       taskSet.tasks.foreach(_.epoch = mapOutputTracker.getEpoch)
       taskSets += taskSet
+      val taskPartitionIds = new HashSet[Int]()
+      taskSet.tasks.foreach(task => taskPartitionIds += task.partitionId)
+      runningTaskInfos.put(taskSet.stageId, taskPartitionIds)
     }
     override def killTaskAttempt(
       taskId: Long, interruptThread: Boolean, reason: String): Boolean = false
     override def killAllTaskAttempts(
       stageId: Int, interruptThread: Boolean, reason: String): Unit = {
       cancelledStages += stageId
+      runningTaskInfos.remove(stageId)
     }
     override def notifyPartitionCompletion(stageId: Int, partitionId: Int): Unit = {
       taskSets.filter(_.stageId == stageId).lastOption.foreach { ts =>
@@ -392,6 +398,16 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
           new DummyScheduledFuture(delay, registerMergeResults))
       if (shuffleMergeFinalize) {
         handleShuffleMergeFinalized(shuffleMapStage, shuffleMapStage.shuffleDep.shuffleMergeId)
+      }
+    }
+
+    override private[scheduler] def handleTaskCompletion(event: CompletionEvent): Unit = {
+      super.handleTaskCompletion(event)
+      if (runningTaskInfos.contains(event.task.stageId)) {
+        runningTaskInfos(event.task.stageId) -= event.task.partitionId
+        if (runningTaskInfos(event.task.stageId).isEmpty) {
+          runningTaskInfos.remove(event.task.stageId)
+        }
       }
     }
   }
@@ -2227,7 +2243,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     runEvent(makeCompletionEvent(taskSets(1).tasks(0), Success, 42))
     // speculative result task 1.1 fetch failed
     val info = new TaskInfo(
-      4, index = 1, attemptNumber = 1, partitionId = 1, 0L, "", "", TaskLocality.ANY, true)
+      0, index = 1, attemptNumber = 1, partitionId = 1, 0L, "", "", TaskLocality.ANY, true)
     runEvent(makeCompletionEvent(
         taskSets(1).tasks(1),
         FetchFailed(makeBlockManagerId("hostA"), shuffleDep.shuffleId, 0L, 0, 1, "ignored"),
@@ -2252,6 +2268,45 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     sc.listenerBus.waitUntilEmpty()
     assert(completedStage === List(0, 1, 1, 0, 1))
     assert(scheduler.activeJobs.isEmpty)
+  }
+
+  test("SPARK-50648: when job is cancelled during shuffle retry in parent stage, " +
+    "should kill all running tasks") {
+    val shuffleMapRdd = new MyRDD(sc, 2, Nil)
+    val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(2))
+    val reduceRdd = new MyRDD(sc, 2, List(shuffleDep))
+    submit(reduceRdd, Array(0, 1))
+    completeShuffleMapStageSuccessfully(0, 0, 2)
+    sc.listenerBus.waitUntilEmpty()
+
+    val info = new TaskInfo(
+      3, index = 1, attemptNumber = 1,
+      partitionId = taskSets(1).tasks(0).partitionId, 0L, "", "", TaskLocality.ANY, true)
+    // result task 0.0 fetch failed, but result task 1.0 is still running
+    runEvent(makeCompletionEvent(taskSets(1).tasks(0),
+      FetchFailed(makeBlockManagerId("hostA"), shuffleDep.shuffleId, 0L, 0, 1, "ignored"),
+      null,
+      Seq.empty,
+      Array.empty,
+      info))
+    sc.listenerBus.waitUntilEmpty()
+
+    Thread.sleep(DAGScheduler.RESUBMIT_TIMEOUT * 2)
+    // map stage is running by resubmitted, result stage is waiting
+    // (the origin result task 1.0 is still running)
+    assert(scheduler.runningStages.size == 1, "Map stage should be running")
+    val mapStage = scheduler.runningStages.head
+    assert(mapStage.id === 0)
+    assert(mapStage.latestInfo.failureReason.isEmpty)
+    assert(scheduler.waitingStages.size == 1, "Result stage should be waiting")
+    assert(runningTaskInfos(taskSets(1).stageId).size == 1,
+      "origin result task 1.0 should be running")
+
+    // the origin result task 1.0 should be killed
+    scheduler.cancelAllJobs()
+    assert(runningTaskInfos.isEmpty)
+    assert(scheduler.runningStages.isEmpty)
+    assert(scheduler.waitingStages.isEmpty)
   }
 
   test("misbehaved accumulator should not crash DAGScheduler and SparkContext") {

@@ -71,7 +71,9 @@ private[scheduler] abstract class Stage(
   /** The ID to use for the next new attempt for this stage. */
   private var nextAttemptId: Int = 0
   private[scheduler] def getNextAttemptId: Int = nextAttemptId
-  private[scheduler] var _resubmitInFetchFailed: Boolean = false
+
+  /** A flag indicates that the stage has been resubmitted and is waiting to be executed. */
+  private[scheduler] var _resubmitByFetchFailure: Boolean = false
 
   val name: String = callSite.shortForm
   val details: String = callSite.longForm
@@ -97,10 +99,10 @@ private[scheduler] abstract class Stage(
     failedAttemptIds.clear()
   }
 
-  private[scheduler] def resubmitInFetchFailed: Boolean = _resubmitInFetchFailed
+  private[scheduler] def resubmitInFetchFailed: Boolean = _resubmitByFetchFailure
 
-  private[scheduler] def markResubmitInFetchFailed() : Unit = {
-    _resubmitInFetchFailed = true
+  private[scheduler] def setResubmitByFetchFailure(resubmitByFetchFailure: Boolean) : Unit = {
+    _resubmitByFetchFailure = resubmitByFetchFailure
   }
 
   /** Creates a new attempt for this stage by creating a new StageInfo with a new attempt ID. */
