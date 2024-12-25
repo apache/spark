@@ -185,7 +185,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
   private var firstInit: Boolean = _
   /** Set of TaskSets the DAGScheduler has requested executed. */
   val taskSets = scala.collection.mutable.Buffer[TaskSet]()
-  /** Track running tasks, key is the task's stageId of the task, value is the task's partitionId */
+  /** Track running tasks, the key is the task's stageId , the value is the task's partitionId */
   var runningTaskInfos = new HashMap[Int, HashSet[Int]]()
 
   /** Stages for which the DAGScheduler has called TaskScheduler.killAllTaskAttempts(). */
@@ -231,7 +231,9 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     override def executorLost(executorId: String, reason: ExecutorLossReason): Unit = {}
     override def workerRemoved(workerId: String, host: String, message: String): Unit = {}
     override def applicationAttemptId(): Option[String] = None
-    override def hasRunningTasks(stageId: Int): Boolean = false
+    override def hasRunningTasks(stageId: Int): Boolean = {
+      runningTaskInfos.contains(stageId) && runningTaskInfos(stageId).nonEmpty
+    }
     override def executorDecommission(
       executorId: String,
       decommissionInfo: ExecutorDecommissionInfo): Unit = {
