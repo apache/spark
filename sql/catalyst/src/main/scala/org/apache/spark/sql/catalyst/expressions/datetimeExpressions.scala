@@ -1336,7 +1336,7 @@ abstract class ToTimestamp
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val javaType = CodeGenerator.javaType(dataType)
     val parseErrorBranch: String = if (failOnError) {
-      "throw QueryExecutionErrors.ansiDateTimeParseError(e);"
+      s"throw QueryExecutionErrors.ansiDateTimeParseError(e, \"${suggestedFuncOnFail}\");"
     } else {
       s"${ev.isNull} = true;"
     }
