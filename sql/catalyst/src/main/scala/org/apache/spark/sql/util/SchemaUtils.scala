@@ -350,6 +350,9 @@ private[spark] object SchemaUtils {
     }
   }
 
+  /**
+   * Throws an error if the given schema has indeterminate collation.
+   */
   def checkIndeterminateCollationInSchema(schema: StructType): Unit = {
     val indeterminatePaths = findColumnPaths(schema) {
       case IndeterminateStringType => true

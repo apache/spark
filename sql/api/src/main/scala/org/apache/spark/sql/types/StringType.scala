@@ -137,6 +137,10 @@ private[spark] case object IndeterminateStringType
   override def jsonValue: JValue = throw new SparkRuntimeException(
     errorClass = "INDETERMINATE_COLLATION_NOT_SERIALIZABLE",
     messageParameters = Map.empty)
+
+  override def sql: String = throw new SparkRuntimeException(
+    errorClass = "INDETERMINATE_COLLATION_NOT_SERIALIZABLE",
+    messageParameters = Map.empty)
 }
 
 sealed trait StringConstraint
