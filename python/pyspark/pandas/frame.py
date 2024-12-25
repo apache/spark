@@ -13779,11 +13779,15 @@ def _test() -> None:
     import tempfile
     import uuid
     from pyspark.sql import SparkSession
+    from pyspark.testing.utils import have_jinja2
     import pyspark.pandas.frame
 
     os.chdir(os.environ["SPARK_HOME"])
 
     globs = pyspark.pandas.frame.__dict__.copy()
+    if not have_jinja2:
+        del pyspark.pandas.frame.DataFrame.to_latex.__doc__
+
     globs["ps"] = pyspark.pandas
     spark = (
         SparkSession.builder.master("local[4]").appName("pyspark.pandas.frame tests").getOrCreate()
