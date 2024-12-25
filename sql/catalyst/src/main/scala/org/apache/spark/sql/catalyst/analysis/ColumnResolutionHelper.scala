@@ -265,8 +265,6 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
       }
     }
 
-    // todo LOCALVARS: refactor to be more functional with getorelse or something
-
     val variableName = if (conf.caseSensitiveAnalysis) {
       nameParts.last
     } else {
@@ -278,24 +276,22 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
       .map { varDef =>
         VariableReference(
           nameParts,
-          // todo LOCALVARS: deal with this fakesystemcatalog situation
+          // todo LOCALVARS: deal with this fakesystemcatalog / session_namespace situation
           FakeSystemCatalog,
           Identifier.of(Array(CatalogManager.SESSION_NAMESPACE), variableName),
           varDef)
       }
-      .orElse(
-        if (maybeTempVariableName(nameParts)) {
-          catalogManager.tempVariableManager.get(variableName).map { varDef =>
+      .orElse(Option.when(maybeTempVariableName(nameParts)) {
+        catalogManager.tempVariableManager
+          .get(variableName)
+          .map { varDef =>
             VariableReference(
               nameParts,
               FakeSystemCatalog,
               Identifier.of(Array(CatalogManager.SESSION_NAMESPACE), variableName),
               varDef)
           }
-        } else {
-          None
-        }
-      )
+        })
   }
 
   // Resolves `UnresolvedAttribute` to its value.
