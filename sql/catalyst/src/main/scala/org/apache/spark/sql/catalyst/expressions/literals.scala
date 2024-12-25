@@ -198,10 +198,10 @@ object Literal {
     case TimestampNTZType => create(0L, TimestampNTZType)
     case it: DayTimeIntervalType => create(0L, it)
     case it: YearMonthIntervalType => create(0, it)
-    case CharType(length) if SQLConf.get.preserveCharVarcharTypeInfo =>
+    case CharType(length) =>
       create(CharVarcharCodegenUtils.charTypeWriteSideCheck(UTF8String.fromString(""), length),
         dataType)
-    case VarcharType(length) if SQLConf.get.preserveCharVarcharTypeInfo =>
+    case VarcharType(length) =>
       create(CharVarcharCodegenUtils.varcharTypeWriteSideCheck(UTF8String.fromString(""), length),
         dataType)
     case st: StringType if st.constraint == NoConstraint => Literal(UTF8String.fromString(""), st)

@@ -72,15 +72,6 @@ trait CharVarcharTestSuite extends QueryTest with SQLTestUtils {
     )
   }
 
-  protected def withAllConfigCombinations[T](config: Seq[(Seq[(String, String)], T)])
-                                  (f: T => Unit): Unit = {
-    config.foreach { case (pairs, additional) =>
-      withSQLConf(pairs: _*) {
-        f(additional)
-      }
-    }
-  }
-
   test("apply char padding/trimming and varchar trimming: top-level columns") {
     Seq("CHAR(5)", "VARCHAR(5)").foreach { typ =>
       withTable("t") {
@@ -97,20 +88,20 @@ trait CharVarcharTestSuite extends QueryTest with SQLTestUtils {
 
   test("preserve char/varchar type info") {
     Seq(CharType(5), VarcharType(5)).foreach { typ =>
-      val char_varchar_as_string = SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key
-      val preserve_char_varchar = SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key
-      withAllConfigCombinations(Seq(
-        (Seq(char_varchar_as_string -> "false", preserve_char_varchar -> "false"), StringType),
-        (Seq(char_varchar_as_string -> "false", preserve_char_varchar -> "true"), typ),
-        (Seq(char_varchar_as_string -> "true", preserve_char_varchar -> "false"), StringType),
-        (Seq(char_varchar_as_string -> "true", preserve_char_varchar -> "true"), typ))) {
-        expectedType =>
-        withTable("t") {
-          val name = typ.typeName
-          sql(s"CREATE TABLE t(i STRING, c $name) USING $format")
-          val schema = spark.table("t").schema
-          assert(schema.fields(0).dataType == StringType)
-          assert(schema.fields(1).dataType == expectedType)
+      for {
+        char_varchar_as_string <- Seq(false, true)
+        preserve_char_varchar <- Seq(false, true)
+      } {
+        withSQLConf(SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> char_varchar_as_string.toString,
+          SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> preserve_char_varchar.toString) {
+          withTable("t") {
+            val name = typ.typeName
+            sql(s"CREATE TABLE t(i STRING, c $name) USING $format")
+            val schema = spark.table("t").schema
+            assert(schema.fields(0).dataType == StringType)
+            val expectedType = if (preserve_char_varchar) typ else StringType
+            assert(schema.fields(1).dataType == expectedType)
+          }
         }
       }
     }

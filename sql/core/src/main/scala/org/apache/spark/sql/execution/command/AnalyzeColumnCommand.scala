@@ -141,7 +141,7 @@ case class AnalyzeColumnCommand(
     case DoubleType | FloatType => true
     case BooleanType => true
     case _: DatetimeType => true
-    case CharType(_) | VarcharType(_) if !SQLConf.get.preserveCharVarcharTypeInfo => false
+    case CharType(_) | VarcharType(_) => false
     case BinaryType | _: StringType => true
     case _ => false
   }
