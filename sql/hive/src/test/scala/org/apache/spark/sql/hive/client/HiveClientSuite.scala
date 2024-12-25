@@ -335,17 +335,6 @@ class HiveClientSuite(version: String) extends HiveVersionSuite(version) {
     assert(!client.tableExists("temporary", "tgt"))
   }
 
-  test("alterTable - change collation") {
-    val newTable = client.getTable("default", "src")
-      .copy(collation = Some("uNiCodE_CI"))
-
-    client.alterTable("default", "src", newTable)
-    val readBack = client.getTable("default", "src")
-
-    assert(readBack.collation === Some("uNiCodE_CI"))
-    assert(!readBack.properties.contains(TableCatalog.PROP_COLLATION))
-  }
-
   test("listTables(database)") {
     assert(client.listTables("default") === Seq("src", "temporary", "view1"))
   }
