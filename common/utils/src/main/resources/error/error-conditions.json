@@ -8892,6 +8892,11 @@
       "No enough memory for aggregation"
     ]
   },
+  "_LEGACY_ERROR_TEMP_3303" : {
+    "message" : [
+      "The command <command> is unsafe to run after spark session stopped"
+    ]
+  },
   "_LEGACY_ERROR_USER_RAISED_EXCEPTION" : {
     "message" : [
       "<errorMessage>"
