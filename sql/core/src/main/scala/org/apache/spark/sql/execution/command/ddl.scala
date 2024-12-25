@@ -339,8 +339,7 @@ case class AlterTableUnsetPropertiesCommand(
     // If comment is in the table property, we reset it to None
     val tableComment = if (propKeys.contains(TableCatalog.PROP_COMMENT)) None else table.comment
     val newProperties = table.properties.filter { case (k, _) => !propKeys.contains(k) }
-    val newTable =
-      table.copy(properties = newProperties, comment = tableComment)
+    val newTable = table.copy(properties = newProperties, comment = tableComment)
     catalog.alterTable(newTable)
     catalog.invalidateCachedTable(tableName)
     Seq.empty[Row]
