@@ -135,10 +135,6 @@ class IndeterminateCollationTestSuite extends QueryTest with SharedSparkSession 
 
   test("create table as select fails with indeterminate collation") {
     withTestTable {
-      sql(s"""
-             |CREATE TABLE t AS
-             |SELECT c1 || c2 FROM $testTableName
-             |""".stripMargin)
       assertIndeterminateCollationInSchemaError("concat(c1, c2)") {
         sql(s"""
              |CREATE TABLE t AS
