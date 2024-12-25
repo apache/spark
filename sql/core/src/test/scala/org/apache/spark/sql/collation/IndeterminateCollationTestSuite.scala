@@ -64,6 +64,13 @@ class IndeterminateCollationTestSuite extends QueryTest with SharedSparkSession 
       "COLLATION_INVALID_NAME",
       parameters = Map("proposals" -> "nl", "collationName" -> "NULL"))
 
+    checkError(
+      intercept[SparkThrowable] {
+        sql("SELECT CAST('a' AS STRING COLLATE NULL)")
+      },
+      "COLLATION_INVALID_NAME",
+      parameters = Map("proposals" -> "nl", "collationName" -> "NULL"))
+
     intercept[SparkThrowable] {
       StringType("NULL")
     }

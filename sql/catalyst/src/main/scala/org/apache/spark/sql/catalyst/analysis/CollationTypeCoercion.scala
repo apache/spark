@@ -470,7 +470,7 @@ object CollationTypeCoercion {
    * Returns whether the given expression can contain indeterminate collation.
    */
   private def canContainIndeterminateCollation(expression: Expression): Boolean = expression match {
-    case _: Alias | _: AttributeReference | _: Cast | _: Concat | _: ConcatWs |
+    case _: NamedExpression | _: Cast | _: Concat | _: ConcatWs |
          _: Collation | _: InvokeLike | _: Literal => true
     case _ => false
   }
