@@ -218,6 +218,7 @@ class SparkContext(config: SparkConf) extends Logging {
   private var _eventLogCodec: Option[String] = None
   private var _listenerBus: LiveListenerBus = _
   private var _env: SparkEnv = _
+  private var envCreated: SparkEnv = null
   private var _statusTracker: SparkStatusTracker = _
   private var _progressBar: Option[ConsoleProgressBar] = None
   private var _ui: Option[SparkUI] = None
@@ -488,7 +489,8 @@ class SparkContext(config: SparkConf) extends Logging {
     listenerBus.addToStatusQueue(_statusStore.listener.get)
 
     // Create the Spark execution environment (cache, map output tracker, etc)
-    _env = createSparkEnv(_conf, isLocal, listenerBus)
+    envCreated = createSparkEnv(_conf, isLocal, listenerBus)
+    _env = envCreated
     SparkEnv.set(_env)
 
     // If running the REPL, register the repl's output dir with the file server.
@@ -721,6 +723,15 @@ class SparkContext(config: SparkConf) extends Logging {
   } catch {
     case NonFatal(e) =>
       logError("Error initializing SparkContext.", e)
+      if(_env == null && envCreated != null) {
+        logWarning("Stopping partially created SparkEnv after init error.")
+        try {
+          envCreated.stop()
+        } catch {
+          case NonFatal(stopErr) =>
+            logError("Error stopping partially created SparkEnv.", stopErr)
+        }
+      }
       try {
         stop()
       } catch {
