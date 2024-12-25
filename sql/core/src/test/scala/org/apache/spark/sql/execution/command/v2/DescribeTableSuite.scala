@@ -213,4 +213,29 @@ class DescribeTableSuite extends command.DescribeTableSuiteBase
       assert("""\d+\s+bytes,\s+4\s+rows""".r.matches(stats))
     }
   }
+
+  Seq(true, false).foreach { hasCollations =>
+    test(s"DESCRIBE TABLE EXTENDED with collation specified = $hasCollations") {
+
+      withNamespaceAndTable("ns", "tbl") { tbl =>
+        val getCollationDescription = () => sql(s"DESCRIBE TABLE EXTENDED $tbl")
+          .where("col_name = 'Collation'")
+
+        val defaultCollation = if (hasCollations) "DEFAULT COLLATION uNiCoDe" else ""
+
+        sql(s"CREATE TABLE $tbl (id string) $defaultUsing $defaultCollation")
+        val descriptionDf = getCollationDescription()
+
+        if (hasCollations) {
+          checkAnswer(descriptionDf, Seq(Row("Collation", "UNICODE", "")))
+        } else {
+          assert(descriptionDf.isEmpty)
+        }
+
+        sql(s"ALTER TABLE $tbl DEFAULT COLLATION UniCode_cI_rTrIm")
+        val newDescription = getCollationDescription()
+        checkAnswer(newDescription, Seq(Row("Collation", "UNICODE_CI_RTRIM", "")))
+      }
+    }
+  }
 }
