@@ -111,7 +111,31 @@ case class ScalarCastHelper(
     } else {
       ""
     }
-    if (cast != null) {
+    val customCast = (child.dataType, dataType) match {
+      case (_: LongType, _: TimestampType) => "castLongToTimestamp"
+      case (_: DecimalType, _: TimestampType) => "castDecimalToTimestamp"
+      case (_: DecimalType, _: StringType) => "castDecimalToString"
+      case _ => null
+    }
+    if (customCast != null) {
+      val childCode = child.genCode(ctx)
+      // We can avoid the try-catch block for decimal -> string, but the performance benefit is
+      // little. We can also be more specific in the exception type, like catching
+      // `ArithmeticException` instead of `Exception`, but it is unnecessary. The `try_cast` codegen
+      // also catches `Exception` instead of specific exceptions.
+      val code = code"""
+        ${childCode.code}
+        boolean ${ev.isNull} = false;
+        ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+        try {
+          ${ev.value} = ${classOf[VariantGet].getName}.$customCast(${childCode.value});
+        } catch (Exception e) {
+          ${ev.isNull} = true;
+          $invalidCastCode
+        }
+      """
+      ev.copy(code = code)
+    } else if (cast != null) {
       val castCode = cast.genCode(ctx)
       val code = code"""
         ${castCode.code}
