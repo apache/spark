@@ -51,17 +51,36 @@ sealed trait RocksDBValueStateEncoder {
   def decodeValues(valueBytes: Array[Byte]): Iterator[UnsafeRow]
 }
 
-
+/**
+ * Contains schema version information for both key and value schemas in a state store.
+ * This information is used to support schema evolution, allowing state schemas to be
+ * modified over time while maintaining compatibility with existing state data.
+ *
+ * @param keySchemaId   A unique identifier for the version of the key schema.
+ *                      Used to track and handle changes to the key schema structure.
+ * @param valueSchemaId A unique identifier for the version of the value schema.
+ *                      Used to track and handle changes to the value schema structure.
+ */
 case class StateSchemaInfo(
     keySchemaId: Short,
     valueSchemaId: Short
 )
 
+/**
+ * Represents a row of state data along with its schema version.
+ * Used during state storage operations to track which schema version was used
+ * to encode the data, enabling proper decoding even when schemas have evolved.
+ *
+ * @param schemaId The version identifier for the schema that was used to encode this row.
+ *                 This could be either a key schema ID or value schema ID depending on context.
+ * @param bytes    The actual encoded data bytes for this row. When using Avro encoding,
+ *                 these bytes contain the Avro-serialized data. For UnsafeRow encoding,
+ *                 these contain the binary-encoded row data.
+ */
 case class StateSchemaIdRow(
     schemaId: Short,
     bytes: Array[Byte]
 )
-
 
 /**
  * The DataEncoder can encode UnsafeRows into raw bytes in two ways:
@@ -482,6 +501,30 @@ class UnsafeRowDataEncoder(
   override def decodeValue(bytes: Array[Byte]): UnsafeRow = decodeToUnsafeRow(bytes, reusedValueRow)
 }
 
+/**
+ * Encoder that uses Avro for serializing state store data with schema evolution support.
+ * The encoded format varies depending on the key type and whether it's a key or value:
+ *
+ * For prefix and range scan keys:
+ * |--prefix---|--schemaId (2 bytes)--|--remainingKeyBytes (avro-encoded)--|
+ * where:
+ * - prefix: Variable length prefix for scan operations
+ * - schemaId: 2 byte short integer identifying the schema version
+ * - remainingKeyBytes: Avro-encoded remaining key data
+ *
+ * For no-prefix keys and values:
+ * |--schemaId (2 bytes)--|--avroEncodedBytes--|
+ * where:
+ * - schemaId: 2 byte short integer identifying the schema version
+ * - avroEncodedBytes: Variable length Avro-encoded data
+ *
+ * The schema ID allows the state store to identify which schema version was used
+ * to encode the data, enabling proper decoding even when schemas have evolved over time.
+ *
+ * @param keyStateEncoderSpec Specification for how to encode keys (prefix/range scan)
+ * @param valueSchema Schema for the values to be encoded
+ * @param stateSchemaInfo Schema version information for both keys and values
+ */
 class AvroStateEncoder(
     keyStateEncoderSpec: KeyStateEncoderSpec,
     valueSchema: StructType,
@@ -666,6 +709,7 @@ class AvroStateEncoder(
         encodeUnsafeRowToAvro(row, avroEncoder.keySerializer, keyAvroType, out)
         val avroRow =
           encodeUnsafeRowToAvro(row, avroEncoder.keySerializer, keyAvroType, out)
+        // prepend stateSchemaId to the Avro-encoded key portion for NoPrefixKeys
         encodeWithStateSchemaId(
           StateSchemaIdRow(stateSchemaInfo.get.keySchemaId, avroRow))
       case PrefixKeyScanStateEncoderSpec(_, _) =>
@@ -682,6 +726,7 @@ class AvroStateEncoder(
         encodeUnsafeRowToAvro(row, avroEncoder.keySerializer, remainingKeyAvroType, out)
       case _ => throw unsupportedOperationForKeyStateEncoder("encodeRemainingKey")
     }
+    // prepend stateSchemaId to the remaining key portion
     encodeWithStateSchemaId(
       StateSchemaIdRow(stateSchemaInfo.get.keySchemaId, avroRow))
   }
@@ -827,6 +872,7 @@ class AvroStateEncoder(
 
   override def encodeValue(row: UnsafeRow): Array[Byte] = {
     val avroRow = encodeUnsafeRowToAvro(row, avroEncoder.valueSerializer, valueAvroType, out)
+    // prepend stateSchemaId to the Avro-encoded value portion
     encodeWithStateSchemaId(StateSchemaIdRow(stateSchemaInfo.get.valueSchemaId, avroRow))
   }
 
