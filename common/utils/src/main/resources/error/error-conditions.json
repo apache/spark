@@ -377,7 +377,7 @@
   },
   "CANNOT_PARSE_TIMESTAMP" : {
     "message" : [
-      "<message>. Use `try_to_timestamp` to tolerate invalid input string and return NULL instead."
+      "<message>. Use <func> to tolerate invalid input string and return NULL instead."
     ],
     "sqlState" : "22007"
   },
