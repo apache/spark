@@ -956,8 +956,6 @@ case class DescribeTableJsonCommand(
 
   private def describeFormattedTableInfoJson(
         table: CatalogTable, buffer: ArrayBuffer[Row]): Unit = {
-
-    // TODO asl3 remove this (double check golden files don't change)
     val excludedTableInfo = Set("catalog", "schema", "database", "table", "location",
       "serde_library", "inputformat", "outputformat")
 
