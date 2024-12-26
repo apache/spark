@@ -702,7 +702,8 @@ class SparkConnectPlanner(
       val stateSchema = DataTypeProtoConverter.toCatalystType(rel.getStateSchema) match {
         case s: StructType => s
         case other =>
-          throw InvalidPlanInput(s"Invalid state schema dataType $other for flatMapGroupsWithState")
+          throw InvalidPlanInput(
+            s"Invalid state schema dataType $other for flatMapGroupsWithState")
       }
       val stateEncoder = TypedScalaUdf.encoderFor(
         // the state agnostic encoder is the second element in the input encoders.
