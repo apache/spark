@@ -203,7 +203,7 @@ public final class CollationFactory {
       // No Collation can simultaneously support binary equality and lowercase equality
       assert(!supportsBinaryEquality || !supportsLowercaseEquality);
 
-      assert(SUPPORTED_PROVIDERS.contains(provider));
+      assert(SUPPORTED_PROVIDERS.contains(provider) || provider.equals(PROVIDER_NULL));
     }
 
     public Collator getCollator() {
@@ -1162,7 +1162,7 @@ public final class CollationFactory {
   public static final String PROVIDER_SPARK = "spark";
   public static final String PROVIDER_ICU = "icu";
   public static final String PROVIDER_NULL = "null";
-  public static final List<String> SUPPORTED_PROVIDERS = List.of(PROVIDER_SPARK, PROVIDER_ICU, PROVIDER_NULL);
+  public static final List<String> SUPPORTED_PROVIDERS = List.of(PROVIDER_SPARK, PROVIDER_ICU);
   public static final String COLLATION_PAD_ATTRIBUTE = "NO_PAD";
 
   public static final int UTF8_BINARY_COLLATION_ID =
