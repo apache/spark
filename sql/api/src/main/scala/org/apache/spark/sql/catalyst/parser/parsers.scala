@@ -100,7 +100,7 @@ abstract class AbstractParser extends DataTypeParserInterface with Logging {
           command = Option(command),
           start = e.origin,
           stop = e.origin,
-          errorClass = e.getErrorClass,
+          errorClass = e.getCondition,
           messageParameters = e.getMessageParameters.asScala.toMap,
           queryContext = e.getQueryContext)
     }
@@ -275,7 +275,7 @@ class ParseException private (
   }
 
   def withCommand(cmd: String): ParseException = {
-    val cl = getErrorClass
+    val cl = getCondition
     val (newCl, params) = if (cl == "PARSE_SYNTAX_ERROR" && cmd.trim().isEmpty) {
       // PARSE_EMPTY_STATEMENT error class overrides the PARSE_SYNTAX_ERROR when cmd is empty
       ("PARSE_EMPTY_STATEMENT", Map.empty[String, String])
@@ -287,7 +287,7 @@ class ParseException private (
 
   override def getQueryContext: Array[QueryContext] = queryContext
 
-  override def getErrorClass: String = errorClass.getOrElse {
+  override def getCondition: String = errorClass.getOrElse {
     throw SparkException.internalError("ParseException shall have an error class.")
   }
 }
@@ -413,6 +413,20 @@ case class UnclosedCommentProcessor(command: String, tokenStream: CommonTokenStr
     if (!ctx.setResetStatement().isInstanceOf[SqlBaseParser.SetConfigurationContext]) {
       checkUnclosedComment(tokenStream, command)
     }
+  }
+
+  override def exitCompoundOrSingleStatement(
+      ctx: SqlBaseParser.CompoundOrSingleStatementContext): Unit = {
+    // Same as in exitSingleStatement, we shouldn't parse the comments in SET command.
+    if (Option(ctx.singleStatement()).forall(
+        !_.setResetStatement().isInstanceOf[SqlBaseParser.SetConfigurationContext])) {
+      checkUnclosedComment(tokenStream, command)
+    }
+  }
+
+  override def exitSingleCompoundStatement(
+      ctx: SqlBaseParser.SingleCompoundStatementContext): Unit = {
+    checkUnclosedComment(tokenStream, command)
   }
 
   /** check `has_unclosed_bracketed_comment` to find out the unclosed bracketed comment. */

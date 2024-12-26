@@ -240,7 +240,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "sqlState" : "42K09",
   "messageParameters" : {
     "inputExpr" : "\"col\"",
-    "inputName" : "seed",
+    "inputName" : "`seed`",
     "inputType" : "integer or floating-point",
     "sqlExpr" : "\"uniform(10, 20, col)\""
   },
@@ -265,7 +265,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "sqlState" : "42K09",
   "messageParameters" : {
     "inputExpr" : "\"col\"",
-    "inputName" : "min",
+    "inputName" : "`min`",
     "inputType" : "integer or floating-point",
     "sqlExpr" : "\"uniform(col, 10, 0)\""
   },
@@ -520,7 +520,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "sqlState" : "42K09",
   "messageParameters" : {
     "inputExpr" : "\"col\"",
-    "inputName" : "length",
+    "inputName" : "`length`",
     "inputType" : "INT or SMALLINT",
     "sqlExpr" : "\"randstr(col, 0)\""
   },
@@ -545,7 +545,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "sqlState" : "42K09",
   "messageParameters" : {
     "inputExpr" : "\"col\"",
-    "inputName" : "seedExpression",
+    "inputName" : "`seed`",
     "inputType" : "INT or SMALLINT",
     "sqlExpr" : "\"randstr(10, col)\""
   },

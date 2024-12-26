@@ -575,3 +575,18 @@ private[sql] case class InvokeInlineUserDefinedFunction(
 private[sql] trait UserDefinedFunctionLike {
   def name: String = SparkClassUtils.getFormattedClassName(this)
 }
+
+/**
+ * A marker node to trigger Spark Classic DataFrame lazy analysis.
+ *
+ * @param child
+ *   that needs to be lazily analyzed in Spark Classic DataFrame.
+ */
+private[sql] case class LazyExpression(
+    child: ColumnNode,
+    override val origin: Origin = CurrentOrigin.get)
+    extends ColumnNode {
+  override private[internal] def normalize(): ColumnNode =
+    copy(child = child.normalize(), origin = NO_ORIGIN)
+  override def sql: String = "lazy" + argumentsToSql(Seq(child))
+}

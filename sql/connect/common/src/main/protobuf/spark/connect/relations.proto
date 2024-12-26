@@ -77,6 +77,8 @@ message Relation {
     CommonInlineUserDefinedDataSource common_inline_user_defined_data_source = 40;
     WithRelations with_relations = 41;
     Transpose transpose = 42;
+    UnresolvedTableValuedFunction unresolved_table_valued_function = 43;
+    LateralJoin lateral_join = 44;
 
     // NA functions
     NAFill fill_na = 90;
@@ -902,6 +904,14 @@ message Transpose {
   repeated Expression index_columns = 2;
 }
 
+message UnresolvedTableValuedFunction {
+  // (Required) name (or unparsed name for user defined function) for the unresolved function.
+  string function_name = 1;
+
+  // (Optional) Function arguments. Empty arguments are allowed.
+  repeated Expression arguments = 2;
+}
+
 message ToSchema {
   // (Required) The input relation.
   Relation input = 1;
@@ -1130,4 +1140,21 @@ message AsOfJoin {
 
   // (Required) Whether to search for prior, subsequent, or closest matches.
   string direction = 10;
+}
+
+// Relation of type [[LateralJoin]].
+//
+// `left` and `right` must be present.
+message LateralJoin {
+  // (Required) Left input relation for a Join.
+  Relation left = 1;
+
+  // (Required) Right input relation for a Join.
+  Relation right = 2;
+
+  // (Optional) The join condition.
+  Expression join_condition = 3;
+
+  // (Required) The join type.
+  Join.JoinType join_type = 4;
 }

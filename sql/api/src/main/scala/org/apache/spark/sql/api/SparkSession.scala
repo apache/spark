@@ -24,13 +24,17 @@ import _root_.java.io.Closeable
 import _root_.java.lang
 import _root_.java.net.URI
 import _root_.java.util
+import _root_.java.util.concurrent.atomic.AtomicReference
 
-import org.apache.spark.SparkContext
+import org.apache.spark.{SparkConf, SparkContext, SparkException}
 import org.apache.spark.annotation.{DeveloperApi, Experimental, Stable, Unstable}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{Encoder, Row, RuntimeConfig}
+import org.apache.spark.sql.{Encoder, ExperimentalMethods, Row, RuntimeConfig, SparkSessionExtensions}
+import org.apache.spark.sql.internal.{SessionState, SharedState}
+import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.util.ExecutionListenerManager
 import org.apache.spark.util.SparkClassUtils
 
 /**
@@ -70,6 +74,49 @@ abstract class SparkSession extends Serializable with Closeable {
    */
   def version: String
 
+  /* ----------------------- *
+   |  Session-related state  |
+   * ----------------------- */
+
+  /**
+   * State shared across sessions, including the `SparkContext`, cached data, listener, and a
+   * catalog that interacts with external systems.
+   *
+   * This is internal to Spark and there is no guarantee on interface stability.
+   *
+   * @note
+   *   this method is not supported in Spark Connect.
+   * @since 2.2.0
+   */
+  @Unstable
+  @transient
+  def sharedState: SharedState
+
+  /**
+   * State isolated across sessions, including SQL configurations, temporary tables, registered
+   * functions, and everything else that accepts a `org.apache.spark.sql.internal.SQLConf`. If
+   * `parentSessionState` is not null, the `SessionState` will be a copy of the parent.
+   *
+   * This is internal to Spark and there is no guarantee on interface stability.
+   *
+   * @note
+   *   this method is not supported in Spark Connect.
+   * @since 2.2.0
+   */
+  @Unstable
+  @transient
+  def sessionState: SessionState
+
+  /**
+   * A wrapped version of this session in the form of a `SQLContext`, for backward compatibility.
+   *
+   * @note
+   *   this method is not supported in Spark Connect.
+   * @since 2.0.0
+   */
+  @transient
+  def sqlContext: SQLContext
+
   /**
    * Runtime configuration interface for Spark.
    *
@@ -80,6 +127,28 @@ abstract class SparkSession extends Serializable with Closeable {
    * @since 2.0.0
    */
   def conf: RuntimeConfig
+
+  /**
+   * An interface to register custom `org.apache.spark.sql.util.QueryExecutionListeners` that
+   * listen for execution metrics.
+   *
+   * @note
+   *   this method is not supported in Spark Connect.
+   * @since 2.0.0
+   */
+  def listenerManager: ExecutionListenerManager
+
+  /**
+   * :: Experimental :: A collection of methods that are considered experimental, but can be used
+   * to hook into the query planner for advanced functionality.
+   *
+   * @note
+   *   this method is not supported in Spark Connect.
+   * @since 2.0.0
+   */
+  @Experimental
+  @Unstable
+  def experimental: ExperimentalMethods
 
   /**
    * A collection of methods for registering user-defined functions (UDF).
@@ -245,6 +314,15 @@ abstract class SparkSession extends Serializable with Closeable {
    */
   def createDataFrame(rdd: JavaRDD[_], beanClass: Class[_]): Dataset[Row]
 
+  /**
+   * Convert a `BaseRelation` created for external data sources into a `DataFrame`.
+   *
+   * @note
+   *   this method is not supported in Spark Connect.
+   * @since 2.0.0
+   */
+  def baseRelationToDataFrame(baseRelation: BaseRelation): Dataset[Row]
+
   /* ------------------------------- *
    |  Methods for creating DataSets  |
    * ------------------------------- */
@@ -392,7 +470,6 @@ abstract class SparkSession extends Serializable with Closeable {
    *   is.
    * @since 3.5.0
    */
-  @Experimental
   def sql(sqlText: String, args: Array[_]): Dataset[Row]
 
   /**
@@ -410,7 +487,6 @@ abstract class SparkSession extends Serializable with Closeable {
    *   `array()`, `struct()`, in that case it is taken as is.
    * @since 3.4.0
    */
-  @Experimental
   def sql(sqlText: String, args: Map[String, Any]): Dataset[Row]
 
   /**
@@ -428,7 +504,6 @@ abstract class SparkSession extends Serializable with Closeable {
    *   `array()`, `struct()`, in that case it is taken as is.
    * @since 3.4.0
    */
-  @Experimental
   def sql(sqlText: String, args: util.Map[String, Any]): Dataset[Row] = {
     sql(sqlText, args.asScala.toMap)
   }
@@ -440,6 +515,29 @@ abstract class SparkSession extends Serializable with Closeable {
    * @since 2.0.0
    */
   def sql(sqlText: String): Dataset[Row] = sql(sqlText, Map.empty[String, Any])
+
+  /**
+   * Execute an arbitrary string command inside an external execution engine rather than Spark.
+   * This could be useful when user wants to execute some commands out of Spark. For example,
+   * executing custom DDL/DML command for JDBC, creating index for ElasticSearch, creating cores
+   * for Solr and so on.
+   *
+   * The command will be eagerly executed after this method is called and the returned DataFrame
+   * will contain the output of the command(if any).
+   *
+   * @param runner
+   *   The class name of the runner that implements `ExternalCommandRunner`.
+   * @param command
+   *   The target command to be executed
+   * @param options
+   *   The options for the runner.
+   *
+   * @note
+   *   this method is not supported in Spark Connect.
+   * @since 3.0.0
+   */
+  @Unstable
+  def executeCommand(runner: String, command: String, options: Map[String, String]): Dataset[Row]
 
   /**
    * Add a single artifact to the current session.
@@ -629,6 +727,13 @@ abstract class SparkSession extends Serializable with Closeable {
   def readStream: DataStreamReader
 
   /**
+   * Returns a [[TableValuedFunction]] that can be used to call a table-valued function (TVF).
+   *
+   * @since 4.0.0
+   */
+  def tvf: TableValuedFunction
+
+  /**
    * (Scala-specific) Implicit methods available in Scala for converting common Scala objects into
    * `DataFrame`s.
    *
@@ -663,9 +768,19 @@ abstract class SparkSession extends Serializable with Closeable {
    * @since 2.0.0
    */
   def stop(): Unit = close()
+
+  /**
+   * Check to see if the session is still usable.
+   *
+   * In Classic this means that the underlying `SparkContext` is still active. In Connect this
+   * means the connection to the server is usable.
+   */
+  private[sql] def isUsable: Boolean
 }
 
 object SparkSession extends SparkSessionCompanion {
+  type Session = SparkSession
+
   private[this] val companion: SparkSessionCompanion = {
     val cls = SparkClassUtils.classForName("org.apache.spark.sql.SparkSession")
     val mirror = scala.reflect.runtime.currentMirror
@@ -675,12 +790,97 @@ object SparkSession extends SparkSessionCompanion {
 
   /** @inheritdoc */
   override def builder(): SparkSessionBuilder = companion.builder()
+
+  /** @inheritdoc */
+  override def setActiveSession(session: SparkSession): Unit =
+    companion.setActiveSession(session.asInstanceOf[companion.Session])
+
+  /** @inheritdoc */
+  override def clearActiveSession(): Unit = companion.clearActiveSession()
+
+  /** @inheritdoc */
+  override def setDefaultSession(session: SparkSession): Unit =
+    companion.setDefaultSession(session.asInstanceOf[companion.Session])
+
+  /** @inheritdoc */
+  override def clearDefaultSession(): Unit = companion.clearDefaultSession()
+
+  /** @inheritdoc */
+  override def getActiveSession: Option[SparkSession] = companion.getActiveSession
+
+  /** @inheritdoc */
+  override def getDefaultSession: Option[SparkSession] = companion.getDefaultSession
 }
 
 /**
- * Companion of a [[SparkSession]].
+ * Interface for a [[SparkSession]] Companion. The companion is responsible for building the
+ * session, and managing the active (thread local) and default (global) SparkSessions.
  */
 private[sql] abstract class SparkSessionCompanion {
+  private[sql] type Session <: SparkSession
+
+  /**
+   * Changes the SparkSession that will be returned in this thread and its children when
+   * SparkSession.getOrCreate() is called. This can be used to ensure that a given thread receives
+   * a SparkSession with an isolated session, instead of the global (first created) context.
+   *
+   * @since 2.0.0
+   */
+  def setActiveSession(session: Session): Unit
+
+  /**
+   * Clears the active SparkSession for current thread. Subsequent calls to getOrCreate will
+   * return the first created context instead of a thread-local override.
+   *
+   * @since 2.0.0
+   */
+  def clearActiveSession(): Unit
+
+  /**
+   * Sets the default SparkSession that is returned by the builder.
+   *
+   * @since 2.0.0
+   */
+  def setDefaultSession(session: Session): Unit
+
+  /**
+   * Clears the default SparkSession that is returned by the builder.
+   *
+   * @since 2.0.0
+   */
+  def clearDefaultSession(): Unit
+
+  /**
+   * Returns the active SparkSession for the current thread, returned by the builder.
+   *
+   * @note
+   *   Return None, when calling this function on executors
+   *
+   * @since 2.2.0
+   */
+  def getActiveSession: Option[Session]
+
+  /**
+   * Returns the default SparkSession that is returned by the builder.
+   *
+   * @note
+   *   Return None, when calling this function on executors
+   *
+   * @since 2.2.0
+   */
+  def getDefaultSession: Option[Session]
+
+  /**
+   * Returns the currently active SparkSession, otherwise the default one. If there is no default
+   * SparkSession, throws an exception.
+   *
+   * @since 2.4.0
+   */
+  def active: Session = {
+    getActiveSession.getOrElse(
+      getDefaultSession.getOrElse(
+        throw SparkException.internalError("No active or default Spark session found")))
+  }
 
   /**
    * Creates a [[SparkSessionBuilder]] for constructing a [[SparkSession]].
@@ -688,6 +888,83 @@ private[sql] abstract class SparkSessionCompanion {
    * @since 2.0.0
    */
   def builder(): SparkSessionBuilder
+}
+
+/**
+ * Abstract class for [[SparkSession]] companions. This implements active and default session
+ * management.
+ */
+private[sql] abstract class BaseSparkSessionCompanion extends SparkSessionCompanion {
+
+  /** The active SparkSession for the current thread. */
+  private val activeThreadSession = new InheritableThreadLocal[Session]
+
+  /** Reference to the root SparkSession. */
+  private val defaultSession = new AtomicReference[Session]
+
+  /** @inheritdoc */
+  def setActiveSession(session: Session): Unit = {
+    activeThreadSession.set(session)
+  }
+
+  /** @inheritdoc */
+  def clearActiveSession(): Unit = {
+    activeThreadSession.remove()
+  }
+
+  /** @inheritdoc */
+  def setDefaultSession(session: Session): Unit = {
+    defaultSession.set(session)
+  }
+
+  /** @inheritdoc */
+  def clearDefaultSession(): Unit = {
+    defaultSession.set(null.asInstanceOf[Session])
+  }
+
+  /** @inheritdoc */
+  def getActiveSession: Option[Session] = usableSession(activeThreadSession.get())
+
+  /** @inheritdoc */
+  def getDefaultSession: Option[Session] = usableSession(defaultSession.get())
+
+  private def usableSession(session: Session): Option[Session] = {
+    if ((session ne null) && canUseSession(session)) {
+      Some(session)
+    } else {
+      None
+    }
+  }
+
+  protected def canUseSession(session: Session): Boolean = session.isUsable
+
+  /**
+   * Set the (global) default [[SparkSession]], and (thread-local) active [[SparkSession]] when
+   * they are not set yet or they are not usable.
+   */
+  protected def setDefaultAndActiveSession(session: Session): Unit = {
+    val currentDefault = defaultSession.getAcquire
+    if (currentDefault == null || !currentDefault.isUsable) {
+      // Update `defaultSession` if it is null or the contained session is not usable. There is a
+      // chance that the following `compareAndSet` fails if a new default session has just been set,
+      // but that does not matter since that event has happened after this method was invoked.
+      defaultSession.compareAndSet(currentDefault, session)
+    }
+    val active = getActiveSession
+    if (active.isEmpty || !active.get.isUsable) {
+      setActiveSession(session)
+    }
+  }
+
+  /**
+   * When the session is closed remove it from active and default.
+   */
+  private[sql] def onSessionClose(session: Session): Unit = {
+    defaultSession.compareAndSet(session, null.asInstanceOf[Session])
+    if (getActiveSession.contains(session)) {
+      clearActiveSession()
+    }
+  }
 }
 
 /**
@@ -804,6 +1081,26 @@ abstract class SparkSessionBuilder {
   def config(map: util.Map[String, Any]): this.type = synchronized {
     config(map.asScala.toMap)
   }
+
+  /**
+   * Sets a list of config options based on the given `SparkConf`.
+   *
+   * @since 2.0.0
+   */
+  def config(conf: SparkConf): this.type = synchronized {
+    conf.getAll.foreach { case (k, v) => options += k -> v }
+    this
+  }
+
+  /**
+   * Inject extensions into the [[SparkSession]]. This allows a user to add Analyzer rules,
+   * Optimizer rules, Planning Strategies or a customized parser.
+   *
+   * @note
+   *   this method is not supported in Spark Connect.
+   * @since 2.2.0
+   */
+  def withExtensions(f: SparkSessionExtensions => Unit): this.type
 
   /**
    * Gets an existing [[SparkSession]] or, if there is no existing one, creates a new one based on

@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.sql.{Date, Timestamp}
-import java.time.{Duration, LocalDate, LocalDateTime, Period, Year => JYear}
+import java.time.{Duration, LocalDate, LocalDateTime, Period}
 import java.time.temporal.ChronoUnit
 import java.util.{Calendar, Locale, TimeZone}
 
@@ -37,7 +37,6 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.DataTypeTestUtils.{dayTimeIntervalTypes, yearMonthIntervalTypes}
 import org.apache.spark.sql.types.DayTimeIntervalType.{DAY, HOUR, MINUTE, SECOND}
-import org.apache.spark.sql.types.TestUDT._
 import org.apache.spark.sql.types.UpCastRule.numericPrecedence
 import org.apache.spark.sql.types.YearMonthIntervalType.{MONTH, YEAR}
 import org.apache.spark.unsafe.types.UTF8String
@@ -730,6 +729,8 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
       assert(Cast.canUpCast(DateType, TimestampNTZType))
       assert(Cast.canUpCast(TimestampType, TimestampNTZType))
       assert(Cast.canUpCast(TimestampNTZType, TimestampType))
+      assert(Cast.canUpCast(IntegerType, StringType("UTF8_LCASE")))
+      assert(Cast.canUpCast(CalendarIntervalType, StringType("UTF8_LCASE")))
       assert(!Cast.canUpCast(TimestampType, DateType))
       assert(!Cast.canUpCast(TimestampNTZType, DateType))
     }
@@ -1011,6 +1012,17 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
         DataTypeMismatch(
           "CAST_WITHOUT_SUGGESTION",
           Map("srcType" -> "\"TIMESTAMP_NTZ\"", "targetType" -> s""""${numericType.sql}"""")))
+    }
+  }
+
+  test("disallow type conversions between calendar interval type and char/varchar types") {
+    Seq(CharType(10), VarcharType(10))
+      .foreach { typ =>
+      verifyCastFailure(
+        cast(Literal.default(CalendarIntervalType), typ),
+        DataTypeMismatch(
+          "CAST_WITHOUT_SUGGESTION",
+          Map("srcType" -> "\"INTERVAL\"", "targetType" -> toSQLType(typ))))
     }
   }
 
@@ -1411,42 +1423,9 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     assert(!Cast(timestampNTZLiteral, TimestampType).resolved)
   }
 
-  test("SPARK-49787: Cast between UDT and other types") {
-    val value = new MyDenseVector(Array(1.0, 2.0, -1.0))
-    val udtType = new MyDenseVectorUDT()
-    val targetType = ArrayType(DoubleType, containsNull = false)
-
-    val serialized = udtType.serialize(value)
-
-    checkEvaluation(Cast(new Literal(serialized, udtType), targetType), serialized)
-    checkEvaluation(Cast(new Literal(serialized, targetType), udtType), serialized)
-
-    val year = JYear.parse("2024")
-    val yearUDTType = new YearUDT()
-
-    val yearSerialized = yearUDTType.serialize(year)
-
-    checkEvaluation(Cast(new Literal(yearSerialized, yearUDTType), IntegerType), 2024)
-    checkEvaluation(Cast(new Literal(2024, IntegerType), yearUDTType), yearSerialized)
-
-    val yearString = UTF8String.fromString("2024")
-    checkEvaluation(Cast(new Literal(yearSerialized, yearUDTType), StringType), yearString)
-    checkEvaluation(Cast(new Literal(yearString, StringType), yearUDTType), yearSerialized)
+  test("Casting between TimestampType and StringType requires timezone") {
+    val timestampLiteral = Literal.create(1L, TimestampType)
+    assert(!Cast(timestampLiteral, StringType).resolved)
+    assert(!Cast(timestampLiteral, StringType("UTF8_LCASE")).resolved)
   }
-}
-
-private[sql] class YearUDT extends UserDefinedType[JYear] {
-  override def sqlType: DataType = IntegerType
-
-  override def serialize(obj: JYear): Int = {
-    obj.getValue
-  }
-
-  def deserialize(datum: Any): JYear = datum match {
-    case value: Int => JYear.of(value)
-  }
-
-  override def userClass: Class[JYear] = classOf[JYear]
-
-  private[spark] override def asNullable: YearUDT = this
 }

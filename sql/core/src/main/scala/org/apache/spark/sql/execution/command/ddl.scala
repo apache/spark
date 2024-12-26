@@ -45,7 +45,7 @@ import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAM
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces._
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.errors.QueryExecutionErrors.hiveTableWithAnsiIntervalsError
-import org.apache.spark.sql.execution.datasources.{DataSource, DataSourceUtils, FileFormat, HadoopFsRelation, LogicalRelation}
+import org.apache.spark.sql.execution.datasources.{DataSource, DataSourceUtils, FileFormat, HadoopFsRelation, LogicalRelationWithTable}
 import org.apache.spark.sql.execution.datasources.v2.FileDataSourceV2
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
 import org.apache.spark.sql.types._
@@ -196,7 +196,8 @@ case class DescribeDatabaseCommand(
         if (properties.isEmpty) {
           ""
         } else {
-          conf.redactOptions(properties).toSeq.sortBy(_._1).mkString("(", ", ", ")")
+          sparkSession.sessionState.conf.redactOptions(properties).toSeq
+            .sortBy(_._1).mkString("(", ", ", ")")
         }
       result :+ Row("Properties", propertiesStr)
     } else {
@@ -493,7 +494,7 @@ case class AlterTableSerDePropertiesCommand(
       throw QueryCompilationErrors.alterTableSetSerdeForSpecificPartitionNotSupportedError()
     }
     if (serdeClassName.isDefined && DDLUtils.isDatasourceTable(table)) {
-      throw QueryCompilationErrors.alterTableSetSerdeNotSupportedError()
+      throw QueryCompilationErrors.alterTableSetSerdeNotSupportedError(table.qualifiedName)
     }
     if (partSpec.isEmpty) {
       val newTable = table.withNewStorage(
@@ -548,7 +549,7 @@ case class AlterTableAddPartitionCommand(
     // Hive metastore may not have enough memory to handle millions of partitions in single RPC.
     // Also the request to metastore times out when adding lot of partitions in one shot.
     // we should split them into smaller batches
-    val batchSize = conf.getConf(SQLConf.ADD_PARTITION_BATCH_SIZE)
+    val batchSize = sparkSession.sessionState.conf.getConf(SQLConf.ADD_PARTITION_BATCH_SIZE)
     parts.iterator.grouped(batchSize).foreach { batch =>
       catalog.createPartitions(table.identifier, batch, ignoreIfExists = ifNotExists)
     }
@@ -1008,9 +1009,13 @@ object DDLUtils extends Logging {
     if (!catalog.isTempView(tableMetadata.identifier)) {
       tableMetadata.tableType match {
         case CatalogTableType.VIEW if !isView =>
-          throw QueryCompilationErrors.cannotAlterViewWithAlterTableError()
+          throw QueryCompilationErrors.cannotAlterViewWithAlterTableError(
+            viewName = tableMetadata.identifier.table
+          )
         case o if o != CatalogTableType.VIEW && isView =>
-          throw QueryCompilationErrors.cannotAlterTableWithAlterViewError()
+          throw QueryCompilationErrors.cannotAlterTableWithAlterViewError(
+            tableName = tableMetadata.identifier.table
+          )
         case _ =>
       }
     }
@@ -1071,7 +1076,7 @@ object DDLUtils extends Logging {
       outputPath: Path,
       table: Option[CatalogTable] = None) : Unit = {
     val inputPaths = query.collect {
-      case LogicalRelation(r: HadoopFsRelation, _, _, _) =>
+      case LogicalRelationWithTable(r: HadoopFsRelation, _) =>
         r.location.rootPaths
     }.flatten
 

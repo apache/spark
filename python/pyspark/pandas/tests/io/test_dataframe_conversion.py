@@ -26,6 +26,7 @@ import pandas as pd
 from pyspark import pandas as ps
 from pyspark.testing.pandasutils import PandasOnSparkTestCase, TestUtils
 from pyspark.testing.sqlutils import SQLTestUtils
+from pyspark.testing.utils import have_jinja2, jinja2_requirement_message
 
 
 class DataFrameConversionMixin:
@@ -199,6 +200,7 @@ class DataFrameConversionMixin:
             psdf.to_clipboard(sep=";", index=False), pdf.to_clipboard(sep=";", index=False)
         )
 
+    @unittest.skipIf(not have_jinja2, jinja2_requirement_message)
     def test_to_latex(self):
         pdf = self.pdf
         psdf = self.psdf

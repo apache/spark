@@ -436,10 +436,8 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     withSQLConf((SQLConf.ANSI_ENABLED.key, "true")) {
       checkErrorInExpression[SparkIllegalArgumentException](
         DateAddInterval(Literal(d), Literal(new CalendarInterval(1, 1, 25 * MICROS_PER_HOUR))),
-        "_LEGACY_ERROR_TEMP_2000",
-        Map("message" ->
-          "Cannot add hours, minutes or seconds, milliseconds, microseconds to a date",
-          "ansiConfig" -> "\"spark.sql.ansi.enabled\""))
+        "INVALID_INTERVAL_WITH_MICROSECONDS_ADDITION",
+        Map("ansiConfig" -> "\"spark.sql.ansi.enabled\""))
     }
 
     withSQLConf((SQLConf.ANSI_ENABLED.key, "false")) {
@@ -1202,7 +1200,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
               Literal(23), Literal(59), Literal(Decimal(BigDecimal(60.0), 16, 6)))
             if (ansi) {
               checkExceptionInExpression[DateTimeException](makeTimestampExpr.copy(sec = Literal(
-                Decimal(BigDecimal(60.5), 16, 6))), EmptyRow, "The fraction of sec must be zero")
+                Decimal(BigDecimal(60.5), 16, 6))), EmptyRow, "Valid range for seconds is [0, 60]")
             } else {
               checkEvaluation(makeTimestampExpr, expectedAnswer("2019-07-01 00:00:00"))
             }

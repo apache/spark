@@ -24,7 +24,7 @@ import scala.collection.mutable
 import org.apache.spark.TaskContext
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.Encoder
-import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
+import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder}
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.streaming.StatefulProcessorHandleState.PRE_INIT
 import org.apache.spark.sql.execution.streaming.state._
@@ -43,6 +43,24 @@ object ImplicitGroupingKeyTracker {
   def setImplicitKey(key: Any): Unit = implicitKey.set(key)
 
   def removeImplicitKey(): Unit = implicitKey.remove()
+}
+
+/**
+ * Utility object to perform metrics updates
+ */
+object TWSMetricsUtils {
+  def resetMetric(
+      metrics: Map[String, SQLMetric],
+      metricName: String): Unit = {
+    metrics.get(metricName).foreach(_.reset())
+  }
+
+  def incrementMetric(
+      metrics: Map[String, SQLMetric],
+      metricName: String,
+      countValue: Long = 1L): Unit = {
+    metrics.get(metricName).foreach(_.add(countValue))
+  }
 }
 
 /**
@@ -117,34 +135,6 @@ class StatefulProcessorHandleImpl(
 
   private lazy val currQueryInfo: QueryInfo = buildQueryInfo()
 
-  private def incrementMetric(metricName: String): Unit = {
-    metrics.get(metricName).foreach(_.add(1))
-  }
-
-  override def getValueState[T](
-      stateName: String,
-      valEncoder: Encoder[T]): ValueState[T] = {
-    verifyStateVarOperations("get_value_state", CREATED)
-    incrementMetric("numValueStateVars")
-    val resultState = new ValueStateImpl[T](store, stateName, keyEncoder, valEncoder)
-    resultState
-  }
-
-  override def getValueState[T](
-      stateName: String,
-      valEncoder: Encoder[T],
-      ttlConfig: TTLConfig): ValueState[T] = {
-    verifyStateVarOperations("get_value_state", CREATED)
-    validateTTLConfig(ttlConfig, stateName)
-
-    assert(batchTimestampMs.isDefined)
-    val valueStateWithTTL = new ValueStateImplWithTTL[T](store, stateName,
-      keyEncoder, valEncoder, ttlConfig, batchTimestampMs.get)
-    incrementMetric("numValueStateWithTTLVars")
-    ttlStates.add(valueStateWithTTL)
-    valueStateWithTTL
-  }
-
   override def getQueryInfo(): QueryInfo = currQueryInfo
 
   private lazy val timerState = new TimerStateImpl(store, timeMode, keyEncoder)
@@ -155,8 +145,8 @@ class StatefulProcessorHandleImpl(
    */
   override def registerTimer(expiryTimestampMs: Long): Unit = {
     verifyTimerOperations("register_timer")
-    incrementMetric("numRegisteredTimers")
     timerState.registerTimer(expiryTimestampMs)
+    TWSMetricsUtils.incrementMetric(metrics, "numRegisteredTimers")
   }
 
   /**
@@ -165,8 +155,8 @@ class StatefulProcessorHandleImpl(
    */
   override def deleteTimer(expiryTimestampMs: Long): Unit = {
     verifyTimerOperations("delete_timer")
-    incrementMetric("numDeletedTimers")
     timerState.deleteTimer(expiryTimestampMs)
+    TWSMetricsUtils.incrementMetric(metrics, "numDeletedTimers")
   }
 
   /**
@@ -199,7 +189,7 @@ class StatefulProcessorHandleImpl(
   def doTtlCleanup(): Unit = {
     val numValuesRemovedDueToTTLExpiry = metrics.get("numValuesRemovedDueToTTLExpiry").get
     ttlStates.forEach { s =>
-      numValuesRemovedDueToTTLExpiry += s.clearExpiredState()
+      numValuesRemovedDueToTTLExpiry += s.clearExpiredStateForAllKeys()
     }
   }
 
@@ -211,15 +201,43 @@ class StatefulProcessorHandleImpl(
   override def deleteIfExists(stateName: String): Unit = {
     verifyStateVarOperations("delete_if_exists", CREATED)
     if (store.removeColFamilyIfExists(stateName)) {
-      incrementMetric("numDeletedStateVars")
+      TWSMetricsUtils.incrementMetric(metrics, "numDeletedStateVars")
     }
   }
 
-  override def getListState[T](stateName: String, valEncoder: Encoder[T]): ListState[T] = {
-    verifyStateVarOperations("get_list_state", CREATED)
-    incrementMetric("numListStateVars")
-    val resultState = new ListStateImpl[T](store, stateName, keyEncoder, valEncoder)
-    resultState
+  override def getValueState[T](
+      stateName: String,
+      valEncoder: Encoder[T],
+      ttlConfig: TTLConfig): ValueState[T] = {
+    getValueState(stateName, ttlConfig)(valEncoder)
+  }
+
+  override def getValueState[T: Encoder](
+      stateName: String,
+      ttlConfig: TTLConfig): ValueState[T] = {
+    verifyStateVarOperations("get_value_state", CREATED)
+    val ttlEnabled = if (ttlConfig.ttlDuration != null && ttlConfig.ttlDuration.isZero) {
+      false
+    } else {
+      true
+    }
+
+    val stateEncoder = encoderFor[T].asInstanceOf[ExpressionEncoder[Any]]
+    val result = if (ttlEnabled) {
+      validateTTLConfig(ttlConfig, stateName)
+      assert(batchTimestampMs.isDefined)
+      val valueStateWithTTL = new ValueStateImplWithTTL[T](store, stateName,
+        keyEncoder, stateEncoder, ttlConfig, batchTimestampMs.get, metrics)
+      ttlStates.add(valueStateWithTTL)
+      TWSMetricsUtils.incrementMetric(metrics, "numValueStateWithTTLVars")
+      valueStateWithTTL
+    } else {
+      val valueStateWithoutTTL = new ValueStateImpl[T](store, stateName,
+        keyEncoder, stateEncoder, metrics)
+      TWSMetricsUtils.incrementMetric(metrics, "numValueStateVars")
+      valueStateWithoutTTL
+    }
+    result
   }
 
   /**
@@ -241,27 +259,34 @@ class StatefulProcessorHandleImpl(
       stateName: String,
       valEncoder: Encoder[T],
       ttlConfig: TTLConfig): ListState[T] = {
-
-    verifyStateVarOperations("get_list_state", CREATED)
-    validateTTLConfig(ttlConfig, stateName)
-
-    assert(batchTimestampMs.isDefined)
-    val listStateWithTTL = new ListStateImplWithTTL[T](store, stateName,
-      keyEncoder, valEncoder, ttlConfig, batchTimestampMs.get)
-    incrementMetric("numListStateWithTTLVars")
-    ttlStates.add(listStateWithTTL)
-
-    listStateWithTTL
+    getListState(stateName, ttlConfig)(valEncoder)
   }
 
-  override def getMapState[K, V](
-      stateName: String,
-      userKeyEnc: Encoder[K],
-      valEncoder: Encoder[V]): MapState[K, V] = {
-    verifyStateVarOperations("get_map_state", CREATED)
-    incrementMetric("numMapStateVars")
-    val resultState = new MapStateImpl[K, V](store, stateName, keyEncoder, userKeyEnc, valEncoder)
-    resultState
+  override def getListState[T: Encoder](stateName: String, ttlConfig: TTLConfig): ListState[T] = {
+    verifyStateVarOperations("get_list_state", CREATED)
+
+    val ttlEnabled = if (ttlConfig.ttlDuration != null && ttlConfig.ttlDuration.isZero) {
+      false
+    } else {
+      true
+    }
+
+    val stateEncoder = encoderFor[T].asInstanceOf[ExpressionEncoder[Any]]
+    val result = if (ttlEnabled) {
+      validateTTLConfig(ttlConfig, stateName)
+      assert(batchTimestampMs.isDefined)
+      val listStateWithTTL = new ListStateImplWithTTL[T](store, stateName,
+        keyEncoder, stateEncoder, ttlConfig, batchTimestampMs.get, metrics)
+      TWSMetricsUtils.incrementMetric(metrics, "numListStateWithTTLVars")
+      ttlStates.add(listStateWithTTL)
+      listStateWithTTL
+    } else {
+      val listStateWithoutTTL = new ListStateImpl[T](store, stateName, keyEncoder,
+        stateEncoder, metrics)
+      TWSMetricsUtils.incrementMetric(metrics, "numListStateVars")
+      listStateWithoutTTL
+    }
+    result
   }
 
   override def getMapState[K, V](
@@ -269,16 +294,37 @@ class StatefulProcessorHandleImpl(
       userKeyEnc: Encoder[K],
       valEncoder: Encoder[V],
       ttlConfig: TTLConfig): MapState[K, V] = {
+    getMapState(stateName, ttlConfig)(userKeyEnc, valEncoder)
+  }
+
+  override def getMapState[K: Encoder, V: Encoder](
+      stateName: String,
+      ttlConfig: TTLConfig): MapState[K, V] = {
     verifyStateVarOperations("get_map_state", CREATED)
-    validateTTLConfig(ttlConfig, stateName)
 
-    assert(batchTimestampMs.isDefined)
-    val mapStateWithTTL = new MapStateImplWithTTL[K, V](store, stateName, keyEncoder, userKeyEnc,
-      valEncoder, ttlConfig, batchTimestampMs.get)
-    incrementMetric("numMapStateWithTTLVars")
-    ttlStates.add(mapStateWithTTL)
+    val ttlEnabled = if (ttlConfig.ttlDuration != null && ttlConfig.ttlDuration.isZero) {
+      false
+    } else {
+      true
+    }
 
-    mapStateWithTTL
+    val userKeyEnc = encoderFor[K].asInstanceOf[ExpressionEncoder[Any]]
+    val valEncoder = encoderFor[V].asInstanceOf[ExpressionEncoder[Any]]
+    val result = if (ttlEnabled) {
+      validateTTLConfig(ttlConfig, stateName)
+      assert(batchTimestampMs.isDefined)
+      val mapStateWithTTL = new MapStateImplWithTTL[K, V](store, stateName, keyEncoder, userKeyEnc,
+        valEncoder, ttlConfig, batchTimestampMs.get, metrics)
+      TWSMetricsUtils.incrementMetric(metrics, "numMapStateWithTTLVars")
+      ttlStates.add(mapStateWithTTL)
+      mapStateWithTTL
+    } else {
+      val mapStateWithoutTTL = new MapStateImpl[K, V](store, stateName, keyEncoder,
+        userKeyEnc, valEncoder, metrics)
+      TWSMetricsUtils.incrementMetric(metrics, "numMapStateVars")
+      mapStateWithoutTTL
+    }
+    result
   }
 
   private def validateTTLConfig(ttlConfig: TTLConfig, stateName: String): Unit = {
@@ -334,73 +380,60 @@ class DriverStatefulProcessorHandleImpl(timeMode: TimeMode, keyExprEnc: Expressi
     stateVariableInfos.put(stateName, stateVariableInfo)
   }
 
-  override def getValueState[T](stateName: String, valEncoder: Encoder[T]): ValueState[T] = {
-    verifyStateVarOperations("get_value_state", PRE_INIT)
-    val colFamilySchema = StateStoreColumnFamilySchemaUtils.
-      getValueStateSchema(stateName, keyExprEnc, valEncoder, false)
-    checkIfDuplicateVariableDefined(stateName)
-    columnFamilySchemas.put(stateName, colFamilySchema)
-    val stateVariableInfo = TransformWithStateVariableUtils.
-      getValueState(stateName, ttlEnabled = false)
-    stateVariableInfos.put(stateName, stateVariableInfo)
-    null.asInstanceOf[ValueState[T]]
-  }
-
   override def getValueState[T](
       stateName: String,
       valEncoder: Encoder[T],
       ttlConfig: TTLConfig): ValueState[T] = {
-    verifyStateVarOperations("get_value_state", PRE_INIT)
-    val colFamilySchema = StateStoreColumnFamilySchemaUtils.
-      getValueStateSchema(stateName, keyExprEnc, valEncoder, true)
-    checkIfDuplicateVariableDefined(stateName)
-    columnFamilySchemas.put(stateName, colFamilySchema)
-    val stateVariableInfo = TransformWithStateVariableUtils.
-      getValueState(stateName, ttlEnabled = true)
-    stateVariableInfos.put(stateName, stateVariableInfo)
-    null.asInstanceOf[ValueState[T]]
+    getValueState(stateName, ttlConfig)(valEncoder)
   }
 
-  override def getListState[T](stateName: String, valEncoder: Encoder[T]): ListState[T] = {
-    verifyStateVarOperations("get_list_state", PRE_INIT)
+  override def getValueState[T: Encoder](
+      stateName: String,
+      ttlConfig: TTLConfig): ValueState[T] = {
+    verifyStateVarOperations("get_value_state", PRE_INIT)
+    val ttlEnabled = if (ttlConfig.ttlDuration != null && ttlConfig.ttlDuration.isZero) {
+      false
+    } else {
+      true
+    }
+
+    val stateEncoder = encoderFor[T]
     val colFamilySchema = StateStoreColumnFamilySchemaUtils.
-      getListStateSchema(stateName, keyExprEnc, valEncoder, false)
+      getValueStateSchema(stateName, keyExprEnc, stateEncoder, ttlEnabled)
     checkIfDuplicateVariableDefined(stateName)
     columnFamilySchemas.put(stateName, colFamilySchema)
     val stateVariableInfo = TransformWithStateVariableUtils.
-      getListState(stateName, ttlEnabled = false)
+      getValueState(stateName, ttlEnabled = ttlEnabled)
     stateVariableInfos.put(stateName, stateVariableInfo)
-    null.asInstanceOf[ListState[T]]
+    null.asInstanceOf[ValueState[T]]
   }
 
   override def getListState[T](
       stateName: String,
       valEncoder: Encoder[T],
       ttlConfig: TTLConfig): ListState[T] = {
-    verifyStateVarOperations("get_list_state", PRE_INIT)
-    val colFamilySchema = StateStoreColumnFamilySchemaUtils.
-      getListStateSchema(stateName, keyExprEnc, valEncoder, true)
-    checkIfDuplicateVariableDefined(stateName)
-    columnFamilySchemas.put(stateName, colFamilySchema)
-    val stateVariableInfo = TransformWithStateVariableUtils.
-      getListState(stateName, ttlEnabled = true)
-    stateVariableInfos.put(stateName, stateVariableInfo)
-    null.asInstanceOf[ListState[T]]
+    getListState(stateName, ttlConfig)(valEncoder)
   }
 
-  override def getMapState[K, V](
+  override def getListState[T: Encoder](
       stateName: String,
-      userKeyEnc: Encoder[K],
-      valEncoder: Encoder[V]): MapState[K, V] = {
-    verifyStateVarOperations("get_map_state", PRE_INIT)
+      ttlConfig: TTLConfig): ListState[T] = {
+    verifyStateVarOperations("get_list_state", PRE_INIT)
+    val ttlEnabled = if (ttlConfig.ttlDuration != null && ttlConfig.ttlDuration.isZero) {
+      false
+    } else {
+      true
+    }
+
+    val stateEncoder = encoderFor[T]
     val colFamilySchema = StateStoreColumnFamilySchemaUtils.
-      getMapStateSchema(stateName, keyExprEnc, userKeyEnc, valEncoder, false)
+      getListStateSchema(stateName, keyExprEnc, stateEncoder, ttlEnabled)
     checkIfDuplicateVariableDefined(stateName)
     columnFamilySchemas.put(stateName, colFamilySchema)
     val stateVariableInfo = TransformWithStateVariableUtils.
-      getMapState(stateName, ttlEnabled = false)
+      getListState(stateName, ttlEnabled = ttlEnabled)
     stateVariableInfos.put(stateName, stateVariableInfo)
-    null.asInstanceOf[MapState[K, V]]
+    null.asInstanceOf[ListState[T]]
   }
 
   override def getMapState[K, V](
@@ -408,12 +441,27 @@ class DriverStatefulProcessorHandleImpl(timeMode: TimeMode, keyExprEnc: Expressi
       userKeyEnc: Encoder[K],
       valEncoder: Encoder[V],
       ttlConfig: TTLConfig): MapState[K, V] = {
+    getMapState(stateName, ttlConfig)(userKeyEnc, valEncoder)
+  }
+
+  override def getMapState[K: Encoder, V: Encoder](
+      stateName: String,
+      ttlConfig: TTLConfig): MapState[K, V] = {
     verifyStateVarOperations("get_map_state", PRE_INIT)
+
+    val ttlEnabled = if (ttlConfig.ttlDuration != null && ttlConfig.ttlDuration.isZero) {
+      false
+    } else {
+      true
+    }
+
+    val userKeyEnc = encoderFor[K]
+    val valEncoder = encoderFor[V]
     val colFamilySchema = StateStoreColumnFamilySchemaUtils.
-      getMapStateSchema(stateName, keyExprEnc, userKeyEnc, valEncoder, true)
+      getMapStateSchema(stateName, keyExprEnc, userKeyEnc, valEncoder, ttlEnabled)
     columnFamilySchemas.put(stateName, colFamilySchema)
     val stateVariableInfo = TransformWithStateVariableUtils.
-      getMapState(stateName, ttlEnabled = true)
+      getMapState(stateName, ttlEnabled = ttlEnabled)
     stateVariableInfos.put(stateName, stateVariableInfo)
     null.asInstanceOf[MapState[K, V]]
   }

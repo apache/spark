@@ -43,6 +43,7 @@ from typing import (
     Dict,
     Set,
     NoReturn,
+    Mapping,
     cast,
     TYPE_CHECKING,
     Type,
@@ -65,7 +66,7 @@ from pyspark.version import __version__
 from pyspark.resource.information import ResourceInformation
 from pyspark.sql.metrics import MetricValue, PlanMetrics, ExecutionInfo, ObservedMetrics
 from pyspark.sql.connect.client.artifact import ArtifactManager
-from pyspark.sql.connect.client.logging import logger
+from pyspark.sql.connect.logging import logger
 from pyspark.sql.connect.profiler import ConnectProfilerCollector
 from pyspark.sql.connect.client.reattach import ExecutePlanResponseReattachableIterator
 from pyspark.sql.connect.client.retries import RetryPolicy, Retrying, DefaultPolicy
@@ -493,6 +494,7 @@ class AnalyzeResult:
         is_same_semantics: Optional[bool],
         semantic_hash: Optional[int],
         storage_level: Optional[StorageLevel],
+        ddl_string: Optional[str],
     ):
         self.schema = schema
         self.explain_string = explain_string
@@ -505,6 +507,7 @@ class AnalyzeResult:
         self.is_same_semantics = is_same_semantics
         self.semantic_hash = semantic_hash
         self.storage_level = storage_level
+        self.ddl_string = ddl_string
 
     @classmethod
     def fromProto(cls, pb: Any) -> "AnalyzeResult":
@@ -519,6 +522,7 @@ class AnalyzeResult:
         is_same_semantics: Optional[bool] = None
         semantic_hash: Optional[int] = None
         storage_level: Optional[StorageLevel] = None
+        ddl_string: Optional[str] = None
 
         if pb.HasField("schema"):
             schema = types.proto_schema_to_pyspark_data_type(pb.schema.schema)
@@ -546,6 +550,8 @@ class AnalyzeResult:
             pass
         elif pb.HasField("get_storage_level"):
             storage_level = proto_to_storage_level(pb.get_storage_level.storage_level)
+        elif pb.HasField("json_to_ddl"):
+            ddl_string = pb.json_to_ddl.ddl_string
         else:
             raise SparkConnectException("No analyze result found!")
 
@@ -561,6 +567,7 @@ class AnalyzeResult:
             is_same_semantics,
             semantic_hash,
             storage_level,
+            ddl_string,
         )
 
 
@@ -1283,6 +1290,8 @@ class SparkConnectClient(object):
                 req.unpersist.blocking = cast(bool, kwargs.get("blocking"))
         elif method == "get_storage_level":
             req.get_storage_level.relation.CopyFrom(cast(pb2.Relation, kwargs.get("relation")))
+        elif method == "json_to_ddl":
+            req.json_to_ddl.json_string = cast(str, kwargs.get("json_string"))
         else:
             raise PySparkValueError(
                 errorClass="UNSUPPORTED_OPERATION",
@@ -1575,6 +1584,10 @@ class SparkConnectClient(object):
         op = pb2.ConfigRequest.Operation(get=pb2.ConfigRequest.Get(keys=keys))
         configs = dict(self.config(op).pairs)
         return tuple(configs.get(key) for key in keys)
+
+    def get_config_dict(self, *keys: str) -> Mapping[str, Optional[str]]:
+        op = pb2.ConfigRequest.Operation(get=pb2.ConfigRequest.Get(keys=keys))
+        return dict(self.config(op).pairs)
 
     def get_config_with_defaults(
         self, *pairs: Tuple[str, Optional[str]]

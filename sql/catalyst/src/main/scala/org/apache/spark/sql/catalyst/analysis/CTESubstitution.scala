@@ -123,7 +123,7 @@ object CTESubstitution extends Rule[LogicalPlan] {
       startOfQuery: Boolean = true): Unit = {
     val resolver = conf.resolver
     plan match {
-      case UnresolvedWith(child, relations) =>
+      case UnresolvedWith(child, relations, _) =>
         val newNames = ArrayBuffer.empty[String]
         newNames ++= outerCTERelationNames
         relations.foreach {
@@ -149,7 +149,7 @@ object CTESubstitution extends Rule[LogicalPlan] {
       plan: LogicalPlan,
       cteDefs: ArrayBuffer[CTERelationDef]): LogicalPlan = {
     plan.resolveOperatorsUp {
-      case UnresolvedWith(child, relations) =>
+      case UnresolvedWith(child, relations, _) =>
         val resolvedCTERelations =
           resolveCTERelations(relations, isLegacy = true, forceInline = false, Seq.empty, cteDefs)
         substituteCTE(child, alwaysInline = true, resolvedCTERelations)
@@ -202,7 +202,7 @@ object CTESubstitution extends Rule[LogicalPlan] {
     var firstSubstituted: Option[LogicalPlan] = None
     val newPlan = plan.resolveOperatorsDownWithPruning(
         _.containsAnyPattern(UNRESOLVED_WITH, PLAN_EXPRESSION)) {
-      case UnresolvedWith(child: LogicalPlan, relations) =>
+      case UnresolvedWith(child: LogicalPlan, relations, _) =>
         val resolvedCTERelations =
           resolveCTERelations(relations, isLegacy = false, forceInline, outerCTEDefs, cteDefs) ++
             outerCTEDefs
@@ -267,6 +267,25 @@ object CTESubstitution extends Rule[LogicalPlan] {
     resolvedCTERelations
   }
 
+  private def resolveWithCTERelations(
+      table: String,
+      alwaysInline: Boolean,
+      cteRelations: Seq[(String, CTERelationDef)],
+      unresolvedRelation: UnresolvedRelation): LogicalPlan = {
+    cteRelations
+      .find(r => conf.resolver(r._1, table))
+      .map {
+        case (_, d) =>
+          if (alwaysInline) {
+            d.child
+          } else {
+            // Add a `SubqueryAlias` for hint-resolving rules to match relation names.
+            SubqueryAlias(table, CTERelationRef(d.id, d.resolved, d.output, d.isStreaming))
+          }
+      }
+      .getOrElse(unresolvedRelation)
+  }
+
   private def substituteCTE(
       plan: LogicalPlan,
       alwaysInline: Boolean,
@@ -279,22 +298,20 @@ object CTESubstitution extends Rule[LogicalPlan] {
         throw QueryCompilationErrors.timeTravelUnsupportedError(toSQLId(table))
 
       case u @ UnresolvedRelation(Seq(table), _, _) =>
-        cteRelations.find(r => plan.conf.resolver(r._1, table)).map { case (_, d) =>
-          if (alwaysInline) {
-            d.child
-          } else {
-            // Add a `SubqueryAlias` for hint-resolving rules to match relation names.
-            SubqueryAlias(table, CTERelationRef(d.id, d.resolved, d.output, d.isStreaming))
-          }
-        }.getOrElse(u)
+        resolveWithCTERelations(table, alwaysInline, cteRelations, u)
 
       case p: PlanWithUnresolvedIdentifier =>
         // We must look up CTE relations first when resolving `UnresolvedRelation`s,
         // but we can't do it here as `PlanWithUnresolvedIdentifier` is a leaf node
-        // and may produce `UnresolvedRelation` later.
-        // Here we wrap it with `UnresolvedWithCTERelations` so that we can
-        // delay the CTE relations lookup after `PlanWithUnresolvedIdentifier` is resolved.
-        UnresolvedWithCTERelations(p, cteRelations)
+        // and may produce `UnresolvedRelation` later. Instead, we delay CTE resolution
+        // by moving it to the planBuilder of the corresponding `PlanWithUnresolvedIdentifier`.
+        p.copy(planBuilder = (nameParts, children) => {
+          p.planBuilder.apply(nameParts, children) match {
+            case u @ UnresolvedRelation(Seq(table), _, _) =>
+              resolveWithCTERelations(table, alwaysInline, cteRelations, u)
+            case other => other
+          }
+        })
 
       case other =>
         // This cannot be done in ResolveSubquery because ResolveSubquery does not know the CTE.

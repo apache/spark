@@ -244,7 +244,7 @@ class ParserUtilsSuite extends SparkFunSuite {
         Some(context)
       case _ =>
         val it = ctx.children.iterator()
-        while(it.hasNext) {
+        while (it.hasNext) {
           it.next() match {
             case p: ParserRuleContext =>
               val childResult = findCastContext(p)

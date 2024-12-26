@@ -84,6 +84,7 @@ DataFrame
     DataFrame.offset
     DataFrame.orderBy
     DataFrame.persist
+    DataFrame.plot
     DataFrame.printSchema
     DataFrame.randomSplit
     DataFrame.rdd

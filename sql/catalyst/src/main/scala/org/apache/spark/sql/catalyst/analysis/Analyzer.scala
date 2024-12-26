@@ -19,7 +19,6 @@ package org.apache.spark.sql.catalyst.analysis
 
 import java.util
 import java.util.Locale
-import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
@@ -29,6 +28,13 @@ import scala.util.{Failure, Random, Success, Try}
 import org.apache.spark.{SparkException, SparkThrowable, SparkUnsupportedOperationException}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst._
+import org.apache.spark.sql.catalyst.analysis.resolver.{
+  AnalyzerBridgeState,
+  HybridAnalyzer,
+  Resolver => OperatorResolver,
+  ResolverExtension,
+  ResolverGuard
+}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.encoders.OuterScopes
 import org.apache.spark.sql.catalyst.expressions._
@@ -39,17 +45,16 @@ import org.apache.spark.sql.catalyst.optimizer.OptimizeUpdateFields
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
-import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
 import org.apache.spark.sql.catalyst.trees.AlwaysProcess
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin.withOrigin
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
-import org.apache.spark.sql.catalyst.util.{toPrettySQL, AUTO_GENERATED_ALIAS, CharVarcharUtils}
+import org.apache.spark.sql.catalyst.util.{toPrettySQL, CharVarcharUtils}
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
 import org.apache.spark.sql.connector.catalog.{View => _, _}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.catalog.TableChange.{After, ColumnPosition}
-import org.apache.spark.sql.connector.catalog.functions.{AggregateFunction => V2AggregateFunction, ScalarFunction, UnboundFunction}
+import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
 import org.apache.spark.sql.connector.catalog.procedures.{BoundProcedure, ProcedureParameter, UnboundProcedure}
 import org.apache.spark.sql.connector.expressions.{FieldReference, IdentityTransform}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
@@ -58,7 +63,6 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.{PartitionOverwriteMode, StoreAssignmentPolicy}
 import org.apache.spark.sql.internal.connector.V1Function
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.types.DayTimeIntervalType.DAY
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.ArrayImplicits._
 
@@ -149,7 +153,26 @@ case class AnalysisContext(
     //    lookup a temporary function. And export to the view metadata.
     referredTempFunctionNames: mutable.Set[String] = mutable.Set.empty,
     referredTempVariableNames: Seq[Seq[String]] = Seq.empty,
-    outerPlan: Option[LogicalPlan] = None)
+    outerPlan: Option[LogicalPlan] = None,
+
+    /**
+     * This is a bridge state between this fixed-point [[Analyzer]] and a single-pass [[Resolver]].
+     * It's managed ([[setSinglePassResolverBridgeState]] method) by the [[HybridAnalyzer]] - the
+     * goal is to preserve it correctly between the fixed-point and single-pass runs.
+     * [[AnalysisContext.reset]] simply propagates it to prevent it from being reset in
+     * [[Analyzer.execute]]. Normally it's always [[None]], unless
+     * [[ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER]] is set to [[true]].
+     *
+     * See [[AnalyzerBridgeState]] and [[HybridAnalyzer]] for more info.
+     */
+    private var singlePassResolverBridgeState: Option[AnalyzerBridgeState] = None) {
+
+    def setSinglePassResolverBridgeState(bridgeState: Option[AnalyzerBridgeState]): Unit =
+      singlePassResolverBridgeState = bridgeState
+
+    def getSinglePassResolverBridgeState: Option[AnalyzerBridgeState] =
+      singlePassResolverBridgeState
+}
 
 object AnalysisContext {
   private val value = new ThreadLocal[AnalysisContext]() {
@@ -157,7 +180,16 @@ object AnalysisContext {
   }
 
   def get: AnalysisContext = value.get()
-  def reset(): Unit = value.remove()
+
+  def reset(): Unit = {
+    // We need to preserve the single-pass resolver bridge state here, since it's managed by the
+    // [[HybridAnalyzer]] (set or reset to `None`) to avoid it being reset in [[execute]].
+    // It acts as a bridge between the single-pass and fixed-point analyzers in the absence of any
+    // other explicit state.
+    val prevSinglePassResolverBridgeState = value.get.getSinglePassResolverBridgeState
+    value.remove()
+    value.get.setSinglePassResolverBridgeState(prevSinglePassResolverBridgeState)
+  }
 
   private def set(context: AnalysisContext): Unit = value.set(context)
 
@@ -203,6 +235,8 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
   with CheckAnalysis with SQLConfHelper with ColumnResolutionHelper {
 
   private val v1SessionCatalog: SessionCatalog = catalogManager.v1SessionCatalog
+  private val relationResolution = new RelationResolution(catalogManager)
+  private val functionResolution = new FunctionResolution(catalogManager, relationResolution)
 
   override protected def validatePlanChanges(
       previousPlan: LogicalPlan,
@@ -220,9 +254,15 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
   def executeAndCheck(plan: LogicalPlan, tracker: QueryPlanningTracker): LogicalPlan = {
     if (plan.analyzed) return plan
     AnalysisHelper.markInAnalyzer {
-      val analyzed = executeAndTrack(plan, tracker)
-      checkAnalysis(analyzed)
-      analyzed
+      new HybridAnalyzer(
+        this,
+        new ResolverGuard(catalogManager),
+        new OperatorResolver(
+          catalogManager,
+          singlePassResolverExtensions,
+          singlePassMetadataResolverExtensions
+        )
+      ).apply(plan, tracker)
     }
   }
 
@@ -247,9 +287,28 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       maxIterationsSetting = SQLConf.ANALYZER_MAX_ITERATIONS.key)
 
   /**
+   * Extensions for the single-pass analyzer.
+   *
+   * See [[ResolverExtension]] for more info.
+   */
+  val singlePassResolverExtensions: Seq[ResolverExtension] = Nil
+
+  /**
+   * Extensions used for early resolution of the single-pass analyzer.
+   *
+   * See [[ResolverExtension]] for more info.
+   */
+  val singlePassMetadataResolverExtensions: Seq[ResolverExtension] = Nil
+
+  /**
    * Override to provide additional rules for the "Resolution" batch.
    */
   val extendedResolutionRules: Seq[Rule[LogicalPlan]] = Nil
+
+  /**
+   * Override to provide additional rules for the "Hints" resolution batch.
+   */
+  val hintResolutionRules: Seq[Rule[LogicalPlan]] = Nil
 
   /**
    * Override to provide rules to do post-hoc resolution. Note that these rules will be executed
@@ -264,7 +323,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
     TypeCoercion.typeCoercionRules
   }
 
-  private def earlyBatches: Seq[Batch] = Seq(
+  override def batches: Seq[Batch] = Seq(
     Batch("Substitution", fixedPoint,
       new SubstituteExecuteImmediate(catalogManager),
       // This rule optimizes `UpdateFields` expression chains so looks more like optimization rule.
@@ -275,19 +334,18 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       CTESubstitution,
       WindowsSubstitution,
       EliminateUnions,
-      SubstituteUnresolvedOrdinals),
+      SubstituteUnresolvedOrdinals,
+      EliminateLazyExpression),
     Batch("Disable Hints", Once,
       new ResolveHints.DisableHints),
     Batch("Hints", fixedPoint,
-      ResolveHints.ResolveJoinStrategyHints,
-      ResolveHints.ResolveCoalesceHints),
+      Seq(ResolveHints.ResolveJoinStrategyHints,
+        ResolveHints.ResolveCoalesceHints) ++
+        hintResolutionRules: _*),
     Batch("Simple Sanity Check", Once,
       LookupFunctions),
     Batch("Keep Legacy Outputs", Once,
-      KeepLegacyOutputs)
-  )
-
-  override def batches: Seq[Batch] = earlyBatches ++ Seq(
+      KeepLegacyOutputs),
     Batch("Resolution", fixedPoint,
       new ResolveCatalogs(catalogManager) ::
       ResolveInsertInto ::
@@ -296,6 +354,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       ResolveFieldNameAndPosition ::
       AddMetadataColumns ::
       DeduplicateRelations ::
+      ResolveCollationName ::
       new ResolveReferences(catalogManager) ::
       // Please do not insert any other rules in between. See the TODO comments in rule
       // ResolveLateralColumnAliasReference for more details.
@@ -317,6 +376,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       ResolveAliases ::
       ResolveSubquery ::
       ResolveSubqueryColumnAliases ::
+      ResolveDefaultStringTypes ::
       ResolveWindowOrder ::
       ResolveWindowFrame ::
       ResolveNaturalAndUsingJoin ::
@@ -334,7 +394,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       ResolveTimeZone ::
       ResolveRandomSeed ::
       ResolveBinaryArithmetic ::
-      new ResolveIdentifierClause(earlyBatches) ::
+      ResolveIdentifierClause ::
       ResolveUnion ::
       ResolveRowLevelCommandAssignments ::
       MoveParameterizedQueriesDown ::
@@ -411,80 +471,9 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
   object ResolveBinaryArithmetic extends Rule[LogicalPlan] {
     override def apply(plan: LogicalPlan): LogicalPlan =
       plan.resolveExpressionsUpWithPruning(_.containsPattern(BINARY_ARITHMETIC), ruleId) {
-        case expr @ (_: Add | _: Subtract | _: Multiply | _: Divide)
-          if expr.childrenResolved => resolve(expr)
+        case expr @ (_: Add | _: Subtract | _: Multiply | _: Divide) if expr.childrenResolved =>
+          BinaryArithmeticWithDatetimeResolver.resolve(expr)
       }
-
-    def resolve(expr: Expression): Expression = expr match {
-      case a @ Add(l, r, mode) => (l.dataType, r.dataType) match {
-        case (DateType, DayTimeIntervalType(DAY, DAY)) => DateAdd(l, ExtractANSIIntervalDays(r))
-        case (DateType, _: DayTimeIntervalType) => TimeAdd(Cast(l, TimestampType), r)
-        case (DayTimeIntervalType(DAY, DAY), DateType) => DateAdd(r, ExtractANSIIntervalDays(l))
-        case (_: DayTimeIntervalType, DateType) => TimeAdd(Cast(r, TimestampType), l)
-        case (DateType, _: YearMonthIntervalType) => DateAddYMInterval(l, r)
-        case (_: YearMonthIntervalType, DateType) => DateAddYMInterval(r, l)
-        case (TimestampType | TimestampNTZType, _: YearMonthIntervalType) =>
-          TimestampAddYMInterval(l, r)
-        case (_: YearMonthIntervalType, TimestampType | TimestampNTZType) =>
-          TimestampAddYMInterval(r, l)
-        case (CalendarIntervalType, CalendarIntervalType) |
-             (_: DayTimeIntervalType, _: DayTimeIntervalType) => a
-        case (_: NullType, _: AnsiIntervalType) =>
-          a.copy(left = Cast(a.left, a.right.dataType))
-        case (_: AnsiIntervalType, _: NullType) =>
-          a.copy(right = Cast(a.right, a.left.dataType))
-        case (DateType, CalendarIntervalType) =>
-          DateAddInterval(l, r, ansiEnabled = mode == EvalMode.ANSI)
-        case (_, CalendarIntervalType | _: DayTimeIntervalType) => Cast(TimeAdd(l, r), l.dataType)
-        case (CalendarIntervalType, DateType) =>
-          DateAddInterval(r, l, ansiEnabled = mode == EvalMode.ANSI)
-        case (CalendarIntervalType | _: DayTimeIntervalType, _) => Cast(TimeAdd(r, l), r.dataType)
-        case (DateType, dt) if dt != StringType => DateAdd(l, r)
-        case (dt, DateType) if dt != StringType => DateAdd(r, l)
-        case _ => a
-      }
-      case s @ Subtract(l, r, mode) => (l.dataType, r.dataType) match {
-        case (DateType, DayTimeIntervalType(DAY, DAY)) =>
-          DateAdd(l, UnaryMinus(ExtractANSIIntervalDays(r), mode == EvalMode.ANSI))
-        case (DateType, _: DayTimeIntervalType) =>
-          DatetimeSub(l, r, TimeAdd(Cast(l, TimestampType), UnaryMinus(r, mode == EvalMode.ANSI)))
-        case (DateType, _: YearMonthIntervalType) =>
-          DatetimeSub(l, r, DateAddYMInterval(l, UnaryMinus(r, mode == EvalMode.ANSI)))
-        case (TimestampType | TimestampNTZType, _: YearMonthIntervalType) =>
-          DatetimeSub(l, r, TimestampAddYMInterval(l, UnaryMinus(r, mode == EvalMode.ANSI)))
-        case (CalendarIntervalType, CalendarIntervalType) |
-             (_: DayTimeIntervalType, _: DayTimeIntervalType) => s
-        case (_: NullType, _: AnsiIntervalType) =>
-          s.copy(left = Cast(s.left, s.right.dataType))
-        case (_: AnsiIntervalType, _: NullType) =>
-          s.copy(right = Cast(s.right, s.left.dataType))
-        case (DateType, CalendarIntervalType) =>
-          DatetimeSub(l, r, DateAddInterval(l,
-            UnaryMinus(r, mode == EvalMode.ANSI), ansiEnabled = mode == EvalMode.ANSI))
-        case (_, CalendarIntervalType | _: DayTimeIntervalType) =>
-          Cast(DatetimeSub(l, r, TimeAdd(l, UnaryMinus(r, mode == EvalMode.ANSI))), l.dataType)
-        case _ if AnyTimestampTypeExpression.unapply(l) ||
-          AnyTimestampTypeExpression.unapply(r) => SubtractTimestamps(l, r)
-        case (_, DateType) => SubtractDates(l, r)
-        case (DateType, dt) if dt != StringType => DateSub(l, r)
-        case _ => s
-      }
-      case m @ Multiply(l, r, mode) => (l.dataType, r.dataType) match {
-        case (CalendarIntervalType, _) => MultiplyInterval(l, r, mode == EvalMode.ANSI)
-        case (_, CalendarIntervalType) => MultiplyInterval(r, l, mode == EvalMode.ANSI)
-        case (_: YearMonthIntervalType, _) => MultiplyYMInterval(l, r)
-        case (_, _: YearMonthIntervalType) => MultiplyYMInterval(r, l)
-        case (_: DayTimeIntervalType, _) => MultiplyDTInterval(l, r)
-        case (_, _: DayTimeIntervalType) => MultiplyDTInterval(r, l)
-        case _ => m
-      }
-      case d @ Divide(l, r, mode) => (l.dataType, r.dataType) match {
-        case (CalendarIntervalType, _) => DivideInterval(l, r, mode == EvalMode.ANSI)
-        case (_: YearMonthIntervalType, _) => DivideYMInterval(l, r)
-        case (_: DayTimeIntervalType, _) => DivideDTInterval(l, r)
-        case _ => d
-      }
-    }
   }
 
   /**
@@ -494,12 +483,18 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
       _.containsAnyPattern(WITH_WINDOW_DEFINITION, UNRESOLVED_WINDOW_EXPRESSION), ruleId) {
       // Lookup WindowSpecDefinitions. This rule works with unresolved children.
-      case WithWindowDefinition(windowDefinitions, child) => child.resolveExpressions {
-        case UnresolvedWindowExpression(c, WindowSpecReference(windowName)) =>
-          val windowSpecDefinition = windowDefinitions.getOrElse(windowName,
-            throw QueryCompilationErrors.windowSpecificationNotDefinedError(windowName))
-          WindowExpression(c, windowSpecDefinition)
-      }
+      case WithWindowDefinition(windowDefinitions, child, forPipeSQL) =>
+        val resolveWindowExpression: PartialFunction[Expression, Expression] = {
+          case UnresolvedWindowExpression(c, WindowSpecReference(windowName)) =>
+            val windowSpecDefinition = windowDefinitions.getOrElse(windowName,
+              throw QueryCompilationErrors.windowSpecificationNotDefinedError(windowName))
+            WindowExpression(c, windowSpecDefinition)
+        }
+        if (forPipeSQL) {
+          child.transformExpressions(resolveWindowExpression)
+        } else {
+          child.resolveExpressions(resolveWindowExpression)
+        }
     }
   }
 
@@ -507,62 +502,42 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
    * Replaces [[UnresolvedAlias]]s with concrete aliases.
    */
   object ResolveAliases extends Rule[LogicalPlan] {
-    private def assignAliases(exprs: Seq[NamedExpression]) = {
-      exprs.map(_.transformUpWithPruning(_.containsPattern(UNRESOLVED_ALIAS)) {
-          case u: UnresolvedAlias => resolve(u)
-        }
-      ).asInstanceOf[Seq[NamedExpression]]
-    }
+    def apply(plan: LogicalPlan): LogicalPlan =
+      plan.resolveOperatorsUpWithPruning(_.containsPattern(UNRESOLVED_ALIAS), ruleId) {
+        case Aggregate(groups, aggs, child, _)
+            if child.resolved && AliasResolution.hasUnresolvedAlias(aggs) =>
+          Aggregate(groups, AliasResolution.assignAliases(aggs), child)
 
-    private[analysis] def resolve(u: UnresolvedAlias): Expression = {
-      val UnresolvedAlias(child, optGenAliasFunc) = u
-      child match {
-        case ne: NamedExpression => ne
-        case go @ GeneratorOuter(g: Generator) if g.resolved => MultiAlias(go, Nil)
-        case e if !e.resolved => u
-        case g: Generator => MultiAlias(g, Nil)
-        case c @ Cast(ne: NamedExpression, _, _, _) => Alias(c, ne.name)()
-        case e: ExtractValue if extractOnly(e) => Alias(e, toPrettySQL(e))()
-        case e if optGenAliasFunc.isDefined =>
-          Alias(child, optGenAliasFunc.get.apply(e))()
-        case l: Literal => Alias(l, toPrettySQL(l))()
-        case e =>
-          val metaForAutoGeneratedAlias = new MetadataBuilder()
-            .putString(AUTO_GENERATED_ALIAS, "true")
-            .build()
-          Alias(e, toPrettySQL(e))(explicitMetadata = Some(metaForAutoGeneratedAlias))
+        case Pivot(groupByOpt, pivotColumn, pivotValues, aggregates, child)
+            if child.resolved &&
+            groupByOpt.isDefined &&
+            AliasResolution.hasUnresolvedAlias(groupByOpt.get) =>
+          Pivot(
+            Some(AliasResolution.assignAliases(groupByOpt.get)),
+            pivotColumn,
+            pivotValues,
+            aggregates,
+            child
+          )
+
+        case up: Unpivot
+            if up.child.resolved &&
+            (up.ids.exists(AliasResolution.hasUnresolvedAlias) || up.values.exists(
+              _.exists(AliasResolution.hasUnresolvedAlias)
+            )) =>
+          up.copy(
+            ids = up.ids.map(AliasResolution.assignAliases),
+            values = up.values.map(_.map(AliasResolution.assignAliases))
+          )
+
+        case Project(projectList, child)
+            if child.resolved && AliasResolution.hasUnresolvedAlias(projectList) =>
+          Project(AliasResolution.assignAliases(projectList), child)
+
+        case c: CollectMetrics
+            if c.child.resolved && AliasResolution.hasUnresolvedAlias(c.metrics) =>
+          c.copy(metrics = AliasResolution.assignAliases(c.metrics))
       }
-    }
-
-    private def extractOnly(e: Expression): Boolean = e match {
-      case _: ExtractValue => e.children.forall(extractOnly)
-      case _: Literal => true
-      case _: Attribute => true
-      case _ => false
-    }
-
-    private def hasUnresolvedAlias(exprs: Seq[NamedExpression]) =
-      exprs.exists(_.exists(_.isInstanceOf[UnresolvedAlias]))
-
-    def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
-      _.containsPattern(UNRESOLVED_ALIAS), ruleId) {
-      case Aggregate(groups, aggs, child) if child.resolved && hasUnresolvedAlias(aggs) =>
-        Aggregate(groups, assignAliases(aggs), child)
-
-      case Pivot(groupByOpt, pivotColumn, pivotValues, aggregates, child)
-        if child.resolved && groupByOpt.isDefined && hasUnresolvedAlias(groupByOpt.get) =>
-        Pivot(Some(assignAliases(groupByOpt.get)), pivotColumn, pivotValues, aggregates, child)
-
-      case up: Unpivot if up.child.resolved &&
-        (up.ids.exists(hasUnresolvedAlias) || up.values.exists(_.exists(hasUnresolvedAlias))) =>
-        up.copy(ids = up.ids.map(assignAliases), values = up.values.map(_.map(assignAliases)))
-
-      case Project(projectList, child) if child.resolved && hasUnresolvedAlias(projectList) =>
-        Project(assignAliases(projectList), child)
-
-      case c: CollectMetrics if c.child.resolved && hasUnresolvedAlias(c.metrics) =>
-        c.copy(metrics = assignAliases(c.metrics))
-    }
   }
 
   object ResolveGroupingAnalytics extends Rule[LogicalPlan] {
@@ -761,7 +736,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsDownWithPruning(
       _.containsPattern(GROUPING_ANALYTICS), ruleId) {
       case h @ UnresolvedHaving(_, agg @ Aggregate(
-        GroupingAnalytics(selectedGroupByExprs, groupByExprs), aggExprs, _))
+        GroupingAnalytics(selectedGroupByExprs, groupByExprs), aggExprs, _, _))
         if agg.childrenResolved && aggExprs.forall(_.resolved) =>
         tryResolveHavingCondition(h, agg, selectedGroupByExprs, groupByExprs)
 
@@ -771,7 +746,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       case a if !a.childrenResolved => a
 
       // Ensure group by expressions and aggregate expressions have been resolved.
-      case Aggregate(GroupingAnalytics(selectedGroupByExprs, groupByExprs), aggExprs, child)
+      case Aggregate(GroupingAnalytics(selectedGroupByExprs, groupByExprs), aggExprs, child, _)
         if aggExprs.forall(_.resolved) =>
         constructAggregate(selectedGroupByExprs, groupByExprs, aggExprs, child)
 
@@ -783,7 +758,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         f.copy(condition = newCond)
 
       // We should make sure all [[SortOrder]]s have been resolved.
-      case s @ Sort(order, _, child)
+      case s @ Sort(order, _, child, _)
         if order.exists(hasGroupingFunction) && order.forall(_.resolved) =>
         val groupingExprs = findGroupingExprs(child)
         val gid = VirtualColumn.groupingIdAttribute
@@ -972,30 +947,6 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
     }
   }
 
-  private def isResolvingView: Boolean = AnalysisContext.get.catalogAndNamespace.nonEmpty
-  private def isReferredTempViewName(nameParts: Seq[String]): Boolean = {
-    AnalysisContext.get.referredTempViewNames.exists { n =>
-      (n.length == nameParts.length) && n.zip(nameParts).forall {
-        case (a, b) => resolver(a, b)
-      }
-    }
-  }
-
-  // If we are resolving database objects (relations, functions, etc.) insides views, we may need to
-  // expand single or multi-part identifiers with the current catalog and namespace of when the
-  // view was created.
-  private def expandIdentifier(nameParts: Seq[String]): Seq[String] = {
-    if (!isResolvingView || isReferredTempViewName(nameParts)) return nameParts
-
-    if (nameParts.length == 1) {
-      AnalysisContext.get.catalogAndNamespace :+ nameParts.head
-    } else if (catalogManager.isCatalogRegistered(nameParts.head)) {
-      nameParts
-    } else {
-      AnalysisContext.get.catalogAndNamespace.head +: nameParts
-    }
-  }
-
   /**
    * Adds metadata columns to output for child relations when nodes are missing resolved attributes.
    *
@@ -1085,26 +1036,9 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
     // If `AnalysisContext.catalogAndNamespace` is non-empty, analyzer will expand single-part names
     // with it, instead of current catalog and namespace.
     private def resolveViews(plan: LogicalPlan): LogicalPlan = plan match {
-      // The view's child should be a logical plan parsed from the `desc.viewText`, the variable
-      // `viewText` should be defined, or else we throw an error on the generation of the View
-      // operator.
-      case view @ View(desc, isTempView, child) if !child.resolved =>
-        // Resolve all the UnresolvedRelations and Views in the child.
-        val newChild = AnalysisContext.withAnalysisContext(desc) {
-          val nestedViewDepth = AnalysisContext.get.nestedViewDepth
-          val maxNestedViewDepth = AnalysisContext.get.maxNestedViewDepth
-          if (nestedViewDepth > maxNestedViewDepth) {
-            throw QueryCompilationErrors.viewDepthExceedsMaxResolutionDepthError(
-              desc.identifier, maxNestedViewDepth, view)
-          }
-          SQLConf.withExistingConf(View.effectiveSQLConf(desc.viewSQLConfigs, isTempView)) {
-            executeSameContext(child)
-          }
-        }
-        // Fail the analysis eagerly because outside AnalysisContext, the unresolved operators
-        // inside a view maybe resolved incorrectly.
-        checkAnalysis(newChild)
-        view.copy(child = newChild)
+      case view: View if !view.child.resolved =>
+        ViewResolution
+          .resolve(view, resolveChild = executeSameContext, checkAnalysis = checkAnalysis)
       case p @ SubqueryAlias(_, view: View) =>
         p.copy(child = resolveViews(view))
       case _ => plan
@@ -1194,29 +1128,6 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         }.getOrElse(u)
     }
 
-    private def lookupTempView(identifier: Seq[String]): Option[TemporaryViewRelation] = {
-      // We are resolving a view and this name is not a temp view when that view was created. We
-      // return None earlier here.
-      if (isResolvingView && !isReferredTempViewName(identifier)) return None
-      v1SessionCatalog.getRawLocalOrGlobalTempView(identifier)
-    }
-
-    private def resolveTempView(
-        identifier: Seq[String],
-        isStreaming: Boolean = false,
-        isTimeTravel: Boolean = false): Option[LogicalPlan] = {
-      lookupTempView(identifier).map { v =>
-        val tempViewPlan = v1SessionCatalog.getTempViewRelation(v)
-        if (isStreaming && !tempViewPlan.isStreaming) {
-          throw QueryCompilationErrors.readNonStreamingTempViewError(identifier.quoted)
-        }
-        if (isTimeTravel) {
-          throw QueryCompilationErrors.timeTravelUnsupportedError(toSQLId(identifier))
-        }
-        tempViewPlan
-      }
-    }
-
     /**
      * Resolves relations to `ResolvedTable` or `Resolved[Temp/Persistent]View`. This is
      * for resolving DDL and misc commands.
@@ -1224,10 +1135,10 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
     private def lookupTableOrView(
         identifier: Seq[String],
         viewOnly: Boolean = false): Option[LogicalPlan] = {
-      lookupTempView(identifier).map { tempView =>
+      relationResolution.lookupTempView(identifier).map { tempView =>
         ResolvedTempView(identifier.asIdentifier, tempView.tableMeta)
       }.orElse {
-        expandIdentifier(identifier) match {
+        relationResolution.expandIdentifier(identifier) match {
           case CatalogAndIdentifier(catalog, ident) =>
             if (viewOnly && !CatalogV2Util.isSessionCatalog(catalog)) {
               throw QueryCompilationErrors.catalogOperationNotSupported(catalog, "views")
@@ -1247,111 +1158,23 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       }
     }
 
-    private def createRelation(
-        catalog: CatalogPlugin,
-        ident: Identifier,
-        table: Option[Table],
-        options: CaseInsensitiveStringMap,
-        isStreaming: Boolean): Option[LogicalPlan] = {
-      table.map {
-        // To utilize this code path to execute V1 commands, e.g. INSERT,
-        // either it must be session catalog, or tracksPartitionsInCatalog
-        // must be false so it does not require use catalog to manage partitions.
-        // Obviously we cannot execute V1Table by V1 code path if the table
-        // is not from session catalog and the table still requires its catalog
-        // to manage partitions.
-        case v1Table: V1Table if CatalogV2Util.isSessionCatalog(catalog)
-          || !v1Table.catalogTable.tracksPartitionsInCatalog =>
-          if (isStreaming) {
-            if (v1Table.v1Table.tableType == CatalogTableType.VIEW) {
-              throw QueryCompilationErrors.permanentViewNotSupportedByStreamingReadingAPIError(
-                ident.quoted)
-            }
-            SubqueryAlias(
-              catalog.name +: ident.asMultipartIdentifier,
-              UnresolvedCatalogRelation(v1Table.v1Table, options, isStreaming = true))
-          } else {
-            v1SessionCatalog.getRelation(v1Table.v1Table, options)
-          }
-
-        case table =>
-          if (isStreaming) {
-            val v1Fallback = table match {
-              case withFallback: V2TableWithV1Fallback =>
-                Some(UnresolvedCatalogRelation(withFallback.v1Table, isStreaming = true))
-              case _ => None
-            }
-            SubqueryAlias(
-              catalog.name +: ident.asMultipartIdentifier,
-              StreamingRelationV2(None, table.name, table, options, table.columns.toAttributes,
-                Some(catalog), Some(ident), v1Fallback))
-          } else {
-            SubqueryAlias(
-              catalog.name +: ident.asMultipartIdentifier,
-              DataSourceV2Relation.create(table, Some(catalog), Some(ident), options))
-          }
-      }
-    }
-
-    /**
-     * Resolves relations to v1 relation if it's a v1 table from the session catalog, or to v2
-     * relation. This is for resolving DML commands and SELECT queries.
-     */
-    private def resolveRelation(
-        u: UnresolvedRelation,
+    def resolveRelation(
+        unresolvedRelation: UnresolvedRelation,
         timeTravelSpec: Option[TimeTravelSpec] = None): Option[LogicalPlan] = {
-      val timeTravelSpecFromOptions = TimeTravelSpec.fromOptions(
-        u.options,
-        conf.getConf(SQLConf.TIME_TRAVEL_TIMESTAMP_KEY),
-        conf.getConf(SQLConf.TIME_TRAVEL_VERSION_KEY),
-        conf.sessionLocalTimeZone
-      )
-      if (timeTravelSpec.nonEmpty && timeTravelSpecFromOptions.nonEmpty) {
-        throw new AnalysisException("MULTIPLE_TIME_TRAVEL_SPEC", Map.empty[String, String])
-      }
-      val finalTimeTravelSpec = timeTravelSpec.orElse(timeTravelSpecFromOptions)
-      resolveTempView(u.multipartIdentifier, u.isStreaming, finalTimeTravelSpec.isDefined).orElse {
-        expandIdentifier(u.multipartIdentifier) match {
-          case CatalogAndIdentifier(catalog, ident) =>
-            val key =
-              ((catalog.name +: ident.namespace :+ ident.name).toImmutableArraySeq,
-              finalTimeTravelSpec)
-            AnalysisContext.get.relationCache.get(key).map { cache =>
-              val cachedRelation = cache.transform {
-                case multi: MultiInstanceRelation =>
-                  val newRelation = multi.newInstance()
-                  newRelation.copyTagsFrom(multi)
-                  newRelation
-              }
-              u.getTagValue(LogicalPlan.PLAN_ID_TAG).map { planId =>
-                val cachedConnectRelation = cachedRelation.clone()
-                cachedConnectRelation.setTagValue(LogicalPlan.PLAN_ID_TAG, planId)
-                cachedConnectRelation
-              }.getOrElse(cachedRelation)
-            }.orElse {
-              val writePrivilegesString =
-                Option(u.options.get(UnresolvedRelation.REQUIRED_WRITE_PRIVILEGES))
-              val table = CatalogV2Util.loadTable(
-                catalog, ident, finalTimeTravelSpec, writePrivilegesString)
-              val loaded = createRelation(
-                catalog, ident, table, u.clearWritePrivileges.options, u.isStreaming)
-              loaded.foreach(AnalysisContext.get.relationCache.update(key, _))
-              u.getTagValue(LogicalPlan.PLAN_ID_TAG).map { planId =>
-                loaded.map { loadedRelation =>
-                  val loadedConnectRelation = loadedRelation.clone()
-                  loadedConnectRelation.setTagValue(LogicalPlan.PLAN_ID_TAG, planId)
-                  loadedConnectRelation
-                }
-              }.getOrElse(loaded)
-            }
-          case _ => None
+      relationResolution
+        .resolveRelation(
+          unresolvedRelation,
+          timeTravelSpec
+        )
+        .map { relation =>
+          // We put the synchronously resolved relation into the [[AnalyzerBridgeState]] for
+          // it to be later reused by the single-pass [[Resolver]] to avoid resolving the relation
+          // metadata twice.
+          AnalysisContext.get.getSinglePassResolverBridgeState.map { bridgeState =>
+            bridgeState.relationsWithResolvedMetadata.put(unresolvedRelation, relation)
+          }
+          relation
         }
-      }
-    }
-
-    /** Consumes an unresolved relation and resolves it to a v1 or v2 relation or temporary view. */
-    def resolveRelationOrTempView(u: UnresolvedRelation): LogicalPlan = {
-      EliminateSubqueryAliases(resolveRelation(u).getOrElse(u))
     }
   }
 
@@ -1845,9 +1668,6 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       case s: Sort if !s.resolved || s.missingInput.nonEmpty =>
         resolveReferencesInSort(s)
 
-      case u: UnresolvedWithCTERelations =>
-        UnresolvedWithCTERelations(this.apply(u.unresolvedPlan), u.cteRelations)
-
       case q: LogicalPlan =>
         logTrace(s"Attempting to resolve ${q.simpleString(conf.maxToStringFields)}")
         q.mapExpressions(resolveExpressionByPlanChildren(_, q, includeLastResort = true))
@@ -2052,7 +1872,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       case p if !p.childrenResolved => p
       // Replace the index with the related attribute for ORDER BY,
       // which is a 1-base position of the projection list.
-      case Sort(orders, global, child)
+      case Sort(orders, global, child, hint)
         if orders.exists(_.child.isInstanceOf[UnresolvedOrdinal]) =>
         val newOrders = orders map {
           case s @ SortOrder(UnresolvedOrdinal(index), direction, nullOrdering, _) =>
@@ -2063,19 +1883,28 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
             }
           case o => o
         }
-        Sort(newOrders, global, child)
+        Sort(newOrders, global, child, hint)
 
       // Replace the index with the corresponding expression in aggregateExpressions. The index is
       // a 1-base position of aggregateExpressions, which is output columns (select expression)
-      case Aggregate(groups, aggs, child) if aggs.forall(_.resolved) &&
+      case Aggregate(groups, aggs, child, hint)
+        if aggs
+          .filter(!containUnresolvedPipeAggregateOrdinal(_))
+          .forall(_.resolved) &&
         groups.exists(containUnresolvedOrdinal) =>
-        val newGroups = groups.map(resolveGroupByExpressionOrdinal(_, aggs))
-        Aggregate(newGroups, aggs, child)
+        val newAggs = aggs.map(resolvePipeAggregateExpressionOrdinal(_, child.output))
+        val newGroups = groups.map(resolveGroupByExpressionOrdinal(_, newAggs))
+        Aggregate(newGroups, newAggs, child, hint)
     }
 
     private def containUnresolvedOrdinal(e: Expression): Boolean = e match {
       case _: UnresolvedOrdinal => true
       case gs: BaseGroupingSets => gs.children.exists(containUnresolvedOrdinal)
+      case _ => false
+    }
+
+    private def containUnresolvedPipeAggregateOrdinal(e: Expression): Boolean = e match {
+      case UnresolvedAlias(_: UnresolvedPipeAggregateOrdinal, _) => true
       case _ => false
     }
 
@@ -2114,6 +1943,17 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
     }
   }
 
+  private def resolvePipeAggregateExpressionOrdinal(
+      expr: NamedExpression,
+      inputs: Seq[Attribute]): NamedExpression = expr match {
+    case UnresolvedAlias(UnresolvedPipeAggregateOrdinal(index), _) =>
+      // In this case, the user applied the SQL pipe aggregate operator ("|> AGGREGATE") and used
+      // ordinals in its GROUP BY clause. This expression then refers to the i-th attribute of the
+      // child operator (one-based). Here we resolve the ordinal to the corresponding attribute.
+      inputs(index - 1)
+    case other =>
+      other
+  }
 
   /**
    * Checks whether a function identifier referenced by an [[UnresolvedFunction]] is defined in the
@@ -2132,10 +1972,11 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
 
       plan.resolveExpressionsWithPruning(_.containsAnyPattern(UNRESOLVED_FUNCTION)) {
         case f @ UnresolvedFunction(nameParts, _, _, _, _, _, _) =>
-          if (ResolveFunctions.lookupBuiltinOrTempFunction(nameParts, Some(f)).isDefined) {
+          if (functionResolution.lookupBuiltinOrTempFunction(nameParts, Some(f)).isDefined) {
             f
           } else {
-            val CatalogAndIdentifier(catalog, ident) = expandIdentifier(nameParts)
+            val CatalogAndIdentifier(catalog, ident) =
+              relationResolution.expandIdentifier(nameParts)
             val fullName =
               normalizeFuncName((catalog.name +: ident.namespace :+ ident.name).toImmutableArraySeq)
             if (externalFunctionNameSet.contains(fullName)) {
@@ -2170,15 +2011,13 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
    * Replaces [[UnresolvedTableValuedFunction]]s with concrete [[LogicalPlan]]s.
    */
   object ResolveFunctions extends Rule[LogicalPlan] {
-    val trimWarningEnabled = new AtomicBoolean(true)
-
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
       _.containsAnyPattern(UNRESOLVED_FUNC, UNRESOLVED_FUNCTION, GENERATOR,
         UNRESOLVED_TABLE_VALUED_FUNCTION, UNRESOLVED_TVF_ALIASES), ruleId) {
       // Resolve functions with concrete relations from v2 catalog.
       case u @ UnresolvedFunctionName(nameParts, cmd, requirePersistentFunc, mismatchHint, _) =>
-        lookupBuiltinOrTempFunction(nameParts, None)
-          .orElse(lookupBuiltinOrTempTableFunction(nameParts)).map { info =>
+        functionResolution.lookupBuiltinOrTempFunction(nameParts, None)
+          .orElse(functionResolution.lookupBuiltinOrTempTableFunction(nameParts)).map { info =>
           if (requirePersistentFunc) {
             throw QueryCompilationErrors.expectPersistentFuncError(
               nameParts.head, cmd, mismatchHint, u)
@@ -2186,7 +2025,8 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
             ResolvedNonPersistentFunc(nameParts.head, V1Function(info))
           }
         }.getOrElse {
-          val CatalogAndIdentifier(catalog, ident) = expandIdentifier(nameParts)
+          val CatalogAndIdentifier(catalog, ident) =
+            relationResolution.expandIdentifier(nameParts)
           val fullName = catalog.name +: ident.namespace :+ ident.name
           CatalogV2Util.loadFunction(catalog, ident).map { func =>
             ResolvedPersistentFunc(catalog.asFunctionCatalog, ident, func)
@@ -2197,8 +2037,10 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       case u: UnresolvedTableValuedFunction if u.functionArgs.forall(_.resolved) =>
         withPosition(u) {
           try {
-            val resolvedFunc = resolveBuiltinOrTempTableFunction(u.name, u.functionArgs).getOrElse {
-              val CatalogAndIdentifier(catalog, ident) = expandIdentifier(u.name)
+            val resolvedFunc = functionResolution.resolveBuiltinOrTempTableFunction(
+                u.name, u.functionArgs).getOrElse {
+              val CatalogAndIdentifier(catalog, ident) =
+                relationResolution.expandIdentifier(u.name)
               if (CatalogV2Util.isSessionCatalog(catalog)) {
                 v1SessionCatalog.resolvePersistentTableFunction(
                   ident.asFunctionIdentifier, u.functionArgs)
@@ -2300,8 +2142,8 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
           _.containsAnyPattern(UNRESOLVED_FUNCTION, GENERATOR),
           ruleId) {
           case u @ UnresolvedFunction(nameParts, arguments, _, _, _, _, _)
-              if hasLambdaAndResolvedArguments(arguments) => withPosition(u) {
-            resolveBuiltinOrTempFunction(nameParts, arguments, u).map {
+              if functionResolution.hasLambdaAndResolvedArguments(arguments) => withPosition(u) {
+            functionResolution.resolveBuiltinOrTempFunction(nameParts, arguments, u).map {
               case func: HigherOrderFunction => func
               case other => other.failAnalysis(
                 errorClass = "INVALID_LAMBDA_FUNCTION_CALL.NON_HIGHER_ORDER_FUNCTION",
@@ -2328,7 +2170,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
             }
           }
 
-          case u: UnresolvedFunction => resolveFunction(u)
+          case u: UnresolvedFunction => functionResolution.resolveFunction(u)
 
           case u: UnresolvedPolymorphicPythonUDTF => withPosition(u) {
             // Check if this is a call to a Python user-defined table function whose polymorphic
@@ -2350,276 +2192,6 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
               newChildren, u.evalType, u.udfDeterministic, u.resultId)
           }
         }
-    }
-
-    private[analysis] def resolveFunction(u: UnresolvedFunction): Expression = {
-      withPosition(u) {
-        resolveBuiltinOrTempFunction(u.nameParts, u.arguments, u).getOrElse {
-          val CatalogAndIdentifier(catalog, ident) = expandIdentifier(u.nameParts)
-          if (CatalogV2Util.isSessionCatalog(catalog)) {
-            resolveV1Function(ident.asFunctionIdentifier, u.arguments, u)
-          } else {
-            resolveV2Function(catalog.asFunctionCatalog, ident, u.arguments, u)
-          }
-        }
-      }
-    }
-
-    /**
-     * Check if the arguments of a function are either resolved or a lambda function.
-     */
-    private def hasLambdaAndResolvedArguments(expressions: Seq[Expression]): Boolean = {
-      val (lambdas, others) = expressions.partition(_.isInstanceOf[LambdaFunction])
-      lambdas.nonEmpty && others.forall(_.resolved)
-    }
-
-    def lookupBuiltinOrTempFunction(
-        name: Seq[String],
-        u: Option[UnresolvedFunction]): Option[ExpressionInfo] = {
-      if (name.size == 1 && u.exists(_.isInternal)) {
-        FunctionRegistry.internal.lookupFunction(FunctionIdentifier(name.head))
-      } else if (name.size == 1) {
-        v1SessionCatalog.lookupBuiltinOrTempFunction(name.head)
-      } else {
-        None
-      }
-    }
-
-    def lookupBuiltinOrTempTableFunction(name: Seq[String]): Option[ExpressionInfo] = {
-      if (name.length == 1) {
-        v1SessionCatalog.lookupBuiltinOrTempTableFunction(name.head)
-      } else {
-        None
-      }
-    }
-
-    private def resolveBuiltinOrTempFunction(
-        name: Seq[String],
-        arguments: Seq[Expression],
-        u: UnresolvedFunction): Option[Expression] = {
-      val expression = if (name.size == 1  && u.isInternal) {
-        Option(FunctionRegistry.internal.lookupFunction(FunctionIdentifier(name.head), arguments))
-      } else if (name.size == 1) {
-        v1SessionCatalog.resolveBuiltinOrTempFunction(name.head, arguments)
-      } else {
-        None
-      }
-      expression.map { func =>
-        validateFunction(func, arguments.length, u)
-      }
-    }
-
-    private def resolveBuiltinOrTempTableFunction(
-        name: Seq[String],
-        arguments: Seq[Expression]): Option[LogicalPlan] = {
-      if (name.length == 1) {
-        v1SessionCatalog.resolveBuiltinOrTempTableFunction(name.head, arguments)
-      } else {
-        None
-      }
-    }
-
-    private def resolveV1Function(
-        ident: FunctionIdentifier,
-        arguments: Seq[Expression],
-        u: UnresolvedFunction): Expression = {
-      val func = v1SessionCatalog.resolvePersistentFunction(ident, arguments)
-      validateFunction(func, arguments.length, u)
-    }
-
-    private def validateFunction(
-        func: Expression,
-        numArgs: Int,
-        u: UnresolvedFunction): Expression = {
-      func match {
-        case owg: SupportsOrderingWithinGroup if u.isDistinct =>
-          throw QueryCompilationErrors.distinctInverseDistributionFunctionUnsupportedError(
-            owg.prettyName)
-        case owg: SupportsOrderingWithinGroup
-          if !owg.orderingFilled && u.orderingWithinGroup.isEmpty =>
-          throw QueryCompilationErrors.inverseDistributionFunctionMissingWithinGroupError(
-            owg.prettyName)
-        case owg: SupportsOrderingWithinGroup
-          if owg.orderingFilled && u.orderingWithinGroup.nonEmpty =>
-          throw QueryCompilationErrors.wrongNumOrderingsForInverseDistributionFunctionError(
-            owg.prettyName, 0, u.orderingWithinGroup.length)
-        case f
-          if !f.isInstanceOf[SupportsOrderingWithinGroup] && u.orderingWithinGroup.nonEmpty =>
-          throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
-            func.prettyName, "WITHIN GROUP (ORDER BY ...)")
-        // AggregateWindowFunctions are AggregateFunctions that can only be evaluated within
-        // the context of a Window clause. They do not need to be wrapped in an
-        // AggregateExpression.
-        case wf: AggregateWindowFunction =>
-          if (u.isDistinct) {
-            throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
-              wf.prettyName, "DISTINCT")
-          } else if (u.filter.isDefined) {
-            throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
-              wf.prettyName, "FILTER clause")
-          } else if (u.ignoreNulls) {
-            wf match {
-              case nthValue: NthValue =>
-                nthValue.copy(ignoreNulls = u.ignoreNulls)
-              case _ =>
-                throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
-                  wf.prettyName, "IGNORE NULLS")
-            }
-          } else {
-            wf
-          }
-        case owf: FrameLessOffsetWindowFunction =>
-          if (u.isDistinct) {
-            throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
-              owf.prettyName, "DISTINCT")
-          } else if (u.filter.isDefined) {
-            throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
-              owf.prettyName, "FILTER clause")
-          } else if (u.ignoreNulls) {
-            owf match {
-              case lead: Lead =>
-                lead.copy(ignoreNulls = u.ignoreNulls)
-              case lag: Lag =>
-                lag.copy(ignoreNulls = u.ignoreNulls)
-            }
-          } else {
-            owf
-          }
-        // We get an aggregate function, we need to wrap it in an AggregateExpression.
-        case agg: AggregateFunction =>
-          // Note: PythonUDAF does not support these advanced clauses.
-          if (agg.isInstanceOf[PythonUDAF]) checkUnsupportedAggregateClause(agg, u)
-          // After parse, the inverse distribution functions not set the ordering within group yet.
-          val newAgg = agg match {
-            case owg: SupportsOrderingWithinGroup
-              if !owg.orderingFilled && u.orderingWithinGroup.nonEmpty =>
-              owg.withOrderingWithinGroup(u.orderingWithinGroup)
-            case _ =>
-              agg
-          }
-
-          u.filter match {
-            case Some(filter) if !filter.deterministic =>
-              throw QueryCompilationErrors.nonDeterministicFilterInAggregateError(
-                filterExpr = filter)
-            case Some(filter) if filter.dataType != BooleanType =>
-              throw QueryCompilationErrors.nonBooleanFilterInAggregateError(
-                filterExpr = filter)
-            case Some(filter) if filter.exists(_.isInstanceOf[AggregateExpression]) =>
-              throw QueryCompilationErrors.aggregateInAggregateFilterError(
-                filterExpr = filter,
-                aggExpr = filter.find(_.isInstanceOf[AggregateExpression]).get)
-            case Some(filter) if filter.exists(_.isInstanceOf[WindowExpression]) =>
-              throw QueryCompilationErrors.windowFunctionInAggregateFilterError(
-                filterExpr = filter,
-                windowExpr = filter.find(_.isInstanceOf[WindowExpression]).get)
-            case _ =>
-          }
-          if (u.ignoreNulls) {
-            val aggFunc = newAgg match {
-              case first: First => first.copy(ignoreNulls = u.ignoreNulls)
-              case last: Last => last.copy(ignoreNulls = u.ignoreNulls)
-              case any_value: AnyValue => any_value.copy(ignoreNulls = u.ignoreNulls)
-              case _ =>
-                throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
-                  newAgg.prettyName, "IGNORE NULLS")
-            }
-            aggFunc.toAggregateExpression(u.isDistinct, u.filter)
-          } else {
-            newAgg.toAggregateExpression(u.isDistinct, u.filter)
-          }
-        // This function is not an aggregate function, just return the resolved one.
-        case other =>
-          checkUnsupportedAggregateClause(other, u)
-          if (other.isInstanceOf[String2TrimExpression] && numArgs == 2) {
-            if (trimWarningEnabled.get) {
-              log.warn("Two-parameter TRIM/LTRIM/RTRIM function signatures are deprecated." +
-                " Use SQL syntax `TRIM((BOTH | LEADING | TRAILING)? trimStr FROM str)`" +
-                " instead.")
-              trimWarningEnabled.set(false)
-            }
-          }
-          other
-      }
-    }
-
-    private def checkUnsupportedAggregateClause(func: Expression, u: UnresolvedFunction): Unit = {
-      if (u.isDistinct) {
-        throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
-          func.prettyName, "DISTINCT")
-      }
-      if (u.filter.isDefined) {
-        throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
-          func.prettyName, "FILTER clause")
-      }
-      if (u.ignoreNulls) {
-        throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
-          func.prettyName, "IGNORE NULLS")
-      }
-    }
-
-    private def resolveV2Function(
-        catalog: FunctionCatalog,
-        ident: Identifier,
-        arguments: Seq[Expression],
-        u: UnresolvedFunction): Expression = {
-      val unbound = catalog.loadFunction(ident)
-      val inputType = StructType(arguments.zipWithIndex.map {
-        case (exp, pos) => StructField(s"_$pos", exp.dataType, exp.nullable)
-      })
-      val bound = try {
-        unbound.bind(inputType)
-      } catch {
-        case unsupported: UnsupportedOperationException =>
-          throw QueryCompilationErrors.functionCannotProcessInputError(
-            unbound, arguments, unsupported)
-      }
-
-      if (bound.inputTypes().length != arguments.length) {
-        throw QueryCompilationErrors.v2FunctionInvalidInputTypeLengthError(
-          bound, arguments)
-      }
-
-      bound match {
-        case scalarFunc: ScalarFunction[_] =>
-          processV2ScalarFunction(scalarFunc, arguments, u)
-        case aggFunc: V2AggregateFunction[_, _] =>
-          processV2AggregateFunction(aggFunc, arguments, u)
-        case _ =>
-          failAnalysis(
-            errorClass = "INVALID_UDF_IMPLEMENTATION",
-            messageParameters = Map("funcName" -> toSQLId(bound.name())))
-      }
-    }
-
-    private def processV2ScalarFunction(
-        scalarFunc: ScalarFunction[_],
-        arguments: Seq[Expression],
-        u: UnresolvedFunction): Expression = {
-      if (u.isDistinct) {
-        throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
-          scalarFunc.name(), "DISTINCT")
-      } else if (u.filter.isDefined) {
-        throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
-          scalarFunc.name(), "FILTER clause")
-      } else if (u.ignoreNulls) {
-        throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
-          scalarFunc.name(), "IGNORE NULLS")
-      } else {
-        V2ExpressionUtils.resolveScalarFunction(scalarFunc, arguments)
-      }
-    }
-
-    private def processV2AggregateFunction(
-        aggFunc: V2AggregateFunction[_, _],
-        arguments: Seq[Expression],
-        u: UnresolvedFunction): Expression = {
-      if (u.ignoreNulls) {
-        throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
-          aggFunc.name(), "IGNORE NULLS")
-      }
-      val aggregator = V2Aggregator(aggFunc, arguments)
-      aggregator.toAggregateExpression(u.isDistinct, u.filter)
     }
   }
 
@@ -2850,7 +2422,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
           Filter(newExprs.head, newChild)
         })
 
-      case s @ Sort(_, _, agg: Aggregate) if agg.resolved && s.order.forall(_.resolved) =>
+      case s @ Sort(_, _, agg: Aggregate, _) if agg.resolved && s.order.forall(_.resolved) =>
         resolveOperatorWithAggregate(s.order.map(_.child), agg, (newExprs, newChild) => {
           val newSortOrder = s.order.zip(newExprs).map {
             case (sortOrder, expr) => sortOrder.copy(child = expr)
@@ -2858,7 +2430,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
           s.copy(order = newSortOrder, child = newChild)
         })
 
-      case s @ Sort(_, _, f @ Filter(cond, agg: Aggregate))
+      case s @ Sort(_, _, f @ Filter(cond, agg: Aggregate), _)
           if agg.resolved && cond.resolved && s.order.forall(_.resolved) =>
         resolveOperatorWithAggregate(s.order.map(_.child), agg, (newExprs, newChild) => {
           val newSortOrder = s.order.zip(newExprs).map {
@@ -3049,15 +2621,15 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         val nestedGenerator = projectList.find(hasNestedGenerator).get
         throw QueryCompilationErrors.nestedGeneratorError(trimAlias(nestedGenerator))
 
-      case Aggregate(_, aggList, _) if aggList.exists(hasNestedGenerator) =>
+      case Aggregate(_, aggList, _, _) if aggList.exists(hasNestedGenerator) =>
         val nestedGenerator = aggList.find(hasNestedGenerator).get
         throw QueryCompilationErrors.nestedGeneratorError(trimAlias(nestedGenerator))
 
-      case Aggregate(_, aggList, _) if aggList.count(hasGenerator) > 1 =>
+      case Aggregate(_, aggList, _, _) if aggList.count(hasGenerator) > 1 =>
         val generators = aggList.filter(hasGenerator).map(trimAlias)
         throw QueryCompilationErrors.moreThanOneGeneratorError(generators)
 
-      case Aggregate(groupList, aggList, child) if canRewriteGenerator(aggList) &&
+      case Aggregate(groupList, aggList, child, _) if canRewriteGenerator(aggList) &&
           aggList.exists(hasGenerator) =>
         // If generator in the aggregate list was visited, set the boolean flag true.
         var generatorVisited = false
@@ -3275,6 +2847,9 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
           ne
         case e: Expression if e.foldable =>
           e // No need to create an attribute reference if it will be evaluated as a Literal.
+        case e: SortOrder =>
+          // For SortOder just recursively extract the from child expression.
+          e.copy(child = extractExpr(e.child))
         case e: NamedArgumentExpression =>
           // For NamedArgumentExpression, we extract the value and replace it with
           // an AttributeReference (with an internal column name, e.g. "_w0").
@@ -3423,7 +2998,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
 
       // Aggregate with Having clause. This rule works with an unresolved Aggregate because
       // a resolved Aggregate will not have Window Functions.
-      case f @ UnresolvedHaving(condition, a @ Aggregate(groupingExprs, aggregateExprs, child))
+      case f @ UnresolvedHaving(condition, a @ Aggregate(groupingExprs, aggregateExprs, child, _))
         if child.resolved &&
           hasWindowFunction(aggregateExprs) &&
           a.expressions.forall(_.resolved) =>
@@ -3448,7 +3023,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
 
       // Aggregate without Having clause.
       // Make sure the lateral column aliases are properly handled first.
-      case a @ Aggregate(groupingExprs, aggregateExprs, child)
+      case a @ Aggregate(groupingExprs, aggregateExprs, child, _)
         if hasWindowFunction(aggregateExprs) &&
           a.expressions.forall(_.resolved) &&
           !aggregateExprs.exists(_.containsPattern(LATERAL_COLUMN_ALIAS_REFERENCE)) =>
@@ -4107,14 +3682,14 @@ object CleanupAliases extends Rule[LogicalPlan] with AliasHelper {
       val cleanedProjectList = projectList.map(trimNonTopLevelAliases)
       Project(cleanedProjectList, child)
 
-    case Aggregate(grouping, aggs, child) =>
+    case Aggregate(grouping, aggs, child, hint) =>
       val cleanedAggs = aggs.map(trimNonTopLevelAliases)
-      Aggregate(grouping.map(trimAliases), cleanedAggs, child)
+      Aggregate(grouping.map(trimAliases), cleanedAggs, child, hint)
 
-    case Window(windowExprs, partitionSpec, orderSpec, child) =>
+    case Window(windowExprs, partitionSpec, orderSpec, child, hint) =>
       val cleanedWindowExprs = windowExprs.map(trimNonTopLevelAliases)
       Window(cleanedWindowExprs, partitionSpec.map(trimAliases),
-        orderSpec.map(trimAliases(_).asInstanceOf[SortOrder]), child)
+        orderSpec.map(trimAliases(_).asInstanceOf[SortOrder]), child, hint)
 
     case CollectMetrics(name, metrics, child, dataframeId) =>
       val cleanedMetrics = metrics.map(trimNonTopLevelAliases)
@@ -4146,12 +3721,11 @@ object CleanupAliases extends Rule[LogicalPlan] with AliasHelper {
 
 /**
  * Ignore event time watermark in batch query, which is only supported in Structured Streaming.
- * TODO: add this rule into analyzer rule list.
  */
 object EliminateEventTimeWatermark extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
     _.containsPattern(EVENT_TIME_WATERMARK)) {
-    case EventTimeWatermark(_, _, child) if child.resolved && !child.isStreaming => child
+    case EventTimeWatermark(_, _, _, child) if child.resolved && !child.isStreaming => child
     case UpdateEventTimeWatermarkColumn(_, _, child) if child.resolved && !child.isStreaming =>
       child
   }

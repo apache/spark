@@ -40,8 +40,11 @@ private[sql] object UpCastRule {
     case (DateType, TimestampNTZType) => true
     case (TimestampNTZType, TimestampType) => true
     case (TimestampType, TimestampNTZType) => true
-    case (_: AtomicType, StringType) => true
-    case (_: CalendarIntervalType, StringType) => true
+
+    case (_: AtomicType, CharType(_) | VarcharType(_)) => false
+    case (_: CalendarIntervalType, CharType(_) | VarcharType(_)) => false
+    case (_: AtomicType, _: StringType) => true
+    case (_: CalendarIntervalType, _: StringType) => true
     case (NullType, _) => true
 
     // Spark supports casting between long and timestamp, please see `longToTimestamp` and
@@ -65,10 +68,6 @@ private[sql] object UpCastRule {
     case (_: YearMonthIntervalType, _: YearMonthIntervalType) => true
 
     case (from: UserDefinedType[_], to: UserDefinedType[_]) if to.acceptsType(from) => true
-
-    case (udt: UserDefinedType[_], toType) => canUpCast(udt.sqlType, toType)
-
-    case (fromType, udt: UserDefinedType[_]) => canUpCast(fromType, udt.sqlType)
 
     case _ => false
   }

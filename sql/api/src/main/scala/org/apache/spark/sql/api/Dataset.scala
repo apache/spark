@@ -21,11 +21,12 @@ import scala.reflect.runtime.universe.TypeTag
 
 import _root_.java.util
 
-import org.apache.spark.annotation.{DeveloperApi, Stable}
+import org.apache.spark.annotation.{DeveloperApi, Stable, Unstable}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.api.java.function.{FilterFunction, FlatMapFunction, ForeachFunction, ForeachPartitionFunction, MapFunction, MapPartitionsFunction, ReduceFunction}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{functions, AnalysisException, Column, DataFrameWriter, DataFrameWriterV2, Encoder, MergeIntoWriter, Observation, Row, TypedColumn}
+import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.internal.{ToScalaUDF, UDFAdaptors}
 import org.apache.spark.sql.types.{Metadata, StructType}
 import org.apache.spark.storage.StorageLevel
@@ -127,6 +128,8 @@ abstract class Dataset[T] extends Serializable {
   def sparkSession: SparkSession
 
   val encoder: Encoder[T]
+
+  @DeveloperApi @Unstable def queryExecution: QueryExecution
 
   /**
    * Converts this strongly typed collection of data to generic Dataframe. In contrast to the
@@ -314,7 +317,8 @@ abstract class Dataset[T] extends Serializable {
    * @group basic
    * @since 2.1.0
    */
-  def checkpoint(): Dataset[T] = checkpoint(eager = true, reliableCheckpoint = true)
+  def checkpoint(): Dataset[T] =
+    checkpoint(eager = true, reliableCheckpoint = true, storageLevel = None)
 
   /**
    * Returns a checkpointed version of this Dataset. Checkpointing can be used to truncate the
@@ -334,7 +338,7 @@ abstract class Dataset[T] extends Serializable {
    * @since 2.1.0
    */
   def checkpoint(eager: Boolean): Dataset[T] =
-    checkpoint(eager = eager, reliableCheckpoint = true)
+    checkpoint(eager = eager, reliableCheckpoint = true, storageLevel = None)
 
   /**
    * Eagerly locally checkpoints a Dataset and return the new Dataset. Checkpointing can be used
@@ -345,7 +349,8 @@ abstract class Dataset[T] extends Serializable {
    * @group basic
    * @since 2.3.0
    */
-  def localCheckpoint(): Dataset[T] = checkpoint(eager = true, reliableCheckpoint = false)
+  def localCheckpoint(): Dataset[T] =
+    checkpoint(eager = true, reliableCheckpoint = false, storageLevel = None)
 
   /**
    * Locally checkpoints a Dataset and return the new Dataset. Checkpointing can be used to
@@ -365,7 +370,29 @@ abstract class Dataset[T] extends Serializable {
    * @since 2.3.0
    */
   def localCheckpoint(eager: Boolean): Dataset[T] =
-    checkpoint(eager = eager, reliableCheckpoint = false)
+    checkpoint(eager = eager, reliableCheckpoint = false, storageLevel = None)
+
+  /**
+   * Locally checkpoints a Dataset and return the new Dataset. Checkpointing can be used to
+   * truncate the logical plan of this Dataset, which is especially useful in iterative algorithms
+   * where the plan may grow exponentially. Local checkpoints are written to executor storage and
+   * despite potentially faster they are unreliable and may compromise job completion.
+   *
+   * @param eager
+   *   Whether to checkpoint this dataframe immediately
+   * @param storageLevel
+   *   StorageLevel with which to checkpoint the data.
+   * @note
+   *   When checkpoint is used with eager = false, the final data that is checkpointed after the
+   *   first action may be different from the data that was used during the job due to
+   *   non-determinism of the underlying operation and retries. If checkpoint is used to achieve
+   *   saving a deterministic snapshot of the data, eager = true should be used. Otherwise, it is
+   *   only deterministic after the first execution, after the checkpoint was finalized.
+   * @group basic
+   * @since 4.0.0
+   */
+  def localCheckpoint(eager: Boolean, storageLevel: StorageLevel): Dataset[T] =
+    checkpoint(eager = eager, reliableCheckpoint = false, storageLevel = Some(storageLevel))
 
   /**
    * Returns a checkpointed version of this Dataset.
@@ -375,8 +402,14 @@ abstract class Dataset[T] extends Serializable {
    * @param reliableCheckpoint
    *   Whether to create a reliable checkpoint saved to files inside the checkpoint directory. If
    *   false creates a local checkpoint using the caching subsystem
+   * @param storageLevel
+   *   Option. If defined, StorageLevel with which to checkpoint the data. Only with
+   *   reliableCheckpoint = false.
    */
-  protected def checkpoint(eager: Boolean, reliableCheckpoint: Boolean): Dataset[T]
+  protected def checkpoint(
+      eager: Boolean,
+      reliableCheckpoint: Boolean,
+      storageLevel: Option[StorageLevel]): Dataset[T]
 
   /**
    * Defines an event time watermark for this [[Dataset]]. A watermark tracks a point in time
@@ -825,6 +858,60 @@ abstract class Dataset[T] extends Serializable {
   def joinWith[U](other: DS[U], condition: Column): Dataset[(T, U)] = {
     joinWith(other, condition, "inner")
   }
+
+  /**
+   * Lateral join with another `DataFrame`.
+   *
+   * Behaves as an JOIN LATERAL.
+   *
+   * @param right
+   *   Right side of the join operation.
+   * @group untypedrel
+   * @since 4.0.0
+   */
+  def lateralJoin(right: DS[_]): Dataset[Row]
+
+  /**
+   * Lateral join with another `DataFrame`.
+   *
+   * Behaves as an JOIN LATERAL.
+   *
+   * @param right
+   *   Right side of the join operation.
+   * @param joinExprs
+   *   Join expression.
+   * @group untypedrel
+   * @since 4.0.0
+   */
+  def lateralJoin(right: DS[_], joinExprs: Column): Dataset[Row]
+
+  /**
+   * Lateral join with another `DataFrame`.
+   *
+   * @param right
+   *   Right side of the join operation.
+   * @param joinType
+   *   Type of join to perform. Default `inner`. Must be one of: `inner`, `cross`, `left`,
+   *   `leftouter`, `left_outer`.
+   * @group untypedrel
+   * @since 4.0.0
+   */
+  def lateralJoin(right: DS[_], joinType: String): Dataset[Row]
+
+  /**
+   * Lateral join with another `DataFrame`.
+   *
+   * @param right
+   *   Right side of the join operation.
+   * @param joinExprs
+   *   Join expression.
+   * @param joinType
+   *   Type of join to perform. Default `inner`. Must be one of: `inner`, `cross`, `left`,
+   *   `leftouter`, `left_outer`.
+   * @group untypedrel
+   * @since 4.0.0
+   */
+  def lateralJoin(right: DS[_], joinExprs: Column, joinType: String): Dataset[Row]
 
   protected def sortInternal(global: Boolean, sortExprs: Seq[Column]): Dataset[T]
 
@@ -1665,6 +1752,33 @@ abstract class Dataset[T] extends Serializable {
    * @since 4.0.0
    */
   def transpose(): Dataset[Row]
+
+  /**
+   * Return a `Column` object for a SCALAR Subquery containing exactly one row and one column.
+   *
+   * The `scalar()` method is useful for extracting a `Column` object that represents a scalar
+   * value from a DataFrame, especially when the DataFrame results from an aggregation or
+   * single-value computation. This returned `Column` can then be used directly in `select`
+   * clauses or as predicates in filters on the outer DataFrame, enabling dynamic data filtering
+   * and calculations based on scalar values.
+   *
+   * @group subquery
+   * @since 4.0.0
+   */
+  def scalar(): Column
+
+  /**
+   * Return a `Column` object for an EXISTS Subquery.
+   *
+   * The `exists` method provides a way to create a boolean column that checks for the presence of
+   * related records in a subquery. When applied within a `DataFrame`, this method allows you to
+   * filter rows based on whether matching records exist in the related dataset. The resulting
+   * `Column` object can be used directly in filtering conditions or as a computed column.
+   *
+   * @group subquery
+   * @since 4.0.0
+   */
+  def exists(): Column
 
   /**
    * Define (named) metrics to observe on the Dataset. This method returns an 'observed' Dataset

@@ -14,10 +14,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from typing import Dict, Iterator, List, Union, cast, Tuple
+from typing import Dict, Iterator, List, Union, Tuple
 
 from pyspark.sql.streaming.stateful_processor_api_client import StatefulProcessorApiClient
-from pyspark.sql.types import StructType, TYPE_CHECKING, _parse_datatype_string
+from pyspark.sql.types import StructType, TYPE_CHECKING
 from pyspark.errors import PySparkRuntimeError
 import uuid
 
@@ -28,14 +28,22 @@ __all__ = ["ListStateClient"]
 
 
 class ListStateClient:
-    def __init__(self, stateful_processor_api_client: StatefulProcessorApiClient) -> None:
+    def __init__(
+        self,
+        stateful_processor_api_client: StatefulProcessorApiClient,
+        schema: Union[StructType, str],
+    ) -> None:
         self._stateful_processor_api_client = stateful_processor_api_client
+        if isinstance(schema, str):
+            self.schema = self._stateful_processor_api_client._parse_string_schema(schema)
+        else:
+            self.schema = schema
         # A dictionary to store the mapping between list state name and a tuple of pandas DataFrame
         # and the index of the last row that was read.
         self.pandas_df_dict: Dict[str, Tuple["PandasDataFrameLike", int]] = {}
 
     def exists(self, state_name: str) -> bool:
-        import pyspark.sql.streaming.StateMessage_pb2 as stateMessage
+        import pyspark.sql.streaming.proto.StateMessage_pb2 as stateMessage
 
         exists_call = stateMessage.Exists()
         list_state_call = stateMessage.ListStateCall(stateName=state_name, exists=exists_call)
@@ -57,7 +65,7 @@ class ListStateClient:
             )
 
     def get(self, state_name: str, iterator_id: str) -> Tuple:
-        import pyspark.sql.streaming.StateMessage_pb2 as stateMessage
+        import pyspark.sql.streaming.proto.StateMessage_pb2 as stateMessage
 
         if iterator_id in self.pandas_df_dict:
             # If the state is already in the dictionary, return the next row.
@@ -78,8 +86,19 @@ class ListStateClient:
             status = response_message[0]
             if status == 0:
                 iterator = self._stateful_processor_api_client._read_arrow_state()
-                batch = next(iterator)
-                pandas_df = batch.to_pandas()
+                # We need to exhaust the iterator here to make sure all the arrow batches are read,
+                # even though there is only one batch in the iterator. Otherwise, the stream might
+                # block further reads since it thinks there might still be some arrow batches left.
+                # We only need to read the first batch in the iterator because it's guaranteed that
+                # there would only be one batch sent from the JVM side.
+                data_batch = None
+                for batch in iterator:
+                    if data_batch is None:
+                        data_batch = batch
+                if data_batch is None:
+                    # TODO(SPARK-49233): Classify user facing errors.
+                    raise PySparkRuntimeError("Error getting next list state row.")
+                pandas_df = data_batch.to_pandas()
                 index = 0
             else:
                 raise StopIteration()
@@ -94,12 +113,10 @@ class ListStateClient:
         pandas_row = pandas_df.iloc[index]
         return tuple(pandas_row)
 
-    def append_value(self, state_name: str, schema: Union[StructType, str], value: Tuple) -> None:
-        import pyspark.sql.streaming.StateMessage_pb2 as stateMessage
+    def append_value(self, state_name: str, value: Tuple) -> None:
+        import pyspark.sql.streaming.proto.StateMessage_pb2 as stateMessage
 
-        if isinstance(schema, str):
-            schema = cast(StructType, _parse_datatype_string(schema))
-        bytes = self._stateful_processor_api_client._serialize_to_bytes(schema, value)
+        bytes = self._stateful_processor_api_client._serialize_to_bytes(self.schema, value)
         append_value_call = stateMessage.AppendValue(value=bytes)
         list_state_call = stateMessage.ListStateCall(
             stateName=state_name, appendValue=append_value_call
@@ -114,13 +131,9 @@ class ListStateClient:
             # TODO(SPARK-49233): Classify user facing errors.
             raise PySparkRuntimeError(f"Error updating value state: " f"{response_message[1]}")
 
-    def append_list(
-        self, state_name: str, schema: Union[StructType, str], values: List[Tuple]
-    ) -> None:
-        import pyspark.sql.streaming.StateMessage_pb2 as stateMessage
+    def append_list(self, state_name: str, values: List[Tuple]) -> None:
+        import pyspark.sql.streaming.proto.StateMessage_pb2 as stateMessage
 
-        if isinstance(schema, str):
-            schema = cast(StructType, _parse_datatype_string(schema))
         append_list_call = stateMessage.AppendList()
         list_state_call = stateMessage.ListStateCall(
             stateName=state_name, appendList=append_list_call
@@ -130,18 +143,16 @@ class ListStateClient:
 
         self._stateful_processor_api_client._send_proto_message(message.SerializeToString())
 
-        self._stateful_processor_api_client._send_arrow_state(schema, values)
+        self._stateful_processor_api_client._send_arrow_state(self.schema, values)
         response_message = self._stateful_processor_api_client._receive_proto_message()
         status = response_message[0]
         if status != 0:
             # TODO(SPARK-49233): Classify user facing errors.
             raise PySparkRuntimeError(f"Error updating value state: " f"{response_message[1]}")
 
-    def put(self, state_name: str, schema: Union[StructType, str], values: List[Tuple]) -> None:
-        import pyspark.sql.streaming.StateMessage_pb2 as stateMessage
+    def put(self, state_name: str, values: List[Tuple]) -> None:
+        import pyspark.sql.streaming.proto.StateMessage_pb2 as stateMessage
 
-        if isinstance(schema, str):
-            schema = cast(StructType, _parse_datatype_string(schema))
         put_call = stateMessage.ListStatePut()
         list_state_call = stateMessage.ListStateCall(stateName=state_name, listStatePut=put_call)
         state_variable_request = stateMessage.StateVariableRequest(listStateCall=list_state_call)
@@ -149,7 +160,7 @@ class ListStateClient:
 
         self._stateful_processor_api_client._send_proto_message(message.SerializeToString())
 
-        self._stateful_processor_api_client._send_arrow_state(schema, values)
+        self._stateful_processor_api_client._send_arrow_state(self.schema, values)
         response_message = self._stateful_processor_api_client._receive_proto_message()
         status = response_message[0]
         if status != 0:
@@ -157,7 +168,7 @@ class ListStateClient:
             raise PySparkRuntimeError(f"Error updating value state: " f"{response_message[1]}")
 
     def clear(self, state_name: str) -> None:
-        import pyspark.sql.streaming.StateMessage_pb2 as stateMessage
+        import pyspark.sql.streaming.proto.StateMessage_pb2 as stateMessage
 
         clear_call = stateMessage.Clear()
         list_state_call = stateMessage.ListStateCall(stateName=state_name, clear=clear_call)

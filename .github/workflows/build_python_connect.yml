@@ -22,6 +22,7 @@ name: Build / Spark Connect Python-only (master, Python 3.11)
 on:
   schedule:
     - cron: '0 19 * * *'
+  workflow_dispatch:
 
 jobs:
   # Build: build Spark and run the tests for specified modules using SBT
@@ -82,7 +83,7 @@ jobs:
           sed -i 's/rootLogger.level = info/rootLogger.level = warn/g' conf/log4j2.properties
 
           # Start a Spark Connect server for local
-          PYTHONPATH="python/lib/pyspark.zip:python/lib/py4j-0.10.9.7-src.zip:$PYTHONPATH" ./sbin/start-connect-server.sh \
+          PYTHONPATH="python/lib/pyspark.zip:python/lib/py4j-0.10.9.8-src.zip:$PYTHONPATH" ./sbin/start-connect-server.sh \
             --driver-java-options "-Dlog4j.configurationFile=file:$GITHUB_WORKSPACE/conf/log4j2.properties" \
             --jars "`find connector/protobuf/target -name spark-protobuf-*SNAPSHOT.jar`,`find connector/avro/target -name spark-avro*SNAPSHOT.jar`"
 
@@ -93,7 +94,7 @@ jobs:
           # Several tests related to catalog requires to run them sequencially, e.g., writing a table in a listener.
           ./python/run-tests --parallelism=1 --python-executables=python3 --modules pyspark-connect,pyspark-ml-connect
           # None of tests are dependent on each other in Pandas API on Spark so run them in parallel
-          ./python/run-tests --parallelism=4 --python-executables=python3 --modules pyspark-pandas-connect-part0,pyspark-pandas-connect-part1,pyspark-pandas-connect-part2,pyspark-pandas-connect-part3
+          ./python/run-tests --parallelism=1 --python-executables=python3 --modules pyspark-pandas-connect-part0,pyspark-pandas-connect-part1,pyspark-pandas-connect-part2,pyspark-pandas-connect-part3
 
           # Stop Spark Connect server.
           ./sbin/stop-connect-server.sh
@@ -101,7 +102,7 @@ jobs:
           mv pyspark.back python/pyspark
 
           # Start a Spark Connect server for local-cluster
-          PYTHONPATH="python/lib/pyspark.zip:python/lib/py4j-0.10.9.7-src.zip:$PYTHONPATH" ./sbin/start-connect-server.sh \
+          PYTHONPATH="python/lib/pyspark.zip:python/lib/py4j-0.10.9.8-src.zip:$PYTHONPATH" ./sbin/start-connect-server.sh \
             --master "local-cluster[2, 4, 1024]" \
             --driver-java-options "-Dlog4j.configurationFile=file:$GITHUB_WORKSPACE/conf/log4j2.properties" \
             --jars "`find connector/protobuf/target -name spark-protobuf-*SNAPSHOT.jar`,`find connector/avro/target -name spark-avro*SNAPSHOT.jar`"

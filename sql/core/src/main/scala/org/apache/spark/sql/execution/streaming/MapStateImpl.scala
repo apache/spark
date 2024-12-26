@@ -17,19 +17,31 @@
 package org.apache.spark.sql.execution.streaming
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
+import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.streaming.TransformWithStateKeyValueRowSchemaUtils._
 import org.apache.spark.sql.execution.streaming.state.{PrefixKeyScanStateEncoderSpec, StateStore, StateStoreErrors, UnsafeRowPair}
 import org.apache.spark.sql.streaming.MapState
 import org.apache.spark.sql.types.StructType
 
+/**
+ * Class that provides a concrete implementation for map state associated with state
+ * variables used in the streaming transformWithState operator.
+ * @param store - reference to the StateStore instance to be used for storing state
+ * @param stateName - name of logical state partition
+ * @param keyExprEnc - Spark SQL encoder for key
+ * @param valEncoder - Spark SQL encoder for value
+ * @param metrics - metrics to be updated as part of stateful processing
+ * @tparam K - type of key for map state variable
+ * @tparam V - type of value for map state variable
+ */
 class MapStateImpl[K, V](
     store: StateStore,
     stateName: String,
     keyExprEnc: ExpressionEncoder[Any],
-    userKeyEnc: Encoder[K],
-    valEncoder: Encoder[V]) extends MapState[K, V] with Logging {
+    userKeyEnc: ExpressionEncoder[Any],
+    valEncoder: ExpressionEncoder[Any],
+    metrics: Map[String, SQLMetric] = Map.empty) extends MapState[K, V] with Logging {
 
   // Pack grouping key and user key together as a prefixed composite key
   private val schemaForCompositeKeyRow: StructType = {
@@ -54,7 +66,7 @@ class MapStateImpl[K, V](
     val unsafeRowValue = store.get(encodedCompositeKey, stateName)
 
     if (unsafeRowValue == null) return null.asInstanceOf[V]
-    stateTypesEncoder.decodeValue(unsafeRowValue)
+    stateTypesEncoder.decodeValue(unsafeRowValue).asInstanceOf[V]
   }
 
   /** Check if the user key is contained in the map */
@@ -70,6 +82,7 @@ class MapStateImpl[K, V](
     val encodedValue = stateTypesEncoder.encodeValue(value)
     val encodedCompositeKey = stateTypesEncoder.encodeCompositeKey(key)
     store.put(encodedCompositeKey, encodedValue, stateName)
+    TWSMetricsUtils.incrementMetric(metrics, "numUpdatedStateRows")
   }
 
   /** Get the map associated with grouping key */
@@ -78,8 +91,8 @@ class MapStateImpl[K, V](
     store.prefixScan(encodedGroupingKey, stateName)
       .map {
         case iter: UnsafeRowPair =>
-          (stateTypesEncoder.decodeCompositeKey(iter.key),
-            stateTypesEncoder.decodeValue(iter.value))
+          (stateTypesEncoder.decodeCompositeKey(iter.key).asInstanceOf[K],
+            stateTypesEncoder.decodeValue(iter.value).asInstanceOf[V])
       }
   }
 
@@ -98,6 +111,9 @@ class MapStateImpl[K, V](
     StateStoreErrors.requireNonNullStateValue(key, stateName)
     val compositeKey = stateTypesEncoder.encodeCompositeKey(key)
     store.remove(compositeKey, stateName)
+    // Note that for mapState, the rows are flattened. So we count the number of rows removed
+    // proportional to the number of keys in the map per grouping key.
+    TWSMetricsUtils.incrementMetric(metrics, "numRemovedStateRows")
   }
 
   /** Remove this state. */
