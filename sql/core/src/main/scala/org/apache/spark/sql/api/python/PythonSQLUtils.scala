@@ -75,18 +75,18 @@ private[sql] object PythonSQLUtils extends Logging {
       groupBy(_.getName).map(v => v._2.head).toArray
   }
 
-  private def listAllSQLConfigs(): Seq[(String, String, String, String)] = {
+  def listAllSQLConfigs(): Array[(String, String, String, String)] = {
     val conf = new SQLConf()
-    conf.getAllDefinedConfs
+    conf.getAllDefinedConfs.toArray
   }
 
   def listRuntimeSQLConfigs(): Array[(String, String, String, String)] = {
     // Py4J doesn't seem to translate Seq well, so we convert to an Array.
-    listAllSQLConfigs().filterNot(p => SQLConf.isStaticConfigKey(p._1)).toArray
+    listAllSQLConfigs().filterNot(p => SQLConf.isStaticConfigKey(p._1))
   }
 
   def listStaticSQLConfigs(): Array[(String, String, String, String)] = {
-    listAllSQLConfigs().filter(p => SQLConf.isStaticConfigKey(p._1)).toArray
+    listAllSQLConfigs().filter(p => SQLConf.isStaticConfigKey(p._1))
   }
 
   def isTimestampNTZPreferred: Boolean =
