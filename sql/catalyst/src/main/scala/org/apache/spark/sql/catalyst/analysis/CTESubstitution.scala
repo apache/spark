@@ -302,9 +302,10 @@ object CTESubstitution extends Rule[LogicalPlan] {
         traverseAndSubstituteCTE(relation, forceInline, nonConflictingCTERelations, cteDefs)._1
       }
 
-      // If recursion is allowed then it has higher priority than outer or previous relations so
+      // If recursion is allowed (RECURSIVE keyword specified)
+      // then it has higher priority than outer or previous relations so
       // construct a not yet substituted but recursive `CTERelationDef`, that we will prepend to
-      // `resolvedCTERelations`.
+      // `resolvedCTERelations`. Prepending is done within `substituteCTE` method.
       val recursiveCTERelation = if (allowRecursion) {
         Some(name -> CTERelationDef(relation, recursive = true))
       } else {
@@ -350,6 +351,7 @@ object CTESubstitution extends Rule[LogicalPlan] {
             d.child
           } else {
             if (d.recursive) {
+              // self-reference is found
               recursionFound = true
             }
             // Add a `SubqueryAlias` for hint-resolving rules to match relation names.
