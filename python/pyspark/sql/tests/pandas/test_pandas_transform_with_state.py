@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 
+import json
 import os
 import time
 import tempfile
@@ -26,7 +27,7 @@ from typing import cast
 
 from pyspark import SparkConf
 from pyspark.errors import PySparkRuntimeError
-from pyspark.sql.functions import split
+from pyspark.sql.functions import array_sort, col, explode, split
 from pyspark.sql.types import StringType, StructType, StructField, Row, IntegerType, TimestampType
 from pyspark.testing import assertDataFrameEqual
 from pyspark.testing.sqlutils import (
@@ -99,9 +100,17 @@ class TransformWithStateInPandasTestsMixin:
         return df_final
 
     def _test_transform_with_state_in_pandas_basic(
-        self, stateful_processor, check_results, single_batch=False, timeMode="None"
+        self,
+        stateful_processor,
+        check_results,
+        single_batch=False,
+        timeMode="None",
+        checkpoint_path=None,
+        initial_state=None,
     ):
         input_path = tempfile.mkdtemp()
+        if checkpoint_path is None:
+            checkpoint_path = tempfile.mkdtemp()
         self._prepare_test_resource1(input_path)
         if not single_batch:
             time.sleep(2)
@@ -127,8 +136,10 @@ class TransformWithStateInPandasTestsMixin:
                 outputStructType=output_schema,
                 outputMode="Update",
                 timeMode=timeMode,
+                initialState=initial_state,
             )
             .writeStream.queryName("this_query")
+            .option("checkpointLocation", checkpoint_path)
             .foreachBatch(check_results)
             .outputMode("update")
             .start()
@@ -358,7 +369,7 @@ class TransformWithStateInPandasTestsMixin:
                 for q in self.spark.streams.active:
                     q.stop()
             if batch_id == 0 or batch_id == 1:
-                time.sleep(6)
+                time.sleep(4)
 
         input_dir = tempfile.TemporaryDirectory()
         input_path = input_dir.name
@@ -591,17 +602,24 @@ class TransformWithStateInPandasTestsMixin:
         )
 
     def _test_transform_with_state_init_state_in_pandas(
-        self, stateful_processor, check_results, time_mode="None"
+        self,
+        stateful_processor,
+        check_results,
+        time_mode="None",
+        checkpoint_path=None,
+        initial_state=None,
     ):
         input_path = tempfile.mkdtemp()
+        if checkpoint_path is None:
+            checkpoint_path = tempfile.mkdtemp()
         self._prepare_test_resource1(input_path)
         time.sleep(2)
         self._prepare_input_data(input_path + "/text-test2.txt", [0, 3], [67, 12])
 
-        df = self._build_test_df(input_path)
-
         for q in self.spark.streams.active:
             q.stop()
+
+        df = self._build_test_df(input_path)
         self.assertTrue(df.isStreaming)
 
         output_schema = StructType(
@@ -611,8 +629,9 @@ class TransformWithStateInPandasTestsMixin:
             ]
         )
 
-        data = [("0", 789), ("3", 987)]
-        initial_state = self.spark.createDataFrame(data, "id string, initVal int").groupBy("id")
+        if initial_state is None:
+            data = [("0", 789), ("3", 987)]
+            initial_state = self.spark.createDataFrame(data, "id string, initVal int").groupBy("id")
 
         q = (
             df.groupBy("id")
@@ -624,6 +643,7 @@ class TransformWithStateInPandasTestsMixin:
                 initialState=initial_state,
             )
             .writeStream.queryName("this_query")
+            .option("checkpointLocation", checkpoint_path)
             .foreachBatch(check_results)
             .outputMode("update")
             .start()
@@ -852,13 +872,6 @@ class TransformWithStateInPandasTestsMixin:
             StatefulProcessorWithInitialStateTimers(), check_results, "processingTime"
         )
 
-    # run the same test suites again but with single shuffle partition
-    def test_transform_with_state_with_timers_single_partition(self):
-        with self.sql_conf({"spark.sql.shuffle.partitions": "1"}):
-            self.test_transform_with_state_init_state_with_timers()
-            self.test_transform_with_state_in_pandas_event_time()
-            self.test_transform_with_state_in_pandas_proc_timer()
-
     def test_transform_with_state_in_pandas_batch_query(self):
         data = [("0", 123), ("0", 46), ("1", 146), ("1", 346)]
         df = self.spark.createDataFrame(data, "id string, temperature int")
@@ -906,6 +919,374 @@ class TransformWithStateInPandasTestsMixin:
             Row(id="0", value=str(789 + 123 + 46)),
             Row(id="1", value=str(146 + 346)),
         }
+
+    # This test covers mapState with TTL, an empty state variable
+    # and additional test against initial state python runner
+    def test_transform_with_map_state_metadata(self):
+        checkpoint_path = tempfile.mktemp()
+
+        def check_results(batch_df, batch_id):
+            if batch_id == 0:
+                assert set(batch_df.sort("id").collect()) == {
+                    Row(id="0", countAsString="2"),
+                    Row(id="1", countAsString="2"),
+                }
+            else:
+                # check for state metadata source
+                metadata_df = self.spark.read.format("state-metadata").load(checkpoint_path)
+                assert set(
+                    metadata_df.select(
+                        "operatorId",
+                        "operatorName",
+                        "stateStoreName",
+                        "numPartitions",
+                        "minBatchId",
+                        "maxBatchId",
+                    ).collect()
+                ) == {
+                    Row(
+                        operatorId=0,
+                        operatorName="transformWithStateInPandasExec",
+                        stateStoreName="default",
+                        numPartitions=5,
+                        minBatchId=0,
+                        maxBatchId=0,
+                    )
+                }
+                operator_properties_json_obj = json.loads(
+                    metadata_df.select("operatorProperties").collect()[0][0]
+                )
+                assert operator_properties_json_obj["timeMode"] == "ProcessingTime"
+                assert operator_properties_json_obj["outputMode"] == "Update"
+
+                state_var_list = operator_properties_json_obj["stateVariables"]
+                assert len(state_var_list) == 3
+                for state_var in state_var_list:
+                    if state_var["stateName"] == "mapState":
+                        assert state_var["stateVariableType"] == "MapState"
+                        assert state_var["ttlEnabled"]
+                    elif state_var["stateName"] == "listState":
+                        assert state_var["stateVariableType"] == "ListState"
+                        assert not state_var["ttlEnabled"]
+                    else:
+                        assert state_var["stateName"] == "$procTimers_keyToTimestamp"
+                        assert state_var["stateVariableType"] == "TimerState"
+
+                # check for state data source
+                map_state_df = (
+                    self.spark.read.format("statestore")
+                    .option("path", checkpoint_path)
+                    .option("stateVarName", "mapState")
+                    .load()
+                )
+                assert map_state_df.selectExpr(
+                    "key.id AS groupingKey",
+                    "user_map_key.name AS mapKey",
+                    "user_map_value.value.count AS mapValue",
+                ).sort("groupingKey").collect() == [
+                    Row(groupingKey="0", mapKey="key2", mapValue=2),
+                    Row(groupingKey="1", mapKey="key2", mapValue=2),
+                ]
+
+                # check for map state with flatten option
+                map_state_df_non_flatten = (
+                    self.spark.read.format("statestore")
+                    .option("path", checkpoint_path)
+                    .option("stateVarName", "mapState")
+                    .option("flattenCollectionTypes", False)
+                    .load()
+                )
+                assert map_state_df_non_flatten.select(
+                    "key.id", explode(col("map_value")).alias("map_key", "map_value")
+                ).selectExpr(
+                    "id AS groupingKey",
+                    "map_key.name AS mapKey",
+                    "map_value.value.count AS mapValue",
+                ).sort(
+                    "groupingKey"
+                ).collect() == [
+                    Row(groupingKey="0", mapKey="key2", mapValue=2),
+                    Row(groupingKey="1", mapKey="key2", mapValue=2),
+                ]
+
+                ttl_df = map_state_df.selectExpr(
+                    "user_map_value.ttlExpirationMs AS TTLVal"
+                ).collect()
+                # check if there are two rows containing TTL value in map state dataframe
+                assert len(ttl_df) == 2
+                # check if two rows are of the same TTL value
+                assert len(set(ttl_df)) == 1
+
+                list_state_df = (
+                    self.spark.read.format("statestore")
+                    .option("path", checkpoint_path)
+                    .option("stateVarName", "listState")
+                    .load()
+                )
+                assert list_state_df.isEmpty()
+
+                for q in self.spark.streams.active:
+                    q.stop()
+
+        self._test_transform_with_state_in_pandas_basic(
+            MapStateLargeTTLProcessor(),
+            check_results,
+            True,
+            "processingTime",
+            checkpoint_path=checkpoint_path,
+            initial_state=None,
+        )
+
+        # run the same test suite again but with no-op initial state
+        # TWS with initial state is using a different python runner
+        init_data = [("0", 789), ("3", 987)]
+        initial_state = self.spark.createDataFrame(init_data, "id string, temperature int").groupBy(
+            "id"
+        )
+        self._test_transform_with_state_in_pandas_basic(
+            MapStateLargeTTLProcessor(),
+            check_results,
+            True,
+            "processingTime",
+            checkpoint_path=checkpoint_path,
+            initial_state=initial_state,
+        )
+
+    # This test covers multiple list state variables and flatten option
+    def test_transform_with_list_state_metadata(self):
+        checkpoint_path = tempfile.mktemp()
+
+        def check_results(batch_df, batch_id):
+            if batch_id == 0:
+                assert set(batch_df.sort("id").collect()) == {
+                    Row(id="0", countAsString="2"),
+                    Row(id="1", countAsString="2"),
+                }
+            else:
+                # check for state metadata source
+                metadata_df = self.spark.read.format("state-metadata").load(checkpoint_path)
+                operator_properties_json_obj = json.loads(
+                    metadata_df.select("operatorProperties").collect()[0][0]
+                )
+                state_var_list = operator_properties_json_obj["stateVariables"]
+                assert len(state_var_list) == 3
+                for state_var in state_var_list:
+                    if state_var["stateName"] in ["listState1", "listState2"]:
+                        state_var["stateVariableType"] == "ListState"
+                    else:
+                        assert state_var["stateName"] == "$procTimers_keyToTimestamp"
+                        assert state_var["stateVariableType"] == "TimerState"
+
+                # check for state data source and flatten option
+                list_state_1_df = (
+                    self.spark.read.format("statestore")
+                    .option("path", checkpoint_path)
+                    .option("stateVarName", "listState1")
+                    .option("flattenCollectionTypes", True)
+                    .load()
+                )
+                assert list_state_1_df.selectExpr(
+                    "key.id AS groupingKey",
+                    "list_element.temperature AS listElement",
+                ).sort("groupingKey", "listElement").collect() == [
+                    Row(groupingKey="0", listElement=20),
+                    Row(groupingKey="0", listElement=20),
+                    Row(groupingKey="0", listElement=111),
+                    Row(groupingKey="0", listElement=120),
+                    Row(groupingKey="0", listElement=120),
+                    Row(groupingKey="1", listElement=20),
+                    Row(groupingKey="1", listElement=20),
+                    Row(groupingKey="1", listElement=111),
+                    Row(groupingKey="1", listElement=120),
+                    Row(groupingKey="1", listElement=120),
+                ]
+
+                list_state_2_df = (
+                    self.spark.read.format("statestore")
+                    .option("path", checkpoint_path)
+                    .option("stateVarName", "listState2")
+                    .option("flattenCollectionTypes", False)
+                    .load()
+                )
+                assert list_state_2_df.selectExpr(
+                    "key.id AS groupingKey", "list_value.temperature AS valueList"
+                ).sort("groupingKey").withColumn(
+                    "valueSortedList", array_sort(col("valueList"))
+                ).select(
+                    "groupingKey", "valueSortedList"
+                ).collect() == [
+                    Row(groupingKey="0", valueSortedList=[20, 20, 120, 120, 222]),
+                    Row(groupingKey="1", valueSortedList=[20, 20, 120, 120, 222]),
+                ]
+
+                for q in self.spark.streams.active:
+                    q.stop()
+
+        self._test_transform_with_state_in_pandas_basic(
+            ListStateProcessor(),
+            check_results,
+            True,
+            "processingTime",
+            checkpoint_path=checkpoint_path,
+            initial_state=None,
+        )
+
+    # This test covers value state variable and read change feed,
+    # snapshotStartBatchId related options
+    def test_transform_with_value_state_metadata(self):
+        checkpoint_path = tempfile.mktemp()
+
+        def check_results(batch_df, batch_id):
+            if batch_id == 0:
+                assert set(batch_df.sort("id").collect()) == {
+                    Row(id="0", countAsString="2"),
+                    Row(id="1", countAsString="2"),
+                }
+            else:
+                assert set(batch_df.sort("id").collect()) == {
+                    Row(id="0", countAsString="3"),
+                    Row(id="1", countAsString="2"),
+                }
+
+                # check for state metadata source
+                metadata_df = self.spark.read.format("state-metadata").load(checkpoint_path)
+                operator_properties_json_obj = json.loads(
+                    metadata_df.select("operatorProperties").collect()[0][0]
+                )
+                state_var_list = operator_properties_json_obj["stateVariables"]
+
+                assert len(state_var_list) == 3
+                for state_var in state_var_list:
+                    if state_var["stateName"] in ["numViolations", "tempState"]:
+                        state_var["stateVariableType"] == "ValueState"
+                    else:
+                        assert state_var["stateName"] == "$procTimers_keyToTimestamp"
+                        assert state_var["stateVariableType"] == "TimerState"
+
+                # check for state data source and readChangeFeed
+                value_state_df = (
+                    self.spark.read.format("statestore")
+                    .option("path", checkpoint_path)
+                    .option("stateVarName", "numViolations")
+                    .option("readChangeFeed", True)
+                    .option("changeStartBatchId", 0)
+                    .load()
+                ).selectExpr(
+                    "change_type", "key.id AS groupingKey", "value.value AS value", "partition_id"
+                )
+
+                assert value_state_df.select("change_type", "groupingKey", "value").sort(
+                    "groupingKey"
+                ).collect() == [
+                    Row(change_type="update", groupingKey="0", value=1),
+                    Row(change_type="update", groupingKey="1", value=2),
+                ]
+
+                partition_id_list = [
+                    row["partition_id"] for row in value_state_df.select("partition_id").collect()
+                ]
+
+                for partition_id in partition_id_list:
+                    # check for state data source and snapshotStartBatchId options
+                    state_snapshot_df = (
+                        self.spark.read.format("statestore")
+                        .option("path", checkpoint_path)
+                        .option("stateVarName", "numViolations")
+                        .option("snapshotPartitionId", partition_id)
+                        .option("snapshotStartBatchId", 0)
+                        .load()
+                    )
+
+                    assert (
+                        value_state_df.select("partition_id", "groupingKey", "value")
+                        .filter(value_state_df["partition_id"] == partition_id)
+                        .sort("groupingKey")
+                        .collect()
+                        == state_snapshot_df.selectExpr(
+                            "partition_id", "key.id AS groupingKey", "value.value AS value"
+                        )
+                        .sort("groupingKey")
+                        .collect()
+                    )
+
+                for q in self.spark.streams.active:
+                    q.stop()
+
+        with self.sql_conf(
+            {"spark.sql.streaming.stateStore.rocksdb.changelogCheckpointing.enabled": "true"}
+        ):
+            self._test_transform_with_state_in_pandas_basic(
+                SimpleStatefulProcessor(),
+                check_results,
+                False,
+                "processingTime",
+                checkpoint_path=checkpoint_path,
+            )
+
+    def test_transform_with_state_restart_with_multiple_rows_init_state(self):
+        def check_results(batch_df, _):
+            assert set(batch_df.sort("id").collect()) == {
+                Row(id="0", countAsString="2"),
+                Row(id="1", countAsString="2"),
+            }
+
+        def check_results_for_new_query(batch_df, batch_id):
+            if batch_id == 0:
+                assert set(batch_df.sort("id").collect()) == {
+                    Row(id="0", value=str(123 + 46)),
+                    Row(id="1", value=str(146 + 346)),
+                }
+            else:
+                assert set(batch_df.sort("id").collect()) == {
+                    Row(id="0", value=str(123 + 46 + 67)),
+                    Row(id="3", value=str(12)),
+                }
+                # verify values in initial state is appended into list state for all keys
+                df = (
+                    self.spark.read.format("statestore")
+                    .option("path", new_checkpoint_path)
+                    .option("stateVarName", "list_state")
+                    .load()
+                ).selectExpr("key.id AS id", "list_element.value AS value")
+
+                def dataframe_to_value_list(output_df):
+                    return [
+                        row["value"] for row in output_df.sort("value").select("value").collect()
+                    ]
+
+                assert dataframe_to_value_list(df.filter(df.id == "0")) == [20, 20, 111, 120, 120]
+                assert dataframe_to_value_list(df.filter(df.id == "1")) == [20, 20, 111, 120, 120]
+
+        # run a tws query and read state data source dataframe from its checkpoint
+        checkpoint_path = tempfile.mkdtemp()
+        self._test_transform_with_state_in_pandas_basic(
+            ListStateProcessor(), check_results, True, checkpoint_path=checkpoint_path
+        )
+        list_state_df = (
+            self.spark.read.format("statestore")
+            .option("path", checkpoint_path)
+            .option("stateVarName", "listState1")
+            .load()
+        ).selectExpr("key.id AS id", "list_element.temperature AS initVal")
+        init_df = list_state_df.groupBy("id")
+
+        # run a new tws query and pass state data source dataframe as initial state
+        # multiple rows exist in the initial state with the same grouping key
+        new_checkpoint_path = tempfile.mkdtemp()
+        self._test_transform_with_state_init_state_in_pandas(
+            StatefulProcessorWithListStateInitialState(),
+            check_results_for_new_query,
+            checkpoint_path=new_checkpoint_path,
+            initial_state=init_df,
+        )
+
+    # run the same test suites again but with single shuffle partition
+    def test_transform_with_state_with_timers_single_partition(self):
+        with self.sql_conf({"spark.sql.shuffle.partitions": "1"}):
+            self.test_transform_with_state_init_state_with_timers()
+            self.test_transform_with_state_in_pandas_event_time()
+            self.test_transform_with_state_in_pandas_proc_timer()
+            self.test_transform_with_state_restart_with_multiple_rows_init_state()
 
 
 class SimpleStatefulProcessorWithInitialState(StatefulProcessor):
@@ -961,6 +1342,17 @@ class StatefulProcessorWithInitialStateTimers(SimpleStatefulProcessorWithInitial
     def handleInitialState(self, key, initialState, timer_values) -> None:
         super().handleInitialState(key, initialState, timer_values)
         self.handle.registerTimer(timer_values.get_current_processing_time_in_ms() - 1)
+
+
+class StatefulProcessorWithListStateInitialState(SimpleStatefulProcessorWithInitialState):
+    def init(self, handle: StatefulProcessorHandle) -> None:
+        super().init(handle)
+        list_ele_schema = StructType([StructField("value", IntegerType(), True)])
+        self.list_state = handle.getListState("list_state", list_ele_schema)
+
+    def handleInitialState(self, key, initialState, timer_values) -> None:
+        for val in initialState["initVal"].tolist():
+            self.list_state.append_value((val,))
 
 
 # A stateful processor that output the max event time it has seen. Register timer for
@@ -1297,6 +1689,7 @@ class MapStateLargeTTLProcessor(MapStateProcessor):
         key_schema = StructType([StructField("name", StringType(), True)])
         value_schema = StructType([StructField("count", IntegerType(), True)])
         self.map_state = handle.getMapState("mapState", key_schema, value_schema, 30000)
+        self.list_state = handle.getListState("listState", key_schema)
 
 
 class TransformWithStateInPandasTests(TransformWithStateInPandasTestsMixin, ReusedSQLTestCase):
