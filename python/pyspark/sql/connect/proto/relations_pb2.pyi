@@ -3448,8 +3448,9 @@ class GroupMap(google.protobuf.message.Message):
     """(Optional) The output mode of the function."""
     timeout_conf: builtins.str
     """(Optional) Timeout configuration for groups that do not receive data for a while."""
-    state_schema: builtins.str
-    """(Optional) The schema for the grouped state."""
+    @property
+    def state_schema(self) -> pyspark.sql.connect.proto.types_pb2.DataType:
+        """(Optional) The schema for the grouped state."""
     def __init__(
         self,
         *,
@@ -3472,7 +3473,7 @@ class GroupMap(google.protobuf.message.Message):
         is_map_groups_with_state: builtins.bool | None = ...,
         output_mode: builtins.str | None = ...,
         timeout_conf: builtins.str | None = ...,
-        state_schema: builtins.str | None = ...,
+        state_schema: pyspark.sql.connect.proto.types_pb2.DataType | None = ...,
     ) -> None: ...
     def HasField(
         self,
