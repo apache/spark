@@ -974,7 +974,7 @@ class PlanResolutionSuite extends AnalysisTest {
           comparePlans(parsed, expected2)
         } else {
           parsed match {
-            case DescribeRelationJson(_: ResolvedTable, _, isExtended, _) =>
+            case DescribeRelationJson(_: ResolvedTable, _, isExtended) =>
               assert(isExtended)
             case _ => fail("Expect DescribeTable, but got:\n" + parsed.treeString)
           }
@@ -989,7 +989,7 @@ class PlanResolutionSuite extends AnalysisTest {
           comparePlans(parsed2, expected2)
         } else {
           parsed2 match {
-            case DescribeRelationJson(_: ResolvedTable, partitionSpec, isExtended, _) =>
+            case DescribeRelationJson(_: ResolvedTable, partitionSpec, isExtended) =>
               assert(isExtended)
               assert(partitionSpec == Map("a" -> "1"))
             case _ => fail("Expect DescribeTable, but got:\n" + parsed2.treeString)

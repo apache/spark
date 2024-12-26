@@ -133,10 +133,10 @@ class DescribeTableSuite extends v1.DescribeTableSuiteBase with CommandSuiteBase
         namespace = Some(List("ns")),
         schema_name = Some("ns"),
         columns = Some(List(
-          TableColumn(1, "a", Type("string")),
-          TableColumn(2, "b", Type("integer")),
-          TableColumn(3, "c", Type("string")),
-          TableColumn(4, "d", Type("string"))
+          TableColumn("a", Type("string")),
+          TableColumn("b", Type("integer")),
+          TableColumn("c", Type("string")),
+          TableColumn("d", Type("string"))
         )),
         owner = Some(""),
         created_time = Some(""),
@@ -193,10 +193,10 @@ class DescribeTableSuite extends v1.DescribeTableSuiteBase with CommandSuiteBase
         namespace = Some(List("ns")),
         schema_name = Some("ns"),
         columns = Some(List(
-          TableColumn(1, "a", Type("string")),
-          TableColumn(2, "b", Type("integer")),
-          TableColumn(3, "c", Type("string")),
-          TableColumn(4, "d", Type("string"))
+          TableColumn("a", Type("string")),
+          TableColumn("b", Type("integer")),
+          TableColumn("c", Type("string")),
+          TableColumn("d", Type("string"))
         )),
         last_access = Some("UNKNOWN"),
         created_by = Some("Spark 4.0.0-SNAPSHOT"),
@@ -252,8 +252,8 @@ class DescribeTableSuite extends v1.DescribeTableSuiteBase with CommandSuiteBase
         namespace = Some(List("ns")),
         schema_name = Some("ns"),
         columns = Some(List(
-          TableColumn(1, "a", Type("string"), default_value = Some("'default-value'")),
-          TableColumn(2, "b", Type("integer"), default_value = Some("42"))
+          TableColumn("a", Type("string"), default_value = Some("'default-value'")),
+          TableColumn("b", Type("integer"), default_value = Some("42"))
         )),
         last_access = Some("UNKNOWN"),
         created_by = Some("Spark 4.0.0-SNAPSHOT"),
@@ -294,10 +294,10 @@ class DescribeTableSuite extends v1.DescribeTableSuiteBase with CommandSuiteBase
 
         val expectedOutput = DescribeTableJson(
           columns = Some(List(
-            TableColumn(1, "a", Type("string")),
-            TableColumn(2, "b", Type("integer")),
-            TableColumn(3, "c", Type("string")),
-            TableColumn(4, "d", Type("string"))
+            TableColumn("a", Type("string")),
+            TableColumn("b", Type("integer")),
+            TableColumn("c", Type("string")),
+            TableColumn("d", Type("string"))
           ))
         )
 
@@ -369,7 +369,6 @@ class DescribeTableSuite extends v1.DescribeTableSuiteBase with CommandSuiteBase
         schema_name = Some("ns"),
         columns = Some(List(
           TableColumn(
-            id = 1,
             name = "nested_struct",
             `type` = Type(
               `type` = "struct",
@@ -440,7 +439,6 @@ class DescribeTableSuite extends v1.DescribeTableSuiteBase with CommandSuiteBase
             default_value = None
           ),
           TableColumn(
-            id = 2,
             name = "preferences",
             `type` = Type(
               `type` = "map",
@@ -455,7 +453,6 @@ class DescribeTableSuite extends v1.DescribeTableSuiteBase with CommandSuiteBase
             default_value = None
           ),
           TableColumn(
-            id = 3,
             name = "id",
             `type` = Type("string"),
             default_value = None
@@ -516,7 +513,6 @@ case class DescribeTableJson(
 
 /** Used for columns field of DescribeTableJson */
 case class TableColumn(
- id: Int,
  name: String,
  `type`: Type,
  default_value: Option[String] = None

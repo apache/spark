@@ -331,7 +331,7 @@ ExplainCommand 'DescribeRelation false, [col_name#x, data_type#x, comment#x], Si
 -- !query
 EXPLAIN DESC EXTENDED t AS JSON
 -- !query analysis
-ExplainCommand 'DescribeRelationJson true, [json_metadata#x], SimpleMode
+ExplainCommand 'DescribeRelationJson true, SimpleMode
 
 
 -- !query
@@ -361,7 +361,7 @@ ExplainCommand 'DescribeRelation [c=Us, d=2], false, [col_name#x, data_type#x, c
 -- !query
 EXPLAIN DESCRIBE EXTENDED t PARTITION (c='Us', d=2) AS JSON
 -- !query analysis
-ExplainCommand 'DescribeRelationJson [c=Us, d=2], true, [json_metadata#x], SimpleMode
+ExplainCommand 'DescribeRelationJson [c=Us, d=2], true, SimpleMode
 
 
 -- !query

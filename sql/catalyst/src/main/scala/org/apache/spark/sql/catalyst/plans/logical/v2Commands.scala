@@ -681,35 +681,28 @@ case class DescribeRelation(
     relation: LogicalPlan,
     partitionSpec: TablePartitionSpec,
     isExtended: Boolean,
-    override val output: Seq[Attribute] = DescribeRelation.getOutputAttrs)
-  extends UnaryCommand {
+    override val output: Seq[Attribute] = DescribeRelation.getOutputAttrs) extends UnaryCommand {
   override def child: LogicalPlan = relation
   override protected def withNewChildInternal(newChild: LogicalPlan): DescribeRelation =
     copy(relation = newChild)
 }
 
 object DescribeRelation {
-  def getOutputAttrs: Seq[Attribute] =
-    DescribeCommandSchema.describeTableAttributes()
+  def getOutputAttrs: Seq[Attribute] = DescribeCommandSchema.describeTableAttributes()
 }
 
 /**
  * The logical plan of the DESCRIBE relation_name AS JSON command.
  */
 case class DescribeRelationJson(
-  relation: LogicalPlan,
-  partitionSpec: TablePartitionSpec,
-  isExtended: Boolean,
-  override val output: Seq[Attribute] = DescribeRelationJson.getOutputAttrs)
+    relation: LogicalPlan,
+    partitionSpec: TablePartitionSpec,
+    isExtended: Boolean)
   extends UnaryCommand {
+  override val output: Seq[Attribute] = DescribeCommandSchema.describeJsonTableAttributes()
   override def child: LogicalPlan = relation
   override protected def withNewChildInternal(newChild: LogicalPlan): DescribeRelationJson =
     copy(relation = newChild)
-}
-
-object DescribeRelationJson {
-  def getOutputAttrs: Seq[Attribute] =
-    DescribeCommandSchema.describeJsonTableAttributes()
 }
 
 /**

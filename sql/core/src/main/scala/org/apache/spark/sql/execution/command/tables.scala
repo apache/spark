@@ -893,7 +893,6 @@ case class DescribeTableJsonCommand(
         .getOrElse("")
 
       s"""{
-         |  "id": ${id + 1},
          |  "name": "${column.name}",
          |  "type": ${jsonType(column.dataType)}
          |  $commentField$defaultValueJson
