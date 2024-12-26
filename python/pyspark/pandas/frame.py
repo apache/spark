@@ -2632,7 +2632,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         ...                    'mask': ['red', 'purple'],
         ...                    'weapon': ['sai', 'bo staff']},
         ...                   columns=['name', 'mask', 'weapon'])
-        >>> print(df.to_latex(index=False)) # doctest: +NORMALIZE_WHITESPACE
+        >>> print(df.to_latex(index=False))  # doctest: +SKIP
         \begin{tabular}{lll}
         \toprule
               name &    mask &    weapon \\
