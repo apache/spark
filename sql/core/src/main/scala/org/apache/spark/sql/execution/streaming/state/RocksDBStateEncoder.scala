@@ -706,7 +706,6 @@ class AvroStateEncoder(
   override def encodeKey(row: UnsafeRow): Array[Byte] = {
     keyStateEncoderSpec match {
       case NoPrefixKeyStateEncoderSpec(_) =>
-        encodeUnsafeRowToAvro(row, avroEncoder.keySerializer, keyAvroType, out)
         val avroRow =
           encodeUnsafeRowToAvro(row, avroEncoder.keySerializer, keyAvroType, out)
         // prepend stateSchemaId to the Avro-encoded key portion for NoPrefixKeys
@@ -1257,7 +1256,6 @@ class PrefixKeyScanStateEncoder(
     encodeStateRowWithPrefix(combinedData)
   }
 
-
   override def decodeKey(keyBytes: Array[Byte]): UnsafeRow = {
     // First decode the metadata prefixes and get the actual key data
     val keyData = decodeStateRowData(keyBytes)
@@ -1303,7 +1301,6 @@ class PrefixKeyScanStateEncoder(
       prefixKeyEncoded.length
     )
 
-    // Add metadata prefixes
     encodeStateRowWithPrefix(dataWithLength)
   }
 
@@ -1467,7 +1464,6 @@ class RangeKeyScanStateEncoder(
       combinedData
     }
 
-    // Add metadata prefixes (schema ID and column family ID if enabled)
     encodeStateRowWithPrefix(data)
   }
 
@@ -1522,7 +1518,6 @@ class RangeKeyScanStateEncoder(
       rangeScanKeyEncoded.length
     )
 
-    // Add metadata prefixes
     encodeStateRowWithPrefix(dataWithLength)
   }
 
@@ -1567,7 +1562,6 @@ class NoPrefixKeyStateEncoder(
         rowBytes.length
       )
 
-      // Add metadata prefixes
       encodeStateRowWithPrefix(dataWithVersion)
     }
   }
@@ -1705,10 +1699,7 @@ class SingleValueStateEncoder(
   extends RocksDBValueStateEncoder with Logging {
 
   override def encodeValue(row: UnsafeRow): Array[Byte] = {
-    // First encode the row using either Avro or UnsafeRow encoding
-    val rowBytes = dataEncoder.encodeValue(row)
-    // Add metadata prefixes
-    rowBytes
+    dataEncoder.encodeValue(row)
   }
 
   override def decodeValue(valueBytes: Array[Byte]): UnsafeRow = {

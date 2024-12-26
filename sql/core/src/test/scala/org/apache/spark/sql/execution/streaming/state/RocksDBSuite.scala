@@ -304,6 +304,7 @@ object OpenNumCountedTestInputStream extends Logging {
     }
   }
 }
+
 class RocksDBStateEncoderSuite extends SparkFunSuite {
 
   // Helper method to create test schemas
@@ -360,64 +361,60 @@ class RocksDBStateEncoderSuite extends SparkFunSuite {
     val fullKeyRow = keyProj.apply(InternalRow(42, 123L, 3.14))
 
     // Test prefix scan encoding with schema evolution
-    {
-      withClue("Testing prefix scan encoding: ") {
-        val prefixKeySpec = PrefixKeyScanStateEncoderSpec(keySchema, numColsPrefixKey = 2)
-        val stateSchemaInfo = Some(StateSchemaInfo(keySchemaId = 42, valueSchemaId = 0))
-        val encoder = new AvroStateEncoder(prefixKeySpec, valueSchema, stateSchemaInfo)
+    withClue("Testing prefix scan encoding: ") {
+      val prefixKeySpec = PrefixKeyScanStateEncoderSpec(keySchema, numColsPrefixKey = 2)
+      val stateSchemaInfo = Some(StateSchemaInfo(keySchemaId = 42, valueSchemaId = 0))
+      val encoder = new AvroStateEncoder(prefixKeySpec, valueSchema, stateSchemaInfo)
 
-        // Then encode just the remaining key portion (which should include schema ID)
-        val remainingKeyRow = keyProj.apply(InternalRow(null, null, 3.14))
-        val encodedRemainingKey = encoder.encodeRemainingKey(remainingKeyRow)
+      // Then encode just the remaining key portion (which should include schema ID)
+      val remainingKeyRow = keyProj.apply(InternalRow(null, null, 3.14))
+      val encodedRemainingKey = encoder.encodeRemainingKey(remainingKeyRow)
 
-        // Verify schema ID in remaining key bytes
-        val decodedSchemaIdRow = encoder.decodeStateSchemaIdRow(encodedRemainingKey)
-        assert(decodedSchemaIdRow.schemaId === 42,
-          "Schema ID not preserved in prefix scan remaining key encoding")
-      }
+      // Verify schema ID in remaining key bytes
+      val decodedSchemaIdRow = encoder.decodeStateSchemaIdRow(encodedRemainingKey)
+      assert(decodedSchemaIdRow.schemaId === 42,
+        "Schema ID not preserved in prefix scan remaining key encoding")
     }
 
     // Test range scan encoding with schema evolution
-    {
-      withClue("Testing range scan encoding: ") {
-        val rangeScanSpec = RangeKeyScanStateEncoderSpec(keySchema, orderingOrdinals = Seq(0, 1))
-        val stateSchemaInfo = Some(StateSchemaInfo(keySchemaId = 24, valueSchemaId = 0))
-        val encoder = new AvroStateEncoder(rangeScanSpec, valueSchema, stateSchemaInfo)
+    withClue("Testing range scan encoding: ") {
+      val rangeScanSpec = RangeKeyScanStateEncoderSpec(keySchema, orderingOrdinals = Seq(0, 1))
+      val stateSchemaInfo = Some(StateSchemaInfo(keySchemaId = 24, valueSchemaId = 0))
+      val encoder = new AvroStateEncoder(rangeScanSpec, valueSchema, stateSchemaInfo)
 
-        // Encode remaining key (non-ordering columns)
-        // For range scan, the remaining key schema only contains columns NOT in orderingOrdinals
-        val remainingKeySchema = StructType(Seq(
-          StructField("k3", DoubleType)  // Only the non-ordering column
-        ))
-        val remainingKeyProj = UnsafeProjection.create(remainingKeySchema)
-        val remainingKeyRow = remainingKeyProj.apply(InternalRow(3.14))
-        val encodedRemainingKey = encoder.encodeRemainingKey(remainingKeyRow)
+      // Encode remaining key (non-ordering columns)
+      // For range scan, the remaining key schema only contains columns NOT in orderingOrdinals
+      val remainingKeySchema = StructType(Seq(
+        StructField("k3", DoubleType)  // Only the non-ordering column
+      ))
+      val remainingKeyProj = UnsafeProjection.create(remainingKeySchema)
+      val remainingKeyRow = remainingKeyProj.apply(InternalRow(3.14))
+      val encodedRemainingKey = encoder.encodeRemainingKey(remainingKeyRow)
 
-        // Verify schema ID in remaining key bytes
-        val decodedSchemaIdRow = encoder.decodeStateSchemaIdRow(encodedRemainingKey)
-        assert(decodedSchemaIdRow.schemaId === 24,
-          "Schema ID not preserved in range scan remaining key encoding")
+      // Verify schema ID in remaining key bytes
+      val decodedSchemaIdRow = encoder.decodeStateSchemaIdRow(encodedRemainingKey)
+      assert(decodedSchemaIdRow.schemaId === 24,
+        "Schema ID not preserved in range scan remaining key encoding")
 
-        // Verify we can decode the remaining key correctly
-        // The decoded row should only have the non-ordering column (k3)
-        val decodedRemainingKey = encoder.decodeRemainingKey(encodedRemainingKey)
-        assert(decodedRemainingKey.getDouble(0) === 3.14,
-          "Data not preserved in range scan remaining key encoding")
+      // Verify we can decode the remaining key correctly
+      // The decoded row should only have the non-ordering column (k3)
+      val decodedRemainingKey = encoder.decodeRemainingKey(encodedRemainingKey)
+      assert(decodedRemainingKey.getDouble(0) === 3.14,
+        "Data not preserved in range scan remaining key encoding")
 
-        // Test the range scan key portion (ordering columns)
-        val rangeScanKeySchema = StructType(Seq(
-          StructField("k1", IntegerType),
-          StructField("k2", LongType)
-        ))
-        val rangeScanProj = UnsafeProjection.create(rangeScanKeySchema)
-        val rangeScanRow = rangeScanProj.apply(InternalRow(42, 123L))
-        val encodedRangeScan = encoder.encodePrefixKeyForRangeScan(rangeScanRow)
+      // Test the range scan key portion (ordering columns)
+      val rangeScanKeySchema = StructType(Seq(
+        StructField("k1", IntegerType),
+        StructField("k2", LongType)
+      ))
+      val rangeScanProj = UnsafeProjection.create(rangeScanKeySchema)
+      val rangeScanRow = rangeScanProj.apply(InternalRow(42, 123L))
+      val encodedRangeScan = encoder.encodePrefixKeyForRangeScan(rangeScanRow)
 
-        // Range scan portion should not have schema ID since it uses special encoding
-        val decodedRangeScan = encoder.decodePrefixKeyForRangeScan(encodedRangeScan)
-        assert(decodedRangeScan.getInt(0) === 42)
-        assert(decodedRangeScan.getLong(1) === 123L)
-      }
+      // Range scan portion should not have schema ID since it uses special encoding
+      val decodedRangeScan = encoder.decodePrefixKeyForRangeScan(encodedRangeScan)
+      assert(decodedRangeScan.getInt(0) === 42)
+      assert(decodedRangeScan.getLong(1) === 123L)
     }
   }
 
