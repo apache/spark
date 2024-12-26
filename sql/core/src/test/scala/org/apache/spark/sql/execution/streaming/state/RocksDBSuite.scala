@@ -346,6 +346,51 @@ class RocksDBStateEncoderSuite extends SparkFunSuite {
     createTestEncoder(RangeKeyScanStateEncoderSpec(keySchema, orderingOrdinals = Seq(0, 1)))
   }
 
+  test("verify range scan encoding using all ordinals") {
+    val keySchema = StructType(Seq(
+      StructField("k1", IntegerType),
+      StructField("k2", LongType),
+      StructField("k3", DoubleType)
+    ))
+    val valueSchema = StructType(Seq(
+      StructField("v1", StringType)
+    ))
+
+    // Use all ordinals (0,1,2) for range scan
+    val rangeScanSpec = RangeKeyScanStateEncoderSpec(keySchema, orderingOrdinals = Seq(0, 1, 2))
+    val stateSchemaInfo = Some(StateSchemaInfo(keySchemaId = 24, valueSchemaId = 0))
+    val encoder = new AvroStateEncoder(rangeScanSpec, valueSchema, stateSchemaInfo)
+
+    // Test encoding range scan keys with all columns
+    val rangeScanSchema = keySchema  // Using full schema since all columns are ordering columns
+    val rangeScanProj = UnsafeProjection.create(rangeScanSchema)
+    val rangeScanRow = rangeScanProj.apply(InternalRow(42, 123L, 3.14))
+    val encodedRangeScan = encoder.encodePrefixKeyForRangeScan(rangeScanRow)
+
+    // Verify range scan decoding with all columns
+    val decodedRangeScan = encoder.decodePrefixKeyForRangeScan(encodedRangeScan)
+    assert(decodedRangeScan.getInt(0) === 42)
+    assert(decodedRangeScan.getLong(1) === 123L)
+    assert(decodedRangeScan.getDouble(2) === 3.14)
+
+    // Since all columns are used in range scan, remaining key should be empty
+    // but still contain schema information
+    val emptyKeySchema = StructType(Seq.empty)
+    val emptyKeyProj = UnsafeProjection.create(emptyKeySchema)
+    val emptyKeyRow = emptyKeyProj.apply(InternalRow.empty)
+    val encodedRemainingKey = encoder.encodeRemainingKey(emptyKeyRow)
+
+    // Verify schema ID is preserved in remaining key portion
+    val decodedSchemaIdRow = encoder.decodeStateSchemaIdRow(encodedRemainingKey)
+    assert(decodedSchemaIdRow.schemaId === 24,
+      "Schema ID not preserved in range scan remaining key encoding")
+
+    // Verify remaining key decoding (should be empty)
+    val decodedRemainingKey = encoder.decodeRemainingKey(encodedRemainingKey)
+    assert(decodedRemainingKey.numFields === 0,
+      "Remaining key should be empty when all columns are used for range scan")
+  }
+
   test("verify schema ID handling in prefix and range scan key encoding") {
     val keySchema = StructType(Seq(
       StructField("k1", IntegerType),
