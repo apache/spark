@@ -382,7 +382,7 @@ object CTESubstitution extends Rule[LogicalPlan] {
       case u @ UnresolvedRelation(Seq(table), _, _) =>
         val resolved = resolveWithCTERelations(table, alwaysInline,
           (recursiveCTERelation ++ cteRelations).toSeq, u)
-        recursionFound = resolved._2
+        recursionFound = recursionFound || resolved._2
         resolved._1
 
       case p: PlanWithUnresolvedIdentifier =>
