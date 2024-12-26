@@ -1509,7 +1509,6 @@ class RangeKeyScanStateEncoder(
     }
   }
 
-
   override def encodePrefixKey(prefixKey: UnsafeRow): Array[Byte] = {
     // First encode the range scan ordered prefix
     val rangeScanKeyEncoded = dataEncoder.encodePrefixKeyForRangeScan(prefixKey)
@@ -1660,7 +1659,6 @@ class MultiValuedStateEncoder(
       Seq().iterator
     } else {
       new Iterator[UnsafeRow] {
-
         private var pos: Int = Platform.BYTE_ARRAY_OFFSET
         private val maxPos = Platform.BYTE_ARRAY_OFFSET + valueBytes.length
 
@@ -1680,7 +1678,6 @@ class MultiValuedStateEncoder(
           )
           pos += numBytes
           pos += 1 // eat the delimiter character
-
           dataEncoder.decodeValue(encodedValue)
         }
       }
