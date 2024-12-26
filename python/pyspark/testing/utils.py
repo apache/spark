@@ -97,6 +97,9 @@ flameprof_requirement_message = None if have_flameprof else "No module named 'fl
 have_jinja2 = have_package("jinja2")
 jinja2_requirement_message = None if have_jinja2 else "No module named 'jinja2'"
 
+have_openpyxl = have_package("openpyxl")
+openpyxl_requirement_message = None if have_openpyxl else "No module named 'openpyxl'"
+
 pandas_requirement_message = None
 try:
     from pyspark.sql.pandas.utils import require_minimum_pandas_version
