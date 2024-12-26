@@ -207,6 +207,7 @@ object CTESubstitution extends Rule[LogicalPlan] {
     var firstSubstituted: Option[LogicalPlan] = None
     val newPlan = plan.resolveOperatorsDownWithPruning(
         _.containsAnyPattern(UNRESOLVED_WITH, PLAN_EXPRESSION)) {
+      // allowRecursion flag is set to `True` by the parser if the `RECURSIVE` keyword is used.
       case cte @ UnresolvedWith(child: LogicalPlan, relations, allowRecursion) =>
         if (allowRecursion && forceInline) {
           cte.failAnalysis(
@@ -268,38 +269,29 @@ object CTESubstitution extends Rule[LogicalPlan] {
         //     SELECT * FROM t1
         //   )
         // SELECT * FROM t2
-        // t3 should resolve the t1 to `SELECT 2` instead of `SELECT 1`.
+        // t3 should resolve the t1 to `SELECT 2` ("inner" t1) instead of `SELECT 1`.
         //
-        // When recursion allowed:
-        // - don't add current definition to outer definitions of `traverseAndSubstituteCTE()` to
-        //   prevent recursion inside inner CTEs.
-        //   E.g. the following query will not resolve `t1` within `t2`:
-        //   WITH RECURSIVE
-        //     t1 AS (
-        //       SELECT 1 AS level
-        //       UNION (
-        //         WITH t2 AS (SELECT level + 1 FROM t1 WHERE level < 10)
-        //         SELECT * FROM t2
-        //       )
-        //     )
-        //   SELECT * FROM t1
-        // - remove definitions that conflict with current relation `name` from outer definitions of
-        //   `traverseAndSubstituteCTE()` to prevent weird resolutions.
-        //   E.g. we don't want to resolve `t1` within `t3` to `SELECT 1`:
-        //   WITH
-        //     t1 AS (SELECT 1),
-        //     t2 AS (
-        //       WITH RECURSIVE
-        //         t1 AS (
-        //           SELECT 1 AS level
-        //           UNION (
-        //             WITH t3 AS (SELECT level + 1 FROM t1 WHERE level < 10)
-        //             SELECT * FROM t3
-        //           )
-        //         )
-        //       SELECT * FROM t1
-        //     )
-        //   SELECT * FROM t2
+        // When recursion allowed (RECURSIVE keyword used):
+        // Consider following example:
+        //  WITH
+        //    t1 AS (SELECT 1),
+        //    t2 AS (
+        //      WITH RECURSIVE
+        //        t1 AS (
+        //          SELECT 1 AS level
+        //          UNION (
+        //            WITH t3 AS (SELECT level + 1 FROM t1 WHERE level < 10)
+        //            SELECT * FROM t3
+        //          )
+        //        )
+        //      SELECT * FROM t1
+        //    )
+        //  SELECT * FROM t2
+        // t1 reference within t3 would initially resolve to outer `t1` (SELECT 1), as the inner t1
+        // is not yet known. Therefore, we need to remove definitions that conflict with current
+        // relation `name` from the list of `outerCTEDefs` entering `traverseAndSubstituteCTE()`.
+        // NOTE: It will be recognized later in the code that this is actually a self-reference
+        // (reference to the inner t1).
         val nonConflictingCTERelations = if (allowRecursion) {
           resolvedCTERelations.filterNot {
             case (cteName, cteDef) => cteDef.conf.resolver(cteName, name)
