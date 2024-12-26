@@ -265,11 +265,13 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       summary = "")
   }
 
-  def ansiDateTimeParseError(e: Exception): SparkDateTimeException = {
+  def ansiDateTimeParseError(e: Exception, suggestedFunc: String): SparkDateTimeException = {
     new SparkDateTimeException(
       errorClass = "CANNOT_PARSE_TIMESTAMP",
       messageParameters = Map(
-        "message" -> e.getMessage),
+        "message" -> e.getMessage,
+        "func" -> toSQLId(suggestedFunc)
+      ),
       context = Array.empty,
       summary = "")
   }

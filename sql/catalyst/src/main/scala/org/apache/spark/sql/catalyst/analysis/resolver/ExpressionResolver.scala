@@ -64,11 +64,13 @@ import org.apache.spark.sql.types.MetadataBuilder
  *   operators which are nested in expressions.
  * @param scopes [[NameScopeStack]] to resolve the expression tree in the correct scope.
  * @param functionResolution [[FunctionResolution]] to resolve function expressions.
+ * @param planLogger [[PlanLogger]] to log expression tree resolution events.
  */
 class ExpressionResolver(
     resolver: Resolver,
     scopes: NameScopeStack,
-    functionResolution: FunctionResolution)
+    functionResolution: FunctionResolution,
+    planLogger: PlanLogger)
     extends TreeNodeResolver[Expression, Expression]
     with ProducesUnresolvedSubtree
     with ResolvesExpressionChildren
@@ -118,7 +120,9 @@ class ExpressionResolver(
    * In this case `IN` is an expression and `SELECT 1` is a nested operator tree for which
    * the [[ExpressionResolver]] would invoke the [[Resolver]].
    */
-  override def resolve(unresolvedExpression: Expression): Expression =
+  override def resolve(unresolvedExpression: Expression): Expression = {
+    planLogger.logExpressionTreeResolutionEvent(unresolvedExpression, "Unresolved expression tree")
+
     if (unresolvedExpression
         .getTagValue(ExpressionResolver.SINGLE_PASS_SUBTREE_BOUNDARY)
         .nonEmpty) {
@@ -126,7 +130,7 @@ class ExpressionResolver(
     } else {
       throwIfNodeWasResolvedEarlier(unresolvedExpression)
 
-      val resolvedExpr = unresolvedExpression match {
+      val resolvedExpression = unresolvedExpression match {
         case unresolvedBinaryArithmetic: BinaryArithmetic =>
           binaryArithmeticResolver.resolve(unresolvedBinaryArithmetic)
         case unresolvedExtractANSIIntervalDays: ExtractANSIIntervalDays =>
@@ -157,10 +161,13 @@ class ExpressionResolver(
           }
       }
 
-      markNodeAsResolved(resolvedExpr)
+      markNodeAsResolved(resolvedExpression)
 
-      resolvedExpr
+      planLogger.logExpressionTreeResolution(unresolvedExpression, resolvedExpression)
+
+      resolvedExpression
     }
+  }
 
   private def resolveNamedExpression(
       unresolvedNamedExpression: Expression,
