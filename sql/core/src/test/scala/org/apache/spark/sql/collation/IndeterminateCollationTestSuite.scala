@@ -95,16 +95,13 @@ class IndeterminateCollationTestSuite extends QueryTest with SharedSparkSession 
         "array(c1 || c2)",
         "map('a', c1 || c2)",
         "named_struct('f1', c1 || c2, 'f2', c2)",
-        "coalesce(c1 || c2, c2)"
-      )
+        "coalesce(c1 || c2, c2)")
 
       expressions.foreach { expr =>
         sql(s"SELECT $expr FROM $testTableName").collect()
       }
 
-      checkAnswer(
-        sql(s"SELECT COLLATION(c1 || c2) FROM $testTableName"),
-        Seq(Row("null")))
+      checkAnswer(sql(s"SELECT COLLATION(c1 || c2) FROM $testTableName"), Seq(Row("null")))
     }
   }
 
@@ -122,8 +119,7 @@ class IndeterminateCollationTestSuite extends QueryTest with SharedSparkSession 
         "INITCAP(c1 || c2) = 'Ab'",
         "FIND_IN_SET(c1 || c2, 'a,b')",
         "INSTR(c1 || c2, c1)",
-        "LOCATE(c1, c1 || c2)"
-      )
+        "LOCATE(c1, c1 || c2)")
 
       expressions.foreach { expr =>
         assertIndeterminateCollationInExpressionError {
@@ -137,9 +133,7 @@ class IndeterminateCollationTestSuite extends QueryTest with SharedSparkSession 
     withTestTable {
       sql(s"INSERT INTO $testTableName VALUES ('a', 'b')")
 
-      val expressions = Seq(
-        "c1 || c2 IN ('a')",
-      )
+      val expressions = Seq("c1 || c2 IN ('a')")
 
       expressions.foreach { expr =>
         assertRuntimeIndeterminateCollationError {
@@ -177,8 +171,7 @@ class IndeterminateCollationTestSuite extends QueryTest with SharedSparkSession 
              |""".stripMargin)
       }
 
-      assertIndeterminateCollationInSchemaError("arr.element", "map.value", "struct.f1")(
-        sql(s"""
+      assertIndeterminateCollationInSchemaError("arr.element", "map.value", "struct.f1")(sql(s"""
              |CREATE TABLE t
              |USING $dataSource
              |AS SELECT

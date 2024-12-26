@@ -39,7 +39,7 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
     assert(INDETERMINATE_COLLATION_ID == -1)
     val indeterminate = fetchCollation(INDETERMINATE_COLLATION_ID)
     assert(indeterminate.collationName == "null")
-    assert(indeterminate.provider == "spark")
+    assert(indeterminate.provider == "null")
     assert(indeterminate.version == null)
 
     assert(UTF8_BINARY_COLLATION_ID == 0)
