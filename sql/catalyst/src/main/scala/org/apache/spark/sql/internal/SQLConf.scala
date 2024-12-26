@@ -4938,6 +4938,14 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val PRESERVE_CHAR_VARCHAR_TYPE_INFO = buildConf("spark.sql.preserveCharVarcharTypeInfo")
+    .doc("When true, Spark does not replace CHAR/VARCHAR types the STRING type, which is the " +
+      "default behavior of Spark 3.0 and earlier versions. This means the length checks for " +
+      "CHAR/VARCHAR types is enforced and CHAR type is also properly padded.")
+    .version("4.0.0")
+    .booleanConf
+    .createWithDefault(false)
+
   val READ_SIDE_CHAR_PADDING = buildConf("spark.sql.readSideCharPadding")
     .doc("When true, Spark applies string padding when reading CHAR type columns/fields, " +
       "in addition to the write-side padding. This config is true by default to better enforce " +
@@ -6342,6 +6350,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
     StaticSQLConf.DISABLED_JDBC_CONN_PROVIDER_LIST)
 
   def charVarcharAsString: Boolean = getConf(SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING)
+
+  def preserveCharVarcharTypeInfo: Boolean = getConf(SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO)
 
   def readSideCharPadding: Boolean = getConf(SQLConf.READ_SIDE_CHAR_PADDING)
 
