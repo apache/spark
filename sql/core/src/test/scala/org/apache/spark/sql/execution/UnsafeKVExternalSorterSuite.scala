@@ -242,7 +242,7 @@ class UnsafeKVExternalSorterSuite extends SparkFunSuite with SharedSparkSession 
     try {
       val context = new TaskContextImpl(0, 0, 0, 0, 0, 1, taskMemoryManager, new Properties(), null)
       TaskContext.setTaskContext(context)
-      val expectedSpillSize = map.getTotalMemoryConsumption
+      val expectedSpillSize = expectedSpillSizeForMapWithDuplicateKeys(map)
       val sorter = new UnsafeKVExternalSorter(
         schema,
         schema,
@@ -267,7 +267,8 @@ class UnsafeKVExternalSorterSuite extends SparkFunSuite with SharedSparkSession 
     try {
       val context = new TaskContextImpl(0, 0, 0, 0, 0, 1, taskMemoryManager, new Properties(), null)
       TaskContext.setTaskContext(context)
-      val expectedSpillSize = map1.getTotalMemoryConsumption + map2.getTotalMemoryConsumption
+      val expectedSpillSize = expectedSpillSizeForMapWithDuplicateKeys(map1) +
+        expectedSpillSizeForMapWithDuplicateKeys(map2)
       val sorter1 = new UnsafeKVExternalSorter(
         schema,
         schema,
@@ -309,4 +310,10 @@ class UnsafeKVExternalSorterSuite extends SparkFunSuite with SharedSparkSession 
     }
     map
   }
+
+  private def expectedSpillSizeForMapWithDuplicateKeys(map: BytesToBytesMap): Long = {
+    val internalArrayMemoryUsed = Option(map.getArray).map(_.memoryBlock().size()).getOrElse(0L)
+    map.getTotalMemoryConsumption - internalArrayMemoryUsed
+  }
+
 }
