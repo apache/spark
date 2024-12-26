@@ -41,7 +41,7 @@ on:
         description: Additional environment variables to set when running the tests. Should be in JSON format.
         required: false
         type: string
-        default: '{}'
+        default: '{"PYSPARK_IMAGE_TO_TEST": "python-311", "PYTHON_TO_TEST": "python3.11"}'
       jobs:
         description: >-
           Jobs to run, and should be in JSON format. The values should be matched with the job's key defined
@@ -55,7 +55,6 @@ jobs:
     runs-on: ubuntu-latest
     env:
       GITHUB_PREV_SHA: ${{ github.event.before }}
-      PYSPARK_IMAGE_TO_TEST: ''
     outputs:
       required: ${{ steps.set-outputs.outputs.required }}
       image_url: ${{ steps.infra-image-outputs.outputs.image_url }}
@@ -135,6 +134,28 @@ jobs:
           precondition="${precondition//$'\n'/}"
           echo "required=$precondition" >> $GITHUB_OUTPUT
         fi
+    - name: Check envs
+      id: check-envs
+      if: inputs.branch != 'branch-3.5'
+      env: ${{ fromJSON(inputs.envs) }}
+      run: |
+        if [[ "${{ fromJson(steps.set-outputs.outputs.required).pyspark }}"  == 'true' ]]; then
+          if [[ "${{ env.PYSPARK_IMAGE_TO_TEST }}" == "" ]]; then
+            echo "PYSPARK_IMAGE_TO_TEST is required when pyspark is enabled."
+            exit 1
+          fi
+          PYSPARK_IMAGE_PATH="dev/spark-test-image/${{ env.PYSPARK_IMAGE_TO_TEST }}/Dockerfile"
+          if [ -f $PYSPARK_IMAGE_PATH ]; then
+            echo "Dockerfile $PYSPARK_IMAGE_PATH exists."
+          else
+            echo "Dockerfile $PYSPARK_IMAGE_PATH does NOT exist."
+            exit 1
+          fi
+          if [[ "${{ env.PYTHON_TO_TEST }}" == "" ]]; then
+            echo "PYTHON_TO_TEST is required when pyspark is enabled."
+            exit 1
+          fi
+        fi
     - name: Generate infra image URL
       id: infra-image-outputs
       run: |
@@ -192,11 +213,7 @@ jobs:
           echo "image_docs_url_link=${{ steps.infra-image-docs-outputs.outputs.image_docs_url }}" >> $GITHUB_OUTPUT
           echo "image_lint_url_link=${{ steps.infra-image-lint-outputs.outputs.image_lint_url }}" >> $GITHUB_OUTPUT
           echo "image_sparkr_url_link=${{ steps.infra-image-sparkr-outputs.outputs.image_sparkr_url }}" >> $GITHUB_OUTPUT
-          if [[ "${{ env.PYSPARK_IMAGE_TO_TEST }}" != "" ]]; then
-            echo "image_pyspark_url_link=${{ steps.infra-image-pyspark-outputs.outputs.image_pyspark_url }}" >> $GITHUB_OUTPUT
-          else
-            echo "image_pyspark_url_link=${{ steps.infra-image-outputs.outputs.image_url }}" >> $GITHUB_OUTPUT
-          fi
+          echo "image_pyspark_url_link=${{ steps.infra-image-pyspark-outputs.outputs.image_pyspark_url }}" >> $GITHUB_OUTPUT
         fi
 
   # Build: build Spark and run the tests for specified modules.
@@ -340,7 +357,7 @@ jobs:
     - name: Install Python packages (Python 3.11)
       if: (contains(matrix.modules, 'sql') && !contains(matrix.modules, 'sql-')) || contains(matrix.modules, 'connect')
       run: |
-        python3.11 -m pip install 'numpy>=1.20.0' pyarrow pandas scipy unittest-xml-reporting 'lxml==4.9.4' 'grpcio==1.67.0' 'grpcio-status==1.67.0' 'protobuf==5.28.3'
+        python3.11 -m pip install 'numpy>=1.20.0' pyarrow pandas scipy unittest-xml-reporting 'lxml==4.9.4' 'grpcio==1.67.0' 'grpcio-status==1.67.0' 'protobuf==5.29.1'
         python3.11 -m pip list
     # Run the tests.
     - name: Run tests
@@ -376,12 +393,11 @@ jobs:
     if: >-
       fromJson(needs.precondition.outputs.required).pyspark == 'true' ||
       fromJson(needs.precondition.outputs.required).lint == 'true' ||
+      fromJson(needs.precondition.outputs.required).docs == 'true' ||
       fromJson(needs.precondition.outputs.required).sparkr == 'true'
     runs-on: ubuntu-latest
     permissions:
       packages: write
-    env:
-      PYSPARK_IMAGE_TO_TEST: ''
     steps:
       - name: Login to GitHub Container Registry
         uses: docker/login-action@v3
@@ -407,7 +423,8 @@ jobs:
         uses: docker/setup-qemu-action@v3
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
-      - name: Build and push
+      - name: Build and push for branch-3.5
+        if: inputs.branch == 'branch-3.5'
         id: docker_build
         uses: docker/build-push-action@v6
         with:
@@ -418,7 +435,7 @@ jobs:
           # Use the infra image cache to speed up
           cache-from: type=registry,ref=ghcr.io/apache/spark/apache-spark-github-action-image-cache:${{ inputs.branch }}
       - name: Build and push (Documentation)
-        if: hashFiles('dev/spark-test-image/docs/Dockerfile') != ''
+        if: ${{ inputs.branch != 'branch-3.5' && fromJson(needs.precondition.outputs.required).docs == 'true' && hashFiles('dev/spark-test-image/docs/Dockerfile') != '' }}
         id: docker_build_docs
         uses: docker/build-push-action@v6
         with:
@@ -429,7 +446,7 @@ jobs:
           # Use the infra image cache to speed up
           cache-from: type=registry,ref=ghcr.io/apache/spark/apache-spark-github-action-image-docs-cache:${{ inputs.branch }}
       - name: Build and push (Linter)
-        if: hashFiles('dev/spark-test-image/lint/Dockerfile') != ''
+        if: ${{ inputs.branch != 'branch-3.5' && fromJson(needs.precondition.outputs.required).lint == 'true' && hashFiles('dev/spark-test-image/lint/Dockerfile') != '' }}
         id: docker_build_lint
         uses: docker/build-push-action@v6
         with:
@@ -440,7 +457,7 @@ jobs:
           # Use the infra image cache to speed up
           cache-from: type=registry,ref=ghcr.io/apache/spark/apache-spark-github-action-image-lint-cache:${{ inputs.branch }}
       - name: Build and push (SparkR)
-        if: hashFiles('dev/spark-test-image/sparkr/Dockerfile') != ''
+        if: ${{ inputs.branch != 'branch-3.5' && fromJson(needs.precondition.outputs.required).sparkr == 'true' && hashFiles('dev/spark-test-image/sparkr/Dockerfile') != '' }}
         id: docker_build_sparkr
         uses: docker/build-push-action@v6
         with:
@@ -450,8 +467,8 @@ jobs:
             ${{ needs.precondition.outputs.image_sparkr_url }}
           # Use the infra image cache to speed up
           cache-from: type=registry,ref=ghcr.io/apache/spark/apache-spark-github-action-image-sparkr-cache:${{ inputs.branch }}
-      - name: Build and push (PySpark ${{ env.PYSPARK_IMAGE_TO_TEST }})
-        if: ${{ env.PYSPARK_IMAGE_TO_TEST }}
+      - name: Build and push (PySpark with ${{ env.PYSPARK_IMAGE_TO_TEST }})
+        if: ${{ inputs.branch != 'branch-3.5' && fromJson(needs.precondition.outputs.required).pyspark == 'true' && env.PYSPARK_IMAGE_TO_TEST != '' }}
         id: docker_build_pyspark
         env: ${{ fromJSON(inputs.envs) }}
         uses: docker/build-push-action@v6
@@ -511,7 +528,6 @@ jobs:
           - modules: ${{ fromJson(needs.precondition.outputs.required).pyspark-pandas != 'true' && 'pyspark-pandas-connect-part3' }}
     env:
       MODULES_TO_TEST: ${{ matrix.modules }}
-      PYTHON_TO_TEST: 'python3.11'
       HADOOP_PROFILE: ${{ inputs.hadoop }}
       HIVE_PROFILE: hive2.3
       # GitHub Actions' default miniconda to use in pip packaging test.
@@ -568,6 +584,7 @@ jobs:
         distribution: zulu
         java-version: ${{ matrix.java }}
     - name: List Python packages (${{ env.PYTHON_TO_TEST }})
+      if: ${{ env.PYTHON_TO_TEST != '' }}
       env: ${{ fromJSON(inputs.envs) }}
       shell: 'script -q -e -c "bash {0}"'
       run: |
@@ -726,7 +743,7 @@ jobs:
         python-version: '3.11'
     - name: Install dependencies for Python CodeGen check
       run: |
-        python3.11 -m pip install 'black==23.9.1' 'protobuf==5.28.3' 'mypy==1.8.0' 'mypy-protobuf==3.3.0'
+        python3.11 -m pip install 'black==23.9.1' 'protobuf==5.29.1' 'mypy==1.8.0' 'mypy-protobuf==3.3.0'
         python3.11 -m pip list
     - name: Python CodeGen check for branch-3.5
       if: inputs.branch == 'branch-3.5'

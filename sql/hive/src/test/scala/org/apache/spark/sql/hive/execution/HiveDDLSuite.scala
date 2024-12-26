@@ -34,7 +34,6 @@ import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces.PROP_OWNER
-import org.apache.spark.sql.errors.DataTypeErrors.toSQLType
 import org.apache.spark.sql.execution.command.{DDLSuite, DDLUtils}
 import org.apache.spark.sql.execution.datasources.orc.OrcCompressionCodec
 import org.apache.spark.sql.execution.datasources.parquet.{ParquetCompressionCodec, ParquetFooterReader}
@@ -167,17 +166,23 @@ class HiveDDLSuite
   }
 
   test("SPARK-46934: quote element name before parsing struct") {
-    withTable("t") {
-      sql("CREATE TABLE t USING hive AS SELECT STRUCT('a' AS `$a`, 1 AS b) q")
-      assert(spark.table("t").schema === CatalystSqlParser.parseTableSchema(
-        "q STRUCT<`$a`: STRING, b: INT>"))
-    }
+    val e = intercept[AnalysisException](
+      sql("CREATE TABLE t USING hive AS SELECT STRUCT('a' AS `$a`, 1 AS b) q"))
+    checkError(
+      exception = e,
+      condition = "_LEGACY_ERROR_TEMP_3065",
+      parameters = Map(
+        "clazz" -> "org.apache.hadoop.hive.ql.metadata.HiveException",
+        "msg" -> e.getCause.getMessage))
 
-    withTable("t") {
-      sql("CREATE TABLE t(q STRUCT<`$a`:INT, col2:STRING>, i1 INT) USING hive")
-      assert(spark.table("t").schema === CatalystSqlParser.parseTableSchema(
-        "q STRUCT<`$a`:INT, col2:STRING>, i1 INT"))
-    }
+    val e1 = intercept[AnalysisException](
+      sql("CREATE TABLE t(q STRUCT<`$a`:INT, col2:STRING>, i1 INT) USING hive"))
+    checkError(
+      exception = e1,
+      condition = "_LEGACY_ERROR_TEMP_3065",
+      parameters = Map(
+        "clazz" -> "org.apache.hadoop.hive.ql.metadata.HiveException",
+        "msg" -> e1.getCause.getMessage))
 
     withView("v") {
       spark.sql("CREATE VIEW v AS SELECT STRUCT('a' AS `a`, 1 AS b) q")
@@ -233,12 +238,26 @@ class HiveDDLSuite
     }
   }
 
-  test("SPARK-46934: alter table tests with nested types") {
+  test("SPARK-46934: alter datasource table tests with nested types") {
     withTable("t1") {
-      sql("CREATE TABLE t1 (q STRUCT<col1:INT, col2:STRING>, i1 INT) USING hive")
+      sql("CREATE TABLE t1 (q STRUCT<col1:INT, col2:STRING>, i1 INT) USING parquet")
       sql("ALTER TABLE t1 ADD COLUMNS (newcol1 STRUCT<`$col1`:STRING, col2:Int>)")
       assert(spark.table("t1").schema == CatalystSqlParser.parseTableSchema(
         "q STRUCT<col1:INT, col2:STRING>, i1 INT,newcol1 STRUCT<`$col1`:STRING, col2:Int>"))
+    }
+  }
+
+  test("SPARK-46934: alter hive table tests with nested types") {
+    withTable("t1") {
+      sql("CREATE TABLE t1 (q STRUCT<col1:INT, col2:STRING>, i1 INT) USING hive")
+      val e = intercept[AnalysisException](
+        sql("ALTER TABLE t1 ADD COLUMNS (newcol1 STRUCT<`$col1`:STRING, col2:Int>)"))
+      checkError(
+        exception = e,
+        condition = "_LEGACY_ERROR_TEMP_3065",
+        parameters = Map(
+          "clazz" -> "java.lang.IllegalArgumentException",
+          "msg" -> e.getCause.getMessage))
     }
   }
 
@@ -2849,38 +2868,18 @@ class HiveDDLSuite
   }
 
   test("SPARK-47101 checks if nested column names do not include invalid characters") {
-    // delimiter characters
-    Seq(",", ":").foreach { c =>
+    Seq(",", ":", ";", "^", "\\", "/", "%").foreach { c =>
       val typ = s"array<struct<`abc${c}xyz`:int>>"
-      // The regex is from HiveClientImpl.getSparkSQLDataType, please keep them in sync.
-      val replaced = typ.replaceAll("`", "").replaceAll("(?<=struct<|,)([^,<:]+)(?=:)", "`$1`")
       withTable("t") {
-        checkError(
-          exception = intercept[SparkException] {
+        val e = intercept[AnalysisException] {
             sql(s"CREATE TABLE t (a $typ) USING hive")
-          },
-          condition = "CANNOT_RECOGNIZE_HIVE_TYPE",
-          parameters = Map(
-            "fieldType" -> toSQLType(replaced),
-            "fieldName" -> "`a`")
-        )
-      }
-    }
-    // other special characters
-    Seq(";", "^", "\\", "/", "%").foreach { c =>
-      val typ = s"array<struct<`abc${c}xyz`:int>>"
-      val replaced = typ.replaceAll("`", "")
-      val msg = s"java.lang.IllegalArgumentException: Error: : expected at the position " +
-        s"16 of '$replaced' but '$c' is found."
-      withTable("t") {
+          }
         checkError(
-          exception = intercept[AnalysisException] {
-            sql(s"CREATE TABLE t (a $typ) USING hive")
-          },
+          exception = e,
           condition = "_LEGACY_ERROR_TEMP_3065",
           parameters = Map(
-            "clazz" -> "org.apache.hadoop.hive.ql.metadata.HiveException",
-            "msg" -> msg)
+            "clazz" -> e.getCause.getClass.getName,
+            "msg" -> e.getCause.getMessage)
         )
       }
     }

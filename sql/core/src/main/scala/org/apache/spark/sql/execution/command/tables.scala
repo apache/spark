@@ -242,7 +242,7 @@ case class AlterTableAddColumnsCommand(
 
     SchemaUtils.checkColumnNameDuplication(
       (colsWithProcessedDefaults ++ catalogTable.schema).map(_.name),
-      conf.caseSensitiveAnalysis)
+      sparkSession.sessionState.conf.caseSensitiveAnalysis)
     if (!conf.allowCollationsInMapKeys) {
       colsToAdd.foreach(col => SchemaUtils.checkNoCollationsInMapKeys(col.dataType))
     }
@@ -503,7 +503,7 @@ case class TruncateTableCommand(
         partLocations
       }
     val hadoopConf = spark.sessionState.newHadoopConf()
-    val ignorePermissionAcl = conf.truncateTableIgnorePermissionAcl
+    val ignorePermissionAcl = spark.sessionState.conf.truncateTableIgnorePermissionAcl
     locations.foreach { location =>
       if (location.isDefined) {
         val path = new Path(location.get)
@@ -1098,7 +1098,8 @@ case class DescribeColumnCommand(
 
     val catalogTable = catalog.getTempViewOrPermanentTableMetadata(table)
     val colStatsMap = catalogTable.stats.map(_.colStats).getOrElse(Map.empty)
-    val colStats = if (conf.caseSensitiveAnalysis) colStatsMap else CaseInsensitiveMap(colStatsMap)
+    val colStats = if (sparkSession.sessionState.conf.caseSensitiveAnalysis) colStatsMap
+      else CaseInsensitiveMap(colStatsMap)
     val cs = colStats.get(field.name)
 
     val comment = if (field.metadata.contains("comment")) {
@@ -1254,7 +1255,7 @@ case class ShowTablePropertiesCommand(
       Seq.empty[Row]
     } else {
       val catalogTable = catalog.getTableMetadata(table)
-      val properties = conf.redactOptions(catalogTable.properties)
+      val properties = sparkSession.sessionState.conf.redactOptions(catalogTable.properties)
       propertyKey match {
         case Some(p) =>
           val propValue = properties

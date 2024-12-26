@@ -398,6 +398,7 @@ case class CatalogTable(
     stats: Option[CatalogStatistics] = None,
     viewText: Option[String] = None,
     comment: Option[String] = None,
+    collation: Option[String] = None,
     unsupportedFeatures: Seq[String] = Seq.empty,
     tracksPartitionsInCatalog: Boolean = false,
     schemaPreservesCase: Boolean = true,
@@ -611,6 +612,7 @@ case class CatalogTable(
       "Bucket Spec" -> bucketSpec.map(
         spec => JObject(spec.toJsonLinkedHashMap.toSeq: _*)).getOrElse(JNull),
       "Comment" -> comment.map(JString).getOrElse(JNull),
+      "Collation" -> collation.map(JString).getOrElse(JNull),
       "View Text" -> (
         if (tableType == CatalogTableType.VIEW) viewText.map(JString).getOrElse(JNull) else JNull),
       "View Original Text" -> (
