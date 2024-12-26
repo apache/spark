@@ -21,7 +21,6 @@ import java.net.{URI, URISyntaxException}
 
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
-import scala.util.Try
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.fs.{FileContext, FsConstants, Path}
@@ -32,7 +31,7 @@ import org.json4s.jackson.JsonMethods._
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.{SQLConfHelper, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
-import org.apache.spark.sql.catalyst.catalog._
+import org.apache.spark.sql.catalyst.catalog.{CatalogSerializer, _}
 import org.apache.spark.sql.catalyst.catalog.CatalogTableType._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.Attribute
@@ -626,7 +625,7 @@ case class DescribeTableCommand(
     partitionSpec: TablePartitionSpec,
     isExtended: Boolean,
     override val output: Seq[Attribute])
-  extends DescribeCommandBase {
+  extends DescribeCommandBase with CatalogSerializer {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val result = new ArrayBuffer[Row]
@@ -706,9 +705,9 @@ case class DescribeTableCommand(
     )
     append(buffer, "", "", "")
     append(buffer, "# Detailed Table Information", "", "")
-    table.toLinkedHashMap.filter { case (k, _) => !excludedTableInfo.contains(k) }.foreach {
-      s => append(buffer, s._1, s._2, "")
-    }
+    toLinkedHashMap(table.toJsonLinkedHashMap).filter {
+      case (k, _) => !excludedTableInfo.contains(k)
+    }.foreach { s => append(buffer, s._1, s._2, "")}
   }
 
   private def describeDetailedPartitionInfo(
@@ -738,15 +737,18 @@ case class DescribeTableCommand(
     append(buffer, "# Detailed Partition Information", "", "")
     append(buffer, "Database", table.database, "")
     append(buffer, "Table", tableIdentifier.table, "")
-    partition.toLinkedHashMap.foreach(s => append(buffer, s._1, s._2, ""))
+    toLinkedHashMap(partition.toJsonLinkedHashMap)
+      .foreach(s => append(buffer, s._1, s._2, ""))
     append(buffer, "", "", "")
     append(buffer, "# Storage Information", "", "")
     table.bucketSpec match {
       case Some(spec) =>
-        spec.toLinkedHashMap.foreach(s => append(buffer, s._1, s._2, ""))
+        toLinkedHashMap(spec.toJsonLinkedHashMap)
+          .foreach(s => append(buffer, s._1, s._2, ""))
       case _ =>
     }
-    table.storage.toLinkedHashMap.foreach(s => append(buffer, s._1, s._2, ""))
+    toLinkedHashMap(table.storage.toJsonLinkedHashMap)
+      .foreach(s => append(buffer, s._1, s._2, ""))
   }
 }
 
@@ -960,29 +962,13 @@ case class DescribeTableJsonCommand(
 
     table.bucketSpec match {
       case Some(spec) =>
-        spec.toJsonLinkedHashMap.map { case (key, value) =>
-          val jsonValue: JValue =
-            Try(parse(value)) match {
-              case scala.util.Success(parsedJson) =>
-                parsedJson
-              case scala.util.Failure(_) =>
-                JString(value)
-            }
-
-          addKeyValueToJson(buffer, key, jsonValue)
+        spec.toJsonLinkedHashMap.foreach { case (key, value) =>
+          addKeyValueToJson(buffer, key, value)
         }
       case _ =>
     }
-    table.storage.toJsonLinkedHashMap.map { case (key, value) =>
-      val jsonValue: JValue =
-        Try(parse(value)) match {
-          case scala.util.Success(parsedJson) =>
-            parsedJson
-          case scala.util.Failure(_) =>
-            JString(value)
-        }
-
-      addKeyValueToJson(buffer, key, jsonValue)
+    table.storage.toJsonLinkedHashMap.foreach { case (key, value) =>
+      addKeyValueToJson(buffer, key, value)
     }
 
     val filteredTableInfo = table.toJsonLinkedHashMap.filterNot { case (key, _) =>
@@ -990,15 +976,7 @@ case class DescribeTableJsonCommand(
     }
 
     filteredTableInfo.map { case (key, value) =>
-      val jsonValue: JValue =
-        Try(parse(value)) match {
-          case scala.util.Success(parsedJson) =>
-            parsedJson
-          case scala.util.Failure(_) =>
-            JString(value)
-        }
-
-      addKeyValueToJson(buffer, key, jsonValue)
+      addKeyValueToJson(buffer, key, value)
     }
 
   }
@@ -1021,16 +999,7 @@ case class DescribeTableJsonCommand(
     val partition = catalog.getPartition(table, normalizedPartSpec)
 
     partition.toJsonLinkedHashMap.map { case (key, value) =>
-      // Try to parse the value as JSON if it's array-like or object-like
-      val jsonValue: JValue =
-        Try(parse(value)) match {
-          case scala.util.Success(parsedJson) =>
-            parsedJson
-          case scala.util.Failure(_) =>
-            JString(value)
-        }
-
-      addKeyValueToJson(buffer, key, jsonValue)
+      addKeyValueToJson(buffer, key, value)
     }
 
     val excludedTableInfo = Set("catalog", "schema", "database", "table", "partition_columns")
@@ -1040,42 +1009,18 @@ case class DescribeTableJsonCommand(
     }
 
     detailedInfo.map { case (key, value) =>
-      val jsonValue: JValue =
-        Try(parse(value)) match {
-          case scala.util.Success(parsedJson) =>
-            parsedJson
-          case scala.util.Failure(_) =>
-            JString(value)
-        }
-
-      addKeyValueToJson(buffer, key, jsonValue)
+      addKeyValueToJson(buffer, key, value)
     }
 
     metadata.bucketSpec match {
       case Some(spec) =>
         spec.toJsonLinkedHashMap.map { case (key, value) =>
-          val jsonValue: JValue =
-            Try(parse(value)) match {
-              case scala.util.Success(parsedJson) =>
-                parsedJson
-              case scala.util.Failure(_) =>
-                JString(value)
-            }
-
-          addKeyValueToJson(buffer, key, jsonValue)
+          addKeyValueToJson(buffer, key, value)
         }
       case _ =>
     }
     metadata.storage.toJsonLinkedHashMap.map { case (key, value) =>
-      val jsonValue: JValue =
-        Try(parse(value)) match {
-          case scala.util.Success(parsedJson) =>
-            parsedJson
-          case scala.util.Failure(_) =>
-            JString(value)
-        }
-
-      addKeyValueToJson(buffer, key, jsonValue)
+      addKeyValueToJson(buffer, key, value)
     }
   }
 }

@@ -19,11 +19,11 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.catalyst.CurrentUserContext.CURRENT_USER
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
+import org.apache.spark.sql.catalyst.catalog.{CatalogSerializer, CatalogStorageFormat, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.types.StructType
 
 
-class CatalogSuite extends AnalysisTest {
+class CatalogSuite extends AnalysisTest with CatalogSerializer {
 
   test("desc table when owner is set to null") {
     val table = CatalogTable(
@@ -33,7 +33,7 @@ class CatalogSuite extends AnalysisTest {
       owner = null,
       schema = new StructType().add("col1", "int").add("col2", "string"),
       provider = Some("parquet"))
-    table.toLinkedHashMap
+    toLinkedHashMap(table.toJsonLinkedHashMap)
   }
 
   test("SPARK-45454: Set table owner to current_user") {
