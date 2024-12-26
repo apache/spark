@@ -640,7 +640,7 @@ case class CatalogTable(
     map += "View Schema Mode" ->
       (if (SQLConf.get.viewSchemaBindingEnabled && tableType == CatalogTableType.VIEW)
         {JString(viewSchemaMode.toString)} else JNull)
-    map += "View Catalog And Namespace" ->
+    map += "View Catalog and Namespace" ->
       (if (viewCatalogAndNamespace.nonEmpty && tableType == CatalogTableType.VIEW) {
           import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
           JString(viewCatalogAndNamespace.quoted)

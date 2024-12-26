@@ -60,7 +60,7 @@ trait SQLQueryTestHelper extends Logging {
       .replaceAll("CTERelationDef \\d+,", s"CTERelationDef xxxx,")
       .replaceAll("CTERelationRef \\d+,", s"CTERelationRef xxxx,")
       .replaceAll("@\\w*,", s"@xxxxxxxx,")
-      .replaceAll("\\*\\(\\d+\\) ", "*") // remove the WholeStageCodegen codegenStageIds
+      .replaceAll("\\*\\(\\d+\\) ", "*")
   }
 
   protected def replaceNotIncludedMsgJson(line: String): String = {

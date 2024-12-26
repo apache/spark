@@ -613,7 +613,6 @@ abstract class DescribeCommandBase extends LeafRunnableCommand {
     buffer += Row(column, dataType, comment)
   }
 }
-
 /**
  * Command that looks like
  * {{{

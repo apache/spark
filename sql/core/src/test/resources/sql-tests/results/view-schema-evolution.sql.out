@@ -58,7 +58,7 @@ Type                	VIEW
 View Text           	SELECT * FROM t     	                    
 View Original Text  	SELECT * FROM t     	                    
 View Schema Mode    	EVOLUTION           	                    
-View Catalog And Namespace	spark_catalog.default	                    
+View Catalog and Namespace	spark_catalog.default	                    
 View Query Output Columns	[`c1`, `c2`]
 
 
@@ -113,7 +113,7 @@ Type                	VIEW
 View Text           	SELECT * FROM t     	                    
 View Original Text  	SELECT * FROM t     	                    
 View Schema Mode    	EVOLUTION           	                    
-View Catalog And Namespace	spark_catalog.default	                    
+View Catalog and Namespace	spark_catalog.default	                    
 View Query Output Columns	[`c4`, `c5`]
 
 
@@ -169,7 +169,7 @@ Type                	VIEW
 View Text           	SELECT * FROM t     	                    
 View Original Text  	SELECT * FROM t     	                    
 View Schema Mode    	EVOLUTION           	                    
-View Catalog And Namespace	spark_catalog.default	                    
+View Catalog and Namespace	spark_catalog.default	                    
 View Query Output Columns	[`c4`, `c5`, `c6`]
 
 
@@ -232,7 +232,7 @@ Type                	VIEW
 View Text           	SELECT * FROM t     	                    
 View Original Text  	SELECT * FROM t     	                    
 View Schema Mode    	EVOLUTION           	                    
-View Catalog And Namespace	spark_catalog.default	                    
+View Catalog and Namespace	spark_catalog.default	                    
 View Query Output Columns	[`c1`, `c2`]
 
 
@@ -278,7 +278,7 @@ Type                	VIEW
 View Text           	SELECT * FROM t     	                    
 View Original Text  	SELECT * FROM t     	                    
 View Schema Mode    	EVOLUTION           	                    
-View Catalog And Namespace	spark_catalog.default	                    
+View Catalog and Namespace	spark_catalog.default	                    
 View Query Output Columns	[`c1`]
 
 
@@ -341,7 +341,7 @@ Type                	VIEW
 View Text           	SELECT * FROM t     	                    
 View Original Text  	SELECT * FROM t     	                    
 View Schema Mode    	TYPE EVOLUTION      	                    
-View Catalog And Namespace	spark_catalog.default	                    
+View Catalog and Namespace	spark_catalog.default	                    
 View Query Output Columns	[`c1`, `c2`]
 
 
@@ -396,7 +396,7 @@ Type                	VIEW
 View Text           	SELECT * FROM t     	                    
 View Original Text  	SELECT * FROM t     	                    
 View Schema Mode    	TYPE EVOLUTION      	                    
-View Catalog And Namespace	spark_catalog.default	                    
+View Catalog and Namespace	spark_catalog.default	                    
 View Query Output Columns	[`c1`, `c2`]
 
 
@@ -451,7 +451,7 @@ Type                	VIEW
 View Text           	SELECT * FROM t     	                    
 View Original Text  	SELECT * FROM t     	                    
 View Schema Mode    	TYPE EVOLUTION      	                    
-View Catalog And Namespace	spark_catalog.default	                    
+View Catalog and Namespace	spark_catalog.default	                    
 View Query Output Columns	[`c1`, `c2`]
 
 
@@ -514,7 +514,7 @@ Type                	VIEW
 View Text           	SELECT * FROM t     	                    
 View Original Text  	SELECT * FROM t     	                    
 View Schema Mode    	TYPE EVOLUTION      	                    
-View Catalog And Namespace	spark_catalog.default	                    
+View Catalog and Namespace	spark_catalog.default	                    
 View Query Output Columns	[`c1`, `c2`]
 
 
@@ -572,7 +572,7 @@ Type                	VIEW
 View Text           	SELECT * FROM t     	                    
 View Original Text  	SELECT * FROM t     	                    
 View Schema Mode    	TYPE EVOLUTION      	                    
-View Catalog And Namespace	spark_catalog.default	                    
+View Catalog and Namespace	spark_catalog.default	                    
 View Query Output Columns	[`c1`, `c2`]
 
 
@@ -630,7 +630,7 @@ Type                	VIEW
 View Text           	SELECT * FROM t     	                    
 View Original Text  	SELECT * FROM t     	                    
 View Schema Mode    	TYPE EVOLUTION      	                    
-View Catalog And Namespace	spark_catalog.default	                    
+View Catalog and Namespace	spark_catalog.default	                    
 View Query Output Columns	[`c1`, `c2`]
 
 
@@ -677,7 +677,7 @@ Type                	VIEW
 View Text           	SELECT * FROM t     	                    
 View Original Text  	SELECT * FROM t     	                    
 View Schema Mode    	TYPE EVOLUTION      	                    
-View Catalog And Namespace	spark_catalog.default	                    
+View Catalog and Namespace	spark_catalog.default	                    
 View Query Output Columns	[`c1`, `c2`]
 
 
@@ -708,7 +708,7 @@ Type                	VIEW
 View Text           	SELECT * FROM t     	                    
 View Original Text  	SELECT * FROM t     	                    
 View Schema Mode    	TYPE EVOLUTION      	                    
-View Catalog And Namespace	spark_catalog.default	                    
+View Catalog and Namespace	spark_catalog.default	                    
 View Query Output Columns	[`c1`, `c2`]
 
 
@@ -755,7 +755,7 @@ Type                	VIEW
 View Text           	SELECT * FROM t     	                    
 View Original Text  	SELECT * FROM t     	                    
 View Schema Mode    	TYPE EVOLUTION      	                    
-View Catalog And Namespace	spark_catalog.default	                    
+View Catalog and Namespace	spark_catalog.default	                    
 View Query Output Columns	[`c1`, `c2`]
 
 
@@ -786,7 +786,7 @@ Type                	VIEW
 View Text           	SELECT * FROM t     	                    
 View Original Text  	SELECT * FROM t     	                    
 View Schema Mode    	TYPE EVOLUTION      	                    
-View Catalog And Namespace	spark_catalog.default	                    
+View Catalog and Namespace	spark_catalog.default	                    
 View Query Output Columns	[`c1`, `c2`]
 
 
@@ -833,7 +833,7 @@ Type                	VIEW
 View Text           	SELECT * FROM t     	                    
 View Original Text  	SELECT * FROM t     	                    
 View Schema Mode    	TYPE EVOLUTION      	                    
-View Catalog And Namespace	spark_catalog.default	                    
+View Catalog and Namespace	spark_catalog.default	                    
 View Query Output Columns	[`c1`, `c2`]
 
 
@@ -864,7 +864,7 @@ Type                	VIEW
 View Text           	SELECT * FROM t     	                    
 View Original Text  	SELECT * FROM t     	                    
 View Schema Mode    	EVOLUTION           	                    
-View Catalog And Namespace	spark_catalog.default	                    
+View Catalog and Namespace	spark_catalog.default	                    
 View Query Output Columns	[`c1`, `c2`]
 
 
@@ -911,7 +911,7 @@ Type                	VIEW
 View Text           	SELECT * FROM t     	                    
 View Original Text  	SELECT * FROM t     	                    
 View Schema Mode    	EVOLUTION           	                    
-View Catalog And Namespace	spark_catalog.default	                    
+View Catalog and Namespace	spark_catalog.default	                    
 View Query Output Columns	[`c1`, `c2`]
 
 
@@ -1093,7 +1093,7 @@ Type                	VIEW
 View Text           	SELECT * FROM t     	                    
 View Original Text  	SELECT * FROM t     	                    
 View Schema Mode    	EVOLUTION           	                    
-View Catalog And Namespace	spark_catalog.default	                    
+View Catalog and Namespace	spark_catalog.default	                    
 View Query Output Columns	[`c1`, `c2`]
 
 
