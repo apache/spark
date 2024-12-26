@@ -111,6 +111,7 @@ to return the metadata pertaining to a partition or column respectively.
       "serde_library": "<serde_library>",
       "inputformat": "<input_format>",
       "outputformt": "<output_format>",
+      "num_buckets": <num_buckets>,
       "bucket_columns": ["<col_name>"],
       "sort_columns": ["<col_name>"],
       "created_time": "<timestamp>",

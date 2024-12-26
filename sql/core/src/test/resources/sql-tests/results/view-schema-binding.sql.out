@@ -49,8 +49,8 @@ Type                	VIEW
 View Text           	SELECT * FROM t     	                    
 View Original Text  	SELECT * FROM t     	                    
 View Schema Mode    	BINDING             	                    
-View Catalog and Namespace	spark_catalog.default	                    
-View Query Output Columns	[c1]
+View Catalog And Namespace	spark_catalog.default	                    
+View Query Output Columns	[`c1`]
 
 
 -- !query
@@ -105,8 +105,8 @@ Type                	VIEW
 View Text           	SELECT * FROM t     	                    
 View Original Text  	SELECT * FROM t     	                    
 View Schema Mode    	BINDING             	                    
-View Catalog and Namespace	spark_catalog.default	                    
-View Query Output Columns	[c1]
+View Catalog And Namespace	spark_catalog.default	                    
+View Query Output Columns	[`c1`]
 
 
 -- !query
@@ -160,8 +160,8 @@ Type                	VIEW
 View Text           	SELECT * FROM t     	                    
 View Original Text  	SELECT * FROM t     	                    
 View Schema Mode    	BINDING             	                    
-View Catalog and Namespace	spark_catalog.default	                    
-View Query Output Columns	[c1, c2]
+View Catalog And Namespace	spark_catalog.default	                    
+View Query Output Columns	[`c1`, `c2`]
 
 
 -- !query
@@ -218,8 +218,8 @@ Type                	VIEW
 View Text           	SELECT * FROM t     	                    
 View Original Text  	SELECT * FROM t     	                    
 View Schema Mode    	BINDING             	                    
-View Catalog and Namespace	spark_catalog.default	                    
-View Query Output Columns	[c1, c2]
+View Catalog And Namespace	spark_catalog.default	                    
+View Query Output Columns	[`c1`, `c2`]
 
 
 -- !query
@@ -280,8 +280,8 @@ Type                	VIEW
 View Text           	SELECT * FROM t     	                    
 View Original Text  	SELECT * FROM t     	                    
 View Schema Mode    	BINDING             	                    
-View Catalog and Namespace	spark_catalog.default	                    
-View Query Output Columns	[c1]
+View Catalog And Namespace	spark_catalog.default	                    
+View Query Output Columns	[`c1`]
 
 
 -- !query
@@ -310,8 +310,8 @@ Type                	VIEW
 View Text           	SELECT * FROM t     	                    
 View Original Text  	SELECT * FROM t     	                    
 View Schema Mode    	BINDING             	                    
-View Catalog and Namespace	spark_catalog.default	                    
-View Query Output Columns	[c1]
+View Catalog And Namespace	spark_catalog.default	                    
+View Query Output Columns	[`c1`]
 
 
 -- !query
@@ -366,8 +366,8 @@ Type                	VIEW
 View Text           	SELECT * FROM t     	                    
 View Original Text  	SELECT * FROM t     	                    
 View Schema Mode    	BINDING             	                    
-View Catalog and Namespace	spark_catalog.default	                    
-View Query Output Columns	[c1]
+View Catalog And Namespace	spark_catalog.default	                    
+View Query Output Columns	[`c1`]
 
 
 -- !query

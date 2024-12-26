@@ -55,17 +55,31 @@ import org.apache.spark.util.ArrayImplicits._
  * Interface providing util to convert JValue to String representation of catalog entities.
  */
 trait CatalogSerializer {
-  def toLinkedHashMap(jsonMap: Map[String, JValue]): mutable.LinkedHashMap[String, String] = {
+  def toLinkedHashMap(jsonMap: mutable.LinkedHashMap[String, JValue]):
+  mutable.LinkedHashMap[String, String] = {
+    def removeWhitespace(str: String): String = {
+      str.replaceAll("\\s+$", "")
+    }
+
     val map = new mutable.LinkedHashMap[String, String]()
     jsonMap.foreach { case (key, jValue) =>
       val stringValue = jValue match {
-        case JString(value) => value
-        case JArray(values) => values.map(_.values).mkString("[", ", ", "]")
-        case JObject(fields) => fields.map { case (k, v) => s"$k=${v.values}" }
-          .mkString("[", ", ", "]")
+        case JString(value) => removeWhitespace(value)
+        case JArray(values) =>
+          values.map(_.values)
+            .map {
+              case str: String => quoteIdentifier(removeWhitespace(str))
+              case other => removeWhitespace(other.toString)
+            }
+            .mkString("[", ", ", "]")
+        case JObject(fields) =>
+          fields.map { case (k, v) =>
+            s"$k=${removeWhitespace(v.values.toString)}"
+          }
+            .mkString("[", ", ", "]")
         case JInt(value) => value.toString
         case JDouble(value) => value.toString
-        case _ => jValue.values.toString
+        case _ => removeWhitespace(jValue.values.toString)
       }
       map.put(key, stringValue)
     }
@@ -107,15 +121,15 @@ case class CatalogStorageFormat(
   /** Util providing the JSON-compatible version of toLinkedHashMap, for serialization of fields
    * to JSON format via json4s
    */
-  def toJsonLinkedHashMap: Map[String, JValue] = {
-    val map = scala.collection.mutable.LinkedHashMap[String, JValue]()
+  def toJsonLinkedHashMap: mutable.LinkedHashMap[String, JValue] = {
+    val map = mutable.LinkedHashMap[String, JValue]()
 
-    locationUri.foreach(l => map.put("Location", JString(l.toString)))
-    serde.foreach(s => map.put("Serde Library", JString(s)))
-    inputFormat.foreach(format => map.put("InputFormat", JString(format)))
-    outputFormat.foreach(format => map.put("OutputFormat", JString(format)))
+    locationUri.foreach(l => map += ("Location" -> JString(l.toString)))
+    serde.foreach(s => map += ("Serde Library" -> JString(s)))
+    inputFormat.foreach(format => map += ("InputFormat" -> JString(format)))
+    outputFormat.foreach(format => map += ("OutputFormat" -> JString(format)))
 
-    if (compressed) map.put("Compressed", JBool(true))
+    if (compressed) map += ("Compressed" -> JBool(true))
 
     SQLConf.get.redactOptions(properties) match {
       case props if props.isEmpty =>
@@ -123,10 +137,9 @@ case class CatalogStorageFormat(
         val storagePropsJson = JObject(
           props.map { case (k, v) => k -> JString(v) }.toList
         )
-        map.put("Storage Properties", storagePropsJson)
+        map += ("Storage Properties" -> storagePropsJson)
     }
-
-    map.toMap
+    map
   }
 }
 
@@ -156,32 +169,32 @@ case class CatalogTablePartition(
   /** Util providing the JSON-compatible version of toLinkedHashMap, for serialization of fields
    * to JSON format via json4s
    */
-  def toJsonLinkedHashMap: Map[String, JValue] = {
-    val map = scala.collection.mutable.Map[String, JValue]()
+  def toJsonLinkedHashMap: mutable.LinkedHashMap[String, JValue] = {
+    val map = mutable.LinkedHashMap[String, JValue]()
 
     val specJson = JObject(spec.map { case (k, v) => k -> JString(v) }.toList)
-    map.put("Partition Values", specJson)
+    map += ("Partition Values" -> specJson)
 
     storage.toJsonLinkedHashMap.foreach { case (k, v) =>
-      map.put(k, v)
+      map += (k -> v)
     }
 
     if (parameters.nonEmpty) {
       val paramsJson = JObject(SQLConf.get.redactOptions(parameters).map {
         case (k, v) => k -> JString(v)
       }.toList)
-      map.put("Partition Parameters", paramsJson)
+      map += ("Partition Parameters" -> paramsJson)
     }
 
-    map.put("Created Time", JString(new Date(createTime).toString))
+    map += ("Created Time" -> JString(new Date(createTime).toString))
 
     val lastAccess = if (lastAccessTime <= 0) JString("UNKNOWN")
     else JString(new Date(lastAccessTime).toString)
-    map.put("Last Access", lastAccess)
+    map += ("Last Access" -> lastAccess)
 
-    stats.foreach(s => map.put("Partition Statistics", JString(s.simpleString)))
+    stats.foreach(s => map += ("Partition Statistics" -> JString(s.simpleString)))
 
-    map.toMap
+    map
   }
 
 
@@ -349,12 +362,17 @@ case class BucketSpec(
   /** Util providing the JSON-compatible version of toLinkedHashMap, for serialization of fields
    * to JSON format via json4s
    */
-  def toJsonLinkedHashMap: Map[String, JValue] = {
+  def toJsonLinkedHashMap: mutable.LinkedHashMap[String, JValue] = {
+    val map = mutable.LinkedHashMap[String, JValue]()
+
     Map(
-      "num_buckets" -> JInt(numBuckets),
-      "bucket_columns" -> JArray(bucketColumnNames.map(JString).toList),
-      "sort_columns" -> JArray(sortColumnNames.map(JString).toList)
-    )
+      "Num Buckets" -> JInt(numBuckets),
+      "Bucket Columns" -> JArray(bucketColumnNames.map(JString).toList),
+      "Sort Columns" -> JArray(sortColumnNames.map(JString).toList)
+    ).foreach { case (key, value) =>
+      map += (key -> value)
+    }
+    map
   }
 }
 
@@ -575,7 +593,7 @@ case class CatalogTable(
   /** Util providing the JSON-compatible version of toLinkedHashMap, for serialization of fields
    * to JSON format via json4s
    */
-  def toJsonLinkedHashMap: Map[String, JValue] = {
+  def toJsonLinkedHashMap: mutable.LinkedHashMap[String, JValue] = {
     val filteredTableProperties = SQLConf.get
       .redactOptions(properties.filter { case (k, v) =>
         !k.startsWith(VIEW_PREFIX) && v.nonEmpty
@@ -598,46 +616,46 @@ case class CatalogTable(
       if (viewQueryColumnNames.nonEmpty) JArray(viewQueryColumnNames.map(JString).toList)
       else JNull
 
-    Map(
-      "Catalog" -> identifier.catalog.map(JString).getOrElse(JNull),
-      "Database" -> identifier.database.map(JString).getOrElse(JNull),
-      "Table" -> JString(identifier.table),
-      "Owner" -> Option(owner).filter(_.nonEmpty).map(JString).getOrElse(JNull),
-      "Created Time" ->
-        JString(DateTimeUtils.microsToInstant(DateTimeUtils.millisToMicros(createTime)).toString),
-      "Last Access" -> lastAccess,
-      "Created By" -> JString(s"Spark $createVersion"),
-      "Type" -> JString(tableType.name),
-      "Provider" -> provider.map(JString).getOrElse(JNull),
-      "Bucket Spec" -> bucketSpec.map(
-        spec => JObject(spec.toJsonLinkedHashMap.toSeq: _*)).getOrElse(JNull),
-      "Comment" -> comment.map(JString).getOrElse(JNull),
-      "Collation" -> collation.map(JString).getOrElse(JNull),
-      "View Text" -> (
-        if (tableType == CatalogTableType.VIEW) viewText.map(JString).getOrElse(JNull) else JNull),
-      "View Original Text" -> (
-        if (tableType == CatalogTableType.VIEW) {
-          viewOriginalText.map(JString).getOrElse(JNull)
-        } else JNull),
-      "View Schema Mode" -> (
-        if (SQLConf.get.viewSchemaBindingEnabled && tableType == CatalogTableType.VIEW) {
-          JString(viewSchemaMode.toString)
-        } else JNull),
-      "View Catalog And Namespace" -> (
-        if (viewCatalogAndNamespace.nonEmpty && tableType == CatalogTableType.VIEW) {
-          JArray(viewCatalogAndNamespace.map(JString).toList)
-        } else JNull),
-      "View Query Output Columns" -> viewQueryOutputColumns,
-      "Table Properties" -> tableProperties,
-      "Statistics" -> stats.map(s => JString(s.simpleString)).getOrElse(JNull),
-      "Partition Provider" -> (if (tracksPartitionsInCatalog) JString("Catalog") else JNull),
-      "Partition Columns" -> partitionColumns,
-      "Schema" -> (if (schema.nonEmpty) JString(schema.treeString) else JNull)
-    )
-      .++(storage.toJsonLinkedHashMap.map {
-        case (key, value) => key -> value
-      })
-      .filterNot(_._2 == JNull)
+    val map = mutable.LinkedHashMap[String, JValue]()
+
+    map += "Catalog" -> identifier.catalog.map(JString).getOrElse(JNull)
+    map += "Database" -> identifier.database.map(JString).getOrElse(JNull)
+    map += "Table" -> JString(identifier.table)
+    map += "Owner" -> Option(owner).filter(_.nonEmpty).map(JString).getOrElse(JNull)
+    map += "Created Time" ->
+      JString(DateTimeUtils.microsToInstant(DateTimeUtils.millisToMicros(createTime)).toString)
+    map += "Last Access" -> lastAccess
+    map += "Created By" -> JString(s"Spark $createVersion")
+    map += "Type" -> JString(tableType.name)
+    map += "Provider" -> provider.map(JString).getOrElse(JNull)
+    map ++= bucketSpec.map(spec => spec.toJsonLinkedHashMap).getOrElse(mutable.LinkedHashMap.empty)
+      .map { case (k, v) => k -> v }
+    map += "Comment" -> comment.map(JString).getOrElse(JNull)
+    map += "Collation" -> collation.map(JString).getOrElse(JNull)
+    map += "View Text" ->
+      (if (tableType == CatalogTableType.VIEW) viewText.map(JString).getOrElse(JNull) else JNull)
+    map += "View Original Text" ->
+      (if (tableType == CatalogTableType.VIEW) viewOriginalText.map(JString).getOrElse(JNull)
+      else JNull)
+    map += "View Schema Mode" ->
+      (if (SQLConf.get.viewSchemaBindingEnabled && tableType == CatalogTableType.VIEW)
+        {JString(viewSchemaMode.toString)} else JNull)
+    map += "View Catalog And Namespace" ->
+      (if (viewCatalogAndNamespace.nonEmpty && tableType == CatalogTableType.VIEW) {
+          import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
+          JString(viewCatalogAndNamespace.quoted)
+      }
+      else JNull)
+    map += "View Query Output Columns" -> viewQueryOutputColumns
+    map += "Table Properties" -> tableProperties
+    map += "Statistics" -> stats.map(s => JString(s.simpleString)).getOrElse(JNull)
+    map ++= storage.toJsonLinkedHashMap
+    map += "Partition Provider" ->
+      (if (tracksPartitionsInCatalog) JString("Catalog") else JNull)
+    map += "Partition Columns" -> partitionColumns
+    map += "Schema" -> (if (schema.nonEmpty) JString(schema.treeString) else JNull)
+
+    map.filterNot(_._2 == JNull)
   }
 
   override def toString: String = {
