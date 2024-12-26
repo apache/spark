@@ -1049,7 +1049,7 @@ def read_udtf(pickleSer, infile, eval_type):
                 list(args) + list(kwargs.values())
             )
             if changed_partitions:
-                if self._udtf.terminate is not None:
+                if hasattr(self._udtf, "terminate") and self._udtf.terminate is not None:
                     result = self._udtf.terminate()
                     if result is not None:
                         for row in result:
