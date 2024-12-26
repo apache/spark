@@ -32,7 +32,7 @@ from pyspark.sql.udf import _wrap_function
 
 if TYPE_CHECKING:
     from py4j.java_gateway import JavaObject
-    from pyspark.sql._typing import ColumnOrName
+    from pyspark.sql._typing import TVFArgumentOrName
     from pyspark.sql.dataframe import DataFrame
     from pyspark.sql.session import SparkSession
     from pyspark.sql.table_arg import TableArg
@@ -373,9 +373,7 @@ class UserDefinedTableFunction:
             )(self._name, wrapped_func, jdt, self.evalType, self.deterministic)
         return judtf
 
-    def __call__(
-        self, *args: Union["ColumnOrName", "TableArg"], **kwargs: Union["ColumnOrName", "TableArg"]
-    ) -> "DataFrame":
+    def __call__(self, *args: "TVFArgumentOrName", **kwargs: "TVFArgumentOrName") -> "DataFrame":
         from pyspark.sql.classic.column import _to_java_column, _to_seq
 
         from pyspark.sql import DataFrame, SparkSession
