@@ -1566,7 +1566,6 @@ private[spark] class DAGScheduler(
     addPySparkConfigsToProperties(stage, properties)
 
     runningStages += stage
-    stage.setResubmitByFetchFailure(false)
     // SparkListenerStageSubmitted should be posted before testing whether tasks are
     // serializable. If tasks are not serializable, a SparkListenerStageCompleted event
     // will be posted, which should always come after a corresponding SparkListenerStageSubmitted
@@ -2188,8 +2187,6 @@ private[spark] class DAGScheduler(
                   log"we will roll back and rerun below stages which include itself and all its " +
                   log"indeterminate child stages: ${MDC(STAGES, rollingBackStages)}")
               }
-              failedStage.setResubmitByFetchFailure(true)
-              mapStage.setResubmitByFetchFailure(true)
               // We expect one executor failure to trigger many FetchFailures in rapid succession,
               // but all of those task failures can typically be handled by a single resubmission of
               // the failed stage.  We avoid flooding the scheduler's event queue with resubmit
@@ -2939,8 +2936,7 @@ private[spark] class DAGScheduler(
         } else {
           // This stage is only used by the job, so finish the stage if it is running.
           val stage = stageIdToStage(stageId)
-          val shouldKill = runningStages.contains(stage) ||
-            (waitingStages.contains(stage) && stage.resubmitInFetchFailed)
+          val shouldKill = runningStages.contains(stage) || stage.failedAttemptIds.nonEmpty
           if (shouldKill) {
             try { // killAllTaskAttempts will fail if a SchedulerBackend does not implement killTask
               taskScheduler.killAllTaskAttempts(stageId, shouldInterruptTaskThread(job), reason)

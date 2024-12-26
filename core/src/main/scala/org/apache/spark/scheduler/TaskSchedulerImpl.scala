@@ -1212,12 +1212,6 @@ private[spark] class TaskSchedulerImpl(
 
   override def applicationAttemptId(): Option[String] = backend.applicationAttemptId()
 
-  override def hasRunningTasks(stageId: Int): Boolean = synchronized {
-    taskSetsByStageIdAndAttempt.get(stageId).exists { attempts =>
-      attempts.values.exists(_.runningTasksSet.nonEmpty)
-    }
-  }
-
   // exposed for testing
   private[scheduler] def taskSetManagerForAttempt(
       stageId: Int,

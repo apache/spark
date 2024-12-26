@@ -231,9 +231,6 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     override def executorLost(executorId: String, reason: ExecutorLossReason): Unit = {}
     override def workerRemoved(workerId: String, host: String, message: String): Unit = {}
     override def applicationAttemptId(): Option[String] = None
-    override def hasRunningTasks(stageId: Int): Boolean = {
-      runningTaskInfos.contains(stageId) && runningTaskInfos(stageId).nonEmpty
-    }
     override def executorDecommission(
       executorId: String,
       decommissionInfo: ExecutorDecommissionInfo): Unit = {
@@ -960,7 +957,6 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
       override def executorLost(executorId: String, reason: ExecutorLossReason): Unit = {}
       override def workerRemoved(workerId: String, host: String, message: String): Unit = {}
       override def applicationAttemptId(): Option[String] = None
-      override def hasRunningTasks(stageId: Int): Boolean = false
       override def executorDecommission(
         executorId: String,
         decommissionInfo: ExecutorDecommissionInfo): Unit = {}
@@ -2295,12 +2291,14 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
 
     Thread.sleep(DAGScheduler.RESUBMIT_TIMEOUT * 2)
     // map stage is running by resubmitted, result stage is waiting
-    // (the origin result task 1.0 is still running)
+    // (the origin result task 1.0 in result stage is still running)
     assert(scheduler.runningStages.size == 1, "Map stage should be running")
     val mapStage = scheduler.runningStages.head
     assert(mapStage.id === 0)
     assert(mapStage.latestInfo.failureReason.isEmpty)
     assert(scheduler.waitingStages.size == 1, "Result stage should be waiting")
+    // tasks in map stage and origin result task 1.0 in result stage should be running
+    assert(runningTaskInfos.size == 2)
     assert(runningTaskInfos(taskSets(1).stageId).size == 1,
       "origin result task 1.0 should be running")
 
