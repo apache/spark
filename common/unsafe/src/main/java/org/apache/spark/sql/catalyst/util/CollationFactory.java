@@ -32,8 +32,11 @@ import com.ibm.icu.text.StringSearch;
 import com.ibm.icu.util.ULocale;
 import com.ibm.icu.util.VersionInfo;
 
+import org.apache.spark.QueryContext;
 import org.apache.spark.SparkException;
+import org.apache.spark.SparkRuntimeException;
 import org.apache.spark.unsafe.types.UTF8String;
+import scala.collection.immutable.Map$;
 
 /**
  * Static entry point for collation aware string functions.
@@ -108,7 +111,7 @@ public final class CollationFactory {
   public static class Collation {
     public final String collationName;
     public final String provider;
-    public final Collator collator;
+    private final Collator collator;
     public final Comparator<UTF8String> comparator;
 
     /**
@@ -201,6 +204,10 @@ public final class CollationFactory {
       assert(!supportsBinaryEquality || !supportsLowercaseEquality);
 
       assert(SUPPORTED_PROVIDERS.contains(provider));
+    }
+
+    public Collator getCollator() {
+      return collator;
     }
 
     /**
@@ -1096,23 +1103,33 @@ public final class CollationFactory {
 
       IndeterminateCollation() {
         super(
-          "NULL",
-          "spark",
+          "null",
+          "null",
           null,
           (s1, s2) -> {
-            throw new RuntimeException("Comparator can't be called on indeterminate collation");
+            throw indeterminateError();
           },
           null,
           s -> {
-            throw new RuntimeException("Hash can't be called on indeterminate collation!");
+            throw indeterminateError();
           },
           (s1, s2) -> {
-            throw new RuntimeException("Equals can't be called on indeterminate collation!");
+            throw indeterminateError();
           },
           false,
           false,
           false
         );
+      }
+
+      @Override
+      public Collator getCollator() {
+        throw indeterminateError();
+      }
+
+      private static SparkRuntimeException indeterminateError() {
+        return new SparkRuntimeException("INDETERMINATE_COLLATION",
+          Map$.MODULE$.empty(), null, new QueryContext[]{}, "");
       }
     }
 
@@ -1144,7 +1161,8 @@ public final class CollationFactory {
   public static final String SCHEMA = "BUILTIN";
   public static final String PROVIDER_SPARK = "spark";
   public static final String PROVIDER_ICU = "icu";
-  public static final List<String> SUPPORTED_PROVIDERS = List.of(PROVIDER_SPARK, PROVIDER_ICU);
+  public static final String PROVIDER_NULL = "null";
+  public static final List<String> SUPPORTED_PROVIDERS = List.of(PROVIDER_SPARK, PROVIDER_ICU, PROVIDER_NULL);
   public static final String COLLATION_PAD_ATTRIBUTE = "NO_PAD";
 
   public static final int UTF8_BINARY_COLLATION_ID =
@@ -1183,7 +1201,7 @@ public final class CollationFactory {
       final String patternString,
       final int collationId) {
     CharacterIterator target = new StringCharacterIterator(targetString);
-    Collator collator = CollationFactory.fetchCollation(collationId).collator;
+    Collator collator = CollationFactory.fetchCollation(collationId).getCollator();
     return new StringSearch(patternString, target, (RuleBasedCollator) collator);
   }
 
@@ -1329,7 +1347,7 @@ public final class CollationFactory {
     } else if (collation.isUtf8LcaseType) {
       return CollationAwareUTF8String.lowerCaseCodePoints(input);
     } else {
-      CollationKey collationKey = collation.collator.getCollationKey(
+      CollationKey collationKey = collation.getCollator().getCollationKey(
         input.toValidString());
       return UTF8String.fromBytes(collationKey.toByteArray());
     }
@@ -1345,7 +1363,7 @@ public final class CollationFactory {
     } else if (collation.isUtf8LcaseType) {
       return CollationAwareUTF8String.lowerCaseCodePoints(input).getBytes();
     } else {
-      return collation.collator.getCollationKey(
+      return collation.getCollator().getCollationKey(
         input.toValidString()).toByteArray();
     }
   }

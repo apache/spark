@@ -38,7 +38,7 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
   test("collationId stability") {
     assert(INDETERMINATE_COLLATION_ID == -1)
     val indeterminate = fetchCollation(INDETERMINATE_COLLATION_ID)
-    assert(indeterminate.collationName == "NULL")
+    assert(indeterminate.collationName == "null")
     assert(indeterminate.provider == "spark")
     assert(indeterminate.version == null)
 
@@ -290,7 +290,7 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
     // if we don't handle the concurrency properly on Collator level
 
     (0 to 10).foreach(_ => {
-      val collator = fetchCollation("UNICODE").collator
+      val collator = fetchCollation("UNICODE").getCollator
 
       ParSeq(0 to 100).foreach { _ =>
         collator.getCollationKey("aaa")
@@ -344,7 +344,7 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
       "sr_Cyrl_SRB_AI"
     ).foreach(collationICU => {
       val col = fetchCollation(collationICU)
-      assert(col.collator.getLocale(ULocale.VALID_LOCALE) != ULocale.ROOT)
+      assert(col.getCollator.getLocale(ULocale.VALID_LOCALE) != ULocale.ROOT)
     })
   }
 

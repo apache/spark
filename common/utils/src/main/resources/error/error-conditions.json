@@ -1920,19 +1920,25 @@
   },
   "INDETERMINATE_COLLATION" : {
     "message" : [
-      "Data type of <expr> has indeterminate collation. Use COLLATE function to set the collation explicitly."
+      "Could not determine which collation to use for string operation. Use COLLATE clause to set the collation explicitly."
+    ],
+    "sqlState" : "42P22"
+  },
+  "INDETERMINATE_COLLATION_IN_EXPRESSION" : {
+    "message" : [
+      "Data type of <expr> has indeterminate collation. Use COLLATE clause to set the collation explicitly."
     ],
     "sqlState" : "42P22"
   },
   "INDETERMINATE_COLLATION_IN_SCHEMA" : {
     "message" : [
-      "Schema contains indeterminate collation at: [<columnPaths>]."
+      "Schema contains indeterminate collation at: [<columnPaths>]. Use COLLATE clause to set the collation explicitly."
     ],
     "sqlState" : "42P22"
   },
   "INDETERMINATE_COLLATION_NOT_SERIALIZABLE" : {
     "message" : [
-      "Indeterminate collation is not serializable."
+      "Indeterminate collation is not serializable. Use COLLATE clause to set the collation explicitly."
     ],
     "sqlState" : "42P22"
   },

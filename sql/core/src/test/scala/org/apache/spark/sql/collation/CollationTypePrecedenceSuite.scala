@@ -33,7 +33,7 @@ class CollationTypePrecedenceSuite extends QueryTest with SharedSparkSession {
 
   private def assertThrowsError(df: => DataFrame, errorClass: String): Unit = {
     val exception = intercept[SparkThrowable] {
-      df
+      df.collect()
     }
     assert(exception.getCondition === errorClass)
   }
@@ -41,8 +41,12 @@ class CollationTypePrecedenceSuite extends QueryTest with SharedSparkSession {
   private def assertExplicitMismatch(df: => DataFrame): Unit =
     assertThrowsError(df, "COLLATION_MISMATCH.EXPLICIT")
 
-  private def assertIndeterminateCollation(df: => DataFrame): Unit =
-    assertThrowsError(df, "INDETERMINATE_COLLATION")
+  private def assertIndeterminateCollation(df: => DataFrame): Unit = {
+    val exception = intercept[SparkThrowable] {
+      df.collect()
+    }
+    assert(exception.getCondition.startsWith("INDETERMINATE_COLLATION"))
+  }
 
   private def assertQuerySchema(df: => DataFrame, expectedSchema: DataType): Unit = {
     val querySchema = df.schema.fields.head.dataType
@@ -550,8 +554,14 @@ class CollationTypePrecedenceSuite extends QueryTest with SharedSparkSession {
     assertExplicitMismatch(
       sql(s"SELECT array(struct(1, 'a' collate utf8_lcase), struct(2, 'b' collate unicode))"))
 
-    assertIndeterminateCollation(sql(s"""
+    checkAnswer(sql(s"""
            |SELECT array(struct(1, c1), struct(2, c2 as c1))
+           |FROM VALUES ('a' collate unicode, 'b' collate utf8_lcase) AS t(c1, c2)
+           |""".stripMargin),
+      Seq(Row(Seq(Row(1, "a"), Row(2, "b")))))
+
+    assertIndeterminateCollation(sql(s"""
+           |SELECT struct(1, 'A' as c1) = array(struct(1, c1), struct(2, c2 as c1))[0]
            |FROM VALUES ('a' collate unicode, 'b' collate utf8_lcase) AS t(c1, c2)
            |""".stripMargin))
   }

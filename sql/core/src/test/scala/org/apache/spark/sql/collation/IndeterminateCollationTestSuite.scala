@@ -17,8 +17,8 @@
 
 package org.apache.spark.sql.collation
 
-import org.apache.spark.SparkThrowable
-import org.apache.spark.sql.{DataFrame, QueryTest, Row}
+import org.apache.spark.{SparkRuntimeException, SparkThrowable}
+import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StringType
 
@@ -40,8 +40,15 @@ class IndeterminateCollationTestSuite extends QueryTest with SharedSparkSession 
   }
 
   def assertIndeterminateCollationInExpressionError(query: => DataFrame): Unit = {
-    val exception = intercept[SparkThrowable] {
+    val exception = intercept[AnalysisException] {
       query
+    }
+    assert(exception.getCondition === "INDETERMINATE_COLLATION_IN_EXPRESSION")
+  }
+
+  def assertRuntimeIndeterminateCollationError(query: => DataFrame): Unit = {
+    val exception = intercept[SparkRuntimeException] {
+      query.collect()
     }
     assert(exception.getCondition === "INDETERMINATE_COLLATION")
   }
@@ -49,8 +56,8 @@ class IndeterminateCollationTestSuite extends QueryTest with SharedSparkSession 
   def assertIndeterminateCollationInSchemaError(columnPaths: String*)(
       query: => DataFrame): Unit = {
     checkError(
-      exception = intercept[SparkThrowable] {
-        query
+      exception = intercept[AnalysisException] {
+        query.collect()
       },
       condition = "INDETERMINATE_COLLATION_IN_SCHEMA",
       parameters = Map("columnPaths" -> columnPaths.mkString(", ")))
@@ -76,45 +83,66 @@ class IndeterminateCollationTestSuite extends QueryTest with SharedSparkSession 
     }
   }
 
-  test("concat supports indeterminate collation") {
+  test("various expressions that support indeterminate collation") {
     withTestTable {
       sql(s"INSERT INTO $testTableName VALUES ('a', 'b')")
 
-      checkAnswer(sql(s"SELECT c1 || c2 FROM $testTableName"), Seq(Row("ab")))
+      val expressions = Seq(
+        "c1 || c2",
+        "concat(c1, c2)",
+        "concat_ws(' ', c1, c2)",
+        "length(c1 || c2)",
+        "array(c1 || c2)",
+        "map('a', c1 || c2)",
+        "named_struct('f1', c1 || c2, 'f2', c2)",
+        "coalesce(c1 || c2, c2)"
+      )
 
-      checkAnswer(sql(s"SELECT c1 || c2 as c3 FROM $testTableName"), Seq(Row("ab")))
+      expressions.foreach { expr =>
+        sql(s"SELECT $expr FROM $testTableName").collect()
+      }
 
       checkAnswer(
         sql(s"SELECT COLLATION(c1 || c2) FROM $testTableName"),
-        Seq(Row("NULL")))
+        Seq(Row("null")))
     }
   }
 
-  test("concat ws supports indeterminate collation") {
+  test("expressions that don't support indeterminate collations and fail in analyzer") {
     withTestTable {
       sql(s"INSERT INTO $testTableName VALUES ('a', 'b')")
 
-      checkAnswer(sql(s"SELECT concat_ws(' ', c1, c2) FROM $testTableName"), Seq(Row("a b")))
-
-      checkAnswer(
-        sql(s"SELECT concat_ws(' ', c1, c2) as c3 FROM $testTableName"),
-        Seq(Row("a b")))
-
-      checkAnswer(
-        sql(s"SELECT COLLATION(concat_ws(' ', c1, c2)) FROM $testTableName"),
-        Seq(Row("NULL")))
-    }
-  }
-
-  test("functions that don't support indeterminate collations") {
-    withTestTable {
-      sql(s"INSERT INTO $testTableName VALUES ('a', 'b')")
-
-      val expressions =
-        Seq("c1 = c2", "c1 != c2", "substring(c1 || c2, 1, 1)", "length(c1 || c2)")
+      val expressions = Seq(
+        "c1 = c2",
+        "c1 != c2",
+        "c1 > c2",
+        "STARTSWITH(c1 || c2, c1)",
+        "ENDSWITH(c1 || c2, c2)",
+        "UPPER(c1 || c2) = 'AB'",
+        "INITCAP(c1 || c2) = 'Ab'",
+        "FIND_IN_SET(c1 || c2, 'a,b')",
+        "INSTR(c1 || c2, c1)",
+        "LOCATE(c1, c1 || c2)"
+      )
 
       expressions.foreach { expr =>
         assertIndeterminateCollationInExpressionError {
+          sql(s"SELECT $expr FROM $testTableName")
+        }
+      }
+    }
+  }
+
+  test("expressions that don't support indeterminate collation and fail in runtime") {
+    withTestTable {
+      sql(s"INSERT INTO $testTableName VALUES ('a', 'b')")
+
+      val expressions = Seq(
+        "c1 || c2 IN ('a')",
+      )
+
+      expressions.foreach { expr =>
+        assertRuntimeIndeterminateCollationError {
           sql(s"SELECT $expr FROM $testTableName")
         }
       }
@@ -149,15 +177,14 @@ class IndeterminateCollationTestSuite extends QueryTest with SharedSparkSession 
              |""".stripMargin)
       }
 
-      assertIndeterminateCollationInExpressionError(
+      assertIndeterminateCollationInSchemaError("arr.element", "map.value", "struct.f1")(
         sql(s"""
              |CREATE TABLE t
              |USING $dataSource
              |AS SELECT
              |  array(c1 || c2) AS arr,
              |  map('a', c1 || c2) AS map,
-             |  named_struct('f1', c1 || c2, 'f2', c2) AS struct,
-             |  named_struct(c1 || c2, 'v1') AS struct2
+             |  named_struct('f1', c1 || c2, 'f2', c2) AS struct
              |FROM $testTableName
              |""".stripMargin))
     }
@@ -175,8 +202,22 @@ class IndeterminateCollationTestSuite extends QueryTest with SharedSparkSession 
              |""".stripMargin)
 
         checkAnswer(sql("SELECT * FROM v"), Seq(Row("ab"), Row("cd")))
-        checkAnswer(sql("SELECT DISTINCT COLLATION(col) FROM v"), Seq(Row("NULL")))
+        checkAnswer(sql("SELECT DISTINCT COLLATION(col) FROM v"), Seq(Row("null")))
+
+        // group by should fail in runtime when fetching the collator
+        assertRuntimeIndeterminateCollationError {
+          sql(s"SELECT * FROM v GROUP BY col")
+        }
       }
+    }
+  }
+
+  test("can call show on indeterminate collation") {
+    withTestTable {
+      sql(s"INSERT INTO $testTableName VALUES ('a', 'b')")
+      sql(s"INSERT INTO $testTableName VALUES ('c', 'd')")
+
+      sql(s"SELECT c1 || c2 as col FROM $testTableName").show()
     }
   }
 }
