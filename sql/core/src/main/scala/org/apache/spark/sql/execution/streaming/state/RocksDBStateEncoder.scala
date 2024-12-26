@@ -1427,44 +1427,29 @@ class RangeKeyScanStateEncoder(
     val prefixKey = extractPrefixKey(row)
     val rangeScanKeyEncoded = dataEncoder.encodePrefixKeyForRangeScan(prefixKey)
 
-    // Now handle any remaining key parts
-    val data = if (orderingOrdinals.length < keySchema.length) {
-      // We have remaining key parts to encode
-      val remainingEncoded = dataEncoder.encodeRemainingKey(remainingKeyProjection(row))
+    // We have remaining key parts to encode
+    val remainingEncoded = dataEncoder.encodeRemainingKey(remainingKeyProjection(row))
 
-      // Combine range scan key and remaining key with length prefix
-      val combinedData = new Array[Byte](4 + rangeScanKeyEncoded.length + remainingEncoded.length)
+    // Combine range scan key and remaining key with length prefix
+    val combinedData = new Array[Byte](4 + rangeScanKeyEncoded.length + remainingEncoded.length)
 
-      // Write length of range scan key
-      Platform.putInt(combinedData, Platform.BYTE_ARRAY_OFFSET, rangeScanKeyEncoded.length)
+    // Write length of range scan key
+    Platform.putInt(combinedData, Platform.BYTE_ARRAY_OFFSET, rangeScanKeyEncoded.length)
 
-      // Write range scan key
-      Platform.copyMemory(
-        rangeScanKeyEncoded, Platform.BYTE_ARRAY_OFFSET,
-        combinedData, Platform.BYTE_ARRAY_OFFSET + 4,
-        rangeScanKeyEncoded.length
-      )
-      // Write remaining key
-      Platform.copyMemory(
-        remainingEncoded, Platform.BYTE_ARRAY_OFFSET,
-        combinedData, Platform.BYTE_ARRAY_OFFSET + 4 + rangeScanKeyEncoded.length,
-        remainingEncoded.length
-      )
+    // Write range scan key
+    Platform.copyMemory(
+      rangeScanKeyEncoded, Platform.BYTE_ARRAY_OFFSET,
+      combinedData, Platform.BYTE_ARRAY_OFFSET + 4,
+      rangeScanKeyEncoded.length
+    )
+    // Write remaining key
+    Platform.copyMemory(
+      remainingEncoded, Platform.BYTE_ARRAY_OFFSET,
+      combinedData, Platform.BYTE_ARRAY_OFFSET + 4 + rangeScanKeyEncoded.length,
+      remainingEncoded.length
+    )
 
-      combinedData
-    } else {
-      // No remaining key parts - just add length prefix to range scan key
-      val combinedData = new Array[Byte](4 + rangeScanKeyEncoded.length)
-      Platform.putInt(combinedData, Platform.BYTE_ARRAY_OFFSET, rangeScanKeyEncoded.length)
-      Platform.copyMemory(
-        rangeScanKeyEncoded, Platform.BYTE_ARRAY_OFFSET,
-        combinedData, Platform.BYTE_ARRAY_OFFSET + 4,
-        rangeScanKeyEncoded.length
-      )
-      combinedData
-    }
-
-    encodeStateRowWithPrefix(data)
+    encodeStateRowWithPrefix(combinedData)
   }
 
   override def decodeKey(keyBytes: Array[Byte]): UnsafeRow = {
