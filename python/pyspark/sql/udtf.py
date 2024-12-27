@@ -35,7 +35,6 @@ if TYPE_CHECKING:
     from pyspark.sql._typing import TVFArgumentOrName
     from pyspark.sql.dataframe import DataFrame
     from pyspark.sql.session import SparkSession
-    from pyspark.sql.table_arg import TableArg
 
 __all__ = [
     "AnalyzeArgument",
