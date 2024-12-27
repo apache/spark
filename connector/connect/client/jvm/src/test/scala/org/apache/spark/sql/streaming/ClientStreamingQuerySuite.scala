@@ -566,7 +566,7 @@ class ClientStreamingQuerySuite extends QueryTest with RemoteSparkSession with L
     }
   }
 
-  test("foreachBatch") {
+  test("foreachBatch with DataFrame") {
     // Starts a streaming query with a foreachBatch function, which writes batchId and row count
     // to a temp view. The test verifies that the view is populated with data.
 
@@ -649,6 +649,32 @@ class ClientStreamingQuerySuite extends QueryTest with RemoteSparkSession with L
 
       q.stop()
     }
+  }
+
+  test("foreachBatch with Dataset[TestClass]") {
+    val session: SparkSession = spark
+    import session.implicits._
+    val viewName = "test_view"
+    val tableName = s"global_temp.$viewName"
+
+    val df = spark.readStream
+      .format("rate")
+      .option("rowsPerSecond", "10")
+      .load()
+
+    val q = df
+      .selectExpr("CAST(value AS INT)")
+      .as[TestClass]
+      .writeStream
+      .foreachBatch((ds: Dataset[TestClass], batchId: Long) => {
+        val count = ds.collect().map(_.value).sum
+      })
+      .start()
+    eventually(timeout(30.seconds)) {
+      assert(q.isActive)
+      assert(q.exception.isEmpty)
+    }
+    q.stop()
   }
 
   abstract class EventCollector extends StreamingQueryListener {
