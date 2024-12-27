@@ -808,7 +808,7 @@ class FunctionsTestsMixin:
         self.check_error(
             exception=pe.exception,
             errorClass="NOT_COLUMN_OR_INT_OR_STR",
-            messageParameters={"arg_name": "len", "arg_type": "float"},
+            messageParameters={"arg_name": "length", "arg_type": "float"},
         )
 
     def test_percentile(self):

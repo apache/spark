@@ -339,10 +339,10 @@ def coalesce(*cols: "ColumnOrName") -> Column:
 coalesce.__doc__ = pysparkfuncs.coalesce.__doc__
 
 
-def expr(str: str) -> Column:
+def expr(expression: str) -> Column:
     from pyspark.sql.connect.column import Column as ConnectColumn
 
-    return ConnectColumn(SQLExpression(str))
+    return ConnectColumn(SQLExpression(expression))
 
 
 expr.__doc__ = pysparkfuncs.expr.__doc__
@@ -781,13 +781,13 @@ pmod.__doc__ = pysparkfuncs.pmod.__doc__
 
 def width_bucket(
     v: "ColumnOrName",
-    min: "ColumnOrName",
-    max: "ColumnOrName",
+    minimum: "ColumnOrName",
+    maximum: "ColumnOrName",
     numBucket: Union["ColumnOrName", int],
 ) -> Column:
     numBucket = _enum_to_value(numBucket)
     numBucket = lit(numBucket) if isinstance(numBucket, int) else numBucket
-    return _invoke_function_over_columns("width_bucket", v, min, max, numBucket)
+    return _invoke_function_over_columns("width_bucket", v, minimum, maximum, numBucket)
 
 
 width_bucket.__doc__ = pysparkfuncs.width_bucket.__doc__
@@ -1003,16 +1003,16 @@ unhex.__doc__ = pysparkfuncs.unhex.__doc__
 
 
 def uniform(
-    min: Union[Column, int, float],
-    max: Union[Column, int, float],
+    minimum: Union[Column, int, float],
+    maximum: Union[Column, int, float],
     seed: Optional[Union[Column, int]] = None,
 ) -> Column:
     if seed is None:
         return _invoke_function_over_columns(
-            "uniform", lit(min), lit(max), lit(random.randint(0, sys.maxsize))
+            "uniform", lit(minimum), lit(maximum), lit(random.randint(0, sys.maxsize))
         )
     else:
-        return _invoke_function_over_columns("uniform", lit(min), lit(max), lit(seed))
+        return _invoke_function_over_columns("uniform", lit(minimum), lit(maximum), lit(seed))
 
 
 uniform.__doc__ = pysparkfuncs.uniform.__doc__
@@ -2498,29 +2498,29 @@ def encode(col: "ColumnOrName", charset: str) -> Column:
 encode.__doc__ = pysparkfuncs.encode.__doc__
 
 
-def is_valid_utf8(str: "ColumnOrName") -> Column:
-    return _invoke_function_over_columns("is_valid_utf8", _to_col(str))
+def is_valid_utf8(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("is_valid_utf8", _to_col(col))
 
 
 is_valid_utf8.__doc__ = pysparkfuncs.is_valid_utf8.__doc__
 
 
-def make_valid_utf8(str: "ColumnOrName") -> Column:
-    return _invoke_function_over_columns("make_valid_utf8", _to_col(str))
+def make_valid_utf8(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("make_valid_utf8", _to_col(col))
 
 
 make_valid_utf8.__doc__ = pysparkfuncs.make_valid_utf8.__doc__
 
 
-def validate_utf8(str: "ColumnOrName") -> Column:
-    return _invoke_function_over_columns("validate_utf8", _to_col(str))
+def validate_utf8(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("validate_utf8", _to_col(col))
 
 
 validate_utf8.__doc__ = pysparkfuncs.validate_utf8.__doc__
 
 
-def try_validate_utf8(str: "ColumnOrName") -> Column:
-    return _invoke_function_over_columns("try_validate_utf8", _to_col(str))
+def try_validate_utf8(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("try_validate_utf8", _to_col(col))
 
 
 try_validate_utf8.__doc__ = pysparkfuncs.try_validate_utf8.__doc__
@@ -2533,15 +2533,15 @@ def format_number(col: "ColumnOrName", d: int) -> Column:
 format_number.__doc__ = pysparkfuncs.format_number.__doc__
 
 
-def format_string(format: str, *cols: "ColumnOrName") -> Column:
-    return _invoke_function("format_string", lit(format), *[_to_col(c) for c in cols])
+def format_string(fmt: str, *cols: "ColumnOrName") -> Column:
+    return _invoke_function("format_string", lit(fmt), *[_to_col(c) for c in cols])
 
 
 format_string.__doc__ = pysparkfuncs.format_string.__doc__
 
 
-def instr(str: "ColumnOrName", substr: Union[Column, str]) -> Column:
-    return _invoke_function("instr", _to_col(str), lit(substr))
+def instr(col: "ColumnOrName", substr: Union[Column, str]) -> Column:
+    return _invoke_function("instr", _to_col(col), lit(substr))
 
 
 instr.__doc__ = pysparkfuncs.instr.__doc__
@@ -2551,7 +2551,7 @@ def overlay(
     src: "ColumnOrName",
     replace: "ColumnOrName",
     pos: Union["ColumnOrName", int],
-    len: Union["ColumnOrName", int] = -1,
+    length: Union["ColumnOrName", int] = -1,
 ) -> Column:
     pos = _enum_to_value(pos)
     if not isinstance(pos, (int, str, Column)):
@@ -2559,19 +2559,19 @@ def overlay(
             errorClass="NOT_COLUMN_OR_INT_OR_STR",
             messageParameters={"arg_name": "pos", "arg_type": type(pos).__name__},
         )
-    len = _enum_to_value(len)
-    if len is not None and not isinstance(len, (int, str, Column)):
+    length = _enum_to_value(length)
+    if length is not None and not isinstance(length, (int, str, Column)):
         raise PySparkTypeError(
             errorClass="NOT_COLUMN_OR_INT_OR_STR",
-            messageParameters={"arg_name": "len", "arg_type": type(len).__name__},
+            messageParameters={"arg_name": "length", "arg_type": type(length).__name__},
         )
 
     if isinstance(pos, int):
         pos = lit(pos)
-    if isinstance(len, int):
-        len = lit(len)
+    if isinstance(length, int):
+        length = lit(length)
 
-    return _invoke_function_over_columns("overlay", src, replace, pos, len)
+    return _invoke_function_over_columns("overlay", src, replace, pos, length)
 
 
 overlay.__doc__ = pysparkfuncs.overlay.__doc__
@@ -2592,20 +2592,20 @@ sentences.__doc__ = pysparkfuncs.sentences.__doc__
 
 
 def substring(
-    str: "ColumnOrName",
+    col: "ColumnOrName",
     pos: Union["ColumnOrName", int],
-    len: Union["ColumnOrName", int],
+    length: Union["ColumnOrName", int],
 ) -> Column:
     _pos = lit(pos) if isinstance(pos, int) else _to_col(pos)
-    _len = lit(len) if isinstance(len, int) else _to_col(len)
-    return _invoke_function("substring", _to_col(str), _pos, _len)
+    _len = lit(length) if isinstance(length, int) else _to_col(length)
+    return _invoke_function("substring", _to_col(col), _pos, _len)
 
 
 substring.__doc__ = pysparkfuncs.substring.__doc__
 
 
-def substring_index(str: "ColumnOrName", delim: str, count: int) -> Column:
-    return _invoke_function("substring_index", _to_col(str), lit(delim), lit(count))
+def substring_index(col: "ColumnOrName", delim: str, count: int) -> Column:
+    return _invoke_function("substring_index", _to_col(col), lit(delim), lit(count))
 
 
 substring_index.__doc__ = pysparkfuncs.substring_index.__doc__
@@ -2623,8 +2623,8 @@ def levenshtein(
 levenshtein.__doc__ = pysparkfuncs.levenshtein.__doc__
 
 
-def locate(substr: str, str: "ColumnOrName", pos: int = 1) -> Column:
-    return _invoke_function("locate", lit(substr), _to_col(str), lit(pos))
+def locate(substr: str, col: "ColumnOrName", pos: int = 1) -> Column:
+    return _invoke_function("locate", lit(substr), _to_col(col), lit(pos))
 
 
 locate.__doc__ = pysparkfuncs.locate.__doc__
@@ -2632,10 +2632,10 @@ locate.__doc__ = pysparkfuncs.locate.__doc__
 
 def lpad(
     col: "ColumnOrName",
-    len: Union[Column, int],
+    length: Union[Column, int],
     pad: Union[Column, str],
 ) -> Column:
-    return _invoke_function_over_columns("lpad", col, lit(len), lit(pad))
+    return _invoke_function_over_columns("lpad", col, lit(length), lit(pad))
 
 
 lpad.__doc__ = pysparkfuncs.lpad.__doc__
@@ -2643,10 +2643,10 @@ lpad.__doc__ = pysparkfuncs.lpad.__doc__
 
 def rpad(
     col: "ColumnOrName",
-    len: Union[Column, int],
+    length: Union[Column, int],
     pad: Union[Column, str],
 ) -> Column:
-    return _invoke_function_over_columns("rpad", col, lit(len), lit(pad))
+    return _invoke_function_over_columns("rpad", col, lit(length), lit(pad))
 
 
 rpad.__doc__ = pysparkfuncs.rpad.__doc__
@@ -2662,34 +2662,34 @@ repeat.__doc__ = pysparkfuncs.repeat.__doc__
 
 
 def split(
-    str: "ColumnOrName",
+    col: "ColumnOrName",
     pattern: Union[Column, str],
     limit: Union["ColumnOrName", int] = -1,
 ) -> Column:
     limit = _enum_to_value(limit)
     limit = lit(limit) if isinstance(limit, int) else _to_col(limit)
-    return _invoke_function("split", _to_col(str), lit(pattern), limit)
+    return _invoke_function("split", _to_col(col), lit(pattern), limit)
 
 
 split.__doc__ = pysparkfuncs.split.__doc__
 
 
-def rlike(str: "ColumnOrName", regexp: "ColumnOrName") -> Column:
-    return _invoke_function_over_columns("rlike", str, regexp)
+def rlike(col: "ColumnOrName", regexp: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("rlike", col, regexp)
 
 
 rlike.__doc__ = pysparkfuncs.rlike.__doc__
 
 
-def regexp(str: "ColumnOrName", regexp: "ColumnOrName") -> Column:
-    return _invoke_function_over_columns("regexp", str, regexp)
+def regexp(col: "ColumnOrName", regexp: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("regexp", col, regexp)
 
 
 regexp.__doc__ = pysparkfuncs.regexp.__doc__
 
 
-def regexp_like(str: "ColumnOrName", regexp: "ColumnOrName") -> Column:
-    return _invoke_function_over_columns("regexp_like", str, regexp)
+def regexp_like(col: "ColumnOrName", regexp: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("regexp_like", col, regexp)
 
 
 regexp_like.__doc__ = pysparkfuncs.regexp_like.__doc__
@@ -2707,22 +2707,22 @@ def randstr(length: Union[Column, int], seed: Optional[Union[Column, int]] = Non
 randstr.__doc__ = pysparkfuncs.randstr.__doc__
 
 
-def regexp_count(str: "ColumnOrName", regexp: "ColumnOrName") -> Column:
-    return _invoke_function_over_columns("regexp_count", str, regexp)
+def regexp_count(col: "ColumnOrName", regexp: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("regexp_count", col, regexp)
 
 
 regexp_count.__doc__ = pysparkfuncs.regexp_count.__doc__
 
 
-def regexp_extract(str: "ColumnOrName", pattern: str, idx: int) -> Column:
-    return _invoke_function("regexp_extract", _to_col(str), lit(pattern), lit(idx))
+def regexp_extract(col: "ColumnOrName", pattern: str, idx: int) -> Column:
+    return _invoke_function("regexp_extract", _to_col(col), lit(pattern), lit(idx))
 
 
 regexp_extract.__doc__ = pysparkfuncs.regexp_extract.__doc__
 
 
 def regexp_extract_all(
-    str: "ColumnOrName", regexp: "ColumnOrName", idx: Optional[Union[int, Column]] = None
+    col: "ColumnOrName", regexp: "ColumnOrName", idx: Optional[Union[int, Column]] = None
 ) -> Column:
     if idx is None:
         return _invoke_function_over_columns("regexp_extract_all", str, regexp)
@@ -2742,20 +2742,20 @@ def regexp_replace(
 regexp_replace.__doc__ = pysparkfuncs.regexp_replace.__doc__
 
 
-def regexp_substr(str: "ColumnOrName", regexp: "ColumnOrName") -> Column:
-    return _invoke_function_over_columns("regexp_substr", str, regexp)
+def regexp_substr(col: "ColumnOrName", regexp: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("regexp_substr", col, regexp)
 
 
 regexp_substr.__doc__ = pysparkfuncs.regexp_substr.__doc__
 
 
 def regexp_instr(
-    str: "ColumnOrName", regexp: "ColumnOrName", idx: Optional[Union[int, Column]] = None
+    col: "ColumnOrName", regexp: "ColumnOrName", idx: Optional[Union[int, Column]] = None
 ) -> Column:
     if idx is None:
-        return _invoke_function_over_columns("regexp_instr", str, regexp)
+        return _invoke_function_over_columns("regexp_instr", col, regexp)
     else:
-        return _invoke_function_over_columns("regexp_instr", str, regexp, lit(idx))
+        return _invoke_function_over_columns("regexp_instr", col, regexp, lit(idx))
 
 
 regexp_instr.__doc__ = pysparkfuncs.regexp_instr.__doc__
@@ -2854,12 +2854,12 @@ split_part.__doc__ = pysparkfuncs.split_part.__doc__
 
 
 def substr(
-    str: "ColumnOrName", pos: "ColumnOrName", len: Optional["ColumnOrName"] = None
+    col: "ColumnOrName", pos: "ColumnOrName", length: Optional["ColumnOrName"] = None
 ) -> Column:
     if len is not None:
-        return _invoke_function_over_columns("substr", str, pos, len)
+        return _invoke_function_over_columns("substr", col, pos, length)
     else:
-        return _invoke_function_over_columns("substr", str, pos)
+        return _invoke_function_over_columns("substr", col, pos)
 
 
 substr.__doc__ = pysparkfuncs.substr.__doc__
@@ -2896,48 +2896,48 @@ def printf(format: "ColumnOrName", *cols: "ColumnOrName") -> Column:
 printf.__doc__ = pysparkfuncs.printf.__doc__
 
 
-def url_decode(str: "ColumnOrName") -> Column:
-    return _invoke_function_over_columns("url_decode", str)
+def url_decode(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("url_decode", col)
 
 
 url_decode.__doc__ = pysparkfuncs.url_decode.__doc__
 
 
-def try_url_decode(str: "ColumnOrName") -> Column:
-    return _invoke_function_over_columns("try_url_decode", str)
+def try_url_decode(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("try_url_decode", col)
 
 
 try_url_decode.__doc__ = pysparkfuncs.try_url_decode.__doc__
 
 
-def url_encode(str: "ColumnOrName") -> Column:
-    return _invoke_function_over_columns("url_encode", str)
+def url_encode(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("url_encode", col)
 
 
 url_encode.__doc__ = pysparkfuncs.url_encode.__doc__
 
 
 def position(
-    substr: "ColumnOrName", str: "ColumnOrName", start: Optional["ColumnOrName"] = None
+    substr: "ColumnOrName", col: "ColumnOrName", start: Optional["ColumnOrName"] = None
 ) -> Column:
     if start is not None:
-        return _invoke_function_over_columns("position", substr, str, start)
+        return _invoke_function_over_columns("position", substr, col, start)
     else:
-        return _invoke_function_over_columns("position", substr, str)
+        return _invoke_function_over_columns("position", substr, col)
 
 
 position.__doc__ = pysparkfuncs.position.__doc__
 
 
-def endswith(str: "ColumnOrName", suffix: "ColumnOrName") -> Column:
-    return _invoke_function_over_columns("endswith", str, suffix)
+def endswith(col: "ColumnOrName", suffix: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("endswith", col, suffix)
 
 
 endswith.__doc__ = pysparkfuncs.endswith.__doc__
 
 
-def startswith(str: "ColumnOrName", prefix: "ColumnOrName") -> Column:
-    return _invoke_function_over_columns("startswith", str, prefix)
+def startswith(col: "ColumnOrName", prefix: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("startswith", col, prefix)
 
 
 startswith.__doc__ = pysparkfuncs.startswith.__doc__
@@ -2967,25 +2967,25 @@ def try_to_number(col: "ColumnOrName", format: "ColumnOrName") -> Column:
 try_to_number.__doc__ = pysparkfuncs.try_to_number.__doc__
 
 
-def btrim(str: "ColumnOrName", trim: Optional["ColumnOrName"] = None) -> Column:
+def btrim(col: "ColumnOrName", trim: Optional["ColumnOrName"] = None) -> Column:
     if trim is not None:
-        return _invoke_function_over_columns("btrim", str, trim)
+        return _invoke_function_over_columns("btrim", col, trim)
     else:
-        return _invoke_function_over_columns("btrim", str)
+        return _invoke_function_over_columns("btrim", col)
 
 
 btrim.__doc__ = pysparkfuncs.btrim.__doc__
 
 
-def char_length(str: "ColumnOrName") -> Column:
-    return _invoke_function_over_columns("char_length", str)
+def char_length(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("char_length", col)
 
 
 char_length.__doc__ = pysparkfuncs.char_length.__doc__
 
 
-def character_length(str: "ColumnOrName") -> Column:
-    return _invoke_function_over_columns("character_length", str)
+def character_length(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("character_length", col)
 
 
 character_length.__doc__ = pysparkfuncs.character_length.__doc__
@@ -3005,60 +3005,60 @@ def elt(*inputs: "ColumnOrName") -> Column:
 elt.__doc__ = pysparkfuncs.elt.__doc__
 
 
-def find_in_set(str: "ColumnOrName", str_array: "ColumnOrName") -> Column:
-    return _invoke_function_over_columns("find_in_set", str, str_array)
+def find_in_set(col: "ColumnOrName", str_array: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("find_in_set", col, str_array)
 
 
 find_in_set.__doc__ = pysparkfuncs.find_in_set.__doc__
 
 
 def like(
-    str: "ColumnOrName", pattern: "ColumnOrName", escapeChar: Optional["Column"] = None
+    col: "ColumnOrName", pattern: "ColumnOrName", escapeChar: Optional["Column"] = None
 ) -> Column:
     if escapeChar is not None:
-        return _invoke_function_over_columns("like", str, pattern, escapeChar)
+        return _invoke_function_over_columns("like", col, pattern, escapeChar)
     else:
-        return _invoke_function_over_columns("like", str, pattern)
+        return _invoke_function_over_columns("like", col, pattern)
 
 
 like.__doc__ = pysparkfuncs.like.__doc__
 
 
 def ilike(
-    str: "ColumnOrName", pattern: "ColumnOrName", escapeChar: Optional["Column"] = None
+    col: "ColumnOrName", pattern: "ColumnOrName", escapeChar: Optional["Column"] = None
 ) -> Column:
     if escapeChar is not None:
-        return _invoke_function_over_columns("ilike", str, pattern, escapeChar)
+        return _invoke_function_over_columns("ilike", col, pattern, escapeChar)
     else:
-        return _invoke_function_over_columns("ilike", str, pattern)
+        return _invoke_function_over_columns("ilike", col, pattern)
 
 
 ilike.__doc__ = pysparkfuncs.ilike.__doc__
 
 
-def lcase(str: "ColumnOrName") -> Column:
-    return _invoke_function_over_columns("lcase", str)
+def lcase(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("lcase", col)
 
 
 lcase.__doc__ = pysparkfuncs.lcase.__doc__
 
 
-def ucase(str: "ColumnOrName") -> Column:
-    return _invoke_function_over_columns("ucase", str)
+def ucase(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("ucase", col)
 
 
 ucase.__doc__ = pysparkfuncs.ucase.__doc__
 
 
-def left(str: "ColumnOrName", len: "ColumnOrName") -> Column:
-    return _invoke_function_over_columns("left", str, len)
+def left(col: "ColumnOrName", length: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("left", col, length)
 
 
 left.__doc__ = pysparkfuncs.left.__doc__
 
 
-def right(str: "ColumnOrName", len: "ColumnOrName") -> Column:
-    return _invoke_function_over_columns("right", str, len)
+def right(col: "ColumnOrName", length: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("right", col, length)
 
 
 right.__doc__ = pysparkfuncs.right.__doc__
