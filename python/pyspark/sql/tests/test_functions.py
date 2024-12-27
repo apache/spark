@@ -1344,8 +1344,8 @@ class FunctionsTestsMixin:
 
             self.check_error(
                 exception=pe.exception,
-                error_class="COLUMN_IN_DICT",
-                message_parameters={"func_name": "lit"},
+                errorClass="COLUMN_IN_DICT",
+                messageParameters={"func_name": "lit"},
             )
 
     # Test added for SPARK-39832; change Python API to accept both col & str as input
