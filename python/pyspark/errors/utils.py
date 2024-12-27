@@ -255,7 +255,8 @@ def _with_origin(func: FuncT) -> FuncT:
         from pyspark.sql.utils import is_remote
 
         spark = SparkSession.getActiveSession()
-        if spark is not None and hasattr(func, "__name__"):
+
+        if spark is not None and hasattr(func, "__name__") and is_debugging_enabled():
             if is_remote():
                 global current_origin
 
@@ -313,10 +314,7 @@ def with_origin_to_class(
         return lambda cls: with_origin_to_class(cls, ignores)
     else:
         cls = cls_or_ignores
-        if (
-            os.environ.get("PYSPARK_PIN_THREAD", "true").lower() == "true"
-            and is_debugging_enabled()
-        ):
+        if os.environ.get("PYSPARK_PIN_THREAD", "true").lower() == "true":
             skipping = set(
                 ["__init__", "__new__", "__iter__", "__nonzero__", "__repr__", "__bool__"]
                 + (ignores or [])
