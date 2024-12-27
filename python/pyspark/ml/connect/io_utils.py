@@ -38,7 +38,9 @@ def _copy_file_from_local_to_fs(local_path: str, dest_path: str) -> None:
         session.copyFromLocalToFs(local_path, dest_path)
     else:
         jvm = session.sparkContext._gateway.jvm  # type: ignore[union-attr]
-        jvm.org.apache.spark.ml.python.MLUtil.copyFileFromLocalToFs(local_path, dest_path)
+        getattr(jvm, "org.apache.spark.ml.python.MLUtil").copyFileFromLocalToFs(
+            local_path, dest_path
+        )
 
 
 def _copy_dir_from_local_to_fs(local_path: str, dest_path: str) -> None:

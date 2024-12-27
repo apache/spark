@@ -60,7 +60,7 @@ class _ImageSchema:
 
         ctx = SparkContext._active_spark_context
         assert ctx is not None and ctx._jvm is not None
-        jschema = ctx._jvm.org.apache.spark.ml.image.ImageSchema.imageSchema()
+        jschema = getattr(ctx._jvm, "org.apache.spark.ml.image.ImageSchema").imageSchema()
         return cast(StructType, _parse_datatype_json_string(jschema.json()))
 
     @cached_property
@@ -79,7 +79,7 @@ class _ImageSchema:
 
         ctx = SparkContext._active_spark_context
         assert ctx is not None and ctx._jvm is not None
-        return dict(ctx._jvm.org.apache.spark.ml.image.ImageSchema.javaOcvTypes())
+        return dict(getattr(ctx._jvm, "org.apache.spark.ml.image.ImageSchema").javaOcvTypes())
 
     @cached_property
     def columnSchema(self) -> StructType:
@@ -98,7 +98,7 @@ class _ImageSchema:
 
         ctx = SparkContext._active_spark_context
         assert ctx is not None and ctx._jvm is not None
-        jschema = ctx._jvm.org.apache.spark.ml.image.ImageSchema.columnSchema()
+        jschema = getattr(ctx._jvm, "org.apache.spark.ml.image.ImageSchema").columnSchema()
         return cast(StructType, _parse_datatype_json_string(jschema.json()))
 
     @cached_property
@@ -117,7 +117,7 @@ class _ImageSchema:
 
         ctx = SparkContext._active_spark_context
         assert ctx is not None and ctx._jvm is not None
-        return list(ctx._jvm.org.apache.spark.ml.image.ImageSchema.imageFields())
+        return list(getattr(ctx._jvm, "org.apache.spark.ml.image.ImageSchema").imageFields())
 
     @cached_property
     def undefinedImageType(self) -> str:
@@ -130,7 +130,7 @@ class _ImageSchema:
 
         ctx = SparkContext._active_spark_context
         assert ctx is not None and ctx._jvm is not None
-        return ctx._jvm.org.apache.spark.ml.image.ImageSchema.undefinedImageType()
+        return getattr(ctx._jvm, "org.apache.spark.ml.image.ImageSchema").undefinedImageType()
 
     def toNDArray(self, image: Row) -> np.ndarray:
         """
