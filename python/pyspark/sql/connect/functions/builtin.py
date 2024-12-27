@@ -2725,9 +2725,9 @@ def regexp_extract_all(
     col: "ColumnOrName", regexp: "ColumnOrName", idx: Optional[Union[int, Column]] = None
 ) -> Column:
     if idx is None:
-        return _invoke_function_over_columns("regexp_extract_all", str, regexp)
+        return _invoke_function_over_columns("regexp_extract_all", col, regexp)
     else:
-        return _invoke_function_over_columns("regexp_extract_all", str, regexp, lit(idx))
+        return _invoke_function_over_columns("regexp_extract_all", col, regexp, lit(idx))
 
 
 regexp_extract_all.__doc__ = pysparkfuncs.regexp_extract_all.__doc__
@@ -2856,7 +2856,7 @@ split_part.__doc__ = pysparkfuncs.split_part.__doc__
 def substr(
     col: "ColumnOrName", pos: "ColumnOrName", length: Optional["ColumnOrName"] = None
 ) -> Column:
-    if len is not None:
+    if length is not None:
         return _invoke_function_over_columns("substr", col, pos, length)
     else:
         return _invoke_function_over_columns("substr", col, pos)

@@ -17223,7 +17223,7 @@ def lcase(col: "ColumnOrName") -> Column:
     |       spark|
     +------------+
     """
-    return _invoke_function_over_columns("lcase", str)
+    return _invoke_function_over_columns("lcase", col)
 
 
 @_try_remote_functions
