@@ -18,7 +18,7 @@ import os
 import sys
 import warnings
 from collections.abc import Sized
-from functools import reduce
+from functools import reduce, cached_property
 from threading import RLock
 from types import TracebackType
 from typing import (
@@ -773,7 +773,7 @@ class SparkSession(SparkConversionMixin):
             """
             return self._sc
 
-    @property
+    @cached_property
     def version(self) -> str:
         """
         The version of Spark on which this application is running.
@@ -794,7 +794,7 @@ class SparkSession(SparkConversionMixin):
         """
         return self._jsparkSession.version()
 
-    @property
+    @cached_property
     def conf(self) -> RuntimeConfig:
         """Runtime configuration interface for Spark.
 
@@ -822,11 +822,9 @@ class SparkSession(SparkConversionMixin):
         >>> spark.conf.get("key")
         'value'
         """
-        if not hasattr(self, "_conf"):
-            self._conf = RuntimeConfig(self._jsparkSession.conf())
-        return self._conf
+        return RuntimeConfig(self._jsparkSession.conf())
 
-    @property
+    @cached_property
     def catalog(self) -> "Catalog":
         """Interface through which the user may create, drop, alter or query underlying
         databases, tables, functions, etc.
@@ -854,9 +852,7 @@ class SparkSession(SparkConversionMixin):
         """
         from pyspark.sql.catalog import Catalog
 
-        if not hasattr(self, "_catalog"):
-            self._catalog = Catalog(self)
-        return self._catalog
+        return Catalog(self)
 
     @property
     def udf(self) -> "UDFRegistration":
@@ -1907,7 +1903,7 @@ class SparkSession(SparkConversionMixin):
         """
         return DataStreamReader(self)
 
-    @property
+    @cached_property
     def streams(self) -> "StreamingQueryManager":
         """Returns a :class:`StreamingQueryManager` that allows managing all the
         :class:`StreamingQuery` instances active on `this` context.
@@ -1941,10 +1937,7 @@ class SparkSession(SparkConversionMixin):
         """
         from pyspark.sql.streaming import StreamingQueryManager
 
-        if hasattr(self, "_sqm"):
-            return self._sqm
-        self._sqm: StreamingQueryManager = StreamingQueryManager(self._jsparkSession.streams())
-        return self._sqm
+        return StreamingQueryManager(self._jsparkSession.streams())
 
     @property
     def tvf(self) -> "TableValuedFunction":
