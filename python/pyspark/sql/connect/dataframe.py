@@ -54,7 +54,7 @@ import functools
 from pyspark import _NoValue
 from pyspark._globals import _NoValueType
 from pyspark.util import is_remote_only
-from pyspark.sql.types import Row, StructType, _create_row
+from pyspark.sql.types import Row, StructType, _create_row, _parse_datatype_string
 from pyspark.sql.dataframe import (
     DataFrame as ParentDataFrame,
     DataFrameNaFunctions as ParentDataFrameNaFunctions,
@@ -2036,6 +2036,8 @@ class DataFrame(ParentDataFrame):
         from pyspark.sql.connect.udf import UserDefinedFunction
 
         _validate_pandas_udf(func, evalType)
+        if isinstance(schema, str):
+            schema = cast(StructType, _parse_datatype_string(schema))
         udf_obj = UserDefinedFunction(
             func,
             returnType=schema,
