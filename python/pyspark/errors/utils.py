@@ -34,6 +34,8 @@ from typing import (
     overload,
     cast,
 )
+from types import FrameType
+
 import pyspark
 from pyspark.errors.error_classes import ERROR_CLASSES_MAP
 
@@ -199,7 +201,7 @@ def _capture_call_site(depth: int) -> str:
     # Filtering out PySpark code and keeping user code only
     pyspark_root = os.path.dirname(pyspark.__file__)
 
-    def inspect_stack() -> Iterator[inspect.FrameInfo]:
+    def inspect_stack() -> Iterator[FrameType]:
         frame = inspect.currentframe()
         while frame:
             yield frame
@@ -207,7 +209,7 @@ def _capture_call_site(depth: int) -> str:
 
     stack = (f for f in inspect_stack() if pyspark_root not in f.f_code.co_filename)
 
-    selected_frames = itertools.islice(stack, depth)
+    selected_frames: Iterator[FrameType] = itertools.islice(stack, depth)
 
     # We try import here since IPython is not a required dependency
     try:
