@@ -343,7 +343,7 @@ object CTESubstitution extends Rule[LogicalPlan] {
       cteRelations: Seq[(String, CTERelationDef)],
       unresolvedRelation: UnresolvedRelation): (LogicalPlan, Boolean) = {
     var recursionFound = false
-    val cteRelationsOut = cteRelations
+    val resolvedPlan = cteRelations
       .find(r => conf.resolver(r._1, table))
       .map {
         case (_, d) =>
@@ -360,7 +360,7 @@ object CTESubstitution extends Rule[LogicalPlan] {
           }
       }
       .getOrElse(unresolvedRelation)
-    (cteRelationsOut, recursionFound)
+    (resolvedPlan, recursionFound)
   }
 
   /**
