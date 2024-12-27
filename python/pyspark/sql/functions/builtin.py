@@ -259,7 +259,9 @@ def lit(col: Any) -> Column:
     Example 7: Creating a literal column from a dict.
 
     >>> import pyspark.sql.functions as sf
-    >>> spark.range(1).select(sf.lit({"a": 1, "b": 2}).alias("map_col")).show()
+    >>> spark.range(1).select(
+    >>>    sf.lit({"a": 1, "b": 2}).alias("map_col")
+    >>> ).show()
     +----------------+
     |         map_col|
     +----------------+
