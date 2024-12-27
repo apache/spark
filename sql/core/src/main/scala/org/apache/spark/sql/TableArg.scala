@@ -22,12 +22,18 @@ import org.apache.spark.sql.catalyst.expressions.{Ascending, Expression, Functio
 
 class TableArg(
     private[sql] val expression: FunctionTableSubqueryArgumentExpression,
-    private val sparkSession: SparkSession
+    private val sparkSession: SparkSession,
+    private val isPartitioned: Boolean = false
 )  extends TableValuedFunctionArgument {
   import sparkSession.toRichColumn
 
   @scala.annotation.varargs
   def partitionBy(cols: Column*): TableArg = {
+    if (isPartitioned) {
+      throw new IllegalArgumentException(
+        "partitionBy() can only be specified once."
+      )
+    }
     if (expression.withSinglePartition) {
       throw new IllegalArgumentException(
         "Cannot call partitionBy() after withSinglePartition() has been called."
@@ -37,7 +43,8 @@ class TableArg(
     new TableArg(
       expression.copy(
         partitionByExpressions = partitionByExpressions, withSinglePartition = false),
-      sparkSession
+      sparkSession,
+      isPartitioned = true
     )
   }
 
@@ -55,8 +62,10 @@ class TableArg(
         case expr: Expression => SortOrder(expr, Ascending)
       }
     }
-    new TableArg(expression.copy(orderByExpressions = orderByExpressions),
-      sparkSession)
+    new TableArg(
+      expression.copy(orderByExpressions = orderByExpressions),
+      sparkSession,
+      isPartitioned)
   }
 
   def withSinglePartition(): TableArg = {
