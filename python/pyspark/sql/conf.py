@@ -171,16 +171,26 @@ class RuntimeConfig:
         return RuntimeConfigDictWrapper(self, d, prefix="spark")
 
     def __setitem__(self, key: Any, val: Any) -> None:
+        prefix = "spark."
         if key.startswith("spark."):
-            self.spark[key[6:]] = val
+            self.spark[key[len(prefix) :]] = val
         else:
             super().__setattr__(key, val)
 
     def __getitem__(self, item: Any) -> Union["RuntimeConfigDictWrapper", str]:
+        prefix = "spark."
         if item.startswith("spark."):
-            return self.spark[item[6:]]
+            return self.spark[item[len(prefix) :]]
         else:
-            return object.__getattribute__(self, item)
+            return super().__getattribute__(item)
+
+    def __delitem__(self, item: Any) -> None:
+        prefix = "spark."
+        if item.startswith("spark."):
+            del self.spark[item[len(prefix) :]]
+        else:
+            # So it throws the same error as if `__delitem__` does not exist
+            getattr(self, "__delitem__")
 
 
 class SQLConfEntry(str):
@@ -206,13 +216,13 @@ class RuntimeConfigDictWrapper:
     _logger = PySparkLogger.getLogger("RuntimeConfigDictWrapper")
 
     def __init__(self, conf: RuntimeConfig, d: Dict[str, SQLConfEntry], prefix: str = ""):
-        object.__setattr__(self, "d", d)
-        object.__setattr__(self, "prefix", prefix)
-        object.__setattr__(self, "_conf", conf)
+        super().__setattr__("d", d)
+        super().__setattr__("prefix", prefix)
+        super().__setattr__("_conf", conf)
 
     def __setattr__(self, key: str, val: Any) -> None:
-        prefix = object.__getattribute__(self, "prefix")
-        d = object.__getattribute__(self, "d")
+        prefix = super().__getattribute__("prefix")
+        d = super().__getattribute__("d")
         if prefix:
             prefix += "."
         canonical_key = prefix + key
@@ -226,20 +236,22 @@ class RuntimeConfigDictWrapper:
                     canonical_key, val
                 )
             )
-        object.__getattribute__(self, "_conf").set(canonical_key, val)
+        super().__getattribute__("_conf").set(canonical_key, val)
 
     __setitem__ = __setattr__
 
-    def __getattr__(self, key: str) -> Union["RuntimeConfigDictWrapper", str]:
-        prefix = object.__getattribute__(self, "prefix")
-        d = object.__getattribute__(self, "d")
-        conf = object.__getattribute__(self, "_conf")
+    def __getattr__(self, key: str) -> Union["RuntimeConfigDictWrapper", Optional[str]]:
+        prefix = super().__getattribute__("prefix")
+        d = super().__getattribute__("d")
+        conf = super().__getattribute__("_conf")
         if prefix:
             prefix += "."
         canonical_key = prefix + key
 
         try:
             value = conf.get(canonical_key)
+            if value is None:
+                return None
             description = "Documentation not found for '{}'.".format(canonical_key)
             version = "Version not found for '{}'.".format(canonical_key)
             if canonical_key in d:
@@ -254,9 +266,17 @@ class RuntimeConfigDictWrapper:
 
     __getitem__ = __getattr__
 
+    def __delitem__(self, key) -> None:
+        prefix = super().__getattribute__("prefix")
+        conf = super().__getattribute__("_conf")
+        if prefix:
+            prefix += "."
+        canonical_key = prefix + key
+        conf.unset(canonical_key)
+
     def __dir__(self) -> List[str]:
-        prefix = object.__getattribute__(self, "prefix")
-        d = object.__getattribute__(self, "d")
+        prefix = super().__getattribute__("prefix")
+        d = super().__getattribute__("d")
 
         if prefix == "":
             candidates = d.keys()
