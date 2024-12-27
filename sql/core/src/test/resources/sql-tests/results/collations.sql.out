@@ -585,20 +585,10 @@ select str_to_map(text, pairDelim, keyValueDelim) from t4
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.SparkRuntimeException
 {
   "errorClass" : "INDETERMINATE_COLLATION",
-  "sqlState" : "42P22",
-  "messageParameters" : {
-    "expr" : "\"str_to_map(text, pairDelim, keyValueDelim)\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 49,
-    "fragment" : "str_to_map(text, pairDelim, keyValueDelim)"
-  } ]
+  "sqlState" : "42P22"
 }
 
 
@@ -924,7 +914,7 @@ sitTing sitTing
 -- !query
 select concat_ws(' ', utf8_binary, utf8_lcase) from t5
 -- !query schema
-struct<concat_ws( , utf8_binary, utf8_lcase):string collate NULL>
+struct<concat_ws( , utf8_binary, utf8_lcase):string collate null>
 -- !query output
 Hello, world! Nice day. Hello, world! Nice day.
 Something else. Nothing here. Something else. Nothing here.
@@ -1049,23 +1039,23 @@ kitten
 -- !query
 select elt(2, utf8_binary, utf8_lcase, s) from t5
 -- !query schema
-struct<>
+struct<elt(2, utf8_binary, utf8_lcase, s):string collate null>
 -- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "INDETERMINATE_COLLATION",
-  "sqlState" : "42P22",
-  "messageParameters" : {
-    "expr" : "\"elt(2, utf8_binary, utf8_lcase, s)\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 41,
-    "fragment" : "elt(2, utf8_binary, utf8_lcase, s)"
-  } ]
-}
+Hello, world! Nice day.
+SQL
+Something else. Nothing here.
+a
+aBcDCbA
+aaAaAAaA
+aaAaaAaA
+aaAaaAaAaaAaaAaAaaAaaAaA
+abc
+efd2
+i̇o
+sitTing
+İo
+İo
+İo
 
 
 -- !query
@@ -1176,20 +1166,10 @@ select split_part(utf8_binary, utf8_lcase, 3) from t5
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.SparkRuntimeException
 {
   "errorClass" : "INDETERMINATE_COLLATION",
-  "sqlState" : "42P22",
-  "messageParameters" : {
-    "expr" : "\"split_part(utf8_binary, utf8_lcase, 3)\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 45,
-    "fragment" : "split_part(utf8_binary, utf8_lcase, 3)"
-  } ]
+  "sqlState" : "42P22"
 }
 
 
@@ -1359,7 +1339,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INDETERMINATE_COLLATION",
+  "errorClass" : "INDETERMINATE_COLLATION_IN_EXPRESSION",
   "sqlState" : "42P22",
   "messageParameters" : {
     "expr" : "\"contains(utf8_binary, utf8_lcase)\""
@@ -1554,7 +1534,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INDETERMINATE_COLLATION",
+  "errorClass" : "INDETERMINATE_COLLATION_IN_EXPRESSION",
   "sqlState" : "42P22",
   "messageParameters" : {
     "expr" : "\"substring_index(utf8_binary, utf8_lcase, 2)\""
@@ -1749,7 +1729,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INDETERMINATE_COLLATION",
+  "errorClass" : "INDETERMINATE_COLLATION_IN_EXPRESSION",
   "sqlState" : "42P22",
   "messageParameters" : {
     "expr" : "\"instr(utf8_binary, utf8_lcase)\""
@@ -1922,7 +1902,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INDETERMINATE_COLLATION",
+  "errorClass" : "INDETERMINATE_COLLATION_IN_EXPRESSION",
   "sqlState" : "42P22",
   "messageParameters" : {
     "expr" : "\"find_in_set(utf8_binary, utf8_lcase)\""
@@ -2091,7 +2071,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INDETERMINATE_COLLATION",
+  "errorClass" : "INDETERMINATE_COLLATION_IN_EXPRESSION",
   "sqlState" : "42P22",
   "messageParameters" : {
     "expr" : "\"startswith(utf8_binary, utf8_lcase)\""
@@ -2308,7 +2288,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INDETERMINATE_COLLATION",
+  "errorClass" : "INDETERMINATE_COLLATION_IN_EXPRESSION",
   "sqlState" : "42P22",
   "messageParameters" : {
     "expr" : "\"translate(utf8_binary, utf8_lcase, 12345)\""
@@ -2459,7 +2439,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INDETERMINATE_COLLATION",
+  "errorClass" : "INDETERMINATE_COLLATION_IN_EXPRESSION",
   "sqlState" : "42P22",
   "messageParameters" : {
     "expr" : "\"replace(utf8_binary, utf8_lcase, abc)\""
@@ -2654,7 +2634,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INDETERMINATE_COLLATION",
+  "errorClass" : "INDETERMINATE_COLLATION_IN_EXPRESSION",
   "sqlState" : "42P22",
   "messageParameters" : {
     "expr" : "\"endswith(utf8_binary, utf8_lcase)\""
@@ -3330,23 +3310,23 @@ Spark	Sql
 -- !query
 select overlay(utf8_binary, utf8_lcase, 2) from t5
 -- !query schema
-struct<>
+struct<overlay(utf8_binary, utf8_lcase, 2, -1):string collate null>
 -- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "INDETERMINATE_COLLATION",
-  "sqlState" : "42P22",
-  "messageParameters" : {
-    "expr" : "\"overlay(utf8_binary, utf8_lcase, 2, -1)\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 42,
-    "fragment" : "overlay(utf8_binary, utf8_lcase, 2)"
-  } ]
-}
+HHello, world! Nice day.
+SSQLk
+SSomething else. Nothing here.
+aaBcDCbA
+aaaAaAAaA
+aaaAaaAaA
+aaaAaaAaAaaAaaAaAaaAaaAaA
+aabc
+baAbAAbA
+eefd2
+ksitTing
+İi̇o
+İİo
+İİo
+İİo
 
 
 -- !query
@@ -3708,23 +3688,23 @@ false
 -- !query
 select levenshtein(utf8_binary, utf8_lcase) from t5
 -- !query schema
-struct<>
+struct<levenshtein(utf8_binary, utf8_lcase):int>
 -- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "INDETERMINATE_COLLATION",
-  "sqlState" : "42P22",
-  "messageParameters" : {
-    "expr" : "\"levenshtein(utf8_binary, utf8_lcase)\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 43,
-    "fragment" : "levenshtein(utf8_binary, utf8_lcase)"
-  } ]
-}
+0
+0
+0
+0
+0
+0
+1
+1
+1
+16
+2
+4
+4
+4
+8
 
 
 -- !query
@@ -4251,23 +4231,23 @@ ki	si
 -- !query
 select rpad(utf8_binary, 8, utf8_lcase) from t5
 -- !query schema
-struct<>
+struct<rpad(utf8_binary, 8, utf8_lcase):string collate null>
 -- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "INDETERMINATE_COLLATION",
-  "sqlState" : "42P22",
-  "messageParameters" : {
-    "expr" : "\"rpad(utf8_binary, 8, utf8_lcase)\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 39,
-    "fragment" : "rpad(utf8_binary, 8, utf8_lcase)"
-  } ]
-}
+Hello, w
+Somethin
+SparkSQL
+aaAaAAaA
+aaAaAAaA
+aaAaAAaA
+abcabcab
+abcdcbaa
+bbAbAAbA
+efd2efd2
+kittensi
+İo İoİoİ
+İoi̇oi̇o
+İoİo İo 
+İoİoİoİo
 
 
 -- !query
@@ -4420,23 +4400,23 @@ kittenAa	sitTingA
 -- !query
 select lpad(utf8_binary, 8, utf8_lcase) from t5
 -- !query schema
-struct<>
+struct<lpad(utf8_binary, 8, utf8_lcase):string collate null>
 -- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "INDETERMINATE_COLLATION",
-  "sqlState" : "42P22",
-  "messageParameters" : {
-    "expr" : "\"lpad(utf8_binary, 8, utf8_lcase)\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 39,
-    "fragment" : "lpad(utf8_binary, 8, utf8_lcase)"
-  } ]
-}
+Hello, w
+SQLSpark
+Somethin
+aaAaAAaA
+aaAaAAaA
+aaAaAAaA
+aabcdcba
+abcababc
+bbAbAAbA
+efd2efd2
+i̇oi̇oİo
+sikitten
+İo İo İo
+İoİoİoİo
+İoİoİİo
 
 
 -- !query
@@ -4593,7 +4573,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INDETERMINATE_COLLATION",
+  "errorClass" : "INDETERMINATE_COLLATION_IN_EXPRESSION",
   "sqlState" : "42P22",
   "messageParameters" : {
     "expr" : "\"locate(utf8_binary, utf8_lcase, 1)\""
@@ -4788,7 +4768,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INDETERMINATE_COLLATION",
+  "errorClass" : "INDETERMINATE_COLLATION_IN_EXPRESSION",
   "sqlState" : "42P22",
   "messageParameters" : {
     "expr" : "\"TRIM(BOTH utf8_binary FROM utf8_lcase)\""
@@ -4969,7 +4949,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INDETERMINATE_COLLATION",
+  "errorClass" : "INDETERMINATE_COLLATION_IN_EXPRESSION",
   "sqlState" : "42P22",
   "messageParameters" : {
     "expr" : "\"TRIM(BOTH utf8_lcase FROM utf8_binary)\""
@@ -5164,7 +5144,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INDETERMINATE_COLLATION",
+  "errorClass" : "INDETERMINATE_COLLATION_IN_EXPRESSION",
   "sqlState" : "42P22",
   "messageParameters" : {
     "expr" : "\"TRIM(LEADING utf8_binary FROM utf8_lcase)\""
@@ -5345,7 +5325,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INDETERMINATE_COLLATION",
+  "errorClass" : "INDETERMINATE_COLLATION_IN_EXPRESSION",
   "sqlState" : "42P22",
   "messageParameters" : {
     "expr" : "\"TRIM(TRAILING utf8_binary FROM utf8_lcase)\""

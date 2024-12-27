@@ -95,6 +95,8 @@ class IndeterminateCollationTestSuite extends QueryTest with SharedSparkSession 
         "array(c1 || c2)",
         "map('a', c1 || c2)",
         "named_struct('f1', c1 || c2, 'f2', c2)",
+        "repeat(c1 || c2, 2)",
+        "elt(1, c1 || c2, c2)",
         "coalesce(c1 || c2, c2)")
 
       expressions.foreach { expr =>
@@ -133,7 +135,7 @@ class IndeterminateCollationTestSuite extends QueryTest with SharedSparkSession 
     withTestTable {
       sql(s"INSERT INTO $testTableName VALUES ('a', 'b')")
 
-      val expressions = Seq("c1 || c2 IN ('a')")
+      val expressions = Seq("str_to_map(c1 || c2, 'a', 'b')")
 
       expressions.foreach { expr =>
         assertRuntimeIndeterminateCollationError {
