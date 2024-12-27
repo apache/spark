@@ -25,6 +25,7 @@ import scala.jdk.CollectionConverters._
 import org.apache.avro.{LogicalTypes, Schema, SchemaBuilder}
 import org.apache.avro.LogicalTypes.{Decimal, _}
 import org.apache.avro.Schema.Type._
+import org.apache.avro.SchemaBuilder.FieldAssembler
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.internal.{Logging, MDC}
@@ -299,23 +300,93 @@ object SchemaConverters extends Logging {
     }
   }
 
-  /**
-   * Converts a Spark SQL schema to a corresponding Avro schema.
-   *
-   * @since 2.4.0
-   */
+  def getDefaultValue(dataType: DataType): Any = {
+    def createNestedDefault(st: StructType): java.util.HashMap[String, Any] = {
+      val defaultMap = new java.util.HashMap[String, Any]()
+      st.fields.foreach { field =>
+        defaultMap.put(field.name, getDefaultValue(field.dataType))
+      }
+      defaultMap
+    }
+
+    dataType match {
+      case BooleanType => false
+      case ByteType | ShortType | IntegerType => 0
+      case LongType => 0L
+      case FloatType => 0.0f
+      case DoubleType => 0.0
+      case StringType => ""
+      case BinaryType => java.nio.ByteBuffer.allocate(0)
+      case ArrayType(elementType, _) =>
+        val defaultArray = new java.util.ArrayList[Any]()
+        defaultArray.add(getDefaultValue(elementType))  // Add one default element
+        defaultArray
+      case MapType(StringType, valueType, _) =>
+        val defaultMap = new java.util.HashMap[String, Any]()
+        defaultMap.put("defaultKey", getDefaultValue(valueType))  // Add one default entry
+        defaultMap
+      case st: StructType => createNestedDefault(st)  // Handle nested structs recursively
+      case _: DecimalType => java.nio.ByteBuffer.allocate(0)
+      case DateType => 0
+      case TimestampType => 0L
+      case TimestampNTZType => 0L
+      case NullType => null
+      case _ => null
+    }
+  }
+
   def toAvroType(
       catalystType: DataType,
       nullable: Boolean = false,
       recordName: String = "topLevelRecord",
-      nameSpace: String = "")
-    : Schema = {
+      nameSpace: String = "",
+      withDefaults: Boolean = true,
+      nestingLevel: Int = 0): Schema = {
+
     val builder = SchemaBuilder.builder()
 
+    // Helper function to generate unique names for nested records
+    def getNestedRecordName(baseName: String): String = {
+      if (nestingLevel == 0) baseName
+      else s"${baseName}_nested_$nestingLevel"
+    }
+
+    // Helper function to handle struct fields
+    def processStructFields(
+        st: StructType,
+        fieldsAssembler: FieldAssembler[Schema]): FieldAssembler[Schema] = {
+      st.foreach { field =>
+        val fieldAvroType = toAvroType(
+          field.dataType,
+          field.nullable,
+          getNestedRecordName(field.name),
+          nameSpace,
+          withDefaults,
+          nestingLevel + 1
+        )
+
+        val fieldAssembler = fieldsAssembler.name(field.name).`type`(fieldAvroType)
+
+        if (withDefaults) {
+          fieldAssembler.withDefault(getDefaultValue(field.dataType))
+        } else {
+          fieldAssembler.noDefault()
+        }
+      }
+      fieldsAssembler
+    }
+
     val schema = catalystType match {
+      // Basic types remain the same
       case BooleanType => builder.booleanType()
       case ByteType | ShortType | IntegerType => builder.intType()
       case LongType => builder.longType()
+      case FloatType => builder.floatType()
+      case DoubleType => builder.doubleType()
+      case StringType => builder.stringType()
+      case NullType => builder.nullType()
+
+      // Date and Timestamp types
       case DateType =>
         LogicalTypes.date().addToSchema(builder.intType())
       case TimestampType =>
@@ -323,49 +394,51 @@ object SchemaConverters extends Logging {
       case TimestampNTZType =>
         LogicalTypes.localTimestampMicros().addToSchema(builder.longType())
 
-      case FloatType => builder.floatType()
-      case DoubleType => builder.doubleType()
-      case StringType => builder.stringType()
-      case NullType => builder.nullType()
+      // Decimal type
       case d: DecimalType =>
         val avroType = LogicalTypes.decimal(d.precision, d.scale)
         val fixedSize = minBytesForPrecision(d.precision)
-        // Need to avoid naming conflict for the fixed fields
         val name = nameSpace match {
-          case "" => s"$recordName.fixed"
-          case _ => s"$nameSpace.$recordName.fixed"
+          case "" => s"${getNestedRecordName(recordName)}.fixed"
+          case _ => s"$nameSpace.${getNestedRecordName(recordName)}.fixed"
         }
         avroType.addToSchema(SchemaBuilder.fixed(name).size(fixedSize))
 
       case BinaryType => builder.bytesType()
-      case ArrayType(et, containsNull) =>
-        builder.array()
-          .items(toAvroType(et, containsNull, recordName, nameSpace))
-      case MapType(StringType, vt, valueContainsNull) =>
-        builder.map()
-          .values(toAvroType(vt, valueContainsNull, recordName, nameSpace))
-      case st: StructType =>
-        val childNameSpace = if (nameSpace != "") s"$nameSpace.$recordName" else recordName
-        val fieldsAssembler = builder.record(recordName).namespace(nameSpace).fields()
-        st.foreach { f =>
-          val fieldAvroType =
-            toAvroType(f.dataType, f.nullable, f.name, childNameSpace)
-          fieldsAssembler.name(f.name).`type`(fieldAvroType).noDefault()
-        }
-        fieldsAssembler.endRecord()
 
+      // Complex types with improved nesting handling
+      case ArrayType(elementType, containsNull) =>
+        builder.array()
+          .items(toAvroType(elementType, containsNull, recordName,
+            nameSpace, withDefaults, nestingLevel + 1))
+
+      case MapType(StringType, valueType, valueContainsNull) =>
+        builder.map()
+          .values(toAvroType(valueType, valueContainsNull, recordName,
+            nameSpace, withDefaults, nestingLevel + 1))
+
+      case st: StructType =>
+        val nestedRecordName = getNestedRecordName(recordName)
+        val childNameSpace = if (nameSpace != "") {
+          s"$nameSpace.$nestedRecordName"
+        } else nestedRecordName
+        val fieldsAssembler = builder.record(nestedRecordName).namespace(nameSpace).fields()
+        processStructFields(st, fieldsAssembler).endRecord()
+
+      // Interval types
       case ym: YearMonthIntervalType =>
         val ymIntervalType = builder.intType()
         ymIntervalType.addProp(CATALYST_TYPE_PROP_NAME, ym.typeName)
         ymIntervalType
+
       case dt: DayTimeIntervalType =>
         val dtIntervalType = builder.longType()
         dtIntervalType.addProp(CATALYST_TYPE_PROP_NAME, dt.typeName)
         dtIntervalType
 
-      // This should never happen.
       case other => throw new IncompatibleSchemaException(s"Unexpected type $other.")
     }
+
     if (nullable && catalystType != NullType) {
       Schema.createUnion(schema, nullSchema)
     } else {

@@ -69,6 +69,70 @@ class RunningCountStatefulProcessor extends StatefulProcessor[String, String, (S
   }
 }
 
+case class TwoLongs(
+    value: Long,
+    value2: Long
+)
+
+case class NestedLongs(
+    value: Long,
+    value2: TwoLongs
+)
+
+class RunningCountStatefulProcessorTwoLongs
+  extends StatefulProcessor[String, String, (String, String)] with Logging {
+  @transient protected var _countState: ValueState[TwoLongs] = _
+
+  override def init(
+      outputMode: OutputMode,
+      timeMode: TimeMode): Unit = {
+    _countState = getHandle.getValueState[TwoLongs]("countState",
+      Encoders.product[TwoLongs], TTLConfig.NONE)
+  }
+
+  override def handleInputRows(
+      key: String,
+      inputRows: Iterator[String],
+      timerValues: TimerValues): Iterator[(String, String)] = {
+    val count = _countState.getOption().getOrElse(TwoLongs(0L, 0L)).value + 1
+    if (count == 3) {
+      _countState.clear()
+      Iterator.empty
+    } else {
+      _countState.update(TwoLongs(count, -1))
+      Iterator((key, count.toString))
+    }
+  }
+}
+
+class RunningCountStatefulProcessorNestedLongs
+  extends StatefulProcessor[String, String, (String, String)] with Logging {
+  @transient protected var _countState: ValueState[NestedLongs] = _
+
+  override def init(
+      outputMode: OutputMode,
+      timeMode: TimeMode): Unit = {
+    _countState = getHandle.getValueState[NestedLongs]("countState",
+      Encoders.product[NestedLongs], TTLConfig.NONE)
+  }
+
+  override def handleInputRows(
+      key: String,
+      inputRows: Iterator[String],
+      timerValues: TimerValues): Iterator[(String, String)] = {
+    val count = _countState.getOption().getOrElse(
+      NestedLongs(0L, TwoLongs(0L, 0L))).value + 1
+    if (count == 3) {
+      _countState.clear()
+      Iterator.empty
+    } else {
+      _countState.update(NestedLongs(count, TwoLongs(0L, 0L)))
+      Iterator((key, count.toString))
+    }
+  }
+}
+
+
 class RunningCountStatefulProcessorWithTTL
   extends StatefulProcessor[String, String, (String, String)]
   with Logging {
@@ -680,6 +744,100 @@ class TransformWithStateSuite extends StateStoreMetricsTest
           CheckNewAnswer(("a", "2")),
           AddData(inputData, "d"),
           CheckNewAnswer(("d", "1")),
+          StopStream
+        )
+      }
+    }
+  }
+
+  test("transformWithState - adding field should succeed") {
+    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+      classOf[RocksDBStateStoreProvider].getName,
+      SQLConf.SHUFFLE_PARTITIONS.key ->
+        TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString) {
+      withTempDir { chkptDir =>
+        val dirPath = chkptDir.getCanonicalPath
+        val inputData = MemoryStream[String]
+        val result1 = inputData.toDS()
+          .groupByKey(x => x)
+          .transformWithState(new RunningCountStatefulProcessor(),
+            TimeMode.None(),
+            OutputMode.Update())
+
+        testStream(result1, OutputMode.Update())(
+          StartStream(checkpointLocation = dirPath),
+          AddData(inputData, "a"),
+          CheckNewAnswer(("a", "1")),
+          Execute { q =>
+            assert(q.lastProgress.stateOperators(0).customMetrics.get("numValueStateVars") > 0)
+            assert(q.lastProgress.stateOperators(0).customMetrics.get("numRegisteredTimers") == 0)
+            assert(q.lastProgress.stateOperators(0).numRowsUpdated === 1)
+          },
+          AddData(inputData, "a", "b"),
+          CheckNewAnswer(("a", "2"), ("b", "1")),
+          StopStream,
+          StartStream(checkpointLocation = dirPath),
+          AddData(inputData, "a", "b"), // should remove state for "a" and not return anything for a
+          CheckNewAnswer(("b", "2")),
+          StopStream,
+          Execute { q =>
+            assert(q.lastProgress.stateOperators(0).numRowsUpdated === 1)
+            assert(q.lastProgress.stateOperators(0).numRowsRemoved === 1)
+          },
+          StartStream(checkpointLocation = dirPath),
+          AddData(inputData, "a", "c"), // should recreate state for "a" and return count as 1 and
+          CheckNewAnswer(("a", "1"), ("c", "1"))
+        )
+
+        logError(s"### starting query 2")
+        val result2 = inputData.toDS()
+          .groupByKey(x => x)
+          .transformWithState(new RunningCountStatefulProcessorNestedLongs(),
+            TimeMode.None(),
+            OutputMode.Update())
+
+        testStream(result2, OutputMode.Update())(
+          StartStream(checkpointLocation = dirPath),
+          AddData(inputData, "a"),
+          CheckNewAnswer(("a", "2")),
+          StopStream
+        )
+      }
+    }
+  }
+
+  test("transformWithState - removing field should succeed") {
+    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+      classOf[RocksDBStateStoreProvider].getName,
+      SQLConf.SHUFFLE_PARTITIONS.key ->
+        TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString) {
+      withTempDir { chkptDir =>
+        val dirPath = chkptDir.getCanonicalPath
+        val inputData = MemoryStream[String]
+
+        val result2 = inputData.toDS()
+          .groupByKey(x => x)
+          .transformWithState(new RunningCountStatefulProcessorTwoLongs(),
+            TimeMode.None(),
+            OutputMode.Update())
+
+        testStream(result2, OutputMode.Update())(
+          StartStream(checkpointLocation = dirPath),
+          AddData(inputData, "a"),
+          CheckNewAnswer(("a", "1")),
+          StopStream
+        )
+
+        val result1 = inputData.toDS()
+          .groupByKey(x => x)
+          .transformWithState(new RunningCountStatefulProcessor(),
+            TimeMode.None(),
+            OutputMode.Update())
+
+        testStream(result1, OutputMode.Update())(
+          StartStream(checkpointLocation = dirPath),
+          AddData(inputData, "a"),
+          CheckNewAnswer(("a", "2")),
           StopStream
         )
       }

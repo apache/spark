@@ -797,6 +797,32 @@ class AvroStateEncoder(
     }
   }
 
+  /**
+   * This method takes a byte array written using Avro encoding, and
+   * deserializes to an UnsafeRow using the Avro deserializer
+   */
+  def decodeFromAvroToUnsafeRow(
+      valueBytes: Array[Byte],
+      avroDeserializer: AvroDeserializer,
+      writerSchema: Schema,
+      readerSchema: Schema,
+      valueProj: UnsafeProjection): UnsafeRow = {
+    if (valueBytes != null) {
+      val reader = new GenericDatumReader[Any](writerSchema, readerSchema)
+      val decoder = DecoderFactory.get().binaryDecoder(
+        valueBytes, 0, valueBytes.length, null)
+      // bytes -> Avro.GenericDataRecord
+      val genericData = reader.read(null, decoder)
+      // Avro.GenericDataRecord -> InternalRow
+      val internalRow = avroDeserializer.deserialize(
+        genericData).orNull.asInstanceOf[InternalRow]
+      // InternalRow -> UnsafeRow
+      valueProj.apply(internalRow)
+    } else {
+      null
+    }
+  }
+
   private val out = new ByteArrayOutputStream
 
   override def encodeKey(row: UnsafeRow): Array[Byte] = {
@@ -1103,8 +1129,21 @@ class AvroStateEncoder(
 
   override def decodeValue(bytes: Array[Byte]): UnsafeRow = {
     val schemaIdRow = decodeStateSchemaIdRow(bytes)
+    logError(s"### schemaId: ${schemaIdRow.schemaId}, currentSchemaId: ${currentValSchemaId}")
+    val writerSchema = stateSchemaBroadcast.get.getSchemaMetadataValue(
+      StateSchemaMetadataKey(
+        getColFamilyName,
+        schemaIdRow.schemaId,
+        isKey = false
+      )
+    )
+    val valueProj = UnsafeProjection.create(writerSchema.sqlSchema)
     decodeFromAvroToUnsafeRow(
-      schemaIdRow.bytes, avroEncoder.valueDeserializer, valueAvroType, valueProj)
+      schemaIdRow.bytes,
+      avroEncoder.valueDeserializer,
+      writerSchema.avroSchema,
+      valueAvroType, valueProj
+    )
   }
 }
 
