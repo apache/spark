@@ -773,7 +773,7 @@ class SparkSession(SparkConversionMixin):
             """
             return self._sc
 
-    @property
+    @cached_property
     def version(self) -> str:
         """
         The version of Spark on which this application is running.
