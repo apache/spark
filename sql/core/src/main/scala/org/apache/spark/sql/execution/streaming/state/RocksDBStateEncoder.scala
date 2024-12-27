@@ -959,15 +959,13 @@ object RocksDBStateEncoder extends Logging {
    * @param keyStateEncoderSpec Specification defining the key encoding strategy
    *                            (no prefix, prefix scan, or range scan)
    * @param useColumnFamilies Whether to use RocksDB column families for storage
-   * @param virtualColFamilyId Optional column family identifier when column families are enabled
    * @return A configured RocksDBKeyStateEncoder instance
    */
   def getKeyEncoder(
       dataEncoder: RocksDBDataEncoder,
       keyStateEncoderSpec: KeyStateEncoderSpec,
-      useColumnFamilies: Boolean,
-      virtualColFamilyId: Option[Short] = None): RocksDBKeyStateEncoder = {
-    keyStateEncoderSpec.toEncoder(dataEncoder, useColumnFamilies, virtualColFamilyId)
+      useColumnFamilies: Boolean): RocksDBKeyStateEncoder = {
+    keyStateEncoderSpec.toEncoder(dataEncoder, useColumnFamilies)
   }
 
   /**

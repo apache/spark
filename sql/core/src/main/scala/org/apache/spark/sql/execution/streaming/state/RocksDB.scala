@@ -26,7 +26,7 @@ import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger}
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.{mutable, Map}
-import scala.jdk.CollectionConverters.{ConcurrentMapHasAsScala, MapHasAsJava}
+import scala.jdk.CollectionConverters.ConcurrentMapHasAsScala
 import scala.ref.WeakReference
 import scala.util.Try
 
@@ -81,7 +81,8 @@ class RocksDB(
       checkpointDir: File,
       version: Long,
       numKeys: Long,
-      columnFamilyMapping: Map[String, Short],
+      numInternalKeys: Long,
+      columnFamilyMapping: Map[String, ColumnFamilyInfo],
       maxColumnFamilyId: Short,
       dfsFileSuffix: String,
       fileMapping: Map[String, RocksDBSnapshotFile],
@@ -179,6 +180,10 @@ class RocksDB(
 
   @volatile private var numKeysOnLoadedVersion = 0L
   @volatile private var numKeysOnWritingVersion = 0L
+
+  @volatile private var numInternalKeysOnLoadedVersion = 0L
+  @volatile private var numInternalKeysOnWritingVersion = 0L
+
   @volatile private var fileManagerMetrics = RocksDBFileManagerMetrics.EMPTY_METRICS
 
   // SPARK-46249 - Keep track of recorded metrics per version which can be used for querying later
@@ -192,7 +197,7 @@ class RocksDB(
   // This is accessed and updated only between load and commit
   // which means it is implicitly guarded by acquireLock
   @GuardedBy("acquireLock")
-  private val colFamilyNameToIdMap = new ConcurrentHashMap[String, Short]()
+  private val colFamilyNameToInfoMap = new ConcurrentHashMap[String, ColumnFamilyInfo]()
 
   @GuardedBy("acquireLock")
   private val maxColumnFamilyId: AtomicInteger = new AtomicInteger(-1)
@@ -210,24 +215,25 @@ class RocksDB(
 
   // Methods to fetch column family mapping for this State Store version
   def getColumnFamilyMapping: Map[String, Short] = {
-    colFamilyNameToIdMap.asScala
+    colFamilyNameToInfoMap.asScala.map { case (k, v) => (k, v.cfId) }.toMap
   }
 
   def getColumnFamilyId(cfName: String): Short = {
-    colFamilyNameToIdMap.get(cfName)
+    colFamilyNameToInfoMap.get(cfName).cfId
   }
 
   /**
    * Create RocksDB column family, if not created already
    */
-  def createColFamilyIfAbsent(colFamilyName: String): Short = {
+  def createColFamilyIfAbsent(colFamilyName: String, isInternal: Boolean): Short = {
     if (!checkColFamilyExists(colFamilyName)) {
       val newColumnFamilyId = maxColumnFamilyId.incrementAndGet().toShort
-      colFamilyNameToIdMap.putIfAbsent(colFamilyName, newColumnFamilyId)
+      colFamilyNameToInfoMap.putIfAbsent(colFamilyName,
+        ColumnFamilyInfo(newColumnFamilyId, isInternal))
       shouldForceSnapshot.set(true)
       newColumnFamilyId
     } else {
-      colFamilyNameToIdMap.get(colFamilyName)
+      colFamilyNameToInfoMap.get(colFamilyName).cfId
     }
   }
 
@@ -238,7 +244,7 @@ class RocksDB(
   def removeColFamilyIfExists(colFamilyName: String): Option[Short] = {
     if (checkColFamilyExists(colFamilyName)) {
       shouldForceSnapshot.set(true)
-      Some(colFamilyNameToIdMap.remove(colFamilyName))
+      Some(colFamilyNameToInfoMap.remove(colFamilyName).cfId)
     } else {
       None
     }
@@ -251,22 +257,22 @@ class RocksDB(
    * @return - true if the column family exists, false otherwise
    */
   def checkColFamilyExists(colFamilyName: String): Boolean = {
-    colFamilyNameToIdMap.containsKey(colFamilyName)
+    colFamilyNameToInfoMap.containsKey(colFamilyName)
   }
 
   // This method sets the internal column family metadata to
   // the default values it should be set to on load
   private def setInitialCFInfo(): Unit = {
-    colFamilyNameToIdMap.clear()
+    colFamilyNameToInfoMap.clear()
     shouldForceSnapshot.set(false)
     maxColumnFamilyId.set(0)
   }
 
   def getColFamilyCount(isInternal: Boolean): Long = {
     if (isInternal) {
-      colFamilyNameToIdMap.asScala.keys.toSeq.count(checkInternalColumnFamilies)
+      colFamilyNameToInfoMap.asScala.keys.toSeq.count(checkInternalColumnFamilies)
     } else {
-      colFamilyNameToIdMap.asScala.keys.toSeq.count(!checkInternalColumnFamilies(_))
+      colFamilyNameToInfoMap.asScala.keys.toSeq.count(!checkInternalColumnFamilies(_))
     }
   }
 
@@ -487,7 +493,9 @@ class RocksDB(
   private def openLocalRocksDB(metadata: RocksDBCheckpointMetadata): Unit = {
     setInitialCFInfo()
     metadata.columnFamilyMapping.foreach { mapping =>
-      colFamilyNameToIdMap.putAll(mapping.asJava)
+      mapping.foreach { case (colFamilyName, colFamilyInfo) =>
+        colFamilyNameToInfoMap.putIfAbsent(colFamilyName, colFamilyInfo)
+      }
     }
 
     metadata.maxColumnFamilyId.foreach { maxId =>
@@ -639,7 +647,9 @@ class RocksDB(
    * Get the value for the given key if present, or null.
    * @note This will return the last written value even if it was uncommitted.
    */
-  def get(key: Array[Byte]): Array[Byte] = {
+  def get(
+      key: Array[Byte],
+      cfName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Array[Byte] = {
     db.get(readOptions, key)
   }
 
@@ -647,7 +657,10 @@ class RocksDB(
    * Put the given value for the given key.
    * @note This update is not committed to disk until commit() is called.
    */
-  def put(key: Array[Byte], value: Array[Byte]): Unit = {
+  def put(
+      key: Array[Byte],
+      value: Array[Byte],
+      cfName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Unit = {
     if (conf.trackTotalNumberOfRows) {
       val oldValue = db.get(readOptions, key)
       if (oldValue == null) {
@@ -670,7 +683,10 @@ class RocksDB(
    *
    * @note This update is not committed to disk until commit() is called.
    */
-  def merge(key: Array[Byte], value: Array[Byte]): Unit = {
+  def merge(
+      key: Array[Byte],
+      value: Array[Byte],
+      cfName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Unit = {
     if (conf.trackTotalNumberOfRows) {
       val oldValue = db.get(readOptions, key)
       if (oldValue == null) {
@@ -686,7 +702,7 @@ class RocksDB(
    * Remove the key if present.
    * @note This update is not committed to disk until commit() is called.
    */
-  def remove(key: Array[Byte]): Unit = {
+  def remove(key: Array[Byte], cfName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Unit = {
     if (conf.trackTotalNumberOfRows) {
       val value = db.get(readOptions, key)
       if (value != null) {
@@ -748,7 +764,9 @@ class RocksDB(
     }
   }
 
-  def prefixScan(prefix: Array[Byte]): Iterator[ByteArrayPair] = {
+  def prefixScan(
+      prefix: Array[Byte],
+      cfName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Iterator[ByteArrayPair] = {
     val iter = db.newIterator()
     iter.seek(prefix)
 
@@ -824,7 +842,7 @@ class RocksDB(
           snapshot = Some(createSnapshot(
             checkpointDir,
             newVersion,
-            colFamilyNameToIdMap.asScala.toMap,
+            colFamilyNameToInfoMap.asScala.toMap,
             maxColumnFamilyId.get().toShort,
             sessionStateStoreCkptId))
           lastSnapshotVersion = newVersion
@@ -1104,14 +1122,15 @@ class RocksDB(
   private def createSnapshot(
       checkpointDir: File,
       version: Long,
-      columnFamilyMapping: Map[String, Short],
+      columnFamilyMapping: Map[String, ColumnFamilyInfo],
       maxColumnFamilyId: Short,
       uniqueId: Option[String] = None): RocksDBSnapshot = {
     val (dfsFileSuffix, immutableFileMapping) = rocksDBFileMapping.createSnapshotFileMapping(
       fileManager, checkpointDir, version)
 
     RocksDBSnapshot(checkpointDir, version, numKeysOnWritingVersion,
-      columnFamilyMapping, maxColumnFamilyId, dfsFileSuffix, immutableFileMapping, uniqueId)
+      numInternalKeysOnWritingVersion, columnFamilyMapping, maxColumnFamilyId,
+      dfsFileSuffix, immutableFileMapping, uniqueId)
   }
 
   /**
@@ -1232,7 +1251,8 @@ class RocksDB(
     try {
       val uploadTime = timeTakenMs {
         fileManager.saveCheckpointToDfs(snapshot.checkpointDir,
-          snapshot.version, snapshot.numKeys, snapshot.fileMapping,
+          snapshot.version, snapshot.numKeys, snapshot.numInternalKeys,
+          snapshot.fileMapping,
           Some(snapshot.columnFamilyMapping), Some(snapshot.maxColumnFamilyId), snapshot.uniqueId)
         fileManagerMetrics = fileManager.latestSaveCheckpointMetrics
 

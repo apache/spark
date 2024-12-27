@@ -1244,7 +1244,7 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
       val conf = dbConf.copy(minDeltasForSnapshot = 5, compactOnCommit = false)
       new File(remoteDir).delete() // to make sure that the directory gets created
       withDB(remoteDir, conf = conf, useColumnFamilies = true) { db =>
-        db.createColFamilyIfAbsent("test")
+        db.createColFamilyIfAbsent("test", isInternal = false)
         db.load(0)
         db.put("a", "1")
         db.put("b", "2")
@@ -1345,7 +1345,8 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
         case true => Some(UUID.randomUUID().toString)
       }
       saveCheckpointFiles(fileManager, cpFiles1, version = 1,
-        numKeys = 101, rocksDBFileMapping, uuid)
+        numKeys = 101, rocksDBFileMapping,
+        numInternalKeys = 0, uuid)
       assert(fileManager.getLatestVersion() === 1)
       assert(numRemoteSSTFiles == 2) // 2 sst files copied
       assert(numRemoteLogFiles == 2)
@@ -1360,7 +1361,8 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
         "archive/00003.log" -> 2000
       )
       saveCheckpointFiles(fileManager_, cpFiles1_, version = 1,
-        numKeys = 101, new RocksDBFileMapping(), uuid)
+        numKeys = 101, new RocksDBFileMapping(),
+        numInternalKeys = 0, uuid)
       assert(fileManager_.getLatestVersion() === 1)
       assert(numRemoteSSTFiles == 4)
       assert(numRemoteLogFiles == 4)
@@ -1380,7 +1382,8 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
         "archive/00005.log" -> 2000
       )
       saveCheckpointFiles(fileManager_, cpFiles2,
-        version = 2, numKeys = 121, new RocksDBFileMapping(), uuid)
+        version = 2, numKeys = 121, new RocksDBFileMapping(),
+        numInternalKeys = 0, uuid)
       fileManager_.deleteOldVersions(1)
       assert(numRemoteSSTFiles <= 4) // delete files recorded in 1.zip
       assert(numRemoteLogFiles <= 5) // delete files recorded in 1.zip and orphan 00001.log
@@ -1395,7 +1398,8 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
         "archive/00007.log" -> 2000
       )
       saveCheckpointFiles(fileManager_, cpFiles3,
-        version = 3, numKeys = 131, new RocksDBFileMapping(), uuid)
+        version = 3, numKeys = 131, new RocksDBFileMapping(),
+        numInternalKeys = 0, uuid)
       assert(fileManager_.getLatestVersion() === 3)
       fileManager_.deleteOldVersions(1)
       assert(numRemoteSSTFiles == 1)
@@ -1441,7 +1445,8 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
       }
 
       saveCheckpointFiles(
-        fileManager, cpFiles1, version = 1, numKeys = 101, rocksDBFileMapping, uuid)
+        fileManager, cpFiles1, version = 1, numKeys = 101, rocksDBFileMapping,
+        numInternalKeys = 0, uuid)
       fileManager.deleteOldVersions(1)
       // Should not delete orphan files even when they are older than all existing files
       // when there is only 1 version.
@@ -1459,7 +1464,8 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
         "archive/00004.log" -> 2000
       )
       saveCheckpointFiles(
-        fileManager, cpFiles2, version = 2, numKeys = 101, rocksDBFileMapping, uuid)
+        fileManager, cpFiles2, version = 2, numKeys = 101, rocksDBFileMapping,
+        numInternalKeys = 0, uuid)
       assert(numRemoteSSTFiles == 5)
       assert(numRemoteLogFiles == 5)
       fileManager.deleteOldVersions(1)
@@ -1509,7 +1515,8 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
         }
 
         saveCheckpointFiles(
-          fileManager, cpFiles1, version = 1, numKeys = 101, fileMapping, uuid)
+          fileManager, cpFiles1, version = 1, numKeys = 101, fileMapping, numInternalKeys = 0,
+          uuid)
         assert(fileManager.getLatestVersion() === 1)
         assert(numRemoteSSTFiles == 2) // 2 sst files copied
         assert(numRemoteLogFiles == 2) // 2 log files copied
@@ -1547,7 +1554,8 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
         // upload version 1 again, new checkpoint will be created and SST files from
         // previously committed version 1 will not be reused.
         saveCheckpointFiles(fileManager, cpFiles1_,
-          version = 1, numKeys = 1001, fileMapping, uuid)
+          version = 1, numKeys = 1001, fileMapping,
+          numInternalKeys = 0, uuid)
         assert(numRemoteSSTFiles === 5, "shouldn't reuse old version 1 SST files" +
           " while uploading version 1 again") // 2 old + 3 new SST files
         assert(numRemoteLogFiles === 5, "shouldn't reuse old version 1 log files" +
@@ -1567,7 +1575,8 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
           "archive/00004.log" -> 4000
         )
         saveCheckpointFiles(fileManager, cpFiles2,
-          version = 2, numKeys = 1501, fileMapping, uuid)
+          version = 2, numKeys = 1501, fileMapping,
+          numInternalKeys = 0, uuid)
         assert(numRemoteSSTFiles === 6) // 1 new file over earlier 5 files
         assert(numRemoteLogFiles === 6) // 1 new file over earlier 6 files
         loadAndVerifyCheckpointFiles(fileManager, verificationDir,
@@ -1610,7 +1619,8 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
       }
       intercept[IOException] {
         saveCheckpointFiles(
-          fileManager, cpFiles, version = 1, numKeys = 101, new RocksDBFileMapping(), uuid)
+          fileManager, cpFiles, version = 1, numKeys = 101, new RocksDBFileMapping(),
+          numInternalKeys = 0, uuid)
       }
       assert(CreateAtomicTestManager.cancelCalledInCreateAtomic)
     }
@@ -3013,6 +3023,7 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
       version: Int,
       numKeys: Int,
       fileMapping: RocksDBFileMapping,
+      numInternalKeys: Int = 0,
       checkpointUniqueId: Option[String] = None): Unit = {
     val checkpointDir = Utils.createTempDir().getAbsolutePath // local dir to create checkpoints
     generateFiles(checkpointDir, fileToLengths)
@@ -3022,6 +3033,7 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
       checkpointDir,
       version,
       numKeys,
+      numInternalKeys,
       immutableFileMapping,
       checkpointUniqueId = checkpointUniqueId)
 

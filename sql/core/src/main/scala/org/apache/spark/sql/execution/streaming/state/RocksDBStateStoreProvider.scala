@@ -74,7 +74,7 @@ private[sql] class RocksDBStateStoreProvider
         useMultipleValuesPerKey: Boolean = false,
         isInternal: Boolean = false): Unit = {
       verifyColFamilyCreationOrDeletion("create_col_family", colFamilyName, isInternal)
-      val newColFamilyId = rocksDB.createColFamilyIfAbsent(colFamilyName)
+      val newColFamilyId = rocksDB.createColFamilyIfAbsent(colFamilyName, isInternal)
       val dataEncoderCacheKey = StateRowEncoderCacheKey(
         queryRunId = getRunId(hadoopConf),
         operatorId = stateStoreId.operatorId,
@@ -88,9 +88,7 @@ private[sql] class RocksDBStateStoreProvider
       val keyEncoder = RocksDBStateEncoder.getKeyEncoder(
         dataEncoder,
         keyStateEncoderSpec,
-        useColumnFamilies,
-        Some(newColFamilyId)
-      )
+        useColumnFamilies)
       val valueEncoder = RocksDBStateEncoder.getValueEncoder(
         dataEncoder,
         valueSchema,
@@ -394,7 +392,8 @@ private[sql] class RocksDBStateStoreProvider
     var defaultColFamilyId: Option[Short] = None
 
     if (useColumnFamilies) {
-      defaultColFamilyId = Some(rocksDB.createColFamilyIfAbsent(StateStore.DEFAULT_COL_FAMILY_NAME))
+      defaultColFamilyId = Some(rocksDB.createColFamilyIfAbsent(StateStore.DEFAULT_COL_FAMILY_NAME,
+        isInternal = false))
     }
 
     val dataEncoderCacheKey = StateRowEncoderCacheKey(
@@ -410,8 +409,7 @@ private[sql] class RocksDBStateStoreProvider
     val keyEncoder = RocksDBStateEncoder.getKeyEncoder(
       dataEncoder,
       keyStateEncoderSpec,
-      useColumnFamilies,
-      defaultColFamilyId
+      useColumnFamilies
     )
     val valueEncoder = RocksDBStateEncoder.getValueEncoder(
       dataEncoder,
