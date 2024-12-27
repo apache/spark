@@ -93,9 +93,8 @@ object StreamingForeachBatchHelper extends Logging {
   def scalaForeachBatchWrapper(
       payloadBytes: Array[Byte],
       sessionHolder: SessionHolder): ForeachBatchFnType = {
-    val foreachBatchPkt = Utils.deserialize[ForeachWriterPacket](
-      payloadBytes,
-      Utils.getContextOrSparkClassLoader)
+    val foreachBatchPkt =
+      Utils.deserialize[ForeachWriterPacket](payloadBytes, Utils.getContextOrSparkClassLoader)
     val fn = foreachBatchPkt.foreachWriter.asInstanceOf[(Dataset[Any], Long) => Unit]
     val encoder = foreachBatchPkt.datasetEncoder.asInstanceOf[AgnosticEncoder[Any]]
     // TODO(SPARK-44462): Set up Spark Connect session.
