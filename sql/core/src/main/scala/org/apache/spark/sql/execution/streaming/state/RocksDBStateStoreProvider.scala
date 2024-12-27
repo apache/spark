@@ -77,7 +77,8 @@ private[sql] class RocksDBStateStoreProvider
       val keyEncoder = RocksDBStateEncoder.getKeyEncoder(
         dataEncoder,
         keyStateEncoderSpec,
-        useColumnFamilies)
+        useColumnFamilies
+      )
       val valueEncoder = RocksDBStateEncoder.getValueEncoder(
         dataEncoder,
         valueSchema,
@@ -372,10 +373,6 @@ private[sql] class RocksDBStateStoreProvider
 
     rocksDB // lazy initialization
 
-    if (useColumnFamilies) {
-      rocksDB.createColFamilyIfAbsent(StateStore.DEFAULT_COL_FAMILY_NAME, isInternal = false)
-    }
-
     val dataEncoderCacheKey = StateRowEncoderCacheKey(
       queryRunId = getRunId(hadoopConf),
       operatorId = stateStoreId.operatorId,
@@ -386,11 +383,14 @@ private[sql] class RocksDBStateStoreProvider
     val dataEncoder = getDataEncoder(
       stateStoreEncoding, dataEncoderCacheKey, keyStateEncoderSpec, valueSchema)
 
+    if (useColumnFamilies) {
+      rocksDB.createColFamilyIfAbsent(StateStore.DEFAULT_COL_FAMILY_NAME, isInternal = false)
+    }
+
     val keyEncoder = RocksDBStateEncoder.getKeyEncoder(
       dataEncoder,
       keyStateEncoderSpec,
-      useColumnFamilies
-    )
+      useColumnFamilies)
     val valueEncoder = RocksDBStateEncoder.getValueEncoder(
       dataEncoder,
       valueSchema,
@@ -618,8 +618,11 @@ object RocksDBStateStoreProvider {
   val STATE_ENCODING_NUM_VERSION_BYTES = 1
   val STATE_ENCODING_VERSION: Byte = 0
 
+  val SCHEMA_ID_PREFIX_BYTES = 2
+
   private val MAX_AVRO_ENCODERS_IN_CACHE = 1000
   private val AVRO_ENCODER_LIFETIME_HOURS = 1L
+  private val DEFAULT_SCHEMA_IDS = StateSchemaInfo(0, 0)
 
   // Add the cache at companion object level so it persists across provider instances
   private val dataEncoderCache: NonFateSharingCache[StateRowEncoderCacheKey, RocksDBDataEncoder] =
@@ -657,9 +660,9 @@ object RocksDBStateStoreProvider {
       new java.util.concurrent.Callable[RocksDBDataEncoder] {
         override def call(): RocksDBDataEncoder = {
           if (stateStoreEncoding == "avro") {
-            new AvroStateEncoder(keyStateEncoderSpec, valueSchema)
+            new AvroStateEncoder(keyStateEncoderSpec, valueSchema, Some(DEFAULT_SCHEMA_IDS))
           } else {
-            new UnsafeRowDataEncoder(keyStateEncoderSpec, valueSchema)
+            new UnsafeRowDataEncoder(keyStateEncoderSpec, valueSchema, None)
           }
         }
       }

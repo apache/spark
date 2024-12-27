@@ -382,7 +382,6 @@ case class PrefixKeyScanStateEncoderSpec(
       dataEncoder, keySchema, numColsPrefixKey, useColumnFamilies)
   }
 
-
   override def jsonValue: JValue = {
     ("keyStateEncoderType" -> JString("PrefixKeyScanStateEncoderSpec")) ~
       ("numColsPrefixKey" -> JInt(numColsPrefixKey))
