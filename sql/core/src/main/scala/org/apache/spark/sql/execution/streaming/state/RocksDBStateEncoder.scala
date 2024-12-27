@@ -1129,7 +1129,6 @@ class AvroStateEncoder(
 
   override def decodeValue(bytes: Array[Byte]): UnsafeRow = {
     val schemaIdRow = decodeStateSchemaIdRow(bytes)
-    logError(s"### schemaId: ${schemaIdRow.schemaId}, currentSchemaId: ${currentValSchemaId}")
     val writerSchema = stateSchemaBroadcast.get.getSchemaMetadataValue(
       StateSchemaMetadataKey(
         getColFamilyName,
@@ -1137,7 +1136,6 @@ class AvroStateEncoder(
         isKey = false
       )
     )
-    logError(s"### writerSchema: ${writerSchema.avroSchema}, readerSchema: ${valueAvroType}")
     decodeFromAvroToUnsafeRow(
       schemaIdRow.bytes,
       avroEncoder.valueDeserializer,
