@@ -68,9 +68,15 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
 
   private def applyInternal(p: LogicalPlan): LogicalPlan = {
     val inputPlans = p.children
+    val commonExprIdSet = p.expressions
+      .flatMap(_.collect { case r: CommonExpressionRef => r.id })
+      .groupBy(identity)
+      .transform((_, v) => v.size)
+      .filter(_._2 > 1)
+      .keySet
     val commonExprsPerChild = Array.fill(inputPlans.length)(mutable.ListBuffer.empty[(Alias, Long)])
     var newPlan: LogicalPlan = p.mapExpressions { expr =>
-      rewriteWithExprAndInputPlans(expr, inputPlans, commonExprsPerChild)
+      rewriteWithExprAndInputPlans(expr, inputPlans, commonExprsPerChild, commonExprIdSet)
     }
     val newChildren = inputPlans.zip(commonExprsPerChild).map { case (inputPlan, commonExprs) =>
       if (commonExprs.isEmpty) {
@@ -96,6 +102,7 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
       e: Expression,
       inputPlans: Seq[LogicalPlan],
       commonExprsPerChild: Array[mutable.ListBuffer[(Alias, Long)]],
+      commonExprIdSet: Set[CommonExpressionId],
       isNestedWith: Boolean = false): Expression = {
     if (!e.containsPattern(WITH_EXPRESSION)) return e
     e match {
@@ -103,9 +110,9 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
       case w: With if !isNestedWith =>
         // Rewrite nested With expressions first
         val child = rewriteWithExprAndInputPlans(
-          w.child, inputPlans, commonExprsPerChild, isNestedWith = true)
+          w.child, inputPlans, commonExprsPerChild, commonExprIdSet, isNestedWith = true)
         val defs = w.defs.map(rewriteWithExprAndInputPlans(
-          _, inputPlans, commonExprsPerChild, isNestedWith = true))
+          _, inputPlans, commonExprsPerChild, commonExprIdSet, isNestedWith = true))
         val refToExpr = mutable.HashMap.empty[CommonExpressionId, Expression]
 
         defs.zipWithIndex.foreach { case (CommonExpressionDef(child, id), index) =>
@@ -114,7 +121,7 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
               "Cannot rewrite canonicalized Common expression definitions")
           }
 
-          if (CollapseProject.isCheap(child)) {
+          if (CollapseProject.isCheap(child) || !commonExprIdSet.contains(id)) {
             refToExpr(id) = child
           } else {
             val childPlanIndex = inputPlans.indexWhere(
@@ -171,7 +178,8 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
 
       case c: ConditionalExpression =>
         val newAlwaysEvaluatedInputs = c.alwaysEvaluatedInputs.map(
-          rewriteWithExprAndInputPlans(_, inputPlans, commonExprsPerChild, isNestedWith))
+          rewriteWithExprAndInputPlans(
+            _, inputPlans, commonExprsPerChild, commonExprIdSet, isNestedWith))
         val newExpr = c.withNewAlwaysEvaluatedInputs(newAlwaysEvaluatedInputs)
         // Use transformUp to handle nested With.
         newExpr.transformUpWithPruning(_.containsPattern(WITH_EXPRESSION)) {
@@ -185,7 +193,8 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
         }
 
       case other => other.mapChildren(
-        rewriteWithExprAndInputPlans(_, inputPlans, commonExprsPerChild, isNestedWith)
+        rewriteWithExprAndInputPlans(
+          _, inputPlans, commonExprsPerChild, commonExprIdSet, isNestedWith)
       )
     }
   }
