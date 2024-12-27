@@ -202,15 +202,12 @@ def _capture_call_site(depth: int) -> str:
     def inspect_stack() -> Iterator[inspect.FrameInfo]:
         frame = inspect.currentframe()
         while frame:
-            frameinfo = (frame,) + inspect.getframeinfo(frame, context=0)
-            yield inspect.FrameInfo(*frameinfo)
+            yield frame
             frame = frame.f_back
 
-    stack = (
-        frame_info for frame_info in inspect_stack() if pyspark_root not in frame_info.filename
-    )
+    stack = (f for f in inspect_stack() if pyspark_root not in f.f_code.co_filename)
 
-    selected_frames: Iterator[inspect.FrameInfo] = itertools.islice(stack, depth)
+    selected_frames = itertools.islice(stack, depth)
 
     # We try import here since IPython is not a required dependency
     try:
@@ -226,7 +223,8 @@ def _capture_call_site(depth: int) -> str:
         selected_frames = (
             frame
             for frame in selected_frames
-            if (ipy_root not in frame.filename) and (ipykernel_root not in frame.filename)
+            if (ipy_root not in frame.f_code.co_filename)
+            and (ipykernel_root not in frame.f_code.co_filename)
         )
     except ImportError:
         ipython = None
@@ -234,10 +232,11 @@ def _capture_call_site(depth: int) -> str:
     # Identifying the cell is useful when the error is generated from IPython Notebook
     if ipython:
         call_sites = [
-            f"line {frame.lineno} in cell [{ipython.execution_count}]" for frame in selected_frames
+            f"line {frame.f_lineno} in cell [{ipython.execution_count}]"
+            for frame in selected_frames
         ]
     else:
-        call_sites = [f"{frame.filename}:{frame.lineno}" for frame in selected_frames]
+        call_sites = [f"{frame.f_code.co_filename}:{frame.f_lineno}" for frame in selected_frames]
     call_sites_str = "\n".join(call_sites)
 
     return call_sites_str
