@@ -1137,7 +1137,7 @@ class AvroStateEncoder(
         isKey = false
       )
     )
-    val valueProj = UnsafeProjection.create(writerSchema.sqlSchema)
+    logError(s"### writerSchema: ${writerSchema.avroSchema}, readerSchema: ${valueAvroType}")
     decodeFromAvroToUnsafeRow(
       schemaIdRow.bytes,
       avroEncoder.valueDeserializer,
