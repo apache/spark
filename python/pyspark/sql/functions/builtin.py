@@ -255,7 +255,7 @@ def lit(col: Any) -> Column:
     +------------------+-------+-----------------+--------------------+
     |     [true, false]|     []|       [1.5, 0.1]|           [a, b, c]|
     +------------------+-------+-----------------+--------------------+
-    
+
     Example 7: Creating a literal column from a dict.
 
     >>> import pyspark.sql.functions as sf
@@ -275,13 +275,13 @@ def lit(col: Any) -> Column:
             )
         return array(*[lit(item) for item in col])
     elif isinstance(col, dict):
-         # Skip checking if the keys are column as Columns are not hashable
-         # and cannot be used as dict keys in the first place.
-         if any(isinstance(value, Column) for value in col.values()):
-             raise PySparkValueError(
-                 errorClass="COLUMN_IN_DICT", messageParameters={"func_name": "lit"}
-             )
-         return create_map(*[lit(x) for x in chain(*col.items())])
+        # Skip checking if the keys are column as Columns are not hashable
+        # and cannot be used as dict keys in the first place.
+        if any(isinstance(value, Column) for value in col.values()):
+            raise PySparkValueError(
+                errorClass="COLUMN_IN_DICT", messageParameters={"func_name": "lit"}
+            )
+        return create_map(*[lit(x) for x in chain(*col.items())])
     elif _has_numpy:
         if isinstance(col, np.generic):
             dt = _from_numpy_type(col.dtype)

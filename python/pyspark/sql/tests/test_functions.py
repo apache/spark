@@ -1315,7 +1315,7 @@ class FunctionsTestsMixin:
             errorClass="COLUMN_IN_LIST",
             messageParameters={"func_name": "lit"},
         )
-    
+
     # SPARK-48665: added support for dict type
     def test_lit_dict(self):
         test_dict = {"a": 1, "b": 2}

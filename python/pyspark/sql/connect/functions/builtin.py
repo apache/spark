@@ -260,6 +260,7 @@ column = col
 def lit(col: Any) -> Column:
     from pyspark.sql.connect.column import Column as ConnectColumn
     from itertools import chain
+
     if isinstance(col, Column):
         return col
     elif isinstance(col, list):
