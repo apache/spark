@@ -1318,8 +1318,8 @@ class DataStreamWriter:
                 )
             interval = processingTime.strip()
             jTrigger = getattr(
-                self._spark._sc._jvm, "org.apache.spark.sql.streaming.Trigger.ProcessingTime"
-            )(interval)
+                self._spark._sc._jvm, "org.apache.spark.sql.streaming.Trigger"
+            ).ProcessingTime(interval)
 
         elif once is not None:
             if once is not True:
@@ -1329,8 +1329,8 @@ class DataStreamWriter:
                 )
 
             jTrigger = getattr(
-                self._spark._sc._jvm, "org.apache.spark.sql.streaming.Trigger.Once"
-            )()
+                self._spark._sc._jvm, "org.apache.spark.sql.streaming.Trigger"
+            ).Once()
 
         elif continuous is not None:
             if type(continuous) != str or len(continuous.strip()) == 0:
@@ -1340,8 +1340,8 @@ class DataStreamWriter:
                 )
             interval = continuous.strip()
             jTrigger = getattr(
-                self._spark._sc._jvm, "org.apache.spark.sql.streaming.Trigger.Continuous"
-            )(interval)
+                self._spark._sc._jvm, "org.apache.spark.sql.streaming.Trigger"
+            ).Continuous(interval)
         else:
             if availableNow is not True:
                 raise PySparkValueError(
@@ -1349,8 +1349,8 @@ class DataStreamWriter:
                     messageParameters={"arg_name": "availableNow", "arg_value": str(availableNow)},
                 )
             jTrigger = getattr(
-                self._spark._sc._jvm, "org.apache.spark.sql.streaming.Trigger.AvailableNow"
-            )()
+                self._spark._sc._jvm, "org.apache.spark.sql.streaming.Trigger"
+            ).AvailableNow()
 
         self._jwrite = self._jwrite.trigger(jTrigger)
         return self
