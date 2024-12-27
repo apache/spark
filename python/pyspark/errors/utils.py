@@ -270,8 +270,8 @@ def _with_origin(func: FuncT) -> FuncT:
                     set_current_origin(None, None)
             else:
                 assert spark._jvm is not None
-                jvm_pyspark_origin = (
-                    spark._jvm.org.apache.spark.sql.catalyst.trees.PySparkCurrentOrigin
+                jvm_pyspark_origin = getattr(
+                    spark._jvm, "org.apache.spark.sql.catalyst.trees.PySparkCurrentOrigin"
                 )
                 depth = int(
                     spark.conf.get(  # type: ignore[arg-type]
