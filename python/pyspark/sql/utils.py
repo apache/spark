@@ -116,22 +116,6 @@ def require_test_compiled() -> None:
         )
 
 
-def require_minimum_plotly_version() -> None:
-    """Raise ImportError if plotly is not installed"""
-    minimum_plotly_version = "4.8"
-
-    try:
-        import plotly  # noqa: F401
-    except ImportError as error:
-        raise PySparkImportError(
-            errorClass="PACKAGE_NOT_INSTALLED",
-            messageParameters={
-                "package_name": "plotly",
-                "minimum_version": str(minimum_plotly_version),
-            },
-        ) from error
-
-
 class ForeachBatchFunction:
     """
     This is the Python implementation of Java interface 'ForeachBatchFunction'. This wraps
