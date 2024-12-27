@@ -259,7 +259,7 @@ column = col
 
 def lit(col: Any) -> Column:
     from pyspark.sql.connect.column import Column as ConnectColumn
-
+    from itertools import chain
     if isinstance(col, Column):
         return col
     elif isinstance(col, list):
@@ -276,6 +276,12 @@ def lit(col: Any) -> Column:
                 messageParameters={"dtype": col.dtype.name},
             )
         return array(*[lit(c) for c in col]).cast(ArrayType(dt))
+    elif isinstance(col, dict):
+        if any(isinstance(c, Column) for c in col.values()):
+            raise PySparkValueError(
+                errorClass="COLUMN_IN_DICT", messageParameters={"func_name": "lit"}
+            )
+        return create_map(*[lit(x) for x in chain(*col.items())])
     return ConnectColumn(LiteralExpression._from_value(col))
 
 

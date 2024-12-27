@@ -1315,6 +1315,38 @@ class FunctionsTestsMixin:
             errorClass="COLUMN_IN_LIST",
             messageParameters={"func_name": "lit"},
         )
+    
+    # SPARK-48665: added support for dict type
+    def test_lit_dict(self):
+        test_dict = {"a": 1, "b": 2}
+        actual = self.spark.range(1).select(F.lit(test_dict)).first()[0]
+        self.assertEqual(actual, test_dict)
+
+        test_dict = {"a": {"1": 1}, "b": {"2": 2}}
+        actual = self.spark.range(1).select(F.lit(test_dict)).first()[0]
+        self.assertEqual(actual, test_dict)
+
+        with self.sql_conf({"spark.sql.ansi.enabled": False}):
+            test_dict = {"a": 1, "b": "2", "c": None}
+            expected_dict = {"a": "1", "b": "2", "c": None}
+            actual = self.spark.range(1).select(F.lit(test_dict)).first()[0]
+            self.assertEqual(actual, expected_dict)
+
+        df = self.spark.range(10)
+        dicts = [
+            {"a": df.id},
+            {"a": {"b": df.id}},
+        ]
+
+        for d in dicts:
+            with self.assertRaises(PySparkValueError) as pe:
+                F.lit(d)
+
+            self.check_error(
+                exception=pe.exception,
+                error_class="COLUMN_IN_DICT",
+                message_parameters={"func_name": "lit"},
+            )
 
     # Test added for SPARK-39832; change Python API to accept both col & str as input
     def test_regexp_replace(self):

@@ -38,6 +38,7 @@ from typing import (
     Union,
     ValuesView,
 )
+from itertools import chain
 
 from pyspark.errors import PySparkTypeError, PySparkValueError
 from pyspark.errors.utils import _with_origin
@@ -164,12 +165,13 @@ def lit(col: Any) -> Column:
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column`, str, int, float, bool or list, NumPy literals or ndarray.
+    col : :class:`~pyspark.sql.Column`, str, int, float, bool or list, NumPy literals, ndarray or dict.
         the value to make it as a PySpark literal. If a column is passed,
         it returns the column as is.
 
-        .. versionchanged:: 3.4.0
+        .. versionchanged:: 4.0.0
             Since 3.4.0, it supports the list type.
+            Since 4.0.0, it supports the dict type for the creation of a map.
 
     Returns
     -------
@@ -253,6 +255,16 @@ def lit(col: Any) -> Column:
     +------------------+-------+-----------------+--------------------+
     |     [true, false]|     []|       [1.5, 0.1]|           [a, b, c]|
     +------------------+-------+-----------------+--------------------+
+    
+    Example 7: Creating a literal column from a dict.
+
+    >>> import pyspark.sql.functions as sf
+    >>> spark.range(1).select(sf.lit({"a": 1, "b": 2}).alias("map_col")).show()
+    +----------------+
+    |         map_col|
+    +----------------+
+    |{a -> 1, b -> 2}|
+    +----------------+
     """
     if isinstance(col, Column):
         return col
@@ -262,6 +274,14 @@ def lit(col: Any) -> Column:
                 errorClass="COLUMN_IN_LIST", messageParameters={"func_name": "lit"}
             )
         return array(*[lit(item) for item in col])
+    elif isinstance(col, dict):
+         # Skip checking if the keys are column as Columns are not hashable
+         # and cannot be used as dict keys in the first place.
+         if any(isinstance(value, Column) for value in col.values()):
+             raise PySparkValueError(
+                 errorClass="COLUMN_IN_DICT", messageParameters={"func_name": "lit"}
+             )
+         return create_map(*[lit(x) for x in chain(*col.items())])
     elif _has_numpy:
         if isinstance(col, np.generic):
             dt = _from_numpy_type(col.dtype)
