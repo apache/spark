@@ -1051,22 +1051,6 @@ class StateRowPrefixEncoder(useColumnFamilies: Boolean) {
     result
   }
 
-/*
-  def decodeStateRowPrefix(stateRow: Array[Byte]): StateRowPrefix = {
-    var offset = Platform.BYTE_ARRAY_OFFSET
-
-    // Read column family ID if present
-    val colFamilyId = if (useColumnFamilies) {
-      val id = Platform.getShort(stateRow, offset)
-      offset += StateStore.VIRTUAL_COL_FAMILY_PREFIX_BYTES
-      Some(id)
-    } else {
-      None
-    }
-
-    StateRowPrefix(colFamilyId)
-  } */
-
   def decodeStateRowData(stateRow: Array[Byte]): Array[Byte] = {
     val offset = Platform.BYTE_ARRAY_OFFSET + getNumPrefixBytes
 
