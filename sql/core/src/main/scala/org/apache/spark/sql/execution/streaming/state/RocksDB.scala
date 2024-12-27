@@ -41,6 +41,7 @@ import org.apache.spark.TaskContext
 import org.apache.spark.internal.{LogEntry, Logging, LogKeys, MDC}
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.unsafe.Platform
 import org.apache.spark.util.{NextIterator, Utils}
 
 // RocksDB operations that could acquire/release the instance lock
@@ -200,6 +201,9 @@ class RocksDB(
   private val colFamilyNameToInfoMap = new ConcurrentHashMap[String, ColumnFamilyInfo]()
 
   @GuardedBy("acquireLock")
+  private val colFamilyIdToNameMap = new ConcurrentHashMap[Short, String]()
+
+  @GuardedBy("acquireLock")
   private val maxColumnFamilyId: AtomicInteger = new AtomicInteger(-1)
 
   @GuardedBy("acquireLock")
@@ -218,8 +222,8 @@ class RocksDB(
     colFamilyNameToInfoMap.asScala.map { case (k, v) => (k, v.cfId) }.toMap
   }
 
-  def getColumnFamilyId(cfName: String): Short = {
-    colFamilyNameToInfoMap.get(cfName).cfId
+  def getColumnFamilyInfo(cfName: String): ColumnFamilyInfo = {
+    colFamilyNameToInfoMap.get(cfName)
   }
 
   /**
@@ -230,6 +234,7 @@ class RocksDB(
       val newColumnFamilyId = maxColumnFamilyId.incrementAndGet().toShort
       colFamilyNameToInfoMap.putIfAbsent(colFamilyName,
         ColumnFamilyInfo(newColumnFamilyId, isInternal))
+      colFamilyIdToNameMap.putIfAbsent(newColumnFamilyId, colFamilyName)
       shouldForceSnapshot.set(true)
       newColumnFamilyId
     } else {
@@ -241,12 +246,15 @@ class RocksDB(
    * Remove RocksDB column family, if exists
    * @return columnFamilyId if it exists, else None
    */
-  def removeColFamilyIfExists(colFamilyName: String): Option[Short] = {
+  def removeColFamilyIfExists(colFamilyName: String): Boolean = {
     if (checkColFamilyExists(colFamilyName)) {
       shouldForceSnapshot.set(true)
-      Some(colFamilyNameToInfoMap.remove(colFamilyName).cfId)
+      val colFamilyInfo = colFamilyNameToInfoMap.get(colFamilyName)
+      colFamilyNameToInfoMap.remove(colFamilyName)
+      colFamilyIdToNameMap.remove(colFamilyInfo.cfId)
+      true
     } else {
-      None
+      false
     }
   }
 
@@ -264,6 +272,7 @@ class RocksDB(
   // the default values it should be set to on load
   private def setInitialCFInfo(): Unit = {
     colFamilyNameToInfoMap.clear()
+    colFamilyIdToNameMap.clear()
     shouldForceSnapshot.set(false)
     maxColumnFamilyId.set(0)
   }
@@ -495,6 +504,7 @@ class RocksDB(
     metadata.columnFamilyMapping.foreach { mapping =>
       mapping.foreach { case (colFamilyName, colFamilyInfo) =>
         colFamilyNameToInfoMap.putIfAbsent(colFamilyName, colFamilyInfo)
+        colFamilyIdToNameMap.putIfAbsent(colFamilyInfo.cfId, colFamilyName)
       }
     }
 
@@ -625,16 +635,34 @@ class RocksDB(
       var changelogReader: StateStoreChangelogReader = null
       try {
         changelogReader = fileManager.getChangelogReader(v, uniqueId)
-        changelogReader.foreach { case (recordType, key, value) =>
-          recordType match {
-            case RecordType.PUT_RECORD =>
-              put(key, value)
 
-            case RecordType.DELETE_RECORD =>
-              remove(key)
+        if (useColumnFamilies) {
+          changelogReader.foreach { case (recordType, key, value) =>
+            val cfId = Platform.getShort(key, Platform.BYTE_ARRAY_OFFSET)
+            val cfName = colFamilyIdToNameMap.get(cfId)
+            recordType match {
+              case RecordType.PUT_RECORD =>
+                put(key, value, cfName)
 
-            case RecordType.MERGE_RECORD =>
-              merge(key, value)
+              case RecordType.DELETE_RECORD =>
+                remove(key, cfName)
+
+              case RecordType.MERGE_RECORD =>
+                merge(key, value, cfName)
+            }
+          }
+        } else {
+          changelogReader.foreach { case (recordType, key, value) =>
+            recordType match {
+              case RecordType.PUT_RECORD =>
+                put(key, value)
+
+              case RecordType.DELETE_RECORD =>
+                remove(key)
+
+              case RecordType.MERGE_RECORD =>
+                merge(key, value)
+            }
           }
         }
       } finally {
@@ -650,6 +678,11 @@ class RocksDB(
   def get(
       key: Array[Byte],
       cfName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Array[Byte] = {
+    if (useColumnFamilies) {
+      val cfInfo = getColumnFamilyInfo(cfName)
+      Platform.putShort(key, Platform.BYTE_ARRAY_OFFSET, cfInfo.cfId)
+    }
+
     db.get(readOptions, key)
   }
 
@@ -661,6 +694,11 @@ class RocksDB(
       key: Array[Byte],
       value: Array[Byte],
       cfName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Unit = {
+    if (useColumnFamilies) {
+      val cfInfo = getColumnFamilyInfo(cfName)
+      Platform.putShort(key, Platform.BYTE_ARRAY_OFFSET, cfInfo.cfId)
+    }
+
     if (conf.trackTotalNumberOfRows) {
       val oldValue = db.get(readOptions, key)
       if (oldValue == null) {
@@ -687,6 +725,11 @@ class RocksDB(
       key: Array[Byte],
       value: Array[Byte],
       cfName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Unit = {
+    if (useColumnFamilies) {
+      val cfInfo = getColumnFamilyInfo(cfName)
+      Platform.putShort(key, Platform.BYTE_ARRAY_OFFSET, cfInfo.cfId)
+    }
+
     if (conf.trackTotalNumberOfRows) {
       val oldValue = db.get(readOptions, key)
       if (oldValue == null) {
@@ -703,6 +746,11 @@ class RocksDB(
    * @note This update is not committed to disk until commit() is called.
    */
   def remove(key: Array[Byte], cfName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Unit = {
+    if (useColumnFamilies) {
+      val cfInfo = getColumnFamilyInfo(cfName)
+      Platform.putShort(key, Platform.BYTE_ARRAY_OFFSET, cfInfo.cfId)
+    }
+
     if (conf.trackTotalNumberOfRows) {
       val value = db.get(readOptions, key)
       if (value != null) {
@@ -764,9 +812,7 @@ class RocksDB(
     }
   }
 
-  def prefixScan(
-      prefix: Array[Byte],
-      cfName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Iterator[ByteArrayPair] = {
+  def prefixScan(prefix: Array[Byte]): Iterator[ByteArrayPair] = {
     val iter = db.newIterator()
     iter.seek(prefix)
 
@@ -790,6 +836,14 @@ class RocksDB(
 
       override protected def close(): Unit = { iter.close() }
     }
+  }
+
+  def prefixScan(cfName: String): Iterator[ByteArrayPair] = {
+    assert(useColumnFamilies == true)
+    val cfBytes = new Array[Byte](StateStore.VIRTUAL_COL_FAMILY_PREFIX_BYTES)
+    val cfInfo = getColumnFamilyInfo(cfName)
+    Platform.putShort(cfBytes, Platform.BYTE_ARRAY_OFFSET, cfInfo.cfId)
+    prefixScan(cfBytes)
   }
 
   /**
