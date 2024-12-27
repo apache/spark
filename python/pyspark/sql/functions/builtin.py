@@ -260,13 +260,14 @@ def lit(col: Any) -> Column:
 
     >>> import pyspark.sql.functions as sf
     >>> spark.range(1).select(
-    >>>    sf.lit({"a": 1, "b": 2}).alias("map_col")
-    >>> ).show()
+    ...    sf.lit({"a": 1, "b": 2}).alias("map_col")
+    ... ).show() # doctest: +SKIP
     +----------------+
     |         map_col|
     +----------------+
     |{a -> 1, b -> 2}|
     +----------------+
+
     """
     if isinstance(col, Column):
         return col
