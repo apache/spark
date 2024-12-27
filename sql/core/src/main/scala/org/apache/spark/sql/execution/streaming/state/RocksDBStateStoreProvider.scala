@@ -175,7 +175,7 @@ private[sql] class RocksDBStateStoreProvider
       // we'll need to do prefixScan on the default column family with the same column
       // family id prefix to get all rows stored in a given virtual column family
       if (useColumnFamilies) {
-        rocksDB.prefixScan(colFamilyName).map { kv =>
+        rocksDB.prefixScan(Array.empty[Byte], colFamilyName).map { kv =>
           rowPair.withRows(kvEncoder._1.decodeKey(kv.key),
             kvEncoder._2.decodeValue(kv.value))
           if (!isValidated && rowPair.value != null && !useColumnFamilies) {
@@ -209,7 +209,7 @@ private[sql] class RocksDBStateStoreProvider
 
       val rowPair = new UnsafeRowPair()
       val prefix = kvEncoder._1.encodePrefixKey(prefixKey)
-      rocksDB.prefixScan(prefix).map { kv =>
+      rocksDB.prefixScan(prefix, colFamilyName).map { kv =>
         rowPair.withRows(kvEncoder._1.decodeKey(kv.key),
           kvEncoder._2.decodeValue(kv.value))
         rowPair
@@ -335,7 +335,7 @@ private[sql] class RocksDBStateStoreProvider
       val result = rocksDB.removeColFamilyIfExists(colFamilyName)
 
       if (result) {
-        rocksDB.prefixScan(colFamilyName).foreach { kv =>
+        rocksDB.prefixScan(Array.empty[Byte], colFamilyName).foreach { kv =>
           rocksDB.remove(kv.key)
         }
         keyValueEncoderMap.remove(colFamilyName)

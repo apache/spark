@@ -554,6 +554,9 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
         versionToUniqueId = versionToUniqueId) { db =>
         for (version <- 0 to 49) {
           db.load(version)
+          if (colFamiliesEnabled) {
+            db.createColFamilyIfAbsent(StateStore.DEFAULT_COL_FAMILY_NAME, isInternal = false)
+          }
           db.put(version.toString, version.toString)
           db.commit()
           if ((version + 1) % 5 == 0) db.doMaintenance()
@@ -786,6 +789,11 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
           versionToUniqueId = versionToUniqueId) { db =>
         for (version <- 0 to 2) {
           db.load(version)
+
+          if (colFamiliesEnabled) {
+            db.createColFamilyIfAbsent(StateStore.DEFAULT_COL_FAMILY_NAME, isInternal = false)
+          }
+
           db.put(version.toString, version.toString)
           db.commit()
         }
@@ -794,6 +802,11 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
         // Roll back to version 1 and start to process data.
         for (version <- 1 to 3) {
           db.load(version)
+
+          if (colFamiliesEnabled) {
+            db.createColFamilyIfAbsent(StateStore.DEFAULT_COL_FAMILY_NAME, isInternal = false)
+          }
+
           db.put(version.toString, version.toString)
           db.commit()
         }
@@ -806,6 +819,10 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
           versionToUniqueId = versionToUniqueId) { db =>
         // Open the db to verify that the state in 4.zip is no corrupted.
         db.load(4)
+
+        if (colFamiliesEnabled) {
+          db.createColFamilyIfAbsent(StateStore.DEFAULT_COL_FAMILY_NAME, isInternal = false)
+        }
       }
   }
 
@@ -825,6 +842,11 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
       versionToUniqueId = versionToUniqueId) { db =>
       for (version <- 1 to 30) {
         db.load(version - 1)
+
+        if (colFamiliesEnabled) {
+          db.createColFamilyIfAbsent(StateStore.DEFAULT_COL_FAMILY_NAME, isInternal = false)
+        }
+
         db.put(version.toString, version.toString)
         db.remove((version - 1).toString)
         db.commit()
@@ -843,10 +865,20 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
       versionToUniqueId = versionToUniqueId) { db =>
       for (version <- 1 to 30) {
         db.load(version)
+
+        if (colFamiliesEnabled) {
+          db.createColFamilyIfAbsent(StateStore.DEFAULT_COL_FAMILY_NAME, isInternal = false)
+        }
+
         assert(db.iterator().map(toStr).toSet === Set((version.toString, version.toString)))
       }
       for (version <- 30 to 60) {
         db.load(version - 1)
+
+        if (colFamiliesEnabled) {
+          db.createColFamilyIfAbsent(StateStore.DEFAULT_COL_FAMILY_NAME, isInternal = false)
+        }
+
         db.put(version.toString, version.toString)
         db.remove((version - 1).toString)
         db.commit()
@@ -855,12 +887,22 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
       assert(changelogVersionsPresent(remoteDir) === (30 to 60))
       for (version <- 1 to 60) {
         db.load(version, readOnly = true)
+
+        if (colFamiliesEnabled) {
+          db.createColFamilyIfAbsent(StateStore.DEFAULT_COL_FAMILY_NAME, isInternal = false)
+        }
+
         assert(db.iterator().map(toStr).toSet === Set((version.toString, version.toString)))
       }
 
       // recommit 60 to ensure that acquireLock is released for maintenance
       for (version <- 60 to 60) {
         db.load(version - 1)
+
+        if (colFamiliesEnabled) {
+          db.createColFamilyIfAbsent(StateStore.DEFAULT_COL_FAMILY_NAME, isInternal = false)
+        }
+
         db.put(version.toString, version.toString)
         db.remove((version - 1).toString)
         db.commit()
@@ -878,6 +920,11 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
       // Verify the content of retained versions.
       for (version <- 30 to 60) {
         db.load(version, readOnly = true)
+
+        if (colFamiliesEnabled) {
+          db.createColFamilyIfAbsent(StateStore.DEFAULT_COL_FAMILY_NAME, isInternal = false)
+        }
+
         assert(db.iterator().map(toStr).toSet === Set((version.toString, version.toString)))
       }
     }
@@ -1057,6 +1104,11 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
         CreateAtomicTestManager.shouldFailInCreateAtomic = false
         for (version <- 1 to 10) {
           db.load(version - 1)
+
+          if (colFamiliesEnabled) {
+            db.createColFamilyIfAbsent(StateStore.DEFAULT_COL_FAMILY_NAME, isInternal = false)
+          }
+
           db.put(version.toString, version.toString) // update "1" -> "1", "2" -> "2", ...
           db.commit()
         }
@@ -1065,6 +1117,11 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
         // Fail commit for next version and verify that reloading resets the files
         CreateAtomicTestManager.shouldFailInCreateAtomic = true
         db.load(10)
+
+        if (colFamiliesEnabled) {
+          db.createColFamilyIfAbsent(StateStore.DEFAULT_COL_FAMILY_NAME, isInternal = false)
+        }
+
         db.put("11", "11")
         intercept[IOException] {
           quietly {
@@ -1076,6 +1133,11 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
 
         // Abort commit for next version and verify that reloading resets the files
         db.load(10)
+
+        if (colFamiliesEnabled) {
+          db.createColFamilyIfAbsent(StateStore.DEFAULT_COL_FAMILY_NAME, isInternal = false)
+        }
+
         db.put("11", "11")
         db.rollback()
         assert(db.load(10, readOnly = true).iterator().map(toStr).toSet === version10Data)
@@ -1092,6 +1154,11 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
       withDB(remoteDir, conf = conf, useColumnFamilies = colFamiliesEnabled,
         enableStateStoreCheckpointIds = enableStateStoreCheckpointIds) { db =>
         db.load(0)
+
+        if (colFamiliesEnabled) {
+          db.createColFamilyIfAbsent(StateStore.DEFAULT_COL_FAMILY_NAME, isInternal = false)
+        }
+
         db.put("foo", "bar")
         db.commit()
         // call close first and maintenance can be still be invoked in the context of the
@@ -1111,6 +1178,11 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
       withDB(remoteDir, conf = conf, useColumnFamilies = colFamiliesEnabled,
         enableStateStoreCheckpointIds = enableStateStoreCheckpointIds) { db =>
         db.load(0)
+
+        if (colFamiliesEnabled) {
+          db.createColFamilyIfAbsent(StateStore.DEFAULT_COL_FAMILY_NAME, isInternal = false)
+        }
+
         db.put("foo", "bar")
         db.commit()
         // maintenance can be invoked in the context of the maintenance task's thread pool
@@ -1970,16 +2042,16 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
     // should always include sstFiles and numKeys
     checkJsonRoundtrip(
       RocksDBCheckpointMetadata(Seq.empty, 0L),
-      """{"sstFiles":[],"numKeys":0}"""
+      """{"sstFiles":[],"numKeys":0,"numInternalKeys":0}"""
     )
     // shouldn't include the "logFiles" field in json when it's empty
     checkJsonRoundtrip(
       RocksDBCheckpointMetadata(sstFiles, 12345678901234L),
-      """{"sstFiles":[{"localFileName":"00001.sst","dfsSstFileName":"00001-uuid.sst","sizeBytes":12345678901234}],"numKeys":12345678901234}"""
+      """{"sstFiles":[{"localFileName":"00001.sst","dfsSstFileName":"00001-uuid.sst","sizeBytes":12345678901234}],"numKeys":12345678901234,"numInternalKeys":0}"""
     )
     checkJsonRoundtrip(
       RocksDBCheckpointMetadata(sstFiles, logFiles, 12345678901234L),
-      """{"sstFiles":[{"localFileName":"00001.sst","dfsSstFileName":"00001-uuid.sst","sizeBytes":12345678901234}],"logFiles":[{"localFileName":"00001.log","dfsLogFileName":"00001-uuid.log","sizeBytes":12345678901234}],"numKeys":12345678901234}""")
+      """{"sstFiles":[{"localFileName":"00001.sst","dfsSstFileName":"00001-uuid.sst","sizeBytes":12345678901234}],"logFiles":[{"localFileName":"00001.log","dfsLogFileName":"00001-uuid.log","sizeBytes":12345678901234}],"numKeys":12345678901234,"numInternalKeys":0}""")
     // scalastyle:on line.size.limit
   }
 
@@ -2189,6 +2261,10 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
           val remoteDir = dir.getCanonicalPath
           withDB(remoteDir, conf = dbConf, useColumnFamilies = colFamiliesEnabled) { db =>
             db.load(0)
+            if (colFamiliesEnabled) {
+              db.createColFamilyIfAbsent(StateStore.DEFAULT_COL_FAMILY_NAME, isInternal = false)
+            }
+
             db.put("a", "1")
             db.commit()
           }
@@ -3218,8 +3294,15 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
           useColumnFamilies = useColumnFamilies)
       }
       db.load(version)
+      if (useColumnFamilies) {
+        logWarning(s"Creating default col family")
+        db.createColFamilyIfAbsent(StateStore.DEFAULT_COL_FAMILY_NAME, isInternal = false)
+      }
       func(db)
     } finally {
+      if (useColumnFamilies && db != null) {
+        db.removeColFamilyIfExists(StateStore.DEFAULT_COL_FAMILY_NAME)
+      }
       if (db != null) {
         db.close()
       }
