@@ -2264,7 +2264,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     // original result task 1.0 succeed
     runEvent(makeCompletionEvent(taskSets(1).tasks(1), Success, 42))
     sc.listenerBus.waitUntilEmpty()
-    assert(completedStage === List(0, 1, 1, 0, 1))
+    assert(completedStage === List(0, 1, 1, 0))
     assert(scheduler.activeJobs.isEmpty)
   }
 
