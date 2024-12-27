@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan, Plan
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{COMMON_EXPR_REF, WITH_EXPRESSION}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.util.Utils
 
 /**
  * Rewrites the `With` expressions by adding a `Project` to pre-evaluate the common expressions, or
@@ -66,11 +67,19 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
   }
 
   private def applyInternal(p: LogicalPlan): LogicalPlan = {
-    val inputPlans = p.children.toArray
+    val inputPlans = p.children
+    val commonExprsPerChild = Array.fill(inputPlans.length)(mutable.ListBuffer.empty[(Alias, Long)])
     var newPlan: LogicalPlan = p.mapExpressions { expr =>
-      rewriteWithExprAndInputPlans(expr, inputPlans)
+      rewriteWithExprAndInputPlans(expr, inputPlans, commonExprsPerChild)
     }
-    newPlan = newPlan.withNewChildren(inputPlans.toIndexedSeq)
+    val newChildren = inputPlans.zip(commonExprsPerChild).map { case (inputPlan, commonExprs) =>
+      if (commonExprs.isEmpty) {
+        inputPlan
+      } else {
+        Project(inputPlan.output ++ commonExprs.map(_._1), inputPlan)
+      }
+    }
+    newPlan = newPlan.withNewChildren(newChildren)
     // Since we add extra Projects with extra columns to pre-evaluate the common expressions,
     // the current operator may have extra columns if it inherits the output columns from its
     // child, and we need to project away the extra columns to keep the plan schema unchanged.
@@ -85,17 +94,19 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
 
   private def rewriteWithExprAndInputPlans(
       e: Expression,
-      inputPlans: Array[LogicalPlan],
+      inputPlans: Seq[LogicalPlan],
+      commonExprsPerChild: Array[mutable.ListBuffer[(Alias, Long)]],
       isNestedWith: Boolean = false): Expression = {
     if (!e.containsPattern(WITH_EXPRESSION)) return e
     e match {
       // Do not handle nested With in one pass. Leave it to the next rule executor batch.
       case w: With if !isNestedWith =>
         // Rewrite nested With expressions first
-        val child = rewriteWithExprAndInputPlans(w.child, inputPlans, isNestedWith = true)
-        val defs = w.defs.map(rewriteWithExprAndInputPlans(_, inputPlans, isNestedWith = true))
+        val child = rewriteWithExprAndInputPlans(
+          w.child, inputPlans, commonExprsPerChild, isNestedWith = true)
+        val defs = w.defs.map(rewriteWithExprAndInputPlans(
+          _, inputPlans, commonExprsPerChild, isNestedWith = true))
         val refToExpr = mutable.HashMap.empty[CommonExpressionId, Expression]
-        val childProjections = Array.fill(inputPlans.length)(mutable.ArrayBuffer.empty[Alias])
 
         defs.zipWithIndex.foreach { case (CommonExpressionDef(child, id), index) =>
           if (id.canonicalized) {
@@ -106,10 +117,10 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
           if (CollapseProject.isCheap(child)) {
             refToExpr(id) = child
           } else {
-            val childProjectionIndex = inputPlans.indexWhere(
+            val childPlanIndex = inputPlans.indexWhere(
               c => child.references.subsetOf(c.outputSet)
             )
-            if (childProjectionIndex == -1) {
+            if (childPlanIndex == -1) {
               // When we cannot rewrite the common expressions, force to inline them so that the
               // query can still run. This can happen if the join condition contains `With` and
               // the common expression references columns from both join sides.
@@ -120,28 +131,30 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
               //       if it's ref count is 1.
               refToExpr(id) = child
             } else {
-              val aliasName = if (SQLConf.get.getConf(SQLConf.USE_COMMON_EXPR_ID_FOR_ALIAS)) {
-                s"_common_expr_${id.id}"
+              val commonExprs = commonExprsPerChild(childPlanIndex)
+              val existingCommonExpr = commonExprs.find(_._2 == id.id)
+              if (existingCommonExpr.isDefined) {
+                if (Utils.isTesting) {
+                  assert(existingCommonExpr.get._1.child.semanticEquals(child))
+                }
+                refToExpr(id) = existingCommonExpr.get._1.toAttribute
               } else {
-                s"_common_expr_$index"
-              }
-              val alias = Alias(child, aliasName)()
-              val fakeProj = Project(Seq(alias), inputPlans(childProjectionIndex))
-              if (PlanHelper.specialExpressionsInUnsupportedOperator(fakeProj).nonEmpty) {
-                // We have to inline the common expression if it cannot be put in a Project.
-                refToExpr(id) = child
-              } else {
-                childProjections(childProjectionIndex) += alias
-                refToExpr(id) = alias.toAttribute
+                val aliasName = if (SQLConf.get.getConf(SQLConf.USE_COMMON_EXPR_ID_FOR_ALIAS)) {
+                  s"_common_expr_${id.id}"
+                } else {
+                  s"_common_expr_$index"
+                }
+                val alias = Alias(child, aliasName)()
+                val fakeProj = Project(Seq(alias), inputPlans(childPlanIndex))
+                if (PlanHelper.specialExpressionsInUnsupportedOperator(fakeProj).nonEmpty) {
+                  // We have to inline the common expression if it cannot be put in a Project.
+                  refToExpr(id) = child
+                } else {
+                  commonExprs.append((alias, id.id))
+                  refToExpr(id) = alias.toAttribute
+                }
               }
             }
-          }
-        }
-
-        for (i <- inputPlans.indices) {
-          val projectList = childProjections(i)
-          if (projectList.nonEmpty) {
-            inputPlans(i) = Project(inputPlans(i).output ++ projectList, inputPlans(i))
           }
         }
 
@@ -158,7 +171,7 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
 
       case c: ConditionalExpression =>
         val newAlwaysEvaluatedInputs = c.alwaysEvaluatedInputs.map(
-          rewriteWithExprAndInputPlans(_, inputPlans, isNestedWith))
+          rewriteWithExprAndInputPlans(_, inputPlans, commonExprsPerChild, isNestedWith))
         val newExpr = c.withNewAlwaysEvaluatedInputs(newAlwaysEvaluatedInputs)
         // Use transformUp to handle nested With.
         newExpr.transformUpWithPruning(_.containsPattern(WITH_EXPRESSION)) {
@@ -171,7 +184,9 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
             }
         }
 
-      case other => other.mapChildren(rewriteWithExprAndInputPlans(_, inputPlans, isNestedWith))
+      case other => other.mapChildren(
+        rewriteWithExprAndInputPlans(_, inputPlans, commonExprsPerChild, isNestedWith)
+      )
     }
   }
 }
