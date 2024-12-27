@@ -43,6 +43,12 @@ class TableArg(
 
   @scala.annotation.varargs
   def orderBy(cols: Column*): TableArg = {
+    // Validate that partitionBy has been called before orderBy
+    if (expression.partitionByExpressions.isEmpty) {
+      throw new IllegalArgumentException(
+        "Please call partitionBy() before orderBy()."
+      )
+    }
     val orderByExpressions = cols.map { col =>
       col.expr match {
         case sortOrder: SortOrder => sortOrder

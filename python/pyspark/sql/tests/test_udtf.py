@@ -1139,6 +1139,12 @@ class BaseUDTFTestsMixin:
         ):
             df.asTable().withSinglePartition().partitionBy(df.key)
 
+        with self.assertRaisesRegex(
+            IllegalArgumentException,
+            r"Please call partitionBy() before orderBy()",
+        ):
+            df.asTable().orderBy(df.key)
+
     def test_udtf_with_int_and_table_argument_query(self):
         class TestUDTF:
             def eval(self, i: int, row: Row):
