@@ -33,6 +33,7 @@ import org.apache.arrow.vector.{FieldVector, VectorSchemaRoot}
 import org.apache.arrow.vector.complex.{ListVector, MapVector, StructVector}
 import org.apache.arrow.vector.ipc.ArrowReader
 
+import org.apache.spark.SparkRuntimeException
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders._
@@ -40,7 +41,7 @@ import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
 import org.apache.spark.sql.connect.client.CloseableIterator
 import org.apache.spark.sql.errors.{CompilationErrors, ExecutionErrors}
 import org.apache.spark.sql.types.Decimal
-import org.apache.spark.unsafe.types.VariantVal
+import org.apache.spark.unsafe.types.{UTF8String, VariantVal}
 
 /**
  * Helper class for converting arrow batches into user objects.
@@ -123,6 +124,48 @@ object ArrowDeserializers {
       case (NullEncoder, _: FieldVector) =>
         new Deserializer[Any] {
           def get(i: Int): Any = null
+        }
+      case (CharEncoder(length), v: FieldVector) =>
+        new LeafFieldDeserializer[String](encoder, v, timeZoneId) {
+          override def value(i: Int): String = {
+            val utf8 = UTF8String.fromString(reader.getString(i))
+            val str = if (utf8.numChars() == length) {
+              utf8
+            } else if (utf8.numChars() < length) {
+              utf8.rpad(length, UTF8String.fromString(" "))
+            } else {
+              val numTailSpacesToTrim = utf8.numChars() - length;
+              val trimmed = utf8.trimTrailingSpaces(numTailSpacesToTrim);
+              if (trimmed.numChars() > length) {
+                throw new SparkRuntimeException(
+                  errorClass = "EXCEED_LIMIT_LENGTH",
+                  messageParameters = Map("limit" -> length.toString))
+              } else {
+                trimmed
+              }
+            }
+            str.toString
+          }
+        }
+      case (VarcharEncoder(length), v: FieldVector) =>
+        new LeafFieldDeserializer[String](encoder, v, timeZoneId) {
+          override def value(i: Int): String = {
+            val utf8 = UTF8String.fromString(reader.getString(i))
+            val str = if (utf8.numChars() <= length) {
+              utf8
+            } else {
+              val numTailSpacesToTrim = utf8.numChars() - length;
+              val trimmed = utf8.trimTrailingSpaces(numTailSpacesToTrim);
+              if (trimmed.numChars() > length) {
+                throw new SparkRuntimeException(
+                  errorClass = "EXCEED_LIMIT_LENGTH",
+                  messageParameters = Map("limit" -> length.toString))
+              } else {
+                trimmed
+              }
+            }
+            str.toString
+          }
         }
       case (StringEncoder, v: FieldVector) =>
         new LeafFieldDeserializer[String](encoder, v, timeZoneId) {
