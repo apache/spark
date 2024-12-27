@@ -154,14 +154,14 @@
       "Cannot <condition1> without <condition2>."
     ]
   },
-  "COLUMN_IN_DICT" : {
-    "message": [
-      "`<func_name>` does not allow a Column in a dict."
-    ]
-  },
   "CLASSIC_OPERATION_NOT_SUPPORTED_ON_DF": {
     "message": [
       "Calling property or member '<member>' is not supported in PySpark Classic, please use Spark Connect instead."
+    ]
+  },
+  "COLUMN_IN_DICT" : {
+    "message": [
+      "`<func_name>` does not allow a Column in a dict."
     ]
   },
   "COLLATION_INVALID_PROVIDER" : {
