@@ -2803,9 +2803,9 @@ def translate(srcCol: "ColumnOrName", matching: str, replace: str) -> Column:
 translate.__doc__ = pysparkfuncs.translate.__doc__
 
 
-def to_binary(col: "ColumnOrName", format: Optional["ColumnOrName"] = None) -> Column:
-    if format is not None:
-        return _invoke_function_over_columns("to_binary", col, format)
+def to_binary(col: "ColumnOrName", fmt: Optional["ColumnOrName"] = None) -> Column:
+    if fmt is not None:
+        return _invoke_function_over_columns("to_binary", col, fmt)
     else:
         return _invoke_function_over_columns("to_binary", col)
 
@@ -2813,22 +2813,22 @@ def to_binary(col: "ColumnOrName", format: Optional["ColumnOrName"] = None) -> C
 to_binary.__doc__ = pysparkfuncs.to_binary.__doc__
 
 
-def to_char(col: "ColumnOrName", format: "ColumnOrName") -> Column:
-    return _invoke_function_over_columns("to_char", col, format)
+def to_char(col: "ColumnOrName", fmt: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("to_char", col, fmt)
 
 
 to_char.__doc__ = pysparkfuncs.to_char.__doc__
 
 
-def to_varchar(col: "ColumnOrName", format: "ColumnOrName") -> Column:
-    return _invoke_function_over_columns("to_varchar", col, format)
+def to_varchar(col: "ColumnOrName", fmt: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("to_varchar", col, fmt)
 
 
 to_varchar.__doc__ = pysparkfuncs.to_varchar.__doc__
 
 
-def to_number(col: "ColumnOrName", format: "ColumnOrName") -> Column:
-    return _invoke_function_over_columns("to_number", col, format)
+def to_number(col: "ColumnOrName", fmt: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("to_number", col, fmt)
 
 
 to_number.__doc__ = pysparkfuncs.to_number.__doc__
@@ -2889,8 +2889,8 @@ def try_parse_url(
 try_parse_url.__doc__ = pysparkfuncs.try_parse_url.__doc__
 
 
-def printf(format: "ColumnOrName", *cols: "ColumnOrName") -> Column:
-    return _invoke_function("printf", _to_col(format), *[_to_col(c) for c in cols])
+def printf(fmt: "ColumnOrName", *cols: "ColumnOrName") -> Column:
+    return _invoke_function("printf", _to_col(fmt), *[_to_col(c) for c in cols])
 
 
 printf.__doc__ = pysparkfuncs.printf.__doc__
@@ -2950,9 +2950,9 @@ def char(col: "ColumnOrName") -> Column:
 char.__doc__ = pysparkfuncs.char.__doc__
 
 
-def try_to_binary(col: "ColumnOrName", format: Optional["ColumnOrName"] = None) -> Column:
-    if format is not None:
-        return _invoke_function_over_columns("try_to_binary", col, format)
+def try_to_binary(col: "ColumnOrName", fmt: Optional["ColumnOrName"] = None) -> Column:
+    if fmt is not None:
+        return _invoke_function_over_columns("try_to_binary", col, fmt)
     else:
         return _invoke_function_over_columns("try_to_binary", col)
 
@@ -2960,8 +2960,8 @@ def try_to_binary(col: "ColumnOrName", format: Optional["ColumnOrName"] = None) 
 try_to_binary.__doc__ = pysparkfuncs.try_to_binary.__doc__
 
 
-def try_to_number(col: "ColumnOrName", format: "ColumnOrName") -> Column:
-    return _invoke_function_over_columns("try_to_number", col, format)
+def try_to_number(col: "ColumnOrName", fmt: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("try_to_number", col, fmt)
 
 
 try_to_number.__doc__ = pysparkfuncs.try_to_number.__doc__
@@ -3143,8 +3143,8 @@ def localtimestamp() -> Column:
 localtimestamp.__doc__ = pysparkfuncs.localtimestamp.__doc__
 
 
-def date_format(date: "ColumnOrName", format: str) -> Column:
-    return _invoke_function("date_format", _to_col(date), lit(format))
+def date_format(date: "ColumnOrName", fmt: str) -> Column:
+    return _invoke_function("date_format", _to_col(date), lit(fmt))
 
 
 date_format.__doc__ = pysparkfuncs.date_format.__doc__
@@ -3340,11 +3340,11 @@ def months_between(date1: "ColumnOrName", date2: "ColumnOrName", roundOff: bool 
 months_between.__doc__ = pysparkfuncs.months_between.__doc__
 
 
-def to_date(col: "ColumnOrName", format: Optional[str] = None) -> Column:
-    if format is None:
+def to_date(col: "ColumnOrName", fmt: Optional[str] = None) -> Column:
+    if fmt is None:
         return _invoke_function_over_columns("to_date", col)
     else:
-        return _invoke_function("to_date", _to_col(col), lit(format))
+        return _invoke_function("to_date", _to_col(col), lit(fmt))
 
 
 to_date.__doc__ = pysparkfuncs.to_date.__doc__
@@ -3384,23 +3384,23 @@ def to_timestamp(col: "ColumnOrName") -> Column:
 
 
 @overload
-def to_timestamp(col: "ColumnOrName", format: str) -> Column:
+def to_timestamp(col: "ColumnOrName", fmt: str) -> Column:
     ...
 
 
-def to_timestamp(col: "ColumnOrName", format: Optional[str] = None) -> Column:
-    if format is None:
+def to_timestamp(col: "ColumnOrName", fmt: Optional[str] = None) -> Column:
+    if fmt is None:
         return _invoke_function_over_columns("to_timestamp", col)
     else:
-        return _invoke_function("to_timestamp", _to_col(col), lit(format))
+        return _invoke_function("to_timestamp", _to_col(col), lit(fmt))
 
 
 to_timestamp.__doc__ = pysparkfuncs.to_timestamp.__doc__
 
 
-def try_to_timestamp(col: "ColumnOrName", format: Optional["ColumnOrName"] = None) -> Column:
-    if format is not None:
-        return _invoke_function_over_columns("try_to_timestamp", col, format)
+def try_to_timestamp(col: "ColumnOrName", fmt: Optional["ColumnOrName"] = None) -> Column:
+    if fmt is not None:
+        return _invoke_function_over_columns("try_to_timestamp", col, fmt)
     else:
         return _invoke_function_over_columns("try_to_timestamp", col)
 
@@ -3471,15 +3471,15 @@ def xpath_string(xml: "ColumnOrName", path: "ColumnOrName") -> Column:
 xpath_string.__doc__ = pysparkfuncs.xpath_string.__doc__
 
 
-def trunc(date: "ColumnOrName", format: str) -> Column:
-    return _invoke_function("trunc", _to_col(date), lit(format))
+def trunc(date: "ColumnOrName", fmt: str) -> Column:
+    return _invoke_function("trunc", _to_col(date), lit(fmt))
 
 
 trunc.__doc__ = pysparkfuncs.trunc.__doc__
 
 
-def date_trunc(format: str, timestamp: "ColumnOrName") -> Column:
-    return _invoke_function("date_trunc", lit(format), _to_col(timestamp))
+def date_trunc(fmt: str, timestamp: "ColumnOrName") -> Column:
+    return _invoke_function("date_trunc", lit(fmt), _to_col(timestamp))
 
 
 date_trunc.__doc__ = pysparkfuncs.date_trunc.__doc__
@@ -3499,15 +3499,15 @@ def last_day(date: "ColumnOrName") -> Column:
 last_day.__doc__ = pysparkfuncs.last_day.__doc__
 
 
-def from_unixtime(timestamp: "ColumnOrName", format: str = "yyyy-MM-dd HH:mm:ss") -> Column:
-    return _invoke_function("from_unixtime", _to_col(timestamp), lit(format))
+def from_unixtime(timestamp: "ColumnOrName", fmt: str = "yyyy-MM-dd HH:mm:ss") -> Column:
+    return _invoke_function("from_unixtime", _to_col(timestamp), lit(fmt))
 
 
 from_unixtime.__doc__ = pysparkfuncs.from_unixtime.__doc__
 
 
 @overload
-def unix_timestamp(timestamp: "ColumnOrName", format: str = ...) -> Column:
+def unix_timestamp(timestamp: "ColumnOrName", fmt: str = ...) -> Column:
     ...
 
 
@@ -3517,11 +3517,11 @@ def unix_timestamp() -> Column:
 
 
 def unix_timestamp(
-    timestamp: Optional["ColumnOrName"] = None, format: str = "yyyy-MM-dd HH:mm:ss"
+    timestamp: Optional["ColumnOrName"] = None, fmt: str = "yyyy-MM-dd HH:mm:ss"
 ) -> Column:
     if timestamp is None:
         return _invoke_function("unix_timestamp")
-    return _invoke_function("unix_timestamp", _to_col(timestamp), lit(format))
+    return _invoke_function("unix_timestamp", _to_col(timestamp), lit(fmt))
 
 
 unix_timestamp.__doc__ = pysparkfuncs.unix_timestamp.__doc__
@@ -3653,10 +3653,10 @@ session_window.__doc__ = pysparkfuncs.session_window.__doc__
 
 def to_unix_timestamp(
     timestamp: "ColumnOrName",
-    format: Optional["ColumnOrName"] = None,
+    fmt: Optional["ColumnOrName"] = None,
 ) -> Column:
-    if format is not None:
-        return _invoke_function_over_columns("to_unix_timestamp", timestamp, format)
+    if fmt is not None:
+        return _invoke_function_over_columns("to_unix_timestamp", timestamp, fmt)
     else:
         return _invoke_function_over_columns("to_unix_timestamp", timestamp)
 
@@ -3666,10 +3666,10 @@ to_unix_timestamp.__doc__ = pysparkfuncs.to_unix_timestamp.__doc__
 
 def to_timestamp_ltz(
     timestamp: "ColumnOrName",
-    format: Optional["ColumnOrName"] = None,
+    fmt: Optional["ColumnOrName"] = None,
 ) -> Column:
-    if format is not None:
-        return _invoke_function_over_columns("to_timestamp_ltz", timestamp, format)
+    if fmt is not None:
+        return _invoke_function_over_columns("to_timestamp_ltz", timestamp, fmt)
     else:
         return _invoke_function_over_columns("to_timestamp_ltz", timestamp)
 
@@ -3679,10 +3679,10 @@ to_timestamp_ltz.__doc__ = pysparkfuncs.to_timestamp_ltz.__doc__
 
 def to_timestamp_ntz(
     timestamp: "ColumnOrName",
-    format: Optional["ColumnOrName"] = None,
+    fmt: Optional["ColumnOrName"] = None,
 ) -> Column:
-    if format is not None:
-        return _invoke_function_over_columns("to_timestamp_ntz", timestamp, format)
+    if fmt is not None:
+        return _invoke_function_over_columns("to_timestamp_ntz", timestamp, fmt)
     else:
         return _invoke_function_over_columns("to_timestamp_ntz", timestamp)
 
