@@ -217,12 +217,7 @@ class RocksDB(
    */
   private def checkInternalColumnFamilies(cfName: String): Boolean = cfName.charAt(0) == '_'
 
-  // Methods to fetch column family mapping for this State Store version
-  def getColumnFamilyMapping: Map[String, Short] = {
-    colFamilyNameToInfoMap.asScala.map { case (k, v) => (k, v.cfId) }.toMap
-  }
-
-  def getColumnFamilyInfo(cfName: String): ColumnFamilyInfo = {
+  private def getColumnFamilyInfo(cfName: String): ColumnFamilyInfo = {
     colFamilyNameToInfoMap.get(cfName)
   }
 

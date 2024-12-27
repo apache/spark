@@ -55,13 +55,6 @@ private[sql] class RocksDBStateStoreProvider
 
     override def version: Long = lastVersion
 
-    // Test-visible methods to fetch column family mapping for this State Store version
-    // Because column families are only enabled for RocksDBStateStore, these methods
-    // are no-ops everywhere else.
-    private[sql] def getColumnFamilyMapping: Map[String, Short] = {
-      rocksDB.getColumnFamilyMapping.toMap
-    }
-
     override def createColFamilyIfAbsent(
         colFamilyName: String,
         keySchema: StructType,
