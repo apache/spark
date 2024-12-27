@@ -93,9 +93,9 @@ object Cast extends QueryErrorsBase {
 
     case (NullType, _) => true
 
-    case (_, CharType(_) | VarcharType(_)) => false
+    case (_, CharType(_) | VarcharType(_)) if !SQLConf.get.preserveCharVarcharTypeInfo => false
     case (_, _: StringType) => true
-    case (CharType(_) | VarcharType(_), _) => false
+    case (CharType(_) | VarcharType(_), _) if !SQLConf.get.preserveCharVarcharTypeInfo => false
 
     case (_: StringType, _: BinaryType) => true
 
@@ -200,9 +200,9 @@ object Cast extends QueryErrorsBase {
 
     case (NullType, _) => true
 
-    case (_, CharType(_) | VarcharType(_)) => false
+    case (_, CharType(_) | VarcharType(_)) if !SQLConf.get.preserveCharVarcharTypeInfo => false
     case (_, _: StringType) => true
-    case (CharType(_) | VarcharType(_), _) => false
+    case (CharType(_) | VarcharType(_), _) if !SQLConf.get.preserveCharVarcharTypeInfo => false
 
     case (_: StringType, BinaryType) => true
     case (_: IntegralType, BinaryType) => true
@@ -284,6 +284,8 @@ object Cast extends QueryErrorsBase {
    */
   def needsTimeZone(from: DataType, to: DataType): Boolean = (from, to) match {
     case (VariantType, _) => true
+    case (CharType(_) | VarcharType(_), TimestampType) => SQLConf.get.preserveCharVarcharTypeInfo
+    case (TimestampType, CharType(_) | VarcharType(_)) => SQLConf.get.preserveCharVarcharTypeInfo
     case (_: StringType, TimestampType) => true
     case (TimestampType, _: StringType) => true
     case (DateType, TimestampType) => true
@@ -318,10 +320,9 @@ object Cast extends QueryErrorsBase {
     case _ if from == to => true
     case (NullType, _) => true
     case (_: NumericType, _: NumericType) => true
-    case (_: AtomicType, CharType(_) | VarcharType(_)) => false
-    case (_: CalendarIntervalType, CharType(_) | VarcharType(_)) => false
-    case (_: AtomicType, _: StringType) => true
-    case (_: CalendarIntervalType, _: StringType) => true
+    case (s1: StringType, s2: StringType) => StringHelper.isMoreConstrained(s1, s2)
+    case (_: AtomicType, s: StringType) if StringHelper.isPlainString(s) => true
+    case (_: CalendarIntervalType, s: StringType) if StringHelper.isPlainString(s) => true
     case (_: DatetimeType, _: DatetimeType) => true
 
     case (ArrayType(fromType, fn), ArrayType(toType, tn)) =>
@@ -361,10 +362,10 @@ object Cast extends QueryErrorsBase {
     case (_, _) if from == to => false
     case (VariantType, _) => true
 
-    case (CharType(_) | VarcharType(_), BinaryType | _: StringType) => false
-    case (_: StringType, BinaryType | _: StringType) => false
-    case (st: StringType, _) if st.constraint == NoConstraint => true
-    case (_, st: StringType) if st.constraint == NoConstraint => false
+    case (_: StringType, BinaryType) => false
+    case (s1: StringType, s2: StringType) => !StringHelper.isMoreConstrained(s1, s2)
+    case (_: StringType, _) => true
+    case (_, st: StringType) => st.constraint != NoConstraint
 
     case (TimestampType, ByteType | ShortType | IntegerType) => true
     case (FloatType | DoubleType, TimestampType) => true
@@ -1138,6 +1139,8 @@ case class Cast(
       to match {
         case dt if dt == from => identity[Any]
         case VariantType => input => variant.VariantExpressionEvalUtils.castToVariant(input, from)
+        case CharType(length) => castToChar(from, length)
+        case VarcharType(length) => castToVarchar(from, length)
         case _: StringType => castToString(from)
         case BinaryType => castToBinary(from)
         case DateType => castToDate(from)
@@ -1244,6 +1247,10 @@ case class Cast(
       val cls = variant.VariantExpressionEvalUtils.getClass.getName.stripSuffix("$")
       val fromArg = ctx.addReferenceObj("from", from)
       (c, evPrim, evNull) => code"$evPrim = $cls.castToVariant($c, $fromArg);"
+    case CharType(length) =>
+      (c, evPrim, _) => castToCharCode(from, length, ctx).apply(c, evPrim)
+    case VarcharType(length) =>
+      (c, evPrim, _) => castToVarcharCode(from, length, ctx).apply(c, evPrim)
     case _: StringType => (c, evPrim, _) => castToStringCode(from, ctx).apply(c, evPrim)
     case BinaryType => castToBinaryCode(from)
     case DateType => castToDateCode(from, ctx)

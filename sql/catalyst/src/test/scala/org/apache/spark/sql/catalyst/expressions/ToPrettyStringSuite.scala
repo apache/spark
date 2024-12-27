@@ -91,7 +91,7 @@ class ToPrettyStringSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("Char as pretty strings") {
     checkEvaluation(ToPrettyString(Literal.create('a', CharType(5))), "a")
     withSQLConf(SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true") {
-      checkEvaluation(ToPrettyString(Literal.create('a', CharType(5))), "a    ")
+      checkEvaluation(ToPrettyString(Literal.create('a', CharType(5))), "a")
     }
   }
 

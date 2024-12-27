@@ -22,7 +22,7 @@ import java.time.ZoneOffset
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.catalyst.util.{ArrayData, DateFormatter, IntervalStringStyles, IntervalUtils, MapData, SparkStringUtils, TimestampFormatter}
+import org.apache.spark.sql.catalyst.util.{ArrayData, CharVarcharCodegenUtils, DateFormatter, IntervalStringStyles, IntervalUtils, MapData, SparkStringUtils, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.IntervalStringStyles.ANSI_STYLE
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.BinaryOutputStyle
@@ -51,6 +51,19 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
   // Makes the function accept Any type input by doing `asInstanceOf[T]`.
   @inline private def acceptAny[T](func: T => UTF8String): Any => UTF8String =
     i => func(i.asInstanceOf[T])
+
+  protected final def castToChar(from: DataType, length: Int): Any => UTF8String = from match {
+    case _: StringType => acceptAny(o => CharVarcharCodegenUtils.charTypeWriteSideCheck(o, length))
+    case _ => o => CharVarcharCodegenUtils.charTypeWriteSideCheck(
+      UTF8String.fromString(o.toString), length)
+  }
+
+  protected final def castToVarchar(from: DataType, length: Int): Any => UTF8String = from match {
+    case _: StringType => acceptAny(o => CharVarcharCodegenUtils.varcharTypeWriteSideCheck(
+      o, length))
+    case _ => o => CharVarcharCodegenUtils.varcharTypeWriteSideCheck(
+      UTF8String.fromString(o.toString), length)
+  }
 
   // Returns a function to convert a value to pretty string. The function assumes input is not null.
   protected final def castToString(from: DataType): Any => UTF8String = from match {
@@ -161,8 +174,33 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
         IntervalUtils.toDayTimeIntervalString(i, ANSI_STYLE, startField, endField)))
     case _: DecimalType if useDecimalPlainString =>
       acceptAny[Decimal](d => UTF8String.fromString(d.toPlainString))
+    case CharType(_) | VarcharType(_) => acceptAny[UTF8String](s => { s.trimRight() })
     case _: StringType => acceptAny[UTF8String](identity[UTF8String])
     case _ => o => UTF8String.fromString(o.toString)
+  }
+
+  protected final def castToCharCode(
+      from: DataType, length: Int, ctx: CodegenContext): (ExprValue, ExprValue) => Block = {
+    from match {
+      case _: StringType =>
+        (c, evPrim) => code"$evPrim = org.apache.spark.sql.catalyst.util.CharVarcharCodegenUtils" +
+          code".charTypeWriteSideCheck($c, $length);"
+      case _ =>
+        (c, evPrim) => code"$evPrim = org.apache.spark.sql.catalyst.util.CharVarcharCodegenUtils" +
+          code".charTypeWriteSideCheck(UTF8String.fromString(String.valueOf($c)));"
+    }
+  }
+
+  protected final def castToVarcharCode(
+      from: DataType, length: Int, ctx: CodegenContext): (ExprValue, ExprValue) => Block = {
+    from match {
+      case _: StringType =>
+        (c, evPrim) => code"$evPrim = org.apache.spark.sql.catalyst.util.CharVarcharCodegenUtils" +
+          code".varcharTypeWriteSideCheck($c, $length);"
+      case _ =>
+        (c, evPrim) => code"$evPrim = org.apache.spark.sql.catalyst.util.CharVarcharCodegenUtils" +
+          code".varcharTypeWriteSideCheck(UTF8String.fromString(String.valueOf($c)));"
+    }
   }
 
   // Returns a function to generate code to convert a value to pretty string. It assumes the input
@@ -255,6 +293,8 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
       // notation if an exponent is needed.
       case _: DecimalType if useDecimalPlainString =>
         (c, evPrim) => code"$evPrim = UTF8String.fromString($c.toPlainString());"
+      case CharType(_) | VarcharType(_) =>
+        (c, evPrim) => code"$evPrim = $c.trimRight();"
       case _: StringType =>
         (c, evPrim) => code"$evPrim = $c;"
       case _ =>

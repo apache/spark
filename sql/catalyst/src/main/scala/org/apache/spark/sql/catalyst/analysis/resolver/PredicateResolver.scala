@@ -17,18 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis.resolver
 
-import org.apache.spark.sql.catalyst.analysis.{
-  AnsiStringPromotionTypeCoercion,
-  AnsiTypeCoercion,
-  ApplyCharTypePaddingHelper,
-  BooleanEqualityTypeCoercion,
-  CollationTypeCoercion,
-  DecimalPrecisionTypeCoercion,
-  DivisionTypeCoercion,
-  IntegralDivisionTypeCoercion,
-  StringPromotionTypeCoercion,
-  TypeCoercion
-}
+import org.apache.spark.sql.catalyst.analysis.{AnsiStringPromotionTypeCoercion, AnsiTypeCoercion, ApplyCharTypePaddingHelper, BooleanEqualityTypeCoercion, CollationTypeCoercion, DecimalPrecisionTypeCoercion, DivisionTypeCoercion, IntegralDivisionTypeCoercion, StringPromotionTypeCoercion, TypeCoercion}
 import org.apache.spark.sql.catalyst.expressions.{Expression, Predicate, StringRPad}
 import org.apache.spark.sql.internal.SQLConf
 

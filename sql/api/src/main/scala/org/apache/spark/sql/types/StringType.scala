@@ -21,6 +21,7 @@ import org.json4s.JsonAST.{JString, JValue}
 
 import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.catalyst.util.CollationFactory
+import org.apache.spark.sql.internal.SqlApiConf
 
 /**
  * The data type representing `String` values. Please use the singleton `DataTypes.StringType`.
@@ -95,10 +96,13 @@ class StringType private[sql] (
   override def jsonValue: JValue = JString("string")
 
   override def equals(obj: Any): Boolean = {
-    obj match {
-      case s: StringType => s.collationId == collationId && s.constraint == constraint
-      case _ => false
+    val rhs = obj match {
+      case s: StringType => s
+      case _ => return false
     }
+    val a = StringHelper.getConstraint(this)
+    val b = StringHelper.getConstraint(rhs)
+    collationId == rhs.collationId && StringHelper.equiv(a, b)
   }
 
   override def hashCode(): Int = collationId.hashCode()
@@ -128,6 +132,70 @@ case object StringType
 }
 
 sealed trait StringConstraint
+
+case object StringHelper extends PartialOrdering[StringConstraint] {
+  override def tryCompare(x: StringConstraint, y: StringConstraint): Option[Int] = {
+    (x, y) match {
+      case (NoConstraint, NoConstraint) => Some(0)
+      case (NoConstraint, _) => Some(-1)
+      case (_, NoConstraint) => Some(1)
+      case (FixedLength(l1), FixedLength(l2)) => Some(l2.compareTo(l1))
+      case (FixedLength(l1), MaxLength(l2)) if l1 <= l2 => Some(1)
+      case (MaxLength(l1), FixedLength(l2)) if l1 >= l2 => Some(-1)
+      case (MaxLength(l1), MaxLength(l2)) => Some(l2.compareTo(l1))
+      case _ => None
+    }
+  }
+
+  override def lteq(x: StringConstraint, y: StringConstraint): Boolean = {
+    tryCompare(x, y).exists(_ <= 0)
+  }
+
+  override def gteq(x: StringConstraint, y: StringConstraint): Boolean = {
+    tryCompare(x, y).exists(_ >= 0)
+  }
+
+  override def equiv(x: StringConstraint, y: StringConstraint): Boolean = {
+    tryCompare(x, y).contains(0)
+  }
+
+  def getConstraint(s: StringType): StringConstraint =
+    if (SqlApiConf.get.preserveCharVarcharTypeInfo) {
+      s.constraint
+    } else {
+      s match {
+        case st @ (CharType(_) | VarcharType(_)) => st.constraint
+        case _ => NoConstraint
+      }
+    }
+
+  def isPlainString(s: StringType): Boolean = equiv(getConstraint(s), NoConstraint)
+
+  def isMoreConstrained(a: StringType, b: StringType): Boolean =
+    gteq(getConstraint(a), getConstraint(b))
+
+  def tightestCommonString(s1: StringType, s2: StringType): Option[StringType] = {
+    if (s1.collationId != s2.collationId) {
+      return None
+    }
+    if (!SqlApiConf.get.preserveCharVarcharTypeInfo) {
+      return Some(StringType(s1.collationId))
+    }
+    Some((s1.constraint, s2.constraint) match {
+      case (FixedLength(l1), FixedLength(l2)) => CharType(l1.max(l2))
+      case (MaxLength(l1), FixedLength(l2)) => VarcharType(l1.max(l2))
+      case (FixedLength(l1), MaxLength(l2)) => VarcharType(l1.max(l2))
+      case (MaxLength(l1), MaxLength(l2)) => VarcharType(l1.max(l2))
+      case _ => StringType(s1.collationId)
+    })
+  }
+
+  def removeCollation(s: StringType): StringType = s match {
+    case CharType(length) => CharType(length)
+    case VarcharType(length) => VarcharType(length)
+    case s: StringType => new StringType(CollationFactory.UTF8_BINARY_COLLATION_ID, s.constraint)
+  }
+}
 
 case object NoConstraint extends StringConstraint
 

@@ -51,6 +51,7 @@ object TypeCoercion extends TypeCoercionBase {
     WidenSetOperationTypes ::
     ProcedureArgumentCoercion ::
     new CombinedTypeCoercionRule(
+      CastCoercion ::
       CollationTypeCasts ::
       InConversion ::
       PromoteStrings ::
@@ -76,6 +77,9 @@ object TypeCoercion extends TypeCoercionBase {
       case (t1, t2) if t1 == t2 => Some(t1)
       case (NullType, t1) => Some(t1)
       case (t1, NullType) => Some(t1)
+
+      case(s1: StringType, s2: StringType) if SQLConf.get.preserveCharVarcharTypeInfo =>
+        StringHelper.tightestCommonString(s1, s2)
 
       case (t1: IntegralType, t2: DecimalType) if t2.isWiderThan(t1) =>
         Some(t2)
@@ -103,8 +107,10 @@ object TypeCoercion extends TypeCoercionBase {
     // [SPARK-50060] If a binary operation contains two collated string types with different
     // collation IDs, we can't decide which collation ID the result should have.
     case (st1: StringType, st2: StringType) if st1.collationId != st2.collationId => None
-    case (st: StringType, t2: AtomicType) if t2 != BinaryType && t2 != BooleanType => Some(st)
-    case (t1: AtomicType, st: StringType) if t1 != BinaryType && t1 != BooleanType => Some(st)
+    case (st: StringType, t2: AtomicType) if t2 != BinaryType && t2 != BooleanType &&
+      StringHelper.isPlainString(st) => Some(st)
+    case (t1: AtomicType, st: StringType) if t1 != BinaryType && t1 != BooleanType &&
+      StringHelper.isPlainString(st) => Some(st)
     case _ => None
   }
 
@@ -149,6 +155,7 @@ object TypeCoercion extends TypeCoercionBase {
     case (DecimalType.Fixed(_, s), _: StringType) if s > 0 => Some(DoubleType)
     case (_: StringType, DecimalType.Fixed(_, s)) if s > 0 => Some(DoubleType)
 
+    case (s1: StringType, s2: StringType) => StringHelper.tightestCommonString(s1, s2)
     case (l: StringType, r: AtomicType) if canPromoteAsInBinaryComparison(r) => Some(r)
     case (l: AtomicType, r: StringType) if canPromoteAsInBinaryComparison(l) => Some(l)
     case (l, r) => None
@@ -190,6 +197,12 @@ object TypeCoercion extends TypeCoercionBase {
       // Cast null type (usually from null literals) into target types
       case (NullType, target) => target.defaultConcreteType
 
+      case (s1: StringType, s2: StringType) =>
+        if (s1.collationId == s2.collationId && StringHelper.isMoreConstrained(s1, s2)) {
+          s2
+        } else {
+          null
+        }
       // If the function accepts any numeric type and the input is a string, we follow the hive
       // convention and cast that input into a double
       case (_: StringType, NumericType) => NumericType.defaultConcreteType

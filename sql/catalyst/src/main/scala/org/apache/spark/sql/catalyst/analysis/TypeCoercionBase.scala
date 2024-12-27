@@ -42,7 +42,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{
 }
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.catalog.procedures.BoundProcedure
-import org.apache.spark.sql.types.DataType
+import org.apache.spark.sql.types.{CharType, DataType, StringType, VarcharType}
 
 abstract class TypeCoercionBase extends TypeCoercionHelper {
 
@@ -323,6 +323,18 @@ abstract class TypeCoercionBase extends TypeCoercionHelper {
     override val transform: PartialFunction[Expression, Expression] = {
       case c: Concat if !c.childrenResolved => c
       case withChildrenResolved => ConcatTypeCoercion(withChildrenResolved)
+    }
+  }
+
+  object CastCoercion extends TypeCoercionRule {
+
+    override val transform: PartialFunction[Expression, Expression] = {
+      case c @ Cast(child, dataType, _, _) if child.resolved => (child.dataType, dataType) match {
+        case (_: StringType, _) => c
+        case (_, CharType(_) | VarcharType(_)) => c.withNewChildren(Seq(Cast(child, StringType)))
+        case _ => c
+      }
+      case e => e
     }
   }
 
