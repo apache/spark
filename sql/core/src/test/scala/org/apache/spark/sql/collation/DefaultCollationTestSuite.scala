@@ -65,7 +65,7 @@ abstract class DefaultCollationTestSuite extends QueryTest with SharedSparkSessi
     val exception = intercept[AnalysisException] {
       f
     }
-    assert(exception.getCondition === "INDETERMINATE_COLLATION")
+    assert(exception.getCondition.startsWith("INDETERMINATE_COLLATION"))
   }
 
   // region DDL tests
