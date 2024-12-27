@@ -149,7 +149,8 @@ case class TransformWithStateInPandasExec(
     initialStateGroupingAttrs.map(SortOrder(_, Ascending)))
 
   override def operatorStateMetadata(
-      stateSchemaPaths: List[String]): OperatorStateMetadata = {
+      stateSchemaPaths: List[List[String]]
+  ): OperatorStateMetadata = {
     getOperatorStateMetadata(stateSchemaPaths, getStateInfo, shortName, timeMode, outputMode)
   }
 

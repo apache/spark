@@ -462,12 +462,13 @@ case class TransformWithStateExec(
       stateSchemaVersion: Int): List[StateSchemaValidationResult] = {
     val info = getStateInfo
     validateAndWriteStateSchema(hadoopConf, batchId, stateSchemaVersion,
-      info, session, operatorStateMetadataVersion)
+      info, session, operatorStateMetadataVersion, conf.stateStoreEncodingFormat)
   }
 
   /** Metadata of this stateful operator and its states stores. */
   override def operatorStateMetadata(
-      stateSchemaPaths: List[String]): OperatorStateMetadata = {
+      stateSchemaPaths: List[List[String]]
+  ): OperatorStateMetadata = {
     val info = getStateInfo
     getOperatorStateMetadata(stateSchemaPaths, info, shortName, timeMode, outputMode)
   }

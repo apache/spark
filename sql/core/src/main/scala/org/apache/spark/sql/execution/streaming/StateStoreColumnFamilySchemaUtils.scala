@@ -69,8 +69,8 @@ object StateStoreColumnFamilySchemaUtils {
       valEncoder: Encoder[T],
       hasTtl: Boolean): StateStoreColFamilySchema = {
    StateStoreColFamilySchema(
-      stateName,
-      keyEncoder.schema,
+      stateName, 0,
+      keyEncoder.schema, 0,
       getValueSchemaWithTTL(valEncoder.schema, hasTtl),
       Some(NoPrefixKeyStateEncoderSpec(keyEncoder.schema)))
   }
@@ -81,8 +81,8 @@ object StateStoreColumnFamilySchemaUtils {
       valEncoder: Encoder[T],
       hasTtl: Boolean): StateStoreColFamilySchema = {
   StateStoreColFamilySchema(
-      stateName,
-      keyEncoder.schema,
+      stateName, 0,
+      keyEncoder.schema, 0,
       getValueSchemaWithTTL(valEncoder.schema, hasTtl),
       Some(NoPrefixKeyStateEncoderSpec(keyEncoder.schema)))
   }
@@ -95,8 +95,8 @@ object StateStoreColumnFamilySchemaUtils {
       hasTtl: Boolean): StateStoreColFamilySchema = {
     val compositeKeySchema = getCompositeKeySchema(keyEncoder.schema, userKeyEnc.schema)
     StateStoreColFamilySchema(
-      stateName,
-      compositeKeySchema,
+      stateName, 0,
+      compositeKeySchema, 0,
       getValueSchemaWithTTL(valEncoder.schema, hasTtl),
       Some(PrefixKeyScanStateEncoderSpec(compositeKeySchema, 1)),
       Some(userKeyEnc.schema))
@@ -107,8 +107,8 @@ object StateStoreColumnFamilySchemaUtils {
       keySchema: StructType,
       valSchema: StructType): StateStoreColFamilySchema = {
     StateStoreColFamilySchema(
-      stateName,
-      keySchema,
+      stateName, 0,
+      keySchema, 0,
       valSchema,
       Some(PrefixKeyScanStateEncoderSpec(keySchema, 1)))
   }
@@ -118,8 +118,8 @@ object StateStoreColumnFamilySchemaUtils {
       keySchema: StructType,
       valSchema: StructType): StateStoreColFamilySchema = {
     StateStoreColFamilySchema(
-      stateName,
-      keySchema,
+      stateName, 0,
+      keySchema, 0,
       valSchema,
       Some(RangeKeyScanStateEncoderSpec(keySchema, Seq(0))))
   }

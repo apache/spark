@@ -67,7 +67,9 @@ case class AvroEncoder(
 // Used to represent the schema of a column family in the state store
 case class StateStoreColFamilySchema(
     colFamilyName: String,
+    keySchemaId: Short,
     keySchema: StructType,
+    valueSchemaId: Short,
     valueSchema: StructType,
     keyStateEncoderSpec: Option[KeyStateEncoderSpec] = None,
     userKeyEncoderSchema: Option[StructType] = None
@@ -156,38 +158,63 @@ class StateSchemaCompatibilityChecker(
       oldSchema: StateStoreColFamilySchema,
       newSchema: StateStoreColFamilySchema,
       ignoreValueSchema: Boolean,
-      schemaEvolutionEnabled: Boolean) : Boolean = {
-    val (storedKeySchema, storedValueSchema) = (oldSchema.keySchema,
-      oldSchema.valueSchema)
+      schemaEvolutionEnabled: Boolean): StateStoreColFamilySchema = {
+
+    val (storedKeySchema, storedValueSchema) = (oldSchema.keySchema, oldSchema.valueSchema)
     val (keySchema, valueSchema) = (newSchema.keySchema, newSchema.valueSchema)
+
+    def incrementSchemaId(id: Short): Short = (id + 1).toShort
+
+    // Initialize with old schema IDs
+    var resultSchema = newSchema.copy(
+      keySchemaId = oldSchema.keySchemaId,
+      valueSchemaId = oldSchema.valueSchemaId
+    )
 
     if (storedKeySchema.equals(keySchema) &&
       (ignoreValueSchema || storedValueSchema.equals(valueSchema))) {
-      // schema is exactly same
-      false
+      // Schema is exactly same - return old schema
+      oldSchema
     } else if (!ignoreValueSchema && schemaEvolutionEnabled) {
-      // By this point, we know that old value schema is not equal to new value schema
+      // Check value schema evolution
       val oldAvroSchema = SchemaConverters.toAvroType(storedValueSchema)
       val newAvroSchema = SchemaConverters.toAvroType(valueSchema)
 
       val validator = new SchemaValidatorBuilder().canReadStrategy.validateAll()
-      // This will throw a SchemaValidation exception if the schema has evolved in an
-      // unacceptable way.
       validator.validate(newAvroSchema, Iterable(oldAvroSchema).asJava)
-      // If no exception is thrown, then we know that the schema evolved in an
-      // acceptable way
-      true
-    } else if (!schemasCompatible(storedKeySchema, keySchema)) {
-      throw StateStoreErrors.stateStoreKeySchemaNotCompatible(storedKeySchema.toString,
-        keySchema.toString)
-    } else if (!ignoreValueSchema && !schemasCompatible(storedValueSchema, valueSchema)) {
-      throw StateStoreErrors.stateStoreValueSchemaNotCompatible(storedValueSchema.toString,
-        valueSchema.toString)
+
+      // Schema evolved - increment value schema ID
+      resultSchema.copy(valueSchemaId = incrementSchemaId(oldSchema.valueSchemaId))
     } else {
-      logInfo("Detected schema change which is compatible. Allowing to put rows.")
-      true
+      // Check compatibility
+      if (!schemasCompatible(storedKeySchema, keySchema)) {
+        throw StateStoreErrors.stateStoreKeySchemaNotCompatible(
+          storedKeySchema.toString, keySchema.toString)
+      }
+      if (!ignoreValueSchema && !schemasCompatible(storedValueSchema, valueSchema)) {
+        throw StateStoreErrors.stateStoreValueSchemaNotCompatible(
+          storedValueSchema.toString, valueSchema.toString)
+      }
+
+      // Schema changed but compatible - increment IDs as needed
+      val needsKeyUpdate = !storedKeySchema.equals(keySchema)
+      val needsValueUpdate = !ignoreValueSchema && !storedValueSchema.equals(valueSchema)
+
+      resultSchema.copy(
+        keySchemaId = if (needsKeyUpdate) {
+          incrementSchemaId(oldSchema.keySchemaId)
+        } else {
+          oldSchema.keySchemaId
+        },
+        valueSchemaId = if (needsValueUpdate) {
+          incrementSchemaId(oldSchema.valueSchemaId)
+        } else {
+          oldSchema.valueSchemaId
+        }
+      )
     }
   }
+
 
   /**
    * Function to validate the new state store schema and evolve the schema if required.
@@ -202,31 +229,44 @@ class StateSchemaCompatibilityChecker(
       stateSchemaVersion: Int,
       schemaEvolutionEnabled: Boolean): Boolean = {
     val existingStateSchemaList = getExistingKeyAndValueSchema()
-    val newStateSchemaList = newStateSchema
 
     if (existingStateSchemaList.isEmpty) {
-      // write the schema file if it doesn't exist
-      createSchemaFile(newStateSchemaList.sortBy(_.colFamilyName), stateSchemaVersion)
+      // Initialize schemas with ID 0 when no existing schema
+      val initializedSchemas = newStateSchema.map(schema =>
+        schema.copy(keySchemaId = 0, valueSchemaId = 0)
+      )
+      createSchemaFile(initializedSchemas.sortBy(_.colFamilyName), stateSchemaVersion)
       true
     } else {
-      // validate if the new schema is compatible with the existing schema
-      val existingSchemaMap = existingStateSchemaList.map { schema =>
+      val existingSchemaMap = existingStateSchemaList.map(schema =>
         schema.colFamilyName -> schema
-      }.toMap
-      // For each new state variable, we want to compare it to the old state variable
-      // schema with the same name
-      val hasEvolvedSchema = newStateSchemaList.exists { newSchema =>
-        existingSchemaMap.get(newSchema.colFamilyName)
-          .exists(existingSchema => check(
-            existingSchema, newSchema, ignoreValueSchema, schemaEvolutionEnabled))
+      ).toMap
+
+      // Process each new schema and track if any have evolved
+      val (evolvedSchemas, hasEvolutions) = newStateSchema.foldLeft(
+        (List.empty[StateStoreColFamilySchema], false)) {
+        case ((schemas, evolved), newSchema) =>
+          existingSchemaMap.get(newSchema.colFamilyName) match {
+            case Some(existingSchema) =>
+              val updatedSchema = check(
+                existingSchema, newSchema, ignoreValueSchema, schemaEvolutionEnabled)
+              val hasEvolved = !updatedSchema.equals(existingSchema)
+              (updatedSchema :: schemas, evolved || hasEvolved)
+            case None =>
+              // New column family - initialize with schema ID 0
+              val newSchemaWithIds = newSchema.copy(keySchemaId = 0, valueSchemaId = 0)
+              (newSchemaWithIds :: schemas, true)
+          }
       }
+
       val colFamiliesAddedOrRemoved =
-        (newStateSchemaList.map(_.colFamilyName).toSet != existingSchemaMap.keySet)
-      val newSchemaFileWritten = hasEvolvedSchema || colFamiliesAddedOrRemoved
+        (newStateSchema.map(_.colFamilyName).toSet != existingSchemaMap.keySet)
+      val newSchemaFileWritten = hasEvolutions || colFamiliesAddedOrRemoved
+
       if (stateSchemaVersion == SCHEMA_FORMAT_V3 && newSchemaFileWritten) {
-        createSchemaFile(newStateSchemaList.sortBy(_.colFamilyName), stateSchemaVersion)
+        createSchemaFile(evolvedSchemas.sortBy(_.colFamilyName), stateSchemaVersion)
       }
-      // TODO: [SPARK-49535] Write Schema files after schema has changed for StateSchemaV3
+
       newSchemaFileWritten
     }
   }

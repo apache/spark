@@ -246,9 +246,9 @@ class IncrementalExecution(
             } else {
               None
             }
-            val stateSchemaMapping = ssw.stateSchemaMapping(schemaValidationResult,
+            val stateSchemaList = ssw.stateSchemaList(schemaValidationResult,
               oldMetadata)
-            val metadata = ssw.operatorStateMetadata(stateSchemaMapping)
+            val metadata = ssw.operatorStateMetadata(stateSchemaList)
             oldMetadata match {
               case Some(oldMetadata) => ssw.validateNewMetadata(oldMetadata, metadata)
               case None =>
@@ -260,7 +260,7 @@ class IncrementalExecution(
                 Some(currentBatchId))
             metadataWriter.write(metadata)
             if (ssw.supportsSchemaEvolution) {
-              val stateSchemaMetadata = createStateSchemaMetadata(stateSchemaMapping.head)
+              val stateSchemaMetadata = createStateSchemaMetadata(stateSchemaList.head)
               stateSchemaMetadatas.put(ssw.getStateInfo.operatorId, stateSchemaMetadata)
               // Create new instance with copied fields but updated stateInfo
               ssw match {
@@ -279,22 +279,54 @@ class IncrementalExecution(
   }
 
   private def createStateSchemaMetadata(
-      stateSchemaMapping: Map[Short, String]
+      stateSchemaFiles: List[String]
   ): StateSchemaBroadcast = {
     val fm = CheckpointFileManager.create(new Path(checkpointLocation), hadoopConf)
-    val stateSchemas = stateSchemaMapping.flatMap { case (stateSchemaId, stateSchemaPath) =>
-      val inStream = fm.open(new Path(stateSchemaPath))
-        StateSchemaCompatibilityChecker.readSchemaFile(inStream).map { schema =>
-          StateSchemaMetadataKey(
-            schema.colFamilyName, stateSchemaId) ->
-            StateSchemaMetadataValue(
-              schema.valueSchema, SchemaConverters.toAvroType(schema.valueSchema))
-        }.toMap
-    }
-    StateSchemaBroadcast(
-      sparkSession.sparkContext.broadcast(
-      StateSchemaMetadata(stateSchemas.keys.map(_.schemaId).max, stateSchemas)
-    ))
+
+    // Build up our map of schema metadata
+    val activeSchemas = stateSchemaFiles.zipWithIndex.foldLeft(
+      Map.empty[StateSchemaMetadataKey, StateSchemaMetadataValue]) {
+      case (schemas, (stateSchemaFile, schemaIndex)) =>
+        val fsDataInputStream = fm.open(new Path(stateSchemaFile))
+        val colFamilySchemas = StateSchemaCompatibilityChecker.readSchemaFile(fsDataInputStream)
+
+        // For each column family, create metadata entries for both key and value schemas
+        val schemaEntries = colFamilySchemas.flatMap { colFamilySchema =>
+          // Create key schema metadata
+          val keyAvroSchema = SchemaConverters.toAvroType(colFamilySchema.keySchema)
+          val keyEntry = StateSchemaMetadataKey(
+            colFamilySchema.colFamilyName,
+            colFamilySchema.keySchemaId,
+            isKey = true
+          ) -> StateSchemaMetadataValue(
+            colFamilySchema.keySchema,
+            keyAvroSchema
+          )
+
+          // Create value schema metadata
+          val valueAvroSchema = SchemaConverters.toAvroType(colFamilySchema.valueSchema)
+          val valueEntry = StateSchemaMetadataKey(
+            colFamilySchema.colFamilyName,
+            colFamilySchema.valueSchemaId,
+            isKey = false
+          ) -> StateSchemaMetadataValue(
+            colFamilySchema.valueSchema,
+            valueAvroSchema
+          )
+
+          Seq(keyEntry, valueEntry)
+        }
+
+        // Add new entries to our accumulated map
+        schemas ++ schemaEntries.toMap
+      }
+
+    // Create the final metadata and wrap it in a broadcast
+    val metadata = StateSchemaMetadata(
+      activeSchemas = activeSchemas
+    )
+
+    StateSchemaBroadcast(sparkSession.sparkContext.broadcast(metadata))
   }
 
   object StateOpIdRule extends SparkPlanPartialRule {

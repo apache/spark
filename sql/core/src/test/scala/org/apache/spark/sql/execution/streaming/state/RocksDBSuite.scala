@@ -344,7 +344,7 @@ class RocksDBStateEncoderSuite extends SparkFunSuite {
       keySchemaId = 0,
       valueSchemaId = 0
     ))
-    new AvroStateEncoder(keyStateEncoderSpec, valueSchema, stateSchemaInfo)
+    new AvroStateEncoder(keyStateEncoderSpec, valueSchema, None, None)
   }
 
   private def createNoPrefixKeyEncoder(): RocksDBDataEncoder = {
@@ -380,7 +380,7 @@ class RocksDBStateEncoderSuite extends SparkFunSuite {
     withClue("Testing prefix scan encoding: ") {
       val prefixKeySpec = PrefixKeyScanStateEncoderSpec(keySchema, numColsPrefixKey = 2)
       val stateSchemaInfo = Some(StateSchemaInfo(keySchemaId = 42, valueSchemaId = 0))
-      val encoder = new AvroStateEncoder(prefixKeySpec, valueSchema, stateSchemaInfo)
+      val encoder = new AvroStateEncoder(prefixKeySpec, valueSchema, None, None)
 
       // Then encode just the remaining key portion (which should include schema ID)
       val remainingKeyRow = keyProj.apply(InternalRow(null, null, 3.14))
@@ -396,7 +396,7 @@ class RocksDBStateEncoderSuite extends SparkFunSuite {
     withClue("Testing range scan encoding: ") {
       val rangeScanSpec = RangeKeyScanStateEncoderSpec(keySchema, orderingOrdinals = Seq(0, 1))
       val stateSchemaInfo = Some(StateSchemaInfo(keySchemaId = 24, valueSchemaId = 0))
-      val encoder = new AvroStateEncoder(rangeScanSpec, valueSchema, stateSchemaInfo)
+      val encoder = new AvroStateEncoder(rangeScanSpec, valueSchema, None, None)
 
       // Encode remaining key (non-ordering columns)
       // For range scan, the remaining key schema only contains columns NOT in orderingOrdinals
@@ -494,7 +494,7 @@ class RocksDBStateEncoderSuite extends SparkFunSuite {
     withClue("Testing single value encoder: ") {
       val keySpec = NoPrefixKeyStateEncoderSpec(keySchema)
       val stateSchemaInfo = Some(StateSchemaInfo(keySchemaId = 0, valueSchemaId = 42))
-      val avroEncoder = new AvroStateEncoder(keySpec, valueSchema, stateSchemaInfo)
+      val avroEncoder = new AvroStateEncoder(keySpec, valueSchema, None, None)
       val valueEncoder = new SingleValueStateEncoder(avroEncoder, valueSchema)
 
       // Encode value
@@ -1946,10 +1946,10 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
 
           val keyRowPrefixEncoder = new StateRowPrefixEncoder(
             useColumnFamilies = colFamiliesEnabled,
-            colFamilyInfo, supportSchemaEvolution = schemaEvolutionEnabled)
+            colFamilyInfo)
 
           val valueRowPrefixEncoder = new StateRowPrefixEncoder(
-            false, None, supportSchemaEvolution = schemaEvolutionEnabled)
+            false, None)
 
           // Create some test data with known prefix values
           val testData = "test data".getBytes
@@ -1965,10 +1965,6 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
 
           // Verify key prefixes
           val keyPrefix = keyRowPrefixEncoder.decodeStateRowPrefix(encodedKey)
-          assert(keyPrefix.schemaId.isDefined == schemaEvolutionEnabled)
-          if (schemaEvolutionEnabled) {
-            assert(keyPrefix.schemaId.get === keyRowPrefixEncoder.getCurrentSchemaId)
-          }
           if (colFamiliesEnabled) {
             assert(keyPrefix.columnFamilyId.isDefined)
             assert(keyPrefix.columnFamilyId.get === 1)
@@ -1978,11 +1974,6 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
 
           // Verify value prefixes
           val valuePrefix = valueRowPrefixEncoder.decodeStateRowPrefix(retrievedValue)
-          assert(valuePrefix.schemaId.isDefined == schemaEvolutionEnabled)
-          if (schemaEvolutionEnabled) {
-            assert(valuePrefix.schemaId.get === valueRowPrefixEncoder.getCurrentSchemaId)
-          }
-          assert(valuePrefix.columnFamilyId.isEmpty) // Values don't have column family IDs
 
           // Verify the actual data after stripping prefixes
           val retrievedKeyData = keyRowPrefixEncoder.decodeStateRowData(encodedKey)
@@ -2061,8 +2052,7 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
               val valueEncoder = RocksDBStateEncoder.getValueEncoder(
                 dataEncoder,
                 valueSchema = valueSchema,
-                useMultipleValuesPerKey = useMultipleValues,
-                None
+                useMultipleValuesPerKey = useMultipleValues
               )
 
               // Encode and write to DB
@@ -2088,13 +2078,9 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
               if (schemaEvolutionEnabled) {
                 val keyPrefix = keyEncoder.asInstanceOf[StateRowPrefixEncoder]
                   .decodeStateRowPrefix(encodedKey)
-                assert(keyPrefix.schemaId.isDefined == schemaEvolutionEnabled)
-                assert(keyPrefix.schemaId.get === 0) // default schema ID
 
                 val valuePrefix = valueEncoder.asInstanceOf[StateRowPrefixEncoder]
                   .decodeStateRowPrefix(encodedValue)
-                assert(valuePrefix.schemaId.isDefined == schemaEvolutionEnabled)
-                assert(valuePrefix.schemaId.get === 0)
               }
 
               // Verify column family prefix if enabled

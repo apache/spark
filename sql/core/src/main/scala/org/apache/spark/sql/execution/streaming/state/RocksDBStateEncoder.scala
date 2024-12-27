@@ -26,6 +26,7 @@ import org.apache.avro.Schema
 import org.apache.avro.generic.{GenericData, GenericDatumReader, GenericDatumWriter, GenericRecord}
 import org.apache.avro.io.{DecoderFactory, EncoderFactory}
 
+import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.avro.{AvroDeserializer, AvroOptions, AvroSerializer, SchemaConverters}
 import org.apache.spark.sql.catalyst.InternalRow
@@ -50,6 +51,78 @@ sealed trait RocksDBValueStateEncoder {
   def decodeValue(valueBytes: Array[Byte]): UnsafeRow
   def decodeValues(valueBytes: Array[Byte]): Iterator[UnsafeRow]
 }
+
+/**
+ * Broadcasts schema metadata information for stateful operators in a streaming query.
+ *
+ * This class provides a way to distribute schema evolution information to all executors
+ * via Spark's broadcast mechanism. Each stateful operator in a streaming query maintains
+ * its own instance of this class to track schema versions and evolution.
+ *
+ * @param broadcast Spark broadcast variable containing the schema metadata
+ */
+case class StateSchemaBroadcast(
+    broadcast: Broadcast[StateSchemaMetadata]
+) extends Logging {
+
+  /**
+   * Retrieves the schema information for a given column family and schema version
+   *
+   * @param key A combination of column family name and schema ID
+   * @return The corresponding schema metadata value containing both SQL and Avro schemas
+   */
+  def getSchemaMetadataValue(key: StateSchemaMetadataKey): StateSchemaMetadataValue = {
+    broadcast.value.activeSchemas(key)
+  }
+
+  def getCurrentStateSchemaId(colFamilyName: String, isKey: Boolean): Short = {
+    broadcast.value.activeSchemas
+      .keys
+      .filter(key =>
+        key.colFamilyName == colFamilyName &&
+          key.isKey == isKey
+      )
+      .map(_.schemaId).max
+  }
+}
+
+/**
+ * Contains schema evolution metadata for a stateful operator.
+ *
+ * @param currentSchemaId The schema version currently being used for writing new state
+ * @param activeSchemas Map of all active schema versions, keyed by column family and schema ID.
+ *                      This includes both the current schema and any previous schemas that
+ *                      may still exist in the state store.
+ */
+case class StateSchemaMetadata(
+    activeSchemas: Map[StateSchemaMetadataKey, StateSchemaMetadataValue]
+)
+
+/**
+ * Composite key for looking up schema metadata, combining column family and schema version.
+ *
+ * @param colFamilyName Name of the RocksDB column family this schema applies to
+ * @param schemaId Version identifier for this schema
+ */
+case class StateSchemaMetadataKey(
+    colFamilyName: String,
+    schemaId: Short,
+    isKey: Boolean
+)
+
+/**
+ * Contains both SQL and Avro representations of a schema version.
+ *
+ * The SQL schema represents the logical structure while the Avro schema is used
+ * for evolution compatibility checking and serialization.
+ *
+ * @param sqlSchema The Spark SQL schema definition
+ * @param avroSchema The equivalent Avro schema used for compatibility checking
+ */
+case class StateSchemaMetadataValue(
+    sqlSchema: StructType,
+    avroSchema: Schema
+)
 
 /**
  * Contains schema version information for both key and value schemas in a state store.
@@ -297,7 +370,8 @@ abstract class RocksDBDataEncoder(
 class UnsafeRowDataEncoder(
     keyStateEncoderSpec: KeyStateEncoderSpec,
     valueSchema: StructType,
-    stateSchemaInfo: Option[StateSchemaInfo]
+    stateSchemaBroadcast: Option[StateSchemaBroadcast],
+    columnFamilyInfo: Option[ColumnFamilyInfo]
 ) extends RocksDBDataEncoder(keyStateEncoderSpec, valueSchema) {
 
   override def supportsSchemaEvolution: Boolean = false
@@ -528,8 +602,21 @@ class UnsafeRowDataEncoder(
 class AvroStateEncoder(
     keyStateEncoderSpec: KeyStateEncoderSpec,
     valueSchema: StructType,
-    stateSchemaInfo: Option[StateSchemaInfo]
+    stateSchemaBroadcast: Option[StateSchemaBroadcast],
+    columnFamilyInfo: Option[ColumnFamilyInfo]
 ) extends RocksDBDataEncoder(keyStateEncoderSpec, valueSchema) with Logging {
+
+
+  // schema information
+  private val currentKeySchemaId: Short = getStateSchemaBroadcast.getCurrentStateSchemaId(
+    getColFamilyName,
+    isKey = true
+  )
+
+  private val currentValSchemaId: Short = getStateSchemaBroadcast.getCurrentStateSchemaId(
+    getColFamilyName,
+    isKey = false
+  )
 
   private val avroEncoder = createAvroEnc(keyStateEncoderSpec, valueSchema)
   // Avro schema used by the avro encoders
@@ -546,10 +633,11 @@ class AvroStateEncoder(
       StructType(keySchema.take (numColsPrefixKey))
     case _ => throw unsupportedOperationForKeyStateEncoder("prefixKeySchema")
   }
+
   private lazy val prefixKeyAvroType = SchemaConverters.toAvroType(prefixKeySchema)
   private lazy val prefixKeyProj = UnsafeProjection.create(prefixKeySchema)
 
-  // Range Key schema nd projection definitions used by the Avro Serializers and
+  // Range Key schema and projection definitions used by the Avro Serializers and
   // Deserializers
   private lazy val rangeScanKeyFieldsWithOrdinal = keyStateEncoderSpec match {
     case RangeKeyScanStateEncoderSpec(keySchema, orderingOrdinals) =>
@@ -656,6 +744,14 @@ class AvroStateEncoder(
 
   override def supportsSchemaEvolution: Boolean = true
 
+  private def getColFamilyName: String = {
+    columnFamilyInfo.get.colFamilyName
+  }
+
+  private def getStateSchemaBroadcast: StateSchemaBroadcast = {
+    stateSchemaBroadcast.get
+  }
+
   /**
    * This method takes an UnsafeRow, and serializes to a byte array using Avro encoding.
    */
@@ -710,7 +806,7 @@ class AvroStateEncoder(
           encodeUnsafeRowToAvro(row, avroEncoder.keySerializer, keyAvroType, out)
         // prepend stateSchemaId to the Avro-encoded key portion for NoPrefixKeys
         encodeWithStateSchemaId(
-          StateSchemaIdRow(stateSchemaInfo.get.keySchemaId, avroRow))
+          StateSchemaIdRow(currentKeySchemaId, avroRow))
       case PrefixKeyScanStateEncoderSpec(_, _) =>
         encodeUnsafeRowToAvro(row, avroEncoder.keySerializer, prefixKeyAvroType, out)
       case _ => throw unsupportedOperationForKeyStateEncoder("encodeKey")
@@ -727,7 +823,7 @@ class AvroStateEncoder(
     }
     // prepend stateSchemaId to the remaining key portion
     encodeWithStateSchemaId(
-      StateSchemaIdRow(stateSchemaInfo.get.keySchemaId, avroRow))
+      StateSchemaIdRow(currentKeySchemaId, avroRow))
   }
 
   /**
@@ -872,7 +968,7 @@ class AvroStateEncoder(
   override def encodeValue(row: UnsafeRow): Array[Byte] = {
     val avroRow = encodeUnsafeRowToAvro(row, avroEncoder.valueSerializer, valueAvroType, out)
     // prepend stateSchemaId to the Avro-encoded value portion
-    encodeWithStateSchemaId(StateSchemaIdRow(stateSchemaInfo.get.valueSchemaId, avroRow))
+    encodeWithStateSchemaId(StateSchemaIdRow(currentValSchemaId, avroRow))
   }
 
   override def decodeKey(bytes: Array[Byte]): UnsafeRow = {

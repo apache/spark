@@ -20,7 +20,9 @@ package org.apache.spark.sql.execution.streaming.state
 import java.io._
 import java.util.UUID
 import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
+
 import scala.util.control.NonFatal
+
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
@@ -30,7 +32,6 @@ import org.apache.spark.internal.LogKeys._
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider.DEFAULT_SCHEMA_IDS
 import org.apache.spark.sql.execution.streaming.{CheckpointFileManager, StreamExecution}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.{NonFateSharingCache, Utils}
@@ -101,8 +102,7 @@ private[sql] class RocksDBStateStoreProvider
       val valueEncoder = RocksDBStateEncoder.getValueEncoder(
         dataEncoder,
         valueSchema,
-        useMultipleValuesPerKey,
-        stateSchemaBroadcast.map(_.getCurrentSchemaId)
+        useMultipleValuesPerKey
       )
       keyValueEncoderMap.putIfAbsent(colFamilyName, (keyEncoder, valueEncoder))
     }
@@ -418,7 +418,7 @@ private[sql] class RocksDBStateStoreProvider
     }
 
     val dataEncoder = getDataEncoder(
-      stateStoreEncoding,
+      "unsaferow",
       dataEncoderCacheKey,
       keyStateEncoderSpec,
       valueSchema,
@@ -435,8 +435,7 @@ private[sql] class RocksDBStateStoreProvider
     val valueEncoder = RocksDBStateEncoder.getValueEncoder(
       dataEncoder,
       valueSchema,
-      useMultipleValuesPerKey,
-      stateSchemaBroadcast.map(_.getCurrentSchemaId)
+      useMultipleValuesPerKey
     )
     keyValueEncoderMap.putIfAbsent(StateStore.DEFAULT_COL_FAMILY_NAME, (keyEncoder, valueEncoder))
   }
@@ -706,10 +705,18 @@ object RocksDBStateStoreProvider {
         override def call(): RocksDBDataEncoder = {
           if (stateStoreEncoding == "avro") {
             new AvroStateEncoder(
-              keyStateEncoderSpec, valueSchema, stateSchemaBroadcast, Some(DEFAULT_SCHEMA_IDS), columnFamilyInfo)
+              keyStateEncoderSpec,
+              valueSchema,
+              stateSchemaBroadcast,
+              columnFamilyInfo
+            )
           } else {
             new UnsafeRowDataEncoder(
-              keyStateEncoderSpec, valueSchema, stateSchemaBroadcast, None, columnFamilyInfo)
+              keyStateEncoderSpec,
+              valueSchema,
+              stateSchemaBroadcast,
+              columnFamilyInfo
+            )
           }
         }
       }

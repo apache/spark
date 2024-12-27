@@ -51,8 +51,7 @@ case class StateStoreMetadataV2(
     storeName: String,
     numColsPrefixKey: Int,
     numPartitions: Int,
-    stateSchemaId: Short,
-    stateSchemaFilePaths: Map[Short, String])
+    stateSchemaFilePaths: List[String])
   extends StateStoreMetadata with Serializable
 
 object StateStoreMetadataV2 {
@@ -470,7 +469,7 @@ class OperatorStateMetadataV2FileManager(
     val earliestBatchToKeep = latestMetadata match {
       case Some(OperatorStateMetadataV2(_, stateStoreInfo, _)) =>
         val ssInfo = stateStoreInfo.head
-        val schemaFilePath = ssInfo.stateSchemaFilePaths.minBy(_._1)._2
+        val schemaFilePath = ssInfo.stateSchemaFilePaths.head
         new Path(schemaFilePath).getName.split("_").head.toLong
       case _ => 0
     }

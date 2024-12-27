@@ -152,7 +152,7 @@ class OperatorStateMetadataSuite extends StreamTest with SharedSparkSession {
       // dynamically by the operator.
       val expectedMetadata = OperatorStateMetadataV2(OperatorInfoV1(0, "transformWithStateExec"),
         Array(StateStoreMetadataV2(
-          "default", 0, numShufflePartitions, 0, Map.empty)),
+          "default", 0, numShufflePartitions, List.empty)),
         "")
       checkOperatorStateMetadata(checkpointDir.toString, 0, expectedMetadata, 2)
 

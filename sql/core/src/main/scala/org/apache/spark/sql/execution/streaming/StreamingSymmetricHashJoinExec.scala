@@ -228,7 +228,8 @@ case class StreamingSymmetricHashJoinExec(
     SymmetricHashJoinStateManager.allStateStoreNames(LeftSide, RightSide)
 
   override def operatorStateMetadata(
-      stateSchemaPaths: List[Map[Short, String]] = List.empty): OperatorStateMetadata = {
+      stateSchemaPaths: List[List[String]] = List.empty
+  ): OperatorStateMetadata = {
     val info = getStateInfo
     val operatorInfo = OperatorInfoV1(info.operatorId, shortName)
     val stateStoreInfo =
@@ -263,8 +264,8 @@ case class StreamingSymmetricHashJoinExec(
 
     // validate and maybe evolve schema for all state stores across both sides of the join
     result.map { case (stateStoreName, (keySchema, valueSchema)) =>
-      val newStateSchema = List(StateStoreColFamilySchema(StateStore.DEFAULT_COL_FAMILY_NAME,
-        keySchema, valueSchema))
+      val newStateSchema = List(StateStoreColFamilySchema(StateStore.DEFAULT_COL_FAMILY_NAME, 0,
+        keySchema, 0, valueSchema))
       StateSchemaCompatibilityChecker.validateAndMaybeEvolveStateSchema(getStateInfo, hadoopConf,
         newStateSchema, session.sessionState, stateSchemaVersion, storeName = stateStoreName)
     }.toList

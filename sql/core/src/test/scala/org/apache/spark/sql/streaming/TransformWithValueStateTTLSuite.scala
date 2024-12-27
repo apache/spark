@@ -285,13 +285,13 @@ class TransformWithValueStateTTLSuite extends TransformWithStateTTLTest {
           .add("expiryTimestampMs", LongType, nullable = false)
         val schemaForValueRow: StructType = StructType(Array(StructField("__dummy__", NullType)))
         val schema0 = StateStoreColFamilySchema(
-          TimerStateUtils.getTimerStateVarName(TimeMode.ProcessingTime().toString),
-          schemaForKeyRow,
+          TimerStateUtils.getTimerStateVarName(TimeMode.ProcessingTime().toString), 0,
+          schemaForKeyRow, 0,
           schemaForValueRow,
           Some(PrefixKeyScanStateEncoderSpec(schemaForKeyRow, 1)))
         val schema1 = StateStoreColFamilySchema(
-          "valueStateTTL",
-          keySchema,
+          "valueStateTTL", 0,
+          keySchema, 0,
           new StructType().add("value",
             new StructType()
               .add("value", IntegerType, false))
@@ -300,15 +300,15 @@ class TransformWithValueStateTTLSuite extends TransformWithStateTTLTest {
           None
         )
         val schema2 = StateStoreColFamilySchema(
-          "valueState",
-          keySchema,
+          "valueState", 0,
+          keySchema, 0,
           new StructType().add("value", IntegerType, false),
           Some(NoPrefixKeyStateEncoderSpec(keySchema)),
           None
         )
         val schema3 = StateStoreColFamilySchema(
-          "listState",
-          keySchema,
+          "listState", 0,
+          keySchema, 0,
           new StructType().add("value",
             new StructType()
               .add("id", LongType, false)
@@ -325,8 +325,8 @@ class TransformWithValueStateTTLSuite extends TransformWithStateTTLTest {
           .add("key", new StructType().add("value", StringType))
           .add("userKey", userKeySchema)
         val schema4 = StateStoreColFamilySchema(
-          "mapState",
-          compositeKeySchema,
+          "mapState", 0,
+          compositeKeySchema, 0,
           new StructType().add("value",
             new StructType()
               .add("value", StringType))
