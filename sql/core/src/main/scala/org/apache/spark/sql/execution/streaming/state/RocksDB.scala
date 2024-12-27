@@ -384,6 +384,7 @@ class RocksDB(
         // After changelog replay the numKeysOnWritingVersion will be updated to
         // the correct number of keys in the loaded version.
         numKeysOnLoadedVersion = numKeysOnWritingVersion
+        numInternalKeysOnLoadedVersion = numInternalKeysOnWritingVersion
         fileManagerMetrics = fileManager.latestLoadCheckpointMetrics
       }
 
@@ -457,6 +458,7 @@ class RocksDB(
         // After changelog replay the numKeysOnWritingVersion will be updated to
         // the correct number of keys in the loaded version.
         numKeysOnLoadedVersion = numKeysOnWritingVersion
+        numInternalKeysOnLoadedVersion = numInternalKeysOnWritingVersion
         fileManagerMetrics = fileManager.latestLoadCheckpointMetrics
       }
       if (conf.resetStatsOnLoad) {
@@ -492,16 +494,20 @@ class RocksDB(
       maxColumnFamilyId.set(maxId)
     }
     openDB()
-    numKeysOnWritingVersion = if (!conf.trackTotalNumberOfRows) {
-      // we don't track the total number of rows - discard the number being track
-      -1L
-    } else if (metadata.numKeys < 0) {
-      // we track the total number of rows, but the snapshot doesn't have tracking number
-      // need to count keys now
-      countKeys()
-    } else {
-      metadata.numKeys
+    val (numKeys, numInternalKeys) = {
+      if (!conf.trackTotalNumberOfRows) {
+        // we don't track the total number of rows - discard the number being track
+        (-1L, -1L)
+      } else if (metadata.numKeys < 0) {
+        // we track the total number of rows, but the snapshot doesn't have tracking number
+        // need to count keys now
+        countKeys()
+      } else {
+        (metadata.numKeys, metadata.numInternalKeys)
+      }
     }
+    numKeysOnWritingVersion = numKeys
+    numInternalKeysOnWritingVersion = numInternalKeys
   }
 
   def load(
@@ -569,16 +575,19 @@ class RocksDB(
     lastSnapshotVersion = snapshotVersion
     openDB()
 
-    numKeysOnWritingVersion = if (!conf.trackTotalNumberOfRows) {
+    val (numKeys, numInternalKeys) = if (!conf.trackTotalNumberOfRows) {
       // we don't track the total number of rows - discard the number being track
-      -1L
+      (-1L, -1L)
     } else if (metadata.numKeys < 0) {
       // we track the total number of rows, but the snapshot doesn't have tracking number
       // need to count keys now
       countKeys()
     } else {
-      metadata.numKeys
+      (metadata.numKeys, metadata.numInternalKeys)
     }
+    numKeysOnWritingVersion = numKeys
+    numInternalKeysOnWritingVersion = numInternalKeys
+
     if (loadedVersion != endVersion) {
       val versionsAndUniqueIds: Array[(Long, Option[String])] =
         (loadedVersion + 1 to endVersion).map((_, None)).toArray
@@ -588,6 +597,7 @@ class RocksDB(
     // After changelog replay the numKeysOnWritingVersion will be updated to
     // the correct number of keys in the loaded version.
     numKeysOnLoadedVersion = numKeysOnWritingVersion
+    numInternalKeysOnLoadedVersion = numInternalKeysOnWritingVersion
     fileManagerMetrics = fileManager.latestLoadCheckpointMetrics
 
     if (conf.resetStatsOnLoad) {
@@ -677,12 +687,23 @@ class RocksDB(
     if (useColumnFamilies) {
       val cfInfo = getColumnFamilyInfo(cfName)
       Platform.putShort(key, Platform.BYTE_ARRAY_OFFSET, cfInfo.cfId)
-    }
 
-    if (conf.trackTotalNumberOfRows) {
-      val oldValue = db.get(readOptions, key)
-      if (oldValue == null) {
-        numKeysOnWritingVersion += 1
+      if (conf.trackTotalNumberOfRows) {
+        val oldValue = db.get(readOptions, key)
+        if (oldValue == null) {
+          if (cfInfo.isInternal) {
+            numInternalKeysOnWritingVersion += 1
+          } else {
+            numKeysOnWritingVersion += 1
+          }
+        }
+      }
+    } else {
+      if (conf.trackTotalNumberOfRows) {
+        val oldValue = db.get(readOptions, key)
+        if (oldValue == null) {
+          numKeysOnWritingVersion += 1
+        }
       }
     }
 
@@ -708,14 +729,26 @@ class RocksDB(
     if (useColumnFamilies) {
       val cfInfo = getColumnFamilyInfo(cfName)
       Platform.putShort(key, Platform.BYTE_ARRAY_OFFSET, cfInfo.cfId)
-    }
 
-    if (conf.trackTotalNumberOfRows) {
-      val oldValue = db.get(readOptions, key)
-      if (oldValue == null) {
-        numKeysOnWritingVersion += 1
+      if (conf.trackTotalNumberOfRows) {
+        val oldValue = db.get(readOptions, key)
+        if (oldValue == null) {
+          if (cfInfo.isInternal) {
+            numInternalKeysOnWritingVersion += 1
+          } else {
+            numKeysOnWritingVersion += 1
+          }
+        }
+      }
+    } else {
+      if (conf.trackTotalNumberOfRows) {
+        val oldValue = db.get(readOptions, key)
+        if (oldValue == null) {
+          numKeysOnWritingVersion += 1
+        }
       }
     }
+
     db.merge(writeOptions, key, value)
 
     changelogWriter.foreach(_.merge(key, value))
@@ -729,14 +762,26 @@ class RocksDB(
     if (useColumnFamilies) {
       val cfInfo = getColumnFamilyInfo(cfName)
       Platform.putShort(key, Platform.BYTE_ARRAY_OFFSET, cfInfo.cfId)
-    }
 
-    if (conf.trackTotalNumberOfRows) {
-      val value = db.get(readOptions, key)
-      if (value != null) {
-        numKeysOnWritingVersion -= 1
+      if (conf.trackTotalNumberOfRows) {
+        val oldValue = db.get(readOptions, key)
+        if (oldValue == null) {
+          if (cfInfo.isInternal) {
+            numInternalKeysOnWritingVersion -= 1
+          } else {
+            numKeysOnWritingVersion -= 1
+          }
+        }
+      }
+    } else {
+      if (conf.trackTotalNumberOfRows) {
+        val value = db.get(readOptions, key)
+        if (value != null) {
+          numKeysOnWritingVersion -= 1
+        }
       }
     }
+
     db.delete(writeOptions, key)
     changelogWriter.foreach(_.delete(key))
   }
@@ -771,7 +816,7 @@ class RocksDB(
     }
   }
 
-  private def countKeys(): Long = {
+  private def countKeys(): (Long, Long) = {
     val iter = db.newIterator()
 
     try {
@@ -781,12 +826,28 @@ class RocksDB(
       iter.seekToFirst()
 
       var keys = 0L
-      while (iter.isValid) {
-        keys += 1
-        iter.next()
+      var internalKeys = 0L
+
+      if (!useColumnFamilies) {
+        while (iter.isValid) {
+          keys += 1
+          iter.next()
+        }
+      } else {
+        while (iter.isValid) {
+          val cfId = Platform.getShort(iter.key, Platform.BYTE_ARRAY_OFFSET)
+          val cfName = colFamilyIdToNameMap.get(cfId)
+          val cfInfo = getColumnFamilyInfo(cfName)
+          if (cfInfo.isInternal) {
+            internalKeys += 1
+          } else {
+            keys += 1
+          }
+          iter.next()
+        }
       }
 
-      keys
+      (keys, internalKeys)
     } finally {
       iter.close()
     }
@@ -893,6 +954,7 @@ class RocksDB(
       fileManager.setMaxSeenVersion(newVersion)
 
       numKeysOnLoadedVersion = numKeysOnWritingVersion
+      numInternalKeysOnLoadedVersion = numInternalKeysOnWritingVersion
       loadedVersion = newVersion
       commitLatencyMs ++= Map(
         "fileSync" -> fileSyncTimeMs
@@ -991,6 +1053,7 @@ class RocksDB(
     acquire(RollbackStore)
     try {
       numKeysOnWritingVersion = numKeysOnLoadedVersion
+      numInternalKeysOnWritingVersion = numInternalKeysOnLoadedVersion
       loadedVersion = -1L
       lastCommitBasedStateStoreCkptId = None
       lastCommittedStateStoreCkptId = None
@@ -1131,6 +1194,7 @@ class RocksDB(
     RocksDBMetrics(
       numKeysOnLoadedVersion,
       numKeysOnWritingVersion,
+      numInternalKeysOnWritingVersion,
       memoryUsage,
       pinnedBlocksMemUsage,
       totalSSTFilesBytes,
@@ -1748,6 +1812,7 @@ object RocksDBConf {
 case class RocksDBMetrics(
     numCommittedKeys: Long,
     numUncommittedKeys: Long,
+    numInternalKeys: Long,
     totalMemUsageBytes: Long,
     pinnedBlocksMemUsage: Long,
     totalSSTFilesBytes: Long,
