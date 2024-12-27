@@ -73,8 +73,10 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
     val sqlScript =
       """
         |BEGIN
+        | lbl: BEGIN
         |DECLARE var = 1;
         |SELECT var + var * 2;
+        | END;
         |END
         |""".stripMargin
 

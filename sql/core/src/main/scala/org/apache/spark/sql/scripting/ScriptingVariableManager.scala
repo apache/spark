@@ -19,18 +19,24 @@ package org.apache.spark.sql.scripting
 
 import org.apache.spark.sql.catalyst.catalog.{VariableDefinition, VariableManager}
 import org.apache.spark.sql.catalyst.expressions.Literal
+import org.apache.spark.sql.connector.catalog.Identifier
 
-
-// todo LOCALVARS: should this be thread safe / synchronized (probably not since its one per script)
 class ScriptingVariableManager(context: SqlScriptingExecutionContext) extends VariableManager {
 
   override def create(
       name: String,
       defaultValueSQL: String,
       initValue: Literal,
-      overrideIfExists: Boolean): Unit = {
+      overrideIfExists: Boolean,
+      identifier: Identifier): Unit = {
     // todo LOCALVARS: qualified name
-    context.currentScope.variables.put(name, VariableDefinition(defaultValueSQL, initValue))
+    context.currentScope.variables.put(
+      name,
+      VariableDefinition(
+        Identifier.of(Array(context.currentScope.label), name),
+        defaultValueSQL,
+        initValue
+      ))
   }
 
   override def get(name: String): Option[VariableDefinition] = {
@@ -41,6 +47,7 @@ class ScriptingVariableManager(context: SqlScriptingExecutionContext) extends Va
   }
 
   override def remove(name: String): Boolean = {
+    // probably throw error
     true
   }
 

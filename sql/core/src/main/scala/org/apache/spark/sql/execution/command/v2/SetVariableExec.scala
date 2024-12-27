@@ -61,7 +61,8 @@ case class SetVariableExec(variables: Seq[VariableReference], query: SparkPlan)
       variable.identifier.name,
       variable.varDef.defaultValueSQL,
       Literal(value, variable.dataType),
-      overrideIfExists = true)
+      overrideIfExists = true,
+      variable.identifier)
   }
 
   override def output: Seq[Attribute] = Seq.empty

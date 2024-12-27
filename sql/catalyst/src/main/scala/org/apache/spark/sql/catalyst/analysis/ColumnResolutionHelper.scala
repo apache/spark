@@ -265,6 +265,7 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
       }
     }
 
+    // todo LOCALVARS: should we do this for namespace as well
     val variableName = if (conf.caseSensitiveAnalysis) {
       nameParts.last
     } else {
@@ -278,20 +279,20 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
           nameParts,
           // todo LOCALVARS: deal with this fakesystemcatalog / session_namespace situation
           FakeSystemCatalog,
-          Identifier.of(Array(CatalogManager.SESSION_NAMESPACE), variableName),
+          Identifier.of(Array(varDef.identifier.namespace().last), variableName),
           varDef)
       }
-//      .orElse(Option.when(maybeTempVariableName(nameParts)) {
-//        catalogManager.tempVariableManager
-//          .get(variableName)
-//          .map { varDef =>
-//            VariableReference(
-//              nameParts,
-//              FakeSystemCatalog,
-//              Identifier.of(Array(CatalogManager.SESSION_NAMESPACE), variableName),
-//              varDef)
-//          }
-//        })
+      .orElse(Option.when(maybeTempVariableName(nameParts)) {
+        catalogManager.tempVariableManager
+          .get(variableName)
+          .map { varDef =>
+            VariableReference(
+              nameParts,
+              FakeSystemCatalog,
+              Identifier.of(Array(CatalogManager.SESSION_NAMESPACE), variableName),
+              varDef)
+          }
+        })
   }
 
   // Resolves `UnresolvedAttribute` to its value.

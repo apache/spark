@@ -42,7 +42,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, RangePartitioning, RoundRobinPartitioning}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util._
-import org.apache.spark.sql.connector.catalog.InMemoryTable
+import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryTable}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.SQLConf
@@ -1483,9 +1483,9 @@ class AnalysisSuite extends AnalysisTest with Matchers {
   test("Execute Immediate plan transformation") {
     try {
     SimpleAnalyzer.catalogManager.tempVariableManager.create(
-      "res", "1", Literal(1), overrideIfExists = true)
+      "res", "1", Literal(1), overrideIfExists = true, Identifier.of(Array("res"), "res"))
     SimpleAnalyzer.catalogManager.tempVariableManager.create(
-      "res2", "1", Literal(1), overrideIfExists = true)
+      "res2", "1", Literal(1), overrideIfExists = true, Identifier.of(Array("res"), "res"))
     val actual1 = parsePlan("EXECUTE IMMEDIATE 'SELECT 42 WHERE ? = 1' USING 2").analyze
     val expected1 = parsePlan("SELECT 42 where 2 = 1").analyze
     comparePlans(actual1, expected1)

@@ -24,14 +24,17 @@ import scala.collection.mutable
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.connector.catalog.CatalogManager.{SESSION_NAMESPACE, SYSTEM_CATALOG_NAME}
+import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.errors.DataTypeErrorsBase
 
+// todo LOCALVARS: move this to separate file or rename this file
 trait VariableManager {
   def create(
     name: String,
     defaultValueSQL: String,
     initValue: Literal,
-    overrideIfExists: Boolean): Unit
+    overrideIfExists: Boolean,
+    identifier: Identifier): Unit
 
   def get(name: String): Option[VariableDefinition]
 
@@ -41,6 +44,11 @@ trait VariableManager {
 
   def isEmpty: Boolean
 }
+
+case class VariableDefinition(
+  identifier: Identifier,
+  defaultValueSQL: String,
+  currentValue: Literal)
 
 /**
  * A thread-safe manager for temporary SQL variables (that live in the schema `SYSTEM.SESSION`),
@@ -58,14 +66,15 @@ class TempVariableManager extends VariableManager with DataTypeErrorsBase {
       name: String,
       defaultValueSQL: String,
       initValue: Literal,
-      overrideIfExists: Boolean): Unit = synchronized {
+      overrideIfExists: Boolean,
+      identifier: Identifier): Unit = synchronized {
     if (!overrideIfExists && variables.contains(name)) {
       throw new AnalysisException(
         errorClass = "VARIABLE_ALREADY_EXISTS",
         messageParameters = Map(
           "variableName" -> toSQLId(Seq(SYSTEM_CATALOG_NAME, SESSION_NAMESPACE, name))))
     }
-    variables.put(name, VariableDefinition(defaultValueSQL, initValue))
+    variables.put(name, VariableDefinition(identifier, defaultValueSQL, initValue))
   }
 
   override def get(name: String): Option[VariableDefinition] = synchronized {
@@ -85,5 +94,3 @@ class TempVariableManager extends VariableManager with DataTypeErrorsBase {
     variables.isEmpty
   }
 }
-
-case class VariableDefinition(defaultValueSQL: String, currentValue: Literal)
