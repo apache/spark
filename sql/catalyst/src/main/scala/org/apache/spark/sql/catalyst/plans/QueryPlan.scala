@@ -724,6 +724,12 @@ object QueryPlan extends PredicateHelper {
         } else {
           ar.withExprId(ExprId(ordinal))
         }
+
+      // Top-level Alias is already handled by `QueryPlan#doCanonicalize`. For inner Alias, the id
+      // doesn't matter and we normalize it to 0 here.
+      case a: Alias =>
+        Alias(a.child, a.name)(
+          ExprId(0), a.qualifier, a.explicitMetadata, a.nonInheritableMetadataKeys)
     }.canonicalized.asInstanceOf[T]
   }
 
