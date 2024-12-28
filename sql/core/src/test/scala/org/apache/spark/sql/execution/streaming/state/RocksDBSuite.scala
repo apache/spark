@@ -732,30 +732,71 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
           versionToUniqueId = versionToUniqueId) { db =>
         for (version <- 0 to 1) {
           db.load(version)
+
+          if (colFamiliesEnabled) {
+            db.createColFamilyIfAbsent(StateStore.DEFAULT_COL_FAMILY_NAME, isInternal = false)
+          }
+
           db.commit()
           db.doMaintenance()
         }
-        // Snapshot should not be created because minDeltasForSnapshot = 3
-        assert(snapshotVersionsPresent(remoteDir) === Seq.empty)
+
+        if (colFamiliesEnabled) {
+          assert(snapshotVersionsPresent(remoteDir) === Seq(1))
+        } else {
+          // Snapshot should not be created because minDeltasForSnapshot = 3
+          assert(snapshotVersionsPresent(remoteDir) === Seq.empty)
+        }
+
         assert(changelogVersionsPresent(remoteDir) == Seq(1, 2))
         db.load(2)
+        if (colFamiliesEnabled) {
+          db.createColFamilyIfAbsent(StateStore.DEFAULT_COL_FAMILY_NAME, isInternal = false)
+        }
         db.commit()
         db.doMaintenance()
-        assert(snapshotVersionsPresent(remoteDir) === Seq(3))
+        if (colFamiliesEnabled) {
+          assert(snapshotVersionsPresent(remoteDir) === Seq(1))
+        } else {
+          assert(snapshotVersionsPresent(remoteDir) === Seq(3))
+        }
+
         db.load(3)
+        if (colFamiliesEnabled) {
+          db.createColFamilyIfAbsent(StateStore.DEFAULT_COL_FAMILY_NAME, isInternal = false)
+        }
 
         for (version <- 3 to 7) {
           db.load(version)
+          if (colFamiliesEnabled) {
+            db.createColFamilyIfAbsent(StateStore.DEFAULT_COL_FAMILY_NAME, isInternal = false)
+          }
+
           db.commit()
           db.doMaintenance()
         }
-        assert(snapshotVersionsPresent(remoteDir) === Seq(3, 6))
+
+        if (colFamiliesEnabled) {
+          assert(snapshotVersionsPresent(remoteDir) === Seq(1, 4, 7))
+        } else {
+          assert(snapshotVersionsPresent(remoteDir) === Seq(3, 6))
+        }
+
         for (version <- 8 to 17) {
           db.load(version)
+          if (colFamiliesEnabled) {
+            db.createColFamilyIfAbsent(StateStore.DEFAULT_COL_FAMILY_NAME, isInternal = false)
+          }
+
           db.commit()
         }
         db.doMaintenance()
-        assert(snapshotVersionsPresent(remoteDir) === Seq(3, 6, 18))
+
+        if (colFamiliesEnabled) {
+          assert(snapshotVersionsPresent(remoteDir) === Seq(1, 4, 7, 16))
+        } else {
+          assert(snapshotVersionsPresent(remoteDir) === Seq(3, 6, 18))
+        }
       }
 
       // pick up from the last snapshot and the next upload will be for version 21
@@ -763,16 +804,35 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
           enableStateStoreCheckpointIds = enableStateStoreCheckpointIds,
           versionToUniqueId = versionToUniqueId) { db =>
         db.load(18)
+
+        if (colFamiliesEnabled) {
+          db.createColFamilyIfAbsent(StateStore.DEFAULT_COL_FAMILY_NAME, isInternal = false)
+        }
+
         db.commit()
         db.doMaintenance()
-        assert(snapshotVersionsPresent(remoteDir) === Seq(3, 6, 18))
+
+        if (colFamiliesEnabled) {
+          assert(snapshotVersionsPresent(remoteDir) === Seq(1, 4, 7, 16, 19))
+        } else {
+          assert(snapshotVersionsPresent(remoteDir) === Seq(3, 6, 18))
+        }
 
         for (version <- 19 to 20) {
           db.load(version)
+          if (colFamiliesEnabled) {
+            db.createColFamilyIfAbsent(StateStore.DEFAULT_COL_FAMILY_NAME, isInternal = false)
+          }
+
           db.commit()
         }
         db.doMaintenance()
-        assert(snapshotVersionsPresent(remoteDir) === Seq(3, 6, 18, 21))
+
+        if (colFamiliesEnabled) {
+          assert(snapshotVersionsPresent(remoteDir) === Seq(1, 4, 7, 16, 19))
+        } else {
+          assert(snapshotVersionsPresent(remoteDir) === Seq(3, 6, 18, 21))
+        }
       }
   }
 
@@ -3295,7 +3355,6 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
       }
       db.load(version)
       if (useColumnFamilies) {
-        logWarning(s"Creating default col family")
         db.createColFamilyIfAbsent(StateStore.DEFAULT_COL_FAMILY_NAME, isInternal = false)
       }
       func(db)
