@@ -2734,9 +2734,9 @@ regexp_extract_all.__doc__ = pysparkfuncs.regexp_extract_all.__doc__
 
 
 def regexp_replace(
-    string: "ColumnOrName", pattern: Union[str, Column], replacement: Union[str, Column]
+    col: "ColumnOrName", pattern: Union[str, Column], replacement: Union[str, Column]
 ) -> Column:
-    return _invoke_function_over_columns("regexp_replace", string, lit(pattern), lit(replacement))
+    return _invoke_function_over_columns("regexp_replace", col, lit(pattern), lit(replacement))
 
 
 regexp_replace.__doc__ = pysparkfuncs.regexp_replace.__doc__
