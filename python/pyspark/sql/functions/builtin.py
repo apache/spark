@@ -260,7 +260,7 @@ def lit(col: Any, to_struct: bool = False) -> Column:
     |     [true, false]|     []|       [1.5, 0.1]|           [a, b, c]|
     +------------------+-------+-----------------+--------------------+
 
-    Example 7: Creating a literal column from a dict.
+    Example 7: Creating a literal column as a map from a dict.
 
     >>> import pyspark.sql.functions as sf
     >>> spark.range(1).select(
@@ -268,6 +268,18 @@ def lit(col: Any, to_struct: bool = False) -> Column:
     ... ).show() # doctest: +SKIP
     +----------------+
     |         map_col|
+    +----------------+
+    |{a -> 1, b -> 2}|
+    +----------------+
+    
+    Example 8: Creating a literal column as a struct from a dict.
+
+    >>> import pyspark.sql.functions as sf
+    >>> spark.range(1).select(
+    ...    sf.lit({"a": 1, "b": 2}, true).alias("struct_col")
+    ... ).show() # doctest: +SKIP
+    +----------------+
+    |      struct_col|
     +----------------+
     |{a -> 1, b -> 2}|
     +----------------+
