@@ -581,7 +581,12 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
 
       if (isChangelogCheckpointingEnabled) {
         assert(changelogVersionsPresent(remoteDir) === (1 to 50))
-        assert(snapshotVersionsPresent(remoteDir) === Range.inclusive(5, 50, 5))
+        if (colFamiliesEnabled) {
+          assert(snapshotVersionsPresent(remoteDir) ===
+            Seq(1, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50))
+        } else {
+          assert(snapshotVersionsPresent(remoteDir) === Range.inclusive(5, 50, 5))
+        }
       } else {
         assert(changelogVersionsPresent(remoteDir) === Seq.empty)
         assert(snapshotVersionsPresent(remoteDir) === (1 to 50))
@@ -639,20 +644,46 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
       withDB(remoteDir, conf = conf, useColumnFamilies = colFamiliesEnabled,
           enableStateStoreCheckpointIds = enableStateStoreCheckpointIds) { db =>
         db.load(0)
+
+        if (colFamiliesEnabled) {
+          db.createColFamilyIfAbsent(StateStore.DEFAULT_COL_FAMILY_NAME, isInternal = false)
+        }
+
         db.commit()
         for (version <- 1 to 2) {
           db.load(version)
+
+          if (colFamiliesEnabled) {
+            db.createColFamilyIfAbsent(StateStore.DEFAULT_COL_FAMILY_NAME, isInternal = false)
+          }
+
           db.commit()
           db.doMaintenance()
         }
-        assert(snapshotVersionsPresent(remoteDir) === Seq(2, 3))
+
+        if (colFamiliesEnabled) {
+          assert(snapshotVersionsPresent(remoteDir) === Seq(1, 2, 3))
+        } else {
+          assert(snapshotVersionsPresent(remoteDir) === Seq(2, 3))
+        }
         assert(changelogVersionsPresent(remoteDir) == Seq(1, 2, 3))
 
         for (version <- 3 to 4) {
           db.load(version)
+
+          if (colFamiliesEnabled) {
+            db.createColFamilyIfAbsent(StateStore.DEFAULT_COL_FAMILY_NAME, isInternal = false)
+          }
+
           db.commit()
         }
-        assert(snapshotVersionsPresent(remoteDir) === Seq(2, 3))
+
+        if (colFamiliesEnabled) {
+          assert(snapshotVersionsPresent(remoteDir) === Seq(1, 2, 3))
+        } else {
+          assert(snapshotVersionsPresent(remoteDir) === Seq(2, 3))
+        }
+
         assert(changelogVersionsPresent(remoteDir) == (1 to 5))
         db.doMaintenance()
         // 3 is the latest snapshot <= maxSnapshotVersionPresent - minVersionsToRetain + 1
@@ -661,6 +692,11 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
 
         for (version <- 5 to 7) {
           db.load(version)
+
+          if (colFamiliesEnabled) {
+            db.createColFamilyIfAbsent(StateStore.DEFAULT_COL_FAMILY_NAME, isInternal = false)
+          }
+
           db.commit()
         }
         assert(snapshotVersionsPresent(remoteDir) === Seq(3, 5))
@@ -1007,6 +1043,9 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
       versionToUniqueId = versionToUniqueId) { db =>
       for (version <- 1 to 30) {
         db.load(version - 1)
+        if (colFamiliesEnabled) {
+          db.createColFamilyIfAbsent(StateStore.DEFAULT_COL_FAMILY_NAME, isInternal = false)
+        }
         db.put(version.toString, version.toString)
         db.remove((version - 1).toString)
         db.commit()
@@ -1024,18 +1063,38 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
       versionToUniqueId = versionToUniqueId) { db =>
       for (version <- 1 to 30) {
         db.load(version)
+        if (colFamiliesEnabled) {
+          db.createColFamilyIfAbsent(StateStore.DEFAULT_COL_FAMILY_NAME, isInternal = false)
+        }
         assert(db.iterator().map(toStr).toSet === Set((version.toString, version.toString)))
       }
+
       for (version <- 31 to 60) {
         db.load(version - 1)
+        if (colFamiliesEnabled) {
+          db.createColFamilyIfAbsent(StateStore.DEFAULT_COL_FAMILY_NAME, isInternal = false)
+        }
         db.put(version.toString, version.toString)
         db.remove((version - 1).toString)
         db.commit()
       }
       assert(changelogVersionsPresent(remoteDir) === (1 to 30))
-      assert(snapshotVersionsPresent(remoteDir) === (31 to 60))
+
+      var result: Seq[Long] = if (colFamiliesEnabled) {
+        Seq(1)
+      } else {
+        Seq.empty
+      }
+
+      (31 to 60).foreach { i =>
+        result = result :+ i
+      }
+      assert(snapshotVersionsPresent(remoteDir) === result)
       for (version <- 1 to 60) {
         db.load(version, readOnly = true)
+        if (colFamiliesEnabled) {
+          db.createColFamilyIfAbsent(StateStore.DEFAULT_COL_FAMILY_NAME, isInternal = false)
+        }
         assert(db.iterator().map(toStr).toSet === Set((version.toString, version.toString)))
       }
       // Check that snapshots and changelogs get purged correctly.
@@ -1045,6 +1104,9 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
       // Verify the content of retained versions.
       for (version <- 41 to 60) {
         db.load(version, readOnly = true)
+        if (colFamiliesEnabled) {
+          db.createColFamilyIfAbsent(StateStore.DEFAULT_COL_FAMILY_NAME, isInternal = false)
+        }
         assert(db.iterator().map(toStr).toSet === Set((version.toString, version.toString)))
       }
     }
