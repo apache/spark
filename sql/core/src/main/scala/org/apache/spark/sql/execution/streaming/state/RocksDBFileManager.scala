@@ -924,6 +924,11 @@ object RocksDBFileManagerMetrics {
   val EMPTY_METRICS = RocksDBFileManagerMetrics(0L, 0L, 0L, None)
 }
 
+/**
+ * Case class to keep track of column family info within checkpoint metadata.
+ * @param cfId - virtual column family id
+ * @param isInternal - whether the column family is internal or not
+ */
 case class ColumnFamilyInfo(
     cfId: Short,
     isInternal: Boolean)
