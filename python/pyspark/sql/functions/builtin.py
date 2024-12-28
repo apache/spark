@@ -154,7 +154,7 @@ def _options_to_str(options: Optional[Mapping[str, Any]] = None) -> Mapping[str,
 
 
 @_try_remote_functions
-def lit(col: Any) -> Column:
+def lit(col: Any, to_struct: bool = False) -> Column:
     """
     Creates a :class:`~pyspark.sql.Column` of literal value.
 
@@ -168,6 +168,10 @@ def lit(col: Any) -> Column:
     col : :class:`~pyspark.sql.Column`, str, int, float, bool or list, NumPy literals, ndarray
         or dict. the value to make it as a PySpark literal. If a column is passed,
         it returns the column as is.
+        
+    to_struct: bool, optional, default False
+        If True, the column will be converted to a struct column. If False, the column will be
+        converted to a map column. Default is False. only has an effect when col is a dict.
 
         .. versionchanged:: 4.0.0
             Since 3.4.0, it supports the list type.
@@ -267,7 +271,6 @@ def lit(col: Any) -> Column:
     +----------------+
     |{a -> 1, b -> 2}|
     +----------------+
-
     """
     if isinstance(col, Column):
         return col
@@ -284,7 +287,11 @@ def lit(col: Any) -> Column:
             raise PySparkValueError(
                 errorClass="COLUMN_IN_DICT", messageParameters={"func_name": "lit"}
             )
-        return create_map(*[lit(x) for x in chain(*col.items())])
+        # Convert to struct or map based on the parameter `to_struct`
+        if to_struct:
+            return struct(*[lit(value).alias(key) for key, value in col.items()])
+        else:
+            return create_map(*[lit(x) for x in chain(*col.items())])
     elif _has_numpy:
         if isinstance(col, np.generic):
             dt = _from_numpy_type(col.dtype)

@@ -1319,6 +1319,12 @@ class FunctionsTestsMixin:
     # SPARK-48665: added support for dict type
     def test_lit_dict(self):
         test_dict = {"a": 1, "b": 2}
+        actual = self.spark.range(1).select(F.lit(test_dict), to_struct=True).first()[0]
+        # Convert struct return to dict
+        actual = actual.asDict()
+        self.assertEqual(actual, test_dict)
+
+        test_dict = {"a": 1, "b": 2}
         actual = self.spark.range(1).select(F.lit(test_dict)).first()[0]
         self.assertEqual(actual, test_dict)
 

@@ -257,7 +257,7 @@ col.__doc__ = pysparkfuncs.col.__doc__
 column = col
 
 
-def lit(col: Any) -> Column:
+def lit(col: Any, to_struct: bool = False) -> Column:
     from pyspark.sql.connect.column import Column as ConnectColumn
     from itertools import chain
 
@@ -282,7 +282,11 @@ def lit(col: Any) -> Column:
             raise PySparkValueError(
                 errorClass="COLUMN_IN_DICT", messageParameters={"func_name": "lit"}
             )
-        return create_map(*[lit(x) for x in chain(*col.items())])
+        # Convert to struct or map based on the parameter `to_struct`
+        if to_struct:
+            return struct(*[lit(value).alias(key) for key, value in col.items()])
+        else:
+            return create_map(*[lit(x) for x in chain(*col.items())])
     return ConnectColumn(LiteralExpression._from_value(col))
 
 
