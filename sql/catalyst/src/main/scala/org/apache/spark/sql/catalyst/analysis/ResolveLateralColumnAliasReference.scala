@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.analysis
 
 import java.util.LinkedHashSet
 
+import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.WindowExpression.hasWindowExpression
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
@@ -165,7 +166,8 @@ object ResolveLateralColumnAliasReference extends Rule[LogicalPlan] {
               }
             case lcaRef: LateralColumnAliasReference if !aliasMap.contains(lcaRef.a) =>
               // It shouldn't happen, but restore to unresolved attribute to be safe.
-              UnresolvedAttribute(lcaRef.nameParts)
+              throw SparkUnsupportedOperationException()
+              // UnresolvedAttribute(lcaRef.nameParts)
           }.asInstanceOf[NamedExpression]
         }
         val newProjectList = projectList.zipWithIndex.map {
