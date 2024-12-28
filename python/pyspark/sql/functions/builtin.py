@@ -6329,7 +6329,7 @@ def width_bucket(
     |-2.1|    1.3|     3.4|  3|                                   0|
     | 8.1|    0.0|     5.7|  4|                                   5|
     |-0.9|    5.2|     0.5|  2|                                   3|
-    +----+-------+--------+---+------------------------------------+
+    +----+-------+--------+---+------------------------------------+ 
     """
     numBucket = _enum_to_value(numBucket)
     numBucket = lit(numBucket) if isinstance(numBucket, int) else numBucket
