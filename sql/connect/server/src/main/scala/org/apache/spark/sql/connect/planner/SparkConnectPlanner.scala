@@ -2957,10 +2957,9 @@ class SparkConnectPlanner(
           fn
 
         case StreamingForeachFunction.FunctionCase.SCALA_FUNCTION =>
-          val scalaFn = Utils.deserialize[StreamingForeachBatchHelper.ForeachBatchFnType](
+          StreamingForeachBatchHelper.scalaForeachBatchWrapper(
             writeOp.getForeachBatch.getScalaFunction.getPayload.toByteArray,
-            Utils.getContextOrSparkClassLoader)
-          StreamingForeachBatchHelper.scalaForeachBatchWrapper(scalaFn, sessionHolder)
+            sessionHolder)
 
         case StreamingForeachFunction.FunctionCase.FUNCTION_NOT_SET =>
           throw InvalidPlanInput("Unexpected foreachBatch function") // Unreachable
