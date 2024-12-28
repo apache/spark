@@ -93,7 +93,7 @@ private[sql] class RocksDBStateStoreProvider
 
       val kvEncoder = keyValueEncoderMap.get(colFamilyName)
       val value =
-        kvEncoder._2.decodeValue(rocksDB.get(kvEncoder._1.encodeKey(key)))
+        kvEncoder._2.decodeValue(rocksDB.get(kvEncoder._1.encodeKey(key), colFamilyName))
 
       if (!isValidated && value != null && !useColumnFamilies) {
         StateStoreProvider.validateStateRowFormat(
@@ -124,7 +124,7 @@ private[sql] class RocksDBStateStoreProvider
       verify(valueEncoder.supportsMultipleValuesPerKey, "valuesIterator requires a encoder " +
       "that supports multiple values for a single key.")
 
-      val encodedValues = rocksDB.get(keyEncoder.encodeKey(key))
+      val encodedValues = rocksDB.get(keyEncoder.encodeKey(key), colFamilyName)
       valueEncoder.decodeValues(encodedValues)
     }
 
@@ -141,7 +141,7 @@ private[sql] class RocksDBStateStoreProvider
       verify(key != null, "Key cannot be null")
       require(value != null, "Cannot merge a null value")
 
-      rocksDB.merge(keyEncoder.encodeKey(key), valueEncoder.encodeValue(value))
+      rocksDB.merge(keyEncoder.encodeKey(key), valueEncoder.encodeValue(value), colFamilyName)
     }
 
     override def put(key: UnsafeRow, value: UnsafeRow, colFamilyName: String): Unit = {
@@ -151,7 +151,7 @@ private[sql] class RocksDBStateStoreProvider
       verifyColFamilyOperations("put", colFamilyName)
 
       val kvEncoder = keyValueEncoderMap.get(colFamilyName)
-      rocksDB.put(kvEncoder._1.encodeKey(key), kvEncoder._2.encodeValue(value))
+      rocksDB.put(kvEncoder._1.encodeKey(key), kvEncoder._2.encodeValue(value), colFamilyName)
     }
 
     override def remove(key: UnsafeRow, colFamilyName: String): Unit = {
@@ -160,7 +160,7 @@ private[sql] class RocksDBStateStoreProvider
       verifyColFamilyOperations("remove", colFamilyName)
 
       val kvEncoder = keyValueEncoderMap.get(colFamilyName)
-      rocksDB.remove(kvEncoder._1.encodeKey(key))
+      rocksDB.remove(kvEncoder._1.encodeKey(key), colFamilyName)
     }
 
     override def iterator(colFamilyName: String): Iterator[UnsafeRowPair] = {
