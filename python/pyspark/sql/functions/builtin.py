@@ -168,7 +168,7 @@ def lit(col: Any, to_struct: bool = False) -> Column:
     col : :class:`~pyspark.sql.Column`, str, int, float, bool or list, NumPy literals, ndarray
         or dict. the value to make it as a PySpark literal. If a column is passed,
         it returns the column as is.
-        
+
     to_struct: bool, optional, default False
         If True, the column will be converted to a struct column. If False, the column will be
         converted to a map column. Default is False. only has an effect when col is a dict.
@@ -271,7 +271,7 @@ def lit(col: Any, to_struct: bool = False) -> Column:
     +----------------+
     |{a -> 1, b -> 2}|
     +----------------+
-    
+
     Example 8: Creating a literal column as a struct from a dict.
 
     >>> import pyspark.sql.functions as sf
