@@ -4319,6 +4319,7 @@ class AstBuilder extends DataTypeAstBuilder
       case (PROP_OWNER, _) if !legacyOn =>
         throw QueryParsingErrors.cannotCleanReservedTablePropertyError(
           PROP_OWNER, ctx, "it will be set to the current user")
+      case ("", _) => false
       case (PROP_OWNER, _) => false
       case (PROP_EXTERNAL, _) if !legacyOn =>
         throw QueryParsingErrors.cannotCleanReservedTablePropertyError(

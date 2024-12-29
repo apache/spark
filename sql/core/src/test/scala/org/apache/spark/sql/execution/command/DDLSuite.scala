@@ -2053,6 +2053,34 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
     }
   }
 
+  test(s"Test alter table command with empty key") {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> s"true") {
+      withLocale("tr") {
+        val dbName = "DaTaBaSe_I"
+        withDatabase(dbName) {
+          sql(s"CREATE DATABASE $dbName")
+          sql(s"USE $dbName")
+
+          val tabName = "tAb_I"
+          withTable(tabName) {
+            sql(s"CREATE TABLE $tabName(col_I int) USING PARQUET")
+            sql(s"ALTER TABLE $tabName SET TBLPROPERTIES ('foo' = 'a')")
+            checkAnswer(sql(s"SELECT col_I FROM $tabName"), Nil)
+            val ret = s"""CREATE TABLE spark_catalog.DaTaBaSe_I.tAb_I (
+                         |  col_I INT)
+                         |USING PARQUET
+                         |TBLPROPERTIES (
+                         |  'foo' = 'a')
+                         |""".stripMargin
+            assert(sql(s"SHOW CREATE TABLE $tabName").head().getString(0).equals(ret))
+            sql(s"ALTER TABLE $tabName SET TBLPROPERTIES ('' = 'b')")
+            assert(sql(s"SHOW CREATE TABLE $tabName").head().getString(0).equals(ret))
+          }
+        }
+      }
+    }
+  }
+
   test("set command rejects SparkConf entries") {
     checkError(
       exception = intercept[AnalysisException] {
