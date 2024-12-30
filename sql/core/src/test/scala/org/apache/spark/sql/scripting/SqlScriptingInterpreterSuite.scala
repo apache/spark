@@ -74,8 +74,8 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
       """
         |BEGIN
         | lbl: BEGIN
-        |DECLARE var = 1;
-        |SELECT var + var * 2;
+        |  DECLARE var = 1;
+        |  SELECT lbl.var;
         | END;
         |END
         |""".stripMargin
@@ -94,8 +94,13 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
     val sqlScript =
       """
         |BEGIN
-        |DECLARE `my.var.i.ab.le` = 1;
-        |SELECT `my.var.i.ab.le` + `my.var.i.ab.le` * 2;
+        | lbl: BEGIN
+        |  DECLARE var = 1;
+        |  lbl2: BEGIN
+        |    DECLARE var = 2;
+        |    SELECT lbl.var;
+        |  END;
+        | END;
         |END
         |""".stripMargin
 

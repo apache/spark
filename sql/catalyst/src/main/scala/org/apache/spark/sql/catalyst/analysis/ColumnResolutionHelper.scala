@@ -265,34 +265,41 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
       }
     }
 
-    // todo LOCALVARS: should we do this for namespace as well
-    val variableName = if (conf.caseSensitiveAnalysis) {
-      nameParts.last
+//    val variableName = if (conf.caseSensitiveAnalysis) {
+//      nameParts.last
+//    } else {
+//      nameParts.last.toLowerCase(Locale.ROOT)
+//    }
+
+    // todo LOCALVARS: check if we have 1 or 2 nameparts (here and maybe createvarexec)
+    // todo LOCALVARS: should we do this for label or only for var name
+    val namePartsCaseAdjusted = if (conf.caseSensitiveAnalysis) {
+      nameParts
     } else {
-      nameParts.last.toLowerCase(Locale.ROOT)
+      nameParts.map(_.toLowerCase(Locale.ROOT))
     }
 
     catalogManager.scriptingLocalVariableManager
-      .flatMap(_.get(variableName))
+      .flatMap(_.get(namePartsCaseAdjusted))
       .map { varDef =>
         VariableReference(
           nameParts,
           // todo LOCALVARS: deal with this fakesystemcatalog / session_namespace situation
           FakeSystemCatalog,
-          Identifier.of(Array(varDef.identifier.namespace().last), variableName),
+          Identifier.of(Array(varDef.identifier.namespace().last), namePartsCaseAdjusted.last),
           varDef)
       }
-      .orElse(Option.when(maybeTempVariableName(nameParts)) {
-        catalogManager.tempVariableManager
-          .get(variableName)
-          .map { varDef =>
-            VariableReference(
-              nameParts,
-              FakeSystemCatalog,
-              Identifier.of(Array(CatalogManager.SESSION_NAMESPACE), variableName),
-              varDef)
-          }
-        })
+//      .orElse(Option.when(maybeTempVariableName(nameParts)) {
+//        catalogManager.tempVariableManager
+//          .get(variableName)
+//          .map { varDef =>
+//            VariableReference(
+//              nameParts,
+//              FakeSystemCatalog,
+//              Identifier.of(Array(CatalogManager.SESSION_NAMESPACE), variableName),
+//              varDef)
+//          }
+//        })
   }
 
   // Resolves `UnresolvedAttribute` to its value.

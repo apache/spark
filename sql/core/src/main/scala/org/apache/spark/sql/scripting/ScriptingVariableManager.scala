@@ -39,10 +39,14 @@ class ScriptingVariableManager(context: SqlScriptingExecutionContext) extends Va
       ))
   }
 
-  override def get(name: String): Option[VariableDefinition] = {
-    // todo LOCALVARS: add support for qualified name
-    context.currentFrame.scopes
+  override def get(nameParts: Seq[String]): Option[VariableDefinition] = nameParts match {
+    case Seq(name) =>
+      context.currentFrame.scopes
       .findLast(_.variables.contains(name))
+      .map(_.variables(name))
+    case Seq(label, name) =>
+      context.currentFrame.scopes
+      .findLast(_.label == label)
       .map(_.variables(name))
   }
 

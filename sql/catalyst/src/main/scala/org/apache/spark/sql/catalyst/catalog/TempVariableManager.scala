@@ -36,7 +36,7 @@ trait VariableManager {
     overrideIfExists: Boolean,
     identifier: Identifier): Unit
 
-  def get(name: String): Option[VariableDefinition]
+  def get(nameParts: Seq[String]): Option[VariableDefinition]
 
   def remove(name: String): Boolean
 
@@ -77,8 +77,8 @@ class TempVariableManager extends VariableManager with DataTypeErrorsBase {
     variables.put(name, VariableDefinition(identifier, defaultValueSQL, initValue))
   }
 
-  override def get(name: String): Option[VariableDefinition] = synchronized {
-    variables.get(name)
+  override def get(nameParts: Seq[String]): Option[VariableDefinition] = synchronized {
+    variables.get(nameParts.last)
   }
 
   override def remove(name: String): Boolean = synchronized {
