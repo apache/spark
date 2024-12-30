@@ -1741,7 +1741,6 @@ ansiNonReserved
     | RECORDREADER
     | RECORDWRITER
     | RECOVER
-    | RECURSIVE
     | REDUCE
     | REFRESH
     | RENAME
@@ -2112,6 +2111,7 @@ nonReserved
     | RECORDREADER
     | RECORDWRITER
     | RECOVER
+    | RECURSIVE
     | REDUCE
     | REFERENCES
     | REFRESH
