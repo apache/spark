@@ -34,6 +34,7 @@ import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.streaming.{CheckpointFileManager, StreamExecution}
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.unsafe.Platform
 import org.apache.spark.util.{NonFateSharingCache, Utils}
 
 private[sql] class RocksDBStateStoreProvider
@@ -63,7 +64,7 @@ private[sql] class RocksDBStateStoreProvider
         useMultipleValuesPerKey: Boolean = false,
         isInternal: Boolean = false): Unit = {
       verifyColFamilyCreationOrDeletion("create_col_family", colFamilyName, isInternal)
-      rocksDB.createColFamilyIfAbsent(colFamilyName, isInternal)
+      val cfId = rocksDB.createColFamilyIfAbsent(colFamilyName, isInternal)
       val dataEncoderCacheKey = StateRowEncoderCacheKey(
         queryRunId = getRunId(hadoopConf),
         operatorId = stateStoreId.operatorId,
@@ -84,7 +85,7 @@ private[sql] class RocksDBStateStoreProvider
         valueSchema,
         useMultipleValuesPerKey
       )
-      keyValueEncoderMap.putIfAbsent(colFamilyName, (keyEncoder, valueEncoder))
+      keyValueEncoderMap.putIfAbsent(colFamilyName, (keyEncoder, valueEncoder, cfId))
     }
 
     override def get(key: UnsafeRow, colFamilyName: String): UnsafeRow = {
@@ -379,10 +380,6 @@ private[sql] class RocksDBStateStoreProvider
     val dataEncoder = getDataEncoder(
       stateStoreEncoding, dataEncoderCacheKey, keyStateEncoderSpec, valueSchema)
 
-    if (useColumnFamilies) {
-      rocksDB.createColFamilyIfAbsent(StateStore.DEFAULT_COL_FAMILY_NAME, isInternal = false)
-    }
-
     val keyEncoder = RocksDBStateEncoder.getKeyEncoder(
       dataEncoder,
       keyStateEncoderSpec,
@@ -392,7 +389,15 @@ private[sql] class RocksDBStateStoreProvider
       valueSchema,
       useMultipleValuesPerKey
     )
-    keyValueEncoderMap.putIfAbsent(StateStore.DEFAULT_COL_FAMILY_NAME, (keyEncoder, valueEncoder))
+
+    var cfId: Short = 0
+    if (useColumnFamilies) {
+      cfId = rocksDB.createColFamilyIfAbsent(StateStore.DEFAULT_COL_FAMILY_NAME,
+        isInternal = false)
+    }
+
+    keyValueEncoderMap.putIfAbsent(StateStore.DEFAULT_COL_FAMILY_NAME,
+      (keyEncoder, valueEncoder, cfId))
   }
 
   override def stateStoreId: StateStoreId = stateStoreId_
@@ -483,7 +488,7 @@ private[sql] class RocksDBStateStoreProvider
   }
 
   private val keyValueEncoderMap = new java.util.concurrent.ConcurrentHashMap[String,
-    (RocksDBKeyStateEncoder, RocksDBValueStateEncoder)]
+    (RocksDBKeyStateEncoder, RocksDBValueStateEncoder, Short)]
 
   private val multiColFamiliesDisabledStr = "multiple column families is disabled in " +
     "RocksDBStateStoreProvider"
@@ -772,16 +777,43 @@ class RocksDBStateStoreChangeDataReader(
     endVersion: Long,
     compressionCodec: CompressionCodec,
     keyValueEncoderMap:
-      ConcurrentHashMap[String, (RocksDBKeyStateEncoder, RocksDBValueStateEncoder)],
+      ConcurrentHashMap[String, (RocksDBKeyStateEncoder, RocksDBValueStateEncoder, Short)],
     colFamilyNameOpt: Option[String] = None)
   extends StateStoreChangeDataReader(
     fm, stateLocation, startVersion, endVersion, compressionCodec, colFamilyNameOpt) {
 
   override protected var changelogSuffix: String = "changelog"
 
+  /**
+   * Encodes a virtual column family ID into a byte array suitable for RocksDB.
+   *
+   * This method creates a fixed-size byte array prefixed with the virtual column family ID,
+   * which is used to partition data within RocksDB.
+   *
+   * @param virtualColFamilyId The column family identifier to encode
+   * @return A byte array containing the encoded column family ID
+   */
+  private def getColumnFamilyIdBytes(virtualColFamilyId: Short): Array[Byte] = {
+    val encodedBytes = new Array[Byte](StateStore.VIRTUAL_COL_FAMILY_PREFIX_BYTES)
+    Platform.putShort(encodedBytes, Platform.BYTE_ARRAY_OFFSET, virtualColFamilyId)
+    encodedBytes
+  }
+
+  private def getExtractedKey(data: Array[Byte]): Array[Byte] = {
+    val offset = Platform.BYTE_ARRAY_OFFSET + StateStore.VIRTUAL_COL_FAMILY_PREFIX_BYTES
+
+    val key = new Array[Byte](data.length - StateStore.VIRTUAL_COL_FAMILY_PREFIX_BYTES)
+    Platform.copyMemory(
+      data, offset,
+      key, Platform.BYTE_ARRAY_OFFSET,
+      key.length
+    )
+    key
+  }
+
   override def getNext(): (RecordType.Value, UnsafeRow, UnsafeRow, Long) = {
     var currRecord: (RecordType.Value, Array[Byte], Array[Byte]) = null
-    val currEncoder: (RocksDBKeyStateEncoder, RocksDBValueStateEncoder) =
+    val currEncoder: (RocksDBKeyStateEncoder, RocksDBValueStateEncoder, Short) =
       keyValueEncoderMap.get(colFamilyNameOpt
         .getOrElse(StateStore.DEFAULT_COL_FAMILY_NAME))
 
@@ -797,15 +829,16 @@ class RocksDBStateStoreChangeDataReader(
           return null
         }
 
-        // TODO: fix this
         val nextRecord = reader.next()
-        val colFamilyIdBytes: Array[Byte] = new Array[Byte](2)
+        val colFamilyIdBytes: Array[Byte] = getColumnFamilyIdBytes(currEncoder._3)
         val endIndex = colFamilyIdBytes.size
         // Function checks for byte arrays being equal
         // from index 0 to endIndex - 1 (both inclusive)
         if (java.util.Arrays.equals(nextRecord._2, 0, endIndex,
           colFamilyIdBytes, 0, endIndex)) {
-          currRecord = nextRecord
+          val extractedKey = getExtractedKey(nextRecord._2)
+          val result = (nextRecord._1, extractedKey, nextRecord._3)
+          currRecord = result
         }
       }
     } else {
