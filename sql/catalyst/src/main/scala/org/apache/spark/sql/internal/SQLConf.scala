@@ -4407,7 +4407,7 @@ object SQLConf {
         "extend 'CatalogExtension'.")
       .version("3.0.0")
       .stringConf
-      .createOptional
+      .createWithDefault("builtin")
 
   object MapKeyDedupPolicy extends Enumeration {
     val EXCEPTION, LAST_WIN = Value
