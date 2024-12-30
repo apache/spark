@@ -229,6 +229,9 @@ class RocksDB(
   def removeColFamilyIfExists(colFamilyName: String): Boolean = {
     if (checkColFamilyExists(colFamilyName)) {
       shouldForceSnapshot.set(true)
+      prefixScan(Array.empty[Byte], colFamilyName).foreach { kv =>
+        remove(kv.key, colFamilyName)
+      }
       val colFamilyInfo = colFamilyNameToInfoMap.get(colFamilyName)
       colFamilyNameToInfoMap.remove(colFamilyName)
       colFamilyIdToNameMap.remove(colFamilyInfo.cfId)
@@ -493,6 +496,9 @@ class RocksDB(
     metadata.maxColumnFamilyId.foreach { maxId =>
       maxColumnFamilyId.set(maxId)
     }
+
+    createColFamilyIfAbsent(StateStore.DEFAULT_COL_FAMILY_NAME, isInternal = false)
+
     openDB()
     val (numKeys, numInternalKeys) = {
       if (!conf.trackTotalNumberOfRows) {

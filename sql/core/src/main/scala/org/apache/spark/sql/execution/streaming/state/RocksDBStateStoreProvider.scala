@@ -333,11 +333,7 @@ private[sql] class RocksDBStateStoreProvider
       verify(useColumnFamilies, "Column families are not supported in this store")
 
       val result = rocksDB.removeColFamilyIfExists(colFamilyName)
-
       if (result) {
-        rocksDB.prefixScan(Array.empty[Byte], colFamilyName).foreach { kv =>
-          rocksDB.remove(kv.key)
-        }
         keyValueEncoderMap.remove(colFamilyName)
       }
       result
