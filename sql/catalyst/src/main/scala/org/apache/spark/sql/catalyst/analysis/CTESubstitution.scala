@@ -157,7 +157,7 @@ object CTESubstitution extends Rule[LogicalPlan] {
         }
         val resolvedCTERelations = resolveCTERelations(relations, isLegacy = true,
           forceInline = false, Seq.empty, cteDefs, allowRecursion)
-        substituteCTE(child, alwaysInline = true, resolvedCTERelations, None)._1
+        substituteCTE(child, alwaysInline = true, resolvedCTERelations, allowRecursion, None)._1
     }
   }
 
@@ -221,6 +221,7 @@ object CTESubstitution extends Rule[LogicalPlan] {
           traverseAndSubstituteCTE(child, forceInline, resolvedCTERelations, cteDefs)._1,
           forceInline,
           resolvedCTERelations,
+          allowRecursion,
           None)._1
         if (firstSubstituted.isEmpty) {
           firstSubstituted = Some(substituted)
@@ -313,7 +314,7 @@ object CTESubstitution extends Rule[LogicalPlan] {
       }
       // CTE definition can reference a previous one or itself if recursion allowed.
       val (substituted, recursionFound) = substituteCTE(innerCTEResolved, alwaysInline,
-        resolvedCTERelations, recursiveCTERelation)
+        resolvedCTERelations, allowRecursion, recursiveCTERelation)
       val cteRelation = recursiveCTERelation
         .map(_._2.copy(child = substituted, recursive = recursionFound))
         .getOrElse(CTERelationDef(substituted))
@@ -370,6 +371,7 @@ object CTESubstitution extends Rule[LogicalPlan] {
       plan: LogicalPlan,
       alwaysInline: Boolean,
       cteRelations: Seq[(String, CTERelationDef)],
+      allowRecursion: Boolean,
       recursiveCTERelation: Option[(String, CTERelationDef)]): (LogicalPlan, Boolean) = {
     var recursionFound = false
     val substituted = plan.resolveOperatorsUpWithPruning(
@@ -390,6 +392,11 @@ object CTESubstitution extends Rule[LogicalPlan] {
         // but we can't do it here as `PlanWithUnresolvedIdentifier` is a leaf node
         // and may produce `UnresolvedRelation` later. Instead, we delay CTE resolution
         // by moving it to the planBuilder of the corresponding `PlanWithUnresolvedIdentifier`.
+        if (allowRecursion) {
+          p.failAnalysis(
+            errorClass = "RECURSIVE_CTE_WITH_IDENTIFIER",
+            messageParameters = Map.empty)
+        }
         p.copy(planBuilder = (nameParts, children) => {
           p.planBuilder.apply(nameParts, children) match {
             case u @ UnresolvedRelation(Seq(table), _, _) =>
@@ -406,7 +413,7 @@ object CTESubstitution extends Rule[LogicalPlan] {
         other.transformExpressionsWithPruning(_.containsPattern(PLAN_EXPRESSION)) {
           case e: SubqueryExpression =>
             e.withNewPlan(
-              apply(substituteCTE(e.plan, alwaysInline, cteRelations, None)._1))
+              apply(substituteCTE(e.plan, alwaysInline, cteRelations, allowRecursion, None)._1))
         }
     }
     (substituted, recursionFound)
