@@ -1738,7 +1738,8 @@ class SparkConnectPlanner(
       case uda: UserDefinedAggregator[_, _, _] =>
         ScalaAggregator(uda, children).toAggregateExpression()
       case other =>
-        throw InvalidPlanInput(s"Unsupported UserDefinedFunction implementation: ${other.getClass}")
+        throw InvalidPlanInput(
+          s"Unsupported UserDefinedFunction implementation: ${other.getClass}")
     }
   }
 
@@ -1748,8 +1749,8 @@ class SparkConnectPlanner(
    * @param fun
    *   Proto representation of the Scala user-defined function or aggregator.
    * @return
-   *   A concrete UserDefinedFunction implementation, either a SparkUserDefinedFunction or
-   *   a UserDefinedAggregator.
+   *   A concrete UserDefinedFunction implementation, either a SparkUserDefinedFunction or a
+   *   UserDefinedAggregator.
    */
   private def transformScalaFunction(
       fun: proto.CommonInlineUserDefinedFunction): UserDefinedFunction = {
