@@ -1916,34 +1916,9 @@ def _parse_datatype_string(s: str) -> DataType:
         from py4j.java_gateway import JVMView
 
         sc = get_active_spark_context()
-
-        def from_ddl_schema(type_str: str) -> DataType:
-            return _parse_datatype_json_string(
-                cast(JVMView, sc._jvm)
-                .org.apache.spark.sql.types.StructType.fromDDL(type_str)
-                .json()
-            )
-
-        def from_ddl_datatype(type_str: str) -> DataType:
-            return _parse_datatype_json_string(
-                cast(JVMView, sc._jvm)
-                .org.apache.spark.sql.api.python.PythonSQLUtils.parseDataType(type_str)
-                .json()
-            )
-
-        try:
-            # DDL format, "fieldname datatype, fieldname datatype".
-            return from_ddl_schema(s)
-        except Exception as e:
-            try:
-                # For backwards compatibility, "integer", "struct<fieldname: datatype>" and etc.
-                return from_ddl_datatype(s)
-            except BaseException:
-                try:
-                    # For backwards compatibility, "fieldname: datatype, fieldname: datatype" case.
-                    return from_ddl_datatype("struct<%s>" % s.strip())
-                except BaseException:
-                    raise e
+        return _parse_datatype_json_string(
+            cast(JVMView, sc._jvm).org.apache.spark.sql.api.python.PythonSQLUtils.ddlToJson(s)
+        )
 
 
 def _parse_datatype_json_string(json_string: str) -> DataType:
