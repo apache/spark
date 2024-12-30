@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.command
 
 import java.net.{URI, URISyntaxException}
 
+import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
@@ -26,12 +27,13 @@ import scala.util.control.NonFatal
 import org.apache.hadoop.fs.{FileContext, FsConstants, Path}
 import org.apache.hadoop.fs.permission.{AclEntry, AclEntryScope, AclEntryType, FsAction, FsPermission}
 import org.json4s._
+import org.json4s.JsonAST.JObject
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.{SQLConfHelper, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
-import org.apache.spark.sql.catalyst.catalog.{CatalogSerializer, _}
+import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTableType._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.Attribute
@@ -624,7 +626,7 @@ case class DescribeTableCommand(
     partitionSpec: TablePartitionSpec,
     isExtended: Boolean,
     override val output: Seq[Attribute])
-  extends DescribeCommandBase with CatalogSerializer {
+  extends DescribeCommandBase {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val result = new ArrayBuffer[Row]
@@ -704,7 +706,7 @@ case class DescribeTableCommand(
     )
     append(buffer, "", "", "")
     append(buffer, "# Detailed Table Information", "", "")
-    toLinkedHashMap(table.toJsonLinkedHashMap).filter {
+    table.toLinkedHashMap.filter {
       case (k, _) => !excludedTableInfo.contains(k)
     }.foreach { s => append(buffer, s._1, s._2, "")}
   }
@@ -736,18 +738,15 @@ case class DescribeTableCommand(
     append(buffer, "# Detailed Partition Information", "", "")
     append(buffer, "Database", table.database, "")
     append(buffer, "Table", tableIdentifier.table, "")
-    toLinkedHashMap(partition.toJsonLinkedHashMap)
-      .foreach(s => append(buffer, s._1, s._2, ""))
+    partition.toLinkedHashMap.foreach(s => append(buffer, s._1, s._2, ""))
     append(buffer, "", "", "")
     append(buffer, "# Storage Information", "", "")
     table.bucketSpec match {
       case Some(spec) =>
-        toLinkedHashMap(spec.toJsonLinkedHashMap)
-          .foreach(s => append(buffer, s._1, s._2, ""))
+        spec.toLinkedHashMap.foreach(s => append(buffer, s._1, s._2, ""))
       case _ =>
     }
-    toLinkedHashMap(table.storage.toJsonLinkedHashMap)
-      .foreach(s => append(buffer, s._1, s._2, ""))
+    table.storage.toLinkedHashMap.foreach(s => append(buffer, s._1, s._2, ""))
   }
 }
 
@@ -763,8 +762,9 @@ case class DescribeTableJsonCommand(
    isExtended: Boolean)
   extends LeafRunnableCommand {
   override val output = DescribeCommandSchema.describeJsonTableAttributes()
+
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    val result = new ArrayBuffer[Row]
+    val jsonMap = mutable.LinkedHashMap[String, JValue]()
     val catalog = sparkSession.sessionState.catalog
 
     if (catalog.isTempView(table)) {
@@ -772,7 +772,7 @@ case class DescribeTableJsonCommand(
         throw QueryCompilationErrors.descPartitionNotAllowedOnTempView(table.identifier)
       }
       val schema = catalog.getTempViewOrPermanentTableMetadata(table).schema
-      describeColsJson(schema, result, header = false)
+      describeColsJson(schema, jsonMap, header = false)
     } else {
       val metadata = catalog.getTableRawMetadata(table)
       val schema = if (metadata.schema.isEmpty) {
@@ -783,28 +783,26 @@ case class DescribeTableJsonCommand(
         metadata.schema
       }
 
-      addKeyValueToJson(result, "table_name", JString(metadata.identifier.table))
-
-      table.catalog.foreach(catalog => addKeyValueToJson(result, "catalog_name", JString(catalog)))
+      jsonMap += "table_name" -> JString(metadata.identifier.table)
+      table.catalog.foreach(catalog => jsonMap += "catalog_name" -> JString(catalog))
       table.database.foreach { db =>
-        addKeyValueToJson(result, "namespace", JArray(List(JString(db))))
-        addKeyValueToJson(result, "schema_name", JString(db))
+        jsonMap += "namespace" -> JArray(List(JString(db)))
+        jsonMap += "schema_name" -> JString(db)
       }
 
-      describeColsJson(schema, result, header = false)
-
-      describeClusteringInfoJson(metadata, result)
+      describeColsJson(schema, jsonMap, header = false)
+      describeClusteringInfoJson(metadata, jsonMap)
 
       if (partitionSpec.nonEmpty) {
         // Outputs the partition-specific info for the DDL command:
         // "DESCRIBE [EXTENDED|FORMATTED] table_name PARTITION (partitionVal*)"
-        describePartitionInfoJson(sparkSession, catalog, metadata, result)
+        describePartitionInfoJson(sparkSession, catalog, metadata, jsonMap)
       } else {
-        describeFormattedTableInfoJson(metadata, result)
+        describeFormattedTableInfoJson(metadata, jsonMap)
       }
     }
 
-    result.toSeq
+    Seq(Row(pretty(render(JObject(jsonMap.toList)))))
   }
 
   /**
@@ -871,14 +869,14 @@ case class DescribeTableJsonCommand(
     }
   }
 
-  def normalizeStr(str: String): String = {
+  private def normalizeStr(str: String): String = {
     str.toLowerCase().replace(" ", "_")
   }
 
   private def describeColsJson(
-    schema: StructType,
-    buffer: ArrayBuffer[Row],
-    header: Boolean): Unit = {
+      schema: StructType,
+      jsonMap: mutable.LinkedHashMap[String, JValue],
+      header: Boolean): Unit = {
 
     val defaultValuesMap = Option(ResolveDefaultColumns.getDescribeMetadata(schema))
       .getOrElse(Seq.empty)
@@ -886,6 +884,7 @@ case class DescribeTableJsonCommand(
       .toMap
 
     val columnsJson = schema.zipWithIndex.map { case (column, id) =>
+      print("\n!!!! comment" + column.getComment())
       val commentField = column.getComment()
         .map(c => s""", "comment": "${c.replace("\"", "\\\"")}"""")
         .getOrElse("")
@@ -900,7 +899,11 @@ case class DescribeTableJsonCommand(
          |}""".stripMargin
     }.mkString("[", ",", "]")
 
-    addKeyValueToJson(buffer, "columns", parse(columnsJson))
+    print("\n **** columnsJson" + columnsJson)
+
+    jsonMap += "columns" -> parse(columnsJson)
+
+    print("\n **** jsonMap" + jsonMap)
   }
 
   protected def appendJson(buffer: ArrayBuffer[Row], key: String, jsonObject: String): Unit = {
@@ -932,7 +935,8 @@ case class DescribeTableJsonCommand(
     }
   }
 
-  private def describeClusteringInfoJson(table: CatalogTable, buffer: ArrayBuffer[Row]): Unit = {
+  private def describeClusteringInfoJson(
+      table: CatalogTable, jsonMap: mutable.LinkedHashMap[String, JValue]): Unit = {
     table.clusterBySpec.foreach { clusterBySpec =>
       val clusteringColumnsJson = clusterBySpec.columnNames.map { fieldNames =>
         val nestedFieldOpt = table.schema.findNestedField(fieldNames.fieldNames.toIndexedSeq)
@@ -949,24 +953,24 @@ case class DescribeTableJsonCommand(
            |}""".stripMargin
       }.mkString("[", ",", "]")
 
-      appendJson(buffer, "clustering_information", clusteringColumnsJson)
+      jsonMap += "clustering_information" -> parse(clusteringColumnsJson)
     }
   }
 
   private def describeFormattedTableInfoJson(
-        table: CatalogTable, buffer: ArrayBuffer[Row]): Unit = {
+      table: CatalogTable, jsonMap: mutable.LinkedHashMap[String, JValue]): Unit = {
     val excludedTableInfo = Set("catalog", "schema", "database", "table", "location",
       "serde_library", "inputformat", "outputformat")
 
     table.bucketSpec match {
       case Some(spec) =>
         spec.toJsonLinkedHashMap.foreach { case (key, value) =>
-          addKeyValueToJson(buffer, key, value)
+          jsonMap += key -> value
         }
       case _ =>
     }
     table.storage.toJsonLinkedHashMap.foreach { case (key, value) =>
-      addKeyValueToJson(buffer, key, value)
+      jsonMap += key -> value
     }
 
     val filteredTableInfo = table.toJsonLinkedHashMap.filterNot { case (key, _) =>
@@ -974,16 +978,16 @@ case class DescribeTableJsonCommand(
     }
 
     filteredTableInfo.map { case (key, value) =>
-      addKeyValueToJson(buffer, key, value)
+      jsonMap += key -> value
     }
 
   }
 
   private def describePartitionInfoJson(
-   spark: SparkSession,
-   catalog: SessionCatalog,
-   metadata: CatalogTable,
-   buffer: ArrayBuffer[Row]): Unit = {
+     spark: SparkSession,
+     catalog: SessionCatalog,
+     metadata: CatalogTable,
+     jsonMap: mutable.LinkedHashMap[String, JValue]): Unit = {
     if (metadata.tableType == CatalogTableType.VIEW) {
       throw QueryCompilationErrors.descPartitionNotAllowedOnView(table.identifier)
     }
@@ -997,7 +1001,7 @@ case class DescribeTableJsonCommand(
     val partition = catalog.getPartition(table, normalizedPartSpec)
 
     partition.toJsonLinkedHashMap.map { case (key, value) =>
-      addKeyValueToJson(buffer, key, value)
+      jsonMap += key -> value
     }
 
     val excludedTableInfo = Set("catalog", "schema", "database", "table", "partition_columns")
@@ -1007,18 +1011,18 @@ case class DescribeTableJsonCommand(
     }
 
     detailedInfo.map { case (key, value) =>
-      addKeyValueToJson(buffer, key, value)
+      jsonMap += key -> value
     }
 
     metadata.bucketSpec match {
       case Some(spec) =>
         spec.toJsonLinkedHashMap.map { case (key, value) =>
-          addKeyValueToJson(buffer, key, value)
+          jsonMap += key -> value
         }
       case _ =>
     }
     metadata.storage.toJsonLinkedHashMap.map { case (key, value) =>
-      addKeyValueToJson(buffer, key, value)
+      jsonMap += key -> value
     }
   }
 }
