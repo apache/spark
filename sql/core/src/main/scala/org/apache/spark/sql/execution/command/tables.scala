@@ -802,7 +802,13 @@ case class DescribeTableJsonCommand(
       }
     }
 
-    Seq(Row(pretty(render(JObject(jsonMap.toList)))))
+    val normalizedJsonMap = mutable.LinkedHashMap[String, JValue]()
+    jsonMap.foreach { case (key, value) =>
+      val normalizedKey = key.toLowerCase().replace(" ", "_")
+      normalizedJsonMap += normalizedKey -> value
+    }
+
+    Seq(Row(compact(render(JObject(normalizedJsonMap.toList)))))
   }
 
   /**
@@ -883,8 +889,7 @@ case class DescribeTableJsonCommand(
       .collect { case (name, _, defaultValue) => name -> defaultValue }
       .toMap
 
-    val columnsJson = schema.zipWithIndex.map { case (column, id) =>
-      print("\n!!!! comment" + column.getComment())
+    val columnsJson = schema.map { case column =>
       val commentField = column.getComment()
         .map(c => s""", "comment": "${c.replace("\"", "\\\"")}"""")
         .getOrElse("")
@@ -899,40 +904,7 @@ case class DescribeTableJsonCommand(
          |}""".stripMargin
     }.mkString("[", ",", "]")
 
-    print("\n **** columnsJson" + columnsJson)
-
     jsonMap += "columns" -> parse(columnsJson)
-
-    print("\n **** jsonMap" + jsonMap)
-  }
-
-  protected def appendJson(buffer: ArrayBuffer[Row], key: String, jsonObject: String): Unit = {
-    val currentJson = buffer.headOption.map(row => parse(row.getString(0))).
-      getOrElse(parse("""{}"""))
-    val newJson = parse(jsonObject.replace(" ", ""))
-    val updatedJson = currentJson merge JObject(key -> newJson)
-
-    if (buffer.isEmpty) {
-      buffer += Row(compact(render(updatedJson)))
-    } else {
-      buffer(0) = Row(compact(render(updatedJson)))
-    }
-  }
-
-  private def addKeyValueToJson(buffer: ArrayBuffer[Row], key: String, value: JValue): Unit = {
-    val normalizedKey = normalizeStr(key)
-
-    val currentJson = buffer.headOption.map(row => parse(row.getString(0))).getOrElse(JObject())
-    if ((currentJson \ normalizedKey) == JNothing) {
-      val updatedJson = currentJson merge JObject(normalizedKey -> value)
-      val jsonString = compact(render(updatedJson))
-
-      if (buffer.isEmpty) {
-        buffer += Row(jsonString)
-      } else {
-        buffer(0) = Row(jsonString)
-      }
-    }
   }
 
   private def describeClusteringInfoJson(
@@ -980,7 +952,6 @@ case class DescribeTableJsonCommand(
     filteredTableInfo.map { case (key, value) =>
       jsonMap += key -> value
     }
-
   }
 
   private def describePartitionInfoJson(
