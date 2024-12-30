@@ -248,7 +248,7 @@ class RocksDB(
    * @return - true if the column family exists, false otherwise
    */
   def checkColFamilyExists(colFamilyName: String): Boolean = {
-    colFamilyNameToInfoMap.containsKey(colFamilyName)
+    db != null && colFamilyNameToInfoMap.containsKey(colFamilyName)
   }
 
   // This method sets the internal column family metadata to
@@ -497,7 +497,9 @@ class RocksDB(
       maxColumnFamilyId.set(maxId)
     }
 
-    createColFamilyIfAbsent(StateStore.DEFAULT_COL_FAMILY_NAME, isInternal = false)
+    if (useColumnFamilies) {
+      createColFamilyIfAbsent(StateStore.DEFAULT_COL_FAMILY_NAME, isInternal = false)
+    }
 
     openDB()
     val (numKeys, numInternalKeys) = {
