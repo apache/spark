@@ -177,10 +177,10 @@ object CreateUserDefinedFunctionCommand {
    * Perform this check on function input and return parameters while registering the function
    * to fail early. This check does not need to run the function itself.
    */
-  def checkParameterNotNull(param: StructType, input: String, language: RoutineLanguage): Unit = {
+  def checkParameterNotNull(param: StructType, input: String): Unit = {
     param.fields.foreach { field =>
       if (!field.nullable) {
-        throw UserDefinedFunctionErrors.cannotSpecifyNotNullOnFunctionParameters(language, input)
+        throw UserDefinedFunctionErrors.cannotSpecifyNotNullOnFunctionParameters(input)
       }
     }
   }

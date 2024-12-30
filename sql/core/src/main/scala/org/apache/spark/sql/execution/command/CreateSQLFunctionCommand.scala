@@ -97,7 +97,7 @@ case class CreateSQLFunctionCommand(
       // Build function input.
       val inputPlan = if (inputParam.isDefined) {
         val param = inputParam.get
-        checkParameterNotNull(param, inputParamText.get, function.language)
+        checkParameterNotNull(param, inputParamText.get)
         checkParameterNameDuplication(param, conf, name)
         checkDefaultsTrailing(param, name)
 
@@ -209,7 +209,7 @@ case class CreateSQLFunctionCommand(
         }
 
         // Check the return columns cannot have NOT NULL specified.
-        checkParameterNotNull(returnParam, returnTypeText, function.language)
+        checkParameterNotNull(returnParam, returnTypeText)
 
         // Check duplicated return column names.
         checkReturnsColumnDuplication(returnParam, conf, name)

@@ -5860,7 +5860,7 @@
       },
       "NOT_NULL_ON_FUNCTION_PARAMETERS" : {
         "message" : [
-          "Cannot specify NOT NULL on <languageName> function parameters: <input>"
+          "Cannot specify NOT NULL on function parameters: <input>"
         ]
       },
       "RETURN_COLUMN_COUNT_MISMATCH" : {

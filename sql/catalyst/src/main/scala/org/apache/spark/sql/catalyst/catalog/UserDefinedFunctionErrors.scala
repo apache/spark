@@ -46,11 +46,10 @@ object UserDefinedFunctionErrors extends QueryErrorsBase {
       messageParameters = Map("routineName" -> routineName, "columns" -> columns))
   }
 
-  def cannotSpecifyNotNullOnFunctionParameters(
-      language: RoutineLanguage, input: String): Throwable = {
+  def cannotSpecifyNotNullOnFunctionParameters(input: String): Throwable = {
     new AnalysisException(
       errorClass = "USER_DEFINED_FUNCTIONS.NOT_NULL_ON_FUNCTION_PARAMETERS",
-      messageParameters = Map("languageName" -> language.name, "input" -> input))
+      messageParameters = Map("input" -> input))
   }
 
   def bodyIsNotAQueryForSqlTableUdf(functionName: String): Throwable = {
