@@ -2297,7 +2297,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     assert(runningTaskInfos(taskSets(1).stageId).size == 1,
       "origin result task 1.0 should be running")
 
-    scheduler.cancelAllJobs()
+    scheduler.doCancelAllJobs()
     // all tasks should be killed
     assert(runningTaskInfos.isEmpty)
     assert(scheduler.runningStages.isEmpty)
