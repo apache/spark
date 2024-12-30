@@ -203,6 +203,7 @@ public final class CollationFactory {
       // No Collation can simultaneously support binary equality and lowercase equality
       assert(!supportsBinaryEquality || !supportsLowercaseEquality);
 
+      // Null is a special provider for indeterminate collation.
       assert(SUPPORTED_PROVIDERS.contains(provider) || provider.equals(PROVIDER_NULL));
     }
 
@@ -1097,7 +1098,7 @@ public final class CollationFactory {
     }
 
     /**
-     * Collation that is a result of two different non-explicit collation.
+     * Collation that is a result of a mismatch between two different non-explicit collations.
      */
     private static class IndeterminateCollation extends Collation {
 

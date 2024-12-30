@@ -201,8 +201,12 @@ class IndeterminateCollationTestSuite extends QueryTest with SharedSparkSession 
 
         // group by should fail in runtime when fetching the collator
         assertRuntimeIndeterminateCollationError {
-          sql(s"SELECT * FROM v GROUP BY col")
+          sql(s"SELECT COUNT(*) FROM v GROUP BY col")
         }
+
+        checkAnswer(
+          sql(s"SELECT COUNT(*) FROM v GROUP by col collate utf8_binary"),
+          Seq(Row(1), Row(1)))
       }
     }
   }

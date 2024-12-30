@@ -435,8 +435,8 @@ object CollationTypeCoercion {
   }
 
   /**
-   * Returns whether the given expression which isn't allowed to have inputs with indeterminate
-   * collations has indeterminate collation.
+   * Returns whether the given expression has indeterminate collation in case it isn't allowed
+   * to have inputs with indeterminate collations, and thus should fail.
    */
   private def shouldFailWithIndeterminateCollation(expression: Expression): Boolean = {
     def getDataTypeSafe(e: Expression): DataType = try {
@@ -445,7 +445,7 @@ object CollationTypeCoercion {
       case _: Throwable => NullType
     }
 
-    expression.children.exists(child => expression.resolved &&
+    expression.children.exists(child =>
       shouldFailWithIndeterminateCollation(expression, getDataTypeSafe(child)))
   }
 
