@@ -806,7 +806,7 @@ class RocksDB(
 
       if (conf.trackTotalNumberOfRows) {
         val oldValue = db.get(readOptions, keyWithPrefix)
-        if (oldValue == null) {
+        if (oldValue != null) {
           val cfInfo = getColumnFamilyInfo(cfName)
           if (cfInfo.isInternal) {
             numInternalKeysOnWritingVersion -= 1
