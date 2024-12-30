@@ -208,9 +208,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
       // normally done by TaskSetManager
       taskSet.tasks.foreach(_.epoch = mapOutputTracker.getEpoch)
       taskSets += taskSet
-      val taskPartitionIds = new HashSet[Int]()
-      taskSet.tasks.foreach(task => taskPartitionIds += task.partitionId)
-      runningTaskInfos.put(taskSet.stageId, taskPartitionIds)
+      runningTaskInfos.put(taskSet.stageId, new HashSet[Int]() ++ taskSet.tasks.map(_.partitionId))
     }
     override def killTaskAttempt(
       taskId: Long, interruptThread: Boolean, reason: String): Boolean = false
@@ -402,11 +400,9 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
 
     override private[scheduler] def handleTaskCompletion(event: CompletionEvent): Unit = {
       super.handleTaskCompletion(event)
-      if (runningTaskInfos.contains(event.task.stageId)) {
-        runningTaskInfos(event.task.stageId) -= event.task.partitionId
-        if (runningTaskInfos(event.task.stageId).isEmpty) {
-          runningTaskInfos.remove(event.task.stageId)
-        }
+      runningTaskInfos.get(event.task.stageId).foreach{ partitions =>
+        partitions -= event.task.partitionId
+        if (partitions.isEmpty) runningTaskInfos.remove(event.task.stageId)
       }
     }
   }
