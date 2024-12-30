@@ -61,7 +61,12 @@ import org.apache.spark.util.Utils
  *                     send a null value to the database.
  */
 @DeveloperApi
-case class JdbcType(databaseTypeDefinition : String, jdbcNullType : Int)
+case class JdbcType(
+    databaseTypeDefinition: String,
+    jdbcNullType: Int,
+    castAsTypeDefinition: Option[String] = None) {
+  def castAsType(): String = castAsTypeDefinition.getOrElse(databaseTypeDefinition)
+}
 
 /**
  * :: DeveloperApi ::
@@ -374,6 +379,7 @@ abstract class JdbcDialect extends Serializable with Logging {
     case dateValue: Date => "'" + dateValue + "'"
     case dateValue: LocalDate => s"'${DateFormatter().format(dateValue)}'"
     case arrayValue: Array[Any] => arrayValue.map(compileValue).mkString(", ")
+    case binaryValue: Array[Byte] => binaryValue.map("%02X".format(_)).mkString("X'", "", "'")
     case _ => value
   }
 
@@ -406,7 +412,7 @@ abstract class JdbcDialect extends Serializable with Logging {
 
     override def visitCast(expr: String, exprDataType: DataType, dataType: DataType): String = {
       val databaseTypeDefinition =
-        getJDBCType(dataType).map(_.databaseTypeDefinition).getOrElse(dataType.typeName)
+        getJDBCType(dataType).map(_.castAsType()).getOrElse(dataType.typeName)
       s"CAST($expr AS $databaseTypeDefinition)"
     }
 

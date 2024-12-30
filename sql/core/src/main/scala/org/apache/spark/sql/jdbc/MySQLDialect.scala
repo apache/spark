@@ -45,7 +45,46 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper with No
   // See https://dev.mysql.com/doc/refman/8.0/en/aggregate-functions.html
   private val supportedAggregateFunctions =
     Set("MAX", "MIN", "SUM", "COUNT", "AVG") ++ distinctUnsupportedAggregateFunctions
-  private val supportedFunctions = supportedAggregateFunctions ++ Set("DATE_ADD", "DATE_DIFF")
+
+  // See https://dev.mysql.com/doc/refman/8.4/en/built-in-function-reference.html
+  // The functions listed here have the same signature and similar semantics,
+  // and can be supported with existing mechanism.
+  private val supportedSQLFunctions = Set(
+    "ABS",
+    "COALESCE",
+    "GREATEST",
+    "LEAST",
+    "RAND",
+    "LOG10",
+    "LOG2",
+    "LN",
+    "EXP",
+    "POWER",
+    "SQRT",
+    "SIN",
+    "COS",
+    "TAN",
+    "COT",
+    "ASIN",
+    "ACOS",
+    "ATAN",
+    "ATAN2",
+    "DEGREES",
+    "RADIANS",
+    "SIGN",
+    "SUBSTRING",
+    "UPPER",
+    "LOWER",
+    "SHA1",
+    "SHA2",
+    "MD5",
+    "CRC32",
+    "BIT_LENGTH",
+    "CHAR_LENGTH",
+    "CONCAT")
+
+  private val supportedFunctions =
+    supportedAggregateFunctions ++ Set("DATE_ADD", "DATE_DIFF") ++ supportedSQLFunctions
 
   override def isSupportedFunction(funcName: String): Boolean =
     supportedFunctions.contains(funcName)
@@ -256,9 +295,17 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper with No
     // See SPARK-35446: MySQL treats REAL as a synonym to DOUBLE by default
     // We override getJDBCType so that FloatType is mapped to FLOAT instead
     case FloatType => Option(JdbcType("FLOAT", java.sql.Types.FLOAT))
-    case StringType => Option(JdbcType("LONGTEXT", java.sql.Types.LONGVARCHAR))
+    // MySQL uses CHAR in the cast function for the type LONGTEXT.
+    case StringType => Option(JdbcType("LONGTEXT", java.sql.Types.LONGVARCHAR, Some("CHAR")))
     case ByteType => Option(JdbcType("TINYINT", java.sql.Types.TINYINT))
-    case ShortType => Option(JdbcType("SMALLINT", java.sql.Types.SMALLINT))
+    // MySQL uses SIGNED INTEGER in the cast function for the types SMALLINT, INTEGER, and BIGINT.
+    case ShortType => Option(JdbcType("SMALLINT", java.sql.Types.SMALLINT, Some("SIGNED INTEGER")))
+    case IntegerType => Option(JdbcType("INTEGER", java.sql.Types.INTEGER, Some("SIGNED INTEGER")))
+    case LongType => Option(JdbcType("BIGINT", java.sql.Types.BIGINT, Some("SIGNED INTEGER")))
+    // MySQL uses BINARY in the cast function for the type BLOB.
+    case BinaryType => Option(JdbcType("BLOB", java.sql.Types.BLOB, Some("BINARY")))
+    // We override getJDBCType so that DoubleType is mapped to DOUBLE instead.
+    case DoubleType => Option(JdbcType("DOUBLE", java.sql.Types.DOUBLE))
     // scalastyle:off line.size.limit
     // In MYSQL, DATETIME is TIMESTAMP WITHOUT TIME ZONE
     // https://github.com/mysql/mysql-connector-j/blob/8.3.0/src/main/core-api/java/com/mysql/cj/MysqlType.java#L251
