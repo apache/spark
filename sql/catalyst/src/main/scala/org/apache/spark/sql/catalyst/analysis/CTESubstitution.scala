@@ -341,7 +341,7 @@ object CTESubstitution extends Rule[LogicalPlan] {
       table: String,
       alwaysInline: Boolean,
       cteRelations: Seq[(String, CTERelationDef)],
-      unresolvedRelation: UnresolvedRelation): LogicalPlan = {
+      unresolvedRelation: UnresolvedRelation): (LogicalPlan, Boolean) = {
     var recursionFound = false
     val resolvedPlan = cteRelations
       .find(r => conf.resolver(r._1, table))
@@ -350,13 +350,17 @@ object CTESubstitution extends Rule[LogicalPlan] {
           if (alwaysInline) {
             d.child
           } else {
+            if (d.recursive) {
+              // self-reference is found
+              recursionFound = true
+            }
             // Add a `SubqueryAlias` for hint-resolving rules to match relation names.
             SubqueryAlias(table,
               CTERelationRef(d.id, d.resolved, d.output, d.isStreaming, recursive = d.recursive))
           }
       }
       .getOrElse(unresolvedRelation)
-    resolvedPlan
+    (resolvedPlan, recursionFound)
   }
 
   /**
@@ -378,27 +382,21 @@ object CTESubstitution extends Rule[LogicalPlan] {
       case u @ UnresolvedRelation(Seq(table), _, _) =>
         val resolved = resolveWithCTERelations(table, alwaysInline,
           (recursiveCTERelation ++ cteRelations).toSeq, u)
-        val isRecursive = resolved.find{
-          case ref: CTERelationRef => ref.recursive
-        }.isDefined
-        recursionFound = recursionFound || isRecursive
-        resolved
+        recursionFound = recursionFound || resolved._2
+        resolved._1
 
       case p: PlanWithUnresolvedIdentifier =>
         // We must look up CTE relations first when resolving `UnresolvedRelation`s,
         // but we can't do it here as `PlanWithUnresolvedIdentifier` is a leaf node
         // and may produce `UnresolvedRelation` later. Instead, we delay CTE resolution
         // by moving it to the planBuilder of the corresponding `PlanWithUnresolvedIdentifier`.
-        if (recursiveCTERelation.isDefined) {
-          p.failAnalysis(
-            errorClass = "RECURSIVE_CTE_WITH_IDENTIFIER",
-            messageParameters = Map.empty)
-        }
         p.copy(planBuilder = (nameParts, children) => {
           p.planBuilder.apply(nameParts, children) match {
             case u @ UnresolvedRelation(Seq(table), _, _) =>
-              val resolved = resolveWithCTERelations(table, alwaysInline, cteRelations, u)
-              resolved
+              val resolved = resolveWithCTERelations(table, alwaysInline,
+                (recursiveCTERelation ++ cteRelations).toSeq, u)
+              recursionFound = resolved._2
+              resolved._1
             case other => other
           }
         })
