@@ -1561,7 +1561,9 @@ class StructType(DataType):
         if is_remote():
             from pyspark.sql.connect.session import SparkSession
 
-            return SparkSession.getActiveSession()._to_ddl(self)
+            session = SparkSession.getActiveSession()
+            assert session is not None
+            return session._to_ddl(self)
         else:
             return get_active_spark_context()._to_ddl(self)
 
