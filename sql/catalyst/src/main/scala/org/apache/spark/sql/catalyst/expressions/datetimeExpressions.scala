@@ -3431,7 +3431,7 @@ case class TimestampAdd(
   override def left: Expression = quantity
   override def right: Expression = timestamp
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(IntegerType, AnyTimestampType)
+  override def inputTypes: Seq[AbstractDataType] = Seq(LongType, AnyTimestampType)
   override def dataType: DataType = timestamp.dataType
 
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
@@ -3440,7 +3440,7 @@ case class TimestampAdd(
   @transient private lazy val zoneIdInEval: ZoneId = zoneIdForType(timestamp.dataType)
 
   override def nullSafeEval(q: Any, micros: Any): Any = {
-    DateTimeUtils.timestampAdd(unit, q.asInstanceOf[Int], micros.asInstanceOf[Long], zoneIdInEval)
+    DateTimeUtils.timestampAdd(unit, q.asInstanceOf[Long], micros.asInstanceOf[Long], zoneIdInEval)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {

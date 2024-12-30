@@ -362,14 +362,14 @@ class UserDefinedTableFunction:
 
         assert sc._jvm is not None
         if self.returnType is None:
-            judtf = sc._jvm.org.apache.spark.sql.execution.python.UserDefinedPythonTableFunction(
-                self._name, wrapped_func, self.evalType, self.deterministic
-            )
+            judtf = getattr(
+                sc._jvm, "org.apache.spark.sql.execution.python.UserDefinedPythonTableFunction"
+            )(self._name, wrapped_func, self.evalType, self.deterministic)
         else:
             jdt = spark._jsparkSession.parseDataType(self.returnType.json())
-            judtf = sc._jvm.org.apache.spark.sql.execution.python.UserDefinedPythonTableFunction(
-                self._name, wrapped_func, jdt, self.evalType, self.deterministic
-            )
+            judtf = getattr(
+                sc._jvm, "org.apache.spark.sql.execution.python.UserDefinedPythonTableFunction"
+            )(self._name, wrapped_func, jdt, self.evalType, self.deterministic)
         return judtf
 
     def __call__(self, *args: "ColumnOrName", **kwargs: "ColumnOrName") -> "DataFrame":
