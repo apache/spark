@@ -187,7 +187,7 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
           code".charTypeWriteSideCheck($c, $length);"
       case _ =>
         (c, evPrim) => code"$evPrim = org.apache.spark.sql.catalyst.util.CharVarcharCodegenUtils" +
-          code".charTypeWriteSideCheck(UTF8String.fromString(String.valueOf($c)));"
+          code".charTypeWriteSideCheck(UTF8String.fromString(String.valueOf($c)), $length);"
     }
   }
 
@@ -199,7 +199,7 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
           code".varcharTypeWriteSideCheck($c, $length);"
       case _ =>
         (c, evPrim) => code"$evPrim = org.apache.spark.sql.catalyst.util.CharVarcharCodegenUtils" +
-          code".varcharTypeWriteSideCheck(UTF8String.fromString(String.valueOf($c)));"
+          code".varcharTypeWriteSideCheck(UTF8String.fromString(String.valueOf($c)), $length);"
     }
   }
 

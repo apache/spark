@@ -84,7 +84,7 @@ object RowEncoder extends DataTypeErrorsBase {
         CharEncoder(length)
       case VarcharType(length) if SqlApiConf.get.preserveCharVarcharTypeInfo =>
         VarcharEncoder(length)
-      case _: StringType => StringEncoder
+      case s: StringType if StringHelper.isPlainString(s) => StringEncoder
       case TimestampType if SqlApiConf.get.datetimeJava8ApiEnabled => InstantEncoder(lenient)
       case TimestampType => TimestampEncoder(lenient)
       case TimestampNTZType => LocalDateTimeEncoder

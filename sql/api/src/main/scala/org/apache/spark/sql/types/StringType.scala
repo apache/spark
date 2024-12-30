@@ -160,13 +160,9 @@ case object StringHelper extends PartialOrdering[StringConstraint] {
   }
 
   def getConstraint(s: StringType): StringConstraint =
-    if (SqlApiConf.get.preserveCharVarcharTypeInfo) {
-      s.constraint
-    } else {
-      s match {
-        case st @ (CharType(_) | VarcharType(_)) => st.constraint
-        case _ => NoConstraint
-      }
+    s match {
+      case st @ (CharType(_) | VarcharType(_)) => st.constraint
+      case _ => NoConstraint
     }
 
   def isPlainString(s: StringType): Boolean = equiv(getConstraint(s), NoConstraint)
