@@ -31,8 +31,8 @@ import java.util.concurrent.atomic.AtomicReference
  * @note
  * This helper class has additional requirements on the compute function:
  *   1) The compute function MUST not return null;
- *   2) The compute function MUST be deterministic;
- *   3) This class won't cache the failure.
+ *   2) The computation failure is not cached.
+ *
  * @note
  *   Scala 3 uses a different implementation of lazy vals which doesn't have this problem.
  *   Please refer to <a
