@@ -77,7 +77,7 @@ import org.apache.spark.sql.execution.stat.StatFunctions
 import org.apache.spark.sql.execution.streaming.GroupStateImpl.groupStateTimeoutFromString
 import org.apache.spark.sql.execution.streaming.StreamingQueryWrapper
 import org.apache.spark.sql.expressions.{Aggregator, ReduceAggregator, SparkUserDefinedFunction, UserDefinedAggregator, UserDefinedFunction}
-import org.apache.spark.sql.internal.{CatalogImpl, MergeIntoWriterImpl, TypedAggUtils}
+import org.apache.spark.sql.internal.{CatalogImpl, MergeIntoWriterImpl, TypedAggUtils, UserDefinedFunctionUtils}
 import org.apache.spark.sql.streaming.{GroupStateTimeout, OutputMode, StreamingQuery, StreamingQueryListener, StreamingQueryProgress, Trigger}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -1727,34 +1727,36 @@ class SparkConnectPlanner(
   }
 
   /**
-   * Translates a Scala user-defined function from proto to the Catalyst expression.
+   * Translates a Scala user-defined function or aggregator from proto to the corresponding
+   * Catalyst expression.
    *
    * @param fun
-   *   Proto representation of the Scala user-defined function.
+   *   Proto representation of the Scala user-defined function or aggregator.
    * @return
-   *   ScalaUDF.
+   *   An expression, either a ScalaUDF or a ScalaAggregator.
    */
   private def transformScalaUDF(fun: proto.CommonInlineUserDefinedFunction): Expression = {
-    val udf = fun.getScalarScalaUdf
-    val udfPacket = unpackUdf(fun)
-    if (udf.getAggregate) {
-      ScalaAggregator(
-        transformScalaFunction(fun).asInstanceOf[UserDefinedAggregator[Any, Any, Any]],
-        fun.getArgumentsList.asScala.map(transformExpression).toSeq)
-        .toAggregateExpression()
-    } else {
-      ScalaUDF(
-        function = udfPacket.function,
-        dataType = transformDataType(udf.getOutputType),
-        children = fun.getArgumentsList.asScala.map(transformExpression).toSeq,
-        inputEncoders = udfPacket.inputEncoders.map(e => Try(ExpressionEncoder(e)).toOption),
-        outputEncoder = Option(ExpressionEncoder(udfPacket.outputEncoder)),
-        udfName = Option(fun.getFunctionName),
-        nullable = udf.getNullable,
-        udfDeterministic = fun.getDeterministic)
+    val children = fun.getArgumentsList.asScala.map(transformExpression).toSeq
+    transformScalaFunction(fun) match {
+      case udf: SparkUserDefinedFunction =>
+        UserDefinedFunctionUtils.toScalaUDF(udf, children)
+      case uda: UserDefinedAggregator[_, _, _] =>
+        ScalaAggregator(uda, children).toAggregateExpression()
+      case other =>
+        throw InvalidPlanInput(
+          s"Unsupported UserDefinedFunction implementation: ${other.getClass}")
     }
   }
 
+  /**
+   * Translates a Scala user-defined function or aggregator. from proto to a UserDefinedFunction.
+   *
+   * @param fun
+   *   Proto representation of the Scala user-defined function or aggregator.
+   * @return
+   *   A concrete UserDefinedFunction implementation, either a SparkUserDefinedFunction or a
+   *   UserDefinedAggregator.
+   */
   private def transformScalaFunction(
       fun: proto.CommonInlineUserDefinedFunction): UserDefinedFunction = {
     val udf = fun.getScalarScalaUdf
