@@ -1323,6 +1323,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
       useColumnFamilies: Boolean = false,
       useMultipleValuesPerKey: Boolean = false): RocksDBStateStoreProvider = {
     val provider = new RocksDBStateStoreProvider()
+    val testStateSchemaProvider = new TestStateSchemaProvider
     provider.init(
       storeId,
       keySchema,
@@ -1331,7 +1332,8 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
       useColumnFamilies,
       new StateStoreConf(sqlConf.getOrElse(SQLConf.get)),
       conf,
-      useMultipleValuesPerKey)
+      useMultipleValuesPerKey,
+      stateSchemaProvider = Some(testStateSchemaProvider))
     provider
   }
 

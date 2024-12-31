@@ -66,7 +66,7 @@ class MaintenanceErrorOnCertainPartitionsProvider extends HDFSBackedStateStorePr
       storeConfs: StateStoreConf,
       hadoopConf: Configuration,
       useMultipleValuesPerKey: Boolean = false,
-      stateSchemaBroadcast: Option[StateSchemaBroadcast] = None): Unit = {
+      stateSchemaProvider: Option[StateSchemaProvider] = None): Unit = {
     id = stateStoreId
 
     super.init(
@@ -102,7 +102,7 @@ class FakeStateStoreProviderWithMaintenanceError extends StateStoreProvider {
       storeConfs: StateStoreConf,
       hadoopConf: Configuration,
       useMultipleValuesPerKey: Boolean = false,
-      stateSchemaBroadcast: Option[StateSchemaBroadcast] = None): Unit = {
+      stateSchemaProvider: Option[StateSchemaProvider] = None): Unit = {
     id = stateStoreId
   }
 

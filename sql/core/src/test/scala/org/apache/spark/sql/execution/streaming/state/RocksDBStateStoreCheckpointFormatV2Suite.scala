@@ -146,7 +146,7 @@ class CkptIdCollectingStateStoreProviderWrapper extends StateStoreProvider {
       storeConfs: StateStoreConf,
       hadoopConf: Configuration,
       useMultipleValuesPerKey: Boolean = false,
-      stateSchemaBroadcast: Option[StateSchemaBroadcast] = None): Unit = {
+      stateSchemaProvider: Option[StateSchemaProvider] = None): Unit = {
     innerProvider.init(
       stateStoreId,
       keySchema,

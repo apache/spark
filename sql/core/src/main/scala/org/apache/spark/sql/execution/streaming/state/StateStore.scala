@@ -466,7 +466,7 @@ trait StateStoreProvider {
       storeConfs: StateStoreConf,
       hadoopConf: Configuration,
       useMultipleValuesPerKey: Boolean = false,
-      stateSchemaBroadcast: Option[StateSchemaBroadcast] = None): Unit
+      stateSchemaProvider: Option[StateSchemaProvider] = None): Unit
 
   /**
    * Return the id of the StateStores this provider will generate.
