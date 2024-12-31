@@ -392,11 +392,6 @@ object CTESubstitution extends Rule[LogicalPlan] {
         // but we can't do it here as `PlanWithUnresolvedIdentifier` is a leaf node
         // and may produce `UnresolvedRelation` later. Instead, we delay CTE resolution
         // by moving it to the planBuilder of the corresponding `PlanWithUnresolvedIdentifier`.
-        if (allowRecursion) {
-          p.failAnalysis(
-            errorClass = "RECURSIVE_CTE_WITH_IDENTIFIER",
-            messageParameters = Map.empty)
-        }
         p.copy(planBuilder = (nameParts, children) => {
           p.planBuilder.apply(nameParts, children) match {
             case u @ UnresolvedRelation(Seq(table), _, _) =>
