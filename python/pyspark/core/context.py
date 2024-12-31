@@ -75,6 +75,7 @@ from py4j.java_gateway import is_instance_of, JavaGateway, JavaObject, JVMView
 
 if TYPE_CHECKING:
     from pyspark.accumulators import AccumulatorParam
+    from pyspark.sql.types import DataType, StructType
 
 __all__ = ["SparkContext"]
 
@@ -362,10 +363,14 @@ class SparkContext:
 
         # Create a temporary directory inside spark.local.dir:
         assert self._jvm is not None
-        local_dir = self._jvm.org.apache.spark.util.Utils.getLocalDir(self._jsc.sc().conf())
-        self._temp_dir = self._jvm.org.apache.spark.util.Utils.createTempDir(
-            local_dir, "pyspark"
-        ).getAbsolutePath()
+        local_dir = getattr(self._jvm, "org.apache.spark.util.Utils").getLocalDir(
+            self._jsc.sc().conf()
+        )
+        self._temp_dir = (
+            getattr(self._jvm, "org.apache.spark.util.Utils")
+            .createTempDir(local_dir, "pyspark")
+            .getAbsolutePath()
+        )
 
         # profiling stats collected for each PythonRDD
         if (
@@ -1740,9 +1745,9 @@ class SparkContext:
         assert gw is not None
         jvm = SparkContext._jvm
         assert jvm is not None
-        jrdd_cls = jvm.org.apache.spark.api.java.JavaRDD
-        jpair_rdd_cls = jvm.org.apache.spark.api.java.JavaPairRDD
-        jdouble_rdd_cls = jvm.org.apache.spark.api.java.JavaDoubleRDD
+        jrdd_cls = getattr(jvm, "org.apache.spark.api.java.JavaRDD")
+        jpair_rdd_cls = getattr(jvm, "org.apache.spark.api.java.JavaPairRDD")
+        jdouble_rdd_cls = getattr(jvm, "org.apache.spark.api.java.JavaDoubleRDD")
         if is_instance_of(gw, rdds[0]._jrdd, jrdd_cls):
             cls = jrdd_cls
         elif is_instance_of(gw, rdds[0]._jrdd, jpair_rdd_cls):
@@ -2111,7 +2116,7 @@ class SparkContext:
         if not isinstance(storageLevel, StorageLevel):
             raise TypeError("storageLevel must be of type pyspark.StorageLevel")
         assert self._jvm is not None
-        newStorageLevel = self._jvm.org.apache.spark.storage.StorageLevel
+        newStorageLevel = getattr(self._jvm, "org.apache.spark.storage.StorageLevel")
         return newStorageLevel(
             storageLevel.useDisk,
             storageLevel.useMemory,
@@ -2618,6 +2623,16 @@ class SparkContext:
                 errorClass="CONTEXT_ONLY_VALID_ON_DRIVER",
                 messageParameters={},
             )
+
+    def _to_ddl(self, struct: "StructType") -> str:
+        assert self._jvm is not None
+        return self._jvm.PythonSQLUtils.jsonToDDL(struct.json())
+
+    def _parse_ddl(self, ddl: str) -> "DataType":
+        from pyspark.sql.types import _parse_datatype_json_string
+
+        assert self._jvm is not None
+        return _parse_datatype_json_string(self._jvm.PythonSQLUtils.ddlToJson(ddl))
 
 
 def _test() -> None:

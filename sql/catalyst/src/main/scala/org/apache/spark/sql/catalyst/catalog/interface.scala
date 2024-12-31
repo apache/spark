@@ -559,7 +559,8 @@ case class CatalogTable(
         map.put("View Catalog and Namespace", viewCatalogAndNamespace.quoted)
       }
       if (viewQueryColumnNames.nonEmpty) {
-        map.put("View Query Output Columns", viewQueryColumnNames.mkString("[", ", ", "]"))
+        map.put("View Query Output Columns",
+          viewQueryColumnNames.map(quoteIdentifier).mkString("[", ", ", "]"))
       }
     }
 

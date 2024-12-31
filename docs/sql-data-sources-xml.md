@@ -19,7 +19,7 @@ license: |
   limitations under the License.
 ---
 
-Spark SQL provides `spark.read().xml("file_1_path","file_2_path")` to read a file or directory of files in XML format into a Spark DataFrame, and `dataframe.write().xml("path")` to write to a xml file. When reading a XML file, the `rowTag` option must be specified to indicate the XML element that maps to a `DataFrame row`. The option() function can be used to customize the behavior of reading or writing, such as controlling behavior of the XML attributes, XSD validation, compression, and so on.
+Spark SQL provides `spark.read().xml("file_1_path","file_2_path")` to read a file or directory of files in XML format into a Spark DataFrame, and `dataframe.write().xml("path")` to write to a xml file. The `rowTag` option must be specified to indicate the XML element that maps to a `DataFrame row`. The option() function can be used to customize the behavior of reading or writing, such as controlling behavior of the XML attributes, XSD validation, compression, and so on.
 
 <div class="codetabs">
 
@@ -61,7 +61,7 @@ Data source options of XML can be set via:
         <code><xmp><books><book></book>...</books></xmp></code>
         the appropriate value would be book. This is a required option for both read and write.
     </td>
-    <td>read</td>
+    <td>read/write</td>
   </tr>
 
   <tr>

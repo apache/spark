@@ -26,7 +26,12 @@ import pandas as pd
 from pyspark import pandas as ps
 from pyspark.testing.pandasutils import PandasOnSparkTestCase, TestUtils
 from pyspark.testing.sqlutils import SQLTestUtils
-from pyspark.testing.utils import have_jinja2, jinja2_requirement_message
+from pyspark.testing.utils import (
+    have_openpyxl,
+    openpyxl_requirement_message,
+    have_jinja2,
+    jinja2_requirement_message,
+)
 
 
 class DataFrameConversionMixin:
@@ -87,6 +92,7 @@ class DataFrameConversionMixin:
             "expected": pd.read_excel(pandas_location, index_col=0),
         }
 
+    @unittest.skipIf(not have_openpyxl, openpyxl_requirement_message)
     def test_to_excel(self):
         with self.temp_dir() as dirpath:
             pandas_location = dirpath + "/" + "output1.xlsx"

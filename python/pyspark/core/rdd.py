@@ -5044,7 +5044,7 @@ class RDD(Generic[T_co]):
         else:
             assert self.ctx._jvm is not None
 
-            builder = self.ctx._jvm.org.apache.spark.resource.ResourceProfileBuilder()
+            builder = getattr(self.ctx._jvm, "org.apache.spark.resource.ResourceProfileBuilder")()
             ereqs = ExecutorResourceRequests(self.ctx._jvm, profile._executor_resource_requests)
             treqs = TaskResourceRequests(self.ctx._jvm, profile._task_resource_requests)
             builder.require(ereqs._java_executor_resource_requests)
