@@ -21,9 +21,6 @@ package org.apache.spark.util
  * threads are trying to initialize it concurrently.
  * This may be helpful for avoiding deadlocks in certain scenarios while extract-once
  * is not a hard requirement.
- * The main difference between this and [[TransientBestEffortLazyVal]] is that:
- * [[BestEffortLazyVal]] serializes the cached value after computation, while
- * [[TransientBestEffortLazyVal]] always serializes the compute function.
  *
  * @note
  * This helper class has additional requirements on the compute function:

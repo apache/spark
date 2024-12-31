@@ -21,13 +21,15 @@ package org.apache.spark.util
  * threads are trying to initialize it concurrently.
  * This may be helpful for avoiding deadlocks in certain scenarios while extract-once
  * is not a hard requirement.
+ * The main difference between this and [[BestEffortLazyVal]] is that:
+ * [[BestEffortLazyVal]] serializes the cached value after computation, while
+ * [[TransientBestEffortLazyVal]] always serializes the compute function.
  *
  * @note
  * This helper class has additional requirements on the compute function:
  *   1) The compute function MUST not return null;
  *   2) The compute function MUST be deterministic;
  *   3) This class won't cache the failure.
- *
  * @note
  *   Scala 3 uses a different implementation of lazy vals which doesn't have this problem.
  *   Please refer to <a
