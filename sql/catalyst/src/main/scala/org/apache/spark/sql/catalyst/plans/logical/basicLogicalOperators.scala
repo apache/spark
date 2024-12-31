@@ -864,7 +864,7 @@ case class UnresolvedWith(
  *                                   pushdown to help ensure rule idempotency.
  * @param underSubquery If true, it means we don't need to add a shuffle for this CTE relation as
  *                      subquery reuse will be applied to reuse CTE relation output.
- * @param recursive If true, then this CTE Definition is recursive - it contains a self-reference.
+ * @param recursiveArg If true, then this CTE Definition is recursive - it contains a self-reference
  * @param recursionAnchor A helper plan node that temporary stores the anchor term of recursive
  *                        definitions. In the beginning of recursive resolution the `ResolveWithCTE`
  *                        rule updates this parameter and once it is resolved the same rule resolves
@@ -875,7 +875,7 @@ case class CTERelationDef(
     id: Long = CTERelationDef.newId,
     originalPlanWithPredicates: Option[(LogicalPlan, Seq[Expression])] = None,
     underSubquery: Boolean = false,
-    recursive: Boolean = false,
+    recursiveArg: Boolean = false,
     recursionAnchor: Option[LogicalPlan] = None) extends UnaryNode {
 
   final override val nodePatterns: Seq[TreePattern] = Seq(CTE)
@@ -884,6 +884,10 @@ case class CTERelationDef(
     copy(child = newChild)
 
   override def output: Seq[Attribute] = if (resolved) child.output else Nil
+
+  lazy val recursive: Boolean = child.exists(
+    (p: LogicalPlan) => p.isInstanceOf[CTERelationRef] && p.asInstanceOf[CTERelationRef].recursive
+  )
 }
 
 object CTERelationDef {
