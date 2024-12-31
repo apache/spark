@@ -236,7 +236,7 @@ class TransformWithListStateTTLSuite extends TransformWithStateTTLTest
         // The number of updated rows is the total across the last time assertNumStateRows
         // was called, and we only update numRowsUpdated for primary key updates. We ran 6 batches
         // and each wrote 3 primary keys, so the total number of updated rows is 6 * 3 = 18.
-        assertNumStateRows(total = 24, updated = 18)
+        assertNumStateRows(total = 10, updated = 18)
       )
     }
   }
@@ -552,7 +552,7 @@ class TransformWithListStateTTLSuite extends TransformWithStateTTLTest
           //
           // It's important to check with assertNumStateRows, since the InputEvents
           // only return values for the current grouping key, not the entirety of RocksDB.
-          assertNumStateRows(total = 4, updated = 4),
+          assertNumStateRows(total = 1, updated = 4),
 
           // The k1 calls should both return no values. However, the k2 calls should return
           // one record each. We put these into one AddData call since we want them all to
