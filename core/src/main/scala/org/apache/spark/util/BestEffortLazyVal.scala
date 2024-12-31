@@ -44,6 +44,8 @@ private[spark] class BestEffortLazyVal[T <: AnyRef](
   def apply(): T = {
     val value = cached.get()
     if (value != null) {
+      // The value has been cached, so null the compute function
+      this.compute = null
       value
     } else {
       val newValue = compute()
@@ -55,7 +57,7 @@ private[spark] class BestEffortLazyVal[T <: AnyRef](
 
   @throws(classOf[IOException])
   private def writeObject(oos: ObjectOutputStream): Unit = Utils.tryOrIOException {
-    if (cached.get() != null) {
+    if (this.compute != null && cached.get() != null) {
       // The value has been cached, so null the compute function
       this.compute = null
     }
