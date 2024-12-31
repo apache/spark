@@ -15329,9 +15329,9 @@ def regexp_count(str: "ColumnOrName", regexp: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    str : :class:`~pyspark.sql.Column` or str
+    str : :class:`~pyspark.sql.Column` or column name
         target column to work on.
-    regexp : :class:`~pyspark.sql.Column` or str
+    regexp : :class:`~pyspark.sql.Column` or column name
         regex pattern to apply.
 
     Returns
@@ -15341,12 +15341,15 @@ def regexp_count(str: "ColumnOrName", regexp: "ColumnOrName") -> Column:
 
     Examples
     --------
+    >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([("1a 2b 14m", r"\d+")], ["str", "regexp"])
-    >>> df.select(regexp_count('str', lit(r'\d+')).alias('d')).collect()
+    >>> df.select(sf.regexp_count('str', lit(r'\d+')).alias('d')).collect()
     [Row(d=3)]
-    >>> df.select(regexp_count('str', lit(r'mmm')).alias('d')).collect()
+    >>> df.select(sf.regexp_count('str', lit(r'mmm')).alias('d')).collect()
     [Row(d=0)]
-    >>> df.select(regexp_count("str", col("regexp")).alias('d')).collect()
+    >>> df.select(sf.regexp_count("str", col("regexp")).alias('d')).collect()
+    [Row(d=3)]
+    >>> df.select(sf.regexp_count(col('str'), "regexp").alias('d')).collect()
     [Row(d=3)]
     """
     return _invoke_function_over_columns("regexp_count", str, regexp)
@@ -15364,7 +15367,7 @@ def regexp_extract(str: "ColumnOrName", pattern: str, idx: int) -> Column:
 
     Parameters
     ----------
-    str : :class:`~pyspark.sql.Column` or str
+    str : :class:`~pyspark.sql.Column` or column name
         target column to work on.
     pattern : str
         regex pattern to apply.
@@ -15376,16 +15379,21 @@ def regexp_extract(str: "ColumnOrName", pattern: str, idx: int) -> Column:
     :class:`~pyspark.sql.Column`
         matched value specified by `idx` group id.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.regexp_extract_all`
+
     Examples
     --------
+    >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([('100-200',)], ['str'])
-    >>> df.select(regexp_extract('str', r'(\d+)-(\d+)', 1).alias('d')).collect()
+    >>> df.select(sf.regexp_extract('str', r'(\d+)-(\d+)', 1).alias('d')).collect()
     [Row(d='100')]
     >>> df = spark.createDataFrame([('foo',)], ['str'])
-    >>> df.select(regexp_extract('str', r'(\d+)', 1).alias('d')).collect()
+    >>> df.select(sf.regexp_extract('str', r'(\d+)', 1).alias('d')).collect()
     [Row(d='')]
     >>> df = spark.createDataFrame([('aaaac',)], ['str'])
-    >>> df.select(regexp_extract('str', '(a+)(b)?(c)', 2).alias('d')).collect()
+    >>> df.select(sf.regexp_extract(col('str'), '(a+)(b)?(c)', 2).alias('d')).collect()
     [Row(d='')]
     """
     from pyspark.sql.classic.column import _to_java_column
@@ -15406,9 +15414,9 @@ def regexp_extract_all(
 
     Parameters
     ----------
-    str : :class:`~pyspark.sql.Column` or str
+    str : :class:`~pyspark.sql.Column` or column name
         target column to work on.
-    regexp : :class:`~pyspark.sql.Column` or str
+    regexp : :class:`~pyspark.sql.Column` or column name
         regex pattern to apply.
     idx : int, optional
         matched group id.
@@ -15418,16 +15426,23 @@ def regexp_extract_all(
     :class:`~pyspark.sql.Column`
         all strings in the `str` that match a Java regex and corresponding to the regex group index.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.regexp_extract`
+
     Examples
     --------
+    >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([("100-200, 300-400", r"(\d+)-(\d+)")], ["str", "regexp"])
-    >>> df.select(regexp_extract_all('str', lit(r'(\d+)-(\d+)')).alias('d')).collect()
+    >>> df.select(sf.regexp_extract_all('str', lit(r'(\d+)-(\d+)')).alias('d')).collect()
     [Row(d=['100', '300'])]
-    >>> df.select(regexp_extract_all('str', lit(r'(\d+)-(\d+)'), 1).alias('d')).collect()
+    >>> df.select(sf.regexp_extract_all('str', lit(r'(\d+)-(\d+)'), 1).alias('d')).collect()
     [Row(d=['100', '300'])]
-    >>> df.select(regexp_extract_all('str', lit(r'(\d+)-(\d+)'), 2).alias('d')).collect()
+    >>> df.select(sf.regexp_extract_all('str', lit(r'(\d+)-(\d+)'), 2).alias('d')).collect()
     [Row(d=['200', '400'])]
-    >>> df.select(regexp_extract_all('str', col("regexp")).alias('d')).collect()
+    >>> df.select(sf.regexp_extract_all('str', col("regexp")).alias('d')).collect()
+    [Row(d=['100', '300'])]
+    >>> df.select(sf.regexp_extract_all(col('str'), "regexp").alias('d')).collect()
     [Row(d=['100', '300'])]
     """
     if idx is None:
