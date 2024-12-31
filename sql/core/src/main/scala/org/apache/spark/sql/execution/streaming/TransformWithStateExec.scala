@@ -140,7 +140,13 @@ case class TransformWithStateExec(
    * after init is called.
    */
   override def getColFamilySchemas(): Map[String, StateStoreColFamilySchema] = {
-    val columnFamilySchemas = getDriverProcessorHandle().getColumnFamilySchemas
+    val keySchema = keyExpressions.toStructType
+    val columnFamilySchemas = getDriverProcessorHandle().getColumnFamilySchemas ++
+      Map(
+        StateStore.DEFAULT_COL_FAMILY_NAME ->
+          StateStoreColFamilySchema(StateStore.DEFAULT_COL_FAMILY_NAME,
+            0, keyExpressions.toStructType, 0, DUMMY_VALUE_ROW_SCHEMA,
+            Some(NoPrefixKeyStateEncoderSpec(keySchema))))
     closeProcessorHandle()
     columnFamilySchemas
   }

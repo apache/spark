@@ -300,7 +300,11 @@ object SchemaConverters extends Logging {
     }
   }
 
-  def getDefaultValue(dataType: DataType): Any = {
+  /**
+   * Creates default values for Spark SQL data types when converting to Avro.
+   * This ensures fields have appropriate defaults during schema evolution.
+   */
+  private def getDefaultValue(dataType: DataType): Any = {
     def createNestedDefault(st: StructType): java.util.HashMap[String, Any] = {
       val defaultMap = new java.util.HashMap[String, Any]()
       st.fields.foreach { field =>
@@ -310,6 +314,7 @@ object SchemaConverters extends Logging {
     }
 
     dataType match {
+      // Basic types
       case BooleanType => false
       case ByteType | ShortType | IntegerType => 0
       case LongType => 0L
@@ -317,15 +322,19 @@ object SchemaConverters extends Logging {
       case DoubleType => 0.0
       case StringType => ""
       case BinaryType => java.nio.ByteBuffer.allocate(0)
+
+      // Complex types
       case ArrayType(elementType, _) =>
         val defaultArray = new java.util.ArrayList[Any]()
-        defaultArray.add(getDefaultValue(elementType))  // Add one default element
+        defaultArray.add(getDefaultValue(elementType))
         defaultArray
       case MapType(StringType, valueType, _) =>
         val defaultMap = new java.util.HashMap[String, Any]()
-        defaultMap.put("defaultKey", getDefaultValue(valueType))  // Add one default entry
+        defaultMap.put("defaultKey", getDefaultValue(valueType))
         defaultMap
-      case st: StructType => createNestedDefault(st)  // Handle nested structs recursively
+      case st: StructType => createNestedDefault(st)
+
+      // Special types
       case _: DecimalType => java.nio.ByteBuffer.allocate(0)
       case DateType => 0
       case TimestampType => 0L
@@ -335,6 +344,10 @@ object SchemaConverters extends Logging {
     }
   }
 
+  /**
+   * Converts a Spark SQL schema to a corresponding Avro schema.
+   * Handles nested types and adds support for schema evolution.
+   */
   def toAvroType(
       catalystType: DataType,
       nullable: Boolean = false,
@@ -377,7 +390,7 @@ object SchemaConverters extends Logging {
     }
 
     val schema = catalystType match {
-      // Basic types remain the same
+      // Basic types
       case BooleanType => builder.booleanType()
       case ByteType | ShortType | IntegerType => builder.intType()
       case LongType => builder.longType()
@@ -386,7 +399,7 @@ object SchemaConverters extends Logging {
       case StringType => builder.stringType()
       case NullType => builder.nullType()
 
-      // Date and Timestamp types
+      // Date/Timestamp types
       case DateType =>
         LogicalTypes.date().addToSchema(builder.intType())
       case TimestampType =>
@@ -406,7 +419,7 @@ object SchemaConverters extends Logging {
 
       case BinaryType => builder.bytesType()
 
-      // Complex types with improved nesting handling
+      // Complex types
       case ArrayType(elementType, containsNull) =>
         builder.array()
           .items(toAvroType(elementType, containsNull, recordName,

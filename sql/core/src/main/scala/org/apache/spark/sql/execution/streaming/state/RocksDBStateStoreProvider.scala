@@ -418,7 +418,7 @@ private[sql] class RocksDBStateStoreProvider
     }
 
     val dataEncoder = getDataEncoder(
-      "unsaferow",
+      stateStoreEncoding,
       dataEncoderCacheKey,
       keyStateEncoderSpec,
       valueSchema,

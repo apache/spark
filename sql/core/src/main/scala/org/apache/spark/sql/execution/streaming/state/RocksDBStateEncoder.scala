@@ -608,12 +608,12 @@ class AvroStateEncoder(
 
 
   // schema information
-  private val currentKeySchemaId: Short = getStateSchemaBroadcast.getCurrentStateSchemaId(
+  private lazy val currentKeySchemaId: Short = getStateSchemaBroadcast.getCurrentStateSchemaId(
     getColFamilyName,
     isKey = true
   )
 
-  private val currentValSchemaId: Short = getStateSchemaBroadcast.getCurrentStateSchemaId(
+  private lazy val currentValSchemaId: Short = getStateSchemaBroadcast.getCurrentStateSchemaId(
     getColFamilyName,
     isKey = false
   )
