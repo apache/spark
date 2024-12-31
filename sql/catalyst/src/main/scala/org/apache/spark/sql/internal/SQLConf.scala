@@ -4409,6 +4409,7 @@ object SQLConf {
         "implementation.")
       .version("3.0.0")
       .stringConf
+      .transform(_.toLowerCase(Locale.ROOT))
       .createWithDefault("builtin")
 
   object MapKeyDedupPolicy extends Enumeration {
