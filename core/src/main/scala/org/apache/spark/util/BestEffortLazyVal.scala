@@ -16,13 +16,12 @@
  */
 package org.apache.spark.util
 
-import java.io.{IOException, ObjectOutputStream}
 import java.util.concurrent.atomic.AtomicReference
 
 /**
  * A util class to lazily initialize a variable, re-computation is allowed if multiple
  * threads are trying to initialize it concurrently.
- * This may be helpful for avoiding deadlocks in certain scenarios while extract-once
+ * This may be helpful for avoiding deadlocks in certain scenarios while exactly-once
  * is not a hard requirement.
  *
  * @note
@@ -37,30 +36,23 @@ import java.util.concurrent.atomic.AtomicReference
  *   Vals Initialization</a> for more details.
  */
 private[spark] class BestEffortLazyVal[T <: AnyRef](
-    private[this] var compute: () => T) extends Serializable {
+    @volatile private[this] var compute: () => T) extends Serializable {
 
   private[this] val cached: AtomicReference[T] = new AtomicReference(null.asInstanceOf[T])
 
   def apply(): T = {
     val value = cached.get()
     if (value != null) {
-      // The value has been cached, so null the compute function
-      this.compute = null
       value
     } else {
-      val newValue = compute()
-      assert(newValue != null, "compute function cannot return null.")
-      cached.compareAndSet(null.asInstanceOf[T], newValue)
+      val f = compute
+      if (f != null) {
+        val newValue = f()
+        assert(newValue != null, "compute function cannot return null.")
+        cached.compareAndSet(null.asInstanceOf[T], newValue)
+        compute = null  // allow closure to be GC'd
+      }
       cached.get()
     }
-  }
-
-  @throws(classOf[IOException])
-  private def writeObject(oos: ObjectOutputStream): Unit = Utils.tryOrIOException {
-    if (this.compute != null && cached.get() != null) {
-      // The value has been cached, so null the compute function
-      this.compute = null
-    }
-    oos.defaultWriteObject()
   }
 }

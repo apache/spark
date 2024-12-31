@@ -22,7 +22,7 @@ import java.util.concurrent.atomic.AtomicReference
 /**
  * A util class to lazily initialize a variable, re-computation is allowed if multiple
  * threads are trying to initialize it concurrently.
- * This may be helpful for avoiding deadlocks in certain scenarios while extract-once
+ * This may be helpful for avoiding deadlocks in certain scenarios while exactly-once
  * is not a hard requirement.
  * The main difference between this and [[BestEffortLazyVal]] is that:
  * [[BestEffortLazyVal]] serializes the cached value after computation, while
