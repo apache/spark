@@ -157,7 +157,7 @@ object CTESubstitution extends Rule[LogicalPlan] {
         }
         val resolvedCTERelations = resolveCTERelations(relations, isLegacy = true,
           forceInline = false, Seq.empty, cteDefs, allowRecursion)
-        substituteCTE(child, alwaysInline = true, resolvedCTERelations, allowRecursion, None)
+        substituteCTE(child, alwaysInline = true, resolvedCTERelations, None)
     }
   }
 
@@ -221,7 +221,6 @@ object CTESubstitution extends Rule[LogicalPlan] {
           traverseAndSubstituteCTE(child, forceInline, resolvedCTERelations, cteDefs)._1,
           forceInline,
           resolvedCTERelations,
-          allowRecursion,
           None)
         if (firstSubstituted.isEmpty) {
           firstSubstituted = Some(substituted)
@@ -314,7 +313,7 @@ object CTESubstitution extends Rule[LogicalPlan] {
       }
       // CTE definition can reference a previous one or itself if recursion allowed.
       val substituted = substituteCTE(innerCTEResolved, alwaysInline,
-        resolvedCTERelations, allowRecursion, recursiveCTERelation)
+        resolvedCTERelations, recursiveCTERelation)
       val cteRelation = CTERelationDef(substituted)
       if (!alwaysInline) {
         cteDefs += cteRelation
@@ -373,7 +372,6 @@ object CTESubstitution extends Rule[LogicalPlan] {
       plan: LogicalPlan,
       alwaysInline: Boolean,
       cteRelations: Seq[(String, CTERelationDef)],
-      allowRecursion: Boolean,
       recursiveCTERelation: Option[(String, CTERelationDef)]): LogicalPlan = {
     val substituted = plan.resolveOperatorsUpWithPruning(
         _.containsAnyPattern(RELATION_TIME_TRAVEL, UNRESOLVED_RELATION, PLAN_EXPRESSION,
@@ -407,7 +405,7 @@ object CTESubstitution extends Rule[LogicalPlan] {
         other.transformExpressionsWithPruning(_.containsPattern(PLAN_EXPRESSION)) {
           case e: SubqueryExpression =>
             e.withNewPlan(
-              apply(substituteCTE(e.plan, alwaysInline, cteRelations, allowRecursion, None)))
+              apply(substituteCTE(e.plan, alwaysInline, cteRelations, None)))
         }
     }
     substituted
