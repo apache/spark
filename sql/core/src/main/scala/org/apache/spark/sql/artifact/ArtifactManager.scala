@@ -18,6 +18,7 @@
 package org.apache.spark.sql.artifact
 
 import java.io.File
+import java.lang.ref.Cleaner
 import java.net.{URI, URL, URLClassLoader}
 import java.nio.ByteBuffer
 import java.nio.file.{CopyOption, Files, Path, Paths, StandardCopyOption}
@@ -376,7 +377,7 @@ class ArtifactManager(session: SparkSession) extends Logging {
   /**
    * Cleans up all resources specific to this `session`.
    */
-  private[sql] def cleanUpResources(): Unit = {
+  private[sql] def cleanUpResources(): Unit = synchronized {
     logDebug(
       s"Cleaning up resources for session with sessionUUID ${session.sessionUUID}")
 
@@ -400,7 +401,12 @@ class ArtifactManager(session: SparkSession) extends Logging {
     blockManager.removeCache(session.sessionUUID)
 
     // Clean up artifacts folder
-    FileUtils.deleteDirectory(artifactPath.toFile)
+    try {
+      FileUtils.deleteDirectory(artifactPath.toFile)
+    } catch {
+      case e: Exception =>
+        logWarning(s"Failed to delete directory ${artifactPath.toFile}: ${e.getMessage}", e)
+    }
 
     // Clean up internal trackers
     jarsList.clear()
@@ -447,6 +453,12 @@ class ArtifactManager(session: SparkSession) extends Logging {
     }
     fs.copyFromLocalFile(false, true, new FSPath(localPath.toString), destFSPath)
   }
+
+  // The Cleaner and the associated cleanup task
+  private val cleaner: Cleaner = Cleaner.create()
+  private val cleanable = cleaner.register(this, new Runnable {
+    override def run(): Unit = cleanUpResources()
+  })
 }
 
 object ArtifactManager extends Logging {
