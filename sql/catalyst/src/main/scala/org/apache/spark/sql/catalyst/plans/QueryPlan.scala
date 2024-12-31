@@ -55,7 +55,7 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
   /**
    * Returns the set of attributes that are output by this node.
    */
-  def outputSet: AttributeSet = _outputSet.apply()
+  def outputSet: AttributeSet = _outputSet()
 
   private val _outputSet = new TransientBestEffortLazyVal(() => AttributeSet(output))
 
@@ -106,7 +106,7 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
    * Returns true when the all the expressions in the current node as well as all of its children
    * are deterministic
    */
-  def deterministic: Boolean = _deterministic.apply()
+  def deterministic: Boolean = _deterministic()
 
   private val _deterministic = new BestEffortLazyVal[JBoolean](() =>
     expressions.forall(_.deterministic) && children.forall(_.deterministic))
@@ -430,10 +430,10 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
     }
   }
 
-  def schema: StructType = _schema.apply()
+  def schema: StructType = _schema()
 
-  private val _schema: BestEffortLazyVal[StructType] =
-    new BestEffortLazyVal[StructType](() => DataTypeUtils.fromAttributes(output))
+  private val _schema = new BestEffortLazyVal[StructType](
+    () => DataTypeUtils.fromAttributes(output))
 
   /** Returns the output schema in the tree format. */
   def schemaString: String = schema.treeString
@@ -486,7 +486,7 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
   /**
    * All the top-level subqueries of the current plan node. Nested subqueries are not included.
    */
-  def subqueries: Seq[PlanType] = _subqueries.apply()
+  def subqueries: Seq[PlanType] = _subqueries()
 
   private val _subqueries = new TransientBestEffortLazyVal(() =>
     expressions.filter(_.containsPattern(PLAN_EXPRESSION)).flatMap(_.collect {
@@ -628,7 +628,7 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
    * Plan nodes that require special canonicalization should override [[doCanonicalize()]].
    * They should remove expressions cosmetic variations themselves.
    */
-  def canonicalized: PlanType = _canonicalized.apply()
+  def canonicalized: PlanType = _canonicalized()
 
   private val _canonicalized = new TransientBestEffortLazyVal(() => {
     var plan = doCanonicalize()

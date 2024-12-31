@@ -66,4 +66,21 @@ class BestEffortLazyValSuite extends SparkFunSuite {
     }
     assert(e.getMessage.contains("java.lang.Object"))
   }
+
+  test("BestEffortLazyVal val is serializable: failure in compute function") {
+    val lazyval = new BestEffortLazyVal[String](() => throw new RuntimeException("test"))
+
+    // BestEffortLazyVal serializes the compute function before first invocation
+    val oos = new ObjectOutputStream(new ByteArrayOutputStream())
+    oos.writeObject(lazyval)
+
+    val e = intercept[RuntimeException] {
+      val v = lazyval()
+    }
+    assert(e.getMessage.contains("test"))
+
+    // BestEffortLazyVal still serializes the compute function after initialization failure
+    val oos2 = new ObjectOutputStream(new ByteArrayOutputStream())
+    oos2.writeObject(lazyval)
+  }
 }
