@@ -17,14 +17,16 @@
 package org.apache.spark.util
 
 /**
- * Construct to lazily initialize a variable, re-computation is allowed if multiple threads are
- * trying to initialize it concurrently.
- * This may be helpful for avoiding deadlocks in certain scenarios.
+ * A util class to lazily initialize a variable, re-computation is allowed if multiple
+ * threads are trying to initialize it concurrently.
+ * This may be helpful for avoiding deadlocks in certain scenarios while extract-once
+ * is not a hard requirement.
  *
  * @note
  * This helper class has additional requirements on the compute function:
  *   1) The compute function MUST not return null;
- *   2) The compute function MUST be deterministic.
+ *   2) The compute function MUST be deterministic;
+ *   3) This class won't cache the failure.
  *
  * @note
  *   Scala 3 uses a different implementation of lazy vals which doesn't have this problem.
