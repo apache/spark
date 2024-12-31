@@ -770,23 +770,18 @@ class ParametersSuite extends QueryTest with SharedSparkSession with PlanTest {
     checkAnswer(spark.sql(query("?"), args = Array("t1")), Row(1))
   }
 
-  test("SPARK-24497: parameterized identifier referencing a recursive CTE") {
+  test("SPARK-50636: parameterized identifier calling a recursive CTE") {
     def query(p: String): String = {
       s"""
-         |WITH t1(n) AS (SELECT 1 UNION ALL SELECT n+1 FROM t1 WHERE n<5)
-         |SELECT * FROM IDENTIFIER($p)""".stripMargin
+        |WITH RECURSIVE t1(n) AS (SELECT 1 UNION ALL SELECT n+1 FROM t1 WHERE n<5)
+        |SELECT * FROM IDENTIFIER($p)""".stripMargin
     }
-
-    // checkAnswer(spark.sql(query(":cte"), args = Map("cte" -> "t1")),
-    //   Seq(Row(1), Row(2), Row(3), Row(4), Row(5)))
-    // checkAnswer(spark.sql(query("?"), args = Array("t1")),
-    //   Seq(Row(1), Row(2), Row(3), Row(4), Row(5)))
 
     checkError(
       exception = intercept[AnalysisException] {
         spark.sql(query(":cte"), args = Map("cte" -> "t1")).show()
       },
-      condition = "TABLE_OR_VIEW_NOT_FOUND",
+      condition = "RECURSIVE_CTE_WITH_IDENTIFIER",
       parameters = Map("relationName" -> "`t1`"),
       context = ExpectedContext(
         fragment = "t1",
@@ -797,7 +792,37 @@ class ParametersSuite extends QueryTest with SharedSparkSession with PlanTest {
       exception = intercept[AnalysisException] {
         spark.sql(query("?"), args = Array("t1")).show()
       },
-      condition = "TABLE_OR_VIEW_NOT_FOUND",
+      condition = "RECURSIVE_CTE_WITH_IDENTIFIER",
+      parameters = Map("relationName" -> "`t1`"),
+      context = ExpectedContext(
+        fragment = "t1",
+        start = 51,
+        stop = 52)
+    )
+  }
+  test("SPARK-50636: parameterized identifier inside a recursive CTE") {
+    def query(p: String): String = {
+      s"""
+        |WITH RECURSIVE t1(n) AS (SELECT 1 UNION ALL SELECT n+1 FROM IDENTIFIER($p) WHERE n<5)
+        |SELECT * FROM t1""".stripMargin
+    }
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.sql(query(":cte"), args = Map("cte" -> "t1"))
+      },
+      condition = "RECURSIVE_CTE_WITH_IDENTIFIER",
+      parameters = Map("relationName" -> "`t1`"),
+      context = ExpectedContext(
+        fragment = "t1",
+        start = 51,
+        stop = 52)
+    )
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.sql(query("?"), args = Array("t1"))
+      },
+      condition = "RECURSIVE_CTE_WITH_IDENTIFIER",
       parameters = Map("relationName" -> "`t1`"),
       context = ExpectedContext(
         fragment = "t1",
