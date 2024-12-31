@@ -1111,6 +1111,16 @@ class SparkSession:
 
         return creator, (self._session_id,)
 
+    def _to_ddl(self, struct: StructType) -> str:
+        ddl = self._client._analyze(method="json_to_ddl", json_string=struct.json()).ddl_string
+        assert ddl is not None
+        return ddl
+
+    def _parse_ddl(self, ddl: str) -> DataType:
+        dt = self._client._analyze(method="ddl_parse", ddl_string=ddl).parsed
+        assert dt is not None
+        return dt
+
 
 SparkSession.__doc__ = PySparkSession.__doc__
 
