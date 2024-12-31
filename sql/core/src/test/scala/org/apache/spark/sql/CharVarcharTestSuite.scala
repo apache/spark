@@ -695,6 +695,42 @@ trait CharVarcharTestSuite extends QueryTest with SQLTestUtils {
       }
     }
   }
+
+  test(s"insert string literal into char/varchar column when " +
+    s"${SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key} is true") {
+    withSQLConf(SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true") {
+      withTable("t") {
+        sql(s"CREATE TABLE t(c1 CHAR(5), c2 VARCHAR(5)) USING $format")
+        sql("INSERT INTO t VALUES ('1234', '1234')")
+        checkAnswer(spark.table("t"), Row("1234 ", "1234"))
+        assertLengthCheckFailure("INSERT INTO t VALUES ('123456', '1')")
+        assertLengthCheckFailure("INSERT INTO t VALUES ('1', '123456')")
+      }
+    }
+  }
+
+  test(s"insert from string column into char/varchar column when " +
+    s"${SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key} is true") {
+    withSQLConf(SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true") {
+      withTable("a", "b") {
+        sql(s"CREATE TABLE a AS SELECT '1234' as c1, '1234' as c2")
+        sql(s"CREATE TABLE b(c1 CHAR(5), c2 VARCHAR(5)) USING $format")
+        sql("INSERT INTO b SELECT * FROM a")
+        checkAnswer(spark.table("b"), Row("1234 ", "1234"))
+        spark.table("b").show()
+      }
+    }
+  }
+
+  test("implicitly cast char/varchar into atomics") {
+    Seq("char", "varchar").foreach { typ =>
+      withSQLConf((SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key, "true")) {
+        withTable("t") {
+          checkAnswer(sql(s"select not('false'::$typ(5)), 1 + ('4'::$typ(5))"), Row(true, 5))
+        }
+      }
+    }
+  }
 }
 
 // Some basic char/varchar tests which doesn't rely on table implementation.

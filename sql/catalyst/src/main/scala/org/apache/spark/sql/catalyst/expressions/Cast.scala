@@ -320,7 +320,7 @@ object Cast extends QueryErrorsBase {
     case _ if from == to => true
     case (NullType, _) => true
     case (_: NumericType, _: NumericType) => true
-    case (s1: StringType, s2: StringType) => StringHelper.isMoreConstrained(s1, s2)
+    case (_: StringType, _: StringType) => true
     case (_: AtomicType, s: StringType) if StringHelper.isPlainString(s) => true
     case (_: CalendarIntervalType, s: StringType) if StringHelper.isPlainString(s) => true
     case (_: DatetimeType, _: DatetimeType) => true
