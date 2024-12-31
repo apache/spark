@@ -779,7 +779,7 @@ class ParametersSuite extends QueryTest with SharedSparkSession with PlanTest {
 
     checkError(
       exception = intercept[AnalysisException] {
-        spark.sql(query(":cte"), args = Map("cte" -> "t1")).show()
+        spark.sql(query(":cte"), args = Map("cte" -> "t1"))
       },
       condition = "RECURSIVE_CTE_WITH_IDENTIFIER",
       parameters = Map("relationName" -> "`t1`"),
@@ -790,7 +790,7 @@ class ParametersSuite extends QueryTest with SharedSparkSession with PlanTest {
     )
     checkError(
       exception = intercept[AnalysisException] {
-        spark.sql(query("?"), args = Array("t1")).show()
+        spark.sql(query("?"), args = Array("t1"))
       },
       condition = "RECURSIVE_CTE_WITH_IDENTIFIER",
       parameters = Map("relationName" -> "`t1`"),
