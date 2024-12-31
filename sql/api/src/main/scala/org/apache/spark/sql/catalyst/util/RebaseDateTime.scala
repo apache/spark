@@ -290,7 +290,7 @@ object RebaseDateTime {
     val file = SparkClassUtils.getSparkClassLoader.getResource(fileName)
     val jsonRebaseRecords = mapper.readValue[Seq[JsonRebaseRecord]](file)
     val hashMap = new HashMap[String, RebaseInfo]
-    hashMap.sizeHint((3 * jsonRebaseRecords.size) / 2)
+    hashMap.sizeHint(jsonRebaseRecords.size)
     jsonRebaseRecords.foreach { jsonRecord =>
       val rebaseInfo = RebaseInfo(jsonRecord.switches, jsonRecord.diffs)
       var i = 0
