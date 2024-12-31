@@ -1563,16 +1563,9 @@ class StructType(DataType):
 
             session = SparkSession.getActiveSession()
             assert session is not None
-            return session._client._analyze(  # type: ignore[return-value]
-                method="json_to_ddl", json_string=self.json()
-            ).ddl_string
-
+            return session._to_ddl(self)
         else:
-            from py4j.java_gateway import JVMView
-
-            sc = get_active_spark_context()
-            assert sc._jvm is not None
-            return cast(JVMView, sc._jvm).PythonSQLUtils.jsonToDDL(self.json())
+            return get_active_spark_context()._to_ddl(self)
 
 
 class VariantType(AtomicType):
@@ -1907,18 +1900,9 @@ def _parse_datatype_string(s: str) -> DataType:
     if is_remote():
         from pyspark.sql.connect.session import SparkSession
 
-        return cast(
-            DataType,
-            SparkSession.active()._client._analyze(method="ddl_parse", ddl_string=s).parsed,
-        )
-
+        return SparkSession.active()._parse_ddl(s)
     else:
-        from py4j.java_gateway import JVMView
-
-        sc = get_active_spark_context()
-        return _parse_datatype_json_string(
-            cast(JVMView, sc._jvm).org.apache.spark.sql.api.python.PythonSQLUtils.ddlToJson(s)
-        )
+        return get_active_spark_context()._parse_ddl(s)
 
 
 def _parse_datatype_json_string(json_string: str) -> DataType:
