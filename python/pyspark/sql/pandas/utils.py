@@ -124,33 +124,3 @@ def require_minimum_numpy_version() -> None:
                 "current_version": str(numpy.__version__),
             },
         )
-
-
-def require_minimum_plotly_version() -> None:
-    """Raise ImportError if plotly is not installed"""
-    minimum_plotly_version = "4.8"
-
-    try:
-        import plotly
-
-        have_plotly = True
-    except ImportError as error:
-        have_plotly = False
-        raised_error = error
-    if not have_plotly:
-        raise PySparkImportError(
-            errorClass="PACKAGE_NOT_INSTALLED",
-            messageParameters={
-                "package_name": "Plotly",
-                "minimum_version": str(minimum_plotly_version),
-            },
-        ) from raised_error
-    if LooseVersion(plotly.__version__) < LooseVersion(minimum_plotly_version):
-        raise PySparkImportError(
-            errorClass="UNSUPPORTED_PACKAGE_VERSION",
-            messageParameters={
-                "package_name": "Plotly",
-                "minimum_version": str(minimum_plotly_version),
-                "current_version": str(plotly.__version__),
-            },
-        )

@@ -22,8 +22,8 @@ from types import ModuleType
 from pyspark.errors import PySparkValueError
 from pyspark.sql import Column, functions as F
 from pyspark.sql.internal import InternalFunction as SF
-from pyspark.sql.pandas.utils import require_minimum_pandas_version, require_minimum_plotly_version
-from pyspark.sql.utils import NumpyHelper
+from pyspark.sql.pandas.utils import require_minimum_pandas_version
+from pyspark.sql.utils import NumpyHelper, require_minimum_plotly_version
 
 if TYPE_CHECKING:
     from pyspark.sql import DataFrame, Row
