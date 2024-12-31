@@ -1438,7 +1438,7 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
         (VarcharType(5), IntegerType) -> ("123 ", 123),
         (VarcharType(5), LongType) -> ("123", 123L),
         (IntegerType, CharType(5)) -> (123, "123  "),
-        (LongType, VarcharType(5)) -> (123L, "123"),
+        (LongType, VarcharType(5)) -> (123L, "123")
       ).foreach { case ((fromType, toType), (from, to)) =>
         checkEvaluation(cast(Literal.create(from, fromType), toType), to)
       }
