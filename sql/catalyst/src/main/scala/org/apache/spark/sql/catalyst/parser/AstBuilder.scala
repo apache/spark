@@ -43,7 +43,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
 import org.apache.spark.sql.catalyst.trees.TreePattern.PARAMETER
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
-import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, DateTimeUtils, IntervalUtils, SparkParserUtils}
+import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, CollationFactory, DateTimeUtils, IntervalUtils, SparkParserUtils}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{convertSpecialDate, convertSpecialTimestamp, convertSpecialTimestampNTZ, getZoneId, stringToDate, stringToTimestamp, stringToTimestampWithoutTimeZone}
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, SupportsNamespaces, TableCatalog, TableWritePrivilege}
 import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition
@@ -2763,20 +2763,6 @@ class AstBuilder extends DataTypeAstBuilder
    */
   override def visitCast(ctx: CastContext): Expression = withOrigin(ctx) {
     val rawDataType = typedVisit[DataType](ctx.dataType())
-    ctx.dataType() match {
-      case context: PrimitiveDataTypeContext =>
-        val typeCtx = context.`type`()
-        if (typeCtx.start.getType == STRING) {
-          typeCtx.children.asScala.toSeq match {
-            case Seq(_, cctx: CollateClauseContext) =>
-              throw QueryParsingErrors.dataTypeUnsupportedError(
-                rawDataType.typeName,
-                ctx.dataType().asInstanceOf[PrimitiveDataTypeContext])
-            case _ =>
-          }
-        }
-      case _ =>
-    }
     val dataType = CharVarcharUtils.replaceCharVarcharWithStringForCast(rawDataType)
     ctx.name.getType match {
       case SqlBaseParser.CAST =>
@@ -2796,20 +2782,6 @@ class AstBuilder extends DataTypeAstBuilder
    */
   override def visitCastByColon(ctx: CastByColonContext): Expression = withOrigin(ctx) {
     val rawDataType = typedVisit[DataType](ctx.dataType())
-    ctx.dataType() match {
-      case context: PrimitiveDataTypeContext =>
-        val typeCtx = context.`type`()
-        if (typeCtx.start.getType == STRING) {
-          typeCtx.children.asScala.toSeq match {
-            case Seq(_, cctx: CollateClauseContext) =>
-              throw QueryParsingErrors.dataTypeUnsupportedError(
-                rawDataType.typeName,
-                ctx.dataType().asInstanceOf[PrimitiveDataTypeContext])
-            case _ =>
-          }
-        }
-      case _ =>
-    }
     val dataType = CharVarcharUtils.replaceCharVarcharWithStringForCast(rawDataType)
     val cast = Cast(expression(ctx.primaryExpression), dataType)
     cast.setTagValue(Cast.USER_SPECIFIED_CAST, ())
@@ -3897,6 +3869,16 @@ class AstBuilder extends DataTypeAstBuilder
     ctx.asScala.headOption.map(visitCommentSpec)
   }
 
+  protected def visitCollationSpecList(
+      ctx: java.util.List[CollationSpecContext]): Option[String] = {
+    ctx.asScala.headOption.map(visitCollationSpec)
+  }
+
+  override def visitCollationSpec(ctx: CollationSpecContext): String = withOrigin(ctx) {
+    val collationName = ctx.identifier.getText
+    CollationFactory.fetchCollation(collationName).collationName
+  }
+
   /**
    * Create a [[BucketSpec]].
    */
@@ -4028,6 +4010,7 @@ class AstBuilder extends DataTypeAstBuilder
    * - options
    * - location
    * - comment
+   * - collation
    * - serde
    * - clusterBySpec
    *
@@ -4036,8 +4019,8 @@ class AstBuilder extends DataTypeAstBuilder
    * types like `i INT`, which should be appended to the existing table schema.
    */
   type TableClauses = (
-      Seq[Transform], Seq[ColumnDefinition], Option[BucketSpec], Map[String, String],
-      OptionList, Option[String], Option[String], Option[SerdeInfo], Option[ClusterBySpec])
+      Seq[Transform], Seq[ColumnDefinition], Option[BucketSpec], Map[String, String], OptionList,
+      Option[String], Option[String], Option[String], Option[SerdeInfo], Option[ClusterBySpec])
 
   /**
    * Validate a create table statement and return the [[TableIdentifier]].
@@ -4324,6 +4307,10 @@ class AstBuilder extends DataTypeAstBuilder
         throw QueryParsingErrors.cannotCleanReservedTablePropertyError(
           PROP_EXTERNAL, ctx, "please use CREATE EXTERNAL TABLE")
       case (PROP_EXTERNAL, _) => false
+      case (PROP_COLLATION, _) if !legacyOn =>
+        throw QueryParsingErrors.cannotCleanReservedTablePropertyError(
+          PROP_COLLATION, ctx, "please use the DEFAULT COLLATION clause to specify it")
+      case (PROP_COLLATION, _) => false
       // It's safe to set whatever table comment, so we don't make it a reserved table property.
       case (PROP_COMMENT, _) => true
       case (k, _) =>
@@ -4503,6 +4490,7 @@ class AstBuilder extends DataTypeAstBuilder
     checkDuplicateClauses(ctx.createFileFormat, "STORED AS/BY", ctx)
     checkDuplicateClauses(ctx.rowFormat, "ROW FORMAT", ctx)
     checkDuplicateClauses(ctx.commentSpec(), "COMMENT", ctx)
+    checkDuplicateClauses(ctx.collationSpec(), "DEFAULT COLLATION", ctx)
     checkDuplicateClauses(ctx.bucketSpec(), "CLUSTERED BY", ctx)
     checkDuplicateClauses(ctx.clusterBySpec(), "CLUSTER BY", ctx)
     checkDuplicateClauses(ctx.locationSpec, "LOCATION", ctx)
@@ -4521,6 +4509,7 @@ class AstBuilder extends DataTypeAstBuilder
     val location = visitLocationSpecList(ctx.locationSpec())
     val (cleanedOptions, newLocation) = cleanTableOptions(ctx, options, location)
     val comment = visitCommentSpecList(ctx.commentSpec())
+    val collation = visitCollationSpecList(ctx.collationSpec())
     val serdeInfo =
       getSerdeInfo(ctx.rowFormat.asScala.toSeq, ctx.createFileFormat.asScala.toSeq, ctx)
     val clusterBySpec = ctx.clusterBySpec().asScala.headOption.map(visitClusterBySpec)
@@ -4535,7 +4524,7 @@ class AstBuilder extends DataTypeAstBuilder
     }
 
     (partTransforms, partCols, bucketSpec, cleanedProperties, cleanedOptions, newLocation, comment,
-      serdeInfo, clusterBySpec)
+      collation, serdeInfo, clusterBySpec)
   }
 
   protected def getSerdeInfo(
@@ -4595,6 +4584,7 @@ class AstBuilder extends DataTypeAstBuilder
    *     ]
    *     [LOCATION path]
    *     [COMMENT table_comment]
+   *     [DEFAULT COLLATION collation_name]
    *     [TBLPROPERTIES (property_name=property_value, ...)]
    *
    *   partition_fields:
@@ -4608,8 +4598,8 @@ class AstBuilder extends DataTypeAstBuilder
 
     val columns = Option(ctx.colDefinitionList()).map(visitColDefinitionList).getOrElse(Nil)
     val provider = Option(ctx.tableProvider).map(_.multipartIdentifier.getText)
-    val (partTransforms, partCols, bucketSpec, properties, options, location,
-      comment, serdeInfo, clusterBySpec) = visitCreateTableClauses(ctx.createTableClauses())
+    val (partTransforms, partCols, bucketSpec, properties, options, location, comment,
+      collation, serdeInfo, clusterBySpec) = visitCreateTableClauses(ctx.createTableClauses())
 
     if (provider.isDefined && serdeInfo.isDefined) {
       invalidStatement(s"CREATE TABLE ... USING ... ${serdeInfo.get.describe}", ctx)
@@ -4627,7 +4617,7 @@ class AstBuilder extends DataTypeAstBuilder
         clusterBySpec.map(_.asTransform)
 
     val tableSpec = UnresolvedTableSpec(properties, provider, options, location, comment,
-      serdeInfo, external)
+      collation, serdeInfo, external)
 
     Option(ctx.query).map(plan) match {
       case Some(_) if columns.nonEmpty =>
@@ -4676,6 +4666,7 @@ class AstBuilder extends DataTypeAstBuilder
    *     ]
    *     [LOCATION path]
    *     [COMMENT table_comment]
+   *     [DEFAULT COLLATION collation_name]
    *     [TBLPROPERTIES (property_name=property_value, ...)]
    *
    *   partition_fields:
@@ -4685,8 +4676,8 @@ class AstBuilder extends DataTypeAstBuilder
    */
   override def visitReplaceTable(ctx: ReplaceTableContext): LogicalPlan = withOrigin(ctx) {
     val orCreate = ctx.replaceTableHeader().CREATE() != null
-    val (partTransforms, partCols, bucketSpec, properties, options, location, comment, serdeInfo,
-      clusterBySpec) = visitCreateTableClauses(ctx.createTableClauses())
+    val (partTransforms, partCols, bucketSpec, properties, options, location, comment, collation,
+      serdeInfo, clusterBySpec) = visitCreateTableClauses(ctx.createTableClauses())
     val columns = Option(ctx.colDefinitionList()).map(visitColDefinitionList).getOrElse(Nil)
     val provider = Option(ctx.tableProvider).map(_.multipartIdentifier.getText)
 
@@ -4700,7 +4691,7 @@ class AstBuilder extends DataTypeAstBuilder
         clusterBySpec.map(_.asTransform)
 
     val tableSpec = UnresolvedTableSpec(properties, provider, options, location, comment,
-      serdeInfo, external = false)
+      collation, serdeInfo, external = false)
 
     Option(ctx.query).map(plan) match {
       case Some(_) if columns.nonEmpty =>
@@ -5105,6 +5096,21 @@ class AstBuilder extends DataTypeAstBuilder
       AlterTableClusterBy(table, Some(visitClusterBySpec(ctx.clusterBySpec())))
     }
   }
+
+  /**
+   * Parse a [[AlterTableCollation]] command.
+   *
+   * For example:
+   * {{{
+   *   ALTER TABLE table1 DEFAULT COLLATION name
+   * }}}
+   */
+  override def visitAlterTableCollation(ctx: AlterTableCollationContext): LogicalPlan =
+    withOrigin(ctx) {
+      val table = createUnresolvedTable(
+        ctx.identifierReference, "ALTER TABLE ... DEFAULT COLLATION")
+      AlterTableCollation(table, visitCollationSpec(ctx.collationSpec()))
+    }
 
   /**
    * Parse [[SetViewProperties]] or [[SetTableProperties]] commands.

@@ -104,6 +104,15 @@ object NormalizePlan extends PredicateHelper {
       case Project(projectList, child) =>
         Project(normalizeProjectList(projectList), child)
       case c: KeepAnalyzedQuery => c.storeAnalyzedQuery()
+      case localRelation: LocalRelation if !localRelation.data.isEmpty =>
+        /**
+         * A substitute for the [[LocalRelation.data]]. [[GenericInternalRow]] is incomparable for
+         * maps, because [[ArrayBasedMapData]] doesn't define [[equals]].
+         */
+        val unsafeProjection = UnsafeProjection.create(localRelation.schema)
+        localRelation.copy(data = localRelation.data.map { row =>
+          unsafeProjection(row)
+        })
     }
   }
 

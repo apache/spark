@@ -1260,8 +1260,12 @@ class DataSourceV2SQLSuiteV1Filter
       PROP_OWNER -> "it will be set to the current user",
       PROP_EXTERNAL -> "please use CREATE EXTERNAL TABLE"
     )
+    val excludedProperties = Set(TableCatalog.PROP_COMMENT, TableCatalog.PROP_COLLATION)
+    val tableLegacyProperties = CatalogV2Util.TABLE_RESERVED_PROPERTIES
+      .filterNot(excludedProperties.contains)
+
     withSQLConf((SQLConf.LEGACY_PROPERTY_NON_RESERVED.key, "false")) {
-      CatalogV2Util.TABLE_RESERVED_PROPERTIES.filterNot(_ == PROP_COMMENT).foreach { key =>
+      tableLegacyProperties.foreach { key =>
         Seq("OPTIONS", "TBLPROPERTIES").foreach { clause =>
           Seq("CREATE", "REPLACE").foreach { action =>
             val sqlText = s"$action TABLE testcat.reservedTest (key int) " +
@@ -1314,7 +1318,7 @@ class DataSourceV2SQLSuiteV1Filter
       }
     }
     withSQLConf((SQLConf.LEGACY_PROPERTY_NON_RESERVED.key, "true")) {
-      CatalogV2Util.TABLE_RESERVED_PROPERTIES.filterNot(_ == PROP_COMMENT).foreach { key =>
+      tableLegacyProperties.foreach { key =>
         Seq("OPTIONS", "TBLPROPERTIES").foreach { clause =>
           withTable("testcat.reservedTest") {
             Seq("CREATE", "REPLACE").foreach { action =>
@@ -3389,6 +3393,7 @@ class DataSourceV2SQLSuiteV1Filter
            |TBLPROPERTIES ('prop1' = '1', 'prop2' = '2')
            |PARTITIONED BY (a)
            |LOCATION '/tmp'
+           |DEFAULT COLLATION sr_CI_AI
         """.stripMargin)
 
       val table = spark.sessionState.catalogManager.v2SessionCatalog.asTableCatalog
@@ -3396,6 +3401,7 @@ class DataSourceV2SQLSuiteV1Filter
       val properties = table.properties
       assert(properties.get(TableCatalog.PROP_PROVIDER) == "parquet")
       assert(properties.get(TableCatalog.PROP_COMMENT) == "This is a comment")
+      assert(properties.get(TableCatalog.PROP_COLLATION) == "sr_CI_AI")
       assert(properties.get(TableCatalog.PROP_LOCATION) == "file:/tmp")
       assert(properties.containsKey(TableCatalog.PROP_OWNER))
       assert(properties.get(TableCatalog.PROP_EXTERNAL) == "true")

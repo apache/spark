@@ -1618,6 +1618,7 @@ class Dataset[T] private[sql](
         name = TableIdentifier(identifier.last),
         userSpecifiedColumns = Nil,
         comment = None,
+        collation = None,
         properties = Map.empty,
         originalText = None,
         plan = logicalPlan,

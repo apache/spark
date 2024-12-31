@@ -377,7 +377,7 @@
   },
   "CANNOT_PARSE_TIMESTAMP" : {
     "message" : [
-      "<message>. Use `try_to_timestamp` to tolerate invalid input string and return NULL instead."
+      "<message>. Use <func> to tolerate invalid input string and return NULL instead."
     ],
     "sqlState" : "22007"
   },
@@ -5935,7 +5935,7 @@
   },
   "XML_ROW_TAG_MISSING" : {
     "message" : [
-      "<rowTag> option is required for reading files in XML format."
+      "<rowTag> option is required for reading/writing files in XML format."
     ],
     "sqlState" : "42KDF"
   },

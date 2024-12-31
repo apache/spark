@@ -49,9 +49,8 @@ public class ShreddingUtils {
       throw malformedVariant();
     }
     byte[] metadata = row.getBinary(schema.topLevelMetadataIdx);
-    if (schema.variantIdx >= 0 && schema.typedIdx < 0) {
-      // The variant is unshredded. We are not required to do anything special, but we can have an
-      // optimization to avoid `rebuild`.
+    if (schema.isUnshredded()) {
+      // `rebuild` is unnecessary for unshredded variant.
       if (row.isNullAt(schema.variantIdx)) {
         throw malformedVariant();
       }
@@ -65,8 +64,8 @@ public class ShreddingUtils {
   // Rebuild a variant value from the shredded data according to the reconstruction algorithm in
   // https://github.com/apache/parquet-format/blob/master/VariantShredding.md.
   // Append the result to `builder`.
-  private static void rebuild(ShreddedRow row, byte[] metadata, VariantSchema schema,
-                              VariantBuilder builder) {
+  public static void rebuild(ShreddedRow row, byte[] metadata, VariantSchema schema,
+                             VariantBuilder builder) {
     int typedIdx = schema.typedIdx;
     int variantIdx = schema.variantIdx;
     if (typedIdx >= 0 && !row.isNullAt(typedIdx)) {

@@ -391,7 +391,7 @@ class UserDefinedFunction:
         wrapped_func = _wrap_function(sc, func, self.returnType)
         jdt = spark._jsparkSession.parseDataType(self.returnType.json())
         assert sc._jvm is not None
-        judf = sc._jvm.org.apache.spark.sql.execution.python.UserDefinedPythonFunction(
+        judf = getattr(sc._jvm, "org.apache.spark.sql.execution.python.UserDefinedPythonFunction")(
             self._name, wrapped_func, jdt, self.evalType, self.deterministic
         )
         return judf

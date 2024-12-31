@@ -218,6 +218,7 @@ class DescribeTableSuite extends DescribeTableSuiteBase with CommandSuiteBase {
         " PARTITIONED BY (id)" +
         " TBLPROPERTIES ('bar'='baz')" +
         " COMMENT 'this is a test table'" +
+        " DEFAULT COLLATION unicode" +
         " LOCATION 'file:/tmp/testcat/table_name'")
       val descriptionDf = spark.sql(s"DESCRIBE TABLE EXTENDED $tbl")
       assert(descriptionDf.schema.map(field => (field.name, field.dataType)) === Seq(
@@ -241,6 +242,7 @@ class DescribeTableSuite extends DescribeTableSuiteBase with CommandSuiteBase {
           Row("Type", "EXTERNAL", ""),
           Row("Provider", getProvider(), ""),
           Row("Comment", "this is a test table", ""),
+          Row("Collation", "UNICODE", ""),
           Row("Table Properties", "[bar=baz]", ""),
           Row("Location", "file:/tmp/testcat/table_name", ""),
           Row("Partition Provider", "Catalog", "")))
