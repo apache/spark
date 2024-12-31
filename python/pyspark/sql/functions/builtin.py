@@ -297,9 +297,11 @@ def lit(col: Any) -> Column:
             raise PySparkValueError(
                 errorClass="COLUMN_IN_DICT", messageParameters={"func_name": "lit"}
             )
-        sc = _get_active_spark_context()
-        dict_as_struct = bool(sc._conf.get("spark.sql.pyspark.inferNestedDictAsStruct"))
-        if dict_as_struct:
+        from pyspark.sql import SparkSession
+
+        spark = SparkSession.getActiveSession()
+        dict_as_struct = spark.conf.get("spark.sql.pyspark.inferNestedDictAsStruct.enabled")
+        if dict_as_struct.lower() == "true":
             return struct(*[lit(value).alias(key) for key, value in col.items()])
         else:
             return create_map(*[lit(x) for x in chain(*col.items())])

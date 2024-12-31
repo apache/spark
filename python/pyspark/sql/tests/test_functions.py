@@ -30,7 +30,7 @@ from pyspark.sql import Row, Window, functions as F, types
 from pyspark.sql.avro.functions import from_avro, to_avro
 from pyspark.sql.column import Column
 from pyspark.sql.functions.builtin import nullifzero, randstr, uniform, zeroifnull
-from pyspark.sql.types import StructType, StructField, StringType, MapType
+from pyspark.sql.types import StructType, StructField, StringType, MapType, IntegerType
 from pyspark.testing.sqlutils import ReusedSQLTestCase, SQLTestUtils
 from pyspark.testing.utils import have_numpy, assertDataFrameEqual
 
@@ -1317,33 +1317,48 @@ class FunctionsTestsMixin:
         )
 
     # SPARK-48665: added support for dict type
-    def test_lit_dict(self):
-        self.spark.conf.set("spark.sql.pyspark.inferNestedDictAsStruct", "true")
-        test_dict = {"a": 1, "b": 2}
-        actual = self.spark.range(1).select(F.lit(test_dict).alias("dict_to_struct"))
-        column_type = actual.schema["dict_to_struct"].dataType
-        actual = actual.first()[0]
-        self.assertEqual(column_type, StructType)
-        self.assertEqual(actual, test_dict)
+    def test_lit_dict_struct(self):
+        with self.sql_conf({"spark.sql.pyspark.inferNestedDictAsStruct.enabled": True}):
+            expected_types = StructType(
+                [
+                    StructField("a", IntegerType(), False),
+                    StructField("b", IntegerType(), False),
+                ]
+            )
+            test_dict = {"a": 1, "b": 2}
+            actual = self.spark.range(1).select(F.lit(test_dict).alias("dict_to_struct"))
+            column_type = actual.schema["dict_to_struct"].dataType
+            actual = actual.first()[0]
+            self.assertEqual(column_type, expected_types)
+            self.assertEqual(actual, Row(a=1, b=2))
 
-        self.spark.conf.set("spark.sql.pyspark.inferNestedDictAsStruct", "false")
-        test_dict = {"a": 1, "b": 2}
-        actual = self.spark.range(1).select(F.lit(test_dict).alias("dict_to_map"))
-        column_type = actual.schema["dict_to_map"].dataType
-        actual = actual.first()[0]
-        self.assertEqual(column_type, MapType)
-        self.assertEqual(actual, test_dict)
+    # SPARK-48665: added support for dict type
+    def test_lit_dict_map(self):
+        with self.sql_conf({"spark.sql.pyspark.inferNestedDictAsStruct.enabled": False}):
+            test_dict = {"a": 1, "b": 2}
+            actual = self.spark.range(1).select(F.lit(test_dict).alias("dict_to_map"))
+            column_type = actual.schema["dict_to_map"].dataType
+            actual = actual.first()[0]
+            self.assertEqual(column_type, MapType(StringType(), IntegerType(), False))
+            self.assertEqual(actual, test_dict)
 
-        test_dict = {"a": {"1": 1}, "b": {"2": 2}}
-        actual = self.spark.range(1).select(F.lit(test_dict)).first()[0]
-        self.assertEqual(actual, test_dict)
+            test_dict = {"a": {"1": 1}, "b": {"2": 2}}
+            actual = self.spark.range(1).select(F.lit(test_dict)).first()[0]
+            self.assertEqual(actual, test_dict)
 
-        with self.sql_conf({"spark.sql.ansi.enabled": False}):
+        with self.sql_conf(
+            {
+                "spark.sql.ansi.enabled": False,
+                "spark.sql.pyspark.inferNestedDictAsStruct.enabled": False,
+            }
+        ):
             test_dict = {"a": 1, "b": "2", "c": None}
             expected_dict = {"a": "1", "b": "2", "c": None}
             actual = self.spark.range(1).select(F.lit(test_dict)).first()[0]
             self.assertEqual(actual, expected_dict)
 
+    # SPARK-48665: added support for dict type
+    def test_lit_dict_raise_error(self):
         df = self.spark.range(10)
         dicts = [
             {"a": df.id},
