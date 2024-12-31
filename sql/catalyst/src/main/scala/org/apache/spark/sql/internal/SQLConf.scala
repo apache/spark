@@ -4409,7 +4409,10 @@ object SQLConf {
         "implementation.")
       .version("3.0.0")
       .stringConf
-      .transform(_.toLowerCase(Locale.ROOT))
+      .transform {
+        case builtin if builtin.equalsIgnoreCase("builtin") => "builtin"
+        case fullClassName => fullClassName
+      }
       .createWithDefault("builtin")
 
   object MapKeyDedupPolicy extends Enumeration {
