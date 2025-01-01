@@ -285,8 +285,13 @@ def lit(col: Any) -> Column:
                 errorClass="COLUMN_IN_DICT", messageParameters={"func_name": "lit"}
             )
         from pyspark.sql import SparkSession
+
         spark = SparkSession.getActiveSession()
-        dict_as_struct = spark.conf.get("spark.sql.pyspark.inferNestedDictAsStruct.enabled") if spark else "false"
+        dict_as_struct = (
+            spark.conf.get("spark.sql.pyspark.inferNestedDictAsStruct.enabled")
+            if spark
+            else "false"
+        )
         if dict_as_struct and dict_as_struct.lower() == "true":
             return struct(*[lit(value).alias(key) for key, value in col.items()])
         else:
