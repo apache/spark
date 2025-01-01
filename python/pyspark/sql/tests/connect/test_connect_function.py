@@ -2235,14 +2235,14 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
             (CF.to_date, SF.to_date),
         ]:
             self.assert_eq(
-                cdf.select(cfunc(cdf.ts1, format="yyyy-MM-dd HH:mm:ss")).toPandas(),
-                sdf.select(sfunc(sdf.ts1, format="yyyy-MM-dd HH:mm:ss")).toPandas(),
+                cdf.select(cfunc(cdf.ts1, fmt="yyyy-MM-dd HH:mm:ss")).toPandas(),
+                sdf.select(sfunc(sdf.ts1, fmt="yyyy-MM-dd HH:mm:ss")).toPandas(),
             )
         self.compare_by_show(
             # [left]:  datetime64[ns, America/Los_Angeles]
             # [right]: datetime64[ns]
-            cdf.select(CF.to_timestamp(cdf.ts1, format="yyyy-MM-dd HH:mm:ss")),
-            sdf.select(SF.to_timestamp(sdf.ts1, format="yyyy-MM-dd HH:mm:ss")),
+            cdf.select(CF.to_timestamp(cdf.ts1, fmt="yyyy-MM-dd HH:mm:ss")),
+            sdf.select(SF.to_timestamp(sdf.ts1, fmt="yyyy-MM-dd HH:mm:ss")),
         )
 
         # With tz parameter
