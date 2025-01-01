@@ -72,7 +72,6 @@ from pyspark.sql.types import (
 )
 from pyspark.sql.utils import (
     enum_to_value as _enum_to_value,
-    get_active_spark_context as _get_active_spark_context,
 )
 
 # The implementation of pandas_udf is embedded in pyspark.sql.function.pandas_udf
