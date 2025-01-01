@@ -897,7 +897,13 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
         db.remove((version - 1).toString)
         db.commit()
       }
-      assert(snapshotVersionsPresent(remoteDir) === (1 to 30))
+
+      if (enableStateStoreCheckpointIds && colFamiliesEnabled) {
+        assert(snapshotVersionsPresent(remoteDir) === (1 to 30) :+ 30 :+ 31)
+      } else {
+        assert(snapshotVersionsPresent(remoteDir) === (1 to 30))
+      }
+
       assert(changelogVersionsPresent(remoteDir) === (30 to 60))
       for (version <- 1 to 60) {
         db.load(version, readOnly = true)
@@ -913,18 +919,34 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
       }
       // Check that snapshots and changelogs get purged correctly.
       db.doMaintenance()
-      assert(snapshotVersionsPresent(remoteDir) === Seq(30, 60))
+
+      if (enableStateStoreCheckpointIds && colFamiliesEnabled) {
+        assert(snapshotVersionsPresent(remoteDir) === Seq(31, 60, 60))
+      } else {
+        assert(snapshotVersionsPresent(remoteDir) === Seq(30, 60))
+      }
       if (enableStateStoreCheckpointIds) {
         // recommit version 60 creates another changelog file with different unique id
-        assert(changelogVersionsPresent(remoteDir) === (30 to 60) :+ 60)
+        if (colFamiliesEnabled) {
+          assert(changelogVersionsPresent(remoteDir) === (31 to 60) :+ 60)
+        } else {
+          assert(changelogVersionsPresent(remoteDir) === (30 to 60) :+ 60)
+        }
       } else {
         assert(changelogVersionsPresent(remoteDir) === (30 to 60))
       }
 
       // Verify the content of retained versions.
-      for (version <- 30 to 60) {
-        db.load(version, readOnly = true)
-        assert(db.iterator().map(toStr).toSet === Set((version.toString, version.toString)))
+      if (enableStateStoreCheckpointIds && colFamiliesEnabled) {
+        for (version <- 31 to 60) {
+          db.load(version, readOnly = true)
+          assert(db.iterator().map(toStr).toSet === Set((version.toString, version.toString)))
+        }
+      } else {
+        for (version <- 30 to 60) {
+          db.load(version, readOnly = true)
+          assert(db.iterator().map(toStr).toSet === Set((version.toString, version.toString)))
+        }
       }
     }
   }
