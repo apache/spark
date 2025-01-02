@@ -1113,6 +1113,16 @@ class BaseUDTFTestsMixin:
             ],
         )
 
+        assertDataFrameEqual(
+            func(df.asTable().withSinglePartition().orderBy(df.value)),
+            [
+                Row(key=1, value="a"),
+                Row(key=1, value="b"),
+                Row(key=2, value="c"),
+                Row(key=2, value="d"),
+            ],
+        )
+
         with self.assertRaisesRegex(
             IllegalArgumentException,
             r"Cannot call withSinglePartition\(\) after partitionBy\(\) or withSinglePartition\(\) has been called",

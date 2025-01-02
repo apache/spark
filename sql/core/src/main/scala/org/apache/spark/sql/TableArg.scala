@@ -20,7 +20,7 @@ package org.apache.spark.sql
 import org.apache.spark.sql.catalyst.expressions.{Ascending, Expression, FunctionTableSubqueryArgumentExpression, SortOrder}
 
 class TableArg(
-    expression: FunctionTableSubqueryArgumentExpression,
+    val expression: FunctionTableSubqueryArgumentExpression,
     sparkSession: SparkSession)
   extends TableValuedFunctionArgument {
   import sparkSession.toRichColumn
@@ -36,7 +36,7 @@ class TableArg(
     new TableArg(
       expression.copy(
         partitionByExpressions = partitionByExpressions),
-      sparkSession)
+        sparkSession)
   }
 
   @scala.annotation.varargs
@@ -60,7 +60,8 @@ class TableArg(
   def withSinglePartition(): TableArg = {
     if (expression.partitionByExpressions.nonEmpty || expression.withSinglePartition) {
       throw new IllegalArgumentException(
-        "Cannot call withSinglePartition() after partitionBy() or withSinglePartition() has been called."
+        "Cannot call withSinglePartition() after partitionBy() or " +
+          "withSinglePartition() has been called."
       )
     }
     new TableArg(
