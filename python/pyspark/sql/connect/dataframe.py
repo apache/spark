@@ -79,6 +79,7 @@ from pyspark.sql.connect.streaming.readwriter import DataStreamWriter
 from pyspark.sql.column import Column
 from pyspark.sql.connect.expressions import (
     ColumnReference,
+    SubqueryExpression,
     UnresolvedRegex,
     UnresolvedStar,
 )
@@ -692,10 +693,14 @@ class DataFrame(ParentDataFrame):
         on: Optional[Column] = None,
         how: Optional[str] = None,
     ) -> ParentDataFrame:
-        # TODO(SPARK-50134): Implement this method
-        raise PySparkNotImplementedError(
-            errorClass="NOT_IMPLEMENTED",
-            messageParameters={"feature": "lateralJoin()"},
+        self._check_same_session(other)
+        if how is not None and isinstance(how, str):
+            how = how.lower().replace("_", "")
+        return DataFrame(
+            plan.LateralJoin(
+                left=self._plan, right=cast(plan.LogicalPlan, other._plan), on=on, how=how
+            ),
+            session=self._session,
         )
 
     def _joinAsOf(
@@ -1797,18 +1802,14 @@ class DataFrame(ParentDataFrame):
         )
 
     def scalar(self) -> Column:
-        # TODO(SPARK-50134): Implement this method
-        raise PySparkNotImplementedError(
-            errorClass="NOT_IMPLEMENTED",
-            messageParameters={"feature": "scalar()"},
-        )
+        from pyspark.sql.connect.column import Column as ConnectColumn
+
+        return ConnectColumn(SubqueryExpression(self._plan, subquery_type="scalar"))
 
     def exists(self) -> Column:
-        # TODO(SPARK-50134): Implement this method
-        raise PySparkNotImplementedError(
-            errorClass="NOT_IMPLEMENTED",
-            messageParameters={"feature": "exists()"},
-        )
+        from pyspark.sql.connect.column import Column as ConnectColumn
+
+        return ConnectColumn(SubqueryExpression(self._plan, subquery_type="exists"))
 
     @property
     def schema(self) -> StructType:
@@ -2035,6 +2036,8 @@ class DataFrame(ParentDataFrame):
         from pyspark.sql.connect.udf import UserDefinedFunction
 
         _validate_pandas_udf(func, evalType)
+        if isinstance(schema, str):
+            schema = cast(StructType, self._session._parse_ddl(schema))
         udf_obj = UserDefinedFunction(
             func,
             returnType=schema,
@@ -2273,11 +2276,6 @@ def _test() -> None:
     if not is_remote_only():
         del pyspark.sql.dataframe.DataFrame.toJSON.__doc__
         del pyspark.sql.dataframe.DataFrame.rdd.__doc__
-
-    # TODO(SPARK-50134): Support subquery in connect
-    del pyspark.sql.dataframe.DataFrame.scalar.__doc__
-    del pyspark.sql.dataframe.DataFrame.exists.__doc__
-    del pyspark.sql.dataframe.DataFrame.lateralJoin.__doc__
 
     globs["spark"] = (
         PySparkSession.builder.appName("sql.connect.dataframe tests")

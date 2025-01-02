@@ -6612,7 +6612,7 @@ class DataFrame:
         >>> from pyspark.sql import functions as sf
         >>> employees.where(
         ...     sf.col("salary") > employees.select(sf.avg("salary")).scalar()
-        ... ).select("name", "salary", "department_id").show()
+        ... ).select("name", "salary", "department_id").orderBy("name").show()
         +-----+------+-------------+
         | name|salary|department_id|
         +-----+------+-------------+
@@ -6630,7 +6630,7 @@ class DataFrame:
         ...     > employees.alias("e2").where(
         ...         sf.col("e2.department_id") == sf.col("e1.department_id").outer()
         ...     ).select(sf.avg("salary")).scalar()
-        ... ).select("name", "salary", "department_id").show()
+        ... ).select("name", "salary", "department_id").orderBy("name").show()
         +-----+------+-------------+
         | name|salary|department_id|
         +-----+------+-------------+
@@ -6651,15 +6651,15 @@ class DataFrame:
         ...             ).select(sf.sum("salary")).scalar().alias("avg_salary"),
         ...         1
         ...     ).alias("salary_proportion_in_department")
-        ... ).show()
+        ... ).orderBy("name").show()
         +-------+------+-------------+-------------------------------+
         |   name|salary|department_id|salary_proportion_in_department|
         +-------+------+-------------+-------------------------------+
         |  Alice| 45000|          101|                           30.6|
         |    Bob| 54000|          101|                           36.7|
         |Charlie| 29000|          102|                           32.2|
-        |    Eve| 48000|          101|                           32.7|
         |  David| 61000|          102|                           67.8|
+        |    Eve| 48000|          101|                           32.7|
         +-------+------+-------------+-------------------------------+
         """
         ...
@@ -6785,6 +6785,9 @@ class DataFrame:
         Notes
         -----
         This API is experimental.
+        It provides two ways to create plots:
+        1. Chaining style (e.g., `df.plot.line(...)`).
+        2. Explicit style (e.g., `df.plot(kind="line", ...)`).
 
         Examples
         --------
@@ -6794,6 +6797,7 @@ class DataFrame:
         >>> type(df.plot)
         <class 'pyspark.sql.plot.core.PySparkPlotAccessor'>
         >>> df.plot.line(x="category", y=["int_val", "float_val"])  # doctest: +SKIP
+        >>> df.plot(kind="line", x="category", y=["int_val", "float_val"])  # doctest: +SKIP
         """
         ...
 

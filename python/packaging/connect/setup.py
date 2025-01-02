@@ -72,9 +72,12 @@ if "SPARK_TESTING" in os.environ:
         "pyspark.testing",
         "pyspark.resource.tests",
         "pyspark.sql.tests",
+        "pyspark.sql.tests.arrow",
         "pyspark.sql.tests.connect",
+        "pyspark.sql.tests.connect.arrow",
         "pyspark.sql.tests.connect.streaming",
         "pyspark.sql.tests.connect.client",
+        "pyspark.sql.tests.connect.pandas",
         "pyspark.sql.tests.connect.shell",
         "pyspark.sql.tests.pandas",
         "pyspark.sql.tests.plot",
@@ -101,7 +104,6 @@ if "SPARK_TESTING" in os.environ:
         "pyspark.pandas.tests.connect.groupby",
         "pyspark.pandas.tests.connect.indexes",
         "pyspark.pandas.tests.connect.io",
-        "pyspark.pandas.tests.connect.pandas",
         "pyspark.pandas.tests.connect.plot",
         "pyspark.pandas.tests.connect.resample",
         "pyspark.pandas.tests.connect.reshape",
@@ -130,7 +132,7 @@ try:
     # python/packaging/classic/setup.py
     _minimum_pandas_version = "2.0.0"
     _minimum_numpy_version = "1.21"
-    _minimum_pyarrow_version = "10.0.0"
+    _minimum_pyarrow_version = "11.0.0"
     _minimum_grpc_version = "1.59.3"
     _minimum_googleapis_common_protos_version = "1.56.4"
 

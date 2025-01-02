@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.catalyst.analysis.CollationStrength.{Default, Explicit, Implicit}
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion.haveSameType
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Project}
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types.{ArrayType, DataType, MapType, StringType, StructType}
@@ -37,9 +38,6 @@ object CollationTypeCoercion {
   }
 
   def apply(expression: Expression): Expression = expression match {
-    case cast: Cast if shouldRemoveCast(cast) =>
-      cast.child
-
     case ifExpr: If =>
       ifExpr.withNewChildren(
         ifExpr.predicate +: collateToSingleType(Seq(ifExpr.trueValue, ifExpr.falseValue))
@@ -145,18 +143,11 @@ object CollationTypeCoercion {
   }
 
   /**
-   * If childType is collated and target is UTF8_BINARY, the collation of the output
-   * should be that of the childType.
+   * Returns true if the given data type has any StringType in it.
    */
-  private def shouldRemoveCast(cast: Cast): Boolean = {
-    val isUserDefined = cast.getTagValue(Cast.USER_SPECIFIED_CAST).isDefined
-    val isChildTypeCollatedString = cast.child.dataType match {
-      case st: StringType => !st.isUTF8BinaryCollation
-      case _ => false
-    }
-    val targetType = cast.dataType
-
-    isUserDefined && isChildTypeCollatedString && targetType == StringType
+  private def hasStringType(dt: DataType): Boolean = dt.existsRecursively {
+    case _: StringType => true
+    case _ => false
   }
 
   /**
@@ -167,22 +158,48 @@ object CollationTypeCoercion {
       case Some(newDataType) if newDataType != expr.dataType =>
         assert(!newDataType.existsRecursively(_.isInstanceOf[StringTypeWithContext]))
 
-        val exprWithNewType = expr match {
+        expr match {
           case lit: Literal => lit.copy(dataType = newDataType)
           case cast: Cast => cast.copy(dataType = newDataType)
+          case subquery: SubqueryExpression =>
+            changeTypeInSubquery(subquery, newType)
+
           case _ => Cast(expr, newDataType)
         }
-
-        // also copy the collation context tag
-        if (hasCollationContextTag(expr)) {
-          exprWithNewType.setTagValue(
-            COLLATION_CONTEXT_TAG, expr.getTagValue(COLLATION_CONTEXT_TAG).get)
-        }
-        exprWithNewType
 
       case _ =>
         expr
     }
+  }
+
+  /**
+   * Changes the data type of the expression in the subquery to the given `newType`.
+   * Currently only supports subqueries with [[Project]] and [[Aggregate]] plan.
+   */
+  private def changeTypeInSubquery(
+      subqueryExpression: SubqueryExpression,
+      newType: DataType): SubqueryExpression = {
+
+    def transformNamedExpressions(ex: NamedExpression): NamedExpression = {
+      changeType(ex, newType) match {
+        case named: NamedExpression => named
+        case other => Alias(other, ex.name)()
+      }
+    }
+
+    val newPlan = subqueryExpression.plan match {
+      case project: Project =>
+        val newProjectList = project.projectList.map(transformNamedExpressions)
+        project.copy(projectList = newProjectList)
+
+      case agg: Aggregate =>
+        val newAggregateExpressions = agg.aggregateExpressions.map(transformNamedExpressions)
+        agg.copy(aggregateExpressions = newAggregateExpressions)
+
+      case other => other
+    }
+
+    subqueryExpression.withNewPlan(newPlan)
   }
 
   /**
@@ -362,7 +379,16 @@ object CollationTypeCoercion {
     case collate: Collate =>
       Some(addContextToStringType(collate.dataType, Explicit))
 
-    case expr @ (_: Alias | _: SubqueryExpression | _: AttributeReference | _: VariableReference) =>
+    case cast: Cast =>
+      val castStrength = if (hasStringType(cast.child.dataType)) {
+        Implicit
+      } else {
+        Default
+      }
+
+      Some(addContextToStringType(cast.dataType, castStrength))
+
+    case expr @ (_: NamedExpression | _: SubqueryExpression | _: VariableReference) =>
       Some(addContextToStringType(expr.dataType, Implicit))
 
     case lit: Literal =>

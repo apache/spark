@@ -85,6 +85,7 @@ private[sql] object V1Table {
         TableCatalog.OPTION_PREFIX + key -> value } ++
       v1Table.provider.map(TableCatalog.PROP_PROVIDER -> _) ++
       v1Table.comment.map(TableCatalog.PROP_COMMENT -> _) ++
+      v1Table.collation.map(TableCatalog.PROP_COLLATION -> _) ++
       v1Table.storage.locationUri.map { loc =>
         TableCatalog.PROP_LOCATION -> CatalogUtils.URIToString(loc)
       } ++

@@ -36,7 +36,7 @@ WITH tmp AS (
 SELECT id FROM range(3) WHERE id > (SELECT max(id) FROM tmp)
 -- !query analysis
 WithCTE
-:- CTERelationDef xxxx, false
+:- CTERelationDef xxxx, false, false
 :  +- SubqueryAlias tmp
 :     +- Intersect false
 :        :- Project [id#xL]
@@ -47,7 +47,7 @@ WithCTE
    +- Filter (id#xL > scalar-subquery#x [])
       :  +- Aggregate [max(id#xL) AS max(id)#xL]
       :     +- SubqueryAlias tmp
-      :        +- CTERelationRef xxxx, true, [id#xL], false
+      :        +- CTERelationRef xxxx, true, [id#xL], false, false
       +- Range (0, 3, step=1)
 
 
