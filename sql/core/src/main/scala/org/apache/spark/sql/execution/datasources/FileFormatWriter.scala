@@ -138,11 +138,16 @@ object FileFormatWriter extends Logging {
       statsTrackers = statsTrackers
     )
 
-    // We should first sort by dynamic partition columns, then bucket id, and finally sorting
-    // columns.
-    val requiredOrdering = partitionColumns.drop(numStaticPartitionCols) ++
-        writerBucketSpec.map(_.bucketIdExpression) ++ sortColumns
     val writeFilesOpt = V1WritesUtils.getWriteFilesOpt(plan)
+    val requiredOrdering = if (writeFilesOpt.isDefined) {
+      // When planned writing enabled, the plan will already be ordered.
+      Seq.empty
+    } else {
+      // We should first sort by dynamic partition columns, then bucket id, and finally sorting
+      // columns.
+      partitionColumns.drop(numStaticPartitionCols) ++
+          writerBucketSpec.map(_.bucketIdExpression) ++ sortColumns
+    }
 
     // SPARK-40588: when planned writing is disabled and AQE is enabled,
     // plan contains an AdaptiveSparkPlanExec, which does not know
@@ -165,7 +170,7 @@ object FileFormatWriter extends Logging {
     // get an ID guaranteed to be unique.
     job.getConfiguration.set("spark.sql.sources.writeJobUUID", description.uuid)
 
-    // When `PLANNED_WRITE_ENABLED` is true, the optimizer rule V1Writes will add logical sort
+    // When `PLANNED_WRITE_ENABLED` is true, the optimizer rule V1Writes will add clustering
     // operator based on the required ordering of the V1 write command. So the output
     // ordering of the physical plan should always match the required ordering. Here
     // we set the variable to verify this behavior in tests.

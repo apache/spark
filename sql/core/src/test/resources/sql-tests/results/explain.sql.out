@@ -1044,14 +1044,14 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 == Optimized Logical Plan ==
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/explain_temp5, false, [val#x], Parquet, [path=file:[not included in comparison]/{warehouse_dir}/explain_temp5], Append, `spark_catalog`.`default`.`explain_temp5`, org.apache.spark.sql.execution.datasources.CatalogFileIndex(file:[not included in comparison]/{warehouse_dir}/explain_temp5), [key, val]
 +- WriteFiles
-   +- Clustering [val#x ASC NULLS FIRST]
+   +- Clustering ClusterSpec(List(val#x),List())
       +- Project [key#x, empty2null(val#x) AS val#x]
          +- Relation spark_catalog.default.explain_temp4[key#x,val#x] parquet
 
 == Physical Plan ==
 Execute InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/explain_temp5, false, [val#x], Parquet, [path=file:[not included in comparison]/{warehouse_dir}/explain_temp5], Append, `spark_catalog`.`default`.`explain_temp5`, org.apache.spark.sql.execution.datasources.CatalogFileIndex(file:[not included in comparison]/{warehouse_dir}/explain_temp5), [key, val]
 +- WriteFiles
-   +- *Sort [val#x ASC NULLS FIRST], false, 0
+   +- Clustering ClusterSpec(List(val#x),List())
       +- *Project [key#x, empty2null(val#x) AS val#x]
          +- *ColumnarToRow
             +- FileScan parquet spark_catalog.default.explain_temp4[key#x,val#x] Batched: true, DataFilters: [], Format: Parquet, Location [not included in comparison]/{warehouse_dir}/explain_temp4], PartitionFilters: [], PushedFilters: [], ReadSchema: struct<key:int,val:string>
