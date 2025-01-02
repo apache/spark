@@ -21,38 +21,29 @@ import org.apache.spark.sql.catalyst.expressions.{Ascending, Expression, Functio
 
 class TableArg(
     private[sql] val expression: FunctionTableSubqueryArgumentExpression,
-    private val sparkSession: SparkSession,
-    private val isPartitioned: Boolean = false)
+    private val sparkSession: SparkSession)
   extends TableValuedFunctionArgument {
   import sparkSession.toRichColumn
 
   @scala.annotation.varargs
   def partitionBy(cols: Column*): TableArg = {
-    if (isPartitioned) {
+    if (expression.partitionByExpressions.nonEmpty || expression.withSinglePartition) {
       throw new IllegalArgumentException(
-        "partitionBy() can only be specified once."
-      )
-    }
-    if (expression.withSinglePartition) {
-      throw new IllegalArgumentException(
-        "Cannot call partitionBy() after withSinglePartition() has been called."
+        "Cannot call partitionBy() after partitionBy() or withSinglePartition() has been called."
       )
     }
     val partitionByExpressions = cols.map(_.expr)
     new TableArg(
       expression.copy(
         partitionByExpressions = partitionByExpressions),
-      sparkSession,
-      isPartitioned = true
-    )
+      sparkSession)
   }
 
   @scala.annotation.varargs
   def orderBy(cols: Column*): TableArg = {
-    // Validate that partitionBy has been called before orderBy
-    if (expression.partitionByExpressions.isEmpty) {
+    if (expression.partitionByExpressions.isEmpty && !expression.withSinglePartition) {
       throw new IllegalArgumentException(
-        "Please call partitionBy() before orderBy()."
+        "Please call partitionBy() or withSinglePartition() before orderBy()."
       )
     }
     val orderByExpressions = cols.map { col =>
@@ -63,14 +54,13 @@ class TableArg(
     }
     new TableArg(
       expression.copy(orderByExpressions = orderByExpressions),
-      sparkSession,
-      isPartitioned)
+      sparkSession)
   }
 
   def withSinglePartition(): TableArg = {
-    if (expression.partitionByExpressions.nonEmpty) {
+    if (expression.partitionByExpressions.nonEmpty || expression.withSinglePartition) {
       throw new IllegalArgumentException(
-        "Cannot call withSinglePartition() after partitionBy() has been called."
+        "Cannot call withSinglePartition() after partitionBy() or withSinglePartition() has been called."
       )
     }
     new TableArg(
