@@ -668,6 +668,12 @@ class RocksDB(
     }
   }
 
+  /**
+   * Function to encode state row with virtual col family id prefix
+   * @param data - passed byte array to be stored in state store
+   * @param cfName - name of column family
+   * @return - encoded byte array with virtual column family id prefix
+   */
   private def encodeStateRowWithPrefix(
       data: Array[Byte],
       cfName: String): Array[Byte] = {
@@ -688,6 +694,12 @@ class RocksDB(
     result
   }
 
+  /**
+   * Function to decode state row with virtual col family id prefix
+   * @param data - passed byte array retrieved from state store
+   * @return - pair of decoded byte array without virtual column family id prefix
+   *           and name of column family
+   */
   private def decodeStateRowWithPrefix(data: Array[Byte]): (Array[Byte], String) = {
     val cfId = Platform.getShort(data, Platform.BYTE_ARRAY_OFFSET)
     val cfName = colFamilyIdToNameMap.get(cfId)

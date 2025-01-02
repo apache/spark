@@ -228,10 +228,13 @@ class TransformWithListStateTTLSuite extends TransformWithStateTTLTest
         //    - List state: 1 record in the primary, TTL, min, and count indexes
         //    - Value state: 1 record in the primary, and 1 record in the TTL index
         //
-        // So in total, that amounts to 2t + 4 + 2 = 2t + 6 records.
+        // So in total, that amounts to 2t + 4 + 2 = 2t + 6 records. This is for internal and
+        // non-internal column families. For non-internal column families, the total records are
+        // t + 2.
         //
         // In this test, we have 2 unique keys, and each key occurs 3 times. Thus, the total number
-        // of keys in state is 2 * (2t + 6) where t = 3, which is 24.
+        // of keys in state is 2 * (2t + 6) where t = 3, which is 24. And the total number of
+        // records in the primary indexes are 2 * (t + 2) = 10.
         //
         // The number of updated rows is the total across the last time assertNumStateRows
         // was called, and we only update numRowsUpdated for primary key updates. We ran 6 batches
