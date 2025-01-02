@@ -211,8 +211,8 @@ class RocksDB(
   }
 
   private def addToColFamilyMaps(cfName: String, cfId: Short, isInternal: Boolean): Unit = {
-    colFamilyNameToInfoMap.put(cfName, ColumnFamilyInfo(cfId, isInternal))
-    colFamilyIdToNameMap.put(cfId, cfName)
+    colFamilyNameToInfoMap.putIfAbsent(cfName, ColumnFamilyInfo(cfId, isInternal))
+    colFamilyIdToNameMap.putIfAbsent(cfId, cfName)
   }
 
   private def removeFromColFamilyMaps(cfName: String): Unit = {
