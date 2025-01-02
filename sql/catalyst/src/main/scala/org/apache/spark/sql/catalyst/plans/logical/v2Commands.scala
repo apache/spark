@@ -697,8 +697,7 @@ object DescribeRelation {
 case class DescribeRelationJson(
     relation: LogicalPlan,
     partitionSpec: TablePartitionSpec,
-    isExtended: Boolean)
-  extends UnaryCommand {
+    isExtended: Boolean) extends UnaryCommand {
   override val output: Seq[Attribute] = DescribeCommandSchema.describeJsonTableAttributes()
   override def child: LogicalPlan = relation
   override protected def withNewChildInternal(newChild: LogicalPlan): DescribeRelationJson =

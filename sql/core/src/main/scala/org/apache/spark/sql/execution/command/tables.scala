@@ -759,8 +759,7 @@ case class DescribeTableCommand(
 case class DescribeTableJsonCommand(
    table: TableIdentifier,
    partitionSpec: TablePartitionSpec,
-   isExtended: Boolean)
-  extends LeafRunnableCommand {
+   isExtended: Boolean) extends LeafRunnableCommand {
   override val output = DescribeCommandSchema.describeJsonTableAttributes()
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
@@ -802,21 +801,16 @@ case class DescribeTableJsonCommand(
       }
     }
 
-    val normalizedJsonMap = mutable.LinkedHashMap[String, JValue]()
-    jsonMap.foreach { case (key, value) =>
-      val normalizedKey = key.toLowerCase().replace(" ", "_")
-      addKeyValueToMap(normalizedKey, value, normalizedJsonMap)
-    }
-
-    Seq(Row(compact(render(JObject(normalizedJsonMap.toList)))))
+    Seq(Row(compact(render(JObject(jsonMap.toList)))))
   }
 
   private def addKeyValueToMap(
       key: String,
       value: JValue,
       jsonMap: mutable.LinkedHashMap[String, JValue]): Unit = {
-    if (!jsonMap.contains(key)) {
-      jsonMap += key -> value
+    def normalize_key(key: String): String = key.toLowerCase().replace(" ", "_")
+    if (!jsonMap.contains(normalize_key(key))) {
+      jsonMap += normalize_key(key) -> value
     }
   }
 
@@ -824,63 +818,79 @@ case class DescribeTableJsonCommand(
    * Util to recursively form JSON string representation of data type, used for DESCRIBE AS JSON.
    * Differs from `json` in DataType.scala by providing additional fields for some types.
    */
-  private def jsonType(dataType: DataType): String = {
+  private def jsonType(dataType: DataType): JValue = {
     dataType match {
       case arrayType: ArrayType =>
-        val elementTypeJson = jsonType(arrayType.elementType)
-        s"""{"type": "array","elementType": $elementTypeJson,
-           |"containsNull": ${arrayType.containsNull}}""".stripMargin
+        JObject(
+          "type" -> JString("array"),
+          "elementType" -> jsonType(arrayType.elementType),
+          "containsNull" -> JBool(arrayType.containsNull)
+        )
 
       case mapType: MapType =>
-        val keyTypeJson = jsonType(mapType.keyType)
-        val valueTypeJson = jsonType(mapType.valueType)
-        s"""{"type": "map","keyType": $keyTypeJson,"valueType": $valueTypeJson,
-           |"valueContainsNull": ${mapType.valueContainsNull}}""".stripMargin
+        JObject(
+          "type" -> JString("map"),
+          "keyType" -> jsonType(mapType.keyType),
+          "valueType" -> jsonType(mapType.valueType),
+          "valueContainsNull" -> JBool(mapType.valueContainsNull)
+        )
 
       case structType: StructType =>
-        val fieldsJson = structType.fields
-          .map { field =>
-            val fieldTypeJson = jsonType(field.dataType)
-            s"""{"name": "${field.name}", "type": $fieldTypeJson, "nullable": ${field.nullable}}"""
-          }
-          .mkString(", ")
-        s"""{"type": "struct", "fields": [$fieldsJson]}"""
+        val fieldsJson = structType.fields.map { field =>
+          JObject(
+            "name" -> JString(field.name),
+            "type" -> jsonType(field.dataType),
+            "nullable" -> JBool(field.nullable)
+          )
+        }.toList
+        JObject(
+          "type" -> JString("struct"),
+          "fields" -> JArray(fieldsJson)
+        )
 
       case decimalType: DecimalType =>
-        s"""{"type": "decimal", "precision": ${decimalType.precision},
-           |"scale": ${decimalType.scale}}""".stripMargin
+        JObject(
+          "type" -> JString("decimal"),
+          "precision" -> JInt(decimalType.precision),
+          "scale" -> JInt(decimalType.scale)
+        )
 
       case varcharType: VarcharType =>
-        s"""{"type": "varchar", "length": ${varcharType.length}}"""
+        JObject(
+          "type" -> JString("varchar"),
+          "length" -> JInt(varcharType.length)
+        )
 
       case charType: CharType =>
-        s"""{"type": "char", "length": ${charType.length}}"""
+        JObject(
+          "type" -> JString("char"),
+          "length" -> JInt(charType.length)
+        )
 
       // Only override TimestampType; TimestampType_NTZ type is already timestamp_ntz
       case _: TimestampType =>
-        """{"type": "timestamp_ltz"}"""
+        JObject("type" -> JString("timestamp_ltz"))
 
       case yearMonthIntervalType: YearMonthIntervalType =>
-        def getFieldName(field: Byte): String = {
-          YearMonthIntervalType.fieldToString(field)
-        }
+        def getFieldName(field: Byte): String = YearMonthIntervalType.fieldToString(field)
 
-        val startUnit = getFieldName(yearMonthIntervalType.startField)
-        val endUnit = getFieldName(yearMonthIntervalType.endField)
-        s"""{"type": "interval", "start_unit": "$startUnit", "end_unit": "$endUnit"}"""
+        JObject(
+          "type" -> JString("interval"),
+          "start_unit" -> JString(getFieldName(yearMonthIntervalType.startField)),
+          "end_unit" -> JString(getFieldName(yearMonthIntervalType.endField))
+        )
 
       case dayTimeIntervalType: DayTimeIntervalType =>
-        def getFieldName(field: Byte): String = {
-          DayTimeIntervalType.fieldToString(field)
-        }
+        def getFieldName(field: Byte): String = DayTimeIntervalType.fieldToString(field)
 
-        val startUnit = getFieldName(dayTimeIntervalType.startField)
-        val endUnit = getFieldName(dayTimeIntervalType.startField)
-        s"""{"type": "interval", "start_unit": "$startUnit", "end_unit": "$endUnit"}"""
+        JObject(
+          "type" -> JString("interval"),
+          "start_unit" -> JString(getFieldName(dayTimeIntervalType.startField)),
+          "end_unit" -> JString(getFieldName(dayTimeIntervalType.endField))
+        )
 
-      // Base case for other simple types
       case _ =>
-        s"""{"type": "${dataType.typeName}"}"""
+        JObject("type" -> JString(dataType.typeName))
     }
   }
 
@@ -897,7 +907,7 @@ case class DescribeTableJsonCommand(
     val columnsJson = schema.map { column =>
       val baseFields: List[JField] = List(
         JField("name", JString(column.name)),
-        JField("type", parse(jsonType(column.dataType)))
+        JField("type", jsonType(column.dataType))
       )
 
       val commentField: List[JField] = column.getComment().map { comment =>
@@ -917,30 +927,28 @@ case class DescribeTableJsonCommand(
   private def describeClusteringInfoJson(
       table: CatalogTable, jsonMap: mutable.LinkedHashMap[String, JValue]): Unit = {
     table.clusterBySpec.foreach { clusterBySpec =>
-      val clusteringColumnsJson = clusterBySpec.columnNames.map { fieldNames =>
-        val nestedFieldOpt = table.schema.findNestedField(fieldNames.fieldNames.toIndexedSeq)
-        assert(nestedFieldOpt.isDefined,
-          "The clustering column " +
-            s"${fieldNames.fieldNames.map(quoteIfNeeded).mkString(".")} " +
-            s"was not found in the table schema ${table.schema.catalogString}."
-        )
-        val (path, field) = nestedFieldOpt.get
-        s"""{
-           |  "name": "${(path :+ field.name).map(quoteIfNeeded).mkString(".")}",
-           |  "type": ${jsonType(field.dataType)},
-           |  "comment": ${field.getComment().map(c => s""""$c"""").getOrElse("null")}
-           |}""".stripMargin
-      }.mkString("[", ",", "]")
-
-      addKeyValueToMap("clustering_information", parse(clusteringColumnsJson), jsonMap)
+      val clusteringColumnsJson: JValue = JArray(
+        clusterBySpec.columnNames.map { fieldNames =>
+          val nestedFieldOpt = table.schema.findNestedField(fieldNames.fieldNames.toIndexedSeq)
+          assert(nestedFieldOpt.isDefined,
+            "The clustering column " +
+              s"${fieldNames.fieldNames.map(quoteIfNeeded).mkString(".")} " +
+              s"was not found in the table schema ${table.schema.catalogString}."
+          )
+          val (path, field) = nestedFieldOpt.get
+          JObject(
+            "name" -> JString((path :+ field.name).map(quoteIfNeeded).mkString(".")),
+            "type" -> jsonType(field.dataType),
+            "comment" -> field.getComment().map(JString).getOrElse(JNull)
+          )
+        }.toList
+      )
+      addKeyValueToMap("clustering_information", clusteringColumnsJson, jsonMap)
     }
   }
 
   private def describeFormattedTableInfoJson(
       table: CatalogTable, jsonMap: mutable.LinkedHashMap[String, JValue]): Unit = {
-    val excludedTableInfo = Set("catalog", "schema", "database", "table", "location",
-      "serde_library", "inputformat", "outputformat")
-
     table.bucketSpec match {
       case Some(spec) =>
         spec.toJsonLinkedHashMap.foreach { case (key, value) =>
@@ -952,9 +960,7 @@ case class DescribeTableJsonCommand(
       addKeyValueToMap(key, value, jsonMap)
     }
 
-    val filteredTableInfo = table.toJsonLinkedHashMap.filterNot { case (key, _) =>
-      excludedTableInfo.contains(key.toLowerCase())
-    }
+    val filteredTableInfo = table.toJsonLinkedHashMap
 
     filteredTableInfo.map { case (key, value) =>
       addKeyValueToMap(key, value, jsonMap)
@@ -978,17 +984,15 @@ case class DescribeTableJsonCommand(
       spark.sessionState.conf.resolver)
     val partition = catalog.getPartition(table, normalizedPartSpec)
 
+    // First add partition details to jsonMap.
+    // `addKeyValueToMap` only adds unique keys, so this ensures the
+    // more detailed partition information is added
+    // in the case of duplicated key names (e.g. storage_information).
     partition.toJsonLinkedHashMap.map { case (key, value) =>
       addKeyValueToMap(key, value, jsonMap)
     }
 
-    val excludedTableInfo = Set("catalog", "schema", "database", "table", "partition_columns")
-
-    val detailedInfo = metadata.toJsonLinkedHashMap.filterNot { case (key, _) =>
-      excludedTableInfo.contains(key.toLowerCase())
-    }
-
-    detailedInfo.map { case (key, value) =>
+    metadata.toJsonLinkedHashMap.map { case (key, value) =>
       addKeyValueToMap(key, value, jsonMap)
     }
 

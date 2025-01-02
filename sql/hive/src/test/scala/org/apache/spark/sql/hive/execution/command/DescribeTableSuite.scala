@@ -93,12 +93,18 @@ class DescribeTableSuite extends v1.DescribeTableSuiteBase with CommandSuiteBase
     withNamespaceAndTable("ns", "table") { t =>
       val tableCreationStr =
         s"""
-          |CREATE TABLE $t (a STRING, b INT, c STRING, d STRING) USING parquet
-          |  OPTIONS (a '1', b '2', password 'password')
-          |  PARTITIONED BY (c, d) CLUSTERED BY (a) SORTED BY (b ASC) INTO 2 BUCKETS
-          |  COMMENT 'table_comment'
-          |  TBLPROPERTIES (t 'test', password 'password')
-          |""".stripMargin
+           |CREATE TABLE $t (
+           |  employee_id INT,
+           |  employee_name STRING,
+           |  department STRING,
+           |  hire_date DATE
+           |) USING parquet
+           |OPTIONS ('compression' = 'snappy', 'max_records' = '1000')
+           |PARTITIONED BY (department, hire_date)
+           |CLUSTERED BY (employee_id) SORTED BY (employee_name ASC) INTO 4 BUCKETS
+           |COMMENT 'Employee data table for testing partitions and buckets'
+           |TBLPROPERTIES ('version' = '1.0')
+           |""".stripMargin
       spark.sql(tableCreationStr)
 
       val error = intercept[AnalysisException] {
@@ -115,12 +121,18 @@ class DescribeTableSuite extends v1.DescribeTableSuiteBase with CommandSuiteBase
     withNamespaceAndTable("ns", "table") { t =>
       val tableCreationStr =
         s"""
-          |CREATE TABLE $t (a STRING, b INT, c STRING, d STRING) USING parquet
-          |  OPTIONS (a '1', b '2', password 'password')
-          |  PARTITIONED BY (c, d) CLUSTERED BY (a) SORTED BY (b ASC) INTO 2 BUCKETS
-          |  COMMENT 'table_comment'
-          |  TBLPROPERTIES (t 'test', password 'password')
-          |""".stripMargin
+           |CREATE TABLE $t (
+           |  employee_id INT,
+           |  employee_name STRING,
+           |  department STRING,
+           |  hire_date DATE
+           |) USING parquet
+           |OPTIONS ('compression' = 'snappy', 'max_records' = '1000')
+           |PARTITIONED BY (department, hire_date)
+           |CLUSTERED BY (employee_id) SORTED BY (employee_name ASC) INTO 4 BUCKETS
+           |COMMENT 'Employee data table for testing partitions and buckets'
+           |TBLPROPERTIES ('version' = '1.0')
+           |""".stripMargin
       spark.sql(tableCreationStr)
       val descriptionDf = spark.sql(s"DESCRIBE EXTENDED $t AS JSON")
       val firstRow = descriptionDf.select("json_metadata").head()
@@ -133,10 +145,10 @@ class DescribeTableSuite extends v1.DescribeTableSuiteBase with CommandSuiteBase
         namespace = Some(List("ns")),
         schema_name = Some("ns"),
         columns = Some(List(
-          TableColumn("a", Type("string")),
-          TableColumn("b", Type("integer")),
-          TableColumn("c", Type("string")),
-          TableColumn("d", Type("string"))
+          TableColumn("employee_id", Type("integer")),
+          TableColumn("employee_name", Type("string")),
+          TableColumn("department", Type("string")),
+          TableColumn("hire_date", Type("date"))
         )),
         owner = Some(""),
         created_time = Some(""),
@@ -144,24 +156,22 @@ class DescribeTableSuite extends v1.DescribeTableSuiteBase with CommandSuiteBase
         created_by = Some("Spark 4.0.0-SNAPSHOT"),
         `type` = Some("MANAGED"),
         provider = Some("parquet"),
-        bucket_columns = Some(List("a")),
-        sort_columns = Some(List("b")),
-        comment = Some("table_comment"),
+        bucket_columns = Some(List("employee_id")),
+        sort_columns = Some(List("employee_name")),
+        comment = Some("Employee data table for testing partitions and buckets"),
         table_properties = Some(Map(
-          "password" -> "*********(redacted)",
-          "t" -> "test"
+          "version" -> "1.0"
         )),
         location = Some(""),
         serde_library = Some("org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe"),
         inputformat = Some("org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat"),
         outputformat = Some("org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat"),
         storage_properties = Some(Map(
-          "a" -> "1",
-          "b" -> "2",
-          "password" -> "*********(redacted)"
+          "compression" -> "snappy",
+          "max_records" -> "1000"
         )),
         partition_provider = Some("Catalog"),
-        partition_columns = Some(List("c", "d"))
+        partition_columns = Some(List("department", "hire_date"))
       )
 
       assert(expectedOutput == parsedOutput.copy(owner = Some(""),
@@ -174,15 +184,21 @@ class DescribeTableSuite extends v1.DescribeTableSuiteBase with CommandSuiteBase
     withNamespaceAndTable("ns", "table") { t =>
       val tableCreationStr =
         s"""
-          |CREATE TABLE $t (a STRING, b INT, c STRING, d STRING) USING parquet
-          |  OPTIONS (a '1', b '2', password 'password')
-          |  PARTITIONED BY (c, d) CLUSTERED BY (a) SORTED BY (b ASC) INTO 2 BUCKETS
-          |  COMMENT 'table_comment'
-          |  TBLPROPERTIES (t 'test', password 'password')
-          |""".stripMargin
+           |CREATE TABLE $t (
+           |  id INT,
+           |  name STRING,
+           |  region STRING,
+           |  category STRING
+           |) USING parquet
+           |PARTITIONED BY (region, category)
+           |COMMENT 'test partition spec'
+           |TBLPROPERTIES ('t' = 'test')
+           |""".stripMargin
       spark.sql(tableCreationStr)
-      spark.sql(s"ALTER TABLE $t ADD PARTITION (c='Us', d=1)")
-      val descriptionDf = spark.sql(s"DESCRIBE FORMATTED $t PARTITION (c='Us', d=1) AS JSON")
+      spark.sql(s"ALTER TABLE $t ADD PARTITION (region='USA', category='tech')")
+
+      val descriptionDf =
+        spark.sql(s"DESCRIBE FORMATTED $t PARTITION (region='USA', category='tech') AS JSON")
       val firstRow = descriptionDf.select("json_metadata").head()
       val jsonValue = firstRow.getString(0)
       val parsedOutput = parse(jsonValue).extract[DescribeTableJson]
@@ -193,37 +209,32 @@ class DescribeTableSuite extends v1.DescribeTableSuiteBase with CommandSuiteBase
         namespace = Some(List("ns")),
         schema_name = Some("ns"),
         columns = Some(List(
-          TableColumn("a", Type("string")),
-          TableColumn("b", Type("integer")),
-          TableColumn("c", Type("string")),
-          TableColumn("d", Type("string"))
+          TableColumn("id", Type("integer")),
+          TableColumn("name", Type("string")),
+          TableColumn("region", Type("string")),
+          TableColumn("category", Type("string"))
         )),
         last_access = Some("UNKNOWN"),
         created_by = Some("Spark 4.0.0-SNAPSHOT"),
         `type` = Some("MANAGED"),
         provider = Some("parquet"),
-        bucket_columns = Some(List("a")),
-        sort_columns = Some(List("b")),
-        comment = Some("table_comment"),
+        bucket_columns = Some(Nil),
+        sort_columns = Some(Nil),
+        comment = Some("test partition spec"),
         table_properties = Some(Map(
-          "password" -> "*********(redacted)",
           "t" -> "test"
         )),
         serde_library = Some("org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe"),
         inputformat = Some("org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat"),
         outputformat = Some("org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat"),
         storage_properties = Some(Map(
-          "a" -> "1",
-          "serialization.format" -> "1",
-          "b" -> "2",
-          "password" -> "*********(redacted)"
+          "serialization.format" -> "1"
         )),
         partition_provider = Some("Catalog"),
-        partition_columns = Some(List("c", "d")),
-        partition_values = Some(Map("c" -> "Us", "d" -> "1"))
+        partition_columns = Some(List("region", "category")),
+        partition_values = Some(Map("region" -> "USA", "category" -> "tech"))
       )
 
-      // exclude path from check
       val filteredParsedStorageProperties =
         parsedOutput.storage_properties.map(_.filterNot { case (key, _) => key == "path" })
 
@@ -237,10 +248,16 @@ class DescribeTableSuite extends v1.DescribeTableSuiteBase with CommandSuiteBase
     withNamespaceAndTable("ns", "table") { t =>
       val tableCreationStr =
         s"""
-          |CREATE TABLE $t (a STRING DEFAULT 'default-value', b INT DEFAULT 42)
-          |USING parquet COMMENT 'table_comment'
-          |""".stripMargin
+           |CREATE TABLE $t (
+           |  id INT DEFAULT 1,
+           |  name STRING DEFAULT 'unknown',
+           |  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+           |  is_active BOOLEAN DEFAULT true
+           |)
+           |USING parquet COMMENT 'table_comment'
+           |""".stripMargin
       spark.sql(tableCreationStr)
+
       val descriptionDf = spark.sql(s"DESC EXTENDED $t AS JSON")
       val firstRow = descriptionDf.select("json_metadata").head()
       val jsonValue = firstRow.getString(0)
@@ -252,25 +269,29 @@ class DescribeTableSuite extends v1.DescribeTableSuiteBase with CommandSuiteBase
         namespace = Some(List("ns")),
         schema_name = Some("ns"),
         columns = Some(List(
-          TableColumn("a", Type("string"), default_value = Some("'default-value'")),
-          TableColumn("b", Type("integer"), default_value = Some("42"))
+          TableColumn("id", Type("integer"), default_value = Some("1")),
+          TableColumn("name", Type("string"), default_value = Some("'unknown'")),
+          TableColumn("created_at", Type("timestamp_ltz"),
+            default_value = Some("CURRENT_TIMESTAMP")),
+          TableColumn("is_active", Type("boolean"), default_value = Some("true"))
         )),
         last_access = Some("UNKNOWN"),
         created_by = Some("Spark 4.0.0-SNAPSHOT"),
         `type` = Some("MANAGED"),
         storage_properties = None,
         provider = Some("parquet"),
-        bucket_columns = Some(Nil), // No bucket columns in actual JSON
-        sort_columns = Some(Nil), // No sort columns in actual JSON
+        bucket_columns = Some(Nil),
+        sort_columns = Some(Nil),
         comment = Some("table_comment"),
         serde_library = Some("org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe"),
         inputformat = Some("org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat"),
         outputformat = Some("org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat"),
         table_properties = None
       )
-
-      assert(expectedOutput ==
-        parsedOutput.copy(location = None, created_time = None, owner = None))
+      assert(
+        expectedOutput ==
+          parsedOutput.copy(location = None, created_time = None, owner = None)
+      )
     }
   }
 
@@ -279,14 +300,15 @@ class DescribeTableSuite extends v1.DescribeTableSuiteBase with CommandSuiteBase
       withTempView("temp_view") {
         val tableCreationStr =
           s"""
-             |CREATE TABLE $t (a STRING, b INT, c STRING, d STRING) USING parquet
-             |  OPTIONS (a '1', b '2', password 'password')
-             |  PARTITIONED BY (c, d) CLUSTERED BY (a) SORTED BY (b ASC) INTO 2 BUCKETS
-             |  COMMENT 'table_comment'
-             |  TBLPROPERTIES (t 'test', password 'password')
+             |CREATE TABLE $t (id INT, name STRING, created_at TIMESTAMP)
+             |  USING parquet
+             |  OPTIONS ('compression' 'snappy')
+             |  CLUSTERED BY (id, name) SORTED BY (created_at) INTO 4 BUCKETS
+             |  COMMENT 'test temp view'
+             |  TBLPROPERTIES ('parquet.encryption' = 'true')
              |""".stripMargin
         spark.sql(tableCreationStr)
-          spark.sql(s"CREATE TEMPORARY VIEW temp_view AS SELECT * FROM $t")
+        spark.sql(s"CREATE TEMPORARY VIEW temp_view AS SELECT * FROM $t")
         val descriptionDf = spark.sql(s"DESCRIBE EXTENDED temp_view AS JSON")
         val firstRow = descriptionDf.select("json_metadata").head()
         val jsonValue = firstRow.getString(0)
@@ -294,10 +316,9 @@ class DescribeTableSuite extends v1.DescribeTableSuiteBase with CommandSuiteBase
 
         val expectedOutput = DescribeTableJson(
           columns = Some(List(
-            TableColumn("a", Type("string")),
-            TableColumn("b", Type("integer")),
-            TableColumn("c", Type("string")),
-            TableColumn("d", Type("string"))
+            TableColumn("id", Type("integer")),
+            TableColumn("name", Type("string")),
+            TableColumn("created_at", Type("timestamp_ltz"))
           ))
         )
 
@@ -319,7 +340,7 @@ class DescribeTableSuite extends v1.DescribeTableSuiteBase with CommandSuiteBase
           |    PARTITIONED BY (state)
           |""".stripMargin
       spark.sql(tableCreationStr)
-      spark.sql("INSERT INTO ns.table PARTITION (state = \"AR\") VALUES (100, \"Mike\")")
+      spark.sql("INSERT INTO ns.table PARTITION (state = \"CA\") VALUES (100, \"Jane\")")
       val error = intercept[AnalysisException] {
         spark.sql("DESCRIBE FORMATTED ns.table ns.table.name AS JSON")
       }

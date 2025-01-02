@@ -54,7 +54,7 @@ import org.apache.spark.util.ArrayImplicits._
 /**
  * Interface providing util to convert JValue to String representation of catalog entities.
  */
-trait MetadataHashMapTranslator {
+trait MetadataMapSupport {
   def toJsonLinkedHashMap: mutable.LinkedHashMap[String, JValue]
 
   def toLinkedHashMap: mutable.LinkedHashMap[String, String] = {
@@ -116,7 +116,7 @@ case class CatalogStorageFormat(
     outputFormat: Option[String],
     serde: Option[String],
     compressed: Boolean,
-    properties: Map[String, String]) extends MetadataHashMapTranslator {
+    properties: Map[String, String]) extends MetadataMapSupport {
 
   override def toString: String = {
     toLinkedHashMap.map { case (key, value) =>
@@ -168,7 +168,7 @@ case class CatalogTablePartition(
     parameters: Map[String, String] = Map.empty,
     createTime: Long = System.currentTimeMillis,
     lastAccessTime: Long = -1,
-    stats: Option[CatalogStatistics] = None) extends MetadataHashMapTranslator {
+    stats: Option[CatalogStatistics] = None) extends MetadataMapSupport {
   def toJsonLinkedHashMap: mutable.LinkedHashMap[String, JValue] = {
     val map = mutable.LinkedHashMap[String, JValue]()
 
@@ -342,7 +342,7 @@ object ClusterBySpec {
 case class BucketSpec(
     numBuckets: Int,
     bucketColumnNames: Seq[String],
-    sortColumnNames: Seq[String]) extends SQLConfHelper with MetadataHashMapTranslator {
+    sortColumnNames: Seq[String]) extends SQLConfHelper with MetadataMapSupport {
 
   if (numBuckets <= 0 || numBuckets > conf.bucketingMaxBuckets) {
     throw QueryCompilationErrors.invalidBucketNumberError(
@@ -413,7 +413,7 @@ case class CatalogTable(
     tracksPartitionsInCatalog: Boolean = false,
     schemaPreservesCase: Boolean = true,
     ignoredProperties: Map[String, String] = Map.empty,
-    viewOriginalText: Option[String] = None) extends MetadataHashMapTranslator {
+    viewOriginalText: Option[String] = None) extends MetadataMapSupport {
 
   import CatalogTable._
 
