@@ -158,7 +158,7 @@ class ParquetWriteSupport extends WriteSupport[InternalRow] with Logging {
         s"""Initialized Parquet WriteSupport with Catalyst schema:
            |${schema.prettyJson}
            |and shredding schema:
-           |$shreddedSchema.prettyJson}
+           |${shreddedSchema.prettyJson}
            |and corresponding Parquet message type:
            |$messageType
          """.stripMargin)
