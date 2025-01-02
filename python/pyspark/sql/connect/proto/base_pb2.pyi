@@ -1921,17 +1921,32 @@ class ConfigRequest(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
         PAIRS_FIELD_NUMBER: builtins.int
+        SILENT_FIELD_NUMBER: builtins.int
         @property
         def pairs(
             self,
         ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___KeyValue]:
             """(Required) The config key-value pairs to set."""
+        silent: builtins.bool
+        """(Optional) Whether to ignore failures."""
         def __init__(
             self,
             *,
             pairs: collections.abc.Iterable[global___KeyValue] | None = ...,
+            silent: builtins.bool | None = ...,
         ) -> None: ...
-        def ClearField(self, field_name: typing_extensions.Literal["pairs", b"pairs"]) -> None: ...
+        def HasField(
+            self, field_name: typing_extensions.Literal["_silent", b"_silent", "silent", b"silent"]
+        ) -> builtins.bool: ...
+        def ClearField(
+            self,
+            field_name: typing_extensions.Literal[
+                "_silent", b"_silent", "pairs", b"pairs", "silent", b"silent"
+            ],
+        ) -> None: ...
+        def WhichOneof(
+            self, oneof_group: typing_extensions.Literal["_silent", b"_silent"]
+        ) -> typing_extensions.Literal["silent"] | None: ...
 
     class Get(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
