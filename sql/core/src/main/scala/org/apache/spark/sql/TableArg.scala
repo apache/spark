@@ -20,8 +20,8 @@ package org.apache.spark.sql
 import org.apache.spark.sql.catalyst.expressions.{Ascending, Expression, FunctionTableSubqueryArgumentExpression, SortOrder}
 
 class TableArg(
-    val expression: FunctionTableSubqueryArgumentExpression,
-    val sparkSession: SparkSession)
+    expression: FunctionTableSubqueryArgumentExpression,
+    sparkSession: SparkSession)
   extends TableValuedFunctionArgument {
   import sparkSession.toRichColumn
 
