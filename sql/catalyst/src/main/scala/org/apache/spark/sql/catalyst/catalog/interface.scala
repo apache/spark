@@ -197,7 +197,6 @@ case class CatalogTablePartition(
     map
   }
 
-
   override def toString: String = {
     toLinkedHashMap.map { case (key, value) =>
       if (value.isEmpty) key else s"$key: $value"
