@@ -27,7 +27,7 @@ import org.apache.spark.connect.proto
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{agnosticEncoderFor, ProductEncoder}
 import org.apache.spark.sql.connect.ConnectConversions._
-import org.apache.spark.sql.connect.common.UdfUtils
+import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, UdfUtils}
 import org.apache.spark.sql.expressions.SparkUserDefinedFunction
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.internal.ColumnNodeToProtoConverter.toExpr
@@ -502,6 +502,7 @@ private class KeyValueGroupedDatasetImpl[K, V, IK, IV](
     }
 
     val outputEncoder = agnosticEncoderFor[U]
+    val stateEncoder = agnosticEncoderFor[S]
     val nf = UDFAdaptors.flatMapGroupsWithStateWithMappedValues(func, valueMapFunc)
 
     sparkSession.newDataset[U](outputEncoder) { builder =>
@@ -509,11 +510,12 @@ private class KeyValueGroupedDatasetImpl[K, V, IK, IV](
       groupMapBuilder
         .setInput(plan.getRoot)
         .addAllGroupingExpressions(groupingExprs)
-        .setFunc(getUdf(nf, outputEncoder)(ivEncoder))
+        .setFunc(getUdf(nf, outputEncoder, stateEncoder)(ivEncoder))
         .setIsMapGroupsWithState(isMapGroupWithState)
         .setOutputMode(if (outputMode.isEmpty) OutputMode.Update.toString
         else outputMode.get.toString)
         .setTimeoutConf(timeoutConf.toString)
+        .setStateSchema(DataTypeProtoConverter.toConnectProtoType(stateEncoder.schema))
 
       if (initialStateImpl != null) {
         groupMapBuilder
@@ -526,6 +528,21 @@ private class KeyValueGroupedDatasetImpl[K, V, IK, IV](
   private def getUdf[U: Encoder](nf: AnyRef, outputEncoder: AgnosticEncoder[U])(
       inEncoders: AgnosticEncoder[_]*): proto.CommonInlineUserDefinedFunction = {
     val inputEncoders = kEncoder +: inEncoders // Apply keyAs changes by setting kEncoder
+    val udf = SparkUserDefinedFunction(
+      function = nf,
+      inputEncoders = inputEncoders,
+      outputEncoder = outputEncoder)
+    udf.apply(inputEncoders.map(_ => col("*")): _*).expr.getCommonInlineUserDefinedFunction
+  }
+
+  private def getUdf[U: Encoder, S: Encoder](
+      nf: AnyRef,
+      outputEncoder: AgnosticEncoder[U],
+      stateEncoder: AgnosticEncoder[S])(
+      inEncoders: AgnosticEncoder[_]*): proto.CommonInlineUserDefinedFunction = {
+    // Apply keyAs changes by setting kEncoder
+    // Add the state encoder to the inputEncoders.
+    val inputEncoders = kEncoder +: stateEncoder +: inEncoders
     val udf = SparkUserDefinedFunction(
       function = nf,
       inputEncoders = inputEncoders,
