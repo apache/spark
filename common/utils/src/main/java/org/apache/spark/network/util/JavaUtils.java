@@ -126,9 +126,9 @@ public class JavaUtils {
   private static void deleteRecursivelyUsingJavaIO(
       File file,
       FilenameFilter filter) throws IOException {
-    if (!file.exists()) return;
     BasicFileAttributes fileAttributes =
-      Files.readAttributes(file.toPath(), BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
+            Files.readAttributes(file.toPath(), BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
+    if (!file.exists() && !fileAttributes.isSymbolicLink()) return;
     if (fileAttributes.isDirectory()) {
       IOException savedIOException = null;
       for (File child : listFilesSafely(file, filter)) {
