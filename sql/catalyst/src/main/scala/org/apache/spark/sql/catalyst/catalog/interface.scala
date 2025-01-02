@@ -55,8 +55,14 @@ import org.apache.spark.util.ArrayImplicits._
  * Interface providing util to convert JValue to String representation of catalog entities.
  */
 trait MetadataHashMapTranslator {
-  def jsonToString(jsonMap: mutable.LinkedHashMap[String, JValue]):
-  mutable.LinkedHashMap[String, String] = {
+  def toJsonLinkedHashMap: mutable.LinkedHashMap[String, JValue]
+
+  def toLinkedHashMap: mutable.LinkedHashMap[String, String] = {
+    jsonToString(toJsonLinkedHashMap)
+  }
+
+  protected def jsonToString(
+      jsonMap: mutable.LinkedHashMap[String, JValue]): mutable.LinkedHashMap[String, String] = {
     def removeWhitespace(str: String): String = {
       str.replaceAll("\\s+$", "")
     }
@@ -118,10 +124,6 @@ case class CatalogStorageFormat(
     }.mkString("Storage(", ", ", ")")
   }
 
-  def toLinkedHashMap: mutable.LinkedHashMap[String, String] = {
-    jsonToString(toJsonLinkedHashMap)
-  }
-
   def toJsonLinkedHashMap: mutable.LinkedHashMap[String, JValue] = {
     val map = mutable.LinkedHashMap[String, JValue]()
 
@@ -167,10 +169,6 @@ case class CatalogTablePartition(
     createTime: Long = System.currentTimeMillis,
     lastAccessTime: Long = -1,
     stats: Option[CatalogStatistics] = None) extends MetadataHashMapTranslator {
-  def toLinkedHashMap: mutable.LinkedHashMap[String, String] = {
-    jsonToString(toJsonLinkedHashMap)
-  }
-
   def toJsonLinkedHashMap: mutable.LinkedHashMap[String, JValue] = {
     val map = mutable.LinkedHashMap[String, JValue]()
 
@@ -359,10 +357,6 @@ case class BucketSpec(
       ""
     }
     s"$numBuckets buckets, $bucketString$sortString"
-  }
-
-  def toLinkedHashMap: mutable.LinkedHashMap[String, String] = {
-    jsonToString(toJsonLinkedHashMap)
   }
 
   def toJsonLinkedHashMap: mutable.LinkedHashMap[String, JValue] = {
@@ -586,10 +580,6 @@ case class CatalogTable(
       properties: Map[String, String] = storage.properties): CatalogTable = {
     copy(storage = CatalogStorageFormat(
       locationUri, inputFormat, outputFormat, serde, compressed, properties))
-  }
-
-  def toLinkedHashMap: mutable.LinkedHashMap[String, String] = {
-    jsonToString(toJsonLinkedHashMap)
   }
 
   def toJsonLinkedHashMap: mutable.LinkedHashMap[String, JValue] = {

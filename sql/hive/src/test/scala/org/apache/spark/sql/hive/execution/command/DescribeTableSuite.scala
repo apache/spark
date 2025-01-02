@@ -486,51 +486,51 @@ class DescribeTableSuite extends v1.DescribeTableSuiteBase with CommandSuiteBase
 
 /** Represents JSON output of DESCRIBE TABLE AS JSON  */
 case class DescribeTableJson(
-  table_name: Option[String] = None,
-  catalog_name: Option[String] = None,
-  namespace: Option[List[String]] = Some(Nil),
-  schema_name: Option[String] = None,
-  columns: Option[List[TableColumn]] = Some(Nil),
-  owner: Option[String] = None,
-  created_time: Option[String] = None,
-  last_access: Option[String] = None,
-  created_by: Option[String] = None,
-  `type`: Option[String] = None,
-  provider: Option[String] = None,
-  bucket_columns: Option[List[String]] = Some(Nil),
-  sort_columns: Option[List[String]] = Some(Nil),
-  comment: Option[String] = None,
-  table_properties: Option[Map[String, String]] = None,
-  location: Option[String] = None,
-  serde_library: Option[String] = None,
-  inputformat: Option[String] = None,
-  outputformat: Option[String] = None,
-  storage_properties: Option[Map[String, String]] = None,
-  partition_provider: Option[String] = None,
-  partition_columns: Option[List[String]] = Some(Nil),
-  partition_values: Option[Map[String, String]] = None
+    table_name: Option[String] = None,
+    catalog_name: Option[String] = None,
+    namespace: Option[List[String]] = Some(Nil),
+    schema_name: Option[String] = None,
+    columns: Option[List[TableColumn]] = Some(Nil),
+    owner: Option[String] = None,
+    created_time: Option[String] = None,
+    last_access: Option[String] = None,
+    created_by: Option[String] = None,
+    `type`: Option[String] = None,
+    provider: Option[String] = None,
+    bucket_columns: Option[List[String]] = Some(Nil),
+    sort_columns: Option[List[String]] = Some(Nil),
+    comment: Option[String] = None,
+    table_properties: Option[Map[String, String]] = None,
+    location: Option[String] = None,
+    serde_library: Option[String] = None,
+    inputformat: Option[String] = None,
+    outputformat: Option[String] = None,
+    storage_properties: Option[Map[String, String]] = None,
+    partition_provider: Option[String] = None,
+    partition_columns: Option[List[String]] = Some(Nil),
+    partition_values: Option[Map[String, String]] = None
 )
 
 /** Used for columns field of DescribeTableJson */
 case class TableColumn(
- name: String,
- `type`: Type,
- default_value: Option[String] = None
+    name: String,
+    `type`: Type,
+    default_value: Option[String] = None
 )
 
 case class Type(
-   `type`: String,
-   fields: Option[List[Field]] = None,
-   elementType: Option[Type] = None,
-   keyType: Option[Type] = None,
-   valueType: Option[Type] = None,
-   nullable: Option[Boolean] = None,
-   containsNull: Option[Boolean] = None,
-   valueContainsNull: Option[Boolean] = None
-  )
+    `type`: String,
+    fields: Option[List[Field]] = None,
+    elementType: Option[Type] = None,
+    keyType: Option[Type] = None,
+    valueType: Option[Type] = None,
+    nullable: Option[Boolean] = None,
+    containsNull: Option[Boolean] = None,
+    valueContainsNull: Option[Boolean] = None
+)
 
 case class Field(
-  name: String,
-  `type`: Type,
-  nullable: Option[Boolean] = None
+    name: String,
+    `type`: Type,
+    nullable: Option[Boolean] = None
 )

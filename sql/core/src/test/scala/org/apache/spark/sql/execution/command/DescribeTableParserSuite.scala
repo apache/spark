@@ -76,13 +76,7 @@ class DescribeTableParserSuite extends AnalysisTest {
         UnresolvedAttribute(Seq("col")),
         isExtended = true))
 
-    val error = intercept[AnalysisException] {
-      comparePlans(parsePlan("DESCRIBE EXTENDED t col AS JSON"),
-        DescribeColumn(
-          UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE", true),
-          UnresolvedAttribute(Seq("col")),
-          isExtended = true))
-    }
+    val error = intercept[AnalysisException](parsePlan("DESCRIBE EXTENDED t col AS JSON"))
 
     checkError(
       exception = error,

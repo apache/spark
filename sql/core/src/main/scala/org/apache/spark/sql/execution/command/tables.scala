@@ -706,9 +706,9 @@ case class DescribeTableCommand(
     )
     append(buffer, "", "", "")
     append(buffer, "# Detailed Table Information", "", "")
-    table.toLinkedHashMap.filter {
-      case (k, _) => !excludedTableInfo.contains(k)
-    }.foreach { s => append(buffer, s._1, s._2, "")}
+    table.toLinkedHashMap.filter { case (k, _) => !excludedTableInfo.contains(k) }.foreach {
+      s => append(buffer, s._1, s._2, "")
+    }
   }
 
   private def describeDetailedPartitionInfo(
@@ -783,11 +783,11 @@ case class DescribeTableJsonCommand(
         metadata.schema
       }
 
-      jsonMap += "table_name" -> JString(metadata.identifier.table)
-      table.catalog.foreach(catalog => jsonMap += "catalog_name" -> JString(catalog))
+      addKeyValueToMap("table_name", JString(metadata.identifier.table), jsonMap)
+      table.catalog.foreach(catalog => addKeyValueToMap("catalog_name", JString(catalog), jsonMap))
       table.database.foreach { db =>
-        jsonMap += "namespace" -> JArray(List(JString(db)))
-        jsonMap += "schema_name" -> JString(db)
+        addKeyValueToMap("namespace", JArray(List(JString(db))), jsonMap)
+        addKeyValueToMap("schema_name", JString(db), jsonMap)
       }
 
       describeColsJson(schema, jsonMap, header = false)
@@ -805,17 +805,26 @@ case class DescribeTableJsonCommand(
     val normalizedJsonMap = mutable.LinkedHashMap[String, JValue]()
     jsonMap.foreach { case (key, value) =>
       val normalizedKey = key.toLowerCase().replace(" ", "_")
-      normalizedJsonMap += normalizedKey -> value
+      addKeyValueToMap(normalizedKey, value, normalizedJsonMap)
     }
 
     Seq(Row(compact(render(JObject(normalizedJsonMap.toList)))))
+  }
+
+  private def addKeyValueToMap(
+      key: String,
+      value: JValue,
+      jsonMap: mutable.LinkedHashMap[String, JValue]): Unit = {
+    if (!jsonMap.contains(key)) {
+      jsonMap += key -> value
+    }
   }
 
   /**
    * Util to recursively form JSON string representation of data type, used for DESCRIBE AS JSON.
    * Differs from `json` in DataType.scala by providing additional fields for some types.
    */
-  def jsonType(dataType: DataType): String = {
+  private def jsonType(dataType: DataType): String = {
     dataType match {
       case arrayType: ArrayType =>
         val elementTypeJson = jsonType(arrayType.elementType)
@@ -875,10 +884,6 @@ case class DescribeTableJsonCommand(
     }
   }
 
-  private def normalizeStr(str: String): String = {
-    str.toLowerCase().replace(" ", "_")
-  }
-
   private def describeColsJson(
       schema: StructType,
       jsonMap: mutable.LinkedHashMap[String, JValue],
@@ -889,22 +894,24 @@ case class DescribeTableJsonCommand(
       .collect { case (name, _, defaultValue) => name -> defaultValue }
       .toMap
 
-    val columnsJson = schema.map { case column =>
-      val commentField = column.getComment()
-        .map(c => s""", "comment": "${c.replace("\"", "\\\"")}"""")
-        .getOrElse("")
-      val defaultValueJson = defaultValuesMap.get(column.name)
-        .map(defaultValue => s""", "default_value": "${defaultValue.replace("\"", "\\\"")}"""")
-        .getOrElse("")
+    val columnsJson = schema.map { column =>
+      val baseFields: List[JField] = List(
+        JField("name", JString(column.name)),
+        JField("type", parse(jsonType(column.dataType)))
+      )
 
-      s"""{
-         |  "name": "${column.name}",
-         |  "type": ${jsonType(column.dataType)}
-         |  $commentField$defaultValueJson
-         |}""".stripMargin
-    }.mkString("[", ",", "]")
+      val commentField: List[JField] = column.getComment().map { comment =>
+        List(JField("comment", JString(comment)))
+      }.getOrElse(Nil)
 
-    jsonMap += "columns" -> parse(columnsJson)
+      val defaultValueField: List[JField] = defaultValuesMap.get(column.name).map { defaultValue =>
+        List(JField("default_value", JString(defaultValue)))
+      }.getOrElse(Nil)
+
+      JObject(baseFields ++ commentField ++ defaultValueField)
+    }
+
+    addKeyValueToMap("columns", JArray(columnsJson.toList), jsonMap)
   }
 
   private def describeClusteringInfoJson(
@@ -925,7 +932,7 @@ case class DescribeTableJsonCommand(
            |}""".stripMargin
       }.mkString("[", ",", "]")
 
-      jsonMap += "clustering_information" -> parse(clusteringColumnsJson)
+      addKeyValueToMap("clustering_information", parse(clusteringColumnsJson), jsonMap)
     }
   }
 
@@ -937,12 +944,12 @@ case class DescribeTableJsonCommand(
     table.bucketSpec match {
       case Some(spec) =>
         spec.toJsonLinkedHashMap.foreach { case (key, value) =>
-          jsonMap += key -> value
+          addKeyValueToMap(key, value, jsonMap)
         }
       case _ =>
     }
     table.storage.toJsonLinkedHashMap.foreach { case (key, value) =>
-      jsonMap += key -> value
+      addKeyValueToMap(key, value, jsonMap)
     }
 
     val filteredTableInfo = table.toJsonLinkedHashMap.filterNot { case (key, _) =>
@@ -950,7 +957,7 @@ case class DescribeTableJsonCommand(
     }
 
     filteredTableInfo.map { case (key, value) =>
-      jsonMap += key -> value
+      addKeyValueToMap(key, value, jsonMap)
     }
   }
 
@@ -972,7 +979,7 @@ case class DescribeTableJsonCommand(
     val partition = catalog.getPartition(table, normalizedPartSpec)
 
     partition.toJsonLinkedHashMap.map { case (key, value) =>
-      jsonMap += key -> value
+      addKeyValueToMap(key, value, jsonMap)
     }
 
     val excludedTableInfo = Set("catalog", "schema", "database", "table", "partition_columns")
@@ -982,18 +989,18 @@ case class DescribeTableJsonCommand(
     }
 
     detailedInfo.map { case (key, value) =>
-      jsonMap += key -> value
+      addKeyValueToMap(key, value, jsonMap)
     }
 
     metadata.bucketSpec match {
       case Some(spec) =>
         spec.toJsonLinkedHashMap.map { case (key, value) =>
-          jsonMap += key -> value
+          addKeyValueToMap(key, value, jsonMap)
         }
       case _ =>
     }
     metadata.storage.toJsonLinkedHashMap.map { case (key, value) =>
-      jsonMap += key -> value
+      addKeyValueToMap(key, value, jsonMap)
     }
   }
 }
@@ -1359,6 +1366,7 @@ trait ShowCreateTableCommandBase extends SQLConfHelper {
       builder ++= concatByMultiLines(props)
     }
   }
+
 
   protected def concatByMultiLines(iter: Iterable[String]): String = {
     iter.mkString("(\n  ", ",\n  ", ")\n")
