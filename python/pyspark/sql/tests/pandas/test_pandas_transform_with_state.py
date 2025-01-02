@@ -922,6 +922,9 @@ class TransformWithStateInPandasTestsMixin:
 
     # This test covers mapState with TTL, an empty state variable
     # and additional test against initial state python runner
+    @unittest.skipIf(
+        "COVERAGE_PROCESS_START" in os.environ, "Flaky with coverage enabled, skipping for now."
+    )
     def test_transform_with_map_state_metadata(self):
         checkpoint_path = tempfile.mktemp()
 
