@@ -54,7 +54,8 @@
           "literal": {
             "string": "high"
           }
-        }]
+        }],
+        "isInternal": false
       }
     }]
   }
