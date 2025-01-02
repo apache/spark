@@ -251,7 +251,8 @@ class SparkConnectServiceE2ESuite extends SparkConnectServerTest {
       val sessionId = UUID.randomUUID.toString()
       val iter =
         stub.executePlan(
-          buildExecutePlanRequest(buildPlan("select * from range(1000000)"),
+          buildExecutePlanRequest(
+            buildPlan("select * from range(1000000)"),
             sessionId = sessionId))
       iter.hasNext // guarantees the request was received by server.
 
@@ -259,7 +260,8 @@ class SparkConnectServiceE2ESuite extends SparkConnectServerTest {
 
       val iter2 =
         stub.executePlan(
-          buildExecutePlanRequest(buildPlan("select * from range(1000000)"),
+          buildExecutePlanRequest(
+            buildPlan("select * from range(1000000)"),
             sessionId = sessionId))
       // guarantees the request was received by server. No exception should be thrown on reuse
       iter2.hasNext
