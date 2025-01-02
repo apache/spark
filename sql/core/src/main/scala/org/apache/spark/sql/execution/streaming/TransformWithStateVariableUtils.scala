@@ -29,7 +29,7 @@ import org.json4s.jackson.JsonMethods.{compact, render}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.execution.streaming.StateVariableType.StateVariableType
-import org.apache.spark.sql.execution.streaming.state.{OperatorInfoV1, OperatorStateMetadata, OperatorStateMetadataReader, OperatorStateMetadataV2, StateSchemaCompatibilityChecker, StateSchemaValidationResult, StateStoreColFamilySchema, StateStoreErrors, StateStoreId, StateStoreMetadataV2}
+import org.apache.spark.sql.execution.streaming.state.{OperatorInfoV1, OperatorStateMetadata, OperatorStateMetadataReader, OperatorStateMetadataV2, StateSchemaCompatibilityChecker, StateSchemaMetadataKey, StateSchemaMetadataValue, StateSchemaProvider, StateSchemaValidationResult, StateStoreColFamilySchema, StateStoreErrors, StateStoreId, StateStoreMetadataV2}
 import org.apache.spark.sql.streaming.{OutputMode, TimeMode}
 
 /**
@@ -79,6 +79,24 @@ case class TransformWithStateVariableInfo(
 
   def json: String = {
     compact(render(jsonValue))
+  }
+}
+
+// Simple implementation that just holds a map
+class SingleStateSchemaProvider(
+    schemas: Map[StateSchemaMetadataKey, StateSchemaMetadataValue]
+) extends StateSchemaProvider {
+
+  override def getSchemaMetadataValue(key: StateSchemaMetadataKey): StateSchemaMetadataValue = {
+    schemas(key)
+  }
+
+  override def getCurrentStateSchemaId(colFamilyName: String, isKey: Boolean): Short = {
+    schemas.keys
+      .filter(key =>
+        key.colFamilyName == colFamilyName &&
+          key.isKey == isKey)
+      .map(_.schemaId).max
   }
 }
 

@@ -52,7 +52,7 @@ sealed trait RocksDBValueStateEncoder {
   def decodeValues(valueBytes: Array[Byte]): Iterator[UnsafeRow]
 }
 
-trait StateSchemaProvider {
+trait StateSchemaProvider extends Serializable {
   def getSchemaMetadataValue(key: StateSchemaMetadataKey): StateSchemaMetadataValue
 
   def getCurrentStateSchemaId(colFamilyName: String, isKey: Boolean): Short
@@ -86,6 +86,22 @@ class TestStateSchemaProvider extends StateSchemaProvider {
       .filter(key =>
         key.colFamilyName == colFamilyName &&
           key.isKey == isKey)
+      .map(_.schemaId).max
+  }
+}
+
+class InMemoryStateSchemaProvider(metadata: StateSchemaMetadata) extends StateSchemaProvider {
+  override def getSchemaMetadataValue(key: StateSchemaMetadataKey): StateSchemaMetadataValue = {
+    metadata.activeSchemas(key)
+  }
+
+  override def getCurrentStateSchemaId(colFamilyName: String, isKey: Boolean): Short = {
+    metadata.activeSchemas
+      .keys
+      .filter(key =>
+        key.colFamilyName == colFamilyName &&
+          key.isKey == isKey
+      )
       .map(_.schemaId).max
   }
 }

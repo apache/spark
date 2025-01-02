@@ -589,7 +589,7 @@ case class TransformWithStateExec(
       storeConf = storeConf,
       hadoopConf = hadoopConfBroadcast.value.value,
       useMultipleValuesPerKey = true,
-      stateSchemaBroadcast = stateInfo.get.stateSchemaMetadata)
+      stateSchemaProvider = stateInfo.get.stateSchemaMetadata)
 
     val store = stateStoreProvider.getStore(0, None)
     val outputIterator = f(store)

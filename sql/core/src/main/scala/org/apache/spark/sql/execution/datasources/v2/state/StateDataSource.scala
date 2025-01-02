@@ -26,6 +26,7 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.avro.SchemaConverters
 import org.apache.spark.sql.catalyst.DataSourceOptions
 import org.apache.spark.sql.connector.catalog.{Table, TableProvider}
 import org.apache.spark.sql.connector.expressions.Transform
@@ -33,10 +34,10 @@ import org.apache.spark.sql.execution.datasources.v2.state.StateSourceOptions.{J
 import org.apache.spark.sql.execution.datasources.v2.state.StateSourceOptions.JoinSideValues.JoinSideValues
 import org.apache.spark.sql.execution.datasources.v2.state.metadata.{StateMetadataPartitionReader, StateMetadataTableEntry}
 import org.apache.spark.sql.execution.datasources.v2.state.utils.SchemaUtil
-import org.apache.spark.sql.execution.streaming.{CommitLog, OffsetSeqLog, OffsetSeqMetadata, TimerStateUtils, TransformWithStateOperatorProperties, TransformWithStateVariableInfo}
+import org.apache.spark.sql.execution.streaming.{CheckpointFileManager, CommitLog, OffsetSeqLog, OffsetSeqMetadata, TimerStateUtils, TransformWithStateOperatorProperties, TransformWithStateVariableInfo}
 import org.apache.spark.sql.execution.streaming.StreamingCheckpointConstants.{DIR_NAME_COMMITS, DIR_NAME_OFFSETS, DIR_NAME_STATE}
 import org.apache.spark.sql.execution.streaming.StreamingSymmetricHashJoinHelper.{LeftSide, RightSide}
-import org.apache.spark.sql.execution.streaming.state.{KeyStateEncoderSpec, NoPrefixKeyStateEncoderSpec, PrefixKeyScanStateEncoderSpec, StateSchemaCompatibilityChecker, StateStore, StateStoreColFamilySchema, StateStoreConf, StateStoreId, StateStoreProviderId}
+import org.apache.spark.sql.execution.streaming.state.{InMemoryStateSchemaProvider, KeyStateEncoderSpec, NoPrefixKeyStateEncoderSpec, PrefixKeyScanStateEncoderSpec, StateSchemaCompatibilityChecker, StateSchemaMetadata, StateSchemaMetadataKey, StateSchemaMetadataValue, StateSchemaProvider, StateStore, StateStoreColFamilySchema, StateStoreConf, StateStoreId, StateStoreProviderId}
 import org.apache.spark.sql.sources.DataSourceRegister
 import org.apache.spark.sql.streaming.TimeMode
 import org.apache.spark.sql.types.StructType
@@ -77,7 +78,8 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
 
     new StateTable(session, schema, sourceOptions, stateConf, keyStateEncoderSpec,
       stateStoreReaderInfo.transformWithStateVariableInfoOpt,
-      stateStoreReaderInfo.stateStoreColFamilySchemaOpt)
+      stateStoreReaderInfo.stateStoreColFamilySchemaOpt,
+      stateStoreReaderInfo.stateSchemaProviderOpt)
   }
 
   override def inferSchema(options: CaseInsensitiveStringMap): StructType = {
@@ -206,6 +208,8 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
     var keyStateEncoderSpecOpt: Option[KeyStateEncoderSpec] = None
     var stateStoreColFamilySchemaOpt: Option[StateStoreColFamilySchema] = None
     var transformWithStateVariableInfoOpt: Option[TransformWithStateVariableInfo] = None
+    var schemaFilePaths: List[String] = List.empty
+    var stateSchemaProvider: Option[StateSchemaProvider] = None
     var timeMode: String = TimeMode.None.toString
 
     if (sourceOptions.joinSide == JoinSideValues.none) {
@@ -231,8 +235,11 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
           s"for state variable $stateVarName in operator ${sourceOptions.operatorId}")
         val stateVarInfo = stateVarInfoList.head
         transformWithStateVariableInfoOpt = Some(stateVarInfo)
-        val schemaFilePath = new Path(storeMetadataEntry.stateSchemaFilePath.get)
-        Some(schemaFilePath)
+        schemaFilePaths = storeMetadataEntry.stateSchemaFilePaths
+        stateSchemaProvider = Some(createStateSchemaMetadata(sourceOptions, schemaFilePaths))
+        schemaFilePaths.lastOption.map { schemaFilePath =>
+          new Path(schemaFilePath)
+        }
       } else {
         None
       }
@@ -263,8 +270,61 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
     StateStoreReaderInfo(
       keyStateEncoderSpecOpt,
       stateStoreColFamilySchemaOpt,
-      transformWithStateVariableInfoOpt
+      transformWithStateVariableInfoOpt,
+      stateSchemaProvider
     )
+  }
+
+  private def createStateSchemaMetadata(
+      sourceOptions: StateSourceOptions,
+      stateSchemaFiles: List[String]
+  ): StateSchemaProvider = {
+    val fm = CheckpointFileManager.create(sourceOptions.stateCheckpointLocation, hadoopConf)
+
+    // Build up our map of schema metadata
+    val activeSchemas = stateSchemaFiles.zipWithIndex.foldLeft(
+      Map.empty[StateSchemaMetadataKey, StateSchemaMetadataValue]) {
+      case (schemas, (stateSchemaFile, schemaIndex)) =>
+        val fsDataInputStream = fm.open(new Path(stateSchemaFile))
+        val colFamilySchemas = StateSchemaCompatibilityChecker.readSchemaFile(fsDataInputStream)
+
+        // For each column family, create metadata entries for both key and value schemas
+        val schemaEntries = colFamilySchemas.flatMap { colFamilySchema =>
+          // Create key schema metadata
+          val keyAvroSchema = SchemaConverters.toAvroType(colFamilySchema.keySchema)
+          val keyEntry = StateSchemaMetadataKey(
+            colFamilySchema.colFamilyName,
+            colFamilySchema.keySchemaId,
+            isKey = true
+          ) -> StateSchemaMetadataValue(
+            colFamilySchema.keySchema,
+            keyAvroSchema
+          )
+
+          // Create value schema metadata
+          val valueAvroSchema = SchemaConverters.toAvroType(colFamilySchema.valueSchema)
+          val valueEntry = StateSchemaMetadataKey(
+            colFamilySchema.colFamilyName,
+            colFamilySchema.valueSchemaId,
+            isKey = false
+          ) -> StateSchemaMetadataValue(
+            colFamilySchema.valueSchema,
+            valueAvroSchema
+          )
+
+          Seq(keyEntry, valueEntry)
+        }
+
+        // Add new entries to our accumulated map
+        schemas ++ schemaEntries.toMap
+    }
+
+    // Create the final metadata and wrap it in a broadcast
+    val metadata = StateSchemaMetadata(
+      activeSchemas = activeSchemas
+    )
+
+    new InMemoryStateSchemaProvider(metadata)
   }
 
   private def getKeyStateEncoderSpec(
@@ -548,5 +608,6 @@ object StateSourceOptions extends DataSourceOptions {
 case class StateStoreReaderInfo(
     keyStateEncoderSpecOpt: Option[KeyStateEncoderSpec],
     stateStoreColFamilySchemaOpt: Option[StateStoreColFamilySchema],
-    transformWithStateVariableInfoOpt: Option[TransformWithStateVariableInfo]
+    transformWithStateVariableInfoOpt: Option[TransformWithStateVariableInfo],
+    stateSchemaProviderOpt: Option[StateSchemaProvider]
 )

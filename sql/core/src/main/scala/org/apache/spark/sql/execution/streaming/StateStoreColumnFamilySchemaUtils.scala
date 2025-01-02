@@ -80,7 +80,7 @@ object StateStoreColumnFamilySchemaUtils {
       keyEncoder: ExpressionEncoder[Any],
       valEncoder: Encoder[T],
       hasTtl: Boolean): StateStoreColFamilySchema = {
-  StateStoreColFamilySchema(
+    StateStoreColFamilySchema(
       stateName, 0,
       keyEncoder.schema, 0,
       getValueSchemaWithTTL(valEncoder.schema, hasTtl),
