@@ -19,12 +19,11 @@ package org.apache.spark.sql
 
 import org.apache.spark.sql.catalyst.expressions.{Ascending, Expression, FunctionTableSubqueryArgumentExpression, SortOrder}
 
-
 class TableArg(
     private[sql] val expression: FunctionTableSubqueryArgumentExpression,
     private val sparkSession: SparkSession,
-    private val isPartitioned: Boolean = false
-)  extends TableValuedFunctionArgument {
+    private val isPartitioned: Boolean = false)
+  extends TableValuedFunctionArgument {
   import sparkSession.toRichColumn
 
   @scala.annotation.varargs
@@ -42,7 +41,7 @@ class TableArg(
     val partitionByExpressions = cols.map(_.expr)
     new TableArg(
       expression.copy(
-        partitionByExpressions = partitionByExpressions, withSinglePartition = false),
+        partitionByExpressions = partitionByExpressions),
       sparkSession,
       isPartitioned = true
     )
@@ -75,7 +74,7 @@ class TableArg(
       )
     }
     new TableArg(
-      expression.copy(partitionByExpressions = Seq.empty, withSinglePartition = true),
+      expression.copy(withSinglePartition = true),
       sparkSession)
   }
 }
