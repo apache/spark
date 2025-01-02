@@ -1008,18 +1008,6 @@ case class Sort(
   override protected def withNewChildInternal(newChild: LogicalPlan): Sort = copy(child = newChild)
 }
 
-/**
- * Clustering data within the partition.
- *
- * @param cluster The clustering expressions
- * @param child   Child logical plan
- */
-case class Clustering(cluster: Seq[SortOrder], child: LogicalPlan) extends UnaryNode {
-  override def output: Seq[Attribute] = child.output
-  override protected def withNewChildInternal(newChild: LogicalPlan): Clustering =
-    copy(child = newChild)
-}
-
 /** Factory for constructing new `Range` nodes. */
 object Range {
   def apply(start: Long, end: Long, step: Long, numSlices: Int): Range = {
