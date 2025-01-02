@@ -1143,6 +1143,12 @@ class BaseUDTFTestsMixin:
 
         with self.assertRaisesRegex(
             IllegalArgumentException,
+            r"Please call partitionBy\(\) or withSinglePartition\(\) before orderBy\(\)",
+        ):
+            df.asTable().partitionBy().orderBy(df.key)
+
+        with self.assertRaisesRegex(
+            IllegalArgumentException,
             r"Cannot call partitionBy\(\) after partitionBy\(\) or withSinglePartition\(\) has been called",
         ):
             df.asTable().partitionBy(df.key).partitionBy()
