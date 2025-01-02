@@ -16,6 +16,8 @@
  */
 package org.apache.spark.sql.execution.streaming
 
+import scala.collection.mutable
+
 import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.execution.streaming.TransformWithStateKeyValueRowSchemaUtils._
@@ -67,24 +69,78 @@ object StateStoreColumnFamilySchemaUtils {
       stateName: String,
       keyEncoder: ExpressionEncoder[Any],
       valEncoder: Encoder[T],
-      hasTtl: Boolean): StateStoreColFamilySchema = {
-   StateStoreColFamilySchema(
+      hasTtl: Boolean): Map[String, StateStoreColFamilySchema] = {
+    val schemas = mutable.Map[String, StateStoreColFamilySchema]()
+
+    // Add main value state schema
+    schemas.put(stateName, StateStoreColFamilySchema(
       stateName, 0,
       keyEncoder.schema, 0,
       getValueSchemaWithTTL(valEncoder.schema, hasTtl),
-      Some(NoPrefixKeyStateEncoderSpec(keyEncoder.schema)))
+      Some(NoPrefixKeyStateEncoderSpec(keyEncoder.schema))))
+
+    // Add TTL index if needed
+    if (hasTtl) {
+      val ttlIndexSchema = StateStoreColFamilySchema(
+        getTtlColFamilyName(stateName), 0,
+        getTTLRowKeySchema(keyEncoder.schema), 0,
+        StructType(Array(StructField("__empty__", NullType))),
+        Some(RangeKeyScanStateEncoderSpec(getTTLRowKeySchema(keyEncoder.schema), Seq(0))))
+      schemas.put(ttlIndexSchema.colFamilyName, ttlIndexSchema)
+    }
+
+    schemas.toMap
   }
 
   def getListStateSchema[T](
       stateName: String,
       keyEncoder: ExpressionEncoder[Any],
       valEncoder: Encoder[T],
-      hasTtl: Boolean): StateStoreColFamilySchema = {
-    StateStoreColFamilySchema(
+      hasTtl: Boolean): Map[String, StateStoreColFamilySchema] = {
+    val schemas = mutable.Map[String, StateStoreColFamilySchema]()
+
+    // Add main list state schema
+    schemas.put(stateName, StateStoreColFamilySchema(
       stateName, 0,
       keyEncoder.schema, 0,
       getValueSchemaWithTTL(valEncoder.schema, hasTtl),
+      Some(NoPrefixKeyStateEncoderSpec(keyEncoder.schema))))
+    // Add row counter schema
+    val counterSchema = StateStoreColFamilySchema(
+      ListStateMetricsImpl.getRowCounterCFName(stateName), 0,
+      keyEncoder.schema, 0,
+      StructType(Seq(StructField("count", LongType, nullable = false))),
       Some(NoPrefixKeyStateEncoderSpec(keyEncoder.schema)))
+    schemas.put(counterSchema.colFamilyName, counterSchema)
+
+    // Add TTL-related schemas if needed
+    if (hasTtl) {
+      // TTL index
+      val ttlIndexSchema = StateStoreColFamilySchema(
+        getTtlColFamilyName(stateName), 0,
+        getTTLRowKeySchema(keyEncoder.schema), 0,
+        StructType(Array(StructField("__empty__", NullType))),
+        Some(RangeKeyScanStateEncoderSpec(getTTLRowKeySchema(keyEncoder.schema), Seq(0))))
+      schemas.put(ttlIndexSchema.colFamilyName, ttlIndexSchema)
+
+      // Min expiry index
+      val minIndexSchema = StateStoreColFamilySchema(
+        s"$$min_$stateName", 0,
+        keyEncoder.schema, 0,
+        getExpirationMsRowSchema(),
+        Some(NoPrefixKeyStateEncoderSpec(keyEncoder.schema)))
+      schemas.put(minIndexSchema.colFamilyName, minIndexSchema)
+
+      // Count index
+      val countSchema = StateStoreColFamilySchema(
+        s"$$count_$stateName", 0,
+        keyEncoder.schema, 0,
+        StructType(Seq(StructField("count", LongType, nullable = false))),
+        Some(NoPrefixKeyStateEncoderSpec(keyEncoder.schema)))
+      schemas.put(countSchema.colFamilyName, countSchema)
+    }
+
+    schemas.toMap
   }
 
   def getMapStateSchema[K, V](
@@ -92,14 +148,29 @@ object StateStoreColumnFamilySchemaUtils {
       keyEncoder: ExpressionEncoder[Any],
       userKeyEnc: Encoder[K],
       valEncoder: Encoder[V],
-      hasTtl: Boolean): StateStoreColFamilySchema = {
+      hasTtl: Boolean): Map[String, StateStoreColFamilySchema] = {
+    val schemas = mutable.Map[String, StateStoreColFamilySchema]()
     val compositeKeySchema = getCompositeKeySchema(keyEncoder.schema, userKeyEnc.schema)
-    StateStoreColFamilySchema(
+
+    // Add main map state schema
+    schemas.put(stateName, StateStoreColFamilySchema(
       stateName, 0,
       compositeKeySchema, 0,
       getValueSchemaWithTTL(valEncoder.schema, hasTtl),
       Some(PrefixKeyScanStateEncoderSpec(compositeKeySchema, 1)),
-      Some(userKeyEnc.schema))
+      Some(userKeyEnc.schema)))
+
+    // Add TTL index if needed
+    if (hasTtl) {
+      val ttlIndexSchema = StateStoreColFamilySchema(
+        getTtlColFamilyName(stateName), 0,
+        getTTLRowKeySchema(compositeKeySchema), 0,
+        StructType(Array(StructField("__empty__", NullType))),
+        Some(RangeKeyScanStateEncoderSpec(getTTLRowKeySchema(compositeKeySchema), Seq(0))))
+      schemas.put(ttlIndexSchema.colFamilyName, ttlIndexSchema)
+    }
+
+    schemas.toMap
   }
 
   def getTimerStateSchema(

@@ -21,6 +21,10 @@ import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeProj
 import org.apache.spark.sql.execution.streaming.state.{NoPrefixKeyStateEncoderSpec, StateStore}
 import org.apache.spark.sql.types._
 
+object ListStateMetricsImpl {
+  def getRowCounterCFName(stateName: String): String = "$rowCounter_" + stateName
+}
+
 /**
  * Trait that provides helper methods to maintain metrics for a list state.
  * For list state, we keep track of the count of entries in the list in a separate column family
@@ -43,10 +47,9 @@ trait ListStateMetricsImpl {
 
   private val updatedCountRow = new GenericInternalRow(1)
 
-  private def getRowCounterCFName(stateName: String) = "$rowCounter_" + stateName
-
-  stateStore.createColFamilyIfAbsent(getRowCounterCFName(baseStateName), exprEncSchema,
-    counterCFValueSchema, NoPrefixKeyStateEncoderSpec(exprEncSchema), isInternal = true)
+  stateStore.createColFamilyIfAbsent(ListStateMetricsImpl.getRowCounterCFName(baseStateName),
+    exprEncSchema, counterCFValueSchema, NoPrefixKeyStateEncoderSpec(exprEncSchema),
+    isInternal = true)
 
   /**
    * Function to get the number of entries in the list state for a given grouping key
@@ -54,7 +57,8 @@ trait ListStateMetricsImpl {
    * @return - number of entries in the list state
    */
   def getEntryCount(encodedKey: UnsafeRow): Long = {
-    val countRow = stateStore.get(encodedKey, getRowCounterCFName(baseStateName))
+    val countRow = stateStore.get(encodedKey,
+      ListStateMetricsImpl.getRowCounterCFName(baseStateName))
     if (countRow != null) {
       countRow.getLong(0)
     } else {
@@ -73,7 +77,7 @@ trait ListStateMetricsImpl {
     updatedCountRow.setLong(0, updatedCount)
     stateStore.put(encodedKey,
       counterCFProjection(updatedCountRow.asInstanceOf[InternalRow]),
-      getRowCounterCFName(baseStateName))
+      ListStateMetricsImpl.getRowCounterCFName(baseStateName))
   }
 
   /**
@@ -81,6 +85,7 @@ trait ListStateMetricsImpl {
    * @param encodedKey - encoded grouping key
    */
   def removeEntryCount(encodedKey: UnsafeRow): Unit = {
-    stateStore.remove(encodedKey, getRowCounterCFName(baseStateName))
+    stateStore.remove(encodedKey,
+      ListStateMetricsImpl.getRowCounterCFName(baseStateName))
   }
 }
