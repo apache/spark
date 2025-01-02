@@ -1079,10 +1079,6 @@ class BaseUDTFTestsMixin:
             def eval(self, row: Row):
                 yield row["key"], row["value"]
 
-            def terminate(self):
-                if False:
-                    yield
-
         func = udtf(TestUDTF, returnType="key: int, value: string")
         df = self.spark.createDataFrame([(1, "a"), (1, "b"), (2, "c"), (2, "d")], ["key", "value"])
         assertDataFrameEqual(
