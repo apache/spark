@@ -789,7 +789,6 @@ class TransformWithStateSuite extends StateStoreMetricsTest
           CheckNewAnswer(("a", "1"), ("c", "1"))
         )
 
-        logError(s"### starting query 2")
         val result2 = inputData.toDS()
           .groupByKey(x => x)
           .transformWithState(new RunningCountStatefulProcessorNestedLongs(),

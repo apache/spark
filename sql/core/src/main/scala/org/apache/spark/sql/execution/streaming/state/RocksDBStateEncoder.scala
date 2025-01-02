@@ -25,6 +25,8 @@ import java.nio.{ByteBuffer, ByteOrder}
 import org.apache.avro.Schema
 import org.apache.avro.generic.{GenericData, GenericDatumReader, GenericDatumWriter, GenericRecord}
 import org.apache.avro.io.{DecoderFactory, EncoderFactory}
+import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.Path
 
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.Logging
@@ -32,7 +34,7 @@ import org.apache.spark.sql.avro.{AvroDeserializer, AvroOptions, AvroSerializer,
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{BoundReference, JoinedRow, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.expressions.codegen.UnsafeRowWriter
-import org.apache.spark.sql.execution.streaming.StateStoreColumnFamilySchemaUtils
+import org.apache.spark.sql.execution.streaming.{CheckpointFileManager, StateStoreColumnFamilySchemaUtils}
 import org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider.{SCHEMA_ID_PREFIX_BYTES, STATE_ENCODING_NUM_VERSION_BYTES, STATE_ENCODING_VERSION, VIRTUAL_COL_FAMILY_PREFIX_BYTES}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.Platform
@@ -71,9 +73,9 @@ class TestStateSchemaProvider extends StateSchemaProvider {
       valueSchemaId: Short = 0): Unit = {
     schemas ++= Map(
       StateSchemaMetadataKey(colFamilyName, keySchemaId, isKey = true) ->
-        StateSchemaMetadataValue(keySchema, SchemaConverters.toAvroType(keySchema)),
+        StateSchemaMetadataValue(keySchema, SchemaConverters.toAvroTypeWithDefaults(keySchema)),
       StateSchemaMetadataKey(colFamilyName, valueSchemaId, isKey = false) ->
-        StateSchemaMetadataValue(valueSchema, SchemaConverters.toAvroType(valueSchema))
+        StateSchemaMetadataValue(valueSchema, SchemaConverters.toAvroTypeWithDefaults(valueSchema))
     )
   }
 
@@ -151,6 +153,62 @@ case class StateSchemaBroadcast(
 case class StateSchemaMetadata(
     activeSchemas: Map[StateSchemaMetadataKey, StateSchemaMetadataValue]
 )
+
+object StateSchemaMetadata {
+
+  def createStateSchemaMetadata(
+      checkpointLocation: String,
+      hadoopConf: Configuration,
+      stateSchemaFiles: List[String]
+  ): StateSchemaMetadata = {
+    val fm = CheckpointFileManager.create(new Path(checkpointLocation), hadoopConf)
+
+    // Build up our map of schema metadata
+    val activeSchemas = stateSchemaFiles.zipWithIndex.foldLeft(
+      Map.empty[StateSchemaMetadataKey, StateSchemaMetadataValue]) {
+      case (schemas, (stateSchemaFile, schemaIndex)) =>
+        val fsDataInputStream = fm.open(new Path(stateSchemaFile))
+        val colFamilySchemas = StateSchemaCompatibilityChecker.readSchemaFile(fsDataInputStream)
+
+        // For each column family, create metadata entries for both key and value schemas
+        val schemaEntries = colFamilySchemas.flatMap { colFamilySchema =>
+          // Create key schema metadata
+          val keyAvroSchema = SchemaConverters.toAvroTypeWithDefaults(
+            colFamilySchema.keySchema)
+          val keyEntry = StateSchemaMetadataKey(
+            colFamilySchema.colFamilyName,
+            colFamilySchema.keySchemaId,
+            isKey = true
+          ) -> StateSchemaMetadataValue(
+            colFamilySchema.keySchema,
+            keyAvroSchema
+          )
+
+          // Create value schema metadata
+          val valueAvroSchema = SchemaConverters.toAvroTypeWithDefaults(
+            colFamilySchema.valueSchema)
+          val valueEntry = StateSchemaMetadataKey(
+            colFamilySchema.colFamilyName,
+            colFamilySchema.valueSchemaId,
+            isKey = false
+          ) -> StateSchemaMetadataValue(
+            colFamilySchema.valueSchema,
+            valueAvroSchema
+          )
+
+          Seq(keyEntry, valueEntry)
+        }
+
+        // Add new entries to our accumulated map
+        schemas ++ schemaEntries.toMap
+    }
+
+    // Create the final metadata and wrap it in a broadcast
+    StateSchemaMetadata(
+      activeSchemas = activeSchemas
+    )
+  }
+}
 
 /**
  * Composite key for looking up schema metadata, combining column family and schema version.
@@ -674,10 +732,10 @@ class AvroStateEncoder(
 
   private val avroEncoder = createAvroEnc(keyStateEncoderSpec, valueSchema)
   // Avro schema used by the avro encoders
-  private lazy val keyAvroType: Schema = SchemaConverters.toAvroType(keySchema)
+  private lazy val keyAvroType: Schema = SchemaConverters.toAvroTypeWithDefaults(keySchema)
   private lazy val keyProj = UnsafeProjection.create(keySchema)
 
-  private lazy val valueAvroType: Schema = SchemaConverters.toAvroType(valueSchema)
+  private lazy val valueAvroType: Schema = SchemaConverters.toAvroTypeWithDefaults(valueSchema)
   private lazy val valueProj = UnsafeProjection.create(valueSchema)
 
   // Prefix Key schema and projection definitions used by the Avro Serializers
@@ -688,7 +746,7 @@ class AvroStateEncoder(
     case _ => throw unsupportedOperationForKeyStateEncoder("prefixKeySchema")
   }
 
-  private lazy val prefixKeyAvroType = SchemaConverters.toAvroType(prefixKeySchema)
+  private lazy val prefixKeyAvroType = SchemaConverters.toAvroTypeWithDefaults(prefixKeySchema)
   private lazy val prefixKeyProj = UnsafeProjection.create(prefixKeySchema)
 
   // Range Key schema and projection definitions used by the Avro Serializers and
@@ -706,7 +764,7 @@ class AvroStateEncoder(
   private lazy val rangeScanAvroSchema = StateStoreColumnFamilySchemaUtils.convertForRangeScan(
     StructType(rangeScanKeyFieldsWithOrdinal.map(_._1).toArray))
 
-  private lazy val rangeScanAvroType = SchemaConverters.toAvroType(rangeScanAvroSchema)
+  private lazy val rangeScanAvroType = SchemaConverters.toAvroTypeWithDefaults(rangeScanAvroSchema)
 
   private lazy val rangeScanAvroProjection = UnsafeProjection.create(rangeScanAvroSchema)
 
@@ -721,17 +779,18 @@ class AvroStateEncoder(
     case _ => throw unsupportedOperationForKeyStateEncoder("remainingKeySchema")
   }
 
-  private lazy val remainingKeyAvroType = SchemaConverters.toAvroType(remainingKeySchema)
+  private lazy val remainingKeyAvroType = SchemaConverters.toAvroTypeWithDefaults(
+    remainingKeySchema)
 
   private lazy val remainingKeyAvroProjection = UnsafeProjection.create(remainingKeySchema)
 
   private def getAvroSerializer(schema: StructType): AvroSerializer = {
-    val avroType = SchemaConverters.toAvroType(schema)
+    val avroType = SchemaConverters.toAvroTypeWithDefaults(schema)
     new AvroSerializer(schema, avroType, nullable = false)
   }
 
   private def getAvroDeserializer(schema: StructType): AvroDeserializer = {
-    val avroType = SchemaConverters.toAvroType(schema)
+    val avroType = SchemaConverters.toAvroTypeWithDefaults(schema)
     val avroOptions = AvroOptions(Map.empty)
     new AvroDeserializer(avroType, schema,
       avroOptions.datetimeRebaseModeInRead, avroOptions.useStableIdForUnionType,

@@ -301,6 +301,80 @@ object SchemaConverters extends Logging {
   }
 
   /**
+   * Converts a Spark SQL schema to a corresponding Avro schema.
+   *
+   * @since 2.4.0
+   */
+  def toAvroType(
+      catalystType: DataType,
+      nullable: Boolean = false,
+      recordName: String = "topLevelRecord",
+      nameSpace: String = "")
+    : Schema = {
+    val builder = SchemaBuilder.builder()
+
+    val schema = catalystType match {
+      case BooleanType => builder.booleanType()
+      case ByteType | ShortType | IntegerType => builder.intType()
+      case LongType => builder.longType()
+      case DateType =>
+        LogicalTypes.date().addToSchema(builder.intType())
+      case TimestampType =>
+        LogicalTypes.timestampMicros().addToSchema(builder.longType())
+      case TimestampNTZType =>
+        LogicalTypes.localTimestampMicros().addToSchema(builder.longType())
+
+      case FloatType => builder.floatType()
+      case DoubleType => builder.doubleType()
+      case StringType => builder.stringType()
+      case NullType => builder.nullType()
+      case d: DecimalType =>
+        val avroType = LogicalTypes.decimal(d.precision, d.scale)
+        val fixedSize = minBytesForPrecision(d.precision)
+        // Need to avoid naming conflict for the fixed fields
+        val name = nameSpace match {
+          case "" => s"$recordName.fixed"
+          case _ => s"$nameSpace.$recordName.fixed"
+        }
+        avroType.addToSchema(SchemaBuilder.fixed(name).size(fixedSize))
+
+      case BinaryType => builder.bytesType()
+      case ArrayType(et, containsNull) =>
+        builder.array()
+          .items(toAvroType(et, containsNull, recordName, nameSpace))
+      case MapType(StringType, vt, valueContainsNull) =>
+        builder.map()
+          .values(toAvroType(vt, valueContainsNull, recordName, nameSpace))
+      case st: StructType =>
+        val childNameSpace = if (nameSpace != "") s"$nameSpace.$recordName" else recordName
+        val fieldsAssembler = builder.record(recordName).namespace(nameSpace).fields()
+        st.foreach { f =>
+          val fieldAvroType =
+            toAvroType(f.dataType, f.nullable, f.name, childNameSpace)
+          fieldsAssembler.name(f.name).`type`(fieldAvroType).noDefault()
+        }
+        fieldsAssembler.endRecord()
+
+      case ym: YearMonthIntervalType =>
+        val ymIntervalType = builder.intType()
+        ymIntervalType.addProp(CATALYST_TYPE_PROP_NAME, ym.typeName)
+        ymIntervalType
+      case dt: DayTimeIntervalType =>
+        val dtIntervalType = builder.longType()
+        dtIntervalType.addProp(CATALYST_TYPE_PROP_NAME, dt.typeName)
+        dtIntervalType
+
+      // This should never happen.
+      case other => throw new IncompatibleSchemaException(s"Unexpected type $other.")
+    }
+    if (nullable && catalystType != NullType) {
+      Schema.createUnion(schema, nullSchema)
+    } else {
+      schema
+    }
+  }
+
+  /**
    * Creates default values for Spark SQL data types when converting to Avro.
    * This ensures fields have appropriate defaults during schema evolution.
    */
@@ -348,12 +422,11 @@ object SchemaConverters extends Logging {
    * Converts a Spark SQL schema to a corresponding Avro schema.
    * Handles nested types and adds support for schema evolution.
    */
-  def toAvroType(
+  def toAvroTypeWithDefaults(
       catalystType: DataType,
       nullable: Boolean = false,
       recordName: String = "topLevelRecord",
       nameSpace: String = "",
-      withDefaults: Boolean = true,
       nestingLevel: Int = 0): Schema = {
 
     val builder = SchemaBuilder.builder()
@@ -369,22 +442,16 @@ object SchemaConverters extends Logging {
         st: StructType,
         fieldsAssembler: FieldAssembler[Schema]): FieldAssembler[Schema] = {
       st.foreach { field =>
-        val fieldAvroType = toAvroType(
+        val fieldAvroType = toAvroTypeWithDefaults(
           field.dataType,
           field.nullable,
           getNestedRecordName(field.name),
           nameSpace,
-          withDefaults,
           nestingLevel + 1
         )
 
         val fieldAssembler = fieldsAssembler.name(field.name).`type`(fieldAvroType)
-
-        if (withDefaults) {
-          fieldAssembler.withDefault(getDefaultValue(field.dataType))
-        } else {
-          fieldAssembler.noDefault()
-        }
+        fieldAssembler.withDefault(getDefaultValue(field.dataType))
       }
       fieldsAssembler
     }
@@ -422,13 +489,13 @@ object SchemaConverters extends Logging {
       // Complex types
       case ArrayType(elementType, containsNull) =>
         builder.array()
-          .items(toAvroType(elementType, containsNull, recordName,
-            nameSpace, withDefaults, nestingLevel + 1))
+          .items(toAvroTypeWithDefaults(elementType, containsNull, recordName,
+            nameSpace, nestingLevel + 1))
 
       case MapType(StringType, valueType, valueContainsNull) =>
         builder.map()
-          .values(toAvroType(valueType, valueContainsNull, recordName,
-            nameSpace, withDefaults, nestingLevel + 1))
+          .values(toAvroTypeWithDefaults(valueType, valueContainsNull, recordName,
+            nameSpace, nestingLevel + 1))
 
       case st: StructType =>
         val nestedRecordName = getNestedRecordName(recordName)

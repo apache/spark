@@ -177,8 +177,8 @@ class StateSchemaCompatibilityChecker(
       oldSchema
     } else if (!ignoreValueSchema && schemaEvolutionEnabled) {
       // Check value schema evolution
-      val oldAvroSchema = SchemaConverters.toAvroType(storedValueSchema)
-      val newAvroSchema = SchemaConverters.toAvroType(valueSchema)
+      val oldAvroSchema = SchemaConverters.toAvroTypeWithDefaults(storedValueSchema)
+      val newAvroSchema = SchemaConverters.toAvroTypeWithDefaults(valueSchema)
 
       val validator = new SchemaValidatorBuilder().canReadStrategy.validateAll()
       validator.validate(newAvroSchema, Iterable(oldAvroSchema).asJava)

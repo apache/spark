@@ -447,7 +447,6 @@ class DriverStatefulProcessorHandleImpl(timeMode: TimeMode, keyExprEnc: Expressi
     columnFamilySchemas ++= colFamilySchema
     val stateVariableInfo = TransformWithStateVariableUtils.
       getListState(stateName, ttlEnabled = ttlEnabled)
-    logError(s"### colFamilySchema: $colFamilySchema")
     stateVariableInfos.put(stateName, stateVariableInfo)
     addTTLSchemas(
       columnFamilySchemas,
