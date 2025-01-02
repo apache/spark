@@ -1193,6 +1193,66 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
     }
   }
 
+  testWithColumnFamiliesAndEncodingTypes(s"numInternalKeys metrics",
+    TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
+    tryWithProviderResource(
+      newStoreProvider(useColumnFamilies = colFamiliesEnabled)) { provider =>
+      if (colFamiliesEnabled) {
+        val store = provider.getStore(0)
+
+        // create non-internal col family and add data
+        val cfName = "testColFamily"
+        store.createColFamilyIfAbsent(cfName, keySchema, valueSchema,
+          NoPrefixKeyStateEncoderSpec(keySchema))
+        put(store, "a", 0, 1, cfName)
+        put(store, "b", 0, 2, cfName)
+        put(store, "c", 0, 3, cfName)
+        put(store, "d", 0, 4, cfName)
+        put(store, "e", 0, 5, cfName)
+
+        // create internal col family and add data
+        val internalCfName = "$testIndex"
+        store.createColFamilyIfAbsent(internalCfName, keySchema, valueSchema,
+          NoPrefixKeyStateEncoderSpec(keySchema), isInternal = true)
+        put(store, "a", 0, 1, internalCfName)
+        put(store, "m", 0, 2, internalCfName)
+        put(store, "n", 0, 3, internalCfName)
+        put(store, "b", 0, 4, internalCfName)
+
+        assert(store.commit() === 1)
+        // Commit and verify that the metrics are correct for internal and non-internal col families
+        assert(store.metrics.numKeys === 5)
+        val metricPair = store
+          .metrics.customMetrics.find(_._1.name == "rocksdbNumInternalColFamiliesKeys")
+        assert(metricPair.isDefined && metricPair.get._2 === 4)
+        assert(rowPairsToDataSet(store.iterator(cfName)) ===
+          Set(("a", 0) -> 1, ("b", 0) -> 2, ("c", 0) -> 3, ("d", 0) -> 4, ("e", 0) -> 5))
+        assert(rowPairsToDataSet(store.iterator(internalCfName)) ===
+          Set(("a", 0) -> 1, ("m", 0) -> 2, ("n", 0) -> 3, ("b", 0) -> 4))
+
+        // Reload the store and remove some keys
+        val reloadedProvider = newStoreProvider(store.id, colFamiliesEnabled)
+        val reloadedStore = reloadedProvider.getStore(1)
+        reloadedStore.createColFamilyIfAbsent(cfName, keySchema, valueSchema,
+          NoPrefixKeyStateEncoderSpec(keySchema))
+        reloadedStore.createColFamilyIfAbsent(internalCfName, keySchema, valueSchema,
+          NoPrefixKeyStateEncoderSpec(keySchema), isInternal = true)
+        remove(reloadedStore, _._1 == "b", cfName)
+        remove(reloadedStore, _._1 == "m", internalCfName)
+        assert(reloadedStore.commit() === 2)
+        // Commit and verify that the metrics are correct for internal and non-internal col families
+        assert(reloadedStore.metrics.numKeys === 4)
+        val metricPairUpdated = reloadedStore
+          .metrics.customMetrics.find(_._1.name == "rocksdbNumInternalColFamiliesKeys")
+        assert(metricPairUpdated.isDefined && metricPairUpdated.get._2 === 3)
+        assert(rowPairsToDataSet(reloadedStore.iterator(cfName)) ===
+          Set(("a", 0) -> 1, ("c", 0) -> 3, ("d", 0) -> 4, ("e", 0) -> 5))
+        assert(rowPairsToDataSet(reloadedStore.iterator(internalCfName)) ===
+          Set(("a", 0) -> 1, ("n", 0) -> 3, ("b", 0) -> 4))
+      }
+    }
+  }
+
   test(s"validate rocksdb removeColFamilyIfExists correctness") {
     Seq(
       NoPrefixKeyStateEncoderSpec(keySchema),
