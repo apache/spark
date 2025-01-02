@@ -808,9 +808,14 @@ case class DescribeTableJsonCommand(
       key: String,
       value: JValue,
       jsonMap: mutable.LinkedHashMap[String, JValue]): Unit = {
-    def normalize_key(key: String): String = key.toLowerCase().replace(" ", "_")
-    if (!jsonMap.contains(normalize_key(key))) {
-      jsonMap += normalize_key(key) -> value
+    print(s"\nAdding key: $key, value: $value to jsonMap")
+    // Already added to jsonMap in DescribeTableJsonCommand
+    val excluded_keys = Set("catalog", "schema", "database", "table")
+
+    val normalized_key = key.toLowerCase().replace(" ", "_")
+
+    if (!jsonMap.contains(normalized_key) && !excluded_keys.contains(normalized_key)) {
+      jsonMap += normalized_key -> value
     }
   }
 
