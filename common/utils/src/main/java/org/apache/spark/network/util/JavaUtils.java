@@ -128,6 +128,7 @@ public class JavaUtils {
       FilenameFilter filter) throws IOException {
     BasicFileAttributes fileAttributes =
             Files.readAttributes(file.toPath(), BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
+    // If the file does not exist and not a broken symbolic link, return directly.
     if (!file.exists() && !fileAttributes.isSymbolicLink()) return;
     if (fileAttributes.isDirectory()) {
       IOException savedIOException = null;
