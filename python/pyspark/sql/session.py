@@ -58,7 +58,6 @@ from pyspark.sql.types import (
     _has_nulltype,
     _merge_type,
     _create_converter,
-    _parse_datatype_string,
     _from_numpy_type,
 )
 from pyspark.errors.exceptions.captured import install_exception_handler
@@ -1501,7 +1500,7 @@ class SparkSession(SparkConversionMixin):
             )
 
         if isinstance(schema, str):
-            schema = cast(Union[AtomicType, StructType, str], _parse_datatype_string(schema))
+            schema = cast(Union[AtomicType, StructType, str], self._parse_ddl(schema))
         elif isinstance(schema, (list, tuple)):
             # Must re-encode any unicode strings to be consistent with StructField names
             schema = [x.encode("utf-8") if not isinstance(x, str) else x for x in schema]
@@ -2337,6 +2336,12 @@ class SparkSession(SparkConversionMixin):
             Supports Spark Classic.
         """
         self._jsparkSession.clearTags()
+
+    def _to_ddl(self, struct: StructType) -> str:
+        return self._sc._to_ddl(struct)
+
+    def _parse_ddl(self, ddl: str) -> DataType:
+        return self._sc._parse_ddl(ddl)
 
 
 def _test() -> None:
