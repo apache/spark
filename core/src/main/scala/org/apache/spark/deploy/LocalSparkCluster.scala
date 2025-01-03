@@ -25,7 +25,7 @@ import org.apache.spark.SparkConf
 import org.apache.spark.deploy.master.Master
 import org.apache.spark.deploy.worker.Worker
 import org.apache.spark.internal.{config, Logging, LogKeys, MDC}
-import org.apache.spark.rpc.RpcEnv
+import org.apache.spark.rpc.{RpcEndpointRef, RpcEnv}
 import org.apache.spark.util.Utils
 
 /**
@@ -45,6 +45,7 @@ class LocalSparkCluster private (
   private val localHostname = Utils.localHostName()
   private val masterRpcEnvs = ArrayBuffer[RpcEnv]()
   private val workerRpcEnvs = ArrayBuffer[RpcEnv]()
+  private val workerRefs = ArrayBuffer[RpcEndpointRef]()
   // exposed for testing
   var masterWebUIPort = -1
   // for test only
@@ -57,7 +58,6 @@ class LocalSparkCluster private (
     // Disable REST server on Master in this mode unless otherwise specified
     val _conf = conf.clone()
       .setIfMissing(config.MASTER_REST_SERVER_ENABLED, false)
-      .set(config.SHUFFLE_SERVICE_ENABLED, false)
 
     /* Start the Master */
     val (rpcEnv, webUiPort, _) = Master.startRpcEnvAndEndpoint(localHostname, 0, 0, _conf)
@@ -74,14 +74,18 @@ class LocalSparkCluster private (
       if (Utils.isTesting) {
         workerDirs += workDir
       }
-      val workerEnv = Worker.startRpcEnvAndEndpoint(localHostname, 0, 0, coresPerWorker,
+      val (workerEnv, workerRef) = Worker.startRpcEnvAndEndpoint(
+        localHostname, 0, 0, coresPerWorker,
         memoryPerWorker, masters, workDir, Some(workerNum), _conf,
         conf.get(config.Worker.SPARK_WORKER_RESOURCE_FILE))
       workerRpcEnvs += workerEnv
+      workerRefs += workerRef
     }
 
     masters
   }
+
+  def workers: Seq[RpcEndpointRef] = workerRefs.toSeq
 
   def workerLogfiles(): Seq[File] = {
     workerDirs.toSeq.flatMap { dir =>

@@ -15,13 +15,8 @@
  * limitations under the License.
  */
 
-package org.apache.spark
+package org.apache.spark.deploy
 
-import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.internal.config
-import org.apache.spark.network.TransportContext
-import org.apache.spark.network.netty.SparkTransportConf
-import org.apache.spark.network.shuffle.ExternalBlockHandler
 import org.apache.spark.util.SslTestUtils
 
 /**
@@ -32,22 +27,8 @@ import org.apache.spark.util.SslTestUtils
  */
 class SslExternalShuffleServiceSuite extends ExternalShuffleServiceSuite {
 
-  override def initializeHandlers(): Unit = {
+  override def beforeAll(): Unit = {
     SslTestUtils.updateWithSSLConfig(conf)
-    val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf);
-    // Show that we can successfully inherit options defined in the `spark.ssl` namespace
-    val defaultSslOptions = SSLOptions.parse(conf, hadoopConf, "spark.ssl")
-    val sslOptions = SSLOptions.parse(
-      conf, hadoopConf, "spark.ssl.rpc", defaults = Some(defaultSslOptions))
-    val transportConf = SparkTransportConf.fromSparkConf(
-      conf, "shuffle", numUsableCores = 2, sslOptions = Some(sslOptions))
-
-    rpcHandler = new ExternalBlockHandler(transportConf, null)
-    transportContext = new TransportContext(transportConf, rpcHandler)
-    server = transportContext.createServer()
-
-    conf.set(config.SHUFFLE_MANAGER, "sort")
-    conf.set(config.SHUFFLE_SERVICE_ENABLED, true)
-    conf.set(config.SHUFFLE_SERVICE_PORT, server.getPort)
+    super.beforeAll()
   }
 }

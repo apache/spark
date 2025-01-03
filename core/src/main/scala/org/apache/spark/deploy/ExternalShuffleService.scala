@@ -18,6 +18,7 @@
 package org.apache.spark.deploy
 
 import java.io.File
+import java.util.UUID
 import java.util.concurrent.CountDownLatch
 
 import scala.jdk.CollectionConverters._
@@ -49,7 +50,6 @@ class ExternalShuffleService(sparkConf: SparkConf, securityManager: SecurityMana
     MetricsSystem.createMetricsSystem(MetricsSystemInstances.SHUFFLE_SERVICE, sparkConf)
 
   private val enabled = sparkConf.get(config.SHUFFLE_SERVICE_ENABLED)
-  private val port = sparkConf.get(config.SHUFFLE_SERVICE_PORT)
 
   private val registeredExecutorsDB = "registeredExecutors"
 
@@ -65,6 +65,15 @@ class ExternalShuffleService(sparkConf: SparkConf, securityManager: SecurityMana
   private var server: TransportServer = _
 
   private val shuffleServiceSource = new ExternalShuffleServiceSource
+
+  def port: Option[Int] = {
+    if (enabled) {
+      assert(server != null, "Server hasn't started yet")
+      Some(server.getPort)
+    } else {
+      None
+    }
+  }
 
   protected def findRegisteredExecutorsDBFile(dbName: String): File = {
     val localDirs = sparkConf.getOption("spark.local.dir").map(_.split(",")).getOrElse(Array())
@@ -89,8 +98,12 @@ class ExternalShuffleService(sparkConf: SparkConf, securityManager: SecurityMana
       val dbBackend = DBBackend.byName(shuffleDBName)
       logInfo(log"Use ${MDC(SHUFFLE_DB_BACKEND_NAME, dbBackend.name())} as the implementation of " +
         log"${MDC(SHUFFLE_DB_BACKEND_KEY, config.SHUFFLE_SERVICE_DB_BACKEND.key)}")
+      val fileIdentify = if (LocalSparkCluster.get.isDefined) {
+        s"_${UUID.randomUUID().getLeastSignificantBits}"
+      } else ""
+      val filePrefix = s"$registeredExecutorsDB$fileIdentify"
       new ExternalBlockHandler(conf,
-        findRegisteredExecutorsDBFile(dbBackend.fileName(registeredExecutorsDB)))
+        findRegisteredExecutorsDBFile(dbBackend.fileName(filePrefix)))
     } else {
       new ExternalBlockHandler(conf, null)
     }
@@ -107,6 +120,11 @@ class ExternalShuffleService(sparkConf: SparkConf, securityManager: SecurityMana
   def start(): Unit = {
     require(server == null, "Shuffle server already started")
     val authEnabled = securityManager.isAuthenticationEnabled()
+    val port = if (LocalSparkCluster.get.isDefined) {
+      0
+    } else {
+      sparkConf.get(config.SHUFFLE_SERVICE_PORT)
+    }
     logInfo(log"Starting shuffle service on port ${MDC(PORT, port)}" +
       log" (auth enabled = ${MDC(AUTH_ENABLED, authEnabled)})")
     val bootstraps: Seq[TransportServerBootstrap] =
@@ -127,7 +145,7 @@ class ExternalShuffleService(sparkConf: SparkConf, securityManager: SecurityMana
   }
 
   /** Clean up all shuffle files associated with an application that has exited. */
-  def applicationRemoved(appId: String): Unit = {
+  def applicationRemoved(appId: String, cleanupLocalDirs: Boolean = true): Unit = {
     blockHandler.applicationRemoved(appId, true /* cleanupLocalDirs */)
   }
 
@@ -156,6 +174,9 @@ object ExternalShuffleService extends Logging {
   private var server: ExternalShuffleService = _
 
   private val barrier = new CountDownLatch(1)
+
+  // the environment variable of the external shuffle service port
+  val TESTING_ESS_PORT_ENV = "TESTING_EXTERNAL_SHUFFLE_SERVICE_PORT"
 
   def main(args: Array[String]): Unit = {
     main(args, (conf: SparkConf, sm: SecurityManager) => new ExternalShuffleService(conf, sm))
