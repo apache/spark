@@ -51,6 +51,8 @@ class CommitLog(sparkSession: SparkSession, path: String)
 
   import CommitLog._
 
+  private val VERSION = SQLConf.get.stateStoreCheckpointFormatVersion
+
   override protected[sql] def deserialize(in: InputStream): CommitMetadata = {
     // called inside a try-finally where the underlying stream is closed in the caller
     val lines = IOSource.fromInputStream(in, UTF_8.name()).getLines()
@@ -58,7 +60,9 @@ class CommitLog(sparkSession: SparkSession, path: String)
       throw new IllegalStateException("Incomplete log file in the offset commit log")
     }
     // TODO [SPARK-49462] This validation should be relaxed for a stateless query.
-    validateVersion(lines.next().trim, VERSION)
+    // TODO [SPARK-50653] This validation should be relaxed to support reading
+    //  a V1 log file when VERSION is V2
+    validateVersionExactMatch(lines.next().trim, VERSION)
     val metadataJson = if (lines.hasNext) lines.next() else EMPTY_JSON
     CommitMetadata(metadataJson)
   }
@@ -74,7 +78,6 @@ class CommitLog(sparkSession: SparkSession, path: String)
 }
 
 object CommitLog {
-  private val VERSION = SQLConf.get.stateStoreCheckpointFormatVersion
   private val EMPTY_JSON = "{}"
 }
 
