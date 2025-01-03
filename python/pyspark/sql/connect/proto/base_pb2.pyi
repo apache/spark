@@ -3216,6 +3216,7 @@ class ReleaseSessionRequest(google.protobuf.message.Message):
     SESSION_ID_FIELD_NUMBER: builtins.int
     USER_CONTEXT_FIELD_NUMBER: builtins.int
     CLIENT_TYPE_FIELD_NUMBER: builtins.int
+    ALLOW_RECONNECT_FIELD_NUMBER: builtins.int
     session_id: builtins.str
     """(Required)
 
@@ -3234,12 +3235,27 @@ class ReleaseSessionRequest(google.protobuf.message.Message):
     can be used for language or version specific information and is only intended for
     logging purposes and will not be interpreted by the server.
     """
+    allow_reconnect: builtins.bool
+    """Signals the server to allow the client to reconnect to the session after it is released.
+
+    By default, the server tombstones the session upon release, preventing reconnections and
+    fully cleaning the session state.
+
+    If this flag is set to true, the server may permit the client to reconnect to the session
+    post-release, even if the session state has been cleaned. This can result in missing state,
+    such as Temporary Views, Temporary UDFs, or the Current Catalog, in the reconnected session.
+
+    Use this option sparingly and only when the client fully understands the implications of
+    reconnecting to a released session. The client must ensure that any queries executed do not
+    rely on the session state prior to its release.
+    """
     def __init__(
         self,
         *,
         session_id: builtins.str = ...,
         user_context: global___UserContext | None = ...,
         client_type: builtins.str | None = ...,
+        allow_reconnect: builtins.bool = ...,
     ) -> None: ...
     def HasField(
         self,
@@ -3257,6 +3273,8 @@ class ReleaseSessionRequest(google.protobuf.message.Message):
         field_name: typing_extensions.Literal[
             "_client_type",
             b"_client_type",
+            "allow_reconnect",
+            b"allow_reconnect",
             "client_type",
             b"client_type",
             "session_id",
