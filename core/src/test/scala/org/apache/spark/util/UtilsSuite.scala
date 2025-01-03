@@ -732,7 +732,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
     assert(!sourceFile2.exists())
   }
 
-  test("deleteRecursively - SymbolicLink To File") {
+  test("SPARK-50716: deleteRecursively - SymbolicLink To File") {
     val tempDir = Utils.createTempDir()
     val sourceFile = new File(tempDir, "foo.txt")
     JFiles.write(sourceFile.toPath, "Some content".getBytes)
@@ -755,7 +755,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
     assert(!symlinkFile.exists)
   }
 
-  test("deleteRecursively - SymbolicLink To Dir") {
+  test("SPARK-50716: deleteRecursively - SymbolicLink To Dir") {
     val tempDir = Utils.createTempDir()
     val sourceDir = new File(tempDir, "sourceDir")
     assert(sourceDir.mkdir())

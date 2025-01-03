@@ -127,8 +127,8 @@ public class JavaUtils {
       File file,
       FilenameFilter filter) throws IOException {
     BasicFileAttributes fileAttributes =
-            Files.readAttributes(file.toPath(), BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
-    // If the file does not exist and not a broken symbolic link, return directly.
+      Files.readAttributes(file.toPath(), BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
+    // SPARK-50716: If the file does not exist and not a broken symbolic link, return directly.
     if (!file.exists() && !fileAttributes.isSymbolicLink()) return;
     if (fileAttributes.isDirectory()) {
       IOException savedIOException = null;
@@ -192,17 +192,6 @@ public class JavaUtils {
     } else {
       return new File[0];
     }
-  }
-
-  private static boolean isSymlink(File file) throws IOException {
-    Objects.requireNonNull(file);
-    File fileInCanonicalDir = null;
-    if (file.getParent() == null) {
-      fileInCanonicalDir = file;
-    } else {
-      fileInCanonicalDir = new File(file.getParentFile().getCanonicalFile(), file.getName());
-    }
-    return !fileInCanonicalDir.getCanonicalFile().equals(fileInCanonicalDir.getAbsoluteFile());
   }
 
   private static final Map<String, TimeUnit> timeSuffixes;
