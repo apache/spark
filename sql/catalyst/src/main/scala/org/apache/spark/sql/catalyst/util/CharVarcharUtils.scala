@@ -167,7 +167,7 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
           if (SQLConf.get.preserveCharVarcharTypeInfo) {
             c
           } else {
-            StringType(c.collationId)
+            StringType
           },
           charFuncName.get,
           expr :: Literal(length) :: Nil,
@@ -179,7 +179,7 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
           if (SQLConf.get.preserveCharVarcharTypeInfo) {
             v
           } else {
-            StringType(v.collationId)
+            StringType
           },
           varcharFuncName.get,
           expr :: Literal(length) :: Nil,

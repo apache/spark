@@ -54,15 +54,11 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
 
   protected final def castToChar(from: DataType, length: Int): Any => UTF8String = from match {
     case _: StringType => acceptAny(o => CharVarcharCodegenUtils.charTypeWriteSideCheck(o, length))
-    case _ => o => CharVarcharCodegenUtils.charTypeWriteSideCheck(
-      UTF8String.fromString(o.toString), length)
   }
 
   protected final def castToVarchar(from: DataType, length: Int): Any => UTF8String = from match {
     case _: StringType => acceptAny(o => CharVarcharCodegenUtils.varcharTypeWriteSideCheck(
       o, length))
-    case _ => o => CharVarcharCodegenUtils.varcharTypeWriteSideCheck(
-      UTF8String.fromString(o.toString), length)
   }
 
   // Returns a function to convert a value to pretty string. The function assumes input is not null.
@@ -185,9 +181,6 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
       case _: StringType =>
         (c, evPrim) => code"$evPrim = org.apache.spark.sql.catalyst.util.CharVarcharCodegenUtils" +
           code".charTypeWriteSideCheck($c, $length);"
-      case _ =>
-        (c, evPrim) => code"$evPrim = org.apache.spark.sql.catalyst.util.CharVarcharCodegenUtils" +
-          code".charTypeWriteSideCheck(UTF8String.fromString(String.valueOf($c)), $length);"
     }
   }
 
@@ -197,9 +190,6 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
       case _: StringType =>
         (c, evPrim) => code"$evPrim = org.apache.spark.sql.catalyst.util.CharVarcharCodegenUtils" +
           code".varcharTypeWriteSideCheck($c, $length);"
-      case _ =>
-        (c, evPrim) => code"$evPrim = org.apache.spark.sql.catalyst.util.CharVarcharCodegenUtils" +
-          code".varcharTypeWriteSideCheck(UTF8String.fromString(String.valueOf($c)), $length);"
     }
   }
 

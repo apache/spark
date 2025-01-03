@@ -329,11 +329,11 @@ abstract class TypeCoercionBase extends TypeCoercionHelper {
   object CastCoercion extends TypeCoercionRule {
 
     override val transform: PartialFunction[Expression, Expression] = {
-      case c @ Cast(child, dataType, _, _) if child.resolved => (child.dataType, dataType) match {
-        case (_: StringType, _) => c
-        case (_, CharType(_) | VarcharType(_)) => c.withNewChildren(Seq(Cast(child, StringType)))
-        case _ => c
-      }
+      case c @ Cast(child, CharType(_) | VarcharType(_), _, _) if child.resolved =>
+        child.dataType match {
+          case _: StringType => c
+          case _ => c.withNewChildren(Seq(Cast(child, StringType)))
+        }
       case e => e
     }
   }
