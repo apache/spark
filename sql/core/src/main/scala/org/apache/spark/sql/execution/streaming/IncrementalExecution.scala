@@ -214,7 +214,7 @@ class IncrementalExecution(
       // filepath, and write this path out in the OperatorStateMetadata file
       case statefulOp: StatefulOperator if isFirstBatch =>
         val stateSchemaVersion = statefulOp match {
-          case _: TransformWithStateExec =>
+          case _: TransformWithStateExec | _: TransformWithStateInPandasExec =>
             sparkSession.sessionState.conf.
               getConf(SQLConf.STREAMING_TRANSFORM_WITH_STATE_OP_STATE_SCHEMA_VERSION)
           case _ => STATE_SCHEMA_DEFAULT_VERSION

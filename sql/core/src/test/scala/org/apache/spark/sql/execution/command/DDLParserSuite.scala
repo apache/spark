@@ -498,6 +498,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
       UnresolvedIdentifier(Seq("view1")),
       Seq.empty[(String, Option[String])],
       None,
+      None,
       Map.empty[String, String],
       Some("SELECT * FROM tab1"),
       parser.parsePlan("SELECT * FROM tab1"),
@@ -512,6 +513,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     val expected2 = CreateViewCommand(
       Seq("a").asTableIdentifier,
       Seq.empty[(String, Option[String])],
+      None,
       None,
       Map.empty[String, String],
       Some("SELECT * FROM tab1"),
@@ -539,6 +541,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
         |(col1, col3 COMMENT 'hello')
         |TBLPROPERTIES('prop1Key'="prop1Val")
         |COMMENT 'BLABLA'
+        |DEFAULT COLLATION uNiCodE
         |AS SELECT * FROM tab1
       """.stripMargin
     val parsed1 = parser.parsePlan(v1)
@@ -546,6 +549,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
       UnresolvedIdentifier(Seq("view1")),
       Seq("col1" -> None, "col3" -> Some("hello")),
       Some("BLABLA"),
+      Some("UNICODE"),
       Map("prop1Key" -> "prop1Val"),
       Some("SELECT * FROM tab1"),
       parser.parsePlan("SELECT * FROM tab1"),
@@ -559,6 +563,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
         |CREATE OR REPLACE GLOBAL TEMPORARY VIEW a
         |(col1, col3 COMMENT 'hello')
         |COMMENT 'BLABLA'
+        |DEFAULT COLLATION uNiCoDe
         |AS SELECT * FROM tab1
           """.stripMargin
     val parsed2 = parser.parsePlan(v2)
@@ -566,6 +571,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
       Seq("a").asTableIdentifier,
       Seq("col1" -> None, "col3" -> Some("hello")),
       Some("BLABLA"),
+      Some("UNICODE"),
       Map(),
       Some("SELECT * FROM tab1"),
       parser.parsePlan("SELECT * FROM tab1"),

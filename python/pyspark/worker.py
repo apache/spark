@@ -1049,7 +1049,7 @@ def read_udtf(pickleSer, infile, eval_type):
                 list(args) + list(kwargs.values())
             )
             if changed_partitions:
-                if self._udtf.terminate is not None:
+                if hasattr(self._udtf, "terminate"):
                     result = self._udtf.terminate()
                     if result is not None:
                         for row in result:
@@ -1075,7 +1075,7 @@ def read_udtf(pickleSer, infile, eval_type):
                     self._eval_raised_skip_rest_of_input_table = True
 
         def terminate(self) -> Iterator:
-            if self._udtf.terminate is not None:
+            if hasattr(self._udtf, "terminate"):
                 return self._udtf.terminate()
             return iter(())
 

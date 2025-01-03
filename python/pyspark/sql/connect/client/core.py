@@ -331,8 +331,8 @@ class DefaultChannelBuilder(ChannelBuilder):
                 jvm = PySparkSession._instantiatedSession._jvm  # type: ignore[union-attr]
                 return getattr(
                     getattr(
-                        jvm.org.apache.spark.sql.connect.service,  # type: ignore[union-attr]
-                        "SparkConnectService$",
+                        jvm,
+                        "org.apache.spark.sql.connect.service.SparkConnectService$",
                     ),
                     "MODULE$",
                 ).localPort()

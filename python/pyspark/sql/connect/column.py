@@ -52,6 +52,7 @@ from pyspark.sql.connect.expressions import (
     WithField,
     DropField,
 )
+from pyspark.errors.utils import with_origin_to_class
 
 
 if TYPE_CHECKING:
@@ -106,19 +107,12 @@ def _to_expr(v: Any) -> Expression:
     return v._expr if isinstance(v, Column) else LiteralExpression._from_value(v)
 
 
+@with_origin_to_class(["to_plan"])
 class Column(ParentColumn):
     def __new__(
         cls,
         expr: "Expression",
     ) -> "Column":
-        # We apply `with_origin_to_class` decorator here instead of top of the class definition
-        # to prevent circular import issue when initializing the SparkSession.
-        # See https://github.com/apache/spark/pull/49054 for more detail.
-        from pyspark.errors.utils import with_origin_to_class
-
-        if not hasattr(cls, "_with_origin_applied"):
-            cls = with_origin_to_class(["to_plan"])(cls)
-            cls._with_origin_applied = True
         self = object.__new__(cls)
         self.__init__(expr)  # type: ignore[misc]
         return self

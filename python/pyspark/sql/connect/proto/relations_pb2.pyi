@@ -3612,6 +3612,7 @@ class GroupMap(google.protobuf.message.Message):
     IS_MAP_GROUPS_WITH_STATE_FIELD_NUMBER: builtins.int
     OUTPUT_MODE_FIELD_NUMBER: builtins.int
     TIMEOUT_CONF_FIELD_NUMBER: builtins.int
+    STATE_SCHEMA_FIELD_NUMBER: builtins.int
     @property
     def input(self) -> global___Relation:
         """(Required) Input relation for Group Map API: apply, applyInPandas."""
@@ -3650,6 +3651,9 @@ class GroupMap(google.protobuf.message.Message):
     """(Optional) The output mode of the function."""
     timeout_conf: builtins.str
     """(Optional) Timeout configuration for groups that do not receive data for a while."""
+    @property
+    def state_schema(self) -> pyspark.sql.connect.proto.types_pb2.DataType:
+        """(Optional) The schema for the grouped state."""
     def __init__(
         self,
         *,
@@ -3672,6 +3676,7 @@ class GroupMap(google.protobuf.message.Message):
         is_map_groups_with_state: builtins.bool | None = ...,
         output_mode: builtins.str | None = ...,
         timeout_conf: builtins.str | None = ...,
+        state_schema: pyspark.sql.connect.proto.types_pb2.DataType | None = ...,
     ) -> None: ...
     def HasField(
         self,
@@ -3680,6 +3685,8 @@ class GroupMap(google.protobuf.message.Message):
             b"_is_map_groups_with_state",
             "_output_mode",
             b"_output_mode",
+            "_state_schema",
+            b"_state_schema",
             "_timeout_conf",
             b"_timeout_conf",
             "func",
@@ -3692,6 +3699,8 @@ class GroupMap(google.protobuf.message.Message):
             b"is_map_groups_with_state",
             "output_mode",
             b"output_mode",
+            "state_schema",
+            b"state_schema",
             "timeout_conf",
             b"timeout_conf",
         ],
@@ -3703,6 +3712,8 @@ class GroupMap(google.protobuf.message.Message):
             b"_is_map_groups_with_state",
             "_output_mode",
             b"_output_mode",
+            "_state_schema",
+            b"_state_schema",
             "_timeout_conf",
             b"_timeout_conf",
             "func",
@@ -3721,6 +3732,8 @@ class GroupMap(google.protobuf.message.Message):
             b"output_mode",
             "sorting_expressions",
             b"sorting_expressions",
+            "state_schema",
+            b"state_schema",
             "timeout_conf",
             b"timeout_conf",
         ],
@@ -3736,6 +3749,10 @@ class GroupMap(google.protobuf.message.Message):
     def WhichOneof(
         self, oneof_group: typing_extensions.Literal["_output_mode", b"_output_mode"]
     ) -> typing_extensions.Literal["output_mode"] | None: ...
+    @typing.overload
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["_state_schema", b"_state_schema"]
+    ) -> typing_extensions.Literal["state_schema"] | None: ...
     @typing.overload
     def WhichOneof(
         self, oneof_group: typing_extensions.Literal["_timeout_conf", b"_timeout_conf"]

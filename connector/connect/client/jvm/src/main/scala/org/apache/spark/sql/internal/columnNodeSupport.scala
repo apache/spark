@@ -167,6 +167,15 @@ object ColumnNodeToProtoConverter extends (ColumnNode => proto.Expression) {
       case LazyExpression(child, _) =>
         builder.getLazyExpressionBuilder.setChild(apply(child, e))
 
+      case SubqueryExpressionNode(relation, subqueryType, _) =>
+        val b = builder.getSubqueryExpressionBuilder
+        b.setSubqueryType(subqueryType match {
+          case SubqueryType.SCALAR => proto.SubqueryExpression.SubqueryType.SUBQUERY_TYPE_SCALAR
+          case SubqueryType.EXISTS => proto.SubqueryExpression.SubqueryType.SUBQUERY_TYPE_EXISTS
+        })
+        assert(relation.hasCommon && relation.getCommon.hasPlanId)
+        b.setPlanId(relation.getCommon.getPlanId)
+
       case ProtoColumnNode(e, _) =>
         return e
 
@@ -217,4 +226,24 @@ case class ProtoColumnNode(
     override val origin: Origin = CurrentOrigin.get)
     extends ColumnNode {
   override def sql: String = expr.toString
+  override private[internal] def children: Seq[ColumnNodeLike] = Seq.empty
+}
+
+sealed trait SubqueryType
+
+object SubqueryType {
+  case object SCALAR extends SubqueryType
+  case object EXISTS extends SubqueryType
+}
+
+case class SubqueryExpressionNode(
+    relation: proto.Relation,
+    subqueryType: SubqueryType,
+    override val origin: Origin = CurrentOrigin.get)
+    extends ColumnNode {
+  override def sql: String = subqueryType match {
+    case SubqueryType.SCALAR => s"($relation)"
+    case _ => s"$subqueryType ($relation)"
+  }
+  override private[internal] def children: Seq[ColumnNodeLike] = Seq.empty
 }

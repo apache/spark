@@ -350,6 +350,7 @@ case class CatalogTable(
     stats: Option[CatalogStatistics] = None,
     viewText: Option[String] = None,
     comment: Option[String] = None,
+    collation: Option[String] = None,
     unsupportedFeatures: Seq[String] = Seq.empty,
     tracksPartitionsInCatalog: Boolean = false,
     schemaPreservesCase: Boolean = true,
@@ -546,6 +547,7 @@ case class CatalogTable(
     provider.foreach(map.put("Provider", _))
     bucketSpec.foreach(map ++= _.toLinkedHashMap)
     comment.foreach(map.put("Comment", _))
+    collation.foreach(map.put("Collation", _))
     if (tableType == CatalogTableType.VIEW) {
       viewText.foreach(map.put("View Text", _))
       viewOriginalText.foreach(map.put("View Original Text", _))
@@ -557,7 +559,8 @@ case class CatalogTable(
         map.put("View Catalog and Namespace", viewCatalogAndNamespace.quoted)
       }
       if (viewQueryColumnNames.nonEmpty) {
-        map.put("View Query Output Columns", viewQueryColumnNames.mkString("[", ", ", "]"))
+        map.put("View Query Output Columns",
+          viewQueryColumnNames.map(quoteIdentifier).mkString("[", ", ", "]"))
       }
     }
 

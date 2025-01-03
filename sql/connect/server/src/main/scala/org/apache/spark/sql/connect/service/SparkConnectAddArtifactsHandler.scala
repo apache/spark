@@ -87,8 +87,8 @@ class SparkConnectAddArtifactsHandler(val responseObserver: StreamObserver[AddAr
     ErrorUtils.handleError(
       "addArtifacts.onNext",
       responseObserver,
-      holder.userId,
-      holder.sessionId,
+      req.getUserContext.getUserId,
+      req.getSessionId,
       None,
       false,
       Some(() => {

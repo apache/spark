@@ -3,9 +3,9 @@ py4j>=0.10.9.7
 
 # PySpark dependencies (optional)
 numpy>=1.21
-pyarrow>=10.0.0
+pyarrow>=11.0.0
 six==1.16.0
-pandas>=2.0.0
+pandas>=2.2.0
 scipy
 plotly>=4.8
 mlflow>=2.3.1
@@ -61,7 +61,7 @@ py
 grpcio>=1.67.0
 grpcio-status>=1.67.0
 googleapis-common-protos>=1.65.0
-protobuf==5.28.3
+protobuf==5.29.1
 
 # Spark Connect python proto generation plugin (optional)
 mypy-protobuf==3.3.0

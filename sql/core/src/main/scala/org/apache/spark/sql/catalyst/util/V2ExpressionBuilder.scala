@@ -305,6 +305,8 @@ class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) extends L
     case _: Md5 => generateExpressionWithName("MD5", expr, isPredicate)
     case _: Sha1 => generateExpressionWithName("SHA1", expr, isPredicate)
     case _: Sha2 => generateExpressionWithName("SHA2", expr, isPredicate)
+    case _: StringLPad => generateExpressionWithName("LPAD", expr, isPredicate)
+    case _: StringRPad => generateExpressionWithName("RPAD", expr, isPredicate)
     // TODO supports other expressions
     case ApplyFunctionExpression(function, children) =>
       val childrenExpressions = children.flatMap(generateExpression(_))
