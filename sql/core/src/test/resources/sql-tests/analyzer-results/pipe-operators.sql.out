@@ -414,9 +414,8 @@ table t
 |> select x + length(y) as z
 -- !query analysis
 Project [pipeexpression((x#x + length(y#x)), false, SELECT) AS z#x]
-+- Project [x#x, y#x]
-   +- SubqueryAlias spark_catalog.default.t
-      +- Relation spark_catalog.default.t[x#x,y#x] csv
++- SubqueryAlias spark_catalog.default.t
+   +- Relation spark_catalog.default.t[x#x,y#x] csv
 
 
 -- !query
@@ -465,9 +464,8 @@ Union false, false
 |> select col.i1
 -- !query analysis
 Project [col#x.i1 AS i1#x]
-+- Project [col#x]
-   +- SubqueryAlias spark_catalog.default.st
-      +- Relation spark_catalog.default.st[x#x,col#x] parquet
++- SubqueryAlias spark_catalog.default.st
+   +- Relation spark_catalog.default.st[x#x,col#x] parquet
 
 
 -- !query
@@ -523,10 +521,9 @@ Project [pipeexpression(scalar-subquery#x [x#x], false, SELECT) AS result#x]
 table t
 |> select x + length(x) as z, z + 1 as plus_one
 -- !query analysis
-Project [z#x, pipeexpression((z#x + 1), false, SELECT) AS plus_one#x]
-+- Project [x#x, y#x, pipeexpression((x#x + length(cast(x#x as string))), false, SELECT) AS z#x]
-   +- SubqueryAlias spark_catalog.default.t
-      +- Relation spark_catalog.default.t[x#x,y#x] csv
+Project [pipeexpression((x#x + length(cast(x#x as string))), false, SELECT) AS z#x, pipeexpression((pipeexpression((x#x + length(cast(x#x as string))), false, SELECT) + 1), false, SELECT) AS plus_one#x]
++- SubqueryAlias spark_catalog.default.t
+   +- Relation spark_catalog.default.t[x#x,y#x] csv
 
 
 -- !query
@@ -550,13 +547,12 @@ select 1 x, 2 y, 3 z
 |> select a2
 -- !query analysis
 Project [a2#x]
-+- Project [(1 + sum(x) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING))#xL, avg(y) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)#x, x#x, a2#x]
-   +- Project [x#x, y#x, _w1#x, z#x, _we0#xL, avg(y) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)#x, _we2#x, (cast(1 as bigint) + _we0#xL) AS (1 + sum(x) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING))#xL, avg(y) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)#x, pipeexpression(_we2#x, false, SELECT) AS a2#x]
-      +- Window [avg(_w1#x) windowspecdefinition(y#x, z#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS _we2#x], [y#x], [z#x ASC NULLS FIRST]
-         +- Window [sum(x#x) windowspecdefinition(specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS _we0#xL, avg(y#x) windowspecdefinition(specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS avg(y) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)#x]
-            +- Project [x#x, y#x, (x#x + 1) AS _w1#x, z#x]
-               +- Project [1 AS x#x, 2 AS y#x, 3 AS z#x]
-                  +- OneRowRelation
++- Project [x#x, y#x, _w1#x, z#x, _we0#xL, avg(y) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)#x, _we2#x, (cast(1 as bigint) + _we0#xL) AS (1 + sum(x) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING))#xL, avg(y) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)#x, pipeexpression(_we2#x, false, SELECT) AS a2#x]
+   +- Window [avg(_w1#x) windowspecdefinition(y#x, z#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS _we2#x], [y#x], [z#x ASC NULLS FIRST]
+      +- Window [sum(x#x) windowspecdefinition(specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS _we0#xL, avg(y#x) windowspecdefinition(specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS avg(y) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)#x]
+         +- Project [x#x, y#x, (x#x + 1) AS _w1#x, z#x]
+            +- Project [1 AS x#x, 2 AS y#x, 3 AS z#x]
+               +- OneRowRelation
 
 
 -- !query
@@ -565,12 +561,11 @@ table t
 |> select x
 -- !query analysis
 Project [x#x]
-+- Project [x#x, count(1) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)#xL]
-   +- Project [x#x, count(1) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)#xL, count(1) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)#xL]
-      +- Window [count(1) windowspecdefinition(specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS count(1) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)#xL]
-         +- Project [x#x]
-            +- SubqueryAlias spark_catalog.default.t
-               +- Relation spark_catalog.default.t[x#x,y#x] csv
++- Project [x#x, count(1) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)#xL, count(1) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)#xL]
+   +- Window [count(1) windowspecdefinition(specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS count(1) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)#xL]
+      +- Project [x#x]
+         +- SubqueryAlias spark_catalog.default.t
+            +- Relation spark_catalog.default.t[x#x,y#x] csv
 
 
 -- !query
@@ -726,10 +721,9 @@ table t
 |> extend x + length(y) as z
 |> extend z + 1 as zz
 -- !query analysis
-Project [x#x, y#x, z#x, pipeexpression((z#x + 1), false, EXTEND) AS zz#x]
-+- Project [x#x, y#x, pipeexpression((x#x + length(y#x)), false, EXTEND) AS z#x]
-   +- SubqueryAlias spark_catalog.default.t
-      +- Relation spark_catalog.default.t[x#x,y#x] csv
+Project [x#x, y#x, pipeexpression((x#x + length(y#x)), false, EXTEND) AS z#x, pipeexpression((pipeexpression((x#x + length(y#x)), false, EXTEND) + 1), false, EXTEND) AS zz#x]
++- SubqueryAlias spark_catalog.default.t
+   +- Relation spark_catalog.default.t[x#x,y#x] csv
 
 
 -- !query
@@ -737,9 +731,8 @@ select col from st
 |> extend col.i1 as z
 -- !query analysis
 Project [col#x, pipeexpression(col#x.i1, false, EXTEND) AS z#x]
-+- Project [col#x]
-   +- SubqueryAlias spark_catalog.default.st
-      +- Relation spark_catalog.default.st[x#x,col#x] parquet
++- SubqueryAlias spark_catalog.default.st
+   +- Relation spark_catalog.default.st[x#x,col#x] parquet
 
 
 -- !query
@@ -798,10 +791,9 @@ Project [x#x, y#x, result#x]
 table t
 |> extend x + length(y) as z, z + 1 as plus_one
 -- !query analysis
-Project [x#x, y#x, z#x, pipeexpression((z#x + 1), false, EXTEND) AS plus_one#x]
-+- Project [x#x, y#x, pipeexpression((x#x + length(y#x)), false, EXTEND) AS z#x]
-   +- SubqueryAlias spark_catalog.default.t
-      +- Relation spark_catalog.default.t[x#x,y#x] csv
+Project [x#x, y#x, pipeexpression((x#x + length(y#x)), false, EXTEND) AS z#x, pipeexpression((pipeexpression((x#x + length(y#x)), false, EXTEND) + 1), false, EXTEND) AS plus_one#x]
++- SubqueryAlias spark_catalog.default.t
+   +- Relation spark_catalog.default.t[x#x,y#x] csv
 
 
 -- !query
@@ -880,9 +872,8 @@ table t
 |> set z = x + length(y)
 -- !query analysis
 Project [x#x, y#x, pipeexpression((x#x + length(y#x)), false, SET) AS z#x]
-+- Project [x#x, y#x, pipeexpression(1, false, EXTEND) AS z#x]
-   +- SubqueryAlias spark_catalog.default.t
-      +- Relation spark_catalog.default.t[x#x,y#x] csv
++- SubqueryAlias spark_catalog.default.t
+   +- Relation spark_catalog.default.t[x#x,y#x] csv
 
 
 -- !query
@@ -891,12 +882,11 @@ table t
 |> extend 2 as zz
 |> set z = x + length(y), zz = x + 1
 -- !query analysis
-Project [x#x, y#x, z#x, pipeexpression((x#x + 1), false, SET) AS zz#x]
-+- Project [x#x, y#x, pipeexpression((x#x + length(y#x)), false, SET) AS z#x, zz#x]
-   +- Project [x#x, y#x, z#x, pipeexpression(2, false, EXTEND) AS zz#x]
-      +- Project [x#x, y#x, pipeexpression(1, false, EXTEND) AS z#x]
-         +- SubqueryAlias spark_catalog.default.t
-            +- Relation spark_catalog.default.t[x#x,y#x] csv
+Project [x#x, y#x, pipeexpression((x#x + length(y#x)), false, SET) AS z#x, pipeexpression((x#x + 1), false, SET) AS zz#x]
++- Project [x#x, y#x, z#x, pipeexpression(2, false, EXTEND) AS zz#x]
+   +- Project [x#x, y#x, pipeexpression(1, false, EXTEND) AS z#x]
+      +- SubqueryAlias spark_catalog.default.t
+         +- Relation spark_catalog.default.t[x#x,y#x] csv
 
 
 -- !query
@@ -904,11 +894,10 @@ table other
 |> extend 3 as c
 |> set a = b, b = c
 -- !query analysis
-Project [a#x, pipeexpression(c#x, false, SET) AS b#x, c#x]
-+- Project [pipeexpression(b#x, false, SET) AS a#x, b#x, c#x]
-   +- Project [a#x, b#x, pipeexpression(3, false, EXTEND) AS c#x]
-      +- SubqueryAlias spark_catalog.default.other
-         +- Relation spark_catalog.default.other[a#x,b#x] json
+Project [pipeexpression(b#x, false, SET) AS a#x, pipeexpression(c#x, false, SET) AS b#x, c#x]
++- Project [a#x, b#x, pipeexpression(3, false, EXTEND) AS c#x]
+   +- SubqueryAlias spark_catalog.default.other
+      +- Relation spark_catalog.default.other[a#x,b#x] json
 
 
 -- !query
@@ -917,12 +906,11 @@ table t
 |> extend 2 as zz
 |> set z = x + length(y), zz = z + 1
 -- !query analysis
-Project [x#x, y#x, z#x, pipeexpression((z#x + 1), false, SET) AS zz#x]
-+- Project [x#x, y#x, pipeexpression((x#x + length(y#x)), false, SET) AS z#x, zz#x]
-   +- Project [x#x, y#x, z#x, pipeexpression(2, false, EXTEND) AS zz#x]
-      +- Project [x#x, y#x, pipeexpression(1, false, EXTEND) AS z#x]
-         +- SubqueryAlias spark_catalog.default.t
-            +- Relation spark_catalog.default.t[x#x,y#x] csv
+Project [x#x, y#x, pipeexpression((x#x + length(y#x)), false, SET) AS z#x, pipeexpression((pipeexpression((x#x + length(y#x)), false, SET) + 1), false, SET) AS zz#x]
++- Project [x#x, y#x, z#x, pipeexpression(2, false, EXTEND) AS zz#x]
+   +- Project [x#x, y#x, pipeexpression(1, false, EXTEND) AS z#x]
+      +- SubqueryAlias spark_catalog.default.t
+         +- Relation spark_catalog.default.t[x#x,y#x] csv
 
 
 -- !query
@@ -931,11 +919,10 @@ table t
 |> set z = x + length(y)
 |> set z = z + 1
 -- !query analysis
-Project [x#x, y#x, pipeexpression((z#x + 1), false, SET) AS z#x]
-+- Project [x#x, y#x, pipeexpression((x#x + length(y#x)), false, SET) AS z#x]
-   +- Project [x#x, y#x, pipeexpression(1, false, EXTEND) AS z#x]
-      +- SubqueryAlias spark_catalog.default.t
-         +- Relation spark_catalog.default.t[x#x,y#x] csv
+Project [x#x, y#x, pipeexpression((pipeexpression((x#x + length(y#x)), false, SET) + 1), false, SET) AS z#x]
++- Project [x#x, y#x, pipeexpression(1, false, EXTEND) AS z#x]
+   +- SubqueryAlias spark_catalog.default.t
+      +- Relation spark_catalog.default.t[x#x,y#x] csv
 
 
 -- !query
@@ -943,11 +930,10 @@ table t
 |> extend 1 as z
 |> set z = x + length(y), z = z + 1
 -- !query analysis
-Project [x#x, y#x, pipeexpression((z#x + 1), false, SET) AS z#x]
-+- Project [x#x, y#x, pipeexpression((x#x + length(y#x)), false, SET) AS z#x]
-   +- Project [x#x, y#x, pipeexpression(1, false, EXTEND) AS z#x]
-      +- SubqueryAlias spark_catalog.default.t
-         +- Relation spark_catalog.default.t[x#x,y#x] csv
+Project [x#x, y#x, pipeexpression((pipeexpression((x#x + length(y#x)), false, SET) + 1), false, SET) AS z#x]
++- Project [x#x, y#x, pipeexpression(1, false, EXTEND) AS z#x]
+   +- SubqueryAlias spark_catalog.default.t
+      +- Relation spark_catalog.default.t[x#x,y#x] csv
 
 
 -- !query
@@ -956,10 +942,9 @@ select col from st
 |> set z = col.i1
 -- !query analysis
 Project [col#x, pipeexpression(col#x.i1, false, SET) AS z#x]
-+- Project [col#x, pipeexpression(1, false, EXTEND) AS z#x]
-   +- Project [col#x]
-      +- SubqueryAlias spark_catalog.default.st
-         +- Relation spark_catalog.default.st[x#x,col#x] parquet
++- Project [col#x]
+   +- SubqueryAlias spark_catalog.default.st
+      +- Relation spark_catalog.default.st[x#x,col#x] parquet
 
 
 -- !query
@@ -983,9 +968,8 @@ table t
 |> set `x.y.z` = x + length(y)
 -- !query analysis
 Project [x#x, y#x, pipeexpression((x#x + length(y#x)), false, SET) AS x.y.z#x]
-+- Project [x#x, y#x, pipeexpression(1, false, EXTEND) AS x.y.z#x]
-   +- SubqueryAlias spark_catalog.default.t
-      +- Relation spark_catalog.default.t[x#x,y#x] csv
++- SubqueryAlias spark_catalog.default.t
+   +- Relation spark_catalog.default.t[x#x,y#x] csv
 
 
 -- !query
@@ -1072,9 +1056,8 @@ Project [x#x]
 select 1 as x, 2 as y, 3 as z
 |> drop z, y
 -- !query analysis
-Project [x#x]
-+- Project [1 AS x#x, 2 AS y#x, 3 AS z#x]
-   +- OneRowRelation
+Project [1 AS x#x]
++- OneRowRelation
 
 
 -- !query
@@ -1083,9 +1066,8 @@ select 1 as x, 2 as y, 3 as z
 |> drop y
 -- !query analysis
 Project [x#x]
-+- Project [x#x, y#x]
-   +- Project [1 AS x#x, 2 AS y#x, 3 AS z#x]
-      +- OneRowRelation
++- Project [1 AS x#x, 2 AS y#x, 3 AS z#x]
+   +- OneRowRelation
 
 
 -- !query
@@ -1093,9 +1075,8 @@ select x from t
 |> drop x
 -- !query analysis
 Project
-+- Project [x#x]
-   +- SubqueryAlias spark_catalog.default.t
-      +- Relation spark_catalog.default.t[x#x,y#x] csv
++- SubqueryAlias spark_catalog.default.t
+   +- Relation spark_catalog.default.t[x#x,y#x] csv
 
 
 -- !query
@@ -1104,9 +1085,8 @@ table t
 |> drop `x.y.z`
 -- !query analysis
 Project [x#x, y#x]
-+- Project [x#x, y#x, pipeexpression(1, false, EXTEND) AS x.y.z#x]
-   +- SubqueryAlias spark_catalog.default.t
-      +- Relation spark_catalog.default.t[x#x,y#x] csv
++- SubqueryAlias spark_catalog.default.t
+   +- Relation spark_catalog.default.t[x#x,y#x] csv
 
 
 -- !query
@@ -2339,30 +2319,29 @@ table join_test_t1
 |> select a, join_test_t1.a, jt2.a, jt3.a
 -- !query analysis
 Project [a#x, a#x, a#x, a#x]
-+- Project [a#x, a#x, a#x]
-   +- Join Inner, (a#x = a#x)
-      :- SubqueryAlias join_test_t1
-      :  +- View (`join_test_t1`, [a#x])
-      :     +- Project [cast(a#x as int) AS a#x]
-      :        +- Project [a#x]
-      :           +- SubqueryAlias grouping
-      :              +- LocalRelation [a#x]
-      +- Project [a#x, a#x]
-         +- Join Inner, (a#x = a#x)
-            :- SubqueryAlias jt2
-            :  +- SubqueryAlias join_test_t2
-            :     +- View (`join_test_t2`, [a#x])
-            :        +- Project [cast(a#x as int) AS a#x]
-            :           +- Project [a#x]
-            :              +- SubqueryAlias grouping
-            :                 +- LocalRelation [a#x]
-            +- SubqueryAlias jt3
-               +- SubqueryAlias join_test_t3
-                  +- View (`join_test_t3`, [a#x])
-                     +- Project [cast(a#x as int) AS a#x]
-                        +- Project [a#x]
-                           +- SubqueryAlias grouping
-                              +- LocalRelation [a#x]
++- Join Inner, (a#x = a#x)
+   :- SubqueryAlias join_test_t1
+   :  +- View (`join_test_t1`, [a#x])
+   :     +- Project [cast(a#x as int) AS a#x]
+   :        +- Project [a#x]
+   :           +- SubqueryAlias grouping
+   :              +- LocalRelation [a#x]
+   +- Project [a#x, a#x]
+      +- Join Inner, (a#x = a#x)
+         :- SubqueryAlias jt2
+         :  +- SubqueryAlias join_test_t2
+         :     +- View (`join_test_t2`, [a#x])
+         :        +- Project [cast(a#x as int) AS a#x]
+         :           +- Project [a#x]
+         :              +- SubqueryAlias grouping
+         :                 +- LocalRelation [a#x]
+         +- SubqueryAlias jt3
+            +- SubqueryAlias join_test_t3
+               +- View (`join_test_t3`, [a#x])
+                  +- Project [cast(a#x as int) AS a#x]
+                     +- Project [a#x]
+                        +- SubqueryAlias grouping
+                           +- LocalRelation [a#x]
 
 
 -- !query
@@ -2605,21 +2584,20 @@ table natural_join_test_t1
 |> select natural_join_test_t1.*
 -- !query analysis
 Project [k#x, v1#x]
-+- Project [k#x, v1#x, v2#x]
-   +- Join Inner, (k#x = k#x)
-      :- SubqueryAlias natural_join_test_t1
-      :  +- View (`natural_join_test_t1`, [k#x, v1#x])
-      :     +- Project [cast(k#x as string) AS k#x, cast(v1#x as int) AS v1#x]
-      :        +- Project [k#x, v1#x]
-      :           +- SubqueryAlias natural_join_test_t1
-      :              +- LocalRelation [k#x, v1#x]
-      +- SubqueryAlias nt2
-         +- SubqueryAlias natural_join_test_t2
-            +- View (`natural_join_test_t2`, [k#x, v2#x])
-               +- Project [cast(k#x as string) AS k#x, cast(v2#x as int) AS v2#x]
-                  +- Project [k#x, v2#x]
-                     +- SubqueryAlias natural_join_test_t2
-                        +- LocalRelation [k#x, v2#x]
++- Join Inner, (k#x = k#x)
+   :- SubqueryAlias natural_join_test_t1
+   :  +- View (`natural_join_test_t1`, [k#x, v1#x])
+   :     +- Project [cast(k#x as string) AS k#x, cast(v1#x as int) AS v1#x]
+   :        +- Project [k#x, v1#x]
+   :           +- SubqueryAlias natural_join_test_t1
+   :              +- LocalRelation [k#x, v1#x]
+   +- SubqueryAlias nt2
+      +- SubqueryAlias natural_join_test_t2
+         +- View (`natural_join_test_t2`, [k#x, v2#x])
+            +- Project [cast(k#x as string) AS k#x, cast(v2#x as int) AS v2#x]
+               +- Project [k#x, v2#x]
+                  +- SubqueryAlias natural_join_test_t2
+                     +- LocalRelation [k#x, v2#x]
 
 
 -- !query
@@ -2629,30 +2607,29 @@ table natural_join_test_t1
 |> select natural_join_test_t1.*, nt2.*, nt3.*
 -- !query analysis
 Project [k#x, v1#x, k#x, v2#x, k#x, v3#x]
-+- Project [k#x, v1#x, v2#x, v3#x, k#x, k#x]
-   +- Join Inner, (k#x = k#x)
-      :- Project [k#x, v1#x, v2#x, k#x]
-      :  +- Join Inner, (k#x = k#x)
-      :     :- SubqueryAlias natural_join_test_t1
-      :     :  +- View (`natural_join_test_t1`, [k#x, v1#x])
-      :     :     +- Project [cast(k#x as string) AS k#x, cast(v1#x as int) AS v1#x]
-      :     :        +- Project [k#x, v1#x]
-      :     :           +- SubqueryAlias natural_join_test_t1
-      :     :              +- LocalRelation [k#x, v1#x]
-      :     +- SubqueryAlias nt2
-      :        +- SubqueryAlias natural_join_test_t2
-      :           +- View (`natural_join_test_t2`, [k#x, v2#x])
-      :              +- Project [cast(k#x as string) AS k#x, cast(v2#x as int) AS v2#x]
-      :                 +- Project [k#x, v2#x]
-      :                    +- SubqueryAlias natural_join_test_t2
-      :                       +- LocalRelation [k#x, v2#x]
-      +- SubqueryAlias nt3
-         +- SubqueryAlias natural_join_test_t3
-            +- View (`natural_join_test_t3`, [k#x, v3#x])
-               +- Project [cast(k#x as string) AS k#x, cast(v3#x as int) AS v3#x]
-                  +- Project [k#x, v3#x]
-                     +- SubqueryAlias natural_join_test_t3
-                        +- LocalRelation [k#x, v3#x]
++- Join Inner, (k#x = k#x)
+   :- Project [k#x, v1#x, v2#x, k#x]
+   :  +- Join Inner, (k#x = k#x)
+   :     :- SubqueryAlias natural_join_test_t1
+   :     :  +- View (`natural_join_test_t1`, [k#x, v1#x])
+   :     :     +- Project [cast(k#x as string) AS k#x, cast(v1#x as int) AS v1#x]
+   :     :        +- Project [k#x, v1#x]
+   :     :           +- SubqueryAlias natural_join_test_t1
+   :     :              +- LocalRelation [k#x, v1#x]
+   :     +- SubqueryAlias nt2
+   :        +- SubqueryAlias natural_join_test_t2
+   :           +- View (`natural_join_test_t2`, [k#x, v2#x])
+   :              +- Project [cast(k#x as string) AS k#x, cast(v2#x as int) AS v2#x]
+   :                 +- Project [k#x, v2#x]
+   :                    +- SubqueryAlias natural_join_test_t2
+   :                       +- LocalRelation [k#x, v2#x]
+   +- SubqueryAlias nt3
+      +- SubqueryAlias natural_join_test_t3
+         +- View (`natural_join_test_t3`, [k#x, v3#x])
+            +- Project [cast(k#x as string) AS k#x, cast(v3#x as int) AS v3#x]
+               +- Project [k#x, v3#x]
+                  +- SubqueryAlias natural_join_test_t3
+                     +- LocalRelation [k#x, v3#x]
 
 
 -- !query
