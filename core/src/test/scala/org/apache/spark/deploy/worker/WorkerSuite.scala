@@ -371,7 +371,7 @@ class WorkerSuite extends SparkFunSuite with Matchers with BeforeAndAfter with P
     val appId = "app1"
     val execId = "exec1"
     val cleanupCalled = new AtomicBoolean(false)
-    when(shuffleService.applicationRemoved(any[String])).thenAnswer(
+    when(shuffleService.applicationRemoved(any[String], any[Boolean])).thenAnswer(
       (_: InvocationOnMock) => cleanupCalled.set(true))
     val externalShuffleServiceSupplier = new Supplier[ExternalShuffleService] {
       override def get: ExternalShuffleService = shuffleService

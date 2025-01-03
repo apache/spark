@@ -646,7 +646,8 @@ private[deploy] class Worker(
             appLocalDirs,
             ExecutorState.LAUNCHING,
             rpId,
-            resources_)
+            resources_,
+            shuffleService.port)
           executors(appId + "/" + execId) = manager
           manager.start()
           coresUsed += cores_
@@ -740,6 +741,11 @@ private[deploy] class Worker(
         finishedDrivers.values.toList, activeMasterUrl, cores, memory,
         coresUsed, memoryUsed, activeMasterWebUiUrl, resources,
         resourcesUsed.toMap.map { case (k, v) => (k, v.toResourceInformation)}))
+
+    case ApplicationRemoveTest(id, cleanupLocalDirs) =>
+      finishedApps += id
+      shuffleService.applicationRemoved(id, cleanupLocalDirs)
+      context.reply(true)
   }
 
   override def onDisconnected(remoteAddress: RpcAddress): Unit = {
@@ -984,7 +990,7 @@ private[deploy] object Worker extends Logging {
     Utils.initDaemon(log)
     val conf = new SparkConf
     val args = new WorkerArguments(argStrings, conf)
-    val rpcEnv = startRpcEnvAndEndpoint(args.host, args.port, args.webUiPort, args.cores,
+    val (rpcEnv, _) = startRpcEnvAndEndpoint(args.host, args.port, args.webUiPort, args.cores,
       args.memory, args.masters, args.workDir, conf = conf,
       resourceFileOpt = conf.get(SPARK_WORKER_RESOURCE_FILE))
     // With external shuffle service enabled, if we request to launch multiple workers on one host,
@@ -1011,16 +1017,16 @@ private[deploy] object Worker extends Logging {
       workDir: String,
       workerNumber: Option[Int] = None,
       conf: SparkConf = new SparkConf,
-      resourceFileOpt: Option[String] = None): RpcEnv = {
+      resourceFileOpt: Option[String] = None): (RpcEnv, RpcEndpointRef) = {
 
     // The LocalSparkCluster runs multiple local sparkWorkerX RPC Environments
     val systemName = SYSTEM_NAME + workerNumber.map(_.toString).getOrElse("")
     val securityMgr = new SecurityManager(conf)
     val rpcEnv = RpcEnv.create(systemName, host, port, conf, securityMgr)
     val masterAddresses = masterUrls.map(RpcAddress.fromSparkURL)
-    rpcEnv.setupEndpoint(ENDPOINT_NAME, new Worker(rpcEnv, webUiPort, cores, memory,
+    val workerRef = rpcEnv.setupEndpoint(ENDPOINT_NAME, new Worker(rpcEnv, webUiPort, cores, memory,
       masterAddresses, ENDPOINT_NAME, workDir, conf, securityMgr, resourceFileOpt))
-    rpcEnv
+    (rpcEnv, workerRef)
   }
 
   def isUseLocalNodeSSLConfig(cmd: Command): Boolean = {

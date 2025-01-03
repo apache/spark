@@ -25,7 +25,7 @@ import scala.jdk.CollectionConverters._
 import com.google.common.io.Files
 
 import org.apache.spark.{SecurityManager, SparkConf}
-import org.apache.spark.deploy.{ApplicationDescription, ExecutorState}
+import org.apache.spark.deploy.{ApplicationDescription, ExecutorState, ExternalShuffleService, LocalSparkCluster}
 import org.apache.spark.deploy.DeployMessages.ExecutorStateChanged
 import org.apache.spark.deploy.StandaloneResourceUtils.prepareResourcesFile
 import org.apache.spark.internal.{Logging, MDC}
@@ -60,7 +60,8 @@ private[deploy] class ExecutorRunner(
     val appLocalDirs: Seq[String],
     @volatile var state: ExecutorState.Value,
     val rpId: Int,
-    val resources: Map[String, ResourceInformation] = Map.empty)
+    val resources: Map[String, ResourceInformation] = Map.empty,
+    val shuffleServicePort: Option[Int] = None)
   extends Logging {
 
   private val fullId = appId + "/" + execId
@@ -170,6 +171,10 @@ private[deploy] class ExecutorRunner(
       // In case we are running this from within the Spark Shell, avoid creating a "scala"
       // parent process for the executor command
       builder.environment.put("SPARK_LAUNCH_WITH_SCALA", "0")
+
+      if (LocalSparkCluster.get.isDefined) {
+        builder.environment().put(ExternalShuffleService.TESTING_ESS_PORT_ENV, shuffleServicePort.get.toString)
+      }
 
       // Add webUI log urls
       val baseUrl =

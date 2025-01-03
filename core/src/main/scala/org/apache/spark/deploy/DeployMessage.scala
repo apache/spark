@@ -182,6 +182,10 @@ private[deploy] object DeployMessages {
 
   case class ApplicationFinished(id: String)
 
+  // Used for test only. This removes the app in external shuffle service
+  // directly without any checks.
+  case class ApplicationRemoveTest(id: String, cleanupLocalDirs: Boolean)
+
   // Worker internal
 
   case object WorkDirCleanup // Sent to Worker endpoint periodically for cleaning up app folders

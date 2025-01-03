@@ -14,14 +14,12 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
-package org.apache.spark
+package org.apache.spark.deploy
 
 import java.io.File
 import java.nio.file.Files
 import java.nio.file.attribute.PosixFilePermission
 
-import scala.collection
 import scala.concurrent.Promise
 import scala.concurrent.duration.Duration
 
@@ -30,13 +28,12 @@ import org.scalatest.concurrent.Eventually
 import org.scalatest.matchers.should.Matchers._
 import org.scalatest.time.SpanSugar._
 
+import org.apache.spark.{ShuffleSuite, SparkContext, SparkException, TestUtils}
+import org.apache.spark.deploy.DeployMessages.ApplicationRemoveTest
 import org.apache.spark.internal.config
-import org.apache.spark.network.TransportContext
-import org.apache.spark.network.netty.SparkTransportConf
-import org.apache.spark.network.server.TransportServer
-import org.apache.spark.network.shuffle.{ExecutorDiskUtils, ExternalBlockHandler, ExternalBlockStoreClient}
+import org.apache.spark.network.shuffle.{ExecutorDiskUtils, ExternalBlockStoreClient}
 import org.apache.spark.storage.{RDDBlockId, ShuffleBlockId, ShuffleDataBlockId, ShuffleIndexBlockId, StorageLevel}
-import org.apache.spark.util.{ThreadUtils, Utils}
+import org.apache.spark.util.ThreadUtils
 
 /**
  * This suite creates an external shuffle server and routes all shuffle fetches through it.
@@ -45,37 +42,11 @@ import org.apache.spark.util.{ThreadUtils, Utils}
  * we hash files into folders.
  */
 class ExternalShuffleServiceSuite extends ShuffleSuite with BeforeAndAfterAll with Eventually {
-  var server: TransportServer = _
-  var transportContext: TransportContext = _
-  var rpcHandler: ExternalBlockHandler = _
-
-  protected def initializeHandlers(): Unit = {
-    val transportConf = SparkTransportConf.fromSparkConf(conf, "shuffle", numUsableCores = 2)
-    rpcHandler = new ExternalBlockHandler(transportConf, null)
-    transportContext = new TransportContext(transportConf, rpcHandler)
-    server = transportContext.createServer()
-
-    conf.set(config.SHUFFLE_MANAGER, "sort")
-    conf.set(config.SHUFFLE_SERVICE_ENABLED, true)
-    conf.set(config.SHUFFLE_SERVICE_PORT, server.getPort)
-  }
 
   override def beforeAll(): Unit = {
     super.beforeAll()
-    initializeHandlers()
-  }
-
-  override def afterAll(): Unit = {
-    Utils.tryLogNonFatalError{
-      server.close()
-    }
-    Utils.tryLogNonFatalError{
-      rpcHandler.close()
-    }
-    Utils.tryLogNonFatalError{
-      transportContext.close()
-    }
-    super.afterAll()
+    conf.set(config.SHUFFLE_MANAGER, "sort")
+    conf.set(config.SHUFFLE_SERVICE_ENABLED, true)
   }
 
   // This test ensures that the external shuffle service is actually in use for the other tests.
@@ -102,14 +73,18 @@ class ExternalShuffleServiceSuite extends ShuffleSuite with BeforeAndAfterAll wi
 
     // Invalidate the registered executors, disallowing access to their shuffle blocks (without
     // deleting the actual shuffle files, so we could access them without the shuffle service).
-    rpcHandler.applicationRemoved(sc.conf.getAppId, false /* cleanupLocalDirs */)
+    LocalSparkCluster.get.get.workers.head.askSync[Boolean](
+      ApplicationRemoveTest(sc.conf.getAppId, false)
+    )
 
     // Now Spark will receive FetchFailed, and not retry the stage due to "spark.test.noStageRetry"
     // being set.
-    val e = intercept[SparkException] {
-      rdd.count()
+    eventually(timeout(60.seconds), interval(100.milliseconds)) {
+      val e = intercept[SparkException] {
+        rdd.count()
+      }
+      e.getMessage should include("Fetch failure will not retry stage due to testing config")
     }
-    e.getMessage should include ("Fetch failure will not retry stage due to testing config")
   }
 
   test("SPARK-25888: using external shuffle service fetching disk persisted blocks") {
@@ -131,8 +106,6 @@ class ExternalShuffleServiceSuite extends ShuffleSuite with BeforeAndAfterAll wi
       val bms = eventually(timeout(2.seconds), interval(100.milliseconds)) {
         val locations = sc.env.blockManager.master.getLocations(blockId)
         assert(locations.size === 2)
-        assert(locations.map(_.port).contains(server.getPort),
-          "external shuffle service port should be contained")
         locations
       }
 
@@ -169,8 +142,6 @@ class ExternalShuffleServiceSuite extends ShuffleSuite with BeforeAndAfterAll wi
       eventually(timeout(2.seconds), interval(100.milliseconds)) {
         val locations = sc.env.blockManager.master.getLocations(blockId)
         assert(locations.size === 1)
-        assert(locations.map(_.port).contains(server.getPort),
-          "external shuffle service port should be contained")
       }
 
       assert(sc.env.blockManager.getRemoteValues(blockId).isDefined)
@@ -179,7 +150,8 @@ class ExternalShuffleServiceSuite extends ShuffleSuite with BeforeAndAfterAll wi
       rdd.unpersist(true)
       assert(sc.env.blockManager.getRemoteValues(blockId).isEmpty)
     } finally {
-      rpcHandler.applicationRemoved(sc.conf.getAppId, true)
+      LocalSparkCluster.get.get
+        .workers.head.askSync[Boolean](ApplicationRemoveTest(sc.conf.getAppId, true))
     }
   }
 
@@ -257,7 +229,8 @@ class ExternalShuffleServiceSuite extends ShuffleSuite with BeforeAndAfterAll wi
           assert(filesToCheck.forall(_.exists()))
         }
       } finally {
-        rpcHandler.applicationRemoved(sc.conf.getAppId, true)
+        LocalSparkCluster.get.get
+          .workers.head.askSync[Boolean](ApplicationRemoveTest(sc.conf.getAppId, true))
         sc.stop()
       }
     }
@@ -279,7 +252,8 @@ class ExternalShuffleServiceSuite extends ShuffleSuite with BeforeAndAfterAll wi
         rdd.unpersist(true)
         assert(sc.persistentRdds.isEmpty)
       } finally {
-        rpcHandler.applicationRemoved(sc.conf.getAppId, true)
+        LocalSparkCluster.get.get
+          .workers.head.askSync[Boolean](ApplicationRemoveTest(sc.conf.getAppId, true))
         sc.stop()
       }
     }

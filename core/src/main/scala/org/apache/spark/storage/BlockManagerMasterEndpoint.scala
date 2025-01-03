@@ -31,6 +31,7 @@ import com.google.common.cache.CacheBuilder
 
 import org.apache.spark.{MapOutputTrackerMaster, SparkConf, SparkContext, SparkEnv}
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.deploy.LocalSparkCluster
 import org.apache.spark.internal.{config, Logging, MDC}
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config.RDD_CACHE_VISIBILITY_TRACKING_ENABLED
@@ -71,6 +72,9 @@ class BlockManagerMasterEndpoint(
       .newBuilder()
       .maximumSize(conf.get(config.STORAGE_LOCAL_DISK_BY_EXECUTORS_CACHE_SIZE))
       .build[String, Array[String]]()
+
+  // This is used in Spark local cluster only. It will be fairly small.
+  private val shuffleServiceIdSet = new mutable.HashSet[BlockManagerId]()
 
   // Mapping from external shuffle service block manager id to the block statuses.
   private val blockStatusByShuffleService =
@@ -364,7 +368,7 @@ class BlockManagerMasterEndpoint(
         invisibleRDDBlocks.remove(blockId)
       }
 
-      val (bmIdsExtShuffle, bmIdsExecutor) = bms.partition(_.port == externalShuffleServicePort)
+      val (bmIdsExtShuffle, bmIdsExecutor) = bms.partition(isShuffleService)
       val liveExecutorsForBlock = bmIdsExecutor.map(_.executorId).toSet
       bmIdsExtShuffle.foreach { bmIdForShuffleService =>
         // if the original executor is already released then delete this disk block via
@@ -543,7 +547,7 @@ class BlockManagerMasterEndpoint(
   private def addMergerLocation(blockManagerId: BlockManagerId): Unit = {
     if (!blockManagerId.isDriver && !shuffleMergerLocations.contains(blockManagerId.host)) {
       val shuffleServerId = BlockManagerId(BlockManagerId.SHUFFLE_MERGER_IDENTIFIER,
-        blockManagerId.host, externalShuffleServicePort)
+        blockManagerId.host, blockManagerId.port)
       if (shuffleMergerLocations.size >= maxRetainedMergerLocations) {
         shuffleMergerLocations -= shuffleMergerLocations.head._1
       }
@@ -667,10 +671,19 @@ class BlockManagerMasterEndpoint(
     ).map(_.flatten.toSeq)
   }
 
-  private def externalShuffleServiceIdOnHost(blockManagerId: BlockManagerId): BlockManagerId = {
+  private def externalShuffleServiceIdOnHost(
+      blockManagerId: BlockManagerId,
+      blockManagerRef: RpcEndpointRef): BlockManagerId = {
+    val essPort = if (LocalSparkCluster.get.isDefined) {
+      blockManagerRef.askSync[Int](GetShuffleServicePort)
+    } else {
+      externalShuffleServicePort
+    }
     // we need to keep the executor ID of the original executor to let the shuffle service know
     // which local directories should be used to look for the file
-    BlockManagerId(blockManagerId.executorId, blockManagerId.host, externalShuffleServicePort)
+    val essId = BlockManagerId(blockManagerId.executorId, blockManagerId.host, essPort)
+    shuffleServiceIdSet.add(essId)
+    essId
   }
 
   /**
@@ -721,7 +734,9 @@ class BlockManagerMasterEndpoint(
           // memory footprint when all the disk persisted blocks are removed for a shuffle service
           // BlockStatusPerBlockId releases the backing HashMap.
           val externalShuffleServiceBlocks = blockStatusByShuffleService
-            .getOrElseUpdate(externalShuffleServiceIdOnHost(id), new BlockStatusPerBlockId)
+            .getOrElseUpdate(
+              externalShuffleServiceIdOnHost(id, storageEndpoint), new BlockStatusPerBlockId
+            )
           Some(externalShuffleServiceBlocks)
         } else {
           None
@@ -731,7 +746,7 @@ class BlockManagerMasterEndpoint(
         maxOnHeapMemSize, maxOffHeapMemSize, storageEndpoint, externalShuffleServiceBlockStatus)
 
       if (pushBasedShuffleEnabled) {
-        addMergerLocation(id)
+        addMergerLocation(externalShuffleServiceIdOnHost(id, storageEndpoint))
       }
       listenerBus.post(SparkListenerBlockManagerAdded(time, id,
         maxOnHeapMemSize + maxOffHeapMemSize, Some(maxOnHeapMemSize), Some(maxOffHeapMemSize)))
@@ -840,7 +855,10 @@ class BlockManagerMasterEndpoint(
     }
 
     if (blockId.isRDD && storageLevel.useDisk && externalShuffleServiceRddFetchEnabled) {
-      val externalShuffleServiceId = externalShuffleServiceIdOnHost(blockManagerId)
+      val externalShuffleServiceId = externalShuffleServiceIdOnHost(
+        blockManagerId,
+        blockManagerInfo(blockManagerId).storageEndpoint
+      )
       if (storageLevel.isValid) {
         locations.add(externalShuffleServiceId)
       } else {
@@ -859,12 +877,20 @@ class BlockManagerMasterEndpoint(
     if (blockLocations.containsKey(blockId)) blockLocations.get(blockId).toSeq else Seq.empty
   }
 
+  private def isShuffleService(bmId: BlockManagerId): Boolean = {
+    if (LocalSparkCluster.get.isEmpty) {
+      bmId.port == externalShuffleServicePort
+    } else {
+      shuffleServiceIdSet.contains(bmId)
+    }
+  }
+
   private def getLocationsAndStatus(
       blockId: BlockId,
       requesterHost: String): Option[BlockLocationsAndStatus] = {
     val locations = Option(blockLocations.get(blockId)).map(_.toSeq).getOrElse(Seq.empty)
     val status = locations.headOption.flatMap { bmId =>
-      if (externalShuffleServiceRddFetchEnabled && bmId.port == externalShuffleServicePort) {
+      if (externalShuffleServiceRddFetchEnabled && isShuffleService(bmId)) {
         blockStatusByShuffleService.get(bmId).flatMap(m => m.get(blockId))
       } else {
         blockManagerInfo.get(bmId).flatMap(_.getStatus(blockId))
@@ -877,7 +903,7 @@ class BlockManagerMasterEndpoint(
         // locations then the block must be persisted on the disk. In this case the executorId
         // can be used to access this block even when the original executor is already stopped.
         loc.host == requesterHost &&
-          (loc.port == externalShuffleServicePort ||
+          (isShuffleService(loc) ||
             blockManagerInfo
               .get(loc)
               .flatMap(_.getStatus(blockId).map(_.storageLevel.useDisk))
@@ -911,11 +937,16 @@ class BlockManagerMasterEndpoint(
   private def getShufflePushMergerLocations(
       numMergersNeeded: Int,
       hostsToFilter: Set[String]): Seq[BlockManagerId] = {
-    val blockManagerHosts = blockManagerIdByExecutor
-      .filterNot(_._2.isDriver).values.map(_.host).toSet
-    val filteredBlockManagerHosts = blockManagerHosts.diff(hostsToFilter)
-    val filteredMergersWithExecutors = filteredBlockManagerHosts.map(
-      BlockManagerId(BlockManagerId.SHUFFLE_MERGER_IDENTIFIER, _, externalShuffleServicePort))
+    val filteredBlockManagerIds = blockManagerIdByExecutor
+      .values
+      .filterNot(bmId => bmId.isDriver || hostsToFilter.contains(bmId.host))
+      .toSet
+    val filteredMergersWithExecutors = filteredBlockManagerIds.map { bmId =>
+      val essPort = blockManagerInfo.get(bmId).map { bmInfo =>
+        externalShuffleServiceIdOnHost(bmId, bmInfo.storageEndpoint).port
+      }.getOrElse(externalShuffleServicePort)
+      BlockManagerId(BlockManagerId.SHUFFLE_MERGER_IDENTIFIER, bmId.host, essPort)
+    }
     // Enough mergers are available as part of active executors list
     if (filteredMergersWithExecutors.size >= numMergersNeeded) {
       filteredMergersWithExecutors.toSeq

@@ -25,7 +25,8 @@ import scala.collection.mutable
 import sun.misc.Unsafe
 
 import org.apache.spark.SparkConf
-import org.apache.spark.internal.{config, Logging}
+import org.apache.spark.deploy.ExternalShuffleService
+import org.apache.spark.internal.{config, Logging, LogKeys, MDC}
 import org.apache.spark.util.Utils
 
 /**
@@ -223,6 +224,15 @@ private[spark] object StorageUtils extends Logging {
    * set through the Hadoop configuration as the server is launched in the Yarn NM.
    */
   def externalShuffleServicePort(conf: SparkConf): Int = {
+    if (Utils.isTesting && sys.env.contains(ExternalShuffleService.TESTING_ESS_PORT_ENV)) {
+      val port = sys.env(ExternalShuffleService.TESTING_ESS_PORT_ENV).toInt
+      if (conf.contains(config.SHUFFLE_SERVICE_PORT.key)) {
+        logWarning(log"Setting external shuffle service port in Spark local cluster " +
+          log"is not allowed, overriding with the actual port ${MDC(LogKeys.PORT, port)}")
+      }
+      conf.set(config.SHUFFLE_SERVICE_PORT, port)
+    }
+
     val tmpPort = Utils.getSparkOrYarnConfig(conf, config.SHUFFLE_SERVICE_PORT.key,
       config.SHUFFLE_SERVICE_PORT.defaultValueString).toInt
     if (tmpPort == 0) {
