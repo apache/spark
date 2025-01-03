@@ -74,8 +74,10 @@ object StateStoreColumnFamilySchemaUtils {
 
     // Add main value state schema
     schemas.put(stateName, StateStoreColFamilySchema(
-      stateName, 0,
-      keyEncoder.schema, 0,
+      stateName,
+      keySchemaId = 0,
+      keyEncoder.schema,
+      valueSchemaId = 0,
       getValueSchemaWithTTL(valEncoder.schema, hasTtl),
       Some(NoPrefixKeyStateEncoderSpec(keyEncoder.schema))))
 
@@ -101,14 +103,17 @@ object StateStoreColumnFamilySchemaUtils {
 
     // Add main list state schema
     schemas.put(stateName, StateStoreColFamilySchema(
-      stateName, 0,
-      keyEncoder.schema, 0,
+      stateName,
+      keySchemaId = 0,
+      keyEncoder.schema,
+      valueSchemaId = 0,
       getValueSchemaWithTTL(valEncoder.schema, hasTtl),
       Some(NoPrefixKeyStateEncoderSpec(keyEncoder.schema))))
     // Add row counter schema
     val counterSchema = StateStoreColFamilySchema(
       ListStateMetricsImpl.getRowCounterCFName(stateName), 0,
-      keyEncoder.schema, 0,
+      keyEncoder.schema,
+      valueSchemaId = 0,
       StructType(Seq(StructField("count", LongType, nullable = false))),
       Some(NoPrefixKeyStateEncoderSpec(keyEncoder.schema)))
     schemas.put(counterSchema.colFamilyName, counterSchema)
@@ -126,7 +131,8 @@ object StateStoreColumnFamilySchemaUtils {
       // Min expiry index
       val minIndexSchema = StateStoreColFamilySchema(
         s"$$min_$stateName", 0,
-        keyEncoder.schema, 0,
+        keyEncoder.schema,
+      valueSchemaId = 0,
         getExpirationMsRowSchema(),
         Some(NoPrefixKeyStateEncoderSpec(keyEncoder.schema)))
       schemas.put(minIndexSchema.colFamilyName, minIndexSchema)
@@ -134,7 +140,8 @@ object StateStoreColumnFamilySchemaUtils {
       // Count index
       val countSchema = StateStoreColFamilySchema(
         s"$$count_$stateName", 0,
-        keyEncoder.schema, 0,
+        keyEncoder.schema,
+      valueSchemaId = 0,
         StructType(Seq(StructField("count", LongType, nullable = false))),
         Some(NoPrefixKeyStateEncoderSpec(keyEncoder.schema)))
       schemas.put(countSchema.colFamilyName, countSchema)
@@ -154,8 +161,10 @@ object StateStoreColumnFamilySchemaUtils {
 
     // Add main map state schema
     schemas.put(stateName, StateStoreColFamilySchema(
-      stateName, 0,
-      compositeKeySchema, 0,
+      stateName,
+      keySchemaId = 0,
+      compositeKeySchema,
+      valueSchemaId = 0,
       getValueSchemaWithTTL(valEncoder.schema, hasTtl),
       Some(PrefixKeyScanStateEncoderSpec(compositeKeySchema, 1)),
       Some(userKeyEnc.schema)))
@@ -178,8 +187,10 @@ object StateStoreColumnFamilySchemaUtils {
       keySchema: StructType,
       valSchema: StructType): StateStoreColFamilySchema = {
     StateStoreColFamilySchema(
-      stateName, 0,
-      keySchema, 0,
+      stateName,
+      keySchemaId = 0,
+      keySchema,
+      valueSchemaId = 0,
       valSchema,
       Some(PrefixKeyScanStateEncoderSpec(keySchema, 1)))
   }
@@ -189,8 +200,10 @@ object StateStoreColumnFamilySchemaUtils {
       keySchema: StructType,
       valSchema: StructType): StateStoreColFamilySchema = {
     StateStoreColFamilySchema(
-      stateName, 0,
-      keySchema, 0,
+      stateName,
+      keySchemaId = 0,
+      keySchema,
+      valueSchemaId = 0,
       valSchema,
       Some(RangeKeyScanStateEncoderSpec(keySchema, Seq(0))))
   }

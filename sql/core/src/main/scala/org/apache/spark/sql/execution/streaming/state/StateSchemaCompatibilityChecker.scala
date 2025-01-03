@@ -160,9 +160,6 @@ class StateSchemaCompatibilityChecker(
       ignoreValueSchema: Boolean,
       schemaEvolutionEnabled: Boolean): StateStoreColFamilySchema = {
 
-    val (storedKeySchema, storedValueSchema) = (oldSchema.keySchema, oldSchema.valueSchema)
-    val (keySchema, valueSchema) = (newSchema.keySchema, newSchema.valueSchema)
-
     def incrementSchemaId(id: Short): Short = (id + 1).toShort
 
     // Initialize with old schema IDs
@@ -170,11 +167,17 @@ class StateSchemaCompatibilityChecker(
       keySchemaId = oldSchema.keySchemaId,
       valueSchemaId = oldSchema.valueSchemaId
     )
+    val (storedKeySchema, storedValueSchema) = (oldSchema.keySchema,
+      oldSchema.valueSchema)
+    val (keySchema, valueSchema) = (newSchema.keySchema, newSchema.valueSchema)
 
     if (storedKeySchema.equals(keySchema) &&
       (ignoreValueSchema || storedValueSchema.equals(valueSchema))) {
-      // Schema is exactly same - return old schema
+      // schema is exactly same
       oldSchema
+    } else if (!schemasCompatible(storedKeySchema, keySchema)) {
+      throw StateStoreErrors.stateStoreKeySchemaNotCompatible(storedKeySchema.toString,
+        keySchema.toString)
     } else if (!ignoreValueSchema && schemaEvolutionEnabled) {
       // Check value schema evolution
       val oldAvroSchema = SchemaConverters.toAvroTypeWithDefaults(storedValueSchema)
@@ -185,33 +188,12 @@ class StateSchemaCompatibilityChecker(
 
       // Schema evolved - increment value schema ID
       resultSchema.copy(valueSchemaId = incrementSchemaId(oldSchema.valueSchemaId))
+    } else if (!ignoreValueSchema && !schemasCompatible(storedValueSchema, valueSchema)) {
+      throw StateStoreErrors.stateStoreValueSchemaNotCompatible(storedValueSchema.toString,
+        valueSchema.toString)
     } else {
-      // Check compatibility
-      if (!schemasCompatible(storedKeySchema, keySchema)) {
-        throw StateStoreErrors.stateStoreKeySchemaNotCompatible(
-          storedKeySchema.toString, keySchema.toString)
-      }
-      if (!ignoreValueSchema && !schemasCompatible(storedValueSchema, valueSchema)) {
-        throw StateStoreErrors.stateStoreValueSchemaNotCompatible(
-          storedValueSchema.toString, valueSchema.toString)
-      }
-
-      // Schema changed but compatible - increment IDs as needed
-      val needsKeyUpdate = !storedKeySchema.equals(keySchema)
-      val needsValueUpdate = !ignoreValueSchema && !storedValueSchema.equals(valueSchema)
-
-      resultSchema.copy(
-        keySchemaId = if (needsKeyUpdate) {
-          incrementSchemaId(oldSchema.keySchemaId)
-        } else {
-          oldSchema.keySchemaId
-        },
-        valueSchemaId = if (needsValueUpdate) {
-          incrementSchemaId(oldSchema.valueSchemaId)
-        } else {
-          oldSchema.valueSchemaId
-        }
-      )
+      logInfo("Detected schema change which is compatible. Allowing to put rows.")
+      oldSchema
     }
   }
 

@@ -547,6 +547,14 @@ private[sql] class RocksDBStateStoreProvider
     if (!condition) { throw new IllegalStateException(msg) }
   }
 
+  private[sql] def getSchemaProvider: TestStateSchemaProvider = {
+    assert(Utils.isTesting && stateSchemaProvider.isDefined)
+    stateSchemaProvider.get match {
+      case provider: TestStateSchemaProvider => provider
+      case _ => throw new IllegalStateException("Expected TestStateSchemaProvider in test")
+    }
+  }
+
   /**
    * Get the state store of endVersion by applying delta files on the snapshot of snapshotVersion.
    * If snapshot for snapshotVersion does not exist, an error will be thrown.

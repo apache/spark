@@ -374,7 +374,7 @@ trait DataEncoder {
 
 abstract class RocksDBDataEncoder(
     keyStateEncoderSpec: KeyStateEncoderSpec,
-    valueSchema: StructType) extends DataEncoder {
+    valueSchema: StructType) extends DataEncoder with Logging {
 
   val keySchema = keyStateEncoderSpec.keySchema
   val reusedKeyRow = new UnsafeRow(keyStateEncoderSpec.keySchema.length)

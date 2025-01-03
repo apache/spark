@@ -32,6 +32,7 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.util.quietly
 import org.apache.spark.sql.execution.streaming.StatefulOperatorStateInfo
+import org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider.clearDataEncoderCache
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
@@ -493,6 +494,58 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
         (key._1, key._2)
       }.toSeq
       assert(result === timerTimestamps.sorted)
+    }
+  }
+
+  testWithColumnFamiliesAndEncodingTypes(
+    "schema evolution - adding fields to value schema",
+    TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
+
+    val initialValueSchema = StructType(Seq(
+      StructField("value", IntegerType, false)
+    ))
+
+    val evolvedValueSchema = StructType(Seq(
+      StructField("value", IntegerType, false),
+      StructField("timestamp", LongType, true)
+    ))
+
+    tryWithProviderResource(newStoreProvider(
+      keySchema = keySchema,
+      keyStateEncoderSpec = NoPrefixKeyStateEncoderSpec(keySchema),
+      useColumnFamilies = colFamiliesEnabled)) { provider =>
+
+      // Add initial schema to provider
+      provider.getSchemaProvider.addSchema(
+        StateStore.DEFAULT_COL_FAMILY_NAME,
+        keySchema,
+        initialValueSchema
+      )
+
+      // Write initial data with original schema
+      val store = provider.getStore(0)
+      val initialData = Seq(("a", 1), ("b", 2), ("c", 3))
+      initialData.foreach { case (key, value) =>
+        store.put(dataToKeyRow(key, 0), dataToValueRow(value))
+      }
+      store.commit()
+
+      // Add evolved schema with incremented schema ID
+      provider.getSchemaProvider.addSchema(
+        StateStore.DEFAULT_COL_FAMILY_NAME,
+        keySchema,
+        evolvedValueSchema,
+        valueSchemaId = 1  // Value schema has evolved
+      )
+
+      clearDataEncoderCache
+
+      val store2 = provider.getStore(1)
+      initialData.foreach { case (key, value) =>
+        val row = store2.get(dataToKeyRow(key, 0))
+        logError(s"### row.getInt: ${row.getInt(0)}")
+        logError(s"### row.getLong: ${row.getLong(1)}")
+      }
     }
   }
 
