@@ -38,6 +38,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.datasources.DataSourceUtils
 import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
 import org.apache.spark.sql.types._
+import org.apache.spark.types.variant.Variant
 
 /**
  * A Parquet [[WriteSupport]] implementation that writes Catalyst [[InternalRow]]s as Parquet
@@ -58,6 +59,10 @@ class ParquetWriteSupport extends WriteSupport[InternalRow] with Logging {
 
   // Schema of the `InternalRow`s to be written
   private var schema: StructType = _
+
+  // Schema of the `InternalRow`s to be written, with VariantType replaced with its shredding
+  // schema, if appropriate.
+  private var shreddedSchema: StructType = _
 
   // `ValueWriter`s for all fields of the schema
   private var rootFieldWriters: Array[ValueWriter] = _
@@ -95,7 +100,16 @@ class ParquetWriteSupport extends WriteSupport[InternalRow] with Logging {
 
   override def init(configuration: Configuration): WriteContext = {
     val schemaString = configuration.get(ParquetWriteSupport.SPARK_ROW_SCHEMA)
+    val shreddedSchemaString = configuration.get(ParquetWriteSupport.SPARK_VARIANT_SHREDDING_SCHEMA)
     this.schema = StructType.fromString(schemaString)
+    // If shreddingSchemaString is provided, we use that everywhere in the writer, except for
+    // setting the spark schema in the Parquet metadata. If it isn't provided, it means that there
+    // are no shredded Variant columns, so it is identical to this.schema.
+    this.shreddedSchema = if (shreddedSchemaString == null) {
+      this.schema
+    } else {
+      StructType.fromString(shreddedSchemaString)
+    }
     this.writeLegacyParquetFormat = {
       // `SQLConf.PARQUET_WRITE_LEGACY_FORMAT` should always be explicitly set in ParquetRelation
       assert(configuration.get(SQLConf.PARQUET_WRITE_LEGACY_FORMAT.key) != null)
@@ -108,9 +122,9 @@ class ParquetWriteSupport extends WriteSupport[InternalRow] with Logging {
       SQLConf.ParquetOutputTimestampType.withName(configuration.get(key))
     }
 
-    this.rootFieldWriters = schema.map(_.dataType).map(makeWriter).toArray[ValueWriter]
+    this.rootFieldWriters = shreddedSchema.map(_.dataType).map(makeWriter).toArray[ValueWriter]
 
-    val messageType = new SparkToParquetSchemaConverter(configuration).convert(schema)
+    val messageType = new SparkToParquetSchemaConverter(configuration).convert(shreddedSchema)
     val metadata = Map(
       SPARK_VERSION_METADATA_KEY -> SPARK_VERSION_SHORT,
       ParquetReadSupport.SPARK_METADATA_KEY -> schemaString
@@ -132,13 +146,23 @@ class ParquetWriteSupport extends WriteSupport[InternalRow] with Logging {
       }
     }
 
-    logDebug(
-      s"""Initialized Parquet WriteSupport with Catalyst schema:
-         |${schema.prettyJson}
-         |and corresponding Parquet message type:
-         |$messageType
-       """.stripMargin)
-
+    if (shreddedSchemaString == null) {
+      logDebug(
+        s"""Initialized Parquet WriteSupport with Catalyst schema:
+           |${schema.prettyJson}
+           |and corresponding Parquet message type:
+           |$messageType
+         """.stripMargin)
+    } else {
+      logDebug(
+        s"""Initialized Parquet WriteSupport with Catalyst schema:
+           |${schema.prettyJson}
+           |and shredding schema:
+           |${shreddedSchema.prettyJson}
+           |and corresponding Parquet message type:
+           |$messageType
+         """.stripMargin)
+    }
     new WriteContext(messageType, metadata.asJava)
   }
 
@@ -148,7 +172,7 @@ class ParquetWriteSupport extends WriteSupport[InternalRow] with Logging {
 
   override def write(row: InternalRow): Unit = {
     consumeMessage {
-      writeFields(row, schema, rootFieldWriters)
+      writeFields(row, shreddedSchema, rootFieldWriters)
     }
   }
 
@@ -248,6 +272,17 @@ class ParquetWriteSupport extends WriteSupport[InternalRow] with Logging {
             consumeField("metadata", 1) {
               recordConsumer.addBinary(Binary.fromReusedByteArray(v.getMetadata))
             }
+          }
+
+      case s: StructType if SparkShreddingUtils.isVariantShreddingStruct(s) =>
+        val fieldWriters = s.map(_.dataType).map(makeWriter).toArray[ValueWriter]
+        val variantShreddingSchema = SparkShreddingUtils.buildVariantSchema(s)
+        (row: SpecializedGetters, ordinal: Int) =>
+          val v = row.getVariant(ordinal)
+          val variant = new Variant(v.getValue, v.getMetadata)
+          val shreddedValues = SparkShreddingUtils.castShredded(variant, variantShreddingSchema)
+          consumeGroup {
+            writeFields(shreddedValues, s, fieldWriters)
           }
 
       case t: StructType =>
@@ -499,11 +534,19 @@ class ParquetWriteSupport extends WriteSupport[InternalRow] with Logging {
 
 object ParquetWriteSupport {
   val SPARK_ROW_SCHEMA: String = "org.apache.spark.sql.parquet.row.attributes"
+  // A version of `SPARK_ROW_SCHEMA`, where one or more Variant attributes have been replace with a
+  // shredded struct schema.
+  val SPARK_VARIANT_SHREDDING_SCHEMA: String =
+    "org.apache.spark.sql.parquet.variant.shredding.attributes"
 
-  def setSchema(schema: StructType, configuration: Configuration): Unit = {
+  def setSchema(schema: StructType, configuration: Configuration,
+      shreddingSchema: Option[StructType]): Unit = {
     configuration.set(SPARK_ROW_SCHEMA, schema.json)
     configuration.setIfUnset(
       ParquetOutputFormat.WRITER_VERSION,
       ParquetProperties.WriterVersion.PARQUET_1_0.toString)
+    shreddingSchema.foreach { s =>
+      configuration.set(SPARK_VARIANT_SHREDDING_SCHEMA, s.json)
+    }
   }
 }
