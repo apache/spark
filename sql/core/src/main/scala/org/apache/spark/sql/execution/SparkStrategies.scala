@@ -35,7 +35,7 @@ import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors
 import org.apache.spark.sql.execution.aggregate.AggUtils
 import org.apache.spark.sql.execution.columnar.{InMemoryRelation, InMemoryTableScanExec}
 import org.apache.spark.sql.execution.command._
-import org.apache.spark.sql.execution.datasources.{Clustering, ClusteringExec, WriteFiles, WriteFilesExec}
+import org.apache.spark.sql.execution.datasources.{WriteFiles, WriteFilesExec}
 import org.apache.spark.sql.execution.exchange.{REBALANCE_PARTITIONS_BY_COL, REBALANCE_PARTITIONS_BY_NONE, REPARTITION_BY_COL, REPARTITION_BY_NUM, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.python._
 import org.apache.spark.sql.execution.streaming._
@@ -992,6 +992,8 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         }
       case logical.Sort(sortExprs, global, child, _) =>
         execution.SortExec(sortExprs, global, planLater(child)) :: Nil
+      case logical.Clustering(clusterExprs, child) =>
+        execution.SortExec(clusterExprs, global = false, planLater(child)) :: Nil
       case logical.Project(projectList, child) =>
         execution.ProjectExec(projectList, planLater(child)) :: Nil
       case logical.Filter(condition, child) =>
@@ -1066,8 +1068,6 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           staticPartitions) :: Nil
       case MultiResult(children) =>
         MultiResultExec(children.map(planLater)) :: Nil
-      case Clustering(clusterSpec, child) =>
-        ClusteringExec(clusterSpec, planLater(child)) :: Nil
       case _ => Nil
     }
   }
