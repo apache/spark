@@ -153,7 +153,7 @@ case class InsertAdaptiveSparkPlan(
     // Apply the same instance of this rule to sub-queries so that sub-queries all share the
     // same `stageCache` for Exchange reuse.
     this.applyInternal(
-      QueryExecution.createSparkPlan(adaptiveExecutionContext.session,
+      QueryExecution.createSparkPlan(
         adaptiveExecutionContext.session.sessionState.planner, plan.clone()), true)
   }
 
