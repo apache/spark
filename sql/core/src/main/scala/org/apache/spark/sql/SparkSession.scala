@@ -40,7 +40,7 @@ import org.apache.spark.sql.SparkSession.applyAndLoadExtensions
 import org.apache.spark.sql.artifact.ArtifactManager
 import org.apache.spark.sql.catalog.Catalog
 import org.apache.spark.sql.catalyst._
-import org.apache.spark.sql.catalyst.analysis.{NameParameterizedQuery, PosParameterizedQuery, UnresolvedRelation}
+import org.apache.spark.sql.catalyst.analysis.{NameParameterizedQuery, PosParameterizedQuery, RelationWrapper, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.encoders._
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression}
 import org.apache.spark.sql.catalyst.parser.ParserInterface
@@ -100,6 +100,7 @@ class SparkSession private(
     @transient private val parentManagedJobTags: Map[String, String])
   extends api.SparkSession with Logging with classic.ColumnConversions { self =>
 
+  private implicit val withRelations: Set[RelationWrapper] = Set.empty
   // The call site where this SparkSession was constructed.
   private val creationSite: CallSite = Utils.getCallSite()
 
