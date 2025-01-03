@@ -1125,13 +1125,15 @@ class BaseUDTFTestsMixin:
 
         with self.assertRaisesRegex(
             IllegalArgumentException,
-            r"Cannot call withSinglePartition\(\) after partitionBy\(\) or withSinglePartition\(\) has been called",
+            r"Cannot call withSinglePartition\(\) after partitionBy\(\)"
+            r" or withSinglePartition\(\) has been called",
         ):
             df.asTable().partitionBy(df.key).withSinglePartition()
 
         with self.assertRaisesRegex(
             IllegalArgumentException,
-            r"Cannot call partitionBy\(\) after partitionBy\(\) or withSinglePartition\(\) has been called",
+            r"Cannot call partitionBy\(\) after partitionBy\(\)"
+            r" or withSinglePartition\(\) has been called",
         ):
             df.asTable().withSinglePartition().partitionBy(df.key)
 
@@ -1149,7 +1151,8 @@ class BaseUDTFTestsMixin:
 
         with self.assertRaisesRegex(
             IllegalArgumentException,
-            r"Cannot call partitionBy\(\) after partitionBy\(\) or withSinglePartition\(\) has been called",
+            r"Cannot call partitionBy\(\) after partitionBy\(\)"
+            r" or withSinglePartition\(\) has been called",
         ):
             df.asTable().partitionBy(df.key).partitionBy()
 
