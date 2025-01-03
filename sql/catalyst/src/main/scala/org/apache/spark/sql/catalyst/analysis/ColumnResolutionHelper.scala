@@ -271,20 +271,19 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
 //      nameParts.last.toLowerCase(Locale.ROOT)
 //    }
 
-    // todo LOCALVARS: check if we have 1 or 2 nameparts (here and maybe createvarexec)
-    // todo LOCALVARS: should we do this for label or only for var name
+    // todo LOCALVARS: should we do this for all nameParts or only name
     val namePartsCaseAdjusted = if (conf.caseSensitiveAnalysis) {
       nameParts
     } else {
       nameParts.map(_.toLowerCase(Locale.ROOT))
     }
 
+    // todo LOCALVARS: if system.session.var check only tempVariableManager
     catalogManager.scriptingLocalVariableManager
       .flatMap(_.get(namePartsCaseAdjusted))
       .map { varDef =>
         VariableReference(
           nameParts,
-          // todo LOCALVARS: deal with this fakesystemcatalog / session_namespace situation
           FakeSystemCatalog,
           Identifier.of(Array(varDef.identifier.namespace().last), namePartsCaseAdjusted.last),
           varDef)

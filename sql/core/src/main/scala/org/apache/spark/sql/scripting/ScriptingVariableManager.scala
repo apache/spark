@@ -29,10 +29,12 @@ class ScriptingVariableManager(context: SqlScriptingExecutionContext) extends Va
       initValue: Literal,
       overrideIfExists: Boolean,
       identifier: Identifier): Unit = {
-    // todo LOCALVARS: qualified name
+    // todo LOCALVARS: check for duplicate (somewhere)
     context.currentScope.variables.put(
       name,
       VariableDefinition(
+        // we use the label name of current scope as namespace for local variables
+        // e.g. ("scopeName.varName")
         Identifier.of(Array(context.currentScope.label), name),
         defaultValueSQL,
         initValue
@@ -48,6 +50,8 @@ class ScriptingVariableManager(context: SqlScriptingExecutionContext) extends Va
       context.currentFrame.scopes
       .findLast(_.label == label)
       .map(_.variables(name))
+      // todo LOCALVARS: add error if not 1 or 2 nameparts
+      // case _ => throw error
   }
 
   override def remove(name: String): Boolean = {

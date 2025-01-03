@@ -40,6 +40,8 @@ case class CreateVariableExec(
     val exprs = prepareExpressions(Seq(defaultExpr.child), subExprEliminationEnabled = false)
     initializeExprs(exprs, 0)
     val initValue = Literal(exprs.head.eval(), defaultExpr.dataType)
+
+    // todo LOCALVARS: should we do this for the entire identifier or only name
     val normalizedName = if (session.sessionState.conf.caseSensitiveAnalysis) {
       identifier.name()
     } else {

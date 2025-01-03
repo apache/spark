@@ -209,6 +209,7 @@ class ResolverGuard(catalogManager: CatalogManager) extends SQLConfHelper {
     // Case-sensitive inference is not supported for Hive table schema.
     conf.caseSensitiveInferenceMode == HiveCaseSensitiveInferenceMode.NEVER_INFER
 
+  // todo LOCALVARS: add check that no local vars exist here
   private def checkVariables() = catalogManager.tempVariableManager.isEmpty
 }
 

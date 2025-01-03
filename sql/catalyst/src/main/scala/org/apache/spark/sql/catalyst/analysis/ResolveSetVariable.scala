@@ -55,8 +55,7 @@ class ResolveSetVariable(val catalogManager: CatalogManager) extends Rule[Logica
       // No need for case insensitive comparison here.
       // TODO: we need to group by the qualified variable name once other catalogs support it.
 
-      // todo LOCALVARS: the todo above, although possibly not neceesary because it might work.
-      //  research further
+      // todo LOCALVARS: the todo above
       val dups = resolvedVars.groupBy(_.identifier.name).filter(kv => kv._2.length > 1)
       if (dups.nonEmpty) {
         throw new AnalysisException(

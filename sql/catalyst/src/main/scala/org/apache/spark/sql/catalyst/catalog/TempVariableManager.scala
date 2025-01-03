@@ -89,7 +89,6 @@ class TempVariableManager extends VariableManager with DataTypeErrorsBase {
     variables.clear()
   }
 
-  // todo LOCALVARS: check what this is for with Vladimir
   override def isEmpty: Boolean = synchronized {
     variables.isEmpty
   }
