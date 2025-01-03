@@ -172,7 +172,7 @@ class JobCancellationTests(JobCancellationTestsMixin, ReusedSQLTestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.sql.tests.test_session import *  # noqa: F401
+    from pyspark.sql.tests.test_job_cancellation import *  # noqa: F401
 
     try:
         import xmlrunner
