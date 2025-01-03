@@ -726,7 +726,17 @@ trait CharVarcharTestSuite extends QueryTest with SQLTestUtils {
     Seq("char", "varchar").foreach { typ =>
       withSQLConf((SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key, "true")) {
         withTable("t") {
-          checkAnswer(sql(s"select not('false'::$typ(5)), 1 + ('4'::$typ(5))"), Row(true, 5))
+          checkAnswer(sql(
+            s"""
+               |SELECT
+               |NOT('false'::$typ(5)),
+               |1 + ('4'::$typ(5)),
+               |2L + ('4'::$typ(5)),
+               |3S + ('4'::$typ(5)),
+               |4Y - ('4'::$typ(5)),
+               |1.2 / ('0.6'::$typ(5)),
+               |MINUTE('2009-07-30 12:58:59'::$typ(30))
+            """.stripMargin), Row(true, 5, 6, 7, 0, 2.0, 58))
         }
       }
     }

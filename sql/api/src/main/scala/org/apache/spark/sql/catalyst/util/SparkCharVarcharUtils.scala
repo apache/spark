@@ -54,8 +54,7 @@ trait SparkCharVarcharUtils {
       StructType(fields.map { field =>
         field.copy(dataType = replaceCharVarcharWithString(field.dataType))
       })
-    case st: StringType if !SqlApiConf.get.preserveCharVarcharTypeInfo =>
-      new StringType(st.collationId, st.constraint)
+    case CharType(_) | VarcharType(_) if !SqlApiConf.get.preserveCharVarcharTypeInfo => StringType
     case _ => dt
   }
 }

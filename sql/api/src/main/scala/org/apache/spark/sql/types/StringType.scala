@@ -96,13 +96,10 @@ class StringType private[sql] (
   override def jsonValue: JValue = JString("string")
 
   override def equals(obj: Any): Boolean = {
-    val rhs = obj match {
-      case s: StringType => s
-      case _ => return false
+    obj match {
+      case s: StringType => s.collationId == collationId && s.constraint == constraint
+      case _ => false
     }
-    val a = StringHelper.getConstraint(this)
-    val b = StringHelper.getConstraint(rhs)
-    collationId == rhs.collationId && StringHelper.equiv(a, b)
   }
 
   override def hashCode(): Int = collationId.hashCode()
@@ -159,16 +156,10 @@ case object StringHelper extends PartialOrdering[StringConstraint] {
     tryCompare(x, y).contains(0)
   }
 
-  def getConstraint(s: StringType): StringConstraint =
-    s match {
-      case st @ (CharType(_) | VarcharType(_)) => st.constraint
-      case _ => NoConstraint
-    }
-
-  def isPlainString(s: StringType): Boolean = equiv(getConstraint(s), NoConstraint)
+  def isPlainString(s: StringType): Boolean = equiv(s.constraint, NoConstraint)
 
   def isMoreConstrained(a: StringType, b: StringType): Boolean =
-    gteq(getConstraint(a), getConstraint(b))
+    gteq(a.constraint, b.constraint)
 
   def tightestCommonString(s1: StringType, s2: StringType): Option[StringType] = {
     if (s1.collationId != s2.collationId) {

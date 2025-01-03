@@ -365,7 +365,7 @@ object Cast extends QueryErrorsBase {
     case (_: StringType, BinaryType) => false
     case (s1: StringType, s2: StringType) => !StringHelper.isMoreConstrained(s1, s2)
     case (_: StringType, _) => true
-    case (_, st: StringType) => st.constraint != NoConstraint
+    case (_, st: StringType) => !StringHelper.isPlainString(st)
 
     case (TimestampType, ByteType | ShortType | IntegerType) => true
     case (FloatType | DoubleType, TimestampType) => true

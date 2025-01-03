@@ -74,7 +74,7 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
   def replaceCharVarcharWithStringForCast(dt: DataType): DataType = {
     if (SQLConf.get.charVarcharAsString) {
       replaceCharVarcharWithString(dt)
-    } else if (hasCharVarchar(dt)) {
+    } else if (hasCharVarchar(dt) && !SQLConf.get.preserveCharVarcharTypeInfo) {
       logWarning(log"The Spark cast operator does not support char/varchar type and simply treats" +
         log" them as string type. Please use string type directly to avoid confusion. Otherwise," +
         log" you can set ${MDC(CONFIG, SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key)} " +
@@ -167,7 +167,7 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
           if (SQLConf.get.preserveCharVarcharTypeInfo) {
             c
           } else {
-            new StringType(c.collationId, c.constraint)
+            new StringType(c.collationId)
           },
           charFuncName.get,
           expr :: Literal(length) :: Nil,
@@ -179,7 +179,7 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
           if (SQLConf.get.preserveCharVarcharTypeInfo) {
             v
           } else {
-            new StringType(v.collationId, v.constraint)
+            new StringType(v.collationId)
           },
           varcharFuncName.get,
           expr :: Literal(length) :: Nil,
