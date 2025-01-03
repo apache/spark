@@ -42,6 +42,7 @@ import google.protobuf.internal.enum_type_wrapper
 import google.protobuf.message
 import pyspark.sql.connect.proto.common_pb2
 import pyspark.sql.connect.proto.expressions_pb2
+import pyspark.sql.connect.proto.ml_pb2
 import pyspark.sql.connect.proto.relations_pb2
 import sys
 import typing
@@ -104,6 +105,7 @@ class Command(google.protobuf.message.Message):
     CHECKPOINT_COMMAND_FIELD_NUMBER: builtins.int
     REMOVE_CACHED_REMOTE_RELATION_COMMAND_FIELD_NUMBER: builtins.int
     MERGE_INTO_TABLE_COMMAND_FIELD_NUMBER: builtins.int
+    ML_COMMAND_FIELD_NUMBER: builtins.int
     EXTENSION_FIELD_NUMBER: builtins.int
     @property
     def register_function(
@@ -146,6 +148,8 @@ class Command(google.protobuf.message.Message):
     @property
     def merge_into_table_command(self) -> global___MergeIntoTableCommand: ...
     @property
+    def ml_command(self) -> pyspark.sql.connect.proto.ml_pb2.MlCommand: ...
+    @property
     def extension(self) -> google.protobuf.any_pb2.Any:
         """This field is used to mark extensions to the protocol. When plugins generate arbitrary
         Commands they can add them here. During the planning the correct resolution is done.
@@ -174,6 +178,7 @@ class Command(google.protobuf.message.Message):
         remove_cached_remote_relation_command: global___RemoveCachedRemoteRelationCommand
         | None = ...,
         merge_into_table_command: global___MergeIntoTableCommand | None = ...,
+        ml_command: pyspark.sql.connect.proto.ml_pb2.MlCommand | None = ...,
         extension: google.protobuf.any_pb2.Any | None = ...,
     ) -> None: ...
     def HasField(
@@ -193,6 +198,8 @@ class Command(google.protobuf.message.Message):
             b"get_resources_command",
             "merge_into_table_command",
             b"merge_into_table_command",
+            "ml_command",
+            b"ml_command",
             "register_data_source",
             b"register_data_source",
             "register_function",
@@ -234,6 +241,8 @@ class Command(google.protobuf.message.Message):
             b"get_resources_command",
             "merge_into_table_command",
             b"merge_into_table_command",
+            "ml_command",
+            b"ml_command",
             "register_data_source",
             b"register_data_source",
             "register_function",
@@ -278,6 +287,7 @@ class Command(google.protobuf.message.Message):
             "checkpoint_command",
             "remove_cached_remote_relation_command",
             "merge_into_table_command",
+            "ml_command",
             "extension",
         ]
         | None

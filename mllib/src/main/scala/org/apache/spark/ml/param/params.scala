@@ -19,11 +19,11 @@ package org.apache.spark.ml.param
 
 import java.lang.reflect.Modifier
 import java.util.{List => JList}
-import java.util.NoSuchElementException
 
 import scala.annotation.varargs
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
+import scala.reflect.ClassTag
 
 import org.json4s._
 import org.json4s.jackson.JsonMethods._
@@ -45,8 +45,13 @@ import org.apache.spark.util.ArrayImplicits._
  *                See [[ParamValidators]] for factory methods for common validation functions.
  * @tparam T param value type
  */
-class Param[T](val parent: String, val name: String, val doc: String, val isValid: T => Boolean)
+class Param[T: ClassTag](
+    val parent: String, val name: String, val doc: String, val isValid: T => Boolean)
   extends Serializable {
+
+  // Spark Connect ML needs T type information which has been erased when compiling,
+  // Use classTag to preserve the T type.
+  val paramValueClassTag = implicitly[ClassTag[T]]
 
   def this(parent: Identifiable, name: String, doc: String, isValid: T => Boolean) =
     this(parent.uid, name, doc, isValid)

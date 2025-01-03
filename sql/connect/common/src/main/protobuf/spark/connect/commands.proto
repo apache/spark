@@ -21,6 +21,7 @@ import "google/protobuf/any.proto";
 import "spark/connect/common.proto";
 import "spark/connect/expressions.proto";
 import "spark/connect/relations.proto";
+import "spark/connect/ml.proto";
 
 package spark.connect;
 
@@ -48,7 +49,7 @@ message Command {
     CheckpointCommand checkpoint_command = 14;
     RemoveCachedRemoteRelationCommand remove_cached_remote_relation_command = 15;
     MergeIntoTableCommand merge_into_table_command = 16;
-
+    MlCommand ml_command = 17;
     // This field is used to mark extensions to the protocol. When plugins generate arbitrary
     // Commands they can add them here. During the planning the correct resolution is done.
     google.protobuf.Any extension = 999;
