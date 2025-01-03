@@ -68,6 +68,7 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
       } else {
         DoNotCleanup
       }
+    println(s"SparkConnectPlanExecution: ${request.getPlan}")
     val dataframe =
       Dataset.ofRows(
         sessionHolder.session,

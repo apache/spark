@@ -142,16 +142,13 @@ object ColumnNodeToProtoConverter extends (ColumnNode => proto.Expression) {
 
       case InvokeInlineUserDefinedFunction(
             a: Aggregator[Any @unchecked, Any @unchecked, Any @unchecked],
-            Nil,
+            args,
             false,
             _) =>
         // TODO we should probably 'just' detect this particular scenario
         //  in the planner instead of wrapping it in a separate method.
-        val exp = proto.Expression.newBuilder()
-          .setUnresolvedAttribute(
-          proto.Expression.UnresolvedAttribute.newBuilder().setUnparsedIdentifier("k"))
         val protoUdf = UdfToProtoUtils.toProto(
-          UserDefinedAggregator(a, e.get), Seq(exp.build()))
+          UserDefinedAggregator(a, e.get), args.map(apply(_, e)))
         builder.getTypedAggregateExpressionBuilder.setScalarScalaUdf(protoUdf.getScalarScalaUdf)
 
       case InvokeInlineUserDefinedFunction(udf: UserDefinedFunction, args, false, _) =>
