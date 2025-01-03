@@ -353,7 +353,7 @@ trait ShowTablesSuiteBase extends QueryTest with DDLCommandTestUtils {
              |View Text: SELECT id FROM $catalog.$namespace.$table
              |View Schema Mode: BINDING
              |View Catalog and Namespace: spark_catalog.default
-             |View Query Output Columns: [id]
+             |View Query Output Columns: [`id`]
              |Schema: root
              | |-- id: integer (nullable = true)""".stripMargin
         assert(actualLocalResult === expectedLocalResult)
@@ -380,7 +380,7 @@ trait ShowTablesSuiteBase extends QueryTest with DDLCommandTestUtils {
              |View Text: SELECT id FROM $catalog.$namespace.$table
              |View Schema Mode: BINDING
              |View Catalog and Namespace: spark_catalog.default
-             |View Query Output Columns: [id]
+             |View Query Output Columns: [`id`]
              |Schema: root
              | |-- id: integer (nullable = true)""".stripMargin
         assert(actualGlobalResult1 === expectedGlobalResult1)
@@ -398,7 +398,7 @@ trait ShowTablesSuiteBase extends QueryTest with DDLCommandTestUtils {
              |View Text: SELECT id FROM $catalog.$namespace.$table
              |View Schema Mode: BINDING
              |View Catalog and Namespace: spark_catalog.default
-             |View Query Output Columns: [id]
+             |View Query Output Columns: [`id`]
              |Schema: root
              | |-- id: integer (nullable = true)""".stripMargin
         assert(actualLocalResult2 === expectedLocalResult2)

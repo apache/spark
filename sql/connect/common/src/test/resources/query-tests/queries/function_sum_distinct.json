@@ -19,7 +19,8 @@
             "unparsedIdentifier": "a"
           }
         }],
-        "isDistinct": true
+        "isDistinct": true,
+        "isInternal": false
       }
     }]
   }

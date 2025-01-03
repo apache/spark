@@ -33,6 +33,7 @@ import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{DatabaseAlreadyExistsException, NoSuchDatabaseException, PartitionsAlreadyExistException}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, EqualTo, Literal}
+import org.apache.spark.sql.connector.catalog.TableCatalog
 import org.apache.spark.sql.hive.HiveExternalCatalog
 import org.apache.spark.sql.hive.test.TestHiveVersion
 import org.apache.spark.sql.types.{IntegerType, StructType}
@@ -68,11 +69,13 @@ class HiveClientSuite(version: String) extends HiveVersionSuite(version) {
   }
 
   def table(database: String, tableName: String,
+      collation: Option[String] = None,
       tableType: CatalogTableType = CatalogTableType.MANAGED): CatalogTable = {
     CatalogTable(
       identifier = TableIdentifier(tableName, Some(database)),
       tableType = tableType,
       schema = new StructType().add("key", "int"),
+      collation = collation,
       storage = CatalogStorageFormat(
         locationUri = None,
         inputFormat = Some(classOf[TextInputFormat].getName),
@@ -202,6 +205,22 @@ class HiveClientSuite(version: String) extends HiveVersionSuite(version) {
     client.createTable(table("default", tableName = "temporary"), ignoreIfExists = false)
     client.createTable(table("default", tableName = "view1", tableType = CatalogTableType.VIEW),
       ignoreIfExists = false)
+  }
+
+  test("create/alter table with collations") {
+    client.createTable(table("default", tableName = "collation_table",
+      collation = Some("UNICODE")), ignoreIfExists = false)
+
+    val readBack = client.getTable("default", "collation_table")
+    assert(!readBack.properties.contains(TableCatalog.PROP_COLLATION))
+    assert(readBack.collation === Some("UNICODE"))
+
+    client.alterTable("default", "collation_table",
+      readBack.copy(collation = Some("UNICODE_CI")))
+    val alteredTbl = client.getTable("default", "collation_table")
+    assert(alteredTbl.collation === Some("UNICODE_CI"))
+
+    client.dropTable("default", "collation_table", ignoreIfNotExists = true, purge = true)
   }
 
   test("loadTable") {

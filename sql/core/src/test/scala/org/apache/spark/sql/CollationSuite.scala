@@ -22,7 +22,6 @@ import scala.jdk.CollectionConverters.MapHasAsJava
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.connector.{DatasourceV2SQLBase, FakeV2ProviderWithCustomSchema}
 import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryTable}
@@ -34,6 +33,7 @@ import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAggregateExec}
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.execution.joins._
+import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.internal.{SqlApiConf, SQLConf}
 import org.apache.spark.sql.types.{ArrayType, IntegerType, MapType, Metadata, MetadataBuilder, StringType, StructField, StructType}
 
@@ -1106,43 +1106,42 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
     }
   }
 
-  test("SPARK-47972: Cast expression limitation for collations") {
-    checkError(
-      exception = intercept[ParseException]
-        (sql("SELECT cast(1 as string collate unicode)")),
-      condition = "UNSUPPORTED_DATATYPE",
-      parameters = Map(
-        "typeName" -> toSQLType(StringType("UNICODE"))),
-      context =
-        ExpectedContext(fragment = s"cast(1 as string collate unicode)", start = 7, stop = 39)
-    )
+  test("Cast expression for collations") {
+    checkAnswer(
+      sql(s"SELECT collation(cast('a' as string collate utf8_lcase))"),
+      Seq(Row(fullyQualifiedPrefix + "UTF8_LCASE")))
 
-    checkError(
-      exception = intercept[ParseException]
-        (sql("SELECT 'A' :: string collate unicode")),
-      condition = "UNSUPPORTED_DATATYPE",
-      parameters = Map(
-        "typeName" -> toSQLType(StringType("UNICODE"))),
-      context = ExpectedContext(fragment = s"'A' :: string collate unicode", start = 7, stop = 35)
-    )
+    checkAnswer(
+      sql(s"SELECT collation('a' :: string collate utf8_lcase)"),
+      Seq(Row(fullyQualifiedPrefix + "UTF8_LCASE")))
 
     checkAnswer(sql(s"SELECT cast(1 as string)"), Seq(Row("1")))
     checkAnswer(sql(s"SELECT cast('A' as string)"), Seq(Row("A")))
 
     withSQLConf(SqlApiConf.DEFAULT_COLLATION -> "UNICODE") {
-      checkError(
-        exception = intercept[ParseException]
-          (sql("SELECT cast(1 as string collate unicode)")),
-        condition = "UNSUPPORTED_DATATYPE",
-        parameters = Map(
-          "typeName" -> toSQLType(StringType("UNICODE"))),
-        context =
-          ExpectedContext(fragment = s"cast(1 as string collate unicode)", start = 7, stop = 39)
-      )
-
+      checkAnswer(
+        sql(s"SELECT collation(cast(1 as string collate unicode))"),
+        Seq(Row(fullyQualifiedPrefix + "UNICODE")))
       checkAnswer(sql(s"SELECT cast(1 as string)"), Seq(Row("1")))
       checkAnswer(sql(s"SELECT collation(cast(1 as string))"),
         Seq(Row(fullyQualifiedPrefix + "UNICODE")))
+    }
+  }
+
+  test("cast using the dataframe api") {
+    val tableName = "cast_table"
+    withTable(tableName) {
+      sql(s"CREATE TABLE $tableName (name STRING COLLATE UTF8_LCASE) USING PARQUET")
+
+      var df = spark.read.table(tableName)
+        .withColumn("name", col("name").cast("STRING COLLATE UNICODE"))
+
+      assert(df.schema.fields.head.dataType === StringType("UNICODE"))
+
+      df = spark.read.table(tableName)
+        .withColumn("name", col("name").cast("STRING COLLATE UTF8_BINARY"))
+
+      assert(df.schema.fields.head.dataType === StringType)
     }
   }
 

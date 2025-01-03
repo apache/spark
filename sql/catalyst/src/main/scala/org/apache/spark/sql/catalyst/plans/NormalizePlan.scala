@@ -95,17 +95,35 @@ object NormalizePlan extends PredicateHelper {
             .sortBy(_.hashCode())
             .reduce(And)
         Join(left, right, newJoinType, Some(newCondition), hint)
+      case Project(outerProjectList, innerProject: Project) =>
+        val normalizedInnerProjectList = normalizeProjectList(innerProject.projectList)
+        val orderedInnerProjectList = normalizedInnerProjectList.sortBy(_.name)
+        val newInnerProject =
+          Project(orderedInnerProjectList, innerProject.child)
+        Project(normalizeProjectList(outerProjectList), newInnerProject)
       case Project(projectList, child) =>
-        val projList = projectList
-          .map { e =>
-            e.transformUp {
-              case g: GetViewColumnByNameAndOrdinal => g.copy(viewDDL = None)
-            }
-          }
-          .asInstanceOf[Seq[NamedExpression]]
-        Project(projList, child)
+        Project(normalizeProjectList(projectList), child)
       case c: KeepAnalyzedQuery => c.storeAnalyzedQuery()
+      case localRelation: LocalRelation if !localRelation.data.isEmpty =>
+        /**
+         * A substitute for the [[LocalRelation.data]]. [[GenericInternalRow]] is incomparable for
+         * maps, because [[ArrayBasedMapData]] doesn't define [[equals]].
+         */
+        val unsafeProjection = UnsafeProjection.create(localRelation.schema)
+        localRelation.copy(data = localRelation.data.map { row =>
+          unsafeProjection(row)
+        })
     }
+  }
+
+  private def normalizeProjectList(projectList: Seq[NamedExpression]): Seq[NamedExpression] = {
+    projectList
+      .map { e =>
+        e.transformUp {
+          case g: GetViewColumnByNameAndOrdinal => g.copy(viewDDL = None)
+        }
+      }
+      .asInstanceOf[Seq[NamedExpression]]
   }
 
   /**

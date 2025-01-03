@@ -2198,6 +2198,17 @@ class BaseUDTFTestsMixin:
                     ],
                 )
 
+    def test_udtf_with_table_argument_and_partition_by_no_terminate(self):
+        func = self.udtf_for_table_argument()  # a udtf with no terminate method defined
+        self.spark.udtf.register("test_udtf", func)
+
+        assertDataFrameEqual(
+            self.spark.sql(
+                "SELECT * FROM test_udtf(TABLE (SELECT id FROM range(0, 8)) PARTITION BY id)"
+            ),
+            [Row(a=6), Row(a=7)],
+        )
+
     def test_udtf_with_table_argument_and_partition_by_and_order_by(self):
         class TestUDTF:
             def __init__(self):

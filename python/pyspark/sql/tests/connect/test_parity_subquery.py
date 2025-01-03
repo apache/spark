@@ -17,42 +17,37 @@
 
 import unittest
 
+from pyspark.sql import functions as sf
 from pyspark.sql.tests.test_subquery import SubqueryTestsMixin
+from pyspark.testing import assertDataFrameEqual
 from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
 class SubqueryParityTests(SubqueryTestsMixin, ReusedConnectTestCase):
-    @unittest.skip("TODO(SPARK-50134): Support subquery in connect")
-    def test_simple_uncorrelated_scalar_subquery(self):
-        super().test_simple_uncorrelated_scalar_subquery()
+    def test_scalar_subquery_with_missing_outer_reference(self):
+        with self.tempView("l", "r"):
+            self.df1.createOrReplaceTempView("l")
+            self.df2.createOrReplaceTempView("r")
 
-    @unittest.skip("TODO(SPARK-50134): Support subquery in connect")
-    def test_uncorrelated_scalar_subquery_with_view(self):
-        super().test_uncorrelated_scalar_subquery_with_view()
+            assertDataFrameEqual(
+                self.spark.table("l").select(
+                    "a",
+                    (
+                        self.spark.table("r")
+                        .where(sf.col("c") == sf.col("a"))
+                        .select(sf.sum("d"))
+                        .scalar()
+                    ),
+                ),
+                self.spark.sql("""SELECT a, (SELECT sum(d) FROM r WHERE c = a) FROM l"""),
+            )
 
-    @unittest.skip("TODO(SPARK-50134): Support subquery in connect")
-    def test_scalar_subquery_against_local_relations(self):
-        super().test_scalar_subquery_against_local_relations()
+    def test_subquery_in_unpivot(self):
+        self.check_subquery_in_unpivot(None, None)
 
-    @unittest.skip("TODO(SPARK-50134): Support subquery in connect")
-    def test_correlated_scalar_subquery(self):
-        super().test_correlated_scalar_subquery()
-
-    @unittest.skip("TODO(SPARK-50134): Support subquery in connect")
-    def test_exists_subquery(self):
-        super().test_exists_subquery()
-
-    @unittest.skip("TODO(SPARK-50134): Support subquery in connect")
-    def test_scalar_subquery_with_outer_reference_errors(self):
-        super().test_scalar_subquery_with_outer_reference_errors()
-
-    @unittest.skip("TODO(SPARK-50134): Support subquery in connect")
-    def test_scalar_subquery_inside_lateral_join(self):
-        super().test_scalar_subquery_inside_lateral_join()
-
-    @unittest.skip("TODO(SPARK-50134): Support subquery in connect")
-    def test_lateral_join_inside_subquery(self):
-        super().test_lateral_join_inside_subquery()
+    @unittest.skip("SPARK-50601: Fix the SparkConnectPlanner to support this case")
+    def test_subquery_in_with_columns(self):
+        super().test_subquery_in_with_columns()
 
 
 if __name__ == "__main__":

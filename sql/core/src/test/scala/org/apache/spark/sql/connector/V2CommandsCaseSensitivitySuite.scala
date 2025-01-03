@@ -53,7 +53,8 @@ class V2CommandsCaseSensitivitySuite
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
         Seq("ID", "iD").foreach { ref =>
           val tableSpec =
-            UnresolvedTableSpec(Map.empty, None, OptionList(Seq.empty), None, None, None, false)
+            UnresolvedTableSpec(Map.empty, None, OptionList(Seq.empty),
+              None, None, None, None, false)
           val plan = CreateTableAsSelect(
             UnresolvedIdentifier(Array("table_name").toImmutableArraySeq),
             Expressions.identity(ref) :: Nil,
@@ -77,7 +78,8 @@ class V2CommandsCaseSensitivitySuite
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
         Seq("POINT.X", "point.X", "poInt.x", "poInt.X").foreach { ref =>
           val tableSpec =
-            UnresolvedTableSpec(Map.empty, None, OptionList(Seq.empty), None, None, None, false)
+            UnresolvedTableSpec(Map.empty, None, OptionList(Seq.empty),
+              None, None, None, None, false)
           val plan = CreateTableAsSelect(
             UnresolvedIdentifier(Array("table_name").toImmutableArraySeq),
             Expressions.bucket(4, ref) :: Nil,
@@ -102,7 +104,8 @@ class V2CommandsCaseSensitivitySuite
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
         Seq("ID", "iD").foreach { ref =>
           val tableSpec =
-            UnresolvedTableSpec(Map.empty, None, OptionList(Seq.empty), None, None, None, false)
+            UnresolvedTableSpec(Map.empty, None, OptionList(Seq.empty),
+              None, None, None, None, false)
           val plan = ReplaceTableAsSelect(
             UnresolvedIdentifier(Array("table_name").toImmutableArraySeq),
             Expressions.identity(ref) :: Nil,
@@ -126,7 +129,8 @@ class V2CommandsCaseSensitivitySuite
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
         Seq("POINT.X", "point.X", "poInt.x", "poInt.X").foreach { ref =>
           val tableSpec =
-            UnresolvedTableSpec(Map.empty, None, OptionList(Seq.empty), None, None, None, false)
+            UnresolvedTableSpec(Map.empty, None, OptionList(Seq.empty),
+              None, None, None, None, false)
           val plan = ReplaceTableAsSelect(
             UnresolvedIdentifier(Array("table_name").toImmutableArraySeq),
             Expressions.bucket(4, ref) :: Nil,

@@ -36,16 +36,21 @@ import org.scalactic.source.Position
 import org.scalatest.PrivateMethodTester
 import org.scalatest.Tag
 
-import org.apache.spark.{SparkConf, SparkException, TaskContext}
+import org.apache.spark.{SparkConf, SparkException, SparkFunSuite, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.io.CompressionCodec
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.UnsafeProjection
 import org.apache.spark.sql.catalyst.util.quietly
 import org.apache.spark.sql.execution.streaming.{CheckpointFileManager, CreateAtomicTestManager, FileContextBasedCheckpointFileManager, FileSystemBasedCheckpointFileManager}
 import org.apache.spark.sql.execution.streaming.CheckpointFileManager.{CancellableFSDataOutputStream, RenameBasedFSDataOutputStream}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.STREAMING_CHECKPOINT_FILE_MANAGER_CLASS
 import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
+import org.apache.spark.sql.types._
 import org.apache.spark.tags.SlowSQLTest
+import org.apache.spark.unsafe.Platform
+import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.{ThreadUtils, Utils}
 import org.apache.spark.util.ArrayImplicits._
 
@@ -176,6 +181,21 @@ trait AlsoTestWithRocksDBFeatures
     }
   }
 
+  def testWithColumnFamiliesAndEncodingTypes(
+      testName: String,
+      testMode: TestMode = TestWithBothChangelogCheckpointingEnabledAndDisabled)
+      (testBody: Boolean => Any): Unit = {
+    // For each encoding type
+    Seq("unsaferow", "avro").foreach { encoding =>
+      // Call testWithColumnFamilies for each encoding
+      testWithColumnFamilies(s"$testName (encoding = $encoding)", testMode) { colFamiliesEnabled =>
+        withSQLConf(SQLConf.STREAMING_STATE_STORE_ENCODING_FORMAT.key -> encoding) {
+          testBody(colFamiliesEnabled)
+        }
+      }
+    }
+  }
+
   def testWithColumnFamilies(
       testName: String,
       testMode: TestMode,
@@ -296,6 +316,199 @@ object OpenNumCountedTestInputStream extends Logging {
       }
       throw new IllegalStateException(s"There are $numOpen possibly leaked file streams.",
         openStreams.values.head)
+    }
+  }
+}
+
+class RocksDBStateEncoderSuite extends SparkFunSuite {
+
+  // Helper method to create test schemas
+  private def createTestSchemas() = {
+    val keySchema = StructType(Seq(
+      StructField("k1", IntegerType),
+      StructField("k2", LongType),
+      StructField("k3", DoubleType)
+    ))
+    val valueSchema = StructType(Seq(
+      StructField("v1", StringType),
+      StructField("v2", BooleanType)
+    ))
+    (keySchema, valueSchema)
+  }
+
+  // Create encoders for different key encoding strategies
+  private def createTestEncoder(keyStateEncoderSpec: KeyStateEncoderSpec): RocksDBDataEncoder = {
+    val (keySchema, valueSchema) = createTestSchemas()
+    val stateSchemaInfo = Some(StateSchemaInfo(
+      keySchemaId = 0,
+      valueSchemaId = 0
+    ))
+    new AvroStateEncoder(keyStateEncoderSpec, valueSchema, stateSchemaInfo)
+  }
+
+  private def createNoPrefixKeyEncoder(): RocksDBDataEncoder = {
+    val (keySchema, _) = createTestSchemas()
+    createTestEncoder(NoPrefixKeyStateEncoderSpec(keySchema))
+  }
+
+  private def createPrefixKeyScanEncoder(): RocksDBDataEncoder = {
+    val (keySchema, _) = createTestSchemas()
+    createTestEncoder(PrefixKeyScanStateEncoderSpec(keySchema, numColsPrefixKey = 2))
+  }
+
+  private def createRangeKeyScanEncoder(): RocksDBDataEncoder = {
+    val (keySchema, _) = createTestSchemas()
+    createTestEncoder(RangeKeyScanStateEncoderSpec(keySchema, orderingOrdinals = Seq(0, 1)))
+  }
+
+  test("verify schema ID handling in prefix and range scan key encoding") {
+    val keySchema = StructType(Seq(
+      StructField("k1", IntegerType),
+      StructField("k2", LongType),
+      StructField("k3", DoubleType)
+    ))
+    val valueSchema = StructType(Seq(
+      StructField("v1", StringType)
+    ))
+
+    // Create test row with some data
+    val keyProj = UnsafeProjection.create(keySchema)
+    val fullKeyRow = keyProj.apply(InternalRow(42, 123L, 3.14))
+
+    // Test prefix scan encoding with schema evolution
+    withClue("Testing prefix scan encoding: ") {
+      val prefixKeySpec = PrefixKeyScanStateEncoderSpec(keySchema, numColsPrefixKey = 2)
+      val stateSchemaInfo = Some(StateSchemaInfo(keySchemaId = 42, valueSchemaId = 0))
+      val encoder = new AvroStateEncoder(prefixKeySpec, valueSchema, stateSchemaInfo)
+
+      // Then encode just the remaining key portion (which should include schema ID)
+      val remainingKeyRow = keyProj.apply(InternalRow(null, null, 3.14))
+      val encodedRemainingKey = encoder.encodeRemainingKey(remainingKeyRow)
+
+      // Verify schema ID in remaining key bytes
+      val decodedSchemaIdRow = encoder.decodeStateSchemaIdRow(encodedRemainingKey)
+      assert(decodedSchemaIdRow.schemaId === 42,
+        "Schema ID not preserved in prefix scan remaining key encoding")
+    }
+
+    // Test range scan encoding with schema evolution
+    withClue("Testing range scan encoding: ") {
+      val rangeScanSpec = RangeKeyScanStateEncoderSpec(keySchema, orderingOrdinals = Seq(0, 1))
+      val stateSchemaInfo = Some(StateSchemaInfo(keySchemaId = 24, valueSchemaId = 0))
+      val encoder = new AvroStateEncoder(rangeScanSpec, valueSchema, stateSchemaInfo)
+
+      // Encode remaining key (non-ordering columns)
+      // For range scan, the remaining key schema only contains columns NOT in orderingOrdinals
+      val remainingKeySchema = StructType(Seq(
+        StructField("k3", DoubleType)  // Only the non-ordering column
+      ))
+      val remainingKeyProj = UnsafeProjection.create(remainingKeySchema)
+      val remainingKeyRow = remainingKeyProj.apply(InternalRow(3.14))
+      val encodedRemainingKey = encoder.encodeRemainingKey(remainingKeyRow)
+
+      // Verify schema ID in remaining key bytes
+      val decodedSchemaIdRow = encoder.decodeStateSchemaIdRow(encodedRemainingKey)
+      assert(decodedSchemaIdRow.schemaId === 24,
+        "Schema ID not preserved in range scan remaining key encoding")
+
+      // Verify we can decode the remaining key correctly
+      // The decoded row should only have the non-ordering column (k3)
+      val decodedRemainingKey = encoder.decodeRemainingKey(encodedRemainingKey)
+      assert(decodedRemainingKey.getDouble(0) === 3.14,
+        "Data not preserved in range scan remaining key encoding")
+
+      // Test the range scan key portion (ordering columns)
+      val rangeScanKeySchema = StructType(Seq(
+        StructField("k1", IntegerType),
+        StructField("k2", LongType)
+      ))
+      val rangeScanProj = UnsafeProjection.create(rangeScanKeySchema)
+      val rangeScanRow = rangeScanProj.apply(InternalRow(42, 123L))
+      val encodedRangeScan = encoder.encodePrefixKeyForRangeScan(rangeScanRow)
+
+      // Range scan portion should not have schema ID since it uses special encoding
+      val decodedRangeScan = encoder.decodePrefixKeyForRangeScan(encodedRangeScan)
+      assert(decodedRangeScan.getInt(0) === 42)
+      assert(decodedRangeScan.getLong(1) === 123L)
+    }
+  }
+
+  test("verify schema ID preservation through encode/decode cycle") {
+    val encoders = Seq(
+      ("NoPrefixKey", createNoPrefixKeyEncoder()),
+      ("PrefixKeyScan", createPrefixKeyScanEncoder()),
+      ("RangeKeyScan", createRangeKeyScanEncoder())
+    )
+
+    // Test a range of schema IDs including edge cases
+    val testSchemaIds = Seq[Short](
+      0, // Min value
+      1, // Common case
+      42, // Arbitrary value
+      -1, // Negative value
+      Short.MaxValue, // Max positive
+      Short.MinValue // Max negative
+    )
+
+    encoders.foreach { case (encoderType, encoder) =>
+      testSchemaIds.foreach { schemaId =>
+        withClue(s"Testing $encoderType encoder with schema ID $schemaId: ") {
+          val testData = Array[Byte](1, 2, 3, 4)
+          val schemaIdRow = StateSchemaIdRow(schemaId, testData)
+
+          // Encode the row
+          val encoded = encoder.encodeWithStateSchemaId(schemaIdRow)
+
+          // Verify schema ID directly in encoded bytes
+          val encodedSchemaId = Platform.getShort(encoded, Platform.BYTE_ARRAY_OFFSET)
+          assert(encodedSchemaId === schemaId,
+            s"Schema ID mismatch in encoded bytes: expected $schemaId but got $encodedSchemaId")
+
+          // Decode and verify
+          val decoded = encoder.decodeStateSchemaIdRow(encoded)
+          assert(decoded.schemaId === schemaId,
+            s"Schema ID mismatch after decode: expected $schemaId but got ${decoded.schemaId}")
+
+          // Also verify data wasn't corrupted
+          assert(decoded.bytes === testData,
+            "Data corruption detected in encode/decode cycle")
+        }
+      }
+    }
+  }
+
+  test("verify schema ID handling in single value encoder") {
+    val keySchema = StructType(Seq(
+      StructField("k1", IntegerType)
+    ))
+    val valueSchema = StructType(Seq(
+      StructField("v1", StringType),
+      StructField("v2", IntegerType),
+      StructField("v3", BooleanType)
+    ))
+
+    val valueProj = UnsafeProjection.create(valueSchema)
+    val value = valueProj.apply(InternalRow(UTF8String.fromString("hello"), 42, true))
+
+    withClue("Testing single value encoder: ") {
+      val keySpec = NoPrefixKeyStateEncoderSpec(keySchema)
+      val stateSchemaInfo = Some(StateSchemaInfo(keySchemaId = 0, valueSchemaId = 42))
+      val avroEncoder = new AvroStateEncoder(keySpec, valueSchema, stateSchemaInfo)
+      val valueEncoder = new SingleValueStateEncoder(avroEncoder, valueSchema)
+
+      // Encode value
+      val encodedValue = valueEncoder.encodeValue(value)
+
+      // Verify schema ID was included and preserved
+      val decodedSchemaIdRow = avroEncoder.decodeStateSchemaIdRow(encodedValue)
+      assert(decodedSchemaIdRow.schemaId === 42,
+        "Schema ID not preserved in single value encoding")
+
+      // Verify value was preserved
+      val decodedValue = valueEncoder.decodeValue(encodedValue)
+      assert(decodedValue.getString(0) === "hello")
+      assert(decodedValue.getInt(1) === 42)
+      assert(decodedValue.getBoolean(2) === true)
     }
   }
 }
@@ -979,12 +1192,12 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
         null, StateStore.DEFAULT_COL_FAMILY_NAME)
     }
 
-    changelogReader.closeIfNeeded()
-
     assert(entries.size == expectedEntries.size)
     entries.zip(expectedEntries).map{
       case (e1, e2) => assert(e1._1 === e2._1 && e1._2 === e2._2 && e1._3 === e2._3)
     }
+
+    changelogReader.closeIfNeeded()
   }
 
   testWithChangelogCheckpointingEnabled("RocksDBFileManager: StateStoreChangelogReaderFactory " +
@@ -1124,12 +1337,13 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
       (RecordType.DELETE_RECORD, j.toString.getBytes,
         null, StateStore.DEFAULT_COL_FAMILY_NAME)
     }
-    changelogReader.closeIfNeeded()
 
     assert(entries.size == expectedEntries.size)
     entries.zip(expectedEntries).map{
       case (e1, e2) => assert(e1._1 === e2._1 && e1._2 === e2._2 && e1._3 === e2._3)
     }
+
+    changelogReader.closeIfNeeded()
   }
 
   testWithChangelogCheckpointingEnabled(
@@ -1161,12 +1375,13 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
     } ++ (2 to 4).map { j =>
       (RecordType.DELETE_RECORD, j.toString.getBytes, null)
     }
-    changelogReader.closeIfNeeded()
 
     assert(entries.size == expectedEntries.size)
     entries.zip(expectedEntries).map{
       case (e1, e2) => assert(e1._1 === e2._1 && e1._2 === e2._2 && e1._3 === e2._3)
     }
+
+    changelogReader.closeIfNeeded()
   }
 
   testWithChangelogCheckpointingEnabled("RocksDBFileManager: read and write v2 changelog with " +
@@ -1206,12 +1421,13 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
     } ++ (2 to 4).map { j =>
       (RecordType.DELETE_RECORD, j.toString.getBytes, null)
     }
-    changelogReader.closeIfNeeded()
 
     assert(entries.size == expectedEntries.size)
     entries.zip(expectedEntries).map{
       case (e1, e2) => assert(e1._1 === e2._1 && e1._2 === e2._2 && e1._3 === e2._3)
     }
+
+    changelogReader.closeIfNeeded()
   }
 
   testWithColumnFamilies("RocksDBFileManager: create init dfs directory with " +
