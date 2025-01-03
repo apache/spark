@@ -464,12 +464,19 @@ object ViewHelper extends SQLConfHelper with Logging {
   }
 
   /**
+   * Get all configurations that are modifiable and should be captured.
+   */
+  def getModifiedConf(conf: SQLConf): Map[String, String] = {
+    conf.getAllConfs.filter { case (k, _) =>
+      conf.isModifiable(k) && shouldCaptureConfig(k)
+    }
+  }
+
+  /**
    * Convert the view SQL configs to `properties`.
    */
   private def sqlConfigsToProps(conf: SQLConf): Map[String, String] = {
-    val modifiedConfs = conf.getAllConfs.filter { case (k, _) =>
-      conf.isModifiable(k) && shouldCaptureConfig(k)
-    }
+    val modifiedConfs = getModifiedConf(conf)
     // Some configs have dynamic default values, such as SESSION_LOCAL_TIMEZONE whose
     // default value relies on the JVM system timezone. We need to always capture them to
     // to make sure we apply the same configs when reading the view.
@@ -690,7 +697,7 @@ object ViewHelper extends SQLConfHelper with Logging {
   /**
    * Collect all temporary SQL variables and return the identifiers separately.
    */
-  private def collectTemporaryVariables(child: LogicalPlan): Seq[Seq[String]] = {
+  def collectTemporaryVariables(child: LogicalPlan): Seq[Seq[String]] = {
     def collectTempVars(child: LogicalPlan): Seq[Seq[String]] = {
       child.flatMap { plan =>
         plan.expressions.flatMap(_.flatMap {

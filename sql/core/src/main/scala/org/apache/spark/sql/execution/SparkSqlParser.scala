@@ -723,8 +723,19 @@ class SparkSqlAstBuilder extends AstBuilder {
 
       withIdentClause(ctx.identifierReference(), functionIdentifier => {
         if (ctx.TEMPORARY == null) {
-          // TODO: support creating persistent UDFs.
-          operationNotAllowed(s"creating persistent SQL functions is not supported", ctx)
+          CreateUserDefinedFunction(
+            UnresolvedIdentifier(functionIdentifier),
+            inputParamText,
+            returnTypeText,
+            exprText,
+            queryText,
+            comment,
+            deterministic,
+            containsSQL,
+            language,
+            isTableFunc,
+            ctx.EXISTS != null,
+            ctx.REPLACE != null)
         } else {
           // Disallow to define a temporary function with `IF NOT EXISTS`
           if (ctx.EXISTS != null) {
