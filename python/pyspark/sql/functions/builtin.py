@@ -39,7 +39,6 @@ from typing import (
     ValuesView,
 )
 from itertools import chain
-from functools import lru_cache
 from pyspark.errors import PySparkTypeError, PySparkValueError
 from pyspark.errors.utils import _with_origin
 from pyspark.sql.column import Column
