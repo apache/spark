@@ -202,22 +202,24 @@ class SparkSession:
 
             # The options are applied after session creation,
             # so options ["spark.remote", "spark.master"] always take no effect.
-            invalid_configs = ["spark.remote", "spark.master"]
+            invalid_opts = ["spark.remote", "spark.master"]
 
             with self._lock:
+                opts = {}
+
                 # Only attempts to set Spark SQL configurations.
                 # If the configurations are static, it might throw an exception so
                 # simply ignore it for now.
-                configs = {
-                    k: v
-                    for k, v in init_opts.items()
-                    if k not in invalid_configs and k.startswith("spark.sql.")
-                }
-                session.conf._set_all(configs=configs, silent=True)
+                for k, v in init_opts.items():
+                    if k not in invalid_opts and k.startswith("spark.sql."):
+                        opts[k] = v
 
-            with self._lock:
-                configs = {k: v for k, v in self._options.items() if k not in invalid_configs}
-                session.conf._set_all(configs=configs, silent=True)
+                for k, v in self._options.items():
+                    if k not in invalid_opts:
+                        opts[k] = v
+
+                if len(opts) > 0:
+                    session.conf._set_all(configs=opts, silent=True)
 
         def create(self) -> "SparkSession":
             has_channel_builder = self._channel_builder is not None
