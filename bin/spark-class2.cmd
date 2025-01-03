@@ -80,8 +80,13 @@ rem executed by the batch interpreter. So read all the output of the launcher in
 set LAUNCHER_OUTPUT=%temp%\spark-class-launcher-output-%RANDOM_SUFFIX%.txt
 
 rem unset SHELL to indicate non-bash environment to launcher/Main
+setlocal enabledelayedexpansion
+
+set args=%*
+set args="!args:&=^^^&!"
 set SHELL=
-"%RUNNER%" -Xmx128m -cp "%LAUNCH_CLASSPATH%" org.apache.spark.launcher.Main %* > %LAUNCHER_OUTPUT%
+"%RUNNER%" -Xmx128m -cp "%LAUNCH_CLASSPATH%" org.apache.spark.launcher.Main !args:~1,-1! > %LAUNCHER_OUTPUT%
+endlocal
 for /f "tokens=*" %%i in (%LAUNCHER_OUTPUT%) do (
   set SPARK_CMD=%%i
 )
