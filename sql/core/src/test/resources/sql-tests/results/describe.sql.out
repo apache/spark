@@ -167,14 +167,6 @@ Partition Provider  	Catalog
 
 
 -- !query
-DESC FORMATTED t AS JSON
--- !query schema
-struct<json_metadata:string>
--- !query output
-{"table_name":"t","catalog_name":"spark_catalog","namespace":["default"],"schema_name":"default","columns":[{"name":"a","type":{"type":"string"}},{"name":"b","type":{"type":"integer"}},{"name":"c","type":{"type":"string"}},{"name":"d","type":{"type":"string"}}],"num_buckets":2,"bucket_columns":["a"],"sort_columns":["b"],"location": "[not included in comparison]/{warehouse_dir}/t","storage_properties":{"a":"1","b":"2","password":"*********(redacted)"},"created_time [not included in comparison]":"None","last_access [not included in comparison]":"None","created_by [not included in comparison]":"None","type":"MANAGED","provider":"parquet","comment":"table_comment","table_properties":{"e":"3","password":"*********(redacted)","t":"test"},"partition_provider":"Catalog","partition_columns":["c","d"]}
-
-
--- !query
 DESC EXTENDED t
 -- !query schema
 struct<col_name:string,data_type:string,comment:string>
@@ -205,14 +197,6 @@ Table Properties    	[e=3, password=*********(redacted), t=test]
 Location [not included in comparison]/{warehouse_dir}/t	                    
 Storage Properties  	[a=1, b=2, password=*********(redacted)]	                    
 Partition Provider  	Catalog
-
-
--- !query
-DESC EXTENDED t AS JSON
--- !query schema
-struct<json_metadata:string>
--- !query output
-{"table_name":"t","catalog_name":"spark_catalog","namespace":["default"],"schema_name":"default","columns":[{"name":"a","type":{"type":"string"}},{"name":"b","type":{"type":"integer"}},{"name":"c","type":{"type":"string"}},{"name":"d","type":{"type":"string"}}],"num_buckets":2,"bucket_columns":["a"],"sort_columns":["b"],"location": "[not included in comparison]/{warehouse_dir}/t","storage_properties":{"a":"1","b":"2","password":"*********(redacted)"},"created_time [not included in comparison]":"None","last_access [not included in comparison]":"None","created_by [not included in comparison]":"None","type":"MANAGED","provider":"parquet","comment":"table_comment","table_properties":{"e":"3","password":"*********(redacted)","t":"test"},"partition_provider":"Catalog","partition_columns":["c","d"]}
 
 
 -- !query
@@ -413,14 +397,6 @@ Storage Properties  	[a=1, b=2, password=*********(redacted)]
 
 
 -- !query
-DESC EXTENDED t PARTITION (C='Us', D=1) AS JSON
--- !query schema
-struct<json_metadata:string>
--- !query output
-{"table_name":"t","catalog_name":"spark_catalog","namespace":["default"],"schema_name":"default","columns":[{"name":"a","type":{"type":"string"}},{"name":"b","type":{"type":"integer"}},{"name":"c","type":{"type":"string"}},{"name":"d","type":{"type":"string"}}],"partition_values":{"c":"Us","d":"1"},"location": "[not included in comparison]/{warehouse_dir}/t/c=Us/d=1","storage_properties":{"a":"1","b":"2","password":"*********(redacted)"},"created_time [not included in comparison]":"None","last_access [not included in comparison]":"None","created_by [not included in comparison]":"None","type":"MANAGED","provider":"parquet","num_buckets":2,"bucket_columns":["a"],"sort_columns":["b"],"table_properties":{"password":"*********(redacted)","t":"test"},"partition_provider":"Catalog","partition_columns":["c","d"]}
-
-
--- !query
 DESC t PARTITION (c='Us', d=2)
 -- !query schema
 struct<>
@@ -483,14 +459,6 @@ a                   	string
 b                   	int                 	                    
 c                   	string              	                    
 d                   	string
-
-
--- !query
-DESC EXTENDED temp_v AS JSON
--- !query schema
-struct<json_metadata:string>
--- !query output
-{"columns":[{"name":"a","type":{"type":"string"}},{"name":"b","type":{"type":"integer"}},{"name":"c","type":{"type":"string"}},{"name":"d","type":{"type":"string"}}]}
 
 
 -- !query
@@ -614,14 +582,6 @@ View Query Output Columns	[`a`, `b`, `c`, `d`]
 
 
 -- !query
-DESC FORMATTED v AS JSON
--- !query schema
-struct<json_metadata:string>
--- !query output
-{"table_name":"v","catalog_name":"spark_catalog","namespace":["default"],"schema_name":"default","columns":[{"name":"a","type":{"type":"string"}},{"name":"b","type":{"type":"integer"}},{"name":"c","type":{"type":"string"}},{"name":"d","type":{"type":"string"}}],"created_time [not included in comparison]":"None","last_access [not included in comparison]":"None","created_by [not included in comparison]":"None","type":"VIEW","view_text":"SELECT * FROM t","view_original_text":"SELECT * FROM t","view_schema_mode":"COMPENSATION","view_catalog_and_namespace":"spark_catalog.default","view_query_output_columns":["a","b","c","d"]}
-
-
--- !query
 DESC EXTENDED v
 -- !query schema
 struct<col_name:string,data_type:string,comment:string>
@@ -671,16 +631,6 @@ struct<plan:string>
 == Physical Plan ==
 Execute DescribeTableCommand
    +- DescribeTableCommand `spark_catalog`.`default`.`t`, false, [col_name#x, data_type#x, comment#x]
-
-
--- !query
-EXPLAIN DESC EXTENDED t AS JSON
--- !query schema
-struct<plan:string>
--- !query output
-== Physical Plan ==
-Execute DescribeTableJsonCommand
-   +- DescribeTableJsonCommand `spark_catalog`.`default`.`t`, true
 
 
 -- !query
@@ -848,14 +798,6 @@ b                   	int                 	42
 
 
 -- !query
-DESC TABLE EXTENDED d AS JSON
--- !query schema
-struct<json_metadata:string>
--- !query output
-{"table_name":"d","catalog_name":"spark_catalog","namespace":["default"],"schema_name":"default","columns":[{"name":"a","type":{"type":"string"},"default_value":"'default-value'"},{"name":"b","type":{"type":"integer"},"default_value":"42"}],"location": "[not included in comparison]/{warehouse_dir}/d","created_time [not included in comparison]":"None","last_access [not included in comparison]":"None","created_by [not included in comparison]":"None","type":"MANAGED","provider":"parquet","comment":"table_comment"}
-
-
--- !query
 DESC FORMATTED d
 -- !query schema
 struct<col_name:string,data_type:string,comment:string>
@@ -899,14 +841,6 @@ b                   	int
 # Column Default Values	                    	                    
 a                   	string              	CONCAT('a\n b\n ', 'c\n d')
 b                   	int                 	42
-
-
--- !query
-DESC EXTENDED e AS JSON
--- !query schema
-struct<json_metadata:string>
--- !query output
-{"table_name":"e","catalog_name":"spark_catalog","namespace":["default"],"schema_name":"default","columns":[{"name":"a","type":{"type":"string"},"default_value":"CONCAT('a\\n b\\n ', 'c\\n d')"},{"name":"b","type":{"type":"integer"},"default_value":"42"}],"location": "[not included in comparison]/{warehouse_dir}/e","created_time [not included in comparison]":"None","last_access [not included in comparison]":"None","created_by [not included in comparison]":"None","type":"MANAGED","provider":"parquet","comment":"table_comment"}
 
 
 -- !query
@@ -982,160 +916,3 @@ Location [not included in comparison]/{warehouse_dir}/e
 # Column Default Values	                    	                    
 a                   	string              	CONCAT('a\n b\n ', 'c\n d')
 b                   	int                 	42
-
-
--- !query
-DESC TABLE FORMATTED e AS JSON
--- !query schema
-struct<json_metadata:string>
--- !query output
-{"table_name":"e","catalog_name":"spark_catalog","namespace":["default"],"schema_name":"default","columns":[{"name":"a","type":{"type":"string"},"default_value":"CONCAT('a\\n b\\n ', 'c\\n d')"},{"name":"b","type":{"type":"integer"},"default_value":"42"}],"location": "[not included in comparison]/{warehouse_dir}/e","created_time [not included in comparison]":"None","last_access [not included in comparison]":"None","created_by [not included in comparison]":"None","type":"MANAGED","provider":"parquet","comment":"table_comment"}
-
-
--- !query
-CREATE TABLE t2 (
-    a STRING,
-    b INT,
-    c STRING,
-    d STRING
-)
-USING parquet
-OPTIONS (
-    a '1',
-    b '2',
-    password 'password'
-)
-PARTITIONED BY (c, d)
-CLUSTERED BY (a) SORTED BY (b ASC) INTO 2 BUCKETS
-COMMENT 'table_comment'
-TBLPROPERTIES (
-    t 'test',
-    password 'password'
-)
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-DESC t2
--- !query schema
-struct<col_name:string,data_type:string,comment:string>
--- !query output
-a                   	string              	                    
-b                   	int                 	                    
-c                   	string              	                    
-d                   	string              	                    
-# Partition Information	                    	                    
-# col_name          	data_type           	comment             
-c                   	string              	                    
-d                   	string
-
-
--- !query
-DESC FORMATTED t2 as json
--- !query schema
-struct<json_metadata:string>
--- !query output
-{"table_name":"t2","catalog_name":"spark_catalog","namespace":["default"],"schema_name":"default","columns":[{"name":"a","type":{"type":"string"}},{"name":"b","type":{"type":"integer"}},{"name":"c","type":{"type":"string"}},{"name":"d","type":{"type":"string"}}],"num_buckets":2,"bucket_columns":["a"],"sort_columns":["b"],"location": "[not included in comparison]/{warehouse_dir}/t2","storage_properties":{"a":"1","b":"2","password":"*********(redacted)"},"created_time [not included in comparison]":"None","last_access [not included in comparison]":"None","created_by [not included in comparison]":"None","type":"MANAGED","provider":"parquet","comment":"table_comment","table_properties":{"password":"*********(redacted)","t":"test"},"partition_provider":"Catalog","partition_columns":["c","d"]}
-
-
--- !query
-DROP TABLE t2
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-CREATE TABLE c (
-  id STRING,
-  nested_struct STRUCT<
-    name: STRING,
-    age: INT,
-    contact: STRUCT<
-      email: STRING,
-      phone_numbers: ARRAY<STRING>,
-      addresses: ARRAY<STRUCT<
-        street: STRING,
-        city: STRING,
-        zip: INT
-      >>
-    >
-  >,
-  preferences MAP<STRING, ARRAY<STRING>>
-) USING parquet
-  OPTIONS (option1 'value1', option2 'value2')
-  PARTITIONED BY (id)
-  COMMENT 'A table with nested complex types'
-  TBLPROPERTIES ('property1' = 'value1', 'password' = 'password')
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-DESC FORMATTED c AS JSON
--- !query schema
-struct<json_metadata:string>
--- !query output
-{"table_name":"c","catalog_name":"spark_catalog","namespace":["default"],"schema_name":"default","columns":[{"name":"nested_struct","type":{"type":"struct","fields":[{"name":"name","type":{"type":"string"},"nullable":true},{"name":"age","type":{"type":"integer"},"nullable":true},{"name":"contact","type":{"type":"struct","fields":[{"name":"email","type":{"type":"string"},"nullable":true},{"name":"phone_numbers","type":{"type":"array","elementType":{"type":"string"},"containsNull":true},"nullable":true},{"name":"addresses","type":{"type":"array","elementType":{"type":"struct","fields":[{"name":"street","type":{"type":"string"},"nullable":true},{"name":"city","type":{"type":"string"},"nullable":true},{"name":"zip","type":{"type":"integer"},"nullable":true}]},"containsNull":true},"nullable":true}]},"nullable":true}]}},{"name":"preferences","type":{"type":"map","keyType":{"type":"string"},"valueType":{"type":"array","elementType":{"type":"string"},"containsNull":true},"valueContainsNull":true}},{"name":"id","type":{"type":"string"}}],"location": "[not included in comparison]/{warehouse_dir}/c","storage_properties":{"option1":"value1","option2":"value2"},"created_time [not included in comparison]":"None","last_access [not included in comparison]":"None","created_by [not included in comparison]":"None","type":"MANAGED","provider":"parquet","comment":"A table with nested complex types","table_properties":{"password":"*********(redacted)","property1":"value1"},"partition_provider":"Catalog","partition_columns":["id"]}
-
-
--- !query
-DROP TABLE c
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-CREATE TABLE special_types_table (
-  id STRING,
-  salary DECIMAL(10, 2),
-  short_description VARCHAR(255),
-  char_code CHAR(10),
-  timestamp_with_time_zone TIMESTAMP,
-  timestamp_without_time_zone TIMESTAMP_NTZ,
-  interval_year_to_month INTERVAL YEAR TO MONTH,
-  interval_day_to_hour INTERVAL DAY TO HOUR,
-  nested_struct STRUCT<
-    detail: STRING,
-    metrics: STRUCT<
-      precision: DECIMAL(5, 2),
-      scale: CHAR(5)
-    >,
-    time_info: STRUCT<
-      timestamp_ltz: TIMESTAMP,
-      timestamp_ntz: TIMESTAMP_NTZ
-    >
-  >,
-  preferences MAP<STRING, ARRAY<VARCHAR(50)>>
-) USING parquet
-  OPTIONS ('compression' = 'snappy')
-  COMMENT 'Table testing all special types'
-  TBLPROPERTIES ('test_property' = 'test_value')
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-DESC FORMATTED special_types_table AS JSON
--- !query schema
-struct<json_metadata:string>
--- !query output
-{"table_name":"special_types_table","catalog_name":"spark_catalog","namespace":["default"],"schema_name":"default","columns":[{"name":"id","type":{"type":"string"}},{"name":"salary","type":{"type":"decimal","precision":10,"scale":2}},{"name":"short_description","type":{"type":"varchar","length":255}},{"name":"char_code","type":{"type":"char","length":10}},{"name":"timestamp_with_time_zone","type":{"type":"timestamp_ltz"}},{"name":"timestamp_without_time_zone","type":{"type":"timestamp_ntz"}},{"name":"interval_year_to_month","type":{"type":"interval","start_unit":"year","end_unit":"month"}},{"name":"interval_day_to_hour","type":{"type":"interval","start_unit":"day","end_unit":"hour"}},{"name":"nested_struct","type":{"type":"struct","fields":[{"name":"detail","type":{"type":"string"},"nullable":true},{"name":"metrics","type":{"type":"struct","fields":[{"name":"precision","type":{"type":"decimal","precision":5,"scale":2},"nullable":true},{"name":"scale","type":{"type":"char","length":5},"nullable":true}]},"nullable":true},{"name":"time_info","type":{"type":"struct","fields":[{"name":"timestamp_ltz","type":{"type":"timestamp_ltz"},"nullable":true},{"name":"timestamp_ntz","type":{"type":"timestamp_ntz"},"nullable":true}]},"nullable":true}]}},{"name":"preferences","type":{"type":"map","keyType":{"type":"string"},"valueType":{"type":"array","elementType":{"type":"varchar","length":50},"containsNull":true},"valueContainsNull":true}}],"location": "[not included in comparison]/{warehouse_dir}/special_types_table","storage_properties":{"compression":"snappy"},"created_time [not included in comparison]":"None","last_access [not included in comparison]":"None","created_by [not included in comparison]":"None","type":"MANAGED","provider":"parquet","comment":"Table testing all special types","table_properties":{"test_property":"test_value"}}
-
-
--- !query
-DROP TABLE special_types_table
--- !query schema
-struct<>
--- !query output
-

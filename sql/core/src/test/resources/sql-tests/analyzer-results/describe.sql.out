@@ -101,21 +101,9 @@ DescribeTableCommand `spark_catalog`.`default`.`t`, true, [col_name#x, data_type
 
 
 -- !query
-DESC FORMATTED t AS JSON
--- !query analysis
-DescribeTableJsonCommand `spark_catalog`.`default`.`t`, true
-
-
--- !query
 DESC EXTENDED t
 -- !query analysis
 DescribeTableCommand `spark_catalog`.`default`.`t`, true, [col_name#x, data_type#x, comment#x]
-
-
--- !query
-DESC EXTENDED t AS JSON
--- !query analysis
-DescribeTableJsonCommand `spark_catalog`.`default`.`t`, true
 
 
 -- !query
@@ -173,12 +161,6 @@ DescribeTableCommand `spark_catalog`.`default`.`t`, [C=Us, D=1], true, [col_name
 
 
 -- !query
-DESC EXTENDED t PARTITION (C='Us', D=1) AS JSON
--- !query analysis
-DescribeTableJsonCommand `spark_catalog`.`default`.`t`, [C=Us, D=1], true
-
-
--- !query
 DESC t PARTITION (c='Us', d=2)
 -- !query analysis
 org.apache.spark.sql.catalyst.analysis.NoSuchPartitionException
@@ -230,12 +212,6 @@ org.apache.spark.sql.catalyst.parser.ParseException
 DESC temp_v
 -- !query analysis
 DescribeTableCommand `temp_v`, false, [col_name#x, data_type#x, comment#x]
-
-
--- !query
-DESC EXTENDED temp_v AS JSON
--- !query analysis
-DescribeTableJsonCommand `temp_v`, true
 
 
 -- !query
@@ -296,12 +272,6 @@ DescribeTableCommand `spark_catalog`.`default`.`v`, true, [col_name#x, data_type
 
 
 -- !query
-DESC FORMATTED v AS JSON
--- !query analysis
-DescribeTableJsonCommand `spark_catalog`.`default`.`v`, true
-
-
--- !query
 DESC EXTENDED v
 -- !query analysis
 DescribeTableCommand `spark_catalog`.`default`.`v`, true, [col_name#x, data_type#x, comment#x]
@@ -326,12 +296,6 @@ org.apache.spark.sql.AnalysisException
 EXPLAIN DESC t
 -- !query analysis
 ExplainCommand 'DescribeRelation false, [col_name#x, data_type#x, comment#x], SimpleMode
-
-
--- !query
-EXPLAIN DESC EXTENDED t AS JSON
--- !query analysis
-ExplainCommand 'DescribeRelationJson true, SimpleMode
 
 
 -- !query
@@ -421,12 +385,6 @@ DescribeTableCommand `spark_catalog`.`default`.`d`, true, [col_name#x, data_type
 
 
 -- !query
-DESC TABLE EXTENDED d AS JSON
--- !query analysis
-DescribeTableJsonCommand `spark_catalog`.`default`.`d`, true
-
-
--- !query
 DESC FORMATTED d
 -- !query analysis
 DescribeTableCommand `spark_catalog`.`default`.`d`, true, [col_name#x, data_type#x, comment#x]
@@ -452,12 +410,6 @@ DescribeTableCommand `spark_catalog`.`default`.`e`, false, [col_name#x, data_typ
 
 
 -- !query
-DESC EXTENDED e AS JSON
--- !query analysis
-DescribeTableJsonCommand `spark_catalog`.`default`.`e`, true
-
-
--- !query
 DESC EXTENDED e
 -- !query analysis
 DescribeTableCommand `spark_catalog`.`default`.`e`, true, [col_name#x, data_type#x, comment#x]
@@ -473,134 +425,3 @@ DescribeTableCommand `spark_catalog`.`default`.`e`, true, [col_name#x, data_type
 DESC FORMATTED e
 -- !query analysis
 DescribeTableCommand `spark_catalog`.`default`.`e`, true, [col_name#x, data_type#x, comment#x]
-
-
--- !query
-DESC TABLE FORMATTED e AS JSON
--- !query analysis
-DescribeTableJsonCommand `spark_catalog`.`default`.`e`, true
-
-
--- !query
-CREATE TABLE t2 (
-    a STRING,
-    b INT,
-    c STRING,
-    d STRING
-)
-USING parquet
-OPTIONS (
-    a '1',
-    b '2',
-    password 'password'
-)
-PARTITIONED BY (c, d)
-CLUSTERED BY (a) SORTED BY (b ASC) INTO 2 BUCKETS
-COMMENT 'table_comment'
-TBLPROPERTIES (
-    t 'test',
-    password 'password'
-)
--- !query analysis
-CreateDataSourceTableCommand `spark_catalog`.`default`.`t2`, false
-
-
--- !query
-DESC t2
--- !query analysis
-DescribeTableCommand `spark_catalog`.`default`.`t2`, false, [col_name#x, data_type#x, comment#x]
-
-
--- !query
-DESC FORMATTED t2 as json
--- !query analysis
-DescribeTableJsonCommand `spark_catalog`.`default`.`t2`, true
-
-
--- !query
-DROP TABLE t2
--- !query analysis
-DropTable false, false
-+- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.t2
-
-
--- !query
-CREATE TABLE c (
-  id STRING,
-  nested_struct STRUCT<
-    name: STRING,
-    age: INT,
-    contact: STRUCT<
-      email: STRING,
-      phone_numbers: ARRAY<STRING>,
-      addresses: ARRAY<STRUCT<
-        street: STRING,
-        city: STRING,
-        zip: INT
-      >>
-    >
-  >,
-  preferences MAP<STRING, ARRAY<STRING>>
-) USING parquet
-  OPTIONS (option1 'value1', option2 'value2')
-  PARTITIONED BY (id)
-  COMMENT 'A table with nested complex types'
-  TBLPROPERTIES ('property1' = 'value1', 'password' = 'password')
--- !query analysis
-CreateDataSourceTableCommand `spark_catalog`.`default`.`c`, false
-
-
--- !query
-DESC FORMATTED c AS JSON
--- !query analysis
-DescribeTableJsonCommand `spark_catalog`.`default`.`c`, true
-
-
--- !query
-DROP TABLE c
--- !query analysis
-DropTable false, false
-+- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.c
-
-
--- !query
-CREATE TABLE special_types_table (
-  id STRING,
-  salary DECIMAL(10, 2),
-  short_description VARCHAR(255),
-  char_code CHAR(10),
-  timestamp_with_time_zone TIMESTAMP,
-  timestamp_without_time_zone TIMESTAMP_NTZ,
-  interval_year_to_month INTERVAL YEAR TO MONTH,
-  interval_day_to_hour INTERVAL DAY TO HOUR,
-  nested_struct STRUCT<
-    detail: STRING,
-    metrics: STRUCT<
-      precision: DECIMAL(5, 2),
-      scale: CHAR(5)
-    >,
-    time_info: STRUCT<
-      timestamp_ltz: TIMESTAMP,
-      timestamp_ntz: TIMESTAMP_NTZ
-    >
-  >,
-  preferences MAP<STRING, ARRAY<VARCHAR(50)>>
-) USING parquet
-  OPTIONS ('compression' = 'snappy')
-  COMMENT 'Table testing all special types'
-  TBLPROPERTIES ('test_property' = 'test_value')
--- !query analysis
-CreateDataSourceTableCommand `spark_catalog`.`default`.`special_types_table`, false
-
-
--- !query
-DESC FORMATTED special_types_table AS JSON
--- !query analysis
-DescribeTableJsonCommand `spark_catalog`.`default`.`special_types_table`, true
-
-
--- !query
-DROP TABLE special_types_table
--- !query analysis
-DropTable false, false
-+- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.special_types_table

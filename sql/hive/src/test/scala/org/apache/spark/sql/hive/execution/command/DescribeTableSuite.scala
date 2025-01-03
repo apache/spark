@@ -327,8 +327,57 @@ class DescribeTableSuite extends v1.DescribeTableSuiteBase with CommandSuiteBase
     }
   }
 
-  test("DESCRIBE AS JSON for column throws Analysis Exception") {
+  test("DESCRIBE AS JSON persistent view") {
     withNamespaceAndTable("ns", "table") { t =>
+      withView("view") {
+        val tableCreationStr =
+          s"""
+             |CREATE TABLE $t (id INT, name STRING, created_at TIMESTAMP)
+             |  USING parquet
+             |  OPTIONS ('compression' 'snappy')
+             |  CLUSTERED BY (id, name) SORTED BY (created_at) INTO 4 BUCKETS
+             |  COMMENT 'test temp view'
+             |  TBLPROPERTIES ('parquet.encryption' = 'true')
+             |""".stripMargin
+        spark.sql(tableCreationStr)
+        spark.sql(s"CREATE VIEW view AS SELECT * FROM $t")
+        val descriptionDf = spark.sql(s"DESCRIBE EXTENDED view AS JSON")
+        val firstRow = descriptionDf.select("json_metadata").head()
+        val jsonValue = firstRow.getString(0)
+        val parsedOutput = parse(jsonValue).extract[DescribeTableJson]
+
+        val expectedOutput = DescribeTableJson(
+          table_name = Some("view"),
+          catalog_name = Some("spark_catalog"),
+          namespace = Some(List("default")),
+          schema_name = Some("default"),
+          columns = Some(List(
+            TableColumn("id", Type("integer")),
+            TableColumn("name", Type("string")),
+            TableColumn("created_at", Type("timestamp_ltz"))
+          )),
+          serde_library = Some("org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe"),
+          inputformat = Some("org.apache.hadoop.mapred.SequenceFileInputFormat"),
+          outputformat = Some("org.apache.hadoop.hive.ql.io.HiveSequenceFileOutputFormat"),
+          storage_properties = Some(Map("serialization.format" -> "1")),
+          last_access = Some("UNKNOWN"),
+          created_by = Some("Spark 4.0.0-SNAPSHOT"),
+          `type` = Some("VIEW"),
+          view_text = Some("SELECT * FROM spark_catalog.ns.table"),
+          view_original_text = Some("SELECT * FROM spark_catalog.ns.table"),
+          view_schema_mode = Some("COMPENSATION"),
+          view_catalog_and_namespace = Some("spark_catalog.default"),
+          view_query_output_columns = Some(List("id", "name", "created_at"))
+        )
+
+        assert(expectedOutput ==
+          parsedOutput.copy(table_properties = None, created_time = None, owner = None))
+      }
+    }
+  }
+
+  test("DESCRIBE AS JSON for column throws Analysis Exception") {
+    withNamespaceAndTable("ns", "table") {
       val tableCreationStr =
         s"""
           |CREATE TABLE ns.table(
@@ -529,7 +578,12 @@ case class DescribeTableJson(
     storage_properties: Option[Map[String, String]] = None,
     partition_provider: Option[String] = None,
     partition_columns: Option[List[String]] = Some(Nil),
-    partition_values: Option[Map[String, String]] = None
+    partition_values: Option[Map[String, String]] = None,
+    view_text: Option[String] = None,
+    view_original_text: Option[String] = None,
+    view_schema_mode: Option[String] = None,
+    view_catalog_and_namespace: Option[String] = None,
+    view_query_output_columns: Option[List[String]] = None
 )
 
 /** Used for columns field of DescribeTableJson */
