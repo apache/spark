@@ -259,7 +259,7 @@ private case class PostgresDialect()
 
   override def classifyException(
       e: Throwable,
-      errorClass: String,
+      condition: String,
       messageParameters: Map[String, String],
       description: String,
       isRuntime: Boolean): Throwable with SparkThrowable = {
@@ -268,12 +268,12 @@ private case class PostgresDialect()
         sqlException.getSQLState match {
           // https://www.postgresql.org/docs/14/errcodes-appendix.html
           case "42P07" =>
-            if (errorClass == "FAILED_JDBC.CREATE_INDEX") {
+            if (condition == "FAILED_JDBC.CREATE_INDEX") {
               throw new IndexAlreadyExistsException(
                 indexName = messageParameters("indexName"),
                 tableName = messageParameters("tableName"),
                 cause = Some(e))
-            } else if (errorClass == "FAILED_JDBC.RENAME_TABLE") {
+            } else if (condition == "FAILED_JDBC.RENAME_TABLE") {
               val newTable = messageParameters("newName")
               throw QueryCompilationErrors.tableAlreadyExistsError(newTable)
             } else {
@@ -281,10 +281,10 @@ private case class PostgresDialect()
               if (tblRegexp.nonEmpty) {
                 throw QueryCompilationErrors.tableAlreadyExistsError(tblRegexp.get.group(1))
               } else {
-                super.classifyException(e, errorClass, messageParameters, description, isRuntime)
+                super.classifyException(e, condition, messageParameters, description, isRuntime)
               }
             }
-          case "42704" if errorClass == "FAILED_JDBC.DROP_INDEX" =>
+          case "42704" if condition == "FAILED_JDBC.DROP_INDEX" =>
             val indexName = messageParameters("indexName")
             val tableName = messageParameters("tableName")
             throw new NoSuchIndexException(indexName, tableName, cause = Some(e))
@@ -294,10 +294,10 @@ private case class PostgresDialect()
               details = sqlException.getMessage,
               cause = Some(e))
           case _ =>
-            super.classifyException(e, errorClass, messageParameters, description, isRuntime)
+            super.classifyException(e, condition, messageParameters, description, isRuntime)
         }
       case unsupported: UnsupportedOperationException => throw unsupported
-      case _ => super.classifyException(e, errorClass, messageParameters, description, isRuntime)
+      case _ => super.classifyException(e, condition, messageParameters, description, isRuntime)
     }
   }
 
