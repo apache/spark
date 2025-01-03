@@ -76,6 +76,7 @@ class SqlScriptingExecutionFrame(
       scopes.remove(scopes.length - 1)
     }
 
+    // Remove the scope with the given label.
     if (scopes.nonEmpty) {
       scopes.remove(scopes.length - 1)
     }

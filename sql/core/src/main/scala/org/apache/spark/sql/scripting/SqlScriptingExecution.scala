@@ -50,24 +50,27 @@ class SqlScriptingExecution(
     ctx
   }
 
-  private var current: Option[DataFrame] = getNextResult
+  private var current: Option[DataFrame] = None
 
-  override def hasNext: Boolean = current.isDefined
+  override def hasNext: Boolean = {
+    current = getNextResult
+    current.isDefined
+  }
 
   override def next(): DataFrame = {
     current match {
       case None => throw SparkException.internalError("No more elements to iterate through.")
-      case Some(result) =>
-        current = getNextResult
-        result
+      case Some(result) => result
     }
   }
 
   /** Helper method to iterate get next statements from the first available frame. */
   private def getNextStatement: Option[CompoundStatementExec] = {
+    // Remove frames that are already executed.
     while (context.frames.nonEmpty && !context.frames.last.hasNext) {
       context.frames.remove(context.frames.size - 1)
     }
+    // If there are still frames available, get the next statement.
     if (context.frames.nonEmpty) {
       return Some(context.frames.last.next())
     }

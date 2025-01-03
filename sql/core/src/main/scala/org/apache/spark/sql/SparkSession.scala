@@ -449,14 +449,10 @@ class SparkSession private(
     var result: Option[Seq[Row]] = None
 
     while (sse.hasNext) {
+      val df = sse.next()
       sse.withErrorHandling {
-        val df = sse.next()
-        if (sse.hasNext) {
-          df.write.format("noop").mode("overwrite").save()
-        } else {
-          // Collect results from the last DataFrame.
-          result = Some(df.collect().toSeq)
-        }
+        // Collect results from the current DataFrame.
+        result = Some(df.collect().toSeq)
       }
     }
 
