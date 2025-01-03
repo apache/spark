@@ -339,15 +339,10 @@ object CTESubstitution extends Rule[LogicalPlan] {
       // self-reference is found
       recursiveCTERelation.map {
         case (_, d) =>
-          if (alwaysInline) {
-            d.child
-          } else {
-            SubqueryAlias(table,
-              CTERelationRef(d.id, d.resolved, d.output, d.isStreaming, recursive = true))
-          }
+          SubqueryAlias(table,
+            CTERelationRef(d.id, d.resolved, d.output, d.isStreaming, recursive = true))
       }.get
-    }
-    else {
+    } else {
       cteRelations
         .find(r => conf.resolver(r._1, table))
         .map {
@@ -373,7 +368,7 @@ object CTESubstitution extends Rule[LogicalPlan] {
       alwaysInline: Boolean,
       cteRelations: Seq[(String, CTERelationDef)],
       recursiveCTERelation: Option[(String, CTERelationDef)]): LogicalPlan = {
-    val substituted = plan.resolveOperatorsUpWithPruning(
+    plan.resolveOperatorsUpWithPruning(
         _.containsAnyPattern(RELATION_TIME_TRAVEL, UNRESOLVED_RELATION, PLAN_EXPRESSION,
           UNRESOLVED_IDENTIFIER)) {
       case RelationTimeTravel(UnresolvedRelation(Seq(table), _, _), _, _)
@@ -381,9 +376,8 @@ object CTESubstitution extends Rule[LogicalPlan] {
         throw QueryCompilationErrors.timeTravelUnsupportedError(toSQLId(table))
 
       case u @ UnresolvedRelation(Seq(table), _, _) =>
-        val resolved = resolveWithCTERelations(table, alwaysInline, cteRelations,
+        resolveWithCTERelations(table, alwaysInline, cteRelations,
           recursiveCTERelation, u)
-        resolved
 
       case p: PlanWithUnresolvedIdentifier =>
         // We must look up CTE relations first when resolving `UnresolvedRelation`s,
@@ -393,9 +387,8 @@ object CTESubstitution extends Rule[LogicalPlan] {
         p.copy(planBuilder = (nameParts, children) => {
           p.planBuilder.apply(nameParts, children) match {
             case u @ UnresolvedRelation(Seq(table), _, _) =>
-              val resolved = resolveWithCTERelations(table, alwaysInline, cteRelations,
+              resolveWithCTERelations(table, alwaysInline, cteRelations,
                 recursiveCTERelation, u)
-              resolved
             case other => other
           }
         })
@@ -408,7 +401,6 @@ object CTESubstitution extends Rule[LogicalPlan] {
               apply(substituteCTE(e.plan, alwaysInline, cteRelations, None)))
         }
     }
-    substituted
   }
 
   /**
