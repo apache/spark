@@ -112,11 +112,27 @@ case class InsertIntoHadoopFsRelationCommand(
     }
 
     val jobId = java.util.UUID.randomUUID().toString
+
+    val activeSession = Option(sparkSession).filter(_.isUsable)
     val committer = FileCommitProtocol.instantiate(
       sparkSession.sessionState.conf.fileCommitProtocolClass,
       jobId = jobId,
       outputPath = outputPath.toString,
       dynamicPartitionOverwrite = dynamicPartitionOverwrite)
+
+    def isSessionActiveAndUnchanged: Boolean = {
+      SparkSession.getActiveSession.zip(activeSession).exists {
+        case (sessionBefore, sessionAfter) => sessionBefore eq sessionAfter
+      }
+    }
+
+    // SPARK-48458: we need to ensure we have the same spark session that had been used
+    // during dynamicPartitionOverwrite initialization. Otherwise, there is a data loss risk
+    // if a fallback to the default static mode happens.
+    if (!isSessionActiveAndUnchanged) {
+      throw QueryExecutionErrors.unsafeCommandWhenSparkSessionStopped(command =
+        getClass.getSimpleName)
+    }
 
     val doInsertion = if (mode == SaveMode.Append) {
       true

@@ -2901,4 +2901,10 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       )
     )
   }
+
+  def unsafeCommandWhenSparkSessionStopped(command: String): SparkRuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "_LEGACY_ERROR_TEMP_3303",
+      messageParameters = Map("command" -> command))
+  }
 }
