@@ -180,7 +180,7 @@ case object StringHelper extends PartialOrdering[StringConstraint] {
   def removeCollation(s: StringType): StringType = s match {
     case CharType(length) => CharType(length)
     case VarcharType(length) => VarcharType(length)
-    case s: StringType => new StringType(CollationFactory.UTF8_BINARY_COLLATION_ID, s.constraint)
+    case _: StringType => StringType
   }
 }
 
