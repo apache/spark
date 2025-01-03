@@ -418,6 +418,30 @@ class DataFrameSubquerySuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("lateral join with star expansion") {
+    withView("t1", "t2") {
+      val t1 = table1()
+      val t2 = table2()
+
+      checkAnswer(
+        t1.lateralJoin(spark.range(1).select().select($"*")),
+        sql("SELECT * FROM t1, LATERAL (SELECT *)")
+      )
+      checkAnswer(
+        t1.lateralJoin(t2.select($"*")),
+        sql("SELECT * FROM t1, LATERAL (SELECT * FROM t2)")
+      )
+      checkAnswer(
+        t1.lateralJoin(t2.select($"t1.*".outer(), $"t2.*")),
+        sql("SELECT * FROM t1, LATERAL (SELECT t1.*, t2.* FROM t2)")
+      )
+      checkAnswer(
+        t1.lateralJoin(t2.alias("t1").select($"t1.*")),
+        sql("SELECT * FROM t1, LATERAL (SELECT t1.* FROM t2 AS t1)")
+      )
+    }
+  }
+
   test("lateral join with different join types") {
     withView("t1") {
       val t1 = table1()
@@ -440,6 +464,18 @@ class DataFrameSubquerySuite extends QueryTest with SharedSparkSession {
           spark.range(1).select(($"c1".outer() + $"c2".outer()).as("c3")),
           "cross"),
         sql("SELECT * FROM t1 CROSS JOIN LATERAL (SELECT c1 + c2 AS c3)")
+      )
+    }
+  }
+
+  test("lateral join with subquery alias") {
+    withView("t1") {
+      val t1 = table1()
+
+      checkAnswer(
+        t1.lateralJoin(spark.range(1).select($"c1".outer(), $"c2".outer()).toDF("a", "b").as("s"))
+          .select("a", "b"),
+        sql("SELECT a, b FROM t1, LATERAL (SELECT c1, c2) s(a, b)")
       )
     }
   }
@@ -516,8 +552,8 @@ class DataFrameSubquerySuite extends QueryTest with SharedSparkSession {
 
       checkAnswer(
         t1.lateralJoin(
-          t2.where($"t1.c1".outer() === $"t2.c1").select($"c2"), "left"
-        ).join(t1.as("t3"), $"t2.c2" === $"t3.c2", "left"),
+          t2.where($"t1.c1".outer() === $"t2.c1").select($"c2").as("s"), "left"
+        ).join(t1.as("t3"), $"s.c2" === $"t3.c2", "left"),
         sql(
           """
             |SELECT * FROM t1

@@ -518,6 +518,28 @@ class SubqueryTestsMixin:
                 self.spark.sql("""SELECT * FROM t1, LATERAL (SELECT t1.c1 + t2.c1 FROM t2)"""),
             )
 
+    def test_lateral_join_with_star_expansion(self):
+        with self.tempView("t1", "t2"):
+            t1 = self.table1()
+            t2 = self.table2()
+
+            assertDataFrameEqual(
+                t1.lateralJoin(self.spark.range(1).select().select(sf.col("*"))),
+                self.spark.sql("""SELECT * FROM t1, LATERAL (SELECT *)"""),
+            )
+            assertDataFrameEqual(
+                t1.lateralJoin(t2.select(sf.col("*"))),
+                self.spark.sql("""SELECT * FROM t1, LATERAL (SELECT * FROM t2)"""),
+            )
+            assertDataFrameEqual(
+                t1.lateralJoin(t2.select(sf.col("t1.*").outer(), sf.col("t2.*"))),
+                self.spark.sql("""SELECT * FROM t1, LATERAL (SELECT t1.*, t2.* FROM t2)"""),
+            )
+            assertDataFrameEqual(
+                t1.lateralJoin(t2.alias("t1").select(sf.col("t1.*"))),
+                self.spark.sql("""SELECT * FROM t1, LATERAL (SELECT t1.* FROM t2 AS t1)"""),
+            )
+
     def test_lateral_join_with_different_join_types(self):
         with self.tempView("t1"):
             t1 = self.table1()
@@ -570,6 +592,20 @@ class SubqueryTestsMixin:
                     "typ": "right",
                     "supported": "'inner', 'leftouter', 'left', 'left_outer', 'cross'",
                 },
+            )
+
+    def test_lateral_join_with_subquery_alias(self):
+        with self.tempView("t1"):
+            t1 = self.table1()
+
+            assertDataFrameEqual(
+                t1.lateralJoin(
+                    self.spark.range(1)
+                    .select(sf.col("c1").outer(), sf.col("c2").outer())
+                    .toDF("a", "b")
+                    .alias("s")
+                ).select("a", "b"),
+                self.spark.sql("""SELECT a, b FROM t1, LATERAL (SELECT c1, c2) s(a, b)"""),
             )
 
     def test_lateral_join_with_correlated_predicates(self):
@@ -661,9 +697,11 @@ class SubqueryTestsMixin:
 
             assertDataFrameEqual(
                 t1.lateralJoin(
-                    t2.where(sf.col("t1.c1").outer() == sf.col("t2.c1")).select(sf.col("c2")),
+                    t2.where(sf.col("t1.c1").outer() == sf.col("t2.c1"))
+                    .select(sf.col("c2"))
+                    .alias("s"),
                     how="left",
-                ).join(t1.alias("t3"), sf.col("t2.c2") == sf.col("t3.c2"), how="left"),
+                ).join(t1.alias("t3"), sf.col("s.c2") == sf.col("t3.c2"), how="left"),
                 self.spark.sql(
                     """
                     SELECT * FROM t1
