@@ -163,8 +163,8 @@ class TransformWithStateInPandasStateServer(
           statefulProcessorHandle.setHandleState(StatefulProcessorHandleState.CLOSED)
           return
         case _: InterruptedException =>
-          Thread.currentThread().interrupt()
           logInfo(log"Thread interrupted, shutting down state server")
+          Thread.currentThread().interrupt()
           statefulProcessorHandle.setHandleState(StatefulProcessorHandleState.CLOSED)
           return
         case e: Exception =>
