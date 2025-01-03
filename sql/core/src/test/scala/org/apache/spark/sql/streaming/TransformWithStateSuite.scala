@@ -53,6 +53,77 @@ case class ReorderedLongs(
     value1: Long
 )
 
+// Initial state with basic fields
+case class BasicState(
+id: Int,
+name: String
+)
+
+// Evolved state with just primitive types
+case class EvolvedState(
+id: Int,
+name: String,
+count: Long,             // Should default to 0
+active: Boolean,         // Should default to false
+score: Double           // Should default to 0.0
+)
+
+// Processor with initial schema
+class DefaultValueInitialProcessor
+  extends StatefulProcessor[String, String, (String, BasicState)] {
+
+  @transient var state: ValueState[BasicState] = _
+
+  override def init(outputMode: OutputMode, timeMode: TimeMode): Unit = {
+    state = getHandle.getValueState[BasicState](
+      "testState",
+      Encoders.product[BasicState],
+      TTLConfig.NONE)
+  }
+
+  override def handleInputRows(
+      key: String,
+      rows: Iterator[String],
+      timerValues: TimerValues): Iterator[(String, BasicState)] = {
+
+    rows.map { value =>
+      val stateValue = BasicState(value.hashCode, value)
+      state.update(stateValue)
+      (key, stateValue)
+    }
+  }
+}
+
+// Evolved processor with additional primitive fields
+class DefaultValueEvolvedProcessor
+  extends StatefulProcessor[String, String, (String, EvolvedState)] {
+
+  @transient var state: ValueState[EvolvedState] = _
+
+  override def init(outputMode: OutputMode, timeMode: TimeMode): Unit = {
+    state = getHandle.getValueState[EvolvedState](
+      "testState",
+      Encoders.product[EvolvedState],
+      TTLConfig.NONE)
+  }
+
+  override def handleInputRows(
+      key: String,
+      rows: Iterator[String],
+      timerValues: TimerValues): Iterator[(String, EvolvedState)] = {
+
+    rows.map { value =>
+      val current = state.getOption().getOrElse {
+        // If no state exists, create new state
+        EvolvedState(
+          value.hashCode, value, 100L, true, 99.9
+        )
+      }
+      (key, current)
+    }
+  }
+}
+
 class RunningCountStatefulProcessorInitialOrder
   extends StatefulProcessor[String, String, (String, String)] with Logging {
   @transient protected var _countState: ValueState[TwoLongs] = _
@@ -904,6 +975,66 @@ class TransformWithStateSuite extends StateStoreMetricsTest
     }
   }
 
+  test("transformWithState - verify default values during schema evolution") {
+    withSQLConf(
+      SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[RocksDBStateStoreProvider].getName,
+      SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
+      withTempDir { dir =>
+        val inputData = MemoryStream[String]
+
+        // First run with basic schema
+        val result1 = inputData.toDS()
+          .groupByKey(x => x)
+          .transformWithState(new DefaultValueInitialProcessor(),
+            TimeMode.None(),
+            OutputMode.Update())
+
+        testStream(result1, OutputMode.Update())(
+          StartStream(checkpointLocation = dir.getCanonicalPath),
+          AddData(inputData, "test1"),
+          CheckNewAnswer(("test1", BasicState("test1".hashCode, "test1"))),
+          StopStream
+        )
+
+        // Second run with evolved schema to check defaults
+        val result2 = inputData.toDS()
+          .groupByKey(x => x)
+          .transformWithState(new DefaultValueEvolvedProcessor(),
+            TimeMode.None(),
+            OutputMode.Update())
+
+        testStream(result2, OutputMode.Update())(
+          StartStream(checkpointLocation = dir.getCanonicalPath),
+
+          // Check existing state - new fields should get default values
+          AddData(inputData, "test1"),
+          CheckNewAnswer(
+            ("test1", EvolvedState(
+              id = "test1".hashCode,
+              name = "test1",
+              count = 0L,
+              active = false,
+              score = 0.0
+            ))
+          ),
+
+          // New state should get initialized values, not defaults
+          AddData(inputData, "test2"),
+          CheckNewAnswer(
+            ("test2", EvolvedState(
+              id = "test2".hashCode,
+              name = "test2",
+              count = 100L,
+              active = true,
+              score = 99.9
+            ))
+          ),
+          StopStream
+        )
+      }
+    }
+  }
+
   test("transformWithState - removing field should succeed") {
     withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
       classOf[RocksDBStateStoreProvider].getName,
@@ -1519,7 +1650,7 @@ class TransformWithStateSuite extends StateStoreMetricsTest
         testStream(result2, OutputMode.Update())(
           StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
           AddData(inputData, "a"),
-          ExpectFailure[StateStoreValueSchemaNotCompatible] {
+          ExpectFailure[StateStoreInvalidValueSchema] {
             (t: Throwable) => {
               assert(t.getMessage.contains("Please check number and type of fields."))
             }

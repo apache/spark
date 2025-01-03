@@ -4423,6 +4423,14 @@
     ],
     "sqlState" : "42K06"
   },
+  "STATE_STORE_INVALID_VALUE_SCHEMA_EVOLUTION" : {
+    "message" : [
+      "Schema evolution is not possible with existing value_schema=<storedValueSchema> and new value_schema=<newValueSchema>.",
+      "Please check https://avro.apache.org/docs/1.11.1/specification/_print/#schema-resolution for valid schema evolution.",
+      "Please check number and type of fields."
+    ],
+    "sqlState" : "XXKST"
+  },
   "STATE_STORE_INVALID_VARIABLE_TYPE_CHANGE" : {
     "message" : [
       "Cannot change <stateVarName> to <newType> between query restarts. Please set <stateVarName> to <oldType>, or restart with a new checkpoint directory."
