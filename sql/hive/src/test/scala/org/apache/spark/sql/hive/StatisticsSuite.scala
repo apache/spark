@@ -609,12 +609,15 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
       }
 
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
-        val message = intercept[AnalysisException] {
-          sql(s"ANALYZE TABLE $tableName PARTITION (DS='2010-01-01') COMPUTE STATISTICS")
-        }.getMessage
-        assert(message.contains(
-          "DS is not a valid partition column in table " +
-            s"`$SESSION_CATALOG_NAME`.`default`.`$tableName`"))
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql(s"ANALYZE TABLE $tableName PARTITION (DS='2010-01-01') COMPUTE STATISTICS")
+          },
+          condition = "PARTITIONS_NOT_FOUND",
+          parameters = Map(
+            "partitionList" -> "`DS`",
+            "tableName" -> s"`$SESSION_CATALOG_NAME`.`default`.`$tableName`")
+        )
       }
     }
   }
@@ -692,16 +695,26 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
 
       sql(s"INSERT INTO TABLE $tableName PARTITION (ds='2010-01-01') SELECT * FROM src")
 
-      assertAnalysisException(
-        s"ANALYZE TABLE $tableName PARTITION (hour=20) COMPUTE STATISTICS",
-        "hour is not a valid partition column in table " +
-          s"`$SESSION_CATALOG_NAME`.`default`.`${tableName.toLowerCase(Locale.ROOT)}`"
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"ANALYZE TABLE $tableName PARTITION (hour=20) COMPUTE STATISTICS")
+        },
+        condition = "PARTITIONS_NOT_FOUND",
+        parameters = Map(
+          "partitionList" -> "`hour`",
+          "tableName" ->
+            s"`$SESSION_CATALOG_NAME`.`default`.`${tableName.toLowerCase(Locale.ROOT)}`")
       )
 
-      assertAnalysisException(
-        s"ANALYZE TABLE $tableName PARTITION (hour) COMPUTE STATISTICS",
-        "hour is not a valid partition column in table " +
-          s"`$SESSION_CATALOG_NAME`.`default`.`${tableName.toLowerCase(Locale.ROOT)}`"
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"ANALYZE TABLE $tableName PARTITION (hour) COMPUTE STATISTICS")
+        },
+        condition = "PARTITIONS_NOT_FOUND",
+        parameters = Map(
+          "partitionList" -> "`hour`",
+          "tableName" ->
+            s"`$SESSION_CATALOG_NAME`.`default`.`${tableName.toLowerCase(Locale.ROOT)}`")
       )
 
       intercept[NoSuchPartitionException] {
