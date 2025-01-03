@@ -134,7 +134,7 @@ trait EncoderImplicits extends LowPrioritySQLImplicits with Serializable {
 
   /** @since 3.2.0 */
   implicit def newJavaEnumEncoder[A <: java.lang.Enum[_]: TypeTag]: Encoder[A] =
-    ScalaReflection.encoderFor[A]
+    ScalaReflection.encoderForWithRowEncoderSupport[A]
 
   // Boxed primitives
 
@@ -239,15 +239,17 @@ trait EncoderImplicits extends LowPrioritySQLImplicits with Serializable {
    */
   @deprecated("Use newSequenceEncoder instead", "2.2.0")
   def newProductSeqEncoder[A <: Product: TypeTag]: Encoder[Seq[A]] =
-    newSeqEncoder(ScalaReflection.encoderFor[A])
+    newSeqEncoder(ScalaReflection.encoderForWithRowEncoderSupport[A])
 
   /** @since 2.2.0 */
   implicit def newSequenceEncoder[T <: Seq[_]: TypeTag]: Encoder[T] =
-    ScalaReflection.encoderFor[T]
+    ScalaReflection.encoderForWithRowEncoderSupport[T]
 
   // Maps
   /** @since 2.3.0 */
-  implicit def newMapEncoder[T <: Map[_, _]: TypeTag]: Encoder[T] = ScalaReflection.encoderFor[T]
+  implicit def newMapEncoder[T <: Map[_, _]: TypeTag]: Encoder[T] = {
+    ScalaReflection.encoderForWithRowEncoderSupport[T]
+  }
 
   /**
    * Notice that we serialize `Set` to Catalyst array. The set property is only kept when
@@ -257,7 +259,9 @@ trait EncoderImplicits extends LowPrioritySQLImplicits with Serializable {
    *
    * @since 2.3.0
    */
-  implicit def newSetEncoder[T <: Set[_]: TypeTag]: Encoder[T] = ScalaReflection.encoderFor[T]
+  implicit def newSetEncoder[T <: Set[_]: TypeTag]: Encoder[T] = {
+    ScalaReflection.encoderForWithRowEncoderSupport[T]
+  }
 
   // Arrays
   private def newArrayEncoder[E](
@@ -296,7 +300,7 @@ trait EncoderImplicits extends LowPrioritySQLImplicits with Serializable {
 
   /** @since 1.6.1 */
   implicit def newProductArrayEncoder[A <: Product: TypeTag]: Encoder[Array[A]] =
-    newArrayEncoder(ScalaReflection.encoderFor[A])
+    newArrayEncoder(ScalaReflection.encoderForWithRowEncoderSupport[A])
 }
 
 /**
