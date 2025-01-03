@@ -491,6 +491,9 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
     }.sortBy(_.name)
   }
 
+  protected def saveAsTable(df: DataFrame, tableName: String, format: String): Unit =
+    df.write.format(format).saveAsTable(tableName)
+
   /** Load built-in test tables into the SparkSession. */
   protected def createTestTables(session: SparkSession): Unit = {
     import session.implicits._
@@ -501,93 +504,86 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
       Utils.deleteRecursively(f)
     }
 
-    (1 to 100).map(i => (i, i.toString)).toDF("key", "value")
-      .repartition(1)
-      .write
-      .format("parquet")
-      .saveAsTable("testdata")
+    saveAsTable(
+      (1 to 100).map(i => (i, i.toString)).toDF("key", "value")
+        .repartition(1), "default.testdata", "parquet"
+    )
 
-    ((Seq(1, 2, 3), Seq(Seq(1, 2, 3))) :: (Seq(2, 3, 4), Seq(Seq(2, 3, 4))) :: Nil)
-      .toDF("arraycol", "nestedarraycol")
-      .write
-      .format("parquet")
-      .saveAsTable("arraydata")
+    saveAsTable(((Seq(1, 2, 3), Seq(Seq(1, 2, 3))) :: (Seq(2, 3, 4), Seq(Seq(2, 3, 4))) :: Nil)
+      .toDF("arraycol", "nestedarraycol"), "default.arraydata", "parquet"
+    )
 
-    (Tuple1(Map(1 -> "a1", 2 -> "b1", 3 -> "c1", 4 -> "d1", 5 -> "e1")) ::
-      Tuple1(Map(1 -> "a2", 2 -> "b2", 3 -> "c2", 4 -> "d2")) ::
-      Tuple1(Map(1 -> "a3", 2 -> "b3", 3 -> "c3")) ::
-      Tuple1(Map(1 -> "a4", 2 -> "b4")) ::
-      Tuple1(Map(1 -> "a5")) :: Nil)
-      .toDF("mapcol")
-      .write
-      .format("parquet")
-      .saveAsTable("mapdata")
+    saveAsTable(
+      (Tuple1(Map(1 -> "a1", 2 -> "b1", 3 -> "c1", 4 -> "d1", 5 -> "e1")) ::
+        Tuple1(Map(1 -> "a2", 2 -> "b2", 3 -> "c2", 4 -> "d2")) ::
+        Tuple1(Map(1 -> "a3", 2 -> "b3", 3 -> "c3")) ::
+        Tuple1(Map(1 -> "a4", 2 -> "b4")) ::
+        Tuple1(Map(1 -> "a5")) :: Nil)
+        .toDF("mapcol"), "default.mapdata", "parquet"
+    )
 
-    session
-      .read
-      .format("csv")
-      .options(Map("delimiter" -> "\t", "header" -> "false"))
-      .schema("a int, b float")
-      .load(testFile("test-data/postgresql/agg.data"))
-      .write
-      .format("parquet")
-      .saveAsTable("aggtest")
+    saveAsTable(
+      session
+        .read
+        .format("csv")
+        .options(Map("delimiter" -> "\t", "header" -> "false"))
+        .schema("a int, b float")
+        .load(testFile("test-data/postgresql/agg.data")), "default.aggtest", "parquet"
+    )
 
-    session
-      .read
-      .format("csv")
-      .options(Map("delimiter" -> "\t", "header" -> "false"))
-      .schema(
-        """
-          |unique1 int,
-          |unique2 int,
-          |two int,
-          |four int,
-          |ten int,
-          |twenty int,
-          |hundred int,
-          |thousand int,
-          |twothousand int,
-          |fivethous int,
-          |tenthous int,
-          |odd int,
-          |even int,
-          |stringu1 string,
-          |stringu2 string,
-          |string4 string
-        """.stripMargin)
-      .load(testFile("test-data/postgresql/onek.data"))
-      .write
-      .format("parquet")
-      .saveAsTable("onek")
+    saveAsTable(
+      session
+        .read
+        .format("csv")
+        .options(Map("delimiter" -> "\t", "header" -> "false"))
+        .schema(
+          """
+            |unique1 int,
+            |unique2 int,
+            |two int,
+            |four int,
+            |ten int,
+            |twenty int,
+            |hundred int,
+            |thousand int,
+            |twothousand int,
+            |fivethous int,
+            |tenthous int,
+            |odd int,
+            |even int,
+            |stringu1 string,
+            |stringu2 string,
+            |string4 string
+          """.stripMargin)
+        .load(testFile("test-data/postgresql/onek.data")), "default.onek", "parquet"
+    )
 
-    session
-      .read
-      .format("csv")
-      .options(Map("delimiter" -> "\t", "header" -> "false"))
-      .schema(
-        """
-          |unique1 int,
-          |unique2 int,
-          |two int,
-          |four int,
-          |ten int,
-          |twenty int,
-          |hundred int,
-          |thousand int,
-          |twothousand int,
-          |fivethous int,
-          |tenthous int,
-          |odd int,
-          |even int,
-          |stringu1 string,
-          |stringu2 string,
-          |string4 string
-        """.stripMargin)
-      .load(testFile("test-data/postgresql/tenk.data"))
-      .write
-      .format("parquet")
-      .saveAsTable("tenk1")
+    saveAsTable(
+      session
+        .read
+        .format("csv")
+        .options(Map("delimiter" -> "\t", "header" -> "false"))
+        .schema(
+          """
+            |unique1 int,
+            |unique2 int,
+            |two int,
+            |four int,
+            |ten int,
+            |twenty int,
+            |hundred int,
+            |thousand int,
+            |twothousand int,
+            |fivethous int,
+            |tenthous int,
+            |odd int,
+            |even int,
+            |stringu1 string,
+            |stringu2 string,
+            |string4 string
+          """.stripMargin)
+        .load(testFile("test-data/postgresql/tenk.data")), "default.tenk1", "parquet"
+    )
   }
 
   protected def removeTestTables(session: SparkSession): Unit = {
