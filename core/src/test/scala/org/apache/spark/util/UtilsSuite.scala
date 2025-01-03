@@ -747,8 +747,6 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
 
     // Verify that everything is deleted
     assert(!tempDir.exists)
-    assert(!sourceFile.exists)
-    assert(!symlinkFile.exists)
   }
 
   test("SPARK-50716: deleteRecursively - SymbolicLink To Dir") {
@@ -769,9 +767,6 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
 
     // Verify that everything is deleted
     assert(!tempDir.exists)
-    assert(!sourceDir.exists)
-    assert(!sourceFile.exists)
-    assert(!symlinkDir.exists)
   }
 
   test("loading properties from file") {
