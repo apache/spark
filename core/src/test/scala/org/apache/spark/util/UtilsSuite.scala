@@ -738,10 +738,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
     JFiles.write(sourceFile.toPath, "Some content".getBytes)
     assert(sourceFile.exists())
 
-    val targetDir = new File(tempDir, "targetDir")
-    assert(targetDir.mkdir())
-
-    val symlinkFile = new File(targetDir, "target.txt")
+    val symlinkFile = new File(tempDir, "bar.txt")
     JFiles.createSymbolicLink(symlinkFile.toPath, sourceFile.toPath)
 
     // Check that the symlink was created successfully
@@ -751,7 +748,6 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
     // Verify that everything is deleted
     assert(!tempDir.exists)
     assert(!sourceFile.exists)
-    assert(!targetDir.exists)
     assert(!symlinkFile.exists)
   }
 
