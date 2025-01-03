@@ -32,8 +32,10 @@ trait TPCBase extends SharedSparkSession {
         .set(SQLConf.CBO_ENABLED, true)
         .set(SQLConf.PLAN_STATS_ENABLED, true)
         .set(SQLConf.JOIN_REORDER_ENABLED, true)
+        .set(SQLConf.USE_COMMON_EXPR_ID_FOR_ALIAS, false)
     } else {
       super.sparkConf.set(SQLConf.MAX_TO_STRING_FIELDS, Int.MaxValue)
+        .set(SQLConf.USE_COMMON_EXPR_ID_FOR_ALIAS, false)
     }
   }
 
