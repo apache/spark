@@ -477,7 +477,7 @@ def remote_only(func: Union[Callable, property]) -> Union[Callable, property]:
 
 
 @functools.lru_cache()
-def get_conf(config_requested: str, default: str) -> Optional[str]:
+def get_conf(config_requested: str) -> Optional[str]:
     from pyspark.sql import SparkSession, SparkConf
 
     spark = SparkSession.getActiveSession()
