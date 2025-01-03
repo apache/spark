@@ -17,6 +17,7 @@
 package org.apache.spark.deploy.k8s.features
 
 import scala.jdk.CollectionConverters._
+import scala.util.Random
 
 import io.fabric8.kubernetes.api.model._
 
@@ -42,9 +43,7 @@ private[spark] class BasicExecutorFeatureStep(
   private val executorContainerImage = kubernetesConf
     .get(EXECUTOR_CONTAINER_IMAGE)
     .getOrElse(throw new SparkException("Must specify the executor container image"))
-  private val blockManagerPort = kubernetesConf
-    .sparkConf
-    .getInt(BLOCK_MANAGER_PORT.key, DEFAULT_BLOCKMANAGER_PORT)
+  private val blockManagerPort = genBlockManagerPort()
 
   require(blockManagerPort == 0 || (1024 <= blockManagerPort && blockManagerPort < 65536),
     "port number must be 0 or in [1024, 65535]")
@@ -99,6 +98,16 @@ private[spark] class BasicExecutorFeatureStep(
       val quantity = new Quantity(request.amount.toString)
       (KubernetesConf.buildKubernetesResourceName(vendorDomain, request.resourceName), quantity)
     }.toMap
+  }
+
+  private def genBlockManagerPort(): Int = {
+    kubernetesConf.sparkConf.get(EXECUTOR_RANDOM_BLOCK_MANAGER_PORT) match {
+      case true => Random.between(1024, 65535)
+      case false =>
+        kubernetesConf
+          .sparkConf
+          .getInt(BLOCK_MANAGER_PORT.key, DEFAULT_BLOCKMANAGER_PORT)
+    }
   }
 
   override def configurePod(pod: SparkPod): SparkPod = {
@@ -157,6 +166,7 @@ private[spark] class BasicExecutorFeatureStep(
           ENV_EXECUTOR_CORES -> execResources.cores.get.toString,
           ENV_EXECUTOR_MEMORY -> executorMemoryString,
           ENV_APPLICATION_ID -> kubernetesConf.appId,
+          ENV_RANDOM_BLOCKMANAGER_PORT -> blockManagerPort.toString,
           // This is to set the SPARK_CONF_DIR to be /opt/spark/conf
           ENV_SPARK_CONF_DIR -> SPARK_CONF_DIR_INTERNAL,
           ENV_EXECUTOR_ID -> kubernetesConf.executorId,
