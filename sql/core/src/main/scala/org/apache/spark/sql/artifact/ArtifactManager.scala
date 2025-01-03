@@ -530,7 +530,7 @@ object ArtifactManager extends Logging {
   }
 }
 
-case class ArtifactStateForCleanup(
+private[artifact] case class ArtifactStateForCleanup(
   sparkSessionUUID: String,
   sparkContext: SparkContext,
   jobArtifactState: JobArtifactState,
