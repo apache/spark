@@ -738,10 +738,10 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
     JFiles.write(sourceFile.toPath, "Some content".getBytes)
     assert(sourceFile.exists())
 
-    val symlinkDir = new File(tempDir, "symlinkDir")
-    assert(symlinkDir.mkdir())
+    val targetDir = new File(tempDir, "targetDir")
+    assert(targetDir.mkdir())
 
-    val symlinkFile = new File(symlinkDir, "target.txt")
+    val symlinkFile = new File(targetDir, "target.txt")
     JFiles.createSymbolicLink(symlinkFile.toPath, sourceFile.toPath)
 
     // Check that the symlink was created successfully
@@ -751,7 +751,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
     // Verify that everything is deleted
     assert(!tempDir.exists)
     assert(!sourceFile.exists)
-    assert(!symlinkDir.exists)
+    assert(!targetDir.exists)
     assert(!symlinkFile.exists)
   }
 
@@ -762,11 +762,11 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
     val sourceFile = new File(sourceDir, "file.txt")
     JFiles.write(sourceFile.toPath, "Some content".getBytes)
 
-    val symlinkFile = new File(tempDir, "targetDir")
-    JFiles.createSymbolicLink(symlinkFile.toPath, sourceFile.toPath)
+    val symlinkDir = new File(tempDir, "targetDir")
+    JFiles.createSymbolicLink(symlinkDir.toPath, sourceDir.toPath)
 
     // Check that the symlink was created successfully
-    assert(JFiles.isSymbolicLink(symlinkFile.toPath))
+    assert(JFiles.isSymbolicLink(symlinkDir.toPath))
 
     // Now delete recursively
     Utils.deleteRecursively(tempDir)
@@ -775,7 +775,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
     assert(!tempDir.exists)
     assert(!sourceDir.exists)
     assert(!sourceFile.exists)
-    assert(!symlinkFile.exists)
+    assert(!symlinkDir.exists)
   }
 
   test("loading properties from file") {
