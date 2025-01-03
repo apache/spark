@@ -34,7 +34,7 @@ from pyspark.sql.functions.builtin import nullifzero, randstr, uniform, zeroifnu
 from pyspark.sql.types import StructType, StructField, StringType, MapType, IntegerType, LongType
 from pyspark.testing.sqlutils import ReusedSQLTestCase, SQLTestUtils
 from pyspark.testing.utils import have_numpy, assertDataFrameEqual
-
+from pyspark.sql.utils import get_conf as _get_conf
 
 class FunctionsTestsMixin:
     def test_function_parity(self):
@@ -1319,6 +1319,7 @@ class FunctionsTestsMixin:
 
     # SPARK-48665: added support for dict type
     def test_lit_dict_struct(self):
+        _get_conf.cache_clear()
         with self.sql_conf({"spark.sql.pyspark.inferNestedDictAsStruct.enabled": True}):
             # Not nested dict
             expected_types = StructType(
@@ -1351,6 +1352,7 @@ class FunctionsTestsMixin:
 
     # SPARK-48665: added support for dict type
     def test_lit_dict_map(self):
+        _get_conf.cache_clear()
         with self.sql_conf({"spark.sql.pyspark.inferNestedDictAsStruct.enabled": False}):
             # Not nested dict
             test_dict = {"a": 1, "b": 2}
@@ -1382,6 +1384,7 @@ class FunctionsTestsMixin:
 
     # SPARK-48665: added support for dict type
     def test_lit_dict_raise_error(self):
+        _get_conf.cache_clear()
         df = self.spark.range(10)
         dicts = [
             {"a": df.id},
