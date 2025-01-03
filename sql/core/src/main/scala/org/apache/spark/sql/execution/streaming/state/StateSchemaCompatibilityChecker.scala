@@ -197,7 +197,6 @@ class StateSchemaCompatibilityChecker(
     }
   }
 
-
   /**
    * Function to validate the new state store schema and evolve the schema if required.
    * @param newStateSchema - proposed new state store schema by the operator

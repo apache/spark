@@ -48,7 +48,6 @@ case class TwoLongs(
     value2: Long
 )
 
-
 case class ReorderedLongs(
     value2: Long,
     value1: Long
