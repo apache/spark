@@ -916,3 +916,33 @@ Location [not included in comparison]/{warehouse_dir}/e
 # Column Default Values	                    	                    
 a                   	string              	CONCAT('a\n b\n ', 'c\n d')
 b                   	int                 	42
+
+
+-- !query
+CREATE TABLE customer(
+        cust_id INT,
+        state VARCHAR(20),
+        name STRING COMMENT 'Short name'
+    )
+    USING parquet
+    PARTITIONED BY (state)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+INSERT INTO customer PARTITION (state = 'AR') VALUES (100, 'Mike')
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DESC FORMATTED customer AS JSON
+-- !query schema
+struct<json_metadata:string>
+-- !query output
+{"table_name":"customer","catalog_name":"spark_catalog","namespace":["default"],"schema_name":"default","columns":[{"name":"cust_id","type":{"type":"integer"},"nullable":true},{"name":"name","type":{"type":"string"},"nullable":true,"comment":"Short name","metadata":{"comment":"Short name"}},{"name":"state","type":{"type":"varchar","length":20},"nullable":true}],"location":"file:[not included in comparison]/{warehouse_dir}/customer","created_time [not included in comparison]":"None","last_access [not included in comparison]":"None","created_by [not included in comparison]":"None","type":"MANAGED","provider":"parquet","partition_provider":"Catalog","partition_columns":["state"]}

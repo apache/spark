@@ -130,3 +130,15 @@ DESC EXTENDED e;
 DESC TABLE EXTENDED e;
 
 DESC FORMATTED e;
+
+CREATE TABLE customer(
+        cust_id INT,
+        state VARCHAR(20),
+        name STRING COMMENT 'Short name'
+    )
+    USING parquet
+    PARTITIONED BY (state);
+
+INSERT INTO customer PARTITION (state = 'AR') VALUES (100, 'Mike');
+
+DESC FORMATTED customer AS JSON;

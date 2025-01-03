@@ -810,10 +810,17 @@ case class DescribeTableJsonCommand(
       key: String,
       value: JValue,
       jsonMap: mutable.LinkedHashMap[String, JValue]): Unit = {
-    val normalizedKey = key.toLowerCase().replace(" ", "_")
+    // Rename some JSON keys that are pre-named in describe table implementation
+    val renames = Map(
+      "inputformat" -> "input_format",
+      "outputformat" -> "output_format"
+    )
 
-    if (!jsonMap.contains(normalizedKey) && !excludedKeys.contains(normalizedKey)) {
-      jsonMap += normalizedKey -> value
+    val normalizedKey = key.toLowerCase().replace(" ", "_")
+    val renamedKey = renames.getOrElse(normalizedKey, normalizedKey)
+
+    if (!jsonMap.contains(renamedKey) && !excludedKeys.contains(renamedKey)) {
+      jsonMap += renamedKey -> value
     }
   }
 
@@ -828,16 +835,16 @@ case class DescribeTableJsonCommand(
       case arrayType: ArrayType =>
         JObject(
           "type" -> JString("array"),
-          "elementType" -> jsonType(arrayType.elementType),
-          "containsNull" -> JBool(arrayType.containsNull)
+          "element_type" -> jsonType(arrayType.elementType),
+          "contains_null" -> JBool(arrayType.containsNull)
         )
 
       case mapType: MapType =>
         JObject(
           "type" -> JString("map"),
-          "keyType" -> jsonType(mapType.keyType),
-          "valueType" -> jsonType(mapType.valueType),
-          "valueContainsNull" -> JBool(mapType.valueContainsNull)
+          "key_type" -> jsonType(mapType.keyType),
+          "value_type" -> jsonType(mapType.valueType),
+          "value_contains_null" -> JBool(mapType.valueContainsNull)
         )
 
       case structType: StructType =>
