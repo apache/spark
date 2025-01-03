@@ -427,7 +427,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     }
 
     // Launch tasks returned by a set of resource offers
-    private def launchTasks(tasks: Seq[Seq[TaskDescription]]): Unit = {
+    private def launchTasks(tasks: Seq[Seq[TaskDescription[_]]]): Unit = {
       for (task <- tasks.flatten) {
         val serializedTask = TaskDescription.encode(task)
         if (serializedTask.limit() >= maxRpcMessageSize) {

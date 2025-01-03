@@ -307,11 +307,11 @@ private[spark] abstract class MockBackend(
    * Test backends should call this to get a task that has been assigned to them by the scheduler.
    * Each task should be responded to with either [[taskSuccess]] or [[taskFailed]].
    */
-  def beginTask[T](): (TaskDescription, Task[T]) = {
+  def beginTask[T](): (TaskDescription[T], Task[T]) = {
     synchronized {
       val toRun = assignedTasksWaitingToRun.remove(assignedTasksWaitingToRun.size - 1)
       runningTasks += toRun._1.taskId
-      toRun.asInstanceOf[(TaskDescription, Task[T])]
+      toRun.asInstanceOf[(TaskDescription[T], Task[T])]
     }
   }
 
@@ -319,7 +319,7 @@ private[spark] abstract class MockBackend(
    * Tell the scheduler the task completed successfully, with the given result.  Also
    * updates some internal state for this mock.
    */
-  def taskSuccess(task: TaskDescription, result: Any): Unit = {
+  def taskSuccess(task: TaskDescription[_], result: Any): Unit = {
     val ser = env.serializer.newInstance()
     val resultBytes = ser.serialize(result)
     // no accumulator updates
@@ -331,15 +331,15 @@ private[spark] abstract class MockBackend(
    * Tell the scheduler the task failed, with the given state and result (probably ExceptionFailure
    * or FetchFailed).  Also updates some internal state for this mock.
    */
-  def taskFailed(task: TaskDescription, exc: Exception): Unit = {
+  def taskFailed(task: TaskDescription[_], exc: Exception): Unit = {
     taskUpdate(task, TaskState.FAILED, new ExceptionFailure(exc, Seq()))
   }
 
-  def taskFailed(task: TaskDescription, reason: TaskFailedReason): Unit = {
+  def taskFailed(task: TaskDescription[_], reason: TaskFailedReason): Unit = {
     taskUpdate(task, TaskState.FAILED, reason)
   }
 
-  def taskUpdate(task: TaskDescription, state: TaskState, result: Any): Unit = {
+  def taskUpdate(task: TaskDescription[_], state: TaskState, result: Any): Unit = {
     val ser = env.serializer.newInstance()
     val resultBytes = ser.serialize(result)
     // statusUpdate is safe to call from multiple threads, its protected inside taskScheduler
@@ -355,7 +355,7 @@ private[spark] abstract class MockBackend(
   }
 
   // protected by this
-  private val assignedTasksWaitingToRun = new ArrayBuffer[(TaskDescription, Task[_])](10000)
+  private val assignedTasksWaitingToRun = new ArrayBuffer[(TaskDescription[_], Task[_])](10000)
   // protected by this
   private val runningTasks = HashSet[Long]()
 

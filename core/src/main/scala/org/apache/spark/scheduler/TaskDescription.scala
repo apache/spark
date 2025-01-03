@@ -46,7 +46,7 @@ import org.apache.spark.util.{ByteBufferInputStream, ByteBufferOutputStream, Uti
  *         serialized size because it avoids serializing unnecessary fields in the Map objects
  *         (which can introduce significant overhead when the maps are small).
  */
-private[spark] class TaskDescription(
+private[spark] class TaskDescription[_](
     val taskId: Long,
     val attemptNumber: Int,
     val executorId: String,
@@ -60,7 +60,8 @@ private[spark] class TaskDescription(
     // Eg, Map("gpu" -> Map("0" -> ResourceAmountUtils.toInternalResource(0.7))):
     // assign 0.7 of the gpu address "0" to this task
     val resources: immutable.Map[String, immutable.Map[String, Long]],
-    val serializedTask: ByteBuffer) {
+    val serializedTask: ByteBuffer,
+    val task: Task[_] = null) {
 
   assert(cpus > 0, "CPUs per task should be > 0")
 
@@ -89,7 +90,7 @@ private[spark] object TaskDescription {
     }
   }
 
-  def encode(taskDescription: TaskDescription): ByteBuffer = {
+  def encode(taskDescription: TaskDescription[_]): ByteBuffer = {
     val bytesOut = new ByteBufferOutputStream(4096)
     val dataOut = new DataOutputStream(bytesOut)
 
@@ -197,7 +198,7 @@ private[spark] object TaskDescription {
     map.toMap
   }
 
-  def decode(byteBuffer: ByteBuffer): TaskDescription = {
+  def decode(byteBuffer: ByteBuffer): TaskDescription[_] = {
     val dataIn = new DataInputStream(new ByteBufferInputStream(byteBuffer))
     val taskId = dataIn.readLong()
     val attemptNumber = dataIn.readInt()
@@ -230,6 +231,6 @@ private[spark] object TaskDescription {
     val serializedTask = byteBuffer.slice()
 
     new TaskDescription(taskId, attemptNumber, executorId, name, index, partitionId, artifacts,
-      properties, cpus, resources, serializedTask)
+      properties, cpus, resources, serializedTask, null)
   }
 }

@@ -619,7 +619,7 @@ class ExecutorSuite extends SparkFunSuite
       serializer: SerializerInstance,
       taskBinary: Broadcast[Array[Byte]],
       rdd: RDD[Int],
-      stageId: Int): TaskDescription = {
+      stageId: Int): TaskDescription[_] = {
     val serializedTaskMetrics = serializer.serialize(TaskMetrics.registered).array()
     val task = new ResultTask(
       stageId = stageId,
@@ -637,7 +637,7 @@ class ExecutorSuite extends SparkFunSuite
     createFakeTaskDescription(serTask)
   }
 
-  private def createFakeTaskDescription(serializedTask: ByteBuffer): TaskDescription = {
+  private def createFakeTaskDescription(serializedTask: ByteBuffer): TaskDescription[_] = {
     new TaskDescription(
       taskId = 0,
       attemptNumber = 0,
@@ -652,12 +652,12 @@ class ExecutorSuite extends SparkFunSuite
       serializedTask)
   }
 
-  private def runTaskAndGetFailReason(taskDescription: TaskDescription): TaskFailedReason = {
+  private def runTaskAndGetFailReason(taskDescription: TaskDescription[_]): TaskFailedReason = {
     runTaskGetFailReasonAndExceptionHandler(taskDescription, false)._1
   }
 
   private def runTaskGetFailReasonAndExceptionHandler(
-      taskDescription: TaskDescription,
+      taskDescription: TaskDescription[_],
       killTask: Boolean,
       poll: Boolean = false): (TaskFailedReason, UncaughtExceptionHandler) = {
     val mockBackend = mock[ExecutorBackend]

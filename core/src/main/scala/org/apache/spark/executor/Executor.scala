@@ -371,9 +371,9 @@ private[spark] class Executor(
   }
 
   private[executor] def createTaskRunner(context: ExecutorBackend,
-    taskDescription: TaskDescription) = new TaskRunner(context, taskDescription, plugins)
+    taskDescription: TaskDescription[_]) = new TaskRunner(context, taskDescription, plugins)
 
-  def launchTask(context: ExecutorBackend, taskDescription: TaskDescription): Unit = {
+  def launchTask(context: ExecutorBackend, taskDescription: TaskDescription[_]): Unit = {
     val taskId = taskDescription.taskId
     val tr = createTaskRunner(context, taskDescription)
     runningTasks.put(taskId, tr)
@@ -477,7 +477,7 @@ private[spark] class Executor(
 
   class TaskRunner(
       execBackend: ExecutorBackend,
-      val taskDescription: TaskDescription,
+      val taskDescription: TaskDescription[_],
       private val plugins: Option[PluginContainer])
     extends Runnable {
 
@@ -610,8 +610,14 @@ private[spark] class Executor(
         // Always reset the thread class loader to ensure if any updates, all threads (not only
         // the thread that updated the dependencies) can update to the new class loader.
         Thread.currentThread.setContextClassLoader(isolatedSession.replClassLoader)
-        task = ser.deserialize[Task[Any]](
-          taskDescription.serializedTask, Thread.currentThread.getContextClassLoader)
+        task = if (taskDescription.serializedTask != null) {
+          ser.deserialize[Task[Any]](
+            taskDescription.serializedTask, Thread.currentThread.getContextClassLoader)
+        } else if (taskDescription.task != null) {
+          taskDescription.task.asInstanceOf[Task[Any]]
+        } else {
+          throw new SparkException("No task to run")
+        }
         task.localProperties = taskDescription.properties
         task.setTaskMemoryManager(taskMemoryManager)
 

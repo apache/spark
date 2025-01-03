@@ -458,7 +458,7 @@ private[spark] class TaskSetManager(
       maxLocality: TaskLocality.TaskLocality,
       taskCpus: Int = sched.CPUS_PER_TASK,
       taskResourceAssignments: Map[String, Map[String, Long]] = Map.empty)
-    : (Option[TaskDescription], Boolean, Int) =
+    : (Option[TaskDescription[_]], Boolean, Int) =
   {
     val offerExcluded = taskSetExcludelistHelperOpt.exists { excludeList =>
       excludeList.isNodeExcludedForTaskSet(host) ||
@@ -504,7 +504,8 @@ private[spark] class TaskSetManager(
                 speculative,
                 taskCpus,
                 taskResourceAssignments,
-                curTime)
+                curTime,
+                sched.isLocal)
             }
           }
       val hasPendingTasks = pendingTasks.all.nonEmpty || pendingSpeculatableTasks.all.nonEmpty
@@ -526,7 +527,8 @@ private[spark] class TaskSetManager(
       speculative: Boolean,
       taskCpus: Int,
       taskResourceAssignments: Map[String, Map[String, Long]],
-      launchTime: Long): TaskDescription = {
+      launchTime: Long,
+      isLocal: Boolean): TaskDescription[_] = {
     // Found a task; do some bookkeeping and return a task description
     val task = tasks(index)
     val taskId = sched.newTaskId()
@@ -539,19 +541,26 @@ private[spark] class TaskSetManager(
     taskInfos(taskId) = info
     taskAttempts(index) = info :: taskAttempts(index)
     // Serialize and return the task
-    val serializedTask: ByteBuffer = try {
-      ser.serialize(task)
-    } catch {
-      // If the task cannot be serialized, then there's no point to re-attempt the task,
-      // as it will always fail. So just abort the whole task-set.
-      case NonFatal(e) =>
-        val msg = log"Failed to serialize task ${MDC(TASK_ID, taskId)}, not attempting to retry it."
-        logError(msg, e)
-        abort(s"${msg.message} Exception during serialization: $e")
-        throw SparkCoreErrors.failToSerializeTaskError(e)
+    val serializedTask: ByteBuffer = if (isLocal) {
+      // No need to serialize task for local task
+      null
+    } else {
+      try {
+        ser.serialize(task)
+      } catch {
+        // If the task cannot be serialized, then there's no point to re-attempt the task,
+        // as it will always fail. So just abort the whole task-set.
+        case NonFatal(e) =>
+          val msg = log"Failed to serialize task ${MDC(TASK_ID, taskId)}, " +
+            log"not attempting to retry it."
+          logError(msg, e)
+          abort(s"${msg.message} Exception during serialization: $e")
+          throw SparkCoreErrors.failToSerializeTaskError(e)
+      }
     }
-    if (serializedTask.limit() > TaskSetManager.TASK_SIZE_TO_WARN_KIB * 1024 &&
-      !emittedTaskSizeWarning) {
+    if (serializedTask != null &&
+        serializedTask.limit() > TaskSetManager.TASK_SIZE_TO_WARN_KIB * 1024 &&
+        !emittedTaskSizeWarning) {
       emittedTaskSizeWarning = true
       logWarning(log"Stage ${MDC(STAGE_ID, task.stageId)} contains a task of very large size " +
         log"(${MDC(NUM_BYTES, serializedTask.limit() / 1024)} KiB). " +
@@ -568,7 +577,11 @@ private[spark] class TaskSetManager(
       log"executor ${MDC(LogKeys.EXECUTOR_ID, info.executorId)}, " +
       log"partition ${MDC(PARTITION_ID, task.partitionId)}, " +
       log"${MDC(TASK_LOCALITY, taskLocality)}, " +
-      log"${MDC(SIZE, serializedTask.limit())} bytes) " +
+      (if (serializedTask != null) {
+        log"${MDC(SIZE, serializedTask.limit())} bytes) "
+      } else {
+        log""
+      }) +
       (if (taskResourceAssignments.nonEmpty) {
         log"taskResourceAssignments ${MDC(TASK_RESOURCE_ASSIGNMENTS, taskResourceAssignments)}"
       } else {
@@ -587,7 +600,8 @@ private[spark] class TaskSetManager(
       task.localProperties,
       taskCpus,
       taskResourceAssignments,
-      serializedTask)
+      serializedTask,
+      task)
   }
 
   def taskName(tid: Long): String = {

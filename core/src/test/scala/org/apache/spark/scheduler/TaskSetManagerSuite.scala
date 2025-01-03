@@ -1324,7 +1324,7 @@ class TaskSetManagerSuite
       task.metrics.internalAccums
     }
     // Offer resources for 5 tasks to start
-    val tasks = new ArrayBuffer[TaskDescription]()
+    val tasks = new ArrayBuffer[TaskDescription[_]]()
     for ((k, v) <- List(
       "exec1" -> "host1",
       "exec1" -> "host1",
@@ -1345,7 +1345,7 @@ class TaskSetManagerSuite
       assert(sched.endedTasks(id) === Success)
     }
 
-    def runningTaskForIndex(index: Int): TaskDescription = {
+    def runningTaskForIndex(index: Int): TaskDescription[_] = {
       tasks.find { task =>
         task.index == index && !sched.endedTasks.contains(task.taskId)
       }.getOrElse {
@@ -2600,7 +2600,7 @@ class TaskSetManagerSuite
     val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock = clock)
 
     // Offer resources for 3 task to start
-    val tasks = new ArrayBuffer[TaskDescription]()
+    val tasks = new ArrayBuffer[TaskDescription[_]]()
     for ((k, v) <- List("exec1" -> "host1", "exec2" -> "host2", "exec3" -> "host3")) {
       val taskOption = manager.resourceOffer(k, v, NO_PREF)._1
       assert(taskOption.isDefined)
@@ -2610,7 +2610,7 @@ class TaskSetManagerSuite
     }
     assert(sched.startedTasks.toSet === (0 until 3).toSet)
 
-    def runningTaskForIndex(index: Int): TaskDescription = {
+    def runningTaskForIndex(index: Int): TaskDescription[_] = {
       tasks.find { task =>
         task.index == index && !sched.endedTasks.contains(task.taskId)
       }.getOrElse {

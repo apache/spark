@@ -324,7 +324,7 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
       when(executor.runningTasks).thenAnswer(_ => runningTasks)
       when(executor.conf).thenReturn(conf)
 
-      def getFakeTaskRunner(taskDescription: TaskDescription): Executor#TaskRunner = {
+      def getFakeTaskRunner(taskDescription: TaskDescription[_]): Executor#TaskRunner = {
         new executor.TaskRunner(backend, taskDescription, None) {
           override def run(): Unit = {
             logInfo(s"task ${this.taskDescription.taskId} runs.")
@@ -437,7 +437,7 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
       }
       assert(taskDescriptions.length == numTasks)
 
-      def getFakeTaskRunner(taskDescription: TaskDescription): Executor#TaskRunner = {
+      def getFakeTaskRunner(taskDescription: TaskDescription[_]): Executor#TaskRunner = {
         new executor.TaskRunner(backend, taskDescription, None) {
           override def run(): Unit = {
             tasksExecuted.put(this.taskDescription.taskId, true)
@@ -529,7 +529,7 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
       }
       assert(taskDescriptions.length == numTasks)
 
-      def getFakeTaskRunner(taskDescription: TaskDescription): Executor#TaskRunner = {
+      def getFakeTaskRunner(taskDescription: TaskDescription[_]): Executor#TaskRunner = {
         new executor.TaskRunner(backend, taskDescription, None) {
           override def run(): Unit = {
             tasksExecuted.put(this.taskDescription.taskId, true)

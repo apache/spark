@@ -346,7 +346,7 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
 
     val taskResources = Map(GPU -> Map("0" -> ONE_ENTIRE_RESOURCE))
     val taskCpus = 1
-    val taskDescs: Seq[Seq[TaskDescription]] = Seq(Seq(new TaskDescription(1, 0, "1",
+    val taskDescs: Seq[Seq[TaskDescription[_]]] = Seq(Seq(new TaskDescription(1, 0, "1",
       "t1", 0, 1, JobArtifactSet.emptyJobArtifactSet, new Properties(),
       taskCpus, taskResources, bytebuffer)))
     val ts = backend.getTaskSchedulerImpl()
@@ -453,7 +453,7 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
 
     val taskResources = Map(GPU -> Map("0" -> ONE_ENTIRE_RESOURCE))
     val taskCpus = 1
-    val taskDescs: Seq[Seq[TaskDescription]] = Seq(Seq(new TaskDescription(1, 0, "1",
+    val taskDescs: Seq[Seq[TaskDescription[_]]] = Seq(Seq(new TaskDescription(1, 0, "1",
       "t1", 0, 1, JobArtifactSet.emptyJobArtifactSet, new Properties(),
       taskCpus, taskResources, bytebuffer)))
     val ts = backend.getTaskSchedulerImpl()
@@ -546,7 +546,7 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
     assert(ResourceProfile.getTaskCpusOrDefaultForProfile(defaultRp, conf) == 1)
     // Task cpus can be different from default resource profile when TaskResourceProfile is used.
     val taskCpus = 2
-    val taskDescs: Seq[Seq[TaskDescription]] = Seq(Seq(new TaskDescription(1, 0, "1",
+    val taskDescs: Seq[Seq[TaskDescription[_]]] = Seq(Seq(new TaskDescription(1, 0, "1",
       "t1", 0, 1, JobArtifactSet.emptyJobArtifactSet, new Properties(),
       taskCpus, Map.empty, bytebuffer)))
     when(ts.resourceOffers(any[IndexedSeq[WorkerOffer]], any[Boolean])).thenReturn(taskDescs)

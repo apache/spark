@@ -732,7 +732,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
         .isExecutorExcludedForTaskSet(anyString())
     }
 
-    def tasksForStage(stageId: Int): Seq[TaskDescription] = {
+    def tasksForStage(stageId: Int): Seq[TaskDescription[_]] = {
       firstTaskAttempts.filter{_.name.contains(s"stage $stageId")}
     }
     tasksForStage(0).foreach { task =>

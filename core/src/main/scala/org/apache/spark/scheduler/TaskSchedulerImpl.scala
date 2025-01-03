@@ -83,7 +83,7 @@ import org.apache.spark.util.{AccumulatorV2, Clock, SystemClock, ThreadUtils, Ut
 private[spark] class TaskSchedulerImpl(
     val sc: SparkContext,
     val maxTaskFailures: Int,
-    isLocal: Boolean = false,
+    val isLocal: Boolean = false,
     clock: Clock = new SystemClock)
   extends TaskScheduler with Logging {
 
@@ -389,7 +389,7 @@ private[spark] class TaskSchedulerImpl(
       shuffledOffers: Seq[WorkerOffer],
       availableCpus: Array[Int],
       availableResources: Array[ExecutorResourcesAmounts],
-      tasks: IndexedSeq[ArrayBuffer[TaskDescription]])
+      tasks: IndexedSeq[ArrayBuffer[TaskDescription[_]]])
     : (Boolean, Option[TaskLocality]) = {
     var noDelayScheduleRejects = true
     var minLaunchedLocality: Option[TaskLocality] = None
@@ -495,7 +495,7 @@ private[spark] class TaskSchedulerImpl(
    */
   def resourceOffers(
       offers: IndexedSeq[WorkerOffer],
-      isAllFreeResources: Boolean = true): Seq[Seq[TaskDescription]] = synchronized {
+      isAllFreeResources: Boolean = true): Seq[Seq[TaskDescription[_]]] = synchronized {
     // Mark each worker as alive and remember its hostname
     // Also track if new executor is added
     var newExecAvail = false
@@ -532,7 +532,7 @@ private[spark] class TaskSchedulerImpl(
     // Build a list of tasks to assign to each worker.
     // Note the size estimate here might be off with different ResourceProfiles but should be
     // close estimate
-    val tasks = shuffledOffers.map(o => new ArrayBuffer[TaskDescription](o.cores / CPUS_PER_TASK))
+    val tasks = shuffledOffers.map(o => new ArrayBuffer[TaskDescription[_]](o.cores / CPUS_PER_TASK))
     val availableResources = shuffledOffers.map(_.resources).toArray
     val availableCpus = shuffledOffers.map(o => o.cores).toArray
     val resourceProfileIds = shuffledOffers.map(o => o.resourceProfileId).toArray
@@ -710,7 +710,8 @@ private[spark] class TaskSchedulerImpl(
                 false,
                 task.assignedCores,
                 task.assignedResources,
-                launchTime)
+                launchTime,
+                isLocal)
               addRunningTask(taskDesc.taskId, taskDesc.executorId, taskSet)
               tasks(task.assignedOfferIndex) += taskDesc
               shuffledOffers(task.assignedOfferIndex).address.get -> taskDesc
