@@ -86,6 +86,7 @@ from pyspark.sql.connect.expressions import (
 from pyspark.sql.connect.functions import builtin as F
 from pyspark.sql.pandas.types import from_arrow_schema, to_arrow_schema
 from pyspark.sql.pandas.functions import _validate_pandas_udf  # type: ignore[attr-defined]
+from pyspark.sql.table_arg import TableArg
 
 
 if TYPE_CHECKING:
@@ -1799,6 +1800,13 @@ class DataFrame(ParentDataFrame):
         return DataFrame(
             plan.Transpose(self._plan, [F._to_col(indexColumn)] if indexColumn is not None else []),
             self._session,
+        )
+
+    def asTable(self) -> TableArg:
+        # TODO(SPARK-50393): Support DataFrame conversion to table argument in Spark Connect
+        raise PySparkNotImplementedError(
+            errorClass="NOT_IMPLEMENTED",
+            messageParameters={"feature": "asTable()"},
         )
 
     def scalar(self) -> Column:
