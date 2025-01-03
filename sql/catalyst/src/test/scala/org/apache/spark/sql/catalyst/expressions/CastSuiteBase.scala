@@ -1428,4 +1428,21 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     assert(!Cast(timestampLiteral, StringType).resolved)
     assert(!Cast(timestampLiteral, StringType("UTF8_LCASE")).resolved)
   }
+
+  test(s"Casting from char/varchar when " +
+    s"${SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key} is true") {
+    withSQLConf(SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true") {
+      Seq(CharType(10), VarcharType(10)).foreach { typ =>
+        Seq(
+          IntegerType -> ("123", 123),
+          LongType -> ("123 ", 123L),
+          BooleanType -> ("true ", true),
+          BooleanType -> ("false", false),
+          DoubleType -> ("1.2", 1.2)
+        ).foreach { case (toType, (from, to)) =>
+          checkEvaluation(cast(Literal.create(from, typ), toType), to)
+        }
+      }
+    }
+  }
 }
