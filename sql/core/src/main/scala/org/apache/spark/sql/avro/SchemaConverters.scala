@@ -406,13 +406,9 @@ object SchemaConverters extends Logging {
 
       // Complex types
       case ArrayType(elementType, _) =>
-        val defaultArray = new java.util.ArrayList[Any]()
-        defaultArray.add(getDefaultValue(elementType))
-        defaultArray
+        new java.util.ArrayList[Any]()
       case MapType(StringType, valueType, _) =>
-        val defaultMap = new java.util.HashMap[String, Any]()
-        defaultMap.put("defaultKey", getDefaultValue(valueType))
-        defaultMap
+        new java.util.HashMap[String, Any]()
       case st: StructType => createNestedDefault(st)
 
       // Special types
