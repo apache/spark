@@ -141,12 +141,12 @@ case class TransformWithStateExec(
    */
   override def getColFamilySchemas(): Map[String, StateStoreColFamilySchema] = {
     val keySchema = keyExpressions.toStructType
+    val defaultSchema = StateStoreColFamilySchema(StateStore.DEFAULT_COL_FAMILY_NAME,
+      0, keyExpressions.toStructType, 0, DUMMY_VALUE_ROW_SCHEMA,
+      Some(NoPrefixKeyStateEncoderSpec(keySchema)))
+
     val columnFamilySchemas = getDriverProcessorHandle().getColumnFamilySchemas ++
-      Map(
-        StateStore.DEFAULT_COL_FAMILY_NAME ->
-          StateStoreColFamilySchema(StateStore.DEFAULT_COL_FAMILY_NAME,
-            0, keyExpressions.toStructType, 0, DUMMY_VALUE_ROW_SCHEMA,
-            Some(NoPrefixKeyStateEncoderSpec(keySchema))))
+      Map(StateStore.DEFAULT_COL_FAMILY_NAME -> defaultSchema)
     closeProcessorHandle()
     columnFamilySchemas
   }
@@ -473,8 +473,7 @@ case class TransformWithStateExec(
 
   /** Metadata of this stateful operator and its states stores. */
   override def operatorStateMetadata(
-      stateSchemaPaths: List[List[String]]
-  ): OperatorStateMetadata = {
+      stateSchemaPaths: List[List[String]]): OperatorStateMetadata = {
     val info = getStateInfo
     getOperatorStateMetadata(stateSchemaPaths, info, shortName, timeMode, outputMode)
   }

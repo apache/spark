@@ -136,6 +136,9 @@ class MicroBatchExecution(
   // operatorID -> (partitionID -> array of uniqueID)
   private val currentStateStoreCkptId = MutableMap[Long, Array[Array[String]]]()
 
+  // This map keeps track of all active schemas in the StateStore per each operatorId
+  // in the query plan. It is populated by the first batch at planning time, and passed
+  // into every subsequent batch's query plan.
   private val stateSchemaMetadatas = MutableMap[Long, StateSchemaBroadcast]()
 
   override lazy val logicalPlan: LogicalPlan = {

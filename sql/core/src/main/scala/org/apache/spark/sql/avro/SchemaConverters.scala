@@ -377,6 +377,13 @@ object SchemaConverters extends Logging {
   /**
    * Creates default values for Spark SQL data types when converting to Avro.
    * This ensures fields have appropriate defaults during schema evolution.
+   *
+   * This method recursively processes Spark SQL data types and generates corresponding
+   * default values that are compatible with Avro schema specifications. It handles
+   * both primitive types (like Boolean, Integer) and complex types (Arrays, Maps, Structs).
+   *
+   * @param dataType The Spark SQL DataType to create a default value for
+   * @return A default value appropriate for the given data type that's compatible with Avro
    */
   private def getDefaultValue(dataType: DataType): Any = {
     def createNestedDefault(st: StructType): java.util.HashMap[String, Any] = {
@@ -420,13 +427,30 @@ object SchemaConverters extends Logging {
 
   /**
    * Converts a Spark SQL schema to a corresponding Avro schema.
-   * Handles nested types and adds support for schema evolution.
+   * This method provides comprehensive support for schema evolution and handles
+   * complex nested types while maintaining type safety and compatibility.
+   *
+   * The conversion process includes:
+   * - Converting primitive Spark SQL types to Avro types
+   * - Handling complex types (arrays, maps, structs) with proper nesting
+   * - Supporting nullable fields through Avro unions
+   * - Managing logical types for dates, timestamps, and decimals
+   * - Generating unique names for nested records
+   * - Preserving namespace hierarchy for nested structures
+   *
+   * @param catalystType The Spark SQL DataType to convert
+   * @param nullable Whether the field can contain null values
+   * @param recordName The name to use for the record in the Avro schema
+   * @param namespace The namespace for the Avro schema
+   * @param nestingLevel Current nesting level for generating unique names
+   * @return An Avro Schema corresponding to the input Spark SQL type
+   * @throws IncompatibleSchemaException if the input type cannot be converted to Avro
    */
   def toAvroTypeWithDefaults(
       catalystType: DataType,
       nullable: Boolean = false,
       recordName: String = "topLevelRecord",
-      nameSpace: String = "",
+      namespace: String = "",
       nestingLevel: Int = 0): Schema = {
 
     val builder = SchemaBuilder.builder()
@@ -446,7 +470,7 @@ object SchemaConverters extends Logging {
           field.dataType,
           field.nullable,
           getNestedRecordName(field.name),
-          nameSpace,
+          namespace,
           nestingLevel + 1
         )
 
@@ -478,9 +502,9 @@ object SchemaConverters extends Logging {
       case d: DecimalType =>
         val avroType = LogicalTypes.decimal(d.precision, d.scale)
         val fixedSize = minBytesForPrecision(d.precision)
-        val name = nameSpace match {
+        val name = namespace match {
           case "" => s"${getNestedRecordName(recordName)}.fixed"
-          case _ => s"$nameSpace.${getNestedRecordName(recordName)}.fixed"
+          case _ => s"$namespace.${getNestedRecordName(recordName)}.fixed"
         }
         avroType.addToSchema(SchemaBuilder.fixed(name).size(fixedSize))
 
@@ -490,19 +514,19 @@ object SchemaConverters extends Logging {
       case ArrayType(elementType, containsNull) =>
         builder.array()
           .items(toAvroTypeWithDefaults(elementType, containsNull, recordName,
-            nameSpace, nestingLevel + 1))
+            namespace, nestingLevel + 1))
 
       case MapType(StringType, valueType, valueContainsNull) =>
         builder.map()
           .values(toAvroTypeWithDefaults(valueType, valueContainsNull, recordName,
-            nameSpace, nestingLevel + 1))
+            namespace, nestingLevel + 1))
 
       case st: StructType =>
         val nestedRecordName = getNestedRecordName(recordName)
-        val childNameSpace = if (nameSpace != "") {
-          s"$nameSpace.$nestedRecordName"
+        val childNameSpace = if (namespace != "") {
+          s"$namespace.$nestedRecordName"
         } else nestedRecordName
-        val fieldsAssembler = builder.record(nestedRecordName).namespace(nameSpace).fields()
+        val fieldsAssembler = builder.record(nestedRecordName).namespace(namespace).fields()
         processStructFields(st, fieldsAssembler).endRecord()
 
       // Interval types

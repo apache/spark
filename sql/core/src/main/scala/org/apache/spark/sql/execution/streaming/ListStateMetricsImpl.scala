@@ -18,12 +18,9 @@ package org.apache.spark.sql.execution.streaming
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeProjection, UnsafeRow}
+import org.apache.spark.sql.execution.streaming.TransformWithStateVariableUtils.getRowCounterCFName
 import org.apache.spark.sql.execution.streaming.state.{NoPrefixKeyStateEncoderSpec, StateStore}
 import org.apache.spark.sql.types._
-
-object ListStateMetricsImpl {
-  def getRowCounterCFName(stateName: String): String = "$rowCounter_" + stateName
-}
 
 /**
  * Trait that provides helper methods to maintain metrics for a list state.
@@ -47,7 +44,7 @@ trait ListStateMetricsImpl {
 
   private val updatedCountRow = new GenericInternalRow(1)
 
-  stateStore.createColFamilyIfAbsent(ListStateMetricsImpl.getRowCounterCFName(baseStateName),
+  stateStore.createColFamilyIfAbsent(getRowCounterCFName(baseStateName),
     exprEncSchema, counterCFValueSchema, NoPrefixKeyStateEncoderSpec(exprEncSchema),
     isInternal = true)
 
@@ -58,7 +55,7 @@ trait ListStateMetricsImpl {
    */
   def getEntryCount(encodedKey: UnsafeRow): Long = {
     val countRow = stateStore.get(encodedKey,
-      ListStateMetricsImpl.getRowCounterCFName(baseStateName))
+      getRowCounterCFName(baseStateName))
     if (countRow != null) {
       countRow.getLong(0)
     } else {
@@ -77,7 +74,7 @@ trait ListStateMetricsImpl {
     updatedCountRow.setLong(0, updatedCount)
     stateStore.put(encodedKey,
       counterCFProjection(updatedCountRow.asInstanceOf[InternalRow]),
-      ListStateMetricsImpl.getRowCounterCFName(baseStateName))
+      getRowCounterCFName(baseStateName))
   }
 
   /**
@@ -86,6 +83,6 @@ trait ListStateMetricsImpl {
    */
   def removeEntryCount(encodedKey: UnsafeRow): Unit = {
     stateStore.remove(encodedKey,
-      ListStateMetricsImpl.getRowCounterCFName(baseStateName))
+      getRowCounterCFName(baseStateName))
   }
 }

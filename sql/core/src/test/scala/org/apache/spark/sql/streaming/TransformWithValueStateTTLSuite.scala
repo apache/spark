@@ -285,7 +285,7 @@ class TransformWithValueStateTTLSuite extends TransformWithStateTTLTest {
           .add("expiryTimestampMs", LongType, nullable = false)
         val schemaForValueRow: StructType = StructType(Array(StructField("__dummy__", NullType)))
         val schema0 = StateStoreColFamilySchema(
-          TimerStateUtils.getTimerStateVarName(TimeMode.ProcessingTime().toString), 0,
+          TimerStateUtils.getTimerStateVarNames(TimeMode.ProcessingTime().toString)._1, 0,
           schemaForKeyRow, 0,
           schemaForValueRow,
           Some(PrefixKeyScanStateEncoderSpec(schemaForKeyRow, 1)))

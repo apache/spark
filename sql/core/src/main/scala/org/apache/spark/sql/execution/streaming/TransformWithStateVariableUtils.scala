@@ -59,6 +59,8 @@ object TransformWithStateVariableUtils {
       throw StateStoreErrors.missingTimeValues(timeMode.toString)
     }
   }
+
+  def getRowCounterCFName(stateName: String): String = "$rowCounter_" + stateName
 }
 
 // Enum of possible State Variable types
@@ -224,7 +226,10 @@ trait TransformWithStateMetadataUtils extends Logging {
       case Some(metadata) =>
         metadata match {
           case v2: OperatorStateMetadataV2 =>
-            Some(new Path(v2.stateStoreInfo.head.stateSchemaFilePaths.last))
+            // We pick the last entry in the schema list because it contains the most recent
+            // StateStoreColFamilySchemas
+            val schemaPath = v2.stateStoreInfo.head.stateSchemaFilePaths.last
+            Some(new Path(schemaPath))
           case _ => None
         }
       case None => None

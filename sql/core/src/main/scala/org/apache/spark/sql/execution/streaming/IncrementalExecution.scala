@@ -50,6 +50,10 @@ import org.apache.spark.util.{SerializableConfiguration, Utils}
  * @param currentStateStoreCkptId checkpoint ID for the latest committed version. It is
  *                                  operatorID -> array of checkpointIDs. Array index n
  *                                  represents checkpoint ID for the nth shuffle partition.
+ * @param stateSchemaMetadatas map that keeps track of the StateSchemaBroadcasts per operator.
+ *                             It is passed in by reference from MicrobatchExecution, so it is
+ *                             populated during planning in the first batch, and passed in to the
+ *                             StatefulOperatorStateInfo on every subsequent batch
  */
 class IncrementalExecution(
     sparkSession: SparkSession,
@@ -262,6 +266,8 @@ class IncrementalExecution(
               val stateSchemaMetadata = StateSchemaMetadata.
                 createStateSchemaMetadata(checkpointLocation, hadoopConf, stateSchemaList.head)
 
+              // The Broadcast is created only on the first batch of every query run
+              // and is kept in-memory and passed in to planning for every subsequent batch
               val stateSchemaBroadcast =
                 StateSchemaBroadcast(sparkSession.sparkContext.broadcast(stateSchemaMetadata))
               stateSchemaMetadatas.put(ssw.getStateInfo.operatorId, stateSchemaBroadcast)

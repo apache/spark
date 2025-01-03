@@ -21,6 +21,7 @@ import scala.collection.mutable
 import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.execution.streaming.TransformWithStateKeyValueRowSchemaUtils._
+import org.apache.spark.sql.execution.streaming.TransformWithStateVariableUtils.getRowCounterCFName
 import org.apache.spark.sql.execution.streaming.state.{NoPrefixKeyStateEncoderSpec, PrefixKeyScanStateEncoderSpec, RangeKeyScanStateEncoderSpec, StateStoreColFamilySchema}
 import org.apache.spark.sql.types._
 
@@ -111,7 +112,7 @@ object StateStoreColumnFamilySchemaUtils {
       Some(NoPrefixKeyStateEncoderSpec(keyEncoder.schema))))
     // Add row counter schema
     val counterSchema = StateStoreColFamilySchema(
-      ListStateMetricsImpl.getRowCounterCFName(stateName), 0,
+      getRowCounterCFName(stateName), 0,
       keyEncoder.schema,
       valueSchemaId = 0,
       StructType(Seq(StructField("count", LongType, nullable = false))),

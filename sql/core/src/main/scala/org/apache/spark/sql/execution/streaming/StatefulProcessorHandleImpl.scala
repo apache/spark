@@ -347,7 +347,7 @@ class StatefulProcessorHandleImpl(
  * the StatefulProcessor is initialized.
  */
 class DriverStatefulProcessorHandleImpl(timeMode: TimeMode, keyExprEnc: ExpressionEncoder[Any])
-  extends StatefulProcessorHandleImplBase(timeMode, keyExprEnc) with Logging {
+  extends StatefulProcessorHandleImplBase(timeMode, keyExprEnc) {
 
   // Because this is only happening on the driver side, there is only
   // one task modifying and accessing these maps at a time
@@ -374,19 +374,24 @@ class DriverStatefulProcessorHandleImpl(timeMode: TimeMode, keyExprEnc: Expressi
   }
 
   private def addTimerColFamily(): Unit = {
-    val stateName = TimerStateUtils.getTimerStateVarName(timeMode.toString)
+    val stateNames = TimerStateUtils.getTimerStateVarNames(timeMode.toString)
+    val primaryIndex = stateNames._1
+    val secondaryIndex = stateNames._2
     val timerEncoder = new TimerKeyEncoder(keyExprEnc)
     val colFamilySchema = StateStoreColumnFamilySchemaUtils.
-      getTimerStateSchema(stateName, timerEncoder.schemaForKeyRow, timerEncoder.schemaForValueRow)
-    columnFamilySchemas.put(stateName, colFamilySchema)
-    val tsToKeyCFName = TimerStateUtils.getTimerStateSecIndexName(timeMode.toString)
+      getTimerStateSchema(
+        primaryIndex,
+        timerEncoder.schemaForKeyRow,
+        timerEncoder.schemaForValueRow
+      )
+    columnFamilySchemas.put(primaryIndex, colFamilySchema)
+    val stateVariableInfo = TransformWithStateVariableUtils.getTimerState(primaryIndex)
+    stateVariableInfos.put(primaryIndex, stateVariableInfo)
+
     val secondaryColFamilySchema = StateStoreColumnFamilySchemaUtils.
       getSecIndexTimerStateSchema(
-        tsToKeyCFName, timerEncoder.keySchemaForSecIndex, timerEncoder.schemaForValueRow)
-    columnFamilySchemas.put(stateName, colFamilySchema)
-    columnFamilySchemas.put(tsToKeyCFName, secondaryColFamilySchema)
-    val stateVariableInfo = TransformWithStateVariableUtils.getTimerState(stateName)
-    stateVariableInfos.put(stateName, stateVariableInfo)
+        secondaryIndex, timerEncoder.keySchemaForSecIndex, timerEncoder.schemaForValueRow)
+    columnFamilySchemas.put(secondaryIndex, secondaryColFamilySchema)
   }
 
   override def getValueState[T](

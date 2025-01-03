@@ -1100,8 +1100,7 @@ case class SessionWindowStateStoreSaveExec(
   }
 
   override def operatorStateMetadata(
-      stateSchemaPaths: List[List[String]] = List.empty
-  ): OperatorStateMetadata = {
+      stateSchemaPaths: List[List[String]] = List.empty): OperatorStateMetadata = {
     val info = getStateInfo
     val operatorInfo = OperatorInfoV1(info.operatorId, shortName)
     val stateStoreInfo = Array(StateStoreMetadataV1(
