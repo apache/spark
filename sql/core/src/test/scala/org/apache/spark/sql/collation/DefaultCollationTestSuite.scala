@@ -61,11 +61,11 @@ abstract class DefaultCollationTestSuite extends QueryTest with SharedSparkSessi
     assert(colType === StringType(expectedCollation))
   }
 
-  def assertThrowsImplicitMismatch(f: => DataFrame): Unit = {
+  def assertThrowsIndeterminateCollation(f: => DataFrame): Unit = {
     val exception = intercept[AnalysisException] {
       f
     }
-    assert(exception.getCondition === "COLLATION_MISMATCH.IMPLICIT")
+    assert(exception.getCondition.startsWith("INDETERMINATE_COLLATION"))
   }
 
   // region DDL tests
@@ -425,7 +425,7 @@ class DefaultCollationTestSuiteV1 extends DefaultCollationTestSuite {
           Row(2))
 
         // two implicit collations -> errors out
-        assertThrowsImplicitMismatch(sql(s"SELECT c1 = c2 FROM $testView"))
+        assertThrowsIndeterminateCollation(sql(s"SELECT c1 = c2 FROM $testView"))
 
         sql(s"ALTER VIEW $testView AS SELECT c1 COLLATE UNICODE_CI AS c1, c2 FROM $testTable")
         assertTableColumnCollation(testView, "c1", "UNICODE_CI")
@@ -454,7 +454,7 @@ class DefaultCollationTestSuiteV1 extends DefaultCollationTestSuite {
       withView(testView) {
         sql(s"CREATE VIEW $testView AS SELECT * FROM $viewTableName")
 
-        assertThrowsImplicitMismatch(
+        assertThrowsIndeterminateCollation(
           sql(s"SELECT * FROM $testView JOIN $joinTableName ON $testView.c1 = $joinTableName.c1"))
 
         checkAnswer(

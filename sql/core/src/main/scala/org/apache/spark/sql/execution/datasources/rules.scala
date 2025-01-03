@@ -276,6 +276,7 @@ case class PreprocessTableCreation(catalog: SessionCatalog) extends Rule[Logical
         val normalizedTable = normalizeCatalogTable(analyzedQuery.schema, tableDesc)
 
         DDLUtils.checkTableColumns(tableDesc.copy(schema = analyzedQuery.schema))
+        SchemaUtils.checkIndeterminateCollationInSchema(analyzedQuery.schema)
 
         val output = analyzedQuery.output
 
@@ -295,6 +296,8 @@ case class PreprocessTableCreation(catalog: SessionCatalog) extends Rule[Logical
         c.copy(tableDesc = normalizedTable, query = Some(reorderedQuery))
       } else {
         DDLUtils.checkTableColumns(tableDesc)
+        SchemaUtils.checkIndeterminateCollationInSchema(tableDesc.schema)
+
         val normalizedTable = normalizeCatalogTable(tableDesc.schema, tableDesc)
 
         val normalizedSchemaByName = HashMap(normalizedTable.schema.map(s => s.name -> s): _*)
@@ -322,6 +325,9 @@ case class PreprocessTableCreation(catalog: SessionCatalog) extends Rule[Logical
       // Check that columns are not duplicated in the partitioning statement
       SchemaUtils.checkTransformDuplication(
         partitioning, "in the partitioning", isCaseSensitive)
+
+      // Check that columns do not have indeterminate collation
+      SchemaUtils.checkIndeterminateCollationInSchema(schema)
 
       if (schema.isEmpty) {
         if (partitioning.nonEmpty) {
