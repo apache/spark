@@ -761,6 +761,8 @@ case class DescribeTableJsonCommand(
    partitionSpec: TablePartitionSpec,
    isExtended: Boolean) extends LeafRunnableCommand {
   override val output = DescribeCommandSchema.describeJsonTableAttributes()
+  // Already added to jsonMap in DescribeTableJsonCommand
+  private val excludedKeys = Set("catalog", "schema", "database", "table")
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val jsonMap = mutable.LinkedHashMap[String, JValue]()
@@ -808,14 +810,10 @@ case class DescribeTableJsonCommand(
       key: String,
       value: JValue,
       jsonMap: mutable.LinkedHashMap[String, JValue]): Unit = {
-    print(s"\nAdding key: $key, value: $value to jsonMap")
-    // Already added to jsonMap in DescribeTableJsonCommand
-    val excluded_keys = Set("catalog", "schema", "database", "table")
+    val normalizedKey = key.toLowerCase().replace(" ", "_")
 
-    val normalized_key = key.toLowerCase().replace(" ", "_")
-
-    if (!jsonMap.contains(normalized_key) && !excluded_keys.contains(normalized_key)) {
-      jsonMap += normalized_key -> value
+    if (!jsonMap.contains(normalizedKey) && !excludedKeys.contains(normalizedKey)) {
+      jsonMap += normalizedKey -> value
     }
   }
 
