@@ -92,10 +92,6 @@ to return the metadata pertaining to a partition or column respectively.
           "comment": "<comment>",
           "nullable": <boolean>,
           "default": "<default_val>"
-          "metadata": {
-            "key1": "<val1>",
-            "key2": "<val2>"
-          }
         }
       ],
       "partition_values": {
@@ -131,28 +127,28 @@ to return the metadata pertaining to a partition or column respectively.
   
   Below are the schema definitions for `<type_json>`:
 
-| Supported Data Types      | JSON Representation                                                                                              |
-|---------------------------|------------------------------------------------------------------------------------------------------------------|
-| ByteType                  | `{ "type" : "tinyint" }`                                                                                         |
-| ShortType                 | `{ "type" : "smallint" }`                                                                                        |
-| IntegerType               | `{ "type" : "int" }`                                                                                             |
-| LongType                  | `{ "type" : "bigint" }`                                                                                          |
-| FloatType                 | `{ "type" : "float" }`                                                                                           |
-| DoubleType                | `{ "type" : "double" }`                                                                                          |
-| DecimalType               | `{ "type": "decimal", "precision": p, "scale": s }`                                                              |
-| StringType                | `{ "type" : "string" }`                                                                                          |
-| VarCharType               | `{ "type" : "varchar", "length": n }`                                                                            |
-| CharType                  | `{ "type" : "char", "length": n }`                                                                               |
-| BinaryType                | `{ "type" : "binary" }`                                                                                          |
-| BooleanType               | `{ "type" : "boolean" }`                                                                                         |
-| DateType                  | `{ "type" : "date" }`                                                                                            |
-| TimestampType             | `{ "type" : "timestamp_ltz" }`                                                                                   |
-| TimestampNTZType          | `{ "type" : "timestamp_ntz" }`                                                                                   |
-| YearMonthIntervalType     | `{ "type" : "interval", "start_unit": "<start_unit>", "end_unit": "<end_unit>" }`                                |
-| DayTimeIntervalType       | `{ "type" : "interval", "start_unit": "<start_unit>", "end_unit": "<end_unit>" }`                                |
-| ArrayType                 | `{ "type" : "array", "element_type": <type_json>, "contains_null": <boolean> }`                                  |
-| MapType                   | `{ "type" : "map", "key_type": <type_json>, "value_type": <type_json>, "contains_null": <boolean> }`             |
-| StructType                | `{ "name" : "<name>", "type" : "struct", "nullable": <boolean>, "comment": "<comment>", "default": "<default>" }` |
+| Spark SQL Data Types  | JSON Representation                                                                                              |
+|-----------------------|------------------------------------------------------------------------------------------------------------------|
+| ByteType              | `{ "type" : "tinyint" }`                                                                                         |
+| ShortType             | `{ "type" : "smallint" }`                                                                                        |
+| IntegerType           | `{ "type" : "int" }`                                                                                             |
+| LongType              | `{ "type" : "bigint" }`                                                                                          |
+| FloatType             | `{ "type" : "float" }`                                                                                           |
+| DoubleType            | `{ "type" : "double" }`                                                                                          |
+| DecimalType           | `{ "type": "decimal", "precision": p, "scale": s }`                                                              |
+| StringType            | `{ "type" : "string" }`                                                                                          |
+| VarCharType           | `{ "type" : "varchar", "length": n }`                                                                            |
+| CharType              | `{ "type" : "char", "length": n }`                                                                               |
+| BinaryType            | `{ "type" : "binary" }`                                                                                          |
+| BooleanType           | `{ "type" : "boolean" }`                                                                                         |
+| DateType              | `{ "type" : "date" }`                                                                                            |
+| TimestampType         | `{ "type" : "timestamp_ltz" }`                                                                                   |
+| TimestampNTZType      | `{ "type" : "timestamp_ntz" }`                                                                                   |
+| YearMonthIntervalType | `{ "type" : "interval", "start_unit": "<start_unit>", "end_unit": "<end_unit>" }`                                |
+| DayTimeIntervalType   | `{ "type" : "interval", "start_unit": "<start_unit>", "end_unit": "<end_unit>" }`                                |
+| ArrayType             | `{ "type" : "array", "element_type": <type_json>, "contains_null": <boolean> }`                                  |
+| MapType               | `{ "type" : "map", "key_type": <type_json>, "value_type": <type_json>, "contains_null": <boolean> }`             |
+| StructType            | `{ "name" : "<name>", "type" : "struct", "nullable": <boolean>, "comment": "<comment>", "default": "<default>" }` |
 
 ### Examples
 

@@ -854,8 +854,7 @@ case class DescribeTableJsonCommand(
             "type" -> jsonType(field.dataType),
             "nullable" -> JBool(field.nullable),
             "comment" -> field.getComment().map(JString).getOrElse(JNull),
-            "default" -> defaultValues.get(field.name).map(JString).getOrElse(JNull),
-            "metadata" -> field.metadata.jsonValue
+            "default" -> defaultValues.get(field.name).map(JString).getOrElse(JNull)
           )
         }.toList
         JObject(
@@ -922,27 +921,21 @@ case class DescribeTableJsonCommand(
     val columnsJson = schema.map { column =>
       val baseFields: List[JField] = List(
         JField("name", JString(column.name)),
-        JField("type", jsonType(column.dataType)),
-        JField("nullable", JBool(column.nullable))
+        JField("type", jsonType(column.dataType))
       )
 
       val commentField: List[JField] = column.getComment().map { comment =>
         List(JField("comment", JString(comment)))
       }.getOrElse(Nil)
 
+      val nullableField: List[JField] = List(JField("nullable", JBool(column.nullable)))
+
       val defaultValueField: List[JField] = defaultValuesMap.get(column.name).map { defaultValue =>
         List(JField("default", JString(defaultValue)))
       }.getOrElse(Nil)
 
-      val metadataJson = column.metadata.jsonValue
-      val metadataField: List[JField] = metadataJson match {
-        case JObject(fields) if fields.nonEmpty => List(JField("metadata", metadataJson))
-        case _ => Nil
-      }
-
-      JObject(baseFields ++ commentField ++ defaultValueField ++ metadataField)
+      JObject(baseFields ++ commentField ++ nullableField ++ defaultValueField)
     }
-
     addKeyValueToMap("columns", JArray(columnsJson.toList), jsonMap)
   }
 
