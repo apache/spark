@@ -182,13 +182,13 @@ class ScalaReflectionSuite extends SparkFunSuite {
 
   // A helper method used to test `ScalaReflection.serializerForType`.
   private def serializerFor[T: TypeTag]: Expression = {
-    val enc = ScalaReflection.encoderFor[T]
+    val enc = ScalaReflection.encoderForWithRowEncoderSupport[T]
     SerializerBuildHelper.createSerializer(enc)
   }
 
   // A helper method used to test `ScalaReflection.deserializerForType`.
   private def deserializerFor[T: TypeTag]: Expression = {
-    val enc = ScalaReflection.encoderFor[T]
+    val enc = ScalaReflection.encoderForWithRowEncoderSupport[T]
     DeserializerBuildHelper.createDeserializer(enc)
   }
 

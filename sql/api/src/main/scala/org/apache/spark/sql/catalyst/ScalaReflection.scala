@@ -160,7 +160,7 @@ object ScalaReflection extends ScalaReflection {
    * Returns a catalyst DataType and its nullability for the given Scala Type using reflection.
    */
   def schemaFor(tpe: `Type`): Schema = {
-    val enc = encoderFor(tpe)
+    val enc = encoderFor(tpe, isRowEncoderSupported = true)
     Schema(enc.dataType, enc.nullable)
   }
 
