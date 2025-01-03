@@ -1058,7 +1058,7 @@ ReadSchema: struct<key:int,val:string>
 (2) ObjectHashAggregate
 Input [2]: [key#x, val#x]
 Keys [1]: [key#x]
-Functions [1]: [partial_collect_set(val#x, 0, 0)]
+Functions [1]: [partial_collect_set(val#x, 0, 0, true)]
 Aggregate Attributes [1]: [buf#x]
 Results [2]: [key#x, buf#x]
 
@@ -1069,9 +1069,9 @@ Arguments: hashpartitioning(key#x, 4), ENSURE_REQUIREMENTS, [plan_id=x]
 (4) ObjectHashAggregate
 Input [2]: [key#x, buf#x]
 Keys [1]: [key#x]
-Functions [1]: [collect_set(val#x, 0, 0)]
-Aggregate Attributes [1]: [collect_set(val#x, 0, 0)#x]
-Results [2]: [key#x, sort_array(collect_set(val#x, 0, 0)#x, true)[0] AS sort_array(collect_set(val), true)[0]#x]
+Functions [1]: [collect_set(val#x, 0, 0, true)]
+Aggregate Attributes [1]: [collect_set(val#x, 0, 0, true)#x]
+Results [2]: [key#x, sort_array(collect_set(val#x, 0, 0, true)#x, true)[0] AS sort_array(collect_set(val), true)[0]#x]
 
 (5) AdaptiveSparkPlan
 Output [2]: [key#x, sort_array(collect_set(val), true)[0]#x]
