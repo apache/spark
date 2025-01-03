@@ -821,7 +821,9 @@ case class DescribeTableJsonCommand(
    * Util to recursively form JSON string representation of data type, used for DESCRIBE AS JSON.
    * Differs from `json` in DataType.scala by providing additional fields for some types.
    */
-  private def jsonType(dataType: DataType): JValue = {
+  private def jsonType(
+      dataType: DataType,
+      defaultValues: Map[String, String] = Map.empty): JValue = {
     dataType match {
       case arrayType: ArrayType =>
         JObject(
@@ -843,7 +845,9 @@ case class DescribeTableJsonCommand(
           JObject(
             "name" -> JString(field.name),
             "type" -> jsonType(field.dataType),
-            "nullable" -> JBool(field.nullable)
+            "nullable" -> JBool(field.nullable),
+            "comment" -> field.getComment().map(JString).getOrElse(JNull),
+            "default_value" -> defaultValues.get(field.name).map(JString).getOrElse(JNull)
           )
         }.toList
         JObject(
@@ -917,13 +921,17 @@ case class DescribeTableJsonCommand(
         List(JField("comment", JString(comment)))
       }.getOrElse(Nil)
 
+      val nullableField: List[JField] =
+        if (column.nullable) {
+          List(JField("nullable", JBool(column.nullable)))
+        } else Nil
+
       val defaultValueField: List[JField] = defaultValuesMap.get(column.name).map { defaultValue =>
         List(JField("default_value", JString(defaultValue)))
       }.getOrElse(Nil)
 
-      JObject(baseFields ++ commentField ++ defaultValueField)
+      JObject(baseFields ++ commentField ++ nullableField ++ defaultValueField)
     }
-
     addKeyValueToMap("columns", JArray(columnsJson.toList), jsonMap)
   }
 

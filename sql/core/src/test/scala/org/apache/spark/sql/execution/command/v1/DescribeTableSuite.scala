@@ -824,6 +824,8 @@ case class Type(
    keyType: Option[Type] = None,
    valueType: Option[Type] = None,
    nullable: Option[Boolean] = None,
+   comment: Option[String] = None,
+   defaultValue: Option[String] = None,
    containsNull: Option[Boolean] = None,
    valueContainsNull: Option[Boolean] = None
  )
@@ -831,5 +833,7 @@ case class Type(
 case class Field(
   name: String,
   `type`: Type,
-  nullable: Option[Boolean] = None
+  nullable: Option[Boolean] = None,
+  comment: Option[String] = None,
+  defaultValue: Option[String] = None,
 )
