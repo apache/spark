@@ -5365,11 +5365,6 @@
           "Parameter markers are not allowed in <statement>."
         ]
       },
-      "PARTITION_BY_MAP" : {
-        "message" : [
-          "Cannot use MAP producing expressions to partition a DataFrame, but the type of expression <expr> is <dataType>."
-        ]
-      },
       "PARTITION_BY_VARIANT" : {
         "message" : [
           "Cannot use VARIANT producing expressions to partition a DataFrame, but the type of expression <expr> is <dataType>."

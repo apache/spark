@@ -103,13 +103,6 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
       case _ => None
     }
 
-  protected def mapExprInPartitionExpression(plan: LogicalPlan): Option[Expression] =
-    plan match {
-      case r: RepartitionByExpression =>
-        r.partitionExpressions.find(e => hasMapType(e.dataType))
-      case _ => None
-    }
-
   private def checkLimitLikeClause(name: String, limitExpr: Expression): Unit = {
     limitExpr match {
       case e if !e.foldable => limitExpr.failAnalysis(
@@ -893,14 +886,6 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
               messageParameters = Map(
                 "expr" -> toSQLExpr(variantExpr),
                 "dataType" -> toSQLType(variantExpr.dataType)))
-
-          case o if mapExprInPartitionExpression(o).isDefined =>
-            val mapExpr = mapExprInPartitionExpression(o).get
-            o.failAnalysis(
-              errorClass = "UNSUPPORTED_FEATURE.PARTITION_BY_MAP",
-              messageParameters = Map(
-                "expr" -> toSQLExpr(mapExpr),
-                "dataType" -> toSQLType(mapExpr.dataType)))
 
           case o if o.expressions.exists(!_.deterministic) &&
             !operatorAllowsNonDeterministicExpressions(o) &&
