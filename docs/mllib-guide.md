@@ -20,7 +20,7 @@ license: |
 ---
 
 This page documents sections of the MLlib guide for the RDD-based API (the `spark.mllib` package).
-Please see the [MLlib Main Guide](ml-guide.html) for the DataFrame-based API (the `spark.ml` package),
+Please see the [MLlib Main Guide](ml-guide.md) for the DataFrame-based API (the `spark.ml` package),
 which is now the primary API for MLlib.
 
 * [Data types](mllib-data-types.html)
