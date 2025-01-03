@@ -72,6 +72,7 @@ from pyspark.sql.types import (
 )
 from pyspark.sql.utils import (
     enum_to_value as _enum_to_value,
+    get_conf as _get_conf,
 )
 
 # The implementation of pandas_udf is embedded in pyspark.sql.function.pandas_udf
@@ -284,14 +285,7 @@ def lit(col: Any) -> Column:
             raise PySparkValueError(
                 errorClass="COLUMN_IN_DICT", messageParameters={"func_name": "lit"}
             )
-        from pyspark.sql import SparkSession
-
-        spark = SparkSession.getActiveSession()
-        dict_as_struct = (
-            spark.conf.get("spark.sql.pyspark.inferNestedDictAsStruct.enabled")
-            if spark
-            else "false"
-        )
+        dict_as_struct = _get_conf("spark.sql.pyspark.inferNestedDictAsStruct.enabled")
         if dict_as_struct and dict_as_struct.lower() == "true":
             return struct(*[lit(value).alias(key) for key, value in col.items()])
         else:

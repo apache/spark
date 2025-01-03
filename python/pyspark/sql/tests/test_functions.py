@@ -29,8 +29,9 @@ from pyspark.errors import PySparkTypeError, PySparkValueError, SparkRuntimeExce
 from pyspark.sql import Row, Window, functions as F, types
 from pyspark.sql.avro.functions import from_avro, to_avro
 from pyspark.sql.column import Column
-from pyspark.sql.functions.builtin import nullifzero, randstr, uniform, zeroifnull
-from pyspark.sql.types import StructType, StructField, StringType, MapType, IntegerType
+
+# from pyspark.sql.functions.builtin import nullifzero, randstr, uniform, zeroifnull
+from pyspark.sql.types import StructType, StructField, StringType, MapType, IntegerType, LongType
 from pyspark.testing.sqlutils import ReusedSQLTestCase, SQLTestUtils
 from pyspark.testing.utils import have_numpy, assertDataFrameEqual
 
@@ -1319,6 +1320,7 @@ class FunctionsTestsMixin:
     # SPARK-48665: added support for dict type
     def test_lit_dict_struct(self):
         with self.sql_conf({"spark.sql.pyspark.inferNestedDictAsStruct.enabled": True}):
+            # Not nested dict
             expected_types = StructType(
                 [
                     StructField("a", IntegerType(), False),
@@ -1332,9 +1334,25 @@ class FunctionsTestsMixin:
             self.assertEqual(column_type, expected_types)
             self.assertEqual(actual, Row(a=1, b=2))
 
+            # Nested dict
+            expected_types = StructType(
+                [
+                    StructField("a", StructType([StructField("c", IntegerType(), False)]), False),
+                    StructField("b", StructType([StructField("d", IntegerType(), False)]), False),
+                ]
+            )
+            test_dict = {"a": {"c": 1}, "b": {"d": 2}}
+            actual = self.spark.range(1).select(F.lit(test_dict).alias("dict_to_struct"))
+            column_type = actual.schema["dict_to_struct"].dataType
+            print(column_type)
+            actual = actual.first()[0]
+            self.assertEqual(column_type, expected_types)
+            self.assertEqual(actual, Row(a=Row(c=1), b=Row(d=2)))
+
     # SPARK-48665: added support for dict type
     def test_lit_dict_map(self):
         with self.sql_conf({"spark.sql.pyspark.inferNestedDictAsStruct.enabled": False}):
+            # Not nested dict
             test_dict = {"a": 1, "b": 2}
             actual = self.spark.range(1).select(F.lit(test_dict).alias("dict_to_map"))
             column_type = actual.schema["dict_to_map"].dataType
@@ -1342,20 +1360,25 @@ class FunctionsTestsMixin:
             self.assertEqual(column_type, MapType(StringType(), IntegerType(), False))
             self.assertEqual(actual, test_dict)
 
+            # Nested dict
             test_dict = {"a": {"1": 1}, "b": {"2": 2}}
-            actual = self.spark.range(1).select(F.lit(test_dict)).first()[0]
+            actual = self.spark.range(1).select(F.lit(test_dict).alias("dict_to_map"))
+            column_type = actual.schema["dict_to_map"].dataType
+            actual = actual.first()[0]
+            self.assertEqual(
+                column_type,
+                MapType(StringType(), MapType(StringType(), IntegerType(), False), False),
+            )
             self.assertEqual(actual, test_dict)
 
-        with self.sql_conf(
-            {
-                "spark.sql.ansi.enabled": False,
-                "spark.sql.pyspark.inferNestedDictAsStruct.enabled": False,
-            }
-        ):
+            # dict with multiple types 1 int, "2" string
             test_dict = {"a": 1, "b": "2", "c": None}
-            expected_dict = {"a": "1", "b": "2", "c": None}
-            actual = self.spark.range(1).select(F.lit(test_dict)).first()[0]
+            expected_dict = {"a": 1, "b": 2, "c": None}
+            actual = self.spark.range(1).select(F.lit(test_dict).alias("dict_to_map"))
+            column_type = actual.schema["dict_to_map"].dataType
+            actual = actual.first()[0]
             self.assertEqual(actual, expected_dict)
+            self.assertEqual(column_type, MapType(StringType(), LongType(), True))
 
     # SPARK-48665: added support for dict type
     def test_lit_dict_raise_error(self):

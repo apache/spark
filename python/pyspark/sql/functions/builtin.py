@@ -39,7 +39,7 @@ from typing import (
     ValuesView,
 )
 from itertools import chain
-
+from functools import lru_cache
 from pyspark.errors import PySparkTypeError, PySparkValueError
 from pyspark.errors.utils import _with_origin
 from pyspark.sql.column import Column
@@ -67,6 +67,7 @@ from pyspark.sql.pandas.functions import pandas_udf, PandasUDFType  # noqa: F401
 from pyspark.sql.utils import (
     to_str as _to_str,
     has_numpy as _has_numpy,
+    get_conf as _get_conf,
     try_remote_functions as _try_remote_functions,
     get_active_spark_context as _get_active_spark_context,
     enum_to_value as _enum_to_value,
@@ -257,12 +258,13 @@ def lit(col: Any) -> Column:
     +------------------+-------+-----------------+--------------------+
 
     Example 7: Creating a literal column as a map from a dict.
-        if spark.sql.pyspark.inferNestedDictAsStruct is False
+        if ``spark.sql.pyspark.inferNestedDictAsStruct`` is False
 
     >>> import pyspark.sql.functions as sf
+    >>> spark.conf.set("spark.sql.pyspark.inferNestedDictAsStruct.enabled", "false")
     >>> spark.range(1).select(
     ...    sf.lit({"a": 1, "b": 2}).alias("map_col")
-    ... ).show() # doctest: +SKIP
+    ... ).show()
     +----------------+
     |         map_col|
     +----------------+
@@ -270,9 +272,10 @@ def lit(col: Any) -> Column:
     +----------------+
 
     Example 8: Creating a literal column as a struct from a dict.
-        if spark.sql.pyspark.inferNestedDictAsStruct is True
+        if ``spark.sql.pyspark.inferNestedDictAsStruct`` is True
 
     >>> import pyspark.sql.functions as sf
+    >>> spark.conf.set("spark.sql.pyspark.inferNestedDictAsStruct.enabled", "false")
     >>> spark.range(1).select(
     ...    sf.lit({"a": 1, "b": 2}, true).alias("struct_col")
     ... ).show() # doctest: +SKIP
@@ -297,14 +300,7 @@ def lit(col: Any) -> Column:
             raise PySparkValueError(
                 errorClass="COLUMN_IN_DICT", messageParameters={"func_name": "lit"}
             )
-        from pyspark.sql import SparkSession
-
-        spark = SparkSession.getActiveSession()
-        dict_as_struct = (
-            spark.conf.get("spark.sql.pyspark.inferNestedDictAsStruct.enabled")
-            if spark
-            else "false"
-        )
+        dict_as_struct = _get_conf("spark.sql.pyspark.inferNestedDictAsStruct.enabled")
         if dict_as_struct and dict_as_struct.lower() == "true":
             return struct(*[lit(value).alias(key) for key, value in col.items()])
         else:
@@ -12890,7 +12886,7 @@ def to_unix_timestamp(
 
     Example 3: Using a format column to represent different formats.
 
-    >>> import pyspark.sql.functions as sff
+    >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame(
     ...     [('2015-04-08', 'yyyy-MM-dd'), ('2025+01+09', 'yyyy+MM+dd')], ['dt', 'fmt'])
     >>> df.select('*', sf.to_unix_timestamp('dt', 'fmt')).show()
