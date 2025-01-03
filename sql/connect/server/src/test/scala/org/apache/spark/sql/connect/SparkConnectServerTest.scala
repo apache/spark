@@ -167,7 +167,7 @@ trait SparkConnectServerTest extends SharedSparkSession {
       case Right(executions) =>
         // all rpc detached.
         assert(
-          executions.forall(_.lastAttachedRpcTimeMs.isDefined),
+          executions.forall(_.lastAttachedRpcTimeNs.isDefined),
           s"Expected no RPCs, but got $executions")
     }
   }
