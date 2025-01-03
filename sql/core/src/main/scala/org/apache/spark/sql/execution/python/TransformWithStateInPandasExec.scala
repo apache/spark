@@ -149,7 +149,7 @@ case class TransformWithStateInPandasExec(
     initialStateGroupingAttrs.map(SortOrder(_, Ascending)))
 
   override def operatorStateMetadata(
-      stateSchemaPaths: List[String]): OperatorStateMetadata = {
+      stateSchemaPaths: List[List[String]]): OperatorStateMetadata = {
     getOperatorStateMetadata(stateSchemaPaths, getStateInfo, shortName, timeMode, outputMode)
   }
 
@@ -299,6 +299,7 @@ case class TransformWithStateInPandasExec(
               NoPrefixKeyStateEncoderSpec(schemaForKeyRow),
               version = stateInfo.get.storeVersion,
               stateStoreCkptId = stateInfo.get.getStateStoreCkptId(partitionId).map(_.head),
+              stateSchemaBroadcast = stateInfo.get.stateSchemaMetadata,
               useColumnFamilies = true,
               storeConf = storeConf,
               hadoopConf = hadoopConfBroadcast.value.value
@@ -342,7 +343,8 @@ case class TransformWithStateInPandasExec(
       useColumnFamilies = true,
       storeConf = storeConf,
       hadoopConf = hadoopConfBroadcast.value.value,
-      useMultipleValuesPerKey = true)
+      useMultipleValuesPerKey = true,
+      stateSchemaProvider = getStateInfo.stateSchemaMetadata)
 
     val store = stateStoreProvider.getStore(0, None)
     val outputIterator = f(store)

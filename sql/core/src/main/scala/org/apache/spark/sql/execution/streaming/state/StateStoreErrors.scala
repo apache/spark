@@ -145,6 +145,12 @@ object StateStoreErrors {
     new StateStoreValueSchemaNotCompatible(storedValueSchema, newValueSchema)
   }
 
+  def stateStoreInvalidValueSchemaEvolution(
+      storedValueSchema: String,
+      newValueSchema: String): StateStoreInvalidValueSchemaEvolution = {
+    new StateStoreInvalidValueSchemaEvolution(storedValueSchema, newValueSchema)
+  }
+
   def stateStoreColumnFamilyMismatch(
       columnFamilyName: String,
       oldColumnFamilySchema: String,
@@ -314,6 +320,8 @@ class StateStoreKeySchemaNotCompatible(
       "storedKeySchema" -> storedKeySchema,
       "newKeySchema" -> newKeySchema))
 
+trait StateStoreInvalidValueSchema extends Throwable
+
 class StateStoreValueSchemaNotCompatible(
     storedValueSchema: String,
     newValueSchema: String)
@@ -321,7 +329,16 @@ class StateStoreValueSchemaNotCompatible(
     errorClass = "STATE_STORE_VALUE_SCHEMA_NOT_COMPATIBLE",
     messageParameters = Map(
       "storedValueSchema" -> storedValueSchema,
-      "newValueSchema" -> newValueSchema))
+      "newValueSchema" -> newValueSchema)) with StateStoreInvalidValueSchema
+
+class StateStoreInvalidValueSchemaEvolution(
+    storedValueSchema: String,
+    newValueSchema: String)
+  extends SparkUnsupportedOperationException(
+    errorClass = "STATE_STORE_INVALID_VALUE_SCHEMA_EVOLUTION",
+    messageParameters = Map(
+      "storedValueSchema" -> storedValueSchema,
+      "newValueSchema" -> newValueSchema)) with StateStoreInvalidValueSchema
 
 class StateStoreSnapshotFileNotFound(fileToRead: String, clazz: String)
   extends SparkRuntimeException(

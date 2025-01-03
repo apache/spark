@@ -343,7 +343,7 @@ class RocksDBStateEncoderSuite extends SparkFunSuite {
       keySchemaId = 0,
       valueSchemaId = 0
     ))
-    new AvroStateEncoder(keyStateEncoderSpec, valueSchema, stateSchemaInfo)
+    new AvroStateEncoder(keyStateEncoderSpec, valueSchema, None, None)
   }
 
   private def createNoPrefixKeyEncoder(): RocksDBDataEncoder = {
@@ -379,7 +379,7 @@ class RocksDBStateEncoderSuite extends SparkFunSuite {
     withClue("Testing prefix scan encoding: ") {
       val prefixKeySpec = PrefixKeyScanStateEncoderSpec(keySchema, numColsPrefixKey = 2)
       val stateSchemaInfo = Some(StateSchemaInfo(keySchemaId = 42, valueSchemaId = 0))
-      val encoder = new AvroStateEncoder(prefixKeySpec, valueSchema, stateSchemaInfo)
+      val encoder = new AvroStateEncoder(prefixKeySpec, valueSchema, None, None)
 
       // Then encode just the remaining key portion (which should include schema ID)
       val remainingKeyRow = keyProj.apply(InternalRow(null, null, 3.14))
@@ -395,7 +395,7 @@ class RocksDBStateEncoderSuite extends SparkFunSuite {
     withClue("Testing range scan encoding: ") {
       val rangeScanSpec = RangeKeyScanStateEncoderSpec(keySchema, orderingOrdinals = Seq(0, 1))
       val stateSchemaInfo = Some(StateSchemaInfo(keySchemaId = 24, valueSchemaId = 0))
-      val encoder = new AvroStateEncoder(rangeScanSpec, valueSchema, stateSchemaInfo)
+      val encoder = new AvroStateEncoder(rangeScanSpec, valueSchema, None, None)
 
       // Encode remaining key (non-ordering columns)
       // For range scan, the remaining key schema only contains columns NOT in orderingOrdinals
@@ -493,7 +493,7 @@ class RocksDBStateEncoderSuite extends SparkFunSuite {
     withClue("Testing single value encoder: ") {
       val keySpec = NoPrefixKeyStateEncoderSpec(keySchema)
       val stateSchemaInfo = Some(StateSchemaInfo(keySchemaId = 0, valueSchemaId = 42))
-      val avroEncoder = new AvroStateEncoder(keySpec, valueSchema, stateSchemaInfo)
+      val avroEncoder = new AvroStateEncoder(keySpec, valueSchema, None, None)
       val valueEncoder = new SingleValueStateEncoder(avroEncoder, valueSchema)
 
       // Encode value

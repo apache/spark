@@ -59,6 +59,8 @@ object TransformWithStateVariableUtils {
       throw StateStoreErrors.missingTimeValues(timeMode.toString)
     }
   }
+
+  def getRowCounterCFName(stateName: String): String = "$rowCounter_" + stateName
 }
 
 // Enum of possible State Variable types
@@ -176,7 +178,7 @@ trait TransformWithStateMetadataUtils extends Logging {
   def getStateVariableInfos(): Map[String, TransformWithStateVariableInfo]
 
   def getOperatorStateMetadata(
-      stateSchemaPaths: List[String],
+      stateSchemaPaths: List[List[String]],
       info: StatefulOperatorStateInfo,
       shortName: String,
       timeMode: TimeMode,
@@ -201,7 +203,8 @@ trait TransformWithStateMetadataUtils extends Logging {
       stateSchemaVersion: Int,
       info: StatefulOperatorStateInfo,
       session: SparkSession,
-      operatorStateMetadataVersion: Int = 2): List[StateSchemaValidationResult] = {
+      operatorStateMetadataVersion: Int = 2,
+      stateStoreEncodingFormat: String = "unsaferow"): List[StateSchemaValidationResult] = {
     assert(stateSchemaVersion >= 3)
     val newSchemas = getColFamilySchemas()
     val stateSchemaDir = stateSchemaDirPath(info)
@@ -223,7 +226,10 @@ trait TransformWithStateMetadataUtils extends Logging {
       case Some(metadata) =>
         metadata match {
           case v2: OperatorStateMetadataV2 =>
-            Some(new Path(v2.stateStoreInfo.head.stateSchemaFilePath))
+            // We pick the last entry in the schema list because it contains the most recent
+            // StateStoreColFamilySchemas
+            val schemaPath = v2.stateStoreInfo.head.stateSchemaFilePaths.last
+            Some(new Path(schemaPath))
           case _ => None
         }
       case None => None
@@ -234,7 +240,8 @@ trait TransformWithStateMetadataUtils extends Logging {
         newSchemas.values.toList, session.sessionState, stateSchemaVersion,
         storeName = StateStoreId.DEFAULT_STORE_NAME,
         oldSchemaFilePath = oldStateSchemaFilePath,
-        newSchemaFilePath = Some(newStateSchemaFilePath)))
+        newSchemaFilePath = Some(newStateSchemaFilePath),
+        schemaEvolutionEnabled = stateStoreEncodingFormat == "avro"))
   }
 
   def validateNewMetadataForTWS(

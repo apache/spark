@@ -80,6 +80,68 @@ class TestListStateProcessor
   }
 }
 
+// Case classes for schema evolution testing
+case class SimpleListItem(value: String)
+case class EvolvedListItem(value: String, timestamp: Option[Long])
+
+// Initial processor with simple schema
+class InitialListStateProcessor extends StatefulProcessor[String, String, (String, String)] {
+  @transient protected var listState: ListState[SimpleListItem] = _
+
+  override def init(outputMode: OutputMode, timeMode: TimeMode): Unit = {
+    listState = getHandle.getListState[SimpleListItem](
+      "listState",
+      Encoders.product[SimpleListItem],
+      TTLConfig.NONE
+    )
+  }
+
+  override def handleInputRows(
+      key: String,
+      rows: Iterator[String],
+      timerValues: TimerValues): Iterator[(String, String)] = {
+
+    // Add items to state
+    rows.foreach { value =>
+      listState.appendValue(SimpleListItem(value))
+    }
+
+    // Return all items in state and clear
+    val result = listState.get().map(item => (key, item.value)).toList
+    listState.clear()
+    result.iterator
+  }
+}
+
+// Evolved processor with additional field
+class EvolvedListStateProcessor extends StatefulProcessor[String, String, (String, String)] {
+  @transient protected var listState: ListState[EvolvedListItem] = _
+
+  override def init(outputMode: OutputMode, timeMode: TimeMode): Unit = {
+    listState = getHandle.getListState[EvolvedListItem](
+      "listState",
+      Encoders.product[EvolvedListItem],
+      TTLConfig.NONE
+    )
+  }
+
+  override def handleInputRows(
+      key: String,
+      rows: Iterator[String],
+      timerValues: TimerValues): Iterator[(String, String)] = {
+
+    // Add items with timestamp
+    rows.foreach { value =>
+      listState.appendValue(EvolvedListItem(value, Some(System.currentTimeMillis())))
+    }
+
+    // Return all items (just value field) and clear
+    val result = listState.get().map(item => (key, item.value)).toList
+    listState.clear()
+    result.iterator
+  }
+}
+
 class ToggleSaveAndEmitProcessor
   extends StatefulProcessor[String, String, String] {
 
@@ -326,6 +388,46 @@ class TransformWithListStateSuite extends StreamTest
         AddData(inputData, "k2"),
         CheckNewAnswer("k1", "k1", "k2", "k2")
       )
+    }
+  }
+
+  test("ListState schema evolution - add field") {
+    withSQLConf(
+      SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[RocksDBStateStoreProvider].getName) {
+      withTempDir { dir =>
+        val inputData = MemoryStream[String]
+
+        // First run with initial schema
+        val result1 = inputData.toDS()
+          .groupByKey(x => x)
+          .transformWithState(new InitialListStateProcessor(),
+            TimeMode.None(),
+            OutputMode.Update())
+
+        testStream(result1, OutputMode.Update())(
+          StartStream(checkpointLocation = dir.getCanonicalPath),
+          AddData(inputData, "a", "b"),
+          CheckNewAnswer(("a", "a"), ("b", "b")),
+          StopStream
+        )
+
+        // Second run with evolved schema
+        val result2 = inputData.toDS()
+          .groupByKey(x => x)
+          .transformWithState(new EvolvedListStateProcessor(),
+            TimeMode.None(),
+            OutputMode.Update())
+
+        testStream(result2, OutputMode.Update())(
+          StartStream(checkpointLocation = dir.getCanonicalPath),
+          AddData(inputData, "c"),
+          CheckNewAnswer(("c", "c")),
+          // Verify we can still read old state format
+          AddData(inputData, "a"),
+          CheckNewAnswer(("a", "a")),
+          StopStream
+        )
+      }
     }
   }
 }

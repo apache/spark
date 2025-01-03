@@ -238,7 +238,7 @@ class StateSchemaCompatibilityCheckerSuite extends SharedSparkSession {
     val providerId = StateStoreProviderId(
       StateStoreId(dir, opId, partitionId), queryId)
     val storeColFamilySchema = List(StateStoreColFamilySchema(StateStore.DEFAULT_COL_FAMILY_NAME,
-      keySchema, valueSchema))
+      0, keySchema, 0, valueSchema))
     val checker = new StateSchemaCompatibilityChecker(providerId, hadoopConf)
     checker.createSchemaFile(storeColFamilySchema,
       SchemaHelper.SchemaWriter.createSchemaWriter(1))
@@ -259,15 +259,15 @@ class StateSchemaCompatibilityCheckerSuite extends SharedSparkSession {
       val runId = UUID.randomUUID()
       val stateInfo = StatefulOperatorStateInfo(dir, runId, opId, 0, 200)
       val storeColFamilySchema = List(
-        StateStoreColFamilySchema("test1", keySchema, valueSchema,
+        StateStoreColFamilySchema("test1", 0, keySchema, 0, valueSchema,
           keyStateEncoderSpec = getKeyStateEncoderSpec(stateSchemaVersion, keySchema,
             encoderSpecStr)),
-        StateStoreColFamilySchema("test2", longKeySchema, longValueSchema,
+        StateStoreColFamilySchema("test2", 0, longKeySchema, 0, longValueSchema,
           keyStateEncoderSpec = getKeyStateEncoderSpec(stateSchemaVersion, longKeySchema,
             encoderSpecStr)),
-        StateStoreColFamilySchema("test3", keySchema65535Bytes, valueSchema65535Bytes,
+        StateStoreColFamilySchema("test3", 0, keySchema65535Bytes, 0, valueSchema65535Bytes,
           keyStateEncoderSpec = getKeyStateEncoderSpec(stateSchemaVersion, keySchema65535Bytes)),
-        StateStoreColFamilySchema("test4", keySchema, valueSchema,
+        StateStoreColFamilySchema("test4", 0, keySchema, 0, valueSchema,
           keyStateEncoderSpec = getKeyStateEncoderSpec(stateSchemaVersion, keySchema,
             encoderSpecStr),
           userKeyEncoderSchema = Some(structSchema)))
@@ -391,7 +391,7 @@ class StateSchemaCompatibilityCheckerSuite extends SharedSparkSession {
       }
 
       val oldStateSchema = List(StateStoreColFamilySchema(StateStore.DEFAULT_COL_FAMILY_NAME,
-        oldKeySchema, oldValueSchema,
+        0, oldKeySchema, 0, oldValueSchema,
         keyStateEncoderSpec = getKeyStateEncoderSpec(stateSchemaVersion, oldKeySchema)))
       val newSchemaFilePath = getNewSchemaPath(stateSchemaDir, stateSchemaVersion)
       val result = Try(
@@ -407,7 +407,7 @@ class StateSchemaCompatibilityCheckerSuite extends SharedSparkSession {
       } else {
         intercept[SparkUnsupportedOperationException] {
           val newStateSchema = List(StateStoreColFamilySchema(StateStore.DEFAULT_COL_FAMILY_NAME,
-            newKeySchema, newValueSchema,
+            0, newKeySchema, 0, newValueSchema,
             keyStateEncoderSpec = getKeyStateEncoderSpec(stateSchemaVersion, newKeySchema)))
           StateSchemaCompatibilityChecker.validateAndMaybeEvolveStateSchema(stateInfo, hadoopConf,
             newStateSchema, spark.sessionState, stateSchemaVersion = stateSchemaVersion,
@@ -459,7 +459,7 @@ class StateSchemaCompatibilityCheckerSuite extends SharedSparkSession {
       }
 
       val oldStateSchema = List(StateStoreColFamilySchema(StateStore.DEFAULT_COL_FAMILY_NAME,
-        oldKeySchema, oldValueSchema,
+        0, oldKeySchema, 0, oldValueSchema,
         keyStateEncoderSpec = getKeyStateEncoderSpec(stateSchemaVersion, oldKeySchema)))
       StateSchemaCompatibilityChecker.validateAndMaybeEvolveStateSchema(stateInfo, hadoopConf,
         oldStateSchema, spark.sessionState, stateSchemaVersion = stateSchemaVersion,
@@ -468,7 +468,7 @@ class StateSchemaCompatibilityCheckerSuite extends SharedSparkSession {
         extraOptions = extraOptions)
 
       val newStateSchema = List(StateStoreColFamilySchema(StateStore.DEFAULT_COL_FAMILY_NAME,
-        newKeySchema, newValueSchema,
+        0, newKeySchema, 0, newValueSchema,
         keyStateEncoderSpec = getKeyStateEncoderSpec(stateSchemaVersion, newKeySchema)))
       StateSchemaCompatibilityChecker.validateAndMaybeEvolveStateSchema(stateInfo, hadoopConf,
         newStateSchema, spark.sessionState, stateSchemaVersion = stateSchemaVersion,

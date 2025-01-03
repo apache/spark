@@ -140,7 +140,13 @@ case class TransformWithStateExec(
    * after init is called.
    */
   override def getColFamilySchemas(): Map[String, StateStoreColFamilySchema] = {
-    val columnFamilySchemas = getDriverProcessorHandle().getColumnFamilySchemas
+    val keySchema = keyExpressions.toStructType
+    val defaultSchema = StateStoreColFamilySchema(StateStore.DEFAULT_COL_FAMILY_NAME,
+      0, keyExpressions.toStructType, 0, DUMMY_VALUE_ROW_SCHEMA,
+      Some(NoPrefixKeyStateEncoderSpec(keySchema)))
+
+    val columnFamilySchemas = getDriverProcessorHandle().getColumnFamilySchemas ++
+      Map(StateStore.DEFAULT_COL_FAMILY_NAME -> defaultSchema)
     closeProcessorHandle()
     columnFamilySchemas
   }
@@ -462,12 +468,12 @@ case class TransformWithStateExec(
       stateSchemaVersion: Int): List[StateSchemaValidationResult] = {
     val info = getStateInfo
     validateAndWriteStateSchema(hadoopConf, batchId, stateSchemaVersion,
-      info, session, operatorStateMetadataVersion)
+      info, session, operatorStateMetadataVersion, conf.stateStoreEncodingFormat)
   }
 
   /** Metadata of this stateful operator and its states stores. */
   override def operatorStateMetadata(
-      stateSchemaPaths: List[String]): OperatorStateMetadata = {
+      stateSchemaPaths: List[List[String]]): OperatorStateMetadata = {
     val info = getStateInfo
     getOperatorStateMetadata(stateSchemaPaths, info, shortName, timeMode, outputMode)
   }
@@ -506,6 +512,7 @@ case class TransformWithStateExec(
               NoPrefixKeyStateEncoderSpec(keyEncoder.schema),
               version = stateInfo.get.storeVersion,
               stateStoreCkptId = stateInfo.get.getStateStoreCkptId(partitionId).map(_.head),
+              stateSchemaBroadcast = stateInfo.get.stateSchemaMetadata,
               useColumnFamilies = true,
               storeConf = storeConf,
               hadoopConf = hadoopConfBroadcast.value.value
@@ -548,6 +555,8 @@ case class TransformWithStateExec(
     }
   }
 
+  override def supportsSchemaEvolution: Boolean = true
+
   /**
    * Create a new StateStore for given partitionId and instantiate a temp directory
    * on the executors. Process data and close the stateStore provider afterwards.
@@ -578,7 +587,8 @@ case class TransformWithStateExec(
       useColumnFamilies = true,
       storeConf = storeConf,
       hadoopConf = hadoopConfBroadcast.value.value,
-      useMultipleValuesPerKey = true)
+      useMultipleValuesPerKey = true,
+      stateSchemaProvider = stateInfo.get.stateSchemaMetadata)
 
     val store = stateStoreProvider.getStore(0, None)
     val outputIterator = f(store)
