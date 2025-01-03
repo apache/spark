@@ -55,17 +55,17 @@ case class ReorderedLongs(
 
 // Initial state with basic fields
 case class BasicState(
-id: Int,
-name: String
+    id: Int,
+    name: String
 )
 
 // Evolved state with just primitive types
 case class EvolvedState(
-id: Int,
-name: String,
-count: Long,             // Should default to 0
-active: Boolean,         // Should default to false
-score: Double           // Should default to 0.0
+    id: Int,
+    name: String,
+    count: Long,             // Should default to 0
+    active: Boolean,         // Should default to false
+    score: Double           // Should default to 0.0
 )
 
 // Processor with initial schema
