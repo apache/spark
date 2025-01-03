@@ -1104,7 +1104,7 @@ class BaseUDTFTestsMixin:
         )
 
         assertDataFrameEqual(
-            func(df.asTable().withSinglePartition()),
+            func(row=df.asTable().withSinglePartition()),
             [
                 Row(key=1, value="a"),
                 Row(key=1, value="b"),
