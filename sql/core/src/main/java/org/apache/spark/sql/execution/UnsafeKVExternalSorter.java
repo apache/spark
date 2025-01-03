@@ -114,7 +114,9 @@ public final class UnsafeKVExternalSorter {
       // so that we can always reuse the pointer array.
       if (map.numValues() > pointerArray.size() / 4) {
         // Here we ask the map to allocate memory, so that the memory manager won't ask the map
-        // to spill, if the memory is not enough.
+        // to spill, if the memory is not enough. Also, we free the redundant internal map array
+        // to reduce the overall memory footprint.
+        map.freeInternalArray();
         pointerArray = map.allocateArray(map.numValues() * 4L);
       }
 
