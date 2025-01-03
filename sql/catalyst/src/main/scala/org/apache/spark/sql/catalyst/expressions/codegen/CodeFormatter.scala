@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions.codegen
 
+import java.lang.{StringBuilder => JStringBuilder}
 import java.util.regex.Matcher
 
 /**
@@ -51,7 +52,7 @@ object CodeFormatter {
   }
 
   def stripExtraNewLines(input: String): String = {
-    val code = new StringBuilder
+    val code = new JStringBuilder
     var lastLine: String = "dummy"
     input.split('\n').foreach { l =>
       val line = l.trim()
@@ -62,11 +63,11 @@ object CodeFormatter {
       }
       lastLine = line
     }
-    code.result()
+    code.toString
   }
 
   def stripOverlappingComments(codeAndComment: CodeAndComment): CodeAndComment = {
-    val code = new StringBuilder
+    val code = new JStringBuilder
     val map = codeAndComment.comment
 
     def getComment(line: String): Option[String] = {
@@ -92,7 +93,7 @@ object CodeFormatter {
 
       lastLine = line
     }
-    new CodeAndComment(code.result().trim(), map)
+    new CodeAndComment(code.toString.trim(), map)
   }
 
   def stripExtraNewLinesAndComments(input: String): String = {
@@ -101,7 +102,7 @@ object CodeFormatter {
 }
 
 private class CodeFormatter {
-  private val code = new StringBuilder
+  private val code = new JStringBuilder
   private val indentSize = 2
 
   // Tracks the level of indentation in the current line.
@@ -161,5 +162,5 @@ private class CodeFormatter {
     currentLine += 1
   }
 
-  private def result(): String = code.result()
+  private def result(): String = code.toString
 }
