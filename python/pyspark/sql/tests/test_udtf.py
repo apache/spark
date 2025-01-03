@@ -1082,7 +1082,7 @@ class BaseUDTFTestsMixin:
         func = udtf(TestUDTF, returnType="key: int, value: string")
         df = self.spark.createDataFrame([(1, "a"), (1, "b"), (2, "c"), (2, "d")], ["key", "value"])
         assertDataFrameEqual(
-            func(df.asTable().partitionBy(df.key).orderBy(df.value)),
+            func(df.asTable().partitionBy("key").orderBy(df.value)),
             [
                 Row(key=1, value="a"),
                 Row(key=1, value="b"),
@@ -1093,7 +1093,7 @@ class BaseUDTFTestsMixin:
         )
 
         assertDataFrameEqual(
-            func(df.asTable().partitionBy(df.key).orderBy(df.value.desc())),
+            func(df.asTable().partitionBy("key").orderBy(df.value.desc())),
             [
                 Row(key=1, value="b"),
                 Row(key=1, value="a"),
@@ -1114,7 +1114,7 @@ class BaseUDTFTestsMixin:
         )
 
         assertDataFrameEqual(
-            func(df.asTable().withSinglePartition().orderBy(df.value)),
+            func(df.asTable().withSinglePartition().orderBy("value")),
             [
                 Row(key=1, value="a"),
                 Row(key=1, value="b"),
