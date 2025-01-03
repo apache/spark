@@ -15535,11 +15535,21 @@ def regexp_replace(
 
     Examples
     --------
+    >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([("100-200", r"(\d+)", "--")], ["str", "pattern", "replacement"])
-    >>> df.select(regexp_replace('str', r'(\d+)', '--').alias('d')).collect()
-    [Row(d='-----')]
-    >>> df.select(regexp_replace("str", col("pattern"), col("replacement")).alias('d')).collect()
-    [Row(d='-----')]
+    >>> df.select('*', sf.regexp_replace('str', r'(\d+)', '--')).show()
+    +-------+-------+-----------+---------------------------------+
+    |    str|pattern|replacement|regexp_replace(str, (\d+), --, 1)|
+    +-------+-------+-----------+---------------------------------+
+    |100-200|  (\d+)|         --|                            -----|
+    +-------+-------+-----------+---------------------------------+
+
+    >>> df.select('*', sf.regexp_replace(sf.col("str"), sf.col("pattern"), sf.col("replacement"))).show()
+    +-------+-------+-----------+--------------------------------------------+
+    |    str|pattern|replacement|regexp_replace(str, pattern, replacement, 1)|
+    +-------+-------+-----------+--------------------------------------------+
+    |100-200|  (\d+)|         --|                                       -----|
+    +-------+-------+-----------+--------------------------------------------+
     """
     return _invoke_function_over_columns("regexp_replace", string, lit(pattern), lit(replacement))
 
@@ -15553,9 +15563,9 @@ def regexp_substr(str: "ColumnOrName", regexp: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    str : :class:`~pyspark.sql.Column` or str
+    str : :class:`~pyspark.sql.Column` or column name
         target column to work on.
-    regexp : :class:`~pyspark.sql.Column` or str
+    regexp : :class:`~pyspark.sql.Column` or column name
         regex pattern to apply.
 
     Returns
@@ -15565,13 +15575,35 @@ def regexp_substr(str: "ColumnOrName", regexp: "ColumnOrName") -> Column:
 
     Examples
     --------
+    >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([("1a 2b 14m", r"\d+")], ["str", "regexp"])
-    >>> df.select(regexp_substr('str', lit(r'\d+')).alias('d')).collect()
-    [Row(d='1')]
-    >>> df.select(regexp_substr('str', lit(r'mmm')).alias('d')).collect()
-    [Row(d=None)]
-    >>> df.select(regexp_substr("str", col("regexp")).alias('d')).collect()
-    [Row(d='1')]
+    >>> df.select('*', sf.regexp_substr('str', sf.lit(r'\d+'))).show()
+    +---------+------+-----------------------+
+    |      str|regexp|regexp_substr(str, \d+)|
+    +---------+------+-----------------------+
+    |1a 2b 14m|   \d+|                      1|
+    +---------+------+-----------------------+
+
+    >>> df.select('*', sf.regexp_substr('str', sf.lit(r'mmm'))).show()
+    +---------+------+-----------------------+
+    |      str|regexp|regexp_substr(str, mmm)|
+    +---------+------+-----------------------+
+    |1a 2b 14m|   \d+|                   NULL|
+    +---------+------+-----------------------+
+
+    >>> df.select('*', sf.regexp_substr("str", sf.col("regexp"))).show()
+    +---------+------+--------------------------+
+    |      str|regexp|regexp_substr(str, regexp)|
+    +---------+------+--------------------------+
+    |1a 2b 14m|   \d+|                         1|
+    +---------+------+--------------------------+
+
+    >>> df.select('*', sf.regexp_substr(sf.col("str"), "regexp")).show()
+    +---------+------+--------------------------+
+    |      str|regexp|regexp_substr(str, regexp)|
+    +---------+------+--------------------------+
+    |1a 2b 14m|   \d+|                         1|
+    +---------+------+--------------------------+
     """
     return _invoke_function_over_columns("regexp_substr", str, regexp)
 
@@ -15587,11 +15619,11 @@ def regexp_instr(
 
     Parameters
     ----------
-    str : :class:`~pyspark.sql.Column` or str
+    str : :class:`~pyspark.sql.Column` or column name
         target column to work on.
-    regexp : :class:`~pyspark.sql.Column` or str
+    regexp : :class:`~pyspark.sql.Column` or column name
         regex pattern to apply.
-    idx : int, optional
+    idx : :class:`~pyspark.sql.Column` or int, optional
         matched group id.
 
     Returns
@@ -15601,15 +15633,42 @@ def regexp_instr(
 
     Examples
     --------
+    >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([("1a 2b 14m", r"\d+(a|b|m)")], ["str", "regexp"])
-    >>> df.select(regexp_instr('str', lit(r'\d+(a|b|m)')).alias('d')).collect()
-    [Row(d=1)]
-    >>> df.select(regexp_instr('str', lit(r'\d+(a|b|m)'), 1).alias('d')).collect()
-    [Row(d=1)]
-    >>> df.select(regexp_instr('str', lit(r'\d+(a|b|m)'), 2).alias('d')).collect()
-    [Row(d=1)]
-    >>> df.select(regexp_instr('str', col("regexp")).alias('d')).collect()
-    [Row(d=1)]
+    >>> df.select('*', sf.regexp_instr('str', sf.lit(r'\d+(a|b|m)'))).show()
+    +---------+----------+--------------------------------+
+    |      str|    regexp|regexp_instr(str, \d+(a|b|m), 0)|
+    +---------+----------+--------------------------------+
+    |1a 2b 14m|\d+(a|b|m)|                               1|
+    +---------+----------+--------------------------------+
+
+    >>> df.select('*', sf.regexp_instr('str', sf.lit(r'\d+(a|b|m)'), sf.lit(1))).show()
+    +---------+----------+--------------------------------+
+    |      str|    regexp|regexp_instr(str, \d+(a|b|m), 1)|
+    +---------+----------+--------------------------------+
+    |1a 2b 14m|\d+(a|b|m)|                               1|
+    +---------+----------+--------------------------------+
+
+    >>> df.select('*', sf.regexp_instr('str', sf.lit(r'\d+(a|b|m)'), 2)).show()
+    +---------+----------+--------------------------------+
+    |      str|    regexp|regexp_instr(str, \d+(a|b|m), 2)|
+    +---------+----------+--------------------------------+
+    |1a 2b 14m|\d+(a|b|m)|                               1|
+    +---------+----------+--------------------------------+
+
+    >>> df.select('*', sf.regexp_instr('str', sf.col("regexp"))).show()
+    +---------+----------+----------------------------+
+    |      str|    regexp|regexp_instr(str, regexp, 0)|
+    +---------+----------+----------------------------+
+    |1a 2b 14m|\d+(a|b|m)|                           1|
+    +---------+----------+----------------------------+
+
+    >>> df.select('*', sf.regexp_instr(sf.col("str"), "regexp")).show()
+    +---------+----------+----------------------------+
+    |      str|    regexp|regexp_instr(str, regexp, 0)|
+    +---------+----------+----------------------------+
+    |1a 2b 14m|\d+(a|b|m)|                           1|
+    +---------+----------+----------------------------+
     """
     if idx is None:
         return _invoke_function_over_columns("regexp_instr", str, regexp)
