@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.command.v2
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.catalog.TempVariableManager
+import org.apache.spark.sql.catalyst.catalog.VariableManager
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Literal, VariableReference}
 import org.apache.spark.sql.catalyst.trees.UnaryLike
 import org.apache.spark.sql.execution.SparkPlan
@@ -32,11 +32,14 @@ case class SetVariableExec(variables: Seq[VariableReference], query: SparkPlan)
   extends V2CommandExec with UnaryLike[SparkPlan] {
 
   override protected def run(): Seq[InternalRow] = {
-    val variableManager = session.sessionState.catalogManager.tempVariableManager
+    val tempVariableManager = session.sessionState.catalogManager.tempVariableManager
+    val scriptingVariableManager = session.sessionState.catalogManager.scriptingLocalVariableManager
+    val manager = scriptingVariableManager.getOrElse(tempVariableManager)
+
     val values = query.executeCollect()
     if (values.length == 0) {
       variables.foreach { v =>
-        createVariable(variableManager, v, null)
+        createVariable(manager, v, null)
       }
     } else if (values.length > 1) {
       throw new SparkException(
@@ -47,14 +50,14 @@ case class SetVariableExec(variables: Seq[VariableReference], query: SparkPlan)
       val row = values(0)
       variables.zipWithIndex.foreach { case (v, index) =>
         val value = row.get(index, v.dataType)
-        createVariable(variableManager, v, value)
+        createVariable(manager, v, value)
       }
     }
     Seq.empty
   }
 
   private def createVariable(
-      variableManager: TempVariableManager,
+      variableManager: VariableManager,
       variable: VariableReference,
       value: Any): Unit = {
     variableManager.create(

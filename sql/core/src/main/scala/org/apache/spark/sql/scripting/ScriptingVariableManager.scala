@@ -66,7 +66,7 @@ class ScriptingVariableManager(context: SqlScriptingExecutionContext)
 
   override def remove(name: String): Boolean = {
     // probably throw error
-    true
+    throw new Exception("cant remove local var")
   }
 
   // todo LOCALVARS: create errorclass for this

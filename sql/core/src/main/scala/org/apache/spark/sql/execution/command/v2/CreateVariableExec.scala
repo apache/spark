@@ -41,16 +41,22 @@ case class CreateVariableExec(
     initializeExprs(exprs, 0)
     val initValue = Literal(exprs.head.eval(), defaultExpr.dataType)
 
-    // todo LOCALVARS: should we do this for the entire identifier or only name
-    val normalizedName = if (session.sessionState.conf.caseSensitiveAnalysis) {
-      identifier.name()
+    val normalizedIdentifier = if (session.sessionState.conf.caseSensitiveAnalysis) {
+      identifier
     } else {
-      identifier.name().toLowerCase(Locale.ROOT)
+      Identifier.of(
+        identifier.namespace().map(_.toLowerCase(Locale.ROOT)),
+        identifier.name().toLowerCase(Locale.ROOT))
     }
 
     // create local variable if we are in a script, otherwise create session variable
     scriptingVariableManager.getOrElse(tempVariableManager)
-      .create(normalizedName, defaultExpr.originalSQL, initValue, replace, identifier)
+      .create(
+        normalizedIdentifier.name(),
+        defaultExpr.originalSQL,
+        initValue,
+        replace,
+        normalizedIdentifier)
 
     Nil
   }

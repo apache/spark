@@ -265,13 +265,6 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
       }
     }
 
-//    val variableName = if (conf.caseSensitiveAnalysis) {
-//      nameParts.last
-//    } else {
-//      nameParts.last.toLowerCase(Locale.ROOT)
-//    }
-
-    // todo LOCALVARS: should we do this for all nameParts or only name
     val namePartsCaseAdjusted = if (conf.caseSensitiveAnalysis) {
       nameParts
     } else {
