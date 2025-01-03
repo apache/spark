@@ -19,6 +19,7 @@ import os
 import json
 import sys
 import random
+import functools
 import warnings
 from collections.abc import Iterable
 from functools import reduce, cached_property
@@ -1695,6 +1696,19 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
         self, func: Callable[..., ParentDataFrame], *args: Any, **kwargs: Any
     ) -> ParentDataFrame:
         result = func(self, *args, **kwargs)
+        assert isinstance(
+            result, DataFrame
+        ), "Func returned an instance of type [%s], " "should have been DataFrame." % type(result)
+        return result
+
+    def pipe(
+        self, *funcs: tuple[Callable[..., ParentDataFrame]]
+    ) -> ParentDataFrame:
+        result = functools.reduce(
+            lambda init, func: init.transform(func),
+            funcs,
+            self
+        )
         assert isinstance(
             result, DataFrame
         ), "Func returned an instance of type [%s], " "should have been DataFrame." % type(result)
