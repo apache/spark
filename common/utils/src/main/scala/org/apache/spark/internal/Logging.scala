@@ -398,7 +398,7 @@ private[spark] object Logging {
   @volatile private var initialized = false
   @volatile private var defaultRootLevel: Level = null
   @volatile private var defaultSparkLog4jConfig = false
-  @volatile private var structuredLoggingEnabled = true
+  @volatile private var structuredLoggingEnabled = false
   @volatile private[spark] var sparkShellThresholdLevel: Level = null
   @volatile private[spark] var setLogLevelPrinted: Boolean = false
 

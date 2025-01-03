@@ -2689,7 +2689,7 @@ private[spark] object Utils
    * loading SparkConf.
    */
   def resetStructuredLogging(sparkConf: SparkConf): Unit = {
-    if (sparkConf.getBoolean(STRUCTURED_LOGGING_ENABLED.key, defaultValue = true)) {
+    if (sparkConf.getBoolean(STRUCTURED_LOGGING_ENABLED.key, defaultValue = false)) {
       Logging.enableStructuredLogging()
     } else {
       Logging.disableStructuredLogging()

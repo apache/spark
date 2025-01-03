@@ -3757,8 +3757,7 @@ Spark uses [log4j](http://logging.apache.org/log4j/) for logging. You can config
 `log4j2.properties` file in the `conf` directory. One way to start is to copy the existing templates `log4j2.properties.template` or `log4j2.properties.pattern-layout-template` located there.
 
 ## Structured Logging
-Starting from version 4.0.0, `spark-submit` has adopted the [JSON Template Layout](https://logging.apache.org/log4j/2.x/manual/json-template-layout.html) for logging, which outputs logs in JSON format. This format facilitates querying logs using Spark SQL with the JSON data source. Additionally, the logs include all Mapped Diagnostic Context (MDC) information for search and debugging purposes.
-
+Beginning with version 4.0.0, you can optionally enable structured logging based on the [JSON Template Layout](https://logging.apache.org/log4j/2.x/manual/json-template-layout.html). This JSON format makes it easy to query logs with Spark SQL using the JSON data source and includes all Mapped Diagnostic Context (MDC) information for more efficient searching and debugging.
 To configure the layout of structured logging, start with the `log4j2.properties.template` file.
 
 To query Spark logs using Spark SQL, you can use the following code snippets:

@@ -162,7 +162,7 @@ package object config {
         "PySpark shell.")
       .version("4.0.0")
       .booleanConf
-      .createWithDefault(true)
+      .createWithDefault(false)
 
   private[spark] val LEGACY_TASK_NAME_MDC_ENABLED =
     ConfigBuilder("spark.log.legacyTaskNameMdc.enabled")
