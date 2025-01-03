@@ -77,7 +77,7 @@ case class InlineCTE(
   private def buildCTEMap(
       plan: LogicalPlan,
       cteMap: mutable.Map[Long, CTEReferenceInfo],
-      collectCTERefs: CTERelationRef => Unit = _ => ()): Unit = {
+      collectCTERefs: (CTERelationRef, Seq[Long]) => Unit = (_, _) => ()): Unit = {
     plan match {
       case WithCTE(child, cteDefs) =>
         cteDefs.foreach { cteDef =>
@@ -85,29 +85,44 @@ case class InlineCTE(
             cteDef = cteDef,
             refCount = 0,
             outgoingRefs = mutable.Map.empty.withDefaultValue(0),
+            indirectOutgoingRefSources = mutable.Set.empty[Long],
             shouldInline = true
           )
         }
         cteDefs.foreach { cteDef =>
-          buildCTEMap(cteDef, cteMap, ref => {
-            // A CTE relation can references CTE relations defined before it in the same `WithCTE`.
-            // Here we update the out-going-ref-count for it, in case this CTE relation is not
-            // referenced at all and can be optimized out, and we need to decrease the ref counts
-            // for CTE relations that are referenced by it.
+          buildCTEMap(cteDef, cteMap, (ref, lineage) => {
             if (cteDefs.exists(_.id == ref.cteId)) {
-              cteMap(cteDef.id).increaseOutgoingRefCount(ref.cteId, 1)
+              // The CTE relation being referenced is defined by this WITH. We need to do some
+              // bookkeeping here w.r.t. the lineage of this reference.
+              //  - Update the outgoing ref count of the bottom-most CTE relation that directly
+              //    reference the CTE relation. The bottom-most CTE relation can be the current
+              //    CTE relation if lineage is empty. This is in case the bottom-most CTE relation
+              //    is not referenced at all and can be optimized out, and we need to decrease the
+              //    ref counts for CTE relations that are referenced by it.
+              //  - Update indirect outgoing ref sources of all the CTE relations on the
+              //    lineage (except for the bottom-most one). It's important to record this lineage,
+              //    so that we can decrease ref counts properly if any CTE relation on the lineage
+              //    is not referenced at all. Assume the lineage is t1 -> t2 -> t3 -> t4-ref, t3 is
+              //    the bottom-most CTE relation. If t1 or t2 turns out to be not referenced at all,
+              //    we can trace down the lineage and finally decrease the ref count of t4 by t3.
+              if (lineage.isEmpty) {
+                cteMap(cteDef.id).increaseOutgoingRefCount(ref.cteId, 1)
+              } else {
+                cteMap(lineage.head).increaseOutgoingRefCount(ref.cteId, 1)
+                lineage.appended(cteDef.id).sliding(2).foreach {
+                  case Seq(source, parent) => cteMap(parent).addIndirectOutgoingRefSource(source)
+                }
+              }
+            } else {
+              collectCTERefs(ref, lineage :+ cteDef.id)
             }
-            // Similarly, a CTE relation can reference CTE relations defined in the outer `WithCTE`.
-            // Here we call the `collectCTERefs` function so that the outer CTE can also update the
-            // out-going-ref-count if needed.
-            collectCTERefs(ref)
           })
         }
         buildCTEMap(child, cteMap, collectCTERefs)
 
       case ref: CTERelationRef =>
         cteMap(ref.cteId) = cteMap(ref.cteId).withRefCountIncreased(1)
-        collectCTERefs(ref)
+        collectCTERefs(ref, Nil)
       case _ =>
         if (plan.containsPattern(CTE)) {
           plan.children.foreach { child =>
@@ -137,10 +152,23 @@ case class InlineCTE(
     cteMap.keys.toSeq.reverse.foreach { currentCTEId =>
       val refInfo = cteMap(currentCTEId)
       if (refInfo.refCount == 0) {
-        refInfo.outgoingRefs.foreach { case (referencedCTEId, uselessRefCount) =>
-          cteMap(referencedCTEId) = cteMap(referencedCTEId).withRefCountDecreased(uselessRefCount)
-        }
+        decreaseUseLessRefCount(cteMap, refInfo)
       }
+    }
+  }
+
+  private def decreaseUseLessRefCount(
+      cteMap: mutable.SortedMap[Long, CTEReferenceInfo],
+      refInfo: CTEReferenceInfo): Unit = {
+    refInfo.outgoingRefs.foreach { case (referencedCTEId, uselessRefCount) =>
+      cteMap(referencedCTEId) = cteMap(referencedCTEId).withRefCountDecreased(uselessRefCount)
+    }
+    // It's important to clear the `outgoingRefs` here, as we may hit the same CTE relation more
+    // than once, if more than one CTE relations in the reference lineage have ref count 0. We must
+    // avoid over decreasing the ref counts.
+    refInfo.outgoingRefs.clear()
+    refInfo.indirectOutgoingRefSources.foreach { sourceId =>
+      decreaseUseLessRefCount(cteMap, cteMap(sourceId))
     }
   }
 
@@ -224,12 +252,24 @@ case class InlineCTE(
  * @param refCount The number of incoming references to this CTE relation. This includes references
  *                 from other CTE relations and regular places.
  * @param outgoingRefs A mutable map that tracks outgoing reference counts to other CTE relations.
+ * @param indirectOutgoingRefSources The ids of nested CTE relations within this CTE relation that
+ *                                   provide outgoing references indirectly. For example:
+ *                                   WITH
+ *                                     t1 AS (...),
+ *                                     t2 AS (
+ *                                       WITH
+ *                                         t3 AS (SELECT * FROM t1)
+ *                                     )
+ *                                   The t2 references t1 indirectly via t3. So t1 is part of
+ *                                   outgoingRefs of t3, and t3 is an indirect outgoing ref source
+ *                                   of t2.
  * @param shouldInline If true, this CTE relation should be inlined in the places that reference it.
  */
 case class CTEReferenceInfo(
     cteDef: CTERelationDef,
     refCount: Int,
     outgoingRefs: mutable.Map[Long, Int],
+    indirectOutgoingRefSources: mutable.Set[Long],
     shouldInline: Boolean) {
 
   def withRefCountIncreased(count: Int): CTEReferenceInfo = {
@@ -242,5 +282,9 @@ case class CTEReferenceInfo(
 
   def increaseOutgoingRefCount(cteDefId: Long, count: Int): Unit = {
     outgoingRefs(cteDefId) += count
+  }
+
+  def addIndirectOutgoingRefSource(cteDefId: Long): Unit = {
+    indirectOutgoingRefSources += cteDefId
   }
 }
