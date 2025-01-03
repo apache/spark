@@ -173,7 +173,9 @@ private[deploy] class ExecutorRunner(
       builder.environment.put("SPARK_LAUNCH_WITH_SCALA", "0")
 
       if (LocalSparkCluster.get.isDefined) {
-        builder.environment().put(ExternalShuffleService.TESTING_ESS_PORT_ENV, shuffleServicePort.get.toString)
+        builder.environment().put(
+          ExternalShuffleService.TESTING_ESS_PORT_ENV, shuffleServicePort.get.toString
+        )
       }
 
       // Add webUI log urls
