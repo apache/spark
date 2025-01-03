@@ -90,6 +90,7 @@ to return the metadata pertaining to a partition or column respectively.
         "name": "<name>",
         "type": <type_json>,
         "comment": "<comment>",
+        "nullable": <boolean>,
         "default": "<default_val>"
         }
       ],

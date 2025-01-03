@@ -847,7 +847,7 @@ case class DescribeTableJsonCommand(
             "type" -> jsonType(field.dataType),
             "nullable" -> JBool(field.nullable),
             "comment" -> field.getComment().map(JString).getOrElse(JNull),
-            "default_value" -> defaultValues.get(field.name).map(JString).getOrElse(JNull)
+            "default" -> defaultValues.get(field.name).map(JString).getOrElse(JNull)
           )
         }.toList
         JObject(
@@ -921,13 +921,10 @@ case class DescribeTableJsonCommand(
         List(JField("comment", JString(comment)))
       }.getOrElse(Nil)
 
-      val nullableField: List[JField] =
-        if (column.nullable) {
-          List(JField("nullable", JBool(column.nullable)))
-        } else Nil
+      val nullableField: List[JField] = List(JField("nullable", JBool(column.nullable)))
 
       val defaultValueField: List[JField] = defaultValuesMap.get(column.name).map { defaultValue =>
-        List(JField("default_value", JString(defaultValue)))
+        List(JField("default", JString(defaultValue)))
       }.getOrElse(Nil)
 
       JObject(baseFields ++ commentField ++ nullableField ++ defaultValueField)

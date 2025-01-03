@@ -337,10 +337,10 @@ class DescribeTableSuite extends DescribeTableSuiteBase with CommandSuiteBase {
         namespace = Some(List("ns")),
         schema_name = Some("ns"),
         columns = Some(List(
-          TableColumn("employee_id", Type("integer")),
-          TableColumn("employee_name", Type("string")),
-          TableColumn("department", Type("string")),
-          TableColumn("hire_date", Type("date"))
+          TableColumn("employee_id", Type("integer"), true),
+          TableColumn("employee_name", Type("string"), true),
+          TableColumn("department", Type("string"), true),
+          TableColumn("hire_date", Type("date"), true)
         )),
         owner = Some(""),
         created_time = Some(""),
@@ -406,10 +406,10 @@ class DescribeTableSuite extends DescribeTableSuiteBase with CommandSuiteBase {
         namespace = Some(List("ns")),
         schema_name = Some("ns"),
         columns = Some(List(
-          TableColumn("id", Type("integer")),
-          TableColumn("name", Type("string")),
-          TableColumn("region", Type("string")),
-          TableColumn("category", Type("string"))
+          TableColumn("id", Type("integer"), true),
+          TableColumn("name", Type("string"), true),
+          TableColumn("region", Type("string"), true),
+          TableColumn("category", Type("string"), true)
         )),
         last_access = Some("UNKNOWN"),
         created_by = Some("Spark 4.0.0-SNAPSHOT"),
@@ -473,11 +473,11 @@ class DescribeTableSuite extends DescribeTableSuiteBase with CommandSuiteBase {
         namespace = Some(List("ns")),
         schema_name = Some("ns"),
         columns = Some(List(
-          TableColumn("id", Type("integer"), default_value = Some("1")),
-          TableColumn("name", Type("string"), default_value = Some("'unknown'")),
-          TableColumn("created_at", Type("timestamp_ltz"),
-            default_value = Some("CURRENT_TIMESTAMP")),
-          TableColumn("is_active", Type("boolean"), default_value = Some("true"))
+          TableColumn("id", Type("integer"), nullable = true, default = Some("1")),
+          TableColumn("name", Type("string"), nullable = true, default = Some("'unknown'")),
+          TableColumn("created_at", Type("timestamp_ltz"), nullable = true,
+            default = Some("CURRENT_TIMESTAMP")),
+          TableColumn("is_active", Type("boolean"), nullable = true, default = Some("true"))
         )),
         last_access = Some("UNKNOWN"),
         created_by = Some("Spark 4.0.0-SNAPSHOT"),
@@ -527,9 +527,9 @@ class DescribeTableSuite extends DescribeTableSuiteBase with CommandSuiteBase {
 
         val expectedOutput = DescribeTableJson(
           columns = Some(List(
-            TableColumn("id", Type("integer")),
-            TableColumn("name", Type("string")),
-            TableColumn("created_at", Type("timestamp_ltz"))
+            TableColumn("id", Type("integer"), nullable = true),
+            TableColumn("name", Type("string"), nullable = true),
+            TableColumn("created_at", Type("timestamp_ltz"), nullable = true)
           ))
         )
 
@@ -563,9 +563,9 @@ class DescribeTableSuite extends DescribeTableSuiteBase with CommandSuiteBase {
           namespace = Some(List("default")),
           schema_name = Some("default"),
           columns = Some(List(
-            TableColumn("id", Type("integer")),
-            TableColumn("name", Type("string")),
-            TableColumn("created_at", Type("timestamp_ltz"))
+            TableColumn("id", Type("integer"), nullable = true),
+            TableColumn("name", Type("string"), nullable = true),
+            TableColumn("created_at", Type("timestamp_ltz"), nullable = true)
           )),
           serde_library = Some("org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe"),
           inputformat = Some("org.apache.hadoop.mapred.SequenceFileInputFormat"),
@@ -665,12 +665,12 @@ class DescribeTableSuite extends DescribeTableSuiteBase with CommandSuiteBase {
                 Field(
                   name = "name",
                   `type` = Type("string"),
-                  nullable = Some(true)
+                  nullable = true
                 ),
                 Field(
                   name = "age",
                   `type` = Type("integer"),
-                  nullable = Some(true)
+                  nullable = true
                 ),
                 Field(
                   name = "contact",
@@ -680,7 +680,7 @@ class DescribeTableSuite extends DescribeTableSuiteBase with CommandSuiteBase {
                       Field(
                         name = "email",
                         `type` = Type("string"),
-                        nullable = Some(true)
+                        nullable = true
                       ),
                       Field(
                         name = "phone_numbers",
@@ -689,7 +689,7 @@ class DescribeTableSuite extends DescribeTableSuiteBase with CommandSuiteBase {
                           elementType = Some(Type("string")),
                           containsNull = Some(true)
                         ),
-                        nullable = Some(true)
+                        nullable = true
                       ),
                       Field(
                         name = "addresses",
@@ -701,31 +701,32 @@ class DescribeTableSuite extends DescribeTableSuiteBase with CommandSuiteBase {
                               Field(
                                 name = "street",
                                 `type` = Type("string"),
-                                nullable = Some(true)
+                                nullable = true
                               ),
                               Field(
                                 name = "city",
                                 `type` = Type("string"),
-                                nullable = Some(true)
+                                nullable = true
                               ),
                               Field(
                                 name = "zip",
                                 `type` = Type("integer"),
-                                nullable = Some(true)
+                                nullable = true
                               )
                             ))
                           )),
                           containsNull = Some(true)
                         ),
-                        nullable = Some(true)
+                        nullable = true
                       )
                     ))
                   ),
-                  nullable = Some(true)
+                  nullable = true
                 )
               ))
             ),
-            default_value = None
+            nullable = true,
+            default = None
           ),
           TableColumn(
             name = "preferences",
@@ -739,12 +740,14 @@ class DescribeTableSuite extends DescribeTableSuiteBase with CommandSuiteBase {
               )),
               valueContainsNull = Some(true)
             ),
-            default_value = None
+            nullable = true,
+            default = None
           ),
           TableColumn(
             name = "id",
             `type` = Type("string"),
-            default_value = None
+            nullable = true,
+            default = None
           )
         )),
         serde_library = Some("org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe"),
@@ -814,7 +817,9 @@ case class DescribeTableJson(
 case class TableColumn(
   name: String,
   `type`: Type,
-  default_value: Option[String] = None
+  nullable: Boolean = true,
+  comment: Option[String] = None,
+  default: Option[String] = None
 )
 
 case class Type(
@@ -825,7 +830,7 @@ case class Type(
    valueType: Option[Type] = None,
    nullable: Option[Boolean] = None,
    comment: Option[String] = None,
-   defaultValue: Option[String] = None,
+   default: Option[String] = None,
    containsNull: Option[Boolean] = None,
    valueContainsNull: Option[Boolean] = None
  )
@@ -833,7 +838,7 @@ case class Type(
 case class Field(
   name: String,
   `type`: Type,
-  nullable: Option[Boolean] = None,
+  nullable: Boolean = true,
   comment: Option[String] = None,
-  defaultValue: Option[String] = None,
+  default: Option[String] = None
 )
