@@ -87,11 +87,15 @@ to return the metadata pertaining to a partition or column respectively.
       "provider": "<provider>",
       "columns": [
         {
-        "name": "<name>",
-        "type": <type_json>,
-        "comment": "<comment>",
-        "nullable": <boolean>,
-        "default": "<default_val>"
+          "name": "<name>",
+          "type": <type_json>,
+          "comment": "<comment>",
+          "nullable": <boolean>,
+          "default": "<default_val>"
+          "metadata": {
+            "key1": "<val1>",
+            "key2": "<val2>"
+          }
         }
       ],
       "partition_values": {
