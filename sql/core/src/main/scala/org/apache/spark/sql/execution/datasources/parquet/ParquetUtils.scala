@@ -485,7 +485,8 @@ object ParquetUtils extends Logging {
     }
 
     // This metadata is useful for keeping UDTs like Vector/Matrix.
-    ParquetWriteSupport.setSchema(dataSchema, conf, shreddingSchema)
+    ParquetWriteSupport.setSchema(dataSchema, conf)
+    shreddingSchema.foreach(ParquetWriteSupport.setShreddingSchema(_, conf))
 
     // Sets flags for `ParquetWriteSupport`, which converts Catalyst schema to Parquet
     // schema and writes actual rows to Parquet files.
