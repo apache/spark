@@ -55,6 +55,12 @@ case class PipeExpression(child: Expression, isAggregate: Boolean, clause: Strin
     case _ =>
       e.children.flatMap(findFirstAggregate).headOption
   }
+
+  /**
+   * Generate the SQL string representation of this expression as the same as the child expression
+   * it wraps. In this way, the presence of the pipe operator is not visible in the SQL string.
+   */
+  override def sql: String = child.sql
 }
 
 object PipeOperators {
