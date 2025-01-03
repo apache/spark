@@ -172,7 +172,7 @@ private[deploy] class ExecutorRunner(
       // parent process for the executor command
       builder.environment.put("SPARK_LAUNCH_WITH_SCALA", "0")
 
-      if (LocalSparkCluster.get.isDefined) {
+      if (shuffleServicePort.isDefined && LocalSparkCluster.get.isDefined) {
         builder.environment().put(
           ExternalShuffleService.TESTING_ESS_PORT_ENV, shuffleServicePort.get.toString
         )
