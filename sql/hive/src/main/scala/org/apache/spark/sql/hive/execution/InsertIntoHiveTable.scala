@@ -33,7 +33,7 @@ import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.command.CommandUtils
-import org.apache.spark.sql.execution.datasources.{ClusterSpec, FileFormat, V1WriteCommand, V1WritesUtils}
+import org.apache.spark.sql.execution.datasources.{FileFormat, V1WriteCommand, V1WritesUtils}
 import org.apache.spark.sql.hive.client.HiveClientImpl
 
 
@@ -85,8 +85,8 @@ case class InsertIntoHiveTable(
     partition.filter(_._2.nonEmpty).map { case (k, v) => k -> v.get }
   }
 
-  override def clusterSpec: Option[ClusterSpec] = {
-    V1WritesUtils.getClusterSpec(outputColumns, partitionColumns, bucketSpec, options)
+  override def requiredOrdering: Seq[SortOrder] = {
+    V1WritesUtils.getSortOrder(outputColumns, partitionColumns, bucketSpec, options)
   }
 
   /**
