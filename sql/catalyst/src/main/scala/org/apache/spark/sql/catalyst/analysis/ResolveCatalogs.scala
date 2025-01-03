@@ -74,28 +74,32 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
   }
 
   private def resolveVariableName(nameParts: Seq[String]): ResolvedIdentifier = {
-    def ident: Identifier = Identifier.of(Array(CatalogManager.SESSION_NAMESPACE), nameParts.last)
-    // todo LOCALVARS: update to support local vars
-    if (nameParts.length == 1) {
-      ResolvedIdentifier(FakeSystemCatalog, ident)
-    } else if (nameParts.length == 2) {
-      if (nameParts.head.equalsIgnoreCase(CatalogManager.SESSION_NAMESPACE)) {
-        ResolvedIdentifier(FakeSystemCatalog, ident)
-      } else {
-        throw QueryCompilationErrors.unresolvedVariableError(
-          nameParts, Seq(CatalogManager.SYSTEM_CATALOG_NAME, CatalogManager.SESSION_NAMESPACE))
-      }
-    } else if (nameParts.length == 3) {
-      if (nameParts(0).equalsIgnoreCase(CatalogManager.SYSTEM_CATALOG_NAME) &&
-        nameParts(1).equalsIgnoreCase(CatalogManager.SESSION_NAMESPACE)) {
-        ResolvedIdentifier(FakeSystemCatalog, ident)
-      } else {
-        throw QueryCompilationErrors.unresolvedVariableError(
-          nameParts, Seq(CatalogManager.SYSTEM_CATALOG_NAME, CatalogManager.SESSION_NAMESPACE))
-      }
-    } else {
-      throw QueryCompilationErrors.unresolvedVariableError(
-        nameParts, Seq(CatalogManager.SYSTEM_CATALOG_NAME, CatalogManager.SESSION_NAMESPACE))
+    if (catalogManager.scriptingLocalVariableManager.isDefined && nameParts.length != 1) {
+      // todo LOCALVARS: create errorclass for this
+      throw new Exception("must be unqualified")
     }
+
+    val ident: Identifier = catalogManager.scriptingLocalVariableManager
+      .getOrElse(catalogManager.tempVariableManager)
+      .createIdentifier(nameParts.last)
+
+    nameParts.length match {
+      case 1 =>
+        ResolvedIdentifier(FakeSystemCatalog, ident)
+
+      case 2 if nameParts.head.equalsIgnoreCase(CatalogManager.SESSION_NAMESPACE) =>
+        ResolvedIdentifier(FakeSystemCatalog, ident)
+
+      case 3 if nameParts(0).equalsIgnoreCase(CatalogManager.SYSTEM_CATALOG_NAME) &&
+        nameParts(1).equalsIgnoreCase(CatalogManager.SESSION_NAMESPACE) =>
+        ResolvedIdentifier(FakeSystemCatalog, ident)
+
+      case _ =>
+        // todo LOCALVARS: update this error
+        throw QueryCompilationErrors.unresolvedVariableError(
+          nameParts, Seq(CatalogManager.SYSTEM_CATALOG_NAME, CatalogManager.SESSION_NAMESPACE)
+        )
+    }
+
   }
 }

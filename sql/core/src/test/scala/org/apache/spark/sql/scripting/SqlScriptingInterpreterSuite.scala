@@ -139,6 +139,49 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
 //    verifySqlScriptResult(sqlScript, expected)
   }
 
+  test("testtest4") {
+    val sqlScript =
+      """
+        |BEGIN
+        | lbl: BEGIN
+        |  DECLARE var = 1;
+        |  SELECT lbl.var;
+        | END;
+        |END
+        |""".stripMargin
+
+    val r = spark.sql(sqlScript).collect()
+
+    val expected = Seq(
+      Seq.empty[Row], // declare var
+      Seq(Row(1)), // select
+      Seq.empty[Row] // drop var
+    )
+    //    verifySqlScriptResult(sqlScript, expected)
+  }
+
+  test("testtest5") {
+    val sqlScript =
+      """
+        |BEGIN
+        | lbl: BEGIN
+        |  DECLARE var = 1;
+        |  DECLARE var = 2;
+        |  SELECT lbl.var;
+        | END;
+        |END
+        |""".stripMargin
+
+    val r = spark.sql(sqlScript).collect()
+
+    val expected = Seq(
+      Seq.empty[Row], // declare var
+      Seq(Row(1)), // select
+      Seq.empty[Row] // drop var
+    )
+    //    verifySqlScriptResult(sqlScript, expected)
+  }
+
   // Tests
   test("multi statement - simple") {
     withTable("t") {

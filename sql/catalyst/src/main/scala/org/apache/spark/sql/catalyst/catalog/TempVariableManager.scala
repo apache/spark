@@ -23,8 +23,8 @@ import scala.collection.mutable
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions.Literal
+import org.apache.spark.sql.connector.catalog.{CatalogManager, Identifier}
 import org.apache.spark.sql.connector.catalog.CatalogManager.{SESSION_NAMESPACE, SYSTEM_CATALOG_NAME}
-import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.errors.DataTypeErrorsBase
 
 // todo LOCALVARS: move this to separate file or rename this file
@@ -39,6 +39,8 @@ trait VariableManager {
   def get(nameParts: Seq[String]): Option[VariableDefinition]
 
   def remove(name: String): Boolean
+
+  def createIdentifier(name: String): Identifier
 
   def clear(): Unit
 
@@ -84,6 +86,9 @@ class TempVariableManager extends VariableManager with DataTypeErrorsBase {
   override def remove(name: String): Boolean = synchronized {
     variables.remove(name).isDefined
   }
+
+  override def createIdentifier(name: String): Identifier =
+    Identifier.of(Array(CatalogManager.SESSION_NAMESPACE), name)
 
   override def clear(): Unit = synchronized {
     variables.clear()

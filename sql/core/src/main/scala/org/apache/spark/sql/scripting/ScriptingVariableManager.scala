@@ -17,11 +17,15 @@
 
 package org.apache.spark.sql.scripting
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.catalog.{VariableDefinition, VariableManager}
 import org.apache.spark.sql.catalyst.expressions.Literal
+import org.apache.spark.sql.connector.catalog.CatalogManager.SYSTEM_CATALOG_NAME
 import org.apache.spark.sql.connector.catalog.Identifier
+import org.apache.spark.sql.errors.DataTypeErrorsBase
 
-class ScriptingVariableManager(context: SqlScriptingExecutionContext) extends VariableManager {
+class ScriptingVariableManager(context: SqlScriptingExecutionContext)
+  extends VariableManager with DataTypeErrorsBase {
 
   override def create(
       name: String,
@@ -29,13 +33,16 @@ class ScriptingVariableManager(context: SqlScriptingExecutionContext) extends Va
       initValue: Literal,
       overrideIfExists: Boolean,
       identifier: Identifier): Unit = {
-    // todo LOCALVARS: check for duplicate (somewhere)
+    if (!overrideIfExists && context.currentScope.variables.contains(name)) {
+      throw new AnalysisException(
+        errorClass = "VARIABLE_ALREADY_EXISTS",
+        messageParameters = Map(
+          "variableName" -> toSQLId(Seq(SYSTEM_CATALOG_NAME, context.currentScope.label, name))))
+    }
     context.currentScope.variables.put(
       name,
       VariableDefinition(
-        // we use the label name of current scope as namespace for local variables
-        // e.g. ("scopeName.varName")
-        Identifier.of(Array(context.currentScope.label), name),
+        identifier,
         defaultValueSQL,
         initValue
       ))
@@ -54,13 +61,17 @@ class ScriptingVariableManager(context: SqlScriptingExecutionContext) extends Va
       // case _ => throw error
   }
 
+  override def createIdentifier(name: String): Identifier =
+    Identifier.of(Array(context.currentScope.label), name)
+
   override def remove(name: String): Boolean = {
     // probably throw error
     true
   }
 
-  // todo LOCALVARS: do we need this
-  override def clear(): Unit = ()
+  // todo LOCALVARS: create errorclass for this
+  override def clear(): Unit = throw new Exception("cant clear() scripting manager")
 
-  override def isEmpty: Boolean = context.currentFrame.scopes.forall(_.variables.isEmpty)
+  // Empty if all scopes of all frames in the script context contain no variables.
+  override def isEmpty: Boolean = context.frames.forall(_.scopes.forall(_.variables.isEmpty))
 }
