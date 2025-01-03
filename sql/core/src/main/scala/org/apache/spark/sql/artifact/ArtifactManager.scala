@@ -32,7 +32,7 @@ import org.apache.commons.io.{FilenameUtils, FileUtils}
 import org.apache.hadoop.fs.{LocalFileSystem, Path => FSPath}
 
 import org.apache.spark.{JobArtifactSet, JobArtifactState, SparkContext, SparkEnv, SparkException, SparkUnsupportedOperationException}
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.internal.config.{CONNECT_SCALA_UDF_STUB_PREFIXES, EXECUTOR_USER_CLASS_PATH_FIRST}
 import org.apache.spark.sql.{Artifact, SparkSession}
 import org.apache.spark.sql.internal.SQLConf
@@ -524,7 +524,8 @@ object ArtifactManager extends Logging {
       FileUtils.deleteDirectory(artifactPath.toFile)
     } catch {
       case e: IOException =>
-        logWarning(s"Failed to delete directory ${artifactPath.toFile}: ${e.getMessage}", e)
+        logWarning(log"Failed to delete directory ${MDC(LogKeys.PATH, artifactPath.toFile)}: " +
+          log"${MDC(LogKeys.EXCEPTION, e.getMessage)}", e)
     }
   }
 }
