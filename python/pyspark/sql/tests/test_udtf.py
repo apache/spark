@@ -1080,7 +1080,9 @@ class BaseUDTFTestsMixin:
                 yield row["key"], row["value"]
 
         func = udtf(TestUDTF, returnType="key: int, value: string")
-        df = self.spark.createDataFrame([(1, "a"), (1, "b"), (2, "c"), (2, "d")], ["key", "value"])
+        df = self.spark.createDataFrame(
+            [(1, "a", 3), (1, "b", 3), (2, "c", 4), (2, "d", 4)], ["key", "value", "number"]
+        )
         assertDataFrameEqual(
             func(df.asTable().partitionBy("key").orderBy(df.value)),
             [
@@ -1091,7 +1093,16 @@ class BaseUDTFTestsMixin:
             ],
             checkRowOrder=True,
         )
-
+        assertDataFrameEqual(
+            func(df.asTable().partitionBy(["key", "number"]).orderBy(df.value)),
+            [
+                Row(key=1, value="a"),
+                Row(key=1, value="b"),
+                Row(key=2, value="c"),
+                Row(key=2, value="d"),
+            ],
+            checkRowOrder=True,
+        )
         assertDataFrameEqual(
             func(df.asTable().partitionBy("key").orderBy(df.value.desc())),
             [
@@ -1102,7 +1113,16 @@ class BaseUDTFTestsMixin:
             ],
             checkRowOrder=True,
         )
-
+        assertDataFrameEqual(
+            func(df.asTable().partitionBy("key").orderBy(["number", "value"])),
+            [
+                Row(key=1, value="a"),
+                Row(key=1, value="b"),
+                Row(key=2, value="c"),
+                Row(key=2, value="d"),
+            ],
+            checkRowOrder=True,
+        )
         assertDataFrameEqual(
             func(row=df.asTable().withSinglePartition()),
             [
