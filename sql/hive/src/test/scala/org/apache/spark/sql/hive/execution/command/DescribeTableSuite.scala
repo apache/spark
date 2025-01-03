@@ -377,7 +377,7 @@ class DescribeTableSuite extends v1.DescribeTableSuiteBase with CommandSuiteBase
   }
 
   test("DESCRIBE AS JSON for column throws Analysis Exception") {
-    withNamespaceAndTable("ns", "table") {
+    withNamespaceAndTable("ns", "table") { t =>
       val tableCreationStr =
         s"""
           |CREATE TABLE ns.table(
