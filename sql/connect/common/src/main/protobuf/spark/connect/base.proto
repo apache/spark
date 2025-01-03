@@ -525,6 +525,9 @@ message ConfigRequest {
   message Set {
     // (Required) The config key-value pairs to set.
     repeated KeyValue pairs = 1;
+
+    // (Optional) Whether to ignore failures.
+    optional bool silent = 2;
   }
 
   message Get {
