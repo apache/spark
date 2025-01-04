@@ -337,9 +337,9 @@ trait Logging {
       if (Logging.defaultSparkLog4jConfig || Logging.islog4j2DefaultConfigured()) {
         Logging.defaultSparkLog4jConfig = true
         val defaultLogProps = if (Logging.isStructuredLoggingEnabled) {
-          "org/apache/spark/log4j2-defaults.properties"
+          "org/apache/spark/log4j2-structured.properties"
         } else {
-          "org/apache/spark/log4j2-pattern-layout-defaults.properties"
+          "org/apache/spark/log4j2-defaults.properties"
         }
         Option(SparkClassUtils.getSparkClassLoader.getResource(defaultLogProps)) match {
           case Some(url) =>
