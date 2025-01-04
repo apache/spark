@@ -849,14 +849,18 @@ case class DescribeTableJsonCommand(
 
       case structType: StructType =>
         val fieldsJson = structType.fields.map { field =>
-          JObject(
+          val baseJson = List(
             "name" -> JString(field.name),
             "type" -> jsonType(field.dataType),
-            "nullable" -> JBool(field.nullable),
-            "comment" -> field.getComment().map(JString).getOrElse(JNull),
-            "default" -> defaultValues.get(field.name).map(JString).getOrElse(JNull)
+            "nullable" -> JBool(field.nullable)
           )
+          val commentJson = field.getComment().map(comment => "comment" -> JString(comment)).toList
+          val defaultJson =
+            defaultValues.get(field.name).map(default => "default" -> JString(default)).toList
+
+          JObject(baseJson ++ commentJson ++ defaultJson: _*)
         }.toList
+
         JObject(
           "type" -> JString("struct"),
           "fields" -> JArray(fieldsJson)

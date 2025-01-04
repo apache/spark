@@ -473,11 +473,11 @@ class DescribeTableSuite extends DescribeTableSuiteBase with CommandSuiteBase {
         namespace = Some(List("ns")),
         schema_name = Some("ns"),
         columns = Some(List(
-          TableColumn("id", Type("integer"), nullable = true, default = Some("1")),
-          TableColumn("name", Type("string"), nullable = true, default = Some("'unknown'")),
+          TableColumn("id", Type("integer"), default = Some("1")),
+          TableColumn("name", Type("string"), default = Some("'unknown'")),
           TableColumn("created_at", Type("timestamp_ltz"), nullable = true,
             default = Some("CURRENT_TIMESTAMP")),
-          TableColumn("is_active", Type("boolean"), nullable = true, default = Some("true"))
+          TableColumn("is_active", Type("boolean"), default = Some("true"))
         )),
         last_access = Some("UNKNOWN"),
         created_by = Some("Spark 4.0.0-SNAPSHOT"),
@@ -647,8 +647,6 @@ class DescribeTableSuite extends DescribeTableSuiteBase with CommandSuiteBase {
       val descriptionDf = spark.sql(s"DESCRIBE EXTENDED $t AS JSON")
       val firstRow = descriptionDf.select("json_metadata").head()
       val jsonValue = firstRow.getString(0)
-      print(jsonValue)
-      print("\n" + getProvider())
       val parsedOutput = parse(jsonValue).extract[DescribeTableJson]
 
       val expectedOutput = DescribeTableJson(
@@ -686,8 +684,8 @@ class DescribeTableSuite extends DescribeTableSuiteBase with CommandSuiteBase {
                         name = "phone_numbers",
                         `type` = Type(
                           `type` = "array",
-                          elementType = Some(Type("string")),
-                          containsNull = Some(true)
+                          element_type = Some(Type("string")),
+                          contains_null = Some(true)
                         ),
                         nullable = true
                       ),
@@ -695,7 +693,7 @@ class DescribeTableSuite extends DescribeTableSuiteBase with CommandSuiteBase {
                         name = "addresses",
                         `type` = Type(
                           `type` = "array",
-                          elementType = Some(Type(
+                          element_type = Some(Type(
                             `type` = "struct",
                             fields = Some(List(
                               Field(
@@ -715,7 +713,7 @@ class DescribeTableSuite extends DescribeTableSuiteBase with CommandSuiteBase {
                               )
                             ))
                           )),
-                          containsNull = Some(true)
+                          contains_null = Some(true)
                         ),
                         nullable = true
                       )
@@ -732,13 +730,13 @@ class DescribeTableSuite extends DescribeTableSuiteBase with CommandSuiteBase {
             name = "preferences",
             `type` = Type(
               `type` = "map",
-              keyType = Some(Type("string")),
-              valueType = Some(Type(
+              key_type = Some(Type("string")),
+              value_type = Some(Type(
                 `type` = "array",
-                elementType = Some(Type("string")),
-                containsNull = Some(true)
+                element_type = Some(Type("string")),
+                contains_null = Some(true)
               )),
-              valueContainsNull = Some(true)
+              value_contains_null = Some(true)
             ),
             nullable = true,
             default = None
@@ -825,14 +823,14 @@ case class TableColumn(
 case class Type(
    `type`: String,
    fields: Option[List[Field]] = None,
-   elementType: Option[Type] = None,
-   keyType: Option[Type] = None,
-   valueType: Option[Type] = None,
-   nullable: Option[Boolean] = None,
+   element_type: Option[Type] = None,
+   key_type: Option[Type] = None,
+   value_type: Option[Type] = None,
    comment: Option[String] = None,
    default: Option[String] = None,
-   containsNull: Option[Boolean] = None,
-   valueContainsNull: Option[Boolean] = None
+   contains_null: Option[Boolean] = None,
+   value_contains_null: Option[Boolean] = None,
+   nullable: Option[Boolean] = None
  )
 
 case class Field(

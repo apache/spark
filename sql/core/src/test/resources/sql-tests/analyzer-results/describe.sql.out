@@ -68,7 +68,10 @@ DESCRIBE t AS JSON
 org.apache.spark.sql.catalyst.parser.ParseException
 {
   "errorClass" : "DESCRIBE_JSON_NOT_EXTENDED",
-  "sqlState" : "0A000"
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "tableName" : "t"
+  }
 }
 
 

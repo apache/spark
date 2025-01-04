@@ -41,10 +41,10 @@ private[sql] trait CompilationErrors extends DataTypeErrorsBase {
       cause = Option(cause))
   }
 
-  def describeJsonNotExtendedError(): AnalysisException = {
+  def describeJsonNotExtendedError(tableName: String): AnalysisException = {
     new AnalysisException(
       errorClass = "DESCRIBE_JSON_NOT_EXTENDED",
-      messageParameters = Map.empty)
+      messageParameters = Map("tableName" -> tableName))
   }
 
   def describeColJsonUnsupportedError(): AnalysisException = {

@@ -1158,7 +1158,7 @@
   "DESCRIBE_JSON_NOT_EXTENDED" : {
     "message" : [
       "DESCRIBE TABLE ... AS JSON only supported when [EXTENDED|FORMATTED] is specified.",
-      "For example: DESCRIBE EXTENDED TABLE AS JSON is supported but DESCRIBE TABLE AS JSON is not."
+      "For example: DESCRIBE EXTENDED <tableName> AS JSON is supported but DESCRIBE <tableName> AS JSON is not."
     ],
     "sqlState" : "0A000"
   },
