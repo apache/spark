@@ -20,9 +20,9 @@ import scala.collection.mutable
 import scala.io.Source
 
 import org.apache.spark.sql.{AnalysisException, Dataset, ExtendedExplainGenerator, FastOperator}
-import org.apache.spark.sql.catalyst.{QueryPlanningTracker, QueryPlanningTrackerCallback}
-import org.apache.spark.sql.catalyst.analysis.CurrentNamespace
-import org.apache.spark.sql.catalyst.expressions.UnsafeRow
+import org.apache.spark.sql.catalyst.{QueryPlanningTracker, QueryPlanningTrackerCallback, TableIdentifier}
+import org.apache.spark.sql.catalyst.analysis.{CurrentNamespace, UnresolvedFunction, UnresolvedRelation}
+import org.apache.spark.sql.catalyst.expressions.{Alias, UnsafeRow}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{CommandResult, LogicalPlan, OneRowRelation, Project, ShowTables, SubqueryAlias}
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
@@ -403,6 +403,18 @@ class QueryExecutionSuite extends SharedSparkSession {
         "SMJ Info: SortMergeJoin"
       assert(info == expected)
     }
+  }
+
+  test("SPARK-123: Failed analysis should send analyzed event") {
+    val mockCallback = MockCallback()
+
+    def table(ref: String): LogicalPlan = UnresolvedRelation(TableIdentifier(ref))
+
+    val unresolvedUndefinedFunc = UnresolvedFunction("unknown", Seq.empty, isDistinct = false)
+    val plan = Project(Seq(Alias(unresolvedUndefinedFunc, "call1")()), table("table"))
+    val df = Dataset.ofRows(spark, plan, new QueryPlanningTracker(Some(mockCallback)))
+    df.queryExecution.assertAnalyzed()
+    mockCallback.assertAnalyzed()
   }
 
   case class MockCallbackEagerCommand(
