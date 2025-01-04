@@ -5200,10 +5200,16 @@ class AstBuilder extends DataTypeAstBuilder
    */
   override def visitDescribeRelation(ctx: DescribeRelationContext): LogicalPlan = withOrigin(ctx) {
     val isExtended = ctx.EXTENDED != null || ctx.FORMATTED != null
+    val asJson = ctx.JSON != null
+    if (asJson && !isExtended) {
+      throw QueryCompilationErrors.describeJsonNotExtendedError()
+    }
     val relation = createUnresolvedTableOrView(ctx.identifierReference, "DESCRIBE TABLE")
     if (ctx.describeColName != null) {
       if (ctx.partitionSpec != null) {
         throw QueryParsingErrors.descColumnForPartitionUnsupportedError(ctx)
+      } else if (asJson) {
+        throw QueryCompilationErrors.describeColJsonUnsupportedError()
       } else {
         DescribeColumn(
           relation,
@@ -5221,7 +5227,11 @@ class AstBuilder extends DataTypeAstBuilder
       } else {
         Map.empty[String, String]
       }
-      DescribeRelation(relation, partitionSpec, isExtended)
+      if (asJson) {
+        DescribeRelationJson(relation, partitionSpec, isExtended)
+      } else {
+        DescribeRelation(relation, partitionSpec, isExtended)
+      }
     }
   }
 
