@@ -1125,7 +1125,7 @@ private[spark] class BlockManager(
     // all the storage endpoints to get block status.
     val locationsAndStatusOption = master.getLocationsAndStatus(blockId, blockManagerId.host)
     if (locationsAndStatusOption.isEmpty) {
-      logWarning(s"Block $blockId is unknown by block manager master")
+      logWarning(log"Block ${MDC(BLOCK_ID, blockId)} is unknown by block manager master")
       None
     } else {
       val locationsAndStatus = locationsAndStatusOption.get
