@@ -305,7 +305,8 @@ class DescribeTableSuite extends DescribeTableSuiteBase with CommandSuiteBase {
 
       checkError(
         exception = error,
-        condition = "DESCRIBE_JSON_NOT_EXTENDED")
+        condition = "DESCRIBE_JSON_NOT_EXTENDED",
+        parameters = Map("tableName" -> "table"))
     }
   }
 

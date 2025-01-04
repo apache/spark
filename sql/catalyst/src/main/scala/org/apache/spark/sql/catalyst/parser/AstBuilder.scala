@@ -5202,7 +5202,7 @@ class AstBuilder extends DataTypeAstBuilder
     val isExtended = ctx.EXTENDED != null || ctx.FORMATTED != null
     val asJson = ctx.JSON != null
     if (asJson && !isExtended) {
-      val tableName = ctx.identifierReference.getText.split("\\.").lastOption.getOrElse("")
+      val tableName = ctx.identifierReference.getText.split("\\.").lastOption.getOrElse("table")
       throw QueryCompilationErrors.describeJsonNotExtendedError(tableName)
     }
     val relation = createUnresolvedTableOrView(ctx.identifierReference, "DESCRIBE TABLE")
