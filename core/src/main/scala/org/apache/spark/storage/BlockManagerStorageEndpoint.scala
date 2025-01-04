@@ -101,6 +101,9 @@ class BlockManagerStorageEndpoint(
       // 2. Once a replica of a visible block is cached and reported, driver will also ask the
       //    the block manager to mark the block as visible immediately.
       context.reply(blockManager.blockInfoManager.tryMarkBlockAsVisible(blockId))
+
+    case GetShuffleServicePort =>
+      context.reply(blockManager.externalShuffleServicePort)
   }
 
   private def doAsync[T](
