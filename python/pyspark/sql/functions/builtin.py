@@ -15536,7 +15536,15 @@ def regexp_replace(
     Examples
     --------
     >>> from pyspark.sql import functions as sf
-    >>> df = spark.createDataFrame([("100-200", r"(\d+)", "--")], ["str", "pattern", "replacement"])
+    >>> df = spark.createDataFrame(
+    ...      [("100-200", r"(\d+)", "--")],
+    ...      ["str", "pattern", "replacement"]
+    ... )
+
+    Example 1: Replaces all the substrings in the `str` column name that
+    match the regex pattern `(\d+)` (one or more digits) with the replacement
+    string "--".
+
     >>> df.select('*', sf.regexp_replace('str', r'(\d+)', '--')).show()
     +-------+-------+-----------+---------------------------------+
     |    str|pattern|replacement|regexp_replace(str, (\d+), --, 1)|
@@ -15544,7 +15552,13 @@ def regexp_replace(
     |100-200|  (\d+)|         --|                            -----|
     +-------+-------+-----------+---------------------------------+
 
-    >>> df.select('*', sf.regexp_replace(sf.col("str"), sf.col("pattern"), sf.col("replacement"))).show()
+    Example 2: Replaces all the substrings in the `str` Column that match
+    the regex pattern in the `pattern` Column with the string in the `replacement`
+    column.
+
+    >>> df.select('*', \
+    ...     sf.regexp_replace(sf.col("str"), sf.col("pattern"), sf.col("replacement")) \
+    ... ).show()
     +-------+-------+-----------+--------------------------------------------+
     |    str|pattern|replacement|regexp_replace(str, pattern, replacement, 1)|
     +-------+-------+-----------+--------------------------------------------+
@@ -15556,7 +15570,7 @@ def regexp_replace(
 
 @_try_remote_functions
 def regexp_substr(str: "ColumnOrName", regexp: "ColumnOrName") -> Column:
-    r"""Returns the substring that matches the Java regex `regexp` within the string `str`.
+    r"""Returns the first substring that matches the Java regex `regexp` within the string `str`.
     If the regular expression is not found, the result is null.
 
     .. versionadded:: 3.5.0
@@ -15571,18 +15585,25 @@ def regexp_substr(str: "ColumnOrName", regexp: "ColumnOrName") -> Column:
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        the substring that matches a Java regex within the string `str`.
+        the first substring that matches a Java regex within the string `str`.
 
     Examples
     --------
     >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([("1a 2b 14m", r"\d+")], ["str", "regexp"])
+
+    Example 1: Returns the first substring in the `str` column name that
+    matches the regex pattern `(\d+)` (one or more digits).
+
     >>> df.select('*', sf.regexp_substr('str', sf.lit(r'\d+'))).show()
     +---------+------+-----------------------+
     |      str|regexp|regexp_substr(str, \d+)|
     +---------+------+-----------------------+
     |1a 2b 14m|   \d+|                      1|
     +---------+------+-----------------------+
+
+    Example 2: Returns the first substring in the `str` column name that
+    matches the regex pattern `(mmm)` (three consecutive 'm' characters)
 
     >>> df.select('*', sf.regexp_substr('str', sf.lit(r'mmm'))).show()
     +---------+------+-----------------------+
@@ -15591,12 +15612,18 @@ def regexp_substr(str: "ColumnOrName", regexp: "ColumnOrName") -> Column:
     |1a 2b 14m|   \d+|                   NULL|
     +---------+------+-----------------------+
 
+    Example 3: Returns the first substring in the `str` column name that
+    matches the regex pattern in `regexp` Column.
+
     >>> df.select('*', sf.regexp_substr("str", sf.col("regexp"))).show()
     +---------+------+--------------------------+
     |      str|regexp|regexp_substr(str, regexp)|
     +---------+------+--------------------------+
     |1a 2b 14m|   \d+|                         1|
     +---------+------+--------------------------+
+
+    Example 4: Returns the first substring in the `str` Column that
+    matches the regex pattern in `regexp` column name.
 
     >>> df.select('*', sf.regexp_substr(sf.col("str"), "regexp")).show()
     +---------+------+--------------------------+
@@ -15612,7 +15639,7 @@ def regexp_substr(str: "ColumnOrName", regexp: "ColumnOrName") -> Column:
 def regexp_instr(
     str: "ColumnOrName", regexp: "ColumnOrName", idx: Optional[Union[int, Column]] = None
 ) -> Column:
-    r"""Extract all strings in the `str` that match the Java regex `regexp`
+    r"""Returns the position of the first substring in the `str` that match the Java regex `regexp`
     and corresponding to the regex group index.
 
     .. versionadded:: 3.5.0
@@ -15629,18 +15656,26 @@ def regexp_instr(
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        all strings in the `str` that match a Java regex and corresponding to the regex group index.
+        the position of the first substring in the `str` that match a Java regex and corresponding
+        to the regex group index.
 
     Examples
     --------
     >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([("1a 2b 14m", r"\d+(a|b|m)")], ["str", "regexp"])
+
+    Example 1: Returns the position of the first substring in the `str` column name that
+    match the regex pattern `(\d+(a|b|m))` (one or more digits followed by 'a', 'b', or 'm').
+
     >>> df.select('*', sf.regexp_instr('str', sf.lit(r'\d+(a|b|m)'))).show()
     +---------+----------+--------------------------------+
     |      str|    regexp|regexp_instr(str, \d+(a|b|m), 0)|
     +---------+----------+--------------------------------+
     |1a 2b 14m|\d+(a|b|m)|                               1|
     +---------+----------+--------------------------------+
+
+    Example 2: Returns the position of the first substring in the `str` column name that
+    match the regex pattern `(\d+(a|b|m))` (one or more digits followed by 'a', 'b', or 'm'),
 
     >>> df.select('*', sf.regexp_instr('str', sf.lit(r'\d+(a|b|m)'), sf.lit(1))).show()
     +---------+----------+--------------------------------+
@@ -15649,12 +15684,8 @@ def regexp_instr(
     |1a 2b 14m|\d+(a|b|m)|                               1|
     +---------+----------+--------------------------------+
 
-    >>> df.select('*', sf.regexp_instr('str', sf.lit(r'\d+(a|b|m)'), 2)).show()
-    +---------+----------+--------------------------------+
-    |      str|    regexp|regexp_instr(str, \d+(a|b|m), 2)|
-    +---------+----------+--------------------------------+
-    |1a 2b 14m|\d+(a|b|m)|                               1|
-    +---------+----------+--------------------------------+
+    Example 3: Returns the position of the first substring in the `str` column name that
+    match the regex pattern in `regexp` Column.
 
     >>> df.select('*', sf.regexp_instr('str', sf.col("regexp"))).show()
     +---------+----------+----------------------------+
@@ -15662,6 +15693,9 @@ def regexp_instr(
     +---------+----------+----------------------------+
     |1a 2b 14m|\d+(a|b|m)|                           1|
     +---------+----------+----------------------------+
+
+    Example 4: Returns the position of the first substring in the `str` Column that
+    match the regex pattern in `regexp` column name.
 
     >>> df.select('*', sf.regexp_instr(sf.col("str"), "regexp")).show()
     +---------+----------+----------------------------+
