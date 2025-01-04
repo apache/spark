@@ -39,6 +39,7 @@ import com.google.common.cache.CacheBuilder
 import org.apache.commons.io.IOUtils
 
 import org.apache.spark._
+import org.apache.spark.deploy.ExternalShuffleService
 import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.executor.{DataReadMethod, ExecutorExitCode}
 import org.apache.spark.internal.{config, Logging, MDC}
@@ -244,6 +245,9 @@ private[spark] class BlockManager(
   private lazy val maxOnHeapMemory = memoryManager.maxOnHeapStorageMemory
   private lazy val maxOffHeapMemory = memoryManager.maxOffHeapStorageMemory
 
+  // Whether we are launched in a local Spark cluster.
+  private[spark] val isLocalSparkCluster = Utils.isTesting &&
+    sys.env.contains(ExternalShuffleService.TESTING_ESS_PORT_ENV)
   private[spark] val externalShuffleServicePort = StorageUtils.externalShuffleServicePort(conf)
 
   var blockManagerId: BlockManagerId = _
