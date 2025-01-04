@@ -402,6 +402,20 @@ final class ShuffleBlockFetcherIterator(
 
     val fallback = FallbackStorage.FALLBACK_BLOCK_MANAGER_ID.executorId
     val localExecIds = Set(blockManager.blockManagerId.executorId, fallback)
+
+    @inline def isHostLocal(blockAddress: BlockManagerId): Boolean = {
+      if (blockManager.hostLocalDirManager.isDefined
+        && blockAddress.host == blockManager.blockManagerId.host) {
+        if (blockManager.isLocalSparkCluster && blockManager.externalShuffleServiceEnabled) {
+          blockAddress.hostPort == blockManager.shuffleServerId.hostPort
+        } else {
+          true
+        }
+      } else {
+        false
+      }
+    }
+
     for ((address, blockInfos) <- blocksByAddress) {
       checkBlockSizes(blockInfos)
       if (pushBasedFetchHelper.isPushMergedShuffleBlockAddress(address)) {
@@ -419,8 +433,7 @@ final class ShuffleBlockFetcherIterator(
         numBlocksToFetch += mergedBlockInfos.size
         localBlocks ++= mergedBlockInfos.map(info => (info.blockId, info.mapIndex))
         localBlockBytes += mergedBlockInfos.map(_.size).sum
-      } else if (blockManager.hostLocalDirManager.isDefined &&
-        address.host == blockManager.blockManagerId.host) {
+      } else if (isHostLocal(address)) {
         val mergedBlockInfos = mergeContinuousShuffleBlockIdsIfNeeded(
           blockInfos.map(info => FetchBlockInfo(info._1, info._2, info._3)), doBatchFetch)
         numBlocksToFetch += mergedBlockInfos.size

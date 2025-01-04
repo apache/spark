@@ -78,7 +78,13 @@ class HostLocalShuffleReadingSuite extends SparkFunSuite with Matchers with Loca
     test(s"host local shuffle reading with external shuffle service $essStatus") {
       conf.set(SHUFFLE_SERVICE_ENABLED, isESSEnabled)
         .set(STORAGE_LOCAL_DISK_BY_EXECUTORS_CACHE_SIZE, 5)
-      sc = new SparkContext("local-cluster[2,1,1024]", "test-host-local-shuffle-reading", conf)
+      val master = if (isESSEnabled) {
+        conf.set(EXECUTOR_CORES, 1)
+        "local-cluster[1,2,2048]"
+      } else {
+        "local-cluster[2,1,1024]"
+      }
+      sc = new SparkContext(master, "test-host-local-shuffle-reading", conf)
       // In a slow machine, one executor may register hundreds of milliseconds ahead of the other
       // one. If we don't wait for all executors, it's possible that only one executor runs all
       // jobs. Then all shuffle blocks will be in this executor, ShuffleBlockFetcherIterator will
