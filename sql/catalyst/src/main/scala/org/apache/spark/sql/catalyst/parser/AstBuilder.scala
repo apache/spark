@@ -551,7 +551,7 @@ class AstBuilder extends DataTypeAstBuilder
       throw QueryParsingErrors.duplicateCteDefinitionNamesError(
         duplicates.map(toSQLId).mkString(", "), ctx)
     }
-    UnresolvedWith(plan, ctes.toSeq)
+    UnresolvedWith(plan, ctes.toSeq, ctx.RECURSIVE() != null)
   }
 
   /**

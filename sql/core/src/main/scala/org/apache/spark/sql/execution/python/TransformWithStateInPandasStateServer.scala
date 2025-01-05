@@ -146,6 +146,9 @@ class TransformWithStateInPandasStateServer(
 
     while (listeningSocket.isConnected &&
       statefulProcessorHandle.getHandleState != StatefulProcessorHandleState.CLOSED) {
+      if (Thread.currentThread().isInterrupted) {
+        throw new InterruptedException("Thread was interrupted")
+      }
       try {
         val version = inputStream.readInt()
         if (version != -1) {
@@ -157,6 +160,11 @@ class TransformWithStateInPandasStateServer(
       } catch {
         case _: EOFException =>
           logWarning(log"No more data to read from the socket")
+          statefulProcessorHandle.setHandleState(StatefulProcessorHandleState.CLOSED)
+          return
+        case _: InterruptedException =>
+          logInfo(log"Thread interrupted, shutting down state server")
+          Thread.currentThread().interrupt()
           statefulProcessorHandle.setHandleState(StatefulProcessorHandleState.CLOSED)
           return
         case e: Exception =>

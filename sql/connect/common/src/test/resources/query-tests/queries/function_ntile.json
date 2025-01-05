@@ -20,7 +20,8 @@
               "literal": {
                 "integer": 4
               }
-            }]
+            }],
+            "isInternal": false
           }
         },
         "partitionSpec": [{

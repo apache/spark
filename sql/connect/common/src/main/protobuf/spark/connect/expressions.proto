@@ -261,6 +261,11 @@ message Expression {
     // When it is not a user defined function, Connect will use the function name directly.
     // When it is a user defined function, Connect will parse the function name first.
     bool is_user_defined_function = 4;
+
+    // (Optional) Indicate if this function is defined in the internal function registry.
+    // If not set, the server will try to look up the function in the internal function registry
+    // and decide appropriately.
+    optional bool is_internal = 5;
   }
 
   // Expression as string.

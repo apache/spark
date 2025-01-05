@@ -18,7 +18,8 @@
           "literal": {
             "string": "[{\"col\":01}]"
           }
-        }]
+        }],
+        "isInternal": false
       }
     }]
   }
