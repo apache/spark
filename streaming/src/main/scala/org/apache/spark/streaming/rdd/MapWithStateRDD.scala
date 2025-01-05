@@ -17,8 +17,6 @@
 
 package org.apache.spark.streaming.rdd
 
-import java.io.{IOException, ObjectOutputStream}
-
 import scala.collection.mutable.ArrayBuffer
 import scala.reflect.ClassTag
 
@@ -26,7 +24,6 @@ import org.apache.spark._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.streaming.{State, StateImpl, Time}
 import org.apache.spark.streaming.util.{EmptyStateMap, StateMap}
-import org.apache.spark.util.Utils
 
 /**
  * Record storing the keyed-state [[MapWithStateRDD]]. Each record contains a `StateMap` and a
@@ -91,19 +88,14 @@ private[streaming] class MapWithStateRDDPartition(
   private[rdd] var previousSessionRDDPartition: Partition = null
   private[rdd] var partitionedDataRDDPartition: Partition = null
 
+  previousSessionRDDPartition = prevStateRDD.partitions(index)
+  partitionedDataRDDPartition = partitionedDataRDD.partitions(index)
+
   override def hashCode(): Int = index
 
   override def equals(other: Any): Boolean = other match {
     case that: MapWithStateRDDPartition => index == that.index
     case _ => false
-  }
-
-  @throws(classOf[IOException])
-  private def writeObject(oos: ObjectOutputStream): Unit = Utils.tryOrIOException {
-    // Update the reference to parent split at the time of task serialization
-    previousSessionRDDPartition = prevStateRDD.partitions(index)
-    partitionedDataRDDPartition = partitionedDataRDD.partitions(index)
-    oos.defaultWriteObject()
   }
 }
 
