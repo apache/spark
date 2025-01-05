@@ -1272,3 +1272,16 @@ jobs:
           cd ui-test
           npm install --save-dev
           node --experimental-vm-modules node_modules/.bin/jest
+
+  maven-macos-test:
+    name: "Run Maven Macos Test"
+    permissions:
+      packages: write
+    uses: ./.github/workflows/maven_test.yml
+    with:
+      java: 21
+      os: macos-15
+      envs: >-
+        {
+          "OBJC_DISABLE_INITIALIZE_FORK_SAFETY": "YES"
+        }
