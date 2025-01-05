@@ -116,7 +116,6 @@ to return the metadata pertaining to a partition or column respectively.
       "serde_library": "<serde_library>",
       "input_format": "<input_format>",
       "output_format": "<output_format>",
-      "num_buckets": <num_buckets>,
       "bucket_columns": ["<col_name>"],
       "sort_columns": ["<col_name>"],
       "created_time": "<timestamp_ISO-8601>",
@@ -135,19 +134,20 @@ to return the metadata pertaining to a partition or column respectively.
 | LongType              | `{ "type" : "bigint" }`                                                                                                                                          |
 | FloatType             | `{ "type" : "float" }`                                                                                                                                           |
 | DoubleType            | `{ "type" : "double" }`                                                                                                                                          |
-| DecimalType           | `{ "type": "decimal", "precision": p, "scale": s }`                                                                                                              |
+| DecimalType           | `{ "type" : "decimal", "precision": p, "scale": s }`                                                                                                             |
 | StringType            | `{ "type" : "string" }`                                                                                                                                          |
 | VarCharType           | `{ "type" : "varchar", "length": n }`                                                                                                                            |
 | CharType              | `{ "type" : "char", "length": n }`                                                                                                                               |
 | BinaryType            | `{ "type" : "binary" }`                                                                                                                                          |
 | BooleanType           | `{ "type" : "boolean" }`                                                                                                                                         |
 | DateType              | `{ "type" : "date" }`                                                                                                                                            |
+| VariantType           | `{ "type" : "variant" }`                                                                                                                                         |
 | TimestampType         | `{ "type" : "timestamp_ltz" }`                                                                                                                                   |
 | TimestampNTZType      | `{ "type" : "timestamp_ntz" }`                                                                                                                                   |
 | YearMonthIntervalType | `{ "type" : "interval", "start_unit": "<start_unit>", "end_unit": "<end_unit>" }`                                                                                |
 | DayTimeIntervalType   | `{ "type" : "interval", "start_unit": "<start_unit>", "end_unit": "<end_unit>" }`                                                                                |
-| ArrayType             | `{ "type" : "array", "element_type": <type_json>, "contains_null": <boolean> }`                                                                                  |
-| MapType               | `{ "type" : "map", "key_type": <type_json>, "value_type": <type_json>, "value_contains_null": <boolean> }`                                                       |
+| ArrayType             | `{ "type" : "array", "element_type": <type_json>, "nullable": <boolean> }`                                                                                       |
+| MapType               | `{ "type" : "map", "key_type": <type_json>, "value_type": <type_json>, "nullable": <boolean> }`                                                                  |
 | StructType            | `{ "type" : "struct", "fields": [ {"name" : "field1", "type" : <type_json>, “nullable”: <boolean>, "comment": “<comment>”, "default": “<default_val>”}, ... ] }` |
 
 ### Examples

@@ -476,8 +476,7 @@ class DescribeTableSuite extends DescribeTableSuiteBase with CommandSuiteBase {
         columns = Some(List(
           TableColumn("id", Type("integer"), default = Some("1")),
           TableColumn("name", Type("string"), default = Some("'unknown'")),
-          TableColumn("created_at", Type("timestamp_ltz"), nullable = true,
-            default = Some("CURRENT_TIMESTAMP")),
+          TableColumn("created_at", Type("timestamp_ltz"), default = Some("CURRENT_TIMESTAMP")),
           TableColumn("is_active", Type("boolean"), default = Some("true"))
         )),
         last_access = Some("UNKNOWN"),
@@ -528,9 +527,9 @@ class DescribeTableSuite extends DescribeTableSuiteBase with CommandSuiteBase {
 
         val expectedOutput = DescribeTableJson(
           columns = Some(List(
-            TableColumn("id", Type("integer"), nullable = true),
-            TableColumn("name", Type("string"), nullable = true),
-            TableColumn("created_at", Type("timestamp_ltz"), nullable = true)
+            TableColumn("id", Type("integer")),
+            TableColumn("name", Type("string")),
+            TableColumn("created_at", Type("timestamp_ltz"))
           ))
         )
 
@@ -564,9 +563,9 @@ class DescribeTableSuite extends DescribeTableSuiteBase with CommandSuiteBase {
           namespace = Some(List("default")),
           schema_name = Some("default"),
           columns = Some(List(
-            TableColumn("id", Type("integer"), nullable = true),
-            TableColumn("name", Type("string"), nullable = true),
-            TableColumn("created_at", Type("timestamp_ltz"), nullable = true)
+            TableColumn("id", Type("integer")),
+            TableColumn("name", Type("string")),
+            TableColumn("created_at", Type("timestamp_ltz"))
           )),
           serde_library = Some("org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe"),
           inputformat = Some("org.apache.hadoop.mapred.SequenceFileInputFormat"),
@@ -624,6 +623,7 @@ class DescribeTableSuite extends DescribeTableSuiteBase with CommandSuiteBase {
         s"""
            |CREATE TABLE $t (
            |  id STRING,
+           |  logs VARIANT,
            |  nested_struct STRUCT<
            |    name: STRING,
            |    age: INT,
@@ -657,19 +657,22 @@ class DescribeTableSuite extends DescribeTableSuiteBase with CommandSuiteBase {
         schema_name = Some("ns"),
         columns = Some(List(
           TableColumn(
+            name = "logs",
+            `type` = Type("variant"),
+            default = None
+          ),
+          TableColumn(
             name = "nested_struct",
             `type` = Type(
               `type` = "struct",
               fields = Some(List(
                 Field(
                   name = "name",
-                  `type` = Type("string"),
-                  nullable = true
+                  `type` = Type("string")
                 ),
                 Field(
                   name = "age",
-                  `type` = Type("integer"),
-                  nullable = true
+                  `type` = Type("integer")
                 ),
                 Field(
                   name = "contact",
@@ -678,17 +681,15 @@ class DescribeTableSuite extends DescribeTableSuiteBase with CommandSuiteBase {
                     fields = Some(List(
                       Field(
                         name = "email",
-                        `type` = Type("string"),
-                        nullable = true
+                        `type` = Type("string")
                       ),
                       Field(
                         name = "phone_numbers",
                         `type` = Type(
                           `type` = "array",
                           element_type = Some(Type("string")),
-                          contains_null = Some(true)
-                        ),
-                        nullable = true
+                          nullable = Some(true)
+                        )
                       ),
                       Field(
                         name = "addresses",
@@ -699,32 +700,26 @@ class DescribeTableSuite extends DescribeTableSuiteBase with CommandSuiteBase {
                             fields = Some(List(
                               Field(
                                 name = "street",
-                                `type` = Type("string"),
-                                nullable = true
+                                `type` = Type("string")
                               ),
                               Field(
                                 name = "city",
-                                `type` = Type("string"),
-                                nullable = true
+                                `type` = Type("string")
                               ),
                               Field(
                                 name = "zip",
-                                `type` = Type("integer"),
-                                nullable = true
+                                `type` = Type("integer")
                               )
                             ))
                           )),
-                          contains_null = Some(true)
-                        ),
-                        nullable = true
+                          nullable = Some(true)
+                        )
                       )
                     ))
-                  ),
-                  nullable = true
+                  )
                 )
               ))
             ),
-            nullable = true,
             default = None
           ),
           TableColumn(
@@ -735,17 +730,15 @@ class DescribeTableSuite extends DescribeTableSuiteBase with CommandSuiteBase {
               value_type = Some(Type(
                 `type` = "array",
                 element_type = Some(Type("string")),
-                contains_null = Some(true)
+                nullable = Some(true)
               )),
-              value_contains_null = Some(true)
+              nullable = Some(true)
             ),
-            nullable = true,
             default = None
           ),
           TableColumn(
             name = "id",
             `type` = Type("string"),
-            nullable = true,
             default = None
           )
         )),
@@ -829,9 +822,7 @@ case class Type(
    value_type: Option[Type] = None,
    comment: Option[String] = None,
    default: Option[String] = None,
-   contains_null: Option[Boolean] = None,
-   value_contains_null: Option[Boolean] = None,
-   nullable: Option[Boolean] = None
+   nullable: Option[Boolean] = Some(true)
  )
 
 case class Field(
