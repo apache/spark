@@ -36,6 +36,7 @@ from pyspark.testing.sqlutils import ReusedSQLTestCase, SQLTestUtils
 from pyspark.testing.utils import have_numpy, assertDataFrameEqual
 from pyspark.sql.utils import get_conf as _get_conf
 
+
 class FunctionsTestsMixin:
     def test_function_parity(self):
         # This test compares the available list of functions in pyspark.sql.functions with those
