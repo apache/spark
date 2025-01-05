@@ -146,9 +146,6 @@ class TransformWithStateInPandasStateServer(
 
     while (listeningSocket.isConnected &&
       statefulProcessorHandle.getHandleState != StatefulProcessorHandleState.CLOSED) {
-      if (Thread.currentThread().isInterrupted) {
-        throw new InterruptedException("Thread was interrupted")
-      }
       try {
         val version = inputStream.readInt()
         if (version != -1) {
