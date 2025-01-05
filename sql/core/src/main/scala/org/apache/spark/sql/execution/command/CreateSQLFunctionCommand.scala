@@ -117,6 +117,7 @@ case class CreateSQLFunctionCommand(
                   messageParameters =
                     Map("functionName" -> name.funcName, "parameterName" -> p.name))
               } else if (defaultPlan.containsPattern(UNRESOLVED_ATTRIBUTE)) {
+                // TODO(SPARK-50698): use parsed expression instead of expression string.
                 defaultPlan.collect {
                   case a: UnresolvedAttribute =>
                     throw QueryCompilationErrors.unresolvedAttributeError(

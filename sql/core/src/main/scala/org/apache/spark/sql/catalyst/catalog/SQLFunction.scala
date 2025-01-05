@@ -161,8 +161,9 @@ object SQLFunction {
    * Convert the temporary object names to properties.
    */
   def referredTempNamesToProps(
-    viewNames: Seq[Seq[String]], functionsNames: Seq[String],
-    variableNames: Seq[Seq[String]]): Map[String, String] = {
+      viewNames: Seq[Seq[String]],
+      functionsNames: Seq[String],
+      variableNames: Seq[Seq[String]]): Map[String, String] = {
     val viewNamesJson =
       JArray(viewNames.map(nameParts => JArray(nameParts.map(JString).toList)).toList)
     val functionsNamesJson = JArray(functionsNames.map(JString).toList)
