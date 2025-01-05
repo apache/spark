@@ -29,6 +29,7 @@ import org.apache.parquet.hadoop.ParquetFileReader;
 import org.apache.parquet.hadoop.metadata.ParquetMetadata;
 import org.apache.parquet.hadoop.util.HadoopInputFile;
 
+import org.apache.parquet.io.SeekableInputStream;
 import org.apache.spark.sql.execution.datasources.PartitionedFile;
 
 /**
@@ -82,8 +83,11 @@ public class ParquetFooterReader {
       HadoopReadOptions.builder(inputFile.getConfiguration(), inputFile.getPath())
         .withMetadataFilter(filter).build();
     // Use try-with-resources to ensure fd is closed.
-    try (ParquetFileReader fileReader = ParquetFileReader.open(inputFile, readOptions)) {
-      return fileReader.getFooter();
+    try (SeekableInputStream seekableInputStream = inputFile.newStream()) {
+      try (ParquetFileReader fileReader =
+          ParquetFileReader.open(inputFile, readOptions, seekableInputStream)) {
+        return fileReader.getFooter();
+      }
     }
   }
 }
