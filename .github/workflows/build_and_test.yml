@@ -1094,6 +1094,7 @@ jobs:
           spark.sql.autoBroadcastJoinThreshold=-1
           spark.sql.join.forceApplyShuffledHashJoin=true
     - name: Run TPC-DS queries on collated data
+      if: inputs.branch != 'branch-3.5'
       run: |
         SPARK_TPCDS_DATA=`pwd`/tpcds-sf-1 build/sbt "sql/testOnly org.apache.spark.sql.TPCDSCollationQueryTestSuite"
     - name: Upload test results to report
