@@ -344,7 +344,7 @@ case class RandStr(
   override def right: Expression = seedExpression
 
   override def inputTypes: Seq[AbstractDataType] = Seq(
-    TypeCollection(ByteType, ShortType, IntegerType, LongType, FloatType, DoubleType, DecimalType),
+    TypeCollection(NumericType),
     TypeCollection(IntegerType, LongType))
 
   /**
@@ -421,11 +421,9 @@ case class RandStr(
     val rngTerm = ctx.addMutableState(className, "rng")
     ctx.addPartitionInitializationStatement(
       s"$rngTerm = new $className(${seed}L + partitionIndex);")
-    val eval = length.genCode(ctx)
     val numChars = lengthInteger()
     ev.copy(code =
       code"""
-        |${eval.code}
         |UTF8String ${ev.value} =
         |  ${classOf[ExpressionImplUtils].getName}.randStr($rngTerm, $numChars);
         |boolean ${ev.isNull} = false;
