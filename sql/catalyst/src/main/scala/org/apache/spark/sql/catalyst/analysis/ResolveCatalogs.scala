@@ -35,7 +35,7 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
     // We only support temp variables for now and the system catalog is not properly implemented
     // yet. We need to resolve `UnresolvedIdentifier` for variable commands specially.
     case c @ CreateVariable(UnresolvedIdentifier(nameParts, _), _, _) =>
-      val resolved = resolveVariableName(nameParts)
+      val resolved = resolveCreateVariableName(nameParts)
       c.copy(name = resolved)
     case d @ DropVariable(UnresolvedIdentifier(nameParts, _), _) =>
       val resolved = resolveVariableName(nameParts)
@@ -73,22 +73,22 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
     }
   }
 
-  private def resolveVariableName(nameParts: Seq[String]): ResolvedIdentifier = {
+  private def resolveCreateVariableName(nameParts: Seq[String]): ResolvedIdentifier = {
+    // from scripts we can only create local variables, which must be unqualified
     if (catalogManager.scriptingLocalVariableManager.isDefined && nameParts.length != 1) {
-      // todo LOCALVARS: create errorclass for this
+      // todo LOCALVARS: add error class
       throw new Exception("must be unqualified")
     }
+    resolveVariableName(nameParts)
+  }
 
+  private def resolveVariableName(nameParts: Seq[String]): ResolvedIdentifier = {
     val ident: Identifier = catalogManager.scriptingLocalVariableManager
       .getOrElse(catalogManager.tempVariableManager)
       .createIdentifier(nameParts.last)
 
     nameParts.length match {
-      case 1 =>
-        ResolvedIdentifier(FakeSystemCatalog, ident)
-
-      case 2 if nameParts.head.equalsIgnoreCase(CatalogManager.SESSION_NAMESPACE) =>
-        ResolvedIdentifier(FakeSystemCatalog, ident)
+      case 1 | 2 => ResolvedIdentifier(FakeSystemCatalog, ident)
 
       case 3 if nameParts(0).equalsIgnoreCase(CatalogManager.SYSTEM_CATALOG_NAME) &&
         nameParts(1).equalsIgnoreCase(CatalogManager.SESSION_NAMESPACE) =>

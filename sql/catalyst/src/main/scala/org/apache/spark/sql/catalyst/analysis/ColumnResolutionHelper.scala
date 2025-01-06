@@ -271,8 +271,10 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
       nameParts.map(_.toLowerCase(Locale.ROOT))
     }
 
-    // todo LOCALVARS: if system.session.var check only tempVariableManager
+    // todo LOCALVARS: check if system.session.var uses only tempVariableManager
     catalogManager.scriptingLocalVariableManager
+      // if variable name is qualified with system.session.<varName> treat it as a session variable
+      .filterNot(_ => namePartsCaseAdjusted.take(2) == Seq("system", "session"))
       .flatMap(_.get(namePartsCaseAdjusted))
       .map { varDef =>
         VariableReference(
