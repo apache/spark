@@ -314,6 +314,9 @@ class TransformWithStateInPandasTestsMixin:
             SimpleTTLStatefulProcessor(), check_results, False, "processingTime"
         )
 
+    @unittest.skipIf(
+        "COVERAGE_PROCESS_START" in os.environ, "Flaky with coverage enabled, skipping for now."
+    )
     def test_value_state_ttl_expiration(self):
         def check_results(batch_df, batch_id):
             if batch_id == 0:
