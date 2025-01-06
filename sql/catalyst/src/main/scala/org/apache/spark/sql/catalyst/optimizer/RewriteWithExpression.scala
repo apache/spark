@@ -42,9 +42,9 @@ object RewriteWithExpression extends Rule[LogicalPlan] with AliasHelper {
   override def apply(plan: LogicalPlan): LogicalPlan = {
     var p = plan
     while (p.containsPattern(WITH_EXPRESSION)) {
-      p = CollapseProject.apply(applyOnce(p))
+      p = applyOnce(p)
     }
-    rewriteAlias(p)
+    rewriteAlias(CollapseProject.apply(p))
   }
 
   // Expensive common expression will be evaluated twice: once in the Filter being pushed down,
