@@ -265,7 +265,7 @@ DESCRIBE customer salesdb.customer.name;
 
 -- Returns the table metadata in JSON format.
 DESC FORMATTED customer AS JSON;
-{"table_name":"customer","catalog_name":"spark_catalog","namespace":["default"],"columns":[{"name":"cust_id","type":{"name":"integer"},"nullable":true},{"name":"name","type":{"name":"string"},"comment":"Short name","nullable":true},{"name":"state","type":{"name":"varchar","length":20},"nullable":true}],"location": "file:/tmp/salesdb.db/custom...","created_time":"2020-04-07T14:05:43Z","last_access":"UNKNOWN","created_by":"None","type":"MANAGED","provider":"parquet","partition_provider":"Catalog","partition_columns":["state"]}
+{"table_name":"customer","catalog_name":"spark_catalog","schema_name":"default","namespace":["default"],"columns":[{"name":"cust_id","type":{"name":"integer"},"nullable":true},{"name":"name","type":{"name":"string"},"comment":"Short name","nullable":true},{"name":"state","type":{"name":"varchar","length":20},"nullable":true}],"location": "file:/tmp/salesdb.db/custom...","created_time":"2020-04-07T14:05:43Z","last_access":"UNKNOWN","created_by":"None","type":"MANAGED","provider":"parquet","partition_provider":"Catalog","partition_columns":["state"]}
 ```
 
 ### Related Statements
