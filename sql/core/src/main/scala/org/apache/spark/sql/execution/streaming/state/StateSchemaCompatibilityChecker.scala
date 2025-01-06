@@ -147,6 +147,20 @@ class StateSchemaCompatibilityChecker(
     }
   }
 
+  /**
+   * Function to read and return the list of existing state store column family schemas from the
+   * schema file, if it exists
+   * @return - List of state store column family schemas if the schema file exists and empty l
+   *         otherwise
+   */
+  private def getExistingKeyAndValueSchema(): List[StateStoreColFamilySchema] = {
+    if (fm.exists(schemaFileLocation)) {
+      readSchemaFile()
+    } else {
+      List.empty
+    }
+  }
+
   private def schemasCompatible(storedSchema: StructType, schema: StructType): Boolean =
     DataType.equalsIgnoreNameAndCompatibleNullability(schema, storedSchema)
 
@@ -253,7 +267,8 @@ class StateSchemaCompatibilityChecker(
       }
 
       val colFamiliesAddedOrRemoved =
-        (newStateSchema.map(_.colFamilyName).toSet != existingStateSchemaMap.keySet)
+        (newStateSchema.map(_.colFamilyName).toSet !=
+          getExistingKeyAndValueSchema().map(_.colFamilyName).toSet)
       val newSchemaFileWritten = hasEvolutions || colFamiliesAddedOrRemoved
 
       if (stateSchemaVersion == SCHEMA_FORMAT_V3 && newSchemaFileWritten) {
