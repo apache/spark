@@ -33,8 +33,7 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
       Batch("PushDownFilters", FixedPoint(100),
         PushPredicateThroughJoin,
         PushPredicateThroughNonJoin,
-        RewriteWithExpression,
-        CollapseProject) ::
+        RewriteWithExpression) ::
       Batch("InferFilters", Once,
         InferFiltersFromConstraints,
         CombineFilters,
@@ -44,8 +43,7 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
       Batch("PushDownFilters", FixedPoint(100),
         PushPredicateThroughJoin,
         PushPredicateThroughNonJoin,
-        RewriteWithExpression,
-        CollapseProject) :: Nil
+        RewriteWithExpression) :: Nil
   }
 
   val testRelation = LocalRelation($"a".int, $"b".int, $"c".int)
@@ -162,7 +160,7 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
       .select($"a", $"b", $"c", Coalesce(Seq($"a", $"b")) as "int_col")
       .where(IsNotNull($"a") && IsNotNull($"int_col") &&
         $"a" === $"int_col")
-      .select($"a", Coalesce(Seq($"a", $"b")).as("int_col")).as("t")
+      .select($"a", $"int_col").as("t")
       .join(t2.where(IsNotNull($"a")), Inner,
         Some("t.a".attr === "t2.a".attr && "t.int_col".attr === "t2.a".attr))
       .analyze

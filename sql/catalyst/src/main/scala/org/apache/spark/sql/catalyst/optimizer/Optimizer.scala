@@ -105,7 +105,6 @@ abstract class Optimizer(catalogManager: CatalogManager)
         EliminateOuterJoin,
         PushDownPredicates,
         RewriteWithExpression,
-        CollapseProject,
         PushDownLeftSemiAntiJoin,
         PushLeftSemiLeftAntiThroughJoin,
         OptimizeJoinCondition,
@@ -171,8 +170,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
       Batch("Push extra predicate through join", fixedPoint,
         PushExtraPredicateThroughJoin,
         PushDownPredicates,
-        RewriteWithExpression,
-        CollapseProject))
+        RewriteWithExpression))
 
     val batches: Seq[Batch] = flattenBatches(Seq(
     Batch("Finish Analysis", FixedPoint(1), FinishAnalysis),

@@ -66,8 +66,7 @@ class SparkOptimizer(
       RewriteDistinctAggregates),
     Batch("Pushdown Filters from PartitionPruning", fixedPoint,
       PushDownPredicates,
-      RewriteWithExpression,
-      CollapseProject),
+      RewriteWithExpression),
     Batch("Cleanup filters that cannot be pushed down", Once,
       CleanupDynamicPruningFilters,
       // cleanup the unnecessary TrueLiteral predicates
@@ -90,7 +89,6 @@ class SparkOptimizer(
       LimitPushDown,
       PushPredicateThroughNonJoin,
       RewriteWithExpression,
-      CollapseProject,
       PushProjectionThroughLimit,
       RemoveNoopOperators),
     Batch("Infer window group limit", Once,

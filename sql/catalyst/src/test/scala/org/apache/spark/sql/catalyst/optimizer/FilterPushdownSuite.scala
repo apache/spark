@@ -42,13 +42,11 @@ class FilterPushdownSuite extends PlanTest {
         PushPredicateThroughNonJoin,
         BooleanSimplification,
         PushPredicateThroughJoin,
-        RewriteWithExpression,
-        CollapseProject) ::
+        RewriteWithExpression) ::
       Batch("Push extra predicate through join", FixedPoint(10),
         PushExtraPredicateThroughJoin,
         PushDownPredicates,
-        RewriteWithExpression,
-        CollapseProject) :: Nil
+        RewriteWithExpression) :: Nil
   }
 
   val attrA = $"a".int
@@ -1554,7 +1552,7 @@ class FilterPushdownSuite extends PlanTest {
       .where($"add" < 10 &&
         $"add" + $"add" > 10 &&
         $"a" - $"b" > 0)
-      .select($"a" + $"b" as "add", $"a" - $"b" as "sub")
+      .select($"add", $"a" - $"b" as "sub")
       .analyze
     comparePlans(optimized1, correctAnswer1)
 
