@@ -30,7 +30,12 @@ import org.apache.spark.sql.execution.streaming.state.{KeyStateEncoderSpec, Stat
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
-/** An implementation of [[Table]] with [[SupportsRead]] for State Store data source. */
+/**
+ * An implementation of [[Table]] with [[SupportsRead]] for State Store data source.
+ * @param stateSchemaProviderOpt Optional provider that maintains mapping between schema IDs and
+ *                               their corresponding schemas, enabling reading of state data
+ *                               written with older schema versions
+ */
 class StateTable(
     session: SparkSession,
     override val schema: StructType,

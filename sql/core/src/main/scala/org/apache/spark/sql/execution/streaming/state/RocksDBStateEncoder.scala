@@ -913,6 +913,13 @@ class AvroStateEncoder(
   /**
    * This method takes a byte array written using Avro encoding, and
    * deserializes to an UnsafeRow using the Avro deserializer
+   *
+   * @param valueBytes The raw bytes containing Avro-encoded data
+   * @param avroDeserializer Custom deserializer to convert Avro records to InternalRows
+   * @param writerSchema The Avro schema used when writing the data
+   * @param readerSchema The Avro schema to use for reading (may be different from writer schema)
+   * @param valueProj Projection to convert InternalRow to UnsafeRow
+   * @return The deserialized UnsafeRow, or null if input bytes are null
    */
   def decodeFromAvroToUnsafeRow(
       valueBytes: Array[Byte],

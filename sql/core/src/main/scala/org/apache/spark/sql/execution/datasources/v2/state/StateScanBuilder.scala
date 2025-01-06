@@ -31,7 +31,12 @@ import org.apache.spark.sql.execution.streaming.state.{KeyStateEncoderSpec, Stat
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.SerializableConfiguration
 
-/** An implementation of [[ScanBuilder]] for State Store data source. */
+/**
+ * An implementation of [[ScanBuilder]] for State Store data source.
+ * @param stateSchemaProviderOpt Optional provider that maintains mapping between schema IDs and
+ *                               their corresponding schemas, enabling reading of state data
+ *                               written with older schema versions
+ */
 class StateScanBuilder(
     session: SparkSession,
     schema: StructType,

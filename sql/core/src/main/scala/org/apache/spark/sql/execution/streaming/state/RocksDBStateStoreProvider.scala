@@ -84,6 +84,9 @@ private[sql] class RocksDBStateStoreProvider
 
       val columnFamilyInfo = Some(ColumnFamilyInfo(colFamilyName, newColFamilyId))
 
+      // For test cases only: TestStateSchemaProvider allows dynamically adding schemas
+      // during test execution to verify schema evolution behavior. In production,
+      // schemas are loaded from checkpoint data
       stateSchemaProvider match {
         case Some(t: TestStateSchemaProvider) =>
           t.addSchema(colFamilyName, keySchema, valueSchema)
@@ -416,6 +419,9 @@ private[sql] class RocksDBStateStoreProvider
       stateStoreName = stateStoreId.storeName,
       colFamilyName = StateStore.DEFAULT_COL_FAMILY_NAME)
 
+    // For test cases only: TestStateSchemaProvider allows dynamically adding schemas
+    // during test execution to verify schema evolution behavior. In production,
+    // schemas are loaded from checkpoint data
     stateSchemaProvider match {
       case Some(t: TestStateSchemaProvider) =>
         t.addSchema(StateStore.DEFAULT_COL_FAMILY_NAME, keySchema, valueSchema)

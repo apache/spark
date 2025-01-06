@@ -31,6 +31,9 @@ import org.apache.spark.util.{NextIterator, SerializableConfiguration}
 /**
  * An implementation of [[PartitionReaderFactory]] for State data source. This is used to support
  * general read from a state store instance, rather than specific to the operator.
+ * @param stateSchemaProviderOpt Optional provider that maintains mapping between schema IDs and
+ *                               their corresponding schemas, enabling reading of state data
+ *                               written with older schema versions
  */
 class StatePartitionReaderFactory(
     storeConf: StateStoreConf,
