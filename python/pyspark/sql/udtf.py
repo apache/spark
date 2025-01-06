@@ -390,7 +390,7 @@ class UserDefinedTableFunction:
                 jargs.append(arg._j_table_arg)
             else:
                 # Otherwise, convert it to a Java column
-                jargs.append(_to_java_column(arg))
+                jargs.append(_to_java_column(arg))  # type: ignore[arg-type]
 
         # Process keyword arguments
         jkwargs = []
@@ -400,7 +400,7 @@ class UserDefinedTableFunction:
                 j_arg = value._j_table_arg
             else:
                 # Otherwise, convert it to a Java column
-                j_arg = _to_java_column(value)
+                j_arg = _to_java_column(value)  # type: ignore[arg-type]
             # Create a named argument expression
             j_named_arg = sc._jvm.PythonSQLUtils.namedArgumentExpression(key, j_arg)
             jkwargs.append(j_named_arg)
