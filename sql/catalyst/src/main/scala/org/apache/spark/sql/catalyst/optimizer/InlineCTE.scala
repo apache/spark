@@ -80,18 +80,35 @@ case class InlineCTE(
       outerCTEId: Option[Long] = None): Unit = {
     plan match {
       case WithCTE(child, cteDefs) =>
+        var visit = true
         cteDefs.foreach { cteDef =>
-          cteMap(cteDef.id) = CTEReferenceInfo(
-            cteDef = cteDef,
-            refCount = 0,
-            outgoingRefs = mutable.Map.empty.withDefaultValue(0),
-            shouldInline = true
-          )
+          cteMap.get(cteDef.id) match {
+            // If we have seen this CTE definition then it must be self-contained so we can clear
+            // the references from its container to the definition
+            case Some(refInfo) =>
+              refInfo.container.foreach(c => cteMap(c).outgoingRefs -= cteDef.id)
+
+              // We have processed this definition (and all others in this `WithCTE` node) so we
+              // don't need to do it again.
+              visit = false
+
+            case _ =>
+              cteMap(cteDef.id) = CTEReferenceInfo(
+                cteDef = cteDef,
+                refCount = 0,
+                outgoingRefs = mutable.Map.empty.withDefaultValue(0),
+                shouldInline = true,
+                container = outerCTEId
+              )
+          }
         }
-        cteDefs.foreach { cteDef =>
-          buildCTEMap(cteDef, cteMap, Some(cteDef.id))
+
+        if (visit) {
+          cteDefs.foreach { cteDef =>
+            buildCTEMap(cteDef, cteMap, Some(cteDef.id))
+          }
+          buildCTEMap(child, cteMap, outerCTEId)
         }
-        buildCTEMap(child, cteMap, outerCTEId)
 
       case ref: CTERelationRef =>
         cteMap(ref.cteId) = cteMap(ref.cteId).withRefCountIncreased(1)
@@ -216,12 +233,15 @@ case class InlineCTE(
  *                 from other CTE relations and regular places.
  * @param outgoingRefs A mutable map that tracks outgoing reference counts to other CTE relations.
  * @param shouldInline If true, this CTE relation should be inlined in the places that reference it.
+ * @param container The container of a CTE definition is another CTE definition in witch the
+ *                  `WithCTE` node of the definition resides.
  */
 case class CTEReferenceInfo(
     cteDef: CTERelationDef,
     refCount: Int,
     outgoingRefs: mutable.Map[Long, Int],
-    shouldInline: Boolean) {
+    shouldInline: Boolean,
+    container: Option[Long]) {
 
   def withRefCountIncreased(count: Int): CTEReferenceInfo = {
     copy(refCount = refCount + count)
