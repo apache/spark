@@ -689,7 +689,7 @@ Project [x#x, y#x, pipeexpression(1, false, EXTEND) AS z#x]
 table t
 |> extend 1
 -- !query analysis
-Project [x#x, y#x, pipeexpression(1, false, EXTEND) AS 1#x]
+Project [x#x, y#x, 1 AS 1#x]
 +- SubqueryAlias spark_catalog.default.t
    +- Relation spark_catalog.default.t[x#x,y#x] csv
 
@@ -765,8 +765,8 @@ table t
     |> select * except (a, b))
 -- !query analysis
 Filter exists#x [x#x]
-:  +- Project [outer(spark_catalog.default.t.x)#x]
-:     +- Project [a#x, b#x, pipeexpression(outer(x#x), false, EXTEND) AS outer(spark_catalog.default.t.x)#x]
+:  +- Project [x#x]
+:     +- Project [a#x, b#x, outer(x#x)]
 :        +- SubqueryAlias spark_catalog.default.other
 :           +- Relation spark_catalog.default.other[a#x,b#x] json
 +- SubqueryAlias spark_catalog.default.t
@@ -3091,7 +3091,7 @@ table other
 |> select gkey
 -- !query analysis
 Project [gkey#x]
-+- Aggregate [(a#x + 1)], [(a#x + 1) AS gkey#x, pipeexpression(sum(b#x), true, AGGREGATE) AS sum(b)#xL]
++- Aggregate [(a#x + 1)], [(a#x + 1) AS gkey#x, sum(b#x) AS sum(b)#xL]
    +- SubqueryAlias spark_catalog.default.other
       +- Relation spark_catalog.default.other[a#x,b#x] json
 
@@ -3118,7 +3118,7 @@ Aggregate [1, 2], [1 AS 1#x, 2 AS 2#x]
 table t
 |> aggregate sum(x)
 -- !query analysis
-Aggregate [pipeexpression(sum(x#x), true, AGGREGATE) AS sum(x)#xL]
+Aggregate [sum(x#x) AS sum(x)#xL]
 +- SubqueryAlias spark_catalog.default.t
    +- Relation spark_catalog.default.t[x#x,y#x] csv
 
@@ -3190,7 +3190,7 @@ select 1 x, 3 z
 |> select x
 -- !query analysis
 Project [x#x]
-+- Aggregate [x#x, z#x, x#x], [x#x, z#x, x#x, pipeexpression(count(1), true, AGGREGATE) AS count(1)#xL]
++- Aggregate [x#x, z#x, x#x], [x#x, z#x, x#x, count(1) AS count(1)#xL]
    +- Project [1 AS x#x, 3 AS z#x]
       +- OneRowRelation
 
@@ -3199,7 +3199,7 @@ Project [x#x]
 table other
 |> aggregate a + count(b) group by a
 -- !query analysis
-Aggregate [a#x], [a#x, pipeexpression((cast(a#x as bigint) + count(b#x)), true, AGGREGATE) AS (a + count(b))#xL]
+Aggregate [a#x], [a#x, (cast(a#x as bigint) + count(b#x)) AS (a + count(b))#xL]
 +- SubqueryAlias spark_catalog.default.other
    +- Relation spark_catalog.default.other[a#x,b#x] json
 

@@ -18,17 +18,7 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.catalyst.analysis.MultiAlias
-import org.apache.spark.sql.catalyst.expressions.{
-  Alias,
-  Attribute,
-  Cast,
-  Expression,
-  ExtractValue,
-  Generator,
-  GeneratorOuter,
-  Literal,
-  NamedExpression
-}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Cast, Expression, ExtractValue, Generator, GeneratorOuter, Literal, NamedExpression, PipeExpression}
 import org.apache.spark.sql.catalyst.trees.TreePattern.UNRESOLVED_ALIAS
 import org.apache.spark.sql.catalyst.util.{toPrettySQL, AUTO_GENERATED_ALIAS}
 import org.apache.spark.sql.types.MetadataBuilder
@@ -52,6 +42,7 @@ object AliasResolution {
       case ne: NamedExpression => ne
       case go @ GeneratorOuter(g: Generator) if g.resolved => MultiAlias(go, Nil)
       case e if !e.resolved => u
+      case p: PipeExpression => resolve(u.copy(child = p.replacement))
       case g: Generator => MultiAlias(g, Nil)
       case c @ Cast(ne: NamedExpression, _, _, _) => Alias(c, ne.name)()
       case e: ExtractValue if extractOnly(e) => Alias(e, toPrettySQL(e))()
