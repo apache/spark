@@ -486,7 +486,7 @@ jobs:
   pyspark:
     needs: [precondition, infra-image]
     # always run if pyspark == 'true', even infra-image is skip (such as non-master job)
-    if: (!cancelled()) && fromJson(needs.precondition.outputs.required).pyspark == 'true'
+    if: (!cancelled()) && (fromJson(needs.precondition.outputs.required).pyspark == 'true' || fromJson(needs.precondition.outputs.required).pyspark-pandas == 'true')
     name: "Build modules: ${{ matrix.modules }}"
     runs-on: ubuntu-latest
     timeout-minutes: 180
