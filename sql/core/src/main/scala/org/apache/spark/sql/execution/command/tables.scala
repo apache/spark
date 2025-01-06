@@ -834,17 +834,17 @@ case class DescribeTableJsonCommand(
     dataType match {
       case arrayType: ArrayType =>
         JObject(
-          "type" -> JString("array"),
+          "name" -> JString("array"),
           "element_type" -> jsonType(arrayType.elementType),
-          "contains_null" -> JBool(arrayType.containsNull)
+          "element_nullable" -> JBool(arrayType.containsNull)
         )
 
       case mapType: MapType =>
         JObject(
-          "type" -> JString("map"),
+          "name" -> JString("map"),
           "key_type" -> jsonType(mapType.keyType),
           "value_type" -> jsonType(mapType.valueType),
-          "value_contains_null" -> JBool(mapType.valueContainsNull)
+          "value_nullable" -> JBool(mapType.valueContainsNull)
         )
 
       case structType: StructType =>
@@ -862,38 +862,38 @@ case class DescribeTableJsonCommand(
         }.toList
 
         JObject(
-          "type" -> JString("struct"),
+          "name" -> JString("struct"),
           "fields" -> JArray(fieldsJson)
         )
 
       case decimalType: DecimalType =>
         JObject(
-          "type" -> JString("decimal"),
+          "name" -> JString("decimal"),
           "precision" -> JInt(decimalType.precision),
           "scale" -> JInt(decimalType.scale)
         )
 
       case varcharType: VarcharType =>
         JObject(
-          "type" -> JString("varchar"),
+          "name" -> JString("varchar"),
           "length" -> JInt(varcharType.length)
         )
 
       case charType: CharType =>
         JObject(
-          "type" -> JString("char"),
+          "name" -> JString("char"),
           "length" -> JInt(charType.length)
         )
 
       // Only override TimestampType; TimestampType_NTZ type is already timestamp_ntz
       case _: TimestampType =>
-        JObject("type" -> JString("timestamp_ltz"))
+        JObject("name" -> JString("timestamp_ltz"))
 
       case yearMonthIntervalType: YearMonthIntervalType =>
         def getFieldName(field: Byte): String = YearMonthIntervalType.fieldToString(field)
 
         JObject(
-          "type" -> JString("interval"),
+          "name" -> JString("interval"),
           "start_unit" -> JString(getFieldName(yearMonthIntervalType.startField)),
           "end_unit" -> JString(getFieldName(yearMonthIntervalType.endField))
         )
@@ -902,13 +902,13 @@ case class DescribeTableJsonCommand(
         def getFieldName(field: Byte): String = DayTimeIntervalType.fieldToString(field)
 
         JObject(
-          "type" -> JString("interval"),
+          "name" -> JString("interval"),
           "start_unit" -> JString(getFieldName(dayTimeIntervalType.startField)),
           "end_unit" -> JString(getFieldName(dayTimeIntervalType.endField))
         )
 
       case _ =>
-        JObject("type" -> JString(dataType.typeName))
+        JObject("name" -> JString(dataType.typeName))
     }
   }
 

@@ -664,7 +664,7 @@ class DescribeTableSuite extends DescribeTableSuiteBase with CommandSuiteBase {
           TableColumn(
             name = "nested_struct",
             `type` = Type(
-              `type` = "struct",
+              name = "struct",
               fields = Some(List(
                 Field(
                   name = "name",
@@ -677,7 +677,7 @@ class DescribeTableSuite extends DescribeTableSuiteBase with CommandSuiteBase {
                 Field(
                   name = "contact",
                   `type` = Type(
-                    `type` = "struct",
+                    name = "struct",
                     fields = Some(List(
                       Field(
                         name = "email",
@@ -686,17 +686,17 @@ class DescribeTableSuite extends DescribeTableSuiteBase with CommandSuiteBase {
                       Field(
                         name = "phone_numbers",
                         `type` = Type(
-                          `type` = "array",
+                          name = "array",
                           element_type = Some(Type("string")),
-                          nullable = Some(true)
+                          element_nullable = Some(true)
                         )
                       ),
                       Field(
                         name = "addresses",
                         `type` = Type(
-                          `type` = "array",
+                          name = "array",
                           element_type = Some(Type(
-                            `type` = "struct",
+                            name = "struct",
                             fields = Some(List(
                               Field(
                                 name = "street",
@@ -712,7 +712,7 @@ class DescribeTableSuite extends DescribeTableSuiteBase with CommandSuiteBase {
                               )
                             ))
                           )),
-                          nullable = Some(true)
+                          element_nullable = Some(true)
                         )
                       )
                     ))
@@ -725,14 +725,14 @@ class DescribeTableSuite extends DescribeTableSuiteBase with CommandSuiteBase {
           TableColumn(
             name = "preferences",
             `type` = Type(
-              `type` = "map",
+              name = "map",
               key_type = Some(Type("string")),
               value_type = Some(Type(
-                `type` = "array",
+                name = "array",
                 element_type = Some(Type("string")),
-                nullable = Some(true)
+                element_nullable = Some(true)
               )),
-              nullable = Some(true)
+              value_nullable = Some(true)
             ),
             default = None
           ),
@@ -809,26 +809,29 @@ case class DescribeTableJson(
 case class TableColumn(
   name: String,
   `type`: Type,
-  nullable: Boolean = true,
+  element_nullable: Boolean = true,
   comment: Option[String] = None,
   default: Option[String] = None
 )
 
 case class Type(
-   `type`: String,
+   name: String,
    fields: Option[List[Field]] = None,
+   `type`: Option[Type] = None,
    element_type: Option[Type] = None,
    key_type: Option[Type] = None,
    value_type: Option[Type] = None,
    comment: Option[String] = None,
    default: Option[String] = None,
+   element_nullable: Option[Boolean] = Some(true),
+   value_nullable: Option[Boolean] = Some(true),
    nullable: Option[Boolean] = Some(true)
- )
+)
 
 case class Field(
   name: String,
   `type`: Type,
-  nullable: Boolean = true,
+  element_nullable: Boolean = true,
   comment: Option[String] = None,
   default: Option[String] = None
 )
