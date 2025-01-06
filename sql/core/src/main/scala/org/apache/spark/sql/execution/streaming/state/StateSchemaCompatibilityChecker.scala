@@ -231,8 +231,8 @@ class StateSchemaCompatibilityChecker(
       stateSchemaVersion: Int,
       schemaEvolutionEnabled: Boolean): Boolean = {
     val existingStateSchemaMap = readSchemaFiles()
-
-    if (existingStateSchemaMap.isEmpty) {
+    val mostRecentColFamilies = getExistingKeyAndValueSchema().map(_.colFamilyName)
+    if (mostRecentColFamilies.isEmpty) {
       // Initialize schemas with ID 0 when no existing schema
       val initializedSchemas = newStateSchema.map(schema =>
         schema.copy(keySchemaId = 0, valueSchemaId = 0)
@@ -259,7 +259,7 @@ class StateSchemaCompatibilityChecker(
 
       val colFamiliesAddedOrRemoved =
         (newStateSchema.map(_.colFamilyName).toSet !=
-          getExistingKeyAndValueSchema().map(_.colFamilyName).toSet)
+          mostRecentColFamilies.toSet)
       val newSchemaFileWritten = hasEvolutions || colFamiliesAddedOrRemoved
 
       if (stateSchemaVersion == SCHEMA_FORMAT_V3 && newSchemaFileWritten) {
