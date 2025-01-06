@@ -85,8 +85,10 @@ object StateStoreColumnFamilySchemaUtils {
     // Add TTL index if needed
     if (hasTtl) {
       val ttlIndexSchema = StateStoreColFamilySchema(
-        getTtlColFamilyName(stateName), 0,
-        getTTLRowKeySchema(keyEncoder.schema), 0,
+        getTtlColFamilyName(stateName),
+        keySchemaId = 0,
+        getTTLRowKeySchema(keyEncoder.schema),
+        valueSchemaId = 0,
         StructType(Array(StructField("__empty__", NullType))),
         Some(RangeKeyScanStateEncoderSpec(getTTLRowKeySchema(keyEncoder.schema), Seq(0))))
       schemas.put(ttlIndexSchema.colFamilyName, ttlIndexSchema)
@@ -112,7 +114,7 @@ object StateStoreColumnFamilySchemaUtils {
       Some(NoPrefixKeyStateEncoderSpec(keyEncoder.schema))))
     // Add row counter schema
     val counterSchema = StateStoreColFamilySchema(
-      getRowCounterCFName(stateName), 0,
+      getRowCounterCFName(stateName), keySchemaId = 0,
       keyEncoder.schema,
       valueSchemaId = 0,
       StructType(Seq(StructField("count", LongType, nullable = false))),
@@ -123,26 +125,30 @@ object StateStoreColumnFamilySchemaUtils {
     if (hasTtl) {
       // TTL index
       val ttlIndexSchema = StateStoreColFamilySchema(
-        getTtlColFamilyName(stateName), 0,
-        getTTLRowKeySchema(keyEncoder.schema), 0,
+        getTtlColFamilyName(stateName),
+        keySchemaId = 0,
+        getTTLRowKeySchema(keyEncoder.schema),
+        valueSchemaId = 0,
         StructType(Array(StructField("__empty__", NullType))),
         Some(RangeKeyScanStateEncoderSpec(getTTLRowKeySchema(keyEncoder.schema), Seq(0))))
       schemas.put(ttlIndexSchema.colFamilyName, ttlIndexSchema)
 
       // Min expiry index
       val minIndexSchema = StateStoreColFamilySchema(
-        s"$$min_$stateName", 0,
+        s"$$min_$stateName",
+        keySchemaId = 0,
         keyEncoder.schema,
-      valueSchemaId = 0,
+        valueSchemaId = 0,
         getExpirationMsRowSchema(),
         Some(NoPrefixKeyStateEncoderSpec(keyEncoder.schema)))
       schemas.put(minIndexSchema.colFamilyName, minIndexSchema)
 
       // Count index
       val countSchema = StateStoreColFamilySchema(
-        s"$$count_$stateName", 0,
+        s"$$count_$stateName",
+        keySchemaId = 0,
         keyEncoder.schema,
-      valueSchemaId = 0,
+        valueSchemaId = 0,
         StructType(Seq(StructField("count", LongType, nullable = false))),
         Some(NoPrefixKeyStateEncoderSpec(keyEncoder.schema)))
       schemas.put(countSchema.colFamilyName, countSchema)
@@ -173,8 +179,10 @@ object StateStoreColumnFamilySchemaUtils {
     // Add TTL index if needed
     if (hasTtl) {
       val ttlIndexSchema = StateStoreColFamilySchema(
-        getTtlColFamilyName(stateName), 0,
-        getTTLRowKeySchema(compositeKeySchema), 0,
+        getTtlColFamilyName(stateName),
+        keySchemaId = 0,
+        getTTLRowKeySchema(compositeKeySchema),
+        valueSchemaId = 0,
         StructType(Array(StructField("__empty__", NullType))),
         Some(RangeKeyScanStateEncoderSpec(getTTLRowKeySchema(compositeKeySchema), Seq(0))))
       schemas.put(ttlIndexSchema.colFamilyName, ttlIndexSchema)
