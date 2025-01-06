@@ -270,7 +270,8 @@ class SparkConnectServiceE2ESuite extends SparkConnectServerTest {
   }
 
   test("Exceptions thrown in the gRPC response observer does not lead to infinite retries") {
-    withSparkEnvConfs((Connect.CONNECT_EXECUTE_REATTACHABLE_SENDER_MAX_STREAM_DURATION.key, "10")) {
+    withSparkEnvConfs(
+      (Connect.CONNECT_EXECUTE_REATTACHABLE_SENDER_MAX_STREAM_DURATION.key, "10")) {
       withClient { client =>
         val query = client.execute(buildPlan("SELECT 1"))
         query.hasNext

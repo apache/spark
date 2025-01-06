@@ -126,7 +126,6 @@ private[connect] class ExecuteHolder(
     runner.start()
   }
 
-
   /**
    * Check if the execution is completed.
    */
