@@ -60,38 +60,6 @@ trait StateSchemaProvider extends Serializable {
   def getCurrentStateSchemaId(colFamilyName: String, isKey: Boolean): Short
 }
 
-
-// Test implementation that can be dynamically updated
-class TestStateSchemaProvider extends StateSchemaProvider {
-  private var schemas = Map.empty[StateSchemaMetadataKey, StateSchemaMetadataValue]
-
-  def addSchema(
-      colFamilyName: String,
-      keySchema: StructType,
-      valueSchema: StructType,
-      keySchemaId: Short = 0,
-      valueSchemaId: Short = 0): Unit = {
-    schemas ++= Map(
-      StateSchemaMetadataKey(colFamilyName, keySchemaId, isKey = true) ->
-        StateSchemaMetadataValue(keySchema, SchemaConverters.toAvroTypeWithDefaults(keySchema)),
-      StateSchemaMetadataKey(colFamilyName, valueSchemaId, isKey = false) ->
-        StateSchemaMetadataValue(valueSchema, SchemaConverters.toAvroTypeWithDefaults(valueSchema))
-    )
-  }
-
-  override def getSchemaMetadataValue(key: StateSchemaMetadataKey): StateSchemaMetadataValue = {
-    schemas(key)
-  }
-
-  override def getCurrentStateSchemaId(colFamilyName: String, isKey: Boolean): Short = {
-    schemas.keys
-      .filter(key =>
-        key.colFamilyName == colFamilyName &&
-          key.isKey == isKey)
-      .map(_.schemaId).max
-  }
-}
-
 class InMemoryStateSchemaProvider(metadata: StateSchemaMetadata) extends StateSchemaProvider {
   override def getSchemaMetadataValue(key: StateSchemaMetadataKey): StateSchemaMetadataValue = {
     metadata.activeSchemas(key)

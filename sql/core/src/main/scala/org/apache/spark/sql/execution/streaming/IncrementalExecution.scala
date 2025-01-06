@@ -276,6 +276,9 @@ class IncrementalExecution(
                 case exec: TransformWithStateExec =>
                   exec.copy(stateInfo = Some(exec.getStateInfo.copy(
                     stateSchemaMetadata = Some(stateSchemaBroadcast))))
+                case exec: TransformWithStateInPandasExec =>
+                  exec.copy(stateInfo = Some(exec.getStateInfo.copy(
+                    stateSchemaMetadata = Some(stateSchemaBroadcast))))
                 // Add other cases if needed for different StateStoreWriter implementations
                 case _ => ssw
               }

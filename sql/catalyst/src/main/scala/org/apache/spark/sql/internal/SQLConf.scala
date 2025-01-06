@@ -2334,6 +2334,13 @@ object SQLConf {
         "Valid values are 'unsaferow' and 'avro'")
       .createWithDefault("unsaferow")
 
+  val STREAMING_STATE_MAX_STATE_SCHEMA_FILES =
+    buildConf("spark.sql.streaming.stateStore.maxStateSchemaFiles")
+      .doc("The maximum number of StateSchemaV3 files allowed per operator")
+      .version("4.0.0")
+      .intConf
+      .createWithDefault(10)
+
   val STATE_STORE_COMPRESSION_CODEC =
     buildConf("spark.sql.streaming.stateStore.compression.codec")
       .internal()
@@ -5786,6 +5793,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def stateStoreCheckpointFormatVersion: Int = getConf(STATE_STORE_CHECKPOINT_FORMAT_VERSION)
 
   def stateStoreEncodingFormat: String = getConf(STREAMING_STATE_STORE_ENCODING_FORMAT)
+
+  def maxStateSchemaFiles: Int = getConf(STREAMING_STATE_MAX_STATE_SCHEMA_FILES)
 
   def checkpointRenamedFileCheck: Boolean = getConf(CHECKPOINT_RENAMEDFILE_CHECK_ENABLED)
 

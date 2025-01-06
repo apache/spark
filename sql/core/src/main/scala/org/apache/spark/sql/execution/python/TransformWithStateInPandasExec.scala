@@ -355,6 +355,8 @@ case class TransformWithStateInPandasExec(
     }
   }
 
+  override def supportsSchemaEvolution: Boolean = true
+
   private def processDataWithPartition(
       store: StateStore,
       dataIterator: Iterator[InternalRow],

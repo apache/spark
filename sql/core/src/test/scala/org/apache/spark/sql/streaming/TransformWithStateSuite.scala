@@ -21,7 +21,6 @@ import java.io.File
 import java.time.Duration
 import java.util.UUID
 
-import org.apache.avro.SchemaValidationException
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.scalatest.matchers.must.Matchers.be
 import org.scalatest.matchers.should.Matchers.convertToAnyShouldWrapper
@@ -1853,7 +1852,7 @@ class TransformWithStateSuite extends StateStoreMetricsTest
         testStream(result2, OutputMode.Update())(
           StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
           AddData(inputData, "a"),
-          ExpectFailure[SchemaValidationException] {
+          ExpectFailure[StateStoreInvalidValueSchemaEvolution] {
             (t: Throwable) => {
               assert(t.getMessage.contains(
                 "Unable to read schema:"))
@@ -2087,7 +2086,7 @@ class TransformWithStateSuite extends StateStoreMetricsTest
             triggerClock = clock),
           AddData(inputData, "a"),
           AdvanceManualClock(1 * 1000),
-          ExpectFailure[SchemaValidationException] { t =>
+          ExpectFailure[StateStoreInvalidValueSchemaEvolution] { t =>
             checkError(
               t.asInstanceOf[SparkUnsupportedOperationException],
               condition = "STATE_STORE_INVALID_VALUE_SCHEMA_EVOLUTION"
@@ -2759,7 +2758,7 @@ class TransformWithStateSuite extends StateStoreMetricsTest
         testStream(result3, OutputMode.Update())(
           StartStream(checkpointLocation = dir.getCanonicalPath),
           AddData(inputData, "test3"),
-          ExpectFailure[SchemaValidationException] { error =>
+          ExpectFailure[StateStoreInvalidValueSchemaEvolution] { error =>
             assert(error.getMessage.contains("Unable to read schema:"))
           }
         )

@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.streaming.state
 import scala.jdk.CollectionConverters.IterableHasAsJava
 import scala.util.Try
 
-import org.apache.avro.SchemaValidatorBuilder
+import org.apache.avro.{SchemaValidationException, SchemaValidatorBuilder}
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FSDataInputStream, Path}
 
@@ -196,7 +196,6 @@ class StateSchemaCompatibilityChecker(
       throw StateStoreErrors.stateStoreKeySchemaNotCompatible(storedKeySchema.toString,
         keySchema.toString)
     } else if (!ignoreValueSchema && schemaEvolutionEnabled) {
-
       // Check value schema evolution
       // Sort schemas by most recent to least recent
       val oldAvroSchemas = oldSchemas.sortBy(_.valueSchemaId).reverse.map { oldSchema =>
@@ -205,7 +204,14 @@ class StateSchemaCompatibilityChecker(
       val newAvroSchema = SchemaConverters.toAvroTypeWithDefaults(valueSchema)
 
       val validator = new SchemaValidatorBuilder().canReadStrategy.validateAll()
-      validator.validate(newAvroSchema, oldAvroSchemas)
+      try {
+        validator.validate(newAvroSchema, oldAvroSchemas)
+      } catch {
+        case s: SchemaValidationException =>
+          throw StateStoreErrors.stateStoreInvalidValueSchemaEvolution(
+            valueSchema.toString, s.getMessage)
+        case e: _ => throw e
+      }
 
       // Schema evolved - increment value schema ID
       (resultSchema.copy(valueSchemaId = incrementSchemaId(mostRecentSchema.valueSchemaId)), true)
