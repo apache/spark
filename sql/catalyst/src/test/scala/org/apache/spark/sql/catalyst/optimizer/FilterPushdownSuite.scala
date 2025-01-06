@@ -27,7 +27,6 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
 
@@ -43,11 +42,11 @@ class FilterPushdownSuite extends PlanTest {
         PushPredicateThroughNonJoin,
         BooleanSimplification,
         PushPredicateThroughJoin,
+        RewriteWithExpression,
         CollapseProject) ::
       Batch("Push extra predicate through join", FixedPoint(10),
         PushExtraPredicateThroughJoin,
-        PushDownPredicates) ::
-      Batch("Rewrite With expression", FixedPoint(10),
+        PushDownPredicates,
         RewriteWithExpression,
         CollapseProject) :: Nil
   }
@@ -1545,35 +1544,33 @@ class FilterPushdownSuite extends PlanTest {
   }
 
   test("SPARK-50589: avoid extra expression duplication when push filter") {
-    withSQLConf(SQLConf.USE_COMMON_EXPR_ID_FOR_ALIAS.key -> "false") {
-      // through project
-      val originalQuery1 = testRelation
-        .select($"a" + $"b" as "add", $"a" - $"b" as "sub")
-        .where($"add" < 10 && $"add" + $"add" > 10 && $"sub" > 0)
-      val optimized1 = Optimize.execute(originalQuery1.analyze)
-      val correctAnswer1 = testRelation
-        .select($"a", $"b", $"c", $"a" + $"b" as "_common_expr_0")
-        .where($"_common_expr_0" < 10 &&
-          $"_common_expr_0" + $"_common_expr_0" > 10 &&
-          $"a" - $"b" > 0)
-        .select($"a" + $"b" as "add", $"a" - $"b" as "sub")
-        .analyze
-      comparePlans(optimized1, correctAnswer1)
+    // through project
+    val originalQuery1 = testRelation
+      .select($"a" + $"b" as "add", $"a" - $"b" as "sub")
+      .where($"add" < 10 && $"add" + $"add" > 10 && $"sub" > 0)
+    val optimized1 = Optimize.execute(originalQuery1.analyze)
+    val correctAnswer1 = testRelation
+      .select($"a", $"b", $"c", $"a" + $"b" as "add")
+      .where($"add" < 10 &&
+        $"add" + $"add" > 10 &&
+        $"a" - $"b" > 0)
+      .select($"a" + $"b" as "add", $"a" - $"b" as "sub")
+      .analyze
+    comparePlans(optimized1, correctAnswer1)
 
-      // through aggregate
-      val originalQuery2 = testRelation
-        .groupBy($"a")($"a", $"a" + $"a" as "add", abs($"a") as "abs", count(1) as "ct")
-        .where($"add" < 10 && $"add" + $"add" > 10 && $"abs" > 5)
-      val optimized2 = Optimize.execute(originalQuery2.analyze)
-      val correctAnswer2 = testRelation
-        .select($"a", $"b", $"c", $"a" + $"a" as "_common_expr_0")
-        .where($"_common_expr_0" < 10 &&
-          $"_common_expr_0" + $"_common_expr_0" > 10 &&
-          abs($"a") > 5)
-        .select($"a", $"b", $"c")
-        .groupBy($"a")($"a", $"a" + $"a" as "add", abs($"a") as "abs", count(1) as "ct")
-        .analyze
-      comparePlans(optimized2, correctAnswer2)
-    }
+    // through aggregate
+    val originalQuery2 = testRelation
+      .groupBy($"a")($"a", $"a" + $"a" as "add", abs($"a") as "abs", count(1) as "ct")
+      .where($"add" < 10 && $"add" + $"add" > 10 && $"abs" > 5)
+    val optimized2 = Optimize.execute(originalQuery2.analyze)
+    val correctAnswer2 = testRelation
+      .select($"a", $"b", $"c", $"a" + $"a" as "add")
+      .where($"add" < 10 &&
+        $"add" + $"add" > 10 &&
+        abs($"a") > 5)
+      .select($"a", $"b", $"c")
+      .groupBy($"a")($"a", $"a" + $"a" as "add", abs($"a") as "abs", count(1) as "ct")
+      .analyze
+    comparePlans(optimized2, correctAnswer2)
   }
 }

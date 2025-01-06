@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.rules.RuleExecutor
 class RewriteWithExpressionSuite extends PlanTest {
 
   object Optimizer extends RuleExecutor[LogicalPlan] {
-    val batches = Batch("Rewrite With expression", FixedPoint(5),
+    val batches = Batch("Rewrite With expression", Once,
       PullOutGroupingExpressions,
       RewriteWithExpression) :: Nil
   }

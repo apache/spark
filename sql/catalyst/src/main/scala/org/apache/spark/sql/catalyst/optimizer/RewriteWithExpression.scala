@@ -40,6 +40,14 @@ import org.apache.spark.util.Utils
  */
 object RewriteWithExpression extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = {
+    var p = plan
+    while (p.containsPattern(WITH_EXPRESSION)) {
+      p = applyOnce(p)
+    }
+    p
+  }
+
+  private def applyOnce(plan: LogicalPlan): LogicalPlan = {
     plan.transformUpWithSubqueriesAndPruning(_.containsPattern(WITH_EXPRESSION)) {
       // For aggregates, separate the computation of the aggregations themselves from the final
       // result by moving the final result computation into a projection above it. This prevents
@@ -115,7 +123,7 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
           _, inputPlans, commonExprsPerChild, commonExprIdSet, isNestedWith = true))
         val refToExpr = mutable.HashMap.empty[CommonExpressionId, Expression]
 
-        defs.zipWithIndex.foreach { case (CommonExpressionDef(child, id), index) =>
+        defs.zipWithIndex.foreach { case (CommonExpressionDef(child, id, originAlias), index) =>
           if (id.canonicalized) {
             throw SparkException.internalError(
               "Cannot rewrite canonicalized Common expression definitions")
@@ -146,12 +154,22 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
                 }
                 refToExpr(id) = existingCommonExpr.get._1.toAttribute
               } else {
-                val aliasName = if (SQLConf.get.getConf(SQLConf.USE_COMMON_EXPR_ID_FOR_ALIAS)) {
-                  s"_common_expr_${id.id}"
-                } else {
-                  s"_common_expr_$index"
+                val alias = originAlias match {
+                  case Some(a) =>
+                    a.copy(child = child)(
+                      exprId = a.exprId,
+                      qualifier = a.qualifier,
+                      explicitMetadata = Option(a.metadata),
+                      nonInheritableMetadataKeys = a.nonInheritableMetadataKeys
+                    )
+                  case _ =>
+                    val aliasName = if (SQLConf.get.getConf(SQLConf.USE_COMMON_EXPR_ID_FOR_ALIAS)) {
+                      s"_common_expr_${id.id}"
+                    } else {
+                      s"_common_expr_$index"
+                    }
+                    Alias(child, aliasName)()
                 }
-                val alias = Alias(child, aliasName)()
                 val fakeProj = Project(Seq(alias), inputPlans(childPlanIndex))
                 if (PlanHelper.specialExpressionsInUnsupportedOperator(fakeProj).nonEmpty) {
                   // We have to inline the common expression if it cannot be put in a Project.

@@ -104,6 +104,8 @@ abstract class Optimizer(catalogManager: CatalogManager)
         ReorderJoin,
         EliminateOuterJoin,
         PushDownPredicates,
+        RewriteWithExpression,
+        CollapseProject,
         PushDownLeftSemiAntiJoin,
         PushLeftSemiLeftAntiThroughJoin,
         OptimizeJoinCondition,
@@ -161,9 +163,6 @@ abstract class Optimizer(catalogManager: CatalogManager)
     val operatorOptimizationBatch: Seq[Batch] = Seq(
       Batch("Operator Optimization before Inferring Filters", fixedPoint,
         operatorOptimizationRuleSet: _*),
-      Batch("Rewrite With expression", fixedPoint,
-        RewriteWithExpression,
-        CollapseProject),
       Batch("Infer Filters", Once,
         InferFiltersFromGenerate,
         InferFiltersFromConstraints),
@@ -171,8 +170,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
         operatorOptimizationRuleSet: _*),
       Batch("Push extra predicate through join", fixedPoint,
         PushExtraPredicateThroughJoin,
-        PushDownPredicates),
-      Batch("Rewrite With expression", fixedPoint,
+        PushDownPredicates,
         RewriteWithExpression,
         CollapseProject))
 
@@ -180,7 +178,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
     Batch("Finish Analysis", FixedPoint(1), FinishAnalysis),
     // We must run this batch after `ReplaceExpressions`, as `RuntimeReplaceable` expression
     // may produce `With` expressions that need to be rewritten.
-    Batch("Rewrite With expression", fixedPoint, RewriteWithExpression),
+    Batch("Rewrite With expression", Once, RewriteWithExpression),
     //////////////////////////////////////////////////////////////////////////////////////////
     // Optimizer rules start here
     //////////////////////////////////////////////////////////////////////////////////////////
@@ -2002,32 +2000,23 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
       cond: Expression,
       aliasMap: AttributeMap[Alias]): Expression = {
     if (!SQLConf.get.getConf(SQLConf.ALWAYS_INLINE_COMMON_EXPR)) {
-      // SubqueryExpression can't contain common expression ref, replace alias for it first.
-      val newCond = replaceAliasForSubqueryExpression(cond, aliasMap)
-      val replaceWithMap = newCond.collect {case a: Attribute => a }
+      val replaceWithMap = cond.collect {case a: Attribute => a }
         .groupBy(identity)
         .transform((_, v) => v.size)
         .filter(m => aliasMap.contains(m._1) && m._2 > 1)
-        .map(m => m._1 -> trimAliases(aliasMap.getOrElse(m._1, m._1)))
+        .map(m => m._1 -> aliasMap(m._1))
         .filter(m => !CollapseProject.isCheap(m._2))
       if (replaceWithMap.isEmpty) {
-        newCond
+        cond
       } else {
-        val defsMap = AttributeMap(replaceWithMap.map(m => m._1 -> CommonExpressionDef(m._2)))
+        val defsMap = AttributeMap(replaceWithMap.map(m =>
+          m._1 -> CommonExpressionDef(child = trimAliases(m._2), originAlias = Some(m._2))))
         val refsMap = AttributeMap(defsMap.map(m => m._1 -> new CommonExpressionRef(m._2)))
-        splitConjunctivePredicates(newCond)
+        splitConjunctivePredicates(cond)
           .map(rewriteByWith(_, defsMap, refsMap))
           .reduce(And)
       }
     } else cond
-  }
-
-  private def replaceAliasForSubqueryExpression(
-      expr: Expression,
-      aliasMap: AttributeMap[Alias]): Expression = {
-    expr.transform {
-      case s: SubqueryExpression => replaceAlias(s, aliasMap)
-    }
   }
 
   private def rewriteByWith(
