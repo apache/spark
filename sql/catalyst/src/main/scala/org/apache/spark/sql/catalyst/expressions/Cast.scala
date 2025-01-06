@@ -93,7 +93,9 @@ object Cast extends QueryErrorsBase {
 
     case (NullType, _) => true
 
+    case (_, CharType(_) | VarcharType(_)) if !SQLConf.get.preserveCharVarcharTypeInfo => false
     case (_, _: StringType) => true
+    case (CharType(_) | VarcharType(_), _) if !SQLConf.get.preserveCharVarcharTypeInfo => false
 
     case (_: StringType, _: BinaryType) => true
 
@@ -198,7 +200,9 @@ object Cast extends QueryErrorsBase {
 
     case (NullType, _) => true
 
+    case (_, CharType(_) | VarcharType(_)) if !SQLConf.get.preserveCharVarcharTypeInfo => false
     case (_, _: StringType) => true
+    case (CharType(_) | VarcharType(_), _) if !SQLConf.get.preserveCharVarcharTypeInfo => false
 
     case (_: StringType, BinaryType) => true
     case (_: IntegralType, BinaryType) => true
@@ -317,7 +321,8 @@ object Cast extends QueryErrorsBase {
     case (NullType, _) => true
     case (_: NumericType, _: NumericType) => true
     case (_: AtomicType, _: StringType) => true
-    case (_: CalendarIntervalType, s: StringType) => StringHelper.isPlainString(s)
+    case (_: CalendarIntervalType, CharType(_) | VarcharType(_)) => false
+    case (_: CalendarIntervalType, _: StringType) => true
     case (_: DatetimeType, _: DatetimeType) => true
 
     case (ArrayType(fromType, fn), ArrayType(toType, tn)) =>

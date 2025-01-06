@@ -20,8 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode, FalseLiteral}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{CharType, DataType, StringType, VarcharType}
+import org.apache.spark.sql.types.{DataType, StringType}
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
@@ -52,10 +51,7 @@ case class ToPrettyString(child: Expression, timeZoneId: Option[String] = None)
 
   override protected val binaryFormatter: BinaryFormatter = ToStringBase.getBinaryFormatter
 
-  private[this] lazy val castFunc: Any => UTF8String = castToString(child.dataType match {
-    case CharType(_) => StringType
-    case dt => dt
-  })
+  private[this] lazy val castFunc: Any => UTF8String = castToString(child.dataType)
 
   override def eval(input: InternalRow): Any = {
     val v = child.eval(input)
@@ -64,13 +60,7 @@ case class ToPrettyString(child: Expression, timeZoneId: Option[String] = None)
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val childCode = child.genCode(ctx)
-    val toStringCode = (child.dataType match {
-      case CharType(length) if SQLConf.get.preserveCharVarcharTypeInfo =>
-        castToCharCode(child.dataType, length, ctx)
-      case VarcharType(length) if SQLConf.get.preserveCharVarcharTypeInfo =>
-        castToVarcharCode(child.dataType, length, ctx)
-      case _ => castToStringCode(child.dataType, ctx)
-    }).apply(childCode.value, ev.value)
+    val toStringCode = castToStringCode(child.dataType, ctx).apply(childCode.value, ev.value)
     val finalCode =
       code"""
          |${childCode.code}
