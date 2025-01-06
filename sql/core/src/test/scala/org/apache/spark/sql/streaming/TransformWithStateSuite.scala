@@ -33,11 +33,11 @@ import org.apache.spark.sql.catalyst.util.stringToFile
 import org.apache.spark.sql.execution.datasources.v2.state.StateSourceOptions
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.execution.streaming._
-import org.apache.spark.sql.execution.streaming.state._
+import org.apache.spark.sql.execution.streaming.state.{StateStoreInvalidValueSchemaEvolution, _}
 import org.apache.spark.sql.functions.timestamp_seconds
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.util.StreamManualClock
-import org.apache.spark.sql.types.{IntegerType, LongType, StringType, StructType}
+import org.apache.spark.sql.types._
 
 object TransformWithStateSuiteUtils {
   val NUM_SHUFFLE_PARTITIONS = 5
@@ -854,7 +854,7 @@ class TransformWithStateSuite extends StateStoreMetricsTest
     }
   }
 
-  test("transformWithState - upcasting should succeed") {
+  testWithAvroOnly("transformWithState - upcasting should succeed") {
     withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
       classOf[RocksDBStateStoreProvider].getName,
       SQLConf.SHUFFLE_PARTITIONS.key ->
@@ -911,7 +911,7 @@ class TransformWithStateSuite extends StateStoreMetricsTest
     }
   }
 
-  test("transformWithState - reordering fields should succeed") {
+  testWithAvroOnly("transformWithState - reordering fields should succeed") {
     withSQLConf(
       SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
         classOf[RocksDBStateStoreProvider].getName,
@@ -952,7 +952,7 @@ class TransformWithStateSuite extends StateStoreMetricsTest
     }
   }
 
-  test("transformWithState - adding field should succeed") {
+  testWithAvroOnly("transformWithState - adding field should succeed") {
     withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
       classOf[RocksDBStateStoreProvider].getName,
       SQLConf.SHUFFLE_PARTITIONS.key ->
@@ -1007,7 +1007,7 @@ class TransformWithStateSuite extends StateStoreMetricsTest
     }
   }
 
-  test("transformWithState - rename field") {
+  testWithAvroOnly("transformWithState - add and remove field between runs") {
     withSQLConf(
       SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[RocksDBStateStoreProvider].getName,
       SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
@@ -1049,7 +1049,7 @@ class TransformWithStateSuite extends StateStoreMetricsTest
     }
   }
 
-  test("transformWithState - verify default values during schema evolution") {
+  testWithAvroOnly("transformWithState - verify default values during schema evolution") {
     withSQLConf(
       SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[RocksDBStateStoreProvider].getName,
       SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
@@ -1109,7 +1109,7 @@ class TransformWithStateSuite extends StateStoreMetricsTest
     }
   }
 
-  test("transformWithState - removing field should succeed") {
+  testWithAvroOnly("transformWithState - removing field should succeed") {
     withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
       classOf[RocksDBStateStoreProvider].getName,
       SQLConf.SHUFFLE_PARTITIONS.key ->
@@ -1140,7 +1140,7 @@ class TransformWithStateSuite extends StateStoreMetricsTest
         testStream(result1, OutputMode.Update())(
           StartStream(checkpointLocation = dirPath),
           AddData(inputData, "a"),
-          CheckNewAnswer(("a", "2")),
+          CheckNewAnswer(("a", "1")),
           StopStream
         )
       }
@@ -1614,6 +1614,22 @@ class TransformWithStateSuite extends StateStoreMetricsTest
             Option(userKeySchema)
           )
 
+          val schema3 = StateStoreColFamilySchema(
+            "$rowCounter_listState", 0,
+            keySchema, 0,
+            new StructType().add("count", LongType, false),
+            Some(NoPrefixKeyStateEncoderSpec(keySchema)),
+            None
+          )
+
+          val schema4 = StateStoreColFamilySchema(
+            "default", 0,
+            keySchema, 0,
+            new StructType().add("value", BinaryType),
+            Some(NoPrefixKeyStateEncoderSpec(keySchema)),
+            None
+          )
+
           val inputData = MemoryStream[String]
           val result = inputData.toDS()
             .groupByKey(x => x)
@@ -1631,7 +1647,7 @@ class TransformWithStateSuite extends StateStoreMetricsTest
               val providerId = StateStoreProviderId(StateStoreId(
                 checkpointDir.getCanonicalPath, 0, 0), q.lastProgress.runId)
               val checker = new StateSchemaCompatibilityChecker(providerId,
-                hadoopConf, Some(schemaFilePath))
+                hadoopConf, List(schemaFilePath))
               val colFamilySeq = checker.readSchemaFile()
 
               assert(TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS ==
@@ -1641,9 +1657,9 @@ class TransformWithStateSuite extends StateStoreMetricsTest
               assert(TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS ==
                 q.lastProgress.stateOperators.head.customMetrics.get("numMapStateVars").toInt)
 
-              assert(colFamilySeq.length == 3)
+              assert(colFamilySeq.length == 5)
               assert(colFamilySeq.map(_.toString).toSet == Set(
-                schema0, schema1, schema2
+                schema0, schema1, schema2, schema3, schema4
               ).map(_.toString))
             },
             StopStream
@@ -1721,10 +1737,11 @@ class TransformWithStateSuite extends StateStoreMetricsTest
           .transformWithState(new RunningCountStatefulProcessorInt(),
             TimeMode.None(),
             OutputMode.Update())
+
         testStream(result2, OutputMode.Update())(
           StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
           AddData(inputData, "a"),
-          ExpectFailure[StateStoreInvalidValueSchema] {
+          ExpectFailure[StateStoreInvalidValueSchemaEvolution] {
             (t: Throwable) => {
               assert(t.getMessage.contains("Please check number and type of fields."))
             }
@@ -2137,7 +2154,7 @@ class TransformWithStateSuite extends StateStoreMetricsTest
         // and we only need to keep metadata files for batches 2, 3, and the since schema
         // hasn't changed between batches 2, 3, we only keep the schema file for batch 2
         assert(getFiles(metadataPath).length == 2)
-        assert(getFiles(stateSchemaPath).length == 1)
+        assert(getFiles(stateSchemaPath).length == 2)
       }
     }
   }

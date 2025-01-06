@@ -275,7 +275,7 @@ class StateSchemaCompatibilityCheckerSuite extends SharedSparkSession {
       val schemaFilePath = Some(new Path(stateSchemaDir,
         s"${batchId}_${UUID.randomUUID().toString}"))
       val checker = new StateSchemaCompatibilityChecker(providerId, hadoopConf,
-        oldSchemaFilePath = schemaFilePath,
+        oldSchemaFilePaths = schemaFilePath.toList,
         newSchemaFilePath = schemaFilePath)
       checker.createSchemaFile(storeColFamilySchema,
         SchemaHelper.SchemaWriter.createSchemaWriter(stateSchemaVersion))
@@ -397,7 +397,7 @@ class StateSchemaCompatibilityCheckerSuite extends SharedSparkSession {
       val result = Try(
         StateSchemaCompatibilityChecker.validateAndMaybeEvolveStateSchema(stateInfo, hadoopConf,
           oldStateSchema, spark.sessionState, stateSchemaVersion = stateSchemaVersion,
-          oldSchemaFilePath = schemaFilePath,
+          oldSchemaFilePaths = schemaFilePath.toList,
           newSchemaFilePath = newSchemaFilePath,
           extraOptions = extraOptions)
       ).toEither.fold(Some(_), _ => None)
@@ -412,9 +412,9 @@ class StateSchemaCompatibilityCheckerSuite extends SharedSparkSession {
           StateSchemaCompatibilityChecker.validateAndMaybeEvolveStateSchema(stateInfo, hadoopConf,
             newStateSchema, spark.sessionState, stateSchemaVersion = stateSchemaVersion,
             extraOptions = extraOptions,
-            oldSchemaFilePath = stateSchemaVersion match {
-                case 3 => newSchemaFilePath
-                case _ => None
+            oldSchemaFilePaths = stateSchemaVersion match {
+                case 3 => newSchemaFilePath.toList
+                case _ => List.empty
             },
             newSchemaFilePath = getNewSchemaPath(stateSchemaDir, stateSchemaVersion))
         }
@@ -463,7 +463,7 @@ class StateSchemaCompatibilityCheckerSuite extends SharedSparkSession {
         keyStateEncoderSpec = getKeyStateEncoderSpec(stateSchemaVersion, oldKeySchema)))
       StateSchemaCompatibilityChecker.validateAndMaybeEvolveStateSchema(stateInfo, hadoopConf,
         oldStateSchema, spark.sessionState, stateSchemaVersion = stateSchemaVersion,
-        oldSchemaFilePath = schemaFilePath,
+        oldSchemaFilePaths = schemaFilePath.toList,
         newSchemaFilePath = getNewSchemaPath(stateSchemaDir, stateSchemaVersion),
         extraOptions = extraOptions)
 
@@ -472,7 +472,7 @@ class StateSchemaCompatibilityCheckerSuite extends SharedSparkSession {
         keyStateEncoderSpec = getKeyStateEncoderSpec(stateSchemaVersion, newKeySchema)))
       StateSchemaCompatibilityChecker.validateAndMaybeEvolveStateSchema(stateInfo, hadoopConf,
         newStateSchema, spark.sessionState, stateSchemaVersion = stateSchemaVersion,
-        oldSchemaFilePath = schemaFilePath,
+        oldSchemaFilePaths = schemaFilePath.toList,
         newSchemaFilePath = getNewSchemaPath(stateSchemaDir, stateSchemaVersion),
         extraOptions = extraOptions)
     }

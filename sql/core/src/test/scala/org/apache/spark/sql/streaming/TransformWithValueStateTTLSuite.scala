@@ -360,7 +360,7 @@ class TransformWithValueStateTTLSuite extends TransformWithStateTTLTest {
             val providerId = StateStoreProviderId(StateStoreId(
               checkpointDir.getCanonicalPath, 0, 0), q.lastProgress.runId)
             val checker = new StateSchemaCompatibilityChecker(providerId,
-              hadoopConf, Some(schemaFilePath))
+              hadoopConf, List(schemaFilePath))
             val colFamilySeq = checker.readSchemaFile()
 
             assert(TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS ==

@@ -123,6 +123,20 @@ trait AlsoTestWithEncodingTypes extends SQLTestUtils {
       }
     }
   }
+
+  // New method for Avro-only tests
+  protected def testWithAvroOnly(testName: String, testTags: Tag*)(testBody: => Any)
+                            (implicit pos: Position): Unit = {
+    super.test(s"$testName (encoding = avro)", testTags: _*) {
+      withSQLConf(SQLConf.STREAMING_STATE_STORE_ENCODING_FORMAT.key -> "avro") {
+        testBody
+      }
+    }
+  }
+
+  protected def getCurrentEncoding(): String = {
+    spark.conf.get(SQLConf.STREAMING_STATE_STORE_ENCODING_FORMAT.key)
+  }
 }
 
 trait AlsoTestWithRocksDBFeatures

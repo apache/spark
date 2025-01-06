@@ -222,24 +222,21 @@ trait TransformWithStateMetadataUtils extends Logging {
         None
     }
 
-    val oldStateSchemaFilePath: Option[Path] = operatorStateMetadata match {
+    val oldStateSchemaFilePaths: List[Path] = operatorStateMetadata match {
       case Some(metadata) =>
         metadata match {
           case v2: OperatorStateMetadataV2 =>
-            // We pick the last entry in the schema list because it contains the most recent
-            // StateStoreColFamilySchemas
-            val schemaPath = v2.stateStoreInfo.head.stateSchemaFilePaths.last
-            Some(new Path(schemaPath))
-          case _ => None
+            v2.stateStoreInfo.head.stateSchemaFilePaths.map(new Path(_))
+          case _ => List.empty
         }
-      case None => None
+      case None => List.empty
     }
     // state schema file written here, writing the new schema list we passed here
     List(StateSchemaCompatibilityChecker.
       validateAndMaybeEvolveStateSchema(info, hadoopConf,
         newSchemas.values.toList, session.sessionState, stateSchemaVersion,
         storeName = StateStoreId.DEFAULT_STORE_NAME,
-        oldSchemaFilePath = oldStateSchemaFilePath,
+        oldSchemaFilePaths = oldStateSchemaFilePaths,
         newSchemaFilePath = Some(newStateSchemaFilePath),
         schemaEvolutionEnabled = stateStoreEncodingFormat == "avro"))
   }

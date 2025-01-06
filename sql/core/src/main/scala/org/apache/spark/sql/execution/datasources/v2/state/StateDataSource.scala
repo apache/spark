@@ -217,7 +217,7 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
 
       // Read the schema file path from operator metadata version v2 onwards
       // for the transformWithState operator
-      val oldSchemaFilePath = if (storeMetadata.length > 0 && storeMetadata.head.version == 2
+      val oldSchemaFilePaths = if (storeMetadata.length > 0 && storeMetadata.head.version == 2
         && twsShortNameSeq.exists(storeMetadata.head.operatorName.contains)) {
         val storeMetadataEntry = storeMetadata.head
         val operatorProperties = TransformWithStateOperatorProperties.fromJson(
@@ -241,12 +241,10 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
           schemaFilePaths
         )
         stateSchemaProvider = Some(new InMemoryStateSchemaProvider(stateSchemaMetadata))
-        schemaFilePaths.lastOption.map { schemaFilePath =>
-          new Path(schemaFilePath)
-        }
+        schemaFilePaths.map(new Path(_))
       } else {
         None
-      }
+      }.toList
 
       try {
         // Read the actual state schema from the provided path for v2 or from the dedicated path
@@ -257,7 +255,7 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
           partitionId, sourceOptions.storeName)
         val providerId = new StateStoreProviderId(storeId, UUID.randomUUID())
         val manager = new StateSchemaCompatibilityChecker(providerId, hadoopConf,
-          oldSchemaFilePath = oldSchemaFilePath)
+          oldSchemaFilePaths = oldSchemaFilePaths)
         val stateSchema = manager.readSchemaFile()
 
         // Based on the version and read schema, populate the keyStateEncoderSpec used for
