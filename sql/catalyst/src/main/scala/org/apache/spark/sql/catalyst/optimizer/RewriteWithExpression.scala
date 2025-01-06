@@ -40,11 +40,14 @@ import org.apache.spark.util.Utils
  */
 object RewriteWithExpression extends Rule[LogicalPlan] with AliasHelper {
   override def apply(plan: LogicalPlan): LogicalPlan = {
+    if (!plan.containsPattern(WITH_EXPRESSION)) {
+      return plan
+    }
     var p = plan
     while (p.containsPattern(WITH_EXPRESSION)) {
-      p = applyOnce(p)
+      p = CollapseProject(applyOnce(p))
     }
-    rewriteAlias(CollapseProject.apply(p))
+    rewriteAlias(p)
   }
 
   // Expensive common expression will be evaluated twice: once in the Filter being pushed down,

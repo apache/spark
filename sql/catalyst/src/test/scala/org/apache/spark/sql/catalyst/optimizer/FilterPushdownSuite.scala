@@ -42,7 +42,8 @@ class FilterPushdownSuite extends PlanTest {
         PushPredicateThroughNonJoin,
         BooleanSimplification,
         PushPredicateThroughJoin,
-        RewriteWithExpression) ::
+        RewriteWithExpression,
+        CollapseProject) ::
       Batch("Push extra predicate through join", FixedPoint(10),
         PushExtraPredicateThroughJoin,
         PushDownPredicates,
