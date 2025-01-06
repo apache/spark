@@ -22,9 +22,8 @@ import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedIdentifie
 import org.apache.spark.sql.catalyst.catalog.LanguageSQL
 import org.apache.spark.sql.catalyst.plans.logical.CreateUserDefinedFunction
 import org.apache.spark.sql.execution.SparkSqlParser
-import org.apache.spark.sql.test.SharedSparkSession
 
-class CreateSQLFunctionParserSuite extends AnalysisTest with SharedSparkSession {
+class CreateSQLFunctionParserSuite extends AnalysisTest {
   private lazy val parser = new SparkSqlParser()
 
   private def intercept(sqlCommand: String, messages: String*): Unit =
@@ -35,7 +34,7 @@ class CreateSQLFunctionParserSuite extends AnalysisTest with SharedSparkSession 
       errorClass: String,
       parameters: Map[String, String],
       queryContext: Array[ExpectedContext] = Array.empty): Unit =
-      assertParseErrorClass(parser.parsePlan, sqlCommand, errorClass, parameters, queryContext)
+    assertParseErrorClass(parser.parsePlan, sqlCommand, errorClass, parameters, queryContext)
 
   // scalastyle:off argcount
   private def createSQLFunction(
