@@ -217,10 +217,8 @@ case class Uniform(min: Expression, max: Expression, seedExpression: Expression,
     Seq(RUNTIME_REPLACEABLE, EXPRESSION_WITH_RANDOM_SEED)
 
   override def inputTypes: Seq[AbstractDataType] = {
-    val minMaxTypes =
-      TypeCollection(ByteType, ShortType, IntegerType, LongType, FloatType, DoubleType, DecimalType)
     val randomSeedTypes = TypeCollection(IntegerType, LongType)
-    Seq(minMaxTypes, minMaxTypes, randomSeedTypes)
+    Seq(NumericType, NumericType, randomSeedTypes)
   }
 
   override def dataType: DataType = {
@@ -275,15 +273,19 @@ case class Uniform(min: Expression, max: Expression, seedExpression: Expression,
     Uniform(newFirst, newSecond, newThird, hideSeed)
 
   override def replacement: Expression = {
-    def cast(e: Expression, to: DataType): Expression = if (e.dataType == to) e else Cast(e, to)
-    cast(Add(
-      cast(min, DoubleType),
-      Multiply(
-        Subtract(
-          cast(If(IsNull(max), Literal(null, max.dataType), max), DoubleType),
-          cast(If(IsNull(min), Literal(null, min.dataType), min), DoubleType)),
-        Rand(seed))),
-      dataType)
+    if (Seq(min, max, seedExpression).exists(_.dataType == NullType)) {
+      Literal(null)
+    } else {
+      def cast(e: Expression, to: DataType): Expression = if (e.dataType == to) e else Cast(e, to)
+      cast(Add(
+        cast(min, DoubleType),
+        Multiply(
+          Subtract(
+            cast(If(IsNull(max), Literal(null, max.dataType), max), DoubleType),
+            cast(If(IsNull(min), Literal(null, min.dataType), min), DoubleType)),
+          Rand(seed))),
+        dataType)
+    }
   }
 }
 

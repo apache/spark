@@ -38,12 +38,18 @@ SELECT uniform(10, 20.0F) IS NOT NULL AS result;
 SELECT uniform(-10L, 10L, 0) AS result;
 SELECT uniform(-20L, -10L, 0) AS result;
 SELECT uniform(-20L, -10L, -10) AS result;
--- Negative test cases for the uniform random number generator.
 SELECT uniform(NULL, 1, 0) AS result;
+SELECT uniform(cast(NULL AS int), 1, 0) AS result;
+SELECT uniform(cast(NULL AS float), 1, 0) AS result;
 SELECT uniform(0, NULL, 0) AS result;
+SELECT uniform(0, cast(NULL AS int), 0) AS result;
+SELECT uniform(0, cast(NULL AS float), 0) AS result;
 SELECT uniform(0, 1, NULL) AS result;
 SELECT uniform(NULL, NULL, 0) AS result;
 SELECT uniform(NULL, NULL, NULL) AS result;
+-- Negative test cases for the uniform random number generator.
+SELECT uniform(0, 1, cast(NULL as int)) AS result;
+SELECT uniform(0, 1, cast(NULL as float)) AS result;
 SELECT uniform(10, 20, col) AS result FROM VALUES (0), (1), (2) tab(col);
 SELECT uniform(col, 10, 0) AS result FROM VALUES (0), (1), (2) tab(col);
 SELECT uniform(10) AS result;

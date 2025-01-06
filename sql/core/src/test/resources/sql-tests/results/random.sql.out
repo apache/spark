@@ -280,7 +280,23 @@ struct<result:bigint>
 -- !query
 SELECT uniform(NULL, 1, 0) AS result
 -- !query schema
+struct<result:double>
+-- !query output
+NULL
+
+
+-- !query
+SELECT uniform(cast(NULL AS int), 1, 0) AS result
+-- !query schema
 struct<result:int>
+-- !query output
+NULL
+
+
+-- !query
+SELECT uniform(cast(NULL AS float), 1, 0) AS result
+-- !query schema
+struct<result:float>
 -- !query output
 NULL
 
@@ -288,7 +304,23 @@ NULL
 -- !query
 SELECT uniform(0, NULL, 0) AS result
 -- !query schema
+struct<result:double>
+-- !query output
+NULL
+
+
+-- !query
+SELECT uniform(0, cast(NULL AS int), 0) AS result
+-- !query schema
 struct<result:int>
+-- !query output
+NULL
+
+
+-- !query
+SELECT uniform(0, cast(NULL AS float), 0) AS result
+-- !query schema
+struct<result:float>
 -- !query output
 NULL
 
@@ -304,7 +336,7 @@ struct<result:int>
 -- !query
 SELECT uniform(NULL, NULL, 0) AS result
 -- !query schema
-struct<result:tinyint>
+struct<result:double>
 -- !query output
 NULL
 
@@ -312,9 +344,43 @@ NULL
 -- !query
 SELECT uniform(NULL, NULL, NULL) AS result
 -- !query schema
-struct<result:tinyint>
+struct<result:double>
 -- !query output
 NULL
+
+
+-- !query
+SELECT uniform(0, 1, cast(NULL as int)) AS result
+-- !query schema
+struct<result:int>
+-- !query output
+0
+
+
+-- !query
+SELECT uniform(0, 1, cast(NULL as float)) AS result
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"CAST(NULL AS FLOAT)\"",
+    "inputType" : "\"FLOAT\"",
+    "paramIndex" : "third",
+    "requiredType" : "(\"INT\" or \"BIGINT\")",
+    "sqlExpr" : "\"uniform(0, 1, CAST(NULL AS FLOAT))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 41,
+    "fragment" : "uniform(0, 1, cast(NULL as float))"
+  } ]
+}
 
 
 -- !query
@@ -508,7 +574,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "inputSql" : "\"abc\"",
     "inputType" : "\"STRING\"",
     "paramIndex" : "first",
-    "requiredType" : "(\"TINYINT\" or \"SMALLINT\" or \"INT\" or \"BIGINT\" or \"FLOAT\" or \"DOUBLE\" or \"DECIMAL\")",
+    "requiredType" : "\"NUMERIC\"",
     "sqlExpr" : "\"uniform(abc, 10, 0)\""
   },
   "queryContext" : [ {
@@ -534,7 +600,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "inputSql" : "\"def\"",
     "inputType" : "\"STRING\"",
     "paramIndex" : "second",
-    "requiredType" : "(\"TINYINT\" or \"SMALLINT\" or \"INT\" or \"BIGINT\" or \"FLOAT\" or \"DOUBLE\" or \"DECIMAL\")",
+    "requiredType" : "\"NUMERIC\"",
     "sqlExpr" : "\"uniform(0, def, 0)\""
   },
   "queryContext" : [ {
