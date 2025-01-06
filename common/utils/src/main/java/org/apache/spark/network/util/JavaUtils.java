@@ -22,7 +22,6 @@ import java.nio.ByteBuffer;
 import java.nio.channels.ReadableByteChannel;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
-import java.nio.file.LinkOption;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
@@ -126,11 +125,10 @@ public class JavaUtils {
   private static void deleteRecursivelyUsingJavaIO(
       File file,
       FilenameFilter filter) throws IOException {
+    if (!file.exists()) return;
     BasicFileAttributes fileAttributes =
-      Files.readAttributes(file.toPath(), BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
-    // SPARK-50716: If the file does not exist and not a broken symbolic link, return directly.
-    if (!file.exists() && !fileAttributes.isSymbolicLink()) return;
-    if (fileAttributes.isDirectory()) {
+      Files.readAttributes(file.toPath(), BasicFileAttributes.class);
+    if (fileAttributes.isDirectory() && !isSymlink(file)) {
       IOException savedIOException = null;
       for (File child : listFilesSafely(file, filter)) {
         try {
@@ -145,8 +143,8 @@ public class JavaUtils {
       }
     }
 
-    // Delete file only when it's a normal file, a symbolic link, or an empty directory.
-    if (fileAttributes.isRegularFile() || fileAttributes.isSymbolicLink() ||
+    // Delete file only when it's a normal file or an empty directory.
+    if (fileAttributes.isRegularFile() ||
       (fileAttributes.isDirectory() && listFilesSafely(file, null).length == 0)) {
       boolean deleted = file.delete();
       // Delete can also fail if the file simply did not exist.
@@ -192,6 +190,17 @@ public class JavaUtils {
     } else {
       return new File[0];
     }
+  }
+
+  private static boolean isSymlink(File file) throws IOException {
+    Objects.requireNonNull(file);
+    File fileInCanonicalDir = null;
+    if (file.getParent() == null) {
+      fileInCanonicalDir = file;
+    } else {
+      fileInCanonicalDir = new File(file.getParentFile().getCanonicalFile(), file.getName());
+    }
+    return !fileInCanonicalDir.getCanonicalFile().equals(fileInCanonicalDir.getAbsoluteFile());
   }
 
   private static final Map<String, TimeUnit> timeSuffixes;
