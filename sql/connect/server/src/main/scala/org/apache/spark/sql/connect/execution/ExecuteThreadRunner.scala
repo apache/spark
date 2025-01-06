@@ -64,6 +64,16 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
   }
 
   /**
+   * Checks if the execution is completed.
+   *
+   * @return
+   *    true if the execution is completed.
+   */
+  private[connect] def isCompleted(): Boolean = {
+    state.getAcquire() == ThreadState.completed
+  }
+
+  /**
    * Interrupts the execution thread if the execution has been interrupted by this method call.
    *
    * @return

@@ -224,6 +224,8 @@ private[connect] class ExecuteGrpcResponseSender[T <: Message](
       // 4. time deadline or size limit reached
       def deadlineLimitReached =
         sentResponsesSize > maximumResponseSize || deadlineTimeMillis < System.currentTimeMillis()
+      // 5. whether the execution thread has completed running
+      val executionCompleted = executeHolder.isExecutionCompleted()
 
       logTrace(s"Trying to get next response with index=$nextIndex.")
       executionObserver.responseLock.synchronized {
@@ -319,7 +321,15 @@ private[connect] class ExecuteGrpcResponseSender[T <: Message](
           log"waitingForResults=${MDC(WAIT_RESULT_TIME, consumeSleep / NANOS_PER_MILLIS.toDouble)} ms " +
           log"waitingForSend=${MDC(WAIT_SEND_TIME, sendSleep / NANOS_PER_MILLIS.toDouble)} ms")
         // scalastyle:on line.size.limit
-        grpcObserver.onCompleted()
+        if (executionCompleted) {
+          // The execution thread has completed running, but no responses were recorded, implying
+          // the execution thread failed to record any responses because of a resource shortage.
+          // This is executing in it's own thread, so need to handle RPC error like the
+          // SparkConnectService handlers do.
+          throw new IllegalStateException("Execution was completed but no responses were recorded.")
+        } else {
+          grpcObserver.onCompleted()
+        }
         finished = true
       }
     }

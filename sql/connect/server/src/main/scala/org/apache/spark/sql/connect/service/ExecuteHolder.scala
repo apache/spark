@@ -126,6 +126,14 @@ private[connect] class ExecuteHolder(
     runner.start()
   }
 
+
+  /**
+   * Check if the execution is completed.
+   */
+  def isExecutionCompleted(): Boolean = {
+    runner.isCompleted()
+  }
+
   def addObservation(name: String, observation: Observation): Unit = synchronized {
     observations += (name -> observation)
   }
@@ -193,6 +201,11 @@ private[connect] class ExecuteHolder(
   // For testing
   private[connect] def interruptGrpcResponseSenders() = synchronized {
     grpcResponseSenders.foreach(_.interrupt())
+  }
+
+  // For testing
+  private[connect] def removeAllResponses() = synchronized {
+    responseObserver.removeAll()
   }
 
   /**
