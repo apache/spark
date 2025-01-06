@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, UnaryNode}
+import org.apache.spark.sql.catalyst.trees.TreePattern
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
@@ -1070,4 +1071,30 @@ trait UnresolvedPlanId extends LeafExpression with Unevaluable {
 
   // Subclasses can override this function to provide more TreePatterns.
   def nodePatternsInternal(): Seq[TreePattern] = Seq()
+}
+
+case class UnresolvedWithColumns(
+     colNames: Seq[String],
+     exprs: Seq[Expression],
+     metadata: Option[Seq[Metadata]],
+     child: LogicalPlan)
+  extends UnresolvedUnaryNode {
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_WITH_COLUMNS)
+
+  override protected def withNewChildInternal(
+      newChild: LogicalPlan): UnresolvedWithColumns = copy(child = newChild)
+}
+
+case class UnresolvedWithColumnsRenamed(
+     colNames: Seq[String],
+     newColNames: Seq[String],
+     child: LogicalPlan)
+  extends UnresolvedUnaryNode {
+
+  final override val nodePatterns: Seq[TreePattern] =
+    Seq(TreePattern.UNRESOLVED_WITH_COLUMNS_RENAMED)
+
+  override protected def withNewChildInternal(
+      newChild: LogicalPlan): UnresolvedWithColumnsRenamed = copy(child = newChild)
 }

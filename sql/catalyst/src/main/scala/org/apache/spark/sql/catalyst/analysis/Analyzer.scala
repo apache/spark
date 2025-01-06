@@ -63,7 +63,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.{PartitionOverwriteMode, StoreAssignmentPolicy}
 import org.apache.spark.sql.internal.connector.V1Function
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.sql.util.{CaseInsensitiveStringMap, SchemaUtils}
 import org.apache.spark.util.ArrayImplicits._
 
 /**
@@ -376,6 +376,8 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       ResolveAliases ::
       ResolveSubquery ::
       ResolveSubqueryColumnAliases ::
+      ResolveWithColumns ::
+      ResolveWithColumnsRenamed ::
       ResolveDefaultStringTypes ::
       ResolveWindowOrder ::
       ResolveWindowFrame ::
@@ -2360,6 +2362,77 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
           Alias(attr, aliasName)()
         }
         Project(aliases, child)
+    }
+  }
+
+  /**
+   * Replaces unresolved with columns.
+   */
+  object ResolveWithColumns extends Rule[LogicalPlan] {
+
+    def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
+      _.containsPattern(UNRESOLVED_WITH_COLUMNS), ruleId) {
+      case UnresolvedWithColumns(colNames, exprs, metadata, child) if child.resolved =>
+        assert(colNames.size == exprs.size)
+        metadata.foreach(m => assert(colNames.size == m.size))
+
+        SchemaUtils.checkColumnNameDuplication(
+          colNames,
+          conf.caseSensitiveAnalysis)
+
+        val output = child.output
+
+        val columnSeq = metadata match {
+          case Some(ms) => colNames.zip(exprs).zip(ms.map(Some(_)))
+          case _ => colNames.zip(exprs).map((_, None))
+        }
+
+        val replacedAndExistingColumns = output.map { field =>
+          columnSeq.find { case ((colName, _), _) =>
+            resolver(field.name, colName)
+          } match {
+            case Some(((colName, expr), m)) => Alias(expr, colName)(explicitMetadata = m)
+            case _ => field
+          }
+        }
+
+        val newColumns = columnSeq.filter { case ((colName, _), _) =>
+          !output.exists(f => resolver(f.name, colName))
+        }.map { case ((colName, expr), m) => Alias(expr, colName)(explicitMetadata = m) }
+
+        Project(replacedAndExistingColumns ++ newColumns, child)
+    }
+  }
+
+  /**
+   * Replaces unresolved with columns renamed.
+   */
+  object ResolveWithColumnsRenamed extends Rule[LogicalPlan] {
+
+    def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
+      _.containsPattern(UNRESOLVED_WITH_COLUMNS_RENAMED), ruleId) {
+      case UnresolvedWithColumnsRenamed(colNames, newColNames, child) if child.resolved =>
+        assert(colNames.size == newColNames.size)
+
+        val output: Seq[NamedExpression] = child.output
+        var shouldRename = false
+
+        val projectList = colNames.zip(newColNames).foldLeft(output) {
+          case (attrs, (existingName, newName)) =>
+            attrs.map(attr =>
+              if (resolver(attr.name, existingName)) {
+                shouldRename = true
+                Alias(attr, newName)()
+              } else {
+                attr
+              }
+            )
+        }
+        if (shouldRename) {
+          Project(projectList, child)
+        } else {
+          child
+        }
     }
   }
 

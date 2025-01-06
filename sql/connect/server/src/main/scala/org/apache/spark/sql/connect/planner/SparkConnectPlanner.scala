@@ -45,7 +45,7 @@ import org.apache.spark.internal.LogKeys.{DATAFRAME_ID, SESSION_ID}
 import org.apache.spark.resource.{ExecutorResourceRequest, ResourceProfile, TaskResourceProfile, TaskResourceRequest}
 import org.apache.spark.sql.{Column, Dataset, Encoders, ForeachWriter, Observation, RelationalGroupedDataset, Row, SparkSession}
 import org.apache.spark.sql.catalyst.{expressions, AliasIdentifier, FunctionIdentifier, QueryPlanningTracker}
-import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, GlobalTempView, LazyExpression, LocalTempView, MultiAlias, NameParameterizedQuery, PosParameterizedQuery, UnresolvedAlias, UnresolvedAttribute, UnresolvedDataFrameStar, UnresolvedDeserializer, UnresolvedExtractValue, UnresolvedFunction, UnresolvedPlanId, UnresolvedRegex, UnresolvedRelation, UnresolvedStar, UnresolvedSubqueryColumnAliases, UnresolvedTableValuedFunction, UnresolvedTranspose}
+import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, GlobalTempView, LazyExpression, LocalTempView, MultiAlias, NameParameterizedQuery, PosParameterizedQuery, UnresolvedAlias, UnresolvedAttribute, UnresolvedDataFrameStar, UnresolvedDeserializer, UnresolvedExtractValue, UnresolvedFunction, UnresolvedPlanId, UnresolvedRegex, UnresolvedRelation, UnresolvedStar, UnresolvedSubqueryColumnAliases, UnresolvedTableValuedFunction, UnresolvedTranspose, UnresolvedWithColumns, UnresolvedWithColumnsRenamed}
 import org.apache.spark.sql.catalyst.encoders.{encoderFor, AgnosticEncoder, ExpressionEncoder, RowEncoder}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.UnboundRowEncoder
 import org.apache.spark.sql.catalyst.expressions._
@@ -1064,25 +1064,22 @@ class SparkConnectPlanner(
   }
 
   private def transformWithColumnsRenamed(rel: proto.WithColumnsRenamed): LogicalPlan = {
-    if (rel.getRenamesCount > 0) {
-      val (colNames, newColNames) = rel.getRenamesList.asScala.toSeq.map { rename =>
+    val (colNames, newColNames) = if (rel.getRenamesCount > 0) {
+      rel.getRenamesList.asScala.toSeq.map { rename =>
         (rename.getColName, rename.getNewColName)
       }.unzip
-      Dataset
-        .ofRows(session, transformRelation(rel.getInput))
-        .withColumnsRenamed(colNames, newColNames)
-        .logicalPlan
     } else {
       // for backward compatibility
-      Dataset
-        .ofRows(session, transformRelation(rel.getInput))
-        .withColumnsRenamed(rel.getRenameColumnsMapMap)
-        .logicalPlan
+      rel.getRenameColumnsMapMap.asScala.toSeq.unzip
     }
+    UnresolvedWithColumnsRenamed(
+      colNames = colNames,
+      newColNames = newColNames,
+      child = transformRelation(rel.getInput))
   }
 
   private def transformWithColumns(rel: proto.WithColumns): LogicalPlan = {
-    val (colNames, cols, metadata) =
+    val (colNames, exprs, metadata) =
       rel.getAliasesList.asScala.toSeq.map { alias =>
         if (alias.getNameCount != 1) {
           throw InvalidPlanInput(s"""WithColumns require column name only contains one name part,
@@ -1095,13 +1092,14 @@ class SparkConnectPlanner(
           Metadata.empty
         }
 
-        (alias.getName(0), Column(transformExpression(alias.getExpr)), metadata)
+        (alias.getName(0), transformExpression(alias.getExpr), metadata)
       }.unzip3
 
-    Dataset
-      .ofRows(session, transformRelation(rel.getInput))
-      .withColumns(colNames, cols, metadata)
-      .logicalPlan
+    UnresolvedWithColumns(
+      colNames = colNames,
+      exprs = exprs,
+      metadata = Some(metadata),
+      child = transformRelation(rel.getInput))
   }
 
   private def transformWithWatermark(rel: proto.WithWatermark): LogicalPlan = {
