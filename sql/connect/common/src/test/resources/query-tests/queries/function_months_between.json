@@ -16,13 +16,15 @@
         "functionName": "months_between",
         "arguments": [{
           "unresolvedFunction": {
-            "functionName": "current_date"
+            "functionName": "current_date",
+            "isInternal": false
           }
         }, {
           "unresolvedAttribute": {
             "unparsedIdentifier": "d"
           }
-        }]
+        }],
+        "isInternal": false
       }
     }]
   }

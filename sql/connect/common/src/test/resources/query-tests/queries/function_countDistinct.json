@@ -23,7 +23,8 @@
             "unparsedIdentifier": "g"
           }
         }],
-        "isDistinct": true
+        "isDistinct": true,
+        "isInternal": false
       }
     }]
   }

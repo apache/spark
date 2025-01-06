@@ -34,7 +34,8 @@
                       "literal": {
                         "integer": 10
                       }
-                    }]
+                    }],
+                    "isInternal": false
                   }
                 }, {
                   "unresolvedFunction": {
@@ -47,9 +48,11 @@
                       "literal": {
                         "integer": 2
                       }
-                    }]
+                    }],
+                    "isInternal": false
                   }
-                }]
+                }],
+                "isInternal": false
               }
             },
             "arguments": [{
@@ -58,7 +61,8 @@
               "nameParts": ["y_2"]
             }]
           }
-        }]
+        }],
+        "isInternal": false
       }
     }]
   }
