@@ -82,7 +82,7 @@ to return the metadata pertaining to a partition or column respectively.
       "table_name": "<table_name>",
       "catalog_name": "<catalog_name>",
       "schema_name": "<innermost_schema_name>",
-      "namespace": ["<innermost_schema_name>"],
+      "namespace": ["<schema_name>"],
       "type": "<table_type>",
       "provider": "<provider>",
       "columns": [
@@ -148,7 +148,7 @@ to return the metadata pertaining to a partition or column respectively.
 | YearMonthIntervalType | `{ "name" : "interval", "start_unit": "<start_unit>", "end_unit": "<end_unit>" }`                                                                                |
 | DayTimeIntervalType   | `{ "name" : "interval", "start_unit": "<start_unit>", "end_unit": "<end_unit>" }`                                                                                |
 | ArrayType             | `{ "name" : "array", "element_type": <type_json>, "element_nullable": <boolean> }`                                                                               |
-| MapType               | `{ "name" : "map", "key_type": <type_json>, "value_type": <type_json>, "element_nullable": <boolean> }`                                                          |
+| MapType               | `{ "name" : "map", "key_type": <type_json>, "value_type": <type_json>, "value_nullable": <boolean> }`                                                            |
 | StructType            | `{ "name" : "struct", "fields": [ {"name" : "field1", "type" : <type_json>, “nullable”: <boolean>, "comment": “<comment>”, "default": “<default_val>”}, ... ] }` |
 
 ### Examples

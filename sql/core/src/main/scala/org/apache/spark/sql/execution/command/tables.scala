@@ -916,31 +916,39 @@ case class DescribeTableJsonCommand(
       schema: StructType,
       jsonMap: mutable.LinkedHashMap[String, JValue],
       header: Boolean): Unit = {
+    // convert schema field values to JsonValue
+    def toJsonValue(value: Any): JValue = value match {
+      case s: String => JString(s)
+      case b: Boolean => JBool(b)
+      case i: Int => JInt(i)
+      case d: Double => JDouble(d)
+      case l: List[_] => JArray(l.map(toJsonValue))
+      case m: Map[_, _] =>
+        JObject(
+          m.asInstanceOf[Map[String, Any]].toList.map {
+            case (nestedKey, nestedValue) => JField(nestedKey, toJsonValue(nestedValue))
+          }: _*
+        )
+      case _ => JNothing
+    }
 
     val defaultValuesMap = Option(ResolveDefaultColumns.getDescribeMetadata(schema))
       .getOrElse(Seq.empty)
       .collect { case (name, _, defaultValue) => name -> defaultValue }
       .toMap
 
-    val columnsJson = schema.map { column =>
-      val baseFields: List[JField] = List(
-        JField("name", JString(column.name)),
-        JField("type", jsonType(column.dataType))
-      )
-
-      val commentField: List[JField] = column.getComment().map { comment =>
-        List(JField("comment", JString(comment)))
-      }.getOrElse(Nil)
-
-      val nullableField: List[JField] = List(JField("nullable", JBool(column.nullable)))
-
-      val defaultValueField: List[JField] = defaultValuesMap.get(column.name).map { defaultValue =>
-        List(JField("default", JString(defaultValue)))
-      }.getOrElse(Nil)
-
-      JObject(baseFields ++ commentField ++ nullableField ++ defaultValueField)
-    }
-    addKeyValueToMap("columns", JArray(columnsJson.toList), jsonMap)
+    val columnsJson = jsonType(StructType(schema.fields), defaultValuesMap).asInstanceOf[JObject]
+      .values("fields")
+      .asInstanceOf[List[Map[String, Any]]]
+      .map { field =>
+        JObject(
+          field.toList.map {
+            case (key, value) =>
+              JField(key, toJsonValue(value))
+          }: _*
+        )
+      }
+    addKeyValueToMap("columns", JArray(columnsJson), jsonMap)
   }
 
   private def describeClusteringInfoJson(
