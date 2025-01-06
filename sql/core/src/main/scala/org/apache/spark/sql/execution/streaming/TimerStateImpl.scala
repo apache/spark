@@ -37,17 +37,20 @@ object TimerStateUtils {
 
   def getTimerStateVarNames(timeMode: String): (String, String) = {
     assert(timeMode == TimeMode.EventTime.toString || timeMode == TimeMode.ProcessingTime.toString)
-    val primaryIndex = if (timeMode == TimeMode.EventTime.toString) {
-      TimerStateUtils.EVENT_TIMERS_STATE_NAME + TimerStateUtils.KEY_TO_TIMESTAMP_CF
-    } else {
-      TimerStateUtils.PROC_TIMERS_STATE_NAME + TimerStateUtils.KEY_TO_TIMESTAMP_CF
+
+    def buildTimerStateNames(baseStateName: String): (String, String) = {
+      val primaryIndex = baseStateName + TimerStateUtils.KEY_TO_TIMESTAMP_CF
+      val secondaryIndex = baseStateName + TimerStateUtils.TIMESTAMP_TO_KEY_CF
+      (primaryIndex, secondaryIndex)
     }
-    val secondaryIndex = if (timeMode == TimeMode.EventTime.toString) {
-      TimerStateUtils.EVENT_TIMERS_STATE_NAME + TimerStateUtils.TIMESTAMP_TO_KEY_CF
+
+    val baseStateName = if (timeMode == TimeMode.EventTime.toString) {
+      TimerStateUtils.EVENT_TIMERS_STATE_NAME
     } else {
-      TimerStateUtils.PROC_TIMERS_STATE_NAME + TimerStateUtils.TIMESTAMP_TO_KEY_CF
+      TimerStateUtils.PROC_TIMERS_STATE_NAME
     }
-    (primaryIndex, secondaryIndex)
+
+    buildTimerStateNames(baseStateName)
   }
 }
 
