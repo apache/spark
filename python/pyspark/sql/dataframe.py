@@ -2713,11 +2713,10 @@ class DataFrame:
         >>> customers.alias("c").lateralJoin(
         ...     orders.alias("o")
         ...     .where(sf.col("o.customer_id") == sf.col("c.customer_id").outer())
+        ...     .select("order_id", "order_date")
         ...     .orderBy(sf.col("order_date").desc())
         ...     .limit(2),
         ...     how="left"
-        ... ).select(
-        ...     "c.customer_id", "name", "order_id", "order_date"
         ... ).orderBy("customer_id", "order_id").show()
         +-----------+-------+--------+----------+
         |customer_id|   name|order_id|order_date|
