@@ -200,34 +200,26 @@ class SparkSession:
             for i in range(int(os.environ.get("PYSPARK_REMOTE_INIT_CONF_LEN", "0"))):
                 init_opts = json.loads(os.environ[f"PYSPARK_REMOTE_INIT_CONF_{i}"])
 
-            with self._lock:
-                for k, v in init_opts.items():
-                    # the options are applied after session creation,
-                    # so following options always take no effect
-                    if k not in [
-                        "spark.remote",
-                        "spark.master",
-                    ] and k.startswith("spark.sql."):
-                        # Only attempts to set Spark SQL configurations.
-                        # If the configurations are static, it might throw an exception so
-                        # simply ignore it for now.
-                        try:
-                            session.conf.set(k, v)
-                        except Exception as e:
-                            logger.warn(f"Failed to set configuration {k} due to {e}")
+            # The options are applied after session creation,
+            # so options ["spark.remote", "spark.master"] always take no effect.
+            invalid_opts = ["spark.remote", "spark.master"]
 
             with self._lock:
+                opts = {}
+
+                # Only attempts to set Spark SQL configurations.
+                # If the configurations are static, it might throw an exception so
+                # simply ignore it for now.
+                for k, v in init_opts.items():
+                    if k not in invalid_opts and k.startswith("spark.sql."):
+                        opts[k] = v
+
                 for k, v in self._options.items():
-                    # the options are applied after session creation,
-                    # so following options always take no effect
-                    if k not in [
-                        "spark.remote",
-                        "spark.master",
-                    ]:
-                        try:
-                            session.conf.set(k, v)
-                        except Exception as e:
-                            logger.warn(f"Failed to set configuration {k} due to {e}")
+                    if k not in invalid_opts:
+                        opts[k] = v
+
+                if len(opts) > 0:
+                    session.conf._set_all(configs=opts, silent=True)
 
         def create(self) -> "SparkSession":
             has_channel_builder = self._channel_builder is not None
@@ -1110,6 +1102,16 @@ class SparkSession:
             return SparkSession._getActiveSessionIfMatches(old_session_id)
 
         return creator, (self._session_id,)
+
+    def _to_ddl(self, struct: StructType) -> str:
+        ddl = self._client._analyze(method="json_to_ddl", json_string=struct.json()).ddl_string
+        assert ddl is not None
+        return ddl
+
+    def _parse_ddl(self, ddl: str) -> DataType:
+        dt = self._client._analyze(method="ddl_parse", ddl_string=ddl).parsed
+        assert dt is not None
+        return dt
 
 
 SparkSession.__doc__ = PySparkSession.__doc__

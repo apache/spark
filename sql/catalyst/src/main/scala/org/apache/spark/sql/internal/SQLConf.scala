@@ -4404,10 +4404,16 @@ object SQLConf {
         s"the $SESSION_CATALOG_NAME and must be consistent with it; for example, if a table can " +
         s"be loaded by the $SESSION_CATALOG_NAME, this catalog must also return the table " +
         s"metadata. To delegate operations to the $SESSION_CATALOG_NAME, implementations can " +
-        "extend 'CatalogExtension'.")
+        "extend 'CatalogExtension'. The value should be either 'builtin' which represents the " +
+        "spark's builit-in V2SessionCatalog, or a fully qualified class name of the catalog " +
+        "implementation.")
       .version("3.0.0")
       .stringConf
-      .createOptional
+      .transform {
+        case builtin if builtin.equalsIgnoreCase("builtin") => "builtin"
+        case fullClassName => fullClassName
+      }
+      .createWithDefault("builtin")
 
   object MapKeyDedupPolicy extends Enumeration {
     val EXCEPTION, LAST_WIN = Value
@@ -4658,6 +4664,22 @@ object SQLConf {
       .version("4.0.0")
       .booleanConf
       .createWithDefault(false)
+
+  val VARIANT_WRITE_SHREDDING_ENABLED =
+    buildConf("spark.sql.variant.writeShredding.enabled")
+      .internal()
+      .doc("When true, the Parquet writer is allowed to write shredded variant. ")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  val VARIANT_FORCE_SHREDDING_SCHEMA_FOR_TEST =
+    buildConf("spark.sql.variant.forceShreddingSchemaForTest")
+      .internal()
+      .doc("FOR INTERNAL TESTING ONLY. Sets shredding schema for Variant.")
+      .version("4.0.0")
+      .stringConf
+      .createWithDefault("")
 
   val LEGACY_CSV_ENABLE_DATE_TIME_PARSING_FALLBACK =
     buildConf("spark.sql.legacy.csv.enableDateTimeParsingFallback")

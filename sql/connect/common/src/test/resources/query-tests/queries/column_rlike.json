@@ -22,7 +22,8 @@
           "literal": {
             "string": "^[0-9]*$"
           }
-        }]
+        }],
+        "isInternal": false
       }
     }]
   }

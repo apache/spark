@@ -817,12 +817,12 @@ FROM t1 FULL OUTER JOIN t2 USING (key)
 WHERE t1.key NOT LIKE 'bb.%'
 -- !query analysis
 WithCTE
-:- CTERelationDef xxxx, false, false
+:- CTERelationDef xxxx, false
 :  +- SubqueryAlias t1
 :     +- Project [key#x]
 :        +- SubqueryAlias t
 :           +- LocalRelation [key#x]
-:- CTERelationDef xxxx, false, false
+:- CTERelationDef xxxx, false
 :  +- SubqueryAlias t2
 :     +- Project [key#x]
 :        +- SubqueryAlias t

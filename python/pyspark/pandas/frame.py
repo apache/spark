@@ -7292,8 +7292,6 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         4  1   True  1.0
         5  2  False  2.0
         """
-        from pyspark.sql.types import _parse_datatype_string
-
         include_list: List[str]
         if not is_list_like(include):
             include_list = [cast(str, include)] if include is not None else []
@@ -7320,14 +7318,14 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         include_spark_type = []
         for inc in include_list:
             try:
-                include_spark_type.append(_parse_datatype_string(inc))
+                include_spark_type.append(self._internal.spark_frame._session._parse_ddl(inc))
             except BaseException:
                 pass
 
         exclude_spark_type = []
         for exc in exclude_list:
             try:
-                exclude_spark_type.append(_parse_datatype_string(exc))
+                exclude_spark_type.append(self._internal.spark_frame._session._parse_ddl(exc))
             except BaseException:
                 pass
 

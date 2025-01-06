@@ -128,6 +128,17 @@ trait SparkConnectServerTest extends SharedSparkSession {
     req.build()
   }
 
+  protected def buildReleaseSessionRequest(
+      sessionId: String = defaultSessionId,
+      allowReconnect: Boolean = false) = {
+    proto.ReleaseSessionRequest
+      .newBuilder()
+      .setUserContext(userContext)
+      .setSessionId(sessionId)
+      .setAllowReconnect(allowReconnect)
+      .build()
+  }
+
   protected def buildPlan(query: String) = {
     proto.Plan.newBuilder().setRoot(dsl.sql(query)).build()
   }
