@@ -479,6 +479,25 @@ class KeyValueGroupedDatasetE2ETestSuite extends QueryTest with RemoteSparkSessi
       "(c,1,1)")
   }
 
+  test("SPARK-50693: groupby on unresolved plan") {
+    val ds = Seq(("a", 1, 10), ("a", 2, 20), ("b", 2, 1), ("b", 1, 2), ("c", 1, 1))
+      .toDF("key", "seq", "value")
+    val grouped = ds.select("*").groupBy($"key").as[String, (String, Int, Int)]
+    val aggregated = grouped
+      .flatMapSortedGroups($"seq", expr("length(key)"), $"value") { (g, iter) =>
+        Iterator(g, iter.mkString(", "))
+      }
+
+    checkDatasetUnorderly(
+      aggregated,
+      "a",
+      "(a,1,10), (a,2,20)",
+      "b",
+      "(b,1,2), (b,2,1)",
+      "c",
+      "(c,1,1)")
+  }
+
   test("groupby - keyAs, keys") {
     val ds = Seq(("a", 1, 10), ("a", 2, 20), ("b", 2, 1), ("b", 1, 2), ("c", 1, 1))
       .toDF("key", "seq", "value")
@@ -597,11 +616,36 @@ class KeyValueGroupedDatasetE2ETestSuite extends QueryTest with RemoteSparkSessi
       ("c", 1L))
   }
 
+  test("SPARK-50693: RowEncoder in udf on unresolved plan") {
+    val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDF("c1", "c2")
+
+    checkDatasetUnorderly(
+      ds.select("*").groupByKey(k => k.getAs[String](0)).agg(sum("c2").as[Long]),
+      ("a", 30L),
+      ("b", 3L),
+      ("c", 1L))
+  }
+
   test("mapGroups with row encoder") {
     val df = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDF("c1", "c2")
 
     checkDataset(
       df.groupByKey(r => r.getAs[String]("c1"))
+        .mapGroups((_, it) =>
+          it.map(r => {
+            r.getAs[Int]("c2")
+          }).sum),
+      30,
+      3,
+      1)
+  }
+
+  test("SPARK-50693: mapGroups with row encoder on unresolved plan") {
+    val df = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDF("c1", "c2")
+
+    checkDataset(
+      df.select("*")
+        .groupByKey(r => r.getAs[String]("c1"))
         .mapGroups((_, it) =>
           it.map(r => {
             r.getAs[Int]("c2")
@@ -630,6 +674,30 @@ class KeyValueGroupedDatasetE2ETestSuite extends QueryTest with RemoteSparkSessi
       1,
       30,
       3)
+  }
+
+  test("SPARK-50693: coGroup with row encoder on unresolved plan") {
+    val df1 = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDF("c1", "c2")
+    val df2 = Seq(("x", 10), ("x", 20), ("y", 1), ("y", 2), ("a", 1)).toDF("c1", "c2")
+
+    Seq((df1.select("*"), df2), (df1, df2.select("*")), (df1.select("*"), df2.select("*")))
+      .foreach { case (df1, df2) =>
+        val ds1: KeyValueGroupedDataset[String, Row] =
+          df1.groupByKey(r => r.getAs[String]("c1"))
+        val ds2: KeyValueGroupedDataset[String, Row] =
+          df2.groupByKey(r => r.getAs[String]("c1"))
+        checkDataset(
+          ds1.cogroup(ds2)((_, it, it2) => {
+            val sum1 = it.map(r => r.getAs[Int]("c2")).sum
+            val sum2 = it2.map(r => r.getAs[Int]("c2")).sum
+            Iterator(sum1 + sum2)
+          }),
+          31,
+          3,
+          1,
+          30,
+          3)
+      }
   }
 
   test("serialize as null") {

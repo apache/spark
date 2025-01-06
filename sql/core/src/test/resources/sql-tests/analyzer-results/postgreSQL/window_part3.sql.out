@@ -89,7 +89,7 @@ FROM cte
 WINDOW w AS (ORDER BY x rows between 1 preceding and 1 following)
 -- !query analysis
 WithCTE
-:- CTERelationDef xxxx, false, false
+:- CTERelationDef xxxx, false
 :  +- SubqueryAlias cte
 :     +- Project [id#xL AS x#xL]
 :        +- Project [id#xL]
@@ -111,7 +111,7 @@ FROM cte
 WINDOW w AS (ORDER BY x range between 1 preceding and 1 following)
 -- !query analysis
 WithCTE
-:- CTERelationDef xxxx, false, false
+:- CTERelationDef xxxx, false
 :  +- SubqueryAlias cte
 :     +- Project [id#xL AS x#xL]
 :        +- Project [id#xL]
@@ -134,7 +134,7 @@ FROM cte
 WINDOW w AS (ORDER BY x rows between 1 preceding and 1 following)
 -- !query analysis
 WithCTE
-:- CTERelationDef xxxx, false, false
+:- CTERelationDef xxxx, false
 :  +- SubqueryAlias cte
 :     +- Project [1#xL AS x#xL]
 :        +- Union false, false
@@ -167,7 +167,7 @@ FROM cte
 WINDOW w AS (ORDER BY x range between 1 preceding and 1 following)
 -- !query analysis
 WithCTE
-:- CTERelationDef xxxx, false, false
+:- CTERelationDef xxxx, false
 :  +- SubqueryAlias cte
 :     +- Project [1#xL AS x#xL]
 :        +- Union false, false

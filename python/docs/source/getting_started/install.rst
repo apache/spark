@@ -239,7 +239,7 @@ Installable with ``pip install "pyspark[pandas_on_spark]"``.
 ========= ================= ================================
 Package   Supported version Note
 ========= ================= ================================
-`pandas`  >=2.0.0           Required for Pandas API on Spark
+`pandas`  >=2.2.0           Required for Pandas API on Spark
 `pyarrow` >=11.0.0          Required for Pandas API on Spark
 ========= ================= ================================
 

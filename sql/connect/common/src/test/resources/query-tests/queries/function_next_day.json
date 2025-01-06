@@ -22,7 +22,8 @@
           "literal": {
             "string": "Mon"
           }
-        }]
+        }],
+        "isInternal": false
       }
     }]
   }
