@@ -21,7 +21,7 @@ import sys
 import random
 import warnings
 from collections.abc import Iterable
-from functools import reduce
+from functools import reduce, cached_property
 from typing import (
     Any,
     Callable,
@@ -118,8 +118,6 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
     ):
         from pyspark.sql.context import SQLContext
 
-        self._sql_ctx: Optional["SQLContext"] = None
-
         if isinstance(sql_ctx, SQLContext):
             assert not os.environ.get("SPARK_TESTING")  # Sanity check for our internal usage.
             assert isinstance(sql_ctx, SQLContext)
@@ -136,14 +134,11 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
         self._sc: "SparkContext" = sql_ctx._sc
         self._jdf: "JavaObject" = jdf
         self.is_cached = False
-        # initialized lazily
-        self._schema: Optional[StructType] = None
-        self._lazy_rdd: Optional["RDD[Row]"] = None
         # Check whether _repr_html is supported or not, we use it to avoid calling _jdf twice
         # by __repr__ and _repr_html_ while eager evaluation opens.
         self._support_repr_html = False
 
-    @property
+    @cached_property
     def sql_ctx(self) -> "SQLContext":
         from pyspark.sql.context import SQLContext
 
@@ -151,24 +146,18 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
             "DataFrame.sql_ctx is an internal property, and will be removed "
             "in future releases. Use DataFrame.sparkSession instead."
         )
-        if self._sql_ctx is None:
-            self._sql_ctx = SQLContext._get_or_create(self._sc)
-        return self._sql_ctx
+        return SQLContext._get_or_create(self._sc)
 
     @property
     def sparkSession(self) -> "SparkSession":
         return self._session
 
-    @property
+    @cached_property
     def rdd(self) -> "RDD[Row]":
         from pyspark.core.rdd import RDD
 
-        if self._lazy_rdd is None:
-            jrdd = self._jdf.javaToPython()
-            self._lazy_rdd = RDD(
-                jrdd, self.sparkSession._sc, BatchedSerializer(CPickleSerializer())
-            )
-        return self._lazy_rdd
+        jrdd = self._jdf.javaToPython()
+        return RDD(jrdd, self.sparkSession._sc, BatchedSerializer(CPickleSerializer()))
 
     @property
     def na(self) -> ParentDataFrameNaFunctions:
@@ -208,21 +197,17 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
     def writeStream(self) -> DataStreamWriter:
         return DataStreamWriter(self)
 
-    @property
+    @cached_property
     def schema(self) -> StructType:
-        if self._schema is None:
-            try:
-                self._schema = cast(
-                    StructType, _parse_datatype_json_string(self._jdf.schema().json())
-                )
-            except AnalysisException as e:
-                raise e
-            except Exception as e:
-                raise PySparkValueError(
-                    errorClass="CANNOT_PARSE_DATATYPE",
-                    messageParameters={"error": str(e)},
-                )
-        return self._schema
+        try:
+            return cast(StructType, _parse_datatype_json_string(self._jdf.schema().json()))
+        except AnalysisException as e:
+            raise e
+        except Exception as e:
+            raise PySparkValueError(
+                errorClass="CANNOT_PARSE_DATATYPE",
+                messageParameters={"error": str(e)},
+            )
 
     def printSchema(self, level: Optional[int] = None) -> None:
         if level:

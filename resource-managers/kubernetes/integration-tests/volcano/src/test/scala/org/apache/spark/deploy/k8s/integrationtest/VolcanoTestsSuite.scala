@@ -28,8 +28,8 @@ import scala.concurrent.Future
 import scala.jdk.CollectionConverters._
 
 import io.fabric8.kubernetes.api.model.{HasMetadata, Pod, Quantity}
+import io.fabric8.volcano.api.model.scheduling.v1beta1.{Queue, QueueBuilder}
 import io.fabric8.volcano.client.VolcanoClient
-import io.fabric8.volcano.scheduling.v1beta1.{Queue, QueueBuilder}
 import org.scalatest.BeforeAndAfterEach
 import org.scalatest.concurrent.Eventually
 

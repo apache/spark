@@ -83,7 +83,7 @@ class V2SessionCatalog(catalog: SessionCatalog)
   }
 
   private def hasCustomSessionCatalog: Boolean = {
-    catalog.conf.contains(SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION.key)
+    catalog.conf.getConf(SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION) != "builtin"
   }
 
   override def loadTable(ident: Identifier): Table = {

@@ -1056,3 +1056,18 @@ case class LazyExpression(child: Expression) extends UnaryExpression with Uneval
   }
   final override val nodePatterns: Seq[TreePattern] = Seq(LAZY_EXPRESSION)
 }
+
+trait UnresolvedPlanId extends LeafExpression with Unevaluable {
+  override def nullable: Boolean = throw new UnresolvedException("nullable")
+  override def dataType: DataType = throw new UnresolvedException("dataType")
+  override lazy val resolved = false
+
+  def planId: Long
+  def withPlan(plan: LogicalPlan): Expression
+
+  final override val nodePatterns: Seq[TreePattern] =
+    Seq(UNRESOLVED_PLAN_ID) ++ nodePatternsInternal()
+
+  // Subclasses can override this function to provide more TreePatterns.
+  def nodePatternsInternal(): Seq[TreePattern] = Seq()
+}
