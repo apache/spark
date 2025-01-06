@@ -383,6 +383,11 @@ final class DataFrameWriterImpl[T] private[sql](ds: Dataset[T]) extends DataFram
     }
   }
 
+  private def hasCustomSessionCatalog: Boolean = {
+    df.sparkSession.sessionState.conf
+      .getConf(SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION) != "builtin"
+  }
+
   /**
    * Saves the content of the `DataFrame` as the specified table.
    *
@@ -426,8 +431,7 @@ final class DataFrameWriterImpl[T] private[sql](ds: Dataset[T]) extends DataFram
     import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
     val session = df.sparkSession
-    val canUseV2 = lookupV2Provider().isDefined || (df.sparkSession.sessionState.conf.getConf(
-        SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION).isDefined &&
+    val canUseV2 = lookupV2Provider().isDefined || (hasCustomSessionCatalog &&
         !df.sparkSession.sessionState.catalogManager.catalog(CatalogManager.SESSION_CATALOG_NAME)
           .isInstanceOf[CatalogExtension])
 
