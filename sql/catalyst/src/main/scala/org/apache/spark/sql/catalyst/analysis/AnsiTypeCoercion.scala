@@ -20,7 +20,6 @@ package org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.types.{AbstractArrayType, AbstractStringType}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.UpCastRule.numericPrecedence
@@ -104,8 +103,7 @@ object AnsiTypeCoercion extends TypeCoercionBase {
     case (NullType, t1) => Some(t1)
     case (t1, NullType) => Some(t1)
 
-    case(s1: StringType, s2: StringType) if SQLConf.get.preserveCharVarcharTypeInfo =>
-      StringHelper.tightestCommonString(s1, s2)
+    case(s1: StringType, s2: StringType) => StringHelper.tightestCommonString(s1, s2)
 
     case (t1: IntegralType, t2: DecimalType) if t2.isWiderThan(t1) =>
       Some(t2)

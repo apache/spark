@@ -52,13 +52,10 @@ case class ToPrettyString(child: Expression, timeZoneId: Option[String] = None)
 
   override protected val binaryFormatter: BinaryFormatter = ToStringBase.getBinaryFormatter
 
-  private[this] lazy val castFunc: Any => UTF8String = child.dataType match {
-    case CharType(length) if SQLConf.get.preserveCharVarcharTypeInfo =>
-      castToChar(child.dataType, length)
-    case VarcharType(length) if SQLConf.get.preserveCharVarcharTypeInfo =>
-      castToVarchar(child.dataType, length)
-    case _ => castToString(child.dataType)
-  }
+  private[this] lazy val castFunc: Any => UTF8String = castToString(child.dataType match {
+    case CharType(_) => StringType
+    case dt => dt
+  })
 
   override def eval(input: InternalRow): Any = {
     val v = child.eval(input)
