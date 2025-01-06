@@ -1056,4 +1056,177 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
     )
     verifySqlScriptResult(sqlScriptText, expected)
   }
+
+  test("local variable") {
+    val sqlScript =
+      """
+        |BEGIN
+        | lbl: BEGIN
+        |  DECLARE localVar = 1;
+        |  SELECT lbl.localVar;
+        | END;
+        |END
+        |""".stripMargin
+
+    val expected = Seq(
+      Seq(Row(1)) // select lbl.localVar
+    )
+    verifySqlScriptResult(sqlScript, expected)
+  }
+
+  test("local variable - nested compounds") {
+    val sqlScript =
+      """
+        |BEGIN
+        | lbl1: BEGIN
+        |  DECLARE localVar = 1;
+        |  lbl2: BEGIN
+        |    DECLARE localVar = 2;
+        |    SELECT var;
+        |    SELECT lbl1.localVar;
+        |    SELECT lbl2.localVar;
+        |  END;
+        | END;
+        |END
+        |""".stripMargin
+
+    val expected = Seq(
+      Seq(Row(2)), // select localVar
+      Seq(Row(1)), // select lbl1.localVar
+      Seq(Row(2)) // select lbl2.localVar
+    )
+    verifySqlScriptResult(sqlScript, expected)
+  }
+
+  // todo: fix this case
+
+//    test("testtest3") {
+//      val sqlScript =
+//        """
+//          |BEGIN
+//          | lbl: BEGIN
+//          |  DECLARE var = 1;
+//          |  lbl2: BEGIN
+//          |    DECLARE var = 2;
+//          |    SELECT lbl.var;
+//          |    SET (var, lbl.var) = (select 1, 2);
+//          |  END;
+//          | END;
+//          |END
+//          |""".stripMargin
+//
+//      val r = spark.sql(sqlScript).collect()
+//
+//      val expected = Seq(
+//        Seq.empty[Row], // declare var
+//        Seq(Row(1)), // select
+//        Seq.empty[Row] // drop var
+//      )
+//      //    verifySqlScriptResult(sqlScript, expected)
+//    }
+
+  // todo: check error when it's added
+
+//    test("testtest5") {
+//      val sqlScript =
+//        """
+//          |BEGIN
+//          | lbl: BEGIN
+//          |  DECLARE var = 1;
+//          |  DECLARE var = 2;
+//          |  SELECT lbl.var;
+//          | END;
+//          |END
+//          |""".stripMargin
+//
+//      val r = spark.sql(sqlScript).collect()
+//
+//      val expected = Seq(
+//        Seq.empty[Row], // declare var
+//        Seq(Row(1)), // select
+//        Seq.empty[Row] // drop var
+//      )
+//      //    verifySqlScriptResult(sqlScript, expected)
+//    }
+
+  test("local variable - set qualified") {
+    val sqlScript =
+      """
+        |BEGIN
+        | lbl: BEGIN
+        |  DECLARE localVar = 1;
+        |  SELECT lbl.localVar;
+        |  SET lbl.localVar = 5;
+        |  SELECT lbl.localVar;
+        | END;
+        |END
+        |""".stripMargin
+
+    val expected = Seq(
+      Seq(Row(1)), // select lbl.localVar
+      Seq(Row(5)) // select lbl.localVar
+    )
+    verifySqlScriptResult(sqlScript, expected)
+  }
+
+  test("local variable - set unqualified") {
+    val sqlScript =
+      """
+        |BEGIN
+        | lbl: BEGIN
+        |  DECLARE localVar = 1;
+        |  SELECT localVar;
+        |  SET localVar = 5;
+        |  SELECT localVar;
+        | END;
+        |END
+        |""".stripMargin
+
+    val expected = Seq(
+      Seq(Row(1)), // select localVar
+      Seq(Row(5)) // select localVar
+    )
+    verifySqlScriptResult(sqlScript, expected)
+  }
+
+  test("local variable - set unqualified select qualified") {
+    val sqlScript =
+      """
+        |BEGIN
+        | lbl: BEGIN
+        |  DECLARE localVar = 1;
+        |  SELECT lbl.localVar;
+        |  SET localVar = 5;
+        |  SELECT lbl.localVar;
+        | END;
+        |END
+        |""".stripMargin
+
+    val expected = Seq(
+      Seq(Row(1)), // select lbl.localVar
+      Seq(Row(5)) // select lbl.localVar
+    )
+    verifySqlScriptResult(sqlScript, expected)
+  }
+
+//  test("local variable - resolved over session variable") {
+//    withSessionVariable("localVar") {
+//      spark.sql("DECLARE VARIABLE localVar = 1")
+//
+//      val sqlScript =
+//        """
+//          |BEGIN
+//          | lbl: BEGIN
+//          |  DECLARE localVar = 5;
+//          |  SELECT localVar;
+//          | END;
+//          |END
+//          |""".stripMargin
+//
+//      val expected = Seq(
+//        Seq(Row(5)) // select lbl.localVar
+//      )
+//      verifySqlScriptResult(sqlScript, expected)
+//    }
+//  }
 }

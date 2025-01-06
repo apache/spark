@@ -271,7 +271,6 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
       nameParts.map(_.toLowerCase(Locale.ROOT))
     }
 
-    // todo LOCALVARS: check if system.session.var uses only tempVariableManager
     catalogManager.scriptingLocalVariableManager
       // if variable name is qualified with system.session.<varName> treat it as a session variable
       .filterNot(_ => namePartsCaseAdjusted.take(2) == Seq("system", "session"))
@@ -283,17 +282,19 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
           Identifier.of(Array(varDef.identifier.namespace().last), namePartsCaseAdjusted.last),
           varDef)
       }
-//      .orElse(Option.when(maybeTempVariableName(nameParts)) {
-//        catalogManager.tempVariableManager
-//          .get(variableName)
-//          .map { varDef =>
-//            VariableReference(
-//              nameParts,
-//              FakeSystemCatalog,
-//              Identifier.of(Array(CatalogManager.SESSION_NAMESPACE), variableName),
-//              varDef)
-//          }
-//        })
+      .orElse(
+        Option.when(maybeTempVariableName(nameParts)) {
+          catalogManager.tempVariableManager
+            .get(namePartsCaseAdjusted)
+            .map { varDef =>
+              VariableReference(
+                nameParts,
+                FakeSystemCatalog,
+                Identifier.of(Array(CatalogManager.SESSION_NAMESPACE), namePartsCaseAdjusted.last),
+                varDef)
+            }
+        }.flatten
+      )
   }
 
   // Resolves `UnresolvedAttribute` to its value.
