@@ -127,10 +127,11 @@ private[connect] class ExecuteHolder(
   }
 
   /**
-   * Check if the execution is completed.
+   * Check if the execution is completed and no further progress will be made. If the execution
+   * was delegated, this method will always return false.
    */
   def isExecutionCompleted(): Boolean = {
-    runner.isCompleted()
+    !runner.shouldDelegateCompleteResponse(request) && runner.isCompleted()
   }
 
   def addObservation(name: String, observation: Observation): Unit = synchronized {
