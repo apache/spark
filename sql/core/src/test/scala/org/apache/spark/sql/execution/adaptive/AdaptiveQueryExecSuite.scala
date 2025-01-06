@@ -749,7 +749,6 @@ class AdaptiveQueryExecSuite
     // so retry several times here to avoid unit test failure.
     eventually(timeout(15.seconds), interval(500.milliseconds)) {
       withSQLConf(
-        SQLConf.ARTIFACTS_SESSION_ISOLATION_ALWAYS_APPLY_CLASSLOADER.key -> "true",
         SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
         SQLConf.NON_EMPTY_PARTITION_RATIO_FOR_BROADCAST_JOIN.key -> "0.5") {
         // `testData` is small enough to be broadcast but has empty partition ratio over the config.
