@@ -700,11 +700,6 @@ class KeyValueGroupedDatasetE2ETestSuite extends QueryTest with RemoteSparkSessi
       }
   }
 
-  test("testtest") {
-    val df1 = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDF("c1", "c2")
-    df1.select(col("werwerwerewrwer")).collectAsList()
-  }
-
   test("serialize as null") {
     val kvgds = session.range(10).groupByKey(_ % 2)
     val bytes = SparkSerDeUtils.serialize(kvgds)
