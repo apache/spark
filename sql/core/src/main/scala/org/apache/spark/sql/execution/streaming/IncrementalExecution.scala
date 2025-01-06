@@ -253,7 +253,8 @@ class IncrementalExecution(
               oldMetadata)
             val metadata = ssw.operatorStateMetadata(stateSchemaList)
             oldMetadata match {
-              case Some(oldMetadata) => ssw.validateNewMetadata(oldMetadata, metadata)
+              case Some(oldMetadata) =>
+                ssw.validateNewMetadata(oldMetadata, metadata)
               case None =>
             }
             val metadataWriter = OperatorStateMetadataWriter.createWriter(

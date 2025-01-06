@@ -210,7 +210,7 @@ class StateSchemaCompatibilityChecker(
         case s: SchemaValidationException =>
           throw StateStoreErrors.stateStoreInvalidValueSchemaEvolution(
             valueSchema.toString, s.getMessage)
-        case e: _ => throw e
+        case e: Throwable => throw e
       }
 
       // Schema evolved - increment value schema ID

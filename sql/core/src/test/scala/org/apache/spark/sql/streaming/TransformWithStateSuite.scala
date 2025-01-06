@@ -1854,8 +1854,7 @@ class TransformWithStateSuite extends StateStoreMetricsTest
           AddData(inputData, "a"),
           ExpectFailure[StateStoreInvalidValueSchemaEvolution] {
             (t: Throwable) => {
-              assert(t.getMessage.contains(
-                "Unable to read schema:"))
+              assert(t.getMessage.contains("Unable to read schema:"))
             }
           }
         )
@@ -2102,6 +2101,53 @@ class TransformWithStateSuite extends StateStoreMetricsTest
       classOf[RocksDBStateStoreProvider].getName,
       SQLConf.SHUFFLE_PARTITIONS.key ->
         TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString) {
+      withTempDir { checkpointDir =>
+        val clock = new StreamManualClock
+
+        val inputData1 = MemoryStream[String]
+        val result1 = inputData1.toDS()
+          .groupByKey(x => x)
+          .transformWithState(new RunningCountStatefulProcessor(),
+            TimeMode.ProcessingTime(),
+            OutputMode.Update())
+
+        testStream(result1, OutputMode.Update())(
+          StartStream(
+            checkpointLocation = checkpointDir.getCanonicalPath,
+            trigger = Trigger.ProcessingTime("1 second"),
+            triggerClock = clock),
+          AddData(inputData1, "a"),
+          AdvanceManualClock(1 * 1000),
+          CheckNewAnswer(("a", "1")),
+          StopStream
+        )
+
+        val result2 = inputData1.toDS()
+          .groupByKey(x => x)
+          .transformWithState(new RunningCountStatefulProcessorWithProcTimeTimer(),
+            TimeMode.ProcessingTime(),
+            OutputMode.Update())
+
+        testStream(result2, OutputMode.Update())(
+          StartStream(
+            checkpointLocation = checkpointDir.getCanonicalPath,
+            trigger = Trigger.ProcessingTime("1 second"),
+            triggerClock = clock),
+          AddData(inputData1, "a"),
+          AdvanceManualClock(1 * 1000),
+          CheckNewAnswer(("a", "2")),
+          StopStream
+        )
+      }
+    }
+  }
+
+  test("test exceeding schema file threshold throws error") {
+    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+      classOf[RocksDBStateStoreProvider].getName,
+      SQLConf.SHUFFLE_PARTITIONS.key ->
+        TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString,
+      SQLConf.STREAMING_STATE_MAX_STATE_SCHEMA_FILES.key -> 1.toString) {
       withTempDir { checkpointDir =>
         val clock = new StreamManualClock
 

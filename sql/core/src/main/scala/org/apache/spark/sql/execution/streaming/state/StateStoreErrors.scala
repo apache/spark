@@ -336,13 +336,13 @@ class StateStoreValueSchemaNotCompatible(
       "newValueSchema" -> newValueSchema))
 
 class StateStoreInvalidValueSchemaEvolution(
-    storedValueSchema: String,
-    newValueSchema: String)
+    newValueSchema: String,
+    avroErrorMessage: String)
   extends SparkUnsupportedOperationException(
     errorClass = "STATE_STORE_INVALID_VALUE_SCHEMA_EVOLUTION",
     messageParameters = Map(
-      "storedValueSchema" -> storedValueSchema,
-      "newValueSchema" -> newValueSchema))
+      "newValueSchema" -> newValueSchema,
+      "avroErrorMessage" -> avroErrorMessage))
 
 class StateStoreSchemaFileThresholdExceeded(
     numSchemaFiles: Int,
