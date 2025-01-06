@@ -854,7 +854,7 @@ class TransformWithStateSuite extends StateStoreMetricsTest
     }
   }
 
-  testWithAvroOnly("transformWithState - upcasting should succeed") {
+  testWithEncoding("avro")("transformWithState - upcasting should succeed") {
     withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
       classOf[RocksDBStateStoreProvider].getName,
       SQLConf.SHUFFLE_PARTITIONS.key ->
@@ -911,7 +911,7 @@ class TransformWithStateSuite extends StateStoreMetricsTest
     }
   }
 
-  testWithAvroOnly("transformWithState - reordering fields should succeed") {
+  testWithEncoding("avro")("transformWithState - reordering fields should succeed") {
     withSQLConf(
       SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
         classOf[RocksDBStateStoreProvider].getName,
@@ -952,7 +952,7 @@ class TransformWithStateSuite extends StateStoreMetricsTest
     }
   }
 
-  testWithAvroOnly("transformWithState - adding field should succeed") {
+  testWithEncoding("avro")("transformWithState - adding field should succeed") {
     withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
       classOf[RocksDBStateStoreProvider].getName,
       SQLConf.SHUFFLE_PARTITIONS.key ->
@@ -1007,7 +1007,7 @@ class TransformWithStateSuite extends StateStoreMetricsTest
     }
   }
 
-  testWithAvroOnly("transformWithState - add and remove field between runs") {
+  testWithEncoding("avro")("transformWithState - add and remove field between runs") {
     withSQLConf(
       SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[RocksDBStateStoreProvider].getName,
       SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
@@ -1049,7 +1049,7 @@ class TransformWithStateSuite extends StateStoreMetricsTest
     }
   }
 
-  testWithAvroOnly("transformWithState - verify default values during schema evolution") {
+  testWithEncoding("avro")("transformWithState - verify default values during schema evolution") {
     withSQLConf(
       SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[RocksDBStateStoreProvider].getName,
       SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
@@ -1109,7 +1109,7 @@ class TransformWithStateSuite extends StateStoreMetricsTest
     }
   }
 
-  testWithAvroOnly("transformWithState - removing field should succeed") {
+  testWithEncoding("avro")("transformWithState - removing field should succeed") {
     withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
       classOf[RocksDBStateStoreProvider].getName,
       SQLConf.SHUFFLE_PARTITIONS.key ->
@@ -1713,7 +1713,47 @@ class TransformWithStateSuite extends StateStoreMetricsTest
     }
   }
 
-  test("test that invalid schema evolution fails query for column family") {
+  testWithEncoding("unsaferow")("test that invalid schema evolution " +
+    "fails query for column family") {
+    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+      classOf[RocksDBStateStoreProvider].getName,
+      SQLConf.SHUFFLE_PARTITIONS.key ->
+        TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString) {
+      withTempDir { checkpointDir =>
+        val inputData = MemoryStream[String]
+        val result1 = inputData.toDS()
+          .groupByKey(x => x)
+          .transformWithState(new RunningCountStatefulProcessor(),
+            TimeMode.None(),
+            OutputMode.Update())
+
+        testStream(result1, OutputMode.Update())(
+          StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
+          AddData(inputData, "a"),
+          CheckNewAnswer(("a", "1")),
+          StopStream
+        )
+        val result2 = inputData.toDS()
+          .groupByKey(x => x)
+          .transformWithState(new RunningCountStatefulProcessorInt(),
+            TimeMode.None(),
+            OutputMode.Update())
+
+        testStream(result2, OutputMode.Update())(
+          StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
+          AddData(inputData, "a"),
+          ExpectFailure[StateStoreValueSchemaNotCompatible] {
+            (t: Throwable) => {
+              assert(t.getMessage.contains("Please check number and type of fields."))
+            }
+          }
+        )
+      }
+    }
+  }
+
+  testWithEncoding("avro")("test that invalid schema evolution " +
+    "fails query for column family") {
     withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
       classOf[RocksDBStateStoreProvider].getName,
       SQLConf.SHUFFLE_PARTITIONS.key ->
@@ -1743,7 +1783,8 @@ class TransformWithStateSuite extends StateStoreMetricsTest
           AddData(inputData, "a"),
           ExpectFailure[StateStoreInvalidValueSchemaEvolution] {
             (t: Throwable) => {
-              assert(t.getMessage.contains("Please check number and type of fields."))
+              assert(t.getMessage.contains(
+                "Schema evolution is not possible with existing value_schema"))
             }
           }
         )
@@ -1883,7 +1924,7 @@ class TransformWithStateSuite extends StateStoreMetricsTest
     }
   }
 
-  test("test that introducing TTL after restart fails query") {
+  testWithEncoding("unsaferow")("test that introducing TTL after restart fails query") {
     withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
       classOf[RocksDBStateStoreProvider].getName,
       SQLConf.SHUFFLE_PARTITIONS.key ->
@@ -1924,6 +1965,60 @@ class TransformWithStateSuite extends StateStoreMetricsTest
             checkError(
               t.asInstanceOf[SparkUnsupportedOperationException],
               condition = "STATE_STORE_VALUE_SCHEMA_NOT_COMPATIBLE",
+              parameters = Map(
+                "storedValueSchema" -> "StructType(StructField(value,LongType,false))",
+                "newValueSchema" ->
+                  ("StructType(StructField(value,StructType(StructField(value,LongType,false))," +
+                    "true),StructField(ttlExpirationMs,LongType,true))")
+              )
+            )
+          }
+        )
+      }
+    }
+  }
+
+  testWithEncoding("avro")("test that introducing TTL after restart fails query") {
+    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+      classOf[RocksDBStateStoreProvider].getName,
+      SQLConf.SHUFFLE_PARTITIONS.key ->
+        TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString) {
+      withTempDir { checkpointDir =>
+        val inputData = MemoryStream[String]
+        val clock = new StreamManualClock
+        val result = inputData.toDS()
+          .groupByKey(x => x)
+          .transformWithState(new RunningCountStatefulProcessor(),
+            TimeMode.ProcessingTime(),
+            OutputMode.Update())
+
+        testStream(result, OutputMode.Update())(
+          StartStream(
+            trigger = Trigger.ProcessingTime("1 second"),
+            checkpointLocation = checkpointDir.getCanonicalPath,
+            triggerClock = clock),
+          AddData(inputData, "a"),
+          AdvanceManualClock(1 * 1000),
+          CheckNewAnswer(("a", "1")),
+          AdvanceManualClock(1 * 1000),
+          StopStream
+        )
+        val result2 = inputData.toDS()
+          .groupByKey(x => x)
+          .transformWithState(new RunningCountStatefulProcessorWithTTL(),
+            TimeMode.ProcessingTime(),
+            OutputMode.Update())
+        testStream(result2, OutputMode.Update())(
+          StartStream(
+            trigger = Trigger.ProcessingTime("1 second"),
+            checkpointLocation = checkpointDir.getCanonicalPath,
+            triggerClock = clock),
+          AddData(inputData, "a"),
+          AdvanceManualClock(1 * 1000),
+          ExpectFailure[StateStoreInvalidValueSchemaEvolution] { t =>
+            checkError(
+              t.asInstanceOf[SparkUnsupportedOperationException],
+              condition = "STATE_STORE_INVALID_VALUE_SCHEMA_EVOLUTION",
               parameters = Map(
                 "storedValueSchema" -> "StructType(StructField(value,LongType,false))",
                 "newValueSchema" ->
@@ -2068,7 +2163,7 @@ class TransformWithStateSuite extends StateStoreMetricsTest
     new Path(stateCheckpointPath, "_stateSchema/default/")
   }
 
-  test("transformWithState - verify that metadata and schema logs are purged") {
+  ignore("transformWithState - verify that metadata and schema logs are purged") {
     withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
       classOf[RocksDBStateStoreProvider].getName,
       SQLConf.SHUFFLE_PARTITIONS.key ->

@@ -124,11 +124,11 @@ trait AlsoTestWithEncodingTypes extends SQLTestUtils {
     }
   }
 
-  // New method for Avro-only tests
-  protected def testWithAvroOnly(testName: String, testTags: Tag*)(testBody: => Any)
-                            (implicit pos: Position): Unit = {
-    super.test(s"$testName (encoding = avro)", testTags: _*) {
-      withSQLConf(SQLConf.STREAMING_STATE_STORE_ENCODING_FORMAT.key -> "avro") {
+  // Helper method to test with specific encoding
+  protected def testWithEncoding(encoding: String)(testName: String)(testBody: => Any)
+                                (implicit pos: Position): Unit = {
+    super.test(s"$testName (encoding = $encoding)", Seq.empty: _*) {
+      withSQLConf(SQLConf.STREAMING_STATE_STORE_ENCODING_FORMAT.key -> encoding) {
         testBody
       }
     }
