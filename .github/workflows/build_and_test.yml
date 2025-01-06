@@ -499,7 +499,7 @@ jobs:
           - >-
             pyspark-sql, pyspark-resource, pyspark-testing
           - >-
-            pyspark-core, pyspark-errors, pyspark-streaming
+            pyspark-core, pyspark-errors, pyspark-streaming, pyspark_logging
           - >-
             pyspark-mllib, pyspark-ml, pyspark-ml-connect
           - >-
