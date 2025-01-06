@@ -1384,7 +1384,7 @@ private[spark] class DAGScheduler(
       log"with ${MDC(NUM_PARTITIONS, partitions.length)} output partitions")
     logInfo(log"Final stage: ${MDC(STAGE, finalStage)} " +
       log"(${MDC(STAGE_NAME, finalStage.name)})")
-    logInfo(log"Parents of final stage: ${MDC(STAGE, finalStage.parents)}")
+    logInfo(log"Parents of final stage: ${MDC(STAGES, finalStage.parents)}")
     logInfo(log"Missing parents: ${MDC(MISSING_PARENT_STAGES, getMissingParentStages(finalStage))}")
 
     val jobSubmissionTime = clock.getTimeMillis()
