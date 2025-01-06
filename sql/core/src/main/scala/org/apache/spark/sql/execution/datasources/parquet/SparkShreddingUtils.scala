@@ -448,6 +448,8 @@ case object SparkShreddingUtils {
   val TypedValueFieldName = "typed_value";
   val MetadataFieldName = "metadata";
 
+  val VARIANT_WRITE_SHREDDING_KEY: String = "__VARIANT_WRITE_SHREDDING_KEY"
+
   def buildVariantSchema(schema: DataType): VariantSchema = {
     schema match {
       case s: StructType => buildVariantSchema(s, topLevel = true)
@@ -510,6 +512,27 @@ case object SparkShreddingUtils {
     } else {
       StructType(fields)
     }
+  }
+
+  /**
+   * Given a schema that represents a valid shredding schema (e.g. constructed by
+   * SparkShreddingUtils.variantShreddingSchema), add metadata to the top-level fields to mark it
+   * as a shredding schema for writers.
+   */
+  def addWriteShreddingMetadata(schema: StructType): StructType = {
+    val newFields = schema.fields.map { f =>
+      f.copy(metadata = new
+          MetadataBuilder()
+            .withMetadata(f.metadata)
+            .putNull(VARIANT_WRITE_SHREDDING_KEY).build())
+    }
+    StructType(newFields)
+  }
+
+  // Check if the struct is marked with metadata set by addWriteShreddingMetadata - i.e. it
+  // represents a Variant converted to a shredding schema for writing.
+  def isVariantShreddingStruct(s: StructType): Boolean = {
+    s.fields.length > 0 && s.fields.forall(_.metadata.contains(VARIANT_WRITE_SHREDDING_KEY))
   }
 
   /*

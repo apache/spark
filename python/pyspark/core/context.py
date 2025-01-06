@@ -75,6 +75,7 @@ from py4j.java_gateway import is_instance_of, JavaGateway, JavaObject, JVMView
 
 if TYPE_CHECKING:
     from pyspark.accumulators import AccumulatorParam
+    from pyspark.sql.types import DataType, StructType
 
 __all__ = ["SparkContext"]
 
@@ -2622,6 +2623,16 @@ class SparkContext:
                 errorClass="CONTEXT_ONLY_VALID_ON_DRIVER",
                 messageParameters={},
             )
+
+    def _to_ddl(self, struct: "StructType") -> str:
+        assert self._jvm is not None
+        return self._jvm.PythonSQLUtils.jsonToDDL(struct.json())
+
+    def _parse_ddl(self, ddl: str) -> "DataType":
+        from pyspark.sql.types import _parse_datatype_json_string
+
+        assert self._jvm is not None
+        return _parse_datatype_json_string(self._jvm.PythonSQLUtils.ddlToJson(ddl))
 
 
 def _test() -> None:

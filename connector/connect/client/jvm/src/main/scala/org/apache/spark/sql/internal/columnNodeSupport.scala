@@ -72,13 +72,19 @@ object ColumnNodeToProtoConverter extends (ColumnNode => proto.Expression) {
           .setColName(regex)
         planId.foreach(b.setPlanId)
 
-      case UnresolvedFunction(functionName, arguments, isDistinct, isUserDefinedFunction, _, _) =>
-        // TODO(SPARK-49087) use internal namespace.
+      case UnresolvedFunction(
+            functionName,
+            arguments,
+            isDistinct,
+            isUserDefinedFunction,
+            isInternal,
+            _) =>
         builder.getUnresolvedFunctionBuilder
           .setFunctionName(functionName)
           .setIsUserDefinedFunction(isUserDefinedFunction)
           .setIsDistinct(isDistinct)
           .addAllArguments(arguments.map(apply(_, e)).asJava)
+          .setIsInternal(isInternal)
 
       case Alias(child, name, metadata, _) =>
         val b = builder.getAliasBuilder.setExpr(apply(child, e))
@@ -155,6 +161,7 @@ object ColumnNodeToProtoConverter extends (ColumnNode => proto.Expression) {
       case CaseWhenOtherwise(branches, otherwise, _) =>
         val b = builder.getUnresolvedFunctionBuilder
           .setFunctionName("when")
+          .setIsInternal(false)
         branches.foreach { case (condition, value) =>
           b.addArguments(apply(condition, e))
           b.addArguments(apply(value, e))

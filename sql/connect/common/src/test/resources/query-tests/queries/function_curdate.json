@@ -13,7 +13,8 @@
     },
     "expressions": [{
       "unresolvedFunction": {
-        "functionName": "curdate"
+        "functionName": "curdate",
+        "isInternal": false
       }
     }]
   }

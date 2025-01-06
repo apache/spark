@@ -77,7 +77,7 @@ import org.apache.spark.sql.execution.stat.StatFunctions
 import org.apache.spark.sql.execution.streaming.GroupStateImpl.groupStateTimeoutFromString
 import org.apache.spark.sql.execution.streaming.StreamingQueryWrapper
 import org.apache.spark.sql.expressions.{Aggregator, ReduceAggregator, SparkUserDefinedFunction, UserDefinedAggregator, UserDefinedFunction}
-import org.apache.spark.sql.internal.{CatalogImpl, MergeIntoWriterImpl, TypedAggUtils}
+import org.apache.spark.sql.internal.{CatalogImpl, MergeIntoWriterImpl, TypedAggUtils, UserDefinedFunctionUtils}
 import org.apache.spark.sql.streaming.{GroupStateTimeout, OutputMode, StreamingQuery, StreamingQueryListener, StreamingQueryProgress, Trigger}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -667,7 +667,8 @@ class SparkConnectPlanner(
   private def transformTypedGroupMap(
       rel: proto.GroupMap,
       commonUdf: proto.CommonInlineUserDefinedFunction): LogicalPlan = {
-    val udf = TypedScalaUdf(commonUdf)
+    val unpackedUdf = unpackUdf(commonUdf)
+    val udf = TypedScalaUdf(unpackedUdf, None)
     val ds = UntypedKeyValueGroupedDataset(
       rel.getInput,
       rel.getGroupingExpressionsList,
@@ -697,6 +698,18 @@ class SparkConnectPlanner(
         InternalOutputModes(rel.getOutputMode)
       }
 
+      val stateSchema = DataTypeProtoConverter.toCatalystType(rel.getStateSchema) match {
+        case s: StructType => s
+        case other =>
+          throw InvalidPlanInput(
+            s"Invalid state schema dataType $other for flatMapGroupsWithState")
+      }
+      val stateEncoder = TypedScalaUdf.encoderFor(
+        // the state agnostic encoder is the second element in the input encoders.
+        unpackedUdf.inputEncoders.tail.head,
+        "state",
+        Some(DataTypeUtils.toAttributes(stateSchema)))
+
       val flatMapGroupsWithState = if (hasInitialState) {
         new FlatMapGroupsWithState(
           udf.function
@@ -706,7 +719,7 @@ class SparkConnectPlanner(
           ds.groupingAttributes,
           ds.dataAttributes,
           udf.outputObjAttr,
-          initialDs.vEncoder.asInstanceOf[ExpressionEncoder[Any]],
+          stateEncoder.asInstanceOf[ExpressionEncoder[Any]],
           outputMode,
           rel.getIsMapGroupsWithState,
           timeoutConf,
@@ -725,7 +738,7 @@ class SparkConnectPlanner(
           ds.groupingAttributes,
           ds.dataAttributes,
           udf.outputObjAttr,
-          initialDs.vEncoder.asInstanceOf[ExpressionEncoder[Any]],
+          stateEncoder.asInstanceOf[ExpressionEncoder[Any]],
           outputMode,
           rel.getIsMapGroupsWithState,
           timeoutConf,
@@ -875,18 +888,20 @@ class SparkConnectPlanner(
         logicalPlan: LogicalPlan,
         groupingExprs: java.util.List[proto.Expression],
         sortOrder: Seq[SortOrder]): UntypedKeyValueGroupedDataset = {
+      val analyzed = session.sessionState.executePlan(logicalPlan).analyzed
+
       assertPlan(groupingExprs.size() >= 1)
       val dummyFunc = TypedScalaUdf(groupingExprs.get(0), None)
       val groupExprs = groupingExprs.asScala.toSeq.drop(1).map(expr => transformExpression(expr))
 
       val (qe, aliasedGroupings) =
-        RelationalGroupedDataset.handleGroupingExpression(logicalPlan, session, groupExprs)
+        RelationalGroupedDataset.handleGroupingExpression(analyzed, session, groupExprs)
 
       UntypedKeyValueGroupedDataset(
         dummyFunc.outEnc,
         dummyFunc.inEnc,
         qe.analyzed,
-        logicalPlan.output,
+        analyzed.output,
         aliasedGroupings,
         sortOrder)
     }
@@ -895,20 +910,22 @@ class SparkConnectPlanner(
         logicalPlan: LogicalPlan,
         groupingExprs: java.util.List[proto.Expression],
         sortOrder: Seq[SortOrder]): UntypedKeyValueGroupedDataset = {
+      val analyzed = session.sessionState.executePlan(logicalPlan).analyzed
+
       assertPlan(groupingExprs.size() == 1)
-      val groupFunc = TypedScalaUdf(groupingExprs.get(0), Some(logicalPlan.output))
+      val groupFunc = TypedScalaUdf(groupingExprs.get(0), Some(analyzed.output))
       val vEnc = groupFunc.inEnc
       val kEnc = groupFunc.outEnc
 
-      val withGroupingKey = AppendColumns(groupFunc.function, vEnc, kEnc, logicalPlan)
+      val withGroupingKey = AppendColumns(groupFunc.function, vEnc, kEnc, analyzed)
       // The input logical plan of KeyValueGroupedDataset need to be executed and analyzed
-      val analyzed = session.sessionState.executePlan(withGroupingKey).analyzed
+      val withGroupingKeyAnalyzed = session.sessionState.executePlan(withGroupingKey).analyzed
 
       UntypedKeyValueGroupedDataset(
         kEnc,
         vEnc,
-        analyzed,
-        logicalPlan.output,
+        withGroupingKeyAnalyzed,
+        analyzed.output,
         withGroupingKey.newColumns,
         sortOrder)
     }
@@ -943,10 +960,7 @@ class SparkConnectPlanner(
       }
     }
 
-    def apply(
-        commonUdf: proto.CommonInlineUserDefinedFunction,
-        inputAttrs: Option[Seq[Attribute]] = None): TypedScalaUdf = {
-      val udf = unpackUdf(commonUdf)
+    def apply(udf: UdfPacket, inputAttrs: Option[Seq[Attribute]]): TypedScalaUdf = {
       // There might be more than one inputs, but we only interested in the first one.
       // Most typed API takes one UDF input.
       // For the few that takes more than one inputs, e.g. grouping function mapping UDFs,
@@ -954,6 +968,13 @@ class SparkConnectPlanner(
       assertPlan(udf.inputEncoders.nonEmpty)
       val inEnc = udf.inputEncoders.head // single input encoder or key encoder
       TypedScalaUdf(udf.function, udf.outputEncoder, inEnc, inputAttrs)
+    }
+
+    def apply(
+        commonUdf: proto.CommonInlineUserDefinedFunction,
+        inputAttrs: Option[Seq[Attribute]] = None): TypedScalaUdf = {
+      val udf = unpackUdf(commonUdf)
+      apply(udf, inputAttrs)
     }
 
     def encoderFor(
@@ -1457,8 +1478,9 @@ class SparkConnectPlanner(
   private def transformTypedFilter(
       fun: proto.CommonInlineUserDefinedFunction,
       child: LogicalPlan): TypedFilter = {
-    val udf = TypedScalaUdf(fun, Some(child.output))
-    TypedFilter(udf.function, child)(udf.inEnc)
+    val analyzed = session.sessionState.executePlan(child).analyzed
+    val udf = TypedScalaUdf(fun, Some(analyzed.output))
+    TypedFilter(udf.function, analyzed)(udf.inEnc)
   }
 
   private def transformProject(rel: proto.Project): LogicalPlan = {
@@ -1672,14 +1694,18 @@ class SparkConnectPlanner(
         fun.getArgumentsList.asScala.map(transformExpression).toSeq,
         isDistinct = fun.getIsDistinct)
     } else {
-      // Spark Connect historically used the global namespace to lookup a couple of internal
-      // functions (e.g. product, collect_top_k, unwrap_udt, ...). In Spark 4 we moved these
-      // functions to a dedicated namespace, however in order to stay backwards compatible we still
-      // need to allow connect to use the global namespace. Here we check if a function is
-      // registered in the internal function registry, and we reroute the lookup to the internal
-      // registry.
       val name = fun.getFunctionName
-      val internal = FunctionRegistry.internal.functionExists(FunctionIdentifier(name))
+      val internal = if (fun.hasIsInternal) {
+        fun.getIsInternal
+      } else {
+        // Spark Connect historically used the global namespace to look up a couple of internal
+        // functions (e.g. product, collect_top_k, unwrap_udt, ...). In Spark 4 we moved these
+        // functions to a dedicated namespace, however in order to stay backwards compatible we
+        // still need to allow Connect to use the global namespace. Here we check if a function is
+        // registered in the internal function registry, and we reroute the lookup to the internal
+        // registry.
+        FunctionRegistry.internal.functionExists(FunctionIdentifier(name))
+      }
       UnresolvedFunction(
         name :: Nil,
         fun.getArgumentsList.asScala.map(transformExpression).toSeq,
@@ -1761,34 +1787,36 @@ class SparkConnectPlanner(
   }
 
   /**
-   * Translates a Scala user-defined function from proto to the Catalyst expression.
+   * Translates a Scala user-defined function or aggregator from proto to the corresponding
+   * Catalyst expression.
    *
    * @param fun
-   *   Proto representation of the Scala user-defined function.
+   *   Proto representation of the Scala user-defined function or aggregator.
    * @return
-   *   ScalaUDF.
+   *   An expression, either a ScalaUDF or a ScalaAggregator.
    */
   private def transformScalaUDF(fun: proto.CommonInlineUserDefinedFunction): Expression = {
-    val udf = fun.getScalarScalaUdf
-    val udfPacket = unpackUdf(fun)
-    if (udf.getAggregate) {
-      ScalaAggregator(
-        transformScalaFunction(fun).asInstanceOf[UserDefinedAggregator[Any, Any, Any]],
-        fun.getArgumentsList.asScala.map(transformExpression).toSeq)
-        .toAggregateExpression()
-    } else {
-      ScalaUDF(
-        function = udfPacket.function,
-        dataType = transformDataType(udf.getOutputType),
-        children = fun.getArgumentsList.asScala.map(transformExpression).toSeq,
-        inputEncoders = udfPacket.inputEncoders.map(e => Try(ExpressionEncoder(e)).toOption),
-        outputEncoder = Option(ExpressionEncoder(udfPacket.outputEncoder)),
-        udfName = Option(fun.getFunctionName),
-        nullable = udf.getNullable,
-        udfDeterministic = fun.getDeterministic)
+    val children = fun.getArgumentsList.asScala.map(transformExpression).toSeq
+    transformScalaFunction(fun) match {
+      case udf: SparkUserDefinedFunction =>
+        UserDefinedFunctionUtils.toScalaUDF(udf, children)
+      case uda: UserDefinedAggregator[_, _, _] =>
+        ScalaAggregator(uda, children).toAggregateExpression()
+      case other =>
+        throw InvalidPlanInput(
+          s"Unsupported UserDefinedFunction implementation: ${other.getClass}")
     }
   }
 
+  /**
+   * Translates a Scala user-defined function or aggregator. from proto to a UserDefinedFunction.
+   *
+   * @param fun
+   *   Proto representation of the Scala user-defined function or aggregator.
+   * @return
+   *   A concrete UserDefinedFunction implementation, either a SparkUserDefinedFunction or a
+   *   UserDefinedAggregator.
+   */
   private def transformScalaFunction(
       fun: proto.CommonInlineUserDefinedFunction): UserDefinedFunction = {
     val udf = fun.getScalarScalaUdf
@@ -2996,10 +3024,9 @@ class SparkConnectPlanner(
           fn
 
         case StreamingForeachFunction.FunctionCase.SCALA_FUNCTION =>
-          val scalaFn = Utils.deserialize[StreamingForeachBatchHelper.ForeachBatchFnType](
+          StreamingForeachBatchHelper.scalaForeachBatchWrapper(
             writeOp.getForeachBatch.getScalaFunction.getPayload.toByteArray,
-            Utils.getContextOrSparkClassLoader)
-          StreamingForeachBatchHelper.scalaForeachBatchWrapper(scalaFn, sessionHolder)
+            sessionHolder)
 
         case StreamingForeachFunction.FunctionCase.FUNCTION_NOT_SET =>
           throw InvalidPlanInput("Unexpected foreachBatch function") // Unreachable

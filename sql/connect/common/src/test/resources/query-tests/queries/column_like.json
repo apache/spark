@@ -22,7 +22,8 @@
           "literal": {
             "string": "%bob%"
           }
-        }]
+        }],
+        "isInternal": false
       }
     }]
   }
