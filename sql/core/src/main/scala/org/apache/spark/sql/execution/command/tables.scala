@@ -920,7 +920,6 @@ case class DescribeTableJsonCommand(
       .getOrElse(Seq.empty)
       .collect { case (name, _, defaultValue) => name -> defaultValue }
       .toMap
-
     val columnsJson = jsonType(StructType(schema.fields), defaultValuesMap)
       .asInstanceOf[JObject].find(_.isInstanceOf[JArray]).get
     addKeyValueToMap("columns", columnsJson, jsonMap)
