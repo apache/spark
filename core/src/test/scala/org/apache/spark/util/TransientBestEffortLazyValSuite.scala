@@ -16,13 +16,11 @@
  */
 package org.apache.spark.util
 
-import java.io.{ByteArrayOutputStream, ObjectOutputStream}
-
 import org.apache.spark.SparkFunSuite
 
 class TransientBestEffortLazyValSuite extends SparkFunSuite {
 
-  test("TransientBestEffortLazyVal val works") {
+  test("TransientBestEffortLazyVal works") {
     var test: Option[Object] = None
 
     val lazyval = new TransientBestEffortLazyVal(() => {
@@ -40,42 +38,57 @@ class TransientBestEffortLazyValSuite extends SparkFunSuite {
     assert(lazyval() == test && test.isDefined)
   }
 
-  test("TransientBestEffortLazyVal val is serializable") {
+  test("TransientBestEffortLazyVal is serializable") {
     val lazyval = new TransientBestEffortLazyVal(() => "test")
 
-    val oos = new ObjectOutputStream(new ByteArrayOutputStream())
-    oos.writeObject(lazyval)
+    // serialize and deserialize before first invocation
+    val lazyval2 = roundtripSerialize(lazyval)
+    assert(lazyval2() === "test")
 
-    val v = lazyval()
-    val oos2 = new ObjectOutputStream(new ByteArrayOutputStream())
-    oos2.writeObject(lazyval)
+    // first invocation
+    assert(lazyval() === "test")
+
+    // serialize and deserialize after first invocation
+    val lazyval3 = roundtripSerialize(lazyval)
+    assert(lazyval3() === "test")
   }
 
-  test("TransientBestEffortLazyVal val is serializable: unserializable value") {
+  test("TransientBestEffortLazyVal is serializable: unserializable value") {
     val lazyval = new TransientBestEffortLazyVal(() => new Object())
 
-    val oos = new ObjectOutputStream(new ByteArrayOutputStream())
-    oos.writeObject(lazyval)
+    // serialize and deserialize before first invocation
+    val lazyval2 = roundtripSerialize(lazyval)
+    assert(lazyval2() != null)
 
-    val v = lazyval()
-    val oos2 = new ObjectOutputStream(new ByteArrayOutputStream())
-    oos2.writeObject(lazyval)
+    // first invocation
+    assert(lazyval() != null)
+
+    // serialize and deserialize after first invocation
+    val lazyval3 = roundtripSerialize(lazyval)
+    assert(lazyval3() != null)
   }
 
-  test("TransientBestEffortLazyVal val is serializable: failure in compute function") {
+  test("TransientBestEffortLazyVal is serializable: failure in compute function") {
     val lazyval = new TransientBestEffortLazyVal[String](() => throw new RuntimeException("test"))
 
-    // BestEffortLazyVal serializes the compute function before first invocation
-    val oos = new ObjectOutputStream(new ByteArrayOutputStream())
-    oos.writeObject(lazyval)
+    // serialize and deserialize before first invocation
+    val lazyval2 = roundtripSerialize(lazyval)
+    val e2 = intercept[RuntimeException] {
+      val v = lazyval2()
+    }
+    assert(e2.getMessage.contains("test"))
 
+    // initialization failure
     val e = intercept[RuntimeException] {
       val v = lazyval()
     }
     assert(e.getMessage.contains("test"))
 
-    // BestEffortLazyVal still serializes the compute function after initialization failure
-    val oos2 = new ObjectOutputStream(new ByteArrayOutputStream())
-    oos2.writeObject(lazyval)
+    // serialize and deserialize after initialization failure
+    val lazyval3 = roundtripSerialize(lazyval)
+    val e3 = intercept[RuntimeException] {
+      val v = lazyval3()
+    }
+    assert(e3.getMessage.contains("test"))
   }
 }

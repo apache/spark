@@ -16,13 +16,13 @@
  */
 package org.apache.spark.util
 
-import java.io.{ByteArrayOutputStream, NotSerializableException, ObjectOutputStream}
+import java.io.NotSerializableException
 
 import org.apache.spark.SparkFunSuite
 
 class BestEffortLazyValSuite extends SparkFunSuite {
 
-  test("BestEffortLazy val works") {
+  test("BestEffortLazy works") {
     var test: Option[Object] = None
 
     val lazyval = new BestEffortLazyVal(() => {
@@ -40,47 +40,60 @@ class BestEffortLazyValSuite extends SparkFunSuite {
     assert(lazyval() == test && test.isDefined)
   }
 
-  test("BestEffortLazyVal val is serializable") {
+  test("BestEffortLazyVal is serializable") {
     val lazyval = new BestEffortLazyVal(() => "test")
 
-    val oos = new ObjectOutputStream(new ByteArrayOutputStream())
-    oos.writeObject(lazyval)
+    // serialize and deserialize before first invocation
+    val lazyval2 = roundtripSerialize(lazyval)
+    assert(lazyval2() === "test")
 
-    val v = lazyval()
-    val oos2 = new ObjectOutputStream(new ByteArrayOutputStream())
-    oos2.writeObject(lazyval)
+    // first invocation
+    assert(lazyval() === "test")
+
+    // serialize and deserialize after first invocation
+    val lazyval3 = roundtripSerialize(lazyval)
+    assert(lazyval3() === "test")
   }
 
-  test("BestEffortLazyVal val is serializable: unserializable value") {
+  test("BestEffortLazyVal is serializable: unserializable value") {
     val lazyval = new BestEffortLazyVal(() => new Object())
 
-    // BestEffortLazyVal serializes the compute function before first invocation
-    val oos = new ObjectOutputStream(new ByteArrayOutputStream())
-    oos.writeObject(lazyval)
+    // serialize and deserialize before first invocation
+    val lazyval2 = roundtripSerialize(lazyval)
+    assert(lazyval2() != null)
 
-    val v = lazyval()
-    // BestEffortLazyVal serializes the cached value after first invocation
+    // first invocation
+    assert(lazyval() != null)
+
+    // serialize and deserialize after first invocation
+    // try to serialize the cached value and cause NotSerializableException
     val e = intercept[NotSerializableException] {
-      val oos2 = new ObjectOutputStream(new ByteArrayOutputStream())
-      oos2.writeObject(lazyval)
+      val lazyval3 = roundtripSerialize(lazyval)
     }
     assert(e.getMessage.contains("java.lang.Object"))
   }
 
-  test("BestEffortLazyVal val is serializable: failure in compute function") {
+  test("BestEffortLazyVal is serializable: initialization failure") {
     val lazyval = new BestEffortLazyVal[String](() => throw new RuntimeException("test"))
 
-    // BestEffortLazyVal serializes the compute function before first invocation
-    val oos = new ObjectOutputStream(new ByteArrayOutputStream())
-    oos.writeObject(lazyval)
+    // serialize and deserialize before first invocation
+    val lazyval2 = roundtripSerialize(lazyval)
+    val e2 = intercept[RuntimeException] {
+      val v = lazyval2()
+    }
+    assert(e2.getMessage.contains("test"))
 
+    // initialization failure
     val e = intercept[RuntimeException] {
       val v = lazyval()
     }
     assert(e.getMessage.contains("test"))
 
-    // BestEffortLazyVal still serializes the compute function after initialization failure
-    val oos2 = new ObjectOutputStream(new ByteArrayOutputStream())
-    oos2.writeObject(lazyval)
+    // serialize and deserialize after initialization failure
+    val lazyval3 = roundtripSerialize(lazyval)
+    val e3 = intercept[RuntimeException] {
+      val v = lazyval3()
+    }
+    assert(e3.getMessage.contains("test"))
   }
 }
