@@ -393,23 +393,7 @@ case class RandStr(
   }
 
   private def lengthInteger(): Int = {
-    def throwNullArgumentError(): Nothing = {
-      throw QueryCompilationErrors.nullArgumentError(prettyName, "length")
-    }
-    val result = length.dataType match {
-      case _: DecimalType =>
-        val eval = length.eval().asInstanceOf[Decimal]
-        if (eval == null) {
-          throwNullArgumentError()
-        }
-        eval.toInt
-      case _ =>
-        val eval = length.eval().asInstanceOf[Number]
-        if (eval == null) {
-          throwNullArgumentError()
-        }
-        eval.intValue()
-    }
+    val result = Cast(length, IntegerType).eval().asInstanceOf[Int]
     if (result < 0) {
       throw QueryExecutionErrors.unexpectedValueForLengthInFunctionError(prettyName, result)
     }

@@ -454,17 +454,9 @@ ceV0PXaR2I
 -- !query
 SELECT randstr(NULL, 0) AS result
 -- !query schema
-struct<>
+struct<result:string>
 -- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "INVALID_PARAMETER_VALUE.NULL",
-  "sqlState" : "22023",
-  "messageParameters" : {
-    "functionName" : "`randstr`",
-    "parameter" : "`length`"
-  }
-}
+
 
 
 -- !query
