@@ -263,10 +263,11 @@ class StateSchemaCompatibilityChecker(
             case Some(existingSchemas) =>
               val (updatedSchema, hasEvolved) = check(
                 existingSchemas, newSchema, ignoreValueSchema, schemaEvolutionEnabled)
-              if (oldSchemaFilePaths.size == conf.maxStateSchemaFiles && hasEvolved) {
+              if (oldSchemaFilePaths.size ==
+                conf.streamingValueStateSchemaEvolutionThreshold && hasEvolved) {
                 throw StateStoreErrors.stateStoreSchemaFileThresholdExceeded(
                   oldSchemaFilePaths.size + 1,
-                  conf.maxStateSchemaFiles,
+                  conf.streamingValueStateSchemaEvolutionThreshold,
                   List(newSchema.colFamilyName)
                 )
               }
@@ -283,11 +284,11 @@ class StateSchemaCompatibilityChecker(
       val colFamiliesAddedOrRemoved = newColFamilies != oldColFamilies
       val newSchemaFileWritten = hasEvolutions || colFamiliesAddedOrRemoved
 
-      if (oldSchemaFilePaths.size == conf.maxStateSchemaFiles &&
+      if (oldSchemaFilePaths.size == conf.streamingValueStateSchemaEvolutionThreshold &&
         colFamiliesAddedOrRemoved) {
         throw StateStoreErrors.stateStoreSchemaFileThresholdExceeded(
           oldSchemaFilePaths.size + 1,
-          conf.maxStateSchemaFiles,
+          conf.streamingValueStateSchemaEvolutionThreshold,
           // need to compute symmetric diff between col family list
           (newColFamilies.diff(oldColFamilies) ++
             oldColFamilies.diff(newColFamilies)).toList

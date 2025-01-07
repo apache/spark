@@ -4518,7 +4518,7 @@
     "message" : [
       "The number of state schema files <numStateSchemaFiles> exceeds the maximum number of state schema files allowed for this query, <maxStateSchemaFiles>.",
       "Offending column families: <colFamilyNames>",
-      "Please set 'spark.sql.streaming.stateStore.maxStateSchemaFiles' to a higher number, or revert state schema modifications"
+      "Please set 'spark.sql.streaming.stateStore.valueStateSchemaEvolutionThreshold' to a higher number, or revert state schema modifications"
     ],
     "sqlState" : "42K06"
   },
