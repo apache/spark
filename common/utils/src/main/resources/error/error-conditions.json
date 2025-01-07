@@ -2387,6 +2387,12 @@
     ],
     "sqlState" : "42604"
   },
+  "INVALID_EXECUTOR_HEARTBEAT_INTERVAL" : {
+    "message" : [
+      "The value of <networkTimeoutKey>=<networkTimeoutValue>ms must be greater than the value of <executorHeartbeatIntervalKey>=<executorHeartbeatIntervalValue>ms."
+    ],
+    "sqlState" : "42616"
+  },
   "INVALID_EXECUTOR_MEMORY" : {
     "message" : [
       "Executor memory <executorMemory> must be at least <minSystemMemory>.",
@@ -3686,6 +3692,12 @@
       "Nested EXECUTE IMMEDIATE commands are not allowed. Please ensure that the SQL query provided (<sqlString>) does not contain another EXECUTE IMMEDIATE command."
     ],
     "sqlState" : "07501"
+  },
+  "NETWORK_AUTH_MUST_BE_ENABLED" : {
+    "message" : [
+      "<networkAuthEnabledConf> must be enabled when enabling encryption."
+    ],
+    "sqlState" : "42616"
   },
   "NONEXISTENT_FIELD_NAME_IN_LIST" : {
     "message" : [
