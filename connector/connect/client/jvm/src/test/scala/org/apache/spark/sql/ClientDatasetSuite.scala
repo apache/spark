@@ -143,11 +143,12 @@ class ClientDatasetSuite extends ConnectFunSuite with BeforeAndAfterEach {
   test("write V2") {
     val df = ss.newDataFrame(_ => ()).limit(10)
 
+    val partCol = col("col99")
     val builder = proto.WriteOperationV2.newBuilder()
     builder
       .setInput(df.plan.getRoot)
       .setTableName("t1")
-      .addPartitioningColumns(toExpr(col("col99")))
+      .addPartitioningColumns(toExpr(partCol))
       .setProvider("json")
       .addClusteringColumns("col3")
       .putTableProperties("key", "value")
@@ -160,7 +161,7 @@ class ClientDatasetSuite extends ConnectFunSuite with BeforeAndAfterEach {
       .build()
 
     df.writeTo("t1")
-      .partitionedBy(col("col99"))
+      .partitionedBy(partCol)
       .clusterBy("col3")
       .using("json")
       .tableProperty("key", "value")
