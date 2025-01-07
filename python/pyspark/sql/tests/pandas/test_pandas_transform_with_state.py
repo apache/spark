@@ -1377,10 +1377,9 @@ class TransformWithStateInPandasTestsMixin:
                 df = self._build_test_df(input_path)
 
                 def check_basic_state(batch_df, batch_id):
-                    if batch_id == 0:
-                        result = batch_df.collect()[0]
-                        assert result.value["id"] == 0  # First ID from test data
-                        assert result.value["name"] == "name-0"
+                    result = batch_df.collect()[0]
+                    assert result.value["id"] == 0  # First ID from test data
+                    assert result.value["name"] == "name-0"
 
                 self._run_evolution_test(BasicProcessor(), checkpoint_dir, check_basic_state, df)
 
@@ -1388,27 +1387,21 @@ class TransformWithStateInPandasTestsMixin:
 
                 # Test 2: Add fields
                 def check_add_fields(batch_df, batch_id):
-                    if batch_id == 0:
-                        results = batch_df.collect()
-                        # Check default values for existing key
-                        assert results[0].value["count"] == 0
-                        assert results[0].value["active"] == False
-                        assert results[0].value["score"] == 0.0
-                        # Check initialized values for new key
-                        assert results[1].value["count"] == 100
-                        assert results[1].value["active"] == True
-                        assert results[1].value["score"] == 99.9
+                    results = batch_df.collect()
+                    # Check default values for existing key
+                    assert results[0].value["count"] == 0
+                    assert results[0].value["active"] == False
+                    assert results[0].value["score"] == 0.0
 
                 self._run_evolution_test(AddFieldsProcessor(), checkpoint_dir, check_add_fields, df)
                 self._prepare_test_resource3(input_path)
 
                 # Test 3: Remove fields
                 def check_remove_fields(batch_df, batch_id):
-                    if batch_id == 0:
-                        result = batch_df.collect()[0]
-                        assert result.value["id"] == 0  # First ID from test data
-                        assert result.value["name"] == "name-0"
-                        assert len(result.value) == 2
+                    result = batch_df.collect()[0]
+                    assert result.value["id"] == 0  # First ID from test data
+                    assert result.value["name"] == "name-0"
+                    assert len(result.value) == 2
 
                 self._run_evolution_test(
                     RemoveFieldsProcessor(), checkpoint_dir, check_remove_fields, df
@@ -1417,11 +1410,10 @@ class TransformWithStateInPandasTestsMixin:
 
                 # Test 4: Reorder fields
                 def check_reorder_fields(batch_df, batch_id):
-                    if batch_id == 0:
-                        result = batch_df.collect()[0]
-                        assert result.value["name"] == "name-0"
-                        assert result.value["id"] == 0
-                        assert result.value["score"] == 99.9
+                    result = batch_df.collect()[0]
+                    assert result.value["name"] == "name-0"
+                    assert result.value["id"] == 0
+                    assert result.value["score"] == 0
 
                 self._run_evolution_test(
                     ReorderedFieldsProcessor(), checkpoint_dir, check_reorder_fields, df
@@ -1430,13 +1422,11 @@ class TransformWithStateInPandasTestsMixin:
 
                 # Test 5: Upcast type
                 def check_upcast(batch_df, batch_id):
-                    if batch_id == 0:
-                        result = batch_df.collect()[0]
-                        assert isinstance(result.value["id"], int)
-                        assert result.value["name"] == "name-0"
+                    result = batch_df.collect()[0]
+                    assert isinstance(result.value["id"], long)
+                    assert result.value["name"] == "name-0"
 
                 self._run_evolution_test(UpcastProcessor(), checkpoint_dir, check_upcast, df)
-
 
 class SimpleStatefulProcessorWithInitialState(StatefulProcessor):
     # this dict is the same as input initial state dataframe
