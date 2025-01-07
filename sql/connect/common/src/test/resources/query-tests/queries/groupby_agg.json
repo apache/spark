@@ -15,6 +15,25 @@
     "groupingExpressions": [{
       "unresolvedAttribute": {
         "unparsedIdentifier": "id"
+      },
+      "common": {
+        "origin": {
+          "jvmOrigin": {
+            "stackTrace": [{
+              "classLoaderName": "app",
+              "declaringClass": "org.apache.spark.sql.Column$",
+              "methodName": "apply",
+              "fileName": "Column.scala",
+              "lineNumber": 35
+            }, {
+              "classLoaderName": "app",
+              "declaringClass": "org.apache.spark.sql.PlanGenerationTestSuite",
+              "methodName": "$anonfun$new$688",
+              "fileName": "PlanGenerationTestSuite.scala",
+              "lineNumber": 3144
+            }]
+          }
+        }
       }
     }],
     "aggregateExpressions": [{
@@ -24,9 +43,47 @@
           "unresolvedAttribute": {
             "unparsedIdentifier": "a",
             "planId": "0"
+          },
+          "common": {
+            "origin": {
+              "jvmOrigin": {
+                "stackTrace": [{
+                  "classLoaderName": "app",
+                  "declaringClass": "org.apache.spark.sql.Dataset",
+                  "methodName": "col",
+                  "fileName": "Dataset.scala",
+                  "lineNumber": 456
+                }, {
+                  "classLoaderName": "app",
+                  "declaringClass": "org.apache.spark.sql.api.RelationalGroupedDataset",
+                  "methodName": "toAggCol",
+                  "fileName": "RelationalGroupedDataset.scala",
+                  "lineNumber": 52
+                }]
+              }
+            }
           }
         }],
         "isInternal": false
+      },
+      "common": {
+        "origin": {
+          "jvmOrigin": {
+            "stackTrace": [{
+              "classLoaderName": "app",
+              "declaringClass": "org.apache.spark.sql.Column$",
+              "methodName": "fn",
+              "fileName": "Column.scala",
+              "lineNumber": 59
+            }, {
+              "classLoaderName": "app",
+              "declaringClass": "org.apache.spark.sql.api.RelationalGroupedDataset",
+              "methodName": "toAggCol",
+              "fileName": "RelationalGroupedDataset.scala",
+              "lineNumber": 57
+            }]
+          }
+        }
       }
     }, {
       "unresolvedFunction": {
@@ -35,9 +92,47 @@
           "unresolvedAttribute": {
             "unparsedIdentifier": "b",
             "planId": "0"
+          },
+          "common": {
+            "origin": {
+              "jvmOrigin": {
+                "stackTrace": [{
+                  "classLoaderName": "app",
+                  "declaringClass": "org.apache.spark.sql.Dataset",
+                  "methodName": "col",
+                  "fileName": "Dataset.scala",
+                  "lineNumber": 456
+                }, {
+                  "classLoaderName": "app",
+                  "declaringClass": "org.apache.spark.sql.api.RelationalGroupedDataset",
+                  "methodName": "toAggCol",
+                  "fileName": "RelationalGroupedDataset.scala",
+                  "lineNumber": 52
+                }]
+              }
+            }
           }
         }],
         "isInternal": false
+      },
+      "common": {
+        "origin": {
+          "jvmOrigin": {
+            "stackTrace": [{
+              "classLoaderName": "app",
+              "declaringClass": "org.apache.spark.sql.functions$",
+              "methodName": "stddev",
+              "fileName": "functions.scala",
+              "lineNumber": 1066
+            }, {
+              "classLoaderName": "app",
+              "declaringClass": "org.apache.spark.sql.api.RelationalGroupedDataset",
+              "methodName": "toAggCol",
+              "fileName": "RelationalGroupedDataset.scala",
+              "lineNumber": 55
+            }]
+          }
+        }
       }
     }, {
       "unresolvedFunction": {
@@ -46,9 +141,47 @@
           "unresolvedAttribute": {
             "unparsedIdentifier": "b",
             "planId": "0"
+          },
+          "common": {
+            "origin": {
+              "jvmOrigin": {
+                "stackTrace": [{
+                  "classLoaderName": "app",
+                  "declaringClass": "org.apache.spark.sql.Dataset",
+                  "methodName": "col",
+                  "fileName": "Dataset.scala",
+                  "lineNumber": 456
+                }, {
+                  "classLoaderName": "app",
+                  "declaringClass": "org.apache.spark.sql.api.RelationalGroupedDataset",
+                  "methodName": "toAggCol",
+                  "fileName": "RelationalGroupedDataset.scala",
+                  "lineNumber": 52
+                }]
+              }
+            }
           }
         }],
         "isInternal": false
+      },
+      "common": {
+        "origin": {
+          "jvmOrigin": {
+            "stackTrace": [{
+              "classLoaderName": "app",
+              "declaringClass": "org.apache.spark.sql.functions$",
+              "methodName": "stddev",
+              "fileName": "functions.scala",
+              "lineNumber": 1066
+            }, {
+              "classLoaderName": "app",
+              "declaringClass": "org.apache.spark.sql.api.RelationalGroupedDataset",
+              "methodName": "toAggCol",
+              "fileName": "RelationalGroupedDataset.scala",
+              "lineNumber": 55
+            }]
+          }
+        }
       }
     }, {
       "unresolvedFunction": {
@@ -57,9 +190,47 @@
           "unresolvedAttribute": {
             "unparsedIdentifier": "b",
             "planId": "0"
+          },
+          "common": {
+            "origin": {
+              "jvmOrigin": {
+                "stackTrace": [{
+                  "classLoaderName": "app",
+                  "declaringClass": "org.apache.spark.sql.Dataset",
+                  "methodName": "col",
+                  "fileName": "Dataset.scala",
+                  "lineNumber": 456
+                }, {
+                  "classLoaderName": "app",
+                  "declaringClass": "org.apache.spark.sql.api.RelationalGroupedDataset",
+                  "methodName": "toAggCol",
+                  "fileName": "RelationalGroupedDataset.scala",
+                  "lineNumber": 52
+                }]
+              }
+            }
           }
         }],
         "isInternal": false
+      },
+      "common": {
+        "origin": {
+          "jvmOrigin": {
+            "stackTrace": [{
+              "classLoaderName": "app",
+              "declaringClass": "org.apache.spark.sql.functions$",
+              "methodName": "avg",
+              "fileName": "functions.scala",
+              "lineNumber": 322
+            }, {
+              "classLoaderName": "app",
+              "declaringClass": "org.apache.spark.sql.api.RelationalGroupedDataset",
+              "methodName": "toAggCol",
+              "fileName": "RelationalGroupedDataset.scala",
+              "lineNumber": 54
+            }]
+          }
+        }
       }
     }, {
       "unresolvedFunction": {
@@ -68,9 +239,47 @@
           "unresolvedAttribute": {
             "unparsedIdentifier": "b",
             "planId": "0"
+          },
+          "common": {
+            "origin": {
+              "jvmOrigin": {
+                "stackTrace": [{
+                  "classLoaderName": "app",
+                  "declaringClass": "org.apache.spark.sql.Dataset",
+                  "methodName": "col",
+                  "fileName": "Dataset.scala",
+                  "lineNumber": 456
+                }, {
+                  "classLoaderName": "app",
+                  "declaringClass": "org.apache.spark.sql.api.RelationalGroupedDataset",
+                  "methodName": "toAggCol",
+                  "fileName": "RelationalGroupedDataset.scala",
+                  "lineNumber": 52
+                }]
+              }
+            }
           }
         }],
         "isInternal": false
+      },
+      "common": {
+        "origin": {
+          "jvmOrigin": {
+            "stackTrace": [{
+              "classLoaderName": "app",
+              "declaringClass": "org.apache.spark.sql.functions$",
+              "methodName": "avg",
+              "fileName": "functions.scala",
+              "lineNumber": 322
+            }, {
+              "classLoaderName": "app",
+              "declaringClass": "org.apache.spark.sql.api.RelationalGroupedDataset",
+              "methodName": "toAggCol",
+              "fileName": "RelationalGroupedDataset.scala",
+              "lineNumber": 54
+            }]
+          }
+        }
       }
     }, {
       "unresolvedFunction": {
@@ -79,9 +288,47 @@
           "unresolvedAttribute": {
             "unparsedIdentifier": "b",
             "planId": "0"
+          },
+          "common": {
+            "origin": {
+              "jvmOrigin": {
+                "stackTrace": [{
+                  "classLoaderName": "app",
+                  "declaringClass": "org.apache.spark.sql.Dataset",
+                  "methodName": "col",
+                  "fileName": "Dataset.scala",
+                  "lineNumber": 456
+                }, {
+                  "classLoaderName": "app",
+                  "declaringClass": "org.apache.spark.sql.api.RelationalGroupedDataset",
+                  "methodName": "toAggCol",
+                  "fileName": "RelationalGroupedDataset.scala",
+                  "lineNumber": 52
+                }]
+              }
+            }
           }
         }],
         "isInternal": false
+      },
+      "common": {
+        "origin": {
+          "jvmOrigin": {
+            "stackTrace": [{
+              "classLoaderName": "app",
+              "declaringClass": "org.apache.spark.sql.functions$",
+              "methodName": "avg",
+              "fileName": "functions.scala",
+              "lineNumber": 322
+            }, {
+              "classLoaderName": "app",
+              "declaringClass": "org.apache.spark.sql.api.RelationalGroupedDataset",
+              "methodName": "toAggCol",
+              "fileName": "RelationalGroupedDataset.scala",
+              "lineNumber": 54
+            }]
+          }
+        }
       }
     }, {
       "unresolvedFunction": {
@@ -89,9 +336,47 @@
         "arguments": [{
           "unresolvedStar": {
             "planId": "0"
+          },
+          "common": {
+            "origin": {
+              "jvmOrigin": {
+                "stackTrace": [{
+                  "classLoaderName": "app",
+                  "declaringClass": "org.apache.spark.sql.Dataset",
+                  "methodName": "col",
+                  "fileName": "Dataset.scala",
+                  "lineNumber": 456
+                }, {
+                  "classLoaderName": "app",
+                  "declaringClass": "org.apache.spark.sql.api.RelationalGroupedDataset",
+                  "methodName": "toAggCol",
+                  "fileName": "RelationalGroupedDataset.scala",
+                  "lineNumber": 52
+                }]
+              }
+            }
           }
         }],
         "isInternal": false
+      },
+      "common": {
+        "origin": {
+          "jvmOrigin": {
+            "stackTrace": [{
+              "classLoaderName": "app",
+              "declaringClass": "org.apache.spark.sql.functions$",
+              "methodName": "count",
+              "fileName": "functions.scala",
+              "lineNumber": 429
+            }, {
+              "classLoaderName": "app",
+              "declaringClass": "org.apache.spark.sql.api.RelationalGroupedDataset",
+              "methodName": "toAggCol",
+              "fileName": "RelationalGroupedDataset.scala",
+              "lineNumber": 56
+            }]
+          }
+        }
       }
     }, {
       "unresolvedFunction": {
@@ -100,9 +385,47 @@
           "unresolvedAttribute": {
             "unparsedIdentifier": "a",
             "planId": "0"
+          },
+          "common": {
+            "origin": {
+              "jvmOrigin": {
+                "stackTrace": [{
+                  "classLoaderName": "app",
+                  "declaringClass": "org.apache.spark.sql.Dataset",
+                  "methodName": "col",
+                  "fileName": "Dataset.scala",
+                  "lineNumber": 456
+                }, {
+                  "classLoaderName": "app",
+                  "declaringClass": "org.apache.spark.sql.api.RelationalGroupedDataset",
+                  "methodName": "toAggCol",
+                  "fileName": "RelationalGroupedDataset.scala",
+                  "lineNumber": 52
+                }]
+              }
+            }
           }
         }],
         "isInternal": false
+      },
+      "common": {
+        "origin": {
+          "jvmOrigin": {
+            "stackTrace": [{
+              "classLoaderName": "app",
+              "declaringClass": "org.apache.spark.sql.functions$",
+              "methodName": "count",
+              "fileName": "functions.scala",
+              "lineNumber": 429
+            }, {
+              "classLoaderName": "app",
+              "declaringClass": "org.apache.spark.sql.api.RelationalGroupedDataset",
+              "methodName": "toAggCol",
+              "fileName": "RelationalGroupedDataset.scala",
+              "lineNumber": 56
+            }]
+          }
+        }
       }
     }]
   }

@@ -17,9 +17,47 @@
         "arguments": [{
           "unresolvedAttribute": {
             "unparsedIdentifier": "e"
+          },
+          "common": {
+            "origin": {
+              "jvmOrigin": {
+                "stackTrace": [{
+                  "classLoaderName": "app",
+                  "declaringClass": "org.apache.spark.sql.functions$",
+                  "methodName": "col",
+                  "fileName": "functions.scala",
+                  "lineNumber": 94
+                }, {
+                  "classLoaderName": "app",
+                  "declaringClass": "org.apache.spark.sql.PlanGenerationTestSuite",
+                  "methodName": "$anonfun$new$572",
+                  "fileName": "PlanGenerationTestSuite.scala",
+                  "lineNumber": 2670
+                }]
+              }
+            }
           }
         }],
         "isInternal": false
+      },
+      "common": {
+        "origin": {
+          "jvmOrigin": {
+            "stackTrace": [{
+              "classLoaderName": "app",
+              "declaringClass": "org.apache.spark.sql.functions$",
+              "methodName": "reverse",
+              "fileName": "functions.scala",
+              "lineNumber": 7492
+            }, {
+              "classLoaderName": "app",
+              "declaringClass": "org.apache.spark.sql.PlanGenerationTestSuite",
+              "methodName": "$anonfun$new$572",
+              "fileName": "PlanGenerationTestSuite.scala",
+              "lineNumber": 2670
+            }]
+          }
+        }
       }
     }]
   }

@@ -15,6 +15,25 @@
     "groupingExpressions": [{
       "unresolvedAttribute": {
         "unparsedIdentifier": "a"
+      },
+      "common": {
+        "origin": {
+          "jvmOrigin": {
+            "stackTrace": [{
+              "classLoaderName": "app",
+              "declaringClass": "org.apache.spark.sql.functions$",
+              "methodName": "col",
+              "fileName": "functions.scala",
+              "lineNumber": 94
+            }, {
+              "classLoaderName": "app",
+              "declaringClass": "org.apache.spark.sql.PlanGenerationTestSuite",
+              "methodName": "$anonfun$new$704",
+              "fileName": "PlanGenerationTestSuite.scala",
+              "lineNumber": 3236
+            }]
+          }
+        }
       }
     }],
     "aggregateExpressions": [{
@@ -24,9 +43,47 @@
           "unresolvedAttribute": {
             "unparsedIdentifier": "a",
             "planId": "0"
+          },
+          "common": {
+            "origin": {
+              "jvmOrigin": {
+                "stackTrace": [{
+                  "classLoaderName": "app",
+                  "declaringClass": "org.apache.spark.sql.Dataset",
+                  "methodName": "col",
+                  "fileName": "Dataset.scala",
+                  "lineNumber": 456
+                }, {
+                  "classLoaderName": "app",
+                  "declaringClass": "org.apache.spark.sql.api.RelationalGroupedDataset",
+                  "methodName": "toAggCol",
+                  "fileName": "RelationalGroupedDataset.scala",
+                  "lineNumber": 52
+                }]
+              }
+            }
           }
         }],
         "isInternal": false
+      },
+      "common": {
+        "origin": {
+          "jvmOrigin": {
+            "stackTrace": [{
+              "classLoaderName": "app",
+              "declaringClass": "org.apache.spark.sql.Column$",
+              "methodName": "fn",
+              "fileName": "Column.scala",
+              "lineNumber": 59
+            }, {
+              "classLoaderName": "app",
+              "declaringClass": "org.apache.spark.sql.api.RelationalGroupedDataset",
+              "methodName": "toAggCol",
+              "fileName": "RelationalGroupedDataset.scala",
+              "lineNumber": 57
+            }]
+          }
+        }
       }
     }, {
       "unresolvedFunction": {
@@ -35,15 +92,72 @@
           "unresolvedAttribute": {
             "unparsedIdentifier": "a",
             "planId": "0"
+          },
+          "common": {
+            "origin": {
+              "jvmOrigin": {
+                "stackTrace": [{
+                  "classLoaderName": "app",
+                  "declaringClass": "org.apache.spark.sql.Dataset",
+                  "methodName": "col",
+                  "fileName": "Dataset.scala",
+                  "lineNumber": 456
+                }, {
+                  "classLoaderName": "app",
+                  "declaringClass": "org.apache.spark.sql.api.RelationalGroupedDataset",
+                  "methodName": "toAggCol",
+                  "fileName": "RelationalGroupedDataset.scala",
+                  "lineNumber": 52
+                }]
+              }
+            }
           }
         }],
         "isInternal": false
+      },
+      "common": {
+        "origin": {
+          "jvmOrigin": {
+            "stackTrace": [{
+              "classLoaderName": "app",
+              "declaringClass": "org.apache.spark.sql.functions$",
+              "methodName": "count",
+              "fileName": "functions.scala",
+              "lineNumber": 429
+            }, {
+              "classLoaderName": "app",
+              "declaringClass": "org.apache.spark.sql.api.RelationalGroupedDataset",
+              "methodName": "toAggCol",
+              "fileName": "RelationalGroupedDataset.scala",
+              "lineNumber": 56
+            }]
+          }
+        }
       }
     }],
     "groupingSets": [{
       "groupingSet": [{
         "unresolvedAttribute": {
           "unparsedIdentifier": "a"
+        },
+        "common": {
+          "origin": {
+            "jvmOrigin": {
+              "stackTrace": [{
+                "classLoaderName": "app",
+                "declaringClass": "org.apache.spark.sql.functions$",
+                "methodName": "col",
+                "fileName": "functions.scala",
+                "lineNumber": 94
+              }, {
+                "classLoaderName": "app",
+                "declaringClass": "org.apache.spark.sql.PlanGenerationTestSuite",
+                "methodName": "$anonfun$new$704",
+                "fileName": "PlanGenerationTestSuite.scala",
+                "lineNumber": 3236
+              }]
+            }
+          }
         }
       }]
     }, {

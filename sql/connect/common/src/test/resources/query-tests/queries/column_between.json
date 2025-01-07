@@ -20,13 +20,70 @@
             "arguments": [{
               "unresolvedAttribute": {
                 "unparsedIdentifier": "a"
+              },
+              "common": {
+                "origin": {
+                  "jvmOrigin": {
+                    "stackTrace": [{
+                      "classLoaderName": "app",
+                      "declaringClass": "org.apache.spark.sql.functions$",
+                      "methodName": "col",
+                      "fileName": "functions.scala",
+                      "lineNumber": 94
+                    }, {
+                      "classLoaderName": "app",
+                      "declaringClass": "org.apache.spark.sql.PlanGenerationTestSuite",
+                      "methodName": "$anonfun$new$109",
+                      "fileName": "PlanGenerationTestSuite.scala",
+                      "lineNumber": 777
+                    }]
+                  }
+                }
               }
             }, {
               "literal": {
                 "integer": 10
+              },
+              "common": {
+                "origin": {
+                  "jvmOrigin": {
+                    "stackTrace": [{
+                      "classLoaderName": "app",
+                      "declaringClass": "org.apache.spark.sql.Column",
+                      "methodName": "between",
+                      "fileName": "Column.scala",
+                      "lineNumber": 537
+                    }, {
+                      "classLoaderName": "app",
+                      "declaringClass": "org.apache.spark.sql.PlanGenerationTestSuite",
+                      "methodName": "$anonfun$new$109",
+                      "fileName": "PlanGenerationTestSuite.scala",
+                      "lineNumber": 777
+                    }]
+                  }
+                }
               }
             }],
             "isInternal": false
+          },
+          "common": {
+            "origin": {
+              "jvmOrigin": {
+                "stackTrace": [{
+                  "classLoaderName": "app",
+                  "declaringClass": "org.apache.spark.sql.Column",
+                  "methodName": "between",
+                  "fileName": "Column.scala",
+                  "lineNumber": 537
+                }, {
+                  "classLoaderName": "app",
+                  "declaringClass": "org.apache.spark.sql.PlanGenerationTestSuite",
+                  "methodName": "$anonfun$new$109",
+                  "fileName": "PlanGenerationTestSuite.scala",
+                  "lineNumber": 777
+                }]
+              }
+            }
           }
         }, {
           "unresolvedFunction": {
@@ -34,16 +91,92 @@
             "arguments": [{
               "unresolvedAttribute": {
                 "unparsedIdentifier": "a"
+              },
+              "common": {
+                "origin": {
+                  "jvmOrigin": {
+                    "stackTrace": [{
+                      "classLoaderName": "app",
+                      "declaringClass": "org.apache.spark.sql.functions$",
+                      "methodName": "col",
+                      "fileName": "functions.scala",
+                      "lineNumber": 94
+                    }, {
+                      "classLoaderName": "app",
+                      "declaringClass": "org.apache.spark.sql.PlanGenerationTestSuite",
+                      "methodName": "$anonfun$new$109",
+                      "fileName": "PlanGenerationTestSuite.scala",
+                      "lineNumber": 777
+                    }]
+                  }
+                }
               }
             }, {
               "literal": {
                 "integer": 20
+              },
+              "common": {
+                "origin": {
+                  "jvmOrigin": {
+                    "stackTrace": [{
+                      "classLoaderName": "app",
+                      "declaringClass": "org.apache.spark.sql.Column",
+                      "methodName": "between",
+                      "fileName": "Column.scala",
+                      "lineNumber": 537
+                    }, {
+                      "classLoaderName": "app",
+                      "declaringClass": "org.apache.spark.sql.PlanGenerationTestSuite",
+                      "methodName": "$anonfun$new$109",
+                      "fileName": "PlanGenerationTestSuite.scala",
+                      "lineNumber": 777
+                    }]
+                  }
+                }
               }
             }],
             "isInternal": false
+          },
+          "common": {
+            "origin": {
+              "jvmOrigin": {
+                "stackTrace": [{
+                  "classLoaderName": "app",
+                  "declaringClass": "org.apache.spark.sql.Column",
+                  "methodName": "between",
+                  "fileName": "Column.scala",
+                  "lineNumber": 537
+                }, {
+                  "classLoaderName": "app",
+                  "declaringClass": "org.apache.spark.sql.PlanGenerationTestSuite",
+                  "methodName": "$anonfun$new$109",
+                  "fileName": "PlanGenerationTestSuite.scala",
+                  "lineNumber": 777
+                }]
+              }
+            }
           }
         }],
         "isInternal": false
+      },
+      "common": {
+        "origin": {
+          "jvmOrigin": {
+            "stackTrace": [{
+              "classLoaderName": "app",
+              "declaringClass": "org.apache.spark.sql.Column",
+              "methodName": "between",
+              "fileName": "Column.scala",
+              "lineNumber": 537
+            }, {
+              "classLoaderName": "app",
+              "declaringClass": "org.apache.spark.sql.PlanGenerationTestSuite",
+              "methodName": "$anonfun$new$109",
+              "fileName": "PlanGenerationTestSuite.scala",
+              "lineNumber": 777
+            }]
+          }
+        }
       }
     }]
   }

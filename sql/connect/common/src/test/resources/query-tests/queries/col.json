@@ -15,11 +15,49 @@
       "unresolvedAttribute": {
         "unparsedIdentifier": "id",
         "planId": "0"
+      },
+      "common": {
+        "origin": {
+          "jvmOrigin": {
+            "stackTrace": [{
+              "classLoaderName": "app",
+              "declaringClass": "org.apache.spark.sql.Dataset",
+              "methodName": "col",
+              "fileName": "Dataset.scala",
+              "lineNumber": 456
+            }, {
+              "classLoaderName": "app",
+              "declaringClass": "org.apache.spark.sql.PlanGenerationTestSuite",
+              "methodName": "$anonfun$new$44",
+              "fileName": "PlanGenerationTestSuite.scala",
+              "lineNumber": 480
+            }]
+          }
+        }
       }
     }, {
       "unresolvedAttribute": {
         "unparsedIdentifier": "b",
         "planId": "0"
+      },
+      "common": {
+        "origin": {
+          "jvmOrigin": {
+            "stackTrace": [{
+              "classLoaderName": "app",
+              "declaringClass": "org.apache.spark.sql.Dataset",
+              "methodName": "col",
+              "fileName": "Dataset.scala",
+              "lineNumber": 456
+            }, {
+              "classLoaderName": "app",
+              "declaringClass": "org.apache.spark.sql.PlanGenerationTestSuite",
+              "methodName": "$anonfun$new$44",
+              "fileName": "PlanGenerationTestSuite.scala",
+              "lineNumber": 480
+            }]
+          }
+        }
       }
     }]
   }

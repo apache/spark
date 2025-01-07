@@ -17,10 +17,48 @@
         "arguments": [{
           "unresolvedAttribute": {
             "unparsedIdentifier": "bytes"
+          },
+          "common": {
+            "origin": {
+              "jvmOrigin": {
+                "stackTrace": [{
+                  "classLoaderName": "app",
+                  "declaringClass": "org.apache.spark.sql.functions$",
+                  "methodName": "col",
+                  "fileName": "functions.scala",
+                  "lineNumber": 94
+                }, {
+                  "classLoaderName": "app",
+                  "declaringClass": "org.apache.spark.sql.PlanGenerationTestSuite",
+                  "methodName": "$anonfun$new$729",
+                  "fileName": "PlanGenerationTestSuite.scala",
+                  "lineNumber": 3439
+                }]
+              }
+            }
           }
         }, {
           "literal": {
             "string": "{\"type\": \"int\", \"name\": \"id\"}"
+          },
+          "common": {
+            "origin": {
+              "jvmOrigin": {
+                "stackTrace": [{
+                  "classLoaderName": "app",
+                  "declaringClass": "org.apache.spark.sql.functions$",
+                  "methodName": "lit",
+                  "fileName": "functions.scala",
+                  "lineNumber": 124
+                }, {
+                  "classLoaderName": "app",
+                  "declaringClass": "org.apache.spark.sql.avro.functions$",
+                  "methodName": "from_avro",
+                  "fileName": "functions.scala",
+                  "lineNumber": 67
+                }]
+              }
+            }
           }
         }, {
           "unresolvedFunction": {
@@ -28,24 +66,138 @@
             "arguments": [{
               "literal": {
                 "string": "mode"
+              },
+              "common": {
+                "origin": {
+                  "jvmOrigin": {
+                    "stackTrace": [{
+                      "classLoaderName": "app",
+                      "declaringClass": "org.apache.spark.sql.Column$",
+                      "methodName": "fnWithOptions",
+                      "fileName": "Column.scala",
+                      "lineNumber": 51
+                    }, {
+                      "classLoaderName": "app",
+                      "declaringClass": "org.apache.spark.sql.avro.functions$",
+                      "methodName": "from_avro",
+                      "fileName": "functions.scala",
+                      "lineNumber": 67
+                    }]
+                  }
+                }
               }
             }, {
               "literal": {
                 "string": "FAILFAST"
+              },
+              "common": {
+                "origin": {
+                  "jvmOrigin": {
+                    "stackTrace": [{
+                      "classLoaderName": "app",
+                      "declaringClass": "org.apache.spark.sql.Column$",
+                      "methodName": "fnWithOptions",
+                      "fileName": "Column.scala",
+                      "lineNumber": 51
+                    }, {
+                      "classLoaderName": "app",
+                      "declaringClass": "org.apache.spark.sql.avro.functions$",
+                      "methodName": "from_avro",
+                      "fileName": "functions.scala",
+                      "lineNumber": 67
+                    }]
+                  }
+                }
               }
             }, {
               "literal": {
                 "string": "compression"
+              },
+              "common": {
+                "origin": {
+                  "jvmOrigin": {
+                    "stackTrace": [{
+                      "classLoaderName": "app",
+                      "declaringClass": "org.apache.spark.sql.Column$",
+                      "methodName": "fnWithOptions",
+                      "fileName": "Column.scala",
+                      "lineNumber": 51
+                    }, {
+                      "classLoaderName": "app",
+                      "declaringClass": "org.apache.spark.sql.avro.functions$",
+                      "methodName": "from_avro",
+                      "fileName": "functions.scala",
+                      "lineNumber": 67
+                    }]
+                  }
+                }
               }
             }, {
               "literal": {
                 "string": "zstandard"
+              },
+              "common": {
+                "origin": {
+                  "jvmOrigin": {
+                    "stackTrace": [{
+                      "classLoaderName": "app",
+                      "declaringClass": "org.apache.spark.sql.Column$",
+                      "methodName": "fnWithOptions",
+                      "fileName": "Column.scala",
+                      "lineNumber": 51
+                    }, {
+                      "classLoaderName": "app",
+                      "declaringClass": "org.apache.spark.sql.avro.functions$",
+                      "methodName": "from_avro",
+                      "fileName": "functions.scala",
+                      "lineNumber": 67
+                    }]
+                  }
+                }
               }
             }],
             "isInternal": false
+          },
+          "common": {
+            "origin": {
+              "jvmOrigin": {
+                "stackTrace": [{
+                  "classLoaderName": "app",
+                  "declaringClass": "org.apache.spark.sql.Column$",
+                  "methodName": "fnWithOptions",
+                  "fileName": "Column.scala",
+                  "lineNumber": 51
+                }, {
+                  "classLoaderName": "app",
+                  "declaringClass": "org.apache.spark.sql.avro.functions$",
+                  "methodName": "from_avro",
+                  "fileName": "functions.scala",
+                  "lineNumber": 67
+                }]
+              }
+            }
           }
         }],
         "isInternal": false
+      },
+      "common": {
+        "origin": {
+          "jvmOrigin": {
+            "stackTrace": [{
+              "classLoaderName": "app",
+              "declaringClass": "org.apache.spark.sql.Column$",
+              "methodName": "fnWithOptions",
+              "fileName": "Column.scala",
+              "lineNumber": 55
+            }, {
+              "classLoaderName": "app",
+              "declaringClass": "org.apache.spark.sql.avro.functions$",
+              "methodName": "from_avro",
+              "fileName": "functions.scala",
+              "lineNumber": 67
+            }]
+          }
+        }
       }
     }]
   }

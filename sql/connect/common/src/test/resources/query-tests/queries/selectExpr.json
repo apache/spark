@@ -14,10 +14,48 @@
     "expressions": [{
       "expressionString": {
         "expression": "a + 10 as x"
+      },
+      "common": {
+        "origin": {
+          "jvmOrigin": {
+            "stackTrace": [{
+              "classLoaderName": "app",
+              "declaringClass": "org.apache.spark.sql.Dataset",
+              "methodName": "selectExpr",
+              "fileName": "Dataset.scala",
+              "lineNumber": 1419
+            }, {
+              "classLoaderName": "app",
+              "declaringClass": "org.apache.spark.sql.PlanGenerationTestSuite",
+              "methodName": "$anonfun$new$51",
+              "fileName": "PlanGenerationTestSuite.scala",
+              "lineNumber": 507
+            }]
+          }
+        }
       }
     }, {
       "expressionString": {
         "expression": "id % 10 as grp"
+      },
+      "common": {
+        "origin": {
+          "jvmOrigin": {
+            "stackTrace": [{
+              "classLoaderName": "app",
+              "declaringClass": "org.apache.spark.sql.Dataset",
+              "methodName": "selectExpr",
+              "fileName": "Dataset.scala",
+              "lineNumber": 1419
+            }, {
+              "classLoaderName": "app",
+              "declaringClass": "org.apache.spark.sql.PlanGenerationTestSuite",
+              "methodName": "$anonfun$new$51",
+              "fileName": "PlanGenerationTestSuite.scala",
+              "lineNumber": 507
+            }]
+          }
+        }
       }
     }]
   }

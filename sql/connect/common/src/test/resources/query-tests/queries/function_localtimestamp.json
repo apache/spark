@@ -15,6 +15,25 @@
       "unresolvedFunction": {
         "functionName": "localtimestamp",
         "isInternal": false
+      },
+      "common": {
+        "origin": {
+          "jvmOrigin": {
+            "stackTrace": [{
+              "classLoaderName": "app",
+              "declaringClass": "org.apache.spark.sql.functions$",
+              "methodName": "localtimestamp",
+              "fileName": "functions.scala",
+              "lineNumber": 5164
+            }, {
+              "classLoaderName": "app",
+              "declaringClass": "org.apache.spark.sql.PlanGenerationTestSuite",
+              "methodName": "$anonfun$new$436",
+              "fileName": "PlanGenerationTestSuite.scala",
+              "lineNumber": 2179
+            }]
+          }
+        }
       }
     }]
   }

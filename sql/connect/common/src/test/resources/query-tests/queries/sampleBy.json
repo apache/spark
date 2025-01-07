@@ -14,6 +14,25 @@
     "col": {
       "unresolvedAttribute": {
         "unparsedIdentifier": "id"
+      },
+      "common": {
+        "origin": {
+          "jvmOrigin": {
+            "stackTrace": [{
+              "classLoaderName": "app",
+              "declaringClass": "org.apache.spark.sql.DataFrameStatFunctions",
+              "methodName": "sampleBy",
+              "fileName": "DataFrameStatFunctions.scala",
+              "lineNumber": 109
+            }, {
+              "classLoaderName": "app",
+              "declaringClass": "org.apache.spark.sql.PlanGenerationTestSuite",
+              "methodName": "$anonfun$new$723",
+              "fileName": "PlanGenerationTestSuite.scala",
+              "lineNumber": 3410
+            }]
+          }
+        }
       }
     },
     "fractions": [{
