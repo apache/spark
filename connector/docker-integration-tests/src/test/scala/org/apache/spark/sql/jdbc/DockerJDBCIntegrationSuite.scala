@@ -29,7 +29,7 @@ import scala.util.control.NonFatal
 import com.github.dockerjava.api.DockerClient
 import com.github.dockerjava.api.async.{ResultCallback, ResultCallbackTemplate}
 import com.github.dockerjava.api.command.{CreateContainerResponse, PullImageResultCallback}
-import com.github.dockerjava.api.exception.NotFoundException
+import com.github.dockerjava.api.exception.{InternalServerErrorException, NotFoundException}
 import com.github.dockerjava.api.model._
 import com.github.dockerjava.core.{DefaultDockerClientConfig, DockerClientImpl}
 import com.github.dockerjava.zerodep.ZerodepDockerHttpClient
@@ -205,7 +205,15 @@ abstract class DockerJDBCIntegrationSuite
 
       container = createContainerCmd.exec()
       // Start the container and wait until the database can accept JDBC connections:
-      docker.startContainerCmd(container.getId).exec()
+      try {
+        docker.startContainerCmd(container.getId).exec()
+      } catch {
+        case e: InternalServerErrorException =>
+          // Try once more in order to mitigate port binding error
+          docker.startContainerCmd(container.getId).exec()
+        case e =>
+          throw e
+      }
       eventually(timeout(startContainerTimeout.seconds), interval(1.second)) {
         val response = docker.inspectContainerCmd(container.getId).exec()
         assert(response.getState.getRunning)
