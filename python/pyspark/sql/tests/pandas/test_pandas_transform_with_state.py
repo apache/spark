@@ -1226,6 +1226,55 @@ class TransformWithStateInPandasTestsMixin:
                 checkpoint_path=checkpoint_path,
             )
 
+    def test_value_state_schema_evolution(self):
+        checkpoint_path = tempfile.mktemp()
+        input_path = tempfile.mktemp()
+
+        # First run with old schema
+        self._prepare_input_data(input_path + "/batch1.txt", ["k1"], ["v1"])
+
+        df = self._build_test_df(input_path)
+        output_schema = StructType([
+            StructField("id", StringType()),
+            StructField("value", StringType())
+        ])
+
+        query1 = df.groupBy("id").transformWithStateInPandas(
+            OldStateProcessor(),
+            output_schema,
+            "Update"
+        ).writeStream \
+            .format("memory") \
+            .queryName("evolution_test") \
+            .option("checkpointLocation", checkpoint_path) \
+            .start()
+
+        query1.processAllAvailable()
+        query1.stop()
+
+        # Verify first state format
+        results1 = self.spark.sql("SELECT * FROM evolution_test")
+        assert results1.collect() == [Row(id="k1", value="v1")]
+
+        # Second run with evolved schema
+        self._prepare_input_data(input_path + "/batch2.txt", ["k1"], ["v2"])
+
+        query2 = df.groupBy("id").transformWithStateInPandas(
+            NewStateProcessor(),
+            output_schema,
+            "Update"
+        ).writeStream \
+            .format("memory") \
+            .queryName("evolution_test") \
+            .option("checkpointLocation", checkpoint_path) \
+            .start()
+
+        query2.processAllAvailable()
+        query2.stop()
+
+        # Verify evolved state still works
+        results2 = self.spark.sql("SELECT * FROM evolution_test")
+        assert results2.collect() == [Row(id="k1", value="v2")]
     def test_transform_with_state_restart_with_multiple_rows_init_state(self):
         def check_results(batch_df, _):
             assert set(batch_df.sort("id").collect()) == {
@@ -1291,6 +1340,52 @@ class TransformWithStateInPandasTestsMixin:
             self.test_transform_with_state_in_pandas_proc_timer()
             self.test_transform_with_state_restart_with_multiple_rows_init_state()
 
+# Case classes for schema evolution testing
+class OldState:
+    def __init__(self, value: str):
+        self.value = value
+
+class NewState:
+    def __init__(self, value: str, timestamp: int):
+        self.value = value
+        self.timestamp = timestamp
+
+class OldStateProcessor(StatefulProcessor):
+    def init(self, handle: StatefulProcessorHandle):
+        self.state = handle.getValueState(
+            "test_state",
+            StructType([StructField("value", StringType())])
+        )
+
+    def handleInputRows(self, key, rows, timer_values) -> Iterator[pd.DataFrame]:
+        for pdf in rows:
+            old_state = OldState(pdf["value"].iloc[0])
+            self.state.update((old_state.value,))
+
+        current = self.state.get()[0] if self.state.exists() else None
+        yield pd.DataFrame({"id": key, "value": [current]})
+
+class NewStateProcessor(StatefulProcessor):
+    def init(self, handle: StatefulProcessorHandle):
+        self.state = handle.getValueState(
+            "test_state",
+            StructType([
+                StructField("value", StringType()),
+                StructField("timestamp", LongType(), True)
+            ])
+        )
+
+    def handleInputRows(self, key, rows, timer_values) -> Iterator[pd.DataFrame]:
+        for pdf in rows:
+            new_state = NewState(
+                pdf["value"].iloc[0],
+                timer_values.get_current_processing_time_in_ms()
+            )
+            self.state.update((new_state.value, new_state.timestamp))
+
+        if self.state.exists():
+            current = self.state.get()
+            yield pd.DataFrame({"id": key, "value": [current[0]]})
 
 class SimpleStatefulProcessorWithInitialState(StatefulProcessor):
     # this dict is the same as input initial state dataframe

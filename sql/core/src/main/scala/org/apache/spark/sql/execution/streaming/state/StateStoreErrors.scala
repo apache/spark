@@ -350,7 +350,7 @@ class StateStoreSchemaFileThresholdExceeded(
   extends SparkUnsupportedOperationException(
     errorClass = "STATE_STORE_SCHEMA_FILE_THRESHOLD_EXCEEDED",
     messageParameters = Map(
-      "numSchemaFiles" -> numSchemaFiles.toString,
+      "numStateSchemaFiles" -> numSchemaFiles.toString,
       "maxStateSchemaFiles" -> maxStateSchemaFiles.toString))
 
 class StateStoreSnapshotFileNotFound(fileToRead: String, clazz: String)

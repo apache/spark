@@ -2143,46 +2143,42 @@ class TransformWithStateSuite extends StateStoreMetricsTest
   }
 
   test("test exceeding schema file threshold throws error") {
-    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
-      classOf[RocksDBStateStoreProvider].getName,
+    withSQLConf(
+      SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[RocksDBStateStoreProvider].getName,
       SQLConf.SHUFFLE_PARTITIONS.key ->
         TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString,
       SQLConf.STREAMING_STATE_MAX_STATE_SCHEMA_FILES.key -> 1.toString) {
-      withTempDir { checkpointDir =>
-        val clock = new StreamManualClock
-
-        val inputData1 = MemoryStream[String]
-        val result1 = inputData1.toDS()
-          .groupByKey(x => x)
-          .transformWithState(new RunningCountStatefulProcessor(),
-            TimeMode.ProcessingTime(),
+      withTempDir { dirPath =>
+        val inputData = MemoryStream[(String, String)]
+        // First run with both count and mostRecent states
+        val stream1 = inputData.toDS()
+          .groupByKey(x => x._1)
+          .transformWithState(new RunningCountMostRecentStatefulProcessor(),
+            TimeMode.None(),
             OutputMode.Update())
 
-        testStream(result1, OutputMode.Update())(
-          StartStream(
-            checkpointLocation = checkpointDir.getCanonicalPath,
-            trigger = Trigger.ProcessingTime("1 second"),
-            triggerClock = clock),
-          AddData(inputData1, "a"),
-          AdvanceManualClock(1 * 1000),
-          CheckNewAnswer(("a", "1")),
+        testStream(stream1, OutputMode.Update())(
+          StartStream(checkpointLocation = dirPath.getCanonicalPath),
+          AddData(inputData, ("a", "str1")),
+          CheckNewAnswer(("a", "1", "")),
           StopStream
         )
 
-        val result2 = inputData1.toDS()
-          .groupByKey(x => x)
-          .transformWithState(new RunningCountStatefulProcessorWithProcTimeTimer(),
-            TimeMode.ProcessingTime(),
+        // Second run deletes count state but keeps mostRecent
+        val stream2 = inputData.toDS()
+          .groupByKey(x => x._1)
+          .transformWithState(new MostRecentStatefulProcessorWithDeletion(),
+            TimeMode.None(),
             OutputMode.Update())
 
-        testStream(result2, OutputMode.Update())(
-          StartStream(
-            checkpointLocation = checkpointDir.getCanonicalPath,
-            trigger = Trigger.ProcessingTime("1 second"),
-            triggerClock = clock),
-          AddData(inputData1, "a"),
-          AdvanceManualClock(1 * 1000),
-          CheckNewAnswer(("a", "2")),
+        testStream(stream2, OutputMode.Update())(
+          StartStream(checkpointLocation = dirPath.getCanonicalPath),
+          AddData(inputData, ("a", "str2"), ("b", "str3")),
+          CheckNewAnswer(("a", "str1"), ("b", "")),
+          Execute { q =>
+            assert(q.lastProgress.stateOperators(0).customMetrics.get("numValueStateVars") > 0)
+            assert(q.lastProgress.stateOperators(0).customMetrics.get("numDeletedStateVars") > 0)
+          },
           StopStream
         )
       }

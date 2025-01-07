@@ -4486,12 +4486,11 @@
   },
   "STATE_STORE_SCHEMA_FILE_THRESHOLD_EXCEEDED" : {
     "message" : [
-      "The number of state schema files <numStateSchemaFiles> exceeds the maximum number of state schema files allowed for this query, <maxNumStateSchemaFiles>.",
+      "The number of state schema files <numStateSchemaFiles> exceeds the maximum number of state schema files allowed for this query, <maxStateSchemaFiles>.",
       "Please set 'spark.sql.streaming.stateStore.maxStateSchemaFiles' to a higher number, or revert state schema modifications"
     ],
     "sqlState" : "42K06"
-  }
-},
+  },
   "STATE_STORE_UNSUPPORTED_OPERATION" : {
     "message" : [
       "<operationType> operation not supported with <entity>"

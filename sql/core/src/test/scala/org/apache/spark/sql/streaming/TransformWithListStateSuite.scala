@@ -391,7 +391,7 @@ class TransformWithListStateSuite extends StreamTest
     }
   }
 
-  test("ListState schema evolution - add field") {
+  testWithEncoding("avro")("ListState schema evolution - add field") {
     withSQLConf(
       SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[RocksDBStateStoreProvider].getName) {
       withTempDir { dir =>

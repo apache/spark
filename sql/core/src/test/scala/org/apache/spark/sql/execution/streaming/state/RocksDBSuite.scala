@@ -127,7 +127,7 @@ trait AlsoTestWithEncodingTypes extends SQLTestUtils {
   // Helper method to test with specific encoding
   protected def testWithEncoding(encoding: String)(testName: String)(testBody: => Any)
                                 (implicit pos: Position): Unit = {
-    super.test(s"$testName (encoding = $encoding)", Seq.empty: _*) {
+    test(s"$testName (encoding = $encoding)", Seq.empty: _*) {
       withSQLConf(SQLConf.STREAMING_STATE_STORE_ENCODING_FORMAT.key -> encoding) {
         testBody
       }

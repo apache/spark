@@ -291,7 +291,7 @@ class TransformWithMapStateSuite extends StreamTest
     checkAnswer(df, Seq(("k1", "v1", "10")).toDF())
   }
 
-  test("MapState schema evolution - add field") {
+  testWithEncoding("avro")("MapState schema evolution - add field") {
     withSQLConf(
       SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[RocksDBStateStoreProvider].getName) {
       withTempDir { dir =>

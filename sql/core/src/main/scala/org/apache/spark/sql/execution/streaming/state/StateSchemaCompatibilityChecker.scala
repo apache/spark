@@ -106,9 +106,14 @@ class StateSchemaCompatibilityChecker(
   // This method is used for OperatorStateMetadataV2 when schema evolution
   // is supported, to read all active schemas in the StateStore for this operator
   def readSchemaFiles(): Map[String, List[StateStoreColFamilySchema]] = {
-    oldSchemaFilePaths.flatMap { schemaFile =>
-        val inStream = fm.open(schemaFile)
-        StateSchemaCompatibilityChecker.readSchemaFile(inStream)
+    val stateSchemaFilePaths = (oldSchemaFilePaths ++ List(schemaFileLocation)).distinct
+    stateSchemaFilePaths.flatMap { schemaFile =>
+        if (fm.exists(schemaFile)) {
+          val inStream = fm.open(schemaFile)
+          StateSchemaCompatibilityChecker.readSchemaFile(inStream)
+        } else {
+          List.empty
+        }
       }
       .groupBy(_.colFamilyName)
   }
