@@ -39,15 +39,12 @@ class FilterPushdownSuite extends PlanTest {
         EliminateSubqueryAliases) ::
       Batch("Filter Pushdown", FixedPoint(10),
         CombineFilters,
-        PushPredicateThroughNonJoin,
+        PushDownPredicates,
         BooleanSimplification,
-        PushPredicateThroughJoin,
-        RewriteWithExpression,
         CollapseProject) ::
       Batch("Push extra predicate through join", FixedPoint(10),
         PushExtraPredicateThroughJoin,
-        PushDownPredicates,
-        RewriteWithExpression) :: Nil
+        PushDownPredicates) :: Nil
   }
 
   val attrA = $"a".int

@@ -65,8 +65,7 @@ class SparkOptimizer(
       MergeScalarSubqueries,
       RewriteDistinctAggregates),
     Batch("Pushdown Filters from PartitionPruning", fixedPoint,
-      PushDownPredicates,
-      RewriteWithExpression),
+      PushDownPredicates),
     Batch("Cleanup filters that cannot be pushed down", Once,
       CleanupDynamicPruningFilters,
       // cleanup the unnecessary TrueLiteral predicates

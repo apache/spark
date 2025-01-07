@@ -104,7 +104,6 @@ abstract class Optimizer(catalogManager: CatalogManager)
         ReorderJoin,
         EliminateOuterJoin,
         PushDownPredicates,
-        RewriteWithExpression,
         PushDownLeftSemiAntiJoin,
         PushLeftSemiLeftAntiThroughJoin,
         OptimizeJoinCondition,
@@ -169,8 +168,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
         operatorOptimizationRuleSet: _*),
       Batch("Push extra predicate through join", fixedPoint,
         PushExtraPredicateThroughJoin,
-        PushDownPredicates,
-        RewriteWithExpression))
+        PushDownPredicates))
 
     val batches: Seq[Batch] = flattenBatches(Seq(
     Batch("Finish Analysis", FixedPoint(1), FinishAnalysis),
@@ -1788,12 +1786,12 @@ object PruneFilters extends Rule[LogicalPlan] with PredicateHelper {
  *  Filter-Join-Join-Join. Most predicates can be pushed down in a single pass.
  */
 object PushDownPredicates extends Rule[LogicalPlan] {
-  def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
-    _.containsAnyPattern(FILTER, JOIN)) {
-    CombineFilters.applyLocally
-      .orElse(PushPredicateThroughNonJoin.applyLocally)
-      .orElse(PushPredicateThroughJoin.applyLocally)
-  }
+  def apply(plan: LogicalPlan): LogicalPlan = RewriteWithExpression(
+    plan.transformWithPruning(_.containsAnyPattern(FILTER, JOIN)) {
+      CombineFilters.applyLocally
+        .orElse(PushPredicateThroughNonJoin.applyLocally)
+        .orElse(PushPredicateThroughJoin.applyLocally)
+    })
 }
 
 /**
