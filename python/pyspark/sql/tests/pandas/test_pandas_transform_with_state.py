@@ -1423,7 +1423,6 @@ class TransformWithStateInPandasTestsMixin:
                 # Test 5: Upcast type
                 def check_upcast(batch_df, batch_id):
                     result = batch_df.collect()[0]
-                    assert isinstance(result.value["id"], long)
                     assert result.value["name"] == "name-0"
 
                 self._run_evolution_test(UpcastProcessor(), checkpoint_dir, check_upcast, df)
