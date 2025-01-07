@@ -68,14 +68,14 @@ to return the metadata pertaining to a partition or column respectively.
 * **AS JSON**
 
   An optional parameter to return the table metadata in JSON format. Only supported when `EXTENDED`
-  or `FORMATTED` format is specified.
+  or `FORMATTED` format is specified (both produce equivalent JSON).
 
   **Syntax:** `[ AS JSON ]`
 
   **Schema:**
   
-  Below is the full JSON schema. 
-  In practice only non-null fields are included in the JSON output (see Examples section).
+  Below is the full JSON schema.
+  In actual output, null fields are omitted and the JSON is not pretty-printed (see Examples).
   
   ```sql
     {
