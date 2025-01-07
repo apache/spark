@@ -235,8 +235,7 @@
 
     <!-- org.fusesource.leveldbjni will be used except on arm64 platform. -->
     <leveldbjni.group>org.fusesource.leveldbjni</leveldbjni.group>
-    <kubernetes-client.version>6.13.4</kubernetes-client.version>
-    <okio.version>1.17.6</okio.version>
+    <kubernetes-client.version>7.0.1</kubernetes-client.version>
 
     <test.java.home>${java.home}</test.java.home>
 
@@ -839,7 +838,7 @@
       <dependency>
         <groupId>com.github.luben</groupId>
         <artifactId>zstd-jni</artifactId>
-        <version>1.5.6-8</version>
+        <version>1.5.6-9</version>
       </dependency>
       <dependency>
         <groupId>com.clearspring.analytics</groupId>
@@ -2593,11 +2592,6 @@
         <groupId>javax.servlet</groupId>
         <artifactId>javax.servlet-api</artifactId>
         <version>${javaxservlet.version}</version>
-      </dependency>
-      <dependency>
-        <groupId>com.squareup.okio</groupId>
-        <artifactId>okio</artifactId>
-        <version>${okio.version}</version>
       </dependency>
     </dependencies>
   </dependencyManagement>
