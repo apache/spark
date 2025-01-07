@@ -184,7 +184,8 @@ case class TransformWithStateInPandasExec(
     runner.stop()
 
     validateAndWriteStateSchema(hadoopConf, batchId, stateSchemaVersion, getStateInfo,
-      session, operatorStateMetadataVersion)
+      session, operatorStateMetadataVersion, stateStoreEncodingFormat =
+        conf.stateStoreEncodingFormat)
   }
 
   override def shouldRunAnotherBatch(newInputWatermark: Long): Boolean = {

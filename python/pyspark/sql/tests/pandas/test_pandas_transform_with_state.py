@@ -28,7 +28,7 @@ from typing import cast
 from pyspark import SparkConf
 from pyspark.errors import PySparkRuntimeError
 from pyspark.sql.functions import array_sort, col, explode, split
-from pyspark.sql.types import StringType, StructType, StructField, Row, IntegerType, TimestampType
+from pyspark.sql.types import *
 from pyspark.testing import assertDataFrameEqual
 from pyspark.testing.sqlutils import (
     ReusedSQLTestCase,
@@ -74,6 +74,12 @@ class TransformWithStateInPandasTestsMixin:
 
     def _prepare_test_resource3(self, input_path):
         self._prepare_input_data(input_path + "/text-test3.txt", [0, 1], [123, 6])
+
+    def _prepare_test_resource4(self, input_path):
+        self._prepare_input_data(input_path + "/text-test4.txt", [0, 1], [123, 6])
+
+    def _prepare_test_resource5(self, input_path):
+        self._prepare_input_data(input_path + "/text-test5.txt", [0, 1], [123, 6])
 
     def _build_test_df(self, input_path):
         df = self.spark.readStream.format("text").option("maxFilesPerTrigger", 1).load(input_path)
@@ -1288,6 +1294,156 @@ class TransformWithStateInPandasTestsMixin:
             self.test_transform_with_state_in_pandas_proc_timer()
             self.test_transform_with_state_restart_with_multiple_rows_init_state()
 
+    def _run_evolution_test(self, processor, checkpoint_dir, check_results, df):
+        # Schema definitions
+        basic_state_schema = StructType([
+            StructField("id", IntegerType(), True),
+            StructField("name", StringType(), True)
+        ])
+
+        evolved_state_schema = StructType([
+            StructField("id", IntegerType(), True),
+            StructField("name", StringType(), True),
+            StructField("count", IntegerType(), True),
+            StructField("active", BooleanType(), True),
+            StructField("score", FloatType(), True)
+        ])
+
+        reordered_state_schema = StructType([
+            StructField("name", StringType(), True),
+            StructField("id", IntegerType(), True),
+            StructField("score", FloatType(), True),
+            StructField("count", IntegerType(), True),
+            StructField("active", BooleanType(), True)
+        ])
+
+        upcast_state_schema = StructType([
+            StructField("id", LongType(), True),  # Upcast from Int to Long
+            StructField("name", StringType(), True)
+        ])
+        schema_map = {
+            BasicProcessor: basic_state_schema,
+            AddFieldsProcessor: evolved_state_schema,
+            RemoveFieldsProcessor: basic_state_schema,
+            ReorderedFieldsProcessor: reordered_state_schema,
+            UpcastProcessor: upcast_state_schema
+        }
+
+        output_schema = StructType([
+            StructField("id", StringType(), True),
+            StructField("value", schema_map[processor.__class__], True)
+        ])
+
+        for q in self.spark.streams.active:
+            q.stop()
+
+        q = (df.groupBy("id")
+             .transformWithStateInPandas(
+            statefulProcessor=processor,
+            outputStructType=output_schema,
+            outputMode="Update",
+            timeMode="None",
+        )
+             .writeStream
+             .queryName("evolution_test")
+             .option("checkpointLocation", checkpoint_dir)
+             .foreachBatch(check_results)
+             .outputMode("update")
+             .start())
+
+        self.assertEqual(q.name, "evolution_test")
+        self.assertTrue(q.isActive)
+        q.processAllAvailable()
+        q.awaitTermination(10)
+        self.assertTrue(q.exception() is None)
+
+    def test_schema_evolution_scenarios(self):
+        """Test various schema evolution scenarios"""
+        with self.sql_conf({"spark.sql.streaming.stateStore.encodingFormat": "avro"}):
+            with tempfile.TemporaryDirectory() as checkpoint_dir:
+                # Test 1: Basic state
+
+                input_path = tempfile.mkdtemp()
+                self._prepare_test_resource1(input_path)
+
+                df = self._build_test_df(input_path)
+                def check_basic_state(batch_df, batch_id):
+                    if batch_id == 0:
+                        result = batch_df.collect()[0]
+                        assert result.value["id"] == 0  # First ID from test data
+                        assert result.value["name"] == "name-0"
+
+                self._run_evolution_test(
+                    BasicProcessor(),
+                    checkpoint_dir,
+                    check_basic_state,
+                    df
+                )
+
+                self._prepare_test_resource2(input_path)
+                # Test 2: Add fields
+                def check_add_fields(batch_df, batch_id):
+                    if batch_id == 0:
+                        results = batch_df.collect()
+                        # Check default values for existing key
+                        assert results[0].value["count"] == 0
+                        assert results[0].value["active"] == False
+                        assert results[0].value["score"] == 0.0
+                        # Check initialized values for new key
+                        assert results[1].value["count"] == 100
+                        assert results[1].value["active"] == True
+                        assert results[1].value["score"] == 99.9
+
+                self._run_evolution_test(
+                    AddFieldsProcessor(),
+                    checkpoint_dir,
+                    check_add_fields,
+                    df
+                )
+                self._prepare_test_resource3(input_path)
+                # Test 3: Remove fields
+                def check_remove_fields(batch_df, batch_id):
+                    if batch_id == 0:
+                        result = batch_df.collect()[0]
+                        assert result.value["id"] == 0  # First ID from test data
+                        assert result.value["name"] == "name-0"
+                        assert len(result.value) == 2
+
+                self._run_evolution_test(
+                    RemoveFieldsProcessor(),
+                    checkpoint_dir,
+                    check_remove_fields,
+                    df
+                )
+                self._prepare_test_resource4(input_path)
+                # Test 4: Reorder fields
+                def check_reorder_fields(batch_df, batch_id):
+                    if batch_id == 0:
+                        result = batch_df.collect()[0]
+                        assert result.value["name"] == "name-0"
+                        assert result.value["id"] == 0
+                        assert result.value["score"] == 99.9
+
+                self._run_evolution_test(
+                    ReorderedFieldsProcessor(),
+                    checkpoint_dir,
+                    check_reorder_fields,
+                    df
+                )
+                self._prepare_test_resource5(input_path)
+                # Test 5: Upcast type
+                def check_upcast(batch_df, batch_id):
+                    if batch_id == 0:
+                        result = batch_df.collect()[0]
+                        assert isinstance(result.value["id"], int)
+                        assert result.value["name"] == "name-0"
+
+                self._run_evolution_test(
+                    UpcastProcessor(),
+                    checkpoint_dir,
+                    check_upcast,
+                    df
+                )
 
 class SimpleStatefulProcessorWithInitialState(StatefulProcessor):
     # this dict is the same as input initial state dataframe
@@ -1690,7 +1846,169 @@ class MapStateLargeTTLProcessor(MapStateProcessor):
         value_schema = StructType([StructField("count", IntegerType(), True)])
         self.map_state = handle.getMapState("mapState", key_schema, value_schema, 30000)
         self.list_state = handle.getListState("listState", key_schema)
+class BasicProcessor(StatefulProcessor):
+    def init(self, handle):
+        # Schema definitions
+        basic_state_schema = StructType([
+            StructField("id", IntegerType(), True),
+            StructField("name", StringType(), True)
+        ])
 
+        self.state = handle.getValueState("state", basic_state_schema)
+
+    def handleInputRows(self, key, rows, timer_values) -> Iterator[pd.DataFrame]:
+        for pdf in rows:
+            id_val = int(key[0])
+            name = f"name-{id_val}"
+            self.state.update((id_val, name))
+            yield pd.DataFrame({
+                "id": [key[0]],
+                "value": [{"id": id_val, "name": name}]
+            })
+
+    def close(self) -> None:
+        pass
+
+class AddFieldsProcessor(StatefulProcessor):
+    def init(self, handle):
+        evolved_state_schema = StructType([
+            StructField("id", IntegerType(), True),
+            StructField("name", StringType(), True),
+            StructField("count", IntegerType(), True),
+            StructField("active", BooleanType(), True),
+            StructField("score", FloatType(), True)
+        ])
+        self.state = handle.getValueState("state", evolved_state_schema)
+
+    def handleInputRows(self, key, rows, timer_values) -> Iterator[pd.DataFrame]:
+        for pdf in rows:
+            id_val = int(key[0])
+            name = f"name-{id_val}"
+
+            if self.state.exists():
+                state_data = self.state.get()
+                state_dict = {
+                    "id": state_data[0],
+                    "name": state_data[1],
+                    "count": state_data[2],
+                    "active": state_data[3],
+                    "score": state_data[4]
+                }
+            else:
+                state_dict = {
+                    "id": id_val,
+                    "name": name,
+                    "count": 100,
+                    "active": True,
+                    "score": 99.9
+                }
+
+            self.state.update((
+                state_dict["id"],
+                state_dict["name"],
+                state_dict["count"],
+                state_dict["active"],
+                state_dict["score"]
+            ))
+            yield pd.DataFrame({
+                "id": [key[0]],
+                "value": [state_dict]
+            })
+
+    def close(self) -> None:
+        pass
+
+class RemoveFieldsProcessor(StatefulProcessor):
+    def init(self, handle):
+        # Schema definitions
+        basic_state_schema = StructType([
+            StructField("id", IntegerType(), True),
+            StructField("name", StringType(), True)
+        ])
+        self.state = handle.getValueState("state", basic_state_schema)
+
+    def handleInputRows(self, key, rows, timer_values) -> Iterator[pd.DataFrame]:
+        for pdf in rows:
+            id_val = int(key[0])
+            name = f"name-{id_val}"
+            self.state.update((id_val, name))
+            yield pd.DataFrame({
+                "id": [key[0]],
+                "value": [{"id": id_val, "name": name}]
+            })
+
+    def close(self) -> None:
+        pass
+
+class ReorderedFieldsProcessor(StatefulProcessor):
+    def init(self, handle):
+        reordered_state_schema = StructType([
+            StructField("name", StringType(), True),
+            StructField("id", IntegerType(), True),
+            StructField("score", FloatType(), True),
+            StructField("count", IntegerType(), True),
+            StructField("active", BooleanType(), True)
+        ])
+        self.state = handle.getValueState("state", reordered_state_schema)
+
+    def handleInputRows(self, key, rows, timer_values) -> Iterator[pd.DataFrame]:
+        for pdf in rows:
+            id_val = int(key[0])
+            name = f"name-{id_val}"
+
+            if self.state.exists():
+                state_data = self.state.get()
+                state_dict = {
+                    "name": state_data[0],
+                    "id": state_data[1],
+                    "score": state_data[2],
+                    "count": state_data[3],
+                    "active": state_data[4]
+                }
+            else:
+                state_dict = {
+                    "name": name,
+                    "id": id_val,
+                    "score": 99.9,
+                    "count": 100,
+                    "active": True
+                }
+            self.state.update((
+                state_dict["name"],
+                state_dict["id"],
+                state_dict["score"],
+                state_dict["count"],
+                state_dict["active"]
+            ))
+            yield pd.DataFrame({
+                "id": [key[0]],
+                "value": [state_dict]
+            })
+
+    def close(self) -> None:
+        pass
+
+class UpcastProcessor(StatefulProcessor):
+    def init(self, handle):
+        upcast_state_schema = StructType([
+            StructField("id", LongType(), True),  # Upcast from Int to Long
+            StructField("name", StringType(), True)
+        ])
+
+        self.state = handle.getValueState("state", upcast_state_schema)
+
+    def handleInputRows(self, key, rows, timer_values) -> Iterator[pd.DataFrame]:
+        for pdf in rows:
+            id_val = int(key[0])
+            name = f"name-{id_val}"
+            self.state.update((id_val, name))
+            yield pd.DataFrame({
+                "id": [key[0]],
+                "value": [{"id": id_val, "name": name}]
+            })
+
+    def close(self) -> None:
+        pass
 
 class TransformWithStateInPandasTests(TransformWithStateInPandasTestsMixin, ReusedSQLTestCase):
     pass
