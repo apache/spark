@@ -829,8 +829,7 @@ case class DescribeTableJsonCommand(
    * Differs from `json` in DataType.scala by providing additional fields for some types.
    */
   private def jsonType(
-      dataType: DataType,
-      defaultValues: Map[String, String] = Map.empty): JValue = {
+      dataType: DataType): JValue = {
     dataType match {
       case arrayType: ArrayType =>
         JObject(
@@ -856,7 +855,7 @@ case class DescribeTableJsonCommand(
           )
           val commentJson = field.getComment().map(comment => "comment" -> JString(comment)).toList
           val defaultJson =
-            defaultValues.get(field.name).map(default => "default" -> JString(default)).toList
+            field.getCurrentDefaultValue().map(default => "default" -> JString(default)).toList
 
           JObject(baseJson ++ commentJson ++ defaultJson: _*)
         }.toList
@@ -916,11 +915,7 @@ case class DescribeTableJsonCommand(
       schema: StructType,
       jsonMap: mutable.LinkedHashMap[String, JValue],
       header: Boolean): Unit = {
-    val defaultValuesMap = Option(ResolveDefaultColumns.getDescribeMetadata(schema))
-      .getOrElse(Seq.empty)
-      .collect { case (name, _, defaultValue) => name -> defaultValue }
-      .toMap
-    val columnsJson = jsonType(StructType(schema.fields), defaultValuesMap)
+    val columnsJson = jsonType(StructType(schema.fields))
       .asInstanceOf[JObject].find(_.isInstanceOf[JArray]).get
     addKeyValueToMap("columns", columnsJson, jsonMap)
   }

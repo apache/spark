@@ -82,7 +82,7 @@ to return the metadata pertaining to a partition or column respectively.
       "table_name": "<table_name>",
       "catalog_name": "<catalog_name>",
       "schema_name": "<innermost_namespace_name>",
-      "namespace": ["<schema_name>"],
+      "namespace": ["<namespace_names>"],
       "type": "<table_type>",
       "provider": "<provider>",
       "columns": [
