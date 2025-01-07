@@ -716,7 +716,7 @@ abstract class CTEInlineSuiteBase
     checkAnswer(df, Row(1))
   }
 
-  test("SPARK-49816: should only update out-going-ref-count for referenced outer CTE relation") {
+  test("SPARK-49816: detect self-contained WithCTE nodes") {
     withView("v") {
       sql(
         """
