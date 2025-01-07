@@ -211,7 +211,7 @@ abstract class DockerJDBCIntegrationSuite
         case e: InternalServerErrorException =>
           // Try once more in order to mitigate port binding error
           docker.startContainerCmd(container.getId).exec()
-        case e =>
+        case e: Throwable =>
           throw e
       }
       eventually(timeout(startContainerTimeout.seconds), interval(1.second)) {
