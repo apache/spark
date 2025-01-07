@@ -59,7 +59,7 @@ trait SQLQueryTestHelper extends Logging {
       .replaceAll("Partition Statistics\t\\d+", s"Partition Statistics\t$notIncludedMsg")
       .replaceAll("CTERelationDef \\d+,", s"CTERelationDef xxxx,")
       .replaceAll("CTERelationRef \\d+,", s"CTERelationRef xxxx,")
-      .replaceAll("@\\w*,", s"@xxxxxxxx,")
+      .replaceAll("@[0-9a-f]+", s"@xxxxxxxx")
       .replaceAll("\\*\\(\\d+\\) ", "*") // remove the WholeStageCodegen codegenStageIds
   }
 
