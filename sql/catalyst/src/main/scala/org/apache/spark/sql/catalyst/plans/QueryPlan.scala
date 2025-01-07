@@ -432,8 +432,8 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
 
   def schema: StructType = _schema()
 
-  private val _schema = new BestEffortLazyVal[StructType](
-    () => DataTypeUtils.fromAttributes(output))
+  private val _schema = new BestEffortLazyVal[StructType](() =>
+    DataTypeUtils.fromAttributes(output))
 
   /** Returns the output schema in the tree format. */
   def schemaString: String = schema.treeString
