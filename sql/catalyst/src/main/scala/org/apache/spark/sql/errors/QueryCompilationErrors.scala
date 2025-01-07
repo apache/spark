@@ -3305,10 +3305,12 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     new NoSuchTableException(ident)
   }
 
-  def unsupportedTableChangeInJDBCCatalogError(change: TableChange): Throwable = {
+  def unsupportedTableChangeInJDBCCatalogError(
+      change: TableChange, tableName: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1305",
-      messageParameters = Map("change" -> change.toString))
+      errorClass = "UNSUPPORTED_TABLE_CHANGE_IN_JDBC_CATALOG",
+      messageParameters = Map(
+        "change" -> change.toString, "tableName" -> toSQLId(tableName)))
   }
 
   def pathOptionNotSetCorrectlyWhenReadingError(): Throwable = {
