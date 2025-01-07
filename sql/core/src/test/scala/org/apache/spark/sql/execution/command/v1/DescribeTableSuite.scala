@@ -22,6 +22,7 @@ import java.util.Locale
 import org.json4s._
 import org.json4s.jackson.JsonMethods.parse
 
+import org.apache.spark.SPARK_VERSION
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.execution.command
@@ -346,7 +347,7 @@ class DescribeTableSuite extends DescribeTableSuiteBase with CommandSuiteBase {
         owner = Some(""),
         created_time = Some(""),
         last_access = Some("UNKNOWN"),
-        created_by = Some("Spark 4.0.0-SNAPSHOT"),
+        created_by = Some(s"Spark $SPARK_VERSION"),
         `type` = Some("MANAGED"),
         provider = Some("parquet"),
         bucket_columns = Some(List("employee_id")),
@@ -413,7 +414,7 @@ class DescribeTableSuite extends DescribeTableSuiteBase with CommandSuiteBase {
           TableColumn("category", Type("string"), true)
         )),
         last_access = Some("UNKNOWN"),
-        created_by = Some("Spark 4.0.0-SNAPSHOT"),
+        created_by = Some(s"Spark $SPARK_VERSION"),
         `type` = Some("MANAGED"),
         provider = Some("parquet"),
         bucket_columns = Some(Nil),
@@ -480,7 +481,7 @@ class DescribeTableSuite extends DescribeTableSuiteBase with CommandSuiteBase {
           TableColumn("is_active", Type("boolean"), default = Some("true"))
         )),
         last_access = Some("UNKNOWN"),
-        created_by = Some("Spark 4.0.0-SNAPSHOT"),
+        created_by = Some(s"Spark $SPARK_VERSION"),
         `type` = Some("MANAGED"),
         storage_properties = None,
         provider = Some("parquet"),
@@ -572,7 +573,7 @@ class DescribeTableSuite extends DescribeTableSuiteBase with CommandSuiteBase {
           outputformat = Some("org.apache.hadoop.hive.ql.io.HiveSequenceFileOutputFormat"),
           storage_properties = Some(Map("serialization.format" -> "1")),
           last_access = Some("UNKNOWN"),
-          created_by = Some("Spark 4.0.0-SNAPSHOT"),
+          created_by = Some(s"Spark $SPARK_VERSION"),
           `type` = Some("VIEW"),
           view_text = Some("SELECT * FROM spark_catalog.ns.table"),
           view_original_text = Some("SELECT * FROM spark_catalog.ns.table"),
@@ -750,7 +751,7 @@ class DescribeTableSuite extends DescribeTableSuiteBase with CommandSuiteBase {
           "option2" -> "value2"
         )),
         last_access = Some("UNKNOWN"),
-        created_by = Some("Spark 4.0.0-SNAPSHOT"),
+        created_by = Some(s"Spark $SPARK_VERSION"),
         `type` = Some("MANAGED"),
         provider = Some("parquet"),
         comment = Some("A table with nested complex types"),
