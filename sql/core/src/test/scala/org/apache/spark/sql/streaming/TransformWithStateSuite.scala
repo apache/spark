@@ -2086,10 +2086,7 @@ class TransformWithStateSuite extends StateStoreMetricsTest
           AddData(inputData, "a"),
           AdvanceManualClock(1 * 1000),
           ExpectFailure[StateStoreInvalidValueSchemaEvolution] { t =>
-            checkError(
-              t.asInstanceOf[SparkUnsupportedOperationException],
-              condition = "STATE_STORE_INVALID_VALUE_SCHEMA_EVOLUTION"
-            )
+            assert(t.getMessage.contains("Unable to read schema"))
           }
         )
       }
