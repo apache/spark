@@ -8617,7 +8617,7 @@ object functions {
    *   The input encoder is inferred from the input type IN.
    */
   def udaf[IN: TypeTag, BUF, OUT](agg: Aggregator[IN, BUF, OUT]): UserDefinedFunction = {
-    udaf(agg, ScalaReflection.encoderForWithRowEncoderSupport[IN])
+    udaf(agg, ScalaReflection.encoderFor[IN])
   }
 
   /**

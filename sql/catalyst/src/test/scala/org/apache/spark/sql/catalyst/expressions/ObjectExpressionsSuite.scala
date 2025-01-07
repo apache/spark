@@ -626,8 +626,8 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   private def scalaMapSerializerFor[T: TypeTag, U: TypeTag](inputObject: Expression): Expression = {
-    val keyEnc = ScalaReflection.encoderForWithRowEncoderSupport[T]
-    val valueEnc = ScalaReflection.encoderForWithRowEncoderSupport[U]
+    val keyEnc = ScalaReflection.encoderFor[T]
+    val valueEnc = ScalaReflection.encoderFor[U]
 
     def kvSerializerFor(enc: AgnosticEncoder[_])(inputObject: Expression): Expression = enc match {
       case AgnosticEncoders.BoxedIntEncoder =>

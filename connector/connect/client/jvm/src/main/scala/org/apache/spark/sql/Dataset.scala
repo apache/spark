@@ -956,7 +956,7 @@ class Dataset[T] private[sql] (
     val generator = SparkUserDefinedFunction(
       UDFAdaptors.iterableOnceToSeq(f),
       UnboundRowEncoder :: Nil,
-      ScalaReflection.encoderForWithRowEncoderSupport[Seq[A]])
+      ScalaReflection.encoderFor[Seq[A]])
     select(col("*"), functions.inline(generator(struct(input: _*))))
   }
 
@@ -967,7 +967,7 @@ class Dataset[T] private[sql] (
     val generator = SparkUserDefinedFunction(
       UDFAdaptors.iterableOnceToSeq(f),
       Nil,
-      ScalaReflection.encoderForWithRowEncoderSupport[Seq[B]])
+      ScalaReflection.encoderFor[Seq[B]])
     select(col("*"), functions.explode(generator(col(inputColumn))).as((outputColumn)))
   }
 

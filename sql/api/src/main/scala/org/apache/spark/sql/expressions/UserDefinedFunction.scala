@@ -129,9 +129,9 @@ object SparkUserDefinedFunction {
       function: AnyRef,
       returnTypeTag: TypeTag[_],
       inputTypeTags: TypeTag[_]*): SparkUserDefinedFunction = {
-    val outputEncoder = ScalaReflection.encoderForWithRowEncoderSupport(returnTypeTag)
+    val outputEncoder = ScalaReflection.encoderFor(returnTypeTag)
     val inputEncoders = inputTypeTags.map { tag =>
-      Try(ScalaReflection.encoderForWithRowEncoderSupport(tag)).toOption
+      Try(ScalaReflection.encoderFor(tag)).toOption
     }
     SparkUserDefinedFunction(
       f = function,

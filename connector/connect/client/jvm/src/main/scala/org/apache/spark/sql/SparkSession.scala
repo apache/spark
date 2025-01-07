@@ -131,7 +131,7 @@ class SparkSession private[sql] (
 
   /** @inheritdoc */
   def createDataFrame[A <: Product: TypeTag](data: Seq[A]): DataFrame = {
-    createDataset(ScalaReflection.encoderForWithRowEncoderSupport[A], data.iterator).toDF()
+    createDataset(ScalaReflection.encoderFor[A], data.iterator).toDF()
   }
 
   /** @inheritdoc */
