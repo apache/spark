@@ -76,6 +76,9 @@ object UserDefinedFunction {
   val SQL_CONFIG_PREFIX = "sqlConfig."
   val INDEX_LENGTH: Int = 3
 
+  // The default Hive Metastore SQL schema length for function resource uri.
+  private val HIVE_FUNCTION_RESOURCE_URI_LENGTH_THRESHOLD: Int = 4000
+
   def parseTableSchema(text: String, parser: ParserInterface): StructType = {
     val parsed = parser.parseTableSchema(text)
     CharVarcharUtils.failIfHasCharVarchar(parsed).asInstanceOf[StructType]
@@ -100,8 +103,7 @@ object UserDefinedFunction {
       props: Map[String, String],
       name: FunctionIdentifier): Seq[FunctionResource] = {
     val blob = mapper.writeValueAsString(props)
-    val threshold = SQLConf.get.getConf(
-      SQLConf.HIVE_FUNCTION_RESOURCE_URI_LENGTH_THRESHOLD) - INDEX_LENGTH
+    val threshold = HIVE_FUNCTION_RESOURCE_URI_LENGTH_THRESHOLD - INDEX_LENGTH
     blob.grouped(threshold).zipWithIndex.map { case (part, i) =>
       // Add a sequence number to the part and pad it to a given length.
       // E.g. 1 will become "001" if the given length is 3.

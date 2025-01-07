@@ -100,7 +100,7 @@ object UserDefinedFunctionErrors extends QueryErrorsBase {
 
   def routinePropertyTooLarge(routineName: String): Throwable = {
     new AnalysisException(
-      errorClass = "USER_DEFINED_FUNCTIONS.PROPERTY_TOO_LARGE",
+      errorClass = "USER_DEFINED_FUNCTIONS.ROUTINE_PROPERTY_TOO_LARGE",
       messageParameters = Map("name" -> toSQLId(routineName)))
   }
 
@@ -114,17 +114,5 @@ object UserDefinedFunctionErrors extends QueryErrorsBase {
     new AnalysisException(
       errorClass = "NOT_A_TABLE_FUNCTION",
       messageParameters = Map("functionName" -> toSQLId(functionName)))
-  }
-
-  def namedParametersNotSupportedForSqlUdfs(
-      functionName: String,
-      argument: String): Throwable = {
-    new AnalysisException(
-      errorClass = "NAMED_PARAMETERS_NOT_SUPPORTED_FOR_SQL_UDFS",
-      messageParameters = Map(
-        "functionName" -> toSQLId(functionName),
-        "argument" -> toSQLId(argument)
-      )
-    )
   }
 }

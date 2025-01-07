@@ -1518,14 +1518,6 @@ object SQLConf {
       .intConf
       .createOptional
 
-  val HIVE_FUNCTION_RESOURCE_URI_LENGTH_THRESHOLD =
-    buildConf("spark.sql.hive.functionResourceUriLengthThreshold")
-      .internal()
-      .doc("The maximum length allowed for a function resource uri in Hive metastore.")
-      .version("4.0.0")
-      .intConf
-      .createWithDefault(4000)
-
   val OPTIMIZER_METADATA_ONLY = buildConf("spark.sql.optimizer.metadataOnly")
     .internal()
     .doc("When true, enable the metadata-only query optimization that use the table's metadata " +

@@ -1698,19 +1698,12 @@ class SessionCatalog(
       return expressions
     }
 
-    if (!SQLConf.get.getConf(SQLConf.ALLOW_NAMED_FUNCTION_ARGUMENTS)) {
-      val firstNamedArgument = expressions(firstNamedArgumentExpressionIdx)
-        .asInstanceOf[NamedArgumentExpression].key
-      throw UserDefinedFunctionErrors.namedParametersNotSupportedForSqlUdfs(
-        functionName, firstNamedArgument)
-    }
-
     val paramNames: Seq[InputParameter] =
       if (inputParams.isDefined) {
         inputParams.get.map {
           p => p.getDefault() match {
             case Some(defaultExpr) =>
-              // This cast is needed to ensure default value is of target data type
+              // This cast is needed to ensure the default value is of the target data type.
               InputParameter(p.name, Some(Cast(parseDefault(defaultExpr, parser), p.dataType)))
             case None =>
               InputParameter(p.name)
@@ -1910,7 +1903,7 @@ class SessionCatalog(
    * Look up a persistent scalar function by name and resolves it to an Expression.
    */
   def resolvePersistentFunction(
-    name: FunctionIdentifier, arguments: Seq[Expression]): Expression = {
+      name: FunctionIdentifier, arguments: Seq[Expression]): Expression = {
     resolvePersistentFunctionInternal[Expression](
       name,
       arguments,
@@ -1937,8 +1930,8 @@ class SessionCatalog(
    * Look up a persistent table function by name and resolves it to a LogicalPlan.
    */
   def resolvePersistentTableFunction(
-    name: FunctionIdentifier,
-    arguments: Seq[Expression]): LogicalPlan = {
+      name: FunctionIdentifier,
+      arguments: Seq[Expression]): LogicalPlan = {
     resolvePersistentFunctionInternal[LogicalPlan](
       name,
       arguments,

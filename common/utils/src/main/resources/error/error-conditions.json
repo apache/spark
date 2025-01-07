@@ -3660,12 +3660,6 @@
     ],
     "sqlState" : "4274K"
   },
-  "NAMED_PARAMETERS_NOT_SUPPORTED_FOR_SQL_UDFS" : {
-    "message" : [
-      "Cannot call function <functionName> because named argument references are not supported. In this case, the named argument reference was <argument>."
-    ],
-    "sqlState" : "0A000"
-  },
   "NAMED_PARAMETER_SUPPORT_DISABLED" : {
     "message" : [
       "Cannot call function <functionName> because named argument references are not enabled here.",
@@ -5887,9 +5881,9 @@
           "Cannot specify NOT NULL on function parameters: <input>"
         ]
       },
-      "PROPERTY_TOO_LARGE" : {
+      "ROUTINE_PROPERTY_TOO_LARGE" : {
         "message" : [
-          "Cannot convert user defined routine <name> to catalog function: routine properties too large."
+          "Cannot convert user defined routine <name> to catalog function: routine properties are too large."
         ]
       },
       "RETURN_COLUMN_COUNT_MISMATCH" : {
