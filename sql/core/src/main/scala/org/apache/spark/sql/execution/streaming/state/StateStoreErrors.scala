@@ -153,8 +153,10 @@ object StateStoreErrors {
 
   def stateStoreSchemaFileThresholdExceeded(
       numSchemaFiles: Int,
-      maxNumSchemaFiles: Int): StateStoreSchemaFileThresholdExceeded = {
-    new StateStoreSchemaFileThresholdExceeded(numSchemaFiles, maxNumSchemaFiles)
+      maxNumSchemaFiles: Int,
+      colFamilyNames: List[String]): StateStoreSchemaFileThresholdExceeded = {
+    new StateStoreSchemaFileThresholdExceeded(
+      numSchemaFiles, maxNumSchemaFiles, colFamilyNames)
   }
 
   def stateStoreColumnFamilyMismatch(
@@ -346,12 +348,14 @@ class StateStoreInvalidValueSchemaEvolution(
 
 class StateStoreSchemaFileThresholdExceeded(
     numSchemaFiles: Int,
-    maxStateSchemaFiles: Int)
+    maxStateSchemaFiles: Int,
+    colFamilyNames: List[String])
   extends SparkUnsupportedOperationException(
-    errorClass = "STATE_STORE_SCHEMA_FILE_THRESHOLD_EXCEEDED",
+    errorClass = "STATE_STORE_VALUE_SCHEMA_EVOLUTION_THRESHOLD_EXCEEDED",
     messageParameters = Map(
       "numStateSchemaFiles" -> numSchemaFiles.toString,
-      "maxStateSchemaFiles" -> maxStateSchemaFiles.toString))
+      "maxStateSchemaFiles" -> maxStateSchemaFiles.toString,
+      "colFamilyNames" -> colFamilyNames.mkString("(", ",", ")")))
 
 class StateStoreSnapshotFileNotFound(fileToRead: String, clazz: String)
   extends SparkRuntimeException(

@@ -2339,7 +2339,7 @@ object SQLConf {
       .doc("The maximum number of StateSchemaV3 files allowed per operator")
       .version("4.0.0")
       .intConf
-      .createWithDefault(10)
+      .createWithDefault(32)
 
   val STATE_STORE_COMPRESSION_CODEC =
     buildConf("spark.sql.streaming.stateStore.compression.codec")

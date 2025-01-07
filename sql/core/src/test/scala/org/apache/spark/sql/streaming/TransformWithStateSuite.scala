@@ -2177,10 +2177,11 @@ class TransformWithStateSuite extends StateStoreMetricsTest
           ExpectFailure[StateStoreSchemaFileThresholdExceeded] { t =>
             checkError(
               t.asInstanceOf[StateStoreSchemaFileThresholdExceeded],
-              condition = "STATE_STORE_SCHEMA_FILE_THRESHOLD_EXCEEDED",
+              condition = "STATE_STORE_VALUE_SCHEMA_EVOLUTION_THRESHOLD_EXCEEDED",
               parameters = Map(
                 "numStateSchemaFiles" -> "2",
-                "maxStateSchemaFiles" -> "1"
+                "maxStateSchemaFiles" -> "1",
+                "colFamilyNames" -> "(countState)"
               )
             )
           }

@@ -174,8 +174,6 @@ object TransformWithStateOperatorProperties extends Logging {
  */
 trait TransformWithStateMetadataUtils extends Logging {
 
-  private val conf = SparkSession.getActiveSession.get.sessionState.conf
-
   def getColFamilySchemas(): Map[String, StateStoreColFamilySchema]
 
   def getStateVariableInfos(): Map[String, TransformWithStateVariableInfo]
@@ -257,11 +255,6 @@ trait TransformWithStateMetadataUtils extends Logging {
           newMetadataV2.operatorPropertiesJson)
         TransformWithStateOperatorProperties.validateOperatorProperties(
           oldOperatorProps, newOperatorProps)
-        val numSchemaFiles = newMetadataV2.stateStoreInfo.head.stateSchemaFilePaths.size
-        if (numSchemaFiles > conf.maxStateSchemaFiles) {
-          throw StateStoreErrors.stateStoreSchemaFileThresholdExceeded(
-            numSchemaFiles, conf.maxStateSchemaFiles)
-        }
       case (_, _) =>
     }
   }

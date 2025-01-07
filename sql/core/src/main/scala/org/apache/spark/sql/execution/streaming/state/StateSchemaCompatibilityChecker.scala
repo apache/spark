@@ -26,6 +26,7 @@ import org.apache.hadoop.fs.{FSDataInputStream, Path}
 
 import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.internal.{Logging, LogKeys, MDC}
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.avro.{AvroDeserializer, AvroSerializer, SchemaConverters}
 import org.apache.spark.sql.catalyst.util.UnsafeRowUtils
 import org.apache.spark.sql.execution.streaming.{CheckpointFileManager, StatefulOperatorStateInfo}
@@ -95,6 +96,8 @@ class StateSchemaCompatibilityChecker(
   private val fm = CheckpointFileManager.create(schemaFileLocation, hadoopConf)
 
   fm.mkdirs(schemaFileLocation.getParent)
+
+  private val conf = SparkSession.getActiveSession.get.sessionState.conf
 
   // Read most recent schema file
   def readSchemaFile(): List[StateStoreColFamilySchema] = {
@@ -260,6 +263,13 @@ class StateSchemaCompatibilityChecker(
             case Some(existingSchemas) =>
               val (updatedSchema, hasEvolved) = check(
                 existingSchemas, newSchema, ignoreValueSchema, schemaEvolutionEnabled)
+              if (oldSchemaFilePaths.size == conf.maxStateSchemaFiles && hasEvolved) {
+                throw StateStoreErrors.stateStoreSchemaFileThresholdExceeded(
+                  oldSchemaFilePaths.size + 1,
+                  conf.maxStateSchemaFiles,
+                  List(newSchema.colFamilyName)
+                )
+              }
               (updatedSchema :: schemas, evolved || hasEvolved)
             case None =>
               // New column family - initialize with schema ID 0
@@ -268,11 +278,21 @@ class StateSchemaCompatibilityChecker(
           }
       }
 
-      val colFamiliesAddedOrRemoved =
-        (newStateSchema.map(_.colFamilyName).toSet !=
-          mostRecentColFamilies.toSet)
+      val newColFamilies = newStateSchema.map(_.colFamilyName).toSet
+      val oldColFamilies = mostRecentColFamilies.toSet
+      val colFamiliesAddedOrRemoved = newColFamilies != oldColFamilies
       val newSchemaFileWritten = hasEvolutions || colFamiliesAddedOrRemoved
 
+      if (oldSchemaFilePaths.size == conf.maxStateSchemaFiles &&
+        colFamiliesAddedOrRemoved) {
+        throw StateStoreErrors.stateStoreSchemaFileThresholdExceeded(
+          oldSchemaFilePaths.size + 1,
+          conf.maxStateSchemaFiles,
+          // need to compute symmetric diff between col family list
+          (newColFamilies.diff(oldColFamilies) ++
+            oldColFamilies.diff(newColFamilies)).toList
+        )
+      }
       if (stateSchemaVersion == SCHEMA_FORMAT_V3 && newSchemaFileWritten) {
         createSchemaFile(evolvedSchemas.sortBy(_.colFamilyName), stateSchemaVersion)
       }
