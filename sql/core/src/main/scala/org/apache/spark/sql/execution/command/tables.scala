@@ -916,39 +916,14 @@ case class DescribeTableJsonCommand(
       schema: StructType,
       jsonMap: mutable.LinkedHashMap[String, JValue],
       header: Boolean): Unit = {
-    // convert schema field values to JsonValue
-    def toJsonValue(value: Any): JValue = value match {
-      case s: String => JString(s)
-      case b: Boolean => JBool(b)
-      case i: Int => JInt(i)
-      case d: Double => JDouble(d)
-      case l: List[_] => JArray(l.map(toJsonValue))
-      case m: Map[_, _] =>
-        JObject(
-          m.asInstanceOf[Map[String, Any]].toList.map {
-            case (nestedKey, nestedValue) => JField(nestedKey, toJsonValue(nestedValue))
-          }: _*
-        )
-      case _ => JNothing
-    }
-
     val defaultValuesMap = Option(ResolveDefaultColumns.getDescribeMetadata(schema))
       .getOrElse(Seq.empty)
       .collect { case (name, _, defaultValue) => name -> defaultValue }
       .toMap
 
-    val columnsJson = jsonType(StructType(schema.fields), defaultValuesMap).asInstanceOf[JObject]
-      .values("fields")
-      .asInstanceOf[List[Map[String, Any]]]
-      .map { field =>
-        JObject(
-          field.toList.map {
-            case (key, value) =>
-              JField(key, toJsonValue(value))
-          }: _*
-        )
-      }
-    addKeyValueToMap("columns", JArray(columnsJson), jsonMap)
+    val columnsJson = jsonType(StructType(schema.fields), defaultValuesMap)
+      .asInstanceOf[JObject].find(_.isInstanceOf[JArray]).get
+    addKeyValueToMap("columns", columnsJson, jsonMap)
   }
 
   private def describeClusteringInfoJson(
