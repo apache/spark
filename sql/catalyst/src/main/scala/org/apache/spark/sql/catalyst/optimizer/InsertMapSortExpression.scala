@@ -89,11 +89,10 @@ object InsertMapSortInRepartitionExpressions extends Rule[LogicalPlan] {
 
   override def apply(plan: LogicalPlan): LogicalPlan = {
     plan.transformUpWithPruning(_.containsPattern(REPARTITION_OPERATION)) {
-      case rep @
-        RepartitionByExpression(partitionExprs, child, optNumPartitions, optAdvisoryPartitionSize)
+      case rep: RepartitionByExpression
         if rep.partitionExpressions.exists(mapTypeExistsRecursively) =>
         val exprToMapSort = new mutable.HashMap[Expression, Expression]
-        val newPartitionExprs = partitionExprs.map { expr =>
+        val newPartitionExprs = rep.partitionExpressions.map { expr =>
           val inserted = insertMapSortRecursively(expr)
           if (expr.ne(inserted)) {
             exprToMapSort.getOrElseUpdate(expr.canonicalized, inserted)
@@ -101,9 +100,7 @@ object InsertMapSortInRepartitionExpressions extends Rule[LogicalPlan] {
             expr
           }
         }
-        RepartitionByExpression(
-          newPartitionExprs, child, optNumPartitions, optAdvisoryPartitionSize
-        )
+        rep.copy(partitionExpressions = newPartitionExprs)
     }
   }
 }
