@@ -60,7 +60,10 @@ compoundBody
     ;
 
 compoundStatement
-    : statement
+    : declareCondition
+    | declareHandler
+    | signalStatement
+    | statement
     | setStatementWithOptionalVarKeyword
     | beginEndCompoundBlock
     | ifElseStatement
@@ -71,6 +74,27 @@ compoundStatement
     | iterateStatement
     | loopStatement
     | forStatement
+    ;
+
+conditionValue
+    : stringLit
+    | multipartIdentifier
+    ;
+
+conditionValueList
+    : ((conditionValues+=conditionValue (COMMA conditionValues+=conditionValue)*) | SQLEXCEPTION | NOT FOUND)
+    ;
+
+declareCondition
+    : DECLARE multipartIdentifier CONDITION (FOR stringLit)?
+    ;
+
+declareHandler
+    : DECLARE (CONTINUE | EXIT) HANDLER FOR conditionValueList (BEGIN compoundBody END | statement | setStatementWithOptionalVarKeyword)
+    ;
+
+signalStatement
+    : SIGNAL (multipartIdentifier (SET MESSAGE_TEXT EQ stringLit)? | SQLSTATE VALUE? stringLit? (SET MESSAGE_TEXT EQ stringLit)?)
     ;
 
 setStatementWithOptionalVarKeyword
@@ -1601,6 +1625,7 @@ ansiNonReserved
     | COMPUTE
     | CONCATENATE
     | CONTAINS
+    | CONTINUE
     | COST
     | CUBE
     | CURRENT
@@ -1640,6 +1665,7 @@ ansiNonReserved
     | EXCHANGE
     | EXCLUDE
     | EXISTS
+    | EXIT
     | EXPLAIN
     | EXPORT
     | EXTEND
@@ -1653,11 +1679,13 @@ ansiNonReserved
     | FOLLOWING
     | FORMAT
     | FORMATTED
+    | FOUND
     | FUNCTION
     | FUNCTIONS
     | GENERATED
     | GLOBAL
     | GROUPING
+    | HANDLER
     | HOUR
     | HOURS
     | IDENTIFIER_KW
@@ -1789,6 +1817,7 @@ ansiNonReserved
     | SORTED
     | SOURCE
     | SPECIFIC
+    | SQLEXCEPTION
     | START
     | STATISTICS
     | STORED
@@ -1936,8 +1965,10 @@ nonReserved
     | COMPENSATION
     | COMPUTE
     | CONCATENATE
+    | CONDITION
     | CONSTRAINT
     | CONTAINS
+    | CONTINUE
     | COST
     | CREATE
     | CUBE
@@ -1987,6 +2018,7 @@ nonReserved
     | EXCLUDE
     | EXECUTE
     | EXISTS
+    | EXIT
     | EXPLAIN
     | EXPORT
     | EXTEND
@@ -2005,6 +2037,7 @@ nonReserved
     | FOREIGN
     | FORMAT
     | FORMATTED
+    | FOUND
     | FROM
     | FUNCTION
     | FUNCTIONS
@@ -2013,6 +2046,7 @@ nonReserved
     | GRANT
     | GROUP
     | GROUPING
+    | HANDLER
     | HAVING
     | HOUR
     | HOURS
@@ -2163,6 +2197,7 @@ nonReserved
     | SOURCE
     | SPECIFIC
     | SQL
+    | SQLEXCEPTION
     | START
     | STATISTICS
     | STORED
