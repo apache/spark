@@ -22,7 +22,7 @@ import scala.collection.mutable
 import org.apache.spark.sql.catalyst.expressions.{Alias, ArrayTransform, CreateNamedStruct, Expression, GetStructField, If, IsNull, LambdaFunction, Literal, MapFromArrays, MapKeys, MapSort, MapValues, NamedExpression, NamedLambdaVariable}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan, Project, RepartitionByExpression}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.trees.TreePattern.REPARTITION_OPERATION
+import org.apache.spark.sql.catalyst.trees.TreePattern.{AGGREGATE, REPARTITION_OPERATION}
 import org.apache.spark.sql.types.{ArrayType, MapType, StructType}
 import org.apache.spark.util.ArrayImplicits.SparkArrayOps
 
@@ -39,6 +39,9 @@ object InsertMapSortInGroupingExpressions extends Rule[LogicalPlan] {
   import InsertMapSortExpression._
 
   override def apply(plan: LogicalPlan): LogicalPlan = {
+    if (!plan.containsPattern(AGGREGATE)) {
+      return plan
+    }
     val shouldRewrite = plan.exists {
       case agg: Aggregate if agg.groupingExpressions.exists(mapTypeExistsRecursively) => true
       case _ => false
