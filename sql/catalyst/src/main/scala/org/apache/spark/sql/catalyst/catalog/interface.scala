@@ -104,7 +104,9 @@ trait MetadataMapSupport {
 case class CatalogFunction(
     identifier: FunctionIdentifier,
     className: String,
-    resources: Seq[FunctionResource])
+    resources: Seq[FunctionResource]) {
+  val isUserDefinedFunction: Boolean = UserDefinedFunction.isUserDefinedFunction(className)
+}
 
 
 /**

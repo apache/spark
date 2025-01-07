@@ -97,4 +97,22 @@ object UserDefinedFunctionErrors extends QueryErrorsBase {
         "tempObj" -> "VARIABLE",
         "tempObjName" -> toSQLId(varName)))
   }
+
+  def routinePropertyTooLarge(routineName: String): Throwable = {
+    new AnalysisException(
+      errorClass = "USER_DEFINED_FUNCTIONS.ROUTINE_PROPERTY_TOO_LARGE",
+      messageParameters = Map("name" -> toSQLId(routineName)))
+  }
+
+  def notAScalarFunction(functionName: Seq[String]): Throwable = {
+    new AnalysisException(
+      errorClass = "NOT_A_SCALAR_FUNCTION",
+      messageParameters = Map("functionName" -> toSQLId(functionName)))
+  }
+
+  def notATableFunction(functionName: Seq[String]): Throwable = {
+    new AnalysisException(
+      errorClass = "NOT_A_TABLE_FUNCTION",
+      messageParameters = Map("functionName" -> toSQLId(functionName)))
+  }
 }

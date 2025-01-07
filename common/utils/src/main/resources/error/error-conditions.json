@@ -758,6 +758,12 @@
     ],
     "sqlState" : "22018"
   },
+  "CORRUPTED_CATALOG_FUNCTION" : {
+    "message" : [
+      "Cannot convert the catalog function '<identifier>' into a SQL function due to corrupted function information in catalog. If the function is not a SQL function, please make sure the class name '<className>' is loadable."
+    ],
+    "sqlState" : "0A000"
+  },
   "CREATE_PERMANENT_VIEW_WITHOUT_ALIAS" : {
     "message" : [
       "Not allowed to create the permanent view <name> without explicitly assigning an alias for the expression <attr>."
@@ -5890,6 +5896,11 @@
       "RETURN_COLUMN_COUNT_MISMATCH" : {
         "message" : [
           "The number of columns produced by the RETURN clause (num: `<outputSize>`) does not match the number of column names specified by the RETURNS clause (num: `<returnParamSize>`) of <name>."
+        ]
+      },
+      "ROUTINE_PROPERTY_TOO_LARGE" : {
+        "message" : [
+          "Cannot convert user defined routine <name> to catalog function: routine properties are too large."
         ]
       },
       "SQL_TABLE_UDF_BODY_MUST_BE_A_QUERY" : {
