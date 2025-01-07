@@ -977,7 +977,8 @@ object StateStore extends Logging {
           } finally {
             val duration = System.currentTimeMillis() - startTime
             val logMsg =
-              log"Finished maintenance task for provider=${MDC(LogKeys.STATE_STORE_PROVIDER, id)}" +
+              log"Finished maintenance task for " +
+                log"provider=${MDC(LogKeys.STATE_STORE_PROVIDER_ID, id)}" +
                 log" in elapsed_time=${MDC(LogKeys.TIME_UNITS, duration)}\n"
             if (duration > 5000) {
               logInfo(logMsg)
@@ -1007,9 +1008,9 @@ object StateStore extends Logging {
         .map(_.reportActiveInstance(storeProviderId, host, executorId, otherProviderIds))
         .getOrElse(Seq.empty[StateStoreProviderId])
       logInfo(log"Reported that the loaded instance " +
-        log"${MDC(LogKeys.STATE_STORE_PROVIDER, storeProviderId)} is active")
+        log"${MDC(LogKeys.STATE_STORE_PROVIDER_ID, storeProviderId)} is active")
       logDebug(log"The loaded instances are going to unload: " +
-        log"${MDC(LogKeys.STATE_STORE_PROVIDER, providerIdsToUnload.mkString(", "))}")
+        log"${MDC(LogKeys.STATE_STORE_PROVIDER_IDS, providerIdsToUnload)}")
       providerIdsToUnload
     } else {
       Seq.empty[StateStoreProviderId]
@@ -1041,7 +1042,7 @@ object StateStore extends Logging {
         _coordRef = StateStoreCoordinatorRef.forExecutor(env)
       }
       logInfo(log"Retrieved reference to StateStoreCoordinator: " +
-        log"${MDC(LogKeys.STATE_STORE_PROVIDER, _coordRef)}")
+        log"${MDC(LogKeys.STATE_STORE_COORDINATOR, _coordRef)}")
       Some(_coordRef)
     } else {
       _coordRef = null
