@@ -1229,6 +1229,9 @@ class TransformWithStateInPandasTestsMixin:
     def test_value_state_schema_evolution(self):
         checkpoint_path = tempfile.mktemp()
         input_path = tempfile.mktemp()
+        # Create directories if they don't exist
+        os.makedirs(os.path.dirname(input_path), exist_ok=True)
+        os.makedirs(os.path.dirname(checkpoint_path), exist_ok=True)
 
         # First run with old schema
         self._prepare_input_data(input_path + "/batch1.txt", ["k1"], ["v1"])
