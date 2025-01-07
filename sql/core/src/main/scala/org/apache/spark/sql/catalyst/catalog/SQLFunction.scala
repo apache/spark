@@ -17,9 +17,16 @@
 
 package org.apache.spark.sql.catalyst.catalog
 
+import scala.collection.mutable
+
+import org.json4s.JsonAST.{JArray, JString}
+import org.json4s.jackson.JsonMethods.{compact, render}
+
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.catalog.UserDefinedFunction._
+import org.apache.spark.sql.catalyst.expressions.{Expression, ScalarSubquery}
 import org.apache.spark.sql.catalyst.parser.ParserInterface
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, OneRowRelation, Project}
 import org.apache.spark.sql.types.{DataType, StructType}
 
 /**
@@ -56,9 +63,47 @@ case class SQLFunction(
   assert((isTableFunc && returnType.isRight) || (!isTableFunc && returnType.isLeft))
 
   override val language: RoutineLanguage = LanguageSQL
+
+  /**
+   * Optionally get the function body as an expression or query using the given parser.
+   */
+  def getExpressionAndQuery(
+      parser: ParserInterface,
+      isTableFunc: Boolean): (Option[Expression], Option[LogicalPlan]) = {
+    // The RETURN clause of the CREATE FUNCTION statement looks like this in the parser:
+    // RETURN (query | expression)
+    // If the 'query' matches and parses as a SELECT clause of one item with no FROM clause, and
+    // this is a scalar function, we skip a level of subquery expression wrapping by using the
+    // referenced expression directly.
+    val parsedExpression = exprText.map(parser.parseExpression)
+    val parsedQuery = queryText.map(parser.parsePlan)
+    (parsedExpression, parsedQuery) match {
+      case (None, Some(Project(expr :: Nil, _: OneRowRelation)))
+        if !isTableFunc =>
+        (Some(expr), None)
+      case (Some(ScalarSubquery(Project(expr :: Nil, _: OneRowRelation), _, _, _, _, _, _)), None)
+        if !isTableFunc =>
+        (Some(expr), None)
+      case (_, _) =>
+        (parsedExpression, parsedQuery)
+    }
+  }
 }
 
 object SQLFunction {
+
+  private val SQL_FUNCTION_PREFIX = "sqlFunction."
+
+  private val FUNCTION_CATALOG_AND_NAMESPACE = "catalogAndNamespace.numParts"
+  private val FUNCTION_CATALOG_AND_NAMESPACE_PART_PREFIX = "catalogAndNamespace.part."
+
+  private val FUNCTION_REFERRED_TEMP_VIEW_NAMES = "referredTempViewNames"
+  private val FUNCTION_REFERRED_TEMP_FUNCTION_NAMES = "referredTempFunctionsNames"
+  private val FUNCTION_REFERRED_TEMP_VARIABLE_NAMES = "referredTempVariableNames"
+
+  def parseDefault(text: String, parser: ParserInterface): Expression = {
+    parser.parseExpression(text)
+  }
 
   /**
    * This method returns an optional DataType indicating, when present, either the return type for
@@ -91,5 +136,44 @@ object SQLFunction {
         Some(Right(parseTableSchema(text, parser)))
       }
     }
+  }
+
+  def isSQLFunction(className: String): Boolean = className == SQL_FUNCTION_PREFIX
+
+  /**
+   * Convert the current catalog and namespace to properties.
+   */
+  def catalogAndNamespaceToProps(
+      currentCatalog: String,
+      currentNamespace: Seq[String]): Map[String, String] = {
+    val props = new mutable.HashMap[String, String]
+    val parts = currentCatalog +: currentNamespace
+    if (parts.nonEmpty) {
+      props.put(FUNCTION_CATALOG_AND_NAMESPACE, parts.length.toString)
+      parts.zipWithIndex.foreach { case (name, index) =>
+        props.put(s"$FUNCTION_CATALOG_AND_NAMESPACE_PART_PREFIX$index", name)
+      }
+    }
+    props.toMap
+  }
+
+  /**
+   * Convert the temporary object names to properties.
+   */
+  def referredTempNamesToProps(
+      viewNames: Seq[Seq[String]],
+      functionsNames: Seq[String],
+      variableNames: Seq[Seq[String]]): Map[String, String] = {
+    val viewNamesJson =
+      JArray(viewNames.map(nameParts => JArray(nameParts.map(JString).toList)).toList)
+    val functionsNamesJson = JArray(functionsNames.map(JString).toList)
+    val variableNamesJson =
+      JArray(variableNames.map(nameParts => JArray(nameParts.map(JString).toList)).toList)
+
+    val props = new mutable.HashMap[String, String]
+    props.put(FUNCTION_REFERRED_TEMP_VIEW_NAMES, compact(render(viewNamesJson)))
+    props.put(FUNCTION_REFERRED_TEMP_FUNCTION_NAMES, compact(render(functionsNamesJson)))
+    props.put(FUNCTION_REFERRED_TEMP_VARIABLE_NAMES, compact(render(variableNamesJson)))
+    props.toMap
   }
 }
