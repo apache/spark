@@ -18,6 +18,19 @@ CreateViewCommand `t2`, select * from values 0, 1 as t(id), false, false, LocalT
 
 
 -- !query
+create temporary view t3 as select * from t
+-- !query analysis
+CreateViewCommand `t3`, select * from t, false, false, LocalTempView, UNSUPPORTED, true
+   +- Project [id#x]
+      +- SubqueryAlias t
+         +- View (`t`, [id#x])
+            +- Project [cast(id#x as int) AS id#x]
+               +- Project [id#x]
+                  +- SubqueryAlias t
+                     +- LocalRelation [id#x]
+
+
+-- !query
 WITH s AS (SELECT 1 FROM s) SELECT * FROM s
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
@@ -74,6 +87,27 @@ WithCTE
 +- Project [1#x]
    +- SubqueryAlias t
       +- CTERelationRef xxxx, true, [1#x], false, false
+
+
+-- !query
+WITH t AS (SELECT 1) SELECT * FROM t3
+-- !query analysis
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias t
+:     +- Project [1 AS 1#x]
+:        +- OneRowRelation
++- Project [id#x]
+   +- SubqueryAlias t3
+      +- View (`t3`, [id#x])
+         +- Project [cast(id#x as int) AS id#x]
+            +- Project [id#x]
+               +- SubqueryAlias t
+                  +- View (`t`, [id#x])
+                     +- Project [cast(id#x as int) AS id#x]
+                        +- Project [id#x]
+                           +- SubqueryAlias t
+                              +- LocalRelation [id#x]
 
 
 -- !query
@@ -778,3 +812,9 @@ DropTempViewCommand t
 DROP VIEW IF EXISTS t2
 -- !query analysis
 DropTempViewCommand t2
+
+
+-- !query
+DROP VIEW IF EXISTS t3
+-- !query analysis
+DropTempViewCommand t3

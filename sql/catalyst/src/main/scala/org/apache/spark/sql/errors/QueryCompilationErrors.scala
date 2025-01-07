@@ -2172,6 +2172,15 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "ability" -> ability))
   }
 
+  def tableValuedArgumentsNotYetImplementedForSqlFunctions(
+      action: String, functionName: String): Throwable = {
+    new AnalysisException(
+      errorClass = "TABLE_VALUED_ARGUMENTS_NOT_YET_IMPLEMENTED_FOR_SQL_FUNCTIONS",
+      messageParameters = Map(
+        "action" -> action,
+        "functionName" -> functionName))
+  }
+
   def tableValuedFunctionTooManyTableArgumentsError(num: Int): Throwable = {
     new AnalysisException(
       errorClass = "TABLE_VALUED_FUNCTION_TOO_MANY_TABLE_ARGUMENTS",

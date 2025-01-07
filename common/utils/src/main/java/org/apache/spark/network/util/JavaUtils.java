@@ -126,10 +126,10 @@ public class JavaUtils {
   private static void deleteRecursivelyUsingJavaIO(
       File file,
       FilenameFilter filter) throws IOException {
-    BasicFileAttributes fileAttributes =
-      Files.readAttributes(file.toPath(), BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
-    // SPARK-50716: If the file does not exist and not a broken symbolic link, return directly.
-    if (!file.exists() && !fileAttributes.isSymbolicLink()) return;
+    BasicFileAttributes fileAttributes = readFileAttributes(file);
+    // SPARK-50716: If the file attributes are null, that is, the file attributes cannot be read,
+    // or if the file does not exist and is not a broken symbolic link, then return directly.
+    if (fileAttributes == null || (!file.exists() && !fileAttributes.isSymbolicLink())) return;
     if (fileAttributes.isDirectory()) {
       IOException savedIOException = null;
       for (File child : listFilesSafely(file, filter)) {
@@ -153,6 +153,18 @@ public class JavaUtils {
       if (!deleted && file.exists()) {
         throw new IOException("Failed to delete: " + file.getAbsolutePath());
       }
+    }
+  }
+
+  /**
+   * Reads basic attributes of a given file, of return null if an I/O error occurs.
+   */
+  private static BasicFileAttributes readFileAttributes(File file) {
+    try {
+      return Files.readAttributes(
+        file.toPath(), BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
+    } catch (IOException e) {
+      return null;
     }
   }
 

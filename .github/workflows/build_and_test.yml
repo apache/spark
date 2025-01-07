@@ -499,7 +499,7 @@ jobs:
           - >-
             pyspark-sql, pyspark-resource, pyspark-testing
           - >-
-            pyspark-core, pyspark-errors, pyspark-streaming
+            pyspark-core, pyspark-errors, pyspark-streaming, pyspark-logger
           - >-
             pyspark-mllib, pyspark-ml, pyspark-ml-connect
           - >-
@@ -743,7 +743,7 @@ jobs:
         python-version: '3.11'
     - name: Install dependencies for Python CodeGen check
       run: |
-        python3.11 -m pip install 'black==23.9.1' 'protobuf==5.29.1' 'mypy==1.8.0' 'mypy-protobuf==3.3.0'
+        python3.11 -m pip install 'black==23.12.1' 'protobuf==5.29.1' 'mypy==1.8.0' 'mypy-protobuf==3.3.0'
         python3.11 -m pip list
     - name: Python CodeGen check for branch-3.5
       if: inputs.branch == 'branch-3.5'
@@ -1094,6 +1094,7 @@ jobs:
           spark.sql.autoBroadcastJoinThreshold=-1
           spark.sql.join.forceApplyShuffledHashJoin=true
     - name: Run TPC-DS queries on collated data
+      if: inputs.branch != 'branch-3.5'
       run: |
         SPARK_TPCDS_DATA=`pwd`/tpcds-sf-1 build/sbt "sql/testOnly org.apache.spark.sql.TPCDSCollationQueryTestSuite"
     - name: Upload test results to report
@@ -1225,6 +1226,7 @@ jobs:
       - name: Start Minikube
         uses: medyagh/setup-minikube@v0.0.18
         with:
+          kubernetes-version: "1.32.0"
           # Github Action limit cpu:2, memory: 6947MB, limit to 2U6G for better resource statistic
           cpus: 2
           memory: 6144m
