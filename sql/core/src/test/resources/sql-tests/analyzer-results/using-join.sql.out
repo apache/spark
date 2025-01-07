@@ -833,6 +833,6 @@ WithCTE
          +- Project [coalesce(key#x, key#x) AS key#x, key#x, key#x, key#x]
             +- Join FullOuter, (key#x = key#x)
                :- SubqueryAlias t1
-               :  +- CTERelationRef xxxx, true, [key#x], false
+               :  +- CTERelationRef xxxx, true, [key#x], false, false
                +- SubqueryAlias t2
-                  +- CTERelationRef xxxx, true, [key#x], false
+                  +- CTERelationRef xxxx, true, [key#x], false, false

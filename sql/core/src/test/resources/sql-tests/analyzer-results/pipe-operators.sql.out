@@ -1540,6 +1540,78 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 
 
 -- !query
+table t
+|> select x, length(y) as z
+|> limit 1000
+|> where x + length(y) < 4
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`y`",
+    "proposal" : "`x`, `z`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 71,
+    "stopIndex" : 71,
+    "fragment" : "y"
+  } ]
+}
+
+
+-- !query
+table t
+|> select x, length(y) as z
+|> limit 1000 offset 1
+|> where x + length(y) < 4
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`y`",
+    "proposal" : "`x`, `z`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 80,
+    "stopIndex" : 80,
+    "fragment" : "y"
+  } ]
+}
+
+
+-- !query
+table t
+|> select x, length(y) as z
+|> order by x, y
+|> where x + length(y) < 4
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`y`",
+    "proposal" : "`x`, `z`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 52,
+    "stopIndex" : 52,
+    "fragment" : "y"
+  } ]
+}
+
+
+-- !query
 (select x, sum(length(y)) as sum_len from t group by x)
 |> where sum(length(y)) = 3
 -- !query analysis
@@ -2697,19 +2769,32 @@ Union false, false
 
 
 -- !query
-values (0, 1) tab(x, y)
+values (2, 'xyz') tab(x, y)
 |> union table t
 |> where x = 0
 -- !query analysis
-Distinct
-+- Union false, false
-   :- Project [x#x, cast(y#x as bigint) AS y#xL]
-   :  +- SubqueryAlias tab
-   :     +- LocalRelation [x#x, y#x]
-   +- Project [x#x, cast(y#x as bigint) AS y#xL]
-      +- Filter (x#x = 0)
+Filter (x#x = 0)
++- SubqueryAlias __auto_generated_subquery_name
+   +- Distinct
+      +- Union false, false
+         :- SubqueryAlias tab
+         :  +- LocalRelation [x#x, y#x]
          +- SubqueryAlias spark_catalog.default.t
             +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
+values (2, 'xyz') tab(x, y)
+|> union table t
+|> drop x
+-- !query analysis
+Project [y#x]
++- Distinct
+   +- Union false, false
+      :- SubqueryAlias tab
+      :  +- LocalRelation [x#x, y#x]
+      +- SubqueryAlias spark_catalog.default.t
+         +- Relation spark_catalog.default.t[x#x,y#x] csv
 
 
 -- !query
@@ -2878,10 +2963,9 @@ table t
 -- !query analysis
 GlobalLimit 1
 +- LocalLimit 1
-   +- SubqueryAlias __auto_generated_subquery_name
-      +- Sort [x#x ASC NULLS FIRST], true
-         +- SubqueryAlias spark_catalog.default.t
-            +- Relation spark_catalog.default.t[x#x,y#x] csv
+   +- Sort [x#x ASC NULLS FIRST], true
+      +- SubqueryAlias spark_catalog.default.t
+         +- Relation spark_catalog.default.t[x#x,y#x] csv
 
 
 -- !query
@@ -3109,8 +3193,98 @@ Aggregate [x#x, y#x], [x#x, y#x]
 select 3 as x, 4 as y
 |> aggregate group by 1, 2
 -- !query analysis
-Aggregate [1, 2], [1 AS 1#x, 2 AS 2#x]
+Aggregate [x#x, y#x], [x#x, y#x]
 +- Project [3 AS x#x, 4 AS y#x]
+   +- OneRowRelation
+
+
+-- !query
+values (3, 4) as tab(x, y)
+|> aggregate sum(y) group by 1
+-- !query analysis
+Aggregate [x#x], [x#x, pipeexpression(sum(y#x), true, AGGREGATE) AS pipeexpression(sum(y))#xL]
++- SubqueryAlias tab
+   +- LocalRelation [x#x, y#x]
+
+
+-- !query
+values (3, 4), (5, 4) as tab(x, y)
+|> aggregate sum(y) group by 1
+-- !query analysis
+Aggregate [x#x], [x#x, pipeexpression(sum(y#x), true, AGGREGATE) AS pipeexpression(sum(y))#xL]
++- SubqueryAlias tab
+   +- LocalRelation [x#x, y#x]
+
+
+-- !query
+select 3 as x, 4 as y
+|> aggregate sum(y) group by 1, 1
+-- !query analysis
+Aggregate [x#x, x#x], [x#x, x#x, pipeexpression(sum(y#x), true, AGGREGATE) AS pipeexpression(sum(y))#xL]
++- Project [3 AS x#x, 4 AS y#x]
+   +- OneRowRelation
+
+
+-- !query
+select 1 as `1`, 2 as `2`
+|> aggregate sum(`2`) group by `1`
+-- !query analysis
+Aggregate [1#x], [1#x, pipeexpression(sum(2#x), true, AGGREGATE) AS pipeexpression(sum(2))#xL]
++- Project [1 AS 1#x, 2 AS 2#x]
+   +- OneRowRelation
+
+
+-- !query
+select 3 as x, 4 as y
+|> aggregate sum(y) group by 2
+-- !query analysis
+Aggregate [y#x], [y#x, pipeexpression(sum(y#x), true, AGGREGATE) AS pipeexpression(sum(y))#xL]
++- Project [3 AS x#x, 4 AS y#x]
+   +- OneRowRelation
+
+
+-- !query
+select 3 as x, 4 as y, 5 as z
+|> aggregate sum(y) group by 2
+-- !query analysis
+Aggregate [y#x], [y#x, pipeexpression(sum(y#x), true, AGGREGATE) AS pipeexpression(sum(y))#xL]
++- Project [3 AS x#x, 4 AS y#x, 5 AS z#x]
+   +- OneRowRelation
+
+
+-- !query
+select 3 as x, 4 as y, 5 as z
+|> aggregate sum(y) group by 3
+-- !query analysis
+Aggregate [z#x], [z#x, pipeexpression(sum(y#x), true, AGGREGATE) AS pipeexpression(sum(y))#xL]
++- Project [3 AS x#x, 4 AS y#x, 5 AS z#x]
+   +- OneRowRelation
+
+
+-- !query
+select 3 as x, 4 as y, 5 as z
+|> aggregate sum(y) group by 2, 3
+-- !query analysis
+Aggregate [y#x, z#x], [y#x, z#x, pipeexpression(sum(y#x), true, AGGREGATE) AS pipeexpression(sum(y))#xL]
++- Project [3 AS x#x, 4 AS y#x, 5 AS z#x]
+   +- OneRowRelation
+
+
+-- !query
+select 3 as x, 4 as y, 5 as z
+|> aggregate sum(y) group by 1, 2, 3
+-- !query analysis
+Aggregate [x#x, y#x, z#x], [x#x, y#x, z#x, pipeexpression(sum(y#x), true, AGGREGATE) AS pipeexpression(sum(y))#xL]
++- Project [3 AS x#x, 4 AS y#x, 5 AS z#x]
+   +- OneRowRelation
+
+
+-- !query
+select 3 as x, 4 as y, 5 as z
+|> aggregate sum(y) group by x, 2, 3
+-- !query analysis
+Aggregate [x#x, y#x, z#x], [x#x, y#x, z#x, pipeexpression(sum(y#x), true, AGGREGATE) AS pipeexpression(sum(y))#xL]
++- Project [3 AS x#x, 4 AS y#x, 5 AS z#x]
    +- OneRowRelation
 
 

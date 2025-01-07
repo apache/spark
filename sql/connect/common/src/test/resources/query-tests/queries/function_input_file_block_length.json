@@ -13,7 +13,8 @@
     },
     "expressions": [{
       "unresolvedFunction": {
-        "functionName": "input_file_block_length"
+        "functionName": "input_file_block_length",
+        "isInternal": false
       }
     }]
   }

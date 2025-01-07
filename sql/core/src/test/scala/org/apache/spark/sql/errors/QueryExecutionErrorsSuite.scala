@@ -351,7 +351,7 @@ class QueryExecutionErrorsSuite
         sql("select timestampadd(YEAR, 1000000, timestamp'2022-03-09 01:02:03')").collect()
       },
       condition = "DATETIME_OVERFLOW",
-      parameters = Map("operation" -> "add 1000000 YEAR to TIMESTAMP '2022-03-09 01:02:03'"),
+      parameters = Map("operation" -> "add 1000000L YEAR to TIMESTAMP '2022-03-09 01:02:03'"),
       sqlState = "22008")
   }
 

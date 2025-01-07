@@ -79,12 +79,14 @@ from pyspark.sql.connect.streaming.readwriter import DataStreamWriter
 from pyspark.sql.column import Column
 from pyspark.sql.connect.expressions import (
     ColumnReference,
+    SubqueryExpression,
     UnresolvedRegex,
     UnresolvedStar,
 )
 from pyspark.sql.connect.functions import builtin as F
 from pyspark.sql.pandas.types import from_arrow_schema, to_arrow_schema
 from pyspark.sql.pandas.functions import _validate_pandas_udf  # type: ignore[attr-defined]
+from pyspark.sql.table_arg import TableArg
 
 
 if TYPE_CHECKING:
@@ -1800,19 +1802,22 @@ class DataFrame(ParentDataFrame):
             self._session,
         )
 
-    def scalar(self) -> Column:
-        # TODO(SPARK-50134): Implement this method
+    def asTable(self) -> TableArg:
+        # TODO(SPARK-50393): Support DataFrame conversion to table argument in Spark Connect
         raise PySparkNotImplementedError(
             errorClass="NOT_IMPLEMENTED",
-            messageParameters={"feature": "scalar()"},
+            messageParameters={"feature": "asTable()"},
         )
 
+    def scalar(self) -> Column:
+        from pyspark.sql.connect.column import Column as ConnectColumn
+
+        return ConnectColumn(SubqueryExpression(self._plan, subquery_type="scalar"))
+
     def exists(self) -> Column:
-        # TODO(SPARK-50134): Implement this method
-        raise PySparkNotImplementedError(
-            errorClass="NOT_IMPLEMENTED",
-            messageParameters={"feature": "exists()"},
-        )
+        from pyspark.sql.connect.column import Column as ConnectColumn
+
+        return ConnectColumn(SubqueryExpression(self._plan, subquery_type="exists"))
 
     @property
     def schema(self) -> StructType:
@@ -2039,6 +2044,8 @@ class DataFrame(ParentDataFrame):
         from pyspark.sql.connect.udf import UserDefinedFunction
 
         _validate_pandas_udf(func, evalType)
+        if isinstance(schema, str):
+            schema = cast(StructType, self._session._parse_ddl(schema))
         udf_obj = UserDefinedFunction(
             func,
             returnType=schema,
@@ -2277,10 +2284,6 @@ def _test() -> None:
     if not is_remote_only():
         del pyspark.sql.dataframe.DataFrame.toJSON.__doc__
         del pyspark.sql.dataframe.DataFrame.rdd.__doc__
-
-    # TODO(SPARK-50134): Support subquery in connect
-    del pyspark.sql.dataframe.DataFrame.scalar.__doc__
-    del pyspark.sql.dataframe.DataFrame.exists.__doc__
 
     globs["spark"] = (
         PySparkSession.builder.appName("sql.connect.dataframe tests")

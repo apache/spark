@@ -185,7 +185,6 @@ org.apache.spark.SparkArrayIndexOutOfBoundsException
   "errorClass" : "INVALID_ARRAY_INDEX_IN_ELEMENT_AT",
   "sqlState" : "22003",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "arraySize" : "3",
     "indexValue" : "5"
   },
@@ -209,7 +208,6 @@ org.apache.spark.SparkArrayIndexOutOfBoundsException
   "errorClass" : "INVALID_ARRAY_INDEX_IN_ELEMENT_AT",
   "sqlState" : "22003",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "arraySize" : "3",
     "indexValue" : "-5"
   },
@@ -252,7 +250,6 @@ org.apache.spark.SparkArrayIndexOutOfBoundsException
   "errorClass" : "INVALID_ARRAY_INDEX",
   "sqlState" : "22003",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "arraySize" : "2",
     "indexValue" : "4"
   },
@@ -276,7 +273,6 @@ org.apache.spark.SparkArrayIndexOutOfBoundsException
   "errorClass" : "INVALID_ARRAY_INDEX",
   "sqlState" : "22003",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "arraySize" : "2",
     "indexValue" : "0"
   },
@@ -300,7 +296,6 @@ org.apache.spark.SparkArrayIndexOutOfBoundsException
   "errorClass" : "INVALID_ARRAY_INDEX",
   "sqlState" : "22003",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "arraySize" : "2",
     "indexValue" : "-1"
   },
@@ -356,7 +351,6 @@ org.apache.spark.SparkArrayIndexOutOfBoundsException
   "errorClass" : "INVALID_ARRAY_INDEX",
   "sqlState" : "22003",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "arraySize" : "3",
     "indexValue" : "5"
   },
@@ -380,7 +374,6 @@ org.apache.spark.SparkArrayIndexOutOfBoundsException
   "errorClass" : "INVALID_ARRAY_INDEX",
   "sqlState" : "22003",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "arraySize" : "3",
     "indexValue" : "-1"
   },

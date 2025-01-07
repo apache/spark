@@ -376,7 +376,7 @@ org.apache.spark.SparkDateTimeException
   "errorClass" : "CANNOT_PARSE_TIMESTAMP",
   "sqlState" : "22007",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
+    "func" : "`try_to_timestamp`",
     "message" : "Text 'aa' could not be parsed at index 0"
   }
 }
@@ -409,7 +409,7 @@ org.apache.spark.SparkDateTimeException
   "errorClass" : "CANNOT_PARSE_TIMESTAMP",
   "sqlState" : "22007",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
+    "func" : "`try_to_timestamp`",
     "message" : "Text 'aa' could not be parsed at index 0"
   }
 }

@@ -57,6 +57,35 @@ DescribeTableCommand `spark_catalog`.`default`.`t`, false, [col_name#x, data_typ
 
 
 -- !query
+DESCRIBE EXTENDED t AS JSON
+-- !query analysis
+DescribeTableJsonCommand `spark_catalog`.`default`.`t`, true
+
+
+-- !query
+DESCRIBE t AS JSON
+-- !query analysis
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "DESCRIBE_JSON_NOT_EXTENDED",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "tableName" : "t"
+  }
+}
+
+
+-- !query
+DESC FORMATTED t a AS JSON
+-- !query analysis
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "UNSUPPORTED_FEATURE.DESC_TABLE_COLUMN_JSON",
+  "sqlState" : "0A000"
+}
+
+
+-- !query
 DESC default.t
 -- !query analysis
 DescribeTableCommand `spark_catalog`.`default`.`t`, false, [col_name#x, data_type#x, comment#x]
@@ -108,6 +137,12 @@ DescribeTableCommand `spark_catalog`.`default`.`t`, true, [col_name#x, data_type
 DESC t PARTITION (c='Us', d=1)
 -- !query analysis
 DescribeTableCommand `spark_catalog`.`default`.`t`, [c=Us, d=1], false, [col_name#x, data_type#x, comment#x]
+
+
+-- !query
+DESC EXTENDED t PARTITION (c='Us', d=1) AS JSON
+-- !query analysis
+DescribeTableJsonCommand `spark_catalog`.`default`.`t`, [c=Us, d=1], true
 
 
 -- !query
@@ -288,6 +323,12 @@ ExplainCommand 'DescribeColumn 'b, false, [info_name#x, info_value#x], SimpleMod
 EXPLAIN DESCRIBE t PARTITION (c='Us', d=2)
 -- !query analysis
 ExplainCommand 'DescribeRelation [c=Us, d=2], false, [col_name#x, data_type#x, comment#x], SimpleMode
+
+
+-- !query
+EXPLAIN DESCRIBE EXTENDED t PARTITION (c='Us', d=2) AS JSON
+-- !query analysis
+ExplainCommand 'DescribeRelationJson [c=Us, d=2], true, SimpleMode
 
 
 -- !query

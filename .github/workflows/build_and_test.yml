@@ -393,6 +393,7 @@ jobs:
     if: >-
       fromJson(needs.precondition.outputs.required).pyspark == 'true' ||
       fromJson(needs.precondition.outputs.required).lint == 'true' ||
+      fromJson(needs.precondition.outputs.required).docs == 'true' ||
       fromJson(needs.precondition.outputs.required).sparkr == 'true'
     runs-on: ubuntu-latest
     permissions:
@@ -422,7 +423,8 @@ jobs:
         uses: docker/setup-qemu-action@v3
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
-      - name: Build and push
+      - name: Build and push for branch-3.5
+        if: inputs.branch == 'branch-3.5'
         id: docker_build
         uses: docker/build-push-action@v6
         with:
@@ -433,7 +435,7 @@ jobs:
           # Use the infra image cache to speed up
           cache-from: type=registry,ref=ghcr.io/apache/spark/apache-spark-github-action-image-cache:${{ inputs.branch }}
       - name: Build and push (Documentation)
-        if: hashFiles('dev/spark-test-image/docs/Dockerfile') != ''
+        if: ${{ inputs.branch != 'branch-3.5' && fromJson(needs.precondition.outputs.required).docs == 'true' && hashFiles('dev/spark-test-image/docs/Dockerfile') != '' }}
         id: docker_build_docs
         uses: docker/build-push-action@v6
         with:
@@ -444,7 +446,7 @@ jobs:
           # Use the infra image cache to speed up
           cache-from: type=registry,ref=ghcr.io/apache/spark/apache-spark-github-action-image-docs-cache:${{ inputs.branch }}
       - name: Build and push (Linter)
-        if: hashFiles('dev/spark-test-image/lint/Dockerfile') != ''
+        if: ${{ inputs.branch != 'branch-3.5' && fromJson(needs.precondition.outputs.required).lint == 'true' && hashFiles('dev/spark-test-image/lint/Dockerfile') != '' }}
         id: docker_build_lint
         uses: docker/build-push-action@v6
         with:
@@ -455,7 +457,7 @@ jobs:
           # Use the infra image cache to speed up
           cache-from: type=registry,ref=ghcr.io/apache/spark/apache-spark-github-action-image-lint-cache:${{ inputs.branch }}
       - name: Build and push (SparkR)
-        if: hashFiles('dev/spark-test-image/sparkr/Dockerfile') != ''
+        if: ${{ inputs.branch != 'branch-3.5' && fromJson(needs.precondition.outputs.required).sparkr == 'true' && hashFiles('dev/spark-test-image/sparkr/Dockerfile') != '' }}
         id: docker_build_sparkr
         uses: docker/build-push-action@v6
         with:
@@ -466,7 +468,7 @@ jobs:
           # Use the infra image cache to speed up
           cache-from: type=registry,ref=ghcr.io/apache/spark/apache-spark-github-action-image-sparkr-cache:${{ inputs.branch }}
       - name: Build and push (PySpark with ${{ env.PYSPARK_IMAGE_TO_TEST }})
-        if: ${{ inputs.branch != 'branch-3.5' && env.PYSPARK_IMAGE_TO_TEST != '' }}
+        if: ${{ inputs.branch != 'branch-3.5' && fromJson(needs.precondition.outputs.required).pyspark == 'true' && env.PYSPARK_IMAGE_TO_TEST != '' }}
         id: docker_build_pyspark
         env: ${{ fromJSON(inputs.envs) }}
         uses: docker/build-push-action@v6
@@ -497,7 +499,7 @@ jobs:
           - >-
             pyspark-sql, pyspark-resource, pyspark-testing
           - >-
-            pyspark-core, pyspark-errors, pyspark-streaming
+            pyspark-core, pyspark-errors, pyspark-streaming, pyspark-logger
           - >-
             pyspark-mllib, pyspark-ml, pyspark-ml-connect
           - >-
@@ -582,6 +584,7 @@ jobs:
         distribution: zulu
         java-version: ${{ matrix.java }}
     - name: List Python packages (${{ env.PYTHON_TO_TEST }})
+      if: ${{ env.PYTHON_TO_TEST != '' }}
       env: ${{ fromJSON(inputs.envs) }}
       shell: 'script -q -e -c "bash {0}"'
       run: |
@@ -740,7 +743,7 @@ jobs:
         python-version: '3.11'
     - name: Install dependencies for Python CodeGen check
       run: |
-        python3.11 -m pip install 'black==23.9.1' 'protobuf==5.29.1' 'mypy==1.8.0' 'mypy-protobuf==3.3.0'
+        python3.11 -m pip install 'black==23.12.1' 'protobuf==5.29.1' 'mypy==1.8.0' 'mypy-protobuf==3.3.0'
         python3.11 -m pip list
     - name: Python CodeGen check for branch-3.5
       if: inputs.branch == 'branch-3.5'
@@ -1091,6 +1094,7 @@ jobs:
           spark.sql.autoBroadcastJoinThreshold=-1
           spark.sql.join.forceApplyShuffledHashJoin=true
     - name: Run TPC-DS queries on collated data
+      if: inputs.branch != 'branch-3.5'
       run: |
         SPARK_TPCDS_DATA=`pwd`/tpcds-sf-1 build/sbt "sql/testOnly org.apache.spark.sql.TPCDSCollationQueryTestSuite"
     - name: Upload test results to report
@@ -1222,6 +1226,7 @@ jobs:
       - name: Start Minikube
         uses: medyagh/setup-minikube@v0.0.18
         with:
+          kubernetes-version: "1.32.0"
           # Github Action limit cpu:2, memory: 6947MB, limit to 2U6G for better resource statistic
           cpus: 2
           memory: 6144m

@@ -22,11 +22,11 @@ import scala.language.existentials
 import org.apache.spark.sql.catalyst.{expressions => exprs}
 import org.apache.spark.sql.catalyst.DeserializerBuildHelper.expressionWithNullSafety
 import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, AgnosticEncoders, Codec, JavaSerializationCodec, KryoSerializationCodec}
-import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{ArrayEncoder, BoxedBooleanEncoder, BoxedByteEncoder, BoxedDoubleEncoder, BoxedFloatEncoder, BoxedIntEncoder, BoxedLeafEncoder, BoxedLongEncoder, BoxedShortEncoder, DateEncoder, DayTimeIntervalEncoder, InstantEncoder, IterableEncoder, JavaBeanEncoder, JavaBigIntEncoder, JavaDecimalEncoder, JavaEnumEncoder, LocalDateEncoder, LocalDateTimeEncoder, MapEncoder, OptionEncoder, PrimitiveLeafEncoder, ProductEncoder, ScalaBigIntEncoder, ScalaDecimalEncoder, ScalaEnumEncoder, StringEncoder, TimestampEncoder, TransformingEncoder, UDTEncoder, YearMonthIntervalEncoder}
+import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{ArrayEncoder, BoxedBooleanEncoder, BoxedByteEncoder, BoxedDoubleEncoder, BoxedFloatEncoder, BoxedIntEncoder, BoxedLeafEncoder, BoxedLongEncoder, BoxedShortEncoder, CharEncoder, DateEncoder, DayTimeIntervalEncoder, InstantEncoder, IterableEncoder, JavaBeanEncoder, JavaBigIntEncoder, JavaDecimalEncoder, JavaEnumEncoder, LocalDateEncoder, LocalDateTimeEncoder, MapEncoder, OptionEncoder, PrimitiveLeafEncoder, ProductEncoder, ScalaBigIntEncoder, ScalaDecimalEncoder, ScalaEnumEncoder, StringEncoder, TimestampEncoder, TransformingEncoder, UDTEncoder, VarcharEncoder, YearMonthIntervalEncoder}
 import org.apache.spark.sql.catalyst.encoders.EncoderUtils.{externalDataTypeFor, isNativeEncoder, lenientExternalDataTypeFor}
 import org.apache.spark.sql.catalyst.expressions.{BoundReference, CheckOverflow, CreateNamedStruct, Expression, IsNull, KnownNotNull, Literal, UnsafeArrayData}
 import org.apache.spark.sql.catalyst.expressions.objects._
-import org.apache.spark.sql.catalyst.util.{ArrayData, DateTimeUtils, GenericArrayData, IntervalUtils}
+import org.apache.spark.sql.catalyst.util.{ArrayData, CharVarcharCodegenUtils, DateTimeUtils, GenericArrayData, IntervalUtils}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -61,6 +61,24 @@ object SerializerBuildHelper {
 
   def createSerializerForDouble(inputObject: Expression): Expression = {
     Invoke(inputObject, "doubleValue", DoubleType)
+  }
+
+  def createSerializerForChar(inputObject: Expression, length: Int): Expression = {
+    StaticInvoke(
+      classOf[CharVarcharCodegenUtils],
+      CharType(length),
+      "charTypeWriteSideCheck",
+      createSerializerForString(inputObject) :: Literal(length) :: Nil,
+      returnNullable = false)
+  }
+
+  def createSerializerForVarchar(inputObject: Expression, length: Int): Expression = {
+    StaticInvoke(
+      classOf[CharVarcharCodegenUtils],
+      VarcharType(length),
+      "varcharTypeWriteSideCheck",
+      createSerializerForString(inputObject) :: Literal(length) :: Nil,
+      returnNullable = false)
   }
 
   def createSerializerForString(inputObject: Expression): Expression = {
@@ -298,6 +316,8 @@ object SerializerBuildHelper {
     case BoxedDoubleEncoder => createSerializerForDouble(input)
     case JavaEnumEncoder(_) => createSerializerForJavaEnum(input)
     case ScalaEnumEncoder(_, _) => createSerializerForScalaEnum(input)
+    case CharEncoder(length) => createSerializerForChar(input, length)
+    case VarcharEncoder(length) => createSerializerForVarchar(input, length)
     case StringEncoder => createSerializerForString(input)
     case ScalaDecimalEncoder(dt) => createSerializerForBigDecimal(input, dt)
     case JavaDecimalEncoder(dt, false) => createSerializerForBigDecimal(input, dt)

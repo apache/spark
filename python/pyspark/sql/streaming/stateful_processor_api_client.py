@@ -40,6 +40,7 @@ __all__ = ["StatefulProcessorApiClient", "StatefulProcessorHandleState"]
 
 
 class StatefulProcessorHandleState(Enum):
+    PRE_INIT = 0
     CREATED = 1
     INITIALIZED = 2
     DATA_PROCESSED = 3
@@ -48,14 +49,19 @@ class StatefulProcessorHandleState(Enum):
 
 
 class StatefulProcessorApiClient:
-    def __init__(self, state_server_port: int, key_schema: StructType) -> None:
+    def __init__(
+        self, state_server_port: int, key_schema: StructType, is_driver: bool = False
+    ) -> None:
         self.key_schema = key_schema
         self._client_socket = socket.socket()
         self._client_socket.connect(("localhost", state_server_port))
         self.sockfile = self._client_socket.makefile(
             "rwb", int(os.environ.get("SPARK_BUFFER_SIZE", 65536))
         )
-        self.handle_state = StatefulProcessorHandleState.CREATED
+        if is_driver:
+            self.handle_state = StatefulProcessorHandleState.PRE_INIT
+        else:
+            self.handle_state = StatefulProcessorHandleState.CREATED
         self.utf8_deserializer = UTF8Deserializer()
         self.pickleSer = CPickleSerializer()
         self.serializer = ArrowStreamSerializer()
@@ -70,7 +76,9 @@ class StatefulProcessorApiClient:
     def set_handle_state(self, state: StatefulProcessorHandleState) -> None:
         import pyspark.sql.streaming.proto.StateMessage_pb2 as stateMessage
 
-        if state == StatefulProcessorHandleState.CREATED:
+        if state == StatefulProcessorHandleState.PRE_INIT:
+            proto_state = stateMessage.PRE_INIT
+        elif state == StatefulProcessorHandleState.CREATED:
             proto_state = stateMessage.CREATED
         elif state == StatefulProcessorHandleState.INITIALIZED:
             proto_state = stateMessage.INITIALIZED

@@ -1494,6 +1494,84 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 
 
 -- !query
+table t
+|> select x, length(y) as z
+|> limit 1000
+|> where x + length(y) < 4
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`y`",
+    "proposal" : "`x`, `z`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 71,
+    "stopIndex" : 71,
+    "fragment" : "y"
+  } ]
+}
+
+
+-- !query
+table t
+|> select x, length(y) as z
+|> limit 1000 offset 1
+|> where x + length(y) < 4
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`y`",
+    "proposal" : "`x`, `z`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 80,
+    "stopIndex" : 80,
+    "fragment" : "y"
+  } ]
+}
+
+
+-- !query
+table t
+|> select x, length(y) as z
+|> order by x, y
+|> where x + length(y) < 4
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`y`",
+    "proposal" : "`x`, `z`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 52,
+    "stopIndex" : 52,
+    "fragment" : "y"
+  } ]
+}
+
+
+-- !query
 (select x, sum(length(y)) as sum_len from t group by x)
 |> where sum(length(y)) = 3
 -- !query schema
@@ -2362,29 +2440,25 @@ struct<x:int,y:string>
 
 
 -- !query
-values (0, 1) tab(x, y)
+values (2, 'xyz') tab(x, y)
 |> union table t
 |> where x = 0
 -- !query schema
-struct<>
+struct<x:int,y:string>
 -- !query output
-org.apache.spark.SparkNumberFormatException
-{
-  "errorClass" : "CAST_INVALID_INPUT",
-  "sqlState" : "22018",
-  "messageParameters" : {
-    "expression" : "'abc'",
-    "sourceType" : "\"STRING\"",
-    "targetType" : "\"BIGINT\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 55,
-    "fragment" : "values (0, 1) tab(x, y)\n|> union table t\n|> where x = 0"
-  } ]
-}
+0	abc
+
+
+-- !query
+values (2, 'xyz') tab(x, y)
+|> union table t
+|> drop x
+-- !query schema
+struct<y:string>
+-- !query output
+abc
+def
+xyz
 
 
 -- !query
@@ -2779,9 +2853,100 @@ struct<x:int,y:int>
 select 3 as x, 4 as y
 |> aggregate group by 1, 2
 -- !query schema
-struct<1:int,2:int>
+struct<x:int,y:int>
+-- !query output
+3	4
+
+
+-- !query
+values (3, 4) as tab(x, y)
+|> aggregate sum(y) group by 1
+-- !query schema
+struct<x:int,pipeexpression(sum(y)):bigint>
+-- !query output
+3	4
+
+
+-- !query
+values (3, 4), (5, 4) as tab(x, y)
+|> aggregate sum(y) group by 1
+-- !query schema
+struct<x:int,pipeexpression(sum(y)):bigint>
+-- !query output
+3	4
+5	4
+
+
+-- !query
+select 3 as x, 4 as y
+|> aggregate sum(y) group by 1, 1
+-- !query schema
+struct<x:int,x:int,pipeexpression(sum(y)):bigint>
+-- !query output
+3	3	4
+
+
+-- !query
+select 1 as `1`, 2 as `2`
+|> aggregate sum(`2`) group by `1`
+-- !query schema
+struct<1:int,pipeexpression(sum(2)):bigint>
 -- !query output
 1	2
+
+
+-- !query
+select 3 as x, 4 as y
+|> aggregate sum(y) group by 2
+-- !query schema
+struct<y:int,pipeexpression(sum(y)):bigint>
+-- !query output
+4	4
+
+
+-- !query
+select 3 as x, 4 as y, 5 as z
+|> aggregate sum(y) group by 2
+-- !query schema
+struct<y:int,pipeexpression(sum(y)):bigint>
+-- !query output
+4	4
+
+
+-- !query
+select 3 as x, 4 as y, 5 as z
+|> aggregate sum(y) group by 3
+-- !query schema
+struct<z:int,pipeexpression(sum(y)):bigint>
+-- !query output
+5	4
+
+
+-- !query
+select 3 as x, 4 as y, 5 as z
+|> aggregate sum(y) group by 2, 3
+-- !query schema
+struct<y:int,z:int,pipeexpression(sum(y)):bigint>
+-- !query output
+4	5	4
+
+
+-- !query
+select 3 as x, 4 as y, 5 as z
+|> aggregate sum(y) group by 1, 2, 3
+-- !query schema
+struct<x:int,y:int,z:int,pipeexpression(sum(y)):bigint>
+-- !query output
+3	4	5	4
+
+
+-- !query
+select 3 as x, 4 as y, 5 as z
+|> aggregate sum(y) group by x, 2, 3
+-- !query schema
+struct<x:int,y:int,z:int,pipeexpression(sum(y)):bigint>
+-- !query output
+3	4	5	4
 
 
 -- !query
