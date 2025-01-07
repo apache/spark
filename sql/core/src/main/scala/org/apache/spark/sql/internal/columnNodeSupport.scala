@@ -16,8 +16,6 @@
  */
 package org.apache.spark.sql.internal
 
-import scala.language.implicitConversions
-
 import UserDefinedFunctionUtils.toScalaUDF
 
 import org.apache.spark.SparkException
@@ -87,9 +85,6 @@ private[sql] trait ColumnNodeToExpressionConverter extends (ColumnNode => Expres
             arguments = arguments.map(apply),
             isDistinct = isDistinct,
             isInternal = isInternal)
-
-        case LazyOuterReference(nameParts, planId, _) =>
-          convertLazyOuterReference(nameParts, planId)
 
         case Alias(child, Seq(name), None, _) =>
           expressions.Alias(apply(child), name)(
@@ -193,6 +188,9 @@ private[sql] trait ColumnNodeToExpressionConverter extends (ColumnNode => Expres
             case _ => transformed
           }
 
+        case l: LazyExpression =>
+          analysis.LazyExpression(apply(l.child))
+
         case node =>
           throw SparkException.internalError("Unsupported ColumnNode: " + node)
       }
@@ -248,16 +246,6 @@ private[sql] trait ColumnNodeToExpressionConverter extends (ColumnNode => Expres
     }
     attribute
   }
-
-  private def convertLazyOuterReference(
-      nameParts: Seq[String],
-      planId: Option[Long]): analysis.LazyOuterReference = {
-    val lazyOuterReference = analysis.LazyOuterReference(nameParts)
-    if (planId.isDefined) {
-      lazyOuterReference.setTagValue(LogicalPlan.PLAN_ID_TAG, planId.get)
-    }
-    lazyOuterReference
-  }
 }
 
 private[sql] object ColumnNodeToExpressionConverter extends ColumnNodeToExpressionConverter {
@@ -285,6 +273,8 @@ private[sql] case class ExpressionColumnNode private(
   }
 
   override def sql: String = expression.sql
+
+  override private[internal] def children: Seq[ColumnNodeLike] = Seq.empty
 }
 
 private[sql] object ExpressionColumnNode {
@@ -312,13 +302,14 @@ private[spark] object ExpressionUtils {
   /**
    * Create an Expression backed Column.
    */
-  implicit def column(e: Expression): Column = Column(ExpressionColumnNode(e))
+  def column(e: Expression): Column = Column(ExpressionColumnNode(e))
 
   /**
-   * Create an ColumnNode backed Expression. Please not that this has to be converted to an actual
-   * Expression before it is used.
+   * Create an ColumnNode backed Expression. This can only be used for expressions that will be
+   * used to construct a [[Column]]. In all other cases please use `SparkSession.expression(...)`,
+   * `SparkSession.toRichColumn(...)`, or `org.apache.spark.sql.classic.ColumnConversions`.
    */
-  implicit def expression(c: Column): Expression = ColumnNodeExpression(c.node)
+  def expression(c: Column): Expression = ColumnNodeExpression(c.node)
 
   /**
    * Returns the expression either with an existing or auto assigned name.

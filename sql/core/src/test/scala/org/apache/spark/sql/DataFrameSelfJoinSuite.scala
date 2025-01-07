@@ -22,7 +22,6 @@ import org.apache.spark.sql.catalyst.expressions.{Alias, Ascending, AttributeRef
 import org.apache.spark.sql.catalyst.plans.logical.{Expand, Generate, ScriptInputOutputSchema, ScriptTransformation, Window => WindowPlan}
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions.{col, count, explode, sum, year}
-import org.apache.spark.sql.internal.ExpressionUtils.column
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.test.SQLTestData.TestData
@@ -375,7 +374,7 @@ class DataFrameSelfJoinSuite extends QueryTest with SharedSparkSession {
       Seq.empty,
       PythonEvalType.SQL_MAP_PANDAS_ITER_UDF,
       true)
-    val df7 = df1.mapInPandas(mapInPandasUDF)
+    val df7 = df1.mapInPandas(Column(mapInPandasUDF))
     val df8 = df7.filter($"x" > 0)
     assertAmbiguousSelfJoin(df7.join(df8, df7("x") === df8("y")))
     assertAmbiguousSelfJoin(df8.join(df7, df7("x") === df8("y")))
@@ -386,7 +385,7 @@ class DataFrameSelfJoinSuite extends QueryTest with SharedSparkSession {
       Seq.empty,
       PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
       true)
-    val df9 = df1.groupBy($"key1").flatMapGroupsInPandas(flatMapGroupsInPandasUDF)
+    val df9 = df1.groupBy($"key1").flatMapGroupsInPandas(Column(flatMapGroupsInPandasUDF))
     val df10 = df9.filter($"x" > 0)
     assertAmbiguousSelfJoin(df9.join(df10, df9("x") === df10("y")))
     assertAmbiguousSelfJoin(df10.join(df9, df9("x") === df10("y")))
@@ -398,7 +397,7 @@ class DataFrameSelfJoinSuite extends QueryTest with SharedSparkSession {
       PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF,
       true)
     val df11 = df1.groupBy($"key1").flatMapCoGroupsInPandas(
-      df1.groupBy($"key2"), flatMapCoGroupsInPandasUDF)
+      df1.groupBy($"key2"), Column(flatMapCoGroupsInPandasUDF))
     val df12 = df11.filter($"x" > 0)
     assertAmbiguousSelfJoin(df11.join(df12, df11("x") === df12("y")))
     assertAmbiguousSelfJoin(df12.join(df11, df11("x") === df12("y")))

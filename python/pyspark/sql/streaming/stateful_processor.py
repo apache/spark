@@ -45,12 +45,9 @@ class ValueState:
     .. versionadded:: 4.0.0
     """
 
-    def __init__(
-        self, value_state_client: ValueStateClient, state_name: str, schema: Union[StructType, str]
-    ) -> None:
+    def __init__(self, value_state_client: ValueStateClient, state_name: str) -> None:
         self._value_state_client = value_state_client
         self._state_name = state_name
-        self.schema = schema
 
     def exists(self) -> bool:
         """
@@ -68,7 +65,7 @@ class ValueState:
         """
         Update the value of the state.
         """
-        self._value_state_client.update(self._state_name, self.schema, new_value)
+        self._value_state_client.update(self._state_name, new_value)
 
     def clear(self) -> None:
         """
@@ -105,20 +102,12 @@ class TimerValues:
 
 class ExpiredTimerInfo:
     """
-    Class used for arbitrary stateful operations with transformWithState to access expired timer
-    info. When is_valid is false, the expiry timestamp is invalid.
+    Class used to provide access to expired timer's expiry time.
     .. versionadded:: 4.0.0
     """
 
-    def __init__(self, is_valid: bool, expiry_time_in_ms: int = -1) -> None:
-        self._is_valid = is_valid
+    def __init__(self, expiry_time_in_ms: int = -1) -> None:
         self._expiry_time_in_ms = expiry_time_in_ms
-
-    def is_valid(self) -> bool:
-        """
-        Whether the expiry info is valid.
-        """
-        return self._is_valid
 
     def get_expiry_time_in_ms(self) -> int:
         """
@@ -135,12 +124,9 @@ class ListState:
     .. versionadded:: 4.0.0
     """
 
-    def __init__(
-        self, list_state_client: ListStateClient, state_name: str, schema: Union[StructType, str]
-    ) -> None:
+    def __init__(self, list_state_client: ListStateClient, state_name: str) -> None:
         self._list_state_client = list_state_client
         self._state_name = state_name
-        self.schema = schema
 
     def exists(self) -> bool:
         """
@@ -158,19 +144,19 @@ class ListState:
         """
         Update the values of the list state.
         """
-        self._list_state_client.put(self._state_name, self.schema, new_state)
+        self._list_state_client.put(self._state_name, new_state)
 
     def append_value(self, new_state: Tuple) -> None:
         """
         Append a new value to the list state.
         """
-        self._list_state_client.append_value(self._state_name, self.schema, new_state)
+        self._list_state_client.append_value(self._state_name, new_state)
 
     def append_list(self, new_state: List[Tuple]) -> None:
         """
         Append a list of new values to the list state.
         """
-        self._list_state_client.append_list(self._state_name, self.schema, new_state)
+        self._list_state_client.append_list(self._state_name, new_state)
 
     def clear(self) -> None:
         """
@@ -283,7 +269,7 @@ class StatefulProcessorHandle:
             If ttl is not specified the state will never expire.
         """
         self.stateful_processor_api_client.get_value_state(state_name, schema, ttl_duration_ms)
-        return ValueState(ValueStateClient(self.stateful_processor_api_client), state_name, schema)
+        return ValueState(ValueStateClient(self.stateful_processor_api_client, schema), state_name)
 
     def getListState(
         self, state_name: str, schema: Union[StructType, str], ttl_duration_ms: Optional[int] = None
@@ -307,7 +293,7 @@ class StatefulProcessorHandle:
             If ttl is not specified the state will never expire.
         """
         self.stateful_processor_api_client.get_list_state(state_name, schema, ttl_duration_ms)
-        return ListState(ListStateClient(self.stateful_processor_api_client), state_name, schema)
+        return ListState(ListStateClient(self.stateful_processor_api_client, schema), state_name)
 
     def getMapState(
         self,
@@ -398,7 +384,6 @@ class StatefulProcessor(ABC):
         key: Any,
         rows: Iterator["PandasDataFrameLike"],
         timer_values: TimerValues,
-        expired_timer_info: ExpiredTimerInfo,
     ) -> Iterator["PandasDataFrameLike"]:
         """
         Function that will allow users to interact with input data rows along with the grouping key.
@@ -420,10 +405,28 @@ class StatefulProcessor(ABC):
         timer_values: TimerValues
                       Timer value for the current batch that process the input rows.
                       Users can get the processing or event time timestamp from TimerValues.
-        expired_timer_info: ExpiredTimerInfo
-                            Timestamp of expired timers on the grouping key.
         """
         ...
+
+    def handleExpiredTimer(
+        self, key: Any, timer_values: TimerValues, expired_timer_info: ExpiredTimerInfo
+    ) -> Iterator["PandasDataFrameLike"]:
+        """
+        Optional to implement. Will act return an empty iterator if not defined.
+        Function that will be invoked when a timer is fired for a given key. Users can choose to
+        evict state, register new timers and optionally provide output rows.
+
+        Parameters
+        ----------
+        key : Any
+            grouping key.
+        timer_values: TimerValues
+                      Timer value for the current batch that process the input rows.
+                      Users can get the processing or event time timestamp from TimerValues.
+        expired_timer_info: ExpiredTimerInfo
+                            Instance of ExpiredTimerInfo that provides access to expired timer.
+        """
+        return iter([])
 
     @abstractmethod
     def close(self) -> None:
@@ -433,9 +436,21 @@ class StatefulProcessor(ABC):
         """
         ...
 
-    def handleInitialState(self, key: Any, initialState: "PandasDataFrameLike") -> None:
+    def handleInitialState(
+        self, key: Any, initialState: "PandasDataFrameLike", timer_values: TimerValues
+    ) -> None:
         """
         Optional to implement. Will act as no-op if not defined or no initial state input.
          Function that will be invoked only in the first batch for users to process initial states.
+
+        Parameters
+        ----------
+        key : Any
+            grouping key.
+        initialState: :class:`pandas.DataFrame`
+                      One dataframe in the initial state associated with the key.
+        timer_values: TimerValues
+                      Timer value for the current batch that process the input rows.
+                      Users can get the processing or event time timestamp from TimerValues.
         """
         pass

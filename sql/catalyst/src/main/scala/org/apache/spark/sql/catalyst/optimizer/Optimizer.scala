@@ -74,6 +74,21 @@ abstract class Optimizer(catalogManager: CatalogManager)
       maxIterationsSetting = SQLConf.OPTIMIZER_MAX_ITERATIONS.key)
 
   /**
+   * A helper method that takes as input a Seq of Batch or Seq[Batch], and flattens it out.
+   */
+  def flattenBatches(nestedBatchSequence: Seq[Any]): Seq[Batch] = {
+    assert(nestedBatchSequence.forall {
+      case _: Batch => true
+      case s: Seq[_] => s.forall(_.isInstanceOf[Batch])
+      case _ => false
+    })
+    nestedBatchSequence.flatMap {
+      case batches: Seq[Batch @unchecked] => batches
+      case batch: Batch => Seq(batch)
+    }
+  }
+
+  /**
    * Defines the default rule batches in the Optimizer.
    *
    * Implementations of this class should override this method, and [[nonExcludableRules]] if
@@ -143,39 +158,38 @@ abstract class Optimizer(catalogManager: CatalogManager)
         PushdownPredicatesAndPruneColumnsForCTEDef) ++
         extendedOperatorOptimizationRules
 
-    val operatorOptimizationBatch: Seq[Batch] = {
+    val operatorOptimizationBatch: Seq[Batch] = Seq(
       Batch("Operator Optimization before Inferring Filters", fixedPoint,
-        operatorOptimizationRuleSet: _*) ::
+        operatorOptimizationRuleSet: _*),
       Batch("Infer Filters", Once,
         InferFiltersFromGenerate,
-        InferFiltersFromConstraints) ::
+        InferFiltersFromConstraints),
       Batch("Operator Optimization after Inferring Filters", fixedPoint,
-        operatorOptimizationRuleSet: _*) ::
+        operatorOptimizationRuleSet: _*),
       Batch("Push extra predicate through join", fixedPoint,
         PushExtraPredicateThroughJoin,
-        PushDownPredicates) :: Nil
-    }
+        PushDownPredicates))
 
-    val batches = (
-    Batch("Finish Analysis", FixedPoint(1), FinishAnalysis) ::
+    val batches: Seq[Batch] = flattenBatches(Seq(
+    Batch("Finish Analysis", FixedPoint(1), FinishAnalysis),
     // We must run this batch after `ReplaceExpressions`, as `RuntimeReplaceable` expression
     // may produce `With` expressions that need to be rewritten.
-    Batch("Rewrite With expression", Once, RewriteWithExpression) ::
+    Batch("Rewrite With expression", fixedPoint, RewriteWithExpression),
     //////////////////////////////////////////////////////////////////////////////////////////
     // Optimizer rules start here
     //////////////////////////////////////////////////////////////////////////////////////////
-    Batch("Eliminate Distinct", Once, EliminateDistinct) ::
+    Batch("Eliminate Distinct", Once, EliminateDistinct),
     // - Do the first call of CombineUnions before starting the major Optimizer rules,
     //   since it can reduce the number of iteration and the other rules could add/move
     //   extra operators between two adjacent Union operators.
     // - Call CombineUnions again in Batch("Operator Optimizations"),
     //   since the other rules might make two separate Unions operators adjacent.
     Batch("Inline CTE", Once,
-      InlineCTE()) ::
+      InlineCTE()),
     Batch("Union", fixedPoint,
       RemoveNoopOperators,
       CombineUnions,
-      RemoveNoopUnion) ::
+      RemoveNoopUnion),
     // Run this once earlier. This might simplify the plan and reduce cost of optimizer.
     // For example, a query such as Filter(LocalRelation) would go through all the heavy
     // optimizer rules that are triggered when there is a filter
@@ -186,16 +200,16 @@ abstract class Optimizer(catalogManager: CatalogManager)
       PropagateEmptyRelation,
       // PropagateEmptyRelation can change the nullability of an attribute from nullable to
       // non-nullable when an empty relation child of a Union is removed
-      UpdateAttributeNullability) ::
+      UpdateAttributeNullability),
     Batch("Pullup Correlated Expressions", Once,
       OptimizeOneRowRelationSubquery,
       PullOutNestedDataOuterRefExpressions,
-      PullupCorrelatedPredicates) ::
+      PullupCorrelatedPredicates),
     // Subquery batch applies the optimizer rules recursively. Therefore, it makes no sense
     // to enforce idempotence on it and we change this batch from Once to FixedPoint(1).
     Batch("Subquery", FixedPoint(1),
       OptimizeSubqueries,
-      OptimizeOneRowRelationSubquery) ::
+      OptimizeOneRowRelationSubquery),
     Batch("Replace Operators", fixedPoint,
       RewriteExceptAll,
       RewriteIntersectAll,
@@ -203,48 +217,48 @@ abstract class Optimizer(catalogManager: CatalogManager)
       ReplaceExceptWithFilter,
       ReplaceExceptWithAntiJoin,
       ReplaceDistinctWithAggregate,
-      ReplaceDeduplicateWithAggregate) ::
+      ReplaceDeduplicateWithAggregate),
     Batch("Aggregate", fixedPoint,
       RemoveLiteralFromGroupExpressions,
-      RemoveRepetitionFromGroupExpressions) :: Nil ++
-    operatorOptimizationBatch) :+
-    Batch("Clean Up Temporary CTE Info", Once, CleanUpTempCTEInfo) :+
+      RemoveRepetitionFromGroupExpressions),
+    operatorOptimizationBatch,
+    Batch("Clean Up Temporary CTE Info", Once, CleanUpTempCTEInfo),
     // This batch rewrites plans after the operator optimization and
     // before any batches that depend on stats.
-    Batch("Pre CBO Rules", Once, preCBORules: _*) :+
+    Batch("Pre CBO Rules", Once, preCBORules: _*),
     // This batch pushes filters and projections into scan nodes. Before this batch, the logical
     // plan may contain nodes that do not report stats. Anything that uses stats must run after
     // this batch.
-    Batch("Early Filter and Projection Push-Down", Once, earlyScanPushDownRules: _*) :+
-    Batch("Update CTE Relation Stats", Once, UpdateCTERelationStats) :+
+    Batch("Early Filter and Projection Push-Down", Once, earlyScanPushDownRules: _*),
+    Batch("Update CTE Relation Stats", Once, UpdateCTERelationStats),
     // Since join costs in AQP can change between multiple runs, there is no reason that we have an
     // idempotence enforcement on this batch. We thus make it FixedPoint(1) instead of Once.
     Batch("Join Reorder", FixedPoint(1),
-      CostBasedJoinReorder) :+
+      CostBasedJoinReorder),
     Batch("Eliminate Sorts", Once,
       EliminateSorts,
-      RemoveRedundantSorts) :+
+      RemoveRedundantSorts),
     Batch("Decimal Optimizations", fixedPoint,
-      DecimalAggregates) :+
+      DecimalAggregates),
     // This batch must run after "Decimal Optimizations", as that one may change the
     // aggregate distinct column
     Batch("Distinct Aggregate Rewrite", Once,
-      RewriteDistinctAggregates) :+
+      RewriteDistinctAggregates),
     Batch("Object Expressions Optimization", fixedPoint,
       EliminateMapObjects,
       CombineTypedFilters,
       ObjectSerializerPruning,
-      ReassignLambdaVariableID) :+
+      ReassignLambdaVariableID),
     Batch("LocalRelation", fixedPoint,
       ConvertToLocalRelation,
       PropagateEmptyRelation,
       // PropagateEmptyRelation can change the nullability of an attribute from nullable to
       // non-nullable when an empty relation child of a Union is removed
-      UpdateAttributeNullability) :+
-    Batch("Optimize One Row Plan", fixedPoint, OptimizeOneRowPlan) :+
+      UpdateAttributeNullability),
+    Batch("Optimize One Row Plan", fixedPoint, OptimizeOneRowPlan),
     // The following batch should be executed after batch "Join Reorder" and "LocalRelation".
     Batch("Check Cartesian Products", Once,
-      CheckCartesianProducts) :+
+      CheckCartesianProducts),
     Batch("RewriteSubquery", Once,
       RewritePredicateSubquery,
       PushPredicateThroughJoin,
@@ -252,10 +266,10 @@ abstract class Optimizer(catalogManager: CatalogManager)
       ColumnPruning,
       CollapseProject,
       RemoveRedundantAliases,
-      RemoveNoopOperators) :+
+      RemoveNoopOperators),
     // This batch must be executed after the `RewriteSubquery` batch, which creates joins.
-    Batch("NormalizeFloatingNumbers", Once, NormalizeFloatingNumbers) :+
-    Batch("ReplaceUpdateFieldsExpression", Once, ReplaceUpdateFieldsExpression)
+    Batch("NormalizeFloatingNumbers", Once, NormalizeFloatingNumbers),
+    Batch("ReplaceUpdateFieldsExpression", Once, ReplaceUpdateFieldsExpression)))
 
     // remove any batches with no rules. this may happen when subclasses do not add optional rules.
     batches.filter(_.rules.nonEmpty)
@@ -270,22 +284,23 @@ abstract class Optimizer(catalogManager: CatalogManager)
    * (defaultBatches - (excludedRules - nonExcludableRules)).
    */
   def nonExcludableRules: Seq[String] =
-    FinishAnalysis.ruleName ::
-      RewriteDistinctAggregates.ruleName ::
-      ReplaceDeduplicateWithAggregate.ruleName ::
-      ReplaceIntersectWithSemiJoin.ruleName ::
-      ReplaceExceptWithFilter.ruleName ::
-      ReplaceExceptWithAntiJoin.ruleName ::
-      RewriteExceptAll.ruleName ::
-      RewriteIntersectAll.ruleName ::
-      ReplaceDistinctWithAggregate.ruleName ::
-      PullupCorrelatedPredicates.ruleName ::
-      RewriteCorrelatedScalarSubquery.ruleName ::
-      RewritePredicateSubquery.ruleName ::
-      NormalizeFloatingNumbers.ruleName ::
-      ReplaceUpdateFieldsExpression.ruleName ::
-      RewriteLateralSubquery.ruleName ::
-      OptimizeSubqueries.ruleName :: Nil
+    Seq(
+      FinishAnalysis.ruleName,
+      RewriteDistinctAggregates.ruleName,
+      ReplaceDeduplicateWithAggregate.ruleName,
+      ReplaceIntersectWithSemiJoin.ruleName,
+      ReplaceExceptWithFilter.ruleName,
+      ReplaceExceptWithAntiJoin.ruleName,
+      RewriteExceptAll.ruleName,
+      RewriteIntersectAll.ruleName,
+      ReplaceDistinctWithAggregate.ruleName,
+      PullupCorrelatedPredicates.ruleName,
+      RewriteCorrelatedScalarSubquery.ruleName,
+      RewritePredicateSubquery.ruleName,
+      NormalizeFloatingNumbers.ruleName,
+      ReplaceUpdateFieldsExpression.ruleName,
+      RewriteLateralSubquery.ruleName,
+      OptimizeSubqueries.ruleName)
 
   /**
    * Apply finish-analysis rules for the entire plan including all subqueries.
@@ -346,7 +361,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
       case d: DynamicPruningSubquery => d
       case s @ ScalarSubquery(
         PhysicalOperation(projections, predicates, a @ Aggregate(group, _, child, _)),
-        _, _, _, _, mayHaveCountBug, _, _)
+        _, _, _, _, mayHaveCountBug, _)
         if conf.getConf(SQLConf.DECORRELATE_SUBQUERY_PREVENT_CONSTANT_FOLDING_FOR_COUNT_BUG) &&
           mayHaveCountBug.nonEmpty && mayHaveCountBug.get =>
         // This is a subquery with an aggregate that may suffer from a COUNT bug.
@@ -1030,6 +1045,9 @@ object ColumnPruning extends Rule[LogicalPlan] {
 
     // Can't prune the columns on LeafNode
     case p @ Project(_, _: LeafNode) => p
+
+    // Can't prune the columns on UpdateEventTimeWatermarkColumn
+    case p @ Project(_, _: UpdateEventTimeWatermarkColumn) => p
 
     case NestedColumnAliasing(rewrittenPlan) => rewrittenPlan
 

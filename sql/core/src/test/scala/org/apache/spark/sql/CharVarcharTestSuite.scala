@@ -86,6 +86,27 @@ trait CharVarcharTestSuite extends QueryTest with SQLTestUtils {
     }
   }
 
+  test("preserve char/varchar type info") {
+    Seq(CharType(5), VarcharType(5)).foreach { typ =>
+      for {
+        char_varchar_as_string <- Seq(false, true)
+        preserve_char_varchar <- Seq(false, true)
+      } {
+        withSQLConf(SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> char_varchar_as_string.toString,
+          SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> preserve_char_varchar.toString) {
+          withTable("t") {
+            val name = typ.typeName
+            sql(s"CREATE TABLE t(i STRING, c $name) USING $format")
+            val schema = spark.table("t").schema
+            assert(schema.fields(0).dataType == StringType)
+            val expectedType = if (preserve_char_varchar) typ else StringType
+            assert(schema.fields(1).dataType == expectedType)
+          }
+        }
+      }
+    }
+  }
+
   test("char type values should be padded or trimmed: partitioned columns") {
     // via dynamic partitioned columns
     withTable("t") {

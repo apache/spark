@@ -99,7 +99,7 @@ class ShowTablesSuite extends v1.ShowTablesSuiteBase with CommandSuiteBase {
              |View Original Text: SELECT id FROM $catalog.$namespace.$table
              |View Schema Mode: COMPENSATION
              |View Catalog and Namespace: $catalog.$namespace
-             |View Query Output Columns: [id]
+             |View Query Output Columns: [`id`]
              |Table Properties: <table properties>
              |Serde Library: org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
              |InputFormat: org.apache.hadoop.mapred.SequenceFileInputFormat

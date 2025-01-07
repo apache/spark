@@ -63,6 +63,7 @@ object TreePattern extends Enumeration  {
   val LAMBDA_VARIABLE: Value = Value
   val LATERAL_COLUMN_ALIAS_REFERENCE: Value = Value
   val LATERAL_SUBQUERY: Value = Value
+  val LAZY_EXPRESSION: Value = Value
   val LIKE_FAMLIY: Value = Value
   val LIST_SUBQUERY: Value = Value
   val LITERAL: Value = Value
@@ -145,6 +146,7 @@ object TreePattern extends Enumeration  {
   // Unresolved expression patterns (Alphabetically ordered)
   val UNRESOLVED_ALIAS: Value = Value
   val UNRESOLVED_ATTRIBUTE: Value = Value
+  val UNRESOLVED_COLLATION: Value = Value
   val UNRESOLVED_DESERIALIZER: Value = Value
   val UNRESOLVED_DF_STAR: Value = Value
   val UNRESOLVED_HAVING: Value = Value
@@ -153,8 +155,7 @@ object TreePattern extends Enumeration  {
   val UNRESOLVED_FUNCTION: Value = Value
   val UNRESOLVED_HINT: Value = Value
   val UNRESOLVED_WINDOW_EXPRESSION: Value = Value
-  val UNRESOLVED_IDENTIFIER_WITH_CTE: Value = Value
-  val UNRESOLVED_OUTER_REFERENCE: Value = Value
+  val UNRESOLVED_PLAN_ID: Value = Value
 
   // Unresolved Plan patterns (Alphabetically ordered)
   val UNRESOLVED_FUNC: Value = Value
@@ -169,8 +170,4 @@ object TreePattern extends Enumeration  {
 
   // Execution Plan patterns (alphabetically ordered)
   val EXCHANGE: Value = Value
-
-  // Lazy analysis expression patterns (alphabetically ordered)
-  val LAZY_ANALYSIS_EXPRESSION: Value = Value
-  val LAZY_OUTER_REFERENCE: Value = Value
 }

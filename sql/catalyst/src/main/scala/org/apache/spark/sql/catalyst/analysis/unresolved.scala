@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.{FunctionIdentifier, InternalRow, TableIden
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
-import org.apache.spark.sql.catalyst.plans.logical.{CTERelationDef, LeafNode, LogicalPlan, UnaryNode}
+import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, UnaryNode}
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
@@ -74,17 +74,6 @@ case class PlanWithUnresolvedIdentifier(
   override protected def withNewChildrenInternal(
       newChildren: IndexedSeq[LogicalPlan]): LogicalPlan =
     copy(identifierExpr, newChildren, planBuilder)
-}
-
-/**
- * A logical plan placeholder which delays CTE resolution
- * to moment when PlanWithUnresolvedIdentifier gets resolved
- */
-case class UnresolvedWithCTERelations(
-   unresolvedPlan: LogicalPlan,
-   cteRelations: Seq[(String, CTERelationDef)])
-  extends UnresolvedLeafNode {
-  final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_IDENTIFIER_WITH_CTE)
 }
 
 /**
@@ -217,7 +206,8 @@ case class ResolvedInlineTable(rows: Seq[Seq[Expression]], output: Seq[Attribute
  */
 case class UnresolvedTableValuedFunction(
     name: Seq[String],
-    functionArgs: Seq[Expression])
+    functionArgs: Seq[Expression],
+    override val isStreaming: Boolean = false)
   extends UnresolvedLeafNode {
 
   final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_TABLE_VALUED_FUNCTION)
@@ -462,13 +452,13 @@ abstract class Star extends LeafExpression with NamedExpression {
  * "SELECT record.* from (SELECT struct(a,b,c) as record ...)
  *
  * @param target an optional name that should be the target of the expansion.  If omitted all
- *              targets' columns are produced. This can either be a table name or struct name. This
- *              is a list of identifiers that is the path of the expansion.
+ *               targets' columns are produced. This can either be a table name or struct name. This
+ *               is a list of identifiers that is the path of the expansion.
  *
  * This class provides the shared behavior between the classes for SELECT * ([[UnresolvedStar]])
- * and SELECT * EXCEPT ([[UnresolvedStarExcept]]). [[UnresolvedStar]] is just a case class of this,
- * while [[UnresolvedStarExcept]] adds some additional logic to the expand method.
-  */
+ * and SELECT * EXCEPT ([[UnresolvedStarExceptOrReplace]]). [[UnresolvedStar]] is just a case class
+ * of this, while [[UnresolvedStarExceptOrReplace]] adds some additional logic to the expand method.
+ */
 abstract class UnresolvedStarBase(target: Option[Seq[String]]) extends Star with Unevaluable {
   /**
    * Returns true if the nameParts is a subset of the last elements of qualifier of the attribute.
@@ -518,7 +508,9 @@ abstract class UnresolvedStarBase(target: Option[Seq[String]]) extends Star with
       childOperatorMetadataOutput: Seq[Attribute],
       resolve: (Seq[String], Resolver) => Option[NamedExpression],
       suggestedAttributes: Seq[Attribute],
-      resolver: Resolver): Seq[NamedExpression] = {
+      resolver: Resolver,
+      cleanupNestedAliasesDuringStructExpansion: Boolean = false
+  ): Seq[NamedExpression] = {
     // If there is no table specified, use all non-hidden input attributes.
     if (target.isEmpty) return childOperatorOutput
 
@@ -539,11 +531,22 @@ abstract class UnresolvedStarBase(target: Option[Seq[String]]) extends Star with
     // (i.e. [name].* is both a table and a struct), the struct path can always be qualified.
     val attribute = resolve(target.get, resolver)
     if (attribute.isDefined) {
+      // If cleanupNestedAliasesDuringStructExpansion is true, we remove nested aliases during
+      // struct expansion. This is something which is done in the CleanupAliases rule but for the
+      // single-pass analyzer it has to be done here to avoid additional tree traversals.
+      val normalizedAttribute = if (cleanupNestedAliasesDuringStructExpansion) {
+        attribute.get match {
+          case a: Alias => a.child
+          case other => other
+        }
+      } else {
+        attribute.get
+      }
       // This target resolved to an attribute in child. It must be a struct. Expand it.
-      attribute.get.dataType match {
+      normalizedAttribute.dataType match {
         case s: StructType => s.zipWithIndex.map {
           case (f, i) =>
-            val extract = GetStructField(attribute.get, i)
+            val extract = GetStructField(normalizedAttribute, i)
             Alias(extract, f.name)()
         }
 
@@ -571,8 +574,15 @@ abstract class UnresolvedStarBase(target: Option[Seq[String]]) extends Star with
  *
  * @param excepts a list of names that should be excluded from the expansion.
  *
+ * @param replacements an optional list of expressions that should be used to replace the
+ *                     expressions removed by EXCEPT. If present, the length of this list must
+ *                     be the same as the length of the EXCEPT list. This supports replacing
+ *                     expressions instead of excluding them from the original SELECT list.
  */
-case class UnresolvedStarExcept(target: Option[Seq[String]], excepts: Seq[Seq[String]])
+case class UnresolvedStarExceptOrReplace(
+    target: Option[Seq[String]],
+    excepts: Seq[Seq[String]],
+    replacements: Option[Seq[NamedExpression]])
   extends UnresolvedStarBase(target) {
 
   /**
@@ -652,7 +662,14 @@ case class UnresolvedStarExcept(target: Option[Seq[String]], excepts: Seq[Seq[St
       // group the except pairs by the column they refer to. NOTE: no groupMap until scala 2.13
       val groupedExcepts: AttributeMap[Seq[Seq[String]]] =
         AttributeMap(excepts.groupBy(_._1.toAttribute).transform((_, v) => v.map(_._2)))
-
+      // If the 'replacements' list is populated to indicate we should replace excepted columns
+      // with new expressions, we must have the same number of replacements as excepts. Keep an
+      // index to track the current replacement.
+      replacements.foreach { r =>
+        assert(excepts.size == r.size,
+          "The number of replacements must be the same as the number of excepts")
+      }
+      var replacementIndex = 0
       // map input columns while searching for the except entry corresponding to the current column
       columns.map(col => col -> groupedExcepts.get(col.toAttribute)).collect {
         // pass through columns that don't match anything in groupedExcepts
@@ -679,11 +696,15 @@ case class UnresolvedStarExcept(target: Option[Seq[String]], excepts: Seq[Seq[St
             filterColumns(extractedFields.toImmutableArraySeq, newExcepts)), col.name)()
         // if there are multiple nestedExcepts but one is empty we must have overlapping except
         // columns. throw an error.
-        case (col, Some(nestedExcepts)) if nestedExcepts.size > 1 =>
+        case (_, Some(nestedExcepts)) if nestedExcepts.size > 1 =>
           throw new AnalysisException(
             errorClass = "EXCEPT_OVERLAPPING_COLUMNS",
             messageParameters = Map(
               "columns" -> this.excepts.map(_.mkString(".")).mkString(", ")))
+        // found a match and the 'replacements' list is populated - replace the column
+        case (_, Some(_)) if replacements.nonEmpty =>
+          replacementIndex += 1
+          replacements.get(replacementIndex - 1)
       }
     }
 
@@ -937,6 +958,28 @@ case class UnresolvedOrdinal(ordinal: Int)
 }
 
 /**
+ * Represents an unresolved ordinal used in the GROUP BY clause of a SQL pipe aggregate operator
+ * ("|> AGGREGATE").
+ *
+ * In this context, the ordinal refers to the one-based position of the column in the input
+ * relation. Note that this behavior is different from GROUP BY ordinals in regular SQL, wherein the
+ * ordinal refers to the one-based position of the column in the SELECT clause.
+ *
+ * For example:
+ * {{{
+ *   values ('abc', 'def') tab(x, y)
+ *   |> aggregate sum(x) group by 2
+ * }}}
+ * @param ordinal ordinal starts from 1, instead of 0
+ */
+case class UnresolvedPipeAggregateOrdinal(ordinal: Int)
+  extends LeafExpression with Unevaluable with NonSQLExpression {
+  override def dataType: DataType = throw new UnresolvedException("dataType")
+  override def nullable: Boolean = throw new UnresolvedException("nullable")
+  override lazy val resolved = false
+}
+
+/**
  * Represents unresolved having clause, the child for it can be Aggregate, GroupingSets, Rollup
  * and Cube. It is turned by the analyzer into a Filter.
  */
@@ -1004,42 +1047,28 @@ case class UnresolvedTranspose(
     copy(child = newChild)
 }
 
-case class UnresolvedOuterReference(
-    nameParts: Seq[String])
-  extends LeafExpression with NamedExpression with Unevaluable {
-
-  def name: String =
-    nameParts.map(n => if (n.contains(".")) s"`$n`" else n).mkString(".")
-
-  override def exprId: ExprId = throw new UnresolvedException("exprId")
-  override def dataType: DataType = throw new UnresolvedException("dataType")
-  override def nullable: Boolean = throw new UnresolvedException("nullable")
-  override def qualifier: Seq[String] = throw new UnresolvedException("qualifier")
-  override lazy val resolved = false
-
-  override def toAttribute: Attribute = throw new UnresolvedException("toAttribute")
-  override def newInstance(): UnresolvedOuterReference = this
-
-  final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_OUTER_REFERENCE)
+// A marker node to indicate that the logical plan containing this expression should be lazily
+// analyzed in the DataFrame. This node will be removed at the beginning of analysis.
+case class LazyExpression(child: Expression) extends UnaryExpression with Unevaluable {
+  override lazy val resolved: Boolean = false
+  override def dataType: DataType = child.dataType
+  override protected def withNewChildInternal(newChild: Expression): Expression = {
+    copy(child = newChild)
+  }
+  final override val nodePatterns: Seq[TreePattern] = Seq(LAZY_EXPRESSION)
 }
 
-case class LazyOuterReference(
-     nameParts: Seq[String])
-  extends LeafExpression with NamedExpression with Unevaluable with LazyAnalysisExpression {
-
-  def name: String =
-    nameParts.map(n => if (n.contains(".")) s"`$n`" else n).mkString(".")
-
-  override def exprId: ExprId = throw new UnresolvedException("exprId")
-  override def dataType: DataType = throw new UnresolvedException("dataType")
+trait UnresolvedPlanId extends LeafExpression with Unevaluable {
   override def nullable: Boolean = throw new UnresolvedException("nullable")
-  override def qualifier: Seq[String] = throw new UnresolvedException("qualifier")
+  override def dataType: DataType = throw new UnresolvedException("dataType")
+  override lazy val resolved = false
 
-  override def toAttribute: Attribute = throw new UnresolvedException("toAttribute")
-  override def newInstance(): NamedExpression = LazyOuterReference(nameParts)
+  def planId: Long
+  def withPlan(plan: LogicalPlan): Expression
 
-  override def nodePatternsInternal(): Seq[TreePattern] = Seq(LAZY_OUTER_REFERENCE)
+  final override val nodePatterns: Seq[TreePattern] =
+    Seq(UNRESOLVED_PLAN_ID) ++ nodePatternsInternal()
 
-  override def prettyName: String = "outer"
-  override def sql: String = s"$prettyName($name)"
+  // Subclasses can override this function to provide more TreePatterns.
+  def nodePatternsInternal(): Seq[TreePattern] = Seq()
 }

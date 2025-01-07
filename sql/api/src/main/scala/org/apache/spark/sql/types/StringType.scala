@@ -30,7 +30,11 @@ import org.apache.spark.sql.catalyst.util.CollationFactory
  *   The id of collation for this StringType.
  */
 @Stable
-class StringType private (val collationId: Int) extends AtomicType with Serializable {
+class StringType private[sql] (
+    val collationId: Int,
+    val constraint: StringConstraint = NoConstraint)
+    extends AtomicType
+    with Serializable {
 
   /**
    * Support for Binary Equality implies that strings are considered equal only if they are byte
@@ -39,7 +43,8 @@ class StringType private (val collationId: Int) extends AtomicType with Serializ
    * equality and hashing).
    */
   private[sql] def supportsBinaryEquality: Boolean =
-    CollationFactory.fetchCollation(collationId).supportsBinaryEquality
+    collationId == CollationFactory.UTF8_BINARY_COLLATION_ID ||
+      CollationFactory.fetchCollation(collationId).supportsBinaryEquality
 
   private[sql] def supportsLowercaseEquality: Boolean =
     CollationFactory.fetchCollation(collationId).supportsLowercaseEquality
@@ -75,15 +80,26 @@ class StringType private (val collationId: Int) extends AtomicType with Serializ
    */
   override def typeName: String =
     if (isUTF8BinaryCollation) "string"
-    else s"string collate ${CollationFactory.fetchCollation(collationId).collationName}"
+    else s"string collate $collationName"
+
+  override def toString: String =
+    if (isUTF8BinaryCollation) "StringType"
+    else s"StringType($collationName)"
+
+  private[sql] def collationName: String =
+    CollationFactory.fetchCollation(collationId).collationName
 
   // Due to backwards compatibility and compatibility with other readers
   // all string types are serialized in json as regular strings and
   // the collation information is written to struct field metadata
   override def jsonValue: JValue = JString("string")
 
-  override def equals(obj: Any): Boolean =
-    obj.isInstanceOf[StringType] && obj.asInstanceOf[StringType].collationId == collationId
+  override def equals(obj: Any): Boolean = {
+    obj match {
+      case s: StringType => s.collationId == collationId && s.constraint == constraint
+      case _ => false
+    }
+  }
 
   override def hashCode(): Int = collationId.hashCode()
 
@@ -101,7 +117,8 @@ class StringType private (val collationId: Int) extends AtomicType with Serializ
  * @since 1.3.0
  */
 @Stable
-case object StringType extends StringType(0) {
+case object StringType
+    extends StringType(CollationFactory.UTF8_BINARY_COLLATION_ID, NoConstraint) {
   private[spark] def apply(collationId: Int): StringType = new StringType(collationId)
 
   def apply(collation: String): StringType = {
@@ -109,3 +126,11 @@ case object StringType extends StringType(0) {
     new StringType(collationId)
   }
 }
+
+sealed trait StringConstraint
+
+case object NoConstraint extends StringConstraint
+
+case class FixedLength(length: Int) extends StringConstraint
+
+case class MaxLength(length: Int) extends StringConstraint

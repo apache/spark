@@ -35,7 +35,8 @@ from pyspark.sql.streaming.stateful_processor import (
     TimerValues,
 )
 from pyspark.sql.streaming.stateful_processor import StatefulProcessor, StatefulProcessorHandle
-from pyspark.sql.types import StructType, _parse_datatype_string
+from pyspark.sql.streaming.stateful_processor_util import TransformWithStateInPandasFuncMode
+from pyspark.sql.types import StructType
 
 if TYPE_CHECKING:
     from pyspark.sql.pandas._typing import (
@@ -347,9 +348,9 @@ class PandasGroupedOpsMixin:
         ]
 
         if isinstance(outputStructType, str):
-            outputStructType = cast(StructType, _parse_datatype_string(outputStructType))
+            outputStructType = cast(StructType, self._df._session._parse_ddl(outputStructType))
         if isinstance(stateStructType, str):
-            stateStructType = cast(StructType, _parse_datatype_string(stateStructType))
+            stateStructType = cast(StructType, self._df._session._parse_ddl(stateStructType))
 
         udf = pandas_udf(
             func,  # type: ignore[call-overload]
@@ -374,6 +375,7 @@ class PandasGroupedOpsMixin:
         outputMode: str,
         timeMode: str,
         initialState: Optional["GroupedData"] = None,
+        eventTimeColumnName: str = "",
     ) -> DataFrame:
         """
         Invokes methods defined in the stateful processor used in arbitrary state API v2. It
@@ -500,63 +502,85 @@ class PandasGroupedOpsMixin:
         if initialState is not None:
             assert isinstance(initialState, GroupedData)
         if isinstance(outputStructType, str):
-            outputStructType = cast(StructType, _parse_datatype_string(outputStructType))
+            outputStructType = cast(StructType, self._df._session._parse_ddl(outputStructType))
 
-        def handle_data_with_timers(
+        def handle_pre_init(
+            statefulProcessorApiClient: StatefulProcessorApiClient,
+        ) -> Iterator["PandasDataFrameLike"]:
+            # Driver handle is different from the handle used on executors;
+            # On JVM side, we will use `DriverStatefulProcessorHandleImpl` for driver handle which
+            # will only be used for handling init() and get the state schema on the driver.
+            driver_handle = StatefulProcessorHandle(statefulProcessorApiClient)
+            statefulProcessorApiClient.set_handle_state(StatefulProcessorHandleState.PRE_INIT)
+            statefulProcessor.init(driver_handle)
+
+            # This method is used for the driver-side stateful processor after we have collected
+            # all the necessary schemas. This instance of the DriverStatefulProcessorHandleImpl
+            # won't be used again on JVM.
+            statefulProcessor.close()
+
+            # return a dummy results, no return value is needed for pre init
+            return iter([])
+
+        def handle_data_rows(
             statefulProcessorApiClient: StatefulProcessorApiClient,
             key: Any,
-            inputRows: Iterator["PandasDataFrameLike"],
+            inputRows: Optional[Iterator["PandasDataFrameLike"]] = None,
         ) -> Iterator["PandasDataFrameLike"]:
             statefulProcessorApiClient.set_implicit_key(key)
-            if timeMode != "none":
-                batch_timestamp = statefulProcessorApiClient.get_batch_timestamp()
-                watermark_timestamp = statefulProcessorApiClient.get_watermark_timestamp()
-            else:
-                batch_timestamp = -1
-                watermark_timestamp = -1
-            # process with invalid expiry timer info and emit data rows
-            data_iter = statefulProcessor.handleInputRows(
-                key,
-                inputRows,
-                TimerValues(batch_timestamp, watermark_timestamp),
-                ExpiredTimerInfo(False),
-            )
-            statefulProcessorApiClient.set_handle_state(StatefulProcessorHandleState.DATA_PROCESSED)
 
-            if timeMode == "processingtime":
+            batch_timestamp, watermark_timestamp = statefulProcessorApiClient.get_timestamps(
+                timeMode
+            )
+
+            # process with data rows
+            if inputRows is not None:
+                data_iter = statefulProcessor.handleInputRows(
+                    key, inputRows, TimerValues(batch_timestamp, watermark_timestamp)
+                )
+                return data_iter
+            else:
+                return iter([])
+
+        def handle_expired_timers(
+            statefulProcessorApiClient: StatefulProcessorApiClient,
+        ) -> Iterator["PandasDataFrameLike"]:
+            batch_timestamp, watermark_timestamp = statefulProcessorApiClient.get_timestamps(
+                timeMode
+            )
+
+            if timeMode.lower() == "processingtime":
                 expiry_list_iter = statefulProcessorApiClient.get_expiry_timers_iterator(
                     batch_timestamp
                 )
-            elif timeMode == "eventtime":
+            elif timeMode.lower() == "eventtime":
                 expiry_list_iter = statefulProcessorApiClient.get_expiry_timers_iterator(
                     watermark_timestamp
                 )
             else:
                 expiry_list_iter = iter([[]])
 
-            result_iter_list = [data_iter]
-            # process with valid expiry time info and with empty input rows,
-            # only timer related rows will be emitted
+            # process with expiry timers, only timer related rows will be emitted
             for expiry_list in expiry_list_iter:
                 for key_obj, expiry_timestamp in expiry_list:
-                    result_iter_list.append(
-                        statefulProcessor.handleInputRows(
-                            key_obj,
-                            iter([]),
-                            TimerValues(batch_timestamp, watermark_timestamp),
-                            ExpiredTimerInfo(True, expiry_timestamp),
-                        )
-                    )
-            # TODO(SPARK-49603) set the handle state in the lazily initialized iterator
-
-            result = itertools.chain(*result_iter_list)
-            return result
+                    statefulProcessorApiClient.set_implicit_key(key_obj)
+                    for pd in statefulProcessor.handleExpiredTimer(
+                        key=key_obj,
+                        timer_values=TimerValues(batch_timestamp, watermark_timestamp),
+                        expired_timer_info=ExpiredTimerInfo(expiry_timestamp),
+                    ):
+                        yield pd
+                    statefulProcessorApiClient.delete_timer(expiry_timestamp)
 
         def transformWithStateUDF(
             statefulProcessorApiClient: StatefulProcessorApiClient,
+            mode: TransformWithStateInPandasFuncMode,
             key: Any,
             inputRows: Iterator["PandasDataFrameLike"],
         ) -> Iterator["PandasDataFrameLike"]:
+            if mode == TransformWithStateInPandasFuncMode.PRE_INIT:
+                return handle_pre_init(statefulProcessorApiClient)
+
             handle = StatefulProcessorHandle(statefulProcessorApiClient)
 
             if statefulProcessorApiClient.handle_state == StatefulProcessorHandleState.CREATED:
@@ -565,19 +589,28 @@ class PandasGroupedOpsMixin:
                     StatefulProcessorHandleState.INITIALIZED
                 )
 
-            # Key is None when we have processed all the input data from the worker and ready to
-            # proceed with the cleanup steps.
-            if key is None:
+            if mode == TransformWithStateInPandasFuncMode.PROCESS_TIMER:
+                statefulProcessorApiClient.set_handle_state(
+                    StatefulProcessorHandleState.DATA_PROCESSED
+                )
+                result = handle_expired_timers(statefulProcessorApiClient)
+                return result
+            elif mode == TransformWithStateInPandasFuncMode.COMPLETE:
+                statefulProcessorApiClient.set_handle_state(
+                    StatefulProcessorHandleState.TIMER_PROCESSED
+                )
                 statefulProcessorApiClient.remove_implicit_key()
                 statefulProcessor.close()
                 statefulProcessorApiClient.set_handle_state(StatefulProcessorHandleState.CLOSED)
                 return iter([])
-
-            result = handle_data_with_timers(statefulProcessorApiClient, key, inputRows)
-            return result
+            else:
+                # mode == TransformWithStateInPandasFuncMode.PROCESS_DATA
+                result = handle_data_rows(statefulProcessorApiClient, key, inputRows)
+                return result
 
         def transformWithStateWithInitStateUDF(
             statefulProcessorApiClient: StatefulProcessorApiClient,
+            mode: TransformWithStateInPandasFuncMode,
             key: Any,
             inputRows: Iterator["PandasDataFrameLike"],
             initialStates: Optional[Iterator["PandasDataFrameLike"]] = None,
@@ -594,6 +627,9 @@ class PandasGroupedOpsMixin:
             - `initialStates` is None, while `inputRows` is not empty. This is not first batch.
              `initialStates` is initialized to the positional value as None.
             """
+            if mode == TransformWithStateInPandasFuncMode.PRE_INIT:
+                return handle_pre_init(statefulProcessorApiClient)
+
             handle = StatefulProcessorHandle(statefulProcessorApiClient)
 
             if statefulProcessorApiClient.handle_state == StatefulProcessorHandleState.CREATED:
@@ -602,20 +638,30 @@ class PandasGroupedOpsMixin:
                     StatefulProcessorHandleState.INITIALIZED
                 )
 
-            # Key is None when we have processed all the input data from the worker and ready to
-            # proceed with the cleanup steps.
-            if key is None:
+            if mode == TransformWithStateInPandasFuncMode.PROCESS_TIMER:
+                statefulProcessorApiClient.set_handle_state(
+                    StatefulProcessorHandleState.DATA_PROCESSED
+                )
+                result = handle_expired_timers(statefulProcessorApiClient)
+                return result
+            elif mode == TransformWithStateInPandasFuncMode.COMPLETE:
                 statefulProcessorApiClient.remove_implicit_key()
                 statefulProcessor.close()
                 statefulProcessorApiClient.set_handle_state(StatefulProcessorHandleState.CLOSED)
                 return iter([])
+            else:
+                # mode == TransformWithStateInPandasFuncMode.PROCESS_DATA
+                batch_timestamp, watermark_timestamp = statefulProcessorApiClient.get_timestamps(
+                    timeMode
+                )
 
             # only process initial state if first batch and initial state is not None
             if initialStates is not None:
                 for cur_initial_state in initialStates:
                     statefulProcessorApiClient.set_implicit_key(key)
-                    # TODO(SPARK-50194) integration with new timer API with initial state
-                    statefulProcessor.handleInitialState(key, cur_initial_state)
+                    statefulProcessor.handleInitialState(
+                        key, cur_initial_state, TimerValues(batch_timestamp, watermark_timestamp)
+                    )
 
             # if we don't have input rows for the given key but only have initial state
             # for the grouping key, the inputRows iterator could be empty
@@ -628,14 +674,14 @@ class PandasGroupedOpsMixin:
                 inputRows = itertools.chain([first], inputRows)
 
             if not input_rows_empty:
-                result = handle_data_with_timers(statefulProcessorApiClient, key, inputRows)
+                result = handle_data_rows(statefulProcessorApiClient, key, inputRows)
             else:
                 result = iter([])
 
             return result
 
         if isinstance(outputStructType, str):
-            outputStructType = cast(StructType, _parse_datatype_string(outputStructType))
+            outputStructType = cast(StructType, self._df._session._parse_ddl(outputStructType))
 
         df = self._df
 
@@ -662,6 +708,7 @@ class PandasGroupedOpsMixin:
             outputMode,
             timeMode,
             initial_state_java_obj,
+            eventTimeColumnName,
         )
         return DataFrame(jdf, self.session)
 

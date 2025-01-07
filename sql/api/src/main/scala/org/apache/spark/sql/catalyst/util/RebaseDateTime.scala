@@ -22,7 +22,7 @@ import java.time.temporal.ChronoField
 import java.util.{Calendar, TimeZone}
 import java.util.Calendar.{DAY_OF_MONTH, DST_OFFSET, ERA, HOUR_OF_DAY, MINUTE, MONTH, SECOND, YEAR, ZONE_OFFSET}
 
-import scala.collection.mutable.AnyRefMap
+import scala.collection.mutable.HashMap
 
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.scala.{ClassTagExtensions, DefaultScalaModule}
@@ -285,12 +285,12 @@ object RebaseDateTime {
   }
 
   // Loads rebasing info from an JSON file. JSON records in the files should conform to
-  // `JsonRebaseRecord`. AnyRefMap is used here instead of Scala's immutable map because
-  // it is 2 times faster in DateTimeRebaseBenchmark.
-  private[sql] def loadRebaseRecords(fileName: String): AnyRefMap[String, RebaseInfo] = {
+  // `JsonRebaseRecord`. Mutable HashMap is used here instead of AnyRefMap due to SPARK-49491.
+  private[sql] def loadRebaseRecords(fileName: String): HashMap[String, RebaseInfo] = {
     val file = SparkClassUtils.getSparkClassLoader.getResource(fileName)
     val jsonRebaseRecords = mapper.readValue[Seq[JsonRebaseRecord]](file)
-    val anyRefMap = new AnyRefMap[String, RebaseInfo]((3 * jsonRebaseRecords.size) / 2)
+    val hashMap = new HashMap[String, RebaseInfo]
+    hashMap.sizeHint(jsonRebaseRecords.size)
     jsonRebaseRecords.foreach { jsonRecord =>
       val rebaseInfo = RebaseInfo(jsonRecord.switches, jsonRecord.diffs)
       var i = 0
@@ -299,9 +299,9 @@ object RebaseDateTime {
         rebaseInfo.diffs(i) = rebaseInfo.diffs(i) * MICROS_PER_SECOND
         i += 1
       }
-      anyRefMap.update(jsonRecord.tz, rebaseInfo)
+      hashMap.update(jsonRecord.tz, rebaseInfo)
     }
-    anyRefMap
+    hashMap
   }
 
   /**
@@ -313,7 +313,7 @@ object RebaseDateTime {
    */
   private val gregJulianRebaseMap = loadRebaseRecords("gregorian-julian-rebase-micros.json")
 
-  private def getLastSwitchTs(rebaseMap: AnyRefMap[String, RebaseInfo]): Long = {
+  private def getLastSwitchTs(rebaseMap: HashMap[String, RebaseInfo]): Long = {
     val latestTs = rebaseMap.values.map(_.switches.last).max
     require(
       rebaseMap.values.forall(_.diffs.last == 0),
@@ -404,7 +404,7 @@ object RebaseDateTime {
     if (micros >= lastSwitchGregorianTs) {
       micros
     } else {
-      val rebaseRecord = gregJulianRebaseMap.getOrNull(timeZoneId)
+      val rebaseRecord = gregJulianRebaseMap.get(timeZoneId).orNull
       if (rebaseRecord == null || micros < rebaseRecord.switches(0)) {
         rebaseGregorianToJulianMicros(TimeZone.getTimeZone(timeZoneId), micros)
       } else {
@@ -526,7 +526,7 @@ object RebaseDateTime {
     if (micros >= lastSwitchJulianTs) {
       micros
     } else {
-      val rebaseRecord = julianGregRebaseMap.getOrNull(timeZoneId)
+      val rebaseRecord = julianGregRebaseMap.get(timeZoneId).orNull
       if (rebaseRecord == null || micros < rebaseRecord.switches(0)) {
         rebaseJulianToGregorianMicros(TimeZone.getTimeZone(timeZoneId), micros)
       } else {

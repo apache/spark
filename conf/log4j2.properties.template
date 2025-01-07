@@ -54,10 +54,3 @@ logger.RetryingHMSHandler.name = org.apache.hadoop.hive.metastore.RetryingHMSHan
 logger.RetryingHMSHandler.level = fatal
 logger.FunctionRegistry.name = org.apache.hadoop.hive.ql.exec.FunctionRegistry
 logger.FunctionRegistry.level = error
-
-# For deploying Spark ThriftServer
-# SPARK-34128: Suppress undesirable TTransportException warnings involved in THRIFT-4805
-appender.console.filter.1.type = RegexFilter
-appender.console.filter.1.regex = .*Thrift error occurred during processing of message.*
-appender.console.filter.1.onMatch = deny
-appender.console.filter.1.onMismatch = neutral

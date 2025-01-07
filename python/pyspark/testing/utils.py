@@ -94,6 +94,12 @@ graphviz_requirement_message = None if have_graphviz else "No module named 'grap
 have_flameprof = have_package("flameprof")
 flameprof_requirement_message = None if have_flameprof else "No module named 'flameprof'"
 
+have_jinja2 = have_package("jinja2")
+jinja2_requirement_message = None if have_jinja2 else "No module named 'jinja2'"
+
+have_openpyxl = have_package("openpyxl")
+openpyxl_requirement_message = None if have_openpyxl else "No module named 'openpyxl'"
+
 pandas_requirement_message = None
 try:
     from pyspark.sql.pandas.utils import require_minimum_pandas_version
@@ -194,16 +200,14 @@ def eventually(
 
 class QuietTest:
     def __init__(self, sc):
-        self.sc = sc
+        self.log4j = sc._jvm.org.apache.log4j
 
     def __enter__(self):
-        self.old_level = (
-            self.sc._jvm.org.apache.log4j.LogManager.getRootLogger().getLevel().toString()
-        )
-        self.sc.setLogLevel("FATAL")
+        self.old_level = self.log4j.LogManager.getRootLogger().getLevel()
+        self.log4j.LogManager.getRootLogger().setLevel(self.log4j.Level.FATAL)
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        self.sc.setLogLevel(self.old_level)
+        self.log4j.LogManager.getRootLogger().setLevel(self.old_level)
 
 
 class PySparkTestCase(unittest.TestCase):
@@ -340,6 +344,7 @@ class PySparkErrorTestUtils:
         messageParameters: Optional[Dict[str, str]] = None,
         query_context_type: Optional[QueryContextType] = None,
         fragment: Optional[str] = None,
+        matchPVals: bool = False,
     ):
         query_context = exception.getQueryContext()
         assert bool(query_context) == (query_context_type is not None), (
@@ -363,9 +368,30 @@ class PySparkErrorTestUtils:
         # Test message parameters
         expected = messageParameters
         actual = exception.getMessageParameters()
-        self.assertEqual(
-            expected, actual, f"Expected message parameters was '{expected}', got '{actual}'"
-        )
+        if matchPVals:
+            self.assertEqual(
+                len(expected),
+                len(actual),
+                "Expected message parameters count does not match actual message parameters count"
+                f": {len(expected)}, {len(actual)}.",
+            )
+            for key, value in expected.items():
+                self.assertIn(
+                    key,
+                    actual,
+                    f"Expected message parameter key '{key}' was not found "
+                    "in actual message parameters.",
+                )
+                self.assertRegex(
+                    actual[key],
+                    value,
+                    f"Expected message parameter value '{value}' does not match actual message "
+                    f"parameter value '{actual[key]}'.",
+                ),
+        else:
+            self.assertEqual(
+                expected, actual, f"Expected message parameters was '{expected}', got '{actual}'"
+            )
 
         # Test query context
         if query_context:

@@ -29,8 +29,9 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Expression, ImplicitCastInputTypes}
 import org.apache.spark.sql.catalyst.expressions.aggregate.TypedImperativeAggregate
 import org.apache.spark.sql.catalyst.trees.BinaryLike
+import org.apache.spark.sql.classic.ClassicConversions._
 import org.apache.spark.sql.functions.lit
-import org.apache.spark.sql.internal.ExpressionUtils.{column, expression}
+import org.apache.spark.sql.internal.ExpressionUtils.expression
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
@@ -249,13 +250,13 @@ private[ml] class SummaryBuilderImpl(
   ) extends SummaryBuilder {
 
   override def summary(featuresCol: Column, weightCol: Column): Column = {
-    SummaryBuilderImpl.MetricsAggregate(
+    Column(SummaryBuilderImpl.MetricsAggregate(
       requestedMetrics,
       requestedCompMetrics,
-      featuresCol,
-      weightCol,
+      expression(featuresCol),
+      expression(weightCol),
       mutableAggBufferOffset = 0,
-      inputAggBufferOffset = 0)
+      inputAggBufferOffset = 0))
   }
 }
 
