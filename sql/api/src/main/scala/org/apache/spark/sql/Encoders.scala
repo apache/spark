@@ -316,9 +316,7 @@ object Encoders {
    * An encoder for Scala's product type (tuples, case classes, etc).
    * @since 2.0.0
    */
-  def product[T <: Product: TypeTag]: Encoder[T] = {
-    ScalaReflection.encoderForWithRowEncoderSupport[T]
-  }
+  def product[T <: Product: TypeTag]: Encoder[T] = ScalaReflection.encoderFor[T]
 
   /**
    * An encoder for Scala's primitive int type.
