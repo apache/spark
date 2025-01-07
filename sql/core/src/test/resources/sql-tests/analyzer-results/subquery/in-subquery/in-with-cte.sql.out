@@ -123,7 +123,7 @@ WHERE  t1b IN (SELECT cte1.t1b
                WHERE  cte1.t1b > 0)
 -- !query analysis
 WithCTE
-:- CTERelationDef xxxx, false, false
+:- CTERelationDef xxxx, false
 :  +- SubqueryAlias cte1
 :     +- Project [t1a#x, t1b#x]
 :        +- Filter (t1a#x = val1a)
@@ -177,7 +177,7 @@ GROUP BY t1a, t1b, t1c
 HAVING t1c IS NOT NULL
 -- !query analysis
 WithCTE
-:- CTERelationDef xxxx, false, false
+:- CTERelationDef xxxx, false
 :  +- SubqueryAlias cte1
 :     +- Project [t1a#x, t1b#x]
 :        +- SubqueryAlias t1
@@ -250,7 +250,7 @@ WHERE  t1c IN
               ON              cte1.t1d > cte6.t1d)
 -- !query analysis
 WithCTE
-:- CTERelationDef xxxx, false, false
+:- CTERelationDef xxxx, false
 :  +- SubqueryAlias cte1
 :     +- Project [t1a#x, t1b#x, t1c#x, t1d#xL, t1e#x]
 :        +- SubqueryAlias t1
@@ -316,7 +316,7 @@ FROM   (SELECT *
                        ON cte1.t1b = cte4.t1b) s
 -- !query analysis
 WithCTE
-:- CTERelationDef xxxx, false, false
+:- CTERelationDef xxxx, false
 :  +- SubqueryAlias cte1
 :     +- Project [t1a#x, t1b#x]
 :        +- Filter (t1b#x IN (list#x []) AND (t1a#x = val1b))
@@ -393,7 +393,7 @@ WHERE    t1b IN
 GROUP BY t1b
 -- !query analysis
 WithCTE
-:- CTERelationDef xxxx, false, false
+:- CTERelationDef xxxx, false
 :  +- SubqueryAlias cte1
 :     +- Project [t1a#x, t1b#x, t1h#x]
 :        +- Filter t1a#x IN (list#x [t1b#x])
@@ -453,7 +453,7 @@ FROM            (
                        ) s
 -- !query analysis
 WithCTE
-:- CTERelationDef xxxx, false, false
+:- CTERelationDef xxxx, false
 :  +- SubqueryAlias cte1
 :     +- Project [t1a#x, t1b#x, t1c#x]
 :        +- Filter (t1b#x IN (list#x [t1c#x]) AND (t1a#x = val1b))
@@ -515,7 +515,7 @@ FROM   (SELECT cte1.t1a,
 GROUP  BY s.t1b
 -- !query analysis
 WithCTE
-:- CTERelationDef xxxx, false, false
+:- CTERelationDef xxxx, false
 :  +- SubqueryAlias cte1
 :     +- Project [t1a#x, t1b#x]
 :        +- Filter t1b#x IN (list#x [t1c#x])
@@ -569,7 +569,7 @@ WHERE           s.t1b IN
                        ON     t1.t1a = cte1.t1a)
 -- !query analysis
 WithCTE
-:- CTERelationDef xxxx, false, false
+:- CTERelationDef xxxx, false
 :  +- SubqueryAlias cte1
 :     +- Project [t1a#x, t1b#x]
 :        +- Filter t1b#x IN (list#x [t1c#x])
@@ -627,7 +627,7 @@ WHERE  t1b NOT IN (SELECT cte1.t1b
        t1c > 10
 -- !query analysis
 WithCTE
-:- CTERelationDef xxxx, false, false
+:- CTERelationDef xxxx, false
 :  +- SubqueryAlias cte1
 :     +- Project [t1a#x, t1b#x]
 :        +- Filter (t1a#x = val1d)
@@ -683,7 +683,7 @@ WHERE    t1b NOT IN
 ORDER BY t1c DESC
 -- !query analysis
 WithCTE
-:- CTERelationDef xxxx, false, false
+:- CTERelationDef xxxx, false
 :  +- SubqueryAlias cte1
 :     +- Project [t1a#x, t1b#x, t1c#x, t1d#xL, t1h#x]
 :        +- Filter NOT t1d#xL IN (list#x [])

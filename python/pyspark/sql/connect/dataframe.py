@@ -54,7 +54,7 @@ import functools
 from pyspark import _NoValue
 from pyspark._globals import _NoValueType
 from pyspark.util import is_remote_only
-from pyspark.sql.types import Row, StructType, _create_row, _parse_datatype_string
+from pyspark.sql.types import Row, StructType, _create_row
 from pyspark.sql.dataframe import (
     DataFrame as ParentDataFrame,
     DataFrameNaFunctions as ParentDataFrameNaFunctions,
@@ -86,6 +86,7 @@ from pyspark.sql.connect.expressions import (
 from pyspark.sql.connect.functions import builtin as F
 from pyspark.sql.pandas.types import from_arrow_schema, to_arrow_schema
 from pyspark.sql.pandas.functions import _validate_pandas_udf  # type: ignore[attr-defined]
+from pyspark.sql.table_arg import TableArg
 
 
 if TYPE_CHECKING:
@@ -1801,6 +1802,13 @@ class DataFrame(ParentDataFrame):
             self._session,
         )
 
+    def asTable(self) -> TableArg:
+        # TODO(SPARK-50393): Support DataFrame conversion to table argument in Spark Connect
+        raise PySparkNotImplementedError(
+            errorClass="NOT_IMPLEMENTED",
+            messageParameters={"feature": "asTable()"},
+        )
+
     def scalar(self) -> Column:
         from pyspark.sql.connect.column import Column as ConnectColumn
 
@@ -2037,7 +2045,7 @@ class DataFrame(ParentDataFrame):
 
         _validate_pandas_udf(func, evalType)
         if isinstance(schema, str):
-            schema = cast(StructType, _parse_datatype_string(schema))
+            schema = cast(StructType, self._session._parse_ddl(schema))
         udf_obj = UserDefinedFunction(
             func,
             returnType=schema,

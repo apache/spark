@@ -35,7 +35,8 @@
           "unresolvedAttribute": {
             "unparsedIdentifier": "wt"
           }
-        }]
+        }],
+        "isInternal": false
       }
     }]
   }

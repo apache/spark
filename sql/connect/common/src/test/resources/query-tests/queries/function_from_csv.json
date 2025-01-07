@@ -33,9 +33,11 @@
               "literal": {
                 "string": "FAILFAST"
               }
-            }]
+            }],
+            "isInternal": false
           }
-        }]
+        }],
+        "isInternal": false
       }
     }]
   }

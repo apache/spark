@@ -152,13 +152,17 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
     case RenameTable(ResolvedV1TableOrViewIdentifier(oldIdent), newName, isView) =>
       AlterTableRenameCommand(oldIdent, newName.asTableIdentifier, isView)
 
+    case DescribeRelationJson(
+        ResolvedV1TableOrViewIdentifier(ident), partitionSpec, isExtended) =>
+      DescribeTableJsonCommand(ident, partitionSpec, isExtended)
+
     // Use v1 command to describe (temp) view, as v2 catalog doesn't support view yet.
     case DescribeRelation(
-         ResolvedV1TableOrViewIdentifier(ident), partitionSpec, isExtended, output) =>
+        ResolvedV1TableOrViewIdentifier(ident), partitionSpec, isExtended, output) =>
       DescribeTableCommand(ident, partitionSpec, isExtended, output)
 
     case DescribeColumn(
-         ResolvedViewIdentifier(ident), column: UnresolvedAttribute, isExtended, output) =>
+        ResolvedViewIdentifier(ident), column: UnresolvedAttribute, isExtended, output) =>
       // For views, the column will not be resolved by `ResolveReferences` because
       // `ResolvedView` stores only the identifier.
       DescribeColumnCommand(ident, column.nameParts, isExtended, output)
@@ -497,6 +501,27 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
 
     case CreateFunction(ResolvedIdentifier(catalog, _), _, _, _, _) =>
       throw QueryCompilationErrors.missingCatalogAbilityError(catalog, "CREATE FUNCTION")
+
+    case c @ CreateUserDefinedFunction(
+        ResolvedIdentifierInSessionCatalog(ident), _, _, _, _, _, _, _, _, _, _, _) =>
+      CreateUserDefinedFunctionCommand(
+        FunctionIdentifier(ident.table, ident.database, ident.catalog),
+        c.inputParamText,
+        c.returnTypeText,
+        c.exprText,
+        c.queryText,
+        c.comment,
+        c.isDeterministic,
+        c.containsSQL,
+        c.language,
+        c.isTableFunc,
+        isTemp = false,
+        c.ignoreIfExists,
+        c.replace)
+
+    case CreateUserDefinedFunction(
+        ResolvedIdentifier(catalog, _), _, _, _, _, _, _, _, _, _, _, _) =>
+      throw QueryCompilationErrors.missingCatalogAbilityError(catalog, "CREATE FUNCTION")
   }
 
   private def constructV1TableCmd(
@@ -726,7 +751,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
 
   private def supportsV1Command(catalog: CatalogPlugin): Boolean = {
     isSessionCatalog(catalog) && (
-      SQLConf.get.getConf(SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION).isEmpty ||
+      SQLConf.get.getConf(SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION) == "builtin" ||
         catalog.isInstanceOf[CatalogExtension])
   }
 }
