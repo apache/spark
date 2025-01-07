@@ -18,7 +18,9 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateFunction
+import org.apache.spark.sql.catalyst.trees.TreePattern.PIPE_EXPRESSION
 import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.types.DataType
 
 /**
  * Represents an expression when used with a SQL pipe operator.
@@ -30,10 +32,14 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
  * @param clause The clause of the pipe operator. This is used to generate error messages.
  */
 case class PipeExpression(child: Expression, isAggregate: Boolean, clause: String)
-  extends UnaryExpression with RuntimeReplaceable {
+  extends UnaryExpression with Unevaluable {
+  final override val nodePatterns = Seq(PIPE_EXPRESSION)
   override def withNewChildInternal(newChild: Expression): Expression =
     PipeExpression(newChild, isAggregate, clause)
-  override lazy val replacement: Expression = {
+  override def dataType: DataType = child.dataType
+  // Once the child expression is resolved, we can perform the necessary invariant checks and then
+  // remove this expression, replacing it with the child expression instead.
+  lazy val checkInvariantsAndRemove: Expression = {
     val firstAggregateFunction: Option[AggregateFunction] = findFirstAggregate(child)
     if (isAggregate && firstAggregateFunction.isEmpty) {
       throw QueryCompilationErrors.pipeOperatorAggregateExpressionContainsNoAggregateFunction(child)

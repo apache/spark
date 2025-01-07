@@ -42,7 +42,7 @@ object AliasResolution {
       case ne: NamedExpression => ne
       case go @ GeneratorOuter(g: Generator) if g.resolved => MultiAlias(go, Nil)
       case e if !e.resolved => u
-      case p: PipeExpression => resolve(u.copy(child = p.replacement))
+      case p: PipeExpression => resolve(u.copy(child = p.checkInvariantsAndRemove))
       case g: Generator => MultiAlias(g, Nil)
       case c @ Cast(ne: NamedExpression, _, _, _) => Alias(c, ne.name)()
       case e: ExtractValue if extractOnly(e) => Alias(e, toPrettySQL(e))()
