@@ -4484,14 +4484,6 @@
     ],
     "sqlState" : "42K06"
   },
-  "STATE_STORE_VALUE_SCHEMA_EVOLUTION_THRESHOLD_EXCEEDED" : {
-    "message" : [
-      "The number of state schema files <numStateSchemaFiles> exceeds the maximum number of state schema files allowed for this query, <maxStateSchemaFiles>.",
-      "Offending column families: <colFamilyNames>",
-      "Please set 'spark.sql.streaming.stateStore.maxStateSchemaFiles' to a higher number, or revert state schema modifications"
-    ],
-    "sqlState" : "42K06"
-  },
   "STATE_STORE_UNSUPPORTED_OPERATION" : {
     "message" : [
       "<operationType> operation not supported with <entity>"
@@ -4521,6 +4513,14 @@
       "to process the streaming state. Retrieved error_message=<errorMsg>"
     ],
     "sqlState" : "XX000"
+  },
+  "STATE_STORE_VALUE_SCHEMA_EVOLUTION_THRESHOLD_EXCEEDED" : {
+    "message" : [
+      "The number of state schema files <numStateSchemaFiles> exceeds the maximum number of state schema files allowed for this query, <maxStateSchemaFiles>.",
+      "Offending column families: <colFamilyNames>",
+      "Please set 'spark.sql.streaming.stateStore.maxStateSchemaFiles' to a higher number, or revert state schema modifications"
+    ],
+    "sqlState" : "42K06"
   },
   "STATE_STORE_VALUE_SCHEMA_NOT_COMPATIBLE" : {
     "message" : [
