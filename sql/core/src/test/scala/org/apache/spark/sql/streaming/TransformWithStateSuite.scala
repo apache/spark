@@ -2174,12 +2174,16 @@ class TransformWithStateSuite extends StateStoreMetricsTest
         testStream(stream2, OutputMode.Update())(
           StartStream(checkpointLocation = dirPath.getCanonicalPath),
           AddData(inputData, ("a", "str2"), ("b", "str3")),
-          CheckNewAnswer(("a", "str1"), ("b", "")),
-          Execute { q =>
-            assert(q.lastProgress.stateOperators(0).customMetrics.get("numValueStateVars") > 0)
-            assert(q.lastProgress.stateOperators(0).customMetrics.get("numDeletedStateVars") > 0)
-          },
-          StopStream
+          ExpectFailure[StateStoreSchemaFileThresholdExceeded] { t =>
+            checkError(
+              t.asInstanceOf[StateStoreSchemaFileThresholdExceeded],
+              condition = "STATE_STORE_SCHEMA_FILE_THRESHOLD_EXCEEDED",
+              parameters = Map(
+                "numStateSchemaFiles" -> "2",
+                "maxStateSchemaFiles" -> "1"
+              )
+            )
+          }
         )
       }
     }
