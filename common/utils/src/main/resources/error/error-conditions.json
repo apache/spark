@@ -5881,14 +5881,14 @@
           "Cannot specify NOT NULL on function parameters: <input>"
         ]
       },
-      "ROUTINE_PROPERTY_TOO_LARGE" : {
-        "message" : [
-          "Cannot convert user defined routine <name> to catalog function: routine properties are too large."
-        ]
-      },
       "RETURN_COLUMN_COUNT_MISMATCH" : {
         "message" : [
           "The number of columns produced by the RETURN clause (num: `<outputSize>`) does not match the number of column names specified by the RETURNS clause (num: `<returnParamSize>`) of <name>."
+        ]
+      },
+      "ROUTINE_PROPERTY_TOO_LARGE" : {
+        "message" : [
+          "Cannot convert user defined routine <name> to catalog function: routine properties are too large."
         ]
       },
       "SQL_TABLE_UDF_BODY_MUST_BE_A_QUERY" : {
