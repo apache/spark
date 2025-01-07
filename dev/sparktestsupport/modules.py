@@ -1438,7 +1438,7 @@ pyspark_errors = Module(
     ],
 )
 
-pyspark_logging = Module(
+pyspark_logger = Module(
     name="pyspark-logger",
     dependencies=[],
     source_file_regexes=["python/pyspark/logger"],

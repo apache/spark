@@ -15,20 +15,13 @@
 # limitations under the License.
 #
 
-[tool.pytest.ini_options]
-# Pytest it used only to run mypy data tests
-python_files = "test_*.yml"
-testpaths = [
-  "pyspark/tests/typing",
-  "pyspark/sql/tests/typing",
-  "pyspark/ml/typing",
-]
 
-[tool.black]
-# When changing the version, we have to update
-# GitHub workflow version and dev/reformat-python
-required-version = "23.12.1"
-line-length = 100
-target-version = ['py39']
-include = '\.pyi?$'
-extend-exclude = 'cloudpickle|error_classes.py'
+class TableValuedFunctionArgument:
+    """
+    Base class for arguments passed to Table Valued Functions.
+
+    This class is intentionally left empty and serves as a marker to achieve
+    parity with the Scala `TableValuedFunctionArgument` trait.
+    """
+
+    pass

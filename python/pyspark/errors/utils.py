@@ -259,8 +259,6 @@ def _with_origin(func: FuncT) -> FuncT:
 
         if spark is not None and hasattr(func, "__name__") and is_debugging_enabled():
             if is_remote():
-                global current_origin
-
                 # Getting the configuration requires RPC call. Uses the default value for now.
                 depth = 1
                 set_current_origin(func.__name__, _capture_call_site(depth))

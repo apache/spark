@@ -21,8 +21,8 @@ import org.apache.spark.{SparkIllegalArgumentException, SparkUnsupportedOperatio
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, AssignmentUtils, EliminateSubqueryAliases, FieldName, NamedRelation, PartitionSpec, ResolvedIdentifier, ResolvedProcedure, TypeCheckResult, UnresolvedException, UnresolvedProcedure, ViewSchemaMode}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
+import org.apache.spark.sql.catalyst.catalog.{FunctionResource, RoutineLanguage}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
-import org.apache.spark.sql.catalyst.catalog.FunctionResource
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSet, Expression, MetadataAttribute, NamedExpression, UnaryExpression, Unevaluable, V2ExpressionUtils}
 import org.apache.spark.sql.catalyst.plans.DescribeCommandSchema
 import org.apache.spark.sql.catalyst.trees.BinaryLike
@@ -692,6 +692,19 @@ object DescribeRelation {
 }
 
 /**
+ * The logical plan of the DESCRIBE relation_name AS JSON command.
+ */
+case class DescribeRelationJson(
+    relation: LogicalPlan,
+    partitionSpec: TablePartitionSpec,
+    isExtended: Boolean) extends UnaryCommand {
+  override val output: Seq[Attribute] = DescribeCommandSchema.describeJsonTableAttributes()
+  override def child: LogicalPlan = relation
+  override protected def withNewChildInternal(newChild: LogicalPlan): DescribeRelationJson =
+    copy(relation = newChild)
+}
+
+/**
  * The logical plan of the DESCRIBE relation_name col_name command.
  */
 case class DescribeColumn(
@@ -1069,6 +1082,26 @@ case class CreateFunction(
     ifExists: Boolean,
     replace: Boolean) extends UnaryCommand {
   override protected def withNewChildInternal(newChild: LogicalPlan): CreateFunction =
+    copy(child = newChild)
+}
+
+/**
+ * The logical plan of the CREATE FUNCTION command for SQL Functions.
+ */
+case class CreateUserDefinedFunction(
+    child: LogicalPlan,
+    inputParamText: Option[String],
+    returnTypeText: String,
+    exprText: Option[String],
+    queryText: Option[String],
+    comment: Option[String],
+    isDeterministic: Option[Boolean],
+    containsSQL: Option[Boolean],
+    language: RoutineLanguage,
+    isTableFunc: Boolean,
+    ignoreIfExists: Boolean,
+    replace: Boolean) extends UnaryCommand {
+  override protected def withNewChildInternal(newChild: LogicalPlan): CreateUserDefinedFunction =
     copy(child = newChild)
 }
 

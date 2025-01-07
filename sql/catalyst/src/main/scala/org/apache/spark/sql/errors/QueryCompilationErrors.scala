@@ -1615,6 +1615,10 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     notSupportedForV2TablesError("ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]")
   }
 
+  def describeAsJsonNotSupportedForV2TablesError(): Throwable = {
+    notSupportedForV2TablesError("DESCRIBE TABLE AS JSON")
+  }
+
   def loadDataNotSupportedForV2TablesError(): Throwable = {
     notSupportedForV2TablesError("LOAD DATA")
   }
@@ -2170,6 +2174,15 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map(
         "plugin" -> plugin.name,
         "ability" -> ability))
+  }
+
+  def tableValuedArgumentsNotYetImplementedForSqlFunctions(
+      action: String, functionName: String): Throwable = {
+    new AnalysisException(
+      errorClass = "TABLE_VALUED_ARGUMENTS_NOT_YET_IMPLEMENTED_FOR_SQL_FUNCTIONS",
+      messageParameters = Map(
+        "action" -> action,
+        "functionName" -> functionName))
   }
 
   def tableValuedFunctionTooManyTableArgumentsError(num: Int): Throwable = {

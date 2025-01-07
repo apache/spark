@@ -16,6 +16,14 @@ struct<>
 
 
 -- !query
+create temporary view t3 as select * from t
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
 WITH s AS (SELECT 1 FROM s) SELECT * FROM s
 -- !query schema
 struct<>
@@ -68,6 +76,16 @@ struct<1:int>
 1
 1
 1
+
+
+-- !query
+WITH t AS (SELECT 1) SELECT * FROM t3
+-- !query schema
+struct<id:int>
+-- !query output
+0
+1
+2
 
 
 -- !query
@@ -576,6 +594,14 @@ struct<>
 
 -- !query
 DROP VIEW IF EXISTS t2
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP VIEW IF EXISTS t3
 -- !query schema
 struct<>
 -- !query output

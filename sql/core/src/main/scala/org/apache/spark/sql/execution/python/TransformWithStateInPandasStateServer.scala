@@ -159,6 +159,11 @@ class TransformWithStateInPandasStateServer(
           logWarning(log"No more data to read from the socket")
           statefulProcessorHandle.setHandleState(StatefulProcessorHandleState.CLOSED)
           return
+        case _: InterruptedException =>
+          logInfo(log"Thread interrupted, shutting down state server")
+          Thread.currentThread().interrupt()
+          statefulProcessorHandle.setHandleState(StatefulProcessorHandleState.CLOSED)
+          return
         case e: Exception =>
           logError(log"Error reading message: ${MDC(LogKeys.ERROR, e.getMessage)}", e)
           sendResponse(1, e.getMessage)
