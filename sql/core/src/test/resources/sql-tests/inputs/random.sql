@@ -23,7 +23,7 @@ SELECT uniform(0, 10, 0) AS result;
 SELECT uniform(0L, 10L, 0) AS result;
 SELECT uniform(0, 10L, 0) AS result;
 SELECT uniform(0, cast(10 as tinyint), 0) AS result;
-SELECT uniform(0, cast(10 as bigint), 0) AS result;
+SELECT uniform(0, cast(10 as smallint), 0) AS result;
 SELECT uniform(0, 10S, 0) AS result;
 SELECT uniform(10, 20, 0) AS result;
 SELECT uniform(10.0F, 20.0F, 0) AS result;

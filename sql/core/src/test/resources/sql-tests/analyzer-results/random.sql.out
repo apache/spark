@@ -126,7 +126,7 @@ SELECT uniform(0, cast(10 as tinyint), 0) AS result
 
 
 -- !query
-SELECT uniform(0, cast(10 as bigint), 0) AS result
+SELECT uniform(0, cast(10 as smallint), 0) AS result
 -- !query analysis
 [Analyzer test output redacted due to nondeterminism]
 

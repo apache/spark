@@ -156,9 +156,9 @@ struct<result:int>
 
 
 -- !query
-SELECT uniform(0, cast(10 as bigint), 0) AS result
+SELECT uniform(0, cast(10 as smallint), 0) AS result
 -- !query schema
-struct<result:bigint>
+struct<result:int>
 -- !query output
 7
 

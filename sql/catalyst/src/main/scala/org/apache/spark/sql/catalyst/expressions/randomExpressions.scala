@@ -281,8 +281,8 @@ case class Uniform(min: Expression, max: Expression, seedExpression: Expression,
         cast(min, DoubleType),
         Multiply(
           Subtract(
-            cast(If(IsNull(max), Literal(null, max.dataType), max), DoubleType),
-            cast(If(IsNull(min), Literal(null, min.dataType), min), DoubleType)),
+            cast(max, DoubleType),
+            cast(min, DoubleType)),
           Rand(seed))),
         dataType)
     }
