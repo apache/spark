@@ -1155,6 +1155,13 @@
     ],
     "sqlState" : "42623"
   },
+  "DESCRIBE_JSON_NOT_EXTENDED" : {
+    "message" : [
+      "DESCRIBE TABLE ... AS JSON only supported when [EXTENDED|FORMATTED] is specified.",
+      "For example: DESCRIBE EXTENDED <tableName> AS JSON is supported but DESCRIBE <tableName> AS JSON is not."
+    ],
+    "sqlState" : "0A000"
+  },
   "DISTINCT_WINDOW_FUNCTION_UNSUPPORTED" : {
     "message" : [
       "Distinct window functions are not supported: <windowExpr>."
@@ -5281,6 +5288,11 @@
       "COMMENT_NAMESPACE" : {
         "message" : [
           "Attach a comment to the namespace <namespace>."
+        ]
+      },
+      "DESC_TABLE_COLUMN_JSON" : {
+        "message" : [
+          "DESC TABLE COLUMN AS JSON not supported for individual columns."
         ]
       },
       "DESC_TABLE_COLUMN_PARTITION" : {
