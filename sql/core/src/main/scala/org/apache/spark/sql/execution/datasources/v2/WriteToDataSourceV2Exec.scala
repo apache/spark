@@ -513,7 +513,7 @@ trait WritingSparkTask[W <: DataWriter[InternalRow]] extends Logging with Serial
         log"stage ${MDC(LogKeys.STAGE_ID, stageId)}." +
         log"${MDC(LogKeys.STAGE_ATTEMPT_ID, stageAttempt)})")
       dataWriter.abort()
-      logError(log"Aborted commit for partition ${MDC(LogKeys.PARTITION_ID_ID, partId)} " +
+      logError(log"Aborted commit for partition ${MDC(LogKeys.PARTITION_ID, partId)} " +
         log"(task ${MDC(LogKeys.TASK_ID, taskId)}, " +
         log"attempt ${MDC(LogKeys.TASK_ATTEMPT_ID, attemptId)}, " +
         log"stage ${MDC(LogKeys.STAGE_ID, stageId)}." +
