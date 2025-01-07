@@ -166,9 +166,7 @@ private[sql] trait ParquetTest extends FileBasedDataSourceTest {
     Thread.currentThread().getContextClassLoader.getResource(name).toString
   }
 
-  protected def schemaFor[T: TypeTag]: StructType = {
-    ScalaReflection.encoderFor[T].schema
-  }
+  protected def schemaFor[T: TypeTag]: StructType = ScalaReflection.encoderFor[T].schema
 
   def withAllParquetReaders(code: => Unit): Unit = {
     // test the row-based reader

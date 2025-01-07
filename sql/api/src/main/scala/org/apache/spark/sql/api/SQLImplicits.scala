@@ -247,9 +247,7 @@ trait EncoderImplicits extends LowPrioritySQLImplicits with Serializable {
 
   // Maps
   /** @since 2.3.0 */
-  implicit def newMapEncoder[T <: Map[_, _]: TypeTag]: Encoder[T] = {
-    ScalaReflection.encoderFor[T]
-  }
+  implicit def newMapEncoder[T <: Map[_, _]: TypeTag]: Encoder[T] = ScalaReflection.encoderFor[T]
 
   /**
    * Notice that we serialize `Set` to Catalyst array. The set property is only kept when
@@ -259,9 +257,7 @@ trait EncoderImplicits extends LowPrioritySQLImplicits with Serializable {
    *
    * @since 2.3.0
    */
-  implicit def newSetEncoder[T <: Set[_]: TypeTag]: Encoder[T] = {
-    ScalaReflection.encoderFor[T]
-  }
+  implicit def newSetEncoder[T <: Set[_]: TypeTag]: Encoder[T] = ScalaReflection.encoderFor[T]
 
   // Arrays
   private def newArrayEncoder[E](
