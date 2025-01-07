@@ -3202,7 +3202,7 @@ Aggregate [x#x, y#x], [x#x, y#x]
 values (3, 4) as tab(x, y)
 |> aggregate sum(y) group by 1
 -- !query analysis
-Aggregate [x#x], [x#x, pipeexpression(sum(y#x), true, AGGREGATE) AS pipeexpression(sum(y))#xL]
+Aggregate [x#x], [x#x, sum(y#x) AS sum(y)#xL]
 +- SubqueryAlias tab
    +- LocalRelation [x#x, y#x]
 
@@ -3211,7 +3211,7 @@ Aggregate [x#x], [x#x, pipeexpression(sum(y#x), true, AGGREGATE) AS pipeexpressi
 values (3, 4), (5, 4) as tab(x, y)
 |> aggregate sum(y) group by 1
 -- !query analysis
-Aggregate [x#x], [x#x, pipeexpression(sum(y#x), true, AGGREGATE) AS pipeexpression(sum(y))#xL]
+Aggregate [x#x], [x#x, sum(y#x) AS sum(y)#xL]
 +- SubqueryAlias tab
    +- LocalRelation [x#x, y#x]
 
@@ -3220,7 +3220,7 @@ Aggregate [x#x], [x#x, pipeexpression(sum(y#x), true, AGGREGATE) AS pipeexpressi
 select 3 as x, 4 as y
 |> aggregate sum(y) group by 1, 1
 -- !query analysis
-Aggregate [x#x, x#x], [x#x, x#x, pipeexpression(sum(y#x), true, AGGREGATE) AS pipeexpression(sum(y))#xL]
+Aggregate [x#x, x#x], [x#x, x#x, sum(y#x) AS sum(y)#xL]
 +- Project [3 AS x#x, 4 AS y#x]
    +- OneRowRelation
 
@@ -3229,7 +3229,7 @@ Aggregate [x#x, x#x], [x#x, x#x, pipeexpression(sum(y#x), true, AGGREGATE) AS pi
 select 1 as `1`, 2 as `2`
 |> aggregate sum(`2`) group by `1`
 -- !query analysis
-Aggregate [1#x], [1#x, pipeexpression(sum(2#x), true, AGGREGATE) AS pipeexpression(sum(2))#xL]
+Aggregate [1#x], [1#x, sum(2#x) AS sum(2)#xL]
 +- Project [1 AS 1#x, 2 AS 2#x]
    +- OneRowRelation
 
@@ -3238,7 +3238,7 @@ Aggregate [1#x], [1#x, pipeexpression(sum(2#x), true, AGGREGATE) AS pipeexpressi
 select 3 as x, 4 as y
 |> aggregate sum(y) group by 2
 -- !query analysis
-Aggregate [y#x], [y#x, pipeexpression(sum(y#x), true, AGGREGATE) AS pipeexpression(sum(y))#xL]
+Aggregate [y#x], [y#x, sum(y#x) AS sum(y)#xL]
 +- Project [3 AS x#x, 4 AS y#x]
    +- OneRowRelation
 
@@ -3247,7 +3247,7 @@ Aggregate [y#x], [y#x, pipeexpression(sum(y#x), true, AGGREGATE) AS pipeexpressi
 select 3 as x, 4 as y, 5 as z
 |> aggregate sum(y) group by 2
 -- !query analysis
-Aggregate [y#x], [y#x, pipeexpression(sum(y#x), true, AGGREGATE) AS pipeexpression(sum(y))#xL]
+Aggregate [y#x], [y#x, sum(y#x) AS sum(y)#xL]
 +- Project [3 AS x#x, 4 AS y#x, 5 AS z#x]
    +- OneRowRelation
 
@@ -3256,7 +3256,7 @@ Aggregate [y#x], [y#x, pipeexpression(sum(y#x), true, AGGREGATE) AS pipeexpressi
 select 3 as x, 4 as y, 5 as z
 |> aggregate sum(y) group by 3
 -- !query analysis
-Aggregate [z#x], [z#x, pipeexpression(sum(y#x), true, AGGREGATE) AS pipeexpression(sum(y))#xL]
+Aggregate [z#x], [z#x, sum(y#x) AS sum(y)#xL]
 +- Project [3 AS x#x, 4 AS y#x, 5 AS z#x]
    +- OneRowRelation
 
@@ -3265,7 +3265,7 @@ Aggregate [z#x], [z#x, pipeexpression(sum(y#x), true, AGGREGATE) AS pipeexpressi
 select 3 as x, 4 as y, 5 as z
 |> aggregate sum(y) group by 2, 3
 -- !query analysis
-Aggregate [y#x, z#x], [y#x, z#x, pipeexpression(sum(y#x), true, AGGREGATE) AS pipeexpression(sum(y))#xL]
+Aggregate [y#x, z#x], [y#x, z#x, sum(y#x) AS sum(y)#xL]
 +- Project [3 AS x#x, 4 AS y#x, 5 AS z#x]
    +- OneRowRelation
 
@@ -3274,7 +3274,7 @@ Aggregate [y#x, z#x], [y#x, z#x, pipeexpression(sum(y#x), true, AGGREGATE) AS pi
 select 3 as x, 4 as y, 5 as z
 |> aggregate sum(y) group by 1, 2, 3
 -- !query analysis
-Aggregate [x#x, y#x, z#x], [x#x, y#x, z#x, pipeexpression(sum(y#x), true, AGGREGATE) AS pipeexpression(sum(y))#xL]
+Aggregate [x#x, y#x, z#x], [x#x, y#x, z#x, sum(y#x) AS sum(y)#xL]
 +- Project [3 AS x#x, 4 AS y#x, 5 AS z#x]
    +- OneRowRelation
 
@@ -3283,7 +3283,7 @@ Aggregate [x#x, y#x, z#x], [x#x, y#x, z#x, pipeexpression(sum(y#x), true, AGGREG
 select 3 as x, 4 as y, 5 as z
 |> aggregate sum(y) group by x, 2, 3
 -- !query analysis
-Aggregate [x#x, y#x, z#x], [x#x, y#x, z#x, pipeexpression(sum(y#x), true, AGGREGATE) AS pipeexpression(sum(y))#xL]
+Aggregate [x#x, y#x, z#x], [x#x, y#x, z#x, sum(y#x) AS sum(y)#xL]
 +- Project [3 AS x#x, 4 AS y#x, 5 AS z#x]
    +- OneRowRelation
 
