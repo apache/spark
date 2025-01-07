@@ -170,6 +170,7 @@ IS	true
 ITEMS	false
 ITERATE	false
 JOIN	true
+JSON	false
 KEYS	false
 LANGUAGE	false
 LAST	false
