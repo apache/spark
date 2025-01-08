@@ -90,13 +90,11 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
     // the current operator may have extra columns if it inherits the output columns from its
     // child, and we need to project away the extra columns to keep the plan schema unchanged.
     assert(p.output.length <= newPlan.output.length)
-    newPlan.output.diff(p.output).forall(_.name.startsWith("_"))
-    def hasOriginAlias(expr: Expression): Boolean = {
-      expr match {
-        case w: With =>
-          if (w.defs.exists(_.originAlias.nonEmpty)) true else false
-        case e => e.children.exists(hasOriginAlias)
-      }
+
+    def hasOriginAlias(expr: Expression): Boolean = expr match {
+      case w: With =>
+        if (w.defs.exists(_.originAlias.nonEmpty)) true else false
+      case e => e.children.exists(hasOriginAlias)
     }
     // If this iteration contains attribute that require propagate, the column cannot be pruning.
     val needPropagate = p.expressions.exists(hasOriginAlias)
@@ -148,6 +146,11 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
               // TODO: we should calculate the ref count and also inline the common expression
               //       if it's ref count is 1.
               refToExpr(id) = child
+            } else if (originAlias.nonEmpty &&
+              inputPlans.head.output.contains(originAlias.get.toAttribute)) {
+              // originAlias only exists in Project or Filter. If the child already contains this
+              // attribute, extend it.
+              refToExpr(id) = originAlias.get.toAttribute
             } else {
               val commonExprs = commonExprsPerChild(childPlanIndex)
               val existingCommonExpr = commonExprs.find(_._2 == id.id)

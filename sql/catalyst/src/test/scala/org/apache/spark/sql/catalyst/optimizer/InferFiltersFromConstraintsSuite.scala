@@ -161,10 +161,9 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
       .join(t2, Inner, Some("t.a".attr === "t2.a".attr && "t.int_col".attr === "t2.a".attr))
       .analyze
     val correctAnswer = t1
-      .select($"a", Coalesce(Seq($"a", $"b")) as "int_col")
+      .select($"a", Coalesce(Seq($"a", $"b")) as "int_col").as("t")
       .where(IsNotNull($"a") && IsNotNull($"int_col") &&
         $"a" === $"int_col")
-      .select($"a", $"int_col").as("t")
       .join(t2.where(IsNotNull($"a")), Inner,
         Some("t.a".attr === "t2.a".attr && "t.int_col".attr === "t2.a".attr))
       .analyze

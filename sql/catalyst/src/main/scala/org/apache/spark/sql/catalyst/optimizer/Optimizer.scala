@@ -1135,7 +1135,6 @@ object CollapseProject extends Rule[LogicalPlan] with AliasHelper {
         r.copy(child = p.copy(projectList = buildCleanedProjectList(l1, p.projectList)))
       case Project(l1, s @ Sample(_, _, _, _, p2 @ Project(l2, _))) if isRenaming(l1, l2) =>
         s.copy(child = p2.copy(projectList = buildCleanedProjectList(l1, p2.projectList)))
-      case p @ Project(_, child) if child.output == p.output => child
     }
   }
 
@@ -1815,7 +1814,10 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
       maxIterationsSetting = SQLConf.OPTIMIZER_MAX_ITERATIONS.key)
     val batches = Seq(
       Batch("RewriteWithExpression", fixedPoint, RewriteWithExpression),
-      Batch("Optimize after RewriteWithExpression", fixedPoint, CollapseProject, ColumnPruning)
+      Batch("Optimize after RewriteWithExpression", fixedPoint,
+        CollapseProject,
+        ColumnPruning,
+        RemoveNoopOperators)
     )
   }
 
@@ -1833,9 +1835,9 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
       val aliasMap = getAliasMap(project)
       var newProjectList = fields ++ getWithAttributes(condition)
       val newCondition = rewriteCondition(condition, aliasMap)
-      val rewriteAlias = getWithAlias(newCondition).toSet
+      val exprIdSet = getWithAlias(newCondition).map(_.exprId).toSet
       newProjectList = newProjectList.map {
-        case a: Alias if rewriteAlias.contains(a) => a.toAttribute
+        case a: Alias if exprIdSet.contains(a.exprId) => a.toAttribute
         case e => e
       }
       project.copy(child = Filter(newCondition, grandChild), projectList = newProjectList)
@@ -1862,8 +1864,8 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
         // propagate the attributes directly need add the groupingExpressions may cause regression.
         // So Aggregate only need inline common expression from parent for original project
         // inheritance.
-        val newAggregateExpressions =
-          aggregate.aggregateExpressions ++ getWithAlias(pushDown.reduce(And))
+        val newAggregateExpressions = aggregate.aggregateExpressions ++
+          getWithAlias(pushDown.reduce(And)).map(replaceAliasButKeepName(_, aliasMap))
         val replaced = removeOriginAlias(rewriteCondition(pushDown.reduce(And), aliasMap))
         val newAggregate = aggregate.copy(child = Filter(replaced, aggregate.child),
           aggregateExpressions = newAggregateExpressions)
@@ -2041,8 +2043,7 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
       cond: Expression,
       aliasMap: AttributeMap[Alias]): Expression = {
     if (!SQLConf.get.getConf(SQLConf.ALWAYS_INLINE_COMMON_EXPR)) {
-      val replaceWithMap = cond.collect {case a: Attribute => a }
-        .distinct
+      val replaceWithMap = cond.references.toSeq
         .filter(attr => aliasMap.contains(attr))
         .map(attr => attr -> aliasMap(attr))
         .filter(m => !CollapseProject.isCheap(m._2))
