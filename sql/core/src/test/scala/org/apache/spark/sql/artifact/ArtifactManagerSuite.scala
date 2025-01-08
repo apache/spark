@@ -48,7 +48,7 @@ class ArtifactManagerSuite extends SharedSparkSession {
   private def sessionUUID: String = spark.sessionUUID
 
   override def afterEach(): Unit = {
-    artifactManager.cleanUpResources()
+    artifactManager.cleanUpResourcesForTesting()
     super.afterEach()
   }
 
@@ -209,7 +209,7 @@ class ArtifactManagerSuite extends SharedSparkSession {
         assert(expectedPath.toFile.exists())
 
         // Remove resources
-        artifactManager.cleanUpResources()
+        artifactManager.cleanUpResourcesForTesting()
 
         assert(blockManager.getLocalBytes(blockId).isEmpty)
         assert(!expectedPath.toFile.exists())
@@ -294,7 +294,7 @@ class ArtifactManagerSuite extends SharedSparkSession {
     val sessionDirectory = artifactManager.artifactPath.toFile
     assert(sessionDirectory.exists())
 
-    artifactManager.cleanUpResources()
+    artifactManager.cleanUpResourcesForTesting()
     assert(!sessionDirectory.exists())
     assert(ArtifactManager.artifactRootDirectory.toFile.exists())
   }

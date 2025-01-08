@@ -148,6 +148,18 @@ case class StructField(
   }
 
   /**
+   * Return the default value of this StructField. This is used for storing the default value of a
+   * function parameter.
+   */
+  private[sql] def getDefault(): Option[String] = {
+    if (metadata.contains("default")) {
+      Option(metadata.getString("default"))
+    } else {
+      None
+    }
+  }
+
+  /**
    * Updates the StructField with a new current default value.
    */
   def withCurrentDefaultValue(value: String): StructField = {

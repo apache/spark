@@ -29,16 +29,17 @@ to return the metadata pertaining to a partition or column respectively.
 ### Syntax
 
 ```sql
-{ DESC | DESCRIBE } [ TABLE ] [ format ] table_identifier [ partition_spec ] [ col_name ]
+{ DESC | DESCRIBE } [ TABLE ] [ format ] table_identifier [ partition_spec ] [ col_name ] [ AS JSON ]
 ```
 
 ### Parameters
 
 * **format**
 
-    Specifies the optional format of describe output. If `EXTENDED` is specified
+    Specifies the optional format of describe output. If `EXTENDED` or `FORMATTED` is specified
     then additional metadata information (such as parent database, owner, and access time)
-    is returned. 
+    is returned. Also if `EXTENDED` or `FORMATTED` is specified, then the metadata can be returned 
+    in JSON format by specifying `AS JSON` at the end of the statement.
 
 * **table_identifier**
 
@@ -60,7 +61,95 @@ to return the metadata pertaining to a partition or column respectively.
     and `col_name` are  mutually exclusive and can not be specified together. Currently
     nested columns are not allowed to be specified.
     
+    JSON format is not currently supported for individual columns.
+    
     **Syntax:** `[ database_name. ] [ table_name. ] column_name`
+
+* **AS JSON**
+
+  An optional parameter to return the table metadata in JSON format. Only supported when `EXTENDED`
+  or `FORMATTED` format is specified (both produce equivalent JSON).
+
+  **Syntax:** `[ AS JSON ]`
+
+  **Schema:**
+  
+  Below is the full JSON schema.
+  In actual output, null fields are omitted and the JSON is not pretty-printed (see Examples).
+  
+  ```sql
+    {
+      "table_name": "<table_name>",
+      "catalog_name": "<catalog_name>",
+      "schema_name": "<innermost_namespace_name>",
+      "namespace": ["<namespace_names>"],
+      "type": "<table_type>",
+      "provider": "<provider>",
+      "columns": [
+        {
+          "name": "<name>",
+          "type": <type_json>,
+          "comment": "<comment>",
+          "nullable": <boolean>,
+          "default": "<default_val>"
+        }
+      ],
+      "partition_values": {
+        "<col_name>": "<val>"
+      },
+      "location": "<path>",
+      "view_text": "<view_text>",
+      "view_original_text": "<view_original_text>",
+      "view_schema_mode": "<view_schema_mode>",
+      "view_catalog_and_namespace": "<view_catalog_and_namespace>",
+      "view_query_output_columns": ["col1", "col2"],
+      "comment": "<comment>",
+      "table_properties": {
+        "property1": "<property1>",
+        "property2": "<property2>"
+      },
+      "storage_properties": {
+        "property1": "<property1>",
+        "property2": "<property2>"
+      },
+      "serde_library": "<serde_library>",
+      "input_format": "<input_format>",
+      "output_format": "<output_format>",
+      "num_buckets": <num_buckets>,
+      "bucket_columns": ["<col_name>"],
+      "sort_columns": ["<col_name>"],
+      "created_time": "<timestamp_ISO-8601>",
+      "created_by": "<created_by>",
+      "last_access": "<timestamp_ISO-8601>",
+      "partition_provider": "<partition_provider>"
+    }
+  ```
+  
+  Below are the schema definitions for `<type_json>`:
+
+| Spark SQL Data Types  | JSON Representation                                                                                                                                              |
+|-----------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| ByteType              | `{ "name" : "tinyint" }`                                                                                                                                         |
+| ShortType             | `{ "name" : "smallint" }`                                                                                                                                        |
+| IntegerType           | `{ "name" : "int" }`                                                                                                                                             |
+| LongType              | `{ "name" : "bigint" }`                                                                                                                                          |
+| FloatType             | `{ "name" : "float" }`                                                                                                                                           |
+| DoubleType            | `{ "name" : "double" }`                                                                                                                                          |
+| DecimalType           | `{ "name" : "decimal", "precision": p, "scale": s }`                                                                                                             |
+| StringType            | `{ "name" : "string" }`                                                                                                                                          |
+| VarCharType           | `{ "name" : "varchar", "length": n }`                                                                                                                            |
+| CharType              | `{ "name" : "char", "length": n }`                                                                                                                               |
+| BinaryType            | `{ "name" : "binary" }`                                                                                                                                          |
+| BooleanType           | `{ "name" : "boolean" }`                                                                                                                                         |
+| DateType              | `{ "name" : "date" }`                                                                                                                                            |
+| VariantType           | `{ "name" : "variant" }`                                                                                                                                         |
+| TimestampType         | `{ "name" : "timestamp_ltz" }`                                                                                                                                   |
+| TimestampNTZType      | `{ "name" : "timestamp_ntz" }`                                                                                                                                   |
+| YearMonthIntervalType | `{ "name" : "interval", "start_unit": "<start_unit>", "end_unit": "<end_unit>" }`                                                                                |
+| DayTimeIntervalType   | `{ "name" : "interval", "start_unit": "<start_unit>", "end_unit": "<end_unit>" }`                                                                                |
+| ArrayType             | `{ "name" : "array", "element_type": <type_json>, "element_nullable": <boolean> }`                                                                               |
+| MapType               | `{ "name" : "map", "key_type": <type_json>, "value_type": <type_json>, "value_nullable": <boolean> }`                                                            |
+| StructType            | `{ "name" : "struct", "fields": [ {"name" : "field1", "type" : <type_json>, “nullable”: <boolean>, "comment": “<comment>”, "default": “<default_val>”}, ... ] }` |
 
 ### Examples
 
@@ -173,6 +262,10 @@ DESCRIBE customer salesdb.customer.name;
 |data_type|    string|
 |  comment|Short name|
 +---------+----------+
+
+-- Returns the table metadata in JSON format.
+DESC FORMATTED customer AS JSON;
+{"table_name":"customer","catalog_name":"spark_catalog","schema_name":"default","namespace":["default"],"columns":[{"name":"cust_id","type":{"name":"integer"},"nullable":true},{"name":"name","type":{"name":"string"},"comment":"Short name","nullable":true},{"name":"state","type":{"name":"varchar","length":20},"nullable":true}],"location": "file:/tmp/salesdb.db/custom...","created_time":"2020-04-07T14:05:43Z","last_access":"UNKNOWN","created_by":"None","type":"MANAGED","provider":"parquet","partition_provider":"Catalog","partition_columns":["state"]}
 ```
 
 ### Related Statements

@@ -41,9 +41,11 @@
               "literal": {
                 "string": "zstandard"
               }
-            }]
+            }],
+            "isInternal": false
           }
-        }]
+        }],
+        "isInternal": false
       }
     }]
   }

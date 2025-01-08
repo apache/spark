@@ -40,7 +40,8 @@
                       }
                     }
                   }
-                }]
+                }],
+                "isInternal": false
               }
             },
             "arguments": [{
@@ -49,7 +50,8 @@
               "nameParts": ["y_2"]
             }]
           }
-        }]
+        }],
+        "isInternal": false
       }
     }]
   }
