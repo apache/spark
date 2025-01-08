@@ -393,7 +393,10 @@ case class RandStr(
   }
 
   private def lengthInteger(): Int = {
-    val result = Cast(length, IntegerType).eval().asInstanceOf[Int]
+    // We should have already added a cast to IntegerType (if necessary) in
+    // FunctionArgumentTypeCoercion.
+    assert(length.dataType == IntegerType)
+    val result = length.eval().asInstanceOf[Int]
     if (result < 0) {
       throw QueryExecutionErrors.unexpectedValueForLengthInFunctionError(prettyName, result)
     }
