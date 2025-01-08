@@ -607,23 +607,17 @@ class SparkConf(loadDefaults: Boolean)
     }
 
     val encryptionEnabled = get(NETWORK_CRYPTO_ENABLED) || get(SASL_ENCRYPTION_ENABLED)
-    SparkException.require(
-      !encryptionEnabled || get(NETWORK_AUTH_ENABLED),
-      "NETWORK_AUTH_MUST_BE_ENABLED",
-      Map("networkAuthEnabledConf" -> NETWORK_AUTH_ENABLED.key))
+    require(!encryptionEnabled || get(NETWORK_AUTH_ENABLED),
+      s"${NETWORK_AUTH_ENABLED.key} must be enabled when enabling encryption.")
 
     val executorTimeoutThresholdMs = get(NETWORK_TIMEOUT) * 1000
     val executorHeartbeatIntervalMs = get(EXECUTOR_HEARTBEAT_INTERVAL)
+    val networkTimeout = NETWORK_TIMEOUT.key
     // If spark.executor.heartbeatInterval bigger than spark.network.timeout,
     // it will almost always cause ExecutorLostFailure. See SPARK-22754.
-    SparkException.require(
-      executorTimeoutThresholdMs > executorHeartbeatIntervalMs,
-      "INVALID_EXECUTOR_HEARTBEAT_INTERVAL",
-      Map(
-        "networkTimeoutKey" -> NETWORK_TIMEOUT.key,
-        "networkTimeoutValue" -> executorTimeoutThresholdMs.toString,
-        "executorHeartbeatIntervalKey" -> EXECUTOR_HEARTBEAT_INTERVAL.key,
-        "executorHeartbeatIntervalValue" -> executorHeartbeatIntervalMs.toString))
+    require(executorTimeoutThresholdMs > executorHeartbeatIntervalMs, "The value of " +
+      s"${networkTimeout}=${executorTimeoutThresholdMs}ms must be greater than the value of " +
+      s"${EXECUTOR_HEARTBEAT_INTERVAL.key}=${executorHeartbeatIntervalMs}ms.")
   }
 
   /**
