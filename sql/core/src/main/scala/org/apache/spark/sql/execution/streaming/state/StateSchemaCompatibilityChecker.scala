@@ -209,6 +209,9 @@ class StateSchemaCompatibilityChecker(
       val oldAvroSchemas = oldSchemas.sortBy(_.valueSchemaId).reverse.map { oldSchema =>
         SchemaConverters.toAvroTypeWithDefaults(oldSchema.valueSchema)
       }.asJava
+      val l = oldSchemas.sortBy(_.valueSchemaId).reverse.map { oldSchema =>
+        SchemaConverters.toAvroTypeWithDefaults(oldSchema.valueSchema)
+      }
       val newAvroSchema = SchemaConverters.toAvroTypeWithDefaults(valueSchema)
 
       val validator = new SchemaValidatorBuilder().canReadStrategy.validateAll()
@@ -221,6 +224,14 @@ class StateSchemaCompatibilityChecker(
         case e: Throwable => throw e
       }
 
+      if (resultSchema.valueSchemaId + 1 >=
+        conf.streamingValueStateSchemaEvolutionThreshold) {
+        throw StateStoreErrors.stateStoreValueSchemaEvolutionThresholdExceeded(
+          resultSchema.valueSchemaId + 1,
+          conf.streamingValueStateSchemaEvolutionThreshold,
+          newSchema.colFamilyName
+        )
+      }
       // Schema evolved - increment value schema ID
       (resultSchema.copy(valueSchemaId = incrementSchemaId(mostRecentSchema.valueSchemaId)), true)
     } else if (!ignoreValueSchema && !schemasCompatible(storedValueSchema, valueSchema)) {
@@ -263,14 +274,6 @@ class StateSchemaCompatibilityChecker(
             case Some(existingSchemas) =>
               val (updatedSchema, hasEvolved) = check(
                 existingSchemas, newSchema, ignoreValueSchema, schemaEvolutionEnabled)
-              if (oldSchemaFilePaths.size ==
-                conf.streamingValueStateSchemaEvolutionThreshold && hasEvolved) {
-                throw StateStoreErrors.stateStoreSchemaFileThresholdExceeded(
-                  oldSchemaFilePaths.size + 1,
-                  conf.streamingValueStateSchemaEvolutionThreshold,
-                  List(newSchema.colFamilyName)
-                )
-              }
               (updatedSchema :: schemas, evolved || hasEvolved)
             case None =>
               // New column family - initialize with schema ID 0
@@ -284,11 +287,11 @@ class StateSchemaCompatibilityChecker(
       val colFamiliesAddedOrRemoved = newColFamilies != oldColFamilies
       val newSchemaFileWritten = hasEvolutions || colFamiliesAddedOrRemoved
 
-      if (oldSchemaFilePaths.size == conf.streamingValueStateSchemaEvolutionThreshold &&
+      if (oldSchemaFilePaths.size == conf.streamingStateSchemaFilesThreshold &&
         colFamiliesAddedOrRemoved) {
-        throw StateStoreErrors.stateStoreSchemaFileThresholdExceeded(
+        throw StateStoreErrors.streamingStateSchemaFilesThresholdExceeded(
           oldSchemaFilePaths.size + 1,
-          conf.streamingValueStateSchemaEvolutionThreshold,
+          conf.streamingStateSchemaFilesThreshold,
           // need to compute symmetric diff between col family list
           (newColFamilies.diff(oldColFamilies) ++
             oldColFamilies.diff(newColFamilies)).toList

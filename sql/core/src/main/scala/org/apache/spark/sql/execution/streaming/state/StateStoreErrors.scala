@@ -151,12 +151,20 @@ object StateStoreErrors {
     new StateStoreInvalidValueSchemaEvolution(newValueSchema, avroErrorMessage)
   }
 
-  def stateStoreSchemaFileThresholdExceeded(
+  def stateStoreValueSchemaEvolutionThresholdExceeded(
+      numSchemaEvolutions: Int,
+      maxSchemaEvolutions: Int,
+      colFamilyName: String): StateStoreValueSchemaEvolutionThresholdExceeded = {
+    new StateStoreValueSchemaEvolutionThresholdExceeded(
+      numSchemaEvolutions, maxSchemaEvolutions, colFamilyName)
+  }
+
+  def streamingStateSchemaFilesThresholdExceeded(
       numSchemaFiles: Int,
-      maxNumSchemaFiles: Int,
-      colFamilyNames: List[String]): StateStoreSchemaFileThresholdExceeded = {
-    new StateStoreSchemaFileThresholdExceeded(
-      numSchemaFiles, maxNumSchemaFiles, colFamilyNames)
+      schemaFilesThreshold: Int,
+      colFamilyNames: List[String]): StateStoreStateSchemaFilesThresholdExceeded = {
+    new StateStoreStateSchemaFilesThresholdExceeded(
+      numSchemaFiles, schemaFilesThreshold, colFamilyNames)
   }
 
   def stateStoreColumnFamilyMismatch(
@@ -346,14 +354,25 @@ class StateStoreInvalidValueSchemaEvolution(
       "newValueSchema" -> newValueSchema,
       "avroErrorMessage" -> avroErrorMessage))
 
-class StateStoreSchemaFileThresholdExceeded(
-    numSchemaFiles: Int,
-    maxStateSchemaFiles: Int,
-    colFamilyNames: List[String])
+class StateStoreValueSchemaEvolutionThresholdExceeded(
+    numSchemaEvolutions: Int,
+    maxSchemaEvolutions: Int,
+    colFamilyName: String)
   extends SparkUnsupportedOperationException(
     errorClass = "STATE_STORE_VALUE_SCHEMA_EVOLUTION_THRESHOLD_EXCEEDED",
     messageParameters = Map(
-      "numStateSchemaFiles" -> numSchemaFiles.toString,
+      "numSchemaEvolutions" -> numSchemaEvolutions.toString,
+      "maxSchemaEvolutions" -> maxSchemaEvolutions.toString,
+      "colFamilyName" -> colFamilyName))
+
+class StateStoreStateSchemaFilesThresholdExceeded(
+    numStateSchemaFiles: Int,
+    maxStateSchemaFiles: Int,
+    colFamilyNames: List[String])
+  extends SparkUnsupportedOperationException(
+    errorClass = "STATE_STORE_STATE_SCHEMA_FILES_THRESHOLD_EXCEEDED",
+    messageParameters = Map(
+      "numStateSchemaFiles" -> numStateSchemaFiles.toString,
       "maxStateSchemaFiles" -> maxStateSchemaFiles.toString,
       "colFamilyNames" -> colFamilyNames.mkString("(", ",", ")")))
 

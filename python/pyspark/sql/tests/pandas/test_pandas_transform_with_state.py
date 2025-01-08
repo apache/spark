@@ -1294,7 +1294,9 @@ class TransformWithStateInPandasTestsMixin:
             self.test_transform_with_state_in_pandas_proc_timer()
             self.test_transform_with_state_restart_with_multiple_rows_init_state()
 
-    def _run_evolution_test(self, processor, checkpoint_dir, check_results, df):
+    def _run_evolution_test(
+        self, processor, checkpoint_dir, check_results, df, check_exception=None
+    ):
         # Schema definitions
         basic_state_schema = StructType(
             [StructField("id", IntegerType(), True), StructField("name", StringType(), True)]
@@ -1341,29 +1343,39 @@ class TransformWithStateInPandasTestsMixin:
             ]
         )
 
+        # Stop any active streams first
         for q in self.spark.streams.active:
             q.stop()
 
-        q = (
-            df.groupBy("id")
-            .transformWithStateInPandas(
-                statefulProcessor=processor,
-                outputStructType=output_schema,
-                outputMode="Update",
-                timeMode="None",
+        try:
+            q = (
+                df.groupBy("id")
+                .transformWithStateInPandas(
+                    statefulProcessor=processor,
+                    outputStructType=output_schema,
+                    outputMode="Update",
+                    timeMode="None",
+                )
+                .writeStream.queryName("evolution_test")
+                .option("checkpointLocation", checkpoint_dir)
+                .foreachBatch(check_results)
+                .outputMode("update")
+                .start()
             )
-            .writeStream.queryName("evolution_test")
-            .option("checkpointLocation", checkpoint_dir)
-            .foreachBatch(check_results)
-            .outputMode("update")
-            .start()
-        )
 
-        self.assertEqual(q.name, "evolution_test")
-        self.assertTrue(q.isActive)
-        q.processAllAvailable()
-        q.awaitTermination(10)
-        self.assertTrue(q.exception() is None)
+            self.assertEqual(q.name, "evolution_test")
+            self.assertTrue(q.isActive)
+            q.processAllAvailable()
+            q.awaitTermination(10)
+
+            if q.exception() is None:
+                assert check_exception is None
+
+        except Exception as e:
+            # If we are expecting an exception, verify it's the right one
+            if check_exception is None:
+                raise  # Re-raise if we weren't expecting an exception
+            self.assertTrue(check_exception(e))
 
     def test_schema_evolution_scenarios(self):
         """Test various schema evolution scenarios"""
@@ -1426,6 +1438,60 @@ class TransformWithStateInPandasTestsMixin:
                     assert result.value["name"] == "name-0"
 
                 self._run_evolution_test(UpcastProcessor(), checkpoint_dir, check_upcast, df)
+
+    def test_schema_evolution_fails(self):
+        with self.sql_conf({"spark.sql.streaming.stateStore.encodingFormat": "avro"}):
+            with tempfile.TemporaryDirectory() as checkpoint_dir:
+                input_path = tempfile.mkdtemp()
+                self._prepare_test_resource1(input_path)
+
+                df = self._build_test_df(input_path)
+
+                def check_add_fields(batch_df, batch_id):
+                    results = batch_df.collect()
+                    assert results[0].value["count"] == 100
+                    assert results[0].value["active"] == True
+
+                self._run_evolution_test(AddFieldsProcessor(), checkpoint_dir, check_add_fields, df)
+
+                self._prepare_test_resource2(input_path)
+
+                def check_upcast(batch_df, batch_id):
+                    result = batch_df.collect()[0]
+                    assert result.value["name"] == "name-0"
+
+                self._run_evolution_test(UpcastProcessor(), checkpoint_dir, check_upcast, df)
+
+                self._prepare_test_resource3(input_path)
+
+                def check_basic_state(batch_df, batch_id):
+                    result = batch_df.collect()[0]
+                    assert result.value["id"] == 0  # First ID from test data
+                    assert result.value["name"] == "name-0"
+
+                def check_exception(error):
+                    from pyspark.errors.exceptions.captured import StreamingQueryException
+
+                    if not isinstance(error, StreamingQueryException):
+                        return False
+
+                    error_msg = str(error)
+                    return (
+                        "[STREAM_FAILED]" in error_msg
+                        and "[STATE_STORE_INVALID_VALUE_SCHEMA_EVOLUTION]" in error_msg
+                        and "Schema evolution is not possible" in error_msg
+                        and "StructType(StructField(id,IntegerType,true),StructField(name,StringType,true))"
+                        in error_msg
+                    )
+
+                self._run_evolution_test(
+                    BasicProcessor(),
+                    checkpoint_dir,
+                    check_basic_state,
+                    df,
+                    check_exception=check_exception,
+                )
+
 
 class SimpleStatefulProcessorWithInitialState(StatefulProcessor):
     # this dict is the same as input initial state dataframe

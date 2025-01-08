@@ -2323,6 +2323,13 @@ object SQLConf {
       .intConf
       .createWithDefault(1)
 
+  val STREAMING_STATE_SCHEMA_FILES_THRESHOLD =
+    buildConf("spark.sql.streaming.stateStore.stateSchemaFilesThreshold")
+      .doc("The maximum number of StateSchemaV3 files allowed per operator")
+      .version("4.0.0")
+      .intConf
+      .createWithDefault(128)
+
   val STREAMING_STATE_STORE_ENCODING_FORMAT =
     buildConf("spark.sql.streaming.stateStore.encodingFormat")
       .doc("The encoding format used for stateful operators to store information " +
@@ -2336,10 +2343,10 @@ object SQLConf {
 
   val STREAMING_VALUE_STATE_SCHEMA_EVOLUTION_THRESHOLD =
     buildConf("spark.sql.streaming.stateStore.valueStateSchemaEvolutionThreshold")
-      .doc("The maximum number of StateSchemaV3 files allowed per operator")
+      .doc("The maximum number of value state schema evolutions allowed per column family")
       .version("4.0.0")
       .intConf
-      .createWithDefault(32)
+      .createWithDefault(16)
 
   val STATE_STORE_COMPRESSION_CODEC =
     buildConf("spark.sql.streaming.stateStore.compression.codec")
@@ -5796,6 +5803,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def streamingValueStateSchemaEvolutionThreshold: Int =
     getConf(STREAMING_VALUE_STATE_SCHEMA_EVOLUTION_THRESHOLD)
+
+  def streamingStateSchemaFilesThreshold: Int =
+    getConf(STREAMING_STATE_SCHEMA_FILES_THRESHOLD)
 
   def checkpointRenamedFileCheck: Boolean = getConf(CHECKPOINT_RENAMEDFILE_CHECK_ENABLED)
 
