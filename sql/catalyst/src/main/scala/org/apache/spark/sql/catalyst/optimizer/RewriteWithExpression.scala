@@ -22,9 +22,9 @@ import scala.collection.mutable
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.PhysicalAggregation
-import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan, PlanHelper, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.trees.TreePattern.{COMMON_EXPR_REF, FILTER, PROJECT, WITH_EXPRESSION}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{COMMON_EXPR_REF, WITH_EXPRESSION}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.Utils
 
@@ -38,34 +38,8 @@ import org.apache.spark.util.Utils
  * Note: For now we only use `With` in a few `RuntimeReplaceable` expressions. If we expand its
  *       usage, we should support aggregate/window functions as well.
  */
-object RewriteWithExpression extends Rule[LogicalPlan] with AliasHelper {
+object RewriteWithExpression extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = {
-    if (!plan.containsPattern(WITH_EXPRESSION)) {
-      return plan
-    }
-    var p = plan
-    while (p.containsPattern(WITH_EXPRESSION)) {
-      p = CollapseProject(applyOnce(p))
-    }
-    rewriteAlias(p)
-  }
-
-  // Expensive common expression will be evaluated twice: once in the Filter being pushed down,
-  // once in the Project stays up. Project reuses the attribute to avoid secondary evaluates.
-  private def rewriteAlias(plan: LogicalPlan): LogicalPlan = {
-    plan.transformUpWithSubqueriesAndPruning(_.containsAllPatterns(PROJECT, FILTER)) {
-      case p @ Project(projectList, child: Filter)
-        if getAliasMap(p).keySet.exists(child.output.contains) =>
-        val newProjectList = projectList.map {
-          case a: Alias if child.output.contains(a.toAttribute) =>
-            a.toAttribute
-          case e => e
-        }
-        p.copy(projectList = newProjectList)
-    }
-  }
-
-  private def applyOnce(plan: LogicalPlan): LogicalPlan = {
     plan.transformUpWithSubqueriesAndPruning(_.containsPattern(WITH_EXPRESSION)) {
       // For aggregates, separate the computation of the aggregations themselves from the final
       // result by moving the final result computation into a projection above it. This prevents
@@ -116,7 +90,17 @@ object RewriteWithExpression extends Rule[LogicalPlan] with AliasHelper {
     // the current operator may have extra columns if it inherits the output columns from its
     // child, and we need to project away the extra columns to keep the plan schema unchanged.
     assert(p.output.length <= newPlan.output.length)
-    if (p.output.length < newPlan.output.length) {
+    newPlan.output.diff(p.output).forall(_.name.startsWith("_"))
+    def hasOriginAlias(expr: Expression): Boolean = {
+      expr match {
+        case w: With =>
+          if (w.defs.exists(_.originAlias.nonEmpty)) true else false
+        case e => e.children.exists(hasOriginAlias)
+      }
+    }
+    // If this iteration contains attribute that require propagate, the column cannot be pruning.
+    val needPropagate = p.expressions.exists(hasOriginAlias)
+    if (p.output.length < newPlan.output.length && !needPropagate) {
       assert(p.outputSet.subsetOf(newPlan.outputSet))
       Project(p.output, newPlan)
     } else {
@@ -147,7 +131,8 @@ object RewriteWithExpression extends Rule[LogicalPlan] with AliasHelper {
               "Cannot rewrite canonicalized Common expression definitions")
           }
 
-          if (CollapseProject.isCheap(child) || !commonExprIdSet.contains(id)) {
+          if (CollapseProject.isCheap(child) ||
+            (originAlias.isEmpty && !commonExprIdSet.contains(id))) {
             refToExpr(id) = child
           } else {
             val childPlanIndex = inputPlans.indexWhere(

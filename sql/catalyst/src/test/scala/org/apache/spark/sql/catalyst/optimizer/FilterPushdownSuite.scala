@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
 
@@ -45,6 +46,13 @@ class FilterPushdownSuite extends PlanTest {
       Batch("Push extra predicate through join", FixedPoint(10),
         PushExtraPredicateThroughJoin,
         PushDownPredicates) :: Nil
+  }
+
+  object Optimize1 extends RuleExecutor[LogicalPlan] {
+
+    val batches = Batch("ColumnPruning and CollapseProject", FixedPoint(10),
+      ColumnPruning,
+      CollapseProject) :: Nil
   }
 
   val attrA = $"a".int
@@ -156,13 +164,7 @@ class FilterPushdownSuite extends PlanTest {
         .analyze
 
     val optimized = Optimize.execute(originalQuery.analyze)
-    val correctAnswer =
-      testRelation
-        .where($"a" + $"b" === 1)
-        .select($"a" + $"b" as "e")
-        .analyze
-
-    comparePlans(optimized, correctAnswer)
+    comparePlans(optimized, originalQuery)
   }
 
   test("nondeterministic: can always push down filter through project with deterministic field") {
@@ -199,8 +201,12 @@ class FilterPushdownSuite extends PlanTest {
       .analyze
 
     val optimized = Optimize.execute(originalQuery)
-
-    comparePlans(optimized, originalQuery)
+    val correctAnswer = testRelation
+      .select($"a")
+      .groupBy($"a")($"a", Rand(10).as("rand"))
+      .where($"a" > 5)
+      .analyze
+      comparePlans(optimized, correctAnswer)
   }
 
   test("nondeterministic: push down part of filter through aggregate with deterministic field") {
@@ -213,6 +219,7 @@ class FilterPushdownSuite extends PlanTest {
 
     val correctAnswer = testRelation
       .where($"a" > 5)
+      .select($"a")
       .groupBy($"a")($"a")
       .where(Rand(10) > 5)
       .analyze
@@ -222,6 +229,7 @@ class FilterPushdownSuite extends PlanTest {
 
   test("Can't push down nondeterministic filter through aggregate") {
     val originalQuery = testRelation
+      .select($"a", $"b")
       .groupBy($"a")($"a", count($"b") as "c")
       .where(Rand(10) > $"a")
       .analyze
@@ -609,7 +617,7 @@ class FilterPushdownSuite extends PlanTest {
     val optimized = Optimize.execute(originalQuery)
     val correctAnswer =
       x.where("x.a".attr > 10)
-        .join(y, LeftAnti, Some("x.b".attr === "y.b".attr))
+        .join(y.select($"b"), LeftAnti, Some("x.b".attr === "y.b".attr))
         .analyze
     comparePlans(optimized, correctAnswer)
   }
@@ -624,7 +632,7 @@ class FilterPushdownSuite extends PlanTest {
     val optimized = Optimize.execute(originalQuery)
     val correctAnswer =
       x.join(
-        y.where("y.a".attr > 10),
+        y.where("y.a".attr > 10).select($"b"),
         LeftAnti,
         Some("x.b".attr === "y.b".attr && "x.a".attr > 10))
         .analyze
@@ -642,7 +650,7 @@ class FilterPushdownSuite extends PlanTest {
     val optimized = Optimize.execute(originalQuery)
     val correctAnswer =
       x.join(
-        y.where("y.b".attr > 2),
+        y.where("y.b".attr > 2).select(),
         ExistenceJoin(fillerVal),
         Some("x.a".attr > 1))
       .analyze
@@ -727,16 +735,17 @@ class FilterPushdownSuite extends PlanTest {
 
   test("aggregate: push down filter when filter on group by expression") {
     val originalQuery = testRelation
-                        .groupBy($"a")($"a", count($"b") as "c")
-                        .select($"a", $"c")
-                        .where($"a" === 2)
+      .groupBy($"a")($"a", count($"b") as "c")
+      .select($"a", $"c")
+      .where($"a" === 2)
 
     val optimized = Optimize.execute(originalQuery.analyze)
 
     val correctAnswer = testRelation
-                        .where($"a" === 2)
-                        .groupBy($"a")($"a", count($"b") as "c")
-                        .analyze
+      .where($"a" === 2)
+      .select($"a", $"b")
+      .groupBy($"a")($"a", count($"b") as "c")
+      .analyze
     comparePlans(optimized, correctAnswer)
   }
 
@@ -833,7 +842,7 @@ class FilterPushdownSuite extends PlanTest {
     val optimized = Optimize.execute(originalQuery.analyze)
 
     val correctAnswer = testRelation
-      .select($"a", $"b")
+      .select($"a")
       .groupBy($"a")(count($"a"))
       .where(false)
       .analyze
@@ -849,7 +858,11 @@ class FilterPushdownSuite extends PlanTest {
 
     val optimized = Optimize.execute(originalQuery.analyze)
 
-    val correctAnswer = originalQuery.analyze
+    val correctAnswer = LocalRelation.apply(testRelation.output, Seq.empty)
+      .select()
+      .groupBy()(count(1))
+      .where(false)
+      .analyze
 
     comparePlans(optimized, correctAnswer)
   }
@@ -870,6 +883,7 @@ class FilterPushdownSuite extends PlanTest {
 
       val correctAnswer = testRelation
         .where($"a" > 42)
+        .select($"a", $"b")
         .groupBy($"a")(agg($"b"))
         .analyze
 
@@ -929,7 +943,8 @@ class FilterPushdownSuite extends PlanTest {
 
     val query = agg.where(a > 1 && b > 2)
     val optimized = Optimize.execute(query)
-    val correctedAnswer = agg.copy(child = agg.child.where(a > 1 && b > 2)).analyze
+    val correctedAnswer =
+      Optimize1.execute(agg.copy(child = agg.child.where(a > 1 && b > 2)).analyze)
     comparePlans(optimized, correctedAnswer)
   }
 
@@ -997,9 +1012,9 @@ class FilterPushdownSuite extends PlanTest {
     val originalQuery = testRelation.select($"a", $"b", $"c",
       winExpr.as("window")).where($"a" > 1)
     val correctAnswer = testRelation
-      .where($"a" > 1).select($"a", $"b", $"c")
+      .where($"a" > 1)
       .window(winExpr.as("window") :: Nil, $"a" :: Nil, $"b".asc :: Nil)
-      .select($"a", $"b", $"c", $"window").analyze
+      .analyze
 
     comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer)
   }
@@ -1012,9 +1027,9 @@ class FilterPushdownSuite extends PlanTest {
     val originalQuery = testRelation.select($"a", $"b", $"c",
       winExpr.as("window")).where($"a" * 3 > 15)
     val correctAnswer = testRelation
-      .where($"a" * 3 > 15).select($"a", $"b", $"c")
+      .where($"a" * 3 > 15)
       .window(winExpr.as("window") :: Nil, $"a".attr :: $"b".attr :: Nil, $"b".asc :: Nil)
-      .select($"a", $"b", $"c", $"window").analyze
+      .analyze
 
     comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer)
   }
@@ -1028,10 +1043,10 @@ class FilterPushdownSuite extends PlanTest {
       .where($"a" > 1)
 
     val correctAnswer = testRelation
-      .where($"a" > 1).select($"a", $"b", $"c")
+      .where($"a" > 1)
       .window(winExpr1.as("window1") :: winExpr2.as("window2") :: Nil,
         $"a".attr :: $"b".attr :: Nil, $"b".asc :: Nil)
-      .select($"a", $"b", $"c", $"window1", $"window2").analyze
+      .analyze
 
     comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer)
   }
@@ -1047,16 +1062,16 @@ class FilterPushdownSuite extends PlanTest {
       .where($"a" > 1)
 
     val correctAnswer1 = testRelation
-      .where($"a" > 1).select($"a", $"b", $"c")
+      .where($"a" > 1)
       .window(winExpr1.as("window1") :: Nil, $"a".attr :: $"b".attr :: Nil, $"b".asc :: Nil)
       .window(winExpr2.as("window2") :: Nil, $"a".attr :: $"b".attr :: Nil, $"a".asc :: Nil)
-      .select($"a", $"b", $"c", $"window1", $"window2").analyze
+      .analyze
 
     val correctAnswer2 = testRelation
-      .where($"a" > 1).select($"a", $"b", $"c")
+      .where($"a" > 1)
       .window(winExpr2.as("window2") :: Nil, $"a".attr :: $"b".attr :: Nil, $"a".asc :: Nil)
       .window(winExpr1.as("window1") :: Nil, $"a".attr :: $"b".attr :: Nil, $"b".asc :: Nil)
-      .select($"a", $"b", $"c", $"window1", $"window2").analyze
+      .analyze
 
     // When Analyzer adding Window operators after grouping the extracted Window Expressions
     // based on their Partition and Order Specs, the order of Window operators is
@@ -1079,13 +1094,13 @@ class FilterPushdownSuite extends PlanTest {
       .select($"a", winExpr1.as("window1"), $"b", $"c", winExpr2.as("window2"))
       .where($"b" > 1)
 
-    val correctAnswer1 = testRelation.select($"a", $"b", $"c")
+    val correctAnswer1 = testRelation
       .window(winExpr1.as("window1") :: Nil, $"a".attr :: Nil, $"b".asc :: Nil)
       .where($"b" > 1)
       .window(winExpr2.as("window2") :: Nil, $"b".attr :: Nil, $"b".asc :: Nil)
       .select($"a", $"window1", $"b", $"c", $"window2").analyze
 
-    val correctAnswer2 = testRelation.select($"a", $"b", $"c")
+    val correctAnswer2 = testRelation
       .window(winExpr2.as("window2") :: Nil, $"b".attr :: Nil, $"b".asc :: Nil)
       .window(winExpr1.as("window1") :: Nil, $"a".attr :: Nil, $"b".asc :: Nil)
       .where($"b" > 1)
@@ -1110,9 +1125,9 @@ class FilterPushdownSuite extends PlanTest {
     val originalQuery = testRelation.select($"a", $"b", $"c", winExpr.as("window"))
       .where($"a" + $"b" > 1)
     val correctAnswer = testRelation
-      .where($"a" + $"b" > 1).select($"a", $"b", $"c")
+      .where($"a" + $"b" > 1)
       .window(winExpr.as("window") :: Nil, $"a".attr :: $"b".attr :: Nil, $"b".asc :: Nil)
-      .select($"a", $"b", $"c", $"window").analyze
+      .analyze
 
     comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer)
   }
@@ -1153,9 +1168,9 @@ class FilterPushdownSuite extends PlanTest {
     // No push down: the predicate is c > 1, but the partitioning key is (a, b).
     val originalQuery = testRelation.select($"a", $"b", $"c", winExpr.as("window"))
       .where($"c" > 1)
-    val correctAnswer = testRelation.select($"a", $"b", $"c")
+    val correctAnswer = testRelation
       .window(winExpr.as("window") :: Nil, $"a".attr :: $"b".attr :: Nil, $"b".asc :: Nil)
-      .where($"c" > 1).select($"a", $"b", $"c", $"window").analyze
+      .where($"c" > 1).analyze
 
     comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer)
   }
@@ -1193,9 +1208,8 @@ class FilterPushdownSuite extends PlanTest {
     val originalQuery = testRelation.select($"a", $"b", $"c", winExpr.as("window"))
       .where($"a" + $"b" > 1)
     val correctAnswer = testRelation
-      .select($"a", $"b", $"c")
       .window(winExpr.as("window") :: Nil, $"b".attr :: Nil, $"b".asc :: Nil)
-      .where($"a" + $"b" > 1).select($"a", $"b", $"c", $"window").analyze
+      .where($"a" + $"b" > 1).analyze
 
     comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer)
   }
@@ -1505,6 +1519,7 @@ class FilterPushdownSuite extends PlanTest {
       .analyze
     val optimizedQueryWithStep = Optimize.execute(queryWithStep)
     val correctAnswerWithStep = x.where(IsNotNull(Sequence($"x.a", $"x.b", Some(Literal(1)))))
+      .select($"x.a", $"x.b")
       .groupBy($"x.a", $"x.b")($"x.a", $"x.b")
       .analyze
     comparePlans(optimizedQueryWithStep, correctAnswerWithStep)
@@ -1514,6 +1529,7 @@ class FilterPushdownSuite extends PlanTest {
       .analyze
     val optimizedQueryWithoutStep = Optimize.execute(queryWithoutStep)
     val correctAnswer = x.where(IsNotNull(Sequence($"x.a", $"x.b", None)))
+      .select($"x.a", $"x.b")
       .groupBy($"x.a", $"x.b")($"x.a", $"x.b")
       .analyze
     comparePlans(optimizedQueryWithoutStep, correctAnswer)
@@ -1540,33 +1556,29 @@ class FilterPushdownSuite extends PlanTest {
   }
 
   test("SPARK-50589: avoid extra expression duplication when push filter") {
-    // through project
-    val originalQuery1 = testRelation
-      .select($"a" + $"b" as "add", $"a" - $"b" as "sub")
-      .where($"add" < 10 && $"add" + $"add" > 10 && $"sub" > 0)
-    val optimized1 = Optimize.execute(originalQuery1.analyze)
-    val correctAnswer1 = testRelation
-      .select($"a", $"b", $"c", $"a" + $"b" as "add")
-      .where($"add" < 10 &&
-        $"add" + $"add" > 10 &&
-        $"a" - $"b" > 0)
-      .select($"add", $"a" - $"b" as "sub")
-      .analyze
-    comparePlans(optimized1, correctAnswer1)
+    withSQLConf(SQLConf.USE_COMMON_EXPR_ID_FOR_ALIAS.key -> "false") {
+      // through project
+      val originalQuery1 = testRelation
+        .select($"a" + $"b" as "add", $"a" - $"b" as "sub")
+        .where($"add" < 10 && $"add" + $"add" > 10 && $"sub" > 0)
+        .analyze
+      val optimized1 = Optimize.execute(originalQuery1)
+      comparePlans(optimized1, originalQuery1)
 
-    // through aggregate
-    val originalQuery2 = testRelation
-      .groupBy($"a")($"a", $"a" + $"a" as "add", abs($"a") as "abs", count(1) as "ct")
-      .where($"add" < 10 && $"add" + $"add" > 10 && $"abs" > 5)
-    val optimized2 = Optimize.execute(originalQuery2.analyze)
-    val correctAnswer2 = testRelation
-      .select($"a", $"b", $"c", $"a" + $"a" as "add")
-      .where($"add" < 10 &&
-        $"add" + $"add" > 10 &&
-        abs($"a") > 5)
-      .select($"a", $"b", $"c")
-      .groupBy($"a")($"a", $"a" + $"a" as "add", abs($"a") as "abs", count(1) as "ct")
-      .analyze
-    comparePlans(optimized2, correctAnswer2)
-  }
+      // through aggregate
+      val originalQuery2 = testRelation
+        .groupBy($"a")($"a", $"a" + $"a" as "add", abs($"a") as "abs", count(1) as "ct")
+        .where($"add" < 10 && $"add" + $"add" > 10 && $"abs" > 5)
+      val optimized2 = Optimize.execute(originalQuery2.analyze)
+      val correctAnswer2 = testRelation
+        .select($"a", $"a" + $"a" as "_common_expr_0")
+        .where($"_common_expr_0" < 10 &&
+          $"_common_expr_0" + $"_common_expr_0" > 10 &&
+          abs($"a") > 5)
+        .select($"a")
+        .groupBy($"a")($"a", $"a" + $"a" as "add", abs($"a") as "abs", count(1) as "ct")
+        .analyze
+      comparePlans(optimized2, correctAnswer2)
+    }
+    }
 }

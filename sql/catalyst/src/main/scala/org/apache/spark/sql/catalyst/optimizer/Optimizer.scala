@@ -174,7 +174,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
     Batch("Finish Analysis", FixedPoint(1), FinishAnalysis),
     // We must run this batch after `ReplaceExpressions`, as `RuntimeReplaceable` expression
     // may produce `With` expressions that need to be rewritten.
-    Batch("Rewrite With expression", FixedPoint(1), RewriteWithExpression),
+    Batch("Rewrite With expression", fixedPoint, RewriteWithExpression),
     //////////////////////////////////////////////////////////////////////////////////////////
     // Optimizer rules start here
     //////////////////////////////////////////////////////////////////////////////////////////
@@ -1135,6 +1135,7 @@ object CollapseProject extends Rule[LogicalPlan] with AliasHelper {
         r.copy(child = p.copy(projectList = buildCleanedProjectList(l1, p.projectList)))
       case Project(l1, s @ Sample(_, _, _, _, p2 @ Project(l2, _))) if isRenaming(l1, l2) =>
         s.copy(child = p2.copy(projectList = buildCleanedProjectList(l1, p2.projectList)))
+      case p @ Project(_, child) if child.output == p.output => child
     }
   }
 
@@ -1786,12 +1787,15 @@ object PruneFilters extends Rule[LogicalPlan] with PredicateHelper {
  *  Filter-Join-Join-Join. Most predicates can be pushed down in a single pass.
  */
 object PushDownPredicates extends Rule[LogicalPlan] {
-  def apply(plan: LogicalPlan): LogicalPlan = RewriteWithExpression(
-    plan.transformWithPruning(_.containsAnyPattern(FILTER, JOIN)) {
+
+  def apply(plan: LogicalPlan): LogicalPlan = {
+    val pushDownPlan = plan.transformWithPruning(_.containsAnyPattern(FILTER, JOIN)) {
       CombineFilters.applyLocally
         .orElse(PushPredicateThroughNonJoin.applyLocally)
         .orElse(PushPredicateThroughJoin.applyLocally)
-    })
+    }
+    PushPredicateThroughNonJoin.rewriteWithRuleExecutor.execute(pushDownPlan)
+  }
 }
 
 /**
@@ -1802,7 +1806,18 @@ object PushDownPredicates extends Rule[LogicalPlan] {
  * This heuristic is valid assuming the expression evaluation cost is minimal.
  */
 object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelper {
-  def apply(plan: LogicalPlan): LogicalPlan = plan transform applyLocally
+  def apply(plan: LogicalPlan): LogicalPlan =
+    rewriteWithRuleExecutor.execute(plan transform applyLocally)
+
+  val rewriteWithRuleExecutor = new RuleExecutor[LogicalPlan] {
+    val fixedPoint = FixedPoint(
+      conf.optimizerMaxIterations,
+      maxIterationsSetting = SQLConf.OPTIMIZER_MAX_ITERATIONS.key)
+    val batches = Seq(
+      Batch("RewriteWithExpression", fixedPoint, RewriteWithExpression),
+      Batch("Optimize after RewriteWithExpression", fixedPoint, CollapseProject, ColumnPruning)
+    )
+  }
 
   val applyLocally: PartialFunction[LogicalPlan, LogicalPlan] = {
     // SPARK-13473: We can't push the predicate down when the underlying projection output non-
@@ -1813,8 +1828,17 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
     // This also applies to Aggregate.
     case Filter(condition, project @ Project(fields, grandChild))
       if fields.forall(_.deterministic) && canPushThroughCondition(grandChild, condition) =>
+      // Project use With to push down filter, for propagate the common expression attributes, it
+      // needs output the attribute from parent.
       val aliasMap = getAliasMap(project)
-      project.copy(child = Filter(rewriteCondition(condition, aliasMap), grandChild))
+      var newProjectList = fields ++ getWithAttributes(condition)
+      val newCondition = rewriteCondition(condition, aliasMap)
+      val rewriteAlias = getWithAlias(newCondition).toSet
+      newProjectList = newProjectList.map {
+        case a: Alias if rewriteAlias.contains(a) => a.toAttribute
+        case e => e
+      }
+      project.copy(child = Filter(newCondition, grandChild), projectList = newProjectList)
 
     // We can push down deterministic predicate through Aggregate, including throwable predicate.
     // If we can push down a filter through Aggregate, it means the filter only references the
@@ -1834,8 +1858,15 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
       }
 
       if (pushDown.nonEmpty) {
-        val replaced = rewriteCondition(pushDown.reduce(And), aliasMap)
-        val newAggregate = aggregate.copy(child = Filter(replaced, aggregate.child))
+        // Different from Project, Aggregate is not suitable for using With to push down, because
+        // propagate the attributes directly need add the groupingExpressions may cause regression.
+        // So Aggregate only need inline common expression from parent for original project
+        // inheritance.
+        val newAggregateExpressions =
+          aggregate.aggregateExpressions ++ getWithAlias(pushDown.reduce(And))
+        val replaced = removeOriginAlias(rewriteCondition(pushDown.reduce(And), aliasMap))
+        val newAggregate = aggregate.copy(child = Filter(replaced, aggregate.child),
+          aggregateExpressions = newAggregateExpressions)
         // If there is no more filter to stay up, just eliminate the filter.
         // Otherwise, create "Filter(stayUp) <- Aggregate <- Filter(pushDownPredicate)".
         if (stayUp.isEmpty) newAggregate else Filter(stayUp.reduce(And), newAggregate)
@@ -1915,6 +1946,17 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
         filter
       }
 
+    case filter @ Filter(_, e: Expand) if e.expressions.forall(_.deterministic) =>
+      pushDownPredicate(filter, e.child) { predicate =>
+        // Expand's output is different from child, we need update for propagate the common
+        // expression attributes.
+        val withAttributes = getWithAttributes(predicate)
+        val newOutput = e.output ++ withAttributes
+        val newProjections = e.projections.map(_ ++ withAttributes)
+        val newChild = Filter(predicate, e.child)
+        Expand(newProjections, newOutput, newChild)
+      }
+
     case filter @ Filter(_, u: UnaryNode)
         if canPushThrough(u) && u.expressions.forall(_.deterministic) =>
       pushDownPredicate(filter, u.child) { predicate =>
@@ -1936,7 +1978,6 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
     case _: Sort => true
     case _: BatchEvalPython => true
     case _: ArrowEvalPython => true
-    case _: Expand => true
     case _ => false
   }
 
@@ -1981,6 +2022,12 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
     }
   }
 
+  private def removeOriginAlias(expr: Expression): Expression = {
+    expr.transform {
+      case ced: CommonExpressionDef => ced.copy(originAlias = None)
+    }
+  }
+
   private def rewriteCondition(
       cond: Expression,
       aliasMap: AttributeMap[Alias]): Expression = {
@@ -1988,19 +2035,16 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
   }
 
   /**
-   * Use [[With]] to rewrite condition which contains attribute that are not cheap and be consumed
-   * multiple times. Each predicate generates one or 0 With. For facilitates subsequent merge
-   * [[With]], use the same CommonExpressionDef ids for different [[With]].
+   * Use [[With]] to rewrite condition which contains attribute that are not cheap.
    */
   private def rewriteConditionByWith(
       cond: Expression,
       aliasMap: AttributeMap[Alias]): Expression = {
     if (!SQLConf.get.getConf(SQLConf.ALWAYS_INLINE_COMMON_EXPR)) {
       val replaceWithMap = cond.collect {case a: Attribute => a }
-        .groupBy(identity)
-        .transform((_, v) => v.size)
-        .filter(m => aliasMap.contains(m._1) && m._2 > 1)
-        .map(m => m._1 -> aliasMap(m._1))
+        .distinct
+        .filter(attr => aliasMap.contains(attr))
+        .map(attr => attr -> aliasMap(attr))
         .filter(m => !CollapseProject.isCheap(m._2))
       if (replaceWithMap.isEmpty) {
         cond
@@ -2028,6 +2072,18 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
     if (defs.nonEmpty) {
       With(replaced, defs.toSeq)
     } else expr
+  }
+
+  private def getWithAttributes(condition: Expression): Seq[Attribute] = {
+    condition.collect {
+      case CommonExpressionDef(_, _, Some(alias)) => alias.toAttribute
+    }.distinct
+  }
+
+  private def getWithAlias(condition: Expression): Seq[Alias] = {
+    condition.collect {
+      case CommonExpressionDef(_, _, Some(alias)) => alias
+    }.distinct
   }
 }
 

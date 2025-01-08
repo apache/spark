@@ -28,9 +28,13 @@ import org.apache.spark.sql.catalyst.rules.RuleExecutor
 class RewriteWithExpressionSuite extends PlanTest {
 
   object Optimizer extends RuleExecutor[LogicalPlan] {
-    val batches = Batch("Rewrite With expression", Once,
-      PullOutGroupingExpressions,
-      RewriteWithExpression) :: Nil
+    val batches =
+      Batch("Rewrite With expression", FixedPoint(5),
+        PullOutGroupingExpressions,
+        RewriteWithExpression) ::
+      Batch("Optimize after RewriteWithExpression", FixedPoint(5),
+        CollapseProject,
+        ColumnPruning) :: Nil
   }
 
   private val testRelation = LocalRelation($"a".int, $"b".int)
@@ -68,7 +72,7 @@ class RewriteWithExpressionSuite extends PlanTest {
     comparePlans(
       Optimizer.execute(plan),
       testRelation
-        .select((testRelation.output :+ (a + a).as("_common_expr_0")): _*)
+        .select((a + a).as("_common_expr_0"))
         .select(($"_common_expr_0" * $"_common_expr_0").as("col"))
         .analyze
     )
@@ -86,8 +90,8 @@ class RewriteWithExpressionSuite extends PlanTest {
     comparePlans(
       Optimizer.execute(testRelation.select(outerExpr.as("col"))),
       testRelation
-        .select(star(), (a + a).as("_common_expr_0"))
-        .select(a, b, ($"_common_expr_0" + $"_common_expr_0" + b).as("_common_expr_1"))
+        .select(b, (a + a).as("_common_expr_0"))
+        .select(($"_common_expr_0" + $"_common_expr_0" + b).as("_common_expr_1"))
         .select(($"_common_expr_1" * $"_common_expr_1").as("col"))
         .analyze
     )
@@ -105,7 +109,7 @@ class RewriteWithExpressionSuite extends PlanTest {
     comparePlans(
       Optimizer.execute(testRelation.select(outerExpr.as("col"))),
       testRelation
-        .select(star(), (b + b).as("_common_expr_1"), (a + a).as("_common_expr_0"))
+        .select((b + b).as("_common_expr_1"), (a + a).as("_common_expr_0"))
         .select(finalExpr.as("col"))
         .analyze
     )
@@ -126,10 +130,10 @@ class RewriteWithExpressionSuite extends PlanTest {
       Optimizer.execute(testRelation.select(outerExpr1.as("col"))),
       testRelation
         // The first Project contains the common expression of the outer With
-        .select(star(), rewrittenOuterExpr)
+        .select(a, rewrittenOuterExpr)
         // The second Project contains the common expression of the inner With, which references
         // the common expression of the outer With.
-        .select(star(), (a + a + $"_common_expr_0").as("_common_expr_1"))
+        .select($"_common_expr_0", (a + a + $"_common_expr_0").as("_common_expr_1"))
         // The final Project contains the final result expression, which references both common
         // expressions.
         .select(($"_common_expr_0" + ($"_common_expr_1" + $"_common_expr_1")).as("col"))
@@ -144,7 +148,7 @@ class RewriteWithExpressionSuite extends PlanTest {
     comparePlans(
       Optimizer.execute(testRelation.select(outerExpr2.as("col"))),
       testRelation
-        .select(star(), rewrittenOuterExpr, (a + a).as("_common_expr_2"))
+        .select(rewrittenOuterExpr, (a + a).as("_common_expr_2"))
         // The final Project contains the final result expression, which references both common
         // expressions.
         .select(($"_common_expr_0" +
@@ -239,7 +243,7 @@ class RewriteWithExpressionSuite extends PlanTest {
     comparePlans(
       Optimizer.execute(plan2),
       testRelation
-        .select((testRelation.output :+ (a + a).as("_common_expr_0")): _*)
+        .select(a, (a + a).as("_common_expr_0"))
         .select(Coalesce(Seq(($"_common_expr_0" * $"_common_expr_0"), a)).as("col"))
         .analyze
     )
@@ -263,8 +267,8 @@ class RewriteWithExpressionSuite extends PlanTest {
     comparePlans(
       Optimizer.execute(plan),
       testRelation
-        .select(testRelation.output :+ (a + 1).as("_common_expr_0"): _*)
-        .select(testRelation.output ++ Seq(
+        .select(a, (a + 1).as("_common_expr_0"))
+        .select(Seq(
           ($"_common_expr_0" * $"_common_expr_0").as("_groupingexpression"),
           (a + 1).as("_common_expr_1")): _*)
         .groupBy($"_groupingexpression")(
@@ -291,7 +295,7 @@ class RewriteWithExpressionSuite extends PlanTest {
     comparePlans(
       Optimizer.execute(plan),
       testRelation
-        .select(testRelation.output :+ (b + 2).as("_common_expr_0"): _*)
+        .select(a, (b + 2).as("_common_expr_0"))
         .groupBy(a)(a, max($"_common_expr_0" * $"_common_expr_0").as("_aggregateexpression"),
           (a + 1).as("_common_expr_1"))
         .select(
@@ -315,6 +319,7 @@ class RewriteWithExpressionSuite extends PlanTest {
     comparePlans(
       Optimizer.execute(plan),
       testRelation
+        .select(a)
         .groupBy(a)(a, count(a - 1).as("_aggregateexpression"))
         .select(
           (a - 1).as("col1"),
@@ -350,8 +355,8 @@ class RewriteWithExpressionSuite extends PlanTest {
     comparePlans(
       Optimizer.execute(plan),
       testRelation
-        .select(testRelation.output :+ (a + 1).as("_common_expr_0"): _*)
-        .groupBy(a)(a, max($"_common_expr_0" * $"_common_expr_0").as("_aggregateexpression"),
+        .select(a, (a + 1).as("_common_expr_0"))
+        .groupBy(a)(max($"_common_expr_0" * $"_common_expr_0").as("_aggregateexpression"),
           (a - 1).as("_common_expr_1"))
         .select(($"_common_expr_1" * $"_aggregateexpression" + $"_common_expr_1").as("col"))
         .analyze
@@ -383,14 +388,14 @@ class RewriteWithExpressionSuite extends PlanTest {
     comparePlans(
       Optimizer.execute(plan),
       testRelation
-        .select(a, b, (b + 2).as("_common_expr_0"))
+        .select(a, (b + 2).as("_common_expr_0"))
         .window(
           Seq(windowExpr(count(a), windowSpec(Seq($"_common_expr_0" * $"_common_expr_0"), Nil,
             frame)).as("col2")),
           Seq($"_common_expr_0" * $"_common_expr_0"),
           Nil
         )
-        .select(a, b, $"col2", (a + 1).as("_common_expr_1"))
+        .select(a, $"col2", (a + 1).as("_common_expr_1"))
         .window(
           Seq(windowExpr(sum($"_common_expr_1" * $"_common_expr_1"),
             windowSpec(Seq(a), Nil, frame)).as("col3")),
@@ -440,7 +445,7 @@ class RewriteWithExpressionSuite extends PlanTest {
     val plan = testRelation.having($"b")(avg("a").as("a"))(expr).analyze
     comparePlans(
       Optimizer.execute(plan),
-      testRelation.groupBy($"b")(avg("a").as("a")).where($"a" === 1).analyze
+      testRelation.select($"b").groupBy($"b")(avg("a").as("a")).where($"a" === 1).analyze
     )
   }
 
@@ -454,7 +459,7 @@ class RewriteWithExpressionSuite extends PlanTest {
     comparePlans(
       Optimizer.execute(plan),
       testRelation
-        .select(star(), (a + a).as("_common_expr_0"))
+        .select((a + a).as("_common_expr_0"))
         .select(
           ($"_common_expr_0" * $"_common_expr_0").as("c1"),
           ($"_common_expr_0" - $"_common_expr_0").as("c2"))

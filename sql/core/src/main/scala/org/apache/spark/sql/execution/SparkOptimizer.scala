@@ -87,7 +87,6 @@ class SparkOptimizer(
       ColumnPruning,
       LimitPushDown,
       PushPredicateThroughNonJoin,
-      RewriteWithExpression,
       PushProjectionThroughLimit,
       RemoveNoopOperators),
     Batch("Infer window group limit", Once,

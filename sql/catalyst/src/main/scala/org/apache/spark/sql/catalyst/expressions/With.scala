@@ -150,7 +150,8 @@ object CommonExpressionId {
 /**
  * A wrapper of common expression to carry the id.
  *
- * @param originAlias only used for push down predicates to make it idempotent.
+ * @param originAlias only used for push down predicates to make it idempotent. If it
+ *                    is not none, we should propagate this attribute
  */
 case class CommonExpressionDef(
     child: Expression,
