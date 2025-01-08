@@ -512,7 +512,7 @@ case class AdaptiveSparkPlanExec(
       // when the stage got materialized while we were in the create query stage function
       // Run the final plan when there's no more unfinished stages.
       ruleContext = ruleContext.withFinalStage(isFinalStage = true)
-      currentPhysicalPlan = applyPhysicalRules(
+      currentPhysicalPlan = applyPhysicalRulesWithRuleContext(
         optimizeQueryStage(result.newPlan, isFinalStage = true),
         postStageCreationRules(supportsColumnar),
         Some((planChangeLogger, "AQE Post Stage Creation")))
