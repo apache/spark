@@ -217,3 +217,45 @@ Project [a#x, b#x, c#x, d#x]
                      +- Project [id#x, v2#x]
                         +- SubqueryAlias src2
                            +- LocalRelation [id#x, v2#x]
+
+
+-- !query
+SELECT src1.* FROM src1 a ORDER BY id LIMIT 1
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "CANNOT_RESOLVE_STAR_EXPAND",
+  "sqlState" : "42704",
+  "messageParameters" : {
+    "columns" : "`id`, `v1`",
+    "targetString" : "`src1`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 13,
+    "fragment" : "src1.*"
+  } ]
+}
+
+
+-- !query
+SELECT src1.id FROM (SELECT * FROM src1 ORDER BY id LIMIT 1) a
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`src1`.`id`",
+    "proposal" : "`a`.`id`, `a`.`v1`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 14,
+    "fragment" : "src1.id"
+  } ]
+}

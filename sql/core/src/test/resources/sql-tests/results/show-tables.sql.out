@@ -247,10 +247,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1231",
+  "errorClass" : "PARTITIONS_NOT_FOUND",
+  "sqlState" : "428FT",
   "messageParameters" : {
-    "key" : "a",
-    "tblName" : "`spark_catalog`.`showdb`.`show_t1`"
+    "partitionList" : "`a`",
+    "tableName" : "`spark_catalog`.`showdb`.`show_t1`"
   }
 }
 

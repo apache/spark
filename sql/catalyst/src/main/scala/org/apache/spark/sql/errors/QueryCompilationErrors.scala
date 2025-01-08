@@ -2673,12 +2673,12 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "comment" -> comment))
   }
 
-  def invalidPartitionColumnKeyInTableError(key: String, tblName: String): Throwable = {
+  def invalidPartitionColumnKeyInTableError(key: String, tableName: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1231",
+      errorClass = "PARTITIONS_NOT_FOUND",
       messageParameters = Map(
-        "key" -> key,
-        "tblName" -> toSQLId(tblName)))
+        "partitionList" -> toSQLId(key),
+        "tableName" -> toSQLId(tableName)))
   }
 
   def invalidPartitionSpecError(
