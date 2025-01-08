@@ -23,7 +23,7 @@ import scala.jdk.CollectionConverters._
 
 import net.razorvine.pickle.Unpickler
 
-import org.apache.spark.{JobArtifactSet, TaskContext}
+import org.apache.spark.{JobArtifactSet, SparkEnv, TaskContext}
 import org.apache.spark.api.python.{ChainedPythonFunctions, PythonEvalType, PythonWorkerUtils}
 import org.apache.spark.internal.config.BUFFER_SIZE
 import org.apache.spark.sql.catalyst.InternalRow
@@ -32,7 +32,6 @@ import org.apache.spark.sql.catalyst.util.GenericArrayData
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.python.EvalPythonExec.ArgumentMetadata
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -105,7 +104,7 @@ class PythonUDTFRunner(
     PythonEvalType.SQL_TABLE_UDF, Array(argMetas.map(_.offset)), pythonMetrics, jobArtifactUUID) {
 
   // Overriding here to NOT use the same value of UDF config in UDTF.
-  override val bufferSize: Int = SQLConf.get.getConf(BUFFER_SIZE)
+  override val bufferSize: Int = SparkEnv.get.conf.get(BUFFER_SIZE)
 
   override protected def writeUDF(dataOut: DataOutputStream): Unit = {
     PythonUDTFRunner.writeUDTF(dataOut, udtf, argMetas)
