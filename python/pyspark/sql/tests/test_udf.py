@@ -1248,8 +1248,10 @@ class UDFTests(BaseUDFTestsMixin, ReusedSQLTestCase):
         for batch_size in [1, 33, 10000]:
             with self.sql_conf({"spark.sql.execution.python.udf.buffer.size": batch_size}):
                 df = (
-                    self.spark.range(1000).repartition(1)
-                        .selectExpr("twoArgs('test', id) AS ret").orderBy("ret")
+                    self.spark.range(1000)
+                    .repartition(1)
+                    .selectExpr("twoArgs('test', id) AS ret")
+                    .orderBy("ret")
                 )
                 rets = [x["ret"] for x in df.collect()]
                 self.assertEqual(rets, list(range(4, 1004)))
