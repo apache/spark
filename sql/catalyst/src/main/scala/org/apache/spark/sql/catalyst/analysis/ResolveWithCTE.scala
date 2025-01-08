@@ -20,8 +20,8 @@ package org.apache.spark.sql.catalyst.analysis
 import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
-import org.apache.spark.sql.catalyst.plans.logical.{CTERelationDef, CTERelationRef, Distinct, LogicalPlan,
-  SubqueryAlias, Union, WithCTE}
+import org.apache.spark.sql.catalyst.plans.logical.{CTERelationDef, CTERelationRef, Distinct, Except, LogicalPlan,
+  Project, SubqueryAlias, Union, UnionLoop, UnionLoopRef, WithCTE}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{CTE, PLAN_EXPRESSION}
 
@@ -38,29 +38,36 @@ object ResolveWithCTE extends Rule[LogicalPlan] {
     }
   }
 
+  private def transformRefs(plan: LogicalPlan) = {
+    plan.transformWithPruning(_.containsPattern(CTE)) {
+      case r: CTERelationRef if r.recursive =>
+        UnionLoopRef(r.cteId, r.output, false)
+    }
+  }
+
   private def updateRecursiveAnchor(cteDef: CTERelationDef): CTERelationDef = {
     cteDef.child match {
-      case SubqueryAlias(_, u: Union) =>
-        if (u.children.head.resolved) {
-          cteDef.copy(recursionAnchor = Some(u.children.head))
+      case SubqueryAlias(_, ul: UnionLoop) =>
+        if (ul.anchor.resolved) {
+          cteDef.copy(recursionAnchor = Some(ul.anchor))
         } else {
           cteDef
         }
-      case SubqueryAlias(_, d @ Distinct(u: Union)) =>
-        if (u.children.head.resolved) {
-          cteDef.copy(recursionAnchor = Some(d.copy(child = u.children.head)))
+      case SubqueryAlias(_, d @ Distinct(ul: UnionLoop)) =>
+        if (ul.anchor.resolved) {
+          cteDef.copy(recursionAnchor = Some(d.copy(child = ul.anchor)))
         } else {
           cteDef
         }
-      case SubqueryAlias(_, a @ UnresolvedSubqueryColumnAliases(_, u: Union)) =>
-        if (u.children.head.resolved) {
-          cteDef.copy(recursionAnchor = Some(a.copy(child = u.children.head)))
+      case SubqueryAlias(_, a @ UnresolvedSubqueryColumnAliases(_, ul: UnionLoop)) =>
+        if (ul.anchor.resolved) {
+          cteDef.copy(recursionAnchor = Some(a.copy(child = ul.anchor)))
         } else {
           cteDef
         }
-      case SubqueryAlias(_, a @ UnresolvedSubqueryColumnAliases(_, d @ Distinct(u: Union))) =>
-        if (u.children.head.resolved) {
-          cteDef.copy(recursionAnchor = Some(a.copy(child = d.copy(child = u.children.head))))
+      case SubqueryAlias(_, a @ UnresolvedSubqueryColumnAliases(_, d @ Distinct(ul: UnionLoop))) =>
+        if (ul.anchor.resolved) {
+          cteDef.copy(recursionAnchor = Some(a.copy(child = d.copy(child = ul.anchor))))
         } else {
           cteDef
         }
@@ -81,6 +88,49 @@ object ResolveWithCTE extends Rule[LogicalPlan] {
           // definition, but if it is resolved then the extracted anchor term is no longer needed
           // and can be removed.
           val newCTEDef = if (cteDef.recursive) {
+            cteDef.child match {
+              case Union(Seq(anchor, recursion), false, false) =>
+                cteDef.copy(child = UnionLoop(cteDef.id, anchor, transformRefs(recursion)))
+              case a @ SubqueryAlias(_, Union(Seq(anchor, recursion), false, false)) =>
+                cteDef.copy(child =
+                  a.copy(child =
+                    UnionLoop(cteDef.id, anchor, transformRefs(recursion))))
+              case p @ Project(_, Union(Seq(anchor, recursion), false, false)) =>
+                cteDef.copy(child =
+                  p.copy(child =
+                    UnionLoop(cteDef.id, anchor, transformRefs(recursion))))
+              case a @ SubqueryAlias(_,
+              p @ Project(_, Union(Seq(anchor, recursion), false, false))) =>
+                cteDef.copy(child =
+                  a.copy(child =
+                    p.copy(child =
+                      UnionLoop(cteDef.id, anchor, transformRefs(recursion)))))
+              // If the recursion is described with an UNION (deduplicating) clause then the
+              // recursive term should not return those rows that have been calculated previously,
+              // and we exclude those rows from the current iteration result.
+              case p @ Project(_, Distinct(Union(Seq(anchor, recursion), false, false))) =>
+                cteDef.copy(child =
+                  p.copy(child =
+                    UnionLoop(cteDef.id,
+                      Distinct(anchor),
+                      Except(
+                        transformRefs(recursion),
+                        UnionLoopRef(cteDef.id, cteDef.output, true),
+                        false))))
+              case a @ SubqueryAlias(_,
+              p @ Project(_, Distinct(Union(Seq(anchor, recursion), false, false)))) =>
+                cteDef.copy(child =
+                  a.copy(child =
+                    p.copy(child =
+                      UnionLoop(cteDef.id,
+                        Distinct(anchor),
+                        Except(
+                          transformRefs(recursion),
+                          UnionLoopRef(cteDef.id, cteDef.output, true),
+                          false)))))
+              case _ => cteDef
+            }
+
             if (!cteDef.resolved) {
               if (cteDef.recursionAnchor.isEmpty) {
                 updateRecursiveAnchor(cteDef)
