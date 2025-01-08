@@ -82,7 +82,7 @@ object SubExprEliminationBenchmark extends SqlBasedBenchmark {
 
     withTempPath { path =>
       prepareDataInfo(benchmark)
-      val numCols = 500
+      val numCols = 330
       val schema = writeWideRow(path.getAbsolutePath, rowsNum, numCols)
 
       val jsonValue = from_json($"value", schema)
@@ -121,8 +121,8 @@ object SubExprEliminationBenchmark extends SqlBasedBenchmark {
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
     val numIters = 3
     runBenchmark("Benchmark for performance of subexpression elimination") {
-      withFromJson(100, numIters)
-      withFilter(100, numIters)
+      // withFromJson(100, numIters)
+      withFilter(100000, numIters)
     }
   }
 }
