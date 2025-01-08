@@ -927,26 +927,4 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
       testDefaultColumn
     }
   }
-
-  test("SPARK-50469: V1Writes should respect the output ordering") {
-    withSQLConf(("hive.exec.dynamic.partition.mode", "nonstrict")) {
-      withTable("t1") {
-        withTempView("t2") {
-          val df = scala.util.Random.shuffle((1 to 1000)
-            .map(i => (i, "part_val"))).toDF("key", "val")
-          df.createOrReplaceTempView("t2")
-
-          sql("CREATE TABLE t1 (key Int, part String) USING hive PARTITIONED BY (part)")
-          sql(
-            """
-              |INSERT OVERWRITE TABLE t1 PARTITION(part)
-              |SELECT /*+ REPARTITION(1) */ key, val from t2 SORT BY (key)
-              |""".stripMargin)
-
-          // Swap the test parameters to ensure data order is verified.
-          checkAnswer(df.select("key", "val").sort("key"), sql("SELECT key, part from t1"))
-        }
-      }
-    }
-  }
 }

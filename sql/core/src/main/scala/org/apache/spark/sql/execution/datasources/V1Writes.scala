@@ -21,7 +21,7 @@ import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Alias, Ascending, Attribute, AttributeMap, AttributeSet, BitwiseAnd, Empty2Null, Expression, HiveHash, Literal, NamedExpression, Pmod, SortOrder}
-import org.apache.spark.sql.catalyst.plans.logical.{Clustering, LogicalPlan, Project}
+import org.apache.spark.sql.catalyst.plans.logical.{Clustering, LogicalPlan, Project, Sort}
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.SparkPlan
@@ -98,16 +98,30 @@ object V1Writes extends Rule[LogicalPlan] with SQLConfHelper {
     assert(empty2NullPlan.output.length == query.output.length)
     val attrMap = AttributeMap(query.output.zip(empty2NullPlan.output))
 
-    // Rewrite the attribute references in the required ordering to use the new output.
-    val requiredOrdering = write.requiredOrdering.map(_.transform {
-      case a: Attribute => attrMap.getOrElse(a, a)
-    }.asInstanceOf[SortOrder])
+    // Rewrite the attribute references to use the new output.
+    def rewriteAttributes[T <: Expression](expr: T): T = {
+      expr.transform {
+        case a: Attribute => attrMap.getOrElse(a, a)
+      }.asInstanceOf[T]
+    }
+    val requiredOrdering = write.requiredOrdering.map(rewriteAttributes(_))
     val outputOrdering = empty2NullPlan.outputOrdering
     val orderingMatched = isOrderingMatched(requiredOrdering.map(_.child), outputOrdering)
     if (orderingMatched) {
       empty2NullPlan
+    } else if (conf.clusterQueryEnabled) {
+      val (clusteringKeys, sortKeys) = V1WritesUtils.getClusterSpec(
+          write.outputColumns,
+          write.partitionColumns,
+          write.bucketSpec,
+          write.options,
+          write.staticPartitions.size)
+      Clustering(
+          clusteringKeys.map(rewriteAttributes(_)),
+          sortKeys.map(rewriteAttributes(_)),
+          empty2NullPlan)
     } else {
-      Clustering(requiredOrdering, empty2NullPlan)
+      Sort(requiredOrdering, false, empty2NullPlan)
     }
   }
 }
@@ -162,6 +176,21 @@ object V1WritesUtils {
       bucketSpec: Option[BucketSpec],
       options: Map[String, String],
       numStaticPartitionCols: Int = 0): Seq[SortOrder] = {
+    val (clusteringKeys, sortKeys) = getClusterSpec(
+        outputColumns,
+        partitionColumns,
+        bucketSpec,
+        options,
+        numStaticPartitionCols)
+    clusteringKeys.map(SortOrder(_, Ascending)) ++ sortKeys
+  }
+
+  def getClusterSpec(
+      outputColumns: Seq[Attribute],
+      partitionColumns: Seq[Attribute],
+      bucketSpec: Option[BucketSpec],
+      options: Map[String, String],
+      numStaticPartitionCols: Int = 0): (Seq[Expression], Seq[SortOrder]) = {
     require(partitionColumns.size >= numStaticPartitionCols)
 
     val partitionSet = AttributeSet(partitionColumns)
@@ -173,14 +202,16 @@ object V1WritesUtils {
 
     if (SQLConf.get.maxConcurrentOutputFileWriters > 0 && sortColumns.isEmpty) {
       // Do not insert logical sort when concurrent output writers are enabled.
-      Seq.empty
+      (Seq.empty, Seq.empty)
     } else {
-      // We should first sort by dynamic partition columns, then bucket id, and finally sorting
+      // We should first cluster by dynamic partition columns, then bucket id, and finally sorting
       // columns.
-      (dynamicPartitionColumns ++ writerBucketSpec.map(_.bucketIdExpression) ++ sortColumns)
-        .map(SortOrder(_, Ascending))
+      val clusteringKeys = dynamicPartitionColumns ++ writerBucketSpec.map(_.bucketIdExpression)
+      val sortKeys = sortColumns.map(SortOrder(_, Ascending))
+      (clusteringKeys, sortKeys)
     }
   }
+
 
   def convertEmptyToNull(
       output: Seq[Attribute],

@@ -1011,10 +1011,14 @@ case class Sort(
 /**
  * Clustering data within the partition.
  *
- * @param cluster The clustering expressions
- * @param child   Child logical plan
+ * @param clusteringKeys The clustering expressions
+ * @param sortKeys       The sort orders
+ * @param child          Child logical plan
  */
-case class Clustering(cluster: Seq[SortOrder], child: LogicalPlan) extends UnaryNode {
+case class Clustering(
+    clusteringKeys: Seq[Expression],
+    sortKeys: Seq[SortOrder],
+    child: LogicalPlan) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
   override protected def withNewChildInternal(newChild: LogicalPlan): Clustering =
     copy(child = newChild)
