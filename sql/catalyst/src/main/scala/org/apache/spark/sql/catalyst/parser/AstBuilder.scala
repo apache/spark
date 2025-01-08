@@ -159,6 +159,61 @@ class AstBuilder extends DataTypeAstBuilder
     script
   }
 
+  override def visitConditionValue(ctx: ConditionValueContext): String = {
+    ctx.getText.replace("'", "")
+  }
+
+  override def visitConditionValues(ctx: ConditionValuesContext): Seq[String] = {
+    val buff = scala.collection.mutable.Set[String]()
+    ctx.cvList.forEach { conditionValue =>
+      val elem = visit(conditionValue).asInstanceOf[String]
+      if (buff(elem)) {
+        throw SparkException.internalError(s"Duplicate condition value $elem " +
+          s"in handler definition")
+      }
+      buff += elem
+    }
+    buff.toSeq
+  }
+
+  override def visitDeclareConditionStatement(
+      ctx: DeclareConditionStatementContext): ErrorCondition = {
+    val conditionName = ctx.multipartIdentifier().getText
+    val conditionValue = Option(ctx.sqlStateValue())
+      .map(_.getText.replace("'", "")).getOrElse("45000")
+
+    val sqlStateRegex = "^[A-Za-z0-9]{5}$".r
+    assert(sqlStateRegex.findFirstIn(conditionValue).isDefined)
+
+    ErrorCondition(conditionName, conditionValue)
+  }
+
+  def visitDeclareHandlerImpl(
+        ctx: DeclareHandlerStatementContext,
+        labelCtx: SqlScriptingLabelContext): ErrorHandler = {
+    val conditions = visit(ctx.conditionValues()).asInstanceOf[Seq[String]]
+
+    if (Option(ctx.CONTINUE()).isDefined) {
+      throw SparkException.internalError("CONTINUE is not supported in DECLARE HANDLER")
+    }
+
+    val handlerType = HandlerType.EXIT
+
+    val body = if (!ctx.compoundBody().isEmpty) {
+      visitCompoundBodyImpl(
+        ctx.compoundBody(),
+        None,
+        allowVarDeclare = true,
+        labelCtx,
+        isScope = false)
+    } else {
+      val logicalPlan = visitChildren(ctx).asInstanceOf[LogicalPlan]
+      CompoundBody(Seq(SingleStatement(parsedPlan = logicalPlan)), None, isScope = false)
+    }
+
+    ErrorHandler(conditions, body, handlerType)
+  }
+
   private def visitCompoundBodyImpl(
       ctx: CompoundBodyContext,
       label: Option[String],
@@ -243,6 +298,8 @@ class AstBuilder extends DataTypeAstBuilder
                 visitSimpleCaseStatementImpl(simpleCaseContext, labelCtx)
               case forStatementContext: ForStatementContext =>
                 visitForStatementImpl(forStatementContext, labelCtx)
+              case declareHandlerContext: DeclareHandlerStatementContext =>
+                visitDeclareHandlerImpl(declareHandlerContext, labelCtx)
               case stmt => visit(stmt).asInstanceOf[CompoundPlanStatement]
             }
           } else {

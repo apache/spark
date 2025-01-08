@@ -63,6 +63,8 @@ compoundStatement
     : statement
     | setStatementWithOptionalVarKeyword
     | beginEndCompoundBlock
+    | declareConditionStatement
+    | declareHandlerStatement
     | ifElseStatement
     | caseStatement
     | whileStatement
@@ -79,12 +81,16 @@ setStatementWithOptionalVarKeyword
         LEFT_PAREN query RIGHT_PAREN                            #setVariableWithOptionalKeyword
     ;
 
+sqlStateValue
+    : stringLit
+    ;
+
 declareConditionStatement
-    : DECLARE multipartIdentifier CONDITION (FOR SQLSTATE VALUE? stringLit)?
+    : DECLARE multipartIdentifier CONDITION (FOR SQLSTATE VALUE? sqlStateValue)?
     ;
 
 conditionValue
-    : stringLit
+    : sqlStateValue
     | multipartIdentifier
     | SQLEXCEPTION
     | NOT FOUND
@@ -1857,6 +1863,7 @@ ansiNonReserved
     | UNTIL
     | UPDATE
     | USE
+    | VALUE
     | VALUES
     | VARCHAR
     | VAR
@@ -2246,6 +2253,7 @@ nonReserved
     | UPDATE
     | USE
     | USER
+    | VALUE
     | VALUES
     | VARCHAR
     | VAR

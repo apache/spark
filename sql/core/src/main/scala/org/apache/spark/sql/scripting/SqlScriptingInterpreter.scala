@@ -185,5 +185,6 @@ case class SqlScriptingInterpreter(session: SparkSession) {
           args,
           isInternal = false,
           context)
+      case _ => throw new UnsupportedOperationException(s"Unsupported statement: $node")
     }
 }

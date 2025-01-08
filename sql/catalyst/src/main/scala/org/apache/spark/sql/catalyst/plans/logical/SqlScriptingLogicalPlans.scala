@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.plans.logical.HandlerType.HandlerType
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
 
 
@@ -296,5 +297,55 @@ case class ForStatement(
       newChildren: IndexedSeq[LogicalPlan]): LogicalPlan = newChildren match {
     case IndexedSeq(query: SingleStatement, body: CompoundBody) =>
       ForStatement(query, variableName, body, label)
+  }
+}
+
+/**
+ * Logical operator for an error condition.
+ * @param conditionName Name of the error condition.
+ * @param value SQLSTATE or Error Code.
+ */
+case class ErrorCondition(
+    conditionName: String,
+    value: String) extends CompoundPlanStatement {
+  override def output: Seq[Attribute] = Seq.empty
+
+  /**
+   * Returns a Seq of the children of this node.
+   * Children should not change. Immutability required for containsChild optimization
+   */
+  override def children: Seq[LogicalPlan] = Seq.empty
+
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[LogicalPlan]): LogicalPlan = this.copy()
+}
+
+object HandlerType extends Enumeration {
+  type HandlerType = Value
+  val EXIT, CONTINUE = Value
+}
+
+/**
+ * Logical operator for an error condition.
+ * @param conditions Name of the error condition variable for which the handler is built.
+ * @param body CompoundBody of the handler.
+ * @param handlerType Type of the handler (CONTINUE or EXIT).
+ */
+case class ErrorHandler(
+    conditions: Seq[String],
+    body: CompoundBody,
+    handlerType: HandlerType) extends CompoundPlanStatement {
+  override def output: Seq[Attribute] = Seq.empty
+
+  /**
+   * Returns a Seq of the children of this node.
+   * Children should not change. Immutability required for containsChild optimization
+   */
+  override def children: Seq[LogicalPlan] = Seq(body)
+
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[LogicalPlan]): LogicalPlan = {
+    assert(newChildren.length == 1)
+    ErrorHandler(conditions, newChildren(0).asInstanceOf[CompoundBody], handlerType)
   }
 }
