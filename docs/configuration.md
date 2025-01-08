@@ -3756,7 +3756,7 @@ Note: When running Spark on YARN in `cluster` mode, environment variables need t
 Spark uses [log4j](http://logging.apache.org/log4j/) for logging. You can configure it by adding a `log4j2.properties` file in the `conf` directory. To get started, copy one of the provided templates: `log4j2.properties.template` (for plain text logging) or `log4j2-json-layout.properties.template` (for structured logging).
 
 ## Plain Text Logging
-The default logging format is plain text, using Log4j's `PatternLayout`.
+The default logging format is plain text, using Log4j's [Pattern Layout](https://logging.apache.org/log4j/2.x/manual/pattern-layout.html).
 
 MDC (Mapped Diagnostic Context) information is not included by default in plain text logs. To include it, update the `PatternLayout` configuration in the `log4j2.properties` file. For example, add `%X{task_name}` to include the task name in logs. Additionally, use `spark.sparkContext.setLocalProperty("key", "value")` to add custom data to the MDC.
 
