@@ -131,8 +131,7 @@ case object StringType
  * String type that was the result of coercing two different non-explicit collations.
  */
 private[spark] case object IndeterminateStringType
-  extends StringType(CollationFactory.INDETERMINATE_COLLATION_ID)
-
+    extends StringType(CollationFactory.INDETERMINATE_COLLATION_ID)
 
 sealed trait StringConstraint
 
