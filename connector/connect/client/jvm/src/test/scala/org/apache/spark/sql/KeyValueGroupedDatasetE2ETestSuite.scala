@@ -455,7 +455,6 @@ class KeyValueGroupedDatasetE2ETestSuite extends QueryTest with RemoteSparkSessi
 
   test("reduceGroups") {
     val ds = Seq("abc", "xyz", "hello").toDS()
-    val ddd = ds.groupByKey(_.length).reduceGroups(_ + _)
     checkDatasetUnorderly(
       ds.groupByKey(_.length).reduceGroups(_ + _),
       (3, "abcxyz"),

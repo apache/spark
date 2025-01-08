@@ -776,12 +776,6 @@ object UDFAdaptors extends Serializable {
 
   def mapToMapPartitions[V, U](f: V => U): Iterator[V] => Iterator[U] = values => values.map(f)
 
-  def mapToMapPartitions[V, U](f: Option[V => U]): Iterator[V] => Iterator[U] =
-    f match {
-      case Some(value) => mapToMapPartitions(value)
-      case None => identity(_).asInstanceOf[Iterator[U]]
-    }
-
   def mapToMapPartitions[V, U](f: MapFunction[V, U]): Iterator[V] => Iterator[U] =
     values => values.map(f.call)
 

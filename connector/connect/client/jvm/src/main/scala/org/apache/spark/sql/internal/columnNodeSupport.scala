@@ -140,10 +140,10 @@ object ColumnNodeToProtoConverter extends (ColumnNode => proto.Expression) {
           .addAllArguments(arguments.map(convertNamedLambdaVariable).asJava)
 
       case f @ InvokeInlineUserDefinedFunction(
-          a: Aggregator[Any @unchecked, Any @unchecked, Any @unchecked],
-          _,
-          false,
-          _) =>
+            a: Aggregator[Any @unchecked, Any @unchecked, Any @unchecked],
+            _,
+            false,
+            _) =>
         // Translate UserDefinedFunctionLike into UserDefinedFunction.
         builder.mergeFrom(apply(f.copy(function = UserDefinedAggregator(a, e.get)), e))
 

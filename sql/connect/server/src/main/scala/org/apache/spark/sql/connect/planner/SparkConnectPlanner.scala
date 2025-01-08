@@ -1739,7 +1739,7 @@ class SparkConnectPlanner(
         fun.getArgumentsList.asScala.map(transformExpression).toSeq)
         .toAggregateExpression()
     } else {
-      val s = ScalaUDF(
+      ScalaUDF(
         function = udfPacket.function,
         dataType = transformDataType(udf.getOutputType),
         children = fun.getArgumentsList.asScala.map(transformExpression).toSeq,
@@ -1748,7 +1748,6 @@ class SparkConnectPlanner(
         udfName = Option(fun.getFunctionName),
         nullable = udf.getNullable,
         udfDeterministic = fun.getDeterministic)
-      s
     }
   }
 
@@ -1874,7 +1873,6 @@ class SparkConnectPlanner(
   private def transformUnresolvedStar(star: proto.Expression.UnresolvedStar): Expression = {
     (star.hasUnparsedTarget, star.hasPlanId) match {
       case (false, false) =>
-        println(s"UnresolvedStar with plan id: ${star.getPlanId}")
         // functions.col("*")
         UnresolvedStar(None)
 
@@ -1889,7 +1887,6 @@ class SparkConnectPlanner(
         UnresolvedStar(Some(parts))
 
       case (false, true) =>
-        println(s"UnresolvedDataFrameStar with plan id: ${star.getPlanId}")
         // dataframe.col("*")
         UnresolvedDataFrameStar(star.getPlanId)
 
@@ -2301,7 +2298,7 @@ class SparkConnectPlanner(
       plan: LogicalPlan): Expression = {
     expr.getExprTypeCase match {
       case proto.Expression.ExprTypeCase.UNRESOLVED_FUNCTION
-        if expr.getUnresolvedFunction.getFunctionName == "reduce" =>
+          if expr.getUnresolvedFunction.getFunctionName == "reduce" =>
         // The reduce func needs the input data attribute, thus handle it specially here
         transformTypedReduceExpression(expr.getUnresolvedFunction, plan.output)
       case _ => transformExpression(expr, Some(plan))
