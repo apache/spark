@@ -28,7 +28,7 @@ from typing import cast
 from pyspark import SparkConf
 from pyspark.errors import PySparkRuntimeError
 from pyspark.sql.functions import array_sort, col, explode, split
-from pyspark.sql.types import *
+from pyspark.sql.types import StringType, StructType, StructField, Row, IntegerType, TimestampType, LongType, BooleanType, FloatType
 from pyspark.testing import assertDataFrameEqual
 from pyspark.testing.sqlutils import (
     ReusedSQLTestCase,
