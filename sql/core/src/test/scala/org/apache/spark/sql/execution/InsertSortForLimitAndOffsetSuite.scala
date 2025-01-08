@@ -17,8 +17,9 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.sql.QueryTest
+import org.apache.spark.sql.{Dataset, QueryTest}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
+import org.apache.spark.sql.functions.rand
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
@@ -51,6 +52,7 @@ class InsertSortForLimitAndOffsetSuite extends QueryTest
   private def hasLocalSort(plan: SparkPlan): Boolean = {
     find(plan) {
       case GlobalLimitExec(_, s: SortExec, _) => !s.global
+      case GlobalLimitExec(_, ProjectExec(_, s: SortExec), _) => !s.global
       case _ => false
     }.isDefined
   }
@@ -91,12 +93,11 @@ class InsertSortForLimitAndOffsetSuite extends QueryTest
       // one partition to read the range-partition shuffle and there is only one shuffle block for
       // the final single-partition shuffle, random fetch order is no longer an issue.
       SQLConf.COALESCE_PARTITIONS_ENABLED.key -> "false") {
-      val df = spark.range(10).orderBy($"id" % 8).limit(2).distinct()
-      df.collect()
-      val physicalPlan = df.queryExecution.executedPlan
-      assertHasGlobalLimitExec(physicalPlan)
-      // Extra local sort is needed for middle LIMIT
-      assert(hasLocalSort(physicalPlan))
+      val df = 1.to(10).map(v => v -> v).toDF("c1", "c2").orderBy($"c1" % 8)
+      verifySortAdded(df.limit(2))
+      verifySortAdded(df.filter($"c2" > rand()).limit(2))
+      verifySortAdded(df.select($"c2").limit(2))
+      verifySortAdded(df.filter($"c2" > rand()).select($"c2").limit(2))
     }
   }
 
@@ -110,11 +111,21 @@ class InsertSortForLimitAndOffsetSuite extends QueryTest
   }
 
   test("middle OFFSET preserves data ordering with the extra sort") {
-    val df = spark.range(10).orderBy($"id" % 8).offset(2).distinct()
-    df.collect()
-    val physicalPlan = df.queryExecution.executedPlan
+    val df = 1.to(10).map(v => v -> v).toDF("c1", "c2").orderBy($"c1" % 8)
+    verifySortAdded(df.offset(2))
+    verifySortAdded(df.filter($"c2" > rand()).offset(2))
+    verifySortAdded(df.select($"c2").offset(2))
+    verifySortAdded(df.filter($"c2" > rand()).select($"c2").offset(2))
+  }
+
+  private def verifySortAdded(df: Dataset[_]): Unit = {
+    // Do distinct to trigger a shuffle, so that the LIMIT/OFFSET below won't be planned as
+    // `CollectLimitExec`
+    val shuffled = df.distinct()
+    shuffled.collect()
+    val physicalPlan = shuffled.queryExecution.executedPlan
     assertHasGlobalLimitExec(physicalPlan)
-    // Extra local sort is needed for middle OFFSET
+    // Extra local sort is needed for middle LIMIT/OFFSET
     assert(hasLocalSort(physicalPlan))
   }
 }
