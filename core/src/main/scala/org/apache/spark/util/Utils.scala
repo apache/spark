@@ -2522,7 +2522,7 @@ private[spark] object Utils
    *
    * @return whether it is local mode
    */
-  def isLocalMaster(conf: SparkConf): Boolean = {
+  def isLocalMaster(conf: ReadOnlySparkConf): Boolean = {
     val master = conf.get("spark.master", "")
     master == "local" || master.startsWith("local[")
   }
@@ -2606,7 +2606,7 @@ private[spark] object Utils
   /**
    * Return whether dynamic allocation is enabled in the given conf.
    */
-  def isDynamicAllocationEnabled(conf: SparkConf): Boolean = {
+  def isDynamicAllocationEnabled(conf: ReadOnlySparkConf): Boolean = {
     val dynamicAllocationEnabled = conf.get(DYN_ALLOCATION_ENABLED)
     dynamicAllocationEnabled &&
       (!isLocalMaster(conf) || conf.get(DYN_ALLOCATION_TESTING))

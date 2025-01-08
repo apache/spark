@@ -67,6 +67,7 @@ class TPCDSCollationQueryTestSuite extends QueryTest with TPCDSBase with SQLQuer
   // To make output results deterministic
   override protected def sparkConf: SparkConf = super.sparkConf
     .set(SQLConf.SHUFFLE_PARTITIONS.key, "1")
+    .remove("spark.hadoop.fs.file.impl")
 
   protected override def createSparkSession: TestSparkSession = {
     new TestSparkSession(new SparkContext("local[1]", this.getClass.getSimpleName, sparkConf))

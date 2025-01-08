@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution
 
+import scala.annotation.tailrec
+
 import org.apache.spark.sql.catalyst.expressions.SortOrder
 import org.apache.spark.sql.catalyst.plans.physical.SinglePartition
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -49,6 +51,7 @@ object InsertSortForLimitAndOffset extends Rule[SparkPlan] {
   }
 
   object SinglePartitionShuffleWithGlobalOrdering {
+    @tailrec
     def unapply(plan: SparkPlan): Option[Seq[SortOrder]] = plan match {
       case ShuffleExchangeExec(SinglePartition, SparkPlanWithGlobalOrdering(ordering), _, _) =>
         Some(ordering)
@@ -61,6 +64,7 @@ object InsertSortForLimitAndOffset extends Rule[SparkPlan] {
   // Note: this is not implementing a generalized notion of "global order preservation", but just
   // tackles the regular ORDER BY semantics with optional LIMIT (top-K).
   object SparkPlanWithGlobalOrdering {
+    @tailrec
     def unapply(plan: SparkPlan): Option[Seq[SortOrder]] = plan match {
       case p: SortExec if p.global => Some(p.sortOrder)
       case p: LocalLimitExec => unapply(p.child)

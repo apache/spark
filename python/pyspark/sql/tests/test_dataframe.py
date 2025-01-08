@@ -1044,6 +1044,18 @@ class DataFrameTestsMixin:
             messageParameters={"dt1": '"STRING"', "dt2": '"BIGINT"'},
         )
 
+    def test_transpose_with_invalid_index_columns(self):
+        # SPARK-50602: invalid index columns
+        df = self.spark.createDataFrame([{"a": "x", "b": "y", "c": "z"}])
+
+        with self.assertRaises(AnalysisException) as pe:
+            df.transpose(col("a") + 1).collect()
+        self.check_error(
+            exception=pe.exception,
+            errorClass="TRANSPOSE_INVALID_INDEX_COLUMN",
+            messageParameters={"reason": "Index column must be an atomic attribute"},
+        )
+
 
 class DataFrameTests(DataFrameTestsMixin, ReusedSQLTestCase):
     def test_query_execution_unsupported_in_classic(self):
