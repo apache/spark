@@ -212,7 +212,11 @@ trait LoggingSuiteBase
   private lazy val customLog = log"${MDC(CustomLogKeys.CUSTOM_LOG_KEY, "Custom log message.")}"
   test("Logging with custom LogKey") {
     Seq(
-      (Level.ERROR, () => logError(customLog))).foreach {
+      (Level.ERROR, () => logError(customLog)),
+      (Level.WARN, () => logWarning(customLog)),
+      (Level.INFO, () => logInfo(customLog)),
+      (Level.DEBUG, () => logDebug(customLog)),
+      (Level.TRACE, () => logTrace(customLog))).foreach {
       case (level, logFunc) =>
         val logOutput = captureLogOutput(logFunc)
         assert(expectedPatternForCustomLogKey(level).r.matches(logOutput))
