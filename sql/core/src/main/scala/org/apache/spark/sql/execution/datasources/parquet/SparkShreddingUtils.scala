@@ -25,7 +25,6 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.expressions.variant._
-import org.apache.spark.sql.catalyst.expressions.variant.VariantPathParser.PathSegment
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, DateTimeUtils, GenericArrayData}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.RowToColumnConverter
@@ -56,9 +55,9 @@ case class SparkShreddedRow(row: SpecializedGetters) extends ShreddingUtils.Shre
   override def numElements(): Int = row.asInstanceOf[ArrayData].numElements()
 }
 
-// The search result of a `PathSegment` in a `VariantSchema`.
+// The search result of a `VariantPathSegment` in a `VariantSchema`.
 case class SchemaPathSegment(
-    rawPath: PathSegment,
+    rawPath: VariantPathSegment,
     // Whether this path segment is an object or array extraction.
     isObject: Boolean,
     // `schema.typedIdx`, if the path exists in the schema (for object extraction, the schema
@@ -714,11 +713,11 @@ case object SparkShreddingUtils {
           // found at a certain level of the file type, then `typedIdx` will be -1 starting from
           // this position, and the final `schema` will be null.
           for (i <- rawPath.indices) {
-            val isObject = rawPath(i).isLeft
+            val isObject = rawPath(i).isInstanceOf[ObjectExtraction]
             var typedIdx = -1
             var extractionIdx = -1
             rawPath(i) match {
-              case scala.util.Left(key) if schema != null && schema.objectSchema != null =>
+              case ObjectExtraction(key) if schema != null && schema.objectSchema != null =>
                 val fieldIdx = schema.objectSchemaMap.get(key)
                 if (fieldIdx != null) {
                   typedIdx = schema.typedIdx
@@ -727,7 +726,7 @@ case object SparkShreddingUtils {
                 } else {
                   schema = null
                 }
-              case scala.util.Right(index) if schema != null && schema.arraySchema != null =>
+              case ArrayExtraction(index) if schema != null && schema.arraySchema != null =>
                 typedIdx = schema.typedIdx
                 extractionIdx = index
                 schema = schema.arraySchema
@@ -770,8 +769,8 @@ case object SparkShreddingUtils {
         var v = new Variant(row.getBinary(variantIdx), topLevelMetadata)
         while (pathIdx < pathLen) {
           v = pathList(pathIdx).rawPath match {
-            case scala.util.Left(key) if v.getType == Type.OBJECT => v.getFieldByKey(key)
-            case scala.util.Right(index) if v.getType == Type.ARRAY => v.getElementAtIndex(index)
+            case ObjectExtraction(key) if v.getType == Type.OBJECT => v.getFieldByKey(key)
+            case ArrayExtraction(index) if v.getType == Type.ARRAY => v.getElementAtIndex(index)
             case _ => null
           }
           if (v == null) return null

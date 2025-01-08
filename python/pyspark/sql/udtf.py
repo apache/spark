@@ -32,7 +32,7 @@ from pyspark.sql.udf import _wrap_function
 
 if TYPE_CHECKING:
     from py4j.java_gateway import JavaObject
-    from pyspark.sql._typing import ColumnOrName
+    from pyspark.sql._typing import TVFArgumentOrName
     from pyspark.sql.dataframe import DataFrame
     from pyspark.sql.session import SparkSession
 
@@ -372,22 +372,41 @@ class UserDefinedTableFunction:
             )(self._name, wrapped_func, jdt, self.evalType, self.deterministic)
         return judtf
 
-    def __call__(self, *args: "ColumnOrName", **kwargs: "ColumnOrName") -> "DataFrame":
+    def __call__(self, *args: "TVFArgumentOrName", **kwargs: "TVFArgumentOrName") -> "DataFrame":
         from pyspark.sql.classic.column import _to_java_column, _to_seq
 
         from pyspark.sql import DataFrame, SparkSession
+        from pyspark.sql.table_arg import TableArg
 
         spark = SparkSession._getActiveSessionOrCreate()
         sc = spark.sparkContext
 
         assert sc._jvm is not None
-        jcols = [_to_java_column(arg) for arg in args] + [
-            sc._jvm.PythonSQLUtils.namedArgumentExpression(key, _to_java_column(value))
-            for key, value in kwargs.items()
-        ]
+        # Process positional arguments
+        jargs = []
+        for arg in args:
+            if isinstance(arg, TableArg):
+                # If the argument is a TableArg, get the Java TableArg object
+                jargs.append(arg._j_table_arg)
+            else:
+                # Otherwise, convert it to a Java column
+                jargs.append(_to_java_column(arg))  # type: ignore[arg-type]
+
+        # Process keyword arguments
+        jkwargs = []
+        for key, value in kwargs.items():
+            if isinstance(value, TableArg):
+                # If the value is a TableArg, get the Java TableArg object
+                j_arg = value._j_table_arg
+            else:
+                # Otherwise, convert it to a Java column
+                j_arg = _to_java_column(value)  # type: ignore[arg-type]
+            # Create a named argument expression
+            j_named_arg = sc._jvm.PythonSQLUtils.namedArgumentExpression(key, j_arg)
+            jkwargs.append(j_named_arg)
 
         judtf = self._judtf
-        jPythonUDTF = judtf.apply(spark._jsparkSession, _to_seq(sc, jcols))
+        jPythonUDTF = judtf.apply(spark._jsparkSession, _to_seq(sc, jargs + jkwargs))
         return DataFrame(jPythonUDTF, spark)
 
     def asDeterministic(self) -> "UserDefinedTableFunction":

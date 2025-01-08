@@ -90,6 +90,8 @@ object TreePattern extends Enumeration  {
   val SCALA_UDF: Value = Value
   val SESSION_WINDOW: Value = Value
   val SORT: Value = Value
+  val SQL_FUNCTION_EXPRESSION: Value = Value
+  val SQL_TABLE_FUNCTION: Value = Value
   val SUBQUERY_ALIAS: Value = Value
   val SUM: Value = Value
   val TIME_WINDOW: Value = Value

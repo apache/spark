@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.plans
 
+import java.util.HashMap
+
 import org.apache.spark.sql.catalyst.analysis.GetViewColumnByNameAndOrdinal
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
@@ -68,8 +70,13 @@ object NormalizePlan extends PredicateHelper {
    *   etc., will all now be equivalent.
    * - Sample the seed will replaced by 0L.
    * - Join conditions will be resorted by hashCode.
+   * - CTERelationDef ids will be rewritten using a monitonically increasing counter from 0.
+   * - CTERelationRef ids will be remapped based on the new CTERelationDef IDs. This is possible,
+   *   because WithCTE returns cteDefs as first children, and the defs will be traversed before the
+   *   refs.
    */
   def normalizePlan(plan: LogicalPlan): LogicalPlan = {
+    val cteIdNormalizer = new CteIdNormalizer
     plan transform {
       case Filter(condition: Expression, child: LogicalPlan) =>
         Filter(
@@ -113,6 +120,10 @@ object NormalizePlan extends PredicateHelper {
         localRelation.copy(data = localRelation.data.map { row =>
           unsafeProjection(row)
         })
+      case cteRelationDef: CTERelationDef =>
+        cteIdNormalizer.normalizeDef(cteRelationDef)
+      case cteRelationRef: CTERelationRef =>
+        cteIdNormalizer.normalizeRef(cteRelationRef)
     }
   }
 
@@ -141,5 +152,27 @@ object NormalizePlan extends PredicateHelper {
     case GreaterThanOrEqual(l, r) if l.hashCode() > r.hashCode() => LessThanOrEqual(r, l)
     case LessThanOrEqual(l, r) if l.hashCode() > r.hashCode() => GreaterThanOrEqual(r, l)
     case _ => condition // Don't reorder.
+  }
+}
+
+class CteIdNormalizer {
+  private var cteIdCounter: Long = 0
+  private val oldToNewIdMapping = new HashMap[Long, Long]
+
+  def normalizeDef(cteRelationDef: CTERelationDef): CTERelationDef = {
+    try {
+      oldToNewIdMapping.put(cteRelationDef.id, cteIdCounter)
+      cteRelationDef.copy(id = cteIdCounter)
+    } finally {
+      cteIdCounter += 1
+    }
+  }
+
+  def normalizeRef(cteRelationRef: CTERelationRef): CTERelationRef = {
+    if (oldToNewIdMapping.containsKey(cteRelationRef.cteId)) {
+      cteRelationRef.copy(cteId = oldToNewIdMapping.get(cteRelationRef.cteId))
+    } else {
+      cteRelationRef
+    }
   }
 }

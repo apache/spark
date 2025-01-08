@@ -21,7 +21,7 @@ import scala.collection.mutable.HashMap
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.variant.{VariantGet, VariantPathParser}
+import org.apache.spark.sql.catalyst.expressions.variant._
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan, Project, Subquery}
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -54,7 +54,7 @@ case class VariantMetadata(
         .build()
     ).build()
 
-  def parsedPath(): Array[VariantPathParser.PathSegment] = {
+  def parsedPath(): Array[VariantPathSegment] = {
     VariantPathParser.parse(path).getOrElse {
       val name = if (failOnError) "variant_get" else "try_variant_get"
       throw QueryExecutionErrors.invalidVariantGetPath(path, name)

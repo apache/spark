@@ -17,7 +17,8 @@
 
 package org.apache.spark.sql.artifact
 
-import java.io.File
+import java.io.{File, IOException}
+import java.lang.ref.Cleaner
 import java.net.{URI, URL, URLClassLoader}
 import java.nio.ByteBuffer
 import java.nio.file.{CopyOption, Files, Path, Paths, StandardCopyOption}
@@ -30,8 +31,8 @@ import scala.reflect.ClassTag
 import org.apache.commons.io.{FilenameUtils, FileUtils}
 import org.apache.hadoop.fs.{LocalFileSystem, Path => FSPath}
 
-import org.apache.spark.{JobArtifactSet, JobArtifactState, SparkEnv, SparkException, SparkUnsupportedOperationException}
-import org.apache.spark.internal.Logging
+import org.apache.spark.{JobArtifactSet, JobArtifactState, SparkContext, SparkEnv, SparkException, SparkUnsupportedOperationException}
+import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.internal.config.{CONNECT_SCALA_UDF_STUB_PREFIXES, EXECUTOR_USER_CLASS_PATH_FIRST}
 import org.apache.spark.sql.{Artifact, SparkSession}
 import org.apache.spark.sql.internal.SQLConf
@@ -51,7 +52,7 @@ import org.apache.spark.util.{ChildFirstURLClassLoader, StubClassLoader, Utils}
  *
  * @param session The object used to hold the Spark Connect session state.
  */
-class ArtifactManager(session: SparkSession) extends Logging {
+class ArtifactManager(session: SparkSession) extends AutoCloseable with Logging {
   import ArtifactManager._
 
   // The base directory where all artifacts are stored.
@@ -373,34 +374,28 @@ class ArtifactManager(session: SparkSession) extends Logging {
     newArtifactManager
   }
 
+  private val cleanUpStateForGlobalResources = ArtifactStateForCleanup(
+    session.sessionUUID,
+    session.sparkContext,
+    state,
+    artifactPath)
+  // Ensure that no reference to `this` is captured/help by the cleanup lambda
+  private def getCleanable: Cleaner.Cleanable = cleaner.register(
+    this,
+    () => ArtifactManager.cleanUpGlobalResources(cleanUpStateForGlobalResources)
+  )
+  private var cleanable = getCleanable
+
   /**
    * Cleans up all resources specific to this `session`.
    */
-  private[sql] def cleanUpResources(): Unit = {
+  private def cleanUpResources(): Unit = {
     logDebug(
       s"Cleaning up resources for session with sessionUUID ${session.sessionUUID}")
 
-    // Clean up added files
-    val fileserver = SparkEnv.get.rpcEnv.fileServer
-    val sparkContext = session.sparkContext
-    if (state != null) {
-      val shouldUpdateEnv = sparkContext.addedFiles.contains(state.uuid) ||
-        sparkContext.addedArchives.contains(state.uuid) ||
-        sparkContext.addedJars.contains(state.uuid)
-      if (shouldUpdateEnv) {
-        sparkContext.addedFiles.remove(state.uuid).foreach(_.keys.foreach(fileserver.removeFile))
-        sparkContext.addedArchives.remove(state.uuid).foreach(_.keys.foreach(fileserver.removeFile))
-        sparkContext.addedJars.remove(state.uuid).foreach(_.keys.foreach(fileserver.removeJar))
-        sparkContext.postEnvironmentUpdate()
-      }
-    }
-
-    // Clean up cached relations
-    val blockManager = sparkContext.env.blockManager
-    blockManager.removeCache(session.sessionUUID)
-
-    // Clean up artifacts folder
-    FileUtils.deleteDirectory(artifactPath.toFile)
+    // Clean up global resources via the Cleaner process.
+    // Note that this will only be run once per instance.
+    cleanable.clean()
 
     // Clean up internal trackers
     jarsList.clear()
@@ -410,6 +405,17 @@ class ArtifactManager(session: SparkSession) extends Logging {
 
     // Removed cached classloader
     cachedClassLoader = None
+  }
+
+  override def close(): Unit = {
+    cleanUpResources()
+  }
+
+  private[sql] def cleanUpResourcesForTesting(): Unit = {
+    cleanUpResources()
+    // Tests reuse the same instance so we need to re-register the cleanable otherwise, it is run
+    // only once per instance.
+    cleanable = getCleanable
   }
 
   def uploadArtifactToFs(
@@ -481,4 +487,51 @@ object ArtifactManager extends Logging {
         throw SparkException.internalError(s"Block $fromId not found in the block manager.")
     }
   }
+
+  // Shared cleaner instance
+  private val cleaner: Cleaner = Cleaner.create()
+
+  /**
+   * Helper method to clean up global resources (i.e. resources associated with the calling
+   * instance but held externally in sparkContext, blockManager, disk etc.)
+   */
+  private def cleanUpGlobalResources(cleanupState: ArtifactStateForCleanup): Unit = {
+    // Clean up added files
+    val (sparkSessionUUID, sparkContext, state, artifactPath) = (
+      cleanupState.sparkSessionUUID,
+      cleanupState.sparkContext,
+      cleanupState.jobArtifactState,
+      cleanupState.artifactPath)
+    val fileServer = SparkEnv.get.rpcEnv.fileServer
+    if (state != null) {
+      val shouldUpdateEnv = sparkContext.addedFiles.contains(state.uuid) ||
+        sparkContext.addedArchives.contains(state.uuid) ||
+        sparkContext.addedJars.contains(state.uuid)
+      if (shouldUpdateEnv) {
+        sparkContext.addedFiles.remove(state.uuid).foreach(_.keys.foreach(fileServer.removeFile))
+        sparkContext.addedArchives.remove(state.uuid).foreach(_.keys.foreach(fileServer.removeFile))
+        sparkContext.addedJars.remove(state.uuid).foreach(_.keys.foreach(fileServer.removeJar))
+        sparkContext.postEnvironmentUpdate()
+      }
+    }
+
+    // Clean up cached relations
+    val blockManager = sparkContext.env.blockManager
+    blockManager.removeCache(sparkSessionUUID)
+
+    // Clean up artifacts folder
+    try {
+      FileUtils.deleteDirectory(artifactPath.toFile)
+    } catch {
+      case e: IOException =>
+        logWarning(log"Failed to delete directory ${MDC(LogKeys.PATH, artifactPath.toFile)}: " +
+          log"${MDC(LogKeys.EXCEPTION, e.getMessage)}", e)
+    }
+  }
 }
+
+private[artifact] case class ArtifactStateForCleanup(
+  sparkSessionUUID: String,
+  sparkContext: SparkContext,
+  jobArtifactState: JobArtifactState,
+  artifactPath: Path)
