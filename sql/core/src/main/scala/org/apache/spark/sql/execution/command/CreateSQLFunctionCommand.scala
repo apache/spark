@@ -20,12 +20,12 @@ package org.apache.spark.sql.execution.command
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.FunctionIdentifier
-import org.apache.spark.sql.catalyst.analysis.{Analyzer, UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction, UnresolvedRelation}
+import org.apache.spark.sql.catalyst.analysis.{Analyzer, SQLFunctionNode, UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.catalog.{SessionCatalog, SQLFunction, UserDefinedFunctionErrors}
 import org.apache.spark.sql.catalyst.expressions.{Alias, Cast, Generator, LateralSubquery, Literal, ScalarSubquery, SubqueryExpression, WindowExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.Inner
-import org.apache.spark.sql.catalyst.plans.logical.{LateralJoin, LogicalPlan, OneRowRelation, Project, SQLFunctionNode, UnresolvedWith}
+import org.apache.spark.sql.catalyst.plans.logical.{LateralJoin, LogicalPlan, OneRowRelation, Project, UnresolvedWith}
 import org.apache.spark.sql.catalyst.trees.TreePattern.UNRESOLVED_ATTRIBUTE
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.command.CreateUserDefinedFunctionCommand._
@@ -249,7 +249,26 @@ case class CreateSQLFunctionCommand(
       )
     }
 
-    // TODO: create/register sql functions in catalog
+    if (isTemp) {
+      if (isTableFunc) {
+        catalog.registerSQLTableFunction(newFunction, overrideIfExists = replace)
+      } else {
+        catalog.registerSQLScalarFunction(newFunction, overrideIfExists = replace)
+      }
+    } else {
+      if (replace && catalog.functionExists(name)) {
+        // Hive metastore alter function method does not alter function resources
+        // so the existing function must be dropped first when replacing a SQL function.
+        assert(!ignoreIfExists)
+        catalog.dropFunction(name, ignoreIfExists)
+      }
+      // For a persistent function, we will store the metadata into underlying external catalog.
+      // This function will be loaded into the FunctionRegistry when a query uses it.
+      // We do not load it into FunctionRegistry right now, to avoid loading the resource
+      // immediately, as the Spark application to create the function may not have
+      // access to the function.
+      catalog.createUserDefinedFunction(newFunction, ignoreIfExists)
+    }
 
     Seq.empty
   }

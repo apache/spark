@@ -758,6 +758,12 @@
     ],
     "sqlState" : "22018"
   },
+  "CORRUPTED_CATALOG_FUNCTION" : {
+    "message" : [
+      "Cannot convert the catalog function '<identifier>' into a SQL function due to corrupted function information in catalog. If the function is not a SQL function, please make sure the class name '<className>' is loadable."
+    ],
+    "sqlState" : "0A000"
+  },
   "CREATE_PERMANENT_VIEW_WITHOUT_ALIAS" : {
     "message" : [
       "Not allowed to create the permanent view <name> without explicitly assigning an alias for the expression <attr>."
@@ -1154,6 +1160,13 @@
       "Failed to execute <statementType> command because DEFAULT values are not supported for target data source with table provider: \"<dataSource>\"."
     ],
     "sqlState" : "42623"
+  },
+  "DESCRIBE_JSON_NOT_EXTENDED" : {
+    "message" : [
+      "DESCRIBE TABLE ... AS JSON only supported when [EXTENDED|FORMATTED] is specified.",
+      "For example: DESCRIBE EXTENDED <tableName> AS JSON is supported but DESCRIBE <tableName> AS JSON is not."
+    ],
+    "sqlState" : "0A000"
   },
   "DISTINCT_WINDOW_FUNCTION_UNSUPPORTED" : {
     "message" : [
@@ -2379,6 +2392,12 @@
       "`EscapeChar` should be a string literal of length one, but got <sqlExpr>."
     ],
     "sqlState" : "42604"
+  },
+  "INVALID_EXECUTOR_HEARTBEAT_INTERVAL" : {
+    "message" : [
+      "The value of <networkTimeoutKey>=<networkTimeoutValue>ms must be greater than the value of <executorHeartbeatIntervalKey>=<executorHeartbeatIntervalValue>ms."
+    ],
+    "sqlState" : "42616"
   },
   "INVALID_EXECUTOR_MEMORY" : {
     "message" : [
@@ -3679,6 +3698,12 @@
       "Nested EXECUTE IMMEDIATE commands are not allowed. Please ensure that the SQL query provided (<sqlString>) does not contain another EXECUTE IMMEDIATE command."
     ],
     "sqlState" : "07501"
+  },
+  "NETWORK_AUTH_MUST_BE_ENABLED" : {
+    "message" : [
+      "<networkAuthEnabledConf> must be enabled when enabling encryption."
+    ],
+    "sqlState" : "42616"
   },
   "NONEXISTENT_FIELD_NAME_IN_LIST" : {
     "message" : [
@@ -5283,6 +5308,11 @@
           "Attach a comment to the namespace <namespace>."
         ]
       },
+      "DESC_TABLE_COLUMN_JSON" : {
+        "message" : [
+          "DESC TABLE COLUMN AS JSON not supported for individual columns."
+        ]
+      },
       "DESC_TABLE_COLUMN_PARTITION" : {
         "message" : [
           "DESC TABLE COLUMN for a specific partition."
@@ -5884,6 +5914,11 @@
       "RETURN_COLUMN_COUNT_MISMATCH" : {
         "message" : [
           "The number of columns produced by the RETURN clause (num: `<outputSize>`) does not match the number of column names specified by the RETURNS clause (num: `<returnParamSize>`) of <name>."
+        ]
+      },
+      "ROUTINE_PROPERTY_TOO_LARGE" : {
+        "message" : [
+          "Cannot convert user defined routine <name> to catalog function: routine properties are too large."
         ]
       },
       "SQL_TABLE_UDF_BODY_MUST_BE_A_QUERY" : {
