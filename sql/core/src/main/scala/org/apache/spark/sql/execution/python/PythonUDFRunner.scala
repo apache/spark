@@ -46,6 +46,8 @@ abstract class BasePythonUDFRunner(
 
   override val faultHandlerEnabled: Boolean = SQLConf.get.pythonUDFWorkerFaulthandlerEnabled
 
+  override val bufferSize: Int = SQLConf.get.getConf(SQLConf.PYTHON_UDF_BUFFER_SIZE)
+
   protected def writeUDF(dataOut: DataOutputStream): Unit
 
   protected override def newWriter(
