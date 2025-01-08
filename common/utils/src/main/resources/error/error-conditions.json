@@ -3325,6 +3325,11 @@
         "message" : [
           "Variable <varName> can only be declared at the beginning of the compound."
         ]
+      },
+      "QUALIFIED_LOCAL_VARIABLE" : {
+        "message" : [
+          "Variable <varName> must be declared without a qualifier."
+        ]
       }
     },
     "sqlState" : "42K0M"

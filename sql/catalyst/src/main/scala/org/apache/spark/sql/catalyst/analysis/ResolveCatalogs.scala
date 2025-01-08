@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.analysis
 
 import scala.jdk.CollectionConverters._
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, Identifier, LookupCatalog, SupportsNamespaces}
@@ -76,8 +77,9 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
   private def resolveCreateVariableName(nameParts: Seq[String]): ResolvedIdentifier = {
     // from scripts we can only create local variables, which must be unqualified
     if (catalogManager.scriptingLocalVariableManager.isDefined && nameParts.length != 1) {
-      // todo LOCALVARS: add error class
-      throw new Exception("must be unqualified")
+      throw new AnalysisException(
+        "INVALID_VARIABLE_DECLARATION.QUALIFIED_LOCAL_VARIABLE",
+        Map("varName" -> nameParts.mkString(".")))
     }
     resolveVariableName(nameParts)
   }
@@ -90,6 +92,8 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
     nameParts.length match {
       case 1 | 2 => ResolvedIdentifier(FakeSystemCatalog, ident)
 
+      // When there are 3 nameParts the variable must be a fully qualified session variable
+      // i.e. "system.session.<varName>"
       case 3 if nameParts(0).equalsIgnoreCase(CatalogManager.SYSTEM_CATALOG_NAME) &&
         nameParts(1).equalsIgnoreCase(CatalogManager.SESSION_NAMESPACE) =>
         ResolvedIdentifier(FakeSystemCatalog, ident)
@@ -100,6 +104,5 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
           nameParts, Seq(CatalogManager.SYSTEM_CATALOG_NAME, CatalogManager.SESSION_NAMESPACE)
         )
     }
-
   }
 }

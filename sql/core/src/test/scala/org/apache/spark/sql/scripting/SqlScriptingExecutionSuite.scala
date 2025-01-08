@@ -1063,12 +1063,14 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
         |BEGIN
         | lbl: BEGIN
         |  DECLARE localVar = 1;
+        |  SELECT localVar;
         |  SELECT lbl.localVar;
         | END;
         |END
         |""".stripMargin
 
     val expected = Seq(
+      Seq(Row(1)), // select localVar
       Seq(Row(1)) // select lbl.localVar
     )
     verifySqlScriptResult(sqlScript, expected)
@@ -1253,6 +1255,29 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("local variable - session variable resolved over local if qualified") {
+    withSessionVariable("localVar") {
+      spark.sql("DECLARE VARIABLE localVar = 1")
+
+      val sqlScript =
+        """
+          |BEGIN
+          | lbl: BEGIN
+          |  DECLARE localVar = 5;
+          |  SELECT system.session.localVar;
+          |  SELECT localVar;
+          | END;
+          |END
+          |""".stripMargin
+
+      val expected = Seq(
+        Seq(Row(1)), // select system.session.localVar
+        Seq(Row(5)) // select localVar
+      )
+      verifySqlScriptResult(sqlScript, expected)
+    }
+  }
+
   test("local variable - case insensitive name") {
     val sqlScript =
       """
@@ -1319,24 +1344,22 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
   }
 
   test("local variable - case sensitive label") {
+    val sqlScript =
+      """
+        |BEGIN
+        | lbl: BEGIN
+        |  DECLARE localVar = 1;
+        |  SELECT LBL.localVar;
+        | END;
+        |END
+        |""".stripMargin
+
     val e = intercept[AnalysisException] {
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> true.toString) {
-        val sqlScript =
-          """
-            |BEGIN
-            | lbl: BEGIN
-            |  DECLARE localVar = 1;
-            |  SELECT LBL.localVar;
-            | END;
-            |END
-            |""".stripMargin
-
-        val expected = Seq(
-          Seq(Row(1)) // select lbl.localVar
-        )
-        verifySqlScriptResult(sqlScript, expected)
+        verifySqlScriptResult(sqlScript, Seq.empty[Seq[Row]])
       }
     }
+
     checkError(
       exception = e,
       condition = "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
@@ -1346,6 +1369,29 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
         fragment = "LBL.localVar",
         start = 52,
         stop = 63)
+    )
+  }
+
+  test("local variable - qualified declare") {
+      val sqlScript =
+        """
+          |BEGIN
+          | lbl: BEGIN
+          |  DECLARE lbl.localVar = 1;
+          |  SELECT lbl.localVar;
+          | END;
+          |END
+          |""".stripMargin
+
+    val e = intercept[AnalysisException] {
+      verifySqlScriptResult(sqlScript, Seq.empty[Seq[Row]])
+    }
+
+    checkError(
+      exception = e,
+      condition = "INVALID_VARIABLE_DECLARATION.QUALIFIED_LOCAL_VARIABLE",
+      sqlState = "42K0M",
+      parameters = Map("varName" -> "lbl.localVar")
     )
   }
 }

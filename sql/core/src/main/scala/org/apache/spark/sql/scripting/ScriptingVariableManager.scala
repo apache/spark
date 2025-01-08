@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.scripting
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.catalog.{VariableDefinition, VariableManager}
 import org.apache.spark.sql.catalyst.expressions.Literal
@@ -57,20 +58,20 @@ class ScriptingVariableManager(context: SqlScriptingExecutionContext)
       context.currentFrame.scopes
       .findLast(_.label == label)
       .map(_.variables(name))
-      // todo LOCALVARS: add error if not 1 or 2 nameparts
-      // case _ => throw error
+    case _ =>
+      throw SparkException.internalError("ScriptingVariableManager.get expects 1 or 2 nameParts.")
   }
 
   override def createIdentifier(name: String): Identifier =
     Identifier.of(Array(context.currentScope.label), name)
 
   override def remove(name: String): Boolean = {
-    // probably throw error
-    throw new Exception("cant remove local var")
+    throw SparkException.internalError(
+      "ScriptingVariableManager.remove should never be called as local variables cannot be dropped."
+    )
   }
 
-  // todo LOCALVARS: create errorclass for this
-  override def clear(): Unit = throw new Exception("cant clear() scripting manager")
+  override def clear(): Unit = context.frames.clear()
 
   // Empty if all scopes of all frames in the script context contain no variables.
   override def isEmpty: Boolean = context.frames.forall(_.scopes.forall(_.variables.isEmpty))
