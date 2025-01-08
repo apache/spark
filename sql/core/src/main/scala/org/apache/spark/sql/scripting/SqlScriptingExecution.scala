@@ -74,6 +74,9 @@ class SqlScriptingExecution(
     if (context.frames.nonEmpty) {
       return Some(context.frames.last.next())
     }
+    // cleanup variable manager after script is completed
+    // todo LOCALVARS: figure out a better way to do this, also cleanup when script fails
+    session.sessionState.catalogManager.scriptingLocalVariableManager = None
     None
   }
 

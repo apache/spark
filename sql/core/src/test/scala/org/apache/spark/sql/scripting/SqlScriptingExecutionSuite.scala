@@ -18,7 +18,7 @@
 package org.apache.spark.sql.scripting
 
 import org.apache.spark.SparkConf
-import org.apache.spark.sql.{QueryTest, Row}
+import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.logical.CompoundBody
 import org.apache.spark.sql.internal.SQLConf
@@ -1209,24 +1209,143 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
     verifySqlScriptResult(sqlScript, expected)
   }
 
-//  test("local variable - resolved over session variable") {
-//    withSessionVariable("localVar") {
-//      spark.sql("DECLARE VARIABLE localVar = 1")
-//
-//      val sqlScript =
-//        """
-//          |BEGIN
-//          | lbl: BEGIN
-//          |  DECLARE localVar = 5;
-//          |  SELECT localVar;
-//          | END;
-//          |END
-//          |""".stripMargin
-//
-//      val expected = Seq(
-//        Seq(Row(5)) // select lbl.localVar
-//      )
-//      verifySqlScriptResult(sqlScript, expected)
-//    }
-//  }
+  test("local variable - resolved over session variable") {
+    withSessionVariable("localVar") {
+      spark.sql("DECLARE VARIABLE localVar = 1")
+
+      val sqlScript =
+        """
+          |BEGIN
+          | lbl: BEGIN
+          |  DECLARE localVar = 5;
+          |  SELECT localVar;
+          | END;
+          |END
+          |""".stripMargin
+
+      val expected = Seq(
+        Seq(Row(5)) // select localVar
+      )
+      verifySqlScriptResult(sqlScript, expected)
+    }
+  }
+
+  test("local variable - resolved over session variable nested") {
+    withSessionVariable("localVar") {
+      spark.sql("DECLARE VARIABLE localVar = 1")
+
+      val sqlScript =
+        """
+          |BEGIN
+          | SELECT localVar;
+          | lbl: BEGIN
+          |  DECLARE localVar = 5;
+          |  SELECT localVar;
+          | END;
+          |END
+          |""".stripMargin
+
+      val expected = Seq(
+        Seq(Row(1)), // select localVar
+        Seq(Row(5)) // select localVar
+      )
+      verifySqlScriptResult(sqlScript, expected)
+    }
+  }
+
+  test("local variable - case insensitive name") {
+    val sqlScript =
+      """
+        |BEGIN
+        | lbl: BEGIN
+        |  DECLARE localVar = 1;
+        |  SELECT LOCALVAR;
+        | END;
+        |END
+        |""".stripMargin
+
+    val expected = Seq(
+      Seq(Row(1)) // select lbl.localVar
+    )
+    verifySqlScriptResult(sqlScript, expected)
+  }
+
+  test("local variable - case sensitive name") {
+    val e = intercept[AnalysisException] {
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> true.toString) {
+        val sqlScript =
+          """
+            |BEGIN
+            | lbl: BEGIN
+            |  DECLARE localVar = 1;
+            |  SELECT LOCALVAR;
+            | END;
+            |END
+            |""".stripMargin
+
+        val expected = Seq(
+          Seq(Row(1)) // select lbl.localVar
+        )
+        verifySqlScriptResult(sqlScript, expected)
+      }
+    }
+    checkError(
+      exception = e,
+      condition = "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
+      sqlState = "42703",
+      parameters = Map("objectName" -> "`LOCALVAR`"),
+      context = ExpectedContext(
+        fragment = "LOCALVAR",
+        start = 52,
+        stop = 59)
+    )
+  }
+
+  test("local variable - case insensitive label") {
+    val sqlScript =
+      """
+        |BEGIN
+        | lbl: BEGIN
+        |  DECLARE localVar = 1;
+        |  SELECT LBL.localVar;
+        | END;
+        |END
+        |""".stripMargin
+
+    val expected = Seq(
+      Seq(Row(1)) // select lbl.localVar
+    )
+    verifySqlScriptResult(sqlScript, expected)
+  }
+
+  test("local variable - case sensitive label") {
+    val e = intercept[AnalysisException] {
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> true.toString) {
+        val sqlScript =
+          """
+            |BEGIN
+            | lbl: BEGIN
+            |  DECLARE localVar = 1;
+            |  SELECT LBL.localVar;
+            | END;
+            |END
+            |""".stripMargin
+
+        val expected = Seq(
+          Seq(Row(1)) // select lbl.localVar
+        )
+        verifySqlScriptResult(sqlScript, expected)
+      }
+    }
+    checkError(
+      exception = e,
+      condition = "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
+      sqlState = "42703",
+      parameters = Map("objectName" -> "`LBL`.`localVar`"),
+      context = ExpectedContext(
+        fragment = "LBL.localVar",
+        start = 52,
+        stop = 63)
+    )
+  }
 }
