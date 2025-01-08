@@ -93,9 +93,7 @@ object Cast extends QueryErrorsBase {
 
     case (NullType, _) => true
 
-    case (_, CharType(_) | VarcharType(_)) if !SQLConf.get.preserveCharVarcharTypeInfo => false
     case (_, _: StringType) => true
-    case (CharType(_) | VarcharType(_), _) if !SQLConf.get.preserveCharVarcharTypeInfo => false
 
     case (_: StringType, _: BinaryType) => true
 
@@ -200,9 +198,7 @@ object Cast extends QueryErrorsBase {
 
     case (NullType, _) => true
 
-    case (_, CharType(_) | VarcharType(_)) if !SQLConf.get.preserveCharVarcharTypeInfo => false
     case (_, _: StringType) => true
-    case (CharType(_) | VarcharType(_), _) if !SQLConf.get.preserveCharVarcharTypeInfo => false
 
     case (_: StringType, BinaryType) => true
     case (_: IntegralType, BinaryType) => true

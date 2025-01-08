@@ -1015,14 +1015,10 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
-  test("disallow type conversions between calendar interval type and char/varchar types") {
+  test("allow type conversions between calendar interval type and char/varchar types") {
     Seq(CharType(10), VarcharType(10))
       .foreach { typ =>
-      verifyCastFailure(
-        cast(Literal.default(CalendarIntervalType), typ),
-        DataTypeMismatch(
-          "CAST_WITHOUT_SUGGESTION",
-          Map("srcType" -> "\"INTERVAL\"", "targetType" -> toSQLType(typ))))
+        assert(cast(Literal.default(CalendarIntervalType), typ).checkInputDataTypes().isSuccess)
     }
   }
 

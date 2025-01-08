@@ -156,7 +156,7 @@ case object StringHelper extends PartialOrdering[StringConstraint] {
     tryCompare(x, y).contains(0)
   }
 
-  def isPlainString(s: StringType): Boolean = equiv(s.constraint, NoConstraint)
+  def isPlainString(s: StringType): Boolean = s.constraint == NoConstraint
 
   def isMoreConstrained(a: StringType, b: StringType): Boolean =
     gteq(a.constraint, b.constraint)

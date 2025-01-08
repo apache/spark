@@ -42,6 +42,7 @@ private[sql] object UpCastRule {
     case (TimestampType, TimestampNTZType) => true
 
     case (s1: StringType, s2: StringType) => StringHelper.isMoreConstrained(s1, s2)
+    // TODO: allow upcast from int/double/decimal to char/varchar of sufficient length
     case (_: AtomicType, s: StringType) => StringHelper.isPlainString(s)
     case (_: CalendarIntervalType, s: StringType) => StringHelper.isPlainString(s)
     case (NullType, _) => true

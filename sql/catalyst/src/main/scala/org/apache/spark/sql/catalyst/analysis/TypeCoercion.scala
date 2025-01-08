@@ -106,10 +106,8 @@ object TypeCoercion extends TypeCoercionBase {
     // [SPARK-50060] If a binary operation contains two collated string types with different
     // collation IDs, we can't decide which collation ID the result should have.
     case (st1: StringType, st2: StringType) if st1.collationId != st2.collationId => None
-    case (st: StringType, t2: AtomicType) if t2 != BinaryType && t2 != BooleanType &&
-      StringHelper.isPlainString(st) => Some(st)
-    case (t1: AtomicType, st: StringType) if t1 != BinaryType && t1 != BooleanType &&
-      StringHelper.isPlainString(st) => Some(st)
+    case (st: StringType, t2: AtomicType) if t2 != BinaryType && t2 != BooleanType => Some(st)
+    case (t1: AtomicType, st: StringType) if t1 != BinaryType && t1 != BooleanType => Some(st)
     case _ => None
   }
 
