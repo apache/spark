@@ -785,10 +785,12 @@ object UDFAdaptors extends Serializable {
   def mapToMapPartitions[V, U](f: MapFunction[V, U]): Iterator[V] => Iterator[U] =
     values => values.map(f.call)
 
-  def mapValues[K, IV, V](k: IV => K, f: Option[IV => V]): Iterator[IV] => Iterator[(K, V)] =
-    f match {
-      case Some(value) => values => values.map(v => (k(v), value(v)))
-      case None => throw new IllegalArgumentException("mapValues requires a function")
+  def mapKeysAndValues[K, IV, V](
+      kFunc: IV => K,
+      vFuncOpt: Option[IV => V]): Iterator[IV] => Iterator[(K, V)] =
+    vFuncOpt match {
+      case Some(vFunc) => input => input.map(i => (kFunc(i), vFunc(i)))
+      case None => input => input.map(i => (kFunc(i), identity(i).asInstanceOf[V]))
     }
 
   def foreachToForeachPartition[T](f: T => Unit): Iterator[T] => Unit =

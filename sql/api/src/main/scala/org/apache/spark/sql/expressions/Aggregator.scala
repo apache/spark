@@ -18,7 +18,7 @@
 package org.apache.spark.sql.expressions
 
 import org.apache.spark.sql.{Encoder, TypedColumn}
-import org.apache.spark.sql.internal.{InvokeInlineUserDefinedFunction, UnresolvedAttribute, UserDefinedFunctionLike}
+import org.apache.spark.sql.internal.{InvokeInlineUserDefinedFunction, UserDefinedFunctionLike}
 
 /**
  * A base class for user-defined aggregations, which can be used in `Dataset` operations to take
@@ -96,8 +96,6 @@ abstract class Aggregator[-IN, BUF, OUT] extends Serializable with UserDefinedFu
    * @since 1.6.0
    */
   def toColumn: TypedColumn[IN, OUT] = {
-    new TypedColumn[IN, OUT](InvokeInlineUserDefinedFunction(this, Seq(
-      UnresolvedAttribute("vvvvv")
-    )), outputEncoder)
+    new TypedColumn[IN, OUT](InvokeInlineUserDefinedFunction(this, Nil), outputEncoder)
   }
 }

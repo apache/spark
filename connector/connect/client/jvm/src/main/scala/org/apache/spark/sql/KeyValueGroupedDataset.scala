@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{agnosticEncoderFor, ProductEncoder}
 import org.apache.spark.sql.connect.ConnectConversions._
 import org.apache.spark.sql.connect.common.UdfUtils
-import org.apache.spark.sql.expressions.SparkUserDefinedFunction
+import org.apache.spark.sql.expressions.{Aggregator, SparkUserDefinedFunction}
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.internal.ColumnNodeToProtoConverter.toExpr
 import org.apache.spark.sql.internal.UDFAdaptors
@@ -465,28 +465,43 @@ private class KeyValueGroupedDatasetImpl[K, V, IK, IV](
   override protected def aggUntyped(columns: TypedColumn[_, _]*): Dataset[_] = {
     val originalDf = sparkSession.newDataset(ivEncoder, plan)
 
-    val e =
+    // Apply key and value transformations, get a DS of two columns "k" and "v"
+    val transformEncoder =
       ProductEncoder.tuple(Seq(kEncoder, vEncoder)).asInstanceOf[Encoder[(IK, V)]]
-    val ddd = UDFAdaptors.mapValues(keyMapFunc, valueMapFunc)
-    val d = originalDf.mapPartitions(ddd)(e)
-    d.collect()
-    val sss = d.toDF("k", "v")
+    val transformFunc = UDFAdaptors.mapKeysAndValues(keyMapFunc, valueMapFunc)
+    val kvTransformedDf = originalDf.mapPartitions(transformFunc)(transformEncoder).toDF("k", "v")
 
-    val aggCols: Seq[Column] = valueMapFunc match {
-      case Some(func) =>
-        columns
-      case None =>
-        columns
-    }
+    // Rewrite the aggregate columns to use the value column as input
+    val updatedAggColumns = columns.map(rewriteAggColumn(_, "v"))
     val rEnc = ProductEncoder.tuple(kEncoder +: columns.map(c => agnosticEncoderFor(c.encoder)))
-    val finall = sparkSession.newDataset(rEnc) { builder =>
+    sparkSession.newDataset(rEnc) { builder =>
       builder.getAggregateBuilder
-        .setInput(sss.plan.getRoot)
+        .setInput(kvTransformedDf.plan.getRoot)
         .setGroupType(proto.Aggregate.GroupType.GROUP_TYPE_GROUPBY)
-        .addAllGroupingExpressions(List(sss.col("k").typedExpr(kEncoder)).asJava)
-        .addAllAggregateExpressions(aggCols.map(_.typedExpr(vEncoder)).asJava)
+        // Group by the key column, ...
+        .addAllGroupingExpressions(List(kvTransformedDf.col("k").typedExpr(kEncoder)).asJava)
+        // then aggregate by the value column
+        .addAllAggregateExpressions(updatedAggColumns.map(_.typedExpr(vEncoder)).asJava)
     }
-    finall
+  }
+
+  private def rewriteAggColumn(column: TypedColumn[_, _], to: String): TypedColumn[_, _] = {
+    def rewriteStarIntoNamedColumn(col: internal.ColumnNode, name: String): internal.ColumnNode = {
+      col match {
+        case internal.UnresolvedStar(None, planId, origin) =>
+          internal.UnresolvedAttribute(name, planId, isMetadataColumn = false, origin)
+        case _ => col
+      }
+    }
+
+    val newNode = column.node match {
+      case f @ internal.UnresolvedFunction(_, arguments, _, false, _, _) =>
+        f.copy(arguments = arguments.map(rewriteStarIntoNamedColumn(_, to)))
+      case f @ internal.InvokeInlineUserDefinedFunction(_: Aggregator[_, _, _], Nil, _, _) =>
+        f.copy(arguments = Seq(internal.UnresolvedAttribute(to)))
+      case _ => column.node
+    }
+    new TypedColumn(newNode, column.encoder)
   }
 
   override def reduceGroups(f: (V, V) => V): Dataset[(K, V)] = {
