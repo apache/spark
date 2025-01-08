@@ -579,6 +579,9 @@ abstract class InMemoryBaseTable(
     }
 
     override def getPushedBroadcastFiltersCount(): Int = this.getPushedBroadcastFilters().size()
+
+    override def partitionAttributes(): Array[NamedReference] =
+      InMemoryBaseTable.this.partitioning.flatMap(_.references())
   }
 
   abstract class InMemoryWriterBuilder(val info: LogicalWriteInfo)

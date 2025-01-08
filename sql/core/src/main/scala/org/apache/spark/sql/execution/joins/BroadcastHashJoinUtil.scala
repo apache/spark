@@ -234,6 +234,8 @@ object BroadcastHashJoinUtil {
               streamsideLeafJoinAttribIndex)
             val partitionCols = underlyingRuntimeFilteringScan.partitionAttributes().
               map(convertNameReferencesToString).toSet
+            // TODO Asif: Fix completely the push downn of broadcast var for partitioning column
+            // then the below condition should be removed.
             if (!partitionCols.contains(streamsideJoinColName)) {
               if (runtimeFilteringBatchScan.runtimeFilters.isEmpty) {
                 Seq(
