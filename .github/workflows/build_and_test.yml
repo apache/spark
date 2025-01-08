@@ -84,10 +84,11 @@ jobs:
       id: set-outputs
       run: |
         if [ -z "${{ inputs.jobs }}" ]; then
-          pyspark_modules=`cd dev && python -c "import sparktestsupport.modules as m; print(','.join(m.name for m in m.all_modules if m.name.startswith('pyspark')))"`
+          pyspark_modules=`cd dev && python -c "import sparktestsupport.modules as m; print(','.join(m.name for m in m.all_modules if m.name.startswith('pyspark') and not m.name.startswith('pyspark-pandas')))"`
+          pyspark_pandas_modules=`cd dev && python -c "import sparktestsupport.modules as m; print(','.join(m.name for m in m.all_modules if m.name.startswith('pyspark-pandas')))"`
           pyspark=`./dev/is-changed.py -m $pyspark_modules`
+          pandas=`./dev/is-changed.py -m $pyspark_pandas_modules`
           if [[ "${{ github.repository }}" != 'apache/spark' ]]; then
-            pandas=$pyspark
             yarn=`./dev/is-changed.py -m yarn`
             kubernetes=`./dev/is-changed.py -m kubernetes`
             sparkr=`./dev/is-changed.py -m sparkr`
@@ -139,7 +140,7 @@ jobs:
       if: inputs.branch != 'branch-3.5'
       env: ${{ fromJSON(inputs.envs) }}
       run: |
-        if [[ "${{ fromJson(steps.set-outputs.outputs.required).pyspark }}"  == 'true' ]]; then
+        if [[ "${{ fromJson(steps.set-outputs.outputs.required).pyspark }}"  == 'true' || "${{ fromJson(steps.set-outputs.outputs.required).pyspark-pandas }}"  == 'true' ]]; then
           if [[ "${{ env.PYSPARK_IMAGE_TO_TEST }}" == "" ]]; then
             echo "PYSPARK_IMAGE_TO_TEST is required when pyspark is enabled."
             exit 1
@@ -392,6 +393,7 @@ jobs:
     needs: precondition
     if: >-
       fromJson(needs.precondition.outputs.required).pyspark == 'true' ||
+      fromJson(needs.precondition.outputs.required).pyspark-pandas == 'true' ||
       fromJson(needs.precondition.outputs.required).lint == 'true' ||
       fromJson(needs.precondition.outputs.required).docs == 'true' ||
       fromJson(needs.precondition.outputs.required).sparkr == 'true'
@@ -468,7 +470,7 @@ jobs:
           # Use the infra image cache to speed up
           cache-from: type=registry,ref=ghcr.io/apache/spark/apache-spark-github-action-image-sparkr-cache:${{ inputs.branch }}
       - name: Build and push (PySpark with ${{ env.PYSPARK_IMAGE_TO_TEST }})
-        if: ${{ inputs.branch != 'branch-3.5' && fromJson(needs.precondition.outputs.required).pyspark == 'true' && env.PYSPARK_IMAGE_TO_TEST != '' }}
+        if: ${{ inputs.branch != 'branch-3.5' && (fromJson(needs.precondition.outputs.required).pyspark == 'true' || fromJson(needs.precondition.outputs.required).pyspark-pandas == 'true') && env.PYSPARK_IMAGE_TO_TEST != '' }}
         id: docker_build_pyspark
         env: ${{ fromJSON(inputs.envs) }}
         uses: docker/build-push-action@v6
@@ -484,7 +486,7 @@ jobs:
   pyspark:
     needs: [precondition, infra-image]
     # always run if pyspark == 'true', even infra-image is skip (such as non-master job)
-    if: (!cancelled()) && fromJson(needs.precondition.outputs.required).pyspark == 'true'
+    if: (!cancelled()) && (fromJson(needs.precondition.outputs.required).pyspark == 'true' || fromJson(needs.precondition.outputs.required).pyspark-pandas == 'true')
     name: "Build modules: ${{ matrix.modules }}"
     runs-on: ubuntu-latest
     timeout-minutes: 180
@@ -517,6 +519,13 @@ jobs:
           - >-
             pyspark-pandas-connect-part3
         exclude:
+          # Always run if pyspark == 'true', even infra-image is skip (such as non-master job)
+          # In practice, the build will run in individual PR, but not against the individual commit
+          # in Apache Spark repository.
+          - modules: ${{ fromJson(needs.precondition.outputs.required).pyspark != 'true' && 'pyspark-sql, pyspark-resource, pyspark-testing' }}
+          - modules: ${{ fromJson(needs.precondition.outputs.required).pyspark != 'true' && 'pyspark-core, pyspark-errors, pyspark-streaming, pyspark-logger' }}
+          - modules: ${{ fromJson(needs.precondition.outputs.required).pyspark != 'true' && 'pyspark-mllib, pyspark-ml, pyspark-ml-connect' }}
+          - modules: ${{ fromJson(needs.precondition.outputs.required).pyspark != 'true' && 'pyspark-connect' }}
           # Always run if pyspark-pandas == 'true', even infra-image is skip (such as non-master job)
           # In practice, the build will run in individual PR, but not against the individual commit
           # in Apache Spark repository.

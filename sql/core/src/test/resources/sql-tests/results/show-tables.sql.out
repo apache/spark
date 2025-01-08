@@ -128,7 +128,6 @@ View Schema Mode: BINDING
 Schema: root
  |-- e: integer (nullable = true)
 
-
 showdb	show_t1	false	Catalog: spark_catalog
 Database: showdb
 Table: show_t1
@@ -145,7 +144,6 @@ Schema: root
  |-- b: integer (nullable = true)
  |-- c: string (nullable = true)
  |-- d: string (nullable = true)
-
 
 showdb	show_t2	false	Catalog: spark_catalog
 Database: showdb
@@ -249,10 +247,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1231",
+  "errorClass" : "PARTITIONS_NOT_FOUND",
+  "sqlState" : "428FT",
   "messageParameters" : {
-    "key" : "a",
-    "tblName" : "`spark_catalog`.`showdb`.`show_t1`"
+    "partitionList" : "`a`",
+    "tableName" : "`spark_catalog`.`showdb`.`show_t1`"
   }
 }
 
