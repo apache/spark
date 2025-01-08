@@ -133,14 +133,22 @@ trait TruncateTableSuiteBase extends QueryTest with DDLCommandTestUtils {
       } else {
         "`test_catalog`.`ns`.`tbl`"
       }
+      val expectedCondition = if (commandVersion == DDLCommandTestUtils.V1_COMMAND_VERSION) {
+        "_LEGACY_ERROR_TEMP_1267"
+      } else {
+        "PARTITIONS_NOT_FOUND"
+      }
+      val expectedParameters = if (commandVersion == DDLCommandTestUtils.V1_COMMAND_VERSION) {
+        Map("tableIdentWithDB" -> expectedTableName)
+      } else {
+        Map("partitionList" -> "`c0`", "tableName" -> expectedTableName)
+      }
       checkError(
         exception = intercept[AnalysisException] {
           sql(s"TRUNCATE TABLE $t PARTITION (c0=1)")
         },
-        condition = "PARTITIONS_NOT_FOUND",
-        parameters = Map(
-          "partitionList" -> "`c0`",
-          "tableName" -> expectedTableName)
+        condition = expectedCondition,
+        parameters = expectedParameters
       )
     }
   }
