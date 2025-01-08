@@ -44,7 +44,7 @@ from pyspark.sql.merge import MergeIntoWriter
 from pyspark.sql.streaming import DataStreamWriter
 from pyspark.sql.table_arg import TableArg
 from pyspark.sql.types import StructType, Row
-from pyspark.sql.utils import dispatch_df_method
+from pyspark.sql.utils import dispatch_df_method, CachedAccessor
 
 
 if TYPE_CHECKING:
@@ -69,7 +69,6 @@ if TYPE_CHECKING:
         ArrowMapIterFunction,
         DataFrameLike as PandasDataFrameLike,
     )
-    from pyspark.sql.plot import PySparkPlotAccessor
     from pyspark.sql.metrics import ExecutionInfo
 
 
@@ -6794,35 +6793,7 @@ class DataFrame:
         """
         ...
 
-    @property
-    def plot(self) -> "PySparkPlotAccessor":
-        """
-        Returns a :class:`PySparkPlotAccessor` for plotting functions.
-
-        .. versionadded:: 4.0.0
-
-        Returns
-        -------
-        :class:`PySparkPlotAccessor`
-
-        Notes
-        -----
-        This API is experimental.
-        It provides two ways to create plots:
-        1. Chaining style (e.g., `df.plot.line(...)`).
-        2. Explicit style (e.g., `df.plot(kind="line", ...)`).
-
-        Examples
-        --------
-        >>> data = [("A", 10, 1.5), ("B", 30, 2.5), ("C", 20, 3.5)]
-        >>> columns = ["category", "int_val", "float_val"]
-        >>> df = spark.createDataFrame(data, columns)
-        >>> type(df.plot)
-        <class 'pyspark.sql.plot.core.PySparkPlotAccessor'>
-        >>> df.plot.line(x="category", y=["int_val", "float_val"])  # doctest: +SKIP
-        >>> df.plot(kind="line", x="category", y=["int_val", "float_val"])  # doctest: +SKIP
-        """
-        ...
+    plot: CachedAccessor = CachedAccessor("plot", "pyspark.sql.plot.core.PySparkPlotAccessor")
 
 
 class DataFrameNaFunctions:
