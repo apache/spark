@@ -27,7 +27,6 @@ import org.apache.spark.sql.connector.catalog.{CatalogManager, Identifier}
 import org.apache.spark.sql.connector.catalog.CatalogManager.{SESSION_NAMESPACE, SYSTEM_CATALOG_NAME}
 import org.apache.spark.sql.errors.DataTypeErrorsBase
 
-// todo LOCALVARS: move this to separate file or rename this file
 trait VariableManager {
   def create(
     name: String,

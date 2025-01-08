@@ -21,6 +21,7 @@ import org.apache.spark.SparkConf
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.logical.CompoundBody
+import org.apache.spark.sql.errors.DataTypeErrors.toSQLId
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
@@ -1127,30 +1128,6 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
 //      //    verifySqlScriptResult(sqlScript, expected)
 //    }
 
-  // todo: check error when it's added
-
-//    test("testtest5") {
-//      val sqlScript =
-//        """
-//          |BEGIN
-//          | lbl: BEGIN
-//          |  DECLARE var = 1;
-//          |  DECLARE var = 2;
-//          |  SELECT lbl.var;
-//          | END;
-//          |END
-//          |""".stripMargin
-//
-//      val r = spark.sql(sqlScript).collect()
-//
-//      val expected = Seq(
-//        Seq.empty[Row], // declare var
-//        Seq(Row(1)), // select
-//        Seq.empty[Row] // drop var
-//      )
-//      //    verifySqlScriptResult(sqlScript, expected)
-//    }
-
   test("local variable - set qualified") {
     val sqlScript =
       """
@@ -1318,7 +1295,7 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
       exception = e,
       condition = "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
       sqlState = "42703",
-      parameters = Map("objectName" -> "`LOCALVAR`"),
+      parameters = Map("objectName" -> toSQLId("LOCALVAR")),
       context = ExpectedContext(
         fragment = "LOCALVAR",
         start = 52,
@@ -1364,7 +1341,7 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
       exception = e,
       condition = "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
       sqlState = "42703",
-      parameters = Map("objectName" -> "`LBL`.`localVar`"),
+      parameters = Map("objectName" -> toSQLId("LBL.localVar")),
       context = ExpectedContext(
         fragment = "LBL.localVar",
         start = 52,
@@ -1391,7 +1368,128 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
       exception = e,
       condition = "INVALID_VARIABLE_DECLARATION.QUALIFIED_LOCAL_VARIABLE",
       sqlState = "42K0M",
-      parameters = Map("varName" -> "lbl.localVar")
+      parameters = Map("varName" -> toSQLId("lbl.localVar"))
     )
   }
+
+  test("local variable - declare var duplicate names") {
+    val sqlScript =
+      """
+        |BEGIN
+        | lbl: BEGIN
+        |  DECLARE localVar = 1;
+        |  DECLARE localVar = 2;
+        |  SELECT lbl.localVar;
+        | END;
+        |END
+        |""".stripMargin
+
+    val e = intercept[AnalysisException] {
+      verifySqlScriptResult(sqlScript, Seq.empty[Seq[Row]])
+    }
+
+    checkError(
+      exception = e,
+      condition = "VARIABLE_ALREADY_EXISTS",
+      sqlState = "42723",
+      parameters = Map("variableName" -> toSQLId("lbl.localVar"))
+    )
+  }
+
+  test("local variable - leaves scope unqualified") {
+    val sqlScript =
+      """
+        |BEGIN
+        | lbl: BEGIN
+        |  DECLARE localVar = 1;
+        |  SELECT localVar;
+        | END;
+        | SELECT localVar;
+        |END
+        |""".stripMargin
+
+    val e = intercept[AnalysisException] {
+      verifySqlScriptResult(sqlScript, Seq.empty[Seq[Row]])
+    }
+
+    checkError(
+      exception = e,
+      condition = "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
+      sqlState = "42703",
+      parameters = Map("objectName" -> toSQLId("localVar")),
+      context = ExpectedContext(fragment = "localVar", start = 76, stop = 83)
+    )
+  }
+
+  test("local variable - leaves scope qualified") {
+    val sqlScript =
+      """
+        |BEGIN
+        | lbl: BEGIN
+        |  DECLARE localVar = 1;
+        |  SELECT lbl.localVar;
+        | END;
+        | SELECT lbl.localVar;
+        |END
+        |""".stripMargin
+
+    val e = intercept[AnalysisException] {
+      verifySqlScriptResult(sqlScript, Seq.empty[Seq[Row]])
+    }
+
+    checkError(
+      exception = e,
+      condition = "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
+      sqlState = "42703",
+      parameters = Map("objectName" -> toSQLId("lbl.localVar")),
+      context = ExpectedContext(fragment = "lbl.localVar", start = 80, stop = 91)
+    )
+  }
+
+  test("local variable - leaves inner scope") {
+    val sqlScript =
+      """
+        |BEGIN
+        | DECLARE localVar = 1;
+        | lbl: BEGIN
+        |  DECLARE localVar = 2;
+        |  SELECT localVar;
+        | END;
+        | SELECT localVar;
+        |END
+        |""".stripMargin
+
+    val expected = Seq(
+      Seq(Row(2)), // select localVar
+      Seq(Row(1)) // select localVar
+    )
+    verifySqlScriptResult(sqlScript, expected)
+  }
+
+//  test("local variable - inner inner scope -> inner scope -> session var") {
+//    withSessionVariable("localVar") {
+//      spark.sql("DECLARE VARIABLE localVar = 0")
+//      val sqlScript =
+//        """
+//          |BEGIN
+//          | lbl1: BEGIN
+//          |   DECLARE localVar = 1;
+//          |   lbl: BEGIN
+//          |     DECLARE localVar = 2;
+//          |     SELECT localVar;
+//          |   END;
+//          |   SELECT localVar;
+//          | END;
+//          | SELECT localVar;
+//          |END
+//          |""".stripMargin
+//
+//      val expected = Seq(
+//        Seq(Row(2)), // select localVar
+//        Seq(Row(1)), // select localVar
+//        Seq(Row(0)) // select localVar
+//      )
+//      verifySqlScriptResult(sqlScript, expected)
+//    }
+//  }
 }

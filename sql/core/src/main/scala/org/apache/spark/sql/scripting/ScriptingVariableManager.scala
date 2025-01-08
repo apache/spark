@@ -21,7 +21,6 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.catalog.{VariableDefinition, VariableManager}
 import org.apache.spark.sql.catalyst.expressions.Literal
-import org.apache.spark.sql.connector.catalog.CatalogManager.SYSTEM_CATALOG_NAME
 import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.errors.DataTypeErrorsBase
 
@@ -38,7 +37,7 @@ class ScriptingVariableManager(context: SqlScriptingExecutionContext)
       throw new AnalysisException(
         errorClass = "VARIABLE_ALREADY_EXISTS",
         messageParameters = Map(
-          "variableName" -> toSQLId(Seq(SYSTEM_CATALOG_NAME, context.currentScope.label, name))))
+          "variableName" -> toSQLId(Seq(context.currentScope.label, name))))
     }
     context.currentScope.variables.put(
       name,

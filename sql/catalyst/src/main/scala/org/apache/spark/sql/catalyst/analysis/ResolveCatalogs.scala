@@ -23,6 +23,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, Identifier, LookupCatalog, SupportsNamespaces}
+import org.apache.spark.sql.errors.DataTypeErrors.toSQLId
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.util.ArrayImplicits._
 
@@ -79,7 +80,7 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
     if (catalogManager.scriptingLocalVariableManager.isDefined && nameParts.length != 1) {
       throw new AnalysisException(
         "INVALID_VARIABLE_DECLARATION.QUALIFIED_LOCAL_VARIABLE",
-        Map("varName" -> nameParts.mkString(".")))
+        Map("varName" -> toSQLId(nameParts)))
     }
     resolveVariableName(nameParts)
   }
