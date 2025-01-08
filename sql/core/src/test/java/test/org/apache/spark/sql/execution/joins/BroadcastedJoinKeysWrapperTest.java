@@ -19,7 +19,6 @@ package test.org.apache.spark.sql.execution.joins;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
-import java.sql.Date;
 import java.sql.Timestamp;
 import java.time.LocalDateTime;
 import java.util.Arrays;
@@ -28,7 +27,6 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Set;
 
-import java.util.function.Function;
 import org.apache.spark.sql.catalyst.CatalystTypeConverters;
 import org.apache.spark.sql.types.DateType$;
 import org.junit.jupiter.api.Disabled;
@@ -62,12 +60,8 @@ import org.junit.jupiter.api.TestInstance;
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 public class BroadcastedJoinKeysWrapperTest {
   private transient SparkSession spark;
-
-
   private SparkPlan sp;
-
   private final LocalDateTime now = LocalDateTime.now();
-
   private final int uniqueTimeStampValues = 10;
   private final Timestamp[] timeStampData = new Timestamp[uniqueTimeStampValues];
   private final StructType schema = new StructType(
@@ -85,9 +79,6 @@ public class BroadcastedJoinKeysWrapperTest {
       new StructField("bigDecCol", DataTypes.createDecimalType(22, 3),
           false, Metadata.empty()),
       });
-
-  // new StructField("calCol", DataTypes.CalendarIntervalType, false, Metadata.empty()),
-
 
   @BeforeAll
   public void setUp() {

@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.execution.joins;
 
-
-
 import java.io.IOException;
 import java.io.ObjectInput;
 import java.io.ObjectOutput;
@@ -52,17 +50,11 @@ import org.apache.spark.sql.types.IntegerType$;
 import org.apache.spark.sql.types.LongType$;
 import org.apache.spark.sql.types.ShortType$;
 
-
 public class BroadcastedJoinKeysWrapperImpl implements BroadcastedJoinKeysWrapper {
   private Broadcast<HashedRelation> bcVar;
-
   private DataType[] totalKeyDataTypes;
-
   private int index = 0;
-
-
   private transient volatile WeakReference<Object> keysArray = null;
-
   private int totalJoinKeys = 0;
 
   private static final LoadingCache<BroadcastedJoinKeysWrapperImpl, Set<Object>>
@@ -250,7 +242,6 @@ public class BroadcastedJoinKeysWrapperImpl implements BroadcastedJoinKeysWrappe
     return this.totalKeyDataTypes[index];
   }
 
-
   public ArrayWrapper<? extends Object> getKeysArray() {
     Object array = this.initKeys();
     return ArrayWrapper.wrapArray(array, this.totalJoinKeys == 1,  this.index);
@@ -293,7 +284,6 @@ public class BroadcastedJoinKeysWrapperImpl implements BroadcastedJoinKeysWrappe
     return this.index;
   }
 
-
   public int getTotalJoinKeys() {
     return this.totalJoinKeys;
   }
@@ -325,12 +315,12 @@ public class BroadcastedJoinKeysWrapperImpl implements BroadcastedJoinKeysWrappe
     idempotentializerForHashedRelationDeser.invalidateAll();
   }
 }
-
 class SetWrapper<T> implements Set<T> {
   private final Set<T> base;
-  public SetWrapper(Set<T> base) {
+  SetWrapper(Set<T> base) {
     this.base = base;
   }
+
   @Override
   public java.util.Iterator<T> iterator() {
     return this.base.iterator();
@@ -412,7 +402,7 @@ class SetWrapper<T> implements Set<T> {
 class KeyIdempotForHashedRelationDeser {
   final BroadcastedJoinKeysWrapperImpl bcjk;
 
-  public KeyIdempotForHashedRelationDeser(BroadcastedJoinKeysWrapperImpl bcjk) {
+  KeyIdempotForHashedRelationDeser(BroadcastedJoinKeysWrapperImpl bcjk) {
     this.bcjk = bcjk;
   }
 
