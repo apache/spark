@@ -52,14 +52,11 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
   @inline private def acceptAny[T](func: T => UTF8String): Any => UTF8String =
     i => func(i.asInstanceOf[T])
 
-  protected final def castToChar(from: DataType, length: Int): Any => UTF8String = from match {
-    case _: StringType => acceptAny(o => CharVarcharCodegenUtils.charTypeWriteSideCheck(o, length))
-  }
+  protected final def castToChar(from: DataType, length: Int): Any => UTF8String =
+    i => CharVarcharCodegenUtils.charTypeWriteSideCheck(castToString(from)(i), length)
 
-  protected final def castToVarchar(from: DataType, length: Int): Any => UTF8String = from match {
-    case _: StringType => acceptAny(o => CharVarcharCodegenUtils.varcharTypeWriteSideCheck(
-      o, length))
-  }
+  protected final def castToVarchar(from: DataType, length: Int): Any => UTF8String =
+    i => CharVarcharCodegenUtils.varcharTypeWriteSideCheck(castToString(from)(i), length)
 
   // Returns a function to convert a value to pretty string. The function assumes input is not null.
   protected final def castToString(from: DataType): Any => UTF8String = from match {
@@ -175,22 +172,30 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
   }
 
   protected final def castToCharCode(
-      from: DataType, length: Int, ctx: CodegenContext): (ExprValue, ExprValue) => Block = {
-    from match {
-      case _: StringType =>
-        (c, evPrim) => code"$evPrim = org.apache.spark.sql.catalyst.util.CharVarcharCodegenUtils" +
-          code".charTypeWriteSideCheck($c, $length);"
+      from: DataType, length: Int, ctx: CodegenContext): (ExprValue, ExprValue) => Block =
+    (c, evPrim) => {
+      val tmpVar = ctx.freshVariable("tmp", classOf[UTF8String])
+      val t = castToStringCode(from, ctx)(c, tmpVar)
+      code"""
+            UTF8String $tmpVar;
+            $t
+            $evPrim = org.apache.spark.sql.catalyst.util.CharVarcharCodegenUtils
+              .charTypeWriteSideCheck($tmpVar, $length);
+          """
     }
-  }
 
   protected final def castToVarcharCode(
-      from: DataType, length: Int, ctx: CodegenContext): (ExprValue, ExprValue) => Block = {
-    from match {
-      case _: StringType =>
-        (c, evPrim) => code"$evPrim = org.apache.spark.sql.catalyst.util.CharVarcharCodegenUtils" +
-          code".varcharTypeWriteSideCheck($c, $length);"
+      from: DataType, length: Int, ctx: CodegenContext): (ExprValue, ExprValue) => Block =
+    (c, evPrim) => {
+      val tmpVar = ctx.freshVariable("tmp", classOf[UTF8String])
+      val t = castToStringCode(from, ctx)(c, tmpVar)
+      code"""
+            UTF8String $tmpVar;
+            $t
+            $evPrim = org.apache.spark.sql.catalyst.util.CharVarcharCodegenUtils
+              .varcharTypeWriteSideCheck($tmpVar, $length);
+          """
     }
-  }
 
   // Returns a function to generate code to convert a value to pretty string. It assumes the input
   // is not null.

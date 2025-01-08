@@ -51,7 +51,6 @@ object TypeCoercion extends TypeCoercionBase {
     WidenSetOperationTypes ::
     ProcedureArgumentCoercion ::
     new CombinedTypeCoercionRule(
-      CastCoercion ::
       CollationTypeCasts ::
       InConversion ::
       PromoteStrings ::

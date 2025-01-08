@@ -79,7 +79,6 @@ object AnsiTypeCoercion extends TypeCoercionBase {
     WidenSetOperationTypes ::
     ProcedureArgumentCoercion ::
     new AnsiCombinedTypeCoercionRule(
-      CastCoercion ::
       CollationTypeCasts ::
       InConversion ::
       PromoteStrings ::
