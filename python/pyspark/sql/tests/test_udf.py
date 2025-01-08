@@ -1237,8 +1237,8 @@ class UDFTests(BaseUDFTestsMixin, ReusedSQLTestCase):
         for batch_size in [1, 33, 1000, 2000]:
             with self.sql_conf({"spark.sql.execution.python.udf.maxRecordsPerBatch": batch_size}):
                 df = self.spark.range(1000).selectExpr("twoArgs('test', id) AS ret").orderBy("ret")
-                [row] = df.collect()
-                self.assertEqual(row, list(range(4, 1004)))
+                rets = [x["ret"] for x in df.collect()]
+                self.assertEqual(rets, list(range(4, 1004)))
 
     # We cannot check whether the buffer size is effective or not. We just run the query with
     # various buffer size and see whether the query runs successfully, and the output is
@@ -1251,8 +1251,8 @@ class UDFTests(BaseUDFTestsMixin, ReusedSQLTestCase):
                     self.spark.range(1000).repartition(1)
                         .selectExpr("twoArgs('test', id) AS ret").orderBy("ret")
                 )
-                [row] = df.collect()
-                self.assertEqual(row, list(range(4, 1004)))
+                rets = [x["ret"] for x in df.collect()]
+                self.assertEqual(rets, list(range(4, 1004)))
 
 
 class UDFInitializationTests(unittest.TestCase):
