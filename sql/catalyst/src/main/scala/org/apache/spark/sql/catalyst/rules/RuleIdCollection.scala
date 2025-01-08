@@ -70,8 +70,6 @@ object RuleIdCollection {
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveRelations" ::
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveSubquery" ::
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveSubqueryColumnAliases" ::
-      "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveWithColumns" ::
-      "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveWithColumnsRenamed" ::
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveTables" ::
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveTempViews" ::
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveTranspose" ::

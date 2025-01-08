@@ -777,9 +777,13 @@ class DataFrameSubquerySuite extends QueryTest with SharedSparkSession {
       val t1 = table1()
 
       checkAnswer(
-        t1.withColumn("scalar", spark.range(1).select($"c1".outer() + $"c2".outer()).scalar()),
-        t1.withColumn("scalar", $"c1" + $"c2")
-      )
+        t1.withColumn(
+          "scalar",
+          spark
+            .range(1)
+            .select($"c1".outer() + $"c2".outer())
+            .scalar()),
+        t1.select($"*", ($"c1" + $"c2").as("scalar")))
 
       checkAnswer(
         t1.withColumn(
@@ -789,7 +793,7 @@ class DataFrameSubquerySuite extends QueryTest with SharedSparkSession {
             .withColumn("c1", $"c1".outer())
             .select($"c1" + $"c2".outer())
             .scalar()),
-        t1.withColumn("scalar", $"c1" + $"c2"))
+        t1.select($"*", ($"c1" + $"c2").as("scalar")))
 
       checkAnswer(
         t1.withColumn(
@@ -800,7 +804,7 @@ class DataFrameSubquerySuite extends QueryTest with SharedSparkSession {
             .withColumn("c2", $"c2".outer())
             .select($"c1" + $"c2")
             .scalar()),
-        t1.withColumn("scalar", $"c1" + $"c2"))
+        t1.select($"*", ($"c1" + $"c2").as("scalar")))
     }
   }
 
@@ -817,7 +821,7 @@ class DataFrameSubquerySuite extends QueryTest with SharedSparkSession {
             .withColumnsRenamed(Map("c1" -> "x", "c2" -> "y"))
             .select($"x" + $"y")
             .scalar()),
-        t1.withColumn("scalar", $"c1".as("x") + $"c2".as("y")))
+        t1.select($"*", ($"c1".as("x") + $"c2".as("y")).as("scalar")))
     }
   }
 

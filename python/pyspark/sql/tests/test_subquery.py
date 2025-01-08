@@ -939,7 +939,7 @@ class SubqueryTestsMixin:
                     .select(sf.col("c1").outer() + sf.col("c2").outer())
                     .scalar(),
                 ),
-                t1.withColumn("scalar", sf.col("c1") + sf.col("c2")),
+                t1.select("*", (sf.col("c1") + sf.col("c2")).alias("scalar")),
             )
             assertDataFrameEqual(
                 t1.withColumn(
@@ -949,7 +949,7 @@ class SubqueryTestsMixin:
                     .select(sf.col("c1") + sf.col("c2").outer())
                     .scalar(),
                 ),
-                t1.withColumn("scalar", sf.col("c1") + sf.col("c2")),
+                t1.select("*", (sf.col("c1") + sf.col("c2")).alias("scalar")),
             )
             assertDataFrameEqual(
                 t1.withColumn(
@@ -960,7 +960,7 @@ class SubqueryTestsMixin:
                     .select(sf.col("c1") + sf.col("c2"))
                     .scalar(),
                 ),
-                t1.withColumn("scalar", sf.col("c1") + sf.col("c2")),
+                t1.select("*", (sf.col("c1") + sf.col("c2")).alias("scalar")),
             )
 
     def test_subquery_in_with_columns_renamed(self):
@@ -976,7 +976,7 @@ class SubqueryTestsMixin:
                     .select(sf.col("x") + sf.col("y"))
                     .scalar(),
                 ),
-                t1.withColumn("scalar", sf.col("c1").alias("x") + sf.col("c2").alias("y")),
+                t1.select("*", (sf.col("c1").alias("x") + sf.col("c2").alias("y")).alias("scalar")),
             )
 
     def test_subquery_in_drop(self):

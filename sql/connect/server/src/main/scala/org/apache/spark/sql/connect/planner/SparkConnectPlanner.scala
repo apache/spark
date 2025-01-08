@@ -45,7 +45,7 @@ import org.apache.spark.internal.LogKeys.{DATAFRAME_ID, SESSION_ID}
 import org.apache.spark.resource.{ExecutorResourceRequest, ResourceProfile, TaskResourceProfile, TaskResourceRequest}
 import org.apache.spark.sql.{Column, Dataset, Encoders, ForeachWriter, Observation, RelationalGroupedDataset, Row, SparkSession}
 import org.apache.spark.sql.catalyst.{expressions, AliasIdentifier, FunctionIdentifier, QueryPlanningTracker}
-import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, GlobalTempView, LazyExpression, LocalTempView, MultiAlias, NameParameterizedQuery, PosParameterizedQuery, UnresolvedAlias, UnresolvedAttribute, UnresolvedDataFrameStar, UnresolvedDeserializer, UnresolvedExtractValue, UnresolvedFunction, UnresolvedPlanId, UnresolvedRegex, UnresolvedRelation, UnresolvedStar, UnresolvedSubqueryColumnAliases, UnresolvedTableValuedFunction, UnresolvedTranspose, UnresolvedWithColumns, UnresolvedWithColumnsRenamed}
+import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, GlobalTempView, LazyExpression, LocalTempView, MultiAlias, NameParameterizedQuery, PosParameterizedQuery, UnresolvedAlias, UnresolvedAttribute, UnresolvedDataFrameStar, UnresolvedDeserializer, UnresolvedExtractValue, UnresolvedFunction, UnresolvedPlanId, UnresolvedRegex, UnresolvedRelation, UnresolvedStar, UnresolvedStarWithColumns, UnresolvedStarWithColumnsRenames, UnresolvedSubqueryColumnAliases, UnresolvedTableValuedFunction, UnresolvedTranspose}
 import org.apache.spark.sql.catalyst.encoders.{encoderFor, AgnosticEncoder, ExpressionEncoder, RowEncoder}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.UnboundRowEncoder
 import org.apache.spark.sql.catalyst.expressions._
@@ -1072,10 +1072,13 @@ class SparkConnectPlanner(
       // for backward compatibility
       rel.getRenameColumnsMapMap.asScala.toSeq.unzip
     }
-    UnresolvedWithColumnsRenamed(
-      colNames = colNames,
-      newColNames = newColNames,
-      child = transformRelation(rel.getInput))
+    Project(
+      Seq(
+        UnresolvedStarWithColumnsRenames(
+          target = None,
+          existingNames = colNames,
+          newNames = newColNames)),
+      transformRelation(rel.getInput))
   }
 
   private def transformWithColumns(rel: proto.WithColumns): LogicalPlan = {
@@ -1095,11 +1098,14 @@ class SparkConnectPlanner(
         (alias.getName(0), transformExpression(alias.getExpr), metadata)
       }.unzip3
 
-    UnresolvedWithColumns(
-      colNames = colNames,
-      exprs = exprs,
-      metadata = Some(metadata),
-      child = transformRelation(rel.getInput))
+    Project(
+      Seq(
+        UnresolvedStarWithColumns(
+          target = None,
+          colNames = colNames,
+          exprs = exprs,
+          explicitMetadata = Some(metadata))),
+      transformRelation(rel.getInput))
   }
 
   private def transformWithWatermark(rel: proto.WithWatermark): LogicalPlan = {

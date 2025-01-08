@@ -1276,7 +1276,13 @@ class Dataset[T] private[sql](
       s"The size of column names: ${colNames.size} isn't equal to " +
         s"the size of columns: ${cols.size}")
     withPlan {
-      UnresolvedWithColumns(colNames, cols.map(_.expr), None, logicalPlan)
+      Project(
+        Seq(
+          UnresolvedStarWithColumns(
+            target = None,
+            colNames = colNames,
+            exprs = cols.map(_.expr))),
+        logicalPlan)
     }
   }
 
@@ -1305,7 +1311,13 @@ class Dataset[T] private[sql](
       s"The size of existing column names: ${colNames.size} isn't equal to " +
         s"the size of new column names: ${newColNames.size}")
     withPlan {
-      UnresolvedWithColumnsRenamed(colNames, newColNames, logicalPlan)
+      Project(
+        Seq(
+          UnresolvedStarWithColumnsRenames(
+            target = None,
+            existingNames = colNames,
+            newNames = newColNames)),
+        logicalPlan)
     }
   }
 
