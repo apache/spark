@@ -448,6 +448,11 @@ class SparkSession private(
     val sse = new SqlScriptingExecution(script, this, args)
     var result: Option[Seq[Row]] = None
 
+    // We must call hasNext, next, and collect in this order because:
+    //   1. sse.hasNext is not idempotent - it advances the script execution
+    //   2. sse.next() returns the next result DataFrame
+    //   3. We must collect results immediately to maintain execution order
+    // This ensures we respect the contract of SqlScriptingExecution API.
     while (sse.hasNext) {
       val df = sse.next()
       sse.withErrorHandling {

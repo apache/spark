@@ -25,6 +25,9 @@ import org.apache.spark.sql.catalyst.plans.logical.{CommandResult, CompoundBody}
 /**
  * SQL scripting executor - executes script and returns result statements.
  * This supports returning multiple result statements from a single script.
+ * The caller of the SqlScriptingExecution API must adhere to the contract of executing
+ * the returned statement before continuing iteration. Executing the statement needs to be done
+ * inside withErrorHandling block.
  *
  * @param sqlScript CompoundBody which need to be executed.
  * @param session Spark session that SQL script is executed within.
@@ -52,11 +55,29 @@ class SqlScriptingExecution(
 
   private var current: Option[DataFrame] = None
 
+  /**
+   * Advances through the script and executes statements until a result statement or
+   * end of script is encountered.
+   *
+   * To know if there is result statement available, the hasNext needs to advance through
+   * script and execute statements until the result statement or end of script is encountered.
+   * For that reason hasNext must be called only once before each `next()` invocation,
+   * and the returned result must be executed before subsequent calls. Multiple calls without
+   * executing the intermediate results will lead to incorrect behavior.
+   *
+   * @return True if a result statement is available, False otherwise.
+   */
   override def hasNext: Boolean = {
     current = getNextResult
     current.isDefined
   }
 
+  /**
+   * Returns the next result statement from the script.
+   * Multiple consecutive calls without calling `hasNext()` would return the same result statement.
+   *
+   * @return The next result statement.
+   */
   override def next(): DataFrame = {
     current match {
       case None => throw SparkException.internalError("No more elements to iterate through.")
