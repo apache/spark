@@ -27,8 +27,10 @@ from typing import (
     Sequence,
     TYPE_CHECKING,
     cast,
+    Type,
     TypeVar,
     Union,
+    Generic,
 )
 
 # For backward compatibility.
@@ -490,3 +492,49 @@ def remote_only(func: Union[Callable, property]) -> Union[Callable, property]:
     else:
         func._remote_only = True  # type: ignore[attr-defined]
         return func
+
+
+T = TypeVar("T")
+
+
+class CachedAccessor(Generic[T]):
+    """
+    Custom property-like object.
+
+    A descriptor for caching accessors:
+
+    Parameters
+    ----------
+    name : str
+        Namespace that accessor methods, properties, etc will be accessed under, e.g. "foo" for a
+        dataframe accessor yields the accessor ``df.foo``
+    accessor: cls
+        Class with the extension methods.
+    """
+
+    def __init__(self, name: str, accessor: Union[Type[T], str]) -> None:
+        self._name = name
+        self._accessor = accessor
+        self._accessor_class = None
+
+    def _resolve_accessor_class(self) -> None:
+        """Lazily import and resolve the accessor class if it's a string."""
+        if isinstance(self._accessor, str):
+            module_path, class_name = self._accessor.rsplit(".", 1)
+            module = __import__(module_path, fromlist=[class_name])
+            self._accessor_class = getattr(module, class_name)
+        else:
+            self._accessor_class = self._accessor  # type: ignore
+
+    def __get__(self, obj: Optional[Any], cls: Type[T]) -> Union[T, Type[T]]:
+        if obj is None:
+            if self._accessor_class is None:
+                self._resolve_accessor_class()
+            return self._accessor_class  # type: ignore
+
+        if self._accessor_class is None:
+            self._resolve_accessor_class()
+
+        accessor_obj = self._accessor_class(obj)  # type: ignore
+        object.__setattr__(obj, self._name, accessor_obj)
+        return accessor_obj
