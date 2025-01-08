@@ -25,14 +25,17 @@ import org.apache.spark.sql.catalyst.expressions.{
   Cast,
   Equality,
   Expression,
+  In,
   Literal
 }
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{
   AnsiIntervalType,
   CalendarIntervalType,
   DataType,
   DoubleType,
   NullType,
+  StringType,
   StringTypeExpression,
   TimestampType,
   TimestampTypeExpression
@@ -59,6 +62,15 @@ object StringPromotionTypeCoercion {
       p.withNewChildren(Seq(Cast(left, TimestampType), right))
     case p @ Equality(left @ TimestampTypeExpression(), right @ StringTypeExpression()) =>
       p.withNewChildren(Seq(left, Cast(right, TimestampType)))
+
+    case b @ BinaryComparison(StringTypeExpression(), StringTypeExpression())
+      if SQLConf.get.preserveCharVarcharTypeInfo =>
+      b.withNewChildren(TypeCoercion.padStringLiteralsInComparison(b.children))
+
+    case i @ In(StringTypeExpression(), list) if SQLConf.get.preserveCharVarcharTypeInfo &&
+      list.forall(_.dataType.isInstanceOf[StringType]) =>
+      i.withNewChildren(TypeCoercion.padStringLiteralsInComparison(i.children))
+
 
     case p @ BinaryComparison(left, right)
         if findCommonTypeForBinaryComparison(left.dataType, right.dataType, conf).isDefined =>

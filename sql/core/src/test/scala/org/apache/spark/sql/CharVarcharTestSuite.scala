@@ -444,36 +444,48 @@ trait CharVarcharTestSuite extends QueryTest with SQLTestUtils {
   }
 
   test("char type comparison: top-level columns") {
-    withTable("t") {
-      sql(s"CREATE TABLE t(c1 CHAR(2), c2 CHAR(5)) USING $format")
-      sql("INSERT INTO t VALUES ('a', 'a')")
-      testConditions(spark.table("t"), Seq(
-        ("c1 = 'a'", true),
-        ("'a' = c1", true),
-        ("c1 = 'a  '", true),
-        ("c1 > 'a'", false),
-        ("c1 IN ('a', 'b')", true),
-        ("c1 = c2", true),
-        ("c1 < c2", false),
-        ("c1 IN (c2)", true),
-        ("c1 <=> null", false)))
+    def run(): Unit =
+      withTable("t") {
+        sql(s"CREATE TABLE t(c1 CHAR(2), c2 CHAR(5)) USING $format")
+        sql("INSERT INTO t VALUES ('a', 'a')")
+        testConditions(spark.table("t"), Seq(
+          ("c1 = 'a'", true),
+          ("'a' = c1", true),
+          ("c1 = 'a  '", true),
+          ("c1 > 'a'", false),
+          ("c1 IN ('a', 'b')", true),
+          ("c1 = c2", true),
+          ("c1 < c2", false),
+          ("c1 IN (c2)", true),
+          ("c1 <=> null", false)))
+      }
+
+    run()
+    withSQLConf(SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true") {
+      run()
     }
   }
 
   test("char type comparison: partitioned columns") {
-    withTable("t") {
-      sql(s"CREATE TABLE t(i INT, c1 CHAR(2), c2 CHAR(5)) USING $format PARTITIONED BY (c1, c2)")
-      sql("INSERT INTO t VALUES (1, 'a', 'a')")
-      testConditions(spark.table("t"), Seq(
-        ("c1 = 'a'", true),
-        ("'a' = c1", true),
-        ("c1 = 'a  '", true),
-        ("c1 > 'a'", false),
-        ("c1 IN ('a', 'b')", true),
-        ("c1 = c2", true),
-        ("c1 < c2", false),
-        ("c1 IN (c2)", true),
-        ("c1 <=> null", false)))
+    def run(): Unit =
+      withTable("t") {
+        sql(s"CREATE TABLE t(i INT, c1 CHAR(2), c2 CHAR(5)) USING $format PARTITIONED BY (c1, c2)")
+        sql("INSERT INTO t VALUES (1, 'a', 'a')")
+        testConditions(spark.table("t"), Seq(
+          ("c1 = 'a'", true),
+          ("'a' = c1", true),
+          ("c1 = 'a  '", true),
+          ("c1 > 'a'", false),
+          ("c1 IN ('a', 'b')", true),
+          ("c1 = c2", true),
+          ("c1 < c2", false),
+          ("c1 IN (c2)", true),
+          ("c1 <=> null", false)))
+      }
+
+    run()
+    withSQLConf(SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true") {
+      run()
     }
   }
 
@@ -753,7 +765,7 @@ trait CharVarcharTestSuite extends QueryTest with SQLTestUtils {
           } else {
             to
           }
-          sql(s"select cast($from as $typ)").collect() === Array(Row(paddedTo))
+          assert(sql(s"select cast($from as $typ)").collect() === Array(Row(paddedTo)))
         }
       }
     }

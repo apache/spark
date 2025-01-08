@@ -21,7 +21,6 @@ import org.json4s.JsonAST.{JString, JValue}
 
 import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.catalyst.util.CollationFactory
-import org.apache.spark.sql.internal.SqlApiConf
 
 /**
  * The data type representing `String` values. Please use the singleton `DataTypes.StringType`.
@@ -96,10 +95,13 @@ class StringType private[sql] (
   override def jsonValue: JValue = JString("string")
 
   override def equals(obj: Any): Boolean = {
-    obj match {
-      case s: StringType => s.collationId == collationId && s.constraint == constraint
-      case _ => false
+    val rhs = obj match {
+      case s: StringType => s
+      case _ => return false
     }
+    val a = StringHelper.getConstraint(this)
+    val b = StringHelper.getConstraint(rhs)
+    collationId == rhs.collationId && StringHelper.equiv(a, b)
   }
 
   override def hashCode(): Int = collationId.hashCode()
@@ -156,17 +158,20 @@ case object StringHelper extends PartialOrdering[StringConstraint] {
     tryCompare(x, y).contains(0)
   }
 
-  def isPlainString(s: StringType): Boolean = s.constraint == NoConstraint
+  def getConstraint(s: StringType): StringConstraint =
+    s match {
+      case st @ (CharType(_) | VarcharType(_)) => st.constraint
+      case _ => NoConstraint
+    }
+
+  def isPlainString(s: StringType): Boolean = equiv(getConstraint(s), NoConstraint)
 
   def isMoreConstrained(a: StringType, b: StringType): Boolean =
-    gteq(a.constraint, b.constraint)
+    gteq(getConstraint(a), getConstraint(b))
 
   def tightestCommonString(s1: StringType, s2: StringType): Option[StringType] = {
     if (s1.collationId != s2.collationId) {
       return None
-    }
-    if (!SqlApiConf.get.preserveCharVarcharTypeInfo) {
-      return Some(StringType(s1.collationId))
     }
     Some((s1.constraint, s2.constraint) match {
       case (FixedLength(l1), FixedLength(l2)) => CharType(l1.max(l2))
