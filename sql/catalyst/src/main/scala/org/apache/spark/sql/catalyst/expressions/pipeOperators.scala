@@ -63,9 +63,7 @@ case class PipeExpression(child: Expression, isAggregate: Boolean, clause: Strin
 /**
  * Represents the location within a logical plan that a SQL pipe operator appeared.
  * This acts as a logical boundary that works to prevent the analyzer from modifying the logical
- * operators above and below the boundary. For example, when adding a Filter operator after a
- * Project to implement the "|> WHERE" operator, the analyzer might otherwise push the Filter below
- * the project; this class prevents that by acting as a logical boundary.
+ * operators above and below the boundary.
  */
 case class PipeOperator(child: LogicalPlan) extends UnaryNode {
   final override val nodePatterns: Seq[TreePattern] = Seq(PIPE_OPERATOR)
