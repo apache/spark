@@ -58,7 +58,18 @@ trait MetadataMapSupport {
   def toJsonLinkedHashMap: mutable.LinkedHashMap[String, JValue]
 
   def toLinkedHashMap: mutable.LinkedHashMap[String, String] = {
-    jsonToString(toJsonLinkedHashMap)
+    val linkedHashMap = mutable.LinkedHashMap[String, String]()
+
+    // Handle view query output columns quoting separately, to maintain backward compatibility
+    for ((key, value) <- toJsonLinkedHashMap) {
+      if (key == "View Query Output Columns") {
+        val modifiedValue = value.stripPrefix("`").stripSuffix("`").replace("`, `", ", ")
+        linkedHashMap += (key -> s"[$modifiedValue]")
+      } else {
+        linkedHashMap += (key -> value)
+      }
+    }
+    linkedHashMap
   }
 
   protected def jsonToString(
