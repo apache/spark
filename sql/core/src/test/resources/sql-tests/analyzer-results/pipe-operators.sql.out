@@ -306,7 +306,7 @@ from t as t_alias
 -- !query analysis
 Project [tx#x]
 +- Filter (ty#x = def)
-   +- SubqueryAlias __auto_generated_subquery_name
+   +- PipeOperator
       +- Project [pipeexpression(x#x, false, SELECT) AS tx#x, pipeexpression(y#x, false, SELECT) AS ty#x]
          +- SubqueryAlias t_alias
             +- SubqueryAlias spark_catalog.default.t
@@ -769,8 +769,9 @@ Filter exists#x [x#x]
 :     +- Project [a#x, b#x, pipeexpression(outer(x#x), false, EXTEND) AS pipeexpression(outer(spark_catalog.default.t.x))#x]
 :        +- SubqueryAlias spark_catalog.default.other
 :           +- Relation spark_catalog.default.other[a#x,b#x] json
-+- SubqueryAlias spark_catalog.default.t
-   +- Relation spark_catalog.default.t[x#x,y#x] csv
++- PipeOperator
+   +- SubqueryAlias spark_catalog.default.t
+      +- Relation spark_catalog.default.t[x#x,y#x] csv
 
 
 -- !query
@@ -1000,6 +1001,38 @@ Project [x#x, y#x, z#x]
          +- Project [x#x, y#x, pipeexpression(1, false, EXTEND) AS z#x]
             +- SubqueryAlias spark_catalog.default.t
                +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
+values (0), (1) lhs(a)
+|> inner join values (1), (2) rhs(a) using (a)
+|> extend lhs.a + rhs.a as z1
+|> extend lhs.a - rhs.a as z2
+|> drop z1
+|> where z2 = 0
+|> order by lhs.a, rhs.a, z2
+|> set z2 = 4
+|> limit 2
+|> select lhs.a, rhs.a, z2
+-- !query analysis
+Project [a#x, a#x, z2#x]
++- GlobalLimit 2
+   +- LocalLimit 2
+      +- PipeOperator
+         +- Project [a#x, pipeexpression(4, false, SET) AS z2#x, a#x]
+            +- Sort [a#x ASC NULLS FIRST, a#x ASC NULLS FIRST, z2#x ASC NULLS FIRST], true
+               +- PipeOperator
+                  +- Filter (z2#x = 0)
+                     +- PipeOperator
+                        +- Project [a#x, z2#x, a#x]
+                           +- Project [a#x, z1#x, pipeexpression((a#x - a#x), false, EXTEND) AS z2#x, a#x]
+                              +- Project [a#x, pipeexpression((a#x + a#x), false, EXTEND) AS z1#x, a#x]
+                                 +- Project [a#x, a#x, a#x]
+                                    +- Join Inner, (a#x = a#x)
+                                       :- SubqueryAlias lhs
+                                       :  +- LocalRelation [a#x]
+                                       +- SubqueryAlias rhs
+                                          +- LocalRelation [a#x]
 
 
 -- !query
@@ -1241,9 +1274,10 @@ table t
 |> where u.x = 1
 -- !query analysis
 Filter (x#x = 1)
-+- SubqueryAlias u
-   +- SubqueryAlias spark_catalog.default.t
-      +- Relation spark_catalog.default.t[x#x,y#x] csv
++- PipeOperator
+   +- SubqueryAlias u
+      +- SubqueryAlias spark_catalog.default.t
+         +- Relation spark_catalog.default.t[x#x,y#x] csv
 
 
 -- !query
@@ -1325,8 +1359,9 @@ table t
 |> where true
 -- !query analysis
 Filter true
-+- SubqueryAlias spark_catalog.default.t
-   +- Relation spark_catalog.default.t[x#x,y#x] csv
++- PipeOperator
+   +- SubqueryAlias spark_catalog.default.t
+      +- Relation spark_catalog.default.t[x#x,y#x] csv
 
 
 -- !query
@@ -1334,8 +1369,9 @@ table t
 |> where x + length(y) < 4
 -- !query analysis
 Filter ((x#x + length(y#x)) < 4)
-+- SubqueryAlias spark_catalog.default.t
-   +- Relation spark_catalog.default.t[x#x,y#x] csv
++- PipeOperator
+   +- SubqueryAlias spark_catalog.default.t
+      +- Relation spark_catalog.default.t[x#x,y#x] csv
 
 
 -- !query
@@ -1344,9 +1380,11 @@ table t
 |> where x + length(y) < 3
 -- !query analysis
 Filter ((x#x + length(y#x)) < 3)
-+- Filter ((x#x + length(y#x)) < 4)
-   +- SubqueryAlias spark_catalog.default.t
-      +- Relation spark_catalog.default.t[x#x,y#x] csv
++- PipeOperator
+   +- Filter ((x#x + length(y#x)) < 4)
+      +- PipeOperator
+         +- SubqueryAlias spark_catalog.default.t
+            +- Relation spark_catalog.default.t[x#x,y#x] csv
 
 
 -- !query
@@ -1354,7 +1392,7 @@ Filter ((x#x + length(y#x)) < 3)
 |> where x = 1
 -- !query analysis
 Filter (x#x = 1)
-+- SubqueryAlias __auto_generated_subquery_name
++- PipeOperator
    +- Aggregate [x#x], [x#x, sum(length(y#x)) AS sum_len#xL]
       +- SubqueryAlias spark_catalog.default.t
          +- Relation spark_catalog.default.t[x#x,y#x] csv
@@ -1365,8 +1403,9 @@ table t
 |> where t.x = 1
 -- !query analysis
 Filter (x#x = 1)
-+- SubqueryAlias spark_catalog.default.t
-   +- Relation spark_catalog.default.t[x#x,y#x] csv
++- PipeOperator
+   +- SubqueryAlias spark_catalog.default.t
+      +- Relation spark_catalog.default.t[x#x,y#x] csv
 
 
 -- !query
@@ -1374,8 +1413,9 @@ table t
 |> where spark_catalog.default.t.x = 1
 -- !query analysis
 Filter (x#x = 1)
-+- SubqueryAlias spark_catalog.default.t
-   +- Relation spark_catalog.default.t[x#x,y#x] csv
++- PipeOperator
+   +- SubqueryAlias spark_catalog.default.t
+      +- Relation spark_catalog.default.t[x#x,y#x] csv
 
 
 -- !query
@@ -1383,7 +1423,7 @@ Filter (x#x = 1)
 |> where col.i1 = 1
 -- !query analysis
 Filter (col#x.i1 = 1)
-+- SubqueryAlias __auto_generated_subquery_name
++- PipeOperator
    +- Project [col#x]
       +- SubqueryAlias spark_catalog.default.st
          +- Relation spark_catalog.default.st[x#x,col#x] parquet
@@ -1394,8 +1434,9 @@ table st
 |> where st.col.i1 = 2
 -- !query analysis
 Filter (col#x.i1 = 2)
-+- SubqueryAlias spark_catalog.default.st
-   +- Relation spark_catalog.default.st[x#x,col#x] parquet
++- PipeOperator
+   +- SubqueryAlias spark_catalog.default.st
+      +- Relation spark_catalog.default.st[x#x,col#x] parquet
 
 
 -- !query
@@ -1409,8 +1450,9 @@ Filter exists#x [x#x]
 :           +- Filter (outer(x#x) = a#x)
 :              +- SubqueryAlias spark_catalog.default.other
 :                 +- Relation spark_catalog.default.other[a#x,b#x] json
-+- SubqueryAlias spark_catalog.default.t
-   +- Relation spark_catalog.default.t[x#x,y#x] csv
++- PipeOperator
+   +- SubqueryAlias spark_catalog.default.t
+      +- Relation spark_catalog.default.t[x#x,y#x] csv
 
 
 -- !query
@@ -1424,8 +1466,9 @@ Filter (scalar-subquery#x [x#x] = 1)
 :           +- Filter (outer(x#x) = a#x)
 :              +- SubqueryAlias spark_catalog.default.other
 :                 +- Relation spark_catalog.default.other[a#x,b#x] json
-+- SubqueryAlias spark_catalog.default.t
-   +- Relation spark_catalog.default.t[x#x,y#x] csv
++- PipeOperator
+   +- SubqueryAlias spark_catalog.default.t
+      +- Relation spark_catalog.default.t[x#x,y#x] csv
 
 
 -- !query
@@ -1527,7 +1570,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`y`",
-    "proposal" : "`x`, `z`"
+    "proposal" : "`z`, `spark_catalog`.`default`.`t`.`x`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1551,7 +1594,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`y`",
-    "proposal" : "`x`, `z`"
+    "proposal" : "`z`, `spark_catalog`.`default`.`t`.`x`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1575,7 +1618,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`y`",
-    "proposal" : "`x`, `z`"
+    "proposal" : "`z`, `spark_catalog`.`default`.`t`.`x`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1599,7 +1642,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`y`",
-    "proposal" : "`x`, `z`"
+    "proposal" : "`z`, `spark_catalog`.`default`.`t`.`x`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1621,7 +1664,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`y`",
-    "proposal" : "`x`, `sum_len`"
+    "proposal" : "`sum_len`, `spark_catalog`.`default`.`t`.`x`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2583,20 +2626,21 @@ table natural_join_test_t1
 |> where k = "one"
 -- !query analysis
 Filter (k#x = one)
-+- Project [k#x, v1#x, v2#x]
-   +- Join Inner, (k#x = k#x)
-      :- SubqueryAlias natural_join_test_t1
-      :  +- View (`natural_join_test_t1`, [k#x, v1#x])
-      :     +- Project [cast(k#x as string) AS k#x, cast(v1#x as int) AS v1#x]
-      :        +- Project [k#x, v1#x]
-      :           +- SubqueryAlias natural_join_test_t1
-      :              +- LocalRelation [k#x, v1#x]
-      +- SubqueryAlias natural_join_test_t2
-         +- View (`natural_join_test_t2`, [k#x, v2#x])
-            +- Project [cast(k#x as string) AS k#x, cast(v2#x as int) AS v2#x]
-               +- Project [k#x, v2#x]
-                  +- SubqueryAlias natural_join_test_t2
-                     +- LocalRelation [k#x, v2#x]
++- PipeOperator
+   +- Project [k#x, v1#x, v2#x]
+      +- Join Inner, (k#x = k#x)
+         :- SubqueryAlias natural_join_test_t1
+         :  +- View (`natural_join_test_t1`, [k#x, v1#x])
+         :     +- Project [cast(k#x as string) AS k#x, cast(v1#x as int) AS v1#x]
+         :        +- Project [k#x, v1#x]
+         :           +- SubqueryAlias natural_join_test_t1
+         :              +- LocalRelation [k#x, v1#x]
+         +- SubqueryAlias natural_join_test_t2
+            +- View (`natural_join_test_t2`, [k#x, v2#x])
+               +- Project [cast(k#x as string) AS k#x, cast(v2#x as int) AS v2#x]
+                  +- Project [k#x, v2#x]
+                     +- SubqueryAlias natural_join_test_t2
+                        +- LocalRelation [k#x, v2#x]
 
 
 -- !query
@@ -2774,7 +2818,7 @@ values (2, 'xyz') tab(x, y)
 |> where x = 0
 -- !query analysis
 Filter (x#x = 0)
-+- SubqueryAlias __auto_generated_subquery_name
++- PipeOperator
    +- Distinct
       +- Union false, false
          :- SubqueryAlias tab
@@ -2932,8 +2976,9 @@ table t
 |> order by x
 -- !query analysis
 Sort [x#x ASC NULLS FIRST], true
-+- SubqueryAlias spark_catalog.default.t
-   +- Relation spark_catalog.default.t[x#x,y#x] csv
++- PipeOperator
+   +- SubqueryAlias spark_catalog.default.t
+      +- Relation spark_catalog.default.t[x#x,y#x] csv
 
 
 -- !query
@@ -2941,7 +2986,7 @@ Sort [x#x ASC NULLS FIRST], true
 |> order by x
 -- !query analysis
 Sort [x#x ASC NULLS FIRST], true
-+- SubqueryAlias __auto_generated_subquery_name
++- PipeOperator
    +- Project [x#x, y#x]
       +- SubqueryAlias spark_catalog.default.t
          +- Relation spark_catalog.default.t[x#x,y#x] csv
@@ -2952,8 +2997,9 @@ values (0, 'abc') tab(x, y)
 |> order by x
 -- !query analysis
 Sort [x#x ASC NULLS FIRST], true
-+- SubqueryAlias tab
-   +- LocalRelation [x#x, y#x]
++- PipeOperator
+   +- SubqueryAlias tab
+      +- LocalRelation [x#x, y#x]
 
 
 -- !query
@@ -2963,9 +3009,11 @@ table t
 -- !query analysis
 GlobalLimit 1
 +- LocalLimit 1
-   +- Sort [x#x ASC NULLS FIRST], true
-      +- SubqueryAlias spark_catalog.default.t
-         +- Relation spark_catalog.default.t[x#x,y#x] csv
+   +- PipeOperator
+      +- Sort [x#x ASC NULLS FIRST], true
+         +- PipeOperator
+            +- SubqueryAlias spark_catalog.default.t
+               +- Relation spark_catalog.default.t[x#x,y#x] csv
 
 
 -- !query
@@ -2977,11 +3025,12 @@ table t
 GlobalLimit 2
 +- LocalLimit 2
    +- Offset 1
-      +- SubqueryAlias __auto_generated_subquery_name
+      +- PipeOperator
          +- Project [y#x]
             +- Filter (x#x = 1)
-               +- SubqueryAlias spark_catalog.default.t
-                  +- Relation spark_catalog.default.t[x#x,y#x] csv
+               +- PipeOperator
+                  +- SubqueryAlias spark_catalog.default.t
+                     +- Relation spark_catalog.default.t[x#x,y#x] csv
 
 
 -- !query
@@ -2991,11 +3040,12 @@ table t
 |> offset 1
 -- !query analysis
 Offset 1
-+- SubqueryAlias __auto_generated_subquery_name
++- PipeOperator
    +- Project [y#x]
       +- Filter (x#x = 1)
-         +- SubqueryAlias spark_catalog.default.t
-            +- Relation spark_catalog.default.t[x#x,y#x] csv
+         +- PipeOperator
+            +- SubqueryAlias spark_catalog.default.t
+               +- Relation spark_catalog.default.t[x#x,y#x] csv
 
 
 -- !query
@@ -3003,8 +3053,9 @@ table t
 |> limit all offset 0
 -- !query analysis
 Offset 0
-+- SubqueryAlias spark_catalog.default.t
-   +- Relation spark_catalog.default.t[x#x,y#x] csv
++- PipeOperator
+   +- SubqueryAlias spark_catalog.default.t
+      +- Relation spark_catalog.default.t[x#x,y#x] csv
 
 
 -- !query
@@ -3012,8 +3063,9 @@ table t
 |> distribute by x
 -- !query analysis
 RepartitionByExpression [x#x]
-+- SubqueryAlias spark_catalog.default.t
-   +- Relation spark_catalog.default.t[x#x,y#x] csv
++- PipeOperator
+   +- SubqueryAlias spark_catalog.default.t
+      +- Relation spark_catalog.default.t[x#x,y#x] csv
 
 
 -- !query
@@ -3022,8 +3074,9 @@ table t
 -- !query analysis
 Sort [x#x ASC NULLS FIRST], false
 +- RepartitionByExpression [x#x]
-   +- SubqueryAlias spark_catalog.default.t
-      +- Relation spark_catalog.default.t[x#x,y#x] csv
+   +- PipeOperator
+      +- SubqueryAlias spark_catalog.default.t
+         +- Relation spark_catalog.default.t[x#x,y#x] csv
 
 
 -- !query
@@ -3032,8 +3085,9 @@ table t
 -- !query analysis
 RepartitionByExpression [x#x]
 +- Sort [x#x ASC NULLS FIRST], false
-   +- SubqueryAlias spark_catalog.default.t
-      +- Relation spark_catalog.default.t[x#x,y#x] csv
+   +- PipeOperator
+      +- SubqueryAlias spark_catalog.default.t
+         +- Relation spark_catalog.default.t[x#x,y#x] csv
 
 
 -- !query
@@ -3043,8 +3097,9 @@ order by y
 -- !query analysis
 Sort [y#x ASC NULLS FIRST], true
 +- Sort [x#x DESC NULLS LAST], true
-   +- SubqueryAlias spark_catalog.default.t
-      +- Relation spark_catalog.default.t[x#x,y#x] csv
+   +- PipeOperator
+      +- SubqueryAlias spark_catalog.default.t
+         +- Relation spark_catalog.default.t[x#x,y#x] csv
 
 
 -- !query
@@ -3312,7 +3367,7 @@ table other
 |> where a = 1
 -- !query analysis
 Filter (a#x = 1)
-+- SubqueryAlias __auto_generated_subquery_name
++- PipeOperator
    +- Aggregate [a#x], [a#x]
       +- SubqueryAlias spark_catalog.default.other
          +- Relation spark_catalog.default.other[a#x,b#x] json
