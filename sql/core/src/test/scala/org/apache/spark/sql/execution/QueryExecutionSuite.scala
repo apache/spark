@@ -407,7 +407,7 @@ class QueryExecutionSuite extends SharedSparkSession {
   }
 
   test("SPARK-50600: Failed analysis should send analyzed event") {
-    val mockCallback = MockCallback(isFailed = true)
+    val mockCallback = MockCallback()
 
     def table(ref: String): LogicalPlan = UnresolvedRelation(TableIdentifier(ref))
 
@@ -461,12 +461,20 @@ class QueryExecutionSuite extends SharedSparkSession {
   }
   case class MockCallback(
       var trackerAnalyzed: QueryPlanningTracker = null,
-      var trackerReadyForExecution: QueryPlanningTracker = null,
-      val isFailed: Boolean = false)
+      var trackerReadyForExecution: QueryPlanningTracker = null)
       extends QueryPlanningTrackerCallback {
+    override def analysisFailed(
+        trackerFromCallback: QueryPlanningTracker,
+        analyzedPlan: LogicalPlan): Unit = {
+      trackerAnalyzed = trackerFromCallback
+      assert(!trackerAnalyzed.phases.keySet.contains(QueryPlanningTracker.ANALYSIS))
+      assert(!trackerAnalyzed.phases.keySet.contains(QueryPlanningTracker.OPTIMIZATION))
+      assert(!trackerAnalyzed.phases.keySet.contains(QueryPlanningTracker.PLANNING))
+      assert(analyzedPlan != null)
+    }
     def analyzed(trackerFromCallback: QueryPlanningTracker, plan: LogicalPlan): Unit = {
       trackerAnalyzed = trackerFromCallback
-      assert(trackerAnalyzed.phases.keySet.contains(QueryPlanningTracker.ANALYSIS) == !isFailed)
+      assert(trackerAnalyzed.phases.keySet.contains(QueryPlanningTracker.ANALYSIS))
       assert(!trackerAnalyzed.phases.keySet.contains(QueryPlanningTracker.OPTIMIZATION))
       assert(!trackerAnalyzed.phases.keySet.contains(QueryPlanningTracker.PLANNING))
       assert(plan != null)

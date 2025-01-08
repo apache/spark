@@ -21,7 +21,7 @@ import java.io.{BufferedWriter, OutputStreamWriter}
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicLong
 
-import scala.util.Try
+import scala.util.{Failure, Success, Try}
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.fs.Path
@@ -99,10 +99,14 @@ class QueryExecution(
         sparkSession.sessionState.analyzer.executeAndCheck(logical, tracker)
       }
     }
-    plan.toOption.getOrElse(logical).foreach(tracker.setAnalyzed)
+    plan match {
+      case Success(plan) =>
+        tracker.setAnalyzed(plan)
+      case Failure(_) =>
+        tracker.setAnalysisFailed(logical)
+    }
     plan.get
   }
-
 
   def analyzed: LogicalPlan = lazyAnalyzed.get
 
