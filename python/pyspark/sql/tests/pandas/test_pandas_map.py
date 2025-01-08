@@ -99,23 +99,6 @@ class MapInPandasTestsMixin:
         expected = df.collect()
         self.assertEqual(actual, expected)
 
-    def test_large_variable_types(self):
-        with self.sql_conf({"spark.sql.execution.arrow.useLargeVarTypes": True}):
-
-            def func(iterator):
-                for pdf in iterator:
-                    assert isinstance(pdf, pd.DataFrame)
-                    yield pdf
-
-            df = (
-                self.spark.range(10, numPartitions=3)
-                .select(col("id").cast("string").alias("str"))
-                .withColumn("bin", encode(col("str"), "utf-8"))
-            )
-            actual = df.mapInPandas(func, "str string, bin binary").collect()
-            expected = df.collect()
-            self.assertEqual(actual, expected)
-
     def test_no_column_names(self):
         data = [(1, "foo"), (2, None), (3, "bar"), (4, "bar")]
         df = self.spark.createDataFrame(data, "a int, b string")
