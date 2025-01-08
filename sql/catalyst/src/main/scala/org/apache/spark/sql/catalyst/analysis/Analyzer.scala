@@ -373,6 +373,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       ResolveProcedures ::
       BindProcedures ::
       ResolveTableSpec ::
+      ValidateAndStripPipeExpressions ::
       ResolveAliases ::
       ResolveSubquery ::
       ResolveSubqueryColumnAliases ::
@@ -509,9 +510,6 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
             if child.resolved && AliasResolution.hasUnresolvedAlias(aggs) =>
           Aggregate(groups, AliasResolution.assignAliases(aggs), child)
 
-        case a @ Aggregate(groups, aggs, child, _) if a.containsPattern(PIPE_EXPRESSION) =>
-          a.copy(aggregateExpressions = removePipeExpressions(aggs))
-
         case Pivot(groupByOpt, pivotColumn, pivotValues, aggregates, child)
             if child.resolved &&
             groupByOpt.isDefined &&
@@ -537,9 +535,6 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         case Project(projectList, child)
             if child.resolved && AliasResolution.hasUnresolvedAlias(projectList) =>
           Project(AliasResolution.assignAliases(projectList), child)
-
-        case p @ Project(projectList, child) if p.containsPattern(PIPE_EXPRESSION) =>
-          p.copy(projectList = removePipeExpressions(projectList))
 
         case c: CollectMetrics
             if c.child.resolved && AliasResolution.hasUnresolvedAlias(c.metrics) =>

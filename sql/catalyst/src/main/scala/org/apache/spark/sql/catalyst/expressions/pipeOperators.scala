@@ -18,6 +18,8 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateFunction
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.PIPE_EXPRESSION
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types.DataType
@@ -34,6 +36,7 @@ import org.apache.spark.sql.types.DataType
 case class PipeExpression(child: Expression, isAggregate: Boolean, clause: String)
   extends UnaryExpression with Unevaluable {
   final override val nodePatterns = Seq(PIPE_EXPRESSION)
+  final override lazy val resolved = false
   override def withNewChildInternal(newChild: Expression): Expression =
     PipeExpression(newChild, isAggregate, clause)
   override def dataType: DataType = child.dataType
@@ -60,6 +63,21 @@ case class PipeExpression(child: Expression, isAggregate: Boolean, clause: Strin
       None
     case _ =>
       e.children.flatMap(findFirstAggregate).headOption
+  }
+}
+
+/**
+ * Validates and strips PipeExpression nodes from a logical plan once the child expressions are
+ * resolved.
+ */
+object ValidateAndStripPipeExpressions extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
+    _.containsPattern(PIPE_EXPRESSION), ruleId) {
+    case node: LogicalPlan =>
+      node.resolveExpressions {
+        case p: PipeExpression if p.child.resolved =>
+          p.checkInvariantsAndRemove
+      }
   }
 }
 
