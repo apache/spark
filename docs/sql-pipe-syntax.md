@@ -419,7 +419,7 @@ If no `GROUP BY` clause is present, this performs full-table aggregation, return
 with a column for each aggregate expression. Othwrise, this performs aggregation with grouping,
 returning one row per group. Aliases can be assigned directly on grouping expressions.
 
-The column list of this operator includes the grouping columns first (if any), and then the
+The output column list of this operator includes the grouping columns first (if any), and then the
 aggregate columns afterward. 
 
 Each `<agg_expr>` expression can include standard aggregate function(s) like `COUNT`, `SUM`, `AVG`,
