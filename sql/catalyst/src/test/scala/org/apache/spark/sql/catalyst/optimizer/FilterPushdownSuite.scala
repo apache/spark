@@ -1557,30 +1557,30 @@ class FilterPushdownSuite extends PlanTest {
   }
 
   test("SPARK-50589: avoid extra expression duplication when push filter") {
-//    withSQLConf(SQLConf.USE_COMMON_EXPR_ID_FOR_ALIAS.key -> "false") {
-//      // through project
-//      val originalQuery1 = testRelation
-//        .select($"a" + $"b" as "add", $"a" - $"b" as "sub")
-//        .where($"add" < 10 && $"add" + $"add" > 10 && $"sub" > 0)
-//        .analyze
-//      val optimized1 = Optimize.execute(originalQuery1)
-//      comparePlans(optimized1, originalQuery1)
-//
-//      // through aggregate
-//      val originalQuery2 = testRelation
-//        .groupBy($"a")($"a", $"a" + $"a" as "add", abs($"a") as "abs", count(1) as "ct")
-//        .where($"add" < 10 && $"add" + $"add" > 10 && $"abs" > 5)
-//      val optimized2 = Optimize.execute(originalQuery2.analyze)
-//      val correctAnswer2 = testRelation
-//        .select($"a", $"a" + $"a" as "_common_expr_0")
-//        .where($"_common_expr_0" < 10 &&
-//          $"_common_expr_0" + $"_common_expr_0" > 10 &&
-//          abs($"a") > 5)
-//        .select($"a")
-//        .groupBy($"a")($"a", $"a" + $"a" as "add", abs($"a") as "abs", count(1) as "ct")
-//        .analyze
-//      comparePlans(optimized2, correctAnswer2)
-//    }
+    withSQLConf(SQLConf.USE_COMMON_EXPR_ID_FOR_ALIAS.key -> "false") {
+      // through project
+      val originalQuery1 = testRelation
+        .select($"a" + $"b" as "add", $"a" - $"b" as "sub")
+        .where($"add" < 10 && $"add" + $"add" > 10 && $"sub" > 0)
+        .analyze
+      val optimized1 = Optimize.execute(originalQuery1)
+      comparePlans(optimized1, originalQuery1)
+
+      // through aggregate
+      val originalQuery2 = testRelation
+        .groupBy($"a")($"a", $"a" + $"a" as "add", abs($"a") as "abs", count(1) as "ct")
+        .where($"add" < 10 && $"add" + $"add" > 10 && $"abs" > 5)
+      val optimized2 = Optimize.execute(originalQuery2.analyze)
+      val correctAnswer2 = testRelation
+        .select($"a", $"a" + $"a" as "_common_expr_0")
+        .where($"_common_expr_0" < 10 &&
+          $"_common_expr_0" + $"_common_expr_0" > 10 &&
+          abs($"a") > 5)
+        .select($"a")
+        .groupBy($"a")($"a", $"a" + $"a" as "add", abs($"a") as "abs", count(1) as "ct")
+        .analyze
+      comparePlans(optimized2, correctAnswer2)
+    }
     withSQLConf(SQLConf.USE_COMMON_EXPR_ID_FOR_ALIAS.key -> "false") {
       // partial push down
       val originalQuery3 = testRelation

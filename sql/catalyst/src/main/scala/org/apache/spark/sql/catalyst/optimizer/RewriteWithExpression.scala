@@ -129,8 +129,8 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
               "Cannot rewrite canonicalized Common expression definitions")
           }
 
-          if (CollapseProject.isCheap(child) ||
-            (originAlias.isEmpty && !commonExprIdSet.contains(id))) {
+          if (originAlias.isEmpty &&
+            (CollapseProject.isCheap(child) || !commonExprIdSet.contains(id))) {
             refToExpr(id) = child
           } else {
             val childPlanIndex = inputPlans.indexWhere(

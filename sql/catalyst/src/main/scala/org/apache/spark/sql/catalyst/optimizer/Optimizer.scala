@@ -1284,8 +1284,8 @@ object CollapseProject extends Rule[LogicalPlan] with AliasHelper {
       } else {
         true
       }
-    // Alias and ExtractValue are very cheap.
-    case _: Alias | _: ExtractValue => e.children.forall(isCheap)
+    // Alias, ExtractValue and CreateNamedStruct are very cheap.
+    case _: Alias | _: ExtractValue | _: CreateNamedStruct => e.children.forall(isCheap)
     case _ => false
   }
 
@@ -1840,7 +1840,7 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
         case a: Alias if exprIdSet.contains(a.exprId) => a.toAttribute
         case e => e
       }
-      project.copy(child = Filter(newCondition, grandChild), projectList = newProjectList)
+      Project(newProjectList, Filter(newCondition, grandChild))
 
     // We can push down deterministic predicate through Aggregate, including throwable predicate.
     // If we can push down a filter through Aggregate, it means the filter only references the
