@@ -26,7 +26,7 @@ import org.apache.spark.annotation.{Evolving, Experimental}
  */
 @Experimental
 @Evolving
-private[sql] trait ExpiredTimerInfo extends Serializable {
+ trait ExpiredTimerInfo extends Serializable {
 
   /**
    * Get the expired timer's expiry time as milliseconds in epoch time.
