@@ -1106,6 +1106,8 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
     @scala.annotation.tailrec
     def cleanQueryInScalarSubquery(p: LogicalPlan): LogicalPlan = p match {
       case s: SubqueryAlias => cleanQueryInScalarSubquery(s.child)
+      // Skip SQL function node added by the Analyzer
+      case s: SQLFunctionNode => cleanQueryInScalarSubquery(s.child)
       case p: Project => cleanQueryInScalarSubquery(p.child)
       case h: ResolvedHint => cleanQueryInScalarSubquery(h.child)
       case child => child
@@ -1444,6 +1446,10 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
             && usingDecorrelateInnerQueryFramework
             && SQLConf.get.getConf(SQLConf.DECORRELATE_SET_OPS_ENABLED))
           p.children.foreach(child => checkPlan(child, aggregated, childCanContainOuter))
+
+        // SQLFunctionNode serves as a container for the underlying SQL function plan.
+        case s: SQLFunctionNode =>
+          s.children.foreach(child => checkPlan(child, aggregated, canContainOuter))
 
         // Category 2:
         // These operators can be anywhere in a correlated subquery.
