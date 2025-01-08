@@ -18,10 +18,8 @@
 package org.apache.spark.sql.scripting
 
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.catalyst.analysis.UnresolvedIdentifier
 import org.apache.spark.sql.catalyst.expressions.Expression
-import org.apache.spark.sql.catalyst.plans.logical.{CaseStatement, CompoundBody, CompoundPlanStatement, CreateVariable, DropVariable, ForStatement, IfElseStatement, IterateStatement, LeaveStatement, LogicalPlan, LoopStatement, RepeatStatement, SingleStatement, WhileStatement}
-import org.apache.spark.sql.catalyst.trees.Origin
+import org.apache.spark.sql.catalyst.plans.logical.{CaseStatement, CompoundBody, CompoundPlanStatement, ForStatement, IfElseStatement, IterateStatement, LeaveStatement, LoopStatement, RepeatStatement, SingleStatement, WhileStatement}
 
 /**
  * SQL scripting interpreter - builds SQL script execution plan.
@@ -51,19 +49,6 @@ case class SqlScriptingInterpreter(session: SparkSession) {
   }
 
   /**
-   * Fetch the name of the Create Variable plan.
-   * @param plan
-   *   Plan to fetch the name from.
-   * @return
-   *   Name of the variable.
-   */
-  private def getDeclareVarNameFromPlan(plan: LogicalPlan): Option[UnresolvedIdentifier] =
-    plan match {
-      case CreateVariable(name: UnresolvedIdentifier, _, _) => Some(name)
-      case _ => None
-    }
-
-  /**
    * Transform the parsed tree to the executable node.
    *
    * @param node
@@ -79,22 +64,11 @@ case class SqlScriptingInterpreter(session: SparkSession) {
       context: SqlScriptingExecutionContext): CompoundStatementExec =
     node match {
       case CompoundBody(collection, label, isScope) =>
-        // TODO [SPARK-48530]: Current logic doesn't support scoped variables and shadowing.
-        val variables = collection.flatMap {
-          case st: SingleStatement => getDeclareVarNameFromPlan(st.parsedPlan)
-          case _ => None
-        }
-        val dropVariables = variables
-          .map(varName => DropVariable(varName, ifExists = true))
-          .map(new SingleStatementExec(_, Origin(), args, isInternal = true, context))
-          .reverse
-
         val statements = collection
-          .map(st => transformTreeIntoExecutable(st, args, context)) ++ dropVariables match {
+          .map(st => transformTreeIntoExecutable(st, args, context)) match {
             case Nil => Seq(new NoOpStatementExec)
             case s => s
           }
-
         new CompoundBodyExec(
           statements,
           label,

@@ -51,135 +51,28 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
     val executionPlan = interpreter.buildExecutionPlan(compoundBody, args, context)
     context.frames.addOne(new SqlScriptingExecutionFrame(executionPlan.getTreeIterator))
     executionPlan.enterScope()
+    spark.sessionState.catalogManager.scriptingLocalVariableManager =
+      Some(new ScriptingVariableManager(context))
 
-    executionPlan.getTreeIterator.flatMap {
-      case statement: SingleStatementExec =>
-        if (statement.isExecuted) {
-          None
-        } else {
-          Some(Dataset.ofRows(spark, statement.parsedPlan, new QueryPlanningTracker))
-        }
-      case _ => None
-    }.toArray
+    try {
+      executionPlan.getTreeIterator.flatMap {
+        case statement: SingleStatementExec =>
+          if (statement.isExecuted) {
+            None
+          } else {
+            Some(Dataset.ofRows(spark, statement.parsedPlan, new QueryPlanningTracker))
+          }
+        case _ => None
+      }.toArray
+    } finally {
+      spark.sessionState.catalogManager.scriptingLocalVariableManager = None
+    }
   }
 
   private def verifySqlScriptResult(sqlText: String, expected: Seq[Seq[Row]]): Unit = {
     val result = runSqlScript(sqlText)
     assert(result.length == expected.length)
     result.zip(expected).foreach { case (df, expectedAnswer) => checkAnswer(df, expectedAnswer) }
-  }
-
-  test("testtest") {
-    val sqlScript =
-      """
-        |BEGIN
-        | lbl: BEGIN
-        |  DECLARE var = 1;
-        |  SELECT lbl.var;
-        | END;
-        |END
-        |""".stripMargin
-
-    val r = spark.sql(sqlScript).collect()
-
-    val expected = Seq(
-      Seq.empty[Row], // declare var
-      Seq(Row(1)), // select
-      Seq.empty[Row] // drop var
-    )
-//    verifySqlScriptResult(sqlScript, expected)
-  }
-
-  test("testtest2") {
-    val sqlScript =
-      """
-        |BEGIN
-        | lbl: BEGIN
-        |  DECLARE var = 1;
-        |  lbl2: BEGIN
-        |    DECLARE var = 2;
-        |    SELECT lbl.var;
-        |  END;
-        | END;
-        |END
-        |""".stripMargin
-
-    val r = spark.sql(sqlScript).collect()
-
-    val expected = Seq(
-      Seq.empty[Row], // declare var
-      Seq(Row(1)), // select
-      Seq.empty[Row] // drop var
-    )
-//    verifySqlScriptResult(sqlScript, expected)
-  }
-
-  test("testtest3") {
-    val sqlScript =
-      """
-        |BEGIN
-        | lbl: BEGIN
-        |  DECLARE var = 1;
-        |  lbl2: BEGIN
-        |    DECLARE var = 2;
-        |    SELECT lbl.var;
-        |    SET (var, lbl.var) = (select 1, 2);
-        |  END;
-        | END;
-        |END
-        |""".stripMargin
-
-    val r = spark.sql(sqlScript).collect()
-
-    val expected = Seq(
-      Seq.empty[Row], // declare var
-      Seq(Row(1)), // select
-      Seq.empty[Row] // drop var
-    )
-//    verifySqlScriptResult(sqlScript, expected)
-  }
-
-  test("testtest4") {
-    val sqlScript =
-      """
-        |BEGIN
-        | lbl: BEGIN
-        |  DECLARE var = 1;
-        |  SELECT lbl.var;
-        | END;
-        |END
-        |""".stripMargin
-
-    val r = spark.sql(sqlScript).collect()
-
-    val expected = Seq(
-      Seq.empty[Row], // declare var
-      Seq(Row(1)), // select
-      Seq.empty[Row] // drop var
-    )
-    //    verifySqlScriptResult(sqlScript, expected)
-  }
-
-  test("testtest6") {
-    val sqlScript =
-      """
-        |BEGIN
-        | lbl: BEGIN
-        |  DECLARE var = 1;
-        |  SET lbl.var = 5;
-        |  SELECT lbl.var;
-        | END;
-        |END
-        |""".stripMargin
-
-    val r = spark.sql(sqlScript).collect()
-
-    val expected = Seq(
-      Seq.empty[Row], // declare var
-      Seq(Row(1)), // select
-      Seq.empty[Row] // drop var
-    )
-    //    verifySqlScriptResult(sqlScript, expected)
   }
 
   // Tests
@@ -296,8 +189,7 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
     val expected = Seq(
       Seq.empty[Row], // declare var
       Seq.empty[Row], // set var
-      Seq(Row(2)), // select
-      Seq.empty[Row] // drop var
+      Seq(Row(2)) // select
     )
     verifySqlScriptResult(sqlScript, expected)
   }
@@ -314,8 +206,7 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
     val expected = Seq(
       Seq.empty[Row], // declare var
       Seq.empty[Row], // set var
-      Seq(Row(2)), // select
-      Seq.empty[Row] // drop var
+      Seq(Row(2)) // select
     )
     verifySqlScriptResult(sqlScript, expected)
   }
@@ -342,14 +233,11 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
     val expected = Seq(
       Seq.empty[Row], // declare var
       Seq(Row(1)), // select
-      Seq.empty[Row], // drop var
       Seq.empty[Row], // declare var
       Seq(Row(2)), // select
-      Seq.empty[Row], // drop var
       Seq.empty[Row], // declare var
       Seq.empty[Row], // set var
-      Seq(Row(4)), // select
-      Seq.empty[Row] // drop var
+      Seq(Row(4)) // select
     )
     verifySqlScriptResult(sqlScript, expected)
   }
@@ -379,26 +267,6 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
         start = 79,
         stop = 89)
     )
-  }
-
-  test("session vars - drop var statement") {
-    val sqlScript =
-      """
-        |BEGIN
-        |DECLARE var = 1;
-        |SET VAR var = var + 1;
-        |SELECT var;
-        |DROP TEMPORARY VARIABLE var;
-        |END
-        |""".stripMargin
-    val expected = Seq(
-      Seq.empty[Row], // declare var
-      Seq.empty[Row], // set var
-      Seq(Row(2)), // select
-      Seq.empty[Row], // drop var - explicit
-      Seq.empty[Row] // drop var - implicit
-    )
-    verifySqlScriptResult(sqlScript, expected)
   }
 
   test("if") {
@@ -1128,8 +996,7 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
       Seq(Row(1)), // select i
       Seq.empty[Row], // set i
       Seq(Row(2)), // select i
-      Seq.empty[Row], // set i
-      Seq.empty[Row] // drop var
+      Seq.empty[Row] // set i
     )
     verifySqlScriptResult(commands, expected)
   }
@@ -1147,8 +1014,7 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
         |""".stripMargin
 
     val expected = Seq(
-      Seq.empty[Row], // declare i
-      Seq.empty[Row] // drop i
+      Seq.empty[Row] // declare i
     )
     verifySqlScriptResult(commands, expected)
   }
@@ -1184,9 +1050,7 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
       Seq.empty[Row], // increase j
       Seq(Row(1, 1)), // select i, j
       Seq.empty[Row], // increase j
-      Seq.empty[Row], // increase i
-      Seq.empty[Row], // drop j
-      Seq.empty[Row] // drop i
+      Seq.empty[Row] // increase i
     )
     verifySqlScriptResult(commands, expected)
   }
@@ -1236,8 +1100,7 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
       Seq(Row(1)), // select i
       Seq.empty[Row], // set i
       Seq(Row(2)), // select i
-      Seq.empty[Row], // set i
-      Seq.empty[Row] // drop var
+      Seq.empty[Row] // set i
     )
     verifySqlScriptResult(commands, expected)
   }
@@ -1259,8 +1122,7 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
     val expected = Seq(
       Seq.empty[Row], // declare i
       Seq(Row(3)), // select i
-      Seq.empty[Row], // set i
-      Seq.empty[Row] // drop i
+      Seq.empty[Row] // set i
     )
     verifySqlScriptResult(commands, expected)
   }
@@ -1334,9 +1196,7 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
       Seq.empty[Row], // increase j
       Seq(Row(1, 1)), // select i, j
       Seq.empty[Row], // increase j
-      Seq.empty[Row], // increase i
-      Seq.empty[Row], // drop j
-      Seq.empty[Row] // drop i
+      Seq.empty[Row] // increase i
     )
     verifySqlScriptResult(commands, expected)
   }
@@ -1522,8 +1382,7 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
       Seq.empty[Row], // set x = 0
       Seq.empty[Row], // set x = 1
       Seq.empty[Row], // set x = 2
-      Seq(Row(2)), // select
-      Seq.empty[Row] // drop
+      Seq(Row(2)) // select
     )
     verifySqlScriptResult(sqlScriptText, expected)
   }
@@ -1547,8 +1406,7 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
       Seq.empty[Row], // set x = 0
       Seq.empty[Row], // set x = 1
       Seq.empty[Row], // set x = 2
-      Seq(Row(2)), // select x
-      Seq.empty[Row] // drop
+      Seq(Row(2)) // select x
     )
     verifySqlScriptResult(sqlScriptText, expected)
   }
@@ -1645,8 +1503,7 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
       Seq(Row(1)), // select 1
       Seq.empty[Row], // set x = 2
       Seq(Row(1)), // select 1
-      Seq(Row(2)), // select x
-      Seq.empty[Row] // drop
+      Seq(Row(2)) // select x
     )
     verifySqlScriptResult(sqlScriptText, expected)
   }
@@ -1679,8 +1536,7 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
       Seq.empty[Row], // set x = 2
       Seq(Row(1)), // select 1
       Seq(Row(2)), // select 2
-      Seq(Row(2)), // select x
-      Seq.empty[Row] // drop
+      Seq(Row(2)) // select x
     )
     verifySqlScriptResult(sqlScriptText, expected)
   }
@@ -1709,8 +1565,7 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
       Seq(Row(1)), // select 1
       Seq.empty[Row], // set x = 2
       Seq(Row(1)), // select 1
-      Seq(Row(2)), // select x
-      Seq.empty[Row] // drop
+      Seq(Row(2)) // select x
     )
     verifySqlScriptResult(sqlScriptText, expected)
   }
@@ -1740,8 +1595,7 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
       Seq(Row(2)), // select x
       Seq.empty[Row], // set x = 3
       Seq(Row(3)), // select x
-      Seq(Row(3)), // select x
-      Seq.empty[Row] // drop
+      Seq(Row(3)) // select x
     )
     verifySqlScriptResult(sqlScriptText, expected)
   }
@@ -1783,9 +1637,7 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
       Seq.empty[Row], // increase y
       Seq(Row(1, 1)), // select x, y
       Seq.empty[Row], // increase y
-      Seq.empty[Row], // increase x
-      Seq.empty[Row], // drop y
-      Seq.empty[Row] // drop x
+      Seq.empty[Row] // increase x
     )
     verifySqlScriptResult(commands, expected)
   }
@@ -1811,8 +1663,7 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
       Seq.empty[Row], // set x = 0
       Seq.empty[Row], // set x = 1
       Seq.empty[Row], // set x = 2
-      Seq(Row(2)), // select x
-      Seq.empty[Row] // drop
+      Seq(Row(2)) // select x
     )
     verifySqlScriptResult(sqlScriptText, expected)
   }
@@ -1861,8 +1712,7 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
       Seq.empty[Row], // set x = 2
       Seq(Row(1)), // select 1
       Seq.empty[Row], // set x = 3
-      Seq(Row(3)), // select x
-      Seq.empty[Row] // drop
+      Seq(Row(3)) // select x
     )
     verifySqlScriptResult(sqlScriptText, expected)
   }
@@ -1962,8 +1812,7 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
         Seq.empty[Row], // set sumOfCols
         Seq.empty[Row], // drop local var
         Seq.empty[Row], // drop local var
-        Seq(Row(10)), // select sumOfCols
-        Seq.empty[Row] // drop sumOfCols
+        Seq(Row(10)) // select sumOfCols
       )
       verifySqlScriptResult(sqlScript, expected)
     }
@@ -2285,8 +2134,7 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
         Seq(Row(1)), // select intCol
         Seq.empty[Row], // insert
         Seq.empty[Row], // drop local var
-        Seq.empty[Row], // drop local var
-        Seq.empty[Row] // drop cnt
+        Seq.empty[Row] // drop local var
       )
       verifySqlScriptResult(sqlScript, expected)
     }
@@ -2374,8 +2222,7 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
         Seq(Row(1)), // select intCol
         Seq.empty[Row], // insert
         Seq.empty[Row], // drop local var
-        Seq.empty[Row], // drop local var
-        Seq.empty[Row] // drop cnt
+        Seq.empty[Row] // drop local var
       )
       verifySqlScriptResult(sqlScript, expected)
     }
@@ -2572,8 +2419,7 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
         Seq.empty[Row], // set sumOfCols
         Seq.empty[Row], // set sumOfCols
         Seq.empty[Row], // drop local var
-        Seq(Row(10)), // select sumOfCols
-        Seq.empty[Row] // drop sumOfCols
+        Seq(Row(10)) // select sumOfCols
       )
       verifySqlScriptResult(sqlScript, expected)
     }
@@ -2804,8 +2650,7 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
         Seq(Row(0)), // select intCol
         Seq(Row(1)), // select intCol
         Seq.empty[Row], // insert
-        Seq.empty[Row], // drop local var
-        Seq.empty[Row] // drop cnt
+        Seq.empty[Row] // drop local var
       )
       verifySqlScriptResult(sqlScript, expected)
     }
@@ -2878,8 +2723,7 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
         Seq(Row(0)), // select intCol
         Seq(Row(1)), // select intCol
         Seq.empty[Row], // insert
-        Seq.empty[Row], // drop local var
-        Seq.empty[Row] // drop cnt
+        Seq.empty[Row] // drop local var
       )
       verifySqlScriptResult(sqlScript, expected)
     }

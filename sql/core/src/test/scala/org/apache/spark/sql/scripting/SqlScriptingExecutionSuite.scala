@@ -149,20 +149,6 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
     verifySqlScriptResult(sqlScript, expected)
   }
 
-  test("session vars - drop var statement") {
-    val sqlScript =
-      """
-        |BEGIN
-        |DECLARE var = 1;
-        |SET VAR var = var + 1;
-        |SELECT var;
-        |DROP TEMPORARY VARIABLE var;
-        |END
-        |""".stripMargin
-    val expected = Seq(Seq(Row(2)))
-    verifySqlScriptResult(sqlScript, expected)
-  }
-
   test("if") {
     val commands =
       """
@@ -1085,7 +1071,7 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
         |  DECLARE localVar = 1;
         |  lbl2: BEGIN
         |    DECLARE localVar = 2;
-        |    SELECT var;
+        |    SELECT localVar;
         |    SELECT lbl1.localVar;
         |    SELECT lbl2.localVar;
         |  END;
@@ -1392,7 +1378,7 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
       exception = e,
       condition = "VARIABLE_ALREADY_EXISTS",
       sqlState = "42723",
-      parameters = Map("variableName" -> toSQLId("lbl.localVar"))
+      parameters = Map("variableName" -> toSQLId("lbl.localvar"))
     )
   }
 
@@ -1466,30 +1452,96 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
     verifySqlScriptResult(sqlScript, expected)
   }
 
-//  test("local variable - inner inner scope -> inner scope -> session var") {
-//    withSessionVariable("localVar") {
-//      spark.sql("DECLARE VARIABLE localVar = 0")
-//      val sqlScript =
-//        """
-//          |BEGIN
-//          | lbl1: BEGIN
-//          |   DECLARE localVar = 1;
-//          |   lbl: BEGIN
-//          |     DECLARE localVar = 2;
-//          |     SELECT localVar;
-//          |   END;
-//          |   SELECT localVar;
-//          | END;
-//          | SELECT localVar;
-//          |END
-//          |""".stripMargin
-//
-//      val expected = Seq(
-//        Seq(Row(2)), // select localVar
-//        Seq(Row(1)), // select localVar
-//        Seq(Row(0)) // select localVar
-//      )
-//      verifySqlScriptResult(sqlScript, expected)
-//    }
-//  }
+  test("local variable - inner inner scope -> inner scope -> session var") {
+    withSessionVariable("localVar") {
+      spark.sql("DECLARE VARIABLE localVar = 0")
+      val sqlScript =
+        """
+          |BEGIN
+          | lbl1: BEGIN
+          |   DECLARE localVar = 1;
+          |   lbl: BEGIN
+          |     DECLARE localVar = 2;
+          |     SELECT localVar;
+          |   END;
+          |   SELECT localVar;
+          | END;
+          | SELECT localVar;
+          |END
+          |""".stripMargin
+
+      val expected = Seq(
+        Seq(Row(2)), // select localVar
+        Seq(Row(1)), // select localVar
+        Seq(Row(0)) // select localVar
+      )
+      verifySqlScriptResult(sqlScript, expected)
+    }
+  }
+
+  // Local variables cannot be dropped.
+  test("local variable - drop") {
+    val sqlScript =
+      """
+        |BEGIN
+        |DECLARE localVar = 1;
+        |SELECT localVar;
+        |DROP TEMPORARY VARIABLE localVar;
+        |END
+        |""".stripMargin
+    val e = intercept[AnalysisException] {
+      verifySqlScriptResult(sqlScript, Seq.empty[Seq[Row]])
+    }
+    checkError(
+      exception = e,
+      condition = "VARIABLE_NOT_FOUND",
+      parameters = Map("variableName" -> toSQLId("system.session.localVar"))
+    )
+  }
+
+  test("local variable - drop session variable") {
+    val sqlScript =
+      """
+        |BEGIN
+        |DECLARE localVar = 1;
+        |SELECT localVar;
+        |DROP TEMPORARY VARIABLE localVar;
+        |END
+        |""".stripMargin
+    withSessionVariable("localVar") {
+      spark.sql("DECLARE VARIABLE localVar = 0")
+      val expected = Seq(
+        Seq(Row(1))
+      )
+      verifySqlScriptResult(sqlScript, expected)
+    }
+  }
+
+  test("local variable - drop session variable successfully") {
+    val sqlScript =
+      """
+        |BEGIN
+        |DECLARE localVar = 1;
+        |SELECT system.session.localVar;
+        |DROP TEMPORARY VARIABLE localVar;
+        |SELECT system.session.localVar;
+        |END
+        |""".stripMargin
+    withSessionVariable("localVar") {
+      spark.sql("DECLARE VARIABLE localVar = 0")
+      val e = intercept[AnalysisException] {
+        verifySqlScriptResult(sqlScript, Seq.empty[Seq[Row]])
+      }
+      checkError(
+        exception = e,
+        condition = "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
+        sqlState = "42703",
+        parameters = Map("objectName" -> toSQLId("system.session.localVar")),
+        context = ExpectedContext(
+          fragment = "system.session.localVar",
+          start = 102,
+          stop = 124)
+      )
+    }
+  }
 }
