@@ -16,9 +16,9 @@
  */
 package org.apache.spark.util
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SerializerHelper, SparkFunSuite}
 
-class TransientBestEffortLazyValSuite extends SparkFunSuite {
+class TransientBestEffortLazyValSuite extends SparkFunSuite with SerializerHelper {
 
   test("TransientBestEffortLazyVal works") {
     var test: Option[Object] = None

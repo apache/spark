@@ -18,9 +18,9 @@ package org.apache.spark.util
 
 import java.io.NotSerializableException
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SerializerHelper, SparkFunSuite}
 
-class BestEffortLazyValSuite extends SparkFunSuite {
+class BestEffortLazyValSuite extends SparkFunSuite with SerializerHelper {
 
   test("BestEffortLazy works") {
     var test: Option[Object] = None

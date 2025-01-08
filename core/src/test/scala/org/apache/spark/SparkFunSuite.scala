@@ -17,7 +17,7 @@
 
 package org.apache.spark
 
-import java.io.{ByteArrayInputStream, ByteArrayOutputStream, File, ObjectInputStream, ObjectOutputStream}
+import java.io.File
 import java.nio.charset.StandardCharsets.UTF_8
 import java.nio.file.{Files, Path}
 import java.util.{Locale, TimeZone}
@@ -462,27 +462,6 @@ abstract class SparkFunSuite
     checkError(exception = exception,
       condition = "TABLE_OR_VIEW_ALREADY_EXISTS",
       parameters = Map("relationName" -> tableName))
-
-  protected def roundtripSerialize[T](obj: T): T = {
-    deserializeFromBytes(serializeToBytes(obj))
-  }
-
-  protected def serializeToBytes[T](o: T): Array[Byte] = {
-    val baos = new ByteArrayOutputStream
-    val oos = new ObjectOutputStream(baos)
-    try {
-      oos.writeObject(o)
-      baos.toByteArray
-    } finally {
-      oos.close()
-    }
-  }
-
-  protected def deserializeFromBytes[T](bytes: Array[Byte]): T = {
-    val bais = new ByteArrayInputStream(bytes)
-    val ois = new ObjectInputStream(bais)
-    ois.readObject().asInstanceOf[T]
-  }
 
   case class ExpectedContext(
       contextType: QueryContextType,
