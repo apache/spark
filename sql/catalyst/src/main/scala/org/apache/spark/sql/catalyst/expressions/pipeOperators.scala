@@ -18,6 +18,9 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateFunction
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, UnaryNode}
+import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.trees.TreePattern.{PIPE_OPERATOR, TreePattern}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 
 /**
@@ -54,6 +57,25 @@ case class PipeExpression(child: Expression, isAggregate: Boolean, clause: Strin
       None
     case _ =>
       e.children.flatMap(findFirstAggregate).headOption
+  }
+}
+
+/**
+ * Represents the location within a logical plan that a SQL pipe operator appeared.
+ * This acts as a logical boundary that works to prevent the analyzer from modifying the logical
+ * operators above and below the boundary.
+ */
+case class PipeOperator(child: LogicalPlan) extends UnaryNode {
+  final override val nodePatterns: Seq[TreePattern] = Seq(PIPE_OPERATOR)
+  override def output: Seq[Attribute] = child.output
+  override def withNewChildInternal(newChild: LogicalPlan): PipeOperator = copy(child = newChild)
+}
+
+/** This rule removes all PipeOperator nodes from a logical plan at the end of analysis. */
+object EliminatePipeOperators extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
+    _.containsPattern(PIPE_OPERATOR), ruleId) {
+    case PipeOperator(child) => child
   }
 }
 
