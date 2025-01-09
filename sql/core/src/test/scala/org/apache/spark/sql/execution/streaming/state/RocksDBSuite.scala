@@ -559,22 +559,6 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
           if ((version + 1) % 5 == 0) db.doMaintenance()
         }
       }
-  }
-
-  testWithColumnFamilies(
-    "RocksDB: check changelog and snapshot version",
-    TestWithChangelogCheckpointingEnabled) { colFamiliesEnabled =>
-    val remoteDir = Utils.createTempDir().toString
-    val conf = dbConf.copy(minDeltasForSnapshot = 1)
-    new File(remoteDir).delete() // to make sure that the directory gets created
-    for (version <- 0 to 49) {
-      withDB(remoteDir, version = version, conf = conf,
-        useColumnFamilies = colFamiliesEnabled) { db =>
-        db.put(version.toString, version.toString)
-        db.commit()
-        if ((version + 1) % 5 == 0) db.doMaintenance()
-      }
-    }
 
       if (isChangelogCheckpointingEnabled) {
         assert(changelogVersionsPresent(remoteDir) === (1 to 50))
