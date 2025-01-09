@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.sql.catalyst.{AliasIdentifier, InternalRow, SQLConfHelper}
 import org.apache.spark.sql.catalyst.analysis.{AnsiTypeCoercion, MultiInstanceRelation, Resolver, TypeCoercion, TypeCoercionBase, UnresolvedUnaryNode}
-import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable}
+import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, ClusteringSpec}
 import org.apache.spark.sql.catalyst.catalog.CatalogTable.VIEW_STORING_ANALYZED_PLAN
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, TypedImperativeAggregate}
@@ -1011,14 +1011,10 @@ case class Sort(
 /**
  * Clustering data within the partition.
  *
- * @param clusteringKeys The clustering expressions
- * @param sortKeys       The sort orders
+ * @param clusteringSpec The clustering information
  * @param child          Child logical plan
  */
-case class Clustering(
-    clusteringKeys: Seq[Expression],
-    sortKeys: Seq[SortOrder],
-    child: LogicalPlan) extends UnaryNode {
+case class Clustering(clusteringSpec: ClusteringSpec, child: LogicalPlan) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
   override protected def withNewChildInternal(newChild: LogicalPlan): Clustering =
     copy(child = newChild)

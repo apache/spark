@@ -992,9 +992,8 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         }
       case logical.Sort(sortExprs, global, child, _) =>
         execution.SortExec(sortExprs, global, planLater(child)) :: Nil
-      case logical.Clustering(clusteringKeys, sortKeys, child) =>
-        val sorts = clusteringKeys.map(SortOrder(_, Ascending)) ++ sortKeys
-        execution.SortExec(sorts, global = false, planLater(child)) :: Nil
+      case logical.Clustering(clusteringSpec, child) =>
+        execution.SortExec(clusteringSpec.toSorts, global = false, planLater(child)) :: Nil
       case logical.Project(projectList, child) =>
         execution.ProjectExec(projectList, planLater(child)) :: Nil
       case logical.Filter(condition, child) =>

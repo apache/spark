@@ -26,7 +26,7 @@ import org.apache.hadoop.hive.ql.plan.TableDesc
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
-import org.apache.spark.sql.catalyst.expressions.{Attribute, SortOrder}
+import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
@@ -85,8 +85,8 @@ case class InsertIntoHiveTable(
     partition.filter(_._2.nonEmpty).map { case (k, v) => k -> v.get }
   }
 
-  override def requiredOrdering: Seq[SortOrder] = {
-    V1WritesUtils.getSortOrder(outputColumns, partitionColumns, bucketSpec, options)
+  override def clusteringSpec: Option[ClusteringSpec] = {
+    V1WritesUtils.getClusteringSpec(outputColumns, partitionColumns, bucketSpec, options)
   }
 
   /**
