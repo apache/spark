@@ -11666,10 +11666,15 @@ def xpath(xml: "ColumnOrName", path: "ColumnOrName") -> Column:
 
     Examples
     --------
+    >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame(
     ...     [('<a><b>b1</b><b>b2</b><b>b3</b><c>c1</c><c>c2</c></a>',)], ['x'])
-    >>> df.select(xpath(df.x, lit('a/b/text()')).alias('r')).collect()
-    [Row(r=['b1', 'b2', 'b3'])]
+    >>> df.select(sf.xpath(df.x, sf.lit('a/b/text()'))).show()
+    +--------------------+
+    |xpath(x, a/b/text())|
+    +--------------------+
+    |        [b1, b2, b3]|
+    +--------------------+
     """
     return _invoke_function_over_columns("xpath", xml, path)
 
@@ -11683,9 +11688,14 @@ def xpath_boolean(xml: "ColumnOrName", path: "ColumnOrName") -> Column:
 
     Examples
     --------
+    >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([('<a><b>1</b></a>',)], ['x'])
-    >>> df.select(xpath_boolean(df.x, lit('a/b')).alias('r')).collect()
-    [Row(r=True)]
+    >>> df.select(sf.xpath_boolean(df.x, sf.lit('a/b'))).show()
+    +---------------------+
+    |xpath_boolean(x, a/b)|
+    +---------------------+
+    |                 true|
+    +---------------------+
     """
     return _invoke_function_over_columns("xpath_boolean", xml, path)
 
@@ -11700,9 +11710,14 @@ def xpath_double(xml: "ColumnOrName", path: "ColumnOrName") -> Column:
 
     Examples
     --------
+    >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([('<a><b>1</b><b>2</b></a>',)], ['x'])
-    >>> df.select(xpath_double(df.x, lit('sum(a/b)')).alias('r')).collect()
-    [Row(r=3.0)]
+    >>> df.select(sf.xpath_double(df.x, sf.lit('sum(a/b)'))).show()
+    +-------------------------+
+    |xpath_double(x, sum(a/b))|
+    +-------------------------+
+    |                      3.0|
+    +-------------------------+
     """
     return _invoke_function_over_columns("xpath_double", xml, path)
 
@@ -11740,9 +11755,14 @@ def xpath_float(xml: "ColumnOrName", path: "ColumnOrName") -> Column:
 
     Examples
     --------
+    >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([('<a><b>1</b><b>2</b></a>',)], ['x'])
-    >>> df.select(xpath_float(df.x, lit('sum(a/b)')).alias('r')).collect()
-    [Row(r=3.0)]
+    >>> df.select(sf.xpath_float(df.x, sf.lit('sum(a/b)'))).show()
+    +------------------------+
+    |xpath_float(x, sum(a/b))|
+    +------------------------+
+    |                     3.0|
+    +------------------------+
     """
     return _invoke_function_over_columns("xpath_float", xml, path)
 
@@ -11757,9 +11777,14 @@ def xpath_int(xml: "ColumnOrName", path: "ColumnOrName") -> Column:
 
     Examples
     --------
+    >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([('<a><b>1</b><b>2</b></a>',)], ['x'])
-    >>> df.select(xpath_int(df.x, lit('sum(a/b)')).alias('r')).collect()
-    [Row(r=3)]
+    >>> df.select(sf.xpath_int(df.x, sf.lit('sum(a/b)'))).show()
+    +----------------------+
+    |xpath_int(x, sum(a/b))|
+    +----------------------+
+    |                     3|
+    +----------------------+
     """
     return _invoke_function_over_columns("xpath_int", xml, path)
 
@@ -11774,9 +11799,14 @@ def xpath_long(xml: "ColumnOrName", path: "ColumnOrName") -> Column:
 
     Examples
     --------
+    >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([('<a><b>1</b><b>2</b></a>',)], ['x'])
-    >>> df.select(xpath_long(df.x, lit('sum(a/b)')).alias('r')).collect()
-    [Row(r=3)]
+    >>> df.select(sf.xpath_long(df.x, sf.lit('sum(a/b)'))).show()
+    +-----------------------+
+    |xpath_long(x, sum(a/b))|
+    +-----------------------+
+    |                      3|
+    +-----------------------+
     """
     return _invoke_function_over_columns("xpath_long", xml, path)
 
@@ -11791,9 +11821,14 @@ def xpath_short(xml: "ColumnOrName", path: "ColumnOrName") -> Column:
 
     Examples
     --------
+    >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([('<a><b>1</b><b>2</b></a>',)], ['x'])
-    >>> df.select(xpath_short(df.x, lit('sum(a/b)')).alias('r')).collect()
-    [Row(r=3)]
+    >>> df.select(sf.xpath_short(df.x, sf.lit('sum(a/b)'))).show()
+    +------------------------+
+    |xpath_short(x, sum(a/b))|
+    +------------------------+
+    |                       3|
+    +------------------------+
     """
     return _invoke_function_over_columns("xpath_short", xml, path)
 
@@ -11807,9 +11842,14 @@ def xpath_string(xml: "ColumnOrName", path: "ColumnOrName") -> Column:
 
     Examples
     --------
+    >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([('<a><b>b</b><c>cc</c></a>',)], ['x'])
-    >>> df.select(xpath_string(df.x, lit('a/c')).alias('r')).collect()
-    [Row(r='cc')]
+    >>> df.select(sf.xpath_string(df.x, sf.lit('a/c'))).show()
+    +--------------------+
+    |xpath_string(x, a/c)|
+    +--------------------+
+    |                  cc|
+    +--------------------+
     """
     return _invoke_function_over_columns("xpath_string", xml, path)
 
