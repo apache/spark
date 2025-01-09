@@ -45,8 +45,6 @@ private[spark] object SchemaUtils {
     override def toString: String = parts.mkString(".")
 
     def prepended(part: String): ColumnPath = ColumnPath(parts.prepended(part))
-
-    def appended(part: String): ColumnPath = ColumnPath(parts.appended(part))
   }
 
   /**

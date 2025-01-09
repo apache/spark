@@ -19,8 +19,9 @@ package org.apache.spark.sql.collation
 
 import org.apache.spark.{SparkRuntimeException, SparkThrowable}
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row}
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.StringType
+import org.apache.spark.sql.types.{StringType, StructField, StructType}
 
 class IndeterminateCollationTestSuite extends QueryTest with SharedSparkSession {
 
@@ -78,9 +79,12 @@ class IndeterminateCollationTestSuite extends QueryTest with SharedSparkSession 
       "COLLATION_INVALID_NAME",
       parameters = Map("proposals" -> "nl", "collationName" -> "NULL"))
 
-    intercept[SparkThrowable] {
-      StringType("NULL")
-    }
+    checkError(
+      exception = intercept[SparkThrowable] {
+        StringType("NULL")
+      },
+      condition = "COLLATION_INVALID_NAME",
+      parameters = Map("proposals" -> "nl", "collationName" -> "NULL"))
   }
 
   test("various expressions that support indeterminate collation") {
@@ -154,6 +158,34 @@ class IndeterminateCollationTestSuite extends QueryTest with SharedSparkSession 
            |""".stripMargin)
 
       checkAnswer(sql(s"SELECT * FROM $testTableName"), Seq(Row("ab", "ba")))
+    }
+  }
+
+  test("insert with dataframe api") {
+    withTestTable {
+      sql(s"INSERT INTO $testTableName VALUES ('a', 'b')")
+
+      val schema = StructType(Seq(
+        StructField("c1", StringType),
+        StructField("c2", StringType("UNICODE"))
+      ))
+      val dataframe = spark.createDataFrame(
+        spark.sparkContext.parallelize(Seq(Row("a", "b"))), schema
+      )
+
+      val indeterminateDf = dataframe.select(
+        expr("concat(c1, c2)").alias("c1"),
+        expr("concat(c2, c1)").alias("c2")
+      )
+
+      indeterminateDf.write.mode("overwrite").insertInto(testTableName)
+
+      checkError(
+        exception = intercept[SparkThrowable] {
+          indeterminateDf.write.mode("overwrite").saveAsTable(testTableName)
+        },
+        condition = "INDETERMINATE_COLLATION_IN_SCHEMA",
+        parameters = Map("columnPaths" -> "c1, c2"))
     }
   }
 

@@ -754,7 +754,6 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
 
           case write: V2WriteCommand if write.resolved =>
             write.query.schema.foreach(f => TypeUtils.failWithIntervalType(f.dataType))
-            SchemaUtils.checkIndeterminateCollationInSchema(write.query.schema)
 
           case alter: AlterTableCommand =>
             checkAlterTableCommand(alter)

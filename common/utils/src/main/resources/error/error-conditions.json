@@ -1961,12 +1961,6 @@
     ],
     "sqlState" : "42P22"
   },
-  "INDETERMINATE_COLLATION_NOT_SERIALIZABLE" : {
-    "message" : [
-      "Indeterminate collation is not serializable. Use COLLATE clause to set the collation explicitly."
-    ],
-    "sqlState" : "42P22"
-  },
   "INDEX_ALREADY_EXISTS" : {
     "message" : [
       "Cannot create the index <indexName> on table <tableName> because it already exists."
