@@ -211,12 +211,20 @@ private[spark] class KerberosConfDriverFeatureStep(kubernetesConf: KubernetesDri
   override def getAdditionalPodSystemProperties(): Map[String, String] = {
     // If a submission-local keytab is provided, update the Spark config so that it knows the
     // path of the keytab in the driver container.
-    if (needKeytabUpload) {
+    val keytabConfig = if (needKeytabUpload) {
       val ktName = new File(keytab.get).getName()
       Map(KEYTAB.key -> s"$KERBEROS_KEYTAB_MOUNT_POINT/$ktName")
     } else {
       Map.empty
     }
+
+    val kbr5Config = if (hasKerberosConf) {
+      Map(KRB_FILE_MAP_NAME -> krb5CMap.getOrElse(newConfigMapName))
+    } else {
+      Map.empty
+    }
+
+    keytabConfig ++ kbr5Config
   }
 
   override def getAdditionalKubernetesResources(): Seq[HasMetadata] = {

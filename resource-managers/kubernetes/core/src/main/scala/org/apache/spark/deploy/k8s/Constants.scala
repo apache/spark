@@ -113,6 +113,7 @@ object Constants {
   val ENV_HADOOP_CONF_DIR = "HADOOP_CONF_DIR"
   val HADOOP_CONFIG_MAP_NAME =
     "spark.kubernetes.executor.hadoopConfigMapName"
+  val KRB_FILE_MAP_NAME = "spark.kubernetes.executor.krbFileMapName"
 
   // Kerberos Configuration
   val KERBEROS_DT_SECRET_NAME =
