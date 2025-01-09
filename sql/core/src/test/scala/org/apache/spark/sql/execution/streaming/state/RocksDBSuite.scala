@@ -708,6 +708,7 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
       }
     }
 
+    // versionToUniqueId1 should be non-empty, meaning the id is updated from rocksDB to the map
     assert(versionToUniqueId1.nonEmpty)
 
     // The second DB writes to version 0 with another uniqueId
@@ -736,6 +737,7 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
       }
     }
 
+    // versionToUniqueId2 should be non-empty, meaning the id is updated from rocksDB to the map
     assert(versionToUniqueId2.nonEmpty)
 
     // During a load() with linage from the first rocksDB,
