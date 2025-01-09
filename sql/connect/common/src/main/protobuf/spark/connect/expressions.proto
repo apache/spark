@@ -484,9 +484,19 @@ message SubqueryExpression {
   // (Required) The type of the subquery.
   SubqueryType subquery_type = 2;
 
+  // (Optional) The way that input rows are partitioned.
+  repeated Expression partition_spec = 3;
+
+  // (Optional) Ordering of rows in a partition.
+  repeated Expression.SortOrder order_spec = 4;
+
+  // Optional: Whether this is a single partition.
+  optional bool with_single_partition = 5;
+
   enum SubqueryType {
     SUBQUERY_TYPE_UNKNOWN = 0;
     SUBQUERY_TYPE_SCALAR = 1;
     SUBQUERY_TYPE_EXISTS = 2;
+    SUBQUERY_TYPE_TABLE_ARG = 3;
   }
 }
