@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.streaming
 
+import org.apache.spark.sql.errors.QueryExecutionErrors
+
 object MetadataVersionUtil {
   /**
    * Parse the log version from the given `text` -- will throw exception when the parsed version
@@ -25,9 +27,7 @@ object MetadataVersionUtil {
   def validateVersion(text: String, maxSupportedVersion: Int): Int = {
     val version: Int = extractVersion(text)
     if (version > maxSupportedVersion) {
-      throw new IllegalStateException(s"UnsupportedLogVersion: maximum supported log version " +
-        s"is v${maxSupportedVersion}, but encountered v$version. The log file was produced " +
-        s"by a newer version of Spark and cannot be read by this version. Please upgrade.")
+      throw QueryExecutionErrors.invalidLogVersion(version, maxSupportedVersion)
     }
     version
   }
@@ -39,8 +39,7 @@ object MetadataVersionUtil {
   def validateVersionExactMatch(text: String, matchVersion: Int): Int = {
     val version: Int = extractVersion(text)
     if (version != matchVersion) {
-      throw new IllegalStateException(s"UnsupportedLogVersion: the only supported log version " +
-        s"is v${matchVersion}, but encountered v$version.")
+      throw QueryExecutionErrors.invalidLogVersion(version, matchVersion)
     }
     version
   }
@@ -55,16 +54,13 @@ object MetadataVersionUtil {
         text.substring(1, text.length).toInt
       } catch {
         case _: NumberFormatException =>
-          throw new IllegalStateException(s"Log file was malformed: failed to read correct log " +
-            s"version from $text.")
+          throw QueryExecutionErrors.invalidMetadataVersion(text)
       }
     } else {
-      throw new IllegalStateException(s"Log file was malformed: failed to read correct log " +
-        s"version from $text.")
+      throw QueryExecutionErrors.invalidMetadataVersion(text)
     }
     if (version <= 0) {
-      throw new IllegalStateException(s"Log file was malformed: failed to read correct log " +
-        s"version from $text.")
+      throw QueryExecutionErrors.invalidMetadataVersion(text)
     }
     version
   }

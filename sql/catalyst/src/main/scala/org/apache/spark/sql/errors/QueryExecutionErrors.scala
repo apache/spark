@@ -2629,6 +2629,34 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       cause = null)
   }
 
+  def invalidMetadataVersion(text: String): Throwable = {
+    new SparkException(
+      errorClass = "INVALID_METADATA_VERSION.INVALID_VERSION_TEXT",
+      messageParameters = Map("text" -> text),
+      cause = null
+    )
+  }
+
+  def invalidLogVersion(version: Int, maxSupportedVersion: Int): Throwable = {
+    new SparkException(
+      errorClass = "INVALID_LOG_VERSION.MAX_SUPPORTED_VERSION",
+      messageParameters = Map(
+        "version" -> version.toString,
+        "maxSupportedVersion" -> maxSupportedVersion.toString),
+      cause = null
+    )
+  }
+
+  def invalidLogVersionExactMatch(version: Int, matchVersion: Int): Throwable = {
+    new SparkException(
+      errorClass = "INVALID_LOG_VERSION.EXACT_MATCH_VERSION",
+      messageParameters = Map(
+        "version" -> version.toString,
+        "matchVersion" -> matchVersion.toString),
+      cause = null
+    )
+  }
+
   def invalidChangeLogReaderVersion(version: Long): Throwable = {
     new SparkException(
       errorClass = "CANNOT_LOAD_STATE_STORE.INVALID_CHANGE_LOG_READER_VERSION",

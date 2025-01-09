@@ -2800,6 +2800,30 @@
     },
     "sqlState" : "42K0E"
   },
+  "INVALID_LOG_VERSION" : {
+    "message" : [
+      "UnsupportedLogVersion."
+    ],
+    "subClass" : {
+      "MAX_SUPPORTED_VERSION": {
+        "message": [
+          "maximum supported log version is v<maxSupportedVersion>, but encountered v<version>. The log file was produced by a newer version of Spark and cannot be read by this version. Please upgrade."
+        ]
+      },
+      "EXACT_MATCH_VERSION": {
+        "message": [
+          "the only supported log version is v<matchVersion>, but encountered v<version>."
+        ]
+      }
+    },
+    "sqlState" : "22023"
+  },
+  "INVALID_METADATA_VERSION" : {
+    "message" : [
+      "Log file was malformed: failed to read correct log version from <text>."
+    ],
+    "sqlState" : "22023"
+  },
   "INVALID_NON_DETERMINISTIC_EXPRESSIONS" : {
     "message" : [
       "The operator expects a deterministic expression, but the actual expression is <sqlExprs>."
