@@ -53,6 +53,7 @@ object ColumnNodeToProtoConverter extends (ColumnNode => proto.Expression) {
         builder.setLiteral(toLiteralProtoBuilder(value, dataType))
 
       case u @ UnresolvedAttribute(unparsedIdentifier, planId, isMetadataColumn, _) =>
+        println(s"UnresolvedAttribute: $u")
         val escapedName = u.sql
         val b = builder.getUnresolvedAttributeBuilder
           .setUnparsedIdentifier(escapedName)
