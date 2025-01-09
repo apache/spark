@@ -227,12 +227,7 @@ class SparkSessionTests3(unittest.TestCase, PySparkErrorTestUtils):
                 (lambda: session.client, "client"),
                 (session.addArtifacts, "addArtifact(s)"),
                 (lambda: session.copyFromLocalToFs("", ""), "copyFromLocalToFs"),
-                (lambda: session.interruptTag(""), "interruptTag"),
                 (lambda: session.interruptOperation(""), "interruptOperation"),
-                (lambda: session.addTag(""), "addTag"),
-                (lambda: session.removeTag(""), "removeTag"),
-                (session.getTags, "getTags"),
-                (session.clearTags, "clearTags"),
             ]
 
             for func, name in unsupported:

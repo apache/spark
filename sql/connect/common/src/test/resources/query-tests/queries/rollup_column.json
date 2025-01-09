@@ -30,7 +30,8 @@
               "literal": {
                 "integer": 1
               }
-            }]
+            }],
+            "isInternal": false
           }
         },
         "name": ["count"]

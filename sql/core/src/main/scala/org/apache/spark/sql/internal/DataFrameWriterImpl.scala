@@ -39,7 +39,6 @@ import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.{CreateTable, DataSource, DataSourceUtils, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.v2._
 import org.apache.spark.sql.internal.SQLConf.PartitionOverwriteMode
-import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.ArrayImplicits._
@@ -210,6 +209,7 @@ final class DataFrameWriterImpl[T] private[sql](ds: Dataset[T]) extends DataFram
                 optionExpression = OptionList(Seq.empty),
                 location = extraOptions.get("path"),
                 comment = extraOptions.get(TableCatalog.PROP_COMMENT),
+                collation = extraOptions.get(TableCatalog.PROP_COLLATION),
                 serde = None,
                 external = false)
               runCommand(df.sparkSession) {
@@ -383,6 +383,11 @@ final class DataFrameWriterImpl[T] private[sql](ds: Dataset[T]) extends DataFram
     }
   }
 
+  private def hasCustomSessionCatalog: Boolean = {
+    df.sparkSession.sessionState.conf
+      .getConf(SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION) != "builtin"
+  }
+
   /**
    * Saves the content of the `DataFrame` as the specified table.
    *
@@ -426,8 +431,7 @@ final class DataFrameWriterImpl[T] private[sql](ds: Dataset[T]) extends DataFram
     import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
     val session = df.sparkSession
-    val canUseV2 = lookupV2Provider().isDefined || (df.sparkSession.sessionState.conf.getConf(
-        SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION).isDefined &&
+    val canUseV2 = lookupV2Provider().isDefined || (hasCustomSessionCatalog &&
         !df.sparkSession.sessionState.catalogManager.catalog(CatalogManager.SESSION_CATALOG_NAME)
           .isInstanceOf[CatalogExtension])
 
@@ -470,6 +474,7 @@ final class DataFrameWriterImpl[T] private[sql](ds: Dataset[T]) extends DataFram
           optionExpression = OptionList(Seq.empty),
           location = extraOptions.get("path"),
           comment = extraOptions.get(TableCatalog.PROP_COMMENT),
+          collation = extraOptions.get(TableCatalog.PROP_COLLATION),
           serde = None,
           external = false)
         ReplaceTableAsSelect(
@@ -490,6 +495,7 @@ final class DataFrameWriterImpl[T] private[sql](ds: Dataset[T]) extends DataFram
           optionExpression = OptionList(Seq.empty),
           location = extraOptions.get("path"),
           comment = extraOptions.get(TableCatalog.PROP_COMMENT),
+          collation = extraOptions.get(TableCatalog.PROP_COLLATION),
           serde = None,
           external = false)
 
@@ -522,14 +528,14 @@ final class DataFrameWriterImpl[T] private[sql](ds: Dataset[T]) extends DataFram
       case (true, SaveMode.Overwrite) =>
         // Get all input data source or hive relations of the query.
         val srcRelations = df.logicalPlan.collect {
-          case LogicalRelation(src: BaseRelation, _, _, _) => src
+          case l: LogicalRelation => l.relation
           case relation: HiveTableRelation => relation.tableMeta.identifier
         }
 
         val tableRelation = df.sparkSession.table(qualifiedIdent).queryExecution.analyzed
         EliminateSubqueryAliases(tableRelation) match {
           // check if the table is a data source table (the relation is a BaseRelation).
-          case LogicalRelation(dest: BaseRelation, _, _, _) if srcRelations.contains(dest) =>
+          case l: LogicalRelation if srcRelations.contains(l.relation) =>
             throw QueryCompilationErrors.cannotOverwriteTableThatIsBeingReadFromError(
               qualifiedIdent)
           // check hive table relation when overwrite mode

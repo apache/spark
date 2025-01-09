@@ -351,7 +351,7 @@ class QueryExecutionErrorsSuite
         sql("select timestampadd(YEAR, 1000000, timestamp'2022-03-09 01:02:03')").collect()
       },
       condition = "DATETIME_OVERFLOW",
-      parameters = Map("operation" -> "add 1000000 YEAR to TIMESTAMP '2022-03-09 01:02:03'"),
+      parameters = Map("operation" -> "add 1000000L YEAR to TIMESTAMP '2022-03-09 01:02:03'"),
       sqlState = "22008")
   }
 
@@ -1257,6 +1257,22 @@ class QueryExecutionErrorsSuite
         "method2" -> "nullSafeEval"
       )
     )
+  }
+
+  test("SPARK-50485: Unwrap SparkThrowable in UEE thrown by tableRelationCache") {
+    withTable("t") {
+      sql("CREATE TABLE t (a INT)")
+      checkError(
+        exception = intercept[SparkUnsupportedOperationException] {
+          sql("ALTER TABLE t SET LOCATION 'https://mister/spark'")
+        },
+        condition = "FAILED_READ_FILE.UNSUPPORTED_FILE_SYSTEM",
+        parameters = Map(
+          "path" -> "https://mister/spark",
+          "fileSystemClass" -> "org.apache.hadoop.fs.http.HttpsFileSystem",
+          "method" -> "listStatus"))
+      sql("ALTER TABLE t SET LOCATION '/mister/spark'")
+    }
   }
 }
 

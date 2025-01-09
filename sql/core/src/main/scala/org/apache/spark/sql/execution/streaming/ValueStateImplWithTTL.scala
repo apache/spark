@@ -16,9 +16,7 @@
  */
 package org.apache.spark.sql.execution.streaming
 
-import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.streaming.TransformWithStateKeyValueRowSchemaUtils._
 import org.apache.spark.sql.execution.streaming.state.{NoPrefixKeyStateEncoderSpec, StateStore}
@@ -41,24 +39,24 @@ class ValueStateImplWithTTL[S](
     store: StateStore,
     stateName: String,
     keyExprEnc: ExpressionEncoder[Any],
-    valEncoder: Encoder[S],
+    valEncoder: ExpressionEncoder[Any],
     ttlConfig: TTLConfig,
     batchTimestampMs: Long,
     metrics: Map[String, SQLMetric] = Map.empty)
-  extends SingleKeyTTLStateImpl(
-    stateName, store, keyExprEnc, batchTimestampMs) with ValueState[S] {
+  extends OneToOneTTLState(
+    stateName, store, keyExprEnc.schema, ttlConfig, batchTimestampMs, metrics) with ValueState[S] {
 
-  private val stateTypesEncoder = StateTypesEncoder(keyExprEnc, valEncoder,
-    stateName, hasTtl = true)
-  private val ttlExpirationMs =
-    StateTTL.calculateExpirationTimeForDuration(ttlConfig.ttlDuration, batchTimestampMs)
+  private val stateTypesEncoder =
+    StateTypesEncoder(keyExprEnc, valEncoder, stateName, hasTtl = true)
 
   initialize()
 
   private def initialize(): Unit = {
     store.createColFamilyIfAbsent(stateName,
-      keyExprEnc.schema, getValueSchemaWithTTL(valEncoder.schema, true),
-      NoPrefixKeyStateEncoderSpec(keyExprEnc.schema))
+      keyExprEnc.schema,
+      getValueSchemaWithTTL(valEncoder.schema, true),
+      NoPrefixKeyStateEncoderSpec(keyExprEnc.schema)
+    )
   }
 
   /** Function to check if state exists. Returns true if present and false otherwise */
@@ -77,10 +75,11 @@ class ValueStateImplWithTTL[S](
     val retRow = store.get(encodedGroupingKey, stateName)
 
     if (retRow != null) {
+      // Getting the 0th ordinal of the struct using valEncoder
       val resState = stateTypesEncoder.decodeValue(retRow)
 
       if (!stateTypesEncoder.isExpired(retRow, batchTimestampMs)) {
-        resState
+        resState.asInstanceOf[S]
       } else {
         null.asInstanceOf[S]
       }
@@ -91,33 +90,19 @@ class ValueStateImplWithTTL[S](
 
   /** Function to update and overwrite state associated with given key */
   override def update(newState: S): Unit = {
+    val encodedKey = stateTypesEncoder.encodeGroupingKey()
+
+    val ttlExpirationMs = StateTTL
+      .calculateExpirationTimeForDuration(ttlConfig.ttlDuration, batchTimestampMs)
     val encodedValue = stateTypesEncoder.encodeValue(newState, ttlExpirationMs)
-    val serializedGroupingKey = stateTypesEncoder.encodeGroupingKey()
-    store.put(serializedGroupingKey,
-      encodedValue, stateName)
-    TWSMetricsUtils.incrementMetric(metrics, "numUpdatedStateRows")
-    upsertTTLForStateKey(ttlExpirationMs, serializedGroupingKey)
+
+    updatePrimaryAndSecondaryIndices(encodedKey, encodedValue, ttlExpirationMs)
   }
 
   /** Function to remove state for given key */
   override def clear(): Unit = {
-    store.remove(stateTypesEncoder.encodeGroupingKey(), stateName)
-    TWSMetricsUtils.incrementMetric(metrics, "numRemovedStateRows")
-    clearTTLState()
-  }
-
-  def clearIfExpired(groupingKey: UnsafeRow): Long = {
-    val retRow = store.get(groupingKey, stateName)
-
-    var result = 0L
-    if (retRow != null) {
-      if (stateTypesEncoder.isExpired(retRow, batchTimestampMs)) {
-        store.remove(groupingKey, stateName)
-        TWSMetricsUtils.incrementMetric(metrics, "numRemovedStateRows")
-        result = 1L
-      }
-    }
-    result
+    val groupingKey = stateTypesEncoder.encodeGroupingKey()
+    clearAllStateForElementKey(groupingKey)
   }
 
   /*
@@ -136,7 +121,7 @@ class ValueStateImplWithTTL[S](
     val retRow = store.get(encodedGroupingKey, stateName)
 
     if (retRow != null) {
-      val resState = stateTypesEncoder.decodeValue(retRow)
+      val resState = stateTypesEncoder.decodeValue(retRow).asInstanceOf[S]
       Some(resState)
     } else {
       None
@@ -154,18 +139,24 @@ class ValueStateImplWithTTL[S](
     // ttlExpiration
     if (retRow != null) {
       val ttlExpiration = stateTypesEncoder.decodeTtlExpirationMs(retRow)
-      ttlExpiration.map(expiration => (stateTypesEncoder.decodeValue(retRow), expiration))
+      ttlExpiration.map(expiration => (stateTypesEncoder.decodeValue(retRow).asInstanceOf[S],
+        expiration))
     } else {
       None
     }
   }
 
   /**
-   * Get all ttl values stored in ttl state for current implicit
-   * grouping key.
+   * Get the TTL value stored in TTL state for the current implicit grouping key,
+   * if it exists.
    */
-  private[sql] def getValuesInTTLState(): Iterator[Long] = {
-    getValuesInTTLState(stateTypesEncoder.encodeGroupingKey())
+  private[sql] def getValueInTTLState(): Option[Long] = {
+    val groupingKey = stateTypesEncoder.encodeGroupingKey()
+    val ttlRowsForGroupingKey = getTTLRows().filter(_.elementKey == groupingKey).toSeq
+
+    assert(ttlRowsForGroupingKey.size <= 1, "Multiple TTLRows found for grouping key " +
+      s"$groupingKey. Expected at most 1. Found: ${ttlRowsForGroupingKey.mkString(", ")}.")
+    ttlRowsForGroupingKey.headOption.map(_.expirationMs)
   }
 }
 

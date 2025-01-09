@@ -443,6 +443,8 @@ trait MasterSuiteBase extends SparkFunSuite
   private val _state = PrivateMethod[RecoveryState.Value](Symbol("state"))
   protected val _newDriverId = PrivateMethod[String](Symbol("newDriverId"))
   protected val _newApplicationId = PrivateMethod[String](Symbol("newApplicationId"))
+  protected val _maybeUpdateAppName =
+    PrivateMethod[DriverDescription](Symbol("maybeUpdateAppName"))
   protected val _createApplication = PrivateMethod[ApplicationInfo](Symbol("createApplication"))
   protected val _persistenceEngine = PrivateMethod[PersistenceEngine](Symbol("persistenceEngine"))
 

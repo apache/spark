@@ -24,7 +24,6 @@ import java.util.List;
 import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.core.JsonToken;
 
-import org.apache.spark.sql.catalyst.expressions.SharedFactory;
 import org.apache.spark.sql.catalyst.json.CreateJacksonParser;
 import org.apache.spark.sql.catalyst.util.GenericArrayData;
 import org.apache.spark.unsafe.types.UTF8String;
@@ -32,10 +31,6 @@ import org.apache.spark.unsafe.types.UTF8String;
 public class JsonExpressionUtils {
 
   public static Integer lengthOfJsonArray(UTF8String json) {
-    // return null for null input
-    if (json == null) {
-      return null;
-    }
     try (JsonParser jsonParser =
         CreateJacksonParser.utf8String(SharedFactory.jsonFactory(), json)) {
       if (jsonParser.nextToken() == null) {
@@ -60,10 +55,6 @@ public class JsonExpressionUtils {
   }
 
   public static GenericArrayData jsonObjectKeys(UTF8String json) {
-    // return null for `NULL` input
-    if (json == null) {
-      return null;
-    }
     try (JsonParser jsonParser =
         CreateJacksonParser.utf8String(SharedFactory.jsonFactory(), json)) {
       // return null if an empty string or any other valid JSON string is encountered

@@ -22,7 +22,8 @@
           "literal": {
             "string": "org.apache.spark.connect.proto.StorageLevel"
           }
-        }]
+        }],
+        "isInternal": false
       }
     }]
   }

@@ -21,7 +21,7 @@ import java.sql.Timestamp
 import java.time.Duration
 
 import org.apache.spark.sql.execution.streaming.MemoryStream
-import org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider
+import org.apache.spark.sql.execution.streaming.state.{AlsoTestWithEncodingTypes, AlsoTestWithRocksDBFeatures, RocksDBStateStoreProvider}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.util.StreamManualClock
 
@@ -41,7 +41,8 @@ case class OutputEvent(
  * Test suite base for TransformWithState with TTL support.
  */
 abstract class TransformWithStateTTLTest
-  extends StreamTest {
+  extends StreamTest with AlsoTestWithRocksDBFeatures
+  with AlsoTestWithEncodingTypes {
   import testImplicits._
 
   def getProcessor(ttlConfig: TTLConfig): StatefulProcessor[String, InputEvent, OutputEvent]
@@ -143,18 +144,24 @@ abstract class TransformWithStateTTLTest
         AddData(inputStream, InputEvent("k1", "put", 1)),
         // advance clock to trigger processing
         AdvanceManualClock(1 * 1000),
+        // In the primary index, we should have that k1 -> [(1, 61000)].
+        // The TTL index has (61000, k1) -> empty. The min-expiry index has k1 -> 61000.
         CheckNewAnswer(),
+
         // get this state, and make sure we get unexpired value
         AddData(inputStream, InputEvent("k1", "get", -1)),
         AdvanceManualClock(1 * 1000),
         CheckNewAnswer(OutputEvent("k1", 1, isTTLValue = false, -1)),
+
         // ensure ttl values were added correctly
         AddData(inputStream, InputEvent("k1", "get_ttl_value_from_state", -1)),
         AdvanceManualClock(1 * 1000),
         CheckNewAnswer(OutputEvent("k1", 1, isTTLValue = true, 61000)),
+
         AddData(inputStream, InputEvent("k1", "get_values_in_ttl_state", -1)),
         AdvanceManualClock(1 * 1000),
         CheckNewAnswer(OutputEvent("k1", -1, isTTLValue = true, 61000)),
+
         // advance clock and update expiration time
         AdvanceManualClock(30 * 1000),
         AddData(inputStream, InputEvent("k1", "put", 1)),
@@ -162,24 +169,30 @@ abstract class TransformWithStateTTLTest
         // advance clock to trigger processing
         AdvanceManualClock(1 * 1000),
         // validate value is not expired
+        //
+        // In the primary index, we still get that k1 -> [(1, 95000)].
+        // The TTL index should now have (95000, k1) -> empty, and the min-expiry index
+        // should have k1 -> 95000.
         CheckNewAnswer(OutputEvent("k1", 1, isTTLValue = false, -1)),
+
         // validate ttl value is updated in the state
         AddData(inputStream, InputEvent("k1", "get_ttl_value_from_state", -1)),
         AdvanceManualClock(1 * 1000),
         CheckNewAnswer(OutputEvent("k1", 1, isTTLValue = true, 95000)),
-        // validate ttl state has both ttl values present
+
+        // validate ttl state has only the newer ttl value present
         AddData(inputStream, InputEvent("k1", "get_values_in_ttl_state", -1)),
         AdvanceManualClock(1 * 1000),
-        CheckNewAnswer(OutputEvent("k1", -1, isTTLValue = true, 61000),
-          OutputEvent("k1", -1, isTTLValue = true, 95000)
-        ),
-        // advance clock after older expiration value
+        CheckNewAnswer( OutputEvent("k1", -1, isTTLValue = true, 95000)),
+
+        // advance clock after original expiration value; this shouldn't do anything
         AdvanceManualClock(30 * 1000),
         // ensure unexpired value is still present in the state
         AddData(inputStream, InputEvent("k1", "get", -1)),
         AdvanceManualClock(1 * 1000),
         CheckNewAnswer(OutputEvent("k1", 1, isTTLValue = false, -1)),
-        // validate that the older expiration value is removed from ttl state
+
+        // validate that the ttl index still has the newer value
         AddData(inputStream, InputEvent("k1", "get_values_in_ttl_state", -1)),
         AdvanceManualClock(1 * 1000),
         CheckNewAnswer(OutputEvent("k1", -1, isTTLValue = true, 95000))
@@ -282,6 +295,61 @@ abstract class TransformWithStateTTLTest
         CheckNewAnswer(
           OutputEvent("k2", 2, isTTLValue = true, 92000),
           OutputEvent("k2", -1, isTTLValue = true, 92000))
+      )
+    }
+  }
+
+  test("validate that clear only clears the current grouping key") {
+    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+      classOf[RocksDBStateStoreProvider].getName,
+      SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
+      val inputStream = MemoryStream[InputEvent]
+      val ttlConfig = TTLConfig(ttlDuration = Duration.ofMinutes(1))
+      val result = inputStream.toDS()
+        .groupByKey(x => x.key)
+        .transformWithState(
+          getProcessor(ttlConfig),
+          TimeMode.ProcessingTime(),
+          OutputMode.Append())
+
+      val clock = new StreamManualClock
+      testStream(result)(
+        StartStream(Trigger.ProcessingTime("1 second"), triggerClock = clock),
+        AddData(inputStream,
+          InputEvent("k1", "put", 1),
+          InputEvent("k2", "put", 2),
+          InputEvent("k3", "put", 3)
+        ),
+        // advance clock to trigger processing
+        AdvanceManualClock(1 * 1000),
+        CheckNewAnswer(),
+
+        AddData(
+          inputStream,
+          InputEvent("k1", "clear", -1),
+          InputEvent("k1", "get_ttl_value_from_state", -1),
+          InputEvent("k1", "get_values_in_ttl_state", -1)
+        ),
+        // advance clock to trigger processing
+        AdvanceManualClock(1 * 1000),
+        CheckNewAnswer(),
+
+        AddData(inputStream,
+          InputEvent("k2", "get_ttl_value_from_state", -1),
+          InputEvent("k2", "get_values_in_ttl_state", -1),
+
+          InputEvent("k3", "get_ttl_value_from_state", -1),
+          InputEvent("k3", "get_values_in_ttl_state", -1)
+        ),
+        // advance clock to trigger processing
+        AdvanceManualClock(1 * 1000),
+        CheckNewAnswer(
+          OutputEvent("k2", 2, isTTLValue = true, 61000),
+          OutputEvent("k2", -1, isTTLValue = true, 61000),
+
+          OutputEvent("k3", 3, isTTLValue = true, 61000),
+          OutputEvent("k3", -1, isTTLValue = true, 61000)
+        )
       )
     }
   }

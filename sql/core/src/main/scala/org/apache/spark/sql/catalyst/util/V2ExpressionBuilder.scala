@@ -221,8 +221,8 @@ class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) extends L
     case _: BitwiseNot => generateExpressionWithName("~", expr, isPredicate)
     case caseWhen @ CaseWhen(branches, elseValue) =>
       val conditions = branches.map(_._1).flatMap(generateExpression(_, true))
-      val values = branches.map(_._2).flatMap(generateExpression(_))
-      val elseExprOpt = elseValue.flatMap(generateExpression(_))
+      val values = branches.map(_._2).flatMap(generateExpression(_, isPredicate))
+      val elseExprOpt = elseValue.flatMap(generateExpression(_, isPredicate))
       if (conditions.length == branches.length && values.length == branches.length &&
           elseExprOpt.size == elseValue.size) {
         val branchExpressions = conditions.zip(values).flatMap { case (c, v) =>
@@ -305,6 +305,8 @@ class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) extends L
     case _: Md5 => generateExpressionWithName("MD5", expr, isPredicate)
     case _: Sha1 => generateExpressionWithName("SHA1", expr, isPredicate)
     case _: Sha2 => generateExpressionWithName("SHA2", expr, isPredicate)
+    case _: StringLPad => generateExpressionWithName("LPAD", expr, isPredicate)
+    case _: StringRPad => generateExpressionWithName("RPAD", expr, isPredicate)
     // TODO supports other expressions
     case ApplyFunctionExpression(function, children) =>
       val childrenExpressions = children.flatMap(generateExpression(_))
@@ -421,7 +423,7 @@ class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) extends L
       children: Seq[Expression],
       dataType: DataType,
       isPredicate: Boolean): Option[V2Expression] = {
-    val childrenExpressions = children.flatMap(generateExpression(_))
+    val childrenExpressions = children.flatMap(generateExpression(_, isPredicate))
     if (childrenExpressions.length == children.length) {
       if (isPredicate && dataType.isInstanceOf[BooleanType]) {
         Some(new V2Predicate(v2ExpressionName, childrenExpressions.toArray[V2Expression]))

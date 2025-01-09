@@ -522,7 +522,9 @@ class Column(ParentColumn):
         if len(alias) == 1:
             if metadata:
                 assert sc._jvm is not None
-                jmeta = sc._jvm.org.apache.spark.sql.types.Metadata.fromJson(json.dumps(metadata))
+                jmeta = getattr(sc._jvm, "org.apache.spark.sql.types.Metadata").fromJson(
+                    json.dumps(metadata)
+                )
                 return Column(getattr(self._jc, "as")(alias[0], jmeta))
             else:
                 return Column(getattr(self._jc, "as")(alias[0]))
@@ -603,6 +605,10 @@ class Column(ParentColumn):
                 messageParameters={"arg_name": "window", "arg_type": type(window).__name__},
             )
         jc = self._jc.over(window._jspec)
+        return Column(jc)
+
+    def outer(self) -> ParentColumn:
+        jc = self._jc.outer()
         return Column(jc)
 
     def __nonzero__(self) -> None:

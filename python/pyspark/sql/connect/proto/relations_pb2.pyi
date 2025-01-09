@@ -105,6 +105,8 @@ class Relation(google.protobuf.message.Message):
     COMMON_INLINE_USER_DEFINED_DATA_SOURCE_FIELD_NUMBER: builtins.int
     WITH_RELATIONS_FIELD_NUMBER: builtins.int
     TRANSPOSE_FIELD_NUMBER: builtins.int
+    UNRESOLVED_TABLE_VALUED_FUNCTION_FIELD_NUMBER: builtins.int
+    LATERAL_JOIN_FIELD_NUMBER: builtins.int
     FILL_NA_FIELD_NUMBER: builtins.int
     DROP_NA_FIELD_NUMBER: builtins.int
     REPLACE_FIELD_NUMBER: builtins.int
@@ -208,6 +210,10 @@ class Relation(google.protobuf.message.Message):
     @property
     def transpose(self) -> global___Transpose: ...
     @property
+    def unresolved_table_valued_function(self) -> global___UnresolvedTableValuedFunction: ...
+    @property
+    def lateral_join(self) -> global___LateralJoin: ...
+    @property
     def fill_na(self) -> global___NAFill:
         """NA functions"""
     @property
@@ -288,6 +294,8 @@ class Relation(google.protobuf.message.Message):
         | None = ...,
         with_relations: global___WithRelations | None = ...,
         transpose: global___Transpose | None = ...,
+        unresolved_table_valued_function: global___UnresolvedTableValuedFunction | None = ...,
+        lateral_join: global___LateralJoin | None = ...,
         fill_na: global___NAFill | None = ...,
         drop_na: global___NADrop | None = ...,
         replace: global___NAReplace | None = ...,
@@ -360,6 +368,8 @@ class Relation(google.protobuf.message.Message):
             b"html_string",
             "join",
             b"join",
+            "lateral_join",
+            b"lateral_join",
             "limit",
             b"limit",
             "local_relation",
@@ -412,6 +422,8 @@ class Relation(google.protobuf.message.Message):
             b"unknown",
             "unpivot",
             b"unpivot",
+            "unresolved_table_valued_function",
+            b"unresolved_table_valued_function",
             "with_columns",
             b"with_columns",
             "with_columns_renamed",
@@ -479,6 +491,8 @@ class Relation(google.protobuf.message.Message):
             b"html_string",
             "join",
             b"join",
+            "lateral_join",
+            b"lateral_join",
             "limit",
             b"limit",
             "local_relation",
@@ -531,6 +545,8 @@ class Relation(google.protobuf.message.Message):
             b"unknown",
             "unpivot",
             b"unpivot",
+            "unresolved_table_valued_function",
+            b"unresolved_table_valued_function",
             "with_columns",
             b"with_columns",
             "with_columns_renamed",
@@ -586,6 +602,8 @@ class Relation(google.protobuf.message.Message):
             "common_inline_user_defined_data_source",
             "with_relations",
             "transpose",
+            "unresolved_table_valued_function",
+            "lateral_join",
             "fill_na",
             "drop_na",
             "replace",
@@ -3191,6 +3209,36 @@ class Transpose(google.protobuf.message.Message):
 
 global___Transpose = Transpose
 
+class UnresolvedTableValuedFunction(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    FUNCTION_NAME_FIELD_NUMBER: builtins.int
+    ARGUMENTS_FIELD_NUMBER: builtins.int
+    function_name: builtins.str
+    """(Required) name (or unparsed name for user defined function) for the unresolved function."""
+    @property
+    def arguments(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+        pyspark.sql.connect.proto.expressions_pb2.Expression
+    ]:
+        """(Optional) Function arguments. Empty arguments are allowed."""
+    def __init__(
+        self,
+        *,
+        function_name: builtins.str = ...,
+        arguments: collections.abc.Iterable[pyspark.sql.connect.proto.expressions_pb2.Expression]
+        | None = ...,
+    ) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "arguments", b"arguments", "function_name", b"function_name"
+        ],
+    ) -> None: ...
+
+global___UnresolvedTableValuedFunction = UnresolvedTableValuedFunction
+
 class ToSchema(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -3361,6 +3409,7 @@ class GroupMap(google.protobuf.message.Message):
     IS_MAP_GROUPS_WITH_STATE_FIELD_NUMBER: builtins.int
     OUTPUT_MODE_FIELD_NUMBER: builtins.int
     TIMEOUT_CONF_FIELD_NUMBER: builtins.int
+    STATE_SCHEMA_FIELD_NUMBER: builtins.int
     @property
     def input(self) -> global___Relation:
         """(Required) Input relation for Group Map API: apply, applyInPandas."""
@@ -3399,6 +3448,9 @@ class GroupMap(google.protobuf.message.Message):
     """(Optional) The output mode of the function."""
     timeout_conf: builtins.str
     """(Optional) Timeout configuration for groups that do not receive data for a while."""
+    @property
+    def state_schema(self) -> pyspark.sql.connect.proto.types_pb2.DataType:
+        """(Optional) The schema for the grouped state."""
     def __init__(
         self,
         *,
@@ -3421,6 +3473,7 @@ class GroupMap(google.protobuf.message.Message):
         is_map_groups_with_state: builtins.bool | None = ...,
         output_mode: builtins.str | None = ...,
         timeout_conf: builtins.str | None = ...,
+        state_schema: pyspark.sql.connect.proto.types_pb2.DataType | None = ...,
     ) -> None: ...
     def HasField(
         self,
@@ -3429,6 +3482,8 @@ class GroupMap(google.protobuf.message.Message):
             b"_is_map_groups_with_state",
             "_output_mode",
             b"_output_mode",
+            "_state_schema",
+            b"_state_schema",
             "_timeout_conf",
             b"_timeout_conf",
             "func",
@@ -3441,6 +3496,8 @@ class GroupMap(google.protobuf.message.Message):
             b"is_map_groups_with_state",
             "output_mode",
             b"output_mode",
+            "state_schema",
+            b"state_schema",
             "timeout_conf",
             b"timeout_conf",
         ],
@@ -3452,6 +3509,8 @@ class GroupMap(google.protobuf.message.Message):
             b"_is_map_groups_with_state",
             "_output_mode",
             b"_output_mode",
+            "_state_schema",
+            b"_state_schema",
             "_timeout_conf",
             b"_timeout_conf",
             "func",
@@ -3470,6 +3529,8 @@ class GroupMap(google.protobuf.message.Message):
             b"output_mode",
             "sorting_expressions",
             b"sorting_expressions",
+            "state_schema",
+            b"state_schema",
             "timeout_conf",
             b"timeout_conf",
         ],
@@ -3485,6 +3546,10 @@ class GroupMap(google.protobuf.message.Message):
     def WhichOneof(
         self, oneof_group: typing_extensions.Literal["_output_mode", b"_output_mode"]
     ) -> typing_extensions.Literal["output_mode"] | None: ...
+    @typing.overload
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["_state_schema", b"_state_schema"]
+    ) -> typing_extensions.Literal["state_schema"] | None: ...
     @typing.overload
     def WhichOneof(
         self, oneof_group: typing_extensions.Literal["_timeout_conf", b"_timeout_conf"]
@@ -4070,3 +4135,56 @@ class AsOfJoin(google.protobuf.message.Message):
     ) -> None: ...
 
 global___AsOfJoin = AsOfJoin
+
+class LateralJoin(google.protobuf.message.Message):
+    """Relation of type [[LateralJoin]].
+
+    `left` and `right` must be present.
+    """
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    LEFT_FIELD_NUMBER: builtins.int
+    RIGHT_FIELD_NUMBER: builtins.int
+    JOIN_CONDITION_FIELD_NUMBER: builtins.int
+    JOIN_TYPE_FIELD_NUMBER: builtins.int
+    @property
+    def left(self) -> global___Relation:
+        """(Required) Left input relation for a Join."""
+    @property
+    def right(self) -> global___Relation:
+        """(Required) Right input relation for a Join."""
+    @property
+    def join_condition(self) -> pyspark.sql.connect.proto.expressions_pb2.Expression:
+        """(Optional) The join condition."""
+    join_type: global___Join.JoinType.ValueType
+    """(Required) The join type."""
+    def __init__(
+        self,
+        *,
+        left: global___Relation | None = ...,
+        right: global___Relation | None = ...,
+        join_condition: pyspark.sql.connect.proto.expressions_pb2.Expression | None = ...,
+        join_type: global___Join.JoinType.ValueType = ...,
+    ) -> None: ...
+    def HasField(
+        self,
+        field_name: typing_extensions.Literal[
+            "join_condition", b"join_condition", "left", b"left", "right", b"right"
+        ],
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "join_condition",
+            b"join_condition",
+            "join_type",
+            b"join_type",
+            "left",
+            b"left",
+            "right",
+            b"right",
+        ],
+    ) -> None: ...
+
+global___LateralJoin = LateralJoin

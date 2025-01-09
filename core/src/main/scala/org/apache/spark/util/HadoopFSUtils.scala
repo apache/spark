@@ -241,6 +241,13 @@ private[spark] object HadoopFSUtils extends Logging {
         logWarning(log"The directory ${MDC(PATH, path)} " +
           log"was not found. Was it deleted very recently?")
         Array.empty[FileStatus]
+      case u: UnsupportedOperationException =>
+        throw new SparkUnsupportedOperationException(
+          errorClass = "FAILED_READ_FILE.UNSUPPORTED_FILE_SYSTEM",
+          messageParameters = Map(
+            "path" -> path.toString,
+            "fileSystemClass" -> fs.getClass.getName,
+            "method" -> u.getStackTrace.head.getMethodName))
     }
 
     val filteredStatuses =

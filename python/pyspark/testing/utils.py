@@ -35,23 +35,6 @@ from typing import (
 )
 from itertools import zip_longest
 
-have_scipy = False
-have_numpy = False
-try:
-    import scipy  # noqa: F401
-
-    have_scipy = True
-except ImportError:
-    # No SciPy, but that's okay, we'll skip those tests
-    pass
-try:
-    import numpy as np  # noqa: F401
-
-    have_numpy = True
-except ImportError:
-    # No NumPy, but that's okay, we'll skip those tests
-    pass
-
 from pyspark import SparkConf
 from pyspark.errors import PySparkAssertionError, PySparkException, PySparkTypeError
 from pyspark.errors.exceptions.captured import CapturedException
@@ -59,13 +42,86 @@ from pyspark.errors.exceptions.base import QueryContextType
 from pyspark.find_spark_home import _find_spark_home
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql import Row
-from pyspark.sql.types import StructType, StructField
+from pyspark.sql.types import StructType, StructField, VariantVal
 from pyspark.sql.functions import col, when
 
 
 __all__ = ["assertDataFrameEqual", "assertSchemaEqual"]
 
 SPARK_HOME = _find_spark_home()
+
+
+def have_package(name: str) -> bool:
+    try:
+        import importlib
+
+        importlib.import_module(name)
+        return True
+    except Exception:
+        return False
+
+
+have_numpy = have_package("numpy")
+numpy_requirement_message = None if have_numpy else "No module named 'numpy'"
+
+have_scipy = have_package("scipy")
+scipy_requirement_message = None if have_scipy else "No module named 'scipy'"
+
+have_sklearn = have_package("sklearn")
+sklearn_requirement_message = None if have_sklearn else "No module named 'sklearn'"
+
+have_torch = have_package("torch")
+torch_requirement_message = None if have_torch else "No module named 'torch'"
+
+have_torcheval = have_package("torcheval")
+torcheval_requirement_message = None if have_torcheval else "No module named 'torcheval'"
+
+have_deepspeed = have_package("deepspeed")
+deepspeed_requirement_message = None if have_deepspeed else "No module named 'deepspeed'"
+
+have_plotly = have_package("plotly")
+plotly_requirement_message = None if have_plotly else "No module named 'plotly'"
+
+have_matplotlib = have_package("matplotlib")
+matplotlib_requirement_message = None if have_matplotlib else "No module named 'matplotlib'"
+
+have_tabulate = have_package("tabulate")
+tabulate_requirement_message = None if have_tabulate else "No module named 'tabulate'"
+
+have_graphviz = have_package("graphviz")
+graphviz_requirement_message = None if have_graphviz else "No module named 'graphviz'"
+
+have_flameprof = have_package("flameprof")
+flameprof_requirement_message = None if have_flameprof else "No module named 'flameprof'"
+
+have_jinja2 = have_package("jinja2")
+jinja2_requirement_message = None if have_jinja2 else "No module named 'jinja2'"
+
+have_openpyxl = have_package("openpyxl")
+openpyxl_requirement_message = None if have_openpyxl else "No module named 'openpyxl'"
+
+pandas_requirement_message = None
+try:
+    from pyspark.sql.pandas.utils import require_minimum_pandas_version
+
+    require_minimum_pandas_version()
+except Exception as e:
+    # If Pandas version requirement is not satisfied, skip related tests.
+    pandas_requirement_message = str(e)
+
+have_pandas = pandas_requirement_message is None
+
+
+pyarrow_requirement_message = None
+try:
+    from pyspark.sql.pandas.utils import require_minimum_pyarrow_version
+
+    require_minimum_pyarrow_version()
+except Exception as e:
+    # If Arrow version requirement is not satisfied, skip related tests.
+    pyarrow_requirement_message = str(e)
+
+have_pyarrow = pyarrow_requirement_message is None
 
 
 def read_int(b):
@@ -288,6 +344,7 @@ class PySparkErrorTestUtils:
         messageParameters: Optional[Dict[str, str]] = None,
         query_context_type: Optional[QueryContextType] = None,
         fragment: Optional[str] = None,
+        matchPVals: bool = False,
     ):
         query_context = exception.getQueryContext()
         assert bool(query_context) == (query_context_type is not None), (
@@ -311,9 +368,30 @@ class PySparkErrorTestUtils:
         # Test message parameters
         expected = messageParameters
         actual = exception.getMessageParameters()
-        self.assertEqual(
-            expected, actual, f"Expected message parameters was '{expected}', got '{actual}'"
-        )
+        if matchPVals:
+            self.assertEqual(
+                len(expected),
+                len(actual),
+                "Expected message parameters count does not match actual message parameters count"
+                f": {len(expected)}, {len(actual)}.",
+            )
+            for key, value in expected.items():
+                self.assertIn(
+                    key,
+                    actual,
+                    f"Expected message parameter key '{key}' was not found "
+                    "in actual message parameters.",
+                )
+                self.assertRegex(
+                    actual[key],
+                    value,
+                    f"Expected message parameter value '{value}' does not match actual message "
+                    f"parameter value '{actual[key]}'.",
+                ),
+        else:
+            self.assertEqual(
+                expected, actual, f"Expected message parameters was '{expected}', got '{actual}'"
+            )
 
         # Test query context
         if query_context:
@@ -899,6 +977,8 @@ def assertDataFrameEqual(
             elif isinstance(val1, Decimal) and isinstance(val2, Decimal):
                 if abs(val1 - val2) > (Decimal(atol) + Decimal(rtol) * abs(val2)):
                     return False
+            elif isinstance(val1, VariantVal) and isinstance(val2, VariantVal):
+                return compare_vals(val1.toPython(), val2.toPython())
             else:
                 if val1 != val2:
                     return False

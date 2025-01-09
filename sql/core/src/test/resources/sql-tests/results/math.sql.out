@@ -42,17 +42,49 @@ struct<round(25, -3):tinyint>
 -- !query
 SELECT round(127y, -1)
 -- !query schema
-struct<round(127, -1):tinyint>
+struct<>
 -- !query output
--126
+org.apache.spark.SparkArithmeticException
+{
+  "errorClass" : "ARITHMETIC_OVERFLOW",
+  "sqlState" : "22003",
+  "messageParameters" : {
+    "alternative" : "",
+    "config" : "\"spark.sql.ansi.enabled\"",
+    "message" : "Overflow"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 22,
+    "fragment" : "round(127y, -1)"
+  } ]
+}
 
 
 -- !query
 SELECT round(-128y, -1)
 -- !query schema
-struct<round(-128, -1):tinyint>
+struct<>
 -- !query output
-126
+org.apache.spark.SparkArithmeticException
+{
+  "errorClass" : "ARITHMETIC_OVERFLOW",
+  "sqlState" : "22003",
+  "messageParameters" : {
+    "alternative" : "",
+    "config" : "\"spark.sql.ansi.enabled\"",
+    "message" : "Overflow"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 23,
+    "fragment" : "round(-128y, -1)"
+  } ]
+}
 
 
 -- !query
@@ -98,17 +130,49 @@ struct<round(525, -3):smallint>
 -- !query
 SELECT round(32767s, -1)
 -- !query schema
-struct<round(32767, -1):smallint>
+struct<>
 -- !query output
--32766
+org.apache.spark.SparkArithmeticException
+{
+  "errorClass" : "ARITHMETIC_OVERFLOW",
+  "sqlState" : "22003",
+  "messageParameters" : {
+    "alternative" : "",
+    "config" : "\"spark.sql.ansi.enabled\"",
+    "message" : "Overflow"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 24,
+    "fragment" : "round(32767s, -1)"
+  } ]
+}
 
 
 -- !query
 SELECT round(-32768s, -1)
 -- !query schema
-struct<round(-32768, -1):smallint>
+struct<>
 -- !query output
-32766
+org.apache.spark.SparkArithmeticException
+{
+  "errorClass" : "ARITHMETIC_OVERFLOW",
+  "sqlState" : "22003",
+  "messageParameters" : {
+    "alternative" : "",
+    "config" : "\"spark.sql.ansi.enabled\"",
+    "message" : "Overflow"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 25,
+    "fragment" : "round(-32768s, -1)"
+  } ]
+}
 
 
 -- !query
@@ -154,17 +218,49 @@ struct<round(525, -3):int>
 -- !query
 SELECT round(2147483647, -1)
 -- !query schema
-struct<round(2147483647, -1):int>
+struct<>
 -- !query output
--2147483646
+org.apache.spark.SparkArithmeticException
+{
+  "errorClass" : "ARITHMETIC_OVERFLOW",
+  "sqlState" : "22003",
+  "messageParameters" : {
+    "alternative" : "",
+    "config" : "\"spark.sql.ansi.enabled\"",
+    "message" : "Overflow"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 28,
+    "fragment" : "round(2147483647, -1)"
+  } ]
+}
 
 
 -- !query
 SELECT round(-2147483647, -1)
 -- !query schema
-struct<round(-2147483647, -1):int>
+struct<>
 -- !query output
-2147483646
+org.apache.spark.SparkArithmeticException
+{
+  "errorClass" : "ARITHMETIC_OVERFLOW",
+  "sqlState" : "22003",
+  "messageParameters" : {
+    "alternative" : "",
+    "config" : "\"spark.sql.ansi.enabled\"",
+    "message" : "Overflow"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 29,
+    "fragment" : "round(-2147483647, -1)"
+  } ]
+}
 
 
 -- !query
@@ -210,17 +306,49 @@ struct<round(525, -3):bigint>
 -- !query
 SELECT round(9223372036854775807L, -1)
 -- !query schema
-struct<round(9223372036854775807, -1):bigint>
+struct<>
 -- !query output
--9223372036854775806
+org.apache.spark.SparkArithmeticException
+{
+  "errorClass" : "ARITHMETIC_OVERFLOW",
+  "sqlState" : "22003",
+  "messageParameters" : {
+    "alternative" : "",
+    "config" : "\"spark.sql.ansi.enabled\"",
+    "message" : "Overflow"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 38,
+    "fragment" : "round(9223372036854775807L, -1)"
+  } ]
+}
 
 
 -- !query
 SELECT round(-9223372036854775808L, -1)
 -- !query schema
-struct<round(-9223372036854775808, -1):bigint>
+struct<>
 -- !query output
-9223372036854775806
+org.apache.spark.SparkArithmeticException
+{
+  "errorClass" : "ARITHMETIC_OVERFLOW",
+  "sqlState" : "22003",
+  "messageParameters" : {
+    "alternative" : "",
+    "config" : "\"spark.sql.ansi.enabled\"",
+    "message" : "Overflow"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 39,
+    "fragment" : "round(-9223372036854775808L, -1)"
+  } ]
+}
 
 
 -- !query
@@ -266,17 +394,49 @@ struct<bround(25, -3):tinyint>
 -- !query
 SELECT bround(127y, -1)
 -- !query schema
-struct<bround(127, -1):tinyint>
+struct<>
 -- !query output
--126
+org.apache.spark.SparkArithmeticException
+{
+  "errorClass" : "ARITHMETIC_OVERFLOW",
+  "sqlState" : "22003",
+  "messageParameters" : {
+    "alternative" : "",
+    "config" : "\"spark.sql.ansi.enabled\"",
+    "message" : "Overflow"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 23,
+    "fragment" : "bround(127y, -1)"
+  } ]
+}
 
 
 -- !query
 SELECT bround(-128y, -1)
 -- !query schema
-struct<bround(-128, -1):tinyint>
+struct<>
 -- !query output
-126
+org.apache.spark.SparkArithmeticException
+{
+  "errorClass" : "ARITHMETIC_OVERFLOW",
+  "sqlState" : "22003",
+  "messageParameters" : {
+    "alternative" : "",
+    "config" : "\"spark.sql.ansi.enabled\"",
+    "message" : "Overflow"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 24,
+    "fragment" : "bround(-128y, -1)"
+  } ]
+}
 
 
 -- !query
@@ -322,17 +482,49 @@ struct<bround(525, -3):smallint>
 -- !query
 SELECT bround(32767s, -1)
 -- !query schema
-struct<bround(32767, -1):smallint>
+struct<>
 -- !query output
--32766
+org.apache.spark.SparkArithmeticException
+{
+  "errorClass" : "ARITHMETIC_OVERFLOW",
+  "sqlState" : "22003",
+  "messageParameters" : {
+    "alternative" : "",
+    "config" : "\"spark.sql.ansi.enabled\"",
+    "message" : "Overflow"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 25,
+    "fragment" : "bround(32767s, -1)"
+  } ]
+}
 
 
 -- !query
 SELECT bround(-32768s, -1)
 -- !query schema
-struct<bround(-32768, -1):smallint>
+struct<>
 -- !query output
-32766
+org.apache.spark.SparkArithmeticException
+{
+  "errorClass" : "ARITHMETIC_OVERFLOW",
+  "sqlState" : "22003",
+  "messageParameters" : {
+    "alternative" : "",
+    "config" : "\"spark.sql.ansi.enabled\"",
+    "message" : "Overflow"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 26,
+    "fragment" : "bround(-32768s, -1)"
+  } ]
+}
 
 
 -- !query
@@ -378,17 +570,49 @@ struct<bround(525, -3):int>
 -- !query
 SELECT bround(2147483647, -1)
 -- !query schema
-struct<bround(2147483647, -1):int>
+struct<>
 -- !query output
--2147483646
+org.apache.spark.SparkArithmeticException
+{
+  "errorClass" : "ARITHMETIC_OVERFLOW",
+  "sqlState" : "22003",
+  "messageParameters" : {
+    "alternative" : "",
+    "config" : "\"spark.sql.ansi.enabled\"",
+    "message" : "Overflow"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 29,
+    "fragment" : "bround(2147483647, -1)"
+  } ]
+}
 
 
 -- !query
 SELECT bround(-2147483647, -1)
 -- !query schema
-struct<bround(-2147483647, -1):int>
+struct<>
 -- !query output
-2147483646
+org.apache.spark.SparkArithmeticException
+{
+  "errorClass" : "ARITHMETIC_OVERFLOW",
+  "sqlState" : "22003",
+  "messageParameters" : {
+    "alternative" : "",
+    "config" : "\"spark.sql.ansi.enabled\"",
+    "message" : "Overflow"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 30,
+    "fragment" : "bround(-2147483647, -1)"
+  } ]
+}
 
 
 -- !query
@@ -434,17 +658,49 @@ struct<bround(525, -3):bigint>
 -- !query
 SELECT bround(9223372036854775807L, -1)
 -- !query schema
-struct<bround(9223372036854775807, -1):bigint>
+struct<>
 -- !query output
--9223372036854775806
+org.apache.spark.SparkArithmeticException
+{
+  "errorClass" : "ARITHMETIC_OVERFLOW",
+  "sqlState" : "22003",
+  "messageParameters" : {
+    "alternative" : "",
+    "config" : "\"spark.sql.ansi.enabled\"",
+    "message" : "Overflow"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 39,
+    "fragment" : "bround(9223372036854775807L, -1)"
+  } ]
+}
 
 
 -- !query
 SELECT bround(-9223372036854775808L, -1)
 -- !query schema
-struct<bround(-9223372036854775808, -1):bigint>
+struct<>
 -- !query output
-9223372036854775806
+org.apache.spark.SparkArithmeticException
+{
+  "errorClass" : "ARITHMETIC_OVERFLOW",
+  "sqlState" : "22003",
+  "messageParameters" : {
+    "alternative" : "",
+    "config" : "\"spark.sql.ansi.enabled\"",
+    "message" : "Overflow"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 40,
+    "fragment" : "bround(-9223372036854775808L, -1)"
+  } ]
+}
 
 
 -- !query
@@ -474,25 +730,73 @@ struct<conv(9223372036854775808, 10, 16):string>
 -- !query
 SELECT conv('92233720368547758070', 10, 16)
 -- !query schema
-struct<conv(92233720368547758070, 10, 16):string>
+struct<>
 -- !query output
-FFFFFFFFFFFFFFFF
+org.apache.spark.SparkArithmeticException
+{
+  "errorClass" : "ARITHMETIC_OVERFLOW",
+  "sqlState" : "22003",
+  "messageParameters" : {
+    "alternative" : "",
+    "config" : "\"spark.sql.ansi.enabled\"",
+    "message" : "Overflow in function conv()"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 43,
+    "fragment" : "conv('92233720368547758070', 10, 16)"
+  } ]
+}
 
 
 -- !query
 SELECT conv('9223372036854775807', 36, 10)
 -- !query schema
-struct<conv(9223372036854775807, 36, 10):string>
+struct<>
 -- !query output
-18446744073709551615
+org.apache.spark.SparkArithmeticException
+{
+  "errorClass" : "ARITHMETIC_OVERFLOW",
+  "sqlState" : "22003",
+  "messageParameters" : {
+    "alternative" : "",
+    "config" : "\"spark.sql.ansi.enabled\"",
+    "message" : "Overflow in function conv()"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 42,
+    "fragment" : "conv('9223372036854775807', 36, 10)"
+  } ]
+}
 
 
 -- !query
 SELECT conv('-9223372036854775807', 36, 10)
 -- !query schema
-struct<conv(-9223372036854775807, 36, 10):string>
+struct<>
 -- !query output
-18446744073709551615
+org.apache.spark.SparkArithmeticException
+{
+  "errorClass" : "ARITHMETIC_OVERFLOW",
+  "sqlState" : "22003",
+  "messageParameters" : {
+    "alternative" : "",
+    "config" : "\"spark.sql.ansi.enabled\"",
+    "message" : "Overflow in function conv()"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 43,
+    "fragment" : "conv('-9223372036854775807', 36, 10)"
+  } ]
+}
 
 
 -- !query
@@ -570,9 +874,25 @@ struct<(+ 25.5):double>
 -- !query
 SELECT POSITIVE("invalid")
 -- !query schema
-struct<(+ invalid):double>
+struct<>
 -- !query output
-NULL
+org.apache.spark.SparkNumberFormatException
+{
+  "errorClass" : "CAST_INVALID_INPUT",
+  "sqlState" : "22018",
+  "messageParameters" : {
+    "expression" : "'invalid'",
+    "sourceType" : "\"STRING\"",
+    "targetType" : "\"DOUBLE\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 26,
+    "fragment" : "POSITIVE(\"invalid\")"
+  } ]
+}
 
 
 -- !query

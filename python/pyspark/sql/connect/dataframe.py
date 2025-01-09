@@ -79,17 +79,15 @@ from pyspark.sql.connect.streaming.readwriter import DataStreamWriter
 from pyspark.sql.column import Column
 from pyspark.sql.connect.expressions import (
     ColumnReference,
+    SubqueryExpression,
     UnresolvedRegex,
     UnresolvedStar,
 )
 from pyspark.sql.connect.functions import builtin as F
 from pyspark.sql.pandas.types import from_arrow_schema, to_arrow_schema
 from pyspark.sql.pandas.functions import _validate_pandas_udf  # type: ignore[attr-defined]
+from pyspark.sql.table_arg import TableArg
 
-try:
-    from pyspark.sql.plot import PySparkPlotAccessor
-except ImportError:
-    PySparkPlotAccessor = None  # type: ignore
 
 if TYPE_CHECKING:
     from pyspark.sql.connect._typing import (
@@ -687,6 +685,22 @@ class DataFrame(ParentDataFrame):
             how = how.lower().replace("_", "")
         return DataFrame(
             plan.Join(left=self._plan, right=other._plan, on=on, how=how),  # type: ignore[arg-type]
+            session=self._session,
+        )
+
+    def lateralJoin(
+        self,
+        other: ParentDataFrame,
+        on: Optional[Column] = None,
+        how: Optional[str] = None,
+    ) -> ParentDataFrame:
+        self._check_same_session(other)
+        if how is not None and isinstance(how, str):
+            how = how.lower().replace("_", "")
+        return DataFrame(
+            plan.LateralJoin(
+                left=self._plan, right=cast(plan.LogicalPlan, other._plan), on=on, how=how
+            ),
             session=self._session,
         )
 
@@ -1788,6 +1802,23 @@ class DataFrame(ParentDataFrame):
             self._session,
         )
 
+    def asTable(self) -> TableArg:
+        # TODO(SPARK-50393): Support DataFrame conversion to table argument in Spark Connect
+        raise PySparkNotImplementedError(
+            errorClass="NOT_IMPLEMENTED",
+            messageParameters={"feature": "asTable()"},
+        )
+
+    def scalar(self) -> Column:
+        from pyspark.sql.connect.column import Column as ConnectColumn
+
+        return ConnectColumn(SubqueryExpression(self._plan, subquery_type="scalar"))
+
+    def exists(self) -> Column:
+        from pyspark.sql.connect.column import Column as ConnectColumn
+
+        return ConnectColumn(SubqueryExpression(self._plan, subquery_type="exists"))
+
     @property
     def schema(self) -> StructType:
         # Schema caching is correct in most cases. Connect is lazy by nature. This means that
@@ -2013,6 +2044,8 @@ class DataFrame(ParentDataFrame):
         from pyspark.sql.connect.udf import UserDefinedFunction
 
         _validate_pandas_udf(func, evalType)
+        if isinstance(schema, str):
+            schema = cast(StructType, self._session._parse_ddl(schema))
         udf_obj = UserDefinedFunction(
             func,
             returnType=schema,
@@ -2166,7 +2199,9 @@ class DataFrame(ParentDataFrame):
         return self._execution_info
 
     @property
-    def plot(self) -> PySparkPlotAccessor:
+    def plot(self) -> "PySparkPlotAccessor":  # type: ignore[name-defined] # noqa: F821
+        from pyspark.sql.plot import PySparkPlotAccessor
+
         return PySparkPlotAccessor(self)
 
 

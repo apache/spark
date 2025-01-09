@@ -20,7 +20,6 @@ import java.util.UUID
 import java.util.concurrent.TimeUnit.NANOSECONDS
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.Path
 
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
@@ -76,17 +75,32 @@ case class TransformWithStateExec(
     initialStateDataAttrs: Seq[Attribute],
     initialStateDeserializer: Expression,
     initialState: SparkPlan)
-  extends BinaryExecNode with StateStoreWriter with WatermarkSupport with ObjectProducerExec {
+  extends BinaryExecNode
+  with StateStoreWriter
+  with WatermarkSupport
+  with ObjectProducerExec
+  with TransformWithStateMetadataUtils {
 
   override def shortName: String = "transformWithStateExec"
 
   // dummy value schema, the real schema will get during state variable init time
   private val DUMMY_VALUE_ROW_SCHEMA = new StructType().add("value", BinaryType)
 
+  // We need to just initialize key and value deserializer once per partition.
+  // The deserializers need to be lazily created on the executor since they
+  // are not serializable.
+  // Ideas for for improvement can be found here:
+  // https://issues.apache.org/jira/browse/SPARK-50437
+  private lazy val getKeyObj =
+    ObjectOperator.deserializeRowToObject(keyDeserializer, groupingAttributes)
+
+  private lazy val getValueObj =
+    ObjectOperator.deserializeRowToObject(valueDeserializer, dataAttributes)
+
   override def shouldRunAnotherBatch(newInputWatermark: Long): Boolean = {
     if (timeMode == ProcessingTime) {
-      // TODO: check if we can return true only if actual timers are registered, or there is
-      // expired state
+      // TODO SPARK-50180: check if we can return true only if actual timers are registered,
+      //  or there is expired state
       true
     } else if (outputMode == OutputMode.Append || outputMode == OutputMode.Update) {
       eventTimeWatermarkForEviction.isDefined &&
@@ -112,22 +126,6 @@ case class TransformWithStateExec(
   }
 
   /**
-   * Fetching the columnFamilySchemas from the StatefulProcessorHandle
-   * after init is called.
-   */
-  private def getColFamilySchemas(): Map[String, StateStoreColFamilySchema] = {
-    val columnFamilySchemas = getDriverProcessorHandle().getColumnFamilySchemas
-    closeProcessorHandle()
-    columnFamilySchemas
-  }
-
-  private def getStateVariableInfos(): Map[String, TransformWithStateVariableInfo] = {
-    val stateVariableInfos = getDriverProcessorHandle().getStateVariableInfos
-    closeProcessorHandle()
-    stateVariableInfos
-  }
-
-  /**
    * This method is used for the driver-side stateful processor after we
    * have collected all the necessary schemas.
    * This instance of the stateful processor won't be used again.
@@ -135,6 +133,22 @@ case class TransformWithStateExec(
   private def closeProcessorHandle(): Unit = {
     statefulProcessor.close()
     statefulProcessor.setHandle(null)
+  }
+
+  /**
+   * Fetching the columnFamilySchemas from the StatefulProcessorHandle
+   * after init is called.
+   */
+  override def getColFamilySchemas(): Map[String, StateStoreColFamilySchema] = {
+    val columnFamilySchemas = getDriverProcessorHandle().getColumnFamilySchemas
+    closeProcessorHandle()
+    columnFamilySchemas
+  }
+
+  override def getStateVariableInfos(): Map[String, TransformWithStateVariableInfo] = {
+    val stateVariableInfos = getDriverProcessorHandle().getStateVariableInfos
+    closeProcessorHandle()
+    stateVariableInfos
   }
 
   /**
@@ -230,11 +244,6 @@ case class TransformWithStateExec(
 
   private def handleInputRows(keyRow: UnsafeRow, valueRowIter: Iterator[InternalRow]):
     Iterator[InternalRow] = {
-    val getKeyObj =
-      ObjectOperator.deserializeRowToObject(keyDeserializer, groupingAttributes)
-
-    val getValueObj =
-      ObjectOperator.deserializeRowToObject(valueDeserializer, dataAttributes)
 
     val getOutputRow = ObjectOperator.wrapObjectToRow(outputObjectType)
 
@@ -250,8 +259,7 @@ case class TransformWithStateExec(
     val mappedIterator = statefulProcessor.handleInputRows(
       keyObj,
       valueObjIter,
-      new TimerValuesImpl(batchTimestampMs, eventTimeWatermarkForEviction),
-      new ExpiredTimerInfoImpl(isValid = false)).map { obj =>
+      new TimerValuesImpl(batchTimestampMs, eventTimeWatermarkForEviction)).map { obj =>
       getOutputRow(obj)
     }
     ImplicitGroupingKeyTracker.removeImplicitKey()
@@ -262,8 +270,6 @@ case class TransformWithStateExec(
   private def processInitialStateRows(
       keyRow: UnsafeRow,
       initStateIter: Iterator[InternalRow]): Unit = {
-    val getKeyObj =
-      ObjectOperator.deserializeRowToObject(keyDeserializer, groupingAttributes)
 
     val getInitStateValueObj =
       ObjectOperator.deserializeRowToObject(initialStateDeserializer, initialStateDataAttrs)
@@ -272,13 +278,9 @@ case class TransformWithStateExec(
     ImplicitGroupingKeyTracker.setImplicitKey(keyObj)
     val initStateObjIter = initStateIter.map(getInitStateValueObj.apply)
 
-    var seenInitStateOnKey = false
     initStateObjIter.foreach { initState =>
-      // cannot re-initialize state on the same grouping key during initial state handling
-      if (seenInitStateOnKey) {
-        throw StateStoreErrors.cannotReInitializeStateOnKey(keyObj.toString)
-      }
-      seenInitStateOnKey = true
+      // allow multiple initial state rows on the same grouping key for integration
+      // with state data source reader with initial state
       statefulProcessor
         .asInstanceOf[StatefulProcessorWithInitialState[Any, Any, Any, Any]]
         .handleInitialState(keyObj, initState,
@@ -301,11 +303,10 @@ case class TransformWithStateExec(
       processorHandle: StatefulProcessorHandleImpl): Iterator[InternalRow] = {
     val getOutputRow = ObjectOperator.wrapObjectToRow(outputObjectType)
     ImplicitGroupingKeyTracker.setImplicitKey(keyObj)
-    val mappedIterator = statefulProcessor.handleInputRows(
+    val mappedIterator = statefulProcessor.handleExpiredTimer(
       keyObj,
-      Iterator.empty,
       new TimerValuesImpl(batchTimestampMs, eventTimeWatermarkForEviction),
-      new ExpiredTimerInfoImpl(isValid = true, Some(expiryTimestampMs))).map { obj =>
+      new ExpiredTimerInfoImpl(Some(expiryTimestampMs))).map { obj =>
       getOutputRow(obj)
     }
     ImplicitGroupingKeyTracker.removeImplicitKey()
@@ -349,11 +350,20 @@ case class TransformWithStateExec(
     CompletionIterator[InternalRow, Iterator[InternalRow]] = {
     val allUpdatesTimeMs = longMetric("allUpdatesTimeMs")
     val commitTimeMs = longMetric("commitTimeMs")
-    val timeoutLatencyMs = longMetric("allRemovalsTimeMs")
+    val timerProcessingTimeMs = longMetric("timerProcessingTimeMs")
+    // In TWS, allRemovalsTimeMs is the time taken to remove state due to TTL.
+    // It does not measure any time taken by explicit calls from the user's state processor
+    // that clear()s state variables.
+    //
+    // allRemovalsTimeMs is not granular enough to distinguish between user-caused removals and
+    // TTL-caused removals. We could leave this empty and have two custom metrics, but leaving
+    // this as always 0 will be confusing for users. We could also time every call to clear(), but
+    // that could have performance penalties. So, we choose to capture TTL-only removals.
+    val allRemovalsTimeMs = longMetric("allRemovalsTimeMs")
 
     val currentTimeNs = System.nanoTime
     val updatesStartTimeNs = currentTimeNs
-    var timeoutProcessingStartTimeNs = currentTimeNs
+    var timerProcessingStartTimeNs = currentTimeNs
 
     // If timeout is based on event time, then filter late data based on watermark
     val filteredIter = watermarkPredicateForDataForLateEvents match {
@@ -366,9 +376,13 @@ case class TransformWithStateExec(
     val newDataProcessorIter =
       CompletionIterator[InternalRow, Iterator[InternalRow]](
       processNewData(filteredIter), {
-        // Once the input is processed, mark the start time for timeout processing to measure
+        // Note: Due to the iterator lazy execution, this metric also captures the time taken
+        // by the upstream (consumer) operators in addition to the processing in this operator.
+        allUpdatesTimeMs += NANOSECONDS.toMillis(System.nanoTime - updatesStartTimeNs)
+
+        // Once the input is processed, mark the start time for timer processing to measure
         // it separately from the overall processing time.
-        timeoutProcessingStartTimeNs = System.nanoTime
+        timerProcessingStartTimeNs = System.nanoTime
         processorHandle.setHandleState(StatefulProcessorHandleState.DATA_PROCESSED)
     })
 
@@ -382,9 +396,10 @@ case class TransformWithStateExec(
       private def getIterator(): Iterator[InternalRow] =
         CompletionIterator[InternalRow, Iterator[InternalRow]](
           processTimers(timeMode, processorHandle), {
-          // Note: `timeoutLatencyMs` also includes the time the parent operator took for
-          // processing output returned through iterator.
-          timeoutLatencyMs += NANOSECONDS.toMillis(System.nanoTime - timeoutProcessingStartTimeNs)
+          // Note: `timerProcessingTimeMs` also includes the time the parent operators take for
+          // processing output returned from the timers that fire.
+          timerProcessingTimeMs +=
+            NANOSECONDS.toMillis(System.nanoTime - timerProcessingStartTimeNs)
           processorHandle.setHandleState(StatefulProcessorHandleState.TIMER_PROCESSED)
         })
     }
@@ -393,13 +408,12 @@ case class TransformWithStateExec(
     // Return an iterator of all the rows generated by all the keys, such that when fully
     // consumed, all the state updates will be committed by the state store
     CompletionIterator[InternalRow, Iterator[InternalRow]](outputIterator, {
-      // Note: Due to the iterator lazy execution, this metric also captures the time taken
-      // by the upstream (consumer) operators in addition to the processing in this operator.
-      allUpdatesTimeMs += NANOSECONDS.toMillis(System.nanoTime - updatesStartTimeNs)
+      allRemovalsTimeMs += timeTakenMs {
+        processorHandle.doTtlCleanup()
+      }
+
       commitTimeMs += timeTakenMs {
         if (isStreaming) {
-          // clean up any expired user state
-          processorHandle.doTtlCleanup()
           store.commit()
         } else {
           store.abort()
@@ -416,12 +430,17 @@ case class TransformWithStateExec(
   // operator specific metrics
   override def customStatefulOperatorMetrics: Seq[StatefulOperatorCustomMetric] = {
     Seq(
+      // metrics around initial state
+      StatefulOperatorCustomSumMetric("initialStateProcessingTimeMs",
+        "Number of milliseconds taken to process all initial state"),
       // metrics around state variables
       StatefulOperatorCustomSumMetric("numValueStateVars", "Number of value state variables"),
       StatefulOperatorCustomSumMetric("numListStateVars", "Number of list state variables"),
       StatefulOperatorCustomSumMetric("numMapStateVars", "Number of map state variables"),
       StatefulOperatorCustomSumMetric("numDeletedStateVars", "Number of deleted state variables"),
       // metrics around timers
+      StatefulOperatorCustomSumMetric("timerProcessingTimeMs",
+        "Number of milliseconds taken to process all timers"),
       StatefulOperatorCustomSumMetric("numRegisteredTimers", "Number of registered timers"),
       StatefulOperatorCustomSumMetric("numDeletedTimers", "Number of deleted timers"),
       StatefulOperatorCustomSumMetric("numExpiredTimers", "Number of expired timers"),
@@ -441,84 +460,22 @@ case class TransformWithStateExec(
       hadoopConf: Configuration,
       batchId: Long,
       stateSchemaVersion: Int): List[StateSchemaValidationResult] = {
-    assert(stateSchemaVersion >= 3)
-    val newSchemas = getColFamilySchemas()
-    val stateSchemaDir = stateSchemaDirPath()
-    val newStateSchemaFilePath =
-      new Path(stateSchemaDir, s"${batchId}_${UUID.randomUUID().toString}")
-    val metadataPath = new Path(getStateInfo.checkpointLocation, s"${getStateInfo.operatorId}")
-    val metadataReader = OperatorStateMetadataReader.createReader(
-      metadataPath, hadoopConf, operatorStateMetadataVersion, batchId)
-    val operatorStateMetadata = try {
-      metadataReader.read()
-    } catch {
-        // If this is the first time we are running the query, there will be no metadata
-        // and this error is expected. In this case, we return None.
-        case ex: Exception if batchId == 0 =>
-          None
-    }
-
-    val oldStateSchemaFilePath: Option[Path] = operatorStateMetadata match {
-      case Some(metadata) =>
-        metadata match {
-          case v2: OperatorStateMetadataV2 =>
-            Some(new Path(v2.stateStoreInfo.head.stateSchemaFilePath))
-          case _ => None
-        }
-      case None => None
-    }
-    List(StateSchemaCompatibilityChecker.
-      validateAndMaybeEvolveStateSchema(getStateInfo, hadoopConf,
-      newSchemas.values.toList, session.sessionState, stateSchemaVersion,
-      storeName = StateStoreId.DEFAULT_STORE_NAME,
-      oldSchemaFilePath = oldStateSchemaFilePath,
-      newSchemaFilePath = Some(newStateSchemaFilePath)))
+    val info = getStateInfo
+    validateAndWriteStateSchema(hadoopConf, batchId, stateSchemaVersion,
+      info, session, operatorStateMetadataVersion)
   }
 
   /** Metadata of this stateful operator and its states stores. */
   override def operatorStateMetadata(
       stateSchemaPaths: List[String]): OperatorStateMetadata = {
     val info = getStateInfo
-    val operatorInfo = OperatorInfoV1(info.operatorId, shortName)
-    // stateSchemaFilePath should be populated at this point
-    val stateStoreInfo =
-      Array(StateStoreMetadataV2(
-        StateStoreId.DEFAULT_STORE_NAME, 0, info.numPartitions, stateSchemaPaths.head))
-
-    val operatorProperties = TransformWithStateOperatorProperties(
-      timeMode.toString,
-      outputMode.toString,
-      getStateVariableInfos().values.toList
-    )
-    OperatorStateMetadataV2(operatorInfo, stateStoreInfo, operatorProperties.json)
-  }
-
-  private def stateSchemaDirPath(): Path = {
-    val storeName = StateStoreId.DEFAULT_STORE_NAME
-    val stateCheckpointPath =
-      new Path(getStateInfo.checkpointLocation,
-        s"${getStateInfo.operatorId.toString}")
-
-    val stateSchemaPath = new Path(stateCheckpointPath, "_stateSchema")
-    val storeNamePath = new Path(stateSchemaPath, storeName)
-    storeNamePath
+    getOperatorStateMetadata(stateSchemaPaths, info, shortName, timeMode, outputMode)
   }
 
   override def validateNewMetadata(
       oldOperatorMetadata: OperatorStateMetadata,
       newOperatorMetadata: OperatorStateMetadata): Unit = {
-    (oldOperatorMetadata, newOperatorMetadata) match {
-      case (
-        oldMetadataV2: OperatorStateMetadataV2,
-        newMetadataV2: OperatorStateMetadataV2) =>
-        val oldOperatorProps = TransformWithStateOperatorProperties.fromJson(
-          oldMetadataV2.operatorPropertiesJson)
-        val newOperatorProps = TransformWithStateOperatorProperties.fromJson(
-          newMetadataV2.operatorPropertiesJson)
-        TransformWithStateOperatorProperties.validateOperatorProperties(
-          oldOperatorProps, newOperatorProps)
-      case (_, _) =>
-    }
+    validateNewMetadataForTWS(oldOperatorMetadata, newOperatorMetadata)
   }
 
   override protected def doExecute(): RDD[InternalRow] = {
@@ -661,6 +618,8 @@ case class TransformWithStateExec(
     statefulProcessor.init(outputMode, timeMode)
     processorHandle.setHandleState(StatefulProcessorHandleState.INITIALIZED)
 
+    val initialStateProcTimeMs = longMetric("initialStateProcessingTimeMs")
+    val initialStateStartTimeNs = System.nanoTime
     // Check if is first batch
     // Only process initial states for first batch
     if (processorHandle.getQueryInfo().getBatchId == 0) {
@@ -673,6 +632,7 @@ case class TransformWithStateExec(
           processInitialStateRows(keyRow.asInstanceOf[UnsafeRow], valueRowIter)
       }
     }
+    initialStateProcTimeMs += NANOSECONDS.toMillis(System.nanoTime - initialStateStartTimeNs)
 
     processDataWithPartition(childDataIterator, store, processorHandle)
   }
@@ -680,14 +640,10 @@ case class TransformWithStateExec(
   private def validateTimeMode(): Unit = {
     timeMode match {
       case ProcessingTime =>
-        if (batchTimestampMs.isEmpty) {
-          StateStoreErrors.missingTimeValues(timeMode.toString)
-        }
+        TransformWithStateVariableUtils.validateTimeMode(timeMode, batchTimestampMs)
 
       case EventTime =>
-        if (eventTimeWatermarkForEviction.isEmpty) {
-          StateStoreErrors.missingTimeValues(timeMode.toString)
-        }
+        TransformWithStateVariableUtils.validateTimeMode(timeMode, eventTimeWatermarkForEviction)
 
       case _ =>
     }

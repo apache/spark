@@ -273,8 +273,9 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with 
   }
 
   test("json_tuple escaping") {
-    GenerateUnsafeProjection.generate(
-      JsonTuple(Literal("\"quote") ::  Literal("\"quote") :: Nil) :: Nil)
+    checkJsonTuple(
+      JsonTuple(Literal("\"quote") ::  Literal("\"quote") :: Nil),
+      InternalRow.fromSeq(Seq(null).map(UTF8String.fromString)))
   }
 
   test("json_tuple - hive key 1") {
@@ -420,7 +421,7 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with 
   test("from_json escaping") {
     val schema = StructType(StructField("\"quote", IntegerType) :: Nil)
     GenerateUnsafeProjection.generate(
-      JsonToStructs(schema, Map.empty, Literal("\"quote"), UTC_OPT).replacement :: Nil)
+      JsonToStructs(schema, Map.empty, Literal("\"quote"), UTC_OPT) :: Nil)
   }
 
   test("from_json") {
@@ -582,7 +583,7 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with 
     val schema = StructType(StructField("\"quote", IntegerType) :: Nil)
     val struct = Literal.create(create_row(1), schema)
     GenerateUnsafeProjection.generate(
-      StructsToJson(Map.empty, struct, UTC_OPT) :: Nil)
+      StructsToJson(Map.empty, struct, UTC_OPT).replacement :: Nil)
   }
 
   test("to_json - struct") {
@@ -729,8 +730,7 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with 
   test("from/to json - interval support") {
     val schema = StructType(StructField("i", CalendarIntervalType) :: Nil)
     checkEvaluation(
-      JsonToStructs(schema, Map.empty, Literal.create("""{"i":"1 year 1 day"}""", StringType),
-        UTC_OPT),
+      JsonToStructs(schema, Map.empty, Literal.create("""{"i":"1 year 1 day"}""", StringType)),
       InternalRow(new CalendarInterval(12, 1, 0)))
 
     Seq(MapType(CalendarIntervalType, IntegerType), MapType(IntegerType, CalendarIntervalType))

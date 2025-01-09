@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.hive.client
 
-import java.io.PrintStream
+import java.io.{OutputStream, PrintStream}
 import java.lang.{Iterable => JIterable}
 import java.lang.reflect.InvocationTargetException
 import java.nio.charset.StandardCharsets.UTF_8
@@ -28,6 +28,7 @@ import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
 
+import org.apache.commons.lang3.exception.ExceptionUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.common.StatsSetupConst
@@ -44,7 +45,7 @@ import org.apache.hadoop.hive.serde2.MetadataTypedColumnsetSerDe
 import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
 import org.apache.hadoop.security.UserGroupInformation
 
-import org.apache.spark.{SparkConf, SparkException}
+import org.apache.spark.{SparkConf, SparkException, SparkThrowable}
 import org.apache.spark.deploy.SparkHadoopUtil.SOURCE_SPARK
 import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.internal.LogKeys._
@@ -55,12 +56,13 @@ import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
-import org.apache.spark.sql.catalyst.util.CharVarcharUtils
+import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, QuotingUtils, StringConcat}
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces._
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.QueryExecutionException
 import org.apache.spark.sql.hive.{HiveExternalCatalog, HiveUtils}
 import org.apache.spark.sql.hive.HiveExternalCatalog.DATASOURCE_SCHEMA
+import org.apache.spark.sql.hive.HiveUtils.QUOTE_HIVE_STRUCT_FIELD_NAME
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.util.{CircularBuffer, Utils}
@@ -121,6 +123,7 @@ private[hive] class HiveClientImpl(
     case hive.v2_3 => new Shim_v2_3()
     case hive.v3_0 => new Shim_v3_0()
     case hive.v3_1 => new Shim_v3_1()
+    case hive.v4_0 => new Shim_v4_0()
   }
 
   // Create an internal session state for this HiveClientImpl.
@@ -177,8 +180,10 @@ private[hive] class HiveClientImpl(
     // got changed. We reset it to clientLoader.ClassLoader here.
     state.getConf.setClassLoader(clientLoader.classLoader)
     shim.setCurrentSessionState(state)
-    state.out = new PrintStream(outputBuffer, true, UTF_8.name())
-    state.err = new PrintStream(outputBuffer, true, UTF_8.name())
+    val clz = state.getClass.getField("out").getType.asInstanceOf[Class[_ <: PrintStream]]
+    val ctor = clz.getConstructor(classOf[OutputStream], classOf[Boolean], classOf[String])
+    state.getClass.getField("out").set(state, ctor.newInstance(outputBuffer, true, UTF_8.name()))
+    state.getClass.getField("err").set(state, ctor.newInstance(outputBuffer, true, UTF_8.name()))
     state
   }
 
@@ -307,15 +312,27 @@ private[hive] class HiveClientImpl(
   }
 
   def setOut(stream: PrintStream): Unit = withHiveState {
-    state.out = stream
+    val ctor = state.getClass.getField("out")
+      .getType
+      .asInstanceOf[Class[_ <: PrintStream]]
+      .getConstructor(classOf[OutputStream])
+    state.getClass.getField("out").set(state, ctor.newInstance(stream))
   }
 
   def setInfo(stream: PrintStream): Unit = withHiveState {
-    state.info = stream
+    val ctor = state.getClass.getField("info")
+      .getType
+      .asInstanceOf[Class[_ <: PrintStream]]
+      .getConstructor(classOf[OutputStream])
+    state.getClass.getField("info").set(state, ctor.newInstance(stream))
   }
 
   def setError(stream: PrintStream): Unit = withHiveState {
-    state.err = stream
+    val ctor = state.getClass.getField("err")
+      .getType
+      .asInstanceOf[Class[_ <: PrintStream]]
+      .getConstructor(classOf[OutputStream])
+    state.getClass.getField("err").set(state, ctor.newInstance(stream))
   }
 
   private def setCurrentDatabaseRaw(db: String): Unit = {
@@ -501,6 +518,8 @@ private[hive] class HiveClientImpl(
     val excludedTableProperties = HiveStatisticsProperties ++ Set(
       // The property value of "comment" is moved to the dedicated field "comment"
       "comment",
+      // The property value of "collation" is moved to the dedicated field "collation"
+      "collation",
       // For EXTERNAL_TABLE, the table properties has a particular field "EXTERNAL". This is added
       // in the function toHiveTable.
       "EXTERNAL"
@@ -510,6 +529,7 @@ private[hive] class HiveClientImpl(
       case (key, _) => excludedTableProperties.contains(key)
     }
     val comment = properties.get("comment")
+    val collation = properties.get("collation")
 
     CatalogTable(
       identifier = TableIdentifier(h.getTableName, Option(h.getDbName)),
@@ -552,6 +572,7 @@ private[hive] class HiveClientImpl(
       properties = filteredProperties,
       stats = readHiveStats(properties),
       comment = comment,
+      collation = collation,
       // In older versions of Spark(before 2.2.0), we expand the view original text and
       // store that into `viewExpandedText`, that should be used in view resolution.
       // We get `viewExpandedText` as viewText, and also get `viewOriginalText` in order to
@@ -564,7 +585,6 @@ private[hive] class HiveClientImpl(
   }
 
   override def createTable(table: CatalogTable, ignoreIfExists: Boolean): Unit = withHiveState {
-    verifyColumnDataType(table.dataSchema)
     shim.createTable(client, toHiveTable(table, Some(userName)), ignoreIfExists)
   }
 
@@ -584,7 +604,6 @@ private[hive] class HiveClientImpl(
     // these properties are still available to the others that share the same Hive metastore.
     // If users explicitly alter these Hive-specific properties through ALTER TABLE DDL, we respect
     // these user-specified values.
-    verifyColumnDataType(table.dataSchema)
     val hiveTable = toHiveTable(
       table.copy(properties = table.ignoredProperties ++ table.properties), Some(userName))
     // Do not use `table.qualifiedName` here because this may be a rename
@@ -608,7 +627,6 @@ private[hive] class HiveClientImpl(
       newDataSchema: StructType,
       schemaProps: Map[String, String]): Unit = withHiveState {
     val oldTable = shim.getTable(client, dbName, tableName)
-    verifyColumnDataType(newDataSchema)
     val hiveCols = newDataSchema.map(toHiveColumn)
     oldTable.setFields(hiveCols.asJava)
 
@@ -629,21 +647,22 @@ private[hive] class HiveClientImpl(
   }
 
   override def createPartitions(
-      db: String,
-      table: String,
+      table: CatalogTable,
       parts: Seq[CatalogTablePartition],
       ignoreIfExists: Boolean): Unit = withHiveState {
     def replaceExistException(e: Throwable): Unit = e match {
       case _: HiveException if e.getCause.isInstanceOf[AlreadyExistsException] =>
-        val hiveTable = client.getTable(db, table)
+        val db = table.identifier.database.getOrElse(state.getCurrentDatabase)
+        val tableName = table.identifier.table
+        val hiveTable = client.getTable(db, tableName)
         val existingParts = parts.filter { p =>
           shim.getPartitions(client, hiveTable, p.spec.asJava).nonEmpty
         }
-        throw new PartitionsAlreadyExistException(db, table, existingParts.map(_.spec))
+        throw new PartitionsAlreadyExistException(db, tableName, existingParts.map(_.spec))
       case _ => throw e
     }
     try {
-      shim.createPartitions(client, db, table, parts, ignoreIfExists)
+      shim.createPartitions(client, toHiveTable(table), parts, ignoreIfExists)
     } catch {
       case e: InvocationTargetException => replaceExistException(e.getCause)
       case e: Throwable => replaceExistException(e)
@@ -861,8 +880,19 @@ private[hive] class HiveClientImpl(
       // Since HIVE-18238(Hive 3.0.0), the Driver.close function's return type changed
       // and the CommandProcessorFactory.clean function removed.
       driver.getClass.getMethod("close").invoke(driver)
-      if (version != hive.v3_0 && version != hive.v3_1) {
+      if (version != hive.v3_0 && version != hive.v3_1 && version != hive.v4_0) {
         CommandProcessorFactory.clean(conf)
+      }
+    }
+
+    def getResponseCode(response: CommandProcessorResponse): Int = {
+      if (version < hive.v4_0) {
+        response.getResponseCode
+      } else {
+        // Since Hive 4.0, response code is removed from CommandProcessorResponse.
+        // Here we simply return 0 for the positive cases as for error cases it will
+        // throw exceptions early.
+        0
       }
     }
 
@@ -878,30 +908,44 @@ private[hive] class HiveClientImpl(
       val proc = shim.getCommandProcessor(tokens(0), conf)
       proc match {
         case driver: Driver =>
-          val response: CommandProcessorResponse = driver.run(cmd)
-          // Throw an exception if there is an error in query processing.
-          if (response.getResponseCode != 0) {
+          try {
+            val response: CommandProcessorResponse = driver.run(cmd)
+            if (getResponseCode(response) != 0) {
+              // Throw an exception if there is an error in query processing.
+              // This works for hive 3.x and earlier versions.
+              throw new QueryExecutionException(response.getErrorMessage)
+            }
+            driver.setMaxRows(maxRows)
+            val results = shim.getDriverResults(driver)
+            results
+          } catch {
+            case e @ (_: QueryExecutionException | _: SparkThrowable) =>
+              throw e
+            case e: Exception =>
+              // Wrap the original hive error with QueryExecutionException and throw it
+              // if there is an error in query processing.
+              // This works for hive 4.x and later versions.
+              throw new QueryExecutionException(ExceptionUtils.getStackTrace(e))
+          } finally {
             closeDriver(driver)
-            throw new QueryExecutionException(response.getErrorMessage)
           }
-          driver.setMaxRows(maxRows)
-
-          val results = shim.getDriverResults(driver)
-          closeDriver(driver)
-          results
 
         case _ =>
-          if (state.out != null) {
+          val out = state.getClass.getField("out").get(state)
+          if (out != null) {
             // scalastyle:off println
-            state.out.println(tokens(0) + " " + cmd_1)
+            out.asInstanceOf[PrintStream].println(tokens(0) + " " + cmd_1)
             // scalastyle:on println
           }
           val response: CommandProcessorResponse = proc.run(cmd_1)
-          // Throw an exception if there is an error in query processing.
-          if (response.getResponseCode != 0) {
+          val responseCode = getResponseCode(response)
+          if (responseCode != 0) {
+            // Throw an exception if there is an error in query processing.
+            // This works for hive 3.x and earlier versions. For 4.x and later versions,
+            // It will go to the catch block directly.
             throw new QueryExecutionException(response.getErrorMessage)
           }
-          Seq(response.getResponseCode.toString)
+          Seq(responseCode.toString)
       }
     } catch {
       case e: Exception =>
@@ -971,7 +1015,7 @@ private[hive] class HiveClientImpl(
       partSpec,
       replace,
       numDP,
-      listBucketingEnabled = hiveTable.isStoredAsSubDirectories)
+      hiveTable)
   }
 
   override def createFunction(db: String, func: CatalogFunction): Unit = withHiveState {
@@ -1050,11 +1094,43 @@ private[hive] object HiveClientImpl extends Logging {
     // When reading data in parquet, orc, or avro file format with string type for char,
     // the tailing spaces may lost if we are not going to pad it.
     val typeString = if (SQLConf.get.charVarcharAsString) {
-      c.dataType.catalogString
+      catalogString(c.dataType)
     } else {
-      CharVarcharUtils.getRawTypeString(c.metadata).getOrElse(c.dataType.catalogString)
+      CharVarcharUtils.getRawTypeString(c.metadata).getOrElse(catalogString(c.dataType))
     }
     new FieldSchema(c.name, typeString, c.getComment().orNull)
+  }
+
+  /**
+   * This a a variant of `DataType.catalogString` that does the same thing in general but
+   * it will not quote the field names in the struct type. HMS API uses unquoted field names
+   * to store the schema of a struct type. This is fine if we in the write path, we might encounter
+   * issues in the read path to parse the unquoted schema strings in the Spark SQL parser. You can
+   * see the tricks we play in the `getSparkSQLDataType` method to handle this. To avoid the
+   * flakiness of those tricks, we quote the field names, make them unrecognized by HMS API, and
+   * then store them in custom spark properties in a fallback way.
+   *
+   * And the reason we don't add quoting in `DataType.catalogString` directly is that we don't
+   * want to break the compatibility of the existing query output schema.
+   */
+  def catalogString(dataType: DataType): String = dataType match {
+    case ArrayType(et, _) => s"array<${catalogString(et)}>"
+    case MapType(k, v, _) => s"map<${catalogString(k)},${catalogString(v)}>"
+    case StructType(fields) =>
+      val stringConcat = new StringConcat()
+      val len = fields.length
+      stringConcat.append("struct<")
+      var i = 0
+      while (i < len) {
+        val name = QuotingUtils.quoteIfNeeded(fields(i).name)
+        stringConcat.append(s"$name:${catalogString(fields(i).dataType)}")
+        i += 1
+        if (i < len) stringConcat.append(",")
+      }
+      stringConcat.append(">")
+      stringConcat.toString
+    case udt: UserDefinedType[_] => catalogString(udt.sqlType)
+    case _ => dataType.catalogString
   }
 
   /** Get the Spark SQL native DataType from Hive's FieldSchema. */
@@ -1069,7 +1145,12 @@ private[hive] object HiveClientImpl extends Logging {
     //   struct<x:int,y.z:int> -> struct<`x`:int,`y.z`:int>
     //   array<struct<x:int,y.z:int>> -> array<struct<`x`:int,`y.z`:int>>
     //   map<string,struct<x:int,y.z:int>> -> map<string,struct<`x`:int,`y.z`:int>>
-    val typeStr = hc.getType.replaceAll("(?<=struct<|,)([^,<:]+)(?=:)", "`$1`")
+    val typeStr = if (SQLConf.get.getConf(QUOTE_HIVE_STRUCT_FIELD_NAME) &&
+        hc.getType.indexOf('`') < 0) { // This a defensive code for possible changes in HMS
+      hc.getType.replaceAll("(?<=struct<|,)([^,<:]+)(?=:)", "`$1`")
+    } else {
+      hc.getType
+    }
     try {
       CatalystSqlParser.parseDataType(typeStr)
     } catch {
@@ -1086,10 +1167,6 @@ private[hive] object HiveClientImpl extends Logging {
       dataType = columnType,
       nullable = true)
     Option(hc.getComment).map(field.withComment).getOrElse(field)
-  }
-
-  private def verifyColumnDataType(schema: StructType): Unit = {
-    schema.foreach(col => getSparkSQLDataType(toHiveColumn(col)))
   }
 
   private def toInputFormat(name: String) =
@@ -1139,6 +1216,7 @@ private[hive] object HiveClientImpl extends Logging {
     table.storage.properties.foreach { case (k, v) => hiveTable.setSerdeParam(k, v) }
     table.properties.foreach { case (k, v) => hiveTable.setProperty(k, v) }
     table.comment.foreach { c => hiveTable.setProperty("comment", c) }
+    table.collation.foreach { c => hiveTable.setProperty("collation", c) }
     // Hive will expand the view text, so it needs 2 fields: viewOriginalText and viewExpandedText.
     // Since we don't expand the view text, but only add table properties, we map the `viewText` to
     // the both fields in hive table.

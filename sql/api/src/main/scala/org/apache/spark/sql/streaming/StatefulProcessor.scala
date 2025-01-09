@@ -20,15 +20,24 @@ package org.apache.spark.sql.streaming
 import java.io.Serializable
 
 import org.apache.spark.annotation.{Evolving, Experimental}
+import org.apache.spark.sql.api.EncoderImplicits
 import org.apache.spark.sql.errors.ExecutionErrors
 
 /**
  * Represents the arbitrary stateful logic that needs to be provided by the user to perform
  * stateful manipulations on keyed streams.
+ *
+ * Users can also explicitly use `import implicits._` to access the EncoderImplicits and use the
+ * state variable APIs relying on implicit encoders.
  */
 @Experimental
 @Evolving
 private[sql] abstract class StatefulProcessor[K, I, O] extends Serializable {
+
+  // scalastyle:off
+  // Disable style checker so "implicits" object can start with lowercase i
+  object implicits extends EncoderImplicits
+  // scalastyle:on
 
   /**
    * Handle to the stateful processor that provides access to the state store and other stateful
@@ -56,16 +65,27 @@ private[sql] abstract class StatefulProcessor[K, I, O] extends Serializable {
    * @param timerValues
    *   \- instance of TimerValues that provides access to current processing/event time if
    *   available
-   * @param expiredTimerInfo
-   *   \- instance of ExpiredTimerInfo that provides access to expired timer if applicable
    * @return
    *   \- Zero or more output rows
    */
-  def handleInputRows(
+  def handleInputRows(key: K, inputRows: Iterator[I], timerValues: TimerValues): Iterator[O]
+
+  /**
+   * Function that will be invoked when a timer is fired for a given key. Users can choose to
+   * evict state, register new timers and optionally provide output rows.
+   * @param key
+   *   \- grouping key
+   * @param timerValues
+   *   \- instance of TimerValues that provides access to current processing/event
+   * @param expiredTimerInfo
+   *   \- instance of ExpiredTimerInfo that provides access to expired timer
+   * @return
+   *   Zero or more output rows
+   */
+  def handleExpiredTimer(
       key: K,
-      inputRows: Iterator[I],
       timerValues: TimerValues,
-      expiredTimerInfo: ExpiredTimerInfo): Iterator[O]
+      expiredTimerInfo: ExpiredTimerInfo): Iterator[O] = Iterator.empty
 
   /**
    * Function called as the last method that allows for users to perform any cleanup or teardown
@@ -110,6 +130,9 @@ private[sql] abstract class StatefulProcessorWithInitialState[K, I, O, S]
 
   /**
    * Function that will be invoked only in the first batch for users to process initial states.
+   * The provided initial state can be arbitrary dataframe with the same grouping key schema with
+   * the input rows, e.g. dataframe from data source reader of existing streaming query
+   * checkpoint.
    *
    * @param key
    *   \- grouping key

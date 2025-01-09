@@ -14,6 +14,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+from pyspark.sql.connect.utils import check_dependencies
+
+check_dependencies(__name__)
 
 import sys
 from typing import Dict, Optional, TYPE_CHECKING, List, Callable
@@ -235,12 +238,12 @@ def _test() -> None:
 
     globs = pyspark.sql.connect.merge.__dict__.copy()
     globs["spark"] = (
-        PySparkSession.builder.appName("sql.connect.dataframe tests")
+        PySparkSession.builder.appName("sql.connect.merge tests")
         .remote(os.environ.get("SPARK_CONNECT_TESTING_REMOTE", "local[4]"))
         .getOrCreate()
     )
     (failure_count, test_count) = doctest.testmod(
-        pyspark.sql.merge,
+        pyspark.sql.connect.merge,
         globs=globs,
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE | doctest.REPORT_NDIFF,
     )

@@ -53,6 +53,10 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
 
   private lazy val serializedHadoopConf = new SerializableConfiguration(hadoopConf)
 
+  // Seq of operator names who uses state schema v3 and TWS related options.
+  // This Seq was used in checks before reading state schema files.
+  private val twsShortNameSeq = Seq("transformWithStateExec", "transformWithStateInPandasExec")
+
   override def shortName(): String = "statestore"
 
   override def getTable(
@@ -132,12 +136,11 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
   private def runStateVarChecks(
       sourceOptions: StateSourceOptions,
       stateStoreMetadata: Array[StateMetadataTableEntry]): Unit = {
-    val twsShortName = "transformWithStateExec"
     if (sourceOptions.stateVarName.isDefined || sourceOptions.readRegisteredTimers) {
       // Perform checks for transformWithState operator in case state variable name is provided
       require(stateStoreMetadata.size == 1)
       val opMetadata = stateStoreMetadata.head
-      if (opMetadata.operatorName != twsShortName) {
+      if (!twsShortNameSeq.contains(opMetadata.operatorName)) {
         // if we are trying to query state source with state variable name, then the operator
         // should be transformWithState
         val errorMsg = "Providing state variable names is only supported with the " +
@@ -178,7 +181,7 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
     } else {
       // if the operator is transformWithState, then a state variable argument is mandatory
       if (stateStoreMetadata.size == 1 &&
-        stateStoreMetadata.head.operatorName == twsShortName) {
+        twsShortNameSeq.contains(stateStoreMetadata.head.operatorName)) {
         throw StateDataSourceErrors.requiredOptionUnspecified("stateVarName")
       }
     }
@@ -212,7 +215,7 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
       // Read the schema file path from operator metadata version v2 onwards
       // for the transformWithState operator
       val oldSchemaFilePath = if (storeMetadata.length > 0 && storeMetadata.head.version == 2
-        && storeMetadata.head.operatorName.contains("transformWithStateExec")) {
+        && twsShortNameSeq.exists(storeMetadata.head.operatorName.contains)) {
         val storeMetadataEntry = storeMetadata.head
         val operatorProperties = TransformWithStateOperatorProperties.fromJson(
           storeMetadataEntry.operatorPropertiesJson)

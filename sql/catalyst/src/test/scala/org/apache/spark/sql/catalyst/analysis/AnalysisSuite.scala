@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import java.util.TimeZone
+import java.util.{TimeZone, UUID}
 
 import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
@@ -78,6 +78,24 @@ class AnalysisSuite extends AnalysisTest with Matchers {
         parameters = Map("message" ->
           "Logical plan should not have output of char/varchar type.*\n"),
         matchPVals = true)
+    }
+  }
+
+  test(s"do not fail if a leaf node has char/varchar type output and " +
+    s"${SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key} is true") {
+    withSQLConf(SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true") {
+      val schema1 = new StructType().add("c", CharType(5))
+      val schema2 = new StructType().add("c", VarcharType(5))
+      val schema3 = new StructType().add("c", ArrayType(CharType(5)))
+      Seq(schema1, schema2, schema3).foreach { schema =>
+        val table = new InMemoryTable("t", schema, Array.empty, Map.empty[String, String].asJava)
+        DataSourceV2Relation(
+          table,
+          DataTypeUtils.toAttributes(schema),
+          None,
+          None,
+          CaseInsensitiveStringMap.empty()).analyze
+      }
     }
   }
 
@@ -775,6 +793,14 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     assertAnalysisSuccess(
       listRelation.select(MultiAlias(MultiAlias(
         PosExplode($"list"), Seq("first_pos", "first_val")), Seq("second_pos", "second_val"))))
+  }
+
+  test("SPARK-50497 Non-generator function with multiple aliases") {
+    assertAnalysisErrorCondition(parsePlan("SELECT 'length' (a)"),
+      "MULTI_ALIAS_WITHOUT_GENERATOR",
+      Map("expr" -> "\"length\"", "names" -> "a"),
+      Array(ExpectedContext("SELECT 'length' (a)", 0, 18))
+    )
   }
 
   test("SPARK-24151: CURRENT_DATE, CURRENT_TIMESTAMP should be case insensitive") {
@@ -1763,7 +1789,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
   }
 
   test("SPARK-46064 Basic functionality of elimination for watermark node in batch query") {
-    val dfWithEventTimeWatermark = EventTimeWatermark($"ts",
+    val dfWithEventTimeWatermark = EventTimeWatermark(UUID.randomUUID(), $"ts",
       IntervalUtils.fromIntervalString("10 seconds"), batchRelationWithTs)
 
     val analyzed = getAnalyzer.executeAndCheck(dfWithEventTimeWatermark, new QueryPlanningTracker)
@@ -1776,7 +1802,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     "EventTimeWatermark changes the isStreaming flag during resolution") {
     // UnresolvedRelation which is batch initially and will be resolved as streaming
     val dfWithTempView = UnresolvedRelation(TableIdentifier("streamingTable"))
-    val dfWithEventTimeWatermark = EventTimeWatermark($"ts",
+    val dfWithEventTimeWatermark = EventTimeWatermark(UUID.randomUUID(), $"ts",
       IntervalUtils.fromIntervalString("10 seconds"), dfWithTempView)
 
     val analyzed = getAnalyzer.executeAndCheck(dfWithEventTimeWatermark, new QueryPlanningTracker)

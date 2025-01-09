@@ -19,11 +19,9 @@ import unittest
 
 from pyspark.sql.types import StructType, StructField, StringType, IntegerType, LongType, DoubleType
 from pyspark.sql.utils import is_remote
-
 from pyspark.sql import functions as SF
-from pyspark.sql.connect import functions as CF
-
 from pyspark.sql.tests.connect.test_connect_basic import SparkConnectSQLTestCase
+from pyspark.testing.connectutils import should_test_connect
 from pyspark.testing.sqlutils import (
     have_pandas,
     have_pyarrow,
@@ -37,6 +35,9 @@ if have_pyarrow:
 
 if have_pandas:
     import pandas as pd
+
+if should_test_connect:
+    from pyspark.sql.connect import functions as CF
 
 
 class SparkConnectDataFramePropertyTests(SparkConnectSQLTestCase):
@@ -109,6 +110,12 @@ class SparkConnectDataFramePropertyTests(SparkConnectSQLTestCase):
             cdf1 = cdf.mapInPandas(func, schema)
             self.assertEqual(cdf1._cached_schema, schema)
 
+        with self.temp_env({"SPARK_CONNECT_MODE_ENABLED": "1"}):
+            self.assertTrue(is_remote())
+            cdf1 = cdf.mapInPandas(func, "a int, b string")
+            # Properly cache the parsed schema
+            self.assertEqual(cdf1._cached_schema, schema)
+
         with self.temp_env({"SPARK_CONNECT_MODE_ENABLED": None}):
             # 'mapInPandas' depends on the method 'pandas_udf', which is dispatched
             # based on 'is_remote'. However, in SparkConnectSQLTestCase, the remote
@@ -177,6 +184,12 @@ class SparkConnectDataFramePropertyTests(SparkConnectSQLTestCase):
         with self.temp_env({"SPARK_CONNECT_MODE_ENABLED": "1"}):
             self.assertTrue(is_remote())
             cdf1 = cdf.groupby("id").applyInPandas(normalize, schema)
+            self.assertEqual(cdf1._cached_schema, schema)
+
+        with self.temp_env({"SPARK_CONNECT_MODE_ENABLED": "1"}):
+            self.assertTrue(is_remote())
+            cdf1 = cdf.groupby("id").applyInPandas(normalize, "id long, v double")
+            # Properly cache the parsed schema
             self.assertEqual(cdf1._cached_schema, schema)
 
         with self.temp_env({"SPARK_CONNECT_MODE_ENABLED": None}):

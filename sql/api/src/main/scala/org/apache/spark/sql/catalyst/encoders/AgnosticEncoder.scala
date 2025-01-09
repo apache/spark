@@ -139,7 +139,9 @@ object AgnosticEncoders {
         encoders: Seq[AgnosticEncoder[_]],
         elementsCanBeNull: Boolean = false): AgnosticEncoder[_] = {
       val numElements = encoders.size
-      if (numElements < 1 || numElements > MAX_TUPLE_ELEMENTS) {
+      if (numElements < 1) {
+        throw ExecutionErrors.emptyTupleNotSupportedError()
+      } else if (numElements > MAX_TUPLE_ELEMENTS) {
         throw ExecutionErrors.elementsOfTupleExceedLimitError()
       }
       val fields = encoders.zipWithIndex.map { case (e, id) =>
@@ -229,6 +231,8 @@ object AgnosticEncoders {
   // Nullable leaf encoders
   case object NullEncoder extends LeafEncoder[java.lang.Void](NullType)
   case object StringEncoder extends LeafEncoder[String](StringType)
+  case class CharEncoder(length: Int) extends LeafEncoder[String](CharType(length))
+  case class VarcharEncoder(length: Int) extends LeafEncoder[String](VarcharType(length))
   case object BinaryEncoder extends LeafEncoder[Array[Byte]](BinaryType)
   case object ScalaBigIntEncoder extends LeafEncoder[BigInt](DecimalType.BigIntDecimal)
   case object JavaBigIntEncoder extends LeafEncoder[JBigInt](DecimalType.BigIntDecimal)

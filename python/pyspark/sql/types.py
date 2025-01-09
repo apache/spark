@@ -1555,6 +1555,18 @@ class StructType(DataType):
             field._build_formatted_string(prefix, stringConcat, depth)
         return stringConcat.toString()
 
+    def toDDL(self) -> str:
+        from pyspark.sql.utils import is_remote
+
+        if is_remote():
+            from pyspark.sql.connect.session import SparkSession
+
+            session = SparkSession.getActiveSession()
+            assert session is not None
+            return session._to_ddl(self)
+        else:
+            return get_active_spark_context()._to_ddl(self)
+
 
 class VariantType(AtomicType):
     """
@@ -1571,11 +1583,9 @@ class VariantType(AtomicType):
             return None
         return VariantVal(obj["value"], obj["metadata"])
 
-    def toInternal(self, obj: Any) -> Any:
-        raise PySparkNotImplementedError(
-            errorClass="NOT_IMPLEMENTED",
-            messageParameters={"feature": "VariantType.toInternal"},
-        )
+    def toInternal(self, variant: Any) -> Any:
+        assert isinstance(variant, VariantVal)
+        return {"value": variant.value, "metadata": variant.metadata}
 
 
 class UserDefinedType(DataType):
@@ -1890,43 +1900,9 @@ def _parse_datatype_string(s: str) -> DataType:
     if is_remote():
         from pyspark.sql.connect.session import SparkSession
 
-        return cast(
-            DataType,
-            SparkSession.active()._client._analyze(method="ddl_parse", ddl_string=s).parsed,
-        )
-
+        return SparkSession.active()._parse_ddl(s)
     else:
-        from py4j.java_gateway import JVMView
-
-        sc = get_active_spark_context()
-
-        def from_ddl_schema(type_str: str) -> DataType:
-            return _parse_datatype_json_string(
-                cast(JVMView, sc._jvm)
-                .org.apache.spark.sql.types.StructType.fromDDL(type_str)
-                .json()
-            )
-
-        def from_ddl_datatype(type_str: str) -> DataType:
-            return _parse_datatype_json_string(
-                cast(JVMView, sc._jvm)
-                .org.apache.spark.sql.api.python.PythonSQLUtils.parseDataType(type_str)
-                .json()
-            )
-
-        try:
-            # DDL format, "fieldname datatype, fieldname datatype".
-            return from_ddl_schema(s)
-        except Exception as e:
-            try:
-                # For backwards compatibility, "integer", "struct<fieldname: datatype>" and etc.
-                return from_ddl_datatype(s)
-            except BaseException:
-                try:
-                    # For backwards compatibility, "fieldname: datatype, fieldname: datatype" case.
-                    return from_ddl_datatype("struct<%s>" % s.strip())
-                except BaseException:
-                    raise e
+        return get_active_spark_context()._parse_ddl(s)
 
 
 def _parse_datatype_json_string(json_string: str) -> DataType:
@@ -2167,7 +2143,9 @@ def _from_numpy_type(nt: "np.dtype") -> Optional[DataType]:
     """Convert NumPy type to Spark data type."""
     import numpy as np
 
-    if nt == np.dtype("int8"):
+    if nt == np.dtype("bool"):
+        return BooleanType()
+    elif nt == np.dtype("int8"):
         return ByteType()
     elif nt == np.dtype("int16"):
         return ShortType()
@@ -2179,6 +2157,8 @@ def _from_numpy_type(nt: "np.dtype") -> Optional[DataType]:
         return FloatType()
     elif nt == np.dtype("float64"):
         return DoubleType()
+    elif nt.type == np.dtype("str"):
+        return StringType()
 
     return None
 
@@ -3273,6 +3253,8 @@ class NumpyArrayConverter:
             return gateway.jvm.double
         elif nt == np.dtype("bool"):
             return gateway.jvm.boolean
+        elif nt.type == np.dtype("str"):
+            return gateway.jvm.String
 
         return None
 
@@ -3286,15 +3268,12 @@ class NumpyArrayConverter:
         assert gateway is not None
         plist = obj.tolist()
 
-        if len(obj) > 0 and isinstance(plist[0], str):
-            jtpe = gateway.jvm.String
-        else:
-            jtpe = self._from_numpy_type_to_java_type(obj.dtype, gateway)
-            if jtpe is None:
-                raise PySparkTypeError(
-                    errorClass="UNSUPPORTED_NUMPY_ARRAY_SCALAR",
-                    messageParameters={"dtype": str(obj.dtype)},
-                )
+        jtpe = self._from_numpy_type_to_java_type(obj.dtype, gateway)
+        if jtpe is None:
+            raise PySparkTypeError(
+                errorClass="UNSUPPORTED_NUMPY_ARRAY_SCALAR",
+                messageParameters={"dtype": str(obj.dtype)},
+            )
         jarr = gateway.new_array(jtpe, len(obj))
         for i in range(len(plist)):
             jarr[i] = plist[i]

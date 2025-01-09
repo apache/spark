@@ -41,10 +41,11 @@ import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.PlanTestBase
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.classic.{ClassicConversions, ColumnConversions}
 import org.apache.spark.sql.execution.FilterExec
 import org.apache.spark.sql.execution.adaptive.DisableAdaptiveExecution
 import org.apache.spark.sql.execution.datasources.DataSourceUtils
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.{ColumnNodeToExpressionConverter, SQLConf}
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.UninterruptibleThread
 import org.apache.spark.util.Utils
@@ -239,9 +240,12 @@ private[sql] trait SQLTestUtilsBase
    * This is because we create the `SparkSession` immediately before the first test is run,
    * but the implicits import is needed in the constructor.
    */
-  protected object testImplicits extends SQLImplicits {
+  protected object testImplicits
+    extends SQLImplicits
+      with ClassicConversions
+      with ColumnConversions {
     override protected def session: SparkSession = self.spark
-    implicit def toRichColumn(c: Column): SparkSession#RichColumn = session.RichColumn(c)
+    override protected def converter: ColumnNodeToExpressionConverter = self.spark.converter
   }
 
   protected override def withSQLConf[T](pairs: (String, String)*)(f: => T): T = {

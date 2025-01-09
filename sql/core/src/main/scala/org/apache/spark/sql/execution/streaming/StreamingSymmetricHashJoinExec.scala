@@ -510,11 +510,15 @@ case class StreamingSymmetricHashJoinExec(
         val rightSideMetrics = rightSideJoiner.commitStateAndGetMetrics()
         val combinedMetrics = StateStoreMetrics.combine(Seq(leftSideMetrics, rightSideMetrics))
 
-        val checkpointInfo = SymmetricHashJoinStateManager.mergeStateStoreCheckpointInfo(
-          JoinStateStoreCkptInfo(
-            leftSideJoiner.getLatestCheckpointInfo(),
-            rightSideJoiner.getLatestCheckpointInfo()))
-        setStateStoreCheckpointInfo(checkpointInfo)
+        if (StatefulOperatorStateInfo.enableStateStoreCheckpointIds(conf)) {
+          val checkpointInfo = SymmetricHashJoinStateManager.mergeStateStoreCheckpointInfo(
+            JoinStateStoreCkptInfo(
+              leftSideJoiner.getLatestCheckpointInfo(),
+              rightSideJoiner.getLatestCheckpointInfo()
+            )
+          )
+          setStateStoreCheckpointInfo(checkpointInfo)
+        }
 
         // Update SQL metrics
         numUpdatedStateRows +=
