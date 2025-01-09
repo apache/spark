@@ -51,7 +51,7 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper with No
   // and can be supported with existing mechanism.
   private val supportedConditionalFunctions = Set ("COALESCE")
   private val supportedDateAndTimestampFunctions = Set("DATE_ADD", "DATE_DIFF")
-  private val supportedEncryptionFunctions = Set("SHA1", "SHA2", "MD5")
+  private val supportedEncryptionFunctions = Set("SHA1", "SHA2", "MD5", "CONCAT")
   private val supportedMathmaticalFunctions = Set (
     "ABS",
     "ACOS",
@@ -76,7 +76,7 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper with No
     "SIN",
     "TAN")
   private val supportedStringFunctions =
-    Set("BIT_LENGTH", "CHAR_LENGTH", "CONCAT", "LOWER", "SUBSTRING", "UPPER")
+    Set("BIT_LENGTH", "CHAR_LENGTH", "LOWER", "SUBSTRING", "UPPER")
 
   private val supportedFunctions =
     supportedAggregateFunctions ++
@@ -151,6 +151,19 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper with No
       } else {
         super.visitAggregateFunction(funcName, isDistinct, inputs)
       }
+
+    override def visitCast(expr: String, exprDataType: DataType, dataType: DataType): String = {
+      val databaseTypeDefinition = dataType match {
+        // MySQL uses CHAR in the cast function for the type LONGTEXT
+        case StringType => "CHAR"
+        // MySQL uses SIGNED INTEGER in the cast function for the types SMALLINT, INTEGER and BIGINT
+        case ShortType | IntegerType | LongType => "SIGNED INTEGER"
+        // MySQL uses BINARY in the cast function for the type BLOB
+        case BinaryType => "BINARY"
+        case _ => getJDBCType(dataType).map(_.databaseTypeDefinition).getOrElse(dataType.typeName)
+      }
+      s"CAST($expr AS $databaseTypeDefinition)"
+    }
   }
 
   override def compileExpression(expr: Expression): Option[String] = {
@@ -295,15 +308,9 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper with No
     // See SPARK-35446: MySQL treats REAL as a synonym to DOUBLE by default
     // We override getJDBCType so that FloatType is mapped to FLOAT instead
     case FloatType => Option(JdbcType("FLOAT", java.sql.Types.FLOAT))
-    // MySQL uses CHAR in the cast function for the type LONGTEXT.
-    case StringType => Option(JdbcType("LONGTEXT", java.sql.Types.LONGVARCHAR, Some("CHAR")))
+    case StringType => Option(JdbcType("LONGTEXT", java.sql.Types.LONGVARCHAR))
     case ByteType => Option(JdbcType("TINYINT", java.sql.Types.TINYINT))
-    // MySQL uses SIGNED INTEGER in the cast function for the types SMALLINT, INTEGER, and BIGINT.
-    case ShortType => Option(JdbcType("SMALLINT", java.sql.Types.SMALLINT, Some("SIGNED INTEGER")))
-    case IntegerType => Option(JdbcType("INTEGER", java.sql.Types.INTEGER, Some("SIGNED INTEGER")))
-    case LongType => Option(JdbcType("BIGINT", java.sql.Types.BIGINT, Some("SIGNED INTEGER")))
-    // MySQL uses BINARY in the cast function for the type BLOB.
-    case BinaryType => Option(JdbcType("BLOB", java.sql.Types.BLOB, Some("BINARY")))
+    case ShortType => Option(JdbcType("SMALLINT", java.sql.Types.SMALLINT))
     // We override getJDBCType so that DoubleType is mapped to DOUBLE instead.
     case DoubleType => Option(JdbcType("DOUBLE", java.sql.Types.DOUBLE))
     // scalastyle:off line.size.limit
