@@ -23,9 +23,9 @@ import java.util.concurrent.atomic.AtomicInteger
 import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration._
 
-import org.apache.spark.{SerializerHelper, SparkFunSuite}
+import org.apache.spark.{SerializerTestUtils, SparkFunSuite}
 
-class BestEffortLazyValSuite extends SparkFunSuite with SerializerHelper {
+class BestEffortLazyValSuite extends SparkFunSuite with SerializerTestUtils {
 
   test("BestEffortLazy works") {
     val numInitializerCalls = new AtomicInteger(0)

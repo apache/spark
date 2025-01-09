@@ -19,7 +19,7 @@ package org.apache.spark
 
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream, ObjectInputStream, ObjectOutputStream}
 
-trait SerializerHelper {
+trait SerializerTestUtils {
 
   protected def roundtripSerialize[T](obj: T): T = {
     deserializeFromBytes(serializeToBytes(obj))
