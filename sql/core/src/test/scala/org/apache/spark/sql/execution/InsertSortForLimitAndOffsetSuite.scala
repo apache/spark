@@ -18,10 +18,12 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.sql.{Dataset, QueryTest}
+import org.apache.spark.sql.IntegratedUDFTestUtils._
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.functions.rand
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types.IntegerType
 
 class InsertSortForLimitAndOffsetSuite extends QueryTest
   with SharedSparkSession
@@ -98,6 +100,11 @@ class InsertSortForLimitAndOffsetSuite extends QueryTest
       verifySortAdded(df.filter($"c2" > rand()).limit(2))
       verifySortAdded(df.select($"c2").limit(2))
       verifySortAdded(df.filter($"c2" > rand()).select($"c2").limit(2))
+
+      assume(shouldTestPythonUDFs)
+      val pythonTestUDF = TestPythonUDF(name = "pyUDF", Some(IntegerType))
+      verifySortAdded(df.filter(pythonTestUDF($"c2") > rand()).limit(2))
+      verifySortAdded(df.select(pythonTestUDF($"c2")).limit(2))
     }
   }
 
@@ -116,6 +123,11 @@ class InsertSortForLimitAndOffsetSuite extends QueryTest
     verifySortAdded(df.filter($"c2" > rand()).offset(2))
     verifySortAdded(df.select($"c2").offset(2))
     verifySortAdded(df.filter($"c2" > rand()).select($"c2").offset(2))
+
+    assume(shouldTestPythonUDFs)
+    val pythonTestUDF = TestPythonUDF(name = "pyUDF", Some(IntegerType))
+    verifySortAdded(df.filter(pythonTestUDF($"c2") > rand()).offset(2))
+    verifySortAdded(df.select(pythonTestUDF($"c2")).offset(2))
   }
 
   private def verifySortAdded(df: Dataset[_]): Unit = {
@@ -127,5 +139,7 @@ class InsertSortForLimitAndOffsetSuite extends QueryTest
     assertHasGlobalLimitExec(physicalPlan)
     // Extra local sort is needed for middle LIMIT/OFFSET
     assert(hasLocalSort(physicalPlan))
+    // Make sure the schema does not change.
+    assert(physicalPlan.schema == shuffled.schema)
   }
 }

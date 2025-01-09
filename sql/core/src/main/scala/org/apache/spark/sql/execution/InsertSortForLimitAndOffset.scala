@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{Project, Sort}
 import org.apache.spark.sql.catalyst.plans.physical.SinglePartition
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
+import org.apache.spark.sql.execution.python.EvalPythonExec
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -67,14 +68,15 @@ object InsertSortForLimitAndOffset extends Rule[SparkPlan] {
   }
 
   // Note: this is not implementing a generalized notion of "global order preservation", but just
-  // tackles the regular ORDER BY semantics with optional LIMIT (top-K).
+  // a best effort to catch the common query patterns that the data ordering should be preserved.
   private def extractOrderingAndPropagateOrderingColumns(
       plan: SparkPlan): Option[(Seq[SortOrder], SparkPlan)] = plan match {
     case p: SortExec if p.global => Some(p.sortOrder, p)
     case p: UnaryExecNode if
         p.isInstanceOf[LocalLimitExec] ||
           p.isInstanceOf[WholeStageCodegenExec] ||
-          p.isInstanceOf[FilterExec] =>
+          p.isInstanceOf[FilterExec] ||
+          p.isInstanceOf[EvalPythonExec] =>
       extractOrderingAndPropagateOrderingColumns(p.child) match {
         case Some((ordering, newChild)) => Some((ordering, p.withNewChildren(Seq(newChild))))
         case _ => None
