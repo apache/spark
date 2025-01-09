@@ -517,7 +517,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
         "paramIndex" -> "second",
         "inputSql" -> "\"a\"",
         "inputType" -> "\"STRING\"",
-        "requiredType" -> "integer or floating-point"),
+        "requiredType" -> "\"NUMERIC\""),
       context = ExpectedContext(
         contextType = QueryContextType.DataFrame,
         fragment = "uniform",
