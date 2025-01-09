@@ -2520,7 +2520,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         if !f.resolved || AggregateExpression.containsAggregate(cond) ||
           ResolveGroupingAnalytics.hasGroupingFunction(cond) ||
           cond.containsPattern(TEMP_RESOLVED_COLUMN) =>
-        // If the filter's condition contains aggregate expressions or grouping functions or temp
+        // If the filter's condition contains aggregate expressions or grouping expressions or temp
         // resolved column, we cannot rewrite both the filter and the aggregate until they are
         // resolved by ResolveAggregateFunctions or ResolveGroupingAnalytics, because rewriting SQL
         // functions in aggregate can add an additional project on top of the aggregate
@@ -2572,8 +2572,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         } else {
           bottomProject
         }
-        val topProject = if (topProjectList.nonEmpty) Project(topProjectList, newAgg) else newAgg
-        topProject
+        if (topProjectList.nonEmpty) Project(topProjectList, newAgg) else newAgg
 
       case p: Project if p.resolved && hasSQLFunctionExpression(p.expressions) =>
         val newChild = rewrite(p.child)

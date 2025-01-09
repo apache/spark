@@ -88,11 +88,4 @@ object SQLFunctionContext {
     set(context)
     try f finally { set(originContext) }
   }
-
-  def withNewContext[A](f: => A): A = {
-    val originContext = value.get()
-    val context = SQLFunctionContext()
-    set(context)
-    try f finally { set(originContext) }
-  }
 }
