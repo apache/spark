@@ -1814,10 +1814,8 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
       maxIterationsSetting = SQLConf.OPTIMIZER_MAX_ITERATIONS.key)
     val batches = Seq(
       Batch("RewriteWithExpression", fixedPoint, RewriteWithExpression),
-      Batch("Optimize after RewriteWithExpression", fixedPoint,
-        CollapseProject,
-        ColumnPruning,
-        RemoveNoopOperators)
+      // CollapseProject is needed to ensure idempotence
+      Batch("CollapseProject", fixedPoint, CollapseProject)
     )
   }
 
@@ -1866,7 +1864,7 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
         // inheritance.
         val newAggregateExpressions = aggregate.aggregateExpressions ++
           getWithAlias(pushDown.reduce(And)).map(replaceAliasButKeepName(_, aliasMap))
-        val replaced = removeOriginAlias(rewriteCondition(pushDown.reduce(And), aliasMap))
+        val replaced = removeOriginAttribute(rewriteCondition(pushDown.reduce(And), aliasMap))
         val newAggregate = aggregate.copy(child = Filter(replaced, aggregate.child),
           aggregateExpressions = newAggregateExpressions)
         // If there is no more filter to stay up, just eliminate the filter.
@@ -1980,6 +1978,7 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
     case _: Sort => true
     case _: BatchEvalPython => true
     case _: ArrowEvalPython => true
+    case _: Expand => true
     case _ => false
   }
 
@@ -2024,9 +2023,9 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
     }
   }
 
-  private def removeOriginAlias(expr: Expression): Expression = {
+  private def removeOriginAttribute(expr: Expression): Expression = {
     expr.transform {
-      case ced: CommonExpressionDef => ced.copy(originAlias = None)
+      case ced: CommonExpressionDef => ced.copy(originalAttribute = None)
     }
   }
 
@@ -2051,7 +2050,8 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
         cond
       } else {
         val defsMap = AttributeMap(replaceWithMap.map(m =>
-          m._1 -> CommonExpressionDef(child = trimAliases(m._2), originAlias = Some(m._2))))
+          m._1 -> CommonExpressionDef(child = trimAliases(m._2),
+            originalAttribute = Some(m._2.toAttribute))))
         val refsMap = AttributeMap(defsMap.map(m => m._1 -> new CommonExpressionRef(m._2)))
         splitConjunctivePredicates(cond)
           .map(rewriteByWith(_, defsMap, refsMap))
@@ -2077,13 +2077,13 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
 
   private def getWithAttributes(condition: Expression): Seq[Attribute] = {
     condition.collect {
-      case CommonExpressionDef(_, _, Some(alias)) => alias.toAttribute
+      case CommonExpressionDef(_, _, Some(attr)) => attr
     }.distinct
   }
 
   private def getWithAlias(condition: Expression): Seq[Alias] = {
     condition.collect {
-      case CommonExpressionDef(_, _, Some(alias)) => alias
+      case CommonExpressionDef(child, _, Some(attr)) => Alias(child, attr.name)(attr.exprId)
     }.distinct
   }
 }

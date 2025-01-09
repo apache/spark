@@ -91,13 +91,13 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
     // child, and we need to project away the extra columns to keep the plan schema unchanged.
     assert(p.output.length <= newPlan.output.length)
 
-    def hasOriginAlias(expr: Expression): Boolean = expr match {
+    def hasOriginalAttribute(expr: Expression): Boolean = expr match {
       case w: With =>
-        if (w.defs.exists(_.originAlias.nonEmpty)) true else false
-      case e => e.children.exists(hasOriginAlias)
+        if (w.defs.exists(_.originalAttribute.nonEmpty)) true else false
+      case e => e.children.exists(hasOriginalAttribute)
     }
     // If this iteration contains attribute that require propagate, the column cannot be pruning.
-    val needPropagate = p.expressions.exists(hasOriginAlias)
+    val needPropagate = p.expressions.exists(hasOriginalAttribute)
     if (p.output.length < newPlan.output.length && !needPropagate) {
       assert(p.outputSet.subsetOf(newPlan.outputSet))
       Project(p.output, newPlan)
@@ -123,13 +123,13 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
           _, inputPlans, commonExprsPerChild, commonExprIdSet, isNestedWith = true))
         val refToExpr = mutable.HashMap.empty[CommonExpressionId, Expression]
 
-        defs.zipWithIndex.foreach { case (CommonExpressionDef(child, id, originAlias), index) =>
+        defs.zipWithIndex.foreach { case (CommonExpressionDef(child, id, originalAttr), index) =>
           if (id.canonicalized) {
             throw SparkException.internalError(
               "Cannot rewrite canonicalized Common expression definitions")
           }
 
-          if (originAlias.isEmpty &&
+          if (originalAttr.isEmpty &&
             (CollapseProject.isCheap(child) || !commonExprIdSet.contains(id))) {
             refToExpr(id) = child
           } else {
@@ -146,11 +146,11 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
               // TODO: we should calculate the ref count and also inline the common expression
               //       if it's ref count is 1.
               refToExpr(id) = child
-            } else if (originAlias.nonEmpty &&
-              inputPlans.head.output.contains(originAlias.get.toAttribute)) {
+            } else if (originalAttr.nonEmpty &&
+              inputPlans.head.output.contains(originalAttr.get.toAttribute)) {
               // originAlias only exists in Project or Filter. If the child already contains this
               // attribute, extend it.
-              refToExpr(id) = originAlias.get.toAttribute
+              refToExpr(id) = originalAttr.get.toAttribute
             } else {
               val commonExprs = commonExprsPerChild(childPlanIndex)
               val existingCommonExpr = commonExprs.find(_._2 == id.id)
@@ -160,14 +160,9 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
                 }
                 refToExpr(id) = existingCommonExpr.get._1.toAttribute
               } else {
-                val alias = originAlias match {
+                val alias = originalAttr match {
                   case Some(a) =>
-                    a.copy(child = child)(
-                      exprId = a.exprId,
-                      qualifier = a.qualifier,
-                      explicitMetadata = Option(a.metadata),
-                      nonInheritableMetadataKeys = a.nonInheritableMetadataKeys
-                    )
+                    Alias(child, a.name)(a.exprId)
                   case _ =>
                     val aliasName = if (SQLConf.get.getConf(SQLConf.USE_COMMON_EXPR_ID_FOR_ALIAS)) {
                       s"_common_expr_${id.id}"
