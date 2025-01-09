@@ -451,15 +451,18 @@ trait Star extends NamedExpression {
  * This is also used to expand structs. For example:
  * "SELECT record.* from (SELECT struct(a,b,c) as record ...)
  *
- * @param target an optional name that should be the target of the expansion.  If omitted all
- *               targets' columns are produced. This can either be a table name or struct name. This
- *               is a list of identifiers that is the path of the expansion.
- *
- * This class provides the shared behavior between the classes for SELECT * ([[UnresolvedStar]])
- * and SELECT * EXCEPT ([[UnresolvedStarExceptOrReplace]]). [[UnresolvedStar]] is just a case class
- * of this, while [[UnresolvedStarExceptOrReplace]] adds some additional logic to the expand method.
+ * This trait provides the shared behavior among the classes for SELECT * ([[UnresolvedStar]])
+ * and SELECT * EXCEPT ([[UnresolvedStarExceptOrReplace]]), etc. [[UnresolvedStar]] is just a case
+ * class of this, while [[UnresolvedStarExceptOrReplace]] or other classes add some additional logic
+ * to the expand method.
  */
 trait UnresolvedStarBase extends Star with Unevaluable {
+
+  /**
+   * An optional name that should be the target of the expansion. If omitted all
+   * targets' columns are produced. This can either be a table name or struct name. This
+   * is a list of identifiers that is the path of the expansion.
+   */
   def target: Option[Seq[String]]
 
   /**
@@ -714,6 +717,20 @@ case class UnresolvedStarExceptOrReplace(
   }
 }
 
+/**
+ * Represents some of the input attributes to a given relational operator, for example in
+ * `df.withColumn`.
+ *
+ * @param target an optional name that should be the target of the expansion. If omitted all
+ *              targets' columns are produced. This can only be a table name. This
+ *              is a list of identifiers that is the path of the expansion.
+ *
+ * @param colNames a list of column names that should be replaced or produced.
+ *
+ * @param exprs a list of expressions that should be used to replace the expressions removed by.
+ *
+ * @param explicitMetadata an optional list of explicit metadata to associate with the columns.
+ */
 case class UnresolvedStarWithColumns(
      target: Option[Seq[String]],
      colNames: Seq[String],
@@ -765,6 +782,18 @@ case class UnresolvedStarWithColumns(
   }
 }
 
+/**
+ * Represents some of the input attributes to a given relational operator, for example in
+ * `df.withColumnRenamed`.
+ *
+ * @param target an optional name that should be the target of the expansion. If omitted all
+ *              targets' columns are produced. This can only be a table name. This
+ *              is a list of identifiers that is the path of the expansion.
+ *
+ * @param existingNames a list of column names that should be replaced.
+ *
+ * @param newNames a list of new column names that should be used to replace the existing columns.
+ */
 case class UnresolvedStarWithColumnsRenames(
     target: Option[Seq[String]],
     existingNames: Seq[String],
