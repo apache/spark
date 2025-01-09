@@ -166,5 +166,4 @@ class KerberosConfDriverFeatureStepSuite extends SparkFunSuite {
     val kconf = KubernetesTestConf.createDriverConf(sparkConf = conf)
     new KerberosConfDriverFeatureStep(kconf)
   }
-
 }
