@@ -89,5 +89,4 @@ private[spark] class KubernetesExecutorBuilder {
         spec.executorKubernetesResources ++ addedResources)
     }
   }
-
 }
