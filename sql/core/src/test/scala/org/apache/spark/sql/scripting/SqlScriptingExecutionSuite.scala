@@ -44,7 +44,11 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
       args: Map[String, Expression] = Map.empty): Seq[Array[Row]] = {
     val compoundBody = spark.sessionState.sqlParser.parsePlan(sqlText).asInstanceOf[CompoundBody]
     val sse = new SqlScriptingExecution(compoundBody, spark, args)
-    sse.map { df => df.collect() }.toList
+    try {
+      sse.map { df => df.collect() }.toList
+    } finally {
+      sse.cleanup()
+    }
   }
 
   private def verifySqlScriptResult(sqlText: String, expected: Seq[Seq[Row]]): Unit = {
@@ -1496,6 +1500,29 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
       exception = e,
       condition = "VARIABLE_NOT_FOUND",
       parameters = Map("variableName" -> toSQLId("system.session.localVar"))
+    )
+  }
+
+  test("drop variable - drop too many nameparts") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  lbl: BEGIN
+        |    DECLARE localVar = 1;
+        |    SELECT localVar;
+        |    DROP TEMPORARY VARIABLE a.b.c.d;
+        |  END;
+        |END
+        |""".stripMargin
+    val e = intercept[AnalysisException] {
+      verifySqlScriptResult(sqlScript, Seq.empty[Seq[Row]])
+    }
+    checkError(
+      exception = e,
+      condition = "UNRESOLVED_VARIABLE",
+      parameters = Map(
+        "variableName" -> toSQLId("a.b.c.d"),
+        "searchPath" -> toSQLId("system.session"))
     )
   }
 

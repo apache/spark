@@ -40,7 +40,7 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
       val resolved = resolveCreateVariableName(nameParts)
       c.copy(name = resolved)
     case d @ DropVariable(UnresolvedIdentifier(nameParts, _), _) =>
-      val resolved = resolveVariableName(nameParts)
+      val resolved = resolveDropVariableName(nameParts)
       d.copy(name = resolved)
 
     case UnresolvedIdentifier(nameParts, allowTemp) =>
@@ -82,28 +82,34 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
         "INVALID_VARIABLE_DECLARATION.QUALIFIED_LOCAL_VARIABLE",
         Map("varName" -> toSQLId(nameParts)))
     }
-    resolveVariableName(nameParts)
-  }
-
-  private def resolveVariableName(nameParts: Seq[String]): ResolvedIdentifier = {
-    val ident: Identifier = catalogManager.scriptingLocalVariableManager
+    val ident = catalogManager.scriptingLocalVariableManager
       .getOrElse(catalogManager.tempVariableManager)
       .createIdentifier(nameParts.last)
 
-    nameParts.length match {
-      case 1 | 2 => ResolvedIdentifier(FakeSystemCatalog, ident)
+    resolveVariableName(nameParts, ident)
+  }
 
-      // When there are 3 nameParts the variable must be a fully qualified session variable
-      // i.e. "system.session.<varName>"
-      case 3 if nameParts(0).equalsIgnoreCase(CatalogManager.SYSTEM_CATALOG_NAME) &&
-        nameParts(1).equalsIgnoreCase(CatalogManager.SESSION_NAMESPACE) =>
-        ResolvedIdentifier(FakeSystemCatalog, ident)
+  private def resolveDropVariableName(nameParts: Seq[String]): ResolvedIdentifier = {
+    // Only session variables can be dropped, so catalogManager.scriptingLocalVariableManager
+    // is not checked in the case of DropVariable.
+    val ident = catalogManager.tempVariableManager.createIdentifier(nameParts.last)
+    resolveVariableName(nameParts, ident)
+  }
 
-      case _ =>
-        // todo LOCALVARS: update this error
-        throw QueryCompilationErrors.unresolvedVariableError(
-          nameParts, Seq(CatalogManager.SYSTEM_CATALOG_NAME, CatalogManager.SESSION_NAMESPACE)
-        )
-    }
+  private def resolveVariableName(
+      nameParts: Seq[String],
+      ident: Identifier): ResolvedIdentifier = nameParts.length match {
+    case 1 | 2 => ResolvedIdentifier(FakeSystemCatalog, ident)
+
+    // When there are 3 nameParts the variable must be a fully qualified session variable
+    // i.e. "system.session.<varName>"
+    case 3 if nameParts(0).equalsIgnoreCase(CatalogManager.SYSTEM_CATALOG_NAME) &&
+      nameParts(1).equalsIgnoreCase(CatalogManager.SESSION_NAMESPACE) =>
+      ResolvedIdentifier(FakeSystemCatalog, ident)
+
+    case _ =>
+      throw QueryCompilationErrors.unresolvedVariableError(
+        nameParts, Seq(CatalogManager.SYSTEM_CATALOG_NAME, ident.namespace().head)
+      )
   }
 }

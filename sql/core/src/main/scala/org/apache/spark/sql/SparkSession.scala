@@ -448,24 +448,28 @@ class SparkSession private(
     val sse = new SqlScriptingExecution(script, this, args)
     var result: Option[Seq[Row]] = None
 
-    while (sse.hasNext) {
-      sse.withErrorHandling {
-        val df = sse.next()
-        if (sse.hasNext) {
-          df.write.format("noop").mode("overwrite").save()
-        } else {
-          // Collect results from the last DataFrame.
-          result = Some(df.collect().toSeq)
+    try {
+      while (sse.hasNext) {
+        sse.withErrorHandling {
+          val df = sse.next()
+          if (sse.hasNext) {
+            df.write.format("noop").mode("overwrite").save()
+          } else {
+            // Collect results from the last DataFrame.
+            result = Some(df.collect().toSeq)
+          }
         }
       }
-    }
 
-    if (result.isEmpty) {
-      emptyDataFrame
-    } else {
-      val attributes = DataTypeUtils.toAttributes(result.get.head.schema)
-      Dataset.ofRows(
-        self, LocalRelation.fromExternalRows(attributes, result.get))
+      if (result.isEmpty) {
+        emptyDataFrame
+      } else {
+        val attributes = DataTypeUtils.toAttributes(result.get.head.schema)
+        Dataset.ofRows(
+          self, LocalRelation.fromExternalRows(attributes, result.get))
+      }
+    } finally {
+      sse.cleanup()
     }
   }
 

@@ -74,9 +74,6 @@ class SqlScriptingExecution(
     if (context.frames.nonEmpty) {
       return Some(context.frames.last.next())
     }
-    // cleanup variable manager after script is completed
-    // todo LOCALVARS: figure out a better way to do this, also cleanup when script fails
-    session.sessionState.catalogManager.scriptingLocalVariableManager = None
     None
   }
 
@@ -114,5 +111,10 @@ class SqlScriptingExecution(
       case e: Throwable =>
         handleException(e)
     }
+  }
+
+  /** Cleans up resources associated with the execution. */
+  def cleanup(): Unit = {
+    session.sessionState.catalogManager.scriptingLocalVariableManager = None
   }
 }
