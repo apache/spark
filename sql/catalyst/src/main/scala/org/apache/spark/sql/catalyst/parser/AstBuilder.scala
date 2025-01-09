@@ -211,7 +211,7 @@ class AstBuilder extends DataTypeAstBuilder
 
     val handlerType = HandlerType.EXIT
 
-    val body = if (!ctx.compoundBody().isEmpty) {
+    val body = if (Option(ctx.compoundBody()).isDefined) {
       visitCompoundBodyImpl(
         ctx.compoundBody(),
         None,
