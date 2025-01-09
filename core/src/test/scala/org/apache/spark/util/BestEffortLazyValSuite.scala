@@ -35,6 +35,7 @@ class BestEffortLazyValSuite extends SparkFunSuite with SerializerTestUtils {
     val lazyval = new BestEffortLazyVal(() => {
       numInitializerCalls.incrementAndGet()
       latch.countDown()
+      latch.await()
       new Object()
     })
 
@@ -43,12 +44,8 @@ class BestEffortLazyValSuite extends SparkFunSuite with SerializerTestUtils {
 
     // Two threads concurrently invoke the lazy value
     implicit val ec: ExecutionContext = ExecutionContext.global
-    val future1 = Future {
-      lazyval()
-    }
-    val future2 = Future {
-      lazyval()
-    }
+    val future1 = Future { lazyval() }
+    val future2 = Future { lazyval() }
     val value1 = ThreadUtils.awaitResult(future1, 10.seconds)
     val value2 = ThreadUtils.awaitResult(future2, 10.seconds)
 

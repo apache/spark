@@ -34,6 +34,7 @@ class TransientBestEffortLazyValSuite extends SparkFunSuite with SerializerTestU
     val lazyval = new TransientBestEffortLazyVal(() => {
       numInitializerCalls.incrementAndGet()
       latch.countDown()
+      latch.await()
       new Object()
     })
 
