@@ -504,8 +504,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
    */
   object ResolveAliases extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan =
-      plan.resolveOperatorsUpWithPruning(
-        _.containsAnyPattern(UNRESOLVED_ALIAS, PIPE_EXPRESSION), ruleId) {
+      plan.resolveOperatorsUpWithPruning(_.containsAnyPattern(UNRESOLVED_ALIAS), ruleId) {
         case Aggregate(groups, aggs, child, _)
             if child.resolved && AliasResolution.hasUnresolvedAlias(aggs) =>
           Aggregate(groups, AliasResolution.assignAliases(aggs), child)
@@ -539,13 +538,6 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         case c: CollectMetrics
             if c.child.resolved && AliasResolution.hasUnresolvedAlias(c.metrics) =>
           c.copy(metrics = AliasResolution.assignAliases(c.metrics))
-      }
-
-    private def removePipeExpressions(exprs: Seq[NamedExpression]): Seq[NamedExpression] =
-      exprs.map {
-        case a @ Alias(p: PipeExpression, child) if p.child.resolved =>
-          a.withNewChildren(Seq(p.checkInvariantsAndRemove)).asInstanceOf[NamedExpression]
-        case other => other
       }
   }
 

@@ -941,6 +941,23 @@ struct<x:int,y:string,z:int>
 
 
 -- !query
+values (0), (1) lhs(a)
+|> inner join values (1), (2) rhs(a) using (a)
+|> extend lhs.a + rhs.a as z1
+|> extend lhs.a - rhs.a as z2
+|> drop z1
+|> where z2 = 0
+|> order by lhs.a, rhs.a, z2
+|> set z2 = 4
+|> limit 2
+|> select lhs.a, rhs.a, z2
+-- !query schema
+struct<a:int,a:int,z2:int>
+-- !query output
+1	1	4
+
+
+-- !query
 table t
 |> set z = 1
 -- !query schema
@@ -1481,7 +1498,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`y`",
-    "proposal" : "`x`, `z`"
+    "proposal" : "`z`, `spark_catalog`.`default`.`t`.`x`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1507,7 +1524,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`y`",
-    "proposal" : "`x`, `z`"
+    "proposal" : "`z`, `spark_catalog`.`default`.`t`.`x`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1533,7 +1550,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`y`",
-    "proposal" : "`x`, `z`"
+    "proposal" : "`z`, `spark_catalog`.`default`.`t`.`x`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1559,7 +1576,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`y`",
-    "proposal" : "`x`, `z`"
+    "proposal" : "`z`, `spark_catalog`.`default`.`t`.`x`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1583,7 +1600,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`y`",
-    "proposal" : "`x`, `sum_len`"
+    "proposal" : "`sum_len`, `spark_catalog`.`default`.`t`.`x`"
   },
   "queryContext" : [ {
     "objectType" : "",

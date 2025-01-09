@@ -18,7 +18,17 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.catalyst.analysis.MultiAlias
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Cast, Expression, ExtractValue, Generator, GeneratorOuter, Literal, NamedExpression}
+import org.apache.spark.sql.catalyst.expressions.{
+  Alias,
+  Attribute,
+  Cast,
+  Expression,
+  ExtractValue,
+  Generator,
+  GeneratorOuter,
+  Literal,
+  NamedExpression
+}
 import org.apache.spark.sql.catalyst.trees.TreePattern.UNRESOLVED_ALIAS
 import org.apache.spark.sql.catalyst.util.{toPrettySQL, AUTO_GENERATED_ALIAS}
 import org.apache.spark.sql.types.MetadataBuilder

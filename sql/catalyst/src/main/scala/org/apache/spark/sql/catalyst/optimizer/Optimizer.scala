@@ -313,6 +313,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
     private val rules = Seq(
       EliminateResolvedHint,
       EliminateSubqueryAliases,
+      EliminatePipeOperators,
       EliminateView,
       ReplaceExpressions,
       RewriteNonCorrelatedExists,
