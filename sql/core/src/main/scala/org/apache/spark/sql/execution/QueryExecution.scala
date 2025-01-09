@@ -21,7 +21,6 @@ import java.io.{BufferedWriter, OutputStreamWriter}
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicLong
 
-import scala.util.{Failure, Success, Try}
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.fs.Path
@@ -93,19 +92,18 @@ class QueryExecution(
   }
 
   private val lazyAnalyzed = LazyTry {
-    val plan = Try {
-      executePhase(QueryPlanningTracker.ANALYSIS) {
+    try {
+      val plan = executePhase(QueryPlanningTracker.ANALYSIS) {
         // We can't clone `logical` here, which will reset the `_analyzed` flag.
         sparkSession.sessionState.analyzer.executeAndCheck(logical, tracker)
       }
-    }
-    plan match {
-      case Success(plan) =>
-        tracker.setAnalyzed(plan)
-      case Failure(_) =>
+      tracker.setAnalyzed(plan)
+      plan
+    } catch {
+      case NonFatal(e) =>
         tracker.setAnalysisFailed(logical)
+        throw e
     }
-    plan.get
   }
 
   def analyzed: LogicalPlan = lazyAnalyzed.get

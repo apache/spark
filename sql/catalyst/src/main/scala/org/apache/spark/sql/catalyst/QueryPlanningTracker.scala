@@ -158,7 +158,7 @@ class QueryPlanningTracker(
   }
 
   /**
-   * Set when the query has been parsed.
+   * Set when the query has been parsed but failed to be analyzed.
    * Can be called multiple times upon plan change.
    *
    * @param parsedPlan The plan prior analysis
