@@ -20,6 +20,7 @@ package org.apache.spark.sql.connect.ml
 import java.util.ServiceLoader
 
 import scala.collection.immutable.HashSet
+import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 
 import org.apache.commons.lang3.reflect.MethodUtils.invokeMethod
@@ -32,8 +33,10 @@ import org.apache.spark.ml.util.MLWritable
 import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.connect.common.LiteralValueProtoConverter
 import org.apache.spark.sql.connect.planner.SparkConnectPlanner
+import org.apache.spark.sql.connect.plugin.SparkConnectPluginRegistry
 import org.apache.spark.sql.connect.service.SessionHolder
 import org.apache.spark.util.{SparkClassUtils, Utils}
+
 
 private[ml] object MLUtils {
 
@@ -45,16 +48,26 @@ private[ml] object MLUtils {
    * @return
    *   a Map with name and class
    */
-  private def loadOperators(mlCls: Class[_]): Map[String, Class[_]] = {
+  private def loadOperators(mlCls: Class[_]): mutable.HashMap[String, Class[_]] = {
     val loader = Utils.getContextOrSparkClassLoader
     val serviceLoader = ServiceLoader.load(mlCls, loader)
     val providers = serviceLoader.asScala.toList
-    providers.map(est => est.getClass.getName -> est.getClass).toMap
+    mutable.HashMap.from(providers.map(est => est.getClass.getName -> est.getClass).toMap)
   }
 
   private lazy val estimators = loadOperators(classOf[Estimator[_]])
 
   private lazy val transformers = loadOperators(classOf[Transformer])
+
+  // visible for testing
+  private[ml] def addEstimator(name: String, mlCls: Class[_]): Unit = {
+    estimators.put(name, mlCls)
+  }
+  private[ml] def removeEstimator(name: String): Unit = {
+    if (estimators.contains(name)) {
+      estimators.remove(name)
+    }
+  }
 
   def deserializeVector(vector: proto.Vector): Vector = {
     if (vector.hasDense) {
@@ -212,7 +225,7 @@ private[ml] object MLUtils {
   private def getInstance[T](
       name: String,
       uid: String,
-      instanceMap: Map[String, Class[_]],
+      instanceMap: mutable.HashMap[String, Class[_]],
       params: Option[proto.MlParams]): T = {
     if (instanceMap.isEmpty || !instanceMap.contains(name)) {
       throw MlUnsupportedException(s"Unsupported ML operator, found $name")
@@ -239,7 +252,7 @@ private[ml] object MLUtils {
    *   the estimator
    */
   def getEstimator(operator: proto.MlOperator, params: Option[proto.MlParams]): Estimator[_] = {
-    val name = operator.getName
+    val name = SparkConnectPluginRegistry.mlOverrides.getOrElse(operator.getName, operator.getName)
     val uid = operator.getUid
     getInstance[Estimator[_]](name, uid, estimators, params)
   }

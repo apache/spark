@@ -214,6 +214,20 @@ object Connect {
       .toSequence
       .createWithDefault(Nil)
 
+  val CONNECT_EXTENSIONS_ML_OVERRIDES =
+    buildStaticConf("spark.connect.extensions.ml.overrides")
+      .doc("""
+             |Comma separated list of strings that specifies how to replace
+             |the estimators using the third-party implementations.
+             |For example, spark.connect.extensions.ml.overrides=
+             |"org.apache.spark.ml.classification.LogisticRegression=
+             |com.example.MyLogisticRegression"
+             |""".stripMargin)
+      .version("4.0.0")
+      .stringConf
+      .toSequence
+      .createWithDefault(Nil)
+
   val CONNECT_JVM_STACK_TRACE_MAX_SIZE =
     buildStaticConf("spark.connect.jvmStacktrace.maxSize")
       .doc("""

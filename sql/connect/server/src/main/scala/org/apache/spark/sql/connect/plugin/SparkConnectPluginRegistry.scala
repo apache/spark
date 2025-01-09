@@ -49,6 +49,7 @@ object SparkConnectPluginRegistry {
   private var relationRegistryCache: Seq[RelationPlugin] = Seq.empty
   private var expressionRegistryCache: Seq[ExpressionPlugin] = Seq.empty
   private var commandRegistryCache: Seq[CommandPlugin] = Seq.empty
+  private lazy val mlOverridesCache: Map[String, String] = loadMLOverrides()
 
   // Type used to identify the closure responsible to instantiate a ServerInterceptor.
   type relationPluginBuilder = () => RelationPlugin
@@ -64,6 +65,7 @@ object SparkConnectPluginRegistry {
   def commandRegistry: Seq[CommandPlugin] = withInitialize {
     commandRegistryCache
   }
+  def mlOverrides: Map[String, String] = mlOverridesCache
 
   private def withInitialize[T](f: => Seq[T]): Seq[T] = {
     synchronized {
@@ -105,6 +107,15 @@ object SparkConnectPluginRegistry {
   private[connect] def loadCommandPlugins(): Seq[CommandPlugin] = {
     commandPluginChain.map(x => x()) ++ createConfiguredPlugins(
       SparkEnv.get.conf.get(Connect.CONNECT_EXTENSIONS_COMMAND_CLASSES))
+  }
+
+  private[connect] def loadMLOverrides(): Map[String, String] = {
+    SparkEnv.get.conf.get(Connect.CONNECT_EXTENSIONS_ML_OVERRIDES).map { x =>
+      require(x.contains("="))
+      val l = x.split("=")
+      require(l.length == 2)
+      l(0).trim -> l(1).trim
+    }.toMap
   }
 
   /**
