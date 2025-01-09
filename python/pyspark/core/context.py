@@ -1206,7 +1206,7 @@ class SparkContext:
 
     def _dictToJavaMap(self, d: Optional[Dict[str, str]]) -> JavaMap:
         assert self._jvm is not None
-        jm = self._jvm.java.lang.HashMap()
+        jm = getattr(self._jvm, "java.util.HashMap")()
         if not d:
             d = {}
         for k, v in d.items():
