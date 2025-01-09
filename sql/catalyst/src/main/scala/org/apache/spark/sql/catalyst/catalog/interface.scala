@@ -38,7 +38,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{CurrentUserContext, FunctionIdentifier, InternalRow, SQLConfHelper, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation, Resolver, SchemaBinding, SchemaCompensation, SchemaEvolution, SchemaTypeEvolution, SchemaUnsupported, UnresolvedLeafNode, ViewSchemaMode}
 import org.apache.spark.sql.catalyst.catalog.CatalogTable.VIEW_STORING_ANALYZED_PLAN
-import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, AttributeMap, AttributeReference, Cast, Expression, ExprId, Literal, SortOrder}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, Cast, ExprId, Literal}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
@@ -367,17 +367,6 @@ case class BucketSpec(
       "Sort Columns" -> JArray(sortColumnNames.map(JString).toList)
     )
   }
-}
-
-/**
- * The clustering spec holds the information of clustering keys and sorting keys.
- *
- * @param clusteringKeys The clustering expressions
- * @param sortKeys       The sort orders
- */
-case class ClusteringSpec(clusteringKeys: Seq[Expression], sortKeys: Seq[SortOrder]) {
-  def expressions: Seq[Expression] = clusteringKeys ++ sortKeys.map(_.child)
-  def toSorts: Seq[SortOrder] = clusteringKeys.map(SortOrder(_, Ascending)) ++ sortKeys
 }
 
 /**

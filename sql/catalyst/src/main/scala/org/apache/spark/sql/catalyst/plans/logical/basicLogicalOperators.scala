@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.sql.catalyst.{AliasIdentifier, InternalRow, SQLConfHelper}
 import org.apache.spark.sql.catalyst.analysis.{AnsiTypeCoercion, MultiInstanceRelation, Resolver, TypeCoercion, TypeCoercionBase, UnresolvedUnaryNode}
-import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, ClusteringSpec}
+import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable}
 import org.apache.spark.sql.catalyst.catalog.CatalogTable.VIEW_STORING_ANALYZED_PLAN
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, TypedImperativeAggregate}
@@ -1007,6 +1007,17 @@ case class Sort(
   final override val nodePatterns: Seq[TreePattern] = Seq(SORT)
   override protected def withNewChildInternal(newChild: LogicalPlan): Sort = copy(child = newChild)
 }
+
+/**
+ * The clustering spec holds the information of clustering keys and sorting keys.
+ *
+ * @param clusteringKeys The clustering expressions
+ * @param sortKeys       The sort orders
+ */
+ case class ClusteringSpec(clusteringKeys: Seq[Expression], sortKeys: Seq[SortOrder]) {
+   def expressions: Seq[Expression] = clusteringKeys ++ sortKeys.map(_.child)
+   def toSorts: Seq[SortOrder] = clusteringKeys.map(SortOrder(_, Ascending)) ++ sortKeys
+ }
 
 /**
  * Clustering data within the partition.
