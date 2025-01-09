@@ -16,26 +16,47 @@
  */
 package org.apache.spark.util
 
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.atomic.AtomicInteger
+
+import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.duration._
+
 import org.apache.spark.{SerializerHelper, SparkFunSuite}
 
 class TransientBestEffortLazyValSuite extends SparkFunSuite with SerializerHelper {
 
   test("TransientBestEffortLazyVal works") {
-    var test: Option[Object] = None
-
+    val numInitializerCalls = new AtomicInteger(0)
+    // Simulate a race condition where two threads concurrently
+    // initialize the lazy value:
+    val latch = new CountDownLatch(2)
     val lazyval = new TransientBestEffortLazyVal(() => {
-      test = Some(new Object())
-      test
+      numInitializerCalls.incrementAndGet()
+      latch.countDown()
+      new Object()
     })
 
     // Ensure no initialization happened before the lazy value was invoked
-    assert(test.isEmpty)
+    assert(numInitializerCalls.get() === 0)
 
-    // Ensure the first invocation creates a new object
-    assert(lazyval() == test && test.isDefined)
+    // Two threads concurrently invoke the lazy value
+    implicit val ec: ExecutionContext = ExecutionContext.global
+    val future1 = Future { lazyval() }
+    val future2 = Future { lazyval() }
+    val value1 = ThreadUtils.awaitResult(future1, 10.seconds)
+    val value2 = ThreadUtils.awaitResult(future2, 10.seconds)
+
+    // The initializer should have been invoked twice (due to how we set up the
+    // race condition via the latch):
+    assert(numInitializerCalls.get() === 2)
+
+    // But the value should only have been computed once:
+    assert(value1 eq value2)
 
     // Ensure the subsequent invocation serves the same object
-    assert(lazyval() == test && test.isDefined)
+    assert(lazyval() eq value1)
+    assert(numInitializerCalls.get() === 2)
   }
 
   test("TransientBestEffortLazyVal is serializable") {
