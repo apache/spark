@@ -504,7 +504,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
    */
   object ResolveAliases extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan =
-      plan.resolveOperatorsUpWithPruning(_.containsAnyPattern(UNRESOLVED_ALIAS), ruleId) {
+      plan.resolveOperatorsUpWithPruning(_.containsPattern(UNRESOLVED_ALIAS), ruleId) {
         case Aggregate(groups, aggs, child, _)
             if child.resolved && AliasResolution.hasUnresolvedAlias(aggs) =>
           Aggregate(groups, AliasResolution.assignAliases(aggs), child)
