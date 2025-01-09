@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
+import scala.collection.mutable.HashMap
+
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.HandlerType.HandlerType
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
@@ -69,7 +71,9 @@ case class SingleStatement(parsedPlan: LogicalPlan)
 case class CompoundBody(
     collection: Seq[CompoundPlanStatement],
     label: Option[String],
-    isScope: Boolean) extends Command with CompoundPlanStatement {
+    isScope: Boolean,
+    handlers: Seq[ErrorHandler] = Seq.empty,
+    conditions: HashMap[String, String] = HashMap()) extends Command with CompoundPlanStatement {
 
   override def children: Seq[LogicalPlan] = collection
 

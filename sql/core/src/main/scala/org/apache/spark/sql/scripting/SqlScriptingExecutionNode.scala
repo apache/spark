@@ -19,12 +19,15 @@ package org.apache.spark.sql.scripting
 
 import java.util
 
+import scala.collection.mutable.HashMap
+
 import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
 import org.apache.spark.sql.catalyst.analysis.{NameParameterizedQuery, UnresolvedAttribute, UnresolvedIdentifier}
 import org.apache.spark.sql.catalyst.expressions.{Alias, CreateArray, CreateMap, CreateNamedStruct, Expression, Literal}
 import org.apache.spark.sql.catalyst.plans.logical.{CreateVariable, DefaultValueExpression, DropVariable, LogicalPlan, OneRowRelation, Project, SetVariable}
+import org.apache.spark.sql.catalyst.plans.logical.HandlerType.HandlerType
 import org.apache.spark.sql.catalyst.trees.{Origin, WithOrigin}
 import org.apache.spark.sql.errors.SqlScriptingErrors
 import org.apache.spark.sql.types.BooleanType
@@ -190,7 +193,8 @@ class CompoundBodyExec(
     statements: Seq[CompoundStatementExec],
     label: Option[String] = None,
     isScope: Boolean,
-    context: SqlScriptingExecutionContext)
+    context: SqlScriptingExecutionContext,
+    conditionHandlerMap: HashMap[String, ErrorHandlerExec] = HashMap())
   extends NonLeafStatementExec {
 
   private object ScopeStatus extends Enumeration {
@@ -964,4 +968,18 @@ class ForStatementExec(
     interrupted = false
     body.reset()
   }
+}
+
+/**
+ * Executable node for ErrorHandlerStatement.
+ * @param body Executable CompoundBody of the error handler.
+ */
+class ErrorHandlerExec(
+    val body: CompoundBodyExec,
+    val handlerType: HandlerType,
+    val scopeToExit: Option[String]) extends NonLeafStatementExec {
+
+  override def getTreeIterator: Iterator[CompoundStatementExec] = body.getTreeIterator
+
+  override def reset(): Unit = body.reset()
 }

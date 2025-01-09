@@ -17,10 +17,13 @@
 
 package org.apache.spark.sql.scripting
 
+import scala.collection.mutable.HashMap
+
+import org.apache.spark.SparkException
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.analysis.UnresolvedIdentifier
 import org.apache.spark.sql.catalyst.expressions.Expression
-import org.apache.spark.sql.catalyst.plans.logical.{CaseStatement, CompoundBody, CompoundPlanStatement, CreateVariable, DropVariable, ForStatement, IfElseStatement, IterateStatement, LeaveStatement, LogicalPlan, LoopStatement, RepeatStatement, SingleStatement, WhileStatement}
+import org.apache.spark.sql.catalyst.plans.logical.{CaseStatement, CompoundBody, CompoundPlanStatement, CreateVariable, DropVariable, ForStatement, HandlerType, IfElseStatement, IterateStatement, LeaveStatement, LogicalPlan, LoopStatement, RepeatStatement, SingleStatement, WhileStatement}
 import org.apache.spark.sql.catalyst.trees.Origin
 
 /**
@@ -64,6 +67,86 @@ case class SqlScriptingInterpreter(session: SparkSession) {
     }
 
   /**
+   * Transform [[CompoundBody]] into [[CompoundBodyExec]].
+   * @param compoundBody
+   *   CompoundBody to be transformed into CompoundBodyExec.
+   * @param args
+   *   A map of parameter names to SQL literal expressions.
+   * @param isExitHandler
+   *   Flag to indicate if the body is an exit handler body to add leave statement at the end.
+   * @param exitHandlerLabel
+   *   If body is an exit handler body, this is the label of surrounding CompoundBody
+   *   that should be exited.
+   * @return
+   *   Executable version of the CompoundBody .
+   */
+  private def transformBodyIntoExec(
+      compoundBody: CompoundBody,
+      args: Map[String, Expression],
+      context: SqlScriptingExecutionContext,
+      isExitHandler: Boolean = false,
+      exitHandlerLabel: String = ""): CompoundBodyExec = {
+    val variables = compoundBody.collection.flatMap {
+      case st: SingleStatement => getDeclareVarNameFromPlan(st.parsedPlan)
+      case _ => None
+    }
+    val dropVariables = variables
+      .map(varName => DropVariable(varName, ifExists = true))
+      .map(new SingleStatementExec(_, Origin(), args, isInternal = true, context))
+      .reverse
+
+    // Create a map of conditions (SqlStates) to their respective handlers.
+    val conditionHandlerMap = HashMap[String, ErrorHandlerExec]()
+    compoundBody.handlers.foreach(handler => {
+      val handlerBodyExec =
+        transformBodyIntoExec(
+          handler.body,
+          args,
+          context,
+          handler.handlerType == HandlerType.EXIT,
+          compoundBody.label.get)
+
+      // Execution node of handler.
+      val scopeToExit = if (handler.handlerType == HandlerType.EXIT) {
+        Some(compoundBody.label.get)
+      } else {
+        None
+      }
+
+      val handlerExec = new ErrorHandlerExec(
+        handlerBodyExec,
+        handler.handlerType,
+        scopeToExit)
+
+      // For each condition handler is defined for, add corresponding key value pair
+      // to the conditionHandlerMap.
+      handler.conditions.foreach(condition => {
+        // Condition can either be the key in conditions map or SqlState.
+        val conditionValue = compoundBody.conditions.getOrElse(condition, condition)
+        if (conditionHandlerMap.contains(conditionValue)) {
+          throw SparkException
+            .internalError(s"Duplicate Handler for same SqlState $conditionValue")
+        } else {
+          conditionHandlerMap.put(conditionValue, handlerExec)
+        }
+      })
+    })
+
+    val statements = compoundBody.collection
+      .map(st => transformTreeIntoExecutable(st, args, context)) ++ dropVariables match {
+      case Nil => Seq(new NoOpStatementExec)
+      case s => s
+    }
+
+    new CompoundBodyExec(
+      statements,
+      compoundBody.label,
+      compoundBody.isScope,
+      context,
+      conditionHandlerMap)
+  }
+
+  /**
    * Transform the parsed tree to the executable node.
    *
    * @param node
@@ -78,28 +161,9 @@ case class SqlScriptingInterpreter(session: SparkSession) {
       args: Map[String, Expression],
       context: SqlScriptingExecutionContext): CompoundStatementExec =
     node match {
-      case CompoundBody(collection, label, isScope) =>
+      case body: CompoundBody =>
         // TODO [SPARK-48530]: Current logic doesn't support scoped variables and shadowing.
-        val variables = collection.flatMap {
-          case st: SingleStatement => getDeclareVarNameFromPlan(st.parsedPlan)
-          case _ => None
-        }
-        val dropVariables = variables
-          .map(varName => DropVariable(varName, ifExists = true))
-          .map(new SingleStatementExec(_, Origin(), args, isInternal = true, context))
-          .reverse
-
-        val statements = collection
-          .map(st => transformTreeIntoExecutable(st, args, context)) ++ dropVariables match {
-            case Nil => Seq(new NoOpStatementExec)
-            case s => s
-          }
-
-        new CompoundBodyExec(
-          statements,
-          label,
-          isScope,
-          context)
+        transformBodyIntoExec(body, args, context)
 
       case IfElseStatement(conditions, conditionalBodies, elseBody) =>
         val conditionsExec = conditions.map(condition =>
@@ -185,6 +249,7 @@ case class SqlScriptingInterpreter(session: SparkSession) {
           args,
           isInternal = false,
           context)
+
       case _ => throw new UnsupportedOperationException(s"Unsupported statement: $node")
     }
 }

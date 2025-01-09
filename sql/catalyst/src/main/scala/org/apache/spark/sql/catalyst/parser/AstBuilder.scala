@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.parser
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 
-import scala.collection.mutable.{ArrayBuffer, ListBuffer, Set}
+import scala.collection.mutable.{ArrayBuffer, HashMap, ListBuffer, Set}
 import scala.jdk.CollectionConverters._
 import scala.util.{Left, Right}
 
@@ -159,8 +159,22 @@ class AstBuilder extends DataTypeAstBuilder
     script
   }
 
+  private def assertSqlState(sqlState: String): Unit = {
+    val sqlStateRegex = "^[A-Za-z0-9]{5}$".r
+    assert(sqlStateRegex.findFirstIn(sqlState).isDefined,
+      "SQLSTATE must be exactly 5 characters long and contain only A-Z and 0-9.")
+    assert(!sqlState.startsWith("00") && !sqlState.startsWith("01") && !sqlState.startsWith("XX"),
+      "SQLSTATE must not start with '00', '01', or 'XX'.")
+  }
+
   override def visitConditionValue(ctx: ConditionValueContext): String = {
-    ctx.getText.replace("'", "")
+    Option(ctx.sqlStateValue())
+      .map { sqlStateValueContext =>
+        val sqlState = sqlStateValueContext.getText.replace("'", "")
+        assertSqlState(sqlState)
+        sqlState
+      }
+      .getOrElse(ctx.getText)
   }
 
   override def visitConditionValues(ctx: ConditionValuesContext): Seq[String] = {
@@ -182,15 +196,13 @@ class AstBuilder extends DataTypeAstBuilder
     val conditionValue = Option(ctx.sqlStateValue())
       .map(_.getText.replace("'", "")).getOrElse("45000")
 
-    val sqlStateRegex = "^[A-Za-z0-9]{5}$".r
-    assert(sqlStateRegex.findFirstIn(conditionValue).isDefined)
-
+    assertSqlState(conditionValue)
     ErrorCondition(conditionName, conditionValue)
   }
 
-  def visitDeclareHandlerImpl(
-        ctx: DeclareHandlerStatementContext,
-        labelCtx: SqlScriptingLabelContext): ErrorHandler = {
+  private def visitDeclareHandlerImpl(
+      ctx: DeclareHandlerStatementContext,
+      labelCtx: SqlScriptingLabelContext): ErrorHandler = {
     val conditions = visit(ctx.conditionValues()).asInstanceOf[Seq[String]]
 
     if (Option(ctx.CONTINUE()).isDefined) {
@@ -221,8 +233,23 @@ class AstBuilder extends DataTypeAstBuilder
       labelCtx: SqlScriptingLabelContext,
       isScope: Boolean): CompoundBody = {
     val buff = ListBuffer[CompoundPlanStatement]()
-    ctx.compoundStatements.forEach(
-      compoundStatement => buff += visitCompoundStatementImpl(compoundStatement, labelCtx))
+
+    val handlers = ListBuffer[ErrorHandler]()
+    val conditions = HashMap[String, String]()
+
+    ctx.compoundStatements.forEach(compoundStatement => {
+      val stmt = visitCompoundStatementImpl(compoundStatement, labelCtx)
+      stmt match {
+        case handler: ErrorHandler => handlers += handler
+        case condition: ErrorCondition =>
+          if (conditions.contains(condition.conditionName)) {
+            throw SparkException.internalError(
+              s"Duplicate condition name ${condition.conditionName} in handler definition")
+          }
+          conditions += condition.conditionName -> condition.value
+        case s => buff += s
+      }
+    })
 
     val compoundStatements = buff.toList
 
@@ -251,7 +278,7 @@ class AstBuilder extends DataTypeAstBuilder
       case _ =>
     }
 
-    CompoundBody(buff.toSeq, label, isScope)
+    CompoundBody(buff.toSeq, label, isScope, handlers.toSeq, conditions)
   }
 
   private def visitBeginEndCompoundBlockImpl(
