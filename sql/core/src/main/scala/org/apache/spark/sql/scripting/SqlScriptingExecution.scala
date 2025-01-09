@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.scripting
 
-import org.apache.spark.SparkException
 import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.logical.{CommandResult, CompoundBody}
@@ -36,7 +35,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{CommandResult, CompoundBody}
 class SqlScriptingExecution(
     sqlScript: CompoundBody,
     session: SparkSession,
-    args: Map[String, Expression]) extends Iterator[DataFrame] {
+    args: Map[String, Expression]) {
 
   private val interpreter = SqlScriptingInterpreter(session)
 
@@ -53,37 +52,6 @@ class SqlScriptingExecution(
     ctx
   }
 
-  private var current: Option[DataFrame] = None
-
-  /**
-   * Advances through the script and executes statements until a result statement or
-   * end of script is encountered.
-   *
-   * To know if there is result statement available, the hasNext needs to advance through
-   * script and execute statements until the result statement or end of script is encountered.
-   * For that reason hasNext must be called only once before each `next()` invocation,
-   * and the returned result must be executed before subsequent calls. Multiple calls without
-   * executing the intermediate results will lead to incorrect behavior.
-   *
-   * @return True if a result statement is available, False otherwise.
-   */
-  override def hasNext: Boolean = {
-    current = getNextResult
-    current.isDefined
-  }
-
-  /**
-   * Returns the next result statement from the script.
-   * Multiple consecutive calls without calling `hasNext()` would return the same result statement.
-   *
-   * @return The next result statement.
-   */
-  override def next(): DataFrame = {
-    current match {
-      case None => throw SparkException.internalError("No more elements to iterate through.")
-      case Some(result) => result
-    }
-  }
 
   /** Helper method to iterate get next statements from the first available frame. */
   private def getNextStatement: Option[CompoundStatementExec] = {
@@ -98,8 +66,18 @@ class SqlScriptingExecution(
     None
   }
 
-  /** Helper method to iterate through statements until next result statement is encountered. */
-  private def getNextResult: Option[DataFrame] = {
+  /**
+   * Advances through the script and executes statements until a result statement or
+   * end of script is encountered.
+   *
+   * To know if there is result statement available, the method has to advance through script and
+   * execute statements until the result statement or end of script is encountered. For that reason
+   * the returned result must be executed before subsequent calls. Multiple calls without executing
+   * the intermediate results will lead to incorrect behavior.
+   *
+   * @return Result DataFrame if it is available, otherwise None.
+   */
+  def getNextResult: Option[DataFrame] = {
     var currentStatement = getNextStatement
     // While we don't have a result statement, execute the statements.
     while (currentStatement.isDefined) {
