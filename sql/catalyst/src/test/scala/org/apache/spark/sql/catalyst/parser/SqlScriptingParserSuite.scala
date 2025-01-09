@@ -46,18 +46,6 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     assert(!statement.isInstanceOf[CompoundBody])
   }
 
-  test("testtest") {
-    val sqlScriptText =
-      """
-        |BEGIN
-        |DECLARE `my.var.i.ab.le` = 1;
-        |SELECT `my.var.i.ab.le` + `my.var.i.ab.le` * 2;
-        |END
-        |""".stripMargin
-    val statement = parsePlan(sqlScriptText)
-    assert(!statement.isInstanceOf[CompoundBody])
-  }
-
   test("multi select without ; - should fail") {
     val sqlScriptText = "SELECT 1 SELECT 1"
     val e = intercept[ParseException] {

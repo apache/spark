@@ -99,7 +99,10 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
   private def resolveVariableName(
       nameParts: Seq[String],
       ident: Identifier): ResolvedIdentifier = nameParts.length match {
-    case 1 | 2 => ResolvedIdentifier(FakeSystemCatalog, ident)
+    case 1 => ResolvedIdentifier(FakeSystemCatalog, ident)
+
+    case 2 if nameParts.head.equalsIgnoreCase(CatalogManager.SESSION_NAMESPACE) =>
+      ResolvedIdentifier(FakeSystemCatalog, ident)
 
     // When there are 3 nameParts the variable must be a fully qualified session variable
     // i.e. "system.session.<varName>"
