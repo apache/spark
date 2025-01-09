@@ -28,7 +28,7 @@ import org.apache.spark.sql.connect.ConnectConversions._
 import org.apache.spark.sql.connect.common.UdfUtils
 import org.apache.spark.sql.expressions.{Aggregator, SparkUserDefinedFunction}
 import org.apache.spark.sql.functions.col
-import org.apache.spark.sql.internal.UDFAdaptors
+import org.apache.spark.sql.internal.{ColumnNodeToProtoConverter, UDFAdaptors}
 import org.apache.spark.sql.streaming.{GroupState, GroupStateTimeout, OutputMode, StatefulProcessor, StatefulProcessorWithInitialState, TimeMode}
 
 /**
@@ -469,8 +469,9 @@ private class KeyValueGroupedDatasetImpl[K, V, IK, IV](
       originalDf.mapPartitions(transformFunc)(transformEncoder).toDF("iv", "v")
     valueTransformedDf.collect()
     // Rewrite grouping expressions to use "iv" column as input
-    val qqqqq = groupingColumns.map(rewriteGroupingColumn(_, "iv"))
-    val updatedGroupingExprs = groupingColumns.map(rewriteGroupingColumn(_, "iv")).map(_.expr)
+    val qqqqq = groupingColumns.map(c => ColumnNodeToProtoConverter
+      .apply(c.node, None, Some(prependToIdentifier())))
+    val updatedGroupingExprs = qqqqq
     // Rewrite the aggregate columns to use "v" column as input
     val updatedAggColumns = columns.map(rewriteAggColumn(_, "v"))
     val rEnc = ProductEncoder.tuple(kEncoder +: columns.map(c => agnosticEncoderFor(c.encoder)))
@@ -485,23 +486,14 @@ private class KeyValueGroupedDatasetImpl[K, V, IK, IV](
     }
   }
 
-  private def rewriteGroupingColumn(column: Column, to: String): Column = {
-    def prependInput(col: internal.ColumnNode): internal.ColumnNode = {
-      col match {
-        case n@internal.UnresolvedAttribute(nameParts, _, _, _) =>
-          n.copy(nameParts = to +: nameParts)
-        case n@internal.UnresolvedStar(None, planId, origin) =>
-          internal.UnresolvedAttribute(to, planId, isMetadataColumn = false, origin)
-        case n@internal.InvokeInlineUserDefinedFunction(_, arguments, _, _) =>
-          n.copy(arguments = arguments.map(prependInput))
-        case n@internal.UnresolvedFunction(_, arguments, _, _, _, _) =>
-          n.copy(arguments = arguments.map(prependInput))
-        case _ => col
-      }
-    }
-
-    val newNode = prependInput(column.node)
-    new Column(newNode)
+  private def prependToIdentifier(): internal.ColumnNode => internal.ColumnNode = {
+    case n@internal.UnresolvedAttribute(nameParts, _, _, _) =>
+      n.copy(nameParts = "iv" +: nameParts)
+    case internal.UnresolvedStar(None, planId, origin) =>
+      internal.UnresolvedAttribute("iv", planId, isMetadataColumn = false, origin)
+    case f @ internal.InvokeInlineUserDefinedFunction(_: Aggregator[_, _, _], Nil, _, _) =>
+      f.copy(arguments = Seq(internal.UnresolvedAttribute("iv")))
+    case col => col
   }
 
   private def rewriteAggColumn(column: Column, to: String): Column = {

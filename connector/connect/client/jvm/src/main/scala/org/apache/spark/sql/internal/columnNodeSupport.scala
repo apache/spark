@@ -42,10 +42,15 @@ object ColumnNodeToProtoConverter extends (ColumnNode => proto.Expression) {
 
   override def apply(node: ColumnNode): Expression = apply(node, None)
 
-  private def apply(node: ColumnNode, e: Option[Encoder[_]]): proto.Expression = {
+  private[sql] def apply(
+      node: ColumnNode,
+      e: Option[Encoder[_]],
+      additionalTransformation: Option[ColumnNode => ColumnNode] = None
+  ): proto.Expression = {
     val builder = proto.Expression.newBuilder()
     // TODO(SPARK-49273) support Origin in Connect Scala Client.
-    node match {
+    val n = additionalTransformation.map(_(node)).getOrElse(node)
+    n match {
       case Literal(value, None, _) =>
         builder.setLiteral(toLiteralProtoBuilder(value))
 
@@ -53,7 +58,6 @@ object ColumnNodeToProtoConverter extends (ColumnNode => proto.Expression) {
         builder.setLiteral(toLiteralProtoBuilder(value, dataType))
 
       case u @ UnresolvedAttribute(unparsedIdentifier, planId, isMetadataColumn, _) =>
-        println(s"UnresolvedAttribute: $u")
         val escapedName = u.sql
         val b = builder.getUnresolvedAttributeBuilder
           .setUnparsedIdentifier(escapedName)
@@ -80,16 +84,16 @@ object ColumnNodeToProtoConverter extends (ColumnNode => proto.Expression) {
           .setFunctionName(functionName)
           .setIsUserDefinedFunction(isUserDefinedFunction)
           .setIsDistinct(isDistinct)
-          .addAllArguments(arguments.map(apply(_, e)).asJava)
+          .addAllArguments(arguments.map(apply(_, e, additionalTransformation)).asJava)
 
       case Alias(child, name, metadata, _) =>
-        val b = builder.getAliasBuilder.setExpr(apply(child, e))
+        val b = builder.getAliasBuilder.setExpr(apply(child, e, additionalTransformation))
         name.foreach(b.addName)
         metadata.foreach(m => b.setMetadata(m.json))
 
       case Cast(child, dataType, evalMode, _) =>
         val b = builder.getCastBuilder
-          .setExpr(apply(child, e))
+          .setExpr(apply(child, e, additionalTransformation))
           .setType(DataTypeProtoConverter.toConnectProtoType(dataType))
         evalMode.foreach { mode =>
           val convertedMode = mode match {
@@ -108,8 +112,9 @@ object ColumnNodeToProtoConverter extends (ColumnNode => proto.Expression) {
 
       case Window(windowFunction, windowSpec, _) =>
         val b = builder.getWindowBuilder
-          .setWindowFunction(apply(windowFunction, e))
-          .addAllPartitionSpec(windowSpec.partitionColumns.map(apply(_, e)).asJava)
+          .setWindowFunction(apply(windowFunction, e, additionalTransformation))
+          .addAllPartitionSpec(
+            windowSpec.partitionColumns.map(apply(_, e, additionalTransformation)).asJava)
           .addAllOrderSpec(windowSpec.sortColumns.map(convertSortOrder(_, e)).asJava)
         windowSpec.frame.foreach { frame =>
           b.getFrameSpecBuilder
@@ -123,21 +128,21 @@ object ColumnNodeToProtoConverter extends (ColumnNode => proto.Expression) {
 
       case UnresolvedExtractValue(child, extraction, _) =>
         builder.getUnresolvedExtractValueBuilder
-          .setChild(apply(child, e))
-          .setExtraction(apply(extraction, e))
+          .setChild(apply(child, e, additionalTransformation))
+          .setExtraction(apply(extraction, e, additionalTransformation))
 
       case UpdateFields(structExpression, fieldName, valueExpression, _) =>
         val b = builder.getUpdateFieldsBuilder
-          .setStructExpression(apply(structExpression, e))
+          .setStructExpression(apply(structExpression, e, additionalTransformation))
           .setFieldName(fieldName)
-        valueExpression.foreach(v => b.setValueExpression(apply(v, e)))
+        valueExpression.foreach(v => b.setValueExpression(apply(v, e, additionalTransformation)))
 
       case v: UnresolvedNamedLambdaVariable =>
         builder.setUnresolvedNamedLambdaVariable(convertNamedLambdaVariable(v))
 
       case LambdaFunction(function, arguments, _) =>
         builder.getLambdaFunctionBuilder
-          .setFunction(apply(function, e))
+          .setFunction(apply(function, e, additionalTransformation))
           .addAllArguments(arguments.map(convertNamedLambdaVariable).asJava)
 
       case f @ InvokeInlineUserDefinedFunction(
@@ -146,21 +151,22 @@ object ColumnNodeToProtoConverter extends (ColumnNode => proto.Expression) {
             false,
             _) =>
         // Translate UserDefinedFunctionLike into UserDefinedFunction.
-        builder.mergeFrom(apply(f.copy(function = UserDefinedAggregator(a, e.get)), e))
+        builder.mergeFrom(apply(
+          f.copy(function = UserDefinedAggregator(a, e.get)), e, additionalTransformation))
 
       case InvokeInlineUserDefinedFunction(udf: UserDefinedFunction, args, false, _) =>
         builder.setCommonInlineUserDefinedFunction(
-          UdfToProtoUtils.toProto(udf, args.map(apply(_, e))))
+          UdfToProtoUtils.toProto(udf, args.map(apply(_, e, additionalTransformation))))
 
       case CaseWhenOtherwise(branches, otherwise, _) =>
         val b = builder.getUnresolvedFunctionBuilder
           .setFunctionName("when")
         branches.foreach { case (condition, value) =>
-          b.addArguments(apply(condition, e))
-          b.addArguments(apply(value, e))
+          b.addArguments(apply(condition, e, additionalTransformation))
+          b.addArguments(apply(value, e, additionalTransformation))
         }
         otherwise.foreach { value =>
-          b.addArguments(apply(value, e))
+          b.addArguments(apply(value, e, additionalTransformation))
         }
 
       case ProtoColumnNode(e, _) =>
