@@ -23,16 +23,17 @@ import org.apache.spark.sql.catalyst.catalog.{VariableDefinition, VariableManage
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.errors.DataTypeErrorsBase
+ import org.apache.spark.sql.errors.QueryCompilationErrors.unresolvedVariableError
 
 class ScriptingVariableManager(context: SqlScriptingExecutionContext)
   extends VariableManager with DataTypeErrorsBase {
 
   override def create(
-      name: String,
+      identifier: Identifier,
       defaultValueSQL: String,
       initValue: Literal,
-      overrideIfExists: Boolean,
-      identifier: Identifier): Unit = {
+      overrideIfExists: Boolean): Unit = {
+    val name = identifier.name()
     if (!overrideIfExists && context.currentScope.variables.contains(name)) {
       throw new AnalysisException(
         errorClass = "VARIABLE_ALREADY_EXISTS",
@@ -48,15 +49,45 @@ class ScriptingVariableManager(context: SqlScriptingExecutionContext)
       ))
   }
 
+  override def set(
+      nameParts: Seq[String],
+      defaultValueSQL: String,
+      initValue: Literal,
+      identifier: Identifier): Unit = {
+    def varDef = VariableDefinition(identifier, defaultValueSQL, initValue)
+
+    // todo LOCALVARS: maybe identifier is enough here, maybe we don't need nameParts
+
+    nameParts match {
+      case Seq(name) =>
+        context.currentFrame.scopes
+          .findLast(_.variables.contains(name))
+          // Throw error if variable is not found. This shouldn't happen as the check is already
+          // done in SetVariableExec.
+          .orElse(throw unresolvedVariableError(nameParts, identifier.namespace().toIndexedSeq))
+          .map(_.variables.put(name, varDef))
+      case Seq(label, name) =>
+        context.currentFrame.scopes
+          .findLast(_.label == label)
+          .filter(_.variables.contains(name))
+          // Throw error if variable is not found. This shouldn't happen as the check is already
+          // done in SetVariableExec.
+          .orElse(throw unresolvedVariableError(nameParts, identifier.namespace().toIndexedSeq))
+          .map(_.variables.put(name, varDef))
+      case _ =>
+        throw SparkException.internalError("ScriptingVariableManager.set expects 1 or 2 nameParts.")
+    }
+  }
+
   override def get(nameParts: Seq[String]): Option[VariableDefinition] = nameParts match {
     case Seq(name) =>
       context.currentFrame.scopes
       .findLast(_.variables.contains(name))
-      .map(_.variables(name))
+      .flatMap(_.variables.get(name))
     case Seq(label, name) =>
       context.currentFrame.scopes
       .findLast(_.label == label)
-      .map(_.variables(name))
+      .flatMap(_.variables.get(name))
     case _ =>
       throw SparkException.internalError("ScriptingVariableManager.get expects 1 or 2 nameParts.")
   }

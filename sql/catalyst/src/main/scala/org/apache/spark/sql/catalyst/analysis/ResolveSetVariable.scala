@@ -42,7 +42,6 @@ class ResolveSetVariable(val catalogManager: CatalogManager) extends Rule[Logica
         case u: UnresolvedAttribute =>
           lookupVariable(u.nameParts) match {
             case Some(variable) => variable.copy(canFold = false)
-            // todo LOCALVARS: change system session to proper message
             case _ => throw unresolvedVariableError(u.nameParts, Seq("SYSTEM", "SESSION"))
           }
 

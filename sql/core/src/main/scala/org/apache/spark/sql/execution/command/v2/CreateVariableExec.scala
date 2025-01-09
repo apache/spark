@@ -52,11 +52,10 @@ case class CreateVariableExec(
     // create local variable if we are in a script, otherwise create session variable
     scriptingVariableManager.getOrElse(tempVariableManager)
       .create(
-        normalizedIdentifier.name(),
+        normalizedIdentifier,
         defaultExpr.originalSQL,
         initValue,
-        replace,
-        normalizedIdentifier)
+        replace)
 
     Nil
   }

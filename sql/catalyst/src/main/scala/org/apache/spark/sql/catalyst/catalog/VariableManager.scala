@@ -26,13 +26,19 @@ import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.connector.catalog.{CatalogManager, Identifier}
 import org.apache.spark.sql.connector.catalog.CatalogManager.{SESSION_NAMESPACE, SYSTEM_CATALOG_NAME}
 import org.apache.spark.sql.errors.DataTypeErrorsBase
+import org.apache.spark.sql.errors.QueryCompilationErrors.unresolvedVariableError
 
 trait VariableManager {
   def create(
-    name: String,
+    identifier: Identifier,
     defaultValueSQL: String,
     initValue: Literal,
-    overrideIfExists: Boolean,
+    overrideIfExists: Boolean): Unit
+
+  def set(
+    nameParts: Seq[String],
+    defaultValueSQL: String,
+    initValue: Literal,
     identifier: Identifier): Unit
 
   def get(nameParts: Seq[String]): Option[VariableDefinition]
@@ -63,17 +69,30 @@ class TempVariableManager extends VariableManager with DataTypeErrorsBase {
   @GuardedBy("this")
   private val variables = new mutable.HashMap[String, VariableDefinition]
 
-  def create(
-      name: String,
+  override def create(
+      identifier: Identifier,
       defaultValueSQL: String,
       initValue: Literal,
-      overrideIfExists: Boolean,
-      identifier: Identifier): Unit = synchronized {
+      overrideIfExists: Boolean): Unit = synchronized {
+    val name = identifier.name()
     if (!overrideIfExists && variables.contains(name)) {
       throw new AnalysisException(
         errorClass = "VARIABLE_ALREADY_EXISTS",
         messageParameters = Map(
           "variableName" -> toSQLId(Seq(SYSTEM_CATALOG_NAME, SESSION_NAMESPACE, name))))
+    }
+    variables.put(name, VariableDefinition(identifier, defaultValueSQL, initValue))
+  }
+
+  override def set(
+      nameParts: Seq[String],
+      defaultValueSQL: String,
+      initValue: Literal,
+      identifier: Identifier): Unit = synchronized {
+    val name = nameParts.last
+    // Sanity check as this is already checked in ResolveSetVariable.
+    if (!variables.contains(name)) {
+      throw unresolvedVariableError(nameParts, Seq("SYSTEM", "SESSION"))
     }
     variables.put(name, VariableDefinition(identifier, defaultValueSQL, initValue))
   }

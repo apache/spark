@@ -1545,7 +1545,108 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
     verifySqlScriptResult(sqlScript, expected)
   }
 
-  // todo: fix this case
+  test("local variable - set - nested") {
+    val sqlScript =
+      """
+        |BEGIN
+        | lbl1: BEGIN
+        |   DECLARE localVar = 1;
+        |   lbl2: BEGIN
+        |     DECLARE localVar = 2;
+        |     SELECT localVar;
+        |     SELECT lbl1.localVar;
+        |     SELECT lbl2.localVar;
+        |     SET lbl1.localVar = 5;
+        |     SELECT lbl1.localVar;
+        |   END;
+        | END;
+        |END
+        |""".stripMargin
+
+    val expected = Seq(
+      Seq(Row(2)), // select lbl.localVar
+      Seq(Row(1)), // select lbl.localVar
+      Seq(Row(2)), // select lbl.localVar
+      Seq(Row(5)) // select lbl.localVar
+    )
+    verifySqlScriptResult(sqlScript, expected)
+  }
+
+  test("local variable - set - case insensitive name") {
+    val sqlScript =
+      """
+        |BEGIN
+        | lbl: BEGIN
+        |  DECLARE localVar = 1;
+        |  SET LOCALVAR = 5;
+        |  SELECT localVar;
+        | END;
+        |END
+        |""".stripMargin
+
+    val expected = Seq(
+      Seq(Row(5)) // select lbl.localVar
+    )
+    verifySqlScriptResult(sqlScript, expected)
+  }
+
+  test("local variable - set - case sensitive name") {
+    val e = intercept[AnalysisException] {
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> true.toString) {
+        val sqlScript =
+          """
+            |BEGIN
+            | lbl: BEGIN
+            |  DECLARE localVar = 1;
+            |  SET LOCALVAR = 5;
+            |  SELECT localVar;
+            | END;
+            |END
+            |""".stripMargin
+
+        val expected = Seq(
+          Seq(Row(1)) // select lbl.localVar
+        )
+        verifySqlScriptResult(sqlScript, expected)
+      }
+    }
+
+    // TODO: Once execution is changed to support exception handling, remove this manual cleanup.
+    //  The reason it is neccessary now is that with the current execution logic,
+    //  the SqlScriptingExecution errors while being constructed,
+    //  meaning it doesn't get cleaned up properly
+    spark.sessionState.catalogManager.scriptingLocalVariableManager = None
+
+    checkError(
+      exception = e,
+      condition = "UNRESOLVED_VARIABLE",
+      sqlState = "42883",
+      parameters = Map(
+        "variableName" -> toSQLId("LOCALVAR"),
+        "searchPath" -> toSQLId("SYSTEM.SESSION"))
+    )
+  }
+
+  test("local variable - set - session variable") {
+    val sqlScript =
+      """
+        |BEGIN
+        | SELECT localVar;
+        | SET localVar = 1;
+        | SELECT localVar;
+        |END
+        |""".stripMargin
+    withSessionVariable("localVar") {
+      spark.sql("DECLARE VARIABLE localVar = 0").collect()
+      val expected = Seq(
+        Seq(Row(0)),
+        Seq(Row(1))
+      )
+      verifySqlScriptResult(sqlScript, expected)
+    }
+  }
+
+  // todo LOCALVARS: fix this case
 
   //    test("testtest3") {
   //      val sqlScript =
