@@ -152,7 +152,7 @@ if in_spark:
 # python/packaging/connect/setup.py
 _minimum_pandas_version = "2.0.0"
 _minimum_numpy_version = "1.21"
-_minimum_pyarrow_version = "10.0.0"
+_minimum_pyarrow_version = "11.0.0"
 _minimum_grpc_version = "1.67.0"
 _minimum_googleapis_common_protos_version = "1.65.0"
 
@@ -343,7 +343,7 @@ try:
         license="http://www.apache.org/licenses/LICENSE-2.0",
         # Don't forget to update python/docs/source/getting_started/install.rst
         # if you're updating the versions or dependencies.
-        install_requires=["py4j==0.10.9.7"],
+        install_requires=["py4j==0.10.9.8"],
         extras_require={
             "ml": ["numpy>=%s" % _minimum_numpy_version],
             "mllib": ["numpy>=%s" % _minimum_numpy_version],

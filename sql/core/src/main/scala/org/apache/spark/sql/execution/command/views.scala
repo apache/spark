@@ -47,6 +47,7 @@ import org.apache.spark.util.ArrayImplicits._
  * @param userSpecifiedColumns the output column names and optional comments specified by users,
  *                             can be Nil if not specified.
  * @param comment the comment of this view.
+ * @param collation the collation of this view.
  * @param properties the properties of this view.
  * @param originalText the original SQL text of this view, can be None if this view is created via
  *                     Dataset API.
@@ -64,6 +65,7 @@ case class CreateViewCommand(
     name: TableIdentifier,
     userSpecifiedColumns: Seq[(String, Option[String])],
     comment: Option[String],
+    collation: Option[String],
     properties: Map[String, String],
     originalText: Option[String],
     plan: LogicalPlan,
@@ -220,7 +222,8 @@ case class CreateViewCommand(
       properties = newProperties,
       viewOriginalText = originalText,
       viewText = originalText,
-      comment = comment
+      comment = comment,
+      collation = collation
     )
   }
 
@@ -461,12 +464,19 @@ object ViewHelper extends SQLConfHelper with Logging {
   }
 
   /**
+   * Get all configurations that are modifiable and should be captured.
+   */
+  def getModifiedConf(conf: SQLConf): Map[String, String] = {
+    conf.getAllConfs.filter { case (k, _) =>
+      conf.isModifiable(k) && shouldCaptureConfig(k)
+    }
+  }
+
+  /**
    * Convert the view SQL configs to `properties`.
    */
   private def sqlConfigsToProps(conf: SQLConf): Map[String, String] = {
-    val modifiedConfs = conf.getAllConfs.filter { case (k, _) =>
-      conf.isModifiable(k) && shouldCaptureConfig(k)
-    }
+    val modifiedConfs = getModifiedConf(conf)
     // Some configs have dynamic default values, such as SESSION_LOCAL_TIMEZONE whose
     // default value relies on the JVM system timezone. We need to always capture them to
     // to make sure we apply the same configs when reading the view.
@@ -687,7 +697,7 @@ object ViewHelper extends SQLConfHelper with Logging {
   /**
    * Collect all temporary SQL variables and return the identifiers separately.
    */
-  private def collectTemporaryVariables(child: LogicalPlan): Seq[Seq[String]] = {
+  def collectTemporaryVariables(child: LogicalPlan): Seq[Seq[String]] = {
     def collectTempVars(child: LogicalPlan): Seq[Seq[String]] = {
       child.flatMap { plan =>
         plan.expressions.flatMap(_.flatMap {
@@ -729,7 +739,8 @@ object ViewHelper extends SQLConfHelper with Logging {
     val uncache = getRawTempView(name.table).map { r =>
       needsToUncache(r, aliasedPlan)
     }.getOrElse(false)
-    val storeAnalyzedPlanForView = conf.storeAnalyzedPlanForView || originalText.isEmpty
+    val storeAnalyzedPlanForView = session.sessionState.conf.storeAnalyzedPlanForView ||
+      originalText.isEmpty
     if (replace && uncache) {
       logDebug(s"Try to uncache ${name.quotedString} before replacing.")
       if (!storeAnalyzedPlanForView) {

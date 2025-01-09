@@ -330,7 +330,7 @@ WithCTE
       +- Project [t1a#x, t1b#x, t1a#x, t1b#x]
          +- Join Inner, (t1b#x = t1b#x)
             :- SubqueryAlias cte1
-            :  +- CTERelationRef xxxx, true, [t1a#x, t1b#x], false
+            :  +- CTERelationRef xxxx, true, [t1a#x, t1b#x], false, false
             +- SubqueryAlias cte2
                +- SubqueryAlias cte1
-                  +- CTERelationRef xxxx, true, [t1a#x, t1b#x], false
+                  +- CTERelationRef xxxx, true, [t1a#x, t1b#x], false, false
