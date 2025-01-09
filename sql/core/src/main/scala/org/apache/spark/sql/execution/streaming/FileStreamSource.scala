@@ -456,7 +456,7 @@ object FileStreamSource {
    */
   class SeenFilesMap(maxAgeMs: Long, fileNameOnly: Boolean) {
     require(maxAgeMs >= 0)
-z
+
     /** Mapping from file to its timestamp. */
     private val map = new java.util.HashMap[String, Timestamp]
 
