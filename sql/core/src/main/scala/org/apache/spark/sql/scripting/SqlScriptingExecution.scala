@@ -66,18 +66,8 @@ class SqlScriptingExecution(
     None
   }
 
-  /**
-   * Advances through the script and executes statements until a result statement or
-   * end of script is encountered.
-   *
-   * To know if there is result statement available, the method has to advance through script and
-   * execute statements until the result statement or end of script is encountered. For that reason
-   * the returned result must be executed before subsequent calls. Multiple calls without executing
-   * the intermediate results will lead to incorrect behavior.
-   *
-   * @return Result DataFrame if it is available, otherwise None.
-   */
-  def getNextResult: Option[DataFrame] = {
+  /** Helper method to get the next result statement from the script. */
+  private def getNextResultInternal: Option[DataFrame] = {
     var currentStatement = getNextStatement
     // While we don't have a result statement, execute the statements.
     while (currentStatement.isDefined) {
@@ -95,6 +85,27 @@ class SqlScriptingExecution(
       currentStatement = getNextStatement
     }
     None
+  }
+
+  /**
+   * Advances through the script and executes statements until a result statement or
+   * end of script is encountered.
+   *
+   * To know if there is result statement available, the method has to advance through script and
+   * execute statements until the result statement or end of script is encountered. For that reason
+   * the returned result must be executed before subsequent calls. Multiple calls without executing
+   * the intermediate results will lead to incorrect behavior.
+   *
+   * @return Result DataFrame if it is available, otherwise None.
+   */
+  def getNextResult: Option[DataFrame] = {
+    try {
+      getNextResultInternal
+    } catch {
+      case e: Throwable =>
+        handleException(e)
+        getNextResult // After handling the exception, try to get the next result again.
+    }
   }
 
   private def handleException(e: Throwable): Unit = {
