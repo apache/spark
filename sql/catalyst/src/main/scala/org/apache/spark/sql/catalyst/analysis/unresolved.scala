@@ -731,6 +731,11 @@ case class UnresolvedStarWithColumns(
     assert(colNames.size == exprs.size,
       s"The size of column names: ${colNames.size} isn't equal to " +
         s"the size of expressions: ${exprs.size}")
+    explicitMetadata.foreach { m =>
+      assert(colNames.size == m.size,
+        s"The size of column names: ${colNames.size} isn't equal to " +
+          s"the size of metadata elements: ${m.size}")
+    }
 
     SchemaUtils.checkColumnNameDuplication(colNames, resolver)
 
