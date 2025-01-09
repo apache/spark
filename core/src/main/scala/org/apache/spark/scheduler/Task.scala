@@ -239,13 +239,9 @@ private[spark] abstract class Task[T](
             taskThread.interrupt()
           }
         } else {
-          val threadToInterrupt = if (interruptThread && taskThread != null) {
-            Some(taskThread)
-          } else {
-            None
-          }
           logInfo(log"Task ${MDC(LogKeys.TASK_ID, context.taskAttemptId())} " +
             log"is currently not interruptible. ")
+          val threadToInterrupt = if (interruptThread) Option(taskThread) else None
           context.pendingInterrupt(threadToInterrupt, reason)
         }
       }

@@ -326,10 +326,7 @@ private[spark] class TaskContextImpl(
 
     TaskContext.synchronized {
       interruptIfRequired()
-
-      if (_interruptible) {
-        _interruptible = false
-      }
+      _interruptible = false
     }
     try {
       val resource = resourceBuilder

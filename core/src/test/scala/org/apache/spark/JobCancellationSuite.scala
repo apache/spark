@@ -739,11 +739,23 @@ class JobCancellationSuite extends SparkFunSuite with Matchers with BeforeAndAft
               open()
 
               private def dumpFile(typeName: String): Unit = {
-                val file = new File(dir, s"$typeName.$fileHint")
-                val out = new FileOutputStream(file)
-                val objOut = new ObjectOutputStream(out)
-                objOut.writeBoolean(true)
-                objOut.close()
+                var fileOut: FileOutputStream = null
+                var objOut: ObjectOutputStream = null
+                try {
+                  val file = new File(dir, s"$typeName.$fileHint")
+                  fileOut = new FileOutputStream(file)
+                  objOut = new ObjectOutputStream(fileOut)
+                  objOut.writeBoolean(true)
+                  objOut.flush()
+                } finally {
+                  if (fileOut != null) {
+                    fileOut.close()
+                  }
+                  if (objOut != null) {
+                    objOut.close()
+                  }
+                }
+
               }
 
               private def open(): Unit = {
