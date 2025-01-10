@@ -133,7 +133,7 @@ class MicroBatchExecution(
   // Store checkpointIDs for state store checkpoints to be committed or have been committed to
   // the commit log.
   // operatorID -> (partitionID -> array of uniqueID)
-  private var currentStateStoreCkptId: Option[MutableMap[Long, Array[Array[String]]]] = None
+  private val currentStateStoreCkptId = MutableMap[Long, Array[Array[String]]]()
 
   override lazy val logicalPlan: LogicalPlan = {
     assert(queryExecutionThread eq Thread.currentThread,
@@ -513,13 +513,8 @@ class MicroBatchExecution(
               execCtx.startOffsets ++= execCtx.endOffsets
               watermarkTracker.setWatermark(
                 math.max(watermarkTracker.currentWatermark, commitMetadata.nextBatchWatermarkMs))
-              if (StatefulOperatorStateInfo.enableStateStoreCheckpointIds(
-                sparkSessionForStream.sessionState.conf)) {
-                if (currentStateStoreCkptId.isEmpty) {
-                  currentStateStoreCkptId = Some(MutableMap[Long, Array[Array[String]]]())
-                }
-                currentStateStoreCkptId.get.addAll(
-                  commitMetadata.stateUniqueIds.getOrElse(Map.empty))
+              commitMetadata.stateUniqueIds.foreach {
+                stateUniqueIds => currentStateStoreCkptId ++= stateUniqueIds
               }
             } else if (latestCommittedBatchId == latestBatchId - 1) {
               execCtx.endOffsets.foreach {
@@ -927,8 +922,6 @@ class MicroBatchExecution(
       execCtx: MicroBatchExecutionContext,
       opId: Long,
       checkpointInfo: Array[StatefulOpStateStoreCheckpointInfo]): Unit = {
-    assert(StatefulOperatorStateInfo.enableStateStoreCheckpointIds(
-      sparkSessionForStream.sessionState.conf))
     // TODO validate baseStateStoreCkptId
     checkpointInfo.map(_.batchVersion).foreach { v =>
       assert(
@@ -940,10 +933,7 @@ class MicroBatchExecution(
       assert(info.stateStoreCkptId.isDefined)
       info.stateStoreCkptId.get
     }
-    if (currentStateStoreCkptId.isEmpty) {
-      currentStateStoreCkptId = Some(MutableMap[Long, Array[Array[String]]]())
-    }
-    currentStateStoreCkptId.get.put(opId, ckptIds)
+    currentStateStoreCkptId.put(opId, ckptIds)
   }
 
   /**
@@ -978,8 +968,14 @@ class MicroBatchExecution(
       updateStateStoreCkptId(execCtx, latestExecPlan)
     }
     execCtx.reportTimeTaken("commitOffsets") {
+      val stateStoreCkptId = if (StatefulOperatorStateInfo.enableStateStoreCheckpointIds(
+        sparkSessionForStream.sessionState.conf)) {
+        Some(currentStateStoreCkptId.toMap)
+      } else {
+        None
+      }
       if (!commitLog.add(execCtx.batchId,
-        CommitMetadata(watermarkTracker.currentWatermark, currentStateStoreCkptId.map(_.toMap)))) {
+        CommitMetadata(watermarkTracker.currentWatermark, stateStoreCkptId))) {
         throw QueryExecutionErrors.concurrentStreamLogUpdate(execCtx.batchId)
       }
     }

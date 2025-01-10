@@ -51,7 +51,8 @@ class CommitLog(sparkSession: SparkSession, path: String)
 
   import CommitLog._
 
-  private val VERSION = SQLConf.get.stateStoreCheckpointFormatVersion
+  private val VERSION: Int = sparkSession.conf.get(
+    SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key).toInt
 
   override protected[sql] def deserialize(in: InputStream): CommitMetadata = {
     // called inside a try-finally where the underlying stream is closed in the caller
