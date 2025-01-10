@@ -2314,6 +2314,17 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     assert(tree.conditions("test").equals("12000"))
   }
 
+  ignore("declare condition: default sqlstate") {
+    val sqlScriptText =
+      """
+        |BEGIN
+        |  DECLARE test CONDITION;
+        |END""".stripMargin
+    val tree = parsePlan(sqlScriptText).asInstanceOf[CompoundBody]
+    assert(tree.conditions.size == 1)
+    assert(tree.conditions("test").equals("45000")) // Default SQLSTATE
+  }
+
   test("declare handler") {
     val sqlScriptText =
       """

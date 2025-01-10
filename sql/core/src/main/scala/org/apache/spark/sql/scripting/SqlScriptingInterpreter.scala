@@ -19,12 +19,12 @@ package org.apache.spark.sql.scripting
 
 import scala.collection.mutable.HashMap
 
-import org.apache.spark.SparkException
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.analysis.UnresolvedIdentifier
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.logical.{CaseStatement, CompoundBody, CompoundPlanStatement, CreateVariable, DropVariable, ForStatement, HandlerType, IfElseStatement, IterateStatement, LeaveStatement, LogicalPlan, LoopStatement, RepeatStatement, SingleStatement, WhileStatement}
-import org.apache.spark.sql.catalyst.trees.Origin
+import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
+import org.apache.spark.sql.errors.SqlScriptingErrors
 
 /**
  * SQL scripting interpreter - builds SQL script execution plan.
@@ -122,12 +122,10 @@ case class SqlScriptingInterpreter(session: SparkSession) {
       // to the conditionHandlerMap.
       handler.conditions.foreach(condition => {
         // Condition can either be the key in conditions map or SqlState.
-        val conditionValue = compoundBody.conditions.getOrElse(condition, condition)
-        if (conditionHandlerMap.contains(conditionValue)) {
-          throw SparkException
-            .internalError(s"Duplicate Handler for same SqlState $conditionValue")
+        if (conditionHandlerMap.contains(condition)) {
+          throw SqlScriptingErrors.duplicateHandlerForSameCondition(CurrentOrigin.get, condition)
         } else {
-          conditionHandlerMap.put(conditionValue, handlerExec)
+          conditionHandlerMap.put(condition, handlerExec)
         }
       })
     })

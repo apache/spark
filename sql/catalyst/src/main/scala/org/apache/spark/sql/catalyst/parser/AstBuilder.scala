@@ -182,15 +182,14 @@ class AstBuilder extends DataTypeAstBuilder
     ctx.cvList.forEach { conditionValue =>
       val elem = visit(conditionValue).asInstanceOf[String]
       if (buff(elem)) {
-        throw SparkException.internalError(s"Duplicate condition value $elem " +
-          s"in handler definition")
+        throw SqlScriptingErrors.duplicateConditionInHandlerDeclaration(CurrentOrigin.get, elem)
       }
       buff += elem
     }
     buff.toSeq
   }
 
-  override def visitDeclareConditionStatement(
+  private def visitDeclareConditionStatementImpl(
       ctx: DeclareConditionStatementContext): ErrorCondition = {
     val conditionName = ctx.multipartIdentifier().getText
     val conditionValue = Option(ctx.sqlStateValue())
@@ -200,7 +199,7 @@ class AstBuilder extends DataTypeAstBuilder
     ErrorCondition(conditionName, conditionValue)
   }
 
-  private def visitDeclareHandlerImpl(
+  private def visitDeclareHandlerStatementImpl(
       ctx: DeclareHandlerStatementContext,
       labelCtx: SqlScriptingLabelContext): ErrorHandler = {
     val conditions = visit(ctx.conditionValues()).asInstanceOf[Seq[String]]
@@ -326,7 +325,9 @@ class AstBuilder extends DataTypeAstBuilder
               case forStatementContext: ForStatementContext =>
                 visitForStatementImpl(forStatementContext, labelCtx)
               case declareHandlerContext: DeclareHandlerStatementContext =>
-                visitDeclareHandlerImpl(declareHandlerContext, labelCtx)
+                visitDeclareHandlerStatementImpl(declareHandlerContext, labelCtx)
+              case declareConditionContext: DeclareConditionStatementContext =>
+                visitDeclareConditionStatementImpl(declareConditionContext)
               case stmt => visit(stmt).asInstanceOf[CompoundPlanStatement]
             }
           } else {

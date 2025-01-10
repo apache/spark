@@ -133,4 +133,20 @@ private[sql] object SqlScriptingErrors {
       cause = null,
       messageParameters = Map("labelName" -> toSQLStmt(labelName)))
   }
+
+  def duplicateConditionInHandlerDeclaration(origin: Origin, condition: String): Throwable = {
+    new SqlScriptingException(
+      origin = origin,
+      errorClass = "DUPLICATE_CONDITION_IN_HANDLER_DECLARATION",
+      cause = null,
+      messageParameters = Map("condition" -> condition))
+  }
+
+  def duplicateHandlerForSameCondition(origin: Origin, sqlState: String): Throwable = {
+    new SqlScriptingException(
+      origin = origin,
+      errorClass = "DUPLICATE_HANDLER_FOR_SAME_CONDITION",
+      cause = null,
+      messageParameters = Map("sqlState" -> sqlState))
+  }
 }

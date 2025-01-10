@@ -1205,6 +1205,12 @@
     ],
     "sqlState" : "42614"
   },
+  "DUPLICATE_HANDLER_FOR_SAME_CONDITION" : {
+    "message" : [
+      "Found duplicate handlers for the same condition <condition>. Please, remove one of them."
+    ],
+    "sqlState" : "42710"
+  },
   "DUPLICATE_KEY" : {
     "message" : [
       "Found duplicate keys <keyColumn>."
@@ -1228,6 +1234,12 @@
       }
     },
     "sqlState" : "4274K"
+  },
+  "DUPLICATE_CONDITION_IN_HANDLER_DECLARATION" : {
+    "message" : [
+      "Found duplicate condition <condition> in the handler declaration. Please, remove one of them."
+    ],
+    "sqlState" : "42710"
   },
   "EMITTING_ROWS_OLDER_THAN_WATERMARK_NOT_ALLOWED" : {
     "message" : [
