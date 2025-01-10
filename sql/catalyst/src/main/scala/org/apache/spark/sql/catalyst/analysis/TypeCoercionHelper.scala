@@ -402,9 +402,6 @@ abstract class TypeCoercionHelper {
       case NaNvl(l, r) if r.dataType == NullType => NaNvl(l, Cast(r, l.dataType))
 
       case r: RandStr if r.length.dataType != IntegerType =>
-        r.copy(length = Cast(r.length, IntegerType))
-
-      case r: RandStr if r.length.dataType != IntegerType =>
         implicitCast(r.length, IntegerType).map { casted =>
           r.copy(length = casted)
         }.getOrElse(r)
