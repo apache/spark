@@ -344,7 +344,7 @@ case class RandStr(
   override def right: Expression = seedExpression
 
   override def inputTypes: Seq[AbstractDataType] = Seq(
-    TypeCollection(NumericType),
+    IntegerType,
     TypeCollection(IntegerType, LongType))
 
   /**
@@ -395,7 +395,7 @@ case class RandStr(
   private def lengthInteger(): Int = {
     // We should have already added a cast to IntegerType (if necessary) in
     // FunctionArgumentTypeCoercion.
-    assert(length.dataType == IntegerType)
+    assert(length.dataType == IntegerType, s"Expected IntegerType, got ${length.dataType}")
     val result = length.eval().asInstanceOf[Int]
     if (result < 0) {
       throw QueryExecutionErrors.unexpectedValueForLengthInFunctionError(prettyName, result)

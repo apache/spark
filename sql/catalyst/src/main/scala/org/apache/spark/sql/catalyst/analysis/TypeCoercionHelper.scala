@@ -404,6 +404,11 @@ abstract class TypeCoercionHelper {
       case r: RandStr if r.length.dataType != IntegerType =>
         r.copy(length = Cast(r.length, IntegerType))
 
+      case r: RandStr if r.length.dataType != IntegerType =>
+        implicitCast(r.length, IntegerType).map { casted =>
+          r.copy(length = casted)
+        }.getOrElse(r)
+
       case other => other
     }
   }
