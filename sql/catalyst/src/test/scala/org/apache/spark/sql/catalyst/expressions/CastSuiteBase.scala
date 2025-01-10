@@ -1015,14 +1015,10 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
-  test("disallow type conversions between calendar interval type and char/varchar types") {
+  test("allow type conversions between calendar interval type and char/varchar types") {
     Seq(CharType(10), VarcharType(10))
       .foreach { typ =>
-      verifyCastFailure(
-        cast(Literal.default(CalendarIntervalType), typ),
-        DataTypeMismatch(
-          "CAST_WITHOUT_SUGGESTION",
-          Map("srcType" -> "\"INTERVAL\"", "targetType" -> toSQLType(typ))))
+        assert(cast(Literal.default(CalendarIntervalType), typ).checkInputDataTypes().isSuccess)
     }
   }
 
@@ -1427,5 +1423,38 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     val timestampLiteral = Literal.create(1L, TimestampType)
     assert(!Cast(timestampLiteral, StringType).resolved)
     assert(!Cast(timestampLiteral, StringType("UTF8_LCASE")).resolved)
+  }
+
+  test(s"Casting from char/varchar") {
+    Seq(CharType(10), VarcharType(10)).foreach { typ =>
+      Seq(
+        IntegerType -> ("123", 123),
+        LongType -> ("123 ", 123L),
+        BooleanType -> ("true ", true),
+        BooleanType -> ("false", false),
+        DoubleType -> ("1.2", 1.2)
+      ).foreach { case (toType, (from, to)) =>
+        checkEvaluation(cast(Literal.create(from, typ), toType), to)
+      }
+    }
+  }
+
+  test("Casting to char/varchar") {
+    Seq(CharType(10), VarcharType(10)).foreach { typ =>
+      Seq(
+        IntegerType -> (123, "123"),
+        LongType -> (123L, "123"),
+        BooleanType -> (true, "true"),
+        BooleanType -> (false, "false"),
+        DoubleType -> (1.2, "1.2")
+      ).foreach { case (fromType, (from, to)) =>
+        val paddedTo = if (typ.isInstanceOf[CharType]) {
+          to.padTo(10, ' ')
+        } else {
+          to
+        }
+        checkEvaluation(cast(Literal.create(from, fromType), typ), paddedTo)
+      }
+    }
   }
 }

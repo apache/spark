@@ -77,6 +77,8 @@ object TypeCoercion extends TypeCoercionBase {
       case (NullType, t1) => Some(t1)
       case (t1, NullType) => Some(t1)
 
+      case(s1: StringType, s2: StringType) => StringHelper.tightestCommonString(s1, s2)
+
       case (t1: IntegralType, t2: DecimalType) if t2.isWiderThan(t1) =>
         Some(t2)
       case (t1: DecimalType, t2: IntegralType) if t1.isWiderThan(t2) =>
@@ -149,6 +151,7 @@ object TypeCoercion extends TypeCoercionBase {
     case (DecimalType.Fixed(_, s), _: StringType) if s > 0 => Some(DoubleType)
     case (_: StringType, DecimalType.Fixed(_, s)) if s > 0 => Some(DoubleType)
 
+    case (s1: StringType, s2: StringType) => StringHelper.tightestCommonString(s1, s2)
     case (l: StringType, r: AtomicType) if canPromoteAsInBinaryComparison(r) => Some(r)
     case (l: AtomicType, r: StringType) if canPromoteAsInBinaryComparison(l) => Some(l)
     case (l, r) => None
@@ -190,6 +193,12 @@ object TypeCoercion extends TypeCoercionBase {
       // Cast null type (usually from null literals) into target types
       case (NullType, target) => target.defaultConcreteType
 
+      case (s1: StringType, s2: StringType) =>
+        if (s1.collationId == s2.collationId && StringHelper.isMoreConstrained(s1, s2)) {
+          s2
+        } else {
+          null
+        }
       // If the function accepts any numeric type and the input is a string, we follow the hive
       // convention and cast that input into a double
       case (_: StringType, NumericType) => NumericType.defaultConcreteType
