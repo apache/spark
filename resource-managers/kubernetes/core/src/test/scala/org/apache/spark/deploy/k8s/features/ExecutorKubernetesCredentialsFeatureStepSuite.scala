@@ -16,9 +16,8 @@
  */
 package org.apache.spark.deploy.k8s.features
 
-import org.scalatest.BeforeAndAfter
-
 import io.fabric8.kubernetes.api.model.PodSpec
+import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.k8s.{KubernetesTestConf, SparkPod}
