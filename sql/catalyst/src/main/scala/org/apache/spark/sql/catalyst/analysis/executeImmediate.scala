@@ -185,7 +185,7 @@ class SubstituteExecuteImmediate(val catalogManager: CatalogManager)
   }
 
   private def getVariableReference(expr: Expression, nameParts: Seq[String]): VariableReference = {
-    lookupVariable(nameParts) match {
+    lookupVariable(nameParts, sessionVariablesOnly = true) match {
       case Some(variable) => variable
       case _ =>
         throw QueryCompilationErrors

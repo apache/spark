@@ -60,9 +60,6 @@ class ScriptingVariableManager(context: SqlScriptingExecutionContext)
       initValue: Literal,
       identifier: Identifier): Unit = {
     def varDef = VariableDefinition(identifier, defaultValueSQL, initValue)
-
-    // todo LOCALVARS: maybe identifier is enough here, maybe we don't need nameParts
-
     nameParts match {
       case Seq(name) =>
         context.currentFrame.scopes

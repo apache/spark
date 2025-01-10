@@ -250,7 +250,9 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
     }
   }
 
-  def lookupVariable(nameParts: Seq[String]): Option[VariableReference] = {
+  def lookupVariable(
+      nameParts: Seq[String],
+      sessionVariablesOnly: Boolean = false): Option[VariableReference] = {
     // The temp variables live in `SYSTEM.SESSION`, and the name can be qualified or not.
     def maybeTempVariableName(nameParts: Seq[String]): Boolean = {
       nameParts.length == 1 || {
@@ -272,6 +274,8 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
     }
 
     catalogManager.scriptingLocalVariableManager
+      // If sessionOnly is set to true lookup only session variables.
+      .filterNot(_ => sessionVariablesOnly)
       // If variable name is qualified with system.session.<varName> treat it as a session variable.
       .filterNot(_ => nameParts.take(2).map(_.toLowerCase(Locale.ROOT)) == Seq("system", "session"))
       // Local variable must be in format <varName> or <label>.<varName>
