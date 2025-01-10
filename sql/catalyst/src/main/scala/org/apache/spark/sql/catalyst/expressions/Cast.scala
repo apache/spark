@@ -280,8 +280,6 @@ object Cast extends QueryErrorsBase {
    */
   def needsTimeZone(from: DataType, to: DataType): Boolean = (from, to) match {
     case (VariantType, _) => true
-    case (CharType(_) | VarcharType(_), TimestampType) => SQLConf.get.preserveCharVarcharTypeInfo
-    case (TimestampType, CharType(_) | VarcharType(_)) => SQLConf.get.preserveCharVarcharTypeInfo
     case (_: StringType, TimestampType) => true
     case (TimestampType, _: StringType) => true
     case (DateType, TimestampType) => true
@@ -317,7 +315,6 @@ object Cast extends QueryErrorsBase {
     case (NullType, _) => true
     case (_: NumericType, _: NumericType) => true
     case (_: AtomicType, _: StringType) => true
-    case (_: CalendarIntervalType, CharType(_) | VarcharType(_)) => false
     case (_: CalendarIntervalType, _: StringType) => true
     case (_: DatetimeType, _: DatetimeType) => true
 
@@ -358,10 +355,9 @@ object Cast extends QueryErrorsBase {
     case (_, _) if from == to => false
     case (VariantType, _) => true
 
-    case (_: StringType, BinaryType) => false
-    case (s1: StringType, s2: StringType) => !StringHelper.isMoreConstrained(s1, s2)
+    case (_: StringType, BinaryType | _: StringType) => false
     case (_: StringType, _) => true
-    case (_, st: StringType) => !StringHelper.isPlainString(st)
+    case (_, _: StringType) => false
 
     case (TimestampType, ByteType | ShortType | IntegerType) => true
     case (FloatType | DoubleType, TimestampType) => true
@@ -1135,9 +1131,7 @@ case class Cast(
       to match {
         case dt if dt == from => identity[Any]
         case VariantType => input => variant.VariantExpressionEvalUtils.castToVariant(input, from)
-        case CharType(length) => castToChar(from, length)
-        case VarcharType(length) => castToVarchar(from, length)
-        case _: StringType => castToString(from)
+        case s: StringType => castToString(from, s.constraint)
         case BinaryType => castToBinary(from)
         case DateType => castToDate(from)
         case decimal: DecimalType => castToDecimal(from, decimal)
@@ -1243,11 +1237,8 @@ case class Cast(
       val cls = variant.VariantExpressionEvalUtils.getClass.getName.stripSuffix("$")
       val fromArg = ctx.addReferenceObj("from", from)
       (c, evPrim, evNull) => code"$evPrim = $cls.castToVariant($c, $fromArg);"
-    case CharType(length) =>
-      (c, evPrim, _) => castToCharCode(from, length, ctx).apply(c, evPrim)
-    case VarcharType(length) =>
-      (c, evPrim, _) => castToVarcharCode(from, length, ctx).apply(c, evPrim)
-    case _: StringType => (c, evPrim, _) => castToStringCode(from, ctx).apply(c, evPrim)
+    case s: StringType =>
+      (c, evPrim, _) => castToStringCode(from, ctx, s.constraint).apply(c, evPrim)
     case BinaryType => castToBinaryCode(from)
     case DateType => castToDateCode(from, ctx)
     case decimal: DecimalType => castToDecimalCode(from, decimal, ctx)
