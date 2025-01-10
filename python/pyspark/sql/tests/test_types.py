@@ -2240,6 +2240,11 @@ class TypesTestsMixin:
             PySparkValueError, lambda: str(VariantVal(bytes([32, 10, 1, 0, 0, 0]), metadata))
         )
 
+        # check parse_json
+        for key, json_str, obj in expected_values:
+            self.assertEqual(VariantVal.parseJson(json_str).toJson(), json_str)
+            self.assertEqual(VariantVal.parseJson(json_str).toPython(), obj)
+
     def test_to_ddl(self):
         schema = StructType().add("a", NullType()).add("b", BooleanType()).add("c", BinaryType())
         self.assertEqual(schema.toDDL(), "a VOID,b BOOLEAN,c BINARY")
