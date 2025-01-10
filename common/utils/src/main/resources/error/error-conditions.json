@@ -2822,7 +2822,7 @@
     "message" : [
       "Log file was malformed: failed to read correct log version from <text>."
     ],
-    "sqlState" : "22023"
+    "sqlState" : "KD002"
   },
   "INVALID_NON_DETERMINISTIC_EXPRESSIONS" : {
     "message" : [
