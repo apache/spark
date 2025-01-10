@@ -2807,7 +2807,7 @@
     "subClass" : {
       "EXACT_MATCH_VERSION" : {
         "message" : [
-          "the only supported log version is v<matchVersion>, but encountered v<version>."
+          "The only supported log version is v<matchVersion>, but encountered v<version>."
         ]
       },
       "MAX_SUPPORTED_VERSION" : {
