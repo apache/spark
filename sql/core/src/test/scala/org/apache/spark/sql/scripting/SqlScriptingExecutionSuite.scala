@@ -1323,6 +1323,7 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
   test("local variable - inner inner scope -> inner scope -> session var") {
     withSessionVariable("localVar") {
       spark.sql("DECLARE VARIABLE localVar = 0")
+
       val sqlScript =
         """
           |BEGIN
@@ -1438,7 +1439,10 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
   }
 
   test("local variable - drop - session variable") {
-    val sqlScript =
+    withSessionVariable("localVar") {
+      spark.sql("DECLARE VARIABLE localVar = 0")
+
+      val sqlScript =
       """
         |BEGIN
         |DECLARE localVar = 1;
@@ -1446,8 +1450,6 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
         |DROP TEMPORARY VARIABLE localVar;
         |END
         |""".stripMargin
-    withSessionVariable("localVar") {
-      spark.sql("DECLARE VARIABLE localVar = 0")
       val expected = Seq(
         Seq(Row(1))
       )
@@ -1456,7 +1458,10 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
   }
 
   test("local variable - drop session variable successfully") {
-    val sqlScript =
+    withSessionVariable("localVar") {
+      spark.sql("DECLARE VARIABLE localVar = 0")
+
+      val sqlScript =
       """
         |BEGIN
         |DECLARE localVar = 1;
@@ -1465,8 +1470,6 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
         |SELECT system.session.localVar;
         |END
         |""".stripMargin
-    withSessionVariable("localVar") {
-      spark.sql("DECLARE VARIABLE localVar = 0")
       val e = intercept[AnalysisException] {
         verifySqlScriptResult(sqlScript, Seq.empty[Seq[Row]])
       }
@@ -1626,7 +1629,10 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
   }
 
   test("local variable - set - session variable") {
-    val sqlScript =
+    withSessionVariable("localVar") {
+      spark.sql("DECLARE VARIABLE localVar = 0").collect()
+
+      val sqlScript =
       """
         |BEGIN
         | SELECT localVar;
@@ -1634,8 +1640,6 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
         | SELECT localVar;
         |END
         |""".stripMargin
-    withSessionVariable("localVar") {
-      spark.sql("DECLARE VARIABLE localVar = 0").collect()
       val expected = Seq(
         Seq(Row(0)),
         Seq(Row(1))
@@ -1644,30 +1648,77 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  // todo LOCALVARS: fix this case
+  test("local variable - set - duplicate assignment") {
+    val sqlScript =
+      """
+        |BEGIN
+        | lbl1: BEGIN
+        |  DECLARE localVar = 1;
+        |  lbl2: BEGIN
+        |   SELECT localVar;
+        |   SET (localVar, lbl1.localVar) = (select 1, 2);
+        |  END;
+        | END;
+        |END
+        |""".stripMargin
 
-  //    test("testtest3") {
-  //      val sqlScript =
-  //        """
-  //          |BEGIN
-  //          | lbl: BEGIN
-  //          |  DECLARE var = 1;
-  //          |  lbl2: BEGIN
-  //          |    DECLARE var = 2;
-  //          |    SELECT lbl.var;
-  //          |    SET (var, lbl.var) = (select 1, 2);
-  //          |  END;
-  //          | END;
-  //          |END
-  //          |""".stripMargin
-  //
-  //      val r = spark.sql(sqlScript).collect()
-  //
-  //      val expected = Seq(
-  //        Seq.empty[Row], // declare var
-  //        Seq(Row(1)), // select
-  //        Seq.empty[Row] // drop var
-  //      )
-  //      //    verifySqlScriptResult(sqlScript, expected)
-  //    }
+    val e = intercept[AnalysisException] {
+      verifySqlScriptResult(sqlScript, Seq.empty[Seq[Row]])
+    }
+
+    checkError(
+      exception = e,
+      condition = "DUPLICATE_ASSIGNMENTS",
+      sqlState = "42701",
+      parameters = Map("nameList" -> toSQLId("localvar"))
+    )
+  }
+
+  test("local variable - set - no duplicate assignment error with session var") {
+    withSessionVariable("localVar") {
+      spark.sql("DECLARE localVar = 0")
+
+      val sqlScript =
+      """
+        |BEGIN
+        | lbl: BEGIN
+        |  DECLARE localVar = 1;
+        |  SET (localVar, session.localVar) = (select 2, 3);
+        |  SELECT localVar;
+        |  SELECT session.localVar;
+        | END;
+        |END
+        |""".stripMargin
+      val expected = Seq(
+        Seq(Row(2)), // select localVar
+        Seq(Row(3)) // select session.localVar
+      )
+      verifySqlScriptResult(sqlScript, expected)
+    }
+  }
+
+  test("local variable - set - duplicate assignment of session vars") {
+    withSessionVariable("sessionVar") {
+      spark.sql("DECLARE sessionVar = 0")
+
+      val sqlScript =
+      """
+        |BEGIN
+        | lbl1: BEGIN
+        |   SET (sessionVar, session.sessionVar) = (select 1, 2);
+        | END;
+        |END
+        |""".stripMargin
+      val e = intercept[AnalysisException] {
+        verifySqlScriptResult(sqlScript, Seq.empty[Seq[Row]])
+      }
+
+      checkError(
+        exception = e,
+        condition = "DUPLICATE_ASSIGNMENTS",
+        sqlState = "42701",
+        parameters = Map("nameList" -> toSQLId("sessionvar"))
+      )
+    }
+  }
 }
