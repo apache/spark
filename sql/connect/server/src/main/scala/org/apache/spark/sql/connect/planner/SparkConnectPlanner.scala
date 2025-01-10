@@ -3762,18 +3762,13 @@ class SparkConnectPlanner(
       case proto.SubqueryExpression.SubqueryType.SUBQUERY_TYPE_TABLE_ARG =>
         UnresolvedTableArgPlanId(
           planId,
-          partitionSpec = getSubqueryExpression
-            .getPartitionSpecList
-            .asScala
+          partitionSpec = getSubqueryExpression.getPartitionSpecList.asScala
             .map(transformExpression)
             .toSeq,
-          orderSpec = getSubqueryExpression
-            .getOrderSpecList
-            .asScala
+          orderSpec = getSubqueryExpression.getOrderSpecList.asScala
             .map(transformSortOrder)
             .toSeq,
-          withSinglePartition = getSubqueryExpression.getWithSinglePartition
-        )
+          withSinglePartition = getSubqueryExpression.getWithSinglePartition)
       case other => throw InvalidPlanInput(s"Unknown SubqueryType $other")
     }
   }
