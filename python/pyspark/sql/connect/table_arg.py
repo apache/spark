@@ -28,29 +28,34 @@ class TableArg:
         self._subquery_expr = subquery_expr
 
     def partitionBy(self, *cols: "ColumnOrName") -> "TableArg":
-        partition_spec = self._subquery_expr.partition_spec + list(cols)
+        # Create a new SubqueryExpression with updated partition_spec
         new_expr = SubqueryExpression(
             plan=self._subquery_expr._plan,
-            subquery_type=self._subquery_expr.subquery_type,
-            partition_spec=partition_spec,
+            subquery_type=self._subquery_expr._subquery_type,
+            partition_spec=self._subquery_expr._partition_spec + list(cols),
+            order_spec=self._subquery_expr._order_spec,
+            with_single_partition=self._subquery_expr._with_single_partition,
         )
         return TableArg(new_expr)
 
     def orderBy(self, *cols: "ColumnOrName") -> "TableArg":
-        order_spec = self._subquery_expr.order_spec + list(cols)
+        # Create a new SubqueryExpression with updated order_spec
         new_expr = SubqueryExpression(
             plan=self._subquery_expr._plan,
-            subquery_type=self._subquery_expr.subquery_type,
-            order_spec=order_spec,
+            subquery_type=self._subquery_expr._subquery_type,
+            partition_spec=self._subquery_expr._partition_spec,
+            order_spec=self._subquery_expr._order_spec + list(cols),
+            with_single_partition=self._subquery_expr._with_single_partition,
         )
         return TableArg(new_expr)
 
     def withSinglePartition(self) -> "TableArg":
+        # Create a new SubqueryExpression with updated with_single_partition
         new_expr = SubqueryExpression(
             plan=self._subquery_expr._plan,
-            subquery_type=self._subquery_expr.subquery_type,
-            partition_spec=self._subquery_expr.partition_spec,
-            order_spec=self._subquery_expr.order_spec,
+            subquery_type=self._subquery_expr._subquery_type,
+            partition_spec=self._subquery_expr._partition_spec,
+            order_spec=self._subquery_expr._order_spec,
             with_single_partition=True,
         )
         return TableArg(new_expr)
