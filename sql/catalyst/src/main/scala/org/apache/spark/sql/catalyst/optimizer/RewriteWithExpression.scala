@@ -148,7 +148,7 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
               refToExpr(id) = child
             } else if (originalAttr.nonEmpty &&
               inputPlans.head.output.contains(originalAttr.get.toAttribute)) {
-              // originAlias only exists in Project or Filter. If the child already contains this
+              // originAttr only exists in Project or Filter. If the child already contains this
               // attribute, extend it.
               refToExpr(id) = originalAttr.get.toAttribute
             } else {

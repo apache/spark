@@ -1284,8 +1284,8 @@ object CollapseProject extends Rule[LogicalPlan] with AliasHelper {
       } else {
         true
       }
-    // Alias, ExtractValue and CreateNamedStruct are very cheap.
-    case _: Alias | _: ExtractValue | _: CreateNamedStruct => e.children.forall(isCheap)
+    // Alias and ExtractValue are very cheap.
+    case _: Alias | _: ExtractValue => e.children.forall(isCheap)
     case _ => false
   }
 
@@ -1858,13 +1858,13 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
       }
 
       if (pushDown.nonEmpty) {
-        // Different from Project, Aggregate is not suitable for using With to push down, because
-        // propagate the attributes directly need add the groupingExpressions may cause regression.
-        // So Aggregate only need inline common expression from parent for original project
-        // inheritance.
+        // Different from Project, Aggregate propagate the attributes directly need add the
+        // groupingExpressions may cause regression. So Aggregate need inline common expression
+        // from parent for original project inheritance and rewrite originalAttribute of push down
+        // With.
         val newAggregateExpressions = aggregate.aggregateExpressions ++
           getWithAlias(pushDown.reduce(And)).map(replaceAliasButKeepName(_, aliasMap))
-        val replaced = removeOriginAttribute(rewriteCondition(pushDown.reduce(And), aliasMap))
+        val replaced = rewriteOriginalAttribute(rewriteCondition(pushDown.reduce(And), aliasMap))
         val newAggregate = aggregate.copy(child = Filter(replaced, aggregate.child),
           aggregateExpressions = newAggregateExpressions)
         // If there is no more filter to stay up, just eliminate the filter.
@@ -2023,9 +2023,10 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
     }
   }
 
-  private def removeOriginAttribute(expr: Expression): Expression = {
+  private def rewriteOriginalAttribute(expr: Expression): Expression = {
     expr.transform {
-      case ced: CommonExpressionDef => ced.copy(originalAttribute = None)
+      case ced @ CommonExpressionDef(_, _, Some(a)) =>
+        ced.copy(originalAttribute = Some(a.withExprId(NamedExpression.newExprId)))
     }
   }
 
@@ -2045,7 +2046,7 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
       val replaceWithMap = cond.references.toSeq
         .filter(attr => aliasMap.contains(attr))
         .map(attr => attr -> aliasMap(attr))
-        .filter(m => !CollapseProject.isCheap(m._2))
+        .filterNot(m => CollapseProject.isCheap(m._2))
       if (replaceWithMap.isEmpty) {
         cond
       } else {

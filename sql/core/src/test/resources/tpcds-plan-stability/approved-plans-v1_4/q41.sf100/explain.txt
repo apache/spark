@@ -73,15 +73,15 @@ Input [2]: [i_manufact#5, count#10]
 Keys [1]: [i_manufact#5]
 Functions [1]: [count(1)]
 Aggregate Attributes [1]: [count(1)#11]
-Results [2]: [count(1)#11 AS item_cnt#12, i_manufact#5]
+Results [2]: [i_manufact#5, count(1)#11 AS item_cnt#12]
 
 (12) Filter [codegen id : 2]
-Input [2]: [item_cnt#12, i_manufact#5]
+Input [2]: [i_manufact#5, item_cnt#12]
 Condition : (item_cnt#12 > 0)
 
 (13) Project [codegen id : 2]
 Output [1]: [i_manufact#5]
-Input [2]: [item_cnt#12, i_manufact#5]
+Input [2]: [i_manufact#5, item_cnt#12]
 
 (14) BroadcastExchange
 Input [1]: [i_manufact#5]

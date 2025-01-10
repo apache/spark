@@ -2667,7 +2667,10 @@ class DataFrameSuite extends QueryTest
 
       var result: Seq[Row] = Seq.empty
 
-      withSQLConf(SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> ruleName) {
+      withSQLConf(
+        SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> ruleName,
+        SQLConf.ALWAYS_INLINE_COMMON_EXPR.key -> "true"
+      ) {
         withTable("table_timestamp") {
           sql(
             """

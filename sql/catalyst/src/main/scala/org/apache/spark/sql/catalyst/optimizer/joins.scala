@@ -210,7 +210,13 @@ object EliminateOuterJoin extends Rule[LogicalPlan] with PredicateHelper {
     case f @ Filter(condition, j @ Join(_, _, RightOuter | LeftOuter | FullOuter, _, _)) =>
       val newJoinType = buildNewJoinType(f, j)
       if (j.joinType == newJoinType) f else Filter(condition, j.copy(joinType = newJoinType))
-
+    case f @ Filter(condition,
+        p @ Project(_, j @ Join(_, _, RightOuter | LeftOuter | FullOuter, _, _))) =>
+      val aliasMap = getAliasMap(p)
+      val newFilter = f.copy(condition = replaceAlias(condition, aliasMap))
+      val newJoinType = buildNewJoinType(newFilter, j)
+      if (j.joinType == newJoinType) f
+      else Filter(condition, p.copy(child = j.copy(joinType = newJoinType)))
     case a @ Aggregate(_, _, Join(left, _, LeftOuter, _, _), _)
         if a.references.subsetOf(left.outputSet) && allDuplicateAgnostic(a) =>
       a.copy(child = left)
