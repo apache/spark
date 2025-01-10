@@ -30,8 +30,8 @@ import org.apache.spark.sql.execution.datasources.v2.LeafV2CommandExec
  */
 case class CreateVariableExec(
     identifier: Identifier,
-    defaultExpr: DefaultValueExpression, replace: Boolean)
-  extends LeafV2CommandExec with ExpressionsEvaluator {
+    defaultExpr: DefaultValueExpression,
+    replace: Boolean) extends LeafV2CommandExec with ExpressionsEvaluator {
 
   override protected def run(): Seq[InternalRow] = {
     val scriptingVariableManager = session.sessionState.catalogManager.scriptingLocalVariableManager

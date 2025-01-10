@@ -273,7 +273,7 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
 
     catalogManager.scriptingLocalVariableManager
       // If variable name is qualified with system.session.<varName> treat it as a session variable.
-      .filterNot(_ => namePartsCaseAdjusted.take(2) == Seq("system", "session"))
+      .filterNot(_ => nameParts.take(2).map(_.toLowerCase(Locale.ROOT)) == Seq("system", "session"))
       // Local variable must be in format <varName> or <label>.<varName>
       .filter(_ => namePartsCaseAdjusted.nonEmpty && namePartsCaseAdjusted.length <= 2)
       .flatMap(_.get(namePartsCaseAdjusted))

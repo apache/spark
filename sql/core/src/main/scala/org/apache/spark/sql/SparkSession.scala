@@ -445,10 +445,10 @@ class SparkSession private(
   private def executeSqlScript(
       script: CompoundBody,
       args: Map[String, Expression] = Map.empty): DataFrame = {
-    val sse = new SqlScriptingExecution(script, this, args)
-    var result: Option[Seq[Row]] = None
 
-    try {
+    Utils.tryWithResource(new SqlScriptingExecution(script, this, args)) { sse =>
+      var result: Option[Seq[Row]] = None
+
       while (sse.hasNext) {
         sse.withErrorHandling {
           val df = sse.next()
@@ -468,8 +468,6 @@ class SparkSession private(
         Dataset.ofRows(
           self, LocalRelation.fromExternalRows(attributes, result.get))
       }
-    } finally {
-      sse.cleanup()
     }
   }
 

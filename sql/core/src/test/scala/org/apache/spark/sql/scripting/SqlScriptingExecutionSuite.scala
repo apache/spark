@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.plans.logical.CompoundBody
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLId
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.util.Utils
 
 /**
  * SQL Scripting interpreter tests.
@@ -43,11 +44,8 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
       sqlText: String,
       args: Map[String, Expression] = Map.empty): Seq[Array[Row]] = {
     val compoundBody = spark.sessionState.sqlParser.parsePlan(sqlText).asInstanceOf[CompoundBody]
-    val sse = new SqlScriptingExecution(compoundBody, spark, args)
-    try {
+    Utils.tryWithResource(new SqlScriptingExecution(compoundBody, spark, args)) { sse =>
       sse.map { df => df.collect() }.toList
-    } finally {
-      sse.cleanup()
     }
   }
 

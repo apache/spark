@@ -76,7 +76,7 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
   }
 
   private def resolveCreateVariableName(nameParts: Seq[String]): ResolvedIdentifier = {
-    // from scripts we can only create local variables, which must be unqualified
+    // From scripts we can only create local variables, which must be unqualified.
     if (catalogManager.scriptingLocalVariableManager.isDefined && nameParts.length != 1) {
       throw new AnalysisException(
         "INVALID_VARIABLE_DECLARATION.QUALIFIED_LOCAL_VARIABLE",
@@ -99,6 +99,8 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
   private def resolveVariableName(
       nameParts: Seq[String],
       ident: Identifier): ResolvedIdentifier = nameParts.length match {
+    // On declare variable, local variables support only unqualified names.
+    // On drop variable, local variables are not supported at all.
     case 1 => ResolvedIdentifier(FakeSystemCatalog, ident)
 
     case 2 if nameParts.head.equalsIgnoreCase(CatalogManager.SESSION_NAMESPACE) =>
