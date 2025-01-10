@@ -18,7 +18,7 @@ import os
 import sys
 import warnings
 from collections.abc import Sized
-from functools import reduce
+from functools import reduce, cached_property
 from threading import RLock
 from types import TracebackType
 from typing import (
@@ -58,7 +58,6 @@ from pyspark.sql.types import (
     _has_nulltype,
     _merge_type,
     _create_converter,
-    _parse_datatype_string,
     _from_numpy_type,
 )
 from pyspark.errors.exceptions.captured import install_exception_handler
@@ -773,7 +772,7 @@ class SparkSession(SparkConversionMixin):
             """
             return self._sc
 
-    @property
+    @cached_property
     def version(self) -> str:
         """
         The version of Spark on which this application is running.
@@ -794,7 +793,7 @@ class SparkSession(SparkConversionMixin):
         """
         return self._jsparkSession.version()
 
-    @property
+    @cached_property
     def conf(self) -> RuntimeConfig:
         """Runtime configuration interface for Spark.
 
@@ -822,11 +821,9 @@ class SparkSession(SparkConversionMixin):
         >>> spark.conf.get("key")
         'value'
         """
-        if not hasattr(self, "_conf"):
-            self._conf = RuntimeConfig(self._jsparkSession.conf())
-        return self._conf
+        return RuntimeConfig(self._jsparkSession.conf())
 
-    @property
+    @cached_property
     def catalog(self) -> "Catalog":
         """Interface through which the user may create, drop, alter or query underlying
         databases, tables, functions, etc.
@@ -854,9 +851,7 @@ class SparkSession(SparkConversionMixin):
         """
         from pyspark.sql.catalog import Catalog
 
-        if not hasattr(self, "_catalog"):
-            self._catalog = Catalog(self)
-        return self._catalog
+        return Catalog(self)
 
     @property
     def udf(self) -> "UDFRegistration":
@@ -1505,7 +1500,7 @@ class SparkSession(SparkConversionMixin):
             )
 
         if isinstance(schema, str):
-            schema = cast(Union[AtomicType, StructType, str], _parse_datatype_string(schema))
+            schema = cast(Union[AtomicType, StructType, str], self._parse_ddl(schema))
         elif isinstance(schema, (list, tuple)):
             # Must re-encode any unicode strings to be consistent with StructField names
             schema = [x.encode("utf-8") if not isinstance(x, str) else x for x in schema]
@@ -1907,7 +1902,7 @@ class SparkSession(SparkConversionMixin):
         """
         return DataStreamReader(self)
 
-    @property
+    @cached_property
     def streams(self) -> "StreamingQueryManager":
         """Returns a :class:`StreamingQueryManager` that allows managing all the
         :class:`StreamingQuery` instances active on `this` context.
@@ -1941,10 +1936,7 @@ class SparkSession(SparkConversionMixin):
         """
         from pyspark.sql.streaming import StreamingQueryManager
 
-        if hasattr(self, "_sqm"):
-            return self._sqm
-        self._sqm: StreamingQueryManager = StreamingQueryManager(self._jsparkSession.streams())
-        return self._sqm
+        return StreamingQueryManager(self._jsparkSession.streams())
 
     @property
     def tvf(self) -> "TableValuedFunction":
@@ -2205,13 +2197,15 @@ class SparkSession(SparkConversionMixin):
             messageParameters={"feature": "SparkSession.copyFromLocalToFs"},
         )
 
-    @remote_only
     def interruptAll(self) -> List[str]:
         """
         Interrupt all operations of this session currently running on the connected server.
 
         .. versionadded:: 3.5.0
 
+        .. versionchanged:: 4.0.0
+            Supports Spark Classic.
+
         Returns
         -------
         list of str
@@ -2221,18 +2215,25 @@ class SparkSession(SparkConversionMixin):
         -----
         There is still a possibility of operation finishing just as it is interrupted.
         """
-        raise PySparkRuntimeError(
-            errorClass="ONLY_SUPPORTED_WITH_SPARK_CONNECT",
-            messageParameters={"feature": "SparkSession.interruptAll"},
-        )
+        java_list = self._jsparkSession.interruptAll()
+        python_list = list()
 
-    @remote_only
+        # Use iterator to manually iterate through Java list
+        java_iterator = java_list.iterator()
+        while java_iterator.hasNext():
+            python_list.append(str(java_iterator.next()))
+
+        return python_list
+
     def interruptTag(self, tag: str) -> List[str]:
         """
         Interrupt all operations of this session with the given operation tag.
 
         .. versionadded:: 3.5.0
 
+        .. versionchanged:: 4.0.0
+            Supports Spark Classic.
+
         Returns
         -------
         list of str
@@ -2242,18 +2243,25 @@ class SparkSession(SparkConversionMixin):
         -----
         There is still a possibility of operation finishing just as it is interrupted.
         """
-        raise PySparkRuntimeError(
-            errorClass="ONLY_SUPPORTED_WITH_SPARK_CONNECT",
-            messageParameters={"feature": "SparkSession.interruptTag"},
-        )
+        java_list = self._jsparkSession.interruptTag(tag)
+        python_list = list()
 
-    @remote_only
+        # Use iterator to manually iterate through Java list
+        java_iterator = java_list.iterator()
+        while java_iterator.hasNext():
+            python_list.append(str(java_iterator.next()))
+
+        return python_list
+
     def interruptOperation(self, op_id: str) -> List[str]:
         """
         Interrupt an operation of this session with the given operationId.
 
         .. versionadded:: 3.5.0
 
+        .. versionchanged:: 4.0.0
+            Supports Spark Classic.
+
         Returns
         -------
         list of str
@@ -2263,10 +2271,15 @@ class SparkSession(SparkConversionMixin):
         -----
         There is still a possibility of operation finishing just as it is interrupted.
         """
-        raise PySparkRuntimeError(
-            errorClass="ONLY_SUPPORTED_WITH_SPARK_CONNECT",
-            messageParameters={"feature": "SparkSession.interruptOperation"},
-        )
+        java_list = self._jsparkSession.interruptOperation(op_id)
+        python_list = list()
+
+        # Use iterator to manually iterate through Java list
+        java_iterator = java_list.iterator()
+        while java_iterator.hasNext():
+            python_list.append(str(java_iterator.next()))
+
+        return python_list
 
     def addTag(self, tag: str) -> None:
         """
@@ -2344,6 +2357,12 @@ class SparkSession(SparkConversionMixin):
             Supports Spark Classic.
         """
         self._jsparkSession.clearTags()
+
+    def _to_ddl(self, struct: StructType) -> str:
+        return self._sc._to_ddl(struct)
+
+    def _parse_ddl(self, ddl: str) -> DataType:
+        return self._sc._parse_ddl(ddl)
 
 
 def _test() -> None:

@@ -138,14 +138,44 @@ def from_pandas(pobj: Union[pd.DataFrame, pd.Series, pd.Index]) -> Union[Series,
 
     Parameters
     ----------
-    pobj : pandas.DataFrame or pandas.Series
-        pandas DataFrame or Series to read.
+    pobj : pandas.DataFrame, pandas.Series or pandas.Index
+        pandas DataFrame, Series or Index to read.
 
     Returns
     -------
-    Series or DataFrame
-        If a pandas Series is passed in, this function returns a pandas-on-Spark Series.
+    DataFrame, Series or Index
         If a pandas DataFrame is passed in, this function returns a pandas-on-Spark DataFrame.
+        If a pandas Series is passed in, this function returns a pandas-on-Spark Series.
+        If a pandas Index is passed in, this function returns a pandas-on-Spark Index.
+
+    Examples
+    --------
+    >>> import pandas as pd
+    >>> import pyspark.pandas as ps
+
+    Convert a pandas DataFrame:
+    >>> pdf = pd.DataFrame({'a': [1, 2, 3]})
+    >>> psdf = ps.from_pandas(pdf)
+    >>> psdf
+       a
+    0  1
+    1  2
+    2  3
+
+    Convert a pandas Series:
+    >>> pser = pd.Series([1, 2, 3])
+    >>> psser = ps.from_pandas(pser)
+    >>> psser
+    0    1
+    1    2
+    2    3
+    dtype: int64
+
+    Convert a pandas Index:
+    >>> pidx = pd.Index([1, 2, 3])
+    >>> psidx = ps.from_pandas(pidx)
+    >>> psidx
+    Index([1, 2, 3], dtype='int64')
     """
     if isinstance(pobj, pd.Series):
         return Series(pobj)

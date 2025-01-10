@@ -437,46 +437,36 @@ class CollationTypePrecedenceSuite extends QueryTest with SharedSparkSession {
       sql(s"CREATE TABLE $tableName (c1 STRING COLLATE $columnCollation) USING $dataSource")
       sql(s"INSERT INTO $tableName VALUES ('a')")
 
-      // only for non string inputs cast results in default collation
       checkAnswer(
-        sql(s"SELECT COLLATION(c1 || CAST(to_char(DATE'2016-04-08', 'y') AS STRING)) " +
-          s"FROM $tableName"),
-        Seq(Row(columnCollation)))
-
-      checkAnswer(
-        sql(s"SELECT COLLATION(CAST(to_char(DATE'2016-04-08', 'y') AS STRING)) " +
-          s"FROM $tableName"),
+        sql(s"SELECT COLLATION(CAST(5 AS STRING)) FROM $tableName"),
         Seq(Row(UTF8_BINARY_COLLATION_NAME)))
 
-      // for string inputs collation is of the child expression
       checkAnswer(
-        sql(s"SELECT COLLATION(CAST('a' AS STRING)) FROM $tableName"),
-        Seq(Row(UTF8_BINARY_COLLATION_NAME)))
+        sql(s"SELECT c1 = cast(5 AS STRING) FROM $tableName"),
+        Seq(Row(false)))
 
       checkAnswer(
         sql(s"SELECT COLLATION(CAST(c1 AS STRING)) FROM $tableName"),
-        Seq(Row(columnCollation)))
+        Seq(Row(UTF8_BINARY_COLLATION_NAME)))
+
+      checkAnswer(
+        sql(s"SELECT c1 = cast(c1 as STRING COLLATE UNICODE) FROM $tableName"),
+        Seq(Row(true)))
+
+      checkAnswer(
+        sql(s"SELECT c1 = cast(5 as STRING COLLATE UNICODE) FROM $tableName"),
+        Seq(Row(false)))
 
       checkAnswer(
         sql(s"SELECT COLLATION(CAST(c1 collate UTF8_LCASE AS STRING)) FROM $tableName"),
-        Seq(Row(UTF8_LCASE_COLLATION_NAME)))
+        Seq(Row(UTF8_BINARY_COLLATION_NAME)))
 
-      checkAnswer(
-        sql(s"SELECT COLLATION(c1 || CAST('a' AS STRING)) FROM $tableName"),
-        Seq(Row(columnCollation)))
+      assertImplicitMismatch(
+        sql(s"SELECT c1 = CAST(c1 AS STRING) FROM $tableName"))
 
-      checkAnswer(
-        sql(s"SELECT COLLATION(c1 || CAST('a' collate UTF8_LCASE AS STRING)) FROM $tableName"),
-        Seq(Row(UTF8_LCASE_COLLATION_NAME)))
-
-      checkAnswer(
-        sql(s"SELECT COLLATION(c1 || CAST(c1 AS STRING)) FROM $tableName"),
-        Seq(Row(columnCollation)))
-
-      checkAnswer(
-        sql(s"SELECT COLLATION(c1 || SUBSTRING(CAST(c1 AS STRING), 0, 1)) FROM $tableName"),
-        Seq(Row(columnCollation)))
-      }
+      assertImplicitMismatch(
+        sql(s"SELECT c1 = CAST(to_char(DATE'2016-04-08', 'y') AS STRING) FROM $tableName"))
+    }
   }
 
   test("str fns without params have default strength") {

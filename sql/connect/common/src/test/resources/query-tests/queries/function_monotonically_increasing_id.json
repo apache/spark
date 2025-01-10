@@ -13,7 +13,8 @@
     },
     "expressions": [{
       "unresolvedFunction": {
-        "functionName": "monotonically_increasing_id"
+        "functionName": "monotonically_increasing_id",
+        "isInternal": false
       }
     }]
   }

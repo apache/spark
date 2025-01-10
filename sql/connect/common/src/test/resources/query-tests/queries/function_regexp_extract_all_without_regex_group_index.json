@@ -22,7 +22,8 @@
           "literal": {
             "string": "(\\d+)([a-z]+)"
           }
-        }]
+        }],
+        "isInternal": false
       }
     }]
   }

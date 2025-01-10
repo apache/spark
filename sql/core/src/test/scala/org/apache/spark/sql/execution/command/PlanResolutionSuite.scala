@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, 
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Cast, EqualTo, Expression, InSubquery, IntegerLiteral, ListQuery, Literal, StringLiteral}
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
-import org.apache.spark.sql.catalyst.plans.logical.{AlterColumn, AnalysisOnlyCommand, AppendData, Assignment, CreateTable, CreateTableAsSelect, DeleteAction, DeleteFromTable, DescribeRelation, DropTable, InsertAction, InsertIntoStatement, LocalRelation, LogicalPlan, MergeIntoTable, OneRowRelation, OverwriteByExpression, OverwritePartitionsDynamic, Project, SetTableLocation, SetTableProperties, ShowTableProperties, SubqueryAlias, UnsetTableProperties, UpdateAction, UpdateTable}
+import org.apache.spark.sql.catalyst.plans.logical.{AlterColumn, AnalysisOnlyCommand, AppendData, Assignment, CreateTable, CreateTableAsSelect, DeleteAction, DeleteFromTable, DescribeRelation, DescribeRelationJson, DropTable, InsertAction, InsertIntoStatement, LocalRelation, LogicalPlan, MergeIntoTable, OneRowRelation, OverwriteByExpression, OverwritePartitionsDynamic, Project, SetTableLocation, SetTableProperties, ShowTableProperties, SubqueryAlias, UnsetTableProperties, UpdateAction, UpdateTable}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
 import org.apache.spark.sql.connector.FakeV2Provider
@@ -959,6 +959,43 @@ class PlanResolutionSuite extends AnalysisTest {
     val sql4 = "DESC TABLE v"
     val parsed4 = parseAndResolve(sql4)
     assert(parsed4.isInstanceOf[DescribeTableCommand])
+  }
+
+  test("DESCRIBE AS JSON relation") {
+    Seq("v1Table" -> true, "v2Table" -> false, "testcat.tab" -> false).foreach {
+      case (tblName, useV1Command) =>
+        val sql = s"DESC TABLE EXTENDED $tblName AS JSON"
+        val parsed = parseAndResolve(sql)
+        if (useV1Command) {
+          val expected2 = DescribeTableJsonCommand(
+            TableIdentifier(tblName, Some("default"), Some(SESSION_CATALOG_NAME)),
+            Map.empty, true)
+
+          comparePlans(parsed, expected2)
+        } else {
+          parsed match {
+            case DescribeRelationJson(_: ResolvedTable, _, isExtended) =>
+              assert(isExtended)
+            case _ => fail("Expect DescribeTable, but got:\n" + parsed.treeString)
+          }
+        }
+
+        val sql2 = s"DESC TABLE EXTENDED $tblName PARTITION(a=1) AS JSON"
+        val parsed2 = parseAndResolve(sql2)
+        if (useV1Command) {
+          val expected2 = DescribeTableJsonCommand(
+            TableIdentifier(tblName, Some("default"), Some(SESSION_CATALOG_NAME)),
+            Map("a" -> "1"), true)
+          comparePlans(parsed2, expected2)
+        } else {
+          parsed2 match {
+            case DescribeRelationJson(_: ResolvedTable, partitionSpec, isExtended) =>
+              assert(isExtended)
+              assert(partitionSpec == Map("a" -> "1"))
+            case _ => fail("Expect DescribeTable, but got:\n" + parsed2.treeString)
+          }
+        }
+    }
   }
 
   test("DELETE FROM") {
