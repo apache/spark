@@ -1586,8 +1586,8 @@ object CodeGenerator extends Logging {
         val cf = new ClassFile(new ByteArrayInputStream(classBytes))
         val constPoolSize = cf.getConstantPoolSize
         val methodCodeSizes = cf.methodInfos.asScala.flatMap { method =>
-          method.getAttributes.collect { case a: CodeAttribute =>
-            val byteCodeSize = a.code.length
+          method.getAttributes.collect { case attr: CodeAttribute =>
+            val byteCodeSize = attr.code.length
             CodegenMetrics.METRIC_GENERATED_METHOD_BYTECODE_SIZE.update(byteCodeSize)
 
             if (byteCodeSize > DEFAULT_JVM_HUGE_METHOD_LIMIT) {
