@@ -2959,6 +2959,11 @@
           "Unsupported dtype: <invalidValue>. Valid values: float64, float32."
         ]
       },
+      "EXTENSION" : {
+        "message" : [
+          "Invalid extension: <invalidValue>. Extension is limited to exactly 3 letters (e.g. csv, tsv, etc...)"
+        ]
+      },
       "INTEGER" : {
         "message" : [
           "expects an integer literal, but got <invalidValue>."
