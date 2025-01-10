@@ -722,6 +722,43 @@ trait CharVarcharTestSuite extends QueryTest with SQLTestUtils {
     }
   }
 
+  test(s"cast from char/varchar when ${SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key} is true") {
+    withSQLConf(SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true") {
+      Seq("char(5)", "varchar(5)").foreach { typ =>
+        Seq(
+          "int" -> ("123", 123),
+          "long" -> ("123 ", 123L),
+          "boolean" -> ("true ", true),
+          "boolean" -> ("false", false),
+          "double" -> ("1.2", 1.2)
+        ).foreach { case (toType, (from, to)) =>
+          assert(sql(s"select cast($from :: $typ as $toType)").collect() === Array(Row(to)))
+        }
+      }
+    }
+  }
+
+  test(s"cast to char/varchar when ${SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key} is true") {
+    withSQLConf(SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true") {
+      Seq("char(10)", "varchar(10)").foreach { typ =>
+        Seq(
+          123 -> "123",
+          123L-> "123",
+          true -> "true",
+          false -> "false",
+          1.2 -> "1.2"
+        ).foreach { case (from, to) =>
+          val paddedTo = if (typ == "char(10)") {
+            to.padTo(10, ' ')
+          } else {
+            to
+          }
+          sql(s"select cast($from as $typ)").collect() === Array(Row(paddedTo))
+        }
+      }
+    }
+  }
+
   test("implicitly cast char/varchar into atomics") {
     Seq("char", "varchar").foreach { typ =>
       withSQLConf(SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true") {

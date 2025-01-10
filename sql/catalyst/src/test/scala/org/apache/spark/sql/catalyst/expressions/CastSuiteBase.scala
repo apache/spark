@@ -1425,9 +1425,8 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     assert(!Cast(timestampLiteral, StringType("UTF8_LCASE")).resolved)
   }
 
-  test(s"Casting from char/varchar literal when " +
-    s"${SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key} is true") {
-    withSQLConf(SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true") {
+  test(s"Casting from char/varchar") {
+    def run(): Unit = {
       Seq(CharType(10), VarcharType(10)).foreach { typ =>
         Seq(
           IntegerType -> ("123", 123),
@@ -1440,26 +1439,28 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
         }
       }
     }
+
+    run()
+    withSQLConf(SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true") {
+      run()
+    }
   }
 
-  test(s"Casting to char/varchar when " +
-    s"${SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key} is true") {
-    withSQLConf(SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true") {
-      Seq(CharType(10), VarcharType(10)).foreach { typ =>
-        Seq(
-          IntegerType -> (123, "123"),
-          LongType -> (123L, "123"),
-          BooleanType -> (true, "true"),
-          BooleanType -> (false, "false"),
-          DoubleType -> (1.2, "1.2")
-        ).foreach { case (fromType, (from, to)) =>
-          val paddedTo = if (typ.isInstanceOf[CharType]) {
-            to.padTo(10, ' ')
-          } else {
-            to
-          }
-          checkEvaluation(cast(Literal.create(from, fromType), typ), paddedTo)
+  test("Casting to char/varchar") {
+    Seq(CharType(10), VarcharType(10)).foreach { typ =>
+      Seq(
+        IntegerType -> (123, "123"),
+        LongType -> (123L, "123"),
+        BooleanType -> (true, "true"),
+        BooleanType -> (false, "false"),
+        DoubleType -> (1.2, "1.2")
+      ).foreach { case (fromType, (from, to)) =>
+        val paddedTo = if (typ.isInstanceOf[CharType]) {
+          to.padTo(10, ' ')
+        } else {
+          to
         }
+        checkEvaluation(cast(Literal.create(from, fromType), typ), paddedTo)
       }
     }
   }
