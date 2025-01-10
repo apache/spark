@@ -463,7 +463,6 @@ object Union {
 }
 
 abstract class UnionBase extends LogicalPlan {
-  // updating nullability to make all the children consistent
   override def output: Seq[Attribute] = {
     if (conf.getConf(SQLConf.LAZY_SET_OPERATOR_OUTPUT)) {
       lazyOutput
@@ -495,9 +494,9 @@ abstract class UnionBase extends LogicalPlan {
 
   private def merge(a: ExpressionSet, b: ExpressionSet): ExpressionSet = {
     val common = a.intersect(b)
-    // The constraint with only one reference could be easily inferred as predicate
+    // The constraint with only one reference could be easily inferred as predicate.
     // Grouping the constraints by it's references so we can combine the constraints with same
-    // reference together
+    // reference together.
     val othera = a.diff(common).filter(_.references.size == 1).groupBy(_.references.head)
     val otherb = b.diff(common).filter(_.references.size == 1).groupBy(_.references.head)
     // loose the constraints by: A1 && B1 || A2 && B2  ->  (A1 || A2) && (B1 || B2)
