@@ -38,9 +38,9 @@ import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
 import org.apache.spark.sql.catalyst.analysis.TableFunctionRegistry.TableFunctionBuilder
 import org.apache.spark.sql.catalyst.catalog.SQLFunction.parseDefault
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, Cast, Expression, ExpressionInfo, NamedArgumentExpression, NamedExpression, OuterReference, ScalarSubquery, UpCast}
+import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference, Cast, Expression, ExpressionInfo, NamedArgumentExpression, NamedExpression, ScalarSubquery, UpCast}
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParserInterface}
-import org.apache.spark.sql.catalyst.plans.logical.{FunctionSignature, InputParameter, LogicalPlan, NamedParametersSupport, OneRowRelation, Project, SubqueryAlias, View}
+import org.apache.spark.sql.catalyst.plans.logical.{FunctionSignature, InputParameter, LocalRelation, LogicalPlan, NamedParametersSupport, Project, SubqueryAlias, View}
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, StringUtils}
 import org.apache.spark.sql.connector.catalog.CatalogManager
@@ -1577,39 +1577,27 @@ class SessionCatalog(
    *
    *   SELECT area(a, b) FROM t;
    *
-   * Analyzed SQL function plan:
+   * SQL function plan:
    *
    *   Project [CAST(width * height AS DOUBLE) AS area]
-   *   +- Project [CAST(outer(a) AS DOUBLE) AS width, CAST(outer(b AS DOUBLE) AS height]
-   *      +- OneRowRelation
-   *
-   * Analyzed plan:
-   *
-   *   Project [area(width, height) AS area]
-   *   +- Project [a, b, CAST(a AS DOUBLE) AS width, CAST(b AS DOUBLE) AS height]
-   *      +- Relation [a, b]
+   *   +- Project [CAST(a AS DOUBLE) AS width, CAST(b AS DOUBLE) AS height]
+   *      +- LocalRelation [a, b]
    *
    * Example scalar SQL function with a subquery:
    *
    *   CREATE FUNCTION foo(x INT) RETURNS INT
-   *   RETURN SELECT SUM(a) FROM t WHERE x = a;
+   *   RETURN SELECT SUM(b) FROM t WHERE x = a;
    *
    *   SELECT foo(a) FROM t;
    *
-   * Analyzed SQL function plan:
+   * SQL function plan:
    *
    *   Project [scalar-subquery AS foo]
-   *   :  +- Aggregate [] [sum(a)]
+   *   :  +- Aggregate [] [sum(b)]
    *   :     +- Filter [outer(x) = a]
    *   :        +- Relation [a, b]
-   *   +- Project [CAST(outer(a) AS INT) AS x]
-   *      +- OneRowRelation
-   *
-   * Analyzed plan:
-   *
-   *   Project [foo(x) AS foo]
-   *   +- Project [a, b, CAST(a AS INT) AS x]
-   *      +- Relation [a, b]
+   *   +- Project [CAST(a AS INT) AS x]
+   *      +- LocalRelation [a, b]
    */
   def makeSQLFunctionPlan(
       name: String,
@@ -1657,14 +1645,7 @@ class SessionCatalog(
 
         paddedInput.zip(param.fields).map {
           case (expr, param) =>
-            // Add outer references to all attributes and outer references in the function input.
-            // Outer references also need to be wrapped because the function input may already
-            // contain outer references.
-            val outer = expr.transform {
-              case a: Attribute => OuterReference(a)
-              case o: OuterReference => OuterReference(o)
-            }
-            Alias(Cast(outer, param.dataType), param.name)(
+            Alias(Cast(expr, param.dataType), param.name)(
               qualifier = qualifier,
               // mark the alias as function input
               explicitMetadata = Some(metaForFuncInputAlias))
@@ -1672,7 +1653,8 @@ class SessionCatalog(
       }.getOrElse(Nil)
 
       val body = if (query.isDefined) ScalarSubquery(query.get) else expression.get
-      Project(Alias(Cast(body, returnType), funcName)() :: Nil, Project(inputs, OneRowRelation()))
+      Project(Alias(Cast(body, returnType), funcName)() :: Nil,
+        Project(inputs, LocalRelation(inputs.flatMap(_.references))))
     }
   }
 

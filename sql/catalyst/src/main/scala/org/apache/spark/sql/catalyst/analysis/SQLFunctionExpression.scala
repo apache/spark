@@ -20,7 +20,6 @@ package org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.catalyst.catalog.SQLFunction
 import org.apache.spark.sql.catalyst.expressions.{Expression, UnaryExpression, Unevaluable}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{SQL_FUNCTION_EXPRESSION, SQL_SCALAR_FUNCTION, TreePattern}
-import org.apache.spark.sql.catalyst.trees.UnaryLike
 import org.apache.spark.sql.types.DataType
 
 /**
@@ -45,7 +44,7 @@ case class SQLFunctionExpression(
  * A wrapper node for a SQL scalar function expression.
  */
 case class SQLScalarFunction(function: SQLFunction, inputs: Seq[Expression], child: Expression)
-  extends UnaryExpression with UnaryLike[Expression] with Unevaluable {
+    extends UnaryExpression with Unevaluable {
   override def dataType: DataType = child.dataType
   override def toString: String = s"${function.name}(${inputs.mkString(", ")})"
   override def sql: String = s"${function.name}(${inputs.map(_.sql).mkString(", ")})"
