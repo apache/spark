@@ -2623,14 +2623,14 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
   }
 
   def unexpectedStateStoreVersion(version: Long): Throwable = {
-    new SparkException(
+    new SparkIllegalStateException(
       errorClass = "CANNOT_LOAD_STATE_STORE.UNEXPECTED_VERSION",
       messageParameters = Map("version" -> version.toString),
       cause = null)
   }
 
   def invalidMetadataVersion(text: String): Throwable = {
-    new SparkException(
+    new SparkIllegalStateException(
       errorClass = "INVALID_METADATA_VERSION.INVALID_VERSION_TEXT",
       messageParameters = Map("text" -> text),
       cause = null
@@ -2638,7 +2638,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
   }
 
   def invalidLogVersion(version: Int, maxSupportedVersion: Int): Throwable = {
-    new SparkException(
+    new SparkIllegalStateException(
       errorClass = "INVALID_LOG_VERSION.MAX_SUPPORTED_VERSION",
       messageParameters = Map(
         "version" -> version.toString,
