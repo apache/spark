@@ -694,10 +694,9 @@ class PySparkBoxPlotBase:
         assert len(colnames) > 0
         formatted_colnames = ["`{}`".format(colname) for colname in colnames]
 
-        all_stats_col = "_box_plot_all_stats_col"
+        stats_col = "__pyspark_plotting_box_plot_stats__"
 
         stats_scols = []
-        stats_scols_dict = {}
         for i, colname in enumerate(formatted_colnames):
             percentiles = F.percentile_approx(colname, [0.25, 0.50, 0.75], int(1.0 / precision))
             q1 = F.get(percentiles, 0)
@@ -707,34 +706,26 @@ class PySparkBoxPlotBase:
             lfence = q1 - F.lit(whis) * iqr
             ufence = q3 + F.lit(whis) * iqr
 
-            stats_scols.append(
-                F.struct(
-                    F.mean(colname).alias("mean"),
-                    med.alias("med"),
-                    q1.alias("q1"),
-                    q3.alias("q3"),
-                    lfence.alias("lfence"),
-                    ufence.alias("ufence"),
-                ).alias(f"_box_plot_stats_{i}")
-            )
+            stats_scols.append(F.mean(colname).alias(f"mean_{i}"))
+            stats_scols.append(med.alias(f"med_{i}"))
+            stats_scols.append(q1.alias(f"q1_{i}"))
+            stats_scols.append(q3.alias(f"q3_{i}"))
+            stats_scols.append(lfence.alias(f"lfence_{i}"))
+            stats_scols.append(ufence.alias(f"ufence_{i}"))
 
-            stats_scols_dict[f"_box_plot_stats_{i}"] = F.get(all_stats_col, i)
-
-        sdf = sdf.withColumn(
-            all_stats_col,
-            sdf.select(F.array(*stats_scols)).scalar(),
-        ).withColumns(stats_scols_dict)
+        # compute all stats with a scalar subquery
+        sdf = sdf.select("*", sdf.select(F.struct(*stats_scols)).scalar().alias(stats_col))
 
         result_scols = []
         for i, colname in enumerate(formatted_colnames):
             value = F.col(colname)
 
-            lfence = F.col(f"_box_plot_stats_{i}.lfence")
-            ufence = F.col(f"_box_plot_stats_{i}.ufence")
-            mean = F.col(f"_box_plot_stats_{i}.mean")
-            med = F.col(f"_box_plot_stats_{i}.med")
-            q1 = F.col(f"_box_plot_stats_{i}.q1")
-            q3 = F.col(f"_box_plot_stats_{i}.q3")
+            lfence = F.col(f"{stats_col}.lfence_{i}")
+            ufence = F.col(f"{stats_col}.ufence_{i}")
+            mean = F.col(f"{stats_col}.mean_{i}")
+            med = F.col(f"{stats_col}.med_{i}")
+            q1 = F.col(f"{stats_col}.q1_{i}")
+            q3 = F.col(f"{stats_col}.q3_{i}")
 
             outlier = ~value.between(lfence, ufence)
 
@@ -766,5 +757,4 @@ class PySparkBoxPlotBase:
                 ).alias(f"_box_plot_results_{i}")
             )
 
-        sdf_result = sdf.select(*result_scols)
-        return sdf_result.first()
+        return sdf.select(*result_scols).first()
