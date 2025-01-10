@@ -31,6 +31,7 @@ from pyspark.sql.connect.plan import (
     CommonInlineUserDefinedTableFunction,
     PythonUDTF,
 )
+from pyspark.sql.connect.table_arg import TableArg
 from pyspark.sql.connect.types import UnparsedDataType
 from pyspark.sql.connect.utils import get_python_ver
 from pyspark.sql.udtf import AnalyzeArgument, AnalyzeResult  # noqa: F401
@@ -143,8 +144,12 @@ class UserDefinedTableFunction:
         def to_expr(col: "ColumnOrName") -> Expression:
             if isinstance(col, Column):
                 return col._expr
-            else:
+            elif isinstance(col, TableArg):
+                return col._subquery_expr
+            elif isinstance(col, str):
                 return ColumnReference(col)  # type: ignore[arg-type]
+            else:
+                raise TypeError(f"Unsupported column or argument type: {type(col)}")
 
         arg_exprs: List[Expression] = [to_expr(arg) for arg in args] + [
             NamedArgumentExpression(key, to_expr(value)) for key, value in kwargs.items()

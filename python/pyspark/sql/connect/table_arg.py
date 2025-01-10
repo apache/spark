@@ -17,13 +17,18 @@
 
 from typing import TYPE_CHECKING
 
+import pyspark.sql.connect.proto as proto
 from pyspark.sql.connect.expressions import SubqueryExpression
+
+from pyspark.sql.table_arg import TableArg as ParentTableArg
+
 
 if TYPE_CHECKING:
     from pyspark.sql._typing import ColumnOrName
+    from pyspark.sql.connect.client import SparkConnectClient
 
 
-class TableArg:
+class TableArg(ParentTableArg):
     def __init__(self, subquery_expr: SubqueryExpression):
         self._subquery_expr = subquery_expr
 
@@ -60,5 +65,5 @@ class TableArg:
         )
         return TableArg(new_expr)
 
-    def to_plan(self) -> SubqueryExpression:
-        return self._subquery_expr
+    def to_plan(self, session: "SparkConnectClient") -> proto.Expression:
+        return self._subquery_expr.to_plan(session)
