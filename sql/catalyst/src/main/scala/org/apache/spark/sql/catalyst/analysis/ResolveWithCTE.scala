@@ -47,31 +47,31 @@ object ResolveWithCTE extends Rule[LogicalPlan] {
   }
 
   // Update the definition's recursiveAnchor if the anchor is resolved.
-  private def maybeUpdateRecursiveAnchor(cteDef: CTERelationDef): CTERelationDef = {
+  private def recursiveAnchorResolved(cteDef: CTERelationDef): Option[LogicalPlan] = {
     cteDef.child match {
       case SubqueryAlias(_, ul: UnionLoop) =>
         if (ul.anchor.resolved) {
-          cteDef.copy(recursionAnchor = Some(ul.anchor))
+          Some(ul.anchor)
         } else {
-          cteDef
+          None
         }
-      case SubqueryAlias(_, d @ Distinct(ul: UnionLoop)) =>
+      case SubqueryAlias(_, Distinct(ul: UnionLoop)) =>
         if (ul.anchor.resolved) {
-          cteDef.copy(recursionAnchor = Some(d.copy(child = ul.anchor)))
+          Some(ul.anchor)
         } else {
-          cteDef
+          None
         }
-      case SubqueryAlias(_, a @ UnresolvedSubqueryColumnAliases(_, ul: UnionLoop)) =>
+      case SubqueryAlias(_, UnresolvedSubqueryColumnAliases(_, ul: UnionLoop)) =>
         if (ul.anchor.resolved) {
-          cteDef.copy(recursionAnchor = Some(a.copy(child = ul.anchor)))
+          Some(ul.anchor)
         } else {
-          cteDef
+          None
         }
-      case SubqueryAlias(_, a @ UnresolvedSubqueryColumnAliases(_, d @ Distinct(ul: UnionLoop))) =>
+      case SubqueryAlias(_, UnresolvedSubqueryColumnAliases(_, Distinct(ul: UnionLoop))) =>
         if (ul.anchor.resolved) {
-          cteDef.copy(recursionAnchor = Some(a.copy(child = d.copy(child = ul.anchor))))
+          Some(ul.anchor)
         } else {
-          cteDef
+          None
         }
       case _ =>
         cteDef.failAnalysis(
@@ -89,11 +89,6 @@ object ResolveWithCTE extends Rule[LogicalPlan] {
           val newCTEDef = if (cteDef.recursive) {
             cteDef.child match {
               // Substitutions to UnionLoop and UnionLoopRef.
-              //
-              // We do not support cases of Union (needs a SubqueryAlias above it), nor Project (as
-              // UnresolvedSubqueryColumnAliases have not been substituted with the Project yet),
-              // leaving us with cases of SubqueryAlias->Union and SubqueryAlias->
-              // UnresolvedSubqueryColumnAliases->Union. The same applies to Distinct Union.
               case a @ SubqueryAlias(_, Union(Seq(anchor, recursion), false, false)) =>
                 cteDef.copy(child =
                   a.copy(child =
@@ -130,29 +125,33 @@ object ResolveWithCTE extends Rule[LogicalPlan] {
                           UnionLoopRef(cteDef.id, cteDef.output, true),
                           false)))))
               case _ =>
+                // We do not support cases of sole Union (needs a SubqueryAlias above it), nor
+                // Project (as UnresolvedSubqueryColumnAliases have not been substituted with the
+                // Project yet), leaving us with cases of SubqueryAlias->Union and SubqueryAlias->
+                // UnresolvedSubqueryColumnAliases->Union. The same applies to Distinct Union.
                 cteDef.failAnalysis(
-                  errorClass = "INVALID_RECURSIVE_CTE",
-                  messageParameters = Map.empty)
-            }
-
-            // If a recursive CTE definition is not yet resolved, store the anchor term (if it is
-            // resolved) to the definition.
-            if (!cteDef.resolved) {
-              if (cteDef.recursionAnchor.isEmpty) {
-                maybeUpdateRecursiveAnchor(cteDef)
-              } else {
-                cteDef
-              }
-            } else {
-              cteDef
+                    errorClass = "INVALID_RECURSIVE_CTE",
+                    messageParameters = Map.empty)
             }
           } else {
             cteDef
           }
 
-          // cteDefMap holds resolved and "partially" resolved (only via anchor) CTE definitions.
-          if (newCTEDef.resolved || newCTEDef.recursionAnchorResolved) {
-            cteDefMap.put(newCTEDef.id, newCTEDef)
+          if (newCTEDef.recursive) {
+            // cteDefMap holds "partially" resolved (only via anchor) CTE definitions in the
+            // recursive case.
+            if (newCTEDef.resolved) {
+              newCTEDef.failAnalysis(
+                errorClass = "INVALID_RECURSIVE_CTE",
+                messageParameters = Map.empty)
+            }
+            if (recursiveAnchorResolved(newCTEDef).isDefined) {
+              cteDefMap.put(newCTEDef.id, newCTEDef)
+            }
+          } else {
+            if (newCTEDef.resolved) {
+              cteDefMap.put(newCTEDef.id, newCTEDef)
+            }
           }
 
           newCTEDef
@@ -162,12 +161,13 @@ object ResolveWithCTE extends Rule[LogicalPlan] {
       case ref: CTERelationRef if !ref.resolved =>
         cteDefMap.get(ref.cteId).map { cteDef =>
           if (ref.recursive) {
-            // Recursive references can be resolved from the anchor term and non-resolved ref
+            // Recursive references can be resolved from the anchor term. Non-resolved ref
             // implies non-resolved definition. Since the definition was present in the map of
             // resolved and "partially" resolved definitions, the only explanation is that
             // definition was "partially" resolved.
-            if (cteDef.recursionAnchorResolved) {
-              ref.copy(_resolved = true, output = cteDef.recursionAnchor.get.output,
+            val anchorResolved = recursiveAnchorResolved(cteDef)
+            if (anchorResolved.isDefined) {
+              ref.copy(_resolved = true, output = anchorResolved.get.output,
                 isStreaming = cteDef.isStreaming)
             } else {
               cteDef.failAnalysis(
