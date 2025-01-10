@@ -2805,14 +2805,14 @@
       "UnsupportedLogVersion."
     ],
     "subClass" : {
-      "MAX_SUPPORTED_VERSION": {
-        "message": [
-          "maximum supported log version is v<maxSupportedVersion>, but encountered v<version>. The log file was produced by a newer version of Spark and cannot be read by this version. Please upgrade."
+      "EXACT_MATCH_VERSION" : {
+        "message" : [
+          "the only supported log version is v<matchVersion>, but encountered v<version>."
         ]
       },
-      "EXACT_MATCH_VERSION": {
-        "message": [
-          "the only supported log version is v<matchVersion>, but encountered v<version>."
+      "MAX_SUPPORTED_VERSION" : {
+        "message" : [
+          "maximum supported log version is v<maxSupportedVersion>, but encountered v<version>. The log file was produced by a newer version of Spark and cannot be read by this version. Please upgrade."
         ]
       }
     },
