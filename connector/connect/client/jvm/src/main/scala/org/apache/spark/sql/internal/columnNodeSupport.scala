@@ -42,11 +42,21 @@ object ColumnNodeToProtoConverter extends (ColumnNode => proto.Expression) {
 
   override def apply(node: ColumnNode): Expression = apply(node, None)
 
-  private[sql] def apply(
+  /**
+   * Transform a column into an expression, with additional transformation rules that will be
+   * applied to each ColumnNode before converting it.
+   */
+  private[sql] def toExprWithTransformation(
+      node: ColumnNode,
+      encoder: Option[Encoder[_]],
+      additionalTransformation: ColumnNode => ColumnNode): proto.Expression = {
+    apply(node, encoder, Some(additionalTransformation))
+  }
+
+  private def apply(
       node: ColumnNode,
       e: Option[Encoder[_]],
-      additionalTransformation: Option[ColumnNode => ColumnNode] = None
-  ): proto.Expression = {
+      additionalTransformation: Option[ColumnNode => ColumnNode] = None): proto.Expression = {
     val builder = proto.Expression.newBuilder()
     // TODO(SPARK-49273) support Origin in Connect Scala Client.
     val n = additionalTransformation.map(_(node)).getOrElse(node)
@@ -151,8 +161,8 @@ object ColumnNodeToProtoConverter extends (ColumnNode => proto.Expression) {
             false,
             _) =>
         // Translate UserDefinedFunctionLike into UserDefinedFunction.
-        builder.mergeFrom(apply(
-          f.copy(function = UserDefinedAggregator(a, e.get)), e, additionalTransformation))
+        builder.mergeFrom(
+          apply(f.copy(function = UserDefinedAggregator(a, e.get)), e, additionalTransformation))
 
       case InvokeInlineUserDefinedFunction(udf: UserDefinedFunction, args, false, _) =>
         builder.setCommonInlineUserDefinedFunction(

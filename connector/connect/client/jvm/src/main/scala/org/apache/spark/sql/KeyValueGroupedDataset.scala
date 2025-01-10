@@ -25,7 +25,6 @@ import org.apache.spark.connect.proto
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{agnosticEncoderFor, ProductEncoder}
 import org.apache.spark.sql.connect.ConnectConversions._
-import org.apache.spark.sql.connect.common.UdfUtils
 import org.apache.spark.sql.expressions.{Aggregator, SparkUserDefinedFunction}
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.internal.{ColumnNodeToProtoConverter, UDFAdaptors}
@@ -467,52 +466,44 @@ private class KeyValueGroupedDatasetImpl[K, V, IK, IV](
     val transformFunc = UDFAdaptors.mapValues(valueMapFunc)
     val valueTransformedDf =
       originalDf.mapPartitions(transformFunc)(transformEncoder).toDF("iv", "v")
-    valueTransformedDf.collect()
+
     // Rewrite grouping expressions to use "iv" column as input
-    val qqqqq = groupingColumns.map(c => ColumnNodeToProtoConverter
-      .apply(c.node, None, Some(prependToIdentifier())))
-    val updatedGroupingExprs = qqqqq
-    // Rewrite the aggregate columns to use "v" column as input
-    val updatedAggColumns = columns.map(rewriteAggColumn(_, "v"))
+    val updatedGroupingExprs = groupingColumns.map(c =>
+      ColumnNodeToProtoConverter.toExprWithTransformation(
+        c.node,
+        encoder = None,
+        prependAndRewriteColumnAttribute(rewrite = "iv", prepend = Some("iv"))))
+    // Rewrite aggregate columns to use "v" column as input
+    val updatedAggTypedExprs = columns.map { c =>
+      ColumnNodeToProtoConverter.toExprWithTransformation(
+        c.node,
+        encoder = Some(vEncoder),
+        prependAndRewriteColumnAttribute(rewrite = "v", prepend = None))
+    }
+
     val rEnc = ProductEncoder.tuple(kEncoder +: columns.map(c => agnosticEncoderFor(c.encoder)))
     sparkSession.newDataset(rEnc) { builder =>
       builder.getAggregateBuilder
         .setInput(valueTransformedDf.plan.getRoot)
         .setGroupType(proto.Aggregate.GroupType.GROUP_TYPE_GROUPBY)
-        // Group by the key column, ...
         .addAllGroupingExpressions(updatedGroupingExprs.asJava)
-        // then aggregate by the value column
-        .addAllAggregateExpressions(updatedAggColumns.map(_.typedExpr(vEncoder)).asJava)
+        .addAllAggregateExpressions(updatedAggTypedExprs.asJava)
     }
   }
 
-  private def prependToIdentifier(): internal.ColumnNode => internal.ColumnNode = {
-    case n@internal.UnresolvedAttribute(nameParts, _, _, _) =>
-      n.copy(nameParts = "iv" +: nameParts)
+  private def prependAndRewriteColumnAttribute(
+      rewrite: String,
+      prepend: Option[String]): internal.ColumnNode => internal.ColumnNode = {
+    // Prepend to the column name: "col1" to "prepend.col1". Used by grouping columns.
+    case n @ internal.UnresolvedAttribute(nameParts, _, _, _) if prepend.isDefined =>
+      n.copy(nameParts = prepend.get +: nameParts)
+    // Rewrite "*" to a specific column name. Used by grouping & agg columns.
     case internal.UnresolvedStar(None, planId, origin) =>
-      internal.UnresolvedAttribute("iv", planId, isMetadataColumn = false, origin)
+      internal.UnresolvedAttribute(rewrite, planId, isMetadataColumn = false, origin)
+    // Specify the column to invoke the UDAF. Used by agg columns.
     case f @ internal.InvokeInlineUserDefinedFunction(_: Aggregator[_, _, _], Nil, _, _) =>
-      f.copy(arguments = Seq(internal.UnresolvedAttribute("iv")))
+      f.copy(arguments = Seq(internal.UnresolvedAttribute(rewrite)))
     case col => col
-  }
-
-  private def rewriteAggColumn(column: Column, to: String): Column = {
-    def rewriteStarIntoNamedColumn(col: internal.ColumnNode): internal.ColumnNode = {
-      col match {
-        case internal.UnresolvedStar(None, planId, origin) =>
-          internal.UnresolvedAttribute(to, planId, isMetadataColumn = false, origin)
-        case _ => col
-      }
-    }
-
-    val newNode = column.node match {
-      case f @ internal.UnresolvedFunction(_, arguments, _, false, _, _) =>
-        f.copy(arguments = arguments.map(rewriteStarIntoNamedColumn))
-      case f @ internal.InvokeInlineUserDefinedFunction(_: Aggregator[_, _, _], Nil, _, _) =>
-        f.copy(arguments = Seq(internal.UnresolvedAttribute(to)))
-      case _ => column.node
-    }
-    new Column(newNode)
   }
 
   override def reduceGroups(f: (V, V) => V): Dataset[(K, V)] = {
@@ -611,20 +602,15 @@ private object KeyValueGroupedDatasetImpl {
       kEncoder: AgnosticEncoder[K],
       vEncoder: AgnosticEncoder[V],
       groupingExprs: Seq[Column]): KeyValueGroupedDatasetImpl[K, V, K, V] = {
-    // Use a dummy udf to pass the K V encoders
-    val dummyGroupingFunc = SparkUserDefinedFunction(
-      function = UdfUtils.noOp[V, K](),
-      inputEncoders = vEncoder :: Nil,
-      outputEncoder = kEncoder).apply(col("*"))
     val session = df.sparkSession
     new KeyValueGroupedDatasetImpl(
       session,
       df.plan,
-      kEncoder = kEncoder,
-      ivEncoder = vEncoder,
-      vEncoder = vEncoder,
-      groupingColumns = Seq(dummyGroupingFunc) ++ groupingExprs,
-      valueMapFunc = None,
-      keysFunc = () => df.select(groupingExprs: _*).as(kEncoder))
+      kEncoder,
+      vEncoder,
+      vEncoder,
+      groupingExprs,
+      None,
+      () => df.select(groupingExprs: _*).as(kEncoder))
   }
 }

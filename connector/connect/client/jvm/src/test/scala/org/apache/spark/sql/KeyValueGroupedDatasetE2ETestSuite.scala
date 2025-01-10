@@ -480,21 +480,12 @@ class KeyValueGroupedDatasetE2ETestSuite extends QueryTest with RemoteSparkSessi
     assert(values === Array(("a", 2, 60), ("b", 2, 6), ("c", 1, 2)))
   }
 
-  test("sasas") {
-    val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
-    val values = ds.groupBy($"_1").as[String, (String, Int)]
-      .mapValues(_._2 * 2) // value *= 2 to make sure `mapValues` is really applied
-      .agg(count("*"))
-      .collect()
-    assert(values === Array(("a", 2), ("b", 2), ("c", 1)))
-  }
-
   test("agg with mapValues (RGDS to KVDS)") {
-    val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDF("k", "v")
+    val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
     val values = ds
-      .groupBy($"k")
+      .groupBy($"_1")
       .as[String, (String, Int)]
-      .mapValues(_._2 * 2)
+      .mapValues(_._2 * 2) // value *= 2 to make sure `mapValues` is really applied
       .agg(count("*"), IntSumAgg.toColumn)
       .collect()
     assert(values === Array(("a", 2, 60), ("b", 2, 6), ("c", 1, 2)))
