@@ -43,9 +43,9 @@ function delete_virtualenv() {
 trap delete_virtualenv EXIT
 
 echo "......."
-echo $CONDA_PREFIX
-ls -al $CONDA_PREFIX
-# /usr/share/miniconda/bin/conda env list
+echo "$HOME/miniforge3"
+ls -al "$HOME/miniforge3"
+$HOME/miniforge3/bin/conda env list
 echo "......."
 
 PYTHON_EXECS=()
@@ -93,10 +93,6 @@ for python in "${PYTHON_EXECS[@]}"; do
     VIRTUALENV_PATH="$VIRTUALENV_BASE"/$python
     rm -rf "$VIRTUALENV_PATH"
     if [ -n "$USE_CONDA" ]; then
-      if [ -f "$CONDA_PREFIX/etc/profile.d/conda.sh" ]; then
-        # See also https://github.com/conda/conda/issues/7980
-        source "$CONDA_PREFIX/etc/profile.d/conda.sh"
-      fi
       conda create -y -p "$VIRTUALENV_PATH" python=$python numpy pandas pip setuptools
       source activate "$VIRTUALENV_PATH" || conda activate "$VIRTUALENV_PATH"
     else
