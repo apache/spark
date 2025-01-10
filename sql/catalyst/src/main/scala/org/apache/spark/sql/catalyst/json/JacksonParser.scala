@@ -340,8 +340,9 @@ class JacksonParser(
           }
         }
       // Reset back to the original configuration using `~0` as the mask,
-      // which is a bitmask with all bits set, effectively allowing all features to be reset.
-      // This ensures that every feature is restored to its previous state as defined by `oldFeature`.
+      // which is a bitmask with all bits set, effectively allowing all features
+      // to be reset. This ensures that every feature is restored to its previous
+      // state as defined by `oldFeature`.
       parser.overrideStdFeatures(oldFeature, ~0)
       result
     }
