@@ -42,11 +42,11 @@ function delete_virtualenv() {
 }
 trap delete_virtualenv EXIT
 
-echo "......."
-echo "$HOME/miniforge3"
-ls -al "$HOME/miniforge3"
-$HOME/miniforge3/bin/conda env list
-echo "......."
+# echo "......."
+# echo "$HOME/miniforge3"
+# ls -al "$HOME/miniforge3"
+# $HOME/miniforge3/bin/conda env list
+# echo "......."
 
 PYTHON_EXECS=()
 # Some systems don't have pip or virtualenv - in those cases our tests won't work.
