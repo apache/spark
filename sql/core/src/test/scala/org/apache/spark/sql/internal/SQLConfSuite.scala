@@ -530,14 +530,6 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
         condition = "UNSUPPORTED_FEATURE.TRIM_COLLATION"
       )
     }
-
-    withSQLConf(SQLConf.OBJECT_LEVEL_COLLATIONS_ENABLED.key -> "false") {
-      checkError(
-        exception = intercept[AnalysisException](
-          sql(s"CREATE TABLE t (col STRING) DEFAULT COLLATION sr_CI_AI")),
-        condition = "UNSUPPORTED_FEATURE.OBJECT_LEVEL_COLLATIONS"
-      )
-    }
   }
 
   test("SPARK-43028: config not found error") {

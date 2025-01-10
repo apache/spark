@@ -902,7 +902,7 @@ class QueryCompilationErrorsSuite
   }
 
   test("SPARK-50779: the object level collations feature is unsupported when flag is disabled") {
-    withSQLConf(SQLConf.TRIM_COLLATION_ENABLED.key -> "false") {
+    withSQLConf(SQLConf.OBJECT_LEVEL_COLLATIONS_ENABLED.key -> "false") {
       Seq(
         "CREATE TABLE t (c STRING) USING parquet DEFAULT COLLATION UNICODE",
         "REPLACE TABLE t (c STRING) USING parquet DEFAULT COLLATION UNICODE_CI",
