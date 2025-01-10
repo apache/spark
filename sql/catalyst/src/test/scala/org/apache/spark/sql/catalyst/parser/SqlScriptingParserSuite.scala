@@ -313,7 +313,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     assert(exception.origin.line.contains(3))
   }
 
-  test("compound: forbidden label - system case insensitive") {
+  test("compound: forbidden label - system - case insensitive") {
     val sqlScriptText =
       """
         |BEGIN
@@ -335,7 +335,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     assert(exception.origin.line.contains(3))
   }
 
-  test("compound: forbidden label - session case insensitive") {
+  test("compound: forbidden label - session - case insensitive") {
     val sqlScriptText =
       """
         |BEGIN

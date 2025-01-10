@@ -1050,11 +1050,11 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
     val sqlScript =
       """
         |BEGIN
-        | lbl: BEGIN
-        |  DECLARE localVar = 1;
-        |  SELECT localVar;
-        |  SELECT lbl.localVar;
-        | END;
+        |  lbl: BEGIN
+        |    DECLARE localVar = 1;
+        |    SELECT localVar;
+        |    SELECT lbl.localVar;
+        |  END;
         |END
         |""".stripMargin
 
@@ -1069,15 +1069,15 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
     val sqlScript =
       """
         |BEGIN
-        | lbl1: BEGIN
-        |  DECLARE localVar = 1;
-        |  lbl2: BEGIN
-        |    DECLARE localVar = 2;
-        |    SELECT localVar;
-        |    SELECT lbl1.localVar;
-        |    SELECT lbl2.localVar;
+        |  lbl1: BEGIN
+        |    DECLARE localVar = 1;
+        |    lbl2: BEGIN
+        |      DECLARE localVar = 2;
+        |      SELECT localVar;
+        |      SELECT lbl1.localVar;
+        |      SELECT lbl2.localVar;
+        |    END;
         |  END;
-        | END;
         |END
         |""".stripMargin
 
@@ -1096,10 +1096,10 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
       val sqlScript =
         """
           |BEGIN
-          | lbl: BEGIN
-          |  DECLARE localVar = 5;
-          |  SELECT localVar;
-          | END;
+          |  lbl: BEGIN
+          |    DECLARE localVar = 5;
+          |    SELECT localVar;
+          |  END;
           |END
           |""".stripMargin
 
@@ -1117,11 +1117,11 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
       val sqlScript =
         """
           |BEGIN
-          | SELECT localVar;
-          | lbl: BEGIN
-          |  DECLARE localVar = 5;
           |  SELECT localVar;
-          | END;
+          |  lbl: BEGIN
+          |    DECLARE localVar = 5;
+          |    SELECT localVar;
+          |  END;
           |END
           |""".stripMargin
 
@@ -1140,11 +1140,11 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
       val sqlScript =
         """
           |BEGIN
-          | lbl: BEGIN
-          |  DECLARE localVar = 5;
-          |  SELECT system.session.localVar;
-          |  SELECT localVar;
-          | END;
+          |  lbl: BEGIN
+          |    DECLARE localVar = 5;
+          |    SELECT system.session.localVar;
+          |    SELECT localVar;
+          |  END;
           |END
           |""".stripMargin
 
@@ -1160,15 +1160,15 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
     val sqlScript =
       """
         |BEGIN
-        | lbl: BEGIN
-        |  DECLARE localVar = 1;
-        |  SELECT LOCALVAR;
-        | END;
+        |  lbl: BEGIN
+        |    DECLARE localVar = 1;
+        |    SELECT LOCALVAR;
+        |  END;
         |END
         |""".stripMargin
 
     val expected = Seq(
-      Seq(Row(1)) // select lbl.localVar
+      Seq(Row(1)) // select LOCALVAR
     )
     verifySqlScriptResult(sqlScript, expected)
   }
@@ -1179,17 +1179,14 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
         val sqlScript =
           """
             |BEGIN
-            | lbl: BEGIN
-            |  DECLARE localVar = 1;
-            |  SELECT LOCALVAR;
-            | END;
+            |  lbl: BEGIN
+            |    DECLARE localVar = 1;
+            |    SELECT LOCALVAR;
+            |  END;
             |END
             |""".stripMargin
 
-        val expected = Seq(
-          Seq(Row(1)) // select lbl.localVar
-        )
-        verifySqlScriptResult(sqlScript, expected)
+        verifySqlScriptResult(sqlScript, Seq.empty[Seq[Row]])
       }
     }
     checkError(
@@ -1199,8 +1196,8 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
       parameters = Map("objectName" -> toSQLId("LOCALVAR")),
       context = ExpectedContext(
         fragment = "LOCALVAR",
-        start = 52,
-        stop = 59)
+        start = 57,
+        stop = 64)
     )
   }
 
@@ -1208,15 +1205,15 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
     val sqlScript =
       """
         |BEGIN
-        | lbl: BEGIN
-        |  DECLARE localVar = 1;
-        |  SELECT LBL.localVar;
-        | END;
+        |  lbl: BEGIN
+        |    DECLARE localVar = 1;
+        |    SELECT LBL.localVar;
+        |  END;
         |END
         |""".stripMargin
 
     val expected = Seq(
-      Seq(Row(1)) // select lbl.localVar
+      Seq(Row(1)) // select LBL.localVar
     )
     verifySqlScriptResult(sqlScript, expected)
   }
@@ -1225,10 +1222,10 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
     val sqlScript =
       """
         |BEGIN
-        | lbl: BEGIN
-        |  DECLARE localVar = 1;
-        |  SELECT LBL.localVar;
-        | END;
+        |  lbl: BEGIN
+        |    DECLARE localVar = 1;
+        |    SELECT LBL.localVar;
+        |  END;
         |END
         |""".stripMargin
 
@@ -1245,8 +1242,8 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
       parameters = Map("objectName" -> toSQLId("LBL.localVar")),
       context = ExpectedContext(
         fragment = "LBL.localVar",
-        start = 52,
-        stop = 63)
+        start = 57,
+        stop = 68)
     )
   }
 
@@ -1254,11 +1251,11 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
     val sqlScript =
       """
         |BEGIN
-        | lbl: BEGIN
-        |  DECLARE localVar = 1;
+        |  lbl: BEGIN
+        |    DECLARE localVar = 1;
+        |    SELECT localVar;
+        |  END;
         |  SELECT localVar;
-        | END;
-        | SELECT localVar;
         |END
         |""".stripMargin
 
@@ -1271,7 +1268,7 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
       condition = "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
       sqlState = "42703",
       parameters = Map("objectName" -> toSQLId("localVar")),
-      context = ExpectedContext(fragment = "localVar", start = 76, stop = 83)
+      context = ExpectedContext(fragment = "localVar", start = 83, stop = 90)
     )
   }
 
@@ -1279,11 +1276,11 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
     val sqlScript =
       """
         |BEGIN
-        | lbl: BEGIN
-        |  DECLARE localVar = 1;
+        |  lbl: BEGIN
+        |    DECLARE localVar = 1;
+        |    SELECT lbl.localVar;
+        |  END;
         |  SELECT lbl.localVar;
-        | END;
-        | SELECT lbl.localVar;
         |END
         |""".stripMargin
 
@@ -1296,7 +1293,7 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
       condition = "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
       sqlState = "42703",
       parameters = Map("objectName" -> toSQLId("lbl.localVar")),
-      context = ExpectedContext(fragment = "lbl.localVar", start = 80, stop = 91)
+      context = ExpectedContext(fragment = "lbl.localVar", start = 87, stop = 98)
     )
   }
 
@@ -1304,12 +1301,12 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
     val sqlScript =
       """
         |BEGIN
-        | DECLARE localVar = 1;
-        | lbl: BEGIN
-        |  DECLARE localVar = 2;
+        |  DECLARE localVar = 1;
+        |  lbl: BEGIN
+        |    DECLARE localVar = 2;
+        |    SELECT localVar;
+        |  END;
         |  SELECT localVar;
-        | END;
-        | SELECT localVar;
         |END
         |""".stripMargin
 
@@ -1327,15 +1324,15 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
       val sqlScript =
         """
           |BEGIN
-          | lbl1: BEGIN
-          |   DECLARE localVar = 1;
-          |   lbl: BEGIN
-          |     DECLARE localVar = 2;
-          |     SELECT localVar;
-          |   END;
-          |   SELECT localVar;
-          | END;
-          | SELECT localVar;
+          |  lbl1: BEGIN
+          |    DECLARE localVar = 1;
+          |    lbl: BEGIN
+          |       DECLARE localVar = 2;
+          |       SELECT localVar;
+          |    END;
+          |    SELECT localVar;
+          |  END;
+          |  SELECT localVar;
           |END
           |""".stripMargin
 
@@ -1352,10 +1349,10 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
       val sqlScript =
         """
           |BEGIN
-          | lbl: BEGIN
-          |  DECLARE lbl.localVar = 1;
-          |  SELECT lbl.localVar;
-          | END;
+          |  lbl: BEGIN
+          |    DECLARE lbl.localVar = 1;
+          |    SELECT lbl.localVar;
+          |  END;
           |END
           |""".stripMargin
 
@@ -1376,10 +1373,10 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
       val sqlScript =
         """
           |BEGIN
-          | lbl: BEGIN
-          |  DECLARE OR REPLACE localVar = 1;
-          |  SELECT localVar;
-          | END;
+          |  lbl: BEGIN
+          |    DECLARE OR REPLACE localVar = 1;
+          |    SELECT localVar;
+          |  END;
           |END
           |""".stripMargin
 
@@ -1399,11 +1396,11 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
     val sqlScript =
       """
         |BEGIN
-        | lbl: BEGIN
-        |  DECLARE localVar = 1;
-        |  DECLARE localVar = 2;
-        |  SELECT lbl.localVar;
-        | END;
+        |  lbl: BEGIN
+        |    DECLARE localVar = 1;
+        |    DECLARE localVar = 2;
+        |    SELECT lbl.localVar;
+        |  END;
         |END
         |""".stripMargin
 
@@ -1424,9 +1421,9 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
     val sqlScript =
       """
         |BEGIN
-        |DECLARE localVar = 1;
-        |SELECT localVar;
-        |DROP TEMPORARY VARIABLE localVar;
+        |  DECLARE localVar = 1;
+        |  SELECT localVar;
+        |  DROP TEMPORARY VARIABLE localVar;
         |END
         |""".stripMargin
     val e = intercept[AnalysisException] {
@@ -1469,13 +1466,13 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
       val sqlScript =
       """
         |BEGIN
-        |DECLARE localVar = 1;
-        |SELECT localVar;
-        |DROP TEMPORARY VARIABLE localVar;
+        |  DECLARE localVar = 1;
+        |  SELECT localVar;
+        |  DROP TEMPORARY VARIABLE localVar;
         |END
         |""".stripMargin
       val expected = Seq(
-        Seq(Row(1))
+        Seq(Row(1)) // select localVar
       )
       verifySqlScriptResult(sqlScript, expected)
     }
@@ -1488,10 +1485,10 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
       val sqlScript =
       """
         |BEGIN
-        |DECLARE localVar = 1;
-        |SELECT system.session.localVar;
-        |DROP TEMPORARY VARIABLE localVar;
-        |SELECT system.session.localVar;
+        |  DECLARE localVar = 1;
+        |  SELECT system.session.localVar;
+        |  DROP TEMPORARY VARIABLE localVar;
+        |  SELECT system.session.localVar;
         |END
         |""".stripMargin
       val e = intercept[AnalysisException] {
@@ -1504,8 +1501,8 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
         parameters = Map("objectName" -> toSQLId("system.session.localVar")),
         context = ExpectedContext(
           fragment = "system.session.localVar",
-          start = 102,
-          stop = 124)
+          start = 110,
+          stop = 132)
       )
     }
   }
@@ -1514,12 +1511,12 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
     val sqlScript =
       """
         |BEGIN
-        | lbl: BEGIN
-        |  DECLARE localVar = 1;
-        |  SELECT lbl.localVar;
-        |  SET lbl.localVar = 5;
-        |  SELECT lbl.localVar;
-        | END;
+        |  lbl: BEGIN
+        |    DECLARE localVar = 1;
+        |    SELECT lbl.localVar;
+        |    SET lbl.localVar = 5;
+        |    SELECT lbl.localVar;
+        |  END;
         |END
         |""".stripMargin
 
@@ -1534,12 +1531,12 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
     val sqlScript =
       """
         |BEGIN
-        | lbl: BEGIN
-        |  DECLARE localVar = 1;
-        |  SELECT localVar;
-        |  SET localVar = 5;
-        |  SELECT localVar;
-        | END;
+        |  lbl: BEGIN
+        |    DECLARE localVar = 1;
+        |    SELECT localVar;
+        |    SET localVar = 5;
+        |    SELECT localVar;
+        |  END;
         |END
         |""".stripMargin
 
@@ -1554,12 +1551,12 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
     val sqlScript =
       """
         |BEGIN
-        | lbl: BEGIN
-        |  DECLARE localVar = 1;
-        |  SELECT lbl.localVar;
-        |  SET localVar = 5;
-        |  SELECT lbl.localVar;
-        | END;
+        |  lbl: BEGIN
+        |    DECLARE localVar = 1;
+        |    SELECT lbl.localVar;
+        |    SET localVar = 5;
+        |    SELECT lbl.localVar;
+        |  END;
         |END
         |""".stripMargin
 
@@ -1589,10 +1586,10 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
         |""".stripMargin
 
     val expected = Seq(
-      Seq(Row(2)), // select lbl.localVar
-      Seq(Row(1)), // select lbl.localVar
-      Seq(Row(2)), // select lbl.localVar
-      Seq(Row(5)) // select lbl.localVar
+      Seq(Row(2)), // select localVar
+      Seq(Row(1)), // select lbl1.localVar
+      Seq(Row(2)), // select lbl2.localVar
+      Seq(Row(5)) // select lbl1.localVar
     )
     verifySqlScriptResult(sqlScript, expected)
   }
@@ -1601,16 +1598,16 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
     val sqlScript =
       """
         |BEGIN
-        | lbl: BEGIN
-        |  DECLARE localVar = 1;
-        |  SET LOCALVAR = 5;
-        |  SELECT localVar;
-        | END;
+        |  lbl: BEGIN
+        |    DECLARE localVar = 1;
+        |    SET LOCALVAR = 5;
+        |    SELECT localVar;
+        |  END;
         |END
         |""".stripMargin
 
     val expected = Seq(
-      Seq(Row(5)) // select lbl.localVar
+      Seq(Row(5)) // select localVar
     )
     verifySqlScriptResult(sqlScript, expected)
   }
@@ -1621,18 +1618,15 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
         val sqlScript =
           """
             |BEGIN
-            | lbl: BEGIN
-            |  DECLARE localVar = 1;
-            |  SET LOCALVAR = 5;
-            |  SELECT localVar;
-            | END;
+            |  lbl: BEGIN
+            |    DECLARE localVar = 1;
+            |    SET LOCALVAR = 5;
+            |    SELECT localVar;
+            |  END;
             |END
             |""".stripMargin
 
-        val expected = Seq(
-          Seq(Row(1)) // select lbl.localVar
-        )
-        verifySqlScriptResult(sqlScript, expected)
+        verifySqlScriptResult(sqlScript, Seq.empty[Seq[Row]])
       }
     }
 
@@ -1659,14 +1653,14 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
       val sqlScript =
       """
         |BEGIN
-        | SELECT localVar;
-        | SET localVar = 1;
-        | SELECT localVar;
+        |  SELECT localVar;
+        |  SET localVar = 1;
+        |  SELECT localVar;
         |END
         |""".stripMargin
       val expected = Seq(
-        Seq(Row(0)),
-        Seq(Row(1))
+        Seq(Row(0)), // select localVar
+        Seq(Row(1)) // select localVar
       )
       verifySqlScriptResult(sqlScript, expected)
     }
@@ -1676,13 +1670,13 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
     val sqlScript =
       """
         |BEGIN
-        | lbl1: BEGIN
-        |  DECLARE localVar = 1;
-        |  lbl2: BEGIN
-        |   SELECT localVar;
-        |   SET (localVar, lbl1.localVar) = (select 1, 2);
+        |  lbl1: BEGIN
+        |    DECLARE localVar = 1;
+        |    lbl2: BEGIN
+        |      SELECT localVar;
+        |      SET (localVar, lbl1.localVar) = (select 1, 2);
+        |    END;
         |  END;
-        | END;
         |END
         |""".stripMargin
 
@@ -1705,12 +1699,12 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
       val sqlScript =
       """
         |BEGIN
-        | lbl: BEGIN
-        |  DECLARE localVar = 1;
-        |  SET (localVar, session.localVar) = (select 2, 3);
-        |  SELECT localVar;
-        |  SELECT session.localVar;
-        | END;
+        |  lbl: BEGIN
+        |    DECLARE localVar = 1;
+        |    SET (localVar, session.localVar) = (select 2, 3);
+        |    SELECT localVar;
+        |    SELECT session.localVar;
+        |  END;
         |END
         |""".stripMargin
       val expected = Seq(
@@ -1728,9 +1722,9 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
       val sqlScript =
       """
         |BEGIN
-        | lbl1: BEGIN
-        |   SET (sessionVar, session.sessionVar) = (select 1, 2);
-        | END;
+        |  lbl1: BEGIN
+        |    SET (sessionVar, session.sessionVar) = (select 1, 2);
+        |  END;
         |END
         |""".stripMargin
       val e = intercept[AnalysisException] {

@@ -35,10 +35,10 @@ class ScriptingVariableManager(context: SqlScriptingExecutionContext)
       overrideIfExists: Boolean): Unit = {
     val name = identifier.name()
 
-    // overrideIdExists should not be supported because local variables don't support
+    // overrideIfExists should not be supported because local variables don't support
     // DECLARE OR REPLACE. However ForStatementExec currently uses this to handle local vars,
-    // so we support it here.
-    // TODO: Refactor ForStatementExec to use local variables properly.
+    // so we support it for now.
+    // TODO [SPARK-50785]: Refactor ForStatementExec to use local variables properly.
     if (!overrideIfExists && context.currentScope.variables.contains(name)) {
       throw new AnalysisException(
         errorClass = "VARIABLE_ALREADY_EXISTS",
@@ -61,6 +61,7 @@ class ScriptingVariableManager(context: SqlScriptingExecutionContext)
       identifier: Identifier): Unit = {
     def varDef = VariableDefinition(identifier, defaultValueSQL, initValue)
     nameParts match {
+      // Unqualified case.
       case Seq(name) =>
         context.currentFrame.scopes
           .findLast(_.variables.contains(name))
@@ -68,6 +69,7 @@ class ScriptingVariableManager(context: SqlScriptingExecutionContext)
           // done in SetVariableExec.
           .orElse(throw unresolvedVariableError(nameParts, identifier.namespace().toIndexedSeq))
           .map(_.variables.put(name, varDef))
+      // Qualified case.
       case Seq(label, name) =>
         context.currentFrame.scopes
           .findLast(_.label == label)
@@ -82,10 +84,12 @@ class ScriptingVariableManager(context: SqlScriptingExecutionContext)
   }
 
   override def get(nameParts: Seq[String]): Option[VariableDefinition] = nameParts match {
+    // Unqualified case.
     case Seq(name) =>
       context.currentFrame.scopes
       .findLast(_.variables.contains(name))
       .flatMap(_.variables.get(name))
+    // Qualified case.
     case Seq(label, name) =>
       context.currentFrame.scopes
       .findLast(_.label == label)

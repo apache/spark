@@ -53,7 +53,6 @@ class ResolveSetVariable(val catalogManager: CatalogManager) extends Rule[Logica
       // Names are normalized when the variables are created.
       // No need for case insensitive comparison here.
       // TODO: we need to group by the qualified variable name once other catalogs support it.
-
       val dups = resolvedVars.groupBy(_.identifier).filter(kv => kv._2.length > 1)
       if (dups.nonEmpty) {
         throw new AnalysisException(

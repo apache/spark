@@ -23,7 +23,6 @@ import scala.collection.mutable.ListBuffer
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.catalog.VariableDefinition
 
-
 /**
  * SQL scripting execution context - keeps track of the current execution state.
  */

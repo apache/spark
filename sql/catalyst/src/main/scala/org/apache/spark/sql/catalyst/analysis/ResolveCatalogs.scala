@@ -111,10 +111,10 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
   private def resolveVariableName(
       nameParts: Seq[String],
       ident: Identifier): ResolvedIdentifier = nameParts.length match {
-    // On declare variable, local variables support only unqualified names.
-    // On drop variable, local variables are not supported at all.
     case 1 => ResolvedIdentifier(FakeSystemCatalog, ident)
 
+    // On declare variable, local variables support only unqualified names.
+    // On drop variable, local variables are not supported at all.
     case 2 if nameParts.head.equalsIgnoreCase(CatalogManager.SESSION_NAMESPACE) =>
       ResolvedIdentifier(FakeSystemCatalog, ident)
 
@@ -126,7 +126,6 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
 
     case _ =>
       throw QueryCompilationErrors.unresolvedVariableError(
-        nameParts, Seq(CatalogManager.SYSTEM_CATALOG_NAME, ident.namespace().head)
-      )
+        nameParts, Seq(CatalogManager.SYSTEM_CATALOG_NAME, ident.namespace().head))
   }
 }
