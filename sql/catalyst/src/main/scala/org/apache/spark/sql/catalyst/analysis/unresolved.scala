@@ -727,7 +727,7 @@ case class UnresolvedStarExceptOrReplace(
  *
  * @param colNames a list of column names that should be replaced or produced.
  *
- * @param exprs a list of expressions that should be used to replace the expressions removed by.
+ * @param exprs the corresponding expressions for `colNames`.
  *
  * @param explicitMetadata an optional list of explicit metadata to associate with the columns.
  */
