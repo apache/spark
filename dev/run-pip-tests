@@ -42,8 +42,8 @@ function delete_virtualenv() {
 }
 trap delete_virtualenv EXIT
 
-which conda
-conda env list
+echo $CONDA
+ls -al $CONDA
 /usr/share/miniconda/bin/conda env list
 
 PYTHON_EXECS=()
