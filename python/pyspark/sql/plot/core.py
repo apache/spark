@@ -694,7 +694,10 @@ class PySparkBoxPlotBase:
         assert len(colnames) > 0
         formatted_colnames = ["`{}`".format(colname) for colname in colnames]
 
+        all_stats_col = "_box_plot_all_stats_col"
+
         stats_scols = []
+        stats_scols_dict = {}
         for i, colname in enumerate(formatted_colnames):
             percentiles = F.percentile_approx(colname, [0.25, 0.50, 0.75], int(1.0 / precision))
             q1 = F.get(percentiles, 0)
@@ -715,7 +718,12 @@ class PySparkBoxPlotBase:
                 ).alias(f"_box_plot_stats_{i}")
             )
 
-        sdf_stats = sdf.select(*stats_scols)
+            stats_scols_dict[f"_box_plot_stats_{i}"] = F.get(all_stats_col, i)
+
+        sdf = sdf.withColumn(
+            all_stats_col,
+            sdf.select(F.array(*stats_scols)).scalar(),
+        ).withColumns(stats_scols_dict)
 
         result_scols = []
         for i, colname in enumerate(formatted_colnames):
@@ -758,5 +766,5 @@ class PySparkBoxPlotBase:
                 ).alias(f"_box_plot_results_{i}")
             )
 
-        sdf_result = sdf.join(sdf_stats.hint("broadcast")).select(*result_scols)
+        sdf_result = sdf.select(*result_scols)
         return sdf_result.first()
