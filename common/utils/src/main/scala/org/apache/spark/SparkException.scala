@@ -453,7 +453,7 @@ private[spark] class SparkIllegalArgumentException private(
 }
 
 /**
- * No such element exception thrown from Spark with an error class.
+ * IllegalStateException thrown from Spark with an error class.
  */
 private[spark] class SparkIllegalStateException(
     errorClass: String,
