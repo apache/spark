@@ -832,7 +832,6 @@ class RocksDB(
         "fileSync" -> fileSyncTimeMs
       )
       recordedMetrics = Some(metrics)
-      println(s"wei== committed version $newVersion stasts: ${recordedMetrics.get.json}")
       logInfo(log"Committed ${MDC(LogKeys.VERSION_NUM, newVersion)}, " +
         log"stats = ${MDC(LogKeys.METRICS_JSON, recordedMetrics.get.json)}")
       loadedVersion
