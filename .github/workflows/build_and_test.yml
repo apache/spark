@@ -601,10 +601,11 @@ jobs:
     - name: Install Conda for pip packaging test
       if: contains(matrix.modules, 'pyspark-errors')
       run: |
-        curl -s https://github.com/conda-forge/miniforge/releases/download/24.11.2-1/Miniforge3-Linux-x86_64.sh > miniforge3.sh
+        curl -s -L "https://github.com/conda-forge/miniforge/releases/download/24.11.2-1/Miniforge3-Linux-x86_64.sh" > miniforge3.sh
         bash miniforge3.sh -b -p $HOME/miniforge3
         ls -al $HOME/miniforge3
         ls -al $HOME/miniforge3/bin
+        $HOME/miniforge3/bin/conda env list
         rm miniforge3.sh
     # Run the tests.
     - name: Run tests
