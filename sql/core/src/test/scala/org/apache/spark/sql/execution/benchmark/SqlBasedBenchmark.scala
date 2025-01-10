@@ -92,6 +92,16 @@ trait SqlBasedBenchmark extends BenchmarkBase with SQLHelper {
     schema
   }
 
+  /**
+   * Prepares a table with large row for benchmarking. The table will be written into
+   * the given path.
+   */
+  protected def writeLargeRow(path: String, rowsNum: Int, numCols: Int, cellSize: Int): Unit = {
+    spark.range(rowsNum)
+      .select(Seq.tabulate(numCols)(i => lit("a" * cellSize * 1024 * 1024).as(s"col$i")): _*)
+      .write.parquet(path)
+  }
+
   override def afterAll(): Unit = {
     spark.stop()
   }
