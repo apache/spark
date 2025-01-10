@@ -546,6 +546,22 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest
             decimalColumns
           ),
           Some(toStringLiteral)
+        ),
+        generateTests(
+          "CAST",
+          "CAST(COLUMN AS STRING) = CAST(VALUE AS STRING)",
+          Seq(intColumns, longColumns, floatColumns, decimalColumns),
+          Some(toStringLiteral)
+        ),
+        generateTests(
+          "CAST",
+          "CAST(COLUMN AS INT) = CAST(VALUE AS INT)",
+          Seq(intColumns, floatColumns, decimalColumns)
+        ),
+        generateTests(
+          "CAST",
+          "ABS(ABS(CAST(COLUMN AS DOUBLE)) - ABS(CAST(VALUE AS DOUBLE))) <= 0.00001",
+          Seq(intColumns, floatColumns, longColumns, decimalColumns)
         )
       ).flatten
 
