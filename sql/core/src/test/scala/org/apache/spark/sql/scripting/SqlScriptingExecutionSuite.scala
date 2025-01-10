@@ -1371,6 +1371,30 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
     )
   }
 
+  // TODO [SPARK-50785]: Unignore this when For Statement starts properly using local vars.
+  ignore("local variable - declare - declare or replace") {
+      val sqlScript =
+        """
+          |BEGIN
+          | lbl: BEGIN
+          |  DECLARE OR REPLACE localVar = 1;
+          |  SELECT localVar;
+          | END;
+          |END
+          |""".stripMargin
+
+    val e = intercept[AnalysisException] {
+      verifySqlScriptResult(sqlScript, Seq.empty[Seq[Row]])
+    }
+
+    checkError(
+      exception = e,
+      condition = "INVALID_VARIABLE_DECLARATION.REPLACE_LOCAL_VARIABLE",
+      sqlState = "42K0M",
+      parameters = Map("varName" -> toSQLId("localVar"))
+    )
+  }
+
   test("local variable - declare - duplicate names") {
     val sqlScript =
       """
@@ -1615,7 +1639,7 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
     // TODO: Once execution is changed to support exception handling, remove this manual cleanup.
     //  The reason it is neccessary now is that with the current execution logic,
     //  the SqlScriptingExecution errors while being constructed,
-    //  meaning it doesn't get cleaned up properly
+    //  meaning it doesn't get cleaned up properly.
     spark.sessionState.catalogManager.scriptingLocalVariableManager = None
 
     checkError(

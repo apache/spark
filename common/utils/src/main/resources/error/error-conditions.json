@@ -3328,7 +3328,12 @@
       },
       "QUALIFIED_LOCAL_VARIABLE" : {
         "message" : [
-          "Variable <varName> must be declared without a qualifier."
+          "The variable <varName> must be declared without a qualifier, as qualifiers are not allowed for local variable declarations."
+        ]
+      },
+      "REPLACE_LOCAL_VARIABLE" : {
+        "message": [
+          "The variable <varName> does not support DECLARE OR REPLACE, as local variables cannot be replaced."
         ]
       }
     },

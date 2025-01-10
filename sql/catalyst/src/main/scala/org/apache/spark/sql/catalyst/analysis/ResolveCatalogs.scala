@@ -37,6 +37,24 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
     // We only support temp variables for now and the system catalog is not properly implemented
     // yet. We need to resolve `UnresolvedIdentifier` for variable commands specially.
     case c @ CreateVariable(UnresolvedIdentifier(nameParts, _), _, _) =>
+      // From scripts we can only create local variables, which must be unqualified,
+      // and must not be DECLARE OR REPLACE.
+      if (catalogManager.scriptingLocalVariableManager.isDefined) {
+        // TODO [SPARK-50785]: Uncomment this when For Statement starts properly using local vars.
+//        if (c.replace) {
+//          throw new AnalysisException(
+//            "INVALID_VARIABLE_DECLARATION.REPLACE_LOCAL_VARIABLE",
+//            Map("varName" -> toSQLId(nameParts))
+//          )
+//        }
+
+        if (nameParts.length != 1) {
+          throw new AnalysisException(
+            "INVALID_VARIABLE_DECLARATION.QUALIFIED_LOCAL_VARIABLE",
+            Map("varName" -> toSQLId(nameParts)))
+        }
+      }
+
       val resolved = resolveCreateVariableName(nameParts)
       c.copy(name = resolved)
     case d @ DropVariable(UnresolvedIdentifier(nameParts, _), _) =>
@@ -76,12 +94,6 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
   }
 
   private def resolveCreateVariableName(nameParts: Seq[String]): ResolvedIdentifier = {
-    // From scripts we can only create local variables, which must be unqualified.
-    if (catalogManager.scriptingLocalVariableManager.isDefined && nameParts.length != 1) {
-      throw new AnalysisException(
-        "INVALID_VARIABLE_DECLARATION.QUALIFIED_LOCAL_VARIABLE",
-        Map("varName" -> toSQLId(nameParts)))
-    }
     val ident = catalogManager.scriptingLocalVariableManager
       .getOrElse(catalogManager.tempVariableManager)
       .createIdentifier(nameParts.last)
