@@ -128,6 +128,7 @@ View Schema Mode: BINDING
 Schema: root
  |-- e: integer (nullable = true)
 
+
 showdb	show_t1	false	Catalog: spark_catalog
 Database: showdb
 Table: show_t1
@@ -144,6 +145,7 @@ Schema: root
  |-- b: integer (nullable = true)
  |-- c: string (nullable = true)
  |-- d: string (nullable = true)
+
 
 showdb	show_t2	false	Catalog: spark_catalog
 Database: showdb
