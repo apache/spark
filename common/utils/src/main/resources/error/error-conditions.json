@@ -2816,7 +2816,7 @@
         ]
       }
     },
-    "sqlState" : "22023"
+    "sqlState" : "KD002"
   },
   "INVALID_METADATA_VERSION" : {
     "message" : [
