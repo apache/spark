@@ -129,6 +129,8 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
   protected val pythonExec: String = funcs.head.funcs.head.pythonExec
   protected val pythonVer: String = funcs.head.funcs.head.pythonVer
 
+  protected val batchSizeForPythonUDF: Int = 100
+
   // WARN: Both configurations, 'spark.python.daemon.module' and 'spark.python.worker.module' are
   // for very advanced users and they are experimental. This should be considered
   // as expert-only option, and shouldn't be used before knowing what it means exactly.
@@ -212,6 +214,8 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
     if (faultHandlerEnabled) {
       envVars.put("PYTHON_FAULTHANDLER_DIR", BasePythonRunner.faultHandlerLogDir.toString)
     }
+    // allow the user to set the batch size for the BatchedSerializer on UDFs
+    envVars.put("PYTHON_UDF_BATCH_SIZE", batchSizeForPythonUDF.toString)
 
     envVars.put("SPARK_JOB_ARTIFACT_UUID", jobArtifactUUID.getOrElse("default"))
 

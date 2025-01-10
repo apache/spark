@@ -758,6 +758,12 @@
     ],
     "sqlState" : "22018"
   },
+  "CORRUPTED_CATALOG_FUNCTION" : {
+    "message" : [
+      "Cannot convert the catalog function '<identifier>' into a SQL function due to corrupted function information in catalog. If the function is not a SQL function, please make sure the class name '<className>' is loadable."
+    ],
+    "sqlState" : "0A000"
+  },
   "CREATE_PERMANENT_VIEW_WITHOUT_ALIAS" : {
     "message" : [
       "Not allowed to create the permanent view <name> without explicitly assigning an alias for the expression <attr>."
@@ -1155,6 +1161,13 @@
     ],
     "sqlState" : "42623"
   },
+  "DESCRIBE_JSON_NOT_EXTENDED" : {
+    "message" : [
+      "DESCRIBE TABLE ... AS JSON only supported when [EXTENDED|FORMATTED] is specified.",
+      "For example: DESCRIBE EXTENDED <tableName> AS JSON is supported but DESCRIBE <tableName> AS JSON is not."
+    ],
+    "sqlState" : "0A000"
+  },
   "DISTINCT_WINDOW_FUNCTION_UNSUPPORTED" : {
     "message" : [
       "Distinct window functions are not supported: <windowExpr>."
@@ -1240,6 +1253,18 @@
       "Found duplicate condition <condition> in the handler declaration. Please, remove one of them."
     ],
     "sqlState" : "42710"
+  },
+  "DUPLICATE_ROUTINE_PARAMETER_NAMES" : {
+    "message" : [
+      "Found duplicate name(s) in the parameter list of the user-defined routine <routineName>: <names>."
+    ],
+    "sqlState" : "42734"
+  },
+  "DUPLICATE_ROUTINE_RETURNS_COLUMNS" : {
+    "message" : [
+      "Found duplicate column(s) in the RETURNS clause column list of the user-defined routine <routineName>: <columns>."
+    ],
+    "sqlState" : "42711"
   },
   "EMITTING_ROWS_OLDER_THAN_WATERMARK_NOT_ALLOWED" : {
     "message" : [
@@ -4707,6 +4732,12 @@
     ],
     "sqlState" : "42P01"
   },
+  "TABLE_VALUED_ARGUMENTS_NOT_YET_IMPLEMENTED_FOR_SQL_FUNCTIONS" : {
+    "message" : [
+      "Cannot <action> SQL user-defined function <functionName> with TABLE arguments because this functionality is not yet implemented."
+    ],
+    "sqlState" : "0A000"
+  },
   "TABLE_VALUED_FUNCTION_FAILED_TO_ANALYZE_IN_PYTHON" : {
     "message" : [
       "Failed to analyze the Python user defined table function: <msg>"
@@ -5277,6 +5308,11 @@
           "Attach a comment to the namespace <namespace>."
         ]
       },
+      "DESC_TABLE_COLUMN_JSON" : {
+        "message" : [
+          "DESC TABLE COLUMN AS JSON not supported for individual columns."
+        ]
+      },
       "DESC_TABLE_COLUMN_PARTITION" : {
         "message" : [
           "DESC TABLE COLUMN for a specific partition."
@@ -5355,6 +5391,11 @@
       "MULTI_ACTION_ALTER" : {
         "message" : [
           "The target JDBC server hosting table <tableName> does not support ALTER TABLE with multiple actions. Split the ALTER TABLE up into individual actions to avoid this error."
+        ]
+      },
+      "OBJECT_LEVEL_COLLATIONS" : {
+        "message" : [
+          "Default collation for the specified object."
         ]
       },
       "ORC_TYPE_CAST" : {
@@ -5838,6 +5879,59 @@
       "3. set \"spark.sql.legacy.allowUntypedScalaUDF\" to \"true\" and use this API with caution."
     ],
     "sqlState" : "42K0E"
+  },
+  "USER_DEFINED_FUNCTIONS" : {
+    "message" : [
+      "User defined function is invalid:"
+    ],
+    "subClass" : {
+      "CANNOT_CONTAIN_COMPLEX_FUNCTIONS" : {
+        "message" : [
+          "SQL scalar function cannot contain aggregate/window/generate functions: <queryText>"
+        ]
+      },
+      "CANNOT_REPLACE_NON_SQL_UDF_WITH_SQL_UDF" : {
+        "message" : [
+          "Cannot replace the non-SQL function <name> with a SQL function."
+        ]
+      },
+      "NOT_A_VALID_DEFAULT_EXPRESSION" : {
+        "message" : [
+          "The DEFAULT expression of `<functionName>`.`<parameterName>` is not supported because it contains a subquery."
+        ]
+      },
+      "NOT_A_VALID_DEFAULT_PARAMETER_POSITION" : {
+        "message" : [
+          "In routine `<functionName>` parameter `<parameterName>` with DEFAULT must not be followed by parameter `<nextParameterName>` without DEFAULT."
+        ]
+      },
+      "NOT_NULL_ON_FUNCTION_PARAMETERS" : {
+        "message" : [
+          "Cannot specify NOT NULL on function parameters: <input>"
+        ]
+      },
+      "RETURN_COLUMN_COUNT_MISMATCH" : {
+        "message" : [
+          "The number of columns produced by the RETURN clause (num: `<outputSize>`) does not match the number of column names specified by the RETURNS clause (num: `<returnParamSize>`) of <name>."
+        ]
+      },
+      "ROUTINE_PROPERTY_TOO_LARGE" : {
+        "message" : [
+          "Cannot convert user defined routine <name> to catalog function: routine properties are too large."
+        ]
+      },
+      "SQL_TABLE_UDF_BODY_MUST_BE_A_QUERY" : {
+        "message" : [
+          "SQL table function <name> body must be a query."
+        ]
+      },
+      "SQL_TABLE_UDF_MISSING_COLUMN_NAMES" : {
+        "message" : [
+          "The relation returned by the query in the CREATE FUNCTION statement for <functionName> with RETURNS TABLE clause lacks explicit names for one or more output columns; please rewrite the function body to provide explicit column names or add column names to the RETURNS TABLE clause, and re-run the command."
+        ]
+      }
+    },
+    "sqlState" : "42601"
   },
   "USER_RAISED_EXCEPTION" : {
     "message" : [
@@ -6757,11 +6851,6 @@
   "_LEGACY_ERROR_TEMP_1228" : {
     "message" : [
       "Decimal scale (<scale>) cannot be greater than precision (<precision>)."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1231" : {
-    "message" : [
-      "<key> is not a valid partition column in table <tblName>."
     ]
   },
   "_LEGACY_ERROR_TEMP_1232" : {

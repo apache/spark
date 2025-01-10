@@ -183,6 +183,7 @@ object CheckConnectJvmClientCompatibility {
         "org.apache.spark.sql.ExtendedExplainGenerator"),
       ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.UDTFRegistration"),
       ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.DataSourceRegistration"),
+      ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.TableArg"),
       ProblemFilters.exclude[MissingClassProblem](
         "org.apache.spark.sql.artifact.ArtifactStateForCleanup"),
       ProblemFilters.exclude[MissingClassProblem](

@@ -92,6 +92,23 @@ private[sql] object Dataset {
     dataset
   }
 
+  def apply[T](
+      sparkSession: SparkSession,
+      logicalPlan: LogicalPlan,
+      encoderGenerator: () => Encoder[T]): Dataset[T] = {
+    val dataset = new Dataset(sparkSession, logicalPlan, encoderGenerator)
+    // Eagerly bind the encoder so we verify that the encoder matches the underlying
+    // schema. The user will get an error if this is not the case.
+    // optimization: it is guaranteed that [[InternalRow]] can be converted to [[Row]] so
+    // do not do this check in that case. this check can be expensive since it requires running
+    // the whole [[Analyzer]] to resolve the deserializer
+    if (!dataset.queryExecution.isLazyAnalysis
+        && dataset.encoder.clsTag.runtimeClass != classOf[Row]) {
+      dataset.resolvedEnc
+    }
+    dataset
+  }
+
   def ofRows(sparkSession: SparkSession, logicalPlan: LogicalPlan): DataFrame =
     sparkSession.withActive {
       val qe = sparkSession.sessionState.executePlan(logicalPlan)
@@ -241,8 +258,13 @@ class Dataset[T] private[sql](
     this(queryExecution, () => encoder)
   }
 
+  def this(
+      sparkSession: SparkSession, logicalPlan: LogicalPlan, encoderGenerator: () => Encoder[T]) = {
+    this(sparkSession.sessionState.executePlan(logicalPlan), encoderGenerator)
+  }
+
   def this(sparkSession: SparkSession, logicalPlan: LogicalPlan, encoder: Encoder[T]) = {
-    this(sparkSession.sessionState.executePlan(logicalPlan), encoder)
+    this(sparkSession, logicalPlan, () => encoder)
   }
 
   def this(sqlContext: SQLContext, logicalPlan: LogicalPlan, encoder: Encoder[T]) = {
@@ -508,16 +530,8 @@ class Dataset[T] private[sql](
 
   /** @inheritdoc */
   @scala.annotation.varargs
-  def toDF(colNames: String*): DataFrame = {
-    require(schema.size == colNames.size,
-      "The number of columns doesn't match.\n" +
-        s"Old column names (${schema.size}): " + schema.fields.map(_.name).mkString(", ") + "\n" +
-        s"New column names (${colNames.size}): " + colNames.mkString(", "))
-
-    val newCols = logicalPlan.output.zip(colNames).map { case (oldAttribute, newName) =>
-      Column(oldAttribute).as(newName)
-    }
-    select(newCols : _*)
+  def toDF(colNames: String*): DataFrame = withPlan {
+    UnresolvedSubqueryColumnAliases(colNames, logicalPlan)
   }
 
   /** @inheritdoc */
@@ -854,7 +868,7 @@ class Dataset[T] private[sql](
   }
 
   /** @inheritdoc */
-  def as(alias: String): Dataset[T] = withTypedPlan {
+  def as(alias: String): Dataset[T] = withSameTypedPlan {
     SubqueryAlias(alias, logicalPlan)
   }
 
@@ -909,7 +923,7 @@ class Dataset[T] private[sql](
   }
 
   /** @inheritdoc */
-  def filter(condition: Column): Dataset[T] = withTypedPlan {
+  def filter(condition: Column): Dataset[T] = withSameTypedPlan {
     Filter(condition.expr, logicalPlan)
   }
 
@@ -1026,6 +1040,29 @@ class Dataset[T] private[sql](
     )
   }
 
+  /**
+   * Converts the DataFrame into a `TableArg` object, which can be used as a table argument
+   * in a user-defined table function (UDTF).
+   *
+   * After obtaining a `TableArg` from a DataFrame using this method, you can specify
+   * partitioning and ordering for the table argument by calling methods such as `partitionBy`,
+   * `orderBy`, and `withSinglePartition` on the `TableArg` instance.
+   *   - partitionBy(*cols): Partitions the data based on the specified columns.
+   *     This method cannot be called after withSinglePartition() has been called.
+   *   - orderBy(*cols): Orders the data within partitions based on the specified columns.
+   *   - withSinglePartition(): Indicates that the data should be treated as a single partition.
+   *     This method cannot be called after partitionBy() has been called.
+   *
+   * @group untypedrel
+   * @since 4.0.0
+   */
+  def asTable(): TableArg = {
+    new TableArg(
+      FunctionTableSubqueryArgumentExpression(plan = logicalPlan),
+      sparkSession
+    )
+  }
+
   /** @inheritdoc */
   def scalar(): Column = {
     Column(ExpressionColumnNode(ScalarSubqueryExpr(logicalPlan)))
@@ -1038,7 +1075,7 @@ class Dataset[T] private[sql](
 
   /** @inheritdoc */
   @scala.annotation.varargs
-  def observe(name: String, expr: Column, exprs: Column*): Dataset[T] = withTypedPlan {
+  def observe(name: String, expr: Column, exprs: Column*): Dataset[T] = withSameTypedPlan {
     CollectMetrics(name, (expr +: exprs).map(_.named), logicalPlan, id)
   }
 
@@ -1050,12 +1087,12 @@ class Dataset[T] private[sql](
   }
 
   /** @inheritdoc */
-  def limit(n: Int): Dataset[T] = withTypedPlan {
+  def limit(n: Int): Dataset[T] = withSameTypedPlan {
     Limit(Literal(n), logicalPlan)
   }
 
   /** @inheritdoc */
-  def offset(n: Int): Dataset[T] = withTypedPlan {
+  def offset(n: Int): Dataset[T] = withSameTypedPlan {
     Offset(Literal(n), logicalPlan)
   }
 
@@ -1142,7 +1179,7 @@ class Dataset[T] private[sql](
 
   /** @inheritdoc */
   def sample(withReplacement: Boolean, fraction: Double, seed: Long): Dataset[T] = {
-    withTypedPlan {
+    withSameTypedPlan {
       Sample(0.0, fraction, withReplacement, seed, logicalPlan)
     }
   }
@@ -1340,7 +1377,7 @@ class Dataset[T] private[sql](
   def dropDuplicates(): Dataset[T] = dropDuplicates(this.columns)
 
   /** @inheritdoc */
-  def dropDuplicates(colNames: Seq[String]): Dataset[T] = withTypedPlan {
+  def dropDuplicates(colNames: Seq[String]): Dataset[T] = withSameTypedPlan {
     val groupCols = groupColsFromDropDuplicates(colNames)
     Deduplicate(groupCols, logicalPlan)
   }
@@ -1351,7 +1388,7 @@ class Dataset[T] private[sql](
   }
 
   /** @inheritdoc */
-  def dropDuplicatesWithinWatermark(colNames: Seq[String]): Dataset[T] = withTypedPlan {
+  def dropDuplicatesWithinWatermark(colNames: Seq[String]): Dataset[T] = withSameTypedPlan {
     val groupCols = groupColsFromDropDuplicates(colNames)
     // UnsupportedOperationChecker will fail the query if this is called with batch Dataset.
     DeduplicateWithinWatermark(groupCols, logicalPlan)
@@ -1511,7 +1548,7 @@ class Dataset[T] private[sql](
   }
 
   /** @inheritdoc */
-  def repartition(numPartitions: Int): Dataset[T] = withTypedPlan {
+  def repartition(numPartitions: Int): Dataset[T] = withSameTypedPlan {
     Repartition(numPartitions, shuffle = true, logicalPlan)
   }
 
@@ -1526,7 +1563,7 @@ class Dataset[T] private[sql](
       s"""Invalid partitionExprs specified: $sortOrders
          |For range partitioning use repartitionByRange(...) instead.
        """.stripMargin)
-    withTypedPlan {
+    withSameTypedPlan {
       RepartitionByExpression(partitionExprs.map(_.expr), logicalPlan, numPartitions)
     }
   }
@@ -1539,13 +1576,13 @@ class Dataset[T] private[sql](
       case expr: SortOrder => expr
       case expr: Expression => SortOrder(expr, Ascending)
     })
-    withTypedPlan {
+    withSameTypedPlan {
       RepartitionByExpression(sortOrder, logicalPlan, numPartitions)
     }
   }
 
   /** @inheritdoc */
-  def coalesce(numPartitions: Int): Dataset[T] = withTypedPlan {
+  def coalesce(numPartitions: Int): Dataset[T] = withSameTypedPlan {
     Repartition(numPartitions, shuffle = false, logicalPlan)
   }
 
@@ -2240,7 +2277,7 @@ class Dataset[T] private[sql](
           SortOrder(expr, Ascending)
       }
     }
-    withTypedPlan {
+    withSameTypedPlan {
       Sort(sortOrder, global = global, logicalPlan)
     }
   }
@@ -2253,6 +2290,11 @@ class Dataset[T] private[sql](
   /** A convenient function to wrap a logical plan and produce a Dataset. */
   @inline private def withTypedPlan[U : Encoder](logicalPlan: LogicalPlan): Dataset[U] = {
     Dataset(sparkSession, logicalPlan)
+  }
+
+  /** A convenient function to wrap a logical plan and produce a Dataset. */
+  @inline private def withSameTypedPlan(logicalPlan: LogicalPlan): Dataset[T] = {
+    Dataset(sparkSession, logicalPlan, encoderGenerator)
   }
 
   /** A convenient function to wrap a set based logical plan and produce a Dataset. */

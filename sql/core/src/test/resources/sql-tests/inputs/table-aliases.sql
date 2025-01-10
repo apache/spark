@@ -33,3 +33,8 @@ CREATE OR REPLACE TEMPORARY VIEW src2 AS SELECT * FROM VALUES (2, 1.0), (3, 3.2)
 SELECT * FROM (src1 s1 INNER JOIN src2 s2 ON s1.id = s2.id) dst(a, b, c, d);
 
 SELECT dst.* FROM (src1 s1 INNER JOIN src2 s2 ON s1.id = s2.id) dst(a, b, c, d);
+
+-- Negative examples after aliasing
+SELECT src1.* FROM src1 a ORDER BY id LIMIT 1;
+
+SELECT src1.id FROM (SELECT * FROM src1 ORDER BY id LIMIT 1) a;

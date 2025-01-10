@@ -36,8 +36,10 @@ from pyspark._typing import PrimitiveType
 from pyspark.profiler import CodeMapDict
 import pyspark.sql.types
 from pyspark.sql.column import Column
+from pyspark.sql.tvf_argument import TableValuedFunctionArgument
 
 ColumnOrName = Union[Column, str]
+TVFArgumentOrName = Union[TableValuedFunctionArgument, str]
 ColumnOrNameOrOrdinal = Union[Column, str, int]
 DecimalLiteral = decimal.Decimal
 DateTimeLiteral = Union[datetime.datetime, datetime.date]

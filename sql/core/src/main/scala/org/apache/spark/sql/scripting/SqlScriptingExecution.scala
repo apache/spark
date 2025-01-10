@@ -67,7 +67,7 @@ class SqlScriptingExecution(
   }
 
   /** Helper method to get the next result statement from the script. */
-  private def getNextResultInternal: Option[DataFrame] = {
+  def getNextResultInternal: Option[DataFrame] = {
     var currentStatement = getNextStatement
     // While we don't have a result statement, execute the statements.
     while (currentStatement.isDefined) {
