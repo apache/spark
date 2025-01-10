@@ -17,43 +17,53 @@
 
 from typing import TYPE_CHECKING
 
+import pyspark.sql.connect.proto as proto
 from pyspark.sql.connect.expressions import SubqueryExpression
+
+from pyspark.sql.table_arg import TableArg as ParentTableArg
+
 
 if TYPE_CHECKING:
     from pyspark.sql._typing import ColumnOrName
+    from pyspark.sql.connect.client import SparkConnectClient
 
 
-class TableArg:
+class TableArg(ParentTableArg):
     def __init__(self, subquery_expr: SubqueryExpression):
         self._subquery_expr = subquery_expr
 
     def partitionBy(self, *cols: "ColumnOrName") -> "TableArg":
-        partition_spec = self._subquery_expr.partition_spec + list(cols)
+        # Create a new SubqueryExpression with updated partition_spec
         new_expr = SubqueryExpression(
             plan=self._subquery_expr._plan,
-            subquery_type=self._subquery_expr.subquery_type,
-            partition_spec=partition_spec,
+            subquery_type=self._subquery_expr._subquery_type,
+            partition_spec=self._subquery_expr._partition_spec + list(cols),
+            order_spec=self._subquery_expr._order_spec,
+            with_single_partition=self._subquery_expr._with_single_partition,
         )
         return TableArg(new_expr)
 
     def orderBy(self, *cols: "ColumnOrName") -> "TableArg":
-        order_spec = self._subquery_expr.order_spec + list(cols)
+        # Create a new SubqueryExpression with updated order_spec
         new_expr = SubqueryExpression(
             plan=self._subquery_expr._plan,
-            subquery_type=self._subquery_expr.subquery_type,
-            order_spec=order_spec,
+            subquery_type=self._subquery_expr._subquery_type,
+            partition_spec=self._subquery_expr._partition_spec,
+            order_spec=self._subquery_expr._order_spec + list(cols),
+            with_single_partition=self._subquery_expr._with_single_partition,
         )
         return TableArg(new_expr)
 
     def withSinglePartition(self) -> "TableArg":
+        # Create a new SubqueryExpression with updated with_single_partition
         new_expr = SubqueryExpression(
             plan=self._subquery_expr._plan,
-            subquery_type=self._subquery_expr.subquery_type,
-            partition_spec=self._subquery_expr.partition_spec,
-            order_spec=self._subquery_expr.order_spec,
+            subquery_type=self._subquery_expr._subquery_type,
+            partition_spec=self._subquery_expr._partition_spec,
+            order_spec=self._subquery_expr._order_spec,
             with_single_partition=True,
         )
         return TableArg(new_expr)
 
-    def to_plan(self) -> SubqueryExpression:
-        return self._subquery_expr
+    def to_plan(self, session: "SparkConnectClient") -> proto.Expression:
+        return self._subquery_expr.to_plan(session)
