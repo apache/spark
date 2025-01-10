@@ -769,4 +769,23 @@ class ParametersSuite extends QueryTest with SharedSparkSession with PlanTest {
     checkAnswer(spark.sql(query(":cte"), args = Map("cte" -> "t1")), Row(1))
     checkAnswer(spark.sql(query("?"), args = Array("t1")), Row(1))
   }
+
+  test("SPARK-50403: parameterized execute immediate") {
+    checkAnswer(spark.sql("execute immediate 'select ?, ?' using 1", Array(2)), Row(2, 1))
+    checkAnswer(spark.sql("execute immediate 'select :param1, :param2' using 1 as param1",
+      Map("param2" -> 2)), Row(1, 2))
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        checkAnswer(spark.sql("execute immediate 'select ?, :param' using 1", Map("param" -> 2)),
+          Row(2, 1))
+      },
+      condition = "INVALID_QUERY_MIXED_QUERY_PARAMETERS")
+    checkError(
+      exception = intercept[AnalysisException] {
+        checkAnswer(spark.sql("execute immediate 'select ?, :param' using 1 as param", Array(2)),
+          Row(2, 1))
+      },
+      condition = "INVALID_QUERY_MIXED_QUERY_PARAMETERS")
+  }
 }
