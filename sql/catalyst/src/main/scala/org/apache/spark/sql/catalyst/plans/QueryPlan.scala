@@ -283,7 +283,9 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
   }
 
   /** Returns all of the expressions present in this query plan operator. */
-  final def expressions: Seq[Expression] = {
+  final def expressions: Seq[Expression] = _expressions()
+
+  private val _expressions = new BestEffortLazyVal[Seq[Expression]](() => {
     // Recursively find all expressions from a traversable.
     def seqToExpressions(seq: Iterable[Any]): Iterable[Expression] = seq.flatMap {
       case e: Expression => e :: Nil
@@ -297,7 +299,7 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
       case seq: Iterable[_] => seqToExpressions(seq)
       case other => Nil
     }.toSeq
-  }
+  })
 
   /**
    * A variant of `transformUp`, which takes care of the case that the rule replaces a plan node
