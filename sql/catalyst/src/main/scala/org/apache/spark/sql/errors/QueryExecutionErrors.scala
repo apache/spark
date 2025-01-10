@@ -2623,7 +2623,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
   }
 
   def unexpectedStateStoreVersion(version: Long): Throwable = {
-    new SparkIllegalStateException(
+    new SparkException(
       errorClass = "CANNOT_LOAD_STATE_STORE.UNEXPECTED_VERSION",
       messageParameters = Map("version" -> version.toString),
       cause = null)
@@ -2648,7 +2648,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
   }
 
   def invalidLogVersionExactMatch(version: Int, matchVersion: Int): Throwable = {
-    new SparkException(
+    new SparkIllegalStateException(
       errorClass = "INVALID_LOG_VERSION.EXACT_MATCH_VERSION",
       messageParameters = Map(
         "version" -> version.toString,
