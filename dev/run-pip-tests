@@ -42,6 +42,10 @@ function delete_virtualenv() {
 }
 trap delete_virtualenv EXIT
 
+which conda
+conda env list
+/usr/share/miniconda/bin/conda env list
+
 PYTHON_EXECS=()
 # Some systems don't have pip or virtualenv - in those cases our tests won't work.
 if hash virtualenv 2>/dev/null && [ ! -n "$USE_CONDA" ]; then
