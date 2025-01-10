@@ -926,15 +926,12 @@ case class CTERelationDef(
     id: Long = CTERelationDef.newId,
     originalPlanWithPredicates: Option[(LogicalPlan, Seq[Expression])] = None,
     underSubquery: Boolean = false,
-    recursionAnchor: Option[LogicalPlan] = None) extends LogicalPlan {
+    recursionAnchor: Option[LogicalPlan] = None) extends UnaryNode {
 
   final override val nodePatterns: Seq[TreePattern] = Seq(CTE)
 
-  override def children: Seq[LogicalPlan] = child +: recursionAnchor.toSeq
-
-  override protected def withNewChildrenInternal(
-      newChildren: IndexedSeq[LogicalPlan]): CTERelationDef =
-    copy(child = newChildren.head, recursionAnchor = newChildren.tail.headOption)
+  override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan =
+    copy(child = newChild)
 
   override def output: Seq[Attribute] = if (resolved) child.output else Nil
 

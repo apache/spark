@@ -21,7 +21,7 @@ import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
 import org.apache.spark.sql.catalyst.plans.logical.{CTERelationDef, CTERelationRef, Distinct, Except, LogicalPlan,
-  Project, SubqueryAlias, Union, UnionLoop, UnionLoopRef, WithCTE}
+  SubqueryAlias, Union, UnionLoop, UnionLoopRef, WithCTE}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{CTE, PLAN_EXPRESSION}
 
@@ -38,6 +38,7 @@ object ResolveWithCTE extends Rule[LogicalPlan] {
     }
   }
 
+  // Substitute CTERelationRef with UnionLoopRef.
   private def transformRefs(plan: LogicalPlan) = {
     plan.transformWithPruning(_.containsPattern(CTE)) {
       case r: CTERelationRef if r.recursive =>
@@ -45,7 +46,8 @@ object ResolveWithCTE extends Rule[LogicalPlan] {
     }
   }
 
-  private def updateRecursiveAnchor(cteDef: CTERelationDef): CTERelationDef = {
+  // Update the definition's recursiveAnchor if the anchor is resolved.
+  private def maybeUpdateRecursiveAnchor(cteDef: CTERelationDef): CTERelationDef = {
     cteDef.child match {
       case SubqueryAlias(_, ul: UnionLoop) =>
         if (ul.anchor.resolved) {
@@ -84,33 +86,31 @@ object ResolveWithCTE extends Rule[LogicalPlan] {
     plan.resolveOperatorsDownWithPruning(_.containsAllPatterns(CTE)) {
       case w @ WithCTE(_, cteDefs) =>
         val newCTEDefs = cteDefs.map { cteDef =>
-          // If a recursive CTE definition is not yet resolved then extract the anchor term to the
-          // definition, but if it is resolved then the extracted anchor term is no longer needed
-          // and can be removed.
           val newCTEDef = if (cteDef.recursive) {
             cteDef.child match {
-              case Union(Seq(anchor, recursion), false, false) =>
-                cteDef.copy(child = UnionLoop(cteDef.id, anchor, transformRefs(recursion)))
+              // Substitutions to UnionLoop and UnionLoopRef.
+              //
+              // We do not support cases of Union (needs a SubqueryAlias above it), nor Project (as
+              // UnresolvedSubqueryColumnAliases have not been substituted with the Project yet),
+              // leaving us with cases of SubqueryAlias->Union and SubqueryAlias->
+              // UnresolvedSubqueryColumnAliases->Union. The same applies to Distinct Union.
               case a @ SubqueryAlias(_, Union(Seq(anchor, recursion), false, false)) =>
                 cteDef.copy(child =
                   a.copy(child =
                     UnionLoop(cteDef.id, anchor, transformRefs(recursion))))
-              case p @ Project(_, Union(Seq(anchor, recursion), false, false)) =>
-                cteDef.copy(child =
-                  p.copy(child =
-                    UnionLoop(cteDef.id, anchor, transformRefs(recursion))))
               case a @ SubqueryAlias(_,
-              p @ Project(_, Union(Seq(anchor, recursion), false, false))) =>
+              ca @ UnresolvedSubqueryColumnAliases(_,
+              Union(Seq(anchor, recursion), false, false))) =>
                 cteDef.copy(child =
                   a.copy(child =
-                    p.copy(child =
+                    ca.copy(child =
                       UnionLoop(cteDef.id, anchor, transformRefs(recursion)))))
               // If the recursion is described with an UNION (deduplicating) clause then the
               // recursive term should not return those rows that have been calculated previously,
               // and we exclude those rows from the current iteration result.
-              case p @ Project(_, Distinct(Union(Seq(anchor, recursion), false, false))) =>
+              case a @ SubqueryAlias(_, Distinct(Union(Seq(anchor, recursion), false, false))) =>
                 cteDef.copy(child =
-                  p.copy(child =
+                  a.copy(child =
                     UnionLoop(cteDef.id,
                       Distinct(anchor),
                       Except(
@@ -118,36 +118,39 @@ object ResolveWithCTE extends Rule[LogicalPlan] {
                         UnionLoopRef(cteDef.id, cteDef.output, true),
                         false))))
               case a @ SubqueryAlias(_,
-              p @ Project(_, Distinct(Union(Seq(anchor, recursion), false, false)))) =>
+              ca @ UnresolvedSubqueryColumnAliases(_, Distinct(Union(Seq(anchor, recursion),
+              false, false)))) =>
                 cteDef.copy(child =
                   a.copy(child =
-                    p.copy(child =
+                    ca.copy(child =
                       UnionLoop(cteDef.id,
                         Distinct(anchor),
                         Except(
                           transformRefs(recursion),
                           UnionLoopRef(cteDef.id, cteDef.output, true),
                           false)))))
-              case _ => cteDef
+              case _ =>
+                cteDef.failAnalysis(
+                  errorClass = "INVALID_RECURSIVE_CTE",
+                  messageParameters = Map.empty)
             }
 
+            // If a recursive CTE definition is not yet resolved, store the anchor term (if it is
+            // resolved) to the definition.
             if (!cteDef.resolved) {
               if (cteDef.recursionAnchor.isEmpty) {
-                updateRecursiveAnchor(cteDef)
+                maybeUpdateRecursiveAnchor(cteDef)
               } else {
                 cteDef
               }
             } else {
-              if (cteDef.recursionAnchor.nonEmpty) {
-                cteDef.copy(recursionAnchor = None)
-              } else {
-                cteDef
-              }
+              cteDef
             }
           } else {
             cteDef
           }
 
+          // cteDefMap holds resolved and "partially" resolved (only via anchor) CTE definitions.
           if (newCTEDef.resolved || newCTEDef.recursionAnchorResolved) {
             cteDefMap.put(newCTEDef.id, newCTEDef)
           }
@@ -158,18 +161,26 @@ object ResolveWithCTE extends Rule[LogicalPlan] {
 
       case ref: CTERelationRef if !ref.resolved =>
         cteDefMap.get(ref.cteId).map { cteDef =>
-          // Recursive references can be resolved from the anchor term.
           if (ref.recursive) {
+            // Recursive references can be resolved from the anchor term and non-resolved ref
+            // implies non-resolved definition. Since the definition was present in the map of
+            // resolved and "partially" resolved definitions, the only explanation is that
+            // definition was "partially" resolved.
             if (cteDef.recursionAnchorResolved) {
               ref.copy(_resolved = true, output = cteDef.recursionAnchor.get.output,
                 isStreaming = cteDef.isStreaming)
             } else {
-              ref
+              cteDef.failAnalysis(
+                errorClass = "INVALID_RECURSIVE_CTE",
+                messageParameters = Map.empty)
             }
           } else if (cteDef.resolved) {
             ref.copy(_resolved = true, output = cteDef.output, isStreaming = cteDef.isStreaming)
           } else {
-            ref
+            // In the non-recursive case, cteDefMap contains only resolved Definitions.
+            cteDef.failAnalysis(
+              errorClass = "INVALID_RECURSIVE_CTE",
+              messageParameters = Map.empty)
           }
         }.getOrElse {
           ref
