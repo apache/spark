@@ -65,7 +65,7 @@ object LargeRowBenchmark extends SqlBasedBenchmark {
       benchmarks.foreach { b =>
         val rows = b("rows").asInstanceOf[Int]
         val cols = b("cols").asInstanceOf[Int]
-        val cellSize_mb = b("cellSize_mb")
+        val cellSize_mb = b("cellSize_mb").asInstanceOf[Double]
         runLargeRowBenchmark(rows, cols, cellSize_mb)
         runLargeRowBenchmark(rows, cols, cellSize_mb)
       }
