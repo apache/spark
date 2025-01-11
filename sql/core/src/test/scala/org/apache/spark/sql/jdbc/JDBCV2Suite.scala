@@ -3097,4 +3097,19 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     assert(rows.contains(Row(null)))
     assert(rows.contains(Row("a a a")))
   }
+
+  test("SPARK-50792 Format binary data as a binary literal in JDBC.") {
+    withTable(s"h2.test.binary_literal") {
+      // Create a table with binary column
+      val binary = "X'123456'"
+      val tableName = "h2.test.binary_literal"
+
+      sql(s"CREATE TABLE $tableName (binary_col BLOB)")
+      sql(s"INSERT INTO $tableName VALUES ($binary)")
+
+      val select = s"SELECT * FROM $tableName WHERE binary_col = $binary"
+      assert(spark.sql(select).collect().length === 1, s"Binary literal test failed: $select")
+    }
+  }
+
 }
