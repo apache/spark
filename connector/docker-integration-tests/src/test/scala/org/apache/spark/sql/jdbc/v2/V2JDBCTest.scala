@@ -990,14 +990,19 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
   test("SPARK-50792 Format binary data as a binary literal in JDBC.") {
     val tableName = s"$catalogName.test_binary_literal"
     withTable(tableName) {
-      // Create a table with binary column
-      val binary = "X'123456'"
+      // Unfornately, Oracle can only compare two BLOBs with a special function dbms_lob.compare
+      // The V2ExpressionSQLBuilder can not support rewriting the '=' operator.
+      // We don't test binary data on Oracle and do not support binary data on Oracle.
+      if (!this.isInstanceOf[OracleIntegrationSuite]) {
+        // Create a table with binary column
+        val binary = "X'123456'"
 
-      sql(s"CREATE TABLE $tableName (binary_col BINARY)")
-      sql(s"INSERT INTO $tableName VALUES ($binary)")
+        sql(s"CREATE TABLE $tableName (binary_col BINARY)")
+        sql(s"INSERT INTO $tableName VALUES ($binary)")
 
-      val select = s"SELECT * FROM $tableName WHERE binary_col = $binary"
-      assert(spark.sql(select).collect().length === 1, s"Binary literal test failed: $select")
+        val select = s"SELECT * FROM $tableName WHERE binary_col = $binary"
+        assert(spark.sql(select).collect().length === 1, s"Binary literal test failed: $select")
+      }
     }
   }
 }

@@ -138,8 +138,6 @@ private case class OracleDialect() extends JdbcDialect with SQLConfHelper with N
     case timestampValue: Timestamp => "{ts '" + timestampValue + "'}"
     case dateValue: Date => "{d '" + dateValue + "'}"
     case arrayValue: Array[Any] => arrayValue.map(compileValue).mkString(", ")
-    case binaryValue: Array[Byte] =>
-      binaryValue.map("%02X".format(_)).mkString("HEXTORAW('", "", "')")
     case _ => value
   }
 
