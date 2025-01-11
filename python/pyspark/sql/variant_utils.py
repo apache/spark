@@ -526,6 +526,7 @@ class VariantUtils:
             value_pos_list.append(element_pos)
         return func(value_pos_list)
 
+
 class FieldEntry(NamedTuple):
     """
     Info about an object field
@@ -535,10 +536,12 @@ class FieldEntry(NamedTuple):
     id: int
     offset: int
 
+
 class VariantBuilder:
     """
     A utility class for building VariantVal.
     """
+
     DEFAULT_SIZE_LIMIT = 16 * 1024 * 1024
 
     def __init__(self, size_limit=DEFAULT_SIZE_LIMIT):
@@ -637,13 +640,27 @@ class VariantBuilder:
         return bytes([size << 2 | VariantUtils.SHORT_STR])
 
     def _array_header(self, large_size: bool, offset_size: int) -> bytes:
-        return bytes([((large_size << (VariantUtils.BASIC_TYPE_BITS + 2)) |
-                      ((offset_size - 1) << VariantUtils.BASIC_TYPE_BITS) | VariantUtils.ARRAY)])
+        return bytes(
+            [
+                (
+                    (large_size << (VariantUtils.BASIC_TYPE_BITS + 2))
+                    | ((offset_size - 1) << VariantUtils.BASIC_TYPE_BITS)
+                    | VariantUtils.ARRAY
+                )
+            ]
+        )
 
     def _object_header(self, large_size: bool, id_size: int, offset_size: int) -> bytes:
-        return bytes([((large_size << (VariantUtils.BASIC_TYPE_BITS + 4)) |
-                      ((id_size - 1) << (VariantUtils.BASIC_TYPE_BITS + 2)) |
-                      ((offset_size - 1) << VariantUtils.BASIC_TYPE_BITS) | VariantUtils.OBJECT)])
+        return bytes(
+            [
+                (
+                    (large_size << (VariantUtils.BASIC_TYPE_BITS + 4))
+                    | ((id_size - 1) << (VariantUtils.BASIC_TYPE_BITS + 2))
+                    | ((offset_size - 1) << VariantUtils.BASIC_TYPE_BITS)
+                    | VariantUtils.OBJECT
+                )
+            ]
+        )
 
     # Add a key to the variant dictionary. If the key already exists, the dictionary is
     # not modified. In either case, return the id of the key.
@@ -657,13 +674,15 @@ class VariantBuilder:
 
     def _handle_float(self, num_str):
         # a float can be a decimal if it only contains digits, '-', or '-'.
-        if all([ch.isdecimal() or ch == '-' or ch == '.' for ch in num_str]):
+        if all([ch.isdecimal() or ch == "-" or ch == "." for ch in num_str]):
             dec = decimal.Decimal(num_str)
             precision = len(dec.as_tuple().digits)
             scale = -dec.as_tuple().exponent
 
-            if (scale <= VariantUtils.MAX_DECIMAL16_PRECISION and
-                precision <= VariantUtils.MAX_DECIMAL16_PRECISION):
+            if (
+                scale <= VariantUtils.MAX_DECIMAL16_PRECISION
+                and precision <= VariantUtils.MAX_DECIMAL16_PRECISION
+            ):
                 return dec
         return float(num_str)
 
@@ -711,21 +730,27 @@ class VariantBuilder:
         self._check_capacity(2 + 16)
         precision = len(d.as_tuple().digits)
         scale = -d.as_tuple().exponent
-        unscaled = int(''.join(map(str, d.as_tuple().digits)))
+        unscaled = int("".join(map(str, d.as_tuple().digits)))
         unscaled = -unscaled if d < 0 else unscaled
-        if (scale <= VariantUtils.MAX_DECIMAL4_PRECISION and
-            precision <= VariantUtils.MAX_DECIMAL4_PRECISION):
+        if (
+            scale <= VariantUtils.MAX_DECIMAL4_PRECISION
+            and precision <= VariantUtils.MAX_DECIMAL4_PRECISION
+        ):
             self.value.extend(self._primitive_header(VariantUtils.DECIMAL4))
             self.value.extend(scale.to_bytes(1, byteorder="little"))
             self.value.extend(unscaled.to_bytes(4, byteorder="little", signed=True))
-        elif (scale <= VariantUtils.MAX_DECIMAL8_PRECISION and
-              precision <= VariantUtils.MAX_DECIMAL8_PRECISION):
+        elif (
+            scale <= VariantUtils.MAX_DECIMAL8_PRECISION
+            and precision <= VariantUtils.MAX_DECIMAL8_PRECISION
+        ):
             self.value.extend(self._primitive_header(VariantUtils.DECIMAL8))
             self.value.extend(scale.to_bytes(1, byteorder="little"))
             self.value.extend(unscaled.to_bytes(8, byteorder="little", signed=True))
         else:
-            assert (scale <= VariantUtils.MAX_DECIMAL16_PRECISION and
-                    precision <= VariantUtils.MAX_DECIMAL16_PRECISION)
+            assert (
+                scale <= VariantUtils.MAX_DECIMAL16_PRECISION
+                and precision <= VariantUtils.MAX_DECIMAL16_PRECISION
+            )
             self.value.extend(self._primitive_header(VariantUtils.DECIMAL16))
             self.value.extend(scale.to_bytes(1, byteorder="little"))
             self.value.extend(unscaled.to_bytes(16, byteorder="little", signed=True))
@@ -747,19 +772,17 @@ class VariantBuilder:
         self._check_capacity(header_size)
         self.value.extend(bytearray(header_size))
         # Shift the just-written element data to make room for the header section.
-        self.value[start + header_size:] = bytes(self.value[start: start + data_size])
+        self.value[start + header_size :] = bytes(self.value[start : start + data_size])
         # Write the header byte, num offsets
         offset_start = start + 1 + size_bytes
-        self.value[start: start + 1] = self._array_header(large_size, offset_size)
-        self.value[start + 1: offset_start] =\
-            num_offsets.to_bytes(size_bytes, byteorder="little")
+        self.value[start : start + 1] = self._array_header(large_size, offset_size)
+        self.value[start + 1 : offset_start] = num_offsets.to_bytes(size_bytes, byteorder="little")
         # write offset list
         offset_list = bytearray()
         for offset in offsets:
             offset_list.extend(offset.to_bytes(offset_size, byteorder="little"))
         offset_list.extend(data_size.to_bytes(offset_size, byteorder="little"))
-        self.value[offset_start: offset_start + len(offset_list)] = offset_list
-
+        self.value[offset_start : offset_start + len(offset_list)] = offset_list
 
     # Finish writing a variant object after all of its fields have already been written.
     def _finish_writing_object(self, start: int, fields: List[FieldEntry]) -> None:
@@ -780,11 +803,12 @@ class VariantBuilder:
         self._check_capacity(header_size)
         self.value.extend(bytearray(header_size))
         # Shift the just-written field data to make room for the object header section.
-        self.value[start + header_size:] = self.value[start: start + data_size]
+        self.value[start + header_size :] = self.value[start : start + data_size]
         # Write the header byte, num fields, id list, offset list
-        self.value[start: start + 1] = self._object_header(large_size, id_size, offset_size)
-        self.value[start + 1: start + 1 + size_bytes] =\
-            num_fields.to_bytes(size_bytes, byteorder="little")
+        self.value[start : start + 1] = self._object_header(large_size, id_size, offset_size)
+        self.value[start + 1 : start + 1 + size_bytes] = num_fields.to_bytes(
+            size_bytes, byteorder="little"
+        )
         id_start = start + 1 + size_bytes
         offset_start = id_start + num_fields * id_size
         id_list = bytearray()
@@ -793,5 +817,5 @@ class VariantBuilder:
             id_list.extend(field.id.to_bytes(id_size, byteorder="little"))
             offset_list.extend(field.offset.to_bytes(offset_size, byteorder="little"))
         offset_list.extend(data_size.to_bytes(offset_size, byteorder="little"))
-        self.value[id_start: id_start + len(id_list)] = id_list
-        self.value[offset_start: offset_start + len(offset_list)] = offset_list
+        self.value[id_start : id_start + len(id_list)] = id_list
+        self.value[offset_start : offset_start + len(offset_list)] = offset_list
