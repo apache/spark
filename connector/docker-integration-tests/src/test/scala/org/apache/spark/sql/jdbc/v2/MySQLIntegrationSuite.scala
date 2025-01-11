@@ -241,6 +241,31 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest
     assert(rows10(0).getString(0) === "amy")
     assert(rows10(1).getString(0) === "alex")
   }
+
+  test("SPARK-50793: MySQL JDBC Connector failed to cast some types") {
+    val tableName = catalogName + ".test_cast_function"
+    withTable(tableName) {
+      // CREATE table to use types defined in Spark SQL
+      sql(s"""CREATE TABLE $tableName (
+        date_col DATE,
+        string_col STRING,
+        short_col SHORT,
+        integer_col INTEGER,
+        long_col LONG,
+        binary_col BINARY
+      )""")
+      sql(s"INSERT INTO $tableName VALUES(DATE '2025-01-11', '0', 0, 0, 0, x'00')")
+
+      val sql1 = s"SELECT * FROM $tableName WHERE date_col = DATE_ADD(date_col, string_col)"
+      assert(spark.sql(sql1).collect().length === 1)
+      val sql2 =
+        s"SELECT * FROM $tableName WHERE date_col = DATE_ADD(date_col, CAST(binary_col AS STRING))"
+      assert(spark.sql(sql2).collect().length === 1)
+      // Unfortunately, there is no pushdown function takes BINARY type to test.
+      // Refer to https://dev.mysql.com/doc/refman/8.4/en/cast-functions.html
+      // Will add test when there is a function with BINARY type support ready.
+    }
+  }
 }
 
 /**
