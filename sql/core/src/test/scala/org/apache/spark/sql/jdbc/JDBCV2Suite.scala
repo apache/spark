@@ -3099,12 +3099,12 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
   }
 
   test("SPARK-50792 Format binary data as a binary literal in JDBC.") {
-    withTable(s"h2.test.binary_literal") {
+    val tableName = "h2.test.binary_literal"
+    withTable(tableName) {
       // Create a table with binary column
       val binary = "X'123456'"
-      val tableName = "h2.test.binary_literal"
 
-      sql(s"CREATE TABLE $tableName (binary_col BLOB)")
+      sql(s"CREATE TABLE $tableName (binary_col BINARY)")
       sql(s"INSERT INTO $tableName VALUES ($binary)")
 
       val select = s"SELECT * FROM $tableName WHERE binary_col = $binary"
