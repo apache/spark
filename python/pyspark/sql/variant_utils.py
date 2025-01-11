@@ -158,7 +158,7 @@ class VariantUtils:
         return cls._to_python(value, metadata, 0)
 
     @classmethod
-    def parse_json(cls, json_str: str) -> (bytes, bytes):
+    def parse_json(cls, json_str: str) -> Tuple[bytes, bytes]:
         """
         Parses the JSON string and creates the Variant binary (value, metadata)
         :return: tuple of 2 binary values (value, metadata)
@@ -544,13 +544,13 @@ class VariantBuilder:
 
     DEFAULT_SIZE_LIMIT = 16 * 1024 * 1024
 
-    def __init__(self, size_limit=DEFAULT_SIZE_LIMIT):
+    def __init__(self, size_limit: int = DEFAULT_SIZE_LIMIT):
         self.value = bytearray()
         self.dictionary = dict[str, int]()
         self.dictionary_keys = list[bytes]()
         self.size_limit = size_limit
 
-    def build(self, json_str: str) -> (bytes, bytes):
+    def build(self, json_str: str) -> Tuple[bytes, bytes]:
         parsed = json.loads(json_str, parse_float=self._handle_float)
         self._process_parsed_json(parsed)
 
@@ -672,7 +672,7 @@ class VariantBuilder:
         self.dictionary_keys.append(key.encode("utf-8"))
         return id
 
-    def _handle_float(self, num_str):
+    def _handle_float(self, num_str) -> Any:
         # a float can be a decimal if it only contains digits, '-', or '-'.
         if all([ch.isdecimal() or ch == "-" or ch == "." for ch in num_str]):
             dec = decimal.Decimal(num_str)
@@ -711,13 +711,13 @@ class VariantBuilder:
         if i >= VariantUtils.I8_MIN and i <= VariantUtils.I8_MAX:
             self.value.extend(self._primitive_header(VariantUtils.INT1))
             self.value.extend(i.to_bytes(1, byteorder="little", signed=True))
-        if i >= VariantUtils.I16_MIN and i <= VariantUtils.I16_MAX:
+        elif i >= VariantUtils.I16_MIN and i <= VariantUtils.I16_MAX:
             self.value.extend(self._primitive_header(VariantUtils.INT2))
             self.value.extend(i.to_bytes(2, byteorder="little", signed=True))
-        if i >= VariantUtils.I32_MIN and i <= VariantUtils.I32_MAX:
+        elif i >= VariantUtils.I32_MIN and i <= VariantUtils.I32_MAX:
             self.value.extend(self._primitive_header(VariantUtils.INT4))
             self.value.extend(i.to_bytes(4, byteorder="little", signed=True))
-        if i >= VariantUtils.I64_MIN and i <= VariantUtils.I64_MAX:
+        elif i >= VariantUtils.I64_MIN and i <= VariantUtils.I64_MAX:
             self.value.extend(self._primitive_header(VariantUtils.INT8))
             self.value.extend(i.to_bytes(8, byteorder="little", signed=True))
         else:
@@ -729,7 +729,7 @@ class VariantBuilder:
     def _append_decimal(self, d: decimal.Decimal) -> None:
         self._check_capacity(2 + 16)
         precision = len(d.as_tuple().digits)
-        scale = -d.as_tuple().exponent
+        scale = -int(d.as_tuple().exponent)
         unscaled = int("".join(map(str, d.as_tuple().digits)))
         unscaled = -unscaled if d < 0 else unscaled
         if (
