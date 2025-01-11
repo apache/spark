@@ -243,7 +243,8 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest
   }
 
   test("SPARK-50704: Test SQL function push down with different types and casts in WHERE clause") {
-    withTable(s"$catalogName.test_pushdown") {
+    val tableName = s"$catalogName.test_pushdown"
+    withTable(tableName) {
       // Define test values for different data types
       val boolean = true
       val int = 1
@@ -252,10 +253,9 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest
       val float = 0.123
       val binary = "X'123456'"
       val decimal = "-.001234567E+2BD"
-      val tableName = "test_pushdown"
 
       // Create a table with various data types
-      sql(s"""CREATE TABLE $catalogName.$tableName (
+      sql(s"""CREATE TABLE $tableName (
         boolean_col BOOLEAN, byte_col BYTE, tinyint_col TINYINT, short_col SHORT,
         smallint_col SMALLINT, int_col INT, integer_col INTEGER, long_col LONG,
         bigint_col BIGINT, float_col FLOAT, real_col REAL, double_col DOUBLE,
@@ -263,7 +263,7 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest
         numeric_col NUMERIC(10, 7))""")
 
       // Insert test values into the table
-      sql(s"""INSERT INTO $catalogName.$tableName VALUES ($boolean, $int, $int, $int,
+      sql(s"""INSERT INTO $tableName VALUES ($boolean, $int, $int, $int,
         $int, $int, $int, $long, $long, $float, $float, $float, '$str', $binary, $decimal,
         $decimal, $decimal)""")
 
@@ -546,30 +546,12 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest
             decimalColumns
           ),
           Some(toStringLiteral)
-        ),
-        generateTests(
-          "CAST",
-          "CAST(COLUMN AS STRING) = CAST(VALUE AS STRING)",
-          Seq(intColumns, longColumns, floatColumns, decimalColumns),
-          Some(toStringLiteral)
-        ),
-        generateTests(
-          "CAST",
-          "CAST(COLUMN AS INT) = CAST(VALUE AS INT)",
-          Seq(intColumns, floatColumns, decimalColumns)
-        ),
-        generateTests(
-          "CAST",
-          "ABS(ABS(CAST(COLUMN AS DOUBLE)) - ABS(CAST(VALUE AS DOUBLE))) <= 0.00001",
-          Seq(intColumns, floatColumns, longColumns, decimalColumns)
         )
       ).flatten
 
       // Execute the generated test cases
       functions.foreach { case (name, query) =>
-        val sql = s"SELECT * FROM $catalogName.$tableName WHERE $query"
-        val df = spark.sql(sql)
-        val rows = df.collect()
+        val rows = spark.sql(s"SELECT * FROM $tableName WHERE $query").collect()
         assert(rows.length === 1, s"Function `$name` pushdown test failed: $sql")
       }
     }

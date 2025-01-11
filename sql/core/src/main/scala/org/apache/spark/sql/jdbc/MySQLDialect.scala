@@ -151,19 +151,6 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper with No
       } else {
         super.visitAggregateFunction(funcName, isDistinct, inputs)
       }
-
-    override def visitCast(expr: String, exprDataType: DataType, dataType: DataType): String = {
-      val databaseTypeDefinition = dataType match {
-        // MySQL uses CHAR in the cast function for the type LONGTEXT
-        case StringType => "CHAR"
-        // MySQL uses SIGNED INTEGER in the cast function for the types SMALLINT, INTEGER and BIGINT
-        case ShortType | IntegerType | LongType => "SIGNED INTEGER"
-        // MySQL uses BINARY in the cast function for the type BLOB
-        case BinaryType => "BINARY"
-        case _ => getJDBCType(dataType).map(_.databaseTypeDefinition).getOrElse(dataType.typeName)
-      }
-      s"CAST($expr AS $databaseTypeDefinition)"
-    }
   }
 
   override def compileExpression(expr: Expression): Option[String] = {
@@ -311,8 +298,6 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper with No
     case StringType => Option(JdbcType("LONGTEXT", java.sql.Types.LONGVARCHAR))
     case ByteType => Option(JdbcType("TINYINT", java.sql.Types.TINYINT))
     case ShortType => Option(JdbcType("SMALLINT", java.sql.Types.SMALLINT))
-    // We override getJDBCType so that DoubleType is mapped to DOUBLE instead.
-    case DoubleType => Option(JdbcType("DOUBLE", java.sql.Types.DOUBLE))
     // scalastyle:off line.size.limit
     // In MYSQL, DATETIME is TIMESTAMP WITHOUT TIME ZONE
     // https://github.com/mysql/mysql-connector-j/blob/8.3.0/src/main/core-api/java/com/mysql/cj/MysqlType.java#L251
