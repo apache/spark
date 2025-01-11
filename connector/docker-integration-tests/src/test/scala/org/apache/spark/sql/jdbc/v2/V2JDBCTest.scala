@@ -986,4 +986,18 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
   test("scan with filter push-down with date time functions") {
     testDatetime(s"$catalogAndNamespace.${caseConvert("datetime")}")
   }
+
+  test("binary literal") {
+    withTable(s"$catalogName.test_binary_literal") {
+      // Create a table with binary column
+      val binary = "X'123456'"
+      val tableName = "test_binary_literal"
+
+      sql(s"CREATE TABLE $catalogName.$tableName (binary_col BINARY)")
+      sql(s"INSERT INTO $catalogName.$tableName VALUES ($binary)")
+
+      val select = s"SELECT * FROM $catalogName.$tableName WHERE binary_col = $binary"
+      assert(spark.sql(select).collect().length === 1, s"Binary literal test failed: $select")
+    }
+  }
 }
