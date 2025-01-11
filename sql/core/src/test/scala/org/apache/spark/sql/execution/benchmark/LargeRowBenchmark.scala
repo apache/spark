@@ -32,7 +32,7 @@ import org.apache.spark.benchmark.Benchmark
  */
 object LargeRowBenchmark extends SqlBasedBenchmark {
 
-  def runLargeRowBenchmark(rowsNum: Int, numCols: Int, cellSize_mb: Int): Unit = {
+  def runLargeRowBenchmark(rowsNum: Int, numCols: Int, cellSize_mb: Double): Unit = {
     withTempPath { path =>
       val benchmark = new Benchmark(
         s"#rows: $rowsNum, #cols: $numCols, cell: $cellSize_mb MB", rowsNum, output = output)
@@ -57,16 +57,17 @@ object LargeRowBenchmark extends SqlBasedBenchmark {
       spark.udf.register("udf_upper", udf_upper(_: String): String)
 
       val benchmarks = Array(
-        Map("rows" -> 100, "cols" -> 10, "cellSize_mb" -> 1), //  OutOfMemory @ 100, 10, 2
-        Map("rows" -> 1, "cols" -> 1, "cellSize_mb" -> 300), //  OutOfMemory @ 1, 1, 400
-        Map("rows" -> 1, "cols" -> 200, "cellSize_mb" -> 1) //  OutOfMemory @ 1, 300, 1
+        Map("rows" -> 100, "cols" -> 10, "cellSize_mb" -> 1.6) //  OutOfMemory @ 100, 10, 2
+        //        Map("rows" -> 1, "cols" -> 1, "cellSize_mb" -> 300), //  OutOfMemory @ 1, 1, 400
+        //        Map("rows" -> 1, "cols" -> 200, "cellSize_mb" -> 1) //  OutOfMemory @ 1, 300, 1
       )
 
       benchmarks.foreach { b =>
         val rows = b("rows")
         val cols = b("cols")
         val cellSize_mb = b("cellSize_mb")
-        runLargeRowBenchmark(rows, cols, cellSize_mb)
+        runLargeRowBenchmark(rows.toInt, cols.toInt, cellSize_mb)
+        runLargeRowBenchmark(rows.toInt, cols.toInt, cellSize_mb)
       }
     }
   }
