@@ -672,12 +672,12 @@ class VariantBuilder:
         self.dictionary_keys.append(key.encode("utf-8"))
         return id
 
-    def _handle_float(self, num_str) -> Any:
+    def _handle_float(self, num_str: str) -> Any:
         # a float can be a decimal if it only contains digits, '-', or '-'.
         if all([ch.isdecimal() or ch == "-" or ch == "." for ch in num_str]):
             dec = decimal.Decimal(num_str)
             precision = len(dec.as_tuple().digits)
-            scale = -dec.as_tuple().exponent
+            scale = -int(dec.as_tuple().exponent)
 
             if (
                 scale <= VariantUtils.MAX_DECIMAL16_PRECISION
