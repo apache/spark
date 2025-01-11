@@ -721,10 +721,6 @@ case class UnresolvedStarExceptOrReplace(
  * Represents some of the input attributes to a given relational operator, for example in
  * `df.withColumn`.
  *
- * @param target an optional name that should be the target of the expansion. If omitted all
- *              targets' columns are produced. This can only be a table name. This
- *              is a list of identifiers that is the path of the expansion.
- *
  * @param colNames a list of column names that should be replaced or produced.
  *
  * @param exprs the corresponding expressions for `colNames`.
@@ -732,12 +728,12 @@ case class UnresolvedStarExceptOrReplace(
  * @param explicitMetadata an optional list of explicit metadata to associate with the columns.
  */
 case class UnresolvedStarWithColumns(
-     target: Option[Seq[String]],
      colNames: Seq[String],
      exprs: Seq[Expression],
      explicitMetadata: Option[Seq[Metadata]] = None)
   extends UnresolvedStarBase {
 
+  override def target: Option[Seq[String]] = None
   override def children: Seq[Expression] = exprs
 
   override protected def withNewChildrenInternal(
@@ -786,19 +782,17 @@ case class UnresolvedStarWithColumns(
  * Represents some of the input attributes to a given relational operator, for example in
  * `df.withColumnRenamed`.
  *
- * @param target an optional name that should be the target of the expansion. If omitted all
- *              targets' columns are produced. This can only be a table name. This
- *              is a list of identifiers that is the path of the expansion.
- *
  * @param existingNames a list of column names that should be replaced.
+ *                      If the column does not exist, it is ignored.
  *
  * @param newNames a list of new column names that should be used to replace the existing columns.
  */
 case class UnresolvedStarWithColumnsRenames(
-    target: Option[Seq[String]],
     existingNames: Seq[String],
     newNames: Seq[String])
   extends LeafExpression with UnresolvedStarBase {
+
+  override def target: Option[Seq[String]] = None
 
   override def expand(input: LogicalPlan, resolver: Resolver): Seq[NamedExpression] = {
     assert(existingNames.size == newNames.size,

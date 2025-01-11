@@ -1279,7 +1279,6 @@ class Dataset[T] private[sql](
       Project(
         Seq(
           UnresolvedStarWithColumns(
-            target = None,
             colNames = colNames,
             exprs = cols.map(_.expr))),
         logicalPlan)
@@ -1314,7 +1313,6 @@ class Dataset[T] private[sql](
       Project(
         Seq(
           UnresolvedStarWithColumnsRenames(
-            target = None,
             existingNames = colNames,
             newNames = newColNames)),
         logicalPlan)

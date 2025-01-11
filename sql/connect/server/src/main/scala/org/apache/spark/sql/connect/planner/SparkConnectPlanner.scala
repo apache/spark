@@ -1075,7 +1075,6 @@ class SparkConnectPlanner(
     Project(
       Seq(
         UnresolvedStarWithColumnsRenames(
-          target = None,
           existingNames = colNames,
           newNames = newColNames)),
       transformRelation(rel.getInput))
@@ -1101,7 +1100,6 @@ class SparkConnectPlanner(
     Project(
       Seq(
         UnresolvedStarWithColumns(
-          target = None,
           colNames = colNames,
           exprs = exprs,
           explicitMetadata = Some(metadata))),
