@@ -57,7 +57,7 @@ object LargeRowBenchmark extends SqlBasedBenchmark {
       spark.udf.register("udf_upper", udf_upper(_: String): String)
 
       val benchmarks = Array(
-        Map("rows" -> 100, "cols" -> 10, "cellSize_mb" -> 1.2) //  OutOfMemory @ 100, 10, 2
+        Map("rows" -> 100, "cols" -> 10, "cellSize_mb" -> 1.4) //  OutOfMemory @ 100, 10, 2
         //        Map("rows" -> 1, "cols" -> 1, "cellSize_mb" -> 300), //  OutOfMemory @ 1, 1, 400
         //        Map("rows" -> 1, "cols" -> 200, "cellSize_mb" -> 1) //  OutOfMemory @ 1, 300, 1
       )
@@ -66,7 +66,6 @@ object LargeRowBenchmark extends SqlBasedBenchmark {
         val rows = b("rows").asInstanceOf[Int]
         val cols = b("cols").asInstanceOf[Int]
         val cellSize_mb = b("cellSize_mb").asInstanceOf[Double]
-        runLargeRowBenchmark(rows, cols, cellSize_mb)
         runLargeRowBenchmark(rows, cols, cellSize_mb)
       }
     }
