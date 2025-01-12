@@ -15,8 +15,9 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
+package org.apache.spark.sql.hive
 
+import org.apache.spark.sql.{CharVarcharTestSuite, Row}
 import org.apache.spark.sql.execution.command.CharVarcharDDLTestBase
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 
