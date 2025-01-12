@@ -4311,4 +4311,10 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       origin = origin
     )
   }
+
+  def recursiveCteError(): Throwable = {
+    new AnalysisException(
+      errorClass = "INVALID_RECURSIVE_CTE",
+      messageParameters = Map())
+  }
 }

@@ -462,6 +462,14 @@ object Union {
   }
 }
 
+/**
+ * Helper base class for Union and UnionLoop logical nodes that contains their commonalities.
+ * It reflects similarities of using UNION ALL for two different use cases 1) combining two or
+ * more result sets, and 2) for combining anchor and recursive parts in the recursive CTE.
+ *
+ * Most of these methods historically existed in the Union node before the implementation of
+ * the recursive CTE.
+ */
 abstract class UnionBase extends LogicalPlan {
   override def output: Seq[Attribute] = {
     if (conf.getConf(SQLConf.LAZY_SET_OPERATOR_OUTPUT)) {
@@ -483,8 +491,8 @@ abstract class UnionBase extends LogicalPlan {
    * mapping between the original and reference sequences are symmetric.
    */
   private def rewriteConstraints(reference: Seq[Attribute],
-                                 original: Seq[Attribute],
-                                 constraints: ExpressionSet): ExpressionSet = {
+      original: Seq[Attribute],
+      constraints: ExpressionSet): ExpressionSet = {
     require(reference.size == original.size)
     val attributeRewrites = AttributeMap(original.zip(reference))
     constraints.map(_ transform {
@@ -597,9 +605,9 @@ case class Union(
  * @param limit An optional limit that can be pushed down to the node to stop the loop earlier.
  */
 case class UnionLoop(id: Long,
-                     anchor: LogicalPlan,
-                     recursion: LogicalPlan,
-                     limit: Option[Int] = None) extends UnionBase {
+    anchor: LogicalPlan,
+    recursion: LogicalPlan,
+    limit: Option[Int] = None) extends UnionBase {
   override def children: Seq[LogicalPlan] = Seq(anchor, recursion)
 
   override protected def withNewChildrenInternal(newChildren: IndexedSeq[LogicalPlan]): UnionLoop =
@@ -616,8 +624,8 @@ case class UnionLoop(id: Long,
  *                    results.
  */
 case class UnionLoopRef(loopId: Long,
-                        override val output: Seq[Attribute],
-                        accumulated: Boolean) extends LeafNode with MultiInstanceRelation {
+    override val output: Seq[Attribute],
+    accumulated: Boolean) extends LeafNode with MultiInstanceRelation {
   override def newInstance(): LogicalPlan = copy(output = output.map(_.newInstance()))
 
   override def computeStats(): Statistics = Statistics(SQLConf.get.defaultSizeInBytes)

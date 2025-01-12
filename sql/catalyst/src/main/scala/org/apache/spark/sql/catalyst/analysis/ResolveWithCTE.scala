@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{CTERelationDef, CTERelationR
   SubqueryAlias, Union, UnionLoop, UnionLoopRef, WithCTE}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{CTE, PLAN_EXPRESSION}
+import org.apache.spark.sql.errors.QueryCompilationErrors
 
 /**
  * Updates CTE references with the resolve output attributes of corresponding CTE definitions.
@@ -77,6 +78,7 @@ object ResolveWithCTE extends Rule[LogicalPlan] {
         cteDef.failAnalysis(
           errorClass = "INVALID_RECURSIVE_CTE",
           messageParameters = Map.empty)
+        throw QueryCompilationErrors.recursiveCteError()
     }
   }
 
@@ -84,40 +86,42 @@ object ResolveWithCTE extends Rule[LogicalPlan] {
       plan: LogicalPlan,
       cteDefMap: mutable.HashMap[Long, CTERelationDef]): LogicalPlan = {
     plan.resolveOperatorsDownWithPruning(_.containsAllPatterns(CTE)) {
-      case w @ WithCTE(_, cteDefs) =>
+      case withCTE @ WithCTE(_, cteDefs) =>
         val newCTEDefs = cteDefs.map { cteDef =>
           val newCTEDef = if (cteDef.recursive) {
             cteDef.child match {
               // Substitutions to UnionLoop and UnionLoopRef.
-              case a @ SubqueryAlias(_, Union(Seq(anchor, recursion), false, false)) =>
+              case alias @ SubqueryAlias(_, Union(Seq(anchor, recursion), false, false)) =>
                 cteDef.copy(child =
-                  a.copy(child =
+                  alias.copy(child =
                     UnionLoop(cteDef.id, anchor, transformRefs(recursion))))
-              case a @ SubqueryAlias(_,
-              ca @ UnresolvedSubqueryColumnAliases(_,
+              case alias as@ SubqueryAlias(_,
+              columnAlias @ UnresolvedSubqueryColumnAliases(_,
               Union(Seq(anchor, recursion), false, false))) =>
                 cteDef.copy(child =
-                  a.copy(child =
-                    ca.copy(child =
+                  alias.copy(child =
+                    columnAlias.copy(child =
                       UnionLoop(cteDef.id, anchor, transformRefs(recursion)))))
               // If the recursion is described with an UNION (deduplicating) clause then the
               // recursive term should not return those rows that have been calculated previously,
               // and we exclude those rows from the current iteration result.
-              case a @ SubqueryAlias(_, Distinct(Union(Seq(anchor, recursion), false, false))) =>
+              case alias @ SubqueryAlias(_,
+                  Distinct(Union(Seq(anchor, recursion), false, false))) =>
                 cteDef.copy(child =
-                  a.copy(child =
+                  alias.copy(child =
                     UnionLoop(cteDef.id,
                       Distinct(anchor),
                       Except(
                         transformRefs(recursion),
                         UnionLoopRef(cteDef.id, cteDef.output, true),
                         false))))
-              case a @ SubqueryAlias(_,
-              ca @ UnresolvedSubqueryColumnAliases(_, Distinct(Union(Seq(anchor, recursion),
+              case alias @ SubqueryAlias(_,
+              columnAlias @ UnresolvedSubqueryColumnAliases(_,
+                  Distinct(Union(Seq(anchor, recursion),
               false, false)))) =>
                 cteDef.copy(child =
-                  a.copy(child =
-                    ca.copy(child =
+                  alias.copy(child =
+                    columnAlias.copy(child =
                       UnionLoop(cteDef.id,
                         Distinct(anchor),
                         Except(
@@ -132,6 +136,7 @@ object ResolveWithCTE extends Rule[LogicalPlan] {
                 cteDef.failAnalysis(
                     errorClass = "INVALID_RECURSIVE_CTE",
                     messageParameters = Map.empty)
+                throw QueryCompilationErrors.recursiveCteError()
             }
           } else {
             cteDef
@@ -144,6 +149,7 @@ object ResolveWithCTE extends Rule[LogicalPlan] {
               newCTEDef.failAnalysis(
                 errorClass = "INVALID_RECURSIVE_CTE",
                 messageParameters = Map.empty)
+              throw QueryCompilationErrors.recursiveCteError()
             }
             if (recursiveAnchorResolved(newCTEDef).isDefined) {
               cteDefMap.put(newCTEDef.id, newCTEDef)
@@ -156,15 +162,24 @@ object ResolveWithCTE extends Rule[LogicalPlan] {
 
           newCTEDef
         }
-        w.copy(cteDefs = newCTEDefs)
+        withCTE.copy(cteDefs = newCTEDefs)
 
       case ref: CTERelationRef if !ref.resolved =>
-        cteDefMap.get(ref.cteId).map { cteDef =>
-          if (ref.recursive) {
-            // Recursive references can be resolved from the anchor term. Non-resolved ref
-            // implies non-resolved definition. Since the definition was present in the map of
-            // resolved and "partially" resolved definitions, the only explanation is that
-            // definition was "partially" resolved.
+        cteDefMap.get(ref.cteId) match {
+          case Some(cteDef) if !ref.recursive =>
+            if (!cteDef.resolved) {
+              // In the non-recursive case, cteDefMap contains resolved Definitions.
+              cteDef.failAnalysis(
+                errorClass = "INVALID_RECURSIVE_CTE",
+                messageParameters = Map.empty)
+              throw QueryCompilationErrors.recursiveCteError()
+            }
+            ref.copy(_resolved = true, output = cteDef.output, isStreaming = cteDef.isStreaming)
+          case Some(cteDef) =>
+            // Recursive references can be resolved from the anchor term. Non-resolved ref implies
+            // non-resolved definition. Since the definition was present in the map of resolved and
+            // "partially" resolved definitions, the only explanation is that definition was
+            // "partially" resolved.
             val anchorResolved = recursiveAnchorResolved(cteDef)
             if (anchorResolved.isDefined) {
               ref.copy(_resolved = true, output = anchorResolved.get.output,
@@ -173,17 +188,10 @@ object ResolveWithCTE extends Rule[LogicalPlan] {
               cteDef.failAnalysis(
                 errorClass = "INVALID_RECURSIVE_CTE",
                 messageParameters = Map.empty)
+              throw QueryCompilationErrors.recursiveCteError()
             }
-          } else if (cteDef.resolved) {
-            ref.copy(_resolved = true, output = cteDef.output, isStreaming = cteDef.isStreaming)
-          } else {
-            // In the non-recursive case, cteDefMap contains only resolved Definitions.
-            cteDef.failAnalysis(
-              errorClass = "INVALID_RECURSIVE_CTE",
-              messageParameters = Map.empty)
-          }
-        }.getOrElse {
-          ref
+          case None =>
+            ref
         }
 
       case other =>

@@ -764,7 +764,15 @@ object QueryPlan extends PredicateHelper {
   }
 
   /**
-   * Generate detailed field string with different format based on type of input value
+   * Generate detailed field string with different format based on type of input value. Supported
+   * input values are sequences and strings. An empty sequences converts to []. A non-empty
+   * sequences converts to square brackets-enclosed, comma-separated values, prefixed with a
+   * sequence length. An empty string converts to None, while a non-empty string is verbatim
+   * outputted. In all four cases, user-provided fieldName prefixes the output. Examples:
+   * List("Hello", "World") -> <fieldName>: [2]: [Hello, World]
+   * List()                 -> <fieldName>: []
+   * "hello_world"          -> <fieldName>: hello_world
+   * ""                     -> <fieldName>: None
    */
   def generateFieldString(fieldName: String, values: Any): String = values match {
     case iter: Iterable[_] if (iter.size == 0) => s"${fieldName}: []"
