@@ -247,23 +247,29 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest
     withTable(tableName) {
       // CREATE table to use types defined in Spark SQL
       sql(s"""CREATE TABLE $tableName (
-        date_col DATE,
         string_col STRING,
         short_col SHORT,
         integer_col INTEGER,
         long_col LONG,
-        binary_col BINARY
+        binary_col BINARY,
+        double_col DOUBLE
       )""")
-      sql(s"INSERT INTO $tableName VALUES(DATE '2025-01-11', '0', 0, 0, 0, x'00')")
+      sql(s"INSERT INTO $tableName VALUES('0', 0, 0, 0, x'30', 0.0)")
 
-      val sql1 = s"SELECT * FROM $tableName WHERE date_col = DATE_ADD(date_col, string_col)"
-      assert(spark.sql(sql1).collect().length === 1)
-      val sql2 =
-        s"SELECT * FROM $tableName WHERE date_col = DATE_ADD(date_col, CAST(binary_col AS STRING))"
-      assert(spark.sql(sql2).collect().length === 1)
-      // Unfortunately, there is no pushdown function takes BINARY type to test.
-      // Refer to https://dev.mysql.com/doc/refman/8.4/en/cast-functions.html
-      // Will add test when there is a function with BINARY type support ready.
+      def testCast(castType: String, sourceCol: String, targetCol: String): Unit = {
+        val sql = s"SELECT * FROM $tableName WHERE CAST($sourceCol AS $castType) = $targetCol"
+        assert(spark.sql(sql).collect().length === 1)
+      }
+
+      testCast("BINARY", "string_col", "binary_col");
+      testCast("SHORT", "string_col", "short_col")
+      testCast("INTEGER", "string_col", "integer_col")
+      testCast("LONG", "string_col", "long_col")
+      testCast("STRING", "short_col", "'0'")
+      testCast("STRING", "integer_col", "'0'")
+      testCast("STRING", "long_col", "'0'")
+      testCast("STRING", "binary_col", "'0'")
+      testCast("STRING", "double_col", "'0'")
     }
   }
 }
