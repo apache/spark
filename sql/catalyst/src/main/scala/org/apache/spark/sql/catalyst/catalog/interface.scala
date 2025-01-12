@@ -19,7 +19,6 @@ package org.apache.spark.sql.catalyst.catalog
 
 import java.net.URI
 import java.time.{ZoneId, ZoneOffset}
-import java.util.Date
 
 import scala.collection.mutable
 import scala.util.control.NonFatal
@@ -188,10 +187,12 @@ case class CatalogTablePartition(
       map += ("Partition Parameters" -> paramsJson)
     }
 
-    map += ("Created Time" -> JString(new Date(createTime).toString))
+    map += ("Created Time" -> JString(
+      DateTimeUtils.microsToInstant(DateTimeUtils.millisToMicros(createTime)).toString))
 
     val lastAccess = if (lastAccessTime <= 0) JString("UNKNOWN")
-    else JString(new Date(lastAccessTime).toString)
+    else JString(
+      DateTimeUtils.microsToInstant(DateTimeUtils.millisToMicros(createTime)).toString)
     map += ("Last Access" -> lastAccess)
 
     stats.foreach(s => map += ("Partition Statistics" -> JString(s.simpleString)))
