@@ -24,7 +24,7 @@ import scala.util.control.NonFatal
 
 import org.apache.spark.{SparkThrowable, SparkUnsupportedOperationException}
 import org.apache.spark.sql.catalyst.SQLConfHelper
-import org.apache.spark.sql.connector.expressions.Expression
+import org.apache.spark.sql.connector.expressions.{Expression, GeneralScalarExpression, Literal}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
 import org.apache.spark.sql.jdbc.OracleDialect._
@@ -61,6 +61,22 @@ private case class OracleDialect() extends JdbcDialect with SQLConfHelper with N
       } else {
         super.visitAggregateFunction(funcName, isDistinct, inputs)
       }
+
+    private def generateBlobEquals(lhs: Expression, rhs: Expression): String = {
+      s"DBMS_LOB.COMPARE(${inputToSQL(lhs)}, ${inputToSQL(rhs)}) = 0"
+    }
+
+    override def build(expr: Expression): String = expr match {
+      case e: GeneralScalarExpression if e.name == "=" =>
+        (e.children()(0), e.children()(1)) match {
+          case (lhs: Literal[_], rhs: Expression) if lhs.dataType == BinaryType =>
+            generateBlobEquals(rhs, lhs)
+          case (lhs: Expression, rhs: Literal[_]) if rhs.dataType == BinaryType =>
+            generateBlobEquals(rhs, lhs)
+          case _ => super.build(expr)
+        }
+      case _ => super.build(expr)
+    }
   }
 
   override def compileExpression(expr: Expression): Option[String] = {
@@ -138,6 +154,8 @@ private case class OracleDialect() extends JdbcDialect with SQLConfHelper with N
     case timestampValue: Timestamp => "{ts '" + timestampValue + "'}"
     case dateValue: Date => "{d '" + dateValue + "'}"
     case arrayValue: Array[Any] => arrayValue.map(compileValue).mkString(", ")
+    case binaryValue: Array[Byte] =>
+      binaryValue.map("%02X".format(_)).mkString("HEXTORAW('", "", "')")
     case _ => value
   }
 
