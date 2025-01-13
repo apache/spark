@@ -440,7 +440,7 @@ private[sql] class RocksDBStateStoreProvider
     }
     catch {
       case e: SparkException
-        if Option(e.getCondition).contains("CANNOT_LOAD_STATE_STORE") =>
+        if Option(e.getCondition).exists(_.contains("CANNOT_LOAD_STATE_STORE")) =>
         throw e
       case e: OutOfMemoryError =>
         throw QueryExecutionErrors.notEnoughMemoryToLoadStore(
@@ -464,7 +464,7 @@ private[sql] class RocksDBStateStoreProvider
     }
     catch {
       case e: SparkException
-        if Option(e.getCondition).contains("CANNOT_LOAD_STATE_STORE") =>
+        if Option(e.getCondition).exists(_.contains("CANNOT_LOAD_STATE_STORE")) =>
         throw e
       case e: OutOfMemoryError =>
         throw QueryExecutionErrors.notEnoughMemoryToLoadStore(
