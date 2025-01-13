@@ -212,9 +212,6 @@ private[connect] class ExecuteGrpcResponseSender[T <: Message](
     }
     var sentResponsesSize: Long = 0
 
-    // Check whether the execution thread is completed before starting to send responses.
-    val executionCompleted = executeHolder.isExecutionCompleted()
-
     while (!finished) {
       var response: Option[CachedStreamResponse[T]] = None
 
@@ -224,10 +221,9 @@ private[connect] class ExecuteGrpcResponseSender[T <: Message](
       def gotResponse = response.nonEmpty
       // 3. sent everything from the stream and the stream is finished
       def streamFinished = executionObserver.getLastResponseIndex().exists(nextIndex > _)
-      // 4. size limit reached
-      def sizeLimitReached = sentResponsesSize > maximumResponseSize
-      // 5. time deadline reached
-      def deadlineReached = deadlineTimeMillis < System.currentTimeMillis()
+      // 4. time deadline or size limit reached
+      def deadlineLimitReached =
+        sentResponsesSize > maximumResponseSize || deadlineTimeMillis < System.currentTimeMillis()
 
       logTrace(s"Trying to get next response with index=$nextIndex.")
       executionObserver.responseLock.synchronized {
@@ -237,8 +233,7 @@ private[connect] class ExecuteGrpcResponseSender[T <: Message](
         while (!interrupted &&
           !gotResponse &&
           !streamFinished &&
-          !sizeLimitReached &&
-          !deadlineReached) {
+          !deadlineLimitReached) {
           logTrace(s"Try to get response with index=$nextIndex from observer.")
           response = executionObserver.consumeResponse(nextIndex)
           logTrace(s"Response index=$nextIndex from observer: ${response.isDefined}")
@@ -266,8 +261,7 @@ private[connect] class ExecuteGrpcResponseSender[T <: Message](
           s"Exiting loop: interrupted=$interrupted, " +
             s"response=${response.map(r => ProtoUtils.abbreviate(r.response))}, " +
             s"lastIndex=${executionObserver.getLastResponseIndex()}, " +
-            s"sizeLimitReached=$sizeLimitReached, " +
-            s"deadlineReached=$deadlineReached")
+            s"deadline=${deadlineLimitReached}")
         if (sleepEnd > 0) {
           consumeSleep += sleepEnd - sleepStart
           logTrace(s"Slept waiting for execution stream for ${sleepEnd - sleepStart}ns.")
@@ -298,7 +292,7 @@ private[connect] class ExecuteGrpcResponseSender[T <: Message](
         } else {
           // If it wasn't sent, time deadline must have been reached before stream became available,
           // or it was interrupted. Will exit in the next loop iterattion.
-          assert(sizeLimitReached || deadlineReached || interrupted)
+          assert(deadlineLimitReached || interrupted)
         }
       } else if (streamFinished) {
         // Stream is finished and all responses have been sent
@@ -314,7 +308,7 @@ private[connect] class ExecuteGrpcResponseSender[T <: Message](
           case None => grpcObserver.onCompleted()
         }
         finished = true
-      } else if (sizeLimitReached || deadlineReached) {
+      } else if (deadlineLimitReached) {
         // The stream is not complete, but should be finished now.
         // The client needs to reattach with ReattachExecute.
         // scalastyle:off line.size.limit
@@ -325,14 +319,7 @@ private[connect] class ExecuteGrpcResponseSender[T <: Message](
           log"waitingForResults=${MDC(WAIT_RESULT_TIME, consumeSleep / NANOS_PER_MILLIS.toDouble)} ms " +
           log"waitingForSend=${MDC(WAIT_SEND_TIME, sendSleep / NANOS_PER_MILLIS.toDouble)} ms")
         // scalastyle:on line.size.limit
-        if (executionCompleted && !sizeLimitReached) {
-          // The execution thread has completed running, but no responses were recorded, implying
-          // the execution thread failed to record any responses because of a resource shortage.
-          throw new IllegalStateException(
-            "Execution was completed but no responses were recorded.")
-        } else {
-          grpcObserver.onCompleted()
-        }
+        grpcObserver.onCompleted()
         finished = true
       }
     }
