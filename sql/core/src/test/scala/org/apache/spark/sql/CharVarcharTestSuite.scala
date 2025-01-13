@@ -958,6 +958,34 @@ class BasicCharVarcharTestSuite extends QueryTest with SharedSparkSession {
       }
     }
   }
+
+  test("string expressions") {
+    def run(typ: String, expected: Row): Unit = {
+      val df = sql(
+        s"""
+           |SELECT
+           |'X' || '5 '::$typ(5) || 'X',
+           |LENGTH('5 '::$typ(5)),
+           |UPPER('a '::$typ(5)),
+           |LENGTH(UPPER('a '::$typ(5))),
+           |'"' || UPPER('a '::$typ(5)) || '"',
+           |REPLACE('abc', 'ab '::$typ(5), 'x'),
+           |TRANSLATE('abc', 'abc', 'xy '::$typ(5))
+      """.stripMargin)
+      assert(df.schema.map(_.dataType) == Seq(StringType, IntegerType, StringType, IntegerType,
+        StringType, StringType, StringType))
+      assert(df.collect() === Array(expected))
+    }
+
+    val expected = Row("X5 X", 2, "A ", 2, "\"A \"", "abc", "xy ")
+    Seq(("char", expected, Row("X5    X", 5, "A    ", 5, "\"A    \"", "abc", "xy ")),
+      ("varchar", expected, expected)).foreach { case (typ, a, b) =>
+      run(typ, a)
+      withSQLConf((SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key, "true")) {
+        run(typ, b)
+      }
+    }
+  }
 }
 
 class FileSourceCharVarcharTestSuite extends CharVarcharTestSuite with SharedSparkSession {

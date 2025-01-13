@@ -199,6 +199,7 @@ object TypeCoercion extends TypeCoercionBase {
         } else {
           null
         }
+      case (CharType(_) | VarcharType(_), _: AbstractStringType) => StringType
       // If the function accepts any numeric type and the input is a string, we follow the hive
       // convention and cast that input into a double
       case (_: StringType, NumericType) => NumericType.defaultConcreteType
