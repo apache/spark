@@ -1074,10 +1074,7 @@ class SparkConnectPlanner(
       rel.getRenameColumnsMapMap.asScala.toSeq.unzip
     }
     Project(
-      Seq(
-        UnresolvedStarWithColumnsRenames(
-          existingNames = colNames,
-          newNames = newColNames)),
+      Seq(UnresolvedStarWithColumnsRenames(existingNames = colNames, newNames = newColNames)),
       transformRelation(rel.getInput))
   }
 
