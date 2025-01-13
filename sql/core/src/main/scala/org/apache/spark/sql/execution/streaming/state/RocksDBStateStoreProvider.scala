@@ -84,9 +84,10 @@ private[sql] class RocksDBStateStoreProvider
 
       val columnFamilyInfo = Some(ColumnFamilyInfo(colFamilyName, newColFamilyId))
 
-      // For test cases only: TestStateSchemaProvider allows dynamically adding schemas
-      // during test execution to verify schema evolution behavior. In production,
-      // schemas are loaded from checkpoint data
+      // For unit tests only: TestStateSchemaProvider allows dynamically adding schemas
+      // during unit test execution to verify schema compatibility checks and evolution logic.
+      // This provider is only used in isolated unit tests where we directly instantiate
+      // state store components, not in streaming query execution or e2e tests.
       stateSchemaProvider match {
         case Some(t: TestStateSchemaProvider) =>
           t.captureSchema(colFamilyName, keySchema, valueSchema)
