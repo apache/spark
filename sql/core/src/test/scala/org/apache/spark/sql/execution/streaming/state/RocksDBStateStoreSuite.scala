@@ -516,7 +516,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
     val testProvider = new TestStateSchemaProvider()
 
     // Add initial schema version
-    testProvider.addSchema(
+    testProvider.captureSchema(
       StateStore.DEFAULT_COL_FAMILY_NAME,
       keySchema,
       initialValueSchema,
@@ -539,7 +539,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
     val encoded = encoder1.encodeValue(row1)
 
     // Add evolved schema
-    testProvider.addSchema(
+    testProvider.captureSchema(
       StateStore.DEFAULT_COL_FAMILY_NAME,
       keySchema,
       evolvedValueSchema,
@@ -587,7 +587,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
     ))
 
     val testProvider = new TestStateSchemaProvider()
-    testProvider.addSchema(
+    testProvider.captureSchema(
       StateStore.DEFAULT_COL_FAMILY_NAME,
       keySchema,
       initialValueSchema,
@@ -605,7 +605,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
     val row1 = proj.apply(InternalRow(1, 100L))
     val encoded = encoder1.encodeValue(row1)
 
-    testProvider.addSchema(
+    testProvider.captureSchema(
       StateStore.DEFAULT_COL_FAMILY_NAME,
       keySchema,
       evolvedValueSchema,
@@ -651,7 +651,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
     ))
 
     val testProvider = new TestStateSchemaProvider()
-    testProvider.addSchema(
+    testProvider.captureSchema(
       StateStore.DEFAULT_COL_FAMILY_NAME,
       keySchema,
       initialValueSchema,
@@ -669,7 +669,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
     val row1 = proj.apply(InternalRow(InternalRow(1, UTF8String.fromString("test"))))
     val encoded = encoder1.encodeValue(row1)
 
-    testProvider.addSchema(
+    testProvider.captureSchema(
       StateStore.DEFAULT_COL_FAMILY_NAME,
       keySchema,
       evolvedValueSchema,
@@ -714,7 +714,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
     ))
 
     val testProvider = new TestStateSchemaProvider()
-    testProvider.addSchema(
+    testProvider.captureSchema(
       StateStore.DEFAULT_COL_FAMILY_NAME,
       keySchema,
       initialValueSchema,
@@ -734,7 +734,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
     val encoded = encoder1.encodeValue(row1)
 
     // Add evolved schema with LongType
-    testProvider.addSchema(
+    testProvider.captureSchema(
       StateStore.DEFAULT_COL_FAMILY_NAME,
       keySchema,
       evolvedValueSchema,
@@ -781,7 +781,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
     ))
 
     val testProvider = new TestStateSchemaProvider()
-    testProvider.addSchema(
+    testProvider.captureSchema(
       StateStore.DEFAULT_COL_FAMILY_NAME,
       keySchema,
       initialValueSchema,
@@ -801,7 +801,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
     val encoded = encoder1.encodeValue(row1)
 
     // Add evolved schema with reordered fields
-    testProvider.addSchema(
+    testProvider.captureSchema(
       StateStore.DEFAULT_COL_FAMILY_NAME,
       keySchema,
       evolvedValueSchema,
@@ -852,7 +852,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
     ))
 
     val testProvider = new TestStateSchemaProvider()
-    testProvider.addSchema(
+    testProvider.captureSchema(
       StateStore.DEFAULT_COL_FAMILY_NAME,
       keySchema,
       initialValueSchema,
@@ -872,7 +872,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
     val encoded = encoder1.encodeValue(row1)
 
     // Add evolved schema with IntegerType
-    testProvider.addSchema(
+    testProvider.captureSchema(
       StateStore.DEFAULT_COL_FAMILY_NAME,
       keySchema,
       evolvedValueSchema,

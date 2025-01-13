@@ -263,6 +263,8 @@ case class StreamingSymmetricHashJoinExec(
 
     // validate and maybe evolve schema for all state stores across both sides of the join
     result.map { case (stateStoreName, (keySchema, valueSchema)) =>
+      // we have to add the default column family schema because the RocksDBStateEncoder
+      // expects this entry to be present in the stateSchemaProvider.
       val newStateSchema = List(StateStoreColFamilySchema(StateStore.DEFAULT_COL_FAMILY_NAME, 0,
         keySchema, 0, valueSchema))
       StateSchemaCompatibilityChecker.validateAndMaybeEvolveStateSchema(getStateInfo, hadoopConf,

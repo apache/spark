@@ -89,7 +89,7 @@ private[sql] class RocksDBStateStoreProvider
       // schemas are loaded from checkpoint data
       stateSchemaProvider match {
         case Some(t: TestStateSchemaProvider) =>
-          t.addSchema(colFamilyName, keySchema, valueSchema)
+          t.captureSchema(colFamilyName, keySchema, valueSchema)
         case _ =>
       }
 
@@ -424,7 +424,7 @@ private[sql] class RocksDBStateStoreProvider
     // schemas are loaded from checkpoint data
     stateSchemaProvider match {
       case Some(t: TestStateSchemaProvider) =>
-        t.addSchema(StateStore.DEFAULT_COL_FAMILY_NAME, keySchema, valueSchema)
+        t.captureSchema(StateStore.DEFAULT_COL_FAMILY_NAME, keySchema, valueSchema)
       case _ =>
     }
 
@@ -728,9 +728,7 @@ object RocksDBStateStoreProvider {
           } else {
             new UnsafeRowDataEncoder(
               keyStateEncoderSpec,
-              valueSchema,
-              stateSchemaProvider,
-              columnFamilyInfo
+              valueSchema
             )
           }
         }

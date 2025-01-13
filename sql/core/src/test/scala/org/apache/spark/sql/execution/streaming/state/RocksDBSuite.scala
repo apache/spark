@@ -359,7 +359,7 @@ class RocksDBStateEncoderSuite extends SparkFunSuite {
     ))
     // Create test state schema provider
     val testProvider = new TestStateSchemaProvider()
-    testProvider.addSchema(
+    testProvider.captureSchema(
       StateStore.DEFAULT_COL_FAMILY_NAME,
       keySchema,
       valueSchema,
@@ -403,7 +403,7 @@ class RocksDBStateEncoderSuite extends SparkFunSuite {
     ))
 
     val testProvider = new TestStateSchemaProvider()
-    testProvider.addSchema(
+    testProvider.captureSchema(
       StateStore.DEFAULT_COL_FAMILY_NAME,
       keySchema,
       valueSchema,
@@ -431,7 +431,7 @@ class RocksDBStateEncoderSuite extends SparkFunSuite {
         "Schema ID not preserved in prefix scan remaining key encoding")
     }
 
-    testProvider.addSchema(
+    testProvider.captureSchema(
       StateStore.DEFAULT_COL_FAMILY_NAME,
       keySchema,
       valueSchema,
@@ -535,7 +535,7 @@ class RocksDBStateEncoderSuite extends SparkFunSuite {
       StructField("v3", BooleanType)
     ))
     val testProvider = new TestStateSchemaProvider()
-    testProvider.addSchema(
+    testProvider.captureSchema(
       StateStore.DEFAULT_COL_FAMILY_NAME,
       keySchema,
       valueSchema,

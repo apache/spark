@@ -238,7 +238,7 @@ trait StateStoreWriter
       stateSchemaValidationResults: List[StateSchemaValidationResult],
       oldMetadata: Option[OperatorStateMetadata]): List[List[String]] = {
 
-    def getExistingStateInfo(metadata: OperatorStateMetadataV2): List[String] = {
+    def getExistingSchemaFilePaths(metadata: OperatorStateMetadataV2): List[String] = {
       val ssInfo = metadata.stateStoreInfo.head
       ssInfo.stateSchemaFilePaths
     }
@@ -247,7 +247,7 @@ trait StateStoreWriter
 
     oldMetadata match {
       case Some(v2: OperatorStateMetadataV2) =>
-        val oldSchemaPaths = getExistingStateInfo(v2)
+        val oldSchemaPaths = getExistingSchemaFilePaths(v2)
         if (validationResult.evolvedSchema) {
           List(oldSchemaPaths ++ List(validationResult.schemaPath))
         } else {
@@ -612,8 +612,7 @@ case class StateStoreRestoreExec(
       hadoopConf: Configuration, batchId: Long, stateSchemaVersion: Int):
     List[StateSchemaValidationResult] = {
     val newStateSchema = List(StateStoreColFamilySchema(StateStore.DEFAULT_COL_FAMILY_NAME,
-      keySchemaId = 0, keyExpressions.toStructType, valueSchemaId = 0,
-      stateManager.getStateValueSchema))
+      0, keyExpressions.toStructType, 0, stateManager.getStateValueSchema))
     List(StateSchemaCompatibilityChecker.validateAndMaybeEvolveStateSchema(getStateInfo,
       hadoopConf, newStateSchema, session.sessionState, stateSchemaVersion))
   }

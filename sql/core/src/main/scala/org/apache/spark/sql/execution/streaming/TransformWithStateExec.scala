@@ -141,6 +141,8 @@ case class TransformWithStateExec(
    */
   override def getColFamilySchemas(): Map[String, StateStoreColFamilySchema] = {
     val keySchema = keyExpressions.toStructType
+    // we have to add the default column family schema because the RocksDBStateEncoder
+    // expects this entry to be present in the stateSchemaProvider.
     val defaultSchema = StateStoreColFamilySchema(StateStore.DEFAULT_COL_FAMILY_NAME,
       0, keyExpressions.toStructType, 0, DUMMY_VALUE_ROW_SCHEMA,
       Some(NoPrefixKeyStateEncoderSpec(keySchema)))

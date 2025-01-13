@@ -2209,7 +2209,7 @@ class TransformWithStateSuite extends StateStoreMetricsTest
       SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[RocksDBStateStoreProvider].getName,
       SQLConf.SHUFFLE_PARTITIONS.key ->
         TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString,
-      SQLConf.STREAMING_STATE_SCHEMA_FILES_THRESHOLD.key -> 1.toString) {
+      SQLConf.STREAMING_MAX_NUM_STATE_SCHEMA_FILES.key -> 1.toString) {
       withTempDir { dirPath =>
         val inputData = MemoryStream[(String, String)]
         // First run with both count and mostRecent states

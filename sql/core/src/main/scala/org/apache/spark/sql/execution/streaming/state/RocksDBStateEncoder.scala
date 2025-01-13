@@ -22,6 +22,8 @@ import java.lang.Double.{doubleToRawLongBits, longBitsToDouble}
 import java.lang.Float.{floatToRawIntBits, intBitsToFloat}
 import java.nio.{ByteBuffer, ByteOrder}
 
+import scala.collection.mutable
+
 import org.apache.avro.Schema
 import org.apache.avro.generic.{GenericData, GenericDatumReader, GenericDatumWriter, GenericRecord}
 import org.apache.avro.io.{DecoderFactory, EncoderFactory}
@@ -62,9 +64,19 @@ trait StateSchemaProvider extends Serializable {
 
 // Test implementation that can be dynamically updated
 class TestStateSchemaProvider extends StateSchemaProvider {
-  private var schemas = Map.empty[StateSchemaMetadataKey, StateSchemaMetadataValue]
+  private val schemas = mutable.Map.empty[StateSchemaMetadataKey, StateSchemaMetadataValue]
 
-  def addSchema(
+  /**
+   * Captures a new schema pair (key schema and value schema) for a column family.
+   * Each capture creates two entries - one for the key schema and one for the value schema.
+   *
+   * @param colFamilyName Name of the column family
+   * @param keySchema Spark SQL schema for the key
+   * @param valueSchema Spark SQL schema for the value
+   * @param keySchemaId Schema ID for the key, defaults to 0
+   * @param valueSchemaId Schema ID for the value, defaults to 0
+   */
+  def captureSchema(
       colFamilyName: String,
       keySchema: StructType,
       valueSchema: StructType,
@@ -84,9 +96,10 @@ class TestStateSchemaProvider extends StateSchemaProvider {
 
   override def getCurrentStateSchemaId(colFamilyName: String, isKey: Boolean): Short = {
     schemas.keys
-      .filter(key =>
+      .filter { key =>
         key.colFamilyName == colFamilyName &&
-          key.isKey == isKey)
+          key.isKey == isKey
+      }
       .map(_.schemaId).max
   }
 }
@@ -99,10 +112,10 @@ class InMemoryStateSchemaProvider(metadata: StateSchemaMetadata) extends StateSc
   override def getCurrentStateSchemaId(colFamilyName: String, isKey: Boolean): Short = {
     metadata.activeSchemas
       .keys
-      .filter(key =>
+      .filter { key =>
         key.colFamilyName == colFamilyName &&
           key.isKey == isKey
-      )
+      }
       .map(_.schemaId).max
   }
 }
@@ -144,7 +157,6 @@ case class StateSchemaBroadcast(
 /**
  * Contains schema evolution metadata for a stateful operator.
  *
- * @param currentSchemaId The schema version currently being used for writing new state
  * @param activeSchemas Map of all active schema versions, keyed by column family and schema ID.
  *                      This includes both the current schema and any previous schemas that
  *                      may still exist in the state store.
@@ -165,7 +177,7 @@ object StateSchemaMetadata {
     // Build up our map of schema metadata
     val activeSchemas = stateSchemaFiles.zipWithIndex.foldLeft(
       Map.empty[StateSchemaMetadataKey, StateSchemaMetadataValue]) {
-      case (schemas, (stateSchemaFile, schemaIndex)) =>
+      case (schemas, (stateSchemaFile, _)) =>
         val fsDataInputStream = fm.open(new Path(stateSchemaFile))
         val colFamilySchemas = StateSchemaCompatibilityChecker.readSchemaFile(fsDataInputStream)
 
@@ -202,10 +214,8 @@ object StateSchemaMetadata {
         schemas ++ schemaEntries.toMap
     }
 
-    // Create the final metadata and wrap it in a broadcast
-    StateSchemaMetadata(
-      activeSchemas = activeSchemas
-    )
+    // Create the final metadata
+    StateSchemaMetadata(activeSchemas = activeSchemas)
   }
 }
 
@@ -373,7 +383,7 @@ trait DataEncoder {
 
 abstract class RocksDBDataEncoder(
     keyStateEncoderSpec: KeyStateEncoderSpec,
-    valueSchema: StructType) extends DataEncoder with Logging {
+    valueSchema: StructType) extends DataEncoder {
 
   val keySchema = keyStateEncoderSpec.keySchema
   val reusedKeyRow = new UnsafeRow(keyStateEncoderSpec.keySchema.length)
@@ -480,9 +490,7 @@ abstract class RocksDBDataEncoder(
 
 class UnsafeRowDataEncoder(
     keyStateEncoderSpec: KeyStateEncoderSpec,
-    valueSchema: StructType,
-    stateSchemaProvider: Option[StateSchemaProvider],
-    columnFamilyInfo: Option[ColumnFamilyInfo]
+    valueSchema: StructType
 ) extends RocksDBDataEncoder(keyStateEncoderSpec, valueSchema) {
 
   override def supportsSchemaEvolution: Boolean = false
@@ -717,7 +725,9 @@ class AvroStateEncoder(
     columnFamilyInfo: Option[ColumnFamilyInfo]
 ) extends RocksDBDataEncoder(keyStateEncoderSpec, valueSchema) with Logging {
 
+  private val avroEncoder = createAvroEnc(keyStateEncoderSpec, valueSchema)
 
+  // current schema IDs instantiated lazily
   // schema information
   private lazy val currentKeySchemaId: Short = getStateSchemaProvider.getCurrentStateSchemaId(
     getColFamilyName,
@@ -729,7 +739,6 @@ class AvroStateEncoder(
     isKey = false
   )
 
-  private val avroEncoder = createAvroEnc(keyStateEncoderSpec, valueSchema)
   // Avro schema used by the avro encoders
   private lazy val keyAvroType: Schema = SchemaConverters.toAvroTypeWithDefaults(keySchema)
   private lazy val keyProj = UnsafeProjection.create(keySchema)
@@ -861,6 +870,8 @@ class AvroStateEncoder(
   }
 
   private def getStateSchemaProvider: StateSchemaProvider = {
+    assert(stateSchemaProvider.isDefined, "StateSchemaProvider should always be" +
+      " defined for the Avro encoder")
     stateSchemaProvider.get
   }
 
@@ -1248,7 +1259,7 @@ class AvroStateEncoder(
 
   override def decodeValue(bytes: Array[Byte]): UnsafeRow = {
     val schemaIdRow = decodeStateSchemaIdRow(bytes)
-    val writerSchema = stateSchemaProvider.get.getSchemaMetadataValue(
+    val writerSchema = getStateSchemaProvider.getSchemaMetadataValue(
       StateSchemaMetadataKey(
         getColFamilyName,
         schemaIdRow.schemaId,

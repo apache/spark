@@ -65,8 +65,8 @@ class StateScan(
     keyStateEncoderSpec: KeyStateEncoderSpec,
     stateVariableInfoOpt: Option[TransformWithStateVariableInfo],
     stateStoreColFamilySchemaOpt: Option[StateStoreColFamilySchema],
-    stateSchemaProviderOpt: Option[StateSchemaProvider]) extends Scan
-  with Batch {
+    stateSchemaProviderOpt: Option[StateSchemaProvider])
+  extends Scan with Batch {
 
   // A Hadoop Configuration can be about 10 KB, which is pretty big, so broadcast it
   private val hadoopConfBroadcast = session.sparkContext.broadcast(

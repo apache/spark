@@ -468,7 +468,12 @@ class OperatorStateMetadataV2FileManager(
     // find the batchId of the earliest schema file we need to keep
     val earliestBatchToKeep = latestMetadata match {
       case Some(OperatorStateMetadataV2(_, stateStoreInfo, _)) =>
+        // Currently, this purging logic only handles operators with a single state store
+        // instance, which is why we choose the head of this array.
         val ssInfo = stateStoreInfo.head
+        // The schema files in the OperatorStateMetadata are sorted
+        // by earliest to latest. The head of the schemaFileList is
+        // the schema file written for batch 0.
         val schemaFilePath = ssInfo.stateSchemaFilePaths.head
         new Path(schemaFilePath).getName.split("_").head.toLong
       case _ => 0
