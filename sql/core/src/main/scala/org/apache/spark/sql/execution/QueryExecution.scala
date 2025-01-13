@@ -92,12 +92,18 @@ class QueryExecution(
   }
 
   private val lazyAnalyzed = LazyTry {
-    val plan = executePhase(QueryPlanningTracker.ANALYSIS) {
-      // We can't clone `logical` here, which will reset the `_analyzed` flag.
-      sparkSession.sessionState.analyzer.executeAndCheck(logical, tracker)
+    try {
+      val plan = executePhase(QueryPlanningTracker.ANALYSIS) {
+        // We can't clone `logical` here, which will reset the `_analyzed` flag.
+        sparkSession.sessionState.analyzer.executeAndCheck(logical, tracker)
+      }
+      tracker.setAnalyzed(plan)
+      plan
+    } catch {
+      case NonFatal(e) =>
+        tracker.setAnalysisFailed(logical)
+        throw e
     }
-    tracker.setAnalyzed(plan)
-    plan
   }
 
   def analyzed: LogicalPlan = lazyAnalyzed.get

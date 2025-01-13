@@ -322,8 +322,22 @@ case class StateStoreCustomTimingMetric(name: String, desc: String) extends Stat
 }
 
 sealed trait KeyStateEncoderSpec {
+  def keySchema: StructType
   def jsonValue: JValue
   def json: String = compact(render(jsonValue))
+
+  /**
+   * Creates a RocksDBKeyStateEncoder for this specification.
+   *
+   * @param dataEncoder The encoder to handle the actual data encoding/decoding
+   * @param useColumnFamilies Whether to use RocksDB column families
+   * @param virtualColFamilyId Optional column family ID when column families are used
+   * @return A RocksDBKeyStateEncoder configured for this spec
+   */
+  def toEncoder(
+      dataEncoder: RocksDBDataEncoder,
+      useColumnFamilies: Boolean,
+      columnFamilyInfo: Option[ColumnFamilyInfo]): RocksDBKeyStateEncoder
 }
 
 object KeyStateEncoderSpec {
@@ -347,6 +361,14 @@ case class NoPrefixKeyStateEncoderSpec(keySchema: StructType) extends KeyStateEn
   override def jsonValue: JValue = {
     ("keyStateEncoderType" -> JString("NoPrefixKeyStateEncoderSpec"))
   }
+
+  override def toEncoder(
+      dataEncoder: RocksDBDataEncoder,
+      useColumnFamilies: Boolean,
+      columnFamilyInfo: Option[ColumnFamilyInfo]): RocksDBKeyStateEncoder = {
+    new NoPrefixKeyStateEncoder(
+      dataEncoder, keySchema, useColumnFamilies, columnFamilyInfo)
+  }
 }
 
 case class PrefixKeyScanStateEncoderSpec(
@@ -355,6 +377,15 @@ case class PrefixKeyScanStateEncoderSpec(
   if (numColsPrefixKey == 0 || numColsPrefixKey >= keySchema.length) {
     throw StateStoreErrors.incorrectNumOrderingColsForPrefixScan(numColsPrefixKey.toString)
   }
+
+  override def toEncoder(
+      dataEncoder: RocksDBDataEncoder,
+      useColumnFamilies: Boolean,
+      columnFamilyInfo: Option[ColumnFamilyInfo]): RocksDBKeyStateEncoder = {
+    new PrefixKeyScanStateEncoder(
+      dataEncoder, keySchema, numColsPrefixKey, useColumnFamilies, columnFamilyInfo)
+  }
+
 
   override def jsonValue: JValue = {
     ("keyStateEncoderType" -> JString("PrefixKeyScanStateEncoderSpec")) ~
@@ -368,6 +399,14 @@ case class RangeKeyScanStateEncoderSpec(
     orderingOrdinals: Seq[Int]) extends KeyStateEncoderSpec {
   if (orderingOrdinals.isEmpty || orderingOrdinals.length > keySchema.length) {
     throw StateStoreErrors.incorrectNumOrderingColsForRangeScan(orderingOrdinals.length.toString)
+  }
+
+  override def toEncoder(
+      dataEncoder: RocksDBDataEncoder,
+      useColumnFamilies: Boolean,
+      columnFamilyInfo: Option[ColumnFamilyInfo]): RocksDBKeyStateEncoder = {
+    new RangeKeyScanStateEncoder(
+      dataEncoder, keySchema, orderingOrdinals, useColumnFamilies, columnFamilyInfo)
   }
 
   override def jsonValue: JValue = {
@@ -758,6 +797,7 @@ object StateStore extends Logging {
       storeConf: StateStoreConf,
       hadoopConf: Configuration,
       useMultipleValuesPerKey: Boolean = false): ReadStateStore = {
+    hadoopConf.set(StreamExecution.RUN_ID_KEY, storeProviderId.queryRunId.toString)
     if (version < 0) {
       throw QueryExecutionErrors.unexpectedStateStoreVersion(version)
     }
@@ -778,6 +818,7 @@ object StateStore extends Logging {
       storeConf: StateStoreConf,
       hadoopConf: Configuration,
       useMultipleValuesPerKey: Boolean = false): StateStore = {
+    hadoopConf.set(StreamExecution.RUN_ID_KEY, storeProviderId.queryRunId.toString)
     if (version < 0) {
       throw QueryExecutionErrors.unexpectedStateStoreVersion(version)
     }
@@ -936,7 +977,8 @@ object StateStore extends Logging {
           } finally {
             val duration = System.currentTimeMillis() - startTime
             val logMsg =
-              log"Finished maintenance task for provider=${MDC(LogKeys.STATE_STORE_PROVIDER, id)}" +
+              log"Finished maintenance task for " +
+                log"provider=${MDC(LogKeys.STATE_STORE_PROVIDER_ID, id)}" +
                 log" in elapsed_time=${MDC(LogKeys.TIME_UNITS, duration)}\n"
             if (duration > 5000) {
               logInfo(logMsg)
@@ -966,9 +1008,9 @@ object StateStore extends Logging {
         .map(_.reportActiveInstance(storeProviderId, host, executorId, otherProviderIds))
         .getOrElse(Seq.empty[StateStoreProviderId])
       logInfo(log"Reported that the loaded instance " +
-        log"${MDC(LogKeys.STATE_STORE_PROVIDER, storeProviderId)} is active")
+        log"${MDC(LogKeys.STATE_STORE_PROVIDER_ID, storeProviderId)} is active")
       logDebug(log"The loaded instances are going to unload: " +
-        log"${MDC(LogKeys.STATE_STORE_PROVIDER, providerIdsToUnload.mkString(", "))}")
+        log"${MDC(LogKeys.STATE_STORE_PROVIDER_IDS, providerIdsToUnload)}")
       providerIdsToUnload
     } else {
       Seq.empty[StateStoreProviderId]
@@ -1000,7 +1042,7 @@ object StateStore extends Logging {
         _coordRef = StateStoreCoordinatorRef.forExecutor(env)
       }
       logInfo(log"Retrieved reference to StateStoreCoordinator: " +
-        log"${MDC(LogKeys.STATE_STORE_PROVIDER, _coordRef)}")
+        log"${MDC(LogKeys.STATE_STORE_COORDINATOR, _coordRef)}")
       Some(_coordRef)
     } else {
       _coordRef = null

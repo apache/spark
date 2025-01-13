@@ -22,7 +22,8 @@
           "literal": {
             "string": "UNICODE"
           }
-        }]
+        }],
+        "isInternal": false
       }
     }]
   }
