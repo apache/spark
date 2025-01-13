@@ -451,6 +451,8 @@ Aggregate Functions
     kurtosis
     last
     last_value
+    listagg
+    listagg_distinct
     max
     max_by
     mean
@@ -476,6 +478,8 @@ Aggregate Functions
     stddev
     stddev_pop
     stddev_samp
+    string_agg
+    string_agg_distinct
     sum
     sum_distinct
     try_avg

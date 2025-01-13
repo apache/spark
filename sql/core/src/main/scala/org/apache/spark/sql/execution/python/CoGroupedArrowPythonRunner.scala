@@ -51,7 +51,7 @@ class CoGroupedArrowPythonRunner(
     profiler: Option[String])
   extends BasePythonRunner[
     (Iterator[InternalRow], Iterator[InternalRow]), ColumnarBatch](
-    funcs.map(_._1), evalType, argOffsets, jobArtifactUUID)
+    funcs.map(_._1), evalType, argOffsets, jobArtifactUUID, pythonMetrics)
   with BasicPythonArrowOutput {
 
   override val pythonExec: String =

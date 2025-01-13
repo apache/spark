@@ -1326,7 +1326,7 @@ Aggregate [count(1) AS count(1)#xL]
 +- Filter unique1#x IN (list#x [])
    :  +- Project [unique1#x]
    :     +- Filter (unique2#x = 42)
-   :        +- Project [unique1#x, unique2#x, two#x, four#x, ten#x, twenty#x, hundred#x, thousand#x, twothousand#x, fivethous#x, tenthous#x, odd#x, even#x, stringu1#x, stringu2#x, string4#x, unique2#x, two#x, four#x, ten#x, twenty#x, hundred#x, thousand#x, twothousand#x, ... 7 more fields]
+   :        +- Project [unique1#x, unique2#x, two#x, four#x, ten#x, twenty#x, hundred#x, thousand#x, twothousand#x, fivethous#x, tenthous#x, odd#x, even#x, stringu1#x, stringu2#x, string4#x, unique2#x, two#x, four#x, ten#x, twenty#x, hundred#x, thousand#x, twothousand#x, fivethous#x, ... 6 more fields]
    :           +- Join Inner, (unique1#x = unique1#x)
    :              :- SubqueryAlias b
    :              :  +- SubqueryAlias spark_catalog.default.tenk1

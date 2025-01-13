@@ -418,6 +418,30 @@ class DataFrameSubquerySuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("lateral join with star expansion") {
+    withView("t1", "t2") {
+      val t1 = table1()
+      val t2 = table2()
+
+      checkAnswer(
+        t1.lateralJoin(spark.range(1).select().select($"*")),
+        sql("SELECT * FROM t1, LATERAL (SELECT *)")
+      )
+      checkAnswer(
+        t1.lateralJoin(t2.select($"*")),
+        sql("SELECT * FROM t1, LATERAL (SELECT * FROM t2)")
+      )
+      checkAnswer(
+        t1.lateralJoin(t2.select($"t1.*".outer(), $"t2.*")),
+        sql("SELECT * FROM t1, LATERAL (SELECT t1.*, t2.* FROM t2)")
+      )
+      checkAnswer(
+        t1.lateralJoin(t2.alias("t1").select($"t1.*")),
+        sql("SELECT * FROM t1, LATERAL (SELECT t1.* FROM t2 AS t1)")
+      )
+    }
+  }
+
   test("lateral join with different join types") {
     withView("t1") {
       val t1 = table1()
@@ -440,6 +464,18 @@ class DataFrameSubquerySuite extends QueryTest with SharedSparkSession {
           spark.range(1).select(($"c1".outer() + $"c2".outer()).as("c3")),
           "cross"),
         sql("SELECT * FROM t1 CROSS JOIN LATERAL (SELECT c1 + c2 AS c3)")
+      )
+    }
+  }
+
+  test("lateral join with subquery alias") {
+    withView("t1") {
+      val t1 = table1()
+
+      checkAnswer(
+        t1.lateralJoin(spark.range(1).select($"c1".outer(), $"c2".outer()).toDF("a", "b").as("s"))
+          .select("a", "b"),
+        sql("SELECT a, b FROM t1, LATERAL (SELECT c1, c2) s(a, b)")
       )
     }
   }
@@ -516,8 +552,8 @@ class DataFrameSubquerySuite extends QueryTest with SharedSparkSession {
 
       checkAnswer(
         t1.lateralJoin(
-          t2.where($"t1.c1".outer() === $"t2.c1").select($"c2"), "left"
-        ).join(t1.as("t3"), $"t2.c2" === $"t3.c2", "left"),
+          t2.where($"t1.c1".outer() === $"t2.c1").select($"c2").as("s"), "left"
+        ).join(t1.as("t3"), $"s.c2" === $"t3.c2", "left"),
         sql(
           """
             |SELECT * FROM t1
@@ -662,6 +698,104 @@ class DataFrameSubquerySuite extends QueryTest with SharedSparkSession {
         ),
         sql("SELECT * FROM t3 LEFT JOIN LATERAL EXPLODE(c2) t(c3) ON t3.c1 = c3")
       )
+    }
+  }
+
+  test("subquery with generator / table-valued functions") {
+    withView("t1") {
+      val t1 = table1()
+
+      checkAnswer(
+        spark.range(1).select(explode(t1.select(collect_list("c2")).scalar())),
+        sql("SELECT EXPLODE((SELECT COLLECT_LIST(c2) FROM t1))")
+      )
+      checkAnswer(
+        spark.tvf.explode(t1.select(collect_list("c2")).scalar()),
+        sql("SELECT * FROM EXPLODE((SELECT COLLECT_LIST(c2) FROM t1))")
+      )
+    }
+  }
+
+  test("subquery in join condition") {
+    withView("t1", "t2") {
+      val t1 = table1()
+      val t2 = table2()
+
+      checkAnswer(
+        t1.join(t2, $"t1.c1" === t1.select(max("c1")).scalar()),
+        sql("SELECT * FROM t1 JOIN t2 ON t1.c1 = (SELECT MAX(c1) FROM t1)")
+      )
+    }
+  }
+
+  test("subquery in unpivot") {
+    withView("t1", "t2") {
+      val t1 = table1()
+      val t2 = table2()
+
+      checkError(
+        intercept[AnalysisException] {
+          t1.unpivot(Array(t2.exists()), "c1", "c2").collect()
+        },
+        "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.UNSUPPORTED_IN_EXISTS_SUBQUERY",
+        parameters = Map("treeNode" -> "(?s)'Unpivot.*"),
+        matchPVals = true,
+        queryContext = Array(ExpectedContext(
+          fragment = "exists",
+          callSitePattern = getCurrentClassCallSitePattern))
+      )
+      checkError(
+        intercept[AnalysisException] {
+          t1.unpivot(Array($"c1"), Array(t2.exists()), "c1", "c2").collect()
+        },
+        "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.UNSUPPORTED_IN_EXISTS_SUBQUERY",
+        parameters = Map("treeNode" -> "(?s)Expand.*"),
+        matchPVals = true,
+        queryContext = Array(ExpectedContext(
+          fragment = "exists",
+          callSitePattern = getCurrentClassCallSitePattern))
+      )
+    }
+  }
+
+  test("subquery in transpose") {
+    withView("t1") {
+      val t1 = table1()
+
+      checkError(
+        intercept[AnalysisException] {
+          t1.transpose(t1.select(max("c1")).scalar()).collect()
+        },
+        "TRANSPOSE_INVALID_INDEX_COLUMN",
+        parameters = Map("reason" -> "Index column must be an atomic attribute")
+      )
+    }
+  }
+
+  test("subquery in withColumns") {
+    withView("t1") {
+      val t1 = table1()
+
+      checkAnswer(
+        t1.withColumn("scalar", spark.range(1).select($"c1".outer() + $"c2".outer()).scalar()),
+        t1.withColumn("scalar", $"c1" + $"c2")
+      )
+    }
+  }
+
+  test("subquery in drop") {
+    withView("t1") {
+      val t1 = table1()
+
+      checkAnswer(t1.drop(spark.range(1).select(lit("c1")).scalar()), t1)
+    }
+  }
+
+  test("subquery in repartition") {
+    withView("t1") {
+      val t1 = table1()
+
+      checkAnswer(t1.repartition(spark.range(1).select(lit(1)).scalar()), t1)
     }
   }
 }

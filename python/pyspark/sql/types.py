@@ -1555,6 +1555,18 @@ class StructType(DataType):
             field._build_formatted_string(prefix, stringConcat, depth)
         return stringConcat.toString()
 
+    def toDDL(self) -> str:
+        from pyspark.sql.utils import is_remote
+
+        if is_remote():
+            from pyspark.sql.connect.session import SparkSession
+
+            session = SparkSession.getActiveSession()
+            assert session is not None
+            return session._to_ddl(self)
+        else:
+            return get_active_spark_context()._to_ddl(self)
+
 
 class VariantType(AtomicType):
     """
@@ -1888,43 +1900,9 @@ def _parse_datatype_string(s: str) -> DataType:
     if is_remote():
         from pyspark.sql.connect.session import SparkSession
 
-        return cast(
-            DataType,
-            SparkSession.active()._client._analyze(method="ddl_parse", ddl_string=s).parsed,
-        )
-
+        return SparkSession.active()._parse_ddl(s)
     else:
-        from py4j.java_gateway import JVMView
-
-        sc = get_active_spark_context()
-
-        def from_ddl_schema(type_str: str) -> DataType:
-            return _parse_datatype_json_string(
-                cast(JVMView, sc._jvm)
-                .org.apache.spark.sql.types.StructType.fromDDL(type_str)
-                .json()
-            )
-
-        def from_ddl_datatype(type_str: str) -> DataType:
-            return _parse_datatype_json_string(
-                cast(JVMView, sc._jvm)
-                .org.apache.spark.sql.api.python.PythonSQLUtils.parseDataType(type_str)
-                .json()
-            )
-
-        try:
-            # DDL format, "fieldname datatype, fieldname datatype".
-            return from_ddl_schema(s)
-        except Exception as e:
-            try:
-                # For backwards compatibility, "integer", "struct<fieldname: datatype>" and etc.
-                return from_ddl_datatype(s)
-            except BaseException:
-                try:
-                    # For backwards compatibility, "fieldname: datatype, fieldname: datatype" case.
-                    return from_ddl_datatype("struct<%s>" % s.strip())
-                except BaseException:
-                    raise e
+        return get_active_spark_context()._parse_ddl(s)
 
 
 def _parse_datatype_json_string(json_string: str) -> DataType:

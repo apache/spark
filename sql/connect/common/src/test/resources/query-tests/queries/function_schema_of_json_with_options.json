@@ -29,9 +29,11 @@
               "literal": {
                 "string": "true"
               }
-            }]
+            }],
+            "isInternal": false
           }
-        }]
+        }],
+        "isInternal": false
       }
     }]
   }

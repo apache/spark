@@ -853,7 +853,7 @@ will include a list of all tokens obtained, and their expiry details
 To start the Spark Shuffle Service on each `NodeManager` in your YARN cluster, follow these
 instructions:
 
-1. Build Spark with the [YARN profile](building-spark.html). Skip this step if you are using a
+1. Build Spark with the [YARN profile](building-spark.html#specifying-the-hadoop-version-and-enabling-yarn). Skip this step if you are using a
 pre-packaged distribution.
 1. Locate the `spark-<version>-yarn-shuffle.jar`. This should be under
 `$SPARK_HOME/common/network-yarn/target/scala-<version>` if you are building Spark yourself, and under
