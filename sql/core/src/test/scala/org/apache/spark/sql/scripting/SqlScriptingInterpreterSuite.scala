@@ -49,7 +49,8 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
     // Initialize context so scopes can be entered correctly.
     val context = new SqlScriptingExecutionContext()
     val executionPlan = interpreter.buildExecutionPlan(compoundBody, args, context)
-    context.frames.append(new SqlScriptingExecutionFrame(executionPlan.getTreeIterator))
+    context.frames.append(new SqlScriptingExecutionFrame(
+      executionPlan.getTreeIterator, SqlScriptingFrameType.SQL_SCRIPT))
     executionPlan.enterScope()
 
     executionPlan.getTreeIterator.flatMap {

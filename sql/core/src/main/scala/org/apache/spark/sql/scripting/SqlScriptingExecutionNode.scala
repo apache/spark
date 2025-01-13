@@ -194,7 +194,7 @@ class CompoundBodyExec(
     label: Option[String] = None,
     isScope: Boolean,
     context: SqlScriptingExecutionContext,
-    conditionHandlerMap: HashMap[String, ErrorHandlerExec] = HashMap())
+    conditionHandlerMap: HashMap[String, ErrorHandlerExec] = HashMap.empty)
   extends NonLeafStatementExec {
 
   private object ScopeStatus extends Enumeration {
@@ -217,7 +217,7 @@ class CompoundBodyExec(
     // This check makes this operation idempotent.
     if (isScope && scopeStatus == ScopeStatus.NOT_ENTERED) {
       scopeStatus = ScopeStatus.INSIDE
-      context.enterScope(label.get)
+      context.enterScope(label.get, conditionHandlerMap)
     }
   }
 

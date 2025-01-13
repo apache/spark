@@ -29,11 +29,13 @@ class SqlScriptingExecutionContext {
   // List of frames that are currently active.
   val frames: ListBuffer[SqlScriptingExecutionFrame] = ListBuffer.empty
 
-  def enterScope(label: String): Unit = {
+  def enterScope(
+      label: String,
+      conditionHandlerMap: HashMap[String, ErrorHandlerExec]): Unit = {
     if (frames.isEmpty) {
       throw SparkException.internalError("Cannot enter scope: no frames.")
     }
-    frames.last.enterScope(label)
+    frames.last.enterScope(label, conditionHandlerMap)
   }
 
   def exitScope(label: String): Unit = {
@@ -83,8 +85,10 @@ class SqlScriptingExecutionFrame(
     executionPlan.next()
   }
 
-  def enterScope(label: String): Unit = {
-    scopes.append(new SqlScriptingExecutionScope(label))
+  def enterScope(
+      label: String,
+      conditionHandlerMap: HashMap[String, ErrorHandlerExec]): Unit = {
+    scopes.append(new SqlScriptingExecutionScope(label, conditionHandlerMap))
   }
 
   def exitScope(label: String): Unit = {

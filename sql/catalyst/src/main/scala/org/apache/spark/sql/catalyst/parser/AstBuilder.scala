@@ -192,11 +192,11 @@ class AstBuilder extends DataTypeAstBuilder
   private def visitDeclareConditionStatementImpl(
       ctx: DeclareConditionStatementContext): ErrorCondition = {
     val conditionName = ctx.multipartIdentifier().getText
-    val conditionValue = Option(ctx.sqlStateValue())
+    val sqlStateValue = Option(ctx.sqlStateValue())
       .map(_.getText.replace("'", "")).getOrElse("45000")
 
-    assertSqlState(conditionValue)
-    ErrorCondition(conditionName, conditionValue)
+    assertSqlState(sqlStateValue)
+    ErrorCondition(conditionName, sqlStateValue)
   }
 
   private def visitDeclareHandlerStatementImpl(
