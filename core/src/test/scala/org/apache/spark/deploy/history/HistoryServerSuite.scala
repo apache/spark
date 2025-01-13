@@ -794,11 +794,6 @@ object HistoryServerSuite {
  * A filter used for auth tests; sets the request's user to the value of the "HTTP_USER" header.
  */
 class FakeAuthFilter extends Filter {
-
-  override def destroy(): Unit = { }
-
-  override def init(config: FilterConfig): Unit = { }
-
   override def doFilter(req: ServletRequest, res: ServletResponse, chain: FilterChain): Unit = {
     val hreq = req.asInstanceOf[HttpServletRequest]
     val wrapped = new HttpServletRequestWrapper(hreq) {

@@ -62,7 +62,7 @@ class BarrierTaskContext private[spark] (
       log"for ${MDC(TOTAL_TIME, System.currentTimeMillis() - st)} ms,")
     logInfo(log"Task ${MDC(TASK_ATTEMPT_ID, taskAttemptId())}" +
       log" from Stage ${MDC(STAGE_ID, stageId())}" +
-      log"(Attempt ${MDC(STAGE_ATTEMPT, stageAttemptNumber())}) " +
+      log"(Attempt ${MDC(STAGE_ATTEMPT_ID, stageAttemptNumber())}) " +
       msg + waitMsg +
       log" current barrier epoch is ${MDC(BARRIER_EPOCH, barrierEpoch)}.")
   }

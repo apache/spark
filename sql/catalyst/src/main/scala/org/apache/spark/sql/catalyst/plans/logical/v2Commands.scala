@@ -21,8 +21,8 @@ import org.apache.spark.{SparkIllegalArgumentException, SparkUnsupportedOperatio
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, AssignmentUtils, EliminateSubqueryAliases, FieldName, NamedRelation, PartitionSpec, ResolvedIdentifier, ResolvedProcedure, TypeCheckResult, UnresolvedException, UnresolvedProcedure, ViewSchemaMode}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
+import org.apache.spark.sql.catalyst.catalog.{FunctionResource, RoutineLanguage}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
-import org.apache.spark.sql.catalyst.catalog.FunctionResource
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSet, Expression, MetadataAttribute, NamedExpression, UnaryExpression, Unevaluable, V2ExpressionUtils}
 import org.apache.spark.sql.catalyst.plans.DescribeCommandSchema
 import org.apache.spark.sql.catalyst.trees.BinaryLike
@@ -692,6 +692,19 @@ object DescribeRelation {
 }
 
 /**
+ * The logical plan of the DESCRIBE relation_name AS JSON command.
+ */
+case class DescribeRelationJson(
+    relation: LogicalPlan,
+    partitionSpec: TablePartitionSpec,
+    isExtended: Boolean) extends UnaryCommand {
+  override val output: Seq[Attribute] = DescribeCommandSchema.describeJsonTableAttributes()
+  override def child: LogicalPlan = relation
+  override protected def withNewChildInternal(newChild: LogicalPlan): DescribeRelationJson =
+    copy(relation = newChild)
+}
+
+/**
  * The logical plan of the DESCRIBE relation_name col_name command.
  */
 case class DescribeColumn(
@@ -1073,6 +1086,26 @@ case class CreateFunction(
 }
 
 /**
+ * The logical plan of the CREATE FUNCTION command for SQL Functions.
+ */
+case class CreateUserDefinedFunction(
+    child: LogicalPlan,
+    inputParamText: Option[String],
+    returnTypeText: String,
+    exprText: Option[String],
+    queryText: Option[String],
+    comment: Option[String],
+    isDeterministic: Option[Boolean],
+    containsSQL: Option[Boolean],
+    language: RoutineLanguage,
+    isTableFunc: Boolean,
+    ignoreIfExists: Boolean,
+    replace: Boolean) extends UnaryCommand {
+  override protected def withNewChildInternal(newChild: LogicalPlan): CreateUserDefinedFunction =
+    copy(child = newChild)
+}
+
+/**
  * The logical plan of the DROP FUNCTION command.
  */
 case class DropFunction(
@@ -1338,6 +1371,7 @@ case class CreateView(
     child: LogicalPlan,
     userSpecifiedColumns: Seq[(String, Option[String])],
     comment: Option[String],
+    collation: Option[String],
     properties: Map[String, String],
     originalText: Option[String],
     query: LogicalPlan,
@@ -1486,6 +1520,7 @@ trait TableSpecBase {
   def provider: Option[String]
   def location: Option[String]
   def comment: Option[String]
+  def collation: Option[String]
   def serde: Option[SerdeInfo]
   def external: Boolean
 }
@@ -1496,6 +1531,7 @@ case class UnresolvedTableSpec(
     optionExpression: OptionList,
     location: Option[String],
     comment: Option[String],
+    collation: Option[String],
     serde: Option[SerdeInfo],
     external: Boolean) extends UnaryExpression with Unevaluable with TableSpecBase {
 
@@ -1541,10 +1577,11 @@ case class TableSpec(
     options: Map[String, String],
     location: Option[String],
     comment: Option[String],
+    collation: Option[String],
     serde: Option[SerdeInfo],
     external: Boolean) extends TableSpecBase {
   def withNewLocation(newLocation: Option[String]): TableSpec = {
-    TableSpec(properties, provider, options, newLocation, comment, serde, external)
+    TableSpec(properties, provider, options, newLocation, comment, collation, serde, external)
   }
 }
 

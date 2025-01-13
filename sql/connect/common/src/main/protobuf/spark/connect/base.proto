@@ -94,6 +94,7 @@ message AnalyzePlanRequest {
     Persist persist = 14;
     Unpersist unpersist = 15;
     GetStorageLevel get_storage_level = 16;
+    JsonToDDL json_to_ddl = 18;
   }
 
   message Schema {
@@ -199,6 +200,11 @@ message AnalyzePlanRequest {
     // (Required) The logical plan to get the storage level.
     Relation relation = 1;
   }
+
+  message JsonToDDL {
+    // (Required) The JSON formatted string to be converted to DDL.
+    string json_string = 1;
+  }
 }
 
 // Response to performing analysis of the query. Contains relevant metadata to be able to
@@ -224,6 +230,7 @@ message AnalyzePlanResponse {
     Persist persist = 12;
     Unpersist unpersist = 13;
     GetStorageLevel get_storage_level = 14;
+    JsonToDDL json_to_ddl = 16;
   }
 
   message Schema {
@@ -274,6 +281,10 @@ message AnalyzePlanResponse {
   message GetStorageLevel {
     // (Required) The StorageLevel as a result of get_storage_level request.
     StorageLevel storage_level = 1;
+  }
+
+  message JsonToDDL {
+    string ddl_string = 1;
   }
 }
 
@@ -514,6 +525,9 @@ message ConfigRequest {
   message Set {
     // (Required) The config key-value pairs to set.
     repeated KeyValue pairs = 1;
+
+    // (Optional) Whether to ignore failures.
+    optional bool silent = 2;
   }
 
   message Get {
@@ -913,6 +927,20 @@ message ReleaseSessionRequest {
   // can be used for language or version specific information and is only intended for
   // logging purposes and will not be interpreted by the server.
   optional string client_type = 3;
+
+  // Signals the server to allow the client to reconnect to the session after it is released.
+  //
+  // By default, the server tombstones the session upon release, preventing reconnections and
+  // fully cleaning the session state.
+  //
+  // If this flag is set to true, the server may permit the client to reconnect to the session
+  // post-release, even if the session state has been cleaned. This can result in missing state,
+  // such as Temporary Views, Temporary UDFs, or the Current Catalog, in the reconnected session.
+  //
+  // Use this option sparingly and only when the client fully understands the implications of
+  // reconnecting to a released session. The client must ensure that any queries executed do not
+  // rely on the session state prior to its release.
+  bool allow_reconnect = 4;
 }
 
 // Next ID: 3

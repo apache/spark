@@ -15,7 +15,8 @@
       "window": {
         "windowFunction": {
           "unresolvedFunction": {
-            "functionName": "cume_dist"
+            "functionName": "cume_dist",
+            "isInternal": false
           }
         },
         "partitionSpec": [{

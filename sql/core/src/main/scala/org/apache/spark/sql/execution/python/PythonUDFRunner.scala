@@ -36,7 +36,7 @@ abstract class BasePythonUDFRunner(
     pythonMetrics: Map[String, SQLMetric],
     jobArtifactUUID: Option[String])
   extends BasePythonRunner[Array[Byte], Array[Byte]](
-    funcs.map(_._1), evalType, argOffsets, jobArtifactUUID) {
+    funcs.map(_._1), evalType, argOffsets, jobArtifactUUID, pythonMetrics) {
 
   override val pythonExec: String =
     SQLConf.get.pysparkWorkerPythonExecutable.getOrElse(
@@ -45,6 +45,8 @@ abstract class BasePythonUDFRunner(
   override val simplifiedTraceback: Boolean = SQLConf.get.pysparkSimplifiedTraceback
 
   override val faultHandlerEnabled: Boolean = SQLConf.get.pythonUDFWorkerFaulthandlerEnabled
+
+  override val bufferSize: Int = SQLConf.get.getConf(SQLConf.PYTHON_UDF_BUFFER_SIZE)
 
   protected def writeUDF(dataOut: DataOutputStream): Unit
 

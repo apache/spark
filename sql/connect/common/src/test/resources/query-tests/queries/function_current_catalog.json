@@ -13,7 +13,8 @@
     },
     "expressions": [{
       "unresolvedFunction": {
-        "functionName": "current_catalog"
+        "functionName": "current_catalog",
+        "isInternal": false
       }
     }]
   }

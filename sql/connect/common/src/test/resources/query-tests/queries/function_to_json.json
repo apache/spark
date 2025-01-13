@@ -29,9 +29,11 @@
               "literal": {
                 "string": "dd/MM/yyyy"
               }
-            }]
+            }],
+            "isInternal": false
           }
-        }]
+        }],
+        "isInternal": false
       }
     }]
   }

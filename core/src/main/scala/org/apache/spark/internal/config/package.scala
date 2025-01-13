@@ -1023,8 +1023,7 @@ package object config {
   private[spark] val MAX_EXECUTOR_FAILURES =
     ConfigBuilder("spark.executor.maxNumFailures")
       .doc("The maximum number of executor failures before failing the application. " +
-        "This configuration only takes effect on YARN, or Kubernetes when " +
-        "`spark.kubernetes.allocation.pods.allocator` is set to 'direct'.")
+        "This configuration only takes effect on YARN and Kubernetes.")
       .version("3.5.0")
       .intConf
       .createOptional
@@ -1032,8 +1031,8 @@ package object config {
   private[spark] val EXECUTOR_ATTEMPT_FAILURE_VALIDITY_INTERVAL_MS =
     ConfigBuilder("spark.executor.failuresValidityInterval")
       .doc("Interval after which executor failures will be considered independent and not " +
-        "accumulate towards the attempt count. This configuration only takes effect on YARN, " +
-        "or Kubernetes when `spark.kubernetes.allocation.pods.allocator` is set to 'direct'.")
+        "accumulate towards the attempt count. This configuration only takes effect on YARN " +
+        "and Kubernetes.")
       .version("3.5.0")
       .timeConf(TimeUnit.MILLISECONDS)
       .createOptional
