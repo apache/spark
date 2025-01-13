@@ -316,7 +316,7 @@ class DataFrameSuite extends QueryTest
       exception = intercept[AnalysisException](df.repartition(5, col("v"))),
       condition = "UNSUPPORTED_FEATURE.PARTITION_BY_VARIANT",
       parameters = Map(
-        "expr" -> "v",
+        "expr" -> "\"v\"",
         "dataType" -> "\"VARIANT\"")
     )
     // nested variant column
@@ -324,7 +324,7 @@ class DataFrameSuite extends QueryTest
       exception = intercept[AnalysisException](df.repartition(5, col("s"))),
       condition = "UNSUPPORTED_FEATURE.PARTITION_BY_VARIANT",
       parameters = Map(
-        "expr" -> "s",
+        "expr" -> "\"s\"",
         "dataType" -> "\"STRUCT<v: VARIANT NOT NULL>\"")
     )
     // variant producing expression
@@ -333,7 +333,7 @@ class DataFrameSuite extends QueryTest
         intercept[AnalysisException](df.repartition(5, parse_json(col("id").cast("string")))),
       condition = "UNSUPPORTED_FEATURE.PARTITION_BY_VARIANT",
       parameters = Map(
-        "expr" -> "parse_json(CAST(id AS STRING))",
+        "expr" -> "\"parse_json(CAST(id AS STRING))\"",
         "dataType" -> "\"VARIANT\"")
     )
     // Partitioning by non-variant column works
@@ -350,7 +350,7 @@ class DataFrameSuite extends QueryTest
         exception = intercept[AnalysisException](sql("SELECT * FROM tv DISTRIBUTE BY v")),
         condition = "UNSUPPORTED_FEATURE.PARTITION_BY_VARIANT",
         parameters = Map(
-          "expr" -> "tv.v",
+          "expr" -> "\"v\"",
           "dataType" -> "\"VARIANT\""),
         context = ExpectedContext(
           fragment = "DISTRIBUTE BY v",
@@ -361,7 +361,7 @@ class DataFrameSuite extends QueryTest
         exception = intercept[AnalysisException](sql("SELECT * FROM tv DISTRIBUTE BY s")),
         condition = "UNSUPPORTED_FEATURE.PARTITION_BY_VARIANT",
         parameters = Map(
-          "expr" -> "tv.s",
+          "expr" -> "\"s\"",
           "dataType" -> "\"STRUCT<v: VARIANT NOT NULL>\""),
         context = ExpectedContext(
           fragment = "DISTRIBUTE BY s",
@@ -426,6 +426,35 @@ class DataFrameSuite extends QueryTest
     intercept[IllegalArgumentException] {
       data1d.toDF("val").repartitionByRange(data1d.size, Seq.empty: _*)
     }
+  }
+
+  test("repartition by MapType") {
+    Seq("int", "long", "float", "double", "decimal(10, 2)", "string", "varchar(6)").foreach { dt =>
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+        val df = spark.range(20)
+          .withColumn("c1",
+            when(col("id") % 3 === 1, typedLit(Map(1 -> 1)))
+              .when(col("id") % 3 === 2, typedLit(Map(1 -> 1, 2 -> 2)))
+              .otherwise(typedLit(Map(2 -> 2, 1 -> 1))).cast(s"map<$dt, $dt>"))
+          .withColumn("c2", typedLit(Map(1 -> null)).cast(s"map<$dt, $dt>"))
+          .withColumn("c3", lit(null).cast(s"map<$dt, $dt>"))
+
+        assertPartitionNumber(df.repartition(4, col("c1")), 2)
+        assertPartitionNumber(df.repartition(4, col("c2")), 1)
+        assertPartitionNumber(df.repartition(4, col("c3")), 1)
+        assertPartitionNumber(df.repartition(4, col("c1"), col("c2")), 2)
+        assertPartitionNumber(df.repartition(4, col("c1"), col("c3")), 2)
+        assertPartitionNumber(df.repartition(4, col("c1"), col("c2"), col("c3")), 2)
+        assertPartitionNumber(df.repartition(4, col("c2"), col("c3")), 2)
+      }
+    }
+  }
+
+  private def assertPartitionNumber(df: => DataFrame, max: Int): Unit = {
+    val dfGrouped = df.groupBy(spark_partition_id()).count()
+    // Result number of partition can be lower or equal to max,
+    // but no more than that.
+    assert(dfGrouped.count() <= max, dfGrouped.queryExecution.simpleString)
   }
 
   test("coalesce") {

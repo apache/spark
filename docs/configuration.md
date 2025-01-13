@@ -2850,7 +2850,7 @@ Apart from these, the following properties are also available, and may be useful
     If set to "true", prevent Spark from scheduling tasks on executors that have been excluded
     due to too many task failures. The algorithm used to exclude executors and nodes can be further
     controlled by the other "spark.excludeOnFailure" configuration options.
-    This config will be overriden by "spark.excludeOnFailure.application.enabled" and 
+    This config will be overridden by "spark.excludeOnFailure.application.enabled" and
     "spark.excludeOnFailure.taskAndStage.enabled" to specify exclusion enablement on individual
     levels.
   </td>
