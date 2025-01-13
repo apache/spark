@@ -625,8 +625,11 @@ jobs:
     - name: Upload coverage to Codecov
       if: fromJSON(inputs.envs).PYSPARK_CODECOV == 'true'
       uses: codecov/codecov-action@v5
+      permissions:
+        id-token: write
       with:
         files: ./python/coverage.xml
+        use_oidc: true
         token: ${{ secrets.CODECOV_TOKEN }}
         flags: unittests
         name: PySpark
