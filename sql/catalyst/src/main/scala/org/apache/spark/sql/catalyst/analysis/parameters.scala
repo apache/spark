@@ -162,10 +162,15 @@ object BindParameters extends Rule[LogicalPlan] with QueryErrorsBase {
     }
   }
 
-  private def bind(p: LogicalPlan)(f: PartialFunction[Expression, Expression]): LogicalPlan = {
-    p.resolveExpressionsWithPruning(_.containsPattern(PARAMETER)) (f orElse {
-      case sub: SubqueryExpression => sub.withNewPlan(bind(sub.plan)(f))
-    })
+  private def bind(p0: LogicalPlan)(f: PartialFunction[Expression, Expression]): LogicalPlan = {
+    var stop = false
+    p0.resolveOperatorsDownWithPruning(_.containsPattern(PARAMETER) && !stop) {
+      case p1 =>
+        stop = p1.isInstanceOf[ParameterizedQuery]
+        p1.transformExpressionsWithPruning(_.containsPattern(PARAMETER)) (f orElse {
+          case sub: SubqueryExpression => sub.withNewPlan(bind(sub.plan)(f))
+        })
+    }
   }
 
   override def apply(plan: LogicalPlan): LogicalPlan = {

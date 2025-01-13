@@ -63,6 +63,7 @@ class SubstituteExecuteImmediate(val catalogManager: CatalogManager)
         getVariableReference(u, u.nameParts)
       case a: Alias =>
         Alias(resolveVariable(a.child), a.name)()
+      case p: Parameter => p
       case other =>
         throw QueryCompilationErrors.unsupportedParameterExpression(other)
     }
