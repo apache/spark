@@ -118,7 +118,7 @@ class CommitLogSuite extends SparkFunSuite with SharedSparkSession {
         new CommitLog(spark, testCommitLogV1FilePath.toString).deserialize(inputStream)
       }
 
-      assert (e.getMessage.contains("the only supported log version"))
+      assert (e.getMessage.contains("only supported log version"))
     }
   }
 

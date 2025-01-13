@@ -2633,7 +2633,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
 
   def invalidMetadataVersion(text: String): Throwable = {
     new SparkIllegalStateException(
-      errorClass = "INVALID_METADATA_VERSION.INVALID_VERSION_TEXT",
+      errorClass = "INVALID_METADATA_VERSION",
       messageParameters = Map("text" -> text),
       cause = null
     )
