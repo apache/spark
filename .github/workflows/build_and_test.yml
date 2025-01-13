@@ -603,19 +603,6 @@ jobs:
       uses: conda-incubator/setup-miniconda@v3
       with:
         miniforge-version: latest
-    - name: Bash
-      shell: bash -el {0}
-      run: |
-        if [[ "$MODULES_TO_TEST" == *"pyspark-errors"* ]]; then
-          echo "hash conda"
-          hash conda
-          echo "conda info"
-          conda info
-          echo "conda list"
-          conda list
-          echo "env"
-          env
-        fi
     # Run the tests.
     - name: Run tests
       env: ${{ fromJSON(inputs.envs) }}
