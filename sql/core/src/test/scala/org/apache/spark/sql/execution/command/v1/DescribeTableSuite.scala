@@ -208,79 +208,6 @@ trait DescribeTableSuiteBase extends command.DescribeTableSuiteBase
           Row("histogram", "NULL")))
     }
   }
-}
-
-/**
- * The class contains tests for the `DESCRIBE TABLE` command to check V1 In-Memory
- * table catalog.
- */
-class DescribeTableSuite extends DescribeTableSuiteBase with CommandSuiteBase {
-  override def commandVersion: String = super[DescribeTableSuiteBase].commandVersion
-
-  test("DESCRIBE TABLE EXTENDED of a partitioned table") {
-    withNamespaceAndTable("ns", "table") { tbl =>
-      spark.sql(s"CREATE TABLE $tbl (id bigint, data string) $defaultUsing" +
-        " PARTITIONED BY (id)" +
-        " TBLPROPERTIES ('bar'='baz')" +
-        " COMMENT 'this is a test table'" +
-        " DEFAULT COLLATION unicode" +
-        " LOCATION 'file:/tmp/testcat/table_name'")
-      val descriptionDf = spark.sql(s"DESCRIBE TABLE EXTENDED $tbl")
-      assert(descriptionDf.schema.map(field => (field.name, field.dataType)) === Seq(
-        ("col_name", StringType),
-        ("data_type", StringType),
-        ("comment", StringType)))
-      QueryTest.checkAnswer(
-        descriptionDf.filter("!(col_name in ('Created Time', 'Created By'))"),
-        Seq(
-          Row("data", "string", null),
-          Row("id", "bigint", null),
-          Row("# Partition Information", "", ""),
-          Row("# col_name", "data_type", "comment"),
-          Row("id", "bigint", null),
-          Row("", "", ""),
-          Row("# Detailed Table Information", "", ""),
-          Row("Catalog", SESSION_CATALOG_NAME, ""),
-          Row("Database", "ns", ""),
-          Row("Table", "table", ""),
-          Row("Last Access", "UNKNOWN", ""),
-          Row("Type", "EXTERNAL", ""),
-          Row("Provider", getProvider(), ""),
-          Row("Comment", "this is a test table", ""),
-          Row("Collation", "UNICODE", ""),
-          Row("Table Properties", "[bar=baz]", ""),
-          Row("Location", "file:/tmp/testcat/table_name", ""),
-          Row("Partition Provider", "Catalog", "")))
-    }
-  }
-
-  test("DESCRIBE TABLE EXTENDED of a table with a default column value") {
-    withTable("t") {
-      spark.sql(s"CREATE TABLE t (id bigint default 42) $defaultUsing")
-      val descriptionDf = spark.sql(s"DESCRIBE TABLE EXTENDED t")
-      assert(descriptionDf.schema.map { field =>
-        (field.name, field.dataType)
-      } === Seq(
-        ("col_name", StringType),
-        ("data_type", StringType),
-        ("comment", StringType)))
-      QueryTest.checkAnswer(
-        descriptionDf.filter(
-          "!(col_name in ('Created Time', 'Created By', 'Database', 'Location', " +
-            "'Provider', 'Type'))"),
-        Seq(
-          Row("id", "bigint", null),
-          Row("", "", ""),
-          Row("# Detailed Table Information", "", ""),
-          Row("Catalog", SESSION_CATALOG_NAME, ""),
-          Row("Table", "t", ""),
-          Row("Last Access", "UNKNOWN", ""),
-          Row("", "", ""),
-          Row("# Column Default Values", "", ""),
-          Row("id", "bigint", "42")
-        ))
-    }
-  }
 
   test("DESCRIBE AS JSON throws when not EXTENDED") {
     withNamespaceAndTable("ns", "table") { t =>
@@ -507,88 +434,60 @@ class DescribeTableSuite extends DescribeTableSuiteBase with CommandSuiteBase {
     }
   }
 
-  test("DESCRIBE AS JSON temp view") {
-    withNamespaceAndTable("ns", "table") { t =>
-      withTempView("temp_view") {
-        val tableCreationStr =
-          s"""
-             |CREATE TABLE $t (id INT, name STRING, created_at TIMESTAMP)
-             |  USING parquet
-             |  OPTIONS ('compression' 'snappy')
-             |  CLUSTERED BY (id, name) SORTED BY (created_at) INTO 4 BUCKETS
-             |  COMMENT 'test temp view'
-             |  TBLPROPERTIES ('parquet.encryption' = 'true')
-             |""".stripMargin
-        spark.sql(tableCreationStr)
-        spark.sql(s"CREATE TEMPORARY VIEW temp_view AS SELECT * FROM $t")
-        val descriptionDf = spark.sql(s"DESCRIBE EXTENDED temp_view AS JSON")
-        val firstRow = descriptionDf.select("json_metadata").head()
-        val jsonValue = firstRow.getString(0)
-        val parsedOutput = parse(jsonValue).extract[DescribeTableJson]
+  test("DESCRIBE AS JSON view") {
+    Seq(true, false).foreach { isTemp =>
+      withNamespaceAndTable("ns", "table") { t =>
+        withView("view") {
+          val tableCreationStr =
+            s"""
+               |CREATE TABLE $t (id INT, name STRING, created_at TIMESTAMP)
+               |  USING parquet
+               |  OPTIONS ('compression' 'snappy')
+               |  CLUSTERED BY (id, name) SORTED BY (created_at) INTO 4 BUCKETS
+               |  COMMENT 'test temp view'
+               |  TBLPROPERTIES ('parquet.encryption' = 'true')
+               |""".stripMargin
+          spark.sql(tableCreationStr)
+          val viewType = if (isTemp) "TEMP VIEW" else "VIEW"
+          spark.sql(s"CREATE $viewType view AS SELECT * FROM $t")
+          val descriptionDf = spark.sql(s"DESCRIBE EXTENDED view AS JSON")
+          val firstRow = descriptionDf.select("json_metadata").head()
+          val jsonValue = firstRow.getString(0)
+          val parsedOutput = parse(jsonValue).extract[DescribeTableJson]
 
-        val expectedOutput = DescribeTableJson(
-          columns = Some(List(
-            TableColumn("id", Type("integer")),
-            TableColumn("name", Type("string")),
-            TableColumn("created_at", Type("timestamp_ltz"))
-          ))
-        )
+          val expectedOutput = DescribeTableJson(
+            table_name = Some("view"),
+            catalog_name = if (isTemp) Some("system") else Some("spark_catalog"),
+            namespace = if (isTemp) Some(List("session")) else Some(List("default")),
+            schema_name = if (isTemp) Some("session") else Some("default"),
+            columns = Some(List(
+              TableColumn("id", Type("integer")),
+              TableColumn("name", Type("string")),
+              TableColumn("created_at", Type("timestamp_ltz"))
+            )),
+            serde_library = Some("org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe"),
+            inputformat = Some("org.apache.hadoop.mapred.SequenceFileInputFormat"),
+            outputformat = Some("org.apache.hadoop.hive.ql.io.HiveSequenceFileOutputFormat"),
+            storage_properties = Some(Map("serialization.format" -> "1")),
+            last_access = Some("UNKNOWN"),
+            created_by = Some(s"Spark $SPARK_VERSION"),
+            `type` = Some("VIEW"),
+            view_text = Some("SELECT * FROM spark_catalog.ns.table"),
+            view_original_text = Some("SELECT * FROM spark_catalog.ns.table"),
+            // TODO: this is unexpected and temp view should also use COMPENSATION mode.
+            view_schema_mode = if (isTemp) Some("BINDING") else Some("COMPENSATION"),
+            view_catalog_and_namespace = Some("spark_catalog.default"),
+            view_query_output_columns = Some(List("id", "name", "created_at"))
+          )
 
-        assert(expectedOutput == parsedOutput)
-      }
-    }
-  }
-
-  test("DESCRIBE AS JSON persistent view") {
-    withNamespaceAndTable("ns", "table") { t =>
-      withView("view") {
-        val tableCreationStr =
-          s"""
-             |CREATE TABLE $t (id INT, name STRING, created_at TIMESTAMP)
-             |  USING parquet
-             |  OPTIONS ('compression' 'snappy')
-             |  CLUSTERED BY (id, name) SORTED BY (created_at) INTO 4 BUCKETS
-             |  COMMENT 'test temp view'
-             |  TBLPROPERTIES ('parquet.encryption' = 'true')
-             |""".stripMargin
-        spark.sql(tableCreationStr)
-        spark.sql(s"CREATE VIEW view AS SELECT * FROM $t")
-        val descriptionDf = spark.sql(s"DESCRIBE EXTENDED view AS JSON")
-        val firstRow = descriptionDf.select("json_metadata").head()
-        val jsonValue = firstRow.getString(0)
-        val parsedOutput = parse(jsonValue).extract[DescribeTableJson]
-
-        val expectedOutput = DescribeTableJson(
-          table_name = Some("view"),
-          catalog_name = Some("spark_catalog"),
-          namespace = Some(List("default")),
-          schema_name = Some("default"),
-          columns = Some(List(
-            TableColumn("id", Type("integer")),
-            TableColumn("name", Type("string")),
-            TableColumn("created_at", Type("timestamp_ltz"))
-          )),
-          serde_library = Some("org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe"),
-          inputformat = Some("org.apache.hadoop.mapred.SequenceFileInputFormat"),
-          outputformat = Some("org.apache.hadoop.hive.ql.io.HiveSequenceFileOutputFormat"),
-          storage_properties = Some(Map("serialization.format" -> "1")),
-          last_access = Some("UNKNOWN"),
-          created_by = Some(s"Spark $SPARK_VERSION"),
-          `type` = Some("VIEW"),
-          view_text = Some("SELECT * FROM spark_catalog.ns.table"),
-          view_original_text = Some("SELECT * FROM spark_catalog.ns.table"),
-          view_schema_mode = Some("COMPENSATION"),
-          view_catalog_and_namespace = Some("spark_catalog.default"),
-          view_query_output_columns = Some(List("id", "name", "created_at"))
-        )
-
-        if (getProvider() == "hive") {
-          assert(expectedOutput ==
-            parsedOutput.copy(table_properties = None, created_time = None, owner = None))
-        } else {
-          assert(expectedOutput.copy(inputformat = None,
-            outputformat = None, serde_library = None, storage_properties = None)
-            == parsedOutput.copy(table_properties = None, created_time = None, owner = None))
+          if (getProvider() == "hive") {
+            assert(expectedOutput ==
+              parsedOutput.copy(table_properties = None, created_time = None, owner = None))
+          } else {
+            assert(expectedOutput.copy(inputformat = None,
+              outputformat = None, serde_library = None, storage_properties = None)
+              == parsedOutput.copy(table_properties = None, created_time = None, owner = None))
+          }
         }
       }
     }
@@ -770,6 +669,79 @@ class DescribeTableSuite extends DescribeTableSuiteBase with CommandSuiteBase {
         assert(expectedOutput.copy(inputformat = None, outputformat = None, serde_library = None)
           == parsedOutput.copy(location = None, created_time = None, owner = None))
       }
+    }
+  }
+}
+
+/**
+ * The class contains tests for the `DESCRIBE TABLE` command to check V1 In-Memory
+ * table catalog.
+ */
+class DescribeTableSuite extends DescribeTableSuiteBase with CommandSuiteBase {
+  override def commandVersion: String = super[DescribeTableSuiteBase].commandVersion
+
+  test("DESCRIBE TABLE EXTENDED of a partitioned table") {
+    withNamespaceAndTable("ns", "table") { tbl =>
+      spark.sql(s"CREATE TABLE $tbl (id bigint, data string) $defaultUsing" +
+        " PARTITIONED BY (id)" +
+        " TBLPROPERTIES ('bar'='baz')" +
+        " COMMENT 'this is a test table'" +
+        " DEFAULT COLLATION unicode" +
+        " LOCATION 'file:/tmp/testcat/table_name'")
+      val descriptionDf = spark.sql(s"DESCRIBE TABLE EXTENDED $tbl")
+      assert(descriptionDf.schema.map(field => (field.name, field.dataType)) === Seq(
+        ("col_name", StringType),
+        ("data_type", StringType),
+        ("comment", StringType)))
+      QueryTest.checkAnswer(
+        descriptionDf.filter("!(col_name in ('Created Time', 'Created By'))"),
+        Seq(
+          Row("data", "string", null),
+          Row("id", "bigint", null),
+          Row("# Partition Information", "", ""),
+          Row("# col_name", "data_type", "comment"),
+          Row("id", "bigint", null),
+          Row("", "", ""),
+          Row("# Detailed Table Information", "", ""),
+          Row("Catalog", SESSION_CATALOG_NAME, ""),
+          Row("Database", "ns", ""),
+          Row("Table", "table", ""),
+          Row("Last Access", "UNKNOWN", ""),
+          Row("Type", "EXTERNAL", ""),
+          Row("Provider", getProvider(), ""),
+          Row("Comment", "this is a test table", ""),
+          Row("Collation", "UNICODE", ""),
+          Row("Table Properties", "[bar=baz]", ""),
+          Row("Location", "file:/tmp/testcat/table_name", ""),
+          Row("Partition Provider", "Catalog", "")))
+    }
+  }
+
+  test("DESCRIBE TABLE EXTENDED of a table with a default column value") {
+    withTable("t") {
+      spark.sql(s"CREATE TABLE t (id bigint default 42) $defaultUsing")
+      val descriptionDf = spark.sql(s"DESCRIBE TABLE EXTENDED t")
+      assert(descriptionDf.schema.map { field =>
+        (field.name, field.dataType)
+      } === Seq(
+        ("col_name", StringType),
+        ("data_type", StringType),
+        ("comment", StringType)))
+      QueryTest.checkAnswer(
+        descriptionDf.filter(
+          "!(col_name in ('Created Time', 'Created By', 'Database', 'Location', " +
+            "'Provider', 'Type'))"),
+        Seq(
+          Row("id", "bigint", null),
+          Row("", "", ""),
+          Row("# Detailed Table Information", "", ""),
+          Row("Catalog", SESSION_CATALOG_NAME, ""),
+          Row("Table", "t", ""),
+          Row("Last Access", "UNKNOWN", ""),
+          Row("", "", ""),
+          Row("# Column Default Values", "", ""),
+          Row("id", "bigint", "42")
+        ))
     }
   }
 }
