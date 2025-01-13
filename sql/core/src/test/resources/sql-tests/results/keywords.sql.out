@@ -170,6 +170,7 @@ IS	false
 ITEMS	false
 ITERATE	false
 JOIN	false
+JSON	false
 KEYS	false
 LANGUAGE	false
 LAST	false
@@ -252,6 +253,7 @@ REAL	false
 RECORDREADER	false
 RECORDWRITER	false
 RECOVER	false
+RECURSIVE	false
 REDUCE	false
 REFERENCES	false
 REFRESH	false

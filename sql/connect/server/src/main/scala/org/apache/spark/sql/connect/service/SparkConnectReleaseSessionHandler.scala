@@ -37,7 +37,8 @@ class SparkConnectReleaseSessionHandler(
     val maybeSession = SparkConnectService.sessionManager.getIsolatedSessionIfPresent(key)
     maybeSession.foreach(f => responseBuilder.setServerSideSessionId(f.serverSessionId))
 
-    SparkConnectService.sessionManager.closeSession(key)
+    val allowReconnect = v.getAllowReconnect
+    SparkConnectService.sessionManager.closeSession(key, allowReconnect)
 
     responseObserver.onNext(responseBuilder.build())
     responseObserver.onCompleted()

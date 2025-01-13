@@ -13,7 +13,8 @@
     },
     "expressions": [{
       "unresolvedFunction": {
-        "functionName": "make_dt_interval"
+        "functionName": "make_dt_interval",
+        "isInternal": false
       }
     }]
   }

@@ -24,6 +24,8 @@ trait PythonSQLMetrics { self: SparkPlan =>
   protected val pythonMetrics: Map[String, SQLMetric] = {
     PythonSQLMetrics.pythonSizeMetricsDesc.map { case (k, v) =>
       k -> SQLMetrics.createSizeMetric(sparkContext, v)
+    } ++ PythonSQLMetrics.pythonTimingMetricsDesc.map { case (k, v) =>
+      k -> SQLMetrics.createTimingMetric(sparkContext, v)
     } ++ PythonSQLMetrics.pythonOtherMetricsDesc.map { case (k, v) =>
       k -> SQLMetrics.createMetric(sparkContext, v)
     }
@@ -37,6 +39,14 @@ object PythonSQLMetrics {
     Map(
       "pythonDataSent" -> "data sent to Python workers",
       "pythonDataReceived" -> "data returned from Python workers"
+    )
+  }
+
+  val pythonTimingMetricsDesc: Map[String, String] = {
+    Map(
+      "pythonBootTime" -> "total time to start Python workers",
+      "pythonInitTime" -> "total time to initialize Python workers",
+      "pythonTotalTime" -> "total time to run Python workers"
     )
   }
 

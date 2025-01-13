@@ -25,7 +25,8 @@
               "literal": {
                 "integer": 10
               }
-            }]
+            }],
+            "isInternal": false
           }
         }, {
           "unresolvedFunction": {
@@ -38,9 +39,11 @@
               "literal": {
                 "double": 0.5
               }
-            }]
+            }],
+            "isInternal": false
           }
-        }]
+        }],
+        "isInternal": false
       }
     }]
   }

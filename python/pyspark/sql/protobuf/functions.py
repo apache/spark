@@ -149,13 +149,13 @@ def from_protobuf(
         elif descFilePath is not None:
             binary_proto = _read_descriptor_set_file(descFilePath)
         if binary_proto is not None:
-            jc = cast(JVMView, sc._jvm).org.apache.spark.sql.protobuf.functions.from_protobuf(
-                _to_java_column(data), messageName, binary_proto, options or {}
-            )
+            jc = getattr(
+                cast(JVMView, sc._jvm), "org.apache.spark.sql.protobuf.functions"
+            ).from_protobuf(_to_java_column(data), messageName, binary_proto, options or {})
         else:
-            jc = cast(JVMView, sc._jvm).org.apache.spark.sql.protobuf.functions.from_protobuf(
-                _to_java_column(data), messageName, options or {}
-            )
+            jc = getattr(
+                cast(JVMView, sc._jvm), "org.apache.spark.sql.protobuf.functions"
+            ).from_protobuf(_to_java_column(data), messageName, options or {})
     except TypeError as e:
         if str(e) == "'JavaPackage' object is not callable":
             _print_missing_jar("Protobuf", "protobuf", "protobuf", sc.version)
@@ -271,13 +271,13 @@ def to_protobuf(
         elif descFilePath is not None:
             binary_proto = _read_descriptor_set_file(descFilePath)
         if binary_proto is not None:
-            jc = cast(JVMView, sc._jvm).org.apache.spark.sql.protobuf.functions.to_protobuf(
-                _to_java_column(data), messageName, binary_proto, options or {}
-            )
+            jc = getattr(
+                cast(JVMView, sc._jvm), "org.apache.spark.sql.protobuf.functions"
+            ).to_protobuf(_to_java_column(data), messageName, binary_proto, options or {})
         else:
-            jc = cast(JVMView, sc._jvm).org.apache.spark.sql.protobuf.functions.to_protobuf(
-                _to_java_column(data), messageName, options or {}
-            )
+            jc = getattr(
+                cast(JVMView, sc._jvm), "org.apache.spark.sql.protobuf.functions"
+            ).to_protobuf(_to_java_column(data), messageName, options or {})
 
     except TypeError as e:
         if str(e) == "'JavaPackage' object is not callable":
