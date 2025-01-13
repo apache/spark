@@ -207,7 +207,6 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
     var keyStateEncoderSpecOpt: Option[KeyStateEncoderSpec] = None
     var stateStoreColFamilySchemaOpt: Option[StateStoreColFamilySchema] = None
     var transformWithStateVariableInfoOpt: Option[TransformWithStateVariableInfo] = None
-    var schemaFilePaths: List[String] = List.empty
     var stateSchemaProvider: Option[StateSchemaProvider] = None
     var timeMode: String = TimeMode.None.toString
 
@@ -234,7 +233,7 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
           s"for state variable $stateVarName in operator ${sourceOptions.operatorId}")
         val stateVarInfo = stateVarInfoList.head
         transformWithStateVariableInfoOpt = Some(stateVarInfo)
-        schemaFilePaths = storeMetadataEntry.stateSchemaFilePaths
+        val schemaFilePaths = storeMetadataEntry.stateSchemaFilePaths
         val stateSchemaMetadata = StateSchemaMetadata.createStateSchemaMetadata(
           sourceOptions.stateCheckpointLocation.toString,
           hadoopConf,
