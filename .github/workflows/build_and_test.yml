@@ -499,7 +499,7 @@ jobs:
           - >-
             pyspark-sql, pyspark-resource, pyspark-testing
           - >-
-            pyspark-errors, pyspark-core, pyspark-streaming, pyspark-logger
+            pyspark-errors
           - >-
             pyspark-mllib, pyspark-ml, pyspark-ml-connect
           - >-
@@ -603,17 +603,18 @@ jobs:
       uses: conda-incubator/setup-miniconda@v3
       with:
         miniforge-version: latest
-        installation-dir: ${{ github.workspace }}/miniforge-latest
     - name: Bash
       shell: bash -el {0}
       run: |
         if [[ "$MODULES_TO_TEST" == *"pyspark-errors"* ]]; then
-          ls -al $GITHUB_WORKSPACE/miniforge-latest
-          ls -al $GITHUB_WORKSPACE/miniforge-latest/condabin
-          ls -al $GITHUB_WORKSPACE/miniforge-latest/bin
-          conda info
-          conda list
+          echo "hash conda"
           hash conda
+          echo "conda info"
+          conda info
+          echo "conda list"
+          conda list
+          echo "env"
+          env
         fi
     # Run the tests.
     - name: Run tests
@@ -621,9 +622,6 @@ jobs:
       shell: 'script -q -e -c "bash {0}"'
       run: |
         if [[ "$MODULES_TO_TEST" == *"pyspark-errors"* ]]; then
-          hash conda
-          env
-          which conda
           export SKIP_PACKAGING=false
           echo "Python Packaging Tests Enabled!"
         fi
