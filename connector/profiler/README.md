@@ -54,7 +54,7 @@ Then enable the profiling in the configuration.
   <td><code>spark.executor.profiling.dfsDir</code></td>
   <td>(none)</td>
   <td>
-      An HDFS compatible path to which the profiler's output files are copied. The output files will be written as <i>dfsDir/{{APP_ID}}/profile-{{APP_ID}}-exec-{{EXECUTOR_ID}}.jfr</i> <br/>
+      An HDFS compatible path to which the profiler's output files are copied. The output files will be written as <i>dfsDir/{{APP_ID}}/profile-exec-{{EXECUTOR_ID}}.jfr</i> <br/>
       If no <i>dfsDir</i> is specified then the files are not copied over. Users should ensure there is sufficient disk space available otherwise it may lead to corrupt jfr files.
   </td>
   <td>4.0.0</td>

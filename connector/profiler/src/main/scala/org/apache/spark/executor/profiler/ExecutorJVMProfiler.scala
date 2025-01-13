@@ -49,7 +49,7 @@ private[spark] class ExecutorJVMProfiler(conf: SparkConf, executorId: String) ex
   }
   private val appAttemptId = conf.getOption("spark.app.attempt.id")
   private val baseName = Utils.nameForAppAndAttempt(appId, appAttemptId)
-  private val profileFile = s"profile-$baseName-exec-$executorId.jfr"
+  private val profileFile = s"profile-exec-$executorId.jfr"
 
   private val startcmd = s"start,$profilerOptions,file=$profilerLocalDir/$profileFile"
   private val stopcmd = s"stop,$profilerOptions,file=$profilerLocalDir/$profileFile"
