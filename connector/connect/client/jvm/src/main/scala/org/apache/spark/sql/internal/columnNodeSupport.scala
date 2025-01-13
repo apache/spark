@@ -73,13 +73,19 @@ object ColumnNodeToProtoConverter extends (ColumnNode => proto.Expression) {
           .setColName(regex)
         planId.foreach(b.setPlanId)
 
-      case UnresolvedFunction(functionName, arguments, isDistinct, isUserDefinedFunction, _, _) =>
-        // TODO(SPARK-49087) use internal namespace.
+      case UnresolvedFunction(
+            functionName,
+            arguments,
+            isDistinct,
+            isUserDefinedFunction,
+            isInternal,
+            _) =>
         builder.getUnresolvedFunctionBuilder
           .setFunctionName(functionName)
           .setIsUserDefinedFunction(isUserDefinedFunction)
           .setIsDistinct(isDistinct)
           .addAllArguments(arguments.map(apply(_, e)).asJava)
+          .setIsInternal(isInternal)
 
       case Alias(child, name, metadata, _) =>
         val b = builder.getAliasBuilder.setExpr(apply(child, e))
@@ -156,6 +162,7 @@ object ColumnNodeToProtoConverter extends (ColumnNode => proto.Expression) {
       case CaseWhenOtherwise(branches, otherwise, _) =>
         val b = builder.getUnresolvedFunctionBuilder
           .setFunctionName("when")
+          .setIsInternal(false)
         branches.foreach { case (condition, value) =>
           b.addArguments(apply(condition, e))
           b.addArguments(apply(value, e))
@@ -163,6 +170,18 @@ object ColumnNodeToProtoConverter extends (ColumnNode => proto.Expression) {
         otherwise.foreach { value =>
           b.addArguments(apply(value, e))
         }
+
+      case LazyExpression(child, _) =>
+        builder.getLazyExpressionBuilder.setChild(apply(child, e))
+
+      case SubqueryExpressionNode(relation, subqueryType, _) =>
+        val b = builder.getSubqueryExpressionBuilder
+        b.setSubqueryType(subqueryType match {
+          case SubqueryType.SCALAR => proto.SubqueryExpression.SubqueryType.SUBQUERY_TYPE_SCALAR
+          case SubqueryType.EXISTS => proto.SubqueryExpression.SubqueryType.SUBQUERY_TYPE_EXISTS
+        })
+        assert(relation.hasCommon && relation.getCommon.hasPlanId)
+        b.setPlanId(relation.getCommon.getPlanId)
 
       case ProtoColumnNode(e, _) =>
         return e
@@ -214,4 +233,24 @@ case class ProtoColumnNode(
     override val origin: Origin = CurrentOrigin.get)
     extends ColumnNode {
   override def sql: String = expr.toString
+  override private[internal] def children: Seq[ColumnNodeLike] = Seq.empty
+}
+
+sealed trait SubqueryType
+
+object SubqueryType {
+  case object SCALAR extends SubqueryType
+  case object EXISTS extends SubqueryType
+}
+
+case class SubqueryExpressionNode(
+    relation: proto.Relation,
+    subqueryType: SubqueryType,
+    override val origin: Origin = CurrentOrigin.get)
+    extends ColumnNode {
+  override def sql: String = subqueryType match {
+    case SubqueryType.SCALAR => s"($relation)"
+    case _ => s"$subqueryType ($relation)"
+  }
+  override private[internal] def children: Seq[ColumnNodeLike] = Seq.empty
 }

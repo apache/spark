@@ -21,12 +21,27 @@ import java.util.UUID
 
 import org.scalatest.Assertions.fail
 
-import org.apache.spark.sql.{AnalysisException, SparkSession}
+import org.apache.spark.sql.{AnalysisException, DataFrame, SparkSession, SQLImplicits}
+import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
 import org.apache.spark.util.{SparkErrorUtils, SparkFileUtils}
 
 trait SQLHelper {
 
   def spark: SparkSession
+
+  // Shorthand for running a query using our SparkSession
+  protected lazy val sql: String => DataFrame = spark.sql _
+
+  /**
+   * A helper object for importing SQL implicits.
+   *
+   * Note that the alternative of importing `spark.implicits._` is not possible here. This is
+   * because we create the `SparkSession` immediately before the first test is run, but the
+   * implicits import is needed in the constructor.
+   */
+  protected object testImplicits extends SQLImplicits {
+    override protected def session: SparkSession = spark
+  }
 
   /**
    * Sets all SQL configurations specified in `pairs`, calls `f`, and then restores all SQL
@@ -97,6 +112,22 @@ trait SQLHelper {
   }
 
   /**
+   * Drops temporary view `viewNames` after calling `f`.
+   */
+  protected def withTempView(viewNames: String*)(f: => Unit): Unit = {
+    SparkErrorUtils.tryWithSafeFinally(f) {
+      viewNames.foreach { viewName =>
+        try spark.catalog.dropTempView(viewName)
+        catch {
+          // If the test failed part way, we don't want to mask the failure by failing to remove
+          // temp views that never got created.
+          case _: NoSuchTableException =>
+        }
+      }
+    }
+  }
+
+  /**
    * Drops table `tableName` after calling `f`.
    */
   protected def withTable(tableNames: String*)(f: => Unit): Unit = {
@@ -105,5 +136,14 @@ trait SQLHelper {
         spark.sql(s"DROP TABLE IF EXISTS $name").collect()
       }
     }
+  }
+
+  /**
+   * Drops view `viewName` after calling `f`.
+   */
+  protected def withView(viewNames: String*)(f: => Unit): Unit = {
+    SparkErrorUtils.tryWithSafeFinally(f)(viewNames.foreach { name =>
+      spark.sql(s"DROP VIEW IF EXISTS $name")
+    })
   }
 }

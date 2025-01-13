@@ -38,6 +38,7 @@ import org.apache.spark.sql.functions.timestamp_seconds
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.util.StreamManualClock
 import org.apache.spark.sql.types.{IntegerType, LongType, StringType, StructType}
+import org.apache.spark.tags.SlowSQLTest
 
 object TransformWithStateSuiteUtils {
   val NUM_SHUFFLE_PARTITIONS = 5
@@ -441,8 +442,9 @@ class SleepingTimerProcessor extends StatefulProcessor[String, String, String] {
 /**
  * Class that adds tests for transformWithState stateful streaming operator
  */
+@SlowSQLTest
 class TransformWithStateSuite extends StateStoreMetricsTest
-  with AlsoTestWithChangelogCheckpointingEnabled with AlsoTestWithEncodingTypes {
+  with AlsoTestWithRocksDBFeatures with AlsoTestWithEncodingTypes {
 
   import testImplicits._
 

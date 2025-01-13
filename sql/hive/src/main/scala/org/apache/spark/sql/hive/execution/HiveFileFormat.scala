@@ -55,6 +55,8 @@ class HiveFileFormat(fileSinkConf: FileSinkDesc)
 
   override def shortName(): String = "hive"
 
+  override def toString: String = "Hive"
+
   override def inferSchema(
       sparkSession: SparkSession,
       options: Map[String, String],

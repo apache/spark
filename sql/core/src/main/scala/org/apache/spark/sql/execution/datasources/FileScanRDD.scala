@@ -22,6 +22,7 @@ import java.net.URI
 
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hdfs.BlockMissingException
+import org.apache.hadoop.security.AccessControlException
 
 import org.apache.spark.{Partition => RDDPartition, TaskContext}
 import org.apache.spark.deploy.SparkHadoopUtil
@@ -267,7 +268,7 @@ class FileScanRDD(
                     null
                   // Throw FileNotFoundException even if `ignoreCorruptFiles` is true
                   case e: FileNotFoundException if !ignoreMissingFiles => throw e
-                  case e: BlockMissingException => throw e
+                  case e @ (_ : AccessControlException | _ : BlockMissingException) => throw e
                   case e @ (_: RuntimeException | _: IOException) if ignoreCorruptFiles =>
                     logWarning(log"Skipped the rest of the content in the corrupted file: " +
                       log"${MDC(PATH, currentFile)}", e)

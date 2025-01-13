@@ -28,6 +28,7 @@ import org.apache.parquet.schema.Type.Repetition._
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.execution.datasources.VariantMetadata
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -179,7 +180,15 @@ class ParquetToSparkSchemaConverter(
     field match {
       case primitiveColumn: PrimitiveColumnIO => convertPrimitiveField(primitiveColumn, targetType)
       case groupColumn: GroupColumnIO if targetType.contains(VariantType) =>
-        convertVariantField(groupColumn)
+        if (SQLConf.get.getConf(SQLConf.VARIANT_ALLOW_READING_SHREDDED)) {
+          val col = convertGroupField(groupColumn)
+          col.copy(sparkType = VariantType, variantFileType = Some(col))
+        } else {
+          convertVariantField(groupColumn)
+        }
+      case groupColumn: GroupColumnIO if targetType.exists(VariantMetadata.isVariantStruct) =>
+        val col = convertGroupField(groupColumn)
+        col.copy(sparkType = targetType.get, variantFileType = Some(col))
       case groupColumn: GroupColumnIO => convertGroupField(groupColumn, targetType)
     }
   }
@@ -746,6 +755,14 @@ class SparkToParquetSchemaConverter(
           .addField(convertField(StructField("value", BinaryType, nullable = false)))
           .addField(convertField(StructField("metadata", BinaryType, nullable = false)))
           .named(field.name)
+
+      case s: StructType if SparkShreddingUtils.isVariantShreddingStruct(s) =>
+        // Variant struct takes a Variant and writes to Parquet as a shredded schema.
+        val group = Types.buildGroup(repetition)
+        s.fields.foreach { f =>
+          group.addField(convertField(f))
+        }
+        group.named(field.name)
 
       case StructType(fields) =>
         fields.foldLeft(Types.buildGroup(repetition)) { (builder, field) =>

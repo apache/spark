@@ -30,7 +30,8 @@
           "literal": {
             "string": "foo"
           }
-        }]
+        }],
+        "isInternal": false
       }
     }]
   }

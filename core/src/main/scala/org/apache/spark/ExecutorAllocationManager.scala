@@ -885,7 +885,7 @@ private[spark] class ExecutorAllocationManager(
         } else {
           logWarning(log"Should have exactly one resource profile for stage " +
             log"${MDC(STAGE_ATTEMPT, stageAttempt)}, but have " +
-            log"${MDC(RESOURCE_PROFILE_ID, rpForStage)}")
+            log"${MDC(RESOURCE_PROFILE_IDS, rpForStage)}")
         }
       }
     }
