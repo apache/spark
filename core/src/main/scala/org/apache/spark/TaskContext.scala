@@ -306,13 +306,12 @@ abstract class TaskContext extends Serializable {
   /** Gets local properties set upstream in the driver. */
   private[spark] def getLocalProperties: Properties
 
-
   /** Whether the current task is allowed to interrupt. */
   private[spark] def interruptible(): Boolean
 
   /**
-   *  Pending the interruption request until the task is able to
-   *  interrupt after creating the resource uninterruptibly.
+   * Pending the interruption request until the task is able to
+   * interrupt after creating the resource uninterruptibly.
    */
   private[spark] def pendingInterrupt(threadToInterrupt: Option[Thread], reason: String): Unit
 
