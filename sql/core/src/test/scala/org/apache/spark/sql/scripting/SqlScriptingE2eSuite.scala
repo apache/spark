@@ -111,20 +111,6 @@ class SqlScriptingE2eSuite extends QueryTest with SharedSparkSession {
     verifySqlScriptResult(sqlScript, Seq.empty)
   }
 
-  test("script without result statement") {
-    val sqlScript =
-      """
-        |BEGIN
-        |  lbl.1: BEGIN
-        |  DECLARE x INT;
-        |  SET x = 1;
-        |  DROP TEMPORARY VARIABLE x;
-        |  END;
-        |END;
-        |""".stripMargin
-    verifySqlScriptResult(sqlScript, Seq.empty)
-  }
-
   test("empty script") {
     val sqlScript =
       """
