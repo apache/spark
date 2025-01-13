@@ -245,6 +245,15 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest
   test("SPARK-50793: MySQL JDBC Connector failed to cast some types") {
     val tableName = catalogName + ".test_cast_function"
     withTable(tableName) {
+      val stringValue = "0"
+      val stringLiteral = "'0'"
+      val shortValue = 0.toShort
+      val integerValue = 0
+      val longValue = 0L
+      val binaryValue = Array[Byte](0x30)
+      val binaryLiteral = "x'30'"
+      val doubleValue = 0.0
+      val doubleLiteral = "0.0"
       // CREATE table to use types defined in Spark SQL
       sql(s"""CREATE TABLE $tableName (
         string_col STRING,
@@ -254,22 +263,37 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest
         binary_col BINARY,
         double_col DOUBLE
       )""")
-      sql(s"INSERT INTO $tableName VALUES('0', 0, 0, 0, x'30', 0.0)")
+      sql(
+        s"""INSERT INTO $tableName VALUES($stringLiteral, $shortValue, $integerValue,
+           |$longValue, $binaryLiteral, $doubleValue)""".stripMargin)
 
-      def testCast(castType: String, sourceCol: String, targetCol: String): Unit = {
-        val sql = s"SELECT * FROM $tableName WHERE CAST($sourceCol AS $castType) = $targetCol"
-        assert(spark.sql(sql).collect().length === 1)
+      def testCast(castType: String, sourceCol: String, targetCol: String,
+                   sourceValue: Any, targetValue: Any): Unit = {
+        val sql =
+          s"""SELECT $sourceCol, CAST($sourceCol AS $castType) FROM $tableName
+             |WHERE CAST($sourceCol AS $castType) = $targetCol""".stripMargin
+        val rows = spark.sql(sql).collect()
+        assert(rows.length === 1, s"Failed to cast $sourceCol to $castType")
+        val row = rows(0)
+        assert(row.get(0) === sourceValue, s"$sourceCol does not equal to $sourceValue")
+        assert(row.get(1) === targetValue,
+          s"CAST($sourceCol AS $castType) does not equal to $targetValue")
       }
 
-      testCast("BINARY", "string_col", "binary_col");
-      testCast("SHORT", "string_col", "short_col")
-      testCast("INTEGER", "string_col", "integer_col")
-      testCast("LONG", "string_col", "long_col")
-      testCast("STRING", "short_col", "'0'")
-      testCast("STRING", "integer_col", "'0'")
-      testCast("STRING", "long_col", "'0'")
-      testCast("STRING", "binary_col", "'0'")
-      testCast("STRING", "double_col", "'0'")
+      testCast("BINARY", "string_col", "binary_col", stringValue, binaryValue);
+      testCast("SHORT", "string_col", "short_col", stringValue, shortValue)
+      testCast("INTEGER", "string_col", "integer_col", stringValue, integerValue)
+      testCast("LONG", "string_col", "long_col", stringValue, longValue)
+      // We use stringLiteral to make sure both values are using the same collation
+      testCast("STRING", "short_col", stringLiteral, shortValue, stringValue)
+      testCast("STRING", "integer_col", stringLiteral, integerValue, stringValue)
+      testCast("STRING", "long_col", stringLiteral, longValue, stringValue)
+      testCast("STRING", "binary_col", stringLiteral, binaryValue, stringValue)
+      testCast("STRING", "double_col", stringLiteral, doubleValue, doubleLiteral)
+      testCast("DOUBLE", "string_col", "double_col", stringValue, doubleValue)
+      testCast("DOUBLE", "short_col", "double_col", shortValue, doubleValue)
+      testCast("DOUBLE", "integer_col", "double_col", integerValue, doubleValue)
+      testCast("DOUBLE", "long_col", "double_col", longValue, doubleValue)
     }
   }
 }

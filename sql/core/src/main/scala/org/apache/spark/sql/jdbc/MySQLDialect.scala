@@ -272,7 +272,9 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper with No
     case StringType => Option(JdbcType("LONGTEXT", java.sql.Types.LONGVARCHAR))
     case ByteType => Option(JdbcType("TINYINT", java.sql.Types.TINYINT))
     case ShortType => Option(JdbcType("SMALLINT", java.sql.Types.SMALLINT))
-    // We override getJDBCType so that DoubleType is mapped to DOUBLE instead.
+    // Because MySQL 5.7 only supports DOUBLE in the CAST function, and DOUBLE is a
+    // synonym for DOUBLE PRECISION, we override getJDBCType so that DoubleType is
+    // mapped to DOUBLE for better compatibility with MySQL 5.7.
     case DoubleType => Option(JdbcType("DOUBLE", java.sql.Types.DOUBLE))
     // scalastyle:off line.size.limit
     // In MYSQL, DATETIME is TIMESTAMP WITHOUT TIME ZONE
