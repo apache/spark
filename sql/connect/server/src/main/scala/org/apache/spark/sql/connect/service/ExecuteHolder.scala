@@ -127,8 +127,8 @@ private[connect] class ExecuteHolder(
   }
 
   /**
-   * Check if the execution was ended without finalizing the outcome and no further progress will be
-   * made. If the execution was delegated, this method always returns false.
+   * Check if the execution was ended without finalizing the outcome and no further progress will
+   * be made. If the execution was delegated, this method always returns false.
    */
   def isOrphan(): Boolean = {
     // Check runner.completed() before others as the acquire memory fence in the method ensures the
