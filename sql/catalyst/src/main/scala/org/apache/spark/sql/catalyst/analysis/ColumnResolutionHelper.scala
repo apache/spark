@@ -53,9 +53,10 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
       (exprs, plan)
     } else {
       plan match {
-        // For `Distinct` and `SubqueryAlias`, we can't recursively resolve and add attributes
-        // via its children.
-        case u: UnaryNode if !u.isInstanceOf[Distinct] && !u.isInstanceOf[SubqueryAlias] =>
+        // For `Distinct` and `SubqueryAlias` and `PipeOperator`, we can't recursively resolve and
+        // add attributes via its children.
+        case u: UnaryNode if !u.isInstanceOf[Distinct] && !u.isInstanceOf[SubqueryAlias]
+          && !u.isInstanceOf[PipeOperator] =>
           val (newExprs, newChild) = {
             // Resolving expressions against current plan.
             val maybeResolvedExprs = exprs.map(resolveExpressionByPlanOutput(_, u))

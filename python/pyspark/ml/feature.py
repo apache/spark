@@ -1208,7 +1208,7 @@ class CountVectorizerModel(
 
         sc = SparkContext._active_spark_context
         assert sc is not None and sc._gateway is not None
-        java_class = sc._gateway.jvm.java.lang.String
+        java_class = getattr(sc._gateway.jvm, "java.lang.String")
         jvocab = CountVectorizerModel._new_java_array(vocabulary, java_class)
         model = CountVectorizerModel._create_from_java_class(
             "org.apache.spark.ml.feature.CountVectorizerModel", jvocab
@@ -4799,7 +4799,7 @@ class StringIndexerModel(
 
         sc = SparkContext._active_spark_context
         assert sc is not None and sc._gateway is not None
-        java_class = sc._gateway.jvm.java.lang.String
+        java_class = getattr(sc._gateway.jvm, "java.lang.String")
         jlabels = StringIndexerModel._new_java_array(labels, java_class)
         model = StringIndexerModel._create_from_java_class(
             "org.apache.spark.ml.feature.StringIndexerModel", jlabels
@@ -4828,7 +4828,7 @@ class StringIndexerModel(
 
         sc = SparkContext._active_spark_context
         assert sc is not None and sc._gateway is not None
-        java_class = sc._gateway.jvm.java.lang.String
+        java_class = getattr(sc._gateway.jvm, "java.lang.String")
         jlabels = StringIndexerModel._new_java_array(arrayOfLabels, java_class)
         model = StringIndexerModel._create_from_java_class(
             "org.apache.spark.ml.feature.StringIndexerModel", jlabels
@@ -5198,7 +5198,7 @@ class StopWordsRemover(
         Supported languages: danish, dutch, english, finnish, french, german, hungarian,
         italian, norwegian, portuguese, russian, spanish, swedish, turkish
         """
-        stopWordsObj = _jvm().org.apache.spark.ml.feature.StopWordsRemover
+        stopWordsObj = getattr(_jvm(), "org.apache.spark.ml.feature.StopWordsRemover")
         return list(stopWordsObj.loadDefaultStopWords(language))
 
 

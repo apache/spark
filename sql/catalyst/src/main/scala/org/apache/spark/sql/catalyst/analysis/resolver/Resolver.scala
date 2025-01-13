@@ -70,11 +70,12 @@ class Resolver(
     with TracksResolvedNodes[LogicalPlan]
     with DelegatesResolutionToExtensions {
   private val scopes = new NameScopeStack
+  private val planLogger = new PlanLogger
   private val relationResolution = Resolver.createRelationResolution(catalogManager)
   private val functionResolution = new FunctionResolution(catalogManager, relationResolution)
-  private val expressionResolver = new ExpressionResolver(this, scopes, functionResolution)
+  private val expressionResolver =
+    new ExpressionResolver(this, scopes, functionResolution, planLogger)
   private val limitExpressionResolver = new LimitExpressionResolver(expressionResolver)
-  private val planLogger = new PlanLogger
 
   /**
    * [[relationMetadataProvider]] is used to resolve metadata for relations. It's initialized with
@@ -101,6 +102,8 @@ class Resolver(
   def lookupMetadataAndResolve(
       unresolvedPlan: LogicalPlan,
       analyzerBridgeState: Option[AnalyzerBridgeState] = None): LogicalPlan = {
+    planLogger.logPlanResolutionEvent(unresolvedPlan, "Lookup metadata and resolve")
+
     relationMetadataProvider = analyzerBridgeState match {
       case Some(analyzerBridgeState) =>
         new BridgedRelationMetadataProvider(
@@ -134,6 +137,8 @@ class Resolver(
    * producing a fully resolved plan or a descriptive error message.
    */
   override def resolve(unresolvedPlan: LogicalPlan): LogicalPlan = {
+    planLogger.logPlanResolutionEvent(unresolvedPlan, "Unresolved plan")
+
     throwIfNodeWasResolvedEarlier(unresolvedPlan)
 
     val resolvedPlan =
@@ -167,7 +172,9 @@ class Resolver(
       }
 
     markNodeAsResolved(resolvedPlan)
-    planLogger.log(unresolvedPlan, resolvedPlan)
+
+    planLogger.logPlanResolution(unresolvedPlan, resolvedPlan)
+
     resolvedPlan
   }
 
@@ -260,7 +267,10 @@ class Resolver(
   private def resolveRelation(unresolvedRelation: UnresolvedRelation): LogicalPlan = {
     relationMetadataProvider.getRelationWithResolvedMetadata(unresolvedRelation) match {
       case Some(relationWithResolvedMetadata) =>
-        planLogger.log(unresolvedRelation, relationWithResolvedMetadata)
+        planLogger.logPlanResolutionEvent(
+          relationWithResolvedMetadata,
+          "Relation metadata retrieved"
+        )
 
         withPosition(unresolvedRelation) {
           resolve(relationWithResolvedMetadata)

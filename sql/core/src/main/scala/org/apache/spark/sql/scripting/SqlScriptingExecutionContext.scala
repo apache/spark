@@ -68,7 +68,7 @@ class SqlScriptingExecutionFrame(
   }
 
   def enterScope(label: String): Unit = {
-    scopes.addOne(new SqlScriptingExecutionScope(label))
+    scopes.append(new SqlScriptingExecutionScope(label))
   }
 
   def exitScope(label: String): Unit = {
@@ -81,6 +81,7 @@ class SqlScriptingExecutionFrame(
       scopes.remove(scopes.length - 1)
     }
 
+    // Remove the scope with the given label.
     if (scopes.nonEmpty) {
       scopes.remove(scopes.length - 1)
     }

@@ -445,6 +445,21 @@ object Union {
   def apply(left: LogicalPlan, right: LogicalPlan): Union = {
     Union (left :: right :: Nil)
   }
+
+  // updating nullability to make all the children consistent
+  def mergeChildOutputs(childOutputs: Seq[Seq[Attribute]]): Seq[Attribute] = {
+    childOutputs.transpose.map { attrs =>
+      val firstAttr = attrs.head
+      val nullable = attrs.exists(_.nullable)
+      val newDt = attrs.map(_.dataType).reduce(StructType.unionLikeMerge)
+      if (firstAttr.dataType == newDt) {
+        firstAttr.withNullability(nullable)
+      } else {
+        AttributeReference(firstAttr.name, newDt, nullable, firstAttr.metadata)(
+          firstAttr.exprId, firstAttr.qualifier)
+      }
+    }
+  }
 }
 
 /**
@@ -526,20 +541,7 @@ case class Union(
 
   private lazy val lazyOutput: Seq[Attribute] = computeOutput()
 
-  // updating nullability to make all the children consistent
-  private def computeOutput(): Seq[Attribute] = {
-    children.map(_.output).transpose.map { attrs =>
-      val firstAttr = attrs.head
-      val nullable = attrs.exists(_.nullable)
-      val newDt = attrs.map(_.dataType).reduce(StructType.unionLikeMerge)
-      if (firstAttr.dataType == newDt) {
-        firstAttr.withNullability(nullable)
-      } else {
-        AttributeReference(firstAttr.name, newDt, nullable, firstAttr.metadata)(
-          firstAttr.exprId, firstAttr.qualifier)
-      }
-    }
-  }
+  private def computeOutput(): Seq[Attribute] = Union.mergeChildOutputs(children.map(_.output))
 
   /**
    * Maps the constraints containing a given (original) sequence of attributes to those with a
@@ -864,7 +866,6 @@ case class UnresolvedWith(
  *                                   pushdown to help ensure rule idempotency.
  * @param underSubquery If true, it means we don't need to add a shuffle for this CTE relation as
  *                      subquery reuse will be applied to reuse CTE relation output.
- * @param recursive If true, then this CTE Definition is recursive - it contains a self-reference.
  * @param recursionAnchor A helper plan node that temporary stores the anchor term of recursive
  *                        definitions. In the beginning of recursive resolution the `ResolveWithCTE`
  *                        rule updates this parameter and once it is resolved the same rule resolves
@@ -875,7 +876,6 @@ case class CTERelationDef(
     id: Long = CTERelationDef.newId,
     originalPlanWithPredicates: Option[(LogicalPlan, Seq[Expression])] = None,
     underSubquery: Boolean = false,
-    recursive: Boolean = false,
     recursionAnchor: Option[LogicalPlan] = None) extends UnaryNode {
 
   final override val nodePatterns: Seq[TreePattern] = Seq(CTE)
@@ -884,6 +884,13 @@ case class CTERelationDef(
     copy(child = newChild)
 
   override def output: Seq[Attribute] = if (resolved) child.output else Nil
+
+  lazy val recursive: Boolean = child.exists{
+    // if the reference is found inside the child, referencing to this CTE definition,
+    // and already marked as recursive, then this CTE definition is recursive.
+    case CTERelationRef(this.id, _, _, _, _, true) => true
+    case _ => false
+  }
 }
 
 object CTERelationDef {

@@ -21,7 +21,8 @@
               "unresolvedAttribute": {
                 "unparsedIdentifier": "g"
               }
-            }]
+            }],
+            "isInternal": false
           }
         }, {
           "literal": {
@@ -31,7 +32,8 @@
           "literal": {
             "string": "int"
           }
-        }]
+        }],
+        "isInternal": false
       }
     }]
   }

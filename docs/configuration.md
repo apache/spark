@@ -565,8 +565,7 @@ of the most common options to set are:
   <td>numExecutors * 2, with minimum of 3</td>
   <td>
     The maximum number of executor failures before failing the application.
-    This configuration only takes effect on YARN, or Kubernetes when 
-    <code>spark.kubernetes.allocation.pods.allocator</code> is set to 'direct'.
+    This configuration only takes effect on YARN and Kubernetes.
   </td>
   <td>3.5.0</td>
 </tr>
@@ -576,8 +575,7 @@ of the most common options to set are:
   <td>
     Interval after which executor failures will be considered independent and
     not accumulate towards the attempt count.
-    This configuration only takes effect on YARN, or Kubernetes when 
-    <code>spark.kubernetes.allocation.pods.allocator</code> is set to 'direct'.
+    This configuration only takes effect on YARN and Kubernetes.
   </td>
   <td>3.5.0</td>
 </tr>
@@ -2852,7 +2850,7 @@ Apart from these, the following properties are also available, and may be useful
     If set to "true", prevent Spark from scheduling tasks on executors that have been excluded
     due to too many task failures. The algorithm used to exclude executors and nodes can be further
     controlled by the other "spark.excludeOnFailure" configuration options.
-    This config will be overriden by "spark.excludeOnFailure.application.enabled" and 
+    This config will be overridden by "spark.excludeOnFailure.application.enabled" and
     "spark.excludeOnFailure.taskAndStage.enabled" to specify exclusion enablement on individual
     levels.
   </td>

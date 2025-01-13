@@ -357,6 +357,13 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map.empty)
   }
 
+  def objectLevelCollationsNotEnabledError(): Throwable = {
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_FEATURE.OBJECT_LEVEL_COLLATIONS",
+      messageParameters = Map.empty
+    )
+  }
+
   def trimCollationNotEnabledError(): Throwable = {
     new AnalysisException(
       errorClass = "UNSUPPORTED_FEATURE.TRIM_COLLATION",
@@ -1615,6 +1622,10 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     notSupportedForV2TablesError("ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]")
   }
 
+  def describeAsJsonNotSupportedForV2TablesError(): Throwable = {
+    notSupportedForV2TablesError("DESCRIBE TABLE AS JSON")
+  }
+
   def loadDataNotSupportedForV2TablesError(): Throwable = {
     notSupportedForV2TablesError("LOAD DATA")
   }
@@ -2172,6 +2183,15 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "ability" -> ability))
   }
 
+  def tableValuedArgumentsNotYetImplementedForSqlFunctions(
+      action: String, functionName: String): Throwable = {
+    new AnalysisException(
+      errorClass = "TABLE_VALUED_ARGUMENTS_NOT_YET_IMPLEMENTED_FOR_SQL_FUNCTIONS",
+      messageParameters = Map(
+        "action" -> action,
+        "functionName" -> functionName))
+  }
+
   def tableValuedFunctionTooManyTableArgumentsError(num: Int): Throwable = {
     new AnalysisException(
       errorClass = "TABLE_VALUED_FUNCTION_TOO_MANY_TABLE_ARGUMENTS",
@@ -2660,12 +2680,12 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "comment" -> comment))
   }
 
-  def invalidPartitionColumnKeyInTableError(key: String, tblName: String): Throwable = {
+  def invalidPartitionColumnKeyInTableError(key: String, tableName: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1231",
+      errorClass = "PARTITIONS_NOT_FOUND",
       messageParameters = Map(
-        "key" -> key,
-        "tblName" -> toSQLId(tblName)))
+        "partitionList" -> toSQLId(key),
+        "tableName" -> toSQLId(tableName)))
   }
 
   def invalidPartitionSpecError(
@@ -4269,6 +4289,46 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "attributesLength" -> attributes.length.toString,
         "attributes" -> attributes.map(attr => toSQLId(attr.name)).mkString(", ")
       )
+    )
+  }
+
+  def numColumnsMismatch(
+      operator: String,
+      firstNumColumns: Int,
+      invalidOrdinalNum: Int,
+      invalidNumColumns: Int,
+      origin: Origin): Throwable = {
+    new AnalysisException(
+      errorClass = "NUM_COLUMNS_MISMATCH",
+      messageParameters = Map(
+        "operator" -> toSQLStmt(operator),
+        "firstNumColumns" -> firstNumColumns.toString,
+        "invalidOrdinalNum" -> ordinalNumber(invalidOrdinalNum),
+        "invalidNumColumns" -> invalidNumColumns.toString
+      ),
+      origin = origin
+    )
+  }
+
+  def incompatibleColumnTypeError(
+      operator: String,
+      columnOrdinalNumber: Int,
+      tableOrdinalNumber: Int,
+      dataType1: DataType,
+      dataType2: DataType,
+      hint: String,
+      origin: Origin): Throwable = {
+    new AnalysisException(
+      errorClass = "INCOMPATIBLE_COLUMN_TYPE",
+      messageParameters = Map(
+        "operator" -> toSQLStmt(operator),
+        "columnOrdinalNumber" -> ordinalNumber(columnOrdinalNumber),
+        "tableOrdinalNumber" -> ordinalNumber(tableOrdinalNumber),
+        "dataType1" -> toSQLType(dataType1),
+        "dataType2" -> toSQLType(dataType2),
+        "hint" -> hint
+      ),
+      origin = origin
     )
   }
 }

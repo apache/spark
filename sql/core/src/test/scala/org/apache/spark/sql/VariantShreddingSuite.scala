@@ -24,6 +24,8 @@ import java.time.LocalDateTime
 import org.apache.spark.SparkThrowable
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.variant.VariantExpressionEvalUtils
+import org.apache.spark.sql.catalyst.util.DateTimeConstants._
+import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.execution.datasources.parquet.{ParquetTest, SparkShreddingUtils}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -348,5 +350,34 @@ class VariantShreddingSuite extends QueryTest with SharedSparkSession with Parqu
     checkExpr(path, "variant_get(v, '$.a', 'string')", null, null, "1", null, null, "3")
     checkExpr(path, "variant_get(v, '$.a')", null, parseJson("null"), parseJson("1"), null,
       parseJson("null"), parseJson("3"))
+  }
+
+  testWithTempPath("custom casts") { path =>
+    writeRows(path, writeSchema(LongType),
+      Row(metadata(Nil), null, Long.MaxValue / MICROS_PER_SECOND + 1),
+      Row(metadata(Nil), null, Long.MaxValue / MICROS_PER_SECOND))
+
+    // long -> timestamp
+    checkException(path, "cast(v as timestamp)", "INVALID_VARIANT_CAST")
+    checkExpr(path, "try_cast(v as timestamp)",
+      null, toJavaTimestamp(Long.MaxValue / MICROS_PER_SECOND * MICROS_PER_SECOND))
+
+    writeRows(path, writeSchema(DecimalType(38, 19)),
+      Row(metadata(Nil), null, Decimal("1E18")),
+      Row(metadata(Nil), null, Decimal("100")),
+      Row(metadata(Nil), null, Decimal("10")),
+      Row(metadata(Nil), null, Decimal("1")),
+      Row(metadata(Nil), null, Decimal("0")),
+      Row(metadata(Nil), null, Decimal("0.1")),
+      Row(metadata(Nil), null, Decimal("0.01")),
+      Row(metadata(Nil), null, Decimal("1E-18")))
+
+    checkException(path, "cast(v as timestamp)", "INVALID_VARIANT_CAST")
+    // decimal -> timestamp
+    checkExpr(path, "try_cast(v as timestamp)",
+      (null +: Seq(100000000, 10000000, 1000000, 0, 100000, 10000, 0).map(toJavaTimestamp(_))): _*)
+    // decimal -> string
+    checkExpr(path, "cast(v as string)",
+      "1000000000000000000", "100", "10", "1", "0", "0.1", "0.01", "0.000000000000000001")
   }
 }
