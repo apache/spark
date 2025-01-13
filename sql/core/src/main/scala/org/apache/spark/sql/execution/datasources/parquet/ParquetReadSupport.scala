@@ -35,6 +35,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.RebaseDateTime.RebaseSpec
 import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.execution.datasources.VariantMetadata
 import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
 import org.apache.spark.sql.types._
 
@@ -221,6 +222,9 @@ object ParquetReadSupport extends Logging {
         clipParquetMapType(
           parquetType.asGroupType(), t.keyType, t.valueType, caseSensitive, useFieldId)
 
+      case t: StructType if VariantMetadata.isVariantStruct(t) =>
+        clipVariantSchema(parquetType.asGroupType(), t)
+
       case t: StructType =>
         clipParquetGroup(parquetType.asGroupType(), t, caseSensitive, useFieldId)
 
@@ -388,6 +392,11 @@ object ParquetReadSupport extends Logging {
       .as(parquetRecord.getLogicalTypeAnnotation)
       .addFields(clippedParquetFields: _*)
       .named(parquetRecord.getName)
+  }
+
+  private def clipVariantSchema(parquetType: GroupType, variantStruct: StructType): GroupType = {
+    // TODO(SHREDDING): clip `parquetType` to retain the necessary columns.
+    parquetType
   }
 
   /**

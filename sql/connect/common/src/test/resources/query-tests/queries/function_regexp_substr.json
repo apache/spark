@@ -22,7 +22,8 @@
           "literal": {
             "string": "\\d{2}(a|b|m)"
           }
-        }]
+        }],
+        "isInternal": false
       }
     }]
   }

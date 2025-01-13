@@ -3286,7 +3286,9 @@ class RDD(Generic[T_co]):
         assert self.ctx._jvm is not None
 
         if compressionCodecClass:
-            compressionCodec = self.ctx._jvm.java.lang.Class.forName(compressionCodecClass)
+            compressionCodec = getattr(self.ctx._jvm, "java.lang.Class").forName(
+                compressionCodecClass
+            )
             keyed._jrdd.map(self.ctx._jvm.BytesToString()).saveAsTextFile(path, compressionCodec)
         else:
             keyed._jrdd.map(self.ctx._jvm.BytesToString()).saveAsTextFile(path)
@@ -5044,7 +5046,7 @@ class RDD(Generic[T_co]):
         else:
             assert self.ctx._jvm is not None
 
-            builder = self.ctx._jvm.org.apache.spark.resource.ResourceProfileBuilder()
+            builder = getattr(self.ctx._jvm, "org.apache.spark.resource.ResourceProfileBuilder")()
             ereqs = ExecutorResourceRequests(self.ctx._jvm, profile._executor_resource_requests)
             treqs = TaskResourceRequests(self.ctx._jvm, profile._task_resource_requests)
             builder.require(ereqs._java_executor_resource_requests)

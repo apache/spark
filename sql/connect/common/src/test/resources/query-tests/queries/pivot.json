@@ -24,7 +24,8 @@
           "unresolvedAttribute": {
             "unparsedIdentifier": "b"
           }
-        }]
+        }],
+        "isInternal": false
       }
     }],
     "pivot": {

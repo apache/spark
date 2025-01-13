@@ -140,7 +140,7 @@ class RewriteWithExpressionSuite extends PlanTest {
     val commonExprDef2 = CommonExpressionDef(a + a, CommonExpressionId(2))
     val ref2 = new CommonExpressionRef(commonExprDef2)
     // The inner main expression references the outer expression
-    val innerExpr2 = With(ref2 + outerRef, Seq(commonExprDef2))
+    val innerExpr2 = With(ref2 + ref2 + outerRef, Seq(commonExprDef2))
     val outerExpr2 = With(outerRef + innerExpr2, Seq(outerCommonExprDef))
     comparePlans(
       Optimizer.execute(testRelation.select(outerExpr2.as("col"))),
@@ -152,7 +152,8 @@ class RewriteWithExpressionSuite extends PlanTest {
         .select(star(), (a + a).as("_common_expr_2"))
         // The final Project contains the final result expression, which references both common
         // expressions.
-        .select(($"_common_expr_0" + ($"_common_expr_2" + $"_common_expr_0")).as("col"))
+        .select(($"_common_expr_0" +
+          ($"_common_expr_2" + $"_common_expr_2" + $"_common_expr_0")).as("col"))
         .analyze
     )
   }
@@ -404,17 +405,16 @@ class RewriteWithExpressionSuite extends PlanTest {
       Optimizer.execute(plan),
       testRelation
         .select(a, b, (b + 2).as("_common_expr_0"))
-        .select(a, b, $"_common_expr_0", (b + 2).as("_common_expr_1"))
         .window(
           Seq(windowExpr(count(a), windowSpec(Seq($"_common_expr_0" * $"_common_expr_0"), Nil,
             frame)).as("col2")),
-          Seq($"_common_expr_1" * $"_common_expr_1"),
+          Seq($"_common_expr_0" * $"_common_expr_0"),
           Nil
         )
         .select(a, b, $"col2")
-        .select(a, b, $"col2", (a + 1).as("_common_expr_2"))
+        .select(a, b, $"col2", (a + 1).as("_common_expr_1"))
         .window(
-          Seq(windowExpr(sum($"_common_expr_2" * $"_common_expr_2"),
+          Seq(windowExpr(sum($"_common_expr_1" * $"_common_expr_1"),
             windowSpec(Seq(a), Nil, frame)).as("col3")),
           Seq(a),
           Nil
@@ -466,5 +466,38 @@ class RewriteWithExpressionSuite extends PlanTest {
       Optimizer.execute(plan),
       testRelation.groupBy($"b")(avg("a").as("a")).where($"a" === 1).analyze
     )
+  }
+
+  test("SPARK-50679: duplicated common expressions in different With") {
+    val a = testRelation.output.head
+    val exprDef = CommonExpressionDef(a + a)
+    val exprRef = new CommonExpressionRef(exprDef)
+    val expr1 = With(exprRef * exprRef, Seq(exprDef))
+    val expr2 = With(exprRef - exprRef, Seq(exprDef))
+    val plan = testRelation.select(expr1.as("c1"), expr2.as("c2")).analyze
+    comparePlans(
+      Optimizer.execute(plan),
+      testRelation
+        .select(star(), (a + a).as("_common_expr_0"))
+        .select(
+          ($"_common_expr_0" * $"_common_expr_0").as("c1"),
+          ($"_common_expr_0" - $"_common_expr_0").as("c2"))
+        .analyze
+    )
+
+    val wrongExprDef = CommonExpressionDef(a * a, exprDef.id)
+    val wrongExprRef = new CommonExpressionRef(wrongExprDef)
+    val expr3 = With(wrongExprRef + wrongExprRef, Seq(wrongExprDef))
+    val wrongPlan = testRelation.select(expr1.as("c1"), expr3.as("c3")).analyze
+    intercept[AssertionError](Optimizer.execute(wrongPlan))
+  }
+
+  test("SPARK-50683: inline the common expression in With if used once") {
+    val a = testRelation.output.head
+    val exprDef = CommonExpressionDef(a + a)
+    val exprRef = new CommonExpressionRef(exprDef)
+    val expr = With(exprRef + 1, Seq(exprDef))
+    val plan = testRelation.select(expr.as("col"))
+    comparePlans(Optimizer.execute(plan), testRelation.select((a + a + 1).as("col")))
   }
 }

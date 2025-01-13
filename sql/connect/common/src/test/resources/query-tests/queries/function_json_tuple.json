@@ -30,7 +30,8 @@
           "literal": {
             "string": "id"
           }
-        }]
+        }],
+        "isInternal": false
       }
     }]
   }

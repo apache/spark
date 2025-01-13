@@ -184,33 +184,37 @@ case class ToVariantObject(child: Expression)
   }
 }
 
-object VariantPathParser extends RegexParsers {
-  // A path segment in the `VariantGet` expression represents either an object key access or an
-  // array index access.
-  type PathSegment = Either[String, Int]
+// A path segment in the `VariantGet` expression represents either an object key access or an array
+// index access.
+sealed abstract class VariantPathSegment extends Serializable
 
+case class ObjectExtraction(key: String) extends VariantPathSegment
+
+case class ArrayExtraction(index: Int) extends VariantPathSegment
+
+object VariantPathParser extends RegexParsers {
   private def root: Parser[Char] = '$'
 
   // Parse index segment like `[123]`.
-  private def index: Parser[PathSegment] =
+  private def index: Parser[VariantPathSegment] =
     for {
       index <- '[' ~> "\\d+".r <~ ']'
     } yield {
-      scala.util.Right(index.toInt)
+      ArrayExtraction(index.toInt)
     }
 
   // Parse key segment like `.name`, `['name']`, or `["name"]`.
-  private def key: Parser[PathSegment] =
+  private def key: Parser[VariantPathSegment] =
     for {
       key <- '.' ~> "[^\\.\\[]+".r | "['" ~> "[^\\'\\?]+".r <~ "']" |
         "[\"" ~> "[^\\\"\\?]+".r <~ "\"]"
     } yield {
-      scala.util.Left(key)
+      ObjectExtraction(key)
     }
 
-  private val parser: Parser[List[PathSegment]] = phrase(root ~> rep(key | index))
+  private val parser: Parser[List[VariantPathSegment]] = phrase(root ~> rep(key | index))
 
-  def parse(str: String): Option[Array[PathSegment]] = {
+  def parse(str: String): Option[Array[VariantPathSegment]] = {
     this.parseAll(parser, str) match {
       case Success(result, _) => Some(result.toArray)
       case _ => None
@@ -349,14 +353,14 @@ case object VariantGet {
   /** The actual implementation of the `VariantGet` expression. */
   def variantGet(
       input: VariantVal,
-      parsedPath: Array[VariantPathParser.PathSegment],
+      parsedPath: Array[VariantPathSegment],
       dataType: DataType,
       castArgs: VariantCastArgs): Any = {
     var v = new Variant(input.getValue, input.getMetadata)
     for (path <- parsedPath) {
       v = path match {
-        case scala.util.Left(key) if v.getType == Type.OBJECT => v.getFieldByKey(key)
-        case scala.util.Right(index) if v.getType == Type.ARRAY => v.getElementAtIndex(index)
+        case ObjectExtraction(key) if v.getType == Type.OBJECT => v.getFieldByKey(key)
+        case ArrayExtraction(index) if v.getType == Type.ARRAY => v.getElementAtIndex(index)
         case _ => null
       }
       if (v == null) return null
@@ -427,24 +431,15 @@ case object VariantGet {
             messageParameters = Map("id" -> v.getTypeInfo.toString)
           )
         }
-        // We mostly use the `Cast` expression to implement the cast. However, `Cast` silently
-        // ignores the overflow in the long/decimal -> timestamp cast, and we want to enforce
-        // strict overflow checks.
         input.dataType match {
           case LongType if dataType == TimestampType =>
-            try Math.multiplyExact(input.value.asInstanceOf[Long], MICROS_PER_SECOND)
+            try castLongToTimestamp(input.value.asInstanceOf[Long])
             catch {
               case _: ArithmeticException => invalidCast()
             }
           case _: DecimalType if dataType == TimestampType =>
-            try {
-              input.value
-                .asInstanceOf[Decimal]
-                .toJavaBigDecimal
-                .multiply(new java.math.BigDecimal(MICROS_PER_SECOND))
-                .toBigInteger
-                .longValueExact()
-            } catch {
+            try castDecimalToTimestamp(input.value.asInstanceOf[Decimal])
+            catch {
               case _: ArithmeticException => invalidCast()
             }
           case _ =>
@@ -497,6 +492,27 @@ case object VariantGet {
         }
     }
   }
+
+  // We mostly use the `Cast` expression to implement the cast, but we need some custom logic for
+  // certain type combinations.
+  //
+  // `castLongToTimestamp/castDecimalToTimestamp`: `Cast` silently ignores the overflow in the
+  // long/decimal -> timestamp cast, and we want to enforce strict overflow checks. They both throw
+  // an `ArithmeticException` when overflow happens.
+  def castLongToTimestamp(input: Long): Long =
+    Math.multiplyExact(input, MICROS_PER_SECOND)
+
+  def castDecimalToTimestamp(input: Decimal): Long = {
+    val multiplier = new java.math.BigDecimal(MICROS_PER_SECOND)
+    input.toJavaBigDecimal.multiply(multiplier).toBigInteger.longValueExact()
+  }
+
+  // Cast decimal to string, but strip any trailing zeros. We don't have to call it if the decimal
+  // is returned by `Variant.getDecimal`, which already strips any trailing zeros. But we need it
+  // if the decimal is produced by Spark internally, e.g., on a shredded decimal produced by the
+  // Spark Parquet reader.
+  def castDecimalToString(input: Decimal): UTF8String =
+    UTF8String.fromString(input.toJavaBigDecimal.stripTrailingZeros.toPlainString)
 }
 
 abstract class ParseJsonExpressionBuilderBase(failOnError: Boolean) extends ExpressionBuilder {

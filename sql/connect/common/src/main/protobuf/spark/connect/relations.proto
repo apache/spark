@@ -975,6 +975,9 @@ message GroupMap {
 
   // (Optional) Timeout configuration for groups that do not receive data for a while.
   optional string timeout_conf = 9;
+
+  // (Optional) The schema for the grouped state.
+  optional DataType state_schema = 10;
 }
 
 message CoGroupMap {

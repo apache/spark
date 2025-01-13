@@ -18,7 +18,11 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateFunction
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, UnaryNode}
+import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.trees.TreePattern.{PIPE_EXPRESSION, PIPE_OPERATOR, TreePattern}
 import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.types.DataType
 
 /**
  * Represents an expression when used with a SQL pipe operator.
@@ -30,19 +34,56 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
  * @param clause The clause of the pipe operator. This is used to generate error messages.
  */
 case class PipeExpression(child: Expression, isAggregate: Boolean, clause: String)
-  extends UnaryExpression with RuntimeReplaceable {
+  extends UnaryExpression with Unevaluable {
+  final override val nodePatterns = Seq(PIPE_EXPRESSION)
+  final override lazy val resolved = false
   override def withNewChildInternal(newChild: Expression): Expression =
     PipeExpression(newChild, isAggregate, clause)
-  override lazy val replacement: Expression = {
-    val firstAggregateFunction: Option[AggregateFunction] = findFirstAggregate(child)
-    if (isAggregate && firstAggregateFunction.isEmpty) {
-      throw QueryCompilationErrors.pipeOperatorAggregateExpressionContainsNoAggregateFunction(child)
-    } else if (!isAggregate) {
-      firstAggregateFunction.foreach { a =>
-        throw QueryCompilationErrors.pipeOperatorContainsAggregateFunction(a, clause)
+  override def dataType: DataType = child.dataType
+}
+
+/**
+ * Represents the location within a logical plan that a SQL pipe operator appeared.
+ * This acts as a logical boundary that works to prevent the analyzer from modifying the logical
+ * operators above and below the boundary.
+ */
+case class PipeOperator(child: LogicalPlan) extends UnaryNode {
+  final override val nodePatterns: Seq[TreePattern] = Seq(PIPE_OPERATOR)
+  override def output: Seq[Attribute] = child.output
+  override def withNewChildInternal(newChild: LogicalPlan): PipeOperator = copy(child = newChild)
+}
+
+/** This rule removes all PipeOperator nodes from a logical plan at the end of analysis. */
+object EliminatePipeOperators extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
+    _.containsPattern(PIPE_OPERATOR), ruleId) {
+    case PipeOperator(child) => child
+  }
+}
+
+/**
+ * Validates and strips PipeExpression nodes from a logical plan once the child expressions are
+ * resolved.
+ */
+object ValidateAndStripPipeExpressions extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
+    _.containsPattern(PIPE_EXPRESSION), ruleId) {
+    case node: LogicalPlan =>
+      node.resolveExpressions {
+        case p: PipeExpression if p.child.resolved =>
+          // Once the child expression is resolved, we can perform the necessary invariant checks
+          // and then remove this expression, replacing it with the child expression instead.
+          val firstAggregateFunction: Option[AggregateFunction] = findFirstAggregate(p.child)
+          if (p.isAggregate && firstAggregateFunction.isEmpty) {
+            throw QueryCompilationErrors
+              .pipeOperatorAggregateExpressionContainsNoAggregateFunction(p.child)
+          } else if (!p.isAggregate) {
+            firstAggregateFunction.foreach { a =>
+              throw QueryCompilationErrors.pipeOperatorContainsAggregateFunction(a, p.clause)
+            }
+          }
+          p.child
       }
-    }
-    child
   }
 
   /** Returns the first aggregate function in the given expression, or None if not found. */
