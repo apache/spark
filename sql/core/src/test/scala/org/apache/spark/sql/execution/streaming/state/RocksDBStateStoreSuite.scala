@@ -44,8 +44,8 @@ import org.apache.spark.util.Utils
 
 @ExtendedSQLTest
 class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvider]
-  with AlsoTestWithRocksDBFeatures
   with AlsoTestWithEncodingTypes
+  with AlsoTestWithRocksDBFeatures
   with SharedSparkSession
   with BeforeAndAfter {
 
@@ -570,6 +570,91 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
     val decoded2 = encoder2.decodeValue(encoded2)
     assert(decoded2.getInt(0) === 2)
     assert(decoded2.getLong(1) === 100L)
+  }
+
+  test("AvroStateEncoder - add field with null") {
+    val keySchema = StructType(Seq(
+      StructField("k", StringType)
+    ))
+
+    val initialValueSchema = StructType(Seq(
+      StructField("value", IntegerType, true) // Made nullable
+    ))
+
+    val evolvedValueSchema = StructType(Seq(
+      StructField("value", IntegerType, true), // Made nullable
+      StructField("timestamp", LongType, true)
+    ))
+
+    // Create test state schema provider
+    val testProvider = new TestStateSchemaProvider()
+
+    // Add initial schema version
+    testProvider.captureSchema(
+      StateStore.DEFAULT_COL_FAMILY_NAME,
+      keySchema,
+      initialValueSchema,
+      valueSchemaId = 0
+    )
+
+    // Create encoder with initial schema
+    val encoder1 = new AvroStateEncoder(
+      NoPrefixKeyStateEncoderSpec(keySchema),
+      initialValueSchema,
+      Some(testProvider),
+      Some(ColumnFamilyInfo(StateStore.DEFAULT_COL_FAMILY_NAME, 1))
+    )
+
+    // Create test data with null value
+    val proj = UnsafeProjection.create(initialValueSchema)
+    val row1 = proj.apply(InternalRow(null))
+
+    // Encode with schema v0
+    val encoded = encoder1.encodeValue(row1)
+
+    // Read back the encoded value to verify null handling
+    val decodedWithOriginalSchema = encoder1.decodeValue(encoded)
+    assert(decodedWithOriginalSchema.isNullAt(0))
+
+    // Add evolved schema
+    testProvider.captureSchema(
+      StateStore.DEFAULT_COL_FAMILY_NAME,
+      keySchema,
+      evolvedValueSchema,
+      valueSchemaId = 1
+    )
+
+    // Create encoder with evolved schema
+    val encoder2 = new AvroStateEncoder(
+      NoPrefixKeyStateEncoderSpec(keySchema),
+      evolvedValueSchema,
+      Some(testProvider),
+      Some(ColumnFamilyInfo(StateStore.DEFAULT_COL_FAMILY_NAME, 1))
+    )
+
+    // Decode original value with evolved schema
+    val decoded = encoder2.decodeValue(encoded)
+
+    // Should be able to read old format with null value
+    assert(decoded.isNullAt(0))
+    assert(decoded.isNullAt(1)) // New field should be null
+
+    // Encode with new schema, including null value
+    val proj2 = UnsafeProjection.create(evolvedValueSchema)
+    val row2 = proj2.apply(InternalRow(null, 100L))
+    val encoded2 = encoder2.encodeValue(row2)
+
+    // Should write with new schema version
+    val decoded2 = encoder2.decodeValue(encoded2)
+    assert(decoded2.isNullAt(0))
+    assert(decoded2.getLong(1) === 100L)
+
+    // Test mix of null and non-null values
+    val row3 = proj2.apply(InternalRow(2, null))
+    val encoded3 = encoder2.encodeValue(row3)
+    val decoded3 = encoder2.decodeValue(encoded3)
+    assert(decoded3.getInt(0) === 2)
+    assert(decoded3.isNullAt(1))
   }
 
   test("AvroStateEncoder - remove field") {

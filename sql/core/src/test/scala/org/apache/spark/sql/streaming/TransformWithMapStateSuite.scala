@@ -139,7 +139,8 @@ class EvolvedMapStateProcessor extends StatefulProcessor[String, String, (String
  * operators such as transformWithState.
  */
 class TransformWithMapStateSuite extends StreamTest
-  with AlsoTestWithRocksDBFeatures with AlsoTestWithEncodingTypes {
+  with AlsoTestWithEncodingTypes
+  with AlsoTestWithRocksDBFeatures {
   import testImplicits._
 
   private def testMapStateWithNullUserKey(inputMapRow: InputMapRow): Unit = {

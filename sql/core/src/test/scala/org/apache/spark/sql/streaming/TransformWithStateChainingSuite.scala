@@ -104,8 +104,8 @@ case class AggEventRow(
     count: Long)
 
 class TransformWithStateChainingSuite extends StreamTest
-  with AlsoTestWithRocksDBFeatures
-  with AlsoTestWithEncodingTypes {
+  with AlsoTestWithEncodingTypes
+  with AlsoTestWithRocksDBFeatures {
   import testImplicits._
 
   private def isAvroEnabled: Boolean = SQLConf.get.stateStoreEncodingFormat == "avro"

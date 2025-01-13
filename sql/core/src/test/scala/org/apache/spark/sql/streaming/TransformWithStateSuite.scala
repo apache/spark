@@ -738,7 +738,7 @@ class SleepingTimerProcessor extends StatefulProcessor[String, String, String] {
  */
 @SlowSQLTest
 class TransformWithStateSuite extends StateStoreMetricsTest
-  with AlsoTestWithRocksDBFeatures with AlsoTestWithEncodingTypes {
+  with AlsoTestWithEncodingTypes with AlsoTestWithRocksDBFeatures {
 
   import testImplicits._
 
