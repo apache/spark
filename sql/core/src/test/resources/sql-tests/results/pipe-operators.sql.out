@@ -233,6 +233,136 @@ struct<>
 
 
 -- !query
+from t
+-- !query schema
+struct<x:int,y:string>
+-- !query output
+0	abc
+1	def
+
+
+-- !query
+table t
+-- !query schema
+struct<x:int,y:string>
+-- !query output
+0	abc
+1	def
+
+
+-- !query
+from t
+|> select 1 as x
+-- !query schema
+struct<x:int>
+-- !query output
+1
+1
+
+
+-- !query
+from t as t_alias
+|> select t_alias.x
+-- !query schema
+struct<x:int>
+-- !query output
+0
+1
+
+
+-- !query
+from t as t_alias
+|> select t_alias.x as tx, t_alias.y as ty
+|> where ty = 'def'
+|> select tx
+-- !query schema
+struct<tx:int>
+-- !query output
+1
+
+
+-- !query
+from t, other
+|> select t.x + other.a as z
+-- !query schema
+struct<z:int>
+-- !query output
+1
+1
+2
+2
+2
+3
+
+
+-- !query
+from t join other on (t.x = other.a)
+|> select t.x + other.a as z
+-- !query schema
+struct<z:int>
+-- !query output
+2
+2
+
+
+-- !query
+from t lateral view explode(array(100, 101)) as ly
+|> select t.x + ly as z
+-- !query schema
+struct<z:int>
+-- !query output
+100
+101
+101
+102
+
+
+-- !query
+from st
+|> select col.i1
+-- !query schema
+struct<i1:int>
+-- !query output
+2
+
+
+-- !query
+from st as st_alias
+|> select st_alias.col.i1
+-- !query schema
+struct<i1:int>
+-- !query output
+2
+
+
+-- !query
+from values (0), (1) tab(col)
+|> select col as x
+-- !query schema
+struct<x:int>
+-- !query output
+0
+1
+
+
+-- !query
+from t
+|> from t
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'from'",
+    "hint" : ""
+  }
+}
+
+
+-- !query
 table t
 |> select 1 as x
 -- !query schema
@@ -511,7 +641,7 @@ struct<x:int,y:string,z:int>
 table t
 |> extend 1
 -- !query schema
-struct<x:int,y:string,pipeexpression(1):int>
+struct<x:int,y:string,1:int>
 -- !query output
 0	abc	1
 1	def	1
@@ -808,6 +938,23 @@ struct<x:int,y:string,z:int>
 -- !query output
 0	abc	0
 1	def	1
+
+
+-- !query
+values (0), (1) lhs(a)
+|> inner join values (1), (2) rhs(a) using (a)
+|> extend lhs.a + rhs.a as z1
+|> extend lhs.a - rhs.a as z2
+|> drop z1
+|> where z2 = 0
+|> order by lhs.a, rhs.a, z2
+|> set z2 = 4
+|> limit 2
+|> select lhs.a, rhs.a, z2
+-- !query schema
+struct<a:int,a:int,z2:int>
+-- !query output
+1	1	4
 
 
 -- !query
@@ -1351,13 +1498,91 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`y`",
-    "proposal" : "`x`, `z`"
+    "proposal" : "`z`, `spark_catalog`.`default`.`t`.`x`"
   },
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
     "startIndex" : 57,
     "stopIndex" : 57,
+    "fragment" : "y"
+  } ]
+}
+
+
+-- !query
+table t
+|> select x, length(y) as z
+|> limit 1000
+|> where x + length(y) < 4
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`y`",
+    "proposal" : "`z`, `spark_catalog`.`default`.`t`.`x`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 71,
+    "stopIndex" : 71,
+    "fragment" : "y"
+  } ]
+}
+
+
+-- !query
+table t
+|> select x, length(y) as z
+|> limit 1000 offset 1
+|> where x + length(y) < 4
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`y`",
+    "proposal" : "`z`, `spark_catalog`.`default`.`t`.`x`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 80,
+    "stopIndex" : 80,
+    "fragment" : "y"
+  } ]
+}
+
+
+-- !query
+table t
+|> select x, length(y) as z
+|> order by x, y
+|> where x + length(y) < 4
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`y`",
+    "proposal" : "`z`, `spark_catalog`.`default`.`t`.`x`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 52,
+    "stopIndex" : 52,
     "fragment" : "y"
   } ]
 }
@@ -1375,7 +1600,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`y`",
-    "proposal" : "`x`, `sum_len`"
+    "proposal" : "`sum_len`, `spark_catalog`.`default`.`t`.`x`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2232,29 +2457,25 @@ struct<x:int,y:string>
 
 
 -- !query
-values (0, 1) tab(x, y)
+values (2, 'xyz') tab(x, y)
 |> union table t
 |> where x = 0
 -- !query schema
-struct<>
+struct<x:int,y:string>
 -- !query output
-org.apache.spark.SparkNumberFormatException
-{
-  "errorClass" : "CAST_INVALID_INPUT",
-  "sqlState" : "22018",
-  "messageParameters" : {
-    "expression" : "'abc'",
-    "sourceType" : "\"STRING\"",
-    "targetType" : "\"BIGINT\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 55,
-    "fragment" : "values (0, 1) tab(x, y)\n|> union table t\n|> where x = 0"
-  } ]
-}
+0	abc
+
+
+-- !query
+values (2, 'xyz') tab(x, y)
+|> union table t
+|> drop x
+-- !query schema
+struct<y:string>
+-- !query output
+abc
+def
+xyz
 
 
 -- !query
@@ -2649,16 +2870,107 @@ struct<x:int,y:int>
 select 3 as x, 4 as y
 |> aggregate group by 1, 2
 -- !query schema
-struct<1:int,2:int>
+struct<x:int,y:int>
+-- !query output
+3	4
+
+
+-- !query
+values (3, 4) as tab(x, y)
+|> aggregate sum(y) group by 1
+-- !query schema
+struct<x:int,sum(y):bigint>
+-- !query output
+3	4
+
+
+-- !query
+values (3, 4), (5, 4) as tab(x, y)
+|> aggregate sum(y) group by 1
+-- !query schema
+struct<x:int,sum(y):bigint>
+-- !query output
+3	4
+5	4
+
+
+-- !query
+select 3 as x, 4 as y
+|> aggregate sum(y) group by 1, 1
+-- !query schema
+struct<x:int,x:int,sum(y):bigint>
+-- !query output
+3	3	4
+
+
+-- !query
+select 1 as `1`, 2 as `2`
+|> aggregate sum(`2`) group by `1`
+-- !query schema
+struct<1:int,sum(2):bigint>
 -- !query output
 1	2
+
+
+-- !query
+select 3 as x, 4 as y
+|> aggregate sum(y) group by 2
+-- !query schema
+struct<y:int,sum(y):bigint>
+-- !query output
+4	4
+
+
+-- !query
+select 3 as x, 4 as y, 5 as z
+|> aggregate sum(y) group by 2
+-- !query schema
+struct<y:int,sum(y):bigint>
+-- !query output
+4	4
+
+
+-- !query
+select 3 as x, 4 as y, 5 as z
+|> aggregate sum(y) group by 3
+-- !query schema
+struct<z:int,sum(y):bigint>
+-- !query output
+5	4
+
+
+-- !query
+select 3 as x, 4 as y, 5 as z
+|> aggregate sum(y) group by 2, 3
+-- !query schema
+struct<y:int,z:int,sum(y):bigint>
+-- !query output
+4	5	4
+
+
+-- !query
+select 3 as x, 4 as y, 5 as z
+|> aggregate sum(y) group by 1, 2, 3
+-- !query schema
+struct<x:int,y:int,z:int,sum(y):bigint>
+-- !query output
+3	4	5	4
+
+
+-- !query
+select 3 as x, 4 as y, 5 as z
+|> aggregate sum(y) group by x, 2, 3
+-- !query schema
+struct<x:int,y:int,z:int,sum(y):bigint>
+-- !query output
+3	4	5	4
 
 
 -- !query
 table t
 |> aggregate sum(x)
 -- !query schema
-struct<pipeexpression(sum(x)):bigint>
+struct<sum(x):bigint>
 -- !query output
 1
 
@@ -2734,7 +3046,7 @@ struct<x:int>
 table other
 |> aggregate a + count(b) group by a
 -- !query schema
-struct<a:int,pipeexpression((a + count(b))):bigint>
+struct<a:int,(a + count(b)):bigint>
 -- !query output
 1	3
 2	3
@@ -3344,13 +3656,12 @@ struct<c_customer_id:string>
 
 -- !query
 with customer_total_return as
-  (table store_returns
+  (from store_returns
   |> join date_dim
   |> where sr_returned_date_sk = d_date_sk and d_year = 2000
   |> aggregate sum(sr_return_amt) as ctr_total_return
        group by sr_customer_sk as ctr_customer_sk, sr_store_sk as ctr_store_sk)
-table customer_total_return
-|> as ctr1
+from customer_total_return ctr1
 |> join store
 |> join customer
 |> where ctr1.ctr_total_return >
@@ -3696,13 +4007,12 @@ struct<rnk:int,best_performing:string,worst_performing:string>
 
 
 -- !query
-table store_sales
-|> as ss1
+from store_sales ss1
 |> where ss_store_sk = 4
 |> aggregate avg(ss_net_profit) rank_col
      group by ss_item_sk as item_sk
 |> where rank_col > 0.9 * (
-     table store_sales
+     from store_sales
      |> where ss_store_sk = 4
           and ss_addr_sk is null
      |> aggregate avg(ss_net_profit) rank_col
@@ -3717,8 +4027,7 @@ table store_sales
 |> where rnk < 11
 |> as asceding
 |> join (
-     table store_sales
-     |> as ss1
+     from store_sales ss1
      |> where ss_store_sk = 4
      |> aggregate avg(ss_net_profit) rank_col
           group by ss_item_sk as item_sk

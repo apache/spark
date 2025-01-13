@@ -25,7 +25,8 @@
             "unparsedIdentifier": "a",
             "planId": "0"
           }
-        }]
+        }],
+        "isInternal": false
       }
     }, {
       "unresolvedFunction": {
@@ -35,7 +36,8 @@
             "unparsedIdentifier": "a",
             "planId": "0"
           }
-        }]
+        }],
+        "isInternal": false
       }
     }],
     "groupingSets": [{

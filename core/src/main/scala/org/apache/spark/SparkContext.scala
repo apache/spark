@@ -252,6 +252,9 @@ class SparkContext(config: SparkConf) extends Logging {
 
   private[spark] def conf: SparkConf = _conf
 
+  /** Get a read-only reference to the spark conf. This is preferred version over [[getConf]]. */
+  def getReadOnlyConf: ReadOnlySparkConf = _conf
+
   /**
    * Return a copy of this SparkContext's configuration. The configuration ''cannot'' be
    * changed at runtime.
@@ -420,9 +423,6 @@ class SparkContext(config: SparkConf) extends Logging {
     if (!_conf.contains("spark.app.name")) {
       throw new SparkException("An application name must be set in your configuration")
     }
-    // HADOOP-19097 Set fs.s3a.connection.establish.timeout to 30s
-    // We can remove this after Apache Hadoop 3.4.1 releases
-    conf.setIfMissing("spark.hadoop.fs.s3a.connection.establish.timeout", "30000")
     // This should be set as early as possible.
     SparkContext.fillMissingMagicCommitterConfsIfNeeded(_conf)
 
@@ -1878,6 +1878,7 @@ class SparkContext(config: SparkConf) extends Logging {
         if (uri.getFragment != null) uri.getFragment else source.getName)
       logInfo(
         log"Unpacking an archive ${MDC(LogKeys.PATH, path)}" +
+          log" (${MDC(LogKeys.BYTE_SIZE, source.length)} bytes)" +
           log" from ${MDC(LogKeys.SOURCE_PATH, source.getAbsolutePath)}" +
           log" to ${MDC(LogKeys.DESTINATION_PATH, dest.getAbsolutePath)}")
       Utils.deleteRecursively(dest)

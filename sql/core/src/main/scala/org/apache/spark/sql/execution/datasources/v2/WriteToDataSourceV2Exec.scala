@@ -480,7 +480,7 @@ trait WritingSparkTask[W <: DataWriter[InternalRow]] extends Logging with Serial
             log"(task ${MDC(LogKeys.TASK_ID, taskId)}, " +
             log"attempt ${MDC(LogKeys.TASK_ATTEMPT_ID, attemptId)}, " +
             log"stage ${MDC(LogKeys.STAGE_ID, stageId)}." +
-            log"${MDC(LogKeys.STAGE_ATTEMPT, stageAttempt)})")
+            log"${MDC(LogKeys.STAGE_ATTEMPT_ID, stageAttempt)})")
 
           dataWriter.commit()
         } else {
@@ -500,7 +500,8 @@ trait WritingSparkTask[W <: DataWriter[InternalRow]] extends Logging with Serial
       logInfo(log"Committed partition ${MDC(LogKeys.PARTITION_ID, partId)} " +
         log"(task ${MDC(LogKeys.TASK_ID, taskId)}, " +
         log"attempt ${MDC(LogKeys.TASK_ATTEMPT_ID, attemptId)}, " +
-        log"stage ${MDC(LogKeys.STAGE_ID, stageId)}.${MDC(LogKeys.STAGE_ATTEMPT, stageAttempt)})")
+        log"stage ${MDC(LogKeys.STAGE_ID, stageId)}." +
+        log"${MDC(LogKeys.STAGE_ATTEMPT_ID, stageAttempt)})")
 
       DataWritingSparkTaskResult(iterWithMetrics.count, msg)
 
@@ -509,12 +510,14 @@ trait WritingSparkTask[W <: DataWriter[InternalRow]] extends Logging with Serial
       logError(log"Aborting commit for partition ${MDC(LogKeys.PARTITION_ID, partId)} " +
         log"(task ${MDC(LogKeys.TASK_ID, taskId)}, " +
         log"attempt ${MDC(LogKeys.TASK_ATTEMPT_ID, attemptId)}, " +
-        log"stage ${MDC(LogKeys.STAGE_ID, stageId)}.${MDC(LogKeys.STAGE_ATTEMPT, stageAttempt)})")
+        log"stage ${MDC(LogKeys.STAGE_ID, stageId)}." +
+        log"${MDC(LogKeys.STAGE_ATTEMPT_ID, stageAttempt)})")
       dataWriter.abort()
       logError(log"Aborted commit for partition ${MDC(LogKeys.PARTITION_ID, partId)} " +
         log"(task ${MDC(LogKeys.TASK_ID, taskId)}, " +
         log"attempt ${MDC(LogKeys.TASK_ATTEMPT_ID, attemptId)}, " +
-        log"stage ${MDC(LogKeys.STAGE_ID, stageId)}.${MDC(LogKeys.STAGE_ATTEMPT, stageAttempt)})")
+        log"stage ${MDC(LogKeys.STAGE_ID, stageId)}." +
+        log"${MDC(LogKeys.STAGE_ATTEMPT_ID, stageAttempt)})")
     }, finallyBlock = {
       dataWriter.close()
     })

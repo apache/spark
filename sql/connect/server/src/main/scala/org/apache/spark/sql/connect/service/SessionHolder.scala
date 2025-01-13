@@ -301,7 +301,7 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
 
     // Clean up all artifacts.
     // Note: there can be concurrent AddArtifact calls still adding something.
-    artifactManager.cleanUpResources()
+    artifactManager.close()
 
     // Clean up running streaming queries.
     // Note: there can be concurrent streaming queries being started.

@@ -225,8 +225,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       errorClass = "INVALID_ARRAY_INDEX",
       messageParameters = Map(
         "indexValue" -> toSQLValue(index, IntegerType),
-        "arraySize" -> toSQLValue(numElements, IntegerType),
-        "ansiConfig" -> toSQLConf(SQLConf.ANSI_ENABLED.key)),
+        "arraySize" -> toSQLValue(numElements, IntegerType)),
       context = getQueryContext(context),
       summary = getSummary(context))
   }
@@ -239,8 +238,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       errorClass = "INVALID_ARRAY_INDEX_IN_ELEMENT_AT",
       messageParameters = Map(
         "indexValue" -> toSQLValue(index, IntegerType),
-        "arraySize" -> toSQLValue(numElements, IntegerType),
-        "ansiConfig" -> toSQLConf(SQLConf.ANSI_ENABLED.key)),
+        "arraySize" -> toSQLValue(numElements, IntegerType)),
       context = getQueryContext(context),
       summary = getSummary(context))
   }
@@ -267,12 +265,13 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       summary = "")
   }
 
-  def ansiDateTimeParseError(e: Exception): SparkDateTimeException = {
+  def ansiDateTimeParseError(e: Exception, suggestedFunc: String): SparkDateTimeException = {
     new SparkDateTimeException(
       errorClass = "CANNOT_PARSE_TIMESTAMP",
       messageParameters = Map(
         "message" -> e.getMessage,
-        "ansiConfig" -> toSQLConf(SQLConf.ANSI_ENABLED.key)),
+        "func" -> toSQLId(suggestedFunc)
+      ),
       context = Array.empty,
       summary = "")
   }
@@ -2475,11 +2474,11 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
     )
   }
 
-  def timestampAddOverflowError(micros: Long, amount: Int, unit: String): ArithmeticException = {
+  def timestampAddOverflowError(micros: Long, amount: Long, unit: String): ArithmeticException = {
     new SparkArithmeticException(
       errorClass = "DATETIME_OVERFLOW",
       messageParameters = Map(
-        "operation" -> (s"add ${toSQLValue(amount, IntegerType)} $unit to " +
+        "operation" -> (s"add ${toSQLValue(amount, LongType)} $unit to " +
           s"${toSQLValue(DateTimeUtils.microsToInstant(micros), TimestampType)}")),
       context = Array.empty,
       summary = "")
@@ -2599,6 +2598,14 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       messageParameters = Map(
         "expectedVersion" -> expectedVersion,
         "actualVersion" -> actualVersion),
+      cause = null)
+  }
+
+  def cannotFindBaseSnapshotCheckpoint(lineage: String): Throwable = {
+    new SparkException (
+      errorClass =
+        "CANNOT_LOAD_STATE_STORE.CANNOT_FIND_BASE_SNAPSHOT_CHECKPOINT",
+      messageParameters = Map("lineage" -> lineage),
       cause = null)
   }
 
@@ -2778,6 +2785,16 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
     "MALFORMED_VARIANT",
     Map.empty
   )
+
+  def invalidFileExtensionError(functionName: String, extension: String): RuntimeException = {
+    new SparkIllegalArgumentException(
+      errorClass = "INVALID_PARAMETER_VALUE.EXTENSION",
+      messageParameters = Map(
+        "functionName" -> toSQLId(functionName),
+        "parameter" -> toSQLId("extension"),
+        "fileExtension" -> toSQLId(extension),
+        "acceptable" -> "Extension is limited to exactly 3 letters (e.g. csv, tsv, etc...)"))
+  }
 
   def invalidCharsetError(functionName: String, charset: String): RuntimeException = {
     new SparkIllegalArgumentException(

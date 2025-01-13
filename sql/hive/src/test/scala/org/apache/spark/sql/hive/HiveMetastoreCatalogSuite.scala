@@ -17,11 +17,13 @@
 
 package org.apache.spark.sql.hive
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.{AliasIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog.CatalogTableType
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical.SubqueryAlias
+import org.apache.spark.sql.hive.HiveUtils.QUOTE_HIVE_STRUCT_FIELD_NAME
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
 import org.apache.spark.sql.test.{ExamplePointUDT, SQLTestUtils}
@@ -127,6 +129,26 @@ class HiveMetastoreCatalogSuite extends TestHiveSingleton with SQLTestUtils {
         .add("c23", "struct<a:int,b:int>")
         .add("c24", new StructType().add("c", VarcharType(10)).add("d", "int"), true)
       assert(schema == expectedSchema)
+    }
+  }
+
+  test("SPARK-46934: HMS columns cannot handle quoted columns") {
+    withTable("t") {
+      val schema =
+        "a struct<" +
+          "`a.a`:int," +
+          "`a.b`:struct<" +
+          "  `a b b`:array<string>," +
+          "  `a b c`:map<int, string>" +
+          "  >" +
+          ">"
+      val e = intercept[AnalysisException](sql("CREATE TABLE t(" + schema + ") USING hive"))
+      checkError(
+        exception = e,
+        condition = "_LEGACY_ERROR_TEMP_3065",
+        parameters = Map(
+          "clazz" -> "org.apache.hadoop.hive.ql.metadata.HiveException",
+          "msg" -> e.getCause.getMessage))
     }
   }
 }
@@ -441,7 +463,7 @@ class DataSourceWithHiveMetastoreCatalogSuite
   }
 
   test("SPARK-46934: Handle special characters in struct types with hive DDL") {
-    withTable("t") {
+    try {
       val schema =
         "a struct<" +
           "`a.a`:int," +
@@ -451,7 +473,22 @@ class DataSourceWithHiveMetastoreCatalogSuite
           "  >" +
           ">"
       sparkSession.metadataHive.runSqlHive(s"CREATE TABLE t($schema)")
-      assert(spark.table("t").schema === CatalystSqlParser.parseTableSchema(schema))
+      withSQLConf(QUOTE_HIVE_STRUCT_FIELD_NAME.key -> "true") {
+        assert(spark.table("t").schema === CatalystSqlParser.parseTableSchema(schema))
+      }
+
+      withSQLConf(QUOTE_HIVE_STRUCT_FIELD_NAME.key -> "false") {
+        checkError(exception =
+          intercept[SparkException](spark.table("t")).getCause.asInstanceOf[SparkException],
+          condition = "CANNOT_RECOGNIZE_HIVE_TYPE",
+          parameters = Map(
+            "fieldType" ->
+              "\"STRUCT<A.A:INT,A.B:STRUCT<A.B.B:ARRAY<STRING>,A B C:MAP<INT,STRING>>>\"",
+            "fieldName" -> "`a`"
+          ))
+      }
+    } finally {
+      sparkSession.metadataHive.runSqlHive("DROP TABLE IF EXISTS t")
     }
   }
 }

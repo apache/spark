@@ -301,6 +301,14 @@ class UserDefinedFunctionE2ETestSuite extends QueryTest with RemoteSparkSession 
     checkDataset(df.filter(r => r.getInt(1) > 5), Row("a", 10), Row("a", 20))
   }
 
+  test("SPARK-50693: Filter with row input encoder on unresolved plan") {
+    val session: SparkSession = spark
+    import session.implicits._
+    val df = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDF("c1", "c2")
+
+    checkDataset(df.select("*").filter(r => r.getInt(1) > 5), Row("a", 10), Row("a", 20))
+  }
+
   test("mapPartitions with row input encoder") {
     val session: SparkSession = spark
     import session.implicits._
