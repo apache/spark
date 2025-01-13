@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.catalog
 
 import com.fasterxml.jackson.annotation.JsonInclude.Include
 import com.fasterxml.jackson.databind.{DeserializationFeature, ObjectMapper}
-import com.fasterxml.jackson.module.scala.{DefaultScalaModule, ScalaObjectMapper}
+import com.fasterxml.jackson.module.scala.{ClassTagExtensions, DefaultScalaModule}
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.FunctionIdentifier
@@ -118,7 +118,7 @@ object UserDefinedFunction {
    * Get a object mapper to serialize and deserialize function properties.
    */
   private def getObjectMapper: ObjectMapper = {
-    val mapper = new ObjectMapper with ScalaObjectMapper
+    val mapper = new ObjectMapper with ClassTagExtensions
     mapper.setSerializationInclusion(Include.NON_ABSENT)
     mapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
     mapper.registerModule(DefaultScalaModule)
