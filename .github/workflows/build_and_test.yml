@@ -609,6 +609,7 @@ jobs:
       shell: 'script -q -e -c "bash {0}"'
       run: |
         if [[ "$MODULES_TO_TEST" == *"pyspark-errors"* ]]; then
+          export PATH=/github/home/miniconda3/bin:$PATH
           export SKIP_PACKAGING=false
           echo "Python Packaging Tests Enabled!"
         fi
