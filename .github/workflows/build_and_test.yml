@@ -607,16 +607,21 @@ jobs:
     - name: Bash
       shell: bash -el {0}
       run: |
-        ls -al $GITHUB_WORKSPACE/miniforge-latest
-        conda info
-        conda list
+        if [[ "$MODULES_TO_TEST" == *"pyspark-errors"* ]]; then
+          ls -al $GITHUB_WORKSPACE/miniforge-latest
+          ls -al $GITHUB_WORKSPACE/miniforge-latest/condabin
+          ls -al $GITHUB_WORKSPACE/miniforge-latest/bin
+          conda info
+          conda list
+          hash conda
+        fi
     # Run the tests.
     - name: Run tests
       env: ${{ fromJSON(inputs.envs) }}
       shell: 'script -q -e -c "bash {0}"'
       run: |
         if [[ "$MODULES_TO_TEST" == *"pyspark-errors"* ]]; then
-          export PATH=$PATH:$GITHUB_WORKSPACE/miniforge-latest/bin
+          hash conda
           env
           which conda
           export SKIP_PACKAGING=false
