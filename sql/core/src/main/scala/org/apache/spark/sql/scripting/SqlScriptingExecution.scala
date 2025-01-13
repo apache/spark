@@ -44,7 +44,8 @@ class SqlScriptingExecution(
     val ctx = new SqlScriptingExecutionContext()
     val executionPlan = interpreter.buildExecutionPlan(sqlScript, args, ctx)
     // Add frame which represents SQL Script to the context.
-    ctx.frames.append(new SqlScriptingExecutionFrame(executionPlan.getTreeIterator))
+    ctx.frames.append(new SqlScriptingExecutionFrame(
+      executionPlan.getTreeIterator, SqlScriptingFrameType.SQL_SCRIPT))
     // Enter the scope of the top level compound.
     // We don't need to exit this scope explicitly as it will be done automatically
     // when the frame is removed during iteration.
@@ -67,7 +68,7 @@ class SqlScriptingExecution(
   }
 
   /** Helper method to get the next result statement from the script. */
-  def getNextResultInternal: Option[DataFrame] = {
+  private def getNextResultInternal: Option[DataFrame] = {
     var currentStatement = getNextStatement
     // While we don't have a result statement, execute the statements.
     while (currentStatement.isDefined) {

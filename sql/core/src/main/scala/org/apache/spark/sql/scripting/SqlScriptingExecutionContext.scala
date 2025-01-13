@@ -17,9 +17,10 @@
 
 package org.apache.spark.sql.scripting
 
-import scala.collection.mutable.ListBuffer
+import scala.collection.mutable.{HashMap, ListBuffer}
 
 import org.apache.spark.SparkException
+import org.apache.spark.sql.scripting.SqlScriptingFrameType.SqlScriptingFrameType
 
 /**
  * SQL scripting execution context - keeps track of the current execution state.
@@ -41,6 +42,25 @@ class SqlScriptingExecutionContext {
     }
     frames.last.exitScope(label)
   }
+
+  def findHandler(condition: String): Option[ErrorHandlerExec] = {
+    if (frames.isEmpty) {
+      throw SparkException.internalError(s"Cannot find handler: no frames.")
+    }
+
+    frames.reverseIterator.foreach { frame =>
+      val handler = frame.findHandler(condition)
+      if (handler.isDefined) {
+        return handler
+      }
+    }
+    None
+  }
+}
+
+object SqlScriptingFrameType extends Enumeration {
+  type SqlScriptingFrameType = Value
+  val SQL_SCRIPT, HANDLER, STORED_PROCEDURE = Value
 }
 
 /**
@@ -50,7 +70,8 @@ class SqlScriptingExecutionContext {
  * @param executionPlan CompoundBody which need to be executed.
  */
 class SqlScriptingExecutionFrame(
-    executionPlan: Iterator[CompoundStatementExec]) extends Iterator[CompoundStatementExec] {
+    executionPlan: Iterator[CompoundStatementExec],
+    val frameType: SqlScriptingFrameType) extends Iterator[CompoundStatementExec] {
 
   // List of scopes that are currently active.
   private val scopes: ListBuffer[SqlScriptingExecutionScope] = ListBuffer.empty
@@ -81,6 +102,20 @@ class SqlScriptingExecutionFrame(
       scopes.remove(scopes.length - 1)
     }
   }
+
+  def findHandler(condition: String): Option[ErrorHandlerExec] = {
+    if (scopes.isEmpty) {
+      throw SparkException.internalError(s"Cannot find handler: no scopes.")
+    }
+
+    scopes.reverseIterator.foreach { scope =>
+      val handler = scope.findHandler(condition)
+      if (handler.isDefined) {
+        return handler
+      }
+    }
+    None
+  }
 }
 
 /**
@@ -89,4 +124,18 @@ class SqlScriptingExecutionFrame(
  * @param label
  *   Label of the scope.
  */
-class SqlScriptingExecutionScope(val label: String)
+class SqlScriptingExecutionScope(
+    val label: String,
+    val conditionHandlerMap: HashMap[String, ErrorHandlerExec]) {
+
+  def findHandler(condition: String): Option[ErrorHandlerExec] = {
+    conditionHandlerMap.get(condition)
+      .orElse{
+        conditionHandlerMap.get("NOT FOUND") match {
+          // If NOT FOUND handler is defined, use it only for errors with class '02'.
+          case Some(handler) if condition.startsWith("02") => Some(handler)
+          case _ => None
+        }}
+      .orElse{conditionHandlerMap.get("SQLEXCEPTION")}
+  }
+}
