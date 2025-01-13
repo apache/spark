@@ -90,6 +90,14 @@ trait MetadataMapSupport {
     }
     map
   }
+
+  val timestampFormatter = new Iso8601TimestampFormatter(
+    pattern = "yyyy-MM-dd'T'HH:mm:ss.SSSXXX",
+    zoneId = ZoneId.of("UTC"),
+    locale = DateFormatter.defaultLocale,
+    legacyFormat = LegacyDateFormats.SIMPLE_DATE_FORMAT,
+    isParsing = true
+  )
 }
 
 
@@ -188,11 +196,11 @@ case class CatalogTablePartition(
     }
 
     map += ("Created Time" -> JString(
-      DateTimeUtils.microsToInstant(DateTimeUtils.millisToMicros(createTime)).toString))
+      timestampFormatter.format(DateTimeUtils.millisToMicros(createTime))))
 
     val lastAccess = if (lastAccessTime <= 0) JString("UNKNOWN")
     else JString(
-      DateTimeUtils.microsToInstant(DateTimeUtils.millisToMicros(createTime)).toString)
+      timestampFormatter.format(DateTimeUtils.millisToMicros(createTime)))
     map += ("Last Access" -> lastAccess)
 
     stats.foreach(s => map += ("Partition Statistics" -> JString(s.simpleString)))
@@ -600,8 +608,8 @@ case class CatalogTable(
       else JNull
 
     val lastAccess: JValue =
-      if (lastAccessTime <= 0) JString("UNKNOWN") else JString(
-        DateTimeUtils.microsToInstant(DateTimeUtils.millisToMicros(lastAccessTime)).toString)
+      if (lastAccessTime <= 0) JString("UNKNOWN")
+      else JString(timestampFormatter.format(DateTimeUtils.millisToMicros(createTime)))
 
     val viewQueryOutputColumns: JValue =
       if (viewQueryColumnNames.nonEmpty) JArray(viewQueryColumnNames.map(JString).toList)
@@ -614,7 +622,7 @@ case class CatalogTable(
     map += "Table" -> JString(identifier.table)
     if (Option(owner).exists(_.nonEmpty)) map += "Owner" -> JString(owner)
     map += "Created Time" ->
-      JString(DateTimeUtils.microsToInstant(DateTimeUtils.millisToMicros(createTime)).toString)
+      JString(timestampFormatter.format(DateTimeUtils.millisToMicros(createTime)))
     if (lastAccess != JNull) map += "Last Access" -> lastAccess
     map += "Created By" -> JString(s"Spark $createVersion")
     map += "Type" -> JString(tableType.name)
