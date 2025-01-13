@@ -773,7 +773,7 @@ class JobCancellationSuite extends SparkFunSuite with Matchers with BeforeAndAft
 
             // Leave some time for the task to be interrupted during the
             // creation of `InterruptionSensitiveInputStream`.
-            Thread.sleep(5000)
+            Thread.sleep(10000)
 
             underlying = in
             underlying
@@ -811,7 +811,7 @@ class JobCancellationSuite extends SparkFunSuite with Matchers with BeforeAndAft
         sc.addSparkListener(new SparkListener {
           override def onTaskStart(taskStart: SparkListenerTaskStart): Unit = {
             // Sleep some time to ensure task has started
-            Thread.sleep(1000)
+            Thread.sleep(2000)
             taskStartedSemaphore.release()
           }
 
