@@ -3875,6 +3875,9 @@ class AstBuilder extends DataTypeAstBuilder
   }
 
   override def visitCollationSpec(ctx: CollationSpecContext): String = withOrigin(ctx) {
+    if (!SQLConf.get.objectLevelCollationsEnabled) {
+      throw QueryCompilationErrors.objectLevelCollationsNotEnabledError()
+    }
     val collationName = ctx.identifier.getText
     CollationFactory.fetchCollation(collationName).collationName
   }

@@ -619,11 +619,13 @@ jobs:
         fi
     - name: Upload coverage to Codecov
       if: fromJSON(inputs.envs).PYSPARK_CODECOV == 'true'
-      uses: codecov/codecov-action@v4
+      uses: codecov/codecov-action@v5
       with:
         files: ./python/coverage.xml
+        token: ${{ secrets.CODECOV_TOKEN }}
         flags: unittests
         name: PySpark
+        verbose: true
     - name: Upload test results to report
       env: ${{ fromJSON(inputs.envs) }}
       if: always()

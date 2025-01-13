@@ -63,29 +63,25 @@ trait MetadataMapSupport {
 
   protected def jsonToString(
       jsonMap: mutable.LinkedHashMap[String, JValue]): mutable.LinkedHashMap[String, String] = {
-    def removeWhitespace(str: String): String = {
-      str.replaceAll("\\s+$", "")
-    }
-
     val map = new mutable.LinkedHashMap[String, String]()
     jsonMap.foreach { case (key, jValue) =>
       val stringValue = jValue match {
-        case JString(value) => removeWhitespace(value)
+        case JString(value) => value
         case JArray(values) =>
           values.map(_.values)
             .map {
-              case str: String => quoteIdentifier(removeWhitespace(str))
-              case other => removeWhitespace(other.toString)
+              case str: String => quoteIdentifier(str)
+              case other => other.toString
             }
             .mkString("[", ", ", "]")
         case JObject(fields) =>
           fields.map { case (k, v) =>
-            s"$k=${removeWhitespace(v.values.toString)}"
+            s"$k=${v.values.toString}"
           }
             .mkString("[", ", ", "]")
         case JInt(value) => value.toString
         case JDouble(value) => value.toString
-        case _ => removeWhitespace(jValue.values.toString)
+        case _ => jValue.values.toString
       }
       map.put(key, stringValue)
     }

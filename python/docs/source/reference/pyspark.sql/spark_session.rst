@@ -53,6 +53,7 @@ See also :class:`SparkSession`.
     SparkSession.getActiveSession
     SparkSession.getTags
     SparkSession.interruptAll
+    SparkSession.interruptOperation
     SparkSession.interruptTag
     SparkSession.newSession
     SparkSession.profile
@@ -88,6 +89,5 @@ Spark Connect Only
     SparkSession.clearProgressHandlers
     SparkSession.client
     SparkSession.copyFromLocalToFs
-    SparkSession.interruptOperation
     SparkSession.registerProgressHandler
     SparkSession.removeProgressHandler

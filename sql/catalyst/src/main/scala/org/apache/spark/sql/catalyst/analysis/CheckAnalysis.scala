@@ -884,7 +884,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
             o.failAnalysis(
               errorClass = "UNSUPPORTED_FEATURE.PARTITION_BY_VARIANT",
               messageParameters = Map(
-                "expr" -> variantExpr.sql,
+                "expr" -> toSQLExpr(variantExpr),
                 "dataType" -> toSQLType(variantExpr.dataType)))
 
           case o if o.expressions.exists(!_.deterministic) &&
