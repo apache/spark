@@ -4423,6 +4423,29 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val HMS_BATCH_SIZE = buildConf("spark.sql.hive.metastore.batchSize")
+    .internal()
+    .doc("This setting defines the batch size for fetching metadata partitions from the" +
+        "Hive Metastore. A value of -1 disables batching by default. To enable batching," +
+        "specify a positive integer, which will determine the batch size for partition fetching."
+    )
+    .version("3.5.3")
+    .intConf
+    .createWithDefault(-1)
+
+  val METASTORE_PARTITION_BATCH_RETRY_COUNT = buildConf(
+  "spark.sql.metastore.partition.batch.retry.count")
+  .internal()
+  .doc(
+    "This setting specifies the number of retries for fetching partitions from the metastore" +
+    "in case of failure to fetch batch metadata. This retry mechanism is applicable only" +
+    "when HMS_BATCH_SIZE is enabled. It defines the count for the number of " +
+    "retries to be done."
+  )
+  .version("3.5.3")
+  .intConf
+  .createWithDefault(3)
+
   /**
    * Holds information about keys that have been deprecated.
    *
@@ -5277,6 +5300,10 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def legacyNegativeIndexInArrayInsert: Boolean = {
     getConf(SQLConf.LEGACY_NEGATIVE_INDEX_IN_ARRAY_INSERT)
   }
+
+  def getHiveMetaStoreBatchSize: Int = getConf(HMS_BATCH_SIZE)
+
+  def metastorePartitionBatchRetryCount: Int = getConf(METASTORE_PARTITION_BATCH_RETRY_COUNT)
 
   /** ********************** SQLConf functionality methods ************ */
 
