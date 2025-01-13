@@ -64,12 +64,12 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
   }
 
   /**
-   * Checks if the execution is completed.
+   * Checks if the execution thread has completed execution and is not running.
    *
    * @return
-   *   true if the execution is completed.
+   *   true if the execution thread has completed execution and is not running.
    */
-  private[connect] def isCompleted(): Boolean = {
+  private[connect] def completed(): Boolean = {
     state.getAcquire() == ThreadState.completed
   }
 
@@ -161,6 +161,8 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
         currentState == ThreadState.startedInterrupted ||
         currentState == ThreadState.completing) {
         val interrupted = currentState == ThreadState.startedInterrupted
+
+        // This state transition must be infallible.
         val prevState = state.compareAndExchangeRelease(currentState, ThreadState.completed)
         if (prevState == currentState) {
           if (interrupted) {

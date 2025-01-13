@@ -277,11 +277,10 @@ class SparkConnectServiceE2ESuite extends SparkConnectServerTest {
         query.hasNext
         val execution = eventuallyGetExecutionHolder
         Eventually.eventually(timeout(eventuallyTimeout)) {
-          assert(execution.isExecutionCompleted())
+          assert(execution.isExecuteThreadRunnerCompleted())
         }
 
-        // force remove all the responses, so that the client will get an IllegalStateException
-        execution.removeAllResponses()
+        execution.undoResponseObserverCompletion()
 
         val error = intercept[SparkException] {
           while (query.hasNext) query.next()

@@ -127,11 +127,15 @@ private[connect] class ExecuteHolder(
   }
 
   /**
-   * Check if the execution is completed and no further progress will be made. If the execution
-   * was delegated, this method will always return false.
+   * Check if the execution was ended without finalizing the outcome and no further progress will be
+   * made. If the execution was delegated, this method always returns false.
    */
-  def isExecutionCompleted(): Boolean = {
-    !runner.shouldDelegateCompleteResponse(request) && runner.isCompleted()
+  def isOrphan(): Boolean = {
+    // Check runner.completed() before others as the acquire memory fence in the method ensures the
+    // current thread to read the last known state of responseObserver correctly.
+    runner.completed() &&
+    !runner.shouldDelegateCompleteResponse(request) &&
+    !responseObserver.completed()
   }
 
   def addObservation(name: String, observation: Observation): Unit = synchronized {
@@ -204,8 +208,13 @@ private[connect] class ExecuteHolder(
   }
 
   // For testing
-  private[connect] def removeAllResponses() = synchronized {
-    responseObserver.removeAll()
+  private[connect] def undoResponseObserverCompletion() = synchronized {
+    responseObserver.undoCompletion()
+  }
+
+  // For testing
+  private[connect] def isExecuteThreadRunnerCompleted() = {
+    runner.completed()
   }
 
   /**
