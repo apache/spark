@@ -219,11 +219,6 @@ trait DescribeTableSuiteBase extends command.DescribeTableSuiteBase
            |  department STRING,
            |  hire_date DATE
            |) USING parquet
-           |OPTIONS ('compression' = 'snappy', 'max_records' = '1000')
-           |PARTITIONED BY (department, hire_date)
-           |CLUSTERED BY (employee_id) SORTED BY (employee_name ASC) INTO 4 BUCKETS
-           |COMMENT 'Employee data table for testing partitions and buckets'
-           |TBLPROPERTIES ('version' = '1.0')
            |""".stripMargin
       spark.sql(tableCreationStr)
 
@@ -271,8 +266,6 @@ trait DescribeTableSuiteBase extends command.DescribeTableSuiteBase
           TableColumn("department", Type("string"), true),
           TableColumn("hire_date", Type("date"), true)
         )),
-        owner = Some(""),
-        created_time = Some(""),
         last_access = Some("UNKNOWN"),
         created_by = Some(s"Spark $SPARK_VERSION"),
         `type` = Some("MANAGED"),
@@ -283,10 +276,11 @@ trait DescribeTableSuiteBase extends command.DescribeTableSuiteBase
         table_properties = Some(Map(
           "version" -> "1.0"
         )),
-        location = Some(""),
-        serde_library = Some("org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe"),
-        inputformat = Some("org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat"),
-        outputformat = Some("org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat"),
+        serde_library = if (getProvider() == "hive") {
+          Some("org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe")
+        } else {
+          None
+        },
         storage_properties = Some(Map(
           "compression" -> "snappy",
           "max_records" -> "1000"
@@ -295,14 +289,8 @@ trait DescribeTableSuiteBase extends command.DescribeTableSuiteBase
         partition_columns = Some(List("department", "hire_date"))
       )
 
-      if (getProvider() == "hive") {
-        assert(expectedOutput == parsedOutput.copy(owner = Some(""),
-          created_time = Some(""),
-          location = Some("")))
-      } else {
-        assert(expectedOutput.copy(inputformat = None, outputformat = None, serde_library = None)
-          == parsedOutput.copy(owner = Some(""), created_time = Some(""), location = Some("")))
-      }
+      assert(parsedOutput.location.isDefined)
+      assert(expectedOutput == parsedOutput.copy(location = None))
     }
   }
 
@@ -350,30 +338,18 @@ trait DescribeTableSuiteBase extends command.DescribeTableSuiteBase
         table_properties = Some(Map(
           "t" -> "test"
         )),
-        serde_library = Some("org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe"),
-        inputformat = Some("org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat"),
-        outputformat = Some("org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat"),
-        storage_properties = Some(Map(
-          "serialization.format" -> "1"
-        )),
+        serde_library = if (getProvider() == "hive") {
+          Some("org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe")
+        } else {
+          None
+        },
         partition_provider = Some("Catalog"),
         partition_columns = Some(List("region", "category")),
         partition_values = Some(Map("region" -> "USA", "category" -> "tech"))
       )
 
-      val filteredParsedStorageProperties =
-        parsedOutput.storage_properties.map(_.filterNot { case (key, _) => key == "path" })
-
-      if (getProvider() == "hive") {
-        assert(expectedOutput ==
-          parsedOutput.copy(location = None, created_time = None, owner = None,
-            storage_properties = filteredParsedStorageProperties))
-      } else {
-        assert(expectedOutput.copy(
-          inputformat = None, outputformat = None, serde_library = None, storage_properties = None)
-          == parsedOutput.copy(location = None, created_time = None, owner = None,
-            storage_properties = filteredParsedStorageProperties))
-      }
+      assert(parsedOutput.location.isDefined)
+      assert(expectedOutput == parsedOutput.copy(location = None, storage_properties = None))
     }
   }
 
@@ -415,22 +391,15 @@ trait DescribeTableSuiteBase extends command.DescribeTableSuiteBase
         bucket_columns = Some(Nil),
         sort_columns = Some(Nil),
         comment = Some("table_comment"),
-        serde_library = Some("org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe"),
-        inputformat = Some("org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat"),
-        outputformat = Some("org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat"),
+        serde_library = if (getProvider() == "hive") {
+          Some("org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe")
+        } else {
+          None
+        },
         table_properties = None
       )
-      if (getProvider() == "hive") {
-        assert(
-          expectedOutput ==
-            parsedOutput.copy(location = None, created_time = None, owner = None)
-        )
-      } else {
-        assert(
-          expectedOutput.copy(inputformat = None, outputformat = None, serde_library = None) ==
-            parsedOutput.copy(location = None, created_time = None, owner = None)
-        )
-      }
+      assert(parsedOutput.location.isDefined)
+      assert(expectedOutput == parsedOutput.copy(location = None))
     }
   }
 
@@ -465,10 +434,6 @@ trait DescribeTableSuiteBase extends command.DescribeTableSuiteBase
               TableColumn("name", Type("string")),
               TableColumn("created_at", Type("timestamp_ltz"))
             )),
-            serde_library = Some("org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe"),
-            inputformat = Some("org.apache.hadoop.mapred.SequenceFileInputFormat"),
-            outputformat = Some("org.apache.hadoop.hive.ql.io.HiveSequenceFileOutputFormat"),
-            storage_properties = Some(Map("serialization.format" -> "1")),
             last_access = Some("UNKNOWN"),
             created_by = Some(s"Spark $SPARK_VERSION"),
             `type` = Some("VIEW"),
@@ -480,14 +445,10 @@ trait DescribeTableSuiteBase extends command.DescribeTableSuiteBase
             view_query_output_columns = Some(List("id", "name", "created_at"))
           )
 
-          if (getProvider() == "hive") {
-            assert(expectedOutput ==
-              parsedOutput.copy(table_properties = None, created_time = None, owner = None))
-          } else {
-            assert(expectedOutput.copy(inputformat = None,
-              outputformat = None, serde_library = None, storage_properties = None)
-              == parsedOutput.copy(table_properties = None, created_time = None, owner = None))
-          }
+          assert(expectedOutput == parsedOutput.copy(
+            table_properties = None,
+            storage_properties = None,
+            serde_library = None))
         }
       }
     }
@@ -642,9 +603,11 @@ trait DescribeTableSuiteBase extends command.DescribeTableSuiteBase
             default = None
           )
         )),
-        serde_library = Some("org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe"),
-        inputformat = Some("org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat"),
-        outputformat = Some("org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat"),
+        serde_library = if (getProvider() == "hive") {
+          Some("org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe")
+        } else {
+          None
+        },
         storage_properties = Some(Map(
           "option1" -> "value1",
           "option2" -> "value2"
@@ -662,13 +625,8 @@ trait DescribeTableSuiteBase extends command.DescribeTableSuiteBase
         partition_columns = Some(List("id"))
       )
 
-      if (getProvider() == "hive") {
-        assert(expectedOutput ==
-          parsedOutput.copy(location = None, created_time = None, owner = None))
-      } else {
-        assert(expectedOutput.copy(inputformat = None, outputformat = None, serde_library = None)
-          == parsedOutput.copy(location = None, created_time = None, owner = None))
-      }
+      assert(parsedOutput.location.isDefined)
+      assert(expectedOutput == parsedOutput.copy(location = None))
     }
   }
 }
@@ -753,8 +711,6 @@ case class DescribeTableJson(
     namespace: Option[List[String]] = Some(Nil),
     schema_name: Option[String] = None,
     columns: Option[List[TableColumn]] = Some(Nil),
-    owner: Option[String] = None,
-    created_time: Option[String] = None,
     last_access: Option[String] = None,
     created_by: Option[String] = None,
     `type`: Option[String] = None,
@@ -765,8 +721,6 @@ case class DescribeTableJson(
     table_properties: Option[Map[String, String]] = None,
     location: Option[String] = None,
     serde_library: Option[String] = None,
-    inputformat: Option[String] = None,
-    outputformat: Option[String] = None,
     storage_properties: Option[Map[String, String]] = None,
     partition_provider: Option[String] = None,
     partition_columns: Option[List[String]] = Some(Nil),
