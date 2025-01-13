@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.scripting
 
+import org.apache.spark.SparkThrowable
 import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.logical.{CommandResult, CompoundBody}
@@ -44,12 +45,13 @@ class SqlScriptingExecution(
     val ctx = new SqlScriptingExecutionContext()
     val executionPlan = interpreter.buildExecutionPlan(sqlScript, args, ctx)
     // Add frame which represents SQL Script to the context.
-    ctx.frames.append(new SqlScriptingExecutionFrame(
-      executionPlan.getTreeIterator, SqlScriptingFrameType.SQL_SCRIPT))
+    ctx.frames.append(
+      new SqlScriptingExecutionFrame(executionPlan, SqlScriptingFrameType.SQL_SCRIPT))
     // Enter the scope of the top level compound.
     // We don't need to exit this scope explicitly as it will be done automatically
     // when the frame is removed during iteration.
     executionPlan.enterScope()
+    // Return the context.
     ctx
   }
 
@@ -58,7 +60,18 @@ class SqlScriptingExecution(
   private def getNextStatement: Option[CompoundStatementExec] = {
     // Remove frames that are already executed.
     while (context.frames.nonEmpty && !context.frames.last.hasNext) {
+      val lastFrame = context.frames.last
       context.frames.remove(context.frames.size - 1)
+
+      // If the last frame is a handler, set leave statement to be the next one in the
+      // innermost scope that should be exited.
+      if (lastFrame.frameType == SqlScriptingFrameType.HANDLER && context.frames.nonEmpty) {
+        var execPlan: CompoundBodyExec = context.frames.last.executionPlan
+        while (execPlan.curr.get.isInstanceOf[CompoundBodyExec]) {
+          execPlan = execPlan.curr.get.asInstanceOf[CompoundBodyExec]
+        }
+        execPlan.curr = Some(new LeaveStatementExec(lastFrame.scopeToExit.get))
+      }
     }
     // If there are still frames available, get the next statement.
     if (context.frames.nonEmpty) {
@@ -103,24 +116,37 @@ class SqlScriptingExecution(
     try {
       getNextResultInternal
     } catch {
-      case e: Throwable =>
+      case e: SparkThrowable =>
         handleException(e)
         getNextResult // After handling the exception, try to get the next result again.
+      case throwable: Throwable =>
+        throw throwable // Rethrow the exception.
     }
   }
 
-  private def handleException(e: Throwable): Unit = {
-    // Rethrow the exception.
-    // TODO: SPARK-48353 Add error handling for SQL scripts
-    throw e
+  private def handleException(e: SparkThrowable): Unit = {
+    context.findHandler(e.getSqlState) match {
+      case Some(handler) =>
+        context.frames.addOne(
+          new SqlScriptingExecutionFrame(
+            handler.body,
+            SqlScriptingFrameType.HANDLER,
+            handler.scopeToExit
+          )
+        )
+      case None =>
+        throw e.asInstanceOf[Throwable]
+    }
   }
 
   def withErrorHandling(f: => Unit): Unit = {
     try {
       f
     } catch {
-      case e: Throwable =>
-        handleException(e)
+      case sparkThrowable: SparkThrowable =>
+        handleException(sparkThrowable)
+      case throwable: Throwable =>
+        throw throwable
     }
   }
 }

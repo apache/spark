@@ -72,17 +72,18 @@ object SqlScriptingFrameType extends Enumeration {
  * @param executionPlan CompoundBody which need to be executed.
  */
 class SqlScriptingExecutionFrame(
-    executionPlan: Iterator[CompoundStatementExec],
-    val frameType: SqlScriptingFrameType) extends Iterator[CompoundStatementExec] {
+    val executionPlan: CompoundBodyExec,
+    val frameType: SqlScriptingFrameType,
+    val scopeToExit: Option[String] = None) extends Iterator[CompoundStatementExec] {
 
   // List of scopes that are currently active.
   private val scopes: ListBuffer[SqlScriptingExecutionScope] = ListBuffer.empty
 
-  override def hasNext: Boolean = executionPlan.hasNext
+  override def hasNext: Boolean = executionPlan.getTreeIterator.hasNext
 
   override def next(): CompoundStatementExec = {
     if (!hasNext) throw SparkException.internalError("No more elements to iterate through.")
-    executionPlan.next()
+    executionPlan.getTreeIterator.next()
   }
 
   def enterScope(
@@ -127,6 +128,10 @@ class SqlScriptingExecutionFrame(
  *
  * @param label
  *   Label of the scope.
+ * @param conditionHandlerMap
+ *   Map holding condition/sqlState to handler mapping.
+ * @return
+ *   Handler for the given condition.
  */
 class SqlScriptingExecutionScope(
     val label: String,
@@ -140,6 +145,14 @@ class SqlScriptingExecutionScope(
           case Some(handler) if condition.startsWith("02") => Some(handler)
           case _ => None
         }}
-      .orElse{conditionHandlerMap.get("SQLEXCEPTION")}
+      .orElse{
+        conditionHandlerMap.get("SQLEXCEPTION") match {
+          // If SQLEXCEPTION handler is defined, use it only for errors with class
+          // different from 'XX' and '02'.
+          case Some(handler) if
+            !condition.startsWith("XX") && !condition.startsWith("02") => Some(handler)
+          case _ => None
+        }
+      }
   }
 }

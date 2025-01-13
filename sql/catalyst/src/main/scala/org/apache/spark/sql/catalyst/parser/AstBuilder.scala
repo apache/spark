@@ -192,11 +192,11 @@ class AstBuilder extends DataTypeAstBuilder
   private def visitDeclareConditionStatementImpl(
       ctx: DeclareConditionStatementContext): ErrorCondition = {
     val conditionName = ctx.multipartIdentifier().getText
-    val sqlStateValue = Option(ctx.sqlStateValue())
+    val sqlState = Option(ctx.sqlStateValue())
       .map(_.getText.replace("'", "")).getOrElse("45000")
 
-    assertSqlState(sqlStateValue)
-    ErrorCondition(conditionName, sqlStateValue)
+    assertSqlState(sqlState)
+    ErrorCondition(conditionName, sqlState)
   }
 
   private def visitDeclareHandlerStatementImpl(
@@ -245,7 +245,7 @@ class AstBuilder extends DataTypeAstBuilder
             throw SparkException.internalError(
               s"Duplicate condition name ${condition.conditionName} in handler definition")
           }
-          conditions += condition.conditionName -> condition.value
+          conditions += condition.conditionName -> condition.sqlState
         case s => buff += s
       }
     })

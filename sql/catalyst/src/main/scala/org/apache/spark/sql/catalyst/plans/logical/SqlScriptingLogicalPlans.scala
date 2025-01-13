@@ -307,11 +307,11 @@ case class ForStatement(
 /**
  * Logical operator for an error condition.
  * @param conditionName Name of the error condition.
- * @param value SQLSTATE or Error Code.
+ * @param sqlState SQLSTATE or Error Code.
  */
 case class ErrorCondition(
     conditionName: String,
-    value: String) extends CompoundPlanStatement {
+    sqlState: String) extends CompoundPlanStatement {
   override def output: Seq[Attribute] = Seq.empty
 
   /**
