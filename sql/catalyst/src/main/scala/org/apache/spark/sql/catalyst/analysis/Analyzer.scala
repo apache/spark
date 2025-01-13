@@ -387,6 +387,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       ResolveTableSpec ::
       ValidateAndStripPipeExpressions ::
       ResolveSQLFunctions ::
+      ResolveSQLTableFunctions ::
       ResolveAliases ::
       ResolveSubquery ::
       ResolveSubqueryColumnAliases ::
@@ -2449,8 +2450,8 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
      * function inputs into the given project list.
      */
     private def rewriteSQLFunctions[E <: Expression](
-        expression: E,
-        projectList: ArrayBuffer[NamedExpression]): E = {
+      expression: E,
+      projectList: ArrayBuffer[NamedExpression]): E = {
       val newExpr = expression match {
         case f: SQLFunctionExpression if !hasSQLFunctionExpression(f.inputs) &&
           // Make sure LateralColumnAliasReference in parameters is resolved and eliminated first.
@@ -2493,13 +2494,13 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
      * Extract aggregate expressions from the given expression and replace
      * them with attribute references.
      * Example:
-     *   Before: foo(c1) + foo(max(c2)) + max(foo(c2))
-     *   After: foo(c1) + foo(max_c2) + max_foo_c2
-     *   Extracted expressions: [c1, max(c2) AS max_c2, max(foo(c2)) AS max_foo_c2]
+     * Before: foo(c1) + foo(max(c2)) + max(foo(c2))
+     * After: foo(c1) + foo(max_c2) + max_foo_c2
+     * Extracted expressions: [c1, max(c2) AS max_c2, max(foo(c2)) AS max_foo_c2]
      */
     private def extractAndRewrite[T <: Expression](
-        expression: T,
-        extractedExprs: ArrayBuffer[NamedExpression]): T = {
+      expression: T,
+      extractedExprs: ArrayBuffer[NamedExpression]): T = {
       val newExpr = expression match {
         case e if !shouldExtract(e) =>
           val exprToAdd: NamedExpression = e match {
@@ -2522,8 +2523,8 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
      * from the aliasMap.
      */
     private def replaceSQLFunctionWithAttr[T <: Expression](
-        expr: T,
-        aliasMap: mutable.HashMap[Expression, Alias]): T = {
+      expr: T,
+      aliasMap: mutable.HashMap[Expression, Alias]): T = {
       expr.transform {
         case f: SQLFunctionExpression if aliasMap.contains(f.canonicalized) =>
           aliasMap(f.canonicalized).toAttribute
@@ -2534,7 +2535,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       // Return if a sub-tree does not contain SQLFunctionExpression.
       case p: LogicalPlan if !p.containsPattern(SQL_FUNCTION_EXPRESSION) => p
 
-      case f @ Filter(cond, a: Aggregate)
+      case f@Filter(cond, a: Aggregate)
         if !f.resolved || AggregateExpression.containsAggregate(cond) ||
           ResolveGroupingAnalytics.hasGroupingFunction(cond) ||
           cond.containsPattern(TEMP_RESOLVED_COLUMN) =>
@@ -2545,7 +2546,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         // which breaks the pattern matching in those rules.
         f.copy(child = a.copy(child = rewrite(a.child)))
 
-      case h @ UnresolvedHaving(_, a: Aggregate) =>
+      case h@UnresolvedHaving(_, a: Aggregate) =>
         // Similarly UnresolvedHaving should be resolved by ResolveAggregateFunctions first
         // before rewriting aggregate.
         h.copy(child = a.copy(child = rewrite(a.child)))
@@ -2652,6 +2653,95 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       } else {
         rewrite(plan)
       }
+    }
+  }
+
+  /*
+   * This rule resolves SQL table functions.
+   */
+  object ResolveSQLTableFunctions extends Rule[LogicalPlan] with AliasHelper {
+
+    /**
+     * Check if a subquery plan is subject to the COUNT bug that can cause wrong results.
+     * A lateral correlation can only be removed if the lateral subquery is not subject to
+     * the COUNT bug. Currently only lateral correlation can handle it correctly.
+     */
+    private def hasCountBug(sub: LogicalPlan): Boolean = sub.find {
+      // The COUNT bug occurs when there is an Aggregate that satisfies all the following
+      // conditions:
+      // 1) is on the correlation path
+      // 2) has non-empty group by expressions
+      // 3) has one or more output columns that evaluate to non-null values with empty input.
+      //    E.g: COUNT(empty row) = 0.
+      // For simplicity, we use a stricter criteria (1 and 2 only) to determine if a query
+      // is subject to the COUNT bug.
+      case a: Aggregate if a.groupingExpressions.nonEmpty => hasOuterReferences(a.child)
+      case _ => false
+    }.nonEmpty
+
+    /**
+     * Rewrite a resolved SQL table function plan by removing unnecessary lateral joins:
+     * Before:
+     *   LateralJoin lateral-subquery [a], Inner
+     *   :  +- Project [c1, c2]
+     *   :     +- Filter [outer(a) == c1]
+     *   :        +- Relation [c1, c2]
+     *   +- Project [1 AS a]
+     *      +- OneRowRelation
+     * After:
+     *   Project [c1, c2]
+     *   +- Filter [1 == c1]  <---- Replaced outer(a)
+     *      +- Relation [c1, c2]
+     */
+    private def rewrite(plan: LogicalPlan): LogicalPlan = {
+      (plan transformUp {
+        case j @ LateralJoin(Project(aliases, _: OneRowRelation), sub: LateralSubquery, Inner, None)
+            if j.resolved && aliases.forall(_.deterministic) =>
+          val attrMap = AttributeMap(aliases.collect { case a: Alias => a.toAttribute -> a.child })
+          val newPlan = sub.plan.transformAllExpressionsWithPruning(
+            _.containsPattern(OUTER_REFERENCE)) {
+            // Avoid replacing outer references that do not belong to the current outer plan.
+            // This can happen if the child of an alias also contains outer references (nested
+            // table function references). E.g:
+            // LateralJoin
+            // :  +- Filter [outer(a) == x]
+            // :     +- Relation [x, y]
+            // +- Project [outer(c) AS a]
+            //    +- OneRowRelation
+            case OuterReference(a: Attribute) if attrMap.contains(a) => attrMap(a) match {
+              case ne: NamedExpression => ne
+              case o => Alias(o, a.name)(exprId = a.exprId, qualifier = a.qualifier)
+            }
+          }
+          // Keep the original lateral join if the new plan is subject to the count bug.
+          if (hasCountBug(newPlan)) j else newPlan
+      }).transformWithPruning(_.containsPattern(ALIAS)) {
+        // As a result of the above rewriting, we may end-up introducing nested Aliases (i.e.,
+        // Aliases defined inside Aliases). This is problematic for the plan canonicalization as
+        // it doesn't expect nested Aliases. Therefore, here we remove non-top level Aliases.
+        case node => node.mapExpressions(trimNonTopLevelAliases)
+      }
+    }
+
+    def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
+      _.containsPattern(SQL_TABLE_FUNCTION)) {
+      case SQLTableFunction(name, function, inputs, output) =>
+        val plan = v1SessionCatalog.makeSQLTableFunctionPlan(name, function, inputs, output)
+        // Resolve the SQL table function plan using its function context.
+        val conf = new SQLConf()
+        function.getSQLConfigs.foreach { case (k, v) => conf.settings.put(k, v) }
+        val resolved = SQLConf.withExistingConf(conf) {
+          SQLFunctionContext.withSQLFunction {
+            AnalysisContext.withAnalysisContext(function) {
+              executeSameContext(plan)
+            }
+          }
+        }
+        // Remove unnecessary lateral joins that are used to resolve the SQL function.
+        val newPlan = rewrite(resolved)
+        // Fail the analysis eagerly if a SQL table function cannot be resolved using its input.
+        SimpleAnalyzer.checkAnalysis(newPlan)
+        newPlan
     }
   }
 
