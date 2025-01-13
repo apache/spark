@@ -499,7 +499,7 @@ jobs:
           - >-
             pyspark-sql, pyspark-resource, pyspark-testing
           - >-
-            pyspark-core, pyspark-errors, pyspark-streaming, pyspark-logger
+            pyspark-errors, pyspark-core, pyspark-streaming, pyspark-logger
           - >-
             pyspark-mllib, pyspark-ml, pyspark-ml-connect
           - >-
@@ -603,14 +603,20 @@ jobs:
       uses: conda-incubator/setup-miniconda@v3
       with:
         miniforge-version: latest
-        installation-dir: $HOME/miniforge-latest
+        installation-dir: ${{ github.workspace }}/miniforge-latest
+    - name: Bash
+      shell: bash -el {0}
+      run: |
+        ls -al $GITHUB_WORKSPACE/miniforge-latest
+        conda info
+        conda list
     # Run the tests.
     - name: Run tests
       env: ${{ fromJSON(inputs.envs) }}
       shell: 'script -q -e -c "bash {0}"'
       run: |
         if [[ "$MODULES_TO_TEST" == *"pyspark-errors"* ]]; then
-          export PATH=$PATH:$HOME/miniforge-latest/bin
+          export PATH=$PATH:$GITHUB_WORKSPACE/miniforge-latest/bin
           env
           which conda
           export SKIP_PACKAGING=false
