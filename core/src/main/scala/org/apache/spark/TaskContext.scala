@@ -317,7 +317,12 @@ abstract class TaskContext extends Serializable {
 
   /**
    * Creating a closeable resource uninterruptibly. A task is not allowed to interrupt in this
-   * state until the resource creation finishes.
+   * state until the resource creation finishes. E.g.,
+   * {{{
+   *  val linesReader = TaskContext.get().createResourceUninterruptibly {
+   *    new HadoopFileLinesReader(file, parser.options.lineSeparatorInRead, conf)
+   *  }
+   * }}}
    */
   private[spark] def createResourceUninterruptibly[T <: Closeable](resourceBuilder: => T): T
 }

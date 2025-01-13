@@ -728,8 +728,10 @@ class JobCancellationSuite extends SparkFunSuite with Matchers with BeforeAndAft
       import org.apache.spark.JobCancellationSuite._
       withTempDir { dir =>
 
-        // `InterruptionSensitiveInputStream` is designed to easily leak the underlying stream
-        // when task thread interruption happens during its initialization.
+        // `InterruptionSensitiveInputStream` is designed to easily leak the underlying
+        // stream when task thread interruption happens during its initialization, as
+        // the reference to the underlying stream is intentionally not available to
+        // `InterruptionSensitiveInputStream` at that point.
         class InterruptionSensitiveInputStream(fileHint: String) extends InputStream {
           private var underlying: InputStream = _
 
