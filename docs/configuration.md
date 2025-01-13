@@ -3761,7 +3761,7 @@ The default logging format is plain text, using Log4j's [Pattern Layout](https:/
 MDC (Mapped Diagnostic Context) information is not included by default in plain text logs. To include it, update the `PatternLayout` configuration in the `log4j2.properties` file. For example, add `%X{task_name}` to include the task name in logs. Additionally, use `spark.sparkContext.setLocalProperty("key", "value")` to add custom data to the MDC.
 
 ## Structured Logging
-Starting with version 4.0.0, Spark supports optional structured logging using the [JSON Template Layout](https://logging.apache.org/log4j/2.x/manual/json-template-layout.html). This format enables efficient querying of logs with Spark SQL using the JSON data source and includes all MDC information for improved searchability and debugging.
+Starting with version 4.0.0, `spark-submit` supports optional structured logging using the [JSON Template Layout](https://logging.apache.org/log4j/2.x/manual/json-template-layout.html). This format enables efficient querying of logs with Spark SQL using the JSON data source and includes all MDC information for improved searchability and debugging.
 
 To enable structured logging and include MDC information, set the configuration `spark.log.structuredLogging.enabled` to `true` (default is `false`). For additional customization, copy `log4j2-json-layout.properties.template` to `conf/log4j2.properties` and adjust as needed.
 
