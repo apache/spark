@@ -112,6 +112,28 @@ class ProtobufSerdeSuite extends SharedSparkSession with ProtobufTestBase {
     }
   }
 
+  test("Fail to convert from non-struct type") {
+    val protoFile = ProtobufUtils.buildDescriptor(testFileDesc, "MissMatchTypeInRoot")
+    withFieldMatchType { fieldMatch =>
+        val e = intercept[AnalysisException] {
+          new ProtobufSerializer(IntegerType, protoFile, false)
+        }
+
+        val expectMsg =
+            s"[UNABLE_TO_CONVERT_TO_PROTOBUF_MESSAGE_TYPE] Unable to convert" +
+            s" SQL type ${toSQLType(IntegerType)} to Protobuf type ${protoFile.getName}." +
+            " SQLSTATE: 42K0G"
+
+        assert(e.getMessage === expectMsg)
+        checkError(
+          exception = e,
+          condition = "UNABLE_TO_CONVERT_TO_PROTOBUF_MESSAGE_TYPE",
+          parameters = Map(
+            "protobufType" -> "MissMatchTypeInRoot",
+            "toType" -> toSQLType(IntegerType)))
+    }
+  }
+
   test("Fail to convert with missing nested Protobuf fields for serializer") {
     val protoFile = ProtobufUtils.buildDescriptor(testFileDesc, "FieldMissingInProto")
 
