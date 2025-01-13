@@ -992,12 +992,29 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
     withTable(tableName) {
       // Create a table with binary column
       val binary = "X'123456'"
+      val lessThanBinary = "X'123455'"
+      val greaterThanBinary = "X'123457'"
 
       sql(s"CREATE TABLE $tableName (binary_col BINARY)")
       sql(s"INSERT INTO $tableName VALUES ($binary)")
 
-      val select = s"SELECT * FROM $tableName WHERE binary_col = $binary"
-      assert(spark.sql(select).collect().length === 1, s"Binary literal test failed: $select")
+      def testBinaryLiteral(operator: String, literal: String, expected: Int): Unit = {
+        val sql = s"SELECT * FROM $tableName WHERE binary_col $operator $literal"
+        assert(spark.sql(sql).collect().length === expected, s"Failed to run $sql")
+      }
+
+      testBinaryLiteral("=", binary, 1)
+      testBinaryLiteral(">=", binary, 1)
+      testBinaryLiteral(">=", lessThanBinary, 1)
+      testBinaryLiteral(">", lessThanBinary, 1)
+      testBinaryLiteral("<=", binary, 1)
+      testBinaryLiteral("<=", greaterThanBinary, 1)
+      testBinaryLiteral("<", greaterThanBinary, 1)
+      testBinaryLiteral("<>", greaterThanBinary, 1)
+      testBinaryLiteral("<>", lessThanBinary, 1)
+      testBinaryLiteral("<=>", binary, 1)
+      testBinaryLiteral("<=>", lessThanBinary, 0)
+      testBinaryLiteral("<=>", greaterThanBinary, 0)
     }
   }
 }
