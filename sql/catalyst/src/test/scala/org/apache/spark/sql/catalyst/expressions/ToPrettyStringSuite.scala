@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.UTC_OPT
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{UTF8String, VariantVal}
 
@@ -89,6 +90,9 @@ class ToPrettyStringSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("Char as pretty strings") {
     checkEvaluation(ToPrettyString(Literal.create('a', CharType(5))), "a")
+    withSQLConf(SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true") {
+      checkEvaluation(ToPrettyString(Literal.create('a', CharType(5))), "a    ")
+    }
   }
 
   test("Byte as pretty strings") {

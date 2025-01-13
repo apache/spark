@@ -31,14 +31,16 @@
                   "literal": {
                     "integer": 1
                   }
-                }]
+                }],
+                "isInternal": false
               }
             },
             "arguments": [{
               "nameParts": ["x_1"]
             }]
           }
-        }]
+        }],
+        "isInternal": false
       }
     }]
   }

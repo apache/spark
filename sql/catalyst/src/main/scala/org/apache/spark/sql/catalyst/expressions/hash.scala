@@ -419,7 +419,7 @@ abstract class HashExpression[E] extends Expression {
 
   protected def genHashString(
       ctx: CodegenContext, stringType: StringType, input: String, result: String): String = {
-    if (stringType.supportsBinaryEquality && !stringType.usesTrimCollation) {
+    if (stringType.supportsBinaryEquality) {
       val baseObject = s"$input.getBaseObject()"
       val baseOffset = s"$input.getBaseOffset()"
       val numBytes = s"$input.numBytes()"
@@ -570,7 +570,7 @@ abstract class InterpretedHashFunction {
         hashUnsafeBytes(a, Platform.BYTE_ARRAY_OFFSET, a.length, seed)
       case s: UTF8String =>
         val st = dataType.asInstanceOf[StringType]
-        if (st.supportsBinaryEquality && !st.usesTrimCollation) {
+        if (st.supportsBinaryEquality) {
           hashUnsafeBytes(s.getBaseObject, s.getBaseOffset, s.numBytes(), seed)
         } else {
           val stringHash = CollationFactory
@@ -821,7 +821,7 @@ case class HiveHash(children: Seq[Expression]) extends HashExpression[Int] {
 
   override protected def genHashString(
       ctx: CodegenContext, stringType: StringType, input: String, result: String): String = {
-    if (stringType.supportsBinaryEquality && !stringType.usesTrimCollation) {
+    if (stringType.supportsBinaryEquality) {
       val baseObject = s"$input.getBaseObject()"
       val baseOffset = s"$input.getBaseOffset()"
       val numBytes = s"$input.numBytes()"
