@@ -1676,6 +1676,91 @@ class SessionCatalog(
   }
 
   /**
+   * Constructs a table SQL function plan.
+   *
+   * Example SQL table function:
+   *
+   *   CREATE FUNCTION foo(x INT) RETURNS TABLE(a INT) RETURN SELECT x + 1 AS x1
+   *
+   * Query:
+   *
+   *   SELECT * from foo(1);
+   *
+   * Plan:
+   *
+   *   Project [CAST(x1 AS INT) AS a]
+   *   +- LateralJoin lateral-subquery [x]
+   *      :  +- Project [(outer(x) + 1) AS x1]
+   *      :     +- OneRowRelation
+   *      +- Project [CAST(1 AS INT) AS x]
+   *         +- OneRowRelation
+   */
+  def makeSQLTableFunctionPlan(
+      name: String,
+      function: SQLFunction,
+      input: Seq[Expression],
+      outputAttrs: Seq[Attribute]): LogicalPlan = {
+    assert(function.isTableFunc)
+    val funcName = function.name.funcName
+
+    // Use captured SQL configs when parsing a SQL function.
+    val conf = new SQLConf()
+    function.getSQLConfigs.foreach { case (k, v) => conf.settings.put(k, v) }
+    SQLConf.withExistingConf(conf) {
+      val inputParam = function.inputParam
+      val returnParam = function.getTableFuncReturnCols
+      val (_, query) = function.getExpressionAndQuery(parser, isTableFunc = true)
+      assert(query.isDefined)
+
+      // Check function arguments
+      val paramSize = inputParam.map(_.size).getOrElse(0)
+      if (input.size > paramSize) {
+        throw QueryCompilationErrors.wrongNumArgsError(
+          name, paramSize.toString, input.size)
+      }
+
+      val body = if (inputParam.isDefined) {
+        val param = inputParam.get
+        // Attributes referencing the input parameters inside the function can use the
+        // function name as a qualifier.
+        val qualifier = Seq(funcName)
+        val paddedInput = input ++
+          param.takeRight(paramSize - input.size).map { p =>
+            val defaultExpr = p.getDefault()
+            if (defaultExpr.isDefined) {
+              Cast(parseDefault(defaultExpr.get, parser), p.dataType)
+            } else {
+              throw QueryCompilationErrors.wrongNumArgsError(
+                name, paramSize.toString, input.size)
+            }
+          }
+
+        val inputCast = paddedInput.zip(param.fields).map {
+          case (expr, param) =>
+            // Add outer references to all attributes in the function input.
+            val outer = expr.transform {
+              case a: Attribute => OuterReference(a)
+            }
+            Alias(Cast(outer, param.dataType), param.name)(qualifier = qualifier)
+        }
+        val inputPlan = Project(inputCast, OneRowRelation())
+        LateralJoin(inputPlan, LateralSubquery(query.get), Inner, None)
+      } else {
+        query.get
+      }
+
+      assert(returnParam.length == outputAttrs.length)
+      val output = returnParam.fields.zipWithIndex.map { case (param, i) =>
+        // Since we cannot get the output of a unresolved logical plan, we need
+        // to reference the output column of the lateral join by its position.
+        val child = Cast(GetColumnByOrdinal(paramSize + i, param.dataType), param.dataType)
+        Alias(child, param.name)(exprId = outputAttrs(i).exprId)
+      }
+      SQLFunctionNode(function, SubqueryAlias(funcName, Project(output, body)))
+    }
+  }
+
+  /**
    * Constructs a [[FunctionBuilder]] based on the provided function metadata.
    */
   private def makeFunctionBuilder(func: CatalogFunction): FunctionBuilder = {
