@@ -489,8 +489,6 @@ jobs:
     if: (!cancelled()) && (fromJson(needs.precondition.outputs.required).pyspark == 'true' || fromJson(needs.precondition.outputs.required).pyspark-pandas == 'true')
     name: "Build modules: ${{ matrix.modules }}"
     runs-on: ubuntu-latest
-    permissions:
-      id-token: write
     timeout-minutes: 180
     container:
       image: ${{ needs.precondition.outputs.image_pyspark_url_link }}
@@ -622,6 +620,8 @@ jobs:
     - name: Upload coverage to Codecov
       if: fromJSON(inputs.envs).PYSPARK_CODECOV == 'true'
       uses: codecov/codecov-action@v5
+      permissions:
+        id-token: write
       with:
         files: ./python/coverage.xml
         use_oidc: true
