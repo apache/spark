@@ -1000,7 +1000,11 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
 
       def testBinaryLiteral(operator: String, literal: String, expected: Int): Unit = {
         val sql = s"SELECT * FROM $tableName WHERE binary_col $operator $literal"
-        assert(spark.sql(sql).collect().length === expected, s"Failed to run $sql")
+        val rows = spark.sql(sql).collect()
+        assert(rows.length === expected, s"Failed to run $sql")
+        if (expected == 1) {
+          assert(rows(0)(0) === Array(0x12, 0x34, 0x56).map(_.toByte))
+        }
       }
 
       testBinaryLiteral("=", binary, 1)
