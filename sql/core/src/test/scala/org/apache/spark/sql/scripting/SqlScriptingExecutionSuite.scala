@@ -46,7 +46,6 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
       sqlText: String,
       args: Map[String, Expression] = Map.empty): Seq[Array[Row]] = {
     val compoundBody = spark.sessionState.sqlParser.parsePlan(sqlText).asInstanceOf[CompoundBody]
-    val sse = new SqlScriptingExecution(compoundBody, spark, args)
 
     Utils.tryWithResource(new SqlScriptingExecution(compoundBody, spark, args)) { sse =>
       val result: ListBuffer[Array[Row]] = ListBuffer.empty
