@@ -2631,7 +2631,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       cause = null)
   }
 
-  def invalidMetadataVersion(text: String): Throwable = {
+  def malformedLogFile(text: String): Throwable = {
     new SparkIllegalStateException(
       errorClass = "MALFORMED_LOG_FILE",
       messageParameters = Map("text" -> text),

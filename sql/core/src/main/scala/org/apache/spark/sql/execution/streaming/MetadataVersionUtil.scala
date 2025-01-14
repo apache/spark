@@ -54,13 +54,13 @@ object MetadataVersionUtil {
         text.substring(1, text.length).toInt
       } catch {
         case _: NumberFormatException =>
-          throw QueryExecutionErrors.invalidMetadataVersion(text)
+          throw QueryExecutionErrors.malformedLogFile(text)
       }
     } else {
-      throw QueryExecutionErrors.invalidMetadataVersion(text)
+      throw QueryExecutionErrors.malformedLogFile(text)
     }
     if (version <= 0) {
-      throw QueryExecutionErrors.invalidMetadataVersion(text)
+      throw QueryExecutionErrors.malformedLogFile(text)
     }
     version
   }
