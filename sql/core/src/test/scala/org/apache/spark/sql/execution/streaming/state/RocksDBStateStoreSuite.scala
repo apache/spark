@@ -975,7 +975,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
     val exception = intercept[AvroTypeException] {
       encoder2.decodeValue(encoded)
     }
-    assert(exception.getMessage.contains("Found long, expecting int"))
+    assert(exception.getMessage.contains("Found long, expecting union"))
   }
 
   testWithColumnFamiliesAndEncodingTypes(

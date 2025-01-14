@@ -30,6 +30,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.execution.streaming.StateVariableType.StateVariableType
 import org.apache.spark.sql.execution.streaming.state.{OperatorInfoV1, OperatorStateMetadata, OperatorStateMetadataReader, OperatorStateMetadataV2, StateSchemaCompatibilityChecker, StateSchemaValidationResult, StateStoreColFamilySchema, StateStoreErrors, StateStoreId, StateStoreMetadataV2}
+import org.apache.spark.sql.execution.streaming.state.StateStoreEncoding._
 import org.apache.spark.sql.streaming.{OutputMode, TimeMode}
 
 /**
@@ -205,7 +206,7 @@ trait TransformWithStateMetadataUtils extends Logging {
       info: StatefulOperatorStateInfo,
       session: SparkSession,
       operatorStateMetadataVersion: Int = 2,
-      stateStoreEncodingFormat: String = "unsaferow"): List[StateSchemaValidationResult] = {
+      stateStoreEncodingFormat: String = UnsafeRow.toString): List[StateSchemaValidationResult] = {
     assert(stateSchemaVersion >= 3)
     val newSchemas = getColFamilySchemas()
     val stateSchemaDir = stateSchemaDirPath(info)

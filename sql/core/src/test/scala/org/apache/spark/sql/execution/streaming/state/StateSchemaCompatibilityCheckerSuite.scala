@@ -101,6 +101,12 @@ class StateSchemaCompatibilityCheckerSuite extends SharedSparkSession {
     verifyException(keySchema, valueSchema, keySchema, newValueSchema)
   }
 
+  test("downcast using avro throws exception") {
+    val oldValueSchema = StructType(Array(StructField("value", LongType, false)))
+    val newValueSchema = StructType(Array(StructField("value", IntegerType, false)))
+
+  }
+
   test("removing field from key should fail") {
     val fieldRemovedKeySchema = StructType(keySchema.dropRight(1))
     verifyException(keySchema, valueSchema, fieldRemovedKeySchema, valueSchema)

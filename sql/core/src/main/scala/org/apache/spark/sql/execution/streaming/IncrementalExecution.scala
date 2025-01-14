@@ -258,14 +258,14 @@ class IncrementalExecution(
               case None =>
             }
             val metadataWriter = OperatorStateMetadataWriter.createWriter(
-                new Path(checkpointLocation, ssw.getStateInfo.operatorId.toString),
-                hadoopConf,
-                ssw.operatorStateMetadataVersion,
-                Some(currentBatchId))
+              new Path(checkpointLocation, ssw.getStateInfo.operatorId.toString),
+              hadoopConf,
+              ssw.operatorStateMetadataVersion,
+              Some(currentBatchId))
             metadataWriter.write(metadata)
             if (ssw.supportsSchemaEvolution) {
-              val stateSchemaMetadata = StateSchemaMetadata.
-                createStateSchemaMetadata(checkpointLocation, hadoopConf, stateSchemaList.head)
+              val stateSchemaMetadata = StateSchemaMetadata
+                .createStateSchemaMetadata(checkpointLocation, hadoopConf, stateSchemaList.head)
 
               // The Broadcast is created only on the first batch of every query run
               // and is kept in-memory and passed in to planning for every subsequent batch
@@ -600,8 +600,6 @@ class IncrementalExecution(
         checkOperatorValidWithMetadata(planWithStateOpId, currentBatchId - 1)
       }
 
-      // The rule below doesn't change the plan but can cause the side effect that
-      // metadata/schema is written in the checkpoint directory of stateful operator.
       val planWithSchemas = planWithStateOpId transform StateSchemaAndOperatorMetadataRule.rule
 
       simulateWatermarkPropagation(planWithSchemas)

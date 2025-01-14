@@ -112,6 +112,9 @@ trait RocksDBStateStoreChangelogCheckpointingTestUtil {
   }
 }
 
+// Whenever using this in conjunction with AlsoTestWithRocksDBFeatures, this should
+// always be inherited first, so 'testWithChangelogCheckpointingEnabled' tests with
+// both Avro and UnsafeRow enabled.
 trait AlsoTestWithEncodingTypes extends SQLTestUtils {
   override protected def test(testName: String, testTags: Tag*)(testBody: => Any)
                              (implicit pos: Position): Unit = {

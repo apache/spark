@@ -2325,6 +2325,7 @@ object SQLConf {
 
   val STREAMING_MAX_NUM_STATE_SCHEMA_FILES =
     buildConf("spark.sql.streaming.stateStore.maxNumStateSchemaFiles")
+      .internal()
       .doc("The maximum number of StateSchemaV3 files allowed per operator")
       .version("4.0.0")
       .intConf
@@ -2343,6 +2344,7 @@ object SQLConf {
 
   val STREAMING_VALUE_STATE_SCHEMA_EVOLUTION_THRESHOLD =
     buildConf("spark.sql.streaming.stateStore.valueStateSchemaEvolutionThreshold")
+      .internal()
       .doc("The maximum number of value state schema evolutions allowed per column family")
       .version("4.0.0")
       .intConf

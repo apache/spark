@@ -146,10 +146,10 @@ case class StateSchemaBroadcast(
   override def getCurrentStateSchemaId(colFamilyName: String, isKey: Boolean): Short = {
     broadcast.value.activeSchemas
       .keys
-      .filter(key =>
+      .filter { key =>
         key.colFamilyName == colFamilyName &&
           key.isKey == isKey
-      )
+      }
       .map(_.schemaId).max
   }
 }
@@ -215,7 +215,7 @@ object StateSchemaMetadata {
     }
 
     // Create the final metadata
-    StateSchemaMetadata(activeSchemas = activeSchemas)
+    StateSchemaMetadata(activeSchemas)
   }
 }
 
