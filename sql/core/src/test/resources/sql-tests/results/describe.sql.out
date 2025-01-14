@@ -693,8 +693,9 @@ EXPLAIN DESCRIBE EXTENDED t PARTITION (c='Us', d=2) AS JSON
 struct<plan:string>
 -- !query output
 == Physical Plan ==
-Execute DescribeTableJsonCommand
-   +- DescribeTableJsonCommand `spark_catalog`.`default`.`t`, [c=Us, d=2], true
+Execute DescribeRelationJsonCommand
+   +- DescribeRelationJsonCommand [c=Us, d=2], true, [json_metadata#x]
+      +- ResolvedTable V2SessionCatalog(spark_catalog), default.t, V1Table(default.t), [a#x, b#x, c#x, d#x]
 
 
 -- !query
