@@ -23,8 +23,9 @@ import scala.jdk.CollectionConverters._
 
 import net.razorvine.pickle.Unpickler
 
-import org.apache.spark.{JobArtifactSet, TaskContext}
+import org.apache.spark.{JobArtifactSet, SparkEnv, TaskContext}
 import org.apache.spark.api.python.{ChainedPythonFunctions, PythonEvalType, PythonWorkerUtils}
+import org.apache.spark.internal.config.BUFFER_SIZE
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.GenericArrayData
@@ -63,7 +64,8 @@ case class BatchEvalPythonUDTFExec(
     EvaluatePython.registerPicklers()  // register pickler for Row
 
     // Input iterator to Python.
-    val inputIterator = BatchEvalPythonExec.getInputIterator(iter, schema)
+    // For Python UDTF, we don't have a separate configuration for the batch size yet.
+    val inputIterator = BatchEvalPythonExec.getInputIterator(iter, schema, 100)
 
     // Output iterator for results from Python.
     val outputIterator =
@@ -100,6 +102,9 @@ class PythonUDTFRunner(
   extends BasePythonUDFRunner(
     Seq((ChainedPythonFunctions(Seq(udtf.func)), udtf.resultId.id)),
     PythonEvalType.SQL_TABLE_UDF, Array(argMetas.map(_.offset)), pythonMetrics, jobArtifactUUID) {
+
+  // Overriding here to NOT use the same value of UDF config in UDTF.
+  override val bufferSize: Int = SparkEnv.get.conf.get(BUFFER_SIZE)
 
   override protected def writeUDF(dataOut: DataOutputStream): Unit = {
     PythonUDTFRunner.writeUDTF(dataOut, udtf, argMetas)

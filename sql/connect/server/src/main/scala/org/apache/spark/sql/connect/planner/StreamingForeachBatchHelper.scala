@@ -27,12 +27,15 @@ import scala.util.control.NonFatal
 import org.apache.spark.SparkException
 import org.apache.spark.api.python.{PythonException, PythonWorkerUtils, SimplePythonFunction, SpecialLengths, StreamingPythonRunner}
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKeys.{DATAFRAME_ID, QUERY_ID, RUN_ID, SESSION_ID}
-import org.apache.spark.sql.DataFrame
+import org.apache.spark.internal.LogKeys.{DATAFRAME_ID, QUERY_ID, RUN_ID_STRING, SESSION_ID}
+import org.apache.spark.sql.{DataFrame, Dataset}
+import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, AgnosticEncoders}
+import org.apache.spark.sql.connect.common.ForeachWriterPacket
 import org.apache.spark.sql.connect.service.SessionHolder
 import org.apache.spark.sql.connect.service.SparkConnectService
 import org.apache.spark.sql.streaming.StreamingQuery
 import org.apache.spark.sql.streaming.StreamingQueryListener
+import org.apache.spark.util.Utils
 
 /**
  * A helper class for handling ForeachBatch related functionality in Spark Connect servers
@@ -88,13 +91,31 @@ object StreamingForeachBatchHelper extends Logging {
    * DataFrame, so the user code actually runs with legacy DataFrame and session..
    */
   def scalaForeachBatchWrapper(
-      fn: ForeachBatchFnType,
+      payloadBytes: Array[Byte],
       sessionHolder: SessionHolder): ForeachBatchFnType = {
+    val foreachBatchPkt =
+      Utils.deserialize[ForeachWriterPacket](payloadBytes, Utils.getContextOrSparkClassLoader)
+    val fn = foreachBatchPkt.foreachWriter.asInstanceOf[(Dataset[Any], Long) => Unit]
+    val encoder = foreachBatchPkt.datasetEncoder.asInstanceOf[AgnosticEncoder[Any]]
     // TODO(SPARK-44462): Set up Spark Connect session.
     // Do we actually need this for the first version?
     dataFrameCachingWrapper(
       (args: FnArgsWithId) => {
-        fn(args.df, args.batchId) // dfId is not used, see hack comment above.
+        // dfId is not used, see hack comment above.
+        try {
+          val ds = if (AgnosticEncoders.UnboundRowEncoder == encoder) {
+            // When the dataset is a DataFrame (Dataset[Row).
+            args.df.asInstanceOf[Dataset[Any]]
+          } else {
+            // Recover the Dataset from the DataFrame using the encoder.
+            Dataset.apply(args.df.sparkSession, args.df.logicalPlan)(encoder)
+          }
+          fn(ds, args.batchId)
+        } catch {
+          case t: Throwable =>
+            logError(s"Calling foreachBatch fn failed", t)
+            throw t
+        }
       },
       sessionHolder)
   }
@@ -203,7 +224,7 @@ object StreamingForeachBatchHelper extends Logging {
       Option(cleanerCache.remove(key)).foreach { cleaner =>
         logInfo(
           log"Cleaning up runner for queryId ${MDC(QUERY_ID, key.queryId)} " +
-            log"runId ${MDC(RUN_ID, key.runId)}.")
+            log"runId ${MDC(RUN_ID_STRING, key.runId)}.")
         cleaner.close()
       }
     }

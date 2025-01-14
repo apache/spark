@@ -26,7 +26,8 @@
           "literal": {
             "string": "bar"
           }
-        }]
+        }],
+        "isInternal": false
       }
     }]
   }

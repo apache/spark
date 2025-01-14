@@ -47,7 +47,7 @@ WithCTE
    +- Filter (id#xL > scalar-subquery#x [])
       :  +- Aggregate [max(id#xL) AS max(id)#xL]
       :     +- SubqueryAlias tmp
-      :        +- CTERelationRef xxxx, true, [id#xL], false
+      :        +- CTERelationRef xxxx, true, [id#xL], false, false
       +- Range (0, 3, step=1)
 
 

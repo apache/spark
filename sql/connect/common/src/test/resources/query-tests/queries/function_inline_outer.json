@@ -21,9 +21,11 @@
               "unresolvedAttribute": {
                 "unparsedIdentifier": "f"
               }
-            }]
+            }],
+            "isInternal": false
           }
-        }]
+        }],
+        "isInternal": false
       }
     }]
   }

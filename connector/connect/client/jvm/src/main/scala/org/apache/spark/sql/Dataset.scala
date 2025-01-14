@@ -42,7 +42,7 @@ import org.apache.spark.sql.errors.DataTypeErrors.toSQLId
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.expressions.SparkUserDefinedFunction
 import org.apache.spark.sql.functions.{struct, to_json}
-import org.apache.spark.sql.internal.{ColumnNodeToProtoConverter, DataFrameWriterImpl, DataFrameWriterV2Impl, MergeIntoWriterImpl, ToScalaUDF, UDFAdaptors, UnresolvedAttribute, UnresolvedRegex}
+import org.apache.spark.sql.internal.{ColumnNodeToProtoConverter, DataFrameWriterImpl, DataFrameWriterV2Impl, MergeIntoWriterImpl, SubqueryExpressionNode, SubqueryType, ToScalaUDF, UDFAdaptors, UnresolvedAttribute, UnresolvedRegex}
 import org.apache.spark.sql.streaming.DataStreamWriter
 import org.apache.spark.sql.types.{Metadata, StructType}
 import org.apache.spark.storage.StorageLevel
@@ -288,9 +288,10 @@ class Dataset[T] private[sql] (
   /** @inheritdoc */
   def stat: DataFrameStatFunctions = new DataFrameStatFunctions(toDF())
 
-  private def buildJoin(right: Dataset[_])(f: proto.Join.Builder => Unit): DataFrame = {
+  private def buildJoin(right: Dataset[_], cols: Seq[Column] = Seq.empty)(
+      f: proto.Join.Builder => Unit): DataFrame = {
     checkSameSparkSession(right)
-    sparkSession.newDataFrame { builder =>
+    sparkSession.newDataFrame(cols) { builder =>
       val joinBuilder = builder.getJoinBuilder
       joinBuilder.setLeft(plan.getRoot).setRight(right.plan.getRoot)
       f(joinBuilder)
@@ -334,7 +335,7 @@ class Dataset[T] private[sql] (
 
   /** @inheritdoc */
   def join(right: Dataset[_], joinExprs: Column, joinType: String): DataFrame = {
-    buildJoin(right) { builder =>
+    buildJoin(right, Seq(joinExprs)) { builder =>
       builder
         .setJoinType(toJoinType(joinType))
         .setJoinCondition(joinExprs.expr)
@@ -383,11 +384,50 @@ class Dataset[T] private[sql] (
     }
   }
 
+  private def lateralJoin(
+      right: DS[_],
+      joinExprs: Option[Column],
+      joinType: String): DataFrame = {
+    val joinTypeValue = toJoinType(joinType)
+    joinTypeValue match {
+      case proto.Join.JoinType.JOIN_TYPE_INNER | proto.Join.JoinType.JOIN_TYPE_LEFT_OUTER |
+          proto.Join.JoinType.JOIN_TYPE_CROSS =>
+      case _ =>
+        throw new IllegalArgumentException(s"Unsupported lateral join type $joinType")
+    }
+    sparkSession.newDataFrame(joinExprs.toSeq) { builder =>
+      val lateralJoinBuilder = builder.getLateralJoinBuilder
+      lateralJoinBuilder.setLeft(plan.getRoot).setRight(right.plan.getRoot)
+      joinExprs.foreach(c => lateralJoinBuilder.setJoinCondition(c.expr))
+      lateralJoinBuilder.setJoinType(joinTypeValue)
+    }
+  }
+
+  /** @inheritdoc */
+  def lateralJoin(right: DS[_]): DataFrame = {
+    lateralJoin(right, None, "inner")
+  }
+
+  /** @inheritdoc */
+  def lateralJoin(right: DS[_], joinExprs: Column): DataFrame = {
+    lateralJoin(right, Some(joinExprs), "inner")
+  }
+
+  /** @inheritdoc */
+  def lateralJoin(right: DS[_], joinType: String): DataFrame = {
+    lateralJoin(right, None, joinType)
+  }
+
+  /** @inheritdoc */
+  def lateralJoin(right: DS[_], joinExprs: Column, joinType: String): DataFrame = {
+    lateralJoin(right, Some(joinExprs), joinType)
+  }
+
   override protected def sortInternal(global: Boolean, sortCols: Seq[Column]): Dataset[T] = {
     val sortExprs = sortCols.map { c =>
       ColumnNodeToProtoConverter(c.sortOrder).getSortOrder
     }
-    sparkSession.newDataset(agnosticEncoder) { builder =>
+    sparkSession.newDataset(agnosticEncoder, sortCols) { builder =>
       builder.getSortBuilder
         .setInput(plan.getRoot)
         .setIsGlobal(global)
@@ -463,7 +503,7 @@ class Dataset[T] private[sql] (
    * methods and typed select methods is the encoder used to build the return dataset.
    */
   private def selectUntyped(encoder: AgnosticEncoder[_], cols: Seq[Column]): Dataset[_] = {
-    sparkSession.newDataset(encoder) { builder =>
+    sparkSession.newDataset(encoder, cols) { builder =>
       builder.getProjectBuilder
         .setInput(plan.getRoot)
         .addAllExpressions(cols.map(_.typedExpr(this.encoder)).asJava)
@@ -471,29 +511,32 @@ class Dataset[T] private[sql] (
   }
 
   /** @inheritdoc */
-  def filter(condition: Column): Dataset[T] = sparkSession.newDataset(agnosticEncoder) {
-    builder =>
+  def filter(condition: Column): Dataset[T] = {
+    sparkSession.newDataset(agnosticEncoder, Seq(condition)) { builder =>
       builder.getFilterBuilder.setInput(plan.getRoot).setCondition(condition.expr)
+    }
   }
 
   private def buildUnpivot(
       ids: Array[Column],
       valuesOption: Option[Array[Column]],
       variableColumnName: String,
-      valueColumnName: String): DataFrame = sparkSession.newDataFrame { builder =>
-    val unpivot = builder.getUnpivotBuilder
-      .setInput(plan.getRoot)
-      .addAllIds(ids.toImmutableArraySeq.map(_.expr).asJava)
-      .setVariableColumnName(variableColumnName)
-      .setValueColumnName(valueColumnName)
-    valuesOption.foreach { values =>
-      unpivot.getValuesBuilder
-        .addAllValues(values.toImmutableArraySeq.map(_.expr).asJava)
+      valueColumnName: String): DataFrame = {
+    sparkSession.newDataFrame(ids.toSeq ++ valuesOption.toSeq.flatten) { builder =>
+      val unpivot = builder.getUnpivotBuilder
+        .setInput(plan.getRoot)
+        .addAllIds(ids.toImmutableArraySeq.map(_.expr).asJava)
+        .setVariableColumnName(variableColumnName)
+        .setValueColumnName(valueColumnName)
+      valuesOption.foreach { values =>
+        unpivot.getValuesBuilder
+          .addAllValues(values.toImmutableArraySeq.map(_.expr).asJava)
+      }
     }
   }
 
   private def buildTranspose(indices: Seq[Column]): DataFrame =
-    sparkSession.newDataFrame { builder =>
+    sparkSession.newDataFrame(indices) { builder =>
       val transpose = builder.getTransposeBuilder.setInput(plan.getRoot)
       indices.foreach { indexColumn =>
         transpose.addIndexColumns(indexColumn.expr)
@@ -585,18 +628,15 @@ class Dataset[T] private[sql] (
   def transpose(): DataFrame =
     buildTranspose(Seq.empty)
 
-  // TODO(SPARK-50134): Support scalar Subquery API in Spark Connect
-  // scalastyle:off not.implemented.error.usage
   /** @inheritdoc */
   def scalar(): Column = {
-    ???
+    Column(SubqueryExpressionNode(plan.getRoot, SubqueryType.SCALAR))
   }
 
   /** @inheritdoc */
   def exists(): Column = {
-    ???
+    Column(SubqueryExpressionNode(plan.getRoot, SubqueryType.EXISTS))
   }
-  // scalastyle:on not.implemented.error.usage
 
   /** @inheritdoc */
   def limit(n: Int): Dataset[T] = sparkSession.newDataset(agnosticEncoder) { builder =>
@@ -743,7 +783,7 @@ class Dataset[T] private[sql] (
     val aliases = values.zip(names).map { case (value, name) =>
       value.name(name).expr.getAlias
     }
-    sparkSession.newDataFrame { builder =>
+    sparkSession.newDataFrame(values) { builder =>
       builder.getWithColumnsBuilder
         .setInput(plan.getRoot)
         .addAllAliases(aliases.asJava)
@@ -803,10 +843,12 @@ class Dataset[T] private[sql] (
   @scala.annotation.varargs
   def drop(col: Column, cols: Column*): DataFrame = buildDrop(col +: cols)
 
-  private def buildDrop(cols: Seq[Column]): DataFrame = sparkSession.newDataFrame { builder =>
-    builder.getDropBuilder
-      .setInput(plan.getRoot)
-      .addAllColumns(cols.map(_.expr).asJava)
+  private def buildDrop(cols: Seq[Column]): DataFrame = {
+    sparkSession.newDataFrame(cols) { builder =>
+      builder.getDropBuilder
+        .setInput(plan.getRoot)
+        .addAllColumns(cols.map(_.expr).asJava)
+    }
   }
 
   private def buildDropByNames(cols: Seq[String]): DataFrame = sparkSession.newDataFrame {
@@ -976,12 +1018,13 @@ class Dataset[T] private[sql] (
 
   private def buildRepartitionByExpression(
       numPartitions: Option[Int],
-      partitionExprs: Seq[Column]): Dataset[T] = sparkSession.newDataset(agnosticEncoder) {
-    builder =>
+      partitionExprs: Seq[Column]): Dataset[T] = {
+    sparkSession.newDataset(agnosticEncoder, partitionExprs) { builder =>
       val repartitionBuilder = builder.getRepartitionByExpressionBuilder
         .setInput(plan.getRoot)
         .addAllPartitionExprs(partitionExprs.map(_.expr).asJava)
       numPartitions.foreach(repartitionBuilder.setNumPartitions)
+    }
   }
 
   /** @inheritdoc */
@@ -1113,7 +1156,7 @@ class Dataset[T] private[sql] (
   /** @inheritdoc */
   @scala.annotation.varargs
   def observe(name: String, expr: Column, exprs: Column*): Dataset[T] = {
-    sparkSession.newDataset(agnosticEncoder) { builder =>
+    sparkSession.newDataset(agnosticEncoder, expr +: exprs) { builder =>
       builder.getCollectMetricsBuilder
         .setInput(plan.getRoot)
         .setName(name)

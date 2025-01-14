@@ -27,10 +27,12 @@ from pyspark.errors import (
     PySparkTypeError,
     AnalysisException,
     PySparkPicklingError,
+    IllegalArgumentException,
 )
 from pyspark.util import PythonEvalType
 from pyspark.sql.functions import (
     array,
+    col,
     create_map,
     array,
     lit,
@@ -155,6 +157,22 @@ class BaseUDTFTestsMixin:
         )
         assertDataFrameEqual(df, expected)
 
+    def test_udtf_with_lateral_join_dataframe(self):
+        @udtf(returnType="a: int, b: int, c: int")
+        class TestUDTF:
+            def eval(self, a: int, b: int) -> Iterator:
+                yield a, b, a + b
+                yield a, b, a - b
+
+        self.spark.udtf.register("testUDTF", TestUDTF)
+
+        assertDataFrameEqual(
+            self.spark.sql("values (0, 1), (1, 2) t(a, b)").lateralJoin(
+                TestUDTF(col("a").outer(), col("b").outer())
+            ),
+            self.spark.sql("SELECT * FROM values (0, 1), (1, 2) t(a, b), LATERAL testUDTF(a, b)"),
+        )
+
     def test_udtf_eval_with_return_stmt(self):
         class TestUDTF:
             def eval(self, a: int, b: int):
@@ -237,6 +255,20 @@ class BaseUDTFTestsMixin:
         assertDataFrameEqual(
             self.spark.sql("SELECT * FROM range(0, 8) JOIN LATERAL test_udtf(id)"),
             [Row(id=6, a=6), Row(id=7, a=7)],
+        )
+
+    def test_udtf_with_conditional_return_dataframe(self):
+        @udtf(returnType="a: int")
+        class TestUDTF:
+            def eval(self, a: int):
+                if a > 5:
+                    yield a,
+
+        self.spark.udtf.register("test_udtf", TestUDTF)
+
+        assertDataFrameEqual(
+            self.spark.range(8).lateralJoin(TestUDTF(col("id").outer())),
+            self.spark.sql("SELECT * FROM range(0, 8) JOIN LATERAL test_udtf(id)"),
         )
 
     def test_udtf_with_empty_yield(self):
@@ -1024,6 +1056,15 @@ class BaseUDTFTestsMixin:
             [Row(a=6), Row(a=7)],
         )
 
+    def test_df_asTable(self):
+        func = self.udtf_for_table_argument()
+        self.spark.udtf.register("test_udtf", func)
+        df = self.spark.range(8)
+        assertDataFrameEqual(
+            func(df.asTable()),
+            self.spark.sql("SELECT * FROM test_udtf(TABLE (SELECT id FROM range(0, 8)))"),
+        )
+
     def udtf_for_table_argument(self):
         class TestUDTF:
             def eval(self, row: Row):
@@ -1032,6 +1073,108 @@ class BaseUDTFTestsMixin:
 
         func = udtf(TestUDTF, returnType="a: int")
         return func
+
+    def test_df_asTable_chaining_methods(self):
+        class TestUDTF:
+            def eval(self, row: Row):
+                yield row["key"], row["value"]
+
+        func = udtf(TestUDTF, returnType="key: int, value: string")
+        df = self.spark.createDataFrame(
+            [(1, "a", 3), (1, "b", 3), (2, "c", 4), (2, "d", 4)], ["key", "value", "number"]
+        )
+        assertDataFrameEqual(
+            func(df.asTable().partitionBy("key").orderBy(df.value)),
+            [
+                Row(key=1, value="a"),
+                Row(key=1, value="b"),
+                Row(key=2, value="c"),
+                Row(key=2, value="d"),
+            ],
+            checkRowOrder=True,
+        )
+        assertDataFrameEqual(
+            func(df.asTable().partitionBy(["key", "number"]).orderBy(df.value)),
+            [
+                Row(key=1, value="a"),
+                Row(key=1, value="b"),
+                Row(key=2, value="c"),
+                Row(key=2, value="d"),
+            ],
+            checkRowOrder=True,
+        )
+        assertDataFrameEqual(
+            func(df.asTable().partitionBy("key").orderBy(df.value.desc())),
+            [
+                Row(key=1, value="b"),
+                Row(key=1, value="a"),
+                Row(key=2, value="d"),
+                Row(key=2, value="c"),
+            ],
+            checkRowOrder=True,
+        )
+        assertDataFrameEqual(
+            func(df.asTable().partitionBy("key").orderBy(["number", "value"])),
+            [
+                Row(key=1, value="a"),
+                Row(key=1, value="b"),
+                Row(key=2, value="c"),
+                Row(key=2, value="d"),
+            ],
+            checkRowOrder=True,
+        )
+        assertDataFrameEqual(
+            func(df.asTable().withSinglePartition()),
+            [
+                Row(key=1, value="a"),
+                Row(key=1, value="b"),
+                Row(key=2, value="c"),
+                Row(key=2, value="d"),
+            ],
+        )
+
+        assertDataFrameEqual(
+            func(df.asTable().withSinglePartition().orderBy("value")),
+            [
+                Row(key=1, value="a"),
+                Row(key=1, value="b"),
+                Row(key=2, value="c"),
+                Row(key=2, value="d"),
+            ],
+        )
+
+        with self.assertRaisesRegex(
+            IllegalArgumentException,
+            r"Cannot call withSinglePartition\(\) after partitionBy\(\)"
+            r" or withSinglePartition\(\) has been called",
+        ):
+            df.asTable().partitionBy(df.key).withSinglePartition()
+
+        with self.assertRaisesRegex(
+            IllegalArgumentException,
+            r"Cannot call partitionBy\(\) after partitionBy\(\)"
+            r" or withSinglePartition\(\) has been called",
+        ):
+            df.asTable().withSinglePartition().partitionBy(df.key)
+
+        with self.assertRaisesRegex(
+            IllegalArgumentException,
+            r"Please call partitionBy\(\) or withSinglePartition\(\) before orderBy\(\)",
+        ):
+            df.asTable().orderBy(df.key)
+
+        with self.assertRaisesRegex(
+            IllegalArgumentException,
+            r"Please call partitionBy\(\) or withSinglePartition\(\) before orderBy\(\)",
+        ):
+            df.asTable().partitionBy().orderBy(df.key)
+
+        with self.assertRaisesRegex(
+            IllegalArgumentException,
+            r"Cannot call partitionBy\(\) after partitionBy\(\)"
+            r" or withSinglePartition\(\) has been called",
+        ):
+            df.asTable().partitionBy(df.key).partitionBy()
 
     def test_udtf_with_int_and_table_argument_query(self):
         class TestUDTF:
@@ -2166,6 +2309,17 @@ class BaseUDTFTestsMixin:
                         Row(a=0, b=1, partition_col=2, total=3),
                     ],
                 )
+
+    def test_udtf_with_table_argument_and_partition_by_no_terminate(self):
+        func = self.udtf_for_table_argument()  # a udtf with no terminate method defined
+        self.spark.udtf.register("test_udtf", func)
+
+        assertDataFrameEqual(
+            self.spark.sql(
+                "SELECT * FROM test_udtf(TABLE (SELECT id FROM range(0, 8)) PARTITION BY id)"
+            ),
+            [Row(a=6), Row(a=7)],
+        )
 
     def test_udtf_with_table_argument_and_partition_by_and_order_by(self):
         class TestUDTF:

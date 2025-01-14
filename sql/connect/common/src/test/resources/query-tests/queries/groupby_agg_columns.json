@@ -24,7 +24,8 @@
           "unresolvedAttribute": {
             "unparsedIdentifier": "a"
           }
-        }]
+        }],
+        "isInternal": false
       }
     }, {
       "unresolvedFunction": {
@@ -33,7 +34,8 @@
           "unresolvedAttribute": {
             "unparsedIdentifier": "b"
           }
-        }]
+        }],
+        "isInternal": false
       }
     }]
   }
