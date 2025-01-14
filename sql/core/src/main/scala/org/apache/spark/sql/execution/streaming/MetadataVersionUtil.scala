@@ -27,7 +27,7 @@ object MetadataVersionUtil {
   def validateVersion(text: String, maxSupportedVersion: Int): Int = {
     val version: Int = extractVersion(text)
     if (version > maxSupportedVersion) {
-      throw QueryExecutionErrors.invalidLogVersion(version, maxSupportedVersion)
+      throw QueryExecutionErrors.logVersionGreaterThanSupported(version, maxSupportedVersion)
     }
     version
   }
@@ -39,7 +39,7 @@ object MetadataVersionUtil {
   def validateVersionExactMatch(text: String, matchVersion: Int): Int = {
     val version: Int = extractVersion(text)
     if (version != matchVersion) {
-      throw QueryExecutionErrors.invalidLogVersionExactMatch(version, matchVersion)
+      throw QueryExecutionErrors.logVersionNotMatch(version, matchVersion)
     }
     version
   }

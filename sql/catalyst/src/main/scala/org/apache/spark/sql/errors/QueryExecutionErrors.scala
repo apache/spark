@@ -2633,13 +2633,13 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
 
   def invalidMetadataVersion(text: String): Throwable = {
     new SparkIllegalStateException(
-      errorClass = "INVALID_METADATA_VERSION",
+      errorClass = "MALFORMED_LOG_FILE",
       messageParameters = Map("text" -> text),
       cause = null
     )
   }
 
-  def invalidLogVersion(version: Int, maxSupportedVersion: Int): Throwable = {
+  def logVersionGreaterThanSupported(version: Int, maxSupportedVersion: Int): Throwable = {
     new SparkIllegalStateException(
       errorClass = "INVALID_LOG_VERSION.MAX_SUPPORTED_VERSION",
       messageParameters = Map(
@@ -2649,7 +2649,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
     )
   }
 
-  def invalidLogVersionExactMatch(version: Int, matchVersion: Int): Throwable = {
+  def logVersionNotMatch(version: Int, matchVersion: Int): Throwable = {
     new SparkIllegalStateException(
       errorClass = "INVALID_LOG_VERSION.EXACT_MATCH_VERSION",
       messageParameters = Map(

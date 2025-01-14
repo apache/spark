@@ -2843,12 +2843,6 @@
     },
     "sqlState" : "KD002"
   },
-  "INVALID_METADATA_VERSION" : {
-    "message" : [
-      "Log file was malformed: failed to read correct log version from <text>."
-    ],
-    "sqlState" : "KD002"
-  },
   "INVALID_NON_DETERMINISTIC_EXPRESSIONS" : {
     "message" : [
       "The operator expects a deterministic expression, but the actual expression is <sqlExprs>."
@@ -3554,6 +3548,12 @@
       "Malformed CSV record: <badRecord>"
     ],
     "sqlState" : "KD000"
+  },
+  "MALFORMED_LOG_FILE" : {
+    "message" : [
+      "Log file was malformed: failed to read correct log version from <text>."
+    ],
+    "sqlState" : "KD002"
   },
   "MALFORMED_PROTOBUF_MESSAGE" : {
     "message" : [
