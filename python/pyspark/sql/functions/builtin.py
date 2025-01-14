@@ -15211,6 +15211,13 @@ def rlike(str: "ColumnOrName", regexp: "ColumnOrName") -> Column:
     +---------+------+------------------+
     |1a 2b 14m| (\d+)|              true|
     +---------+------+------------------+
+
+    >>> df.select('*', sf.rlike("str", "regexp")).show()
+    +---------+------+------------------+
+    |      str|regexp|RLIKE(str, regexp)|
+    +---------+------+------------------+
+    |1a 2b 14m| (\d+)|              true|
+    +---------+------+------------------+
     """
     return _invoke_function_over_columns("rlike", str, regexp)
 
@@ -16067,14 +16074,14 @@ def octet_length(col: "ColumnOrName") -> Column:
     Examples
     --------
     >>> from pyspark.sql import functions as sf
-    >>> spark.createDataFrame([('cat',), ( '\U0001F408',)], ['cat']) \\
-    ...      .select(sf.octet_length('cat')).show()
-    +-----------------+
-    |octet_length(cat)|
-    +-----------------+
-    |                3|
-    |                4|
-    +-----------------+
+    >>> df = spark.createDataFrame([('cat',), ( '\U0001F408',)], ['cat'])
+    >>> df.select('*', sf.octet_length('cat')).show()
+    +---+-----------------+
+    |cat|octet_length(cat)|
+    +---+-----------------+
+    |cat|                3|
+    | 🐈|                4|
+    +---+-----------------+
     """
     return _invoke_function_over_columns("octet_length", col)
 
@@ -16102,14 +16109,14 @@ def bit_length(col: "ColumnOrName") -> Column:
     Examples
     --------
     >>> from pyspark.sql import functions as sf
-    >>> spark.createDataFrame([('cat',), ( '\U0001F408',)], ['cat']) \\
-    ...      .select(sf.bit_length('cat')).show()
-    +---------------+
-    |bit_length(cat)|
-    +---------------+
-    |             24|
-    |             32|
-    +---------------+
+    >>> df = spark.createDataFrame([('cat',), ( '\U0001F408',)], ['cat'])
+    >>> df.select('*', sf.bit_length('cat')).show()
+    +---+---------------+
+    |cat|bit_length(cat)|
+    +---+---------------+
+    |cat|             24|
+    | 🐈|             32|
+    +---+---------------+
     """
     return _invoke_function_over_columns("bit_length", col)
 
@@ -16144,8 +16151,8 @@ def translate(srcCol: "ColumnOrName", matching: str, replace: str) -> Column:
     Examples
     --------
     >>> from pyspark.sql import functions as sf
-    >>> spark.createDataFrame([('translate',)], ['a']) \\
-    ...     .select('*', sf.translate('a', "rnlt", "123")).show()
+    >>> df = spark.createDataFrame([('translate',)], ['a'])
+    >>> df.select('*', sf.translate('a', "rnlt", "123")).show()
     +---------+-----------------------+
     |        a|translate(a, rnlt, 123)|
     +---------+-----------------------+
