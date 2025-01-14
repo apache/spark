@@ -2251,6 +2251,14 @@ class TypesTestsMixin:
         self.assertEqual(parse_json_spark_output.value, parse_json_python_output.value)
         self.assertEqual(parse_json_spark_output.metadata, parse_json_python_output.metadata)
 
+        # Test createDataFrame
+        create_df_variants = self.spark.createDataFrame(
+            [(VariantVal.parseJson('2'),), (None,)],
+            "v variant"
+        ).collect()
+        self.assertEqual(create_df_variants[0][0].toJson(), "2")
+        self.assertEqual(create_df_variants[1][0], None)
+
     def test_to_ddl(self):
         schema = StructType().add("a", NullType()).add("b", BooleanType()).add("c", BinaryType())
         self.assertEqual(schema.toDDL(), "a VOID,b BOOLEAN,c BINARY")
