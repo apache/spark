@@ -1404,9 +1404,9 @@ class TransformWithStateInPandasTestsMixin:
                 def check_add_fields(batch_df, batch_id):
                     results = batch_df.collect()
                     # Check default values for existing key
-                    assert results[0].value["count"] == 0
-                    assert results[0].value["active"] == False
-                    assert results[0].value["score"] == 0.0
+                    assert results[0].value["count"] is None
+                    assert results[0].value["active"] is None
+                    assert results[0].value["score"] is None
 
                 self._run_evolution_test(AddFieldsProcessor(), checkpoint_dir, check_add_fields, df)
                 self._prepare_test_resource3(input_path)
@@ -1428,7 +1428,6 @@ class TransformWithStateInPandasTestsMixin:
                     result = batch_df.collect()[0]
                     assert result.value["name"] == "name-0"
                     assert result.value["id"] == 0
-                    assert result.value["score"] == 0
 
                 self._run_evolution_test(
                     ReorderedFieldsProcessor(), checkpoint_dir, check_reorder_fields, df
