@@ -82,7 +82,8 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
       if (commonExprs.isEmpty) {
         inputPlan
       } else {
-        Project(inputPlan.output ++ commonExprs.map(_._1), inputPlan)
+        Project(inputPlan.output ++ commonExprs.map(_._1).sortWith(_.exprId.id < _.exprId.id),
+          inputPlan)
       }
     }
     newPlan = newPlan.withNewChildren(newChildren)
