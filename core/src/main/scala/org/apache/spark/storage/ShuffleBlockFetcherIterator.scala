@@ -195,7 +195,7 @@ final class ShuffleBlockFetcherIterator(
   private[this] val isTestingExternalShuffleInLocalClusterMode = {
     Utils.isTesting &&
       blockManager.externalShuffleServiceEnabled &&
-      blockManager.conf.getOption("spark.master").exists(_.startsWith("local-cluster"))
+      Utils.isLocalSparkCluster(blockManager.conf)
   }
 
   initialize()
