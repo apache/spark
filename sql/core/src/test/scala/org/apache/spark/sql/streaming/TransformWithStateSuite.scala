@@ -1185,6 +1185,103 @@ class TransformWithStateSuite extends StateStoreMetricsTest
     }
   }
 
+  testWithEncoding("avro")("state data source - schema evolution with time travel support") {
+    withSQLConf(
+      rocksdbChangelogCheckpointingConfKey -> "true",
+      SQLConf.STREAMING_MAINTENANCE_INTERVAL.key -> "100",
+      SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[RocksDBStateStoreProvider].getName,
+      SQLConf.SHUFFLE_PARTITIONS.key -> "1",
+      SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.key -> "1") {
+
+      withTempDir { chkptDir =>
+        val dirPath = chkptDir.getCanonicalPath
+        val inputData = MemoryStream[String]
+
+        // Phase 1: Initial state with RunningCountStatefulProcessorInt
+        val result1 = inputData.toDS()
+          .groupByKey(x => x)
+          .transformWithState(new RunningCountStatefulProcessorInt(),
+            TimeMode.None(),
+            OutputMode.Update())
+
+        logError(s"### block 1")
+        testStream(result1, OutputMode.Update())(
+          StartStream(checkpointLocation = dirPath),
+          AddData(inputData, "a"),
+          CheckNewAnswer(("a", "1")),
+          AddData(inputData, "a", "b"),
+          CheckNewAnswer(("a", "2"), ("b", "1")),
+          ProcessAllAvailable(),
+          Execute { _ => Thread.sleep(5000) },
+          StopStream
+        )
+
+        logError(s"### block 2")
+        // Phase 2: Switch to RunningCountStatefulProcessor (schema evolution)
+        val result2 = inputData.toDS()
+          .groupByKey(x => x)
+          .transformWithState(new RunningCountStatefulProcessor(),
+            TimeMode.None(),
+            OutputMode.Update())
+
+        testStream(result2, OutputMode.Update())(
+          StartStream(checkpointLocation = dirPath),
+          AddData(inputData, "a", "b"),
+          CheckNewAnswer(("b", "2")), // Should read old state and increment
+          AddData(inputData, "a", "c"),
+          CheckNewAnswer(("a", "1"), ("c", "1")),
+          AddData(inputData, "a", "c"),
+          CheckNewAnswer(("a", "2"), ("c", "2")),
+          ProcessAllAvailable(),
+          Execute { _ => Thread.sleep(5000) },
+          StopStream
+        )
+
+        logError(s"### block 3")
+        // Read historical state using snapshotStartBatchId
+        val oldStateDf = spark.read
+          .format("statestore")
+          .option("snapshotStartBatchId", 1)
+          .option("snapshotEndBatchId", 1)
+          .option("snapshotPartitionId", 0)
+          .option(StateSourceOptions.STATE_VAR_NAME, "countState")
+          .load(dirPath)
+
+        val oldStateAnsDf = oldStateDf.selectExpr(
+          "key.value AS groupingKey",
+          "value.value AS count",
+          "partition_id")
+
+        checkAnswer(oldStateAnsDf.select("groupingKey", "count"),
+          Seq(Row("a", 2), Row("b", 2), Row("c", 2)))
+        // Check types explicitly
+        val oldValueCol = oldStateDf.col("value.value")
+        assert(oldValueCol.expr.dataType === IntegerType,
+          s"Expected IntegerType but got ${oldValueCol.expr.dataType}")
+
+
+        logError(s"### block 4")
+        val newStateDf = spark.read
+          .format("statestore")
+          .option("snapshotStartBatchId", 1)
+          .option("snapshotPartitionId", 0)
+          .option(StateSourceOptions.STATE_VAR_NAME, "countState")
+          .load(dirPath)
+
+        val newStateAnsDf = newStateDf.selectExpr(
+          "key.value AS groupingKey",
+          "value.value AS count")
+
+        checkAnswer(newStateAnsDf,
+          Seq(
+            Row("a", 2L), // Note: 3L - verifying Long type in final state
+            Row("b", 2L),
+            Row("c", 2L)
+          )) // Verify final state with evolved schema (Long type)
+      }
+    }
+  }
+
   testWithEncoding("avro")("transformWithState - verify default values during schema evolution") {
     withSQLConf(
       SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[RocksDBStateStoreProvider].getName,
