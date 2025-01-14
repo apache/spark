@@ -6,21 +6,21 @@ OpenJDK 64-Bit Server VM 21.0.5+11-LTS on Linux 6.8.0-1017-azure
 AMD EPYC 7763 64-Core Processor
 #rows: 100, #cols: 10, cell: 1.3 MB:      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-built-in UPPER                                     5814           6152         478          0.0    58140115.7       1.0X
-udf UPPER                                          4024           4035          16          0.0    40241031.7       1.4X
+built-in UPPER                                     5909           6154         347          0.0    59088236.5       1.0X
+udf UPPER                                          4106           4364         364          0.0    41062501.9       1.4X
 
 OpenJDK 64-Bit Server VM 21.0.5+11-LTS on Linux 6.8.0-1017-azure
 AMD EPYC 7763 64-Core Processor
 #rows: 1, #cols: 1, cell: 300.0 MB:       Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-built-in UPPER                                     1315           1317           2          0.0  1315299564.0       1.0X
-udf UPPER                                          1015           1016           2          0.0  1014585082.0       1.3X
+built-in UPPER                                     1317           1319           3          0.0  1317449498.0       1.0X
+udf UPPER                                           954            975          25          0.0   953744994.0       1.4X
 
 OpenJDK 64-Bit Server VM 21.0.5+11-LTS on Linux 6.8.0-1017-azure
 AMD EPYC 7763 64-Core Processor
 #rows: 1, #cols: 200, cell: 1.0 MB:       Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-built-in UPPER                                     1105           1124          27          0.0  1104599012.0       1.0X
-udf UPPER                                          1263           1303          56          0.0  1263336183.0       0.9X
+built-in UPPER                                     1118           1138          28          0.0  1117901962.0       1.0X
+udf UPPER                                          1145           1210          91          0.0  1145234313.0       1.0X
 
 
