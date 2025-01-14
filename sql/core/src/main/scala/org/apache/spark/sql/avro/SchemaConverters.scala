@@ -435,39 +435,26 @@ object SchemaConverters extends Logging {
         st: StructType,
         fieldsAssembler: FieldAssembler[Schema]): FieldAssembler[Schema] = {
       st.foreach { field =>
+        val isLeafType = field.dataType match {
+          case _: StructType | _: ArrayType | _: MapType => false
+          case _ => true
+        }
+
         val innerType = toAvroTypeWithDefaults(
           field.dataType,
-          nullable = false, // Never make inner types nullable, handle nullability at field level
+          nullable = isLeafType,  // Only make leaf types nullable
           getNestedRecordName(field.name),
           namespace,
           nestingLevel + 1
         )
 
-        val fieldType = if (field.nullable && field.dataType != NullType) {
-          Schema.createUnion(nullSchema, innerType)
-        } else {
-          innerType
+        // We want structs to have their proper defaults
+        val defaultValue = field.dataType match {
+          case _: StructType => getDefaultValue(field.dataType)  // Use struct default
+          case _ => null  // Leaf fields get null default
         }
 
-        val defaultValue = if (field.nullable) {
-          null
-        } else {
-          field.dataType match {
-            case LongType => 0L
-            case IntegerType => 0
-            case BooleanType => false
-            case FloatType => 0.0f
-            case DoubleType => 0.0
-            case StringType => ""
-            case BinaryType => java.nio.ByteBuffer.allocate(0)
-            case DateType => 0
-            case TimestampType => 0L
-            case TimestampNTZType => 0L
-            case _ => getDefaultValue(field.dataType)
-          }
-        }
-
-        fieldsAssembler.name(field.name).`type`(fieldType).withDefault(defaultValue)
+        fieldsAssembler.name(field.name).`type`(innerType).withDefault(defaultValue)
       }
       fieldsAssembler
     }
