@@ -77,9 +77,9 @@ class ExternalShuffleServiceSuite extends ShuffleSuite with BeforeAndAfterAll wi
 
     // Invalidate the registered executors, disallowing access to their shuffle blocks (without
     // deleting the actual shuffle files, so we could access them without the shuffle service).
-    LocalSparkCluster.get.get.workers.head.askSync[Boolean](
+    LocalSparkCluster.get.get.workers.foreach(_.askSync[Boolean](
       ApplicationRemoveTest(sc.conf.getAppId, false)
-    )
+    ))
 
     // Now Spark will receive FetchFailed, and not retry the stage due to "spark.test.noStageRetry"
     // being set.
@@ -155,7 +155,7 @@ class ExternalShuffleServiceSuite extends ShuffleSuite with BeforeAndAfterAll wi
       assert(sc.env.blockManager.getRemoteValues(blockId).isEmpty)
     } finally {
       LocalSparkCluster.get.get
-        .workers.head.askSync[Boolean](ApplicationRemoveTest(sc.conf.getAppId, true))
+        .workers.foreach(_.askSync[Boolean](ApplicationRemoveTest(sc.conf.getAppId, true)))
     }
   }
 
@@ -234,7 +234,7 @@ class ExternalShuffleServiceSuite extends ShuffleSuite with BeforeAndAfterAll wi
         }
       } finally {
         LocalSparkCluster.get.get
-          .workers.head.askSync[Boolean](ApplicationRemoveTest(sc.conf.getAppId, true))
+          .workers.foreach(_.askSync[Boolean](ApplicationRemoveTest(sc.conf.getAppId, true)))
         sc.stop()
       }
     }
@@ -257,7 +257,7 @@ class ExternalShuffleServiceSuite extends ShuffleSuite with BeforeAndAfterAll wi
         assert(sc.persistentRdds.isEmpty)
       } finally {
         LocalSparkCluster.get.get
-          .workers.head.askSync[Boolean](ApplicationRemoveTest(sc.conf.getAppId, true))
+          .workers.foreach(_.askSync[Boolean](ApplicationRemoveTest(sc.conf.getAppId, true)))
         sc.stop()
       }
     }
