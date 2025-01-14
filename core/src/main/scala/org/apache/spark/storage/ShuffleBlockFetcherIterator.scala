@@ -192,6 +192,12 @@ final class ShuffleBlockFetcherIterator(
   private[this] val pushBasedFetchHelper = new PushBasedFetchHelper(
     this, shuffleClient, blockManager, mapOutputTracker, shuffleMetrics)
 
+  private[this] val isTestingExternalShuffleInLocalClusterMode = {
+    Utils.isTesting &&
+      blockManager.externalShuffleServiceEnabled &&
+      blockManager.conf.getOption("spark.master").exists(_.startsWith("local-cluster"))
+  }
+
   initialize()
 
   // Decrements the buffer reference count.
@@ -403,10 +409,12 @@ final class ShuffleBlockFetcherIterator(
     val fallback = FallbackStorage.FALLBACK_BLOCK_MANAGER_ID.executorId
     val localExecIds = Set(blockManager.blockManagerId.executorId, fallback)
 
+
+
     @inline def isHostLocal(blockAddress: BlockManagerId): Boolean = {
       if (blockManager.hostLocalDirManager.isDefined
         && blockAddress.host == blockManager.blockManagerId.host) {
-        if (blockManager.isLocalSparkCluster && blockManager.externalShuffleServiceEnabled) {
+        if (isTestingExternalShuffleInLocalClusterMode) {
           blockAddress.hostPort == blockManager.shuffleServerId.hostPort
         } else {
           true
