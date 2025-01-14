@@ -92,10 +92,10 @@ trait MetadataMapSupport {
   }
 
   val timestampFormatter = new Iso8601TimestampFormatter(
-    pattern = "yyyy-MM-dd'T'HH:mm:ss.SSSXXX",
+    pattern = "yyyy-MM-dd'T'HH:mm:ss'Z'",
     zoneId = ZoneId.of("UTC"),
     locale = DateFormatter.defaultLocale,
-    legacyFormat = LegacyDateFormats.SIMPLE_DATE_FORMAT,
+    legacyFormat = LegacyDateFormats.LENIENT_SIMPLE_DATE_FORMAT,
     isParsing = true
   )
 }
