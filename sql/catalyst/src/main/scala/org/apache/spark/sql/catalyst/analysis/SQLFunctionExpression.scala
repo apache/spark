@@ -18,8 +18,8 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.catalyst.catalog.SQLFunction
-import org.apache.spark.sql.catalyst.expressions.{Expression, Unevaluable}
-import org.apache.spark.sql.catalyst.trees.TreePattern.{SQL_FUNCTION_EXPRESSION, TreePattern}
+import org.apache.spark.sql.catalyst.expressions.{Expression, UnaryExpression, Unevaluable}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{SQL_FUNCTION_EXPRESSION, SQL_SCALAR_FUNCTION, TreePattern}
 import org.apache.spark.sql.types.DataType
 
 /**
@@ -38,4 +38,53 @@ case class SQLFunctionExpression(
   override protected def withNewChildrenInternal(
     newChildren: IndexedSeq[Expression]): SQLFunctionExpression = copy(inputs = newChildren)
   final override val nodePatterns: Seq[TreePattern] = Seq(SQL_FUNCTION_EXPRESSION)
+}
+
+/**
+ * A wrapper node for a SQL scalar function expression.
+ */
+case class SQLScalarFunction(function: SQLFunction, inputs: Seq[Expression], child: Expression)
+    extends UnaryExpression with Unevaluable {
+  override def dataType: DataType = child.dataType
+  override def toString: String = s"${function.name}(${inputs.mkString(", ")})"
+  override def sql: String = s"${function.name}(${inputs.map(_.sql).mkString(", ")})"
+  override protected def withNewChildInternal(newChild: Expression): SQLScalarFunction = {
+    copy(child = newChild)
+  }
+  final override val nodePatterns: Seq[TreePattern] = Seq(SQL_SCALAR_FUNCTION)
+  // The `inputs` is for display only and does not matter in execution.
+  override lazy val canonicalized: Expression = copy(inputs = Nil, child = child.canonicalized)
+  override lazy val deterministic: Boolean = {
+    function.deterministic.getOrElse(true) && children.forall(_.deterministic)
+  }
+}
+
+/**
+ * Provide a way to keep state during analysis for resolving nested SQL functions.
+ *
+ * @param nestedSQLFunctionDepth The nested depth in the SQL function resolution. A SQL function
+ *                               expression should only be expanded as a [[SQLScalarFunction]] if
+ *                               the nested depth is 0.
+ */
+case class SQLFunctionContext(nestedSQLFunctionDepth: Int = 0)
+
+object SQLFunctionContext {
+
+  private val value = new ThreadLocal[SQLFunctionContext]() {
+    override def initialValue: SQLFunctionContext = SQLFunctionContext()
+  }
+
+  def get: SQLFunctionContext = value.get()
+
+  def reset(): Unit = value.remove()
+
+  private def set(context: SQLFunctionContext): Unit = value.set(context)
+
+  def withSQLFunction[A](f: => A): A = {
+    val originContext = value.get()
+    val context = originContext.copy(
+      nestedSQLFunctionDepth = originContext.nestedSQLFunctionDepth + 1)
+    set(context)
+    try f finally { set(originContext) }
+  }
 }
