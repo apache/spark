@@ -53,7 +53,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.parser.{ParseException, ParserUtils}
 import org.apache.spark.sql.catalyst.plans.{Cross, FullOuter, Inner, JoinType, LeftAnti, LeftOuter, LeftSemi, RightOuter, UsingJoin}
 import org.apache.spark.sql.catalyst.plans.logical
-import org.apache.spark.sql.catalyst.plans.logical.{AppendColumns, Assignment, CoGroup, CollectMetrics, CommandResult, Deduplicate, DeduplicateWithinWatermark, DeleteAction, DeserializeToObject, Except, FlatMapGroupsWithState, InsertAction, InsertStarAction, Intersect, JoinWith, LocalRelation, LogicalGroupState, LogicalPlan, MapGroups, MapPartitions, MergeAction, Project, Sample, SerializeFromObject, Sort, SubqueryAlias, TypedFilter, Union, Unpivot, UnresolvedHint, UpdateAction, UpdateStarAction}
+import org.apache.spark.sql.catalyst.plans.logical.{AppendColumns, Assignment, CoGroup, CollectMetrics, CommandResult, Deduplicate, DeduplicateWithinWatermark, DeleteAction, DeserializeToObject, Except, FlatMapGroupsWithState, InsertAction, InsertStarAction, Intersect, JoinWith, LocalRelation, LogicalGroupState, LogicalPlan, MapGroups, MapPartitions, MergeAction, Project, Sample, SerializeFromObject, Sort, SubqueryAlias, TimeModes, TransformWithState, TypedFilter, Union, Unpivot, UnresolvedHint, UpdateAction, UpdateStarAction}
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin, TreePattern}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
@@ -80,7 +80,8 @@ import org.apache.spark.sql.execution.stat.StatFunctions
 import org.apache.spark.sql.execution.streaming.GroupStateImpl.groupStateTimeoutFromString
 import org.apache.spark.sql.execution.streaming.StreamingQueryWrapper
 import org.apache.spark.sql.expressions.{Aggregator, ReduceAggregator, SparkUserDefinedFunction, UserDefinedAggregator, UserDefinedFunction}
-import org.apache.spark.sql.streaming.{GroupStateTimeout, OutputMode, StreamingQuery, StreamingQueryListener, StreamingQueryProgress, Trigger}
+import org.apache.spark.sql.internal.{CatalogImpl, MergeIntoWriterImpl, TypedAggUtils, UserDefinedFunctionUtils}
+import org.apache.spark.sql.streaming.{GroupStateTimeout, OutputMode, StatefulProcessor, StreamingQuery, StreamingQueryListener, StreamingQueryProgress, Trigger}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.{ArrowUtils, CaseInsensitiveStringMap}
 import org.apache.spark.storage.CacheId
@@ -679,6 +680,40 @@ class SparkConnectPlanner(
       rel.getGroupingExpressionsList,
       rel.getSortingExpressionsList)
 
+    if (rel.hasTws) {
+      val tws = rel.getTws
+      val keyDeserializer = udf.inputDeserializer(ds.groupingAttributes)
+
+      val outputAttr = udf.outputObjAttr
+
+      val timeMode = TimeModes(tws.getTimeMode)
+      val outputMode = InternalOutputModes(tws.getOutputMode)
+
+      val statefulProcessorStr = tws.getStatefulProcessorPayload
+      val statefulProcessor = Utils.deserialize[StatefulProcessor[Any, Any, Any]](
+        statefulProcessorStr.toByteArray,
+        Utils.getContextOrSparkClassLoader)
+
+      val node = new TransformWithState(
+        keyDeserializer,
+        ds.valueDeserializer,
+        ds.groupingAttributes,
+        ds.dataAttributes,
+        statefulProcessor,
+        timeMode,
+        outputMode,
+        udf.inEnc.asInstanceOf[ExpressionEncoder[Any]],
+        outputAttr,
+        ds.analyzed,
+        false,
+        ds.groupingAttributes,
+        ds.dataAttributes,
+        keyDeserializer,
+        LocalRelation(ds.vEncoder.schema)
+      )
+      return SerializeFromObject(udf.outputNamedExpression, node)
+    }
+
     if (rel.hasIsMapGroupsWithState) {
       val hasInitialState = !rel.getInitialGroupingExpressionsList.isEmpty && rel.hasInitialInput
       val initialDs = if (hasInitialState) {
@@ -860,6 +895,12 @@ class SparkConnectPlanner(
   }
 
   private object UntypedKeyValueGroupedDataset {
+    def apply(
+        input: proto.Relation,
+        groupingExprs: java.util.List[proto.Expression]): UntypedKeyValueGroupedDataset = {
+      apply(transformRelation(input), groupingExprs, Seq.empty[SortOrder])
+    }
+
     def apply(
         input: proto.Relation,
         groupingExprs: java.util.List[proto.Expression],

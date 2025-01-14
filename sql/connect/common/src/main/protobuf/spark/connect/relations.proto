@@ -1031,6 +1031,15 @@ message GroupMap {
 
   // (Optional) The schema for the grouped state.
   optional DataType state_schema = 10;
+
+  // (Optional) True if the operator is transformWithState.
+  optional TransformWithStateInfo tws = 11;
+}
+
+message TransformWithStateInfo {
+  bytes stateful_processor_payload = 1;
+  string time_mode = 2;
+  string output_mode = 3;
 }
 
 message CoGroupMap {
