@@ -64,13 +64,13 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
   }
 
   /**
-   * Checks if the execution thread has completed execution and is not running.
+   * Checks if the thread is alive.
    *
    * @return
-   *   true if the execution thread has completed execution and is not running.
+   *   true if the execution thread is currently running.
    */
-  private[connect] def completed(): Boolean = {
-    state.getAcquire() == ThreadState.completed
+  private[connect] def isAlive(): Boolean = {
+    executionThread.isAlive()
   }
 
   /**
@@ -113,7 +113,7 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
       currentState = prevState
     }
 
-    // Already interrupted, completing, completed, or not started.
+    // Already interrupted, completed, or not started.
     false
   }
 
@@ -158,11 +158,8 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
       // afterwards.
       var currentState = state.getAcquire()
       while (currentState == ThreadState.started ||
-        currentState == ThreadState.startedInterrupted ||
-        currentState == ThreadState.completing) {
+        currentState == ThreadState.startedInterrupted) {
         val interrupted = currentState == ThreadState.startedInterrupted
-
-        // This state transition must be infallible.
         val prevState = state.compareAndExchangeRelease(currentState, ThreadState.completed)
         if (prevState == currentState) {
           if (interrupted) {
@@ -264,11 +261,11 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
 
       // State transition should be atomic to prevent a situation in which a client of reattachable
       // execution receives ResultComplete, and proceeds to send ReleaseExecute, and that triggers
-      // an interrupt before it finishes. Failing to transition to completing means that the thread
+      // an interrupt before it finishes. Failing to transition to completed means that the thread
       // was interrupted, and that will be checked at the end of the execution.
       if (state.compareAndExchangeRelease(
           ThreadState.started,
-          ThreadState.completing) == ThreadState.started) {
+          ThreadState.completed) == ThreadState.started) {
         // Now, the execution cannot be interrupted.
 
         // If the request starts a long running iterator (e.g. StreamingQueryListener needs
@@ -357,7 +354,7 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
  * The state transitions as follows.
  *   - notStarted -> interrupted.
  *   - notStarted -> started -> startedInterrupted -> completed.
- *   - notStarted -> started -> completing -> completed.
+ *   - notStarted -> started -> completed.
  *
  * The thread can only be interrupted if the thread is in the startedInterrupted state.
  */
@@ -375,11 +372,8 @@ private object ThreadState {
   /** The thread was started and execution has been interrupted: transition to completed. */
   val startedInterrupted: ThreadStateInfo = ThreadStateInfo(3)
 
-  /** The thread started to record the outcome of the execution. */
-  val completing: ThreadStateInfo = ThreadStateInfo(4)
-
   /** Execution has been completed: terminal state. */
-  val completed: ThreadStateInfo = ThreadStateInfo(5)
+  val completed: ThreadStateInfo = ThreadStateInfo(4)
 }
 
 /** Represents the state of an execution thread. */

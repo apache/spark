@@ -277,7 +277,7 @@ class SparkConnectServiceE2ESuite extends SparkConnectServerTest {
         query.hasNext
         val execution = eventuallyGetExecutionHolder
         Eventually.eventually(timeout(eventuallyTimeout)) {
-          assert(execution.isExecuteThreadRunnerCompleted())
+          assert(!execution.isExecuteThreadRunnerAlive())
         }
 
         execution.undoResponseObserverCompletion()

@@ -131,9 +131,7 @@ private[connect] class ExecuteHolder(
    * be made. If the execution was delegated, this method always returns false.
    */
   def isOrphan(): Boolean = {
-    // Check runner.completed() before others as the acquire memory fence in the method ensures the
-    // current thread to read the last known state of responseObserver correctly.
-    runner.completed() &&
+    !runner.isAlive() &&
     !runner.shouldDelegateCompleteResponse(request) &&
     !responseObserver.completed()
   }
@@ -213,8 +211,8 @@ private[connect] class ExecuteHolder(
   }
 
   // For testing
-  private[connect] def isExecuteThreadRunnerCompleted() = {
-    runner.completed()
+  private[connect] def isExecuteThreadRunnerAlive() = {
+    runner.isAlive()
   }
 
   /**
