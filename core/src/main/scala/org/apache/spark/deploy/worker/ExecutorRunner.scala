@@ -172,10 +172,12 @@ private[deploy] class ExecutorRunner(
       // parent process for the executor command
       builder.environment.put("SPARK_LAUNCH_WITH_SCALA", "0")
 
-      if (shuffleServicePort.isDefined && Utils.isTesting && LocalSparkCluster.get.isDefined) {
-        builder.environment().put(
-          ExternalShuffleService.TESTING_ESS_PORT_ENV, shuffleServicePort.get.toString
-        )
+      if (LocalSparkCluster.get.isDefined) {
+        shuffleServicePort.foreach { port =>
+          builder.environment().put(
+            ExternalShuffleService.TESTING_ESS_PORT_ENV, port.toString
+          )
+        }
       }
 
       // Add webUI log urls

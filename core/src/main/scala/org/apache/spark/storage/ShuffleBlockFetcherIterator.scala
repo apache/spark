@@ -192,8 +192,7 @@ final class ShuffleBlockFetcherIterator(
   private[this] val pushBasedFetchHelper = new PushBasedFetchHelper(
     this, shuffleClient, blockManager, mapOutputTracker, shuffleMetrics)
 
-  private[this] val isTestingExternalShuffleInLocalClusterMode = {
-    Utils.isTesting &&
+  private[this] val isExternalShuffleServiceInLocalClusterMode = {
       blockManager.externalShuffleServiceEnabled &&
       Utils.isLocalSparkCluster(blockManager.conf)
   }
@@ -414,7 +413,7 @@ final class ShuffleBlockFetcherIterator(
     @inline def isHostLocal(blockAddress: BlockManagerId): Boolean = {
       if (blockManager.hostLocalDirManager.isDefined
         && blockAddress.host == blockManager.blockManagerId.host) {
-        if (isTestingExternalShuffleInLocalClusterMode) {
+        if (isExternalShuffleServiceInLocalClusterMode) {
           blockAddress.hostPort == blockManager.shuffleServerId.hostPort
         } else {
           true
