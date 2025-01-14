@@ -19,7 +19,7 @@ package org.apache.spark.scheduler
 
 import java.util.Properties
 
-import org.apache.spark.internal.LogKeys.{STAGE_ATTEMPT, STAGE_ID}
+import org.apache.spark.internal.LogKeys.{STAGE_ATTEMPT_ID, STAGE_ID}
 import org.apache.spark.internal.MessageWithContext
 
 /**
@@ -42,7 +42,7 @@ private[spark] class TaskSet(
   lazy val logId: MessageWithContext = {
     val hashMap = new java.util.HashMap[String, String]()
     hashMap.put(STAGE_ID.name, stageId.toString)
-    hashMap.put(STAGE_ATTEMPT.name, stageAttemptId.toString)
+    hashMap.put(STAGE_ATTEMPT_ID.name, stageAttemptId.toString)
     MessageWithContext(id, hashMap)
   }
 }

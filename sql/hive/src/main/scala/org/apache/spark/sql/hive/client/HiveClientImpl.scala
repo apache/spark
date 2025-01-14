@@ -56,13 +56,12 @@ import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
-import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, QuotingUtils, StringConcat}
+import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces._
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.QueryExecutionException
 import org.apache.spark.sql.hive.{HiveExternalCatalog, HiveUtils}
 import org.apache.spark.sql.hive.HiveExternalCatalog.DATASOURCE_SCHEMA
-import org.apache.spark.sql.hive.HiveUtils.QUOTE_HIVE_STRUCT_FIELD_NAME
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.util.{CircularBuffer, Utils}
@@ -518,6 +517,8 @@ private[hive] class HiveClientImpl(
     val excludedTableProperties = HiveStatisticsProperties ++ Set(
       // The property value of "comment" is moved to the dedicated field "comment"
       "comment",
+      // The property value of "collation" is moved to the dedicated field "collation"
+      "collation",
       // For EXTERNAL_TABLE, the table properties has a particular field "EXTERNAL". This is added
       // in the function toHiveTable.
       "EXTERNAL"
@@ -527,6 +528,7 @@ private[hive] class HiveClientImpl(
       case (key, _) => excludedTableProperties.contains(key)
     }
     val comment = properties.get("comment")
+    val collation = properties.get("collation")
 
     CatalogTable(
       identifier = TableIdentifier(h.getTableName, Option(h.getDbName)),
@@ -569,6 +571,7 @@ private[hive] class HiveClientImpl(
       properties = filteredProperties,
       stats = readHiveStats(properties),
       comment = comment,
+      collation = collation,
       // In older versions of Spark(before 2.2.0), we expand the view original text and
       // store that into `viewExpandedText`, that should be used in view resolution.
       // We get `viewExpandedText` as viewText, and also get `viewOriginalText` in order to
@@ -581,6 +584,7 @@ private[hive] class HiveClientImpl(
   }
 
   override def createTable(table: CatalogTable, ignoreIfExists: Boolean): Unit = withHiveState {
+    verifyColumnDataType(table.dataSchema)
     shim.createTable(client, toHiveTable(table, Some(userName)), ignoreIfExists)
   }
 
@@ -600,6 +604,7 @@ private[hive] class HiveClientImpl(
     // these properties are still available to the others that share the same Hive metastore.
     // If users explicitly alter these Hive-specific properties through ALTER TABLE DDL, we respect
     // these user-specified values.
+    verifyColumnDataType(table.dataSchema)
     val hiveTable = toHiveTable(
       table.copy(properties = table.ignoredProperties ++ table.properties), Some(userName))
     // Do not use `table.qualifiedName` here because this may be a rename
@@ -623,6 +628,7 @@ private[hive] class HiveClientImpl(
       newDataSchema: StructType,
       schemaProps: Map[String, String]): Unit = withHiveState {
     val oldTable = shim.getTable(client, dbName, tableName)
+    verifyColumnDataType(newDataSchema)
     val hiveCols = newDataSchema.map(toHiveColumn)
     oldTable.setFields(hiveCols.asJava)
 
@@ -1090,43 +1096,11 @@ private[hive] object HiveClientImpl extends Logging {
     // When reading data in parquet, orc, or avro file format with string type for char,
     // the tailing spaces may lost if we are not going to pad it.
     val typeString = if (SQLConf.get.charVarcharAsString) {
-      catalogString(c.dataType)
+      c.dataType.catalogString
     } else {
-      CharVarcharUtils.getRawTypeString(c.metadata).getOrElse(catalogString(c.dataType))
+      CharVarcharUtils.getRawTypeString(c.metadata).getOrElse(c.dataType.catalogString)
     }
     new FieldSchema(c.name, typeString, c.getComment().orNull)
-  }
-
-  /**
-   * This a a variant of `DataType.catalogString` that does the same thing in general but
-   * it will not quote the field names in the struct type. HMS API uses unquoted field names
-   * to store the schema of a struct type. This is fine if we in the write path, we might encounter
-   * issues in the read path to parse the unquoted schema strings in the Spark SQL parser. You can
-   * see the tricks we play in the `getSparkSQLDataType` method to handle this. To avoid the
-   * flakiness of those tricks, we quote the field names, make them unrecognized by HMS API, and
-   * then store them in custom spark properties in a fallback way.
-   *
-   * And the reason we don't add quoting in `DataType.catalogString` directly is that we don't
-   * want to break the compatibility of the existing query output schema.
-   */
-  def catalogString(dataType: DataType): String = dataType match {
-    case ArrayType(et, _) => s"array<${catalogString(et)}>"
-    case MapType(k, v, _) => s"map<${catalogString(k)},${catalogString(v)}>"
-    case StructType(fields) =>
-      val stringConcat = new StringConcat()
-      val len = fields.length
-      stringConcat.append("struct<")
-      var i = 0
-      while (i < len) {
-        val name = QuotingUtils.quoteIfNeeded(fields(i).name)
-        stringConcat.append(s"$name:${catalogString(fields(i).dataType)}")
-        i += 1
-        if (i < len) stringConcat.append(",")
-      }
-      stringConcat.append(">")
-      stringConcat.toString
-    case udt: UserDefinedType[_] => catalogString(udt.sqlType)
-    case _ => dataType.catalogString
   }
 
   /** Get the Spark SQL native DataType from Hive's FieldSchema. */
@@ -1141,12 +1115,7 @@ private[hive] object HiveClientImpl extends Logging {
     //   struct<x:int,y.z:int> -> struct<`x`:int,`y.z`:int>
     //   array<struct<x:int,y.z:int>> -> array<struct<`x`:int,`y.z`:int>>
     //   map<string,struct<x:int,y.z:int>> -> map<string,struct<`x`:int,`y.z`:int>>
-    val typeStr = if (SQLConf.get.getConf(QUOTE_HIVE_STRUCT_FIELD_NAME) &&
-        hc.getType.indexOf('`') < 0) { // This a defensive code for possible changes in HMS
-      hc.getType.replaceAll("(?<=struct<|,)([^,<:]+)(?=:)", "`$1`")
-    } else {
-      hc.getType
-    }
+    val typeStr = hc.getType.replaceAll("(?<=struct<|,)([^,<:]+)(?=:)", "`$1`")
     try {
       CatalystSqlParser.parseDataType(typeStr)
     } catch {
@@ -1163,6 +1132,10 @@ private[hive] object HiveClientImpl extends Logging {
       dataType = columnType,
       nullable = true)
     Option(hc.getComment).map(field.withComment).getOrElse(field)
+  }
+
+  private def verifyColumnDataType(schema: StructType): Unit = {
+    schema.foreach(col => getSparkSQLDataType(toHiveColumn(col)))
   }
 
   private def toInputFormat(name: String) =
@@ -1212,6 +1185,7 @@ private[hive] object HiveClientImpl extends Logging {
     table.storage.properties.foreach { case (k, v) => hiveTable.setSerdeParam(k, v) }
     table.properties.foreach { case (k, v) => hiveTable.setProperty(k, v) }
     table.comment.foreach { c => hiveTable.setProperty("comment", c) }
+    table.collation.foreach { c => hiveTable.setProperty("collation", c) }
     // Hive will expand the view text, so it needs 2 fields: viewOriginalText and viewExpandedText.
     // Since we don't expand the view text, but only add table properties, we map the `viewText` to
     // the both fields in hive table.

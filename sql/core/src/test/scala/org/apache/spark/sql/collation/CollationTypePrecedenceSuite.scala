@@ -223,6 +223,103 @@ class CollationTypePrecedenceSuite extends QueryTest with SharedSparkSession {
     )
   }
 
+  test("in subquery expression") {
+    val tableName = "subquery_tbl"
+    withTable(tableName) {
+      sql(s"""
+        |CREATE TABLE $tableName (
+        | c1 STRING COLLATE UTF8_LCASE,
+        | c2 STRING COLLATE UNICODE
+        |) USING $dataSource
+        |""".stripMargin)
+
+      sql(s"INSERT INTO $tableName VALUES ('a', 'A')")
+
+      assertImplicitMismatch(
+        sql(s"""
+          |SELECT * FROM $tableName
+          |WHERE c1 IN (SELECT c2 FROM $tableName)
+          |""".stripMargin))
+
+      // this fails since subquery expression collation is implicit by default
+      assertImplicitMismatch(
+        sql(s"""
+          |SELECT * FROM $tableName
+          |WHERE c1 IN (SELECT c2 collate unicode FROM $tableName)
+          |""".stripMargin))
+
+      checkAnswer(
+        sql(s"""
+          |SELECT COUNT(*) FROM $tableName
+          |WHERE c1 collate utf8_lcase IN (SELECT c2 collate unicode FROM $tableName)
+          |""".stripMargin),
+        Seq(Row(1)))
+
+      checkAnswer(
+        sql(s"""
+          |SELECT COUNT(*) FROM $tableName
+          |WHERE c1 collate utf8_lcase IN (SELECT c2 FROM $tableName)
+          |""".stripMargin),
+        Seq(Row(1)))
+
+      checkAnswer(
+        sql(s"""
+          |SELECT COUNT(*) FROM $tableName
+          |WHERE c1 collate unicode IN (SELECT c2 FROM $tableName)
+          |""".stripMargin),
+        Seq(Row(0)))
+
+      checkAnswer(
+        sql(s"""
+          |SELECT COUNT(*) FROM $tableName
+          |WHERE c1 collate unicode IN (SELECT c2 FROM $tableName
+          |  WHERE c2 collate unicode IN (SELECT c1 FROM $tableName))
+          |""".stripMargin),
+        Seq(Row(0)))
+    }
+  }
+
+  test("scalar subquery") {
+    val tableName = "scalar_subquery_tbl"
+    withTable(tableName) {
+      sql(s"""
+        |CREATE TABLE $tableName (
+        | c1 STRING COLLATE UTF8_LCASE,
+        | c2 STRING COLLATE UNICODE
+        |) USING $dataSource
+        |""".stripMargin)
+
+      sql(s"INSERT INTO $tableName VALUES ('a', 'A')")
+
+      assertImplicitMismatch(
+        sql(s"""
+          |SELECT * FROM $tableName
+          |WHERE c1 = (SELECT MAX(c2) FROM $tableName)
+          |""".stripMargin))
+
+      checkAnswer(
+        sql(s"""
+          |SELECT COUNT(*) FROM $tableName
+          |WHERE c1 collate utf8_lcase = (SELECT MAX(c2) collate unicode FROM $tableName)
+          |""".stripMargin),
+        Seq(Row(1)))
+
+      checkAnswer(
+        sql(s"""
+          |SELECT COUNT(*) FROM $tableName
+          |WHERE c1 collate utf8_lcase = (SELECT MAX(c2) FROM $tableName)
+          |""".stripMargin),
+        Seq(Row(1)))
+
+      checkAnswer(
+        sql(s"""
+          |SELECT COUNT(*) FROM $tableName
+          |WHERE c1 collate unicode = (SELECT MAX(c2) FROM $tableName)
+          |""".stripMargin),
+        Seq(Row(0)))
+    }
+  }
+
   test("struct test") {
     val tableName = "struct_tbl"
     val c1Collation = "UNICODE_CI"
@@ -340,46 +437,36 @@ class CollationTypePrecedenceSuite extends QueryTest with SharedSparkSession {
       sql(s"CREATE TABLE $tableName (c1 STRING COLLATE $columnCollation) USING $dataSource")
       sql(s"INSERT INTO $tableName VALUES ('a')")
 
-      // only for non string inputs cast results in default collation
       checkAnswer(
-        sql(s"SELECT COLLATION(c1 || CAST(to_char(DATE'2016-04-08', 'y') AS STRING)) " +
-          s"FROM $tableName"),
-        Seq(Row(columnCollation)))
-
-      checkAnswer(
-        sql(s"SELECT COLLATION(CAST(to_char(DATE'2016-04-08', 'y') AS STRING)) " +
-          s"FROM $tableName"),
+        sql(s"SELECT COLLATION(CAST(5 AS STRING)) FROM $tableName"),
         Seq(Row(UTF8_BINARY_COLLATION_NAME)))
 
-      // for string inputs collation is of the child expression
       checkAnswer(
-        sql(s"SELECT COLLATION(CAST('a' AS STRING)) FROM $tableName"),
-        Seq(Row(UTF8_BINARY_COLLATION_NAME)))
+        sql(s"SELECT c1 = cast(5 AS STRING) FROM $tableName"),
+        Seq(Row(false)))
 
       checkAnswer(
         sql(s"SELECT COLLATION(CAST(c1 AS STRING)) FROM $tableName"),
-        Seq(Row(columnCollation)))
+        Seq(Row(UTF8_BINARY_COLLATION_NAME)))
+
+      checkAnswer(
+        sql(s"SELECT c1 = cast(c1 as STRING COLLATE UNICODE) FROM $tableName"),
+        Seq(Row(true)))
+
+      checkAnswer(
+        sql(s"SELECT c1 = cast(5 as STRING COLLATE UNICODE) FROM $tableName"),
+        Seq(Row(false)))
 
       checkAnswer(
         sql(s"SELECT COLLATION(CAST(c1 collate UTF8_LCASE AS STRING)) FROM $tableName"),
-        Seq(Row(UTF8_LCASE_COLLATION_NAME)))
+        Seq(Row(UTF8_BINARY_COLLATION_NAME)))
 
-      checkAnswer(
-        sql(s"SELECT COLLATION(c1 || CAST('a' AS STRING)) FROM $tableName"),
-        Seq(Row(columnCollation)))
+      assertImplicitMismatch(
+        sql(s"SELECT c1 = CAST(c1 AS STRING) FROM $tableName"))
 
-      checkAnswer(
-        sql(s"SELECT COLLATION(c1 || CAST('a' collate UTF8_LCASE AS STRING)) FROM $tableName"),
-        Seq(Row(UTF8_LCASE_COLLATION_NAME)))
-
-      checkAnswer(
-        sql(s"SELECT COLLATION(c1 || CAST(c1 AS STRING)) FROM $tableName"),
-        Seq(Row(columnCollation)))
-
-      checkAnswer(
-        sql(s"SELECT COLLATION(c1 || SUBSTRING(CAST(c1 AS STRING), 0, 1)) FROM $tableName"),
-        Seq(Row(columnCollation)))
-      }
+      assertImplicitMismatch(
+        sql(s"SELECT c1 = CAST(to_char(DATE'2016-04-08', 'y') AS STRING) FROM $tableName"))
+    }
   }
 
   test("str fns without params have default strength") {

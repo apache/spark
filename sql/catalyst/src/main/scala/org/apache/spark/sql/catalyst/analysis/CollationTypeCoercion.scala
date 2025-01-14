@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.catalyst.analysis.CollationStrength.{Default, Explicit, Implicit}
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion.haveSameType
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Project}
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types.{ArrayType, DataType, MapType, StringType, StructType}
@@ -37,9 +38,6 @@ object CollationTypeCoercion {
   }
 
   def apply(expression: Expression): Expression = expression match {
-    case cast: Cast if shouldRemoveCast(cast) =>
-      cast.child
-
     case ifExpr: If =>
       ifExpr.withNewChildren(
         ifExpr.predicate +: collateToSingleType(Seq(ifExpr.trueValue, ifExpr.falseValue))
@@ -145,21 +143,12 @@ object CollationTypeCoercion {
   }
 
   /**
-   * If childType is collated and target is UTF8_BINARY, the collation of the output
-   * should be that of the childType.
+   * Returns true if the given data type has any StringType in it.
    */
-  private def shouldRemoveCast(cast: Cast): Boolean = {
-    val isChildTypeCollatedString = cast.child.dataType match {
-      case st: StringType => !st.isUTF8BinaryCollation
-      case _ => false
-    }
-    val targetType = cast.dataType
-
-    isUserDefined(cast) && isChildTypeCollatedString && targetType == StringType
+  private def hasStringType(dt: DataType): Boolean = dt.existsRecursively {
+    case _: StringType => true
+    case _ => false
   }
-
-  private def isUserDefined(cast: Cast): Boolean =
-    cast.getTagValue(Cast.USER_SPECIFIED_CAST).isDefined
 
   /**
    * Changes the data type of the expression to the given `newType`.
@@ -172,12 +161,45 @@ object CollationTypeCoercion {
         expr match {
           case lit: Literal => lit.copy(dataType = newDataType)
           case cast: Cast => cast.copy(dataType = newDataType)
+          case subquery: SubqueryExpression =>
+            changeTypeInSubquery(subquery, newType)
+
           case _ => Cast(expr, newDataType)
         }
 
       case _ =>
         expr
     }
+  }
+
+  /**
+   * Changes the data type of the expression in the subquery to the given `newType`.
+   * Currently only supports subqueries with [[Project]] and [[Aggregate]] plan.
+   */
+  private def changeTypeInSubquery(
+      subqueryExpression: SubqueryExpression,
+      newType: DataType): SubqueryExpression = {
+
+    def transformNamedExpressions(ex: NamedExpression): NamedExpression = {
+      changeType(ex, newType) match {
+        case named: NamedExpression => named
+        case other => Alias(other, ex.name)()
+      }
+    }
+
+    val newPlan = subqueryExpression.plan match {
+      case project: Project =>
+        val newProjectList = project.projectList.map(transformNamedExpressions)
+        project.copy(projectList = newProjectList)
+
+      case agg: Aggregate =>
+        val newAggregateExpressions = agg.aggregateExpressions.map(transformNamedExpressions)
+        agg.copy(aggregateExpressions = newAggregateExpressions)
+
+      case other => other
+    }
+
+    subqueryExpression.withNewPlan(newPlan)
   }
 
   /**
@@ -357,17 +379,17 @@ object CollationTypeCoercion {
     case collate: Collate =>
       Some(addContextToStringType(collate.dataType, Explicit))
 
+    case cast: Cast =>
+      val castStrength = if (hasStringType(cast.child.dataType)) {
+        Implicit
+      } else {
+        Default
+      }
+
+      Some(addContextToStringType(cast.dataType, castStrength))
+
     case expr @ (_: NamedExpression | _: SubqueryExpression | _: VariableReference) =>
       Some(addContextToStringType(expr.dataType, Implicit))
-
-    case cast: Cast =>
-      if (isUserDefined(cast) && isComplexType(cast.dataType)) {
-        // since we can't use collate clause with complex types
-        // user defined casts should be treated as implicit
-        Some(addContextToStringType(cast.dataType, Implicit))
-      } else {
-        Some(addContextToStringType(cast.dataType, Default))
-      }
 
     case lit: Literal =>
       Some(addContextToStringType(lit.dataType, Default))
@@ -437,13 +459,6 @@ object CollationTypeCoercion {
       case (leftPriority, rightPriority) =>
         if (leftPriority < rightPriority) left
         else right
-    }
-  }
-
-  private def isComplexType(dataType: DataType): Boolean = {
-    dataType match {
-      case _: ArrayType | _: MapType | _: StructType => true
-      case _ => false
     }
   }
 }
