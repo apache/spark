@@ -131,7 +131,7 @@ to return the metadata pertaining to a partition or column respectively.
 |-----------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | ByteType              | `{ "name" : "tinyint" }`                                                                                                                                         |
 | ShortType             | `{ "name" : "smallint" }`                                                                                                                                        |
-| IntegerType           | `{ "name" : "integer" }`                                                                                                                                         |
+| IntegerType           | `{ "name" : "int" }`                                                                                                                                             |
 | LongType              | `{ "name" : "bigint" }`                                                                                                                                          |
 | FloatType             | `{ "name" : "float" }`                                                                                                                                           |
 | DoubleType            | `{ "name" : "double" }`                                                                                                                                          |
