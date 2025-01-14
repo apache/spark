@@ -24,11 +24,11 @@ import org.apache.hadoop.fs.{FileSystem, FSDataOutputStream, Path}
 import org.apache.hadoop.fs.permission.FsPermission
 
 import org.apache.spark.SparkConf
+import org.apache.spark.SparkContext.DRIVER_IDENTIFIER
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys.PATH
 import org.apache.spark.util.{ThreadUtils, Utils}
-
 
 /**
  * A class that wraps AsyncProfiler
@@ -49,7 +49,11 @@ private[spark] class SparkAsyncProfiler(conf: SparkConf, executorId: String) ext
   }
   private val appAttemptId = conf.getOption("spark.app.attempt.id")
   private val baseName = Utils.nameForAppAndAttempt(appId, appAttemptId)
-  private val profileFile = s"profile-exec-$executorId.jfr"
+  private val profileFile = if (executorId == DRIVER_IDENTIFIER) {
+    s"profile-$executorId.jfr"
+  } else {
+    s"profile-exec-$executorId.jfr"
+  }
 
   private val startcmd = s"start,$profilerOptions,file=$profilerLocalDir/$profileFile"
   private val stopcmd = s"stop,$profilerOptions,file=$profilerLocalDir/$profileFile"
