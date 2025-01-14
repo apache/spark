@@ -1396,7 +1396,7 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
       JdbcDialects.get("jdbc:mysql://localhost:3306/temp"),
       df.schema,
       df.sparkSession.sessionState.conf.caseSensitiveAnalysis)
-    assert(schema.contains("`order` LONGTEXT"))
+    assert(schema.contains("`order` CHAR"))
   }
 
   test("SPARK-18141: Predicates on quoted column names in the jdbc data source") {
