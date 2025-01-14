@@ -65,7 +65,7 @@ class SparkConnectReattachExecuteHandler(
     } else if (executeHolder.isOrphan()) {
       logWarning("Reattach to an orphan operation.")
       SparkConnectService.executionManager.removeExecuteHolder(executeHolder.key)
-      throw new IllegalStateException("Operation was orphaned for an internal error.")
+      throw new IllegalStateException("Operation was orphaned because of an internal error.")
     }
 
     val responseSender =
