@@ -504,26 +504,27 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
   }
 
   test("Test duplicated names in WithColumns") {
-    intercept[AnalysisException] {
-      transform(
-        proto.Relation
-          .newBuilder()
-          .setWithColumns(
-            proto.WithColumns
-              .newBuilder()
-              .setInput(readRel)
-              .addAliases(proto.Expression.Alias
+    val logical = transform(
+      proto.Relation
+        .newBuilder()
+        .setWithColumns(
+          proto.WithColumns
+            .newBuilder()
+            .setInput(readRel)
+            .addAliases(
+              proto.Expression.Alias
                 .newBuilder()
                 .addName("test")
                 .setExpr(proto.Expression.newBuilder
                   .setLiteral(proto.Expression.Literal.newBuilder.setInteger(32))))
-              .addAliases(proto.Expression.Alias
-                .newBuilder()
-                .addName("test")
-                .setExpr(proto.Expression.newBuilder
-                  .setLiteral(proto.Expression.Literal.newBuilder.setInteger(32)))))
-          .build())
-    }
+            .addAliases(proto.Expression.Alias
+              .newBuilder()
+              .addName("test")
+              .setExpr(proto.Expression.newBuilder
+                .setLiteral(proto.Expression.Literal.newBuilder.setInteger(32)))))
+        .build())
+
+    intercept[AnalysisException](Dataset.ofRows(spark, logical))
   }
 
   test("Test multi nameparts for column names in WithColumns") {

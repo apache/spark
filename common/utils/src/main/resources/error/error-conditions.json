@@ -3126,6 +3126,13 @@
     ],
     "sqlState" : "42K08"
   },
+  "INVALID_SQL_FUNCTION_PLAN_STRUCTURE" : {
+    "message" : [
+      "Invalid SQL function plan structure",
+      "<plan>"
+    ],
+    "sqlState" : "XXKD0"
+  },
   "INVALID_SQL_SYNTAX" : {
     "message" : [
       "Invalid SQL syntax:"
@@ -5754,6 +5761,12 @@
   "UNSUPPORTED_SINGLE_PASS_ANALYZER_FEATURE" : {
     "message" : [
       "The single-pass analyzer cannot process this query or command because it does not yet support <feature>."
+    ],
+    "sqlState" : "0A000"
+  },
+  "UNSUPPORTED_SQL_UDF_USAGE" : {
+    "message" : [
+      "Using SQL function <functionName> in <nodeName> is not supported."
     ],
     "sqlState" : "0A000"
   },

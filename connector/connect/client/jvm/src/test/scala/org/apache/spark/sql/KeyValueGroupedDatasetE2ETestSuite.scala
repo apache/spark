@@ -460,6 +460,14 @@ class KeyValueGroupedDatasetE2ETestSuite extends QueryTest with RemoteSparkSessi
       (5, "hello"))
   }
 
+  test("SPARK-50789: reduceGroups on unresolved plan") {
+    val ds = Seq("abc", "xyz", "hello").toDS().select("*").as[String]
+    checkDatasetUnorderly(
+      ds.groupByKey(_.length).reduceGroups(_ + _),
+      (3, "abcxyz"),
+      (5, "hello"))
+  }
+
   test("groupby") {
     val ds = Seq(("a", 1, 10), ("a", 2, 20), ("b", 2, 1), ("b", 1, 2), ("c", 1, 1))
       .toDF("key", "seq", "value")
