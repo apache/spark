@@ -391,7 +391,7 @@ object SchemaConverters extends Logging {
 
     dataType match {
       // Basic types
-      case BooleanType => false
+      case BooleanType => null
       case ByteType | ShortType | IntegerType => null
       case LongType => null
       case FloatType => null
