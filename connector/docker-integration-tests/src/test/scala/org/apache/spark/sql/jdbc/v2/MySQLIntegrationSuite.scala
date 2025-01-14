@@ -247,8 +247,6 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest
     withTable(tableName) {
       val stringValue = "0"
       val stringLiteral = "'0'"
-      val shortValue = 0.toShort
-      val integerValue = 0
       val longValue = 0L
       val binaryValue = Array[Byte](0x30)
       val binaryLiteral = "x'30'"
@@ -257,15 +255,12 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest
       // CREATE table to use types defined in Spark SQL
       sql(s"""CREATE TABLE $tableName (
         string_col STRING,
-        short_col SHORT,
-        integer_col INTEGER,
         long_col LONG,
         binary_col BINARY,
         double_col DOUBLE
       )""")
       sql(
-        s"""INSERT INTO $tableName VALUES($stringLiteral, $shortValue, $integerValue,
-           |$longValue, $binaryLiteral, $doubleValue)""".stripMargin)
+        s"INSERT INTO $tableName VALUES($stringLiteral, $longValue, $binaryLiteral, $doubleValue)")
 
       def testCast(castType: String, sourceCol: String, targetCol: String,
                    sourceValue: Any, targetValue: Any): Unit = {
@@ -285,18 +280,12 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest
       }
 
       testCast("BINARY", "string_col", "binary_col", stringValue, binaryValue);
-      testCast("SHORT", "string_col", "short_col", stringValue, shortValue)
-      testCast("INTEGER", "string_col", "integer_col", stringValue, integerValue)
       testCast("LONG", "string_col", "long_col", stringValue, longValue)
       // We use stringLiteral to make sure both values are using the same collation
-      testCast("STRING", "short_col", stringLiteral, shortValue, stringValue)
-      testCast("STRING", "integer_col", stringLiteral, integerValue, stringValue)
       testCast("STRING", "long_col", stringLiteral, longValue, stringValue)
       testCast("STRING", "binary_col", stringLiteral, binaryValue, stringValue)
       testCast("STRING", "double_col", stringLiteral, doubleValue, doubleLiteral)
       testCast("DOUBLE", "string_col", "double_col", stringValue, doubleValue)
-      testCast("DOUBLE", "short_col", "double_col", shortValue, doubleValue)
-      testCast("DOUBLE", "integer_col", "double_col", integerValue, doubleValue)
       testCast("DOUBLE", "long_col", "double_col", longValue, doubleValue)
     }
   }

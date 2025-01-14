@@ -117,8 +117,10 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper with No
       val databaseTypeDefinition = dataType match {
         // MySQL uses CHAR in the cast function for the type LONGTEXT
         case StringType => "CHAR"
-        // MySQL uses SIGNED INTEGER in the cast function for the types SMALLINT, INTEGER and BIGINT
-        case ShortType | IntegerType | LongType => "SIGNED INTEGER"
+        // MySQL uses SIGNED INTEGER in the cast function for SMALLINT, INTEGER and BIGINT.
+        // To avoid breaking code relying on ResultSet metadata, we support BIGINT only at
+        // this time.
+        case LongType => "SIGNED INTEGER"
         // MySQL uses BINARY in the cast function for the type BLOB
         case BinaryType => "BINARY"
         case _ => getJDBCType(dataType).map(_.databaseTypeDefinition).getOrElse(dataType.typeName)
