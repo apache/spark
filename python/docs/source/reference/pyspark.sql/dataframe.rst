@@ -30,6 +30,7 @@ DataFrame
     DataFrame.agg
     DataFrame.alias
     DataFrame.approxQuantile
+    DataFrame.asTable
     DataFrame.cache
     DataFrame.checkpoint
     DataFrame.coalesce
@@ -56,6 +57,7 @@ DataFrame
     DataFrame.dtypes
     DataFrame.exceptAll
     DataFrame.executionInfo
+    DataFrame.exists
     DataFrame.explain
     DataFrame.fillna
     DataFrame.filter
@@ -75,9 +77,11 @@ DataFrame
     DataFrame.isStreaming
     DataFrame.join
     DataFrame.limit
+    DataFrame.lateralJoin
     DataFrame.localCheckpoint
     DataFrame.mapInPandas
     DataFrame.mapInArrow
+    DataFrame.metadataColumn
     DataFrame.melt
     DataFrame.na
     DataFrame.observe
@@ -96,6 +100,7 @@ DataFrame
     DataFrame.sameSemantics
     DataFrame.sample
     DataFrame.sampleBy
+    DataFrame.scalar
     DataFrame.schema
     DataFrame.select
     DataFrame.selectExpr
@@ -117,6 +122,7 @@ DataFrame
     DataFrame.toLocalIterator
     DataFrame.toPandas
     DataFrame.transform
+    DataFrame.transpose
     DataFrame.union
     DataFrame.unionAll
     DataFrame.unionByName
