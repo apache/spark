@@ -187,12 +187,7 @@ object EventLogFileWriter {
   }
 
   def nameForAppAndAttempt(appId: String, appAttemptId: Option[String]): String = {
-    val base = Utils.sanitizeDirName(appId)
-    if (appAttemptId.isDefined) {
-      base + "_" + Utils.sanitizeDirName(appAttemptId.get)
-    } else {
-      base
-    }
+    Utils.nameForAppAndAttempt(appId, appAttemptId)
   }
 
   def codecName(log: Path): Option[String] = {
