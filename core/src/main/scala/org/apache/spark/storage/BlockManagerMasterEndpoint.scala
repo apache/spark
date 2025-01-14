@@ -674,7 +674,8 @@ class BlockManagerMasterEndpoint(
   private def externalShuffleServiceIdOnHost(
       blockManagerId: BlockManagerId,
       blockManagerRef: RpcEndpointRef): BlockManagerId = {
-    val essPort = if (LocalSparkCluster.get.isDefined) {
+    val isLocalClusterEss = LocalSparkCluster.get.isDefined
+    val essPort = if (isLocalClusterEss) {
       blockManagerRef.askSync[Int](GetShuffleServicePort)
     } else {
       externalShuffleServicePort
@@ -682,7 +683,9 @@ class BlockManagerMasterEndpoint(
     // we need to keep the executor ID of the original executor to let the shuffle service know
     // which local directories should be used to look for the file
     val essId = BlockManagerId(blockManagerId.executorId, blockManagerId.host, essPort)
-    shuffleServiceIdSet.add(essId)
+    if (isLocalClusterEss) {
+      shuffleServiceIdSet.add(essId)
+    }
     essId
   }
 
