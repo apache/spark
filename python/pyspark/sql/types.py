@@ -1770,6 +1770,15 @@ class VariantVal:
         """
         return VariantUtils.to_json(self.value, self.metadata, zone_id)
 
+    @classmethod
+    def parseJson(cls, json_str: str) -> "VariantVal":
+        """
+        Convert the VariantVal to a nested Python object of Python data types.
+        :return: Python representation of the Variant nested structure
+        """
+        (value, metadata) = VariantUtils.parse_json(json_str)
+        return VariantVal(value, metadata)
+
 
 _atomic_types: List[Type[DataType]] = [
     StringType,
