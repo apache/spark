@@ -67,7 +67,7 @@ import org.eclipse.jetty.util.MultiException
 import org.slf4j.Logger
 
 import org.apache.spark._
-import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.deploy.{LocalSparkCluster, SparkHadoopUtil}
 import org.apache.spark.internal.{Logging, MDC, MessageWithContext}
 import org.apache.spark.internal.LogKeys
 import org.apache.spark.internal.LogKeys._
@@ -2525,6 +2525,14 @@ private[spark] object Utils
   def isLocalMaster(conf: ReadOnlySparkConf): Boolean = {
     val master = conf.get("spark.master", "")
     master == "local" || master.startsWith("local[")
+  }
+
+  def isLocalSparkCluster(conf: ReadOnlySparkConf): Boolean = {
+    if (LocalSparkCluster.get.isDefined) {
+      true
+    } else {
+      conf.getOption("spark.master").exists(_.startsWith("local-cluster"))
+    }
   }
 
   /**
