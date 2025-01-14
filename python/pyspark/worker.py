@@ -1569,7 +1569,8 @@ def read_udfs(pickleSer, infile, eval_type):
                 arrow_cast,
             )
     else:
-        ser = BatchedSerializer(CPickleSerializer(), 100)
+        batch_size = int(os.environ.get("PYTHON_UDF_BATCH_SIZE", "100"))
+        ser = BatchedSerializer(CPickleSerializer(), batch_size)
 
     is_profiling = read_bool(infile)
     if is_profiling:

@@ -18,6 +18,19 @@ CreateViewCommand `t2`, select * from values 0, 1 as t(id), false, false, LocalT
 
 
 -- !query
+create temporary view t3 as select * from t
+-- !query analysis
+CreateViewCommand `t3`, select * from t, false, false, LocalTempView, UNSUPPORTED, true
+   +- Project [id#x]
+      +- SubqueryAlias t
+         +- View (`t`, [id#x])
+            +- Project [cast(id#x as int) AS id#x]
+               +- Project [id#x]
+                  +- SubqueryAlias t
+                     +- LocalRelation [id#x]
+
+
+-- !query
 WITH s AS (SELECT 1 FROM s) SELECT * FROM s
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
@@ -62,7 +75,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 WITH t AS (SELECT 1 FROM t) SELECT * FROM t
 -- !query analysis
 WithCTE
-:- CTERelationDef xxxx, false, false
+:- CTERelationDef xxxx, false
 :  +- SubqueryAlias t
 :     +- Project [1 AS 1#x]
 :        +- SubqueryAlias t
@@ -74,6 +87,27 @@ WithCTE
 +- Project [1#x]
    +- SubqueryAlias t
       +- CTERelationRef xxxx, true, [1#x], false, false
+
+
+-- !query
+WITH t AS (SELECT 1) SELECT * FROM t3
+-- !query analysis
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias t
+:     +- Project [1 AS 1#x]
+:        +- OneRowRelation
++- Project [id#x]
+   +- SubqueryAlias t3
+      +- View (`t3`, [id#x])
+         +- Project [cast(id#x as int) AS id#x]
+            +- Project [id#x]
+               +- SubqueryAlias t
+                  +- View (`t`, [id#x])
+                     +- Project [cast(id#x as int) AS id#x]
+                        +- Project [id#x]
+                           +- SubqueryAlias t
+                              +- LocalRelation [id#x]
 
 
 -- !query
@@ -100,7 +134,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 WITH t1 AS (SELECT * FROM t2), t2 AS (SELECT 2 FROM t1) SELECT * FROM t1 cross join t2
 -- !query analysis
 WithCTE
-:- CTERelationDef xxxx, false, false
+:- CTERelationDef xxxx, false
 :  +- SubqueryAlias t1
 :     +- Project [id#x]
 :        +- SubqueryAlias t2
@@ -109,7 +143,7 @@ WithCTE
 :                 +- Project [id#x]
 :                    +- SubqueryAlias t
 :                       +- LocalRelation [id#x]
-:- CTERelationDef xxxx, false, false
+:- CTERelationDef xxxx, false
 :  +- SubqueryAlias t2
 :     +- Project [2 AS 2#x]
 :        +- SubqueryAlias t1
@@ -134,7 +168,7 @@ FROM   CTE1 t1
        CROSS JOIN CTE1 t2
 -- !query analysis
 WithCTE
-:- CTERelationDef xxxx, false, false
+:- CTERelationDef xxxx, false
 :  +- SubqueryAlias CTE1
 :     +- Project [id#x AS id#x]
 :        +- Join Cross
@@ -168,7 +202,7 @@ WITH t(x) AS (SELECT 1)
 SELECT * FROM t WHERE x = 1
 -- !query analysis
 WithCTE
-:- CTERelationDef xxxx, false, false
+:- CTERelationDef xxxx, false
 :  +- SubqueryAlias t
 :     +- Project [1#x AS x#x]
 :        +- Project [1 AS 1#x]
@@ -184,7 +218,7 @@ WITH t(x, y) AS (SELECT 1, 2)
 SELECT * FROM t WHERE x = 1 AND y = 2
 -- !query analysis
 WithCTE
-:- CTERelationDef xxxx, false, false
+:- CTERelationDef xxxx, false
 :  +- SubqueryAlias t
 :     +- Project [1#x AS x#x, 2#x AS y#x]
 :        +- Project [1 AS 1#x, 2 AS 2#x]
@@ -200,7 +234,7 @@ WITH t(x, x) AS (SELECT 1, 2)
 SELECT * FROM t
 -- !query analysis
 WithCTE
-:- CTERelationDef xxxx, false, false
+:- CTERelationDef xxxx, false
 :  +- SubqueryAlias t
 :     +- Project [1#x AS x#x, 2#x AS x#x]
 :        +- Project [1 AS 1#x, 2 AS 2#x]
@@ -300,48 +334,48 @@ WITH w1(c1) AS
 SELECT * FROM w1
 -- !query analysis
 WithCTE
-:- CTERelationDef xxxx, false, false
+:- CTERelationDef xxxx, false
 :  +- SubqueryAlias w8
 :     +- Project [1#x AS c8#x]
 :        +- Project [1 AS 1#x]
 :           +- OneRowRelation
-:- CTERelationDef xxxx, false, false
+:- CTERelationDef xxxx, false
 :  +- SubqueryAlias w7
 :     +- Project [c8#x AS c7#x]
 :        +- Project [c8#x]
 :           +- SubqueryAlias w8
 :              +- CTERelationRef xxxx, true, [c8#x], false, false
-:- CTERelationDef xxxx, false, false
+:- CTERelationDef xxxx, false
 :  +- SubqueryAlias w6
 :     +- Project [c7#x AS c6#x]
 :        +- Project [c7#x]
 :           +- SubqueryAlias w7
 :              +- CTERelationRef xxxx, true, [c7#x], false, false
-:- CTERelationDef xxxx, false, false
+:- CTERelationDef xxxx, false
 :  +- SubqueryAlias w5
 :     +- Project [c6#x AS c5#x]
 :        +- Project [c6#x]
 :           +- SubqueryAlias w6
 :              +- CTERelationRef xxxx, true, [c6#x], false, false
-:- CTERelationDef xxxx, false, false
+:- CTERelationDef xxxx, false
 :  +- SubqueryAlias w4
 :     +- Project [c5#x AS c4#x]
 :        +- Project [c5#x]
 :           +- SubqueryAlias w5
 :              +- CTERelationRef xxxx, true, [c5#x], false, false
-:- CTERelationDef xxxx, false, false
+:- CTERelationDef xxxx, false
 :  +- SubqueryAlias w3
 :     +- Project [c4#x AS c3#x]
 :        +- Project [c4#x]
 :           +- SubqueryAlias w4
 :              +- CTERelationRef xxxx, true, [c4#x], false, false
-:- CTERelationDef xxxx, false, false
+:- CTERelationDef xxxx, false
 :  +- SubqueryAlias w2
 :     +- Project [c3#x AS c2#x]
 :        +- Project [c3#x]
 :           +- SubqueryAlias w3
 :              +- CTERelationRef xxxx, true, [c3#x], false, false
-:- CTERelationDef xxxx, false, false
+:- CTERelationDef xxxx, false
 :  +- SubqueryAlias w1
 :     +- Project [c2#x AS c1#x]
 :        +- Project [c2#x]
@@ -379,7 +413,7 @@ WITH same_name AS (SELECT 42)
 SELECT * FROM same_name, (SELECT 10) AS same_name
 -- !query analysis
 WithCTE
-:- CTERelationDef xxxx, false, false
+:- CTERelationDef xxxx, false
 :  +- SubqueryAlias same_name
 :     +- Project [42 AS 42#x]
 :        +- OneRowRelation
@@ -419,7 +453,7 @@ WITH q AS (SELECT 'foo' AS x)
 SELECT x, typeof(x) FROM q
 -- !query analysis
 WithCTE
-:- CTERelationDef xxxx, false, false
+:- CTERelationDef xxxx, false
 :  +- SubqueryAlias q
 :     +- Project [foo AS x#x]
 :        +- OneRowRelation
@@ -479,7 +513,7 @@ SELECT * FROM
 Project [y#x]
 +- SubqueryAlias __auto_generated_subquery_name
    +- WithCTE
-      :- CTERelationDef xxxx, false, false
+      :- CTERelationDef xxxx, false
       :  +- SubqueryAlias q
       :     +- Project [1 AS x#x]
       :        +- OneRowRelation
@@ -493,7 +527,7 @@ select (with q as (select 1 x) select * from q)
 -- !query analysis
 Project [scalar-subquery#x [] AS scalarsubquery()#x]
 :  +- WithCTE
-:     :- CTERelationDef xxxx, false, false
+:     :- CTERelationDef xxxx, false
 :     :  +- SubqueryAlias q
 :     :     +- Project [1 AS x#x]
 :     :        +- OneRowRelation
@@ -508,7 +542,7 @@ select 1 in (with q as (select 1) select * from q)
 -- !query analysis
 Project [1 IN (list#x []) AS (1 IN (listquery()))#x]
 :  +- WithCTE
-:     :- CTERelationDef xxxx, false, false
+:     :- CTERelationDef xxxx, false
 :     :  +- SubqueryAlias q
 :     :     +- Project [1 AS 1#x]
 :     :        +- OneRowRelation
@@ -549,11 +583,11 @@ from
   T1 z
 -- !query analysis
 WithCTE
-:- CTERelationDef xxxx, false, false
+:- CTERelationDef xxxx, false
 :  +- SubqueryAlias T1
 :     +- Project [1 AS a#x]
 :        +- OneRowRelation
-:- CTERelationDef xxxx, false, false
+:- CTERelationDef xxxx, false
 :  +- SubqueryAlias T1
 :     +- Project [2 AS b#x]
 :        +- OneRowRelation
@@ -580,15 +614,15 @@ from
   (WITH TtTt as (select 3 c) select * from ttTT, `tttT_2`)
 -- !query analysis
 WithCTE
-:- CTERelationDef xxxx, false, false
+:- CTERelationDef xxxx, false
 :  +- SubqueryAlias TTtt
 :     +- Project [1 AS a#x]
 :        +- OneRowRelation
-:- CTERelationDef xxxx, false, false
+:- CTERelationDef xxxx, false
 :  +- SubqueryAlias tTTt_2
 :     +- Project [2 AS a#x]
 :        +- OneRowRelation
-:- CTERelationDef xxxx, false, false
+:- CTERelationDef xxxx, false
 :  +- SubqueryAlias TtTt
 :     +- Project [3 AS c#x]
 :        +- OneRowRelation
@@ -609,7 +643,7 @@ from (select 1 x, 2 y) T
 -- !query analysis
 Project [scalar-subquery#x [x#x] AS scalarsubquery(x)#x]
 :  +- WithCTE
-:     :- CTERelationDef xxxx, false, false
+:     :- CTERelationDef xxxx, false
 :     :  +- SubqueryAlias q
 :     :     +- Project [outer(x#x)]
 :     :        +- OneRowRelation
@@ -628,7 +662,7 @@ from (select 1 x, 2 y) T
 -- !query analysis
 Project [scalar-subquery#x [x#x && y#x] AS scalarsubquery(x, y)#x]
 :  +- WithCTE
-:     :- CTERelationDef xxxx, false, false
+:     :- CTERelationDef xxxx, false
 :     :  +- SubqueryAlias q
 :     :     +- Project [3 AS z#x]
 :     :        +- OneRowRelation
@@ -646,11 +680,11 @@ select * from
   (with q2 as (select * from q1) select * from q2)
 -- !query analysis
 WithCTE
-:- CTERelationDef xxxx, false, false
+:- CTERelationDef xxxx, false
 :  +- SubqueryAlias q1
 :     +- Project [1 AS x#x]
 :        +- OneRowRelation
-:- CTERelationDef xxxx, false, false
+:- CTERelationDef xxxx, false
 :  +- SubqueryAlias q2
 :     +- Project [x#x]
 :        +- SubqueryAlias q1
@@ -668,11 +702,11 @@ select * from
   (with q1 as (select x+1 from q1) select * from q1)
 -- !query analysis
 WithCTE
-:- CTERelationDef xxxx, false, false
+:- CTERelationDef xxxx, false
 :  +- SubqueryAlias q1
 :     +- Project [1 AS x#x]
 :        +- OneRowRelation
-:- CTERelationDef xxxx, false, false
+:- CTERelationDef xxxx, false
 :  +- SubqueryAlias q1
 :     +- Project [(x#x + 1) AS (x + 1)#x]
 :        +- SubqueryAlias q1
@@ -709,7 +743,7 @@ with cte1 as (Select id as j from t)
 select * from cte1 where j = (select max(j) from cte1 as cte2)
 -- !query analysis
 WithCTE
-:- CTERelationDef xxxx, false, false
+:- CTERelationDef xxxx, false
 :  +- SubqueryAlias cte1
 :     +- Project [id#x AS j#x]
 :        +- SubqueryAlias t
@@ -778,3 +812,9 @@ DropTempViewCommand t
 DROP VIEW IF EXISTS t2
 -- !query analysis
 DropTempViewCommand t2
+
+
+-- !query
+DROP VIEW IF EXISTS t3
+-- !query analysis
+DropTempViewCommand t3

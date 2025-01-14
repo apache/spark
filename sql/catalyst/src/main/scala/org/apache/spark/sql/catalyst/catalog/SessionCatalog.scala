@@ -32,12 +32,15 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.{SparkException, SparkThrowable}
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst._
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
-import org.apache.spark.sql.catalyst.expressions.{Alias, Cast, Expression, ExpressionInfo, NamedExpression, UpCast}
+import org.apache.spark.sql.catalyst.analysis.TableFunctionRegistry.TableFunctionBuilder
+import org.apache.spark.sql.catalyst.catalog.SQLFunction.parseDefault
+import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference, Cast, Expression, ExpressionInfo, NamedArgumentExpression, NamedExpression, UpCast}
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParserInterface}
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, SubqueryAlias, View}
+import org.apache.spark.sql.catalyst.plans.logical.{FunctionSignature, InputParameter, LogicalPlan, NamedParametersSupport, Project, SubqueryAlias, View}
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, StringUtils}
 import org.apache.spark.sql.connector.catalog.CatalogManager
@@ -1532,9 +1535,48 @@ class SessionCatalog(
     }
   }
 
+  /**
+   * Create a user defined function.
+   */
+  def createUserDefinedFunction(function: UserDefinedFunction, ignoreIfExists: Boolean): Unit = {
+    createFunction(function.toCatalogFunction, ignoreIfExists)
+  }
+
   // ----------------------------------------------------------------
   // | Methods that interact with temporary and metastore functions |
   // ----------------------------------------------------------------
+
+  /**
+   * Constructs a [[FunctionBuilder]] based on the provided class that represents a function.
+   */
+  private def makeSQLFunctionBuilder(function: SQLFunction): FunctionBuilder = {
+    if (function.isTableFunc) {
+      throw UserDefinedFunctionErrors.notAScalarFunction(function.name.nameParts)
+    }
+    (input: Seq[Expression]) => {
+      val args = rearrangeArguments(function.inputParam, input, function.name.toString)
+      val returnType = function.getScalarFuncReturnType
+      SQLFunctionExpression(
+        function.name.unquotedString, function, args, Some(returnType))
+    }
+  }
+
+  /**
+   * Constructs a [[TableFunctionBuilder]] based on the provided class that represents a function.
+   */
+  private def makeSQLTableFunctionBuilder(function: SQLFunction): TableFunctionBuilder = {
+    if (!function.isTableFunc) {
+      throw UserDefinedFunctionErrors.notATableFunction(function.name.nameParts)
+    }
+    (input: Seq[Expression]) => {
+      val args = rearrangeArguments(function.inputParam, input, function.name.toString)
+      val returnParam = function.getTableFuncReturnCols
+      val output = returnParam.fields.map { param =>
+        AttributeReference(param.name, param.dataType, param.nullable)()
+      }
+      SQLTableFunction(function.name.unquotedString, function, args, output.toSeq)
+    }
+  }
 
   /**
    * Constructs a [[FunctionBuilder]] based on the provided function metadata.
@@ -1548,6 +1590,24 @@ class SessionCatalog(
     val clazz = Utils.classForName(className)
     val name = func.identifier.unquotedString
     (input: Seq[Expression]) => functionExpressionBuilder.makeExpression(name, clazz, input)
+  }
+
+  private def makeUserDefinedScalarFuncBuilder(func: UserDefinedFunction): FunctionBuilder = {
+    func match {
+      case f: SQLFunction => makeSQLFunctionBuilder(f)
+      case _ =>
+        val clsName = func.getClass.getSimpleName
+        throw UserDefinedFunctionErrors.unsupportedUserDefinedFunction(clsName)
+    }
+  }
+
+  private def makeUserDefinedTableFuncBuilder(func: UserDefinedFunction): TableFunctionBuilder = {
+    func match {
+      case f: SQLFunction => makeSQLTableFunctionBuilder(f)
+      case _ =>
+        val clsName = func.getClass.getSimpleName
+        throw UserDefinedFunctionErrors.unsupportedUserDefinedFunction(clsName)
+    }
   }
 
   /**
@@ -1595,6 +1655,81 @@ class SessionCatalog(
       "",
       "",
       "hive")
+  }
+
+  /**
+   * Registers a temporary or persistent SQL scalar function into a session-specific
+   * [[FunctionRegistry]].
+   */
+  def registerSQLScalarFunction(
+      function: SQLFunction,
+      overrideIfExists: Boolean): Unit = {
+    registerUserDefinedFunction[Expression](
+      function,
+      overrideIfExists,
+      functionRegistry,
+      makeSQLFunctionBuilder(function))
+  }
+
+  /**
+   * Registers a temporary or persistent SQL table function into a session-specific
+   * [[TableFunctionRegistry]].
+   */
+  def registerSQLTableFunction(
+      function: SQLFunction,
+      overrideIfExists: Boolean): Unit = {
+    registerUserDefinedFunction[LogicalPlan](
+      function,
+      overrideIfExists,
+      tableFunctionRegistry,
+      makeSQLTableFunctionBuilder(function))
+  }
+
+  /**
+   * Rearranges the arguments of a UDF into positional order.
+   */
+  private def rearrangeArguments(
+      inputParams: Option[StructType],
+      expressions: Seq[Expression],
+      functionName: String) : Seq[Expression] = {
+    val firstNamedArgumentExpressionIdx =
+      expressions.indexWhere(_.isInstanceOf[NamedArgumentExpression])
+    if (firstNamedArgumentExpressionIdx == -1) {
+      return expressions
+    }
+
+    val paramNames: Seq[InputParameter] =
+      if (inputParams.isDefined) {
+        inputParams.get.map {
+          p => p.getDefault() match {
+            case Some(defaultExpr) =>
+              // This cast is needed to ensure the default value is of the target data type.
+              InputParameter(p.name, Some(Cast(parseDefault(defaultExpr, parser), p.dataType)))
+            case None =>
+              InputParameter(p.name)
+          }
+        }.toSeq
+      } else {
+        Seq()
+      }
+
+    NamedParametersSupport.defaultRearrange(
+      FunctionSignature(paramNames), expressions, functionName)
+  }
+
+  /**
+   * Registers a temporary or permanent SQL function into a session-specific function registry.
+   */
+  private def registerUserDefinedFunction[T](
+      function: UserDefinedFunction,
+      overrideIfExists: Boolean,
+      registry: FunctionRegistryBase[T],
+      functionBuilder: Seq[Expression] => T): Unit = {
+    if (registry.functionExists(function.name) && !overrideIfExists) {
+      throw QueryCompilationErrors.functionAlreadyExistsError(function.name)
+    }
+    val info = function.toExpressionInfo
+    registry.registerFunction(function.name, info, functionBuilder)
   }
 
   /**
@@ -1753,7 +1888,11 @@ class SessionCatalog(
         requireDbExists(db)
         if (externalCatalog.functionExists(db, funcName)) {
           val metadata = externalCatalog.getFunction(db, funcName)
-          makeExprInfoForHiveFunction(metadata.copy(identifier = qualifiedIdent))
+          if (metadata.isUserDefinedFunction) {
+            UserDefinedFunction.fromCatalogFunction(metadata, parser).toExpressionInfo
+          } else {
+            makeExprInfoForHiveFunction(metadata.copy(identifier = qualifiedIdent))
+          }
         } else {
           failFunctionLookup(name)
         }
@@ -1765,7 +1904,26 @@ class SessionCatalog(
    */
   def resolvePersistentFunction(
       name: FunctionIdentifier, arguments: Seq[Expression]): Expression = {
-    resolvePersistentFunctionInternal(name, arguments, functionRegistry, makeFunctionBuilder)
+    resolvePersistentFunctionInternal[Expression](
+      name,
+      arguments,
+      functionRegistry,
+      registerHiveFunc = func =>
+        registerFunction(
+          func,
+          overrideIfExists = false,
+          registry = functionRegistry,
+          functionBuilder = makeFunctionBuilder(func)
+        ),
+      registerUserDefinedFunc = function => {
+        val builder = makeUserDefinedScalarFuncBuilder(function)
+        registerUserDefinedFunction[Expression](
+          function = function,
+          overrideIfExists = false,
+          registry = functionRegistry,
+          functionBuilder = builder)
+      }
+    )
   }
 
   /**
@@ -1774,16 +1932,29 @@ class SessionCatalog(
   def resolvePersistentTableFunction(
       name: FunctionIdentifier,
       arguments: Seq[Expression]): LogicalPlan = {
-    // We don't support persistent table functions yet.
-    val builder = (func: CatalogFunction) => failFunctionLookup(name)
-    resolvePersistentFunctionInternal(name, arguments, tableFunctionRegistry, builder)
+    resolvePersistentFunctionInternal[LogicalPlan](
+      name,
+      arguments,
+      tableFunctionRegistry,
+      // We don't support persistent Hive table functions yet.
+      registerHiveFunc = (func: CatalogFunction) => failFunctionLookup(name),
+      registerUserDefinedFunc = function => {
+        val builder = makeUserDefinedTableFuncBuilder(function)
+        registerUserDefinedFunction[LogicalPlan](
+          function = function,
+          overrideIfExists = false,
+          registry = tableFunctionRegistry,
+          functionBuilder = builder)
+      }
+    )
   }
 
   private def resolvePersistentFunctionInternal[T](
       name: FunctionIdentifier,
       arguments: Seq[Expression],
       registry: FunctionRegistryBase[T],
-      createFunctionBuilder: CatalogFunction => FunctionRegistryBase[T]#FunctionBuilder): T = {
+      registerHiveFunc: CatalogFunction => Unit,
+      registerUserDefinedFunc: UserDefinedFunction => Unit): T = {
     // `synchronized` is used to prevent multiple threads from concurrently resolving the
     // same function that has not yet been loaded into the function registry. This is needed
     // because calling `registerFunction` twice with `overrideIfExists = false` can lead to
@@ -1799,19 +1970,24 @@ class SessionCatalog(
         // The function has not been loaded to the function registry, which means
         // that the function is a persistent function (if it actually has been registered
         // in the metastore). We need to first put the function in the function registry.
-        val catalogFunction = externalCatalog.getFunction(db, funcName)
-        loadFunctionResources(catalogFunction.resources)
+        val catalogFunction = try {
+          externalCatalog.getFunction(db, funcName)
+        } catch {
+          case _: AnalysisException => failFunctionLookup(qualifiedIdent)
+        }
         // Please note that qualifiedName is provided by the user. However,
         // catalogFunction.identifier.unquotedString is returned by the underlying
         // catalog. So, it is possible that qualifiedName is not exactly the same as
         // catalogFunction.identifier.unquotedString (difference is on case-sensitivity).
         // At here, we preserve the input from the user.
         val funcMetadata = catalogFunction.copy(identifier = qualifiedIdent)
-        registerFunction(
-          funcMetadata,
-          overrideIfExists = false,
-          registry = registry,
-          functionBuilder = createFunctionBuilder(funcMetadata))
+        if (!catalogFunction.isUserDefinedFunction) {
+          loadFunctionResources(catalogFunction.resources)
+          registerHiveFunc(funcMetadata)
+        } else {
+          val function = UserDefinedFunction.fromCatalogFunction(funcMetadata, parser)
+          registerUserDefinedFunc(function)
+        }
         // Now, we need to create the Expression.
         registry.lookupFunction(qualifiedIdent, arguments)
       }

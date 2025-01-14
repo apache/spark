@@ -2,52 +2,52 @@
 Nested Schema Pruning Benchmark For ORC v2
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 21.0.4+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 21.0.5+11-LTS on Linux 6.8.0-1017-azure
 AMD EPYC 7763 64-Core Processor
 Selection:                                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Top-level column                                     66             84          14         15.1          66.0       1.0X
-Nested column                                        57             68           7         17.6          56.7       1.2X
-Nested column in array                              167            173           5          6.0         166.9       0.4X
+Top-level column                                     59             73           9         17.1          58.5       1.0X
+Nested column                                        58             67           7         17.4          57.5       1.0X
+Nested column in array                              171            177           4          5.9         170.9       0.3X
 
-OpenJDK 64-Bit Server VM 21.0.4+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 21.0.5+11-LTS on Linux 6.8.0-1017-azure
 AMD EPYC 7763 64-Core Processor
 Limiting:                                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Top-level column                                    243            260          12          4.1         242.6       1.0X
-Nested column                                       245            260          12          4.1         244.9       1.0X
-Nested column in array                              515            532          12          1.9         514.8       0.5X
+Top-level column                                    233            256          18          4.3         232.9       1.0X
+Nested column                                       229            241           8          4.4         229.5       1.0X
+Nested column in array                              520            551          30          1.9         520.3       0.4X
 
-OpenJDK 64-Bit Server VM 21.0.4+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 21.0.5+11-LTS on Linux 6.8.0-1017-azure
 AMD EPYC 7763 64-Core Processor
 Repartitioning:                           Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Top-level column                                    218            230           7          4.6         218.1       1.0X
-Nested column                                       223            234          14          4.5         223.4       1.0X
-Nested column in array                              472            484           7          2.1         472.1       0.5X
+Top-level column                                    203            213           6          4.9         203.0       1.0X
+Nested column                                       208            219           6          4.8         207.8       1.0X
+Nested column in array                              467            476           4          2.1         467.3       0.4X
 
-OpenJDK 64-Bit Server VM 21.0.4+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 21.0.5+11-LTS on Linux 6.8.0-1017-azure
 AMD EPYC 7763 64-Core Processor
 Repartitioning by exprs:                  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Top-level column                                    213            231          14          4.7         213.3       1.0X
-Nested column                                       240            252           8          4.2         240.1       0.9X
-Nested column in array                              510            514           3          2.0         509.7       0.4X
+Top-level column                                    201            206           5          5.0         201.2       1.0X
+Nested column                                       238            244           4          4.2         238.0       0.8X
+Nested column in array                              504            522          30          2.0         503.6       0.4X
 
-OpenJDK 64-Bit Server VM 21.0.4+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 21.0.5+11-LTS on Linux 6.8.0-1017-azure
 AMD EPYC 7763 64-Core Processor
 Sample:                                   Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Top-level column                                     65             77          10         15.3          65.3       1.0X
-Nested column                                        74             89          15         13.6          73.7       0.9X
-Nested column in array                              206            242          28          4.8         206.2       0.3X
+Top-level column                                     53             76          10         18.9          53.0       1.0X
+Nested column                                        73             87           9         13.6          73.5       0.7X
+Nested column in array                              208            247          24          4.8         208.4       0.3X
 
-OpenJDK 64-Bit Server VM 21.0.4+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 21.0.5+11-LTS on Linux 6.8.0-1017-azure
 AMD EPYC 7763 64-Core Processor
 Sorting:                                  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Top-level column                                    301            316          21          3.3         300.7       1.0X
-Nested column                                       361            378          21          2.8         360.9       0.8X
-Nested column in array                              723            765          42          1.4         722.8       0.4X
+Top-level column                                    289            297          12          3.5         289.3       1.0X
+Nested column                                       334            344          14          3.0         333.8       0.9X
+Nested column in array                              702            767          41          1.4         701.8       0.4X
 
 

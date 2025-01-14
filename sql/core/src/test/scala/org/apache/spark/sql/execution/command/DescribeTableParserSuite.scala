@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.command
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedAttribute, UnresolvedTableOrView}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser.parsePlan
 import org.apache.spark.sql.catalyst.plans.logical.{DescribeColumn, DescribeRelation}
@@ -74,6 +75,12 @@ class DescribeTableParserSuite extends AnalysisTest {
         UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE", true),
         UnresolvedAttribute(Seq("col")),
         isExtended = true))
+
+    val error = intercept[AnalysisException](parsePlan("DESCRIBE EXTENDED t col AS JSON"))
+
+    checkError(
+      exception = error,
+      condition = "UNSUPPORTED_FEATURE.DESC_TABLE_COLUMN_JSON")
 
     val sql = "DESCRIBE TABLE t PARTITION (ds='1970-01-01') col"
     checkError(

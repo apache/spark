@@ -72,6 +72,41 @@ d                   	string
 
 
 -- !query
+DESCRIBE EXTENDED t AS JSON
+-- !query schema
+struct<json_metadata:string>
+-- !query output
+{"table_name":"t","catalog_name":"spark_catalog","namespace":["default"],"schema_name":"default","columns":[{"name":"a","type":{"name":"string"},"nullable":true},{"name":"b","type":{"name":"integer"},"nullable":true},{"name":"c","type":{"name":"string"},"nullable":true},{"name":"d","type":{"name":"string"},"nullable":true}],"num_buckets":2,"bucket_columns":["a"],"sort_columns":["b"],"location":"file:[not included in comparison]/{warehouse_dir}/t","storage_properties":{"a":"1","b":"2","password":"*********(redacted)"},"created_time [not included in comparison]":"None","last_access [not included in comparison]":"None","created_by [not included in comparison]":"None","type":"MANAGED","provider":"parquet","comment":"table_comment","table_properties":{"e":"3","password":"*********(redacted)","t":"test"},"partition_provider":"Catalog","partition_columns":["c","d"]}
+
+
+-- !query
+DESCRIBE t AS JSON
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "DESCRIBE_JSON_NOT_EXTENDED",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "tableName" : "t"
+  }
+}
+
+
+-- !query
+DESC FORMATTED t a AS JSON
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "UNSUPPORTED_FEATURE.DESC_TABLE_COLUMN_JSON",
+  "sqlState" : "0A000"
+}
+
+
+-- !query
 DESC default.t
 -- !query schema
 struct<col_name:string,data_type:string,comment:string>
@@ -261,6 +296,14 @@ d                   	string
 # col_name          	data_type           	comment             
 c                   	string              	                    
 d                   	string
+
+
+-- !query
+DESC EXTENDED t PARTITION (c='Us', d=1) AS JSON
+-- !query schema
+struct<json_metadata:string>
+-- !query output
+{"table_name":"t","catalog_name":"spark_catalog","namespace":["default"],"schema_name":"default","columns":[{"name":"a","type":{"name":"string"},"nullable":true},{"name":"b","type":{"name":"integer"},"nullable":true},{"name":"c","type":{"name":"string"},"nullable":true},{"name":"d","type":{"name":"string"},"nullable":true}],"partition_values":{"c":"Us","d":"1"},"location":"file:[not included in comparison]/{warehouse_dir}/t/c=Us/d=1","storage_properties":{"a":"1","b":"2","password":"*********(redacted)"},"created_time [not included in comparison]":"None","last_access [not included in comparison]":"None","created_by [not included in comparison]":"None","type":"MANAGED","provider":"parquet","num_buckets":2,"bucket_columns":["a"],"sort_columns":["b"],"table_properties":{"password":"*********(redacted)","t":"test"},"partition_provider":"Catalog","partition_columns":["c","d"]}
 
 
 -- !query
@@ -642,6 +685,16 @@ struct<plan:string>
 == Physical Plan ==
 Execute DescribeTableCommand
    +- DescribeTableCommand `spark_catalog`.`default`.`t`, [c=Us, d=2], false, [col_name#x, data_type#x, comment#x]
+
+
+-- !query
+EXPLAIN DESCRIBE EXTENDED t PARTITION (c='Us', d=2) AS JSON
+-- !query schema
+struct<plan:string>
+-- !query output
+== Physical Plan ==
+Execute DescribeTableJsonCommand
+   +- DescribeTableJsonCommand `spark_catalog`.`default`.`t`, [c=Us, d=2], true
 
 
 -- !query

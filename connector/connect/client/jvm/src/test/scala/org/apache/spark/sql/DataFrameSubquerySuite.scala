@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.{SparkException, SparkRuntimeException}
+import org.apache.spark.SparkRuntimeException
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.{QueryTest, RemoteSparkSession}
 
@@ -354,6 +354,28 @@ class DataFrameSubquerySuite extends QueryTest with RemoteSparkSession {
     }
   }
 
+  test("lateral join with star expansion") {
+    withView("t1", "t2") {
+      val t1 = table1()
+      val t2 = table2()
+
+      checkAnswer(
+        t1.lateralJoin(spark.range(1).select().select($"*")),
+        sql("SELECT * FROM t1, LATERAL (SELECT *)"))
+      checkAnswer(
+        t1.lateralJoin(t2.select($"*")).toDF("c1", "c2", "c3", "c4"),
+        sql("SELECT * FROM t1, LATERAL (SELECT * FROM t2)").toDF("c1", "c2", "c3", "c4"))
+      checkAnswer(
+        t1.lateralJoin(t2.select($"t1.*".outer(), $"t2.*"))
+          .toDF("c1", "c2", "c3", "c4", "c5", "c6"),
+        sql("SELECT * FROM t1, LATERAL (SELECT t1.*, t2.* FROM t2)")
+          .toDF("c1", "c2", "c3", "c4", "c5", "c6"))
+      checkAnswer(
+        t1.lateralJoin(t2.alias("t1").select($"t1.*")).toDF("c1", "c2", "c3", "c4"),
+        sql("SELECT * FROM t1, LATERAL (SELECT t1.* FROM t2 AS t1)").toDF("c1", "c2", "c3", "c4"))
+    }
+  }
+
   test("lateral join with different join types") {
     withView("t1") {
       val t1 = table1()
@@ -372,6 +394,17 @@ class DataFrameSubquerySuite extends QueryTest with RemoteSparkSession {
       checkAnswer(
         t1.lateralJoin(spark.range(1).select(($"c1".outer() + $"c2".outer()).as("c3")), "cross"),
         sql("SELECT * FROM t1 CROSS JOIN LATERAL (SELECT c1 + c2 AS c3)"))
+    }
+  }
+
+  test("lateral join with subquery alias") {
+    withView("t1") {
+      val t1 = table1()
+
+      checkAnswer(
+        t1.lateralJoin(spark.range(1).select($"c1".outer(), $"c2".outer()).toDF("a", "b").as("s"))
+          .select("a", "b"),
+        sql("SELECT a, b FROM t1, LATERAL (SELECT c1, c2) s(a, b)"))
     }
   }
 
@@ -441,8 +474,8 @@ class DataFrameSubquerySuite extends QueryTest with RemoteSparkSession {
       val t2 = table2()
 
       checkAnswer(
-        t1.lateralJoin(t2.where($"t1.c1".outer() === $"t2.c1").select($"c2"), "left")
-          .join(t1.as("t3"), $"t2.c2" === $"t3.c2", "left")
+        t1.lateralJoin(t2.where($"t1.c1".outer() === $"t2.c1").select($"c2").as("s"), "left")
+          .join(t1.as("t3"), $"s.c2" === $"t3.c2", "left")
           .toDF("c1", "c2", "c3", "c4", "c5"),
         sql("""
             |SELECT * FROM t1
@@ -632,15 +665,52 @@ class DataFrameSubquerySuite extends QueryTest with RemoteSparkSession {
     withView("t1") {
       val t1 = table1()
 
-      // TODO(SPARK-50601): Fix the SparkConnectPlanner to support this case
-      checkError(
-        intercept[SparkException] {
-          t1.withColumn("scalar", spark.range(1).select($"c1".outer() + $"c2".outer()).scalar())
-            .collect()
-        },
-        "INTERNAL_ERROR",
-        parameters = Map("message" -> "Found the unresolved operator: .*"),
-        matchPVals = true)
+      checkAnswer(
+        t1.withColumn(
+          "scalar",
+          spark
+            .range(1)
+            .select($"c1".outer() + $"c2".outer())
+            .scalar()),
+        t1.select($"*", ($"c1" + $"c2").as("scalar")))
+
+      checkAnswer(
+        t1.withColumn(
+          "scalar",
+          spark
+            .range(1)
+            .withColumn("c1", $"c1".outer())
+            .select($"c1" + $"c2".outer())
+            .scalar()),
+        t1.select($"*", ($"c1" + $"c2").as("scalar")))
+
+      checkAnswer(
+        t1.withColumn(
+          "scalar",
+          spark
+            .range(1)
+            .select($"c1".outer().as("c1"))
+            .withColumn("c2", $"c2".outer())
+            .select($"c1" + $"c2")
+            .scalar()),
+        t1.select($"*", ($"c1" + $"c2").as("scalar")))
+    }
+  }
+
+  test("subquery in withColumnsRenamed") {
+    withView("t1") {
+      val t1 = table1()
+
+      checkAnswer(
+        t1.withColumn(
+          "scalar",
+          spark
+            .range(1)
+            .select($"c1".outer().as("c1"), $"c2".outer().as("c2"))
+            .withColumnsRenamed(Map("c1" -> "x", "c2" -> "y"))
+            .select($"x" + $"y")
+            .scalar()),
+        t1.select($"*", ($"c1".as("x") + $"c2".as("y")).as("scalar")))
     }
   }
 

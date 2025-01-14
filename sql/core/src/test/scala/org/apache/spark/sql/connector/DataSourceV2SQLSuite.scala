@@ -278,8 +278,8 @@ class DataSourceV2SQLSuiteV1Filter
 
   test("CreateTable: without USING clause") {
     withSQLConf(SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT.key -> "false") {
-      // unset this config to use the default v2 session catalog.
-      spark.conf.unset(V2_SESSION_CATALOG_IMPLEMENTATION.key)
+      // use the default v2 session catalog.
+      spark.conf.set(V2_SESSION_CATALOG_IMPLEMENTATION, "builtin")
       val testCatalog = catalog("testcat").asTableCatalog
 
       sql("CREATE TABLE testcat.t1 (id int)")
@@ -785,8 +785,8 @@ class DataSourceV2SQLSuiteV1Filter
   }
 
   test("CreateTableAsSelect: v2 session catalog can load v1 source table") {
-    // unset this config to use the default v2 session catalog.
-    spark.conf.unset(V2_SESSION_CATALOG_IMPLEMENTATION.key)
+    // use the default v2 session catalog.
+    spark.conf.set(V2_SESSION_CATALOG_IMPLEMENTATION, "builtin")
 
     val df = spark.createDataFrame(Seq((1L, "a"), (2L, "b"), (3L, "c"))).toDF("id", "data")
     df.createOrReplaceTempView("source")
@@ -846,8 +846,8 @@ class DataSourceV2SQLSuiteV1Filter
 
   // TODO: ignored by SPARK-31707, restore the test after create table syntax unification
   ignore("CreateTableAsSelect: without USING clause") {
-    // unset this config to use the default v2 session catalog.
-    spark.conf.unset(V2_SESSION_CATALOG_IMPLEMENTATION.key)
+    // use the default v2 session catalog.
+    spark.conf.set(V2_SESSION_CATALOG_IMPLEMENTATION, "builtin")
     val testCatalog = catalog("testcat").asTableCatalog
 
     sql("CREATE TABLE testcat.t1 AS SELECT 1 i")
@@ -1086,11 +1086,11 @@ class DataSourceV2SQLSuiteV1Filter
     Seq(true, false).foreach { useV1Table =>
       val format = if (useV1Table) "json" else v2Format
       if (useV1Table) {
-        // unset this config to use the default v2 session catalog.
-        spark.conf.unset(V2_SESSION_CATALOG_IMPLEMENTATION.key)
+        // use the default v2 session catalog.
+        spark.conf.set(V2_SESSION_CATALOG_IMPLEMENTATION, "builtin")
       } else {
         spark.conf.set(
-          V2_SESSION_CATALOG_IMPLEMENTATION.key, classOf[InMemoryTableSessionCatalog].getName)
+          V2_SESSION_CATALOG_IMPLEMENTATION, classOf[InMemoryTableSessionCatalog].getName)
       }
 
       withTable("t") {
@@ -1815,8 +1815,8 @@ class DataSourceV2SQLSuiteV1Filter
   }
 
   test("SPARK-46972: asymmetrical replacement for char/varchar in V2SessionCatalog.createTable") {
-    // unset this config to use the default v2 session catalog.
-    spark.conf.unset(V2_SESSION_CATALOG_IMPLEMENTATION.key)
+    // use the default v2 session catalog.
+    spark.conf.set(V2_SESSION_CATALOG_IMPLEMENTATION, "builtin")
     withTable("t") {
       sql(s"CREATE TABLE t(c char(1), v varchar(2)) USING $v2Source")
     }
@@ -2533,8 +2533,8 @@ class DataSourceV2SQLSuiteV1Filter
   }
 
   test("SPARK-30001: session catalog name can be specified in SQL statements") {
-    // unset this config to use the default v2 session catalog.
-    spark.conf.unset(V2_SESSION_CATALOG_IMPLEMENTATION.key)
+    // use the default v2 session catalog.
+    spark.conf.set(V2_SESSION_CATALOG_IMPLEMENTATION, "builtin")
 
     withTable("t") {
       sql("CREATE TABLE t USING json AS SELECT 1 AS i")
@@ -2598,8 +2598,8 @@ class DataSourceV2SQLSuiteV1Filter
   }
 
   test("SPARK-30094: current namespace is used during table resolution") {
-    // unset this config to use the default v2 session catalog.
-    spark.conf.unset(V2_SESSION_CATALOG_IMPLEMENTATION.key)
+    // use the default v2 session catalog.
+    spark.conf.set(V2_SESSION_CATALOG_IMPLEMENTATION, "builtin")
 
     withTable("spark_catalog.default.t", "testcat.ns.t") {
       sql("CREATE TABLE t USING parquet AS SELECT 1")
@@ -2613,8 +2613,8 @@ class DataSourceV2SQLSuiteV1Filter
   }
 
   test("SPARK-30284: CREATE VIEW should track the current catalog and namespace") {
-    // unset this config to use the default v2 session catalog.
-    spark.conf.unset(V2_SESSION_CATALOG_IMPLEMENTATION.key)
+    // use the default v2 session catalog.
+    spark.conf.set(V2_SESSION_CATALOG_IMPLEMENTATION, "builtin")
     val sessionCatalogName = CatalogManager.SESSION_CATALOG_NAME
 
     sql("CREATE NAMESPACE testcat.ns1.ns2")
@@ -2651,8 +2651,8 @@ class DataSourceV2SQLSuiteV1Filter
   }
 
   test("COMMENT ON NAMESPACE") {
-    // unset this config to use the default v2 session catalog.
-    spark.conf.unset(V2_SESSION_CATALOG_IMPLEMENTATION.key)
+    // use the default v2 session catalog.
+    spark.conf.set(V2_SESSION_CATALOG_IMPLEMENTATION, "builtin")
     // Session catalog is used.
     sql("CREATE NAMESPACE ns")
     checkNamespaceComment("ns", "minor revision")
@@ -2685,8 +2685,8 @@ class DataSourceV2SQLSuiteV1Filter
   }
 
   test("COMMENT ON TABLE") {
-    // unset this config to use the default v2 session catalog.
-    spark.conf.unset(V2_SESSION_CATALOG_IMPLEMENTATION.key)
+    // use the default v2 session catalog.
+    spark.conf.set(V2_SESSION_CATALOG_IMPLEMENTATION, "builtin")
     // Session catalog is used.
     withTable("t") {
       sql("CREATE TABLE t(k int) USING json")
