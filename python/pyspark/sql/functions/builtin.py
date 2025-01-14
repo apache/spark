@@ -26291,7 +26291,8 @@ def udf(
         Defaults to :class:`StringType`.
     useArrow : bool, optional
         whether to use Arrow to optimize the (de)serialization. When it is None, the
-        Spark config "spark.sql.execution.pythonUDF.arrow.enabled" takes effect.
+        Spark config "spark.sql.execution.pythonUDF.arrow.enabled" takes effect,
+        which is "true" by default.
 
     Examples
     --------
