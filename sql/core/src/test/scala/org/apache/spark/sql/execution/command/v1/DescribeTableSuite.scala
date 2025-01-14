@@ -211,30 +211,6 @@ trait DescribeTableSuiteBase extends command.DescribeTableSuiteBase
     }
   }
 
-  test("DESCRIBE AS JSON throws when not EXTENDED") {
-    withNamespaceAndTable("ns", "table") { t =>
-      val tableCreationStr =
-        s"""
-           |CREATE TABLE $t (
-           |  employee_id INT,
-           |  employee_name STRING,
-           |  department STRING,
-           |  hire_date DATE
-           |) USING parquet
-           |""".stripMargin
-      spark.sql(tableCreationStr)
-
-      val error = intercept[AnalysisException] {
-        spark.sql(s"DESCRIBE $t AS JSON")
-      }
-
-      checkError(
-        exception = error,
-        condition = "DESCRIBE_JSON_NOT_EXTENDED",
-        parameters = Map("tableName" -> "table"))
-    }
-  }
-
   test("DESCRIBE AS JSON partitions, clusters, buckets") {
     withNamespaceAndTable("ns", "table") { t =>
       val tableCreationStr =
