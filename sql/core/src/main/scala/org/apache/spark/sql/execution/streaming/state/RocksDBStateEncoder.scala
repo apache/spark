@@ -745,7 +745,6 @@ class AvroStateEncoder(
 
   private lazy val valueAvroType: Schema = SchemaConverters.toAvroTypeWithDefaults(valueSchema)
   private lazy val valueProj = UnsafeProjection.create(valueSchema)
-  logError(s"### valueAvroType: ${valueAvroType}")
 
   // Prefix Key schema and projection definitions used by the Avro Serializers
   // and Deserializers

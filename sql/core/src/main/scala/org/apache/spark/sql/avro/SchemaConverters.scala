@@ -378,12 +378,13 @@ object SchemaConverters extends Logging {
     def createNestedDefault(st: StructType): java.util.HashMap[String, Any] = {
       val defaultMap = new java.util.HashMap[String, Any]()
       st.fields.foreach { field =>
-        // For nullable fields in a struct, create a wrapped default value
-        val fieldDefault = getDefaultValue(field.dataType)
-        if (field.nullable) {
-          defaultMap.put(field.name, null)
-        } else {
-          defaultMap.put(field.name, fieldDefault)
+        field.dataType match {
+          case nested: StructType =>
+            // For nested structs, recursively create the default structure
+            defaultMap.put(field.name, createNestedDefault(nested))
+          case _ =>
+            // For leaf fields, use null
+            defaultMap.put(field.name, null)
         }
       }
       defaultMap
