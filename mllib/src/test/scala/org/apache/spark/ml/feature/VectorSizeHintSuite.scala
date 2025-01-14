@@ -79,6 +79,7 @@ class VectorSizeHintSuite
           val numRows = rows.length
           assert(numRows === data.length, s"Expecting ${data.length} rows, got $numRows.")
         }
+      }
     }
   }
 
