@@ -29,10 +29,12 @@ from pyspark.errors import PySparkTypeError, PySparkValueError, SparkRuntimeExce
 from pyspark.sql import Row, Window, functions as F, types
 from pyspark.sql.avro.functions import from_avro, to_avro
 from pyspark.sql.column import Column
+
 from pyspark.sql.functions.builtin import nullifzero, randstr, uniform, zeroifnull
-from pyspark.sql.types import StructType, StructField, StringType
+from pyspark.sql.types import StructType, StructField, StringType, MapType, IntegerType, LongType
 from pyspark.testing.sqlutils import ReusedSQLTestCase, SQLTestUtils
 from pyspark.testing.utils import have_numpy, assertDataFrameEqual
+from pyspark.sql.utils import get_conf as _get_conf
 
 
 class FunctionsTestsMixin:
@@ -1315,6 +1317,90 @@ class FunctionsTestsMixin:
             errorClass="COLUMN_IN_LIST",
             messageParameters={"func_name": "lit"},
         )
+
+    # SPARK-48665: added support for dict type
+    def test_lit_dict_struct(self):
+        _get_conf.cache_clear()
+        with self.sql_conf({"spark.sql.pyspark.inferNestedDictAsStruct.enabled": True}):
+            # Not nested dict
+            expected_types = StructType(
+                [
+                    StructField("a", IntegerType(), False),
+                    StructField("b", IntegerType(), False),
+                ]
+            )
+            test_dict = {"a": 1, "b": 2}
+            actual = self.spark.range(1).select(F.lit(test_dict).alias("dict_to_struct"))
+            column_type = actual.schema["dict_to_struct"].dataType
+            actual = actual.first()[0]
+            self.assertEqual(column_type, expected_types)
+            self.assertEqual(actual, Row(a=1, b=2))
+
+            # Nested dict
+            expected_types = StructType(
+                [
+                    StructField("a", StructType([StructField("c", IntegerType(), False)]), False),
+                    StructField("b", StructType([StructField("d", IntegerType(), False)]), False),
+                ]
+            )
+            test_dict = {"a": {"c": 1}, "b": {"d": 2}}
+            actual = self.spark.range(1).select(F.lit(test_dict).alias("dict_to_struct"))
+            column_type = actual.schema["dict_to_struct"].dataType
+            print(column_type)
+            actual = actual.first()[0]
+            self.assertEqual(column_type, expected_types)
+            self.assertEqual(actual, Row(a=Row(c=1), b=Row(d=2)))
+
+    # SPARK-48665: added support for dict type
+    def test_lit_dict_map(self):
+        _get_conf.cache_clear()
+        with self.sql_conf({"spark.sql.pyspark.inferNestedDictAsStruct.enabled": False}):
+            # Not nested dict
+            test_dict = {"a": 1, "b": 2}
+            actual = self.spark.range(1).select(F.lit(test_dict).alias("dict_to_map"))
+            column_type = actual.schema["dict_to_map"].dataType
+            actual = actual.first()[0]
+            self.assertEqual(column_type, MapType(StringType(), IntegerType(), False))
+            self.assertEqual(actual, test_dict)
+
+            # Nested dict
+            test_dict = {"a": {"1": 1}, "b": {"2": 2}}
+            actual = self.spark.range(1).select(F.lit(test_dict).alias("dict_to_map"))
+            column_type = actual.schema["dict_to_map"].dataType
+            actual = actual.first()[0]
+            self.assertEqual(
+                column_type,
+                MapType(StringType(), MapType(StringType(), IntegerType(), False), False),
+            )
+            self.assertEqual(actual, test_dict)
+
+            # dict with multiple types 1 int, "2" string
+            test_dict = {"a": 1, "b": "2", "c": None}
+            expected_dict = {"a": 1, "b": 2, "c": None}
+            actual = self.spark.range(1).select(F.lit(test_dict).alias("dict_to_map"))
+            column_type = actual.schema["dict_to_map"].dataType
+            actual = actual.first()[0]
+            self.assertEqual(actual, expected_dict)
+            self.assertEqual(column_type, MapType(StringType(), LongType(), True))
+
+    # SPARK-48665: added support for dict type
+    def test_lit_dict_raise_error(self):
+        _get_conf.cache_clear()
+        df = self.spark.range(10)
+        dicts = [
+            {"a": df.id},
+            {"a": {"b": df.id}},
+        ]
+
+        for d in dicts:
+            with self.assertRaises(PySparkValueError) as pe:
+                F.lit(d)
+
+            self.check_error(
+                exception=pe.exception,
+                errorClass="COLUMN_IN_DICT",
+                messageParameters={"func_name": "lit"},
+            )
 
     # Test added for SPARK-39832; change Python API to accept both col & str as input
     def test_regexp_replace(self):

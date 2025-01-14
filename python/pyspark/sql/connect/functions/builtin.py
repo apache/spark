@@ -70,7 +70,10 @@ from pyspark.sql.types import (
     ArrayType,
     StringType,
 )
-from pyspark.sql.utils import enum_to_value as _enum_to_value
+from pyspark.sql.utils import (
+    enum_to_value as _enum_to_value,
+    get_conf as _get_conf,
+)
 
 # The implementation of pandas_udf is embedded in pyspark.sql.function.pandas_udf
 # for code reuse.
@@ -259,6 +262,7 @@ column = col
 
 def lit(col: Any) -> Column:
     from pyspark.sql.connect.column import Column as ConnectColumn
+    from itertools import chain
 
     if isinstance(col, Column):
         return col
@@ -276,6 +280,16 @@ def lit(col: Any) -> Column:
                 messageParameters={"dtype": col.dtype.name},
             )
         return array(*[lit(c) for c in col]).cast(ArrayType(dt))
+    elif isinstance(col, dict):
+        if any(isinstance(c, Column) for c in col.values()):
+            raise PySparkValueError(
+                errorClass="COLUMN_IN_DICT", messageParameters={"func_name": "lit"}
+            )
+        dict_as_struct = _get_conf("spark.sql.pyspark.inferNestedDictAsStruct.enabled")
+        if dict_as_struct and dict_as_struct.lower() == "true":
+            return struct(*[lit(value).alias(key) for key, value in col.items()])
+        else:
+            return create_map(*[lit(x) for x in chain(*col.items())])
     return ConnectColumn(LiteralExpression._from_value(col))
 
 
