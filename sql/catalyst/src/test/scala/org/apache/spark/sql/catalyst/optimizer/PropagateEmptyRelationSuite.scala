@@ -230,8 +230,8 @@ class   PropagateEmptyRelationSuite extends PlanTest {
       val correctAnswer = relation
         .where(false)
         .where($"a" > 1)
-        .select($"a")
         .where($"a" =!= 200)
+        .select($"a")
         .orderBy($"a".asc).analyze
       comparePlans(optimized, correctAnswer)
     }

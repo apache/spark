@@ -66,10 +66,11 @@ class VectorSizeHintSuite
       AttributeGroup.fromStructField(dataFrame.schema(vectorColName)).size == -1,
       s"This test requires that column '$vectorColName' not have size metadata.")
 
+    for (handleInvalid <- VectorSizeHint.supportedHandleInvalids) {
       val transformer = new VectorSizeHint()
         .setInputCol(vectorColName)
         .setSize(size)
-        .setHandleInvalid(VectorSizeHint.SKIP_INVALID)
+        .setHandleInvalid(handleInvalid)
       testTransformerByGlobalCheckFunc[Tuple1[Vector]](dataFrame, transformer, vectorColName) {
         rows => {
           assert(

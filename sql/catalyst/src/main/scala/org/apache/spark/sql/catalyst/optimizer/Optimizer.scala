@@ -1815,7 +1815,8 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
     val batches = Seq(
       Batch("RewriteWithExpression", fixedPoint, RewriteWithExpression),
       // CollapseProject is needed to ensure idempotence
-      Batch("CollapseProject", fixedPoint, CollapseProject, PushPredicateThroughProject)
+      Batch("PushPredicateThroughProject", fixedPoint,
+        PushPredicateThroughProject, CollapseProject)
     )
   }
 

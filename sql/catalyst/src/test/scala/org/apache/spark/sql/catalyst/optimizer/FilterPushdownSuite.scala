@@ -1545,7 +1545,7 @@ class FilterPushdownSuite extends PlanTest {
       .where($"a" + $"a" < 10)
       .select($"a", $"b", $"c", $"a".rlike("magic") as "rlike")
       .where($"rlike")
-      .select($"a", $"b", $"c", $"a" + $"a" as "add", "rlike")
+      .select($"a", $"b", $"c", $"a" + $"a" as "add", $"rlike")
       .groupBy($"a")($"a", $"a" + $"a" as "add", $"a".rlike("magic") as "rlike", count(1) as "ct")
       .analyze
     comparePlans(optimized2, correctAnswer2)
