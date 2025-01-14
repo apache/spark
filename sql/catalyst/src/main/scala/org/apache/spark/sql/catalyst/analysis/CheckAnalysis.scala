@@ -1106,6 +1106,8 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
     @scala.annotation.tailrec
     def cleanQueryInScalarSubquery(p: LogicalPlan): LogicalPlan = p match {
       case s: SubqueryAlias => cleanQueryInScalarSubquery(s.child)
+      // Skip SQL function node added by the Analyzer
+      case s: SQLFunctionNode => cleanQueryInScalarSubquery(s.child)
       case p: Project => cleanQueryInScalarSubquery(p.child)
       case h: ResolvedHint => cleanQueryInScalarSubquery(h.child)
       case child => child
