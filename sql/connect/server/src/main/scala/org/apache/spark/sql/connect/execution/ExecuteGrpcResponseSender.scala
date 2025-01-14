@@ -241,13 +241,13 @@ private[connect] class ExecuteGrpcResponseSender[T <: Message](
           // The state of interrupted, response and lastIndex are changed under executionObserver
           // monitor, and will notify upon state change.
           if (response.isEmpty) {
-            val timeout = Math.max(1, deadlineTimeMillis - System.currentTimeMillis())
+            var timeout = Math.max(1, deadlineTimeMillis - System.currentTimeMillis())
             // Wake up more frequently to send the progress updates.
             val progressTimeout = executeHolder.sessionHolder.session.sessionState.conf
               .getConf(CONNECT_PROGRESS_REPORT_INTERVAL)
             // If the progress feature is disabled, wait for the deadline.
             if (progressTimeout > 0L) {
-              Math.min(progressTimeout, timeout)
+              timeout = Math.min(progressTimeout, timeout)
             }
             logTrace(s"Wait for response to become available with timeout=$timeout ms.")
             executionObserver.responseLock.wait(timeout)

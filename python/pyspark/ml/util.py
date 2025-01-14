@@ -37,6 +37,7 @@ from typing import (
 
 from pyspark import since
 from pyspark.ml.common import inherit_doc
+from pyspark.ml.remote.util import try_remote_intermediate_result, try_remote_write, try_remote_read
 from pyspark.sql import SparkSession
 from pyspark.sql.utils import is_remote
 from pyspark.util import VersionUtils
@@ -270,6 +271,7 @@ class JavaMLWritable(MLWritable):
     (Private) Mixin for ML instances that provide :py:class:`JavaMLWriter`.
     """
 
+    @try_remote_write
     def write(self) -> JavaMLWriter:
         """Returns an MLWriter instance for this ML instance."""
         return JavaMLWriter(self)
@@ -378,6 +380,7 @@ class JavaMLReadable(MLReadable[RL]):
     """
 
     @classmethod
+    @try_remote_read
     def read(cls) -> JavaMLReader[RL]:
         """Returns an MLReader instance for this class."""
         return JavaMLReader(cls)
@@ -680,6 +683,7 @@ class HasTrainingSummary(Generic[T]):
 
     @property
     @since("2.1.0")
+    @try_remote_intermediate_result
     def summary(self) -> T:
         """
         Gets summary of the model trained on the training set. An exception is thrown if
