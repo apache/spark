@@ -67,7 +67,7 @@ class SqlScriptingExecution(
       // innermost scope that should be exited.
       if (lastFrame.frameType == SqlScriptingFrameType.HANDLER && context.frames.nonEmpty) {
         var execPlan: CompoundBodyExec = context.frames.last.executionPlan
-        while (execPlan.curr.get.isInstanceOf[CompoundBodyExec]) {
+        while (execPlan.curr.exists(_.isInstanceOf[CompoundBodyExec])) {
           execPlan = execPlan.curr.get.asInstanceOf[CompoundBodyExec]
         }
         execPlan.curr = Some(new LeaveStatementExec(lastFrame.scopeToExit.get))
@@ -125,7 +125,7 @@ class SqlScriptingExecution(
   }
 
   private def handleException(e: SparkThrowable): Unit = {
-    context.findHandler(e.getSqlState) match {
+    context.findHandler(e.getCondition, e.getSqlState) match {
       case Some(handler) =>
         context.frames.addOne(
           new SqlScriptingExecutionFrame(

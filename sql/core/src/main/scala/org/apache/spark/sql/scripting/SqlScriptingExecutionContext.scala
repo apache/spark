@@ -45,13 +45,13 @@ class SqlScriptingExecutionContext {
     frames.last.exitScope(label)
   }
 
-  def findHandler(condition: String): Option[ErrorHandlerExec] = {
+  def findHandler(condition: String, sqlState: String): Option[ErrorHandlerExec] = {
     if (frames.isEmpty) {
       throw SparkException.internalError(s"Cannot find handler: no frames.")
     }
 
     frames.reverseIterator.foreach { frame =>
-      val handler = frame.findHandler(condition)
+      val handler = frame.findHandler(condition, sqlState)
       if (handler.isDefined) {
         return handler
       }
@@ -108,13 +108,13 @@ class SqlScriptingExecutionFrame(
     }
   }
 
-  def findHandler(condition: String): Option[ErrorHandlerExec] = {
+  def findHandler(condition: String, sqlState: String): Option[ErrorHandlerExec] = {
     if (scopes.isEmpty) {
       throw SparkException.internalError(s"Cannot find handler: no scopes.")
     }
 
     scopes.reverseIterator.foreach { scope =>
-      val handler = scope.findHandler(condition)
+      val handler = scope.findHandler(condition, sqlState)
       if (handler.isDefined) {
         return handler
       }
@@ -137,20 +137,47 @@ class SqlScriptingExecutionScope(
     val label: String,
     val conditionHandlerMap: HashMap[String, ErrorHandlerExec]) {
 
-  def findHandler(condition: String): Option[ErrorHandlerExec] = {
+  /**
+   * Finds the most appropriate error handler for exception based on its condition and SQL state.
+   *
+   * The method follows these rules to determine the most appropriate handler:
+   * 1. Specific named condition handlers (e.g., DIVIDE_BY_ZERO) are checked first.
+   * 2. If no specific condition handler is found, SQLSTATE handlers are checked.
+   * 3. For SQLSTATEs starting with '02', a generic NOT FOUND handler is used if available.
+   * 4. For other SQLSTATEs (except those starting with 'XX' or '02'), a generic SQLEXCEPTION
+   *    handler is used if available.
+   *
+   * Note: Handlers defined in the innermost compound statement where the exception was raised
+   * are considered.
+   *
+   * @param condition Error condition of the exception to find handler for.
+   * @param sqlState SQLSTATE of the exception to find handler for.
+   *
+   * @return Handler for the given condition if exists.
+   */
+  def findHandler(condition: String, sqlState: String): Option[ErrorHandlerExec] = {
+    // Check if there is a specific handler for the given condition.
     conditionHandlerMap.get(condition)
-      .orElse{
-        conditionHandlerMap.get("NOT FOUND") match {
-          // If NOT FOUND handler is defined, use it only for errors with class '02'.
-          case Some(handler) if condition.startsWith("02") => Some(handler)
+      .orElse {
+        conditionHandlerMap.get(sqlState) match {
+          // If SQLSTATE handler is defined, use it only for errors with class != '02'.
+          case Some(handler) if !sqlState.startsWith("02") => Some(handler)
           case _ => None
-        }}
-      .orElse{
+        }
+      }
+      .orElse {
+        conditionHandlerMap.get("NOT FOUND") match {
+          // If NOT FOUND handler is defined, use it only for errors with class == '02'.
+          case Some(handler) if sqlState.startsWith("02") => Some(handler)
+          case _ => None
+        }
+      }
+      .orElse {
         conditionHandlerMap.get("SQLEXCEPTION") match {
           // If SQLEXCEPTION handler is defined, use it only for errors with class
           // different from 'XX' and '02'.
           case Some(handler) if
-            !condition.startsWith("XX") && !condition.startsWith("02") => Some(handler)
+            !sqlState.startsWith("XX") && !sqlState.startsWith("02") => Some(handler)
           case _ => None
         }
       }

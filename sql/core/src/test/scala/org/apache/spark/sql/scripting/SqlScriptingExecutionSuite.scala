@@ -23,6 +23,7 @@ import org.apache.spark.SparkConf
 import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.logical.CompoundBody
+import org.apache.spark.sql.exceptions.SqlScriptingException
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
@@ -50,7 +51,9 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
     var df = sse.getNextResult
     while (df.isDefined) {
       // Collect results from the current DataFrame.
-      result.append(df.get.collect())
+      sse.withErrorHandling {
+        result.append(df.get.collect())
+      }
       df = sse.getNextResult
     }
     result.toSeq
@@ -63,6 +66,220 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
       case (actualAnswer, expectedAnswer) =>
         assert(actualAnswer.sameElements(expectedAnswer))
     }
+  }
+
+  // Handler tests
+  test("duplicate handler") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE OR REPLACE flag INT = -1;
+        |  DECLARE EXIT HANDLER FOR '22012'
+        |  BEGIN
+        |    SET VAR flag = 1;
+        |  END;
+        |  DECLARE EXIT HANDLER FOR '22012'
+        |  BEGIN
+        |    SET VAR flag = 2;
+        |  END;
+        |  SELECT 1/0;
+        |  SELECT flag;
+        |END
+        |""".stripMargin
+    checkError(
+      exception = intercept[SqlScriptingException] {
+        verifySqlScriptResult(sqlScript, Seq.empty)
+      },
+      condition = "DUPLICATE_HANDLER_FOR_SAME_CONDITION",
+      parameters = Map("condition" -> "22012"))
+  }
+
+  test("Specific condition takes precedence over sqlState") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE OR REPLACE flag INT = -1;
+        |  BEGIN
+        |    DECLARE EXIT HANDLER FOR DIVIDE_BY_ZERO
+        |    BEGIN
+        |      SELECT flag;
+        |      SET VAR flag = 1;
+        |    END;
+        |    DECLARE EXIT HANDLER FOR '22012'
+        |    BEGIN
+        |      SELECT flag;
+        |      SET VAR flag = 2;
+        |    END;
+        |    SELECT 1/0;
+        |  END;
+        |  SELECT flag;
+        |END
+        |""".stripMargin
+    val expected = Seq(
+      Seq(Row(-1)),   // select flag
+      Seq(Row(1))     // select flag from the outer body
+    )
+    verifySqlScriptResult(sqlScript, expected = expected)
+  }
+
+  test("Innermost handler takes precedence over other handlers") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE OR REPLACE flag INT = -1;
+        |  DECLARE EXIT HANDLER FOR DIVIDE_BY_ZERO
+        |  BEGIN
+        |    SELECT flag;
+        |    SET VAR flag = 1;
+        |  END;
+        |  BEGIN
+        |    DECLARE EXIT HANDLER FOR '22012'
+        |    BEGIN
+        |      SELECT flag;
+        |      SET VAR flag = 2;
+        |    END;
+        |    SELECT 1/0;
+        |  END;
+        |  SELECT flag;
+        |END
+        |""".stripMargin
+    val expected = Seq(
+      Seq(Row(-1)),   // select flag
+      Seq(Row(2))     // select flag from the outer body
+    )
+    verifySqlScriptResult(sqlScript, expected = expected)
+  }
+
+  test("handler - exit resolve in the same block") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE OR REPLACE VARIABLE flag INT = -1;
+        |  scope_to_exit: BEGIN
+        |    DECLARE EXIT HANDLER FOR DIVIDE_BY_ZERO
+        |    BEGIN
+        |      SELECT flag;
+        |      SET VAR flag = 1;
+        |    END;
+        |    SELECT 2;
+        |    SELECT 3;
+        |    SELECT 1/0;
+        |    SELECT 4;
+        |    SELECT 5;
+        |  END;
+        |  SELECT flag;
+        |END
+        |""".stripMargin
+    val expected = Seq(
+      Seq(Row(2)),    // select
+      Seq(Row(3)),    // select
+      Seq(Row(-1)),   // select flag
+      Seq(Row(1))     // select flag from the outer body
+    )
+    verifySqlScriptResult(sqlScript, expected = expected)
+  }
+
+  test("handler - exit resolve in the same block when if condition fails") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE OR REPLACE VARIABLE flag INT = -1;
+        |  scope_to_exit: BEGIN
+        |    DECLARE EXIT HANDLER FOR '22012'
+        |    BEGIN
+        |      SELECT flag;
+        |      SET VAR flag = 1;
+        |    END;
+        |    SELECT 2;
+        |    SELECT 3;
+        |    IF 1 > 1/0 THEN
+        |      SELECT 10;
+        |    END IF;
+        |    SELECT 4;
+        |    SELECT 5;
+        |  END;
+        |  SELECT flag;
+        |END
+        |""".stripMargin
+    val expected = Seq(
+      Seq(Row(2)),    // select
+      Seq(Row(3)),    // select
+      Seq(Row(-1)),   // select flag
+      Seq(Row(1))     // select flag from the outer body
+    )
+    verifySqlScriptResult(sqlScript, expected = expected)
+  }
+
+  test("handler - exit resolve in outer block") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE OR REPLACE VARIABLE flag INT = -1;
+        |  l1: BEGIN
+        |    DECLARE EXIT HANDLER FOR '22012'
+        |    BEGIN
+        |      SELECT flag;
+        |      SET VAR flag = 1;
+        |    END;
+        |    SELECT 2;
+        |    SELECT 3;
+        |    l2: BEGIN
+        |      SELECT 4;
+        |      SELECT 1/0;
+        |      SELECT 5;
+        |    END;
+        |    SELECT 6;
+        |  END;
+        |  SELECT flag;
+        |END
+        |""".stripMargin
+    val expected = Seq(
+      Seq(Row(2)),    // select
+      Seq(Row(3)),    // select
+      Seq(Row(4)),    // select
+      Seq(Row(-1)),   // select flag
+      Seq(Row(1))     // select flag from the outer body
+    )
+    verifySqlScriptResult(sqlScript, expected = expected)
+  }
+
+  test("handler - exit catch-all in the same block") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE flag INT = -1;
+        |  l1: BEGIN
+        |    DECLARE EXIT HANDLER FOR '22012'
+        |    BEGIN
+        |      SELECT flag;
+        |      SET VAR flag = 1;
+        |    END;
+        |    SELECT 2;
+        |    SELECT 3;
+        |    l2: BEGIN
+        |      DECLARE EXIT HANDLER FOR SQLEXCEPTION
+        |      BEGIN
+        |        SELECT flag;
+        |        SET VAR flag = 2;
+        |      END;
+        |      SELECT 4;
+        |      SELECT 1/0;
+        |      SELECT 5;
+        |    END;
+        |    SELECT 6;
+        |  END;
+        |  SELECT flag;
+        |END
+        |""".stripMargin
+    val expected = Seq(
+      Seq(Row(2)),    // select
+      Seq(Row(3)),    // select
+      Seq(Row(4)),    // select
+      Seq(Row(-1)),   // select flag
+      Seq(Row(6)),    // select
+      Seq(Row(2))     // select flag from the outer body
+    )
+    verifySqlScriptResult(sqlScript, expected = expected)
   }
 
   // Tests

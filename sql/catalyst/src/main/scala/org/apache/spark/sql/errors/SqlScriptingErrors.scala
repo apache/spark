@@ -142,11 +142,11 @@ private[sql] object SqlScriptingErrors {
       messageParameters = Map("condition" -> condition))
   }
 
-  def duplicateHandlerForSameCondition(origin: Origin, sqlState: String): Throwable = {
+  def duplicateHandlerForSameCondition(origin: Origin, condition: String): Throwable = {
     new SqlScriptingException(
       origin = origin,
       errorClass = "DUPLICATE_HANDLER_FOR_SAME_CONDITION",
       cause = null,
-      messageParameters = Map("sqlState" -> sqlState))
+      messageParameters = Map("condition" -> condition))
   }
 }
