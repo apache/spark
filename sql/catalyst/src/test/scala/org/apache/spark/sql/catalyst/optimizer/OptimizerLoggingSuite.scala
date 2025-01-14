@@ -32,7 +32,7 @@ class OptimizerLoggingSuite extends PlanTest {
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =
       Batch("Optimizer Batch", FixedPoint(100),
-        PushPredicateThroughNonJoin) ::
+        PushPredicateThroughNonJoin, ColumnPruning, CollapseProject) ::
       Batch("Batch Has No Effect", Once,
         ColumnPruning) :: Nil
   }
@@ -60,9 +60,9 @@ class OptimizerLoggingSuite extends PlanTest {
     (ruleOrBatch => logMessages.exists(_.contains(ruleOrBatch))))
     assert(events.forall(_.getLevel == expectedLevel))
     val expectedMetrics = Seq(
-      "Total number of runs: 7",
+      "Total number of runs: 15",
       "Total time:",
-      "Total number of effective runs: 3",
+      "Total number of effective runs: 2",
       "Total time of effective runs:")
     assert(expectedMetrics.forall(metrics => logMessages.exists(_.contains(metrics))))
   }
@@ -113,17 +113,15 @@ class OptimizerLoggingSuite extends PlanTest {
         ColumnPruning.ruleName,
         CollapseProject.ruleName).reduce(_ + "," + _) ->
         Seq(PushPredicateThroughNonJoin.ruleName,
-          ColumnPruning.ruleName,
           CollapseProject.ruleName),
       Seq(PushPredicateThroughNonJoin.ruleName,
         ColumnPruning.ruleName).reduce(_ + "," + _) ->
-        Seq(PushPredicateThroughNonJoin.ruleName,
-          ColumnPruning.ruleName),
+        Seq(PushPredicateThroughNonJoin.ruleName),
       CollapseProject.ruleName ->
         Seq(CollapseProject.ruleName),
       Seq(ColumnPruning.ruleName,
         "DummyRule").reduce(_ + "," + _) ->
-        Seq(ColumnPruning.ruleName),
+        Seq(),
       "DummyRule" -> Seq(),
       "" -> Seq()
     )

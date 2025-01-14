@@ -162,7 +162,7 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
               } else {
                 val alias = originalAttr match {
                   case Some(a) =>
-                    Alias(child, a.name)(a.exprId)
+                    Alias(child, a.name)(a.exprId, a.qualifier, Option(a.metadata))
                   case _ =>
                     val aliasName = if (SQLConf.get.getConf(SQLConf.USE_COMMON_EXPR_ID_FOR_ALIAS)) {
                       s"_common_expr_${id.id}"

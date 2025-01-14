@@ -148,6 +148,23 @@ class FilterPushdownSuite extends PlanTest {
     comparePlans(optimized, originalQuery)
   }
 
+  test("can't push without rewrite") {
+    val originalQuery =
+      testRelation
+        .select($"a" + $"b" as "e")
+        .where($"e" === 1)
+        .analyze
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+    val correctAnswer =
+      testRelation
+        .where($"a" + $"b" === 1)
+        .select($"a" + $"b" as "e")
+        .analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
   test("nondeterministic: can always push down filter through project with deterministic field") {
     val originalQuery = testRelation
       .select($"a")

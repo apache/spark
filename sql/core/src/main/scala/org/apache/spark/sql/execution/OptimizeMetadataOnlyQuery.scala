@@ -50,7 +50,7 @@ case class OptimizeMetadataOnlyQuery(catalog: SessionCatalog) extends Rule[Logic
       return plan
     }
 
-    val p = plan.transform {
+    plan.transform {
       case a @ Aggregate(_, aggExprs, child @ PhysicalOperation(
           projectList, filters, PartitionedRelation(partAttrs, rel)), _) =>
         // We only apply this optimization when only partitioned attributes are scanned.
@@ -86,7 +86,6 @@ case class OptimizeMetadataOnlyQuery(catalog: SessionCatalog) extends Rule[Logic
           a
         }
     }
-    p
   }
 
   /**
