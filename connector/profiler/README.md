@@ -16,7 +16,7 @@ The profiler writes the jfr files to the executor's working directory in the exe
 Code profiling is currently only supported for
 
 *   Linux (x64)
-*   Linux (arm 64)
+*   Linux (arm64)
 *   Linux (musl, x64)
 *   MacOS
 
@@ -54,7 +54,7 @@ Then enable the profiling in the configuration.
   <td><code>spark.executor.profiling.dfsDir</code></td>
   <td>(none)</td>
   <td>
-      An HDFS compatible path to which the profiler's output files are copied. The output files will be written as <i>dfsDir/application_id/profile-appname-exec-executor_id.jfr</i> <br/>
+      An HDFS compatible path to which the profiler's output files are copied. The output files will be written as <i>dfsDir/{{APP_ID}}/profile-exec-{{EXECUTOR_ID}}.jfr</i> <br/>
       If no <i>dfsDir</i> is specified then the files are not copied over. Users should ensure there is sufficient disk space available otherwise it may lead to corrupt jfr files.
   </td>
   <td>4.0.0</td>
@@ -72,7 +72,7 @@ Then enable the profiling in the configuration.
   <td>event=wall,interval=10ms,alloc=2m,lock=10ms,chunktime=300s</td>
   <td>
       Options to pass to the profiler. Detailed options are documented in the comments here:
-      <a href="https://github.com/async-profiler/async-profiler/blob/32601bccd9e49adda9510a2ed79d142ac6ef0ff9/src/arguments.cpp#L52">Profiler arguments</a>.  
+      <a href="https://github.com/async-profiler/async-profiler/blob/v3.0/src/arguments.cpp#L44">Profiler arguments</a>.  
        Note that the options to start, stop, specify output format, and output file do not have to be specified.
   </td>
   <td>4.0.0</td>
