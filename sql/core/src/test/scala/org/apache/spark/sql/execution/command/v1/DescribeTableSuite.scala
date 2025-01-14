@@ -438,7 +438,7 @@ trait DescribeTableSuiteBase extends command.DescribeTableSuiteBase
             created_by = Some(s"Spark $SPARK_VERSION"),
             `type` = Some("VIEW"),
             view_text = Some("SELECT * FROM spark_catalog.ns.table"),
-            view_original_text = Some("SELECT * FROM spark_catalog.ns.table"),
+            view_original_text = if (isTemp) None else Some("SELECT * FROM spark_catalog.ns.table"),
             // TODO: this is unexpected and temp view should also use COMPENSATION mode.
             view_schema_mode = if (isTemp) Some("BINDING") else Some("COMPENSATION"),
             view_catalog_and_namespace = Some("spark_catalog.default"),

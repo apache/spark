@@ -806,7 +806,6 @@ object ViewHelper extends SQLConfHelper with Logging {
       tableType = CatalogTableType.VIEW,
       storage = CatalogStorageFormat.empty,
       schema = viewSchema,
-      viewOriginalText = Some(originalText),
       viewText = Some(originalText),
       createVersion = org.apache.spark.SPARK_VERSION,
       properties = newProperties)
