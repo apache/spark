@@ -211,6 +211,8 @@ class RocksDBStateStoreCheckpointFormatV2Suite extends StreamTest
         (SQLConf.STATE_STORE_PROVIDER_CLASS.key -> providerClassName),
         (SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key -> "2"),
         (SQLConf.SHUFFLE_PARTITIONS.key, "2"),
+        // Set the minDeltasForSnapshot to 2 to force a snapshot after every 2 microbatches
+        // This is to make sure the lineage is also verified for snapshots
         (SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.key, "2")
       ) {
         testBody
@@ -475,34 +477,6 @@ class RocksDBStateStoreCheckpointFormatV2Suite extends StreamTest
       }
   }
 
-  test("checkpointFormatVersion2 validate ") {
-    val inputData = MemoryStream[String]
-    val result = inputData.toDS()
-      .groupByKey(x => x)
-      .transformWithState(new RunningCountStatefulProcessor(),
-        TimeMode.None(),
-        OutputMode.Update())
-
-    testStream(result, Update())(
-      AddData(inputData, "a"),
-      CheckNewAnswer(("a", "1")),
-      Execute { q =>
-        assert(q.lastProgress.stateOperators(0).customMetrics.get("numValueStateVars") > 0)
-        assert(q.lastProgress.stateOperators(0).customMetrics.get("numRegisteredTimers") == 0)
-      },
-      AddData(inputData, "a", "b"),
-      CheckNewAnswer(("a", "2"), ("b", "1")),
-      StopStream,
-      StartStream(),
-      AddData(inputData, "a", "b"), // should remove state for "a" and not return anything for a
-      CheckNewAnswer(("b", "2")),
-      StopStream,
-      StartStream(),
-      AddData(inputData, "a", "c"), // should recreate state for "a" and return count as 1 and
-      CheckNewAnswer(("a", "1"), ("c", "1"))
-    )
-  }
-
   // This test enable checkpoint format V2 without validating the checkpoint ID. Just to make
   // sure it doesn't break and return the correct query results.
   testWithChangelogCheckpointingEnabled(s"checkpointFormatVersion2") {
@@ -597,12 +571,14 @@ class RocksDBStateStoreCheckpointFormatV2Suite extends StreamTest
     validateBaseCheckpointInfo()
   }
 
-  // Verify lineage for each partition across batches. Below should satisfy because
-  // these ids are stored in the following manner:
-  // stateStoreCkptIds: id3, id2, id1
-  // baseStateStoreCkptIds:  id2, id1, None
-  // Below checks [id2, id1] are the same,
-  // which is the lineage for this partition across batches
+  /**
+   * Verify lineage for each partition across batches. Below should satisfy because
+   * these ids are stored in the following manner:
+   * stateStoreCkptIds: id3, id2, id1
+   * baseStateStoreCkptIds:  id2, id1, None
+   * Below checks [id2, id1] are the same,
+   * which is the lineage for this partition across batches
+   */
   private def checkpointInfoLineageVerification(
       pickedCheckpointInfoList: Iterable[StateStoreCheckpointInfo]): Unit = {
 
@@ -618,13 +594,18 @@ class RocksDBStateStoreCheckpointFormatV2Suite extends StreamTest
     }
   }
 
+  /**
+   * Verify the version->UniqueId mapping from state store is the same as
+   * what from the commit log
+   * @param checkpointDir The checkpoint directory to read the commit log
+   * @param pickedCheckpointInfoList The checkpoint info list to verify
+   * @return true when the version->UniqueId mapping is the same as what from the commit log
+   */
   private def verifyCheckpointInfoFromCommitLog(
       checkpointDir: File,
       pickedCheckpointInfoList: Iterable[StateStoreCheckpointInfo]): Boolean = {
     var ret: Boolean = true
 
-    // Verify the version->UniqueId mapping from StateStore from state store is the same as
-    // what from the commit log
     val versionToUniqueIdFromStateStore = Seq(1, 2).map {
       batchVersion =>
         val res = pickedCheckpointInfoList
@@ -638,9 +619,9 @@ class RocksDBStateStoreCheckpointFormatV2Suite extends StreamTest
       new Path(checkpointDir.getAbsolutePath), "commits").toString
 
     val commitLog = new CommitLog(spark, commitLogPath)
-    val metadata_ = commitLog.get(Some(0), Some(1)).map(_._2)
+    val metadata = commitLog.get(Some(0), Some(1)).map(_._2)
 
-    val versionToUniqueIdFromCommitLog = metadata_.zipWithIndex.map { case (metadata, idx) =>
+    val versionToUniqueIdFromCommitLog = metadata.zipWithIndex.map { case (metadata, idx) =>
       // Use stateUniqueIds(0) because there is only one state operator
       val res2 = metadata.stateUniqueIds(0).map { uniqueIds =>
         uniqueIds(0)
@@ -701,8 +682,8 @@ class RocksDBStateStoreCheckpointFormatV2Suite extends StreamTest
               .agg(count("*"))
 
           val writer = (ds: DataFrame, batchId: Long) => {
-            ds.write.mode("append").save("wei_test_t1")
-            ds.write.mode("append").save("wei_test_t2")
+            ds.write.mode("append").saveAsTable("wei_test_t1")
+            ds.write.mode("append").saveAsTable("wei_test_t2")
           }
 
           val query = aggregated.writeStream
