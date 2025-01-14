@@ -36,7 +36,11 @@ import org.apache.spark.storage.{RDDBlockId, ShuffleBlockId, ShuffleDataBlockId,
 import org.apache.spark.util.ThreadUtils
 
 /**
- * This suite creates an external shuffle server and routes all shuffle fetches through it.
+ * This suite tests the external shuffle service by starting the services in Spark Workers of
+ * the local Spark cluster. `spark.shuffle.service.port` is not allowed to set in local-cluster
+ * mode as a fixed port can conflict among multiple services on the same host. Dynamic ports
+ * would be used instead.
+ *
  * Note that failures in this suite may arise due to changes in Spark that invalidate expectations
  * set up in `ExternalBlockHandler`, such as changing the format of shuffle files or how
  * we hash files into folders.
