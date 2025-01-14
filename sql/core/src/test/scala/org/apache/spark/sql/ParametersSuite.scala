@@ -781,6 +781,7 @@ class ParametersSuite extends QueryTest with SharedSparkSession with PlanTest {
       parameters = Map("name" -> "_10"),
       context = ExpectedContext("?", 10, 10))
 
+    checkAnswer(spark.sql("execute immediate 'select ?' using 1", Map("param1" -> "1")), Row(1))
     checkAnswer(spark.sql("execute immediate 'select :param1' using :param2 as param1",
       Map("param2" -> 42)), Row(42))
     checkAnswer(spark.sql(
