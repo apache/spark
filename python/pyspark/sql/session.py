@@ -1467,7 +1467,9 @@ class SparkSession(SparkConversionMixin):
         +-----+---+
         |Alice|  1|
         +-----+---+
-        >>> spark.createDataFrame(pandas.DataFrame([[1, 2]])).collect()  # doctest: +SKIP
+
+        >>> pdf = pandas.DataFrame([[1, 2]])  # doctest: +SKIP
+        >>> spark.createDataFrame(pdf).show()  # doctest: +SKIP
         +---+---+
         |  0|  1|
         +---+---+
@@ -1482,8 +1484,9 @@ class SparkSession(SparkConversionMixin):
         +-----+---+
         |Alice|  1|
         +-----+---+
+
         >>> table = pyarrow.table({'0': [1], '1': [2]})  # doctest: +SKIP
-        >>> spark.createDataFrame(table).collect()  # doctest: +SKIP
+        >>> spark.createDataFrame(table).show()  # doctest: +SKIP
         +---+---+
         |  0|  1|
         +---+---+

@@ -79,7 +79,8 @@ class ExpressionInfoSuite extends SparkFunSuite with SharedSparkSession {
     assert(info.getSource === "built-in")
 
     val validSources = Seq(
-      "built-in", "hive", "python_udf", "scala_udf", "java_udf", "python_udtf", "internal")
+      "built-in", "hive", "python_udf", "scala_udf", "java_udf", "python_udtf", "internal",
+      "sql_udf")
     validSources.foreach { source =>
       val info = new ExpressionInfo(
         "testClass", null, "testName", null, "", "", "", "", "", "", source)
