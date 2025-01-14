@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.catalog
 
 import com.fasterxml.jackson.annotation.JsonInclude.Include
 import com.fasterxml.jackson.databind.{DeserializationFeature, ObjectMapper}
-import com.fasterxml.jackson.module.scala.{DefaultScalaModule, ScalaObjectMapper}
+import com.fasterxml.jackson.module.scala.{ClassTagExtensions, DefaultScalaModule}
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.FunctionIdentifier
@@ -44,6 +44,14 @@ trait UserDefinedFunction {
    * execution, such as SQL configs etc. See [[SQLConf]] for more info.
    */
   def properties: Map[String, String]
+
+  /**
+   * Get SQL configs from the function properties.
+   * Use this to restore the SQL configs that should be used for this function.
+   */
+  def getSQLConfigs: Map[String, String] = {
+    UserDefinedFunction.propertiesToSQLConfigs(properties)
+  }
 
   /**
    * Owner of the function
@@ -118,7 +126,7 @@ object UserDefinedFunction {
    * Get a object mapper to serialize and deserialize function properties.
    */
   private def getObjectMapper: ObjectMapper = {
-    val mapper = new ObjectMapper with ScalaObjectMapper
+    val mapper = new ObjectMapper with ClassTagExtensions
     mapper.setSerializationInclusion(Include.NON_ABSENT)
     mapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
     mapper.registerModule(DefaultScalaModule)
@@ -142,4 +150,17 @@ object UserDefinedFunction {
    * Verify if the function is a [[UserDefinedFunction]].
    */
   def isUserDefinedFunction(className: String): Boolean = SQLFunction.isSQLFunction(className)
+
+  /**
+   * Covert properties to SQL configs.
+   */
+  def propertiesToSQLConfigs(properties: Map[String, String]): Map[String, String] = {
+    try {
+      for ((key, value) <- properties if key.startsWith(SQL_CONFIG_PREFIX))
+        yield (key.substring(SQL_CONFIG_PREFIX.length), value)
+    } catch {
+      case e: Exception => throw SparkException.internalError(
+        "Corrupted user defined function SQL configs in catalog", cause = e)
+    }
+  }
 }

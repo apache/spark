@@ -752,6 +752,24 @@
     },
     "sqlState" : "56K00"
   },
+  "CONNECT_ML" : {
+    "message" : [
+      "Generic Spark Connect ML error."
+    ],
+    "subClass" : {
+      "ATTRIBUTE_NOT_ALLOWED" : {
+        "message" : [
+          "<attribute> is not allowed to be accessed."
+        ]
+      },
+      "UNSUPPORTED_EXCEPTION" : {
+        "message" : [
+          "<message>"
+        ]
+      }
+    },
+    "sqlState" : "XX000"
+  },
   "CONVERSION_INVALID_INPUT" : {
     "message" : [
       "The value <str> (<fmt>) cannot be converted to <targetType> because it is malformed. Correct the value as per the syntax, or change its format. Use <suggestion> to tolerate malformed input and return NULL instead."
@@ -3125,6 +3143,13 @@
       "The argument <name> of `sql()` is invalid. Consider to replace it either by a SQL literal or by collection constructor functions such as `map()`, `array()`, `struct()`."
     ],
     "sqlState" : "42K08"
+  },
+  "INVALID_SQL_FUNCTION_PLAN_STRUCTURE" : {
+    "message" : [
+      "Invalid SQL function plan structure",
+      "<plan>"
+    ],
+    "sqlState" : "XXKD0"
   },
   "INVALID_SQL_SYNTAX" : {
     "message" : [
@@ -5754,6 +5779,12 @@
   "UNSUPPORTED_SINGLE_PASS_ANALYZER_FEATURE" : {
     "message" : [
       "The single-pass analyzer cannot process this query or command because it does not yet support <feature>."
+    ],
+    "sqlState" : "0A000"
+  },
+  "UNSUPPORTED_SQL_UDF_USAGE" : {
+    "message" : [
+      "Using SQL function <functionName> in <nodeName> is not supported."
     ],
     "sqlState" : "0A000"
   },

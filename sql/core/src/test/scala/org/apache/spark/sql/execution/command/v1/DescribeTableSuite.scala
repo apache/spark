@@ -44,6 +44,8 @@ trait DescribeTableSuiteBase extends command.DescribeTableSuiteBase
 
   def getProvider(): String = defaultUsing.stripPrefix("USING").trim.toLowerCase(Locale.ROOT)
 
+  val iso8601Regex = raw"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$$".r
+
   test("Describing of a non-existent partition") {
     withNamespaceAndTable("ns", "table") { tbl =>
       spark.sql(s"CREATE TABLE $tbl (id bigint, data string) $defaultUsing " +
@@ -261,7 +263,7 @@ trait DescribeTableSuiteBase extends command.DescribeTableSuiteBase
         namespace = Some(List("ns")),
         schema_name = Some("ns"),
         columns = Some(List(
-          TableColumn("employee_id", Type("integer"), true),
+          TableColumn("employee_id", Type("int"), true),
           TableColumn("employee_name", Type("string"), true),
           TableColumn("department", Type("string"), true),
           TableColumn("hire_date", Type("date"), true)
@@ -290,7 +292,8 @@ trait DescribeTableSuiteBase extends command.DescribeTableSuiteBase
       )
 
       assert(parsedOutput.location.isDefined)
-      assert(expectedOutput == parsedOutput.copy(location = None))
+      assert(iso8601Regex.matches(parsedOutput.created_time.get))
+      assert(expectedOutput == parsedOutput.copy(location = None, created_time = None))
     }
   }
 
@@ -323,7 +326,7 @@ trait DescribeTableSuiteBase extends command.DescribeTableSuiteBase
         namespace = Some(List("ns")),
         schema_name = Some("ns"),
         columns = Some(List(
-          TableColumn("id", Type("integer"), true),
+          TableColumn("id", Type("int"), true),
           TableColumn("name", Type("string"), true),
           TableColumn("region", Type("string"), true),
           TableColumn("category", Type("string"), true)
@@ -349,7 +352,9 @@ trait DescribeTableSuiteBase extends command.DescribeTableSuiteBase
       )
 
       assert(parsedOutput.location.isDefined)
-      assert(expectedOutput == parsedOutput.copy(location = None, storage_properties = None))
+      assert(iso8601Regex.matches(parsedOutput.created_time.get))
+      assert(expectedOutput == parsedOutput.copy(
+        location = None, created_time = None, storage_properties = None))
     }
   }
 
@@ -378,7 +383,7 @@ trait DescribeTableSuiteBase extends command.DescribeTableSuiteBase
         namespace = Some(List("ns")),
         schema_name = Some("ns"),
         columns = Some(List(
-          TableColumn("id", Type("integer"), default = Some("1")),
+          TableColumn("id", Type("int"), default = Some("1")),
           TableColumn("name", Type("string"), default = Some("'unknown'")),
           TableColumn("created_at", Type("timestamp_ltz"), default = Some("CURRENT_TIMESTAMP")),
           TableColumn("is_active", Type("boolean"), default = Some("true"))
@@ -399,7 +404,8 @@ trait DescribeTableSuiteBase extends command.DescribeTableSuiteBase
         table_properties = None
       )
       assert(parsedOutput.location.isDefined)
-      assert(expectedOutput == parsedOutput.copy(location = None))
+      assert(iso8601Regex.matches(parsedOutput.created_time.get))
+      assert(expectedOutput == parsedOutput.copy(location = None, created_time = None))
     }
   }
 
@@ -430,7 +436,7 @@ trait DescribeTableSuiteBase extends command.DescribeTableSuiteBase
             namespace = if (isTemp) Some(List("session")) else Some(List("default")),
             schema_name = if (isTemp) Some("session") else Some("default"),
             columns = Some(List(
-              TableColumn("id", Type("integer")),
+              TableColumn("id", Type("int")),
               TableColumn("name", Type("string")),
               TableColumn("created_at", Type("timestamp_ltz"))
             )),
@@ -445,7 +451,9 @@ trait DescribeTableSuiteBase extends command.DescribeTableSuiteBase
             view_query_output_columns = Some(List("id", "name", "created_at"))
           )
 
+          assert(iso8601Regex.matches(parsedOutput.created_time.get))
           assert(expectedOutput == parsedOutput.copy(
+            created_time = None,
             table_properties = None,
             storage_properties = None,
             serde_library = None))
@@ -533,7 +541,7 @@ trait DescribeTableSuiteBase extends command.DescribeTableSuiteBase
                 ),
                 Field(
                   name = "age",
-                  `type` = Type("integer")
+                  `type` = Type("int")
                 ),
                 Field(
                   name = "contact",
@@ -569,7 +577,7 @@ trait DescribeTableSuiteBase extends command.DescribeTableSuiteBase
                               ),
                               Field(
                                 name = "zip",
-                                `type` = Type("integer")
+                                `type` = Type("int")
                               )
                             ))
                           )),
@@ -626,7 +634,8 @@ trait DescribeTableSuiteBase extends command.DescribeTableSuiteBase
       )
 
       assert(parsedOutput.location.isDefined)
-      assert(expectedOutput == parsedOutput.copy(location = None))
+      assert(iso8601Regex.matches(parsedOutput.created_time.get))
+      assert(expectedOutput == parsedOutput.copy(location = None, created_time = None))
     }
   }
 }
@@ -711,6 +720,7 @@ case class DescribeTableJson(
     namespace: Option[List[String]] = Some(Nil),
     schema_name: Option[String] = None,
     columns: Option[List[TableColumn]] = Some(Nil),
+    created_time: Option[String] = None,
     last_access: Option[String] = None,
     created_by: Option[String] = None,
     `type`: Option[String] = None,
