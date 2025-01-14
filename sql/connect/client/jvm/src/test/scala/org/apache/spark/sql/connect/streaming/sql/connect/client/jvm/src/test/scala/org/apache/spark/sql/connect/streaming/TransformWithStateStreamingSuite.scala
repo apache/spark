@@ -26,7 +26,7 @@ import org.apache.spark.sql.{Encoders, SparkSession}
 import org.apache.spark.sql.test.{QueryTest, RemoteSparkSession}
 import org.apache.spark.sql.types.{StringType, StructField, StructType}
 
-class NotTheSameRunningCountStatefulProcessor
+class RunningCountStatefulProcessor
   extends StatefulProcessor[String, String, (String, String)]
     with Logging {
   @transient protected var _countState: ValueState[Long] = _
@@ -47,7 +47,7 @@ class NotTheSameRunningCountStatefulProcessor
   }
 }
 
-class TransformWithStateStreamingSuite extends QueryTest with RemoteSparkSession {
+class TransformWithStateStreamingSuite extends QueryTest with RemoteSparkSession with Logging {
   val testData: Seq[String] = Seq("a", "b", "a")
 
   test("transformWithState - streaming") {
@@ -72,7 +72,7 @@ class TransformWithStateStreamingSuite extends QueryTest with RemoteSparkSession
           .as[String]
           .groupByKey(x => x)
           .transformWithState(
-            new NotTheSameRunningCountStatefulProcessor(),
+            new RunningCountStatefulProcessor(),
             TimeMode.None(), OutputMode.Update())
           .writeStream
           .format("memory")

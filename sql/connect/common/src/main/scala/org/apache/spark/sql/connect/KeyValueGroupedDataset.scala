@@ -156,26 +156,50 @@ class KeyValueGroupedDataset[K, V] private[sql] () extends sql.KeyValueGroupedDa
       timeMode: TimeMode,
       outputMode: OutputMode,
       initialState: sql.KeyValueGroupedDataset[K, S]): Dataset[U] =
-    unsupported()
+    transformWithStateHelper(
+      statefulProcessor.asInstanceOf[StatefulProcessor[K, V, U]],
+      timeMode,
+      outputMode,
+      Some(initialState)
+    )
 
   /** @inheritdoc */
   override private[sql] def transformWithState[U: Encoder](
       statefulProcessor: StatefulProcessor[K, V, U],
       eventTimeColumnName: String,
-      outputMode: OutputMode): Dataset[U] = unsupported()
+      outputMode: OutputMode): Dataset[U] =
+    transformWithStateHelper(
+      statefulProcessor,
+      TimeMode.None(),
+      outputMode,
+      eventTimeColumnName = eventTimeColumnName
+    )
 
   /** @inheritdoc */
   override private[sql] def transformWithState[U: Encoder, S: Encoder](
       statefulProcessor: StatefulProcessorWithInitialState[K, V, U, S],
       eventTimeColumnName: String,
       outputMode: OutputMode,
+<<<<<<< HEAD:sql/connect/common/src/main/scala/org/apache/spark/sql/connect/KeyValueGroupedDataset.scala
       initialState: sql.KeyValueGroupedDataset[K, S]): Dataset[U] = unsupported()
+=======
+      initialState: KeyValueGroupedDataset[K, S]): Dataset[U] =
+    transformWithStateHelper(
+      statefulProcessor,
+      TimeMode.None(),
+      outputMode,
+      Some(initialState),
+      eventTimeColumnName
+    )
+>>>>>>> 2a07717984 (tmp save):connector/connect/client/jvm/src/main/scala/org/apache/spark/sql/KeyValueGroupedDataset.scala
 
   // TODO, all APIs
-  private[sql] def transformWithStateHelper[U: Encoder](
+  private[sql] def transformWithStateHelper[U: Encoder, S: Encoder](
       statefulProcessor: StatefulProcessor[K, V, U],
       timeMode: TimeMode,
-      outputMode: OutputMode): Dataset[U] = unsupported()
+      outputMode: OutputMode,
+      initialState: Option[KeyValueGroupedDataset[K, S]] = None,
+      eventTimeColumnName: String = ""): Dataset[U] = unsupported()
 
   // Overrides...
   /** @inheritdoc */
@@ -645,10 +669,12 @@ private class KeyValueGroupedDatasetImpl[K, V, IK, IV](
     }
   }
 
-  override protected[sql] def transformWithStateHelper[U: Encoder](
+  override protected[sql] def transformWithStateHelper[U: Encoder, S: Encoder](
       statefulProcessor: StatefulProcessor[K, V, U],
       timeMode: TimeMode,
-      outputMode: OutputMode): Dataset[U] = {
+      outputMode: OutputMode,
+      initialState: Option[KeyValueGroupedDataset[K, S]] = None,
+      eventTimeColumnName: String = ""): Dataset[U] = {
     val outputEncoder = agnosticEncoderFor[U]
 
     val inputEncoders: Seq[AgnosticEncoder[_]] = Seq(kEncoder, ivEncoder)
