@@ -224,7 +224,7 @@ private[spark] object StorageUtils extends Logging {
    * set through the Hadoop configuration as the server is launched in the Yarn NM.
    */
   def externalShuffleServicePort(conf: SparkConf): Int = {
-    if (Utils.isTesting && Utils.isLocalSparkCluster(conf)) {
+    if (Utils.isLocalSparkCluster(conf)) {
       assert(sys.env.contains(ExternalShuffleService.TESTING_ESS_PORT_ENV),
         s"${ExternalShuffleService.TESTING_ESS_PORT_ENV} is not available")
       val port = sys.env(ExternalShuffleService.TESTING_ESS_PORT_ENV).toInt
