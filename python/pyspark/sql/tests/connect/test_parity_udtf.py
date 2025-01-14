@@ -76,6 +76,14 @@ class UDTFParityTests(BaseUDTFTestsMixin, ReusedConnectTestCase):
     def test_udtf_access_spark_session(self):
         super().test_udtf_access_spark_session()
 
+    @unittest.skip("TODO(SPARK-50393): support df.asTable() in Spark Connect")
+    def test_df_asTable(self):
+        super().test_df_asTable()
+
+    @unittest.skip("TODO(SPARK-50393): support df.asTable() in Spark Connect")
+    def test_df_asTable_chaining_methods(self):
+        super().test_df_asTable_chaining_methods()
+
     def _add_pyfile(self, path):
         self.spark.addArtifacts(path, pyfile=True)
 
@@ -84,14 +92,6 @@ class UDTFParityTests(BaseUDTFTestsMixin, ReusedConnectTestCase):
 
     def _add_file(self, path):
         self.spark.addArtifacts(path, file=True)
-
-    @unittest.skip("SPARK-50134: Support Spark Connect")
-    def test_udtf_with_lateral_join_dataframe(self):
-        super().test_udtf_with_lateral_join_dataframe()
-
-    @unittest.skip("SPARK-50134: Support Spark Connect")
-    def test_udtf_with_conditional_return_dataframe(self):
-        super().test_udtf_with_conditional_return_dataframe()
 
 
 class ArrowUDTFParityTests(UDTFArrowTestsMixin, UDTFParityTests):

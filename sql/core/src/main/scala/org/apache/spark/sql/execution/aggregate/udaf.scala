@@ -501,17 +501,17 @@ case class ScalaAggregator[IN, BUF, OUT](
   with Logging {
 
   // input and buffer encoders are resolved by ResolveEncodersInScalaAgg
-  private[this] lazy val inputDeserializer = inputEncoder.createDeserializer()
-  private[this] lazy val bufferSerializer = bufferEncoder.createSerializer()
-  private[this] lazy val bufferDeserializer = bufferEncoder.createDeserializer()
-  private[this] lazy val outputEncoder = encoderFor(agg.outputEncoder)
-  private[this] lazy val outputSerializer = outputEncoder.createSerializer()
+  @transient private[this] lazy val inputDeserializer = inputEncoder.createDeserializer()
+  @transient private[this] lazy val bufferSerializer = bufferEncoder.createSerializer()
+  @transient private[this] lazy val bufferDeserializer = bufferEncoder.createDeserializer()
+  @transient private[this] lazy val outputEncoder = encoderFor(agg.outputEncoder)
+  @transient private[this] lazy val outputSerializer = outputEncoder.createSerializer()
 
   def dataType: DataType = outputEncoder.objSerializer.dataType
 
   def inputTypes: Seq[DataType] = inputEncoder.schema.map(_.dataType)
 
-  override lazy val deterministic: Boolean = isDeterministic
+  @transient override lazy val deterministic: Boolean = isDeterministic
 
   def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): ScalaAggregator[IN, BUF, OUT] =
     copy(mutableAggBufferOffset = newMutableAggBufferOffset)
@@ -519,7 +519,7 @@ case class ScalaAggregator[IN, BUF, OUT](
   def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): ScalaAggregator[IN, BUF, OUT] =
     copy(inputAggBufferOffset = newInputAggBufferOffset)
 
-  private[this] lazy val inputProjection = UnsafeProjection.create(children)
+  @transient private[this] lazy val inputProjection = UnsafeProjection.create(children)
 
   def createAggregationBuffer(): BUF = agg.zero
 
@@ -533,7 +533,7 @@ case class ScalaAggregator[IN, BUF, OUT](
     if (outputEncoder.isSerializedAsStruct) row else row.get(0, dataType)
   }
 
-  private[this] lazy val bufferRow = new UnsafeRow(bufferEncoder.namedExpressions.length)
+  @transient private[this] lazy val bufferRow = new UnsafeRow(bufferEncoder.namedExpressions.length)
 
   def serialize(agg: BUF): Array[Byte] =
     bufferSerializer(agg).asInstanceOf[UnsafeRow].getBytes()

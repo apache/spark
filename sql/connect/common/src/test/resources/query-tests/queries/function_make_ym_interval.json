@@ -13,7 +13,8 @@
     },
     "expressions": [{
       "unresolvedFunction": {
-        "functionName": "make_ym_interval"
+        "functionName": "make_ym_interval",
+        "isInternal": false
       }
     }]
   }

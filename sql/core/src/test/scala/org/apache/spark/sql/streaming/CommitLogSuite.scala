@@ -39,13 +39,8 @@ class CommitLogSuite extends SparkFunSuite with SharedSparkSession {
       "core",
       "src",
       "test",
-      "scala",
-      "org",
-      "apache",
-      "spark",
-      "sql",
-      "streaming",
       "resources",
+      "structured-streaming",
       "testCommitLogV2"
     )
   }
@@ -56,13 +51,8 @@ class CommitLogSuite extends SparkFunSuite with SharedSparkSession {
       "core",
       "src",
       "test",
-      "scala",
-      "org",
-      "apache",
-      "spark",
-      "sql",
-      "streaming",
       "resources",
+      "structured-streaming",
       "testCommitLogV1"
     )
   }

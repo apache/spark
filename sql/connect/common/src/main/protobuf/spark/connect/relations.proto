@@ -78,6 +78,7 @@ message Relation {
     WithRelations with_relations = 41;
     Transpose transpose = 42;
     UnresolvedTableValuedFunction unresolved_table_valued_function = 43;
+    LateralJoin lateral_join = 44;
 
     // NA functions
     NAFill fill_na = 90;
@@ -974,6 +975,9 @@ message GroupMap {
 
   // (Optional) Timeout configuration for groups that do not receive data for a while.
   optional string timeout_conf = 9;
+
+  // (Optional) The schema for the grouped state.
+  optional DataType state_schema = 10;
 }
 
 message CoGroupMap {
@@ -1139,4 +1143,21 @@ message AsOfJoin {
 
   // (Required) Whether to search for prior, subsequent, or closest matches.
   string direction = 10;
+}
+
+// Relation of type [[LateralJoin]].
+//
+// `left` and `right` must be present.
+message LateralJoin {
+  // (Required) Left input relation for a Join.
+  Relation left = 1;
+
+  // (Required) Right input relation for a Join.
+  Relation right = 2;
+
+  // (Optional) The join condition.
+  Expression join_condition = 3;
+
+  // (Required) The join type.
+  Join.JoinType join_type = 4;
 }

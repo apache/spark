@@ -22,7 +22,8 @@
           "literal": {
             "string": "utf-8"
           }
-        }]
+        }],
+        "isInternal": false
       }
     }]
   }

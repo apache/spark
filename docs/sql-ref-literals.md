@@ -46,6 +46,7 @@ A string literal is used to specify a character string value.
     One character from the character set. Use `\` to escape special characters (e.g., `'` or `\`).
     To represent unicode characters, use 16-bit or 32-bit unicode escape of the form `\uxxxx` or `\Uxxxxxxxx`,
     where xxxx and xxxxxxxx are 16-bit and 32-bit code points in hexadecimal respectively (e.g., `\u3042` for `あ` and `\U0001F44D` for `👍`).
+    An ASCII character can also be represented as an octal number preceded by `\` like `\101`, which represents `A`.
 
 * **r**
 
@@ -78,14 +79,14 @@ SELECT "SPARK SQL" AS col;
 +---------+
 |      col|
 +---------+
-|Spark SQL|
+|SPARK SQL|
 +---------+
 
 SELECT 'it\'s $10.' AS col;
 +---------+
 |      col|
 +---------+
-|It's $10.|
+|it's $10.|
 +---------+
 
 SELECT r"'\n' represents newline character." AS col;
