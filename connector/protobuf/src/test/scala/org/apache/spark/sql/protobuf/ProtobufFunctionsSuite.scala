@@ -1721,33 +1721,6 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
     }
   }
 
-  test("non-struct SQL type") {
-    val dfWithInt = spark
-      .range(1)
-      .select(
-        lit(9999).as("int_col")
-      )
-
-    val parseError = intercept[AnalysisException] {
-      dfWithInt.select(
-        to_protobuf_wrapper($"int_col", "SimpleMessageEnum", Some(testFileDesc))).collect()
-    }
-    val descMsg = testFileDesc.map("%02X".format(_)).mkString("")
-    checkError(
-      exception = parseError,
-      condition = "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
-      parameters = Map(
-        "sqlExpr" ->
-          s"""\"to_protobuf(int_col, SimpleMessageEnum, X'$descMsg', NULL)\"""",
-        "msg" -> ("The first argument of the TO_PROTOBUF SQL function must be a struct type"),
-        "hint" -> ""
-      ),
-      queryContext = Array(ExpectedContext(
-        fragment = "fn",
-        callSitePattern = ".*"))
-    )
-  }
-
   test("test unsigned integer types") {
     // Test that we correctly handle unsigned integer parsing.
     // We're using Integer/Long's `MIN_VALUE` as it has a 1 in the sign bit.

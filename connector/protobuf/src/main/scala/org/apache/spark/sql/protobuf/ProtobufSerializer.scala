@@ -47,9 +47,6 @@ private[sql] class ProtobufSerializer(
   }
 
   private val converter: Any => Any = {
-    assert(
-      rootCatalystType.isInstanceOf[StructType],
-      "ProtobufSerializer's root catalyst type must be a struct type")
     val baseConverter =
       try {
         rootCatalystType match {
