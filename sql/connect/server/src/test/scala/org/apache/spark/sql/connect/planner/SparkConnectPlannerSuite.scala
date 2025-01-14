@@ -89,7 +89,8 @@ trait SparkConnectPlanTest extends SharedSparkSession {
   def createLocalRelationProto(
       attrs: Seq[AttributeReference],
       data: Seq[InternalRow],
-      timeZoneId: String = "UTC"): proto.Relation = {
+      timeZoneId: String = "UTC",
+      schema: Option[StructType] = None): proto.Relation = {
     val localRelationBuilder = proto.LocalRelation.newBuilder()
 
     val bytes = ArrowConverters
@@ -103,6 +104,7 @@ trait SparkConnectPlanTest extends SharedSparkSession {
       .next()
 
     localRelationBuilder.setData(ByteString.copyFrom(bytes))
+    schema.foreach(s => localRelationBuilder.setSchema(s.json))
     proto.Relation.newBuilder().setLocalRelation(localRelationBuilder.build()).build()
   }
 }
