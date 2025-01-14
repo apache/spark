@@ -4462,8 +4462,7 @@
   },
   "STATE_STORE_INVALID_VALUE_SCHEMA_EVOLUTION" : {
     "message" : [
-      "Schema evolution is not possible new value_schema=<newValueSchema>.",
-      "Avro Error Message: <avroErrorMessage>",
+      "Schema evolution is not possible new value_schema=<newValueSchema> and old value_schema=<oldValueSchema>",
       "Please check https://avro.apache.org/docs/1.11.1/specification/_print/#schema-resolution for valid schema evolution."
     ],
     "sqlState" : "XXKST"
@@ -4512,7 +4511,7 @@
   "STATE_STORE_STATE_SCHEMA_FILES_THRESHOLD_EXCEEDED" : {
     "message" : [
       "The number of state schema files <numStateSchemaFiles> exceeds the maximum number of state schema files for this query: <maxStateSchemaFiles>.",
-      "Offending column families: <colFamilyNames>",
+      "Added: <addedColumnFamilies>, Removed: <removedColumnFamilies>",
       "Please set 'spark.sql.streaming.stateStore.stateSchemaFilesThreshold' to a higher number, or revert state schema modifications"
     ],
     "sqlState" : "42K06"

@@ -1917,10 +1917,14 @@ class TransformWithStateSuite extends StateStoreMetricsTest
         testStream(result2, OutputMode.Update())(
           StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
           AddData(inputData, "a"),
-          ExpectFailure[StateStoreInvalidValueSchemaEvolution] {
-            (t: Throwable) => {
-              assert(t.getMessage.contains("Unable to read schema:"))
-            }
+          ExpectFailure[StateStoreInvalidValueSchemaEvolution] { e =>
+            checkError(
+              e.asInstanceOf[SparkUnsupportedOperationException],
+              condition = "STATE_STORE_INVALID_VALUE_SCHEMA_EVOLUTION",
+              parameters = Map(
+                "oldValueSchema" -> "StructType(StructField(value,IntegerType,false))",
+                "newValueSchema" -> "StructType(StructField(value,LongType,false))")
+            )
           }
         )
       }
@@ -2243,7 +2247,7 @@ class TransformWithStateSuite extends StateStoreMetricsTest
               parameters = Map(
                 "numStateSchemaFiles" -> "2",
                 "maxStateSchemaFiles" -> "1",
-                "colFamilyNames" -> "(countState)"
+                "addedColumnFamilies" -> "(countState)"
               )
             )
           }

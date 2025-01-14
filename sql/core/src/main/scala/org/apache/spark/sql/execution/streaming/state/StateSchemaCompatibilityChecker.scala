@@ -206,22 +206,23 @@ class StateSchemaCompatibilityChecker(
     } else if (!ignoreValueSchema && schemaEvolutionEnabled) {
       // Check value schema evolution
       // Sort schemas by most recent to least recent
-      val oldAvroSchemas = oldSchemas.sortBy(_.valueSchemaId).reverse.map { oldSchema =>
-        SchemaConverters.toAvroTypeWithDefaults(oldSchema.valueSchema)
+      val oldStateSchemas = oldSchemas.sortBy(_.valueSchemaId).reverse.map { oldSchema =>
+        StateSchemaMetadataValue(
+          oldSchema.valueSchema, SchemaConverters.toAvroTypeWithDefaults(oldSchema.valueSchema))
       }.asJava
-      val l = oldSchemas.sortBy(_.valueSchemaId).reverse.map { oldSchema =>
-        SchemaConverters.toAvroTypeWithDefaults(oldSchema.valueSchema)
-      }
+
       val newAvroSchema = SchemaConverters.toAvroTypeWithDefaults(valueSchema)
 
       val validator = new SchemaValidatorBuilder().canReadStrategy.validateAll()
-      try {
-        validator.validate(newAvroSchema, oldAvroSchemas)
-      } catch {
-        case s: SchemaValidationException =>
-          throw StateStoreErrors.stateStoreInvalidValueSchemaEvolution(
-            valueSchema.toString, s.getMessage)
-        case e: Throwable => throw e
+      oldStateSchemas.forEach { oldStateSchema =>
+        try {
+          validator.validate(newAvroSchema, List(oldStateSchema.avroSchema).asJava)
+        } catch {
+          case _: SchemaValidationException =>
+            throw StateStoreErrors.stateStoreInvalidValueSchemaEvolution(
+              valueSchema.toString, oldStateSchema.sqlSchema.toString)
+          case e: Throwable => throw e
+        }
       }
 
       if (resultSchema.valueSchemaId + 1 >=
@@ -259,13 +260,12 @@ class StateSchemaCompatibilityChecker(
     val mostRecentColFamilies = getExistingKeyAndValueSchema().map(_.colFamilyName)
     if (mostRecentColFamilies.isEmpty) {
       // Initialize schemas with ID 0 when no existing schema
-      val initializedSchemas = newStateSchema.map(schema =>
+      val initializedSchemas = newStateSchema.map { schema =>
         schema.copy(keySchemaId = 0, valueSchemaId = 0)
-      )
+      }
       createSchemaFile(initializedSchemas.sortBy(_.colFamilyName), stateSchemaVersion)
       true
     } else {
-
       // Process each new schema and track if any have evolved
       val (evolvedSchemas, hasEvolutions) = newStateSchema.foldLeft(
         (List.empty[StateStoreColFamilySchema], false)) {
@@ -292,10 +292,8 @@ class StateSchemaCompatibilityChecker(
         throw StateStoreErrors.streamingStateSchemaFilesThresholdExceeded(
           oldSchemaFilePaths.size + 1,
           conf.streamingStateSchemaFilesThreshold,
-          // need to compute symmetric diff between col family list
-          (newColFamilies.diff(oldColFamilies) ++
-            oldColFamilies.diff(newColFamilies)).toList
-        )
+          newColFamilies.diff(oldColFamilies).toList,
+          oldColFamilies.diff(newColFamilies).toList)
       }
       if (stateSchemaVersion == SCHEMA_FORMAT_V3 && newSchemaFileWritten) {
         createSchemaFile(evolvedSchemas.sortBy(_.colFamilyName), stateSchemaVersion)
