@@ -25,6 +25,7 @@ import org.apache.hadoop.fs.{FSDataInputStream, FSDataOutputStream}
 import org.json4s.DefaultFormats
 import org.json4s.jackson.JsonMethods
 
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.execution.streaming.MetadataVersionUtil
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
@@ -202,7 +203,7 @@ object SchemaHelper {
     }
   }
 
-  class SchemaV3Writer extends SchemaWriter {
+  class SchemaV3Writer extends SchemaWriter with Logging {
     override def version: Int = 3
 
     private val emptyJsonStr = """{    }"""

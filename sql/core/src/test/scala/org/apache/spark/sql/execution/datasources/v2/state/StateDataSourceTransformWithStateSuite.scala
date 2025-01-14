@@ -123,47 +123,6 @@ class SessionGroupsStatefulProcessorWithTTL extends
   }
 }
 
-case class SimpleValue(count: Long)
-
-class OriginalProcessor extends StatefulProcessor[Int, (Int, String), (Int, String)] {
-  @transient protected var _state: ValueState[SimpleValue] = _
-
-
-  override def init(outputMode: OutputMode, timeMode: TimeMode): Unit = {
-    _state = getHandle.getValueState[SimpleValue]("testState",
-      Encoders.product[SimpleValue], TTLConfig.NONE)
-  }
-
-  override def handleInputRows(
-      key: Int,
-      inputRows: Iterator[(Int, String)],
-      timerValues: TimerValues): Iterator[(Int, String)] = {
-    val current = _state.getOption().getOrElse(SimpleValue(0L))
-    _state.update(SimpleValue(current.count + 1))
-    Iterator((key, current.count.toString))
-  }
-}
-
-case class EvolvedValue(count: Long, metadata: String)
-
-class EvolvedProcessor extends StatefulProcessor[Int, (Int, String), (Int, String)] {
-  @transient protected var _state: ValueState[EvolvedValue] = _
-
-  override def init(outputMode: OutputMode, timeMode: TimeMode): Unit = {
-    _state = getHandle.getValueState[EvolvedValue]("testState",
-      Encoders.product[EvolvedValue], TTLConfig.NONE)
-  }
-
-  override def handleInputRows(
-      key: Int,
-      inputRows: Iterator[(Int, String)],
-      timerValues: TimerValues): Iterator[(Int, String)] = {
-    val current = _state.getOption().getOrElse(EvolvedValue(0L, ""))
-    _state.update(EvolvedValue(current.count + 1, "evolved"))
-    Iterator((key, current.count.toString))
-  }
-}
-
 /**
  * Test suite to verify integration of state data source reader with the transformWithState operator
  */

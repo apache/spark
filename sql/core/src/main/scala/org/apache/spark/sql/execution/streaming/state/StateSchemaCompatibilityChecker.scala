@@ -220,7 +220,7 @@ class StateSchemaCompatibilityChecker(
         } catch {
           case _: SchemaValidationException =>
             throw StateStoreErrors.stateStoreInvalidValueSchemaEvolution(
-              valueSchema.toString, oldStateSchema.sqlSchema.toString)
+              oldStateSchema.sqlSchema.toString, valueSchema.toString)
           case e: Throwable => throw e
         }
       }

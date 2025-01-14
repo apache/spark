@@ -251,7 +251,6 @@ class RenameEvolvedProcessor extends StatefulProcessor[String, String, (String, 
   }
 }
 
-
 class RunningCountStatefulProcessorReorderedFields
   extends StatefulProcessor[String, String, (String, String)] with Logging {
   @transient protected var _countState: ValueState[ReorderedLongs] = _
@@ -1197,87 +1196,93 @@ class TransformWithStateSuite extends StateStoreMetricsTest
         val dirPath = chkptDir.getCanonicalPath
         val inputData = MemoryStream[String]
 
-        // Phase 1: Initial state with RunningCountStatefulProcessorInt
         val result1 = inputData.toDS()
           .groupByKey(x => x)
-          .transformWithState(new RunningCountStatefulProcessorInt(),
+          .transformWithState(new RunningCountStatefulProcessorTwoLongs(),
             TimeMode.None(),
             OutputMode.Update())
 
-        logError(s"### block 1")
         testStream(result1, OutputMode.Update())(
           StartStream(checkpointLocation = dirPath),
           AddData(inputData, "a"),
           CheckNewAnswer(("a", "1")),
-          AddData(inputData, "a", "b"),
-          CheckNewAnswer(("a", "2"), ("b", "1")),
+          AddData(inputData, "b"),
+          CheckNewAnswer(("b", "1")),
           ProcessAllAvailable(),
           Execute { _ => Thread.sleep(5000) },
           StopStream
         )
 
-        logError(s"### block 2")
-        // Phase 2: Switch to RunningCountStatefulProcessor (schema evolution)
         val result2 = inputData.toDS()
           .groupByKey(x => x)
-          .transformWithState(new RunningCountStatefulProcessor(),
+          .transformWithState(new RenameEvolvedProcessor(),
             TimeMode.None(),
             OutputMode.Update())
 
         testStream(result2, OutputMode.Update())(
           StartStream(checkpointLocation = dirPath),
-          AddData(inputData, "a", "b"),
-          CheckNewAnswer(("b", "2")), // Should read old state and increment
-          AddData(inputData, "a", "c"),
-          CheckNewAnswer(("a", "1"), ("c", "1")),
-          AddData(inputData, "a", "c"),
-          CheckNewAnswer(("a", "2"), ("c", "2")),
+          AddData(inputData, "c"),
+          CheckNewAnswer(("c", "1")),
+          AddData(inputData, "d"),
+          CheckNewAnswer(("d", "1")),
           ProcessAllAvailable(),
           Execute { _ => Thread.sleep(5000) },
           StopStream
         )
 
-        logError(s"### block 3")
-        // Read historical state using snapshotStartBatchId
         val oldStateDf = spark.read
           .format("statestore")
-          .option("snapshotStartBatchId", 1)
-          .option("snapshotEndBatchId", 1)
+          .option("snapshotStartBatchId", 0)
+          .option("batchId", 1)
           .option("snapshotPartitionId", 0)
           .option(StateSourceOptions.STATE_VAR_NAME, "countState")
           .load(dirPath)
 
-        val oldStateAnsDf = oldStateDf.selectExpr(
-          "key.value AS groupingKey",
-          "value.value AS count",
-          "partition_id")
+        checkAnswer(
+          oldStateDf.selectExpr(
+            "key.value AS groupingKey",
+            "value.value1 AS count"),
+          Seq(Row("a", 1), Row("b", 1))
+        )
 
-        checkAnswer(oldStateAnsDf.select("groupingKey", "count"),
-          Seq(Row("a", 2), Row("b", 2), Row("c", 2)))
-        // Check types explicitly
-        val oldValueCol = oldStateDf.col("value.value")
-        assert(oldValueCol.expr.dataType === IntegerType,
-          s"Expected IntegerType but got ${oldValueCol.expr.dataType}")
-
-
-        logError(s"### block 4")
-        val newStateDf = spark.read
+        val evolvedStateDf1 = spark.read
           .format("statestore")
-          .option("snapshotStartBatchId", 1)
+          .option("snapshotStartBatchId", 0)
+          .option("batchId", 3)
           .option("snapshotPartitionId", 0)
           .option(StateSourceOptions.STATE_VAR_NAME, "countState")
           .load(dirPath)
 
-        val newStateAnsDf = newStateDf.selectExpr(
-          "key.value AS groupingKey",
-          "value.value AS count")
-
-        checkAnswer(newStateAnsDf,
+        checkAnswer(
+          evolvedStateDf1.selectExpr(
+            "key.value AS groupingKey",
+            "value.value4 AS count"),
           Seq(
-            Row("a", 2L), // Note: 3L - verifying Long type in final state
-            Row("b", 2L),
-            Row("c", 2L)
-          )) // Verify final state with evolved schema (Long type)
+            Row("a", null),
+            Row("b", null),
+            Row("c", 1),
+            Row("d", 1)
+          )
+        )
+
+        val evolvedStateDf = spark.read
+          .format("statestore")
+          .option("snapshotStartBatchId", 3)
+          .option("snapshotPartitionId", 0)
+          .option(StateSourceOptions.STATE_VAR_NAME, "countState")
+          .load(dirPath)
+
+        checkAnswer(
+          evolvedStateDf.selectExpr(
+            "key.value AS groupingKey",
+            "value.value4 AS count"),
+          Seq(
+            Row("a", null),
+            Row("b", null),
+            Row("c", 1),
+            Row("d", 1)
+          )
+        )
       }
     }
   }

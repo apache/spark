@@ -106,9 +106,6 @@ class TestStateSchemaProvider extends StateSchemaProvider {
 
 class InMemoryStateSchemaProvider(metadata: StateSchemaMetadata)
   extends StateSchemaProvider with Logging {
-  metadata.activeSchemas.keys.foreach { key =>
-    logError(s"### key: $key, value: ${metadata.activeSchemas(key)}")
-  }
 
   override def getSchemaMetadataValue(key: StateSchemaMetadataKey): StateSchemaMetadataValue = {
     metadata.activeSchemas(key)
