@@ -640,14 +640,15 @@ class RocksDBStateStoreCheckpointFormatV2Suite extends StreamTest
   }
 
   // scalastyle:off line.size.limit
-  // When there is task retries or multiple jobs launched, there will be different
-  // sets of state store checkpointInfo because of lineage.
-  // e.g.
-  // [Picked] StateStoreCheckpointInfo[partitionId=1, batchVersion=2, stateStoreCkptId=Some(a9d5afec-0e8d-4473-b948-6c55513aa509), baseStateStoreCkptId=Some(061f7c53-b300-477a-a599-5387d55e315a)]
-  // [Picked] StateStoreCheckpointInfo[partitionId=0, batchVersion=2, stateStoreCkptId=Some(879cc517-6b85-4dae-abba-794bf2dbab82), baseStateStoreCkptId=Some(513726e7-2448-41a6-a874-92053c5cf86b)]
-  // StateStoreCheckpointInfo[partitionId=1, batchVersion=2, stateStoreCkptId=Some(7f4ad39f-d019-4ca2-8cf4-300379821cd6), baseStateStoreCkptId=Some(061f7c53-b300-477a-a599-5387d55e315a)]
-  // StateStoreCheckpointInfo[partitionId=0, batchVersion=2, stateStoreCkptId=Some(9dc215fe-54f9-4dc1-a59b-a8734f359e46), baseStateStoreCkptId=Some(513726e7-2448-41a6-a874-92053c5cf86b)]
-  // This function finds the correct one based on commit log
+  /**
+   * When there is task retries or multiple jobs launched, there will be different
+   * sets of state store checkpointInfo because of lineage. e.g.
+   * [Picked] StateStoreCheckpointInfo[partitionId=1, batchVersion=2, stateStoreCkptId=Some(a9d5afec-0e8d-4473-b948-6c55513aa509), baseStateStoreCkptId=Some(061f7c53-b300-477a-a599-5387d55e315a)]
+   * [Picked] StateStoreCheckpointInfo[partitionId=0, batchVersion=2, stateStoreCkptId=Some(879cc517-6b85-4dae-abba-794bf2dbab82), baseStateStoreCkptId=Some(513726e7-2448-41a6-a874-92053c5cf86b)]
+   * StateStoreCheckpointInfo[partitionId=1, batchVersion=2, stateStoreCkptId=Some(7f4ad39f-d019-4ca2-8cf4-300379821cd6), baseStateStoreCkptId=Some(061f7c53-b300-477a-a599-5387d55e315a)]
+   * StateStoreCheckpointInfo[partitionId=0, batchVersion=2, stateStoreCkptId=Some(9dc215fe-54f9-4dc1-a59b-a8734f359e46), baseStateStoreCkptId=Some(513726e7-2448-41a6-a874-92053c5cf86b)]
+   * This function finds the correct one based on commit log
+   */
   // scalastyle:on line.size.limit
    private def pickCheckpointInfoFromCommitLog(
         checkpointDir: File,
@@ -666,10 +667,12 @@ class RocksDBStateStoreCheckpointFormatV2Suite extends StreamTest
      ret
    }
 
-  // This test verifies when there are two job launched inside the
-  // foreachBatch function (write to multiple sinks).
-  // When this happens, the unique ids actually stored in the commit log should be the the same
-  // as those recorded by CkptIdCollectingStateStoreWrapper
+  /**
+   * This test verifies when there are two job launched inside the
+   * foreachBatch function (write to multiple sinks).
+   * When this happens, the unique ids actually stored in the commit log should be the the same
+   * as those recorded by CkptIdCollectingStateStoreWrapper
+   */
   testWithCheckpointInfoTracked(s"checkpointFormatVersion2 validate ID - two jobs launched") {
     withTempDir { checkpointDir =>
       withTable("wei_test_t1") {
@@ -715,9 +718,11 @@ class RocksDBStateStoreCheckpointFormatV2Suite extends StreamTest
     }
   }
 
-  // This test verifies when there are task retries using foreachBatch.
-  // When retry happens, the unique ids actually stored in the commit log should be the the same
-  // as those recorded by CkptIdCollectingStateStoreWrapper
+  /**
+   * This test verifies when there are task retries using foreachBatch.
+   * When retry happens, the unique ids actually stored in the commit log should be the the same
+   * as those recorded by CkptIdCollectingStateStoreWrapper
+   */
   testWithCheckpointInfoTracked(s"checkpointFormatVersion2 validate ID - task retry") {
     withTempDir { checkpointDir =>
       val inputData = MemoryStream[Int]
@@ -765,9 +770,11 @@ class RocksDBStateStoreCheckpointFormatV2Suite extends StreamTest
     }
   }
 
-  // This test verifies when there are task retries using foreach.
-  // When retry happens, the unique ids actually stored in the commit log should be the the same
-  // as those recorded by CkptIdCollectingStateStoreWrapper
+  /**
+   * This test verifies when there are task retries using foreach.
+   * When retry happens, the unique ids actually stored in the commit log should be the the same
+   * as those recorded by CkptIdCollectingStateStoreWrapper
+   */
   testWithCheckpointInfoTracked(s"checkpointFormatVersion2 validate ID - task retry - foreach") {
     withTempDir { checkpointDir =>
       val inputData = MemoryStream[Int]
