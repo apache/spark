@@ -53,10 +53,7 @@ private[sql] class ProtobufSerializer(
           case st: StructType =>
             newStructConverter(st, rootDescriptor, Nil, Nil).asInstanceOf[Any => Any]
           case _ =>
-            throw QueryCompilationErrors.cannotConvertSqlTypeToProtobufError(
-              rootDescriptor.getName,
-              rootCatalystType,
-              cause = null)
+            assert(false, "ProtobufSerializer's root catalyst type must be a struct type")
         }
       } catch {
         case ise: AnalysisException =>
