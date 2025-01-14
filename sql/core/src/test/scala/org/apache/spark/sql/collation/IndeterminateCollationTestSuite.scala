@@ -217,28 +217,36 @@ class IndeterminateCollationTestSuite extends QueryTest with SharedSparkSession 
     }
   }
 
-  test("can create a view with indeterminate collation") {
+  test("can't create a view with indeterminate collation") {
     withTestTable {
       sql(s"INSERT INTO $testTableName VALUES ('a', 'b')")
       sql(s"INSERT INTO $testTableName VALUES ('c', 'd')")
 
       withView("v") {
-        sql(s"""
-             |CREATE VIEW v AS
-             |SELECT c1 || c2 as col FROM $testTableName
-             |""".stripMargin)
-
-        checkAnswer(sql("SELECT * FROM v"), Seq(Row("ab"), Row("cd")))
-        checkAnswer(sql("SELECT DISTINCT COLLATION(col) FROM v"), Seq(Row("null")))
-
-        // group by should fail in runtime when fetching the collator
-        assertRuntimeIndeterminateCollationError {
-          sql(s"SELECT COUNT(*) FROM v GROUP BY col")
+        assertIndeterminateCollationInSchemaError("col") {
+          sql(s"""
+               |CREATE VIEW v AS
+               |SELECT c1 || c2 as col FROM $testTableName
+               |""".stripMargin)
         }
+      }
+    }
+  }
 
-        checkAnswer(
-          sql(s"SELECT COUNT(*) FROM v GROUP by col collate utf8_binary"),
-          Seq(Row(1), Row(1)))
+  test("can't alter a view with indeterminate collation") {
+    withTestTable {
+      sql(s"INSERT INTO $testTableName VALUES ('a', 'b')")
+      sql(s"INSERT INTO $testTableName VALUES ('c', 'd')")
+
+      withView("v") {
+        sql(s"CREATE VIEW v AS SELECT 'a'")
+
+        assertIndeterminateCollationInSchemaError("col") {
+          sql(s"""
+               |ALTER VIEW v AS
+               |SELECT c1 || c2 as col FROM $testTableName
+               |""".stripMargin)
+        }
       }
     }
   }
