@@ -118,9 +118,9 @@ to return the metadata pertaining to a partition or column respectively.
       "num_buckets": <num_buckets>,
       "bucket_columns": ["<col_name>"],
       "sort_columns": ["<col_name>"],
-      "created_time": "<timestamp_ISO-8601>",
+      "created_time": "<yyyy-MM-dd'T'HH:mm:ss.SSSXXX>",
       "created_by": "<created_by>",
-      "last_access": "<timestamp_ISO-8601>",
+      "last_access": "<yyyy-MM-dd'T'HH:mm:ss.SSSXXX>",
       "partition_provider": "<partition_provider>"
     }
   ```
@@ -131,7 +131,7 @@ to return the metadata pertaining to a partition or column respectively.
 |-----------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | ByteType              | `{ "name" : "tinyint" }`                                                                                                                                         |
 | ShortType             | `{ "name" : "smallint" }`                                                                                                                                        |
-| IntegerType           | `{ "name" : "int" }`                                                                                                                                             |
+| IntegerType           | `{ "name" : "integer" }`                                                                                                                                         |
 | LongType              | `{ "name" : "bigint" }`                                                                                                                                          |
 | FloatType             | `{ "name" : "float" }`                                                                                                                                           |
 | DoubleType            | `{ "name" : "double" }`                                                                                                                                          |
