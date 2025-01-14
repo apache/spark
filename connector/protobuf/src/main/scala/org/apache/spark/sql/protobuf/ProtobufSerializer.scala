@@ -55,7 +55,8 @@ private[sql] class ProtobufSerializer(
           case _ =>
             throw QueryCompilationErrors.cannotConvertSqlTypeToProtobufError(
               rootDescriptor.getName,
-              rootCatalystType)
+              rootCatalystType,
+              cause = null)
         }
       } catch {
         case ise: AnalysisException =>

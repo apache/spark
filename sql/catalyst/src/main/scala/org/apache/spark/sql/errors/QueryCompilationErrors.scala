@@ -3783,14 +3783,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       cause = Option(cause))
   }
 
-  def cannotConvertSqlTypeToProtobufError(
-      protobufType: String,
-      sqlType: DataType): Throwable = {
-    new AnalysisException(
-      errorClass = "UNABLE_TO_CONVERT_TO_PROTOBUF_MESSAGE_TYPE",
-      messageParameters = Map("protobufType" -> protobufType, "toType" -> toSQLType(sqlType)),
-      None)
-  }
   def protobufTypeUnsupportedYetError(protobufType: String): Throwable = {
     new AnalysisException(
       errorClass = "PROTOBUF_TYPE_NOT_SUPPORT",
