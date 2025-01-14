@@ -46,6 +46,14 @@ trait UserDefinedFunction {
   def properties: Map[String, String]
 
   /**
+   * Get SQL configs from the function properties.
+   * Use this to restore the SQL configs that should be used for this function.
+   */
+  def getSQLConfigs: Map[String, String] = {
+    UserDefinedFunction.propertiesToSQLConfigs(properties)
+  }
+
+  /**
    * Owner of the function
    */
   def owner: Option[String]
@@ -142,4 +150,17 @@ object UserDefinedFunction {
    * Verify if the function is a [[UserDefinedFunction]].
    */
   def isUserDefinedFunction(className: String): Boolean = SQLFunction.isSQLFunction(className)
+
+  /**
+   * Covert properties to SQL configs.
+   */
+  def propertiesToSQLConfigs(properties: Map[String, String]): Map[String, String] = {
+    try {
+      for ((key, value) <- properties if key.startsWith(SQL_CONFIG_PREFIX))
+        yield (key.substring(SQL_CONFIG_PREFIX.length), value)
+    } catch {
+      case e: Exception => throw SparkException.internalError(
+        "Corrupted user defined function SQL configs in catalog", cause = e)
+    }
+  }
 }
