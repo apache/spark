@@ -259,7 +259,7 @@ private[connect] class ExecuteGrpcResponseSender[T <: Message](
               .getConf(CONNECT_PROGRESS_REPORT_INTERVAL)
             // If the progress feature is disabled, wait for the deadline.
             if (progressTimeout > 0L) {
-              timeoutNs = Math.min(progressTimeout * NANOS_PER_MILLIS, timeoutNS)
+              timeoutNs = Math.min(progressTimeout * NANOS_PER_MILLIS, timeoutNs)
             }
             logTrace(s"Wait for response to become available with timeout=$timeoutNs ns.")
             executionObserver.responseLock.wait(timeoutNs / NANOS_PER_MILLIS)
