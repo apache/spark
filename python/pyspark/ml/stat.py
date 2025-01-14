@@ -107,7 +107,7 @@ class ChiSquareTest:
         sc = SparkContext._active_spark_context
         assert sc is not None
 
-        javaTestObj = _jvm().org.apache.spark.ml.stat.ChiSquareTest
+        javaTestObj = getattr(_jvm(), "org.apache.spark.ml.stat.ChiSquareTest")
         args = [_py2java(sc, arg) for arg in (dataset, featuresCol, labelCol, flatten)]
         return _java2py(sc, javaTestObj.test(*args))
 
@@ -178,7 +178,7 @@ class Correlation:
         sc = SparkContext._active_spark_context
         assert sc is not None
 
-        javaCorrObj = _jvm().org.apache.spark.ml.stat.Correlation
+        javaCorrObj = getattr(_jvm(), "org.apache.spark.ml.stat.Correlation")
         args = [_py2java(sc, arg) for arg in (dataset, column, method)]
         return _java2py(sc, javaCorrObj.corr(*args))
 
@@ -248,7 +248,7 @@ class KolmogorovSmirnovTest:
         sc = SparkContext._active_spark_context
         assert sc is not None
 
-        javaTestObj = _jvm().org.apache.spark.ml.stat.KolmogorovSmirnovTest
+        javaTestObj = getattr(_jvm(), "org.apache.spark.ml.stat.KolmogorovSmirnovTest")
         dataset = _py2java(sc, dataset)
         params = [float(param) for param in params]  # type: ignore[assignment]
         return _java2py(

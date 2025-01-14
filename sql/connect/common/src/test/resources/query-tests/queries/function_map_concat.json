@@ -55,11 +55,14 @@
                     },
                     "name": ["b"]
                   }
-                }]
+                }],
+                "isInternal": false
               }
-            }]
+            }],
+            "isInternal": false
           }
-        }]
+        }],
+        "isInternal": false
       }
     }]
   }
