@@ -36,6 +36,7 @@ import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.state._
 import org.apache.spark.sql.functions.timestamp_seconds
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.SQLConf.STREAMING_STATE_STORE_ENCODING_FORMAT
 import org.apache.spark.sql.streaming.util.StreamManualClock
 import org.apache.spark.sql.types._
 import org.apache.spark.tags.SlowSQLTest
@@ -1814,6 +1815,9 @@ class TransformWithStateSuite extends StateStoreMetricsTest
         SQLConf.SHUFFLE_PARTITIONS.key ->
           TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString) {
         withTempDir { checkpointDir =>
+          // When Avro is used, we want to set the StructFields to nullable
+          val shouldBeNullable = SQLConf.get.getConf(
+            STREAMING_STATE_STORE_ENCODING_FORMAT) == StateStoreEncoding.Avro.toString
           val metadataPathPostfix = "state/0/_stateSchema/default"
           val stateSchemaPath = new Path(checkpointDir.toString,
             s"$metadataPathPostfix")
@@ -1824,7 +1828,7 @@ class TransformWithStateSuite extends StateStoreMetricsTest
           val schema0 = StateStoreColFamilySchema(
             "countState", 0,
             keySchema, 0,
-            new StructType().add("value", LongType, false),
+            new StructType().add("value", LongType, nullable = shouldBeNullable),
             Some(NoPrefixKeyStateEncoderSpec(keySchema)),
             None
           )
@@ -1832,7 +1836,7 @@ class TransformWithStateSuite extends StateStoreMetricsTest
             "listState", 0,
             keySchema, 0,
             new StructType()
-              .add("id", LongType, false)
+              .add("id", LongType, nullable = shouldBeNullable)
               .add("name", StringType),
             Some(NoPrefixKeyStateEncoderSpec(keySchema)),
             None
@@ -1855,7 +1859,7 @@ class TransformWithStateSuite extends StateStoreMetricsTest
           val schema3 = StateStoreColFamilySchema(
             "$rowCounter_listState", 0,
             keySchema, 0,
-            new StructType().add("count", LongType, false),
+            new StructType().add("count", LongType, nullable = shouldBeNullable),
             Some(NoPrefixKeyStateEncoderSpec(keySchema)),
             None
           )
@@ -2024,8 +2028,8 @@ class TransformWithStateSuite extends StateStoreMetricsTest
               e.asInstanceOf[SparkUnsupportedOperationException],
               condition = "STATE_STORE_INVALID_VALUE_SCHEMA_EVOLUTION",
               parameters = Map(
-                "oldValueSchema" -> "StructType(StructField(value,IntegerType,false))",
-                "newValueSchema" -> "StructType(StructField(value,LongType,false))")
+                "oldValueSchema" -> "StructType(StructField(value,LongType,true))",
+                "newValueSchema" -> "StructType(StructField(value,IntegerType,true))")
             )
           }
         )
@@ -2256,8 +2260,15 @@ class TransformWithStateSuite extends StateStoreMetricsTest
             triggerClock = clock),
           AddData(inputData, "a"),
           AdvanceManualClock(1 * 1000),
-          ExpectFailure[StateStoreInvalidValueSchemaEvolution] { t =>
-            assert(t.getMessage.contains("Unable to read schema"))
+          ExpectFailure[StateStoreInvalidValueSchemaEvolution] { e =>
+            checkError(
+              e.asInstanceOf[SparkUnsupportedOperationException],
+              condition = "STATE_STORE_INVALID_VALUE_SCHEMA_EVOLUTION",
+              parameters = Map(
+                "newValueSchema" -> ("StructType(StructField(value,StructType(StructField(" +
+                  "value,LongType,true)),true),StructField(ttlExpirationMs,LongType,true))"),
+                "oldValueSchema" -> "StructType(StructField(value,LongType,true))")
+            )
           }
         )
       }
@@ -2349,7 +2360,8 @@ class TransformWithStateSuite extends StateStoreMetricsTest
               parameters = Map(
                 "numStateSchemaFiles" -> "2",
                 "maxStateSchemaFiles" -> "1",
-                "addedColumnFamilies" -> "(countState)"
+                "removedColumnFamilies" -> "(countState)",
+                "addedColumnFamilies" -> "()"
               )
             )
           }
@@ -2973,8 +2985,14 @@ class TransformWithStateSuite extends StateStoreMetricsTest
         testStream(result3, OutputMode.Update())(
           StartStream(checkpointLocation = dir.getCanonicalPath),
           AddData(inputData, "test3"),
-          ExpectFailure[StateStoreInvalidValueSchemaEvolution] { error =>
-            assert(error.getMessage.contains("Unable to read schema:"))
+          ExpectFailure[StateStoreInvalidValueSchemaEvolution] { e =>
+            checkError(
+              e.asInstanceOf[SparkUnsupportedOperationException],
+              condition = "STATE_STORE_INVALID_VALUE_SCHEMA_EVOLUTION",
+              parameters = Map(
+                "oldValueSchema" -> "StructType(StructField(value1,StringType,true))",
+                "newValueSchema" -> "StructType(StructField(value1,IntegerType,true))")
+            )
           }
         )
       }

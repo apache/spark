@@ -114,8 +114,10 @@ case class TransformWithStateInPandasExec(
 
   override def operatorStateMetadataVersion: Int = 2
 
-  override def getColFamilySchemas(): Map[String, StateStoreColFamilySchema] = {
-    driverProcessorHandle.getColumnFamilySchemas
+  override def getColFamilySchemas(
+      setNullableFields: Boolean
+  ): Map[String, StateStoreColFamilySchema] = {
+    driverProcessorHandle.getColumnFamilySchemas(setNullableFields)
   }
 
   override def getStateVariableInfos(): Map[String, TransformWithStateVariableInfo] = {

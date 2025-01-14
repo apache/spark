@@ -139,7 +139,9 @@ case class TransformWithStateExec(
    * Fetching the columnFamilySchemas from the StatefulProcessorHandle
    * after init is called.
    */
-  override def getColFamilySchemas(): Map[String, StateStoreColFamilySchema] = {
+  override def getColFamilySchemas(
+      setNullableFields: Boolean
+  ): Map[String, StateStoreColFamilySchema] = {
     val keySchema = keyExpressions.toStructType
     // we have to add the default column family schema because the RocksDBStateEncoder
     // expects this entry to be present in the stateSchemaProvider.
@@ -147,8 +149,9 @@ case class TransformWithStateExec(
       0, keyExpressions.toStructType, 0, DUMMY_VALUE_ROW_SCHEMA,
       Some(NoPrefixKeyStateEncoderSpec(keySchema)))
 
-    val columnFamilySchemas = getDriverProcessorHandle().getColumnFamilySchemas ++
-      Map(StateStore.DEFAULT_COL_FAMILY_NAME -> defaultSchema)
+    val columnFamilySchemas = getDriverProcessorHandle()
+      .getColumnFamilySchemas(setNullableFields) ++
+        Map(StateStore.DEFAULT_COL_FAMILY_NAME -> defaultSchema)
     closeProcessorHandle()
     columnFamilySchemas
   }

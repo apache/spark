@@ -363,7 +363,20 @@ class DriverStatefulProcessorHandleImpl(timeMode: TimeMode, keyExprEnc: Expressi
     addTimerColFamily()
   }
 
-  def getColumnFamilySchemas: Map[String, StateStoreColFamilySchema] = columnFamilySchemas.toMap
+  def getColumnFamilySchemas(
+      setNullableFields: Boolean
+  ): Map[String, StateStoreColFamilySchema] = {
+    val schemas = columnFamilySchemas.toMap
+    if (setNullableFields) {
+      schemas.map { case (colFamilyName, stateStoreColFamilySchema) =>
+        colFamilyName -> stateStoreColFamilySchema.copy(
+          valueSchema = stateStoreColFamilySchema.valueSchema.toNullable
+        )
+      }
+    } else {
+      schemas
+    }
+  }
 
   def getStateVariableInfos: Map[String, TransformWithStateVariableInfo] = stateVariableInfos.toMap
 

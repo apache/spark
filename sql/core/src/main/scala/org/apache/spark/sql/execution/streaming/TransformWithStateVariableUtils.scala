@@ -175,7 +175,7 @@ object TransformWithStateOperatorProperties extends Logging {
  */
 trait TransformWithStateMetadataUtils extends Logging {
 
-  def getColFamilySchemas(): Map[String, StateStoreColFamilySchema]
+  def getColFamilySchemas(setNullableFields: Boolean): Map[String, StateStoreColFamilySchema]
 
   def getStateVariableInfos(): Map[String, TransformWithStateVariableInfo]
 
@@ -208,7 +208,8 @@ trait TransformWithStateMetadataUtils extends Logging {
       operatorStateMetadataVersion: Int = 2,
       stateStoreEncodingFormat: String = UnsafeRow.toString): List[StateSchemaValidationResult] = {
     assert(stateSchemaVersion >= 3)
-    val newSchemas = getColFamilySchemas()
+    val usingAvro = stateStoreEncodingFormat == Avro.toString
+    val newSchemas = getColFamilySchemas(usingAvro)
     val stateSchemaDir = stateSchemaDirPath(info)
     val newStateSchemaFilePath =
       new Path(stateSchemaDir, s"${batchId}_${UUID.randomUUID().toString}")
@@ -240,7 +241,7 @@ trait TransformWithStateMetadataUtils extends Logging {
         storeName = StateStoreId.DEFAULT_STORE_NAME,
         oldSchemaFilePaths = oldStateSchemaFilePaths,
         newSchemaFilePath = Some(newStateSchemaFilePath),
-        schemaEvolutionEnabled = stateStoreEncodingFormat == "avro"))
+        schemaEvolutionEnabled = usingAvro))
   }
 
   def validateNewMetadataForTWS(

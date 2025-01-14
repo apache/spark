@@ -243,6 +243,8 @@ trait StateStoreWriter
       ssInfo.stateSchemaFilePaths
     }
 
+    // TODO: Make this work for Stream-Stream joins, where we use multiple
+    // StateStores
     val validationResult = stateSchemaValidationResults.head
 
     oldMetadata match {
