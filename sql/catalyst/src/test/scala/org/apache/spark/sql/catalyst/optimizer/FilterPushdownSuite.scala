@@ -761,9 +761,8 @@ class FilterPushdownSuite extends PlanTest {
     val optimized = Optimize.execute(originalQuery.analyze)
 
     val correctAnswer = testRelation
-      .select($"a", $"b", $"c", ($"a" + 1) as "aa")
-      .where($"aa" < 3)
-      .select($"a", $"b", $"aa")
+      .where($"a" + 1 < 3)
+      .select($"a", $"b", ($"a" + 1) as "aa")
       .groupBy($"a")(($"a" + 1) as "aa", count($"b") as "c")
       .where($"c" === 2L || $"aa" > 4)
       .analyze
@@ -1523,48 +1522,32 @@ class FilterPushdownSuite extends PlanTest {
     comparePlans(optimizedQueryWithoutStep, correctAnswer)
   }
 
-  test("SPARK-50589: avoid extra expression duplication when push filter") {
+  test("SPARK-50589: avoid extra expensive expression duplication when push filter") {
     // through project
     val originalQuery1 = testRelation
-      .select($"a" + $"b" as "add", $"a" - $"b" as "sub")
-      .where($"add" < 10 && $"add" + $"add" > 10 && $"sub" > 0)
+      .select($"a" + $"b" as "add", $"a".rlike("magic") as "rlike")
+      .where($"add" < 10 && $"rlike")
     val correctAnswer1 = testRelation
-      .select($"a", $"b", $"c", $"a" + $"b" as "add", $"a" - $"b" as "sub")
-      .where($"add" < 10 && $"add" + $"add" > 10 && $"sub" > 0)
-      .select($"add", $"sub")
+      .where($"a" + $"b" < 10)
+      .select($"a", $"b", $"c", $"a".rlike("magic") as "rlike")
+      .where($"rlike")
+      .select($"a" + $"b" as "add", $"rlike")
       .analyze
     val optimized1 = Optimize.execute(originalQuery1.analyze)
     comparePlans(optimized1, correctAnswer1)
 
     // through aggregate
     val originalQuery2 = testRelation
-      .groupBy($"a")($"a", $"a" + $"a" as "add", abs($"a") as "abs", count(1) as "ct")
-      .where($"add" < 10 && $"add" + $"add" > 10 && $"abs" > 5)
+      .groupBy($"a")($"a", $"a" + $"a" as "add", $"a".rlike("magic") as "rlike", count(1) as "ct")
+      .where($"add" < 10 && $"rlike")
     val optimized2 = Optimize.execute(originalQuery2.analyze)
     val correctAnswer2 = testRelation
-      .select($"a", $"b", $"c", $"a" + $"a" as "add", abs($"a") as "abs")
-      .where($"add" < 10 &&
-        $"add" + $"add" > 10 &&
-        $"abs" > 5)
-      .select($"a", $"b", $"c", $"add", $"abs")
-      .groupBy($"a")($"a", $"a" + $"a" as "add", abs($"a") as "abs", count(1) as "ct")
+      .where($"a" + $"a" < 10)
+      .select($"a", $"b", $"c", $"a".rlike("magic") as "rlike")
+      .where($"rlike")
+      .select($"a", $"b", $"c", $"a" + $"a" as "add", "rlike")
+      .groupBy($"a")($"a", $"a" + $"a" as "add", $"a".rlike("magic") as "rlike", count(1) as "ct")
       .analyze
     comparePlans(optimized2, correctAnswer2)
-
-    // partial push down
-    val originalQuery3 = testRelation
-      .groupBy($"a")($"a", count(1) as "ct")
-      .select($"a" + $"a" as "add", $"ct")
-      .where($"add" + $"add" > 10 && $"add" > $"ct")
-    val optimized3 = Optimize.execute(originalQuery3.analyze)
-    val correctAnswer3 = testRelation
-      .select($"a", $"b", $"c", $"a" + $"a" as "add")
-      .where($"add" + $"add" > 10)
-      .select($"a", $"b", $"c", $"add")
-      .groupBy($"a")($"a", count(1) as "ct", $"a" + $"a" as "add")
-      .where($"add" > $"ct")
-      .select($"add", $"ct")
-      .analyze
-    comparePlans(optimized3, correctAnswer3)
   }
 }

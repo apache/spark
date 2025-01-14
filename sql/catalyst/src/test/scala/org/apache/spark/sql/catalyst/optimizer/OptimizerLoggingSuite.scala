@@ -32,7 +32,7 @@ class OptimizerLoggingSuite extends PlanTest {
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =
       Batch("Optimizer Batch", FixedPoint(100),
-        PushPredicateThroughNonJoin, ColumnPruning, CollapseProject) ::
+        PushPredicateThroughNonJoin) ::
       Batch("Batch Has No Effect", Once,
         ColumnPruning) :: Nil
   }
@@ -87,7 +87,6 @@ class OptimizerLoggingSuite extends PlanTest {
           level._2,
           Seq(
             PushPredicateThroughNonJoin.ruleName,
-            ColumnPruning.ruleName,
             CollapseProject.ruleName))
       }
     }

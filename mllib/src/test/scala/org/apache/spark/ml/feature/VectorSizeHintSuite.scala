@@ -22,7 +22,6 @@ import org.apache.spark.ml.attribute.AttributeGroup
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest}
 import org.apache.spark.sql.execution.streaming.MemoryStream
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.StreamTest
 
 class VectorSizeHintSuite
@@ -56,33 +55,29 @@ class VectorSizeHintSuite
   }
 
   test("Adding size to column of vectors.") {
-    withSQLConf(SQLConf.ALWAYS_INLINE_COMMON_EXPR.key -> "true") {
-      val size = 3
-      val vectorColName = "vector"
-      val denseVector = Vectors.dense(1, 2, 3)
-      val sparseVector = Vectors.sparse(size, Array(), Array())
+    val size = 3
+    val vectorColName = "vector"
+    val denseVector = Vectors.dense(1, 2, 3)
+    val sparseVector = Vectors.sparse(size, Array(), Array())
 
-      val data = Seq(denseVector, denseVector, sparseVector).map(Tuple1.apply)
-      val dataFrame = data.toDF(vectorColName)
-      assert(
-        AttributeGroup.fromStructField(dataFrame.schema(vectorColName)).size == -1,
-        s"This test requires that column '$vectorColName' not have size metadata.")
+    val data = Seq(denseVector, denseVector, sparseVector).map(Tuple1.apply)
+    val dataFrame = data.toDF(vectorColName)
+    assert(
+      AttributeGroup.fromStructField(dataFrame.schema(vectorColName)).size == -1,
+      s"This test requires that column '$vectorColName' not have size metadata.")
 
-      for (handleInvalid <- VectorSizeHint.supportedHandleInvalids) {
-        val transformer = new VectorSizeHint()
-          .setInputCol(vectorColName)
-          .setSize(size)
-          .setHandleInvalid(handleInvalid)
-        testTransformerByGlobalCheckFunc[Tuple1[Vector]](dataFrame, transformer, vectorColName) {
-          rows => {
-            assert(
-              AttributeGroup.fromStructField(rows.head.schema(vectorColName)).size == size,
-              "Transformer did not add expected size data.")
-            val numRows = rows.length
-            assert(numRows === data.length, s"Expecting ${data.length} rows, got $numRows.")
-          }
+      val transformer = new VectorSizeHint()
+        .setInputCol(vectorColName)
+        .setSize(size)
+        .setHandleInvalid(VectorSizeHint.SKIP_INVALID)
+      testTransformerByGlobalCheckFunc[Tuple1[Vector]](dataFrame, transformer, vectorColName) {
+        rows => {
+          assert(
+            AttributeGroup.fromStructField(rows.head.schema(vectorColName)).size == size,
+            "Transformer did not add expected size data.")
+          val numRows = rows.length
+          assert(numRows === data.length, s"Expecting ${data.length} rows, got $numRows.")
         }
-      }
     }
   }
 

@@ -93,7 +93,7 @@ class ComplexTypesSuite extends QueryTest with SharedSparkSession {
       .selectExpr("i5", "struct(i1 + 1 as exp, i2, i3) as cola")
       .selectExpr("cola.i3").filter("cola.exp > 10")
     checkAnswer(df1, Row(12) :: Nil)
-    checkNamedStruct(df1.queryExecution.optimizedPlan, expectedCount = 1)
+    checkNamedStruct(df1.queryExecution.optimizedPlan, expectedCount = 0)
   }
 
   test("nested case") {

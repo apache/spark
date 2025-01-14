@@ -647,28 +647,28 @@ class ExplainSuiteAE extends ExplainSuiteHelper with EnableAdaptiveExecutionSuit
       df.collect()
       checkKeywordsExistsInExplain(df, FormattedMode,
         """
-          |(3) Filter [codegen id : 2]
-          |Input [2]: [id#xL, key#xL]
-          |Condition : ((id#xL > Subquery subquery#x, [id=#x]) AND isnotnull(key#xL))
+          |(2) Filter [codegen id : 2]
+          |Input [1]: [id#xL]
+          |Condition : ((id#xL > Subquery subquery#x, [id=#x]) AND isnotnull((id#xL % 10)))
           |""".stripMargin,
         """
-          |(7) BroadcastQueryStage
+          |(6) BroadcastQueryStage
           |Output [1]: [id#xL]
           |Arguments: 0""".stripMargin,
         """
-          |(13) AdaptiveSparkPlan
+          |(12) AdaptiveSparkPlan
           |Output [2]: [key#xL, value#xL]
           |Arguments: isFinalPlan=true
           |""".stripMargin,
         """
-          |Subquery:1 Hosting operator id = 3 Hosting Expression = Subquery subquery#x, [id=#x]
+          |Subquery:1 Hosting operator id = 2 Hosting Expression = Subquery subquery#x, [id=#x]
           |""".stripMargin,
         """
-          |(17) ShuffleQueryStage
+          |(16) ShuffleQueryStage
           |Output [1]: [max#xL]
           |Arguments: 0""".stripMargin,
         """
-          |(21) AdaptiveSparkPlan
+          |(20) AdaptiveSparkPlan
           |Output [1]: [max(id)#xL]
           |Arguments: isFinalPlan=true
           |""".stripMargin

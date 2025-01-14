@@ -48,6 +48,7 @@ import org.apache.spark.unsafe.types.UTF8String
 case class GetJsonObject(json: Expression, path: Expression)
   extends BinaryExpression with ExpectsInputTypes {
 
+  override protected[spark] val _expectedCost = 100
   override def left: Expression = json
   override def right: Expression = path
   override def inputTypes: Seq[AbstractDataType] =
@@ -383,6 +384,8 @@ case class StructsToJson(
   with ExpectsInputTypes
   with TimeZoneAwareExpression
   with QueryErrorsBase {
+
+  override protected[spark] val _expectedCost = 200
 
   override def nullable: Boolean = true
 

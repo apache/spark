@@ -1815,7 +1815,7 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
     val batches = Seq(
       Batch("RewriteWithExpression", fixedPoint, RewriteWithExpression),
       // CollapseProject is needed to ensure idempotence
-      Batch("CollapseProject", fixedPoint, CollapseProject)
+      Batch("CollapseProject", fixedPoint, CollapseProject, PushPredicateThroughProject)
     )
   }
 
@@ -2015,7 +2015,7 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
    * subqueries in the condition do not contain the same attributes as the plan they are moved
    * into. This can happen when the plan and predicate subquery have the same source.
    */
-  private def canPushThroughCondition(plan: LogicalPlan, condition: Expression): Boolean = {
+  def canPushThroughCondition(plan: LogicalPlan, condition: Expression): Boolean = {
     val attributes = plan.outputSet
     !condition.exists {
       case s: SubqueryExpression => s.plan.outputSet.intersect(attributes).nonEmpty

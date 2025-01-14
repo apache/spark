@@ -3824,6 +3824,14 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+ val PUSH_PREDICATE_THROUGH_PROJECT_COST_THRESHOLD =
+    buildConf("spark.sql.pushPredicateThroughProjectCostThreshold")
+      .internal()
+      .doc("The threshold of predicate cost for push down through project.")
+      .version("4.0.0")
+      .intConf
+      .createWithDefault(64)
+
   val USE_COMMON_EXPR_ID_FOR_ALIAS =
     buildConf("spark.sql.useCommonExprIdForAlias")
       .internal()
@@ -6283,6 +6291,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def jsonWriteNullIfWithDefaultValue: Boolean =
     getConf(JSON_GENERATOR_WRITE_NULL_IF_WITH_DEFAULT_VALUE)
 
+  def pushPredicateThroughProjectCostThreshold: Int =
+    getConf(PUSH_PREDICATE_THROUGH_PROJECT_COST_THRESHOLD)
   def useNullsForMissingDefaultColumnValues: Boolean =
     getConf(SQLConf.USE_NULLS_FOR_MISSING_DEFAULT_COLUMN_VALUES)
 
