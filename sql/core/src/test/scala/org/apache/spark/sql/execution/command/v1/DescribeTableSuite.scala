@@ -44,6 +44,8 @@ trait DescribeTableSuiteBase extends command.DescribeTableSuiteBase
 
   def getProvider(): String = defaultUsing.stripPrefix("USING").trim.toLowerCase(Locale.ROOT)
 
+  val iso8601Regex = raw"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$$".r
+
   test("Describing of a non-existent partition") {
     withNamespaceAndTable("ns", "table") { tbl =>
       spark.sql(s"CREATE TABLE $tbl (id bigint, data string) $defaultUsing " +
@@ -339,13 +341,11 @@ class DescribeTableSuite extends DescribeTableSuiteBase with CommandSuiteBase {
         namespace = Some(List("ns")),
         schema_name = Some("ns"),
         columns = Some(List(
-          TableColumn("employee_id", Type("integer"), true),
+          TableColumn("employee_id", Type("int"), true),
           TableColumn("employee_name", Type("string"), true),
           TableColumn("department", Type("string"), true),
           TableColumn("hire_date", Type("date"), true)
         )),
-        owner = Some(""),
-        created_time = Some(""),
         last_access = Some("UNKNOWN"),
         created_by = Some(s"Spark $SPARK_VERSION"),
         `type` = Some("MANAGED"),
@@ -369,12 +369,15 @@ class DescribeTableSuite extends DescribeTableSuiteBase with CommandSuiteBase {
       )
 
       if (getProvider() == "hive") {
-        assert(expectedOutput == parsedOutput.copy(owner = Some(""),
-          created_time = Some(""),
+        assert(expectedOutput == parsedOutput.copy(owner = None,
+          created_time = None,
           location = Some("")))
       } else {
         assert(expectedOutput.copy(inputformat = None, outputformat = None, serde_library = None)
-          == parsedOutput.copy(owner = Some(""), created_time = Some(""), location = Some("")))
+          == parsedOutput.copy(owner = None, created_time = None, location = Some("")))
+      }
+      parsedOutput.created_time.foreach { createdTime =>
+        assert(iso8601Regex.matches(createdTime))
       }
     }
   }
@@ -408,7 +411,7 @@ class DescribeTableSuite extends DescribeTableSuiteBase with CommandSuiteBase {
         namespace = Some(List("ns")),
         schema_name = Some("ns"),
         columns = Some(List(
-          TableColumn("id", Type("integer"), true),
+          TableColumn("id", Type("int"), true),
           TableColumn("name", Type("string"), true),
           TableColumn("region", Type("string"), true),
           TableColumn("category", Type("string"), true)
@@ -447,6 +450,9 @@ class DescribeTableSuite extends DescribeTableSuiteBase with CommandSuiteBase {
           == parsedOutput.copy(location = None, created_time = None, owner = None,
             storage_properties = filteredParsedStorageProperties))
       }
+      parsedOutput.created_time.foreach { createdTime =>
+        assert(iso8601Regex.matches(createdTime))
+      }
     }
   }
 
@@ -475,7 +481,7 @@ class DescribeTableSuite extends DescribeTableSuiteBase with CommandSuiteBase {
         namespace = Some(List("ns")),
         schema_name = Some("ns"),
         columns = Some(List(
-          TableColumn("id", Type("integer"), default = Some("1")),
+          TableColumn("id", Type("int"), default = Some("1")),
           TableColumn("name", Type("string"), default = Some("'unknown'")),
           TableColumn("created_at", Type("timestamp_ltz"), default = Some("CURRENT_TIMESTAMP")),
           TableColumn("is_active", Type("boolean"), default = Some("true"))
@@ -504,6 +510,9 @@ class DescribeTableSuite extends DescribeTableSuiteBase with CommandSuiteBase {
             parsedOutput.copy(location = None, created_time = None, owner = None)
         )
       }
+      parsedOutput.created_time.foreach { createdTime =>
+        assert(iso8601Regex.matches(createdTime))
+      }
     }
   }
 
@@ -528,7 +537,7 @@ class DescribeTableSuite extends DescribeTableSuiteBase with CommandSuiteBase {
 
         val expectedOutput = DescribeTableJson(
           columns = Some(List(
-            TableColumn("id", Type("integer")),
+            TableColumn("id", Type("int")),
             TableColumn("name", Type("string")),
             TableColumn("created_at", Type("timestamp_ltz"))
           ))
@@ -564,7 +573,7 @@ class DescribeTableSuite extends DescribeTableSuiteBase with CommandSuiteBase {
           namespace = Some(List("default")),
           schema_name = Some("default"),
           columns = Some(List(
-            TableColumn("id", Type("integer")),
+            TableColumn("id", Type("int")),
             TableColumn("name", Type("string")),
             TableColumn("created_at", Type("timestamp_ltz"))
           )),
@@ -589,6 +598,9 @@ class DescribeTableSuite extends DescribeTableSuiteBase with CommandSuiteBase {
           assert(expectedOutput.copy(inputformat = None,
             outputformat = None, serde_library = None, storage_properties = None)
             == parsedOutput.copy(table_properties = None, created_time = None, owner = None))
+        }
+        parsedOutput.created_time.foreach { createdTime =>
+          assert(iso8601Regex.matches(createdTime))
         }
       }
     }
@@ -673,7 +685,7 @@ class DescribeTableSuite extends DescribeTableSuiteBase with CommandSuiteBase {
                 ),
                 Field(
                   name = "age",
-                  `type` = Type("integer")
+                  `type` = Type("int")
                 ),
                 Field(
                   name = "contact",
@@ -709,7 +721,7 @@ class DescribeTableSuite extends DescribeTableSuiteBase with CommandSuiteBase {
                               ),
                               Field(
                                 name = "zip",
-                                `type` = Type("integer")
+                                `type` = Type("int")
                               )
                             ))
                           )),
@@ -769,6 +781,9 @@ class DescribeTableSuite extends DescribeTableSuiteBase with CommandSuiteBase {
       } else {
         assert(expectedOutput.copy(inputformat = None, outputformat = None, serde_library = None)
           == parsedOutput.copy(location = None, created_time = None, owner = None))
+      }
+      parsedOutput.created_time.foreach { createdTime =>
+        assert(iso8601Regex.matches(createdTime))
       }
     }
   }
