@@ -276,8 +276,12 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest
         assert(rows.length === 1, s"Failed to cast $sourceCol to $castType")
         val row = rows(0)
         assert(row.get(0) === sourceValue, s"$sourceCol does not equal to $sourceValue")
+        assert(row.get(0).getClass == sourceValue.getClass,
+          s"$sourceCol has different type from $sourceValue")
         assert(row.get(1) === targetValue,
           s"CAST($sourceCol AS $castType) does not equal to $targetValue")
+        assert(row.get(1).getClass == targetValue.getClass,
+          s"CAST($sourceCol AS $castType) has different type from $targetValue")
       }
 
       testCast("BINARY", "string_col", "binary_col", stringValue, binaryValue);
