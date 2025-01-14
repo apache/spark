@@ -205,7 +205,7 @@ class AstBuilder extends DataTypeAstBuilder
     val conditions = visit(ctx.conditionValues()).asInstanceOf[Seq[String]]
 
     if (Option(ctx.CONTINUE()).isDefined) {
-      throw SparkException.internalError("CONTINUE is not supported in DECLARE HANDLER")
+      throw SqlScriptingErrors.continueHandlerNotSupported(CurrentOrigin.get)
     }
 
     val handlerType = HandlerType.EXIT
@@ -241,9 +241,10 @@ class AstBuilder extends DataTypeAstBuilder
       stmt match {
         case handler: ErrorHandler => handlers += handler
         case condition: ErrorCondition =>
+          // Check for duplicate condition names in each scope.
           if (conditions.contains(condition.conditionName)) {
             throw SparkException.internalError(
-              s"Duplicate condition name ${condition.conditionName} in handler definition")
+              s"Duplicate condition name ${condition.conditionName}.")
           }
           conditions += condition.conditionName -> condition.sqlState
         case s => buff += s

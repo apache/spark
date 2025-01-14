@@ -149,4 +149,12 @@ private[sql] object SqlScriptingErrors {
       cause = null,
       messageParameters = Map("condition" -> condition))
   }
+
+  def continueHandlerNotSupported(origin: Origin): Throwable = {
+    new SqlScriptingException(
+      origin = origin,
+      errorClass = "UNSUPPORTED_FEATURE.CONTINUE_ERROR_HANDLER",
+      cause = null,
+      messageParameters = Map.empty)
+  }
 }

@@ -69,6 +69,27 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
   }
 
   // Handler tests
+  test("continue handler not supported") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE OR REPLACE flag INT = -1;
+        |  DECLARE CONTINUE HANDLER FOR '22012'
+        |  BEGIN
+        |    SET VAR flag = 1;
+        |  END;
+        |  SELECT 1/0;
+        |  SELECT flag;
+        |END
+        |""".stripMargin
+    checkError(
+      exception = intercept[SqlScriptingException] {
+        verifySqlScriptResult(sqlScript, Seq.empty)
+      },
+      condition = "UNSUPPORTED_FEATURE.CONTINUE_ERROR_HANDLER",
+      parameters = Map.empty)
+  }
+
   test("duplicate handler") {
     val sqlScript =
       """

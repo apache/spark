@@ -5308,6 +5308,11 @@
           "Attach a comment to the namespace <namespace>."
         ]
       },
+      "CONTINUE_ERROR_HANDLER" : {
+        "message" : [
+          "Continue error handler is not supported. Please use EXIT handler."
+        ]
+      },
       "DESC_TABLE_COLUMN_JSON" : {
         "message" : [
           "DESC TABLE COLUMN AS JSON not supported for individual columns."
