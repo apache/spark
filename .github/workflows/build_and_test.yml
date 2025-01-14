@@ -600,19 +600,16 @@ jobs:
         done
     - name: Install Conda for pip packaging test
       if: contains(matrix.modules, 'pyspark-errors')
-      run: |
-        curl -s -L "https://github.com/conda-forge/miniforge/releases/download/24.11.2-1/Miniforge3-Linux-x86_64.sh" > miniforge3.sh
-        bash miniforge3.sh -b -p $HOME/miniforge3
-        rm miniforge3.sh
+      uses: conda-incubator/setup-miniconda@v3
+      with:
+        miniforge-version: latest
     # Run the tests.
     - name: Run tests
       env: ${{ fromJSON(inputs.envs) }}
       shell: 'script -q -e -c "bash {0}"'
       run: |
         if [[ "$MODULES_TO_TEST" == *"pyspark-errors"* ]]; then
-          export PATH=$PATH:$HOME/miniforge3/bin
-          env
-          which conda
+          export PATH=$CONDA/bin:$PATH
           export SKIP_PACKAGING=false
           echo "Python Packaging Tests Enabled!"
         fi
@@ -625,9 +622,10 @@ jobs:
     - name: Upload coverage to Codecov
       if: fromJSON(inputs.envs).PYSPARK_CODECOV == 'true'
       uses: codecov/codecov-action@v5
+      env:
+        CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
       with:
         files: ./python/coverage.xml
-        token: ${{ secrets.CODECOV_TOKEN }}
         flags: unittests
         name: PySpark
         verbose: true
