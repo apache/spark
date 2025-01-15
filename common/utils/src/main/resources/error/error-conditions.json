@@ -3024,6 +3024,29 @@
     ],
     "sqlState" : "42602"
   },
+  "INVALID_RECURSIVE_REFERENCE" : {
+    "message" : [
+      "Invalid recursive reference found."
+    ],
+    "subClass" : {
+      "DATA_TYPE" : {
+        "message" : [
+          "The data type of recursive references cannot change during resolution. Originally it was <fromDataType> but after resolution is <toDataType>."
+        ]
+      },
+      "NUMBER" : {
+        "message" : [
+          "Recursive references cannot be used multiple times."
+        ]
+      },
+      "PLACE" : {
+        "message" : [
+          "Recursive references cannot be used on the right side of left outer/semi/anti joins, on the left side of right outer joins, in full outer joins and in aggregates."
+        ]
+      }
+    },
+    "sqlState" : "42836"
+  },
   "INVALID_QUERY_MIXED_QUERY_PARAMETERS" : {
     "message" : [
       "Parameterized query must either use positional, or named parameters, but not both."
