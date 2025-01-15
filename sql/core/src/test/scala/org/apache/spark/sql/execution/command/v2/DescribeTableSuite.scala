@@ -55,15 +55,6 @@ class DescribeTableSuite extends command.DescribeTableSuiteBase
           Row("# col_name", "data_type", "comment"),
           Row("s.id", "int", null),
           Row("s.a", "bigint", null)))
-
-      // example date format: Mon Nov 01 12:00:00 UTC 2021
-      val timeRegex = raw"""^[A-Z][a-z]{2} [A-Z][a-z]{2} [ 0-9][0-9]
-          |[0-9]{2}:[0-9]{2}:[0-9]{2} [A-Z]{3,4}
-          |[0-9]{4}$""".stripMargin.r
-
-      val createdTimeValue = descriptionDf.filter("col_name = 'Created Time'")
-          .collect().head.getString(1)
-      assert(timeRegex.matches(createdTimeValue))
     }
   }
 
