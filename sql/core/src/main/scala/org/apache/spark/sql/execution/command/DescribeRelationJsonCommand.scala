@@ -129,8 +129,8 @@ case class DescribeRelationJsonCommand(
       val formattedValue = renamedKey match {
         case "created_time" | "last_access" =>
           value match {
-            case JInt(longValue) if longValue > 0 =>
-              JString(timestampFormatter.format(DateTimeUtils.millisToMicros(longValue.toLong)))
+            case JLong(timestamp) if timestamp > 0 =>
+              JString(timestampFormatter.format(DateTimeUtils.millisToMicros(timestamp)))
             case _ => value
           }
         case _ => value
