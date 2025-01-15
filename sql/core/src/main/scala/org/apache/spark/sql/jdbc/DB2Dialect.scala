@@ -82,6 +82,12 @@ private case class DB2Dialect() extends JdbcDialect with SQLConfHelper with NoLe
     }
   }
 
+  override def compileValue(value: Any): Any = value match {
+    case binaryValue: Array[Byte] =>
+      binaryValue.map("%02X".format(_)).mkString("BLOB(X'", "", "')")
+    case other => super.compileValue(other)
+  }
+
   override def getCatalystType(
       sqlType: Int,
       typeName: String,
