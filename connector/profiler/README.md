@@ -3,8 +3,15 @@
 ## Build
 
 To build
+
 ```
-  ./build/mvn clean package -DskipTests -Pjvm-profiler
+./build/mvn clean package -DskipTests -Pjvm-profiler -pl :spark-profiler_2.13 -am
+```
+
+or
+
+```
+./build/sbt -Pjvm-profiler clean "profiler/package"
 ```
 
 ## Executor Code Profiling

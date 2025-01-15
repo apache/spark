@@ -309,6 +309,15 @@ sql_kafka = Module(
     ],
 )
 
+profiler = Module(
+    name="profiler",
+    dependencies=[],
+    build_profile_flags=["-Pjvm-profiler"],
+    source_file_regexes=[
+        "connector/profiler",
+    ],
+)
+
 protobuf = Module(
     name="protobuf",
     dependencies=[sql],
