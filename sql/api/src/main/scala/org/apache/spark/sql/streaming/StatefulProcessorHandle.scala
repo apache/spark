@@ -27,7 +27,7 @@ import org.apache.spark.sql.Encoder
  */
 @Experimental
 @Evolving
-private[sql] trait StatefulProcessorHandle extends Serializable {
+ trait StatefulProcessorHandle extends Serializable {
 
   /**
    * Function to create new or return existing single value state variable of given type with ttl.

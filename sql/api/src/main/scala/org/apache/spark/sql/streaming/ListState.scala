@@ -23,7 +23,7 @@ import org.apache.spark.annotation.{Evolving, Experimental}
 /**
  * Interface used for arbitrary stateful operations with the v2 API to capture list value state.
  */
-private[sql] trait ListState[S] extends Serializable {
+ trait ListState[S] extends Serializable {
 
   /** Whether state exists or not. */
   def exists(): Boolean

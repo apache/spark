@@ -27,7 +27,7 @@ import org.apache.spark.annotation.{Evolving, Experimental}
  */
 @Experimental
 @Evolving
-private[sql] trait TimerValues extends Serializable {
+ trait TimerValues extends Serializable {
 
   /**
    * Get the current processing time as milliseconds in epoch time.

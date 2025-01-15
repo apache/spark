@@ -32,7 +32,7 @@ import org.apache.spark.sql.errors.ExecutionErrors
  */
 @Experimental
 @Evolving
-private[sql] abstract class StatefulProcessor[K, I, O] extends Serializable {
+ abstract class StatefulProcessor[K, I, O] extends Serializable {
 
   // scalastyle:off
   // Disable style checker so "implicits" object can start with lowercase i
@@ -125,7 +125,7 @@ private[sql] abstract class StatefulProcessor[K, I, O] extends Serializable {
  */
 @Experimental
 @Evolving
-private[sql] abstract class StatefulProcessorWithInitialState[K, I, O, S]
+ abstract class StatefulProcessorWithInitialState[K, I, O, S]
     extends StatefulProcessor[K, I, O] {
 
   /**
