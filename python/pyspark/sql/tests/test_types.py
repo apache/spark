@@ -2255,15 +2255,15 @@ class TypesTestsMixin:
         create_df_variants = self.spark.createDataFrame(
             [
                 (
-                    VariantVal.parseJson('2'),
-                    [VariantVal.parseJson('3')],
-                    {"v" : VariantVal.parseJson('4')},
-                    {"v" : VariantVal.parseJson('5')}
+                    VariantVal.parseJson("2"),
+                    [VariantVal.parseJson("3")],
+                    {"v": VariantVal.parseJson("4")},
+                    {"v": VariantVal.parseJson("5")},
                 ),
-                (None, [None], {"v" : None}, {"v" : None}),
-                (None, None, None, None)
+                (None, [None], {"v": None}, {"v": None}),
+                (None, None, None, None),
             ],
-            "v variant, a array<variant>, s struct<v variant>, m map<string, variant>"
+            "v variant, a array<variant>, s struct<v variant>, m map<string, variant>",
         ).collect()
         self.assertEqual(create_df_variants[0][0].toJson(), "2")
         self.assertEqual(create_df_variants[0][1][0].toJson(), "3")
