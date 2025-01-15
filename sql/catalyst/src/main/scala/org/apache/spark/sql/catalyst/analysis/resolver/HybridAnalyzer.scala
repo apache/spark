@@ -163,7 +163,11 @@ class HybridAnalyzer(
             throw singlePassEx
           case None =>
             validateLogicalPlans(fixedPointResult.get, singlePassResult.get)
-            fixedPointResult.get
+            if (conf.getConf(SQLConf.ANALYZER_DUAL_RUN_RETURN_SINGLE_PASS_RESULT)) {
+              singlePassResult.get
+            } else {
+              fixedPointResult.get
+            }
         }
     }
   }
