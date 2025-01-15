@@ -31,6 +31,8 @@ jobs:
     name: Run
     uses: ./.github/workflows/build_and_test.yml
     if: github.repository == 'apache/spark'
+    secrets:
+      codecov_token: ${{ secrets.CODECOV_TOKEN }}
     with:
       java: 17
       branch: master

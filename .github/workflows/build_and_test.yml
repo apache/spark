@@ -21,6 +21,12 @@ name: Build and test
 
 on:
   workflow_call:
+    secrets:
+      codecov_token:
+        description: The token of codecov.
+        required: false
+        type: string
+        default: ''
     inputs:
       java:
         required: false
@@ -622,9 +628,8 @@ jobs:
     - name: Upload coverage to Codecov
       if: fromJSON(inputs.envs).PYSPARK_CODECOV == 'true'
       uses: codecov/codecov-action@v5
-      env:
-        CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
       with:
+        token: ${{ secrets.codecov_token }}
         files: ./python/coverage.xml
         flags: unittests
         name: PySpark
