@@ -647,8 +647,7 @@ case class PartitionInternalRow(keys: Array[Any])
     if (!other.isInstanceOf[PartitionInternalRow]) {
       return false
     }
-    // Just compare by reference, not by value
-    this.keys == other.asInstanceOf[PartitionInternalRow].keys
+    this.keys sameElements other.asInstanceOf[PartitionInternalRow].keys
   }
   override def hashCode: Int = {
     Objects.hashCode(keys)
