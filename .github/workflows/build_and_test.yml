@@ -453,7 +453,7 @@ jobs:
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v5
       env:
-        CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+        CODECOV_TOKEN: ad879b47-11ad-42ed-8f94-be8b8710f45f
       with:
         files: ./python/coverage.xml
         flags: unittests
