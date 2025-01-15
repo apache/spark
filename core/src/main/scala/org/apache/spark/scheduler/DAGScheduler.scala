@@ -1566,10 +1566,6 @@ private[spark] class DAGScheduler(
     addPySparkConfigsToProperties(stage, properties)
 
     runningStages += stage
-    // SparkListenerStageSubmitted should be posted before testing whether tasks are
-    // serializable. If tasks are not serializable, a SparkListenerStageCompleted event
-    // will be posted, which should always come after a corresponding SparkListenerStageSubmitted
-    // event.
     stage match {
       case s: ShuffleMapStage =>
         outputCommitCoordinator.stageStart(stage = s.id, maxPartitionId = s.numPartitions - 1)
@@ -1619,6 +1615,10 @@ private[spark] class DAGScheduler(
     if (partitionsToCompute.nonEmpty) {
       stage.latestInfo.submissionTime = Some(clock.getTimeMillis())
     }
+    // SparkListenerStageSubmitted should be posted before testing whether tasks are
+    // serializable. If tasks are not serializable, a SparkListenerStageCompleted event
+    // will be posted, which should always come after a corresponding SparkListenerStageSubmitted
+    // event.
     listenerBus.post(SparkListenerStageSubmitted(stage.latestInfo,
       Utils.cloneProperties(properties)))
 
