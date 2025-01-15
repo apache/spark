@@ -64,7 +64,7 @@ case class SetVariableExec(variables: Seq[VariableReference], query: SparkPlan)
     }
 
     val tempVariableManager = session.sessionState.catalogManager.tempVariableManager
-    val scriptingVariableManager = session.sessionState.catalogManager.scriptingLocalVariableManager
+    val scriptingVariableManager = session.sessionState.catalogManager.sqlScriptingLocalVariableManager
 
     val variableManager = scriptingVariableManager
       // If a local variable with nameParts exists, set it using scriptingVariableManager.

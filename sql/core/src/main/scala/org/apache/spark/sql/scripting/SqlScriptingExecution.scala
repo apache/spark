@@ -54,8 +54,8 @@ class SqlScriptingExecution(
     ctx
   }
 
-  private val variableManager = new ScriptingVariableManager(context)
-  session.sessionState.catalogManager.scriptingLocalVariableManager = Some(variableManager)
+  private val variableManager = new SqlScriptingVariableManager(context)
+  session.sessionState.catalogManager.sqlScriptingLocalVariableManager = Some(variableManager)
 
   /** Helper method to iterate get next statements from the first available frame. */
   private def getNextStatement: Option[CompoundStatementExec] = {
@@ -118,6 +118,6 @@ class SqlScriptingExecution(
 
   /** Cleans up resources associated with the execution. */
   override def close(): Unit = {
-    session.sessionState.catalogManager.scriptingLocalVariableManager = None
+    session.sessionState.catalogManager.sqlScriptingLocalVariableManager = None
   }
 }

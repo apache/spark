@@ -1517,8 +1517,8 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     val expected3 = parsePlan("SET var (res, res2) = (SELECT 17, 7 where 2 = 1)").analyze
       comparePlans(actual3, expected3)
     } finally {
-      SimpleAnalyzer.catalogManager.tempVariableManager.remove("res")
-      SimpleAnalyzer.catalogManager.tempVariableManager.remove("res2")
+      SimpleAnalyzer.catalogManager.tempVariableManager.remove(Seq("res"))
+      SimpleAnalyzer.catalogManager.tempVariableManager.remove(Seq("res2"))
     }
   }
 

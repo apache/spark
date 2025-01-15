@@ -51,8 +51,8 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
     val executionPlan = interpreter.buildExecutionPlan(compoundBody, args, context)
     context.frames.append(new SqlScriptingExecutionFrame(executionPlan.getTreeIterator))
     executionPlan.enterScope()
-    spark.sessionState.catalogManager.scriptingLocalVariableManager =
-      Some(new ScriptingVariableManager(context))
+    spark.sessionState.catalogManager.sqlScriptingLocalVariableManager =
+      Some(new SqlScriptingVariableManager(context))
 
     try {
       executionPlan.getTreeIterator.flatMap {
@@ -65,7 +65,7 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
         case _ => None
       }.toArray
     } finally {
-      spark.sessionState.catalogManager.scriptingLocalVariableManager = None
+      spark.sessionState.catalogManager.sqlScriptingLocalVariableManager = None
     }
   }
 

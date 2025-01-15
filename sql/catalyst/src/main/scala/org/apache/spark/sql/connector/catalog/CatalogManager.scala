@@ -50,7 +50,7 @@ class CatalogManager(
   val tempVariableManager: TempVariableManager = new TempVariableManager
 
   // This field will be populated and cleaned up by SqlScriptingExecution.
-  var scriptingLocalVariableManager: Option[VariableManager] = None
+  var sqlScriptingLocalVariableManager: Option[VariableManager] = None
 
   def catalog(name: String): CatalogPlugin = synchronized {
     if (name.equalsIgnoreCase(SESSION_CATALOG_NAME)) {

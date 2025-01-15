@@ -1144,7 +1144,7 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("local variable - session variable resolved over local if qualified") {
+  test("local variable - session variable resolved over local if fully qualified") {
     withSessionVariable("localVar") {
       spark.sql("DECLARE VARIABLE localVar = 1")
 
@@ -1154,6 +1154,29 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
           |  lbl: BEGIN
           |    DECLARE localVar = 5;
           |    SELECT system.session.localVar;
+          |    SELECT localVar;
+          |  END;
+          |END
+          |""".stripMargin
+
+      val expected = Seq(
+        Seq(Row(1)), // select system.session.localVar
+        Seq(Row(5)) // select localVar
+      )
+      verifySqlScriptResult(sqlScript, expected)
+    }
+  }
+
+  test("local variable - session variable resolved over local if qualified with session.varname") {
+    withSessionVariable("localVar") {
+      spark.sql("DECLARE VARIABLE localVar = 1")
+
+      val sqlScript =
+        """
+          |BEGIN
+          |  lbl: BEGIN
+          |    DECLARE localVar = 5;
+          |    SELECT session.localVar;
           |    SELECT localVar;
           |  END;
           |END
@@ -1645,7 +1668,7 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
     //  The reason it is neccessary now is that with the current execution logic,
     //  the SqlScriptingExecution errors while being constructed,
     //  meaning it doesn't get cleaned up properly.
-    spark.sessionState.catalogManager.scriptingLocalVariableManager = None
+    spark.sessionState.catalogManager.sqlScriptingLocalVariableManager = None
 
     checkError(
       exception = e,

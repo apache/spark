@@ -25,7 +25,7 @@ import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.errors.DataTypeErrorsBase
  import org.apache.spark.sql.errors.QueryCompilationErrors.unresolvedVariableError
 
-class ScriptingVariableManager(context: SqlScriptingExecutionContext)
+class SqlScriptingVariableManager(context: SqlScriptingExecutionContext)
   extends VariableManager with DataTypeErrorsBase {
 
   override def create(
@@ -101,7 +101,7 @@ class ScriptingVariableManager(context: SqlScriptingExecutionContext)
   override def createIdentifier(name: String): Identifier =
     Identifier.of(Array(context.currentScope.label), name)
 
-  override def remove(name: String): Boolean = {
+  override def remove(nameParts: Seq[String]): Boolean = {
     throw SparkException.internalError(
       "ScriptingVariableManager.remove should never be called as local variables cannot be dropped."
     )

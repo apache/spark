@@ -34,7 +34,7 @@ case class CreateVariableExec(
     replace: Boolean) extends LeafV2CommandExec with ExpressionsEvaluator {
 
   override protected def run(): Seq[InternalRow] = {
-    val scriptingVariableManager = session.sessionState.catalogManager.scriptingLocalVariableManager
+    val scriptingVariableManager = session.sessionState.catalogManager.sqlScriptingLocalVariableManager
     val tempVariableManager = session.sessionState.catalogManager.tempVariableManager
 
     val exprs = prepareExpressions(Seq(defaultExpr.child), subExprEliminationEnabled = false)
