@@ -30,7 +30,7 @@ import org.apache.spark.{SparkConf, SparkContext, SparkException}
 import org.apache.spark.annotation.{DeveloperApi, Experimental, Stable, Unstable}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{Encoder, ExperimentalMethods, Row, RuntimeConfig, SparkSessionExtensions, SQLContext}
+import org.apache.spark.sql.{Encoder, ExperimentalMethods, Row, RuntimeConfig, SparkSessionExtensions}
 import org.apache.spark.sql.internal.{SessionState, SharedState}
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.types.StructType
@@ -470,7 +470,6 @@ abstract class SparkSession extends Serializable with Closeable {
    *   is.
    * @since 3.5.0
    */
-  @Experimental
   def sql(sqlText: String, args: Array[_]): Dataset[Row]
 
   /**
@@ -488,7 +487,6 @@ abstract class SparkSession extends Serializable with Closeable {
    *   `array()`, `struct()`, in that case it is taken as is.
    * @since 3.4.0
    */
-  @Experimental
   def sql(sqlText: String, args: Map[String, Any]): Dataset[Row]
 
   /**
@@ -506,7 +504,6 @@ abstract class SparkSession extends Serializable with Closeable {
    *   `array()`, `struct()`, in that case it is taken as is.
    * @since 3.4.0
    */
-  @Experimental
   def sql(sqlText: String, args: util.Map[String, Any]): Dataset[Row] = {
     sql(sqlText, args.asScala.toMap)
   }

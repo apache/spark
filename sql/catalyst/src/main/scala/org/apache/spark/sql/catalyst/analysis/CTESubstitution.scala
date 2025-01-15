@@ -123,7 +123,7 @@ object CTESubstitution extends Rule[LogicalPlan] {
       startOfQuery: Boolean = true): Unit = {
     val resolver = conf.resolver
     plan match {
-      case UnresolvedWith(child, relations) =>
+      case UnresolvedWith(child, relations, _) =>
         val newNames = ArrayBuffer.empty[String]
         newNames ++= outerCTERelationNames
         relations.foreach {
@@ -149,10 +149,15 @@ object CTESubstitution extends Rule[LogicalPlan] {
       plan: LogicalPlan,
       cteDefs: ArrayBuffer[CTERelationDef]): LogicalPlan = {
     plan.resolveOperatorsUp {
-      case UnresolvedWith(child, relations) =>
-        val resolvedCTERelations =
-          resolveCTERelations(relations, isLegacy = true, forceInline = false, Seq.empty, cteDefs)
-        substituteCTE(child, alwaysInline = true, resolvedCTERelations)
+      case cte @ UnresolvedWith(child, relations, allowRecursion) =>
+        if (allowRecursion) {
+          cte.failAnalysis(
+            errorClass = "RECURSIVE_CTE_IN_LEGACY_MODE",
+            messageParameters = Map.empty)
+        }
+        val resolvedCTERelations = resolveCTERelations(relations, isLegacy = true,
+          forceInline = false, Seq.empty, cteDefs, allowRecursion)
+        substituteCTE(child, alwaysInline = true, resolvedCTERelations, None)
     }
   }
 
@@ -202,14 +207,21 @@ object CTESubstitution extends Rule[LogicalPlan] {
     var firstSubstituted: Option[LogicalPlan] = None
     val newPlan = plan.resolveOperatorsDownWithPruning(
         _.containsAnyPattern(UNRESOLVED_WITH, PLAN_EXPRESSION)) {
-      case UnresolvedWith(child: LogicalPlan, relations) =>
+      // allowRecursion flag is set to `True` by the parser if the `RECURSIVE` keyword is used.
+      case cte @ UnresolvedWith(child: LogicalPlan, relations, allowRecursion) =>
+        if (allowRecursion && forceInline) {
+          cte.failAnalysis(
+            errorClass = "RECURSIVE_CTE_WHEN_INLINING_IS_FORCED",
+            messageParameters = Map.empty)
+        }
         val resolvedCTERelations =
-          resolveCTERelations(relations, isLegacy = false, forceInline, outerCTEDefs, cteDefs) ++
-            outerCTEDefs
+          resolveCTERelations(relations, isLegacy = false, forceInline, outerCTEDefs, cteDefs,
+            allowRecursion) ++ outerCTEDefs
         val substituted = substituteCTE(
           traverseAndSubstituteCTE(child, forceInline, resolvedCTERelations, cteDefs)._1,
           forceInline,
-          resolvedCTERelations)
+          resolvedCTERelations,
+          None)
         if (firstSubstituted.isEmpty) {
           firstSubstituted = Some(substituted)
         }
@@ -228,7 +240,8 @@ object CTESubstitution extends Rule[LogicalPlan] {
       isLegacy: Boolean,
       forceInline: Boolean,
       outerCTEDefs: Seq[(String, CTERelationDef)],
-      cteDefs: ArrayBuffer[CTERelationDef]): Seq[(String, CTERelationDef)] = {
+      cteDefs: ArrayBuffer[CTERelationDef],
+      allowRecursion: Boolean): Seq[(String, CTERelationDef)] = {
     val alwaysInline = isLegacy || forceInline
     var resolvedCTERelations = if (alwaysInline) {
       Seq.empty
@@ -247,30 +260,116 @@ object CTESubstitution extends Rule[LogicalPlan] {
         // NOTE: we must call `traverseAndSubstituteCTE` before `substituteCTE`, as the relations
         // in the inner CTE have higher priority over the relations in the outer CTE when resolving
         // inner CTE relations. For example:
-        // WITH t1 AS (SELECT 1)
-        // t2 AS (
-        //   WITH t1 AS (SELECT 2)
-        //   WITH t3 AS (SELECT * FROM t1)
-        // )
-        // t3 should resolve the t1 to `SELECT 2` instead of `SELECT 1`.
-        traverseAndSubstituteCTE(relation, forceInline, resolvedCTERelations, cteDefs)._1
+        // WITH
+        //   t1 AS (SELECT 1),
+        //   t2 AS (
+        //     WITH
+        //       t1 AS (SELECT 2),
+        //       t3 AS (SELECT * FROM t1)
+        //     SELECT * FROM t1
+        //   )
+        // SELECT * FROM t2
+        // t3 should resolve the t1 to `SELECT 2` ("inner" t1) instead of `SELECT 1`.
+        //
+        // When recursion allowed (RECURSIVE keyword used):
+        // Consider following example:
+        //  WITH
+        //    t1 AS (SELECT 1),
+        //    t2 AS (
+        //      WITH RECURSIVE
+        //        t1 AS (
+        //          SELECT 1 AS level
+        //          UNION (
+        //            WITH t3 AS (SELECT level + 1 FROM t1 WHERE level < 10)
+        //            SELECT * FROM t3
+        //          )
+        //        )
+        //      SELECT * FROM t1
+        //    )
+        //  SELECT * FROM t2
+        // t1 reference within t3 would initially resolve to outer `t1` (SELECT 1), as the inner t1
+        // is not yet known. Therefore, we need to remove definitions that conflict with current
+        // relation `name` from the list of `outerCTEDefs` entering `traverseAndSubstituteCTE()`.
+        // NOTE: It will be recognized later in the code that this is actually a self-reference
+        // (reference to the inner t1).
+        val nonConflictingCTERelations = if (allowRecursion) {
+          resolvedCTERelations.filterNot {
+            case (cteName, cteDef) => cteDef.conf.resolver(cteName, name)
+          }
+        } else {
+          resolvedCTERelations
+        }
+        traverseAndSubstituteCTE(relation, forceInline, nonConflictingCTERelations, cteDefs)._1
       }
-      // CTE definition can reference a previous one
-      val substituted = substituteCTE(innerCTEResolved, alwaysInline, resolvedCTERelations)
+
+      // If recursion is allowed (RECURSIVE keyword specified)
+      // then it has higher priority than outer or previous relations.
+      // Therefore, we construct a `CTERelationDef` for the current relation.
+      // Later if we encounter unresolved relation which we need to find which CTE Def it is
+      // referencing to, we first check if it is a reference to this one. If yes, then we set the
+      // reference as being recursive.
+      val recursiveCTERelation = if (allowRecursion) {
+        Some(name -> CTERelationDef(relation))
+      } else {
+        None
+      }
+      // CTE definition can reference a previous one or itself if recursion allowed.
+      val substituted = substituteCTE(innerCTEResolved, alwaysInline,
+        resolvedCTERelations, recursiveCTERelation)
       val cteRelation = CTERelationDef(substituted)
       if (!alwaysInline) {
         cteDefs += cteRelation
       }
+
       // Prepending new CTEs makes sure that those have higher priority over outer ones.
       resolvedCTERelations +:= (name -> cteRelation)
     }
     resolvedCTERelations
   }
 
+  /**
+   * This function is called from `substituteCTE` to actually substitute unresolved relations
+   * with CTE references.
+   */
+  private def resolveWithCTERelations(
+      table: String,
+      alwaysInline: Boolean,
+      cteRelations: Seq[(String, CTERelationDef)],
+      recursiveCTERelation: Option[(String, CTERelationDef)],
+      unresolvedRelation: UnresolvedRelation): LogicalPlan = {
+    if (recursiveCTERelation.isDefined && conf.resolver(recursiveCTERelation.get._1, table)) {
+      // self-reference is found
+      recursiveCTERelation.map {
+        case (_, d) =>
+          SubqueryAlias(table,
+            CTERelationRef(d.id, d.resolved, d.output, d.isStreaming, recursive = true))
+      }.get
+    } else {
+      cteRelations
+        .find(r => conf.resolver(r._1, table))
+        .map {
+          case (_, d) =>
+            if (alwaysInline) {
+              d.child
+            } else {
+              // Add a `SubqueryAlias` for hint-resolving rules to match relation names.
+              // This is a non-recursive reference, recursive parameter is by default set to false
+              SubqueryAlias(table,
+                CTERelationRef(d.id, d.resolved, d.output, d.isStreaming))
+            }
+        }
+        .getOrElse(unresolvedRelation)
+    }
+  }
+
+  /**
+   * Substitute unresolved relations in the plan with CTE references (CTERelationRef).
+   */
   private def substituteCTE(
       plan: LogicalPlan,
       alwaysInline: Boolean,
-      cteRelations: Seq[(String, CTERelationDef)]): LogicalPlan = {
+      cteRelations: Seq[(String, CTERelationDef)],
+      recursiveCTERelation: Option[(String, CTERelationDef)]): LogicalPlan = {
     plan.resolveOperatorsUpWithPruning(
         _.containsAnyPattern(RELATION_TIME_TRAVEL, UNRESOLVED_RELATION, PLAN_EXPRESSION,
           UNRESOLVED_IDENTIFIER)) {
@@ -279,28 +378,29 @@ object CTESubstitution extends Rule[LogicalPlan] {
         throw QueryCompilationErrors.timeTravelUnsupportedError(toSQLId(table))
 
       case u @ UnresolvedRelation(Seq(table), _, _) =>
-        cteRelations.find(r => plan.conf.resolver(r._1, table)).map { case (_, d) =>
-          if (alwaysInline) {
-            d.child
-          } else {
-            // Add a `SubqueryAlias` for hint-resolving rules to match relation names.
-            SubqueryAlias(table, CTERelationRef(d.id, d.resolved, d.output, d.isStreaming))
-          }
-        }.getOrElse(u)
+        resolveWithCTERelations(table, alwaysInline, cteRelations,
+          recursiveCTERelation, u)
 
       case p: PlanWithUnresolvedIdentifier =>
         // We must look up CTE relations first when resolving `UnresolvedRelation`s,
         // but we can't do it here as `PlanWithUnresolvedIdentifier` is a leaf node
-        // and may produce `UnresolvedRelation` later.
-        // Here we wrap it with `UnresolvedWithCTERelations` so that we can
-        // delay the CTE relations lookup after `PlanWithUnresolvedIdentifier` is resolved.
-        UnresolvedWithCTERelations(p, cteRelations)
+        // and may produce `UnresolvedRelation` later. Instead, we delay CTE resolution
+        // by moving it to the planBuilder of the corresponding `PlanWithUnresolvedIdentifier`.
+        p.copy(planBuilder = (nameParts, children) => {
+          p.planBuilder.apply(nameParts, children) match {
+            case u @ UnresolvedRelation(Seq(table), _, _) =>
+              resolveWithCTERelations(table, alwaysInline, cteRelations,
+                recursiveCTERelation, u)
+            case other => other
+          }
+        })
 
       case other =>
         // This cannot be done in ResolveSubquery because ResolveSubquery does not know the CTE.
         other.transformExpressionsWithPruning(_.containsPattern(PLAN_EXPRESSION)) {
           case e: SubqueryExpression =>
-            e.withNewPlan(apply(substituteCTE(e.plan, alwaysInline, cteRelations)))
+            e.withNewPlan(
+              apply(substituteCTE(e.plan, alwaysInline, cteRelations, None)))
         }
     }
   }

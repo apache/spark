@@ -24,6 +24,7 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.internal.{Logging, LogKeys, MDC}
+import org.apache.spark.sql.avro.{AvroDeserializer, AvroSerializer}
 import org.apache.spark.sql.catalyst.util.UnsafeRowUtils
 import org.apache.spark.sql.execution.streaming.{CheckpointFileManager, StatefulOperatorStateInfo}
 import org.apache.spark.sql.execution.streaming.state.SchemaHelper.{SchemaReader, SchemaWriter}
@@ -36,6 +37,30 @@ case class StateSchemaValidationResult(
     evolvedSchema: Boolean,
     schemaPath: String
 )
+
+/**
+ * An Avro-based encoder used for serializing between UnsafeRow and Avro
+ *  byte arrays in RocksDB state stores.
+ *
+ * This encoder is primarily utilized by [[RocksDBStateStoreProvider]] and [[RocksDBStateEncoder]]
+ * to handle serialization and deserialization of state store data.
+ *
+ * @param keySerializer Serializer for converting state store keys to Avro format
+ * @param keyDeserializer Deserializer for converting Avro-encoded keys back to UnsafeRow
+ * @param valueSerializer Serializer for converting state store values to Avro format
+ * @param valueDeserializer Deserializer for converting Avro-encoded values back to UnsafeRow
+ * @param suffixKeySerializer Optional serializer for handling suffix keys in Avro format
+ * @param suffixKeyDeserializer Optional deserializer for converting Avro-encoded suffix
+ *                              keys back to UnsafeRow
+ */
+case class AvroEncoder(
+  keySerializer: AvroSerializer,
+  keyDeserializer: AvroDeserializer,
+  valueSerializer: AvroSerializer,
+  valueDeserializer: AvroDeserializer,
+  suffixKeySerializer: Option[AvroSerializer] = None,
+  suffixKeyDeserializer: Option[AvroDeserializer] = None
+) extends Serializable
 
 // Used to represent the schema of a column family in the state store
 case class StateStoreColFamilySchema(

@@ -239,7 +239,7 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
         val complexTypeFactory = JsonToStructs(attr.dataType,
           ioschema.outputSerdeProps.toMap, Literal(null), Some(conf.sessionLocalTimeZone))
         wrapperConvertException(data =>
-          complexTypeFactory.evaluator.evaluate(UTF8String.fromString(data)), any => any)
+          complexTypeFactory.nullSafeEval(UTF8String.fromString(data)), any => any)
       case udt: UserDefinedType[_] =>
         wrapperConvertException(data => udt.deserialize(data), converter)
       case dt =>

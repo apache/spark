@@ -295,7 +295,7 @@ abstract class InMemoryBaseTable(
     TableCapability.TRUNCATE)
 
   override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
-    new InMemoryScanBuilder(schema)
+    new InMemoryScanBuilder(schema, options)
   }
 
   private def canEvaluate(filter: Filter): Boolean = {
@@ -309,8 +309,10 @@ abstract class InMemoryBaseTable(
     }
   }
 
-  class InMemoryScanBuilder(tableSchema: StructType) extends ScanBuilder
-      with SupportsPushDownRequiredColumns with SupportsPushDownFilters {
+  class InMemoryScanBuilder(
+      tableSchema: StructType,
+      options: CaseInsensitiveStringMap) extends ScanBuilder
+    with SupportsPushDownRequiredColumns with SupportsPushDownFilters {
     private var schema: StructType = tableSchema
     private var postScanFilters: Array[Filter] = Array.empty
     private var evaluableFilters: Array[Filter] = Array.empty
@@ -318,7 +320,7 @@ abstract class InMemoryBaseTable(
 
     override def build: Scan = {
       val scan = InMemoryBatchScan(
-        data.map(_.asInstanceOf[InputPartition]).toImmutableArraySeq, schema, tableSchema)
+        data.map(_.asInstanceOf[InputPartition]).toImmutableArraySeq, schema, tableSchema, options)
       if (evaluableFilters.nonEmpty) {
         scan.filter(evaluableFilters)
       }
@@ -442,7 +444,8 @@ abstract class InMemoryBaseTable(
   case class InMemoryBatchScan(
       var _data: Seq[InputPartition],
       readSchema: StructType,
-      tableSchema: StructType)
+      tableSchema: StructType,
+      options: CaseInsensitiveStringMap)
     extends BatchScanBaseClass(_data, readSchema, tableSchema) with SupportsRuntimeFiltering {
 
     override def filterAttributes(): Array[NamedReference] = {
@@ -474,17 +477,17 @@ abstract class InMemoryBaseTable(
     }
   }
 
-  abstract class InMemoryWriterBuilder() extends SupportsTruncate with SupportsDynamicOverwrite
-    with SupportsStreamingUpdateAsAppend {
+  abstract class InMemoryWriterBuilder(val info: LogicalWriteInfo)
+    extends SupportsTruncate with SupportsDynamicOverwrite with SupportsStreamingUpdateAsAppend {
 
-    protected var writer: BatchWrite = Append
-    protected var streamingWriter: StreamingWrite = StreamingAppend
+    protected var writer: BatchWrite = new Append(info)
+    protected var streamingWriter: StreamingWrite = new StreamingAppend(info)
 
     override def overwriteDynamicPartitions(): WriteBuilder = {
-      if (writer != Append) {
+      if (!writer.isInstanceOf[Append]) {
         throw new IllegalArgumentException(s"Unsupported writer type: $writer")
       }
-      writer = DynamicOverwrite
+      writer = new DynamicOverwrite(info)
       streamingWriter = new StreamingNotSupportedOperation("overwriteDynamicPartitions")
       this
     }
@@ -529,13 +532,13 @@ abstract class InMemoryBaseTable(
     override def abort(messages: Array[WriterCommitMessage]): Unit = {}
   }
 
-  protected object Append extends TestBatchWrite {
+  class Append(val info: LogicalWriteInfo) extends TestBatchWrite {
     override def commit(messages: Array[WriterCommitMessage]): Unit = dataMap.synchronized {
       withData(messages.map(_.asInstanceOf[BufferedRows]))
     }
   }
 
-  private object DynamicOverwrite extends TestBatchWrite {
+  class DynamicOverwrite(val info: LogicalWriteInfo) extends TestBatchWrite {
     override def commit(messages: Array[WriterCommitMessage]): Unit = dataMap.synchronized {
       val newData = messages.map(_.asInstanceOf[BufferedRows])
       dataMap --= newData.flatMap(_.rows.map(getKey))
@@ -543,7 +546,7 @@ abstract class InMemoryBaseTable(
     }
   }
 
-  protected object TruncateAndAppend extends TestBatchWrite {
+  class TruncateAndAppend(val info: LogicalWriteInfo) extends TestBatchWrite {
     override def commit(messages: Array[WriterCommitMessage]): Unit = dataMap.synchronized {
       dataMap.clear()
       withData(messages.map(_.asInstanceOf[BufferedRows]))
@@ -572,7 +575,7 @@ abstract class InMemoryBaseTable(
       s"${operation} isn't supported for streaming query.")
   }
 
-  private object StreamingAppend extends TestStreamingWrite {
+  class StreamingAppend(val info: LogicalWriteInfo) extends TestStreamingWrite {
     override def commit(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {
       dataMap.synchronized {
         withData(messages.map(_.asInstanceOf[BufferedRows]))
@@ -580,7 +583,7 @@ abstract class InMemoryBaseTable(
     }
   }
 
-  protected object StreamingTruncateAndAppend extends TestStreamingWrite {
+  class StreamingTruncateAndAppend(val info: LogicalWriteInfo) extends TestStreamingWrite {
     override def commit(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {
       dataMap.synchronized {
         dataMap.clear()

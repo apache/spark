@@ -103,6 +103,14 @@ private[sql] object SqlScriptingErrors {
       messageParameters = Map("invalidStatement" -> toSQLStmt(stmt)))
   }
 
+  def positionalParametersAreNotSupportedWithSqlScripting(): Throwable = {
+    new SqlScriptingException(
+      origin = null,
+      errorClass = "UNSUPPORTED_FEATURE.SQL_SCRIPTING_WITH_POSITIONAL_PARAMETERS",
+      cause = null,
+      messageParameters = Map.empty)
+  }
+
   def labelDoesNotExist(
       origin: Origin,
       labelName: String,
@@ -122,6 +130,16 @@ private[sql] object SqlScriptingErrors {
     new SqlScriptingException(
       origin = origin,
       errorClass = "INVALID_LABEL_USAGE.ITERATE_IN_COMPOUND",
+      cause = null,
+      messageParameters = Map("labelName" -> toSQLStmt(labelName)))
+  }
+
+  def labelCannotBeQualified(
+      origin: Origin,
+      labelName: String): Throwable = {
+    new SqlScriptingException(
+      origin = origin,
+      errorClass = "INVALID_LABEL_USAGE.QUALIFIED_LABEL_NAME",
       cause = null,
       messageParameters = Map("labelName" -> toSQLStmt(labelName)))
   }

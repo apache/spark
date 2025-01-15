@@ -33,8 +33,9 @@ import org.apache.spark.sql.api.python.PythonSQLUtils
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
-import org.apache.spark.sql.execution.streaming.{ImplicitGroupingKeyTracker, StatefulProcessorHandleImpl, StatefulProcessorHandleState, StateVariableType}
-import org.apache.spark.sql.execution.streaming.state.StateMessage.{HandleState, ImplicitGroupingKeyRequest, ListStateCall, MapStateCall, StatefulProcessorCall, StateRequest, StateResponse, StateResponseWithLongTypeVal, StateVariableRequest, TimerRequest, TimerStateCallCommand, TimerValueRequest, ValueStateCall}
+import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
+import org.apache.spark.sql.execution.streaming.{ImplicitGroupingKeyTracker, StatefulProcessorHandleImpl, StatefulProcessorHandleImplBase, StatefulProcessorHandleState, StateVariableType}
+import org.apache.spark.sql.execution.streaming.state.StateMessage.{HandleState, ImplicitGroupingKeyRequest, ListStateCall, MapStateCall, StatefulProcessorCall, StateRequest, StateResponse, StateResponseWithLongTypeVal, StateResponseWithStringTypeVal, StateVariableRequest, TimerRequest, TimerStateCallCommand, TimerValueRequest, UtilsRequest, ValueStateCall}
 import org.apache.spark.sql.streaming.{ListState, MapState, TTLConfig, ValueState}
 import org.apache.spark.sql.types.{BinaryType, LongType, StructField, StructType}
 import org.apache.spark.sql.util.ArrowUtils
@@ -52,7 +53,7 @@ import org.apache.spark.util.Utils
  */
 class TransformWithStateInPandasStateServer(
     stateServerSocket: ServerSocket,
-    statefulProcessorHandle: StatefulProcessorHandleImpl,
+    statefulProcessorHandle: StatefulProcessorHandleImplBase,
     groupingKeySchema: StructType,
     timeZoneId: String,
     errorOnDuplicatedFieldNames: Boolean,
@@ -120,6 +121,8 @@ class TransformWithStateInPandasStateServer(
   }
 
   /** Timer related class variables */
+  // An iterator to store all expired timer info. This is meant to be consumed only once per
+  // partition. This should be called after finishing handling all input rows.
   private var expiryTimestampIter: Option[Iterator[(Any, Long)]] =
     if (expiryTimerIterForTest != null) {
       Option(expiryTimerIterForTest)
@@ -156,6 +159,11 @@ class TransformWithStateInPandasStateServer(
           logWarning(log"No more data to read from the socket")
           statefulProcessorHandle.setHandleState(StatefulProcessorHandleState.CLOSED)
           return
+        case _: InterruptedException =>
+          logInfo(log"Thread interrupted, shutting down state server")
+          Thread.currentThread().interrupt()
+          statefulProcessorHandle.setHandleState(StatefulProcessorHandleState.CLOSED)
+          return
         case e: Exception =>
           logError(log"Error reading message: ${MDC(LogKeys.ERROR, e.getMessage)}", e)
           sendResponse(1, e.getMessage)
@@ -184,6 +192,19 @@ class TransformWithStateInPandasStateServer(
         handleStateVariableRequest(message.getStateVariableRequest)
       case StateRequest.MethodCase.TIMERREQUEST =>
         handleTimerRequest(message.getTimerRequest)
+      case StateRequest.MethodCase.UTILSREQUEST =>
+        handleUtilsRequest(message.getUtilsRequest)
+      case _ =>
+        throw new IllegalArgumentException("Invalid method call")
+    }
+  }
+
+  private[sql] def handleUtilsRequest(message: UtilsRequest): Unit = {
+    message.getMethodCase match {
+      case UtilsRequest.MethodCase.PARSESTRINGSCHEMA =>
+        val stringSchema = message.getParseStringSchema.getSchema
+        val schema = CatalystSqlParser.parseTableSchema(stringSchema)
+        sendResponseWithStringVal(0, null, schema.json)
       case _ =>
         throw new IllegalArgumentException("Invalid method call")
     }
@@ -212,11 +233,13 @@ class TransformWithStateInPandasStateServer(
         // API and it will only be used by `group_ops` once per partition, we won't
         // need to worry about different function calls will interleaved and hence
         // this implementation is safe
+        assert(statefulProcessorHandle.isInstanceOf[StatefulProcessorHandleImpl])
         val expiryRequest = message.getExpiryTimerRequest()
         val expiryTimestamp = expiryRequest.getExpiryTimestampMs
         if (!expiryTimestampIter.isDefined) {
           expiryTimestampIter =
-            Option(statefulProcessorHandle.getExpiredTimers(expiryTimestamp))
+            Option(statefulProcessorHandle
+              .asInstanceOf[StatefulProcessorHandleImpl].getExpiredTimers(expiryTimestamp))
         }
         // expiryTimestampIter could be None in the TWSPandasServerSuite
         if (!expiryTimestampIter.isDefined || !expiryTimestampIter.get.hasNext) {
@@ -265,6 +288,9 @@ class TransformWithStateInPandasStateServer(
       case StatefulProcessorCall.MethodCase.SETHANDLESTATE =>
         val requestedState = message.getSetHandleState.getState
         requestedState match {
+          case HandleState.PRE_INIT =>
+            logInfo(log"set handle state to Pre-init")
+            statefulProcessorHandle.setHandleState(StatefulProcessorHandleState.PRE_INIT)
           case HandleState.CREATED =>
             logInfo(log"set handle state to Created")
             statefulProcessorHandle.setHandleState(StatefulProcessorHandleState.CREATED)
@@ -681,6 +707,22 @@ class TransformWithStateInPandasStateServer(
         responseMessageBuilder.setErrorMessage(errorMessage)
       }
       responseMessageBuilder.setValue(longVal)
+      val responseMessage = responseMessageBuilder.build()
+      val responseMessageBytes = responseMessage.toByteArray
+      val byteLength = responseMessageBytes.length
+      outputStream.writeInt(byteLength)
+      outputStream.write(responseMessageBytes)
+    }
+
+    def sendResponseWithStringVal(
+        status: Int,
+        errorMessage: String = null,
+        stringVal: String): Unit = {
+      val responseMessageBuilder = StateResponseWithStringTypeVal.newBuilder().setStatusCode(status)
+      if (status != 0 && errorMessage != null) {
+        responseMessageBuilder.setErrorMessage(errorMessage)
+      }
+      responseMessageBuilder.setValue(stringVal)
       val responseMessage = responseMessageBuilder.build()
       val responseMessageBytes = responseMessage.toByteArray
       val byteLength = responseMessageBytes.length

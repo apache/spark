@@ -34,6 +34,7 @@ import org.apache.spark.annotation.{DeveloperApi, Experimental, Since}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.ExecutePlanResponse
+import org.apache.spark.connect.proto.ExecutePlanResponse.ObservedMetrics
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalog.Catalog
@@ -45,7 +46,7 @@ import org.apache.spark.sql.connect.client.{ClassFinder, CloseableIterator, Spar
 import org.apache.spark.sql.connect.client.SparkConnectClient.Configuration
 import org.apache.spark.sql.connect.client.arrow.ArrowSerializer
 import org.apache.spark.sql.functions.lit
-import org.apache.spark.sql.internal.{CatalogImpl, ConnectRuntimeConfig, SessionCleaner, SessionState, SharedState, SqlApiConf}
+import org.apache.spark.sql.internal.{CatalogImpl, ConnectRuntimeConfig, SessionCleaner, SessionState, SharedState, SqlApiConf, SubqueryExpressionNode}
 import org.apache.spark.sql.internal.ColumnNodeToProtoConverter.{toExpr, toTypedExpr}
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.streaming.DataStreamReader
@@ -187,8 +188,7 @@ class SparkSession private[sql] (
     throw ConnectClientUnsupportedErrors.sessionState()
 
   /** @inheritdoc */
-  override def sqlContext: SQLContext =
-    throw ConnectClientUnsupportedErrors.sqlContext()
+  override val sqlContext: SQLContext = new SQLContext(this)
 
   /** @inheritdoc */
   override def listenerManager: ExecutionListenerManager =
@@ -210,15 +210,38 @@ class SparkSession private[sql] (
     throw ConnectClientUnsupportedErrors.executeCommand()
 
   /** @inheritdoc */
-  @Experimental
-  def sql(sqlText: String, args: Array[_]): DataFrame = newDataFrame { builder =>
+  def sql(sqlText: String, args: Array[_]): DataFrame = {
+    val sqlCommand = proto.SqlCommand
+      .newBuilder()
+      .setSql(sqlText)
+      .addAllPosArguments(args.map(lit(_).expr).toImmutableArraySeq.asJava)
+      .build()
+    sql(sqlCommand)
+  }
+
+  /** @inheritdoc */
+  def sql(sqlText: String, args: Map[String, Any]): DataFrame = {
+    sql(sqlText, args.asJava)
+  }
+
+  /** @inheritdoc */
+  override def sql(sqlText: String, args: java.util.Map[String, Any]): DataFrame = {
+    val sqlCommand = proto.SqlCommand
+      .newBuilder()
+      .setSql(sqlText)
+      .putAllNamedArguments(args.asScala.map { case (k, v) => (k, lit(v).expr) }.asJava)
+      .build()
+    sql(sqlCommand)
+  }
+
+  /** @inheritdoc */
+  override def sql(query: String): DataFrame = {
+    sql(query, Array.empty)
+  }
+
+  private def sql(sqlCommand: proto.SqlCommand): DataFrame = newDataFrame { builder =>
     // Send the SQL once to the server and then check the output.
-    val cmd = newCommand(b =>
-      b.setSqlCommand(
-        proto.SqlCommand
-          .newBuilder()
-          .setSql(sqlText)
-          .addAllPosArguments(args.map(lit(_).expr).toImmutableArraySeq.asJava)))
+    val cmd = newCommand(b => b.setSqlCommand(sqlCommand))
     val plan = proto.Plan.newBuilder().setCommand(cmd)
     val responseIter = client.execute(plan.build())
 
@@ -232,43 +255,6 @@ class SparkSession private[sql] (
       // consume the rest of the iterator
       responseIter.foreach(_ => ())
     }
-  }
-
-  /** @inheritdoc */
-  @Experimental
-  def sql(sqlText: String, args: Map[String, Any]): DataFrame = {
-    sql(sqlText, args.asJava)
-  }
-
-  /** @inheritdoc */
-  @Experimental
-  override def sql(sqlText: String, args: java.util.Map[String, Any]): DataFrame = newDataFrame {
-    builder =>
-      // Send the SQL once to the server and then check the output.
-      val cmd = newCommand(b =>
-        b.setSqlCommand(
-          proto.SqlCommand
-            .newBuilder()
-            .setSql(sqlText)
-            .putAllNamedArguments(args.asScala.map { case (k, v) => (k, lit(v).expr) }.asJava)))
-      val plan = proto.Plan.newBuilder().setCommand(cmd)
-      val responseIter = client.execute(plan.build())
-
-      try {
-        val response = responseIter
-          .find(_.hasSqlCommandResult)
-          .getOrElse(throw new RuntimeException("SQLCommandResult must be present"))
-        // Update the builder with the values from the result.
-        builder.mergeFrom(response.getSqlCommandResult.getRelation)
-      } finally {
-        // consume the rest of the iterator
-        responseIter.foreach(_ => ())
-      }
-  }
-
-  /** @inheritdoc */
-  override def sql(query: String): DataFrame = {
-    sql(query, Array.empty)
   }
 
   /** @inheritdoc */
@@ -314,7 +300,9 @@ class SparkSession private[sql] (
 
   // scalastyle:off
   /** @inheritdoc */
-  object implicits extends SQLImplicits(this)
+  object implicits extends SQLImplicits {
+    override protected def session: SparkSession = SparkSession.this
+  }
   // scalastyle:on
 
   /** @inheritdoc */
@@ -336,20 +324,111 @@ class SparkSession private[sql] (
     }
   }
 
+  /**
+   * Create a DataFrame including the proto plan built by the given function.
+   *
+   * @param f
+   *   The function to build the proto plan.
+   * @return
+   *   The DataFrame created from the proto plan.
+   */
   @Since("4.0.0")
   @DeveloperApi
   def newDataFrame(f: proto.Relation.Builder => Unit): DataFrame = {
     newDataset(UnboundRowEncoder)(f)
   }
 
+  /**
+   * Create a DataFrame including the proto plan built by the given function.
+   *
+   * Use this method when columns are used to create a new DataFrame. When there are columns
+   * referring to other Dataset or DataFrame, the plan will be wrapped with a `WithRelation`.
+   *
+   * {{{
+   *   with_relations [id 10]
+   *     root: plan  [id 9]  using columns referring to other Dataset or DataFrame, holding plan ids
+   *     reference:
+   *          refs#1: [id 8]  plan for the reference 1
+   *          refs#2: [id 5]  plan for the reference 2
+   * }}}
+   *
+   * @param cols
+   *   The columns to be used in the DataFrame.
+   * @param f
+   *   The function to build the proto plan.
+   * @return
+   *   The DataFrame created from the proto plan.
+   */
+  @Since("4.0.0")
+  @DeveloperApi
+  def newDataFrame(cols: Seq[Column])(f: proto.Relation.Builder => Unit): DataFrame = {
+    newDataset(UnboundRowEncoder, cols)(f)
+  }
+
+  /**
+   * Create a Dataset including the proto plan built by the given function.
+   *
+   * @param encoder
+   *   The encoder for the Dataset.
+   * @param f
+   *   The function to build the proto plan.
+   * @return
+   *   The Dataset created from the proto plan.
+   */
   @Since("4.0.0")
   @DeveloperApi
   def newDataset[T](encoder: AgnosticEncoder[T])(
       f: proto.Relation.Builder => Unit): Dataset[T] = {
+    newDataset[T](encoder, Seq.empty)(f)
+  }
+
+  /**
+   * Create a Dataset including the proto plan built by the given function.
+   *
+   * Use this method when columns are used to create a new Dataset. When there are columns
+   * referring to other Dataset or DataFrame, the plan will be wrapped with a `WithRelation`.
+   *
+   * {{{
+   *   with_relations [id 10]
+   *     root: plan  [id 9]  using columns referring to other Dataset or DataFrame, holding plan ids
+   *     reference:
+   *          refs#1: [id 8]  plan for the reference 1
+   *          refs#2: [id 5]  plan for the reference 2
+   * }}}
+   *
+   * @param encoder
+   *   The encoder for the Dataset.
+   * @param cols
+   *   The columns to be used in the DataFrame.
+   * @param f
+   *   The function to build the proto plan.
+   * @return
+   *   The Dataset created from the proto plan.
+   */
+  @Since("4.0.0")
+  @DeveloperApi
+  def newDataset[T](encoder: AgnosticEncoder[T], cols: Seq[Column])(
+      f: proto.Relation.Builder => Unit): Dataset[T] = {
+    val references = cols.flatMap(_.node.collect { case n: SubqueryExpressionNode =>
+      n.relation
+    })
+
     val builder = proto.Relation.newBuilder()
     f(builder)
     builder.getCommonBuilder.setPlanId(planIdGenerator.getAndIncrement())
-    val plan = proto.Plan.newBuilder().setRoot(builder).build()
+
+    val rootBuilder = if (references.length == 0) {
+      builder
+    } else {
+      val rootBuilder = proto.Relation.newBuilder()
+      rootBuilder.getWithRelationsBuilder
+        .setRoot(builder)
+        .addAllReferences(references.asJava)
+      rootBuilder.getCommonBuilder.setPlanId(planIdGenerator.getAndIncrement())
+      rootBuilder
+    }
+
+    val plan = proto.Plan.newBuilder().setRoot(rootBuilder).build()
     new Dataset[T](this, plan, encoder)
   }
 
@@ -385,13 +464,8 @@ class SparkSession private[sql] (
   private[sql] def timeZoneId: String = conf.get(SqlApiConf.SESSION_LOCAL_TIMEZONE_KEY)
 
   private[sql] def execute[T](plan: proto.Plan, encoder: AgnosticEncoder[T]): SparkResult[T] = {
-    val value = client.execute(plan)
-    new SparkResult(
-      value,
-      allocator,
-      encoder,
-      timeZoneId,
-      Some(setMetricsAndUnregisterObservation))
+    val value = executeInternal(plan)
+    new SparkResult(value, allocator, encoder, timeZoneId)
   }
 
   private[sql] def execute(f: proto.Relation.Builder => Unit): Unit = {
@@ -400,7 +474,7 @@ class SparkSession private[sql] (
     builder.getCommonBuilder.setPlanId(planIdGenerator.getAndIncrement())
     val plan = proto.Plan.newBuilder().setRoot(builder).build()
     // .foreach forces that the iterator is consumed and closed
-    client.execute(plan).foreach(_ => ())
+    executeInternal(plan).foreach(_ => ())
   }
 
   @Since("4.0.0")
@@ -409,11 +483,26 @@ class SparkSession private[sql] (
     val plan = proto.Plan.newBuilder().setCommand(command).build()
     // .toSeq forces that the iterator is consumed and closed. On top, ignore all
     // progress messages.
-    client.execute(plan).filter(!_.hasExecutionProgress).toSeq
+    executeInternal(plan).filter(!_.hasExecutionProgress).toSeq
   }
 
-  private[sql] def execute(plan: proto.Plan): CloseableIterator[ExecutePlanResponse] =
-    client.execute(plan)
+  /**
+   * The real `execute` method that calls into `SparkConnectClient`.
+   *
+   * Here we inject a lazy map to process registered observed metrics, so consumers of the
+   * returned iterator does not need to worry about it.
+   *
+   * Please make sure all `execute` methods call this method.
+   */
+  private[sql] def executeInternal(plan: proto.Plan): CloseableIterator[ExecutePlanResponse] = {
+    client
+      .execute(plan)
+      .map { response =>
+        // Note, this map() is lazy.
+        processRegisteredObservedMetrics(response.getObservedMetricsList)
+        response
+      }
+  }
 
   private[sql] def registerUdf(udf: proto.CommonInlineUserDefinedFunction): Unit = {
     val command = proto.Command.newBuilder().setRegisterFunction(udf).build()
@@ -555,10 +644,14 @@ class SparkSession private[sql] (
     observationRegistry.putIfAbsent(planId, observation)
   }
 
-  private[sql] def setMetricsAndUnregisterObservation(planId: Long, metrics: Row): Unit = {
-    val observationOrNull = observationRegistry.remove(planId)
-    if (observationOrNull != null) {
-      observationOrNull.setMetricsAndNotify(metrics)
+  private def processRegisteredObservedMetrics(metrics: java.util.List[ObservedMetrics]): Unit = {
+    metrics.asScala.map { metric =>
+      // Here we only process metrics that belong to a registered Observation object.
+      // All metrics, whether registered or not, will be collected by `SparkResult`.
+      val observationOrNull = observationRegistry.remove(metric.getPlanId)
+      if (observationOrNull != null) {
+        observationOrNull.setMetricsAndNotify(SparkResult.transformObservedMetrics(metric))
+      }
     }
   }
 

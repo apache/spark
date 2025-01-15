@@ -241,14 +241,13 @@ private[connect] class ExecuteGrpcResponseSender[T <: Message](
           // The state of interrupted, response and lastIndex are changed under executionObserver
           // monitor, and will notify upon state change.
           if (response.isEmpty) {
+            var timeout = Math.max(1, deadlineTimeMillis - System.currentTimeMillis())
             // Wake up more frequently to send the progress updates.
             val progressTimeout = executeHolder.sessionHolder.session.sessionState.conf
               .getConf(CONNECT_PROGRESS_REPORT_INTERVAL)
             // If the progress feature is disabled, wait for the deadline.
-            val timeout = if (progressTimeout > 0) {
-              progressTimeout
-            } else {
-              Math.max(1, deadlineTimeMillis - System.currentTimeMillis())
+            if (progressTimeout > 0L) {
+              timeout = Math.min(progressTimeout, timeout)
             }
             logTrace(s"Wait for response to become available with timeout=$timeout ms.")
             executionObserver.responseLock.wait(timeout)
@@ -291,7 +290,7 @@ private[connect] class ExecuteGrpcResponseSender[T <: Message](
           assert(finished == false)
         } else {
           // If it wasn't sent, time deadline must have been reached before stream became available,
-          // or it was intterupted. Will exit in the next loop iterattion.
+          // or it was interrupted. Will exit in the next loop iterattion.
           assert(deadlineLimitReached || interrupted)
         }
       } else if (streamFinished) {

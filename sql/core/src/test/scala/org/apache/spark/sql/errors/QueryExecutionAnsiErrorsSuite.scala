@@ -145,7 +145,7 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest
         sql("select array(1, 2, 3, 4, 5)[8]").collect()
       },
       condition = "INVALID_ARRAY_INDEX",
-      parameters = Map("indexValue" -> "8", "arraySize" -> "5", "ansiConfig" -> ansiConf),
+      parameters = Map("indexValue" -> "8", "arraySize" -> "5"),
       context = ExpectedContext(fragment = "array(1, 2, 3, 4, 5)[8]", start = 7, stop = 29))
 
     checkError(
@@ -153,7 +153,7 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest
         OneRowRelation().select(lit(Array(1, 2, 3, 4, 5))(8)).collect()
       },
       condition = "INVALID_ARRAY_INDEX",
-      parameters = Map("indexValue" -> "8", "arraySize" -> "5", "ansiConfig" -> ansiConf),
+      parameters = Map("indexValue" -> "8", "arraySize" -> "5"),
       context = ExpectedContext(
         fragment = "apply",
         callSitePattern = getCurrentClassCallSitePattern))
@@ -165,7 +165,7 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest
         sql("select element_at(array(1, 2, 3, 4, 5), 8)").collect()
       },
       condition = "INVALID_ARRAY_INDEX_IN_ELEMENT_AT",
-      parameters = Map("indexValue" -> "8", "arraySize" -> "5", "ansiConfig" -> ansiConf),
+      parameters = Map("indexValue" -> "8", "arraySize" -> "5"),
       context = ExpectedContext(
         fragment = "element_at(array(1, 2, 3, 4, 5), 8)",
         start = 7,
@@ -176,7 +176,7 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest
         OneRowRelation().select(element_at(lit(Array(1, 2, 3, 4, 5)), 8)).collect()
       },
       condition = "INVALID_ARRAY_INDEX_IN_ELEMENT_AT",
-      parameters = Map("indexValue" -> "8", "arraySize" -> "5", "ansiConfig" -> ansiConf),
+      parameters = Map("indexValue" -> "8", "arraySize" -> "5"),
       context =
         ExpectedContext(fragment = "element_at", callSitePattern = getCurrentClassCallSitePattern))
   }
@@ -240,8 +240,8 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest
       },
       condition = "CANNOT_PARSE_TIMESTAMP",
       parameters = Map(
-        "message" -> "Text 'abc' could not be parsed at index 0",
-        "ansiConfig" -> ansiConf)
+        "func" -> "`try_to_timestamp`",
+        "message" -> "Text 'abc' could not be parsed at index 0")
     )
   }
 

@@ -121,7 +121,9 @@ def vector_to_array(col: Column, dtype: str = "float64") -> Column:
     sc = SparkContext._active_spark_context
     assert sc is not None and sc._jvm is not None
     return Column(
-        sc._jvm.org.apache.spark.ml.functions.vector_to_array(_to_java_column(col), dtype)
+        getattr(sc._jvm, "org.apache.spark.ml.functions").vector_to_array(
+            _to_java_column(col), dtype
+        )
     )
 
 
@@ -164,7 +166,9 @@ def array_to_vector(col: Column) -> Column:
 
     sc = SparkContext._active_spark_context
     assert sc is not None and sc._jvm is not None
-    return Column(sc._jvm.org.apache.spark.ml.functions.array_to_vector(_to_java_column(col)))
+    return Column(
+        getattr(sc._jvm, "org.apache.spark.ml.functions").array_to_vector(_to_java_column(col))
+    )
 
 
 def _batched(

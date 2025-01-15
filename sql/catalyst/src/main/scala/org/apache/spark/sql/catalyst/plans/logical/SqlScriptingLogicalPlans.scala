@@ -62,16 +62,19 @@ case class SingleStatement(parsedPlan: LogicalPlan)
  * @param label Label set to CompoundBody by user or UUID otherwise.
  *              It can be None in case when CompoundBody is not part of BeginEndCompoundBlock
  *              for example when CompoundBody is inside loop or conditional block.
+ * @param isScope Flag indicating if the CompoundBody is a labeled scope.
+ *                Scopes are used for grouping local variables and exception handlers.
  */
 case class CompoundBody(
     collection: Seq[CompoundPlanStatement],
-    label: Option[String]) extends Command with CompoundPlanStatement {
+    label: Option[String],
+    isScope: Boolean) extends Command with CompoundPlanStatement {
 
   override def children: Seq[LogicalPlan] = collection
 
   override protected def withNewChildrenInternal(
       newChildren: IndexedSeq[LogicalPlan]): LogicalPlan = {
-    CompoundBody(newChildren.map(_.asInstanceOf[CompoundPlanStatement]), label)
+    CompoundBody(newChildren.map(_.asInstanceOf[CompoundPlanStatement]), label, isScope)
   }
 }
 
@@ -265,5 +268,33 @@ case class LoopStatement(
       newChildren: IndexedSeq[LogicalPlan]): LogicalPlan = {
     assert(newChildren.length == 1)
     LoopStatement(newChildren(0).asInstanceOf[CompoundBody], label)
+  }
+}
+
+/**
+ * Logical operator for FOR statement.
+ * @param query Query which is executed once, then it's result set is iterated on, row by row.
+ * @param variableName Name of variable which is used to access the current row during iteration.
+ * @param body Compound body is a collection of statements that are executed for each row in
+ *             the result set of the query.
+ * @param label An optional label for the loop which is unique amongst all labels for statements
+ *              within which the FOR statement is contained.
+ *              If an end label is specified it must match the beginning label.
+ *              The label can be used to LEAVE or ITERATE the loop.
+ */
+case class ForStatement(
+    query: SingleStatement,
+    variableName: Option[String],
+    body: CompoundBody,
+    label: Option[String]) extends CompoundPlanStatement {
+
+  override def output: Seq[Attribute] = Seq.empty
+
+  override def children: Seq[LogicalPlan] = Seq(query, body)
+
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[LogicalPlan]): LogicalPlan = newChildren match {
+    case IndexedSeq(query: SingleStatement, body: CompoundBody) =>
+      ForStatement(query, variableName, body, label)
   }
 }

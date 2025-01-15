@@ -888,10 +888,10 @@ WithCTE
    +- Join Inner, (b#x = b#x)
       :- SubqueryAlias t1
       :  +- SubqueryAlias temp
-      :     +- CTERelationRef xxxx, true, [b#x], false
+      :     +- CTERelationRef xxxx, true, [b#x], false, false
       +- SubqueryAlias t2
          +- SubqueryAlias temp
-            +- CTERelationRef xxxx, true, [b#x], false
+            +- CTERelationRef xxxx, true, [b#x], false, false
 
 
 -- !query

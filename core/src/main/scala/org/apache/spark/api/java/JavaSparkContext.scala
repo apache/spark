@@ -630,6 +630,9 @@ class JavaSparkContext(val sc: SparkContext) extends Closeable {
    */
   def getConf: SparkConf = sc.getConf
 
+  /** Return a read-only version of the spark conf. */
+  def getReadOnlyConf: ReadOnlySparkConf = sc.getReadOnlyConf
+
   /**
    * Pass-through to SparkContext.setCallSite.  For API support only.
    */

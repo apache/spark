@@ -42,19 +42,21 @@ import org.apache.spark.sql.catalog.Catalog
 import org.apache.spark.sql.catalyst._
 import org.apache.spark.sql.catalyst.analysis.{NameParameterizedQuery, PosParameterizedQuery, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.encoders._
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression, NamedExpression}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression}
 import org.apache.spark.sql.catalyst.parser.ParserInterface
-import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Range}
+import org.apache.spark.sql.catalyst.plans.logical.{CompoundBody, LocalRelation, LogicalPlan, Range}
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.ExternalCommandRunner
-import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.errors.{QueryCompilationErrors, SqlScriptingErrors}
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.command.ExternalCommandExecutor
 import org.apache.spark.sql.execution.datasources.{DataSource, LogicalRelation}
 import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.internal._
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
+import org.apache.spark.sql.scripting.SqlScriptingExecution
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.streaming._
 import org.apache.spark.sql.types.{DataType, StructType}
@@ -96,7 +98,7 @@ class SparkSession private(
     @transient private[sql] val extensions: SparkSessionExtensions,
     @transient private[sql] val initialSessionOptions: Map[String, String],
     @transient private val parentManagedJobTags: Map[String, String])
-  extends api.SparkSession with Logging { self =>
+  extends api.SparkSession with Logging with classic.ColumnConversions { self =>
 
   // The call site where this SparkSession was constructed.
   private val creationSite: CallSite = Utils.getCallSite()
@@ -432,6 +434,43 @@ class SparkSession private(
    * ----------------- */
 
   /**
+   * Executes given script and return the result of the last statement.
+   * If script contains no queries, an empty `DataFrame` is returned.
+   *
+   * @param script A SQL script to execute.
+   * @param args A map of parameter names to SQL literal expressions.
+   *
+   * @return The result as a `DataFrame`.
+   */
+  private def executeSqlScript(
+      script: CompoundBody,
+      args: Map[String, Expression] = Map.empty): DataFrame = {
+    val sse = new SqlScriptingExecution(script, this, args)
+    var result: Option[Seq[Row]] = None
+
+    // We must execute returned df before calling sse.getNextResult again because sse.hasNext
+    // advances the script execution and executes all statements until the next result. We must
+    // collect results immediately to maintain execution order.
+    // This ensures we respect the contract of SqlScriptingExecution API.
+    var df: Option[DataFrame] = sse.getNextResult
+    while (df.isDefined) {
+      sse.withErrorHandling {
+        // Collect results from the current DataFrame.
+        result = Some(df.get.collect().toSeq)
+      }
+      df = sse.getNextResult
+    }
+
+    if (result.isEmpty) {
+      emptyDataFrame
+    } else {
+      val attributes = DataTypeUtils.toAttributes(result.get.head.schema)
+      Dataset.ofRows(
+        self, LocalRelation.fromExternalRows(attributes, result.get))
+    }
+  }
+
+  /**
    * Executes a SQL query substituting positional parameters by the given arguments,
    * returning the result as a `DataFrame`.
    * This API eagerly runs DDL/DML commands, but not for SELECT queries.
@@ -450,17 +489,33 @@ class SparkSession private(
     withActive {
       val plan = tracker.measurePhase(QueryPlanningTracker.PARSING) {
         val parsedPlan = sessionState.sqlParser.parsePlan(sqlText)
-        if (args.nonEmpty) {
-          PosParameterizedQuery(parsedPlan, args.map(lit(_).expr).toImmutableArraySeq)
-        } else {
-          parsedPlan
+        parsedPlan match {
+          case compoundBody: CompoundBody =>
+            if (args.nonEmpty) {
+              // Positional parameters are not supported for SQL scripting.
+              throw SqlScriptingErrors.positionalParametersAreNotSupportedWithSqlScripting()
+            }
+            compoundBody
+          case logicalPlan: LogicalPlan =>
+            if (args.nonEmpty) {
+              PosParameterizedQuery(logicalPlan, args.map(lit(_).expr).toImmutableArraySeq)
+            } else {
+              logicalPlan
+            }
         }
       }
-      Dataset.ofRows(self, plan, tracker)
+
+      plan match {
+        case compoundBody: CompoundBody =>
+          // Execute the SQL script.
+          executeSqlScript(compoundBody)
+        case logicalPlan: LogicalPlan =>
+          // Execute the standalone SQL statement.
+          Dataset.ofRows(self, plan, tracker)
+      }
     }
 
   /** @inheritdoc */
-  @Experimental
   def sql(sqlText: String, args: Array[_]): DataFrame = {
     sql(sqlText, args, new QueryPlanningTracker)
   }
@@ -488,23 +543,34 @@ class SparkSession private(
     withActive {
       val plan = tracker.measurePhase(QueryPlanningTracker.PARSING) {
         val parsedPlan = sessionState.sqlParser.parsePlan(sqlText)
-        if (args.nonEmpty) {
-          NameParameterizedQuery(parsedPlan, args.transform((_, v) => lit(v).expr))
-        } else {
-          parsedPlan
+        parsedPlan match {
+          case compoundBody: CompoundBody =>
+            compoundBody
+          case logicalPlan: LogicalPlan =>
+            if (args.nonEmpty) {
+              NameParameterizedQuery(logicalPlan, args.transform((_, v) => lit(v).expr))
+            } else {
+              logicalPlan
+            }
         }
       }
-      Dataset.ofRows(self, plan, tracker)
+
+      plan match {
+        case compoundBody: CompoundBody =>
+          // Execute the SQL script.
+          executeSqlScript(compoundBody, args.transform((_, v) => lit(v).expr))
+        case logicalPlan: LogicalPlan =>
+          // Execute the standalone SQL statement.
+          Dataset.ofRows(self, plan, tracker)
+      }
     }
 
   /** @inheritdoc */
-  @Experimental
   def sql(sqlText: String, args: Map[String, Any]): DataFrame = {
     sql(sqlText, args, new QueryPlanningTracker)
   }
 
   /** @inheritdoc */
-  @Experimental
   override def sql(sqlText: String, args: java.util.Map[String, Any]): DataFrame = {
     sql(sqlText, args.asScala.toMap)
   }
@@ -732,23 +798,11 @@ class SparkSession private(
       .getOrElse(sparkContext.defaultParallelism)
   }
 
-  private[sql] object Converter extends ColumnNodeToExpressionConverter with Serializable {
-    override protected def parser: ParserInterface = sessionState.sqlParser
-    override protected def conf: SQLConf = sessionState.conf
-  }
-
-  private[sql] def expression(e: Column): Expression = Converter(e.node)
-
-  private[sql] implicit class RichColumn(val column: Column) {
-    /**
-     * Returns the expression for this column.
-     */
-    def expr: Expression = Converter(column.node)
-    /**
-     * Returns the expression for this column either with an existing or auto assigned name.
-     */
-    def named: NamedExpression = ExpressionUtils.toNamed(expr)
-  }
+  override protected[sql] val converter: ColumnNodeToExpressionConverter =
+    new ColumnNodeToExpressionConverter with Serializable {
+      override protected def parser: ParserInterface = sessionState.sqlParser
+      override protected def conf: SQLConf = sessionState.conf
+    }
 
   private[sql] lazy val observationManager = new ObservationManager(this)
 

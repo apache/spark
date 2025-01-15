@@ -60,7 +60,18 @@ trait SQLQueryTestHelper extends Logging {
       .replaceAll("CTERelationDef \\d+,", s"CTERelationDef xxxx,")
       .replaceAll("CTERelationRef \\d+,", s"CTERelationRef xxxx,")
       .replaceAll("@\\w*,", s"@xxxxxxxx,")
-      .replaceAll("\\*\\(\\d+\\) ", "*") // remove the WholeStageCodegen codegenStageIds
+      .replaceAll("\\*\\(\\d+\\) ", "*")
+      .replaceAll(
+        s""""location":.*?$clsName/""",
+        s""""location": "$notIncludedMsg/{warehouse_dir}/""")
+      .replaceAll(s""""created_by":".*?"""", s""""created_by $notIncludedMsg":"None"""")
+      .replaceAll(s""""created_time":".*?"""", s""""created_time $notIncludedMsg":"None"""")
+      .replaceAll(s""""last_access":".*?"""", s""""last_access $notIncludedMsg":"None"""")
+      .replaceAll(s""""owner":".*?"""", s""""owner $notIncludedMsg":"None"""")
+      .replaceAll(s""""partition_statistics":"\\d+"""",
+        s""""partition_statistics $notIncludedMsg":"None"""")
+      .replaceAll("cterelationdef \\d+,", "cterelationdef xxxx,")
+      .replaceAll("cterelationref \\d+,", "cterelationref xxxx,")
   }
 
   /**

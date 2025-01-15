@@ -189,7 +189,7 @@ class StatefulProcessorHandleImpl(
   def doTtlCleanup(): Unit = {
     val numValuesRemovedDueToTTLExpiry = metrics.get("numValuesRemovedDueToTTLExpiry").get
     ttlStates.forEach { s =>
-      numValuesRemovedDueToTTLExpiry += s.clearExpiredState()
+      numValuesRemovedDueToTTLExpiry += s.clearExpiredStateForAllKeys()
     }
   }
 

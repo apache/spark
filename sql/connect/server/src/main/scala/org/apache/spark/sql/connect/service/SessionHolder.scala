@@ -37,6 +37,7 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.connect.common.InvalidPlanInput
 import org.apache.spark.sql.connect.config.Connect
+import org.apache.spark.sql.connect.ml.MLCache
 import org.apache.spark.sql.connect.planner.PythonStreamingQueryListener
 import org.apache.spark.sql.connect.planner.StreamingForeachBatchHelper
 import org.apache.spark.sql.connect.service.ExecuteKey
@@ -110,6 +111,9 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
   // need it.
   private[spark] lazy val dataFrameCache: ConcurrentMap[String, DataFrame] =
     new ConcurrentHashMap()
+
+  // ML model cache
+  private[connect] lazy val mlCache = new MLCache()
 
   // Mapping from id to StreamingQueryListener. Used for methods like removeListener() in
   // StreamingQueryManager.
@@ -301,7 +305,7 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
 
     // Clean up all artifacts.
     // Note: there can be concurrent AddArtifact calls still adding something.
-    artifactManager.cleanUpResources()
+    artifactManager.close()
 
     // Clean up running streaming queries.
     // Note: there can be concurrent streaming queries being started.
@@ -321,6 +325,8 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
     // executionsLock, this guarantees that removeAllExecutionsForSession triggered here will
     // remove all executions and no new executions will be added in the meanwhile.
     SparkConnectService.executionManager.removeAllExecutionsForSession(this.key)
+
+    mlCache.clear()
 
     eventManager.postClosed()
   }

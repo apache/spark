@@ -13,7 +13,8 @@
     },
     "expressions": [{
       "unresolvedFunction": {
-        "functionName": "current_database"
+        "functionName": "current_database",
+        "isInternal": false
       }
     }]
   }

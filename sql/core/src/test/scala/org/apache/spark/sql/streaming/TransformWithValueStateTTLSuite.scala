@@ -55,10 +55,12 @@ object TTLInputProcessFunction {
     } else if (row.action == "put") {
       valueState.update(row.value)
     } else if (row.action == "get_values_in_ttl_state") {
-      val ttlValues = valueState.getValuesInTTLState()
+      val ttlValues = valueState.getValueInTTLState()
       ttlValues.foreach { v =>
         results = OutputEvent(key, -1, isTTLValue = true, ttlValue = v) :: results
       }
+    } else if (row.action == "clear") {
+      valueState.clear()
     }
 
     results.iterator
@@ -76,6 +78,8 @@ object TTLInputProcessFunction {
       }
     } else if (row.action == "put") {
       valueState.update(row.value)
+    } else if (row.action == "clear") {
+      valueState.clear()
     }
 
     results.iterator
@@ -262,7 +266,8 @@ class TransformWithValueStateTTLSuite extends TransformWithStateTTLTest {
     }
   }
 
-  test("verify StateSchemaV3 writes correct SQL schema of key/value and with TTL") {
+  test("verify StateSchemaV3 writes correct SQL " +
+    "schema of key/value and with TTL") {
     withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
       classOf[RocksDBStateStoreProvider].getName,
       SQLConf.SHUFFLE_PARTITIONS.key ->

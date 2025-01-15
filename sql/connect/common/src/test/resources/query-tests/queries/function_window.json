@@ -30,7 +30,8 @@
           "literal": {
             "string": "0 second"
           }
-        }]
+        }],
+        "isInternal": false
       }
     }]
   }
