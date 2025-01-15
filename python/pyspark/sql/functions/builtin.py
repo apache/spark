@@ -15178,9 +15178,9 @@ def rlike(str: "ColumnOrName", regexp: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    str : :class:`~pyspark.sql.Column` or str
+    str : :class:`~pyspark.sql.Column` or column name
         target column to work on.
-    regexp : :class:`~pyspark.sql.Column` or str
+    regexp : :class:`~pyspark.sql.Column` or column name
         regex pattern to apply.
 
     Returns
@@ -15190,13 +15190,35 @@ def rlike(str: "ColumnOrName", regexp: "ColumnOrName") -> Column:
 
     Examples
     --------
+    >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame([("1a 2b 14m", r"(\d+)")], ["str", "regexp"])
-    >>> df.select(rlike('str', lit(r'(\d+)')).alias('d')).collect()
-    [Row(d=True)]
-    >>> df.select(rlike('str', lit(r'\d{2}b')).alias('d')).collect()
-    [Row(d=False)]
-    >>> df.select(rlike("str", col("regexp")).alias('d')).collect()
-    [Row(d=True)]
+    >>> df.select('*', sf.rlike('str', sf.lit(r'(\d+)'))).show()
+    +---------+------+-----------------+
+    |      str|regexp|RLIKE(str, (\d+))|
+    +---------+------+-----------------+
+    |1a 2b 14m| (\d+)|             true|
+    +---------+------+-----------------+
+
+    >>> df.select('*', sf.rlike('str', sf.lit(r'\d{2}b'))).show()
+    +---------+------+------------------+
+    |      str|regexp|RLIKE(str, \d{2}b)|
+    +---------+------+------------------+
+    |1a 2b 14m| (\d+)|             false|
+    +---------+------+------------------+
+
+    >>> df.select('*', sf.rlike("str", sf.col("regexp"))).show()
+    +---------+------+------------------+
+    |      str|regexp|RLIKE(str, regexp)|
+    +---------+------+------------------+
+    |1a 2b 14m| (\d+)|              true|
+    +---------+------+------------------+
+
+    >>> df.select('*', sf.rlike("str", "regexp")).show()
+    +---------+------+------------------+
+    |      str|regexp|RLIKE(str, regexp)|
+    +---------+------+------------------+
+    |1a 2b 14m| (\d+)|              true|
+    +---------+------+------------------+
     """
     return _invoke_function_over_columns("rlike", str, regexp)
 
@@ -16009,7 +16031,7 @@ def length(col: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
         target column to work on.
 
     Returns
@@ -16019,8 +16041,13 @@ def length(col: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> spark.createDataFrame([('ABC ',)], ['a']).select(length('a').alias('length')).collect()
-    [Row(length=4)]
+    >>> from pyspark.sql import functions as sf
+    >>> spark.createDataFrame([('ABC ',)], ['a']).select('*', sf.length('a')).show()
+    +----+---------+
+    |   a|length(a)|
+    +----+---------+
+    |ABC |        4|
+    +----+---------+
     """
     return _invoke_function_over_columns("length", col)
 
@@ -16037,7 +16064,7 @@ def octet_length(col: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
         Source column or strings
 
     Returns
@@ -16047,10 +16074,15 @@ def octet_length(col: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> from pyspark.sql.functions import octet_length
-    >>> spark.createDataFrame([('cat',), ( '\U0001F408',)], ['cat']) \\
-    ...      .select(octet_length('cat')).collect()
-        [Row(octet_length(cat)=3), Row(octet_length(cat)=4)]
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([('cat',), ( '\U0001F408',)], ['cat'])
+    >>> df.select('*', sf.octet_length('cat')).show()
+    +---+-----------------+
+    |cat|octet_length(cat)|
+    +---+-----------------+
+    |cat|                3|
+    | 🐈|                4|
+    +---+-----------------+
     """
     return _invoke_function_over_columns("octet_length", col)
 
@@ -16067,7 +16099,7 @@ def bit_length(col: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
         Source column or strings
 
     Returns
@@ -16077,10 +16109,15 @@ def bit_length(col: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> from pyspark.sql.functions import bit_length
-    >>> spark.createDataFrame([('cat',), ( '\U0001F408',)], ['cat']) \\
-    ...      .select(bit_length('cat')).collect()
-        [Row(bit_length(cat)=24), Row(bit_length(cat)=32)]
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([('cat',), ( '\U0001F408',)], ['cat'])
+    >>> df.select('*', sf.bit_length('cat')).show()
+    +---+---------------+
+    |cat|bit_length(cat)|
+    +---+---------------+
+    |cat|             24|
+    | 🐈|             32|
+    +---+---------------+
     """
     return _invoke_function_over_columns("bit_length", col)
 
@@ -16099,7 +16136,7 @@ def translate(srcCol: "ColumnOrName", matching: str, replace: str) -> Column:
 
     Parameters
     ----------
-    srcCol : :class:`~pyspark.sql.Column` or str
+    srcCol : :class:`~pyspark.sql.Column` or column name
         Source column or strings
     matching : str
         matching characters.
@@ -16114,9 +16151,14 @@ def translate(srcCol: "ColumnOrName", matching: str, replace: str) -> Column:
 
     Examples
     --------
-    >>> spark.createDataFrame([('translate',)], ['a']).select(translate('a', "rnlt", "123") \\
-    ...     .alias('r')).collect()
-    [Row(r='1a2s3ae')]
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([('translate',)], ['a'])
+    >>> df.select('*', sf.translate('a', "rnlt", "123")).show()
+    +---------+-----------------------+
+    |        a|translate(a, rnlt, 123)|
+    +---------+-----------------------+
+    |translate|                1a2s3ae|
+    +---------+-----------------------+
     """
     from pyspark.sql.classic.column import _to_java_column
 
