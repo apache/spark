@@ -61,7 +61,8 @@ case class InlineCTE(
     // 1) It is fine to inline a CTE if it references another CTE that is non-deterministic;
     // 2) Any `CTERelationRef` that contains `OuterReference` would have been inlined first.
     refCount == 1 ||
-      cteDef.deterministic ||
+      // Don't inline recursive CTEs if not necessary as recursion is very costly.
+      (cteDef.deterministic && !cteDef.recursive) ||
       cteDef.child.exists(_.expressions.exists(_.isInstanceOf[OuterReference]))
   }
 
