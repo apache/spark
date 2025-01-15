@@ -375,6 +375,7 @@ jobs:
       SKIP_PACKAGING: true
       METASPACE_SIZE: 1g
       BRANCH: ${{ inputs.branch }}
+      PYSPARK_CODECOV: true
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v4
@@ -438,8 +439,20 @@ jobs:
     - name: Run tests
       env: ${{ fromJSON(inputs.envs) }}
       shell: 'script -q -e -c "bash {0}"'
-      run: touch ./python/coverage.xml
+      run: |
+        if [[ "$MODULES_TO_TEST" == *"pyspark-errors"* ]]; then
+          export PATH=$CONDA/bin:$PATH
+          export SKIP_PACKAGING=false
+          echo "Python Packaging Tests Enabled!"
+        fi
+        if [ ! -z "$PYTHON_TO_TEST" ]; then
+          ./dev/run-tests --parallelism 1 --modules "$MODULES_TO_TEST" --python-executables "$PYTHON_TO_TEST"
+        else
+          # For branch-3.5 and below, it uses the default Python versions.
+          ./dev/run-tests --parallelism 1 --modules "$MODULES_TO_TEST"
+        fi
     - name: Upload coverage to Codecov
+      if: fromJSON(inputs.envs).PYSPARK_CODECOV == 'true'
       uses: codecov/codecov-action@v5
       env:
         CODECOV_TOKEN: ad879b47-11ad-42ed-8f94-be8b8710f45f
