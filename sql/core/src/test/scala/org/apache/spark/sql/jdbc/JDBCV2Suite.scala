@@ -3108,7 +3108,12 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       sql(s"INSERT INTO $tableName VALUES ($binary)")
 
       val select = s"SELECT * FROM $tableName WHERE binary_col = $binary"
-      assert(spark.sql(select).collect().length === 1, s"Binary literal test failed: $select")
+      val df = sql(select)
+      val filter = df.queryExecution.optimizedPlan.collect {
+        case f: Filter => f
+      }
+      assert(filter.isEmpty, "Filter is not pushed")
+      assert(df.collect().length === 1, s"Binary literal test failed: $select")
     }
   }
 
