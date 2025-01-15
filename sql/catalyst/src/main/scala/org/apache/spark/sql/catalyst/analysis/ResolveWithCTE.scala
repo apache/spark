@@ -31,9 +31,11 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
 object ResolveWithCTE extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = {
     if (plan.containsAllPatterns(CTE)) {
-      // A helper map definitionID->Definition. Used for non-recursive CTE definitions only. Bridges
-      // the gap between two CTE resolutions (one for WithCTE, another for reference) by
-      // materializing the resolved definitions in first pass and consuming them in the second.
+      // A helper map definitionID->Definition. Used for non-recursive CTE definitions only, either
+      // inherently non-recursive or that became non-recursive due to recursive CTERelationRef->
+      // UnionLoopRef substitution. Bridges the gap between two CTE resolutions (one for WithCTE,
+      // another for reference) by materializing the resolved definitions in first pass and
+      // consuming them in the second.
       val cteDefMap = mutable.HashMap.empty[Long, CTERelationDef]
       resolveWithCTE(plan, cteDefMap)
     } else {
@@ -62,9 +64,10 @@ object ResolveWithCTE extends Rule[LogicalPlan] {
               // If it is a supported recursive CTE query pattern (4 so far), extract the anchor and
               // recursive plans from the Union and rewrite Union with UnionLoop. The recursive CTE
               // references inside UnionLoop's recursive plan will be rewritten as UnionLoopRef,
-              // using the output of the resolved anchor plan. The side effect of CTERelationRef->
-              // UnionLoopRef substitution is that `cteDef` that was originally considered
-              // `recursive` is no more in the context of `cteDef.recursive` method definition.
+              // using the output of the resolved anchor plan. The side effect of recursive
+              // CTERelationRef->UnionLoopRef substitution is that `cteDef` that was originally
+              // considered `recursive` is no more in the context of `cteDef.recursive` method
+              // definition.
               //
               // Simple case of duplicating (UNION ALL) clause.
               case alias @ SubqueryAlias(_, Union(Seq(anchor, recursion), false, false)) =>
@@ -78,7 +81,7 @@ object ResolveWithCTE extends Rule[LogicalPlan] {
                   cteDef.copy(child = alias.copy(child = loop))
                 }
 
-              // The case of CTE name followed by a parenthesized list of column names, eg.
+              // The case of CTE name followed by a parenthesized list of column name(s), eg.
               // WITH RECURSIVE t(n).
               case alias @ SubqueryAlias(_,
               columnAlias @ UnresolvedSubqueryColumnAliases(
@@ -115,7 +118,7 @@ object ResolveWithCTE extends Rule[LogicalPlan] {
                   cteDef.copy(child = alias.copy(child = loop))
                 }
 
-              // The case of CTE name followed by a parenthesized list of column names.
+              // The case of CTE name followed by a parenthesized list of column name(s).
               case alias @ SubqueryAlias(_,
               columnAlias@UnresolvedSubqueryColumnAliases(
               colNames,
