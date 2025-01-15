@@ -34,6 +34,9 @@ import com.typesafe.tools.mima.core.*
  */
 object MimaExcludes {
 
+  lazy val v41excludes = v40excludes ++ Seq(
+  )
+
   // Exclude rules for 4.0.x from 3.5.0
   lazy val v40excludes = defaultExcludes ++ Seq(
     // [SPARK-44863][UI] Add a button to download thread dump as a txt in Spark UI
@@ -270,6 +273,7 @@ object MimaExcludes {
   }
 
   def excludes(version: String): Seq[Problem => Boolean] = version match {
+    case v if v.startsWith("4.1") => v41excludes
     case v if v.startsWith("4.0") => v40excludes
     case _ => Seq()
   }
