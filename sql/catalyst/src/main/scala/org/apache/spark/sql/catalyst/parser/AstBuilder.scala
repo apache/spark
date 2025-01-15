@@ -221,9 +221,12 @@ class AstBuilder extends DataTypeAstBuilder
         isScope = false)
     } else {
       // If there is no compound body, then there must be a statement or set statement.
-      val child = Option(ctx.statement()).getOrElse(ctx.setStatementWithOptionalVarKeyword())
-      val logicalPlan = visit(child).asInstanceOf[LogicalPlan]
-      CompoundBody(Seq(SingleStatement(parsedPlan = logicalPlan)), None, isScope = false)
+      val statement = Option(ctx.statement().asInstanceOf[ParserRuleContext])
+        .orElse(Option(ctx.setStatementWithOptionalVarKeyword().asInstanceOf[ParserRuleContext]))
+        .map { s =>
+          SingleStatement(parsedPlan = visit(s).asInstanceOf[LogicalPlan])
+        }
+      CompoundBody(Seq(statement.get), None, isScope = false)
     }
 
     ErrorHandler(conditions, body, handlerType)
