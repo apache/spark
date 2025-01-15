@@ -75,8 +75,6 @@ case class SqlScriptingInterpreter(session: SparkSession) {
    *   A map of parameter names to SQL literal expressions.
    * @param isHandler
    *   Indicates if the body is a handler body to do additional processing during transforming.
-   * @param handlerScopeLabel
-   *   If body is a handler body, this is the label of the CompoundBody where handler is defined.
    * @return
    *   Executable version of the CompoundBody .
    */
@@ -84,8 +82,8 @@ case class SqlScriptingInterpreter(session: SparkSession) {
       compoundBody: CompoundBody,
       args: Map[String, Expression],
       context: SqlScriptingExecutionContext,
-      isHandler: Boolean = false,
-      handlerScopeLabel: String = ""): CompoundBodyExec = {
+      isHandler: Boolean = false): CompoundBodyExec = {
+    // Add drop variables to the end of the body.
     val variables = compoundBody.collection.flatMap {
       case st: SingleStatement => getDeclareVarNameFromPlan(st.parsedPlan)
       case _ => None
@@ -103,8 +101,7 @@ case class SqlScriptingInterpreter(session: SparkSession) {
           handler.body,
           args,
           context,
-          handler.handlerType == HandlerType.EXIT,
-          compoundBody.label.get)
+          isHandler = true)
 
       // Execution node of handler.
       val scopeToExit = if (handler.handlerType == HandlerType.EXIT) {
