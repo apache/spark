@@ -77,7 +77,7 @@ import org.apache.spark.sql.execution.stat.StatFunctions
 import org.apache.spark.sql.execution.streaming.GroupStateImpl.groupStateTimeoutFromString
 import org.apache.spark.sql.execution.streaming.StreamingQueryWrapper
 import org.apache.spark.sql.expressions.{Aggregator, ReduceAggregator, SparkUserDefinedFunction, UserDefinedAggregator, UserDefinedFunction}
-import org.apache.spark.sql.internal.{CatalogImpl, MergeIntoWriterImpl, TypedAggUtils}
+import org.apache.spark.sql.internal.{CatalogImpl, MergeIntoWriterImpl, SQLConf, TypedAggUtils}
 import org.apache.spark.sql.streaming.{GroupStateTimeout, OutputMode, StreamingQuery, StreamingQueryListener, StreamingQueryProgress, Trigger}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -2200,6 +2200,7 @@ class SparkConnectPlanner(
     val input = transformRelation(rel.getInput)
     val ds = UntypedKeyValueGroupedDataset(input, rel.getGroupingExpressionsList, Seq.empty)
 
+    println(s"transformKeyValueGroupedAggregate")
     val keyColumn = TypedAggUtils.aggKeyColumn(ds.kEncoder, ds.groupingAttributes)
     val namedColumns = rel.getAggregateExpressionsList.asScala.toSeq
       .map(expr => transformExpressionWithTypedReduceExpression(expr, input))
@@ -2212,7 +2213,6 @@ class SparkConnectPlanner(
       throw InvalidPlanInput("Aggregate needs a plan input")
     }
     val input = transformRelation(rel.getInput)
-
     val groupingExprs = rel.getGroupingExpressionsList.asScala.toSeq.map(transformExpression)
     val aggExprs = rel.getAggregateExpressionsList.asScala.toSeq
       .map(expr => transformExpressionWithTypedReduceExpression(expr, input))
@@ -2275,7 +2275,7 @@ class SparkConnectPlanner(
 
   private def transformTypedReduceExpression(
       fun: proto.Expression.UnresolvedFunction,
-      dataAttributes: Seq[Attribute]): Expression = {
+      plan: LogicalPlan): Expression = {
     assert(fun.getFunctionName == "reduce")
     if (fun.getArgumentsCount != 1) {
       throw InvalidPlanInput("reduce requires single child expression")
@@ -2289,18 +2289,32 @@ class SparkConnectPlanner(
         throw InvalidPlanInput(s"reduce should carry a scalar scala udf, but got $other")
     }
     val encoder = udf.outputEncoder
+    val inputColumns = fun.getArgumentsList.get(0)
+      .getCommonInlineUserDefinedFunction
+      .getArgumentsList.asScala
+      .map(transformExpression)
+      .map(_.asInstanceOf[UnresolvedAttribute])
+    println(s"transformTypedReduceExpression inputColumns: ${inputColumns}")
+    val www = inputColumns.map { c =>
+      plan.resolve(
+        c.nameParts,
+        SQLConf.get.resolver).get
+    }
+    println(s"transformTypedReduceExpression www: ${inputColumns}")
+    println(s"transformTypedReduceExpression encoder: ${encoder}")
     val reduce = ReduceAggregator(udf.function)(encoder).toColumn.expr
-    TypedAggUtils.withInputType(reduce, encoderFor(encoder), dataAttributes)
+    TypedAggUtils.withInputType(reduce, encoderFor(encoder), www.map(_.toAttribute).take(1).toSeq)
   }
 
   private def transformExpressionWithTypedReduceExpression(
       expr: proto.Expression,
       plan: LogicalPlan): Expression = {
+    val analyzed = session.sessionState.executePlan(plan).analyzed
     expr.getExprTypeCase match {
       case proto.Expression.ExprTypeCase.UNRESOLVED_FUNCTION
           if expr.getUnresolvedFunction.getFunctionName == "reduce" =>
         // The reduce func needs the input data attribute, thus handle it specially here
-        transformTypedReduceExpression(expr.getUnresolvedFunction, plan.output)
+        transformTypedReduceExpression(expr.getUnresolvedFunction, analyzed)
       case _ => transformExpression(expr, Some(plan))
     }
   }

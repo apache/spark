@@ -491,17 +491,21 @@ private class KeyValueGroupedDatasetImpl[K, V, IK, IV](
       def withFieldRenamed(schema: StructType): StructType = {
         StructType(schema.zip(newNames).map { case (field, name) => field.copy(name = name) })
       }
-      val newSchemaWithNames =
-        withFieldRenamed(valueTransformedDf.schema(0).dataType.asInstanceOf[StructType])
-      val selects = if (valueMapFunc.isDefined) {
-        col("iv").cast(newSchemaWithNames) :: col("v") :: Nil
+
+      val currentSchema = valueTransformedDf.schema
+      val newIVSchemaWithNames =
+        withFieldRenamed(currentSchema(0).dataType.asInstanceOf[StructType])
+      val newVSchemaWithNames = if (valueMapFunc.isDefined) {
+        currentSchema(1).dataType.asInstanceOf[StructType]
       } else {
-        col("iv").cast(newSchemaWithNames) :: col("v").cast(newSchemaWithNames) :: Nil
+        withFieldRenamed(currentSchema(1).dataType.asInstanceOf[StructType])
       }
-      val df = valueTransformedDf.select(selects: _*)
-      (
-        df,
-        df.schema(0).dataType.asInstanceOf[StructType].fieldNames,
+      val df = valueTransformedDf.select(
+        col("iv").cast(newIVSchemaWithNames).as("iv"),
+        col("v").cast(newVSchemaWithNames).as("v"))
+        (
+          df,
+          df.schema(0).dataType.asInstanceOf[StructType].fieldNames,
         df.schema(1).dataType.asInstanceOf[StructType].fieldNames)
     }
     // Rewrite grouping expressions to use columns inside "iv" as input
@@ -510,13 +514,13 @@ private class KeyValueGroupedDatasetImpl[K, V, IK, IV](
         ColumnNodeToProtoConverter.toExprWithTransformation(
           c.node,
           encoder = None,
-          prefixAndExpandStar("iv", ivFields.toSeq)))
+          prefixAndExpandStar("iv", if (ivIsStruct) None else Some(ivFields.toSeq))))
     // Rewrite aggregate columns to use columns inside "v" as input
     val updatedAggTypedExprs = columns.map { c =>
       ColumnNodeToProtoConverter.toExprWithTransformation(
         c.node,
         encoder = Some(vEncoder),
-        prefixAndExpandStar("v", vFields.toSeq))
+        prefixAndExpandStar("v", if (vIsStruct) None else Some(vFields.toSeq)))
     }
 
     val rEnc = ProductEncoder.tuple(kEncoder +: columns.map(c => agnosticEncoderFor(c.encoder)))
@@ -529,29 +533,31 @@ private class KeyValueGroupedDatasetImpl[K, V, IK, IV](
     }
   }
 
-  private def prefixAndExpandStar(to: String, expand: Seq[String]): ColumnNode => ColumnNode = {
-    // Prefix column names: "col1" to "prepend.col1".
-    case n @ UnresolvedAttribute(nameParts, _, _, _) =>
-      n.copy(nameParts = to +: nameParts)
-    // UDAF aggregator: Expand all columns.
-    case f @ InvokeInlineUserDefinedFunction(_, Nil, _, _) =>
-      f.copy(arguments = expand.map(UnresolvedAttribute(_)))
-    // Other inline UDFs: Expand all columns.
-    case f@InvokeInlineUserDefinedFunction(
-    function: SparkUserDefinedFunction,
-    Seq(UnresolvedStar(None, _, _)),
-    _,
-    _) =>
-      function.inputEncoders match {
-        case Seq(Some(_: ProductEncoder[_])) =>
-          f.copy(arguments = Seq(internal.UnresolvedAttribute(Nil)))
-        case _ =>
-          f.copy(arguments = expand.map(UnresolvedAttribute(_)))
-      }
-    // Build-in/registered functions.
-    case f @ UnresolvedFunction(_, Seq(UnresolvedStar(None, _, _)), _, _, _, _) =>
-      f.copy(arguments = Seq(internal.UnresolvedAttribute(Nil)))
-    case col => col
+  private def prefixAndExpandStar(
+      to: String,
+      expand: Option[Seq[String]]): ColumnNode => ColumnNode = {
+    def expandStar(nodes: Seq[ColumnNode]): Seq[ColumnNode] = nodes.flatMap {
+      case UnresolvedStar(None, _, _) =>
+        expand.map(_.map(UnresolvedAttribute(_)))
+          .getOrElse(Seq(UnresolvedAttribute(Nil)))
+      case n => Seq(n)
+    }
+
+    {
+      // Prefix column names: "col1" to "prepend.col1".
+      case n@UnresolvedAttribute(nameParts, _, _, _) =>
+        n.copy(nameParts = to +: nameParts)
+      // UDAF aggregator
+      case f@InvokeInlineUserDefinedFunction(_, Nil, _, _) =>
+        f.copy(arguments = expandStar(Seq(UnresolvedStar(None))))
+      // Other inline UDFs
+      case f@InvokeInlineUserDefinedFunction(_, arguments, _, _) =>
+        f.copy(arguments = expandStar(arguments))
+      // Build-in/registered functions
+      case f@UnresolvedFunction(_, arguments, _, _, _, _) =>
+        f.copy(arguments = expandStar(arguments))
+      case col => col
+    }
   }
 
   override def reduceGroups(f: (V, V) => V): Dataset[(K, V)] = {
