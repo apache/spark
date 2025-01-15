@@ -466,6 +466,8 @@ trait InputRDDCodegen extends CodegenSupport {
     val input = ctx.addMutableState("scala.collection.Iterator", "input", v => s"$v = inputs[0];",
       forceInline = true)
     val row = ctx.freshName("row")
+    val numOutputRows = ctx.freshName("numOutputRows")
+    val taskInterrupted = ctx.freshName("taskInterrupted")
 
     val outputVars = if (createUnsafeProjection) {
       // creating the vars will make the parent consume add an unsafe projection.
@@ -485,8 +487,16 @@ trait InputRDDCodegen extends CodegenSupport {
       ""
     }
     s"""
-       | while ($limitNotReachedCond $input.hasNext()) {
+       | long $numOutputRows = 0;
+       | boolean $taskInterrupted = false;
+       | while ($limitNotReachedCond !$taskInterrupted && $input.hasNext()) {
        |   InternalRow $row = (InternalRow) $input.next();
+       |   $numOutputRows++;
+       |   if ($numOutputRows % 1000 == 0) {
+       |     if (org.apache.spark.TaskContext.get() != null) {
+       |       $taskInterrupted = org.apache.spark.TaskContext.get().isInterrupted();
+       |     }
+       |   }
        |   ${updateNumOutputRowsMetrics}
        |   ${consume(ctx, outputVars, if (createUnsafeProjection) null else row).trim}
        |   ${shouldStopCheckCode}
