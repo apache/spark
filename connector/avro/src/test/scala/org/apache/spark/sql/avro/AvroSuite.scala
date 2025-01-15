@@ -3021,6 +3021,23 @@ abstract class AvroSuite
       }
     }
   }
+
+  test("Deserialize union of null, record") {
+    val schema =
+      """[
+        |"null",
+        |{"name": "data", "type": "record", "fields":[{"name": "a", "type": "int"}]}
+        |]""".stripMargin
+    val sparkSchema = StructType(Array(StructField("a", IntegerType)))
+    val rows = spark.sparkContext.parallelize(Seq(Row(1)))
+    val df = spark
+      .createDataFrame(rows, schema = sparkSchema)
+      .select(functions.struct("a").alias("data"))
+      .select(avro.functions.to_avro(col("data"), schema).as("encoded"))
+      .select(avro.functions.from_avro(col("encoded"), schema).as("decoded"))
+    assert(df.filter("decoded.a = 1").count() == 1)
+  }
+
 }
 
 class AvroV1Suite extends AvroSuite {
