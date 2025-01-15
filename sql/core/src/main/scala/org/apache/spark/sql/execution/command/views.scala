@@ -793,7 +793,6 @@ object ViewHelper extends SQLConfHelper with Logging {
       originalText: String,
       tempFunctions: Seq[String]): CatalogTable = {
 
-    val catalog = session.sessionState.catalog
     val tempViews = collectTemporaryViews(analyzedPlan)
     val tempVariables = collectTemporaryVariables(analyzedPlan)
     // TBLPROPERTIES is not allowed for temporary view, so we don't use it for
@@ -808,6 +807,7 @@ object ViewHelper extends SQLConfHelper with Logging {
       storage = CatalogStorageFormat.empty,
       schema = viewSchema,
       viewText = Some(originalText),
+      createVersion = org.apache.spark.SPARK_VERSION,
       properties = newProperties)
   }
 

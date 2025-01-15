@@ -761,7 +761,8 @@ trait CharVarcharTestSuite extends QueryTest with SQLTestUtils {
 
   test("implicitly cast char/varchar into atomics") {
     Seq("char", "varchar").foreach { typ =>
-      withSQLConf(SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true") {
+      withSQLConf(SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true",
+        SQLConf.ANSI_ENABLED.key -> "true") {
         checkAnswer(sql(
           s"""
              |SELECT

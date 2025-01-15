@@ -19,7 +19,6 @@ package org.apache.spark.sql.catalyst.catalog
 
 import java.net.URI
 import java.time.{ZoneId, ZoneOffset}
-import java.util.Date
 
 import scala.collection.mutable
 import scala.util.control.NonFatal
@@ -63,34 +62,38 @@ trait MetadataMapSupport {
 
   protected def jsonToString(
       jsonMap: mutable.LinkedHashMap[String, JValue]): mutable.LinkedHashMap[String, String] = {
-    def removeWhitespace(str: String): String = {
-      str.replaceAll("\\s+$", "")
-    }
-
     val map = new mutable.LinkedHashMap[String, String]()
     jsonMap.foreach { case (key, jValue) =>
       val stringValue = jValue match {
-        case JString(value) => removeWhitespace(value)
+        case JString(value) => value
         case JArray(values) =>
           values.map(_.values)
             .map {
-              case str: String => quoteIdentifier(removeWhitespace(str))
-              case other => removeWhitespace(other.toString)
+              case str: String => quoteIdentifier(str)
+              case other => other.toString
             }
             .mkString("[", ", ", "]")
         case JObject(fields) =>
           fields.map { case (k, v) =>
-            s"$k=${removeWhitespace(v.values.toString)}"
+            s"$k=${v.values.toString}"
           }
             .mkString("[", ", ", "]")
         case JInt(value) => value.toString
         case JDouble(value) => value.toString
-        case _ => removeWhitespace(jValue.values.toString)
+        case _ => jValue.values.toString
       }
       map.put(key, stringValue)
     }
     map
   }
+
+  val timestampFormatter = new Iso8601TimestampFormatter(
+    pattern = "yyyy-MM-dd'T'HH:mm:ss'Z'",
+    zoneId = ZoneId.of("UTC"),
+    locale = DateFormatter.defaultLocale,
+    legacyFormat = LegacyDateFormats.LENIENT_SIMPLE_DATE_FORMAT,
+    isParsing = true
+  )
 }
 
 
@@ -188,10 +191,12 @@ case class CatalogTablePartition(
       map += ("Partition Parameters" -> paramsJson)
     }
 
-    map += ("Created Time" -> JString(new Date(createTime).toString))
+    map += ("Created Time" -> JString(
+      timestampFormatter.format(DateTimeUtils.millisToMicros(createTime))))
 
     val lastAccess = if (lastAccessTime <= 0) JString("UNKNOWN")
-    else JString(new Date(lastAccessTime).toString)
+    else JString(
+      timestampFormatter.format(DateTimeUtils.millisToMicros(createTime)))
     map += ("Last Access" -> lastAccess)
 
     stats.foreach(s => map += ("Partition Statistics" -> JString(s.simpleString)))
@@ -599,8 +604,8 @@ case class CatalogTable(
       else JNull
 
     val lastAccess: JValue =
-      if (lastAccessTime <= 0) JString("UNKNOWN") else JString(
-        DateTimeUtils.microsToInstant(DateTimeUtils.millisToMicros(lastAccessTime)).toString)
+      if (lastAccessTime <= 0) JString("UNKNOWN")
+      else JString(timestampFormatter.format(DateTimeUtils.millisToMicros(createTime)))
 
     val viewQueryOutputColumns: JValue =
       if (viewQueryColumnNames.nonEmpty) JArray(viewQueryColumnNames.map(JString).toList)
@@ -613,7 +618,7 @@ case class CatalogTable(
     map += "Table" -> JString(identifier.table)
     if (Option(owner).exists(_.nonEmpty)) map += "Owner" -> JString(owner)
     map += "Created Time" ->
-      JString(DateTimeUtils.microsToInstant(DateTimeUtils.millisToMicros(createTime)).toString)
+      JString(timestampFormatter.format(DateTimeUtils.millisToMicros(createTime)))
     if (lastAccess != JNull) map += "Last Access" -> lastAccess
     map += "Created By" -> JString(s"Spark $createVersion")
     map += "Type" -> JString(tableType.name)

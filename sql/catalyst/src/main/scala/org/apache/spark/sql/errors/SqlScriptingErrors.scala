@@ -134,6 +134,16 @@ private[sql] object SqlScriptingErrors {
       messageParameters = Map("labelName" -> toSQLStmt(labelName)))
   }
 
+  def labelCannotBeQualified(
+      origin: Origin,
+      labelName: String): Throwable = {
+    new SqlScriptingException(
+      origin = origin,
+      errorClass = "INVALID_LABEL_USAGE.QUALIFIED_LABEL_NAME",
+      cause = null,
+      messageParameters = Map("labelName" -> toSQLStmt(labelName)))
+  }
+
   def duplicateConditionInHandlerDeclaration(origin: Origin, condition: String): Throwable = {
     new SqlScriptingException(
       origin = origin,
