@@ -30,7 +30,7 @@ if TYPE_CHECKING:
 class SparkConf:
     """
     Configuration for a Spark application. Used to set various Spark
-    parameters as key-value pairs
+    parameters as key-value pairs.
 
     Most of the time, you would create a SparkConf object with
     ``SparkConf()``, which will load values from `spark.*` Java system
