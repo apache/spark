@@ -676,14 +676,28 @@ private class KeyValueGroupedDatasetImpl[K, V, IK, IV](
       initialState: Option[KeyValueGroupedDataset[K, S]] = None,
       eventTimeColumnName: String = ""): Dataset[U] = {
     val outputEncoder = agnosticEncoderFor[U]
+    val stateEncoder = agnosticEncoderFor[S]
 
-    val inputEncoders: Seq[AgnosticEncoder[_]] = Seq(kEncoder, ivEncoder)
+    val inputEncoders: Seq[AgnosticEncoder[_]] = Seq(kEncoder, stateEncoder, ivEncoder)
     val dummyGroupingFunc = SparkUserDefinedFunction(
       function = UdfUtils.noOp[K, U](),
       inputEncoders = inputEncoders,
       outputEncoder = outputEncoder)
     val udf = dummyGroupingFunc.apply(inputEncoders.map(_ => col("*")): _*)
       .expr.getCommonInlineUserDefinedFunction
+
+    val initialStateImpl = if (initialState.isDefined) {
+      assert(initialState.get.isInstanceOf[KeyValueGroupedDatasetImpl[K, S, _, _]])
+      initialState.get.asInstanceOf[KeyValueGroupedDatasetImpl[K, S, _, _]]
+    } else {
+      null
+    }
+    val statefulProcessorStr = if (!initialState.isDefined) {
+      ByteString.copyFrom(SparkSerDeUtils.serialize(statefulProcessor))
+    } else {
+      ByteString.copyFrom(SparkSerDeUtils.serialize(
+        statefulProcessor.asInstanceOf[StatefulProcessorWithInitialState[K, V, U, S]]))
+    }
 
     sparkSession.newDataset[U](outputEncoder) { builder =>
       val twsBuilder = builder.getGroupMapBuilder
@@ -693,10 +707,14 @@ private class KeyValueGroupedDatasetImpl[K, V, IK, IV](
         TransformWithStateInfo.newBuilder()
           .setOutputMode(outputMode.toString)
           .setTimeMode("none")
-          .setStatefulProcessorPayload(
-            ByteString.copyFrom(SparkSerDeUtils.serialize(statefulProcessor)))
+          .setStatefulProcessorPayload(statefulProcessorStr)
           .build()
       )
+      if (initialStateImpl != null) {
+        twsBuilder
+          .addAllInitialGroupingExpressions(initialStateImpl.groupingExprs)
+          .setInitialInput(initialStateImpl.plan.getRoot)
+      }
     }
   }
 

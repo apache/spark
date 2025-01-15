@@ -26,8 +26,9 @@ import org.apache.spark.sql.{Encoders, SparkSession}
 import org.apache.spark.sql.test.{QueryTest, RemoteSparkSession}
 import org.apache.spark.sql.types.{StringType, StructField, StructType}
 
-class RunningCountStatefulProcessor
-  extends StatefulProcessor[String, String, (String, String)]
+class NewNameCountStatefulProcessor
+  extends StatefulProcessorWithInitialState[
+    String, (String, String), (String, String), (String, String, String)]
     with Logging {
   @transient protected var _countState: ValueState[Long] = _
 
@@ -38,17 +39,25 @@ class RunningCountStatefulProcessor
   }
 
   override def handleInputRows(
-                                key: String,
-                                inputRows: Iterator[String],
-                                timerValues: TimerValues): Iterator[(String, String)] = {
+      key: String,
+      inputRows: Iterator[(String, String)],
+      timerValues: TimerValues): Iterator[(String, String)] = {
     val count = _countState.getOption().getOrElse(0L) + inputRows.toSeq.length
     _countState.update(count)
     Iterator((key, count.toString))
   }
+
+  override def handleInitialState(
+      key: String,
+      initialState: (String, String, String),
+      timerValues: TimerValues): Unit = {
+    val count = _countState.getOption().getOrElse(0L) + 1
+    _countState.update(count)
+  }
 }
 
 class TransformWithStateStreamingSuite extends QueryTest with RemoteSparkSession with Logging {
-  val testData: Seq[String] = Seq("a", "b", "a")
+  val testData: Seq[(String, String)] = Seq(("a", "1"), ("b", "1"), ("a", "2"))
 
   test("transformWithState - streaming") {
     withSQLConf("spark.sql.streaming.stateStore.providerClass" ->
@@ -61,19 +70,26 @@ class TransformWithStateStreamingSuite extends QueryTest with RemoteSparkSession
 
       withTempPath { dir =>
         val path = dir.getCanonicalPath
-        testData.toDS().toDF("value").repartition(3).write.parquet(path)
+        testData.toDS().toDF("id", "value")
+          .repartition(3).write.parquet(path)
 
-        val testSchema = StructType(Array(StructField("value", StringType)))
+        val testSchema = StructType(Array(
+          StructField("id", StringType), StructField("value", StringType)))
+
+        val initDf = Seq(("init_1", "40.0", "a"), ("init_2", "100.0", "b")).toDS()
+          .groupByKey(x => x._3)
+          .mapValues(x => x)
 
         val q = spark.readStream
           .schema(testSchema)
           .option("maxFilesPerTrigger", 1)
           .parquet(path)
-          .as[String]
-          .groupByKey(x => x)
+          .as[(String, String)]
+          .groupByKey(x => x._1)
           .transformWithState(
-            new RunningCountStatefulProcessor(),
-            TimeMode.None(), OutputMode.Update())
+            new NewNameCountStatefulProcessor(),
+            TimeMode.None(), OutputMode.Update(),
+            initialState = initDf)
           .writeStream
           .format("memory")
           .queryName("my_sink")

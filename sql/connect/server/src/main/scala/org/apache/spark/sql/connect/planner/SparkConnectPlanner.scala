@@ -81,7 +81,7 @@ import org.apache.spark.sql.execution.streaming.GroupStateImpl.groupStateTimeout
 import org.apache.spark.sql.execution.streaming.StreamingQueryWrapper
 import org.apache.spark.sql.expressions.{Aggregator, ReduceAggregator, SparkUserDefinedFunction, UserDefinedAggregator, UserDefinedFunction}
 import org.apache.spark.sql.internal.{CatalogImpl, MergeIntoWriterImpl, TypedAggUtils, UserDefinedFunctionUtils}
-import org.apache.spark.sql.streaming.{GroupStateTimeout, OutputMode, StatefulProcessor, StreamingQuery, StreamingQueryListener, StreamingQueryProgress, Trigger}
+import org.apache.spark.sql.streaming.{GroupStateTimeout, OutputMode, StatefulProcessor, StatefulProcessorWithInitialState, StreamingQuery, StreamingQueryListener, StreamingQueryProgress, Trigger}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.{ArrowUtils, CaseInsensitiveStringMap}
 import org.apache.spark.storage.CacheId
@@ -681,6 +681,23 @@ class SparkConnectPlanner(
       rel.getSortingExpressionsList)
 
     if (rel.hasTws) {
+      val hasInitialState = !rel.getInitialGroupingExpressionsList.isEmpty && rel.hasInitialInput
+      val initialDs = if (hasInitialState) {
+        UntypedKeyValueGroupedDataset(
+          rel.getInitialInput,
+          rel.getInitialGroupingExpressionsList,
+          rel.getSortingExpressionsList)
+      } else {
+        UntypedKeyValueGroupedDataset(
+          rel.getInput,
+          rel.getGroupingExpressionsList,
+          rel.getSortingExpressionsList)
+      }
+
+      println(s"initial state here: grouping attr: ${initialDs.groupingAttributes}, " +
+      s"data attr: ${initialDs.dataAttributes}, value attr: ${initialDs.valueDeserializer}," +
+      s"logical plan: ${initialDs.analyzed}")
+
       val tws = rel.getTws
       val keyDeserializer = udf.inputDeserializer(ds.groupingAttributes)
 
@@ -690,9 +707,16 @@ class SparkConnectPlanner(
       val outputMode = InternalOutputModes(tws.getOutputMode)
 
       val statefulProcessorStr = tws.getStatefulProcessorPayload
-      val statefulProcessor = Utils.deserialize[StatefulProcessor[Any, Any, Any]](
-        statefulProcessorStr.toByteArray,
-        Utils.getContextOrSparkClassLoader)
+      println(s"I am getting here in planner, statefulProcessorStr: ${statefulProcessorStr}")
+      val statefulProcessor = if (!hasInitialState) {
+        Utils.deserialize[StatefulProcessor[Any, Any, Any]](
+          statefulProcessorStr.toByteArray,
+          Utils.getContextOrSparkClassLoader)
+      } else {
+        Utils.deserialize[StatefulProcessorWithInitialState[Any, Any, Any, Any]](
+          statefulProcessorStr.toByteArray,
+          Utils.getContextOrSparkClassLoader)
+      }
 
       val node = new TransformWithState(
         keyDeserializer,
@@ -705,11 +729,11 @@ class SparkConnectPlanner(
         udf.inEnc.asInstanceOf[ExpressionEncoder[Any]],
         outputAttr,
         ds.analyzed,
-        false,
-        ds.groupingAttributes,
-        ds.dataAttributes,
-        keyDeserializer,
-        LocalRelation(ds.vEncoder.schema)
+        hasInitialState,
+        initialDs.groupingAttributes,
+        initialDs.dataAttributes,
+        initialDs.valueDeserializer,
+        initialDs.analyzed
       )
       return SerializeFromObject(udf.outputNamedExpression, node)
     }
