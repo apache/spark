@@ -924,12 +924,6 @@ class SparkConnectPlanner(
   private object UntypedKeyValueGroupedDataset {
     def apply(
         input: proto.Relation,
-        groupingExprs: java.util.List[proto.Expression]): UntypedKeyValueGroupedDataset = {
-      apply(transformRelation(input), groupingExprs, Seq.empty[SortOrder])
-    }
-
-    def apply(
-        input: proto.Relation,
         groupingExprs: java.util.List[proto.Expression],
         sortingExprs: java.util.List[proto.Expression]): UntypedKeyValueGroupedDataset = {
 
