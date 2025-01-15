@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.scripting
 
+import java.io.Closeable
+
 import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.logical.{CommandResult, CompoundBody}
@@ -35,7 +37,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{CommandResult, CompoundBody}
 class SqlScriptingExecution(
     sqlScript: CompoundBody,
     session: SparkSession,
-    args: Map[String, Expression]) {
+    args: Map[String, Expression]) extends Closeable {
 
   private val interpreter = SqlScriptingInterpreter(session)
 
@@ -52,6 +54,8 @@ class SqlScriptingExecution(
     ctx
   }
 
+  private val variableManager = new ScriptingVariableManager(context)
+  session.sessionState.catalogManager.scriptingLocalVariableManager = Some(variableManager)
 
   /** Helper method to iterate get next statements from the first available frame. */
   private def getNextStatement: Option[CompoundStatementExec] = {
@@ -110,5 +114,10 @@ class SqlScriptingExecution(
       case e: Throwable =>
         handleException(e)
     }
+  }
+
+  /** Cleans up resources associated with the execution. */
+  override def close(): Unit = {
+    session.sessionState.catalogManager.scriptingLocalVariableManager = None
   }
 }

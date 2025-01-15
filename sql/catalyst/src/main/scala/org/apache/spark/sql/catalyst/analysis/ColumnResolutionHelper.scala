@@ -251,7 +251,9 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
     }
   }
 
-  def lookupVariable(nameParts: Seq[String]): Option[VariableReference] = {
+  def lookupVariable(
+      nameParts: Seq[String],
+      sessionVariablesOnly: Boolean = false): Option[VariableReference] = {
     // The temp variables live in `SYSTEM.SESSION`, and the name can be qualified or not.
     def maybeTempVariableName(nameParts: Seq[String]): Boolean = {
       nameParts.length == 1 || {
@@ -266,22 +268,40 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
       }
     }
 
-    if (maybeTempVariableName(nameParts)) {
-      val variableName = if (conf.caseSensitiveAnalysis) {
-        nameParts.last
-      } else {
-        nameParts.last.toLowerCase(Locale.ROOT)
-      }
-      catalogManager.tempVariableManager.get(variableName).map { varDef =>
+    val namePartsCaseAdjusted = if (conf.caseSensitiveAnalysis) {
+      nameParts
+    } else {
+      nameParts.map(_.toLowerCase(Locale.ROOT))
+    }
+
+    catalogManager.scriptingLocalVariableManager
+      // If sessionOnly is set to true lookup only session variables.
+      .filterNot(_ => sessionVariablesOnly)
+      // If variable name is qualified with system.session.<varName> treat it as a session variable.
+      .filterNot(_ => nameParts.take(2).map(_.toLowerCase(Locale.ROOT)) == Seq("system", "session"))
+      // Local variable must be in format <varName> or <label>.<varName>
+      .filter(_ => namePartsCaseAdjusted.nonEmpty && namePartsCaseAdjusted.length <= 2)
+      .flatMap(_.get(namePartsCaseAdjusted))
+      .map { varDef =>
         VariableReference(
           nameParts,
           FakeSystemCatalog,
-          Identifier.of(Array(CatalogManager.SESSION_NAMESPACE), variableName),
+          Identifier.of(Array(varDef.identifier.namespace().last), namePartsCaseAdjusted.last),
           varDef)
       }
-    } else {
-      None
-    }
+      .orElse(
+        Option.when(maybeTempVariableName(nameParts)) {
+          catalogManager.tempVariableManager
+            .get(namePartsCaseAdjusted)
+            .map { varDef =>
+              VariableReference(
+                nameParts,
+                FakeSystemCatalog,
+                Identifier.of(Array(CatalogManager.SESSION_NAMESPACE), namePartsCaseAdjusted.last),
+                varDef)
+            }
+        }.flatten
+      )
   }
 
   // Resolves `UnresolvedAttribute` to its value.

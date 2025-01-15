@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.types.{StringType, StructType}
 
@@ -87,9 +88,11 @@ trait AnalysisTest extends PlanTest {
       overrideIfExists = true)
     new Analyzer(catalog) {
       catalogManager.tempVariableManager.create(
-        "testVarA", "1", Literal(1), overrideIfExists = true)
+        Identifier.of(Array("testA"), "testVarA"), "1", Literal(1),
+        overrideIfExists = true)
       catalogManager.tempVariableManager.create(
-        "testVarNull", null, Literal(null, StringType), overrideIfExists = true)
+        Identifier.of(Array("testVarNull"), "testVarNull"), null, Literal(null, StringType),
+        overrideIfExists = true)
       override val extendedResolutionRules = extendedAnalysisRules
     }
   }

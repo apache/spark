@@ -36,7 +36,6 @@ sealed trait CompoundStatementExec extends Logging {
 
   /**
    * Whether the statement originates from the SQL script or is created during the interpretation.
-   * Example: DropVariable statements are automatically created at the end of each compound.
    */
   val isInternal: Boolean = false
 
@@ -113,8 +112,7 @@ trait NonLeafStatementExec extends CompoundStatementExec {
  *   A map of parameter names to SQL literal expressions.
  * @param isInternal
  *   Whether the statement originates from the SQL script or it is created during the
- *   interpretation. Example: DropVariable statements are automatically created at the end of each
- *   compound.
+ *   interpretation.
  * @param context
  *   SqlScriptingExecutionContext keeps the execution state of current script.
  */

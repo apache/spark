@@ -17,9 +17,11 @@
 
 package org.apache.spark.sql.scripting
 
+import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
 
 import org.apache.spark.SparkException
+import org.apache.spark.sql.catalyst.catalog.VariableDefinition
 
 /**
  * SQL scripting execution context - keeps track of the current execution state.
@@ -41,6 +43,9 @@ class SqlScriptingExecutionContext {
     }
     frames.last.exitScope(label)
   }
+
+  def currentFrame: SqlScriptingExecutionFrame = frames.last
+  def currentScope: SqlScriptingExecutionScope = currentFrame.currentScope
 }
 
 /**
@@ -53,7 +58,7 @@ class SqlScriptingExecutionFrame(
     executionPlan: Iterator[CompoundStatementExec]) extends Iterator[CompoundStatementExec] {
 
   // List of scopes that are currently active.
-  private val scopes: ListBuffer[SqlScriptingExecutionScope] = ListBuffer.empty
+  val scopes: ListBuffer[SqlScriptingExecutionScope] = ListBuffer.empty
 
   override def hasNext: Boolean = executionPlan.hasNext
 
@@ -81,6 +86,8 @@ class SqlScriptingExecutionFrame(
       scopes.remove(scopes.length - 1)
     }
   }
+
+  def currentScope: SqlScriptingExecutionScope = scopes.last
 }
 
 /**
@@ -89,4 +96,6 @@ class SqlScriptingExecutionFrame(
  * @param label
  *   Label of the scope.
  */
-class SqlScriptingExecutionScope(val label: String)
+class SqlScriptingExecutionScope(val label: String) {
+  val variables = new mutable.HashMap[String, VariableDefinition]
+}

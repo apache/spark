@@ -23,8 +23,39 @@ import scala.collection.mutable
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions.Literal
+import org.apache.spark.sql.connector.catalog.{CatalogManager, Identifier}
 import org.apache.spark.sql.connector.catalog.CatalogManager.{SESSION_NAMESPACE, SYSTEM_CATALOG_NAME}
 import org.apache.spark.sql.errors.DataTypeErrorsBase
+import org.apache.spark.sql.errors.QueryCompilationErrors.unresolvedVariableError
+
+trait VariableManager {
+  def create(
+    identifier: Identifier,
+    defaultValueSQL: String,
+    initValue: Literal,
+    overrideIfExists: Boolean): Unit
+
+  def set(
+    nameParts: Seq[String],
+    defaultValueSQL: String,
+    initValue: Literal,
+    identifier: Identifier): Unit
+
+  def get(nameParts: Seq[String]): Option[VariableDefinition]
+
+  def remove(name: String): Boolean
+
+  def createIdentifier(name: String): Identifier
+
+  def clear(): Unit
+
+  def isEmpty: Boolean
+}
+
+case class VariableDefinition(
+  identifier: Identifier,
+  defaultValueSQL: String,
+  currentValue: Literal)
 
 /**
  * A thread-safe manager for temporary SQL variables (that live in the schema `SYSTEM.SESSION`),
@@ -33,40 +64,55 @@ import org.apache.spark.sql.errors.DataTypeErrorsBase
  * Note that, the variable name is always case-sensitive here, callers are responsible to format the
  * variable name w.r.t. case-sensitive config.
  */
-class TempVariableManager extends DataTypeErrorsBase {
+class TempVariableManager extends VariableManager with DataTypeErrorsBase {
 
   @GuardedBy("this")
   private val variables = new mutable.HashMap[String, VariableDefinition]
 
-  def create(
-      name: String,
+  override def create(
+      identifier: Identifier,
       defaultValueSQL: String,
       initValue: Literal,
       overrideIfExists: Boolean): Unit = synchronized {
+    val name = identifier.name()
     if (!overrideIfExists && variables.contains(name)) {
       throw new AnalysisException(
         errorClass = "VARIABLE_ALREADY_EXISTS",
         messageParameters = Map(
           "variableName" -> toSQLId(Seq(SYSTEM_CATALOG_NAME, SESSION_NAMESPACE, name))))
     }
-    variables.put(name, VariableDefinition(defaultValueSQL, initValue))
+    variables.put(name, VariableDefinition(identifier, defaultValueSQL, initValue))
   }
 
-  def get(name: String): Option[VariableDefinition] = synchronized {
-    variables.get(name)
+  override def set(
+      nameParts: Seq[String],
+      defaultValueSQL: String,
+      initValue: Literal,
+      identifier: Identifier): Unit = synchronized {
+    val name = nameParts.last
+    // Sanity check as this is already checked in ResolveSetVariable.
+    if (!variables.contains(name)) {
+      throw unresolvedVariableError(nameParts, Seq("SYSTEM", "SESSION"))
+    }
+    variables.put(name, VariableDefinition(identifier, defaultValueSQL, initValue))
   }
 
-  def remove(name: String): Boolean = synchronized {
+  override def get(nameParts: Seq[String]): Option[VariableDefinition] = synchronized {
+    variables.get(nameParts.last)
+  }
+
+  override def remove(name: String): Boolean = synchronized {
     variables.remove(name).isDefined
   }
 
-  def clear(): Unit = synchronized {
+  override def createIdentifier(name: String): Identifier =
+    Identifier.of(Array(CatalogManager.SESSION_NAMESPACE), name)
+
+  override def clear(): Unit = synchronized {
     variables.clear()
   }
 
-  def isEmpty: Boolean = synchronized {
+  override def isEmpty: Boolean = synchronized {
     variables.isEmpty
   }
 }
-
-case class VariableDefinition(defaultValueSQL: String, currentValue: Literal)
