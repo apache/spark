@@ -63,7 +63,7 @@ import itertools
 import logging
 import opcode
 import pickle
-from pickle import _getattribute
+from pickle import _getattribute as _pickle_getattribute
 import platform
 import struct
 import sys
@@ -192,6 +192,14 @@ def _is_registered_pickle_by_value(module):
     return False
 
 
+if sys.version_info >= (3, 14):
+    def _getattribute(obj, name):
+        return _pickle_getattribute(obj, name.split('.'))
+else:
+    def _getattribute(obj, name):
+        return _pickle_getattribute(obj, name)[0]
+
+
 def _whichmodule(obj, name):
     """Find the module an object belongs to.
 
@@ -219,7 +227,7 @@ def _whichmodule(obj, name):
         ):
             continue
         try:
-            if _getattribute(module, name)[0] is obj:
+            if _getattribute(module, name) is obj:
                 return module_name
         except Exception:
             pass
@@ -293,7 +301,7 @@ def _lookup_module_and_qualname(obj, name=None):
         return None
 
     try:
-        obj2, parent = _getattribute(module, name)
+        obj2 = _getattribute(module, name)
     except AttributeError:
         # obj was not found inside the module it points to
         return None
