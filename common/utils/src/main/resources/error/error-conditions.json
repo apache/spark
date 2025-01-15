@@ -1236,6 +1236,12 @@
     ],
     "sqlState" : "42614"
   },
+  "DUPLICATE_CONDITION_IN_SCOPE" : {
+    "message" : [
+      "Found duplicate condition <condition> in the scope. Please, remove one of them."
+    ],
+    "sqlState" : "42710"
+  },
   "DUPLICATE_CONDITION_IN_HANDLER_DECLARATION" : {
     "message" : [
       "Found duplicate condition <condition> in the handler declaration. Please, remove one of them."

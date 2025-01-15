@@ -245,8 +245,8 @@ class AstBuilder extends DataTypeAstBuilder
         case condition: ErrorCondition =>
           // Check for duplicate condition names in each scope.
           if (conditions.contains(condition.conditionName)) {
-            throw SparkException.internalError(
-              s"Duplicate condition name ${condition.conditionName}.")
+            throw SqlScriptingErrors
+              .duplicateConditionInScope(CurrentOrigin.get, condition.conditionName)
           }
           conditions += condition.conditionName -> condition.sqlState
         case s => buff += s

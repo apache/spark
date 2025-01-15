@@ -152,6 +152,14 @@ private[sql] object SqlScriptingErrors {
       messageParameters = Map("condition" -> condition))
   }
 
+  def duplicateConditionInScope(origin: Origin, condition: String): Throwable = {
+    new SqlScriptingException(
+      origin = origin,
+      errorClass = "DUPLICATE_CONDITION_IN_SCOPE",
+      cause = null,
+      messageParameters = Map("condition" -> condition))
+  }
+
   def duplicateHandlerForSameCondition(origin: Origin, condition: String): Throwable = {
     new SqlScriptingException(
       origin = origin,
