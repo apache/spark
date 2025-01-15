@@ -114,6 +114,24 @@ class SortShuffleWriterSuite
     assert(records.size === writeMetrics.recordsWritten)
   }
 
+  test("write with some records") {
+    conf.set(config.SHUFFLE_MAP_STATUS_ROW_COUNT_OPTIMIZE_SKEWED_JOB.key, "true")
+    val context = MemoryTestingUtils.fakeTaskContext(sc.env)
+    val records = List[(Int, Int)]((1, 2), (2, 3), (4, 4), (6, 5))
+    val writer = new SortShuffleWriter[Int, Int, Int](
+      shuffleHandle,
+      mapId = 2,
+      context,
+      shuffleExecutorComponents)
+    writer.write(records.toIterator)
+    writer.stop(success = true)
+    val dataFile = shuffleBlockResolver.getDataFile(shuffleId, 2)
+    val writeMetrics = context.taskMetrics().shuffleWriteMetrics
+    assert(dataFile.exists())
+    assert(dataFile.length() === writeMetrics.bytesWritten)
+    assert(records.size === writeMetrics.recordsWritten)
+  }
+
   Seq((true, false, false),
     (true, true, false),
     (true, false, true),
