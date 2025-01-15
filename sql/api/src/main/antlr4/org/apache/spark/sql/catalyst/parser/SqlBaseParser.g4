@@ -63,6 +63,8 @@ compoundStatement
     : statement
     | setStatementWithOptionalVarKeyword
     | beginEndCompoundBlock
+    | declareConditionStatement
+    | declareHandlerStatement
     | ifElseStatement
     | caseStatement
     | whileStatement
@@ -77,6 +79,29 @@ setStatementWithOptionalVarKeyword
     : SET variable? assignmentList                              #setVariableWithOptionalKeyword
     | SET variable? LEFT_PAREN multipartIdentifierList RIGHT_PAREN EQ
         LEFT_PAREN query RIGHT_PAREN                            #setVariableWithOptionalKeyword
+    ;
+
+sqlStateValue
+    : stringLit
+    ;
+
+declareConditionStatement
+    : DECLARE multipartIdentifier CONDITION (FOR SQLSTATE VALUE? sqlStateValue)?
+    ;
+
+conditionValue
+    : sqlStateValue
+    | multipartIdentifier
+    | SQLEXCEPTION
+    | NOT FOUND
+    ;
+
+conditionValues
+    : cvList+=conditionValue (COMMA cvList+=conditionValue)*
+    ;
+
+declareHandlerStatement
+    : DECLARE (CONTINUE | EXIT) HANDLER FOR conditionValues (BEGIN compoundBody END | statement | setStatementWithOptionalVarKeyword)
     ;
 
 whileStatement
@@ -1600,7 +1625,9 @@ ansiNonReserved
     | COMPENSATION
     | COMPUTE
     | CONCATENATE
+    | CONDITION
     | CONTAINS
+    | CONTINUE
     | COST
     | CUBE
     | CURRENT
@@ -1640,6 +1667,7 @@ ansiNonReserved
     | EXCHANGE
     | EXCLUDE
     | EXISTS
+    | EXIT
     | EXPLAIN
     | EXPORT
     | EXTEND
@@ -1653,11 +1681,13 @@ ansiNonReserved
     | FOLLOWING
     | FORMAT
     | FORMATTED
+    | FOUND
     | FUNCTION
     | FUNCTIONS
     | GENERATED
     | GLOBAL
     | GROUPING
+    | HANDLER
     | HOUR
     | HOURS
     | IDENTIFIER_KW
@@ -1790,6 +1820,8 @@ ansiNonReserved
     | SORTED
     | SOURCE
     | SPECIFIC
+    | SQLEXCEPTION
+    | SQLSTATE
     | START
     | STATISTICS
     | STORED
@@ -1832,6 +1864,7 @@ ansiNonReserved
     | UNTIL
     | UPDATE
     | USE
+    | VALUE
     | VALUES
     | VARCHAR
     | VAR
@@ -1937,8 +1970,10 @@ nonReserved
     | COMPENSATION
     | COMPUTE
     | CONCATENATE
+    | CONDITION
     | CONSTRAINT
     | CONTAINS
+    | CONTINUE
     | COST
     | CREATE
     | CUBE
@@ -1988,6 +2023,7 @@ nonReserved
     | EXCLUDE
     | EXECUTE
     | EXISTS
+    | EXIT
     | EXPLAIN
     | EXPORT
     | EXTEND
@@ -2007,6 +2043,7 @@ nonReserved
     | FORMAT
     | FORMATTED
     | FROM
+    | FOUND
     | FUNCTION
     | FUNCTIONS
     | GENERATED
@@ -2014,6 +2051,7 @@ nonReserved
     | GRANT
     | GROUP
     | GROUPING
+    | HANDLER
     | HAVING
     | HOUR
     | HOURS
@@ -2165,6 +2203,8 @@ nonReserved
     | SOURCE
     | SPECIFIC
     | SQL
+    | SQLEXCEPTION
+    | SQLSTATE
     | START
     | STATISTICS
     | STORED
@@ -2215,6 +2255,7 @@ nonReserved
     | UPDATE
     | USE
     | USER
+    | VALUE
     | VALUES
     | VARCHAR
     | VAR

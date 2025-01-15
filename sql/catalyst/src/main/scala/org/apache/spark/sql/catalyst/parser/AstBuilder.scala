@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.parser
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 
-import scala.collection.mutable.{ArrayBuffer, ListBuffer, Set}
+import scala.collection.mutable.{ArrayBuffer, HashMap, ListBuffer, Set}
 import scala.jdk.CollectionConverters._
 import scala.util.{Left, Right}
 
@@ -159,6 +159,72 @@ class AstBuilder extends DataTypeAstBuilder
     script
   }
 
+  private def assertSqlState(sqlState: String): Unit = {
+    val sqlStateRegex = "^[A-Za-z0-9]{5}$".r
+    assert(sqlStateRegex.findFirstIn(sqlState).isDefined,
+      "SQLSTATE must be exactly 5 characters long and contain only A-Z and 0-9.")
+    assert(!sqlState.startsWith("00") && !sqlState.startsWith("01") && !sqlState.startsWith("XX"),
+      "SQLSTATE must not start with '00', '01', or 'XX'.")
+  }
+
+  override def visitConditionValue(ctx: ConditionValueContext): String = {
+    Option(ctx.sqlStateValue())
+      .map { sqlStateValueContext =>
+        val sqlState = sqlStateValueContext.getText.replace("'", "")
+        assertSqlState(sqlState)
+        sqlState
+      }
+      .getOrElse(ctx.getText)
+  }
+
+  override def visitConditionValues(ctx: ConditionValuesContext): Seq[String] = {
+    val buff = scala.collection.mutable.Set[String]()
+    ctx.cvList.forEach { conditionValue =>
+      val elem = visit(conditionValue).asInstanceOf[String]
+      if (buff(elem)) {
+        throw SqlScriptingErrors.duplicateConditionInHandlerDeclaration(CurrentOrigin.get, elem)
+      }
+      buff += elem
+    }
+    buff.toSeq
+  }
+
+  private def visitDeclareConditionStatementImpl(
+      ctx: DeclareConditionStatementContext): ErrorCondition = {
+    val conditionName = ctx.multipartIdentifier().getText
+    val sqlState = Option(ctx.sqlStateValue())
+      .map(_.getText.replace("'", "")).getOrElse("45000")
+
+    assertSqlState(sqlState)
+    ErrorCondition(conditionName, sqlState)
+  }
+
+  private def visitDeclareHandlerStatementImpl(
+      ctx: DeclareHandlerStatementContext,
+      labelCtx: SqlScriptingLabelContext): ErrorHandler = {
+    val conditions = visit(ctx.conditionValues()).asInstanceOf[Seq[String]]
+
+    if (Option(ctx.CONTINUE()).isDefined) {
+      throw SqlScriptingErrors.continueHandlerNotSupported(CurrentOrigin.get)
+    }
+
+    val handlerType = HandlerType.EXIT
+
+    val body = if (Option(ctx.compoundBody()).isDefined) {
+      visitCompoundBodyImpl(
+        ctx.compoundBody(),
+        None,
+        allowVarDeclare = true,
+        labelCtx,
+        isScope = false)
+    } else {
+      val logicalPlan = visitChildren(ctx).asInstanceOf[LogicalPlan]
+      CompoundBody(Seq(SingleStatement(parsedPlan = logicalPlan)), None, isScope = false)
+    }
+
+    ErrorHandler(conditions, body, handlerType)
+  }
+
   private def visitCompoundBodyImpl(
       ctx: CompoundBodyContext,
       label: Option[String],
@@ -166,8 +232,24 @@ class AstBuilder extends DataTypeAstBuilder
       labelCtx: SqlScriptingLabelContext,
       isScope: Boolean): CompoundBody = {
     val buff = ListBuffer[CompoundPlanStatement]()
-    ctx.compoundStatements.forEach(
-      compoundStatement => buff += visitCompoundStatementImpl(compoundStatement, labelCtx))
+
+    val handlers = ListBuffer[ErrorHandler]()
+    val conditions = HashMap[String, String]()
+
+    ctx.compoundStatements.forEach(compoundStatement => {
+      val stmt = visitCompoundStatementImpl(compoundStatement, labelCtx)
+      stmt match {
+        case handler: ErrorHandler => handlers += handler
+        case condition: ErrorCondition =>
+          // Check for duplicate condition names in each scope.
+          if (conditions.contains(condition.conditionName)) {
+            throw SparkException.internalError(
+              s"Duplicate condition name ${condition.conditionName}.")
+          }
+          conditions += condition.conditionName -> condition.sqlState
+        case s => buff += s
+      }
+    })
 
     val compoundStatements = buff.toList
 
@@ -196,7 +278,7 @@ class AstBuilder extends DataTypeAstBuilder
       case _ =>
     }
 
-    CompoundBody(buff.toSeq, label, isScope)
+    CompoundBody(buff.toSeq, label, isScope, handlers.toSeq, conditions)
   }
 
   private def visitBeginEndCompoundBlockImpl(
@@ -243,6 +325,10 @@ class AstBuilder extends DataTypeAstBuilder
                 visitSimpleCaseStatementImpl(simpleCaseContext, labelCtx)
               case forStatementContext: ForStatementContext =>
                 visitForStatementImpl(forStatementContext, labelCtx)
+              case declareHandlerContext: DeclareHandlerStatementContext =>
+                visitDeclareHandlerStatementImpl(declareHandlerContext, labelCtx)
+              case declareConditionContext: DeclareConditionStatementContext =>
+                visitDeclareConditionStatementImpl(declareConditionContext)
               case stmt => visit(stmt).asInstanceOf[CompoundPlanStatement]
             }
           } else {

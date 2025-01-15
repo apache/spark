@@ -17,9 +17,10 @@
 
 package org.apache.spark.sql.scripting
 
-import scala.collection.mutable.ListBuffer
+import scala.collection.mutable.{HashMap, ListBuffer}
 
 import org.apache.spark.SparkException
+import org.apache.spark.sql.scripting.SqlScriptingFrameType.SqlScriptingFrameType
 
 /**
  * SQL scripting execution context - keeps track of the current execution state.
@@ -28,11 +29,13 @@ class SqlScriptingExecutionContext {
   // List of frames that are currently active.
   val frames: ListBuffer[SqlScriptingExecutionFrame] = ListBuffer.empty
 
-  def enterScope(label: String): Unit = {
+  def enterScope(
+      label: String,
+      conditionHandlerMap: HashMap[String, ErrorHandlerExec]): Unit = {
     if (frames.isEmpty) {
       throw SparkException.internalError("Cannot enter scope: no frames.")
     }
-    frames.last.enterScope(label)
+    frames.last.enterScope(label, conditionHandlerMap)
   }
 
   def exitScope(label: String): Unit = {
@@ -41,6 +44,25 @@ class SqlScriptingExecutionContext {
     }
     frames.last.exitScope(label)
   }
+
+  def findHandler(condition: String, sqlState: String): Option[ErrorHandlerExec] = {
+    if (frames.isEmpty) {
+      throw SparkException.internalError(s"Cannot find handler: no frames.")
+    }
+
+    frames.reverseIterator.foreach { frame =>
+      val handler = frame.findHandler(condition, sqlState)
+      if (handler.isDefined) {
+        return handler
+      }
+    }
+    None
+  }
+}
+
+object SqlScriptingFrameType extends Enumeration {
+  type SqlScriptingFrameType = Value
+  val SQL_SCRIPT, HANDLER, STORED_PROCEDURE = Value
 }
 
 /**
@@ -50,20 +72,24 @@ class SqlScriptingExecutionContext {
  * @param executionPlan CompoundBody which need to be executed.
  */
 class SqlScriptingExecutionFrame(
-    executionPlan: Iterator[CompoundStatementExec]) extends Iterator[CompoundStatementExec] {
+    val executionPlan: CompoundBodyExec,
+    val frameType: SqlScriptingFrameType,
+    val scopeToExit: Option[String] = None) extends Iterator[CompoundStatementExec] {
 
   // List of scopes that are currently active.
   private val scopes: ListBuffer[SqlScriptingExecutionScope] = ListBuffer.empty
 
-  override def hasNext: Boolean = executionPlan.hasNext
+  override def hasNext: Boolean = executionPlan.getTreeIterator.hasNext
 
   override def next(): CompoundStatementExec = {
     if (!hasNext) throw SparkException.internalError("No more elements to iterate through.")
-    executionPlan.next()
+    executionPlan.getTreeIterator.next()
   }
 
-  def enterScope(label: String): Unit = {
-    scopes.append(new SqlScriptingExecutionScope(label))
+  def enterScope(
+      label: String,
+      conditionHandlerMap: HashMap[String, ErrorHandlerExec]): Unit = {
+    scopes.append(new SqlScriptingExecutionScope(label, conditionHandlerMap))
   }
 
   def exitScope(label: String): Unit = {
@@ -81,6 +107,20 @@ class SqlScriptingExecutionFrame(
       scopes.remove(scopes.length - 1)
     }
   }
+
+  def findHandler(condition: String, sqlState: String): Option[ErrorHandlerExec] = {
+    if (scopes.isEmpty) {
+      throw SparkException.internalError(s"Cannot find handler: no scopes.")
+    }
+
+    scopes.reverseIterator.foreach { scope =>
+      val handler = scope.findHandler(condition, sqlState)
+      if (handler.isDefined) {
+        return handler
+      }
+    }
+    None
+  }
 }
 
 /**
@@ -88,5 +128,58 @@ class SqlScriptingExecutionFrame(
  *
  * @param label
  *   Label of the scope.
+ * @param conditionHandlerMap
+ *   Map holding condition/sqlState to handler mapping.
+ * @return
+ *   Handler for the given condition.
  */
-class SqlScriptingExecutionScope(val label: String)
+class SqlScriptingExecutionScope(
+    val label: String,
+    val conditionHandlerMap: HashMap[String, ErrorHandlerExec]) {
+
+  /**
+   * Finds the most appropriate error handler for exception based on its condition and SQL state.
+   *
+   * The method follows these rules to determine the most appropriate handler:
+   * 1. Specific named condition handlers (e.g., DIVIDE_BY_ZERO) are checked first.
+   * 2. If no specific condition handler is found, SQLSTATE handlers are checked.
+   * 3. For SQLSTATEs starting with '02', a generic NOT FOUND handler is used if available.
+   * 4. For other SQLSTATEs (except those starting with 'XX' or '02'), a generic SQLEXCEPTION
+   *    handler is used if available.
+   *
+   * Note: Handlers defined in the innermost compound statement where the exception was raised
+   * are considered.
+   *
+   * @param condition Error condition of the exception to find handler for.
+   * @param sqlState SQLSTATE of the exception to find handler for.
+   *
+   * @return Handler for the given condition if exists.
+   */
+  def findHandler(condition: String, sqlState: String): Option[ErrorHandlerExec] = {
+    // Check if there is a specific handler for the given condition.
+    conditionHandlerMap.get(condition)
+      .orElse {
+        conditionHandlerMap.get(sqlState) match {
+          // If SQLSTATE handler is defined, use it only for errors with class != '02'.
+          case Some(handler) if !sqlState.startsWith("02") => Some(handler)
+          case _ => None
+        }
+      }
+      .orElse {
+        conditionHandlerMap.get("NOT FOUND") match {
+          // If NOT FOUND handler is defined, use it only for errors with class == '02'.
+          case Some(handler) if sqlState.startsWith("02") => Some(handler)
+          case _ => None
+        }
+      }
+      .orElse {
+        conditionHandlerMap.get("SQLEXCEPTION") match {
+          // If SQLEXCEPTION handler is defined, use it only for errors with class
+          // different from 'XX' and '02'.
+          case Some(handler) if
+            !sqlState.startsWith("XX") && !sqlState.startsWith("02") => Some(handler)
+          case _ => None
+        }
+      }
+  }
+}
