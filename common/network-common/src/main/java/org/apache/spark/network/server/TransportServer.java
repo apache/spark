@@ -35,6 +35,8 @@ import io.netty.channel.EventLoopGroup;
 import io.netty.channel.socket.SocketChannel;
 import org.apache.commons.lang3.SystemUtils;
 
+import org.apache.spark.internal.LogKeys;
+import org.apache.spark.internal.MDC;
 import org.apache.spark.internal.SparkLogger;
 import org.apache.spark.internal.SparkLoggerFactory;
 import org.apache.spark.network.TransportContext;
@@ -151,7 +153,10 @@ public class TransportServer implements Closeable {
 
     InetSocketAddress localAddress = (InetSocketAddress) channelFuture.channel().localAddress();
     port = localAddress.getPort();
-    logger.debug("Shuffle server started on {} with port {}", localAddress.getHostString(), port);
+    logger.info("{} server started on {} with port {}",
+      MDC.of(LogKeys.MODULE_NAME$.MODULE$, conf.getModuleName()),
+      MDC.of(LogKeys.HOST$.MODULE$, localAddress.getHostString()),
+      MDC.of(LogKeys.PORT$.MODULE$, port));
   }
 
   public MetricSet getAllMetrics() {
