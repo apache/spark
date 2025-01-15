@@ -107,7 +107,7 @@ object NormalizePlan extends PredicateHelper {
       case Filter(condition: Expression, child: LogicalPlan) =>
         Filter(
           splitConjunctivePredicates(condition)
-            .map(rewriteBinaryComparison)
+            .map(rewriteEqualAndComparisons)
             .sortBy(_.hashCode())
             .reduce(And),
           child
@@ -124,7 +124,7 @@ object NormalizePlan extends PredicateHelper {
 
         val newCondition =
           splitConjunctivePredicates(condition.get)
-            .map(rewriteBinaryComparison)
+            .map(rewriteEqualAndComparisons)
             .sortBy(_.hashCode())
             .reduce(And)
         Join(left, right, newJoinType, Some(newCondition), hint)
@@ -161,13 +161,14 @@ object NormalizePlan extends PredicateHelper {
    * 2. (a <=> b), (b <=> a).
    * 3. (a > b), (b < a)
    */
-  private def rewriteBinaryComparison(condition: Expression): Expression = condition match {
+  private def rewriteEqualAndComparisons(condition: Expression): Expression = condition match {
     case EqualTo(l, r) => Seq(l, r).sortBy(_.hashCode()).reduce(EqualTo)
     case EqualNullSafe(l, r) => Seq(l, r).sortBy(_.hashCode()).reduce(EqualNullSafe)
     case GreaterThan(l, r) if l.hashCode() > r.hashCode() => LessThan(r, l)
     case LessThan(l, r) if l.hashCode() > r.hashCode() => GreaterThan(r, l)
     case GreaterThanOrEqual(l, r) if l.hashCode() > r.hashCode() => LessThanOrEqual(r, l)
     case LessThanOrEqual(l, r) if l.hashCode() > r.hashCode() => GreaterThanOrEqual(r, l)
+    case br @ BinaryComparison(lhs: Literal, rhs: Expression) => br.reverseOperands()
     case _ => condition // Don't reorder.
   }
 }
