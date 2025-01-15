@@ -19,7 +19,6 @@ syntax = 'proto3';
 
 package spark.connect;
 
-import "spark/connect/expressions.proto";
 import "spark/connect/relations.proto";
 import "spark/connect/ml_common.proto";
 

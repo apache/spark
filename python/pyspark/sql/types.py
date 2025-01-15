@@ -49,7 +49,6 @@ from typing import (
 from pyspark.util import is_remote_only, JVM_INT_MAX
 from pyspark.serializers import CloudPickleSerializer
 from pyspark.sql.utils import (
-    has_numpy,
     get_active_spark_context,
     escape_meta_characters,
     StringConcat,
@@ -64,9 +63,6 @@ from pyspark.errors import (
     PySparkAttributeError,
     PySparkKeyError,
 )
-
-if has_numpy:
-    import numpy as np
 
 if TYPE_CHECKING:
     import numpy as np
@@ -1584,6 +1580,8 @@ class VariantType(AtomicType):
         return VariantVal(obj["value"], obj["metadata"])
 
     def toInternal(self, variant: Any) -> Any:
+        if variant is None:
+            return None
         assert isinstance(variant, VariantVal)
         return {"value": variant.value, "metadata": variant.metadata}
 
@@ -3237,7 +3235,13 @@ class DayTimeIntervalTypeConverter:
 
 class NumpyScalarConverter:
     def can_convert(self, obj: Any) -> bool:
-        return has_numpy and isinstance(obj, np.generic)
+        from pyspark.testing.utils import have_numpy
+
+        if have_numpy:
+            import numpy as np
+
+            return isinstance(obj, np.generic)
+        return False
 
     def convert(self, obj: "np.generic", gateway_client: "GatewayClient") -> Any:
         return obj.item()
@@ -3248,6 +3252,8 @@ class NumpyArrayConverter:
         self, nt: "np.dtype", gateway: "JavaGateway"
     ) -> Optional["JavaClass"]:
         """Convert NumPy type to Py4J Java type."""
+        import numpy as np
+
         if nt in [np.dtype("int8"), np.dtype("int16")]:
             # Mapping int8 to gateway.jvm.byte causes
             #   TypeError: 'bytes' object does not support item assignment
@@ -3268,7 +3274,13 @@ class NumpyArrayConverter:
         return None
 
     def can_convert(self, obj: Any) -> bool:
-        return has_numpy and isinstance(obj, np.ndarray) and obj.ndim == 1
+        from pyspark.testing.utils import have_numpy
+
+        if have_numpy:
+            import numpy as np
+
+            return isinstance(obj, np.ndarray) and obj.ndim == 1
+        return False
 
     def convert(self, obj: "np.ndarray", gateway_client: "GatewayClient") -> "JavaGateway":
         from pyspark import SparkContext
