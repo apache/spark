@@ -93,7 +93,7 @@ DELETE FROM IDENTIFIER('ta' || 'b') WHERE 1=0
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNSUPPORTED_FEATURE.TABLE_OPERATION",
+  "condition" : "UNSUPPORTED_FEATURE.TABLE_OPERATION",
   "sqlState" : "0A000",
   "messageParameters" : {
     "operation" : "DELETE",
@@ -107,7 +107,7 @@ UPDATE IDENTIFIER('ta' || 'b') SET c1 = 2
 -- !query analysis
 org.apache.spark.SparkUnsupportedOperationException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2096",
+  "condition" : "_LEGACY_ERROR_TEMP_2096",
   "messageParameters" : {
     "ddl" : "UPDATE TABLE"
   }
@@ -120,7 +120,7 @@ MERGE INTO IDENTIFIER('ta' || 'b') AS t USING IDENTIFIER('ta' || 'b') AS s ON s.
 -- !query analysis
 org.apache.spark.SparkUnsupportedOperationException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2096",
+  "condition" : "_LEGACY_ERROR_TEMP_2096",
   "messageParameters" : {
     "ddl" : "MERGE INTO TABLE"
   }
@@ -252,7 +252,7 @@ REPLACE TABLE IDENTIFIER('identifier_clauses.' || 'tab')(c1 INT) USING CSV
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNSUPPORTED_FEATURE.TABLE_OPERATION",
+  "condition" : "UNSUPPORTED_FEATURE.TABLE_OPERATION",
   "sqlState" : "0A000",
   "messageParameters" : {
     "operation" : "REPLACE TABLE",
@@ -369,7 +369,7 @@ REPAIR TABLE IDENTIFIER('ta' || 'b')
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "NOT_A_PARTITIONED_TABLE",
+  "condition" : "NOT_A_PARTITIONED_TABLE",
   "sqlState" : "42809",
   "messageParameters" : {
     "operation" : "MSCK REPAIR TABLE",
@@ -613,7 +613,7 @@ SELECT IDENTIFIER('c 1') FROM VALUES(1) AS T(`c 1`)
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "condition" : "PARSE_SYNTAX_ERROR",
   "sqlState" : "42601",
   "messageParameters" : {
     "error" : "'1'",
@@ -634,7 +634,7 @@ SELECT IDENTIFIER('') FROM VALUES(1) AS T(``)
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "PARSE_EMPTY_STATEMENT",
+  "condition" : "PARSE_EMPTY_STATEMENT",
   "sqlState" : "42617",
   "queryContext" : [ {
     "objectType" : "",
@@ -651,7 +651,7 @@ VALUES(IDENTIFIER(CAST(NULL AS STRING)))
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "NOT_A_CONSTANT_STRING.NULL",
+  "condition" : "NOT_A_CONSTANT_STRING.NULL",
   "sqlState" : "42601",
   "messageParameters" : {
     "expr" : "CAST(NULL AS STRING)",
@@ -672,7 +672,7 @@ VALUES(IDENTIFIER(1))
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "NOT_A_CONSTANT_STRING.WRONG_TYPE",
+  "condition" : "NOT_A_CONSTANT_STRING.WRONG_TYPE",
   "sqlState" : "42601",
   "messageParameters" : {
     "dataType" : "int",
@@ -694,7 +694,7 @@ VALUES(IDENTIFIER(SUBSTR('HELLO', 1, RAND() + 1)))
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "NOT_A_CONSTANT_STRING.NOT_CONSTANT",
+  "condition" : "NOT_A_CONSTANT_STRING.NOT_CONSTANT",
   "sqlState" : "42601",
   "messageParameters" : {
     "expr" : "substr('HELLO', 1, CAST((rand() + CAST(1 AS DOUBLE)) AS INT))",
@@ -715,7 +715,7 @@ SELECT `IDENTIFIER`('abs')(c1) FROM VALUES(-1) AS T(c1)
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNRESOLVED_ROUTINE",
+  "condition" : "UNRESOLVED_ROUTINE",
   "sqlState" : "42883",
   "messageParameters" : {
     "routineName" : "`IDENTIFIER`",
@@ -736,7 +736,7 @@ CREATE TABLE IDENTIFIER(1)(c1 INT) USING csv
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "NOT_A_CONSTANT_STRING.WRONG_TYPE",
+  "condition" : "NOT_A_CONSTANT_STRING.WRONG_TYPE",
   "sqlState" : "42601",
   "messageParameters" : {
     "dataType" : "int",
@@ -758,7 +758,7 @@ CREATE TABLE IDENTIFIER('a.b.c')(c1 INT) USING csv
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "REQUIRES_SINGLE_PART_NAMESPACE",
+  "condition" : "REQUIRES_SINGLE_PART_NAMESPACE",
   "sqlState" : "42K05",
   "messageParameters" : {
     "namespace" : "`a`.`b`",
@@ -772,7 +772,7 @@ CREATE VIEW IDENTIFIER('a.b.c')(c1) AS VALUES(1)
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "REQUIRES_SINGLE_PART_NAMESPACE",
+  "condition" : "REQUIRES_SINGLE_PART_NAMESPACE",
   "sqlState" : "42K05",
   "messageParameters" : {
     "namespace" : "`a`.`b`",
@@ -786,7 +786,7 @@ DROP TABLE IDENTIFIER('a.b.c')
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "REQUIRES_SINGLE_PART_NAMESPACE",
+  "condition" : "REQUIRES_SINGLE_PART_NAMESPACE",
   "sqlState" : "42K05",
   "messageParameters" : {
     "namespace" : "`a`.`b`",
@@ -800,7 +800,7 @@ DROP VIEW IDENTIFIER('a.b.c')
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "REQUIRES_SINGLE_PART_NAMESPACE",
+  "condition" : "REQUIRES_SINGLE_PART_NAMESPACE",
   "sqlState" : "42K05",
   "messageParameters" : {
     "namespace" : "`a`.`b`",
@@ -814,7 +814,7 @@ COMMENT ON TABLE IDENTIFIER('a.b.c.d') IS 'hello'
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "REQUIRES_SINGLE_PART_NAMESPACE",
+  "condition" : "REQUIRES_SINGLE_PART_NAMESPACE",
   "sqlState" : "42K05",
   "messageParameters" : {
     "namespace" : "`a`.`b`.`c`",
@@ -828,7 +828,7 @@ VALUES(IDENTIFIER(1)())
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "NOT_A_CONSTANT_STRING.WRONG_TYPE",
+  "condition" : "NOT_A_CONSTANT_STRING.WRONG_TYPE",
   "sqlState" : "42601",
   "messageParameters" : {
     "dataType" : "int",
@@ -850,7 +850,7 @@ VALUES(IDENTIFIER('a.b.c.d')())
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "IDENTIFIER_TOO_MANY_NAME_PARTS",
+  "condition" : "IDENTIFIER_TOO_MANY_NAME_PARTS",
   "sqlState" : "42601",
   "messageParameters" : {
     "identifier" : "`a`.`b`.`c`.`d`"
@@ -870,7 +870,7 @@ CREATE TEMPORARY FUNCTION IDENTIFIER('default.my' || 'DoubleAvg') AS 'test.org.a
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "INVALID_SQL_SYNTAX.CREATE_TEMP_FUNC_WITH_DATABASE",
+  "condition" : "INVALID_SQL_SYNTAX.CREATE_TEMP_FUNC_WITH_DATABASE",
   "sqlState" : "42000",
   "messageParameters" : {
     "database" : "`default`"
@@ -890,7 +890,7 @@ DROP TEMPORARY FUNCTION IDENTIFIER('default.my' || 'DoubleAvg')
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "INVALID_SQL_SYNTAX.MULTI_PART_NAME",
+  "condition" : "INVALID_SQL_SYNTAX.MULTI_PART_NAME",
   "sqlState" : "42000",
   "messageParameters" : {
     "name" : "`default`.`myDoubleAvg`",
@@ -911,7 +911,7 @@ CREATE TEMPORARY VIEW IDENTIFIER('default.v')(c1) AS VALUES(1)
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "TEMP_VIEW_NAME_TOO_MANY_NAME_PARTS",
+  "condition" : "TEMP_VIEW_NAME_TOO_MANY_NAME_PARTS",
   "sqlState" : "428EK",
   "messageParameters" : {
     "actualName" : "`default`.`v`"
@@ -1063,7 +1063,7 @@ SELECT row_number() OVER IDENTIFIER('x.win') FROM VALUES(1) AS T(c1) WINDOW win 
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "condition" : "PARSE_SYNTAX_ERROR",
   "sqlState" : "42601",
   "messageParameters" : {
     "error" : "''x.win''",
@@ -1077,7 +1077,7 @@ SELECT T1.c1 FROM VALUES(1) AS T1(c1) JOIN VALUES(1) AS T2(c1) USING (IDENTIFIER
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "condition" : "PARSE_SYNTAX_ERROR",
   "sqlState" : "42601",
   "messageParameters" : {
     "error" : "'('",
@@ -1091,7 +1091,7 @@ SELECT IDENTIFIER('t').c1 FROM VALUES(1) AS T(c1)
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "condition" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
   "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`t`",
@@ -1112,7 +1112,7 @@ SELECT map('a', 1).IDENTIFIER('a') FROM VALUES(1) AS T(c1)
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "condition" : "PARSE_SYNTAX_ERROR",
   "sqlState" : "42601",
   "messageParameters" : {
     "error" : "''a''",
@@ -1126,7 +1126,7 @@ SELECT named_struct('a', 1).IDENTIFIER('a') FROM VALUES(1) AS T(c1)
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "condition" : "PARSE_SYNTAX_ERROR",
   "sqlState" : "42601",
   "messageParameters" : {
     "error" : "''a''",
@@ -1140,7 +1140,7 @@ SELECT * FROM s.IDENTIFIER('tab')
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "INVALID_SQL_SYNTAX.INVALID_TABLE_VALUED_FUNC_NAME",
+  "condition" : "INVALID_SQL_SYNTAX.INVALID_TABLE_VALUED_FUNC_NAME",
   "sqlState" : "42000",
   "messageParameters" : {
     "funcName" : "`s`.`IDENTIFIER`"
@@ -1160,7 +1160,7 @@ SELECT * FROM IDENTIFIER('s').IDENTIFIER('tab')
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "condition" : "PARSE_SYNTAX_ERROR",
   "sqlState" : "42601",
   "messageParameters" : {
     "error" : "'.'",
@@ -1174,7 +1174,7 @@ SELECT * FROM IDENTIFIER('s').tab
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "condition" : "PARSE_SYNTAX_ERROR",
   "sqlState" : "42601",
   "messageParameters" : {
     "error" : "'.'",
@@ -1188,7 +1188,7 @@ SELECT row_number() OVER IDENTIFIER('win') FROM VALUES(1) AS T(c1) WINDOW win AS
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "condition" : "PARSE_SYNTAX_ERROR",
   "sqlState" : "42601",
   "messageParameters" : {
     "error" : "''win''",
@@ -1202,7 +1202,7 @@ SELECT row_number() OVER win FROM VALUES(1) AS T(c1) WINDOW IDENTIFIER('win') AS
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "condition" : "PARSE_SYNTAX_ERROR",
   "sqlState" : "42601",
   "messageParameters" : {
     "error" : "'WINDOW'",
@@ -1216,7 +1216,7 @@ WITH identifier('v')(identifier('c1')) AS (VALUES(1)) (SELECT c1 FROM v)
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "condition" : "PARSE_SYNTAX_ERROR",
   "sqlState" : "42601",
   "messageParameters" : {
     "error" : "''v''",
@@ -1230,7 +1230,7 @@ INSERT INTO tab(IDENTIFIER('c1')) VALUES(1)
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "condition" : "PARSE_SYNTAX_ERROR",
   "sqlState" : "42601",
   "messageParameters" : {
     "error" : "'('",
@@ -1244,7 +1244,7 @@ CREATE OR REPLACE VIEW v(IDENTIFIER('c1')) AS VALUES(1)
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "condition" : "PARSE_SYNTAX_ERROR",
   "sqlState" : "42601",
   "messageParameters" : {
     "error" : "'('",
@@ -1258,7 +1258,7 @@ CREATE TABLE tab(IDENTIFIER('c1') INT) USING CSV
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "condition" : "PARSE_SYNTAX_ERROR",
   "sqlState" : "42601",
   "messageParameters" : {
     "error" : "'('",

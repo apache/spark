@@ -6,7 +6,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "NESTED_AGGREGATE_FUNCTION",
+  "condition" : "NESTED_AGGREGATE_FUNCTION",
   "sqlState" : "42607",
   "queryContext" : [ {
     "objectType" : "",

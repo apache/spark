@@ -129,7 +129,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "condition" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
     "inputSql" : "\"1\"",
@@ -182,7 +182,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkArrayIndexOutOfBoundsException
 {
-  "errorClass" : "INVALID_ARRAY_INDEX_IN_ELEMENT_AT",
+  "condition" : "INVALID_ARRAY_INDEX_IN_ELEMENT_AT",
   "sqlState" : "22003",
   "messageParameters" : {
     "arraySize" : "3",
@@ -205,7 +205,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkArrayIndexOutOfBoundsException
 {
-  "errorClass" : "INVALID_ARRAY_INDEX_IN_ELEMENT_AT",
+  "condition" : "INVALID_ARRAY_INDEX_IN_ELEMENT_AT",
   "sqlState" : "22003",
   "messageParameters" : {
     "arraySize" : "3",
@@ -228,7 +228,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkRuntimeException
 {
-  "errorClass" : "INVALID_INDEX_OF_ZERO",
+  "condition" : "INVALID_INDEX_OF_ZERO",
   "sqlState" : "22003",
   "queryContext" : [ {
     "objectType" : "",
@@ -247,7 +247,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkArrayIndexOutOfBoundsException
 {
-  "errorClass" : "INVALID_ARRAY_INDEX",
+  "condition" : "INVALID_ARRAY_INDEX",
   "sqlState" : "22003",
   "messageParameters" : {
     "arraySize" : "2",
@@ -270,7 +270,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkArrayIndexOutOfBoundsException
 {
-  "errorClass" : "INVALID_ARRAY_INDEX",
+  "condition" : "INVALID_ARRAY_INDEX",
   "sqlState" : "22003",
   "messageParameters" : {
     "arraySize" : "2",
@@ -293,7 +293,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkArrayIndexOutOfBoundsException
 {
-  "errorClass" : "INVALID_ARRAY_INDEX",
+  "condition" : "INVALID_ARRAY_INDEX",
   "sqlState" : "22003",
   "messageParameters" : {
     "arraySize" : "2",
@@ -348,7 +348,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkArrayIndexOutOfBoundsException
 {
-  "errorClass" : "INVALID_ARRAY_INDEX",
+  "condition" : "INVALID_ARRAY_INDEX",
   "sqlState" : "22003",
   "messageParameters" : {
     "arraySize" : "3",
@@ -371,7 +371,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkArrayIndexOutOfBoundsException
 {
-  "errorClass" : "INVALID_ARRAY_INDEX",
+  "condition" : "INVALID_ARRAY_INDEX",
   "sqlState" : "22003",
   "messageParameters" : {
     "arraySize" : "3",
@@ -426,7 +426,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "condition" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
     "inputSql" : "\"map(a, 1, b, 2)\"",
@@ -540,7 +540,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkRuntimeException
 {
-  "errorClass" : "INVALID_INDEX_OF_ZERO",
+  "condition" : "INVALID_INDEX_OF_ZERO",
   "sqlState" : "22003",
   "queryContext" : [ {
     "objectType" : "",
@@ -575,7 +575,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.ARRAY_FUNCTION_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.ARRAY_FUNCTION_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "\"ARRAY\"",
@@ -681,7 +681,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "condition" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
     "inputSql" : "\"id\"",

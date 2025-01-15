@@ -35,7 +35,7 @@ WITH s AS (SELECT 1 FROM s) SELECT * FROM s
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "condition" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
   "messageParameters" : {
     "relationName" : "`s`"
@@ -56,7 +56,7 @@ SELECT * FROM r
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "condition" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
   "messageParameters" : {
     "relationName" : "`r`"
@@ -115,7 +115,7 @@ WITH s1 AS (SELECT 1 FROM s2), s2 AS (SELECT 1 FROM s1) SELECT * FROM s1, s2
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "condition" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
   "messageParameters" : {
     "relationName" : "`s2`"
@@ -250,7 +250,7 @@ SELECT * FROM t
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "condition" : "PARSE_SYNTAX_ERROR",
   "sqlState" : "42601",
   "messageParameters" : {
     "error" : "')'",
@@ -267,7 +267,7 @@ SELECT * FROM t
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "DUPLICATED_CTE_NAMES",
+  "condition" : "DUPLICATED_CTE_NAMES",
   "sqlState" : "42602",
   "messageParameters" : {
     "duplicateNames" : "`t`"
@@ -288,7 +288,7 @@ SELECT 2
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "condition" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
   "messageParameters" : {
     "relationName" : "`non_existing_table`"
@@ -393,7 +393,7 @@ FROM t
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_INLINE_TABLE.CANNOT_EVALUATE_EXPRESSION_IN_INLINE_TABLE",
+  "condition" : "INVALID_INLINE_TABLE.CANNOT_EVALUATE_EXPRESSION_IN_INLINE_TABLE",
   "sqlState" : "42000",
   "messageParameters" : {
     "expr" : "\"outer(t.id)\""
@@ -432,7 +432,7 @@ SELECT same_name.x FROM (SELECT 10) AS same_name(x), same_name
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "AMBIGUOUS_REFERENCE",
+  "condition" : "AMBIGUOUS_REFERENCE",
   "sqlState" : "42704",
   "messageParameters" : {
     "name" : "`same_name`.`x`",
@@ -468,7 +468,7 @@ select id from cte
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "condition" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
   "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`id`",
@@ -491,7 +491,7 @@ select 2
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "condition" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
   "messageParameters" : {
     "relationName" : "`r2`"
@@ -559,7 +559,7 @@ SELECT * FROM
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "condition" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
   "messageParameters" : {
     "relationName" : "`q`"
@@ -723,7 +723,7 @@ with cte1 as (select 42), cte1 as (select 42) select * FROM cte1
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "DUPLICATED_CTE_NAMES",
+  "condition" : "DUPLICATED_CTE_NAMES",
   "sqlState" : "42602",
   "messageParameters" : {
     "duplicateNames" : "`cte1`"
@@ -767,7 +767,7 @@ with cte AS (SELECT * FROM va) SELECT * FROM cte
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "condition" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
   "messageParameters" : {
     "relationName" : "`va`"
@@ -787,7 +787,7 @@ with cte as (select * from cte) select * from cte
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "condition" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
   "messageParameters" : {
     "relationName" : "`cte`"

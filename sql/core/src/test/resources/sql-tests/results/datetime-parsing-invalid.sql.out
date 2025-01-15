@@ -15,7 +15,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
 {
-  "errorClass" : "CANNOT_PARSE_TIMESTAMP",
+  "condition" : "CANNOT_PARSE_TIMESTAMP",
   "sqlState" : "22007",
   "messageParameters" : {
     "func" : "`try_to_timestamp`",
@@ -31,7 +31,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
 {
-  "errorClass" : "CANNOT_PARSE_TIMESTAMP",
+  "condition" : "CANNOT_PARSE_TIMESTAMP",
   "sqlState" : "22007",
   "messageParameters" : {
     "func" : "`try_to_timestamp`",
@@ -47,7 +47,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
 {
-  "errorClass" : "CANNOT_PARSE_TIMESTAMP",
+  "condition" : "CANNOT_PARSE_TIMESTAMP",
   "sqlState" : "22007",
   "messageParameters" : {
     "func" : "`try_to_timestamp`",
@@ -63,7 +63,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
 {
-  "errorClass" : "CANNOT_PARSE_TIMESTAMP",
+  "condition" : "CANNOT_PARSE_TIMESTAMP",
   "sqlState" : "22007",
   "messageParameters" : {
     "func" : "`try_to_timestamp`",
@@ -79,7 +79,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
 {
-  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION.DATETIME_PATTERN_RECOGNITION",
+  "condition" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION.DATETIME_PATTERN_RECOGNITION",
   "sqlState" : "42K0B",
   "messageParameters" : {
     "config" : "\"spark.sql.legacy.timeParserPolicy\"",
@@ -96,7 +96,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
 {
-  "errorClass" : "CANNOT_PARSE_TIMESTAMP",
+  "condition" : "CANNOT_PARSE_TIMESTAMP",
   "sqlState" : "22007",
   "messageParameters" : {
     "func" : "`try_to_timestamp`",
@@ -112,7 +112,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
 {
-  "errorClass" : "CANNOT_PARSE_TIMESTAMP",
+  "condition" : "CANNOT_PARSE_TIMESTAMP",
   "sqlState" : "22007",
   "messageParameters" : {
     "func" : "`try_to_timestamp`",
@@ -128,7 +128,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
 {
-  "errorClass" : "CANNOT_PARSE_TIMESTAMP",
+  "condition" : "CANNOT_PARSE_TIMESTAMP",
   "sqlState" : "22007",
   "messageParameters" : {
     "func" : "`try_to_timestamp`",
@@ -144,7 +144,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
 {
-  "errorClass" : "CANNOT_PARSE_TIMESTAMP",
+  "condition" : "CANNOT_PARSE_TIMESTAMP",
   "sqlState" : "22007",
   "messageParameters" : {
     "func" : "`try_to_timestamp`",
@@ -160,7 +160,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
 {
-  "errorClass" : "CANNOT_PARSE_TIMESTAMP",
+  "condition" : "CANNOT_PARSE_TIMESTAMP",
   "sqlState" : "22007",
   "messageParameters" : {
     "func" : "`try_to_timestamp`",
@@ -176,7 +176,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
 {
-  "errorClass" : "CANNOT_PARSE_TIMESTAMP",
+  "condition" : "CANNOT_PARSE_TIMESTAMP",
   "sqlState" : "22007",
   "messageParameters" : {
     "func" : "`try_to_timestamp`",
@@ -192,7 +192,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
 {
-  "errorClass" : "CANNOT_PARSE_TIMESTAMP",
+  "condition" : "CANNOT_PARSE_TIMESTAMP",
   "sqlState" : "22007",
   "messageParameters" : {
     "func" : "`try_to_timestamp`",
@@ -208,7 +208,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
 {
-  "errorClass" : "CANNOT_PARSE_TIMESTAMP",
+  "condition" : "CANNOT_PARSE_TIMESTAMP",
   "sqlState" : "22007",
   "messageParameters" : {
     "func" : "`try_to_timestamp`",
@@ -224,7 +224,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
 {
-  "errorClass" : "CANNOT_PARSE_TIMESTAMP",
+  "condition" : "CANNOT_PARSE_TIMESTAMP",
   "sqlState" : "22007",
   "messageParameters" : {
     "func" : "`try_to_timestamp`",
@@ -240,7 +240,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
 {
-  "errorClass" : "CANNOT_PARSE_TIMESTAMP",
+  "condition" : "CANNOT_PARSE_TIMESTAMP",
   "sqlState" : "22007",
   "messageParameters" : {
     "func" : "`try_to_timestamp`",
@@ -256,7 +256,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
 {
-  "errorClass" : "CANNOT_PARSE_TIMESTAMP",
+  "condition" : "CANNOT_PARSE_TIMESTAMP",
   "sqlState" : "22007",
   "messageParameters" : {
     "func" : "`try_to_timestamp`",
@@ -272,7 +272,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
 {
-  "errorClass" : "CANNOT_PARSE_TIMESTAMP",
+  "condition" : "CANNOT_PARSE_TIMESTAMP",
   "sqlState" : "22007",
   "messageParameters" : {
     "func" : "`try_to_timestamp`",
@@ -296,7 +296,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
 {
-  "errorClass" : "CANNOT_PARSE_TIMESTAMP",
+  "condition" : "CANNOT_PARSE_TIMESTAMP",
   "sqlState" : "22007",
   "messageParameters" : {
     "func" : "`try_to_date`",
@@ -312,7 +312,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
 {
-  "errorClass" : "CANNOT_PARSE_TIMESTAMP",
+  "condition" : "CANNOT_PARSE_TIMESTAMP",
   "sqlState" : "22007",
   "messageParameters" : {
     "func" : "`try_to_date`",
@@ -328,7 +328,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
 {
-  "errorClass" : "CANNOT_PARSE_TIMESTAMP",
+  "condition" : "CANNOT_PARSE_TIMESTAMP",
   "sqlState" : "22007",
   "messageParameters" : {
     "func" : "`try_to_timestamp`",
@@ -344,7 +344,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
 {
-  "errorClass" : "CANNOT_PARSE_TIMESTAMP",
+  "condition" : "CANNOT_PARSE_TIMESTAMP",
   "sqlState" : "22007",
   "messageParameters" : {
     "func" : "`try_to_timestamp`",
@@ -360,7 +360,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
 {
-  "errorClass" : "CANNOT_PARSE_TIMESTAMP",
+  "condition" : "CANNOT_PARSE_TIMESTAMP",
   "sqlState" : "22007",
   "messageParameters" : {
     "func" : "`try_to_timestamp`",
@@ -376,7 +376,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
 {
-  "errorClass" : "CANNOT_PARSE_TIMESTAMP",
+  "condition" : "CANNOT_PARSE_TIMESTAMP",
   "sqlState" : "22007",
   "messageParameters" : {
     "func" : "`try_to_timestamp`",
@@ -392,7 +392,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
 {
-  "errorClass" : "CANNOT_PARSE_TIMESTAMP",
+  "condition" : "CANNOT_PARSE_TIMESTAMP",
   "sqlState" : "22007",
   "messageParameters" : {
     "func" : "`try_to_timestamp`",
@@ -408,7 +408,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
 {
-  "errorClass" : "CANNOT_PARSE_TIMESTAMP",
+  "condition" : "CANNOT_PARSE_TIMESTAMP",
   "sqlState" : "22007",
   "messageParameters" : {
     "func" : "`try_to_timestamp`",
@@ -424,7 +424,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
 {
-  "errorClass" : "CAST_INVALID_INPUT",
+  "condition" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
     "expression" : "'Unparseable'",
@@ -448,7 +448,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
 {
-  "errorClass" : "CAST_INVALID_INPUT",
+  "condition" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
     "expression" : "'Unparseable'",

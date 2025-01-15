@@ -265,7 +265,7 @@ SELECT listagg(c1) FROM (VALUES (ARRAY('a', 'b'))) AS t(c1)
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "condition" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
     "inputSql" : "\"c1\"",
@@ -289,7 +289,7 @@ SELECT listagg(c1, ', ') FROM (VALUES (X'DEAD'), (X'BEEF')) AS t(c1)
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "(\"BINARY\" or \"STRING\")",
@@ -311,7 +311,7 @@ SELECT listagg(b, a) FROM df GROUP BY a
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
+  "condition" : "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
   "sqlState" : "42K09",
   "messageParameters" : {
     "inputExpr" : "\"a\"",
@@ -350,7 +350,7 @@ SELECT listagg(a) WITHIN GROUP (ORDER BY a) OVER (ORDER BY a) FROM df
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "INVALID_WINDOW_SPEC_FOR_AGGREGATION_FUNC",
+  "condition" : "INVALID_WINDOW_SPEC_FOR_AGGREGATION_FUNC",
   "sqlState" : "42601",
   "messageParameters" : {
     "aggFunc" : "\"listagg(a, NULL, a ASC NULLS FIRST)\""
@@ -370,7 +370,7 @@ SELECT string_agg(a) WITHIN GROUP (ORDER BY a) OVER (ORDER BY a) FROM df
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "INVALID_WINDOW_SPEC_FOR_AGGREGATION_FUNC",
+  "condition" : "INVALID_WINDOW_SPEC_FOR_AGGREGATION_FUNC",
   "sqlState" : "42601",
   "messageParameters" : {
     "aggFunc" : "\"listagg(a, NULL, a ASC NULLS FIRST)\""
@@ -390,7 +390,7 @@ SELECT listagg(DISTINCT a) OVER (ORDER BY a) FROM df
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DISTINCT_WINDOW_FUNCTION_UNSUPPORTED",
+  "condition" : "DISTINCT_WINDOW_FUNCTION_UNSUPPORTED",
   "sqlState" : "0A000",
   "messageParameters" : {
     "windowExpr" : "\"listagg(DISTINCT a, NULL) OVER (ORDER BY a ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)\""
@@ -410,7 +410,7 @@ SELECT listagg(DISTINCT a) WITHIN GROUP (ORDER BY b) FROM df
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "INVALID_WITHIN_GROUP_EXPRESSION.MISMATCH_WITH_DISTINCT_INPUT",
+  "condition" : "INVALID_WITHIN_GROUP_EXPRESSION.MISMATCH_WITH_DISTINCT_INPUT",
   "sqlState" : "42K0K",
   "messageParameters" : {
     "funcArg" : "\"a\"",
@@ -425,7 +425,7 @@ SELECT listagg(DISTINCT a) WITHIN GROUP (ORDER BY a, b) FROM df
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "INVALID_WITHIN_GROUP_EXPRESSION.MISMATCH_WITH_DISTINCT_INPUT",
+  "condition" : "INVALID_WITHIN_GROUP_EXPRESSION.MISMATCH_WITH_DISTINCT_INPUT",
   "sqlState" : "42K0K",
   "messageParameters" : {
     "funcArg" : "\"a\"",

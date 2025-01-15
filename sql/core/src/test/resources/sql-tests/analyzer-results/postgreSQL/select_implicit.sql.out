@@ -109,7 +109,7 @@ SELECT count(*) FROM test_missing_target GROUP BY a ORDER BY b
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "condition" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
   "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`b`",
@@ -188,7 +188,7 @@ SELECT c, count(*) FROM test_missing_target GROUP BY 3
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "GROUP_BY_POS_OUT_OF_RANGE",
+  "condition" : "GROUP_BY_POS_OUT_OF_RANGE",
   "sqlState" : "42805",
   "messageParameters" : {
     "index" : "3",
@@ -211,7 +211,7 @@ SELECT count(*) FROM test_missing_target x, test_missing_target y
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "AMBIGUOUS_REFERENCE",
+  "condition" : "AMBIGUOUS_REFERENCE",
   "sqlState" : "42704",
   "messageParameters" : {
     "name" : "`b`",
@@ -321,7 +321,7 @@ SELECT count(a) FROM test_missing_target GROUP BY a ORDER BY b
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "condition" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
   "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`b`",
@@ -385,7 +385,7 @@ SELECT count(x.a) FROM test_missing_target x, test_missing_target y
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "AMBIGUOUS_REFERENCE",
+  "condition" : "AMBIGUOUS_REFERENCE",
   "sqlState" : "42704",
   "messageParameters" : {
     "name" : "`b`",
@@ -425,7 +425,7 @@ SELECT count(b) FROM test_missing_target x, test_missing_target y
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "AMBIGUOUS_REFERENCE",
+  "condition" : "AMBIGUOUS_REFERENCE",
   "sqlState" : "42704",
   "messageParameters" : {
     "name" : "`b`",

@@ -381,7 +381,7 @@ from t
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "condition" : "PARSE_SYNTAX_ERROR",
   "sqlState" : "42601",
   "messageParameters" : {
     "error" : "'from'",
@@ -638,7 +638,7 @@ table t
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "PIPE_OPERATOR_CONTAINS_AGGREGATE_FUNCTION",
+  "condition" : "PIPE_OPERATOR_CONTAINS_AGGREGATE_FUNCTION",
   "sqlState" : "0A000",
   "messageParameters" : {
     "clause" : "SELECT",
@@ -660,7 +660,7 @@ table t
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "PIPE_OPERATOR_CONTAINS_AGGREGATE_FUNCTION",
+  "condition" : "PIPE_OPERATOR_CONTAINS_AGGREGATE_FUNCTION",
   "sqlState" : "0A000",
   "messageParameters" : {
     "clause" : "SELECT",
@@ -811,7 +811,7 @@ table t
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "PIPE_OPERATOR_CONTAINS_AGGREGATE_FUNCTION",
+  "condition" : "PIPE_OPERATOR_CONTAINS_AGGREGATE_FUNCTION",
   "sqlState" : "0A000",
   "messageParameters" : {
     "clause" : "EXTEND",
@@ -833,7 +833,7 @@ table t
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "condition" : "PARSE_SYNTAX_ERROR",
   "sqlState" : "42601",
   "messageParameters" : {
     "error" : "'as'",
@@ -848,7 +848,7 @@ table t
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_USAGE_OF_STAR_OR_REGEX",
+  "condition" : "INVALID_USAGE_OF_STAR_OR_REGEX",
   "sqlState" : "42000",
   "messageParameters" : {
     "elem" : "'*'",
@@ -1042,7 +1042,7 @@ table t
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "condition" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
   "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`z`",
@@ -1064,7 +1064,7 @@ table t
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "condition" : "PARSE_SYNTAX_ERROR",
   "sqlState" : "42601",
   "messageParameters" : {
     "error" : "'as'",
@@ -1079,7 +1079,7 @@ select col from st
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0035",
+  "condition" : "_LEGACY_ERROR_TEMP_0035",
   "messageParameters" : {
     "message" : "SQL pipe syntax |> SET operator with multi-part assignment key (only single-part keys are allowed)"
   },
@@ -1149,7 +1149,7 @@ table t
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "condition" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
   "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`z`",
@@ -1171,7 +1171,7 @@ table st
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "condition" : "PARSE_SYNTAX_ERROR",
   "sqlState" : "42601",
   "messageParameters" : {
     "error" : "'.'",
@@ -1186,7 +1186,7 @@ table st
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "condition" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
   "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`col.i1`",
@@ -1208,7 +1208,7 @@ select 1 as x, 2 as y, 3 as z
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "EXCEPT_OVERLAPPING_COLUMNS",
+  "condition" : "EXCEPT_OVERLAPPING_COLUMNS",
   "sqlState" : "42702",
   "messageParameters" : {
     "columns" : "z, y, z"
@@ -1287,7 +1287,7 @@ table t
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "condition" : "PARSE_SYNTAX_ERROR",
   "sqlState" : "42601",
   "messageParameters" : {
     "error" : "','",
@@ -1302,7 +1302,7 @@ table t
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "condition" : "PARSE_SYNTAX_ERROR",
   "sqlState" : "42601",
   "messageParameters" : {
     "error" : "'1'",
@@ -1317,7 +1317,7 @@ table t
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "INVALID_IDENTIFIER",
+  "condition" : "INVALID_IDENTIFIER",
   "sqlState" : "42602",
   "messageParameters" : {
     "ident" : "u-v"
@@ -1331,7 +1331,7 @@ table t
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "condition" : "PARSE_SYNTAX_ERROR",
   "sqlState" : "42601",
   "messageParameters" : {
     "error" : "'@'",
@@ -1346,7 +1346,7 @@ table t
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "condition" : "PARSE_SYNTAX_ERROR",
   "sqlState" : "42601",
   "messageParameters" : {
     "error" : "'#'",
@@ -1478,7 +1478,7 @@ table t
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "INVALID_WHERE_CONDITION",
+  "condition" : "INVALID_WHERE_CONDITION",
   "sqlState" : "42903",
   "messageParameters" : {
     "condition" : "\"(sum(x) = 1)\"",
@@ -1500,7 +1500,7 @@ table t
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "INVALID_WHERE_CONDITION",
+  "condition" : "INVALID_WHERE_CONDITION",
   "sqlState" : "42903",
   "messageParameters" : {
     "condition" : "\"((y = abc) OR ((length(y) + sum(x)) = 1))\"",
@@ -1522,7 +1522,7 @@ table t
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1034",
+  "condition" : "_LEGACY_ERROR_TEMP_1034",
   "messageParameters" : {
     "clauseName" : "WHERE"
   }
@@ -1536,7 +1536,7 @@ table t
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "NOT_ALLOWED_IN_PIPE_OPERATOR_WHERE.WINDOW_CLAUSE",
+  "condition" : "NOT_ALLOWED_IN_PIPE_OPERATOR_WHERE.WINDOW_CLAUSE",
   "sqlState" : "42601",
   "queryContext" : [ {
     "objectType" : "",
@@ -1553,7 +1553,7 @@ select * from t where sum(x) over (partition by y) = 1
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1034",
+  "condition" : "_LEGACY_ERROR_TEMP_1034",
   "messageParameters" : {
     "clauseName" : "WHERE"
   }
@@ -1567,7 +1567,7 @@ table t
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "condition" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
   "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`y`",
@@ -1591,7 +1591,7 @@ table t
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "condition" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
   "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`y`",
@@ -1615,7 +1615,7 @@ table t
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "condition" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
   "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`y`",
@@ -1639,7 +1639,7 @@ table t
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "condition" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
   "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`y`",
@@ -1661,7 +1661,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "condition" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
   "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`y`",
@@ -1830,7 +1830,7 @@ table courseSales
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "condition" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
   "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`year`",
@@ -1855,7 +1855,7 @@ table courseSales
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "NON_LITERAL_PIVOT_VALUES",
+  "condition" : "NON_LITERAL_PIVOT_VALUES",
   "sqlState" : "42K08",
   "messageParameters" : {
     "expression" : "\"course\""
@@ -1876,7 +1876,7 @@ table courseSales
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "NOT_ALLOWED_IN_FROM.UNPIVOT_WITH_PIVOT",
+  "condition" : "NOT_ALLOWED_IN_FROM.UNPIVOT_WITH_PIVOT",
   "sqlState" : "42601",
   "queryContext" : [ {
     "objectType" : "",
@@ -1901,7 +1901,7 @@ table courseSales
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "NOT_ALLOWED_IN_FROM.UNPIVOT_WITH_PIVOT",
+  "condition" : "NOT_ALLOWED_IN_FROM.UNPIVOT_WITH_PIVOT",
   "sqlState" : "42601",
   "queryContext" : [ {
     "objectType" : "",
@@ -1927,7 +1927,7 @@ table courseSales
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "condition" : "PARSE_SYNTAX_ERROR",
   "sqlState" : "42601",
   "messageParameters" : {
     "error" : "'pivot'",
@@ -1952,7 +1952,7 @@ table courseSales
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "condition" : "PARSE_SYNTAX_ERROR",
   "sqlState" : "42601",
   "messageParameters" : {
     "error" : "'unpivot'",
@@ -2009,7 +2009,7 @@ table t
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0014",
+  "condition" : "_LEGACY_ERROR_TEMP_0014",
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
@@ -2026,7 +2026,7 @@ table t
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0064",
+  "condition" : "_LEGACY_ERROR_TEMP_0064",
   "messageParameters" : {
     "msg" : "Sampling fraction (-1.0) must be on interval [0, 1]"
   },
@@ -2046,7 +2046,7 @@ table t
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "INVALID_LIMIT_LIKE_EXPRESSION.IS_NEGATIVE",
+  "condition" : "INVALID_LIMIT_LIKE_EXPRESSION.IS_NEGATIVE",
   "sqlState" : "42K0E",
   "messageParameters" : {
     "expr" : "\"-5\"",
@@ -2069,7 +2069,7 @@ table t
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "INVALID_LIMIT_LIKE_EXPRESSION.IS_UNFOLDABLE",
+  "condition" : "INVALID_LIMIT_LIKE_EXPRESSION.IS_UNFOLDABLE",
   "sqlState" : "42K0E",
   "messageParameters" : {
     "expr" : "\"x\"",
@@ -2091,7 +2091,7 @@ table t
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0064",
+  "condition" : "_LEGACY_ERROR_TEMP_0064",
   "messageParameters" : {
     "msg" : "Sampling fraction (2.0) must be on interval [0, 1]"
   },
@@ -2111,7 +2111,7 @@ table t
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0015",
+  "condition" : "_LEGACY_ERROR_TEMP_0015",
   "messageParameters" : {
     "msg" : "byteLengthLiteral"
   },
@@ -2131,7 +2131,7 @@ table t
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0016",
+  "condition" : "_LEGACY_ERROR_TEMP_0016",
   "messageParameters" : {
     "bytesStr" : "200"
   },
@@ -2707,7 +2707,7 @@ table join_test_t1
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "condition" : "PARSE_SYNTAX_ERROR",
   "sqlState" : "42601",
   "messageParameters" : {
     "error" : "'inner'",
@@ -2723,7 +2723,7 @@ table join_test_t1
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "condition" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
   "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`join_test_t1`.`a`",
@@ -2745,7 +2745,7 @@ table join_test_t1 jt
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "condition" : "PARSE_SYNTAX_ERROR",
   "sqlState" : "42601",
   "messageParameters" : {
     "error" : "'jt'",
@@ -2928,7 +2928,7 @@ table t
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "NUM_COLUMNS_MISMATCH",
+  "condition" : "NUM_COLUMNS_MISMATCH",
   "sqlState" : "42826",
   "messageParameters" : {
     "firstNumColumns" : "1",
@@ -2952,7 +2952,7 @@ table t
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "condition" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "second",
@@ -3110,7 +3110,7 @@ order by y
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "condition" : "PARSE_SYNTAX_ERROR",
   "sqlState" : "42601",
   "messageParameters" : {
     "error" : "'order'",
@@ -3126,7 +3126,7 @@ table t
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "condition" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
   "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`x`",
@@ -3149,7 +3149,7 @@ table t
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "condition" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
   "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`x`",
@@ -3171,7 +3171,7 @@ table t
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "MULTIPLE_QUERY_RESULT_CLAUSES_WITH_PIPE_OPERATORS",
+  "condition" : "MULTIPLE_QUERY_RESULT_CLAUSES_WITH_PIPE_OPERATORS",
   "sqlState" : "42000",
   "messageParameters" : {
     "clause1" : "ORDER BY",
@@ -3193,7 +3193,7 @@ table t
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "UNSUPPORTED_FEATURE.COMBINATION_QUERY_RESULT_CLAUSES",
+  "condition" : "UNSUPPORTED_FEATURE.COMBINATION_QUERY_RESULT_CLAUSES",
   "sqlState" : "0A000",
   "queryContext" : [ {
     "objectType" : "",
@@ -3440,7 +3440,7 @@ table other
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "PIPE_OPERATOR_AGGREGATE_EXPRESSION_CONTAINS_NO_AGGREGATE_FUNCTION",
+  "condition" : "PIPE_OPERATOR_AGGREGATE_EXPRESSION_CONTAINS_NO_AGGREGATE_FUNCTION",
   "sqlState" : "0A000",
   "messageParameters" : {
     "expr" : "a#x"
@@ -3461,7 +3461,7 @@ select 3 as x, 4 as y
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "UNSUPPORTED_FEATURE.PIPE_OPERATOR_AGGREGATE_UNSUPPORTED_CASE",
+  "condition" : "UNSUPPORTED_FEATURE.PIPE_OPERATOR_AGGREGATE_UNSUPPORTED_CASE",
   "sqlState" : "0A000",
   "messageParameters" : {
     "case" : "GROUP BY ALL"
@@ -3483,7 +3483,7 @@ table courseSales
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "UNSUPPORTED_FEATURE.PIPE_OPERATOR_AGGREGATE_UNSUPPORTED_CASE",
+  "condition" : "UNSUPPORTED_FEATURE.PIPE_OPERATOR_AGGREGATE_UNSUPPORTED_CASE",
   "sqlState" : "0A000",
   "messageParameters" : {
     "case" : "GROUP BY ROLLUP"
@@ -3505,7 +3505,7 @@ table courseSales
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "UNSUPPORTED_FEATURE.PIPE_OPERATOR_AGGREGATE_UNSUPPORTED_CASE",
+  "condition" : "UNSUPPORTED_FEATURE.PIPE_OPERATOR_AGGREGATE_UNSUPPORTED_CASE",
   "sqlState" : "0A000",
   "messageParameters" : {
     "case" : "GROUP BY CUBE"
@@ -3527,7 +3527,7 @@ table courseSales
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "UNSUPPORTED_FEATURE.PIPE_OPERATOR_AGGREGATE_UNSUPPORTED_CASE",
+  "condition" : "UNSUPPORTED_FEATURE.PIPE_OPERATOR_AGGREGATE_UNSUPPORTED_CASE",
   "sqlState" : "0A000",
   "messageParameters" : {
     "case" : "GROUPING SETS"
@@ -3550,7 +3550,7 @@ table courseSales
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "UNSUPPORTED_FEATURE.PIPE_OPERATOR_AGGREGATE_UNSUPPORTED_CASE",
+  "condition" : "UNSUPPORTED_FEATURE.PIPE_OPERATOR_AGGREGATE_UNSUPPORTED_CASE",
   "sqlState" : "0A000",
   "messageParameters" : {
     "case" : "GROUPING"
@@ -3573,7 +3573,7 @@ table courseSales
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "UNSUPPORTED_FEATURE.PIPE_OPERATOR_AGGREGATE_UNSUPPORTED_CASE",
+  "condition" : "UNSUPPORTED_FEATURE.PIPE_OPERATOR_AGGREGATE_UNSUPPORTED_CASE",
   "sqlState" : "0A000",
   "messageParameters" : {
     "case" : "GROUPING_ID"
@@ -3594,7 +3594,7 @@ select 1 as x, 2 as y
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "condition" : "PARSE_SYNTAX_ERROR",
   "sqlState" : "42601",
   "messageParameters" : {
     "error" : "')'",
@@ -3609,7 +3609,7 @@ table other
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "PIPE_OPERATOR_AGGREGATE_EXPRESSION_CONTAINS_NO_AGGREGATE_FUNCTION",
+  "condition" : "PIPE_OPERATOR_AGGREGATE_EXPRESSION_CONTAINS_NO_AGGREGATE_FUNCTION",
   "sqlState" : "0A000",
   "messageParameters" : {
     "expr" : "a#x"
@@ -3630,7 +3630,7 @@ table other
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "PIPE_OPERATOR_CONTAINS_AGGREGATE_FUNCTION",
+  "condition" : "PIPE_OPERATOR_CONTAINS_AGGREGATE_FUNCTION",
   "sqlState" : "0A000",
   "messageParameters" : {
     "clause" : "SELECT",
@@ -3652,7 +3652,7 @@ table other
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0035",
+  "condition" : "_LEGACY_ERROR_TEMP_0035",
   "messageParameters" : {
     "message" : "The AGGREGATE clause requires a list of aggregate expressions or a list of grouping expressions, or both"
   },
@@ -3672,7 +3672,7 @@ table other
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "condition" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
   "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`group`",
@@ -3694,7 +3694,7 @@ table other
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "condition" : "PARSE_SYNTAX_ERROR",
   "sqlState" : "42601",
   "messageParameters" : {
     "error" : "'group'",
@@ -3709,7 +3709,7 @@ table other
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "UNSUPPORTED_FEATURE.PIPE_OPERATOR_AGGREGATE_UNSUPPORTED_CASE",
+  "condition" : "UNSUPPORTED_FEATURE.PIPE_OPERATOR_AGGREGATE_UNSUPPORTED_CASE",
   "sqlState" : "0A000",
   "messageParameters" : {
     "case" : "window functions; please update the query to move the window functions to a subsequent |> SELECT operator instead"
@@ -3732,7 +3732,7 @@ select 1 x, 2 y, 3 z
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "AMBIGUOUS_REFERENCE",
+  "condition" : "AMBIGUOUS_REFERENCE",
   "sqlState" : "42704",
   "messageParameters" : {
     "name" : "`x`",
@@ -3844,7 +3844,7 @@ table windowTestData
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "MISSING_WINDOW_SPECIFICATION",
+  "condition" : "MISSING_WINDOW_SPECIFICATION",
   "sqlState" : "42P20",
   "messageParameters" : {
     "docroot" : "https://spark.apache.org/docs/latest",
@@ -3916,7 +3916,7 @@ table windowTestData
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "MISSING_WINDOW_SPECIFICATION",
+  "condition" : "MISSING_WINDOW_SPECIFICATION",
   "sqlState" : "42P20",
   "messageParameters" : {
     "docroot" : "https://spark.apache.org/docs/latest",
@@ -3933,7 +3933,7 @@ table windowTestData
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "MISSING_WINDOW_SPECIFICATION",
+  "condition" : "MISSING_WINDOW_SPECIFICATION",
   "sqlState" : "42P20",
   "messageParameters" : {
     "docroot" : "https://spark.apache.org/docs/latest",
@@ -3950,7 +3950,7 @@ table windowTestData
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "MISSING_WINDOW_SPECIFICATION",
+  "condition" : "MISSING_WINDOW_SPECIFICATION",
   "sqlState" : "42P20",
   "messageParameters" : {
     "docroot" : "https://spark.apache.org/docs/latest",
@@ -3967,7 +3967,7 @@ table windowTestData
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "MISSING_WINDOW_SPECIFICATION",
+  "condition" : "MISSING_WINDOW_SPECIFICATION",
   "sqlState" : "42P20",
   "messageParameters" : {
     "docroot" : "https://spark.apache.org/docs/latest",
@@ -3999,7 +3999,7 @@ limit 100
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "condition" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
   "messageParameters" : {
     "relationName" : "`store_returns`"
@@ -4038,7 +4038,7 @@ from customer_total_return ctr1
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "condition" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
   "messageParameters" : {
     "relationName" : "`store_returns`"
@@ -4138,7 +4138,7 @@ order by d_week_seq1
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "condition" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
   "messageParameters" : {
     "relationName" : "`web_sales`"
@@ -4243,7 +4243,7 @@ table wswscs
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "condition" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
   "messageParameters" : {
     "relationName" : "`web_sales`"
@@ -4275,7 +4275,7 @@ limit 100
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "condition" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
   "messageParameters" : {
     "relationName" : "`date_dim`"
@@ -4306,7 +4306,7 @@ table date_dim
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "condition" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
   "messageParameters" : {
     "relationName" : "`date_dim`"
@@ -4347,7 +4347,7 @@ limit 100
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "condition" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
   "messageParameters" : {
     "relationName" : "`web_sales`"
@@ -4382,7 +4382,7 @@ table web_sales
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "condition" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
   "messageParameters" : {
     "relationName" : "`web_sales`"
@@ -4447,7 +4447,7 @@ limit 100
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "condition" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
   "messageParameters" : {
     "relationName" : "`store_sales`"
@@ -4514,7 +4514,7 @@ from store_sales ss1
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "condition" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
   "messageParameters" : {
     "relationName" : "`store_sales`"
@@ -4588,7 +4588,7 @@ limit 100
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "condition" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
   "messageParameters" : {
     "relationName" : "`web_sales`"
@@ -4664,7 +4664,7 @@ table web_v1
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "condition" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
   "messageParameters" : {
     "relationName" : "`web_sales`"

@@ -6,7 +6,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNRESOLVABLE_TABLE_VALUED_FUNCTION",
+  "condition" : "UNRESOLVABLE_TABLE_VALUED_FUNCTION",
   "sqlState" : "42883",
   "messageParameters" : {
     "name" : "`dummy`"
@@ -81,7 +81,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+  "condition" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
   "sqlState" : "42605",
   "messageParameters" : {
     "actualNum" : "5",
@@ -106,7 +106,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNEXPECTED_INPUT_TYPE",
+  "condition" : "UNEXPECTED_INPUT_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
     "functionName" : "`range`",
@@ -132,7 +132,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNEXPECTED_INPUT_TYPE",
+  "condition" : "UNEXPECTED_INPUT_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
     "functionName" : "`range`",
@@ -158,7 +158,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "FAILED_FUNCTION_CALL",
+  "condition" : "FAILED_FUNCTION_CALL",
   "sqlState" : "38000",
   "messageParameters" : {
     "funcName" : "`range`"
@@ -198,7 +198,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "NON_FOLDABLE_ARGUMENT",
+  "condition" : "NON_FOLDABLE_ARGUMENT",
   "sqlState" : "42K08",
   "messageParameters" : {
     "funcName" : "`range`",
@@ -222,7 +222,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "NON_FOLDABLE_ARGUMENT",
+  "condition" : "NON_FOLDABLE_ARGUMENT",
   "sqlState" : "42K08",
   "messageParameters" : {
     "funcName" : "`range`",
@@ -306,7 +306,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "condition" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
     "inputSql" : "\"NULL\"",
@@ -332,7 +332,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "condition" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
     "inputSql" : "\"NULL\"",
@@ -358,7 +358,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "condition" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
     "inputSql" : "\"1\"",
@@ -384,7 +384,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+  "condition" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
   "sqlState" : "42605",
   "messageParameters" : {
     "actualNum" : "2",
@@ -409,7 +409,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNSUPPORTED_GENERATOR.NESTED_IN_EXPRESSIONS",
+  "condition" : "UNSUPPORTED_GENERATOR.NESTED_IN_EXPRESSIONS",
   "sqlState" : "42K0E",
   "messageParameters" : {
     "expression" : "\"explode(explode(array(1)))\""
@@ -431,7 +431,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "NUM_TABLE_VALUE_ALIASES_MISMATCH",
+  "condition" : "NUM_TABLE_VALUE_ALIASES_MISMATCH",
   "sqlState" : "42826",
   "messageParameters" : {
     "aliasesNum" : "2",
@@ -535,7 +535,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "condition" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
     "inputSql" : "\"NULL\"",
@@ -561,7 +561,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "NUM_TABLE_VALUE_ALIASES_MISMATCH",
+  "condition" : "NUM_TABLE_VALUE_ALIASES_MISMATCH",
   "sqlState" : "42826",
   "messageParameters" : {
     "aliasesNum" : "3",
@@ -654,7 +654,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "condition" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
     "inputSql" : "\"1\"",
@@ -680,7 +680,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+  "condition" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
   "sqlState" : "42605",
   "messageParameters" : {
     "actualNum" : "2",
@@ -705,7 +705,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNSUPPORTED_GENERATOR.NESTED_IN_EXPRESSIONS",
+  "condition" : "UNSUPPORTED_GENERATOR.NESTED_IN_EXPRESSIONS",
   "sqlState" : "42K0E",
   "messageParameters" : {
     "expression" : "\"posexplode(explode(array(1)))\""
@@ -727,7 +727,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "NUM_TABLE_VALUE_ALIASES_MISMATCH",
+  "condition" : "NUM_TABLE_VALUE_ALIASES_MISMATCH",
   "sqlState" : "42826",
   "messageParameters" : {
     "aliasesNum" : "1",
@@ -825,7 +825,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+  "condition" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
   "sqlState" : "42605",
   "messageParameters" : {
     "actualNum" : "0",
@@ -843,7 +843,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+  "condition" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
   "sqlState" : "42605",
   "messageParameters" : {
     "actualNum" : "1",
@@ -861,7 +861,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.NON_STRING_TYPE",
+  "condition" : "DATATYPE_MISMATCH.NON_STRING_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
     "funcName" : "`json_tuple`",
@@ -884,7 +884,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.NON_STRING_TYPE",
+  "condition" : "DATATYPE_MISMATCH.NON_STRING_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
     "funcName" : "`json_tuple`",
@@ -907,7 +907,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "NUM_TABLE_VALUE_ALIASES_MISMATCH",
+  "condition" : "NUM_TABLE_VALUE_ALIASES_MISMATCH",
   "sqlState" : "42826",
   "messageParameters" : {
     "aliasesNum" : "1",
@@ -987,7 +987,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+  "condition" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
   "sqlState" : "42605",
   "messageParameters" : {
     "actualNum" : "0",
@@ -1005,7 +1005,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "NUM_TABLE_VALUE_ALIASES_MISMATCH",
+  "condition" : "NUM_TABLE_VALUE_ALIASES_MISMATCH",
   "sqlState" : "42826",
   "messageParameters" : {
     "aliasesNum" : "3",
@@ -1029,7 +1029,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.STACK_COLUMN_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.STACK_COLUMN_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "columnIndex" : "1",
@@ -1056,7 +1056,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNSUPPORTED_GENERATOR.NESTED_IN_EXPRESSIONS",
+  "condition" : "UNSUPPORTED_GENERATOR.NESTED_IN_EXPRESSIONS",
   "sqlState" : "42K0E",
   "messageParameters" : {
     "expression" : "\"stack(2, explode(array(1, 2, 3)))\""

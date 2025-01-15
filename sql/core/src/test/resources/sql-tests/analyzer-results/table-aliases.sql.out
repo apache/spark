@@ -57,7 +57,7 @@ SELECT * FROM testData AS t(col1, col2, col3)
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "ASSIGNMENT_ARITY_MISMATCH",
+  "condition" : "ASSIGNMENT_ARITY_MISMATCH",
   "sqlState" : "42802",
   "messageParameters" : {
     "numExpr" : "3",
@@ -78,7 +78,7 @@ SELECT * FROM testData AS t(col1)
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "ASSIGNMENT_ARITY_MISMATCH",
+  "condition" : "ASSIGNMENT_ARITY_MISMATCH",
   "sqlState" : "42802",
   "messageParameters" : {
     "numExpr" : "1",
@@ -99,7 +99,7 @@ SELECT a AS col1, b AS col2 FROM testData AS t(c, d)
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "condition" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
   "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`a`",
@@ -224,7 +224,7 @@ SELECT src1.* FROM src1 a ORDER BY id LIMIT 1
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "CANNOT_RESOLVE_STAR_EXPAND",
+  "condition" : "CANNOT_RESOLVE_STAR_EXPAND",
   "sqlState" : "42704",
   "messageParameters" : {
     "columns" : "`id`, `v1`",
@@ -245,7 +245,7 @@ SELECT src1.id FROM (SELECT * FROM src1 ORDER BY id LIMIT 1) a
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "condition" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
   "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`src1`.`id`",

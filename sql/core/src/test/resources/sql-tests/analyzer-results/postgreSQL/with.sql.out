@@ -242,7 +242,7 @@ SELECT * FROM outermost ORDER BY 1
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "condition" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
   "messageParameters" : {
     "relationName" : "`outermost`"
@@ -373,7 +373,7 @@ create table foo (with baz)
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "UNSUPPORTED_DATATYPE",
+  "condition" : "UNSUPPORTED_DATATYPE",
   "sqlState" : "0A000",
   "messageParameters" : {
     "typeName" : "\"BAZ\""
@@ -393,7 +393,7 @@ create table foo (with ordinality)
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "UNSUPPORTED_DATATYPE",
+  "condition" : "UNSUPPORTED_DATATYPE",
   "sqlState" : "0A000",
   "messageParameters" : {
     "typeName" : "\"ORDINALITY\""
@@ -426,7 +426,7 @@ WITH test AS (SELECT 42) INSERT INTO test VALUES (1)
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "condition" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
   "messageParameters" : {
     "relationName" : "`test`"
