@@ -21,20 +21,46 @@ import java.util.{Map => JMap}
 import scala.jdk.CollectionConverters._
 import scala.util.Random
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.api.plugin.{DriverPlugin, ExecutorPlugin, PluginContext, SparkPlugin}
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys.EXECUTOR_ID
-
 
 /**
  * Spark plugin to do JVM code profiling of executors
  */
 class ExecutorProfilerPlugin extends SparkPlugin {
-  override def driverPlugin(): DriverPlugin = null
+  override def driverPlugin(): DriverPlugin = new JVMProfilerDriverPlugin
 
-  // No-op
   override def executorPlugin(): ExecutorPlugin = new JVMProfilerExecutorPlugin
+}
+
+class JVMProfilerDriverPlugin extends DriverPlugin with Logging {
+
+  private var sparkConf: SparkConf = _
+  private var pluginCtx: PluginContext = _
+  private var profiler: ExecutorJVMProfiler = _
+  private var driverProfilingEnabled: Boolean = _
+
+  override def init(sc: SparkContext, ctx: PluginContext): JMap[String, String] = {
+    pluginCtx = ctx
+    sparkConf = ctx.conf()
+    driverProfilingEnabled = sparkConf.get(DRIVER_PROFILING_ENABLED)
+    if (driverProfilingEnabled) {
+      logInfo("Driver starting JVM code profiling")
+      profiler = new ExecutorJVMProfiler(sparkConf, pluginCtx.executorID())
+      profiler.start()
+    }
+
+    Map.empty[String, String].asJava
+  }
+
+  override def shutdown(): Unit = {
+    logInfo("Driver JVM profiler shutting down")
+    if (profiler != null) {
+      profiler.stop()
+    }
+  }
 }
 
 class JVMProfilerExecutorPlugin extends ExecutorPlugin with Logging {
@@ -42,17 +68,17 @@ class JVMProfilerExecutorPlugin extends ExecutorPlugin with Logging {
   private var sparkConf: SparkConf = _
   private var pluginCtx: PluginContext = _
   private var profiler: ExecutorJVMProfiler = _
-  private var codeProfilingEnabled: Boolean = _
-  private var codeProfilingFraction: Double = _
+  private var executorProfilingEnabled: Boolean = _
+  private var executorProfilingFraction: Double = _
   private val rand: Random = new Random(System.currentTimeMillis())
 
   override def init(ctx: PluginContext, extraConf: JMap[String, String]): Unit = {
     pluginCtx = ctx
     sparkConf = ctx.conf()
-    codeProfilingEnabled = sparkConf.get(EXECUTOR_PROFILING_ENABLED)
-    if (codeProfilingEnabled) {
-      codeProfilingFraction = sparkConf.get(EXECUTOR_PROFILING_FRACTION)
-      if (rand.nextInt(100) * 0.01 < codeProfilingFraction) {
+    executorProfilingEnabled = sparkConf.get(EXECUTOR_PROFILING_ENABLED)
+    if (executorProfilingEnabled) {
+      executorProfilingFraction = sparkConf.get(EXECUTOR_PROFILING_FRACTION)
+      if (rand.nextInt(100) * 0.01 < executorProfilingFraction) {
         logInfo(log"Executor id ${MDC(EXECUTOR_ID, pluginCtx.executorID())} " +
           log"selected for JVM code profiling")
         profiler = new ExecutorJVMProfiler(sparkConf, pluginCtx.executorID())

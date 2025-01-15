@@ -22,6 +22,13 @@ import org.apache.spark.internal.config.ConfigBuilder
 
 package object profiler {
 
+  private[profiler] val DRIVER_PROFILING_ENABLED =
+    ConfigBuilder("spark.driver.profiling.enabled")
+      .doc("Turn on code profiling via async_profiler in driver.")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(false)
+
   private[profiler] val EXECUTOR_PROFILING_ENABLED =
     ConfigBuilder("spark.executor.profiling.enabled")
       .doc("Turn on code profiling via async_profiler in executors.")
