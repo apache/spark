@@ -1236,6 +1236,12 @@
     ],
     "sqlState" : "42614"
   },
+  "DUPLICATE_CONDITION_IN_HANDLER_DECLARATION" : {
+    "message" : [
+      "Found duplicate condition <condition> in the handler declaration. Please, remove one of them."
+    ],
+    "sqlState" : "42710"
+  },
   "DUPLICATE_HANDLER_FOR_SAME_CONDITION" : {
     "message" : [
       "Found duplicate handlers for the same condition <condition>. Please, remove one of them."
@@ -1265,12 +1271,6 @@
       }
     },
     "sqlState" : "4274K"
-  },
-  "DUPLICATE_CONDITION_IN_HANDLER_DECLARATION" : {
-    "message" : [
-      "Found duplicate condition <condition> in the handler declaration. Please, remove one of them."
-    ],
-    "sqlState" : "42710"
   },
   "DUPLICATE_ROUTINE_PARAMETER_NAMES" : {
     "message" : [
@@ -3154,6 +3154,12 @@
       "The `singleVariantColumn` option cannot be used if there is also a user specified schema."
     ],
     "sqlState" : "42613"
+  },
+  "INVALID_SQLSTATE" : {
+    "message" : [
+      "Invalid SQLSTATE value: '<sqlState>'. SQLSTATE must be exactly 5 characters long and contain only A-Z and 0-9. SQLSTATE must not start with '00', '01', or 'XX'."
+    ],
+    "sqlState" : "42000"
   },
   "INVALID_SQL_ARG" : {
     "message" : [

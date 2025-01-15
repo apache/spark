@@ -70,7 +70,7 @@ class SqlScriptingExecution(
         while (execPlan.curr.exists(_.isInstanceOf[CompoundBodyExec])) {
           execPlan = execPlan.curr.get.asInstanceOf[CompoundBodyExec]
         }
-        execPlan.curr = Some(new LeaveStatementExec(lastFrame.scopeToExit.get))
+        execPlan.curr = Some(new LeaveStatementExec(lastFrame.scopeLabel.get))
       }
     }
     // If there are still frames available, get the next statement.
@@ -131,7 +131,7 @@ class SqlScriptingExecution(
           new SqlScriptingExecutionFrame(
             handler.body,
             SqlScriptingFrameType.HANDLER,
-            handler.scopeToExit
+            handler.scopeLabel
           )
         )
       case None =>

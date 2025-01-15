@@ -161,10 +161,12 @@ class AstBuilder extends DataTypeAstBuilder
 
   private def assertSqlState(sqlState: String): Unit = {
     val sqlStateRegex = "^[A-Za-z0-9]{5}$".r
-    assert(sqlStateRegex.findFirstIn(sqlState).isDefined,
-      "SQLSTATE must be exactly 5 characters long and contain only A-Z and 0-9.")
-    assert(!sqlState.startsWith("00") && !sqlState.startsWith("01") && !sqlState.startsWith("XX"),
-      "SQLSTATE must not start with '00', '01', or 'XX'.")
+    if (sqlStateRegex.findFirstIn(sqlState).isEmpty
+      || sqlState.startsWith("00")
+      || sqlState.startsWith("01")
+      || sqlState.startsWith("XX")) {
+      throw SqlScriptingErrors.invalidSqlStateValue(CurrentOrigin.get, sqlState)
+    }
   }
 
   override def visitConditionValue(ctx: ConditionValueContext): String = {

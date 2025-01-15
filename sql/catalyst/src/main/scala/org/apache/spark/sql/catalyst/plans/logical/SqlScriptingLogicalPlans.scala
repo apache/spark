@@ -67,6 +67,8 @@ case class SingleStatement(parsedPlan: LogicalPlan)
  *              for example when CompoundBody is inside loop or conditional block.
  * @param isScope Flag indicating if the CompoundBody is a labeled scope.
  *                Scopes are used for grouping local variables and exception handlers.
+ * @param handlers Collection of error handlers that are defined within the compound body.
+ * @param conditions Collection of conditions that are defined within the compound body.
  */
 case class CompoundBody(
     collection: Seq[CompoundPlanStatement],

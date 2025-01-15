@@ -303,6 +303,24 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
     verifySqlScriptResult(sqlScript, expected = expected)
   }
 
+  test("invalid sqlState in handler declaration") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE EXIT HANDLER FOR 'X22012'
+        |  BEGIN
+        |    SELECT 1;
+        |  END;
+        |END
+        |""".stripMargin
+    checkError(
+      exception = intercept[SqlScriptingException] {
+        verifySqlScriptResult(sqlScript, Seq.empty)
+      },
+      condition = "INVALID_SQLSTATE",
+      parameters = Map("sqlState" -> "X22012"))
+  }
+
   // Tests
   test("multi statement - simple") {
     withTable("t") {

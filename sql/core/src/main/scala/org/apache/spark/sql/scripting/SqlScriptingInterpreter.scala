@@ -19,6 +19,7 @@ package org.apache.spark.sql.scripting
 
 import scala.collection.mutable.HashMap
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.analysis.UnresolvedIdentifier
 import org.apache.spark.sql.catalyst.expressions.Expression
@@ -72,11 +73,10 @@ case class SqlScriptingInterpreter(session: SparkSession) {
    *   CompoundBody to be transformed into CompoundBodyExec.
    * @param args
    *   A map of parameter names to SQL literal expressions.
-   * @param isExitHandler
-   *   Flag to indicate if the body is an exit handler body to add leave statement at the end.
-   * @param exitHandlerLabel
-   *   If body is an exit handler body, this is the label of surrounding CompoundBody
-   *   that should be exited.
+   * @param isHandler
+   *   Indicates if the body is a handler body to do additional processing during transforming.
+   * @param handlerScopeLabel
+   *   If body is a handler body, this is the label of the CompoundBody where handler is defined.
    * @return
    *   Executable version of the CompoundBody .
    */
@@ -84,8 +84,8 @@ case class SqlScriptingInterpreter(session: SparkSession) {
       compoundBody: CompoundBody,
       args: Map[String, Expression],
       context: SqlScriptingExecutionContext,
-      isExitHandler: Boolean = false,
-      exitHandlerLabel: String = ""): CompoundBodyExec = {
+      isHandler: Boolean = false,
+      handlerScopeLabel: String = ""): CompoundBodyExec = {
     val variables = compoundBody.collection.flatMap {
       case st: SingleStatement => getDeclareVarNameFromPlan(st.parsedPlan)
       case _ => None
@@ -248,6 +248,6 @@ case class SqlScriptingInterpreter(session: SparkSession) {
           isInternal = false,
           context)
 
-      case _ => throw new UnsupportedOperationException(s"Unsupported statement: $node")
+      case _ => throw SparkException.internalError(s"Unsupported statement: $node")
     }
 }

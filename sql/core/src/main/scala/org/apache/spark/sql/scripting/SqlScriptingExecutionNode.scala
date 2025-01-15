@@ -188,6 +188,8 @@ class NoOpStatementExec extends LeafStatementExec {
  *   Scopes are used for grouping local variables and exception handlers.
  * @param context
  *   SqlScriptingExecutionContext keeps the execution state of current script.
+ * @param conditionHandlerMap
+ *   Map of condition names/sqlstates to error handlers defined in this compound body.
  */
 class CompoundBodyExec(
     statements: Seq[CompoundStatementExec],
@@ -974,11 +976,13 @@ class ForStatementExec(
 /**
  * Executable node for ErrorHandlerStatement.
  * @param body Executable CompoundBody of the error handler.
+ * @param handlerType Handler type: EXIT, CONTINUE.
+ * @param scopeLabel Label of the scope where handler is defined.
  */
 class ErrorHandlerExec(
     val body: CompoundBodyExec,
     val handlerType: HandlerType,
-    val scopeToExit: Option[String]) extends NonLeafStatementExec {
+    val scopeLabel: Option[String]) extends NonLeafStatementExec {
 
   override def getTreeIterator: Iterator[CompoundStatementExec] = body.getTreeIterator
 

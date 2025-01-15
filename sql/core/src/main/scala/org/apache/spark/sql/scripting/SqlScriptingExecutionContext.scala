@@ -62,7 +62,7 @@ class SqlScriptingExecutionContext {
 
 object SqlScriptingFrameType extends Enumeration {
   type SqlScriptingFrameType = Value
-  val SQL_SCRIPT, HANDLER, STORED_PROCEDURE = Value
+  val SQL_SCRIPT, HANDLER = Value
 }
 
 /**
@@ -70,11 +70,14 @@ object SqlScriptingFrameType extends Enumeration {
  * This supports returning multiple result statements from a single script.
  *
  * @param executionPlan CompoundBody which need to be executed.
+ * @param frameType Type of the frame.
+ * @param scopeLabel Label of the scope where handler is defined.
+ *                   Available only for frameType = HANDLER.
  */
 class SqlScriptingExecutionFrame(
     val executionPlan: CompoundBodyExec,
     val frameType: SqlScriptingFrameType,
-    val scopeToExit: Option[String] = None) extends Iterator[CompoundStatementExec] {
+    val scopeLabel: Option[String] = None) extends Iterator[CompoundStatementExec] {
 
   // List of scopes that are currently active.
   private val scopes: ListBuffer[SqlScriptingExecutionScope] = ListBuffer.empty

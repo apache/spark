@@ -167,4 +167,12 @@ private[sql] object SqlScriptingErrors {
       cause = null,
       messageParameters = Map.empty)
   }
+
+  def invalidSqlStateValue(origin: Origin, sqlState: String): Throwable = {
+    new SqlScriptingException(
+      origin = origin,
+      errorClass = "INVALID_SQLSTATE",
+      cause = null,
+      messageParameters = Map("sqlState" -> sqlState))
+  }
 }
