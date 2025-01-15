@@ -1008,6 +1008,29 @@ case class Sort(
   override protected def withNewChildInternal(newChild: LogicalPlan): Sort = copy(child = newChild)
 }
 
+/**
+ * The clustering spec holds the information of clustering keys and sorting keys.
+ *
+ * @param clusteringKeys The clustering expressions
+ * @param sortKeys       The sort orders
+ */
+ case class ClusteringSpec(clusteringKeys: Seq[Expression], sortKeys: Seq[SortOrder]) {
+   def expressions: Seq[Expression] = clusteringKeys ++ sortKeys.map(_.child)
+   def toSorts: Seq[SortOrder] = clusteringKeys.map(SortOrder(_, Ascending)) ++ sortKeys
+ }
+
+/**
+ * Clustering data within the partition.
+ *
+ * @param clusteringSpec The clustering information
+ * @param child          Child logical plan
+ */
+case class Clustering(clusteringSpec: ClusteringSpec, child: LogicalPlan) extends UnaryNode {
+  override def output: Seq[Attribute] = child.output
+  override protected def withNewChildInternal(newChild: LogicalPlan): Clustering =
+    copy(child = newChild)
+}
+
 /** Factory for constructing new `Range` nodes. */
 object Range {
   def apply(start: Long, end: Long, step: Long, numSlices: Int): Range = {

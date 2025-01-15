@@ -560,6 +560,14 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val CLUSTER_QUERY_ENABLED = buildConf("spark.sql.optimizer.plannedWrite.useClusteringNode")
+    .internal()
+    .doc(s"When true and '${PLANNED_WRITE_ENABLED}' is true, Spark will cluster the child query " +
+      "for V1WriteCommand, which would reserve the SortOrder of child query.")
+    .version("4.0.0")
+    .booleanConf
+    .createWithDefault(true)
+
   val EXPRESSION_PROJECTION_CANDIDATE_LIMIT =
     buildConf("spark.sql.optimizer.expressionProjectionCandidateLimit")
       .doc("The maximum number of the candidate of output expressions whose alias are replaced." +

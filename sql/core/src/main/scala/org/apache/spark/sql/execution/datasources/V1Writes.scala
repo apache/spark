@@ -21,7 +21,7 @@ import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Alias, Ascending, Attribute, AttributeMap, AttributeSet, BitwiseAnd, Empty2Null, Expression, HiveHash, Literal, NamedExpression, Pmod, SortOrder}
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, Sort}
+import org.apache.spark.sql.catalyst.plans.logical.{Clustering, ClusteringSpec, LogicalPlan, Project, Sort}
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.SparkPlan
@@ -56,10 +56,10 @@ trait V1WriteCommand extends DataWritingCommand {
   def options: Map[String, String]
 
   /**
-   * Specify the required ordering for the V1 write command. `FileFormatWriter` will
-   * add SortExec if necessary when the requiredOrdering is empty.
+   * Specify the clustering information for the V1 write command. `FileFormatWriter` will
+   * add SortExec if necessary when planned write is not enabled.
    */
-  def requiredOrdering: Seq[SortOrder]
+  def clusteringSpec: Option[ClusteringSpec]
 }
 
 /**
@@ -98,16 +98,27 @@ object V1Writes extends Rule[LogicalPlan] with SQLConfHelper {
     assert(empty2NullPlan.output.length == query.output.length)
     val attrMap = AttributeMap(query.output.zip(empty2NullPlan.output))
 
-    // Rewrite the attribute references in the required ordering to use the new output.
-    val requiredOrdering = write.requiredOrdering.map(_.transform {
-      case a: Attribute => attrMap.getOrElse(a, a)
-    }.asInstanceOf[SortOrder])
+    // Rewrite the attribute references to use the new output.
+    def rewriteAttributes[T <: Expression](expr: T): T = {
+      expr.transform {
+        case a: Attribute => attrMap.getOrElse(a, a)
+      }.asInstanceOf[T]
+    }
+    val clusteringSpec = write.clusteringSpec.map { spec =>
+      ClusteringSpec(
+        clusteringKeys = spec.clusteringKeys.map(rewriteAttributes),
+        sortKeys = spec.sortKeys.map(rewriteAttributes)
+      )
+    }
+    val clusteringExpressions = clusteringSpec.map(_.expressions).getOrElse(Seq.empty)
     val outputOrdering = empty2NullPlan.outputOrdering
-    val orderingMatched = isOrderingMatched(requiredOrdering.map(_.child), outputOrdering)
+    val orderingMatched = isOrderingMatched(clusteringExpressions, outputOrdering)
     if (orderingMatched) {
       empty2NullPlan
+    } else if (conf.getConf(SQLConf.CLUSTER_QUERY_ENABLED)) {
+      Clustering(clusteringSpec.get, empty2NullPlan)
     } else {
-      Sort(requiredOrdering, global = false, empty2NullPlan)
+      Sort(clusteringSpec.get.toSorts, false, empty2NullPlan)
     }
   }
 }
@@ -156,29 +167,30 @@ object V1WritesUtils {
     }
   }
 
-  def getSortOrder(
+  def getClusteringSpec(
       outputColumns: Seq[Attribute],
       partitionColumns: Seq[Attribute],
       bucketSpec: Option[BucketSpec],
       options: Map[String, String],
-      numStaticPartitionCols: Int = 0): Seq[SortOrder] = {
+      numStaticPartitionCols: Int = 0): Option[ClusteringSpec] = {
     require(partitionColumns.size >= numStaticPartitionCols)
 
     val partitionSet = AttributeSet(partitionColumns)
     val dataColumns = outputColumns.filterNot(partitionSet.contains)
     val writerBucketSpec = V1WritesUtils.getWriterBucketSpec(bucketSpec, dataColumns, options)
     val sortColumns = V1WritesUtils.getBucketSortColumns(bucketSpec, dataColumns)
-    // Static partition must to be ahead of dynamic partition
+    // Static partition must be ahead of dynamic partition
     val dynamicPartitionColumns = partitionColumns.drop(numStaticPartitionCols)
 
     if (SQLConf.get.maxConcurrentOutputFileWriters > 0 && sortColumns.isEmpty) {
       // Do not insert logical sort when concurrent output writers are enabled.
-      Seq.empty
+      None
     } else {
-      // We should first sort by dynamic partition columns, then bucket id, and finally sorting
+      // We should first cluster by dynamic partition columns, then bucket id, and finally sorting
       // columns.
-      (dynamicPartitionColumns ++ writerBucketSpec.map(_.bucketIdExpression) ++ sortColumns)
-        .map(SortOrder(_, Ascending))
+      val clusteringKeys = dynamicPartitionColumns ++ writerBucketSpec.map(_.bucketIdExpression)
+      val sortKeys = sortColumns.map(SortOrder(_, Ascending))
+      Some(ClusteringSpec(clusteringKeys, sortKeys))
     }
   }
 
