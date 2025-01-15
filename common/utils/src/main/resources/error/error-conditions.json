@@ -78,8 +78,20 @@
   },
   "ARITHMETIC_OVERFLOW" : {
     "message" : [
-      "<message>.<alternative> If necessary set <config> to \"false\" to bypass this error."
+      "<message>"
     ],
+    "subClass" : {
+      "WITHOUT_TRY_SUGGESTION" : {
+        "message" : [
+          "If necessary set <config> to \"false\" to bypass this error."
+        ]
+      },
+      "WITH_TRY_SUGGESTION" : {
+        "message" : [
+          "Use <functionName> to tolerate overflow and return NULL instead."
+        ]
+      }
+    },
     "sqlState" : "22003"
   },
   "ASSIGNMENT_ARITY_MISMATCH" : {

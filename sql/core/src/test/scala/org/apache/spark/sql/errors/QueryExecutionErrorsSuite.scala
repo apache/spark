@@ -700,15 +700,14 @@ class QueryExecutionErrorsSuite
     )
   }
 
-  test("ARITHMETIC_OVERFLOW: overflow on adding months") {
+  test("ARITHMETIC_OVERFLOW.WITHOUT_TRY_SUGGESTION: overflow on adding months") {
     checkError(
       exception = intercept[SparkArithmeticException](
         sql("select add_months('5500000-12-31', 10000000)").collect()
       ),
-      condition = "ARITHMETIC_OVERFLOW",
+      condition = "ARITHMETIC_OVERFLOW.WITHOUT_TRY_SUGGESTION",
       parameters = Map(
         "message" -> "integer overflow",
-        "alternative" -> "",
         "config" -> s""""${SQLConf.ANSI_ENABLED.key}""""))
   }
 
