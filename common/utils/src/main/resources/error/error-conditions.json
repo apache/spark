@@ -1963,7 +1963,19 @@
   },
   "INDETERMINATE_COLLATION" : {
     "message" : [
-      "Function called requires knowledge of the collation it should apply, but indeterminate collation was found. Use COLLATE function to set the collation explicitly."
+      "Could not determine which collation to use for string operation. Use COLLATE clause to set the collation explicitly."
+    ],
+    "sqlState" : "42P22"
+  },
+  "INDETERMINATE_COLLATION_IN_EXPRESSION" : {
+    "message" : [
+      "Data type of <expr> has indeterminate collation. Use COLLATE clause to set the collation explicitly."
+    ],
+    "sqlState" : "42P22"
+  },
+  "INDETERMINATE_COLLATION_IN_SCHEMA" : {
+    "message" : [
+      "Schema contains indeterminate collation at: [<columnPaths>]. Use COLLATE clause to set the collation explicitly."
     ],
     "sqlState" : "42P22"
   },

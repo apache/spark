@@ -276,6 +276,7 @@ case class PreprocessTableCreation(catalog: SessionCatalog) extends Rule[Logical
         val normalizedTable = normalizeCatalogTable(analyzedQuery.schema, tableDesc)
 
         DDLUtils.checkTableColumns(tableDesc.copy(schema = analyzedQuery.schema))
+        SchemaUtils.checkIndeterminateCollationInSchema(analyzedQuery.schema)
 
         val output = analyzedQuery.output
 
@@ -295,6 +296,7 @@ case class PreprocessTableCreation(catalog: SessionCatalog) extends Rule[Logical
         c.copy(tableDesc = normalizedTable, query = Some(reorderedQuery))
       } else {
         DDLUtils.checkTableColumns(tableDesc)
+
         val normalizedTable = normalizeCatalogTable(tableDesc.schema, tableDesc)
 
         val normalizedSchemaByName = HashMap(normalizedTable.schema.map(s => s.name -> s): _*)
