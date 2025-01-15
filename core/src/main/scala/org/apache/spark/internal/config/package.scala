@@ -381,6 +381,12 @@ package object config {
       .stringConf
       .createOptional
 
+  private[spark] val SUBMIT_JAVA_OPTION_PURE_MODE =
+    ConfigBuilder("spark.submit.javaOptionPureMode")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(false)
+
   private[spark] val EXECUTOR_LIBRARY_PATH =
     ConfigBuilder(SparkLauncher.EXECUTOR_EXTRA_LIBRARY_PATH)
       .version("1.0.0")
