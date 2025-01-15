@@ -3098,7 +3098,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     assert(rows.contains(Row("a a a")))
   }
 
-  test("SPARK-50792 Format binary data as a binary literal in JDBC.") {
+  test("SPARK-50792: Format binary data as a binary literal in JDBC.") {
     val tableName = "h2.test.binary_literal"
     withTable(tableName) {
       // Create a table with binary column
