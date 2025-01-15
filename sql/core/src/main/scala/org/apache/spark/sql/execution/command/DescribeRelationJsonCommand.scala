@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.command
 
+import java.time.ZoneId
+
 import scala.collection.mutable
 
 import org.json4s._
@@ -29,7 +31,13 @@ import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogTableType, Se
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.catalyst.util.quoteIfNeeded
+import org.apache.spark.sql.catalyst.util.{
+  DateFormatter,
+  DateTimeUtils,
+  quoteIfNeeded,
+  Iso8601TimestampFormatter,
+  LegacyDateFormats,
+}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.catalog.V1Table
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -109,8 +117,25 @@ case class DescribeRelationJsonCommand(
     val normalizedKey = key.toLowerCase().replace(" ", "_")
     val renamedKey = renames.getOrElse(normalizedKey, normalizedKey)
 
+    val timestampFormatter = new Iso8601TimestampFormatter(
+      pattern = "yyyy-MM-dd'T'HH:mm:ss'Z'",
+      zoneId = ZoneId.of("UTC"),
+      locale = DateFormatter.defaultLocale,
+      legacyFormat = LegacyDateFormats.LENIENT_SIMPLE_DATE_FORMAT,
+      isParsing = true
+    )
+
     if (!jsonMap.contains(renamedKey) && !excludedKeys.contains(renamedKey)) {
-      jsonMap += renamedKey -> value
+      val formattedValue = renamedKey match {
+        case "created_time" | "last_access" =>
+          value match {
+            case JInt(longValue) if longValue > 0 =>
+              JString(timestampFormatter.format(DateTimeUtils.millisToMicros(longValue.toLong)))
+            case _ => value
+          }
+        case _ => value
+      }
+      jsonMap += renamedKey -> formattedValue
     }
   }
 

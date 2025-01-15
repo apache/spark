@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.catalog
 
 import java.net.URI
 import java.time.{ZoneId, ZoneOffset}
+import java.util.Date
 
 import scala.collection.mutable
 import scala.util.control.NonFatal
@@ -86,14 +87,6 @@ trait MetadataMapSupport {
     }
     map
   }
-
-  val timestampFormatter = new Iso8601TimestampFormatter(
-    pattern = "yyyy-MM-dd'T'HH:mm:ss'Z'",
-    zoneId = ZoneId.of("UTC"),
-    locale = DateFormatter.defaultLocale,
-    legacyFormat = LegacyDateFormats.LENIENT_SIMPLE_DATE_FORMAT,
-    isParsing = true
-  )
 }
 
 
@@ -191,12 +184,10 @@ case class CatalogTablePartition(
       map += ("Partition Parameters" -> paramsJson)
     }
 
-    map += ("Created Time" -> JString(
-      timestampFormatter.format(DateTimeUtils.millisToMicros(createTime))))
+    map += ("Created Time" -> JString(new Date(createTime).toString))
 
     val lastAccess = if (lastAccessTime <= 0) JString("UNKNOWN")
-    else JString(
-      timestampFormatter.format(DateTimeUtils.millisToMicros(createTime)))
+    else JString(new Date(lastAccessTime).toString)
     map += ("Last Access" -> lastAccess)
 
     stats.foreach(s => map += ("Partition Statistics" -> JString(s.simpleString)))
@@ -605,7 +596,7 @@ case class CatalogTable(
 
     val lastAccess: JValue =
       if (lastAccessTime <= 0) JString("UNKNOWN")
-      else JString(timestampFormatter.format(DateTimeUtils.millisToMicros(createTime)))
+      else JString(new Date(lastAccessTime).toString)
 
     val viewQueryOutputColumns: JValue =
       if (viewQueryColumnNames.nonEmpty) JArray(viewQueryColumnNames.map(JString).toList)
@@ -617,8 +608,7 @@ case class CatalogTable(
     if (identifier.database.isDefined) map += "Database" -> JString(identifier.database.get)
     map += "Table" -> JString(identifier.table)
     if (Option(owner).exists(_.nonEmpty)) map += "Owner" -> JString(owner)
-    map += "Created Time" ->
-      JString(timestampFormatter.format(DateTimeUtils.millisToMicros(createTime)))
+    map += "Created Time" -> JString(new Date(createTime).toString)
     if (lastAccess != JNull) map += "Last Access" -> lastAccess
     map += "Created By" -> JString(s"Spark $createVersion")
     map += "Type" -> JString(tableType.name)
