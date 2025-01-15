@@ -135,7 +135,15 @@ class OrcDeserializer(
       case DoubleType => (ordinal, value) =>
         updater.setDouble(ordinal, value.asInstanceOf[DoubleWritable].get)
 
-      case StringType => (ordinal, value) =>
+      case CharType(length) => (ordinal, value) =>
+        updater.set(ordinal, CharVarcharCodegenUtils.charTypeWriteSideCheck(
+          UTF8String.fromBytes(value.asInstanceOf[Text].copyBytes), length))
+
+      case VarcharType(length) => (ordinal, value) =>
+        updater.set(ordinal, CharVarcharCodegenUtils.varcharTypeWriteSideCheck(
+          UTF8String.fromBytes(value.asInstanceOf[Text].copyBytes), length))
+
+      case _: StringType => (ordinal, value) =>
         updater.set(ordinal, UTF8String.fromBytes(value.asInstanceOf[Text].copyBytes))
 
       case BinaryType => (ordinal, value) =>
