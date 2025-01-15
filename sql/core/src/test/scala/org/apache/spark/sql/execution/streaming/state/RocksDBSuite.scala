@@ -2027,8 +2027,8 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
         e,
         condition = "CANNOT_LOAD_STATE_STORE.CANNOT_READ_CHECKPOINT",
         parameters = Map(
-          "expectedVersion" -> "v2",
-          "actualVersion" -> "v1"
+          "expectedVersion" -> "v1",
+          "actualVersion" -> "v2"
         )
       )
     }

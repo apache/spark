@@ -980,7 +980,7 @@ object RocksDBCheckpointMetadata {
     try {
       val versionLine = reader.readLine()
       if (versionLine != s"v$VERSION") {
-        throw QueryExecutionErrors.cannotReadCheckpoint(versionLine, s"v$VERSION")
+        throw QueryExecutionErrors.cannotReadCheckpoint(s"v$VERSION", versionLine)
       }
       Serialization.read[RocksDBCheckpointMetadata](reader)
     } finally {
