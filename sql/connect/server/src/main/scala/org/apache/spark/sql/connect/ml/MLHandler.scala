@@ -117,7 +117,8 @@ private[connect] object MLHandler extends Logging {
         assert(estimatorProto.getType == proto.MlOperator.OperatorType.ESTIMATOR)
 
         val dataset = MLUtils.parseRelationProto(fitCmd.getDataset, sessionHolder)
-        val estimator = MLUtils.getEstimator(estimatorProto, Some(fitCmd.getParams))
+        val estimator =
+          MLUtils.getEstimator(sessionHolder, estimatorProto, Some(fitCmd.getParams))
         val model = estimator.fit(dataset).asInstanceOf[Model[_]]
         val id = mlCache.register(model)
         proto.MlCommandResult
@@ -176,7 +177,8 @@ private[connect] object MLHandler extends Logging {
           case proto.MlCommand.Write.TypeCase.OPERATOR =>
             val writer = mlCommand.getWrite
             if (writer.getOperator.getType == proto.MlOperator.OperatorType.ESTIMATOR) {
-              val estimator = MLUtils.getEstimator(writer.getOperator, Some(writer.getParams))
+              val estimator =
+                MLUtils.getEstimator(sessionHolder, writer.getOperator, Some(writer.getParams))
               estimator match {
                 case m: MLWritable => MLUtils.write(m, mlCommand.getWrite)
                 case other => throw MlUnsupportedException(s"Estimator $other is not writable")
@@ -195,7 +197,7 @@ private[connect] object MLHandler extends Logging {
         val path = mlCommand.getRead.getPath
 
         if (operator.getType == proto.MlOperator.OperatorType.MODEL) {
-          val model = MLUtils.load(name, path).asInstanceOf[Model[_]]
+          val model = MLUtils.load(sessionHolder, name, path).asInstanceOf[Model[_]]
           val id = mlCache.register(model)
           proto.MlCommandResult
             .newBuilder()
@@ -208,7 +210,7 @@ private[connect] object MLHandler extends Logging {
             .build()
 
         } else if (operator.getType == proto.MlOperator.OperatorType.ESTIMATOR) {
-          val estimator = MLUtils.load(name, path).asInstanceOf[Estimator[_]]
+          val estimator = MLUtils.load(sessionHolder, name, path).asInstanceOf[Estimator[_]]
           proto.MlCommandResult
             .newBuilder()
             .setOperatorInfo(
@@ -231,14 +233,14 @@ private[connect] object MLHandler extends Logging {
       // Ml transform
       case proto.MlRelation.MlTypeCase.TRANSFORM =>
         relation.getTransform.getOperatorCase match {
-          // transform for a new ML transformer
+          // transform with a new ML transformer
           case proto.MlRelation.Transform.OperatorCase.TRANSFORMER =>
             val transformProto = relation.getTransform
             assert(
               transformProto.getTransformer.getType ==
                 proto.MlOperator.OperatorType.TRANSFORMER)
             val dataset = MLUtils.parseRelationProto(transformProto.getInput, sessionHolder)
-            val transformer = MLUtils.getTransformer(transformProto)
+            val transformer = MLUtils.getTransformer(sessionHolder, transformProto)
             transformer.transform(dataset)
 
           // transform on a cached model
