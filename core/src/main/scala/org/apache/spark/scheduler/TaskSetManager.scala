@@ -347,7 +347,7 @@ private[spark] class TaskSetManager(
   }
 
   /** Check whether a task once ran an attempt on a given host */
-  private def hasAttemptOnHost(taskIndex: Int, host: String): Boolean = {
+  def hasAttemptOnHost(taskIndex: Int, host: String): Boolean = {
     taskAttempts(taskIndex).exists(_.host == host)
   }
 
