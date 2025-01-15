@@ -49,7 +49,7 @@ import org.apache.spark.util.Utils
 object ExpressionEncoder {
 
   def apply[T : TypeTag](): ExpressionEncoder[T] = {
-    apply(ScalaReflection.encoderFor[T])
+    apply(ScalaReflection.encoderForWithRowEncoderSupport[T])
   }
 
   def apply[T](enc: AgnosticEncoder[T]): ExpressionEncoder[T] = {

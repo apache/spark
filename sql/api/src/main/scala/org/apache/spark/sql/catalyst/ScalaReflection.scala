@@ -331,7 +331,7 @@ object ScalaReflection extends ScalaReflection {
       case t if isSubtype(t, localTypeOf[java.time.Instant]) => STRICT_INSTANT_ENCODER
       case t if isSubtype(t, localTypeOf[java.time.LocalDateTime]) => LocalDateTimeEncoder
       case t if isSubtype(t, localTypeOf[VariantVal]) => VariantEncoder
-      case t if isSubtype(t, localTypeOf[Row]) => UnboundRowEncoder
+      case t if isRowEncoderSupported && isSubtype(t, localTypeOf[Row]) => UnboundRowEncoder
 
       // UDT encoders
       case t if t.typeSymbol.annotations.exists(_.tree.tpe =:= typeOf[SQLUserDefinedType]) =>
