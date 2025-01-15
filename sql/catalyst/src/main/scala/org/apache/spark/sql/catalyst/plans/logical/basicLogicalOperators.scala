@@ -605,7 +605,8 @@ case class Union(
  * @param recursion The plan that describes the recursion with an [[UnionLoopRef]] node.
  * @param limit An optional limit that can be pushed down to the node to stop the loop earlier.
  */
-case class UnionLoop(id: Long,
+case class UnionLoop(
+    id: Long,
     anchor: LogicalPlan,
     recursion: LogicalPlan,
     limit: Option[Int] = None) extends UnionBase {
@@ -626,7 +627,8 @@ case class UnionLoop(id: Long,
  *                    If it is true then then it stands for the union of all previous iteration
  *                    results.
  */
-case class UnionLoopRef(loopId: Long,
+case class UnionLoopRef(
+    loopId: Long,
     override val output: Seq[Attribute],
     accumulated: Boolean) extends LeafNode with MultiInstanceRelation {
   override def newInstance(): LogicalPlan = copy(output = output.map(_.newInstance()))
