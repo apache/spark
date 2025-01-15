@@ -14,13 +14,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-
+from functools import cached_property
 import sys
-from typing import Any, Dict, Optional, Union, TYPE_CHECKING
+from typing import Any, Dict, Optional, Union, TYPE_CHECKING, List, cast
 
 from pyspark import _NoValue
 from pyspark._globals import _NoValueType
-from pyspark.errors import PySparkTypeError
+from pyspark.errors import PySparkTypeError, SparkNoSuchElementException
+from pyspark.logger import PySparkLogger
+from pyspark.sql.utils import get_active_spark_context
 
 if TYPE_CHECKING:
     from py4j.java_gateway import JavaObject
@@ -150,6 +152,139 @@ class RuntimeConfig:
         .. versionadded:: 2.4.0
         """
         return self._jconf.isModifiable(key)
+
+    @cached_property
+    def spark(self) -> "RuntimeConfigDictWrapper":
+        from py4j.java_gateway import JVMView
+
+        sc = get_active_spark_context()
+        jvm = cast(JVMView, sc._jvm)
+        d = {}
+        for entry in jvm.PythonSQLUtils.listAllSQLConfigs():
+            k = entry._1()
+            default = entry._2()
+            doc = entry._3()
+            ver = entry._4()
+            entry = SQLConfEntry(k, default, doc, ver)
+            entry.__doc__ = doc  # So help function work
+            d[k] = entry
+        return RuntimeConfigDictWrapper(self, d, prefix="spark")
+
+    def __setitem__(self, key: Any, val: Any) -> None:
+        prefix = "spark."
+        if key.startswith("spark."):
+            self.spark[key[len(prefix) :]] = val
+        else:
+            super().__setattr__(key, val)
+
+    def __getitem__(self, item: Any) -> Union["RuntimeConfigDictWrapper", str]:
+        prefix = "spark."
+        if item.startswith("spark."):
+            return self.spark[item[len(prefix) :]]
+        else:
+            return super().__getattribute__(item)
+
+    def __delitem__(self, item: Any) -> None:
+        prefix = "spark."
+        if item.startswith("spark."):
+            del self.spark[item[len(prefix) :]]
+        else:
+            # So it throws the same error as if `__delitem__` does not exist
+            getattr(self, "__delitem__")
+
+
+class SQLConfEntry(str):
+    def __new__(cls, name: str, value: str, description: str, version: str) -> "SQLConfEntry":
+        return super().__new__(cls, value)
+
+    def __init__(self, name: str, value: str, description: str, version: str):
+        self._name = name
+        self._value = value
+        self._description = description
+        self._version = version
+
+    def desc(self) -> str:
+        return self._description
+
+    def version(self) -> str:
+        return self._version
+
+
+class RuntimeConfigDictWrapper:
+    """provide attribute-style access to a nested dict"""
+
+    _logger = PySparkLogger.getLogger("RuntimeConfigDictWrapper")
+
+    def __init__(self, conf: RuntimeConfig, d: Dict[str, SQLConfEntry], prefix: str = ""):
+        super().__setattr__("d", d)
+        super().__setattr__("prefix", prefix)
+        super().__setattr__("_conf", conf)
+
+    def __setattr__(self, key: str, val: Any) -> None:
+        prefix = super().__getattribute__("prefix")
+        d = super().__getattribute__("d")
+        if prefix:
+            prefix += "."
+        canonical_key = prefix + key
+
+        candidates = [
+            k for k in d.keys() if all(x in k.split(".") for x in canonical_key.split("."))
+        ]
+        if len(candidates) == 0:
+            RuntimeConfigDictWrapper._logger.info(
+                "Setting a configuration '{}' to '{}' (non built-in configuration).".format(
+                    canonical_key, val
+                )
+            )
+        super().__getattribute__("_conf").set(canonical_key, val)
+
+    __setitem__ = __setattr__
+
+    def __getattr__(self, key: str) -> Union["RuntimeConfigDictWrapper", Optional[str]]:
+        prefix = super().__getattribute__("prefix")
+        d = super().__getattribute__("d")
+        conf = super().__getattribute__("_conf")
+        if prefix:
+            prefix += "."
+        canonical_key = prefix + key
+
+        try:
+            value = conf.get(canonical_key)
+            if value is None:
+                return None
+            description = "Documentation not found for '{}'.".format(canonical_key)
+            version = "Version not found for '{}'.".format(canonical_key)
+            if canonical_key in d:
+                description = d[canonical_key]._description
+                version = d[canonical_key]._version
+
+            return SQLConfEntry(canonical_key, value, description, version)
+        except SparkNoSuchElementException:
+            if not prefix.startswith("_"):
+                return RuntimeConfigDictWrapper(conf, d, canonical_key)
+            raise
+
+    __getitem__ = __getattr__
+
+    def __delitem__(self, key) -> None:
+        prefix = super().__getattribute__("prefix")
+        conf = super().__getattribute__("_conf")
+        if prefix:
+            prefix += "."
+        canonical_key = prefix + key
+        conf.unset(canonical_key)
+
+    def __dir__(self) -> List[str]:
+        prefix = super().__getattribute__("prefix")
+        d = super().__getattribute__("d")
+
+        if prefix == "":
+            candidates = d.keys()
+            offset = 0
+        else:
+            candidates = [k for k in d.keys() if all(x in k.split(".") for x in prefix.split("."))]
+            offset = len(prefix) + 1  # prefix (e.g. "spark.") to trim.
+        return [c[offset:] for c in candidates]
 
 
 def _test() -> None:
