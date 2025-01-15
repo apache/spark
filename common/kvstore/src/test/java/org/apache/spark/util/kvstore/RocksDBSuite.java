@@ -20,6 +20,7 @@ package org.apache.spark.util.kvstore;
 import java.io.File;
 import java.lang.ref.Reference;
 import java.lang.ref.WeakReference;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Iterator;
 import java.util.List;
@@ -420,6 +421,36 @@ public class RocksDBSuite {
     }
   }
 
+  @Test
+  public void testMultipleTypesWriteAll() throws Exception {
+
+    List<CustomType1> type1List = Arrays.asList(
+      createCustomType1(1),
+      createCustomType1(2),
+      createCustomType1(3),
+      createCustomType1(4)
+    );
+
+    List<CustomType2> type2List = Arrays.asList(
+      createCustomType2(10),
+      createCustomType2(11),
+      createCustomType2(12),
+      createCustomType2(13)
+    );
+
+    List fullList = new ArrayList();
+    fullList.addAll(type1List);
+    fullList.addAll(type2List);
+
+    db.writeAll(fullList);
+    for (CustomType1 value : type1List) {
+      assertEquals(value, db.read(value.getClass(), value.key));
+    }
+    for (CustomType2 value : type2List) {
+      assertEquals(value, db.read(value.getClass(), value.key));
+    }
+  }
+
   private CustomType1 createCustomType1(int i) {
     CustomType1 t = new CustomType1();
     t.key = "key" + i;
@@ -427,6 +458,14 @@ public class RocksDBSuite {
     t.name = "name" + i;
     t.num = i;
     t.child = "child" + i;
+    return t;
+  }
+
+  private CustomType2 createCustomType2(int i) {
+    CustomType2 t = new CustomType2();
+    t.key = "key" + i;
+    t.id = "id" + i;
+    t.parentId = "parent_id" + (i / 2);
     return t;
   }
 
