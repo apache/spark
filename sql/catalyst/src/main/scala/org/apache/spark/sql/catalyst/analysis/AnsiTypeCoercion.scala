@@ -80,8 +80,8 @@ object AnsiTypeCoercion extends TypeCoercionBase {
     ProcedureArgumentCoercion ::
     new AnsiCombinedTypeCoercionRule(
       CollationTypeCasts ::
-      InConversion ::
       PromoteStrings ::
+      InConversion ::
       DecimalPrecision ::
       FunctionArgumentConversion ::
       ConcatCoercion ::

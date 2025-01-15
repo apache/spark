@@ -20,7 +20,6 @@ package org.apache.spark.sql.catalyst.analysis.resolver
 import org.apache.spark.sql.catalyst.analysis.{
   AnsiStringPromotionTypeCoercion,
   AnsiTypeCoercion,
-  ApplyCharTypePaddingHelper,
   BooleanEqualityTypeCoercion,
   CollationTypeCoercion,
   DecimalPrecisionTypeCoercion,
@@ -29,8 +28,7 @@ import org.apache.spark.sql.catalyst.analysis.{
   StringPromotionTypeCoercion,
   TypeCoercion
 }
-import org.apache.spark.sql.catalyst.expressions.{Expression, Predicate, StringRPad}
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.catalyst.expressions.{Expression, Predicate}
 
 /**
  * Resolver class for resolving all [[Predicate]] expressions. Recursively resolves all children
@@ -53,34 +51,7 @@ class PredicateResolver(
   override def resolve(unresolvedPredicate: Predicate): Expression = {
     val predicateWithResolvedChildren =
       withResolvedChildren(unresolvedPredicate, expressionResolver.resolve)
-    val predicateWithTypeCoercion = typeCoercionResolver.resolve(predicateWithResolvedChildren)
-    val predicateWithCharTypePadding = {
-      ApplyCharTypePaddingHelper.singleNodePaddingForStringComparison(
-        predicateWithTypeCoercion,
-        !conf.getConf(SQLConf.LEGACY_NO_CHAR_PADDING_IN_PREDICATE)
-      )
-    }
-    predicateWithCharTypePadding.children.collectFirst {
-      case rpad: StringRPad => rpad
-    } match {
-      // In the fixed-point Analyzer [[ApplyCharTypePadding]] is called after [[ResolveAliases]]
-      // and therefore padding doesn't affect the alias. In single-pass resolver we need to call
-      // this code before we resolve the alias, which will cause the alias to include the pad in
-      // its name:
-      //
-      // fixed-point:
-      //     expression: rpad('12', 3, ' ') = '12 '
-      //     alias:      '12' = '12 '
-      //
-      // single-pass:
-      //     expression: rpad('12', 3, ' ') = '12 '
-      //     alias:      rpad('12', 3, ' ') = '12 '
-      //
-      // Disabling this case until the aliasing is fixed.
-      case Some(_) => throw new ExplicitlyUnsupportedResolverFeature("CharTypePaddingAliasing")
-
-      case _ => predicateWithCharTypePadding
-    }
+    typeCoercionResolver.resolve(predicateWithResolvedChildren)
   }
 }
 
