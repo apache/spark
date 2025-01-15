@@ -57,8 +57,10 @@ if TYPE_CHECKING:
     from pyspark.sql._typing import (
         ColumnOrName,
         ColumnOrNameOrOrdinal,
+        Concatenate,
         LiteralType,
         OptionalPrimitiveType,
+        P,
     )
     from pyspark.sql.context import SQLContext
     from pyspark.sql.session import SparkSession
@@ -5962,7 +5964,12 @@ class DataFrame:
         ...
 
     @dispatch_df_method
-    def transform(self, func: Callable[..., "DataFrame"], *args: Any, **kwargs: Any) -> "DataFrame":
+    def transform(
+        self,
+        func: "Callable[Concatenate[DataFrame, P], DataFrame]",
+        *args: "P.args",
+        **kwargs: "P.kwargs",
+    ) -> "DataFrame":
         """Returns a new :class:`DataFrame`. Concise syntax for chaining custom transformations.
 
         .. versionadded:: 3.0.0
