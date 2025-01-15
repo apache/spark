@@ -203,7 +203,7 @@ class CompoundBodyExec(
   }
 
   private var localIterator = statements.iterator
-  var curr: Option[CompoundStatementExec] =
+  private[scripting] var curr: Option[CompoundStatementExec] =
     if (localIterator.hasNext) Some(localIterator.next()) else None
   private var scopeStatus = ScopeStatus.NOT_ENTERED
 

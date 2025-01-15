@@ -118,7 +118,7 @@ class SqlScriptingExecution(
     } catch {
       case e: SparkThrowable =>
         handleException(e)
-        getNextResult // After handling the exception, try to get the next result again.
+        getNextResult // After setup for exception handling, try to get the next result again.
       case throwable: Throwable =>
         throw throwable // Rethrow the exception.
     }
@@ -127,7 +127,7 @@ class SqlScriptingExecution(
   private def handleException(e: SparkThrowable): Unit = {
     context.findHandler(e.getCondition, e.getSqlState) match {
       case Some(handler) =>
-        context.frames.addOne(
+        context.frames.append(
           new SqlScriptingExecutionFrame(
             handler.body,
             SqlScriptingFrameType.HANDLER,

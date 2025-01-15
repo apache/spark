@@ -314,10 +314,6 @@ case class ErrorCondition(
     sqlState: String) extends CompoundPlanStatement {
   override def output: Seq[Attribute] = Seq.empty
 
-  /**
-   * Returns a Seq of the children of this node.
-   * Children should not change. Immutability required for containsChild optimization
-   */
   override def children: Seq[LogicalPlan] = Seq.empty
 
   override protected def withNewChildrenInternal(
@@ -341,10 +337,6 @@ case class ErrorHandler(
     handlerType: HandlerType) extends CompoundPlanStatement {
   override def output: Seq[Attribute] = Seq.empty
 
-  /**
-   * Returns a Seq of the children of this node.
-   * Children should not change. Immutability required for containsChild optimization
-   */
   override def children: Seq[LogicalPlan] = Seq(body)
 
   override protected def withNewChildrenInternal(
