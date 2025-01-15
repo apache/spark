@@ -464,11 +464,12 @@ object Union {
 
 /**
  * Helper base class for Union and UnionLoop logical nodes that contains their commonalities.
- * It reflects similarities of using UNION ALL for two different use cases 1) combining two or
+ * It reflects similarities of UNION ALL's two different use cases 1) for combining two or
  * more result sets, and 2) for combining anchor and recursive parts in the recursive CTE.
  *
  * Most of these methods historically existed in the Union node before the implementation of
- * the recursive CTE.
+ * the recursive CTE. One notable difference between two is that Union may have more than two
+ * children while UnionLoop strictly has two (anchor and recursion).
  */
 abstract class UnionBase extends LogicalPlan {
   override def output: Seq[Attribute] = {
@@ -593,13 +594,13 @@ case class Union(
 }
 
 /**
- * The logical node for recursion, that contains a initial (anchor) and a recursion describing term,
- * that contains an [[UnionLoopRef]] node.
+ * The logical node for CTE recursion, that contains a initial (anchor) and a recursion describing
+ * term, that contains an [[UnionLoopRef]] node in its recursive child.
  * The node is very similar to [[Union]] because the initial and "generated" children are union-ed
  * and it is also similar to a loop because the recursion continues until the last generated child
- * is not empty.
+ * is not empty. Union in a recursive CTE gets resolved into UnionLoop.
  *
- * @param id The id of the loop, inherited from [[CTERelationDef]]
+ * @param id The id of the loop, inherited from [[CTERelationDef]] within which the Union lived.
  * @param anchor The plan of the initial element of the loop.
  * @param recursion The plan that describes the recursion with an [[UnionLoopRef]] node.
  * @param limit An optional limit that can be pushed down to the node to stop the loop earlier.
@@ -615,9 +616,11 @@ case class UnionLoop(id: Long,
 }
 
 /**
- * The recursive reference in the recursive term of an [[UnionLoop]] node.
+ * The recursive reference in the recursive child of an [[UnionLoop]] node. CTERelationRef in a
+ * recursive CTE gets resolved into UnionLoopRef.
  *
- * @param loopId The id of the loop, inherited from [[CTERelationRef]]
+ * @param loopId The id of the loop, inherited from [[CTERelationRef]] which got resolved into this
+ *               UnionLoopRef.
  * @param output The output attributes of this recursive reference.
  * @param accumulated If false the the reference stands for the result of the previous iteration.
  *                    If it is true then then it stands for the union of all previous iteration
@@ -938,7 +941,7 @@ case class CTERelationDef(
   override def output: Seq[Attribute] = if (resolved) child.output else Nil
 
   lazy val recursive: Boolean = child.exists{
-    // if the reference is found inside the child, referencing to this CTE definition,
+    // If the reference is found inside the child, referencing to this CTE definition,
     // and already marked as recursive, then this CTE definition is recursive.
     case CTERelationRef(this.id, _, _, _, _, true) => true
     case _ => false
