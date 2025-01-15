@@ -455,7 +455,7 @@ jobs:
       if: fromJSON(inputs.envs).PYSPARK_CODECOV == 'true'
       uses: codecov/codecov-action@v5
       env:
-        CODECOV_TOKEN: ad879b47-11ad-42ed-8f94-be8b8710f45f
+        CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
       with:
         files: ./python/coverage.xml
         flags: unittests
