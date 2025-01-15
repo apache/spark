@@ -375,7 +375,6 @@ jobs:
       SKIP_PACKAGING: true
       METASPACE_SIZE: 1g
       BRANCH: ${{ inputs.branch }}
-      PYSPARK_CODECOV: true
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v4
@@ -452,7 +451,6 @@ jobs:
           ./dev/run-tests --parallelism 1 --modules "$MODULES_TO_TEST"
         fi
     - name: Upload coverage to Codecov
-      if: fromJSON(inputs.envs).PYSPARK_CODECOV == 'true'
       uses: codecov/codecov-action@v5
       env:
         CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
