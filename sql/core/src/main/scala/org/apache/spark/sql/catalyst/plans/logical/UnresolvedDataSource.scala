@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.analysis.UnresolvedLeafNode
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.util.Utils
 
 /** Created in the DataFrameReader and DataStreamReader APIs when loading a Spark DataSource. */
 case class UnresolvedDataSource(
@@ -28,4 +29,9 @@ case class UnresolvedDataSource(
     options: CaseInsensitiveMap[String],
     override val isStreaming: Boolean,
     paths: Seq[String])
-  extends UnresolvedLeafNode
+  extends UnresolvedLeafNode {
+
+  override def toString: String = {
+    Utils.redact(conf.stringRedactionPattern, super.toString)
+  }
+}

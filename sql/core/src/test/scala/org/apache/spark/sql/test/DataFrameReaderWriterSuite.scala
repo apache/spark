@@ -707,10 +707,19 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
     spark.createDataset(data).write.mode(SaveMode.Overwrite).text(dir)
 
     // Reader, without user specified schema
-    testRead(spark.read.textFile().toDF(), Seq.empty, textSchema)
-    testRead(spark.read.textFile(dir).toDF(), data, textSchema)
-    testRead(spark.read.textFile(dir, dir).toDF(), data ++ data, textSchema)
-    testRead(spark.read.textFile(Seq(dir, dir): _*).toDF(), data ++ data, textSchema)
+    testRead(spark.read.text().toDF(), Seq.empty, textSchema)
+    testRead(spark.read.text(dir).toDF(), data, textSchema)
+    testRead(spark.read.text(dir, dir).toDF(), data ++ data, textSchema)
+    testRead(spark.read.text(Seq(dir, dir): _*).toDF(), data ++ data, textSchema)
+    testRead(spark.read.textFile().toDF(), Seq.empty, textSchema, checkLogicalPlan = false)
+    testRead(spark.read.textFile(dir).toDF(), data, textSchema, checkLogicalPlan = false)
+    testRead(
+      spark.read.textFile(dir, dir).toDF(), data ++ data, textSchema, checkLogicalPlan = false)
+    testRead(
+      spark.read.textFile(Seq(dir, dir): _*).toDF(),
+      data ++ data,
+      textSchema,
+      checkLogicalPlan = false)
     // Test explicit calls to single arg method - SPARK-16009
     testRead(Option(dir).map(spark.read.text).get, data, textSchema)
 
@@ -900,10 +909,15 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
   private def testRead(
       df: => DataFrame,
       expectedResult: Seq[String],
-      expectedSchema: StructType): Unit = {
+      expectedSchema: StructType,
+      checkLogicalPlan: Boolean = true): Unit = {
     checkAnswer(df, spark.createDataset(expectedResult).toDF())
     assert(df.schema === expectedSchema)
-    assert(!df.queryExecution.logical.resolved, "Should've created an unresolved plan")
+    if (checkLogicalPlan) {
+      // While the `textfile` API also leverages our UnresolvedDataSource plan, it later overrides
+      // the plan with encoders. Therefore this check fails
+      assert(!df.queryExecution.logical.resolved, "Should've created an unresolved plan")
+    }
   }
 
   test("saveAsTable with mode Append should not fail if the table not exists " +
