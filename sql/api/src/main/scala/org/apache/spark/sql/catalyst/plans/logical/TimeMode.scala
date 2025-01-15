@@ -28,10 +28,13 @@ case object ProcessingTime extends TimeMode
 
 case object EventTime extends TimeMode
 
+/** Restore time mode used in transformWithState from string */
 object TimeModes {
-  def apply(timeMode: String): TimeMode = {
+  def apply(timeMode: String, isScala: Boolean = false): TimeMode = {
     timeMode.toLowerCase(Locale.ROOT) match {
-      case "none" =>
+      case "none" if !isScala =>
+        NoTime
+      case "notime" if isScala =>
         NoTime
       case "processingtime" =>
         ProcessingTime

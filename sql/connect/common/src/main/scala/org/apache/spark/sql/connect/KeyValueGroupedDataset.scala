@@ -706,7 +706,8 @@ private class KeyValueGroupedDatasetImpl[K, V, IK, IV](
         .setFunc(udf).setTws(
         TransformWithStateInfo.newBuilder()
           .setOutputMode(outputMode.toString)
-          .setTimeMode("none")
+          // we pass time mode as string here and restore it in planner
+          .setTimeMode(timeMode.toString)
           .setStatefulProcessorPayload(statefulProcessorStr)
           .build()
       )

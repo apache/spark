@@ -26,7 +26,7 @@ import org.apache.spark.sql.{Encoders, SparkSession}
 import org.apache.spark.sql.test.{QueryTest, RemoteSparkSession}
 import org.apache.spark.sql.types.{StringType, StructField, StructType}
 
-class NewNameCountStatefulProcessor
+class TestInitialStatefulProcessor
   extends StatefulProcessorWithInitialState[
     String, (String, String), (String, String), (String, String, String)]
     with Logging {
@@ -56,10 +56,32 @@ class NewNameCountStatefulProcessor
   }
 }
 
+class NewNameCountStatefulProcessor
+  extends StatefulProcessor[String, (String, String), (String, String)]
+    with Logging {
+  @transient protected var _countState: ValueState[Long] = _
+
+  override def init(
+      outputMode: OutputMode,
+      timeMode: TimeMode): Unit = {
+    _countState = getHandle.getValueState[Long]("countState", Encoders.scalaLong, TTLConfig.NONE)
+  }
+
+  override def handleInputRows(
+      key: String,
+      inputRows: Iterator[(String, String)],
+      timerValues: TimerValues): Iterator[(String, String)] = {
+    val count = _countState.getOption().getOrElse(0L) + inputRows.toSeq.length
+    _countState.update(count)
+    Iterator((key, count.toString))
+  }
+}
+
+
 class TransformWithStateStreamingSuite extends QueryTest with RemoteSparkSession with Logging {
   val testData: Seq[(String, String)] = Seq(("a", "1"), ("b", "1"), ("a", "2"))
 
-  test("transformWithState - streaming") {
+  test("transformWithState with initial state") {
     withSQLConf("spark.sql.streaming.stateStore.providerClass" ->
       "org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider",
       "spark.sql.shuffle.partitions" -> "5") {
@@ -87,9 +109,56 @@ class TransformWithStateStreamingSuite extends QueryTest with RemoteSparkSession
           .as[(String, String)]
           .groupByKey(x => x._1)
           .transformWithState(
-            new NewNameCountStatefulProcessor(),
+            new TestInitialStatefulProcessor(),
             TimeMode.None(), OutputMode.Update(),
             initialState = initDf)
+          .writeStream
+          .format("memory")
+          .queryName("my_sink")
+          .start()
+
+        try {
+          q.processAllAvailable()
+          eventually(timeout(30.seconds)) {
+            checkDataset(
+              spark.table("my_sink").toDF().as[(String, String)].orderBy("_1"),
+              ("a", "2"), ("a", "3"), ("b", "2")
+            )
+          }
+        } finally {
+          q.stop()
+          spark.sql("DROP TABLE IF EXISTS my_sink")
+        }
+      }
+    }
+  }
+
+  test("transformWithState - streaming") {
+    withSQLConf("spark.sql.streaming.stateStore.providerClass" ->
+      "org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider",
+      "spark.sql.shuffle.partitions" -> "5") {
+      val session: SparkSession = spark
+      import session.implicits._
+
+      spark.sql("DROP TABLE IF EXISTS my_sink")
+
+      withTempPath { dir =>
+        val path = dir.getCanonicalPath
+        testData.toDS().toDF("id", "value")
+          .repartition(3).write.parquet(path)
+
+        val testSchema = StructType(Array(
+          StructField("id", StringType), StructField("value", StringType)))
+
+        val q = spark.readStream
+          .schema(testSchema)
+          .option("maxFilesPerTrigger", 1)
+          .parquet(path)
+          .as[(String, String)]
+          .groupByKey(x => x._1)
+          .transformWithState(
+            new NewNameCountStatefulProcessor(),
+            TimeMode.None(), OutputMode.Update())
           .writeStream
           .format("memory")
           .queryName("my_sink")
