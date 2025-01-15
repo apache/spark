@@ -25,6 +25,7 @@ import net.razorvine.pickle.Pickler
 
 import org.apache.spark.api.python.{PythonEvalType, PythonFunction, PythonWorkerUtils, SpecialLengths}
 import org.apache.spark.sql.{Column, DataFrame, Dataset, SparkSession, TableArg, TableValuedFunctionArgument}
+import org.apache.spark.sql.catalyst.analysis.RelationWrapper
 import org.apache.spark.sql.catalyst.expressions.{Alias, Ascending, Descending, Expression, FunctionTableSubqueryArgumentExpression, NamedArgumentExpression, NullsFirst, NullsLast, PythonUDAF, PythonUDF, PythonUDTF, PythonUDTFAnalyzeResult, PythonUDTFSelectedExpression, SortOrder, UnresolvedPolymorphicPythonUDTF}
 import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.plans.logical.{Generate, LogicalPlan, NamedParametersSupport, OneRowRelation}
@@ -94,19 +95,19 @@ case class UserDefinedPythonTableFunction(
     udfDeterministic: Boolean) {
 
   def this(
-      name: String,
-      func: PythonFunction,
-      returnType: StructType,
-      pythonEvalType: Int,
-      udfDeterministic: Boolean) = {
+            name: String,
+            func: PythonFunction,
+            returnType: StructType,
+            pythonEvalType: Int,
+            udfDeterministic: Boolean) = {
     this(name, func, Some(returnType), pythonEvalType, udfDeterministic)
   }
 
   def this(
-      name: String,
-      func: PythonFunction,
-      pythonEvalType: Int,
-      udfDeterministic: Boolean) = {
+            name: String,
+            func: PythonFunction,
+            pythonEvalType: Int,
+            udfDeterministic: Boolean) = {
     this(name, func, None, pythonEvalType, udfDeterministic)
   }
 
@@ -170,6 +171,7 @@ case class UserDefinedPythonTableFunction(
       )
     }
     val udtf = builder(expressions, parser)
+    implicit val withRelations: Set[RelationWrapper] = Set.empty
     Dataset.ofRows(session, udtf)
   }
 }

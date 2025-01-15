@@ -154,7 +154,6 @@ case class AnalysisContext(
     referredTempFunctionNames: mutable.Set[String] = mutable.Set.empty,
     referredTempVariableNames: Seq[Seq[String]] = Seq.empty,
     outerPlan: Option[LogicalPlan] = None,
-
     /**
      * This is a bridge state between this fixed-point [[Analyzer]] and a single-pass [[Resolver]].
      * It's managed ([[setSinglePassResolverBridgeState]] method) by the [[HybridAnalyzer]] - the
@@ -165,7 +164,8 @@ case class AnalysisContext(
      *
      * See [[AnalyzerBridgeState]] and [[HybridAnalyzer]] for more info.
      */
-    private var singlePassResolverBridgeState: Option[AnalyzerBridgeState] = None) {
+    private var singlePassResolverBridgeState: Option[AnalyzerBridgeState] = None,
+    skipDedupRelations: Boolean = false) {
 
     def setSinglePassResolverBridgeState(bridgeState: Option[AnalyzerBridgeState]): Unit =
       singlePassResolverBridgeState = bridgeState
@@ -173,6 +173,7 @@ case class AnalysisContext(
     def getSinglePassResolverBridgeState: Option[AnalyzerBridgeState] =
       singlePassResolverBridgeState
 }
+
 
 object AnalysisContext {
   private val value = new ThreadLocal[AnalysisContext]() {
@@ -208,7 +209,8 @@ object AnalysisContext {
       originContext.relationCache,
       viewDesc.viewReferredTempViewNames,
       mutable.Set(viewDesc.viewReferredTempFunctionNames: _*),
-      viewDesc.viewReferredTempVariableNames)
+      viewDesc.viewReferredTempVariableNames,
+      skipDedupRelations = originContext.skipDedupRelations)
     set(context)
     try f finally { set(originContext) }
   }
@@ -224,6 +226,11 @@ object AnalysisContext {
     val context = originContext.copy(outerPlan = Some(outerPlan))
     set(context)
     try f finally { set(originContext) }
+  }
+
+  def setDedupRelatiionSkipFlag(flag: Boolean): Unit = {
+    val currContext = value.get()
+    set(currContext.copy(skipDedupRelations = flag))
   }
 }
 

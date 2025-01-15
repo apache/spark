@@ -22,7 +22,7 @@ import java.util
 import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
-import org.apache.spark.sql.catalyst.analysis.{NameParameterizedQuery, UnresolvedAttribute, UnresolvedIdentifier}
+import org.apache.spark.sql.catalyst.analysis.{NameParameterizedQuery, RelationWrapper, UnresolvedAttribute, UnresolvedIdentifier}
 import org.apache.spark.sql.catalyst.expressions.{Alias, CreateArray, CreateMap, CreateNamedStruct, Expression, Literal}
 import org.apache.spark.sql.catalyst.plans.logical.{CreateVariable, DefaultValueExpression, DropVariable, LogicalPlan, OneRowRelation, Project, SetVariable}
 import org.apache.spark.sql.catalyst.trees.{Origin, WithOrigin}
@@ -79,6 +79,7 @@ trait NonLeafStatementExec extends CompoundStatementExec {
       assert(!statement.isExecuted)
       statement.isExecuted = true
 
+      implicit val withRelations: Set[RelationWrapper] = Set.empty
       // DataFrame evaluates to True if it is single row, single column
       //  of boolean type with value True.
       val df = statement.buildDataFrame(session)
@@ -160,6 +161,7 @@ class SingleStatementExec(
    *   The DataFrame.
    */
   def buildDataFrame(session: SparkSession): DataFrame = {
+    implicit val withRelations: Set[RelationWrapper] = Set.empty
     Dataset.ofRows(session, preparedPlan)
   }
 

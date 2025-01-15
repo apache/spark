@@ -31,13 +31,16 @@ import org.apache.spark.internal.LogKeys.EXTENDED_EXPLAIN_GENERATOR
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{AnalysisException, ExtendedExplainGenerator, Row, SparkSession}
 import org.apache.spark.sql.catalyst.{InternalRow, QueryPlanningTracker}
-import org.apache.spark.sql.catalyst.analysis.{LazyExpression, UnsupportedOperationChecker}
+import org.apache.spark.sql.catalyst.analysis.{LazyExpression, MultiInstanceRelation, RelationWrapper, UnsupportedOperationChecker}
+import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
 import org.apache.spark.sql.catalyst.expressions.codegen.ByteCodeStats
 import org.apache.spark.sql.catalyst.plans.QueryPlan
-import org.apache.spark.sql.catalyst.plans.logical.{AppendData, Command, CommandResult, CreateTableAsSelect, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, ReplaceTableAsSelect, ReturnAnswer, Union}
+import org.apache.spark.sql.catalyst.plans.logical.{AppendData, Command, CommandResult, CreateTableAsSelect, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, ReplaceTableAsSelect, ReturnAnswer, SkipDedupRelRuleMarker, Union}
 import org.apache.spark.sql.catalyst.rules.{PlanChangeLogger, Rule}
+import org.apache.spark.sql.catalyst.trees.TreePattern
 import org.apache.spark.sql.catalyst.util.StringUtils.PlanStringConcat
 import org.apache.spark.sql.catalyst.util.truncatedString
+import org.apache.spark.sql.execution.QueryExecution.subquery_patterns
 import org.apache.spark.sql.execution.adaptive.{AdaptiveExecutionContext, InsertAdaptiveSparkPlan}
 import org.apache.spark.sql.execution.bucketing.{CoalesceBucketsInJoin, DisableUnnecessaryBucketedScan}
 import org.apache.spark.sql.execution.dynamicpruning.PlanDynamicPruningFilters
@@ -61,7 +64,8 @@ class QueryExecution(
     val logical: LogicalPlan,
     val tracker: QueryPlanningTracker = new QueryPlanningTracker,
     val mode: CommandExecutionMode.Value = CommandExecutionMode.ALL,
-    val shuffleCleanupMode: ShuffleCleanupMode = DoNotCleanup) extends Logging {
+    val shuffleCleanupMode: ShuffleCleanupMode = DoNotCleanup,
+    private val withRelations: Set[RelationWrapper] = Set.empty) extends Logging {
 
   val id: Long = QueryExecution.nextExecutionId
 
@@ -95,7 +99,13 @@ class QueryExecution(
     try {
       val plan = executePhase(QueryPlanningTracker.ANALYSIS) {
         // We can't clone `logical` here, which will reset the `_analyzed` flag.
-        sparkSession.sessionState.analyzer.executeAndCheck(logical, tracker)
+        val skipDedupRule = withRelations.nonEmpty
+        val planToAnalyze = if (skipDedupRule && !logical.analyzed) {
+          SkipDedupRelRuleMarker(logical)
+        } else {
+          logical
+        }
+        sparkSession.sessionState.analyzer.executeAndCheck(planToAnalyze, tracker)
       }
       tracker.setAnalyzed(plan)
       plan
@@ -107,6 +117,39 @@ class QueryExecution(
   }
 
   def analyzed: LogicalPlan = lazyAnalyzed.get
+
+  private lazy val identifiedRelations: Set[RelationWrapper] = {
+    def collectRelations(plan: LogicalPlan): Set[RelationWrapper] = plan.collect {
+      case m: MultiInstanceRelation => Set(RelationWrapper(m.getClass, m.output.map(_.exprId.id)))
+
+      case pln => pln.expressions.filter(_.containsAnyPattern(subquery_patterns: _*))
+        .flatMap(_.collect {
+            case sq: SubqueryExpression => collectRelations(sq.plan)
+          }.flatten).toSet
+    }.flatten.toSet
+
+    if (this.withRelations.isEmpty && !this.isLazyAnalysis) {
+      collectRelations(this.analyzed)
+    } else {
+      this.withRelations
+    }
+  }
+
+  def getRelations: Set[RelationWrapper] = identifiedRelations
+
+  def getCombinedRelations(thatQe: QueryExecution): Set[RelationWrapper] = {
+    if (this.isLazyAnalysis || thatQe.isLazyAnalysis) {
+      Set.empty
+    } else {
+      val thatRelations = thatQe.getRelations
+      if (this.getRelations.isEmpty || thatRelations.isEmpty ||
+        this.getRelations.exists(thatRelations.contains)) {
+        Set.empty
+      } else {
+        this.getRelations ++ thatRelations
+      }
+    }
+  }
 
   private val lazyCommandExecuted = LazyTry {
     mode match {
@@ -137,7 +180,7 @@ class QueryExecution(
       // with the rest of processing of the root plan being just outputting command results,
       // for eagerly executed commands we mark this place as beginning of execution.
       tracker.setReadyForExecution()
-      val qe = sparkSession.sessionState.executePlan(p, mode)
+      val qe = sparkSession.sessionState.executePlan(p, mode)(getRelations)
       val result = QueryExecution.withInternalError(s"Eagerly executed $name failed.") {
         SQLExecution.withNewExecutionId(qe, Some(name)) {
           qe.executedPlan.executeCollect()
@@ -666,5 +709,16 @@ object QueryExecution {
       planChangeLogger.logBatch("Plan Normalization", plan, normalized)
       normalized
     }
+
+
   }
+
+  val subquery_patterns =
+    Array(
+      TreePattern.IN_SUBQUERY, TreePattern.DYNAMIC_PRUNING_SUBQUERY,
+      TreePattern.EXISTS_SUBQUERY,
+      TreePattern.FUNCTION_TABLE_RELATION_ARGUMENT_EXPRESSION,
+      TreePattern.LATERAL_SUBQUERY,
+      TreePattern.LIST_SUBQUERY,
+      TreePattern.SCALAR_SUBQUERY).toIndexedSeq
 }

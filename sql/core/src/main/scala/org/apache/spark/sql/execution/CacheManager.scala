@@ -22,6 +22,7 @@ import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.spark.internal.{LogEntry, Logging, MDC}
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.sql.{Dataset, SparkSession}
+import org.apache.spark.sql.catalyst.analysis.RelationWrapper
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
 import org.apache.spark.sql.catalyst.expressions.{Attribute, SubqueryExpression}
 import org.apache.spark.sql.catalyst.optimizer.EliminateResolvedHint
@@ -99,8 +100,8 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
       query.queryExecution.analyzed,
       query.queryExecution.normalized,
       tableName,
-      storageLevel
-    )
+      storageLevel)(query.queryExecution.getRelations)
+
   }
 
   /**
@@ -122,7 +123,8 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
       unnormalizedPlan: LogicalPlan,
       normalizedPlan: LogicalPlan,
       tableName: Option[String],
-      storageLevel: StorageLevel): Unit = {
+      storageLevel: StorageLevel)
+      (implicit withRelations: Set[RelationWrapper] = Set.empty): Unit = {
     if (storageLevel == StorageLevel.NONE) {
       // Do nothing for StorageLevel.NONE since it will not actually cache any data.
     } else if (lookupCachedDataInternal(normalizedPlan).nonEmpty) {
@@ -313,7 +315,7 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
       cd.cachedRepresentation.cacheBuilder.clearCache()
       val sessionWithConfigsOff = getOrCloneSessionWithConfigsOff(spark)
       val newCache = sessionWithConfigsOff.withActive {
-        val qe = sessionWithConfigsOff.sessionState.executePlan(cd.plan)
+        val qe = sessionWithConfigsOff.sessionState.executePlan(cd.plan)(Set.empty)
         InMemoryRelation(cd.cachedRepresentation.cacheBuilder, qe)
       }
       val recomputedPlan = cd.copy(cachedRepresentation = newCache)
