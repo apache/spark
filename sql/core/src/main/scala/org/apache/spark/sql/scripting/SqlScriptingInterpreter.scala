@@ -69,6 +69,7 @@ case class SqlScriptingInterpreter(session: SparkSession) {
 
   /**
    * Transform [[CompoundBody]] into [[CompoundBodyExec]].
+ *
    * @param compoundBody
    *   CompoundBody to be transformed into CompoundBodyExec.
    * @param args
@@ -104,7 +105,7 @@ case class SqlScriptingInterpreter(session: SparkSession) {
           isHandler = true)
 
       // Execution node of handler.
-      val scopeToExit = if (handler.handlerType == HandlerType.EXIT) {
+      val handlerScopeLabel = if (handler.handlerType == HandlerType.EXIT) {
         Some(compoundBody.label.get)
       } else {
         None
@@ -113,7 +114,7 @@ case class SqlScriptingInterpreter(session: SparkSession) {
       val handlerExec = new ErrorHandlerExec(
         handlerBodyExec,
         handler.handlerType,
-        scopeToExit)
+        handlerScopeLabel)
 
       // For each condition handler is defined for, add corresponding key value pair
       // to the conditionHandlerMap.
