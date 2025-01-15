@@ -51,6 +51,9 @@ class CommitLog(sparkSession: SparkSession, path: String)
 
   import CommitLog._
 
+  private val VERSION: Int = sparkSession.conf.get(
+    SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key).toInt
+
   override protected[sql] def deserialize(in: InputStream): CommitMetadata = {
     // called inside a try-finally where the underlying stream is closed in the caller
     val lines = IOSource.fromInputStream(in, UTF_8.name()).getLines()
@@ -74,7 +77,6 @@ class CommitLog(sparkSession: SparkSession, path: String)
 }
 
 object CommitLog {
-  private val VERSION = SQLConf.get.stateStoreCheckpointFormatVersion
   private val EMPTY_JSON = "{}"
 }
 
@@ -104,7 +106,7 @@ object CommitLog {
 
 case class CommitMetadata(
     nextBatchWatermarkMs: Long = 0,
-    stateUniqueIds: Map[Long, Array[Array[String]]] = Map.empty) {
+    stateUniqueIds: Option[Map[Long, Array[Array[String]]]] = None) {
   def json: String = Serialization.write(this)(CommitMetadata.format)
 }
 

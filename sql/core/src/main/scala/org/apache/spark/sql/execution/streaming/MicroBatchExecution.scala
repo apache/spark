@@ -513,7 +513,9 @@ class MicroBatchExecution(
               execCtx.startOffsets ++= execCtx.endOffsets
               watermarkTracker.setWatermark(
                 math.max(watermarkTracker.currentWatermark, commitMetadata.nextBatchWatermarkMs))
-              currentStateStoreCkptId ++= commitMetadata.stateUniqueIds
+              commitMetadata.stateUniqueIds.foreach {
+                stateUniqueIds => currentStateStoreCkptId ++= stateUniqueIds
+              }
             } else if (latestCommittedBatchId == latestBatchId - 1) {
               execCtx.endOffsets.foreach {
                 case (source: Source, end: Offset) =>
@@ -966,8 +968,14 @@ class MicroBatchExecution(
       updateStateStoreCkptId(execCtx, latestExecPlan)
     }
     execCtx.reportTimeTaken("commitOffsets") {
+      val stateStoreCkptId = if (StatefulOperatorStateInfo.enableStateStoreCheckpointIds(
+        sparkSessionForStream.sessionState.conf)) {
+        Some(currentStateStoreCkptId.toMap)
+      } else {
+        None
+      }
       if (!commitLog.add(execCtx.batchId,
-        CommitMetadata(watermarkTracker.currentWatermark, currentStateStoreCkptId.toMap))) {
+        CommitMetadata(watermarkTracker.currentWatermark, stateStoreCkptId))) {
         throw QueryExecutionErrors.concurrentStreamLogUpdate(execCtx.batchId)
       }
     }
