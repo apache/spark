@@ -987,7 +987,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
     testDatetime(s"$catalogAndNamespace.${caseConvert("datetime")}")
   }
 
-  test("SPARK-50792 Format binary data as a binary literal in JDBC.") {
+  test("SPARK-50792: Format binary data as a binary literal in JDBC.") {
     val tableName = s"$catalogName.test_binary_literal"
     withTable(tableName) {
       // Create a table with binary column
