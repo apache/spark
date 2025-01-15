@@ -22,7 +22,6 @@ import java.util.Properties
 
 import org.apache.spark._
 import org.apache.spark.executor.TaskMetrics
-import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.internal.config.APP_CALLER_CONTEXT
 import org.apache.spark.internal.plugin.PluginContainer
 import org.apache.spark.memory.{MemoryMode, TaskMemoryManager}
@@ -71,7 +70,7 @@ private[spark] abstract class Task[T](
     val jobId: Option[Int] = None,
     val appId: Option[String] = None,
     val appAttemptId: Option[String] = None,
-    val isBarrier: Boolean = false) extends Serializable with Logging {
+    val isBarrier: Boolean = false) extends Serializable {
 
   @transient lazy val metrics: TaskMetrics =
     SparkEnv.get.closureSerializer.newInstance().deserialize(ByteBuffer.wrap(serializedTaskMetrics))
@@ -232,19 +231,10 @@ private[spark] abstract class Task[T](
     require(reason != null)
     _reasonIfKilled = reason
     if (context != null) {
-      TaskContext.synchronized {
-        if (context.interruptible()) {
-          context.markInterrupted(reason)
-          if (interruptThread && taskThread != null) {
-            taskThread.interrupt()
-          }
-        } else {
-          logInfo(log"Task ${MDC(LogKeys.TASK_ID, context.taskAttemptId())} " +
-            log"is currently not interruptible. ")
-          val threadToInterrupt = if (interruptThread) Option(taskThread) else None
-          context.pendingInterrupt(threadToInterrupt, reason)
-        }
-      }
+      context.markInterrupted(reason)
+    }
+    if (interruptThread && taskThread != null) {
+      taskThread.interrupt()
     }
   }
 }

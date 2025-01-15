@@ -17,7 +17,6 @@
 
 package org.apache.spark
 
-import java.io.Closeable
 import java.util.{Properties, TimerTask}
 import java.util.concurrent.{ScheduledThreadPoolExecutor, TimeUnit}
 
@@ -274,18 +273,6 @@ class BarrierTaskContext private[spark] (
   }
 
   override private[spark] def getLocalProperties: Properties = taskContext.getLocalProperties
-
-  override private[spark] def interruptible(): Boolean = taskContext.interruptible()
-
-  override private[spark] def pendingInterrupt(threadToInterrupt: Option[Thread], reason: String)
-  : Unit = {
-    taskContext.pendingInterrupt(threadToInterrupt, reason)
-  }
-
-  override private[spark] def createResourceUninterruptibly[T <: Closeable](resourceBuilder: => T)
-  : T = {
-    taskContext.createResourceUninterruptibly(resourceBuilder)
-  }
 }
 
 @Experimental
