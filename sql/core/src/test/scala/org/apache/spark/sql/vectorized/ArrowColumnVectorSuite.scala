@@ -515,4 +515,28 @@ class ArrowColumnVectorSuite extends SparkFunSuite {
     columnVector.close()
     allocator.close()
   }
+
+  test("struct with TimestampNTZType") {
+    val allocator = ArrowUtils.rootAllocator.newChildAllocator("struct", 0, Long.MaxValue)
+    val schema = new StructType().add("ts", TimestampNTZType)
+    val vector = ArrowUtils.toArrowField("struct", schema, nullable = true, null)
+      .createVector(allocator).asInstanceOf[StructVector]
+    vector.allocateNew()
+    val timestampVector = vector.getChildByOrdinal(0).asInstanceOf[TimeStampMicroVector]
+
+    vector.setIndexDefined(0)
+    timestampVector.setSafe(0, 1000L)
+
+    timestampVector.setValueCount(1)
+    vector.setValueCount(1)
+
+    val columnVector = new ArrowColumnVector(vector)
+    assert(columnVector.dataType === schema)
+
+    val row0 = columnVector.getStruct(0)
+    assert(row0.get(0, TimestampNTZType) === 1000L)
+
+    columnVector.close()
+    allocator.close()
+  }
 }

@@ -54,15 +54,18 @@ class SubstituteExecuteImmediate(val catalogManager: CatalogManager)
   def resolveVariable(e: Expression): Expression = {
 
     /**
-     * We know that the expression is either UnresolvedAttribute or Alias, as passed from the
-     * parser. If it is an UnresolvedAttribute, we look it up in the catalog and return it. If it
-     * is an Alias, we resolve the child and return an Alias with the same name.
+     * We know that the expression is either UnresolvedAttribute, Alias or Parameter, as passed from
+     * the parser. If it is an UnresolvedAttribute, we look it up in the catalog and return it. If
+     * it is an Alias, we resolve the child and return an Alias with the same name. If it is
+     * a Parameter, we leave it as is because the parameter belongs to another parameterized
+     * query and should be resolved later.
      */
     e match {
       case u: UnresolvedAttribute =>
         getVariableReference(u, u.nameParts)
       case a: Alias =>
         Alias(resolveVariable(a.child), a.name)()
+      case p: Parameter => p
       case other =>
         throw QueryCompilationErrors.unsupportedParameterExpression(other)
     }

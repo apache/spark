@@ -201,6 +201,11 @@ object MimaExcludes {
 
     // SPARK-50112: Moving avro files from connector to sql/core
     ProblemFilters.exclude[Problem]("org.apache.spark.sql.avro.*"),
+
+    // SPARK-50768: Introduce TaskContext.createResourceUninterruptibly to avoid stream leak by task interruption
+    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.TaskContext.interruptible"),
+    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.TaskContext.pendingInterrupt"),
+    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.TaskContext.createResourceUninterruptibly"),
   ) ++ loggingExcludes("org.apache.spark.sql.DataFrameReader") ++
     loggingExcludes("org.apache.spark.sql.streaming.DataStreamReader") ++
     loggingExcludes("org.apache.spark.sql.SparkSession#Builder")

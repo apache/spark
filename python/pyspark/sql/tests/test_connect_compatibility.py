@@ -266,7 +266,6 @@ class ConnectCompatibilityTestsMixin:
             "addArtifacts",
             "clearProgressHandlers",
             "copyFromLocalToFs",
-            "interruptOperation",
             "newSession",
             "registerProgressHandler",
             "removeProgressHandler",

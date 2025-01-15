@@ -17,13 +17,12 @@
 
 package org.apache.spark.sql.execution
 
-import scala.annotation.tailrec
-
 import org.apache.spark.sql.catalyst.expressions.SortOrder
+import org.apache.spark.sql.catalyst.plans.logical.{Project, Sort}
 import org.apache.spark.sql.catalyst.plans.physical.SinglePartition
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.execution.adaptive.{AQEShuffleReadExec, ShuffleQueryStageExec}
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
+import org.apache.spark.sql.execution.python.EvalPythonExec
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -43,33 +42,61 @@ object InsertSortForLimitAndOffset extends Rule[SparkPlan] {
     plan transform {
       case l @ GlobalLimitExec(
           _,
-          SinglePartitionShuffleWithGlobalOrdering(ordering),
-          _) =>
-        val newChild = SortExec(ordering, global = false, child = l.child)
-        l.withNewChildren(Seq(newChild))
-    }
-  }
-
-  object SinglePartitionShuffleWithGlobalOrdering {
-    @tailrec
-    def unapply(plan: SparkPlan): Option[Seq[SortOrder]] = plan match {
-      case ShuffleExchangeExec(SinglePartition, SparkPlanWithGlobalOrdering(ordering), _, _) =>
-        Some(ordering)
-      case p: AQEShuffleReadExec => unapply(p.child)
-      case p: ShuffleQueryStageExec => unapply(p.plan)
-      case _ => None
+          // Should not match AQE shuffle stage because we only target un-submitted stages which
+          // we can still rewrite the query plan.
+          s @ ShuffleExchangeExec(SinglePartition, child, _, _),
+          _) if child.logicalLink.isDefined =>
+        extractOrderingAndPropagateOrderingColumns(child) match {
+          case Some((ordering, newChild)) =>
+            val newShuffle = s.withNewChildren(Seq(newChild))
+            val sorted = SortExec(ordering, global = false, child = newShuffle)
+            // We must set the logical plan link to avoid losing the added SortExec and ProjectExec
+            // during AQE re-optimization, where we turn physical plan back to logical plan.
+            val logicalSort = Sort(ordering, global = false, child = s.child.logicalLink.get)
+            sorted.setLogicalLink(logicalSort)
+            val projected = if (sorted.output == s.output) {
+              sorted
+            } else {
+              val p = ProjectExec(s.output, sorted)
+              p.setLogicalLink(Project(s.output, logicalSort))
+              p
+            }
+            l.withNewChildren(Seq(projected))
+          case _ => l
+        }
     }
   }
 
   // Note: this is not implementing a generalized notion of "global order preservation", but just
-  // tackles the regular ORDER BY semantics with optional LIMIT (top-K).
-  object SparkPlanWithGlobalOrdering {
-    @tailrec
-    def unapply(plan: SparkPlan): Option[Seq[SortOrder]] = plan match {
-      case p: SortExec if p.global => Some(p.sortOrder)
-      case p: LocalLimitExec => unapply(p.child)
-      case p: WholeStageCodegenExec => unapply(p.child)
-      case _ => None
-    }
+  // a best effort to catch the common query patterns that the data ordering should be preserved.
+  private def extractOrderingAndPropagateOrderingColumns(
+      plan: SparkPlan): Option[(Seq[SortOrder], SparkPlan)] = plan match {
+    case p: SortExec if p.global => Some(p.sortOrder, p)
+    case p: UnaryExecNode if
+        p.isInstanceOf[LocalLimitExec] ||
+          p.isInstanceOf[WholeStageCodegenExec] ||
+          p.isInstanceOf[FilterExec] ||
+          p.isInstanceOf[EvalPythonExec] =>
+      extractOrderingAndPropagateOrderingColumns(p.child) match {
+        case Some((ordering, newChild)) => Some((ordering, p.withNewChildren(Seq(newChild))))
+        case _ => None
+      }
+    case p: ProjectExec =>
+      extractOrderingAndPropagateOrderingColumns(p.child) match {
+        case Some((ordering, newChild)) =>
+          val orderingCols = ordering.flatMap(_.references)
+          if (orderingCols.forall(p.outputSet.contains)) {
+            Some((ordering, p.withNewChildren(Seq(newChild))))
+          } else {
+            // In order to do the sort after shuffle, we must propagate the ordering columns in the
+            // pre-shuffle ProjectExec.
+            val missingCols = orderingCols.filterNot(p.outputSet.contains)
+            val newProj = p.copy(projectList = p.projectList ++ missingCols, child = newChild)
+            newProj.copyTagsFrom(p)
+            Some((ordering, newProj))
+          }
+        case _ => None
+      }
+    case _ => None
   }
 }

@@ -482,9 +482,6 @@ public final class CollationFactory {
        */
       private static final int CASE_SENSITIVITY_MASK = 0b1;
 
-      private static final String UTF8_BINARY_COLLATION_NAME = "UTF8_BINARY";
-      private static final String UTF8_LCASE_COLLATION_NAME = "UTF8_LCASE";
-
       private static final int UTF8_BINARY_COLLATION_ID =
         new CollationSpecUTF8(CaseSensitivity.UNSPECIFIED, SpaceTrimming.NONE).collationId;
       private static final int UTF8_LCASE_COLLATION_ID =
@@ -670,9 +667,9 @@ public final class CollationFactory {
       protected String normalizedCollationName() {
         StringBuilder builder = new StringBuilder();
         if(caseSensitivity == CaseSensitivity.UNSPECIFIED){
-          builder.append(UTF8_BINARY_COLLATION_NAME);
+          builder.append(CollationNames.UTF8_BINARY);
         } else{
-          builder.append(UTF8_LCASE_COLLATION_NAME);
+          builder.append(CollationNames.UTF8_LCASE);
         }
         if (spaceTrimming != SpaceTrimming.NONE) {
           builder.append('_');
@@ -684,12 +681,12 @@ public final class CollationFactory {
       static List<CollationIdentifier> listCollations() {
         CollationIdentifier UTF8_BINARY_COLLATION_IDENT = new CollationIdentifier(
             PROVIDER_SPARK,
-            UTF8_BINARY_COLLATION_NAME,
+            CollationNames.UTF8_BINARY,
             CollationSpecICU.ICU_VERSION
         );
         CollationIdentifier UTF8_LCASE_COLLATION_IDENT = new CollationIdentifier(
             PROVIDER_SPARK,
-            UTF8_LCASE_COLLATION_NAME,
+            CollationNames.UTF8_LCASE,
             CollationSpecICU.ICU_VERSION
         );
         return Arrays.asList(UTF8_BINARY_COLLATION_IDENT, UTF8_LCASE_COLLATION_IDENT);
@@ -773,7 +770,7 @@ public final class CollationFactory {
         VersionInfo.ICU_VERSION.getMinor());
 
       static {
-        ICULocaleMap.put("UNICODE", ULocale.ROOT);
+        ICULocaleMap.put(CollationNames.UNICODE, ULocale.ROOT);
         // ICU-implemented `ULocale`s which have corresponding `Collator` installed.
         ULocale[] locales = Collator.getAvailableULocales();
         // Build locale names in format: language["_" optional script]["_" optional country code].
@@ -821,13 +818,13 @@ public final class CollationFactory {
       }
 
       private static final int UNICODE_COLLATION_ID = new CollationSpecICU(
-        "UNICODE",
+        CollationNames.UNICODE,
         CaseSensitivity.CS,
         AccentSensitivity.AS,
         SpaceTrimming.NONE).collationId;
 
       private static final int UNICODE_CI_COLLATION_ID = new CollationSpecICU(
-        "UNICODE",
+        CollationNames.UNICODE,
         CaseSensitivity.CI,
         AccentSensitivity.AS,
         SpaceTrimming.NONE).collationId;
