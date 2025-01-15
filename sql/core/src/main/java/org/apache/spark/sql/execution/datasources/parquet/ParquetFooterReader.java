@@ -63,7 +63,22 @@ public class ParquetFooterReader {
           .build()
           .getMetadataFilter();
     }
-    return readFooter(configuration, file.toPath(), filter);
+    if (file.fileSize() > 0) {
+      // If we have already known the file size, we don't need to get fileStatus
+      // from HDFS name node again.
+      // Note that the blockReplication and blockSize in FileStatus is useless here,
+      // since we only need to known the file length when reading parquet footer.
+      FileStatus fileStatus = new FileStatus(
+        file.fileSize(),
+        false,
+        1,
+        0,
+        file.modificationTime(),
+        file.toPath());
+      return readFooter(configuration, fileStatus, filter);
+    } else {
+      return readFooter(configuration, file.toPath(), filter);
+    }
   }
 
   public static ParquetMetadata readFooter(Configuration configuration,
