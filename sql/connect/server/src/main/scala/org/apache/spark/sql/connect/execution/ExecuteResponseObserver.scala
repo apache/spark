@@ -260,6 +260,11 @@ private[connect] class ExecuteResponseObserver[T <: Message](val executeHolder: 
     finalProducedIndex.isDefined
   }
 
+  // For testing.
+  private[connect] def undoCompletion(): Unit = responseLock.synchronized {
+    finalProducedIndex = None
+  }
+
   /**
    * Remove cached responses after response with lastReturnedIndex is returned from getResponse.
    * Remove according to caching policy:

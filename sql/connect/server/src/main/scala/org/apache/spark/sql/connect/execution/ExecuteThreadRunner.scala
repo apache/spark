@@ -64,6 +64,16 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
   }
 
   /**
+   * Checks if the thread is alive.
+   *
+   * @return
+   *   true if the execution thread is currently running.
+   */
+  private[connect] def isAlive(): Boolean = {
+    executionThread.isAlive()
+  }
+
+  /**
    * Interrupts the execution thread if the execution has been interrupted by this method call.
    *
    * @return
@@ -288,7 +298,8 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
    *   True if we should delegate sending the final ResultComplete to the handler thread, i.e.
    *   don't send a ResultComplete when the ExecuteThread returns.
    */
-  private def shouldDelegateCompleteResponse(request: proto.ExecutePlanRequest): Boolean = {
+  private[connect] def shouldDelegateCompleteResponse(
+      request: proto.ExecutePlanRequest): Boolean = {
     request.getPlan.getOpTypeCase == proto.Plan.OpTypeCase.COMMAND &&
     request.getPlan.getCommand.getCommandTypeCase ==
       proto.Command.CommandTypeCase.STREAMING_QUERY_LISTENER_BUS_COMMAND &&
