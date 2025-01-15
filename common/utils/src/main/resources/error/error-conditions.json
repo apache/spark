@@ -2782,6 +2782,11 @@
         "message" : [
           "ITERATE statement cannot be used with a label that belongs to a compound (BEGIN...END) body."
         ]
+      },
+      "QUALIFIED_LABEL_NAME" : {
+        "message" : [
+          "Label cannot be qualified."
+        ]
       }
     },
     "sqlState" : "42K0L"
