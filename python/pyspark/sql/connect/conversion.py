@@ -104,7 +104,7 @@ class LocalDataToArrowConversion:
     def _create_converter(
         dataType: DataType,
         nullable: bool = True,
-        variants_as_dicts = False  # some code paths may require python interal types
+        variants_as_dicts = False  # some code paths may require python internal types
     ) -> Callable:
         assert dataType is not None and isinstance(dataType, DataType)
         assert isinstance(nullable, bool)
