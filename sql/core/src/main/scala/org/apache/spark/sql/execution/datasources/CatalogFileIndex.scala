@@ -23,7 +23,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.catalyst.catalog.{CatalogTable, ExternalCatalogUtils}
+import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogTablePartition, ExternalCatalogUtils}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types.StructType
 
@@ -105,4 +105,38 @@ class CatalogFileIndex(
   }
 
   override def hashCode(): Int = table.identifier.hashCode()
+
+  def listPartitions(filters: Seq[Expression]): (Seq[CatalogTablePartition], Long) = {
+    if (table.partitionColumnNames.nonEmpty) {
+      val startTime = System.nanoTime()
+      val selectedPartitions = ExternalCatalogUtils.listPartitionsByFilter(
+        sparkSession.sessionState.conf, sparkSession.sessionState.catalog, table, filters)
+      val timeNs = System.nanoTime() - startTime
+      (selectedPartitions, timeNs)
+    } else {
+      (Seq.empty, 0)
+    }
+  }
+
+  def filterPartitions(
+      inputPartitions: Seq[CatalogTablePartition],
+      baseTimeNs: Long,
+      filters: Seq[Expression]): InMemoryFileIndex = {
+    val startTime = System.nanoTime()
+    val selectedPartitions = ExternalCatalogUtils.prunePartitionsByFilter(table, inputPartitions,
+      filters, sparkSession.sessionState.conf.sessionLocalTimeZone)
+    val partitions = selectedPartitions.map { p =>
+      val path = new Path(p.location)
+      val fs = path.getFileSystem(hadoopConf)
+      PartitionPath(
+        p.toRow(partitionSchema, sparkSession.sessionState.conf.sessionLocalTimeZone),
+        path.makeQualified(fs.getUri, fs.getWorkingDirectory))
+    }
+    val partitionSpec = PartitionSpec(partitionSchema, partitions)
+    val timeNs = System.nanoTime() - startTime + baseTimeNs
+    new InMemoryFileIndex(
+      sparkSession, partitions.map(_.path), parameters = table.storage.properties,
+      userSpecifiedSchema = None, this.fileStatusCache, metadataOpsTimeNs = Some(timeNs),
+      userSpecifiedPartitionSpec = Some(partitionSpec))
+  }
 }
