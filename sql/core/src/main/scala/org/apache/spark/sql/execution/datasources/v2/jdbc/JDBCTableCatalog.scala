@@ -66,7 +66,12 @@ class JDBCTableCatalog extends TableCatalog
   override def listTables(namespace: Array[String]): Array[Identifier] = {
     checkNamespace(namespace)
     JdbcUtils.withConnection(options) { conn =>
-      val schemaPattern = if (namespace.length == 1) namespace.head else null
+      val schemaPattern: Option[String] = if (namespace.length == 1) {
+        val schemaName = namespace.head
+        Some(this.convertSchemaNameToPattern(schemaName))
+      } else {
+        None
+      }
       val rs = JdbcUtils.classifyException(
         errorClass = "FAILED_JDBC.GET_TABLES",
         messageParameters = Map(
@@ -75,7 +80,7 @@ class JDBCTableCatalog extends TableCatalog
         dialect,
         description = s"Failed get tables from: ${namespace.mkString(".")}",
         isRuntime = false) {
-        conn.getMetaData.getTables(null, schemaPattern, "%", Array("TABLE"))
+        conn.getMetaData.getTables(null, schemaPattern.orNull, "%", Array("TABLE"))
       }
       new Iterator[Identifier] {
         def hasNext = rs.next()
@@ -417,5 +422,11 @@ class JDBCTableCatalog extends TableCatalog
 
   private def toSQLId(ident: Identifier): String = {
     toSQLId(ident.namespace.toSeq :+ ident.name)
+  }
+
+  protected def convertSchemaNameToPattern(schemaName: String): String = {
+    schemaName.replace("\\", "\\\\")
+        .replace("%", "\\%")
+        .replace("_", "\\_")
   }
 }
