@@ -3078,6 +3078,23 @@ abstract class CSVSuite
     }
   }
 
+  test("SPARK-50616: We can write with a tsv file extension") {
+    withTempPath { path =>
+      val input = Seq(
+        "1423-11-12T23:41:00",
+        "1765-03-28",
+        "2016-01-28T20:00:00"
+      ).toDF().repartition(1)
+      input.write.option("extension", "tsv").csv(path.getAbsolutePath)
+
+      val files = Files.list(path.toPath)
+        .iterator().asScala.map(x => x.getFileName.toString)
+        .toList.filter(x => x.takeRight(3).equals("tsv"))
+
+      assert(files.size == 1)
+    }
+  }
+
   test("SPARK-39904: Parse incorrect timestamp values") {
     withTempPath { path =>
       Seq(
@@ -3308,7 +3325,7 @@ abstract class CSVSuite
   }
 
   test("SPARK-40667: validate CSV Options") {
-    assert(CSVOptions.getAllOptions.size == 39)
+    assert(CSVOptions.getAllOptions.size == 40)
     // Please add validation on any new CSV options here
     assert(CSVOptions.isValidOption("header"))
     assert(CSVOptions.isValidOption("inferSchema"))
@@ -3347,6 +3364,7 @@ abstract class CSVSuite
     assert(CSVOptions.isValidOption("compression"))
     assert(CSVOptions.isValidOption("codec"))
     assert(CSVOptions.isValidOption("sep"))
+    assert(CSVOptions.isValidOption("extension"))
     assert(CSVOptions.isValidOption("delimiter"))
     assert(CSVOptions.isValidOption("columnPruning"))
     // Please add validation on any new parquet options with alternative here

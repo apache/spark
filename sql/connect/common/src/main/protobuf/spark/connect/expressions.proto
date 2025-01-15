@@ -52,6 +52,8 @@ message Expression {
     NamedArgumentExpression named_argument_expression = 17;
     MergeAction merge_action = 19;
     TypedAggregateExpression typed_aggregate_expression = 20;
+    LazyExpression lazy_expression = 21;
+    SubqueryExpression subquery_expression = 22;
 
     // This field is used to mark extensions to the protocol. When plugins generate arbitrary
     // relations they can add them here. During the planning the correct resolution is done.
@@ -259,6 +261,11 @@ message Expression {
     // When it is not a user defined function, Connect will use the function name directly.
     // When it is a user defined function, Connect will parse the function name first.
     bool is_user_defined_function = 4;
+
+    // (Optional) Indicate if this function is defined in the internal function registry.
+    // If not set, the server will try to look up the function in the internal function registry
+    // and decide appropriately.
+    optional bool is_internal = 5;
   }
 
   // Expression as string.
@@ -449,5 +456,24 @@ message MergeAction {
 
     // (Required) The value of the assignment.
     Expression value = 2;
+  }
+}
+
+message LazyExpression {
+  // (Required) The expression to be marked as lazy.
+  Expression child = 1;
+}
+
+message SubqueryExpression {
+  // (Required) The id of corresponding connect plan.
+  int64 plan_id = 1;
+
+  // (Required) The type of the subquery.
+  SubqueryType subquery_type = 2;
+
+  enum SubqueryType {
+    SUBQUERY_TYPE_UNKNOWN = 0;
+    SUBQUERY_TYPE_SCALAR = 1;
+    SUBQUERY_TYPE_EXISTS = 2;
   }
 }

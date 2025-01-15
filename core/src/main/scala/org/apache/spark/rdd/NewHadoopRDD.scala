@@ -33,6 +33,7 @@ import org.apache.hadoop.mapred.JobConf
 import org.apache.hadoop.mapreduce._
 import org.apache.hadoop.mapreduce.lib.input.{CombineFileSplit, FileInputFormat, FileSplit, InvalidInputException}
 import org.apache.hadoop.mapreduce.task.{JobContextImpl, TaskAttemptContextImpl}
+import org.apache.hadoop.security.AccessControlException
 
 import org.apache.spark._
 import org.apache.spark.annotation.DeveloperApi
@@ -256,7 +257,7 @@ class NewHadoopRDD[K, V](
             null
           // Throw FileNotFoundException even if `ignoreCorruptFiles` is true
           case e: FileNotFoundException if !ignoreMissingFiles => throw e
-          case e: BlockMissingException => throw e
+          case e @ (_ : AccessControlException | _ : BlockMissingException) => throw e
           case e: IOException if ignoreCorruptFiles =>
             logWarning(
               log"Skipped the rest content in the corrupted file: " +
@@ -286,7 +287,7 @@ class NewHadoopRDD[K, V](
               finished = true
             // Throw FileNotFoundException even if `ignoreCorruptFiles` is true
             case e: FileNotFoundException if !ignoreMissingFiles => throw e
-            case e: BlockMissingException => throw e
+            case e @ (_ : AccessControlException | _ : BlockMissingException) => throw e
             case e: IOException if ignoreCorruptFiles =>
               logWarning(
                 log"Skipped the rest content in the corrupted file: " +

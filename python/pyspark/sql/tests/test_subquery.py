@@ -459,30 +459,29 @@ class SubqueryTestsMixin:
                     ),
                 )
 
-    def test_scalar_subquery_with_outer_reference_errors(self):
+    def test_scalar_subquery_with_missing_outer_reference(self):
         with self.tempView("l", "r"):
             self.df1.createOrReplaceTempView("l")
             self.df2.createOrReplaceTempView("r")
 
-            with self.subTest("missing `outer()`"):
-                with self.assertRaises(AnalysisException) as pe:
-                    self.spark.table("l").select(
-                        "a",
-                        (
-                            self.spark.table("r")
-                            .where(sf.col("c") == sf.col("a"))
-                            .select(sf.sum("d"))
-                            .scalar()
-                        ),
-                    ).collect()
+            with self.assertRaises(AnalysisException) as pe:
+                self.spark.table("l").select(
+                    "a",
+                    (
+                        self.spark.table("r")
+                        .where(sf.col("c") == sf.col("a"))
+                        .select(sf.sum("d"))
+                        .scalar()
+                    ),
+                ).collect()
 
-                self.check_error(
-                    exception=pe.exception,
-                    errorClass="UNRESOLVED_COLUMN.WITH_SUGGESTION",
-                    messageParameters={"objectName": "`a`", "proposal": "`c`, `d`"},
-                    query_context_type=QueryContextType.DataFrame,
-                    fragment="col",
-                )
+            self.check_error(
+                exception=pe.exception,
+                errorClass="UNRESOLVED_COLUMN.WITH_SUGGESTION",
+                messageParameters={"objectName": "`a`", "proposal": "`c`, `d`"},
+                query_context_type=QueryContextType.DataFrame,
+                fragment="col",
+            )
 
     def table1(self):
         t1 = self.spark.sql("VALUES (0, 1), (1, 2) AS t1(c1, c2)")
@@ -517,6 +516,28 @@ class SubqueryTestsMixin:
             assertDataFrameEqual(
                 t1.lateralJoin(t2.select(sf.col("t1.c1").outer() + sf.col("t2.c1"))),
                 self.spark.sql("""SELECT * FROM t1, LATERAL (SELECT t1.c1 + t2.c1 FROM t2)"""),
+            )
+
+    def test_lateral_join_with_star_expansion(self):
+        with self.tempView("t1", "t2"):
+            t1 = self.table1()
+            t2 = self.table2()
+
+            assertDataFrameEqual(
+                t1.lateralJoin(self.spark.range(1).select().select(sf.col("*"))),
+                self.spark.sql("""SELECT * FROM t1, LATERAL (SELECT *)"""),
+            )
+            assertDataFrameEqual(
+                t1.lateralJoin(t2.select(sf.col("*"))),
+                self.spark.sql("""SELECT * FROM t1, LATERAL (SELECT * FROM t2)"""),
+            )
+            assertDataFrameEqual(
+                t1.lateralJoin(t2.select(sf.col("t1.*").outer(), sf.col("t2.*"))),
+                self.spark.sql("""SELECT * FROM t1, LATERAL (SELECT t1.*, t2.* FROM t2)"""),
+            )
+            assertDataFrameEqual(
+                t1.lateralJoin(t2.alias("t1").select(sf.col("t1.*"))),
+                self.spark.sql("""SELECT * FROM t1, LATERAL (SELECT t1.* FROM t2 AS t1)"""),
             )
 
     def test_lateral_join_with_different_join_types(self):
@@ -554,6 +575,37 @@ class SubqueryTestsMixin:
                     how="cross",
                 ),
                 self.spark.sql("""SELECT * FROM t1 CROSS JOIN LATERAL (SELECT c1 + c2 AS c3)"""),
+            )
+
+            with self.assertRaises(AnalysisException) as pe:
+                t1.lateralJoin(
+                    self.spark.range(1).select(
+                        (sf.col("c1").outer() + sf.col("c2").outer()).alias("c3")
+                    ),
+                    how="right",
+                ).collect()
+
+            self.check_error(
+                pe.exception,
+                errorClass="UNSUPPORTED_JOIN_TYPE",
+                messageParameters={
+                    "typ": "right",
+                    "supported": "'inner', 'leftouter', 'left', 'left_outer', 'cross'",
+                },
+            )
+
+    def test_lateral_join_with_subquery_alias(self):
+        with self.tempView("t1"):
+            t1 = self.table1()
+
+            assertDataFrameEqual(
+                t1.lateralJoin(
+                    self.spark.range(1)
+                    .select(sf.col("c1").outer(), sf.col("c2").outer())
+                    .toDF("a", "b")
+                    .alias("s")
+                ).select("a", "b"),
+                self.spark.sql("""SELECT a, b FROM t1, LATERAL (SELECT c1, c2) s(a, b)"""),
             )
 
     def test_lateral_join_with_correlated_predicates(self):
@@ -645,9 +697,11 @@ class SubqueryTestsMixin:
 
             assertDataFrameEqual(
                 t1.lateralJoin(
-                    t2.where(sf.col("t1.c1").outer() == sf.col("t2.c1")).select(sf.col("c2")),
+                    t2.where(sf.col("t1.c1").outer() == sf.col("t2.c1"))
+                    .select(sf.col("c2"))
+                    .alias("s"),
                     how="left",
-                ).join(t1.alias("t3"), sf.col("t2.c2") == sf.col("t3.c2"), how="left"),
+                ).join(t1.alias("t3"), sf.col("s.c2") == sf.col("t3.c2"), how="left"),
                 self.spark.sql(
                     """
                     SELECT * FROM t1
@@ -815,6 +869,127 @@ class SubqueryTestsMixin:
                     """SELECT * FROM t3 LEFT JOIN LATERAL EXPLODE(c2) t(c3) ON t3.c1 = c3"""
                 ),
             )
+
+    def test_subquery_with_generator_and_tvf(self):
+        with self.tempView("t1"):
+            t1 = self.table1()
+
+            assertDataFrameEqual(
+                self.spark.range(1).select(sf.explode(t1.select(sf.collect_list("c2")).scalar())),
+                self.spark.sql("""SELECT EXPLODE((SELECT COLLECT_LIST(c2) FROM t1))"""),
+            )
+            assertDataFrameEqual(
+                self.spark.tvf.explode(t1.select(sf.collect_list("c2")).scalar()),
+                self.spark.sql("""SELECT * FROM EXPLODE((SELECT COLLECT_LIST(c2) FROM t1))"""),
+            )
+
+    def test_subquery_in_join_condition(self):
+        with self.tempView("t1", "t2"):
+            t1 = self.table1()
+            t2 = self.table2()
+
+            assertDataFrameEqual(
+                t1.join(t2, sf.col("t1.c1") == t1.select(sf.max("c1")).scalar()),
+                self.spark.sql("""SELECT * FROM t1 JOIN t2 ON t1.c1 = (SELECT MAX(c1) FROM t1)"""),
+            )
+
+    def test_subquery_in_unpivot(self):
+        self.check_subquery_in_unpivot(QueryContextType.DataFrame, "exists")
+
+    def check_subquery_in_unpivot(self, query_context_type, fragment):
+        with self.tempView("t1", "t2"):
+            t1 = self.table1()
+            t2 = self.table2()
+
+            with self.assertRaises(AnalysisException) as pe:
+                t1.unpivot("c1", t2.exists(), "c1", "c2").collect()
+
+            self.check_error(
+                exception=pe.exception,
+                errorClass=(
+                    "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.UNSUPPORTED_IN_EXISTS_SUBQUERY"
+                ),
+                messageParameters={"treeNode": "Expand.*"},
+                query_context_type=query_context_type,
+                fragment=fragment,
+                matchPVals=True,
+            )
+
+    def test_subquery_in_transpose(self):
+        with self.tempView("t1"):
+            t1 = self.table1()
+
+            with self.assertRaises(AnalysisException) as pe:
+                t1.transpose(t1.select(sf.max("c1")).scalar()).collect()
+
+            self.check_error(
+                exception=pe.exception,
+                errorClass="TRANSPOSE_INVALID_INDEX_COLUMN",
+                messageParameters={"reason": "Index column must be an atomic attribute"},
+            )
+
+    def test_subquery_in_with_columns(self):
+        with self.tempView("t1"):
+            t1 = self.table1()
+
+            assertDataFrameEqual(
+                t1.withColumn(
+                    "scalar",
+                    self.spark.range(1)
+                    .select(sf.col("c1").outer() + sf.col("c2").outer())
+                    .scalar(),
+                ),
+                t1.select("*", (sf.col("c1") + sf.col("c2")).alias("scalar")),
+            )
+            assertDataFrameEqual(
+                t1.withColumn(
+                    "scalar",
+                    self.spark.range(1)
+                    .withColumn("c1", sf.col("c1").outer())
+                    .select(sf.col("c1") + sf.col("c2").outer())
+                    .scalar(),
+                ),
+                t1.select("*", (sf.col("c1") + sf.col("c2")).alias("scalar")),
+            )
+            assertDataFrameEqual(
+                t1.withColumn(
+                    "scalar",
+                    self.spark.range(1)
+                    .select(sf.col("c1").outer().alias("c1"))
+                    .withColumn("c2", sf.col("c2").outer())
+                    .select(sf.col("c1") + sf.col("c2"))
+                    .scalar(),
+                ),
+                t1.select("*", (sf.col("c1") + sf.col("c2")).alias("scalar")),
+            )
+
+    def test_subquery_in_with_columns_renamed(self):
+        with self.tempView("t1"):
+            t1 = self.table1()
+
+            assertDataFrameEqual(
+                t1.withColumn(
+                    "scalar",
+                    self.spark.range(1)
+                    .select(sf.col("c1").outer().alias("c1"), sf.col("c2").outer().alias("c2"))
+                    .withColumnsRenamed({"c1": "x", "c2": "y"})
+                    .select(sf.col("x") + sf.col("y"))
+                    .scalar(),
+                ),
+                t1.select("*", (sf.col("c1").alias("x") + sf.col("c2").alias("y")).alias("scalar")),
+            )
+
+    def test_subquery_in_drop(self):
+        with self.tempView("t1"):
+            t1 = self.table1()
+
+            assertDataFrameEqual(t1.drop(self.spark.range(1).select(sf.lit("c1")).scalar()), t1)
+
+    def test_subquery_in_repartition(self):
+        with self.tempView("t1"):
+            t1 = self.table1()
+
+            assertDataFrameEqual(t1.repartition(self.spark.range(1).select(sf.lit(1)).scalar()), t1)
 
 
 class SubqueryTests(SubqueryTestsMixin, ReusedSQLTestCase):

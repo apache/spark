@@ -62,6 +62,7 @@ from pyspark.ml.param.shared import (
     HasSolver,
     HasParallelism,
 )
+from pyspark.ml.remote.util import try_remote_attribute_relation
 from pyspark.ml.tree import (
     _DecisionTreeModel,
     _DecisionTreeParams,
@@ -336,6 +337,7 @@ class _ClassificationSummary(JavaWrapper):
 
     @property
     @since("3.1.0")
+    @try_remote_attribute_relation
     def predictions(self) -> DataFrame:
         """
         Dataframe outputted by the model's `transform` method.
@@ -521,6 +523,7 @@ class _BinaryClassificationSummary(_ClassificationSummary):
         return self._call_java("scoreCol")
 
     @property
+    @try_remote_attribute_relation
     def roc(self) -> DataFrame:
         """
         Returns the receiver operating characteristic (ROC) curve,
@@ -546,6 +549,7 @@ class _BinaryClassificationSummary(_ClassificationSummary):
 
     @property
     @since("3.1.0")
+    @try_remote_attribute_relation
     def pr(self) -> DataFrame:
         """
         Returns the precision-recall curve, which is a Dataframe
@@ -556,6 +560,7 @@ class _BinaryClassificationSummary(_ClassificationSummary):
 
     @property
     @since("3.1.0")
+    @try_remote_attribute_relation
     def fMeasureByThreshold(self) -> DataFrame:
         """
         Returns a dataframe with two fields (threshold, F-Measure) curve
@@ -565,6 +570,7 @@ class _BinaryClassificationSummary(_ClassificationSummary):
 
     @property
     @since("3.1.0")
+    @try_remote_attribute_relation
     def precisionByThreshold(self) -> DataFrame:
         """
         Returns a dataframe with two fields (threshold, precision) curve.
@@ -575,6 +581,7 @@ class _BinaryClassificationSummary(_ClassificationSummary):
 
     @property
     @since("3.1.0")
+    @try_remote_attribute_relation
     def recallByThreshold(self) -> DataFrame:
         """
         Returns a dataframe with two fields (threshold, recall) curve.
@@ -3788,7 +3795,8 @@ class OneVsRestModel(
         assert sc is not None and sc._gateway is not None
 
         java_models_array = JavaWrapper._new_java_array(
-            java_models, sc._gateway.jvm.org.apache.spark.ml.classification.ClassificationModel
+            java_models,
+            getattr(sc._gateway.jvm, "org.apache.spark.ml.classification.ClassificationModel"),
         )
         # TODO: need to set metadata
         metadata = JavaParams._new_java_obj("org.apache.spark.sql.types.Metadata")
@@ -3928,7 +3936,8 @@ class OneVsRestModel(
 
         java_models = [cast(_JavaClassificationModel, model)._to_java() for model in self.models]
         java_models_array = JavaWrapper._new_java_array(
-            java_models, sc._gateway.jvm.org.apache.spark.ml.classification.ClassificationModel
+            java_models,
+            getattr(sc._gateway.jvm, "org.apache.spark.ml.classification.ClassificationModel"),
         )
         metadata = JavaParams._new_java_obj("org.apache.spark.sql.types.Metadata")
         _java_obj = JavaParams._new_java_obj(

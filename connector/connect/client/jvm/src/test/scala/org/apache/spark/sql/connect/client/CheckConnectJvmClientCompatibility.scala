@@ -176,8 +176,6 @@ object CheckConnectJvmClientCompatibility {
 
       // Skip unsupported classes
       ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.ExperimentalMethods"),
-      ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.SQLContext"),
-      ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.SQLContext$*"),
       ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.SparkSessionExtensions"),
       ProblemFilters.exclude[MissingClassProblem](
         "org.apache.spark.sql.SparkSessionExtensionsProvider"),
@@ -185,6 +183,11 @@ object CheckConnectJvmClientCompatibility {
         "org.apache.spark.sql.ExtendedExplainGenerator"),
       ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.UDTFRegistration"),
       ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.DataSourceRegistration"),
+      ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.TableArg"),
+      ProblemFilters.exclude[MissingClassProblem](
+        "org.apache.spark.sql.artifact.ArtifactStateForCleanup"),
+      ProblemFilters.exclude[MissingClassProblem](
+        "org.apache.spark.sql.artifact.ArtifactStateForCleanup$"),
 
       // DataFrameNaFunctions
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.DataFrameNaFunctions.fillValue"),
@@ -330,6 +333,11 @@ object CheckConnectJvmClientCompatibility {
       ),
       ProblemFilters.exclude[DirectMissingMethodProblem](
         "org.apache.spark.sql.SparkSession#Builder.interceptor"),
+
+      // Private case class in SQLContext
+      ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.SQLContext$ListTableRow"),
+      ProblemFilters.exclude[MissingClassProblem](
+        "org.apache.spark.sql.SQLContext$ListTableRow$"),
 
       // SQLImplicits
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SQLImplicits.session"),

@@ -36,7 +36,7 @@ from pyspark.sql.streaming.stateful_processor import (
 )
 from pyspark.sql.streaming.stateful_processor import StatefulProcessor, StatefulProcessorHandle
 from pyspark.sql.streaming.stateful_processor_util import TransformWithStateInPandasFuncMode
-from pyspark.sql.types import StructType, _parse_datatype_string
+from pyspark.sql.types import StructType
 
 if TYPE_CHECKING:
     from pyspark.sql.pandas._typing import (
@@ -348,9 +348,9 @@ class PandasGroupedOpsMixin:
         ]
 
         if isinstance(outputStructType, str):
-            outputStructType = cast(StructType, _parse_datatype_string(outputStructType))
+            outputStructType = cast(StructType, self._df._session._parse_ddl(outputStructType))
         if isinstance(stateStructType, str):
-            stateStructType = cast(StructType, _parse_datatype_string(stateStructType))
+            stateStructType = cast(StructType, self._df._session._parse_ddl(stateStructType))
 
         udf = pandas_udf(
             func,  # type: ignore[call-overload]
@@ -502,7 +502,25 @@ class PandasGroupedOpsMixin:
         if initialState is not None:
             assert isinstance(initialState, GroupedData)
         if isinstance(outputStructType, str):
-            outputStructType = cast(StructType, _parse_datatype_string(outputStructType))
+            outputStructType = cast(StructType, self._df._session._parse_ddl(outputStructType))
+
+        def handle_pre_init(
+            statefulProcessorApiClient: StatefulProcessorApiClient,
+        ) -> Iterator["PandasDataFrameLike"]:
+            # Driver handle is different from the handle used on executors;
+            # On JVM side, we will use `DriverStatefulProcessorHandleImpl` for driver handle which
+            # will only be used for handling init() and get the state schema on the driver.
+            driver_handle = StatefulProcessorHandle(statefulProcessorApiClient)
+            statefulProcessorApiClient.set_handle_state(StatefulProcessorHandleState.PRE_INIT)
+            statefulProcessor.init(driver_handle)
+
+            # This method is used for the driver-side stateful processor after we have collected
+            # all the necessary schemas. This instance of the DriverStatefulProcessorHandleImpl
+            # won't be used again on JVM.
+            statefulProcessor.close()
+
+            # return a dummy results, no return value is needed for pre init
+            return iter([])
 
         def handle_data_rows(
             statefulProcessorApiClient: StatefulProcessorApiClient,
@@ -560,6 +578,9 @@ class PandasGroupedOpsMixin:
             key: Any,
             inputRows: Iterator["PandasDataFrameLike"],
         ) -> Iterator["PandasDataFrameLike"]:
+            if mode == TransformWithStateInPandasFuncMode.PRE_INIT:
+                return handle_pre_init(statefulProcessorApiClient)
+
             handle = StatefulProcessorHandle(statefulProcessorApiClient)
 
             if statefulProcessorApiClient.handle_state == StatefulProcessorHandleState.CREATED:
@@ -606,6 +627,9 @@ class PandasGroupedOpsMixin:
             - `initialStates` is None, while `inputRows` is not empty. This is not first batch.
              `initialStates` is initialized to the positional value as None.
             """
+            if mode == TransformWithStateInPandasFuncMode.PRE_INIT:
+                return handle_pre_init(statefulProcessorApiClient)
+
             handle = StatefulProcessorHandle(statefulProcessorApiClient)
 
             if statefulProcessorApiClient.handle_state == StatefulProcessorHandleState.CREATED:
@@ -657,7 +681,7 @@ class PandasGroupedOpsMixin:
             return result
 
         if isinstance(outputStructType, str):
-            outputStructType = cast(StructType, _parse_datatype_string(outputStructType))
+            outputStructType = cast(StructType, self._df._session._parse_ddl(outputStructType))
 
         df = self._df
 

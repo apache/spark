@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.optimizer._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.catalog.CatalogManager
-import org.apache.spark.sql.execution.datasources.{PruneFileSourcePartitions, SchemaPruning, V1Writes}
+import org.apache.spark.sql.execution.datasources.{PruneFileSourcePartitions, PushVariantIntoScan, SchemaPruning, V1Writes}
 import org.apache.spark.sql.execution.datasources.v2.{GroupBasedRowLevelOperationScanPlanning, OptimizeMetadataOnlyDeleteFromTable, V2ScanPartitioningAndOrdering, V2ScanRelationPushDown, V2Writes}
 import org.apache.spark.sql.execution.dynamicpruning.{CleanupDynamicPruningFilters, PartitionPruning, RowLevelOperationRuntimeGroupFiltering}
 import org.apache.spark.sql.execution.python.{ExtractGroupingPythonUDFFromAggregate, ExtractPythonUDFFromAggregate, ExtractPythonUDFs, ExtractPythonUDTFs}
@@ -36,38 +36,42 @@ class SparkOptimizer(
 
   override def earlyScanPushDownRules: Seq[Rule[LogicalPlan]] =
     // TODO: move SchemaPruning into catalyst
-    Seq(SchemaPruning) :+
-      GroupBasedRowLevelOperationScanPlanning :+
-      V1Writes :+
-      V2ScanRelationPushDown :+
-      V2ScanPartitioningAndOrdering :+
-      V2Writes :+
-      PruneFileSourcePartitions
+    Seq(
+      SchemaPruning,
+      GroupBasedRowLevelOperationScanPlanning,
+      V1Writes,
+      V2ScanRelationPushDown,
+      V2ScanPartitioningAndOrdering,
+      V2Writes,
+      PruneFileSourcePartitions,
+      PushVariantIntoScan)
 
   override def preCBORules: Seq[Rule[LogicalPlan]] =
-    OptimizeMetadataOnlyDeleteFromTable :: Nil
+    Seq(OptimizeMetadataOnlyDeleteFromTable)
 
-  override def defaultBatches: Seq[Batch] = (preOptimizationBatches ++ super.defaultBatches :+
-    Batch("Optimize Metadata Only Query", Once, OptimizeMetadataOnlyQuery(catalog)) :+
+  override def defaultBatches: Seq[Batch] = flattenBatches(Seq(
+    preOptimizationBatches,
+    super.defaultBatches,
+    Batch("Optimize Metadata Only Query", Once, OptimizeMetadataOnlyQuery(catalog)),
     Batch("PartitionPruning", Once,
       PartitionPruning,
       // We can't run `OptimizeSubqueries` in this batch, as it will optimize the subqueries
       // twice which may break some optimizer rules that can only be applied once. The rule below
       // only invokes `OptimizeSubqueries` to optimize newly added subqueries.
-      new RowLevelOperationRuntimeGroupFiltering(OptimizeSubqueries)) :+
+      new RowLevelOperationRuntimeGroupFiltering(OptimizeSubqueries)),
     Batch("InjectRuntimeFilter", FixedPoint(1),
-      InjectRuntimeFilter) :+
+      InjectRuntimeFilter),
     Batch("MergeScalarSubqueries", Once,
       MergeScalarSubqueries,
-      RewriteDistinctAggregates) :+
+      RewriteDistinctAggregates),
     Batch("Pushdown Filters from PartitionPruning", fixedPoint,
-      PushDownPredicates) :+
+      PushDownPredicates),
     Batch("Cleanup filters that cannot be pushed down", Once,
       CleanupDynamicPruningFilters,
       // cleanup the unnecessary TrueLiteral predicates
       BooleanSimplification,
-      PruneFilters)) ++
-    postHocOptimizationBatches :+
+      PruneFilters),
+    postHocOptimizationBatches,
     Batch("Extract Python UDFs", Once,
       ExtractPythonUDFFromJoinCondition,
       // `ExtractPythonUDFFromJoinCondition` can convert a join to a cartesian product.
@@ -84,25 +88,27 @@ class SparkOptimizer(
       LimitPushDown,
       PushPredicateThroughNonJoin,
       PushProjectionThroughLimit,
-      RemoveNoopOperators) :+
+      RemoveNoopOperators),
     Batch("Infer window group limit", Once,
       InferWindowGroupLimit,
       LimitPushDown,
       LimitPushDownThroughWindow,
       EliminateLimits,
-      ConstantFolding) :+
-    Batch("User Provided Optimizers", fixedPoint, experimentalMethods.extraOptimizations: _*) :+
-    Batch("Replace CTE with Repartition", Once, ReplaceCTERefWithRepartition)
+      ConstantFolding),
+    Batch("User Provided Optimizers", fixedPoint, experimentalMethods.extraOptimizations: _*),
+    Batch("Replace CTE with Repartition", Once, ReplaceCTERefWithRepartition)))
 
-  override def nonExcludableRules: Seq[String] = super.nonExcludableRules :+
-    ExtractPythonUDFFromJoinCondition.ruleName :+
-    ExtractPythonUDFFromAggregate.ruleName :+ ExtractGroupingPythonUDFFromAggregate.ruleName :+
-    ExtractPythonUDFs.ruleName :+
-    GroupBasedRowLevelOperationScanPlanning.ruleName :+
-    V2ScanRelationPushDown.ruleName :+
-    V2ScanPartitioningAndOrdering.ruleName :+
-    V2Writes.ruleName :+
-    ReplaceCTERefWithRepartition.ruleName
+  override def nonExcludableRules: Seq[String] = super.nonExcludableRules ++
+    Seq(
+      ExtractPythonUDFFromJoinCondition.ruleName,
+      ExtractPythonUDFFromAggregate.ruleName,
+      ExtractGroupingPythonUDFFromAggregate.ruleName,
+      ExtractPythonUDFs.ruleName,
+      GroupBasedRowLevelOperationScanPlanning.ruleName,
+      V2ScanRelationPushDown.ruleName,
+      V2ScanPartitioningAndOrdering.ruleName,
+      V2Writes.ruleName,
+      ReplaceCTERefWithRepartition.ruleName)
 
   /**
    * Optimization batches that are executed before the regular optimization batches (also before

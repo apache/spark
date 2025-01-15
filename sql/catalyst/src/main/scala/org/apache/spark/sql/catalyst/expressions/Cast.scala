@@ -93,9 +93,7 @@ object Cast extends QueryErrorsBase {
 
     case (NullType, _) => true
 
-    case (_, CharType(_) | VarcharType(_)) => false
     case (_, _: StringType) => true
-    case (CharType(_) | VarcharType(_), _) => false
 
     case (_: StringType, _: BinaryType) => true
 
@@ -200,9 +198,7 @@ object Cast extends QueryErrorsBase {
 
     case (NullType, _) => true
 
-    case (_, CharType(_) | VarcharType(_)) => false
     case (_, _: StringType) => true
-    case (CharType(_) | VarcharType(_), _) => false
 
     case (_: StringType, BinaryType) => true
     case (_: IntegralType, BinaryType) => true
@@ -318,8 +314,6 @@ object Cast extends QueryErrorsBase {
     case _ if from == to => true
     case (NullType, _) => true
     case (_: NumericType, _: NumericType) => true
-    case (_: AtomicType, CharType(_) | VarcharType(_)) => false
-    case (_: CalendarIntervalType, CharType(_) | VarcharType(_)) => false
     case (_: AtomicType, _: StringType) => true
     case (_: CalendarIntervalType, _: StringType) => true
     case (_: DatetimeType, _: DatetimeType) => true
@@ -361,10 +355,9 @@ object Cast extends QueryErrorsBase {
     case (_, _) if from == to => false
     case (VariantType, _) => true
 
-    case (CharType(_) | VarcharType(_), BinaryType | _: StringType) => false
     case (_: StringType, BinaryType | _: StringType) => false
-    case (st: StringType, _) if st.constraint == NoConstraint => true
-    case (_, st: StringType) if st.constraint == NoConstraint => false
+    case (_: StringType, _) => true
+    case (_, _: StringType) => false
 
     case (TimestampType, ByteType | ShortType | IntegerType) => true
     case (FloatType | DoubleType, TimestampType) => true
@@ -571,6 +564,11 @@ case class Cast(
       basic
     }
   }
+
+  private lazy val castArgs = variant.VariantCastArgs(
+    evalMode != EvalMode.TRY,
+    timeZoneId,
+    zoneId)
 
   def needsTimeZone: Boolean = Cast.needsTimeZone(child.dataType, dataType)
 
@@ -1127,13 +1125,13 @@ case class Cast(
       _ => throw QueryExecutionErrors.cannotCastFromNullTypeError(to)
     } else if (from.isInstanceOf[VariantType]) {
       buildCast[VariantVal](_, v => {
-        variant.VariantGet.cast(v, to, evalMode != EvalMode.TRY, timeZoneId, zoneId)
+        variant.VariantGet.cast(v, to, castArgs)
       })
     } else {
       to match {
         case dt if dt == from => identity[Any]
         case VariantType => input => variant.VariantExpressionEvalUtils.castToVariant(input, from)
-        case _: StringType => castToString(from)
+        case s: StringType => castToString(from, s.constraint)
         case BinaryType => castToBinary(from)
         case DateType => castToDate(from)
         case decimal: DecimalType => castToDecimal(from, decimal)
@@ -1225,12 +1223,10 @@ case class Cast(
     case _ if from.isInstanceOf[VariantType] => (c, evPrim, evNull) =>
       val tmp = ctx.freshVariable("tmp", classOf[Object])
       val dataTypeArg = ctx.addReferenceObj("dataType", to)
-      val zoneStrArg = ctx.addReferenceObj("zoneStr", timeZoneId)
-      val zoneIdArg = ctx.addReferenceObj("zoneId", zoneId, classOf[ZoneId].getName)
-      val failOnError = evalMode != EvalMode.TRY
+      val castArgsArg = ctx.addReferenceObj("castArgs", castArgs)
       val cls = classOf[variant.VariantGet].getName
       code"""
-        Object $tmp = $cls.cast($c, $dataTypeArg, $failOnError, $zoneStrArg, $zoneIdArg);
+        Object $tmp = $cls.cast($c, $dataTypeArg, $castArgsArg);
         if ($tmp == null) {
           $evNull = true;
         } else {
@@ -1241,7 +1237,8 @@ case class Cast(
       val cls = variant.VariantExpressionEvalUtils.getClass.getName.stripSuffix("$")
       val fromArg = ctx.addReferenceObj("from", from)
       (c, evPrim, evNull) => code"$evPrim = $cls.castToVariant($c, $fromArg);"
-    case _: StringType => (c, evPrim, _) => castToStringCode(from, ctx).apply(c, evPrim)
+    case s: StringType =>
+      (c, evPrim, _) => castToStringCode(from, ctx, s.constraint).apply(c, evPrim)
     case BinaryType => castToBinaryCode(from)
     case DateType => castToDateCode(from, ctx)
     case decimal: DecimalType => castToDecimalCode(from, decimal, ctx)

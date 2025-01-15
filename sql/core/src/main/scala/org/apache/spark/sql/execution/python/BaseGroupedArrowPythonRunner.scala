@@ -49,7 +49,7 @@ abstract class BaseGroupedArrowPythonRunner[IN](
     profiler: Option[String])
   extends BasePythonRunner[
     IN, ColumnarBatch](
-    funcs.map(_._1), evalType, argOffsets, jobArtifactUUID)
+    funcs.map(_._1), evalType, argOffsets, jobArtifactUUID, pythonMetrics)
   with BasicPythonArrowOutput {
 
   override val pythonExec: String =

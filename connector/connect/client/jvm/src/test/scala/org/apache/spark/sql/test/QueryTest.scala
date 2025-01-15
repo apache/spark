@@ -19,8 +19,11 @@ package org.apache.spark.sql.test
 
 import java.util.TimeZone
 
+import scala.jdk.CollectionConverters._
+
 import org.scalatest.Assertions
 
+import org.apache.spark.{QueryContextType, SparkThrowable}
 import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
 import org.apache.spark.sql.catalyst.util.SparkStringUtils.sideBySide
 import org.apache.spark.util.ArrayImplicits._
@@ -51,6 +54,158 @@ abstract class QueryTest extends ConnectFunSuite with SQLHelper {
 
   protected def checkAnswer(df: => DataFrame, expectedAnswer: Array[Row]): Unit = {
     checkAnswer(df, expectedAnswer.toImmutableArraySeq)
+  }
+
+  case class ExpectedContext(
+      contextType: QueryContextType,
+      objectType: String,
+      objectName: String,
+      startIndex: Int,
+      stopIndex: Int,
+      fragment: String,
+      callSitePattern: String)
+
+  object ExpectedContext {
+    def apply(fragment: String, start: Int, stop: Int): ExpectedContext = {
+      ExpectedContext("", "", start, stop, fragment)
+    }
+
+    def apply(
+        objectType: String,
+        objectName: String,
+        startIndex: Int,
+        stopIndex: Int,
+        fragment: String): ExpectedContext = {
+      new ExpectedContext(
+        QueryContextType.SQL,
+        objectType,
+        objectName,
+        startIndex,
+        stopIndex,
+        fragment,
+        "")
+    }
+
+    def apply(fragment: String, callSitePattern: String): ExpectedContext = {
+      new ExpectedContext(QueryContextType.DataFrame, "", "", -1, -1, fragment, callSitePattern)
+    }
+  }
+
+  /**
+   * Checks an exception with an error condition against expected results.
+   * @param exception
+   *   The exception to check
+   * @param condition
+   *   The expected error condition identifying the error
+   * @param sqlState
+   *   Optional the expected SQLSTATE, not verified if not supplied
+   * @param parameters
+   *   A map of parameter names and values. The names are as defined in the error-classes file.
+   * @param matchPVals
+   *   Optionally treat the parameters value as regular expression pattern. false if not supplied.
+   */
+  protected def checkError(
+      exception: SparkThrowable,
+      condition: String,
+      sqlState: Option[String] = None,
+      parameters: Map[String, String] = Map.empty,
+      matchPVals: Boolean = false,
+      queryContext: Array[ExpectedContext] = Array.empty): Unit = {
+    assert(exception.getCondition === condition)
+    sqlState.foreach(state => assert(exception.getSqlState === state))
+    val expectedParameters = exception.getMessageParameters.asScala
+    if (matchPVals) {
+      assert(expectedParameters.size === parameters.size)
+      expectedParameters.foreach(exp => {
+        val parm = parameters.getOrElse(
+          exp._1,
+          throw new IllegalArgumentException("Missing parameter" + exp._1))
+        if (!exp._2.matches(parm)) {
+          throw new IllegalArgumentException(
+            "For parameter '" + exp._1 + "' value '" + exp._2 +
+              "' does not match: " + parm)
+        }
+      })
+    } else {
+      assert(expectedParameters === parameters)
+    }
+    val actualQueryContext = exception.getQueryContext()
+    assert(
+      actualQueryContext.length === queryContext.length,
+      "Invalid length of the query context")
+    actualQueryContext.zip(queryContext).foreach { case (actual, expected) =>
+      assert(
+        actual.contextType() === expected.contextType,
+        "Invalid contextType of a query context Actual:" + actual.toString)
+      if (actual.contextType() == QueryContextType.SQL) {
+        assert(
+          actual.objectType() === expected.objectType,
+          "Invalid objectType of a query context Actual:" + actual.toString)
+        assert(
+          actual.objectName() === expected.objectName,
+          "Invalid objectName of a query context. Actual:" + actual.toString)
+        assert(
+          actual.startIndex() === expected.startIndex,
+          "Invalid startIndex of a query context. Actual:" + actual.toString)
+        assert(
+          actual.stopIndex() === expected.stopIndex,
+          "Invalid stopIndex of a query context. Actual:" + actual.toString)
+        assert(
+          actual.fragment() === expected.fragment,
+          "Invalid fragment of a query context. Actual:" + actual.toString)
+      } else if (actual.contextType() == QueryContextType.DataFrame) {
+        assert(
+          actual.fragment() === expected.fragment,
+          "Invalid code fragment of a query context. Actual:" + actual.toString)
+        if (expected.callSitePattern.nonEmpty) {
+          assert(
+            actual.callSite().matches(expected.callSitePattern),
+            "Invalid callSite of a query context. Actual:" + actual.toString)
+        }
+      }
+    }
+  }
+
+  protected def checkError(
+      exception: SparkThrowable,
+      condition: String,
+      sqlState: String,
+      parameters: Map[String, String]): Unit =
+    checkError(exception, condition, Some(sqlState), parameters)
+
+  protected def checkError(
+      exception: SparkThrowable,
+      condition: String,
+      sqlState: String,
+      parameters: Map[String, String],
+      context: ExpectedContext): Unit =
+    checkError(exception, condition, Some(sqlState), parameters, false, Array(context))
+
+  protected def checkError(
+      exception: SparkThrowable,
+      condition: String,
+      parameters: Map[String, String],
+      context: ExpectedContext): Unit =
+    checkError(exception, condition, None, parameters, false, Array(context))
+
+  protected def checkError(
+      exception: SparkThrowable,
+      condition: String,
+      sqlState: String,
+      context: ExpectedContext): Unit =
+    checkError(exception, condition, Some(sqlState), Map.empty, false, Array(context))
+
+  protected def checkError(
+      exception: SparkThrowable,
+      condition: String,
+      sqlState: Option[String],
+      parameters: Map[String, String],
+      context: ExpectedContext): Unit =
+    checkError(exception, condition, sqlState, parameters, false, Array(context))
+
+  protected def getCurrentClassCallSitePattern: String = {
+    val cs = Thread.currentThread().getStackTrace()(2)
+    s"${cs.getClassName}\\..*\\(${cs.getFileName}:\\d+\\)"
   }
 
   /**
