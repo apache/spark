@@ -70,6 +70,7 @@ case class XmlToStructs(
       child = child,
       timeZoneId = None)
 
+  override protected[spark] val _expectedCost = 200
   override def nullable: Boolean = true
   override def nullIntolerant: Boolean = true
 

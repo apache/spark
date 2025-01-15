@@ -380,6 +380,16 @@ abstract class Expression extends TreeNode[Expression] {
     } else {
       ""
     }
+
+  /**
+   * A _very rough_ indication of the expected cost of evaluating an expression.
+   * This can be used by the optimizer to decide if an element should be double
+   * evaluated for pre-emptive row filtering, in ordering filter expression, etc.
+   * This is an internal API and may go away at any time.
+   */
+  protected[spark] def expectedCost: Int = children.map(_.expectedCost).sum + _expectedCost
+
+  protected[spark] val _expectedCost = 1
 }
 
 /**

@@ -563,6 +563,7 @@ case class CreateNamedStruct(children: Seq[Expression]) extends Expression with 
 // scalastyle:on line.size.limit
 case class StringToMap(text: Expression, pairDelim: Expression, keyValueDelim: Expression)
   extends TernaryExpression with ExpectsInputTypes {
+  override protected[spark] val _expectedCost = 100
   override def nullIntolerant: Boolean = true
   def this(child: Expression, pairDelim: Expression) = {
     this(child, pairDelim, Literal.create(":", SQLConf.get.defaultStringType))

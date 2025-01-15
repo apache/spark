@@ -82,7 +82,8 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
       if (commonExprs.isEmpty) {
         inputPlan
       } else {
-        Project(inputPlan.output ++ commonExprs.map(_._1), inputPlan)
+        Project(inputPlan.output ++ commonExprs.map(_._1).sortWith(_.exprId.id < _.exprId.id),
+          inputPlan)
       }
     }
     newPlan = newPlan.withNewChildren(newChildren)
@@ -90,7 +91,15 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
     // the current operator may have extra columns if it inherits the output columns from its
     // child, and we need to project away the extra columns to keep the plan schema unchanged.
     assert(p.output.length <= newPlan.output.length)
-    if (p.output.length < newPlan.output.length) {
+
+    def hasOriginalAttribute(expr: Expression): Boolean = expr match {
+      case w: With =>
+        if (w.defs.exists(_.originalAttribute.nonEmpty)) true else false
+      case e => e.children.exists(hasOriginalAttribute)
+    }
+    // If this iteration contains attribute that require propagate, the column cannot be pruning.
+    val needPropagate = p.expressions.exists(hasOriginalAttribute)
+    if (p.output.length < newPlan.output.length && !needPropagate) {
       assert(p.outputSet.subsetOf(newPlan.outputSet))
       Project(p.output, newPlan)
     } else {
@@ -115,13 +124,14 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
           _, inputPlans, commonExprsPerChild, commonExprIdSet, isNestedWith = true))
         val refToExpr = mutable.HashMap.empty[CommonExpressionId, Expression]
 
-        defs.zipWithIndex.foreach { case (CommonExpressionDef(child, id), index) =>
+        defs.zipWithIndex.foreach { case (CommonExpressionDef(child, id, originalAttr), index) =>
           if (id.canonicalized) {
             throw SparkException.internalError(
               "Cannot rewrite canonicalized Common expression definitions")
           }
 
-          if (CollapseProject.isCheap(child) || !commonExprIdSet.contains(id)) {
+          if (originalAttr.isEmpty &&
+            (CollapseProject.isCheap(child) || !commonExprIdSet.contains(id))) {
             refToExpr(id) = child
           } else {
             val childPlanIndex = inputPlans.indexWhere(
@@ -137,6 +147,11 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
               // TODO: we should calculate the ref count and also inline the common expression
               //       if it's ref count is 1.
               refToExpr(id) = child
+            } else if (originalAttr.nonEmpty &&
+              inputPlans.head.output.contains(originalAttr.get.toAttribute)) {
+              // originAttr only exists in Project or Filter. If the child already contains this
+              // attribute, extend it.
+              refToExpr(id) = originalAttr.get.toAttribute
             } else {
               val commonExprs = commonExprsPerChild(childPlanIndex)
               val existingCommonExpr = commonExprs.find(_._2 == id.id)
@@ -146,12 +161,17 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
                 }
                 refToExpr(id) = existingCommonExpr.get._1.toAttribute
               } else {
-                val aliasName = if (SQLConf.get.getConf(SQLConf.USE_COMMON_EXPR_ID_FOR_ALIAS)) {
-                  s"_common_expr_${id.id}"
-                } else {
-                  s"_common_expr_$index"
+                val alias = originalAttr match {
+                  case Some(a) =>
+                    Alias(child, a.name)(a.exprId, a.qualifier, Option(a.metadata))
+                  case _ =>
+                    val aliasName = if (SQLConf.get.getConf(SQLConf.USE_COMMON_EXPR_ID_FOR_ALIAS)) {
+                      s"_common_expr_${id.id}"
+                    } else {
+                      s"_common_expr_$index"
+                    }
+                    Alias(child, aliasName)()
                 }
-                val alias = Alias(child, aliasName)()
                 val fakeProj = Project(Seq(alias), inputPlans(childPlanIndex))
                 if (PlanHelper.specialExpressionsInUnsupportedOperator(fakeProj).nonEmpty) {
                   // We have to inline the common expression if it cannot be put in a Project.
