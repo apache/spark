@@ -220,7 +220,9 @@ class AstBuilder extends DataTypeAstBuilder
         labelCtx,
         isScope = false)
     } else {
-      val logicalPlan = visitChildren(ctx).asInstanceOf[LogicalPlan]
+      // If there is no compound body, then there must be a statement or set statement.
+      val child = Option(ctx.statement()).getOrElse(ctx.setStatementWithOptionalVarKeyword())
+      val logicalPlan = visit(child).asInstanceOf[LogicalPlan]
       CompoundBody(Seq(SingleStatement(parsedPlan = logicalPlan)), None, isScope = false)
     }
 
