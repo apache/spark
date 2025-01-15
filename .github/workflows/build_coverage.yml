@@ -31,12 +31,11 @@ jobs:
     name: Run
     uses: ./.github/workflows/build_and_test.yml
     if: github.repository == 'apache/spark'
-    secrets:
-      codecov_token: ${{ secrets.CODECOV_TOKEN }}
     with:
       java: 17
       branch: master
       hadoop: hadoop3
+      codecov_token: ${{ secrets.CODECOV_TOKEN }}
       envs: >-
         {
           "PYSPARK_IMAGE_TO_TEST": "python-311",

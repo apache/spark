@@ -21,12 +21,6 @@ name: Build and test
 
 on:
   workflow_call:
-    secrets:
-      codecov_token:
-        description: The token of codecov.
-        required: false
-        type: string
-        default: ''
     inputs:
       java:
         required: false
@@ -52,6 +46,11 @@ on:
         description: >-
           Jobs to run, and should be in JSON format. The values should be matched with the job's key defined
           in this file, e.g., build. See precondition job below.
+        required: false
+        type: string
+        default: ''
+      codecov_token:
+        description: The token of codecov.
         required: false
         type: string
         default: ''
@@ -629,7 +628,7 @@ jobs:
       if: fromJSON(inputs.envs).PYSPARK_CODECOV == 'true'
       uses: codecov/codecov-action@v5
       with:
-        token: ${{ secrets.codecov_token }}
+        token: ${{ inputs.codecov_token }}
         files: ./python/coverage.xml
         flags: unittests
         name: PySpark
