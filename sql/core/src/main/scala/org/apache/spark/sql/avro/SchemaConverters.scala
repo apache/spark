@@ -374,23 +374,31 @@ object SchemaConverters extends Logging {
     }
   }
 
-  private def createDefaultStruct(st: StructType): java.util.HashMap[String, Any] = {
-    val defaultMap = new java.util.HashMap[String, Any]()
-    st.fields.foreach { field =>
-      field.dataType match {
-        case nested: StructType =>
-          defaultMap.put(field.name, createDefaultStruct(nested))
-        case _ =>
-          defaultMap.put(field.name, null)
-      }
-    }
-    defaultMap
-  }
-
+  /**
+   * Main entry point for converting a Spark SQL StructType to an Avro schema.
+   * This method gives all fields default 'nulls' while preserving the structure.
+   *
+   * @param structType The Spark SQL StructType to convert
+   * @return An Avro Schema representation of the input StructType
+   */
   def toAvroTypeWithDefaults(structType: StructType): Schema = {
     toAvroTypeWithDefaults(structType, "topLevelRecord", "", 0)
   }
 
+  /**
+   * Internal method that handles the recursive conversion of Spark SQL types to Avro types.
+   * This method handles the complexity of:
+   * 1. Making all nested fields nullable by wrapping them in unions with null
+   * 2. Preserving logical types (like Date, Timestamp)
+   * 3. Managing namespaces and record names to avoid conflicts
+   * 4. Tracking nesting depth to handle recursive types
+   *
+   * @param catalystType The Spark SQL DataType to convert
+   * @param recordName Name for the record (used in struct type naming)
+   * @param namespace Namespace for the record (used to avoid naming conflicts)
+   * @param nestingLevel Current depth in the type hierarchy
+   * @return An Avro Schema representation of the input type
+   */
   private def toAvroTypeWithDefaults(
       catalystType: DataType,
       recordName: String,
@@ -402,11 +410,6 @@ object SchemaConverters extends Logging {
         st: StructType,
         fieldsAssembler: FieldAssembler[Schema]): Unit = {
       st.foreach { field =>
-        val isLeafType = field.dataType match {
-          case _: StructType | _: ArrayType | _: MapType => false
-          case _ => true
-        }
-
         val innerType = toAvroTypeWithDefaults(
           field.dataType,
           recordName = field.name,
@@ -414,24 +417,15 @@ object SchemaConverters extends Logging {
           nestingLevel = nestingLevel + 1
         )
 
-        val fieldType = if (isLeafType) {
-          // Only create union with null for leaf fields
-          if (field.dataType != NullType &&
-            !innerType.getType.equals(Schema.Type.UNION)) {
-            Schema.createUnion(nullSchema, innerType)
-          } else {
-            innerType
-          }
+        // For leaf fields and complex types, create union with null
+        val fieldType = if (field.dataType != NullType &&
+          !innerType.getType.equals(Schema.Type.UNION)) {
+          Schema.createUnion(nullSchema, innerType)
         } else {
           innerType
         }
 
-        val defaultValue = field.dataType match {
-          case st: StructType => createDefaultStruct(st)
-          case _ => null
-        }
-
-        fieldsAssembler.name(field.name).`type`(fieldType).withDefault(defaultValue)
+        fieldsAssembler.name(field.name).`type`(fieldType).withDefault(null)
       }
     }
 
@@ -439,8 +433,13 @@ object SchemaConverters extends Logging {
       case st: StructType =>
         val fieldsAssembler = builder.record(recordName).namespace(namespace).fields()
         processStructFields(st, fieldsAssembler)
-        fieldsAssembler.endRecord()
-
+        val recordSchema = fieldsAssembler.endRecord()
+        // For struct types, wrap in union with null
+        if (nestingLevel > 0) {
+          Schema.createUnion(nullSchema, recordSchema)
+        } else {
+          recordSchema
+        }
 
       case BooleanType => builder.booleanType()
       case ByteType | ShortType | IntegerType => builder.intType()
@@ -466,14 +465,18 @@ object SchemaConverters extends Logging {
       case BinaryType => builder.bytesType()
 
       case ArrayType(elementType, _) =>
-        builder.array()
+        val arraySchema = builder.array()
           .items(toAvroTypeWithDefaults(elementType, recordName = recordName,
             namespace = namespace, nestingLevel = nestingLevel + 1))
+        // Make array types nullable
+        Schema.createUnion(nullSchema, arraySchema)
 
       case MapType(StringType, valueType, _) =>
-        builder.map()
+        val mapSchema = builder.map()
           .values(toAvroTypeWithDefaults(valueType, recordName = recordName,
             namespace = namespace, nestingLevel = nestingLevel + 1))
+        // Make map types nullable
+        Schema.createUnion(nullSchema, mapSchema)
 
       case other => throw new IncompatibleSchemaException(s"Unexpected type $other.")
     }
