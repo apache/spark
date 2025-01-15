@@ -30,6 +30,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.execution.streaming.StateVariableType.StateVariableType
 import org.apache.spark.sql.execution.streaming.state.{OperatorInfoV1, OperatorStateMetadata, OperatorStateMetadataReader, OperatorStateMetadataV2, StateSchemaCompatibilityChecker, StateSchemaValidationResult, StateStoreColFamilySchema, StateStoreErrors, StateStoreId, StateStoreMetadataV2}
+import org.apache.spark.sql.execution.streaming.state.StateStoreEncoding._
 import org.apache.spark.sql.streaming.{OutputMode, TimeMode}
 
 /**
@@ -59,6 +60,8 @@ object TransformWithStateVariableUtils {
       throw StateStoreErrors.missingTimeValues(timeMode.toString)
     }
   }
+
+  def getRowCounterCFName(stateName: String): String = "$rowCounter_" + stateName
 }
 
 // Enum of possible State Variable types
@@ -171,12 +174,13 @@ object TransformWithStateOperatorProperties extends Logging {
  * on driver during physical planning phase.
  */
 trait TransformWithStateMetadataUtils extends Logging {
-  def getColFamilySchemas(): Map[String, StateStoreColFamilySchema]
+
+  def getColFamilySchemas(setNullableFields: Boolean): Map[String, StateStoreColFamilySchema]
 
   def getStateVariableInfos(): Map[String, TransformWithStateVariableInfo]
 
   def getOperatorStateMetadata(
-      stateSchemaPaths: List[String],
+      stateSchemaPaths: List[List[String]],
       info: StatefulOperatorStateInfo,
       shortName: String,
       timeMode: TimeMode,
@@ -201,9 +205,11 @@ trait TransformWithStateMetadataUtils extends Logging {
       stateSchemaVersion: Int,
       info: StatefulOperatorStateInfo,
       session: SparkSession,
-      operatorStateMetadataVersion: Int = 2): List[StateSchemaValidationResult] = {
+      operatorStateMetadataVersion: Int = 2,
+      stateStoreEncodingFormat: String = UnsafeRow.toString): List[StateSchemaValidationResult] = {
     assert(stateSchemaVersion >= 3)
-    val newSchemas = getColFamilySchemas()
+    val usingAvro = stateStoreEncodingFormat == Avro.toString
+    val newSchemas = getColFamilySchemas(usingAvro)
     val stateSchemaDir = stateSchemaDirPath(info)
     val newStateSchemaFilePath =
       new Path(stateSchemaDir, s"${batchId}_${UUID.randomUUID().toString}")
@@ -219,22 +225,23 @@ trait TransformWithStateMetadataUtils extends Logging {
         None
     }
 
-    val oldStateSchemaFilePath: Option[Path] = operatorStateMetadata match {
+    val oldStateSchemaFilePaths: List[Path] = operatorStateMetadata match {
       case Some(metadata) =>
         metadata match {
           case v2: OperatorStateMetadataV2 =>
-            Some(new Path(v2.stateStoreInfo.head.stateSchemaFilePath))
-          case _ => None
+            v2.stateStoreInfo.head.stateSchemaFilePaths.map(new Path(_))
+          case _ => List.empty
         }
-      case None => None
+      case None => List.empty
     }
     // state schema file written here, writing the new schema list we passed here
     List(StateSchemaCompatibilityChecker.
       validateAndMaybeEvolveStateSchema(info, hadoopConf,
         newSchemas.values.toList, session.sessionState, stateSchemaVersion,
         storeName = StateStoreId.DEFAULT_STORE_NAME,
-        oldSchemaFilePath = oldStateSchemaFilePath,
-        newSchemaFilePath = Some(newStateSchemaFilePath)))
+        oldSchemaFilePaths = oldStateSchemaFilePaths,
+        newSchemaFilePath = Some(newStateSchemaFilePath),
+        schemaEvolutionEnabled = usingAvro))
   }
 
   def validateNewMetadataForTWS(

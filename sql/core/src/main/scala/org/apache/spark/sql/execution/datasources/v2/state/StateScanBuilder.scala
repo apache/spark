@@ -27,11 +27,16 @@ import org.apache.spark.sql.connector.read.{Batch, InputPartition, PartitionRead
 import org.apache.spark.sql.execution.datasources.v2.state.StateSourceOptions.JoinSideValues
 import org.apache.spark.sql.execution.streaming.StreamingSymmetricHashJoinHelper.{LeftSide, RightSide}
 import org.apache.spark.sql.execution.streaming.TransformWithStateVariableInfo
-import org.apache.spark.sql.execution.streaming.state.{KeyStateEncoderSpec, StateStoreColFamilySchema, StateStoreConf, StateStoreErrors}
+import org.apache.spark.sql.execution.streaming.state.{KeyStateEncoderSpec, StateSchemaProvider, StateStoreColFamilySchema, StateStoreConf, StateStoreErrors}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.SerializableConfiguration
 
-/** An implementation of [[ScanBuilder]] for State Store data source. */
+/**
+ * An implementation of [[ScanBuilder]] for State Store data source.
+ * @param stateSchemaProviderOpt Optional provider that maintains mapping between schema IDs and
+ *                               their corresponding schemas, enabling reading of state data
+ *                               written with older schema versions
+ */
 class StateScanBuilder(
     session: SparkSession,
     schema: StructType,
@@ -39,9 +44,10 @@ class StateScanBuilder(
     stateStoreConf: StateStoreConf,
     keyStateEncoderSpec: KeyStateEncoderSpec,
     stateVariableInfoOpt: Option[TransformWithStateVariableInfo],
-    stateStoreColFamilySchemaOpt: Option[StateStoreColFamilySchema]) extends ScanBuilder {
+    stateStoreColFamilySchemaOpt: Option[StateStoreColFamilySchema],
+    stateSchemaProviderOpt: Option[StateSchemaProvider]) extends ScanBuilder {
   override def build(): Scan = new StateScan(session, schema, sourceOptions, stateStoreConf,
-    keyStateEncoderSpec, stateVariableInfoOpt, stateStoreColFamilySchemaOpt)
+    keyStateEncoderSpec, stateVariableInfoOpt, stateStoreColFamilySchemaOpt, stateSchemaProviderOpt)
 }
 
 /** An implementation of [[InputPartition]] for State Store data source. */
@@ -58,8 +64,9 @@ class StateScan(
     stateStoreConf: StateStoreConf,
     keyStateEncoderSpec: KeyStateEncoderSpec,
     stateVariableInfoOpt: Option[TransformWithStateVariableInfo],
-    stateStoreColFamilySchemaOpt: Option[StateStoreColFamilySchema]) extends Scan
-  with Batch {
+    stateStoreColFamilySchemaOpt: Option[StateStoreColFamilySchema],
+    stateSchemaProviderOpt: Option[StateSchemaProvider])
+  extends Scan with Batch {
 
   // A Hadoop Configuration can be about 10 KB, which is pretty big, so broadcast it
   private val hadoopConfBroadcast = session.sparkContext.broadcast(
@@ -128,7 +135,8 @@ class StateScan(
 
     case JoinSideValues.none =>
       new StatePartitionReaderFactory(stateStoreConf, hadoopConfBroadcast.value, schema,
-        keyStateEncoderSpec, stateVariableInfoOpt, stateStoreColFamilySchemaOpt)
+        keyStateEncoderSpec, stateVariableInfoOpt, stateStoreColFamilySchemaOpt,
+        stateSchemaProviderOpt)
   }
 
   override def toBatch: Batch = this
