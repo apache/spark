@@ -267,7 +267,9 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest
         val sql =
           s"""SELECT $sourceCol, CAST($sourceCol AS $castType) FROM $tableName
              |WHERE CAST($sourceCol AS $castType) = $targetCol""".stripMargin
-        val rows = spark.sql(sql).collect()
+        val df = spark.sql(sql)
+        checkFilterPushed(df)
+        val rows = df.collect()
         assert(rows.length === 1, s"Failed to cast $sourceCol to $castType")
         val row = rows(0)
         assert(row.get(0) === sourceValue, s"$sourceCol does not equal to $sourceValue")
