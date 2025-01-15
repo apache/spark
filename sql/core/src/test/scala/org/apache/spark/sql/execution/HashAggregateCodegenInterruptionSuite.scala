@@ -64,6 +64,9 @@ class HashAggregateCodegenInterruptionSuite extends QueryTest with SharedSparkSe
       val logAppender = new LogAppender("")
       withLogAppender(logAppender, level = Some(Level.INFO)) {
         spark.sparkContext.setJobGroup("SPARK-50806", "SPARK-50806", false)
+        // The dataset is set to 100k as we are monitoring interruptions for every 1k rows. Two
+        // tasks (50 seconds each, totaling 100k / 2) exceed `spark.task.reaper.killTimeout` (10s),
+        // which should provide a proper test for the interruption behavior.
         val slowDF = spark.range(1, 100000).rdd.mapPartitions { iter =>
           new Iterator[Long] {
             var cnt = 0
