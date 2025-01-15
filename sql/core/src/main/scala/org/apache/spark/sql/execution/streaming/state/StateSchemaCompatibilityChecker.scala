@@ -174,7 +174,7 @@ class StateSchemaCompatibilityChecker(
 
   /**
    * Function to check if new state store schema is compatible with the existing schema.
-   * @param oldSchema - old state schema
+   * @param oldSchemas - old state schemas
    * @param newSchema - new state schema
    * @param ignoreValueSchema - whether to ignore value schema or not
    */

@@ -374,24 +374,15 @@ object SchemaConverters extends Logging {
     }
   }
 
-  private def createDefaultStruct(st: StructType): java.util.HashMap[String, Any] = {
-    val defaultMap = new java.util.HashMap[String, Any]()
-    st.fields.foreach { field =>
-      field.dataType match {
-        case nested: StructType =>
-          defaultMap.put(field.name, createDefaultStruct(nested))
-        case _ =>
-          defaultMap.put(field.name, null)
-      }
-    }
-    defaultMap
+  def toAvroTypeWithDefaults(structType: StructType): Schema = {
+    toAvroTypeWithDefaults(structType, "topLevelRecord", "", 0)
   }
 
-  def toAvroTypeWithDefaults(
+  private def toAvroTypeWithDefaults(
       catalystType: DataType,
-      recordName: String = "topLevelRecord",
-      namespace: String = "",
-      nestingLevel: Int = 0): Schema = {
+      recordName: String,
+      namespace: String,
+      nestingLevel: Int): Schema = {
     val builder = SchemaBuilder.builder()
 
     def processStructFields(
@@ -422,12 +413,7 @@ object SchemaConverters extends Logging {
           innerType
         }
 
-        val defaultValue = field.dataType match {
-          case st: StructType => createDefaultStruct(st)
-          case _ => null
-        }
-
-        fieldsAssembler.name(field.name).`type`(fieldType).withDefault(defaultValue)
+        fieldsAssembler.name(field.name).`type`(fieldType).withDefault(null)
       }
     }
 
