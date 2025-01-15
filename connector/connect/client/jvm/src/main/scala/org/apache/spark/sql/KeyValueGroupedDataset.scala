@@ -23,10 +23,10 @@ import scala.jdk.CollectionConverters._
 import org.apache.spark.api.java.function._
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
-import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{agnosticEncoderFor, ProductEncoder}
+import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{agnosticEncoderFor, ProductEncoder, StructEncoder}
 import org.apache.spark.sql.connect.ConnectConversions._
 import org.apache.spark.sql.connect.common.UdfUtils
-import org.apache.spark.sql.expressions.SparkUserDefinedFunction
+import org.apache.spark.sql.expressions.{ReduceAggregator, SparkUserDefinedFunction}
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.internal.{ColumnNode, ColumnNodeToProtoConverter, InvokeInlineUserDefinedFunction, UDFAdaptors, UnresolvedAttribute, UnresolvedFunction, UnresolvedStar}
 import org.apache.spark.sql.streaming.{GroupState, GroupStateTimeout, OutputMode, StatefulProcessor, StatefulProcessorWithInitialState, TimeMode}
@@ -387,7 +387,6 @@ private class KeyValueGroupedDatasetImpl[K, V, IK, IV](
     private val ivEncoder: AgnosticEncoder[IV],
     private val vEncoder: AgnosticEncoder[V],
     private val groupingColumns: Seq[Column],
-    private val groupingColumnContainDummyUdf: Boolean,
     private val valueMapFunc: Option[IV => V],
     private val keysFunc: () => Dataset[IK])
     extends KeyValueGroupedDataset[K, V] {
@@ -404,7 +403,6 @@ private class KeyValueGroupedDatasetImpl[K, V, IK, IV](
       ivEncoder,
       vEncoder,
       groupingColumns,
-      groupingColumnContainDummyUdf,
       valueMapFunc,
       keysFunc)
   }
@@ -417,7 +415,6 @@ private class KeyValueGroupedDatasetImpl[K, V, IK, IV](
       ivEncoder,
       agnosticEncoderFor[W],
       groupingColumns,
-      groupingColumnContainDummyUdf,
       valueMapFunc
         .map(_.andThen(valueFunc))
         .orElse(Option(valueFunc.asInstanceOf[IV => W])),
@@ -466,61 +463,29 @@ private class KeyValueGroupedDatasetImpl[K, V, IK, IV](
   override protected def aggUntyped(columns: TypedColumn[_, _]*): Dataset[_] = {
     val originalDs = sparkSession.newDataset(ivEncoder, plan)
 
-    val ivIsStruct = ivEncoder.isInstanceOf[ProductEncoder[_]]
-    val vIsStruct = vEncoder.isInstanceOf[ProductEncoder[_]]
     // Apply the value transformation, get a DS of two columns "iv" and "v".
-    val transformEncoder = {
-      val wrappedIvEncoder =
-        (if (ivIsStruct) ivEncoder else ProductEncoder.tuple(Seq(ivEncoder)))
-          .asInstanceOf[AgnosticEncoder[Any]]
-      val wrappedVEncoder =
-        (if (vIsStruct) vEncoder else ProductEncoder.tuple(Seq(vEncoder)))
-          .asInstanceOf[AgnosticEncoder[Any]]
-      ProductEncoder
-        .tuple(Seq(wrappedIvEncoder, wrappedVEncoder))
-        .asInstanceOf[AgnosticEncoder[(Any, Any)]]
-    }
-    val transformFunc =
-      UDFAdaptors.mapValues(valueMapFunc, ivIsStruct, vIsStruct)
-    val valueTransformedDf =
-      originalDs.mapPartitions(transformFunc)(transformEncoder).toDF("iv", "v")
+    // If any of "iv" or "v" consists of a single primitive field, wrap it with a struct so it
+    // would not be flattened.
+    val valueTransformedDf = applyValueMapFunc(originalDs)
 
-    // Restore column/field names, if this KVGDS is from a DF
-    val (valueTransformedDfWithSchema, ivFields, vFields) = {
-      val newNames = originalDs.columns.toSeq
-      def withFieldRenamed(schema: StructType): StructType = {
-        StructType(schema.zip(newNames).map { case (field, name) => field.copy(name = name) })
-      }
+    // Restore column/field names, if this KVGDS is from a DF.
+    val (valueTransformedDfWithSchema, ivFields, vFields) =
+      restoreColumnNames(originalDs, valueTransformedDf)
 
-      val currentSchema = valueTransformedDf.schema
-      val newIVSchemaWithNames =
-        withFieldRenamed(currentSchema(0).dataType.asInstanceOf[StructType])
-      val newVSchemaWithNames = if (valueMapFunc.isDefined) {
-        currentSchema(1).dataType.asInstanceOf[StructType]
-      } else {
-        withFieldRenamed(currentSchema(1).dataType.asInstanceOf[StructType])
-      }
-      val df = valueTransformedDf.select(
-        col("iv").cast(newIVSchemaWithNames).as("iv"),
-        col("v").cast(newVSchemaWithNames).as("v"))
-        (
-          df,
-          df.schema(0).dataType.asInstanceOf[StructType].fieldNames,
-        df.schema(1).dataType.asInstanceOf[StructType].fieldNames)
-    }
-    // Rewrite grouping expressions to use columns inside "iv" as input
-    val updatedGroupingExprs =
-      (if (groupingColumnContainDummyUdf) groupingColumns.drop(1) else groupingColumns).map(c =>
+    // Rewrite grouping expressions to use "iv" as input.
+    val updatedGroupingExprs = groupingColumns
+      .filterNot(c => KeyValueGroupedDatasetImpl.containsDummyUDF(c.node))
+      .map(c =>
         ColumnNodeToProtoConverter.toExprWithTransformation(
           c.node,
           encoder = None,
-          prefixAndExpandStar("iv", if (ivIsStruct) None else Some(ivFields.toSeq))))
-    // Rewrite aggregate columns to use columns inside "v" as input
+          rewriteInputColumnHook("iv", ivFields)))
+    // Rewrite aggregate columns to use "v" as input.
     val updatedAggTypedExprs = columns.map { c =>
       ColumnNodeToProtoConverter.toExprWithTransformation(
         c.node,
-        encoder = Some(vEncoder),
-        prefixAndExpandStar("v", if (vIsStruct) None else Some(vFields.toSeq)))
+        encoder = Some(vEncoder), // Pass encoder to convert it to a typed column.
+        rewriteInputColumnHook("v", vFields))
     }
 
     val rEnc = ProductEncoder.tuple(kEncoder +: columns.map(c => agnosticEncoderFor(c.encoder)))
@@ -533,43 +498,83 @@ private class KeyValueGroupedDatasetImpl[K, V, IK, IV](
     }
   }
 
-  private def prefixAndExpandStar(
-      to: String,
-      expand: Option[Seq[String]]): ColumnNode => ColumnNode = {
-    def expandStar(nodes: Seq[ColumnNode]): Seq[ColumnNode] = nodes.flatMap {
-      case UnresolvedStar(None, _, _) =>
-        expand.map(_.map(UnresolvedAttribute(_)))
-          .getOrElse(Seq(UnresolvedAttribute(Nil)))
-      case n => Seq(n)
+  private def applyValueMapFunc(ds: Dataset[IV]): DataFrame = {
+    val ivIsStruct = ivEncoder.isInstanceOf[StructEncoder[_]]
+    val vIsStruct = vEncoder.isInstanceOf[StructEncoder[_]]
+    val transformEncoder = {
+      val wrappedIvEncoder =
+        (if (ivIsStruct) ivEncoder else ProductEncoder.tuple(Seq(ivEncoder)))
+          .asInstanceOf[AgnosticEncoder[Any]]
+      val wrappedVEncoder =
+        (if (vIsStruct) vEncoder else ProductEncoder.tuple(Seq(vEncoder)))
+          .asInstanceOf[AgnosticEncoder[Any]]
+      ProductEncoder
+        .tuple(Seq(wrappedIvEncoder, wrappedVEncoder))
+        .asInstanceOf[AgnosticEncoder[(Any, Any)]]
+    }
+    val transformFunc = UDFAdaptors.mapValues(valueMapFunc, ivIsStruct, vIsStruct)
+    ds.mapPartitions(transformFunc)(transformEncoder).toDF("iv", "v")
+  }
+
+  /**
+   * See the call site for explanation.
+   * @return
+   *   (new dataframe, column names in IV, column names in V)
+   */
+  private def restoreColumnNames(
+      dsWithNames: Dataset[_],
+      toBeRestored: Dataset[_]): (DataFrame, Seq[String], Seq[String]) = {
+    val newNames = dsWithNames.columns.toSeq
+
+    def withFieldRenamed(schema: StructType): StructType = {
+      StructType(schema.zip(newNames).map { case (field, name) => field.copy(name = name) })
     }
 
-    {
-      // Prefix column names: "col1" to "prepend.col1".
-      case n@UnresolvedAttribute(nameParts, _, _, _) =>
-        n.copy(nameParts = to +: nameParts)
-      // UDAF aggregator
-      case f@InvokeInlineUserDefinedFunction(_, Nil, _, _) =>
-        f.copy(arguments = expandStar(Seq(UnresolvedStar(None))))
-      // Other inline UDFs
-      case f@InvokeInlineUserDefinedFunction(_, arguments, _, _) =>
-        f.copy(arguments = expandStar(arguments))
-      // Build-in/registered functions
-      case f@UnresolvedFunction(_, arguments, _, _, _, _) =>
-        f.copy(arguments = expandStar(arguments))
-      case col => col
+    val currentSchema = toBeRestored.schema
+    val newIVSchemaWithNames =
+      withFieldRenamed(currentSchema(0).dataType.asInstanceOf[StructType])
+    val newVSchemaWithNames = if (valueMapFunc.isDefined) {
+      currentSchema(1).dataType.asInstanceOf[StructType]
+    } else {
+      withFieldRenamed(currentSchema(1).dataType.asInstanceOf[StructType])
     }
+    val df = toBeRestored
+      .select(col("iv").cast(newIVSchemaWithNames), col("v").cast(newVSchemaWithNames))
+    (df, newIVSchemaWithNames.fieldNames.toSeq, newVSchemaWithNames.fieldNames.toSeq)
+  }
+
+  private def rewriteInputColumnHook(
+      prepend: String,
+      expand: Seq[String]): ColumnNode => ColumnNode = {
+    // Prefix column names: "col1" to "prepend.col1".
+    case n @ UnresolvedAttribute(nameParts, _, _, _) =>
+      n.copy(nameParts = prepend +: nameParts)
+    // UDAF aggregator: Attach to the outside struct column.
+    case f @ InvokeInlineUserDefinedFunction(_, Nil, _, _) =>
+      f.copy(arguments = expand.map(UnresolvedAttribute(_)))
+    // Other inline UDFs...
+    case f @ InvokeInlineUserDefinedFunction(
+          function: SparkUserDefinedFunction,
+          Seq(UnresolvedStar(None, _, _)),
+          _,
+          _) =>
+      function.inputEncoders match {
+        // Attach to the outside struct column when struct input is expected.
+        case Seq(Some(_: StructEncoder[_])) =>
+          f.copy(arguments = Seq(internal.UnresolvedAttribute(Nil)))
+        // Attach to the inner struct fields when leaf/primitive inputs are expected.
+        case _ =>
+          f.copy(arguments = expand.map(UnresolvedAttribute(_)))
+      }
+    // Build-in/registered functions: Attach to the outside struct column.
+    case f @ UnresolvedFunction(_, Seq(UnresolvedStar(None, _, _)), _, _, _, _) =>
+      f.copy(arguments = Seq(internal.UnresolvedAttribute(Nil)))
+    case col => col
   }
 
   override def reduceGroups(f: (V, V) => V): Dataset[(K, V)] = {
-    val inputEncoders = Seq(vEncoder, vEncoder)
-    val udf = SparkUserDefinedFunction(
-      function = f,
-      inputEncoders = inputEncoders,
-      outputEncoder = vEncoder)
-    val input = udf.apply(inputEncoders.map(_ => col("*")): _*)
-    val expr = Column.fn("reduce", input)
-    val aggregator: TypedColumn[V, V] = new TypedColumn[V, V](expr.node, vEncoder)
-    agg(aggregator)
+    val r = ReduceAggregator(f)(vEncoder)
+    agg(r.toColumn)
   }
 
   override protected[sql] def flatMapGroupsWithStateHelper[S: Encoder, U: Encoder](
@@ -647,7 +652,6 @@ private object KeyValueGroupedDatasetImpl {
       ds.agnosticEncoder,
       ds.agnosticEncoder,
       Seq(gf.apply(col("*"))),
-      false,
       None,
       () => ds.map(groupingFunc)(kEncoder))
   }
@@ -661,7 +665,7 @@ private object KeyValueGroupedDatasetImpl {
     val dummyGroupingFunc = SparkUserDefinedFunction(
       function = UdfUtils.noOp[V, K](),
       inputEncoders = vEncoder :: Nil,
-      outputEncoder = kEncoder).apply(col("*"))
+      outputEncoder = kEncoder).withName(DUMMY_UDF_NAME).apply(col("*"))
     val session = df.sparkSession
     new KeyValueGroupedDatasetImpl(
       session,
@@ -670,8 +674,15 @@ private object KeyValueGroupedDatasetImpl {
       vEncoder,
       vEncoder,
       Seq(dummyGroupingFunc) ++ groupingExprs,
-      true,
       None,
       () => df.select(groupingExprs: _*).as(kEncoder))
+  }
+
+  val DUMMY_UDF_NAME = "__spark__connect__internal__dummy__"
+
+  def containsDummyUDF(col: ColumnNode): Boolean = col match {
+    case InvokeInlineUserDefinedFunction(udf: SparkUserDefinedFunction, _, _, _) =>
+      udf.givenName.contains(DUMMY_UDF_NAME)
+    case _ => false
   }
 }

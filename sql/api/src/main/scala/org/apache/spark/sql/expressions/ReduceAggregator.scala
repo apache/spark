@@ -27,10 +27,11 @@ import org.apache.spark.sql.{Encoder, Encoders}
  *
  * This class currently assumes there is at least one input row.
  */
+@SerialVersionUID(5066084382969966160L)
 private[sql] class ReduceAggregator[T: Encoder](func: (T, T) => T)
     extends Aggregator[T, (Boolean, T), T] {
 
-  @transient private val encoder = implicitly[Encoder[T]]
+  @transient private lazy val encoder = implicitly[Encoder[T]]
 
   private val _zero = encoder.clsTag.runtimeClass match {
     case java.lang.Boolean.TYPE => false
