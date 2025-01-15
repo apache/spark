@@ -452,6 +452,25 @@ private[spark] class SparkIllegalArgumentException private(
   override def getQueryContext: Array[QueryContext] = context
 }
 
+/**
+ * IllegalStateException thrown from Spark with an error class.
+ */
+private[spark] class SparkIllegalStateException(
+    errorClass: String,
+    messageParameters: Map[String, String],
+    context: Array[QueryContext] = Array.empty,
+    cause: Throwable = null)
+  extends IllegalStateException(
+      SparkThrowableHelper.getMessage(errorClass, messageParameters), cause)
+    with SparkThrowable {
+
+  override def getMessageParameters: java.util.Map[String, String] = messageParameters.asJava
+
+  override def getCondition: String = errorClass
+
+  override def getQueryContext: Array[QueryContext] = context
+}
+
 private[spark] class SparkRuntimeException private(
     message: String,
     cause: Option[Throwable],
