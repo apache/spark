@@ -1451,8 +1451,8 @@ class TransformWithStateInPandasTestsMixin:
 
                 self._run_evolution_test(UpcastProcessor(), checkpoint_dir, check_upcast, df)
 
-    ### This test case verifies that an exception is thrown when downcasting, which violates
-    ### Avro's schema evolution rules
+    ## This test case verifies that an exception is thrown when downcasting, which violates
+    ## Avro's schema evolution rules
     def test_schema_evolution_fails(self):
         with self.sql_conf({"spark.sql.streaming.stateStore.encodingFormat": "avro"}):
             with tempfile.TemporaryDirectory() as checkpoint_dir:
@@ -1464,7 +1464,7 @@ class TransformWithStateInPandasTestsMixin:
                 def check_add_fields(batch_df, batch_id):
                     results = batch_df.collect()
                     assert results[0].value["count"] == 100
-                    assert results[0].value["active"] == True
+                    assert results[0].value["active"]
 
                 self._run_evolution_test(AddFieldsProcessor(), checkpoint_dir, check_add_fields, df)
 
@@ -1474,7 +1474,7 @@ class TransformWithStateInPandasTestsMixin:
                     result = batch_df.collect()[0]
                     assert result.value["name"] == "name-0"
 
-                ### Long
+                ## Long
                 self._run_evolution_test(UpcastProcessor(), checkpoint_dir, check_upcast, df)
 
                 self._prepare_test_resource3(input_path)
@@ -1495,11 +1495,12 @@ class TransformWithStateInPandasTestsMixin:
                         "[STREAM_FAILED]" in error_msg
                         and "[STATE_STORE_INVALID_VALUE_SCHEMA_EVOLUTION]" in error_msg
                         and "Schema evolution is not possible" in error_msg
-                        and "StructType(StructField(id,IntegerType,true),StructField(name,StringType,true))"
+                        and "StructType(StructField(id,IntegerType,true),"
+                        + "StructField(name,StringType,true))"
                         in error_msg
                     )
 
-                ### Int
+                ## Int
                 self._run_evolution_test(
                     BasicProcessor(),
                     checkpoint_dir,
