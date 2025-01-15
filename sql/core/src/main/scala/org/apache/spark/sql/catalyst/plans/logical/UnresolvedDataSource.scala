@@ -31,6 +31,10 @@ case class UnresolvedDataSource(
     paths: Seq[String])
   extends UnresolvedLeafNode {
 
+  override def simpleString(maxFields: Int): String = {
+    Utils.redact(conf.stringRedactionPattern, super.simpleString(maxFields))
+  }
+
   override def toString: String = {
     Utils.redact(conf.stringRedactionPattern, super.toString)
   }
