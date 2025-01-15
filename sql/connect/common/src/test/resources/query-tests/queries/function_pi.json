@@ -15,6 +15,25 @@
       "unresolvedFunction": {
         "functionName": "pi",
         "isInternal": false
+      },
+      "common": {
+        "origin": {
+          "jvmOrigin": {
+            "stackTrace": [{
+              "classLoaderName": "app",
+              "declaringClass": "org.apache.spark.sql.functions$",
+              "methodName": "pi",
+              "fileName": "functions.scala",
+              "lineNumber": 2868
+            }, {
+              "classLoaderName": "app",
+              "declaringClass": "org.apache.spark.sql.PlanGenerationTestSuite",
+              "methodName": "$anonfun$new$286",
+              "fileName": "PlanGenerationTestSuite.scala",
+              "lineNumber": 1494
+            }]
+          }
+        }
       }
     }]
   }

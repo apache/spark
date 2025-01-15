@@ -17,22 +17,117 @@
         "arguments": [{
           "unresolvedAttribute": {
             "unparsedIdentifier": "a"
+          },
+          "common": {
+            "origin": {
+              "jvmOrigin": {
+                "stackTrace": [{
+                  "classLoaderName": "app",
+                  "declaringClass": "org.apache.spark.sql.functions$",
+                  "methodName": "col",
+                  "fileName": "functions.scala",
+                  "lineNumber": 94
+                }, {
+                  "classLoaderName": "app",
+                  "declaringClass": "org.apache.spark.sql.PlanGenerationTestSuite",
+                  "methodName": "$anonfun$new$278",
+                  "fileName": "PlanGenerationTestSuite.scala",
+                  "lineNumber": 1462
+                }]
+              }
+            }
           }
         }, {
           "unresolvedExtractValue": {
             "child": {
               "unresolvedAttribute": {
                 "unparsedIdentifier": "d"
+              },
+              "common": {
+                "origin": {
+                  "jvmOrigin": {
+                    "stackTrace": [{
+                      "classLoaderName": "app",
+                      "declaringClass": "org.apache.spark.sql.functions$",
+                      "methodName": "col",
+                      "fileName": "functions.scala",
+                      "lineNumber": 94
+                    }, {
+                      "classLoaderName": "app",
+                      "declaringClass": "org.apache.spark.sql.PlanGenerationTestSuite",
+                      "methodName": "$anonfun$new$278",
+                      "fileName": "PlanGenerationTestSuite.scala",
+                      "lineNumber": 1462
+                    }]
+                  }
+                }
               }
             },
             "extraction": {
               "literal": {
                 "string": "a"
+              },
+              "common": {
+                "origin": {
+                  "jvmOrigin": {
+                    "stackTrace": [{
+                      "classLoaderName": "app",
+                      "declaringClass": "org.apache.spark.sql.Column",
+                      "methodName": "getItem",
+                      "fileName": "Column.scala",
+                      "lineNumber": 837
+                    }, {
+                      "classLoaderName": "app",
+                      "declaringClass": "org.apache.spark.sql.PlanGenerationTestSuite",
+                      "methodName": "$anonfun$new$278",
+                      "fileName": "PlanGenerationTestSuite.scala",
+                      "lineNumber": 1462
+                    }]
+                  }
+                }
+              }
+            }
+          },
+          "common": {
+            "origin": {
+              "jvmOrigin": {
+                "stackTrace": [{
+                  "classLoaderName": "app",
+                  "declaringClass": "org.apache.spark.sql.Column",
+                  "methodName": "getItem",
+                  "fileName": "Column.scala",
+                  "lineNumber": 837
+                }, {
+                  "classLoaderName": "app",
+                  "declaringClass": "org.apache.spark.sql.PlanGenerationTestSuite",
+                  "methodName": "$anonfun$new$278",
+                  "fileName": "PlanGenerationTestSuite.scala",
+                  "lineNumber": 1462
+                }]
               }
             }
           }
         }],
         "isInternal": false
+      },
+      "common": {
+        "origin": {
+          "jvmOrigin": {
+            "stackTrace": [{
+              "classLoaderName": "app",
+              "declaringClass": "org.apache.spark.sql.functions$",
+              "methodName": "least",
+              "fileName": "functions.scala",
+              "lineNumber": 2752
+            }, {
+              "classLoaderName": "app",
+              "declaringClass": "org.apache.spark.sql.PlanGenerationTestSuite",
+              "methodName": "$anonfun$new$278",
+              "fileName": "PlanGenerationTestSuite.scala",
+              "lineNumber": 1462
+            }]
+          }
+        }
       }
     }]
   }

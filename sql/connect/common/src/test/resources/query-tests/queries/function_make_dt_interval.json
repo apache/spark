@@ -15,6 +15,25 @@
       "unresolvedFunction": {
         "functionName": "make_dt_interval",
         "isInternal": false
+      },
+      "common": {
+        "origin": {
+          "jvmOrigin": {
+            "stackTrace": [{
+              "classLoaderName": "app",
+              "declaringClass": "org.apache.spark.sql.functions$",
+              "methodName": "make_dt_interval",
+              "fileName": "functions.scala",
+              "lineNumber": 8077
+            }, {
+              "classLoaderName": "app",
+              "declaringClass": "org.apache.spark.sql.PlanGenerationTestSuite",
+              "methodName": "$anonfun$new$386",
+              "fileName": "PlanGenerationTestSuite.scala",
+              "lineNumber": 1886
+            }]
+          }
+        }
       }
     }]
   }

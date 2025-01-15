@@ -18,9 +18,47 @@
           "unresolvedFunction": {
             "functionName": "current_timestamp",
             "isInternal": false
+          },
+          "common": {
+            "origin": {
+              "jvmOrigin": {
+                "stackTrace": [{
+                  "classLoaderName": "app",
+                  "declaringClass": "org.apache.spark.sql.functions$",
+                  "methodName": "unix_timestamp",
+                  "fileName": "functions.scala",
+                  "lineNumber": 5633
+                }, {
+                  "classLoaderName": "app",
+                  "declaringClass": "org.apache.spark.sql.PlanGenerationTestSuite",
+                  "methodName": "$anonfun$new$467",
+                  "fileName": "PlanGenerationTestSuite.scala",
+                  "lineNumber": 2303
+                }]
+              }
+            }
           }
         }],
         "isInternal": false
+      },
+      "common": {
+        "origin": {
+          "jvmOrigin": {
+            "stackTrace": [{
+              "classLoaderName": "app",
+              "declaringClass": "org.apache.spark.sql.functions$",
+              "methodName": "unix_timestamp",
+              "fileName": "functions.scala",
+              "lineNumber": 5633
+            }, {
+              "classLoaderName": "app",
+              "declaringClass": "org.apache.spark.sql.PlanGenerationTestSuite",
+              "methodName": "$anonfun$new$467",
+              "fileName": "PlanGenerationTestSuite.scala",
+              "lineNumber": 2303
+            }]
+          }
+        }
       }
     }]
   }

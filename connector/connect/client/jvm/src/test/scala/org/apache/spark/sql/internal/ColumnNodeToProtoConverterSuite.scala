@@ -412,17 +412,30 @@ class ColumnNodeToProtoConverterSuite extends ConnectFunSuite {
           .setNullable(false)
           .setAggregate(true)))
 
-    val result = ColumnNodeToProtoConverter.toTypedExpr(
-      Column(InvokeInlineUserDefinedFunction(aggregator, Nil)),
-      PrimitiveLongEncoder)
-    val expected = expr(
-      _.getTypedAggregateExpressionBuilder.getScalarScalaUdfBuilder
+    val invokeColumn = Column(InvokeInlineUserDefinedFunction(aggregator, Nil))
+    val result = ColumnNodeToProtoConverter.toTypedExpr(invokeColumn, PrimitiveLongEncoder)
+    val expected = expr { builder =>
+      builder.getTypedAggregateExpressionBuilder.getScalarScalaUdfBuilder
         .setPayload(UdfToProtoUtils
           .toUdfPacketBytes(aggregator, PrimitiveLongEncoder :: Nil, PrimitiveLongEncoder))
         .addInputTypes(ProtoDataTypes.LongType)
         .setOutputType(ProtoDataTypes.LongType)
         .setNullable(true)
-        .setAggregate(true))
+        .setAggregate(true)
+      val origin = builder.getCommonBuilder.getOriginBuilder.getJvmOriginBuilder
+      invokeColumn.node.origin.stackTrace.map {
+        _.foreach { element =>
+          origin.addStackTrace(
+            proto.StackTraceElement
+              .newBuilder()
+              .setClassLoaderName(element.getClassLoaderName)
+              .setDeclaringClass(element.getClassName)
+              .setMethodName(element.getMethodName)
+              .setFileName(element.getFileName)
+              .setLineNumber(element.getLineNumber))
+        }
+      }
+    }
     assert(result == expected)
   }
 
@@ -433,6 +446,28 @@ class ColumnNodeToProtoConverterSuite extends ConnectFunSuite {
 
   test("unsupported") {
     intercept[SparkException](ColumnNodeToProtoConverter(Nope()))
+  }
+
+  test("origin") {
+    val origin = Origin(
+      line = Some(1),
+      sqlText = Some("lol"),
+      stackTrace = Some(Array(new StackTraceElement("a", "b", "c", 9))))
+    testConversion(
+      SqlExpression("1 + 1", origin),
+      expr { builder =>
+        builder.getExpressionStringBuilder.setExpression("1 + 1")
+        builder.getCommonBuilder.getOriginBuilder.getJvmOriginBuilder
+          .setLine(1)
+          .setSqlText("lol")
+          .addStackTrace(
+            proto.StackTraceElement
+              .newBuilder()
+              .setDeclaringClass("a")
+              .setMethodName("b")
+              .setFileName("c")
+              .setLineNumber(9))
+      })
   }
 }
 

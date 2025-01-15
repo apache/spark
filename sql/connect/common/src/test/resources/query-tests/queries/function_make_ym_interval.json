@@ -15,6 +15,25 @@
       "unresolvedFunction": {
         "functionName": "make_ym_interval",
         "isInternal": false
+      },
+      "common": {
+        "origin": {
+          "jvmOrigin": {
+            "stackTrace": [{
+              "classLoaderName": "app",
+              "declaringClass": "org.apache.spark.sql.functions$",
+              "methodName": "make_ym_interval",
+              "fileName": "functions.scala",
+              "lineNumber": 8453
+            }, {
+              "classLoaderName": "app",
+              "declaringClass": "org.apache.spark.sql.PlanGenerationTestSuite",
+              "methodName": "$anonfun$new$414",
+              "fileName": "PlanGenerationTestSuite.scala",
+              "lineNumber": 2082
+            }]
+          }
+        }
       }
     }]
   }

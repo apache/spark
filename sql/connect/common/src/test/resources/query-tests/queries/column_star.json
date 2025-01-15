@@ -13,6 +13,25 @@
     },
     "expressions": [{
       "unresolvedStar": {
+      },
+      "common": {
+        "origin": {
+          "jvmOrigin": {
+            "stackTrace": [{
+              "classLoaderName": "app",
+              "declaringClass": "org.apache.spark.sql.functions$",
+              "methodName": "col",
+              "fileName": "functions.scala",
+              "lineNumber": 94
+            }, {
+              "classLoaderName": "app",
+              "declaringClass": "org.apache.spark.sql.PlanGenerationTestSuite",
+              "methodName": "$anonfun$new$146",
+              "fileName": "PlanGenerationTestSuite.scala",
+              "lineNumber": 927
+            }]
+          }
+        }
       }
     }]
   }

@@ -16,10 +16,48 @@
         "expr": {
           "unresolvedAttribute": {
             "unparsedIdentifier": "e"
+          },
+          "common": {
+            "origin": {
+              "jvmOrigin": {
+                "stackTrace": [{
+                  "classLoaderName": "app",
+                  "declaringClass": "org.apache.spark.sql.functions$",
+                  "methodName": "col",
+                  "fileName": "functions.scala",
+                  "lineNumber": 94
+                }, {
+                  "classLoaderName": "app",
+                  "declaringClass": "org.apache.spark.sql.PlanGenerationTestSuite",
+                  "methodName": "$anonfun$new$134",
+                  "fileName": "PlanGenerationTestSuite.scala",
+                  "lineNumber": 879
+                }]
+              }
+            }
           }
         },
         "name": ["e_mod"],
         "metadata": "{\"comment\":\"modified E field\"}"
+      },
+      "common": {
+        "origin": {
+          "jvmOrigin": {
+            "stackTrace": [{
+              "classLoaderName": "app",
+              "declaringClass": "org.apache.spark.sql.Column",
+              "methodName": "as",
+              "fileName": "Column.scala",
+              "lineNumber": 1113
+            }, {
+              "classLoaderName": "app",
+              "declaringClass": "org.apache.spark.sql.PlanGenerationTestSuite",
+              "methodName": "$anonfun$new$134",
+              "fileName": "PlanGenerationTestSuite.scala",
+              "lineNumber": 879
+            }]
+          }
+        }
       }
     }]
   }

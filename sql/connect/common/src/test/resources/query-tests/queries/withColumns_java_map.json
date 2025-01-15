@@ -15,6 +15,25 @@
       "expr": {
         "literal": {
           "string": "123"
+        },
+        "common": {
+          "origin": {
+            "jvmOrigin": {
+              "stackTrace": [{
+                "classLoaderName": "app",
+                "declaringClass": "org.apache.spark.sql.functions$",
+                "methodName": "lit",
+                "fileName": "functions.scala",
+                "lineNumber": 124
+              }, {
+                "classLoaderName": "app",
+                "declaringClass": "org.apache.spark.sql.PlanGenerationTestSuite",
+                "methodName": "$anonfun$new$75",
+                "fileName": "PlanGenerationTestSuite.scala",
+                "lineNumber": 619
+              }]
+            }
+          }
         }
       },
       "name": ["a"]
@@ -22,6 +41,25 @@
       "expr": {
         "unresolvedAttribute": {
           "unparsedIdentifier": "id"
+        },
+        "common": {
+          "origin": {
+            "jvmOrigin": {
+              "stackTrace": [{
+                "classLoaderName": "app",
+                "declaringClass": "org.apache.spark.sql.functions$",
+                "methodName": "col",
+                "fileName": "functions.scala",
+                "lineNumber": 94
+              }, {
+                "classLoaderName": "app",
+                "declaringClass": "org.apache.spark.sql.PlanGenerationTestSuite",
+                "methodName": "$anonfun$new$75",
+                "fileName": "PlanGenerationTestSuite.scala",
+                "lineNumber": 618
+              }]
+            }
+          }
         }
       },
       "name": ["g"]

@@ -15,6 +15,25 @@
       "expr": {
         "expressionString": {
           "expression": "a + 100"
+        },
+        "common": {
+          "origin": {
+            "jvmOrigin": {
+              "stackTrace": [{
+                "classLoaderName": "app",
+                "declaringClass": "org.apache.spark.sql.functions$",
+                "methodName": "expr",
+                "fileName": "functions.scala",
+                "lineNumber": 2176
+              }, {
+                "classLoaderName": "app",
+                "declaringClass": "org.apache.spark.sql.PlanGenerationTestSuite",
+                "methodName": "$anonfun$new$73",
+                "fileName": "PlanGenerationTestSuite.scala",
+                "lineNumber": 609
+              }]
+            }
+          }
         }
       },
       "name": ["z"]

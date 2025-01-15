@@ -15,6 +15,25 @@
     "parameters": [{
       "literal": {
         "integer": 100
+      },
+      "common": {
+        "origin": {
+          "jvmOrigin": {
+            "stackTrace": [{
+              "classLoaderName": "app",
+              "declaringClass": "org.apache.spark.sql.Dataset",
+              "methodName": "$anonfun$hint$1$adapted",
+              "fileName": "Dataset.scala",
+              "lineNumber": 441
+            }, {
+              "classLoaderName": "app",
+              "declaringClass": "org.apache.spark.sql.SparkSession",
+              "methodName": "newDataset",
+              "fileName": "SparkSession.scala",
+              "lineNumber": 417
+            }]
+          }
+        }
       }
     }]
   }

@@ -17,17 +17,93 @@
         "arguments": [{
           "unresolvedAttribute": {
             "unparsedIdentifier": "bytes"
+          },
+          "common": {
+            "origin": {
+              "jvmOrigin": {
+                "stackTrace": [{
+                  "classLoaderName": "app",
+                  "declaringClass": "org.apache.spark.sql.functions$",
+                  "methodName": "col",
+                  "fileName": "functions.scala",
+                  "lineNumber": 94
+                }, {
+                  "classLoaderName": "app",
+                  "declaringClass": "org.apache.spark.sql.PlanGenerationTestSuite",
+                  "methodName": "$anonfun$new$354",
+                  "fileName": "PlanGenerationTestSuite.scala",
+                  "lineNumber": 1762
+                }]
+              }
+            }
           }
         }, {
           "literal": {
             "integer": 5
+          },
+          "common": {
+            "origin": {
+              "jvmOrigin": {
+                "stackTrace": [{
+                  "classLoaderName": "app",
+                  "declaringClass": "org.apache.spark.sql.functions$",
+                  "methodName": "rpad",
+                  "fileName": "functions.scala",
+                  "lineNumber": 4366
+                }, {
+                  "classLoaderName": "app",
+                  "declaringClass": "org.apache.spark.sql.PlanGenerationTestSuite",
+                  "methodName": "$anonfun$new$354",
+                  "fileName": "PlanGenerationTestSuite.scala",
+                  "lineNumber": 1762
+                }]
+              }
+            }
           }
         }, {
           "literal": {
             "binary": "CwoLDg=="
+          },
+          "common": {
+            "origin": {
+              "jvmOrigin": {
+                "stackTrace": [{
+                  "classLoaderName": "app",
+                  "declaringClass": "org.apache.spark.sql.functions$",
+                  "methodName": "rpad",
+                  "fileName": "functions.scala",
+                  "lineNumber": 4366
+                }, {
+                  "classLoaderName": "app",
+                  "declaringClass": "org.apache.spark.sql.PlanGenerationTestSuite",
+                  "methodName": "$anonfun$new$354",
+                  "fileName": "PlanGenerationTestSuite.scala",
+                  "lineNumber": 1762
+                }]
+              }
+            }
           }
         }],
         "isInternal": false
+      },
+      "common": {
+        "origin": {
+          "jvmOrigin": {
+            "stackTrace": [{
+              "classLoaderName": "app",
+              "declaringClass": "org.apache.spark.sql.functions$",
+              "methodName": "rpad",
+              "fileName": "functions.scala",
+              "lineNumber": 4366
+            }, {
+              "classLoaderName": "app",
+              "declaringClass": "org.apache.spark.sql.PlanGenerationTestSuite",
+              "methodName": "$anonfun$new$354",
+              "fileName": "PlanGenerationTestSuite.scala",
+              "lineNumber": 1762
+            }]
+          }
+        }
       }
     }]
   }

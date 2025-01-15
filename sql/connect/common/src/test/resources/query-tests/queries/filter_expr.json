@@ -14,6 +14,25 @@
     "condition": {
       "expressionString": {
         "expression": "exp(a) \u003c 10.0"
+      },
+      "common": {
+        "origin": {
+          "jvmOrigin": {
+            "stackTrace": [{
+              "classLoaderName": "app",
+              "declaringClass": "org.apache.spark.sql.Dataset",
+              "methodName": "filter",
+              "fileName": "Dataset.scala",
+              "lineNumber": 1422
+            }, {
+              "classLoaderName": "app",
+              "declaringClass": "org.apache.spark.sql.PlanGenerationTestSuite",
+              "methodName": "$anonfun$new$52",
+              "fileName": "PlanGenerationTestSuite.scala",
+              "lineNumber": 511
+            }]
+          }
+        }
       }
     }
   }

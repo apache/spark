@@ -15,6 +15,25 @@
       "unresolvedFunction": {
         "functionName": "user",
         "isInternal": false
+      },
+      "common": {
+        "origin": {
+          "jvmOrigin": {
+            "stackTrace": [{
+              "classLoaderName": "app",
+              "declaringClass": "org.apache.spark.sql.functions$",
+              "methodName": "user",
+              "fileName": "functions.scala",
+              "lineNumber": 3512
+            }, {
+              "classLoaderName": "app",
+              "declaringClass": "org.apache.spark.sql.PlanGenerationTestSuite",
+              "methodName": "$anonfun$new$310",
+              "fileName": "PlanGenerationTestSuite.scala",
+              "lineNumber": 1590
+            }]
+          }
+        }
       }
     }]
   }

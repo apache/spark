@@ -19,20 +19,115 @@
             "arguments": [{
               "unresolvedAttribute": {
                 "unparsedIdentifier": "id"
+              },
+              "common": {
+                "origin": {
+                  "jvmOrigin": {
+                    "stackTrace": [{
+                      "classLoaderName": "app",
+                      "declaringClass": "org.apache.spark.sql.functions$",
+                      "methodName": "min",
+                      "fileName": "functions.scala",
+                      "lineNumber": 958
+                    }, {
+                      "classLoaderName": "app",
+                      "declaringClass": "org.apache.spark.sql.PlanGenerationTestSuite",
+                      "methodName": "$anonfun$new$716",
+                      "fileName": "PlanGenerationTestSuite.scala",
+                      "lineNumber": 3369
+                    }]
+                  }
+                }
               }
             }],
             "isInternal": false
+          },
+          "common": {
+            "origin": {
+              "jvmOrigin": {
+                "stackTrace": [{
+                  "classLoaderName": "app",
+                  "declaringClass": "org.apache.spark.sql.functions$",
+                  "methodName": "min",
+                  "fileName": "functions.scala",
+                  "lineNumber": 958
+                }, {
+                  "classLoaderName": "app",
+                  "declaringClass": "org.apache.spark.sql.PlanGenerationTestSuite",
+                  "methodName": "$anonfun$new$716",
+                  "fileName": "PlanGenerationTestSuite.scala",
+                  "lineNumber": 3369
+                }]
+              }
+            }
           }
         },
         "partitionSpec": [{
           "unresolvedAttribute": {
             "unparsedIdentifier": "a"
+          },
+          "common": {
+            "origin": {
+              "jvmOrigin": {
+                "stackTrace": [{
+                  "classLoaderName": "app",
+                  "declaringClass": "org.apache.spark.sql.Column$",
+                  "methodName": "apply",
+                  "fileName": "Column.scala",
+                  "lineNumber": 35
+                }, {
+                  "classLoaderName": "app",
+                  "declaringClass": "org.apache.spark.sql.PlanGenerationTestSuite",
+                  "methodName": "$anonfun$new$716",
+                  "fileName": "PlanGenerationTestSuite.scala",
+                  "lineNumber": 3369
+                }]
+              }
+            }
           }
         }, {
           "unresolvedAttribute": {
             "unparsedIdentifier": "b"
+          },
+          "common": {
+            "origin": {
+              "jvmOrigin": {
+                "stackTrace": [{
+                  "classLoaderName": "app",
+                  "declaringClass": "org.apache.spark.sql.Column$",
+                  "methodName": "apply",
+                  "fileName": "Column.scala",
+                  "lineNumber": 35
+                }, {
+                  "classLoaderName": "app",
+                  "declaringClass": "org.apache.spark.sql.PlanGenerationTestSuite",
+                  "methodName": "$anonfun$new$716",
+                  "fileName": "PlanGenerationTestSuite.scala",
+                  "lineNumber": 3369
+                }]
+              }
+            }
           }
         }]
+      },
+      "common": {
+        "origin": {
+          "jvmOrigin": {
+            "stackTrace": [{
+              "classLoaderName": "app",
+              "declaringClass": "org.apache.spark.sql.Column",
+              "methodName": "over",
+              "fileName": "Column.scala",
+              "lineNumber": 1366
+            }, {
+              "classLoaderName": "app",
+              "declaringClass": "org.apache.spark.sql.PlanGenerationTestSuite",
+              "methodName": "$anonfun$new$716",
+              "fileName": "PlanGenerationTestSuite.scala",
+              "lineNumber": 3369
+            }]
+          }
+        }
       }
     }, {
       "window": {
@@ -42,20 +137,115 @@
             "arguments": [{
               "unresolvedAttribute": {
                 "unparsedIdentifier": "id"
+              },
+              "common": {
+                "origin": {
+                  "jvmOrigin": {
+                    "stackTrace": [{
+                      "classLoaderName": "app",
+                      "declaringClass": "org.apache.spark.sql.functions$",
+                      "methodName": "min",
+                      "fileName": "functions.scala",
+                      "lineNumber": 958
+                    }, {
+                      "classLoaderName": "app",
+                      "declaringClass": "org.apache.spark.sql.PlanGenerationTestSuite",
+                      "methodName": "$anonfun$new$716",
+                      "fileName": "PlanGenerationTestSuite.scala",
+                      "lineNumber": 3370
+                    }]
+                  }
+                }
               }
             }],
             "isInternal": false
+          },
+          "common": {
+            "origin": {
+              "jvmOrigin": {
+                "stackTrace": [{
+                  "classLoaderName": "app",
+                  "declaringClass": "org.apache.spark.sql.functions$",
+                  "methodName": "min",
+                  "fileName": "functions.scala",
+                  "lineNumber": 958
+                }, {
+                  "classLoaderName": "app",
+                  "declaringClass": "org.apache.spark.sql.PlanGenerationTestSuite",
+                  "methodName": "$anonfun$new$716",
+                  "fileName": "PlanGenerationTestSuite.scala",
+                  "lineNumber": 3370
+                }]
+              }
+            }
           }
         },
         "partitionSpec": [{
           "unresolvedAttribute": {
             "unparsedIdentifier": "a"
+          },
+          "common": {
+            "origin": {
+              "jvmOrigin": {
+                "stackTrace": [{
+                  "classLoaderName": "app",
+                  "declaringClass": "org.apache.spark.sql.Column$",
+                  "methodName": "apply",
+                  "fileName": "Column.scala",
+                  "lineNumber": 35
+                }, {
+                  "classLoaderName": "app",
+                  "declaringClass": "org.apache.spark.sql.expressions.WindowSpec",
+                  "methodName": "$anonfun$partitionBy$1",
+                  "fileName": "WindowSpec.scala",
+                  "lineNumber": 44
+                }]
+              }
+            }
           }
         }, {
           "unresolvedAttribute": {
             "unparsedIdentifier": "b"
+          },
+          "common": {
+            "origin": {
+              "jvmOrigin": {
+                "stackTrace": [{
+                  "classLoaderName": "app",
+                  "declaringClass": "org.apache.spark.sql.Column$",
+                  "methodName": "apply",
+                  "fileName": "Column.scala",
+                  "lineNumber": 35
+                }, {
+                  "classLoaderName": "app",
+                  "declaringClass": "org.apache.spark.sql.expressions.WindowSpec",
+                  "methodName": "$anonfun$partitionBy$1",
+                  "fileName": "WindowSpec.scala",
+                  "lineNumber": 44
+                }]
+              }
+            }
           }
         }]
+      },
+      "common": {
+        "origin": {
+          "jvmOrigin": {
+            "stackTrace": [{
+              "classLoaderName": "app",
+              "declaringClass": "org.apache.spark.sql.Column",
+              "methodName": "over",
+              "fileName": "Column.scala",
+              "lineNumber": 1366
+            }, {
+              "classLoaderName": "app",
+              "declaringClass": "org.apache.spark.sql.PlanGenerationTestSuite",
+              "methodName": "$anonfun$new$716",
+              "fileName": "PlanGenerationTestSuite.scala",
+              "lineNumber": 3370
+            }]
+          }
+        }
       }
     }, {
       "window": {
@@ -65,15 +255,72 @@
             "arguments": [{
               "unresolvedAttribute": {
                 "unparsedIdentifier": "id"
+              },
+              "common": {
+                "origin": {
+                  "jvmOrigin": {
+                    "stackTrace": [{
+                      "classLoaderName": "app",
+                      "declaringClass": "org.apache.spark.sql.functions$",
+                      "methodName": "min",
+                      "fileName": "functions.scala",
+                      "lineNumber": 958
+                    }, {
+                      "classLoaderName": "app",
+                      "declaringClass": "org.apache.spark.sql.PlanGenerationTestSuite",
+                      "methodName": "$anonfun$new$716",
+                      "fileName": "PlanGenerationTestSuite.scala",
+                      "lineNumber": 3371
+                    }]
+                  }
+                }
               }
             }],
             "isInternal": false
+          },
+          "common": {
+            "origin": {
+              "jvmOrigin": {
+                "stackTrace": [{
+                  "classLoaderName": "app",
+                  "declaringClass": "org.apache.spark.sql.functions$",
+                  "methodName": "min",
+                  "fileName": "functions.scala",
+                  "lineNumber": 958
+                }, {
+                  "classLoaderName": "app",
+                  "declaringClass": "org.apache.spark.sql.PlanGenerationTestSuite",
+                  "methodName": "$anonfun$new$716",
+                  "fileName": "PlanGenerationTestSuite.scala",
+                  "lineNumber": 3371
+                }]
+              }
+            }
           }
         },
         "orderSpec": [{
           "child": {
             "unresolvedAttribute": {
               "unparsedIdentifier": "a"
+            },
+            "common": {
+              "origin": {
+                "jvmOrigin": {
+                  "stackTrace": [{
+                    "classLoaderName": "app",
+                    "declaringClass": "org.apache.spark.sql.Column$",
+                    "methodName": "apply",
+                    "fileName": "Column.scala",
+                    "lineNumber": 35
+                  }, {
+                    "classLoaderName": "app",
+                    "declaringClass": "org.apache.spark.sql.PlanGenerationTestSuite",
+                    "methodName": "$anonfun$new$716",
+                    "fileName": "PlanGenerationTestSuite.scala",
+                    "lineNumber": 3371
+                  }]
+                }
+              }
             }
           },
           "direction": "SORT_DIRECTION_ASCENDING",
@@ -82,11 +329,49 @@
           "child": {
             "unresolvedAttribute": {
               "unparsedIdentifier": "b"
+            },
+            "common": {
+              "origin": {
+                "jvmOrigin": {
+                  "stackTrace": [{
+                    "classLoaderName": "app",
+                    "declaringClass": "org.apache.spark.sql.Column$",
+                    "methodName": "apply",
+                    "fileName": "Column.scala",
+                    "lineNumber": 35
+                  }, {
+                    "classLoaderName": "app",
+                    "declaringClass": "org.apache.spark.sql.PlanGenerationTestSuite",
+                    "methodName": "$anonfun$new$716",
+                    "fileName": "PlanGenerationTestSuite.scala",
+                    "lineNumber": 3371
+                  }]
+                }
+              }
             }
           },
           "direction": "SORT_DIRECTION_ASCENDING",
           "nullOrdering": "SORT_NULLS_FIRST"
         }]
+      },
+      "common": {
+        "origin": {
+          "jvmOrigin": {
+            "stackTrace": [{
+              "classLoaderName": "app",
+              "declaringClass": "org.apache.spark.sql.Column",
+              "methodName": "over",
+              "fileName": "Column.scala",
+              "lineNumber": 1366
+            }, {
+              "classLoaderName": "app",
+              "declaringClass": "org.apache.spark.sql.PlanGenerationTestSuite",
+              "methodName": "$anonfun$new$716",
+              "fileName": "PlanGenerationTestSuite.scala",
+              "lineNumber": 3371
+            }]
+          }
+        }
       }
     }, {
       "window": {
@@ -96,15 +381,72 @@
             "arguments": [{
               "unresolvedAttribute": {
                 "unparsedIdentifier": "id"
+              },
+              "common": {
+                "origin": {
+                  "jvmOrigin": {
+                    "stackTrace": [{
+                      "classLoaderName": "app",
+                      "declaringClass": "org.apache.spark.sql.functions$",
+                      "methodName": "min",
+                      "fileName": "functions.scala",
+                      "lineNumber": 958
+                    }, {
+                      "classLoaderName": "app",
+                      "declaringClass": "org.apache.spark.sql.PlanGenerationTestSuite",
+                      "methodName": "$anonfun$new$716",
+                      "fileName": "PlanGenerationTestSuite.scala",
+                      "lineNumber": 3372
+                    }]
+                  }
+                }
               }
             }],
             "isInternal": false
+          },
+          "common": {
+            "origin": {
+              "jvmOrigin": {
+                "stackTrace": [{
+                  "classLoaderName": "app",
+                  "declaringClass": "org.apache.spark.sql.functions$",
+                  "methodName": "min",
+                  "fileName": "functions.scala",
+                  "lineNumber": 958
+                }, {
+                  "classLoaderName": "app",
+                  "declaringClass": "org.apache.spark.sql.PlanGenerationTestSuite",
+                  "methodName": "$anonfun$new$716",
+                  "fileName": "PlanGenerationTestSuite.scala",
+                  "lineNumber": 3372
+                }]
+              }
+            }
           }
         },
         "orderSpec": [{
           "child": {
             "unresolvedAttribute": {
               "unparsedIdentifier": "a"
+            },
+            "common": {
+              "origin": {
+                "jvmOrigin": {
+                  "stackTrace": [{
+                    "classLoaderName": "app",
+                    "declaringClass": "org.apache.spark.sql.Column$",
+                    "methodName": "apply",
+                    "fileName": "Column.scala",
+                    "lineNumber": 35
+                  }, {
+                    "classLoaderName": "app",
+                    "declaringClass": "org.apache.spark.sql.expressions.WindowSpec",
+                    "methodName": "$anonfun$orderBy$1",
+                    "fileName": "WindowSpec.scala",
+                    "lineNumber": 62
+                  }]
+                }
+              }
             }
           },
           "direction": "SORT_DIRECTION_ASCENDING",
@@ -113,11 +455,49 @@
           "child": {
             "unresolvedAttribute": {
               "unparsedIdentifier": "b"
+            },
+            "common": {
+              "origin": {
+                "jvmOrigin": {
+                  "stackTrace": [{
+                    "classLoaderName": "app",
+                    "declaringClass": "org.apache.spark.sql.Column$",
+                    "methodName": "apply",
+                    "fileName": "Column.scala",
+                    "lineNumber": 35
+                  }, {
+                    "classLoaderName": "app",
+                    "declaringClass": "org.apache.spark.sql.expressions.WindowSpec",
+                    "methodName": "$anonfun$orderBy$1",
+                    "fileName": "WindowSpec.scala",
+                    "lineNumber": 62
+                  }]
+                }
+              }
             }
           },
           "direction": "SORT_DIRECTION_ASCENDING",
           "nullOrdering": "SORT_NULLS_FIRST"
         }]
+      },
+      "common": {
+        "origin": {
+          "jvmOrigin": {
+            "stackTrace": [{
+              "classLoaderName": "app",
+              "declaringClass": "org.apache.spark.sql.Column",
+              "methodName": "over",
+              "fileName": "Column.scala",
+              "lineNumber": 1366
+            }, {
+              "classLoaderName": "app",
+              "declaringClass": "org.apache.spark.sql.PlanGenerationTestSuite",
+              "methodName": "$anonfun$new$716",
+              "fileName": "PlanGenerationTestSuite.scala",
+              "lineNumber": 3372
+            }]
+          }
+        }
       }
     }, {
       "window": {
@@ -127,15 +507,72 @@
             "arguments": [{
               "unresolvedAttribute": {
                 "unparsedIdentifier": "id"
+              },
+              "common": {
+                "origin": {
+                  "jvmOrigin": {
+                    "stackTrace": [{
+                      "classLoaderName": "app",
+                      "declaringClass": "org.apache.spark.sql.functions$",
+                      "methodName": "min",
+                      "fileName": "functions.scala",
+                      "lineNumber": 958
+                    }, {
+                      "classLoaderName": "app",
+                      "declaringClass": "org.apache.spark.sql.PlanGenerationTestSuite",
+                      "methodName": "$anonfun$new$716",
+                      "fileName": "PlanGenerationTestSuite.scala",
+                      "lineNumber": 3373
+                    }]
+                  }
+                }
               }
             }],
             "isInternal": false
+          },
+          "common": {
+            "origin": {
+              "jvmOrigin": {
+                "stackTrace": [{
+                  "classLoaderName": "app",
+                  "declaringClass": "org.apache.spark.sql.functions$",
+                  "methodName": "min",
+                  "fileName": "functions.scala",
+                  "lineNumber": 958
+                }, {
+                  "classLoaderName": "app",
+                  "declaringClass": "org.apache.spark.sql.PlanGenerationTestSuite",
+                  "methodName": "$anonfun$new$716",
+                  "fileName": "PlanGenerationTestSuite.scala",
+                  "lineNumber": 3373
+                }]
+              }
+            }
           }
         },
         "orderSpec": [{
           "child": {
             "unresolvedAttribute": {
               "unparsedIdentifier": "a"
+            },
+            "common": {
+              "origin": {
+                "jvmOrigin": {
+                  "stackTrace": [{
+                    "classLoaderName": "app",
+                    "declaringClass": "org.apache.spark.sql.Column$",
+                    "methodName": "apply",
+                    "fileName": "Column.scala",
+                    "lineNumber": 35
+                  }, {
+                    "classLoaderName": "app",
+                    "declaringClass": "org.apache.spark.sql.expressions.WindowSpec",
+                    "methodName": "$anonfun$orderBy$1",
+                    "fileName": "WindowSpec.scala",
+                    "lineNumber": 62
+                  }]
+                }
+              }
             }
           },
           "direction": "SORT_DIRECTION_ASCENDING",
@@ -158,6 +595,25 @@
             }
           }
         }
+      },
+      "common": {
+        "origin": {
+          "jvmOrigin": {
+            "stackTrace": [{
+              "classLoaderName": "app",
+              "declaringClass": "org.apache.spark.sql.Column",
+              "methodName": "over",
+              "fileName": "Column.scala",
+              "lineNumber": 1366
+            }, {
+              "classLoaderName": "app",
+              "declaringClass": "org.apache.spark.sql.PlanGenerationTestSuite",
+              "methodName": "$anonfun$new$716",
+              "fileName": "PlanGenerationTestSuite.scala",
+              "lineNumber": 3373
+            }]
+          }
+        }
       }
     }, {
       "window": {
@@ -167,15 +623,72 @@
             "arguments": [{
               "unresolvedAttribute": {
                 "unparsedIdentifier": "id"
+              },
+              "common": {
+                "origin": {
+                  "jvmOrigin": {
+                    "stackTrace": [{
+                      "classLoaderName": "app",
+                      "declaringClass": "org.apache.spark.sql.functions$",
+                      "methodName": "min",
+                      "fileName": "functions.scala",
+                      "lineNumber": 958
+                    }, {
+                      "classLoaderName": "app",
+                      "declaringClass": "org.apache.spark.sql.PlanGenerationTestSuite",
+                      "methodName": "$anonfun$new$716",
+                      "fileName": "PlanGenerationTestSuite.scala",
+                      "lineNumber": 3374
+                    }]
+                  }
+                }
               }
             }],
             "isInternal": false
+          },
+          "common": {
+            "origin": {
+              "jvmOrigin": {
+                "stackTrace": [{
+                  "classLoaderName": "app",
+                  "declaringClass": "org.apache.spark.sql.functions$",
+                  "methodName": "min",
+                  "fileName": "functions.scala",
+                  "lineNumber": 958
+                }, {
+                  "classLoaderName": "app",
+                  "declaringClass": "org.apache.spark.sql.PlanGenerationTestSuite",
+                  "methodName": "$anonfun$new$716",
+                  "fileName": "PlanGenerationTestSuite.scala",
+                  "lineNumber": 3374
+                }]
+              }
+            }
           }
         },
         "orderSpec": [{
           "child": {
             "unresolvedAttribute": {
               "unparsedIdentifier": "a"
+            },
+            "common": {
+              "origin": {
+                "jvmOrigin": {
+                  "stackTrace": [{
+                    "classLoaderName": "app",
+                    "declaringClass": "org.apache.spark.sql.Column$",
+                    "methodName": "apply",
+                    "fileName": "Column.scala",
+                    "lineNumber": 35
+                  }, {
+                    "classLoaderName": "app",
+                    "declaringClass": "org.apache.spark.sql.expressions.WindowSpec",
+                    "methodName": "$anonfun$orderBy$1",
+                    "fileName": "WindowSpec.scala",
+                    "lineNumber": 62
+                  }]
+                }
+              }
             }
           },
           "direction": "SORT_DIRECTION_ASCENDING",
@@ -198,6 +711,25 @@
             }
           }
         }
+      },
+      "common": {
+        "origin": {
+          "jvmOrigin": {
+            "stackTrace": [{
+              "classLoaderName": "app",
+              "declaringClass": "org.apache.spark.sql.Column",
+              "methodName": "over",
+              "fileName": "Column.scala",
+              "lineNumber": 1366
+            }, {
+              "classLoaderName": "app",
+              "declaringClass": "org.apache.spark.sql.PlanGenerationTestSuite",
+              "methodName": "$anonfun$new$716",
+              "fileName": "PlanGenerationTestSuite.scala",
+              "lineNumber": 3374
+            }]
+          }
+        }
       }
     }, {
       "window": {
@@ -207,9 +739,66 @@
             "arguments": [{
               "unresolvedAttribute": {
                 "unparsedIdentifier": "id"
+              },
+              "common": {
+                "origin": {
+                  "jvmOrigin": {
+                    "stackTrace": [{
+                      "classLoaderName": "app",
+                      "declaringClass": "org.apache.spark.sql.Column$",
+                      "methodName": "apply",
+                      "fileName": "Column.scala",
+                      "lineNumber": 35
+                    }, {
+                      "classLoaderName": "app",
+                      "declaringClass": "org.apache.spark.sql.PlanGenerationTestSuite",
+                      "methodName": "$anonfun$new$716",
+                      "fileName": "PlanGenerationTestSuite.scala",
+                      "lineNumber": 3375
+                    }]
+                  }
+                }
               }
             }],
             "isInternal": false
+          },
+          "common": {
+            "origin": {
+              "jvmOrigin": {
+                "stackTrace": [{
+                  "classLoaderName": "app",
+                  "declaringClass": "org.apache.spark.sql.functions$",
+                  "methodName": "count",
+                  "fileName": "functions.scala",
+                  "lineNumber": 429
+                }, {
+                  "classLoaderName": "app",
+                  "declaringClass": "org.apache.spark.sql.PlanGenerationTestSuite",
+                  "methodName": "$anonfun$new$716",
+                  "fileName": "PlanGenerationTestSuite.scala",
+                  "lineNumber": 3375
+                }]
+              }
+            }
+          }
+        }
+      },
+      "common": {
+        "origin": {
+          "jvmOrigin": {
+            "stackTrace": [{
+              "classLoaderName": "app",
+              "declaringClass": "org.apache.spark.sql.Column",
+              "methodName": "over",
+              "fileName": "Column.scala",
+              "lineNumber": 1383
+            }, {
+              "classLoaderName": "app",
+              "declaringClass": "org.apache.spark.sql.PlanGenerationTestSuite",
+              "methodName": "$anonfun$new$716",
+              "fileName": "PlanGenerationTestSuite.scala",
+              "lineNumber": 3375
+            }]
           }
         }
       }

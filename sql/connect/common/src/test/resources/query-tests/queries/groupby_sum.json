@@ -15,6 +15,25 @@
     "groupingExpressions": [{
       "unresolvedAttribute": {
         "unparsedIdentifier": "id"
+      },
+      "common": {
+        "origin": {
+          "jvmOrigin": {
+            "stackTrace": [{
+              "classLoaderName": "app",
+              "declaringClass": "org.apache.spark.sql.Column$",
+              "methodName": "apply",
+              "fileName": "Column.scala",
+              "lineNumber": 35
+            }, {
+              "classLoaderName": "app",
+              "declaringClass": "org.apache.spark.sql.PlanGenerationTestSuite",
+              "methodName": "$anonfun$new$695",
+              "fileName": "PlanGenerationTestSuite.scala",
+              "lineNumber": 3194
+            }]
+          }
+        }
       }
     }],
     "aggregateExpressions": [{
@@ -24,9 +43,47 @@
           "unresolvedAttribute": {
             "unparsedIdentifier": "a",
             "planId": "0"
+          },
+          "common": {
+            "origin": {
+              "jvmOrigin": {
+                "stackTrace": [{
+                  "classLoaderName": "app",
+                  "declaringClass": "org.apache.spark.sql.Dataset",
+                  "methodName": "col",
+                  "fileName": "Dataset.scala",
+                  "lineNumber": 456
+                }, {
+                  "classLoaderName": "app",
+                  "declaringClass": "org.apache.spark.sql.RelationalGroupedDataset",
+                  "methodName": "$anonfun$selectNumericColumns$1",
+                  "fileName": "RelationalGroupedDataset.scala",
+                  "lineNumber": 81
+                }]
+              }
+            }
           }
         }],
         "isInternal": false
+      },
+      "common": {
+        "origin": {
+          "jvmOrigin": {
+            "stackTrace": [{
+              "classLoaderName": "app",
+              "declaringClass": "org.apache.spark.sql.functions$",
+              "methodName": "sum",
+              "fileName": "functions.scala",
+              "lineNumber": 1114
+            }, {
+              "classLoaderName": "app",
+              "declaringClass": "org.apache.spark.sql.api.RelationalGroupedDataset",
+              "methodName": "$anonfun$sum$1",
+              "fileName": "RelationalGroupedDataset.scala",
+              "lineNumber": 217
+            }]
+          }
+        }
       }
     }, {
       "unresolvedFunction": {
@@ -35,9 +92,47 @@
           "unresolvedAttribute": {
             "unparsedIdentifier": "b",
             "planId": "0"
+          },
+          "common": {
+            "origin": {
+              "jvmOrigin": {
+                "stackTrace": [{
+                  "classLoaderName": "app",
+                  "declaringClass": "org.apache.spark.sql.Dataset",
+                  "methodName": "col",
+                  "fileName": "Dataset.scala",
+                  "lineNumber": 456
+                }, {
+                  "classLoaderName": "app",
+                  "declaringClass": "org.apache.spark.sql.RelationalGroupedDataset",
+                  "methodName": "$anonfun$selectNumericColumns$1",
+                  "fileName": "RelationalGroupedDataset.scala",
+                  "lineNumber": 81
+                }]
+              }
+            }
           }
         }],
         "isInternal": false
+      },
+      "common": {
+        "origin": {
+          "jvmOrigin": {
+            "stackTrace": [{
+              "classLoaderName": "app",
+              "declaringClass": "org.apache.spark.sql.functions$",
+              "methodName": "sum",
+              "fileName": "functions.scala",
+              "lineNumber": 1114
+            }, {
+              "classLoaderName": "app",
+              "declaringClass": "org.apache.spark.sql.api.RelationalGroupedDataset",
+              "methodName": "$anonfun$sum$1",
+              "fileName": "RelationalGroupedDataset.scala",
+              "lineNumber": 217
+            }]
+          }
+        }
       }
     }]
   }

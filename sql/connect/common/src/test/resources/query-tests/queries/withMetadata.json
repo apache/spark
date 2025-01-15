@@ -16,6 +16,25 @@
         "unresolvedAttribute": {
           "unparsedIdentifier": "id",
           "planId": "0"
+        },
+        "common": {
+          "origin": {
+            "jvmOrigin": {
+              "stackTrace": [{
+                "classLoaderName": "app",
+                "declaringClass": "org.apache.spark.sql.Dataset",
+                "methodName": "withMetadata",
+                "fileName": "Dataset.scala",
+                "lineNumber": 817
+              }, {
+                "classLoaderName": "app",
+                "declaringClass": "org.apache.spark.sql.PlanGenerationTestSuite",
+                "methodName": "$anonfun$new$79",
+                "fileName": "PlanGenerationTestSuite.scala",
+                "lineNumber": 641
+              }]
+            }
+          }
         }
       },
       "name": ["id"],
