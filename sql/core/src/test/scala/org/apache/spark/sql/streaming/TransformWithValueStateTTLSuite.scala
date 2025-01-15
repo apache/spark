@@ -26,6 +26,7 @@ import org.apache.spark.sql.Encoders
 import org.apache.spark.sql.execution.streaming.{CheckpointFileManager, ListStateImplWithTTL, MapStateImplWithTTL, MemoryStream, ValueStateImpl, ValueStateImplWithTTL}
 import org.apache.spark.sql.execution.streaming.state._
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.SQLConf.STREAMING_STATE_STORE_ENCODING_FORMAT
 import org.apache.spark.sql.streaming.util.StreamManualClock
 import org.apache.spark.sql.types._
 
@@ -272,6 +273,9 @@ class TransformWithValueStateTTLSuite extends TransformWithStateTTLTest {
       SQLConf.SHUFFLE_PARTITIONS.key -> TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString
     ) {
       withTempDir { checkpointDir =>
+        // When Avro is used, we want to set the StructFields to nullable
+        val shouldBeNullable = SQLConf.get.getConf(
+          STREAMING_STATE_STORE_ENCODING_FORMAT) == StateStoreEncoding.Avro.toString
         val metadataPathPostfix = "state/0/_stateSchema/default"
         val stateSchemaPath = new Path(checkpointDir.toString, s"$metadataPathPostfix")
         val hadoopConf = spark.sessionState.newHadoopConf()
@@ -315,7 +319,7 @@ class TransformWithValueStateTTLSuite extends TransformWithStateTTLTest {
         val schema2 = StateStoreColFamilySchema(
           "$count_listState", 0,
           keySchema, 0,
-          new StructType().add("count", LongType, nullable = false),
+          new StructType().add("count", LongType, nullable = shouldBeNullable),
           Some(NoPrefixKeyStateEncoderSpec(keySchema)),
           None
         )
@@ -323,7 +327,7 @@ class TransformWithValueStateTTLSuite extends TransformWithStateTTLTest {
         val schema3 = StateStoreColFamilySchema(
           "$rowCounter_listState", 0,
           keySchema, 0,
-          new StructType().add("count", LongType, nullable = false),
+          new StructType().add("count", LongType, nullable = shouldBeNullable),
           Some(NoPrefixKeyStateEncoderSpec(keySchema)),
           None
         )
@@ -407,7 +411,7 @@ class TransformWithValueStateTTLSuite extends TransformWithStateTTLTest {
           "valueStateTTL", 0,
           keySchema, 0,
           new StructType()
-            .add("value", new StructType().add("value", IntegerType, nullable = false))
+            .add("value", new StructType().add("value", IntegerType, nullable = shouldBeNullable))
             .add("ttlExpirationMs", LongType),
           Some(NoPrefixKeyStateEncoderSpec(keySchema)),
           None
@@ -416,7 +420,7 @@ class TransformWithValueStateTTLSuite extends TransformWithStateTTLTest {
         val schema10 = StateStoreColFamilySchema(
           "valueState", 0,
           keySchema, 0,
-          new StructType().add("value", IntegerType, nullable = false),
+          new StructType().add("value", IntegerType, nullable = shouldBeNullable),
           Some(NoPrefixKeyStateEncoderSpec(keySchema)),
           None
         )
@@ -426,7 +430,7 @@ class TransformWithValueStateTTLSuite extends TransformWithStateTTLTest {
           keySchema, 0,
           new StructType()
             .add("value", new StructType()
-              .add("id", LongType, nullable = false)
+              .add("id", LongType, nullable = shouldBeNullable)
               .add("name", StringType))
             .add("ttlExpirationMs", LongType),
           Some(NoPrefixKeyStateEncoderSpec(keySchema)),
