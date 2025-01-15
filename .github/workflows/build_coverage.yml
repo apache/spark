@@ -35,6 +35,7 @@ jobs:
       java: 17
       branch: master
       hadoop: hadoop3
+      codecov_token: ${{ secrets.CODECOV_TOKEN }}
       envs: >-
         {
           "PYSPARK_IMAGE_TO_TEST": "python-311",
