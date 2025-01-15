@@ -67,7 +67,9 @@ if ! hash pip 2>/dev/null; then
 fi
 
 # Determine which version of PySpark we are building for archive name
+echo "python3 version: I"
 python3 --version
+
 PYSPARK_VERSION=$(python3 -c "exec(open('python/pyspark/version.py').read());print(__version__)")
 PYSPARK_DIST="$FWDIR/python/dist/pyspark-$PYSPARK_VERSION.tar.gz"
 # The pip install options we use for all the pip commands
@@ -104,6 +106,7 @@ for python in "${PYTHON_EXECS[@]}"; do
     cd "$FWDIR"/python
     # Delete the egg info file if it exists, this can cache the setup file.
     rm -rf pyspark.egg-info || echo "No existing egg info file, skipping deletion"
+    echo "python3 version: II"
     python3 --version
     python3 packaging/classic/setup.py sdist
 
@@ -122,6 +125,8 @@ for python in "${PYTHON_EXECS[@]}"; do
 
     cd /
 
+    echo "python3 version: III"
+    python3 --version
     echo "Run basic sanity check on pip installed version with spark-submit"
     spark-submit "$FWDIR"/dev/pip-sanity-check.py
     echo "Run basic sanity check with import based"
