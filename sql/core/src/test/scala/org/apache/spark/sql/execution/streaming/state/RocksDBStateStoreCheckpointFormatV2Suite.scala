@@ -596,7 +596,7 @@ class RocksDBStateStoreCheckpointFormatV2Suite extends StreamTest
 
   /**
    * Verify the version->UniqueId mapping from state store is the same as
-   * what from the commit log
+   * that from the commit log
    * @param checkpointDir The checkpoint directory to read the commit log
    * @param pickedCheckpointInfoList The checkpoint info list to verify
    * @return true when the version->UniqueId mapping is the same as what from the commit log
