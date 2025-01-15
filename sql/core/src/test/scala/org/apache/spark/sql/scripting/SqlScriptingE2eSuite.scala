@@ -81,7 +81,7 @@ class SqlScriptingE2eSuite extends QueryTest with SharedSparkSession {
         |    SET VAR flag = 1;
         |  END;
         |  BEGIN
-        |    DECLARE EXIT HANDLER FOR '22012'
+        |    DECLARE EXIT HANDLER FOR SQLSTATE '22012'
         |    BEGIN
         |      SELECT flag;
         |      SET VAR flag = 2;

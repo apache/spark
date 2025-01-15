@@ -90,7 +90,7 @@ declareConditionStatement
     ;
 
 conditionValue
-    : sqlStateValue
+    : SQLSTATE VALUE? sqlStateValue
     | multipartIdentifier
     | SQLEXCEPTION
     | NOT FOUND

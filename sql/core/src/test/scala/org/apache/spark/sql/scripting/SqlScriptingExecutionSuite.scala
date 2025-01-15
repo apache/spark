@@ -74,7 +74,7 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
       """
         |BEGIN
         |  DECLARE OR REPLACE flag INT = -1;
-        |  DECLARE CONTINUE HANDLER FOR '22012'
+        |  DECLARE CONTINUE HANDLER FOR SQLSTATE '22012'
         |  BEGIN
         |    SET VAR flag = 1;
         |  END;
@@ -95,11 +95,11 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
       """
         |BEGIN
         |  DECLARE OR REPLACE flag INT = -1;
-        |  DECLARE EXIT HANDLER FOR '22012'
+        |  DECLARE EXIT HANDLER FOR SQLSTATE '22012'
         |  BEGIN
         |    SET VAR flag = 1;
         |  END;
-        |  DECLARE EXIT HANDLER FOR '22012'
+        |  DECLARE EXIT HANDLER FOR SQLSTATE '22012'
         |  BEGIN
         |    SET VAR flag = 2;
         |  END;
@@ -126,7 +126,7 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
         |      SELECT flag;
         |      SET VAR flag = 1;
         |    END;
-        |    DECLARE EXIT HANDLER FOR '22012'
+        |    DECLARE EXIT HANDLER FOR SQLSTATE '22012'
         |    BEGIN
         |      SELECT flag;
         |      SET VAR flag = 2;
@@ -154,7 +154,7 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
         |    SET VAR flag = 1;
         |  END;
         |  BEGIN
-        |    DECLARE EXIT HANDLER FOR '22012'
+        |    DECLARE EXIT HANDLER FOR SQLSTATE '22012'
         |    BEGIN
         |      SELECT flag;
         |      SET VAR flag = 2;
@@ -206,7 +206,7 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
         |BEGIN
         |  DECLARE OR REPLACE VARIABLE flag INT = -1;
         |  scope_to_exit: BEGIN
-        |    DECLARE EXIT HANDLER FOR '22012'
+        |    DECLARE EXIT HANDLER FOR SQLSTATE '22012'
         |    BEGIN
         |      SELECT flag;
         |      SET VAR flag = 1;
@@ -237,7 +237,7 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
         |BEGIN
         |  DECLARE OR REPLACE VARIABLE flag INT = -1;
         |  l1: BEGIN
-        |    DECLARE EXIT HANDLER FOR '22012'
+        |    DECLARE EXIT HANDLER FOR SQLSTATE '22012'
         |    BEGIN
         |      SELECT flag;
         |      SET VAR flag = 1;
@@ -270,7 +270,7 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
         |BEGIN
         |  DECLARE flag INT = -1;
         |  l1: BEGIN
-        |    DECLARE EXIT HANDLER FOR '22012'
+        |    DECLARE EXIT HANDLER FOR SQLSTATE '22012'
         |    BEGIN
         |      SELECT flag;
         |      SET VAR flag = 1;
@@ -307,7 +307,7 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
     val sqlScript =
       """
         |BEGIN
-        |  DECLARE EXIT HANDLER FOR 'X22012'
+        |  DECLARE EXIT HANDLER FOR SQLSTATE SQLSTATE 'X22012'
         |  BEGIN
         |    SELECT 1;
         |  END;
