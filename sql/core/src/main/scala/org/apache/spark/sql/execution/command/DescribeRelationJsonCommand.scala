@@ -32,11 +32,11 @@ import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util.{
+  quoteIfNeeded,
   DateFormatter,
   DateTimeUtils,
-  quoteIfNeeded,
   Iso8601TimestampFormatter,
-  LegacyDateFormats,
+  LegacyDateFormats
 }
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.catalog.V1Table
