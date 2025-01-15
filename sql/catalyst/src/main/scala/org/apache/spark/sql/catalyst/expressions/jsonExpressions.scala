@@ -129,6 +129,8 @@ case class GetJsonObject(json: Expression, path: Expression)
   override protected def withNewChildrenInternal(
       newLeft: Expression, newRight: Expression): GetJsonObject =
     copy(json = newLeft, path = newRight)
+
+  override protected[spark] def expectedCost = 100
 }
 
 // scalastyle:off line.size.limit line.contains.tab
@@ -259,6 +261,8 @@ case class JsonToStructs(
   with ExpectsInputTypes
   with QueryErrorsBase {
 
+  override protected[spark] def expectedCost = 200
+
   // The JSON input data might be missing certain fields. We force the nullability
   // of the user-provided schema to avoid data corruptions. In particular, the parquet-mr encoder
   // can generate incorrect files if values are missing in columns declared as non-nullable.
@@ -383,6 +387,8 @@ case class StructsToJson(
   with ExpectsInputTypes
   with TimeZoneAwareExpression
   with QueryErrorsBase {
+
+  override protected[spark] def expectedCost = 200
 
   override def nullable: Boolean = true
 
