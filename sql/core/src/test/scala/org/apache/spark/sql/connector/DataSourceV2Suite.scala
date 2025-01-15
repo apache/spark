@@ -534,7 +534,7 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
   test("SPARK-23315: get output from canonicalized data source v2 related plans") {
     def checkCanonicalizedOutput(
         df: DataFrame, logicalNumOutput: Int, physicalNumOutput: Int): Unit = {
-      val logical = df.queryExecution.logical.collect {
+      val logical = df.queryExecution.analyzed.collect {
         case d: DataSourceV2Relation => d
       }.head
       assert(logical.canonicalized.output.length == logicalNumOutput)
@@ -558,7 +558,7 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
         .read
         .option(optionName, false)
         .format(classOf[DataSourceV2WithSessionConfig].getName).load()
-      val options = df.queryExecution.logical.collectFirst {
+      val options = df.queryExecution.analyzed.collectFirst {
         case d: DataSourceV2Relation => d.options
       }.get
       assert(options.get(optionName) === "false")
