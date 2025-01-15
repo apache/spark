@@ -919,7 +919,8 @@ class SparkConnectServiceSuite
   }
   class MockSparkListener() extends SparkListener {
     val semaphoreStarted = new Semaphore(0)
-    var executeHolder = Option.empty[ExecuteHolder]
+    // Accessed by multiple threads in parallel.
+    @volatile var executeHolder = Option.empty[ExecuteHolder]
     override def onOtherEvent(event: SparkListenerEvent): Unit = {
       event match {
         case e: SparkListenerConnectOperationStarted =>

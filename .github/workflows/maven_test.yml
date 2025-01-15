@@ -178,7 +178,7 @@ jobs:
       - name: Install Python packages (Python 3.11)
         if: (contains(matrix.modules, 'sql#core')) || contains(matrix.modules, 'connect')
         run: |
-          python3.11 -m pip install 'numpy>=1.20.0' pyarrow pandas scipy unittest-xml-reporting 'grpcio==1.67.0' 'grpcio-status==1.67.0' 'protobuf==5.28.3'
+          python3.11 -m pip install 'numpy>=1.20.0' pyarrow pandas scipy unittest-xml-reporting 'grpcio==1.67.0' 'grpcio-status==1.67.0' 'protobuf==5.29.1'
           python3.11 -m pip list
       # Run the tests.
       - name: Run tests

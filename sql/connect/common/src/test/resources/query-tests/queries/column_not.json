@@ -18,7 +18,8 @@
           "literal": {
             "boolean": true
           }
-        }]
+        }],
+        "isInternal": false
       }
     }]
   }

@@ -96,6 +96,13 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
     case _ => None
   }
 
+  protected def variantExprInPartitionExpression(plan: LogicalPlan): Option[Expression] =
+    plan match {
+      case r: RepartitionByExpression =>
+        r.partitionExpressions.find(e => hasVariantType(e.dataType))
+      case _ => None
+    }
+
   private def checkLimitLikeClause(name: String, limitExpr: Expression): Unit = {
     limitExpr match {
       case e if !e.foldable => limitExpr.failAnalysis(
@@ -185,6 +192,15 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
     )
   }
 
+  private def containsUnsupportedLCA(e: Expression, operator: LogicalPlan): Boolean = {
+    e.containsPattern(LATERAL_COLUMN_ALIAS_REFERENCE) && operator.expressions.exists {
+      case a: Alias
+        if e.collect { case l: LateralColumnAliasReference => l.nameParts.head }.contains(a.name) =>
+        a.exists(_.isInstanceOf[Generator])
+      case _ => false
+    }
+  }
+
   /**
    * Checks for errors in a `SELECT` clause, such as a trailing comma or an empty select list.
    *
@@ -267,9 +283,11 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
     plan.foreachUp {
       case p if p.analyzed => // Skip already analyzed sub-plans
 
-      case leaf: LeafNode if leaf.output.map(_.dataType).exists(CharVarcharUtils.hasCharVarchar) =>
+      case leaf: LeafNode if !SQLConf.get.preserveCharVarcharTypeInfo &&
+        leaf.output.map(_.dataType).exists(CharVarcharUtils.hasCharVarchar) =>
         throw SparkException.internalError(
-          "Logical plan should not have output of char/varchar type: " + leaf)
+          s"Logical plan should not have output of char/varchar type when " +
+            s"${SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key} is false: " + leaf)
 
       case u: UnresolvedNamespace =>
         u.schemaNotFound(u.multipartIdentifier)
@@ -352,6 +370,14 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
           // surrounded with single quotes, or there is a typo in the attribute name.
           case GetMapValue(map, key: Attribute) if isMapWithStringKey(map) && !key.resolved =>
             failUnresolvedAttribute(operator, key, "UNRESOLVED_MAP_KEY")
+
+          case e: Expression if containsUnsupportedLCA(e, operator) =>
+            val lcaRefNames =
+              e.collect { case lcaRef: LateralColumnAliasReference => lcaRef.name }.distinct
+            failAnalysis(
+              errorClass = "UNSUPPORTED_FEATURE.LATERAL_COLUMN_ALIAS_IN_GENERATOR",
+              messageParameters =
+                Map("lca" -> toSQLId(lcaRefNames), "generatorExpr" -> toSQLExpr(e)))
         }
 
         // Fail if we still have an unresolved all in group by. This needs to run before the
@@ -482,6 +508,10 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
               errorClass = "UNBOUND_SQL_PARAMETER",
               messageParameters = Map("name" -> p.name))
 
+          case ma @ MultiAlias(child, names) if child.resolved && !child.isInstanceOf[Generator] =>
+            ma.failAnalysis(
+              errorClass = "MULTI_ALIAS_WITHOUT_GENERATOR",
+              messageParameters = Map("expr" -> toSQLExpr(child), "names" -> names.mkString(", ")))
           case _ =>
         })
 
@@ -674,13 +704,13 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
             operator.children.tail.zipWithIndex.foreach { case (child, ti) =>
               // Check the number of columns
               if (child.output.length != ref.length) {
-                e.failAnalysis(
-                  errorClass = "NUM_COLUMNS_MISMATCH",
-                  messageParameters = Map(
-                    "operator" -> toSQLStmt(operator.nodeName),
-                    "firstNumColumns" -> ref.length.toString,
-                    "invalidOrdinalNum" -> ordinalNumber(ti + 1),
-                    "invalidNumColumns" -> child.output.length.toString))
+                throw QueryCompilationErrors.numColumnsMismatch(
+                  operator = operator.nodeName,
+                  firstNumColumns = ref.length,
+                  invalidOrdinalNum = ti + 1,
+                  invalidNumColumns = child.output.length,
+                  origin = operator.origin
+                )
               }
 
               val dataTypesAreCompatibleFn = getDataTypesAreCompatibleFn(operator)
@@ -688,15 +718,15 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
               dataTypes(child).zip(ref).zipWithIndex.foreach { case ((dt1, dt2), ci) =>
                 // SPARK-18058: we shall not care about the nullability of columns
                 if (!dataTypesAreCompatibleFn(dt1, dt2)) {
-                  e.failAnalysis(
-                    errorClass = "INCOMPATIBLE_COLUMN_TYPE",
-                    messageParameters = Map(
-                      "operator" -> toSQLStmt(operator.nodeName),
-                      "columnOrdinalNumber" -> ordinalNumber(ci),
-                      "tableOrdinalNumber" -> ordinalNumber(ti + 1),
-                      "dataType1" -> toSQLType(dt1),
-                      "dataType2" -> toSQLType(dt2),
-                      "hint" -> extraHintForAnsiTypeCoercionPlan(operator)))
+                  throw QueryCompilationErrors.incompatibleColumnTypeError(
+                    operator = operator.nodeName,
+                    columnOrdinalNumber = ci,
+                    tableOrdinalNumber = ti + 1,
+                    dataType1 = dt1,
+                    dataType2 = dt2,
+                    hint = extraHintForAnsiTypeCoercionPlan(operator),
+                    origin = operator.origin
+                  )
                 }
               }
             }
@@ -720,6 +750,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
             }
 
             create.tableSchema.foreach(f => TypeUtils.failWithIntervalType(f.dataType))
+            SchemaUtils.checkIndeterminateCollationInSchema(create.tableSchema)
 
           case write: V2WriteCommand if write.resolved =>
             write.query.schema.foreach(f => TypeUtils.failWithIntervalType(f.dataType))
@@ -848,6 +879,14 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
               messageParameters = Map(
                 "colName" -> toSQLId(variantCol.name),
                 "dataType" -> toSQLType(variantCol.dataType)))
+
+          case o if variantExprInPartitionExpression(o).isDefined =>
+            val variantExpr = variantExprInPartitionExpression(o).get
+            o.failAnalysis(
+              errorClass = "UNSUPPORTED_FEATURE.PARTITION_BY_VARIANT",
+              messageParameters = Map(
+                "expr" -> toSQLExpr(variantExpr),
+                "dataType" -> toSQLType(variantExpr.dataType)))
 
           case o if o.expressions.exists(!_.deterministic) &&
             !operatorAllowsNonDeterministicExpressions(o) &&
@@ -1068,6 +1107,8 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
     @scala.annotation.tailrec
     def cleanQueryInScalarSubquery(p: LogicalPlan): LogicalPlan = p match {
       case s: SubqueryAlias => cleanQueryInScalarSubquery(s.child)
+      // Skip SQL function node added by the Analyzer
+      case s: SQLFunctionNode => cleanQueryInScalarSubquery(s.child)
       case p: Project => cleanQueryInScalarSubquery(p.child)
       case h: ResolvedHint => cleanQueryInScalarSubquery(h.child)
       case child => child
@@ -1615,9 +1656,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
             case (CharType(l1), CharType(l2)) => l1 == l2
             case (CharType(l1), VarcharType(l2)) => l1 <= l2
             case (VarcharType(l1), VarcharType(l2)) => l1 <= l2
-            case _ =>
-              Cast.canUpCast(from, to) ||
-                DataType.equalsIgnoreCompatibleCollation(field.dataType, newDataType)
+            case _ => Cast.canUpCast(from, to)
           }
           if (!canAlterColumnType(field.dataType, newDataType)) {
             alter.failAnalysis(

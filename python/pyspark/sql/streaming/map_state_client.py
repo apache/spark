@@ -14,10 +14,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from typing import Dict, Iterator, Union, cast, Tuple, Optional
+from typing import Dict, Iterator, Union, Tuple, Optional
 
 from pyspark.sql.streaming.stateful_processor_api_client import StatefulProcessorApiClient
-from pyspark.sql.types import StructType, TYPE_CHECKING, _parse_datatype_string
+from pyspark.sql.types import StructType, TYPE_CHECKING
 from pyspark.errors import PySparkRuntimeError
 import uuid
 
@@ -36,11 +36,15 @@ class MapStateClient:
     ) -> None:
         self._stateful_processor_api_client = stateful_processor_api_client
         if isinstance(user_key_schema, str):
-            self.user_key_schema = cast(StructType, _parse_datatype_string(user_key_schema))
+            self.user_key_schema = self._stateful_processor_api_client._parse_string_schema(
+                user_key_schema
+            )
         else:
             self.user_key_schema = user_key_schema
         if isinstance(value_schema, str):
-            self.value_schema = cast(StructType, _parse_datatype_string(value_schema))
+            self.value_schema = self._stateful_processor_api_client._parse_string_schema(
+                value_schema
+            )
         else:
             self.value_schema = value_schema
         # Dictionaries to store the mapping between iterator id and a tuple of pandas DataFrame

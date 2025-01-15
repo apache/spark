@@ -73,11 +73,21 @@ class SparkConnectConfigHandler(responseObserver: StreamObserver[proto.ConfigRes
   private def handleSet(
       operation: proto.ConfigRequest.Set,
       conf: RuntimeConfig): proto.ConfigResponse.Builder = {
+    val silent = operation.hasSilent && operation.getSilent
     val builder = proto.ConfigResponse.newBuilder()
     operation.getPairsList.asScala.iterator.foreach { pair =>
       val (key, value) = SparkConnectConfigHandler.toKeyValue(pair)
-      conf.set(key, value.orNull)
-      getWarning(key).foreach(builder.addWarnings)
+      try {
+        conf.set(key, value.orNull)
+        getWarning(key).foreach(builder.addWarnings)
+      } catch {
+        case e: Throwable =>
+          if (silent) {
+            builder.addWarnings(s"Failed to set $key to $value due to ${e.getMessage}")
+          } else {
+            throw e
+          }
+      }
     }
     builder
   }
