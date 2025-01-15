@@ -27,7 +27,7 @@ import org.apache.spark.annotation.{Evolving, Experimental}
  */
 @Experimental
 @Evolving
- trait QueryInfo extends Serializable {
+trait QueryInfo extends Serializable {
 
   /** Returns the streaming query id associated with stateful operator */
   def getQueryId: UUID
