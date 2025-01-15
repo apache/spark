@@ -1580,6 +1580,8 @@ class VariantType(AtomicType):
         return VariantVal(obj["value"], obj["metadata"])
 
     def toInternal(self, variant: Any) -> Any:
+        if variant is None:
+            return None
         assert isinstance(variant, VariantVal)
         return {"value": variant.value, "metadata": variant.metadata}
 
