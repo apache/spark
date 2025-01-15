@@ -22,11 +22,11 @@ import scala.jdk.CollectionConverters._
 import org.apache.spark.{SparkEnv, SparkException, TaskContext}
 import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.{InternalRow, ProjectingInternalRow}
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, LogicalPlan, TableSpec, UnaryNode}
-import org.apache.spark.sql.catalyst.util.{removeInternalMetadata, CharVarcharUtils, WriteDeltaProjections}
+import org.apache.spark.sql.catalyst.util.{removeInternalMetadata, CharVarcharUtils, METADATA_COL_ATTR_KEY, WriteDeltaProjections}
 import org.apache.spark.sql.catalyst.util.RowDeltaUtils.{DELETE_OPERATION, INSERT_OPERATION, UPDATE_OPERATION}
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Column, Identifier, StagedTable, StagingTableCatalog, Table, TableCatalog, TableWritePrivilege}
 import org.apache.spark.sql.connector.expressions.Transform
@@ -287,6 +287,28 @@ case class ReplaceDataExec(
 
   override val stringArgs: Iterator[Any] = Iterator(query, write)
 
+  override def writingTask: WritingSparkTask[_] = {
+    computeMetadataAndDataColOrdinals(query.schema) match {
+      case (metadataColOrdinals, dataColOrdinals) if metadataColOrdinals.nonEmpty =>
+        val dataProjection = ProjectingInternalRow(dataColOrdinals)
+        val metadataProjection = ProjectingInternalRow(metadataColOrdinals)
+        DataAndMetadataWritingSparkTask(dataProjection, metadataProjection)
+      case _ =>
+        DataWritingSparkTask
+    }
+  }
+
+  private def computeMetadataAndDataColOrdinals(schema: StructType): (Seq[Int], Seq[Int]) = {
+    schema.zipWithIndex.foldLeft((Seq.empty[Int], Seq.empty[Int])) {
+      case ((metadataOrdinals, dataOrdinals), (field, ordinal)) =>
+        if (field.metadata.contains(METADATA_COL_ATTR_KEY)) {
+          (metadataOrdinals :+ ordinal, dataOrdinals)
+        } else {
+          (metadataOrdinals, dataOrdinals :+ ordinal)
+        }
+    }
+  }
+
   override protected def withNewChildInternal(newChild: SparkPlan): ReplaceDataExec = {
     copy(query = newChild)
   }
@@ -542,6 +564,20 @@ trait WritingSparkTask[W <: DataWriter[InternalRow]] extends Logging with Serial
   }
 }
 
+case class DataAndMetadataWritingSparkTask(
+    dataProj: ProjectingInternalRow,
+    metadataProj: ProjectingInternalRow) extends WritingSparkTask[DataWriter[InternalRow]] {
+  override protected def write(
+      writer: DataWriter[InternalRow], iter: java.util.Iterator[InternalRow]): Unit = {
+    while (iter.hasNext) {
+      val row = iter.next()
+      dataProj.project(row)
+      metadataProj.project(row)
+      writer.write(metadataProj, dataProj)
+    }
+  }
+}
+
 object DataWritingSparkTask extends WritingSparkTask[DataWriter[InternalRow]] {
   override protected def write(
       writer: DataWriter[InternalRow], iter: java.util.Iterator[InternalRow]): Unit = {
@@ -609,7 +645,8 @@ case class DeltaWithMetadataWritingSparkTask(
 
         case INSERT_OPERATION =>
           rowProjection.project(row)
-          writer.insert(rowProjection)
+          metadataProjection.project(row)
+          writer.insert(metadataProjection, rowProjection)
 
         case other =>
           throw new SparkException(s"Unexpected operation ID: $other")

@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.trees.TreePattern
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, METADATA_COL_ATTR_KEY}
+import org.apache.spark.sql.connector.catalog.MetadataColumn
 import org.apache.spark.sql.types._
 import org.apache.spark.util.collection.BitSet
 import org.apache.spark.util.collection.ImmutableBitSet
@@ -503,8 +504,48 @@ object MetadataAttribute {
     .putString(METADATA_COL_ATTR_KEY, name)
     .build()
 
+  def metadata(col: MetadataColumn): Metadata = {
+    val builder = new MetadataBuilder()
+    if (col.metadataInJSON != null) {
+      builder.withMetadata(Metadata.fromJson(col.metadataInJSON))
+    }
+    builder.putString(METADATA_COL_ATTR_KEY, col.name)
+    builder.build()
+  }
+
+  def isValid(attr: Attribute): Boolean =
+    isValid(attr.metadata)
+
   def isValid(metadata: Metadata): Boolean =
     metadata.contains(METADATA_COL_ATTR_KEY)
+
+  def isPreservedOnDelete(attr: Attribute): Boolean = {
+    if (attr.metadata.contains(MetadataColumn.PRESERVE_ON_DELETE)) {
+      attr.metadata.getBoolean(MetadataColumn.PRESERVE_ON_DELETE)
+    } else {
+      MetadataColumn.PRESERVE_ON_DELETE_DEFAULT
+    }
+  }
+
+  def isPreservedOnUpdate(attr: Attribute): Boolean = {
+    if (attr.metadata.contains(MetadataColumn.PRESERVE_ON_UPDATE)) {
+      attr.metadata.getBoolean(MetadataColumn.PRESERVE_ON_UPDATE)
+    } else {
+      MetadataColumn.PRESERVE_ON_UPDATE_DEFAULT
+    }
+  }
+
+  def isPreservedOnInsertAsUpdate(attr: Attribute): Boolean = {
+    if (attr.metadata.contains(MetadataColumn.PRESERVE_ON_INSERT_AS_UPDATE)) {
+      attr.metadata.getBoolean(MetadataColumn.PRESERVE_ON_INSERT_AS_UPDATE)
+    } else {
+      MetadataColumn.PRESERVE_ON_INSERT_AS_UPDATE_DEFAULT
+    }
+  }
+
+  def isPreservedOnUpdateAsDeleteAndInsert(attr: Attribute): Boolean = {
+    isPreservedOnDelete(attr) && isPreservedOnInsertAsUpdate(attr)
+  }
 }
 
 /**

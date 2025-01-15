@@ -106,7 +106,7 @@ object RewriteDeleteFromTable extends RewriteRowLevelCommand {
     // construct a plan that only contains records to delete
     val deletedRowsPlan = Filter(cond, readRelation)
     val operationType = Alias(Literal(DELETE_OPERATION), OPERATION_COLUMN)()
-    val requiredWriteAttrs = dedupAttrs(rowIdAttrs ++ metadataAttrs)
+    val requiredWriteAttrs = nullifyMetadataOnDelete(dedupAttrs(rowIdAttrs ++ metadataAttrs))
     val project = Project(operationType +: requiredWriteAttrs, deletedRowsPlan)
 
     // build a plan to write deletes to the table

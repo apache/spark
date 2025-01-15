@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, AssignmentUtils,
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.catalog.{FunctionResource, RoutineLanguage}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSet, Expression, MetadataAttribute, NamedExpression, UnaryExpression, Unevaluable, V2ExpressionUtils}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSet, Expression, MetadataAttribute, UnaryExpression, Unevaluable, V2ExpressionUtils}
 import org.apache.spark.sql.catalyst.plans.DescribeCommandSchema
 import org.apache.spark.sql.catalyst.trees.BinaryLike
 import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, truncatedString, CharVarcharUtils, RowDeltaUtils, WriteDeltaProjections}
@@ -34,9 +34,10 @@ import org.apache.spark.sql.connector.catalog.procedures.BoundProcedure
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.connector.write.{DeltaWrite, RowLevelOperation, RowLevelOperationTable, SupportsDelta, Write}
+import org.apache.spark.sql.connector.write.RowLevelOperation.Command.{DELETE, MERGE, UPDATE}
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLType
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
-import org.apache.spark.sql.types.{BooleanType, DataType, IntegerType, MapType, MetadataBuilder, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{BooleanType, DataType, IntegerType, MapType, MetadataBuilder, StringType, StructType}
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
@@ -66,16 +67,22 @@ trait V2WriteCommand extends UnaryCommand with KeepAnalyzedQuery with CTEInChild
     assert(table.resolved && query.resolved,
       "`outputResolved` can only be called when `table` and `query` are both resolved.")
     // If the table doesn't require schema match, we don't need to resolve the output columns.
-    table.skipSchemaResolution || (query.output.size == table.output.size &&
-      query.output.zip(table.output).forall {
-        case (inAttr, outAttr) =>
-          val inType = CharVarcharUtils.getRawType(inAttr.metadata).getOrElse(inAttr.dataType)
-          val outType = CharVarcharUtils.getRawType(outAttr.metadata).getOrElse(outAttr.dataType)
-          // names and types must match, nullability must be compatible
-          inAttr.name == outAttr.name &&
-            DataType.equalsIgnoreCompatibleNullability(inType, outType) &&
-            (outAttr.nullable || !inAttr.nullable)
-      })
+    table.skipSchemaResolution || areCompatible(query.output, table.output)
+  }
+
+  protected def areCompatible(inAttrs: Seq[Attribute], outAttrs: Seq[Attribute]): Boolean = {
+    inAttrs.size == outAttrs.size && inAttrs.zip(outAttrs).forall {
+      case (inAttr, outAttr) => areCompatible(inAttr, outAttr)
+    }
+  }
+
+  private def areCompatible(inAttr: Attribute, outAttr: Attribute): Boolean = {
+    val inType = CharVarcharUtils.getRawType(inAttr.metadata).getOrElse(inAttr.dataType)
+    val outType = CharVarcharUtils.getRawType(outAttr.metadata).getOrElse(outAttr.dataType)
+    // names and types must match, nullability must be compatible
+    inAttr.name == outAttr.name &&
+      DataType.equalsIgnoreCompatibleNullability(inType, outType) &&
+      (outAttr.nullable || !inAttr.nullable)
   }
 
   def withNewQuery(newQuery: LogicalPlan): V2WriteCommand
@@ -209,6 +216,12 @@ trait RowLevelWrite extends V2WriteCommand with SupportsSubquery {
   def operation: RowLevelOperation
   def condition: Expression
   def originalTable: NamedRelation
+
+  protected def projectedMetadataAttrs: Seq[Attribute] = {
+    V2ExpressionUtils.resolveRefs[AttributeReference](
+      operation.requiredMetadataAttributes.toImmutableArraySeq,
+      originalTable)
+  }
 }
 
 /**
@@ -237,6 +250,8 @@ case class ReplaceData(
 
   override lazy val references: AttributeSet = query.outputSet
 
+  lazy val (inputMetadataAttrs, inputRowAttrs) = query.output.partition(MetadataAttribute.isValid)
+
   lazy val operation: RowLevelOperation = {
     EliminateSubqueryAliases(table) match {
       case DataSourceV2Relation(RowLevelOperationTable(_, operation), _, _, _, _) =>
@@ -248,31 +263,30 @@ case class ReplaceData(
     }
   }
 
-  // the incoming query may include metadata columns
-  lazy val dataInput: Seq[Attribute] = {
-    query.output.filter {
-      case MetadataAttribute(_) => false
-      case _ => true
-    }
-  }
-
   override def outputResolved: Boolean = {
     assert(table.resolved && query.resolved,
       "`outputResolved` can only be called when `table` and `query` are both resolved.")
+    rowAttrsResolved && metadataAttrsResolved
+  }
 
-    // take into account only incoming data columns and ignore metadata columns in the query
-    // they will be discarded after the logical write is built in the optimizer
-    // metadata columns may be needed to request a correct distribution or ordering
-    // but are not passed back to the data source during writes
+  private def rowAttrsResolved: Boolean = {
+    table.skipSchemaResolution || areCompatible(inputRowAttrs, table.output)
+  }
 
-    table.skipSchemaResolution || (dataInput.size == table.output.size &&
-      dataInput.zip(table.output).forall { case (inAttr, outAttr) =>
-        val outType = CharVarcharUtils.getRawType(outAttr.metadata).getOrElse(outAttr.dataType)
-        // names and types must match, nullability must be compatible
-        inAttr.name == outAttr.name &&
-          DataType.equalsIgnoreCompatibleNullability(inAttr.dataType, outType) &&
-          (outAttr.nullable || !inAttr.nullable)
-      })
+  private def metadataAttrsResolved: Boolean = {
+    val writeMetadataAttrs = projectedMetadataAttrs.map {
+      case attr if isMetadataNullabilityPreserved(attr) => attr
+      case attr => attr.withNullability(true)
+    }
+    areCompatible(inputMetadataAttrs, writeMetadataAttrs)
+  }
+
+  private def isMetadataNullabilityPreserved(attr: Attribute): Boolean = {
+    operation.command match {
+      case DELETE => true // metadata is preserved for copied over records
+      case UPDATE if MetadataAttribute.isPreservedOnUpdate(attr) => true
+      case _ => false
+    }
   }
 
   override def withNewQuery(newQuery: LogicalPlan): ReplaceData = copy(query = newQuery)
@@ -317,6 +331,24 @@ case class WriteDelta(
 
   override lazy val references: AttributeSet = query.outputSet
 
+  lazy val inputRowAttrs: Seq[Attribute] = {
+    projections.rowProjection match {
+      case Some(projection) => projection.colOrdinals.map(query.output)
+      case None => Nil
+    }
+  }
+
+  lazy val inputRowIdAttrs: Seq[Attribute] = {
+    projections.rowIdProjection.colOrdinals.map(query.output).map(fixInputRowIdAttr)
+  }
+
+  lazy val inputMetadataAttrs: Seq[Attribute] = {
+    projections.metadataProjection match {
+      case Some(projection) => projection.colOrdinals.map(query.output)
+      case None => Nil
+    }
+  }
+
   lazy val operation: SupportsDelta = {
     EliminateSubqueryAliases(table) match {
       case DataSourceV2Relation(RowLevelOperationTable(_, operation), _, _, _, _) =>
@@ -331,7 +363,6 @@ case class WriteDelta(
   override def outputResolved: Boolean = {
     assert(table.resolved && query.resolved,
       "`outputResolved` can only be called when `table` and `query` are both resolved.")
-
     operationResolved && rowAttrsResolved && rowIdAttrsResolved && metadataAttrsResolved
   }
 
@@ -340,56 +371,58 @@ case class WriteDelta(
     attr.name == RowDeltaUtils.OPERATION_COLUMN && attr.dataType == IntegerType && !attr.nullable
   }
 
-  // validates row projection output is compatible with table attributes
+  // validates input row attributes are compatible with write attributes
   private def rowAttrsResolved: Boolean = {
-    table.skipSchemaResolution || (projections.rowProjection match {
-      case Some(projection) =>
-        table.output.size == projection.schema.size &&
-          projection.schema.zip(table.output).forall { case (field, outAttr) =>
-            isCompatible(field, outAttr)
-          }
-      case None =>
-        true
-    })
+    val writeRowAttrs = if (operation.command == DELETE) Nil else table.output
+    table.skipSchemaResolution || areCompatible(inputRowAttrs, writeRowAttrs)
   }
 
-  // validates row ID projection output is compatible with row ID attributes
+  // validates input row ID attributes are compatible with write row ID attributes
   private def rowIdAttrsResolved: Boolean = {
-    val rowIdAttrs = V2ExpressionUtils.resolveRefs[AttributeReference](
+    val writeRowIdAttrs = V2ExpressionUtils.resolveRefs[AttributeReference](
       operation.rowId.toImmutableArraySeq,
       originalTable)
+    areCompatible(inputRowIdAttrs, writeRowIdAttrs)
+  }
 
-    val projectionSchema = projections.rowIdProjection.schema
-    rowIdAttrs.size == projectionSchema.size && projectionSchema.forall { field =>
-      rowIdAttrs.exists(rowIdAttr => isCompatible(field, rowIdAttr))
+  // adjusts input row ID attributes:
+  // - strip any internal prefixes from the name
+  // - fix nullability as row ID attributes are always set and projected for updates and deletes
+  //   but may be null if the incoming plan also contains inserts
+  private def fixInputRowIdAttr(attr: Attribute): Attribute = {
+    val adjustedName = attr.name.stripPrefix(RowDeltaUtils.ORIGINAL_ROW_ID_VALUE_PREFIX)
+    val adjustedNullability = if (canInputContainInserts) false else attr.nullable
+    attr.withName(adjustedName).withNullability(adjustedNullability)
+  }
+
+  private def canInputContainInserts: Boolean = {
+    operation.command match {
+      case UPDATE if operation.representUpdateAsDeleteAndInsert => true
+      case MERGE => true
+      case _ => false
     }
   }
 
   // validates metadata projection output is compatible with metadata attributes
   private def metadataAttrsResolved: Boolean = {
-    projections.metadataProjection match {
-      case Some(projection) =>
-        val metadataAttrs = V2ExpressionUtils.resolveRefs[AttributeReference](
-          operation.requiredMetadataAttributes.toImmutableArraySeq,
-          originalTable)
-
-        val projectionSchema = projection.schema
-        metadataAttrs.size == projectionSchema.size && projectionSchema.forall { field =>
-          metadataAttrs.exists(metadataAttr => isCompatible(field, metadataAttr))
-        }
-      case None =>
-        true
+    val writeMetadataAttrs = projectedMetadataAttrs.map {
+      case attr if isMetadataNullabilityPreserved(attr) => attr
+      case attr => attr.withNullability(true)
     }
+    areCompatible(inputMetadataAttrs, writeMetadataAttrs)
   }
 
-  // checks if a projection field is compatible with a table attribute
-  private def isCompatible(inField: StructField, outAttr: NamedExpression): Boolean = {
-    val inType = CharVarcharUtils.getRawType(inField.metadata).getOrElse(inField.dataType)
-    val outType = CharVarcharUtils.getRawType(outAttr.metadata).getOrElse(outAttr.dataType)
-    // names and types must match, nullability must be compatible
-    inField.name == outAttr.name &&
-      DataType.equalsIgnoreCompatibleNullability(inType, outType) &&
-      (outAttr.nullable || !inField.nullable)
+  private def isMetadataNullabilityPreserved(attr: Attribute): Boolean = {
+    operation.command match {
+      case DELETE =>
+        MetadataAttribute.isPreservedOnDelete(attr)
+      case UPDATE if operation.representUpdateAsDeleteAndInsert =>
+        MetadataAttribute.isPreservedOnUpdateAsDeleteAndInsert(attr)
+      case UPDATE =>
+        MetadataAttribute.isPreservedOnUpdate(attr)
+      case MERGE =>
+        false
+    }
   }
 
   override def withNewQuery(newQuery: LogicalPlan): V2WriteCommand = copy(query = newQuery)

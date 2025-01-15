@@ -430,7 +430,8 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
   private def toInstruction(action: MergeAction, metadataAttrs: Seq[Attribute]): Instruction = {
     action match {
       case UpdateAction(cond, assignments) =>
-        val output = assignments.map(_.value) ++ metadataAttrs
+        val metadataValues = nullifyMetadataOnUpdate(metadataAttrs)
+        val output = assignments.map(_.value) ++ metadataValues
         Keep(cond.getOrElse(TrueLiteral), output)
 
       case DeleteAction(cond) =>
@@ -460,7 +461,7 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
     action match {
       case UpdateAction(cond, assignments) if splitUpdates =>
         val output = deltaDeleteOutput(rowAttrs, rowIdAttrs, metadataAttrs, originalRowIdValues)
-        val otherOutput = deltaInsertOutput(assignments, metadataAttrs, originalRowIdValues)
+        val otherOutput = deltaInsertAsUpdateOutput(assignments, metadataAttrs, originalRowIdValues)
         Split(cond.getOrElse(TrueLiteral), output, otherOutput)
 
       case UpdateAction(cond, assignments) =>
