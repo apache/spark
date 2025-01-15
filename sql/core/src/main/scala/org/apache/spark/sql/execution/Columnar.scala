@@ -18,16 +18,21 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.broadcast
+import org.apache.spark.internal.LogKeys.{BATCH_SCAN_EXEC, NON_PARTITION_ATTRIBUTES}
+import org.apache.spark.internal.MDC
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Attribute, SortOrder, SpecializedGetters}
+import org.apache.spark.sql.catalyst.expressions.{And, Attribute, BindReferences, Expression, InWithBroadcastVar, SortOrder, SpecializedGetters}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.connector.read.{PushedBroadcastFilterData, SupportsRuntimeV2Filtering}
 import org.apache.spark.sql.errors.ExecutionErrors
 import org.apache.spark.sql.execution.command.DataWritingCommandExec
 import org.apache.spark.sql.execution.datasources.V1WriteCommand
+import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
+import org.apache.spark.sql.execution.joins.{BroadcastedJoinKeysWrapperImpl, BroadcastHashJoinExec, BroadcastHashJoinUtil, HashedRelation}
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.execution.vectorized.WritableColumnVector
 import org.apache.spark.sql.types._
@@ -69,6 +74,14 @@ case class ColumnarToRowExec(child: SparkPlan) extends ColumnarToRowTransition w
   // supportsColumnar requires to be only called on driver side, see also SPARK-37779.
   assert(Utils.isInRunningSparkTask || child.supportsColumnar)
 
+  private var processedBCVar: Boolean = false
+
+  private var filterCountCorrectionTerm: Option[String] = None
+
+  private var localSetOrHashedRelInitCode: String = ""
+
+  private var commonSingleFieldUnsafeRowWriterVar = ""
+
   override def output: Seq[Attribute] = child.output
 
   override def outputPartitioning: Partitioning = child.outputPartitioning
@@ -89,7 +102,7 @@ case class ColumnarToRowExec(child: SparkPlan) extends ColumnarToRowTransition w
       child.output,
       longMetric("numOutputRows"),
       longMetric("numInputBatches"))
-    if (conf.usePartitionEvaluator) {
+    val retVal = if (conf.usePartitionEvaluator) {
       child.executeColumnar().mapPartitionsWithEvaluator(evaluatorFactory)
     } else {
       child.executeColumnar().mapPartitionsWithIndexInternal { (index, batches) =>
@@ -97,6 +110,160 @@ case class ColumnarToRowExec(child: SparkPlan) extends ColumnarToRowTransition w
         evaluator.eval(index, batches)
       }
     }
+    val (batchScanOpt, pushedFilters) = getPushedBroadcastVarFilters
+    if (pushedFilters.isEmpty) {
+      this.checkForWarning(batchScanOpt)
+      retVal
+    } else {
+      val newFilterCondn = pushedFilters
+        .map(bcData => {
+          val attribute = this.output.find(_.name == bcData.columnName).get
+          InWithBroadcastVar(attribute, bcData.bcVar, "", "", "")
+        })
+        .reduce[Expression](And(_, _))
+      val boundExpr = BindReferences.bindReference(newFilterCondn, this.output)
+      retVal.mapPartitionsWithIndexInternal { (_, iter) =>
+        iter.filter { row =>
+          val r = boundExpr.eval(row).asInstanceOf[Boolean]
+          if (!r) evaluatorFactory.numOutputRows.set(evaluatorFactory.numOutputRows.value - 1)
+          r
+        }
+      }
+    }
+  }
+
+  override protected def doProduce(ctx: CodegenContext): String = {
+    if (!processedBCVar) {
+      processedBCVar = true
+      val (batchScanOpt, pushedBroadcastFiltersTemp) = getPushedBroadcastVarFilters
+      if (pushedBroadcastFiltersTemp.isEmpty) {
+        checkForWarning(batchScanOpt)
+      }
+      // Do not evaluate filter for the bottom most broadcast hash join as if
+      // the tuple is filtered to be selected, then it would unnecessary be again have to be
+      // evaluated.
+      val ignoreBroadcastVar = if (pushedBroadcastFiltersTemp.nonEmpty) {
+        var bhjToIgnore: Option[Long] = None
+        var current = this.parent
+        var keepGoing = true
+        while (keepGoing) {
+          bhjToIgnore = current match {
+            case bhj: BroadcastHashJoinExec =>
+              keepGoing = false
+              bhj.getBroadcastID
+            case x: CodegenSupport if x.isInstanceOf[UnaryExecNode] =>
+              current = current.parent
+              None
+            case _ =>
+              keepGoing = false
+              None
+          }
+        }
+        bhjToIgnore
+      } else {
+        None
+      }
+
+      val pushedBroadcastFilters = ignoreBroadcastVar.fold(pushedBroadcastFiltersTemp)(id =>
+        pushedBroadcastFiltersTemp.filterNot(_.bcVar.getBroadcastVarId == id))
+      if (pushedBroadcastFilters.isEmpty) {
+        this.doProduceNoBroadcastVarFilterInsert(ctx)
+      } else {
+        this.filterCountCorrectionTerm = Option(ctx.freshName("filterCountCorrection"))
+        // add broadcast vars as field of generated class and get the names of field storing the
+        // ref
+        val broadcastVarTermsFieldVarsToBCData = for (bcData <- pushedBroadcastFilters) yield {
+          bcData -> ctx.addReferenceObj(
+            "broadcastVarWrapper",
+            bcData.bcVar.asInstanceOf[BroadcastedJoinKeysWrapperImpl],
+            classOf[BroadcastedJoinKeysWrapperImpl].getName)
+        }
+        val localBroadcastVarTerms =
+          Array.fill[String](broadcastVarTermsFieldVarsToBCData.size)(ctx.freshName("localInset"))
+        this.commonSingleFieldUnsafeRowWriterVar = ctx.freshName("commonKeyUnsafeRowWriter")
+        localSetOrHashedRelInitCode = localBroadcastVarTerms
+          .zip(broadcastVarTermsFieldVarsToBCData)
+          .map { case (localTerm, (bcData, refTerm)) =>
+            val (termClass, funcToCall) =
+              if (bcData.bcVar.getTotalJoinKeys == 1) {
+                (classOf[HashedRelation].getName, "getUnderlyingRelation")
+              } else {
+                (classOf[java.util.Set[Any]].getName, "getKeysAsSet")
+              }
+            s"""
+               |$termClass $localTerm = $refTerm.$funcToCall();
+               |""".stripMargin
+          }
+          .mkString("\n")
+        val newFilterExpr = pushedBroadcastFilters
+          .zip(localBroadcastVarTerms)
+          .map { case (bcData, localInsetTerm) =>
+            val attribute = this.output.find(_.name == bcData.columnName).get
+            InWithBroadcastVar(
+              attribute,
+              bcData.bcVar,
+              this.filterCountCorrectionTerm.get,
+              localInsetTerm,
+              this.commonSingleFieldUnsafeRowWriterVar)
+          }
+          .reduce[Expression](And(_, _))
+        val filterPlan = FilterExec(newFilterExpr, ColumnarToRowExec.this)
+        filterPlan.produce(ctx, this.parent)
+      }
+    } else {
+      this.doProduceNoBroadcastVarFilterInsert(ctx)
+    }
+  }
+
+  private def checkForWarning(batchScanOpt: Option[BatchScanExec]): Unit = {
+    if (batchScanOpt.isDefined) {
+      val sr = batchScanOpt.get.scan.asInstanceOf[SupportsRuntimeV2Filtering]
+      val allAttribs = sr.allAttributes().map(BroadcastHashJoinUtil.convertNameReferencesToString)
+      val partitionColNames =
+        sr.partitionAttributes().map(BroadcastHashJoinUtil.convertNameReferencesToString)
+      val nonPartitionAttribs = batchScanOpt.get.proxyForPushedBroadcastVar
+        .fold(Seq.empty[String])(pds =>
+          pds
+            .flatMap(pd => pd.joiningKeysData.map(jkd => jkd.streamsideLeafJoinAttribIndex))
+            .map(allAttribs(_)))
+        .filterNot(name => partitionColNames.contains(name))
+      if (nonPartitionAttribs.nonEmpty) {
+        this.logWarning(log"Proxy for pushed broadcast var found, but no pushed filter data " +
+          log"returned : ${MDC(BATCH_SCAN_EXEC, batchScanOpt.get.toString)}. " +
+          log"Having missing BCVar corresponding to " +
+          log"${MDC(NON_PARTITION_ATTRIBUTES, nonPartitionAttribs.mkString(","))}")
+      }
+    }
+  }
+
+  private def getPushedBroadcastVarFilters
+  : (Option[BatchScanExec], scala.collection.Seq[PushedBroadcastFilterData]) = {
+    val batchScanOpt = this.child match {
+      case bs: BatchScanExec
+        if bs.scan.isInstanceOf[SupportsRuntimeV2Filtering] &&
+          bs.scan.asInstanceOf[SupportsRuntimeV2Filtering].getPushedBroadcastFiltersCount > 0 =>
+        Option(bs)
+
+      case InputAdapter(bs: BatchScanExec)
+        if bs.scan.isInstanceOf[SupportsRuntimeV2Filtering] &&
+          bs.scan.asInstanceOf[SupportsRuntimeV2Filtering].getPushedBroadcastFiltersCount > 0 =>
+        Option(bs)
+
+      case _ => None
+    }
+    val pushedBroadcastFilters = batchScanOpt
+      .map(bs => {
+        val sr = bs.scan.asInstanceOf[SupportsRuntimeV2Filtering]
+        import scala.jdk.CollectionConverters._
+
+        val allPushedBCvar = sr.getPushedBroadcastFilters.asScala
+        val partitionColNames =
+          sr.partitionAttributes().map(BroadcastHashJoinUtil.convertNameReferencesToString)
+        // identify non partition filters
+        allPushedBCvar.filterNot(pd => partitionColNames.contains(pd.columnName))
+      })
+      .getOrElse(Seq.empty)
+    (batchScanOpt, pushedBroadcastFilters.toSeq)
   }
 
   /**
@@ -134,7 +301,7 @@ case class ColumnarToRowExec(child: SparkPlan) extends ColumnarToRowTransition w
    * This produces an [[org.apache.spark.sql.catalyst.expressions.UnsafeRow]] for each row in
    * each batch.
    */
-  override protected def doProduce(ctx: CodegenContext): String = {
+  def doProduceNoBroadcastVarFilterInsert(ctx: CodegenContext): String = {
     // PhysicalRDD always just has one input
     val input = ctx.addMutableState("scala.collection.Iterator", "input",
       v => s"$v = inputs[0];")
@@ -169,6 +336,11 @@ case class ColumnarToRowExec(child: SparkPlan) extends ColumnarToRowTransition w
          |}""".stripMargin)
 
     ctx.currentVars = null
+    val filterCountInitCode =
+      this.filterCountCorrectionTerm.fold("")(name => s"${CodeGenerator.JAVA_LONG} $name = 0L")
+    val filterCountCorrectionCode =
+      this.filterCountCorrectionTerm.fold("")(name => s"$numOutputRows.subtract($name)")
+    val filterCountResetCode = this.filterCountCorrectionTerm.fold("")(name => s"$name = 0L")
     val rowidx = ctx.freshName("rowIdx")
     val columnsBatchInput = (output zip colVars).map { case (attr, colVar) =>
       genCodeColumnVector(ctx, colVar, rowidx, attr.dataType, attr.nullable)
@@ -177,14 +349,42 @@ case class ColumnarToRowExec(child: SparkPlan) extends ColumnarToRowTransition w
     val localEnd = ctx.freshName("localEnd")
     val numRows = ctx.freshName("numRows")
     val shouldStop = if (parent.needStopCheck) {
-      s"if (shouldStop()) { $idx = $rowidx + 1; return; }"
+      if (filterCountCorrectionTerm.isDefined) {
+        s"""
+           |if (shouldStop()) {
+           |  $idx = $rowidx + 1;
+           |  $filterCountCorrectionCode;
+           |  $filterCountResetCode;
+           |  return;
+           |}""".stripMargin
+      } else {
+        s"""
+           |if (shouldStop()) {
+           |  $idx = $rowidx + 1;
+           |  return;
+           |}""".stripMargin
+      }
     } else {
       "// shouldStop check is eliminated"
     }
+    val unsafeRowWriterInitCode = if (this.commonSingleFieldUnsafeRowWriterVar.isEmpty) {
+      ""
+    } else {
+      val unsafeRowWriterClass = classOf[UnsafeRowWriter].getName
+      s"""
+         |$unsafeRowWriterClass $commonSingleFieldUnsafeRowWriterVar =
+         | new $unsafeRowWriterClass(1, 64);
+         |// $commonSingleFieldUnsafeRowWriterVar.resetRowWriter();
+         |""".stripMargin
+    }
+
     s"""
        |if ($batch == null) {
        |  $nextBatchFuncName();
        |}
+       |$filterCountInitCode;
+       |$localSetOrHashedRelInitCode
+       |$unsafeRowWriterInitCode
        |while ($limitNotReachedCond $batch != null) {
        |  int $numRows = $batch.numRows();
        |  int $localEnd = $numRows - $idx;
@@ -194,6 +394,8 @@ case class ColumnarToRowExec(child: SparkPlan) extends ColumnarToRowTransition w
        |    $shouldStop
        |  }
        |  $idx = $numRows;
+       |  $filterCountCorrectionCode;
+       |  $filterCountResetCode;
        |  $batch.closeIfFreeable();
        |  $batch = null;
        |  $nextBatchFuncName();
