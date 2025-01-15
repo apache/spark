@@ -36,7 +36,6 @@ import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.state._
 import org.apache.spark.sql.functions.timestamp_seconds
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.SQLConf.STREAMING_STATE_STORE_ENCODING_FORMAT
 import org.apache.spark.sql.streaming.util.StreamManualClock
 import org.apache.spark.sql.types._
 import org.apache.spark.tags.SlowSQLTest
@@ -1816,8 +1815,7 @@ class TransformWithStateSuite extends StateStoreMetricsTest
           TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString) {
         withTempDir { checkpointDir =>
           // When Avro is used, we want to set the StructFields to nullable
-          val shouldBeNullable = SQLConf.get.getConf(
-            STREAMING_STATE_STORE_ENCODING_FORMAT) == StateStoreEncoding.Avro.toString
+          val shouldBeNullable = usingAvroEncoding()
           val metadataPathPostfix = "state/0/_stateSchema/default"
           val stateSchemaPath = new Path(checkpointDir.toString,
             s"$metadataPathPostfix")
