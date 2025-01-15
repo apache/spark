@@ -374,6 +374,19 @@ object SchemaConverters extends Logging {
     }
   }
 
+  private def createDefaultStruct(st: StructType): java.util.HashMap[String, Any] = {
+    val defaultMap = new java.util.HashMap[String, Any]()
+    st.fields.foreach { field =>
+      field.dataType match {
+        case nested: StructType =>
+          defaultMap.put(field.name, createDefaultStruct(nested))
+        case _ =>
+          defaultMap.put(field.name, null)
+      }
+    }
+    defaultMap
+  }
+
   def toAvroTypeWithDefaults(structType: StructType): Schema = {
     toAvroTypeWithDefaults(structType, "topLevelRecord", "", 0)
   }
@@ -413,7 +426,12 @@ object SchemaConverters extends Logging {
           innerType
         }
 
-        fieldsAssembler.name(field.name).`type`(fieldType).withDefault(null)
+        val defaultValue = field.dataType match {
+          case st: StructType => createDefaultStruct(st)
+          case _ => null
+        }
+
+        fieldsAssembler.name(field.name).`type`(fieldType).withDefault(defaultValue)
       }
     }
 
