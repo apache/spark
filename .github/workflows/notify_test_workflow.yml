@@ -119,7 +119,9 @@ jobs:
               let check_run_head;
               while (retryCount < 3) {
                 const check_runs = await github.request(check_run_endpoint, check_run_params);
+                console.log('check_runs: ' + check_runs)
                 check_run_head = check_runs.data.check_runs.find(r => r.name === "Run / Check changes");
+                console.log('check_run_head: ' + check_run_head)
                 if (check_run_head) {
                   break;
                 }
