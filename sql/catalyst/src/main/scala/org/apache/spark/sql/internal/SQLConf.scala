@@ -886,13 +886,12 @@ object SQLConf {
   lazy val TRIM_COLLATION_ENABLED =
     buildConf("spark.sql.collation.trim.enabled")
       .internal()
-      .doc(
-        "Trim collation feature is under development and its use should be done under this" +
-        "feature flag. Trim collation trims trailing whitespaces from strings."
+      .doc("When enabled allows the use of trim collations which trim trailing whitespaces from" +
+        " strings."
       )
       .version("4.0.0")
       .booleanConf
-      .createWithDefault(Utils.isTesting)
+      .createWithDefault(true)
 
   val DEFAULT_COLLATION =
     buildConf(SqlApiConfHelper.DEFAULT_COLLATION)
