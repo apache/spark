@@ -208,13 +208,11 @@ public class RocksDB implements KVStore {
       final Iterator<byte[]> serializedValueIter;
 
       // Deserialize outside synchronized block
-      {
-        List<byte[]> list = new ArrayList<>(entry.getValue().size());
-        for (Object value : entry.getValue()) {
-          list.add(serializer.serialize(value));
-        }
-        serializedValueIter = list.iterator();
+      List<byte[]> list = new ArrayList<>(entry.getValue().size());
+      for (Object value : entry.getValue()) {
+        list.add(serializer.serialize(value));
       }
+      serializedValueIter = list.iterator();
 
       final Class<?> klass = entry.getKey();
       final RocksDBTypeInfo ti = getTypeInfo(klass);
