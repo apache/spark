@@ -309,6 +309,15 @@ sql_kafka = Module(
     ],
 )
 
+profiler = Module(
+    name="profiler",
+    dependencies=[],
+    build_profile_flags=["-Pjvm-profiler"],
+    source_file_regexes=[
+        "connector/profiler",
+    ],
+)
+
 protobuf = Module(
     name="protobuf",
     dependencies=[sql],
@@ -1107,7 +1116,7 @@ pyspark_ml_connect = Module(
         "pyspark.ml.tests.connect.test_connect_classification",
         "pyspark.ml.tests.connect.test_connect_pipeline",
         "pyspark.ml.tests.connect.test_connect_tuning",
-        "pyspark.ml.tests.connect.test_connect_spark_ml_classification",
+        "pyspark.ml.tests.connect.test_parity_classification",
     ],
     excluded_python_implementations=[
         "PyPy"  # Skip these tests under PyPy since they require numpy, pandas, and pyarrow and

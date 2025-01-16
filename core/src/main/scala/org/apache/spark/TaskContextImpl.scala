@@ -17,6 +17,7 @@
 
 package org.apache.spark
 
+import java.io.Closeable
 import java.util.{Properties, Stack}
 import javax.annotation.concurrent.GuardedBy
 
@@ -81,6 +82,13 @@ private[spark] class TaskContextImpl(
 
   // If defined, the corresponding task has been killed and this option contains the reason.
   @volatile private var reasonIfKilled: Option[String] = None
+
+  // The pending interruption request, which is blocked by uninterruptible resource creation.
+  // Should be protected by `TaskContext.synchronized`.
+  private var pendingInterruptRequest: Option[(Option[Thread], String)] = None
+
+  // Whether this task is able to be interrupted. Should be protected by `TaskContext.synchronized`.
+  private var _interruptible = true
 
   // Whether the task has completed.
   private var completed: Boolean = false
@@ -296,4 +304,39 @@ private[spark] class TaskContextImpl(
   private[spark] override def fetchFailed: Option[FetchFailedException] = _fetchFailedException
 
   private[spark] override def getLocalProperties: Properties = localProperties
+
+
+  override def interruptible(): Boolean = TaskContext.synchronized(_interruptible)
+
+  override def pendingInterrupt(threadToInterrupt: Option[Thread], reason: String): Unit = {
+    TaskContext.synchronized {
+      pendingInterruptRequest = Some((threadToInterrupt, reason))
+    }
+  }
+
+  def createResourceUninterruptibly[T <: Closeable](resourceBuilder: => T): T = {
+
+    @inline def interruptIfRequired(): Unit = {
+      pendingInterruptRequest.foreach { case (threadToInterrupt, reason) =>
+        markInterrupted(reason)
+        threadToInterrupt.foreach(_.interrupt())
+      }
+      killTaskIfInterrupted()
+    }
+
+    TaskContext.synchronized {
+      interruptIfRequired()
+      _interruptible = false
+    }
+    try {
+      val resource = resourceBuilder
+      addTaskCompletionListener[Unit](_ => resource.close())
+      resource
+    } finally {
+      TaskContext.synchronized {
+        _interruptible = true
+        interruptIfRequired()
+      }
+    }
+  }
 }

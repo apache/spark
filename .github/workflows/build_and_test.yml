@@ -108,7 +108,7 @@ jobs:
             ui=false
             docs=false
           fi
-          build=`./dev/is-changed.py -m "core,unsafe,kvstore,avro,utils,network-common,network-shuffle,repl,launcher,examples,sketch,variant,api,catalyst,hive-thriftserver,mllib-local,mllib,graphx,streaming,sql-kafka-0-10,streaming-kafka-0-10,streaming-kinesis-asl,kubernetes,hadoop-cloud,spark-ganglia-lgpl,protobuf,yarn,connect,sql,hive"`
+          build=`./dev/is-changed.py -m "core,unsafe,kvstore,avro,utils,network-common,network-shuffle,repl,launcher,examples,sketch,variant,api,catalyst,hive-thriftserver,mllib-local,mllib,graphx,streaming,sql-kafka-0-10,streaming-kafka-0-10,streaming-kinesis-asl,kubernetes,hadoop-cloud,spark-ganglia-lgpl,profiler,protobuf,yarn,connect,sql,hive"`
           precondition="
             {
               \"build\": \"$build\",
@@ -242,7 +242,7 @@ jobs:
           - >-
             api, catalyst, hive-thriftserver
           - >-
-            mllib-local, mllib, graphx
+            mllib-local, mllib, graphx, profiler
           - >-
             streaming, sql-kafka-0-10, streaming-kafka-0-10, streaming-kinesis-asl,
             kubernetes, hadoop-cloud, spark-ganglia-lgpl, protobuf, connect
@@ -745,12 +745,11 @@ jobs:
       uses: bufbuild/buf-lint-action@v1
       with:
         input: core/src/main/protobuf
-    # Change 'branch-3.5' to 'branch-4.0' in master branch after cutting branch-4.0 branch.
-    - name: Breaking change detection against branch-3.5
+    - name: Breaking change detection against branch-4.0
       uses: bufbuild/buf-breaking-action@v1
       with:
         input: sql/connect/common/src/main
-        against: 'https://github.com/apache/spark.git#branch=branch-3.5,subdir=connector/connect/common/src/main'
+        against: 'https://github.com/apache/spark.git#branch=branch-4.0,subdir=sql/connect/common/src/main'
     - name: Install Python 3.11
       uses: actions/setup-python@v5
       with:

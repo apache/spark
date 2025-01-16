@@ -129,7 +129,9 @@ object TextInputJsonDataSource extends JsonDataSource {
       file: PartitionedFile,
       parser: JacksonParser,
       schema: StructType): Iterator[InternalRow] = {
-    val linesReader = new HadoopFileLinesReader(file, parser.options.lineSeparatorInRead, conf)
+    val linesReader = Utils.createResourceUninterruptiblyIfInTaskThread(
+      new HadoopFileLinesReader(file, parser.options.lineSeparatorInRead, conf)
+    )
     Option(TaskContext.get()).foreach(_.addTaskCompletionListener[Unit](_ => linesReader.close()))
     val textParser = parser.options.encoding
       .map(enc => CreateJacksonParser.text(enc, _: JsonFactory, _: Text))
@@ -211,7 +213,9 @@ object MultiLineJsonDataSource extends JsonDataSource {
       schema: StructType): Iterator[InternalRow] = {
     def partitionedFileString(ignored: Any): UTF8String = {
       Utils.tryWithResource {
-        CodecStreams.createInputStreamWithCloseResource(conf, file.toPath)
+        Utils.createResourceUninterruptiblyIfInTaskThread {
+          CodecStreams.createInputStreamWithCloseResource(conf, file.toPath)
+        }
       } { inputStream =>
         UTF8String.fromBytes(ByteStreams.toByteArray(inputStream))
       }

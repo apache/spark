@@ -62,7 +62,7 @@ from pyspark.ml.param.shared import (
     HasSolver,
     HasParallelism,
 )
-from pyspark.ml.remote.util import try_remote_attribute_relation
+from pyspark.ml.util import try_remote_attribute_relation
 from pyspark.ml.tree import (
     _DecisionTreeModel,
     _DecisionTreeParams,

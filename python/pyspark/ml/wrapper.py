@@ -19,7 +19,7 @@ from abc import ABCMeta, abstractmethod
 from typing import Any, Generic, Optional, List, Type, TypeVar, TYPE_CHECKING
 
 from pyspark import since
-from pyspark.ml.remote.util import (
+from pyspark.ml.util import (
     try_remote_transform_relation,
     try_remote_call,
     try_remote_fit,
