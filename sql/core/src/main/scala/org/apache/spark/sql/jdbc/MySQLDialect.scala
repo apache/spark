@@ -121,7 +121,8 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper with No
         // To avoid breaking code relying on ResultSet metadata, we support BIGINT only at
         // this time.
         case LongType => "SIGNED INTEGER"
-        case ShortType | IntegerType => QueryExecutionErrors.notSupportTypeError(dataType)
+        case ShortType | IntegerType =>
+            QueryExecutionErrors.unsupportedJdbcTypeError(dataType.catalogString)
         // MySQL uses BINARY in the cast function for the type BLOB
         case BinaryType => "BINARY"
         case _ => getJDBCType(dataType).map(_.databaseTypeDefinition).getOrElse(dataType.typeName)
