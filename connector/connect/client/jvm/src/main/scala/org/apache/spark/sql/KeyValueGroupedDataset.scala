@@ -390,7 +390,6 @@ private class KeyValueGroupedDatasetImpl[K, V, IK, IV](
     private val valueMapFunc: Option[IV => V],
     private val keysFunc: () => Dataset[IK])
     extends KeyValueGroupedDataset[K, V] {
-
   import sparkSession.RichColumn
 
   lazy val groupingExprs = groupingColumns.map(_.expr).asJava
