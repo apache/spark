@@ -21,8 +21,6 @@ name: Build and test
 
 on:
   workflow_call:
-    permissions:
-      contents: read
     inputs:
       java:
         required: false
@@ -48,12 +46,6 @@ on:
         description: >-
           Jobs to run, and should be in JSON format. The values should be matched with the job's key defined
           in this file, e.g., build. See precondition job below.
-        required: false
-        type: string
-        default: ''
-    secrets:
-      codecov_token:
-        description: The token of codecov.
         required: false
         type: string
         default: ''
