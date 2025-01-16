@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.executor.profiler
+package org.apache.spark.profiler
 
 import java.io.{BufferedInputStream, FileInputStream, InputStream, IOException}
 import java.util.concurrent.{ScheduledExecutorService, TimeUnit}
@@ -24,32 +24,33 @@ import org.apache.hadoop.fs.{FileSystem, FSDataOutputStream, Path}
 import org.apache.hadoop.fs.permission.FsPermission
 
 import org.apache.spark.SparkConf
+import org.apache.spark.SparkContext.DRIVER_IDENTIFIER
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys.PATH
 import org.apache.spark.util.{ThreadUtils, Utils}
 
-
 /**
- * A class that enables the async JVM code profiler
+ * A class that wraps AsyncProfiler
  */
-private[spark] class ExecutorJVMProfiler(conf: SparkConf, executorId: String) extends Logging {
+private[spark] class SparkAsyncProfiler(conf: SparkConf, executorId: String) extends Logging {
 
   private var running = false
-  private val enableProfiler = conf.get(EXECUTOR_PROFILING_ENABLED)
-  private val profilerOptions = conf.get(EXECUTOR_PROFILING_OPTIONS)
-  private val profilerDfsDirOpt = conf.get(EXECUTOR_PROFILING_DFS_DIR)
-  private val profilerLocalDir = conf.get(EXECUTOR_PROFILING_LOCAL_DIR)
-  private val writeInterval = conf.get(EXECUTOR_PROFILING_WRITE_INTERVAL)
+  private val enableProfiler = conf.get(PROFILER_EXECUTOR_ENABLED)
+  private val profilerOptions = conf.get(PROFILER_ASYNC_PROFILER_OPTIONS)
+  private val profilerDfsDirOpt = conf.get(PROFILER_DFS_DIR)
+  private val profilerLocalDir = conf.get(PROFILER_LOCAL_DIR)
+  private val writeInterval = conf.get(PROFILER_DFS_WRITE_INTERVAL)
 
-  private val appId = try {
-    conf.getAppId
-  } catch {
-    case _: NoSuchElementException => "local-" + System.currentTimeMillis
+  // app_id and app_attempt_id is unavailable during drvier plugin initialization
+  private def getAppId: Option[String] = conf.getOption("spark.app.id")
+  private def getAttemptId: Option[String] = conf.getOption("spark.app.attempt.id")
+
+  private val profileFile = if (executorId == DRIVER_IDENTIFIER) {
+    s"profile-$executorId.jfr"
+  } else {
+    s"profile-exec-$executorId.jfr"
   }
-  private val appAttemptId = conf.getOption("spark.app.attempt.id")
-  private val baseName = Utils.nameForAppAndAttempt(appId, appAttemptId)
-  private val profileFile = s"profile-exec-$executorId.jfr"
 
   private val startcmd = s"start,$profilerOptions,file=$profilerLocalDir/$profileFile"
   private val stopcmd = s"stop,$profilerOptions,file=$profilerLocalDir/$profileFile"
@@ -59,7 +60,7 @@ private[spark] class ExecutorJVMProfiler(conf: SparkConf, executorId: String) ex
   private val PROFILER_FOLDER_PERMISSIONS = new FsPermission(Integer.parseInt("770", 8).toShort)
   private val PROFILER_FILE_PERMISSIONS = new FsPermission(Integer.parseInt("660", 8).toShort)
   private val UPLOAD_SIZE = 8 * 1024 * 1024 // 8 MB
-  private var outputStream: FSDataOutputStream = _
+  @volatile private var outputStream: FSDataOutputStream = _
   private var inputStream: InputStream = _
   private val dataBuffer = new Array[Byte](UPLOAD_SIZE)
   private var threadpool: ScheduledExecutorService = _
@@ -76,14 +77,14 @@ private[spark] class ExecutorJVMProfiler(conf: SparkConf, executorId: String) ex
       try {
         profiler.foreach(p => {
           p.execute(startcmd)
-          logInfo("Executor JVM profiling started.")
+          logInfo("Profiling started.")
           running = true
           startWriting()
         })
       } catch {
         case e @ (_: IllegalArgumentException | _: IllegalStateException | _: IOException) =>
-          logError("JVM profiling aborted. Exception occurred in profiler native code: ", e)
-        case e: Exception => logWarning("Executor JVM profiling aborted due to exception: ", e)
+          logError("Profiling aborted. Exception occurred in async-profiler native code: ", e)
+        case e: Exception => logWarning("Profiling aborted due to exception: ", e)
       }
     }
   }
@@ -93,7 +94,7 @@ private[spark] class ExecutorJVMProfiler(conf: SparkConf, executorId: String) ex
     if (running) {
       profiler.foreach(p => {
         p.execute(stopcmd)
-        logInfo("JVM profiler stopped")
+        logInfo("Profiler stopped")
         running = false
         finishWriting()
       })
@@ -108,24 +109,8 @@ private[spark] class ExecutorJVMProfiler(conf: SparkConf, executorId: String) ex
   }
 
   private def startWriting(): Unit = {
-    profilerDfsDirOpt.foreach { profilerDfsDir =>
-      val profilerDirForApp = s"$profilerDfsDir/$baseName"
-      val profileOutputFile = s"$profilerDirForApp/$profileFile"
-
-      val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf)
-      val fs = Utils.getHadoopFileSystem(profilerDfsDir, hadoopConf)
-
-      requireProfilerBaseDirAsDirectory(fs, profilerDfsDir)
-
-      val profilerDirForAppPath = new Path(profilerDirForApp)
-      if (!fs.exists(profilerDirForAppPath)) {
-        // SPARK-30860: use the class method to avoid the umask causing permission issues
-        FileSystem.mkdirs(fs, profilerDirForAppPath, PROFILER_FOLDER_PERMISSIONS)
-      }
-
-      outputStream = FileSystem.create(fs, new Path(profileOutputFile), PROFILER_FILE_PERMISSIONS)
+    profilerDfsDirOpt.foreach { _ =>
       try {
-        logInfo(log"Copying executor profiling file to ${MDC(PATH, profileOutputFile)}")
         inputStream = new BufferedInputStream(
           new FileInputStream(s"$profilerLocalDir/$profileFile"))
         threadpool = ThreadUtils.newDaemonSingleThreadScheduledExecutor("profilerOutputThread")
@@ -139,7 +124,7 @@ private[spark] class ExecutorJVMProfiler(conf: SparkConf, executorId: String) ex
         writing = true
       } catch {
         case e: Exception =>
-          logError("Failed to start JVM profiler", e)
+          logError("Failed to start profiler", e)
           if (threadpool != null) {
             threadpool.shutdownNow()
           }
@@ -157,6 +142,31 @@ private[spark] class ExecutorJVMProfiler(conf: SparkConf, executorId: String) ex
     if (!writing) {
       return
     }
+
+    if (outputStream == null) {
+      while (getAppId.isEmpty) {
+        logDebug("Waiting for Spark application started")
+        Thread.sleep(1000L)
+      }
+      val baseName = Utils.nameForAppAndAttempt(getAppId.get, getAttemptId)
+      val profilerDirForApp = s"${profilerDfsDirOpt.get}/$baseName"
+      val profileOutputFile = s"$profilerDirForApp/$profileFile"
+
+      val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf)
+      val fs = Utils.getHadoopFileSystem(profilerDfsDirOpt.get, hadoopConf)
+
+      requireProfilerBaseDirAsDirectory(fs, profilerDfsDirOpt.get)
+
+      val profilerDirForAppPath = new Path(profilerDirForApp)
+      if (!fs.exists(profilerDirForAppPath)) {
+        // SPARK-30860: use the class method to avoid the umask causing permission issues
+        FileSystem.mkdirs(fs, profilerDirForAppPath, PROFILER_FOLDER_PERMISSIONS)
+      }
+
+      logInfo(log"Copying profiling file to ${MDC(PATH, profileOutputFile)}")
+      outputStream = FileSystem.create(fs, new Path(profileOutputFile), PROFILER_FILE_PERMISSIONS)
+    }
+
     try {
       // stop (pause) the profiler, dump the results and then resume. This is not ideal as we miss
       // the events while the file is being dumped, but that is the only way to make sure that

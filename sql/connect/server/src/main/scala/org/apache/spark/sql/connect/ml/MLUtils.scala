@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.connect.ml
 
-import java.util.ServiceLoader
+import java.util.{Optional, ServiceLoader}
 
 import scala.collection.immutable.HashSet
 import scala.jdk.CollectionConverters._
@@ -28,10 +28,11 @@ import org.apache.spark.connect.proto
 import org.apache.spark.ml.{Estimator, Transformer}
 import org.apache.spark.ml.linalg.{Matrices, Matrix, Vector, Vectors}
 import org.apache.spark.ml.param.Params
-import org.apache.spark.ml.util.MLWritable
+import org.apache.spark.ml.util.{MLReadable, MLWritable}
 import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.connect.common.LiteralValueProtoConverter
 import org.apache.spark.sql.connect.planner.SparkConnectPlanner
+import org.apache.spark.sql.connect.plugin.SparkConnectPluginRegistry
 import org.apache.spark.sql.connect.service.SessionHolder
 import org.apache.spark.util.{SparkClassUtils, Utils}
 
@@ -41,7 +42,7 @@ private[ml] object MLUtils {
    * Load the registered ML operators via ServiceLoader
    *
    * @param mlCls
-   *   the operator class
+   *   the operator class that will be loaded
    * @return
    *   a Map with name and class
    */
@@ -51,10 +52,6 @@ private[ml] object MLUtils {
     val providers = serviceLoader.asScala.toList
     providers.map(est => est.getClass.getName -> est.getClass).toMap
   }
-
-  private lazy val estimators = loadOperators(classOf[Estimator[_]])
-
-  private lazy val transformers = loadOperators(classOf[Transformer])
 
   def deserializeVector(vector: proto.Vector): Vector = {
     if (vector.hasDense) {
@@ -229,8 +226,23 @@ private[ml] object MLUtils {
   }
 
   /**
+   * Replace the operator with the value provided by the backend.
+   */
+  private def replaceOperator(sessionHolder: SessionHolder, name: String): String = {
+    SparkConnectPluginRegistry
+      .mlBackendRegistry(sessionHolder.session.sessionState.conf)
+      .view
+      .map(p => p.transform(name))
+      .find(_.isPresent) // First come, first served
+      .getOrElse(Optional.of(name))
+      .get()
+  }
+
+  /**
    * Get the Estimator instance according to the proto information
    *
+   * @param sessionHolder
+   *   session holder to hold the Spark Connect session state
    * @param operator
    *   MlOperator information
    * @param params
@@ -238,29 +250,41 @@ private[ml] object MLUtils {
    * @return
    *   the estimator
    */
-  def getEstimator(operator: proto.MlOperator, params: Option[proto.MlParams]): Estimator[_] = {
-    val name = operator.getName
+  def getEstimator(
+      sessionHolder: SessionHolder,
+      operator: proto.MlOperator,
+      params: Option[proto.MlParams]): Estimator[_] = {
+    val name = replaceOperator(sessionHolder, operator.getName)
     val uid = operator.getUid
+
+    // Load the estimator by ServiceLoader everytime
+    val estimators = loadOperators(classOf[Estimator[_]])
     getInstance[Estimator[_]](name, uid, estimators, params)
   }
 
   /**
    * Get the transformer instance according to the transform proto
    *
+   * @param sessionHolder
+   *   session holder to hold the Spark Connect session state
    * @param transformProto
    *   transform proto
    * @return
    *   a transformer
    */
-  def getTransformer(transformProto: proto.MlRelation.Transform): Transformer = {
-    val name = transformProto.getTransformer.getName
+  def getTransformer(
+      sessionHolder: SessionHolder,
+      transformProto: proto.MlRelation.Transform): Transformer = {
+    val name = replaceOperator(sessionHolder, transformProto.getTransformer.getName)
     val uid = transformProto.getTransformer.getUid
     val params = transformProto.getParams
+    // Load the transformer by ServiceLoader everytime.
+    val transformers = loadOperators(classOf[Transformer])
     getInstance[Transformer](name, uid, transformers, Some(params))
   }
 
   /**
-   * Call "load: function on the ML operator given the operator name
+   * Call "load" function on the ML operator given the operator name
    *
    * @param className
    *   the ML operator name
@@ -269,8 +293,18 @@ private[ml] object MLUtils {
    * @return
    *   the ML instance
    */
-  def load(className: String, path: String): Object = {
-    val loadedMethod = SparkClassUtils.classForName(className).getMethod("load", classOf[String])
+  def load(sessionHolder: SessionHolder, className: String, path: String): Object = {
+    val name = replaceOperator(sessionHolder, className)
+
+    // It's the companion object of the corresponding spark operators to load.
+    val objectCls = SparkClassUtils.classForName(name + "$")
+    val mlReadableClass = classOf[MLReadable[_]]
+    // Make sure it is implementing MLReadable
+    if (!mlReadableClass.isAssignableFrom(objectCls)) {
+      throw MlUnsupportedException(s"$name must implement MLReadable.")
+    }
+
+    val loadedMethod = SparkClassUtils.classForName(name).getMethod("load", classOf[String])
     loadedMethod.invoke(null, path)
   }
 
@@ -279,9 +313,17 @@ private[ml] object MLUtils {
   // The attributes could be retrieved from the corresponding python class
   private lazy val ALLOWED_ATTRIBUTES = HashSet(
     "toString",
+    "toDebugString",
     "numFeatures",
     "predict", // PredictionModel
+    "predictLeaf", // Tree models
     "numClasses",
+    "depth", // DecisionTreeClassificationModel
+    "numNodes", // Tree models
+    "totalNumNodes", // Tree models
+    "javaTreeWeights", // Tree models
+    "treeWeights", // Tree models
+    "featureImportances", // Tree models
     "predictRaw", // ClassificationModel
     "predictProbability", // ProbabilisticClassificationModel
     "coefficients",
@@ -291,6 +333,7 @@ private[ml] object MLUtils {
     "summary",
     "hasSummary",
     "evaluate", // LogisticRegressionModel
+    "evaluateEachIteration", // GBTClassificationModel
     "predictions",
     "predictionCol",
     "labelCol",

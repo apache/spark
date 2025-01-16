@@ -276,6 +276,18 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val ANALYZER_DUAL_RUN_RETURN_SINGLE_PASS_RESULT =
+    buildConf("spark.sql.analyzer.singlePassResolver.returnSinglePassResultInDualRun")
+      .internal()
+      .doc(
+        "When true, return the result of the single-pass resolver as the result of the dual run " +
+        "analysis (which is used if the ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER flag " +
+        "value is true). Otherwise, return the result of the fixed-point analyzer."
+      )
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(Utils.isTesting)
+
   val ANALYZER_SINGLE_PASS_RESOLVER_VALIDATION_ENABLED =
     buildConf("spark.sql.analyzer.singlePassResolver.validationEnabled")
       .internal()
@@ -874,20 +886,33 @@ object SQLConf {
   lazy val TRIM_COLLATION_ENABLED =
     buildConf("spark.sql.collation.trim.enabled")
       .internal()
-      .doc(
-        "Trim collation feature is under development and its use should be done under this" +
-        "feature flag. Trim collation trims trailing whitespaces from strings."
+      .doc("When enabled allows the use of trim collations which trim trailing whitespaces from" +
+        " strings."
       )
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(true)
+
+  lazy val DEFAULT_COLLATION_ENABLED =
+    buildConf("spark.sql.sessionDefaultCollation.enabled")
+      .internal()
+      .doc("Session default collation feature is under development and its use should be done " +
+        "under this feature flag.")
       .version("4.0.0")
       .booleanConf
       .createWithDefault(Utils.isTesting)
 
   val DEFAULT_COLLATION =
     buildConf(SqlApiConfHelper.DEFAULT_COLLATION)
+      .internal()
       .doc("Sets default collation to use for string literals, parameter markers or the string" +
         " produced by a builtin function such as to_char or CAST")
       .version("4.0.0")
       .stringConf
+      .checkValue(
+        value => value == CollationNames.UTF8_BINARY || get.getConf(DEFAULT_COLLATION_ENABLED),
+        errorClass = "DEFAULT_COLLATION_NOT_SUPPORTED",
+        parameters = _ => Map.empty)
       .checkValue(
         collationName => {
           try {
