@@ -2175,7 +2175,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
     }
   }
 
-    test("flag for enabling session default collation") {
+  test("flag for enabling session default collation") {
     withSQLConf(SQLConf.DEFAULT_COLLATION_ENABLED.key -> "false") {
       checkError(
         exception = intercept[SparkThrowable] {
