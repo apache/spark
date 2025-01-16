@@ -82,7 +82,8 @@ def try_remote_attribute_relation(f: FuncT) -> FuncT:
     def wrapped(self: "JavaWrapper", *args: Any, **kwargs: Any) -> Any:
         if is_remote() and "PYSPARK_NO_NAMESPACE_SHARE" not in os.environ:
             import pyspark.sql.connect.proto as pb2
-            from pyspark.ml.connect.util import _extract_id_methods, serialize
+            from pyspark.ml.connect.util import _extract_id_methods
+            from pyspark.ml.connect.serialize import serialize
 
             # The attribute returns a dataframe, we need to wrap it
             # in the AttributeRelation
@@ -114,7 +115,7 @@ def try_remote_fit(f: FuncT) -> FuncT:
     def wrapped(self: "JavaEstimator", dataset: "ConnectDataFrame") -> Any:
         if is_remote() and "PYSPARK_NO_NAMESPACE_SHARE" not in os.environ:
             import pyspark.sql.connect.proto as pb2
-            from pyspark.ml.connect.util import serialize_ml_params, deserialize
+            from pyspark.ml.connect.serialize import serialize_ml_params, deserialize
 
             client = dataset.sparkSession.client
             input = dataset._plan.plan(client)
@@ -149,7 +150,7 @@ def try_remote_transform_relation(f: FuncT) -> FuncT:
             from pyspark.ml import Model, Transformer
             from pyspark.sql.connect.session import SparkSession
             from pyspark.sql.connect.dataframe import DataFrame as ConnectDataFrame
-            from pyspark.ml.connect.util import serialize_ml_params, deserialize
+            from pyspark.ml.connect.serialize import serialize_ml_params
 
             session = SparkSession.getActiveSession()
             assert session is not None
@@ -198,7 +199,8 @@ def try_remote_call(f: FuncT) -> FuncT:
             # Launch a remote call if possible
             import pyspark.sql.connect.proto as pb2
             from pyspark.sql.connect.session import SparkSession
-            from pyspark.ml.connect.util import _extract_id_methods, serialize, deserialize
+            from pyspark.ml.connect.util import _extract_id_methods
+            from pyspark.ml.connect.serialize import serialize, deserialize
 
             session = SparkSession.getActiveSession()
             assert session is not None
