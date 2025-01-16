@@ -28,6 +28,7 @@ jobs:
   call-build-and-test:
     permissions:
       packages: write
+      contents: read
     name: Run
     uses: ./.github/workflows/build_and_test.yml
     secrets:
