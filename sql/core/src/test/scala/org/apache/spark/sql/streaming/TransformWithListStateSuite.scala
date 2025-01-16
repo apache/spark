@@ -441,10 +441,10 @@ class TransformWithListStateSuite extends StreamTest
           StartStream(checkpointLocation = dir.getCanonicalPath),
           // Write data with initial schema
           AddData(inputData, "item1", "item2"),
-          CheckAnswer(("item1", 1), ("item2", 1)),
+          CheckNewAnswer(("item1", 1), ("item2", 1)),
           // Add more items to verify count increment
           AddData(inputData, "item1", "item3"),
-          CheckAnswer(("item1", 1), ("item2", 1), ("item1", 2), ("item3", 1)),
+          CheckNewAnswer(("item1", 2), ("item3", 1)),
           StopStream
         )
 
@@ -459,7 +459,7 @@ class TransformWithListStateSuite extends StreamTest
           StartStream(checkpointLocation = dir.getCanonicalPath),
           // Verify reading and migration of existing state
           AddData(inputData, "item1"),
-          CheckAnswer(
+          CheckNewAnswer(
             ("item1", "Migrated item item1 with count 1", 1),
             ("item1", "Migrated item item1 with count 2", 2),
             ("item1", "Updated item item1 with count 4", 4)),

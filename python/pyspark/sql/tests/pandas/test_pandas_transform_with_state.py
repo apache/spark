@@ -1313,7 +1313,6 @@ class TransformWithStateInPandasTestsMixin:
     def _run_evolution_test(
         self, processor, checkpoint_dir, check_results, df, check_exception=None
     ):
-
         output_schema = StructType(
             [
                 StructField("id", StringType(), True),
@@ -1883,15 +1882,15 @@ class BasicProcessor(StatefulProcessor):
     )
 
     def init(self, handle):
-
         self.state = handle.getValueState("state", self.state_schema)
 
     def handleInputRows(self, key, rows, timer_values) -> Iterator[pd.DataFrame]:
         for pdf in rows:
-            id_val = int(key[0])
-            name = f"name-{id_val}"
-            self.state.update((id_val, name))
-            yield pd.DataFrame({"id": [key[0]], "value": [{"id": id_val, "name": name}]})
+            pass
+        id_val = int(key[0])
+        name = f"name-{id_val}"
+        self.state.update((id_val, name))
+        yield pd.DataFrame({"id": [key[0]], "value": [{"id": id_val, "name": name}]})
 
     def close(self) -> None:
         pass
@@ -1907,42 +1906,44 @@ class AddFieldsProcessor(StatefulProcessor):
             StructField("score", FloatType(), True),
         ]
     )
+
     def init(self, handle):
         self.state = handle.getValueState("state", self.state_schema)
 
     def handleInputRows(self, key, rows, timer_values) -> Iterator[pd.DataFrame]:
         for pdf in rows:
-            id_val = int(key[0])
-            name = f"name-{id_val}"
+            pass
+        id_val = int(key[0])
+        name = f"name-{id_val}"
 
-            if self.state.exists():
-                state_data = self.state.get()
-                state_dict = {
-                    "id": state_data[0],
-                    "name": state_data[1],
-                    "count": state_data[2],
-                    "active": state_data[3],
-                    "score": state_data[4],
-                }
-            else:
-                state_dict = {
-                    "id": id_val,
-                    "name": name,
-                    "count": 100,
-                    "active": True,
-                    "score": 99.9,
-                }
+        if self.state.exists():
+            state_data = self.state.get()
+            state_dict = {
+                "id": state_data[0],
+                "name": state_data[1],
+                "count": state_data[2],
+                "active": state_data[3],
+                "score": state_data[4],
+            }
+        else:
+            state_dict = {
+                "id": id_val,
+                "name": name,
+                "count": 100,
+                "active": True,
+                "score": 99.9,
+            }
 
-            self.state.update(
-                (
-                    state_dict["id"],
-                    state_dict["name"] + '0',
-                    state_dict["count"],
-                    state_dict["active"],
-                    state_dict["score"],
-                )
+        self.state.update(
+            (
+                state_dict["id"],
+                state_dict["name"] + "0",
+                state_dict["count"],
+                state_dict["active"],
+                state_dict["score"],
             )
-            yield pd.DataFrame({"id": [key[0]], "value": [state_dict]})
+        )
+        yield pd.DataFrame({"id": [key[0]], "value": [state_dict]})
 
     def close(self) -> None:
         pass
@@ -1953,17 +1954,19 @@ class RemoveFieldsProcessor(StatefulProcessor):
     state_schema = StructType(
         [StructField("id", IntegerType(), True), StructField("name", StringType(), True)]
     )
+
     def init(self, handle):
         self.state = handle.getValueState("state", self.state_schema)
 
     def handleInputRows(self, key, rows, timer_values) -> Iterator[pd.DataFrame]:
         for pdf in rows:
-            id_val = int(key[0])
-            name = f"name-{id_val}"
-            if self.state.exists():
-                name = self.state.get()[1]
-            self.state.update((id_val, name))
-            yield pd.DataFrame({"id": [key[0]], "value": [{"id": id_val, "name": name}]})
+            pass
+        id_val = int(key[0])
+        name = f"name-{id_val}"
+        if self.state.exists():
+            name = self.state.get()[1]
+        self.state.update((id_val, name))
+        yield pd.DataFrame({"id": [key[0]], "value": [{"id": id_val, "name": name}]})
 
     def close(self) -> None:
         pass
@@ -1979,41 +1982,43 @@ class ReorderedFieldsProcessor(StatefulProcessor):
             StructField("active", BooleanType(), True),
         ]
     )
+
     def init(self, handle):
         self.state = handle.getValueState("state", self.state_schema)
 
     def handleInputRows(self, key, rows, timer_values) -> Iterator[pd.DataFrame]:
         for pdf in rows:
-            id_val = int(key[0])
-            name = f"name-{id_val}"
+            pass
+        id_val = int(key[0])
+        name = f"name-{id_val}"
 
-            if self.state.exists():
-                state_data = self.state.get()
-                state_dict = {
-                    "name": state_data[0],
-                    "id": state_data[1],
-                    "score": state_data[2],
-                    "count": state_data[3],
-                    "active": state_data[4],
-                }
-            else:
-                state_dict = {
-                    "name": name,
-                    "id": id_val,
-                    "score": 99.9,
-                    "count": 100,
-                    "active": True,
-                }
-            self.state.update(
-                (
-                    state_dict["name"],
-                    state_dict["id"],
-                    state_dict["score"],
-                    state_dict["count"],
-                    state_dict["active"],
-                )
+        if self.state.exists():
+            state_data = self.state.get()
+            state_dict = {
+                "name": state_data[0],
+                "id": state_data[1],
+                "score": state_data[2],
+                "count": state_data[3],
+                "active": state_data[4],
+            }
+        else:
+            state_dict = {
+                "name": name,
+                "id": id_val,
+                "score": 99.9,
+                "count": 100,
+                "active": True,
+            }
+        self.state.update(
+            (
+                state_dict["name"],
+                state_dict["id"],
+                state_dict["score"],
+                state_dict["count"],
+                state_dict["active"],
             )
-            yield pd.DataFrame({"id": [key[0]], "value": [state_dict]})
+        )
+        yield pd.DataFrame({"id": [key[0]], "value": [state_dict]})
 
     def close(self) -> None:
         pass
@@ -2026,18 +2031,19 @@ class UpcastProcessor(StatefulProcessor):
             StructField("name", StringType(), True),
         ]
     )
-    def init(self, handle):
 
+    def init(self, handle):
         self.state = handle.getValueState("state", self.state_schema)
 
     def handleInputRows(self, key, rows, timer_values) -> Iterator[pd.DataFrame]:
         for pdf in rows:
-            id_val = int(key[0])
-            name = f"name-{id_val}"
-            if self.state.exists():
-                id_val += (self.state.get()[0] + 1)
-            self.state.update((id_val, name))
-            yield pd.DataFrame({"id": [key[0]], "value": [{"id": id_val, "name": name}]})
+            pass
+        id_val = int(key[0])
+        name = f"name-{id_val}"
+        if self.state.exists():
+            id_val += self.state.get()[0] + 1
+        self.state.update((id_val, name))
+        yield pd.DataFrame({"id": [key[0]], "value": [{"id": id_val, "name": name}]})
 
     def close(self) -> None:
         pass
