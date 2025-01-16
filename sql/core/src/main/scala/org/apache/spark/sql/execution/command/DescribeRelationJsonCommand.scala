@@ -58,6 +58,13 @@ case class DescribeRelationJsonCommand(
         nullable = false,
         new MetadataBuilder().putString("comment", "JSON metadata of the table").build())()
     )) extends UnaryRunnableCommand {
+  private lazy val timestampFormatter = new Iso8601TimestampFormatter(
+    pattern = "yyyy-MM-dd'T'HH:mm:ss'Z'",
+    zoneId = ZoneId.of("UTC"),
+    locale = DateFormatter.defaultLocale,
+    legacyFormat = LegacyDateFormats.LENIENT_SIMPLE_DATE_FORMAT,
+    isParsing = true
+  )
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val jsonMap = mutable.LinkedHashMap[String, JValue]()
@@ -116,14 +123,6 @@ case class DescribeRelationJsonCommand(
 
     val normalizedKey = key.toLowerCase().replace(" ", "_")
     val renamedKey = renames.getOrElse(normalizedKey, normalizedKey)
-
-    val timestampFormatter = new Iso8601TimestampFormatter(
-      pattern = "yyyy-MM-dd'T'HH:mm:ss'Z'",
-      zoneId = ZoneId.of("UTC"),
-      locale = DateFormatter.defaultLocale,
-      legacyFormat = LegacyDateFormats.LENIENT_SIMPLE_DATE_FORMAT,
-      isParsing = true
-    )
 
     if (!jsonMap.contains(renamedKey) && !excludedKeys.contains(renamedKey)) {
       val formattedValue = renamedKey match {
