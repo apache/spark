@@ -21,19 +21,46 @@ import java.util.{Map => JMap}
 import scala.jdk.CollectionConverters._
 import scala.util.Random
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.api.plugin.{DriverPlugin, ExecutorPlugin, PluginContext, SparkPlugin}
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys.EXECUTOR_ID
-
 
 /**
  * Spark plugin to do profiling
  */
 class ProfilerPlugin extends SparkPlugin {
-  override def driverPlugin(): DriverPlugin = null
+  override def driverPlugin(): DriverPlugin = new ProfilerDriverPlugin
 
   override def executorPlugin(): ExecutorPlugin = new ProfilerExecutorPlugin
+}
+
+class ProfilerDriverPlugin extends DriverPlugin with Logging {
+
+  private var sparkConf: SparkConf = _
+  private var pluginCtx: PluginContext = _
+  private var profiler: SparkAsyncProfiler = _
+  private var driverProfilingEnabled: Boolean = _
+
+  override def init(sc: SparkContext, ctx: PluginContext): JMap[String, String] = {
+    pluginCtx = ctx
+    sparkConf = ctx.conf()
+    driverProfilingEnabled = sparkConf.get(PROFILER_DRIVER_ENABLED)
+    if (driverProfilingEnabled) {
+      logInfo("Driver starting profiling")
+      profiler = new SparkAsyncProfiler(sparkConf, pluginCtx.executorID())
+      profiler.start()
+    }
+
+    Map.empty[String, String].asJava
+  }
+
+  override def shutdown(): Unit = {
+    logInfo("Driver profiler shutting down")
+    if (profiler != null) {
+      profiler.stop()
+    }
+  }
 }
 
 class ProfilerExecutorPlugin extends ExecutorPlugin with Logging {

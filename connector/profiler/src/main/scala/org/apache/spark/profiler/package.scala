@@ -22,6 +22,13 @@ import org.apache.spark.internal.config.ConfigBuilder
 
 package object profiler {
 
+  private[profiler] val PROFILER_DRIVER_ENABLED =
+    ConfigBuilder("spark.profiler.driver.enabled")
+      .doc("Turn on profiling in driver.")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(false)
+
   private[profiler] val PROFILER_EXECUTOR_ENABLED =
     ConfigBuilder("spark.profiler.executor.enabled")
       .doc("Turn on profiling in executors.")
