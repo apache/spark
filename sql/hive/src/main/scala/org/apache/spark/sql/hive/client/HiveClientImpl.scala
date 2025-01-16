@@ -55,7 +55,9 @@ import org.apache.spark.sql.catalyst.analysis.{DatabaseAlreadyExistsException, N
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.Expression
-import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
+import org.apache.spark.sql.catalyst.parser.{AstBuilder, CatalystSqlParser, ParseException}
+import org.apache.spark.sql.catalyst.parser.ParserUtils.withOrigin
+import org.apache.spark.sql.catalyst.parser.SqlBaseParser.{ComplexColTypeContext}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces._
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
@@ -1090,6 +1092,9 @@ private[hive] class HiveClientImpl(
 }
 
 private[hive] object HiveClientImpl extends Logging {
+  val HIVE_DATA_TYPE_KEY = "hiveDataType"
+  val HIVE_DATA_TYPE_TIME_STAMP = "timestamp"
+
   /** Converts the native StructField to Hive's FieldSchema. */
   def toHiveColumn(c: StructField): FieldSchema = {
     // For Hive Serde, we still need to to restore the raw type for char and varchar type.
@@ -1117,7 +1122,7 @@ private[hive] object HiveClientImpl extends Logging {
     //   map<string,struct<x:int,y.z:int>> -> map<string,struct<`x`:int,`y.z`:int>>
     val typeStr = hc.getType.replaceAll("(?<=struct<|,)([^,<:]+)(?=:)", "`$1`")
     try {
-      CatalystSqlParser.parseDataType(typeStr)
+      HiveCatalystSqLParser.parseDataType(typeStr)
     } catch {
       case e: ParseException =>
         throw QueryExecutionErrors.cannotRecognizeHiveTypeError(e, typeStr, hc.getName)
@@ -1127,11 +1132,29 @@ private[hive] object HiveClientImpl extends Logging {
   /** Builds the native StructField from Hive's FieldSchema. */
   def fromHiveColumn(hc: FieldSchema): StructField = {
     val columnType = getSparkSQLDataType(hc)
+    // since we loading metadata of an existing table, and if Hive's timestamp column type
+    // is Timestamp (which in existing Hive translates to Spark's timestamp_ltz), so even if
+    // spark's timestamp alias points to NTZ, we need to override it to spark's Timestamp type(which
+    // stands for timestamp_ltz). Once spark to hive mapping is actually rectified, this fix needs
+    // to be revisited
+    val metadata = getMetadataForNtz(columnType, hc.getType)
     val field = StructField(
       name = hc.getName,
       dataType = columnType,
-      nullable = true)
+      nullable = true,
+      metadata = metadata)
     Option(hc.getComment).map(field.withComment).getOrElse(field)
+  }
+
+  def getMetadataForNtz(
+      colType: DataType,
+      hiveType: String,
+      existingMd: Metadata = Metadata.empty ): Metadata =
+    colType match {
+    case TimestampNTZType if hiveType == HiveClientImpl.HIVE_DATA_TYPE_TIME_STAMP =>
+      new MetadataBuilder().withMetadata(existingMd).putString(HIVE_DATA_TYPE_KEY, hiveType).build()
+
+    case _ => existingMd
   }
 
   private def verifyColumnDataType(schema: StructType): Unit = {
@@ -1418,6 +1441,16 @@ private[hive] object HiveClientImpl extends Logging {
       // 2.3.8 don't), therefore here we fallback when encountering the exception.
       case _: NoSuchMethodError =>
         Hive.get(hiveConf)
+    }
+  }
+}
+
+object HiveCatalystSqLParser extends CatalystSqlParser {
+  override val astBuilder = new AstBuilder {
+    override def visitComplexColType(ctx: ComplexColTypeContext): StructField = withOrigin(ctx) {
+      val sf = super.visitComplexColType(ctx)
+      val md = HiveClientImpl.getMetadataForNtz(sf.dataType, ctx.dataType().getText, sf.metadata)
+      sf.copy(metadata = md)
     }
   }
 }
