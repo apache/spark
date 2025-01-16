@@ -622,8 +622,8 @@ class RocksDBStateStoreCheckpointFormatV2Suite extends StreamTest
     val metadata = commitLog.get(Some(0), Some(1)).map(_._2)
 
     val versionToUniqueIdFromCommitLog = metadata.zipWithIndex.map { case (metadata, idx) =>
-      // Use stateUniqueIds(0) because there is only one state operator
-      val res2 = metadata.stateUniqueIds(0).map { uniqueIds =>
+      // Use stateUniqueIds.head(0) because there is only one state operator
+      val res2 = metadata.stateUniqueIds.head(0).map { uniqueIds =>
         uniqueIds(0)
       }
       idx -> res2
