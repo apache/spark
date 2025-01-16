@@ -84,10 +84,10 @@ object ResolveWithCTE extends Rule[LogicalPlan] {
               // The case of CTE name followed by a parenthesized list of column name(s), eg.
               // WITH RECURSIVE t(n).
               case alias @ SubqueryAlias(_,
-              columnAlias @ UnresolvedSubqueryColumnAliases(
-              colNames,
-              Union(Seq(anchor, recursion), false, false)
-              )) =>
+                  columnAlias @ UnresolvedSubqueryColumnAliases(
+                  colNames,
+                  Union(Seq(anchor, recursion), false, false)
+                )) =>
                 if (!anchor.resolved) {
                   cteDef
                 } else {
@@ -102,7 +102,7 @@ object ResolveWithCTE extends Rule[LogicalPlan] {
               // recursive term should not return those rows that have been calculated previously,
               // and we exclude those rows from the current iteration result.
               case alias @ SubqueryAlias(_,
-              Distinct(Union(Seq(anchor, recursion), false, false))) =>
+                  Distinct(Union(Seq(anchor, recursion), false, false))) =>
                 if (!anchor.resolved) {
                   cteDef
                 } else {
@@ -120,10 +120,10 @@ object ResolveWithCTE extends Rule[LogicalPlan] {
 
               // The case of CTE name followed by a parenthesized list of column name(s).
               case alias @ SubqueryAlias(_,
-              columnAlias@UnresolvedSubqueryColumnAliases(
-              colNames,
-              Distinct(Union(Seq(anchor, recursion), false, false))
-              )) =>
+                  columnAlias@UnresolvedSubqueryColumnAliases(
+                  colNames,
+                  Distinct(Union(Seq(anchor, recursion), false, false))
+                )) =>
                 if (!anchor.resolved) {
                   cteDef
                 } else {
@@ -139,7 +139,7 @@ object ResolveWithCTE extends Rule[LogicalPlan] {
                   cteDef.copy(child = alias.copy(child = columnAlias.copy(child = loop)))
                 }
 
-              case other if !other.exists(_.isInstanceOf[UnionLoop]) =>
+              case other =>
                 // We do not support cases of sole Union (needs a SubqueryAlias above it), nor
                 // Project (as UnresolvedSubqueryColumnAliases have not been substituted with the
                 // Project yet), leaving us with cases of SubqueryAlias->Union and SubqueryAlias->
