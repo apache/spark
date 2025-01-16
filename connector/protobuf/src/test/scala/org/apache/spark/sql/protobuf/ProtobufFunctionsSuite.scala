@@ -1735,12 +1735,12 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
     val descMsg = testFileDesc.map("%02X".format(_)).mkString("")
     checkError(
       exception = parseError,
-      condition = "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
+      condition = "DATATYPE_MISMATCH.NON_STRUCT_TYPE",
       parameters = Map(
+        "inputName" -> "data",
+        "inputType" -> "\"INT\"",
         "sqlExpr" ->
-          s"""\"to_protobuf(int_col, SimpleMessageEnum, X'$descMsg', NULL)\"""",
-        "msg" -> ("The first argument of the TO_PROTOBUF SQL function must be a struct type"),
-        "hint" -> ""
+          s"""\"to_protobuf(int_col, SimpleMessageEnum, X'$descMsg', NULL)\""""
       ),
       queryContext = Array(ExpectedContext(
         fragment = "fn",

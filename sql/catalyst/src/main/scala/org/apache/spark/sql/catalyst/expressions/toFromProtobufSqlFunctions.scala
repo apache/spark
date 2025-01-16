@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.util.ArrayBasedMapData
+import org.apache.spark.sql.errors.DataTypeErrors.toSQLType
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types.{BinaryType, MapType, NullType, StringType, StructType}
 import org.apache.spark.sql.util.ProtobufUtils
@@ -242,8 +243,11 @@ case class ToProtobuf(
       case _: StructType => None
       case _ =>
         Some(
-          TypeCheckResult.TypeCheckFailure(
-            "The first argument of the TO_PROTOBUF SQL function must be a struct type")
+          TypeCheckResult.DataTypeMismatch(
+            errorSubClass = "NON_STRUCT_TYPE",
+            messageParameters = Map(
+              "inputName" -> "data",
+              "inputType" -> toSQLType(first.dataType)))
         )
     }
 
