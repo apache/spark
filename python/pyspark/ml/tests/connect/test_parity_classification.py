@@ -22,7 +22,7 @@ from pyspark.ml.tests.test_classification import ClassificationTestsMixin
 from pyspark.sql import SparkSession
 
 
-class ClassificationTestsOnConnect(ClassificationTestsMixin, unittest.TestCase):
+class ClassificationParityTests(ClassificationTestsMixin, unittest.TestCase):
     def setUp(self) -> None:
         self.spark = SparkSession.builder.remote(
             os.environ.get("SPARK_CONNECT_TESTING_REMOTE", "local[2]")
@@ -38,7 +38,7 @@ class ClassificationTestsOnConnect(ClassificationTestsMixin, unittest.TestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.ml.tests.connect.test_connect_spark_ml_classification import *  # noqa: F401
+    from pyspark.ml.tests.connect.test_parity_classification import *  # noqa: F401
 
     try:
         import xmlrunner  # type: ignore[import]
