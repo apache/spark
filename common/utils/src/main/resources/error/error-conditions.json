@@ -988,6 +988,11 @@
           "all arguments of the function <funcName> must be strings."
         ]
       },
+      "NON_STRUCT_TYPE" : {
+        "message" : [
+          "the input <inputName> should be a struct expression; however, got <inputType>."
+        ]
+      },
       "NULL_TYPE" : {
         "message" : [
           "Null typed values cannot be used as arguments of <functionName>."
