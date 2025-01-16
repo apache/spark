@@ -1447,6 +1447,11 @@ object HiveExternalCatalog {
     case _: VariantType => false
     case s: StructType =>
       s.forall { f =>
+        // Because HMS thrift API passes StructType's catalog string in a whole, we can not
+        // ensure the HMS server side can parse this string correctly if the names of the fields
+        // contain special characters.
+        // Also, the HMS thrift APIs are kind of internal to Hive, it's hard for us to ensure
+        // which special character is valid or not. So here we just allow regular characters.
         !QuotingUtils.needQuote(f.name) && isHiveCompatibleDataType(f.dataType)
       }
     case a: ArrayType => isHiveCompatibleDataType(a.elementType)
