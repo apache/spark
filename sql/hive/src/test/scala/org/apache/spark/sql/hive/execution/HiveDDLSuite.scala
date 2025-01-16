@@ -43,7 +43,7 @@ import org.apache.spark.sql.hive.HiveUtils.{CONVERT_METASTORE_ORC, CONVERT_METAS
 import org.apache.spark.sql.hive.orc.OrcFileOperator
 import org.apache.spark.sql.hive.test.{TestHive, TestHiveSingleton, TestHiveSparkSession}
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
-import org.apache.spark.sql.internal.SQLConf.ORC_IMPLEMENTATION
+import org.apache.spark.sql.internal.SQLConf.{ORC_IMPLEMENTATION, TimestampTypes}
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
@@ -3381,6 +3381,35 @@ class HiveDDLSuite
     withTable(tbl) {
       sql("CREATE TABLE t1 STORED AS parquet SELECT id as `a,b` FROM range(1)")
       checkAnswer(sql("SELECT * FROM t1"), Row(0))
+    }
+  }
+
+  test("SPARK-50840: Hive table created with timestamp LTZ, should retain the same on reload") {
+    withTable("t1", "t2") {
+      withSQLConf(SQLConf.TIMESTAMP_TYPE.key -> TimestampTypes.TIMESTAMP_LTZ.toString) {
+        val tblDef =
+          s"""
+             |CREATE TABLE t1 (
+             |  ts timestamp,
+             |  nstd Struct<name: String, ts1 timestamp>
+             |)
+             |using parquet""".stripMargin
+        sql(tblDef)
+      }
+      withSQLConf(SQLConf.TIMESTAMP_TYPE.key -> TimestampTypes.TIMESTAMP_NTZ.toString) {
+        def assertNoTimestampNTZ(structType: StructType): Unit = {
+          structType.foreach {
+            _.dataType match {
+              case TimestampNTZType => fail("TimestampNTZType not expected")
+              case st: StructType => assertNoTimestampNTZ(st)
+              case _ =>
+            }
+          }
+        }
+
+        sql("alter table t1 rename to t2")
+        assertNoTimestampNTZ(spark.table("t2").schema)
+      }
     }
   }
 }

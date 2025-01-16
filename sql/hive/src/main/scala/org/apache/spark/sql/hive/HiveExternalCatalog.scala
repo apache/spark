@@ -45,8 +45,8 @@ import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CharVarcharUtils}
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.{PartitioningUtils, SourceOptions}
-import org.apache.spark.sql.hive.client.HiveClient
-import org.apache.spark.sql.internal.HiveSerDe
+import org.apache.spark.sql.hive.client.{HiveClient, HiveClientImpl}
+import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
 import org.apache.spark.sql.internal.StaticSQLConf._
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.SchemaUtils
@@ -122,7 +122,36 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
    * before returning it.
    */
   private[hive] def getRawTable(db: String, table: String): CatalogTable = {
-    client.getTable(db, table)
+
+    def convertNTZToLTZ(st: StructType): StructType = {
+      val rectifiedFields = st.map(sf => sf.dataType match {
+        case TimestampNTZType
+          if sf.metadata.contains(HiveClientImpl.HIVE_DATA_TYPE_KEY) &&
+            HiveClientImpl.HIVE_DATA_TYPE_TIME_STAMP == sf.metadata.getString(
+              HiveClientImpl.HIVE_DATA_TYPE_KEY) =>
+          val newMd = new MetadataBuilder()
+            .withMetadata(sf.metadata)
+            .remove(HiveClientImpl.HIVE_DATA_TYPE_KEY)
+            .build()
+          sf.copy(dataType = TimestampType, metadata = newMd)
+
+        case structType: StructType => sf.copy(dataType = convertNTZToLTZ(structType))
+
+        case _ => sf
+      })
+      StructType(rectifiedFields)
+    }
+
+    val ct = client.getTable(db, table)
+    // since we are in HiveExternalCatalog, and Hive does not support TimeStampTypeNTZ, so even
+    // if this spark engine , converted the timestamp type coming from Hive Metastore to NTZ, we
+    // need to convert it back to TimeStampType
+    if (SQLConf.get.timestampType == TimestampNTZType) {
+      val rectifiedSchema = convertNTZToLTZ(ct.schema)
+      ct.copy(schema = StructType(rectifiedSchema))
+    } else {
+      ct
+    }
   }
 
   private[hive] def getRawTablesByNames(db: String, tables: Seq[String]): Seq[CatalogTable] = {
