@@ -2038,7 +2038,7 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
   }
 
   /**
-   * Use [[With]] to rewrite condition which contains attribute that are not cheap.
+   * Use [[With]] to rewrite condition which contains non-cheap common expression.
    */
   private def rewriteConditionByWith(
       cond: Expression,

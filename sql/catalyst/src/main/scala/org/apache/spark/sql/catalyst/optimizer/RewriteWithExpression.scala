@@ -82,8 +82,8 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
       if (commonExprs.isEmpty) {
         inputPlan
       } else {
-        Project(inputPlan.output ++ commonExprs.map(_._1).sortWith(_.exprId.id < _.exprId.id),
-          inputPlan)
+        // Sort is required to ensure idempotence.
+        Project(inputPlan.output ++ commonExprs.map(_._1).sortBy(_.exprId.id), inputPlan)
       }
     }
     newPlan = newPlan.withNewChildren(newChildren)
@@ -150,8 +150,8 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
             } else if (originalAttr.nonEmpty &&
               inputPlans.head.output.contains(originalAttr.get.toAttribute)) {
               // originAttr only exists in Project or Filter. If the child already contains this
-              // attribute, extend it.
-              refToExpr(id) = originalAttr.get.toAttribute
+              // attribute, extend it to avoid duplication.
+              refToExpr(id) = originalAttr.get
             } else {
               val commonExprs = commonExprsPerChild(childPlanIndex)
               val existingCommonExpr = commonExprs.find(_._2 == id.id)
