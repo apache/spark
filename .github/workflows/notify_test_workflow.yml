@@ -52,11 +52,13 @@ jobs:
               id: 'build_main.yml',
               branch: context.payload.pull_request.head.ref,
             }
+            console.log('params: ' + params)
             const check_run_params = {
               owner: context.payload.pull_request.head.repo.owner.login,
               repo: context.payload.pull_request.head.repo.name,
               ref: context.payload.pull_request.head.ref,
             }
+            console.log('check_run_params: ' + check_run_params)
 
             console.log('Ref: ' + context.payload.pull_request.head.ref)
             console.log('SHA: ' + context.payload.pull_request.head.sha)
@@ -119,9 +121,7 @@ jobs:
               let check_run_head;
               while (retryCount < 3) {
                 const check_runs = await github.request(check_run_endpoint, check_run_params);
-                console.log('check_runs: ' + check_runs)
                 check_run_head = check_runs.data.check_runs.find(r => r.name === "Run / Check changes");
-                console.log('check_run_head: ' + check_run_head)
                 if (check_run_head) {
                   break;
                 }
