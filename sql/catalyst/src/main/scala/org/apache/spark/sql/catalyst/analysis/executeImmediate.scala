@@ -148,9 +148,10 @@ class SubstituteExecuteImmediate(val catalogManager: CatalogManager)
               resolveArguments(aliases))
           }
         }
+        AnalysisContext.get.isExecuteImmediate = true
 
         if (targetVariables.nonEmpty) {
-          SetVariable(targetVariables, queryPlan)
+          SetVariable(targetVariables, queryPlan, executeImmediateIntoClause = true)
         } else { queryPlan }
     }
 
@@ -185,7 +186,7 @@ class SubstituteExecuteImmediate(val catalogManager: CatalogManager)
   }
 
   private def getVariableReference(expr: Expression, nameParts: Seq[String]): VariableReference = {
-    lookupVariable(nameParts, sessionVariablesOnly = true) match {
+    lookupVariable(nameParts, sessionVariablesOnlyOpt = Some(false)) match {
       case Some(variable) => variable
       case _ =>
         throw QueryCompilationErrors

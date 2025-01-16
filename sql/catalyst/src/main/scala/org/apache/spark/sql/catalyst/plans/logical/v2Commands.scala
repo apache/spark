@@ -1591,7 +1591,10 @@ case class TableSpec(
 case class CreateVariable(
     name: LogicalPlan,
     defaultExpr: DefaultValueExpression,
-    replace: Boolean) extends UnaryCommand with SupportsSubquery {
+    replace: Boolean,
+    // When false, this node can create local variables from SQL scripting.
+    // When true, it can only create session variables.
+    sessionVariablesOnly: Boolean = false) extends UnaryCommand with SupportsSubquery {
   override def child: LogicalPlan = name
   override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan =
     copy(name = newChild)
@@ -1613,7 +1616,12 @@ case class DropVariable(
  */
 case class SetVariable(
     targetVariables: Seq[Expression],
-    sourceQuery: LogicalPlan)
+    sourceQuery: LogicalPlan,
+    // When false, this node can set local variables from SQL scripting.
+    // When true, it can only set session variables.
+    sessionVariablesOnly: Boolean = false,
+    // Whether this node was created by EXECUTE IMMEDIATE for the INTO clause.
+    executeImmediateIntoClause: Boolean = false)
   extends UnaryCommand {
   override def child: LogicalPlan = sourceQuery
   override protected def withNewChildInternal(newChild: LogicalPlan): SetVariable =

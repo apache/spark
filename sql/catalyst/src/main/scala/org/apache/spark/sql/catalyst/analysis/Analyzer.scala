@@ -154,6 +154,9 @@ case class AnalysisContext(
     referredTempFunctionNames: mutable.Set[String] = mutable.Set.empty,
     referredTempVariableNames: Seq[Seq[String]] = Seq.empty,
     outerPlan: Option[LogicalPlan] = None,
+    // Whether the current plan is created by EXECUTE IMMEDIATE. Used when resolving variables,
+    // as SQL Scripting local variables should not be visible from EXECUTE IMMEDIATE.
+    var isExecuteImmediate: Boolean = false,
 
     /**
      * This is a bridge state between this fixed-point [[Analyzer]] and a single-pass [[Resolver]].
@@ -208,7 +211,8 @@ object AnalysisContext {
       originContext.relationCache,
       viewDesc.viewReferredTempViewNames,
       mutable.Set(viewDesc.viewReferredTempFunctionNames: _*),
-      viewDesc.viewReferredTempVariableNames)
+      viewDesc.viewReferredTempVariableNames,
+      isExecuteImmediate = originContext.isExecuteImmediate)
     set(context)
     try f finally { set(originContext) }
   }

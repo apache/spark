@@ -31,10 +31,12 @@ import org.apache.spark.sql.execution.datasources.v2.LeafV2CommandExec
 case class CreateVariableExec(
     identifier: Identifier,
     defaultExpr: DefaultValueExpression,
-    replace: Boolean) extends LeafV2CommandExec with ExpressionsEvaluator {
+    replace: Boolean,
+    sessionVariablesOnly: Boolean) extends LeafV2CommandExec with ExpressionsEvaluator {
 
   override protected def run(): Seq[InternalRow] = {
-    val scriptingVariableManager = session.sessionState.catalogManager.sqlScriptingLocalVariableManager
+    val scriptingVariableManager =
+      session.sessionState.catalogManager.sqlScriptingLocalVariableManager
     val tempVariableManager = session.sessionState.catalogManager.tempVariableManager
 
     val exprs = prepareExpressions(Seq(defaultExpr.child), subExprEliminationEnabled = false)
@@ -50,7 +52,9 @@ case class CreateVariableExec(
     }
 
     // create local variable if we are in a script, otherwise create session variable
-    scriptingVariableManager.getOrElse(tempVariableManager)
+    scriptingVariableManager
+      .filterNot(_ => sessionVariablesOnly)
+      .getOrElse(tempVariableManager)
       .create(
         normalizedIdentifier,
         defaultExpr.originalSQL,

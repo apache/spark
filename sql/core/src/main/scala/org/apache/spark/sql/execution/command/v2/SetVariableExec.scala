@@ -30,14 +30,16 @@ import org.apache.spark.sql.execution.datasources.v2.V2CommandExec
 /**
  * Physical plan node for setting a variable.
  */
-case class SetVariableExec(variables: Seq[VariableReference], query: SparkPlan)
-  extends V2CommandExec with UnaryLike[SparkPlan] {
+case class SetVariableExec(
+    variables: Seq[VariableReference],
+    query: SparkPlan,
+    sessionVariablesOnly: Boolean) extends V2CommandExec with UnaryLike[SparkPlan] {
 
   override protected def run(): Seq[InternalRow] = {
     val values = query.executeCollect()
     if (values.length == 0) {
       variables.foreach { v =>
-        setVariable(v, null)
+        setVariable(v, null, sessionVariablesOnly)
       }
     } else if (values.length > 1) {
       throw new SparkException(
@@ -48,7 +50,7 @@ case class SetVariableExec(variables: Seq[VariableReference], query: SparkPlan)
       val row = values(0)
       variables.zipWithIndex.foreach { case (v, index) =>
         val value = row.get(index, v.dataType)
-        setVariable(v, value)
+        setVariable(v, value, sessionVariablesOnly)
       }
     }
     Seq.empty
@@ -56,7 +58,8 @@ case class SetVariableExec(variables: Seq[VariableReference], query: SparkPlan)
 
   private def setVariable(
       variable: VariableReference,
-      value: Any): Unit = {
+      value: Any,
+      sessionVariablesOnly: Boolean): Unit = {
     val namePartsCaseAdjusted = if (session.sessionState.conf.caseSensitiveAnalysis) {
       variable.originalNameParts
     } else {
@@ -64,9 +67,11 @@ case class SetVariableExec(variables: Seq[VariableReference], query: SparkPlan)
     }
 
     val tempVariableManager = session.sessionState.catalogManager.tempVariableManager
-    val scriptingVariableManager = session.sessionState.catalogManager.sqlScriptingLocalVariableManager
+    val scriptingVariableManager =
+      session.sessionState.catalogManager.sqlScriptingLocalVariableManager
 
     val variableManager = scriptingVariableManager
+      .filterNot(_ => sessionVariablesOnly)
       // If a local variable with nameParts exists, set it using scriptingVariableManager.
       .filter(_.get(namePartsCaseAdjusted).isDefined)
       // If a local variable with nameParts doesn't exist, check if a session variable exists

@@ -1773,4 +1773,102 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
       )
     }
   }
+
+  test("local variable - execute immediate using local var") {
+    withSessionVariable("testVar") {
+      spark.sql("DECLARE testVar = 0")
+      val sqlScript =
+        """
+          |BEGIN
+          |  DECLARE testVar = 5;
+          |  EXECUTE IMMEDIATE 'SELECT ?' USING testVar;
+          |END
+          |""".stripMargin
+      val expected = Seq(
+        Seq(Row(5)) // select testVar
+      )
+      verifySqlScriptResult(sqlScript, expected)
+    }
+  }
+
+  test("local variable - execute immediate into local var") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE localVar = 1;
+        |  SELECT localVar;
+        |  EXECUTE IMMEDIATE 'SELECT 5' INTO localVar;
+        |  SELECT localVar;
+        |END
+        |""".stripMargin
+    val expected = Seq(
+      Seq(Row(1)), // select localVar
+      Seq(Row(5)) // select localVar
+    )
+    verifySqlScriptResult(sqlScript, expected)
+  }
+
+  test("local variable - execute immediate can't access local var") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE localVar = 5;
+        |  EXECUTE IMMEDIATE 'SELECT localVar';
+        |END
+        |""".stripMargin
+    val e = intercept[AnalysisException] {
+      verifySqlScriptResult(sqlScript, Seq.empty[Seq[Row]])
+    }
+
+    checkError(
+      exception = e,
+      condition = "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
+      sqlState = "42703",
+      parameters = Map("objectName" -> toSQLId("localVar")),
+      context = ExpectedContext(
+        fragment = "localVar",
+        start = 7,
+        stop = 14)
+    )
+  }
+
+  test("local variable - execute immediate create session var") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  EXECUTE IMMEDIATE 'DECLARE sessionVar = 5';
+        |  SELECT system.session.sessionVar;
+        |  SELECT sessionVar;
+        |END
+        |""".stripMargin
+    val expected = Seq(
+      Seq(Row(5)), // select system.session.sessionVar
+      Seq(Row(5)) // select sessionVar
+    )
+    verifySqlScriptResult(sqlScript, expected)
+  }
+
+  test("local variable - execute immediate set session var") {
+    withSessionVariable("testVar") {
+      spark.sql("DECLARE testVar = 0")
+      val sqlScript =
+        """
+          |BEGIN
+          |  DECLARE testVar = 1;
+          |  SELECT system.session.testVar;
+          |  SELECT testVar;
+          |  EXECUTE IMMEDIATE 'SET VARIABLE testVar = 5';
+          |  SELECT system.session.testVar;
+          |  SELECT testVar;
+          |END
+          |""".stripMargin
+      val expected = Seq(
+        Seq(Row(0)), // select system.session.testVar
+        Seq(Row(1)), // select testVar
+        Seq(Row(5)), // select system.session.testVar
+        Seq(Row(1)) // select testVar
+      )
+      verifySqlScriptResult(sqlScript, expected)
+    }
+  }
 }

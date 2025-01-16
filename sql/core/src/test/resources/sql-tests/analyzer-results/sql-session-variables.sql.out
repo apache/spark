@@ -8,14 +8,14 @@ SetCommand (spark.sql.ansi.enabled,Some(true))
 -- !query
 DECLARE title STRING
 -- !query analysis
-CreateVariable defaultvalueexpression(null, null), false
+CreateVariable defaultvalueexpression(null, null), false, false
 +- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.title
 
 
 -- !query
 SET VARIABLE title = '-- Basic sanity --'
 -- !query analysis
-SetVariable [variablereference(system.session.title=CAST(NULL AS STRING))]
+SetVariable [variablereference(system.session.title=CAST(NULL AS STRING))], false, false
 +- Project [-- Basic sanity -- AS title#x]
    +- OneRowRelation
 
@@ -23,7 +23,7 @@ SetVariable [variablereference(system.session.title=CAST(NULL AS STRING))]
 -- !query
 DECLARE var1 INT = 5
 -- !query analysis
-CreateVariable defaultvalueexpression(cast(5 as int), 5), false
+CreateVariable defaultvalueexpression(cast(5 as int), 5), false, false
 +- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.var1
 
 
@@ -37,7 +37,7 @@ Project [variablereference(system.session.var1=5) AS var1#x]
 -- !query
 SET VARIABLE var1 = 6
 -- !query analysis
-SetVariable [variablereference(system.session.var1=5)]
+SetVariable [variablereference(system.session.var1=5)], false, false
 +- Project [6 AS var1#x]
    +- OneRowRelation
 
@@ -59,7 +59,7 @@ DropVariable false
 -- !query
 SET VARIABLE title = 'Create Variable - Success Cases'
 -- !query analysis
-SetVariable [variablereference(system.session.title='-- Basic sanity --')]
+SetVariable [variablereference(system.session.title='-- Basic sanity --')], false, false
 +- Project [Create Variable - Success Cases AS title#x]
    +- OneRowRelation
 
@@ -67,7 +67,7 @@ SetVariable [variablereference(system.session.title='-- Basic sanity --')]
 -- !query
 DECLARE VARIABLE var1 INT
 -- !query analysis
-CreateVariable defaultvalueexpression(null, null), false
+CreateVariable defaultvalueexpression(null, null), false, false
 +- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.var1
 
 
@@ -81,7 +81,7 @@ Project [Expect: INT, NULL AS Expect: INT, NULL#x, typeof(variablereference(syst
 -- !query
 DECLARE OR REPLACE VARIABLE var1 DOUBLE
 -- !query analysis
-CreateVariable defaultvalueexpression(null, null), true
+CreateVariable defaultvalueexpression(null, null), true, false
 +- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.var1
 
 
@@ -115,7 +115,7 @@ Project [Expect: TIMESTAMP, NULL AS Expect: TIMESTAMP, NULL#x, typeof(variablere
 -- !query
 SET VARIABLE title = 'Create Variable - Failure Cases'
 -- !query analysis
-SetVariable [variablereference(system.session.title='Create Variable - Success Cases')]
+SetVariable [variablereference(system.session.title='Create Variable - Success Cases')], false, false
 +- Project [Create Variable - Failure Cases AS title#x]
    +- OneRowRelation
 
@@ -144,7 +144,7 @@ DropVariable true
 -- !query
 SET VARIABLE title = 'Drop Variable'
 -- !query analysis
-SetVariable [variablereference(system.session.title='Create Variable - Failure Cases')]
+SetVariable [variablereference(system.session.title='Create Variable - Failure Cases')], false, false
 +- Project [Drop Variable AS title#x]
    +- OneRowRelation
 
@@ -152,7 +152,7 @@ SetVariable [variablereference(system.session.title='Create Variable - Failure C
 -- !query
 DECLARE VAR var1 INT
 -- !query analysis
-CreateVariable defaultvalueexpression(null, null), false
+CreateVariable defaultvalueexpression(null, null), false, false
 +- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.var1
 
 
@@ -213,7 +213,7 @@ DropVariable true
 -- !query
 DECLARE VARIABLE var1 INT
 -- !query analysis
-CreateVariable defaultvalueexpression(null, null), false
+CreateVariable defaultvalueexpression(null, null), false, false
 +- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.var1
 
 
@@ -255,7 +255,7 @@ DropVariable false
 -- !query
 SET VARIABLE title = 'Test qualifiers - success'
 -- !query analysis
-SetVariable [variablereference(system.session.title='Drop Variable')]
+SetVariable [variablereference(system.session.title='Drop Variable')], false, false
 +- Project [Test qualifiers - success AS title#x]
    +- OneRowRelation
 
@@ -263,7 +263,7 @@ SetVariable [variablereference(system.session.title='Drop Variable')]
 -- !query
 DECLARE VARIABLE var1 INT DEFAULT 1
 -- !query analysis
-CreateVariable defaultvalueexpression(cast(1 as int), 1), false
+CreateVariable defaultvalueexpression(cast(1 as int), 1), false, false
 +- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.var1
 
 
@@ -277,7 +277,7 @@ Project [1 AS Expected#x, variablereference(system.session.var1=1) AS Unqualifie
 -- !query
 SET VARIABLE var1 = 2
 -- !query analysis
-SetVariable [variablereference(system.session.var1=1)]
+SetVariable [variablereference(system.session.var1=1)], false, false
 +- Project [2 AS var1#x]
    +- OneRowRelation
 
@@ -292,7 +292,7 @@ Project [2 AS Expected#x, variablereference(system.session.var1=2) AS Unqualifie
 -- !query
 DECLARE OR REPLACE VARIABLE session.var1 INT DEFAULT 1
 -- !query analysis
-CreateVariable defaultvalueexpression(cast(1 as int), 1), true
+CreateVariable defaultvalueexpression(cast(1 as int), 1), true, false
 +- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.var1
 
 
@@ -306,7 +306,7 @@ Project [1 AS Expected#x, variablereference(system.session.var1=1) AS Unqualifie
 -- !query
 SET VARIABLE session.var1 = 2
 -- !query analysis
-SetVariable [variablereference(system.session.var1=1)]
+SetVariable [variablereference(system.session.var1=1)], false, false
 +- Project [2 AS var1#x]
    +- OneRowRelation
 
@@ -321,7 +321,7 @@ Project [2 AS Expected#x, variablereference(system.session.var1=2) AS Unqualifie
 -- !query
 DECLARE OR REPLACE VARIABLE system.session.var1 INT DEFAULT 1
 -- !query analysis
-CreateVariable defaultvalueexpression(cast(1 as int), 1), true
+CreateVariable defaultvalueexpression(cast(1 as int), 1), true, false
 +- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.var1
 
 
@@ -335,7 +335,7 @@ Project [1 AS Expected#x, variablereference(system.session.var1=1) AS Unqualifie
 -- !query
 SET VARIABLE system.session.var1 = 2
 -- !query analysis
-SetVariable [variablereference(system.session.var1=1)]
+SetVariable [variablereference(system.session.var1=1)], false, false
 +- Project [2 AS var1#x]
    +- OneRowRelation
 
@@ -350,7 +350,7 @@ Project [2 AS Expected#x, variablereference(system.session.var1=2) AS Unqualifie
 -- !query
 DECLARE OR REPLACE VARIABLE sySteM.sEssIon.vAr1 INT DEFAULT 1
 -- !query analysis
-CreateVariable defaultvalueexpression(cast(1 as int), 1), true
+CreateVariable defaultvalueexpression(cast(1 as int), 1), true, false
 +- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.vAr1
 
 
@@ -364,7 +364,7 @@ Project [1 AS Expected#x, variablereference(system.session.var1=1) AS Unqualifie
 -- !query
 SET VARIABLE sYstem.sesSiOn.vaR1 = 2
 -- !query analysis
-SetVariable [variablereference(system.session.var1=1)]
+SetVariable [variablereference(system.session.var1=1)], false, false
 +- Project [2 AS vaR1#x]
    +- OneRowRelation
 
@@ -379,7 +379,7 @@ Project [2 AS Expected#x, variablereference(system.session.var1=2) AS Unqualifie
 -- !query
 DECLARE OR REPLACE VARIABLE var1 INT
 -- !query analysis
-CreateVariable defaultvalueexpression(null, null), true
+CreateVariable defaultvalueexpression(null, null), true, false
 +- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.var1
 
 
@@ -406,7 +406,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 DECLARE OR REPLACE VARIABLE var1 INT
 -- !query analysis
-CreateVariable defaultvalueexpression(null, null), true
+CreateVariable defaultvalueexpression(null, null), true, false
 +- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.var1
 
 
@@ -433,7 +433,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 DECLARE OR REPLACE VARIABLE var1 INT
 -- !query analysis
-CreateVariable defaultvalueexpression(null, null), true
+CreateVariable defaultvalueexpression(null, null), true, false
 +- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.var1
 
 
@@ -460,7 +460,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 DECLARE OR REPLACE VARIABLE var1 INT
 -- !query analysis
-CreateVariable defaultvalueexpression(null, null), true
+CreateVariable defaultvalueexpression(null, null), true, false
 +- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.var1
 
 
@@ -487,7 +487,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SET VARIABLE title = 'Test variable in aggregate'
 -- !query analysis
-SetVariable [variablereference(system.session.title='Test qualifiers - success')]
+SetVariable [variablereference(system.session.title='Test qualifiers - success')], false, false
 +- Project [Test variable in aggregate AS title#x]
    +- OneRowRelation
 
@@ -506,7 +506,7 @@ Project [scalar-subquery#x [title#x] AS scalarsubquery(title)#xL]
 -- !query
 SET VARIABLE title = 'Test qualifiers - fail'
 -- !query analysis
-SetVariable [variablereference(system.session.title='Test variable in aggregate')]
+SetVariable [variablereference(system.session.title='Test variable in aggregate')], false, false
 +- Project [Test qualifiers - fail AS title#x]
    +- OneRowRelation
 
@@ -556,7 +556,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 DECLARE OR REPLACE VARIABLE var1 INT
 -- !query analysis
-CreateVariable defaultvalueexpression(null, null), true
+CreateVariable defaultvalueexpression(null, null), true, false
 +- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.var1
 
 
@@ -671,7 +671,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SET VARIABLE title = 'Test DEFAULT on create - success'
 -- !query analysis
-SetVariable [variablereference(system.session.title='Test qualifiers - fail')]
+SetVariable [variablereference(system.session.title='Test qualifiers - fail')], false, false
 +- Project [Test DEFAULT on create - success AS title#x]
    +- OneRowRelation
 
@@ -679,7 +679,7 @@ SetVariable [variablereference(system.session.title='Test qualifiers - fail')]
 -- !query
 DECLARE OR REPLACE VARIABLE var1 INT DEFAULT 1
 -- !query analysis
-CreateVariable defaultvalueexpression(cast(1 as int), 1), true
+CreateVariable defaultvalueexpression(cast(1 as int), 1), true, false
 +- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.var1
 
 
@@ -706,7 +706,7 @@ Project [true AS Expected#x, (variablereference(system.session.var1=1.0239069642
 -- !query
 DECLARE OR REPLACE VARIABLE var1 = 'Hello'
 -- !query analysis
-CreateVariable defaultvalueexpression(Hello, 'Hello'), true
+CreateVariable defaultvalueexpression(Hello, 'Hello'), true, false
 +- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.var1
 
 
@@ -720,7 +720,7 @@ Project [STRING, Hello AS Expected#x, typeof(variablereference(system.session.va
 -- !query
 DECLARE OR REPLACE VARIABLE var1 DEFAULT NULL
 -- !query analysis
-CreateVariable defaultvalueexpression(null, NULL), true
+CreateVariable defaultvalueexpression(null, NULL), true, false
 +- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.var1
 
 
@@ -734,7 +734,7 @@ Project [VOID, NULL AS Expected#x, typeof(variablereference(system.session.var1=
 -- !query
 DECLARE OR REPLACE VARIABLE INT DEFAULT 5.0
 -- !query analysis
-CreateVariable defaultvalueexpression(5.0, 5.0), true
+CreateVariable defaultvalueexpression(5.0, 5.0), true, false
 +- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.INT
 
 
@@ -748,7 +748,7 @@ Project [INT, 5 AS Expected#x, typeof(variablereference(system.session.var1=NULL
 -- !query
 DECLARE OR REPLACE VARIABLE var1 MAP<string, double> DEFAULT MAP('Hello', 5.1, 'World', -7.1E10)
 -- !query analysis
-CreateVariable defaultvalueexpression(cast(map(Hello, cast(5.1 as double), World, -7.1E10) as map<string,double>), MAP('Hello', 5.1, 'World', -7.1E10)), true
+CreateVariable defaultvalueexpression(cast(map(Hello, cast(5.1 as double), World, -7.1E10) as map<string,double>), MAP('Hello', 5.1, 'World', -7.1E10)), true, false
 +- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.var1
 
 
@@ -762,7 +762,7 @@ Project [MAP<string, double>, [Hello -> 5.1, World -> -7E10] AS Expected#x, type
 -- !query
 DECLARE OR REPLACE VARIABLE var1 INT DEFAULT NULL
 -- !query analysis
-CreateVariable defaultvalueexpression(cast(null as int), NULL), true
+CreateVariable defaultvalueexpression(cast(null as int), NULL), true, false
 +- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.var1
 
 
@@ -776,7 +776,7 @@ Project [NULL AS Expected#x, variablereference(system.session.var1=CAST(NULL AS 
 -- !query
 DECLARE OR REPLACE VARIABLE var1 STRING DEFAULT CURRENT_DATABASE()
 -- !query analysis
-CreateVariable defaultvalueexpression(cast(current_schema() as string), CURRENT_DATABASE()), true
+CreateVariable defaultvalueexpression(cast(current_schema() as string), CURRENT_DATABASE()), true, false
 +- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.var1
 
 
@@ -814,7 +814,7 @@ org.apache.spark.sql.catalyst.parser.ParseException
 -- !query
 SET VARIABLE title = 'Test DEFAULT on create - failures'
 -- !query analysis
-SetVariable [variablereference(system.session.title='Test DEFAULT on create - success')]
+SetVariable [variablereference(system.session.title='Test DEFAULT on create - success')], false, false
 +- Project [Test DEFAULT on create - failures AS title#x]
    +- OneRowRelation
 
@@ -894,7 +894,7 @@ org.apache.spark.SparkArithmeticException
 -- !query
 SET VARIABLE title = 'SET VARIABLE - single target'
 -- !query analysis
-SetVariable [variablereference(system.session.title='Test DEFAULT on create - failures')]
+SetVariable [variablereference(system.session.title='Test DEFAULT on create - failures')], false, false
 +- Project [SET VARIABLE - single target AS title#x]
    +- OneRowRelation
 
@@ -902,14 +902,14 @@ SetVariable [variablereference(system.session.title='Test DEFAULT on create - fa
 -- !query
 DECLARE OR REPLACE VARIABLE var1 INT DEFAULT 5
 -- !query analysis
-CreateVariable defaultvalueexpression(cast(5 as int), 5), true
+CreateVariable defaultvalueexpression(cast(5 as int), 5), true, false
 +- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.var1
 
 
 -- !query
 SET VARIABLE var1 = 7
 -- !query analysis
-SetVariable [variablereference(system.session.var1=5)]
+SetVariable [variablereference(system.session.var1=5)], false, false
 +- Project [7 AS var1#x]
    +- OneRowRelation
 
@@ -924,7 +924,7 @@ Project [variablereference(system.session.var1=7) AS var1#x]
 -- !query
 SET VAR var1 = 8
 -- !query analysis
-SetVariable [variablereference(system.session.var1=7)]
+SetVariable [variablereference(system.session.var1=7)], false, false
 +- Project [8 AS var1#x]
    +- OneRowRelation
 
@@ -939,7 +939,7 @@ Project [variablereference(system.session.var1=8) AS var1#x]
 -- !query
 SET VARIABLE var1 = (SELECT c1 FROM VALUES(1) AS T(c1))
 -- !query analysis
-SetVariable [variablereference(system.session.var1=8)]
+SetVariable [variablereference(system.session.var1=8)], false, false
 +- Project [scalar-subquery#x [] AS var1#x]
    :  +- Project [c1#x]
    :     +- SubqueryAlias T
@@ -957,7 +957,7 @@ Project [variablereference(system.session.var1=1) AS var1#x]
 -- !query
 SET VARIABLE var1 = (SELECT c1 FROM VALUES(1) AS T(c1) WHERE 1=0)
 -- !query analysis
-SetVariable [variablereference(system.session.var1=1)]
+SetVariable [variablereference(system.session.var1=1)], false, false
 +- Project [scalar-subquery#x [] AS var1#x]
    :  +- Project [c1#x]
    :     +- Filter (1 = 0)
@@ -976,7 +976,7 @@ Project [variablereference(system.session.var1=CAST(NULL AS INT)) AS null#x]
 -- !query
 SET VARIABLE var1 = (SELECT c1 FROM VALUES(1.0) AS T(c1))
 -- !query analysis
-SetVariable [variablereference(system.session.var1=CAST(NULL AS INT))]
+SetVariable [variablereference(system.session.var1=CAST(NULL AS INT))], false, false
 +- Project [cast(var1#x as int) AS var1#x]
    +- Project [scalar-subquery#x [] AS var1#x]
       :  +- Project [c1#x]
@@ -1076,14 +1076,14 @@ org.apache.spark.SparkNumberFormatException
 -- !query
 DECLARE OR REPLACE VARIABLE var1 INT DEFAULT 5
 -- !query analysis
-CreateVariable defaultvalueexpression(cast(5 as int), 5), true
+CreateVariable defaultvalueexpression(cast(5 as int), 5), true, false
 +- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.var1
 
 
 -- !query
 SET VARIABLE var1 = var1 + 1
 -- !query analysis
-SetVariable [variablereference(system.session.var1=5)]
+SetVariable [variablereference(system.session.var1=5)], false, false
 +- Project [(variablereference(system.session.var1=5) + 1) AS var1#x]
    +- OneRowRelation
 
@@ -1105,7 +1105,7 @@ DropVariable false
 -- !query
 SET VARIABLE title = 'SET VARIABLE - comma separated target'
 -- !query analysis
-SetVariable [variablereference(system.session.title='SET VARIABLE - single target')]
+SetVariable [variablereference(system.session.title='SET VARIABLE - single target')], false, false
 +- Project [SET VARIABLE - comma separated target AS title#x]
    +- OneRowRelation
 
@@ -1113,28 +1113,28 @@ SetVariable [variablereference(system.session.title='SET VARIABLE - single targe
 -- !query
 DECLARE OR REPLACE VARIABLE var1 INT DEFAULT 5
 -- !query analysis
-CreateVariable defaultvalueexpression(cast(5 as int), 5), true
+CreateVariable defaultvalueexpression(cast(5 as int), 5), true, false
 +- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.var1
 
 
 -- !query
 DECLARE OR REPLACE VARIABLE var2 STRING DEFAULT 'hello'
 -- !query analysis
-CreateVariable defaultvalueexpression(cast(hello as string), 'hello'), true
+CreateVariable defaultvalueexpression(cast(hello as string), 'hello'), true, false
 +- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.var2
 
 
 -- !query
 DECLARE OR REPLACE VARIABLE var3 DOUBLE DEFAULT 2
 -- !query analysis
-CreateVariable defaultvalueexpression(cast(2 as double), 2), true
+CreateVariable defaultvalueexpression(cast(2 as double), 2), true, false
 +- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.var3
 
 
 -- !query
 SET VARIABLE var1 = 6, var2 = 'world', var3 = pi()
 -- !query analysis
-SetVariable [variablereference(system.session.var1=5), variablereference(system.session.var2='hello'), variablereference(system.session.var3=2.0D)]
+SetVariable [variablereference(system.session.var1=5), variablereference(system.session.var2='hello'), variablereference(system.session.var3=2.0D)], false, false
 +- Project [6 AS var1#x, world AS var2#x, PI() AS var3#x]
    +- OneRowRelation
 
@@ -1149,7 +1149,7 @@ Project [variablereference(system.session.var1=6) AS 6#x, variablereference(syst
 -- !query
 SET VAR var1 = 7, var2 = 'universe', var3 = -1
 -- !query analysis
-SetVariable [variablereference(system.session.var1=6), variablereference(system.session.var2='world'), variablereference(system.session.var3=3.141592653589793D)]
+SetVariable [variablereference(system.session.var1=6), variablereference(system.session.var2='world'), variablereference(system.session.var3=3.141592653589793D)], false, false
 +- Project [var1#x, var2#x, cast(var3#x as double) AS var3#x]
    +- Project [7 AS var1#x, universe AS var2#x, -1 AS var3#x]
       +- OneRowRelation
@@ -1165,28 +1165,28 @@ Project [variablereference(system.session.var1=7) AS 7#x, variablereference(syst
 -- !query
 DECLARE OR REPLACE VARIABLE var1 INT DEFAULT 5
 -- !query analysis
-CreateVariable defaultvalueexpression(cast(5 as int), 5), true
+CreateVariable defaultvalueexpression(cast(5 as int), 5), true, false
 +- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.var1
 
 
 -- !query
 DECLARE OR REPLACE VARIABLE var2 STRING DEFAULT 'hello'
 -- !query analysis
-CreateVariable defaultvalueexpression(cast(hello as string), 'hello'), true
+CreateVariable defaultvalueexpression(cast(hello as string), 'hello'), true, false
 +- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.var2
 
 
 -- !query
 DECLARE OR REPLACE VARIABLE var3 DOUBLE DEFAULT 2
 -- !query analysis
-CreateVariable defaultvalueexpression(cast(2 as double), 2), true
+CreateVariable defaultvalueexpression(cast(2 as double), 2), true, false
 +- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.var3
 
 
 -- !query
 SET VARIABLE var1 = var3, var2 = ascii(var1), var3 = var1
 -- !query analysis
-SetVariable [variablereference(system.session.var1=5), variablereference(system.session.var2='hello'), variablereference(system.session.var3=2.0D)]
+SetVariable [variablereference(system.session.var1=5), variablereference(system.session.var2='hello'), variablereference(system.session.var3=2.0D)], false, false
 +- Project [cast(var3#x as int) AS var1#x, cast(var2#x as string) AS var2#x, cast(var1#x as double) AS var3#x]
    +- Project [variablereference(system.session.var3=2.0D) AS var3#x, ascii(cast(variablereference(system.session.var1=5) as string)) AS var2#x, variablereference(system.session.var1=5) AS var1#x]
       +- OneRowRelation
@@ -1202,7 +1202,7 @@ Project [variablereference(system.session.var1=2) AS 2#x, variablereference(syst
 -- !query
 SET VARIABLE var1 = var3, var2 = INTERVAL'5' HOUR, var3 = var1
 -- !query analysis
-SetVariable [variablereference(system.session.var1=2), variablereference(system.session.var2='53'), variablereference(system.session.var3=5.0D)]
+SetVariable [variablereference(system.session.var1=2), variablereference(system.session.var2='53'), variablereference(system.session.var3=5.0D)], false, false
 +- Project [cast(var3#x as int) AS var1#x, cast(var2#x as string) AS var2#x, cast(var1#x as double) AS var3#x]
    +- Project [variablereference(system.session.var3=5.0D) AS var3#x, INTERVAL '05' HOUR AS var2#x, variablereference(system.session.var1=2) AS var1#x]
       +- OneRowRelation
@@ -1245,7 +1245,7 @@ DropVariable false
 -- !query
 SET VARIABLE title = 'SET VARIABLE - row assignment'
 -- !query analysis
-SetVariable [variablereference(system.session.title='SET VARIABLE - comma separated target')]
+SetVariable [variablereference(system.session.title='SET VARIABLE - comma separated target')], false, false
 +- Project [SET VARIABLE - row assignment AS title#x]
    +- OneRowRelation
 
@@ -1253,28 +1253,28 @@ SetVariable [variablereference(system.session.title='SET VARIABLE - comma separa
 -- !query
 DECLARE OR REPLACE VARIABLE var1 INT DEFAULT 5
 -- !query analysis
-CreateVariable defaultvalueexpression(cast(5 as int), 5), true
+CreateVariable defaultvalueexpression(cast(5 as int), 5), true, false
 +- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.var1
 
 
 -- !query
 DECLARE OR REPLACE VARIABLE var2 STRING DEFAULT 'hello'
 -- !query analysis
-CreateVariable defaultvalueexpression(cast(hello as string), 'hello'), true
+CreateVariable defaultvalueexpression(cast(hello as string), 'hello'), true, false
 +- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.var2
 
 
 -- !query
 DECLARE OR REPLACE VARIABLE var3 DOUBLE DEFAULT 2
 -- !query analysis
-CreateVariable defaultvalueexpression(cast(2 as double), 2), true
+CreateVariable defaultvalueexpression(cast(2 as double), 2), true, false
 +- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.var3
 
 
 -- !query
 SET VARIABLE (var1) = (SELECT c1 FROM VALUES(1) AS T(c1))
 -- !query analysis
-SetVariable [variablereference(system.session.var1=5)]
+SetVariable [variablereference(system.session.var1=5)], false, false
 +- Project [c1#x]
    +- SubqueryAlias T
       +- LocalRelation [c1#x]
@@ -1290,7 +1290,7 @@ Project [variablereference(system.session.var1=1) AS var1#x]
 -- !query
 SET VAR (var1) = (SELECT c1 FROM VALUES(2) AS T(c1))
 -- !query analysis
-SetVariable [variablereference(system.session.var1=1)]
+SetVariable [variablereference(system.session.var1=1)], false, false
 +- Project [c1#x]
    +- SubqueryAlias T
       +- LocalRelation [c1#x]
@@ -1306,7 +1306,7 @@ Project [variablereference(system.session.var1=2) AS var1#x]
 -- !query
 SET VARIABLE (var1, var2) = (SELECT c1, c2 FROM VALUES(10, 11) AS T(c1, c2))
 -- !query analysis
-SetVariable [variablereference(system.session.var1=2), variablereference(system.session.var2='hello')]
+SetVariable [variablereference(system.session.var1=2), variablereference(system.session.var2='hello')], false, false
 +- Project [c1#x, cast(c2#x as string) AS var2#x]
    +- Project [c1#x, c2#x]
       +- SubqueryAlias T
@@ -1323,7 +1323,7 @@ Project [variablereference(system.session.var1=10) AS 10#x, variablereference(sy
 -- !query
 SET VARIABLE (var1, var2, var3) = (SELECT c1, c2, c3 FROM VALUES(100, 110, 120) AS T(c1, c2, c3))
 -- !query analysis
-SetVariable [variablereference(system.session.var1=10), variablereference(system.session.var2='11'), variablereference(system.session.var3=2.0D)]
+SetVariable [variablereference(system.session.var1=10), variablereference(system.session.var2='11'), variablereference(system.session.var3=2.0D)], false, false
 +- Project [c1#x, cast(c2#x as string) AS var2#x, cast(c3#x as double) AS var3#x]
    +- Project [c1#x, c2#x, c3#x]
       +- SubqueryAlias T
@@ -1340,7 +1340,7 @@ Project [variablereference(system.session.var1=100) AS 100#x, variablereference(
 -- !query
 SET VARIABLE (var1, var2, var3) = (SELECT c1, c2, c3 FROM VALUES(100, 110, 120) AS T(c1, c2, c3) WHERE 1 = 0)
 -- !query analysis
-SetVariable [variablereference(system.session.var1=100), variablereference(system.session.var2='110'), variablereference(system.session.var3=120.0D)]
+SetVariable [variablereference(system.session.var1=100), variablereference(system.session.var2='110'), variablereference(system.session.var3=120.0D)], false, false
 +- Project [c1#x, cast(c2#x as string) AS var2#x, cast(c3#x as double) AS var3#x]
    +- Project [c1#x, c2#x, c3#x]
       +- Filter (1 = 0)
@@ -1447,7 +1447,7 @@ DropVariable false
 -- !query
 SET VARIABLE title = 'DEFAULT expression usage'
 -- !query analysis
-SetVariable [variablereference(system.session.title='SET VARIABLE - row assignment')]
+SetVariable [variablereference(system.session.title='SET VARIABLE - row assignment')], false, false
 +- Project [DEFAULT expression usage AS title#x]
    +- OneRowRelation
 
@@ -1455,28 +1455,28 @@ SetVariable [variablereference(system.session.title='SET VARIABLE - row assignme
 -- !query
 DECLARE OR REPLACE VARIABLE var1 STRING DEFAULT 'default1'
 -- !query analysis
-CreateVariable defaultvalueexpression(cast(default1 as string), 'default1'), true
+CreateVariable defaultvalueexpression(cast(default1 as string), 'default1'), true, false
 +- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.var1
 
 
 -- !query
 DECLARE OR REPLACE VARIABLE var2 STRING DEFAULT 'default2'
 -- !query analysis
-CreateVariable defaultvalueexpression(cast(default2 as string), 'default2'), true
+CreateVariable defaultvalueexpression(cast(default2 as string), 'default2'), true, false
 +- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.var2
 
 
 -- !query
 DECLARE OR REPLACE VARIABLE var3 STRING DEFAULT 'default3'
 -- !query analysis
-CreateVariable defaultvalueexpression(cast(default3 as string), 'default3'), true
+CreateVariable defaultvalueexpression(cast(default3 as string), 'default3'), true, false
 +- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.var3
 
 
 -- !query
 SET VARIABLE var1 = 'hello'
 -- !query analysis
-SetVariable [variablereference(system.session.var1='default1')]
+SetVariable [variablereference(system.session.var1='default1')], false, false
 +- Project [hello AS var1#x]
    +- OneRowRelation
 
@@ -1484,7 +1484,7 @@ SetVariable [variablereference(system.session.var1='default1')]
 -- !query
 SET VARIABLE var1 = DEFAULT
 -- !query analysis
-SetVariable [variablereference(system.session.var1='hello')]
+SetVariable [variablereference(system.session.var1='hello')], false, false
 +- Project [default1 AS DEFAULT#x]
    +- OneRowRelation
 
@@ -1499,7 +1499,7 @@ Project [variablereference(system.session.var1='default1') AS default#x]
 -- !query
 SET VARIABLE var1 = 'hello1'
 -- !query analysis
-SetVariable [variablereference(system.session.var1='default1')]
+SetVariable [variablereference(system.session.var1='default1')], false, false
 +- Project [hello1 AS var1#x]
    +- OneRowRelation
 
@@ -1507,7 +1507,7 @@ SetVariable [variablereference(system.session.var1='default1')]
 -- !query
 SET VARIABLE var1 = 'hello2'
 -- !query analysis
-SetVariable [variablereference(system.session.var1='hello1')]
+SetVariable [variablereference(system.session.var1='hello1')], false, false
 +- Project [hello2 AS var1#x]
    +- OneRowRelation
 
@@ -1515,7 +1515,7 @@ SetVariable [variablereference(system.session.var1='hello1')]
 -- !query
 SET VARIABLE var1 = 'hello3'
 -- !query analysis
-SetVariable [variablereference(system.session.var1='hello2')]
+SetVariable [variablereference(system.session.var1='hello2')], false, false
 +- Project [hello3 AS var1#x]
    +- OneRowRelation
 
@@ -1523,7 +1523,7 @@ SetVariable [variablereference(system.session.var1='hello2')]
 -- !query
 SET VARIABLE var1 = DEFAULT, var2 = DEFAULT, var3 = DEFAULT
 -- !query analysis
-SetVariable [variablereference(system.session.var1='hello3'), variablereference(system.session.var2='default2'), variablereference(system.session.var3='default3')]
+SetVariable [variablereference(system.session.var1='hello3'), variablereference(system.session.var2='default2'), variablereference(system.session.var3='default3')], false, false
 +- Project [default1 AS DEFAULT#x, default2 AS DEFAULT#x, default3 AS DEFAULT#x]
    +- OneRowRelation
 
@@ -1538,7 +1538,7 @@ Project [variablereference(system.session.var1='default1') AS default1#x, variab
 -- !query
 SET VARIABLE var1 = 'hello'
 -- !query analysis
-SetVariable [variablereference(system.session.var1='default1')]
+SetVariable [variablereference(system.session.var1='default1')], false, false
 +- Project [hello AS var1#x]
    +- OneRowRelation
 
@@ -1546,7 +1546,7 @@ SetVariable [variablereference(system.session.var1='default1')]
 -- !query
 SET VARIABLE (var1) = (SELECT DEFAULT FROM VALUES(1) AS T(c1))
 -- !query analysis
-SetVariable [variablereference(system.session.var1='hello')]
+SetVariable [variablereference(system.session.var1='hello')], false, false
 +- Project [default1 AS DEFAULT#x]
    +- SubqueryAlias T
       +- LocalRelation [c1#x]
@@ -1562,7 +1562,7 @@ Project [variablereference(system.session.var1='default1') AS default#x]
 -- !query
 SET VARIABLE var1 = 'hello'
 -- !query analysis
-SetVariable [variablereference(system.session.var1='default1')]
+SetVariable [variablereference(system.session.var1='default1')], false, false
 +- Project [hello AS var1#x]
    +- OneRowRelation
 
@@ -1570,7 +1570,7 @@ SetVariable [variablereference(system.session.var1='default1')]
 -- !query
 SET VARIABLE (var1) = (SELECT DEFAULT FROM VALUES('world') AS T(default))
 -- !query analysis
-SetVariable [variablereference(system.session.var1='hello')]
+SetVariable [variablereference(system.session.var1='hello')], false, false
 +- Project [DEFAULT#x]
    +- SubqueryAlias T
       +- LocalRelation [default#x]
@@ -1586,7 +1586,7 @@ Project [variablereference(system.session.var1='world') AS world#x]
 -- !query
 SET VARIABLE var1 = 'hello'
 -- !query analysis
-SetVariable [variablereference(system.session.var1='world')]
+SetVariable [variablereference(system.session.var1='world')], false, false
 +- Project [hello AS var1#x]
    +- OneRowRelation
 
@@ -1594,7 +1594,7 @@ SetVariable [variablereference(system.session.var1='world')]
 -- !query
 SET VARIABLE (var1) = (SELECT DEFAULT FROM VALUES(1) AS T(c1) LIMIT 1)
 -- !query analysis
-SetVariable [variablereference(system.session.var1='hello')]
+SetVariable [variablereference(system.session.var1='hello')], false, false
 +- GlobalLimit 1
    +- LocalLimit 1
       +- Project [default1 AS DEFAULT#x]
@@ -1612,7 +1612,7 @@ Project [variablereference(system.session.var1='default1') AS default#x]
 -- !query
 SET VARIABLE var1 = 'hello'
 -- !query analysis
-SetVariable [variablereference(system.session.var1='default1')]
+SetVariable [variablereference(system.session.var1='default1')], false, false
 +- Project [hello AS var1#x]
    +- OneRowRelation
 
@@ -1620,7 +1620,7 @@ SetVariable [variablereference(system.session.var1='default1')]
 -- !query
 SET VARIABLE (var1) = (SELECT DEFAULT FROM VALUES(1),(2),(3) AS T(c1) LIMIT 1 OFFSET 1)
 -- !query analysis
-SetVariable [variablereference(system.session.var1='hello')]
+SetVariable [variablereference(system.session.var1='hello')], false, false
 +- GlobalLimit 1
    +- LocalLimit 1
       +- Offset 1
@@ -1639,7 +1639,7 @@ Project [variablereference(system.session.var1='default1') AS default#x]
 -- !query
 SET VARIABLE var1 = 'hello'
 -- !query analysis
-SetVariable [variablereference(system.session.var1='default1')]
+SetVariable [variablereference(system.session.var1='default1')], false, false
 +- Project [hello AS var1#x]
    +- OneRowRelation
 
@@ -1664,7 +1664,7 @@ Project [variablereference(system.session.var1='hello') AS default#x]
 -- !query
 SET VARIABLE var1 = 'hello'
 -- !query analysis
-SetVariable [variablereference(system.session.var1='hello')]
+SetVariable [variablereference(system.session.var1='hello')], false, false
 +- Project [hello AS var1#x]
    +- OneRowRelation
 
@@ -1699,7 +1699,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SET VARIABLE (var1) = (VALUES(DEFAULT))
 -- !query analysis
-SetVariable [variablereference(system.session.var1='hello')]
+SetVariable [variablereference(system.session.var1='hello')], false, false
 +- LocalRelation [col1#x]
 
 
@@ -1757,7 +1757,7 @@ DropVariable false
 -- !query
 SET VARIABLE title = 'SET command'
 -- !query analysis
-SetVariable [variablereference(system.session.title='DEFAULT expression usage')]
+SetVariable [variablereference(system.session.title='DEFAULT expression usage')], false, false
 +- Project [SET command AS title#x]
    +- OneRowRelation
 
@@ -1765,7 +1765,7 @@ SetVariable [variablereference(system.session.title='DEFAULT expression usage')]
 -- !query
 DECLARE OR REPLACE VARIABLE var1 INT DEFAULT 1
 -- !query analysis
-CreateVariable defaultvalueexpression(cast(1 as int), 1), true
+CreateVariable defaultvalueexpression(cast(1 as int), 1), true, false
 +- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.var1
 
 
@@ -1881,7 +1881,7 @@ DropVariable false
 -- !query
 DECLARE OR REPLACE VARIABLE var1 INT DEFAULT 1
 -- !query analysis
-CreateVariable defaultvalueexpression(cast(1 as int), 1), true
+CreateVariable defaultvalueexpression(cast(1 as int), 1), true, false
 +- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.var1
 
 
@@ -1937,7 +1937,7 @@ DropVariable false
 -- !query
 SET VARIABLE title = 'variable references -- visibility'
 -- !query analysis
-SetVariable [variablereference(system.session.title='SET command')]
+SetVariable [variablereference(system.session.title='SET command')], false, false
 +- Project [variable references -- visibility AS title#x]
    +- OneRowRelation
 
@@ -1945,7 +1945,7 @@ SetVariable [variablereference(system.session.title='SET command')]
 -- !query
 DECLARE OR REPLACE VARIABLE var1 INT DEFAULT 1
 -- !query analysis
-CreateVariable defaultvalueexpression(cast(1 as int), 1), true
+CreateVariable defaultvalueexpression(cast(1 as int), 1), true, false
 +- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.var1
 
 
@@ -2088,7 +2088,7 @@ DropVariable false
 -- !query
 SET VARIABLE title = 'variable references -- prohibited'
 -- !query analysis
-SetVariable [variablereference(system.session.title='variable references -- visibility')]
+SetVariable [variablereference(system.session.title='variable references -- visibility')], false, false
 +- Project [variable references -- prohibited AS title#x]
    +- OneRowRelation
 
@@ -2096,7 +2096,7 @@ SetVariable [variablereference(system.session.title='variable references -- visi
 -- !query
 DECLARE OR REPLACE VARIABLE var1 INT DEFAULT 1
 -- !query analysis
-CreateVariable defaultvalueexpression(cast(1 as int), 1), true
+CreateVariable defaultvalueexpression(cast(1 as int), 1), true, false
 +- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.var1
 
 
@@ -2132,7 +2132,7 @@ DropVariable false
 -- !query
 SET VARIABLE title = 'variable references -- test constant folding'
 -- !query analysis
-SetVariable [variablereference(system.session.title='variable references -- prohibited')]
+SetVariable [variablereference(system.session.title='variable references -- prohibited')], false, false
 +- Project [variable references -- test constant folding AS title#x]
    +- OneRowRelation
 
@@ -2140,7 +2140,7 @@ SetVariable [variablereference(system.session.title='variable references -- proh
 -- !query
 DECLARE OR REPLACE VARIABLE var1 STRING DEFAULT 'a INT'
 -- !query analysis
-CreateVariable defaultvalueexpression(cast(a INT as string), 'a INT'), true
+CreateVariable defaultvalueexpression(cast(a INT as string), 'a INT'), true, false
 +- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.var1
 
 

@@ -251,9 +251,19 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
     }
   }
 
+  /**
+   * Look up variable by nameParts. If in SQL Script, first check local variables,
+   * if not found fall back to session variables,
+   * unless in EXECUTE IMMEDIATE or specified otherwise by sessionVariablesOnlyOpt.
+   * @param nameParts NameParts of the variable.
+   * @param sessionVariablesOnlyOpt If None - include local variables unless in EXECUTE IMMEDIATE.
+   *                                If Some(false) - include local variables.
+   *                                If Some(true) - exclude local variables.
+   * @return Reference to the variable.
+   */
   def lookupVariable(
       nameParts: Seq[String],
-      sessionVariablesOnly: Boolean = false): Option[VariableReference] = {
+      sessionVariablesOnlyOpt: Option[Boolean] = None): Option[VariableReference] = {
     // The temp variables live in `SYSTEM.SESSION`, and the name can be qualified or not.
     def maybeTempVariableName(nameParts: Seq[String]): Boolean = {
       nameParts.length == 1 || {
@@ -267,6 +277,10 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
         }
       }
     }
+
+    // EXECUTE IMMEDIATE cannot access local variables.
+    val sessionVariablesOnly =
+      sessionVariablesOnlyOpt.getOrElse(AnalysisContext.get.isExecuteImmediate)
 
     val namePartsCaseAdjusted = if (conf.caseSensitiveAnalysis) {
       nameParts
