@@ -19,18 +19,13 @@ package org.apache.spark.sql.connect.ml
 
 import java.io.File
 
-import org.apache.spark.SparkFunSuite
 import org.apache.spark.connect.proto
 import org.apache.spark.ml.classification.LogisticRegressionModel
-import org.apache.spark.ml.linalg.{Vectors, VectorUDT}
+import org.apache.spark.ml.linalg.Vectors
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.util.Identifiable
-import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.UnsafeProjection
-import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.connect.SparkConnectTestUtils
-import org.apache.spark.sql.connect.planner.SparkConnectPlanTest
-import org.apache.spark.sql.types.{FloatType, Metadata, StructField, StructType}
+import org.apache.spark.sql.connect.service.SessionHolder
 import org.apache.spark.util.Utils
 
 trait FakeArrayParams extends Params {
@@ -71,27 +66,7 @@ class FakedML(override val uid: String) extends FakeArrayParams {
   override def copy(extra: ParamMap): Params = this
 }
 
-class MLSuite extends SparkFunSuite with SparkConnectPlanTest {
-
-  def createLocalRelationProto: proto.Relation = {
-    val udt = new VectorUDT()
-    val rows = Seq(
-      InternalRow(1.0f, udt.serialize(Vectors.dense(Array(1.0, 2.0)))),
-      InternalRow(1.0f, udt.serialize(Vectors.dense(Array(2.0, -1.0)))),
-      InternalRow(0.0f, udt.serialize(Vectors.dense(Array(-3.0, -2.0)))),
-      InternalRow(0.0f, udt.serialize(Vectors.dense(Array(-1.0, -2.0)))))
-
-    val schema = StructType(
-      Seq(
-        StructField("label", FloatType),
-        StructField("features", new VectorUDT(), false, Metadata.empty)))
-
-    val inputRows = rows.map { row =>
-      val proj = UnsafeProjection.create(schema)
-      proj(row).copy()
-    }
-    createLocalRelationProto(DataTypeUtils.toAttributes(schema), inputRows, "UTC", Some(schema))
-  }
+class MLSuite extends MLHelper {
 
   test("reconcileParam") {
     val fakedML = new FakedML
@@ -189,6 +164,46 @@ class MLSuite extends SparkFunSuite with SparkConnectPlanTest {
     assert(fakedML.getDouble === 1.0)
   }
 
+  def fetchCommand(modelId: String, method: String): proto.MlCommand = {
+    proto.MlCommand
+      .newBuilder()
+      .setFetch(
+        proto.Fetch
+          .newBuilder()
+          .setObjRef(proto.ObjectRef.newBuilder().setId(modelId))
+          .addMethods(proto.Fetch.Method.newBuilder().setMethod(method)))
+      .build()
+  }
+
+  def trainLogisticRegressionModel(sessionHolder: SessionHolder): String = {
+    val fitCommand = proto.MlCommand
+      .newBuilder()
+      .setFit(
+        proto.MlCommand.Fit
+          .newBuilder()
+          .setDataset(createLocalRelationProto)
+          .setEstimator(
+            proto.MlOperator
+              .newBuilder()
+              .setName("org.apache.spark.ml.classification.LogisticRegression")
+              .setUid("LogisticRegression")
+              .setType(proto.MlOperator.OperatorType.ESTIMATOR))
+          .setParams(
+            proto.MlParams
+              .newBuilder()
+              .putParams(
+                "maxIter",
+                proto.Param
+                  .newBuilder()
+                  .setLiteral(proto.Expression.Literal
+                    .newBuilder()
+                    .setInteger(2))
+                  .build())))
+      .build()
+    val fitResult = MLHandler.handleMlCommand(sessionHolder, fitCommand)
+    fitResult.getOperatorInfo.getObjRef.getId
+  }
+
   test("LogisticRegression works") {
     val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
 
@@ -201,40 +216,19 @@ class MLSuite extends SparkFunSuite with SparkConnectPlanTest {
       assert(lrModel.getMaxIter === 2)
 
       // Fetch double attribute
-      val interceptCommand = proto.MlCommand
-        .newBuilder()
-        .setFetch(
-          proto.Fetch
-            .newBuilder()
-            .setObjRef(proto.ObjectRef.newBuilder().setId(modelId))
-            .addMethods(proto.Fetch.Method.newBuilder().setMethod("intercept")))
-        .build()
+      val interceptCommand = fetchCommand(modelId, "intercept")
       val interceptResult = MLHandler.handleMlCommand(sessionHolder, interceptCommand)
       assert(interceptResult.getParam.getLiteral.getDouble === lrModel.intercept)
 
       // Fetch Vector attribute
-      val coefficientsCommand = proto.MlCommand
-        .newBuilder()
-        .setFetch(
-          proto.Fetch
-            .newBuilder()
-            .setObjRef(proto.ObjectRef.newBuilder().setId(modelId))
-            .addMethods(proto.Fetch.Method.newBuilder().setMethod("coefficients")))
-        .build()
+      val coefficientsCommand = fetchCommand(modelId, "coefficients")
       val coefficientsResult = MLHandler.handleMlCommand(sessionHolder, coefficientsCommand)
       val deserializedCoefficients =
         MLUtils.deserializeVector(coefficientsResult.getParam.getVector)
       assert(deserializedCoefficients === lrModel.coefficients)
 
       // Fetch Matrix attribute
-      val coefficientsMatrixCommand = proto.MlCommand
-        .newBuilder()
-        .setFetch(
-          proto.Fetch
-            .newBuilder()
-            .setObjRef(proto.ObjectRef.newBuilder().setId(modelId))
-            .addMethods(proto.Fetch.Method.newBuilder().setMethod("coefficientMatrix")))
-        .build()
+      val coefficientsMatrixCommand = fetchCommand(modelId, "coefficientMatrix")
       val coefficientsMatrixResult =
         MLHandler.handleMlCommand(sessionHolder, coefficientsMatrixCommand)
       val deserializedCoefficientsMatrix =
@@ -300,32 +294,7 @@ class MLSuite extends SparkFunSuite with SparkConnectPlanTest {
     }
 
     try {
-      val fitCommand = proto.MlCommand
-        .newBuilder()
-        .setFit(
-          proto.MlCommand.Fit
-            .newBuilder()
-            .setDataset(createLocalRelationProto)
-            .setEstimator(
-              proto.MlOperator
-                .newBuilder()
-                .setName("org.apache.spark.ml.classification.LogisticRegression")
-                .setUid("LogisticRegression")
-                .setType(proto.MlOperator.OperatorType.ESTIMATOR))
-            .setParams(
-              proto.MlParams
-                .newBuilder()
-                .putParams(
-                  "maxIter",
-                  proto.Param
-                    .newBuilder()
-                    .setLiteral(proto.Expression.Literal
-                      .newBuilder()
-                      .setInteger(2))
-                    .build())))
-        .build()
-      val fitResult = MLHandler.handleMlCommand(sessionHolder, fitCommand)
-      val modelId = fitResult.getOperatorInfo.getObjRef.getId
+      val modelId = trainLogisticRegressionModel(sessionHolder)
 
       verifyModel(modelId, true)
 
@@ -386,5 +355,36 @@ class MLSuite extends SparkFunSuite with SparkConnectPlanTest {
         .build()
       MLHandler.handleMlCommand(sessionHolder, command)
     }
+  }
+
+  test("access the attribute which is not in allowed list") {
+    val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
+    val modelId = trainLogisticRegressionModel(sessionHolder)
+
+    val fakeAttributeCmd = fetchCommand(modelId, "notExistingAttribute")
+    intercept[MLAttributeNotAllowedException] {
+      MLHandler.handleMlCommand(sessionHolder, fakeAttributeCmd)
+    }
+  }
+
+  test("ML operator must implement MLReadable for loading") {
+    val thrown = intercept[MlUnsupportedException] {
+      val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
+      val readCmd = proto.MlCommand
+        .newBuilder()
+        .setRead(
+          proto.MlCommand.Read
+            .newBuilder()
+            .setOperator(proto.MlOperator
+              .newBuilder()
+              .setName("org.apache.spark.sql.connect.ml.NotImplementingMLReadble")
+              .setType(proto.MlOperator.OperatorType.ESTIMATOR))
+            .setPath("/tmp/fake"))
+        .build()
+      MLHandler.handleMlCommand(sessionHolder, readCmd)
+    }
+    assert(
+      thrown.message.contains("org.apache.spark.sql.connect.ml.NotImplementingMLReadble " +
+        "must implement MLReadable"))
   }
 }

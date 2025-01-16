@@ -21,6 +21,7 @@ import java.lang.reflect.InvocationTargetException
 
 import org.apache.spark.{SparkEnv, SparkException}
 import org.apache.spark.sql.connect.config.Connect
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.Utils
 
 /**
@@ -64,6 +65,7 @@ object SparkConnectPluginRegistry {
   def commandRegistry: Seq[CommandPlugin] = withInitialize {
     commandRegistryCache
   }
+  def mlBackendRegistry(conf: SQLConf): Seq[MLBackendPlugin] = loadMlBackendPlugins(conf)
 
   private def withInitialize[T](f: => Seq[T]): Seq[T] = {
     synchronized {
@@ -105,6 +107,10 @@ object SparkConnectPluginRegistry {
   private[connect] def loadCommandPlugins(): Seq[CommandPlugin] = {
     commandPluginChain.map(x => x()) ++ createConfiguredPlugins(
       SparkEnv.get.conf.get(Connect.CONNECT_EXTENSIONS_COMMAND_CLASSES))
+  }
+
+  private[connect] def loadMlBackendPlugins(sqlConf: SQLConf): Seq[MLBackendPlugin] = {
+    createConfiguredPlugins(sqlConf.getConf(Connect.CONNECT_ML_BACKEND_CLASSES))
   }
 
   /**
