@@ -69,7 +69,6 @@ test_packages = []
 if "SPARK_TESTING" in os.environ:
     test_packages = [
         "pyspark.tests",  # for Memory profiler parity tests
-        "pyspark.testing",
         "pyspark.resource.tests",
         "pyspark.sql.tests",
         "pyspark.sql.tests.arrow",
@@ -82,6 +81,7 @@ if "SPARK_TESTING" in os.environ:
         "pyspark.sql.tests.pandas",
         "pyspark.sql.tests.plot",
         "pyspark.sql.tests.streaming",
+        "pyspark.ml.tests",
         "pyspark.ml.tests.connect",
         "pyspark.pandas.tests",
         "pyspark.pandas.tests.computation",

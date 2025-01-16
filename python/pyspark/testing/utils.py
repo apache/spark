@@ -52,13 +52,9 @@ SPARK_HOME = _find_spark_home()
 
 
 def have_package(name: str) -> bool:
-    try:
-        import importlib
+    import importlib
 
-        importlib.import_module(name)
-        return True
-    except Exception:
-        return False
+    return importlib.util.find_spec(name) is not None
 
 
 have_numpy = have_package("numpy")

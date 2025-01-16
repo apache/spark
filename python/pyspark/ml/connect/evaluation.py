@@ -41,6 +41,8 @@ class _TorchMetricEvaluator(Evaluator):
         Gets the value of metricName or its default value.
 
         .. versionadded:: 3.5.0
+
+        .. deprecated:: 4.0.0
         """
         return self.getOrDefault(self.metricName)
 
@@ -93,6 +95,8 @@ class RegressionEvaluator(_TorchMetricEvaluator, HasLabelCol, HasPredictionCol, 
     Supported metrics are 'rmse', 'mse' and 'r2'.
 
     .. versionadded:: 3.5.0
+
+    .. deprecated:: 4.0.0
 
     Examples
     --------
@@ -160,6 +164,8 @@ class BinaryClassificationEvaluator(
     Supported metrics are 'areaUnderROC' and 'areaUnderPR'.
 
     .. versionadded:: 3.5.0
+
+    .. deprecated:: 4.0.0
 
     Examples
     --------
@@ -232,6 +238,8 @@ class MulticlassClassificationEvaluator(
     Supported metrics are 'accuracy'.
 
     .. versionadded:: 3.5.0
+
+    .. deprecated:: 4.0.0
 
     Examples
     --------

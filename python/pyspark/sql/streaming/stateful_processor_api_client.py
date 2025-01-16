@@ -28,7 +28,6 @@ from pyspark.sql.types import (
     Row,
 )
 from pyspark.sql.pandas.types import convert_pandas_using_numpy_type
-from pyspark.sql.utils import has_numpy
 from pyspark.serializers import CPickleSerializer
 from pyspark.errors import PySparkRuntimeError
 import uuid
@@ -414,8 +413,11 @@ class StatefulProcessorApiClient:
         return self.utf8_deserializer.loads(self.sockfile)
 
     def _serialize_to_bytes(self, schema: StructType, data: Tuple) -> bytes:
+        from pyspark.testing.utils import have_numpy
+
         converted = []
-        if has_numpy:
+
+        if have_numpy:
             import numpy as np
 
             # In order to convert NumPy types to Python primitive types.

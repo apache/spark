@@ -65,7 +65,6 @@ from pyspark.sql.pandas.functions import pandas_udf, PandasUDFType  # noqa: F401
 
 from pyspark.sql.utils import (
     to_str as _to_str,
-    has_numpy as _has_numpy,
     try_remote_functions as _try_remote_functions,
     get_active_spark_context as _get_active_spark_context,
     enum_to_value as _enum_to_value,
@@ -79,8 +78,6 @@ if TYPE_CHECKING:
         UserDefinedFunctionLike,
     )
 
-if _has_numpy:
-    import numpy as np
 
 # Note to developers: all of PySpark functions here take string as column names whenever possible.
 # Namely, if columns are referred as arguments, they can always be both Column or string,
@@ -254,6 +251,8 @@ def lit(col: Any) -> Column:
     |     [true, false]|     []|       [1.5, 0.1]|           [a, b, c]|
     +------------------+-------+-----------------+--------------------+
     """
+    from pyspark.testing.utils import have_numpy
+
     if isinstance(col, Column):
         return col
     elif isinstance(col, list):
@@ -262,7 +261,9 @@ def lit(col: Any) -> Column:
                 errorClass="COLUMN_IN_LIST", messageParameters={"func_name": "lit"}
             )
         return array(*[lit(item) for item in col])
-    elif _has_numpy:
+    elif have_numpy:
+        import numpy as np
+
         if isinstance(col, np.generic):
             dt = _from_numpy_type(col.dtype)
             if dt is None:

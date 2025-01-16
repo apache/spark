@@ -46,7 +46,7 @@ class PlanLogger extends Logging {
        |${MDC(
                QUERY_PLAN,
                sideBySide(
-                 unresolvedPlan.withNewChildren(resolvedPlan.children).treeString,
+                 unresolvedPlan.treeString,
                  resolvedPlan.treeString
                ).mkString("\n")
              )}
