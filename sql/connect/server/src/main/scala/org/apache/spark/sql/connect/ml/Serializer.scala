@@ -18,10 +18,10 @@
 package org.apache.spark.sql.connect.ml
 
 import org.apache.spark.connect.proto
-import org.apache.spark.ml.linalg.{DenseMatrix, DenseVector, SparseMatrix, SparseVector}
+import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.param.Params
 import org.apache.spark.sql.Dataset
-import org.apache.spark.sql.connect.common.LiteralValueProtoConverter
+import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, LiteralValueProtoConverter, ProtoDataTypes}
 import org.apache.spark.sql.connect.service.SessionHolder
 
 private[ml] object Serializer {
@@ -31,56 +31,99 @@ private[ml] object Serializer {
    * @param data
    *   the value of parameter
    * @return
-   *   proto.Param
+   *   proto.Expression
    */
-  def serializeParam(data: Any): proto.Param = {
-    data match {
-      case v: DenseVector =>
-        val denseBuilder = proto.Vector.Dense.newBuilder()
-        v.values.foreach(denseBuilder.addValue)
-        proto.Param
-          .newBuilder()
-          .setVector(proto.Vector.newBuilder().setDense(denseBuilder))
-          .build()
+  def serializeParam(data: Any): proto.Expression = {
+    val literal = data match {
       case v: SparseVector =>
-        val sparseBuilder = proto.Vector.Sparse.newBuilder().setSize(v.size)
-        v.indices.foreach(sparseBuilder.addIndex)
-        v.values.foreach(sparseBuilder.addValue)
-        proto.Param
-          .newBuilder()
-          .setVector(proto.Vector.newBuilder().setSparse(sparseBuilder))
-          .build()
-      case v: DenseMatrix =>
-        val denseBuilder = proto.Matrix.Dense.newBuilder()
-        v.values.foreach(denseBuilder.addValue)
-        denseBuilder.setNumCols(v.numCols)
-        denseBuilder.setNumRows(v.numRows)
-        denseBuilder.setIsTransposed(v.isTransposed)
-        proto.Param
-          .newBuilder()
-          .setMatrix(proto.Matrix.newBuilder().setDense(denseBuilder))
-          .build()
-      case v: SparseMatrix =>
-        val sparseBuilder = proto.Matrix.Sparse
-          .newBuilder()
-          .setNumCols(v.numCols)
-          .setNumRows(v.numRows)
-        v.values.foreach(sparseBuilder.addValue)
-        v.colPtrs.foreach(sparseBuilder.addColptr)
-        v.rowIndices.foreach(sparseBuilder.addRowIndex)
-        proto.Param
-          .newBuilder()
-          .setMatrix(proto.Matrix.newBuilder().setSparse(sparseBuilder))
-          .build()
+        val builder = proto.Expression.Literal.Struct.newBuilder()
+        builder.setStructType(DataTypeProtoConverter.toConnectProtoType(VectorUDT.sqlType))
+        // type = 0
+        builder.addElements(proto.Expression.Literal.newBuilder().setByte(0))
+        // size
+        builder.addElements(proto.Expression.Literal.newBuilder().setInteger(v.size))
+        // indices
+        builder.addElements(buildIntArray(v.indices))
+        // values
+        builder.addElements(buildDoubleArray(v.values))
+        proto.Expression.Literal.newBuilder().setStruct(builder).build()
+
+      case v: DenseVector =>
+        val builder = proto.Expression.Literal.Struct.newBuilder()
+        builder.setStructType(DataTypeProtoConverter.toConnectProtoType(VectorUDT.sqlType))
+        // type = 1
+        builder.addElements(proto.Expression.Literal.newBuilder().setByte(1))
+        // size = null
+        builder.addElements(
+          proto.Expression.Literal.newBuilder().setNull(ProtoDataTypes.NullType))
+        // indices = null
+        builder.addElements(
+          proto.Expression.Literal.newBuilder().setNull(ProtoDataTypes.NullType))
+        // values
+        builder.addElements(buildDoubleArray(v.values))
+        proto.Expression.Literal.newBuilder().setStruct(builder).build()
+
+      case m: SparseMatrix =>
+        val builder = proto.Expression.Literal.Struct.newBuilder()
+        builder.setStructType(DataTypeProtoConverter.toConnectProtoType(MatrixUDT.sqlType))
+        // type = 0
+        builder.addElements(proto.Expression.Literal.newBuilder().setByte(0))
+        // numRows
+        builder.addElements(proto.Expression.Literal.newBuilder().setInteger(m.numRows))
+        // numCols
+        builder.addElements(proto.Expression.Literal.newBuilder().setInteger(m.numCols))
+        // colPtrs
+        builder.addElements(buildIntArray(m.colPtrs))
+        // rowIndices
+        builder.addElements(buildIntArray(m.rowIndices))
+        // values
+        builder.addElements(buildDoubleArray(m.values))
+        // isTransposed
+        builder.addElements(proto.Expression.Literal.newBuilder().setBoolean(m.isTransposed))
+        proto.Expression.Literal.newBuilder().setStruct(builder).build()
+
+      case m: DenseMatrix =>
+        val builder = proto.Expression.Literal.Struct.newBuilder()
+        builder.setStructType(DataTypeProtoConverter.toConnectProtoType(MatrixUDT.sqlType))
+        // type = 1
+        builder.addElements(proto.Expression.Literal.newBuilder().setByte(1))
+        // numRows
+        builder.addElements(proto.Expression.Literal.newBuilder().setInteger(m.numRows))
+        // numCols
+        builder.addElements(proto.Expression.Literal.newBuilder().setInteger(m.numCols))
+        // colPtrs = null
+        builder.addElements(
+          proto.Expression.Literal.newBuilder().setNull(ProtoDataTypes.NullType))
+        // rowIndices = null
+        builder.addElements(
+          proto.Expression.Literal.newBuilder().setNull(ProtoDataTypes.NullType))
+        // values
+        builder.addElements(buildDoubleArray(m.values))
+        // isTransposed
+        builder.addElements(proto.Expression.Literal.newBuilder().setBoolean(m.isTransposed))
+        proto.Expression.Literal.newBuilder().setStruct(builder).build()
+
       case _: Byte | _: Short | _: Int | _: Long | _: Float | _: Double | _: Boolean | _: String |
           _: Array[_] =>
-        proto.Param
-          .newBuilder()
-          .setLiteral(LiteralValueProtoConverter.toLiteralProto(data))
-          .build()
+        LiteralValueProtoConverter.toLiteralProto(data)
 
       case other => throw MlUnsupportedException(s"$other not supported")
     }
+    proto.Expression.newBuilder().setLiteral(literal).build()
+  }
+
+  private def buildIntArray(values: Array[Int]): proto.Expression.Literal = {
+    val builder = proto.Expression.Literal.SpecializedArray.newBuilder()
+    builder.setElementType(ProtoDataTypes.IntegerType)
+    values.foreach(builder.addIntegers)
+    proto.Expression.Literal.newBuilder().setSpecializedArray(builder.build()).build()
+  }
+
+  private def buildDoubleArray(values: Array[Double]): proto.Expression.Literal = {
+    val builder = proto.Expression.Literal.SpecializedArray.newBuilder()
+    builder.setElementType(ProtoDataTypes.DoubleType)
+    values.foreach(builder.addDoubles)
+    proto.Expression.Literal.newBuilder().setSpecializedArray(builder.build()).build()
   }
 
   def deserializeMethodArguments(
@@ -91,6 +134,16 @@ private[ml] object Serializer {
         val param = arg.getParam
         if (param.hasLiteral) {
           param.getLiteral.getLiteralTypeCase match {
+            case proto.Expression.Literal.LiteralTypeCase.STRUCT =>
+              val struct = param.getLiteral.getStruct
+              val schema = DataTypeProtoConverter.toCatalystType(struct.getStructType)
+              if (schema == VectorUDT.sqlType) {
+                (MLUtils.deserializeVector(struct), classOf[Vector])
+              } else if (schema == MatrixUDT.sqlType) {
+                (MLUtils.deserializeMatrix(struct), classOf[Matrix])
+              } else {
+                throw MlUnsupportedException(s"$schema not supported")
+              }
             case proto.Expression.Literal.LiteralTypeCase.INTEGER =>
               (param.getLiteral.getInteger.asInstanceOf[Object], classOf[Int])
             case proto.Expression.Literal.LiteralTypeCase.FLOAT =>
@@ -104,22 +157,6 @@ private[ml] object Serializer {
             case other =>
               throw MlUnsupportedException(s"$other not supported")
           }
-        } else if (param.hasVector) {
-          val vector = MLUtils.deserializeVector(param.getVector)
-          val vectorType = if (param.getVector.hasDense) {
-            classOf[DenseVector]
-          } else {
-            classOf[SparseVector]
-          }
-          (vector, vectorType)
-        } else if (param.hasMatrix) {
-          val matrix = MLUtils.deserializeMatrix(param.getMatrix)
-          val matrixType = if (param.getMatrix.hasDense) {
-            classOf[DenseMatrix]
-          } else {
-            classOf[SparseMatrix]
-          }
-          (matrix, matrixType)
         } else {
           throw MlUnsupportedException(s"$param not supported")
         }

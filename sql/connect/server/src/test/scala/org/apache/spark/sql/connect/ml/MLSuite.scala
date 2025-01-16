@@ -74,31 +74,31 @@ class MLSuite extends MLHelper {
       .newBuilder()
       .putParams(
         "boolean",
-        proto.Param
+        proto.Expression
           .newBuilder()
           .setLiteral(proto.Expression.Literal.newBuilder().setBoolean(true))
           .build())
       .putParams(
         "double",
-        proto.Param
+        proto.Expression
           .newBuilder()
           .setLiteral(proto.Expression.Literal.newBuilder().setDouble(1.0))
           .build())
       .putParams(
         "int",
-        proto.Param
+        proto.Expression
           .newBuilder()
           .setLiteral(proto.Expression.Literal.newBuilder().setInteger(10))
           .build())
       .putParams(
         "float",
-        proto.Param
+        proto.Expression
           .newBuilder()
           .setLiteral(proto.Expression.Literal.newBuilder().setFloat(10.0f))
           .build())
       .putParams(
         "arrayString",
-        proto.Param
+        proto.Expression
           .newBuilder()
           .setLiteral(
             proto.Expression.Literal
@@ -117,7 +117,7 @@ class MLSuite extends MLHelper {
           .build())
       .putParams(
         "arrayInt",
-        proto.Param
+        proto.Expression
           .newBuilder()
           .setLiteral(
             proto.Expression.Literal
@@ -136,7 +136,7 @@ class MLSuite extends MLHelper {
           .build())
       .putParams(
         "arrayDouble",
-        proto.Param
+        proto.Expression
           .newBuilder()
           .setLiteral(
             proto.Expression.Literal
@@ -224,7 +224,7 @@ class MLSuite extends MLHelper {
       val coefficientsCommand = fetchCommand(modelId, "coefficients")
       val coefficientsResult = MLHandler.handleMlCommand(sessionHolder, coefficientsCommand)
       val deserializedCoefficients =
-        MLUtils.deserializeVector(coefficientsResult.getParam.getVector)
+        MLUtils.deserializeVector(coefficientsResult.getParam.getLiteral.getStruct)
       assert(deserializedCoefficients === lrModel.coefficients)
 
       // Fetch Matrix attribute
@@ -232,7 +232,7 @@ class MLSuite extends MLHelper {
       val coefficientsMatrixResult =
         MLHandler.handleMlCommand(sessionHolder, coefficientsMatrixCommand)
       val deserializedCoefficientsMatrix =
-        MLUtils.deserializeMatrix(coefficientsMatrixResult.getParam.getMatrix)
+        MLUtils.deserializeMatrix(coefficientsMatrixResult.getParam.getLiteral.getStruct)
       assert(lrModel.coefficientMatrix === deserializedCoefficientsMatrix)
 
       // Predict with sparse vector

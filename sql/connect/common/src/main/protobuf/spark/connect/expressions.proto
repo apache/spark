@@ -194,6 +194,8 @@ message Expression {
       Array array = 22;
       Map map = 23;
       Struct struct = 24;
+
+      SpecializedArray specialized_array = 25;
     }
 
     message Decimal {
@@ -227,6 +229,16 @@ message Expression {
     message Struct {
       DataType struct_type = 1;
       repeated Literal elements = 2;
+    }
+
+    message SpecializedArray {
+      DataType element_type = 1;
+      repeated bool booleans = 2;
+      repeated int32 integers = 3;
+      repeated int64 longs = 4;
+      repeated float floats = 5;
+      repeated double doubles = 6;
+      repeated string strings = 7;
     }
   }
 

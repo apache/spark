@@ -26,11 +26,11 @@ import org.apache.commons.lang3.reflect.MethodUtils.invokeMethod
 
 import org.apache.spark.connect.proto
 import org.apache.spark.ml.{Estimator, Transformer}
-import org.apache.spark.ml.linalg.{Matrices, Matrix, Vector, Vectors}
+import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.param.Params
 import org.apache.spark.ml.util.{MLReadable, MLWritable}
 import org.apache.spark.sql.{DataFrame, Dataset}
-import org.apache.spark.sql.connect.common.LiteralValueProtoConverter
+import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, LiteralValueProtoConverter}
 import org.apache.spark.sql.connect.planner.SparkConnectPlanner
 import org.apache.spark.sql.connect.plugin.SparkConnectPluginRegistry
 import org.apache.spark.sql.connect.service.SessionHolder
@@ -53,28 +53,54 @@ private[ml] object MLUtils {
     providers.map(est => est.getClass.getName -> est.getClass).toMap
   }
 
-  def deserializeVector(vector: proto.Vector): Vector = {
-    if (vector.hasDense) {
-      val values = vector.getDense.getValueList.asScala.map(_.toDouble).toArray
-      Vectors.dense(values)
-    } else {
-      val size = vector.getSparse.getSize
-      val indices = vector.getSparse.getIndexList.asScala.map(_.toInt).toArray
-      val values = vector.getSparse.getValueList.asScala.map(_.toDouble).toArray
-      Vectors.sparse(size, indices, values)
+  private lazy val estimators = loadOperators(classOf[Estimator[_]])
+
+  private lazy val transformers = loadOperators(classOf[Transformer])
+
+  def deserializeVector(s: proto.Expression.Literal.Struct): Vector = {
+    assert(s.getElementsCount == 4)
+    s.getElements(0).getByte match {
+      case 0 =>
+        val size = s.getElements(1).getInteger
+        val indices =
+          s.getElements(2).getSpecializedArray.getIntegersList.asScala.map(_.toInt).toArray
+        val values =
+          s.getElements(3).getSpecializedArray.getDoublesList.asScala.map(_.toDouble).toArray
+        Vectors.sparse(size, indices, values)
+
+      case 1 =>
+        val values =
+          s.getElements(3).getSpecializedArray.getDoublesList.asScala.map(_.toDouble).toArray
+        Vectors.dense(values)
+
+      case o => throw MlUnsupportedException(s"Unknown Vector type $o")
     }
   }
 
-  def deserializeMatrix(matrix: proto.Matrix): Matrix = {
-    if (matrix.hasDense) {
-      val values = matrix.getDense.getValueList.asScala.map(_.toDouble).toArray
-      Matrices.dense(matrix.getDense.getNumRows, matrix.getDense.getNumCols, values)
-    } else {
-      val sparse = matrix.getSparse
-      val colPtrs = sparse.getColptrList.asScala.map(_.toInt).toArray
-      val rowIndices = sparse.getRowIndexList.asScala.map(_.toInt).toArray
-      val values = sparse.getValueList.asScala.map(_.toDouble).toArray
-      Matrices.sparse(sparse.getNumRows, sparse.getNumCols, colPtrs, rowIndices, values)
+  def deserializeMatrix(s: proto.Expression.Literal.Struct): Matrix = {
+    assert(s.getElementsCount == 7)
+    s.getElements(0).getByte match {
+      case 0 =>
+        val numRows = s.getElements(1).getInteger
+        val numCols = s.getElements(2).getInteger
+        val colPtrs =
+          s.getElements(3).getSpecializedArray.getIntegersList.asScala.map(_.toInt).toArray
+        val rowIndices =
+          s.getElements(4).getSpecializedArray.getIntegersList.asScala.map(_.toInt).toArray
+        val values =
+          s.getElements(5).getSpecializedArray.getDoublesList.asScala.map(_.toDouble).toArray
+        val isTransposed = s.getElements(6).getBoolean
+        new SparseMatrix(numRows, numCols, colPtrs, rowIndices, values, isTransposed)
+
+      case 1 =>
+        val numRows = s.getElements(1).getInteger
+        val numCols = s.getElements(2).getInteger
+        val values =
+          s.getElements(5).getSpecializedArray.getDoublesList.asScala.map(_.toDouble).toArray
+        val isTransposed = s.getElements(6).getBoolean
+        new DenseMatrix(numRows, numCols, values, isTransposed)
+
+      case o => throw MlUnsupportedException(s"Unknown Matrix type $o")
     }
   }
 
@@ -89,16 +115,29 @@ private[ml] object MLUtils {
   def setInstanceParams(instance: Params, params: proto.MlParams): Unit = {
     params.getParamsMap.asScala.foreach { case (name, paramProto) =>
       val p = instance.getParam(name)
-      val value = if (paramProto.hasLiteral) {
-        reconcileParam(
-          p.paramValueClassTag.runtimeClass,
-          LiteralValueProtoConverter.toCatalystValue(paramProto.getLiteral))
-      } else if (paramProto.hasVector) {
-        deserializeVector(paramProto.getVector)
-      } else if (paramProto.hasMatrix) {
-        deserializeMatrix(paramProto.getMatrix)
-      } else {
-        throw MlUnsupportedException(s"Unsupported parameter type for ${name}")
+      val value = paramProto.getExprTypeCase match {
+        case proto.Expression.ExprTypeCase.LITERAL =>
+          val literal = paramProto.getLiteral
+          literal.getLiteralTypeCase match {
+            case proto.Expression.Literal.LiteralTypeCase.STRUCT =>
+              val s = literal.getStruct
+              val schema = DataTypeProtoConverter.toCatalystType(s.getStructType)
+              if (schema == VectorUDT.sqlType) {
+                deserializeVector(s)
+              } else if (schema == MatrixUDT.sqlType) {
+                deserializeMatrix(s)
+              } else {
+                throw MlUnsupportedException(
+                  s"Unsupported parameter struct ${schema} for ${name}")
+              }
+
+            case _ =>
+              reconcileParam(
+                p.paramValueClassTag.runtimeClass,
+                LiteralValueProtoConverter.toCatalystValue(paramProto.getLiteral))
+          }
+
+        case o => throw MlUnsupportedException(s"Unsupported parameter type ${o} for ${name}")
       }
       instance.set(p, value)
     }
