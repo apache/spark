@@ -2277,6 +2277,11 @@
           "Cannot resolve the given default collation. Suggested valid collation names: ['<proposals>']?"
         ]
       },
+      "DEFAULT_COLLATION_NOT_SUPPORTED" : {
+        "message" : [
+          "Setting default session collation other than UTF8_BINARY is currently not supported."
+        ]
+      },
       "TIME_ZONE" : {
         "message" : [
           "Cannot resolve the given timezone."
