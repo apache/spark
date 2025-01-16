@@ -278,12 +278,12 @@ class BarrierTaskContext private[spark] (
   override private[spark] def interruptible(): Boolean = taskContext.interruptible()
 
   override private[spark] def pendingInterrupt(threadToInterrupt: Option[Thread], reason: String)
-  : Unit = {
+    : Unit = {
     taskContext.pendingInterrupt(threadToInterrupt, reason)
   }
 
   override private[spark] def createResourceUninterruptibly[T <: Closeable](resourceBuilder: => T)
-  : T = {
+    : T = {
     taskContext.createResourceUninterruptibly(resourceBuilder)
   }
 }
