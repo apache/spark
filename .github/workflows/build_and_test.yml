@@ -49,6 +49,10 @@ on:
         required: false
         type: string
         default: ''
+    secrets:
+      codecov_token:
+        description: The upload token of codecov.
+        required: false
 jobs:
   precondition:
     name: Check changes
@@ -623,7 +627,7 @@ jobs:
       if: fromJSON(inputs.envs).PYSPARK_CODECOV == 'true'
       uses: codecov/codecov-action@v5
       env:
-        CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+        CODECOV_TOKEN: ${{ secrets.codecov_token }}
       with:
         files: ./python/coverage.xml
         flags: unittests
