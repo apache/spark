@@ -29,6 +29,16 @@ from pyspark.ml.classification import (
     LogisticRegressionModel,
     LogisticRegressionSummary,
     BinaryLogisticRegressionSummary,
+    DecisionTreeClassifier,
+    DecisionTreeClassificationModel,
+    RandomForestClassifier,
+    RandomForestClassificationModel,
+    RandomForestClassificationSummary,
+    RandomForestClassificationTrainingSummary,
+    BinaryRandomForestClassificationSummary,
+    BinaryRandomForestClassificationTrainingSummary,
+    GBTClassifier,
+    GBTClassificationModel,
 )
 
 
@@ -282,6 +292,327 @@ class ClassificationTestsMixin:
             rmtree(path)
         except OSError:
             pass
+
+    def test_decision_tree_classifier(self):
+        df = (
+            self.spark.createDataFrame(
+                [
+                    (1.0, 1.0, Vectors.dense(0.0, 5.0)),
+                    (0.0, 2.0, Vectors.dense(1.0, 2.0)),
+                    (1.0, 3.0, Vectors.dense(2.0, 1.0)),
+                    (0.0, 4.0, Vectors.dense(3.0, 3.0)),
+                ],
+                ["label", "weight", "features"],
+            )
+            .coalesce(1)
+            .sortWithinPartitions("weight")
+        )
+
+        dt = DecisionTreeClassifier(
+            maxDepth=2,
+            labelCol="label",
+            leafCol="leaf",
+            seed=1,
+        )
+        self.assertEqual(dt.getMaxDepth(), 2)
+        self.assertEqual(dt.getSeed(), 1)
+        self.assertEqual(dt.getLabelCol(), "label")
+        self.assertEqual(dt.getLeafCol(), "leaf")
+
+        # Estimator save & load
+        with tempfile.TemporaryDirectory(prefix="decision_tree_classifier") as d:
+            dt.write().overwrite().save(d)
+            dt2 = DecisionTreeClassifier.load(d)
+            self.assertEqual(str(dt), str(dt2))
+
+        model = dt.fit(df)
+        self.assertEqual(model.numClasses, 2)
+        self.assertEqual(model.numFeatures, 2)
+        self.assertEqual(model.depth, 2)
+        self.assertEqual(model.numNodes, 5)
+        self.assertEqual(model.featureImportances, Vectors.sparse(2, [0], [1.0]))
+        self.assertTrue("depth=2, numNodes=5, numClasses=2, numFeatures=2" in model.toDebugString)
+        self.assertTrue("If (feature 0 <= 2.5)" in model.toDebugString)
+
+        vec = Vectors.dense(0.0, 5.0)
+        self.assertEqual(model.predict(vec), 1.0)
+        self.assertEqual(model.predictRaw(vec), Vectors.dense(0.0, 1.0))
+        self.assertEqual(model.predictProbability(vec), Vectors.dense(0.0, 1.0))
+        self.assertEqual(model.predictLeaf(vec), 0.0)
+
+        output = model.transform(df)
+        expected_cols = [
+            "label",
+            "weight",
+            "features",
+            "rawPrediction",
+            "probability",
+            "prediction",
+            "leaf",
+        ]
+        self.assertEqual(output.columns, expected_cols)
+        self.assertEqual(output.count(), 4)
+
+        # Model save & load
+        with tempfile.TemporaryDirectory(prefix="decision_tree_model") as d:
+            model.write().overwrite().save(d)
+            model2 = DecisionTreeClassificationModel.load(d)
+            self.assertEqual(str(model), str(model2))
+            self.assertEqual(model.toDebugString, model2.toDebugString)
+
+    def test_gbt_classifier(self):
+        df = (
+            self.spark.createDataFrame(
+                [
+                    (1.0, 1.0, Vectors.dense(0.0, 5.0)),
+                    (0.0, 2.0, Vectors.dense(1.0, 2.0)),
+                    (1.0, 3.0, Vectors.dense(2.0, 1.0)),
+                    (0.0, 4.0, Vectors.dense(3.0, 3.0)),
+                ],
+                ["label", "weight", "features"],
+            )
+            .coalesce(1)
+            .sortWithinPartitions("weight")
+        )
+
+        gbt = GBTClassifier(
+            maxIter=3,
+            maxDepth=2,
+            labelCol="label",
+            leafCol="leaf",
+            seed=1,
+        )
+        self.assertEqual(gbt.getMaxIter(), 3)
+        self.assertEqual(gbt.getMaxDepth(), 2)
+        self.assertEqual(gbt.getSeed(), 1)
+        self.assertEqual(gbt.getLabelCol(), "label")
+        self.assertEqual(gbt.getLeafCol(), "leaf")
+
+        # Estimator save & load
+        with tempfile.TemporaryDirectory(prefix="gbt_classifier") as d:
+            gbt.write().overwrite().save(d)
+            gbt2 = GBTClassifier.load(d)
+            self.assertEqual(str(gbt), str(gbt2))
+
+        model = gbt.fit(df)
+        self.assertEqual(model.numClasses, 2)
+        self.assertEqual(model.numFeatures, 2)
+        # TODO(SPARK-50843): Support access submodel in TreeEnsembleModel
+        # model.trees
+        self.assertEqual(model.treeWeights, [1.0, 0.1, 0.1])
+        self.assertEqual(model.totalNumNodes, 15)
+        self.assertTrue(np.allclose(model.featureImportances, [0.3333, 0.6667], atol=1e-4))
+        self.assertTrue("numTrees=3, numClasses=2, numFeatures=2" in model.toDebugString)
+        self.assertTrue("If (feature 0 <= 0.5)" in model.toDebugString)
+
+        vec = Vectors.dense(0.0, 5.0)
+        self.assertEqual(model.predict(vec), 1.0)
+        self.assertTrue(np.allclose(model.predictRaw(vec), [-1.0915, 1.0915], atol=1e-4))
+        self.assertTrue(np.allclose(model.predictProbability(vec), [0.1013, 0.8987], atol=1e-4))
+        self.assertEqual(model.predictLeaf(vec), Vectors.dense(0.0, 0.0, 0.0))
+
+        # GBT-specific method: evaluateEachIteration
+        self.assertTrue(
+            np.allclose(
+                model.evaluateEachIteration(df),
+                [0.253856022085945, 0.23205304779013333, 0.21358401299568353],
+                atol=1e-4,
+            )
+        )
+
+        output = model.transform(df)
+        expected_cols = [
+            "label",
+            "weight",
+            "features",
+            "rawPrediction",
+            "probability",
+            "prediction",
+            "leaf",
+        ]
+        self.assertEqual(output.columns, expected_cols)
+        self.assertEqual(output.count(), 4)
+
+        # Model save & load
+        with tempfile.TemporaryDirectory(prefix="gbt_classification_model") as d:
+            model.write().overwrite().save(d)
+            model2 = GBTClassificationModel.load(d)
+            self.assertEqual(str(model), str(model2))
+            self.assertEqual(model.toDebugString, model2.toDebugString)
+
+    def test_binary_random_forest_classifier(self):
+        df = (
+            self.spark.createDataFrame(
+                [
+                    (1.0, 1.0, Vectors.dense(0.0, 5.0)),
+                    (0.0, 2.0, Vectors.dense(1.0, 2.0)),
+                    (1.0, 3.0, Vectors.dense(2.0, 1.0)),
+                    (0.0, 4.0, Vectors.dense(3.0, 3.0)),
+                ],
+                ["label", "weight", "features"],
+            )
+            .coalesce(1)
+            .sortWithinPartitions("weight")
+        )
+
+        rf = RandomForestClassifier(
+            numTrees=3,
+            maxDepth=2,
+            labelCol="label",
+            leafCol="leaf",
+            seed=1,
+        )
+        self.assertEqual(rf.getNumTrees(), 3)
+        self.assertEqual(rf.getMaxDepth(), 2)
+        self.assertEqual(rf.getSeed(), 1)
+        self.assertEqual(rf.getLabelCol(), "label")
+        self.assertEqual(rf.getLeafCol(), "leaf")
+
+        # Estimator save & load
+        with tempfile.TemporaryDirectory(prefix="binary_random_forest_classifier") as d:
+            rf.write().overwrite().save(d)
+            rf2 = RandomForestClassifier.load(d)
+            self.assertEqual(str(rf), str(rf2))
+
+        model = rf.fit(df)
+        self.assertEqual(model.numClasses, 2)
+        self.assertEqual(model.numFeatures, 2)
+        # TODO(SPARK-50843): Support access submodel in TreeEnsembleModel
+        # model.trees
+        self.assertEqual(model.treeWeights, [1.0, 1.0, 1.0])
+        self.assertEqual(model.totalNumNodes, 9)
+        self.assertTrue(np.allclose(model.featureImportances, [0.7778, 0.2222], atol=1e-4))
+        self.assertTrue("numTrees=3, numClasses=2, numFeatures=2" in model.toDebugString)
+        self.assertTrue("If (feature 0 <= 0.5)" in model.toDebugString)
+
+        vec = Vectors.dense(0.0, 5.0)
+        self.assertEqual(model.predict(vec), 1.0)
+        self.assertEqual(model.predictRaw(vec), Vectors.dense(1.0, 2.0))
+        self.assertTrue(np.allclose(model.predictProbability(vec), [0.3333, 0.6667], atol=1e-4))
+        self.assertEqual(model.predictLeaf(vec), Vectors.dense(0.0, 0.0, 1.0))
+
+        output = model.transform(df)
+        expected_cols = [
+            "label",
+            "weight",
+            "features",
+            "rawPrediction",
+            "probability",
+            "prediction",
+            "leaf",
+        ]
+        self.assertEqual(output.columns, expected_cols)
+        self.assertEqual(output.count(), 4)
+
+        # model summary
+        summary = model.summary
+        self.assertTrue(isinstance(summary, BinaryRandomForestClassificationSummary))
+        self.assertTrue(isinstance(summary, BinaryRandomForestClassificationTrainingSummary))
+        self.assertEqual(summary.labels, [0.0, 1.0])
+        self.assertEqual(summary.accuracy, 0.75)
+        self.assertEqual(summary.areaUnderROC, 0.875)
+        self.assertEqual(summary.predictions.columns, expected_cols)
+
+        summary2 = model.evaluate(df)
+        self.assertTrue(isinstance(summary2, BinaryRandomForestClassificationSummary))
+        self.assertFalse(isinstance(summary2, BinaryRandomForestClassificationTrainingSummary))
+        self.assertEqual(summary2.labels, [0.0, 1.0])
+        self.assertEqual(summary2.accuracy, 0.75)
+        self.assertEqual(summary.areaUnderROC, 0.875)
+        self.assertEqual(summary2.predictions.columns, expected_cols)
+
+        # Model save & load
+        with tempfile.TemporaryDirectory(prefix="binary_random_forest_model") as d:
+            model.write().overwrite().save(d)
+            model2 = RandomForestClassificationModel.load(d)
+            self.assertEqual(str(model), str(model2))
+            self.assertEqual(model.toDebugString, model2.toDebugString)
+
+    def test_multiclass_random_forest_classifier(self):
+        df = (
+            self.spark.createDataFrame(
+                [
+                    (1.0, 1.0, Vectors.dense(0.0, 5.0)),
+                    (0.0, 2.0, Vectors.dense(1.0, 2.0)),
+                    (1.0, 3.0, Vectors.dense(2.0, 1.0)),
+                    (2.0, 4.0, Vectors.dense(3.0, 3.0)),
+                ],
+                ["label", "weight", "features"],
+            )
+            .coalesce(1)
+            .sortWithinPartitions("weight")
+        )
+
+        rf = RandomForestClassifier(
+            numTrees=3,
+            maxDepth=2,
+            labelCol="label",
+            leafCol="leaf",
+            seed=1,
+        )
+        self.assertEqual(rf.getNumTrees(), 3)
+        self.assertEqual(rf.getMaxDepth(), 2)
+        self.assertEqual(rf.getSeed(), 1)
+        self.assertEqual(rf.getLabelCol(), "label")
+        self.assertEqual(rf.getLeafCol(), "leaf")
+
+        # Estimator save & load
+        with tempfile.TemporaryDirectory(prefix="binary_random_forest_classifier") as d:
+            rf.write().overwrite().save(d)
+            rf2 = RandomForestClassifier.load(d)
+            self.assertEqual(str(rf), str(rf2))
+
+        model = rf.fit(df)
+        self.assertEqual(model.numClasses, 3)
+        self.assertEqual(model.numFeatures, 2)
+        # TODO(SPARK-50843): Support access submodel in TreeEnsembleModel
+        # model.trees
+        self.assertEqual(model.treeWeights, [1.0, 1.0, 1.0])
+        self.assertEqual(model.totalNumNodes, 9)
+        self.assertEqual(model.featureImportances, Vectors.sparse(2, [0], [1.0]))
+        self.assertTrue("numTrees=3, numClasses=3, numFeatures=2" in model.toDebugString)
+        self.assertTrue("If (feature 0 <= 1.5)" in model.toDebugString)
+
+        vec = Vectors.dense(0.0, 5.0)
+        self.assertEqual(model.predict(vec), 0.0)
+        self.assertEqual(model.predictRaw(vec), Vectors.dense(1.5, 1.5, 0.0))
+        self.assertTrue(np.allclose(model.predictProbability(vec), [0.5, 0.5, 0.0], atol=1e-4))
+        self.assertEqual(model.predictLeaf(vec), Vectors.dense(0.0, 0.0, 0.0))
+
+        output = model.transform(df)
+        expected_cols = [
+            "label",
+            "weight",
+            "features",
+            "rawPrediction",
+            "probability",
+            "prediction",
+            "leaf",
+        ]
+        self.assertEqual(output.columns, expected_cols)
+        self.assertEqual(output.count(), 4)
+
+        # model summary
+        summary = model.summary
+        self.assertTrue(isinstance(summary, RandomForestClassificationSummary))
+        self.assertTrue(isinstance(summary, RandomForestClassificationTrainingSummary))
+        self.assertEqual(summary.labels, [0.0, 1.0, 2.0])
+        self.assertEqual(summary.accuracy, 0.5)
+        self.assertEqual(summary.predictions.columns, expected_cols)
+
+        summary2 = model.evaluate(df)
+        self.assertTrue(isinstance(summary2, RandomForestClassificationSummary))
+        self.assertFalse(isinstance(summary2, RandomForestClassificationTrainingSummary))
+        self.assertEqual(summary2.labels, [0.0, 1.0, 2.0])
+        self.assertEqual(summary2.accuracy, 0.5)
+        self.assertEqual(summary2.predictions.columns, expected_cols)
+
+        # Model save & load
+        with tempfile.TemporaryDirectory(prefix="multiclass_random_forest_model") as d:
+            model.write().overwrite().save(d)
+            model2 = RandomForestClassificationModel.load(d)
+            self.assertEqual(str(model), str(model2))
+            self.assertEqual(model.toDebugString, model2.toDebugString)
 
 
 class ClassificationTests(ClassificationTestsMixin, unittest.TestCase):

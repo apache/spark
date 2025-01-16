@@ -279,9 +279,17 @@ private[ml] object MLUtils {
   // The attributes could be retrieved from the corresponding python class
   private lazy val ALLOWED_ATTRIBUTES = HashSet(
     "toString",
+    "toDebugString",
     "numFeatures",
     "predict", // PredictionModel
+    "predictLeaf", // Tree models
     "numClasses",
+    "depth", // DecisionTreeClassificationModel
+    "numNodes", // Tree models
+    "totalNumNodes", // Tree models
+    "javaTreeWeights", // Tree models
+    "treeWeights", // Tree models
+    "featureImportances", // Tree models
     "predictRaw", // ClassificationModel
     "predictProbability", // ProbabilisticClassificationModel
     "coefficients",
@@ -291,6 +299,7 @@ private[ml] object MLUtils {
     "summary",
     "hasSummary",
     "evaluate", // LogisticRegressionModel
+    "evaluateEachIteration", // GBTClassificationModel
     "predictions",
     "predictionCol",
     "labelCol",
