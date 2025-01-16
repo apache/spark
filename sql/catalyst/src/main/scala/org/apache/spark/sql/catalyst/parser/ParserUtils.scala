@@ -148,12 +148,17 @@ class SqlScriptingLabelContext {
    * Check if the beginLabelCtx and endLabelCtx match.
    * If the labels are defined, they must follow rules:
    *  - If both labels exist, they must match.
+   *  - If label is qualified, it is invalid.
    *  - Begin label must exist if end label exists.
+   *
+   * @param beginLabelCtx Begin label context.
+   * @param endLabelCtx The end label context.
    */
   private def checkLabels(
       beginLabelCtx: Option[BeginLabelContext],
       endLabelCtx: Option[EndLabelContext]) : Unit = {
     (beginLabelCtx, endLabelCtx) match {
+      // Throw an error if labels do not match.
       case (Some(bl: BeginLabelContext), Some(el: EndLabelContext))
         if bl.multipartIdentifier().getText.toLowerCase(Locale.ROOT) !=
             el.multipartIdentifier().getText.toLowerCase(Locale.ROOT) =>
@@ -163,6 +168,7 @@ class SqlScriptingLabelContext {
             bl.multipartIdentifier().getText,
             el.multipartIdentifier().getText)
         }
+      // Throw an error if label is qualified.
       case (Some(bl: BeginLabelContext), _)
         if bl.multipartIdentifier().parts.size() > 1 =>
         withOrigin(bl) {
@@ -171,6 +177,7 @@ class SqlScriptingLabelContext {
             bl.multipartIdentifier().getText.toLowerCase(Locale.ROOT)
           )
         }
+      // Throw an error if end label exists without begin label.
       case (None, Some(el: EndLabelContext)) =>
         withOrigin(el) {
           throw SqlScriptingErrors.endLabelWithoutBeginLabel(

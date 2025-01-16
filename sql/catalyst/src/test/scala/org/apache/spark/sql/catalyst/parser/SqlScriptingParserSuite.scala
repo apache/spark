@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.parser
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.expressions.{Alias, EqualTo, Expression, In, Literal, ScalarSubquery}
 import org.apache.spark.sql.catalyst.plans.SQLHelper
-import org.apache.spark.sql.catalyst.plans.logical.{CaseStatement, CompoundBody, CreateVariable, ErrorHandler, ForStatement, IfElseStatement, IterateStatement, LeaveStatement, LoopStatement, Project, RepeatStatement, SingleStatement, WhileStatement}
+import org.apache.spark.sql.catalyst.plans.logical.{CaseStatement, CompoundBody, CreateVariable, ErrorHandler, ForStatement, IfElseStatement, IterateStatement, LeaveStatement, LoopStatement, Project, RepeatStatement, SetVariable, SingleStatement, WhileStatement}
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLId
 import org.apache.spark.sql.exceptions.SqlScriptingException
 import org.apache.spark.sql.internal.SQLConf
@@ -2015,6 +2015,21 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
       parameters = Map("labelName" -> "PART1.PART2"))
   }
 
+  test("qualified label name: label cannot be qualified + end label") {
+    val sqlScriptText =
+      """
+        |BEGIN
+        |  part1.part2: BEGIN
+        |  END part1.part2;
+        |END""".stripMargin
+    checkError(
+      exception = intercept[SqlScriptingException] {
+        parsePlan(sqlScriptText)
+      },
+      condition = "INVALID_LABEL_USAGE.QUALIFIED_LABEL_NAME",
+      parameters = Map("labelName" -> "PART1.PART2"))
+  }
+
   test("unique label names: nested labeled scope statements") {
     val sqlScriptText =
       """BEGIN
@@ -2340,27 +2355,96 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     assert(tree.conditions("test").equals("45000")) // Default SQLSTATE
   }
 
-  test("declare handler") {
+  test("declare handler with compound body") {
     val sqlScriptText =
       """
         |BEGIN
-        |  DECLARE EXIT HANDLER FOR test BEGIN SELECT 1; END;
+        |  DECLARE EXIT HANDLER FOR test_condition BEGIN SELECT 1; END;
         |END""".stripMargin
     val tree = parsePlan(sqlScriptText).asInstanceOf[CompoundBody]
     assert(tree.handlers.length == 1)
     assert(tree.handlers.head.isInstanceOf[ErrorHandler])
+    assert(tree.handlers.head.conditions.length == 1)
+    assert(tree.handlers.head.conditions.head == "test_condition")
+    assert(tree.handlers.head.body.collection.size == 1)
+    assert(tree.handlers.head.body.collection.head.isInstanceOf[SingleStatement])
+    assert(tree.handlers.head.body.collection.head.asInstanceOf[SingleStatement]
+      .parsedPlan.isInstanceOf[Project])
+  }
+
+  // This test works because END is not keyword here but a part of the statement.
+  // It represents the name of the column in returned dataframe.
+  test("declare handler single statement with END") {
+    val sqlScriptText =
+      """
+        |BEGIN
+        |  DECLARE EXIT HANDLER FOR test_condition SELECT 1 END;
+        |END""".stripMargin
+    val tree = parsePlan(sqlScriptText).asInstanceOf[CompoundBody]
+    assert(tree.handlers.length == 1)
+    assert(tree.handlers.head.isInstanceOf[ErrorHandler])
+    assert(tree.handlers.head.conditions.length == 1)
+    assert(tree.handlers.head.conditions.head == "test_condition")
+    assert(tree.handlers.head.body.collection.size == 1)
+    assert(tree.handlers.head.body.collection.head.isInstanceOf[SingleStatement])
+    assert(tree.handlers.head.body.collection.head.asInstanceOf[SingleStatement]
+      .parsedPlan.isInstanceOf[Project])
   }
 
   test("declare handler single statement") {
     val sqlScriptText =
       """
         |BEGIN
-        |  DECLARE EXIT HANDLER FOR test SELECT 1 END;
+        |  DECLARE EXIT HANDLER FOR test_condition SELECT 1;
         |END""".stripMargin
     val tree = parsePlan(sqlScriptText).asInstanceOf[CompoundBody]
     assert(tree.handlers.length == 1)
     assert(tree.handlers.head.isInstanceOf[ErrorHandler])
+    assert(tree.handlers.head.conditions.length == 1)
+    assert(tree.handlers.head.conditions.head == "test_condition")
+    assert(tree.handlers.head.body.collection.size == 1)
+    assert(tree.handlers.head.body.collection.head.isInstanceOf[SingleStatement])
+    assert(tree.handlers.head.body.collection.head.asInstanceOf[SingleStatement]
+      .parsedPlan.isInstanceOf[Project])
   }
+
+  test("declare handler set statement") {
+    val sqlScriptText =
+      """
+        |BEGIN
+        |  DECLARE EXIT HANDLER FOR test_condition SET test_var = 1;
+        |END""".stripMargin
+    val tree = parsePlan(sqlScriptText).asInstanceOf[CompoundBody]
+    assert(tree.handlers.length == 1)
+    assert(tree.handlers.head.isInstanceOf[ErrorHandler])
+    assert(tree.handlers.head.conditions.length == 1)
+    assert(tree.handlers.head.conditions.head == "test_condition")
+    assert(tree.handlers.head.body.collection.size == 1)
+    assert(tree.handlers.head.body.collection.head.isInstanceOf[SingleStatement])
+    assert(tree.handlers.head.body.collection.head.asInstanceOf[SingleStatement]
+      .parsedPlan.isInstanceOf[SetVariable])
+  }
+
+  test("declare handler with multiple conditions/sqlstates") {
+    val sqlScriptText =
+      """
+        |BEGIN
+        |  DECLARE EXIT HANDLER FOR SQLSTATE '22012', test_condition_1, test_condition_2
+        |    SET test_var = 1;
+        |END""".stripMargin
+    val tree = parsePlan(sqlScriptText).asInstanceOf[CompoundBody]
+    assert(tree.handlers.length == 1)
+    assert(tree.handlers.head.isInstanceOf[ErrorHandler])
+    assert(tree.handlers.head.conditions.length == 3)
+    assert(tree.handlers.head.conditions.contains("test_condition_1"))
+    assert(tree.handlers.head.conditions.contains("test_condition_2"))
+    assert(tree.handlers.head.conditions.contains("22012"))
+    assert(tree.handlers.head.body.collection.size == 1)
+    assert(tree.handlers.head.body.collection.head.isInstanceOf[SingleStatement])
+    assert(tree.handlers.head.body.collection.head.asInstanceOf[SingleStatement]
+      .parsedPlan.isInstanceOf[SetVariable])
+  }
+
 
   // Helper methods
   def cleanupStatementString(statementStr: String): String = {

@@ -307,7 +307,7 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
     val sqlScript =
       """
         |BEGIN
-        |  DECLARE EXIT HANDLER FOR SQLSTATE SQLSTATE 'X22012'
+        |  DECLARE EXIT HANDLER FOR SQLSTATE 'X22012'
         |  BEGIN
         |    SELECT 1;
         |  END;

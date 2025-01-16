@@ -82,8 +82,7 @@ case class SqlScriptingInterpreter(session: SparkSession) {
   private def transformBodyIntoExec(
       compoundBody: CompoundBody,
       args: Map[String, Expression],
-      context: SqlScriptingExecutionContext,
-      isHandler: Boolean = false): CompoundBodyExec = {
+      context: SqlScriptingExecutionContext): CompoundBodyExec = {
     // Add drop variables to the end of the body.
     val variables = compoundBody.collection.flatMap {
       case st: SingleStatement => getDeclareVarNameFromPlan(st.parsedPlan)
@@ -101,8 +100,7 @@ case class SqlScriptingInterpreter(session: SparkSession) {
         transformBodyIntoExec(
           handler.body,
           args,
-          context,
-          isHandler = true)
+          context)
 
       // Execution node of handler.
       val handlerScopeLabel = if (handler.handlerType == HandlerType.EXIT) {
