@@ -21,6 +21,8 @@ name: Build and test
 
 on:
   workflow_call:
+    permissions:
+      contents: read
     inputs:
       java:
         required: false
