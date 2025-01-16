@@ -49,6 +49,10 @@ on:
         required: false
         type: string
         default: ''
+    secrets:
+      codecov_token:
+        description: The upload token of codecov.
+        required: false
 jobs:
   precondition:
     name: Check changes
@@ -108,7 +112,7 @@ jobs:
             ui=false
             docs=false
           fi
-          build=`./dev/is-changed.py -m "core,unsafe,kvstore,avro,utils,network-common,network-shuffle,repl,launcher,examples,sketch,variant,api,catalyst,hive-thriftserver,mllib-local,mllib,graphx,streaming,sql-kafka-0-10,streaming-kafka-0-10,streaming-kinesis-asl,kubernetes,hadoop-cloud,spark-ganglia-lgpl,protobuf,yarn,connect,sql,hive"`
+          build=`./dev/is-changed.py -m "core,unsafe,kvstore,avro,utils,network-common,network-shuffle,repl,launcher,examples,sketch,variant,api,catalyst,hive-thriftserver,mllib-local,mllib,graphx,streaming,sql-kafka-0-10,streaming-kafka-0-10,streaming-kinesis-asl,kubernetes,hadoop-cloud,spark-ganglia-lgpl,profiler,protobuf,yarn,connect,sql,hive"`
           precondition="
             {
               \"build\": \"$build\",
@@ -453,7 +457,7 @@ jobs:
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v5
       env:
-        CODECOV_TOKEN: ad879b47-11ad-42ed-8f94-be8b8710f45f
+        CODECOV_TOKEN: ${{ secrets.codecov_token }}
       with:
         files: ./python/coverage.xml
         flags: unittests

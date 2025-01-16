@@ -17,11 +17,11 @@
 # under the License.
 #
 
-name: "Build / Coverage (master, Scala 2.13, Hadoop 3, JDK 17)"
+name: "Build / Non-ANSI (branch-4.0, Hadoop 3, JDK 17, Scala 2.13)"
 
 on:
   schedule:
-    - cron: '0 10 * * *'
+    - cron: '0 2 * * *'
   workflow_dispatch:
 
 jobs:
@@ -33,17 +33,21 @@ jobs:
     if: github.repository == 'apache/spark'
     with:
       java: 17
-      branch: master
+      branch: branch-4.0
       hadoop: hadoop3
       envs: >-
         {
           "PYSPARK_IMAGE_TO_TEST": "python-311",
           "PYTHON_TO_TEST": "python3.11",
-          "PYSPARK_CODECOV": "true"
+          "SPARK_ANSI_SQL_MODE": "false",
         }
       jobs: >-
         {
-          "pyspark": "true"
+          "build": "true",
+          "docs": "true",
+          "pyspark": "true",
+          "sparkr": "true",
+          "tpcds-1g": "true",
+          "docker-integration-tests": "true",
+          "yarn": "true"
         }
-    secrets:
-      codecov_token: ${{ secrets.CODECOV_TOKEN }}
