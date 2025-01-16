@@ -2453,7 +2453,7 @@ class TransformWithStateSuite extends StateStoreMetricsTest
     new Path(stateCheckpointPath, "_stateSchema/default/")
   }
 
-  // TODO: Re-enable tests after StateSchemaV3 threshold change
+  // TODO: [SPARK-50845] Re-enable tests after StateSchemaV3 threshold change
   ignore("transformWithState - verify that metadata and schema logs are purged") {
     withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
       classOf[RocksDBStateStoreProvider].getName,
@@ -2545,7 +2545,7 @@ class TransformWithStateSuite extends StateStoreMetricsTest
     }
   }
 
-  // TODO: Re-enable tests after StateSchemaV3 threshold change
+  // TODO: [SPARK-50845] Re-enable tests after StateSchemaV3 threshold change
   ignore("transformWithState - verify that schema file " +
     "is kept after metadata is purged") {
     withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
@@ -2764,7 +2764,7 @@ class TransformWithStateSuite extends StateStoreMetricsTest
     }
   }
 
-  // TODO: Re-enable tests after StateSchemaV3 threshold change
+  // TODO: [SPARK-50845] Re-enable tests after StateSchemaV3 threshold change
   ignore("transformWithState - verify that all metadata and schema logs are not purged") {
     withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
       classOf[RocksDBStateStoreProvider].getName,
@@ -2840,7 +2840,7 @@ class TransformWithStateSuite extends StateStoreMetricsTest
     }
   }
 
-  // TODO: Re-enable tests after StateSchemaV3 threshold change
+  // TODO: [SPARK-50845] Re-enable tests after StateSchemaV3 threshold change
   ignore("transformWithState - verify that no metadata and schema logs are purged after" +
     " removing column family") {
     withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
