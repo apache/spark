@@ -411,6 +411,15 @@ class ClassificationTestsMixin:
         self.assertTrue(np.allclose(model.predictProbability(vec), [0.1013, 0.8987], atol=1e-4))
         self.assertEqual(model.predictLeaf(vec), Vectors.dense(0.0, 0.0, 0.0))
 
+        # GBT-specific method: evaluateEachIteration
+        self.assertTrue(
+            np.allclose(
+                model.evaluateEachIteration(df),
+                [0.253856022085945, 0.23205304779013333, 0.21358401299568353],
+                atol=1e-4,
+            )
+        )
+
         output = model.transform(df)
         expected_cols = [
             "label",
