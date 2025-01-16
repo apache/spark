@@ -874,7 +874,7 @@ object SQLConf {
   lazy val TRIM_COLLATION_ENABLED =
     buildConf("spark.sql.collation.trim.enabled")
       .internal()
-      .doc("When enabled allows the use of trim collations which trims trailing whitespaces from" +
+      .doc("When enabled allows the use of trim collations which trim trailing whitespaces from" +
         " strings."
       )
       .version("4.0.0")
