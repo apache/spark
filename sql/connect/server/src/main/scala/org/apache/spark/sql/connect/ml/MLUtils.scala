@@ -53,10 +53,6 @@ private[ml] object MLUtils {
     providers.map(est => est.getClass.getName -> est.getClass).toMap
   }
 
-  private lazy val estimators = loadOperators(classOf[Estimator[_]])
-
-  private lazy val transformers = loadOperators(classOf[Transformer])
-
   def deserializeVector(s: proto.Expression.Literal.Struct): Vector = {
     assert(s.getElementsCount == 4)
     s.getElements(0).getByte match {
