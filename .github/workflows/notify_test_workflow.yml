@@ -31,7 +31,9 @@ jobs:
   notify:
     name: Notify test workflow
     runs-on: ubuntu-latest
-    permissions: write-all
+    permissions:
+      actions: read
+      checks: write
     steps:
       - name: "Notify test workflow"
         uses: actions/github-script@v7

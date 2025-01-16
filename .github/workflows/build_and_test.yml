@@ -49,6 +49,10 @@ on:
         required: false
         type: string
         default: ''
+    secrets:
+      codecov_token:
+        description: The upload token of codecov.
+        required: false
 jobs:
   precondition:
     name: Check changes
