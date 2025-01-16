@@ -162,12 +162,8 @@ private[spark] object FallbackStorage extends Logging {
                                filename: String): Path = {
     val fallbackPath = new Path(conf.get(STORAGE_DECOMMISSION_FALLBACK_STORAGE_PATH).get)
     val subPaths = conf.get(STORAGE_DECOMMISSION_FALLBACK_STORAGE_SUBPATHS)
-    if (subPaths > 0) {
-      val hash = JavaUtils.nonNegativeHash(filename) % subPaths
-      new Path(fallbackPath, s"$appId/$shuffleId/$hash/$filename")
-    } else {
-      new Path(fallbackPath, s"$appId/$shuffleId/$filename")
-    }
+    val hash = JavaUtils.nonNegativeHash(filename) % subPaths
+    new Path(fallbackPath, s"$appId/$shuffleId/$hash/$filename")
   }
 
   /**
