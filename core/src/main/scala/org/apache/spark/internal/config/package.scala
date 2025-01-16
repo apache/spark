@@ -597,8 +597,8 @@ package object config {
       .checkValue(_.endsWith(java.io.File.separator), "Path should end with separator.")
       .createOptional
 
-  private[spark] val STORAGE_DECOMMISSION_FALLBACK_STORAGE_SUBPATHS =
-    ConfigBuilder("spark.storage.decommission.fallbackStorage.subPaths")
+  private[spark] val STORAGE_DECOMMISSION_FALLBACK_STORAGE_SUB_DIRECTORIES =
+    ConfigBuilder("spark.storage.decommission.fallbackStorage.subDirectories")
       .doc("The fallback storage stores files across this number of subdirectories.")
       .version("4.0.0")
       .intConf
