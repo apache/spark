@@ -295,20 +295,22 @@ class FallbackStorageSuite extends SparkFunSuite with LocalSparkContext {
 
   Seq(1, 2, 4, 1024, Int.MaxValue).foreach { subDirs =>
     test(s"Get path for filename with $subDirs subdirectories") {
-      val conf = getSparkConf(2, 2).set(STORAGE_DECOMMISSION_FALLBACK_STORAGE_SUB_DIRECTORIES, subDirs)
+      val conf = getSparkConf(2, 2)
+        .set(STORAGE_DECOMMISSION_FALLBACK_STORAGE_SUB_DIRECTORIES, subDirs)
       val path = conf.get(STORAGE_DECOMMISSION_FALLBACK_STORAGE_PATH).get
       val appId = "app-id"
       val shuffleId = 123
       val filename = "the-file"
       val actual = FallbackStorage.getPath(conf, appId, shuffleId, filename)
-      new Path(s"${path}/$appId/$shuffleId/${1049883992 % subDirs}/$filename")
+      val expected = new Path(s"${path}/$appId/$shuffleId/${1049883992 % subDirs}/$filename")
       assert(actual == expected)
     }
   }
 
   Seq(1, 2, 4, 1024, Int.MaxValue).foreach { subDirs =>
     test(s"Control number of sub-directories ($subDirs)") {
-      val conf = getSparkConf(2, 2).set(STORAGE_DECOMMISSION_FALLBACK_STORAGE_SUB_DIRECTORIES, subDirs)
+      val conf = getSparkConf(2, 2)
+        .set(STORAGE_DECOMMISSION_FALLBACK_STORAGE_SUB_DIRECTORIES, subDirs)
       sc = new SparkContext(conf)
       withSpark(sc) { sc =>
         TestUtils.waitUntilExecutorsUp(sc, 2, 60000)
@@ -345,8 +347,8 @@ class FallbackStorageSuite extends SparkFunSuite with LocalSparkContext {
         val shuffleDirs = appDirs(0).listFiles(dirsOnly)
         assert(shuffleDirs.length == 1)
         // third level is controlled number of hash / bucket dirs
-        val subDirs = shuffleDirs(0).listFiles(dirsOnly)
-        assert(subDirs.length == Math.min(subDirs, 20), subDirs.mkString(", "))
+        val dirs = shuffleDirs(0).listFiles(dirsOnly)
+        assert(dirs.length == Math.min(subDirs, 20), dirs.mkString(", "))
       }
     }
    }
