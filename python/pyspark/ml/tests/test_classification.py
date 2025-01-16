@@ -557,7 +557,7 @@ class ClassificationTestsMixin:
         self.assertEqual(rf.getLeafCol(), "leaf")
 
         # Estimator save & load
-        with tempfile.TemporaryDirectory(prefix="binary_multiclass_forest_classifier") as d:
+        with tempfile.TemporaryDirectory(prefix="binary_random_forest_classifier") as d:
             rf.write().overwrite().save(d)
             rf2 = RandomForestClassifier.load(d)
             self.assertEqual(str(rf), str(rf2))
