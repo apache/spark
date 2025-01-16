@@ -885,7 +885,7 @@ object SQLConf {
   lazy val DEFAULT_COLLATION_ENABLED =
     buildConf("spark.sql.sessionDefaultCollation.enabled")
       .internal()
-      .doc("Session default collation feature is under development and its use should be done" +
+      .doc("Session default collation feature is under development and its use should be done " +
         "under this feature flag.")
       .version("4.0.0")
       .booleanConf
