@@ -37,7 +37,11 @@ from typing import (
 
 from pyspark import since
 from pyspark.ml.common import inherit_doc
-from pyspark.ml.remote.util import try_remote_intermediate_result, try_remote_write, try_remote_read
+from pyspark.ml.connect.util import (
+    try_remote_intermediate_result,
+    try_remote_write,
+    try_remote_read,
+)
 from pyspark.sql import SparkSession
 from pyspark.sql.utils import is_remote
 from pyspark.util import VersionUtils
