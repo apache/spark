@@ -42,6 +42,7 @@ import org.apache.spark.sql.internal.SQLConf.LEGACY_CTE_PRECEDENCE_POLICY
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.util.SchemaUtils.ColumnPath
 import org.apache.spark.util.ArrayImplicits._
 
 /**
@@ -355,6 +356,13 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     new AnalysisException(
       errorClass = "UNSUPPORTED_FEATURE.COLLATIONS_IN_MAP_KEYS",
       messageParameters = Map.empty)
+  }
+
+  def objectLevelCollationsNotEnabledError(): Throwable = {
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_FEATURE.OBJECT_LEVEL_COLLATIONS",
+      messageParameters = Map.empty
+    )
   }
 
   def trimCollationNotEnabledError(): Throwable = {
@@ -2673,12 +2681,12 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "comment" -> comment))
   }
 
-  def invalidPartitionColumnKeyInTableError(key: String, tblName: String): Throwable = {
+  def invalidPartitionColumnKeyInTableError(key: String, tableName: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1231",
+      errorClass = "PARTITIONS_NOT_FOUND",
       messageParameters = Map(
-        "key" -> key,
-        "tblName" -> toSQLId(tblName)))
+        "partitionList" -> toSQLId(key),
+        "tableName" -> toSQLId(tableName)))
   }
 
   def invalidPartitionSpecError(
@@ -3699,15 +3707,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     )
   }
 
-  def implicitCollationMismatchError(implicitTypes: Seq[StringType]): Throwable = {
-    new AnalysisException(
-      errorClass = "COLLATION_MISMATCH.IMPLICIT",
-      messageParameters = Map(
-        "implicitTypes" -> implicitTypes.map(toSQLType).mkString(", ")
-      )
-    )
-  }
-
   def explicitCollationMismatchError(explicitTypes: Seq[StringType]): Throwable = {
     new AnalysisException(
       errorClass = "COLLATION_MISMATCH.EXPLICIT",
@@ -3717,10 +3716,19 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     )
   }
 
-  def indeterminateCollationError(): Throwable = {
+  def indeterminateCollationInExpressionError(expr: Expression): Throwable = {
     new AnalysisException(
       errorClass = "INDETERMINATE_COLLATION",
-      messageParameters = Map.empty
+      messageParameters = Map("expr" -> toSQLExpr(expr))
+    )
+  }
+
+  def indeterminateCollationInSchemaError(columnPaths: Seq[ColumnPath]): Throwable = {
+    new AnalysisException(
+      errorClass = "INDETERMINATE_COLLATION_IN_SCHEMA",
+      messageParameters = Map(
+        "columnPaths" -> columnPaths.map(_.toString).mkString(", ")
+      )
     )
   }
 

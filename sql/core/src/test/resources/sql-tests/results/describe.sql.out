@@ -76,7 +76,7 @@ DESCRIBE EXTENDED t AS JSON
 -- !query schema
 struct<json_metadata:string>
 -- !query output
-{"table_name":"t","catalog_name":"spark_catalog","namespace":["default"],"schema_name":"default","columns":[{"name":"a","type":{"name":"string"},"nullable":true},{"name":"b","type":{"name":"integer"},"nullable":true},{"name":"c","type":{"name":"string"},"nullable":true},{"name":"d","type":{"name":"string"},"nullable":true}],"num_buckets":2,"bucket_columns":["a"],"sort_columns":["b"],"location":"file:[not included in comparison]/{warehouse_dir}/t","storage_properties":{"a":"1","b":"2","password":"*********(redacted)"},"created_time [not included in comparison]":"None","last_access [not included in comparison]":"None","created_by [not included in comparison]":"None","type":"MANAGED","provider":"parquet","comment":"table_comment","table_properties":{"e":"3","password":"*********(redacted)","t":"test"},"partition_provider":"Catalog","partition_columns":["c","d"]}
+{"table_name":"t","catalog_name":"spark_catalog","namespace":["default"],"schema_name":"default","columns":[{"name":"a","type":{"name":"string"},"nullable":true},{"name":"b","type":{"name":"int"},"nullable":true},{"name":"c","type":{"name":"string"},"nullable":true},{"name":"d","type":{"name":"string"},"nullable":true}],"num_buckets":2,"bucket_columns":["a"],"sort_columns":["b"],"location":"file:[not included in comparison]/{warehouse_dir}/t","storage_properties":{"a":"1","b":"2","password":"*********(redacted)"},"created_time [not included in comparison]":"None","last_access [not included in comparison]":"None","created_by [not included in comparison]":"None","type":"MANAGED","provider":"parquet","comment":"table_comment","table_properties":{"e":"3","password":"*********(redacted)","t":"test"},"partition_provider":"Catalog","partition_columns":["c","d"]}
 
 
 -- !query
@@ -303,7 +303,7 @@ DESC EXTENDED t PARTITION (c='Us', d=1) AS JSON
 -- !query schema
 struct<json_metadata:string>
 -- !query output
-{"table_name":"t","catalog_name":"spark_catalog","namespace":["default"],"schema_name":"default","columns":[{"name":"a","type":{"name":"string"},"nullable":true},{"name":"b","type":{"name":"integer"},"nullable":true},{"name":"c","type":{"name":"string"},"nullable":true},{"name":"d","type":{"name":"string"},"nullable":true}],"partition_values":{"c":"Us","d":"1"},"location":"file:[not included in comparison]/{warehouse_dir}/t/c=Us/d=1","storage_properties":{"a":"1","b":"2","password":"*********(redacted)"},"created_time [not included in comparison]":"None","last_access [not included in comparison]":"None","created_by [not included in comparison]":"None","type":"MANAGED","provider":"parquet","num_buckets":2,"bucket_columns":["a"],"sort_columns":["b"],"table_properties":{"password":"*********(redacted)","t":"test"},"partition_provider":"Catalog","partition_columns":["c","d"]}
+{"table_name":"t","catalog_name":"spark_catalog","namespace":["default"],"schema_name":"default","columns":[{"name":"a","type":{"name":"string"},"nullable":true},{"name":"b","type":{"name":"int"},"nullable":true},{"name":"c","type":{"name":"string"},"nullable":true},{"name":"d","type":{"name":"string"},"nullable":true}],"partition_values":{"c":"Us","d":"1"},"location":"file:[not included in comparison]/{warehouse_dir}/t/c=Us/d=1","storage_properties":{"a":"1","b":"2","password":"*********(redacted)"},"created_time [not included in comparison]":"None","last_access [not included in comparison]":"None","created_by [not included in comparison]":"None","type":"MANAGED","provider":"parquet","num_buckets":2,"bucket_columns":["a"],"sort_columns":["b"],"table_properties":{"password":"*********(redacted)","t":"test"},"partition_provider":"Catalog","partition_columns":["c","d"]}
 
 
 -- !query
@@ -693,8 +693,9 @@ EXPLAIN DESCRIBE EXTENDED t PARTITION (c='Us', d=2) AS JSON
 struct<plan:string>
 -- !query output
 == Physical Plan ==
-Execute DescribeTableJsonCommand
-   +- DescribeTableJsonCommand `spark_catalog`.`default`.`t`, [c=Us, d=2], true
+Execute DescribeRelationJsonCommand
+   +- DescribeRelationJsonCommand [c=Us, d=2], true, [json_metadata#x]
+      +- ResolvedTable V2SessionCatalog(spark_catalog), default.t, V1Table(default.t), [a#x, b#x, c#x, d#x]
 
 
 -- !query

@@ -43,7 +43,7 @@ import org.apache.spark.sql.catalyst.analysis.{HintErrorLogger, Resolver}
 import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode
 import org.apache.spark.sql.catalyst.expressions.codegen.CodeGenerator
 import org.apache.spark.sql.catalyst.plans.logical.HintErrorHandler
-import org.apache.spark.sql.catalyst.util.{CollationFactory, DateTimeUtils}
+import org.apache.spark.sql.catalyst.util.{CollationFactory, CollationNames, DateTimeUtils}
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.types.{AtomicType, StringType, TimestampNTZType, TimestampType}
@@ -275,6 +275,18 @@ object SQLConf {
       .version("4.0.0")
       .booleanConf
       .createWithDefault(false)
+
+  val ANALYZER_DUAL_RUN_RETURN_SINGLE_PASS_RESULT =
+    buildConf("spark.sql.analyzer.singlePassResolver.returnSinglePassResultInDualRun")
+      .internal()
+      .doc(
+        "When true, return the result of the single-pass resolver as the result of the dual run " +
+        "analysis (which is used if the ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER flag " +
+        "value is true). Otherwise, return the result of the fixed-point analyzer."
+      )
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(Utils.isTesting)
 
   val ANALYZER_SINGLE_PASS_RESOLVER_VALIDATION_ENABLED =
     buildConf("spark.sql.analyzer.singlePassResolver.validationEnabled")
@@ -859,16 +871,27 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
-  lazy val TRIM_COLLATION_ENABLED =
-    buildConf("spark.sql.collation.trim.enabled")
+  lazy val OBJECT_LEVEL_COLLATIONS_ENABLED =
+    buildConf("spark.sql.collation.objectLevel.enabled")
       .internal()
       .doc(
-        "Trim collation feature is under development and its use should be done under this" +
-        "feature flag. Trim collation trims trailing whitespaces from strings."
+        "Object level collations feature is under development and its use should be done " +
+        "under this feature flag. The feature allows setting default collation for all " +
+        "underlying columns within that object, except the ones that were previously created."
       )
       .version("4.0.0")
       .booleanConf
       .createWithDefault(Utils.isTesting)
+
+  lazy val TRIM_COLLATION_ENABLED =
+    buildConf("spark.sql.collation.trim.enabled")
+      .internal()
+      .doc("When enabled allows the use of trim collations which trim trailing whitespaces from" +
+        " strings."
+      )
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(true)
 
   val DEFAULT_COLLATION =
     buildConf(SqlApiConfHelper.DEFAULT_COLLATION)
@@ -3377,6 +3400,24 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val PYTHON_UDF_MAX_RECORDS_PER_BATCH =
+    buildConf("spark.sql.execution.python.udf.maxRecordsPerBatch")
+      .doc("When using Python UDFs, limit the maximum number of records that can be batched " +
+        "for serialization/deserialization.")
+      .version("4.0.0")
+      .intConf
+      .checkValue(_ > 0, "The value of spark.sql.execution.python.udf.maxRecordsPerBatch " +
+        "must be positive.")
+      .createWithDefault(100)
+
+  val PYTHON_UDF_BUFFER_SIZE =
+    buildConf("spark.sql.execution.python.udf.buffer.size")
+      .doc(
+        s"Same as `${BUFFER_SIZE.key}` but only applies to Python UDF executions. If it is not " +
+        s"set, the fallback is `${BUFFER_SIZE.key}`.")
+      .version("4.0.0")
+      .fallbackConf(BUFFER_SIZE)
+
   val PANDAS_UDF_BUFFER_SIZE =
     buildConf("spark.sql.execution.pandas.udf.buffer.size")
       .doc(
@@ -5752,10 +5793,12 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def allowCollationsInMapKeys: Boolean = getConf(ALLOW_COLLATIONS_IN_MAP_KEYS)
 
+  def objectLevelCollationsEnabled: Boolean = getConf(OBJECT_LEVEL_COLLATIONS_ENABLED)
+
   def trimCollationEnabled: Boolean = getConf(TRIM_COLLATION_ENABLED)
 
   override def defaultStringType: StringType = {
-    if (getConf(DEFAULT_COLLATION).toUpperCase(Locale.ROOT) == "UTF8_BINARY") {
+    if (getConf(DEFAULT_COLLATION).toUpperCase(Locale.ROOT) == CollationNames.UTF8_BINARY) {
       StringType
     } else {
       StringType(getConf(DEFAULT_COLLATION))

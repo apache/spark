@@ -692,19 +692,6 @@ object DescribeRelation {
 }
 
 /**
- * The logical plan of the DESCRIBE relation_name AS JSON command.
- */
-case class DescribeRelationJson(
-    relation: LogicalPlan,
-    partitionSpec: TablePartitionSpec,
-    isExtended: Boolean) extends UnaryCommand {
-  override val output: Seq[Attribute] = DescribeCommandSchema.describeJsonTableAttributes()
-  override def child: LogicalPlan = relation
-  override protected def withNewChildInternal(newChild: LogicalPlan): DescribeRelationJson =
-    copy(relation = newChild)
-}
-
-/**
  * The logical plan of the DESCRIBE relation_name col_name command.
  */
 case class DescribeColumn(

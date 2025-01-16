@@ -559,7 +559,7 @@ class SparkContext:
         """
         SparkContext._ensure_initialized()
         assert SparkContext._jvm is not None
-        SparkContext._jvm.java.lang.System.setProperty(key, value)
+        getattr(SparkContext._jvm, "java.lang.System").setProperty(key, value)
 
     @classmethod
     def getSystemProperty(cls, key: str) -> str:
@@ -581,7 +581,7 @@ class SparkContext:
         """
         SparkContext._ensure_initialized()
         assert SparkContext._jvm is not None
-        return SparkContext._jvm.java.lang.System.getProperty(key)
+        return getattr(SparkContext._jvm, "java.lang.System").getProperty(key)
 
     @property
     def version(self) -> str:
@@ -1206,7 +1206,7 @@ class SparkContext:
 
     def _dictToJavaMap(self, d: Optional[Dict[str, str]]) -> JavaMap:
         assert self._jvm is not None
-        jm = self._jvm.java.util.HashMap()
+        jm = getattr(self._jvm, "java.util.HashMap")()
         if not d:
             d = {}
         for k, v in d.items():
@@ -1938,7 +1938,7 @@ class SparkContext:
         :meth:`SparkContext.addFile`
         """
         return list(
-            self._jvm.scala.jdk.javaapi.CollectionConverters.asJava(  # type: ignore[union-attr]
+            getattr(self._jvm, "scala.jdk.javaapi.CollectionConverters").asJava(
                 self._jsc.sc().listFiles()
             )
         )
@@ -2066,7 +2066,7 @@ class SparkContext:
         :meth:`SparkContext.addArchive`
         """
         return list(
-            self._jvm.scala.jdk.javaapi.CollectionConverters.asJava(  # type: ignore[union-attr]
+            getattr(self._jvm, "scala.jdk.javaapi.CollectionConverters").asJava(
                 self._jsc.sc().listArchives()
             )
         )

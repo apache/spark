@@ -3492,27 +3492,35 @@ class PlanGenerationTestSuite
   }
 
   test("to_protobuf messageClassName") {
-    binary.select(pbFn.to_protobuf(fn.col("bytes"), classOf[StorageLevel].getName))
+    val df = binary.select(
+      pbFn.from_protobuf(fn.col("bytes"), "StorageLevel", testDescFilePath).alias("col"))
+    df.select(pbFn.to_protobuf(fn.col("col"), classOf[StorageLevel].getName))
   }
 
   test("to_protobuf messageClassName options") {
-    binary.select(
+    val df = binary.select(
+      pbFn.from_protobuf(fn.col("bytes"), "StorageLevel", testDescFilePath).alias("col"))
+    df.select(
       pbFn.to_protobuf(
-        fn.col("bytes"),
+        fn.col("col"),
         classOf[StorageLevel].getName,
         Map("recursive.fields.max.depth" -> "2").asJava))
   }
 
   test("to_protobuf messageClassName descFilePath options") {
-    binary.select(
+    val df = binary.select(
+      pbFn.from_protobuf(fn.col("bytes"), "StorageLevel", testDescFilePath).alias("col"))
+    df.select(
       pbFn.to_protobuf(
-        fn.col("bytes"),
+        fn.col("col"),
         "StorageLevel",
         testDescFilePath,
         Map("recursive.fields.max.depth" -> "2").asJava))
   }
 
   test("to_protobuf messageClassName descFilePath") {
-    binary.select(pbFn.to_protobuf(fn.col("bytes"), "StorageLevel", testDescFilePath))
+    val df = binary.select(
+      pbFn.from_protobuf(fn.col("bytes"), "StorageLevel", testDescFilePath).alias("col"))
+    df.select(pbFn.to_protobuf(fn.col("col"), "StorageLevel", testDescFilePath))
   }
 }

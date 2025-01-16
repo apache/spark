@@ -2278,6 +2278,28 @@ class DataFrame:
         ...
 
     @dispatch_df_method
+    def metadataColumn(self, colName: str) -> Column:
+        """
+        Selects a metadata column based on its logical column name and returns it as a
+        :class:`Column`.
+
+        A metadata column can be accessed this way even if the underlying data source defines a data
+        column with a conflicting name.
+
+        .. versionadded:: 4.0.0
+
+        Parameters
+        ----------
+        colName : str
+            string, metadata column name
+
+        Returns
+        -------
+        :class:`Column`
+        """
+        ...
+
+    @dispatch_df_method
     def colRegex(self, colName: str) -> Column:
         """
         Selects column based on the column name specified as a regex and returns it
@@ -6587,10 +6609,10 @@ class DataFrame:
         After obtaining a TableArg from a DataFrame using this method, you can specify partitioning
         and ordering for the table argument by calling methods such as `partitionBy`, `orderBy`, and
         `withSinglePartition` on the `TableArg` instance.
-        - partitionBy(*cols): Partitions the data based on the specified columns. This method cannot
+        - partitionBy: Partitions the data based on the specified columns. This method cannot
         be called after withSinglePartition() has been called.
-        - orderBy(*cols): Orders the data within partitions based on the specified columns.
-        - withSinglePartition(): Indicates that the data should be treated as a single partition.
+        - orderBy: Orders the data within partitions based on the specified columns.
+        - withSinglePartition: Indicates that the data should be treated as a single partition.
         This method cannot be called after partitionBy() has been called.
 
         .. versionadded:: 4.0.0
