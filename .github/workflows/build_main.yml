@@ -26,9 +26,7 @@ on:
 
 jobs:
   call-build-and-test:
-    permissions:
-      packages: write
-      id-token: write
+    permissions: write-all
     name: Run
     uses: ./.github/workflows/build_and_test.yml
     secrets:
