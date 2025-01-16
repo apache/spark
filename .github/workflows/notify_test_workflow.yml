@@ -52,13 +52,11 @@ jobs:
               id: 'build_main.yml',
               branch: context.payload.pull_request.head.ref,
             }
-            console.log('params: ' + params)
             const check_run_params = {
               owner: context.payload.pull_request.head.repo.owner.login,
               repo: context.payload.pull_request.head.repo.name,
               ref: context.payload.pull_request.head.ref,
             }
-            console.log('check_run_params: ' + check_run_params)
 
             console.log('Ref: ' + context.payload.pull_request.head.ref)
             console.log('SHA: ' + context.payload.pull_request.head.sha)
