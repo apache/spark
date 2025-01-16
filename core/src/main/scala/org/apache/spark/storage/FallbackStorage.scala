@@ -30,7 +30,7 @@ import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys._
-import org.apache.spark.internal.config.{STORAGE_DECOMMISSION_FALLBACK_STORAGE_CLEANUP, STORAGE_DECOMMISSION_FALLBACK_STORAGE_PATH, STORAGE_DECOMMISSION_FALLBACK_STORAGE_SUBPATHS}
+import org.apache.spark.internal.config.{STORAGE_DECOMMISSION_FALLBACK_STORAGE_CLEANUP, STORAGE_DECOMMISSION_FALLBACK_STORAGE_PATH, STORAGE_DECOMMISSION_FALLBACK_STORAGE_SUB_DIRECTORIES}
 import org.apache.spark.network.buffer.{ManagedBuffer, NioManagedBuffer}
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.rpc.{RpcAddress, RpcEndpointRef, RpcTimeout}
@@ -161,7 +161,7 @@ private[spark] object FallbackStorage extends Logging {
                                shuffleId: Int,
                                filename: String): Path = {
     val fallbackPath = new Path(conf.get(STORAGE_DECOMMISSION_FALLBACK_STORAGE_PATH).get)
-    val subPaths = conf.get(STORAGE_DECOMMISSION_FALLBACK_STORAGE_SUBPATHS)
+    val subPaths = conf.get(STORAGE_DECOMMISSION_FALLBACK_STORAGE_SUB_DIRECTORIES)
     val hash = JavaUtils.nonNegativeHash(filename) % subPaths
     new Path(fallbackPath, s"$appId/$shuffleId/$hash/$filename")
   }

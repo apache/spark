@@ -293,26 +293,22 @@ class FallbackStorageSuite extends SparkFunSuite with LocalSparkContext {
     }
   }
 
-  Seq(0, 1, 2, 4, 1024, Int.MaxValue).foreach { subPaths =>
-    test(s"Get path for filename with $subPaths subdirectories") {
-      val conf = getSparkConf(2, 2).set(STORAGE_DECOMMISSION_FALLBACK_STORAGE_SUBPATHS, subPaths)
+  Seq(1, 2, 4, 1024, Int.MaxValue).foreach { subDirs =>
+    test(s"Get path for filename with $subDirs subdirectories") {
+      val conf = getSparkConf(2, 2).set(STORAGE_DECOMMISSION_FALLBACK_STORAGE_SUB_DIRECTORIES, subDirs)
       val path = conf.get(STORAGE_DECOMMISSION_FALLBACK_STORAGE_PATH).get
       val appId = "app-id"
       val shuffleId = 123
       val filename = "the-file"
       val actual = FallbackStorage.getPath(conf, appId, shuffleId, filename)
-      val expected = if (subPaths == 0) {
-        new Path(s"${path}/$appId/$shuffleId/$filename")
-      } else {
-        new Path(s"${path}/$appId/$shuffleId/${1049883992 % subPaths}/$filename")
-      }
+      new Path(s"${path}/$appId/$shuffleId/${1049883992 % subDirs}/$filename")
       assert(actual == expected)
     }
   }
 
-  Seq(0, 1, 2, 4, 1024, Int.MaxValue).foreach { subPaths =>
-    test(s"Control number of sub-directories ($subPaths)") {
-      val conf = getSparkConf(2, 2).set(STORAGE_DECOMMISSION_FALLBACK_STORAGE_SUBPATHS, subPaths)
+  Seq(1, 2, 4, 1024, Int.MaxValue).foreach { subDirs =>
+    test(s"Control number of sub-directories ($subDirs)") {
+      val conf = getSparkConf(2, 2).set(STORAGE_DECOMMISSION_FALLBACK_STORAGE_SUB_DIRECTORIES, subDirs)
       sc = new SparkContext(conf)
       withSpark(sc) { sc =>
         TestUtils.waitUntilExecutorsUp(sc, 2, 60000)
@@ -350,7 +346,7 @@ class FallbackStorageSuite extends SparkFunSuite with LocalSparkContext {
         assert(shuffleDirs.length == 1)
         // third level is controlled number of hash / bucket dirs
         val subDirs = shuffleDirs(0).listFiles(dirsOnly)
-        assert(subDirs.length == Math.min(subPaths, 20), subDirs.mkString(", "))
+        assert(subDirs.length == Math.min(subDirs, 20), subDirs.mkString(", "))
       }
     }
    }
