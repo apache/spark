@@ -183,12 +183,6 @@ def main(infile: IO, outfile: IO) -> None:
                         },
                     )
                 outfile.flush()
-        except Exception as e:
-            error_msg = "data source {} throw exception: {}".format(data_source.name, e)
-            raise PySparkRuntimeError(
-                errorClass="PYTHON_STREAMING_DATA_SOURCE_RUNTIME_ERROR",
-                messageParameters={"msg": error_msg},
-            )
         finally:
             reader.stop()
     except BaseException as e:
