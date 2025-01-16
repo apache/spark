@@ -84,6 +84,7 @@ class ApplyInPandasWithStatePythonRunner(
   override protected lazy val timeZoneId: String = _timeZoneId
   override val errorOnDuplicatedFieldNames: Boolean = true
 
+  override val hideTraceback: Boolean = sqlConf.pysparkHideTraceback
   override val simplifiedTraceback: Boolean = sqlConf.pysparkSimplifiedTraceback
 
   override protected val largeVarTypes: Boolean = sqlConf.arrowUseLargeVarTypes

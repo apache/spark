@@ -468,16 +468,19 @@ def handle_worker_exception(e: BaseException, outfile: IO) -> None:
     and exception traceback info to outfile. JVM could then read from the outfile and perform
     exception handling there.
     """
-    try:
-        exc_info = None
+
+    def format_exception():
+        if os.environ.get("SPARK_HIDE_TRACEBACK", False):
+            return "".join(traceback.format_exception_only(type(e), e))
         if os.environ.get("SPARK_SIMPLIFIED_TRACEBACK", False):
             tb = try_simplify_traceback(sys.exc_info()[-1])  # type: ignore[arg-type]
             if tb is not None:
                 e.__cause__ = None
-                exc_info = "".join(traceback.format_exception(type(e), e, tb))
-        if exc_info is None:
-            exc_info = traceback.format_exc()
+                return "".join(traceback.format_exception(type(e), e, tb))
+        return traceback.format_exc()
 
+    try:
+        exc_info = format_exception()
         write_int(SpecialLengths.PYTHON_EXCEPTION_THROWN, outfile)
         write_with_length(exc_info.encode("utf-8"), outfile)
     except IOError:
