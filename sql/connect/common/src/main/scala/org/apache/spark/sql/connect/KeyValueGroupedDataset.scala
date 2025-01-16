@@ -193,7 +193,6 @@ class KeyValueGroupedDataset[K, V] private[sql] () extends sql.KeyValueGroupedDa
     )
 >>>>>>> 2a07717984 (tmp save):connector/connect/client/jvm/src/main/scala/org/apache/spark/sql/KeyValueGroupedDataset.scala
 
-  // TODO, all APIs
   private[sql] def transformWithStateHelper[U: Encoder, S: Encoder](
       statefulProcessor: StatefulProcessor[K, V, U],
       timeMode: TimeMode,
@@ -703,12 +702,13 @@ private class KeyValueGroupedDatasetImpl[K, V, IK, IV](
       val twsBuilder = builder.getGroupMapBuilder
       twsBuilder.setInput(plan.getRoot)
         .addAllGroupingExpressions(groupingExprs)
-        .setFunc(udf).setTws(
+        .setFunc(udf).setTransformWithStateInfo(
         TransformWithStateInfo.newBuilder()
           .setOutputMode(outputMode.toString)
           // we pass time mode as string here and restore it in planner
           .setTimeMode(timeMode.toString)
           .setStatefulProcessorPayload(statefulProcessorStr)
+          .setEventTimeColName(eventTimeColumnName)
           .build()
       )
       if (initialStateImpl != null) {

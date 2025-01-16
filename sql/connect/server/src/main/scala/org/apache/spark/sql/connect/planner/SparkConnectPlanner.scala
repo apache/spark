@@ -680,16 +680,18 @@ class SparkConnectPlanner(
       rel.getGroupingExpressionsList,
       rel.getSortingExpressionsList)
 
-    if (rel.hasTws) {
+    if (rel.hasTransformWithStateInfo) {
       val hasInitialState = !rel.getInitialGroupingExpressionsList.isEmpty && rel.hasInitialInput
 
-      val tws = rel.getTws
-      val statefulProcessorStr = tws.getStatefulProcessorPayload
+      val twsInfo = rel.getTransformWithStateInfo
+      val statefulProcessorStr = twsInfo.getStatefulProcessorPayload
       val keyDeserializer = udf.inputDeserializer(ds.groupingAttributes)
       val outputAttr = udf.outputObjAttr
 
-      val timeMode = TimeModes(tws.getTimeMode, isScala = true)
-      val outputMode = InternalOutputModes(tws.getOutputMode)
+      val timeMode = TimeModes(twsInfo.getTimeMode, isScala = true)
+      val outputMode = InternalOutputModes(twsInfo.getOutputMode)
+      // TODO implement chaining of operator in connect
+      val eventTimeCol = twsInfo.getEventTimeColName
 
       val node = if (hasInitialState) {
         val statefulProcessor =
