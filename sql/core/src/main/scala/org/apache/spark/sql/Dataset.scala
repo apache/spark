@@ -931,11 +931,16 @@ class Dataset[T] private[sql](
 
       case other => other
     }
-    val inputForProj = logicalPlan.outputSet
+    val inputForProjOpt = if (this.queryExecution.isLazyAnalysis) {
+      None
+    } else {
+      Some(logicalPlan.outputSet)
+    }
     val namedExprs = untypedCols.map(ne => (ne.named transformUp {
-      case attr: AttributeReference if attr.metadata.contains(DATASET_ID_KEY) &&
-        (!inputForProj.contains(attr) ||
-          isIncorrectlyResolved(attr, inputForProj, HashSet(id))) =>
+      case attr: AttributeReference if inputForProjOpt.isDefined &&
+        attr.metadata.contains(DATASET_ID_KEY) &&
+        (!inputForProjOpt.get.contains(attr) ||
+          isIncorrectlyResolved(attr, inputForProjOpt.get, HashSet(id))) =>
         val ua = UnresolvedAttribute(Seq(attr.name))
         ua.copyTagsFrom(attr)
         ua.setTagValue(LogicalPlan.UNRESOLVED_ATTRIBUTE_MD_TAG, attr)
