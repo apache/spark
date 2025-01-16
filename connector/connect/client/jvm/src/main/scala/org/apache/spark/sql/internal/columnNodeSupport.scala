@@ -161,12 +161,25 @@ object ColumnNodeToProtoConverter extends (ColumnNode => proto.Expression) {
           .setFunction(apply(function, e, additionalTransformation))
           .addAllArguments(arguments.map(convertNamedLambdaVariable).asJava)
 
-      case f @ InvokeInlineUserDefinedFunction(
+      // TODO(SPARK-50846): Consolidate Aggregator handling with and without arguments.
+      case InvokeInlineUserDefinedFunction(
             a: Aggregator[Any @unchecked, Any @unchecked, Any @unchecked],
-            _,
+            Nil,
             false,
             _) =>
-        // Translate UserDefinedFunctionLike into UserDefinedFunction.
+        // TODO we should probably 'just' detect this particular scenario
+        //  in the planner instead of wrapping it in a separate method.
+        val protoUdf = UdfToProtoUtils.toProto(UserDefinedAggregator(a, e.get))
+        builder.getTypedAggregateExpressionBuilder.setScalarScalaUdf(protoUdf.getScalarScalaUdf)
+
+      // TODO(SPARK-50846): Consolidate Aggregator handling with and without arguments.
+      case f @ InvokeInlineUserDefinedFunction(
+            a: Aggregator[Any @unchecked, Any @unchecked, Any @unchecked],
+            args,
+            false,
+            _) if args.nonEmpty =>
+        // Translate Aggregator (UserDefinedFunctionLike) into UserDefinedFunction, and
+        // send it over to the next "match" to process.
         builder.mergeFrom(
           apply(f.copy(function = UserDefinedAggregator(a, e.get)), e, additionalTransformation))
 

@@ -447,7 +447,6 @@ class KeyValueGroupedDatasetE2ETestSuite extends QueryTest with RemoteSparkSessi
   //  "ds.collect()" is better as columns are named as "_1", "_2" but still incorrect.
   ignore("SPARK-26085: fix key attribute name for atomic type for typed aggregation") {
     val ds = Seq(1, 2, 3).toDS()
-    val sss = ds.groupByKey(x => x).count()
     assert(ds.groupByKey(x => x).count().schema.head.name == "key")
 
     // Enable legacy flag to follow previous Spark behavior
