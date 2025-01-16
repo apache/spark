@@ -121,18 +121,20 @@ case class DescribeRelationJsonCommand(
       "outputformat" -> "output_format"
     )
 
+    val timestampKeys = Set("created_time", "last_access")
+
     val normalizedKey = key.toLowerCase().replace(" ", "_")
     val renamedKey = renames.getOrElse(normalizedKey, normalizedKey)
 
     if (!jsonMap.contains(renamedKey) && !excludedKeys.contains(renamedKey)) {
-      val formattedValue = renamedKey match {
-        case "created_time" | "last_access" =>
-          value match {
-            case JLong(timestamp) =>
-              JString(timestampFormatter.format(DateTimeUtils.millisToMicros(timestamp)))
-            case _ => value
-          }
-        case _ => value
+      val formattedValue = if (timestampKeys.contains(renamedKey)) {
+        value match {
+          case JLong(timestamp) =>
+            JString(timestampFormatter.format(DateTimeUtils.millisToMicros(timestamp)))
+          case _ => value
+        }
+      } else {
+        value
       }
       jsonMap += renamedKey -> formattedValue
     }

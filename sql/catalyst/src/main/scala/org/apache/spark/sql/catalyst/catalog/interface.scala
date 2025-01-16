@@ -64,6 +64,7 @@ trait MetadataMapSupport {
   protected def jsonToString(
       jsonMap: mutable.LinkedHashMap[String, JValue]): mutable.LinkedHashMap[String, String] = {
     val map = new mutable.LinkedHashMap[String, String]()
+    val timestampKeys = Set("Created Time", "Last Access")
     jsonMap.foreach { case (key, jValue) =>
       val stringValue = jValue match {
         case JString(value) => value
@@ -82,7 +83,7 @@ trait MetadataMapSupport {
         case JInt(value) => value.toString
         case JDouble(value) => value.toString
         case JLong(value) =>
-          if (key == "Created Time" || key == "Last Access") {
+          if (timestampKeys.contains(key)) {
             new Date(value).toString
           } else {
             value.toString
