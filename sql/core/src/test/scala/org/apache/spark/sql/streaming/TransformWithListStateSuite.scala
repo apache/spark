@@ -81,17 +81,17 @@ class TestListStateProcessor
 }
 
 // Case classes for schema evolution testing
-case class SimpleListItem(value: String)
-case class EvolvedListItem(value: String, timestamp: Option[Long])
+case class InitialListItem(id: String, count: Int)
+case class EvolvedListItem(id: String, count: Int, lastUpdated: Long, description: String)
 
-// Initial processor with simple schema
-class InitialListStateProcessor extends StatefulProcessor[String, String, (String, String)] {
-  @transient protected var listState: ListState[SimpleListItem] = _
+// Initial processor with basic schema
+class InitialListStateProcessor extends StatefulProcessor[String, String, (String, Int)] {
+  @transient protected var listState: ListState[InitialListItem] = _
 
   override def init(outputMode: OutputMode, timeMode: TimeMode): Unit = {
-    listState = getHandle.getListState[SimpleListItem](
+    listState = getHandle.getListState[InitialListItem](
       "listState",
-      Encoders.product[SimpleListItem],
+      Encoders.product[InitialListItem],
       TTLConfig.NONE
     )
   }
@@ -99,22 +99,28 @@ class InitialListStateProcessor extends StatefulProcessor[String, String, (Strin
   override def handleInputRows(
       key: String,
       rows: Iterator[String],
-      timerValues: TimerValues): Iterator[(String, String)] = {
+      timerValues: TimerValues): Iterator[(String, Int)] = {
 
-    // Add items to state
-    rows.foreach { value =>
-      listState.appendValue(SimpleListItem(value))
+    // Get existing items for the key, if any
+    val existingItems = listState.get().toList
+    val currentCount = if (existingItems.isEmpty) 0 else existingItems.map(_.count).sum
+
+    // Process new items and update state
+    val newItems = rows.map { value =>
+      InitialListItem(value, currentCount + 1)
+    }.toList
+
+    if (newItems.nonEmpty) {
+      listState.appendList(newItems.toArray)
+      newItems.map(item => (key, item.count)).iterator
+    } else {
+      Iterator.empty
     }
-
-    // Return all items in state and clear
-    val result = listState.get().map(item => (key, item.value)).toList
-    listState.clear()
-    result.iterator
   }
 }
 
-// Evolved processor with additional field
-class EvolvedListStateProcessor extends StatefulProcessor[String, String, (String, String)] {
+// Evolved processor with additional fields and enhanced functionality
+class EvolvedListStateProcessor extends StatefulProcessor[String, String, (String, String, Int)] {
   @transient protected var listState: ListState[EvolvedListItem] = _
 
   override def init(outputMode: OutputMode, timeMode: TimeMode): Unit = {
@@ -128,17 +134,44 @@ class EvolvedListStateProcessor extends StatefulProcessor[String, String, (Strin
   override def handleInputRows(
       key: String,
       rows: Iterator[String],
-      timerValues: TimerValues): Iterator[(String, String)] = {
+      timerValues: TimerValues): Iterator[(String, String, Int)] = {
 
-    // Add items with timestamp
-    rows.foreach { value =>
-      listState.appendValue(EvolvedListItem(value, Some(System.currentTimeMillis())))
+    // Get existing items and handle schema evolution
+    val existingItems = listState.get().toList
+    val currentCount = if (existingItems.isEmpty) 0 else existingItems.map(_.count).sum
+
+    // Process new items with enhanced fields
+    val newItems = rows.map { value =>
+      EvolvedListItem(
+        id = value,
+        count = currentCount + 1,
+        lastUpdated = System.currentTimeMillis(),
+        description = s"Updated item $value with count ${currentCount + 1}"
+      )
+    }.toList
+
+    if (newItems.nonEmpty) {
+      // Clear old state and write with new schema
+      listState.clear()
+
+      // Migrate any existing items to new schema
+      val migratedItems = existingItems.map { item =>
+        EvolvedListItem(
+          id = item.id,
+          count = item.count,
+          lastUpdated = System.currentTimeMillis(),
+          description = s"Migrated item ${item.id} with count ${item.count}"
+        )
+      }
+
+      // Write both migrated and new items
+      listState.appendList((migratedItems ++ newItems).toArray)
+
+      // Return both migrated and new items
+      (migratedItems ++ newItems).map(item => (key, item.description, item.count)).iterator
+    } else {
+      Iterator.empty
     }
-
-    // Return all items (just value field) and clear
-    val result = listState.get().map(item => (key, item.value)).toList
-    listState.clear()
-    result.iterator
   }
 }
 
@@ -391,7 +424,7 @@ class TransformWithListStateSuite extends StreamTest
     }
   }
 
-  testWithEncoding("avro")("ListState schema evolution - add field") {
+  testWithEncoding("avro")("ListState schema evolution - add fields and enhance functionality") {
     withSQLConf(
       SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[RocksDBStateStoreProvider].getName) {
       withTempDir { dir =>
@@ -406,8 +439,12 @@ class TransformWithListStateSuite extends StreamTest
 
         testStream(result1, OutputMode.Update())(
           StartStream(checkpointLocation = dir.getCanonicalPath),
-          AddData(inputData, "a", "b"),
-          CheckNewAnswer(("a", "a"), ("b", "b")),
+          // Write data with initial schema
+          AddData(inputData, "item1", "item2"),
+          CheckAnswer(("item1", 1), ("item2", 1)),
+          // Add more items to verify count increment
+          AddData(inputData, "item1", "item3"),
+          CheckAnswer(("item1", 1), ("item2", 1), ("item1", 2), ("item3", 1)),
           StopStream
         )
 
@@ -420,11 +457,12 @@ class TransformWithListStateSuite extends StreamTest
 
         testStream(result2, OutputMode.Update())(
           StartStream(checkpointLocation = dir.getCanonicalPath),
-          AddData(inputData, "c"),
-          CheckNewAnswer(("c", "c")),
-          // Verify we can still read old state format
-          AddData(inputData, "a"),
-          CheckNewAnswer(("a", "a")),
+          // Verify reading and migration of existing state
+          AddData(inputData, "item1"),
+          CheckAnswer(
+            ("item1", "Migrated item item1 with count 1", 1),
+            ("item1", "Migrated item item1 with count 2", 2),
+            ("item1", "Updated item item1 with count 4", 4)),
           StopStream
         )
       }

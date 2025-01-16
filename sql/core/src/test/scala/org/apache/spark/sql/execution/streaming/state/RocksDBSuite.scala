@@ -45,7 +45,7 @@ import org.apache.spark.sql.catalyst.util.quietly
 import org.apache.spark.sql.execution.streaming.{CheckpointFileManager, CreateAtomicTestManager, FileContextBasedCheckpointFileManager, FileSystemBasedCheckpointFileManager}
 import org.apache.spark.sql.execution.streaming.CheckpointFileManager.{CancellableFSDataOutputStream, RenameBasedFSDataOutputStream}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.SQLConf.{STREAMING_CHECKPOINT_FILE_MANAGER_CLASS, STREAMING_STATE_STORE_ENCODING_FORMAT}
+import org.apache.spark.sql.internal.SQLConf.STREAMING_CHECKPOINT_FILE_MANAGER_CLASS
 import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
 import org.apache.spark.sql.types._
 import org.apache.spark.tags.SlowSQLTest
@@ -112,9 +112,11 @@ trait RocksDBStateStoreChangelogCheckpointingTestUtil {
   }
 }
 
-// Whenever using this in conjunction with AlsoTestWithRocksDBFeatures, this should
-// always be inherited first, so 'testWithChangelogCheckpointingEnabled' tests with
-// both Avro and UnsafeRow enabled.
+/**
+ * Whenever using this in conjunction with AlsoTestWithRocksDBFeatures, this should
+ * always be inherited first, so 'testWithChangelogCheckpointingEnabled' tests with
+ * both Avro and UnsafeRow enabled.
+ */
 trait AlsoTestWithEncodingTypes extends SQLTestUtils {
   override protected def test(testName: String, testTags: Tag*)(testBody: => Any)
                              (implicit pos: Position): Unit = {
@@ -128,8 +130,7 @@ trait AlsoTestWithEncodingTypes extends SQLTestUtils {
   }
 
   def usingAvroEncoding(): Boolean = {
-    SQLConf.get.getConf(
-      STREAMING_STATE_STORE_ENCODING_FORMAT) == StateStoreEncoding.Avro.toString
+    getCurrentEncoding() == StateStoreEncoding.Avro.toString
   }
 
   // Helper method to test with specific encoding
