@@ -19,7 +19,7 @@ package org.apache.spark.sql
 
 import scala.jdk.CollectionConverters.MapHasAsJava
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkException, SparkThrowable}
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.CollationFactory
@@ -2081,6 +2081,30 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
     // Make sure DDLs can use fully qualified names.
     withTable("t") {
       sql(s"CREATE TABLE t (c STRING COLLATE system.builtin.UTF8_LCASE)")
+    }
+  }
+
+  test("flag for enabling session default collation") {
+    withSQLConf(SQLConf.DEFAULT_COLLATION_ENABLED.key -> "false") {
+      checkError(
+        exception = intercept[SparkThrowable] {
+          sql("SET COLLATION UNICODE_CI")
+        },
+        condition = "INVALID_CONF_VALUE.DEFAULT_COLLATION_NOT_SUPPORTED",
+        sqlState = "22022",
+        parameters = Map("confValue" -> "UNICODE_CI",
+          "confName" -> "spark.sql.session.collation.default"))
+
+      checkAnswer(
+        sql("SELECT 'a' = 'A'"),
+        Row(false))
+    }
+
+    withSQLConf(SQLConf.DEFAULT_COLLATION_ENABLED.key -> "true") {
+      sql("SET COLLATION UNICODE_CI")
+      checkAnswer(
+        sql("SELECT 'a' = 'A'"),
+        Row(true))
     }
   }
 }

@@ -893,12 +893,26 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  lazy val DEFAULT_COLLATION_ENABLED =
+    buildConf("spark.sql.sessionDefaultCollation.enabled")
+      .internal()
+      .doc("Session default collation feature is under development and its use should be done " +
+        "under this feature flag.")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(Utils.isTesting)
+
   val DEFAULT_COLLATION =
     buildConf(SqlApiConfHelper.DEFAULT_COLLATION)
+      .internal()
       .doc("Sets default collation to use for string literals, parameter markers or the string" +
         " produced by a builtin function such as to_char or CAST")
       .version("4.0.0")
       .stringConf
+      .checkValue(
+        value => value == CollationNames.UTF8_BINARY || get.getConf(DEFAULT_COLLATION_ENABLED),
+        errorClass = "DEFAULT_COLLATION_NOT_SUPPORTED",
+        parameters = _ => Map.empty)
       .checkValue(
         collationName => {
           try {
