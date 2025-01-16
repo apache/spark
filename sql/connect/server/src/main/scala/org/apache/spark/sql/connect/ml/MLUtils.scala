@@ -28,7 +28,7 @@ import org.apache.spark.connect.proto
 import org.apache.spark.ml.{Estimator, Transformer}
 import org.apache.spark.ml.linalg.{Matrices, Matrix, Vector, Vectors}
 import org.apache.spark.ml.param.Params
-import org.apache.spark.ml.util.MLWritable
+import org.apache.spark.ml.util.{MLReadable, MLWritable}
 import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.connect.common.LiteralValueProtoConverter
 import org.apache.spark.sql.connect.planner.SparkConnectPlanner
@@ -295,6 +295,15 @@ private[ml] object MLUtils {
    */
   def load(sessionHolder: SessionHolder, className: String, path: String): Object = {
     val name = replaceOperator(sessionHolder, className)
+
+    // It's the companion object of the corresponding spark operators to load.
+    val objectCls = SparkClassUtils.classForName(name + "$")
+    val mlReadableClass = classOf[MLReadable[_]]
+    // Make sure it is implementing MLReadable
+    if (!mlReadableClass.isAssignableFrom(objectCls)) {
+      throw MlUnsupportedException(s"$name must implement MLReadable.")
+    }
+
     val loadedMethod = SparkClassUtils.classForName(name).getMethod("load", classOf[String])
     loadedMethod.invoke(null, path)
   }

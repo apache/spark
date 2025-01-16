@@ -366,4 +366,25 @@ class MLSuite extends MLHelper {
       MLHandler.handleMlCommand(sessionHolder, fakeAttributeCmd)
     }
   }
+
+  test("ML operator must implement MLReadable for loading") {
+    val thrown = intercept[MlUnsupportedException] {
+      val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
+      val readCmd = proto.MlCommand
+        .newBuilder()
+        .setRead(
+          proto.MlCommand.Read
+            .newBuilder()
+            .setOperator(proto.MlOperator
+              .newBuilder()
+              .setName("org.apache.spark.sql.connect.ml.NotImplementingMLReadble")
+              .setType(proto.MlOperator.OperatorType.ESTIMATOR))
+            .setPath("/tmp/fake"))
+        .build()
+      MLHandler.handleMlCommand(sessionHolder, readCmd)
+    }
+    assert(
+      thrown.message.contains("org.apache.spark.sql.connect.ml.NotImplementingMLReadble " +
+        "must implement MLReadable"))
+  }
 }

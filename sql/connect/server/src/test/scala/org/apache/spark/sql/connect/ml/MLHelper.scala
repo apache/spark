@@ -132,3 +132,7 @@ class MyLogisticRegression(override val uid: String)
 object MyLogisticRegression extends DefaultParamsReadable[MyLogisticRegression] {
   override def load(path: String): MyLogisticRegression = super.load(path)
 }
+
+object NotImplementingMLReadble {
+  def load(path: String): Unit = {}
+}
