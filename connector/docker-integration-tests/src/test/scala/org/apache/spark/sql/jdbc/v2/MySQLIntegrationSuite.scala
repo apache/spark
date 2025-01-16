@@ -20,7 +20,7 @@ package org.apache.spark.sql.jdbc.v2
 import java.sql.{Connection, SQLFeatureNotSupportedException}
 
 import org.apache.spark.{SparkConf, SparkSQLFeatureNotSupportedException}
-import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
 import org.apache.spark.sql.jdbc.MySQLDatabaseOnDocker
 import org.apache.spark.sql.types._
@@ -263,32 +263,34 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest
         s"INSERT INTO $tableName VALUES($stringLiteral, $longValue, $binaryLiteral, $doubleValue)")
 
       def testCast(castType: String, sourceCol: String, targetCol: String,
-                   sourceValue: Any, targetValue: Any): Unit = {
+                   sourceDataType: DataType, sourceValue: Any,
+                   targetDataType: DataType, targetValue: Any): Unit = {
         val sql =
-          s"""SELECT $sourceCol, CAST($sourceCol AS $castType) FROM $tableName
+          s"""SELECT $sourceCol AS source, CAST($sourceCol AS $castType) AS target FROM $tableName
              |WHERE CAST($sourceCol AS $castType) = $targetCol""".stripMargin
         val df = spark.sql(sql)
         checkFilterPushed(df)
-        val rows = df.collect()
-        assert(rows.length === 1, s"Failed to cast $sourceCol to $castType")
-        val row = rows(0)
-        assert(row.get(0) === sourceValue, s"$sourceCol does not equal to $sourceValue")
-        assert(row.get(0).getClass == sourceValue.getClass,
-          s"$sourceCol has different type from $sourceValue")
-        assert(row.get(1) === targetValue,
-          s"CAST($sourceCol AS $castType) does not equal to $targetValue")
-        assert(row.get(1).getClass == targetValue.getClass,
-          s"CAST($sourceCol AS $castType) has different type from $targetValue")
+        checkAnswer(df, Seq(Row(sourceValue, targetValue)))
+        val expectedTypes = Array(sourceDataType, targetDataType)
+        val resultTypes = df.schema.fields.map(_.dataType)
+        assert(resultTypes === expectedTypes, s"Failed to cast $sourceCol to $castType")
       }
 
-      testCast("BINARY", "string_col", "binary_col", stringValue, binaryValue);
-      testCast("LONG", "string_col", "long_col", stringValue, longValue)
+      testCast("BINARY", "string_col", "binary_col",
+        StringType, stringValue, BinaryType, binaryValue);
+      testCast("LONG", "string_col", "long_col",
+        StringType, stringValue, LongType, longValue)
       // We use stringLiteral to make sure both values are using the same collation
-      testCast("STRING", "long_col", stringLiteral, longValue, stringValue)
-      testCast("STRING", "binary_col", stringLiteral, binaryValue, stringValue)
-      testCast("STRING", "double_col", stringLiteral, doubleValue, doubleLiteral)
-      testCast("DOUBLE", "string_col", "double_col", stringValue, doubleValue)
-      testCast("DOUBLE", "long_col", "double_col", longValue, doubleValue)
+      testCast("STRING", "long_col", stringLiteral,
+        LongType, longValue, StringType, stringValue)
+      testCast("STRING", "binary_col", stringLiteral,
+        BinaryType, binaryValue, StringType, stringValue)
+      testCast("STRING", "double_col", stringLiteral,
+        DoubleType, doubleValue, StringType, doubleLiteral)
+      testCast("DOUBLE", "string_col", "double_col",
+        StringType, stringValue, DoubleType, doubleValue)
+      testCast("DOUBLE", "long_col", "double_col",
+        LongType, longValue, DoubleType, doubleValue)
     }
   }
 }
