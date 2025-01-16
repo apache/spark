@@ -19,6 +19,7 @@ package org.apache.spark.sql
 
 import org.apache.spark.{SparkConf, SparkRuntimeException}
 import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.expressions.Cast.toSQLId
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical.Project
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
@@ -777,6 +778,24 @@ trait CharVarcharTestSuite extends QueryTest with SQLTestUtils {
              |if(false, '0'::$typ(5), 1)
           """.stripMargin), Row(true, 5, 6, 7, 0, 2.0, 58, 0, 1))
       }
+    }
+  }
+
+  test("SPARK-50847: Deny ApplyCharTypePadding from applying on specific In expressions") {
+    withTable("mytable") {
+      sql(s"CREATE TABLE mytable(col CHAR(10)) USING $format")
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("SELECT * FROM mytable where col IN (ARRAY('a'))")
+        },
+        condition = "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+        parameters = Map(
+          "functionName" -> toSQLId("in"),
+          "dataType" -> "[\"STRING\", \"ARRAY<STRING>\"]",
+          "sqlExpr" -> s""""(col IN (array(a)))""""
+        ),
+        queryContext = Array(ExpectedContext(fragment = "IN (ARRAY('a'))", start = 32, stop = 46))
+      )
     }
   }
 }
