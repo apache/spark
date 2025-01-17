@@ -469,7 +469,7 @@ def handle_worker_exception(e: BaseException, outfile: IO) -> None:
     exception handling there.
     """
 
-    def format_exception():
+    def format_exception() -> str:
         if os.environ.get("SPARK_HIDE_TRACEBACK", False):
             return "".join(traceback.format_exception_only(type(e), e))
         if os.environ.get("SPARK_SIMPLIFIED_TRACEBACK", False):
