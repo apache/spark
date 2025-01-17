@@ -62,14 +62,6 @@ if TYPE_CHECKING:
     from pyspark.sql.dataframe import DataFrame
     from pyspark.pandas._typing import IndexOpsLike, SeriesOrIndex
 
-has_numpy: bool = False
-try:
-    import numpy as np  # noqa: F401
-
-    has_numpy = True
-except ImportError:
-    pass
-
 
 FuncT = TypeVar("FuncT", bound=Callable[..., Any])
 

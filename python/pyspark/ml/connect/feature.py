@@ -46,6 +46,8 @@ class MaxAbsScaler(Estimator, HasInputCol, HasOutputCol, ParamsReadWrite):
 
     .. versionadded:: 3.5.0
 
+    .. deprecated:: 4.0.0
+
     Examples
     --------
     >>> from pyspark.ml.connect.feature import MaxAbsScaler
@@ -98,6 +100,8 @@ class MaxAbsScalerModel(Model, HasInputCol, HasOutputCol, ParamsReadWrite, CoreM
     Model fitted by MaxAbsScaler.
 
     .. versionadded:: 3.5.0
+
+    .. deprecated:: 4.0.0
     """
 
     def __init__(
@@ -158,6 +162,8 @@ class StandardScaler(Estimator, HasInputCol, HasOutputCol, ParamsReadWrite):
 
     .. versionadded:: 3.5.0
 
+    .. deprecated:: 4.0.0
+
     Examples
     --------
     >>> from pyspark.ml.connect.feature import StandardScaler
@@ -208,6 +214,8 @@ class StandardScalerModel(Model, HasInputCol, HasOutputCol, ParamsReadWrite, Cor
     Model fitted by StandardScaler.
 
     .. versionadded:: 3.5.0
+
+    .. deprecated:: 4.0.0
     """
 
     def __init__(
@@ -293,6 +301,8 @@ class ArrayAssembler(
     if it is set to 'keep', it returns relevant number of NaN in the output.
 
     .. versionadded:: 4.0.0
+
+    .. deprecated:: 4.0.0
 
     Examples
     --------

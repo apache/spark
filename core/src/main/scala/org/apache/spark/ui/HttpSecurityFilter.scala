@@ -44,10 +44,6 @@ private class HttpSecurityFilter(
     conf: SparkConf,
     securityMgr: SecurityManager) extends Filter {
 
-  override def destroy(): Unit = { }
-
-  override def init(config: FilterConfig): Unit = { }
-
   override def doFilter(req: ServletRequest, res: ServletResponse, chain: FilterChain): Unit = {
     val hreq = req.asInstanceOf[HttpServletRequest]
     val hres = res.asInstanceOf[HttpServletResponse]

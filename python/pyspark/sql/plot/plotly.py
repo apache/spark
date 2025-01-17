@@ -151,7 +151,7 @@ def plot_box(data: "DataFrame", **kwargs: Any) -> "Figure":
 
 
 def plot_kde(data: "DataFrame", **kwargs: Any) -> "Figure":
-    from pyspark.sql.utils import has_numpy
+    from pyspark.testing.utils import have_numpy
     from pyspark.sql.pandas.utils import require_minimum_pandas_version
 
     require_minimum_pandas_version()
@@ -166,7 +166,7 @@ def plot_kde(data: "DataFrame", **kwargs: Any) -> "Figure":
     colnames = process_column_param(kwargs.pop("column", None), data)
     ind = PySparkKdePlotBase.get_ind(data.select(*colnames), kwargs.pop("ind", None))
 
-    if has_numpy:
+    if have_numpy:
         import numpy as np
 
         if isinstance(ind, np.ndarray):
