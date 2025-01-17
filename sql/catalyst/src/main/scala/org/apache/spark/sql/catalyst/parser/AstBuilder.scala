@@ -269,33 +269,6 @@ class AstBuilder extends DataTypeAstBuilder
       }
     })
 
-    val compoundStatements = buff.toList
-
-    val candidates = if (allowVarDeclare) {
-      compoundStatements.dropWhile {
-        case SingleStatement(_: CreateVariable) => true
-        case _ => false
-      }
-    } else {
-      compoundStatements
-    }
-
-    val declareVarStatement = candidates.collectFirst {
-      case SingleStatement(c: CreateVariable) => c
-    }
-
-    declareVarStatement match {
-      case Some(c: CreateVariable) =>
-        if (allowVarDeclare) {
-          throw SqlScriptingErrors.variableDeclarationOnlyAtBeginning(
-            c.origin, c.name.asInstanceOf[UnresolvedIdentifier].nameParts)
-        } else {
-          throw SqlScriptingErrors.variableDeclarationNotAllowedInScope(
-            c.origin, c.name.asInstanceOf[UnresolvedIdentifier].nameParts)
-        }
-      case _ =>
-    }
-
     CompoundBody(buff.toSeq, label, isScope, handlers.toSeq, conditions)
   }
 
