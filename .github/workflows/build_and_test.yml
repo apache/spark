@@ -624,7 +624,6 @@ jobs:
           ./dev/run-tests --parallelism 1 --modules "$MODULES_TO_TEST"
         fi
     - name: Upload coverage to Codecov
-      if: fromJSON(inputs.envs).PYSPARK_CODECOV == 'true'
       uses: codecov/codecov-action@v5
       env:
         CODECOV_TOKEN: ${{ secrets.codecov_token }}
