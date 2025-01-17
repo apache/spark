@@ -147,15 +147,14 @@ class PlanGenerationTestSuite
   }
 
   private def test(name: String)(f: => Dataset[_]): Unit = super.test(name) {
-    val actual = f.plan.getRoot
+    val actual = trimJvmOriginFields(f.plan.getRoot)
     val goldenFile = queryFilePath.resolve(name.replace(' ', '_') + ".proto.bin")
     Try(readRelation(goldenFile)) match {
       case Success(expected) if expected == actual =>
-        writeGoldenFile(goldenFile, trimJvmOriginFields(actual))
       // Ok!
       case Success(_) if regenerateGoldenFiles =>
         logInfo("Rewriting Golden File")
-        writeGoldenFile(goldenFile, trimJvmOriginFields(actual))
+        writeGoldenFile(goldenFile, actual)
       case Success(expected) =>
         fail(s"""
              |Expected and actual plans do not match:
@@ -168,7 +167,7 @@ class PlanGenerationTestSuite
              |""".stripMargin)
       case Failure(_) if regenerateGoldenFiles =>
         logInfo("Writing Golden File")
-        writeGoldenFile(goldenFile, trimJvmOriginFields(actual))
+        writeGoldenFile(goldenFile, actual)
       case Failure(_) =>
         fail(
           "No golden file found. Please re-run this test with the " +
