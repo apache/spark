@@ -53,7 +53,7 @@ private[ml] object MLUtils {
     providers.map(est => est.getClass.getName -> est.getClass).toMap
   }
 
-  private def parseInts(ints: proto.Expression.Literal.SpecializedArray.Ints): Array[Int] = {
+  private def parseInts(ints: proto.Ints): Array[Int] = {
     val size = ints.getValuesCount
     val values = Array.ofDim[Int](size)
     var i = 0
@@ -64,8 +64,7 @@ private[ml] object MLUtils {
     values
   }
 
-  private def parseDoubles(
-      doubles: proto.Expression.Literal.SpecializedArray.Doubles): Array[Double] = {
+  private def parseDoubles(doubles: proto.Doubles): Array[Double] = {
     val size = doubles.getValuesCount
     val values = Array.ofDim[Double](size)
     var i = 0

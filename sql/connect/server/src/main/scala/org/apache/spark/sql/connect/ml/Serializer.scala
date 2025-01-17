@@ -112,7 +112,7 @@ private[ml] object Serializer {
   }
 
   private def buildIntArray(values: Array[Int]): proto.Expression.Literal = {
-    val builder = proto.Expression.Literal.SpecializedArray.Ints.newBuilder()
+    val builder = proto.Ints.newBuilder()
     values.foreach(builder.addValues)
     proto.Expression.Literal
       .newBuilder()
@@ -125,7 +125,7 @@ private[ml] object Serializer {
   }
 
   private def buildDoubleArray(values: Array[Double]): proto.Expression.Literal = {
-    val builder = proto.Expression.Literal.SpecializedArray.Doubles.newBuilder()
+    val builder = proto.Doubles.newBuilder()
     values.foreach(builder.addValues)
     proto.Expression.Literal
       .newBuilder()

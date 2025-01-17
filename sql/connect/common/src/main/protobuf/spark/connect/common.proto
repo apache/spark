@@ -96,3 +96,27 @@ message PythonOrigin {
   // (Required) Callsite to show to end users, for example, stacktrace.
   string call_site = 2;
 }
+
+message Bools {
+  repeated bool values = 1;
+}
+
+message Ints {
+  repeated int32 values = 1;
+}
+
+message Longs {
+  repeated int64 values = 1;
+}
+
+message Floats {
+  repeated float values = 1;
+}
+
+message Doubles {
+  repeated double values = 1;
+}
+
+message Strings {
+  repeated string values = 1;
+}
