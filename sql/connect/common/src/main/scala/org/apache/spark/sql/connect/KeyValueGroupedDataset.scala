@@ -724,7 +724,7 @@ private class KeyValueGroupedDatasetImpl[K, V, IK, IV](
           .setEventTimeColName(eventTimeColumnName)
       }
     } else {
-     twsDataset
+      twsDataset
     }
   }
 

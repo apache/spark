@@ -38,15 +38,15 @@ class BasicCountStatefulProcessor
   @transient protected var _countState: ValueState[Long] = _
 
   override def init(
-      outputMode: OutputMode,
-      timeMode: TimeMode): Unit = {
+                     outputMode: OutputMode,
+                     timeMode: TimeMode): Unit = {
     _countState = getHandle.getValueState[Long]("countState", Encoders.scalaLong, TTLConfig.NONE)
   }
 
   override def handleInputRows(
-      key: String,
-      inputRows: Iterator[(String, String)],
-      timerValues: TimerValues): Iterator[(String, String)] = {
+                                key: String,
+                                inputRows: Iterator[(String, String)],
+                                timerValues: TimerValues): Iterator[(String, String)] = {
     val count = _countState.getOption().getOrElse(0L) + inputRows.toSeq.length
     _countState.update(count)
     Iterator((key, count.toString))
@@ -67,18 +67,18 @@ class TestInitialStatefulProcessor
   }
 
   override def handleInputRows(
-      key: String,
-      inputRows: Iterator[(String, String)],
-      timerValues: TimerValues): Iterator[(String, String)] = {
+                                key: String,
+                                inputRows: Iterator[(String, String)],
+                                timerValues: TimerValues): Iterator[(String, String)] = {
     val count = _countState.getOption().getOrElse(0L) + inputRows.toSeq.length
     _countState.update(count)
     Iterator((key, count.toString))
   }
 
   override def handleInitialState(
-      key: String,
-      initialState: (String, String, String),
-      timerValues: TimerValues): Unit = {
+                                   key: String,
+                                   initialState: (String, String, String),
+                                   timerValues: TimerValues): Unit = {
     val count = _countState.getOption().getOrElse(0L) + 1
     _countState.update(count)
   }
@@ -92,16 +92,15 @@ class ChainingOfOpsStatefulProcessor
   override def init(outputMode: OutputMode, timeMode: TimeMode): Unit = {}
 
   override def handleInputRows(
-      key: String,
-      inputRows: Iterator[(String, Timestamp)],
-      timerValues: TimerValues): Iterator[OutputEventTimeRow] = {
+                                key: String,
+                                inputRows: Iterator[(String, Timestamp)],
+                                timerValues: TimerValues): Iterator[OutputEventTimeRow] = {
     val timestamp = inputRows.next()._2
     Iterator(OutputEventTimeRow(key, timestamp))
   }
 }
 
-
-class TransformWithStateStreamingSuite extends QueryTest with RemoteSparkSession with Logging {
+class TransformWithStateConnectSuiteSuite extends QueryTest with RemoteSparkSession with Logging {
   val testData: Seq[(String, String)] = Seq(("a", "1"), ("b", "1"), ("a", "2"))
   val twsAdditionalSQLConf = Seq(
     "spark.sql.streaming.stateStore.providerClass" ->
@@ -233,7 +232,9 @@ class TransformWithStateStreamingSuite extends QueryTest with RemoteSparkSession
       withTempPath { dir =>
         val path = dir.getCanonicalPath
         prepareInputData(path + "/text-test3.txt", Seq("a", "b"), Seq(10, 15))
+        Thread.sleep(2000)
         prepareInputData(path + "/text-test4.txt", Seq("a", "c"), Seq(11, 25))
+        Thread.sleep(2000)
         prepareInputData(path + "/text-test1.txt", Seq("a"), Seq(5))
 
         val q = buildTestDf(path, spark)
