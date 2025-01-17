@@ -394,6 +394,7 @@ private[ml] object MLUtils {
     "featureImportances", // Tree models
     "predictRaw", // ClassificationModel
     "predictProbability", // ProbabilisticClassificationModel
+    "scale", // LinearRegressionModel
     "coefficients",
     "intercept",
     "coefficientMatrix",
@@ -428,7 +429,20 @@ private[ml] object MLUtils {
     "probabilityCol",
     "featuresCol", // LogisticRegressionSummary
     "objectiveHistory",
-    "totalIterations" // _TrainingSummary
+    "coefficientStandardErrors", // _TrainingSummary
+    "degreesOfFreedom",   // LinearRegressionSummary
+    "devianceResiduals",  // LinearRegressionSummary
+    "explainedVariance",  // LinearRegressionSummary
+    "meanAbsoluteError",  // LinearRegressionSummary
+    "meanSquaredError",   // LinearRegressionSummary
+    "numInstances",       // LinearRegressionSummary
+    "pValues",            // LinearRegressionSummary
+    "r2",                 // LinearRegressionSummary
+    "r2adj",              // LinearRegressionSummary
+    "residuals",          // LinearRegressionSummary
+    "rootMeanSquaredError", // LinearRegressionSummary
+    "tValues",            // LinearRegressionSummary
+    "totalIterations"     // LinearRegressionSummary
   )
 
   def invokeMethodAllowed(obj: Object, methodName: String): Object = {
