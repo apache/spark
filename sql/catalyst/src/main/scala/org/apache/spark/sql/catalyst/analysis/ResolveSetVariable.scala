@@ -39,11 +39,16 @@ class ResolveSetVariable(val catalogManager: CatalogManager) extends Rule[Logica
     // Resolve the left hand side of the SET VAR command
     case setVariable: SetVariable if !setVariable.targetVariables.forall(_.resolved) =>
       val sessionVariablesOnly =
-        AnalysisContext.get.isExecuteImmediate && !setVariable.executeImmediateIntoClause
+        AnalysisContext.get.isExecuteImmediate && !setVariable.isExecuteImmediateIntoClause
+      val lookupVariableMode = if (sessionVariablesOnly) {
+        LookupVariableMode.EXCLUDE_LOCAL_VARS
+      } else {
+        LookupVariableMode.INCLUDE_LOCAL_VARS
+      }
 
       val resolvedVars = setVariable.targetVariables.map {
         case u: UnresolvedAttribute =>
-          lookupVariable(u.nameParts, Some(sessionVariablesOnly)) match {
+          lookupVariable(u.nameParts, lookupVariableMode) match {
             case Some(variable) => variable.copy(canFold = false)
             case _ => throw unresolvedVariableError(u.nameParts, Seq("SYSTEM", "SESSION"))
           }

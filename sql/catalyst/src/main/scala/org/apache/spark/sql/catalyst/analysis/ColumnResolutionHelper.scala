@@ -251,19 +251,26 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
     }
   }
 
+  sealed trait LookupVariableMode
+  object LookupVariableMode {
+    case object INCLUDE_LOCAL_VARS extends LookupVariableMode
+    case object EXCLUDE_LOCAL_VARS extends LookupVariableMode
+    case object DEFAULT extends LookupVariableMode
+  }
+
   /**
    * Look up variable by nameParts. If in SQL Script, first check local variables,
    * if not found fall back to session variables,
    * unless in EXECUTE IMMEDIATE or specified otherwise by sessionVariablesOnlyOpt.
    * @param nameParts NameParts of the variable.
-   * @param sessionVariablesOnlyOpt If None - include local variables unless in EXECUTE IMMEDIATE.
-   *                                If Some(false) - include local variables.
-   *                                If Some(true) - exclude local variables.
+   * @param mode DEFAULT => include local variables unless in EXECUTE IMMEDIATE.<p>
+   *             INCLUDE_LOCAL_VARS => include local variables.<p>
+   *             EXCLUDE_LOCAL_VARS => exclude local variables.<p>
    * @return Reference to the variable.
    */
   def lookupVariable(
       nameParts: Seq[String],
-      sessionVariablesOnlyOpt: Option[Boolean] = None): Option[VariableReference] = {
+      mode: LookupVariableMode = LookupVariableMode.DEFAULT): Option[VariableReference] = {
     // The temp variables live in `SYSTEM.SESSION`, and the name can be qualified or not.
     def maybeTempVariableName(nameParts: Seq[String]): Boolean = {
       nameParts.length == 1 || {
@@ -278,9 +285,13 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
       }
     }
 
-    // EXECUTE IMMEDIATE cannot access local variables.
-    val sessionVariablesOnly =
-      sessionVariablesOnlyOpt.getOrElse(AnalysisContext.get.isExecuteImmediate)
+    val sessionVariablesOnly = mode match {
+      case LookupVariableMode.INCLUDE_LOCAL_VARS => false
+      case LookupVariableMode.EXCLUDE_LOCAL_VARS => true
+      // EXECUTE IMMEDIATE cannot access local variables from the SQL string,
+      // only from USING and INTO clauses.
+      case LookupVariableMode.DEFAULT => AnalysisContext.get.isExecuteImmediate
+    }
 
     val namePartsCaseAdjusted = if (conf.caseSensitiveAnalysis) {
       nameParts
