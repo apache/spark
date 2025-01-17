@@ -27,8 +27,11 @@ import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder}
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.streaming.StatefulProcessorHandleState.PRE_INIT
+import org.apache.spark.sql.execution.streaming.StateVariableType._
+import org.apache.spark.sql.execution.streaming.TransformWithStateKeyValueRowSchemaUtils.{getExpirationMsRowSchema, getTTLRowKeySchema}
 import org.apache.spark.sql.execution.streaming.state._
 import org.apache.spark.sql.streaming.{ListState, MapState, QueryInfo, TimeMode, TTLConfig, ValueState}
+import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
 /**
@@ -360,7 +363,20 @@ class DriverStatefulProcessorHandleImpl(timeMode: TimeMode, keyExprEnc: Expressi
     addTimerColFamily()
   }
 
-  def getColumnFamilySchemas: Map[String, StateStoreColFamilySchema] = columnFamilySchemas.toMap
+  def getColumnFamilySchemas(
+      setNullableFields: Boolean
+  ): Map[String, StateStoreColFamilySchema] = {
+    val schemas = columnFamilySchemas.toMap
+    if (setNullableFields) {
+      schemas.map { case (colFamilyName, stateStoreColFamilySchema) =>
+        colFamilyName -> stateStoreColFamilySchema.copy(
+          valueSchema = stateStoreColFamilySchema.valueSchema.toNullable
+        )
+      }
+    } else {
+      schemas
+    }
+  }
 
   def getStateVariableInfos: Map[String, TransformWithStateVariableInfo] = stateVariableInfos.toMap
 
@@ -371,13 +387,24 @@ class DriverStatefulProcessorHandleImpl(timeMode: TimeMode, keyExprEnc: Expressi
   }
 
   private def addTimerColFamily(): Unit = {
-    val stateName = TimerStateUtils.getTimerStateVarName(timeMode.toString)
+    val stateNames = TimerStateUtils.getTimerStateVarNames(timeMode.toString)
+    val primaryIndex = stateNames._1
+    val secondaryIndex = stateNames._2
     val timerEncoder = new TimerKeyEncoder(keyExprEnc)
     val colFamilySchema = StateStoreColumnFamilySchemaUtils.
-      getTimerStateSchema(stateName, timerEncoder.schemaForKeyRow, timerEncoder.schemaForValueRow)
-    columnFamilySchemas.put(stateName, colFamilySchema)
-    val stateVariableInfo = TransformWithStateVariableUtils.getTimerState(stateName)
-    stateVariableInfos.put(stateName, stateVariableInfo)
+      getTimerStateSchema(
+        primaryIndex,
+        timerEncoder.schemaForKeyRow,
+        timerEncoder.schemaForValueRow
+      )
+    columnFamilySchemas.put(primaryIndex, colFamilySchema)
+    val stateVariableInfo = TransformWithStateVariableUtils.getTimerState(primaryIndex)
+    stateVariableInfos.put(primaryIndex, stateVariableInfo)
+
+    val secondaryColFamilySchema = StateStoreColumnFamilySchemaUtils.
+      getSecIndexTimerStateSchema(
+        secondaryIndex, timerEncoder.keySchemaForSecIndex, timerEncoder.schemaForValueRow)
+    columnFamilySchemas.put(secondaryIndex, secondaryColFamilySchema)
   }
 
   override def getValueState[T](
@@ -401,10 +428,16 @@ class DriverStatefulProcessorHandleImpl(timeMode: TimeMode, keyExprEnc: Expressi
     val colFamilySchema = StateStoreColumnFamilySchemaUtils.
       getValueStateSchema(stateName, keyExprEnc, stateEncoder, ttlEnabled)
     checkIfDuplicateVariableDefined(stateName)
-    columnFamilySchemas.put(stateName, colFamilySchema)
+    columnFamilySchemas ++= colFamilySchema
     val stateVariableInfo = TransformWithStateVariableUtils.
       getValueState(stateName, ttlEnabled = ttlEnabled)
     stateVariableInfos.put(stateName, stateVariableInfo)
+    addTTLSchemas(
+      columnFamilySchemas,
+      stateVariableInfo,
+      stateName,
+      keyExprEnc.schema
+    )
     null.asInstanceOf[ValueState[T]]
   }
 
@@ -429,10 +462,16 @@ class DriverStatefulProcessorHandleImpl(timeMode: TimeMode, keyExprEnc: Expressi
     val colFamilySchema = StateStoreColumnFamilySchemaUtils.
       getListStateSchema(stateName, keyExprEnc, stateEncoder, ttlEnabled)
     checkIfDuplicateVariableDefined(stateName)
-    columnFamilySchemas.put(stateName, colFamilySchema)
+    columnFamilySchemas ++= colFamilySchema
     val stateVariableInfo = TransformWithStateVariableUtils.
       getListState(stateName, ttlEnabled = ttlEnabled)
     stateVariableInfos.put(stateName, stateVariableInfo)
+    addTTLSchemas(
+      columnFamilySchemas,
+      stateVariableInfo,
+      stateName,
+      keyExprEnc.schema
+    )
     null.asInstanceOf[ListState[T]]
   }
 
@@ -459,11 +498,113 @@ class DriverStatefulProcessorHandleImpl(timeMode: TimeMode, keyExprEnc: Expressi
     val valEncoder = encoderFor[V]
     val colFamilySchema = StateStoreColumnFamilySchemaUtils.
       getMapStateSchema(stateName, keyExprEnc, userKeyEnc, valEncoder, ttlEnabled)
-    columnFamilySchemas.put(stateName, colFamilySchema)
+    columnFamilySchemas ++= colFamilySchema
     val stateVariableInfo = TransformWithStateVariableUtils.
       getMapState(stateName, ttlEnabled = ttlEnabled)
     stateVariableInfos.put(stateName, stateVariableInfo)
     null.asInstanceOf[MapState[K, V]]
+  }
+
+  /**
+   * Gets the schema for TTL index column family which maps (expirationMs, elementKey) -> EMPTY_ROW.
+   * This is used by both one-to-one and one-to-many TTL states.
+   */
+  def getTTLIndexSchema(
+      stateName: String,
+      elementKeySchema: StructType): StateStoreColFamilySchema = {
+    val ttlIndexName = s"$$ttl_$stateName"
+    val ttlIndexSchema = getTTLRowKeySchema(elementKeySchema)
+    val emptyValueSchema = StructType(Array(StructField("__empty__", NullType)))
+
+    StateStoreColFamilySchema(
+      ttlIndexName, 0,
+      ttlIndexSchema, 0,
+      emptyValueSchema,
+      Some(RangeKeyScanStateEncoderSpec(ttlIndexSchema, Seq(0))))
+  }
+
+  /**
+   * Gets the schema for min expiry index column family which maps elementKey -> minExpirationMs.
+   * This is used by one-to-many TTL states.
+   */
+  def getMinExpiryIndexSchema(
+      stateName: String,
+      elementKeySchema: StructType): StateStoreColFamilySchema = {
+    val minIndexName = s"$$min_$stateName"
+    val minValueSchema = getExpirationMsRowSchema()
+
+    StateStoreColFamilySchema(
+      minIndexName, 0,
+      elementKeySchema, 0,
+      minValueSchema,
+      Some(NoPrefixKeyStateEncoderSpec(elementKeySchema)))
+  }
+
+  /**
+   * Gets the schema for count index column family which maps elementKey -> count.
+   * This is used by one-to-many TTL states to track number of entries.
+   */
+  def getCountIndexSchema(
+      stateName: String,
+      elementKeySchema: StructType): StateStoreColFamilySchema = {
+    val countIndexName = s"$$count_$stateName"
+    val countValueSchema = StructType(Seq(
+      StructField("count", LongType, nullable = false)
+    ))
+
+    StateStoreColFamilySchema(
+      countIndexName, 0,
+      elementKeySchema, 0,
+      countValueSchema,
+      Some(NoPrefixKeyStateEncoderSpec(elementKeySchema)))
+  }
+
+  /**
+   * Adds TTL-related column families to the schema map for value state with TTL.
+   * Value state uses one-to-one TTL state which only needs the TTL index.
+   */
+  private def addValueStateTTLSchemas(
+      columnFamilySchemas: mutable.Map[String, StateStoreColFamilySchema],
+      stateName: String,
+      keySchema: StructType): Unit = {
+    val ttlIndexSchema = getTTLIndexSchema(stateName, keySchema)
+    columnFamilySchemas.put(ttlIndexSchema.colFamilyName, ttlIndexSchema)
+  }
+
+  /**
+   * Adds TTL-related column families to the schema map for list state with TTL.
+   * List state uses one-to-many TTL state which needs TTL, min expiry and count indexes.
+   */
+  private def addListStateTTLSchemas(
+      columnFamilySchemas: mutable.Map[String, StateStoreColFamilySchema],
+      stateName: String,
+      keySchema: StructType): Unit = {
+    val ttlIndexSchema = getTTLIndexSchema(stateName, keySchema)
+    val minExpirySchema = getMinExpiryIndexSchema(stateName, keySchema)
+    val countSchema = getCountIndexSchema(stateName, keySchema)
+
+    columnFamilySchemas.put(ttlIndexSchema.colFamilyName, ttlIndexSchema)
+    columnFamilySchemas.put(minExpirySchema.colFamilyName, minExpirySchema)
+    columnFamilySchemas.put(countSchema.colFamilyName, countSchema)
+  }
+
+  /**
+   * Updates the column family schemas map to handle TTL column families.
+   */
+  def addTTLSchemas(
+      columnFamilySchemas: mutable.Map[String, StateStoreColFamilySchema],
+      stateVariableInfo: TransformWithStateVariableInfo,
+      stateName: String,
+      keySchema: StructType): Unit = {
+
+    if (stateVariableInfo.ttlEnabled) {
+      stateVariableInfo.stateVariableType match {
+        case ValueState => addValueStateTTLSchemas(columnFamilySchemas, stateName, keySchema)
+        case ListState => addListStateTTLSchemas(columnFamilySchemas, stateName, keySchema)
+        case MapState => addValueStateTTLSchemas(columnFamilySchemas, stateName, keySchema)
+        case other => throw new IllegalArgumentException(s"Unsupported state type: $other")
+      }
+    }
   }
 
   /** Function to return queryInfo for currently running task */

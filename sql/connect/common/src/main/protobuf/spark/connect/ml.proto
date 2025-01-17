@@ -20,6 +20,7 @@ syntax = 'proto3';
 package spark.connect;
 
 import "spark/connect/relations.proto";
+import "spark/connect/expressions.proto";
 import "spark/connect/ml_common.proto";
 
 option java_multiple_files = true;
@@ -84,7 +85,7 @@ message MlCommand {
 message MlCommandResult {
   oneof result_type {
     // The result of the attribute
-    Param param = 1;
+    Expression.Literal param = 1;
     // Evaluate a Dataset in a model and return the cached ID of summary
     string summary = 2;
     // Operator information

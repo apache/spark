@@ -35,6 +35,7 @@ import org.apache.spark.sql.execution.{SparkPlan, SQLExecution}
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, StreamingDataSourceV2Relation, StreamingDataSourceV2ScanRelation, StreamWriterCommitProgress, WriteToDataSourceV2Exec}
 import org.apache.spark.sql.execution.streaming.sources.{WriteToMicroBatchDataSource, WriteToMicroBatchDataSourceV1}
+import org.apache.spark.sql.execution.streaming.state.StateSchemaBroadcast
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.Trigger
 import org.apache.spark.util.{Clock, Utils}
@@ -134,6 +135,11 @@ class MicroBatchExecution(
   // the commit log.
   // operatorID -> (partitionID -> array of uniqueID)
   private val currentStateStoreCkptId = MutableMap[Long, Array[Array[String]]]()
+
+  // This map keeps track of all active schemas in the StateStore per each operatorId
+  // in the query plan. It is populated by the first batch at planning time, and passed
+  // into every subsequent batch's query plan.
+  private val stateSchemaMetadatas = MutableMap[Long, StateSchemaBroadcast]()
 
   override lazy val logicalPlan: LogicalPlan = {
     assert(queryExecutionThread eq Thread.currentThread,
@@ -850,7 +856,8 @@ class MicroBatchExecution(
         execCtx.offsetSeqMetadata,
         watermarkPropagator,
         execCtx.previousContext.isEmpty,
-        currentStateStoreCkptId)
+        currentStateStoreCkptId,
+        stateSchemaMetadatas)
       execCtx.executionPlan.executedPlan // Force the lazy generation of execution plan
     }
 

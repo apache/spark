@@ -112,6 +112,11 @@ trait RocksDBStateStoreChangelogCheckpointingTestUtil {
   }
 }
 
+/**
+ * Whenever using this in conjunction with AlsoTestWithRocksDBFeatures, this should
+ * always be inherited first, so 'testWithChangelogCheckpointingEnabled' tests with
+ * both Avro and UnsafeRow enabled.
+ */
 trait AlsoTestWithEncodingTypes extends SQLTestUtils {
   override protected def test(testName: String, testTags: Tag*)(testBody: => Any)
                              (implicit pos: Position): Unit = {
@@ -122,6 +127,24 @@ trait AlsoTestWithEncodingTypes extends SQLTestUtils {
         }
       }
     }
+  }
+
+  def usingAvroEncoding(): Boolean = {
+    getCurrentEncoding() == StateStoreEncoding.Avro.toString
+  }
+
+  // Helper method to test with specific encoding
+  protected def testWithEncoding(encoding: String)(testName: String)(testBody: => Any)
+                                (implicit pos: Position): Unit = {
+    super.test(s"$testName (encoding = $encoding)", Seq.empty: _*) {
+      withSQLConf(SQLConf.STREAMING_STATE_STORE_ENCODING_FORMAT.key -> encoding) {
+        testBody
+      }
+    }
+  }
+
+  protected def getCurrentEncoding(): String = {
+    spark.conf.get(SQLConf.STREAMING_STATE_STORE_ENCODING_FORMAT.key)
   }
 }
 
@@ -343,7 +366,24 @@ class RocksDBStateEncoderSuite extends SparkFunSuite {
       keySchemaId = 0,
       valueSchemaId = 0
     ))
-    new AvroStateEncoder(keyStateEncoderSpec, valueSchema, stateSchemaInfo)
+    // Create test state schema provider
+    val testProvider = new TestStateSchemaProvider()
+    testProvider.captureSchema(
+      StateStore.DEFAULT_COL_FAMILY_NAME,
+      keySchema,
+      valueSchema,
+      keySchemaId = 0,
+      valueSchemaId = 0
+    )
+
+    // Create encoder with column family info
+    new AvroStateEncoder(
+      keyStateEncoderSpec,
+      valueSchema,
+      Some(testProvider),
+      Some(ColumnFamilyInfo(StateStore.DEFAULT_COL_FAMILY_NAME, 0))
+    )
+    new AvroStateEncoder(keyStateEncoderSpec, valueSchema, None, None)
   }
 
   private def createNoPrefixKeyEncoder(): RocksDBDataEncoder = {
@@ -371,6 +411,15 @@ class RocksDBStateEncoderSuite extends SparkFunSuite {
       StructField("v1", StringType)
     ))
 
+    val testProvider = new TestStateSchemaProvider()
+    testProvider.captureSchema(
+      StateStore.DEFAULT_COL_FAMILY_NAME,
+      keySchema,
+      valueSchema,
+      keySchemaId = 18,
+      valueSchemaId = 0
+    )
+
     // Create test row with some data
     val keyProj = UnsafeProjection.create(keySchema)
     val fullKeyRow = keyProj.apply(InternalRow(42, 123L, 3.14))
@@ -378,8 +427,8 @@ class RocksDBStateEncoderSuite extends SparkFunSuite {
     // Test prefix scan encoding with schema evolution
     withClue("Testing prefix scan encoding: ") {
       val prefixKeySpec = PrefixKeyScanStateEncoderSpec(keySchema, numColsPrefixKey = 2)
-      val stateSchemaInfo = Some(StateSchemaInfo(keySchemaId = 42, valueSchemaId = 0))
-      val encoder = new AvroStateEncoder(prefixKeySpec, valueSchema, stateSchemaInfo)
+      val encoder = new AvroStateEncoder(prefixKeySpec, valueSchema, Some(testProvider),
+        Some(ColumnFamilyInfo(StateStore.DEFAULT_COL_FAMILY_NAME, 0)))
 
       // Then encode just the remaining key portion (which should include schema ID)
       val remainingKeyRow = keyProj.apply(InternalRow(null, null, 3.14))
@@ -387,15 +436,23 @@ class RocksDBStateEncoderSuite extends SparkFunSuite {
 
       // Verify schema ID in remaining key bytes
       val decodedSchemaIdRow = encoder.decodeStateSchemaIdRow(encodedRemainingKey)
-      assert(decodedSchemaIdRow.schemaId === 42,
+      assert(decodedSchemaIdRow.schemaId === 18,
         "Schema ID not preserved in prefix scan remaining key encoding")
     }
+
+    testProvider.captureSchema(
+      StateStore.DEFAULT_COL_FAMILY_NAME,
+      keySchema,
+      valueSchema,
+      keySchemaId = 24,
+      valueSchemaId = 0
+    )
 
     // Test range scan encoding with schema evolution
     withClue("Testing range scan encoding: ") {
       val rangeScanSpec = RangeKeyScanStateEncoderSpec(keySchema, orderingOrdinals = Seq(0, 1))
-      val stateSchemaInfo = Some(StateSchemaInfo(keySchemaId = 24, valueSchemaId = 0))
-      val encoder = new AvroStateEncoder(rangeScanSpec, valueSchema, stateSchemaInfo)
+      val encoder = new AvroStateEncoder(rangeScanSpec, valueSchema, Some(testProvider),
+        Some(ColumnFamilyInfo(StateStore.DEFAULT_COL_FAMILY_NAME, 0)))
 
       // Encode remaining key (non-ordering columns)
       // For range scan, the remaining key schema only contains columns NOT in orderingOrdinals
@@ -486,6 +543,15 @@ class RocksDBStateEncoderSuite extends SparkFunSuite {
       StructField("v2", IntegerType),
       StructField("v3", BooleanType)
     ))
+    val testProvider = new TestStateSchemaProvider()
+    testProvider.captureSchema(
+      StateStore.DEFAULT_COL_FAMILY_NAME,
+      keySchema,
+      valueSchema,
+      keySchemaId = 0,
+      valueSchemaId = 42
+    )
+
 
     val valueProj = UnsafeProjection.create(valueSchema)
     val value = valueProj.apply(InternalRow(UTF8String.fromString("hello"), 42, true))
@@ -493,7 +559,8 @@ class RocksDBStateEncoderSuite extends SparkFunSuite {
     withClue("Testing single value encoder: ") {
       val keySpec = NoPrefixKeyStateEncoderSpec(keySchema)
       val stateSchemaInfo = Some(StateSchemaInfo(keySchemaId = 0, valueSchemaId = 42))
-      val avroEncoder = new AvroStateEncoder(keySpec, valueSchema, stateSchemaInfo)
+      val avroEncoder = new AvroStateEncoder(keySpec, valueSchema, Some(testProvider),
+        Some(ColumnFamilyInfo(StateStore.DEFAULT_COL_FAMILY_NAME, 0)))
       val valueEncoder = new SingleValueStateEncoder(avroEncoder, valueSchema)
 
       // Encode value
