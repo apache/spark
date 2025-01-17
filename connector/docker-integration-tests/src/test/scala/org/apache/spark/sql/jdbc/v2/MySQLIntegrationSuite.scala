@@ -19,7 +19,7 @@ package org.apache.spark.sql.jdbc.v2
 
 import java.sql.{Connection, SQLFeatureNotSupportedException}
 
-import org.apache.spark.{SparkConf, SparkSQLFeatureNotSupportedException}
+import org.apache.spark.{SparkConf, SparkException, SparkSQLFeatureNotSupportedException}
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
 import org.apache.spark.sql.jdbc.MySQLDatabaseOnDocker
@@ -269,15 +269,29 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest
           s"""SELECT $sourceCol AS source, CAST($sourceCol AS $castType) AS target FROM $tableName
              |WHERE CAST($sourceCol AS $castType) = $targetCol""".stripMargin
         val df = spark.sql(sql)
-        checkFilterPushed(df)
-        checkAnswer(df, Seq(Row(sourceValue, targetValue)))
-        val expectedTypes = Array(sourceDataType, targetDataType)
-        val resultTypes = df.schema.fields.map(_.dataType)
-        assert(resultTypes === expectedTypes, s"Failed to cast $sourceCol to $castType")
+        castType match {
+          case "SHORT" | "INTEGER" =>
+            checkError(
+              exception = intercept[SparkException] {
+                df.collect()
+              },
+              condition = null
+            )
+          case _ =>
+            checkFilterPushed(df)
+            checkAnswer(df, Seq(Row(sourceValue, targetValue)))
+            val expectedTypes = Array(sourceDataType, targetDataType)
+            val resultTypes = df.schema.fields.map(_.dataType)
+            assert(resultTypes === expectedTypes, s"Failed to cast $sourceCol to $castType")
+        }
       }
 
       testCast("BINARY", "string_col", "binary_col",
         StringType, stringValue, BinaryType, binaryValue);
+      testCast("SHORT", "string_col", "long_col",
+        StringType, stringValue, LongType, longValue)
+      testCast("INTEGER", "string_col", "long_col",
+        StringType, stringValue, LongType, longValue)
       testCast("LONG", "string_col", "long_col",
         StringType, stringValue, LongType, longValue)
       // We use stringLiteral to make sure both values are using the same collation
