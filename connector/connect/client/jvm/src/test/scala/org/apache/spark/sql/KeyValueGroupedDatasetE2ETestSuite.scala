@@ -480,11 +480,21 @@ class KeyValueGroupedDatasetE2ETestSuite extends QueryTest with RemoteSparkSessi
     def outputEncoder: Encoder[Int] = Encoders.scalaInt
   }
 
-  test("agg with mapValues") {
+  test("agg with mapValues - DS") {
     val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
     val values = ds
       .groupByKey(_._1)
       .mapValues(_._2 * 2) // value *= 2 to make sure `mapValues` is really applied
+      .agg(count("*"), IntSumAgg.toColumn)
+      .collect()
+    assert(values === Array(("a", 2, 60), ("b", 2, 6), ("c", 1, 2)))
+  }
+
+  test("agg with mapValues - DF") {
+    val df = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDF("kkk", "vvv")
+    val values = df
+      .groupByKey(_.getAs[String]("kkk"))
+      .mapValues(_.getAs[Int]("vvv") * 2) // value *= 2 to make sure `mapValues` is really applied
       .agg(count("*"), IntSumAgg.toColumn)
       .collect()
     assert(values === Array(("a", 2, 60), ("b", 2, 6), ("c", 1, 2)))
@@ -501,10 +511,58 @@ class KeyValueGroupedDatasetE2ETestSuite extends QueryTest with RemoteSparkSessi
     assert(values === Array(("a", 2, 60), ("b", 2, 6), ("c", 1, 2)))
   }
 
+  object IntTupleSumAgg extends Aggregator[(Int, Int), (Int, Int), Int] {
+    def zero: (Int, Int) = (0, 0)
+    def reduce(b: (Int, Int), a: (Int, Int)): (Int, Int) = (b._1 + a._1, b._2 + a._2)
+    def merge(b1: (Int, Int), b2: (Int, Int)): (Int, Int) = (b1._1 + b2._1, b1._2 + b2._2)
+    def finish(reduction: (Int, Int)): Int = reduction._1 + reduction._2
+    def bufferEncoder: Encoder[(Int, Int)] = Encoders.tuple(Encoders.scalaInt, Encoders.scalaInt)
+    def outputEncoder: Encoder[Int] = Encoders.scalaInt
+  }
+
+  test("agg with mapValues - Tuple - DS") {
+    val ds =
+      Seq(("a", (10, 10)), ("a", (20, 20)), ("b", (1, 1)), ("b", (2, 2)), ("c", (1, 1))).toDS()
+    val values = ds
+      .groupByKey(_._1)
+      .mapValues(v => (v._2._1 * 2, v._2._2 * 2))
+      .agg(count("_1"), IntTupleSumAgg.toColumn)
+      .collect()
+    assert(values === Array(("a", 2, 120), ("b", 2, 12), ("c", 1, 4)))
+  }
+
+  test("agg with mapValues - Tuple - DF") {
+    val ds = Seq(("a", (10, 10)), ("a", (20, 20)), ("b", (1, 1)), ("b", (2, 2)), ("c", (1, 1)))
+      .toDF("kkk", "vvv")
+    val values = ds
+      .groupByKey(_.getAs[String]("kkk"))
+      .mapValues { v =>
+        (v.getStruct(1).getAs[Int]("_1") * 2, v.getStruct(1).getAs[Int]("_2") * 2)
+      }
+      .agg(count("_1"), IntTupleSumAgg.toColumn)
+      .collect()
+    assert(values === Array(("a", 2, 120), ("b", 2, 12), ("c", 1, 4)))
+  }
+
+  test("agg with mapValues (RGDS to KVDS) - Tuple") {
+    val ds =
+      Seq(("a", (10, 10)), ("a", (20, 20)), ("b", (1, 1)), ("b", (2, 2)), ("c", (1, 1))).toDS()
+    val values = ds
+      .groupBy($"_1")
+      .as[String, (String, (Int, Int))]
+      .mapValues(v => (v._2._1 * 2, v._2._2 * 2))
+      .agg(count("*"), IntTupleSumAgg.toColumn)
+      .collect()
+    assert(values === Array(("a", 2, 120), ("b", 2, 12), ("c", 1, 4)))
+  }
+
   test("groupby") {
     val ds = Seq(("a", 1, 10), ("a", 2, 20), ("b", 2, 1), ("b", 1, 2), ("c", 1, 1))
       .toDF("key", "seq", "value")
-    val grouped = ds.groupBy($"key").as[String, (String, Int, Int)]
+    val grouped = ds
+      .groupBy($"key")
+      .as[String, (String, Int, Int)]
+      .mapValues(i => i.copy(_1 = "p_" + i._1))
     val aggregated = grouped
       .flatMapSortedGroups($"seq", expr("length(key)"), $"value") { (g, iter) =>
         Iterator(g, iter.mkString(", "))
@@ -513,11 +571,11 @@ class KeyValueGroupedDatasetE2ETestSuite extends QueryTest with RemoteSparkSessi
     checkDatasetUnorderly(
       aggregated,
       "a",
-      "(a,1,10), (a,2,20)",
+      "(p_a,1,10), (p_a,2,20)",
       "b",
-      "(b,1,2), (b,2,1)",
+      "(p_b,1,2), (p_b,2,1)",
       "c",
-      "(c,1,1)")
+      "(p_c,1,1)")
   }
 
   test("SPARK-50693: groupby on unresolved plan") {
