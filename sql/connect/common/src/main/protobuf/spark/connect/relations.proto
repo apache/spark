@@ -1014,13 +1014,14 @@ message GroupMap {
   // (Optional) Expressions for sorting. Only used by Scala Sorted Group Map API.
   repeated Expression sorting_expressions = 4;
 
-  // Below fields are only used by (Flat)MapGroupsWithState
+  // Below fields are used by (Flat)MapGroupsWithState and TransformWithState.
   // (Optional) Input relation for initial State.
   Relation initial_input = 5;
 
   // (Optional) Expressions for grouping keys of the initial state input relation.
   repeated Expression initial_grouping_expressions = 6;
 
+  // Below fields are only used by (Flat)MapGroupsWithState
   // (Optional) True if MapGroupsWithState, false if FlatMapGroupsWithState.
   optional bool is_map_groups_with_state = 7;
 
@@ -1033,22 +1034,29 @@ message GroupMap {
   // (Optional) The schema for the grouped state.
   optional DataType state_schema = 10;
 
-  // (Optional) True if the operator is transformWithState.
+  // Below fields are only used by TransformWithState
+  // (Optional) TransformWithState related parameters.
   optional TransformWithStateInfo transformWithStateInfo = 11;
 }
 
+// Event time rule needed for chaining of operator of TransformWithState
 message UpdateEventTimeWatermarkColumn {
   // (Required) Input relation.
   Relation input = 1;
 
+  // (Required) Event time column name.
   string event_time_col_name = 3;
 }
 
 message TransformWithStateInfo {
+  // (Required) Bytes for java serialized user-defined stateful processor.
   bytes stateful_processor_payload = 1;
+
+  // (Required) Time mode string for transformWithState.
   string time_mode = 2;
+
+  // (Required) Output mode string for transformWithState.
   string output_mode = 3;
-  optional string event_time_col_name = 4;
 }
 
 message CoGroupMap {

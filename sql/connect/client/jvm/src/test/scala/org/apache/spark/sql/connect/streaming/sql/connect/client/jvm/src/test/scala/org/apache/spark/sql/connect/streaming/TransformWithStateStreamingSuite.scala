@@ -31,6 +31,29 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.{QueryTest, RemoteSparkSession}
 import org.apache.spark.sql.types._
 
+// A basic stateful processor which will return the occurrences of key
+class BasicCountStatefulProcessor
+  extends StatefulProcessor[String, (String, String), (String, String)]
+    with Logging {
+  @transient protected var _countState: ValueState[Long] = _
+
+  override def init(
+      outputMode: OutputMode,
+      timeMode: TimeMode): Unit = {
+    _countState = getHandle.getValueState[Long]("countState", Encoders.scalaLong, TTLConfig.NONE)
+  }
+
+  override def handleInputRows(
+      key: String,
+      inputRows: Iterator[(String, String)],
+      timerValues: TimerValues): Iterator[(String, String)] = {
+    val count = _countState.getOption().getOrElse(0L) + inputRows.toSeq.length
+    _countState.update(count)
+    Iterator((key, count.toString))
+  }
+}
+
+// A stateful processor with initial state which will return the occurrences of key
 class TestInitialStatefulProcessor
   extends StatefulProcessorWithInitialState[
     String, (String, String), (String, String), (String, String, String)]
@@ -61,39 +84,19 @@ class TestInitialStatefulProcessor
   }
 }
 
-class BasicCountStatefulProcessor
-  extends StatefulProcessor[String, (String, String), (String, String)]
-    with Logging {
-  @transient protected var _countState: ValueState[Long] = _
+case class OutputEventTimeRow(key: String, outputTimestamp: Timestamp)
 
-  override def init(
-      outputMode: OutputMode,
-      timeMode: TimeMode): Unit = {
-    _countState = getHandle.getValueState[Long]("countState", Encoders.scalaLong, TTLConfig.NONE)
-  }
-
-  override def handleInputRows(
-      key: String,
-      inputRows: Iterator[(String, String)],
-      timerValues: TimerValues): Iterator[(String, String)] = {
-    val count = _countState.getOption().getOrElse(0L) + inputRows.toSeq.length
-    _countState.update(count)
-    Iterator((key, count.toString))
-  }
-}
-
-case class OutputEventTimeRow2(key: String, outputTimestamp: Timestamp)
-
-class ChainingOfOpsStatefulProcessor2
-  extends StatefulProcessor[String, (String, Timestamp), OutputEventTimeRow2] {
+// A stateful processor which will return timestamp of the first item from input rows
+class ChainingOfOpsStatefulProcessor
+  extends StatefulProcessor[String, (String, Timestamp), OutputEventTimeRow] {
   override def init(outputMode: OutputMode, timeMode: TimeMode): Unit = {}
 
   override def handleInputRows(
       key: String,
       inputRows: Iterator[(String, Timestamp)],
-      timerValues: TimerValues): Iterator[OutputEventTimeRow2] = {
+      timerValues: TimerValues): Iterator[OutputEventTimeRow] = {
     val timestamp = inputRows.next()._2
-    Iterator(OutputEventTimeRow2(key, timestamp))
+    Iterator(OutputEventTimeRow(key, timestamp))
   }
 }
 
@@ -152,7 +155,7 @@ class TransformWithStateStreamingSuite extends QueryTest with RemoteSparkSession
     }
   }
 
-  test("transformWithState with initial state") {
+  test("transformWithState - streaming with initial state") {
     withSQLConf(twsAdditionalSQLConf: _*) {
       val session: SparkSession = spark
       import session.implicits._
@@ -239,8 +242,8 @@ class TransformWithStateStreamingSuite extends QueryTest with RemoteSparkSession
           .withWatermark("eventTime", "5 seconds")
           .as[(String, Timestamp)]
           .groupByKey(x => x._1)
-          .transformWithState[OutputEventTimeRow2](
-            new ChainingOfOpsStatefulProcessor2(),
+          .transformWithState[OutputEventTimeRow](
+            new ChainingOfOpsStatefulProcessor(),
             "outputTimestamp", OutputMode.Append()
           )
           .groupBy("outputTimestamp")
@@ -250,15 +253,43 @@ class TransformWithStateStreamingSuite extends QueryTest with RemoteSparkSession
           .outputMode("Append")
           .start()
 
-        try {
-          q.processAllAvailable()
-          eventually(timeout(30.seconds)) {
-            q.stop()
-          }
-        } finally {
+        q.processAllAvailable()
+        eventually(timeout(30.seconds)) {
           q.stop()
-          spark.sql("DROP TABLE IF EXISTS my_sink")
         }
+      }
+    }
+  }
+
+  test("transformWithState - batch query") {
+    withSQLConf(twsAdditionalSQLConf: _*) {
+      val session: SparkSession = spark
+      import session.implicits._
+
+      spark.sql("DROP TABLE IF EXISTS my_sink")
+
+      withTempPath { dir =>
+        val path = dir.getCanonicalPath
+        testData.toDS().toDF("id", "value")
+          .repartition(3).write.parquet(path)
+
+        val testSchema = StructType(Array(
+          StructField("id", StringType), StructField("value", StringType)))
+
+        spark.read
+          .schema(testSchema)
+          .parquet(path)
+          .as[(String, String)]
+          .groupByKey(x => x._1)
+          .transformWithState(
+            new BasicCountStatefulProcessor(),
+            TimeMode.None(), OutputMode.Update())
+          .write.saveAsTable("my_sink")
+
+        checkDataset(
+          spark.table("my_sink").toDF().as[(String, String)].orderBy("_1"),
+          ("a", "1"), ("a", "2"), ("b", "1")
+        )
       }
     }
   }

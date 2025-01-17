@@ -708,7 +708,6 @@ private class KeyValueGroupedDatasetImpl[K, V, IK, IV](
           // we pass time mode as string here and restore it in planner
           .setTimeMode(timeMode.toString)
           .setStatefulProcessorPayload(statefulProcessorStr)
-          .setEventTimeColName(eventTimeColumnName)
           .build()
       )
       if (initialStateImpl != null) {

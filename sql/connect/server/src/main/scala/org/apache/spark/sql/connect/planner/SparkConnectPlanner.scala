@@ -639,16 +639,6 @@ class SparkConnectPlanner(
     SerializeFromObject(udf.outputNamedExpression, mapped)
   }
 
-  private def transformUpdateEventTimeWatermarkColumn(
-      rel: proto.UpdateEventTimeWatermarkColumn): LogicalPlan = {
-    val eventTimeColName = rel.getEventTimeColName
-    UpdateEventTimeWatermarkColumn(
-      UnresolvedAttribute(eventTimeColName),
-      None,
-      transformRelation(rel.getInput)
-    )
-  }
-
   private def transformGroupMap(rel: proto.GroupMap): LogicalPlan = {
     val commonUdf = rel.getFunc
     commonUdf.getFunctionCase match {
@@ -702,8 +692,6 @@ class SparkConnectPlanner(
 
       val timeMode = TimeModes(twsInfo.getTimeMode, isScala = true)
       val outputMode = InternalOutputModes(twsInfo.getOutputMode)
-      // TODO implement chaining of operator in connect
-      val eventTimeCol = twsInfo.getEventTimeColName
 
       val node = if (hasInitialState) {
         val statefulProcessor =
@@ -843,6 +831,16 @@ class SparkConnectPlanner(
         ds.analyzed)
       SerializeFromObject(udf.outputNamedExpression, mapped)
     }
+  }
+
+  private def transformUpdateEventTimeWatermarkColumn(
+      rel: proto.UpdateEventTimeWatermarkColumn): LogicalPlan = {
+    val eventTimeColName = rel.getEventTimeColName
+    UpdateEventTimeWatermarkColumn(
+      UnresolvedAttribute(eventTimeColName),
+      None,
+      transformRelation(rel.getInput)
+    )
   }
 
   private def transformCoGroupMap(rel: proto.CoGroupMap): LogicalPlan = {
