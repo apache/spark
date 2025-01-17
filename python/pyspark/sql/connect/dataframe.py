@@ -86,6 +86,7 @@ from pyspark.sql.connect.expressions import (
 from pyspark.sql.connect.functions import builtin as F
 from pyspark.sql.pandas.types import from_arrow_schema, to_arrow_schema
 from pyspark.sql.pandas.functions import _validate_pandas_udf  # type: ignore[attr-defined]
+from pyspark.sql.table_arg import TableArg
 
 
 if TYPE_CHECKING:
@@ -272,6 +273,14 @@ class DataFrame(ParentDataFrame):
         res = DataFrame(plan.SubqueryAlias(self._plan, alias), session=self._session)
         res._cached_schema = self._cached_schema
         return res
+
+    def metadataColumn(self, colName: str) -> Column:
+        if not isinstance(colName, str):
+            raise PySparkTypeError(
+                errorClass="NOT_STR",
+                messageParameters={"arg_name": "colName", "arg_type": type(colName).__name__},
+            )
+        return self._col(colName, is_metadata_column=True)
 
     def colRegex(self, colName: str) -> Column:
         from pyspark.sql.connect.column import Column as ConnectColumn
@@ -1749,13 +1758,14 @@ class DataFrame(ParentDataFrame):
                 messageParameters={"arg_name": "item", "arg_type": type(item).__name__},
             )
 
-    def _col(self, name: str) -> Column:
+    def _col(self, name: str, is_metadata_column: bool = False) -> Column:
         from pyspark.sql.connect.column import Column as ConnectColumn
 
         return ConnectColumn(
             ColumnReference(
                 unparsed_identifier=name,
                 plan_id=self._plan._plan_id,
+                is_metadata_column=is_metadata_column,
             )
         )
 
@@ -1799,6 +1809,13 @@ class DataFrame(ParentDataFrame):
         return DataFrame(
             plan.Transpose(self._plan, [F._to_col(indexColumn)] if indexColumn is not None else []),
             self._session,
+        )
+
+    def asTable(self) -> TableArg:
+        # TODO(SPARK-50393): Support DataFrame conversion to table argument in Spark Connect
+        raise PySparkNotImplementedError(
+            errorClass="NOT_IMPLEMENTED",
+            messageParameters={"feature": "asTable()"},
         )
 
     def scalar(self) -> Column:

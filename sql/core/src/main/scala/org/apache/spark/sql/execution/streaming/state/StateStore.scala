@@ -465,7 +465,8 @@ trait StateStoreProvider {
       useColumnFamilies: Boolean,
       storeConfs: StateStoreConf,
       hadoopConf: Configuration,
-      useMultipleValuesPerKey: Boolean = false): Unit
+      useMultipleValuesPerKey: Boolean = false,
+      stateSchemaProvider: Option[StateSchemaProvider] = None): Unit
 
   /**
    * Return the id of the StateStores this provider will generate.
@@ -532,10 +533,11 @@ object StateStoreProvider {
       useColumnFamilies: Boolean,
       storeConf: StateStoreConf,
       hadoopConf: Configuration,
-      useMultipleValuesPerKey: Boolean): StateStoreProvider = {
+      useMultipleValuesPerKey: Boolean,
+      stateSchemaProvider: Option[StateSchemaProvider]): StateStoreProvider = {
     val provider = create(storeConf.providerClass)
     provider.init(providerId.storeId, keySchema, valueSchema, keyStateEncoderSpec,
-      useColumnFamilies, storeConf, hadoopConf, useMultipleValuesPerKey)
+      useColumnFamilies, storeConf, hadoopConf, useMultipleValuesPerKey, stateSchemaProvider)
     provider
   }
 
@@ -785,6 +787,7 @@ object StateStore extends Logging {
   @GuardedBy("loadedProviders")
   private var _coordRef: StateStoreCoordinatorRef = null
 
+  // scalastyle:off
   /** Get or create a read-only store associated with the id. */
   def getReadOnly(
       storeProviderId: StateStoreProviderId,
@@ -793,6 +796,7 @@ object StateStore extends Logging {
       keyStateEncoderSpec: KeyStateEncoderSpec,
       version: Long,
       stateStoreCkptId: Option[String],
+      stateSchemaBroadcast: Option[StateSchemaBroadcast],
       useColumnFamilies: Boolean,
       storeConf: StateStoreConf,
       hadoopConf: Configuration,
@@ -802,7 +806,8 @@ object StateStore extends Logging {
       throw QueryExecutionErrors.unexpectedStateStoreVersion(version)
     }
     val storeProvider = getStateStoreProvider(storeProviderId, keySchema, valueSchema,
-      keyStateEncoderSpec, useColumnFamilies, storeConf, hadoopConf, useMultipleValuesPerKey)
+      keyStateEncoderSpec, useColumnFamilies, storeConf, hadoopConf, useMultipleValuesPerKey,
+      stateSchemaBroadcast)
     storeProvider.getReadStore(version, stateStoreCkptId)
   }
 
@@ -814,6 +819,7 @@ object StateStore extends Logging {
       keyStateEncoderSpec: KeyStateEncoderSpec,
       version: Long,
       stateStoreCkptId: Option[String],
+      stateSchemaBroadcast: Option[StateSchemaBroadcast],
       useColumnFamilies: Boolean,
       storeConf: StateStoreConf,
       hadoopConf: Configuration,
@@ -824,9 +830,11 @@ object StateStore extends Logging {
     }
     hadoopConf.set(StreamExecution.RUN_ID_KEY, storeProviderId.queryRunId.toString)
     val storeProvider = getStateStoreProvider(storeProviderId, keySchema, valueSchema,
-      keyStateEncoderSpec, useColumnFamilies, storeConf, hadoopConf, useMultipleValuesPerKey)
+      keyStateEncoderSpec, useColumnFamilies, storeConf, hadoopConf, useMultipleValuesPerKey,
+      stateSchemaBroadcast)
     storeProvider.getStore(version, stateStoreCkptId)
   }
+  // scalastyle:on
 
   private def getStateStoreProvider(
       storeProviderId: StateStoreProviderId,
@@ -836,7 +844,8 @@ object StateStore extends Logging {
       useColumnFamilies: Boolean,
       storeConf: StateStoreConf,
       hadoopConf: Configuration,
-      useMultipleValuesPerKey: Boolean): StateStoreProvider = {
+      useMultipleValuesPerKey: Boolean,
+      stateSchemaBroadcast: Option[StateSchemaBroadcast]): StateStoreProvider = {
     loadedProviders.synchronized {
       startMaintenanceIfNeeded(storeConf)
 
@@ -847,7 +856,8 @@ object StateStore extends Logging {
           storeProviderId,
           StateStoreProvider.createAndInit(
             storeProviderId, keySchema, valueSchema, keyStateEncoderSpec,
-            useColumnFamilies, storeConf, hadoopConf, useMultipleValuesPerKey)
+            useColumnFamilies, storeConf, hadoopConf, useMultipleValuesPerKey,
+            stateSchemaBroadcast)
         )
       }
 
@@ -977,7 +987,8 @@ object StateStore extends Logging {
           } finally {
             val duration = System.currentTimeMillis() - startTime
             val logMsg =
-              log"Finished maintenance task for provider=${MDC(LogKeys.STATE_STORE_PROVIDER, id)}" +
+              log"Finished maintenance task for " +
+                log"provider=${MDC(LogKeys.STATE_STORE_PROVIDER_ID, id)}" +
                 log" in elapsed_time=${MDC(LogKeys.TIME_UNITS, duration)}\n"
             if (duration > 5000) {
               logInfo(logMsg)
@@ -1007,9 +1018,9 @@ object StateStore extends Logging {
         .map(_.reportActiveInstance(storeProviderId, host, executorId, otherProviderIds))
         .getOrElse(Seq.empty[StateStoreProviderId])
       logInfo(log"Reported that the loaded instance " +
-        log"${MDC(LogKeys.STATE_STORE_PROVIDER, storeProviderId)} is active")
+        log"${MDC(LogKeys.STATE_STORE_PROVIDER_ID, storeProviderId)} is active")
       logDebug(log"The loaded instances are going to unload: " +
-        log"${MDC(LogKeys.STATE_STORE_PROVIDER, providerIdsToUnload.mkString(", "))}")
+        log"${MDC(LogKeys.STATE_STORE_PROVIDER_IDS, providerIdsToUnload)}")
       providerIdsToUnload
     } else {
       Seq.empty[StateStoreProviderId]
@@ -1041,7 +1052,7 @@ object StateStore extends Logging {
         _coordRef = StateStoreCoordinatorRef.forExecutor(env)
       }
       logInfo(log"Retrieved reference to StateStoreCoordinator: " +
-        log"${MDC(LogKeys.STATE_STORE_PROVIDER, _coordRef)}")
+        log"${MDC(LogKeys.STATE_STORE_COORDINATOR, _coordRef)}")
       Some(_coordRef)
     } else {
       _coordRef = null

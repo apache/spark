@@ -2689,7 +2689,7 @@ private[spark] object Utils
    * loading SparkConf.
    */
   def resetStructuredLogging(sparkConf: SparkConf): Unit = {
-    if (sparkConf.getBoolean(STRUCTURED_LOGGING_ENABLED.key, defaultValue = true)) {
+    if (sparkConf.get(STRUCTURED_LOGGING_ENABLED)) {
       Logging.enableStructuredLogging()
     } else {
       Logging.disableStructuredLogging()
@@ -2954,6 +2954,15 @@ private[spark] object Utils
     str.replaceAll("[ :/]", "-").replaceAll("[.${}'\"]", "_").toLowerCase(Locale.ROOT)
   }
 
+  def nameForAppAndAttempt(appId: String, appAttemptId: Option[String]): String = {
+    val base = sanitizeDirName(appId)
+    if (appAttemptId.isDefined) {
+      base + "_" + sanitizeDirName(appAttemptId.get)
+    } else {
+      base
+    }
+  }
+
   def isClientMode(conf: SparkConf): Boolean = {
     "client".equals(conf.get(SparkLauncher.DEPLOY_MODE, "client"))
   }
@@ -3075,6 +3084,18 @@ private[spark] object Utils
       IOUtils.closeQuietly(out)
     }
     files.toSeq
+  }
+
+  /**
+   * Create a resource uninterruptibly if we are in a task thread (i.e., TaskContext.get() != null).
+   * Otherwise, create the resource normally. This is mainly used in the situation where we want to
+   * create a multi-layer resource in a task thread. The uninterruptible behavior ensures we don't
+   * leak the underlying resources when there is a task cancellation request,
+   */
+  def createResourceUninterruptiblyIfInTaskThread[R <: Closeable](createResource: => R): R = {
+    Option(TaskContext.get()).map(_.createResourceUninterruptibly {
+      createResource
+    }).getOrElse(createResource)
   }
 
   /**

@@ -261,21 +261,23 @@ case class ParquetPartitionReaderFactory(
     val int96RebaseSpec = DataSourceUtils.int96RebaseSpec(
       footerFileMetaData.getKeyValueMetaData.get,
       int96RebaseModeInRead)
-    Utils.tryInitializeResource(
-      buildReaderFunc(
-        file.partitionValues,
-        pushed,
-        convertTz,
-        datetimeRebaseSpec,
-        int96RebaseSpec)
-    ) { reader =>
-      reader match {
-        case vectorizedReader: VectorizedParquetRecordReader =>
-          vectorizedReader.initialize(split, hadoopAttemptContext, Option.apply(fileFooter))
-        case _ =>
-          reader.initialize(split, hadoopAttemptContext)
+    Utils.createResourceUninterruptiblyIfInTaskThread {
+      Utils.tryInitializeResource(
+        buildReaderFunc(
+          file.partitionValues,
+          pushed,
+          convertTz,
+          datetimeRebaseSpec,
+          int96RebaseSpec)
+      ) { reader =>
+        reader match {
+          case vectorizedReader: VectorizedParquetRecordReader =>
+            vectorizedReader.initialize(split, hadoopAttemptContext, Option.apply(fileFooter))
+          case _ =>
+            reader.initialize(split, hadoopAttemptContext)
+        }
+        reader
       }
-      reader
     }
   }
 

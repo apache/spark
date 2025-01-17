@@ -32,28 +32,6 @@ class JobCancellationParityTests(JobCancellationTestsMixin, ReusedConnectTestCas
             create_thread=lambda target, session: threading.Thread(target=func, args=(target,))
         )
 
-    def test_interrupt_tag(self):
-        thread_ids = range(4)
-        self.check_job_cancellation(
-            lambda job_group: self.spark.addTag(job_group),
-            lambda job_group: self.spark.interruptTag(job_group),
-            thread_ids,
-            [i for i in thread_ids if i % 2 == 0],
-            [i for i in thread_ids if i % 2 != 0],
-        )
-        self.spark.clearTags()
-
-    def test_interrupt_all(self):
-        thread_ids = range(4)
-        self.check_job_cancellation(
-            lambda job_group: None,
-            lambda job_group: self.spark.interruptAll(),
-            thread_ids,
-            thread_ids,
-            [],
-        )
-        self.spark.clearTags()
-
 
 if __name__ == "__main__":
     import unittest
