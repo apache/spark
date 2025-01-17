@@ -50,7 +50,16 @@ class CatalogManager(
   val tempVariableManager: TempVariableManager = new TempVariableManager
 
   // This field will be populated and cleaned up by SqlScriptingExecution.
-  var sqlScriptingLocalVariableManager: Option[VariableManager] = None
+  private val sqlScriptingLocalVariableManager: InheritableThreadLocal[Option[VariableManager]] =
+    new InheritableThreadLocal[Option[VariableManager]] {
+      override protected def initialValue(): Option[VariableManager] = None
+    }
+
+  def getSqlScriptingLocalVariableManager: Option[VariableManager] =
+    sqlScriptingLocalVariableManager.get()
+
+  def setSqlScriptingLocalVariableManager(value: Option[VariableManager]): Unit =
+    sqlScriptingLocalVariableManager.set(value)
 
   def catalog(name: String): CatalogPlugin = synchronized {
     if (name.equalsIgnoreCase(SESSION_CATALOG_NAME)) {

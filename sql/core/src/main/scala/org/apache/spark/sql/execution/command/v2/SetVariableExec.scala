@@ -68,7 +68,7 @@ case class SetVariableExec(
 
     val tempVariableManager = session.sessionState.catalogManager.tempVariableManager
     val scriptingVariableManager =
-      session.sessionState.catalogManager.sqlScriptingLocalVariableManager
+      session.sessionState.catalogManager.getSqlScriptingLocalVariableManager
 
     val variableManager = scriptingVariableManager
       .filterNot(_ => sessionVariablesOnly)

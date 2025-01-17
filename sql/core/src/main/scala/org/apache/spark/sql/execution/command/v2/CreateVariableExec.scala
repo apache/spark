@@ -36,7 +36,7 @@ case class CreateVariableExec(
 
   override protected def run(): Seq[InternalRow] = {
     val scriptingVariableManager =
-      session.sessionState.catalogManager.sqlScriptingLocalVariableManager
+      session.sessionState.catalogManager.getSqlScriptingLocalVariableManager
     val tempVariableManager = session.sessionState.catalogManager.tempVariableManager
 
     val exprs = prepareExpressions(Seq(defaultExpr.child), subExprEliminationEnabled = false)

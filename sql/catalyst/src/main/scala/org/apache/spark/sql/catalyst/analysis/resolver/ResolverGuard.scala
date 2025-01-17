@@ -211,7 +211,7 @@ class ResolverGuard(catalogManager: CatalogManager) extends SQLConfHelper {
 
   private def checkVariables() =
     catalogManager.tempVariableManager.isEmpty &&
-    catalogManager.sqlScriptingLocalVariableManager.forall(_.isEmpty)
+    catalogManager.getSqlScriptingLocalVariableManager.forall(_.isEmpty)
 }
 
 object ResolverGuard {

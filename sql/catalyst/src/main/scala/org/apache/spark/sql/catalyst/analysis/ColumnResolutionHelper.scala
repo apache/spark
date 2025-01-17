@@ -299,7 +299,7 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
       nameParts.map(_.toLowerCase(Locale.ROOT))
     }
 
-    catalogManager.sqlScriptingLocalVariableManager
+    catalogManager.getSqlScriptingLocalVariableManager
       // If sessionOnly is set to true lookup only session variables.
       .filterNot(_ => sessionVariablesOnly)
       // If variable name is qualified with system.session.<varName> treat it as a session variable.

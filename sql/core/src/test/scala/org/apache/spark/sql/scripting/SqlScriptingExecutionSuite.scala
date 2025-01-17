@@ -1668,7 +1668,7 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
     //  The reason it is neccessary now is that with the current execution logic,
     //  the SqlScriptingExecution errors while being constructed,
     //  meaning it doesn't get cleaned up properly.
-    spark.sessionState.catalogManager.sqlScriptingLocalVariableManager = None
+    spark.sessionState.catalogManager.setSqlScriptingLocalVariableManager(None)
 
     checkError(
       exception = e,
