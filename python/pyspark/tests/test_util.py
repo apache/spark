@@ -141,9 +141,7 @@ class HandleWorkerExceptionTests(unittest.TestCase):
                 handle_worker_exception(e, stream)
                 return stream.getvalue()
 
-    @patch.dict(
-        os.environ, {"SPARK_SIMPLIFIED_TRACEBACK": "", "SPARK_HIDE_TRACEBACK": ""}
-    )
+    @patch.dict(os.environ, {"SPARK_SIMPLIFIED_TRACEBACK": "", "SPARK_HIDE_TRACEBACK": ""})
     def test_full(self):
         result = self.run_handle_worker_exception()
         self.assertIn(self.exception_bytes, result)
