@@ -3938,6 +3938,18 @@
     ],
     "sqlState" : "0A000"
   },
+  "NOT_SUPPORTED_CHANGE_PARENT_CHILD_COLUMN" : {
+    "message" : [
+      "ALTER TABLE ALTER/CHANGE COLUMN is not supported for changing <table>'s parent field <parentField> and child field <childField> in the same command."
+    ],
+    "sqlState" : "0A000"
+  },
+  "NOT_SUPPORTED_CHANGE_SAME_COLUMN" : {
+    "message" : [
+      "ALTER TABLE ALTER/CHANGE COLUMN is not supported for changing <table>'s column <fieldName> multiple times in the same command."
+    ],
+    "sqlState" : "0A000"
+  },
   "NOT_SUPPORTED_COMMAND_FOR_V2_TABLE" : {
     "message" : [
       "<cmd> is not supported for v2 tables."

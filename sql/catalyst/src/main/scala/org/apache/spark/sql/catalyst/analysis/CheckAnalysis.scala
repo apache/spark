@@ -1622,59 +1622,83 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
       case RenameColumn(table: ResolvedTable, col: ResolvedFieldName, newName) =>
         checkColumnNotExists("rename", col.path :+ newName, table.schema)
 
-      case a @ AlterColumn(table: ResolvedTable, col: ResolvedFieldName, _, _, _, _, _) =>
-        val fieldName = col.name.quoted
-        if (a.dataType.isDefined) {
-          val field = CharVarcharUtils.getRawType(col.field.metadata)
-            .map(dt => col.field.copy(dataType = dt))
-            .getOrElse(col.field)
-          val newDataType = a.dataType.get
-          newDataType match {
-            case _: StructType => alter.failAnalysis(
-              "CANNOT_UPDATE_FIELD.STRUCT_TYPE",
-              Map("table" -> toSQLId(table.name), "fieldName" -> toSQLId(fieldName)))
-            case _: MapType => alter.failAnalysis(
-              "CANNOT_UPDATE_FIELD.MAP_TYPE",
-              Map("table" -> toSQLId(table.name), "fieldName" -> toSQLId(fieldName)))
-            case _: ArrayType => alter.failAnalysis(
-              "CANNOT_UPDATE_FIELD.ARRAY_TYPE",
-              Map("table" -> toSQLId(table.name), "fieldName" -> toSQLId(fieldName)))
-            case u: UserDefinedType[_] => alter.failAnalysis(
-              "CANNOT_UPDATE_FIELD.USER_DEFINED_TYPE",
-              Map(
-                "table" -> toSQLId(table.name),
-                "fieldName" -> toSQLId(fieldName),
-                "udtSql" -> toSQLType(u)))
-            case _: CalendarIntervalType | _: AnsiIntervalType => alter.failAnalysis(
-              "CANNOT_UPDATE_FIELD.INTERVAL_TYPE",
-              Map("table" -> toSQLId(table.name), "fieldName" -> toSQLId(fieldName)))
-            case _ => // update is okay
-          }
-
-          // We don't need to handle nested types here which shall fail before.
-          def canAlterColumnType(from: DataType, to: DataType): Boolean = (from, to) match {
-            case (CharType(l1), CharType(l2)) => l1 == l2
-            case (CharType(l1), VarcharType(l2)) => l1 <= l2
-            case (VarcharType(l1), VarcharType(l2)) => l1 <= l2
-            case _ => Cast.canUpCast(from, to)
-          }
-          if (!canAlterColumnType(field.dataType, newDataType)) {
+      case AlterColumns(table: ResolvedTable, columns, specs) =>
+        val groupedColumns = columns.groupBy(_.name)
+        groupedColumns.collect {
+          case (name, occurrences) if occurrences.length > 1 =>
             alter.failAnalysis(
-              errorClass = "NOT_SUPPORTED_CHANGE_COLUMN",
+              errorClass = "NOT_SUPPORTED_CHANGE_SAME_COLUMN",
               messageParameters = Map(
                 "table" -> toSQLId(table.name),
-                "originName" -> toSQLId(fieldName),
-                "originType" -> toSQLType(field.dataType),
-                "newName" -> toSQLId(fieldName),
-                "newType" -> toSQLType(newDataType)))
+                "fieldName" -> toSQLId(name)))
+        }
+        groupedColumns.keys.foreach { name =>
+          val child = groupedColumns.keys.find(child => child != name && child.startsWith(name))
+          if (child.isDefined) {
+            alter.failAnalysis(
+              errorClass = "NOT_SUPPORTED_CHANGE_PARENT_CHILD_COLUMN",
+              messageParameters = Map(
+                "table" -> toSQLId(table.name),
+                "parentField" -> toSQLId(name),
+                "childField" -> toSQLId(child.get)))
           }
         }
-        if (a.nullable.isDefined) {
-          if (!a.nullable.get && col.field.nullable) {
-            alter.failAnalysis(
-              errorClass = "_LEGACY_ERROR_TEMP_2330",
-              messageParameters = Map("fieldName" -> fieldName))
-          }
+        columns.zip(specs).foreach {
+          case (col: ResolvedFieldName, a: AlterColumnSpec) =>
+            val fieldName = col.name.quoted
+            if (a.dataType.isDefined) {
+              val field = CharVarcharUtils.getRawType(col.field.metadata)
+                .map(dt => col.field.copy(dataType = dt))
+                .getOrElse(col.field)
+              val newDataType = a.dataType.get
+              newDataType match {
+                case _: StructType => alter.failAnalysis(
+                  "CANNOT_UPDATE_FIELD.STRUCT_TYPE",
+                  Map("table" -> toSQLId(table.name), "fieldName" -> toSQLId(fieldName)))
+                case _: MapType => alter.failAnalysis(
+                  "CANNOT_UPDATE_FIELD.MAP_TYPE",
+                  Map("table" -> toSQLId(table.name), "fieldName" -> toSQLId(fieldName)))
+                case _: ArrayType => alter.failAnalysis(
+                  "CANNOT_UPDATE_FIELD.ARRAY_TYPE",
+                  Map("table" -> toSQLId(table.name), "fieldName" -> toSQLId(fieldName)))
+                case u: UserDefinedType[_] => alter.failAnalysis(
+                  "CANNOT_UPDATE_FIELD.USER_DEFINED_TYPE",
+                  Map(
+                    "table" -> toSQLId(table.name),
+                    "fieldName" -> toSQLId(fieldName),
+                    "udtSql" -> toSQLType(u)))
+                case _: CalendarIntervalType | _: AnsiIntervalType => alter.failAnalysis(
+                  "CANNOT_UPDATE_FIELD.INTERVAL_TYPE",
+                  Map("table" -> toSQLId(table.name), "fieldName" -> toSQLId(fieldName)))
+                case _ => // update is okay
+              }
+
+              // We don't need to handle nested types here which shall fail before.
+              def canAlterColumnType(from: DataType, to: DataType): Boolean = (from, to) match {
+                case (CharType(l1), CharType(l2)) => l1 == l2
+                case (CharType(l1), VarcharType(l2)) => l1 <= l2
+                case (VarcharType(l1), VarcharType(l2)) => l1 <= l2
+                case _ => Cast.canUpCast(from, to)
+              }
+              if (!canAlterColumnType(field.dataType, newDataType)) {
+                alter.failAnalysis(
+                  errorClass = "NOT_SUPPORTED_CHANGE_COLUMN",
+                  messageParameters = Map(
+                    "table" -> toSQLId(table.name),
+                    "originName" -> toSQLId(fieldName),
+                    "originType" -> toSQLType(field.dataType),
+                    "newName" -> toSQLId(fieldName),
+                    "newType" -> toSQLType(newDataType)))
+              }
+            }
+            if (a.nullable.isDefined) {
+              if (!a.nullable.get && col.field.nullable) {
+                alter.failAnalysis(
+                  errorClass = "_LEGACY_ERROR_TEMP_2330",
+                  messageParameters = Map("fieldName" -> fieldName))
+              }
+            }
+          case _ =>
         }
       case _ =>
     }

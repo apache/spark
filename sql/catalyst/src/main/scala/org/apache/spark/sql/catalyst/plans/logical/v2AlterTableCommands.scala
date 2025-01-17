@@ -201,49 +201,55 @@ case class RenameColumn(
     copy(table = newChild)
 }
 
-/**
- * The logical plan of the ALTER TABLE ... ALTER COLUMN command.
- */
-case class AlterColumn(
-    table: LogicalPlan,
-    column: FieldName,
+case class AlterColumnSpec(
     dataType: Option[DataType],
     nullable: Option[Boolean],
     comment: Option[String],
     position: Option[FieldPosition],
-    setDefaultExpression: Option[String]) extends AlterTableCommand {
+    setDefaultExpression: Option[String])
+
+/**
+ * The logical plan of the ALTER TABLE ... ALTER COLUMN command.
+ */
+case class AlterColumns(
+    table: LogicalPlan,
+    columns: Seq[FieldName],
+    specs: Seq[AlterColumnSpec]) extends AlterTableCommand {
   override def changes: Seq[TableChange] = {
-    require(column.resolved, "FieldName should be resolved before it's converted to TableChange.")
-    val colName = column.name.toArray
-    val typeChange = dataType.map { newDataType =>
-      TableChange.updateColumnType(colName, newDataType)
-    }
-    val nullabilityChange = nullable.map { nullable =>
-      TableChange.updateColumnNullability(colName, nullable)
-    }
-    val commentChange = comment.map { newComment =>
-      TableChange.updateColumnComment(colName, newComment)
-    }
-    val positionChange = position.map { newPosition =>
-      require(newPosition.resolved,
-        "FieldPosition should be resolved before it's converted to TableChange.")
-      TableChange.updateColumnPosition(colName, newPosition.position)
-    }
-    val defaultValueChange = setDefaultExpression.map { newDefaultExpression =>
-      if (newDefaultExpression.nonEmpty) {
-        // SPARK-45075: We call 'ResolveDefaultColumns.analyze' here to make sure that the default
-        // value parses successfully, and return an error otherwise
-        val newDataType = dataType.getOrElse(column.asInstanceOf[ResolvedFieldName].field.dataType)
-        ResolveDefaultColumns.analyze(column.name.last, newDataType, newDefaultExpression,
-          "ALTER TABLE ALTER COLUMN")
+    assert(columns.size == specs.size)
+    columns.zip(specs).flatMap { case (column, spec) =>
+      require(column.resolved, "FieldName should be resolved before it's converted to TableChange.")
+      val colName = column.name.toArray
+      val typeChange = spec.dataType.map { newDataType =>
+        TableChange.updateColumnType(colName, newDataType)
       }
-      TableChange.updateColumnDefaultValue(colName, newDefaultExpression)
+      val nullabilityChange = spec.nullable.map { nullable =>
+        TableChange.updateColumnNullability(colName, nullable)
+      }
+      val commentChange = spec.comment.map { newComment =>
+        TableChange.updateColumnComment(colName, newComment)
+      }
+      val positionChange = spec.position.map { newPosition =>
+        require(newPosition.resolved,
+          "FieldPosition should be resolved before it's converted to TableChange.")
+        TableChange.updateColumnPosition(colName, newPosition.position)
+      }
+      val defaultValueChange = spec.setDefaultExpression.map { newDefaultExpression =>
+        if (newDefaultExpression.nonEmpty) {
+          // SPARK-45075: We call 'ResolveDefaultColumns.analyze' here to make sure that the default
+          // value parses successfully, and return an error otherwise
+          val newDataType = spec.dataType.getOrElse(
+            column.asInstanceOf[ResolvedFieldName].field.dataType)
+          ResolveDefaultColumns.analyze(column.name.last, newDataType, newDefaultExpression,
+            "ALTER TABLE ALTER COLUMN")
+        }
+        TableChange.updateColumnDefaultValue(colName, newDefaultExpression)
+      }
+      typeChange.toSeq ++ nullabilityChange ++ commentChange ++ positionChange ++ defaultValueChange
     }
-    typeChange.toSeq ++ nullabilityChange ++ commentChange ++ positionChange ++ defaultValueChange
   }
 
-  override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan =
-    copy(table = newChild)
+  override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan = copy(newChild)
 }
 
 /**
