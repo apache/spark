@@ -140,6 +140,8 @@ class ParamsReadWrite(Params):
         Save Estimator / Transformer / Model / Evaluator to provided local path.
 
         .. versionadded:: 3.5.0
+
+        .. deprecated:: 4.0.0
         """
         if os.path.exists(path):
             if overwrite:
@@ -228,6 +230,8 @@ class ParamsReadWrite(Params):
         Save Estimator / Transformer / Model / Evaluator to provided cloud storage path.
 
         .. versionadded:: 3.5.0
+
+        .. deprecated:: 4.0.0
         """
         session = SparkSession.active()
         path_exist = True
@@ -256,6 +260,8 @@ class ParamsReadWrite(Params):
         Load Estimator / Transformer / Model / Evaluator from provided cloud storage path.
 
         .. versionadded:: 3.5.0
+
+        .. deprecated:: 4.0.0
         """
         session = SparkSession.active()
 

@@ -18,6 +18,7 @@ package org.apache.spark.sql.execution.streaming
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeProjection, UnsafeRow}
+import org.apache.spark.sql.execution.streaming.TransformWithStateVariableUtils.getRowCounterCFName
 import org.apache.spark.sql.execution.streaming.state.{NoPrefixKeyStateEncoderSpec, StateStore}
 import org.apache.spark.sql.types._
 
@@ -43,10 +44,9 @@ trait ListStateMetricsImpl {
 
   private val updatedCountRow = new GenericInternalRow(1)
 
-  private def getRowCounterCFName(stateName: String) = "$rowCounter_" + stateName
-
-  stateStore.createColFamilyIfAbsent(getRowCounterCFName(baseStateName), exprEncSchema,
-    counterCFValueSchema, NoPrefixKeyStateEncoderSpec(exprEncSchema), isInternal = true)
+  stateStore.createColFamilyIfAbsent(getRowCounterCFName(baseStateName),
+    exprEncSchema, counterCFValueSchema, NoPrefixKeyStateEncoderSpec(exprEncSchema),
+    isInternal = true)
 
   /**
    * Function to get the number of entries in the list state for a given grouping key
@@ -54,7 +54,8 @@ trait ListStateMetricsImpl {
    * @return - number of entries in the list state
    */
   def getEntryCount(encodedKey: UnsafeRow): Long = {
-    val countRow = stateStore.get(encodedKey, getRowCounterCFName(baseStateName))
+    val countRow = stateStore.get(encodedKey,
+      getRowCounterCFName(baseStateName))
     if (countRow != null) {
       countRow.getLong(0)
     } else {
@@ -81,6 +82,7 @@ trait ListStateMetricsImpl {
    * @param encodedKey - encoded grouping key
    */
   def removeEntryCount(encodedKey: UnsafeRow): Unit = {
-    stateStore.remove(encodedKey, getRowCounterCFName(baseStateName))
+    stateStore.remove(encodedKey,
+      getRowCounterCFName(baseStateName))
   }
 }

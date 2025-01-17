@@ -186,7 +186,7 @@ class StreamingSessionWindowStateManagerSuite extends StreamTest with BeforeAndA
       val store = StateStore.get(
         storeProviderId, manager.getStateKeySchema, manager.getStateValueSchema,
         PrefixKeyScanStateEncoderSpec(manager.getStateKeySchema, manager.getNumColsForPrefixKey),
-        stateInfo.storeVersion, None, useColumnFamilies = false, storeConf, new Configuration)
+        stateInfo.storeVersion, None, None, useColumnFamilies = false, storeConf, new Configuration)
 
       try {
         f(manager, store)

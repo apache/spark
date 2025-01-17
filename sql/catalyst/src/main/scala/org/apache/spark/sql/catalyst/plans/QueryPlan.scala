@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.plans
 
+import java.lang.{Boolean => JBoolean}
 import java.util.IdentityHashMap
 
 import scala.collection.mutable
@@ -32,7 +33,7 @@ import org.apache.spark.sql.catalyst.trees.TreePatternBits
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, StructType}
-import org.apache.spark.util.TransientLazy
+import org.apache.spark.util.{BestEffortLazyVal, TransientBestEffortLazyVal}
 import org.apache.spark.util.collection.BitSet
 
 /**
@@ -54,8 +55,9 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
   /**
    * Returns the set of attributes that are output by this node.
    */
-  @transient
-  lazy val outputSet: AttributeSet = AttributeSet(output)
+  def outputSet: AttributeSet = _outputSet()
+
+  private val _outputSet = new TransientBestEffortLazyVal(() => AttributeSet(output))
 
   /**
    * Returns the output ordering that this plan generates, although the semantics differ in logical
@@ -97,16 +99,17 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
    */
   def references: AttributeSet = _references()
 
-  private val _references = new TransientLazy({
-    AttributeSet(expressions) -- producedAttributes
-  })
+  private val _references = new TransientBestEffortLazyVal(() =>
+    AttributeSet(expressions) -- producedAttributes)
 
   /**
    * Returns true when the all the expressions in the current node as well as all of its children
    * are deterministic
    */
-  lazy val deterministic: Boolean = expressions.forall(_.deterministic) &&
-    children.forall(_.deterministic)
+  def deterministic: Boolean = _deterministic()
+
+  private val _deterministic = new BestEffortLazyVal[JBoolean](() =>
+    expressions.forall(_.deterministic) && children.forall(_.deterministic))
 
   /**
    * Attributes that are referenced by expressions but not provided by this node's children.
@@ -280,7 +283,9 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
   }
 
   /** Returns all of the expressions present in this query plan operator. */
-  final def expressions: Seq[Expression] = {
+  final def expressions: Seq[Expression] = _expressions()
+
+  private val _expressions = new BestEffortLazyVal[Seq[Expression]](() => {
     // Recursively find all expressions from a traversable.
     def seqToExpressions(seq: Iterable[Any]): Iterable[Expression] = seq.flatMap {
       case e: Expression => e :: Nil
@@ -294,7 +299,7 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
       case seq: Iterable[_] => seqToExpressions(seq)
       case other => Nil
     }.toSeq
-  }
+  })
 
   /**
    * A variant of `transformUp`, which takes care of the case that the rule replaces a plan node
@@ -427,7 +432,10 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
     }
   }
 
-  lazy val schema: StructType = DataTypeUtils.fromAttributes(output)
+  def schema: StructType = _schema()
+
+  private val _schema = new BestEffortLazyVal[StructType](() =>
+    DataTypeUtils.fromAttributes(output))
 
   /** Returns the output schema in the tree format. */
   def schemaString: String = schema.treeString
@@ -480,11 +488,13 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
   /**
    * All the top-level subqueries of the current plan node. Nested subqueries are not included.
    */
-  @transient lazy val subqueries: Seq[PlanType] = {
+  def subqueries: Seq[PlanType] = _subqueries()
+
+  private val _subqueries = new TransientBestEffortLazyVal(() =>
     expressions.filter(_.containsPattern(PLAN_EXPRESSION)).flatMap(_.collect {
       case e: PlanExpression[_] => e.plan.asInstanceOf[PlanType]
     })
-  }
+  )
 
   /**
    * All the subqueries of the current plan node and all its children. Nested subqueries are also
@@ -620,7 +630,9 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
    * Plan nodes that require special canonicalization should override [[doCanonicalize()]].
    * They should remove expressions cosmetic variations themselves.
    */
-  @transient final lazy val canonicalized: PlanType = {
+  def canonicalized: PlanType = _canonicalized()
+
+  private val _canonicalized = new TransientBestEffortLazyVal(() => {
     var plan = doCanonicalize()
     // If the plan has not been changed due to canonicalization, make a copy of it so we don't
     // mutate the original plan's _isCanonicalizedPlan flag.
@@ -629,7 +641,7 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
     }
     plan._isCanonicalizedPlan = true
     plan
-  }
+  })
 
   /**
    * Defines how the canonicalization should work for the current plan.
@@ -761,5 +773,24 @@ object QueryPlan extends PredicateHelper {
     } catch {
       case e: AnalysisException => append(e.toString)
     }
+  }
+
+  /**
+   * Generate detailed field string with different format based on type of input value. Supported
+   * input values are sequences and strings. An empty sequences converts to []. A non-empty
+   * sequences converts to square brackets-enclosed, comma-separated values, prefixed with a
+   * sequence length. An empty string converts to None, while a non-empty string is verbatim
+   * outputted. In all four cases, user-provided fieldName prefixes the output. Examples:
+   * List("Hello", "World") -> <fieldName>: [2]: [Hello, World]
+   * List()                 -> <fieldName>: []
+   * "hello_world"          -> <fieldName>: hello_world
+   * ""                     -> <fieldName>: None
+   */
+  def generateFieldString(fieldName: String, values: Any): String = values match {
+    case iter: Iterable[_] if (iter.size == 0) => s"${fieldName}: []"
+    case iter: Iterable[_] => s"${fieldName} [${iter.size}]: ${iter.mkString("[", ", ", "]")}"
+    case str: String if (str == null || str.isEmpty) => s"${fieldName}: None"
+    case str: String => s"${fieldName}: ${str}"
+    case _ => throw new IllegalArgumentException(s"Unsupported type for argument values: $values")
   }
 }

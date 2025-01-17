@@ -1467,7 +1467,9 @@ class SparkSession(SparkConversionMixin):
         +-----+---+
         |Alice|  1|
         +-----+---+
-        >>> spark.createDataFrame(pandas.DataFrame([[1, 2]])).collect()  # doctest: +SKIP
+
+        >>> pdf = pandas.DataFrame([[1, 2]])  # doctest: +SKIP
+        >>> spark.createDataFrame(pdf).show()  # doctest: +SKIP
         +---+---+
         |  0|  1|
         +---+---+
@@ -1482,8 +1484,9 @@ class SparkSession(SparkConversionMixin):
         +-----+---+
         |Alice|  1|
         +-----+---+
+
         >>> table = pyarrow.table({'0': [1], '1': [2]})  # doctest: +SKIP
-        >>> spark.createDataFrame(table).collect()  # doctest: +SKIP
+        >>> spark.createDataFrame(table).show()  # doctest: +SKIP
         +---+---+
         |  0|  1|
         +---+---+
@@ -2197,13 +2200,15 @@ class SparkSession(SparkConversionMixin):
             messageParameters={"feature": "SparkSession.copyFromLocalToFs"},
         )
 
-    @remote_only
     def interruptAll(self) -> List[str]:
         """
         Interrupt all operations of this session currently running on the connected server.
 
         .. versionadded:: 3.5.0
 
+        .. versionchanged:: 4.0.0
+            Supports Spark Classic.
+
         Returns
         -------
         list of str
@@ -2213,18 +2218,25 @@ class SparkSession(SparkConversionMixin):
         -----
         There is still a possibility of operation finishing just as it is interrupted.
         """
-        raise PySparkRuntimeError(
-            errorClass="ONLY_SUPPORTED_WITH_SPARK_CONNECT",
-            messageParameters={"feature": "SparkSession.interruptAll"},
-        )
+        java_list = self._jsparkSession.interruptAll()
+        python_list = list()
 
-    @remote_only
+        # Use iterator to manually iterate through Java list
+        java_iterator = java_list.iterator()
+        while java_iterator.hasNext():
+            python_list.append(str(java_iterator.next()))
+
+        return python_list
+
     def interruptTag(self, tag: str) -> List[str]:
         """
         Interrupt all operations of this session with the given operation tag.
 
         .. versionadded:: 3.5.0
 
+        .. versionchanged:: 4.0.0
+            Supports Spark Classic.
+
         Returns
         -------
         list of str
@@ -2234,18 +2246,25 @@ class SparkSession(SparkConversionMixin):
         -----
         There is still a possibility of operation finishing just as it is interrupted.
         """
-        raise PySparkRuntimeError(
-            errorClass="ONLY_SUPPORTED_WITH_SPARK_CONNECT",
-            messageParameters={"feature": "SparkSession.interruptTag"},
-        )
+        java_list = self._jsparkSession.interruptTag(tag)
+        python_list = list()
 
-    @remote_only
+        # Use iterator to manually iterate through Java list
+        java_iterator = java_list.iterator()
+        while java_iterator.hasNext():
+            python_list.append(str(java_iterator.next()))
+
+        return python_list
+
     def interruptOperation(self, op_id: str) -> List[str]:
         """
         Interrupt an operation of this session with the given operationId.
 
         .. versionadded:: 3.5.0
 
+        .. versionchanged:: 4.0.0
+            Supports Spark Classic.
+
         Returns
         -------
         list of str
@@ -2255,10 +2274,15 @@ class SparkSession(SparkConversionMixin):
         -----
         There is still a possibility of operation finishing just as it is interrupted.
         """
-        raise PySparkRuntimeError(
-            errorClass="ONLY_SUPPORTED_WITH_SPARK_CONNECT",
-            messageParameters={"feature": "SparkSession.interruptOperation"},
-        )
+        java_list = self._jsparkSession.interruptOperation(op_id)
+        python_list = list()
+
+        # Use iterator to manually iterate through Java list
+        java_iterator = java_list.iterator()
+        while java_iterator.hasNext():
+            python_list.append(str(java_iterator.next()))
+
+        return python_list
 
     def addTag(self, tag: str) -> None:
         """

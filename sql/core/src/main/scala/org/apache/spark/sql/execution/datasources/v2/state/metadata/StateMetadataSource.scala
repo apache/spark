@@ -50,7 +50,7 @@ case class StateMetadataTableEntry(
     version: Int,
     operatorPropertiesJson: String,
     numColsPrefixKey: Int,
-    stateSchemaFilePath: Option[String]) {
+    stateSchemaFilePaths: List[String]) {
   def toRow(): InternalRow = {
     new GenericInternalRow(
       Array[Any](operatorId,
@@ -256,7 +256,7 @@ class StateMetadataPartitionReader(
               operatorStateMetadata.version,
               null,
               stateStoreMetadata.numColsPrefixKey,
-              None
+              List.empty
             )
           }
         case v2: OperatorStateMetadataV2 =>
@@ -270,7 +270,7 @@ class StateMetadataPartitionReader(
               operatorStateMetadata.version,
               v2.operatorPropertiesJson,
               -1, // numColsPrefixKey is not available in OperatorStateMetadataV2
-              Some(stateStoreMetadata.stateSchemaFilePath)
+              stateStoreMetadata.stateSchemaFilePaths
             )
           }
         }
