@@ -33,7 +33,8 @@ from pyspark import SparkConf, SparkContext
 from pyspark.ml.torch.distributor import TorchDistributor, _get_gpus_owned
 from pyspark.ml.torch.torch_run_process_wrapper import clean_and_terminate, check_parent_alive
 from pyspark.sql import SparkSession
-from pyspark.testing.utils import SPARK_HOME, have_torch, torch_requirement_message
+from pyspark.testing.sqlutils import SPARK_HOME
+from pyspark.testing.utils import have_torch, torch_requirement_message
 
 
 @contextlib.contextmanager
