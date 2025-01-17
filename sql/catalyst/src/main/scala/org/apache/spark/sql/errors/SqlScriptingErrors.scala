@@ -160,6 +160,14 @@ private[sql] object SqlScriptingErrors {
       messageParameters = Map("condition" -> condition))
   }
 
+  def handlerDeclarationInWrongPlace(origin: Origin): Throwable = {
+    new SqlScriptingException(
+      origin = origin,
+      errorClass = "INVALID_HANDLER_DECLARATION",
+      cause = null,
+      messageParameters = Map.empty)
+  }
+
   def duplicateHandlerForSameCondition(origin: Origin, condition: String): Throwable = {
     new SqlScriptingException(
       origin = origin,

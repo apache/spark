@@ -263,7 +263,7 @@ class AstBuilder extends DataTypeAstBuilder
           statement match {
             case SingleStatement(createVariable: CreateVariable) =>
               scriptingParserContext.variable(createVariable, allowVarDeclare)
-            case _ => // pass
+            case _ => scriptingParserContext.statement()
           }
           buff += statement
       }

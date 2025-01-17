@@ -2355,6 +2355,24 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     assert(tree.conditions("test").equals("45000")) // Default SQLSTATE
   }
 
+  test("declare handler in wrong place") {
+    val sqlScriptText =
+      """
+        |BEGIN
+        |  SELECT 1;
+        |  DECLARE EXIT HANDLER FOR test_condition BEGIN SELECT 1; END;
+        |END""".stripMargin
+    val exception = intercept[SqlScriptingException] {
+      parsePlan(sqlScriptText)
+    }
+    checkError(
+      exception = exception,
+      condition = "INVALID_HANDLER_DECLARATION",
+      parameters = Map.empty)
+    assert(exception.origin.line.contains(2))
+  }
+
+
   test("declare handler with compound body") {
     val sqlScriptText =
       """

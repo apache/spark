@@ -221,9 +221,7 @@ class SqlScriptingParsingContext {
           createVariable.get.name.asInstanceOf[UnresolvedIdentifier].nameParts)
 
       case (State.STATEMENTS, State.HANDLERS) =>
-        throw SqlScriptingErrors.variableDeclarationOnlyAtBeginning(
-          createVariable.get.origin,
-          createVariable.get.name.asInstanceOf[UnresolvedIdentifier].nameParts)
+        throw SqlScriptingErrors.handlerDeclarationInWrongPlace(CurrentOrigin.get)
 
       case _ =>
         throw SparkException.internalError(

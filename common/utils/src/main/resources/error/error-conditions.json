@@ -2607,6 +2607,12 @@
     },
     "sqlState" : "HY000"
   },
+  "INVALID_HANDLER_DECLARATION" : {
+    "message" : [
+      "Invalid handler declaration. Handlers must be declared after variable/condition declaration, and before other statements."
+    ],
+    "sqlState" : "42KOQ"
+  },
   "INVALID_IDENTIFIER" : {
     "message" : [
       "The unquoted identifier <ident> is invalid and must be back quoted as: `<ident>`.",
