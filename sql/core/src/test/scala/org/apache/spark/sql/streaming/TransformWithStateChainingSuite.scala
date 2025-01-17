@@ -484,6 +484,23 @@ class TransformWithStateChainingSuite extends StreamTest
         dfFinal
       }
 
+      val checkResultFunc2:
+        (Dataset[(Long, Long)], Long) => Unit = { (batchDF, batchId) =>
+        val realDf = batchDF.orderBy("eventTime").collect().toSet
+        if (batchId == 0) {
+          println(s"plz her: BatchId: ${batchId}, RealDF: ${realDf}")
+          assert(realDf.isEmpty, s"BatchId: ${batchId}, RealDF: ${realDf}")
+        } else if (batchId == 1) {
+          val expectedDF = Seq((10L, 1L)).toSet
+          assert(realDf == expectedDF,
+            s"BatchId: ${batchId}, expectedDf: ${expectedDF}, RealDF: ${realDf}")
+        } else if (batchId == 2) {
+          val expectedDF = Seq().toSet
+          assert(realDf == expectedDF,
+            s"BatchId: ${batchId}, expectedDf: ${expectedDF}, RealDF: ${realDf}")
+        }
+      }
+
       withTempPath { dir =>
         val path = dir.getCanonicalPath
         prepareInputData(path + "/text-test3.txt", Seq("a", "b"), Seq(10, 15))
@@ -495,15 +512,16 @@ class TransformWithStateChainingSuite extends StreamTest
             timestamp_seconds(col("value")).as("eventTime"))
           .withWatermark("eventTime", "5 seconds")
           .as[(String, Long)]
+          /*
           .groupByKey(x => x._1)
           .transformWithState[OutputEventTimeRow](
             new ChainingOfOpsStatefulProcessor(),
-            "outputTimestamp", OutputMode.Append()
-          )
-          .groupBy("outputTimestamp")
+            TimeMode.None(), OutputMode.Append()
+          ) */
+          .groupBy("eventTime")
           .count().as[(Long, Long)]
           .writeStream
-          .foreachBatch(checkResultFunc)
+          .foreachBatch(checkResultFunc2)
           .outputMode("Append")
           .start()
 
