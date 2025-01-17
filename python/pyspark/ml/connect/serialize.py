@@ -192,7 +192,7 @@ def deserialize(ml_command_result_properties: Dict[str, Any]) -> Any:
 
 
 def serialize_ml_params(instance: "Params", client: "SparkConnectClient") -> pb2.MlParams:
-    params: Mapping[str, pb2.Expression] = {
+    params: Mapping[str, pb2.Expression.Literal] = {
         k.name: serialize_param(v, client) for k, v in instance._paramMap.items()
     }
     return pb2.MlParams(params=params)
