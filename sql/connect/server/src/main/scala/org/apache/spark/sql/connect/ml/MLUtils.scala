@@ -430,19 +430,19 @@ private[ml] object MLUtils {
     "featuresCol", // LogisticRegressionSummary
     "objectiveHistory",
     "coefficientStandardErrors", // _TrainingSummary
-    "degreesOfFreedom",   // LinearRegressionSummary
-    "devianceResiduals",  // LinearRegressionSummary
-    "explainedVariance",  // LinearRegressionSummary
-    "meanAbsoluteError",  // LinearRegressionSummary
-    "meanSquaredError",   // LinearRegressionSummary
-    "numInstances",       // LinearRegressionSummary
-    "pValues",            // LinearRegressionSummary
-    "r2",                 // LinearRegressionSummary
-    "r2adj",              // LinearRegressionSummary
-    "residuals",          // LinearRegressionSummary
+    "degreesOfFreedom", // LinearRegressionSummary
+    "devianceResiduals", // LinearRegressionSummary
+    "explainedVariance", // LinearRegressionSummary
+    "meanAbsoluteError", // LinearRegressionSummary
+    "meanSquaredError", // LinearRegressionSummary
+    "numInstances", // LinearRegressionSummary
+    "pValues", // LinearRegressionSummary
+    "r2", // LinearRegressionSummary
+    "r2adj", // LinearRegressionSummary
+    "residuals", // LinearRegressionSummary
     "rootMeanSquaredError", // LinearRegressionSummary
-    "tValues",            // LinearRegressionSummary
-    "totalIterations"     // LinearRegressionSummary
+    "tValues", // LinearRegressionSummary
+    "totalIterations" // LinearRegressionSummary
   )
 
   def invokeMethodAllowed(obj: Object, methodName: String): Object = {
