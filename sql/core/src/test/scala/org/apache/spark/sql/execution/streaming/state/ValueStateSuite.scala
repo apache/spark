@@ -463,7 +463,8 @@ abstract class StateVariableSuiteBase extends SharedSparkSession
     provider.init(
       storeId, schemaForKeyRow, schemaForValueRow, keyStateEncoderSpec,
       useColumnFamilies,
-      new StateStoreConf(sqlConf), conf, useMultipleValuesPerKey)
+      new StateStoreConf(sqlConf), conf, useMultipleValuesPerKey,
+      Some(new TestStateSchemaProvider))
     provider
   }
 

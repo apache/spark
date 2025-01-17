@@ -22,6 +22,7 @@ import java.util.UUID
 import scala.collection.immutable
 import scala.util.Random
 
+import org.apache.avro.AvroTypeException
 import org.apache.hadoop.conf.Configuration
 import org.scalatest.BeforeAndAfter
 
@@ -29,6 +30,7 @@ import org.apache.spark.{SparkConf, SparkUnsupportedOperationException}
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.sql.LocalSparkSession.withSparkSession
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.util.quietly
 import org.apache.spark.sql.execution.streaming.StatefulOperatorStateInfo
@@ -42,8 +44,8 @@ import org.apache.spark.util.Utils
 
 @ExtendedSQLTest
 class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvider]
-  with AlsoTestWithRocksDBFeatures
   with AlsoTestWithEncodingTypes
+  with AlsoTestWithRocksDBFeatures
   with SharedSparkSession
   with BeforeAndAfter {
 
@@ -494,6 +496,573 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
       }.toSeq
       assert(result === timerTimestamps.sorted)
     }
+  }
+
+  test("AvroStateEncoder - add field") {
+    val keySchema = StructType(Seq(
+      StructField("k", StringType)
+    ))
+
+    val initialValueSchema = StructType(Seq(
+      StructField("value", IntegerType, true)
+    ))
+
+    val evolvedValueSchema = StructType(Seq(
+      StructField("value", IntegerType, true),
+      StructField("timestamp", LongType, true)
+    ))
+
+    // Create test state schema provider
+    val testProvider = new TestStateSchemaProvider()
+
+    // Add initial schema version
+    testProvider.captureSchema(
+      StateStore.DEFAULT_COL_FAMILY_NAME,
+      keySchema,
+      initialValueSchema,
+      valueSchemaId = 0
+    )
+
+    // Create encoder with initial schema
+    val encoder1 = new AvroStateEncoder(
+      NoPrefixKeyStateEncoderSpec(keySchema),
+      initialValueSchema,
+      Some(testProvider),
+      Some(ColumnFamilyInfo(StateStore.DEFAULT_COL_FAMILY_NAME, 1))
+    )
+
+    // Create test data
+    val proj = UnsafeProjection.create(initialValueSchema)
+    val row1 = proj.apply(InternalRow(1))
+
+    // Encode with schema v0
+    val encoded = encoder1.encodeValue(row1)
+
+    // Add evolved schema
+    testProvider.captureSchema(
+      StateStore.DEFAULT_COL_FAMILY_NAME,
+      keySchema,
+      evolvedValueSchema,
+      valueSchemaId = 1
+    )
+
+    // Create encoder with initial schema
+    val encoder2 = new AvroStateEncoder(
+      NoPrefixKeyStateEncoderSpec(keySchema),
+      evolvedValueSchema,
+      Some(testProvider),
+      Some(ColumnFamilyInfo(StateStore.DEFAULT_COL_FAMILY_NAME, 1))
+    )
+
+    // Decode with evolved schema
+    val decoded = encoder2.decodeValue(encoded)
+
+    // Should be able to read old format
+    assert(decoded.getInt(0) === 1)
+    assert(decoded.isNullAt(1)) // New field should be null
+
+    // Encode with new schema
+    val proj2 = UnsafeProjection.create(evolvedValueSchema)
+    val row2 = proj2.apply(InternalRow(2, 100L))
+    val encoded2 = encoder2.encodeValue(row2)
+
+    // Should write with new schema version
+    val decoded2 = encoder2.decodeValue(encoded2)
+    assert(decoded2.getInt(0) === 2)
+    assert(decoded2.getLong(1) === 100L)
+  }
+
+  test("AvroStateEncoder - add field with null") {
+    val keySchema = StructType(Seq(
+      StructField("k", StringType)
+    ))
+
+    val initialValueSchema = StructType(Seq(
+      StructField("value", IntegerType) // Made nullable
+    ))
+
+    val evolvedValueSchema = StructType(Seq(
+      StructField("value", IntegerType), // Made nullable
+      StructField("timestamp", LongType)
+    ))
+
+    // Create test state schema provider
+    val testProvider = new TestStateSchemaProvider()
+
+    // Add initial schema version
+    testProvider.captureSchema(
+      StateStore.DEFAULT_COL_FAMILY_NAME,
+      keySchema,
+      initialValueSchema,
+      valueSchemaId = 0
+    )
+
+    // Create encoder with initial schema
+    val encoder1 = new AvroStateEncoder(
+      NoPrefixKeyStateEncoderSpec(keySchema),
+      initialValueSchema,
+      Some(testProvider),
+      Some(ColumnFamilyInfo(StateStore.DEFAULT_COL_FAMILY_NAME, 1))
+    )
+
+    // Create test data with null value
+    val proj = UnsafeProjection.create(initialValueSchema)
+    val row1 = proj.apply(InternalRow(null))
+
+    // Encode with schema v0
+    val encoded = encoder1.encodeValue(row1)
+
+    // Read back the encoded value to verify null handling
+    val decodedWithOriginalSchema = encoder1.decodeValue(encoded)
+    assert(decodedWithOriginalSchema.isNullAt(0))
+
+    // Add evolved schema
+    testProvider.captureSchema(
+      StateStore.DEFAULT_COL_FAMILY_NAME,
+      keySchema,
+      evolvedValueSchema,
+      valueSchemaId = 1
+    )
+
+    // Create encoder with evolved schema
+    val encoder2 = new AvroStateEncoder(
+      NoPrefixKeyStateEncoderSpec(keySchema),
+      evolvedValueSchema,
+      Some(testProvider),
+      Some(ColumnFamilyInfo(StateStore.DEFAULT_COL_FAMILY_NAME, 1))
+    )
+
+    // Decode original value with evolved schema
+    val decoded = encoder2.decodeValue(encoded)
+
+    // Should be able to read old format with null value
+    assert(decoded.isNullAt(0))
+    assert(decoded.isNullAt(1)) // New field should be null
+
+    // Encode with new schema, including null value
+    val proj2 = UnsafeProjection.create(evolvedValueSchema)
+    val row2 = proj2.apply(InternalRow(null, 100L))
+    val encoded2 = encoder2.encodeValue(row2)
+
+    // Should write with new schema version
+    val decoded2 = encoder2.decodeValue(encoded2)
+    assert(decoded2.isNullAt(0))
+    assert(decoded2.getLong(1) === 100L)
+
+    // Test mix of null and non-null values
+    val row3 = proj2.apply(InternalRow(2, null))
+    val encoded3 = encoder2.encodeValue(row3)
+    val decoded3 = encoder2.decodeValue(encoded3)
+    assert(decoded3.getInt(0) === 2)
+    assert(decoded3.isNullAt(1))
+  }
+
+  test("AvroStateEncoder - remove field") {
+    val keySchema = StructType(Seq(
+      StructField("k", StringType)
+    ))
+
+    val initialValueSchema = StructType(Seq(
+      StructField("value", IntegerType, true),
+      StructField("timestamp", LongType, true)
+    ))
+
+    val evolvedValueSchema = StructType(Seq(
+      StructField("value", IntegerType, true)
+    ))
+
+    val testProvider = new TestStateSchemaProvider()
+    testProvider.captureSchema(
+      StateStore.DEFAULT_COL_FAMILY_NAME,
+      keySchema,
+      initialValueSchema,
+      valueSchemaId = 0
+    )
+
+    val encoder1 = new AvroStateEncoder(
+      NoPrefixKeyStateEncoderSpec(keySchema),
+      initialValueSchema,
+      Some(testProvider),
+      Some(ColumnFamilyInfo(StateStore.DEFAULT_COL_FAMILY_NAME, 1))
+    )
+
+    val proj = UnsafeProjection.create(initialValueSchema)
+    val row1 = proj.apply(InternalRow(1, 100L))
+    val encoded = encoder1.encodeValue(row1)
+
+    testProvider.captureSchema(
+      StateStore.DEFAULT_COL_FAMILY_NAME,
+      keySchema,
+      evolvedValueSchema,
+      valueSchemaId = 1
+    )
+
+    val encoder2 = new AvroStateEncoder(
+      NoPrefixKeyStateEncoderSpec(keySchema),
+      evolvedValueSchema,
+      Some(testProvider),
+      Some(ColumnFamilyInfo(StateStore.DEFAULT_COL_FAMILY_NAME, 1))
+    )
+
+    val decoded = encoder2.decodeValue(encoded)
+    assert(decoded.numFields() === 1)
+    assert(decoded.getInt(0) === 1)
+
+    val proj2 = UnsafeProjection.create(evolvedValueSchema)
+    val row2 = proj2.apply(InternalRow(2))
+    val encoded2 = encoder2.encodeValue(row2)
+
+    val decoded2 = encoder2.decodeValue(encoded2)
+    assert(decoded2.getInt(0) === 2)
+  }
+
+  test("AvroStateEncoder - nested struct evolution") {
+    val keySchema = StructType(Seq(
+      StructField("k", StringType)
+    ))
+
+    val initialValueSchema = StructType(Seq(
+      StructField("metadata", StructType(Seq(
+        StructField("id", IntegerType, true),
+        StructField("name", StringType, true)
+      )))
+    ))
+
+    val evolvedValueSchema = StructType(Seq(
+      StructField("metadata", StructType(Seq(
+        StructField("id", IntegerType, true),
+        StructField("name", StringType, true),
+        StructField("timestamp", LongType, true)
+      )))
+    ))
+
+    val testProvider = new TestStateSchemaProvider()
+    testProvider.captureSchema(
+      StateStore.DEFAULT_COL_FAMILY_NAME,
+      keySchema,
+      initialValueSchema,
+      valueSchemaId = 0
+    )
+
+    val encoder1 = new AvroStateEncoder(
+      NoPrefixKeyStateEncoderSpec(keySchema),
+      initialValueSchema,
+      Some(testProvider),
+      Some(ColumnFamilyInfo(StateStore.DEFAULT_COL_FAMILY_NAME, 1))
+    )
+
+    val proj = UnsafeProjection.create(initialValueSchema)
+    val row1 = proj.apply(InternalRow(InternalRow(1, UTF8String.fromString("test"))))
+    val encoded = encoder1.encodeValue(row1)
+
+    testProvider.captureSchema(
+      StateStore.DEFAULT_COL_FAMILY_NAME,
+      keySchema,
+      evolvedValueSchema,
+      valueSchemaId = 1
+    )
+
+    val encoder2 = new AvroStateEncoder(
+      NoPrefixKeyStateEncoderSpec(keySchema),
+      evolvedValueSchema,
+      Some(testProvider),
+      Some(ColumnFamilyInfo(StateStore.DEFAULT_COL_FAMILY_NAME, 1))
+    )
+
+    val decoded = encoder2.decodeValue(encoded)
+    assert(decoded.getStruct(0, 3).getInt(0) === 1)
+    assert(decoded.getStruct(0, 3).getString(1) === "test")
+    assert(decoded.getStruct(0, 3).isNullAt(2))
+
+    val proj2 = UnsafeProjection.create(evolvedValueSchema)
+    val row2 = proj2.apply(InternalRow(InternalRow(2, UTF8String.fromString("test2"), 100L)))
+    val encoded2 = encoder2.encodeValue(row2)
+
+    val decoded2 = encoder2.decodeValue(encoded2)
+    assert(decoded2.getStruct(0, 3).getInt(0) === 2)
+    assert(decoded2.getStruct(0, 3).getString(1) === "test2")
+    assert(decoded2.getStruct(0, 3).getLong(2) === 100L)
+  }
+
+  test("AvroStateEncoder - add nested struct field") {
+    val keySchema = StructType(Seq(
+      StructField("k", StringType)
+    ))
+
+    val initialValueSchema = StructType(Seq(
+      StructField("value", IntegerType, true)
+    ))
+
+    val evolvedValueSchema = StructType(Seq(
+      StructField("value", IntegerType, true),
+      StructField("metadata", StructType(Seq(
+        StructField("id", IntegerType, true),
+        StructField("count", IntegerType, true)
+      )), true)
+    ))
+
+    // Create test state schema provider
+    val testProvider = new TestStateSchemaProvider()
+
+    // Add initial schema version
+    testProvider.captureSchema(
+      StateStore.DEFAULT_COL_FAMILY_NAME,
+      keySchema,
+      initialValueSchema,
+      valueSchemaId = 0
+    )
+
+    // Create encoder with initial schema
+    val encoder1 = new AvroStateEncoder(
+      NoPrefixKeyStateEncoderSpec(keySchema),
+      initialValueSchema,
+      Some(testProvider),
+      Some(ColumnFamilyInfo(StateStore.DEFAULT_COL_FAMILY_NAME, 1))
+    )
+
+    // Create test data
+    val proj = UnsafeProjection.create(initialValueSchema)
+    val row1 = proj.apply(InternalRow(1))
+
+    // Encode with schema v0
+    val encoded = encoder1.encodeValue(row1)
+
+    // Add evolved schema
+    testProvider.captureSchema(
+      StateStore.DEFAULT_COL_FAMILY_NAME,
+      keySchema,
+      evolvedValueSchema,
+      valueSchemaId = 1
+    )
+
+    // Create encoder with evolved schema
+    val encoder2 = new AvroStateEncoder(
+      NoPrefixKeyStateEncoderSpec(keySchema),
+      evolvedValueSchema,
+      Some(testProvider),
+      Some(ColumnFamilyInfo(StateStore.DEFAULT_COL_FAMILY_NAME, 1))
+    )
+
+    // Decode with evolved schema
+    val decoded = encoder2.decodeValue(encoded)
+
+    // Should be able to read old format
+    assert(decoded.getInt(0) === 1)
+    assert(decoded.isNullAt(1)) // New nested struct field should be null
+
+    // Encode with new schema including nested struct
+    val proj2 = UnsafeProjection.create(evolvedValueSchema)
+    val row2 = proj2.apply(InternalRow(2, InternalRow(10, 20)))
+    val encoded2 = encoder2.encodeValue(row2)
+
+    // Should write with new schema version
+    val decoded2 = encoder2.decodeValue(encoded2)
+    assert(decoded2.getInt(0) === 2)
+    assert(!decoded2.isNullAt(1)) // Nested struct should not be null
+    assert(decoded2.getStruct(1, 2).getInt(0) === 10)
+    assert(decoded2.getStruct(1, 2).getInt(1) === 20)
+
+    // Test with null nested struct
+    val row3 = proj2.apply(InternalRow(3, null))
+    val encoded3 = encoder2.encodeValue(row3)
+    val decoded3 = encoder2.decodeValue(encoded3)
+    assert(decoded3.getInt(0) === 3)
+    assert(decoded3.isNullAt(1)) // Nested struct should be null
+  }
+
+  test("AvroStateEncoder - upcast field type") {
+    val keySchema = StructType(Seq(
+      StructField("k", StringType)
+    ))
+
+    // Initial schema with IntegerType
+    val initialValueSchema = StructType(Seq(
+      StructField("value", IntegerType, false)
+    ))
+
+    // Evolved schema with LongType (upcast)
+    val evolvedValueSchema = StructType(Seq(
+      StructField("value", LongType, false)
+    ))
+
+    val testProvider = new TestStateSchemaProvider()
+    testProvider.captureSchema(
+      StateStore.DEFAULT_COL_FAMILY_NAME,
+      keySchema,
+      initialValueSchema,
+      valueSchemaId = 0
+    )
+
+    val encoder1 = new AvroStateEncoder(
+      NoPrefixKeyStateEncoderSpec(keySchema),
+      initialValueSchema,
+      Some(testProvider),
+      Some(ColumnFamilyInfo(StateStore.DEFAULT_COL_FAMILY_NAME, 1))
+    )
+
+    // Create and encode data with initial schema (IntegerType)
+    val proj = UnsafeProjection.create(initialValueSchema)
+    val row1 = proj.apply(InternalRow(42))
+    val encoded = encoder1.encodeValue(row1)
+
+    // Add evolved schema with LongType
+    testProvider.captureSchema(
+      StateStore.DEFAULT_COL_FAMILY_NAME,
+      keySchema,
+      evolvedValueSchema,
+      valueSchemaId = 1
+    )
+
+    val encoder2 = new AvroStateEncoder(
+      NoPrefixKeyStateEncoderSpec(keySchema),
+      evolvedValueSchema,
+      Some(testProvider),
+      Some(ColumnFamilyInfo(StateStore.DEFAULT_COL_FAMILY_NAME, 1))
+    )
+
+    // Should successfully decode IntegerType as LongType
+    val decoded = encoder2.decodeValue(encoded)
+    assert(decoded.getLong(0) === 42L)
+
+    // Write with new schema
+    val proj2 = UnsafeProjection.create(evolvedValueSchema)
+    val row2 = proj2.apply(InternalRow(9999999999L))  // Value too large for IntegerType
+    val encoded2 = encoder2.encodeValue(row2)
+
+    val decoded2 = encoder2.decodeValue(encoded2)
+    assert(decoded2.getLong(0) === 9999999999L)
+  }
+
+  test("AvroStateEncoder - reorder fields") {
+    val keySchema = StructType(Seq(
+      StructField("k", StringType)
+    ))
+
+    // Initial schema with fields in original order
+    val initialValueSchema = StructType(Seq(
+      StructField("first", IntegerType, false),
+      StructField("second", StringType, true),
+      StructField("third", LongType, true)
+    ))
+
+    // Evolved schema with reordered fields
+    val evolvedValueSchema = StructType(Seq(
+      StructField("second", StringType, true),
+      StructField("third", LongType, true),
+      StructField("first", IntegerType, false)
+    ))
+
+    val testProvider = new TestStateSchemaProvider()
+    testProvider.captureSchema(
+      StateStore.DEFAULT_COL_FAMILY_NAME,
+      keySchema,
+      initialValueSchema,
+      valueSchemaId = 0
+    )
+
+    val encoder1 = new AvroStateEncoder(
+      NoPrefixKeyStateEncoderSpec(keySchema),
+      initialValueSchema,
+      Some(testProvider),
+      Some(ColumnFamilyInfo(StateStore.DEFAULT_COL_FAMILY_NAME, 1))
+    )
+
+    // Create and encode data with initial order
+    val proj = UnsafeProjection.create(initialValueSchema)
+    val row1 = proj.apply(InternalRow(1, UTF8String.fromString("test"), 100L))
+    val encoded = encoder1.encodeValue(row1)
+
+    // Add evolved schema with reordered fields
+    testProvider.captureSchema(
+      StateStore.DEFAULT_COL_FAMILY_NAME,
+      keySchema,
+      evolvedValueSchema,
+      valueSchemaId = 1
+    )
+
+    val encoder2 = new AvroStateEncoder(
+      NoPrefixKeyStateEncoderSpec(keySchema),
+      evolvedValueSchema,
+      Some(testProvider),
+      Some(ColumnFamilyInfo(StateStore.DEFAULT_COL_FAMILY_NAME, 1))
+    )
+
+    // Should decode with correct field values despite reordering
+    val decoded = encoder2.decodeValue(encoded)
+    assert(decoded.getString(0) === "test")  // second field now first
+    assert(decoded.getLong(1) === 100L)      // third field now second
+    assert(decoded.getInt(2) === 1)          // first field now third
+
+    // Write with new field order
+    val proj2 = UnsafeProjection.create(evolvedValueSchema)
+    val row2 = proj2.apply(InternalRow(
+      UTF8String.fromString("test2"),
+      200L,
+      2
+    ))
+    val encoded2 = encoder2.encodeValue(row2)
+
+    val decoded2 = encoder2.decodeValue(encoded2)
+    assert(decoded2.getString(0) === "test2")
+    assert(decoded2.getLong(1) === 200L)
+    assert(decoded2.getInt(2) === 2)
+  }
+
+  test("AvroStateEncoder - downcast field type throws exception on read") {
+    val keySchema = StructType(Seq(
+      StructField("k", StringType)
+    ))
+
+    // Initial schema with LongType
+    val initialValueSchema = StructType(Seq(
+      StructField("value", LongType, false)
+    ))
+
+    // Evolved schema with IntegerType (downcast - should fail)
+    val evolvedValueSchema = StructType(Seq(
+      StructField("value", IntegerType, false)
+    ))
+
+    val testProvider = new TestStateSchemaProvider()
+    testProvider.captureSchema(
+      StateStore.DEFAULT_COL_FAMILY_NAME,
+      keySchema,
+      initialValueSchema,
+      valueSchemaId = 0
+    )
+
+    val encoder1 = new AvroStateEncoder(
+      NoPrefixKeyStateEncoderSpec(keySchema),
+      initialValueSchema,
+      Some(testProvider),
+      Some(ColumnFamilyInfo(StateStore.DEFAULT_COL_FAMILY_NAME, 1))
+    )
+
+    // Create and encode data with initial schema (LongType)
+    val proj = UnsafeProjection.create(initialValueSchema)
+    val row1 = proj.apply(InternalRow(9999999999L))  // Value too large for IntegerType
+    val encoded = encoder1.encodeValue(row1)
+
+    // Add evolved schema with IntegerType
+    testProvider.captureSchema(
+      StateStore.DEFAULT_COL_FAMILY_NAME,
+      keySchema,
+      evolvedValueSchema,
+      valueSchemaId = 1
+    )
+
+    val encoder2 = new AvroStateEncoder(
+      NoPrefixKeyStateEncoderSpec(keySchema),
+      evolvedValueSchema,
+      Some(testProvider),
+      Some(ColumnFamilyInfo(StateStore.DEFAULT_COL_FAMILY_NAME, 1))
+    )
+
+    // Attempting to decode Long as Int should fail
+    val exception = intercept[AvroTypeException] {
+      encoder2.decodeValue(encoded)
+    }
+    assert(exception.getMessage.contains("Found long, expecting union"))
   }
 
   testWithColumnFamiliesAndEncodingTypes(
@@ -1323,6 +1892,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
       useColumnFamilies: Boolean = false,
       useMultipleValuesPerKey: Boolean = false): RocksDBStateStoreProvider = {
     val provider = new RocksDBStateStoreProvider()
+    val testStateSchemaProvider = new TestStateSchemaProvider
     provider.init(
       storeId,
       keySchema,
@@ -1331,7 +1901,8 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
       useColumnFamilies,
       new StateStoreConf(sqlConf.getOrElse(SQLConf.get)),
       conf,
-      useMultipleValuesPerKey)
+      useMultipleValuesPerKey,
+      stateSchemaProvider = Some(testStateSchemaProvider))
     provider
   }
 
