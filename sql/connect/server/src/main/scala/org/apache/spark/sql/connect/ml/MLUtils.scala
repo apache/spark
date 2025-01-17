@@ -26,6 +26,7 @@ import org.apache.commons.lang3.reflect.MethodUtils.invokeMethod
 
 import org.apache.spark.connect.proto
 import org.apache.spark.ml.{Estimator, Transformer}
+import org.apache.spark.ml.evaluation.Evaluator
 import org.apache.spark.ml.linalg.{Matrices, Matrix, Vector, Vectors}
 import org.apache.spark.ml.param.Params
 import org.apache.spark.ml.util.{MLReadable, MLWritable}
@@ -281,6 +282,30 @@ private[ml] object MLUtils {
     // Load the transformer by ServiceLoader everytime.
     val transformers = loadOperators(classOf[Transformer])
     getInstance[Transformer](name, uid, transformers, Some(params))
+  }
+
+  /**
+   * Get the Evaluator instance according to the proto information
+   *
+   * @param sessionHolder
+   *   session holder to hold the Spark Connect session state
+   * @param operator
+   *   MlOperator information
+   * @param params
+   *   The optional parameters of the evaluator
+   * @return
+   *   the evaluator
+   */
+  def getEvaluator(
+      sessionHolder: SessionHolder,
+      operator: proto.MlOperator,
+      params: Option[proto.MlParams]): Evaluator = {
+    val name = replaceOperator(sessionHolder, operator.getName)
+    val uid = operator.getUid
+
+    // Load the evaluators by ServiceLoader everytime
+    val evaluators = loadOperators(classOf[Evaluator])
+    getInstance[Evaluator](name, uid, evaluators, params)
   }
 
   /**

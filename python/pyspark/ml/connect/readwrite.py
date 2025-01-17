@@ -38,6 +38,7 @@ class RemoteMLWriter(MLWriter):
 
     def save(self, path: str) -> None:
         from pyspark.ml.wrapper import JavaModel, JavaEstimator
+        from pyspark.ml.evaluation import JavaEvaluator
         from pyspark.sql.connect.session import SparkSession
 
         session = SparkSession.getActiveSession()
@@ -69,6 +70,19 @@ class RemoteMLWriter(MLWriter):
                 should_overwrite=self.shouldOverwrite,
                 options=self.optionMap,
             )
+        elif isinstance(self._instance, JavaEvaluator):
+            evaluator = cast("JavaEvaluator", self._instance)
+            params = serialize_ml_params(evaluator, session.client)
+            assert isinstance(evaluator._java_obj, str)
+            writer = pb2.MlCommand.Write(
+                operator=pb2.MlOperator(
+                    name=evaluator._java_obj, uid=evaluator.uid, type=pb2.MlOperator.EVALUATOR
+                ),
+                params=params,
+                path=path,
+                should_overwrite=self.shouldOverwrite,
+                options=self.optionMap,
+            )
         else:
             raise NotImplementedError(f"Unsupported writing for {self._instance}")
 
@@ -85,6 +99,7 @@ class RemoteMLReader(MLReader[RL]):
     def load(self, path: str) -> RL:
         from pyspark.sql.connect.session import SparkSession
         from pyspark.ml.wrapper import JavaModel, JavaEstimator
+        from pyspark.ml.evaluation import JavaEvaluator
 
         session = SparkSession.getActiveSession()
         assert session is not None
@@ -99,6 +114,8 @@ class RemoteMLReader(MLReader[RL]):
             ml_type = pb2.MlOperator.MODEL
         elif issubclass(self._clazz, JavaEstimator):
             ml_type = pb2.MlOperator.ESTIMATOR
+        elif issubclass(self._clazz, JavaEvaluator):
+            ml_type = pb2.MlOperator.EVALUATOR
         else:
             raise ValueError(f"Unsupported reading for {java_qualified_class_name}")
 
