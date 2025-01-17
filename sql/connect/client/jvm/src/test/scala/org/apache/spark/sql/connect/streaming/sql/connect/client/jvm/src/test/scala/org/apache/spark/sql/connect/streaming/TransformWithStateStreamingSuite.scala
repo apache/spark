@@ -22,9 +22,10 @@ import org.scalatest.concurrent.Futures.timeout
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{Encoders, SparkSession}
+import org.apache.spark.sql.{DataFrame, Dataset, Encoders, SparkSession}
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.{QueryTest, RemoteSparkSession}
-import org.apache.spark.sql.types.{StringType, StructField, StructType}
+import org.apache.spark.sql.types._
 
 class TestInitialStatefulProcessor
   extends StatefulProcessorWithInitialState[
@@ -74,6 +75,24 @@ class NewNameCountStatefulProcessor
     val count = _countState.getOption().getOrElse(0L) + inputRows.toSeq.length
     _countState.update(count)
     Iterator((key, count.toString))
+  }
+}
+
+case class OutputEventTimeRow(key: String, outputTimestamp: Long)
+
+class ChainingOfOpsStatefulProcessor
+  extends StatefulProcessor[String, (String, Long), OutputEventTimeRow] {
+  override def init(outputMode: OutputMode, timeMode: TimeMode): Unit = {}
+
+  override def handleInputRows(
+      key: String,
+      inputRows: Iterator[(String, Long)],
+      timerValues: TimerValues): Iterator[OutputEventTimeRow] = {
+    var timestamp = 0L
+    for (row <- inputRows) {
+      timestamp = row._2
+    }
+    Iterator(OutputEventTimeRow(key, timestamp))
   }
 }
 
@@ -171,6 +190,175 @@ class TransformWithStateStreamingSuite extends QueryTest with RemoteSparkSession
               spark.table("my_sink").toDF().as[(String, String)].orderBy("_1"),
               ("a", "1"), ("a", "2"), ("b", "1")
             )
+          }
+        } finally {
+          q.stop()
+          spark.sql("DROP TABLE IF EXISTS my_sink")
+        }
+      }
+    }
+  }
+
+  test("transformWithState - tmp") {
+    withSQLConf("spark.sql.streaming.stateStore.providerClass" ->
+      "org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider",
+      "spark.sql.shuffle.partitions" -> "5") { withTempPath { dstPath =>
+      val session: SparkSession = spark
+      import session.implicits._
+
+      spark.sql("DROP TABLE IF EXISTS my_sink")
+
+      val checkResultFunc:
+        (Dataset[(String, Long)], Long) => Unit = { (batchDF, batchId) =>
+        if (batchId == 0) {
+          val realDf = batchDF.collect()
+          assert(realDf.toSeq == Seq(("a", 10L), ("b", 15L)),
+            s"BatchId: ${batchId}, RealDF: ${realDf}")
+
+        } else if (batchId == 1) {
+          val realDf = batchDF.collect()
+          assert(realDf.toSeq == Seq(("a", 11L), ("c", 25L)),
+            s"BatchId: ${batchId}, RealDF: ${realDf}")
+        } else if (batchId == 2) {
+          val realDf = batchDF.collect()
+          assert(realDf.toSeq == Seq(("a", 5L)),
+            s"BatchId: ${batchId}, RealDF: ${realDf}")
+        }
+      }
+
+      def prepareInputData(inputPath: String, col1: Seq[String], col2: Seq[Int]): Unit = {
+        import java.io.{BufferedWriter, FileWriter}
+        import java.nio.file.{Files, Paths}
+        // Ensure the parent directory exists
+        val file = Paths.get(inputPath)
+        val parentDir = file.getParent
+        if (parentDir != null && !Files.exists(parentDir)) {
+          Files.createDirectories(parentDir)
+        }
+
+        val writer = new BufferedWriter(new FileWriter(inputPath))
+        try {
+          col1.zip(col2).foreach { case (e1, e2) =>
+            writer.write(s"$e1, $e2\n")
+          }
+        } finally {
+          writer.close()
+        }
+      }
+
+
+      def buildTestDf(inputPath: String): DataFrame = {
+        val df = spark.readStream
+          .format("text")
+          .option("maxFilesPerTrigger", 1)
+          .load(inputPath)
+
+        val dfSplit = df.withColumn("split_values", split(col("value"), ","))
+        val dfFinal = dfSplit.select(
+          col("split_values").getItem(0).alias("id").cast("string"),
+          col("split_values").getItem(1).alias("value").cast("int")
+        )
+
+        dfFinal
+      }
+
+      withTempPath { dir =>
+        val path = dir.getCanonicalPath
+        prepareInputData(path + "/text-test3.txt", Seq("a", "b"), Seq(10, 15))
+        prepareInputData(path + "/text-test4.txt", Seq("a", "c"), Seq(11, 25))
+        prepareInputData(path + "/text-test1.txt", Seq("a"), Seq(5))
+
+        val q = buildTestDf(path)
+          .select(col("id").as("id"),
+            timestamp_seconds(col("value")).as("eventTime"))
+          // .withWatermark("eventTime", "5 seconds")
+          .as[(String, Long)]
+          .writeStream
+          .foreachBatch(checkResultFunc)
+          .outputMode("Append")
+          .start()
+
+        try {
+          q.processAllAvailable()
+          eventually(timeout(20.seconds)) {
+            q.stop()
+          }
+        } finally {
+          q.stop()
+          spark.sql("DROP TABLE IF EXISTS my_sink")
+        }
+      }
+    }}
+  }
+
+  test("transformWithState - streaming with chaining of operators") {
+    withSQLConf("spark.sql.streaming.stateStore.providerClass" ->
+      "org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider",
+      "spark.sql.shuffle.partitions" -> "5") {
+      val session: SparkSession = spark
+      import session.implicits._
+
+      spark.sql("DROP TABLE IF EXISTS my_sink")
+
+      val checkResultFunc : (Dataset[(Long, Long)], Long) => Unit = { (batchDF, batchId) =>
+        val realDf = batchDF.orderBy("outputTimestamp").collect().toSeq
+        if (batchId == 0) {
+          println(s"plz her: BatchId: ${batchId}, RealDF: ${realDf}")
+          assert(realDf.isEmpty, s"BatchId: ${batchId}, RealDF: ${realDf}")
+        } else if (batchId == 1) {
+          val expectedDF = Seq((10L, 1L), (15L, 1L)).toSet
+          assert(realDf == expectedDF,
+            s"BatchId: ${batchId}, expectedDf: ${expectedDF}, RealDF: ${realDf}")
+        } else if (batchId == 2) {
+          val expectedDF = Seq((11L, 1L)).toSet
+          assert(realDf == expectedDF,
+            s"BatchId: ${batchId}, expectedDf: ${expectedDF}, RealDF: ${realDf}")
+        }
+      }
+
+      withTempPath { dir =>
+        val path = dir.getCanonicalPath
+        val testInput: Seq[(String, Int, Int)] = Seq(
+          ("a", 10, 0),
+          ("b", 15, 0),
+          ("a", 11, 1),
+          ("c", 25, 1),
+          ("a", 5, 2)
+        )
+        testInput.toDS().toDF("id", "value", "batchId")
+          .write.partitionBy("batchId")
+          .parquet(path)
+
+        val testSchema = StructType(Array(
+          StructField("id", StringType), StructField("value", IntegerType),
+          StructField("batchId", IntegerType)))
+
+        val q = spark.readStream
+          .schema(testSchema)
+          .option("maxFilesPerTrigger", 2)
+          .format("parquet")
+          .load(path)
+          .as[(String, Int, Int)]
+          .select(col("id").as("id"),
+            timestamp_seconds(col("value")).as("eventTime"))
+          .withWatermark("eventTime", "5 seconds")
+          .as[(String, Long)]
+          .groupByKey(x => x._1)
+          .transformWithState[OutputEventTimeRow](
+            new ChainingOfOpsStatefulProcessor(),
+            "outputTimestamp", OutputMode.Append()
+          )
+          .groupBy("outputTimestamp")
+          .count().as[(Long, Long)]
+          .writeStream
+          .foreachBatch(checkResultFunc)
+          .outputMode("Append")
+          .start()
+
+        try {
+          q.processAllAvailable()
+          eventually(timeout(30.seconds)) {
+            q.stop()
           }
         } finally {
           q.stop()

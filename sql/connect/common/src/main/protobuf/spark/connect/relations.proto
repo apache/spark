@@ -80,6 +80,7 @@ message Relation {
     Transpose transpose = 42;
     UnresolvedTableValuedFunction unresolved_table_valued_function = 43;
     LateralJoin lateral_join = 44;
+    UpdateEventTimeWatermarkColumn update_event_time_watermark_column= 45;
 
     // NA functions
     NAFill fill_na = 90;
@@ -1034,6 +1035,13 @@ message GroupMap {
 
   // (Optional) True if the operator is transformWithState.
   optional TransformWithStateInfo transformWithStateInfo = 11;
+}
+
+message UpdateEventTimeWatermarkColumn {
+  // (Required) Input relation.
+  Relation input = 1;
+
+  string event_time_col_name = 3;
 }
 
 message TransformWithStateInfo {

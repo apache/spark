@@ -170,7 +170,7 @@ class KeyValueGroupedDataset[K, V] private[sql] () extends sql.KeyValueGroupedDa
       outputMode: OutputMode): Dataset[U] =
     transformWithStateHelper(
       statefulProcessor,
-      TimeMode.None(),
+      TimeMode.EventTime(),
       outputMode,
       eventTimeColumnName = eventTimeColumnName
     )
@@ -186,7 +186,7 @@ class KeyValueGroupedDataset[K, V] private[sql] () extends sql.KeyValueGroupedDa
       initialState: KeyValueGroupedDataset[K, S]): Dataset[U] =
     transformWithStateHelper(
       statefulProcessor,
-      TimeMode.None(),
+      TimeMode.EventTime(),
       outputMode,
       Some(initialState),
       eventTimeColumnName
@@ -698,7 +698,7 @@ private class KeyValueGroupedDatasetImpl[K, V, IK, IV](
         statefulProcessor.asInstanceOf[StatefulProcessorWithInitialState[K, V, U, S]]))
     }
 
-    sparkSession.newDataset[U](outputEncoder) { builder =>
+    val twsDataset = sparkSession.newDataset[U](outputEncoder) { builder =>
       val twsBuilder = builder.getGroupMapBuilder
       twsBuilder.setInput(plan.getRoot)
         .addAllGroupingExpressions(groupingExprs)
@@ -716,6 +716,16 @@ private class KeyValueGroupedDatasetImpl[K, V, IK, IV](
           .addAllInitialGroupingExpressions(initialStateImpl.groupingExprs)
           .setInitialInput(initialStateImpl.plan.getRoot)
       }
+    }
+
+    if (!eventTimeColumnName.isEmpty()) {
+      sparkSession.newDataset[U](outputEncoder) { builder =>
+        builder.getUpdateEventTimeWatermarkColumnBuilder
+          .setInput(twsDataset.plan.getRoot)
+          .setEventTimeColName(eventTimeColumnName)
+      }
+    } else {
+     twsDataset
     }
   }
 
