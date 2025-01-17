@@ -51,12 +51,9 @@ class MLBackendSuite extends MLHelper {
       .newBuilder()
       .putParams(
         "maxIter",
-        proto.Param
+        proto.Expression.Literal
           .newBuilder()
-          .setLiteral(
-            proto.Expression.Literal
-              .newBuilder()
-              .setInteger(2))
+          .setInteger(2)
           .build())
   }
 
@@ -111,10 +108,10 @@ class MLBackendSuite extends MLHelper {
         assert(ret.getOperatorInfo.getParams.getParamsMap.containsKey("fakeParam"))
         assert(ret.getOperatorInfo.getParams.getParamsMap.containsKey("maxIter"))
         assert(
-          ret.getOperatorInfo.getParams.getParamsMap.get("maxIter").getLiteral.getInteger
+          ret.getOperatorInfo.getParams.getParamsMap.get("maxIter").getInteger
             == 2)
         assert(
-          ret.getOperatorInfo.getParams.getParamsMap.get("fakeParam").getLiteral.getInteger
+          ret.getOperatorInfo.getParams.getParamsMap.get("fakeParam").getInteger
             == 101010)
       } finally {
         Utils.deleteRecursively(tempDir)
@@ -173,16 +170,16 @@ class MLBackendSuite extends MLHelper {
         assert(ret.getOperatorInfo.getParams.getParamsMap.containsKey("fakeParam"))
         assert(ret.getOperatorInfo.getParams.getParamsMap.containsKey("maxIter"))
         assert(
-          ret.getOperatorInfo.getParams.getParamsMap.get("maxIter").getLiteral.getInteger
+          ret.getOperatorInfo.getParams.getParamsMap.get("maxIter").getInteger
             == 2)
         assert(
-          ret.getOperatorInfo.getParams.getParamsMap.get("fakeParam").getLiteral.getInteger
+          ret.getOperatorInfo.getParams.getParamsMap.get("fakeParam").getInteger
             == 101010)
 
         // Fetch double attribute
         val fakeAttrCmd = fetchCommand(ret.getOperatorInfo.getObjRef.getId, "predictRaw")
         val fakeAttrRet = MLHandler.handleMlCommand(sessionHolder, fakeAttrCmd)
-        assert(fakeAttrRet.getParam.getLiteral.getDouble === 1.11)
+        assert(fakeAttrRet.getParam.getDouble === 1.11)
       } finally {
         Utils.deleteRecursively(tempDir)
       }
@@ -204,7 +201,7 @@ class MLBackendSuite extends MLHelper {
             .setEvaluator(getRegressorEvaluator))
         .build()
       val evalResult = MLHandler.handleMlCommand(sessionHolder, evalCmd)
-      assert(evalResult.getParam.getLiteral.getDouble == 1.11)
+      assert(evalResult.getParam.getDouble == 1.11)
 
       // read/write
       val tempDir = Utils.createTempDir(namePrefix = this.getClass.getName)
@@ -235,10 +232,10 @@ class MLBackendSuite extends MLHelper {
         assert(ret.getOperatorInfo.getParams.getParamsMap.containsKey("fakeParam"))
         assert(ret.getOperatorInfo.getParams.getParamsMap.containsKey("metricName"))
         assert(
-          ret.getOperatorInfo.getParams.getParamsMap.get("metricName").getLiteral.getString
+          ret.getOperatorInfo.getParams.getParamsMap.get("metricName").getString
             == "mae")
         assert(
-          ret.getOperatorInfo.getParams.getParamsMap.get("fakeParam").getLiteral.getInteger
+          ret.getOperatorInfo.getParams.getParamsMap.get("fakeParam").getInteger
             == 101010)
       } finally {
         Utils.deleteRecursively(tempDir)

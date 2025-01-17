@@ -62,7 +62,6 @@ class EvaluatorTestsMixin:
             self.assertEqual(evaluator2.getPredictionCol(), "prediction")
             self.assertEqual(str(evaluator), str(evaluator2))
 
-
     def test_multilabel_classification_evaluator(self):
         dataset = self.spark.createDataFrame(
             [
@@ -94,7 +93,6 @@ class EvaluatorTestsMixin:
             evaluator2 = MultilabelClassificationEvaluator.load(tmp_dir)
             self.assertEqual(evaluator2.getPredictionCol(), "prediction")
             self.assertEqual(str(evaluator), str(evaluator2))
-
 
     def test_multiclass_classification_evaluator(self):
         dataset = self.spark.createDataFrame(
@@ -153,9 +151,7 @@ class EvaluatorTestsMixin:
         self.assertTrue(np.allclose(weighted_f1_score, 0.6613, atol=1e-4))
 
         # Evaluate the dataset with weights using accuracy
-        weighted_accuracy = evaluator.evaluate(
-            dataset, {evaluator.metricName: "accuracy"}
-        )
+        weighted_accuracy = evaluator.evaluate(dataset, {evaluator.metricName: "accuracy"})
         self.assertTrue(np.allclose(weighted_accuracy, 0.6666, atol=1e-4))
 
         evaluator = MulticlassClassificationEvaluator(
@@ -207,9 +203,7 @@ class EvaluatorTestsMixin:
         self.assertTrue(np.allclose(auc_roc_weighted, 0.7025, atol=1e-4))
 
         # Evaluate the dataset with weights using the areaUnderPR metric
-        auc_pr_weighted = evaluator.evaluate(
-            dataset, {evaluator.metricName: "areaUnderPR"}
-        )
+        auc_pr_weighted = evaluator.evaluate(dataset, {evaluator.metricName: "areaUnderPR"})
         self.assertTrue(np.allclose(auc_pr_weighted, 0.8221, atol=1e-4))
 
         # Get the number of bins used to compute areaUnderROC

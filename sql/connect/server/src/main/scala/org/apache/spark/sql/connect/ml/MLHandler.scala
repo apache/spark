@@ -153,11 +153,7 @@ private[connect] object MLHandler extends Logging {
         }
         proto.MlCommandResult
           .newBuilder()
-          .setParam(
-            proto.Param
-              .newBuilder()
-              .setLiteral(LiteralValueProtoConverter.toLiteralProto(result))
-              .build())
+          .setParam(LiteralValueProtoConverter.toLiteralProto(result))
           .build()
 
       case proto.MlCommand.CommandCase.WRITE =>
@@ -247,10 +243,7 @@ private[connect] object MLHandler extends Logging {
         val metric = evaluator.evaluate(dataset)
         proto.MlCommandResult
           .newBuilder()
-          .setParam(
-            proto.Param
-              .newBuilder()
-              .setLiteral(LiteralValueProtoConverter.toLiteralProto(metric)))
+          .setParam(LiteralValueProtoConverter.toLiteralProto(metric))
           .build()
 
       case other => throw MlUnsupportedException(s"$other not supported")

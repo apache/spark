@@ -84,15 +84,7 @@ trait MLHelper extends SparkFunSuite with SparkConnectPlanTest {
   def getMetricName: proto.MlParams.Builder =
     proto.MlParams
       .newBuilder()
-      .putParams(
-        "metricName",
-        proto.Param
-          .newBuilder()
-          .setLiteral(
-            proto.Expression.Literal
-              .newBuilder()
-              .setString("mae"))
-          .build())
+      .putParams("metricName", proto.Expression.Literal.newBuilder().setString("mae").build())
 
   def fetchCommand(modelId: String, method: String): proto.MlCommand = {
     proto.MlCommand
