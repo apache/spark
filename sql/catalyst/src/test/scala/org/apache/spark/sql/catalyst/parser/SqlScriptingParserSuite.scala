@@ -2336,8 +2336,8 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     val sqlScriptText =
       """
         |BEGIN
-        |  SELECT 1;
         |  DECLARE test CONDITION FOR SQLSTATE '12000';
+        |  SELECT 1;
         |END""".stripMargin
     val tree = parsePlan(sqlScriptText).asInstanceOf[CompoundBody]
     assert(tree.conditions.size == 1)
