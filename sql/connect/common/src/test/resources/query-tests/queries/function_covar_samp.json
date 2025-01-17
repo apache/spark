@@ -25,14 +25,12 @@
                   "classLoaderName": "app",
                   "declaringClass": "org.apache.spark.sql.functions$",
                   "methodName": "covar_samp",
-                  "fileName": "functions.scala",
-                  "lineNumber": 508
+                  "fileName": "functions.scala"
                 }, {
                   "classLoaderName": "app",
                   "declaringClass": "org.apache.spark.sql.PlanGenerationTestSuite",
-                  "methodName": "$anonfun$new$165",
-                  "fileName": "PlanGenerationTestSuite.scala",
-                  "lineNumber": 1010
+                  "methodName": "~~trimmed~anonfun~~",
+                  "fileName": "PlanGenerationTestSuite.scala"
                 }]
               }
             }
@@ -48,14 +46,12 @@
                   "classLoaderName": "app",
                   "declaringClass": "org.apache.spark.sql.functions$",
                   "methodName": "covar_samp",
-                  "fileName": "functions.scala",
-                  "lineNumber": 508
+                  "fileName": "functions.scala"
                 }, {
                   "classLoaderName": "app",
                   "declaringClass": "org.apache.spark.sql.PlanGenerationTestSuite",
-                  "methodName": "$anonfun$new$165",
-                  "fileName": "PlanGenerationTestSuite.scala",
-                  "lineNumber": 1010
+                  "methodName": "~~trimmed~anonfun~~",
+                  "fileName": "PlanGenerationTestSuite.scala"
                 }]
               }
             }
@@ -70,14 +66,12 @@
               "classLoaderName": "app",
               "declaringClass": "org.apache.spark.sql.functions$",
               "methodName": "covar_samp",
-              "fileName": "functions.scala",
-              "lineNumber": 508
+              "fileName": "functions.scala"
             }, {
               "classLoaderName": "app",
               "declaringClass": "org.apache.spark.sql.PlanGenerationTestSuite",
-              "methodName": "$anonfun$new$165",
-              "fileName": "PlanGenerationTestSuite.scala",
-              "lineNumber": 1010
+              "methodName": "~~trimmed~anonfun~~",
+              "fileName": "PlanGenerationTestSuite.scala"
             }]
           }
         }

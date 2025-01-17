@@ -25,14 +25,12 @@
                   "classLoaderName": "app",
                   "declaringClass": "org.apache.spark.sql.functions$",
                   "methodName": "col",
-                  "fileName": "functions.scala",
-                  "lineNumber": 94
+                  "fileName": "functions.scala"
                 }, {
                   "classLoaderName": "app",
                   "declaringClass": "org.apache.spark.sql.PlanGenerationTestSuite",
-                  "methodName": "$anonfun$new$327",
-                  "fileName": "PlanGenerationTestSuite.scala",
-                  "lineNumber": 1658
+                  "methodName": "~~trimmed~anonfun~~",
+                  "fileName": "PlanGenerationTestSuite.scala"
                 }]
               }
             }
@@ -47,14 +45,12 @@
               "classLoaderName": "app",
               "declaringClass": "org.apache.spark.sql.functions$",
               "methodName": "initcap",
-              "fileName": "functions.scala",
-              "lineNumber": 4056
+              "fileName": "functions.scala"
             }, {
               "classLoaderName": "app",
               "declaringClass": "org.apache.spark.sql.PlanGenerationTestSuite",
-              "methodName": "$anonfun$new$327",
-              "fileName": "PlanGenerationTestSuite.scala",
-              "lineNumber": 1658
+              "methodName": "~~trimmed~anonfun~~",
+              "fileName": "PlanGenerationTestSuite.scala"
             }]
           }
         }

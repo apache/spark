@@ -23,14 +23,12 @@
               "classLoaderName": "app",
               "declaringClass": "org.apache.spark.sql.functions$",
               "methodName": "input_file_block_length",
-              "fileName": "functions.scala",
-              "lineNumber": 3771
+              "fileName": "functions.scala"
             }, {
               "classLoaderName": "app",
               "declaringClass": "org.apache.spark.sql.PlanGenerationTestSuite",
-              "methodName": "$anonfun$new$667",
-              "fileName": "PlanGenerationTestSuite.scala",
-              "lineNumber": 3059
+              "methodName": "~~trimmed~anonfun~~",
+              "fileName": "PlanGenerationTestSuite.scala"
             }]
           }
         }

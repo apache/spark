@@ -22,15 +22,13 @@
             "stackTrace": [{
               "classLoaderName": "app",
               "declaringClass": "org.apache.spark.sql.Dataset",
-              "methodName": "$anonfun$hint$1$adapted",
-              "fileName": "Dataset.scala",
-              "lineNumber": 441
+              "methodName": "~~trimmed~anonfun~~",
+              "fileName": "Dataset.scala"
             }, {
               "classLoaderName": "app",
               "declaringClass": "org.apache.spark.sql.SparkSession",
               "methodName": "newDataset",
-              "fileName": "SparkSession.scala",
-              "lineNumber": 417
+              "fileName": "SparkSession.scala"
             }]
           }
         }

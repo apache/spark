@@ -23,14 +23,12 @@
               "classLoaderName": "app",
               "declaringClass": "org.apache.spark.sql.functions$",
               "methodName": "localtimestamp",
-              "fileName": "functions.scala",
-              "lineNumber": 5164
+              "fileName": "functions.scala"
             }, {
               "classLoaderName": "app",
               "declaringClass": "org.apache.spark.sql.PlanGenerationTestSuite",
-              "methodName": "$anonfun$new$436",
-              "fileName": "PlanGenerationTestSuite.scala",
-              "lineNumber": 2179
+              "methodName": "~~trimmed~anonfun~~",
+              "fileName": "PlanGenerationTestSuite.scala"
             }]
           }
         }

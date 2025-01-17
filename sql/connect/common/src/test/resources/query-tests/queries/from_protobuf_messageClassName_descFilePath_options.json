@@ -25,14 +25,12 @@
                   "classLoaderName": "app",
                   "declaringClass": "org.apache.spark.sql.functions$",
                   "methodName": "col",
-                  "fileName": "functions.scala",
-                  "lineNumber": 94
+                  "fileName": "functions.scala"
                 }, {
                   "classLoaderName": "app",
                   "declaringClass": "org.apache.spark.sql.PlanGenerationTestSuite",
-                  "methodName": "$anonfun$new$735",
-                  "fileName": "PlanGenerationTestSuite.scala",
-                  "lineNumber": 3484
+                  "methodName": "~~trimmed~anonfun~~",
+                  "fileName": "PlanGenerationTestSuite.scala"
                 }]
               }
             }
@@ -48,14 +46,12 @@
                   "classLoaderName": "app",
                   "declaringClass": "org.apache.spark.sql.functions$",
                   "methodName": "lit",
-                  "fileName": "functions.scala",
-                  "lineNumber": 124
+                  "fileName": "functions.scala"
                 }, {
                   "classLoaderName": "app",
                   "declaringClass": "org.apache.spark.sql.protobuf.functions$",
                   "methodName": "from_protobuf",
-                  "fileName": "functions.scala",
-                  "lineNumber": 78
+                  "fileName": "functions.scala"
                 }]
               }
             }
@@ -71,14 +67,12 @@
                   "classLoaderName": "app",
                   "declaringClass": "org.apache.spark.sql.functions$",
                   "methodName": "lit",
-                  "fileName": "functions.scala",
-                  "lineNumber": 124
+                  "fileName": "functions.scala"
                 }, {
                   "classLoaderName": "app",
                   "declaringClass": "org.apache.spark.sql.protobuf.functions$",
                   "methodName": "from_protobuf",
-                  "fileName": "functions.scala",
-                  "lineNumber": 79
+                  "fileName": "functions.scala"
                 }]
               }
             }
@@ -97,14 +91,12 @@
                       "classLoaderName": "app",
                       "declaringClass": "org.apache.spark.sql.Column$",
                       "methodName": "fnWithOptions",
-                      "fileName": "Column.scala",
-                      "lineNumber": 51
+                      "fileName": "Column.scala"
                     }, {
                       "classLoaderName": "app",
                       "declaringClass": "org.apache.spark.sql.protobuf.functions$",
                       "methodName": "from_protobuf",
-                      "fileName": "functions.scala",
-                      "lineNumber": 79
+                      "fileName": "functions.scala"
                     }]
                   }
                 }
@@ -120,14 +112,12 @@
                       "classLoaderName": "app",
                       "declaringClass": "org.apache.spark.sql.Column$",
                       "methodName": "fnWithOptions",
-                      "fileName": "Column.scala",
-                      "lineNumber": 51
+                      "fileName": "Column.scala"
                     }, {
                       "classLoaderName": "app",
                       "declaringClass": "org.apache.spark.sql.protobuf.functions$",
                       "methodName": "from_protobuf",
-                      "fileName": "functions.scala",
-                      "lineNumber": 79
+                      "fileName": "functions.scala"
                     }]
                   }
                 }
@@ -142,14 +132,12 @@
                   "classLoaderName": "app",
                   "declaringClass": "org.apache.spark.sql.Column$",
                   "methodName": "fnWithOptions",
-                  "fileName": "Column.scala",
-                  "lineNumber": 51
+                  "fileName": "Column.scala"
                 }, {
                   "classLoaderName": "app",
                   "declaringClass": "org.apache.spark.sql.protobuf.functions$",
                   "methodName": "from_protobuf",
-                  "fileName": "functions.scala",
-                  "lineNumber": 79
+                  "fileName": "functions.scala"
                 }]
               }
             }
@@ -164,14 +152,12 @@
               "classLoaderName": "app",
               "declaringClass": "org.apache.spark.sql.Column$",
               "methodName": "fnWithOptions",
-              "fileName": "Column.scala",
-              "lineNumber": 55
+              "fileName": "Column.scala"
             }, {
               "classLoaderName": "app",
               "declaringClass": "org.apache.spark.sql.protobuf.functions$",
               "methodName": "from_protobuf",
-              "fileName": "functions.scala",
-              "lineNumber": 79
+              "fileName": "functions.scala"
             }]
           }
         }

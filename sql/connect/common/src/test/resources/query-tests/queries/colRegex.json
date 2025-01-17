@@ -23,14 +23,12 @@
               "classLoaderName": "app",
               "declaringClass": "org.apache.spark.sql.Dataset",
               "methodName": "colRegex",
-              "fileName": "Dataset.scala",
-              "lineNumber": 465
+              "fileName": "Dataset.scala"
             }, {
               "classLoaderName": "app",
               "declaringClass": "org.apache.spark.sql.PlanGenerationTestSuite",
-              "methodName": "$anonfun$new$45",
-              "fileName": "PlanGenerationTestSuite.scala",
-              "lineNumber": 484
+              "methodName": "~~trimmed~anonfun~~",
+              "fileName": "PlanGenerationTestSuite.scala"
             }]
           }
         }

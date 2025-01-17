@@ -23,14 +23,12 @@
               "classLoaderName": "app",
               "declaringClass": "org.apache.spark.sql.functions$",
               "methodName": "make_dt_interval",
-              "fileName": "functions.scala",
-              "lineNumber": 8077
+              "fileName": "functions.scala"
             }, {
               "classLoaderName": "app",
               "declaringClass": "org.apache.spark.sql.PlanGenerationTestSuite",
-              "methodName": "$anonfun$new$386",
-              "fileName": "PlanGenerationTestSuite.scala",
-              "lineNumber": 1886
+              "methodName": "~~trimmed~anonfun~~",
+              "fileName": "PlanGenerationTestSuite.scala"
             }]
           }
         }

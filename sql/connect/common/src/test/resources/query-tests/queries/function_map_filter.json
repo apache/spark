@@ -25,14 +25,12 @@
                   "classLoaderName": "app",
                   "declaringClass": "org.apache.spark.sql.functions$",
                   "methodName": "col",
-                  "fileName": "functions.scala",
-                  "lineNumber": 94
+                  "fileName": "functions.scala"
                 }, {
                   "classLoaderName": "app",
                   "declaringClass": "org.apache.spark.sql.PlanGenerationTestSuite",
-                  "methodName": "$anonfun$new$544",
-                  "fileName": "PlanGenerationTestSuite.scala",
-                  "lineNumber": 2564
+                  "methodName": "~~trimmed~anonfun~~",
+                  "fileName": "PlanGenerationTestSuite.scala"
                 }]
               }
             }
@@ -57,14 +55,12 @@
                           "classLoaderName": "app",
                           "declaringClass": "org.apache.spark.sql.functions$",
                           "methodName": "lit",
-                          "fileName": "functions.scala",
-                          "lineNumber": 124
+                          "fileName": "functions.scala"
                         }, {
                           "classLoaderName": "app",
                           "declaringClass": "org.apache.spark.sql.PlanGenerationTestSuite",
-                          "methodName": "$anonfun$new$545",
-                          "fileName": "PlanGenerationTestSuite.scala",
-                          "lineNumber": 2564
+                          "methodName": "~~trimmed~anonfun~~",
+                          "fileName": "PlanGenerationTestSuite.scala"
                         }]
                       }
                     }
@@ -79,14 +75,12 @@
                       "classLoaderName": "app",
                       "declaringClass": "org.apache.spark.sql.Column",
                       "methodName": "contains",
-                      "fileName": "Column.scala",
-                      "lineNumber": 1000
+                      "fileName": "Column.scala"
                     }, {
                       "classLoaderName": "app",
                       "declaringClass": "org.apache.spark.sql.PlanGenerationTestSuite",
-                      "methodName": "$anonfun$new$545",
-                      "fileName": "PlanGenerationTestSuite.scala",
-                      "lineNumber": 2564
+                      "methodName": "~~trimmed~anonfun~~",
+                      "fileName": "PlanGenerationTestSuite.scala"
                     }]
                   }
                 }
@@ -105,14 +99,12 @@
                   "classLoaderName": "app",
                   "declaringClass": "org.apache.spark.sql.functions$",
                   "methodName": "map_filter",
-                  "fileName": "functions.scala",
-                  "lineNumber": 6752
+                  "fileName": "functions.scala"
                 }, {
                   "classLoaderName": "app",
                   "declaringClass": "org.apache.spark.sql.PlanGenerationTestSuite",
-                  "methodName": "$anonfun$new$544",
-                  "fileName": "PlanGenerationTestSuite.scala",
-                  "lineNumber": 2564
+                  "methodName": "~~trimmed~anonfun~~",
+                  "fileName": "PlanGenerationTestSuite.scala"
                 }]
               }
             }
@@ -127,14 +119,12 @@
               "classLoaderName": "app",
               "declaringClass": "org.apache.spark.sql.functions$",
               "methodName": "map_filter",
-              "fileName": "functions.scala",
-              "lineNumber": 6752
+              "fileName": "functions.scala"
             }, {
               "classLoaderName": "app",
               "declaringClass": "org.apache.spark.sql.PlanGenerationTestSuite",
-              "methodName": "$anonfun$new$544",
-              "fileName": "PlanGenerationTestSuite.scala",
-              "lineNumber": 2564
+              "methodName": "~~trimmed~anonfun~~",
+              "fileName": "PlanGenerationTestSuite.scala"
             }]
           }
         }

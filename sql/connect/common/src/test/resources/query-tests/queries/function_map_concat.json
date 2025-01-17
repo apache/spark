@@ -25,14 +25,12 @@
                   "classLoaderName": "app",
                   "declaringClass": "org.apache.spark.sql.functions$",
                   "methodName": "col",
-                  "fileName": "functions.scala",
-                  "lineNumber": 94
+                  "fileName": "functions.scala"
                 }, {
                   "classLoaderName": "app",
                   "declaringClass": "org.apache.spark.sql.PlanGenerationTestSuite",
-                  "methodName": "$anonfun$new$583",
-                  "fileName": "PlanGenerationTestSuite.scala",
-                  "lineNumber": 2711
+                  "methodName": "~~trimmed~anonfun~~",
+                  "fileName": "PlanGenerationTestSuite.scala"
                 }]
               }
             }
@@ -51,14 +49,12 @@
                       "classLoaderName": "app",
                       "declaringClass": "org.apache.spark.sql.functions$",
                       "methodName": "lit",
-                      "fileName": "functions.scala",
-                      "lineNumber": 124
+                      "fileName": "functions.scala"
                     }, {
                       "classLoaderName": "app",
                       "declaringClass": "org.apache.spark.sql.PlanGenerationTestSuite",
-                      "methodName": "$anonfun$new$583",
-                      "fileName": "PlanGenerationTestSuite.scala",
-                      "lineNumber": 2712
+                      "methodName": "~~trimmed~anonfun~~",
+                      "fileName": "PlanGenerationTestSuite.scala"
                     }]
                   }
                 }
@@ -79,14 +75,12 @@
                               "classLoaderName": "app",
                               "declaringClass": "org.apache.spark.sql.functions$",
                               "methodName": "lit",
-                              "fileName": "functions.scala",
-                              "lineNumber": 124
+                              "fileName": "functions.scala"
                             }, {
                               "classLoaderName": "app",
                               "declaringClass": "org.apache.spark.sql.PlanGenerationTestSuite",
-                              "methodName": "$anonfun$new$583",
-                              "fileName": "PlanGenerationTestSuite.scala",
-                              "lineNumber": 2712
+                              "methodName": "~~trimmed~anonfun~~",
+                              "fileName": "PlanGenerationTestSuite.scala"
                             }]
                           }
                         }
@@ -101,14 +95,12 @@
                           "classLoaderName": "app",
                           "declaringClass": "org.apache.spark.sql.Column",
                           "methodName": "as",
-                          "fileName": "Column.scala",
-                          "lineNumber": 1060
+                          "fileName": "Column.scala"
                         }, {
                           "classLoaderName": "app",
                           "declaringClass": "org.apache.spark.sql.PlanGenerationTestSuite",
-                          "methodName": "$anonfun$new$583",
-                          "fileName": "PlanGenerationTestSuite.scala",
-                          "lineNumber": 2712
+                          "methodName": "~~trimmed~anonfun~~",
+                          "fileName": "PlanGenerationTestSuite.scala"
                         }]
                       }
                     }
@@ -126,14 +118,12 @@
                               "classLoaderName": "app",
                               "declaringClass": "org.apache.spark.sql.functions$",
                               "methodName": "lit",
-                              "fileName": "functions.scala",
-                              "lineNumber": 124
+                              "fileName": "functions.scala"
                             }, {
                               "classLoaderName": "app",
                               "declaringClass": "org.apache.spark.sql.PlanGenerationTestSuite",
-                              "methodName": "$anonfun$new$583",
-                              "fileName": "PlanGenerationTestSuite.scala",
-                              "lineNumber": 2712
+                              "methodName": "~~trimmed~anonfun~~",
+                              "fileName": "PlanGenerationTestSuite.scala"
                             }]
                           }
                         }
@@ -148,14 +138,12 @@
                           "classLoaderName": "app",
                           "declaringClass": "org.apache.spark.sql.Column",
                           "methodName": "as",
-                          "fileName": "Column.scala",
-                          "lineNumber": 1060
+                          "fileName": "Column.scala"
                         }, {
                           "classLoaderName": "app",
                           "declaringClass": "org.apache.spark.sql.PlanGenerationTestSuite",
-                          "methodName": "$anonfun$new$583",
-                          "fileName": "PlanGenerationTestSuite.scala",
-                          "lineNumber": 2712
+                          "methodName": "~~trimmed~anonfun~~",
+                          "fileName": "PlanGenerationTestSuite.scala"
                         }]
                       }
                     }
@@ -173,14 +161,12 @@
                               "classLoaderName": "app",
                               "declaringClass": "org.apache.spark.sql.functions$",
                               "methodName": "lit",
-                              "fileName": "functions.scala",
-                              "lineNumber": 124
+                              "fileName": "functions.scala"
                             }, {
                               "classLoaderName": "app",
                               "declaringClass": "org.apache.spark.sql.PlanGenerationTestSuite",
-                              "methodName": "$anonfun$new$583",
-                              "fileName": "PlanGenerationTestSuite.scala",
-                              "lineNumber": 2712
+                              "methodName": "~~trimmed~anonfun~~",
+                              "fileName": "PlanGenerationTestSuite.scala"
                             }]
                           }
                         }
@@ -195,14 +181,12 @@
                           "classLoaderName": "app",
                           "declaringClass": "org.apache.spark.sql.Column",
                           "methodName": "as",
-                          "fileName": "Column.scala",
-                          "lineNumber": 1060
+                          "fileName": "Column.scala"
                         }, {
                           "classLoaderName": "app",
                           "declaringClass": "org.apache.spark.sql.PlanGenerationTestSuite",
-                          "methodName": "$anonfun$new$583",
-                          "fileName": "PlanGenerationTestSuite.scala",
-                          "lineNumber": 2712
+                          "methodName": "~~trimmed~anonfun~~",
+                          "fileName": "PlanGenerationTestSuite.scala"
                         }]
                       }
                     }
@@ -217,14 +201,12 @@
                       "classLoaderName": "app",
                       "declaringClass": "org.apache.spark.sql.functions$",
                       "methodName": "struct",
-                      "fileName": "functions.scala",
-                      "lineNumber": 2085
+                      "fileName": "functions.scala"
                     }, {
                       "classLoaderName": "app",
                       "declaringClass": "org.apache.spark.sql.PlanGenerationTestSuite",
-                      "methodName": "$anonfun$new$583",
-                      "fileName": "PlanGenerationTestSuite.scala",
-                      "lineNumber": 2712
+                      "methodName": "~~trimmed~anonfun~~",
+                      "fileName": "PlanGenerationTestSuite.scala"
                     }]
                   }
                 }
@@ -239,14 +221,12 @@
                   "classLoaderName": "app",
                   "declaringClass": "org.apache.spark.sql.functions$",
                   "methodName": "map",
-                  "fileName": "functions.scala",
-                  "lineNumber": 1737
+                  "fileName": "functions.scala"
                 }, {
                   "classLoaderName": "app",
                   "declaringClass": "org.apache.spark.sql.PlanGenerationTestSuite",
-                  "methodName": "$anonfun$new$583",
-                  "fileName": "PlanGenerationTestSuite.scala",
-                  "lineNumber": 2712
+                  "methodName": "~~trimmed~anonfun~~",
+                  "fileName": "PlanGenerationTestSuite.scala"
                 }]
               }
             }
@@ -261,14 +241,12 @@
               "classLoaderName": "app",
               "declaringClass": "org.apache.spark.sql.functions$",
               "methodName": "map_concat",
-              "fileName": "functions.scala",
-              "lineNumber": 7589
+              "fileName": "functions.scala"
             }, {
               "classLoaderName": "app",
               "declaringClass": "org.apache.spark.sql.PlanGenerationTestSuite",
-              "methodName": "$anonfun$new$583",
-              "fileName": "PlanGenerationTestSuite.scala",
-              "lineNumber": 2712
+              "methodName": "~~trimmed~anonfun~~",
+              "fileName": "PlanGenerationTestSuite.scala"
             }]
           }
         }

@@ -22,14 +22,12 @@
               "classLoaderName": "app",
               "declaringClass": "org.apache.spark.sql.Dataset",
               "methodName": "where",
-              "fileName": "Dataset.scala",
-              "lineNumber": 1428
+              "fileName": "Dataset.scala"
             }, {
               "classLoaderName": "app",
               "declaringClass": "org.apache.spark.sql.PlanGenerationTestSuite",
-              "methodName": "$anonfun$new$54",
-              "fileName": "PlanGenerationTestSuite.scala",
-              "lineNumber": 519
+              "methodName": "~~trimmed~anonfun~~",
+              "fileName": "PlanGenerationTestSuite.scala"
             }]
           }
         }

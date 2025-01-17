@@ -23,14 +23,12 @@
               "classLoaderName": "app",
               "declaringClass": "org.apache.spark.sql.Column$",
               "methodName": "apply",
-              "fileName": "Column.scala",
-              "lineNumber": 35
+              "fileName": "Column.scala"
             }, {
               "classLoaderName": "app",
               "declaringClass": "org.apache.spark.sql.PlanGenerationTestSuite",
-              "methodName": "$anonfun$new$697",
-              "fileName": "PlanGenerationTestSuite.scala",
-              "lineNumber": 3205
+              "methodName": "~~trimmed~anonfun~~",
+              "fileName": "PlanGenerationTestSuite.scala"
             }]
           }
         }
@@ -46,14 +44,12 @@
               "classLoaderName": "app",
               "declaringClass": "org.apache.spark.sql.Column$",
               "methodName": "apply",
-              "fileName": "Column.scala",
-              "lineNumber": 35
+              "fileName": "Column.scala"
             }, {
               "classLoaderName": "app",
               "declaringClass": "org.apache.spark.sql.PlanGenerationTestSuite",
-              "methodName": "$anonfun$new$697",
-              "fileName": "PlanGenerationTestSuite.scala",
-              "lineNumber": 3205
+              "methodName": "~~trimmed~anonfun~~",
+              "fileName": "PlanGenerationTestSuite.scala"
             }]
           }
         }
@@ -75,14 +71,12 @@
                       "classLoaderName": "app",
                       "declaringClass": "org.apache.spark.sql.functions$",
                       "methodName": "lit",
-                      "fileName": "functions.scala",
-                      "lineNumber": 124
+                      "fileName": "functions.scala"
                     }, {
                       "classLoaderName": "app",
                       "declaringClass": "org.apache.spark.sql.api.RelationalGroupedDataset",
                       "methodName": "count",
-                      "fileName": "RelationalGroupedDataset.scala",
-                      "lineNumber": 167
+                      "fileName": "RelationalGroupedDataset.scala"
                     }]
                   }
                 }
@@ -97,14 +91,12 @@
                   "classLoaderName": "app",
                   "declaringClass": "org.apache.spark.sql.functions$",
                   "methodName": "count",
-                  "fileName": "functions.scala",
-                  "lineNumber": 429
+                  "fileName": "functions.scala"
                 }, {
                   "classLoaderName": "app",
                   "declaringClass": "org.apache.spark.sql.api.RelationalGroupedDataset",
                   "methodName": "count",
-                  "fileName": "RelationalGroupedDataset.scala",
-                  "lineNumber": 167
+                  "fileName": "RelationalGroupedDataset.scala"
                 }]
               }
             }
@@ -119,14 +111,12 @@
               "classLoaderName": "app",
               "declaringClass": "org.apache.spark.sql.Column",
               "methodName": "as",
-              "fileName": "Column.scala",
-              "lineNumber": 1060
+              "fileName": "Column.scala"
             }, {
               "classLoaderName": "app",
               "declaringClass": "org.apache.spark.sql.api.RelationalGroupedDataset",
               "methodName": "count",
-              "fileName": "RelationalGroupedDataset.scala",
-              "lineNumber": 167
+              "fileName": "RelationalGroupedDataset.scala"
             }]
           }
         }

@@ -23,14 +23,12 @@
                 "classLoaderName": "app",
                 "declaringClass": "org.apache.spark.sql.Dataset",
                 "methodName": "sort",
-                "fileName": "Dataset.scala",
-                "lineNumber": 1393
+                "fileName": "Dataset.scala"
               }, {
                 "classLoaderName": "app",
                 "declaringClass": "org.apache.spark.sql.PlanGenerationTestSuite",
-                "methodName": "$anonfun$new$38",
-                "fileName": "PlanGenerationTestSuite.scala",
-                "lineNumber": 454
+                "methodName": "~~trimmed~anonfun~~",
+                "fileName": "PlanGenerationTestSuite.scala"
               }]
             }
           }
@@ -50,14 +48,12 @@
                 "classLoaderName": "app",
                 "declaringClass": "org.apache.spark.sql.Dataset",
                 "methodName": "sort",
-                "fileName": "Dataset.scala",
-                "lineNumber": 1393
+                "fileName": "Dataset.scala"
               }, {
                 "classLoaderName": "app",
                 "declaringClass": "org.apache.spark.sql.PlanGenerationTestSuite",
-                "methodName": "$anonfun$new$38",
-                "fileName": "PlanGenerationTestSuite.scala",
-                "lineNumber": 454
+                "methodName": "~~trimmed~anonfun~~",
+                "fileName": "PlanGenerationTestSuite.scala"
               }]
             }
           }

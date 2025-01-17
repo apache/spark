@@ -22,14 +22,12 @@
               "classLoaderName": "app",
               "declaringClass": "org.apache.spark.sql.DataFrameStatFunctions",
               "methodName": "sampleBy",
-              "fileName": "DataFrameStatFunctions.scala",
-              "lineNumber": 109
+              "fileName": "DataFrameStatFunctions.scala"
             }, {
               "classLoaderName": "app",
               "declaringClass": "org.apache.spark.sql.PlanGenerationTestSuite",
-              "methodName": "$anonfun$new$723",
-              "fileName": "PlanGenerationTestSuite.scala",
-              "lineNumber": 3410
+              "methodName": "~~trimmed~anonfun~~",
+              "fileName": "PlanGenerationTestSuite.scala"
             }]
           }
         }
