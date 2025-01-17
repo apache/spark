@@ -243,18 +243,29 @@ class AstBuilder extends DataTypeAstBuilder
     val handlers = ListBuffer[ErrorHandler]()
     val conditions = HashMap[String, String]()
 
+    val scriptingParserContext = new SqlScriptingParsingContext()
+
     ctx.compoundStatements.forEach(compoundStatement => {
       val stmt = visitCompoundStatementImpl(compoundStatement, labelCtx)
       stmt match {
-        case handler: ErrorHandler => handlers += handler
+        case handler: ErrorHandler =>
+          scriptingParserContext.handler()
+          handlers += handler
         case condition: ErrorCondition =>
+          scriptingParserContext.condition()
           // Check for duplicate condition names in each scope.
           if (conditions.contains(condition.conditionName)) {
             throw SqlScriptingErrors
               .duplicateConditionInScope(CurrentOrigin.get, condition.conditionName)
           }
           conditions += condition.conditionName -> condition.sqlState
-        case s => buff += s
+        case statement =>
+          statement match {
+            case SingleStatement(createVariable: CreateVariable) =>
+              scriptingParserContext.variable(createVariable, allowVarDeclare)
+            case _ => // pass
+          }
+          buff += statement
       }
     })
 
