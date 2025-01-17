@@ -252,6 +252,13 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
   }
 
   sealed trait LookupVariableMode
+
+  /**
+   * Mode of variable lookup. Possible values:<p>
+   * DEFAULT => include local variables unless in EXECUTE IMMEDIATE.<p>
+   * INCLUDE_LOCAL_VARS => include local variables.<p>
+   * EXCLUDE_LOCAL_VARS => exclude local variables.<p>
+   */
   object LookupVariableMode {
     case object INCLUDE_LOCAL_VARS extends LookupVariableMode
     case object EXCLUDE_LOCAL_VARS extends LookupVariableMode
