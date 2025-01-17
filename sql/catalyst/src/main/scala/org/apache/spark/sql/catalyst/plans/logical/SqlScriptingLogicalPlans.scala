@@ -328,8 +328,9 @@ object HandlerType extends Enumeration {
 }
 
 /**
- * Logical operator for an error condition.
- * @param conditions Name of the error condition variable for which the handler is built.
+ * Logical operator for an error handler.
+ * @param conditions Collection of error conditions handler is defined for. Possible values are:
+ *                   Error Conditions, SQLSTATEs, NOT FOUND, SQLEXCEPTION.
  * @param body CompoundBody of the handler.
  * @param handlerType Type of the handler (CONTINUE or EXIT).
  */
