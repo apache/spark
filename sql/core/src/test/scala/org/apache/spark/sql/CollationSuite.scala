@@ -1965,7 +1965,6 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
     }
   }
 
-
   test("TVF collations()") {
     assert(sql("SELECT * FROM collations()").collect().length >= 562)
 
