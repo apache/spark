@@ -92,10 +92,10 @@ class MLBackendSuite extends MLHelper {
         assert(ret.getOperatorInfo.getParams.getParamsMap.containsKey("fakeParam"))
         assert(ret.getOperatorInfo.getParams.getParamsMap.containsKey("maxIter"))
         assert(
-          ret.getOperatorInfo.getParams.getParamsMap.get("maxIter").getLiteral.getInteger
+          ret.getOperatorInfo.getParams.getParamsMap.get("maxIter").getInteger
             == 2)
         assert(
-          ret.getOperatorInfo.getParams.getParamsMap.get("fakeParam").getLiteral.getInteger
+          ret.getOperatorInfo.getParams.getParamsMap.get("fakeParam").getInteger
             == 101010)
       } finally {
         Utils.deleteRecursively(tempDir)
@@ -154,10 +154,10 @@ class MLBackendSuite extends MLHelper {
         assert(ret.getOperatorInfo.getParams.getParamsMap.containsKey("fakeParam"))
         assert(ret.getOperatorInfo.getParams.getParamsMap.containsKey("maxIter"))
         assert(
-          ret.getOperatorInfo.getParams.getParamsMap.get("maxIter").getLiteral.getInteger
+          ret.getOperatorInfo.getParams.getParamsMap.get("maxIter").getInteger
             == 2)
         assert(
-          ret.getOperatorInfo.getParams.getParamsMap.get("fakeParam").getLiteral.getInteger
+          ret.getOperatorInfo.getParams.getParamsMap.get("fakeParam").getInteger
             == 101010)
       } finally {
         Utils.deleteRecursively(tempDir)
