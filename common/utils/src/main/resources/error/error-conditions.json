@@ -4555,6 +4555,13 @@
     ],
     "sqlState" : "42K06"
   },
+  "STATE_STORE_INVALID_VALUE_SCHEMA_EVOLUTION" : {
+    "message" : [
+      "Schema evolution is not possible new value_schema=<newValueSchema> and old value_schema=<oldValueSchema>",
+      "Please check https://avro.apache.org/docs/1.11.1/specification/_print/#schema-resolution for valid schema evolution."
+    ],
+    "sqlState" : "XXKST"
+  },
   "STATE_STORE_INVALID_VARIABLE_TYPE_CHANGE" : {
     "message" : [
       "Cannot change <stateVarName> to <newType> between query restarts. Please set <stateVarName> to <oldType>, or restart with a new checkpoint directory."
@@ -4596,6 +4603,14 @@
     ],
     "sqlState" : "42K06"
   },
+  "STATE_STORE_STATE_SCHEMA_FILES_THRESHOLD_EXCEEDED" : {
+    "message" : [
+      "The number of state schema files <numStateSchemaFiles> exceeds the maximum number of state schema files for this query: <maxStateSchemaFiles>.",
+      "Added: <addedColumnFamilies>, Removed: <removedColumnFamilies>",
+      "Please set 'spark.sql.streaming.stateStore.stateSchemaFilesThreshold' to a higher number, or revert state schema modifications"
+    ],
+    "sqlState" : "42K06"
+  },
   "STATE_STORE_UNSUPPORTED_OPERATION" : {
     "message" : [
       "<operationType> operation not supported with <entity>"
@@ -4625,6 +4640,14 @@
       "to process the streaming state. Retrieved error_message=<errorMsg>"
     ],
     "sqlState" : "XX000"
+  },
+  "STATE_STORE_VALUE_SCHEMA_EVOLUTION_THRESHOLD_EXCEEDED" : {
+    "message" : [
+      "The number of state schema evolutions <numSchemaEvolutions> exceeds the maximum number of state schema evolutions, <maxSchemaEvolutions>, allowed for this column family.",
+      "Offending column family: <colFamilyName>",
+      "Please set 'spark.sql.streaming.stateStore.valueStateSchemaEvolutionThreshold' to a higher number, or revert state schema modifications"
+    ],
+    "sqlState" : "42K06"
   },
   "STATE_STORE_VALUE_SCHEMA_NOT_COMPATIBLE" : {
     "message" : [

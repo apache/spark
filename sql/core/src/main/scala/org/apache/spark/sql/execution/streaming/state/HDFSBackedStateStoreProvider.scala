@@ -339,7 +339,8 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
       useColumnFamilies: Boolean,
       storeConf: StateStoreConf,
       hadoopConf: Configuration,
-      useMultipleValuesPerKey: Boolean = false): Unit = {
+      useMultipleValuesPerKey: Boolean = false,
+      stateSchemaProvider: Option[StateSchemaProvider] = None): Unit = {
     assert(
       !storeConf.enableStateStoreCheckpointIds,
       "HDFS State Store Provider doesn't support checkpointFormatVersion >= 2 " +
