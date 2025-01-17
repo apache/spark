@@ -35,41 +35,31 @@ class ResolveRecursiveCTESuite extends AnalysisTest {
     // Since cteDef IDs need to be the same, cteDef for each case will be created by copying
     // this one with its child replaced.
     val cteDef = CTERelationDef(OneRowRelation())
+    val anchor = Project(Seq(Alias(Literal(1), "1")()), OneRowRelation())
 
     def getBeforePlan(cteDef: CTERelationDef): LogicalPlan = {
-      val anchor = Project(Seq(Alias(Literal(1), "1")()), OneRowRelation())
-
-      val recursionPart = Project(anchor.output,
-        SubqueryAlias("t",
-          CTERelationRef(cteDef.id, false, Seq(), false, recursive = true)))
+      val recursionPart = SubqueryAlias("t",
+          CTERelationRef(cteDef.id, false, Seq(), false, recursive = true))
 
       val cteDefFinal = cteDef.copy(child =
         SubqueryAlias("t", Union(Seq(anchor, recursionPart))))
 
-      val outerProject = Project(anchor.output,
-        SubqueryAlias("t",
-          CTERelationRef(cteDefFinal.id, false, Seq(), false, recursive = false)))
-
-      val finalPlan = WithCTE(outerProject, Seq(cteDefFinal))
-      finalPlan
+      WithCTE(
+        SubqueryAlias("t", CTERelationRef(cteDefFinal.id, false, Seq(), false, recursive = false)),
+        Seq(cteDefFinal))
     }
 
     def getAfterPlan(cteDef: CTERelationDef): LogicalPlan = {
-      val anchor = Project(Seq(Alias(Literal(1), "1")()), OneRowRelation())
-
       val saRecursion = SubqueryAlias("t",
         UnionLoopRef(cteDef.id, anchor.output, false))
-      val recursionPart = Project(saRecursion.output, saRecursion)
 
       val cteDefFinal = cteDef.copy(child =
-        SubqueryAlias("t", UnionLoop(cteDef.id, anchor, recursionPart)))
+        SubqueryAlias("t", UnionLoop(cteDef.id, anchor, saRecursion)))
 
       val outerCteRef = CTERelationRef(cteDefFinal.id, true, cteDefFinal.output, false,
         recursive = false)
-      val outerProject = Project(outerCteRef.output, SubqueryAlias("t", outerCteRef))
 
-      val finalPlan = WithCTE(outerProject, Seq(cteDefFinal))
-      finalPlan
+      WithCTE(SubqueryAlias("t", outerCteRef), Seq(cteDefFinal))
     }
 
     val beforePlan = getBeforePlan(cteDef)
@@ -89,51 +79,36 @@ class ResolveRecursiveCTESuite extends AnalysisTest {
     // Since cteDef IDs need to be the same, cteDef for each case will be created by copying
     // this one with its child replaced.
     val cteDef = CTERelationDef(OneRowRelation())
+    val anchor = Project(Seq(Alias(Literal(1), "1")()), OneRowRelation())
 
     def getBeforePlan(cteDef: CTERelationDef): LogicalPlan = {
-      val anchor = Project(Seq(Alias(Literal(1), "1")()), OneRowRelation())
-
-      val recursionPart = Project(anchor.output,
-        SubqueryAlias("t",
-          CTERelationRef(cteDef.id, false, Seq(), false, recursive = true)))
+      val recursionPart = SubqueryAlias("t",
+          CTERelationRef(cteDef.id, false, Seq(), false, recursive = true))
 
       val cteDefFinal = cteDef.copy(child =
         SubqueryAlias("t",
           UnresolvedSubqueryColumnAliases(Seq("n"),
             Union(Seq(anchor, recursionPart)))))
 
-      val outerProject = Project(anchor.output,
-        SubqueryAlias("t",
-          CTERelationRef(cteDefFinal.id, false, Seq(), false, recursive = false)))
-
-      val finalPlan = WithCTE(outerProject, Seq(cteDefFinal))
-      finalPlan
+      WithCTE(
+        SubqueryAlias("t", CTERelationRef(cteDefFinal.id, false, Seq(), false, recursive = false)),
+        Seq(cteDefFinal))
     }
 
     def getAfterPlan(cteDef: CTERelationDef): LogicalPlan = {
-      // Note: each Project nodes here has manually set output attributes to anchor.output
-      // instead to its corresponding subtree's output. This is done because the two rules
-      // applied in this test do not resolve the output attributes of the Project nodes.
-      // Therefore, we can not construct such Project nodes in the "before plan" as
-      // its child is still unresolved at the point of before plan.
-      val anchor = Project(Seq(Alias(Literal(1), "1")()), OneRowRelation())
-
       val saRecursion = SubqueryAlias("t",
         Project(Seq(Alias(anchor.output.head, "n")()),
           UnionLoopRef(cteDef.id, anchor.output, false)))
-      val recursionPart = Project(anchor.output, saRecursion)
 
       val cteDefFinal = cteDef.copy(child =
         SubqueryAlias("t",
           Project(Seq(Alias(anchor.output.head, "n")()),
-            UnionLoop(cteDef.id, anchor, recursionPart))))
+            UnionLoop(cteDef.id, anchor, saRecursion))))
 
       val outerCteRef = CTERelationRef(cteDefFinal.id, true, cteDefFinal.output, false,
         recursive = false)
-      val outerProject = Project(anchor.output, SubqueryAlias("t", outerCteRef))
 
-      val finalPlan = WithCTE(outerProject, Seq(cteDefFinal))
-      finalPlan
+      WithCTE(SubqueryAlias("t", outerCteRef), Seq(cteDefFinal))
     }
 
     val beforePlan = getBeforePlan(cteDef)

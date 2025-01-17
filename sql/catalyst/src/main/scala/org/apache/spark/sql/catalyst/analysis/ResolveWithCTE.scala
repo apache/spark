@@ -144,7 +144,7 @@ object ResolveWithCTE extends Rule[LogicalPlan] {
                 // Project (as UnresolvedSubqueryColumnAliases have not been substituted with the
                 // Project yet), leaving us with cases of SubqueryAlias->Union and SubqueryAlias->
                 // UnresolvedSubqueryColumnAliases->Union. The same applies to Distinct Union.
-                throw QueryCompilationErrors.recursiveCteError(
+                throw QueryCompilationErrors.invalidRecursiveCteError(
                   "Unsupported recursive CTE UNION placement.")
             }
         }

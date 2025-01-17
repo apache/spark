@@ -3105,6 +3105,12 @@
     ],
     "sqlState" : "42613"
   },
+  "INVALID_RECURSIVE_CTE" : {
+    "message" : [
+      "Invalid recursive definition found. Recursive queries must contain an UNION or an UNION ALL statement with 2 children. The first child needs to be the anchor term without any recursive references."
+    ],
+    "sqlState" : "42836"
+  },
   "INVALID_REGEXP_REPLACE" : {
     "message" : [
       "Could not perform regexp_replace for source = \"<source>\", pattern = \"<pattern>\", replacement = \"<replacement>\" and position = <position>."
@@ -3122,12 +3128,6 @@
       "The specified save mode <mode> is invalid. Valid save modes include \"append\", \"overwrite\", \"ignore\", \"error\", \"errorifexists\", and \"default\"."
     ],
     "sqlState" : "42000"
-  },
-  "INVALID_RECURSIVE_CTE" : {
-    "message" : [
-      "Invalid recursive definition found. Recursive queries must contain an UNION or an UNION ALL statement with 2 children. The first child needs to be the anchor term without any recursive references. <error>"
-    ],
-    "sqlState" : "42836"
   },
   "INVALID_SCHEMA" : {
     "message" : [
