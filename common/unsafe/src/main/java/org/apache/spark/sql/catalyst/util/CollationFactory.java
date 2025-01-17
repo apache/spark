@@ -440,13 +440,20 @@ public final class CollationFactory {
         }
       }
 
+      protected String getPadding() {
+        if (spaceTrimming == SpaceTrimming.RTRIM) {
+          return PAD_ATTRIBUTE_RTRIM;
+        } else {
+          assert spaceTrimming == SpaceTrimming.NONE;
+          return PAD_ATTRIBUTE_EMPTY;
+        }
+      }
+
       protected abstract Collation buildCollation();
 
       protected abstract CollationMeta buildCollationMeta();
 
       protected abstract String normalizedCollationName();
-
-      protected abstract String getPaddingAttributeString();
 
       static List<CollationIdentifier> listCollations() {
         return Stream.concat(
@@ -462,6 +469,8 @@ public final class CollationFactory {
         }
         return collationSpecUTF8;
       }
+
+      protected SpaceTrimming spaceTrimming;
     }
 
     private static class CollationSpecUTF8 extends CollationSpec {
@@ -494,7 +503,6 @@ public final class CollationFactory {
         new CollationSpecUTF8(CaseSensitivity.LCASE, SpaceTrimming.NONE).buildCollation();
 
       private final CaseSensitivity caseSensitivity;
-      private final SpaceTrimming spaceTrimming;
       private final int collationId;
 
       private CollationSpecUTF8(
@@ -640,7 +648,7 @@ public final class CollationFactory {
             /* language = */ null,
             /* country = */ null,
             /* icuVersion = */ null,
-            spaceTrimming == SpaceTrimming.RTRIM ? PAD_ATTRIBUTE_EMPTY : PAD_ATTRIBUTE_RTRIM,
+            getPadding(),
             /* accentSensitivity = */ true,
             /* caseSensitivity = */ true,
             spaceTrimming.toString());
@@ -652,14 +660,12 @@ public final class CollationFactory {
             /* language = */ null,
             /* country = */ null,
             /* icuVersion = */ null,
-            COLLATION_PAD_ATTRIBUTE,
+            getPadding(),
             /* accentSensitivity = */ true,
             /* caseSensitivity = */ false,
             spaceTrimming.toString());
         }
       }
-
-      protected String
 
       /**
        * Compute normalized collation name. Components of collation name are given in order:
@@ -846,7 +852,6 @@ public final class CollationFactory {
 
       private final CaseSensitivity caseSensitivity;
       private final AccentSensitivity accentSensitivity;
-      private final SpaceTrimming spaceTrimming;
       private final String locale;
       private final int collationId;
 
@@ -1047,7 +1052,7 @@ public final class CollationFactory {
           language.isEmpty() ? null : language,
           country.isEmpty() ? null : country,
           VersionInfo.ICU_VERSION.toString(),
-          COLLATION_PAD_ATTRIBUTE,
+          getPadding(),
           accentSensitivity == AccentSensitivity.AS,
           caseSensitivity == CaseSensitivity.CS,
           spaceTrimming.toString());
