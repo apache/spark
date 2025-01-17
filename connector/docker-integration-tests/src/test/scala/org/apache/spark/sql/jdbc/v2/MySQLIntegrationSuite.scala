@@ -253,21 +253,16 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest
       val doubleValue = 0.0
       val doubleLiteral = "0.0"
       // CREATE table to use types defined in Spark SQL
-      sql(s"""CREATE TABLE $tableName (
-        string_col STRING,
-        long_col LONG,
-        binary_col BINARY,
-        double_col DOUBLE
-      )""")
+      sql(s"CREATE TABLE $tableName (string_col STRING, long_col LONG, " +
+        "binary_col BINARY, double_col DOUBLE)")
       sql(
         s"INSERT INTO $tableName VALUES($stringLiteral, $longValue, $binaryLiteral, $doubleValue)")
 
       def testCast(castType: String, sourceCol: String, targetCol: String,
                    sourceDataType: DataType, sourceValue: Any,
                    targetDataType: DataType, targetValue: Any): Unit = {
-        val sql =
-          s"""SELECT $sourceCol AS source, CAST($sourceCol AS $castType) AS target FROM $tableName
-             |WHERE CAST($sourceCol AS $castType) = $targetCol""".stripMargin
+        val sql = s"SELECT $sourceCol AS source, CAST($sourceCol AS $castType) AS target " +
+          s"FROM $tableName WHERE CAST($sourceCol AS $castType) = $targetCol"
         val df = spark.sql(sql)
         castType match {
           case "SHORT" | "INTEGER" =>
