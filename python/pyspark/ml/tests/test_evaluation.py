@@ -56,11 +56,12 @@ class EvaluatorTestsMixin:
         # read/write
         with tempfile.TemporaryDirectory(prefix="save") as tmp_dir:
             # Save the evaluator
-            ranke_path = tmp_dir + "/ranke"
-            evaluator.write().overwrite().save(ranke_path)
+            evaluator.write().overwrite().save(tmp_dir)
             # Load the saved evaluator
-            evaluator2 = RankingEvaluator.load(ranke_path)
+            evaluator2 = RankingEvaluator.load(tmp_dir)
             self.assertEqual(evaluator2.getPredictionCol(), "prediction")
+            self.assertEqual(str(evaluator), str(evaluator2))
+
 
     def test_multilabel_classification_evaluator(self):
         dataset = self.spark.createDataFrame(
@@ -88,26 +89,27 @@ class EvaluatorTestsMixin:
         # read/write
         with tempfile.TemporaryDirectory(prefix="save") as tmp_dir:
             # Save the evaluator
-            mlce_path = tmp_dir + "/mlce"
-            evaluator.write().overwrite().save(mlce_path)
+            evaluator.write().overwrite().save(tmp_dir)
             # Load the saved evaluator
-            evaluator2 = MultilabelClassificationEvaluator.load(mlce_path)
+            evaluator2 = MultilabelClassificationEvaluator.load(tmp_dir)
             self.assertEqual(evaluator2.getPredictionCol(), "prediction")
+            self.assertEqual(str(evaluator), str(evaluator2))
+
 
     def test_multiclass_classification_evaluator(self):
         dataset = self.spark.createDataFrame(
             [
-                (0.0, 0.0),
-                (0.0, 1.0),
-                (0.0, 0.0),
-                (1.0, 0.0),
-                (1.0, 1.0),
-                (1.0, 1.0),
-                (1.0, 1.0),
-                (2.0, 2.0),
-                (2.0, 0.0),
+                (0.0, 0.0, 1.0, [0.1, 0.8, 0.1]),
+                (0.0, 1.0, 1.0, [0.3, 0.4, 0.3]),
+                (0.0, 0.0, 1.0, [0.9, 0.05, 0.05]),
+                (1.0, 0.0, 1.0, [0.5, 0.2, 0.3]),
+                (1.0, 1.0, 1.0, [0.2, 0.7, 0.1]),
+                (1.0, 1.0, 1.0, [0.1, 0.3, 0.6]),
+                (1.0, 1.0, 1.0, [0.2, 0.1, 0.7]),
+                (2.0, 2.0, 1.0, [0.3, 0.2, 0.5]),
+                (2.0, 0.0, 1.0, [0.6, 0.2, 0.2]),
             ],
-            ["prediction", "label"],
+            ["prediction", "label", "weight", "probability"],
         )
 
         evaluator = MulticlassClassificationEvaluator().setPredictionCol("prediction")
@@ -135,27 +137,11 @@ class EvaluatorTestsMixin:
         # read/write
         with tempfile.TemporaryDirectory(prefix="save") as tmp_dir:
             # Save the evaluator
-            mce_path = tmp_dir + "/mce"
-            evaluator.write().overwrite().save(mce_path)
+            evaluator.write().overwrite().save(tmp_dir)
             # Load the saved evaluator
-            evaluator2 = MulticlassClassificationEvaluator.load(mce_path)
+            evaluator2 = MulticlassClassificationEvaluator.load(tmp_dir)
             self.assertEqual(evaluator2.getPredictionCol(), "prediction")
-
-        # Create a DataFrame with weights
-        dataset_with_weight = self.spark.createDataFrame(
-            [
-                (0.0, 0.0, 1.0),
-                (0.0, 1.0, 1.0),
-                (0.0, 0.0, 1.0),
-                (1.0, 0.0, 1.0),
-                (1.0, 1.0, 1.0),
-                (1.0, 1.0, 1.0),
-                (1.0, 1.0, 1.0),
-                (2.0, 2.0, 1.0),
-                (2.0, 0.0, 1.0),
-            ],
-            ["prediction", "label", "weight"],
-        )
+            self.assertEqual(str(evaluator), str(evaluator2))
 
         # Initialize MulticlassClassificationEvaluator with weight column
         evaluator = MulticlassClassificationEvaluator(
@@ -163,42 +149,39 @@ class EvaluatorTestsMixin:
         )
 
         # Evaluate the dataset with weights using default metric (f1 score)
-        weighted_f1_score = evaluator.evaluate(dataset_with_weight)
+        weighted_f1_score = evaluator.evaluate(dataset)
         self.assertTrue(np.allclose(weighted_f1_score, 0.6613, atol=1e-4))
 
         # Evaluate the dataset with weights using accuracy
         weighted_accuracy = evaluator.evaluate(
-            dataset_with_weight, {evaluator.metricName: "accuracy"}
+            dataset, {evaluator.metricName: "accuracy"}
         )
         self.assertTrue(np.allclose(weighted_accuracy, 0.6666, atol=1e-4))
 
-        # Create a DataFrame with probabilities
-        dataset_with_probabilities = self.spark.createDataFrame(
-            [
-                (1.0, 1.0, 1.0, [0.1, 0.8, 0.1]),
-                (0.0, 2.0, 1.0, [0.9, 0.05, 0.05]),
-                (0.0, 0.0, 1.0, [0.8, 0.2, 0.0]),
-                (1.0, 1.0, 1.0, [0.3, 0.65, 0.05]),
-            ],
-            ["prediction", "label", "weight", "probability"],
-        )
-        # Initialize MulticlassClassificationEvaluator with probability column
         evaluator = MulticlassClassificationEvaluator(
             predictionCol="prediction", probabilityCol="probability"
         )
         # Set the metric to log loss
         evaluator.setMetricName("logLoss")
         # Evaluate the dataset using log loss
-        log_loss = evaluator.evaluate(dataset_with_probabilities)
-        self.assertTrue(np.allclose(log_loss, 0.9682, atol=1e-4))
+        log_loss = evaluator.evaluate(dataset)
+        self.assertTrue(np.allclose(log_loss, 1.0093, atol=1e-4))
 
     def test_binary_classification_evaluator(self):
         # Define score and labels data
-        scoreAndLabels = map(
-            lambda x: (Vectors.dense([1.0 - x[0], x[0]]), x[1]),
-            [(0.1, 0.0), (0.1, 1.0), (0.4, 0.0), (0.6, 0.0), (0.6, 1.0), (0.6, 1.0), (0.8, 1.0)],
+        data = map(
+            lambda x: (Vectors.dense([1.0 - x[0], x[0]]), x[1], x[2]),
+            [
+                (0.1, 0.0, 1.0),
+                (0.1, 1.0, 0.9),
+                (0.4, 0.0, 0.7),
+                (0.6, 0.0, 0.9),
+                (0.6, 1.0, 1.0),
+                (0.6, 1.0, 0.3),
+                (0.8, 1.0, 1.0),
+            ],
         )
-        dataset = self.spark.createDataFrame(scoreAndLabels, ["raw", "label"])
+        dataset = self.spark.createDataFrame(data, ["raw", "label", "weight"])
 
         evaluator = BinaryClassificationEvaluator().setRawPredictionCol("raw")
         auc_roc = evaluator.evaluate(dataset)
@@ -211,67 +194,31 @@ class EvaluatorTestsMixin:
         # read/write
         with tempfile.TemporaryDirectory(prefix="save") as tmp_dir:
             # Save the evaluator
-            bce_path = tmp_dir + "/bce"
-            evaluator.write().overwrite().save(bce_path)
+            evaluator.write().overwrite().save(tmp_dir)
             # Load the saved evaluator
-            evaluator2 = BinaryClassificationEvaluator.load(bce_path)
+            evaluator2 = BinaryClassificationEvaluator.load(tmp_dir)
             self.assertEqual(evaluator2.getRawPredictionCol(), "raw")
-
-        # Define score, labels, and weights data
-        scoreAndLabelsAndWeight = map(
-            lambda x: (Vectors.dense([1.0 - x[0], x[0]]), x[1], x[2]),
-            [
-                (0.1, 0.0, 1.0),
-                (0.1, 1.0, 0.9),
-                (0.4, 0.0, 0.7),
-                (0.6, 0.0, 0.9),
-                (0.6, 1.0, 1.0),
-                (0.6, 1.0, 0.3),
-                (0.8, 1.0, 1.0),
-            ],
-        )
-        # Create a DataFrame with weights
-        dataset_with_weight = self.spark.createDataFrame(
-            scoreAndLabelsAndWeight, ["raw", "label", "weight"]
-        )
+            self.assertEqual(str(evaluator), str(evaluator2))
 
         evaluator = BinaryClassificationEvaluator(rawPredictionCol="raw", weightCol="weight")
 
         # Evaluate the dataset with weights using the default metric (areaUnderROC)
-        auc_roc_weighted = evaluator.evaluate(dataset_with_weight)
+        auc_roc_weighted = evaluator.evaluate(dataset)
         self.assertTrue(np.allclose(auc_roc_weighted, 0.7025, atol=1e-4))
 
         # Evaluate the dataset with weights using the areaUnderPR metric
         auc_pr_weighted = evaluator.evaluate(
-            dataset_with_weight, {evaluator.metricName: "areaUnderPR"}
+            dataset, {evaluator.metricName: "areaUnderPR"}
         )
         self.assertTrue(np.allclose(auc_pr_weighted, 0.8221, atol=1e-4))
 
         # Get the number of bins used to compute areaUnderROC
         num_bins = evaluator.getNumBins()
-        self.assertTrue(num_bins, 0.1000)
+        self.assertEqual(num_bins, 1000)
 
     def test_clustering_evaluator(self):
         # Define feature and predictions data
-        featureAndPredictions = map(
-            lambda x: (Vectors.dense(x[0]), x[1]),
-            [
-                ([0.0, 0.5], 0.0),
-                ([0.5, 0.0], 0.0),
-                ([10.0, 11.0], 1.0),
-                ([10.5, 11.5], 1.0),
-                ([1.0, 1.0], 0.0),
-                ([8.0, 6.0], 1.0),
-            ],
-        )
-        dataset = self.spark.createDataFrame(featureAndPredictions, ["features", "prediction"])
-
-        evaluator = ClusteringEvaluator().setPredictionCol("prediction")
-        score = evaluator.evaluate(dataset)
-        self.assertTrue(np.allclose(score, 0.9079, atol=1e-4))
-
-        # Define feature, predictions, and weight data
-        featureAndPredictionsWithWeight = map(
+        data = map(
             lambda x: (Vectors.dense(x[0]), x[1], x[2]),
             [
                 ([0.0, 0.5], 0.0, 2.5),
@@ -282,23 +229,24 @@ class EvaluatorTestsMixin:
                 ([8.0, 6.0], 1.0, 2.5),
             ],
         )
+        dataset = self.spark.createDataFrame(data, ["features", "prediction", "weight"])
 
-        dataset_with_weight = self.spark.createDataFrame(
-            featureAndPredictionsWithWeight, ["features", "prediction", "weight"]
-        )
+        evaluator = ClusteringEvaluator().setPredictionCol("prediction")
+        score = evaluator.evaluate(dataset)
+        self.assertTrue(np.allclose(score, 0.9079, atol=1e-4))
+
         evaluator.setWeightCol("weight")
 
         # Evaluate the dataset with weights
-        score_with_weight = evaluator.evaluate(dataset_with_weight)
+        score_with_weight = evaluator.evaluate(dataset)
         self.assertTrue(np.allclose(score_with_weight, 0.9079, atol=1e-4))
 
         # read/write
         with tempfile.TemporaryDirectory(prefix="save") as tmp_dir:
             # Save the evaluator
-            ce_path = tmp_dir + "/ce"
-            evaluator.write().overwrite().save(ce_path)
+            evaluator.write().overwrite().save(tmp_dir)
             # Load the saved evaluator
-            evaluator2 = ClusteringEvaluator.load(ce_path)
+            evaluator2 = ClusteringEvaluator.load(tmp_dir)
             self.assertEqual(evaluator2.getPredictionCol(), "prediction")
 
     def test_clustering_evaluator_with_cosine_distance(self):
@@ -321,13 +269,13 @@ class EvaluatorTestsMixin:
     def test_regression_evaluator(self):
         dataset = self.spark.createDataFrame(
             [
-                (-28.98343821, -27.0),
-                (20.21491975, 21.5),
-                (-25.98418959, -22.0),
-                (30.69731842, 33.0),
-                (74.69283752, 71.0),
+                (-28.98343821, -27.0, 1.0),
+                (20.21491975, 21.5, 0.8),
+                (-25.98418959, -22.0, 1.0),
+                (30.69731842, 33.0, 0.6),
+                (74.69283752, 71.0, 0.2),
             ],
-            ["raw", "label"],
+            ["raw", "label", "weight"],
         )
 
         evaluator = RegressionEvaluator()
@@ -345,25 +293,13 @@ class EvaluatorTestsMixin:
         # read/write
         with tempfile.TemporaryDirectory(prefix="save") as tmp_dir:
             # Save the evaluator
-            re_path = tmp_dir + "/re"
-            evaluator.write().overwrite().save(re_path)
+            evaluator.write().overwrite().save(tmp_dir)
             # Load the saved evaluator
-            evaluator2 = RegressionEvaluator.load(re_path)
+            evaluator2 = RegressionEvaluator.load(tmp_dir)
             self.assertEqual(evaluator2.getPredictionCol(), "raw")
 
-        dataset_with_weights = self.spark.createDataFrame(
-            [
-                (-28.98343821, -27.0, 1.0),
-                (20.21491975, 21.5, 0.8),
-                (-25.98418959, -22.0, 1.0),
-                (30.69731842, 33.0, 0.6),
-                (74.69283752, 71.0, 0.2),
-            ],
-            ["raw", "label", "weight"],
-        )
-
         evaluator_with_weights = RegressionEvaluator(predictionCol="raw", weightCol="weight")
-        weighted_rmse = evaluator_with_weights.evaluate(dataset_with_weights)
+        weighted_rmse = evaluator_with_weights.evaluate(dataset)
         self.assertTrue(np.allclose(weighted_rmse, 2.7405, atol=1e-4))
         through_origin = evaluator_with_weights.getThroughOrigin()
         self.assertEqual(through_origin, False)
