@@ -16,7 +16,7 @@
  */
 package org.apache.spark.sql
 
-import org.apache.spark.sql.catalyst.analysis.UnresolvedTableValuedFunction
+import org.apache.spark.sql.catalyst.analysis.{RelationWrapper, UnresolvedTableValuedFunction}
 
 class TableValuedFunction(sparkSession: SparkSession)
   extends api.TableValuedFunction {
@@ -43,6 +43,7 @@ class TableValuedFunction(sparkSession: SparkSession)
   }
 
   private def fn(name: String, args: Seq[Column]): Dataset[Row] = {
+    implicit val withRelations: Set[RelationWrapper] = Set.empty
     Dataset.ofRows(
       sparkSession,
       UnresolvedTableValuedFunction(name, args.map(sparkSession.expression)))

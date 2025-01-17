@@ -27,6 +27,7 @@ import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
 import org.apache.spark.internal.config.ConfigEntry
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst._
+import org.apache.spark.sql.catalyst.analysis.RelationWrapper
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.classic.ClassicConversions._
 import org.apache.spark.sql.internal.{SessionState, SharedState, SQLConf}
@@ -57,6 +58,8 @@ class SQLContext private[sql] (override val sparkSession: SparkSession)
     extends api.SQLContext(sparkSession) {
 
   self =>
+
+  implicit val withRelations: Set[RelationWrapper] = Set.empty
 
   sparkSession.sparkContext.assertNotStopped()
 

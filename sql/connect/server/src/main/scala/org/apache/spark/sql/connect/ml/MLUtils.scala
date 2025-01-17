@@ -30,6 +30,7 @@ import org.apache.spark.ml.linalg.{Matrices, Matrix, Vector, Vectors}
 import org.apache.spark.ml.param.Params
 import org.apache.spark.ml.util.{MLReadable, MLWritable}
 import org.apache.spark.sql.{DataFrame, Dataset}
+import org.apache.spark.sql.catalyst.analysis.RelationWrapper
 import org.apache.spark.sql.connect.common.LiteralValueProtoConverter
 import org.apache.spark.sql.connect.planner.SparkConnectPlanner
 import org.apache.spark.sql.connect.plugin.SparkConnectPluginRegistry
@@ -185,6 +186,7 @@ private[ml] object MLUtils {
   def parseRelationProto(relation: proto.Relation, sessionHolder: SessionHolder): DataFrame = {
     val planner = new SparkConnectPlanner(sessionHolder)
     val plan = planner.transformRelation(relation)
+    implicit val withRelations: Set[RelationWrapper] = Set.empty
     Dataset.ofRows(sessionHolder.session, plan)
   }
 
