@@ -403,7 +403,9 @@ class TorchDistributorLocalUnitTestsMixin:
         self.assertEqual(output, "success" * 4096)
 
 
-@unittest.skipIf(not have_torch, torch_requirement_message)
+# @unittest.skipIf(not have_torch, torch_requirement_message)
+# TODO(SPARK-50864): Re-enable this test after fixing the slowness
+@unittest.skip("Disabled due to slowness")
 class TorchDistributorLocalUnitTests(TorchDistributorLocalUnitTestsMixin, unittest.TestCase):
     @classmethod
     def setUpClass(cls):

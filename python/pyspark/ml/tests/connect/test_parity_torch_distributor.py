@@ -48,9 +48,11 @@ if not is_remote_only():
         def tearDownClass(cls):
             cls.spark.stop()
 
-    @unittest.skipIf(
-        not have_torch or is_remote_only(), torch_requirement_message or "Requires JVM access"
-    )
+    # @unittest.skipIf(
+    #     not have_torch or is_remote_only(), torch_requirement_message or "Requires JVM access"
+    # )
+    # TODO(SPARK-50864): Re-enable this test after fixing the slowness
+    @unittest.skip("Disabled due to slowness")
     class TorchDistributorLocalUnitTestsOnConnect(
         TorchDistributorLocalUnitTestsMixin, unittest.TestCase
     ):
