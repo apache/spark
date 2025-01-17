@@ -20,12 +20,14 @@ package org.apache.spark.sql.streaming
 import java.sql.Timestamp
 import java.time.{Instant, LocalDateTime, ZoneId}
 
+import org.scalatest.time.SpanSugar._
+
 import org.apache.spark.{SparkRuntimeException, SparkThrowable}
-import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset}
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
 import org.apache.spark.sql.execution.streaming.{MemoryStream, StreamExecution}
 import org.apache.spark.sql.execution.streaming.state.{AlsoTestWithEncodingTypes, AlsoTestWithRocksDBFeatures, RocksDBStateStoreProvider}
-import org.apache.spark.sql.functions.window
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 
 case class InputEventRow(
@@ -102,6 +104,24 @@ case class Window(
 case class AggEventRow(
     window: Window,
     count: Long)
+
+case class OutputEventTimeRow(key: String, outputTimestamp: Long)
+
+class ChainingOfOpsStatefulProcessor
+  extends StatefulProcessor[String, (String, Long), OutputEventTimeRow] {
+  override def init(outputMode: OutputMode, timeMode: TimeMode): Unit = {}
+
+  override def handleInputRows(
+      key: String,
+      inputRows: Iterator[(String, Long)],
+      timerValues: TimerValues): Iterator[OutputEventTimeRow] = {
+    var timestamp = 0L
+    for (row <- inputRows) {
+      timestamp = row._2
+    }
+    Iterator(OutputEventTimeRow(key, timestamp))
+  }
+}
 
 class TransformWithStateChainingSuite extends StreamTest
   with AlsoTestWithEncodingTypes
@@ -407,6 +427,95 @@ class TransformWithStateChainingSuite extends StreamTest
       }
 
       checkError(ex, "CANNOT_ASSIGN_EVENT_TIME_COLUMN_WITHOUT_WATERMARK")
+    }
+  }
+
+  test("test if the same in connect") {
+    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+      classOf[RocksDBStateStoreProvider].getName) {
+      val checkResultFunc: (Dataset[(Long, Long)], Long) => Unit = { (batchDF, batchId) =>
+        val realDf = batchDF.orderBy("outputTimestamp").collect().toSet
+        if (batchId == 0) {
+          println(s"plz her: BatchId: ${batchId}, RealDF: ${realDf}")
+          assert(realDf.isEmpty, s"BatchId: ${batchId}, RealDF: ${realDf}")
+        } else if (batchId == 1) {
+          val expectedDF = Seq((10L, 1L), (11L, 1L), (15L, 1L), (25L, 1L)).toSet
+          assert(realDf == expectedDF,
+            s"BatchId: ${batchId}, expectedDf: ${expectedDF}, RealDF: ${realDf}")
+        } else if (batchId == 2) {
+          val expectedDF = Seq().toSet
+          assert(realDf == expectedDF,
+            s"BatchId: ${batchId}, expectedDf: ${expectedDF}, RealDF: ${realDf}")
+        }
+      }
+      def prepareInputData(inputPath: String, col1: Seq[String], col2: Seq[Int]): Unit = {
+        import java.io.{BufferedWriter, FileWriter}
+        import java.nio.file.{Files, Paths}
+        // Ensure the parent directory exists
+        val file = Paths.get(inputPath)
+        val parentDir = file.getParent
+        if (parentDir != null && !Files.exists(parentDir)) {
+          Files.createDirectories(parentDir)
+        }
+
+        val writer = new BufferedWriter(new FileWriter(inputPath))
+        try {
+          col1.zip(col2).foreach { case (e1, e2) =>
+            writer.write(s"$e1, $e2\n")
+          }
+        } finally {
+          writer.close()
+        }
+      }
+
+
+      def buildTestDf(inputPath: String): DataFrame = {
+        val df = spark.readStream
+          .format("text")
+          .option("maxFilesPerTrigger", 1)
+          .load(inputPath)
+
+        val dfSplit = df.withColumn("split_values", split(col("value"), ","))
+        val dfFinal = dfSplit.select(
+          col("split_values").getItem(0).alias("id").cast("string"),
+          col("split_values").getItem(1).alias("value").cast("int")
+        )
+
+        dfFinal
+      }
+
+      withTempPath { dir =>
+        val path = dir.getCanonicalPath
+        prepareInputData(path + "/text-test3.txt", Seq("a", "b"), Seq(10, 15))
+        prepareInputData(path + "/text-test4.txt", Seq("a", "c"), Seq(11, 25))
+        prepareInputData(path + "/text-test1.txt", Seq("a"), Seq(5))
+
+        val q = buildTestDf(path)
+          .select(col("id").as("id"),
+            timestamp_seconds(col("value")).as("eventTime"))
+          .withWatermark("eventTime", "5 seconds")
+          .as[(String, Long)]
+          .groupByKey(x => x._1)
+          .transformWithState[OutputEventTimeRow](
+            new ChainingOfOpsStatefulProcessor(),
+            "outputTimestamp", OutputMode.Append()
+          )
+          .groupBy("outputTimestamp")
+          .count().as[(Long, Long)]
+          .writeStream
+          .foreachBatch(checkResultFunc)
+          .outputMode("Append")
+          .start()
+
+        try {
+          q.processAllAvailable()
+          eventually(timeout(30.seconds)) {
+            q.stop()
+          }
+        } finally {
+          q.stop()
+        }
+      }
     }
   }
 
