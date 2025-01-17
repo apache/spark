@@ -290,9 +290,6 @@ object LiteralValueProtoConverter {
       case proto.Expression.Literal.LiteralTypeCase.ARRAY =>
         toCatalystArray(literal.getArray)
 
-      case proto.Expression.Literal.LiteralTypeCase.SPECIALIZED_ARRAY =>
-        toCatalystArray(literal.getSpecializedArray)
-
       case other =>
         throw new UnsupportedOperationException(
           s"Unsupported Literal Type: ${other.getNumber} (${other.name})")
@@ -358,25 +355,6 @@ object LiteralValueProtoConverter {
     }
 
     makeArrayData(getConverter(array.getElementType))
-  }
-
-  def toCatalystArray(array: proto.Expression.Literal.SpecializedArray): Array[_] = {
-    val dataType = array.getElementType
-    if (dataType.hasBoolean) {
-      array.getBooleansList.asScala.toArray
-    } else if (dataType.hasInteger) {
-      array.getIntegersList.asScala.toArray
-    } else if (dataType.hasLong) {
-      array.getLongsList.asScala.toArray
-    } else if (dataType.hasFloat) {
-      array.getFloatsList.asScala.toArray
-    } else if (dataType.hasDouble) {
-      array.getDoublesList.asScala.toArray
-    } else if (dataType.hasString) {
-      array.getStringsList.asScala.toArray
-    } else {
-      throw InvalidPlanInput(s"Unsupported Element Type in SpecializedArray: $dataType)")
-    }
   }
 
   def toCatalystMap(map: proto.Expression.Literal.Map): mutable.Map[_, _] = {

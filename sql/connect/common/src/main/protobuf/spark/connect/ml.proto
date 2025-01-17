@@ -85,7 +85,7 @@ message MlCommand {
 message MlCommandResult {
   oneof result_type {
     // The result of the attribute
-    Expression param = 1;
+    Expression.Literal param = 1;
     // Evaluate a Dataset in a model and return the cached ID of summary
     string summary = 2;
     // Operator information

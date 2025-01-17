@@ -51,12 +51,9 @@ class MLBackendSuite extends MLHelper {
       .newBuilder()
       .putParams(
         "maxIter",
-        proto.Expression
+        proto.Expression.Literal
           .newBuilder()
-          .setLiteral(
-            proto.Expression.Literal
-              .newBuilder()
-              .setInteger(2))
+          .setInteger(2)
           .build())
   }
 

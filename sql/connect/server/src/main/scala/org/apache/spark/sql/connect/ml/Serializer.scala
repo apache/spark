@@ -33,8 +33,8 @@ private[ml] object Serializer {
    * @return
    *   proto.Expression
    */
-  def serializeParam(data: Any): proto.Expression = {
-    val literal = data match {
+  def serializeParam(data: Any): proto.Expression.Literal = {
+    data match {
       case v: SparseVector =>
         val builder = proto.Expression.Literal.Struct.newBuilder()
         builder.setStructType(DataTypeProtoConverter.toConnectProtoType(VectorUDT.sqlType))
@@ -109,21 +109,32 @@ private[ml] object Serializer {
 
       case other => throw MlUnsupportedException(s"$other not supported")
     }
-    proto.Expression.newBuilder().setLiteral(literal).build()
   }
 
   private def buildIntArray(values: Array[Int]): proto.Expression.Literal = {
-    val builder = proto.Expression.Literal.SpecializedArray.newBuilder()
-    builder.setElementType(ProtoDataTypes.IntegerType)
-    values.foreach(builder.addIntegers)
-    proto.Expression.Literal.newBuilder().setSpecializedArray(builder.build()).build()
+    val builder = proto.Expression.Literal.SpecializedArray.Ints.newBuilder()
+    values.foreach(builder.addValues)
+    proto.Expression.Literal
+      .newBuilder()
+      .setSpecializedArray(
+        proto.Expression.Literal.SpecializedArray
+          .newBuilder()
+          .setInts(builder)
+          .build())
+      .build()
   }
 
   private def buildDoubleArray(values: Array[Double]): proto.Expression.Literal = {
-    val builder = proto.Expression.Literal.SpecializedArray.newBuilder()
-    builder.setElementType(ProtoDataTypes.DoubleType)
-    values.foreach(builder.addDoubles)
-    proto.Expression.Literal.newBuilder().setSpecializedArray(builder.build()).build()
+    val builder = proto.Expression.Literal.SpecializedArray.Doubles.newBuilder()
+    values.foreach(builder.addValues)
+    proto.Expression.Literal
+      .newBuilder()
+      .setSpecializedArray(
+        proto.Expression.Literal.SpecializedArray
+          .newBuilder()
+          .setDoubles(builder)
+          .build())
+      .build()
   }
 
   def deserializeMethodArguments(
@@ -131,34 +142,30 @@ private[ml] object Serializer {
       sessionHolder: SessionHolder): Array[(Object, Class[_])] = {
     args.map { arg =>
       if (arg.hasParam) {
-        val param = arg.getParam
-        if (param.hasLiteral) {
-          param.getLiteral.getLiteralTypeCase match {
-            case proto.Expression.Literal.LiteralTypeCase.STRUCT =>
-              val struct = param.getLiteral.getStruct
-              val schema = DataTypeProtoConverter.toCatalystType(struct.getStructType)
-              if (schema == VectorUDT.sqlType) {
-                (MLUtils.deserializeVector(struct), classOf[Vector])
-              } else if (schema == MatrixUDT.sqlType) {
-                (MLUtils.deserializeMatrix(struct), classOf[Matrix])
-              } else {
-                throw MlUnsupportedException(s"$schema not supported")
-              }
-            case proto.Expression.Literal.LiteralTypeCase.INTEGER =>
-              (param.getLiteral.getInteger.asInstanceOf[Object], classOf[Int])
-            case proto.Expression.Literal.LiteralTypeCase.FLOAT =>
-              (param.getLiteral.getFloat.toDouble.asInstanceOf[Object], classOf[Double])
-            case proto.Expression.Literal.LiteralTypeCase.STRING =>
-              (param.getLiteral.getString, classOf[String])
-            case proto.Expression.Literal.LiteralTypeCase.DOUBLE =>
-              (param.getLiteral.getDouble.asInstanceOf[Object], classOf[Double])
-            case proto.Expression.Literal.LiteralTypeCase.BOOLEAN =>
-              (param.getLiteral.getBoolean.asInstanceOf[Object], classOf[Boolean])
-            case other =>
-              throw MlUnsupportedException(s"$other not supported")
-          }
-        } else {
-          throw MlUnsupportedException(s"$param not supported")
+        val literal = arg.getParam
+        literal.getLiteralTypeCase match {
+          case proto.Expression.Literal.LiteralTypeCase.STRUCT =>
+            val struct = literal.getStruct
+            val schema = DataTypeProtoConverter.toCatalystType(struct.getStructType)
+            if (schema == VectorUDT.sqlType) {
+              (MLUtils.deserializeVector(struct), classOf[Vector])
+            } else if (schema == MatrixUDT.sqlType) {
+              (MLUtils.deserializeMatrix(struct), classOf[Matrix])
+            } else {
+              throw MlUnsupportedException(s"$schema not supported")
+            }
+          case proto.Expression.Literal.LiteralTypeCase.INTEGER =>
+            (literal.getInteger.asInstanceOf[Object], classOf[Int])
+          case proto.Expression.Literal.LiteralTypeCase.FLOAT =>
+            (literal.getFloat.toDouble.asInstanceOf[Object], classOf[Double])
+          case proto.Expression.Literal.LiteralTypeCase.STRING =>
+            (literal.getString, classOf[String])
+          case proto.Expression.Literal.LiteralTypeCase.DOUBLE =>
+            (literal.getDouble.asInstanceOf[Object], classOf[Double])
+          case proto.Expression.Literal.LiteralTypeCase.BOOLEAN =>
+            (literal.getBoolean.asInstanceOf[Object], classOf[Boolean])
+          case other =>
+            throw MlUnsupportedException(s"$other not supported")
         }
       } else if (arg.hasInput) {
         (MLUtils.parseRelationProto(arg.getInput, sessionHolder), classOf[Dataset[_]])

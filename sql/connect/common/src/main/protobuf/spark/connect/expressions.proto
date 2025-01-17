@@ -232,13 +232,38 @@ message Expression {
     }
 
     message SpecializedArray {
-      DataType element_type = 1;
-      repeated bool booleans = 2;
-      repeated int32 integers = 3;
-      repeated int64 longs = 4;
-      repeated float floats = 5;
-      repeated double doubles = 6;
-      repeated string strings = 7;
+      oneof value_type {
+        Bools bools = 1;
+        Ints ints = 2;
+        Longs longs = 3;
+        Floats floats = 4;
+        Doubles doubles = 5;
+        Strings strings = 6;
+      }
+
+      message Bools {
+        repeated bool values = 1;
+      }
+
+      message Ints {
+        repeated int32 values = 1;
+      }
+
+      message Longs {
+        repeated int64 values = 1;
+      }
+
+      message Floats {
+        repeated float values = 1;
+      }
+
+      message Doubles {
+        repeated double values = 1;
+      }
+
+      message Strings {
+        repeated string values = 1;
+      }
     }
   }
 

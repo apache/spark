@@ -28,7 +28,7 @@ option go_package = "internal/generated";
 // MlParams stores param settings for ML Estimator / Transformer / Evaluator
 message MlParams {
   // User-supplied params
-  map<string, Expression> params = 1;
+  map<string, Expression.Literal> params = 1;
 }
 
 // MLOperator represents the ML operators like (Estimator, Transformer or Evaluator)
