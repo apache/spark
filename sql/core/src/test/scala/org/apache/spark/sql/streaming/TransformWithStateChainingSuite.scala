@@ -20,14 +20,12 @@ package org.apache.spark.sql.streaming
 import java.sql.Timestamp
 import java.time.{Instant, LocalDateTime, ZoneId}
 
-import org.scalatest.time.SpanSugar._
-
 import org.apache.spark.{SparkRuntimeException, SparkThrowable}
-import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset}
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
 import org.apache.spark.sql.execution.streaming.{MemoryStream, StreamExecution}
 import org.apache.spark.sql.execution.streaming.state.{AlsoTestWithEncodingTypes, AlsoTestWithRocksDBFeatures, RocksDBStateStoreProvider}
-import org.apache.spark.sql.functions._
+import org.apache.spark.sql.functions.window
 import org.apache.spark.sql.internal.SQLConf
 
 case class InputEventRow(
