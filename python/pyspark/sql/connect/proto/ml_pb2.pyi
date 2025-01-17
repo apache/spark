@@ -347,7 +347,7 @@ class MlCommandResult(google.protobuf.message.Message):
     SUMMARY_FIELD_NUMBER: builtins.int
     OPERATOR_INFO_FIELD_NUMBER: builtins.int
     @property
-    def param(self) -> pyspark.sql.connect.proto.expressions_pb2.Expression:
+    def param(self) -> pyspark.sql.connect.proto.expressions_pb2.Expression.Literal:
         """The result of the attribute"""
     summary: builtins.str
     """Evaluate a Dataset in a model and return the cached ID of summary"""
@@ -357,7 +357,7 @@ class MlCommandResult(google.protobuf.message.Message):
     def __init__(
         self,
         *,
-        param: pyspark.sql.connect.proto.expressions_pb2.Expression | None = ...,
+        param: pyspark.sql.connect.proto.expressions_pb2.Expression.Literal | None = ...,
         summary: builtins.str = ...,
         operator_info: global___MlCommandResult.MlOperatorInfo | None = ...,
     ) -> None: ...

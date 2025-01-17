@@ -581,78 +581,192 @@ class Expression(google.protobuf.message.Message):
         class SpecializedArray(google.protobuf.message.Message):
             DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-            ELEMENT_TYPE_FIELD_NUMBER: builtins.int
-            BOOLEANS_FIELD_NUMBER: builtins.int
-            INTEGERS_FIELD_NUMBER: builtins.int
+            class Bools(google.protobuf.message.Message):
+                DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+                VALUES_FIELD_NUMBER: builtins.int
+                @property
+                def values(
+                    self,
+                ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[
+                    builtins.bool
+                ]: ...
+                def __init__(
+                    self,
+                    *,
+                    values: collections.abc.Iterable[builtins.bool] | None = ...,
+                ) -> None: ...
+                def ClearField(
+                    self, field_name: typing_extensions.Literal["values", b"values"]
+                ) -> None: ...
+
+            class Ints(google.protobuf.message.Message):
+                DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+                VALUES_FIELD_NUMBER: builtins.int
+                @property
+                def values(
+                    self,
+                ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[
+                    builtins.int
+                ]: ...
+                def __init__(
+                    self,
+                    *,
+                    values: collections.abc.Iterable[builtins.int] | None = ...,
+                ) -> None: ...
+                def ClearField(
+                    self, field_name: typing_extensions.Literal["values", b"values"]
+                ) -> None: ...
+
+            class Longs(google.protobuf.message.Message):
+                DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+                VALUES_FIELD_NUMBER: builtins.int
+                @property
+                def values(
+                    self,
+                ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[
+                    builtins.int
+                ]: ...
+                def __init__(
+                    self,
+                    *,
+                    values: collections.abc.Iterable[builtins.int] | None = ...,
+                ) -> None: ...
+                def ClearField(
+                    self, field_name: typing_extensions.Literal["values", b"values"]
+                ) -> None: ...
+
+            class Floats(google.protobuf.message.Message):
+                DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+                VALUES_FIELD_NUMBER: builtins.int
+                @property
+                def values(
+                    self,
+                ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[
+                    builtins.float
+                ]: ...
+                def __init__(
+                    self,
+                    *,
+                    values: collections.abc.Iterable[builtins.float] | None = ...,
+                ) -> None: ...
+                def ClearField(
+                    self, field_name: typing_extensions.Literal["values", b"values"]
+                ) -> None: ...
+
+            class Doubles(google.protobuf.message.Message):
+                DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+                VALUES_FIELD_NUMBER: builtins.int
+                @property
+                def values(
+                    self,
+                ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[
+                    builtins.float
+                ]: ...
+                def __init__(
+                    self,
+                    *,
+                    values: collections.abc.Iterable[builtins.float] | None = ...,
+                ) -> None: ...
+                def ClearField(
+                    self, field_name: typing_extensions.Literal["values", b"values"]
+                ) -> None: ...
+
+            class Strings(google.protobuf.message.Message):
+                DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+                VALUES_FIELD_NUMBER: builtins.int
+                @property
+                def values(
+                    self,
+                ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[
+                    builtins.str
+                ]: ...
+                def __init__(
+                    self,
+                    *,
+                    values: collections.abc.Iterable[builtins.str] | None = ...,
+                ) -> None: ...
+                def ClearField(
+                    self, field_name: typing_extensions.Literal["values", b"values"]
+                ) -> None: ...
+
+            BOOLS_FIELD_NUMBER: builtins.int
+            INTS_FIELD_NUMBER: builtins.int
             LONGS_FIELD_NUMBER: builtins.int
             FLOATS_FIELD_NUMBER: builtins.int
             DOUBLES_FIELD_NUMBER: builtins.int
             STRINGS_FIELD_NUMBER: builtins.int
             @property
-            def element_type(self) -> pyspark.sql.connect.proto.types_pb2.DataType: ...
+            def bools(self) -> global___Expression.Literal.SpecializedArray.Bools: ...
             @property
-            def booleans(
-                self,
-            ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[
-                builtins.bool
-            ]: ...
+            def ints(self) -> global___Expression.Literal.SpecializedArray.Ints: ...
             @property
-            def integers(
-                self,
-            ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.int]: ...
+            def longs(self) -> global___Expression.Literal.SpecializedArray.Longs: ...
             @property
-            def longs(
-                self,
-            ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.int]: ...
+            def floats(self) -> global___Expression.Literal.SpecializedArray.Floats: ...
             @property
-            def floats(
-                self,
-            ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[
-                builtins.float
-            ]: ...
+            def doubles(self) -> global___Expression.Literal.SpecializedArray.Doubles: ...
             @property
-            def doubles(
-                self,
-            ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[
-                builtins.float
-            ]: ...
-            @property
-            def strings(
-                self,
-            ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]: ...
+            def strings(self) -> global___Expression.Literal.SpecializedArray.Strings: ...
             def __init__(
                 self,
                 *,
-                element_type: pyspark.sql.connect.proto.types_pb2.DataType | None = ...,
-                booleans: collections.abc.Iterable[builtins.bool] | None = ...,
-                integers: collections.abc.Iterable[builtins.int] | None = ...,
-                longs: collections.abc.Iterable[builtins.int] | None = ...,
-                floats: collections.abc.Iterable[builtins.float] | None = ...,
-                doubles: collections.abc.Iterable[builtins.float] | None = ...,
-                strings: collections.abc.Iterable[builtins.str] | None = ...,
+                bools: global___Expression.Literal.SpecializedArray.Bools | None = ...,
+                ints: global___Expression.Literal.SpecializedArray.Ints | None = ...,
+                longs: global___Expression.Literal.SpecializedArray.Longs | None = ...,
+                floats: global___Expression.Literal.SpecializedArray.Floats | None = ...,
+                doubles: global___Expression.Literal.SpecializedArray.Doubles | None = ...,
+                strings: global___Expression.Literal.SpecializedArray.Strings | None = ...,
             ) -> None: ...
             def HasField(
-                self, field_name: typing_extensions.Literal["element_type", b"element_type"]
-            ) -> builtins.bool: ...
-            def ClearField(
                 self,
                 field_name: typing_extensions.Literal[
-                    "booleans",
-                    b"booleans",
+                    "bools",
+                    b"bools",
                     "doubles",
                     b"doubles",
-                    "element_type",
-                    b"element_type",
                     "floats",
                     b"floats",
-                    "integers",
-                    b"integers",
+                    "ints",
+                    b"ints",
                     "longs",
                     b"longs",
                     "strings",
                     b"strings",
+                    "value_type",
+                    b"value_type",
+                ],
+            ) -> builtins.bool: ...
+            def ClearField(
+                self,
+                field_name: typing_extensions.Literal[
+                    "bools",
+                    b"bools",
+                    "doubles",
+                    b"doubles",
+                    "floats",
+                    b"floats",
+                    "ints",
+                    b"ints",
+                    "longs",
+                    b"longs",
+                    "strings",
+                    b"strings",
+                    "value_type",
+                    b"value_type",
                 ],
             ) -> None: ...
+            def WhichOneof(
+                self, oneof_group: typing_extensions.Literal["value_type", b"value_type"]
+            ) -> (
+                typing_extensions.Literal["bools", "ints", "longs", "floats", "doubles", "strings"]
+                | None
+            ): ...
 
         NULL_FIELD_NUMBER: builtins.int
         BINARY_FIELD_NUMBER: builtins.int

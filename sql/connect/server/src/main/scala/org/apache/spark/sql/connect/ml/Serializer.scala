@@ -31,7 +31,7 @@ private[ml] object Serializer {
    * @param data
    *   the value of parameter
    * @return
-   *   proto.Expression
+   *   proto.Expression.Literal
    */
   def serializeParam(data: Any): proto.Expression.Literal = {
     data match {

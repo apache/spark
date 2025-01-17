@@ -62,12 +62,12 @@ class MlParams(google.protobuf.message.Message):
         VALUE_FIELD_NUMBER: builtins.int
         key: builtins.str
         @property
-        def value(self) -> pyspark.sql.connect.proto.expressions_pb2.Expression: ...
+        def value(self) -> pyspark.sql.connect.proto.expressions_pb2.Expression.Literal: ...
         def __init__(
             self,
             *,
             key: builtins.str = ...,
-            value: pyspark.sql.connect.proto.expressions_pb2.Expression | None = ...,
+            value: pyspark.sql.connect.proto.expressions_pb2.Expression.Literal | None = ...,
         ) -> None: ...
         def HasField(
             self, field_name: typing_extensions.Literal["value", b"value"]
@@ -81,14 +81,14 @@ class MlParams(google.protobuf.message.Message):
     def params(
         self,
     ) -> google.protobuf.internal.containers.MessageMap[
-        builtins.str, pyspark.sql.connect.proto.expressions_pb2.Expression
+        builtins.str, pyspark.sql.connect.proto.expressions_pb2.Expression.Literal
     ]:
         """User-supplied params"""
     def __init__(
         self,
         *,
         params: collections.abc.Mapping[
-            builtins.str, pyspark.sql.connect.proto.expressions_pb2.Expression
+            builtins.str, pyspark.sql.connect.proto.expressions_pb2.Expression.Literal
         ]
         | None = ...,
     ) -> None: ...
