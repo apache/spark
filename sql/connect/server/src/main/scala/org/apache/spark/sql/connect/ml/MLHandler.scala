@@ -153,11 +153,7 @@ private[connect] object MLHandler extends Logging {
         }
         proto.MlCommandResult
           .newBuilder()
-          .setParam(
-            proto.Param
-              .newBuilder()
-              .setLiteral(LiteralValueProtoConverter.toLiteralProto(result))
-              .build())
+          .setParam(LiteralValueProtoConverter.toLiteralProto(result))
           .build()
 
       case proto.MlCommand.CommandCase.WRITE =>
