@@ -737,8 +737,7 @@ class SparkConnectPlanner(
           ds.groupingAttributes,
           ds.dataAttributes,
           keyDeserializer,
-          LocalRelation(ds.vEncoder.schema)
-        )
+          LocalRelation(ds.vEncoder.schema))
       }
       return SerializeFromObject(udf.outputNamedExpression, node)
     }
@@ -839,8 +838,7 @@ class SparkConnectPlanner(
     UpdateEventTimeWatermarkColumn(
       UnresolvedAttribute(eventTimeColName),
       None,
-      transformRelation(rel.getInput)
-    )
+      transformRelation(rel.getInput))
   }
 
   private def transformCoGroupMap(rel: proto.CoGroupMap): LogicalPlan = {

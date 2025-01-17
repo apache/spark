@@ -145,10 +145,7 @@ class KeyValueGroupedDataset[K, V] private[sql] () extends sql.KeyValueGroupedDa
       statefulProcessor: StatefulProcessor[K, V, U],
       timeMode: TimeMode,
       outputMode: OutputMode): Dataset[U] =
-    transformWithStateHelper(
-      statefulProcessor,
-      timeMode,
-      outputMode)
+    transformWithStateHelper(statefulProcessor, timeMode, outputMode)
 
   /** @inheritdoc */
   private[sql] def transformWithState[U: Encoder, S: Encoder](
@@ -160,8 +157,7 @@ class KeyValueGroupedDataset[K, V] private[sql] () extends sql.KeyValueGroupedDa
       statefulProcessor.asInstanceOf[StatefulProcessor[K, V, U]],
       timeMode,
       outputMode,
-      Some(initialState)
-    )
+      Some(initialState))
 
   /** @inheritdoc */
   override private[sql] def transformWithState[U: Encoder](
@@ -172,26 +168,20 @@ class KeyValueGroupedDataset[K, V] private[sql] () extends sql.KeyValueGroupedDa
       statefulProcessor,
       TimeMode.EventTime(),
       outputMode,
-      eventTimeColumnName = eventTimeColumnName
-    )
+      eventTimeColumnName = eventTimeColumnName)
 
   /** @inheritdoc */
   override private[sql] def transformWithState[U: Encoder, S: Encoder](
       statefulProcessor: StatefulProcessorWithInitialState[K, V, U, S],
       eventTimeColumnName: String,
       outputMode: OutputMode,
-<<<<<<< HEAD:sql/connect/common/src/main/scala/org/apache/spark/sql/connect/KeyValueGroupedDataset.scala
       initialState: sql.KeyValueGroupedDataset[K, S]): Dataset[U] = unsupported()
-=======
-      initialState: KeyValueGroupedDataset[K, S]): Dataset[U] =
     transformWithStateHelper(
       statefulProcessor,
       TimeMode.EventTime(),
       outputMode,
       Some(initialState),
-      eventTimeColumnName
-    )
->>>>>>> 2a07717984 (tmp save):connector/connect/client/jvm/src/main/scala/org/apache/spark/sql/KeyValueGroupedDataset.scala
+      eventTimeColumnName)
 
   private[sql] def transformWithStateHelper[U: Encoder, S: Encoder](
       statefulProcessor: StatefulProcessor[K, V, U],
@@ -682,8 +672,10 @@ private class KeyValueGroupedDatasetImpl[K, V, IK, IV](
       function = UdfUtils.noOp[K, U](),
       inputEncoders = inputEncoders,
       outputEncoder = outputEncoder)
-    val udf = dummyGroupingFunc.apply(inputEncoders.map(_ => col("*")): _*)
-      .expr.getCommonInlineUserDefinedFunction
+    val udf = dummyGroupingFunc
+      .apply(inputEncoders.map(_ => col("*")): _*)
+      .expr
+      .getCommonInlineUserDefinedFunction
 
     val initialStateImpl = if (initialState.isDefined) {
       assert(initialState.get.isInstanceOf[KeyValueGroupedDatasetImpl[K, S, _, _]])
@@ -694,22 +686,25 @@ private class KeyValueGroupedDatasetImpl[K, V, IK, IV](
     val statefulProcessorStr = if (!initialState.isDefined) {
       ByteString.copyFrom(SparkSerDeUtils.serialize(statefulProcessor))
     } else {
-      ByteString.copyFrom(SparkSerDeUtils.serialize(
-        statefulProcessor.asInstanceOf[StatefulProcessorWithInitialState[K, V, U, S]]))
+      ByteString.copyFrom(
+        SparkSerDeUtils.serialize(
+          statefulProcessor.asInstanceOf[StatefulProcessorWithInitialState[K, V, U, S]]))
     }
 
     val twsDataset = sparkSession.newDataset[U](outputEncoder) { builder =>
       val twsBuilder = builder.getGroupMapBuilder
-      twsBuilder.setInput(plan.getRoot)
+      twsBuilder
+        .setInput(plan.getRoot)
         .addAllGroupingExpressions(groupingExprs)
-        .setFunc(udf).setTransformWithStateInfo(
-        TransformWithStateInfo.newBuilder()
-          .setOutputMode(outputMode.toString)
-          // we pass time mode as string here and restore it in planner
-          .setTimeMode(timeMode.toString)
-          .setStatefulProcessorPayload(statefulProcessorStr)
-          .build()
-      )
+        .setFunc(udf)
+        .setTransformWithStateInfo(
+          TransformWithStateInfo
+            .newBuilder()
+            .setOutputMode(outputMode.toString)
+            // we pass time mode as string here and restore it in planner
+            .setTimeMode(timeMode.toString)
+            .setStatefulProcessorPayload(statefulProcessorStr)
+            .build())
       if (initialStateImpl != null) {
         twsBuilder
           .addAllInitialGroupingExpressions(initialStateImpl.groupingExprs)

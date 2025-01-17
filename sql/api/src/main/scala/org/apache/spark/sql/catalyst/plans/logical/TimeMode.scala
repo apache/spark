@@ -28,10 +28,11 @@ case object ProcessingTime extends TimeMode
 
 case object EventTime extends TimeMode
 
-/** Restore time mode used in transformWithState from string.
- * Used for client/server side communication.
- * Set isScala = true if you are using this for scala spark connect.
- * Set isScala = false if you are using this for communication between Py4j and Scala driver. */
+/**
+ * Restore time mode used in transformWithState from string. Used for client/server side
+ * communication. Set isScala = true if you are using this for scala spark connect. Set isScala =
+ * false if you are using this for communication between Py4j and Scala driver.
+ */
 object TimeModes {
   def apply(timeMode: String, isScala: Boolean = false): TimeMode = {
     timeMode.toLowerCase(Locale.ROOT) match {

@@ -33,13 +33,11 @@ import org.apache.spark.sql.types._
 
 // A basic stateful processor which will return the occurrences of key
 class BasicCountStatefulProcessor
-  extends StatefulProcessor[String, (String, String), (String, String)]
+    extends StatefulProcessor[String, (String, String), (String, String)]
     with Logging {
   @transient protected var _countState: ValueState[Long] = _
 
-  override def init(
-                     outputMode: OutputMode,
-                     timeMode: TimeMode): Unit = {
+  override def init(outputMode: OutputMode, timeMode: TimeMode): Unit = {
     _countState = getHandle.getValueState[Long]("countState", Encoders.scalaLong, TTLConfig.NONE)
   }
 
@@ -55,14 +53,15 @@ class BasicCountStatefulProcessor
 
 // A stateful processor with initial state which will return the occurrences of key
 class TestInitialStatefulProcessor
-  extends StatefulProcessorWithInitialState[
-    String, (String, String), (String, String), (String, String, String)]
+    extends StatefulProcessorWithInitialState[
+      String,
+      (String, String),
+      (String, String),
+      (String, String, String)]
     with Logging {
   @transient protected var _countState: ValueState[Long] = _
 
-  override def init(
-                     outputMode: OutputMode,
-                     timeMode: TimeMode): Unit = {
+  override def init(outputMode: OutputMode, timeMode: TimeMode): Unit = {
     _countState = getHandle.getValueState[Long]("countState", Encoders.scalaLong, TTLConfig.NONE)
   }
 
@@ -88,7 +87,7 @@ case class OutputEventTimeRow(key: String, outputTimestamp: Timestamp)
 
 // A stateful processor which will return timestamp of the first item from input rows
 class ChainingOfOpsStatefulProcessor
-  extends StatefulProcessor[String, (String, Timestamp), OutputEventTimeRow] {
+    extends StatefulProcessor[String, (String, Timestamp), OutputEventTimeRow] {
   override def init(outputMode: OutputMode, timeMode: TimeMode): Unit = {}
 
   override def handleInputRows(
@@ -100,14 +99,13 @@ class ChainingOfOpsStatefulProcessor
   }
 }
 
-class TransformWithStateConnectSuiteSuite extends QueryTest with RemoteSparkSession with Logging {
+class TransformWithStateConnectSuite extends QueryTest with RemoteSparkSession with Logging {
   val testData: Seq[(String, String)] = Seq(("a", "1"), ("b", "1"), ("a", "2"))
   val twsAdditionalSQLConf = Seq(
     "spark.sql.streaming.stateStore.providerClass" ->
       "org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider",
     "spark.sql.shuffle.partitions" -> "5",
-    "spark.sql.session.timeZone" -> "UTC"
-  )
+    "spark.sql.session.timeZone" -> "UTC")
 
   test("transformWithState - streaming with state variable") {
     withSQLConf(twsAdditionalSQLConf: _*) {
@@ -118,11 +116,15 @@ class TransformWithStateConnectSuiteSuite extends QueryTest with RemoteSparkSess
 
       withTempPath { dir =>
         val path = dir.getCanonicalPath
-        testData.toDS().toDF("id", "value")
-          .repartition(3).write.parquet(path)
+        testData
+          .toDS()
+          .toDF("id", "value")
+          .repartition(3)
+          .write
+          .parquet(path)
 
-        val testSchema = StructType(Array(
-          StructField("id", StringType), StructField("value", StringType)))
+        val testSchema =
+          StructType(Array(StructField("id", StringType), StructField("value", StringType)))
 
         val q = spark.readStream
           .schema(testSchema)
@@ -132,7 +134,8 @@ class TransformWithStateConnectSuiteSuite extends QueryTest with RemoteSparkSess
           .groupByKey(x => x._1)
           .transformWithState(
             new BasicCountStatefulProcessor(),
-            TimeMode.None(), OutputMode.Update())
+            TimeMode.None(),
+            OutputMode.Update())
           .writeStream
           .format("memory")
           .queryName("my_sink")
@@ -143,8 +146,9 @@ class TransformWithStateConnectSuiteSuite extends QueryTest with RemoteSparkSess
           eventually(timeout(30.seconds)) {
             checkDataset(
               spark.table("my_sink").toDF().as[(String, String)].orderBy("_1"),
-              ("a", "1"), ("a", "2"), ("b", "1")
-            )
+              ("a", "1"),
+              ("a", "2"),
+              ("b", "1"))
           }
         } finally {
           q.stop()
@@ -163,13 +167,18 @@ class TransformWithStateConnectSuiteSuite extends QueryTest with RemoteSparkSess
 
       withTempPath { dir =>
         val path = dir.getCanonicalPath
-        testData.toDS().toDF("id", "value")
-          .repartition(3).write.parquet(path)
+        testData
+          .toDS()
+          .toDF("id", "value")
+          .repartition(3)
+          .write
+          .parquet(path)
 
-        val testSchema = StructType(Array(
-          StructField("id", StringType), StructField("value", StringType)))
+        val testSchema =
+          StructType(Array(StructField("id", StringType), StructField("value", StringType)))
 
-        val initDf = Seq(("init_1", "40.0", "a"), ("init_2", "100.0", "b")).toDS()
+        val initDf = Seq(("init_1", "40.0", "a"), ("init_2", "100.0", "b"))
+          .toDS()
           .groupByKey(x => x._3)
           .mapValues(x => x)
 
@@ -181,7 +190,8 @@ class TransformWithStateConnectSuiteSuite extends QueryTest with RemoteSparkSess
           .groupByKey(x => x._1)
           .transformWithState(
             new TestInitialStatefulProcessor(),
-            TimeMode.None(), OutputMode.Update(),
+            TimeMode.None(),
+            OutputMode.Update(),
             initialState = initDf)
           .writeStream
           .format("memory")
@@ -193,8 +203,9 @@ class TransformWithStateConnectSuiteSuite extends QueryTest with RemoteSparkSess
           eventually(timeout(30.seconds)) {
             checkDataset(
               spark.table("my_sink").toDF().as[(String, String)].orderBy("_1"),
-              ("a", "2"), ("a", "3"), ("b", "2")
-            )
+              ("a", "2"),
+              ("a", "3"),
+              ("b", "2"))
           }
         } finally {
           q.stop()
@@ -213,18 +224,19 @@ class TransformWithStateConnectSuiteSuite extends QueryTest with RemoteSparkSess
         new Timestamp(num * 1000)
       }
 
-      val checkResultFunc : (Dataset[Row], Long) => Unit = { (batchDF, batchId) =>
+      val checkResultFunc: (Dataset[Row], Long) => Unit = { (batchDF, batchId) =>
         val realDf = batchDF.orderBy("outputTimestamp").collect().toSet
         if (batchId == 0) {
           assert(realDf.isEmpty, s"BatchId: $batchId, RealDF: $realDf")
         } else if (batchId == 1) {
           val expectedDF = Seq(Row(timestamp(10), 1L)).toSet
-          assert(realDf == expectedDF,
+          assert(
+            realDf == expectedDF,
             s"BatchId: $batchId, expectedDf: $expectedDF, RealDF: $realDf")
         } else if (batchId == 2) {
-          val expectedDF = Seq(Row(timestamp(11), 1L),
-            Row(timestamp(15), 1L)).toSet
-          assert(realDf == expectedDF,
+          val expectedDF = Seq(Row(timestamp(11), 1L), Row(timestamp(15), 1L)).toSet
+          assert(
+            realDf == expectedDF,
             s"BatchId: $batchId, expectedDf: $expectedDF, RealDF: $realDf")
         }
       }
@@ -238,15 +250,14 @@ class TransformWithStateConnectSuiteSuite extends QueryTest with RemoteSparkSess
         prepareInputData(path + "/text-test1.txt", Seq("a"), Seq(5))
 
         val q = buildTestDf(path, spark)
-          .select(col("id").as("id"),
-            timestamp_seconds(col("value")).as("eventTime"))
+          .select(col("id").as("id"), timestamp_seconds(col("value")).as("eventTime"))
           .withWatermark("eventTime", "5 seconds")
           .as[(String, Timestamp)]
           .groupByKey(x => x._1)
           .transformWithState[OutputEventTimeRow](
             new ChainingOfOpsStatefulProcessor(),
-            "outputTimestamp", OutputMode.Append()
-          )
+            "outputTimestamp",
+            OutputMode.Append())
           .groupBy("outputTimestamp")
           .count()
           .writeStream
@@ -271,11 +282,15 @@ class TransformWithStateConnectSuiteSuite extends QueryTest with RemoteSparkSess
 
       withTempPath { dir =>
         val path = dir.getCanonicalPath
-        testData.toDS().toDF("id", "value")
-          .repartition(3).write.parquet(path)
+        testData
+          .toDS()
+          .toDF("id", "value")
+          .repartition(3)
+          .write
+          .parquet(path)
 
-        val testSchema = StructType(Array(
-          StructField("id", StringType), StructField("value", StringType)))
+        val testSchema =
+          StructType(Array(StructField("id", StringType), StructField("value", StringType)))
 
         spark.read
           .schema(testSchema)
@@ -284,13 +299,15 @@ class TransformWithStateConnectSuiteSuite extends QueryTest with RemoteSparkSess
           .groupByKey(x => x._1)
           .transformWithState(
             new BasicCountStatefulProcessor(),
-            TimeMode.None(), OutputMode.Update())
-          .write.saveAsTable("my_sink")
+            TimeMode.None(),
+            OutputMode.Update())
+          .write
+          .saveAsTable("my_sink")
 
         checkDataset(
           spark.table("my_sink").toDF().as[(String, String)].orderBy("_1"),
-          ("a", "1"), ("a", "2"), ("b", "1")
-        )
+          ("a", "2"),
+          ("b", "1"))
       }
     }
   }
@@ -323,8 +340,7 @@ class TransformWithStateConnectSuiteSuite extends QueryTest with RemoteSparkSess
     val dfSplit = df.withColumn("split_values", split(col("value"), ","))
     val dfFinal = dfSplit.select(
       col("split_values").getItem(0).alias("id").cast("string"),
-      col("split_values").getItem(1).alias("value").cast("int")
-    )
+      col("split_values").getItem(1).alias("value").cast("int"))
 
     dfFinal
   }
