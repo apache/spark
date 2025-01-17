@@ -144,6 +144,16 @@ private[sql] object SqlScriptingErrors {
       messageParameters = Map("labelName" -> toSQLStmt(labelName)))
   }
 
+  def conditionDeclarationOnlyAtBeginning(
+      origin: Origin,
+      conditionName: String): Throwable = {
+    new SqlScriptingException(
+      origin = origin,
+      errorClass = "INVALID_CONDITION_DECLARATION",
+      cause = null,
+      messageParameters = Map("conditionName" -> toSQLId(conditionName)))
+  }
+
   def duplicateConditionInHandlerDeclaration(origin: Origin, condition: String): Throwable = {
     new SqlScriptingException(
       origin = origin,

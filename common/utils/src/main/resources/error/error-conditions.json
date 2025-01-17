@@ -1245,19 +1245,19 @@
     "message" : [
       "Found duplicate condition <condition> in the scope. Please, remove one of them."
     ],
-    "sqlState" : "42710"
+    "sqlState" : "42734"
   },
   "DUPLICATE_CONDITION_IN_HANDLER_DECLARATION" : {
     "message" : [
       "Found duplicate condition <condition> in the handler declaration. Please, remove one of them."
     ],
-    "sqlState" : "42710"
+    "sqlState" : "42734"
   },
   "DUPLICATE_HANDLER_FOR_SAME_CONDITION" : {
     "message" : [
       "Found duplicate handlers for the same condition <condition>. Please, remove one of them."
     ],
-    "sqlState" : "42710"
+    "sqlState" : "42734"
   },
   "DUPLICATE_KEY" : {
     "message" : [
@@ -2613,6 +2613,12 @@
     ],
     "sqlState" : "42KOQ"
   },
+  "INVALID_CONDITION_DECLARATION" : {
+    "message" : [
+      "Invalid condition declaration. Condition <conditionName> can only be declared at the beginning of the compound."
+    ],
+    "sqlState" : "42KOR"
+  },
   "INVALID_IDENTIFIER" : {
     "message" : [
       "The unquoted identifier <ident> is invalid and must be back quoted as: `<ident>`.",
@@ -3231,7 +3237,7 @@
     "message" : [
       "Invalid SQLSTATE value: '<sqlState>'. SQLSTATE must be exactly 5 characters long and contain only A-Z and 0-9. SQLSTATE must not start with '00', '01', or 'XX'."
     ],
-    "sqlState" : "42000"
+    "sqlState" : "428B3"
   },
   "INVALID_SQL_ARG" : {
     "message" : [
@@ -5446,7 +5452,7 @@
       },
       "CONTINUE_ERROR_HANDLER" : {
         "message" : [
-          "Continue error handler is not supported. Please use EXIT handler."
+          "CONTINUE error handler is not supported. Use EXIT handler."
         ]
       },
       "DESC_TABLE_COLUMN_JSON" : {

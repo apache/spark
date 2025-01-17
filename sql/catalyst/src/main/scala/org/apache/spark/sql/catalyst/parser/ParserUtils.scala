@@ -28,7 +28,7 @@ import org.antlr.v4.runtime.tree.{ParseTree, TerminalNodeImpl}
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.analysis.UnresolvedIdentifier
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser.{BeginLabelContext, EndLabelContext}
-import org.apache.spark.sql.catalyst.plans.logical.CreateVariable
+import org.apache.spark.sql.catalyst.plans.logical.{CreateVariable, ErrorCondition}
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin
 import org.apache.spark.sql.catalyst.util.SparkParserUtils
 import org.apache.spark.sql.catalyst.util.SparkParserUtils.withOrigin
@@ -145,15 +145,12 @@ object ParserUtils extends SparkParserUtils {
 
 class SqlScriptingParsingContext {
 
-  sealed trait State
-  private object State {
-    case object INIT extends State
-    case object VARIABLES_AND_CONDITIONS extends State
-    case object HANDLERS extends State
-    case object STATEMENTS extends State
+  object State extends Enumeration {
+    type State = Value
+    val INIT, VARIABLE, CONDITION, HANDLER, STATEMENT = Value
   }
 
-  private var currentState: State = State.INIT
+  private var currentState: State.State = State.INIT
 
   /** Transition to VARIABLES_AND_CONDITIONS state. */
   def variable(createVariable: CreateVariable, allowVarDeclare: Boolean): Unit = {
@@ -161,22 +158,22 @@ class SqlScriptingParsingContext {
       throw SqlScriptingErrors.variableDeclarationNotAllowedInScope(
         createVariable.origin, createVariable.name.asInstanceOf[UnresolvedIdentifier].nameParts)
     }
-    transitionTo(State.VARIABLES_AND_CONDITIONS, Some(createVariable))
+    transitionTo(State.VARIABLE, createVariable = Some(createVariable), None)
   }
 
   /** Transition to VARIABLES_AND_CONDITIONS state. */
-  def condition(): Unit = {
-    transitionTo(State.VARIABLES_AND_CONDITIONS)
+  def condition(errorCondition: ErrorCondition): Unit = {
+    transitionTo(State.CONDITION, None, errorCondition = Some(errorCondition))
   }
 
   /** Transition to HANDLERS state. */
   def handler(): Unit = {
-    transitionTo(State.HANDLERS)
+    transitionTo(State.HANDLER)
   }
 
   /** Transition to STATEMENTS state. */
   def statement(): Unit = {
-    transitionTo(State.STATEMENTS)
+    transitionTo(State.STATEMENT)
   }
 
   /**
@@ -191,38 +188,69 @@ class SqlScriptingParsingContext {
    * @param newState The new state to transition to.
    */
   private def transitionTo(
-      newState: State,
-      createVariable: Option[CreateVariable] = None): Unit = {
+      newState: State.State,
+      createVariable: Option[CreateVariable] = None,
+      errorCondition: Option[ErrorCondition] = None): Unit = {
     (currentState, newState) match {
       // VALID TRANSITIONS
+
       case (State.INIT, _) => currentState = newState
 
-      case (State.VARIABLES_AND_CONDITIONS, State.VARIABLES_AND_CONDITIONS) =>  // do nothing
+      // Transitions from VARIABLE to other states.
+      case (State.VARIABLE, State.VARIABLE) =>  // do nothing
 
-      case (State.VARIABLES_AND_CONDITIONS, State.HANDLERS) => currentState = State.HANDLERS
+      case (State.VARIABLE, State.CONDITION) => currentState = State.CONDITION
 
-      case (State.VARIABLES_AND_CONDITIONS, State.STATEMENTS) => currentState = State.STATEMENTS
+      case (State.VARIABLE, State.HANDLER) => currentState = State.HANDLER
 
-      case (State.HANDLERS, State.HANDLERS) => // do nothing
+      case (State.VARIABLE, State.STATEMENT) => currentState = State.STATEMENT
 
-      case (State.HANDLERS, State.STATEMENTS) => currentState = State.STATEMENTS
+      // Transition from CONDITION to other states.
+      case (State.CONDITION, State.CONDITION) => // do nothing
 
-      case (State.STATEMENTS, State.STATEMENTS) => // do nothing
+      case (State.CONDITION, State.VARIABLE) => currentState = State.VARIABLE
+
+      case (State.CONDITION, State.HANDLER) => currentState = State.HANDLER
+
+      case (State.CONDITION, State.STATEMENT) => currentState = State.STATEMENT
+
+      // Transition from HANDLER to other states.
+      case (State.HANDLER, State.HANDLER) => // do nothing
+
+      case (State.HANDLER, State.STATEMENT) => currentState = State.STATEMENT
+
+      // Transition from STATEMENT to other states.
+      case (State.STATEMENT, State.STATEMENT) => // do nothing
 
       // INVALID TRANSITIONS
-      case (State.STATEMENTS, State.VARIABLES_AND_CONDITIONS) =>
+
+      // Invalid transitions to VARIABLE state.
+      case (State.STATEMENT, State.VARIABLE) =>
         throw SqlScriptingErrors.variableDeclarationOnlyAtBeginning(
           createVariable.get.origin,
           createVariable.get.name.asInstanceOf[UnresolvedIdentifier].nameParts)
 
-      case (State.HANDLERS, State.VARIABLES_AND_CONDITIONS) =>
+      case (State.HANDLER, State.VARIABLE) =>
         throw SqlScriptingErrors.variableDeclarationOnlyAtBeginning(
           createVariable.get.origin,
           createVariable.get.name.asInstanceOf[UnresolvedIdentifier].nameParts)
 
-      case (State.STATEMENTS, State.HANDLERS) =>
+      // Invalid transitions to CONDITION state.
+      case (State.STATEMENT, State.CONDITION) =>
+        throw SqlScriptingErrors.conditionDeclarationOnlyAtBeginning(
+          CurrentOrigin.get,
+          errorCondition.get.conditionName)
+
+      case (State.HANDLER, State.CONDITION) =>
+        throw SqlScriptingErrors.variableDeclarationOnlyAtBeginning(
+          createVariable.get.origin,
+          createVariable.get.name.asInstanceOf[UnresolvedIdentifier].nameParts)
+
+      // Invalid transitions to HANDLER state.
+      case (State.STATEMENT, State.HANDLER) =>
         throw SqlScriptingErrors.handlerDeclarationInWrongPlace(CurrentOrigin.get)
 
+      // This should never happen.
       case _ =>
         throw SparkException.internalError(
           s"Invalid state transition from $currentState to $newState")

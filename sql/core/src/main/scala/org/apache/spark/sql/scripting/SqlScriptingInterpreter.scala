@@ -43,6 +43,8 @@ case class SqlScriptingInterpreter(session: SparkSession) {
    *   CompoundBody for which to build the plan.
    * @param args
    *   A map of parameter names to SQL literal expressions.
+   * @param context
+   *   SqlScriptingExecutionContext keeps the execution state of current script.
    * @return
    *   Top level CompoundBodyExec representing SQL Script to be executed.
    */
@@ -74,8 +76,8 @@ case class SqlScriptingInterpreter(session: SparkSession) {
    *   CompoundBody to be transformed into CompoundBodyExec.
    * @param args
    *   A map of parameter names to SQL literal expressions.
-   * @param isHandler
-   *   Indicates if the body is a handler body to do additional processing during transforming.
+   * @param context
+   *   SqlScriptingExecutionContext keeps the execution state of current script.
    * @return
    *   Executable version of the CompoundBody .
    */
@@ -147,6 +149,8 @@ case class SqlScriptingInterpreter(session: SparkSession) {
    *   Root node of the parsed tree.
    * @param args
    *   A map of parameter names to SQL literal expressions.
+   * @param context
+   *   SqlScriptingExecutionContext keeps the execution state of current script.
    * @return
    *   Executable statement.
    */

@@ -252,7 +252,7 @@ class AstBuilder extends DataTypeAstBuilder
           scriptingParserContext.handler()
           handlers += handler
         case condition: ErrorCondition =>
-          scriptingParserContext.condition()
+          scriptingParserContext.condition(condition)
           // Check for duplicate condition names in each scope.
           if (conditions.contains(condition.conditionName)) {
             throw SqlScriptingErrors
