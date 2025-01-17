@@ -1065,7 +1065,9 @@ object DecorrelateInnerQuery extends PredicateHelper {
                 // depending on the child plan.
                 // The inner expressions for the domain are the values of newOuterReferenceMap.
                 val domainProjections =
-                  if (SQLConf.get.getConf(SQLConf.DECORRELATE_SET_OPS_ENABLED)) {
+                  if (SQLConf.get.getConf(
+                    SQLConf.DECORRELATE_UNION_OR_SET_OP_UNDER_LIMIT_ENABLED
+                  )) {
                     newOuterReferences.map(newOuterReferenceMap(_))
                   } else {
                     collectedChildOuterReferences.map(newOuterReferenceMap(_))
