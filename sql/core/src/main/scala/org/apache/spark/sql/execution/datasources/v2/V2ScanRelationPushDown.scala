@@ -324,12 +324,14 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
     }
   }
 
-  private def addCastIfNeeded(expression: Expression, expectedDataType: DataType) =
-    if (expression.dataType == expectedDataType) {
-      expression
+  private def addCastIfNeeded(expression: Expression, expectedDataType: DataType) = {
+    val cast = Cast(expression, expectedDataType)
+    if (cast.needsTimeZone) {
+      cast.withTimeZone(conf.sessionLocalTimeZone)
     } else {
-      Cast(expression, expectedDataType)
+      cast
     }
+  }
 
   def buildScanWithPushedAggregate(plan: LogicalPlan): LogicalPlan = plan.transform {
     case holder: ScanBuilderHolder if holder.pushedAggregate.isDefined =>
