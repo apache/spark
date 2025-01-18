@@ -83,12 +83,10 @@ class ExternalShuffleServiceSuite extends ShuffleSuite with BeforeAndAfterAll wi
 
     // Now Spark will receive FetchFailed, and not retry the stage due to "spark.test.noStageRetry"
     // being set.
-    eventually(timeout(60.seconds), interval(100.milliseconds)) {
-      val e = intercept[SparkException] {
-        rdd.count()
-      }
-      e.getMessage should include("Fetch failure will not retry stage due to testing config")
+    val e = intercept[SparkException] {
+      rdd.count()
     }
+    e.getMessage should include("Fetch failure will not retry stage due to testing config")
   }
 
   test("SPARK-25888: using external shuffle service fetching disk persisted blocks") {
