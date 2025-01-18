@@ -90,8 +90,6 @@ object BuildCommons {
   // Google Protobuf version used for generating the protobuf.
   // SPARK-41247: needs to be consistent with `protobuf.version` in `pom.xml`.
   val protoVersion = "4.29.3"
-  // GRPC version used for Spark Connect.
-  val grpcVersion = "1.67.1"
 }
 
 object SparkBuild extends PomBuild {
@@ -646,8 +644,11 @@ object SparkConnectCommon {
       val guavaFailureaccessVersion =
         SbtPomKeys.effectivePom.value.getProperties.get(
           "guava.failureaccess.version").asInstanceOf[String]
+      val grpcVersion =
+        SbtPomKeys.effectivePom.value.getProperties.get(
+          "io.grpc.version").asInstanceOf[String]
       Seq(
-        "io.grpc" % "protoc-gen-grpc-java" % BuildCommons.grpcVersion asProtocPlugin(),
+        "io.grpc" % "protoc-gen-grpc-java" % grpcVersion asProtocPlugin(),
         "com.google.guava" % "guava" % guavaVersion,
         "com.google.guava" % "failureaccess" % guavaFailureaccessVersion,
         "com.google.protobuf" % "protobuf-java" % protoVersion % "protobuf"
