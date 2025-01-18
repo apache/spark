@@ -20,8 +20,8 @@ import unittest
 
 import numpy as np
 
-from pyspark.ml.linalg import Vectors, Matrices
-from pyspark.sql import SparkSession, DataFrame
+from pyspark.ml.linalg import Vectors
+from pyspark.sql import SparkSession
 from pyspark.ml.regression import (
     LinearRegression,
     LinearRegressionModel,
