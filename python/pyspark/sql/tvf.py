@@ -554,6 +554,7 @@ class TableValuedFunction:
         | SYSTEM|BUILTIN|        af_CI_RTRIM|Afrikaans|   NULL|  ACCENT_SENSITIVE|CASE_INSENSITIVE|        RTRIM|   76.1.0.0|
         | SYSTEM|BUILTIN|           af_RTRIM|Afrikaans|   NULL|  ACCENT_SENSITIVE|  CASE_SENSITIVE|        RTRIM|   76.1.0.0|
         +-------+-------+-------------------+---------+-------+------------------+----------------+-------------+-----------+
+        only showing top 20 rows
         """
         return self._fn("collations")
 
