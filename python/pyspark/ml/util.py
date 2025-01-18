@@ -580,6 +580,7 @@ class GeneralJavaMLWritable(JavaMLWritable):
     (Private) Mixin for ML instances that provide :py:class:`GeneralJavaMLWriter`.
     """
 
+    @try_remote_write
     def write(self) -> GeneralJavaMLWriter:
         """Returns an GeneralMLWriter instance for this ML instance."""
         return GeneralJavaMLWriter(self)
