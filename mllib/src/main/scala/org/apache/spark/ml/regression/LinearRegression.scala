@@ -903,7 +903,7 @@ class LinearRegressionSummary private[regression] (
     val labelCol: String,
     val featuresCol: String,
     private val privateModel: LinearRegressionModel,
-    private val diagInvAtWA: Array[Double]) extends Serializable {
+    private val diagInvAtWA: Array[Double]) extends Summary with Serializable {
 
   @transient private val metrics = {
     val weightCol =
