@@ -57,11 +57,27 @@ class MLBackendSuite extends MLHelper {
           .build())
   }
 
-  test("ML backend: estimator read/write") {
+  test("ML backend: estimator works") {
     withSparkConf(
       Connect.CONNECT_ML_BACKEND_CLASSES.key ->
         "org.apache.spark.sql.connect.ml.MyMlBackend") {
       val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
+
+      val fitCommand = proto.MlCommand
+        .newBuilder()
+        .setFit(
+          proto.MlCommand.Fit
+            .newBuilder()
+            .setDataset(createLocalRelationProto)
+            .setEstimator(getLogisticRegressionBuilder)
+            .setParams(getMaxIterBuilder))
+        .build()
+      val fitResult = MLHandler.handleMlCommand(sessionHolder, fitCommand)
+      val modelId = fitResult.getOperatorInfo.getObjRef.getId
+      assert(sessionHolder.mlCache.get(modelId).isInstanceOf[MyLogisticRegressionModel])
+      val model = sessionHolder.mlCache.get(modelId).asInstanceOf[MyLogisticRegressionModel]
+      assert(model.intercept == 3.5f)
+      assert(model.coefficients == 4.6f)
 
       // read/write
       val tempDir = Utils.createTempDir(namePrefix = this.getClass.getName)
@@ -103,7 +119,7 @@ class MLBackendSuite extends MLHelper {
     }
   }
 
-  test("ML backend: model read/write") {
+  test("ML backend: model works") {
     withSparkConf(
       Connect.CONNECT_ML_BACKEND_CLASSES.key ->
         "org.apache.spark.sql.connect.ml.MyMlBackend") {
@@ -159,32 +175,72 @@ class MLBackendSuite extends MLHelper {
         assert(
           ret.getOperatorInfo.getParams.getParamsMap.get("fakeParam").getInteger
             == 101010)
+
+        // Fetch double attribute
+        val fakeAttrCmd = fetchCommand(ret.getOperatorInfo.getObjRef.getId, "predictRaw")
+        val fakeAttrRet = MLHandler.handleMlCommand(sessionHolder, fakeAttrCmd)
+        assert(fakeAttrRet.getParam.getDouble === 1.11)
       } finally {
         Utils.deleteRecursively(tempDir)
       }
     }
   }
 
-  test("ML backend") {
+  test("ML backend: evaluator works") {
     withSparkConf(
       Connect.CONNECT_ML_BACKEND_CLASSES.key ->
         "org.apache.spark.sql.connect.ml.MyMlBackend") {
       val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
-      val fitCommand = proto.MlCommand
+
+      val evalCmd = proto.MlCommand
         .newBuilder()
-        .setFit(
-          proto.MlCommand.Fit
+        .setEvaluate(
+          proto.MlCommand.Evaluate
             .newBuilder()
-            .setDataset(createLocalRelationProto)
-            .setEstimator(getLogisticRegressionBuilder)
-            .setParams(getMaxIterBuilder))
+            .setDataset(createRegressionEvaluationLocalRelationProto)
+            .setEvaluator(getRegressorEvaluator))
         .build()
-      val fitResult = MLHandler.handleMlCommand(sessionHolder, fitCommand)
-      val modelId = fitResult.getOperatorInfo.getObjRef.getId
-      assert(sessionHolder.mlCache.get(modelId).isInstanceOf[MyLogisticRegressionModel])
-      val model = sessionHolder.mlCache.get(modelId).asInstanceOf[MyLogisticRegressionModel]
-      assert(model.intercept == 3.5f)
-      assert(model.coefficients == 4.6f)
+      val evalResult = MLHandler.handleMlCommand(sessionHolder, evalCmd)
+      assert(evalResult.getParam.getDouble == 1.11)
+
+      // read/write
+      val tempDir = Utils.createTempDir(namePrefix = this.getClass.getName)
+      try {
+        val path = new File(tempDir, Identifiable.randomUID("Evaluator")).getPath
+        val writeCmd = proto.MlCommand
+          .newBuilder()
+          .setWrite(
+            proto.MlCommand.Write
+              .newBuilder()
+              .setOperator(getRegressorEvaluator)
+              .setParams(getMetricName)
+              .setPath(path)
+              .setShouldOverwrite(true))
+          .build()
+        MLHandler.handleMlCommand(sessionHolder, writeCmd)
+
+        val readCmd = proto.MlCommand
+          .newBuilder()
+          .setRead(
+            proto.MlCommand.Read
+              .newBuilder()
+              .setOperator(getRegressorEvaluator)
+              .setPath(path))
+          .build()
+
+        val ret = MLHandler.handleMlCommand(sessionHolder, readCmd)
+        assert(ret.getOperatorInfo.getParams.getParamsMap.containsKey("fakeParam"))
+        assert(ret.getOperatorInfo.getParams.getParamsMap.containsKey("metricName"))
+        assert(
+          ret.getOperatorInfo.getParams.getParamsMap.get("metricName").getString
+            == "mae")
+        assert(
+          ret.getOperatorInfo.getParams.getParamsMap.get("fakeParam").getInteger
+            == 101010)
+      } finally {
+        Utils.deleteRecursively(tempDir)
+      }
     }
   }
+
 }

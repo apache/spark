@@ -49,6 +49,7 @@ if TYPE_CHECKING:
     from pyspark.core.context import SparkContext
     from pyspark.sql.connect.dataframe import DataFrame as ConnectDataFrame
     from pyspark.ml.wrapper import JavaWrapper, JavaEstimator
+    from pyspark.ml.evaluation import JavaEvaluator
 
 T = TypeVar("T")
 RW = TypeVar("RW", bound="BaseReadWrite")
@@ -320,6 +321,37 @@ def try_remote_not_supporting(f: FuncT) -> FuncT:
             raise NotImplementedError("")
         else:
             return f(*args)
+
+    return cast(FuncT, wrapped)
+
+
+def try_remote_evaluate(f: FuncT) -> FuncT:
+    """Mark the evaluate function in Evaluator."""
+
+    @functools.wraps(f)
+    def wrapped(self: "JavaEvaluator", dataset: "ConnectDataFrame") -> Any:
+        if is_remote() and "PYSPARK_NO_NAMESPACE_SHARE" not in os.environ:
+            import pyspark.sql.connect.proto as pb2
+            from pyspark.ml.connect.serialize import serialize_ml_params, deserialize
+
+            client = dataset.sparkSession.client
+            input = dataset._plan.plan(client)
+            assert isinstance(self._java_obj, str)
+            evaluator = pb2.MlOperator(
+                name=self._java_obj, uid=self.uid, type=pb2.MlOperator.EVALUATOR
+            )
+            command = pb2.Command()
+            command.ml_command.evaluate.CopyFrom(
+                pb2.MlCommand.Evaluate(
+                    evaluator=evaluator,
+                    params=serialize_ml_params(self, client),
+                    dataset=input,
+                )
+            )
+            (_, properties, _) = client.execute_command(command)
+            return deserialize(properties)
+        else:
+            return f(self, dataset)
 
     return cast(FuncT, wrapped)
 

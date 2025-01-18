@@ -35,6 +35,7 @@ message MlCommand {
     Delete delete = 3;
     Write write = 4;
     Read read = 5;
+    Evaluate evaluate = 6;
   }
 
   // Command for estimator.fit(dataset)
@@ -78,6 +79,16 @@ message MlCommand {
     MlOperator operator = 1;
     // Load the ML instance from the input path
     string path = 2;
+  }
+
+  // Command for evaluator.evaluate(dataset)
+  message Evaluate {
+    // Evaluator information
+    MlOperator evaluator = 1;
+    // parameters of the Evaluator
+    MlParams params = 2;
+    // the evaluating dataset
+    Relation dataset = 3;
   }
 }
 

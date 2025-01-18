@@ -132,17 +132,6 @@ class MLSuite extends MLHelper {
     assert(fakedML.getDouble === 1.0)
   }
 
-  def fetchCommand(modelId: String, method: String): proto.MlCommand = {
-    proto.MlCommand
-      .newBuilder()
-      .setFetch(
-        proto.Fetch
-          .newBuilder()
-          .setObjRef(proto.ObjectRef.newBuilder().setId(modelId))
-          .addMethods(proto.Fetch.Method.newBuilder().setMethod(method)))
-      .build()
-  }
-
   def trainLogisticRegressionModel(sessionHolder: SessionHolder): String = {
     val fitCommand = proto.MlCommand
       .newBuilder()
@@ -352,5 +341,61 @@ class MLSuite extends MLHelper {
     assert(
       thrown.message.contains("org.apache.spark.sql.connect.ml.NotImplementingMLReadble " +
         "must implement MLReadable"))
+  }
+
+  test("RegressionEvaluator works") {
+    val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
+
+    val evalCmd = proto.MlCommand
+      .newBuilder()
+      .setEvaluate(
+        proto.MlCommand.Evaluate
+          .newBuilder()
+          .setDataset(createRegressionEvaluationLocalRelationProto)
+          .setEvaluator(getRegressorEvaluator)
+          .setParams(
+            proto.MlParams
+              .newBuilder()
+              .putParams(
+                "predictionCol",
+                proto.Expression.Literal.newBuilder().setString("raw").build())))
+      .build()
+    val evalResult = MLHandler.handleMlCommand(sessionHolder, evalCmd)
+    assert(
+      evalResult.getParam.getDouble > 2.841 &&
+        evalResult.getParam.getDouble < 2.843)
+
+    // read/write
+    val tempDir = Utils.createTempDir(namePrefix = this.getClass.getName)
+    try {
+      val path = new File(tempDir, Identifiable.randomUID("RegressionEvaluator")).getPath
+      val writeCmd = proto.MlCommand
+        .newBuilder()
+        .setWrite(
+          proto.MlCommand.Write
+            .newBuilder()
+            .setOperator(getRegressorEvaluator)
+            .setParams(getMetricName)
+            .setPath(path)
+            .setShouldOverwrite(true))
+        .build()
+      MLHandler.handleMlCommand(sessionHolder, writeCmd)
+
+      val readCmd = proto.MlCommand
+        .newBuilder()
+        .setRead(
+          proto.MlCommand.Read
+            .newBuilder()
+            .setOperator(getRegressorEvaluator)
+            .setPath(path))
+        .build()
+
+      val ret = MLHandler.handleMlCommand(sessionHolder, readCmd)
+      assert(
+        ret.getOperatorInfo.getParams.getParamsMap.get("metricName").getString ==
+          "mae")
+    } finally {
+      Utils.deleteRecursively(tempDir)
+    }
   }
 }
