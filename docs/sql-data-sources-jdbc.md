@@ -374,6 +374,14 @@ logging into the data sources.
     </td>
     <td>read</td>
   </tr>
+  <tr>
+    <td><code>hint</code></td>
+    <td>(none)</td>
+    <td>
+      This option is used to specify the hint for reading. It will apply only if the underlying DBMS supports the hint feature. Currently, this option is only supported by OracleDialect and MySQLDialect.
+    </td>
+    <td>read</td>
+  </tr>
 </table>
 
 Note that kerberos authentication with keytab is not always supported by the JDBC driver.<br>

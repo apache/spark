@@ -249,6 +249,8 @@ class JDBCOptions(
       .map(_.toBoolean)
       .getOrElse(SQLConf.get.timestampType == TimestampNTZType)
 
+  val hint = parameters.get(JDBC_HINT_STRING).map(_ + " ").getOrElse("")
+
   override def hashCode: Int = this.parameters.hashCode()
 
   override def equals(other: Any): Boolean = other match {
@@ -321,4 +323,5 @@ object JDBCOptions {
   val JDBC_CONNECTION_PROVIDER = newOption("connectionProvider")
   val JDBC_PREPARE_QUERY = newOption("prepareQuery")
   val JDBC_PREFER_TIMESTAMP_NTZ = newOption("preferTimestampNTZ")
+  val JDBC_HINT_STRING = newOption("hint")
 }

@@ -406,7 +406,7 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper with No
       }
 
       options.prepareQuery +
-        s"SELECT $columnList FROM ${options.tableOrQuery} $tableSampleClause" +
+        s"SELECT ${options.hint}$columnList FROM ${options.tableOrQuery} $tableSampleClause" +
         s" $whereClause $groupByClause $orderByClause $limitOrOffsetStmt"
     }
   }

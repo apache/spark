@@ -2206,4 +2206,44 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
       JdbcUtils.schemaString(dialect, schema, caseSensitive = false, Some("b boolean"))
     assert(schemaStr === """"b" NUMBER(1) """)
   }
+
+  test("SPARK-50666: reading hint test") {
+    // JDBC url is a required option but is not used in this test.
+    val options = new JDBCOptions(Map("url" -> "jdbc:h2://host:port", "dbtable" -> "test",
+      "hint" -> "/*+ INDEX(test idx1) */"))
+    // hint supported
+    assert(
+      OracleDialect()
+        .getJdbcSQLQueryBuilder(options)
+        .withColumns(Array("a", "b"))
+        .build()
+        .trim() == "SELECT /*+ INDEX(test idx1) */ a,b FROM test")
+    assert(
+      MySQLDialect()
+        .getJdbcSQLQueryBuilder(options)
+        .withColumns(Array("a", "b"))
+        .build()
+        .trim() == "SELECT /*+ INDEX(test idx1) */ a,b FROM test")
+
+    // hint not supported with rewritten JdbcSQLQueryBuilder
+    assert(
+      DB2Dialect()
+        .getJdbcSQLQueryBuilder(options)
+        .withColumns(Array("a", "b"))
+        .build()
+        .trim() == "SELECT a,b FROM test")
+    assert(
+      MsSqlServerDialect()
+        .getJdbcSQLQueryBuilder(options)
+        .withColumns(Array("a", "b"))
+        .build()
+        .trim() == "SELECT  a,b FROM test")
+    // hint not supported with default JdbcSQLQueryBuilder
+    assert(
+      PostgresDialect()
+        .getJdbcSQLQueryBuilder(options)
+        .withColumns(Array("a", "b"))
+        .build()
+        .trim() == "SELECT a,b FROM test")
+  }
 }
