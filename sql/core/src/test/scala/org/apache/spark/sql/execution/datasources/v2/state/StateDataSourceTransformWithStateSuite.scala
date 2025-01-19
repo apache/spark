@@ -128,7 +128,7 @@ class SessionGroupsStatefulProcessorWithTTL extends
  */
 @SlowSQLTest
 class StateDataSourceTransformWithStateSuite extends StateStoreMetricsTest
-  with AlsoTestWithRocksDBFeatures with AlsoTestWithEncodingTypes {
+  with AlsoTestWithEncodingTypes with AlsoTestWithRocksDBFeatures {
 
   import testImplicits._
 

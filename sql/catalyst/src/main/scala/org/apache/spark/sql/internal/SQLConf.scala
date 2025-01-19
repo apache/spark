@@ -2360,6 +2360,14 @@ object SQLConf {
       .intConf
       .createWithDefault(1)
 
+  val STREAMING_MAX_NUM_STATE_SCHEMA_FILES =
+    buildConf("spark.sql.streaming.stateStore.maxNumStateSchemaFiles")
+      .internal()
+      .doc("The maximum number of StateSchemaV3 files allowed per operator")
+      .version("4.0.0")
+      .intConf
+      .createWithDefault(128)
+
   val STREAMING_STATE_STORE_ENCODING_FORMAT =
     buildConf("spark.sql.streaming.stateStore.encodingFormat")
       .doc("The encoding format used for stateful operators to store information " +
@@ -2370,6 +2378,14 @@ object SQLConf {
       .checkValue(v => Set("unsaferow", "avro").contains(v),
         "Valid values are 'unsaferow' and 'avro'")
       .createWithDefault("unsaferow")
+
+  val STREAMING_VALUE_STATE_SCHEMA_EVOLUTION_THRESHOLD =
+    buildConf("spark.sql.streaming.stateStore.valueStateSchemaEvolutionThreshold")
+      .internal()
+      .doc("The maximum number of value state schema evolutions allowed per column family")
+      .version("4.0.0")
+      .intConf
+      .createWithDefault(16)
 
   val STATE_STORE_COMPRESSION_CODEC =
     buildConf("spark.sql.streaming.stateStore.compression.codec")
@@ -5843,6 +5859,12 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def stateStoreCheckpointFormatVersion: Int = getConf(STATE_STORE_CHECKPOINT_FORMAT_VERSION)
 
   def stateStoreEncodingFormat: String = getConf(STREAMING_STATE_STORE_ENCODING_FORMAT)
+
+  def streamingValueStateSchemaEvolutionThreshold: Int =
+    getConf(STREAMING_VALUE_STATE_SCHEMA_EVOLUTION_THRESHOLD)
+
+  def streamingStateSchemaFilesThreshold: Int =
+    getConf(STREAMING_MAX_NUM_STATE_SCHEMA_FILES)
 
   def checkpointRenamedFileCheck: Boolean = getConf(CHECKPOINT_RENAMEDFILE_CHECK_ENABLED)
 

@@ -316,7 +316,9 @@ object CTESubstitution extends Rule[LogicalPlan] {
       // CTE definition can reference a previous one or itself if recursion allowed.
       val substituted = substituteCTE(innerCTEResolved, alwaysInline,
         resolvedCTERelations, recursiveCTERelation)
-      val cteRelation = CTERelationDef(substituted)
+      val cteRelation = recursiveCTERelation
+        .map(_._2.copy(child = substituted))
+        .getOrElse(CTERelationDef(substituted))
       if (!alwaysInline) {
         cteDefs += cteRelation
       }

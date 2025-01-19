@@ -2870,6 +2870,24 @@
     },
     "sqlState" : "42K0E"
   },
+  "INVALID_LOG_VERSION" : {
+    "message" : [
+      "UnsupportedLogVersion."
+    ],
+    "subClass" : {
+      "EXACT_MATCH_VERSION" : {
+        "message" : [
+          "The only supported log version is v<matchVersion>, but encountered v<version>."
+        ]
+      },
+      "MAX_SUPPORTED_VERSION" : {
+        "message" : [
+          "The maximum supported log version is v<maxSupportedVersion>, but encountered v<version>. The log file was produced by a newer version of Spark and cannot be read by this version. You need to upgrade."
+        ]
+      }
+    },
+    "sqlState" : "KD002"
+  },
   "INVALID_NON_DETERMINISTIC_EXPRESSIONS" : {
     "message" : [
       "The operator expects a deterministic expression, but the actual expression is <sqlExprs>."
@@ -3104,6 +3122,12 @@
       "Parameterized query must either use positional, or named parameters, but not both."
     ],
     "sqlState" : "42613"
+  },
+  "INVALID_RECURSIVE_CTE" : {
+    "message" : [
+      "Invalid recursive definition found. Recursive queries must contain an UNION or an UNION ALL statement with 2 children. The first child needs to be the anchor term without any recursive references."
+    ],
+    "sqlState" : "42836"
   },
   "INVALID_REGEXP_REPLACE" : {
     "message" : [
@@ -3620,6 +3644,12 @@
       "Malformed CSV record: <badRecord>"
     ],
     "sqlState" : "KD000"
+  },
+  "MALFORMED_LOG_FILE" : {
+    "message" : [
+      "Log file was malformed: failed to read correct log version from <text>."
+    ],
+    "sqlState" : "KD002"
   },
   "MALFORMED_PROTOBUF_MESSAGE" : {
     "message" : [
@@ -4555,6 +4585,13 @@
     ],
     "sqlState" : "42K06"
   },
+  "STATE_STORE_INVALID_VALUE_SCHEMA_EVOLUTION" : {
+    "message" : [
+      "Schema evolution is not possible new value_schema=<newValueSchema> and old value_schema=<oldValueSchema>",
+      "Please check https://avro.apache.org/docs/1.11.1/specification/_print/#schema-resolution for valid schema evolution."
+    ],
+    "sqlState" : "XXKST"
+  },
   "STATE_STORE_INVALID_VARIABLE_TYPE_CHANGE" : {
     "message" : [
       "Cannot change <stateVarName> to <newType> between query restarts. Please set <stateVarName> to <oldType>, or restart with a new checkpoint directory."
@@ -4596,6 +4633,14 @@
     ],
     "sqlState" : "42K06"
   },
+  "STATE_STORE_STATE_SCHEMA_FILES_THRESHOLD_EXCEEDED" : {
+    "message" : [
+      "The number of state schema files <numStateSchemaFiles> exceeds the maximum number of state schema files for this query: <maxStateSchemaFiles>.",
+      "Added: <addedColumnFamilies>, Removed: <removedColumnFamilies>",
+      "Please set 'spark.sql.streaming.stateStore.stateSchemaFilesThreshold' to a higher number, or revert state schema modifications"
+    ],
+    "sqlState" : "42K06"
+  },
   "STATE_STORE_UNSUPPORTED_OPERATION" : {
     "message" : [
       "<operationType> operation not supported with <entity>"
@@ -4625,6 +4670,14 @@
       "to process the streaming state. Retrieved error_message=<errorMsg>"
     ],
     "sqlState" : "XX000"
+  },
+  "STATE_STORE_VALUE_SCHEMA_EVOLUTION_THRESHOLD_EXCEEDED" : {
+    "message" : [
+      "The number of state schema evolutions <numSchemaEvolutions> exceeds the maximum number of state schema evolutions, <maxSchemaEvolutions>, allowed for this column family.",
+      "Offending column family: <colFamilyName>",
+      "Please set 'spark.sql.streaming.stateStore.valueStateSchemaEvolutionThreshold' to a higher number, or revert state schema modifications"
+    ],
+    "sqlState" : "42K06"
   },
   "STATE_STORE_VALUE_SCHEMA_NOT_COMPATIBLE" : {
     "message" : [

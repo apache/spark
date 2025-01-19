@@ -72,85 +72,53 @@ class MLSuite extends MLHelper {
     val fakedML = new FakedML
     val params = proto.MlParams
       .newBuilder()
-      .putParams(
-        "boolean",
-        proto.Param
-          .newBuilder()
-          .setLiteral(proto.Expression.Literal.newBuilder().setBoolean(true))
-          .build())
-      .putParams(
-        "double",
-        proto.Param
-          .newBuilder()
-          .setLiteral(proto.Expression.Literal.newBuilder().setDouble(1.0))
-          .build())
-      .putParams(
-        "int",
-        proto.Param
-          .newBuilder()
-          .setLiteral(proto.Expression.Literal.newBuilder().setInteger(10))
-          .build())
-      .putParams(
-        "float",
-        proto.Param
-          .newBuilder()
-          .setLiteral(proto.Expression.Literal.newBuilder().setFloat(10.0f))
-          .build())
+      .putParams("boolean", proto.Expression.Literal.newBuilder().setBoolean(true).build())
+      .putParams("double", proto.Expression.Literal.newBuilder().setDouble(1.0).build())
+      .putParams("int", proto.Expression.Literal.newBuilder().setInteger(10).build())
+      .putParams("float", proto.Expression.Literal.newBuilder().setFloat(10.0f).build())
       .putParams(
         "arrayString",
-        proto.Param
+        proto.Expression.Literal
           .newBuilder()
-          .setLiteral(
-            proto.Expression.Literal
+          .setArray(
+            proto.Expression.Literal.Array
               .newBuilder()
-              .setArray(
-                proto.Expression.Literal.Array
-                  .newBuilder()
-                  .setElementType(proto.DataType
-                    .newBuilder()
-                    .setString(proto.DataType.String.getDefaultInstance)
-                    .build())
-                  .addElements(proto.Expression.Literal.newBuilder().setString("hello"))
-                  .addElements(proto.Expression.Literal.newBuilder().setString("world"))
-                  .build())
+              .setElementType(proto.DataType
+                .newBuilder()
+                .setString(proto.DataType.String.getDefaultInstance)
+                .build())
+              .addElements(proto.Expression.Literal.newBuilder().setString("hello"))
+              .addElements(proto.Expression.Literal.newBuilder().setString("world"))
               .build())
           .build())
       .putParams(
         "arrayInt",
-        proto.Param
+        proto.Expression.Literal
           .newBuilder()
-          .setLiteral(
-            proto.Expression.Literal
+          .setArray(
+            proto.Expression.Literal.Array
               .newBuilder()
-              .setArray(
-                proto.Expression.Literal.Array
-                  .newBuilder()
-                  .setElementType(proto.DataType
-                    .newBuilder()
-                    .setInteger(proto.DataType.Integer.getDefaultInstance)
-                    .build())
-                  .addElements(proto.Expression.Literal.newBuilder().setInteger(1))
-                  .addElements(proto.Expression.Literal.newBuilder().setInteger(2))
-                  .build())
+              .setElementType(proto.DataType
+                .newBuilder()
+                .setInteger(proto.DataType.Integer.getDefaultInstance)
+                .build())
+              .addElements(proto.Expression.Literal.newBuilder().setInteger(1))
+              .addElements(proto.Expression.Literal.newBuilder().setInteger(2))
               .build())
           .build())
       .putParams(
         "arrayDouble",
-        proto.Param
+        proto.Expression.Literal
           .newBuilder()
-          .setLiteral(
-            proto.Expression.Literal
+          .setArray(
+            proto.Expression.Literal.Array
               .newBuilder()
-              .setArray(
-                proto.Expression.Literal.Array
-                  .newBuilder()
-                  .setElementType(proto.DataType
-                    .newBuilder()
-                    .setDouble(proto.DataType.Double.getDefaultInstance)
-                    .build())
-                  .addElements(proto.Expression.Literal.newBuilder().setDouble(11.0))
-                  .addElements(proto.Expression.Literal.newBuilder().setDouble(12.0))
-                  .build())
+              .setElementType(proto.DataType
+                .newBuilder()
+                .setDouble(proto.DataType.Double.getDefaultInstance)
+                .build())
+              .addElements(proto.Expression.Literal.newBuilder().setDouble(11.0))
+              .addElements(proto.Expression.Literal.newBuilder().setDouble(12.0))
               .build())
           .build())
       .build()
@@ -162,17 +130,6 @@ class MLSuite extends MLHelper {
     assert(fakedML.getArrayString === Array("hello", "world"))
     assert(fakedML.getBoolean === true)
     assert(fakedML.getDouble === 1.0)
-  }
-
-  def fetchCommand(modelId: String, method: String): proto.MlCommand = {
-    proto.MlCommand
-      .newBuilder()
-      .setFetch(
-        proto.Fetch
-          .newBuilder()
-          .setObjRef(proto.ObjectRef.newBuilder().setId(modelId))
-          .addMethods(proto.Fetch.Method.newBuilder().setMethod(method)))
-      .build()
   }
 
   def trainLogisticRegressionModel(sessionHolder: SessionHolder): String = {
@@ -193,11 +150,9 @@ class MLSuite extends MLHelper {
               .newBuilder()
               .putParams(
                 "maxIter",
-                proto.Param
+                proto.Expression.Literal
                   .newBuilder()
-                  .setLiteral(proto.Expression.Literal
-                    .newBuilder()
-                    .setInteger(2))
+                  .setInteger(2)
                   .build())))
       .build()
     val fitResult = MLHandler.handleMlCommand(sessionHolder, fitCommand)
@@ -218,13 +173,13 @@ class MLSuite extends MLHelper {
       // Fetch double attribute
       val interceptCommand = fetchCommand(modelId, "intercept")
       val interceptResult = MLHandler.handleMlCommand(sessionHolder, interceptCommand)
-      assert(interceptResult.getParam.getLiteral.getDouble === lrModel.intercept)
+      assert(interceptResult.getParam.getDouble === lrModel.intercept)
 
       // Fetch Vector attribute
       val coefficientsCommand = fetchCommand(modelId, "coefficients")
       val coefficientsResult = MLHandler.handleMlCommand(sessionHolder, coefficientsCommand)
       val deserializedCoefficients =
-        MLUtils.deserializeVector(coefficientsResult.getParam.getVector)
+        MLUtils.deserializeVector(coefficientsResult.getParam.getStruct)
       assert(deserializedCoefficients === lrModel.coefficients)
 
       // Fetch Matrix attribute
@@ -232,7 +187,7 @@ class MLSuite extends MLHelper {
       val coefficientsMatrixResult =
         MLHandler.handleMlCommand(sessionHolder, coefficientsMatrixCommand)
       val deserializedCoefficientsMatrix =
-        MLUtils.deserializeMatrix(coefficientsMatrixResult.getParam.getMatrix)
+        MLUtils.deserializeMatrix(coefficientsMatrixResult.getParam.getStruct)
       assert(lrModel.coefficientMatrix === deserializedCoefficientsMatrix)
 
       // Predict with sparse vector
@@ -252,7 +207,7 @@ class MLSuite extends MLHelper {
                   .setParam(Serializer.serializeParam(sparseVector)))))
         .build()
       val predictResult = MLHandler.handleMlCommand(sessionHolder, predictCommand)
-      val predictValue = predictResult.getParam.getLiteral.getDouble
+      val predictValue = predictResult.getParam.getDouble
       assert(lrModel.predict(sparseVector) === predictValue)
 
       // The loaded model doesn't have summary
@@ -268,7 +223,7 @@ class MLSuite extends MLHelper {
               .addMethods(proto.Fetch.Method.newBuilder().setMethod("accuracy")))
           .build()
         val accuracyResult = MLHandler.handleMlCommand(sessionHolder, accuracyCommand)
-        assert(lrModel.summary.accuracy === accuracyResult.getParam.getLiteral.getDouble)
+        assert(lrModel.summary.accuracy === accuracyResult.getParam.getDouble)
 
         val weightedFMeasureCommand = proto.MlCommand
           .newBuilder()
@@ -289,7 +244,7 @@ class MLSuite extends MLHelper {
           MLHandler.handleMlCommand(sessionHolder, weightedFMeasureCommand)
         assert(
           lrModel.summary.weightedFMeasure(2.5) ===
-            weightedFMeasureResult.getParam.getLiteral.getDouble)
+            weightedFMeasureResult.getParam.getDouble)
       }
     }
 
@@ -386,5 +341,61 @@ class MLSuite extends MLHelper {
     assert(
       thrown.message.contains("org.apache.spark.sql.connect.ml.NotImplementingMLReadble " +
         "must implement MLReadable"))
+  }
+
+  test("RegressionEvaluator works") {
+    val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
+
+    val evalCmd = proto.MlCommand
+      .newBuilder()
+      .setEvaluate(
+        proto.MlCommand.Evaluate
+          .newBuilder()
+          .setDataset(createRegressionEvaluationLocalRelationProto)
+          .setEvaluator(getRegressorEvaluator)
+          .setParams(
+            proto.MlParams
+              .newBuilder()
+              .putParams(
+                "predictionCol",
+                proto.Expression.Literal.newBuilder().setString("raw").build())))
+      .build()
+    val evalResult = MLHandler.handleMlCommand(sessionHolder, evalCmd)
+    assert(
+      evalResult.getParam.getDouble > 2.841 &&
+        evalResult.getParam.getDouble < 2.843)
+
+    // read/write
+    val tempDir = Utils.createTempDir(namePrefix = this.getClass.getName)
+    try {
+      val path = new File(tempDir, Identifiable.randomUID("RegressionEvaluator")).getPath
+      val writeCmd = proto.MlCommand
+        .newBuilder()
+        .setWrite(
+          proto.MlCommand.Write
+            .newBuilder()
+            .setOperator(getRegressorEvaluator)
+            .setParams(getMetricName)
+            .setPath(path)
+            .setShouldOverwrite(true))
+        .build()
+      MLHandler.handleMlCommand(sessionHolder, writeCmd)
+
+      val readCmd = proto.MlCommand
+        .newBuilder()
+        .setRead(
+          proto.MlCommand.Read
+            .newBuilder()
+            .setOperator(getRegressorEvaluator)
+            .setPath(path))
+        .build()
+
+      val ret = MLHandler.handleMlCommand(sessionHolder, readCmd)
+      assert(
+        ret.getOperatorInfo.getParams.getParamsMap.get("metricName").getString ==
+          "mae")
+    } finally {
+      Utils.deleteRecursively(tempDir)
+    }
   }
 }
