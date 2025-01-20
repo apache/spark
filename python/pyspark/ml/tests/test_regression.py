@@ -192,7 +192,8 @@ class RegressionTestsMixin:
 
         featureImportances = model.featureImportances
         self.assertTrue(
-            np.allclose(featureImportances, [0.5756, 0.4244], atol=1e-4), featureImportances
+            np.allclose(featureImportances, [0.5756, 0.4244], atol=1e-4),
+            featureImportances,
         )
 
         debugString = model.toDebugString
