@@ -747,7 +747,12 @@ case class UnionLoopExec(
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
 
-  private def cacheAndCount(plan: LogicalPlan, limit: Option[Long]) = {
+  /**
+   * This function executes the plan (optionally with appended limit node) and caches the result,
+   * with the caching mode specified in config.
+   */
+  private def executeAndCacheAndCount(
+     plan: LogicalPlan, limit: Option[Long]) = {
     val limitedPlan = limit.map(l => Limit(Literal(l.toInt), plan)).getOrElse(plan)
     val df = Dataset.ofRows(session, limitedPlan)
     val cachedDF = cacheMode match {
@@ -767,9 +772,11 @@ case class UnionLoopExec(
 
     val unionChildren = mutable.ArrayBuffer.empty[LogicalRDD]
     var currentLimit = limit.map(_.toLong)
-    var (prevDF, prevCount) = cacheAndCount(anchor, currentLimit)
+    var (prevDF, prevCount) = executeAndCacheAndCount(anchor, currentLimit)
 
-    var currentLevel = 0
+    var currentLevel = 1
+
+    // main loop for obtaining the result of the recursive query
     while (prevCount > 0 && currentLimit.forall(_ > 0)) {
       unionDFs += prevDF
 
@@ -785,16 +792,17 @@ case class UnionLoopExec(
       numOutputRows += prevCount
       SQLMetrics.postDriverMetricUpdates(sparkContext, executionId, metrics.values.toSeq)
 
+      // the current plan is created by substituting UnionLoopRef node with the project node of
+      // the previous plan
       val newRecursion = recursion.transform {
         case r: UnionLoopRef =>
-          val prevRefPlan = prevPlan
-          val prevPlanToRefMapping = prevRefPlan.output.zip(r.output).map {
+          val prevPlanToRefMapping = prevPlan.output.zip(r.output).map {
             case (fa, ta) => Alias(fa, ta.name)(ta.exprId)
           }
-          Project(prevPlanToRefMapping, prevRefPlan)
+          Project(prevPlanToRefMapping, prevPlan)
       }
 
-      val (df, count) = cacheAndCount(newRecursion, currentLimit)
+      val (df, count) = executeAndCacheAndCount(newRecursion, currentLimit)
       prevDF = df
       prevCount = count
 
