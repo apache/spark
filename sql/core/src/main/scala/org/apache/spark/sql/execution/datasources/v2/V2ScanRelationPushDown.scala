@@ -326,7 +326,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
 
   private def addCastIfNeeded(expression: Expression, expectedDataType: DataType) = {
     val cast = Cast(expression, expectedDataType)
-    if (cast.needsTimeZone) {
+    if (cast.timeZoneId.isEmpty && cast.needsTimeZone) {
       cast.withTimeZone(conf.sessionLocalTimeZone)
     } else {
       cast
