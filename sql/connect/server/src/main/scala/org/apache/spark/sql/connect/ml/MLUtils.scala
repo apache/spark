@@ -352,34 +352,57 @@ private[ml] object MLUtils {
   }
 
   /**
-   * Call "load" function on the ML operator given the operator name
+   * Load an ML component (Estimator, Transformer, or Evaluator) from the given path.
    *
+   * @param sessionHolder
+   *   the session holder
    * @param className
    *   the ML operator name
    * @param path
    *   the path to be loaded
+   * @param operatorClass
+   *   the class type of the ML operator (Estimator, Transformer, or Evaluator)
+   * @tparam T
+   *   the type of the ML operator
    * @return
-   *   the ML instance
+   *   the instance of the ML operator
    */
-  def load(sessionHolder: SessionHolder, className: String, path: String): Object = {
+  private def loadOperator[T](sessionHolder: SessionHolder,
+                              className: String,
+                              path: String,
+                              operatorClass: Class[T]): T = {
     val name = replaceOperator(sessionHolder, className)
+    val operators = loadOperators(operatorClass)
+    if (operators.isEmpty || !operators.contains(name)) {
+      throw MlUnsupportedException(s"Unsupported read for $name")
+    }
+    operators(name)
+      .getMethod("load", classOf[String])
+      .invoke(null, path)
+      .asInstanceOf[T]
+  }
 
-    def invokeLoad(clz: Class[_]): Object =
-      clz.getMethod("load", classOf[String]).invoke(null, path)
+  /**
+   * Load an estimator from the specified path.
+   */
+  def loadEstimator(sessionHolder: SessionHolder, className: String, path: String): Estimator[_] = {
+    loadOperator(sessionHolder, className, path, classOf[Estimator[_]])
+  }
 
-    val transformers = loadOperators(classOf[Transformer])
-    if (transformers.contains(name)) {
-      return invokeLoad(transformers(name))
-    }
-    val evaluators = loadOperators(classOf[Evaluator])
-    if (evaluators.contains(name)) {
-      return invokeLoad(evaluators(name))
-    }
-    val estimators = loadOperators(classOf[Estimator[_]])
-    if (estimators.contains(name)) {
-      return invokeLoad(estimators(name))
-    }
-    throw MlUnsupportedException(s"Unsupported ML operator for loading, found $name")
+  /**
+   * Load a transformer from the specified path.
+   */
+  def loadTransformer(sessionHolder: SessionHolder,
+                      className: String,
+                      path: String): Transformer = {
+    loadOperator(sessionHolder, className, path, classOf[Transformer])
+  }
+
+  /**
+   * Load an evaluator from the specified path.
+   */
+  def loadEvaluator(sessionHolder: SessionHolder, className: String, path: String): Evaluator = {
+    loadOperator(sessionHolder, className, path, classOf[Evaluator])
   }
 
   // Since we're using reflection way to get the attribute, in order not to

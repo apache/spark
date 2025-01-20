@@ -106,8 +106,8 @@ private[ml] object Node {
     }
   }
 
-  // Create a dummy node used for ml connect only
-  def dummyNode: Node = {
+  // A dummy node used for ml connect only
+  val dummyNode: Node = {
     new LeafNode(0.0, 0.0, ImpurityCalculator.getCalculator("gini", Array.empty, 0))
   }
 }

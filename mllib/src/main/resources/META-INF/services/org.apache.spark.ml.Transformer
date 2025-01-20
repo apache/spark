@@ -25,8 +25,8 @@ org.apache.spark.ml.classification.LogisticRegressionModel
 org.apache.spark.ml.classification.DecisionTreeClassificationModel
 org.apache.spark.ml.classification.RandomForestClassificationModel
 org.apache.spark.ml.classification.GBTClassificationModel
-# regression
 
+# regression
 org.apache.spark.ml.regression.LinearRegressionModel
 org.apache.spark.ml.regression.DecisionTreeRegressionModel
 org.apache.spark.ml.regression.RandomForestRegressionModel
