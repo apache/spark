@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.trees.UnaryLike
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.types.StringTypeWithCollation
-import org.apache.spark.sql.types.{AbstractDataType, BooleanType, DataType, ObjectType}
+import org.apache.spark.sql.types.{AbstractDataType, BooleanType, ObjectType}
 import org.apache.spark.unsafe.types.UTF8String
 
 // scalastyle:off line.size.limit
