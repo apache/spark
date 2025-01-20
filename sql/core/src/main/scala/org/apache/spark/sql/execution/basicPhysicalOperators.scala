@@ -776,7 +776,7 @@ case class UnionLoopExec(
 
     var currentLevel = 1
 
-    // main loop for obtaining the result of the recursive query
+    // Main loop for obtaining the result of the recursive query.
     while (prevCount > 0 && currentLimit.forall(_ > 0)) {
       unionDFs += prevDF
 
@@ -785,7 +785,7 @@ case class UnionLoopExec(
           s"exhausted, try increasing ${SQLConf.CTE_RECURSION_LEVEL_LIMIT.key}")
       }
 
-      // Inherit stats and constraints from the dataset of the previous iteration
+      // Inherit stats and constraints from the dataset of the previous iteration.
       val prevPlan = LogicalRDD.fromDataset(prevDF.queryExecution.toRdd, prevDF, prevDF.isStreaming)
         .newInstance()
       unionChildren += prevPlan
@@ -793,7 +793,7 @@ case class UnionLoopExec(
       SQLMetrics.postDriverMetricUpdates(sparkContext, executionId, metrics.values.toSeq)
 
       // the current plan is created by substituting UnionLoopRef node with the project node of
-      // the previous plan
+      // the previous plan.
       // This way we support only UNION ALL case. Additional case should be added for UNION case.
       val newRecursion = recursion.transform {
         case r: UnionLoopRef =>
