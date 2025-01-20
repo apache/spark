@@ -145,12 +145,12 @@ object JdbcUtils extends Logging with SQLConfHelper {
   }
 
   def getUpsertStatement(
-    table: String,
-    rddSchema: StructType,
-    tableSchema: Option[StructType],
-    isCaseSensitive: Boolean,
-    dialect: JdbcDialect,
-    options: JDBCOptions): String = {
+      table: String,
+      rddSchema: StructType,
+      tableSchema: Option[StructType],
+      isCaseSensitive: Boolean,
+      dialect: JdbcDialect,
+      options: JDBCOptions): String = {
     val columns = getInsertColumns(table, rddSchema, tableSchema, isCaseSensitive, dialect)
     dialect.getUpsertStatement(table, columns, isCaseSensitive, options)
   }
