@@ -530,31 +530,11 @@ class TableValuedFunction:
         Examples
         --------
         >>> spark.tvf.collations().show()
-        +-------+-------+-------------------+---------+-------+------------------+----------------+-------------+-----------+
-        |CATALOG| SCHEMA|               NAME| LANGUAGE|COUNTRY|ACCENT_SENSITIVITY|CASE_SENSITIVITY|PAD_ATTRIBUTE|ICU_VERSION|
-        +-------+-------+-------------------+---------+-------+------------------+----------------+-------------+-----------+
-        | SYSTEM|BUILTIN|        UTF8_BINARY|     NULL|   NULL|  ACCENT_SENSITIVE|  CASE_SENSITIVE|       NO_PAD|       NULL|
-        | SYSTEM|BUILTIN|         UTF8_LCASE|     NULL|   NULL|  ACCENT_SENSITIVE|CASE_INSENSITIVE|       NO_PAD|       NULL|
-        | SYSTEM|BUILTIN|  UTF8_BINARY_RTRIM|     NULL|   NULL|  ACCENT_SENSITIVE|  CASE_SENSITIVE|        RTRIM|       NULL|
-        | SYSTEM|BUILTIN|   UTF8_LCASE_RTRIM|     NULL|   NULL|  ACCENT_SENSITIVE|CASE_INSENSITIVE|        RTRIM|       NULL|
-        | SYSTEM|BUILTIN|            UNICODE|     NULL|   NULL|  ACCENT_SENSITIVE|  CASE_SENSITIVE|       NO_PAD|   76.1.0.0|
-        | SYSTEM|BUILTIN|         UNICODE_AI|     NULL|   NULL|ACCENT_INSENSITIVE|  CASE_SENSITIVE|       NO_PAD|   76.1.0.0|
-        | SYSTEM|BUILTIN|   UNICODE_AI_RTRIM|     NULL|   NULL|ACCENT_INSENSITIVE|  CASE_SENSITIVE|        RTRIM|   76.1.0.0|
-        | SYSTEM|BUILTIN|         UNICODE_CI|     NULL|   NULL|  ACCENT_SENSITIVE|CASE_INSENSITIVE|       NO_PAD|   76.1.0.0|
-        | SYSTEM|BUILTIN|      UNICODE_CI_AI|     NULL|   NULL|ACCENT_INSENSITIVE|CASE_INSENSITIVE|       NO_PAD|   76.1.0.0|
-        | SYSTEM|BUILTIN|UNICODE_CI_AI_RTRIM|     NULL|   NULL|ACCENT_INSENSITIVE|CASE_INSENSITIVE|        RTRIM|   76.1.0.0|
-        | SYSTEM|BUILTIN|   UNICODE_CI_RTRIM|     NULL|   NULL|  ACCENT_SENSITIVE|CASE_INSENSITIVE|        RTRIM|   76.1.0.0|
-        | SYSTEM|BUILTIN|      UNICODE_RTRIM|     NULL|   NULL|  ACCENT_SENSITIVE|  CASE_SENSITIVE|        RTRIM|   76.1.0.0|
-        | SYSTEM|BUILTIN|                 af|Afrikaans|   NULL|  ACCENT_SENSITIVE|  CASE_SENSITIVE|       NO_PAD|   76.1.0.0|
-        | SYSTEM|BUILTIN|              af_AI|Afrikaans|   NULL|ACCENT_INSENSITIVE|  CASE_SENSITIVE|       NO_PAD|   76.1.0.0|
-        | SYSTEM|BUILTIN|        af_AI_RTRIM|Afrikaans|   NULL|ACCENT_INSENSITIVE|  CASE_SENSITIVE|        RTRIM|   76.1.0.0|
-        | SYSTEM|BUILTIN|              af_CI|Afrikaans|   NULL|  ACCENT_SENSITIVE|CASE_INSENSITIVE|       NO_PAD|   76.1.0.0|
-        | SYSTEM|BUILTIN|           af_CI_AI|Afrikaans|   NULL|ACCENT_INSENSITIVE|CASE_INSENSITIVE|       NO_PAD|   76.1.0.0|
-        | SYSTEM|BUILTIN|     af_CI_AI_RTRIM|Afrikaans|   NULL|ACCENT_INSENSITIVE|CASE_INSENSITIVE|        RTRIM|   76.1.0.0|
-        | SYSTEM|BUILTIN|        af_CI_RTRIM|Afrikaans|   NULL|  ACCENT_SENSITIVE|CASE_INSENSITIVE|        RTRIM|   76.1.0.0|
-        | SYSTEM|BUILTIN|           af_RTRIM|Afrikaans|   NULL|  ACCENT_SENSITIVE|  CASE_SENSITIVE|        RTRIM|   76.1.0.0|
-        +-------+-------+-------------------+---------+-------+------------------+----------------+-------------+-----------+
-        only showing top 20 rows
+        +-------+-------+-------------------+...
+        |CATALOG| SCHEMA|               NAME|...
+        +-------+-------+-------------------+...
+        ...
+        +-------+-------+-------------------+...
         """
         return self._fn("collations")
 
