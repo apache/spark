@@ -44,6 +44,7 @@ from pyspark.ml.util import (
     JavaMLReadable,
     GeneralJavaMLWritable,
     HasTrainingSummary,
+    try_remote_attribute_relation,
 )
 from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaParams, JavaWrapper
 from pyspark.ml.common import inherit_doc, _java2py
@@ -91,6 +92,7 @@ class ClusteringSummary(JavaWrapper):
 
     @property
     @since("2.1.0")
+    @try_remote_attribute_relation
     def predictions(self) -> DataFrame:
         """
         DataFrame produced by the model's `transform` method.
@@ -115,6 +117,7 @@ class ClusteringSummary(JavaWrapper):
 
     @property
     @since("2.1.0")
+    @try_remote_attribute_relation
     def cluster(self) -> DataFrame:
         """
         DataFrame of predicted cluster centers for each training data point.
