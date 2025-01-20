@@ -38,6 +38,7 @@ import org.apache.spark.sql.catalyst.util.{
   Iso8601TimestampFormatter,
   LegacyDateFormats
 }
+import org.apache.spark.sql.classic.ClassicConversions.castToImpl
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.catalog.V1Table
 import org.apache.spark.sql.errors.QueryCompilationErrors

@@ -17,9 +17,8 @@
 
 package org.apache.spark.sql.execution.command
 
-import org.apache.spark.sql.Row
+import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.classic.SparkSession
 
 /**
  * The command for `USE NAMESPACE XXX`

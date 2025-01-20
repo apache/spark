@@ -449,6 +449,6 @@ case class ErrorTestCommand(foo: String) extends LeafRunnableCommand {
 
   override val output: Seq[Attribute] = Seq(AttributeReference("foo", StringType)())
 
-  override def run(sparkSession: SparkSession): Seq[Row] =
+  override def run(sparkSession: org.apache.spark.sql.SparkSession): Seq[Row] =
     throw new java.lang.Error(foo)
 }

@@ -17,10 +17,10 @@
 
 package org.apache.spark.sql.execution.datasources
 
-import org.apache.spark.sql.Row
+import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{CTEInChildren, CTERelationDef, LogicalPlan, WithCTE}
-import org.apache.spark.sql.classic.{Dataset, SparkSession}
+import org.apache.spark.sql.classic.Dataset
 import org.apache.spark.sql.execution.command.LeafRunnableCommand
 import org.apache.spark.sql.sources.InsertableRelation
 
