@@ -21,8 +21,8 @@ import scala.jdk.CollectionConverters.CollectionHasAsScala
 
 import org.apache.spark.connect.proto
 import org.apache.spark.internal.Logging
-import org.apache.spark.ml.{Estimator, Model}
-import org.apache.spark.ml.param.ParamMap
+import org.apache.spark.ml.Model
+import org.apache.spark.ml.param.{ParamMap, Params}
 import org.apache.spark.ml.util.{MLWritable, Summary}
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.connect.common.LiteralValueProtoConverter
@@ -172,18 +172,29 @@ private[connect] object MLHandler extends Logging {
           // save an estimator/evaluator/transformer
           case proto.MlCommand.Write.TypeCase.OPERATOR =>
             val writer = mlCommand.getWrite
-            if (writer.getOperator.getType == proto.MlOperator.OperatorType.ESTIMATOR) {
-              val estimator =
-                MLUtils.getEstimator(sessionHolder, writer.getOperator, Some(writer.getParams))
-              estimator match {
-                case m: MLWritable => MLUtils.write(m, mlCommand.getWrite)
-                case other => throw MlUnsupportedException(s"Estimator $other is not writable")
-              }
-            } else {
-              throw MlUnsupportedException(s"${writer.getOperator.getName} not supported")
-            }
+            val operatorType = writer.getOperator.getType
+            val operatorName = writer.getOperator.getName
+            val params = Some(writer.getParams)
 
-          case other => throw MlUnsupportedException(s"$other not supported")
+            operatorType match {
+              case proto.MlOperator.OperatorType.ESTIMATOR =>
+                val estimator = MLUtils.getEstimator(sessionHolder, writer.getOperator, params)
+                estimator match {
+                  case writable: MLWritable => MLUtils.write(writable, mlCommand.getWrite)
+                  case other => throw MlUnsupportedException(s"Estimator $other is not writable")
+                }
+
+              case proto.MlOperator.OperatorType.EVALUATOR =>
+                val evaluator = MLUtils.getEvaluator(sessionHolder, writer.getOperator, params)
+                evaluator match {
+                  case writable: MLWritable => MLUtils.write(writable, mlCommand.getWrite)
+                  case other => throw MlUnsupportedException(s"Evaluator $other is not writable")
+                }
+
+              case _ =>
+                throw MlUnsupportedException(s"Operator $operatorName is not supported")
+            }
+          case other => throw MlUnsupportedException(s"$other write not supported")
         }
         proto.MlCommandResult.newBuilder().build()
 
@@ -205,20 +216,35 @@ private[connect] object MLHandler extends Logging {
                 .setParams(Serializer.serializeParams(model)))
             .build()
 
-        } else if (operator.getType == proto.MlOperator.OperatorType.ESTIMATOR) {
-          val estimator = MLUtils.load(sessionHolder, name, path).asInstanceOf[Estimator[_]]
+        } else if (operator.getType == proto.MlOperator.OperatorType.ESTIMATOR ||
+          operator.getType == proto.MlOperator.OperatorType.EVALUATOR) {
+          val operator = MLUtils.load(sessionHolder, name, path).asInstanceOf[Params]
           proto.MlCommandResult
             .newBuilder()
             .setOperatorInfo(
               proto.MlCommandResult.MlOperatorInfo
                 .newBuilder()
                 .setName(name)
-                .setUid(estimator.uid)
-                .setParams(Serializer.serializeParams(estimator)))
+                .setUid(operator.uid)
+                .setParams(Serializer.serializeParams(operator)))
             .build()
         } else {
-          throw MlUnsupportedException(s"${operator.getType} not supported")
+          throw MlUnsupportedException(s"${operator.getType} read not supported")
         }
+
+      case proto.MlCommand.CommandCase.EVALUATE =>
+        val evalCmd = mlCommand.getEvaluate
+        val evalProto = evalCmd.getEvaluator
+        assert(evalProto.getType == proto.MlOperator.OperatorType.EVALUATOR)
+
+        val dataset = MLUtils.parseRelationProto(evalCmd.getDataset, sessionHolder)
+        val evaluator =
+          MLUtils.getEvaluator(sessionHolder, evalProto, Some(evalCmd.getParams))
+        val metric = evaluator.evaluate(dataset)
+        proto.MlCommandResult
+          .newBuilder()
+          .setParam(LiteralValueProtoConverter.toLiteralProto(metric))
+          .build()
 
       case other => throw MlUnsupportedException(s"$other not supported")
     }

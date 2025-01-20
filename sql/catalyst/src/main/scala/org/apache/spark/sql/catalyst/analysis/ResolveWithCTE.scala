@@ -19,11 +19,11 @@ package org.apache.spark.sql.catalyst.analysis
 
 import scala.collection.mutable
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{CTE, PLAN_EXPRESSION}
-import org.apache.spark.sql.errors.QueryCompilationErrors
 
 /**
  * Updates CTE references with the resolve output attributes of corresponding CTE definitions.
@@ -144,8 +144,9 @@ object ResolveWithCTE extends Rule[LogicalPlan] {
                 // Project (as UnresolvedSubqueryColumnAliases have not been substituted with the
                 // Project yet), leaving us with cases of SubqueryAlias->Union and SubqueryAlias->
                 // UnresolvedSubqueryColumnAliases->Union. The same applies to Distinct Union.
-                throw QueryCompilationErrors.invalidRecursiveCteError(
-                  "Unsupported recursive CTE UNION placement.")
+                throw new AnalysisException(
+                  errorClass = "INVALID_RECURSIVE_CTE",
+                  messageParameters = Map.empty)
             }
         }
         withCTE.copy(cteDefs = newCTEDefs)
