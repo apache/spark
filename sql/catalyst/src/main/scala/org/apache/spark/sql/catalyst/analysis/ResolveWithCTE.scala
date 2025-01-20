@@ -193,7 +193,7 @@ object ResolveWithCTE extends Rule[LogicalPlan] {
     }.count(_ == true)
     if (numOfSelfRef > 1) {
       throw new AnalysisException(
-        errorClass = "INVALID_RECURSIVE_REFERENCE.PLACE",
+        errorClass = "INVALID_RECURSIVE_REFERENCE.NUMBER",
         messageParameters = Map.empty)
     }
   }
