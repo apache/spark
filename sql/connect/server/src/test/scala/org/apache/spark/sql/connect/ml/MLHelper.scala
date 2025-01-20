@@ -149,6 +149,8 @@ class MyLogisticRegressionModel(
     with HasFakedParam
     with DefaultParamsWritable {
 
+  private[spark] def this() = this("MyLogisticRegressionModel", 1.0f, 1.0f)
+
   def setFakeParam(v: Int): this.type = set(fakeParam, v)
 
   def setMaxIter(v: Int): this.type = set(maxIter, v)

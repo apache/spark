@@ -15,19 +15,6 @@
 # limitations under the License.
 #
 
-# Spark Connect ML uses ServiceLoader to find out the supported Spark Ml non-model transformer.
-# So register the supported transformer here if you're trying to add a new one.
-org.apache.spark.ml.feature.VectorAssembler
-
-########### Model for loading
-# classification
-org.apache.spark.ml.classification.LogisticRegressionModel
-org.apache.spark.ml.classification.DecisionTreeClassificationModel
-org.apache.spark.ml.classification.RandomForestClassificationModel
-org.apache.spark.ml.classification.GBTClassificationModel
-# regression
-
-org.apache.spark.ml.regression.LinearRegressionModel
-org.apache.spark.ml.regression.DecisionTreeRegressionModel
-org.apache.spark.ml.regression.RandomForestRegressionModel
-org.apache.spark.ml.regression.GBTRegressionModel
+# Spark Connect ML uses ServiceLoader to find out the supported Spark Ml estimators.
+# So register the supported estimator here if you're trying to add a new one.
+org.apache.spark.sql.connect.ml.MyLogisticRegressionModel

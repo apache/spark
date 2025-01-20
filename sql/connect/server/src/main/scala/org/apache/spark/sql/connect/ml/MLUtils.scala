@@ -29,13 +29,13 @@ import org.apache.spark.ml.{Estimator, Transformer}
 import org.apache.spark.ml.evaluation.Evaluator
 import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.param.Params
-import org.apache.spark.ml.util.{MLReadable, MLWritable}
+import org.apache.spark.ml.util.MLWritable
 import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, LiteralValueProtoConverter}
 import org.apache.spark.sql.connect.planner.SparkConnectPlanner
 import org.apache.spark.sql.connect.plugin.SparkConnectPluginRegistry
 import org.apache.spark.sql.connect.service.SessionHolder
-import org.apache.spark.util.{SparkClassUtils, Utils}
+import org.apache.spark.util.Utils
 
 private[ml] object MLUtils {
 
@@ -364,16 +364,22 @@ private[ml] object MLUtils {
   def load(sessionHolder: SessionHolder, className: String, path: String): Object = {
     val name = replaceOperator(sessionHolder, className)
 
-    // It's the companion object of the corresponding spark operators to load.
-    val objectCls = SparkClassUtils.classForName(name + "$")
-    val mlReadableClass = classOf[MLReadable[_]]
-    // Make sure it is implementing MLReadable
-    if (!mlReadableClass.isAssignableFrom(objectCls)) {
-      throw MlUnsupportedException(s"$name must implement MLReadable.")
-    }
+    def invokeLoad(clz: Class[_]): Object =
+      clz.getMethod("load", classOf[String]).invoke(null, path)
 
-    val loadedMethod = SparkClassUtils.classForName(name).getMethod("load", classOf[String])
-    loadedMethod.invoke(null, path)
+    val transformers = loadOperators(classOf[Transformer])
+    if (transformers.contains(name)) {
+      return invokeLoad(transformers(name))
+    }
+    val evaluators = loadOperators(classOf[Evaluator])
+    if (evaluators.contains(name)) {
+      return invokeLoad(evaluators(name))
+    }
+    val estimators = loadOperators(classOf[Estimator[_]])
+    if (estimators.contains(name)) {
+      return invokeLoad(estimators(name))
+    }
+    throw MlUnsupportedException(s"Unsupported ML operator for loading, found $name")
   }
 
   // Since we're using reflection way to get the attribute, in order not to

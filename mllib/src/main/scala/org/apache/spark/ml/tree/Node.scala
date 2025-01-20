@@ -105,6 +105,11 @@ private[ml] object Node {
         split = Split.fromOld(oldNode.split.get, categoricalFeatures), impurityStats = null)
     }
   }
+
+  // Create a dummy node used for ml connect only
+  def dummyNode: Node = {
+    new LeafNode(0.0, 0.0, ImpurityCalculator.getCalculator("gini", Array.empty, 0))
+  }
 }
 
 /**
