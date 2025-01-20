@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{CTE, PLAN_EXPRESSION}
+import org.apache.spark.sql.types.DataType
 
 /**
  * Updates CTE references with the resolve output attributes of corresponding CTE definitions.
@@ -56,6 +57,13 @@ object ResolveWithCTE extends Rule[LogicalPlan] {
           case cteDef if !cteDef.hasRecursiveCTERelationRef =>
             if (cteDef.resolved) {
               cteDefMap.put(cteDef.id, cteDef)
+              // For the resolved cteDefs, hasItsOwnUnionLoopRef checks if this is a recursive
+              // cteDef. If yes, we should check if data types of anchor and recursive terms match,
+              // and if the self-reference is placed correctly
+              if (cteDef.hasItsOwnUnionLoopRef) {
+                checkDataTypesAnchorAndRecursiveTerm(cteDef)
+                checkIfSelfReferenceIsPlacedCorrectly(cteDef)
+              }
             }
             cteDef
           case cteDef =>
@@ -184,8 +192,10 @@ object ResolveWithCTE extends Rule[LogicalPlan] {
     }
   }
 
-  // Counts number of self-references in a recursive CTE definition and throws an error
-  // if that number is bigger than 1.
+  /**
+   * Counts number of self-references in a recursive CTE definition and throws an error
+   * if that number is bigger than 1.
+   */
   private def checkNumberOfSelfReferences(cteDef: CTERelationDef): Unit = {
     val numOfSelfRef = cteDef.map[Boolean] {
       case CTERelationRef(cteDef.id, _, _, _, _, true) => true
@@ -194,6 +204,23 @@ object ResolveWithCTE extends Rule[LogicalPlan] {
     if (numOfSelfRef > 1) {
       throw new AnalysisException(
         errorClass = "INVALID_RECURSIVE_REFERENCE.NUMBER",
+        messageParameters = Map.empty)
+    }
+  }
+
+  /**
+   * Checks if data types of anchor and recursive terms of a recursive CTE definition match.
+   */
+  private def checkDataTypesAnchorAndRecursiveTerm(cteDef: CTERelationDef): Unit = {
+    val unionLoop = cteDef.find(_.isInstanceOf[UnionLoop]).get.asInstanceOf[UnionLoop]
+    val anchorOutputDatatypes = unionLoop.anchor.output.map(_.dataType)
+    val recursiveTermOutputDatatypes = unionLoop.recursion.output.map(_.dataType)
+
+    if (!anchorOutputDatatypes.zip(recursiveTermOutputDatatypes).forall {
+      case (anchorDT, recursionDT) => DataType.equalsStructurally(anchorDT, recursionDT, true)
+    }) {
+      throw new AnalysisException(
+        errorClass = "INVALID_RECURSIVE_REFERENCE.DATA_TYPE",
         messageParameters = Map.empty)
     }
   }
