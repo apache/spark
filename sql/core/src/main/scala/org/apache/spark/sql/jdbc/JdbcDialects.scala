@@ -346,7 +346,10 @@ abstract class JdbcDialect extends Serializable with Logging {
       columns: Array[StructField],
       isCaseSensitive: Boolean,
       options: JDBCOptions): String =
-    throw new UnsupportedOperationException("upserts are not supported")
+    throw new SparkUnsupportedOperationException(
+      errorClass = "UNSUPPORTED_FEATURE.UPSERT",
+      messageParameters = Map(
+        "class" -> this.getClass.getSimpleName))
 
   /**
    * Returns the effective fetch size for reading from the JDBC source.
