@@ -868,7 +868,7 @@ abstract class Dataset[T] extends Serializable {
    * @group untypedrel
    * @since 4.0.0
    */
-  def lateralJoin(right: DS[_]): Dataset[Row]
+  def lateralJoin(right: Dataset[_]): DataFrame
 
   /**
    * Lateral join with another `DataFrame`.
@@ -882,7 +882,7 @@ abstract class Dataset[T] extends Serializable {
    * @group untypedrel
    * @since 4.0.0
    */
-  def lateralJoin(right: DS[_], joinExprs: Column): Dataset[Row]
+  def lateralJoin(right: Dataset[_], joinExprs: Column): DataFrame
 
   /**
    * Lateral join with another `DataFrame`.
@@ -895,7 +895,7 @@ abstract class Dataset[T] extends Serializable {
    * @group untypedrel
    * @since 4.0.0
    */
-  def lateralJoin(right: DS[_], joinType: String): Dataset[Row]
+  def lateralJoin(right: Dataset[_], joinType: String): DataFrame
 
   /**
    * Lateral join with another `DataFrame`.
@@ -910,7 +910,7 @@ abstract class Dataset[T] extends Serializable {
    * @group untypedrel
    * @since 4.0.0
    */
-  def lateralJoin(right: DS[_], joinExprs: Column, joinType: String): Dataset[Row]
+  def lateralJoin(right: Dataset[_], joinExprs: Column, joinType: String): DataFrame
 
   protected def sortInternal(global: Boolean, sortExprs: Seq[Column]): Dataset[T]
 

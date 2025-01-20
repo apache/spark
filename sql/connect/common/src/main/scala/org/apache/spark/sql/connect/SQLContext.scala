@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
+package org.apache.spark.sql.connect
 
 import java.util.{List => JList, Map => JMap, Properties}
 
@@ -26,7 +26,8 @@ import org.apache.spark.SparkContext
 import org.apache.spark.annotation.Stable
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.connect.ConnectClientUnsupportedErrors
+import org.apache.spark.sql
+import org.apache.spark.sql.{Encoder, ExperimentalMethods, Row}
 import org.apache.spark.sql.connect.ConnectConversions._
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.streaming.{DataStreamReader, StreamingQueryManager}
@@ -35,7 +36,7 @@ import org.apache.spark.sql.util.ExecutionListenerManager
 
 @Stable
 class SQLContext private[sql] (override val sparkSession: SparkSession)
-    extends api.SQLContext(sparkSession) {
+    extends sql.SQLContext(sparkSession) {
 
   /** @inheritdoc */
   def newSession(): SQLContext = sparkSession.newSession().sqlContext
@@ -58,11 +59,7 @@ class SQLContext private[sql] (override val sparkSession: SparkSession)
   // Disable style checker so "implicits" object can start with lowercase i
 
   /** @inheritdoc */
-  object implicits extends SQLImplicits {
-
-    /** @inheritdoc */
-    override protected def session: SparkSession = sparkSession
-  }
+  object implicits extends SQLImplicits(sparkSession)
 
   // scalastyle:on
 
@@ -308,7 +305,7 @@ class SQLContext private[sql] (override val sparkSession: SparkSession)
     super.jdbc(url, table, theParts)
   }
 }
-object SQLContext extends api.SQLContextCompanion {
+object SQLContext extends sql.SQLContextCompanion {
 
   override private[sql] type SQLContextImpl = SQLContext
   override private[sql] type SparkContextImpl = SparkContext

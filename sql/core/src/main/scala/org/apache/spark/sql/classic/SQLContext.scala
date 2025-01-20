@@ -15,15 +15,10 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
+package org.apache.spark.sql.classic
 
 import java.util.{List => JList, Map => JMap, Properties}
 
-<<<<<<< HEAD
-import scala.collection.immutable
-import scala.language.implicitConversions
-=======
->>>>>>> apache/master
 import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.spark.{SparkConf, SparkContext}
@@ -31,16 +26,14 @@ import org.apache.spark.annotation.{DeveloperApi, Experimental, Stable, Unstable
 import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
 import org.apache.spark.internal.config.ConfigEntry
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql
+import org.apache.spark.sql.{Encoder, ExperimentalMethods, Row}
 import org.apache.spark.sql.catalyst._
 import org.apache.spark.sql.catalyst.expressions._
-<<<<<<< HEAD
 import org.apache.spark.sql.catalyst.plans.logical.ShowTables
 import org.apache.spark.sql.classic.ClassicConversions.castToImpl
 import org.apache.spark.sql.classic.Dataset.ofRows
 import org.apache.spark.sql.classic.SparkSession.{builder => newSparkSessionBuilder}
-=======
-import org.apache.spark.sql.classic.ClassicConversions._
->>>>>>> apache/master
 import org.apache.spark.sql.internal.{SessionState, SharedState, SQLConf}
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.streaming.{DataStreamReader, StreamingQueryManager}
@@ -66,7 +59,7 @@ import org.apache.spark.sql.util.ExecutionListenerManager
  */
 @Stable
 class SQLContext private[sql] (override val sparkSession: SparkSession)
-    extends api.SQLContext(sparkSession) {
+    extends sql.SQLContext(sparkSession) {
 
   self =>
 
@@ -118,14 +111,7 @@ class SQLContext private[sql] (override val sparkSession: SparkSession)
 
   /** @inheritdoc */
   object implicits extends SQLImplicits {
-    /** @inheritdoc */
     override protected def session: SparkSession = sparkSession
-
-    override implicit def localSeqToDatasetHolder[T: Encoder](s: Seq[T]): DatasetHolder[T] =
-      sparkSession.implicits.localSeqToDatasetHolder(s)
-
-    override implicit def rddToDatasetHolder[T: Encoder](rdd: RDD[T]): DatasetHolder[T] =
-      sparkSession.implicits.rddToDatasetHolder(rdd)
   }
 
   // scalastyle:on
@@ -156,105 +142,6 @@ class SQLContext private[sql] (override val sparkSession: SparkSession)
   }
 
   /**
-<<<<<<< HEAD
-   * Drops the temporary table with the given table name in the catalog. If the table has been
-   * cached/persisted before, it's also unpersisted.
-   *
-   * @param tableName the name of the table to be unregistered.
-   * @group basic
-   * @since 1.3.0
-   */
-  def dropTempTable(tableName: String): Unit = {
-    sparkSession.catalog.dropTempView(tableName)
-  }
-
-  /**
-   * Creates a `DataFrame` with a single `LongType` column named `id`, containing elements
-   * in a range from 0 to `end` (exclusive) with step value 1.
-   *
-   * @since 1.4.1
-   * @group dataframe
-   */
-  def range(end: Long): DataFrame = sparkSession.range(end).toDF()
-
-  /**
-   * Creates a `DataFrame` with a single `LongType` column named `id`, containing elements
-   * in a range from `start` to `end` (exclusive) with step value 1.
-   *
-   * @since 1.4.0
-   * @group dataframe
-   */
-  def range(start: Long, end: Long): DataFrame = sparkSession.range(start, end).toDF()
-
-  /**
-   * Creates a `DataFrame` with a single `LongType` column named `id`, containing elements
-   * in a range from `start` to `end` (exclusive) with a step value.
-   *
-   * @since 2.0.0
-   * @group dataframe
-   */
-  def range(start: Long, end: Long, step: Long): DataFrame = {
-    sparkSession.range(start, end, step).toDF()
-  }
-
-  /**
-   * Creates a `DataFrame` with a single `LongType` column named `id`, containing elements
-   * in an range from `start` to `end` (exclusive) with an step value, with partition number
-   * specified.
-   *
-   * @since 1.4.0
-   * @group dataframe
-   */
-  def range(start: Long, end: Long, step: Long, numPartitions: Int): DataFrame = {
-    sparkSession.range(start, end, step, numPartitions).toDF()
-  }
-
-  /**
-   * Executes a SQL query using Spark, returning the result as a `DataFrame`.
-   * This API eagerly runs DDL/DML commands, but not for SELECT queries.
-   *
-   * @group basic
-   * @since 1.3.0
-   */
-  def sql(sqlText: String): DataFrame = sparkSession.sql(sqlText)
-
-  /**
-   * Returns the specified table as a `DataFrame`.
-   *
-   * @group ddl_ops
-   * @since 1.3.0
-   */
-  def table(tableName: String): DataFrame = {
-    sparkSession.table(tableName)
-  }
-
-  /**
-   * Returns a `DataFrame` containing names of existing tables in the current database.
-   * The returned DataFrame has three columns, database, tableName and isTemporary (a Boolean
-   * indicating if a table is a temporary one or not).
-   *
-   * @group ddl_ops
-   * @since 1.3.0
-   */
-  def tables(): DataFrame = {
-    ofRows(sparkSession, ShowTables(CurrentNamespace, None))
-  }
-
-  /**
-   * Returns a `DataFrame` containing names of existing tables in the given database.
-   * The returned DataFrame has three columns, database, tableName and isTemporary (a Boolean
-   * indicating if a table is a temporary one or not).
-   *
-   * @group ddl_ops
-   * @since 1.3.0
-   */
-  def tables(databaseName: String): DataFrame = {
-    ofRows(sparkSession, ShowTables(UnresolvedNamespace(Seq(databaseName)), None))
-  }
-
-  /**
-=======
->>>>>>> apache/master
    * Returns a `StreamingQueryManager` that allows managing all the
    * [[org.apache.spark.sql.streaming.StreamingQuery StreamingQueries]] active on `this` context.
    *
@@ -494,7 +381,7 @@ class SQLContext private[sql] (override val sparkSession: SparkSession)
     super.jdbc(url, table, theParts)
 }
 
-object SQLContext extends api.SQLContextCompanion {
+object SQLContext extends sql.SQLContextCompanion {
 
   override private[sql] type SQLContextImpl = SQLContext
   override private[sql] type SparkContextImpl = SparkContext
