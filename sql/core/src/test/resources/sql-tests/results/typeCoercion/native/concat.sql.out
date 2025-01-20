@@ -311,6 +311,22 @@ SELECT
     (string_array1 || int_array2) sti_array
 FROM various_arrays
 -- !query schema
-struct<ts_array:array<smallint>,si_array:array<int>,ib_array:array<bigint>,bd_array:array<decimal(20,0)>,dd_array:array<double>,df_array:array<double>,std_array:array<string>,tst_array:array<string>,sti_array:array<string>>
+struct<>
 -- !query output
-[2,1,3,4]	[2,1,3,4]	[2,1,3,4]	[2,1,9223372036854775808,9223372036854775809]	[9.223372036854776E18,9.223372036854776E18,3.0,4.0]	[2.0,1.0,3.0,4.0]	["a","b","2016-03-12","2016-03-11"]	["2016-11-15 20:54:00","2016-11-12 20:54:00","c","d"]	["a","b","3","4"]
+org.apache.spark.SparkDateTimeException
+{
+  "errorClass" : "CAST_INVALID_INPUT",
+  "sqlState" : "22018",
+  "messageParameters" : {
+    "expression" : "'a'",
+    "sourceType" : "\"STRING\"",
+    "targetType" : "\"DATE\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 295,
+    "stopIndex" : 322,
+    "fragment" : "string_array1 || data_array2"
+  } ]
+}

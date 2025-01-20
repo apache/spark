@@ -65,10 +65,10 @@ object BuildCommons {
   ).map(ProjectRef(buildLocation, _)) ++ sqlProjects ++ streamingProjects ++ connectProjects
 
   val optionallyEnabledProjects@Seq(kubernetes, yarn,
-    sparkGangliaLgpl, streamingKinesisAsl,
+    sparkGangliaLgpl, streamingKinesisAsl, profiler,
     dockerIntegrationTests, hadoopCloud, kubernetesIntegrationTests) =
     Seq("kubernetes", "yarn",
-      "ganglia-lgpl", "streaming-kinesis-asl",
+      "ganglia-lgpl", "streaming-kinesis-asl", "profiler",
       "docker-integration-tests", "hadoop-cloud", "kubernetes-integration-tests").map(ProjectRef(buildLocation, _))
 
   val assemblyProjects@Seq(networkYarn, streamingKafka010Assembly, streamingKinesisAslAssembly) =
@@ -89,9 +89,7 @@ object BuildCommons {
 
   // Google Protobuf version used for generating the protobuf.
   // SPARK-41247: needs to be consistent with `protobuf.version` in `pom.xml`.
-  val protoVersion = "4.28.3"
-  // GRPC version used for Spark Connect.
-  val grpcVersion = "1.67.1"
+  val protoVersion = "4.29.3"
 }
 
 object SparkBuild extends PomBuild {
@@ -371,7 +369,7 @@ object SparkBuild extends PomBuild {
     Seq(
       spark, hive, hiveThriftServer, repl, networkCommon, networkShuffle, networkYarn,
       unsafe, tags, tokenProviderKafka010, sqlKafka010, connectCommon, connect, connectClient,
-      variant, connectShims
+      variant, connectShims, profiler
     ).contains(x)
   }
 
@@ -646,8 +644,11 @@ object SparkConnectCommon {
       val guavaFailureaccessVersion =
         SbtPomKeys.effectivePom.value.getProperties.get(
           "guava.failureaccess.version").asInstanceOf[String]
+      val grpcVersion =
+        SbtPomKeys.effectivePom.value.getProperties.get(
+          "io.grpc.version").asInstanceOf[String]
       Seq(
-        "io.grpc" % "protoc-gen-grpc-java" % BuildCommons.grpcVersion asProtocPlugin(),
+        "io.grpc" % "protoc-gen-grpc-java" % grpcVersion asProtocPlugin(),
         "com.google.guava" % "guava" % guavaVersion,
         "com.google.guava" % "failureaccess" % guavaFailureaccessVersion,
         "com.google.protobuf" % "protobuf-java" % protoVersion % "protobuf"
@@ -1057,11 +1058,11 @@ object KubernetesIntegrationTests {
  * Overrides to work around sbt's dependency resolution being different from Maven's.
  */
 object DependencyOverrides {
-  lazy val guavaVersion = sys.props.get("guava.version").getOrElse("33.1.0-jre")
+  lazy val guavaVersion = sys.props.get("guava.version").getOrElse("33.3.1-jre")
   lazy val settings = Seq(
     dependencyOverrides += "com.google.guava" % "guava" % guavaVersion,
     dependencyOverrides += "jline" % "jline" % "2.14.6",
-    dependencyOverrides += "org.apache.avro" % "avro" % "1.11.3")
+    dependencyOverrides += "org.apache.avro" % "avro" % "1.12.0")
 }
 
 /**
@@ -1190,6 +1191,8 @@ object Hive {
     // smaller size of Xss to mock a FAILED_TO_PARSE_TOO_COMPLEX error, so we need to set for
     // hive moudle specifically.
     (Test / javaOptions) := (Test / javaOptions).value.filterNot(_.contains("Xss")),
+    // SPARK-45265: The value for `-Xss` should be consistent with the configuration value for
+    // `scalatest-maven-plugin` in `sql/hive/pom.xml`
     (Test / javaOptions) += "-Xss64m",
     // Supporting all SerDes requires us to depend on deprecated APIs, so we turn off the warnings
     // only for this subproject.
@@ -1467,11 +1470,11 @@ object SparkUnidoc extends SharedUnidocSettings {
     (ScalaUnidoc / unidoc / unidocProjectFilter) :=
       inAnyProject -- inProjects(OldDeps.project, repl, examples, tools, kubernetes,
         yarn, tags, streamingKafka010, sqlKafka010, connectCommon, connect, connectClient,
-        connectShims, protobuf),
+        connectShims, protobuf, profiler),
     (JavaUnidoc / unidoc / unidocProjectFilter) :=
       inAnyProject -- inProjects(OldDeps.project, repl, examples, tools, kubernetes,
         yarn, tags, streamingKafka010, sqlKafka010, connectCommon, connect, connectClient,
-        connectShims, protobuf),
+        connectShims, protobuf, profiler),
   )
 }
 
@@ -1722,7 +1725,7 @@ object TestSettings {
     (Test / testOptions) += Tests.Argument(TestFrameworks.ScalaTest, "-W", "120", "300"),
     (Test / testOptions) += Tests.Argument(TestFrameworks.JUnit, "-v", "-a"),
     // Enable Junit testing.
-    libraryDependencies += "com.github.sbt.junit" % "jupiter-interface" % "0.13.1" % "test",
+    libraryDependencies += "com.github.sbt.junit" % "jupiter-interface" % "0.13.3" % "test",
     // `parallelExecutionInTest` controls whether test suites belonging to the same SBT project
     // can run in parallel with one another. It does NOT control whether tests execute in parallel
     // within the same JVM (which is controlled by `testForkedParallel`) or whether test cases

@@ -1064,6 +1064,64 @@ def collect_set(col: "ColumnOrName") -> Column:
 collect_set.__doc__ = pysparkfuncs.collect_set.__doc__
 
 
+def listagg(col: "ColumnOrName", delimiter: Optional[Union[Column, str, bytes]] = None) -> Column:
+    if delimiter is None:
+        return _invoke_function_over_columns("listagg", col)
+    else:
+        return _invoke_function_over_columns("listagg", col, lit(delimiter))
+
+
+listagg.__doc__ = pysparkfuncs.listagg.__doc__
+
+
+def listagg_distinct(
+    col: "ColumnOrName", delimiter: Optional[Union[Column, str, bytes]] = None
+) -> Column:
+    from pyspark.sql.connect.column import Column as ConnectColumn
+
+    args = [col]
+    if delimiter is not None:
+        args += [lit(delimiter)]
+
+    _exprs = [_to_col(c)._expr for c in args]
+    return ConnectColumn(
+        UnresolvedFunction("listagg", _exprs, is_distinct=True)  # type: ignore[arg-type]
+    )
+
+
+listagg_distinct.__doc__ = pysparkfuncs.listagg_distinct.__doc__
+
+
+def string_agg(
+    col: "ColumnOrName", delimiter: Optional[Union[Column, str, bytes]] = None
+) -> Column:
+    if delimiter is None:
+        return _invoke_function_over_columns("string_agg", col)
+    else:
+        return _invoke_function_over_columns("string_agg", col, lit(delimiter))
+
+
+string_agg.__doc__ = pysparkfuncs.string_agg.__doc__
+
+
+def string_agg_distinct(
+    col: "ColumnOrName", delimiter: Optional[Union[Column, str, bytes]] = None
+) -> Column:
+    from pyspark.sql.connect.column import Column as ConnectColumn
+
+    args = [col]
+    if delimiter is not None:
+        args += [lit(delimiter)]
+
+    _exprs = [_to_col(c)._expr for c in args]
+    return ConnectColumn(
+        UnresolvedFunction("string_agg", _exprs, is_distinct=True)  # type: ignore[arg-type]
+    )
+
+
+string_agg_distinct.__doc__ = pysparkfuncs.string_agg_distinct.__doc__
+
+
 def corr(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("corr", col1, col2)
 
@@ -1552,7 +1610,7 @@ def count_if(col: "ColumnOrName") -> Column:
 count_if.__doc__ = pysparkfuncs.count_if.__doc__
 
 
-def histogram_numeric(col: "ColumnOrName", nBins: "ColumnOrName") -> Column:
+def histogram_numeric(col: "ColumnOrName", nBins: Column) -> Column:
     return _invoke_function_over_columns("histogram_numeric", col, nBins)
 
 

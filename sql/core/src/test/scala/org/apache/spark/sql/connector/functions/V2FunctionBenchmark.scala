@@ -66,7 +66,7 @@ object V2FunctionBenchmark extends SqlBasedBenchmark {
       codegenEnabled: Boolean,
       resultNullable: Boolean): Unit = {
     val classicSession = castToImpl(spark)
-    import classicSession.RichColumn
+    import classicSession.toRichColumn
     withSQLConf(s"spark.sql.catalog.$catalogName" -> classOf[InMemoryCatalog].getName) {
       createFunction("java_long_add_default",
         new JavaLongAdd(new JavaLongAddDefault(resultNullable)))
@@ -84,7 +84,8 @@ object V2FunctionBenchmark extends SqlBasedBenchmark {
             s"codegen = $codegenEnabled"
         val benchmark = new Benchmark(name, N, output = output)
         benchmark.addCase(s"native_long_add", numIters = 3) { _ =>
-          spark.range(N).select(Column(NativeAdd(col("id").expr, col("id").expr, resultNullable)))
+          spark.range(N)
+            .select(Column(NativeAdd(col("id").expr, col("id").expr, resultNullable)))
             .noop()
         }
         Seq("java_long_add_default", "java_long_add_magic", "java_long_add_static_magic",

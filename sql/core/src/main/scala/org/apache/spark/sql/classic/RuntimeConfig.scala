@@ -21,7 +21,7 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.spark.SPARK_DOC_ROOT
 import org.apache.spark.annotation.Stable
-import org.apache.spark.internal.config.{ConfigEntry, DEFAULT_PARALLELISM}
+import org.apache.spark.internal.config.{ConfigEntry, DEFAULT_PARALLELISM, OptionalConfigEntry}
 import org.apache.spark.sql
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
@@ -43,6 +43,12 @@ class RuntimeConfig private[sql](val sqlConf: SQLConf = new SQLConf) extends sql
   }
 
   /** @inheritdoc */
+  override private[sql] def set[T](entry: ConfigEntry[T], value: T): Unit = {
+    requireNonStaticConf(entry.key)
+    sqlConf.setConf(entry, value)
+  }
+
+  /** @inheritdoc */
   @throws[NoSuchElementException]("if the key is not set and there is no default value")
   def get(key: String): String = {
     sqlConf.getConfString(key)
@@ -57,6 +63,18 @@ class RuntimeConfig private[sql](val sqlConf: SQLConf = new SQLConf) extends sql
   def getAll: Map[String, String] = {
     sqlConf.getAllConfs
   }
+
+  /** @inheritdoc */
+  override private[sql] def get[T](entry: ConfigEntry[T]): T =
+    sqlConf.getConf(entry)
+
+  /** @inheritdoc */
+  override private[sql] def get[T](entry: OptionalConfigEntry[T]): Option[T] =
+    sqlConf.getConf(entry)
+
+  /** @inheritdoc */
+  override private[sql] def get[T](entry: ConfigEntry[T], default: T): T =
+    sqlConf.getConf(entry, default)
 
   private[sql] def getAllAsJava: java.util.Map[String, String] = {
     getAll.asJava

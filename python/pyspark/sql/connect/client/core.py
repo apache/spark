@@ -20,6 +20,8 @@ __all__ = [
     "SparkConnectClient",
 ]
 
+import atexit
+
 from pyspark.sql.connect.utils import check_dependencies
 
 check_dependencies(__name__)
@@ -43,6 +45,7 @@ from typing import (
     Dict,
     Set,
     NoReturn,
+    Mapping,
     cast,
     TYPE_CHECKING,
     Type,
@@ -328,8 +331,8 @@ class DefaultChannelBuilder(ChannelBuilder):
                 jvm = PySparkSession._instantiatedSession._jvm  # type: ignore[union-attr]
                 return getattr(
                     getattr(
-                        jvm.org.apache.spark.sql.connect.service,  # type: ignore[union-attr]
-                        "SparkConnectService$",
+                        jvm,
+                        "org.apache.spark.sql.connect.service.SparkConnectService$",
                     ),
                     "MODULE$",
                 ).localPort()
@@ -493,6 +496,7 @@ class AnalyzeResult:
         is_same_semantics: Optional[bool],
         semantic_hash: Optional[int],
         storage_level: Optional[StorageLevel],
+        ddl_string: Optional[str],
     ):
         self.schema = schema
         self.explain_string = explain_string
@@ -505,6 +509,7 @@ class AnalyzeResult:
         self.is_same_semantics = is_same_semantics
         self.semantic_hash = semantic_hash
         self.storage_level = storage_level
+        self.ddl_string = ddl_string
 
     @classmethod
     def fromProto(cls, pb: Any) -> "AnalyzeResult":
@@ -519,6 +524,7 @@ class AnalyzeResult:
         is_same_semantics: Optional[bool] = None
         semantic_hash: Optional[int] = None
         storage_level: Optional[StorageLevel] = None
+        ddl_string: Optional[str] = None
 
         if pb.HasField("schema"):
             schema = types.proto_schema_to_pyspark_data_type(pb.schema.schema)
@@ -546,6 +552,8 @@ class AnalyzeResult:
             pass
         elif pb.HasField("get_storage_level"):
             storage_level = proto_to_storage_level(pb.get_storage_level.storage_level)
+        elif pb.HasField("json_to_ddl"):
+            ddl_string = pb.json_to_ddl.ddl_string
         else:
             raise SparkConnectException("No analyze result found!")
 
@@ -561,6 +569,7 @@ class AnalyzeResult:
             is_same_semantics,
             semantic_hash,
             storage_level,
+            ddl_string,
         )
 
 
@@ -667,6 +676,9 @@ class SparkConnectClient(object):
         self._profiler_collector = ConnectProfilerCollector()
 
         self._progress_handlers: List[ProgressHandler] = []
+
+        # cleanup ml cache if possible
+        atexit.register(self._cleanup_ml)
 
     def register_progress_handler(self, handler: ProgressHandler) -> None:
         """
@@ -1283,6 +1295,8 @@ class SparkConnectClient(object):
                 req.unpersist.blocking = cast(bool, kwargs.get("blocking"))
         elif method == "get_storage_level":
             req.get_storage_level.relation.CopyFrom(cast(pb2.Relation, kwargs.get("relation")))
+        elif method == "json_to_ddl":
+            req.json_to_ddl.json_string = cast(str, kwargs.get("json_string"))
         else:
             raise PySparkValueError(
                 errorClass="UNSUPPORTED_OPERATION",
@@ -1470,6 +1484,8 @@ class SparkConnectClient(object):
                         b.checkpoint_command_result.relation
                     )
                 }
+            if b.HasField("ml_command_result"):
+                yield {"ml_command_result": b.ml_command_result}
 
         try:
             if self._use_reattachable_execute:
@@ -1575,6 +1591,10 @@ class SparkConnectClient(object):
         op = pb2.ConfigRequest.Operation(get=pb2.ConfigRequest.Get(keys=keys))
         configs = dict(self.config(op).pairs)
         return tuple(configs.get(key) for key in keys)
+
+    def get_config_dict(self, *keys: str) -> Mapping[str, Optional[str]]:
+        op = pb2.ConfigRequest.Operation(get=pb2.ConfigRequest.Get(keys=keys))
+        return dict(self.config(op).pairs)
 
     def get_config_with_defaults(
         self, *pairs: Tuple[str, Optional[str]]
@@ -1918,3 +1938,33 @@ class SparkConnectClient(object):
         (_, properties, _) = self.execute_command(cmd)
         profile_id = properties["create_resource_profile_command_result"]
         return profile_id
+
+    def add_ml_cache(self, cache_id: str) -> None:
+        if not hasattr(self.thread_local, "ml_caches"):
+            self.thread_local.ml_caches = set()
+        self.thread_local.ml_caches.add(cache_id)
+
+    def remove_ml_cache(self, cache_id: str) -> None:
+        if not hasattr(self.thread_local, "ml_caches"):
+            self.thread_local.ml_caches = set()
+
+        if cache_id in self.thread_local.ml_caches:
+            self._delete_ml_cache(cache_id)
+
+    def _delete_ml_cache(self, cache_id: str) -> None:
+        # try best to delete the cache
+        try:
+            command = pb2.Command()
+            command.ml_command.delete.obj_ref.CopyFrom(pb2.ObjectRef(id=cache_id))
+            self.execute_command(command)
+        except Exception:
+            pass
+
+    def _cleanup_ml(self) -> None:
+        if not hasattr(self.thread_local, "ml_caches"):
+            self.thread_local.ml_caches = set()
+
+        self.disable_reattachable_execute()
+        # Todo add a pattern to delete all model in one command
+        for model_id in self.thread_local.ml_caches:
+            self._delete_ml_cache(model_id)

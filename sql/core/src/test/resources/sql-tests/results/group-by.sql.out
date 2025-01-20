@@ -626,27 +626,9 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 SELECT every("true")
 -- !query schema
-struct<>
+struct<every(true):boolean>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
-  "sqlState" : "42K09",
-  "messageParameters" : {
-    "inputSql" : "\"true\"",
-    "inputType" : "\"STRING\"",
-    "paramIndex" : "first",
-    "requiredType" : "\"BOOLEAN\"",
-    "sqlExpr" : "\"every(true)\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 20,
-    "fragment" : "every(\"true\")"
-  } ]
-}
+true
 
 
 -- !query
@@ -1003,6 +985,15 @@ SELECT histogram_numeric(col, 3) FROM VALUES
 struct<histogram_numeric(col, 3):array<struct<x:bigint,y:double>>>
 -- !query output
 [{"x":1,"y":1.0},{"x":2,"y":1.0},{"x":3,"y":1.0}]
+
+
+-- !query
+SELECT histogram_numeric(col, 3) FROM VALUES
+  (CAST(1 AS DECIMAL(4, 2))), (CAST(2 AS DECIMAL(4, 2))), (CAST(3 AS DECIMAL(4, 2))) AS tab(col)
+-- !query schema
+struct<histogram_numeric(col, 3):array<struct<x:decimal(4,2),y:double>>>
+-- !query output
+[{"x":1.00,"y":1.0},{"x":2.00,"y":1.0},{"x":3.00,"y":1.0}]
 
 
 -- !query

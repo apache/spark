@@ -23,7 +23,7 @@ import org.apache.spark.sql.{Row, SaveMode}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, V1CreateTablePlan}
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.classic.{Dataset, SparkSession}
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -44,7 +44,7 @@ import org.apache.spark.sql.types._
 case class CreateTable(
     tableDesc: CatalogTable,
     mode: SaveMode,
-    query: Option[LogicalPlan]) extends LogicalPlan {
+    query: Option[LogicalPlan]) extends LogicalPlan with V1CreateTablePlan {
   assert(tableDesc.provider.isDefined, "The table to be created must have a provider.")
 
   if (query.isEmpty) {
@@ -100,7 +100,7 @@ case class CreateTempViewUsing(
     }
 
     val catalog = sparkSession.sessionState.catalog
-    val analyzedPlan = DataSource.lookupDataSourceV2(provider, sparkSession.sessionState.conf)
+    val unresolvedPlan = DataSource.lookupDataSourceV2(provider, sparkSession.sessionState.conf)
       .flatMap { tblProvider =>
         DataSourceV2Utils.loadV2Source(sparkSession, tblProvider, userSpecifiedSchema,
           CaseInsensitiveMap(options), provider)
@@ -110,10 +110,9 @@ case class CreateTempViewUsing(
           userSpecifiedSchema = userSpecifiedSchema,
           className = provider,
           options = options)
-
-        Dataset.ofRows(
-          sparkSession, LogicalRelation(dataSource.resolveRelation()))
-      }.logicalPlan
+        LogicalRelation(dataSource.resolveRelation())
+      }
+    val analyzedPlan = sparkSession.sessionState.analyzer.execute(unresolvedPlan)
 
     if (global) {
       val db = sparkSession.sessionState.conf.getConf(StaticSQLConf.GLOBAL_TEMP_DATABASE)

@@ -42,7 +42,7 @@ trait TestHiveSingleton extends SparkFunSuite with BeforeAndAfterAll {
 
   protected override def afterEach(): Unit = {
     try {
-      spark.artifactManager.cleanUpResources()
+      spark.artifactManager.cleanUpResourcesForTesting()
     } finally {
       super.afterEach()
     }

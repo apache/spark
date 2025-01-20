@@ -39,7 +39,7 @@ import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
-import org.apache.spark.util.SerializableConfiguration
+import org.apache.spark.util.{SerializableConfiguration, Utils}
 
 private[libsvm] class LibSVMOutputWriter(
     val path: String,
@@ -157,7 +157,9 @@ private[libsvm] class LibSVMFileFormat
       sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
 
     (file: PartitionedFile) => {
-      val linesReader = new HadoopFileLinesReader(file, broadcastedHadoopConf.value.value)
+      val linesReader = Utils.createResourceUninterruptiblyIfInTaskThread(
+        new HadoopFileLinesReader(file, broadcastedHadoopConf.value.value)
+      )
       Option(TaskContext.get()).foreach(_.addTaskCompletionListener[Unit](_ => linesReader.close()))
 
       val points = linesReader

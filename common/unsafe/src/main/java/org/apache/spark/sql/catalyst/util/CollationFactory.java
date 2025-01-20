@@ -32,8 +32,11 @@ import com.ibm.icu.text.StringSearch;
 import com.ibm.icu.util.ULocale;
 import com.ibm.icu.util.VersionInfo;
 
+import org.apache.spark.QueryContext;
 import org.apache.spark.SparkException;
+import org.apache.spark.SparkRuntimeException;
 import org.apache.spark.unsafe.types.UTF8String;
+import scala.collection.immutable.Map$;
 
 /**
  * Static entry point for collation aware string functions.
@@ -108,7 +111,7 @@ public final class CollationFactory {
   public static class Collation {
     public final String collationName;
     public final String provider;
-    public final Collator collator;
+    private final Collator collator;
     public final Comparator<UTF8String> comparator;
 
     /**
@@ -200,7 +203,12 @@ public final class CollationFactory {
       // No Collation can simultaneously support binary equality and lowercase equality
       assert(!supportsBinaryEquality || !supportsLowercaseEquality);
 
-      assert(SUPPORTED_PROVIDERS.contains(provider));
+      // Null is a special provider for indeterminate collation.
+      assert(SUPPORTED_PROVIDERS.contains(provider) || provider.equals(PROVIDER_NULL));
+    }
+
+    public Collator getCollator() {
+      return collator;
     }
 
     /**
@@ -281,7 +289,7 @@ public final class CollationFactory {
        * collations.
        */
       protected enum ImplementationProvider {
-        UTF8_BINARY, ICU
+        UTF8_BINARY, ICU, INDETERMINATE
       }
 
       /**
@@ -325,6 +333,8 @@ public final class CollationFactory {
 
       private static final int INDETERMINATE_COLLATION_ID = -1;
 
+      private static final Collation INDETERMINATE_COLLATION = new IndeterminateCollation();
+
       /**
        * Thread-safe cache mapping collation IDs to corresponding `Collation` instances.
        * We add entries to this cache lazily as new `Collation` instances are requested.
@@ -334,7 +344,11 @@ public final class CollationFactory {
       /**
        * Utility function to retrieve `ImplementationProvider` enum instance from collation ID.
        */
-      private static ImplementationProvider getImplementationProvider(int collationId) {
+      protected static ImplementationProvider getImplementationProvider(int collationId) {
+        if (collationId == INDETERMINATE_COLLATION_ID) {
+          return ImplementationProvider.INDETERMINATE;
+        }
+
         return ImplementationProvider.values()[SpecifierUtils.getSpecValue(collationId,
           IMPLEMENTATION_PROVIDER_OFFSET, IMPLEMENTATION_PROVIDER_MASK)];
       }
@@ -390,16 +404,17 @@ public final class CollationFactory {
        * Main entry point for retrieving `Collation` instance from collation ID.
        */
       private static Collation fetchCollation(int collationId) {
-        // User-defined collations and INDETERMINATE collations cannot produce a `Collation`
-        // instance.
-        assert (collationId >= 0 && getDefinitionOrigin(collationId)
-          == DefinitionOrigin.PREDEFINED);
+        // User-defined collations cannot produce a `Collation` instance.
+        assert collationId == INDETERMINATE_COLLATION_ID ||
+          getDefinitionOrigin(collationId) == DefinitionOrigin.PREDEFINED;
         if (collationId == UTF8_BINARY_COLLATION_ID) {
           // Skip cache.
           return CollationSpecUTF8.UTF8_BINARY_COLLATION;
         } else if (collationMap.containsKey(collationId)) {
           // Already in cache.
           return collationMap.get(collationId);
+        } else if (collationId == INDETERMINATE_COLLATION_ID) {
+          return INDETERMINATE_COLLATION;
         } else {
           // Build `Collation` instance and put into cache.
           CollationSpec spec;
@@ -413,18 +428,6 @@ public final class CollationFactory {
           collationMap.put(collationId, collation);
           return collation;
         }
-      }
-
-      /**
-       * Method for constructing errors thrown on providing invalid collation name.
-       */
-      protected static SparkException collationInvalidNameException(String collationName) {
-        Map<String, String> params = new HashMap<>();
-        final int maxSuggestions = 3;
-        params.put("collationName", collationName);
-        params.put("proposals", getClosestSuggestionsOnInvalidName(collationName, maxSuggestions));
-        return new SparkException("COLLATION_INVALID_NAME",
-          SparkException.constructMessageParams(params), null);
       }
 
       private static int collationNameToId(String collationName) throws SparkException {
@@ -478,9 +481,6 @@ public final class CollationFactory {
        * Bitmask corresponding to width in bits in binary collation ID layout.
        */
       private static final int CASE_SENSITIVITY_MASK = 0b1;
-
-      private static final String UTF8_BINARY_COLLATION_NAME = "UTF8_BINARY";
-      private static final String UTF8_LCASE_COLLATION_NAME = "UTF8_LCASE";
 
       private static final int UTF8_BINARY_COLLATION_ID =
         new CollationSpecUTF8(CaseSensitivity.UNSPECIFIED, SpaceTrimming.NONE).collationId;
@@ -667,9 +667,9 @@ public final class CollationFactory {
       protected String normalizedCollationName() {
         StringBuilder builder = new StringBuilder();
         if(caseSensitivity == CaseSensitivity.UNSPECIFIED){
-          builder.append(UTF8_BINARY_COLLATION_NAME);
+          builder.append(CollationNames.UTF8_BINARY);
         } else{
-          builder.append(UTF8_LCASE_COLLATION_NAME);
+          builder.append(CollationNames.UTF8_LCASE);
         }
         if (spaceTrimming != SpaceTrimming.NONE) {
           builder.append('_');
@@ -681,12 +681,12 @@ public final class CollationFactory {
       static List<CollationIdentifier> listCollations() {
         CollationIdentifier UTF8_BINARY_COLLATION_IDENT = new CollationIdentifier(
             PROVIDER_SPARK,
-            UTF8_BINARY_COLLATION_NAME,
+            CollationNames.UTF8_BINARY,
             CollationSpecICU.ICU_VERSION
         );
         CollationIdentifier UTF8_LCASE_COLLATION_IDENT = new CollationIdentifier(
             PROVIDER_SPARK,
-            UTF8_LCASE_COLLATION_NAME,
+            CollationNames.UTF8_LCASE,
             CollationSpecICU.ICU_VERSION
         );
         return Arrays.asList(UTF8_BINARY_COLLATION_IDENT, UTF8_LCASE_COLLATION_IDENT);
@@ -770,7 +770,7 @@ public final class CollationFactory {
         VersionInfo.ICU_VERSION.getMinor());
 
       static {
-        ICULocaleMap.put("UNICODE", ULocale.ROOT);
+        ICULocaleMap.put(CollationNames.UNICODE, ULocale.ROOT);
         // ICU-implemented `ULocale`s which have corresponding `Collator` installed.
         ULocale[] locales = Collator.getAvailableULocales();
         // Build locale names in format: language["_" optional script]["_" optional country code].
@@ -818,13 +818,13 @@ public final class CollationFactory {
       }
 
       private static final int UNICODE_COLLATION_ID = new CollationSpecICU(
-        "UNICODE",
+        CollationNames.UNICODE,
         CaseSensitivity.CS,
         AccentSensitivity.AS,
         SpaceTrimming.NONE).collationId;
 
       private static final int UNICODE_CI_COLLATION_ID = new CollationSpecICU(
-        "UNICODE",
+        CollationNames.UNICODE,
         CaseSensitivity.CI,
         AccentSensitivity.AS,
         SpaceTrimming.NONE).collationId;
@@ -1095,6 +1095,43 @@ public final class CollationFactory {
     }
 
     /**
+     * Collation that is a result of a mismatch between two different non-explicit collations.
+     */
+    private static class IndeterminateCollation extends Collation {
+
+      IndeterminateCollation() {
+        super(
+          "null",
+          "null",
+          null,
+          (s1, s2) -> {
+            throw indeterminateError();
+          },
+          null,
+          s -> {
+            throw indeterminateError();
+          },
+          (s1, s2) -> {
+            throw indeterminateError();
+          },
+          false,
+          false,
+          false
+        );
+      }
+
+      @Override
+      public Collator getCollator() {
+        throw indeterminateError();
+      }
+
+      private static SparkRuntimeException indeterminateError() {
+        return new SparkRuntimeException("INDETERMINATE_COLLATION",
+          Map$.MODULE$.empty(), null, new QueryContext[]{}, "");
+      }
+    }
+
+    /**
      * Utility class for manipulating conversions between collation IDs and specifier enums/locale
      * IDs. Scope bitwise operations here to avoid confusion.
      */
@@ -1122,6 +1159,7 @@ public final class CollationFactory {
   public static final String SCHEMA = "BUILTIN";
   public static final String PROVIDER_SPARK = "spark";
   public static final String PROVIDER_ICU = "icu";
+  public static final String PROVIDER_NULL = "null";
   public static final List<String> SUPPORTED_PROVIDERS = List.of(PROVIDER_SPARK, PROVIDER_ICU);
   public static final String COLLATION_PAD_ATTRIBUTE = "NO_PAD";
 
@@ -1161,7 +1199,7 @@ public final class CollationFactory {
       final String patternString,
       final int collationId) {
     CharacterIterator target = new StringCharacterIterator(targetString);
-    Collator collator = CollationFactory.fetchCollation(collationId).collator;
+    Collator collator = CollationFactory.fetchCollation(collationId).getCollator();
     return new StringSearch(patternString, target, (RuleBasedCollator) collator);
   }
 
@@ -1185,12 +1223,72 @@ public final class CollationFactory {
     return Collation.CollationSpec.collationNameToId(collationName);
   }
 
+  /**
+   * Returns the resolved fully qualified collation name.
+   */
+  public static String resolveFullyQualifiedName(String[] collationName) throws SparkException {
+    // If collation name has only one part, then we don't need to do any name resolution.
+    if (collationName.length == 1) return collationName[0];
+    else {
+      // Currently we only support builtin collation names with fixed catalog `SYSTEM` and
+      // schema `BUILTIN`.
+      if (collationName.length != 3 ||
+          !CollationFactory.CATALOG.equalsIgnoreCase(collationName[0]) ||
+          !CollationFactory.SCHEMA.equalsIgnoreCase(collationName[1])) {
+        // Throw exception with original (before case conversion) collation name.
+        throw CollationFactory.collationInvalidNameException(
+            collationName.length != 0 ? collationName[collationName.length - 1] : "");
+      }
+      return collationName[2];
+    }
+  }
+
+  /**
+   * Method for constructing errors thrown on providing invalid collation name.
+   */
+  public static SparkException collationInvalidNameException(String collationName) {
+    Map<String, String> params = new HashMap<>();
+    final int maxSuggestions = 3;
+    params.put("collationName", collationName);
+    params.put("proposals", getClosestSuggestionsOnInvalidName(collationName, maxSuggestions));
+    return new SparkException("COLLATION_INVALID_NAME",
+        SparkException.constructMessageParams(params), null);
+  }
+
+
+
+  /**
+   * Returns the fully qualified collation name for the given collation ID.
+   */
+  public static String fullyQualifiedName(int collationId) {
+    if (collationId == INDETERMINATE_COLLATION_ID) {
+      return Collation.CollationSpec.INDETERMINATE_COLLATION.collationName;
+    }
+
+    Collation.CollationSpec.DefinitionOrigin definitionOrigin =
+        Collation.CollationSpec.getDefinitionOrigin(collationId);
+    // Currently only predefined collations are supported.
+    assert definitionOrigin == Collation.CollationSpec.DefinitionOrigin.PREDEFINED;
+    return String.format("%s.%s.%s", CATALOG, SCHEMA,
+      Collation.CollationSpec.fetchCollation(collationId).collationName);
+  }
+
   public static boolean isCaseInsensitive(int collationId) {
+    if (Collation.CollationSpec.getImplementationProvider(collationId) !=
+        Collation.CollationSpec.ImplementationProvider.ICU) {
+      return false;
+    }
+
     return Collation.CollationSpecICU.fromCollationId(collationId).caseSensitivity ==
             Collation.CollationSpecICU.CaseSensitivity.CI;
   }
 
   public static boolean isAccentInsensitive(int collationId) {
+    if (Collation.CollationSpec.getImplementationProvider(collationId) !=
+        Collation.CollationSpec.ImplementationProvider.ICU) {
+      return false;
+    }
+
     return Collation.CollationSpecICU.fromCollationId(collationId).accentSensitivity ==
             Collation.CollationSpecICU.AccentSensitivity.AI;
   }
@@ -1247,7 +1345,7 @@ public final class CollationFactory {
     } else if (collation.isUtf8LcaseType) {
       return CollationAwareUTF8String.lowerCaseCodePoints(input);
     } else {
-      CollationKey collationKey = collation.collator.getCollationKey(
+      CollationKey collationKey = collation.getCollator().getCollationKey(
         input.toValidString());
       return UTF8String.fromBytes(collationKey.toByteArray());
     }
@@ -1263,7 +1361,7 @@ public final class CollationFactory {
     } else if (collation.isUtf8LcaseType) {
       return CollationAwareUTF8String.lowerCaseCodePoints(input).getBytes();
     } else {
-      return collation.collator.getCollationKey(
+      return collation.getCollator().getCollationKey(
         input.toValidString()).toByteArray();
     }
   }

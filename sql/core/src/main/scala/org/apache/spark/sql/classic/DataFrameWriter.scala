@@ -211,6 +211,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) extends sql.DataFram
                 optionExpression = OptionList(Seq.empty),
                 location = extraOptions.get("path"),
                 comment = extraOptions.get(TableCatalog.PROP_COMMENT),
+                collation = extraOptions.get(TableCatalog.PROP_COLLATION),
                 serde = None,
                 external = false)
               runCommand(df.sparkSession) {
@@ -384,6 +385,11 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) extends sql.DataFram
     }
   }
 
+  private def hasCustomSessionCatalog: Boolean = {
+    df.sparkSession.sessionState.conf
+      .getConf(SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION) != "builtin"
+  }
+
   /**
    * Saves the content of the `DataFrame` as the specified table.
    *
@@ -427,8 +433,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) extends sql.DataFram
     import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
     val session = df.sparkSession
-    val canUseV2 = lookupV2Provider().isDefined || (df.sparkSession.sessionState.conf.getConf(
-        SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION).isDefined &&
+    val canUseV2 = lookupV2Provider().isDefined || (hasCustomSessionCatalog &&
         !df.sparkSession.sessionState.catalogManager.catalog(CatalogManager.SESSION_CATALOG_NAME)
           .isInstanceOf[CatalogExtension])
 
@@ -471,6 +476,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) extends sql.DataFram
           optionExpression = OptionList(Seq.empty),
           location = extraOptions.get("path"),
           comment = extraOptions.get(TableCatalog.PROP_COMMENT),
+          collation = extraOptions.get(TableCatalog.PROP_COLLATION),
           serde = None,
           external = false)
         ReplaceTableAsSelect(
@@ -491,6 +497,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) extends sql.DataFram
           optionExpression = OptionList(Seq.empty),
           location = extraOptions.get("path"),
           comment = extraOptions.get(TableCatalog.PROP_COMMENT),
+          collation = extraOptions.get(TableCatalog.PROP_COLLATION),
           serde = None,
           external = false)
 

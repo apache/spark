@@ -162,7 +162,7 @@ abstract class HiveComparisonTest extends SparkFunSuite with BeforeAndAfterAll {
 
     def isSorted(plan: LogicalPlan): Boolean = plan match {
       case _: Join | _: Aggregate | _: Generate | _: Sample | _: Distinct => false
-      case PhysicalOperation(_, _, Sort(_, true, _)) => true
+      case PhysicalOperation(_, _, Sort(_, true, _, _)) => true
       case _ => plan.children.iterator.exists(isSorted)
     }
 

@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateFunction
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.trees.{BinaryLike, CurrentOrigin, LeafLike, QuaternaryLike, TernaryLike, TreeNode, UnaryLike}
-import org.apache.spark.sql.catalyst.trees.TreePattern.{LAZY_ANALYSIS_EXPRESSION, RUNTIME_REPLACEABLE, TreePattern}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{RUNTIME_REPLACEABLE, TreePattern}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.errors.{QueryErrorsBase, QueryExecutionErrors}
@@ -411,20 +411,6 @@ trait Unevaluable extends Expression with FoldableUnevaluable {
 }
 
 /**
- * An expression that cannot be analyzed. These expressions don't live analysis time or after
- * and should not be evaluated during query planning and execution.
- */
-trait LazyAnalysisExpression extends Expression {
-  final override lazy val resolved = false
-
-  final override val nodePatterns: Seq[TreePattern] =
-    Seq(LAZY_ANALYSIS_EXPRESSION) ++ nodePatternsInternal()
-
-  // Subclasses can override this function to provide more TreePatterns.
-  def nodePatternsInternal(): Seq[TreePattern] = Seq()
-}
-
-/**
  * An expression that gets replaced at runtime (currently by the optimizer) into a different
  * expression for evaluation. This is mainly used to provide compatibility with other databases.
  * For example, we use this to support "nvl" by replacing it with "coalesce".
@@ -440,8 +426,12 @@ trait RuntimeReplaceable extends Expression {
   // are semantically equal.
   override lazy val canonicalized: Expression = replacement.canonicalized
 
-  final override def eval(input: InternalRow = null): Any =
-    throw QueryExecutionErrors.cannotEvaluateExpressionError(this)
+  final override def eval(input: InternalRow = null): Any = {
+    // For convenience, we allow to evaluate `RuntimeReplaceable` expressions, in case we need to
+    // get a constant from foldable expression before the query execution starts.
+    assert(input == null)
+    replacement.eval()
+  }
   final override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode =
     throw QueryExecutionErrors.cannotGenerateCodeForExpressionError(this)
 }
@@ -1364,19 +1354,24 @@ trait UserDefinedExpression {
 }
 
 trait CommutativeExpression extends Expression {
-  /** Collects adjacent commutative operations. */
-  private def gatherCommutative(
+  /**
+   * Collects adjacent commutative operations.
+   *
+   * Exposed for testing
+   */
+  private[spark] def gatherCommutative(
       e: Expression,
       f: PartialFunction[CommutativeExpression, Seq[Expression]]): Seq[Expression] = {
     val resultBuffer = scala.collection.mutable.Buffer[Expression]()
-    val stack = scala.collection.mutable.Stack[Expression](e)
+    val queue = scala.collection.mutable.Queue[Expression](e)
 
     // [SPARK-49977]: Use iterative approach to avoid creating many temporary List objects
     // for deep expression trees through recursion.
-    while (stack.nonEmpty) {
-      stack.pop() match {
+    while (queue.nonEmpty) {
+      val current = queue.dequeue()
+      current match {
         case c: CommutativeExpression if f.isDefinedAt(c) =>
-          stack.pushAll(f(c))
+          queue ++= f(c)
         case other =>
           resultBuffer += other.canonicalized
       }

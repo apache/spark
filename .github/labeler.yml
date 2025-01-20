@@ -93,9 +93,9 @@ SQL:
   - changed-files:
     - all-globs-to-any-file: [
      '**/sql/**/*',
-     '!python/pyspark/sql/avro/**/*',
-     '!python/pyspark/sql/streaming/**/*',
-     '!python/pyspark/sql/tests/streaming/test_streaming*.py'
+     '!python/**/avro/**/*',
+     '!python/**/protobuf/**/*',
+     '!python/**/streaming/**/*'
     ]
     - any-glob-to-any-file: [
      'common/unsafe/**/*',
@@ -119,7 +119,7 @@ AVRO:
   - changed-files:
     - any-glob-to-any-file: [
      'connector/avro/**/*',
-     'python/pyspark/sql/avro/**/*'
+     'python/**/avro/**/*'
     ]
 
 DSTREAM:
@@ -152,9 +152,8 @@ ML:
 MLLIB:
   - changed-files:
     - any-glob-to-any-file: [
-     '**/spark/mllib/**/*',
-     'mllib-local/**/*',
-     'python/pyspark/mllib/**/*'
+     '**/mllib/**/*',
+     'mllib-local/**/*'
     ]
 
 STRUCTURED STREAMING:
@@ -162,8 +161,7 @@ STRUCTURED STREAMING:
     - any-glob-to-any-file: [
      '**/sql/**/streaming/**/*',
      'connector/kafka-0-10-sql/**/*',
-     'python/pyspark/sql/streaming/**/*',
-     'python/pyspark/sql/tests/streaming/test_streaming*.py',
+     'python/pyspark/sql/**/streaming/**/*',
      '**/*streaming.R'
     ]
 
@@ -226,13 +224,12 @@ CONNECT:
     - any-glob-to-any-file: [
      'sql/connect/**/*',
      'connector/connect/**/*',
-     'python/pyspark/sql/**/connect/**/*',
-     'python/pyspark/ml/**/connect/**/*'
+     'python/**/connect/**/*'
     ]
 
 PROTOBUF:
   - changed-files:
     - any-glob-to-any-file: [
      'connector/protobuf/**/*',
-     'python/pyspark/sql/protobuf/**/*'
+     'python/**/protobuf/**/*'
     ]

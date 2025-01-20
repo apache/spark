@@ -310,6 +310,10 @@ private case class PostgresDialect()
         case _ => super.visitExtract(field, source)
       }
     }
+
+    override def visitBinaryArithmetic(name: String, l: String, r: String): String = {
+      l + " " + name.replace('^', '#') + " " + r
+    }
   }
 
   override def compileExpression(expr: Expression): Option[String] = {
@@ -321,6 +325,12 @@ private case class PostgresDialect()
         logWarning("Error occurs while compiling V2 expression", e)
         None
     }
+  }
+
+  override def compileValue(value: Any): Any = value match {
+    case binaryValue: Array[Byte] =>
+      binaryValue.map("%02X".format(_)).mkString("'\\x", "", "'::bytea")
+    case other => super.compileValue(other)
   }
 
   override def supportsLimit: Boolean = true

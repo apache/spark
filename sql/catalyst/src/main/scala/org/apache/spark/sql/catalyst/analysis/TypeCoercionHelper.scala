@@ -44,6 +44,7 @@ import org.apache.spark.sql.catalyst.expressions.{
   MapConcat,
   MapZipWith,
   NaNvl,
+  RandStr,
   RangeFrame,
   ScalaUDF,
   Sequence,
@@ -318,7 +319,8 @@ abstract class TypeCoercionHelper {
         }
 
       case aj @ ArrayJoin(arr, d, nr)
-          if !AbstractArrayType(StringTypeWithCollation).acceptsType(arr.dataType) &&
+          if !AbstractArrayType(StringTypeWithCollation(supportsTrimCollation = true)).
+            acceptsType(arr.dataType) &&
           ArrayType.acceptsType(arr.dataType) =>
         val containsNull = arr.dataType.asInstanceOf[ArrayType].containsNull
         implicitCast(arr, ArrayType(StringType, containsNull)) match {
@@ -399,6 +401,11 @@ abstract class TypeCoercionHelper {
         NaNvl(Cast(l, DoubleType), r)
       case NaNvl(l, r) if r.dataType == NullType => NaNvl(l, Cast(r, l.dataType))
 
+      case r: RandStr if r.length.dataType != IntegerType =>
+        implicitCast(r.length, IntegerType).map { casted =>
+          r.copy(length = casted)
+        }.getOrElse(r)
+
       case other => other
     }
   }
@@ -415,7 +422,7 @@ abstract class TypeCoercionHelper {
           if conf.concatBinaryAsString ||
           !children.map(_.dataType).forall(_ == BinaryType) =>
         val newChildren = c.children.map { e =>
-          implicitCast(e, SQLConf.get.defaultStringType).getOrElse(e)
+          implicitCast(e, StringType).getOrElse(e)
         }
         c.copy(children = newChildren)
       case other => other
@@ -465,7 +472,7 @@ abstract class TypeCoercionHelper {
           if (conf.eltOutputAsString ||
             !children.tail.map(_.dataType).forall(_ == BinaryType)) {
             children.tail.map { e =>
-              implicitCast(e, SQLConf.get.defaultStringType).getOrElse(e)
+              implicitCast(e, StringType).getOrElse(e)
             }
           } else {
             children.tail

@@ -23,7 +23,7 @@ import org.apache.spark.{SparkFunSuite, SparkRuntimeException}
 import org.apache.spark.sql.catalyst.analysis.ExpressionBuilder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.variant.ParseJson
-import org.apache.spark.sql.internal.SqlApiConf
+import org.apache.spark.sql.internal.{SqlApiConf, SQLConf}
 import org.apache.spark.sql.internal.types._
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
@@ -104,6 +104,7 @@ class CollationExpressionWalkerSuite extends SparkFunSuite with SharedSparkSessi
           Literal.create("DuMmY sTrInG".getBytes)
       }
       case BooleanType => Literal(true)
+      case ByteType => Literal(5.toByte)
       case _: DatetimeType => Literal(Timestamp.valueOf("2009-07-30 12:58:59"))
       case DecimalType => Literal((new Decimal).set(5))
       case _: DecimalType => Literal((new Decimal).set(5))
@@ -183,6 +184,7 @@ class CollationExpressionWalkerSuite extends SparkFunSuite with SharedSparkSessi
           case Utf8Lcase => "Cast('DuMmY sTrInG' collate utf8_lcase as BINARY)"
         }
       case BooleanType => "True"
+      case ByteType => "cast(5 as tinyint)"
       case _: DatetimeType => "date'2016-04-08'"
       case DecimalType => "5.0"
       case _: DecimalType => "5.0"
@@ -243,6 +245,7 @@ class CollationExpressionWalkerSuite extends SparkFunSuite with SharedSparkSessi
       case AnyTimestampType => "TIMESTAMP"
       case BinaryType => "BINARY"
       case BooleanType => "BOOLEAN"
+      case ByteType => "TINYINT"
       case _: DatetimeType => "DATE"
       case DecimalType => "DECIMAL(2, 1)"
       case _: DecimalType => "DECIMAL(2, 1)"
@@ -636,48 +639,49 @@ class CollationExpressionWalkerSuite extends SparkFunSuite with SharedSparkSessi
       val expr = headConstructor.newInstance(args: _*).asInstanceOf[ExpectsInputTypes]
 
       withTable("tbl", "tbl_lcase") {
+        withSQLConf(SQLConf.ALLOW_COLLATIONS_IN_MAP_KEYS.key -> "true") {
+          val utf8_df = generateTableData(expr.inputTypes.take(2), Utf8Binary)
+          val utf8_lcase_df = generateTableData(expr.inputTypes.take(2), Utf8Lcase)
 
-        val utf8_df = generateTableData(expr.inputTypes.take(2), Utf8Binary)
-        val utf8_lcase_df = generateTableData(expr.inputTypes.take(2), Utf8Lcase)
-
-        val utf8BinaryResult = try {
-          val df = utf8_df.selectExpr(transformExpressionToString(expr, Utf8Binary))
-          df.getRows(1, 0)
-          scala.util.Right(df)
-        } catch {
-          case e: Throwable => scala.util.Left(e)
-        }
-        val utf8LcaseResult = try {
-          val df = utf8_lcase_df.selectExpr(transformExpressionToString(expr, Utf8Lcase))
-          df.getRows(1, 0)
-          scala.util.Right(df)
-        } catch {
-          case e: Throwable => scala.util.Left(e)
-        }
-
-        assert(utf8BinaryResult.isLeft === utf8LcaseResult.isLeft)
-
-        if (utf8BinaryResult.isRight) {
-          val utf8BinaryResultChecked = utf8BinaryResult.getOrElse(null)
-          val utf8LcaseResultChecked = utf8LcaseResult.getOrElse(null)
-
-          val dt = utf8BinaryResultChecked.schema.fields.head.dataType
-
-          dt match {
-            case st if utf8BinaryResultChecked != null && utf8LcaseResultChecked != null &&
-              hasStringType(st) =>
-              // scalastyle:off caselocale
-              assert(utf8BinaryResultChecked.getRows(1, 0).map(_.map(_.toLowerCase))(1) ===
-                utf8LcaseResultChecked.getRows(1, 0).map(_.map(_.toLowerCase))(1))
-              // scalastyle:on caselocale
-            case _ =>
-              assert(utf8BinaryResultChecked.getRows(1, 0)(1) ===
-                utf8LcaseResultChecked.getRows(1, 0)(1))
+          val utf8BinaryResult = try {
+            val df = utf8_df.selectExpr(transformExpressionToString(expr, Utf8Binary))
+            df.getRows(1, 0)
+            scala.util.Right(df)
+          } catch {
+            case e: Throwable => scala.util.Left(e)
           }
-        }
-        else {
-          assert(utf8BinaryResult.getOrElse(new Exception()).getClass
-            == utf8LcaseResult.getOrElse(new Exception()).getClass)
+          val utf8LcaseResult = try {
+            val df = utf8_lcase_df.selectExpr(transformExpressionToString(expr, Utf8Lcase))
+            df.getRows(1, 0)
+            scala.util.Right(df)
+          } catch {
+            case e: Throwable => scala.util.Left(e)
+          }
+
+          assert(utf8BinaryResult.isLeft === utf8LcaseResult.isLeft)
+
+          if (utf8BinaryResult.isRight) {
+            val utf8BinaryResultChecked = utf8BinaryResult.getOrElse(null)
+            val utf8LcaseResultChecked = utf8LcaseResult.getOrElse(null)
+
+            val dt = utf8BinaryResultChecked.schema.fields.head.dataType
+
+            dt match {
+              case st if utf8BinaryResultChecked != null && utf8LcaseResultChecked != null &&
+                hasStringType(st) =>
+                // scalastyle:off caselocale
+                assert(utf8BinaryResultChecked.getRows(1, 0).map(_.map(_.toLowerCase))(1) ===
+                  utf8LcaseResultChecked.getRows(1, 0).map(_.map(_.toLowerCase))(1))
+              // scalastyle:on caselocale
+              case _ =>
+                assert(utf8BinaryResultChecked.getRows(1, 0)(1) ===
+                  utf8LcaseResultChecked.getRows(1, 0)(1))
+            }
+          }
+          else {
+            assert(utf8BinaryResult.getOrElse(new Exception()).getClass
+              == utf8LcaseResult.getOrElse(new Exception()).getClass)
+          }
         }
       }
     }
@@ -728,6 +732,7 @@ class CollationExpressionWalkerSuite extends SparkFunSuite with SharedSparkSessi
       // other functions which are not yet supported
       "to_avro",
       "from_avro",
+      "schema_of_avro",
       "to_protobuf",
       "from_protobuf"
     )
@@ -742,7 +747,7 @@ class CollationExpressionWalkerSuite extends SparkFunSuite with SharedSparkSessi
           }
         } catch {
           case e: SparkRuntimeException => assert(e.getCondition == "USER_RAISED_EXCEPTION")
-          case other: Throwable => throw other
+          case other: Throwable => throw new Exception(s"Query $query failed", other)
         }
       }
     }

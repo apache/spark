@@ -514,6 +514,7 @@ Below is a list of all the keywords in Spark SQL.
 |EXISTS|non-reserved|non-reserved|reserved|
 |EXPLAIN|non-reserved|non-reserved|non-reserved|
 |EXPORT|non-reserved|non-reserved|non-reserved|
+|EXTEND|non-reserved|non-reserved|non-reserved|
 |EXTENDED|non-reserved|non-reserved|non-reserved|
 |EXTERNAL|non-reserved|non-reserved|reserved|
 |EXTRACT|non-reserved|non-reserved|reserved|
@@ -567,6 +568,7 @@ Below is a list of all the keywords in Spark SQL.
 |ITEMS|non-reserved|non-reserved|non-reserved|
 |ITERATE|non-reserved|non-reserved|non-reserved|
 |JOIN|reserved|strict-non-reserved|reserved|
+|JSON|non-reserved|non-reserved|non-reserved|
 |KEYS|non-reserved|non-reserved|non-reserved|
 |LANGUAGE|non-reserved|non-reserved|reserved|
 |LAST|non-reserved|non-reserved|non-reserved|
@@ -650,6 +652,7 @@ Below is a list of all the keywords in Spark SQL.
 |RECORDREADER|non-reserved|non-reserved|non-reserved|
 |RECORDWRITER|non-reserved|non-reserved|non-reserved|
 |RECOVER|non-reserved|non-reserved|non-reserved|
+|RECURSIVE|reserved|non-reserved|reserved|
 |REDUCE|non-reserved|non-reserved|non-reserved|
 |REFERENCES|reserved|non-reserved|reserved|
 |REFRESH|non-reserved|non-reserved|non-reserved|

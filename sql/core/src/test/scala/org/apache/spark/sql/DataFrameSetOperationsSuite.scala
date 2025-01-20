@@ -350,6 +350,84 @@ class DataFrameSetOperationsSuite extends QueryTest
     dates.intersect(widenTypedRows).collect()
   }
 
+  test("SPARK-50373 - cannot run set operations with variant type") {
+    val df = sql("select parse_json(case when id = 0 then 'null' else '1' end)" +
+      " as v, id % 5 as id from range(0, 100, 1, 5)")
+    checkError(
+      exception = intercept[AnalysisException](df.intersect(df)),
+      condition = "UNSUPPORTED_FEATURE.SET_OPERATION_ON_VARIANT_TYPE",
+      parameters = Map(
+        "colName" -> "`v`",
+        "dataType" -> "\"VARIANT\"")
+    )
+    checkError(
+      exception = intercept[AnalysisException](df.except(df)),
+      condition = "UNSUPPORTED_FEATURE.SET_OPERATION_ON_VARIANT_TYPE",
+      parameters = Map(
+        "colName" -> "`v`",
+        "dataType" -> "\"VARIANT\"")
+    )
+    checkError(
+      exception = intercept[AnalysisException](df.distinct()),
+      condition = "UNSUPPORTED_FEATURE.SET_OPERATION_ON_VARIANT_TYPE",
+      parameters = Map(
+        "colName" -> "`v`",
+        "dataType" -> "\"VARIANT\""))
+    checkError(
+      exception = intercept[AnalysisException](df.dropDuplicates()),
+      condition = "UNSUPPORTED_FEATURE.SET_OPERATION_ON_VARIANT_TYPE",
+      parameters = Map(
+        "colName" -> "`v`",
+        "dataType" -> "\"VARIANT\""))
+    withTempView("tv") {
+      df.createOrReplaceTempView("tv")
+      checkError(
+        exception = intercept[AnalysisException](sql("SELECT DISTINCT v FROM tv")),
+        condition = "UNSUPPORTED_FEATURE.SET_OPERATION_ON_VARIANT_TYPE",
+        parameters = Map(
+          "colName" -> "`v`",
+          "dataType" -> "\"VARIANT\""),
+        context = ExpectedContext(
+          fragment = "SELECT DISTINCT v FROM tv",
+          start = 0,
+          stop = 24)
+      )
+      checkError(
+        exception = intercept[AnalysisException](sql("SELECT DISTINCT STRUCT(v) FROM tv")),
+        condition = "UNSUPPORTED_FEATURE.SET_OPERATION_ON_VARIANT_TYPE",
+        parameters = Map(
+          "colName" -> "`struct(v)`",
+          "dataType" -> "\"STRUCT<v: VARIANT NOT NULL>\""),
+        context = ExpectedContext(
+          fragment = "SELECT DISTINCT STRUCT(v) FROM tv",
+          start = 0,
+          stop = 32)
+      )
+      checkError(
+        exception = intercept[AnalysisException](sql("SELECT DISTINCT ARRAY(v) FROM tv")),
+        condition = "UNSUPPORTED_FEATURE.SET_OPERATION_ON_VARIANT_TYPE",
+        parameters = Map(
+          "colName" -> "`array(v)`",
+          "dataType" -> "\"ARRAY<VARIANT>\""),
+        context = ExpectedContext(
+          fragment = "SELECT DISTINCT ARRAY(v) FROM tv",
+          start = 0,
+          stop = 31)
+      )
+      checkError(
+        exception = intercept[AnalysisException](sql("SELECT DISTINCT MAP('m', v) FROM tv")),
+        condition = "UNSUPPORTED_FEATURE.SET_OPERATION_ON_MAP_TYPE",
+        parameters = Map(
+          "colName" -> "`map(m, v)`",
+          "dataType" -> "\"MAP<STRING, VARIANT>\""),
+        context = ExpectedContext(
+          fragment = "SELECT DISTINCT MAP('m', v) FROM tv",
+          start = 0,
+          stop = 34)
+      )
+    }
+  }
+
   test("SPARK-19893: cannot run set operations with map type") {
     val df = spark.range(1).select(map(lit("key"), $"id").as("m"))
     checkError(

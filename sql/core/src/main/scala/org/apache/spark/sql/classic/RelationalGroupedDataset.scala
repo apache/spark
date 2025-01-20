@@ -23,7 +23,7 @@ import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.sql
 import org.apache.spark.sql.{AnalysisException, Column, Encoder}
-import org.apache.spark.sql.catalyst.analysis.UnresolvedAlias
+import org.apache.spark.sql.catalyst.analysis.{UnresolvedAlias, UnresolvedAttribute}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.toPrettySQL
 import org.apache.spark.sql.classic.ClassicConversions._
-import org.apache.spark.sql.classic.ExpressionUtils.{column, generateAlias}
+import org.apache.spark.sql.classic.ExpressionUtils.generateAlias
 import org.apache.spark.sql.classic.TypedAggUtils.withInputType
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.QueryExecution
@@ -58,10 +58,10 @@ class RelationalGroupedDataset protected[sql](
   extends sql.RelationalGroupedDataset {
 
   import RelationalGroupedDataset._
-  import df.sparkSession._
+  import df.sparkSession.toRichColumn
 
   override protected def toDF(aggCols: Seq[Column]): DataFrame = {
-    val aggExprs = aggCols.map(expression).map { e =>
+    val aggExprs = aggCols.map(_.expr).map { e =>
       withInputType(e, df.exprEnc, df.logicalPlan.output)
     }
 
@@ -116,7 +116,7 @@ class RelationalGroupedDataset protected[sql](
         namedExpr
       }
     }
-    columnExprs.map(column)
+    columnExprs.map(Column(_))
   }
 
   /** @inheritdoc */
@@ -240,7 +240,7 @@ class RelationalGroupedDataset protected[sql](
       broadcastVars: Array[Broadcast[Object]],
       outputSchema: StructType): DataFrame = {
       val groupingNamedExpressions = groupingExprs.map(alias)
-      val groupingCols = groupingNamedExpressions.map(column)
+      val groupingCols = groupingNamedExpressions.map(Column(_))
       val groupingDataFrame = df.select(groupingCols : _*)
       val groupingAttributes = groupingNamedExpressions.map(_.toAttribute)
       Dataset.ofRows(
@@ -477,7 +477,8 @@ class RelationalGroupedDataset protected[sql](
       outputStructType: StructType,
       outputModeStr: String,
       timeModeStr: String,
-      initialState: RelationalGroupedDataset): DataFrame = {
+      initialState: RelationalGroupedDataset,
+      eventTimeColumnName: String): DataFrame = {
     def exprToAttr(expr: Seq[Expression]): Seq[Attribute] = {
       expr.map {
         case ne: NamedExpression => ne
@@ -531,7 +532,30 @@ class RelationalGroupedDataset protected[sql](
         initialStateSchema = initialState.df.schema
       )
     }
-    Dataset.ofRows(df.sparkSession, plan)
+    if (eventTimeColumnName.isEmpty) {
+      Dataset.ofRows(df.sparkSession, plan)
+    } else {
+      updateEventTimeColumnAfterTransformWithState(plan, eventTimeColumnName)
+    }
+  }
+
+  /**
+   * Creates a new dataset with updated eventTimeColumn after the transformWithState
+   * logical node.
+   */
+  private def updateEventTimeColumnAfterTransformWithState(
+      transformWithStateInPandas: LogicalPlan,
+      eventTimeColumnName: String): DataFrame = {
+    val transformWithStateDataset = Dataset.ofRows(
+      df.sparkSession,
+      transformWithStateInPandas
+    )
+
+    Dataset.ofRows(df.sparkSession,
+      UpdateEventTimeWatermarkColumn(
+        UnresolvedAttribute(eventTimeColumnName),
+        None,
+        transformWithStateDataset.logicalPlan))
   }
 
   override def toString: String = {

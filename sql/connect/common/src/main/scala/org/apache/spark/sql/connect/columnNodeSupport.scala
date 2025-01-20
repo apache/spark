@@ -45,7 +45,6 @@ object ColumnNodeToProtoConverter extends (ColumnNode => proto.Expression) {
 
   private def apply(node: ColumnNode, e: Option[Encoder[_]]): proto.Expression = {
     val builder = proto.Expression.newBuilder()
-    // TODO(SPARK-49273) support Origin in Connect Scala Client.
     node match {
       case Literal(value, None, _) =>
         builder.setLiteral(toLiteralProtoBuilder(value))
@@ -74,13 +73,19 @@ object ColumnNodeToProtoConverter extends (ColumnNode => proto.Expression) {
           .setColName(regex)
         planId.foreach(b.setPlanId)
 
-      case UnresolvedFunction(functionName, arguments, isDistinct, isUserDefinedFunction, _, _) =>
-        // TODO(SPARK-49087) use internal namespace.
+      case UnresolvedFunction(
+            functionName,
+            arguments,
+            isDistinct,
+            isUserDefinedFunction,
+            isInternal,
+            _) =>
         builder.getUnresolvedFunctionBuilder
           .setFunctionName(functionName)
           .setIsUserDefinedFunction(isUserDefinedFunction)
           .setIsDistinct(isDistinct)
           .addAllArguments(arguments.map(apply(_, e)).asJava)
+          .setIsInternal(isInternal)
 
       case Alias(child, name, metadata, _) =>
         val b = builder.getAliasBuilder.setExpr(apply(child, e))
@@ -157,6 +162,7 @@ object ColumnNodeToProtoConverter extends (ColumnNode => proto.Expression) {
       case CaseWhenOtherwise(branches, otherwise, _) =>
         val b = builder.getUnresolvedFunctionBuilder
           .setFunctionName("when")
+          .setIsInternal(false)
         branches.foreach { case (condition, value) =>
           b.addArguments(apply(condition, e))
           b.addArguments(apply(value, e))
@@ -165,12 +171,56 @@ object ColumnNodeToProtoConverter extends (ColumnNode => proto.Expression) {
           b.addArguments(apply(value, e))
         }
 
+      case LazyExpression(child, _) =>
+        builder.getLazyExpressionBuilder.setChild(apply(child, e))
+
+      case SubqueryExpressionNode(relation, subqueryType, _) =>
+        val b = builder.getSubqueryExpressionBuilder
+        b.setSubqueryType(subqueryType match {
+          case SubqueryType.SCALAR => proto.SubqueryExpression.SubqueryType.SUBQUERY_TYPE_SCALAR
+          case SubqueryType.EXISTS => proto.SubqueryExpression.SubqueryType.SUBQUERY_TYPE_EXISTS
+        })
+        assert(relation.hasCommon && relation.getCommon.hasPlanId)
+        b.setPlanId(relation.getCommon.getPlanId)
+
       case ProtoColumnNode(e, _) =>
         return e
 
       case node =>
         throw SparkException.internalError("Unsupported ColumnNode: " + node)
     }
+    if (node.origin != Origin()) {
+      builder.setCommon(proto.ExpressionCommon.newBuilder().setOrigin(convertOrigin(node.origin)))
+    }
+    builder.build()
+  }
+
+  private def convertOrigin(origin: Origin): proto.Origin = {
+    val jvmOrigin = proto.JvmOrigin.newBuilder()
+    origin.line.map(jvmOrigin.setLine)
+    origin.startPosition.map(jvmOrigin.setStartPosition)
+    origin.startIndex.map(jvmOrigin.setStartIndex)
+    origin.stopIndex.map(jvmOrigin.setStopIndex)
+    origin.sqlText.map(jvmOrigin.setSqlText)
+    origin.objectType.map(jvmOrigin.setObjectType)
+    origin.objectName.map(jvmOrigin.setObjectName)
+
+    origin.stackTrace
+      .map(_.map(convertStackTraceElement).toSeq.asJava)
+      .map(jvmOrigin.addAllStackTrace)
+
+    proto.Origin.newBuilder().setJvmOrigin(jvmOrigin).build()
+  }
+
+  private def convertStackTraceElement(stack: StackTraceElement): proto.StackTraceElement = {
+    val builder = proto.StackTraceElement.newBuilder()
+    Option(stack.getClassLoaderName).map(builder.setClassLoaderName)
+    Option(stack.getModuleName).map(builder.setModuleName)
+    Option(stack.getModuleVersion).map(builder.setModuleVersion)
+    Option(stack.getClassName).map(builder.setDeclaringClass)
+    Option(stack.getMethodName).map(builder.setMethodName)
+    Option(stack.getFileName).map(builder.setFileName)
+    Option(stack.getLineNumber).map(builder.setLineNumber)
     builder.build()
   }
 
@@ -215,4 +265,24 @@ case class ProtoColumnNode(
     override val origin: Origin = CurrentOrigin.get)
     extends ColumnNode {
   override def sql: String = expr.toString
+  override private[internal] def children: Seq[ColumnNodeLike] = Seq.empty
+}
+
+sealed trait SubqueryType
+
+object SubqueryType {
+  case object SCALAR extends SubqueryType
+  case object EXISTS extends SubqueryType
+}
+
+case class SubqueryExpressionNode(
+    relation: proto.Relation,
+    subqueryType: SubqueryType,
+    override val origin: Origin = CurrentOrigin.get)
+    extends ColumnNode {
+  override def sql: String = subqueryType match {
+    case SubqueryType.SCALAR => s"($relation)"
+    case _ => s"$subqueryType ($relation)"
+  }
+  override private[internal] def children: Seq[ColumnNodeLike] = Seq.empty
 }

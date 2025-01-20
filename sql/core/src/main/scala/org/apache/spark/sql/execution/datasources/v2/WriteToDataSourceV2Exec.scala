@@ -33,7 +33,7 @@ import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.metric.CustomMetric
 import org.apache.spark.sql.connector.write.{BatchWrite, DataWriter, DataWriterFactory, DeltaWrite, DeltaWriter, PhysicalWriteInfoImpl, Write, WriterCommitMessage}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
-import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
+import org.apache.spark.sql.execution.{SparkPlan, SQLExecution, UnaryExecNode}
 import org.apache.spark.sql.execution.metric.{CustomMetrics, SQLMetric, SQLMetrics}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.{LongAccumulator, Utils}
@@ -109,6 +109,9 @@ case class AtomicCreateTableAsSelectExec(
     ifNotExists: Boolean) extends V2CreateTableAsSelectBaseExec {
 
   val properties = CatalogV2Util.convertTableProperties(tableSpec)
+
+  override val metrics: Map[String, SQLMetric] =
+    DataSourceV2Utils.commitMetrics(sparkContext, catalog)
 
   override protected def run(): Seq[InternalRow] = {
     if (catalog.tableExists(ident)) {
@@ -196,6 +199,9 @@ case class AtomicReplaceTableAsSelectExec(
   extends V2CreateTableAsSelectBaseExec {
 
   val properties = CatalogV2Util.convertTableProperties(tableSpec)
+
+  override val metrics: Map[String, SQLMetric] =
+    DataSourceV2Utils.commitMetrics(sparkContext, catalog)
 
   override protected def run(): Seq[InternalRow] = {
     val columns = getV2Columns(query.schema, catalog.useNullableQuerySchema)
@@ -341,8 +347,21 @@ trait V2ExistingTableWriteExec extends V2TableWriteExec {
 
   override protected def run(): Seq[InternalRow] = {
     val writtenRows = writeWithV2(write.toBatch)
+    postDriverMetrics()
     refreshCache()
     writtenRows
+  }
+
+  protected def postDriverMetrics(): Unit = {
+    val driveSQLMetrics = write.reportDriverMetrics().map(customTaskMetric => {
+      val metric = metrics(customTaskMetric.name())
+      metric.set(customTaskMetric.value())
+      metric
+    })
+
+    val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
+    SQLMetrics.postDriverMetricUpdates(sparkContext, executionId,
+      driveSQLMetrics.toImmutableArraySeq)
   }
 }
 
@@ -461,7 +480,7 @@ trait WritingSparkTask[W <: DataWriter[InternalRow]] extends Logging with Serial
             log"(task ${MDC(LogKeys.TASK_ID, taskId)}, " +
             log"attempt ${MDC(LogKeys.TASK_ATTEMPT_ID, attemptId)}, " +
             log"stage ${MDC(LogKeys.STAGE_ID, stageId)}." +
-            log"${MDC(LogKeys.STAGE_ATTEMPT, stageAttempt)})")
+            log"${MDC(LogKeys.STAGE_ATTEMPT_ID, stageAttempt)})")
 
           dataWriter.commit()
         } else {
@@ -481,7 +500,8 @@ trait WritingSparkTask[W <: DataWriter[InternalRow]] extends Logging with Serial
       logInfo(log"Committed partition ${MDC(LogKeys.PARTITION_ID, partId)} " +
         log"(task ${MDC(LogKeys.TASK_ID, taskId)}, " +
         log"attempt ${MDC(LogKeys.TASK_ATTEMPT_ID, attemptId)}, " +
-        log"stage ${MDC(LogKeys.STAGE_ID, stageId)}.${MDC(LogKeys.STAGE_ATTEMPT, stageAttempt)})")
+        log"stage ${MDC(LogKeys.STAGE_ID, stageId)}." +
+        log"${MDC(LogKeys.STAGE_ATTEMPT_ID, stageAttempt)})")
 
       DataWritingSparkTaskResult(iterWithMetrics.count, msg)
 
@@ -490,12 +510,14 @@ trait WritingSparkTask[W <: DataWriter[InternalRow]] extends Logging with Serial
       logError(log"Aborting commit for partition ${MDC(LogKeys.PARTITION_ID, partId)} " +
         log"(task ${MDC(LogKeys.TASK_ID, taskId)}, " +
         log"attempt ${MDC(LogKeys.TASK_ATTEMPT_ID, attemptId)}, " +
-        log"stage ${MDC(LogKeys.STAGE_ID, stageId)}.${MDC(LogKeys.STAGE_ATTEMPT, stageAttempt)})")
+        log"stage ${MDC(LogKeys.STAGE_ID, stageId)}." +
+        log"${MDC(LogKeys.STAGE_ATTEMPT_ID, stageAttempt)})")
       dataWriter.abort()
       logError(log"Aborted commit for partition ${MDC(LogKeys.PARTITION_ID, partId)} " +
         log"(task ${MDC(LogKeys.TASK_ID, taskId)}, " +
         log"attempt ${MDC(LogKeys.TASK_ATTEMPT_ID, attemptId)}, " +
-        log"stage ${MDC(LogKeys.STAGE_ID, stageId)}.${MDC(LogKeys.STAGE_ATTEMPT, stageAttempt)})")
+        log"stage ${MDC(LogKeys.STAGE_ID, stageId)}." +
+        log"${MDC(LogKeys.STAGE_ATTEMPT_ID, stageAttempt)})")
     }, finallyBlock = {
       dataWriter.close()
     })
@@ -617,10 +639,7 @@ private[v2] trait V2CreateTableAsSelectBaseExec extends LeafV2CommandExec {
       val qe = session.sessionState.executePlan(append)
       qe.assertCommandExecuted()
 
-      table match {
-        case st: StagedTable => st.commitStagedChanges()
-        case _ =>
-      }
+      DataSourceV2Utils.commitStagedChanges(sparkContext, table, metrics)
 
       Nil
     })(catchBlock = {

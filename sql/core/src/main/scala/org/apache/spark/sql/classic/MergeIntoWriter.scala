@@ -45,7 +45,7 @@ class MergeIntoWriter[T] private[sql](table: String, ds: Dataset[T], on: Column)
   private val df: DataFrame = ds.toDF()
 
   private[sql] val sparkSession = ds.sparkSession
-  import sparkSession.RichColumn
+  import sparkSession.toRichColumn
 
   private val tableName = sparkSession.sessionState.sqlParser.parseMultipartIdentifier(table)
 

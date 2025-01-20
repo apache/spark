@@ -405,4 +405,5 @@ private[classic] case class Nope(override val origin: Origin = CurrentOrigin.get
   extends ColumnNode {
   override private[sql] def normalize(): Nope = this
   override def sql: String = "nope"
+  override private[internal] def children: Seq[ColumnNodeLike] = Seq.empty
 }

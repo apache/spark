@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{CollectMetrics, Distinct, Lo
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.classic.ClassicConversions._
 import org.apache.spark.sql.classic.DataFrame
-import org.apache.spark.sql.connect.common.InvalidPlanInput
+import org.apache.spark.sql.connect.common.{InvalidCommandInput, InvalidPlanInput}
 import org.apache.spark.sql.connect.common.LiteralValueProtoConverter.toLiteralProto
 import org.apache.spark.sql.connect.dsl.MockRemoteSession
 import org.apache.spark.sql.connect.dsl.commands._

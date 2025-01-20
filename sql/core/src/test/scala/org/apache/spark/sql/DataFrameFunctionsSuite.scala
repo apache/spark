@@ -24,7 +24,7 @@ import scala.reflect.runtime.universe.runtimeMirror
 import scala.util.Random
 
 import org.apache.spark.{QueryContextType, SPARK_DOC_ROOT, SparkException, SparkRuntimeException}
-import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.{ExtendedAnalysisException, InternalRow}
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.expressions.{Expression, Literal, UnaryExpression}
 import org.apache.spark.sql.catalyst.expressions.Cast._
@@ -73,7 +73,9 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       "sum_distinct", // equivalent to sum(distinct foo)
       "typedLit", "typedlit", // Scala only
       "udaf", "udf", // create function statement in sql
-      "call_function" // moot in SQL as you just call the function directly
+      "call_function", // moot in SQL as you just call the function directly
+      "listagg_distinct", // equivalent to listagg(distinct foo)
+      "string_agg_distinct" // equivalent to string_agg(distinct foo)
     )
 
     val excludedSqlFunctions = Set.empty[String]
@@ -457,14 +459,14 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     val df = Seq((0)).toDF("a")
     var expr = randstr(lit(10), lit("a"))
     checkError(
-      intercept[AnalysisException](df.select(expr)),
+      intercept[ExtendedAnalysisException](df.select(expr).collect()),
       condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       parameters = Map(
         "sqlExpr" -> "\"randstr(10, a)\"",
         "paramIndex" -> "second",
         "inputSql" -> "\"a\"",
         "inputType" -> "\"STRING\"",
-        "requiredType" -> "INT or SMALLINT"),
+        "requiredType" -> "(\"INT\" or \"BIGINT\")"),
       context = ExpectedContext(
         contextType = QueryContextType.DataFrame,
         fragment = "randstr",
@@ -479,7 +481,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       condition = "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
       parameters = Map(
         "inputName" -> "`length`",
-        "inputType" -> "INT or SMALLINT",
+        "inputType" -> "integer",
         "inputExpr" -> "\"a\"",
         "sqlExpr" -> "\"randstr(a, 10)\""),
       context = ExpectedContext(
@@ -516,7 +518,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
         "paramIndex" -> "second",
         "inputSql" -> "\"a\"",
         "inputType" -> "\"STRING\"",
-        "requiredType" -> "integer or floating-point"),
+        "requiredType" -> "\"NUMERIC\""),
       context = ExpectedContext(
         contextType = QueryContextType.DataFrame,
         fragment = "uniform",

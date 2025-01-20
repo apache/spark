@@ -34,6 +34,9 @@ import com.typesafe.tools.mima.core.*
  */
 object MimaExcludes {
 
+  lazy val v41excludes = v40excludes ++ Seq(
+  )
+
   // Exclude rules for 4.0.x from 3.5.0
   lazy val v40excludes = defaultExcludes ++ Seq(
     // [SPARK-44863][UI] Add a button to download thread dump as a txt in Spark UI
@@ -220,6 +223,12 @@ object MimaExcludes {
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.streaming.DataStreamWriter$"),
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.streaming.StreamingQueryManager"),
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.streaming.StreamingQuery"),
+
+    // SPARK-50768: Introduce TaskContext.createResourceUninterruptibly to avoid stream leak by task interruption
+    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.TaskContext.interruptible"),
+    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.TaskContext.pendingInterrupt"),
+    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.TaskContext.createResourceUninterruptibly"),
+
   ) ++ loggingExcludes("org.apache.spark.sql.DataFrameReader") ++
     loggingExcludes("org.apache.spark.sql.streaming.DataStreamReader") ++
     loggingExcludes("org.apache.spark.sql.SparkSession#Builder")
@@ -284,6 +293,7 @@ object MimaExcludes {
   }
 
   def excludes(version: String): Seq[Problem => Boolean] = version match {
+    case v if v.startsWith("4.1") => v41excludes
     case v if v.startsWith("4.0") => v40excludes
     case _ => Seq()
   }

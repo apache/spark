@@ -715,6 +715,7 @@ abstract class StreamExecution(
 
 object StreamExecution {
   val QUERY_ID_KEY = "sql.streaming.queryId"
+  val RUN_ID_KEY = "sql.streaming.runId"
   val IS_CONTINUOUS_PROCESSING = "__is_continuous_processing"
   val IO_EXCEPTION_NAMES = Seq(
     classOf[InterruptedException].getName,

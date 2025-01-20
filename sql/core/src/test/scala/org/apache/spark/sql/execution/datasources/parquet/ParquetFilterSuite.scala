@@ -2234,6 +2234,8 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
 
 @ExtendedSQLTest
 class ParquetV1FilterSuite extends ParquetFilterSuite {
+  import testImplicits.ColumnConstructorExt
+
   override protected def sparkConf: SparkConf =
     super
       .sparkConf
@@ -2261,7 +2263,11 @@ class ParquetV1FilterSuite extends ParquetFilterSuite {
         SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false",
         SQLConf.NESTED_PREDICATE_PUSHDOWN_FILE_SOURCE_LIST.key -> pushdownDsList) {
         val query = df
+<<<<<<< HEAD
           .select(output.map(e => Column(e)): _*)
+=======
+          .select(output.map(Column(_)): _*)
+>>>>>>> apache/master
           .where(Column(predicate))
 
         val nestedOrAttributes = predicate.collectFirst {
@@ -2314,6 +2320,8 @@ class ParquetV1FilterSuite extends ParquetFilterSuite {
 
 @ExtendedSQLTest
 class ParquetV2FilterSuite extends ParquetFilterSuite {
+  import testImplicits.ColumnConstructorExt
+
   // TODO: enable Parquet V2 write path after file source V2 writers are workable.
   override protected def sparkConf: SparkConf =
     super
@@ -2340,7 +2348,11 @@ class ParquetV2FilterSuite extends ParquetFilterSuite {
       SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> InferFiltersFromConstraints.ruleName,
       SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false") {
       val query = df
+<<<<<<< HEAD
         .select(output.map(e => Column(e)): _*)
+=======
+        .select(output.map(Column(_)): _*)
+>>>>>>> apache/master
         .where(Column(predicate))
 
       query.queryExecution.optimizedPlan.collectFirst {

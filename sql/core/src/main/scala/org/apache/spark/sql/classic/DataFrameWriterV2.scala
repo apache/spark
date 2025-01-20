@@ -152,6 +152,7 @@ final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
       optionExpression = OptionList(Seq.empty),
       location = None,
       comment = None,
+      collation = None,
       serde = None,
       external = false)
     runCommand(
@@ -217,6 +218,7 @@ final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
       optionExpression = OptionList(Seq.empty),
       location = None,
       comment = None,
+      collation = None,
       serde = None,
       external = false)
     runCommand(ReplaceTableAsSelect(

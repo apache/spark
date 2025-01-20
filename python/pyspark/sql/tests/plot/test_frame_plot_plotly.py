@@ -19,8 +19,8 @@ import unittest
 from datetime import datetime
 
 from pyspark.errors import PySparkTypeError, PySparkValueError
-from pyspark.testing.sqlutils import (
-    ReusedSQLTestCase,
+from pyspark.testing.sqlutils import ReusedSQLTestCase
+from pyspark.testing.utils import (
     have_plotly,
     plotly_requirement_message,
     have_pandas,
@@ -301,6 +301,7 @@ class DataFramePlotPlotlyTestsMixin:
         self._check_fig_data(fig["data"][2], **expected_fig_data)
 
     def test_pie_plot(self):
+        # single column as 'y'
         fig = self.sdf3.plot(kind="pie", x="date", y="sales")
         expected_x = [
             datetime(2018, 1, 31, 0, 0),
@@ -308,13 +309,39 @@ class DataFramePlotPlotlyTestsMixin:
             datetime(2018, 3, 31, 0, 0),
             datetime(2018, 4, 30, 0, 0),
         ]
-        expected_fig_data = {
+        expected_fig_data_sales = {
             "name": "",
             "labels": expected_x,
             "values": [3, 2, 3, 9],
             "type": "pie",
         }
-        self._check_fig_data(fig["data"][0], **expected_fig_data)
+        self._check_fig_data(fig["data"][0], **expected_fig_data_sales)
+
+        # all numeric columns as 'y'
+        expected_fig_data_signups = {
+            "name": "",
+            "labels": expected_x,
+            "values": [5, 5, 6, 12],
+            "type": "pie",
+        }
+        expected_fig_data_visits = {
+            "name": "",
+            "labels": expected_x,
+            "values": [20, 42, 28, 62],
+            "type": "pie",
+        }
+        fig = self.sdf3.plot(kind="pie", x="date", subplots=True)
+        self._check_fig_data(fig["data"][0], **expected_fig_data_sales)
+        self._check_fig_data(fig["data"][1], **expected_fig_data_signups)
+        self._check_fig_data(fig["data"][2], **expected_fig_data_visits)
+
+        # not specify subplots
+        with self.assertRaises(PySparkValueError) as pe:
+            self.sdf3.plot(kind="pie", x="date")
+
+        self.check_error(
+            exception=pe.exception, errorClass="UNSUPPORTED_PIE_PLOT_PARAM", messageParameters={}
+        )
 
         # y is not a numerical column
         with self.assertRaises(PySparkTypeError) as pe:
@@ -322,8 +349,12 @@ class DataFramePlotPlotlyTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            errorClass="PLOT_NOT_NUMERIC_COLUMN_ARGUMENT",
-            messageParameters={"arg_name": "y", "arg_type": "StringType"},
+            errorClass="PLOT_INVALID_TYPE_COLUMN",
+            messageParameters={
+                "col_name": "category",
+                "valid_types": "NumericType",
+                "col_type": "StringType",
+            },
         )
 
     def test_box_plot(self):

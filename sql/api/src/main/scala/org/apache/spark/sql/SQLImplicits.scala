@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders._
  *
  * @since 1.6.0
  */
-abstract class SQLImplicits extends LowPrioritySQLImplicits with Serializable {
+abstract class SQLImplicits extends EncoderImplicits with Serializable {
 
   protected def session: SparkSession
 
@@ -47,8 +47,32 @@ abstract class SQLImplicits extends LowPrioritySQLImplicits with Serializable {
     }
   }
 
-  // Primitives
+  /**
+   * Creates a [[Dataset]] from a local Seq.
+   * @since 1.6.0
+   */
+  implicit def localSeqToDatasetHolder[T: Encoder](s: Seq[T]): DatasetHolder[T]
 
+  /**
+   * Creates a [[Dataset]] from an RDD.
+   *
+   * @since 1.6.0
+   */
+  implicit def rddToDatasetHolder[T: Encoder](rdd: RDD[T]): DatasetHolder[T]
+
+  /**
+   * An implicit conversion that turns a Scala `Symbol` into a [[org.apache.spark.sql.Column]].
+   * @since 1.3.0
+   */
+  implicit def symbolToColumn(s: Symbol): ColumnName = new ColumnName(s.name)
+}
+
+/**
+ * EncoderImplicits used to implicitly generate SQL Encoders. Note that these functions don't rely
+ * on or expose `SparkSession`.
+ */
+trait EncoderImplicits extends LowPrioritySQLImplicits with Serializable {
+  // Primitives
   /** @since 1.6.0 */
   implicit def newIntEncoder: Encoder[Int] = Encoders.scalaInt
 
@@ -266,25 +290,6 @@ abstract class SQLImplicits extends LowPrioritySQLImplicits with Serializable {
   /** @since 1.6.1 */
   implicit def newProductArrayEncoder[A <: Product: TypeTag]: Encoder[Array[A]] =
     newArrayEncoder(ScalaReflection.encoderFor[A])
-
-  /**
-   * Creates a [[Dataset]] from a local Seq.
-   * @since 1.6.0
-   */
-  implicit def localSeqToDatasetHolder[T: Encoder](s: Seq[T]): DatasetHolder[T]
-
-  /**
-   * Creates a [[Dataset]] from an RDD.
-   *
-   * @since 1.6.0
-   */
-  implicit def rddToDatasetHolder[T: Encoder](rdd: RDD[T]): DatasetHolder[T]
-
-  /**
-   * An implicit conversion that turns a Scala `Symbol` into a [[org.apache.spark.sql.Column]].
-   * @since 1.3.0
-   */
-  implicit def symbolToColumn(s: Symbol): ColumnName = new ColumnName(s.name)
 }
 
 /**

@@ -236,7 +236,7 @@ A typical example of this using S3 is via passing the following options:
 
 ```
 ...
---packages org.apache.hadoop:hadoop-aws:3.4.0
+--packages org.apache.hadoop:hadoop-aws:3.4.1
 --conf spark.kubernetes.file.upload.path=s3a://<s3-bucket>/path
 --conf spark.hadoop.fs.s3a.access.key=...
 --conf spark.hadoop.fs.s3a.impl=org.apache.hadoop.fs.s3a.S3AFileSystem
@@ -394,7 +394,7 @@ spark.kubernetes.executor.volumes.persistentVolumeClaim.spark-local-dir-1.mount.
 spark.kubernetes.executor.volumes.persistentVolumeClaim.spark-local-dir-1.mount.readOnly=false
 ```
 
-To enable shuffle data recovery feature via the built-in `KubernetesLocalDiskShuffleDataIO` plugin, we need to have the followings. You may want to enable `spark.kubernetes.driver.waitToReusePersistentVolumeClaim` additionally.
+To enable shuffle data recovery feature via the built-in `KubernetesLocalDiskShuffleDataIO` plugin, we need to have the following. You may want to enable `spark.kubernetes.driver.waitToReusePersistentVolumeClaim` additionally.
 
 ```
 spark.kubernetes.executor.volumes.persistentVolumeClaim.spark-local-dir-1.mount.path=/data/spark-x/executor-x

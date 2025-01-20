@@ -47,7 +47,7 @@ import org.apache.spark.util.ArrayImplicits._
  */
 @ExtendedSQLTest
 class OrcFilterSuite extends OrcTest with SharedSparkSession {
-  import testImplicits.toRichColumn
+  import testImplicits.{toRichColumn, ColumnConstructorExt}
 
   override protected def sparkConf: SparkConf =
     super

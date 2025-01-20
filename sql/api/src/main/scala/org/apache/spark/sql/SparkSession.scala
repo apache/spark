@@ -473,7 +473,6 @@ abstract class SparkSession extends Serializable with Closeable {
    *   is.
    * @since 3.5.0
    */
-  @Experimental
   def sql(sqlText: String, args: Array[_]): DataFrame
 
   /**
@@ -491,7 +490,6 @@ abstract class SparkSession extends Serializable with Closeable {
    *   `array()`, `struct()`, in that case it is taken as is.
    * @since 3.4.0
    */
-  @Experimental
   def sql(sqlText: String, args: Map[String, Any]): DataFrame
 
   /**
@@ -509,7 +507,6 @@ abstract class SparkSession extends Serializable with Closeable {
    *   `array()`, `struct()`, in that case it is taken as is.
    * @since 3.4.0
    */
-  @Experimental
   def sql(sqlText: String, args: util.Map[String, Any]): DataFrame = {
     sql(sqlText, args.asScala.toMap)
   }

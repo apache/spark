@@ -686,6 +686,7 @@ class Catalog(sparkSession: SparkSession) extends catalog.Catalog {
       optionExpression = newOptions,
       location = location,
       comment = { if (description.isEmpty) None else Some(description) },
+      collation = None,
       serde = None,
       external = tableType == CatalogTableType.EXTERNAL)
 

@@ -280,7 +280,7 @@ object StaticSQLConf {
     buildStaticConf("spark.sql.streaming.ui.enabledCustomMetricList")
       .internal()
       .doc("Configures a list of custom metrics on Structured Streaming UI, which are enabled. " +
-        "The list contains the name of the custom metrics separated by comma. In aggregation" +
+        "The list contains the name of the custom metrics separated by comma. In aggregation " +
         "only sum used. The list of supported custom metrics is state store provider specific " +
         "and it can be found out for example from query progress log entry.")
       .version("3.1.0")
@@ -295,4 +295,14 @@ object StaticSQLConf {
       .version("3.1.0")
       .stringConf
       .createWithDefault("")
+
+  val DATA_FRAME_DEBUGGING_ENABLED =
+    buildStaticConf("spark.python.sql.dataFrameDebugging.enabled")
+    .internal()
+    .doc(
+      "Enable the DataFrame debugging. This feature is enabled by default, but has a " +
+        "non-trivial performance overhead because of the stack trace collection.")
+    .version("4.0.0")
+    .booleanConf
+    .createWithDefault(true)
 }

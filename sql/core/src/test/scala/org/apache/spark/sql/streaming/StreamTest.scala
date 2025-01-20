@@ -869,7 +869,7 @@ trait StreamTest extends QueryTest with SharedSparkSession with TimeLimits with 
 
     (1 to iterations).foreach { i =>
       val rand = Random.nextDouble()
-      if(!running) {
+      if (!running) {
         rand match {
           case r if r < 0.7 => // AddData
             addRandomData()
@@ -897,7 +897,7 @@ trait StreamTest extends QueryTest with SharedSparkSession with TimeLimits with 
         }
       }
     }
-    if(!running) { actions += StartStream() }
+    if (!running) { actions += StartStream() }
     addCheck()
     testStream(ds)(actions.toSeq: _*)
   }
