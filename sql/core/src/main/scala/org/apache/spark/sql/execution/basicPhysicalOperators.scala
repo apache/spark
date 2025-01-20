@@ -719,7 +719,7 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan {
 }
 
 /**
- * The physical node for recursion.
+ * The physical node for recursion. Currently only UNION ALL case is supported.
  *
  * @param loopId The id of the loop.
  * @param anchor The logical plan of the initial element of the loop.
