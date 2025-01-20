@@ -216,7 +216,7 @@ class RegressionTestsMixin:
         self.assertEqual(output.count(), 4)
 
         # Model save & load
-        with tempfile.TemporaryDirectory(prefix="decision_tree_model") as d:
+        with tempfile.TemporaryDirectory(prefix="decision_tree_regression_model") as d:
             model.write().overwrite().save(d)
             model2 = DecisionTreeRegressionModel.load(d)
             self.assertEqual(str(model), str(model2))
