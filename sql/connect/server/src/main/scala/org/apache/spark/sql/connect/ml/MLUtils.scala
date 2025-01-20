@@ -482,7 +482,14 @@ private[ml] object MLUtils {
     "clusterSizes", // KMeansSummary
     "trainingCost", // KMeansSummary
     "cluster", // KMeansSummary
-    "computeCost" // BisectingKMeansModel
+    "computeCost", // BisectingKMeansModel
+    "rank", // ALSModel
+    "itemFactors", // ALSModel
+    "userFactors", // ALSModel
+    "recommendForAllUsers", // ALSModel
+    "recommendForAllItems", // ALSModel
+    "recommendForUserSubset", // ALSModel
+    "recommendForItemSubset" // ALSModel
   )
 
   def invokeMethodAllowed(obj: Object, methodName: String): Object = {
