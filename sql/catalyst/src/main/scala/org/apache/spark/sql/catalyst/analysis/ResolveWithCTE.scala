@@ -58,8 +58,10 @@ object ResolveWithCTE extends Rule[LogicalPlan] {
           case cteDef if !cteDef.hasRecursiveCTERelationRef =>
             if (cteDef.resolved) {
               cteDefMap.put(cteDef.id, cteDef)
-              // For the resolved cteDefs, hasItsOwnUnionLoopRef checks if this is a recursive
-              // cteDef. If yes, we should check if data types of anchor and recursive terms match,
+              // Additional checks should be performed in recursive CTE case:
+              // For the resolved cteDefs, hasItsOwnUnionLoopRef checks if this is actually a
+              // recursive cteDef.
+              // If yes, we should check if data types of anchor and recursive terms match,
               // and if the self-reference is placed correctly
               if (cteDef.hasItsOwnUnionLoopRef) {
                 checkDataTypesAnchorAndRecursiveTerm(cteDef)
