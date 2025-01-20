@@ -27,6 +27,12 @@ from pyspark.ml.regression import (
     LinearRegressionModel,
     LinearRegressionSummary,
     LinearRegressionTrainingSummary,
+    DecisionTreeRegressor,
+    DecisionTreeRegressionModel,
+    RandomForestRegressor,
+    RandomForestRegressionModel,
+    GBTRegressor,
+    GBTRegressionModel,
 )
 
 
@@ -158,6 +164,201 @@ class RegressionTestsMixin:
             model.write().overwrite().save(d)
             model2 = LinearRegressionModel.load(d)
             self.assertEqual(str(model), str(model2))
+
+    def test_decision_tree_regressor(self):
+        df = self.df
+
+        dt = DecisionTreeRegressor(
+            maxDepth=2,
+            labelCol="label",
+            leafCol="leaf",
+            seed=1,
+        )
+        self.assertEqual(dt.getMaxDepth(), 2)
+        self.assertEqual(dt.getSeed(), 1)
+        self.assertEqual(dt.getLabelCol(), "label")
+        self.assertEqual(dt.getLeafCol(), "leaf")
+
+        # Estimator save & load
+        with tempfile.TemporaryDirectory(prefix="decision_tree_regressor") as d:
+            dt.write().overwrite().save(d)
+            dt2 = DecisionTreeRegressor.load(d)
+            self.assertEqual(str(dt), str(dt2))
+
+        model = dt.fit(df)
+        self.assertEqual(model.numFeatures, 2)
+        self.assertEqual(model.depth, 2)
+        self.assertEqual(model.numNodes, 5)
+
+        featureImportances = model.featureImportances
+        self.assertTrue(
+            np.allclose(featureImportances, [0.5756, 0.4244], atol=1e-4),
+            featureImportances,
+        )
+
+        debugString = model.toDebugString
+        self.assertTrue("depth=2, numNodes=5, numFeatures=2" in debugString, debugString)
+        self.assertTrue("If (feature 0 <= 1.75)" in debugString, debugString)
+
+        vec = Vectors.dense(0.0, 5.0)
+        self.assertTrue(np.allclose(model.predict(vec), 0.85, atol=1e-4))
+        self.assertEqual(model.predictLeaf(vec), 1.0)
+
+        output = model.transform(df)
+        expected_cols = [
+            "label",
+            "weight",
+            "features",
+            "prediction",
+            "leaf",
+        ]
+        self.assertEqual(output.columns, expected_cols)
+        self.assertEqual(output.count(), 4)
+
+        # Model save & load
+        with tempfile.TemporaryDirectory(prefix="decision_tree_regression_model") as d:
+            model.write().overwrite().save(d)
+            model2 = DecisionTreeRegressionModel.load(d)
+            self.assertEqual(str(model), str(model2))
+            self.assertEqual(model.toDebugString, model2.toDebugString)
+
+    def test_gbt_regressor(self):
+        df = self.df
+
+        gbt = GBTRegressor(
+            maxIter=3,
+            maxDepth=2,
+            labelCol="label",
+            leafCol="leaf",
+            seed=1,
+        )
+        self.assertEqual(gbt.getMaxIter(), 3)
+        self.assertEqual(gbt.getMaxDepth(), 2)
+        self.assertEqual(gbt.getSeed(), 1)
+        self.assertEqual(gbt.getLabelCol(), "label")
+        self.assertEqual(gbt.getLeafCol(), "leaf")
+
+        # Estimator save & load
+        with tempfile.TemporaryDirectory(prefix="gbt_regressor") as d:
+            gbt.write().overwrite().save(d)
+            gbt2 = GBTRegressor.load(d)
+            self.assertEqual(str(gbt), str(gbt2))
+
+        model = gbt.fit(df)
+        self.assertEqual(model.numFeatures, 2)
+        # TODO(SPARK-50843): Support access submodel in TreeEnsembleModel
+        # model.trees
+        self.assertEqual(model.treeWeights, [1.0, 0.1, 0.1])
+        self.assertEqual(model.totalNumNodes, 15)
+
+        featureImportances = model.featureImportances
+        self.assertTrue(
+            np.allclose(featureImportances, [0.5944156994359766, 0.4055843005640234], atol=1e-4),
+            featureImportances,
+        )
+
+        debugString = model.toDebugString
+        self.assertTrue("numTrees=3, numFeatures=2" in debugString, debugString)
+        self.assertTrue("If (feature 0 <= 1.75)" in debugString, debugString)
+
+        vec = Vectors.dense(0.0, 5.0)
+        self.assertTrue(np.allclose(model.predict(vec), 0.904, atol=1e-4))
+        self.assertEqual(model.predictLeaf(vec), Vectors.dense(1.0, 0.0, 0.0))
+
+        # GBT-specific method: evaluateEachIteration
+        self.assertTrue(
+            np.allclose(
+                model.evaluateEachIteration(df, "squared"),
+                [0.011250000000000003, 0.0072, 0.0046079999999999975],
+                atol=1e-4,
+            )
+        )
+        self.assertTrue(
+            np.allclose(
+                model.evaluateEachIteration(df, "absolute"),
+                [0.07500000000000007, 0.06000000000000006, 0.048000000000000057],
+                atol=1e-4,
+            )
+        )
+
+        output = model.transform(df)
+        expected_cols = [
+            "label",
+            "weight",
+            "features",
+            "prediction",
+            "leaf",
+        ]
+        self.assertEqual(output.columns, expected_cols)
+        self.assertEqual(output.count(), 4)
+
+        # Model save & load
+        with tempfile.TemporaryDirectory(prefix="gbt_regression_model") as d:
+            model.write().overwrite().save(d)
+            model2 = GBTRegressionModel.load(d)
+            self.assertEqual(str(model), str(model2))
+            self.assertEqual(model.toDebugString, model2.toDebugString)
+
+    def test_random_forest_regressor(self):
+        df = self.df
+
+        rf = RandomForestRegressor(
+            numTrees=3,
+            maxDepth=2,
+            labelCol="label",
+            leafCol="leaf",
+            seed=1,
+        )
+        self.assertEqual(rf.getNumTrees(), 3)
+        self.assertEqual(rf.getMaxDepth(), 2)
+        self.assertEqual(rf.getSeed(), 1)
+        self.assertEqual(rf.getLabelCol(), "label")
+        self.assertEqual(rf.getLeafCol(), "leaf")
+
+        # Estimator save & load
+        with tempfile.TemporaryDirectory(prefix="random_forest_regressor") as d:
+            rf.write().overwrite().save(d)
+            rf2 = RandomForestRegressor.load(d)
+            self.assertEqual(str(rf), str(rf2))
+
+        model = rf.fit(df)
+        self.assertEqual(model.numFeatures, 2)
+        # TODO(SPARK-50843): Support access submodel in TreeEnsembleModel
+        # model.trees
+        self.assertEqual(model.treeWeights, [1.0, 1.0, 1.0])
+        self.assertEqual(model.totalNumNodes, 11)
+
+        featureImportances = model.featureImportances
+        self.assertTrue(
+            np.allclose(featureImportances, [0.5615222294986538, 0.43847777050134623], atol=1e-4),
+            featureImportances,
+        )
+
+        debugString = model.toDebugString
+        self.assertTrue("numTrees=3, numFeatures=2" in debugString, debugString)
+        self.assertTrue("If (feature 0 <= 1.75)" in debugString, debugString)
+
+        vec = Vectors.dense(0.0, 5.0)
+        self.assertTrue(np.allclose(model.predict(vec), 0.6166666666666667, atol=1e-4))
+        self.assertEqual(model.predictLeaf(vec), Vectors.dense(1.0, 0.0, 1.0))
+
+        output = model.transform(df)
+        expected_cols = [
+            "label",
+            "weight",
+            "features",
+            "prediction",
+            "leaf",
+        ]
+        self.assertEqual(output.columns, expected_cols)
+        self.assertEqual(output.count(), 4)
+
+        # Model save & load
+        with tempfile.TemporaryDirectory(prefix="random_forest_regression_model") as d:
+            model.write().overwrite().save(d)
+            model2 = RandomForestRegressionModel.load(d)
+            self.assertEqual(str(model), str(model2))
+            self.assertEqual(model.toDebugString, model2.toDebugString)
 
 
 class RegressionTests(RegressionTestsMixin, unittest.TestCase):
