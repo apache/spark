@@ -2870,6 +2870,24 @@
     },
     "sqlState" : "42K0E"
   },
+  "INVALID_LOG_VERSION" : {
+    "message" : [
+      "UnsupportedLogVersion."
+    ],
+    "subClass" : {
+      "EXACT_MATCH_VERSION" : {
+        "message" : [
+          "The only supported log version is v<matchVersion>, but encountered v<version>."
+        ]
+      },
+      "MAX_SUPPORTED_VERSION" : {
+        "message" : [
+          "The maximum supported log version is v<maxSupportedVersion>, but encountered v<version>. The log file was produced by a newer version of Spark and cannot be read by this version. You need to upgrade."
+        ]
+      }
+    },
+    "sqlState" : "KD002"
+  },
   "INVALID_NON_DETERMINISTIC_EXPRESSIONS" : {
     "message" : [
       "The operator expects a deterministic expression, but the actual expression is <sqlExprs>."
@@ -3104,6 +3122,12 @@
       "Parameterized query must either use positional, or named parameters, but not both."
     ],
     "sqlState" : "42613"
+  },
+  "INVALID_RECURSIVE_CTE" : {
+    "message" : [
+      "Invalid recursive definition found. Recursive queries must contain an UNION or an UNION ALL statement with 2 children. The first child needs to be the anchor term without any recursive references."
+    ],
+    "sqlState" : "42836"
   },
   "INVALID_REGEXP_REPLACE" : {
     "message" : [
@@ -3620,6 +3644,12 @@
       "Malformed CSV record: <badRecord>"
     ],
     "sqlState" : "KD000"
+  },
+  "MALFORMED_LOG_FILE" : {
+    "message" : [
+      "Log file was malformed: failed to read correct log version from <text>."
+    ],
+    "sqlState" : "KD002"
   },
   "MALFORMED_PROTOBUF_MESSAGE" : {
     "message" : [

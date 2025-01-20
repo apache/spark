@@ -18,54 +18,107 @@ from typing import Any, List, TYPE_CHECKING, Mapping, Dict
 
 import pyspark.sql.connect.proto as pb2
 from pyspark.ml.linalg import (
-    Vectors,
-    Matrices,
+    VectorUDT,
+    MatrixUDT,
     DenseVector,
     SparseVector,
     DenseMatrix,
     SparseMatrix,
 )
-from pyspark.sql.connect.expressions import LiteralExpression
 
 if TYPE_CHECKING:
     from pyspark.sql.connect.client import SparkConnectClient
     from pyspark.ml.param import Params
 
 
-def serialize_param(value: Any, client: "SparkConnectClient") -> pb2.Param:
-    if isinstance(value, DenseVector):
-        return pb2.Param(vector=pb2.Vector(dense=pb2.Vector.Dense(value=value.values.tolist())))
-    elif isinstance(value, SparseVector):
-        return pb2.Param(
-            vector=pb2.Vector(
-                sparse=pb2.Vector.Sparse(
-                    size=value.size, index=value.indices.tolist(), value=value.values.tolist()
-                )
-            )
-        )
-    elif isinstance(value, DenseMatrix):
-        return pb2.Param(
-            matrix=pb2.Matrix(
-                dense=pb2.Matrix.Dense(
-                    num_rows=value.numRows, num_cols=value.numCols, value=value.values.tolist()
-                )
-            )
-        )
+def literal_null() -> pb2.Expression.Literal:
+    dt = pb2.DataType()
+    dt.null.CopyFrom(pb2.DataType.NULL())
+    return pb2.Expression.Literal(null=dt)
+
+
+def build_int_list(value: List[int]) -> pb2.Expression.Literal:
+    p = pb2.Expression.Literal()
+    p.specialized_array.ints.values.extend(value)
+    return p
+
+
+def build_float_list(value: List[float]) -> pb2.Expression.Literal:
+    p = pb2.Expression.Literal()
+    p.specialized_array.doubles.values.extend(value)
+    return p
+
+
+def serialize_param(value: Any, client: "SparkConnectClient") -> pb2.Expression.Literal:
+    from pyspark.sql.connect.types import pyspark_types_to_proto_types
+    from pyspark.sql.connect.expressions import LiteralExpression
+
+    if isinstance(value, SparseVector):
+        p = pb2.Expression.Literal()
+        p.struct.struct_type.CopyFrom(pyspark_types_to_proto_types(VectorUDT.sqlType()))
+        # type = 0
+        p.struct.elements.append(pb2.Expression.Literal(byte=0))
+        # size
+        p.struct.elements.append(pb2.Expression.Literal(integer=value.size))
+        # indices
+        p.struct.elements.append(build_int_list(value.indices.tolist()))
+        # values
+        p.struct.elements.append(build_float_list(value.values.tolist()))
+        return p
+
+    elif isinstance(value, DenseVector):
+        p = pb2.Expression.Literal()
+        p.struct.struct_type.CopyFrom(pyspark_types_to_proto_types(VectorUDT.sqlType()))
+        # type = 1
+        p.struct.elements.append(pb2.Expression.Literal(byte=1))
+        # size = null
+        p.struct.elements.append(literal_null())
+        # indices = null
+        p.struct.elements.append(literal_null())
+        # values
+        p.struct.elements.append(build_float_list(value.values.tolist()))
+        return p
+
     elif isinstance(value, SparseMatrix):
-        return pb2.Param(
-            matrix=pb2.Matrix(
-                sparse=pb2.Matrix.Sparse(
-                    num_rows=value.numRows,
-                    num_cols=value.numCols,
-                    colptr=value.colPtrs.tolist(),
-                    row_index=value.rowIndices.tolist(),
-                    value=value.values.tolist(),
-                )
-            )
-        )
+        p = pb2.Expression.Literal()
+        p.struct.struct_type.CopyFrom(pyspark_types_to_proto_types(MatrixUDT.sqlType()))
+        # type = 0
+        p.struct.elements.append(pb2.Expression.Literal(byte=0))
+        # numRows
+        p.struct.elements.append(pb2.Expression.Literal(integer=value.numRows))
+        # numCols
+        p.struct.elements.append(pb2.Expression.Literal(integer=value.numCols))
+        # colPtrs
+        p.struct.elements.append(build_int_list(value.colPtrs.tolist()))
+        # rowIndices
+        p.struct.elements.append(build_int_list(value.rowIndices.tolist()))
+        # values
+        p.struct.elements.append(build_float_list(value.values.tolist()))
+        # isTransposed
+        p.struct.elements.append(pb2.Expression.Literal(boolean=value.isTransposed))
+        return p
+
+    elif isinstance(value, DenseMatrix):
+        p = pb2.Expression.Literal()
+        p.struct.struct_type.CopyFrom(pyspark_types_to_proto_types(MatrixUDT.sqlType()))
+        # type = 1
+        p.struct.elements.append(pb2.Expression.Literal(byte=1))
+        # numRows
+        p.struct.elements.append(pb2.Expression.Literal(integer=value.numRows))
+        # numCols
+        p.struct.elements.append(pb2.Expression.Literal(integer=value.numCols))
+        # colPtrs = null
+        p.struct.elements.append(literal_null())
+        # rowIndices = null
+        p.struct.elements.append(literal_null())
+        # values
+        p.struct.elements.append(build_float_list(value.values.tolist()))
+        # isTransposed
+        p.struct.elements.append(pb2.Expression.Literal(boolean=value.isTransposed))
+        return p
+
     else:
-        literal = LiteralExpression._from_value(value).to_plan(client).literal
-        return pb2.Param(literal=literal)
+        return LiteralExpression._from_value(value).to_plan(client).literal
 
 
 def serialize(client: "SparkConnectClient", *args: Any) -> List[Any]:
@@ -80,38 +133,51 @@ def serialize(client: "SparkConnectClient", *args: Any) -> List[Any]:
     return result
 
 
-def deserialize_param(param: pb2.Param) -> Any:
-    if param.HasField("literal"):
-        return LiteralExpression._to_value(param.literal)
-    if param.HasField("vector"):
-        vector = param.vector
-        if vector.HasField("dense"):
-            return Vectors.dense(vector.dense.value)
-        elif vector.HasField("sparse"):
-            return Vectors.sparse(vector.sparse.size, vector.sparse.index, vector.sparse.value)
-        else:
-            raise ValueError("Unsupported vector type")
-    if param.HasField("matrix"):
-        matrix = param.matrix
-        if matrix.HasField("dense"):
-            return DenseMatrix(
-                matrix.dense.num_rows,
-                matrix.dense.num_cols,
-                matrix.dense.value,
-                matrix.dense.is_transposed,
-            )
-        elif matrix.HasField("sparse"):
-            return Matrices.sparse(
-                matrix.sparse.num_rows,
-                matrix.sparse.num_cols,
-                matrix.sparse.colptr,
-                matrix.sparse.row_index,
-                matrix.sparse.value,
-            )
-        else:
-            raise ValueError("Unsupported matrix type")
+def deserialize_param(literal: pb2.Expression.Literal) -> Any:
+    from pyspark.sql.connect.types import proto_schema_to_pyspark_data_type
+    from pyspark.sql.connect.expressions import LiteralExpression
 
-    raise ValueError("Unsupported param type")
+    if literal.HasField("struct"):
+        s = literal.struct
+        schema = proto_schema_to_pyspark_data_type(s.struct_type)
+
+        if schema == VectorUDT.sqlType():
+            assert len(s.elements) == 4
+            tpe = s.elements[0].byte
+            if tpe == 0:
+                size = s.elements[1].integer
+                indices = s.elements[2].specialized_array.ints.values
+                values = s.elements[3].specialized_array.doubles.values
+                return SparseVector(size, indices, values)
+            elif tpe == 1:
+                values = s.elements[3].specialized_array.doubles.values
+                return DenseVector(values)
+            else:
+                raise ValueError(f"Unknown Vector type {tpe}")
+
+        elif schema == MatrixUDT.sqlType():
+            assert len(s.elements) == 7
+            tpe = s.elements[0].byte
+            if tpe == 0:
+                numRows = s.elements[1].integer
+                numCols = s.elements[2].integer
+                colPtrs = s.elements[3].specialized_array.ints.values
+                rowIndices = s.elements[4].specialized_array.ints.values
+                values = s.elements[5].specialized_array.doubles.values
+                isTransposed = s.elements[6].boolean
+                return SparseMatrix(numRows, numCols, colPtrs, rowIndices, values, isTransposed)
+            elif tpe == 1:
+                numRows = s.elements[1].integer
+                numCols = s.elements[2].integer
+                values = s.elements[5].specialized_array.doubles.values
+                isTransposed = s.elements[6].boolean
+                return DenseMatrix(numRows, numCols, values, isTransposed)
+            else:
+                raise ValueError(f"Unknown Matrix type {tpe}")
+        else:
+            raise ValueError(f"Unsupported parameter struct {schema}")
+    else:
+        return LiteralExpression._to_value(literal)
 
 
 def deserialize(ml_command_result_properties: Dict[str, Any]) -> Any:
@@ -126,7 +192,7 @@ def deserialize(ml_command_result_properties: Dict[str, Any]) -> Any:
 
 
 def serialize_ml_params(instance: "Params", client: "SparkConnectClient") -> pb2.MlParams:
-    params: Mapping[str, pb2.Param] = {
+    params: Mapping[str, pb2.Expression.Literal] = {
         k.name: serialize_param(v, client) for k, v in instance._paramMap.items()
     }
     return pb2.MlParams(params=params)

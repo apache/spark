@@ -151,7 +151,7 @@ message Fetch {
 
     message Args {
       oneof args_type {
-        Param param = 1;
+        Expression.Literal param = 1;
         Relation input = 2;
       }
     }

@@ -22,8 +22,9 @@ import java.util.Optional
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.connect.proto
 import org.apache.spark.ml.{Estimator, Model}
+import org.apache.spark.ml.evaluation.Evaluator
 import org.apache.spark.ml.linalg.{Vectors, VectorUDT}
-import org.apache.spark.ml.param.{IntParam, ParamMap, Params}
+import org.apache.spark.ml.param.{IntParam, Param, ParamMap, Params}
 import org.apache.spark.ml.param.shared.HasMaxIter
 import org.apache.spark.ml.util.{DefaultParamsReadable, DefaultParamsWritable, Identifiable, MLReadable, MLReader}
 import org.apache.spark.sql.{DataFrame, Dataset}
@@ -32,7 +33,7 @@ import org.apache.spark.sql.catalyst.expressions.UnsafeProjection
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.connect.planner.SparkConnectPlanTest
 import org.apache.spark.sql.connect.plugin.MLBackendPlugin
-import org.apache.spark.sql.types.{FloatType, Metadata, StructField, StructType}
+import org.apache.spark.sql.types.{DoubleType, FloatType, Metadata, StructField, StructType}
 
 trait MLHelper extends SparkFunSuite with SparkConnectPlanTest {
 
@@ -55,6 +56,46 @@ trait MLHelper extends SparkFunSuite with SparkConnectPlanTest {
     }
     createLocalRelationProto(DataTypeUtils.toAttributes(schema), inputRows, "UTC", Some(schema))
   }
+
+  def createRegressionEvaluationLocalRelationProto: proto.Relation = {
+    // The test refers to
+    // https://github.com/apache/spark/blob/master/python/pyspark/ml/evaluation.py#L331
+    val rows = Seq(
+      InternalRow(-28.98343821, -27.0),
+      InternalRow(20.21491975, 21.5),
+      InternalRow(-25.98418959, -22.0),
+      InternalRow(30.69731842, 33.0),
+      InternalRow(74.69283752, 71.0))
+    val schema = StructType(Seq(StructField("raw", DoubleType), StructField("label", DoubleType)))
+    val inputRows = rows.map { row =>
+      val proj = UnsafeProjection.create(schema)
+      proj(row).copy()
+    }
+    createLocalRelationProto(schema, inputRows)
+  }
+
+  def getRegressorEvaluator: proto.MlOperator.Builder =
+    proto.MlOperator
+      .newBuilder()
+      .setName("org.apache.spark.ml.evaluation.RegressionEvaluator")
+      .setUid("RegressionEvaluator")
+      .setType(proto.MlOperator.OperatorType.EVALUATOR)
+
+  def getMetricName: proto.MlParams.Builder =
+    proto.MlParams
+      .newBuilder()
+      .putParams("metricName", proto.Expression.Literal.newBuilder().setString("mae").build())
+
+  def fetchCommand(modelId: String, method: String): proto.MlCommand = {
+    proto.MlCommand
+      .newBuilder()
+      .setFetch(
+        proto.Fetch
+          .newBuilder()
+          .setObjRef(proto.ObjectRef.newBuilder().setId(modelId))
+          .addMethods(proto.Fetch.Method.newBuilder().setMethod(method)))
+      .build()
+  }
 }
 
 class MyMlBackend extends MLBackendPlugin {
@@ -65,6 +106,8 @@ class MyMlBackend extends MLBackendPlugin {
         Optional.of("org.apache.spark.sql.connect.ml.MyLogisticRegression")
       case "org.apache.spark.ml.classification.LogisticRegressionModel" =>
         Optional.of("org.apache.spark.sql.connect.ml.MyLogisticRegressionModel")
+      case "org.apache.spark.ml.evaluation.RegressionEvaluator" =>
+        Optional.of("org.apache.spark.sql.connect.ml.MyRegressionEvaluator")
       case _ => Optional.empty()
     }
   }
@@ -72,6 +115,29 @@ class MyMlBackend extends MLBackendPlugin {
 
 trait HasFakedParam extends Params {
   final val fakeParam: IntParam = new IntParam(this, "fakeParam", "faked parameter")
+}
+
+class MyRegressionEvaluator(override val uid: String)
+    extends Evaluator
+    with DefaultParamsWritable
+    with HasFakedParam {
+
+  def this() = this(Identifiable.randomUID("MyRegressionEvaluator"))
+
+  // keep same as RegressionEvaluator
+  val metricName: Param[String] = {
+    new Param(this, "metricName", "metric name in evaluation (mse|rmse|r2|mae|var)")
+  }
+
+  set(fakeParam, 101010)
+
+  override def evaluate(dataset: Dataset[_]): Double = 1.11
+
+  override def copy(extra: ParamMap): Evaluator = defaultCopy(extra)
+}
+
+object MyRegressionEvaluator extends DefaultParamsReadable[MyRegressionEvaluator] {
+  override def load(path: String): MyRegressionEvaluator = super.load(path)
 }
 
 class MyLogisticRegressionModel(
@@ -94,6 +160,9 @@ class MyLogisticRegressionModel(
   override def transform(dataset: Dataset[_]): DataFrame = {
     dataset.toDF()
   }
+
+  // fake a function
+  def predictRaw: Double = 1.11
 
   override def transformSchema(schema: StructType): StructType = schema
 }

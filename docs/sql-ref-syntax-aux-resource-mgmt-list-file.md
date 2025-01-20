@@ -39,7 +39,7 @@ LIST FILE;
 file:/private/tmp/test
 file:/private/tmp/test_2
 
-LIST FILE /tmp/test /some/random/file /another/random/file
+LIST FILE /tmp/test /some/random/file /another/random/file;
 --output
 file:/private/tmp/test
 ```

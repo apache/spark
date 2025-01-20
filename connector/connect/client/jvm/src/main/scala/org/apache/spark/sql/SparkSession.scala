@@ -377,8 +377,8 @@ class SparkSession private[sql] (
    */
   @Since("4.0.0")
   @DeveloperApi
-  def newDataset[T](encoder: AgnosticEncoder[T])(
-      f: proto.Relation.Builder => Unit): Dataset[T] = {
+  def newDataset[T](
+      encoder: AgnosticEncoder[T])(f: proto.Relation.Builder => Unit): Dataset[T] = {
     newDataset[T](encoder, Seq.empty)(f)
   }
 
