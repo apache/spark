@@ -34,7 +34,6 @@ import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces.PROP_OWNER
-import org.apache.spark.sql.errors.DataTypeErrors.toSQLType
 import org.apache.spark.sql.execution.command.{DDLSuite, DDLUtils}
 import org.apache.spark.sql.execution.datasources.orc.OrcCompressionCodec
 import org.apache.spark.sql.execution.datasources.parquet.{ParquetCompressionCodec, ParquetFooterReader}
@@ -2849,38 +2848,18 @@ class HiveDDLSuite
   }
 
   test("SPARK-47101 checks if nested column names do not include invalid characters") {
-    // delimiter characters
-    Seq(",", ":").foreach { c =>
+    Seq(",", ":", ";", "^", "\\", "/", "%").foreach { c =>
       val typ = s"array<struct<`abc${c}xyz`:int>>"
-      // The regex is from HiveClientImpl.getSparkSQLDataType, please keep them in sync.
-      val replaced = typ.replaceAll("`", "").replaceAll("(?<=struct<|,)([^,<:]+)(?=:)", "`$1`")
-      withTable("t") {
-        checkError(
-          exception = intercept[SparkException] {
-            sql(s"CREATE TABLE t (a $typ) USING hive")
-          },
-          condition = "CANNOT_RECOGNIZE_HIVE_TYPE",
-          parameters = Map(
-            "fieldType" -> toSQLType(replaced),
-            "fieldName" -> "`a`")
-        )
+      val e = intercept[AnalysisException] {
+        sql(s"CREATE TABLE t (a $typ) USING hive")
       }
-    }
-    // other special characters
-    Seq(";", "^", "\\", "/", "%").foreach { c =>
-      val typ = s"array<struct<`abc${c}xyz`:int>>"
-      val replaced = typ.replaceAll("`", "")
-      val msg = s"java.lang.IllegalArgumentException: Error: : expected at the position " +
-        s"16 of '$replaced' but '$c' is found."
       withTable("t") {
         checkError(
-          exception = intercept[AnalysisException] {
-            sql(s"CREATE TABLE t (a $typ) USING hive")
-          },
+          exception = e,
           condition = "_LEGACY_ERROR_TEMP_3065",
           parameters = Map(
-            "clazz" -> "org.apache.hadoop.hive.ql.metadata.HiveException",
-            "msg" -> msg)
+            "clazz" -> e.getCause.getClass.getName,
+            "msg" -> e.getCause.getMessage)
         )
       }
     }

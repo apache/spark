@@ -30,6 +30,7 @@ import com.google.common.cache.CacheBuilder
 import org.apache.spark.{SparkEnv, SparkSQLException}
 import org.apache.spark.connect.proto
 import org.apache.spark.internal.{Logging, LogKeys, MDC}
+import org.apache.spark.sql.catalyst.util.DateTimeConstants.NANOS_PER_MILLIS
 import org.apache.spark.sql.connect.config.Connect.{CONNECT_EXECUTE_MANAGER_ABANDONED_TOMBSTONES_SIZE, CONNECT_EXECUTE_MANAGER_DETACHED_TIMEOUT, CONNECT_EXECUTE_MANAGER_MAINTENANCE_INTERVAL}
 import org.apache.spark.util.ThreadUtils
 
@@ -73,7 +74,7 @@ private[connect] class SparkConnectExecutionManager() extends Logging {
     .build[ExecuteKey, ExecuteInfo]()
 
   /** The time when the last execution was removed. */
-  private var lastExecutionTimeMs: AtomicLong = new AtomicLong(System.currentTimeMillis())
+  private var lastExecutionTimeNs: AtomicLong = new AtomicLong(System.nanoTime())
 
   /** Executor for the periodic maintenance */
   private var scheduledExecutor: AtomicReference[ScheduledExecutorService] =
@@ -175,12 +176,12 @@ private[connect] class SparkConnectExecutionManager() extends Logging {
   }
 
   /**
-   * If there are no executions, return Left with System.currentTimeMillis of last active
-   * execution. Otherwise return Right with list of ExecuteInfo of all executions.
+   * If there are no executions, return Left with System.nanoTime of last active execution.
+   * Otherwise return Right with list of ExecuteInfo of all executions.
    */
   def listActiveExecutions: Either[Long, Seq[ExecuteInfo]] = {
     if (executions.isEmpty) {
-      Left(lastExecutionTimeMs.getAcquire())
+      Left(lastExecutionTimeNs.getAcquire())
     } else {
       Right(executions.values().asScala.map(_.getExecuteInfo).toBuffer.toSeq)
     }
@@ -211,7 +212,7 @@ private[connect] class SparkConnectExecutionManager() extends Logging {
    * Updates the last execution time after the last execution has been removed.
    */
   private def updateLastExecutionTime(): Unit = {
-    lastExecutionTimeMs.getAndUpdate(prev => prev.max(System.currentTimeMillis()))
+    lastExecutionTimeNs.getAndUpdate(prev => prev.max(System.nanoTime()))
   }
 
   /**
@@ -231,8 +232,9 @@ private[connect] class SparkConnectExecutionManager() extends Logging {
         executor.scheduleAtFixedRate(
           () => {
             try {
-              val timeout = SparkEnv.get.conf.get(CONNECT_EXECUTE_MANAGER_DETACHED_TIMEOUT)
-              periodicMaintenance(timeout)
+              val timeoutNs =
+                SparkEnv.get.conf.get(CONNECT_EXECUTE_MANAGER_DETACHED_TIMEOUT) * NANOS_PER_MILLIS
+              periodicMaintenance(timeoutNs)
             } catch {
               case NonFatal(ex) => logWarning("Unexpected exception in periodic task", ex)
             }
@@ -245,15 +247,15 @@ private[connect] class SparkConnectExecutionManager() extends Logging {
   }
 
   // Visible for testing.
-  private[connect] def periodicMaintenance(timeout: Long): Unit = {
+  private[connect] def periodicMaintenance(timeoutNs: Long): Unit = {
     // Find any detached executions that expired and should be removed.
     logInfo("Started periodic run of SparkConnectExecutionManager maintenance.")
 
-    val nowMs = System.currentTimeMillis()
+    val nowNs = System.nanoTime()
     executions.forEach((_, executeHolder) => {
-      executeHolder.lastAttachedRpcTimeMs match {
-        case Some(detached) =>
-          if (detached + timeout <= nowMs) {
+      executeHolder.lastAttachedRpcTimeNs match {
+        case Some(detachedNs) =>
+          if (detachedNs + timeoutNs <= nowNs) {
             val info = executeHolder.getExecuteInfo
             logInfo(
               log"Found execution ${MDC(LogKeys.EXECUTE_INFO, info)} that was abandoned " +
@@ -268,8 +270,8 @@ private[connect] class SparkConnectExecutionManager() extends Logging {
   }
 
   // For testing.
-  private[connect] def setAllRPCsDeadline(deadlineMs: Long) = {
-    executions.values().asScala.foreach(_.setGrpcResponseSendersDeadline(deadlineMs))
+  private[connect] def setAllRPCsDeadline(deadlineNs: Long) = {
+    executions.values().asScala.foreach(_.setGrpcResponseSendersDeadline(deadlineNs))
   }
 
   // For testing.

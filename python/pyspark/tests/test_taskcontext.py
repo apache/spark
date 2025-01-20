@@ -23,7 +23,8 @@ import time
 import unittest
 
 from pyspark import SparkConf, SparkContext, TaskContext, BarrierTaskContext
-from pyspark.testing.utils import PySparkTestCase, SPARK_HOME, eventually
+from pyspark.testing.sqlutils import SPARK_HOME
+from pyspark.testing.utils import PySparkTestCase, eventually
 
 
 class TaskContextTests(PySparkTestCase):

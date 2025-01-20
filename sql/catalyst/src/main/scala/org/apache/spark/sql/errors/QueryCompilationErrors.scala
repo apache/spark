@@ -42,6 +42,7 @@ import org.apache.spark.sql.internal.SQLConf.LEGACY_CTE_PRECEDENCE_POLICY
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.util.SchemaUtils.ColumnPath
 import org.apache.spark.util.ArrayImplicits._
 
 /**
@@ -3706,15 +3707,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     )
   }
 
-  def implicitCollationMismatchError(implicitTypes: Seq[StringType]): Throwable = {
-    new AnalysisException(
-      errorClass = "COLLATION_MISMATCH.IMPLICIT",
-      messageParameters = Map(
-        "implicitTypes" -> implicitTypes.map(toSQLType).mkString(", ")
-      )
-    )
-  }
-
   def explicitCollationMismatchError(explicitTypes: Seq[StringType]): Throwable = {
     new AnalysisException(
       errorClass = "COLLATION_MISMATCH.EXPLICIT",
@@ -3724,10 +3716,19 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     )
   }
 
-  def indeterminateCollationError(): Throwable = {
+  def indeterminateCollationInExpressionError(expr: Expression): Throwable = {
     new AnalysisException(
       errorClass = "INDETERMINATE_COLLATION",
-      messageParameters = Map.empty
+      messageParameters = Map("expr" -> toSQLExpr(expr))
+    )
+  }
+
+  def indeterminateCollationInSchemaError(columnPaths: Seq[ColumnPath]): Throwable = {
+    new AnalysisException(
+      errorClass = "INDETERMINATE_COLLATION_IN_SCHEMA",
+      messageParameters = Map(
+        "columnPaths" -> columnPaths.map(_.toString).mkString(", ")
+      )
     )
   }
 

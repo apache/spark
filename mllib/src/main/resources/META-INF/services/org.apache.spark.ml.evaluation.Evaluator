@@ -14,3 +14,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+
+# Spark Connect ML uses ServiceLoader to find out the supported Spark Ml evaluators.
+# So register the supported evaluator here if you're trying to add a new one.
+
+org.apache.spark.ml.evaluation.RegressionEvaluator
+org.apache.spark.ml.evaluation.BinaryClassificationEvaluator
+org.apache.spark.ml.evaluation.MulticlassClassificationEvaluator
+org.apache.spark.ml.evaluation.MultilabelClassificationEvaluator
+org.apache.spark.ml.evaluation.ClusteringEvaluator
+org.apache.spark.ml.evaluation.RankingEvaluator

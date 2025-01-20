@@ -19,7 +19,7 @@ from abc import ABCMeta, abstractmethod
 from typing import Any, Generic, Optional, List, Type, TypeVar, TYPE_CHECKING
 
 from pyspark import since
-from pyspark.ml.remote.util import (
+from pyspark.ml.util import (
     try_remote_transform_relation,
     try_remote_call,
     try_remote_fit,
@@ -353,7 +353,7 @@ class JavaParams(JavaWrapper, Params, metaclass=ABCMeta):
         if extra is None:
             extra = dict()
         that = super(JavaParams, self).copy(extra)
-        if self._java_obj is not None:
+        if self._java_obj is not None and not isinstance(self._java_obj, str):
             that._java_obj = self._java_obj.copy(self._empty_java_param_map())
             that._transfer_params_to_java()
         return that

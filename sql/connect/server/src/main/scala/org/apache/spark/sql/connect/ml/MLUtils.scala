@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.connect.ml
 
-import java.util.ServiceLoader
+import java.util.{Optional, ServiceLoader}
 
 import scala.collection.immutable.HashSet
 import scala.jdk.CollectionConverters._
@@ -26,12 +26,14 @@ import org.apache.commons.lang3.reflect.MethodUtils.invokeMethod
 
 import org.apache.spark.connect.proto
 import org.apache.spark.ml.{Estimator, Transformer}
-import org.apache.spark.ml.linalg.{Matrices, Matrix, Vector, Vectors}
+import org.apache.spark.ml.evaluation.Evaluator
+import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.param.Params
-import org.apache.spark.ml.util.MLWritable
+import org.apache.spark.ml.util.{MLReadable, MLWritable}
 import org.apache.spark.sql.{DataFrame, Dataset}
-import org.apache.spark.sql.connect.common.LiteralValueProtoConverter
+import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, LiteralValueProtoConverter}
 import org.apache.spark.sql.connect.planner.SparkConnectPlanner
+import org.apache.spark.sql.connect.plugin.SparkConnectPluginRegistry
 import org.apache.spark.sql.connect.service.SessionHolder
 import org.apache.spark.util.{SparkClassUtils, Utils}
 
@@ -41,7 +43,7 @@ private[ml] object MLUtils {
    * Load the registered ML operators via ServiceLoader
    *
    * @param mlCls
-   *   the operator class
+   *   the operator class that will be loaded
    * @return
    *   a Map with name and class
    */
@@ -52,32 +54,65 @@ private[ml] object MLUtils {
     providers.map(est => est.getClass.getName -> est.getClass).toMap
   }
 
-  private lazy val estimators = loadOperators(classOf[Estimator[_]])
+  private def parseInts(ints: proto.Ints): Array[Int] = {
+    val size = ints.getValuesCount
+    val values = Array.ofDim[Int](size)
+    var i = 0
+    while (i < size) {
+      values(i) = ints.getValues(i)
+      i += 1
+    }
+    values
+  }
 
-  private lazy val transformers = loadOperators(classOf[Transformer])
+  private def parseDoubles(doubles: proto.Doubles): Array[Double] = {
+    val size = doubles.getValuesCount
+    val values = Array.ofDim[Double](size)
+    var i = 0
+    while (i < size) {
+      values(i) = doubles.getValues(i)
+      i += 1
+    }
+    values
+  }
 
-  def deserializeVector(vector: proto.Vector): Vector = {
-    if (vector.hasDense) {
-      val values = vector.getDense.getValueList.asScala.map(_.toDouble).toArray
-      Vectors.dense(values)
-    } else {
-      val size = vector.getSparse.getSize
-      val indices = vector.getSparse.getIndexList.asScala.map(_.toInt).toArray
-      val values = vector.getSparse.getValueList.asScala.map(_.toDouble).toArray
-      Vectors.sparse(size, indices, values)
+  def deserializeVector(s: proto.Expression.Literal.Struct): Vector = {
+    assert(s.getElementsCount == 4)
+    s.getElements(0).getByte match {
+      case 0 =>
+        val size = s.getElements(1).getInteger
+        val indices = parseInts(s.getElements(2).getSpecializedArray.getInts)
+        val values = parseDoubles(s.getElements(3).getSpecializedArray.getDoubles)
+        Vectors.sparse(size, indices, values)
+
+      case 1 =>
+        val values = parseDoubles(s.getElements(3).getSpecializedArray.getDoubles)
+        Vectors.dense(values)
+
+      case o => throw MlUnsupportedException(s"Unknown Vector type $o")
     }
   }
 
-  def deserializeMatrix(matrix: proto.Matrix): Matrix = {
-    if (matrix.hasDense) {
-      val values = matrix.getDense.getValueList.asScala.map(_.toDouble).toArray
-      Matrices.dense(matrix.getDense.getNumRows, matrix.getDense.getNumCols, values)
-    } else {
-      val sparse = matrix.getSparse
-      val colPtrs = sparse.getColptrList.asScala.map(_.toInt).toArray
-      val rowIndices = sparse.getRowIndexList.asScala.map(_.toInt).toArray
-      val values = sparse.getValueList.asScala.map(_.toDouble).toArray
-      Matrices.sparse(sparse.getNumRows, sparse.getNumCols, colPtrs, rowIndices, values)
+  def deserializeMatrix(s: proto.Expression.Literal.Struct): Matrix = {
+    assert(s.getElementsCount == 7)
+    s.getElements(0).getByte match {
+      case 0 =>
+        val numRows = s.getElements(1).getInteger
+        val numCols = s.getElements(2).getInteger
+        val colPtrs = parseInts(s.getElements(3).getSpecializedArray.getInts)
+        val rowIndices = parseInts(s.getElements(4).getSpecializedArray.getInts)
+        val values = parseDoubles(s.getElements(5).getSpecializedArray.getDoubles)
+        val isTransposed = s.getElements(6).getBoolean
+        new SparseMatrix(numRows, numCols, colPtrs, rowIndices, values, isTransposed)
+
+      case 1 =>
+        val numRows = s.getElements(1).getInteger
+        val numCols = s.getElements(2).getInteger
+        val values = parseDoubles(s.getElements(5).getSpecializedArray.getDoubles)
+        val isTransposed = s.getElements(6).getBoolean
+        new DenseMatrix(numRows, numCols, values, isTransposed)
+
+      case o => throw MlUnsupportedException(s"Unknown Matrix type $o")
     }
   }
 
@@ -90,18 +125,24 @@ private[ml] object MLUtils {
    *   the parameters of the ML operator
    */
   def setInstanceParams(instance: Params, params: proto.MlParams): Unit = {
-    params.getParamsMap.asScala.foreach { case (name, paramProto) =>
+    params.getParamsMap.asScala.foreach { case (name, literal) =>
       val p = instance.getParam(name)
-      val value = if (paramProto.hasLiteral) {
-        reconcileParam(
-          p.paramValueClassTag.runtimeClass,
-          LiteralValueProtoConverter.toCatalystValue(paramProto.getLiteral))
-      } else if (paramProto.hasVector) {
-        deserializeVector(paramProto.getVector)
-      } else if (paramProto.hasMatrix) {
-        deserializeMatrix(paramProto.getMatrix)
-      } else {
-        throw MlUnsupportedException(s"Unsupported parameter type for ${name}")
+      val value = literal.getLiteralTypeCase match {
+        case proto.Expression.Literal.LiteralTypeCase.STRUCT =>
+          val s = literal.getStruct
+          val schema = DataTypeProtoConverter.toCatalystType(s.getStructType)
+          if (schema == VectorUDT.sqlType) {
+            deserializeVector(s)
+          } else if (schema == MatrixUDT.sqlType) {
+            deserializeMatrix(s)
+          } else {
+            throw MlUnsupportedException(s"Unsupported parameter struct ${schema} for ${name}")
+          }
+
+        case _ =>
+          reconcileParam(
+            p.paramValueClassTag.runtimeClass,
+            LiteralValueProtoConverter.toCatalystValue(literal))
       }
       instance.set(p, value)
     }
@@ -229,8 +270,23 @@ private[ml] object MLUtils {
   }
 
   /**
+   * Replace the operator with the value provided by the backend.
+   */
+  private def replaceOperator(sessionHolder: SessionHolder, name: String): String = {
+    SparkConnectPluginRegistry
+      .mlBackendRegistry(sessionHolder.session.sessionState.conf)
+      .view
+      .map(p => p.transform(name))
+      .find(_.isPresent) // First come, first served
+      .getOrElse(Optional.of(name))
+      .get()
+  }
+
+  /**
    * Get the Estimator instance according to the proto information
    *
+   * @param sessionHolder
+   *   session holder to hold the Spark Connect session state
    * @param operator
    *   MlOperator information
    * @param params
@@ -238,29 +294,65 @@ private[ml] object MLUtils {
    * @return
    *   the estimator
    */
-  def getEstimator(operator: proto.MlOperator, params: Option[proto.MlParams]): Estimator[_] = {
-    val name = operator.getName
+  def getEstimator(
+      sessionHolder: SessionHolder,
+      operator: proto.MlOperator,
+      params: Option[proto.MlParams]): Estimator[_] = {
+    val name = replaceOperator(sessionHolder, operator.getName)
     val uid = operator.getUid
+
+    // Load the estimator by ServiceLoader everytime
+    val estimators = loadOperators(classOf[Estimator[_]])
     getInstance[Estimator[_]](name, uid, estimators, params)
   }
 
   /**
    * Get the transformer instance according to the transform proto
    *
+   * @param sessionHolder
+   *   session holder to hold the Spark Connect session state
    * @param transformProto
    *   transform proto
    * @return
    *   a transformer
    */
-  def getTransformer(transformProto: proto.MlRelation.Transform): Transformer = {
-    val name = transformProto.getTransformer.getName
+  def getTransformer(
+      sessionHolder: SessionHolder,
+      transformProto: proto.MlRelation.Transform): Transformer = {
+    val name = replaceOperator(sessionHolder, transformProto.getTransformer.getName)
     val uid = transformProto.getTransformer.getUid
     val params = transformProto.getParams
+    // Load the transformer by ServiceLoader everytime.
+    val transformers = loadOperators(classOf[Transformer])
     getInstance[Transformer](name, uid, transformers, Some(params))
   }
 
   /**
-   * Call "load: function on the ML operator given the operator name
+   * Get the Evaluator instance according to the proto information
+   *
+   * @param sessionHolder
+   *   session holder to hold the Spark Connect session state
+   * @param operator
+   *   MlOperator information
+   * @param params
+   *   The optional parameters of the evaluator
+   * @return
+   *   the evaluator
+   */
+  def getEvaluator(
+      sessionHolder: SessionHolder,
+      operator: proto.MlOperator,
+      params: Option[proto.MlParams]): Evaluator = {
+    val name = replaceOperator(sessionHolder, operator.getName)
+    val uid = operator.getUid
+
+    // Load the evaluators by ServiceLoader everytime
+    val evaluators = loadOperators(classOf[Evaluator])
+    getInstance[Evaluator](name, uid, evaluators, params)
+  }
+
+  /**
+   * Call "load" function on the ML operator given the operator name
    *
    * @param className
    *   the ML operator name
@@ -269,8 +361,18 @@ private[ml] object MLUtils {
    * @return
    *   the ML instance
    */
-  def load(className: String, path: String): Object = {
-    val loadedMethod = SparkClassUtils.classForName(className).getMethod("load", classOf[String])
+  def load(sessionHolder: SessionHolder, className: String, path: String): Object = {
+    val name = replaceOperator(sessionHolder, className)
+
+    // It's the companion object of the corresponding spark operators to load.
+    val objectCls = SparkClassUtils.classForName(name + "$")
+    val mlReadableClass = classOf[MLReadable[_]]
+    // Make sure it is implementing MLReadable
+    if (!mlReadableClass.isAssignableFrom(objectCls)) {
+      throw MlUnsupportedException(s"$name must implement MLReadable.")
+    }
+
+    val loadedMethod = SparkClassUtils.classForName(name).getMethod("load", classOf[String])
     loadedMethod.invoke(null, path)
   }
 
@@ -279,11 +381,20 @@ private[ml] object MLUtils {
   // The attributes could be retrieved from the corresponding python class
   private lazy val ALLOWED_ATTRIBUTES = HashSet(
     "toString",
+    "toDebugString",
     "numFeatures",
     "predict", // PredictionModel
+    "predictLeaf", // Tree models
     "numClasses",
+    "depth", // DecisionTreeClassificationModel
+    "numNodes", // Tree models
+    "totalNumNodes", // Tree models
+    "javaTreeWeights", // Tree models
+    "treeWeights", // Tree models
+    "featureImportances", // Tree models
     "predictRaw", // ClassificationModel
     "predictProbability", // ProbabilisticClassificationModel
+    "scale", // LinearRegressionModel
     "coefficients",
     "intercept",
     "coefficientMatrix",
@@ -291,6 +402,7 @@ private[ml] object MLUtils {
     "summary",
     "hasSummary",
     "evaluate", // LogisticRegressionModel
+    "evaluateEachIteration", // GBTClassificationModel
     "predictions",
     "predictionCol",
     "labelCol",
@@ -317,7 +429,20 @@ private[ml] object MLUtils {
     "probabilityCol",
     "featuresCol", // LogisticRegressionSummary
     "objectiveHistory",
-    "totalIterations" // _TrainingSummary
+    "coefficientStandardErrors", // _TrainingSummary
+    "degreesOfFreedom", // LinearRegressionSummary
+    "devianceResiduals", // LinearRegressionSummary
+    "explainedVariance", // LinearRegressionSummary
+    "meanAbsoluteError", // LinearRegressionSummary
+    "meanSquaredError", // LinearRegressionSummary
+    "numInstances", // LinearRegressionSummary
+    "pValues", // LinearRegressionSummary
+    "r2", // LinearRegressionSummary
+    "r2adj", // LinearRegressionSummary
+    "residuals", // LinearRegressionSummary
+    "rootMeanSquaredError", // LinearRegressionSummary
+    "tValues", // LinearRegressionSummary
+    "totalIterations" // LinearRegressionSummary
   )
 
   def invokeMethodAllowed(obj: Object, methodName: String): Object = {

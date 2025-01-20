@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 
+import glob
 import datetime
 import math
 import os
@@ -32,6 +33,35 @@ from pyspark.testing.utils import (
     have_pyarrow,
     pyarrow_requirement_message,
 )
+from pyspark.find_spark_home import _find_spark_home
+
+
+SPARK_HOME = _find_spark_home()
+
+
+def search_jar(project_relative_path, sbt_jar_name_prefix, mvn_jar_name_prefix):
+    # Note that 'sbt_jar_name_prefix' and 'mvn_jar_name_prefix' are used since the prefix can
+    # vary for SBT or Maven specifically. See also SPARK-26856
+    project_full_path = os.path.join(SPARK_HOME, project_relative_path)
+
+    # We should ignore the following jars
+    ignored_jar_suffixes = ("javadoc.jar", "sources.jar", "test-sources.jar", "tests.jar")
+
+    # Search jar in the project dir using the jar name_prefix for both sbt build and maven
+    # build because the artifact jars are in different directories.
+    sbt_build = glob.glob(
+        os.path.join(project_full_path, "target/scala-*/%s*.jar" % sbt_jar_name_prefix)
+    )
+    maven_build = glob.glob(os.path.join(project_full_path, "target/%s*.jar" % mvn_jar_name_prefix))
+    jar_paths = sbt_build + maven_build
+    jars = [jar for jar in jar_paths if not jar.endswith(ignored_jar_suffixes)]
+
+    if not jars:
+        return None
+    elif len(jars) > 1:
+        raise RuntimeError("Found multiple JARs: %s; please remove all but one" % (", ".join(jars)))
+    else:
+        return jars[0]
 
 
 test_not_compiled_message = None
