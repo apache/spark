@@ -126,6 +126,16 @@ private[connect] class ExecuteHolder(
     runner.start()
   }
 
+  /**
+   * Check if the execution was ended without finalizing the outcome and no further progress will
+   * be made. If the execution was delegated, this method always returns false.
+   */
+  def isOrphan(): Boolean = {
+    !runner.isAlive() &&
+    !runner.shouldDelegateCompleteResponse(request) &&
+    !responseObserver.completed()
+  }
+
   def addObservation(name: String, observation: Observation): Unit = synchronized {
     observations += (name -> observation)
   }
@@ -193,6 +203,16 @@ private[connect] class ExecuteHolder(
   // For testing
   private[connect] def interruptGrpcResponseSenders() = synchronized {
     grpcResponseSenders.foreach(_.interrupt())
+  }
+
+  // For testing
+  private[connect] def undoResponseObserverCompletion() = synchronized {
+    responseObserver.undoCompletion()
+  }
+
+  // For testing
+  private[connect] def isExecuteThreadRunnerAlive() = {
+    runner.isAlive()
   }
 
   /**
