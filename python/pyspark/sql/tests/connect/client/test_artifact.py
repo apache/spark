@@ -425,3 +425,6 @@ class ArtifactTests(ReusedConnectTestCase, ArtifactTestsMixin):
                 self.artifact_manager.add_artifacts(
                     os.path.join(d, "not_existing"), file=True, pyfile=False, archive=False
                 )
+
+    def test_add_pyfile(self):
+        super().test_add_pyfile()
