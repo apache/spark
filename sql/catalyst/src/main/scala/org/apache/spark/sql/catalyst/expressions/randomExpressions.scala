@@ -314,10 +314,10 @@ object Uniform {
 case class RandStr(
     length: Expression, override val seedExpression: Expression, hideSeed: Boolean)
   extends ExpressionWithRandomSeed
-    with BinaryLike[Expression]
-    with DefaultStringProducingExpression
-    with Nondeterministic
-    with ExpectsInputTypes {
+  with BinaryLike[Expression]
+  with DefaultStringProducingExpression
+  with Nondeterministic
+  with ExpectsInputTypes {
   def this(length: Expression) =
     this(length, UnresolvedSeed, hideSeed = true)
   def this(length: Expression, seedExpression: Expression) =

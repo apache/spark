@@ -249,8 +249,8 @@ case class CurrentCatalog()
   group = "misc_funcs")
 // scalastyle:on line.size.limit
 case class Uuid(randomSeed: Option[Long] = None) extends LeafExpression with Nondeterministic
-    with DefaultStringProducingExpression
-    with ExpressionWithRandomSeed {
+  with DefaultStringProducingExpression
+  with ExpressionWithRandomSeed {
 
   def this() = this(None)
 

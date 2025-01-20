@@ -172,8 +172,8 @@ case class Sha2(left: Expression, right: Expression)
   group = "hash_funcs")
 case class Sha1(child: Expression)
   extends UnaryExpression
-    with ImplicitCastInputTypes
-    with DefaultStringProducingExpression {
+  with ImplicitCastInputTypes
+  with DefaultStringProducingExpression {
   override def nullIntolerant: Boolean = true
 
   override def inputTypes: Seq[DataType] = Seq(BinaryType)
