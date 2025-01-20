@@ -248,9 +248,27 @@ case class FilterExec(condition: Expression, child: SparkPlan)
 
   override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
     val numOutput = metricTerm(ctx, "numOutputRows")
-
-    val predicateCode = generatePredicateCode(
-      ctx, child.output, input, output, notNullPreds, otherPreds, notNullAttributes)
+    val (predicateCode, localValInputs) = if (conf.subexpressionEliminationEnabled) {
+      val bound = BindReferences.bindReference(condition, child.output)
+      val exprs = Seq(bound)
+      val subExprs = ctx.subexpressionEliminationForWholeStageCodegen(exprs)
+      val genVars = ctx.withSubExprEliminationExprs(subExprs.states) {
+        exprs.map(_.genCode(ctx))
+      }
+      val ev = genVars.head
+      val nullCheck = if (bound.nullable) { s"${ev.isNull} || " } else { "" }
+      val predicateCode =
+        s"""
+           |${ctx.evaluateSubExprEliminationState(subExprs.states.values)}
+           |${genVars.map(_.code.code).mkString("\n")}
+           |if ($nullCheck!${ev.value}) continue;
+         """.stripMargin
+      (predicateCode, subExprs.exprCodesNeedEvaluate)
+    } else {
+      val predicateCode = generatePredicateCode(
+        ctx, child.output, input, output, notNullPreds, otherPreds, notNullAttributes)
+      (predicateCode, Seq.empty)
+    }
 
     // Reset the isNull to false for the not-null columns, then the followed operators could
     // generate better code (remove dead branches).
@@ -264,6 +282,7 @@ case class FilterExec(condition: Expression, child: SparkPlan)
     // Note: wrap in "do { } while (false);", so the generated checks can jump out with "continue;"
     s"""
        |do {
+       |  ${evaluateVariables(localValInputs)}
        |  $predicateCode
        |  $numOutput.add(1);
        |  ${consume(ctx, resultVars)}
