@@ -52,8 +52,8 @@ object TypeCoercion extends TypeCoercionBase {
     ProcedureArgumentCoercion ::
     new CombinedTypeCoercionRule(
       CollationTypeCasts ::
-      InConversion ::
       PromoteStrings ::
+      InConversion ::
       DecimalPrecision ::
       BooleanEquality ::
       FunctionArgumentConversion ::

@@ -447,7 +447,8 @@ object DataType {
   private[sql] def equalsIgnoreCompatibleCollation(from: DataType, to: DataType): Boolean = {
     (from, to) match {
       // String types with possibly different collations are compatible.
-      case (a: StringType, b: StringType) => a.constraint == b.constraint
+      case (a: StringType, b: StringType) =>
+        StringHelper.getConstraint(a) == StringHelper.getConstraint(b)
 
       case (fromDataType, toDataType) => fromDataType == toDataType
     }

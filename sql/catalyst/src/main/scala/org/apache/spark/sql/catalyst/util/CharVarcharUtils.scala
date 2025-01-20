@@ -161,25 +161,25 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
       charFuncName: Option[String],
       varcharFuncName: Option[String]): Expression = {
     dt match {
-      case CharType(length) if charFuncName.isDefined =>
+      case c @ CharType(length) if charFuncName.isDefined =>
         StaticInvoke(
           classOf[CharVarcharCodegenUtils],
           if (SQLConf.get.preserveCharVarcharTypeInfo) {
-            CharType(length)
+            c
           } else {
-            StringType
+            new StringType(c.collationId, c.constraint)
           },
           charFuncName.get,
           expr :: Literal(length) :: Nil,
           returnNullable = false)
 
-      case VarcharType(length) if varcharFuncName.isDefined =>
+      case v @ VarcharType(length) if varcharFuncName.isDefined =>
         StaticInvoke(
           classOf[CharVarcharCodegenUtils],
           if (SQLConf.get.preserveCharVarcharTypeInfo) {
-            VarcharType(length)
+            v
           } else {
-            StringType
+            new StringType(v.collationId, v.constraint)
           },
           varcharFuncName.get,
           expr :: Literal(length) :: Nil,

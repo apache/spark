@@ -20,29 +20,12 @@ package org.apache.spark.sql.catalyst.analysis
 import scala.annotation.tailrec
 import scala.collection.mutable
 
-import org.apache.spark.sql.catalyst.expressions.{
-  Alias,
-  CaseWhen,
-  Cast,
-  Concat,
-  Elt,
-  Expression,
-  MapZipWith,
-  Stack,
-  WindowSpecDefinition
-}
-import org.apache.spark.sql.catalyst.plans.logical.{
-  Call,
-  Except,
-  Intersect,
-  LogicalPlan,
-  Project,
-  Union,
-  Unpivot
-}
+import org.apache.spark.sql.catalyst.expressions.{Alias, CaseWhen, Cast, Concat, Elt, Expression, Literal, MapZipWith, Stack, StringRPad, WindowSpecDefinition}
+import org.apache.spark.sql.catalyst.plans.logical.{Call, Except, Intersect, LogicalPlan, Project, Union, Unpivot}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.catalog.procedures.BoundProcedure
-import org.apache.spark.sql.types.DataType
+import org.apache.spark.sql.types.{DataType, FixedLength, StringType}
+import org.apache.spark.unsafe.types.UTF8String
 
 abstract class TypeCoercionBase extends TypeCoercionHelper {
 
@@ -383,6 +366,33 @@ abstract class TypeCoercionBase extends TypeCoercionHelper {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
       case withChildrenResolved => StringLiteralTypeCoercion(withChildrenResolved)
+    }
+  }
+
+  def padStringLiteralsInComparison(exprs: Seq[Expression]): Seq[Expression] = {
+    def getFixedLengthOfStringType(dt: StringType): Int = dt.constraint match {
+      case FixedLength(length) => length
+      case _ => 0
+    }
+    def getFixedLengthOfExpression(expr: Expression): Int = expr match {
+      case Cast(_, st: StringType, _, _) => getFixedLengthOfStringType(st)
+      case StringRPad(_, length, _) => length.eval().asInstanceOf[Int]
+      case e if e.foldable && e.dataType.isInstanceOf[StringType] =>
+        val t = e.eval().asInstanceOf[UTF8String]
+        if (t == null) 0 else t.numChars()
+      case e if e.dataType.isInstanceOf[StringType] =>
+        getFixedLengthOfStringType(e.dataType.asInstanceOf[StringType])
+      case _ => 0
+    }
+    val lengths = exprs.map(getFixedLengthOfExpression)
+    val length = lengths.max
+    exprs.zip(lengths).map {
+      case (e, l) =>
+        if (l < length) {
+          StringRPad(e, Literal(length))
+        } else {
+          e
+        }
     }
   }
 }
