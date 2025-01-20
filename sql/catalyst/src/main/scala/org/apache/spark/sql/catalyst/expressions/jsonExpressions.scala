@@ -577,6 +577,7 @@ case class JsonObjectKeys(child: Expression)
 
   override def inputTypes: Seq[AbstractDataType] =
     Seq(StringTypeWithCollation(supportsTrimCollation = true))
+  override def dataType: DataType = ArrayType(super.dataType)
   override def nullable: Boolean = true
   override def prettyName: String = "json_object_keys"
 

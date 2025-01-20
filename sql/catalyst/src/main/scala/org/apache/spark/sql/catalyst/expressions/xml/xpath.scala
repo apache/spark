@@ -250,6 +250,7 @@ case class XPathList(xml: Expression, path: Expression)
   @transient override lazy val evaluator: XPathEvaluator = XPathListEvaluator(pathUTF8String)
 
   override def prettyName: String = "xpath"
+  override def dataType: DataType = ArrayType(super.dataType)
 
   override protected def withNewChildrenInternal(
     newLeft: Expression, newRight: Expression): XPathList = copy(xml = newLeft, path = newRight)
