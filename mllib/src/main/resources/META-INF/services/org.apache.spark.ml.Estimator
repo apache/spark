@@ -27,3 +27,6 @@ org.apache.spark.ml.classification.GBTClassifier
 
 # regression
 org.apache.spark.ml.regression.LinearRegression
+org.apache.spark.ml.regression.DecisionTreeRegressor
+org.apache.spark.ml.regression.RandomForestRegressor
+org.apache.spark.ml.regression.GBTRegressor
