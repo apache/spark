@@ -49,12 +49,11 @@ object ResolveWithCTE extends Rule[LogicalPlan] {
     plan.resolveOperatorsDownWithPruning(_.containsAllPatterns(CTE)) {
       case withCTE @ WithCTE(_, cteDefs) =>
         val newCTEDefs = cteDefs.map {
-          // `cteDef.recursive` means "presence of a recursive CTERelationRef under cteDef". The
-          // side effect of node substitution below is that after CTERelationRef substitution
-          // its cteDef is no more considered `recursive`. This code path is common for `cteDef`
-          // that were non-recursive from the get go, as well as those that are no more recursive
-          // due to node substitution.
-          case cteDef if !cteDef.recursive =>
+          // cteDef in the first case is either recursive and all the recursive CTERelationRefs
+          // are already substituted to UnionLoopRef in the previous pass, or it is not recursive
+          // at all. In both cases we need to put it in the map in case it is resolved.
+          // Second case is performing the substitution of recursive CTERelationRefs.
+          case cteDef if !cteDef.hasRecursiveCTERelationRef =>
             if (cteDef.resolved) {
               cteDefMap.put(cteDef.id, cteDef)
             }

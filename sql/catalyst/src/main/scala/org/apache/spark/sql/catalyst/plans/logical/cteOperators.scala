@@ -100,10 +100,12 @@ case class CTERelationDef(
 
   override def output: Seq[Attribute] = if (resolved) child.output else Nil
 
-  lazy val recursive: Boolean = child.exists{
-    // If the reference is found inside the child, referencing to this CTE definition,
-    // and already marked as recursive, then this CTE definition is recursive.
+  lazy val hasRecursiveCTERelationRef: Boolean = child.exists{
     case CTERelationRef(this.id, _, _, _, _, true) => true
+    case _ => false
+  }
+  lazy val hasItsOwnUnionLoopRef: Boolean = child.exists{
+    case UnionLoopRef(this.id, _, _) => true
     case _ => false
   }
 }
