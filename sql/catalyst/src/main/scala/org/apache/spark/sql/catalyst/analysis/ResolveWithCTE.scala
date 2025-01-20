@@ -62,7 +62,7 @@ object ResolveWithCTE extends Rule[LogicalPlan] {
               // For the resolved cteDefs, hasItsOwnUnionLoopRef checks if this is actually a
               // recursive cteDef.
               // If yes, we should check if data types of anchor and recursive terms match,
-              // and if the self-reference is placed correctly
+              // and if the self-reference is placed correctly.
               if (cteDef.hasItsOwnUnionLoopRef) {
                 checkDataTypesAnchorAndRecursiveTerm(cteDef)
                 checkIfSelfReferenceIsPlacedCorrectly(cteDef)
@@ -70,6 +70,7 @@ object ResolveWithCTE extends Rule[LogicalPlan] {
             }
             cteDef
           case cteDef =>
+            // Multiple self-references are not allowed.
             checkNumberOfSelfReferences(cteDef)
             cteDef.child match {
               // If it is a supported recursive CTE query pattern (4 so far), extract the anchor and
