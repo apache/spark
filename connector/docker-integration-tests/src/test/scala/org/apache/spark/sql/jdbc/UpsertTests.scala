@@ -31,8 +31,8 @@ trait UpsertTests {
   def createTableOption: String
   def upsertTestOptions: Map[String, String] = Map("createTableOptions" -> createTableOption)
 
-  test(s"Upsert existing table") { doTestUpsert(tableExists = true) }
-  test(s"Upsert non-existing table") { doTestUpsert(tableExists = false) }
+  test("Upsert existing table") { doTestUpsert(tableExists = true) }
+  test("Upsert non-existing table") { doTestUpsert(tableExists = false) }
 
   Seq(
     Seq("ts", "id", "v1", "v2"),
@@ -80,7 +80,7 @@ trait UpsertTests {
     assert(actual === expected)
   }
 
-  test(s"Upsert concurrency") {
+  test("Upsert concurrency") {
     // create a table with 100k rows
     val init =
       spark.range(100000)
