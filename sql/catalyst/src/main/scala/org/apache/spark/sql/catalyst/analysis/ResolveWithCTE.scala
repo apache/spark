@@ -191,7 +191,6 @@ object ResolveWithCTE extends Rule[LogicalPlan] {
       case CTERelationRef(cteDef.id, _, _, _, _, true) => true
       case other => false
     }.count(_ == true)
-    print("NumOfSelfRef:", numOfSelfRef, "\n")
     if (numOfSelfRef > 1) {
       throw new AnalysisException(
         errorClass = "INVALID_RECURSIVE_REFERENCE.PLACE",
