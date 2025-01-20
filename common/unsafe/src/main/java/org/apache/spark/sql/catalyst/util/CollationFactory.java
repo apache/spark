@@ -710,7 +710,7 @@ public final class CollationFactory {
             CollationSpecICU.ICU_VERSION
         );
         return Arrays.asList(UTF8_BINARY_COLLATION_IDENT, UTF8_LCASE_COLLATION_IDENT,
-            UTF8_BINARY_RTRIM_COLLATION_IDENT, UTF8_LCASE_RTRIM_COLLATION_IDENT);
+          UTF8_BINARY_RTRIM_COLLATION_IDENT, UTF8_LCASE_RTRIM_COLLATION_IDENT);
       }
 
       static CollationMeta loadCollationMeta(CollationIdentifier collationIdentifier) {
