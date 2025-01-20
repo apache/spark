@@ -251,7 +251,11 @@ class TPCDSCollationQueryTestSuite extends QueryTest with TPCDSBase with SQLQuer
       test(name)(runQuery(queryString, Map.empty, emptyResults.contains(name)))
     }
 
-    tpcdsQueriesV2_7_0.foreach { name =>
+    // Skip q22-v2.7 in GitHub Action environment because it takes 14 minutes.
+    // TODO(SPARK-50887) Re-enable q22-v2.7 in GitHub Action environment.
+    tpcdsQueriesV2_7_0
+      .filterNot(sys.env.contains("GITHUB_ACTIONS") && _.equals("q22"))
+      .foreach { name =>
       val queryString = resourceToString(
         s"tpcds-v2.7.0/$name.sql",
         classLoader = Thread.currentThread().getContextClassLoader)

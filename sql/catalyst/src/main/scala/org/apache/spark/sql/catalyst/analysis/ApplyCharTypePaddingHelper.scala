@@ -99,7 +99,7 @@ object ApplyCharTypePaddingHelper {
           .getOrElse(b)
 
       case i @ In(e @ AttrOrOuterRef(attr), list)
-          if attr.dataType == StringType && list.forall(_.foldable) =>
+          if i.resolved && attr.dataType == StringType && list.forall(_.foldable) =>
         CharVarcharUtils
           .getRawType(attr.metadata)
           .flatMap {

@@ -264,7 +264,6 @@ class ConnectCompatibilityTestsMixin:
         expected_missing_connect_methods = {
             "clearProgressHandlers",
             "copyFromLocalToFs",
-            "interruptOperation",
             "newSession",
             "registerProgressHandler",
             "removeProgressHandler",

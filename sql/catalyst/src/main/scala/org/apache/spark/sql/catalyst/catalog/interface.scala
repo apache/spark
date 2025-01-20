@@ -28,7 +28,7 @@ import com.fasterxml.jackson.annotation.JsonInclude.Include
 import com.fasterxml.jackson.databind.{DeserializationFeature, ObjectMapper}
 import com.fasterxml.jackson.module.scala.{ClassTagExtensions, DefaultScalaModule}
 import org.apache.commons.lang3.StringUtils
-import org.json4s.JsonAST.{JArray, JBool, JDouble, JInt, JNull, JObject, JString, JValue}
+import org.json4s.JsonAST.{JArray, JBool, JDouble, JInt, JLong, JNull, JObject, JString, JValue}
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.SparkException
@@ -63,29 +63,32 @@ trait MetadataMapSupport {
 
   protected def jsonToString(
       jsonMap: mutable.LinkedHashMap[String, JValue]): mutable.LinkedHashMap[String, String] = {
-    def removeWhitespace(str: String): String = {
-      str.replaceAll("\\s+$", "")
-    }
-
     val map = new mutable.LinkedHashMap[String, String]()
+    val timestampKeys = Set("Created Time", "Last Access")
     jsonMap.foreach { case (key, jValue) =>
       val stringValue = jValue match {
-        case JString(value) => removeWhitespace(value)
+        case JString(value) => value
         case JArray(values) =>
           values.map(_.values)
             .map {
-              case str: String => quoteIdentifier(removeWhitespace(str))
-              case other => removeWhitespace(other.toString)
+              case str: String => quoteIdentifier(str)
+              case other => other.toString
             }
             .mkString("[", ", ", "]")
         case JObject(fields) =>
           fields.map { case (k, v) =>
-            s"$k=${removeWhitespace(v.values.toString)}"
+            s"$k=${v.values.toString}"
           }
             .mkString("[", ", ", "]")
         case JInt(value) => value.toString
         case JDouble(value) => value.toString
-        case _ => removeWhitespace(jValue.values.toString)
+        case JLong(value) =>
+          if (timestampKeys.contains(key)) {
+            new Date(value).toString
+          } else {
+            value.toString
+          }
+        case _ => jValue.values.toString
       }
       map.put(key, stringValue)
     }
@@ -188,10 +191,10 @@ case class CatalogTablePartition(
       map += ("Partition Parameters" -> paramsJson)
     }
 
-    map += ("Created Time" -> JString(new Date(createTime).toString))
+    map += ("Created Time" -> JLong(createTime))
 
     val lastAccess = if (lastAccessTime <= 0) JString("UNKNOWN")
-    else JString(new Date(lastAccessTime).toString)
+    else JLong(lastAccessTime)
     map += ("Last Access" -> lastAccess)
 
     stats.foreach(s => map += ("Partition Statistics" -> JString(s.simpleString)))
@@ -599,8 +602,8 @@ case class CatalogTable(
       else JNull
 
     val lastAccess: JValue =
-      if (lastAccessTime <= 0) JString("UNKNOWN") else JString(
-        DateTimeUtils.microsToInstant(DateTimeUtils.millisToMicros(lastAccessTime)).toString)
+      if (lastAccessTime <= 0) JString("UNKNOWN")
+      else JLong(lastAccessTime)
 
     val viewQueryOutputColumns: JValue =
       if (viewQueryColumnNames.nonEmpty) JArray(viewQueryColumnNames.map(JString).toList)
@@ -612,8 +615,7 @@ case class CatalogTable(
     if (identifier.database.isDefined) map += "Database" -> JString(identifier.database.get)
     map += "Table" -> JString(identifier.table)
     if (Option(owner).exists(_.nonEmpty)) map += "Owner" -> JString(owner)
-    map += "Created Time" ->
-      JString(DateTimeUtils.microsToInstant(DateTimeUtils.millisToMicros(createTime)).toString)
+    map += "Created Time" -> JLong(createTime)
     if (lastAccess != JNull) map += "Last Access" -> lastAccess
     map += "Created By" -> JString(s"Spark $createVersion")
     map += "Type" -> JString(tableType.name)

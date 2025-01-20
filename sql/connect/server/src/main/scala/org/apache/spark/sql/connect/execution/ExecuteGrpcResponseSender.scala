@@ -52,8 +52,9 @@ private[connect] class ExecuteGrpcResponseSender[T <: Message](
 
   private var interrupted = false
 
-  // Time at which this sender should finish if the response stream is not finished by then.
-  private var deadlineTimeMillis = Long.MaxValue
+  // Time at which this sender should finish if the response stream is not finished by then. The
+  // value is updated on each execute call.
+  private var deadlineTimeNs = 0L
 
   // Signal to wake up when grpcCallObserver.isReady()
   private val grpcCallObserverReadySignal = new Object
@@ -74,8 +75,8 @@ private[connect] class ExecuteGrpcResponseSender[T <: Message](
   }
 
   // For testing
-  private[connect] def setDeadline(deadlineMs: Long) = {
-    deadlineTimeMillis = deadlineMs
+  private[connect] def setDeadline(deadlineNs: Long) = {
+    deadlineTimeNs = deadlineNs
     wakeUp()
   }
 
@@ -172,6 +173,24 @@ private[connect] class ExecuteGrpcResponseSender[T <: Message](
   }
 
   /**
+   * Update the deadline for this sender. The deadline is the time when this sender should finish.
+   */
+  private def updateDeadlineTimeNs(startTime: Long): Unit = {
+    if (executeHolder.reattachable) {
+      val confSize =
+        SparkEnv.get.conf.get(CONNECT_EXECUTE_REATTACHABLE_SENDER_MAX_STREAM_DURATION)
+      if (confSize > 0) {
+        deadlineTimeNs = startTime + confSize * NANOS_PER_MILLIS
+        return
+      }
+    }
+
+    // We cannot use Long.MaxValue as the default timeout duration, because System.nanoTime() may
+    // return a negative value. We use 180 days as the maximum duration.
+    deadlineTimeNs = startTime + (1000L * 60L * 60L * 24L * 180L * NANOS_PER_MILLIS)
+  }
+
+  /**
    * Attach to the executionObserver, consume responses from it, and send them to grpcObserver.
    *
    * In non reattachable execution, it will keep sending responses until the query finishes. In
@@ -188,19 +207,12 @@ private[connect] class ExecuteGrpcResponseSender[T <: Message](
       log"Starting for opId=${MDC(OP_ID, executeHolder.operationId)}, " +
         log"reattachable=${MDC(REATTACHABLE, executeHolder.reattachable)}, " +
         log"lastConsumedStreamIndex=${MDC(STREAM_ID, lastConsumedStreamIndex)}")
+
     val startTime = System.nanoTime()
+    updateDeadlineTimeNs(startTime)
 
     var nextIndex = lastConsumedStreamIndex + 1
     var finished = false
-
-    // Time at which this sender should finish if the response stream is not finished by then.
-    deadlineTimeMillis = if (!executeHolder.reattachable) {
-      Long.MaxValue
-    } else {
-      val confSize =
-        SparkEnv.get.conf.get(CONNECT_EXECUTE_REATTACHABLE_SENDER_MAX_STREAM_DURATION)
-      if (confSize > 0) System.currentTimeMillis() + confSize else Long.MaxValue
-    }
 
     // Maximum total size of responses. The response which tips over this threshold will be sent.
     val maximumResponseSize: Long = if (!executeHolder.reattachable) {
@@ -223,7 +235,7 @@ private[connect] class ExecuteGrpcResponseSender[T <: Message](
       def streamFinished = executionObserver.getLastResponseIndex().exists(nextIndex > _)
       // 4. time deadline or size limit reached
       def deadlineLimitReached =
-        sentResponsesSize > maximumResponseSize || deadlineTimeMillis < System.currentTimeMillis()
+        sentResponsesSize > maximumResponseSize || deadlineTimeNs < System.nanoTime()
 
       logTrace(s"Trying to get next response with index=$nextIndex.")
       executionObserver.responseLock.synchronized {
@@ -241,17 +253,16 @@ private[connect] class ExecuteGrpcResponseSender[T <: Message](
           // The state of interrupted, response and lastIndex are changed under executionObserver
           // monitor, and will notify upon state change.
           if (response.isEmpty) {
+            var timeoutNs = Math.max(1, deadlineTimeNs - System.nanoTime())
             // Wake up more frequently to send the progress updates.
             val progressTimeout = executeHolder.sessionHolder.session.sessionState.conf
               .getConf(CONNECT_PROGRESS_REPORT_INTERVAL)
             // If the progress feature is disabled, wait for the deadline.
-            val timeout = if (progressTimeout > 0) {
-              progressTimeout
-            } else {
-              Math.max(1, deadlineTimeMillis - System.currentTimeMillis())
+            if (progressTimeout > 0L) {
+              timeoutNs = Math.min(progressTimeout * NANOS_PER_MILLIS, timeoutNs)
             }
-            logTrace(s"Wait for response to become available with timeout=$timeout ms.")
-            executionObserver.responseLock.wait(timeout)
+            logTrace(s"Wait for response to become available with timeout=$timeoutNs ns.")
+            executionObserver.responseLock.wait(timeoutNs / NANOS_PER_MILLIS)
             enqueueProgressMessage(force = true)
             logTrace(s"Reacquired executionObserver lock after waiting.")
             sleepEnd = System.nanoTime()
@@ -284,7 +295,7 @@ private[connect] class ExecuteGrpcResponseSender[T <: Message](
       } else if (gotResponse) {
         enqueueProgressMessage()
         // There is a response available to be sent.
-        val sent = sendResponse(response.get, deadlineTimeMillis)
+        val sent = sendResponse(response.get, deadlineTimeNs)
         if (sent) {
           sentResponsesSize += response.get.serializedByteSize
           nextIndex += 1
@@ -331,14 +342,12 @@ private[connect] class ExecuteGrpcResponseSender[T <: Message](
    * In reattachable execution, we control the backpressure and only send when the
    * grpcCallObserver is in fact ready to send.
    *
-   * @param deadlineTimeMillis
+   * @param deadlineTimeNs
    *   when reattachable, wait for ready stream until this deadline.
    * @return
    *   true if the response was sent, false otherwise (meaning deadline passed)
    */
-  private def sendResponse(
-      response: CachedStreamResponse[T],
-      deadlineTimeMillis: Long): Boolean = {
+  private def sendResponse(response: CachedStreamResponse[T], deadlineTimeNs: Long): Boolean = {
     if (!executeHolder.reattachable) {
       // no flow control in non-reattachable execute
       logDebug(
@@ -370,11 +379,11 @@ private[connect] class ExecuteGrpcResponseSender[T <: Message](
         // 3. time deadline is reached
         while (!interrupted &&
           !grpcCallObserver.isReady() &&
-          deadlineTimeMillis >= System.currentTimeMillis()) {
-          val timeout = Math.max(1, deadlineTimeMillis - System.currentTimeMillis())
+          deadlineTimeNs >= System.nanoTime()) {
+          val timeoutNs = Math.max(1, deadlineTimeNs - System.nanoTime())
           var sleepStart = System.nanoTime()
-          logTrace(s"Wait for grpcCallObserver to become ready with timeout=$timeout ms.")
-          grpcCallObserverReadySignal.wait(timeout)
+          logTrace(s"Wait for grpcCallObserver to become ready with timeout=$timeoutNs ns.")
+          grpcCallObserverReadySignal.wait(timeoutNs / NANOS_PER_MILLIS)
           logTrace(s"Reacquired grpcCallObserverReadySignal lock after waiting.")
           sleepEnd = System.nanoTime()
         }

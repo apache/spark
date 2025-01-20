@@ -73,4 +73,6 @@ case class ToPrettyString(child: Expression, timeZoneId: Option[String] = None)
          |""".stripMargin
     ev.copy(code = finalCode, isNull = FalseLiteral)
   }
+
+  override def sql: String = child.sql
 }

@@ -44,6 +44,7 @@ from pyspark.ml.param.shared import (
     HasLoss,
     HasVarianceCol,
 )
+from pyspark.ml.util import try_remote_attribute_relation
 from pyspark.ml.tree import (
     _DecisionTreeModel,
     _DecisionTreeParams,
@@ -517,6 +518,7 @@ class LinearRegressionSummary(JavaWrapper):
 
     @property
     @since("2.0.0")
+    @try_remote_attribute_relation
     def predictions(self) -> DataFrame:
         """
         Dataframe outputted by the model's `transform` method.
@@ -651,6 +653,7 @@ class LinearRegressionSummary(JavaWrapper):
 
     @property
     @since("2.0.0")
+    @try_remote_attribute_relation
     def residuals(self) -> DataFrame:
         """
         Residuals (label - predicted value)

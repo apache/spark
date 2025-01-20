@@ -274,6 +274,14 @@ class DataFrame(ParentDataFrame):
         res._cached_schema = self._cached_schema
         return res
 
+    def metadataColumn(self, colName: str) -> Column:
+        if not isinstance(colName, str):
+            raise PySparkTypeError(
+                errorClass="NOT_STR",
+                messageParameters={"arg_name": "colName", "arg_type": type(colName).__name__},
+            )
+        return self._col(colName, is_metadata_column=True)
+
     def colRegex(self, colName: str) -> Column:
         from pyspark.sql.connect.column import Column as ConnectColumn
 
@@ -1750,13 +1758,14 @@ class DataFrame(ParentDataFrame):
                 messageParameters={"arg_name": "item", "arg_type": type(item).__name__},
             )
 
-    def _col(self, name: str) -> Column:
+    def _col(self, name: str, is_metadata_column: bool = False) -> Column:
         from pyspark.sql.connect.column import Column as ConnectColumn
 
         return ConnectColumn(
             ColumnReference(
                 unparsed_identifier=name,
                 plan_id=self._plan._plan_id,
+                is_metadata_column=is_metadata_column,
             )
         )
 

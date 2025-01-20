@@ -32,7 +32,7 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.{DataType, StringType, StructType}
-import org.apache.spark.util.SerializableConfiguration
+import org.apache.spark.util.{SerializableConfiguration, Utils}
 
 /**
  * A data source for reading text files. The text files must be encoded as UTF-8.
@@ -119,10 +119,12 @@ class TextFileFormat extends TextBasedFileFormat with DataSourceRegister {
 
     (file: PartitionedFile) => {
       val confValue = conf.value.value
-      val reader = if (!textOptions.wholeText) {
-        new HadoopFileLinesReader(file, textOptions.lineSeparatorInRead, confValue)
-      } else {
-        new HadoopFileWholeTextReader(file, confValue)
+      val reader = Utils.createResourceUninterruptiblyIfInTaskThread {
+        if (!textOptions.wholeText) {
+          new HadoopFileLinesReader(file, textOptions.lineSeparatorInRead, confValue)
+        } else {
+          new HadoopFileWholeTextReader(file, confValue)
+        }
       }
       Option(TaskContext.get()).foreach(_.addTaskCompletionListener[Unit](_ => reader.close()))
       if (requiredSchema.isEmpty) {

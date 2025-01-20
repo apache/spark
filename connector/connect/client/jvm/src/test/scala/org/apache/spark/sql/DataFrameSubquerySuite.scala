@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.{SparkException, SparkRuntimeException}
+import org.apache.spark.SparkRuntimeException
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.{QueryTest, RemoteSparkSession}
 
@@ -56,7 +56,8 @@ class DataFrameSubquerySuite extends QueryTest with RemoteSparkSession {
     checkError(
       intercept[AnalysisException](spark.range(1).select($"outer_col".outer()).collect()),
       "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-      parameters = Map("objectName" -> "`outer_col`", "proposal" -> "`id`"))
+      parameters = Map("objectName" -> "`outer_col`", "proposal" -> "`id`"),
+      context = ExpectedContext(fragment = "$", callSitePattern = getCurrentClassCallSitePattern))
   }
 
   test("simple uncorrelated scalar subquery") {
@@ -637,14 +638,18 @@ class DataFrameSubquerySuite extends QueryTest with RemoteSparkSession {
         },
         "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.UNSUPPORTED_IN_EXISTS_SUBQUERY",
         parameters = Map("treeNode" -> "(?s)'Unpivot.*"),
-        matchPVals = true)
+        matchPVals = true,
+        queryContext = Array(
+          ExpectedContext(fragment = "exists", callSitePattern = getCurrentClassCallSitePattern)))
       checkError(
         intercept[AnalysisException] {
           t1.unpivot(Array($"c1"), Array(t2.exists()), "c1", "c2").collect()
         },
         "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.UNSUPPORTED_IN_EXISTS_SUBQUERY",
         parameters = Map("treeNode" -> "(?s)Expand.*"),
-        matchPVals = true)
+        matchPVals = true,
+        queryContext = Array(
+          ExpectedContext(fragment = "exists", callSitePattern = getCurrentClassCallSitePattern)))
     }
   }
 
@@ -665,15 +670,52 @@ class DataFrameSubquerySuite extends QueryTest with RemoteSparkSession {
     withView("t1") {
       val t1 = table1()
 
-      // TODO(SPARK-50601): Fix the SparkConnectPlanner to support this case
-      checkError(
-        intercept[SparkException] {
-          t1.withColumn("scalar", spark.range(1).select($"c1".outer() + $"c2".outer()).scalar())
-            .collect()
-        },
-        "INTERNAL_ERROR",
-        parameters = Map("message" -> "Found the unresolved operator: .*"),
-        matchPVals = true)
+      checkAnswer(
+        t1.withColumn(
+          "scalar",
+          spark
+            .range(1)
+            .select($"c1".outer() + $"c2".outer())
+            .scalar()),
+        t1.select($"*", ($"c1" + $"c2").as("scalar")))
+
+      checkAnswer(
+        t1.withColumn(
+          "scalar",
+          spark
+            .range(1)
+            .withColumn("c1", $"c1".outer())
+            .select($"c1" + $"c2".outer())
+            .scalar()),
+        t1.select($"*", ($"c1" + $"c2").as("scalar")))
+
+      checkAnswer(
+        t1.withColumn(
+          "scalar",
+          spark
+            .range(1)
+            .select($"c1".outer().as("c1"))
+            .withColumn("c2", $"c2".outer())
+            .select($"c1" + $"c2")
+            .scalar()),
+        t1.select($"*", ($"c1" + $"c2").as("scalar")))
+    }
+  }
+
+  test("subquery in withColumnsRenamed") {
+    withView("t1") {
+      val t1 = table1()
+
+      checkAnswer(
+        t1.withColumn(
+          "scalar",
+          spark
+            .range(1)
+            .select($"c1".outer().as("c1"), $"c2".outer().as("c2"))
+            .withColumnsRenamed(Map("c1" -> "x", "c2" -> "y"))
+            .select($"x" + $"y")
+            .scalar()),
+        t1.select($"*", ($"c1".as("x") + $"c2".as("y")).as("scalar")))
     }
   }
 

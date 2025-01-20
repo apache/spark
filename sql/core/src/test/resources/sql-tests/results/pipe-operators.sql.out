@@ -641,7 +641,7 @@ struct<x:int,y:string,z:int>
 table t
 |> extend 1
 -- !query schema
-struct<x:int,y:string,pipeexpression(1):int>
+struct<x:int,y:string,1:int>
 -- !query output
 0	abc	1
 1	def	1
@@ -2879,7 +2879,7 @@ struct<x:int,y:int>
 values (3, 4) as tab(x, y)
 |> aggregate sum(y) group by 1
 -- !query schema
-struct<x:int,pipeexpression(sum(y)):bigint>
+struct<x:int,sum(y):bigint>
 -- !query output
 3	4
 
@@ -2888,7 +2888,7 @@ struct<x:int,pipeexpression(sum(y)):bigint>
 values (3, 4), (5, 4) as tab(x, y)
 |> aggregate sum(y) group by 1
 -- !query schema
-struct<x:int,pipeexpression(sum(y)):bigint>
+struct<x:int,sum(y):bigint>
 -- !query output
 3	4
 5	4
@@ -2898,7 +2898,7 @@ struct<x:int,pipeexpression(sum(y)):bigint>
 select 3 as x, 4 as y
 |> aggregate sum(y) group by 1, 1
 -- !query schema
-struct<x:int,x:int,pipeexpression(sum(y)):bigint>
+struct<x:int,x:int,sum(y):bigint>
 -- !query output
 3	3	4
 
@@ -2907,7 +2907,7 @@ struct<x:int,x:int,pipeexpression(sum(y)):bigint>
 select 1 as `1`, 2 as `2`
 |> aggregate sum(`2`) group by `1`
 -- !query schema
-struct<1:int,pipeexpression(sum(2)):bigint>
+struct<1:int,sum(2):bigint>
 -- !query output
 1	2
 
@@ -2916,7 +2916,7 @@ struct<1:int,pipeexpression(sum(2)):bigint>
 select 3 as x, 4 as y
 |> aggregate sum(y) group by 2
 -- !query schema
-struct<y:int,pipeexpression(sum(y)):bigint>
+struct<y:int,sum(y):bigint>
 -- !query output
 4	4
 
@@ -2925,7 +2925,7 @@ struct<y:int,pipeexpression(sum(y)):bigint>
 select 3 as x, 4 as y, 5 as z
 |> aggregate sum(y) group by 2
 -- !query schema
-struct<y:int,pipeexpression(sum(y)):bigint>
+struct<y:int,sum(y):bigint>
 -- !query output
 4	4
 
@@ -2934,7 +2934,7 @@ struct<y:int,pipeexpression(sum(y)):bigint>
 select 3 as x, 4 as y, 5 as z
 |> aggregate sum(y) group by 3
 -- !query schema
-struct<z:int,pipeexpression(sum(y)):bigint>
+struct<z:int,sum(y):bigint>
 -- !query output
 5	4
 
@@ -2943,7 +2943,7 @@ struct<z:int,pipeexpression(sum(y)):bigint>
 select 3 as x, 4 as y, 5 as z
 |> aggregate sum(y) group by 2, 3
 -- !query schema
-struct<y:int,z:int,pipeexpression(sum(y)):bigint>
+struct<y:int,z:int,sum(y):bigint>
 -- !query output
 4	5	4
 
@@ -2952,7 +2952,7 @@ struct<y:int,z:int,pipeexpression(sum(y)):bigint>
 select 3 as x, 4 as y, 5 as z
 |> aggregate sum(y) group by 1, 2, 3
 -- !query schema
-struct<x:int,y:int,z:int,pipeexpression(sum(y)):bigint>
+struct<x:int,y:int,z:int,sum(y):bigint>
 -- !query output
 3	4	5	4
 
@@ -2961,7 +2961,7 @@ struct<x:int,y:int,z:int,pipeexpression(sum(y)):bigint>
 select 3 as x, 4 as y, 5 as z
 |> aggregate sum(y) group by x, 2, 3
 -- !query schema
-struct<x:int,y:int,z:int,pipeexpression(sum(y)):bigint>
+struct<x:int,y:int,z:int,sum(y):bigint>
 -- !query output
 3	4	5	4
 
@@ -2970,7 +2970,7 @@ struct<x:int,y:int,z:int,pipeexpression(sum(y)):bigint>
 table t
 |> aggregate sum(x)
 -- !query schema
-struct<pipeexpression(sum(x)):bigint>
+struct<sum(x):bigint>
 -- !query output
 1
 
@@ -3046,7 +3046,7 @@ struct<x:int>
 table other
 |> aggregate a + count(b) group by a
 -- !query schema
-struct<a:int,pipeexpression((a + count(b))):bigint>
+struct<a:int,(a + count(b)):bigint>
 -- !query output
 1	3
 2	3

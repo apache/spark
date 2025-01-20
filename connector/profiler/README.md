@@ -3,8 +3,15 @@
 ## Build
 
 To build
+
 ```
-  ./build/mvn clean package -DskipTests -Pjvm-profiler
+./build/mvn clean package -DskipTests -Pjvm-profiler -pl :spark-profiler_2.13 -am
+```
+
+or
+
+```
+./build/sbt -Pjvm-profiler clean "profiler/package"
 ```
 
 ## Executor Code Profiling
@@ -16,7 +23,7 @@ The profiler writes the jfr files to the executor's working directory in the exe
 Code profiling is currently only supported for
 
 *   Linux (x64)
-*   Linux (arm 64)
+*   Linux (arm64)
 *   Linux (musl, x64)
 *   MacOS
 
@@ -32,7 +39,7 @@ For more information on async_profiler see the [Async Profiler Manual](https://k
 To enable code profiling, first enable the code profiling plugin via
 
 ```
-spark.plugins=org.apache.spark.executor.profiler.ExecutorProfilerPlugin
+spark.plugins=org.apache.spark.profiler.ProfilerPlugin
 ```
 
 Then enable the profiling in the configuration.
@@ -43,24 +50,40 @@ Then enable the profiling in the configuration.
 <table class="spark-config">
 <tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr>
 <tr>
-  <td><code>spark.executor.profiling.enabled</code></td>
+  <td><code>spark.profiler.driver.enabled</code></td>
   <td><code>false</code></td>
   <td>
-    If true, will enable code profiling
+    If true, turn on profiling in driver.
   </td>
   <td>4.0.0</td>
 </tr>
 <tr>
-  <td><code>spark.executor.profiling.dfsDir</code></td>
+  <td><code>spark.profiler.executor.enabled</code></td>
+  <td><code>false</code></td>
+  <td>
+    If true, turn on profiling in executors.
+  </td>
+  <td>4.0.0</td>
+</tr>
+<tr>
+  <td><code>spark.profiler.executor.fraction</code></td>
+  <td>0.10</td>
+  <td>
+    The fraction of executors on which to enable profiling. The executors to be profiled are picked at random.
+  </td>
+  <td>4.0.0</td>
+</tr>
+<tr>
+  <td><code>spark.profiler.dfsDir</code></td>
   <td>(none)</td>
   <td>
-      An HDFS compatible path to which the profiler's output files are copied. The output files will be written as <i>dfsDir/application_id/profile-appname-exec-executor_id.jfr</i> <br/>
+      An HDFS compatible path to which the profiler's output files are copied. The output files will be written as <i>dfsDir/{{APP_ID}}/profile-exec-{{EXECUTOR_ID}}.jfr</i> <br/>
       If no <i>dfsDir</i> is specified then the files are not copied over. Users should ensure there is sufficient disk space available otherwise it may lead to corrupt jfr files.
   </td>
   <td>4.0.0</td>
 </tr>
 <tr>
-  <td><code>spark.executor.profiling.localDir</code></td>
+  <td><code>spark.profiler.localDir</code></td>
   <td><code>.</code> i.e. the executor's working dir</td>
   <td>
    The local directory in the executor container to write the jfr files to. If not specified the file will be written to the executor's working directory. Users should ensure there is sufficient disk space available on the system as running out of space may result in corrupt jfr file and even cause jobs to fail on systems like K8s.  
@@ -68,28 +91,20 @@ Then enable the profiling in the configuration.
   <td>4.0.0</td>
 </tr>
 <tr>
-  <td><code>spark.executor.profiling.options</code></td>
+  <td><code>spark.profiler.asyncProfiler.args</code></td>
   <td>event=wall,interval=10ms,alloc=2m,lock=10ms,chunktime=300s</td>
   <td>
-      Options to pass to the profiler. Detailed options are documented in the comments here:
-      <a href="https://github.com/async-profiler/async-profiler/blob/32601bccd9e49adda9510a2ed79d142ac6ef0ff9/src/arguments.cpp#L52">Profiler arguments</a>.  
-       Note that the options to start, stop, specify output format, and output file do not have to be specified.
+      Arguments to pass to the Async Profiler. Detailed options are documented in the comments here:
+      <a href="https://github.com/async-profiler/async-profiler/blob/v3.0/src/arguments.cpp#L44">Profiler arguments</a>.  
+       Note that the arguments to start, stop, specify output format, and output file do not have to be specified.
   </td>
   <td>4.0.0</td>
 </tr>
 <tr>
-  <td><code>spark.executor.profiling.fraction</code></td>
-  <td>0.10</td>
-  <td>
-    The fraction of executors on which to enable code profiling. The executors to be profiled are picked at random.
-  </td>
-  <td>4.0.0</td>
-</tr>
-<tr>
-  <td><code>spark.executor.profiling.writeInterval</code></td>
+  <td><code>spark.profiler.dfsWriteInterval</code></td>
   <td>30</td>
   <td>
-    Time interval, in seconds, after which the profiler output will be synced to dfs.
+    Time interval, in seconds, after which the profiler output will be synced to DFS.
   </td>
   <td>4.0.0</td>
 </tr>
@@ -108,11 +123,11 @@ On Kubernetes, spark will try to shut down the executor pods while the profiler 
   --master <master-url> \
   --deploy-mode <deploy-mode> \
   -c spark.executor.extraJavaOptions="-XX:+UnlockDiagnosticVMOptions -XX:+DebugNonSafepoints -XX:+PreserveFramePointer" \
-  -c spark.plugins=org.apache.spark.executor.profiler.ExecutorProfilerPlugin \
-  -c spark.executor.profiling.enabled=true \
-  -c spark.executor.profiling.dfsDir=s3a://my-bucket/spark/profiles/  \
-  -c spark.executor.profiling.options=event=wall,interval=10ms,alloc=2m,lock=10ms,chunktime=300s \
-  -c spark.executor.profiling.fraction=0.10  \
+  -c spark.plugins=org.apache.spark.profiler.ProfilerPlugin \
+  -c spark.profiler.executor.enabled=true \
+  -c spark.profiler.executor.fraction=0.10 \
+  -c spark.profiler.dfsDir=s3a://my-bucket/spark/profiles/ \
+  -c spark.profiler.asyncProfiler.args=event=wall,interval=10ms,alloc=2m,lock=10ms,chunktime=300s \
   -c spark.kubernetes.executor.deleteOnTermination=false \
   <application-jar> \
   [application-arguments]

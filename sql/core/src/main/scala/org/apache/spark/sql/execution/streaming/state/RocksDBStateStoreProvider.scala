@@ -33,6 +33,7 @@ import org.apache.spark.io.CompressionCodec
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.streaming.{CheckpointFileManager, StreamExecution}
+import org.apache.spark.sql.execution.streaming.state.StateStoreEncoding.Avro
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.{NonFateSharingCache, Utils}
 
@@ -82,10 +83,26 @@ private[sql] class RocksDBStateStoreProvider
         stateStoreName = stateStoreId.storeName,
         colFamilyName = colFamilyName)
 
-      val dataEncoder = getDataEncoder(
-        stateStoreEncoding, dataEncoderCacheKey, keyStateEncoderSpec, valueSchema)
-
       val columnFamilyInfo = Some(ColumnFamilyInfo(colFamilyName, newColFamilyId))
+
+      // For unit tests only: TestStateSchemaProvider allows dynamically adding schemas
+      // during unit test execution to verify schema compatibility checks and evolution logic.
+      // This provider is only used in isolated unit tests where we directly instantiate
+      // state store components, not in streaming query execution or e2e tests.
+      stateSchemaProvider match {
+        case Some(t: TestStateSchemaProvider) =>
+          t.captureSchema(colFamilyName, keySchema, valueSchema)
+        case _ =>
+      }
+
+      val dataEncoder = getDataEncoder(
+        stateStoreEncoding,
+        dataEncoderCacheKey,
+        keyStateEncoderSpec,
+        valueSchema,
+        stateSchemaProvider,
+        columnFamilyInfo
+      )
 
       val keyEncoder = RocksDBStateEncoder.getKeyEncoder(
         dataEncoder,
@@ -378,7 +395,8 @@ private[sql] class RocksDBStateStoreProvider
       useColumnFamilies: Boolean,
       storeConf: StateStoreConf,
       hadoopConf: Configuration,
-      useMultipleValuesPerKey: Boolean = false): Unit = {
+      useMultipleValuesPerKey: Boolean = false,
+      stateSchemaProvider: Option[StateSchemaProvider]): Unit = {
     this.stateStoreId_ = stateStoreId
     this.keySchema = keySchema
     this.valueSchema = valueSchema
@@ -386,6 +404,7 @@ private[sql] class RocksDBStateStoreProvider
     this.hadoopConf = hadoopConf
     this.useColumnFamilies = useColumnFamilies
     this.stateStoreEncoding = storeConf.stateStoreEncodingFormat
+    this.stateSchemaProvider = stateSchemaProvider
 
     if (useMultipleValuesPerKey) {
       require(useColumnFamilies, "Multiple values per key support requires column families to be" +
@@ -402,15 +421,27 @@ private[sql] class RocksDBStateStoreProvider
       stateStoreName = stateStoreId.storeName,
       colFamilyName = StateStore.DEFAULT_COL_FAMILY_NAME)
 
-    val dataEncoder = getDataEncoder(
-      stateStoreEncoding, dataEncoderCacheKey, keyStateEncoderSpec, valueSchema)
-
-    val columnFamilyInfo = if (useColumnFamilies) {
-      defaultColFamilyId = Some(rocksDB.createColFamilyIfAbsent(StateStore.DEFAULT_COL_FAMILY_NAME))
-      Some(ColumnFamilyInfo(StateStore.DEFAULT_COL_FAMILY_NAME, defaultColFamilyId.get))
-    } else {
-      None
+    // For test cases only: TestStateSchemaProvider allows dynamically adding schemas
+    // during test execution to verify schema evolution behavior. In production,
+    // schemas are loaded from checkpoint data
+    stateSchemaProvider match {
+      case Some(t: TestStateSchemaProvider) =>
+        t.captureSchema(StateStore.DEFAULT_COL_FAMILY_NAME, keySchema, valueSchema)
+      case _ =>
     }
+
+    defaultColFamilyId = Some(rocksDB.createColFamilyIfAbsent(StateStore.DEFAULT_COL_FAMILY_NAME))
+    val columnFamilyInfo =
+      Some(ColumnFamilyInfo(StateStore.DEFAULT_COL_FAMILY_NAME, defaultColFamilyId.get))
+
+    val dataEncoder = getDataEncoder(
+      stateStoreEncoding,
+      dataEncoderCacheKey,
+      keyStateEncoderSpec,
+      valueSchema,
+      stateSchemaProvider,
+      columnFamilyInfo
+    )
 
     val keyEncoder = RocksDBStateEncoder.getKeyEncoder(
       dataEncoder,
@@ -439,7 +470,8 @@ private[sql] class RocksDBStateStoreProvider
       new RocksDBStateStore(version)
     }
     catch {
-      case e: SparkException if e.getCondition.contains("CANNOT_LOAD_STATE_STORE") =>
+      case e: SparkException
+        if Option(e.getCondition).exists(_.contains("CANNOT_LOAD_STATE_STORE")) =>
         throw e
       case e: OutOfMemoryError =>
         throw QueryExecutionErrors.notEnoughMemoryToLoadStore(
@@ -462,7 +494,8 @@ private[sql] class RocksDBStateStoreProvider
       new RocksDBStateStore(version)
     }
     catch {
-      case e: SparkException if e.getCondition.contains("CANNOT_LOAD_STATE_STORE") =>
+      case e: SparkException
+        if Option(e.getCondition).exists(_.contains("CANNOT_LOAD_STATE_STORE")) =>
         throw e
       case e: OutOfMemoryError =>
         throw QueryExecutionErrors.notEnoughMemoryToLoadStore(
@@ -502,6 +535,7 @@ private[sql] class RocksDBStateStoreProvider
   @volatile private var hadoopConf: Configuration = _
   @volatile private var useColumnFamilies: Boolean = _
   @volatile private var stateStoreEncoding: String = _
+  @volatile private var stateSchemaProvider: Option[StateSchemaProvider] = _
 
   private[sql] lazy val rocksDB = {
     val dfsRootDir = stateStoreId.storeCheckpointLocation().toString
@@ -680,16 +714,26 @@ object RocksDBStateStoreProvider {
       stateStoreEncoding: String,
       encoderCacheKey: StateRowEncoderCacheKey,
       keyStateEncoderSpec: KeyStateEncoderSpec,
-      valueSchema: StructType): RocksDBDataEncoder = {
+      valueSchema: StructType,
+      stateSchemaProvider: Option[StateSchemaProvider],
+      columnFamilyInfo: Option[ColumnFamilyInfo] = None): RocksDBDataEncoder = {
     assert(Set("avro", "unsaferow").contains(stateStoreEncoding))
     RocksDBStateStoreProvider.dataEncoderCache.get(
       encoderCacheKey,
       new java.util.concurrent.Callable[RocksDBDataEncoder] {
         override def call(): RocksDBDataEncoder = {
-          if (stateStoreEncoding == "avro") {
-            new AvroStateEncoder(keyStateEncoderSpec, valueSchema, Some(DEFAULT_SCHEMA_IDS))
+          if (stateStoreEncoding == Avro.toString) {
+            new AvroStateEncoder(
+              keyStateEncoderSpec,
+              valueSchema,
+              stateSchemaProvider,
+              columnFamilyInfo
+            )
           } else {
-            new UnsafeRowDataEncoder(keyStateEncoderSpec, valueSchema, None)
+            new UnsafeRowDataEncoder(
+              keyStateEncoderSpec,
+              valueSchema
+            )
           }
         }
       }

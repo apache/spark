@@ -22,7 +22,7 @@ import java.time.ZoneOffset
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.catalyst.util.{ArrayData, DateFormatter, IntervalStringStyles, IntervalUtils, MapData, SparkStringUtils, TimestampFormatter}
+import org.apache.spark.sql.catalyst.util.{ArrayData, CharVarcharCodegenUtils, DateFormatter, IntervalStringStyles, IntervalUtils, MapData, SparkStringUtils, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.IntervalStringStyles.ANSI_STYLE
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.BinaryOutputStyle
@@ -53,7 +53,17 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
     i => func(i.asInstanceOf[T])
 
   // Returns a function to convert a value to pretty string. The function assumes input is not null.
-  protected final def castToString(from: DataType): Any => UTF8String = from match {
+  protected final def castToString(
+      from: DataType, to: StringConstraint = NoConstraint): Any => UTF8String =
+    to match {
+      case FixedLength(length) =>
+        s => CharVarcharCodegenUtils.charTypeWriteSideCheck(castToString(from)(s), length)
+      case MaxLength(length) =>
+        s => CharVarcharCodegenUtils.varcharTypeWriteSideCheck(castToString(from)(s), length)
+      case NoConstraint => castToString(from)
+    }
+
+  private def castToString(from: DataType): Any => UTF8String = from match {
     case CalendarIntervalType =>
       acceptAny[CalendarInterval](i => UTF8String.fromString(i.toString))
     case BinaryType => acceptAny[Array[Byte]](binaryFormatter.apply)
@@ -167,8 +177,31 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
 
   // Returns a function to generate code to convert a value to pretty string. It assumes the input
   // is not null.
-  @scala.annotation.tailrec
   protected final def castToStringCode(
+      from: DataType,
+      ctx: CodegenContext,
+      to: StringConstraint = NoConstraint): (ExprValue, ExprValue) => Block =
+    (c, evPrim) => {
+      val tmpVar = ctx.freshVariable("tmp", classOf[UTF8String])
+      val castToString = castToStringCode(from, ctx)(c, tmpVar)
+      val maintainConstraint = to match {
+        case FixedLength(length) =>
+          code"""$evPrim = org.apache.spark.sql.catalyst.util.CharVarcharCodegenUtils
+                .charTypeWriteSideCheck($tmpVar, $length);""".stripMargin
+        case MaxLength(length) =>
+          code"""$evPrim = org.apache.spark.sql.catalyst.util.CharVarcharCodegenUtils
+                .varcharTypeWriteSideCheck($tmpVar, $length);""".stripMargin
+        case NoConstraint => code"$evPrim = $tmpVar;"
+      }
+      code"""
+            UTF8String $tmpVar;
+            $castToString
+            $maintainConstraint
+          """
+    }
+
+  @scala.annotation.tailrec
+  private def castToStringCode(
       from: DataType, ctx: CodegenContext): (ExprValue, ExprValue) => Block = {
     from match {
       case BinaryType =>

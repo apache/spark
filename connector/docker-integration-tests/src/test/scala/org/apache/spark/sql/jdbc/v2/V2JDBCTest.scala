@@ -986,4 +986,41 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
   test("scan with filter push-down with date time functions") {
     testDatetime(s"$catalogAndNamespace.${caseConvert("datetime")}")
   }
+
+  test("SPARK-50792: Format binary data as a binary literal in JDBC.") {
+    val tableName = s"$catalogName.test_binary_literal"
+    withTable(tableName) {
+      // Create a table with binary column
+      val binary = "X'123456'"
+      val lessThanBinary = "X'123455'"
+      val greaterThanBinary = "X'123457'"
+
+      sql(s"CREATE TABLE $tableName (binary_col BINARY)")
+      sql(s"INSERT INTO $tableName VALUES ($binary)")
+
+      def testBinaryLiteral(operator: String, literal: String, expected: Int): Unit = {
+        val sql = s"SELECT * FROM $tableName WHERE binary_col $operator $literal"
+        val df = spark.sql(sql)
+        checkFilterPushed(df)
+        val rows = df.collect()
+        assert(rows.length === expected, s"Failed to run $sql")
+        if (expected == 1) {
+          assert(rows(0)(0) === Array(0x12, 0x34, 0x56).map(_.toByte))
+        }
+      }
+
+      testBinaryLiteral("=", binary, 1)
+      testBinaryLiteral(">=", binary, 1)
+      testBinaryLiteral(">=", lessThanBinary, 1)
+      testBinaryLiteral(">", lessThanBinary, 1)
+      testBinaryLiteral("<=", binary, 1)
+      testBinaryLiteral("<=", greaterThanBinary, 1)
+      testBinaryLiteral("<", greaterThanBinary, 1)
+      testBinaryLiteral("<>", greaterThanBinary, 1)
+      testBinaryLiteral("<>", lessThanBinary, 1)
+      testBinaryLiteral("<=>", binary, 1)
+      testBinaryLiteral("<=>", lessThanBinary, 0)
+      testBinaryLiteral("<=>", greaterThanBinary, 0)
+    }
+  }
 }
