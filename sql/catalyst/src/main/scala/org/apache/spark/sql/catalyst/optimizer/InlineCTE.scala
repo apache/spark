@@ -63,7 +63,7 @@ case class InlineCTE(
     refCount == 1 ||
       // Don't inline recursive CTEs if not necessary as recursion is very costly.
       // The check if cteDef is recursive is performed by checking if it contains
-      // a UnionLoopRef with the same ID
+      // a UnionLoopRef with the same ID.
       (cteDef.deterministic && !cteDef.hasItsOwnUnionLoopRef) ||
       cteDef.child.exists(_.expressions.exists(_.isInstanceOf[OuterReference]))
   }

@@ -185,7 +185,7 @@ object ResolveWithCTE extends Rule[LogicalPlan] {
   }
 
   // Counts number of self-references in a recursive CTE definition and throws an error
-  // if that number is bigger than 1
+  // if that number is bigger than 1.
   private def checkNumberOfSelfReferences(cteDef: CTERelationDef): Unit = {
     val numOfSelfRef = cteDef.map[Boolean] {
       case CTERelationRef(cteDef.id, _, _, _, _, true) => true
@@ -193,8 +193,9 @@ object ResolveWithCTE extends Rule[LogicalPlan] {
     }.count(_ == true)
     print("NumOfSelfRef:", numOfSelfRef, "\n")
     if (numOfSelfRef > 1) {
-      throw QueryCompilationErrors.invalidRecursiveCteError(
-        "Multiple self-references are not allowed.")
+      throw new AnalysisException(
+        errorClass = "INVALID_RECURSIVE_REFERENCE.PLACE",
+        messageParameters = Map.empty)
     }
   }
 }

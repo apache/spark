@@ -3119,17 +3119,17 @@
   },
   "INVALID_RECURSIVE_REFERENCE" : {
     "message" : [
-      "Invalid recursive reference found."
+      "Invalid recursive reference found inside WITH RECURSIVE clause."
     ],
     "subClass" : {
       "DATA_TYPE" : {
         "message" : [
-          "The data type of recursive references cannot change during resolution. Originally it was <fromDataType> but after resolution is <toDataType>."
+          "The data type of recursive references cannot change during resolution. Check that anchor and recursion term actually output the same data type. Originally it was <fromDataType> but after resolution is <toDataType>."
         ]
       },
       "NUMBER" : {
         "message" : [
-          "Recursive references cannot be used multiple times."
+          "Multiple self-references to one recursive CTE are not allowed."
         ]
       },
       "PLACE" : {
