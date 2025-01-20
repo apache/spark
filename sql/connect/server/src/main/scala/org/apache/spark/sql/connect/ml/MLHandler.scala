@@ -141,7 +141,7 @@ private[connect] object MLHandler extends Logging {
             proto.MlCommandResult.newBuilder().setSummary(id).build()
           case _ =>
             val param = Serializer.serializeParam(attrResult)
-            proto.MlCommandResult.ndummyNodeewBuilder().setParam(param).build()
+            proto.MlCommandResult.newBuilder().setParam(param).build()
         }
 
       case proto.MlCommand.CommandCase.DELETE =>
@@ -219,7 +219,7 @@ private[connect] object MLHandler extends Logging {
         } else if (operator.getType == proto.MlOperator.OperatorType.ESTIMATOR ||
           operator.getType == proto.MlOperator.OperatorType.EVALUATOR) {
           val mlOperator = {
-            if (operator.getType == proto.MlOperator.OperatorType.ESTIMATOR ) {
+            if (operator.getType == proto.MlOperator.OperatorType.ESTIMATOR) {
               MLUtils.loadEstimator(sessionHolder, name, path).asInstanceOf[Params]
             } else {
               MLUtils.loadEvaluator(sessionHolder, name, path).asInstanceOf[Params]

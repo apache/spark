@@ -367,10 +367,11 @@ private[ml] object MLUtils {
    * @return
    *   the instance of the ML operator
    */
-  private def loadOperator[T](sessionHolder: SessionHolder,
-                              className: String,
-                              path: String,
-                              operatorClass: Class[T]): T = {
+  private def loadOperator[T](
+      sessionHolder: SessionHolder,
+      className: String,
+      path: String,
+      operatorClass: Class[T]): T = {
     val name = replaceOperator(sessionHolder, className)
     val operators = loadOperators(operatorClass)
     if (operators.isEmpty || !operators.contains(name)) {
@@ -385,16 +386,20 @@ private[ml] object MLUtils {
   /**
    * Load an estimator from the specified path.
    */
-  def loadEstimator(sessionHolder: SessionHolder, className: String, path: String): Estimator[_] = {
+  def loadEstimator(
+      sessionHolder: SessionHolder,
+      className: String,
+      path: String): Estimator[_] = {
     loadOperator(sessionHolder, className, path, classOf[Estimator[_]])
   }
 
   /**
    * Load a transformer from the specified path.
    */
-  def loadTransformer(sessionHolder: SessionHolder,
-                      className: String,
-                      path: String): Transformer = {
+  def loadTransformer(
+      sessionHolder: SessionHolder,
+      className: String,
+      path: String): Transformer = {
     loadOperator(sessionHolder, className, path, classOf[Transformer])
   }
 
@@ -471,7 +476,13 @@ private[ml] object MLUtils {
     "residuals", // LinearRegressionSummary
     "rootMeanSquaredError", // LinearRegressionSummary
     "tValues", // LinearRegressionSummary
-    "totalIterations" // LinearRegressionSummary
+    "totalIterations", // LinearRegressionSummary
+    "k", // KMeansSummary
+    "numIter", // KMeansSummary
+    "clusterSizes", // KMeansSummary
+    "trainingCost", // KMeansSummary
+    "cluster", // KMeansSummary
+    "computeCost" // BisectingKMeansModel
   )
 
   def invokeMethodAllowed(obj: Object, methodName: String): Object = {
