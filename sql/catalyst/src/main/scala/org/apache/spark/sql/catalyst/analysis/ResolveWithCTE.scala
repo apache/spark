@@ -21,6 +21,7 @@ import scala.collection.mutable
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
+import org.apache.spark.sql.catalyst.plans.{LeftAnti, LeftOuter, LeftSemi, RightOuter}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{CTE, PLAN_EXPRESSION}
@@ -222,6 +223,38 @@ object ResolveWithCTE extends Rule[LogicalPlan] {
       throw new AnalysisException(
         errorClass = "INVALID_RECURSIVE_REFERENCE.DATA_TYPE",
         messageParameters = Map.empty)
+    }
+  }
+
+  /**
+   * Throws error if self-reference is placed in places which are not allowed:
+   * right side of left outer/semi/anti joins, left side of right outer joins,
+   * in full outer joins and in aggregates
+   */
+  private def checkIfSelfReferenceIsPlacedCorrectly(cteDef: CTERelationDef): Unit = {
+    def unionLoopRefNotAllowedUnderCurrentNode(currentNode: LogicalPlan) : Unit =
+      currentNode.foreach {
+        case UnionLoopRef(cteDef.id, _, _) =>
+          throw new AnalysisException(
+            errorClass = "INVALID_RECURSIVE_REFERENCE.PLACE",
+            messageParameters = Map.empty)
+        case other => ()
+      }
+    cteDef.foreach {
+      case Join(left, right, LeftOuter, _, _) =>
+        unionLoopRefNotAllowedUnderCurrentNode(right)
+      case Join(left, right, RightOuter, _, _) =>
+        unionLoopRefNotAllowedUnderCurrentNode(left)
+      case Join(left, right, LeftSemi, _, _) =>
+        unionLoopRefNotAllowedUnderCurrentNode(right)
+      case Join(left, right, LeftAnti, _, _) =>
+        unionLoopRefNotAllowedUnderCurrentNode(right)
+      case Join(left, right, _, _, _) =>
+        unionLoopRefNotAllowedUnderCurrentNode(left)
+        unionLoopRefNotAllowedUnderCurrentNode(right)
+      case Aggregate(_, _, child, _) =>
+        unionLoopRefNotAllowedUnderCurrentNode(child)
+      case other => ()
     }
   }
 }
