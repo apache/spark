@@ -15,27 +15,23 @@
 # limitations under the License.
 #
 
-# Spark Connect ML uses ServiceLoader to find out the supported Spark Ml estimators.
-# So register the supported estimator here if you're trying to add a new one.
+import unittest
 
-# classification
-org.apache.spark.ml.classification.LogisticRegression
-org.apache.spark.ml.classification.DecisionTreeClassifier
-org.apache.spark.ml.classification.RandomForestClassifier
-org.apache.spark.ml.classification.GBTClassifier
+from pyspark.ml.tests.test_als import ALSTestsMixin
+from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
-# regression
-org.apache.spark.ml.regression.LinearRegression
-org.apache.spark.ml.regression.DecisionTreeRegressor
-org.apache.spark.ml.regression.RandomForestRegressor
-org.apache.spark.ml.regression.GBTRegressor
+class ALSParityTests(ALSTestsMixin, ReusedConnectTestCase):
+    pass
 
 
-# clustering
-org.apache.spark.ml.clustering.KMeans
-org.apache.spark.ml.clustering.BisectingKMeans
+if __name__ == "__main__":
+    from pyspark.ml.tests.connect.test_parity_als import *  # noqa: F401
 
+    try:
+        import xmlrunner  # type: ignore[import]
 
-# recommendation
-org.apache.spark.ml.recommendation.ALS
+        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
+    except ImportError:
+        testRunner = None
+    unittest.main(testRunner=testRunner, verbosity=2)
