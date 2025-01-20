@@ -38,9 +38,6 @@ import org.apache.spark.sql.connect.plugin.SparkConnectPluginRegistry
 import org.apache.spark.sql.connect.service.SessionHolder
 import org.apache.spark.util.{SparkClassUtils, Utils}
 
-
-
-
 private[ml] object MLUtils {
 
   /**
@@ -58,9 +55,14 @@ private[ml] object MLUtils {
     // to iterate over a collection of providers that do not instantiate the class
     // directly. Since there is no good way to convert a Java stream to a Scala stream,
     // we collect the Java stream to a Java map and then convert it to a Scala map.
-    serviceLoader.stream().collect(
-      Collectors.toMap((est: ServiceLoader.Provider[_]) => est.`type`().getName,
-        (est: ServiceLoader.Provider[_]) => est.`type`())).asScala.toMap
+    serviceLoader
+      .stream()
+      .collect(
+        Collectors.toMap(
+          (est: ServiceLoader.Provider[_]) => est.`type`().getName,
+          (est: ServiceLoader.Provider[_]) => est.`type`()))
+      .asScala
+      .toMap
   }
 
   private def parseInts(ints: proto.Ints): Array[Int] = {
