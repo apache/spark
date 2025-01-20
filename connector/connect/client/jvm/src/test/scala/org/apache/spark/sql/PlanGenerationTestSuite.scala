@@ -24,6 +24,7 @@ import scala.collection.{immutable, mutable}
 import scala.jdk.CollectionConverters._
 import scala.util.{Failure, Success, Try}
 
+import com.google.protobuf
 import com.google.protobuf.util.JsonFormat
 import com.google.protobuf.util.JsonFormat.TypeRegistry
 import io.grpc.inprocess.InProcessChannelBuilder
@@ -146,7 +147,7 @@ class PlanGenerationTestSuite
   }
 
   private def test(name: String)(f: => Dataset[_]): Unit = super.test(name) {
-    val actual = f.plan.getRoot
+    val actual = trimJvmOriginFields(f.plan.getRoot)
     val goldenFile = queryFilePath.resolve(name.replace(' ', '_') + ".proto.bin")
     Try(readRelation(goldenFile)) match {
       case Success(expected) if expected == actual =>
@@ -158,10 +159,10 @@ class PlanGenerationTestSuite
         fail(s"""
              |Expected and actual plans do not match:
              |
-             |=== Expected Plan ===
+             |=== Expected Plan (with excess fields trimmed) ===
              |$expected
              |
-             |=== Actual Plan ===
+             |=== Actual Plan (with excess fields trimmed) ===
              |$actual
              |""".stripMargin)
       case Failure(_) if regenerateGoldenFiles =>
@@ -196,6 +197,50 @@ class PlanGenerationTestSuite
     finally {
       writer.close()
     }
+  }
+
+  private def trimJvmOriginFields[T <: protobuf.Message](message: T): T = {
+    def trim(builder: proto.JvmOrigin.Builder): Unit = {
+      builder
+        .clearLine()
+        .clearStartPosition()
+        .clearStartIndex()
+        .clearStopIndex()
+      val trimmedStackTraces = builder.getStackTraceBuilderList.asScala.map { element =>
+        element.clearLineNumber()
+        if (element.getMethodName != null && element.getMethodName.startsWith("$anonfun")) {
+          // Anonymous functions contain an sequence ID that is not stable.
+          element.setMethodName("~~trimmed~anonfun~~")
+        }
+        element.build()
+      }
+      builder.clearStackTrace().addAllStackTrace(trimmedStackTraces.asJava)
+    }
+
+    val builder = message.toBuilder
+
+    builder match {
+      case exp: proto.Relation.Builder
+          if exp.hasCommon && exp.getCommon.hasOrigin && exp.getCommon.getOrigin.hasJvmOrigin =>
+        trim(exp.getCommonBuilder.getOriginBuilder.getJvmOriginBuilder)
+      case exp: proto.Expression.Builder
+          if exp.hasCommon && exp.getCommon.hasOrigin && exp.getCommon.getOrigin.hasJvmOrigin =>
+        trim(exp.getCommonBuilder.getOriginBuilder.getJvmOriginBuilder)
+      case _ => // Other stuff that does not have origin
+    }
+
+    builder.getAllFields.asScala.foreach {
+      case (desc, msg: protobuf.Message) =>
+        builder.setField(desc, trimJvmOriginFields(msg))
+      case (desc, list: java.util.List[_]) =>
+        val newList = list.asScala.map {
+          case msg: protobuf.Message => trimJvmOriginFields(msg)
+          case other => other // Primitive types
+        }
+        builder.setField(desc, newList.asJava)
+      case _ => // Primitive types
+    }
+    builder.build().asInstanceOf[T]
   }
 
   private val urlWithUserAndPass = "jdbc:h2:mem:testdb0;user=testUser;password=testPass"
