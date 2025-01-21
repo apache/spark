@@ -848,6 +848,8 @@ object LimitPushDown extends Rule[LogicalPlan] {
     case LocalLimit(exp, u: Union) =>
       LocalLimit(exp, u.copy(children = u.children.map(maybePushLocalLimit(exp, _))))
 
+    // If limit node is present, we should propagate it down to UnionLoop, so that it is later
+    // propagated to UnionLoopExec.
     case l @ LocalLimit(IntegerLiteral(limit), p @ Project(_, u: UnionLoop)) =>
       l.copy(child = p.copy(child = u.copy(limit = Some(limit))))
     case l @ LocalLimit(IntegerLiteral(limit), u: UnionLoop) =>
