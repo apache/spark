@@ -440,6 +440,15 @@ public final class CollationFactory {
         }
       }
 
+      protected String getPadding() {
+        if (spaceTrimming == SpaceTrimming.RTRIM) {
+          return PAD_ATTRIBUTE_RTRIM;
+        } else {
+          assert spaceTrimming == SpaceTrimming.NONE;
+          return PAD_ATTRIBUTE_EMPTY;
+        }
+      }
+
       protected abstract Collation buildCollation();
 
       protected abstract CollationMeta buildCollationMeta();
@@ -460,6 +469,8 @@ public final class CollationFactory {
         }
         return collationSpecUTF8;
       }
+
+      protected SpaceTrimming spaceTrimming;
     }
 
     private static class CollationSpecUTF8 extends CollationSpec {
@@ -492,7 +503,6 @@ public final class CollationFactory {
         new CollationSpecUTF8(CaseSensitivity.LCASE, SpaceTrimming.NONE).buildCollation();
 
       private final CaseSensitivity caseSensitivity;
-      private final SpaceTrimming spaceTrimming;
       private final int collationId;
 
       private CollationSpecUTF8(
@@ -638,7 +648,7 @@ public final class CollationFactory {
             /* language = */ null,
             /* country = */ null,
             /* icuVersion = */ null,
-            COLLATION_PAD_ATTRIBUTE,
+            getPadding(),
             /* accentSensitivity = */ true,
             /* caseSensitivity = */ true,
             spaceTrimming.toString());
@@ -650,7 +660,7 @@ public final class CollationFactory {
             /* language = */ null,
             /* country = */ null,
             /* icuVersion = */ null,
-            COLLATION_PAD_ATTRIBUTE,
+            getPadding(),
             /* accentSensitivity = */ true,
             /* caseSensitivity = */ false,
             spaceTrimming.toString());
@@ -689,7 +699,18 @@ public final class CollationFactory {
             CollationNames.UTF8_LCASE,
             CollationSpecICU.ICU_VERSION
         );
-        return Arrays.asList(UTF8_BINARY_COLLATION_IDENT, UTF8_LCASE_COLLATION_IDENT);
+        CollationIdentifier UTF8_BINARY_RTRIM_COLLATION_IDENT = new CollationIdentifier(
+            PROVIDER_SPARK,
+            CollationNames.UTF8_BINARY + "_RTRIM",
+            CollationSpecICU.ICU_VERSION
+        );
+        CollationIdentifier UTF8_LCASE_RTRIM_COLLATION_IDENT = new CollationIdentifier(
+            PROVIDER_SPARK,
+            CollationNames.UTF8_LCASE + "_RTRIM",
+            CollationSpecICU.ICU_VERSION
+        );
+        return Arrays.asList(UTF8_BINARY_COLLATION_IDENT, UTF8_LCASE_COLLATION_IDENT,
+          UTF8_BINARY_RTRIM_COLLATION_IDENT, UTF8_LCASE_RTRIM_COLLATION_IDENT);
       }
 
       static CollationMeta loadCollationMeta(CollationIdentifier collationIdentifier) {
@@ -831,7 +852,6 @@ public final class CollationFactory {
 
       private final CaseSensitivity caseSensitivity;
       private final AccentSensitivity accentSensitivity;
-      private final SpaceTrimming spaceTrimming;
       private final String locale;
       private final int collationId;
 
@@ -1032,7 +1052,7 @@ public final class CollationFactory {
           language.isEmpty() ? null : language,
           country.isEmpty() ? null : country,
           VersionInfo.ICU_VERSION.toString(),
-          COLLATION_PAD_ATTRIBUTE,
+          getPadding(),
           accentSensitivity == AccentSensitivity.AS,
           caseSensitivity == CaseSensitivity.CS,
           spaceTrimming.toString());
@@ -1068,10 +1088,13 @@ public final class CollationFactory {
       private static List<String> allCollationNames() {
         List<String> collationNames = new ArrayList<>();
         List<String> caseAccentSpecifiers = Arrays.asList("", "_AI", "_CI", "_CI_AI");
+        List<String> trimmingSpecifiers = Arrays.asList("", "_RTRIM");
         for (String locale : ICULocaleToId.keySet()) {
           for (String caseAccent : caseAccentSpecifiers) {
-            String collationName = locale + caseAccent;
-            collationNames.add(collationName);
+            for (String trimming : trimmingSpecifiers) {
+              String collationName = locale + caseAccent + trimming;
+              collationNames.add(collationName);
+            }
           }
         }
         return collationNames.stream().sorted().toList();
@@ -1161,7 +1184,8 @@ public final class CollationFactory {
   public static final String PROVIDER_ICU = "icu";
   public static final String PROVIDER_NULL = "null";
   public static final List<String> SUPPORTED_PROVIDERS = List.of(PROVIDER_SPARK, PROVIDER_ICU);
-  public static final String COLLATION_PAD_ATTRIBUTE = "NO_PAD";
+  public static final String PAD_ATTRIBUTE_EMPTY = "NO_PAD";
+  public static final String PAD_ATTRIBUTE_RTRIM = "RTRIM";
 
   public static final int UTF8_BINARY_COLLATION_ID =
     Collation.CollationSpecUTF8.UTF8_BINARY_COLLATION_ID;
