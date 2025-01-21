@@ -475,5 +475,5 @@ class ColumnNodeToProtoConverterSuite extends ConnectFunSuite {
 private[connect] case class Nope(override val origin: Origin = CurrentOrigin.get)
     extends ColumnNode {
   override def sql: String = "nope"
-  override private[internal] def children: Seq[ColumnNodeLike] = Seq.empty
+  override def children: Seq[ColumnNodeLike] = Seq.empty
 }
