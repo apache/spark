@@ -249,7 +249,8 @@ case class AlterColumns(
     }
   }
 
-  override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan = copy(newChild)
+  override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan =
+    copy(table = newChild)
 }
 
 /**
