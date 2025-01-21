@@ -98,7 +98,7 @@ public class V2ExpressionSQLBuilder {
         case "ENDS_WITH" -> visitEndsWith(build(e.children()[0]), build(e.children()[1]));
         case "CONTAINS" -> visitContains(build(e.children()[0]), build(e.children()[1]));
         case "=", "<>", "<=>", "<", "<=", ">", ">=" ->
-          visitBinaryComparison(name, inputToSQL(e.children()[0]), inputToSQL(e.children()[1]));
+          visitBinaryComparison(name, e.children()[0], e.children()[1]);
         case "+", "*", "/", "%", "&", "|", "^" ->
           visitBinaryArithmetic(name, inputToSQL(e.children()[0]), inputToSQL(e.children()[1]));
         case "-" -> {
@@ -217,6 +217,10 @@ public class V2ExpressionSQLBuilder {
     } else {
       return build(input);
     }
+  }
+
+  protected String visitBinaryComparison(String name, Expression le, Expression re) {
+    return visitBinaryComparison(name, inputToSQL(le), inputToSQL(re));
   }
 
   protected String visitBinaryComparison(String name, String l, String r) {
