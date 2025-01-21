@@ -29,13 +29,13 @@ import org.apache.spark.ml.{Estimator, Transformer}
 import org.apache.spark.ml.evaluation.Evaluator
 import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.param.Params
-import org.apache.spark.ml.util.{MLReadable, MLWritable}
+import org.apache.spark.ml.util.MLWritable
 import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, LiteralValueProtoConverter}
 import org.apache.spark.sql.connect.planner.SparkConnectPlanner
 import org.apache.spark.sql.connect.plugin.SparkConnectPluginRegistry
 import org.apache.spark.sql.connect.service.SessionHolder
-import org.apache.spark.util.{SparkClassUtils, Utils}
+import org.apache.spark.util.Utils
 
 private[ml] object MLUtils {
 
@@ -352,28 +352,62 @@ private[ml] object MLUtils {
   }
 
   /**
-   * Call "load" function on the ML operator given the operator name
+   * Load an ML component (Estimator, Transformer, or Evaluator) from the given path.
    *
+   * @param sessionHolder
+   *   the session holder
    * @param className
    *   the ML operator name
    * @param path
    *   the path to be loaded
+   * @param operatorClass
+   *   the class type of the ML operator (Estimator, Transformer, or Evaluator)
+   * @tparam T
+   *   the type of the ML operator
    * @return
-   *   the ML instance
+   *   the instance of the ML operator
    */
-  def load(sessionHolder: SessionHolder, className: String, path: String): Object = {
+  private def loadOperator[T](
+      sessionHolder: SessionHolder,
+      className: String,
+      path: String,
+      operatorClass: Class[T]): T = {
     val name = replaceOperator(sessionHolder, className)
-
-    // It's the companion object of the corresponding spark operators to load.
-    val objectCls = SparkClassUtils.classForName(name + "$")
-    val mlReadableClass = classOf[MLReadable[_]]
-    // Make sure it is implementing MLReadable
-    if (!mlReadableClass.isAssignableFrom(objectCls)) {
-      throw MlUnsupportedException(s"$name must implement MLReadable.")
+    val operators = loadOperators(operatorClass)
+    if (operators.isEmpty || !operators.contains(name)) {
+      throw MlUnsupportedException(s"Unsupported read for $name")
     }
+    operators(name)
+      .getMethod("load", classOf[String])
+      .invoke(null, path)
+      .asInstanceOf[T]
+  }
 
-    val loadedMethod = SparkClassUtils.classForName(name).getMethod("load", classOf[String])
-    loadedMethod.invoke(null, path)
+  /**
+   * Load an estimator from the specified path.
+   */
+  def loadEstimator(
+      sessionHolder: SessionHolder,
+      className: String,
+      path: String): Estimator[_] = {
+    loadOperator(sessionHolder, className, path, classOf[Estimator[_]])
+  }
+
+  /**
+   * Load a transformer from the specified path.
+   */
+  def loadTransformer(
+      sessionHolder: SessionHolder,
+      className: String,
+      path: String): Transformer = {
+    loadOperator(sessionHolder, className, path, classOf[Transformer])
+  }
+
+  /**
+   * Load an evaluator from the specified path.
+   */
+  def loadEvaluator(sessionHolder: SessionHolder, className: String, path: String): Evaluator = {
+    loadOperator(sessionHolder, className, path, classOf[Evaluator])
   }
 
   // Since we're using reflection way to get the attribute, in order not to

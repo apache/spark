@@ -105,6 +105,11 @@ private[ml] object Node {
         split = Split.fromOld(oldNode.split.get, categoricalFeatures), impurityStats = null)
     }
   }
+
+  // A dummy node used for ml connect only
+  val dummyNode: Node = {
+    new LeafNode(0.0, 0.0, ImpurityCalculator.getCalculator("gini", Array.empty, 0))
+  }
 }
 
 /**
