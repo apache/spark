@@ -229,7 +229,13 @@ class RocksDB(
   }
 
   /**
-   * Create RocksDB column family, if not created already
+   * Check if the column family exists with given name and create one if it doesn't. Users can
+   * create external column families storing user facing data as well as internal column families
+   * such as secondary indexes. Metrics for both of these types are tracked separately.
+   *
+   * @param colFamilyName - column family name
+   * @param isInternal - whether the column family is for internal use or not
+   * @return - virtual column family id
    */
   def createColFamilyIfAbsent(colFamilyName: String, isInternal: Boolean): Short = {
     if (!checkColFamilyExists(colFamilyName)) {
