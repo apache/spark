@@ -40,7 +40,6 @@ from typing import (
 )
 
 from pyspark.conf import SparkConf
-from pyspark.core.files import SparkFiles
 from pyspark.util import is_remote_only
 from pyspark.sql.conf import RuntimeConfig
 from pyspark.sql.dataframe import DataFrame
@@ -2105,6 +2104,8 @@ class SparkSession(SparkConversionMixin):
             Add a file to be downloaded with this Spark job on every node.
             The ``path`` passed can only be a local file for now.
         """
+        from pyspark.core.files import SparkFiles
+
         if sum([file, pyfile, archive]) > 1:
             raise PySparkValueError(
                 errorClass="INVALID_MULTIPLE_ARGUMENT_CONDITIONS",
@@ -2135,7 +2136,7 @@ class SparkSession(SparkConversionMixin):
         elif pyfile:
             self._sc.addPyFile(*path)
         elif file:
-            self._sc.addFile(*path)
+            self._sc.addFile(*path)  # type: ignore[arg-type]
 
     addArtifact = addArtifacts
 
