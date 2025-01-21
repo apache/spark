@@ -205,7 +205,8 @@ abstract class QueryTest extends ConnectFunSuite with SQLHelper {
 
   protected def getCurrentClassCallSitePattern: String = {
     val cs = Thread.currentThread().getStackTrace()(2)
-    s"${cs.getClassName}\\..*\\(${cs.getFileName}:\\d+\\)"
+    // {classloader}//{class.name}({file_name.scala}:{line_number})
+    s".*//${cs.getClassName}\\..*\\(${cs.getFileName}:\\d+\\)"
   }
 
   /**

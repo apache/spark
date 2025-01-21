@@ -31,8 +31,8 @@ import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, AnalysisTest, An
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType, InMemoryCatalog, SessionCatalog, TempVariableManager}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Cast, EqualTo, Expression, InSubquery, IntegerLiteral, ListQuery, Literal, StringLiteral}
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
-import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
-import org.apache.spark.sql.catalyst.plans.logical.{AlterColumn, AnalysisOnlyCommand, AppendData, Assignment, CreateTable, CreateTableAsSelect, DeleteAction, DeleteFromTable, DescribeRelation, DescribeRelationJson, DropTable, InsertAction, InsertIntoStatement, LocalRelation, LogicalPlan, MergeIntoTable, OneRowRelation, OverwriteByExpression, OverwritePartitionsDynamic, Project, SetTableLocation, SetTableProperties, ShowTableProperties, SubqueryAlias, UnsetTableProperties, UpdateAction, UpdateTable}
+import org.apache.spark.sql.catalyst.parser.ParseException
+import org.apache.spark.sql.catalyst.plans.logical.{AlterColumn, AnalysisOnlyCommand, AppendData, Assignment, CreateTable, CreateTableAsSelect, DeleteAction, DeleteFromTable, DescribeRelation, DropTable, InsertAction, InsertIntoStatement, LocalRelation, LogicalPlan, MergeIntoTable, OneRowRelation, OverwriteByExpression, OverwritePartitionsDynamic, Project, SetTableLocation, SetTableProperties, ShowTableProperties, SubqueryAlias, UnsetTableProperties, UpdateAction, UpdateTable}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
 import org.apache.spark.sql.connector.FakeV2Provider
@@ -45,11 +45,12 @@ import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
 import org.apache.spark.sql.internal.SQLConf.{PARTITION_OVERWRITE_MODE, PartitionOverwriteMode}
 import org.apache.spark.sql.sources.SimpleScanSource
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{BooleanType, CharType, DoubleType, IntegerType, LongType, StringType, StructField, StructType, VarcharType}
 import org.apache.spark.unsafe.types.UTF8String
 
-class PlanResolutionSuite extends AnalysisTest {
-  import CatalystSqlParser._
+class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
+  private def parsePlan(statement: String) = spark.sessionState.sqlParser.parsePlan(statement)
 
   private val v1Format = classOf[SimpleScanSource].getName
   private val v2Format = classOf[FakeV2Provider].getName
@@ -240,7 +241,7 @@ class PlanResolutionSuite extends AnalysisTest {
     }
     // We don't check analysis here by default, as we expect the plan to be unresolved
     // such as `CreateTable`.
-    val analyzed = analyzer.execute(CatalystSqlParser.parsePlan(query))
+    val analyzed = analyzer.execute(parsePlan(query))
     if (checkAnalysis) {
       analyzer.checkAnalysis(analyzed)
     }
@@ -959,43 +960,6 @@ class PlanResolutionSuite extends AnalysisTest {
     val sql4 = "DESC TABLE v"
     val parsed4 = parseAndResolve(sql4)
     assert(parsed4.isInstanceOf[DescribeTableCommand])
-  }
-
-  test("DESCRIBE AS JSON relation") {
-    Seq("v1Table" -> true, "v2Table" -> false, "testcat.tab" -> false).foreach {
-      case (tblName, useV1Command) =>
-        val sql = s"DESC TABLE EXTENDED $tblName AS JSON"
-        val parsed = parseAndResolve(sql)
-        if (useV1Command) {
-          val expected2 = DescribeTableJsonCommand(
-            TableIdentifier(tblName, Some("default"), Some(SESSION_CATALOG_NAME)),
-            Map.empty, true)
-
-          comparePlans(parsed, expected2)
-        } else {
-          parsed match {
-            case DescribeRelationJson(_: ResolvedTable, _, isExtended) =>
-              assert(isExtended)
-            case _ => fail("Expect DescribeTable, but got:\n" + parsed.treeString)
-          }
-        }
-
-        val sql2 = s"DESC TABLE EXTENDED $tblName PARTITION(a=1) AS JSON"
-        val parsed2 = parseAndResolve(sql2)
-        if (useV1Command) {
-          val expected2 = DescribeTableJsonCommand(
-            TableIdentifier(tblName, Some("default"), Some(SESSION_CATALOG_NAME)),
-            Map("a" -> "1"), true)
-          comparePlans(parsed2, expected2)
-        } else {
-          parsed2 match {
-            case DescribeRelationJson(_: ResolvedTable, partitionSpec, isExtended) =>
-              assert(isExtended)
-              assert(partitionSpec == Map("a" -> "1"))
-            case _ => fail("Expect DescribeTable, but got:\n" + parsed2.treeString)
-          }
-        }
-    }
   }
 
   test("DELETE FROM") {
@@ -2904,9 +2868,8 @@ class PlanResolutionSuite extends AnalysisTest {
       exception = intercept[ParseException] {
         parsePlan(query)
       },
-      condition = "_LEGACY_ERROR_TEMP_0035",
-      parameters = Map(
-        "message" -> "CREATE TEMPORARY TABLE ..., use CREATE TEMPORARY VIEW instead"),
+      condition = "_LEGACY_ERROR_TEMP_0046",
+      parameters = Map(),
       context = ExpectedContext(fragment = query, start = 0, stop = 48))
   }
 

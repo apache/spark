@@ -55,7 +55,7 @@ import org.apache.spark.sql.catalyst.plans.{Cross, FullOuter, Inner, JoinType, L
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical.{AppendColumns, Assignment, CoGroup, CollectMetrics, CommandResult, Deduplicate, DeduplicateWithinWatermark, DeleteAction, DeserializeToObject, Except, FlatMapGroupsWithState, InsertAction, InsertStarAction, Intersect, JoinWith, LocalRelation, LogicalGroupState, LogicalPlan, MapGroups, MapPartitions, MergeAction, Project, Sample, SerializeFromObject, Sort, SubqueryAlias, TypedFilter, Union, Unpivot, UnresolvedHint, UpdateAction, UpdateStarAction}
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
-import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, TreePattern}
+import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin, TreePattern}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CharVarcharUtils}
 import org.apache.spark.sql.classic.ClassicConversions._
@@ -1537,17 +1537,56 @@ class SparkConnectPlanner(
   @DeveloperApi
   def transformExpression(
       exp: proto.Expression,
-      baseRelationOpt: Option[LogicalPlan]): Expression = if (exp.hasCommon) {
-    CurrentOrigin.withOrigin {
-      val pythonOrigin = exp.getCommon.getOrigin.getPythonOrigin
-      val pysparkErrorContext = (pythonOrigin.getFragment, pythonOrigin.getCallSite)
-      val newOrigin = CurrentOrigin.get.copy(pysparkErrorContext = Some(pysparkErrorContext))
-      CurrentOrigin.withOrigin(newOrigin) {
+      baseRelationOpt: Option[LogicalPlan]): Expression = {
+    if (exp.hasCommon && exp.getCommon.hasOrigin) {
+      val origin = transformOrigin(exp.getCommon.getOrigin)
+      CurrentOrigin.withOrigin(origin) {
         doTransformExpression(exp, baseRelationOpt)
       }
+    } else {
+      doTransformExpression(exp, baseRelationOpt)
     }
-  } else {
-    doTransformExpression(exp, baseRelationOpt)
+  }
+
+  private def transformOrigin(origin: proto.Origin): Origin = {
+    if (origin.hasPythonOrigin) {
+      CurrentOrigin.withOrigin {
+        val pythonOrigin = origin.getPythonOrigin
+        val pysparkErrorContext = (pythonOrigin.getFragment, pythonOrigin.getCallSite)
+        CurrentOrigin.get.copy(pysparkErrorContext = Some(pysparkErrorContext))
+      }
+    } else if (origin.hasJvmOrigin) {
+      transformJvmOrigin(origin.getJvmOrigin)
+    } else {
+      Origin()
+    }
+  }
+
+  private def transformJvmOrigin(origin: proto.JvmOrigin): Origin = {
+    Origin(
+      line = if (origin.hasLine) Some(origin.getLine) else None,
+      startPosition = if (origin.hasStartPosition) Some(origin.getStartPosition) else None,
+      startIndex = if (origin.hasStartIndex) Some(origin.getStartIndex) else None,
+      stopIndex = if (origin.hasStopIndex) Some(origin.getStopIndex) else None,
+      sqlText = if (origin.hasSqlText) Some(origin.getSqlText) else None,
+      objectType = if (origin.hasObjectType) Some(origin.getObjectType) else None,
+      objectName = if (origin.hasObjectName) Some(origin.getObjectName) else None,
+      stackTrace = if (origin.getStackTraceCount > 0) {
+        Some(origin.getStackTraceList.asScala.map(transformStackTraceElement).toArray)
+      } else {
+        None
+      })
+  }
+
+  private def transformStackTraceElement(element: proto.StackTraceElement): StackTraceElement = {
+    new StackTraceElement(
+      /* classLoaderName */ if (element.hasClassLoaderName) element.getClassLoaderName else null,
+      /* moduleName */ if (element.hasModuleName) element.getModuleName else null,
+      /* moduleVersion */ if (element.hasModuleVersion) element.getModuleVersion else null,
+      /* @NotNull declaringClass */ element.getDeclaringClass,
+      /* @NotNull methodName */ element.getMethodName,
+      /* fileName */ if (element.hasFileName) element.getFileName else null,
+      /* lineNumber */ element.getLineNumber)
   }
 
   private def doTransformExpression(

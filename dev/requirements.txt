@@ -1,5 +1,5 @@
 # PySpark dependencies (required)
-py4j>=0.10.9.8
+py4j>=0.10.9.9
 
 # PySpark dependencies (optional)
 numpy>=1.21

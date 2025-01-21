@@ -44,7 +44,6 @@ object ColumnNodeToProtoConverter extends (ColumnNode => proto.Expression) {
 
   private def apply(node: ColumnNode, e: Option[Encoder[_]]): proto.Expression = {
     val builder = proto.Expression.newBuilder()
-    // TODO(SPARK-49273) support Origin in Connect Scala Client.
     node match {
       case Literal(value, None, _) =>
         builder.setLiteral(toLiteralProtoBuilder(value))
@@ -189,6 +188,38 @@ object ColumnNodeToProtoConverter extends (ColumnNode => proto.Expression) {
       case node =>
         throw SparkException.internalError("Unsupported ColumnNode: " + node)
     }
+    if (node.origin != Origin()) {
+      builder.setCommon(proto.ExpressionCommon.newBuilder().setOrigin(convertOrigin(node.origin)))
+    }
+    builder.build()
+  }
+
+  private def convertOrigin(origin: Origin): proto.Origin = {
+    val jvmOrigin = proto.JvmOrigin.newBuilder()
+    origin.line.map(jvmOrigin.setLine)
+    origin.startPosition.map(jvmOrigin.setStartPosition)
+    origin.startIndex.map(jvmOrigin.setStartIndex)
+    origin.stopIndex.map(jvmOrigin.setStopIndex)
+    origin.sqlText.map(jvmOrigin.setSqlText)
+    origin.objectType.map(jvmOrigin.setObjectType)
+    origin.objectName.map(jvmOrigin.setObjectName)
+
+    origin.stackTrace
+      .map(_.map(convertStackTraceElement).toSeq.asJava)
+      .map(jvmOrigin.addAllStackTrace)
+
+    proto.Origin.newBuilder().setJvmOrigin(jvmOrigin).build()
+  }
+
+  private def convertStackTraceElement(stack: StackTraceElement): proto.StackTraceElement = {
+    val builder = proto.StackTraceElement.newBuilder()
+    Option(stack.getClassLoaderName).map(builder.setClassLoaderName)
+    Option(stack.getModuleName).map(builder.setModuleName)
+    Option(stack.getModuleVersion).map(builder.setModuleVersion)
+    Option(stack.getClassName).map(builder.setDeclaringClass)
+    Option(stack.getMethodName).map(builder.setMethodName)
+    Option(stack.getFileName).map(builder.setFileName)
+    Option(stack.getLineNumber).map(builder.setLineNumber)
     builder.build()
   }
 
