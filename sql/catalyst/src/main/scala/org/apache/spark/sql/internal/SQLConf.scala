@@ -3479,8 +3479,7 @@ object SQLConf {
     buildConf("spark.sql.execution.pyspark.udf.hideTraceback.enabled")
       .doc(
         "When true, only show the message of the exception from Python UDFs, " +
-        "hiding stack trace and exception type."
-      )
+        "hiding stack trace and exception type.")
       .version("4.0.0")
       .booleanConf
       .createWithDefault(false)
