@@ -220,6 +220,11 @@ public class ExternalBlockHandlerSuite {
   }
 
   @Test
+  public void testShuffleCorruptionDiagnosisCRC32C() throws IOException {
+    checkDiagnosisResult("CRC32C", Cause.CHECKSUM_VERIFY_PASS);
+  }
+
+  @Test
   public void testFetchShuffleBlocks() {
     when(blockResolver.getBlockData("app0", "exec1", 0, 0, 0)).thenReturn(blockMarkers[0]);
     when(blockResolver.getBlockData("app0", "exec1", 0, 0, 1)).thenReturn(blockMarkers[1]);
