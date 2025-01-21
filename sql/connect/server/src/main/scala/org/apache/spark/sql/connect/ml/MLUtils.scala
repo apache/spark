@@ -339,6 +339,30 @@ private[ml] object MLUtils {
   }
 
   /**
+   * Get the Transformer instance according to the proto information
+   *
+   * @param sessionHolder
+   *   session holder to hold the Spark Connect session state
+   * @param operator
+   *   MlOperator information
+   * @param params
+   *   The optional parameters of the transformer
+   * @return
+   *   the transformer
+   */
+  def getTransformer(
+      sessionHolder: SessionHolder,
+      operator: proto.MlOperator,
+      params: Option[proto.MlParams]): Transformer = {
+    val name = replaceOperator(sessionHolder, operator.getName)
+    val uid = operator.getUid
+
+    // Load the transformers by ServiceLoader everytime
+    val transformers = loadOperators(classOf[Transformer])
+    getInstance[Transformer](name, uid, transformers, params)
+  }
+
+  /**
    * Get the Evaluator instance according to the proto information
    *
    * @param sessionHolder

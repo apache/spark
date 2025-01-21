@@ -17,15 +17,16 @@
 
 package org.apache.spark.sql.connect.ml
 
+import java.io.File
 import java.util.Optional
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.connect.proto
-import org.apache.spark.ml.{Estimator, Model}
+import org.apache.spark.ml.{Estimator, Model, Transformer}
 import org.apache.spark.ml.evaluation.Evaluator
 import org.apache.spark.ml.linalg.{Vectors, VectorUDT}
 import org.apache.spark.ml.param.{IntParam, Param, ParamMap, Params}
-import org.apache.spark.ml.param.shared.HasMaxIter
+import org.apache.spark.ml.param.shared.{HasHandleInvalid, HasInputCols, HasMaxIter, HasOutputCol}
 import org.apache.spark.ml.util.{DefaultParamsReadable, DefaultParamsWritable, Identifiable, MLReadable, MLReader}
 import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.catalyst.InternalRow
@@ -33,7 +34,10 @@ import org.apache.spark.sql.catalyst.expressions.UnsafeProjection
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.connect.planner.SparkConnectPlanTest
 import org.apache.spark.sql.connect.plugin.MLBackendPlugin
-import org.apache.spark.sql.types.{DoubleType, FloatType, Metadata, StructField, StructType}
+import org.apache.spark.sql.connect.service.SessionHolder
+import org.apache.spark.sql.functions.lit
+import org.apache.spark.sql.types.{DoubleType, FloatType, IntegerType, Metadata, StructField, StructType}
+import org.apache.spark.util.Utils
 
 trait MLHelper extends SparkFunSuite with SparkConnectPlanTest {
 
@@ -74,6 +78,32 @@ trait MLHelper extends SparkFunSuite with SparkConnectPlanTest {
     createLocalRelationProto(schema, inputRows)
   }
 
+  def createMultiColumnLocalRelationProto: proto.Relation = {
+    val rows = Seq(InternalRow(1, 0, 3))
+    val schema = StructType(
+      Seq(
+        StructField("a", IntegerType),
+        StructField("b", IntegerType),
+        StructField("c", IntegerType)))
+    val inputRows = rows.map { row =>
+      val proj = UnsafeProjection.create(schema)
+      proj(row).copy()
+    }
+    createLocalRelationProto(schema, inputRows)
+  }
+
+  def getLogisticRegression: proto.MlOperator.Builder =
+    proto.MlOperator
+      .newBuilder()
+      .setName("org.apache.spark.ml.classification.LogisticRegression")
+      .setUid("LogisticRegression")
+      .setType(proto.MlOperator.OperatorType.ESTIMATOR)
+
+  def getMaxIter: proto.MlParams.Builder =
+    proto.MlParams
+      .newBuilder()
+      .putParams("maxIter", proto.Expression.Literal.newBuilder().setInteger(2).build())
+
   def getRegressorEvaluator: proto.MlOperator.Builder =
     proto.MlOperator
       .newBuilder()
@@ -96,6 +126,109 @@ trait MLHelper extends SparkFunSuite with SparkConnectPlanTest {
           .addMethods(proto.Fetch.Method.newBuilder().setMethod(method)))
       .build()
   }
+
+  def getArrayStrings: proto.Expression.Literal =
+    proto.Expression.Literal
+      .newBuilder()
+      .setArray(
+        proto.Expression.Literal.Array
+          .newBuilder()
+          .setElementType(proto.DataType
+            .newBuilder()
+            .setString(proto.DataType.String.getDefaultInstance)
+            .build())
+          .addElements(proto.Expression.Literal.newBuilder().setString("a"))
+          .addElements(proto.Expression.Literal.newBuilder().setString("b"))
+          .addElements(proto.Expression.Literal.newBuilder().setString("c"))
+          .build())
+      .build()
+
+  def getVectorAssembler: proto.MlOperator.Builder =
+    proto.MlOperator
+      .newBuilder()
+      .setUid("vec")
+      .setName("org.apache.spark.ml.feature.VectorAssembler")
+      .setType(proto.MlOperator.OperatorType.TRANSFORMER)
+
+  def getVectorAssemblerParams: proto.MlParams.Builder =
+    proto.MlParams
+      .newBuilder()
+      .putParams("handleInvalid", proto.Expression.Literal.newBuilder().setString("skip").build())
+      .putParams("outputCol", proto.Expression.Literal.newBuilder().setString("features").build())
+      .putParams("inputCols", getArrayStrings)
+
+  def readWrite(
+      sessionHolder: SessionHolder,
+      operator: proto.MlOperator.Builder,
+      params: proto.MlParams.Builder): proto.MlCommandResult = {
+    // read/write
+    val tempDir = Utils.createTempDir(namePrefix = this.getClass.getName)
+    try {
+      val path = new File(tempDir, Identifiable.randomUID("test")).getPath
+      val writeCmd = proto.MlCommand
+        .newBuilder()
+        .setWrite(
+          proto.MlCommand.Write
+            .newBuilder()
+            .setOperator(operator)
+            .setParams(params)
+            .setPath(path)
+            .setShouldOverwrite(true))
+        .build()
+      MLHandler.handleMlCommand(sessionHolder, writeCmd)
+
+      val readCmd = proto.MlCommand
+        .newBuilder()
+        .setRead(
+          proto.MlCommand.Read
+            .newBuilder()
+            .setOperator(operator)
+            .setPath(path))
+        .build()
+
+      MLHandler.handleMlCommand(sessionHolder, readCmd)
+    } finally {
+      Utils.deleteRecursively(tempDir)
+    }
+  }
+
+  def readWrite(
+      sessionHolder: SessionHolder,
+      modelId: String,
+      clsName: String): proto.MlCommandResult = {
+    val tempDir = Utils.createTempDir(namePrefix = this.getClass.getName)
+    try {
+      val path = new File(tempDir, Identifiable.randomUID("test")).getPath
+      val writeCmd = proto.MlCommand
+        .newBuilder()
+        .setWrite(
+          proto.MlCommand.Write
+            .newBuilder()
+            .setObjRef(proto.ObjectRef.newBuilder().setId(modelId))
+            .setPath(path)
+            .setShouldOverwrite(true))
+        .build()
+      MLHandler.handleMlCommand(sessionHolder, writeCmd)
+
+      val readCmd = proto.MlCommand
+        .newBuilder()
+        .setRead(
+          proto.MlCommand.Read
+            .newBuilder()
+            .setOperator(
+              proto.MlOperator
+                .newBuilder()
+                .setName(clsName)
+                .setType(proto.MlOperator.OperatorType.MODEL))
+            .setPath(path))
+        .build()
+
+      MLHandler.handleMlCommand(sessionHolder, readCmd)
+    } finally {
+      Utils.deleteRecursively(tempDir)
+    }
+  }
+
 }
 
 class MyMlBackend extends MLBackendPlugin {
@@ -108,6 +241,8 @@ class MyMlBackend extends MLBackendPlugin {
         Optional.of("org.apache.spark.sql.connect.ml.MyLogisticRegressionModel")
       case "org.apache.spark.ml.evaluation.RegressionEvaluator" =>
         Optional.of("org.apache.spark.sql.connect.ml.MyRegressionEvaluator")
+      case "org.apache.spark.ml.feature.VectorAssembler" =>
+        Optional.of("org.apache.spark.sql.connect.ml.MyVectorAssembler")
       case _ => Optional.empty()
     }
   }
@@ -115,6 +250,25 @@ class MyMlBackend extends MLBackendPlugin {
 
 trait HasFakedParam extends Params {
   final val fakeParam: IntParam = new IntParam(this, "fakeParam", "faked parameter")
+}
+
+class MyVectorAssembler(override val uid: String)
+    extends Transformer
+    with HasInputCols
+    with HasOutputCol
+    with HasHandleInvalid
+    with HasFakedParam
+    with DefaultParamsWritable {
+  set(fakeParam, 101010)
+  private[spark] def this() = this(Identifiable.randomUID("MyVectorAssembler"))
+  override def transform(dataset: Dataset[_]): DataFrame =
+    dataset.withColumn("new", lit(1))
+  override def copy(extra: ParamMap): Transformer = defaultCopy(extra)
+  override def transformSchema(schema: StructType): StructType = schema
+}
+
+object MyVectorAssembler extends DefaultParamsReadable[MyVectorAssembler] {
+  override def load(path: String): MyVectorAssembler = super.load(path)
 }
 
 class MyRegressionEvaluator(override val uid: String)

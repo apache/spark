@@ -18,3 +18,4 @@
 # Spark Connect ML uses ServiceLoader to find out the supported Spark Ml estimators.
 # So register the supported estimator here if you're trying to add a new one.
 org.apache.spark.sql.connect.ml.MyLogisticRegressionModel
+org.apache.spark.sql.connect.ml.MyVectorAssembler
