@@ -22,17 +22,14 @@ import java.net.URI
 import java.nio.file.{Files, Paths, StandardCopyOption}
 import java.sql.{Date, Timestamp}
 import java.util.UUID
-
 import scala.jdk.CollectionConverters._
-
-import org.apache.avro.{AvroTypeException, Schema, SchemaBuilder}
+import org.apache.avro.{AvroTypeException, Schema, SchemaBuilder, SchemaFormatter}
 import org.apache.avro.Schema.{Field, Type}
 import org.apache.avro.Schema.Type._
 import org.apache.avro.file.{DataFileReader, DataFileWriter}
 import org.apache.avro.generic.{GenericData, GenericDatumReader, GenericDatumWriter, GenericRecord}
 import org.apache.avro.generic.GenericData.{EnumSymbol, Fixed}
 import org.apache.commons.io.FileUtils
-
 import org.apache.spark.{SPARK_VERSION_SHORT, SparkConf, SparkException, SparkUpgradeException}
 import org.apache.spark.TestUtils.assertExceptionMsg
 import org.apache.spark.sql._
@@ -41,7 +38,7 @@ import org.apache.spark.sql.avro.AvroCompressionCodec._
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.plans.logical.Filter
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils
-import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{withDefaultTimeZone, LA, UTC}
+import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{LA, UTC, withDefaultTimeZone}
 import org.apache.spark.sql.execution.{FormattedMode, SparkPlan}
 import org.apache.spark.sql.execution.datasources.{CommonFileDataSourceSuite, DataSource, FilePartition}
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
@@ -86,7 +83,7 @@ abstract class AvroSuite
   }
 
   def getAvroSchemaStringFromFiles(filePath: String): String = {
-    new DataFileReader({
+    val schema = new DataFileReader({
       val file = new File(filePath)
       if (file.isFile) {
         file
@@ -96,7 +93,8 @@ abstract class AvroSuite
           .filter(_.getName.endsWith("avro"))
           .head
       }
-    }, new GenericDatumReader[Any]()).getSchema.toString(false)
+    }, new GenericDatumReader[Any]()).getSchema
+    SchemaFormatter.getInstance("json/inline").format(schema)
   }
 
   // Check whether an Avro schema of union type is converted to SQL in an expected way, when the

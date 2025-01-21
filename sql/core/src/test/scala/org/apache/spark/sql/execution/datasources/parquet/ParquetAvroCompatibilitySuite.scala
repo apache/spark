@@ -23,7 +23,7 @@ import java.util.{List => JList, Map => JMap}
 
 import scala.jdk.CollectionConverters._
 
-import org.apache.avro.Schema
+import org.apache.avro.{Schema, SchemaFormatter}
 import org.apache.avro.generic.IndexedRecord
 import org.apache.hadoop.fs.Path
 import org.apache.parquet.avro.AvroParquetWriter
@@ -40,7 +40,7 @@ class ParquetAvroCompatibilitySuite extends ParquetCompatibilityTest with Shared
     logInfo(
       s"""Writing Avro records with the following Avro schema into Parquet file:
          |
-         |${schema.toString(true)}
+         |${SchemaFormatter.getInstance("json/pretty").format(schema)}
        """.stripMargin)
 
     val writer = AvroParquetWriter.builder[T](new Path(path)).withSchema(schema).build()
