@@ -41,3 +41,8 @@ org.apache.spark.ml.recommendation.ALSModel
 
 # fpm
 org.apache.spark.ml.fpm.FPGrowthModel
+
+# feature
+org.apache.spark.ml.feature.StandardScalerModel
+org.apache.spark.ml.feature.MaxAbsScalerModel
+org.apache.spark.ml.feature.MinMaxScalerModel
