@@ -93,6 +93,8 @@
       url: sql-ref-functions.html
     - text: Identifiers
       url: sql-ref-identifier.html
+    - text: IDENTIFIER clause
+      url: sql-ref-identifier-clause.html
     - text: Literals
       url: sql-ref-literals.html
     - text: Null Semantics

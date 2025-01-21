@@ -25,8 +25,10 @@ import scala.util.control.NonFatal
 import org.apache.commons.lang3.exception.ExceptionUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
+import org.apache.hadoop.hdfs.BlockMissingException
 import org.apache.hadoop.mapreduce.Job
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat
+import org.apache.hadoop.security.AccessControlException
 
 import org.apache.spark.TaskContext
 import org.apache.spark.input.{PortableDataStream, StreamInputFormat}
@@ -40,6 +42,7 @@ import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.text.TextFileFormat
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.util.Utils
 
 /**
  * Common functions for parsing XML files
@@ -95,7 +98,9 @@ object TextInputXmlDataSource extends XmlDataSource {
       parser: StaxXmlParser,
       schema: StructType): Iterator[InternalRow] = {
     val lines = {
-      val linesReader = new HadoopFileLinesReader(file, None, conf)
+      val linesReader = Utils.createResourceUninterruptiblyIfInTaskThread(
+        new HadoopFileLinesReader(file, None, conf)
+      )
       Option(TaskContext.get()).foreach(_.addTaskCompletionListener[Unit](_ => linesReader.close()))
       linesReader.map { line =>
         new String(line.getBytes, 0, line.getLength, parser.options.charset)
@@ -190,6 +195,7 @@ object MultiLineXmlDataSource extends XmlDataSource {
             Iterator.empty[String]
           case NonFatal(e) =>
             ExceptionUtils.getRootCause(e) match {
+              case e @ (_ : AccessControlException | _ : BlockMissingException) => throw e
               case _: RuntimeException | _: IOException if parsedOptions.ignoreCorruptFiles =>
                 logWarning("Skipped the rest of the content in the corrupted file", e)
                 Iterator.empty[String]

@@ -255,6 +255,10 @@ class RandomForestClassificationModel private[ml] (
       numClasses: Int) =
     this(Identifiable.randomUID("rfc"), trees, numFeatures, numClasses)
 
+  // For ml connect only
+  @Since("4.0.0")
+  private[ml] def this() = this(Array(new DecisionTreeClassificationModel), 0, 0)
+
   @Since("1.4.0")
   override def trees: Array[DecisionTreeClassificationModel] = _trees
 

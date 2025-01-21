@@ -47,6 +47,9 @@ if TYPE_CHECKING:
     from pyspark.ml.base import Params
     from pyspark.ml.wrapper import JavaWrapper
     from pyspark.core.context import SparkContext
+    from pyspark.sql.connect.dataframe import DataFrame as ConnectDataFrame
+    from pyspark.ml.wrapper import JavaWrapper, JavaEstimator
+    from pyspark.ml.evaluation import JavaEvaluator
 
 T = TypeVar("T")
 RW = TypeVar("RW", bound="BaseReadWrite")
@@ -56,6 +59,301 @@ RL = TypeVar("RL", bound="MLReadable")
 JR = TypeVar("JR", bound="JavaMLReader")
 
 FuncT = TypeVar("FuncT", bound=Callable[..., Any])
+
+
+def try_remote_intermediate_result(f: FuncT) -> FuncT:
+    """Mark the function/property that returns the intermediate result of the remote call.
+    Eg, model.summary"""
+
+    @functools.wraps(f)
+    def wrapped(self: "JavaWrapper") -> Any:
+        if is_remote() and "PYSPARK_NO_NAMESPACE_SHARE" not in os.environ:
+            return f"{self._java_obj}.{f.__name__}"
+        else:
+            return f(self)
+
+    return cast(FuncT, wrapped)
+
+
+def try_remote_attribute_relation(f: FuncT) -> FuncT:
+    """Mark the function/property that returns a Relation.
+    Eg, model.summary.roc"""
+
+    @functools.wraps(f)
+    def wrapped(self: "JavaWrapper", *args: Any, **kwargs: Any) -> Any:
+        if is_remote() and "PYSPARK_NO_NAMESPACE_SHARE" not in os.environ:
+            import pyspark.sql.connect.proto as pb2
+            from pyspark.ml.connect.util import _extract_id_methods
+            from pyspark.ml.connect.serialize import serialize
+
+            # The attribute returns a dataframe, we need to wrap it
+            # in the AttributeRelation
+            from pyspark.ml.connect.proto import AttributeRelation
+            from pyspark.sql.connect.session import SparkSession
+            from pyspark.sql.connect.dataframe import DataFrame as ConnectDataFrame
+
+            session = SparkSession.getActiveSession()
+            assert session is not None
+
+            assert isinstance(self._java_obj, str)
+
+            methods, obj_ref = _extract_id_methods(self._java_obj)
+            methods.append(
+                pb2.Fetch.Method(method=f.__name__, args=serialize(session.client, *args))
+            )
+            plan = AttributeRelation(obj_ref, methods)
+            return ConnectDataFrame(plan, session)
+        else:
+            return f(self, *args, **kwargs)
+
+    return cast(FuncT, wrapped)
+
+
+def try_remote_fit(f: FuncT) -> FuncT:
+    """Mark the function that fits a model."""
+
+    @functools.wraps(f)
+    def wrapped(self: "JavaEstimator", dataset: "ConnectDataFrame") -> Any:
+        if is_remote() and "PYSPARK_NO_NAMESPACE_SHARE" not in os.environ:
+            import pyspark.sql.connect.proto as pb2
+            from pyspark.ml.connect.serialize import serialize_ml_params, deserialize
+
+            client = dataset.sparkSession.client
+            input = dataset._plan.plan(client)
+            assert isinstance(self._java_obj, str)
+            estimator = pb2.MlOperator(
+                name=self._java_obj, uid=self.uid, type=pb2.MlOperator.ESTIMATOR
+            )
+            command = pb2.Command()
+            command.ml_command.fit.CopyFrom(
+                pb2.MlCommand.Fit(
+                    estimator=estimator,
+                    params=serialize_ml_params(self, client),
+                    dataset=input,
+                )
+            )
+            (_, properties, _) = client.execute_command(command)
+            model_info = deserialize(properties)
+            client.add_ml_cache(model_info.obj_ref.id)
+            return model_info.obj_ref.id
+        else:
+            return f(self, dataset)
+
+    return cast(FuncT, wrapped)
+
+
+def try_remote_transform_relation(f: FuncT) -> FuncT:
+    """Mark the function/property that returns a relation for model transform."""
+
+    @functools.wraps(f)
+    def wrapped(self: "JavaWrapper", dataset: "ConnectDataFrame") -> Any:
+        if is_remote() and "PYSPARK_NO_NAMESPACE_SHARE" not in os.environ:
+            from pyspark.ml import Model, Transformer
+            from pyspark.sql.connect.session import SparkSession
+            from pyspark.sql.connect.dataframe import DataFrame as ConnectDataFrame
+            from pyspark.ml.connect.serialize import serialize_ml_params
+
+            session = SparkSession.getActiveSession()
+            assert session is not None
+            # Model is also a Transformer, so we much match Model first
+            if isinstance(self, Model):
+                params = serialize_ml_params(self, session.client)
+                from pyspark.ml.connect.proto import TransformerRelation
+
+                assert isinstance(self._java_obj, str)
+                return ConnectDataFrame(
+                    TransformerRelation(
+                        child=dataset._plan, name=self._java_obj, ml_params=params, is_model=True
+                    ),
+                    session,
+                )
+            elif isinstance(self, Transformer):
+                params = serialize_ml_params(self, session.client)
+                from pyspark.ml.connect.proto import TransformerRelation
+
+                assert isinstance(self._java_obj, str)
+                return ConnectDataFrame(
+                    TransformerRelation(
+                        child=dataset._plan,
+                        name=self._java_obj,
+                        ml_params=params,
+                        uid=self.uid,
+                        is_model=False,
+                    ),
+                    session,
+                )
+            else:
+                raise RuntimeError(f"Unsupported {self}")
+        else:
+            return f(self, dataset)
+
+    return cast(FuncT, wrapped)
+
+
+def try_remote_call(f: FuncT) -> FuncT:
+    """Mark the function/property for the remote call.
+    Eg, model.coefficients"""
+
+    @functools.wraps(f)
+    def wrapped(self: "JavaWrapper", name: str, *args: Any) -> Any:
+        if is_remote() and "PYSPARK_NO_NAMESPACE_SHARE" not in os.environ:
+            # Launch a remote call if possible
+            import pyspark.sql.connect.proto as pb2
+            from pyspark.sql.connect.session import SparkSession
+            from pyspark.ml.connect.util import _extract_id_methods
+            from pyspark.ml.connect.serialize import serialize, deserialize
+
+            session = SparkSession.getActiveSession()
+            assert session is not None
+            assert isinstance(self._java_obj, str)
+            methods, obj_ref = _extract_id_methods(self._java_obj)
+            methods.append(pb2.Fetch.Method(method=name, args=serialize(session.client, *args)))
+            command = pb2.Command()
+            command.ml_command.fetch.CopyFrom(
+                pb2.Fetch(obj_ref=pb2.ObjectRef(id=obj_ref), methods=methods)
+            )
+            (_, properties, _) = session.client.execute_command(command)
+            ml_command_result = properties["ml_command_result"]
+            if ml_command_result.HasField("summary"):
+                summary = ml_command_result.summary
+                session.client.add_ml_cache(summary)
+                return summary
+            else:
+                return deserialize(properties)
+        else:
+            return f(self, name, *args)
+
+    return cast(FuncT, wrapped)
+
+
+def try_remote_del(f: FuncT) -> FuncT:
+    """Mark the function/property to delete a model on the server side."""
+
+    @functools.wraps(f)
+    def wrapped(self: "JavaWrapper") -> Any:
+        try:
+            in_remote = is_remote() and "PYSPARK_NO_NAMESPACE_SHARE" not in os.environ
+        except Exception:
+            return
+
+        if in_remote:
+            # Delete the model if possible
+            model_id = self._java_obj
+            if model_id is not None and "." not in model_id:
+                try:
+                    from pyspark.sql.connect.session import SparkSession
+
+                    session = SparkSession.getActiveSession()
+                    if session is not None:
+                        session.client.remove_ml_cache(model_id)
+                        return
+                except Exception:
+                    # SparkSession's down.
+                    return
+        else:
+            return f(self)
+
+    return cast(FuncT, wrapped)
+
+
+def try_remote_return_java_class(f: FuncT) -> FuncT:
+    """Mark the function/property that returns none."""
+
+    @functools.wraps(f)
+    def wrapped(java_class: str, *args: Any) -> Any:
+        if is_remote() and "PYSPARK_NO_NAMESPACE_SHARE" not in os.environ:
+            return java_class
+        else:
+            return f(java_class, *args)
+
+    return cast(FuncT, wrapped)
+
+
+def try_remote_write(f: FuncT) -> FuncT:
+    """Mark the function that write an estimator/model or evaluator"""
+
+    @functools.wraps(f)
+    def wrapped(self: "JavaMLWritable") -> Any:
+        if is_remote() and "PYSPARK_NO_NAMESPACE_SHARE" not in os.environ:
+            from pyspark.ml.connect.readwrite import RemoteMLWriter
+
+            return RemoteMLWriter(self)
+        else:
+            return f(self)
+
+    return cast(FuncT, wrapped)
+
+
+def try_remote_read(f: FuncT) -> FuncT:
+    """Mark the function to read an estimator/model or evaluator"""
+
+    @functools.wraps(f)
+    def wrapped(cls: Type["JavaMLReadable"]) -> Any:
+        if is_remote() and "PYSPARK_NO_NAMESPACE_SHARE" not in os.environ:
+            from pyspark.ml.connect.readwrite import RemoteMLReader
+
+            return RemoteMLReader(cls)
+        else:
+            return f(cls)
+
+    return cast(FuncT, wrapped)
+
+
+def try_remote_intercept(f: FuncT) -> FuncT:
+    """Mark the function/property that returns none."""
+
+    @functools.wraps(f)
+    def wrapped(java_class: str, *args: Any) -> Any:
+        if is_remote() and "PYSPARK_NO_NAMESPACE_SHARE" not in os.environ:
+            return None
+        else:
+            return f(java_class, *args)
+
+    return cast(FuncT, wrapped)
+
+
+def try_remote_not_supporting(f: FuncT) -> FuncT:
+    """Mark the function/property that has not been supported yet"""
+
+    @functools.wraps(f)
+    def wrapped(*args: Any) -> Any:
+        if is_remote() and "PYSPARK_NO_NAMESPACE_SHARE" not in os.environ:
+            raise NotImplementedError("")
+        else:
+            return f(*args)
+
+    return cast(FuncT, wrapped)
+
+
+def try_remote_evaluate(f: FuncT) -> FuncT:
+    """Mark the evaluate function in Evaluator."""
+
+    @functools.wraps(f)
+    def wrapped(self: "JavaEvaluator", dataset: "ConnectDataFrame") -> Any:
+        if is_remote() and "PYSPARK_NO_NAMESPACE_SHARE" not in os.environ:
+            import pyspark.sql.connect.proto as pb2
+            from pyspark.ml.connect.serialize import serialize_ml_params, deserialize
+
+            client = dataset.sparkSession.client
+            input = dataset._plan.plan(client)
+            assert isinstance(self._java_obj, str)
+            evaluator = pb2.MlOperator(
+                name=self._java_obj, uid=self.uid, type=pb2.MlOperator.EVALUATOR
+            )
+            command = pb2.Command()
+            command.ml_command.evaluate.CopyFrom(
+                pb2.MlCommand.Evaluate(
+                    evaluator=evaluator,
+                    params=serialize_ml_params(self, client),
+                    dataset=input,
+                )
+            )
+            (_, properties, _) = client.execute_command(command)
+            return deserialize(properties)
+        else:
+            return f(self, dataset)
+
+    return cast(FuncT, wrapped)
 
 
 def _jvm() -> "JavaGateway":
@@ -270,6 +568,7 @@ class JavaMLWritable(MLWritable):
     (Private) Mixin for ML instances that provide :py:class:`JavaMLWriter`.
     """
 
+    @try_remote_write
     def write(self) -> JavaMLWriter:
         """Returns an MLWriter instance for this ML instance."""
         return JavaMLWriter(self)
@@ -281,6 +580,7 @@ class GeneralJavaMLWritable(JavaMLWritable):
     (Private) Mixin for ML instances that provide :py:class:`GeneralJavaMLWriter`.
     """
 
+    @try_remote_write
     def write(self) -> GeneralJavaMLWriter:
         """Returns an GeneralMLWriter instance for this ML instance."""
         return GeneralJavaMLWriter(self)
@@ -378,6 +678,7 @@ class JavaMLReadable(MLReadable[RL]):
     """
 
     @classmethod
+    @try_remote_read
     def read(cls) -> JavaMLReader[RL]:
         """Returns an MLReader instance for this class."""
         return JavaMLReader(cls)
@@ -680,6 +981,7 @@ class HasTrainingSummary(Generic[T]):
 
     @property
     @since("2.1.0")
+    @try_remote_intermediate_result
     def summary(self) -> T:
         """
         Gets summary of the model trained on the training set. An exception is thrown if

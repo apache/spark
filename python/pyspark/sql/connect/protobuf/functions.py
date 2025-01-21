@@ -120,7 +120,7 @@ def _read_descriptor_set_file(filePath: str) -> bytes:
 def _test() -> None:
     import os
     import sys
-    from pyspark.testing.utils import search_jar
+    from pyspark.testing.sqlutils import search_jar
 
     protobuf_jar = search_jar("connector/protobuf", "spark-protobuf-assembly-", "spark-protobuf")
     if protobuf_jar is None:

@@ -21,12 +21,13 @@ name: "Build / SparkR-only (master, 4.4.2, windows-2022)"
 on:
   schedule:
     - cron: '0 17 * * *'
+  workflow_dispatch:
 
 jobs:
   build:
     name: "Build module: sparkr"
     runs-on: windows-2022
-    timeout-minutes: 300
+    timeout-minutes: 120
     if: github.repository == 'apache/spark'
     steps:
     - name: Download winutils Hadoop binary
