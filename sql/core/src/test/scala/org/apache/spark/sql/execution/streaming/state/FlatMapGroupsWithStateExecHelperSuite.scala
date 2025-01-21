@@ -42,7 +42,7 @@ class FlatMapGroupsWithStateExecHelperSuite extends StreamTest {
   test(s"StateManager v1 - primitive type - with timestamp") {
     val schema = new StructType()
       .add("value", IntegerType, nullable = false)
-      .add("timeoutTimestamp", IntegerType, nullable = false)
+      .add("timeoutTimestamp", LongType, nullable = false)
     testStateManagerWithTimestamp[Int](version = 1, schema, Seq(0, 10))
   }
 
@@ -75,7 +75,7 @@ class FlatMapGroupsWithStateExecHelperSuite extends StreamTest {
         StructField("d", DoubleType, nullable = false),
         StructField("str", StringType))
       )),
-      StructField("timeoutTimestamp", IntegerType, nullable = false)
+      StructField("timeoutTimestamp", LongType, nullable = false)
     ))
 
     val testValues = Seq(
