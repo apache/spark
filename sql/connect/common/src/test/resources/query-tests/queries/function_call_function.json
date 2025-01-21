@@ -19,7 +19,8 @@
             "unparsedIdentifier": "g"
           }
         }],
-        "isUserDefinedFunction": true
+        "isUserDefinedFunction": true,
+        "isInternal": false
       }
     }]
   }

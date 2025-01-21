@@ -25,7 +25,6 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.expressions.variant._
-import org.apache.spark.sql.catalyst.expressions.variant.VariantPathParser.PathSegment
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, DateTimeUtils, GenericArrayData}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.RowToColumnConverter
@@ -56,9 +55,9 @@ case class SparkShreddedRow(row: SpecializedGetters) extends ShreddingUtils.Shre
   override def numElements(): Int = row.asInstanceOf[ArrayData].numElements()
 }
 
-// The search result of a `PathSegment` in a `VariantSchema`.
+// The search result of a `VariantPathSegment` in a `VariantSchema`.
 case class SchemaPathSegment(
-    rawPath: PathSegment,
+    rawPath: VariantPathSegment,
     // Whether this path segment is an object or array extraction.
     isObject: Boolean,
     // `schema.typedIdx`, if the path exists in the schema (for object extraction, the schema
@@ -448,6 +447,8 @@ case object SparkShreddingUtils {
   val TypedValueFieldName = "typed_value";
   val MetadataFieldName = "metadata";
 
+  val VARIANT_WRITE_SHREDDING_KEY: String = "__VARIANT_WRITE_SHREDDING_KEY"
+
   def buildVariantSchema(schema: DataType): VariantSchema = {
     schema match {
       case s: StructType => buildVariantSchema(s, topLevel = true)
@@ -510,6 +511,27 @@ case object SparkShreddingUtils {
     } else {
       StructType(fields)
     }
+  }
+
+  /**
+   * Given a schema that represents a valid shredding schema (e.g. constructed by
+   * SparkShreddingUtils.variantShreddingSchema), add metadata to the top-level fields to mark it
+   * as a shredding schema for writers.
+   */
+  def addWriteShreddingMetadata(schema: StructType): StructType = {
+    val newFields = schema.fields.map { f =>
+      f.copy(metadata = new
+          MetadataBuilder()
+            .withMetadata(f.metadata)
+            .putNull(VARIANT_WRITE_SHREDDING_KEY).build())
+    }
+    StructType(newFields)
+  }
+
+  // Check if the struct is marked with metadata set by addWriteShreddingMetadata - i.e. it
+  // represents a Variant converted to a shredding schema for writing.
+  def isVariantShreddingStruct(s: StructType): Boolean = {
+    s.fields.length > 0 && s.fields.forall(_.metadata.contains(VARIANT_WRITE_SHREDDING_KEY))
   }
 
   /*
@@ -691,11 +713,11 @@ case object SparkShreddingUtils {
           // found at a certain level of the file type, then `typedIdx` will be -1 starting from
           // this position, and the final `schema` will be null.
           for (i <- rawPath.indices) {
-            val isObject = rawPath(i).isLeft
+            val isObject = rawPath(i).isInstanceOf[ObjectExtraction]
             var typedIdx = -1
             var extractionIdx = -1
             rawPath(i) match {
-              case scala.util.Left(key) if schema != null && schema.objectSchema != null =>
+              case ObjectExtraction(key) if schema != null && schema.objectSchema != null =>
                 val fieldIdx = schema.objectSchemaMap.get(key)
                 if (fieldIdx != null) {
                   typedIdx = schema.typedIdx
@@ -704,7 +726,7 @@ case object SparkShreddingUtils {
                 } else {
                   schema = null
                 }
-              case scala.util.Right(index) if schema != null && schema.arraySchema != null =>
+              case ArrayExtraction(index) if schema != null && schema.arraySchema != null =>
                 typedIdx = schema.typedIdx
                 extractionIdx = index
                 schema = schema.arraySchema
@@ -747,8 +769,8 @@ case object SparkShreddingUtils {
         var v = new Variant(row.getBinary(variantIdx), topLevelMetadata)
         while (pathIdx < pathLen) {
           v = pathList(pathIdx).rawPath match {
-            case scala.util.Left(key) if v.getType == Type.OBJECT => v.getFieldByKey(key)
-            case scala.util.Right(index) if v.getType == Type.ARRAY => v.getElementAtIndex(index)
+            case ObjectExtraction(key) if v.getType == Type.OBJECT => v.getFieldByKey(key)
+            case ArrayExtraction(index) if v.getType == Type.ARRAY => v.getElementAtIndex(index)
             case _ => null
           }
           if (v == null) return null

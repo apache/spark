@@ -504,8 +504,6 @@ private[spark] class TestFilter extends Filter {
 
   private var rc: Int = HttpServletResponse.SC_OK
 
-  override def destroy(): Unit = { }
-
   override def init(config: FilterConfig): Unit = {
     if (config.getInitParameter("responseCode") != null) {
       rc = config.getInitParameter("responseCode").toInt

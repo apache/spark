@@ -62,6 +62,8 @@ case class SingleStatement(parsedPlan: LogicalPlan)
  * @param label Label set to CompoundBody by user or UUID otherwise.
  *              It can be None in case when CompoundBody is not part of BeginEndCompoundBlock
  *              for example when CompoundBody is inside loop or conditional block.
+ * @param isScope Flag indicating if the CompoundBody is a labeled scope.
+ *                Scopes are used for grouping local variables and exception handlers.
  */
 case class CompoundBody(
     collection: Seq[CompoundPlanStatement],

@@ -22,7 +22,8 @@
           "literal": {
             "boolean": false
           }
-        }]
+        }],
+        "isInternal": false
       }
     }]
   }

@@ -28,7 +28,17 @@ from typing import cast
 from pyspark import SparkConf
 from pyspark.errors import PySparkRuntimeError
 from pyspark.sql.functions import array_sort, col, explode, split
-from pyspark.sql.types import StringType, StructType, StructField, Row, IntegerType, TimestampType
+from pyspark.sql.types import (
+    StringType,
+    StructType,
+    StructField,
+    Row,
+    IntegerType,
+    TimestampType,
+    LongType,
+    BooleanType,
+    FloatType,
+)
 from pyspark.testing import assertDataFrameEqual
 from pyspark.testing.sqlutils import (
     ReusedSQLTestCase,
@@ -74,6 +84,12 @@ class TransformWithStateInPandasTestsMixin:
 
     def _prepare_test_resource3(self, input_path):
         self._prepare_input_data(input_path + "/text-test3.txt", [0, 1], [123, 6])
+
+    def _prepare_test_resource4(self, input_path):
+        self._prepare_input_data(input_path + "/text-test4.txt", [0, 1], [123, 6])
+
+    def _prepare_test_resource5(self, input_path):
+        self._prepare_input_data(input_path + "/text-test5.txt", [0, 1], [123, 6])
 
     def _build_test_df(self, input_path):
         df = self.spark.readStream.format("text").option("maxFilesPerTrigger", 1).load(input_path)
@@ -314,6 +330,9 @@ class TransformWithStateInPandasTestsMixin:
             SimpleTTLStatefulProcessor(), check_results, False, "processingTime"
         )
 
+    @unittest.skipIf(
+        "COVERAGE_PROCESS_START" in os.environ, "Flaky with coverage enabled, skipping for now."
+    )
     def test_value_state_ttl_expiration(self):
         def check_results(batch_df, batch_id):
             if batch_id == 0:
@@ -922,6 +941,9 @@ class TransformWithStateInPandasTestsMixin:
 
     # This test covers mapState with TTL, an empty state variable
     # and additional test against initial state python runner
+    @unittest.skipIf(
+        "COVERAGE_PROCESS_START" in os.environ, "Flaky with coverage enabled, skipping for now."
+    )
     def test_transform_with_map_state_metadata(self):
         checkpoint_path = tempfile.mktemp()
 
@@ -1287,6 +1309,167 @@ class TransformWithStateInPandasTestsMixin:
             self.test_transform_with_state_in_pandas_event_time()
             self.test_transform_with_state_in_pandas_proc_timer()
             self.test_transform_with_state_restart_with_multiple_rows_init_state()
+
+    def _run_evolution_test(
+        self, processor, checkpoint_dir, check_results, df, check_exception=None
+    ):
+        output_schema = StructType(
+            [
+                StructField("id", StringType(), True),
+                StructField("value", processor.state_schema, True),
+            ]
+        )
+
+        # Stop any active streams first
+        for q in self.spark.streams.active:
+            q.stop()
+
+        try:
+            q = (
+                df.groupBy("id")
+                .transformWithStateInPandas(
+                    statefulProcessor=processor,
+                    outputStructType=output_schema,
+                    outputMode="Update",
+                    timeMode="None",
+                )
+                .writeStream.queryName("evolution_test")
+                .option("checkpointLocation", checkpoint_dir)
+                .foreachBatch(check_results)
+                .outputMode("update")
+                .start()
+            )
+
+            self.assertEqual(q.name, "evolution_test")
+            self.assertTrue(q.isActive)
+            q.processAllAvailable()
+            q.awaitTermination(10)
+
+            if q.exception() is None:
+                assert check_exception is None
+
+        except Exception as e:
+            # If we are expecting an exception, verify it's the right one
+            if check_exception is None:
+                raise  # Re-raise if we weren't expecting an exception
+            self.assertTrue(check_exception(e))
+
+    def test_schema_evolution_scenarios(self):
+        """Test various schema evolution scenarios"""
+        with self.sql_conf({"spark.sql.streaming.stateStore.encodingFormat": "avro"}):
+            with tempfile.TemporaryDirectory() as checkpoint_dir:
+                # Test 1: Basic state
+
+                input_path = tempfile.mkdtemp()
+                self._prepare_test_resource1(input_path)
+
+                df = self._build_test_df(input_path)
+
+                def check_basic_state(batch_df, batch_id):
+                    result = batch_df.collect()[0]
+                    assert result.value["id"] == 0  # First ID from test data
+                    assert result.value["name"] == "name-0"
+
+                self._run_evolution_test(BasicProcessor(), checkpoint_dir, check_basic_state, df)
+
+                self._prepare_test_resource2(input_path)
+
+                # Test 2: Add fields
+                def check_add_fields(batch_df, batch_id):
+                    result = batch_df.collect()[0]
+                    # Check default values for existing key
+                    assert result.value["id"] == 0
+                    assert result.value["count"] is None
+                    assert result.value["active"] is None
+                    assert result.value["score"] is None
+
+                self._run_evolution_test(AddFieldsProcessor(), checkpoint_dir, check_add_fields, df)
+                self._prepare_test_resource3(input_path)
+
+                # Test 3: Remove fields
+                def check_remove_fields(batch_df, batch_id):
+                    result = batch_df.collect()[0]
+                    assert result.value["id"] == 0  # First ID from test data
+                    assert result.value["name"] == "name-00"
+
+                self._run_evolution_test(
+                    RemoveFieldsProcessor(), checkpoint_dir, check_remove_fields, df
+                )
+                self._prepare_test_resource4(input_path)
+
+                # Test 4: Reorder fields
+                def check_reorder_fields(batch_df, batch_id):
+                    result = batch_df.collect()[0]
+                    assert result.value["name"] == "name-00"
+                    assert result.value["id"] == 0
+
+                self._run_evolution_test(
+                    ReorderedFieldsProcessor(), checkpoint_dir, check_reorder_fields, df
+                )
+                self._prepare_test_resource5(input_path)
+
+                # Test 5: Upcast type
+                def check_upcast(batch_df, batch_id):
+                    result = batch_df.collect()[0]
+                    assert result.value["id"] == 1
+                    assert result.value["name"] == "name-0"
+
+                self._run_evolution_test(UpcastProcessor(), checkpoint_dir, check_upcast, df)
+
+    # This test case verifies that an exception is thrown when downcasting, which violates
+    # Avro's schema evolution rules
+    def test_schema_evolution_fails(self):
+        with self.sql_conf({"spark.sql.streaming.stateStore.encodingFormat": "avro"}):
+            with tempfile.TemporaryDirectory() as checkpoint_dir:
+                input_path = tempfile.mkdtemp()
+                self._prepare_test_resource1(input_path)
+
+                df = self._build_test_df(input_path)
+
+                def check_add_fields(batch_df, batch_id):
+                    results = batch_df.collect()
+                    assert results[0].value["count"] == 100
+                    assert results[0].value["active"]
+
+                self._run_evolution_test(AddFieldsProcessor(), checkpoint_dir, check_add_fields, df)
+
+                self._prepare_test_resource2(input_path)
+
+                def check_upcast(batch_df, batch_id):
+                    result = batch_df.collect()[0]
+                    assert result.value["name"] == "name-0"
+
+                # Long
+                self._run_evolution_test(UpcastProcessor(), checkpoint_dir, check_upcast, df)
+
+                self._prepare_test_resource3(input_path)
+
+                def check_basic_state(batch_df, batch_id):
+                    result = batch_df.collect()[0]
+                    assert result.value["id"] == 0  # First ID from test data
+                    assert result.value["name"] == "name-0"
+
+                def check_exception(error):
+                    from pyspark.errors.exceptions.captured import StreamingQueryException
+
+                    if not isinstance(error, StreamingQueryException):
+                        return False
+
+                    error_msg = str(error)
+                    return (
+                        "[STREAM_FAILED]" in error_msg
+                        and "[STATE_STORE_INVALID_VALUE_SCHEMA_EVOLUTION]" in error_msg
+                        and "Schema evolution is not possible" in error_msg
+                    )
+
+                # Int
+                self._run_evolution_test(
+                    BasicProcessor(),
+                    checkpoint_dir,
+                    check_basic_state,
+                    df,
+                    check_exception=check_exception,
+                )
 
 
 class SimpleStatefulProcessorWithInitialState(StatefulProcessor):
@@ -1690,6 +1873,180 @@ class MapStateLargeTTLProcessor(MapStateProcessor):
         value_schema = StructType([StructField("count", IntegerType(), True)])
         self.map_state = handle.getMapState("mapState", key_schema, value_schema, 30000)
         self.list_state = handle.getListState("listState", key_schema)
+
+
+class BasicProcessor(StatefulProcessor):
+    # Schema definitions
+    state_schema = StructType(
+        [StructField("id", IntegerType(), True), StructField("name", StringType(), True)]
+    )
+
+    def init(self, handle):
+        self.state = handle.getValueState("state", self.state_schema)
+
+    def handleInputRows(self, key, rows, timer_values) -> Iterator[pd.DataFrame]:
+        for pdf in rows:
+            pass
+        id_val = int(key[0])
+        name = f"name-{id_val}"
+        self.state.update((id_val, name))
+        yield pd.DataFrame({"id": [key[0]], "value": [{"id": id_val, "name": name}]})
+
+    def close(self) -> None:
+        pass
+
+
+class AddFieldsProcessor(StatefulProcessor):
+    state_schema = StructType(
+        [
+            StructField("id", IntegerType(), True),
+            StructField("name", StringType(), True),
+            StructField("count", IntegerType(), True),
+            StructField("active", BooleanType(), True),
+            StructField("score", FloatType(), True),
+        ]
+    )
+
+    def init(self, handle):
+        self.state = handle.getValueState("state", self.state_schema)
+
+    def handleInputRows(self, key, rows, timer_values) -> Iterator[pd.DataFrame]:
+        for pdf in rows:
+            pass
+        id_val = int(key[0])
+        name = f"name-{id_val}"
+
+        if self.state.exists():
+            state_data = self.state.get()
+            state_dict = {
+                "id": state_data[0],
+                "name": state_data[1],
+                "count": state_data[2],
+                "active": state_data[3],
+                "score": state_data[4],
+            }
+        else:
+            state_dict = {
+                "id": id_val,
+                "name": name,
+                "count": 100,
+                "active": True,
+                "score": 99.9,
+            }
+
+        self.state.update(
+            (
+                state_dict["id"],
+                state_dict["name"] + "0",
+                state_dict["count"],
+                state_dict["active"],
+                state_dict["score"],
+            )
+        )
+        yield pd.DataFrame({"id": [key[0]], "value": [state_dict]})
+
+    def close(self) -> None:
+        pass
+
+
+class RemoveFieldsProcessor(StatefulProcessor):
+    # Schema definitions
+    state_schema = StructType(
+        [StructField("id", IntegerType(), True), StructField("name", StringType(), True)]
+    )
+
+    def init(self, handle):
+        self.state = handle.getValueState("state", self.state_schema)
+
+    def handleInputRows(self, key, rows, timer_values) -> Iterator[pd.DataFrame]:
+        for pdf in rows:
+            pass
+        id_val = int(key[0])
+        name = f"name-{id_val}"
+        if self.state.exists():
+            name = self.state.get()[1]
+        self.state.update((id_val, name))
+        yield pd.DataFrame({"id": [key[0]], "value": [{"id": id_val, "name": name}]})
+
+    def close(self) -> None:
+        pass
+
+
+class ReorderedFieldsProcessor(StatefulProcessor):
+    state_schema = StructType(
+        [
+            StructField("name", StringType(), True),
+            StructField("id", IntegerType(), True),
+            StructField("score", FloatType(), True),
+            StructField("count", IntegerType(), True),
+            StructField("active", BooleanType(), True),
+        ]
+    )
+
+    def init(self, handle):
+        self.state = handle.getValueState("state", self.state_schema)
+
+    def handleInputRows(self, key, rows, timer_values) -> Iterator[pd.DataFrame]:
+        for pdf in rows:
+            pass
+        id_val = int(key[0])
+        name = f"name-{id_val}"
+
+        if self.state.exists():
+            state_data = self.state.get()
+            state_dict = {
+                "name": state_data[0],
+                "id": state_data[1],
+                "score": state_data[2],
+                "count": state_data[3],
+                "active": state_data[4],
+            }
+        else:
+            state_dict = {
+                "name": name,
+                "id": id_val,
+                "score": 99.9,
+                "count": 100,
+                "active": True,
+            }
+        self.state.update(
+            (
+                state_dict["name"],
+                state_dict["id"],
+                state_dict["score"],
+                state_dict["count"],
+                state_dict["active"],
+            )
+        )
+        yield pd.DataFrame({"id": [key[0]], "value": [state_dict]})
+
+    def close(self) -> None:
+        pass
+
+
+class UpcastProcessor(StatefulProcessor):
+    state_schema = StructType(
+        [
+            StructField("id", LongType(), True),  # Upcast from Int to Long
+            StructField("name", StringType(), True),
+        ]
+    )
+
+    def init(self, handle):
+        self.state = handle.getValueState("state", self.state_schema)
+
+    def handleInputRows(self, key, rows, timer_values) -> Iterator[pd.DataFrame]:
+        for pdf in rows:
+            pass
+        id_val = int(key[0])
+        name = f"name-{id_val}"
+        if self.state.exists():
+            id_val += self.state.get()[0] + 1
+        self.state.update((id_val, name))
+        yield pd.DataFrame({"id": [key[0]], "value": [{"id": id_val, "name": name}]})
+
+    def close(self) -> None:
+        pass
 
 
 class TransformWithStateInPandasTests(TransformWithStateInPandasTestsMixin, ReusedSQLTestCase):

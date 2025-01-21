@@ -19,12 +19,14 @@ package org.apache.spark.sql.util
 
 import java.util.Locale
 
+import scala.collection.immutable.Queue
+
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, NamedExpression}
 import org.apache.spark.sql.connector.expressions.{BucketTransform, FieldReference, NamedTransform, Transform}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
-import org.apache.spark.sql.types.{ArrayType, DataType, MapType, NoConstraint, StringType, StructField, StructType}
+import org.apache.spark.sql.types._
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.SparkSchemaUtils
 
@@ -35,6 +37,40 @@ import org.apache.spark.util.SparkSchemaUtils
  * TODO: Merge this file with [[org.apache.spark.ml.util.SchemaUtils]].
  */
 private[spark] object SchemaUtils {
+
+  /**
+   * Class to represent a nested column path.
+   */
+  private[spark] case class ColumnPath(parts: Queue[String] = Queue.empty) {
+    override def toString: String = parts.mkString(".")
+
+    def prepended(part: String): ColumnPath = ColumnPath(parts.prepended(part))
+  }
+
+  /**
+   * For the given dataType `dt` find all column paths that satisfy the given predicate `f`.
+   */
+  def findColumnPaths(dt: DataType)(f: DataType => Boolean): Seq[ColumnPath] = {
+    dt match {
+      case _ if f(dt) =>
+        Seq(ColumnPath())
+
+      case ArrayType(elementType, _) =>
+        findColumnPaths(elementType)(f).map(p => p.prepended("element"))
+
+      case MapType(keyType, valueType, _) =>
+        findColumnPaths(keyType)(f).map(p => p.prepended("key")) ++
+          findColumnPaths(valueType)(f).map(p => p.prepended("value"))
+
+      case StructType(fields) =>
+        fields.flatMap { case StructField(name, dataType, _, _) =>
+          findColumnPaths(dataType)(f).map(p => p.prepended(name))
+        }.toSeq
+
+      case _ =>
+        Nil
+    }
+  }
 
   /**
    * Checks if an input schema has duplicate column names. This throws an exception if the
@@ -304,6 +340,28 @@ private[spark] object SchemaUtils {
     }
   }
 
+  /** Checks if a given data type has indeterminate collation. */
+  def hasIndeterminateCollation(dt: DataType): Boolean = {
+    dt.existsRecursively {
+      case IndeterminateStringType => true
+      case _ => false
+    }
+  }
+
+  /**
+   * Throws an error if the given schema has indeterminate collation.
+   */
+  def checkIndeterminateCollationInSchema(schema: StructType): Unit = {
+    val indeterminatePaths = findColumnPaths(schema) {
+      case IndeterminateStringType => true
+      case _ => false
+    }
+
+    if (indeterminatePaths.nonEmpty) {
+      throw QueryCompilationErrors.indeterminateCollationInSchemaError(indeterminatePaths)
+    }
+  }
+
   def checkNoCollationsInMapKeys(schema: DataType): Unit = schema match {
     case m: MapType =>
       if (hasNonUTF8BinaryCollation(m.keyType)) {
@@ -328,7 +386,7 @@ private[spark] object SchemaUtils {
       StructType(fields.map { field =>
         field.copy(dataType = replaceCollatedStringWithString(field.dataType))
       })
-    case st: StringType if st.constraint == NoConstraint => StringType
+    case st: StringType => StringHelper.removeCollation(st)
     case _ => dt
   }
 }

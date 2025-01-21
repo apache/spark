@@ -1,11 +1,11 @@
 # PySpark dependencies (required)
-py4j>=0.10.9.7
+py4j>=0.10.9.9
 
 # PySpark dependencies (optional)
 numpy>=1.21
 pyarrow>=11.0.0
 six==1.16.0
-pandas>=2.0.0
+pandas>=2.2.0
 scipy
 plotly>=4.8
 mlflow>=2.3.1
@@ -54,7 +54,7 @@ jira>=3.5.2
 PyGithub
 
 # pandas API on Spark Code formatter.
-black==23.9.1
+black==23.12.1
 py
 
 # Spark Connect (required)

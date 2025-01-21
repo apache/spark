@@ -27,7 +27,7 @@ import org.antlr.v4.runtime.tree.TerminalNode
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{GlobalTempView, LocalTempView, PersistedView, PlanWithUnresolvedIdentifier, SchemaEvolution, SchemaTypeEvolution, UnresolvedFunctionName, UnresolvedIdentifier, UnresolvedNamespace}
+import org.apache.spark.sql.catalyst.analysis.{GlobalTempView, LocalTempView, PersistedView, PlanWithUnresolvedIdentifier, SchemaEvolution, SchemaTypeEvolution, UnresolvedAttribute, UnresolvedFunctionName, UnresolvedIdentifier, UnresolvedNamespace}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.{Expression, Literal}
 import org.apache.spark.sql.catalyst.parser._
@@ -723,8 +723,19 @@ class SparkSqlAstBuilder extends AstBuilder {
 
       withIdentClause(ctx.identifierReference(), functionIdentifier => {
         if (ctx.TEMPORARY == null) {
-          // TODO: support creating persistent UDFs.
-          operationNotAllowed(s"creating persistent SQL functions is not supported", ctx)
+          CreateUserDefinedFunction(
+            UnresolvedIdentifier(functionIdentifier),
+            inputParamText,
+            returnTypeText,
+            exprText,
+            queryText,
+            comment,
+            deterministic,
+            containsSQL,
+            language,
+            isTableFunc,
+            ctx.EXISTS != null,
+            ctx.REPLACE != null)
         } else {
           // Disallow to define a temporary function with `IF NOT EXISTS`
           if (ctx.EXISTS != null) {
@@ -1141,5 +1152,47 @@ class SparkSqlAstBuilder extends AstBuilder {
     UnsetNamespacePropertiesCommand(
       withIdentClause(ctx.identifierReference(), UnresolvedNamespace(_)),
       cleanedProperties)
+  }
+
+  /**
+   * Create a [[DescribeColumn]] or [[DescribeRelation]] or [[DescribeRelationAsJsonCommand]]
+   * command.
+   */
+  override def visitDescribeRelation(ctx: DescribeRelationContext): LogicalPlan = withOrigin(ctx) {
+    val isExtended = ctx.EXTENDED != null || ctx.FORMATTED != null
+    val asJson = ctx.JSON != null
+    if (asJson && !isExtended) {
+      val tableName = ctx.identifierReference.getText.split("\\.").lastOption.getOrElse("table")
+      throw QueryCompilationErrors.describeJsonNotExtendedError(tableName)
+    }
+    val relation = createUnresolvedTableOrView(ctx.identifierReference, "DESCRIBE TABLE")
+    if (ctx.describeColName != null) {
+      if (ctx.partitionSpec != null) {
+        throw QueryParsingErrors.descColumnForPartitionUnsupportedError(ctx)
+      } else if (asJson) {
+        throw QueryCompilationErrors.describeColJsonUnsupportedError()
+      } else {
+        DescribeColumn(
+          relation,
+          UnresolvedAttribute(ctx.describeColName.nameParts.asScala.map(_.getText).toSeq),
+          isExtended)
+      }
+    } else {
+      val partitionSpec = if (ctx.partitionSpec != null) {
+        // According to the syntax, visitPartitionSpec returns `Map[String, Option[String]]`.
+        visitPartitionSpec(ctx.partitionSpec).map {
+          case (key, Some(value)) => key -> value
+          case (key, _) =>
+            throw QueryParsingErrors.emptyPartitionKeyError(key, ctx.partitionSpec)
+        }
+      } else {
+        Map.empty[String, String]
+      }
+      if (asJson) {
+        DescribeRelationJsonCommand(relation, partitionSpec, isExtended)
+      } else {
+        DescribeRelation(relation, partitionSpec, isExtended)
+      }
+    }
   }
 }

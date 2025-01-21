@@ -177,7 +177,7 @@ PySpark requires the following dependencies.
 ========================== ========================= =============================
 Package                    Supported version         Note
 ========================== ========================= =============================
-`py4j`                     >=0.10.9.8                Required to interact with JVM
+`py4j`                     >=0.10.9.9                Required to interact with JVM
 ========================== ========================= =============================
 
 Additional libraries that enhance functionality but are not included in the installation packages:
@@ -239,7 +239,7 @@ Installable with ``pip install "pyspark[pandas_on_spark]"``.
 ========= ================= ================================
 Package   Supported version Note
 ========= ================= ================================
-`pandas`  >=2.0.0           Required for Pandas API on Spark
+`pandas`  >=2.2.0           Required for Pandas API on Spark
 `pyarrow` >=11.0.0          Required for Pandas API on Spark
 ========= ================= ================================
 

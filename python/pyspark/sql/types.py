@@ -49,7 +49,6 @@ from typing import (
 from pyspark.util import is_remote_only, JVM_INT_MAX
 from pyspark.serializers import CloudPickleSerializer
 from pyspark.sql.utils import (
-    has_numpy,
     get_active_spark_context,
     escape_meta_characters,
     StringConcat,
@@ -64,9 +63,6 @@ from pyspark.errors import (
     PySparkAttributeError,
     PySparkKeyError,
 )
-
-if has_numpy:
-    import numpy as np
 
 if TYPE_CHECKING:
     import numpy as np
@@ -1563,16 +1559,9 @@ class StructType(DataType):
 
             session = SparkSession.getActiveSession()
             assert session is not None
-            return session._client._analyze(  # type: ignore[return-value]
-                method="json_to_ddl", json_string=self.json()
-            ).ddl_string
-
+            return session._to_ddl(self)
         else:
-            from py4j.java_gateway import JVMView
-
-            sc = get_active_spark_context()
-            assert sc._jvm is not None
-            return cast(JVMView, sc._jvm).PythonSQLUtils.jsonToDDL(self.json())
+            return get_active_spark_context()._to_ddl(self)
 
 
 class VariantType(AtomicType):
@@ -1591,6 +1580,8 @@ class VariantType(AtomicType):
         return VariantVal(obj["value"], obj["metadata"])
 
     def toInternal(self, variant: Any) -> Any:
+        if variant is None:
+            return None
         assert isinstance(variant, VariantVal)
         return {"value": variant.value, "metadata": variant.metadata}
 
@@ -1777,6 +1768,15 @@ class VariantVal:
         """
         return VariantUtils.to_json(self.value, self.metadata, zone_id)
 
+    @classmethod
+    def parseJson(cls, json_str: str) -> "VariantVal":
+        """
+        Convert the VariantVal to a nested Python object of Python data types.
+        :return: Python representation of the Variant nested structure
+        """
+        (value, metadata) = VariantUtils.parse_json(json_str)
+        return VariantVal(value, metadata)
+
 
 _atomic_types: List[Type[DataType]] = [
     StringType,
@@ -1907,43 +1907,9 @@ def _parse_datatype_string(s: str) -> DataType:
     if is_remote():
         from pyspark.sql.connect.session import SparkSession
 
-        return cast(
-            DataType,
-            SparkSession.active()._client._analyze(method="ddl_parse", ddl_string=s).parsed,
-        )
-
+        return SparkSession.active()._parse_ddl(s)
     else:
-        from py4j.java_gateway import JVMView
-
-        sc = get_active_spark_context()
-
-        def from_ddl_schema(type_str: str) -> DataType:
-            return _parse_datatype_json_string(
-                cast(JVMView, sc._jvm)
-                .org.apache.spark.sql.types.StructType.fromDDL(type_str)
-                .json()
-            )
-
-        def from_ddl_datatype(type_str: str) -> DataType:
-            return _parse_datatype_json_string(
-                cast(JVMView, sc._jvm)
-                .org.apache.spark.sql.api.python.PythonSQLUtils.parseDataType(type_str)
-                .json()
-            )
-
-        try:
-            # DDL format, "fieldname datatype, fieldname datatype".
-            return from_ddl_schema(s)
-        except Exception as e:
-            try:
-                # For backwards compatibility, "integer", "struct<fieldname: datatype>" and etc.
-                return from_ddl_datatype(s)
-            except BaseException:
-                try:
-                    # For backwards compatibility, "fieldname: datatype, fieldname: datatype" case.
-                    return from_ddl_datatype("struct<%s>" % s.strip())
-                except BaseException:
-                    raise e
+        return get_active_spark_context()._parse_ddl(s)
 
 
 def _parse_datatype_json_string(json_string: str) -> DataType:
@@ -3269,7 +3235,13 @@ class DayTimeIntervalTypeConverter:
 
 class NumpyScalarConverter:
     def can_convert(self, obj: Any) -> bool:
-        return has_numpy and isinstance(obj, np.generic)
+        from pyspark.testing.utils import have_numpy
+
+        if have_numpy:
+            import numpy as np
+
+            return isinstance(obj, np.generic)
+        return False
 
     def convert(self, obj: "np.generic", gateway_client: "GatewayClient") -> Any:
         return obj.item()
@@ -3280,6 +3252,8 @@ class NumpyArrayConverter:
         self, nt: "np.dtype", gateway: "JavaGateway"
     ) -> Optional["JavaClass"]:
         """Convert NumPy type to Py4J Java type."""
+        import numpy as np
+
         if nt in [np.dtype("int8"), np.dtype("int16")]:
             # Mapping int8 to gateway.jvm.byte causes
             #   TypeError: 'bytes' object does not support item assignment
@@ -3300,7 +3274,13 @@ class NumpyArrayConverter:
         return None
 
     def can_convert(self, obj: Any) -> bool:
-        return has_numpy and isinstance(obj, np.ndarray) and obj.ndim == 1
+        from pyspark.testing.utils import have_numpy
+
+        if have_numpy:
+            import numpy as np
+
+            return isinstance(obj, np.ndarray) and obj.ndim == 1
+        return False
 
     def convert(self, obj: "np.ndarray", gateway_client: "GatewayClient") -> "JavaGateway":
         from pyspark import SparkContext

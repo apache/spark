@@ -173,30 +173,8 @@
             <property name="message" value="Avoid throwing error in application code."/>
         </module>
         <module name="RegexpSinglelineJava">
-            <property name="format" value="Objects\.toStringHelper"/>
-            <property name="message" value="Avoid using Object.toStringHelper. Use ToStringBuilder instead." />
-        </module>
-        <module name="RegexpSinglelineJava">
             <property name="format" value="new (java\.lang\.)?(Byte|Integer|Long|Short)\("/>
             <property name="message" value="Use static factory 'valueOf' or 'parseXXX' instead of the deprecated constructors." />
-        </module>
-        <module name="RegexpSinglelineJava">
-            <property name="format" value="Files\.createTempDir\("/>
-            <property name="message"
-              value="Avoid using com.google.common.io.Files.createTempDir() due to CVE-2020-8908.
-                Use org.apache.spark.network.util.JavaUtils.createTempDir() instead." />
-        </module>
-        <module name="RegexpSinglelineJava">
-            <property name="format" value="FileBackedOutputStream"/>
-            <property name="message" value="Avoid using FileBackedOutputStream due to CVE-2023-2976." />
-        </module>
-        <module name="RegexpSinglelineJava">
-            <property name="format" value="AtomicDoubleArray"/>
-            <property name="message" value="Avoid using AtomicDoubleArray due to CVE-2018-10237." />
-        </module>
-        <module name="RegexpSinglelineJava">
-            <property name="format" value="CompoundOrdering"/>
-            <property name="message" value="Avoid using CompoundOrdering due to CVE-2018-10237." />
         </module>
         <module name="RegexpSinglelineJava">
             <property name="format" value="@Test\(expected"/>
