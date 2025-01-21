@@ -627,7 +627,7 @@ abstract class JdbcDialect extends Serializable with Logging {
           val name = updateNull.fieldNames
           updateClause += getUpdateColumnNullabilityQuery(tableName, name(0), updateNull.nullable())
         case _ =>
-          throw QueryCompilationErrors.unsupportedTableChangeInJDBCCatalogError(change)
+          throw QueryCompilationErrors.unsupportedTableChangeInJDBCCatalogError(change, tableName)
       }
     }
     updateClause.result()
