@@ -61,8 +61,6 @@ object ResolveWithCTE extends Rule[LogicalPlan] {
             }
             cteDef
           case cteDef =>
-            // Multiple self-references are not allowed.
-            checkNumberOfSelfReferences(cteDef)
             cteDef.child match {
               // If it is a supported recursive CTE query pattern (4 so far), extract the anchor and
               // recursive plans from the Union and rewrite Union with UnionLoop. The recursive CTE
@@ -184,22 +182,6 @@ object ResolveWithCTE extends Rule[LogicalPlan] {
       case r: CTERelationRef if r.recursive && r.cteId == cteDefId =>
         val ref = UnionLoopRef(r.cteId, anchor.output, false)
         columnNames.map(UnresolvedSubqueryColumnAliases(_, ref)).getOrElse(ref)
-    }
-  }
-
-  /**
-   * Counts number of self-references in a recursive CTE definition and throws an error
-   * if that number is bigger than 1.
-   */
-  private def checkNumberOfSelfReferences(cteDef: CTERelationDef): Unit = {
-    val numOfSelfRef = cteDef.map[Boolean] {
-      case CTERelationRef(cteDef.id, _, _, _, _, true) => true
-      case other => false
-    }.count(_ == true)
-    if (numOfSelfRef > 1) {
-      throw new AnalysisException(
-        errorClass = "INVALID_RECURSIVE_REFERENCE.NUMBER",
-        messageParameters = Map.empty)
     }
   }
 

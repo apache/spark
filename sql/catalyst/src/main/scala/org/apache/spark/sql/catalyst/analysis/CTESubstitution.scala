@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.analysis
 
 import scala.collection.mutable.ArrayBuffer
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
 import org.apache.spark.sql.catalyst.plans.logical.{Command, CTEInChildren, CTERelationDef, CTERelationRef, InsertIntoDir, LogicalPlan, ParsedStatement, SubqueryAlias, UnresolvedWith, WithCTE}
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -87,6 +88,11 @@ object CTESubstitution extends Rule[LogicalPlan] {
         case LegacyBehaviorPolicy.CORRECTED =>
           traverseAndSubstituteCTE(plan, forceInline, Seq.empty, cteDefs)
     }
+    // Recursive CTEs allow only one self-reference per CTE. Here, we perform this check and
+    // throw an error if it is not fulfilled
+    cteDefs.foreach { cteDef =>
+      checkNumberOfSelfReferences(cteDef)
+    }
     if (cteDefs.isEmpty) {
       substituted
     } else if (substituted eq firstSubstituted.get) {
@@ -151,7 +157,7 @@ object CTESubstitution extends Rule[LogicalPlan] {
     plan.resolveOperatorsUp {
       case cte @ UnresolvedWith(child, relations, allowRecursion) =>
         if (allowRecursion) {
-          cte.failAnalysis(
+          throw new AnalysisException(
             errorClass = "RECURSIVE_CTE_IN_LEGACY_MODE",
             messageParameters = Map.empty)
         }
@@ -210,7 +216,7 @@ object CTESubstitution extends Rule[LogicalPlan] {
       // allowRecursion flag is set to `True` by the parser if the `RECURSIVE` keyword is used.
       case cte @ UnresolvedWith(child: LogicalPlan, relations, allowRecursion) =>
         if (allowRecursion && forceInline) {
-          cte.failAnalysis(
+          throw new AnalysisException(
             errorClass = "RECURSIVE_CTE_WHEN_INLINING_IS_FORCED",
             messageParameters = Map.empty)
         }
@@ -421,6 +427,22 @@ object CTESubstitution extends Rule[LogicalPlan] {
     p match {
       case c: CTEInChildren => c.withCTEDefs(cteDefs)
       case _ => WithCTE(p, cteDefs)
+    }
+  }
+
+  /**
+   * Counts number of self-references in a recursive CTE definition and throws an error
+   * if that number is bigger than 1.
+   */
+  private def checkNumberOfSelfReferences(cteDef: CTERelationDef): Unit = {
+    val numOfSelfRef = cteDef.map[Boolean] {
+      case CTERelationRef(cteDef.id, _, _, _, _, true) => true
+      case other => false
+    }.count(_ == true)
+    if (numOfSelfRef > 1) {
+      throw new AnalysisException(
+        errorClass = "INVALID_RECURSIVE_REFERENCE.NUMBER",
+        messageParameters = Map.empty)
     }
   }
 }
