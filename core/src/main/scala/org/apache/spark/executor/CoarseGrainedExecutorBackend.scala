@@ -265,8 +265,9 @@ private[spark] class CoarseGrainedExecutorBackend(
   }
 
   override def statusUpdate(taskId: Long, state: TaskState, data: ByteBuffer): Unit = {
-    val resources = executor.runningTasks.get(taskId).taskDescription.resources
-    val cpus = executor.runningTasks.get(taskId).taskDescription.cpus
+    val taskDescription = executor.runningTasks.get(taskId).taskDescription
+    val resources = taskDescription.resources
+    val cpus = taskDescription.cpus
     val msg = StatusUpdate(executorId, taskId, state, data, cpus, resources)
     if (TaskState.isFinished(state)) {
       lastTaskFinishTime.set(System.nanoTime())
