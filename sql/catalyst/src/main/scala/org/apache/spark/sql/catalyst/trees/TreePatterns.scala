@@ -79,6 +79,8 @@ object TreePattern extends Enumeration  {
   val OUTER_REFERENCE: Value = Value
   val PARAMETER: Value = Value
   val PARAMETERIZED_QUERY: Value = Value
+  val PIPE_EXPRESSION: Value = Value
+  val PIPE_OPERATOR: Value = Value
   val PIVOT: Value = Value
   val PLAN_EXPRESSION: Value = Value
   val PYTHON_UDF: Value = Value
@@ -91,6 +93,7 @@ object TreePattern extends Enumeration  {
   val SESSION_WINDOW: Value = Value
   val SORT: Value = Value
   val SQL_FUNCTION_EXPRESSION: Value = Value
+  val SQL_SCALAR_FUNCTION: Value = Value
   val SQL_TABLE_FUNCTION: Value = Value
   val SUBQUERY_ALIAS: Value = Value
   val SUM: Value = Value

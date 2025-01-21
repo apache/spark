@@ -188,10 +188,14 @@ message DataType {
 
   message UDT {
     string type = 1;
+    // Required for Scala/Java UDT
     optional string jvm_class = 2;
+    // Required for Python UDT
     optional string python_class = 3;
+    // Required for Python UDT
     optional string serialized_python_class = 4;
-    DataType sql_type = 5;
+    // Required for Python UDT
+    optional DataType sql_type = 5;
   }
 
   message Unparsed {

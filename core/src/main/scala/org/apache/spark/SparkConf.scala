@@ -562,15 +562,16 @@ class SparkConf(loadDefaults: Boolean)
     Seq(EXECUTOR_JAVA_OPTIONS.key, "spark.executor.defaultJavaOptions").foreach { executorOptsKey =>
       getOption(executorOptsKey).foreach { javaOpts =>
         if (javaOpts.contains("-Dspark")) {
-          val msg = s"$executorOptsKey is not allowed to set Spark options (was '$javaOpts'). " +
-            "Set them directly on a SparkConf or in a properties file " +
-            "when using ./bin/spark-submit."
-          throw new Exception(msg)
+          throw new SparkException(
+            errorClass = "INVALID_SPARK_CONFIG.INVALID_EXECUTOR_SPARK_OPTIONS",
+            messageParameters = Map("executorOptsKey" -> executorOptsKey, "javaOpts" -> javaOpts),
+            cause = null)
         }
         if (javaOpts.contains("-Xmx")) {
-          val msg = s"$executorOptsKey is not allowed to specify max heap memory settings " +
-            s"(was '$javaOpts'). Use spark.executor.memory instead."
-          throw new Exception(msg)
+          throw new SparkException(
+            errorClass = "INVALID_SPARK_CONFIG.INVALID_EXECUTOR_MEMORY_OPTIONS",
+            messageParameters = Map("executorOptsKey" -> executorOptsKey, "javaOpts" -> javaOpts),
+            cause = null)
         }
       }
     }
@@ -581,13 +582,21 @@ class SparkConf(loadDefaults: Boolean)
       if (value > 1 || value < 0) {
         throw new IllegalArgumentException(s"$key should be between 0 and 1 (was '$value').")
       }
+      SparkException.require(
+        value >= 0 && value <= 1,
+        errorClass = "INVALID_SPARK_CONFIG.INVALID_MEMORY_FRACTION",
+        messageParameters = Map(
+          "memoryFractionKey" -> key,
+          "memoryFractionValue" -> value.toString))
     }
 
     if (contains(SUBMIT_DEPLOY_MODE)) {
       get(SUBMIT_DEPLOY_MODE) match {
         case "cluster" | "client" =>
-        case e => throw new SparkException(s"${SUBMIT_DEPLOY_MODE.key} can only be " +
-          "\"cluster\" or \"client\".")
+        case _ => throw new SparkException(
+          errorClass = "INVALID_SPARK_CONFIG.INVALID_SPARK_SUBMIT_DEPLOY_MODE_KEY",
+          messageParameters = Map("sparkSubmitDeployModeKey" -> SUBMIT_DEPLOY_MODE.key),
+          cause = null)
       }
     }
 
@@ -609,8 +618,8 @@ class SparkConf(loadDefaults: Boolean)
     val encryptionEnabled = get(NETWORK_CRYPTO_ENABLED) || get(SASL_ENCRYPTION_ENABLED)
     SparkException.require(
       !encryptionEnabled || get(NETWORK_AUTH_ENABLED),
-      "NETWORK_AUTH_MUST_BE_ENABLED",
-      Map("networkAuthEnabledConf" -> NETWORK_AUTH_ENABLED.key))
+      errorClass = "INVALID_SPARK_CONFIG.NETWORK_AUTH_MUST_BE_ENABLED",
+      messageParameters = Map("networkAuthEnabledConf" -> NETWORK_AUTH_ENABLED.key))
 
     val executorTimeoutThresholdMs = get(NETWORK_TIMEOUT) * 1000
     val executorHeartbeatIntervalMs = get(EXECUTOR_HEARTBEAT_INTERVAL)
@@ -618,8 +627,8 @@ class SparkConf(loadDefaults: Boolean)
     // it will almost always cause ExecutorLostFailure. See SPARK-22754.
     SparkException.require(
       executorTimeoutThresholdMs > executorHeartbeatIntervalMs,
-      "INVALID_EXECUTOR_HEARTBEAT_INTERVAL",
-      Map(
+      errorClass = "INVALID_SPARK_CONFIG.INVALID_EXECUTOR_HEARTBEAT_INTERVAL",
+      messageParameters = Map(
         "networkTimeoutKey" -> NETWORK_TIMEOUT.key,
         "networkTimeoutValue" -> executorTimeoutThresholdMs.toString,
         "executorHeartbeatIntervalKey" -> EXECUTOR_HEARTBEAT_INTERVAL.key,

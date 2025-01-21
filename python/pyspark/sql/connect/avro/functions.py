@@ -94,7 +94,7 @@ to_avro.__doc__ = PyAvroFunctions.to_avro.__doc__
 def _test() -> None:
     import os
     import sys
-    from pyspark.testing.utils import search_jar
+    from pyspark.testing.sqlutils import search_jar
 
     avro_jar = search_jar("connector/avro", "spark-avro", "spark-avro")
     if avro_jar is None:

@@ -752,6 +752,24 @@
     },
     "sqlState" : "56K00"
   },
+  "CONNECT_ML" : {
+    "message" : [
+      "Generic Spark Connect ML error."
+    ],
+    "subClass" : {
+      "ATTRIBUTE_NOT_ALLOWED" : {
+        "message" : [
+          "<attribute> is not allowed to be accessed."
+        ]
+      },
+      "UNSUPPORTED_EXCEPTION" : {
+        "message" : [
+          "<message>"
+        ]
+      }
+    },
+    "sqlState" : "XX000"
+  },
   "CONVERSION_INVALID_INPUT" : {
     "message" : [
       "The value <str> (<fmt>) cannot be converted to <targetType> because it is malformed. Correct the value as per the syntax, or change its format. Use <suggestion> to tolerate malformed input and return NULL instead."
@@ -968,6 +986,11 @@
       "NON_STRING_TYPE" : {
         "message" : [
           "all arguments of the function <funcName> must be strings."
+        ]
+      },
+      "NON_STRUCT_TYPE" : {
+        "message" : [
+          "the input <inputName> should be a struct expression; however, got <inputType>."
         ]
       },
       "NULL_TYPE" : {
@@ -1945,7 +1968,19 @@
   },
   "INDETERMINATE_COLLATION" : {
     "message" : [
-      "Function called requires knowledge of the collation it should apply, but indeterminate collation was found. Use COLLATE function to set the collation explicitly."
+      "Could not determine which collation to use for string operation. Use COLLATE clause to set the collation explicitly."
+    ],
+    "sqlState" : "42P22"
+  },
+  "INDETERMINATE_COLLATION_IN_EXPRESSION" : {
+    "message" : [
+      "Data type of <expr> has indeterminate collation. Use COLLATE clause to set the collation explicitly."
+    ],
+    "sqlState" : "42P22"
+  },
+  "INDETERMINATE_COLLATION_IN_SCHEMA" : {
+    "message" : [
+      "Schema contains indeterminate collation at: [<columnPaths>]. Use COLLATE clause to set the collation explicitly."
     ],
     "sqlState" : "42P22"
   },
@@ -2242,6 +2277,11 @@
           "Cannot resolve the given default collation. Suggested valid collation names: ['<proposals>']?"
         ]
       },
+      "DEFAULT_COLLATION_NOT_SUPPORTED" : {
+        "message" : [
+          "Setting default session collation other than UTF8_BINARY is currently not supported."
+        ]
+      },
       "TIME_ZONE" : {
         "message" : [
           "Cannot resolve the given timezone."
@@ -2392,12 +2432,6 @@
       "`EscapeChar` should be a string literal of length one, but got <sqlExpr>."
     ],
     "sqlState" : "42604"
-  },
-  "INVALID_EXECUTOR_HEARTBEAT_INTERVAL" : {
-    "message" : [
-      "The value of <networkTimeoutKey>=<networkTimeoutValue>ms must be greater than the value of <executorHeartbeatIntervalKey>=<executorHeartbeatIntervalValue>ms."
-    ],
-    "sqlState" : "42616"
   },
   "INVALID_EXECUTOR_MEMORY" : {
     "message" : [
@@ -2770,6 +2804,11 @@
         "message" : [
           "ITERATE statement cannot be used with a label that belongs to a compound (BEGIN...END) body."
         ]
+      },
+      "QUALIFIED_LABEL_NAME" : {
+        "message" : [
+          "Label cannot be qualified."
+        ]
       }
     },
     "sqlState" : "42K0L"
@@ -2830,6 +2869,24 @@
       }
     },
     "sqlState" : "42K0E"
+  },
+  "INVALID_LOG_VERSION" : {
+    "message" : [
+      "UnsupportedLogVersion."
+    ],
+    "subClass" : {
+      "EXACT_MATCH_VERSION" : {
+        "message" : [
+          "The only supported log version is v<matchVersion>, but encountered v<version>."
+        ]
+      },
+      "MAX_SUPPORTED_VERSION" : {
+        "message" : [
+          "The maximum supported log version is v<maxSupportedVersion>, but encountered v<version>. The log file was produced by a newer version of Spark and cannot be read by this version. You need to upgrade."
+        ]
+      }
+    },
+    "sqlState" : "KD002"
   },
   "INVALID_NON_DETERMINISTIC_EXPRESSIONS" : {
     "message" : [
@@ -2965,6 +3022,11 @@
           "Unsupported dtype: <invalidValue>. Valid values: float64, float32."
         ]
       },
+      "EXTENSION" : {
+        "message" : [
+          "Invalid extension: <invalidValue>. Extension is limited to exactly 3 letters (e.g. csv, tsv, etc...)"
+        ]
+      },
       "INTEGER" : {
         "message" : [
           "expects an integer literal, but got <invalidValue>."
@@ -3061,6 +3123,12 @@
     ],
     "sqlState" : "42613"
   },
+  "INVALID_RECURSIVE_CTE" : {
+    "message" : [
+      "Invalid recursive definition found. Recursive queries must contain an UNION or an UNION ALL statement with 2 children. The first child needs to be the anchor term without any recursive references."
+    ],
+    "sqlState" : "42836"
+  },
   "INVALID_REGEXP_REPLACE" : {
     "message" : [
       "Could not perform regexp_replace for source = \"<source>\", pattern = \"<pattern>\", replacement = \"<replacement>\" and position = <position>."
@@ -3121,11 +3189,56 @@
     ],
     "sqlState" : "42613"
   },
+  "INVALID_SPARK_CONFIG" : {
+    "message" : [
+      "Invalid Spark config:"
+    ],
+    "subClass" : {
+      "INVALID_EXECUTOR_HEARTBEAT_INTERVAL" : {
+        "message" : [
+          "The value of <networkTimeoutKey>=<networkTimeoutValue>ms must be greater than the value of <executorHeartbeatIntervalKey>=<executorHeartbeatIntervalValue>ms."
+        ]
+      },
+      "INVALID_EXECUTOR_MEMORY_OPTIONS" : {
+        "message" : [
+          "<executorOptsKey> is not allowed to specify max heap memory settings (was '<javaOpts>'). Use spark.executor.memory instead."
+        ]
+      },
+      "INVALID_EXECUTOR_SPARK_OPTIONS" : {
+        "message" : [
+          "<executorOptsKey> is not allowed to set Spark options (was '<javaOpts>'). Set them directly on a SparkConf or in a properties file when using ./bin/spark-submit."
+        ]
+      },
+      "INVALID_MEMORY_FRACTION" : {
+        "message" : [
+          "<memoryFractionKey> should be between 0 and 1 (was '<memoryFractionValue>')."
+        ]
+      },
+      "INVALID_SPARK_SUBMIT_DEPLOY_MODE_KEY" : {
+        "message" : [
+          "<sparkSubmitDeployModeKey> can only be \"cluster\" or \"client\"."
+        ]
+      },
+      "NETWORK_AUTH_MUST_BE_ENABLED" : {
+        "message" : [
+          "<networkAuthEnabledConf> must be enabled when enabling encryption."
+        ]
+      }
+    },
+    "sqlState" : "42616"
+  },
   "INVALID_SQL_ARG" : {
     "message" : [
       "The argument <name> of `sql()` is invalid. Consider to replace it either by a SQL literal or by collection constructor functions such as `map()`, `array()`, `struct()`."
     ],
     "sqlState" : "42K08"
+  },
+  "INVALID_SQL_FUNCTION_PLAN_STRUCTURE" : {
+    "message" : [
+      "Invalid SQL function plan structure",
+      "<plan>"
+    ],
+    "sqlState" : "XXKD0"
   },
   "INVALID_SQL_SYNTAX" : {
     "message" : [
@@ -3532,6 +3645,12 @@
     ],
     "sqlState" : "KD000"
   },
+  "MALFORMED_LOG_FILE" : {
+    "message" : [
+      "Log file was malformed: failed to read correct log version from <text>."
+    ],
+    "sqlState" : "KD002"
+  },
   "MALFORMED_PROTOBUF_MESSAGE" : {
     "message" : [
       "Malformed Protobuf messages are detected in message deserialization. Parse Mode: <failFastMode>. To process malformed protobuf message as null result, try setting the option 'mode' as 'PERMISSIVE'."
@@ -3698,12 +3817,6 @@
       "Nested EXECUTE IMMEDIATE commands are not allowed. Please ensure that the SQL query provided (<sqlString>) does not contain another EXECUTE IMMEDIATE command."
     ],
     "sqlState" : "07501"
-  },
-  "NETWORK_AUTH_MUST_BE_ENABLED" : {
-    "message" : [
-      "<networkAuthEnabledConf> must be enabled when enabling encryption."
-    ],
-    "sqlState" : "42616"
   },
   "NONEXISTENT_FIELD_NAME_IN_LIST" : {
     "message" : [
@@ -4472,6 +4585,13 @@
     ],
     "sqlState" : "42K06"
   },
+  "STATE_STORE_INVALID_VALUE_SCHEMA_EVOLUTION" : {
+    "message" : [
+      "Schema evolution is not possible new value_schema=<newValueSchema> and old value_schema=<oldValueSchema>",
+      "Please check https://avro.apache.org/docs/1.11.1/specification/_print/#schema-resolution for valid schema evolution."
+    ],
+    "sqlState" : "XXKST"
+  },
   "STATE_STORE_INVALID_VARIABLE_TYPE_CHANGE" : {
     "message" : [
       "Cannot change <stateVarName> to <newType> between query restarts. Please set <stateVarName> to <oldType>, or restart with a new checkpoint directory."
@@ -4513,6 +4633,14 @@
     ],
     "sqlState" : "42K06"
   },
+  "STATE_STORE_STATE_SCHEMA_FILES_THRESHOLD_EXCEEDED" : {
+    "message" : [
+      "The number of state schema files <numStateSchemaFiles> exceeds the maximum number of state schema files for this query: <maxStateSchemaFiles>.",
+      "Added: <addedColumnFamilies>, Removed: <removedColumnFamilies>",
+      "Please set 'spark.sql.streaming.stateStore.stateSchemaFilesThreshold' to a higher number, or revert state schema modifications"
+    ],
+    "sqlState" : "42K06"
+  },
   "STATE_STORE_UNSUPPORTED_OPERATION" : {
     "message" : [
       "<operationType> operation not supported with <entity>"
@@ -4542,6 +4670,14 @@
       "to process the streaming state. Retrieved error_message=<errorMsg>"
     ],
     "sqlState" : "XX000"
+  },
+  "STATE_STORE_VALUE_SCHEMA_EVOLUTION_THRESHOLD_EXCEEDED" : {
+    "message" : [
+      "The number of state schema evolutions <numSchemaEvolutions> exceeds the maximum number of state schema evolutions, <maxSchemaEvolutions>, allowed for this column family.",
+      "Offending column family: <colFamilyName>",
+      "Please set 'spark.sql.streaming.stateStore.valueStateSchemaEvolutionThreshold' to a higher number, or revert state schema modifications"
+    ],
+    "sqlState" : "42K06"
   },
   "STATE_STORE_VALUE_SCHEMA_NOT_COMPATIBLE" : {
     "message" : [
@@ -5393,6 +5529,11 @@
           "The target JDBC server hosting table <tableName> does not support ALTER TABLE with multiple actions. Split the ALTER TABLE up into individual actions to avoid this error."
         ]
       },
+      "OBJECT_LEVEL_COLLATIONS" : {
+        "message" : [
+          "Default collation for the specified object."
+        ]
+      },
       "ORC_TYPE_CAST" : {
         "message" : [
           "Unable to convert <orcType> of Orc to data type <toType>."
@@ -5457,12 +5598,12 @@
         "message" : [
           "Queries from raw JSON/CSV/XML files are disallowed when the",
           "referenced columns only include the internal corrupt record column",
-          "(named _corrupt_record by default). For example:",
-          "spark.read.schema(schema).json(file).filter($\"_corrupt_record\".isNotNull).count()",
-          "and spark.read.schema(schema).json(file).select(\"_corrupt_record\").show().",
+          "(named `_corrupt_record` by default). For example:",
+          "`spark.read.schema(schema).json(file).filter($\"_corrupt_record\".isNotNull).count()`",
+          "and `spark.read.schema(schema).json(file).select(\"_corrupt_record\").show()`.",
           "Instead, you can cache or save the parsed results and then send the same query.",
-          "For example, val df = spark.read.schema(schema).json(file).cache() and then",
-          "df.filter($\"_corrupt_record\".isNotNull).count()."
+          "For example, `val df = spark.read.schema(schema).json(file).cache()` and then",
+          "`df.filter($\"_corrupt_record\".isNotNull).count()`."
         ]
       },
       "REMOVE_NAMESPACE_COMMENT" : {
@@ -5756,6 +5897,12 @@
   "UNSUPPORTED_SINGLE_PASS_ANALYZER_FEATURE" : {
     "message" : [
       "The single-pass analyzer cannot process this query or command because it does not yet support <feature>."
+    ],
+    "sqlState" : "0A000"
+  },
+  "UNSUPPORTED_SQL_UDF_USAGE" : {
+    "message" : [
+      "Using SQL function <functionName> in <nodeName> is not supported."
     ],
     "sqlState" : "0A000"
   },
@@ -6852,11 +6999,6 @@
   "_LEGACY_ERROR_TEMP_1228" : {
     "message" : [
       "Decimal scale (<scale>) cannot be greater than precision (<precision>)."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1231" : {
-    "message" : [
-      "<key> is not a valid partition column in table <tblName>."
     ]
   },
   "_LEGACY_ERROR_TEMP_1232" : {
