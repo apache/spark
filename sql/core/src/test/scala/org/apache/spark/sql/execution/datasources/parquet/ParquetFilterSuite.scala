@@ -2263,11 +2263,7 @@ class ParquetV1FilterSuite extends ParquetFilterSuite {
         SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false",
         SQLConf.NESTED_PREDICATE_PUSHDOWN_FILE_SOURCE_LIST.key -> pushdownDsList) {
         val query = df
-<<<<<<< HEAD
           .select(output.map(e => Column(e)): _*)
-=======
-          .select(output.map(Column(_)): _*)
->>>>>>> apache/master
           .where(Column(predicate))
 
         val nestedOrAttributes = predicate.collectFirst {
@@ -2348,11 +2344,7 @@ class ParquetV2FilterSuite extends ParquetFilterSuite {
       SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> InferFiltersFromConstraints.ruleName,
       SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false") {
       val query = df
-<<<<<<< HEAD
         .select(output.map(e => Column(e)): _*)
-=======
-        .select(output.map(Column(_)): _*)
->>>>>>> apache/master
         .where(Column(predicate))
 
       query.queryExecution.optimizedPlan.collectFirst {

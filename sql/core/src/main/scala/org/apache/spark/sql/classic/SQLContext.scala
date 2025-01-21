@@ -30,9 +30,7 @@ import org.apache.spark.sql
 import org.apache.spark.sql.{Encoder, ExperimentalMethods, Row}
 import org.apache.spark.sql.catalyst._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.logical.ShowTables
 import org.apache.spark.sql.classic.ClassicConversions.castToImpl
-import org.apache.spark.sql.classic.Dataset.ofRows
 import org.apache.spark.sql.classic.SparkSession.{builder => newSparkSessionBuilder}
 import org.apache.spark.sql.internal.{SessionState, SharedState, SQLConf}
 import org.apache.spark.sql.sources.BaseRelation

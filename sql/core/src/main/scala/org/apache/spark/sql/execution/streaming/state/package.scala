@@ -44,7 +44,7 @@ package object state {
         keySchema,
         valueSchema,
         keyStateEncoderSpec,
-        sqlContext.sessionState,
+        sqlContext.sparkSession.sessionState,
         Some(castToImpl(sqlContext.sparkSession).streams.stateStoreCoordinator))(
         storeUpdateFunction)
     }

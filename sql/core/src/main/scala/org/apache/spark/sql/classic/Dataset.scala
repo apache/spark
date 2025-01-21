@@ -38,7 +38,7 @@ import org.apache.spark.api.r.RRDD
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
 import org.apache.spark.resource.ResourceProfile
-import org.apache.spark.sql.{AnalysisException, Column, Encoder, Encoders, Observation, Row, SQLContext, TypedColumn}
+import org.apache.spark.sql.{AnalysisException, Column, Encoder, Encoders, Observation, Row, SQLContext, TableArg, TypedColumn}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, QueryPlanningTracker, ScalaReflection, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
@@ -540,7 +540,6 @@ class Dataset[T] private[sql](
 
   /** @inheritdoc */
   def explain(mode: String): Unit = sparkSession.withActive {
-  def explain(mode: String): Unit = sparkSession.withActive {
     // Because temporary views are resolved during analysis when we create a Dataset, and
     // `ExplainCommand` analyzes input query plan and resolves temporary views again. Using
     // `ExplainCommand` here will probably output different query plans, compared to the results
@@ -724,7 +723,7 @@ class Dataset[T] private[sql](
   }
 
   private[sql] def lateralJoin(
-      right: DS[_], joinExprs: Option[Column], joinType: JoinType): DataFrame = {
+      right: sql.Dataset[_], joinExprs: Option[Column], joinType: JoinType): DataFrame = {
     withPlan {
       LateralJoin(
         logicalPlan,
@@ -736,22 +735,22 @@ class Dataset[T] private[sql](
   }
 
   /** @inheritdoc */
-  def lateralJoin(right: DS[_]): DataFrame = {
+  def lateralJoin(right: sql.Dataset[_]): DataFrame = {
     lateralJoin(right, None, Inner)
   }
 
   /** @inheritdoc */
-  def lateralJoin(right: DS[_], joinExprs: Column): DataFrame = {
+  def lateralJoin(right: sql.Dataset[_], joinExprs: Column): DataFrame = {
     lateralJoin(right, Some(joinExprs), Inner)
   }
 
   /** @inheritdoc */
-  def lateralJoin(right: DS[_], joinType: String): DataFrame = {
+  def lateralJoin(right: sql.Dataset[_], joinType: String): DataFrame = {
     lateralJoin(right, None, LateralJoinType(joinType))
   }
 
   /** @inheritdoc */
-  def lateralJoin(right: DS[_], joinExprs: Column, joinType: String): DataFrame = {
+  def lateralJoin(right: sql.Dataset[_], joinExprs: Column, joinType: String): DataFrame = {
     lateralJoin(right, Some(joinExprs), LateralJoinType(joinType))
   }
 

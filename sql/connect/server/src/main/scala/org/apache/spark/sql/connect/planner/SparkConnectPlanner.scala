@@ -1097,11 +1097,7 @@ class SparkConnectPlanner(
           Metadata.empty
         }
 
-<<<<<<< HEAD
-        (alias.getName(0), Column(transformExpression(alias.getExpr)), metadata)
-=======
         (alias.getName(0), transformExpression(alias.getExpr), metadata)
->>>>>>> apache/master
       }.unzip3
 
     Project(
@@ -2350,11 +2346,7 @@ class SparkConnectPlanner(
           rel.getPivot.getValuesList.asScala.toSeq.map(transformLiteral)
         } else {
           RelationalGroupedDataset
-<<<<<<< HEAD
-            .collectPivotValues(Dataset.ofRows(session, input), Column(pivotExpr))
-=======
             .collectPivotValues(Dataset.ofRows(session, logicalPlan), Column(pivotExpr))
->>>>>>> apache/master
             .map(expressions.Literal.apply)
         }
         logical.Pivot(
@@ -2951,12 +2943,8 @@ class SparkConnectPlanner(
 
     if (writeOperation.getPartitioningColumnsCount > 0) {
       val names = writeOperation.getPartitioningColumnsList.asScala
-<<<<<<< HEAD
-        .map(c => Column(transformExpression(c)))
-=======
         .map(transformExpression)
         .map(Column(_))
->>>>>>> apache/master
         .toSeq
       w.partitionedBy(names.head, names.tail: _*)
     }
@@ -3080,7 +3068,7 @@ class SparkConnectPlanner(
           throw InvalidPlanInput("Unexpected foreachBatch function") // Unreachable
       }
 
-      writer.foreachBatch(foreachBatchFn)
+      writer.foreachBatch(foreachBatchFn) //
     }
 
     val query =
@@ -3536,11 +3524,7 @@ class SparkConnectPlanner(
     val sourceDs = Dataset.ofRows(session, transformRelation(cmd.getSourceTablePlan))
     val mergeInto = sourceDs
       .mergeInto(cmd.getTargetTableName, Column(transformExpression(cmd.getMergeCondition)))
-<<<<<<< HEAD
       .asInstanceOf[MergeIntoWriter[Row]]
-=======
-      .asInstanceOf[MergeIntoWriterImpl[Row]]
->>>>>>> apache/master
     mergeInto.matchedActions ++= matchedActions
     mergeInto.notMatchedActions ++= notMatchedActions
     mergeInto.notMatchedBySourceActions ++= notMatchedBySourceActions

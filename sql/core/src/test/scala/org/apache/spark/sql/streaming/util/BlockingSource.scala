@@ -19,9 +19,7 @@ package org.apache.spark.sql.streaming.util
 
 import java.util.concurrent.CountDownLatch
 
-import org.apache.spark.sql.SQLContext
-import org.apache.spark.sql.classic.ClassicConversions.castToImpl
-import org.apache.spark.sql.classic.DataFrame
+import org.apache.spark.sql.{DataFrame, SQLContext}
 import org.apache.spark.sql.execution.streaming.{LongOffset, Offset, Sink, Source}
 import org.apache.spark.sql.sources.{StreamSinkProvider, StreamSourceProvider}
 import org.apache.spark.sql.streaming.OutputMode
@@ -65,5 +63,5 @@ class BlockingSource extends StreamSourceProvider with StreamSinkProvider {
 }
 
 object BlockingSource {
-  var latch: CountDownLatch = null
+  var latch: CountDownLatch = _
 }

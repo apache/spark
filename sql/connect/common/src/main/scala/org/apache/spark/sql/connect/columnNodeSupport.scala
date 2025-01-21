@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
 import org.apache.spark.sql.connect.common.DataTypeProtoConverter
 import org.apache.spark.sql.connect.common.LiteralValueProtoConverter.toLiteralProtoBuilder
 import org.apache.spark.sql.expressions.{Aggregator, UserDefinedAggregator, UserDefinedFunction}
-import org.apache.spark.sql.internal.{Alias, CaseWhenOtherwise, Cast, ColumnNode, InvokeInlineUserDefinedFunction, LambdaFunction, Literal, SortOrder, SqlExpression, UnresolvedAttribute, UnresolvedExtractValue, UnresolvedFunction, UnresolvedNamedLambdaVariable, UnresolvedRegex, UnresolvedStar, UpdateFields, Window, WindowFrame}
+import org.apache.spark.sql.internal.{Alias, CaseWhenOtherwise, Cast, ColumnNode, ColumnNodeLike, InvokeInlineUserDefinedFunction, LambdaFunction, LazyExpression, Literal, SortOrder, SqlExpression, UnresolvedAttribute, UnresolvedExtractValue, UnresolvedFunction, UnresolvedNamedLambdaVariable, UnresolvedRegex, UnresolvedStar, UpdateFields, Window, WindowFrame}
 
 /**
  * Converter for [[ColumnNode]] to [[proto.Expression]] conversions.
@@ -265,7 +265,7 @@ case class ProtoColumnNode(
     override val origin: Origin = CurrentOrigin.get)
     extends ColumnNode {
   override def sql: String = expr.toString
-  override private[internal] def children: Seq[ColumnNodeLike] = Seq.empty
+  override def children: Seq[ColumnNodeLike] = Seq.empty
 }
 
 sealed trait SubqueryType
@@ -284,5 +284,5 @@ case class SubqueryExpressionNode(
     case SubqueryType.SCALAR => s"($relation)"
     case _ => s"$subqueryType ($relation)"
   }
-  override private[internal] def children: Seq[ColumnNodeLike] = Seq.empty
+  override def children: Seq[ColumnNodeLike] = Seq.empty
 }

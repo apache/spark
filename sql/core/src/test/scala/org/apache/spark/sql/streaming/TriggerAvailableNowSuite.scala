@@ -59,7 +59,7 @@ class TriggerAvailableNowSuite extends FileStreamSourceTest {
         start.map(getOffsetValue).getOrElse(0L) + 1L, getOffsetValue(end) + 1L, 1, None,
         // Intentionally set isStreaming to false; we only use RDD plan in below.
         isStreaming = false)
-      sqlContext.internalCreateDataFrame(
+      sqlContext.sparkSession.internalCreateDataFrame(
         plan.queryExecution.toRdd, plan.schema, isStreaming = true)
     }
 

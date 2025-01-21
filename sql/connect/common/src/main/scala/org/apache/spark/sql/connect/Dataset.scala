@@ -44,7 +44,6 @@ import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.expressions.SparkUserDefinedFunction
 import org.apache.spark.sql.functions.{struct, to_json}
 import org.apache.spark.sql.internal.{ToScalaUDF, UDFAdaptors, UnresolvedAttribute, UnresolvedRegex}
-import org.apache.spark.sql.streaming.DataStreamWriter
 import org.apache.spark.sql.types.{Metadata, StructType}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.ArrayImplicits._
@@ -384,7 +383,7 @@ class Dataset[T] private[sql] (
   }
 
   private def lateralJoin(
-      right: Dataset[_],
+      right: sql.Dataset[_],
       joinExprs: Option[Column],
       joinType: String): DataFrame = {
     val joinTypeValue = toJoinType(joinType)
@@ -403,22 +402,22 @@ class Dataset[T] private[sql] (
   }
 
   /** @inheritdoc */
-  def lateralJoin(right: Dataset[_]): DataFrame = {
+  def lateralJoin(right: sql.Dataset[_]): DataFrame = {
     lateralJoin(right, None, "inner")
   }
 
   /** @inheritdoc */
-  def lateralJoin(right: Dataset[_], joinExprs: Column): DataFrame = {
+  def lateralJoin(right: sql.Dataset[_], joinExprs: Column): DataFrame = {
     lateralJoin(right, Some(joinExprs), "inner")
   }
 
   /** @inheritdoc */
-  def lateralJoin(right: Dataset[_], joinType: String): DataFrame = {
+  def lateralJoin(right: sql.Dataset[_], joinType: String): DataFrame = {
     lateralJoin(right, None, joinType)
   }
 
   /** @inheritdoc */
-  def lateralJoin(right: Dataset[_], joinExprs: Column, joinType: String): DataFrame = {
+  def lateralJoin(right: sql.Dataset[_], joinExprs: Column, joinType: String): DataFrame = {
     lateralJoin(right, Some(joinExprs), joinType)
   }
 

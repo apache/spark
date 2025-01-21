@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.streaming
 
 import java.util
 
-import org.apache.spark.sql.classic.DataFrame
+import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.connector.catalog.{Table, TableCapability}
 import org.apache.spark.sql.types.StructType
 

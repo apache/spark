@@ -28,9 +28,8 @@ import org.apache.spark.SparkException
 import org.apache.spark.api.python.{PythonException, PythonWorkerUtils, SimplePythonFunction, SpecialLengths, StreamingPythonRunner}
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys.{DATAFRAME_ID, QUERY_ID, RUN_ID_STRING, SESSION_ID}
+import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, AgnosticEncoders}
-import org.apache.spark.sql.classic.{DataFrame, Dataset}
-import org.apache.spark.sql.classic.ClassicConversions.castToImpl
 import org.apache.spark.sql.connect.common.ForeachWriterPacket
 import org.apache.spark.sql.connect.service.SessionHolder
 import org.apache.spark.sql.connect.service.SparkConnectService
@@ -109,7 +108,7 @@ object StreamingForeachBatchHelper extends Logging {
             args.df.asInstanceOf[Dataset[Any]]
           } else {
             // Recover the Dataset from the DataFrame using the encoder.
-            Dataset.apply(args.df.sparkSession, args.df.logicalPlan)(encoder)
+            args.df.as(encoder)
           }
           fn(ds, args.batchId)
         } catch {

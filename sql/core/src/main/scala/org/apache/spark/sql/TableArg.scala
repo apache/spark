@@ -21,7 +21,7 @@ import org.apache.spark.sql.catalyst.expressions.{Ascending, Expression, Functio
 
 class TableArg(
     private[sql] val expression: FunctionTableSubqueryArgumentExpression,
-    sparkSession: SparkSession)
+    sparkSession: classic.SparkSession)
   extends TableValuedFunctionArgument {
   import sparkSession.toRichColumn
 

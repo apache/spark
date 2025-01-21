@@ -1497,7 +1497,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
       override def schema: StructType = triggerDF.schema
       override def getOffset: Option[Offset] = Some(LongOffset(0))
       override def getBatch(start: Option[Offset], end: Offset): DataFrame = {
-        sqlContext.internalCreateDataFrame(
+        sqlContext.sparkSession.internalCreateDataFrame(
           triggerDF.queryExecution.toRdd, triggerDF.schema, isStreaming = true)
       }
       override def stop(): Unit = {}

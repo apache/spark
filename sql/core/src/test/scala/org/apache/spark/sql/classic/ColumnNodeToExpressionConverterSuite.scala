@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
 import org.apache.spark.sql.execution.SparkSqlParser
 import org.apache.spark.sql.execution.aggregate
 import org.apache.spark.sql.expressions.{Aggregator, SparkUserDefinedFunction, UserDefinedAggregator}
-import org.apache.spark.sql.internal.{Alias, CaseWhenOtherwise, Cast, ColumnNode, InvokeInlineUserDefinedFunction, LambdaFunction, Literal, SortOrder, SQLConf, SqlExpression, TypedSumLong, UnresolvedAttribute, UnresolvedExtractValue, UnresolvedFunction, UnresolvedNamedLambdaVariable, UnresolvedRegex, UnresolvedStar, UpdateFields, Window, WindowFrame, WindowSpec}
+import org.apache.spark.sql.internal.{Alias, CaseWhenOtherwise, Cast, ColumnNode, ColumnNodeLike, InvokeInlineUserDefinedFunction, LambdaFunction, Literal, SortOrder, SQLConf, SqlExpression, TypedSumLong, UnresolvedAttribute, UnresolvedExtractValue, UnresolvedFunction, UnresolvedNamedLambdaVariable, UnresolvedRegex, UnresolvedStar, UpdateFields, Window, WindowFrame, WindowSpec}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -405,5 +405,5 @@ private[classic] case class Nope(override val origin: Origin = CurrentOrigin.get
   extends ColumnNode {
   override private[sql] def normalize(): Nope = this
   override def sql: String = "nope"
-  override private[internal] def children: Seq[ColumnNodeLike] = Seq.empty
+  override def children: Seq[ColumnNodeLike] = Seq.empty
 }

@@ -18,13 +18,9 @@
 package org.apache.spark.sql.classic
 
 import org.apache.spark.api.java.function._
-<<<<<<< HEAD:sql/core/src/main/scala/org/apache/spark/sql/classic/KeyValueGroupedDataset.scala
 import org.apache.spark.sql
 import org.apache.spark.sql.{Column, Encoder, TypedColumn}
-import org.apache.spark.sql.catalyst.analysis.{EliminateEventTimeWatermark, UnresolvedAttribute}
-=======
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
->>>>>>> apache/master:sql/core/src/main/scala/org/apache/spark/sql/KeyValueGroupedDataset.scala
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{agnosticEncoderFor, ProductEncoder}
 import org.apache.spark.sql.catalyst.encoders.encoderFor
 import org.apache.spark.sql.catalyst.expressions.Attribute
