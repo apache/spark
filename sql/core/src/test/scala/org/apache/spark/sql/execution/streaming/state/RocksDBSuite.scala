@@ -382,7 +382,6 @@ class RocksDBStateEncoderSuite extends SparkFunSuite {
       valueSchema,
       Some(testProvider),
       Some(StateStore.DEFAULT_COL_FAMILY_NAME))
-    new AvroStateEncoder(keyStateEncoderSpec, valueSchema, None, None)
   }
 
   private def createNoPrefixKeyEncoder(): RocksDBDataEncoder = {
