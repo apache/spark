@@ -303,7 +303,7 @@ object DataTypeProtoConverter {
       case udt: UserDefinedType[_] =>
         // Scala/Java UDT
         udt.getClass.getName match {
-          // To avoid make connect-common depends on ml,
+          // To avoid making connect-common depend on ml,
           // we use class name to identify VectorUDT and MatrixUDT.
           case "org.apache.spark.ml.linalg.VectorUDT" =>
             ProtoDataTypes.VectorUDT
