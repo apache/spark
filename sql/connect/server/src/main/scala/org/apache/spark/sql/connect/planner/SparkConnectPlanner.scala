@@ -3068,7 +3068,7 @@ class SparkConnectPlanner(
           throw InvalidPlanInput("Unexpected foreachBatch function") // Unreachable
       }
 
-      writer.foreachBatch(foreachBatchFn) //
+      writer.foreachBatch(foreachBatchFn)
     }
 
     val query =
