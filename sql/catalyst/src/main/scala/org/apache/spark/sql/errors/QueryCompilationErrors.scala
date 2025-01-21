@@ -3319,10 +3319,11 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
 
   def unsupportedTableChangeInJDBCCatalogError(
       change: TableChange, tableName: String): Throwable = {
+    val sanitizedTableName = tableName.replaceAll("\"", "")
     new AnalysisException(
       errorClass = "UNSUPPORTED_TABLE_CHANGE_IN_JDBC_CATALOG",
       messageParameters = Map(
-        "change" -> change.toString, "tableName" -> toSQLId(tableName)))
+        "change" -> change.toString, "tableName" -> toSQLId(sanitizedTableName)))
   }
 
   def pathOptionNotSetCorrectlyWhenReadingError(): Throwable = {

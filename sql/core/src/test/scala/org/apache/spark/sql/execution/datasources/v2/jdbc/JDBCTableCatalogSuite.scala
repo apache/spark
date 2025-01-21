@@ -447,7 +447,7 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
         condition = "UNSUPPORTED_TABLE_CHANGE_IN_JDBC_CATALOG",
         parameters = Map(
           "change" -> "org.apache.spark.sql.connector.catalog.TableChange\\$UpdateColumnComment.*",
-          "tableName" -> "`\"test\"`.`\"alt_table\"`"
+          "tableName" -> "`test`.`alt_table`"
         ),
         matchPVals = true)
       // Update comment for not existing column
