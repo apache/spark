@@ -322,7 +322,7 @@ class MLSuite extends MLHelper {
     }
   }
 
-  test("ML operator must implement MLReadable for loading") {
+  test("Model must be registered into ServiceLoader when loading") {
     val thrown = intercept[MlUnsupportedException] {
       val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
       val readCmd = proto.MlCommand
@@ -339,8 +339,8 @@ class MLSuite extends MLHelper {
       MLHandler.handleMlCommand(sessionHolder, readCmd)
     }
     assert(
-      thrown.message.contains("org.apache.spark.sql.connect.ml.NotImplementingMLReadble " +
-        "must implement MLReadable"))
+      thrown.message.contains("Unsupported read for " +
+        "org.apache.spark.sql.connect.ml.NotImplementingMLReadble"))
   }
 
   test("RegressionEvaluator works") {

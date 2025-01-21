@@ -24,7 +24,7 @@ import scala.util.control.NonFatal
 
 import org.apache.spark.{SparkThrowable, SparkUnsupportedOperationException}
 import org.apache.spark.sql.catalyst.SQLConfHelper
-import org.apache.spark.sql.connector.expressions.{Expression, GeneralScalarExpression, Literal}
+import org.apache.spark.sql.connector.expressions.{Expression, Literal}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
 import org.apache.spark.sql.jdbc.OracleDialect._
@@ -62,32 +62,26 @@ private case class OracleDialect() extends JdbcDialect with SQLConfHelper with N
         super.visitAggregateFunction(funcName, isDistinct, inputs)
       }
 
-    private def compareBlob(lhs: Expression, operator: String, rhs: Expression): String = {
-      val l = inputToSQL(lhs)
-      val r = inputToSQL(rhs)
-      val op = if (operator == "<=>") "=" else operator
-      val compare = s"DBMS_LOB.COMPARE($l, $r) $op 0"
-      if (operator == "<=>") {
-        s"(($l IS NOT NULL AND $r IS NOT NULL AND $compare) OR ($l IS NULL AND $r IS NULL))"
-      } else {
-        compare
+    override def visitBinaryComparison(name: String, le: Expression, re: Expression): String = {
+      (le, re) match {
+        case (lhs: Literal[_], rhs: Expression) if lhs.dataType == BinaryType =>
+          compareBlob(lhs, name, rhs)
+        case (lhs: Expression, rhs: Literal[_]) if rhs.dataType == BinaryType =>
+          compareBlob(lhs, name, rhs)
+        case _ =>
+          super.visitBinaryComparison(name, le, re);
       }
     }
 
-    override def build(expr: Expression): String = expr match {
-      case e: GeneralScalarExpression =>
-        e.name() match {
-          case "=" | "<>" | "<=>" | "<" | "<=" | ">" | ">=" =>
-            (e.children()(0), e.children()(1)) match {
-            case (lhs: Literal[_], rhs: Expression) if lhs.dataType == BinaryType =>
-              compareBlob(lhs, e.name, rhs)
-            case (lhs: Expression, rhs: Literal[_]) if rhs.dataType == BinaryType =>
-              compareBlob(lhs, e.name, rhs)
-            case _ => super.build(expr)
-          }
-          case _ => super.build(expr)
-        }
-      case _ => super.build(expr)
+    private def compareBlob(lhs: Expression, operator: String, rhs: Expression): String = {
+      val l = inputToSQL(lhs)
+      val r = inputToSQL(rhs)
+      if (operator == "<=>") {
+        val compare = s"DBMS_LOB.COMPARE($l, $r) = 0"
+        s"(($l IS NOT NULL AND $r IS NOT NULL AND $compare) OR ($l IS NULL AND $r IS NULL))"
+      } else {
+        s"DBMS_LOB.COMPARE($l, $r) $operator 0"
+      }
     }
   }
 

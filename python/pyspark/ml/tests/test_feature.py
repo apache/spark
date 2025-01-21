@@ -16,7 +16,10 @@
 # limitations under the License.
 #
 
+import tempfile
 import unittest
+
+import numpy as np
 
 from pyspark.ml.feature import (
     Binarizer,
@@ -26,6 +29,12 @@ from pyspark.ml.feature import (
     IDF,
     NGram,
     RFormula,
+    StandardScaler,
+    StandardScalerModel,
+    MaxAbsScaler,
+    MaxAbsScalerModel,
+    MinMaxScaler,
+    MinMaxScalerModel,
     StopWordsRemover,
     StringIndexer,
     StringIndexerModel,
@@ -38,7 +47,122 @@ from pyspark.testing.utils import QuietTest
 from pyspark.testing.mlutils import check_params, SparkSessionTestCase
 
 
-class FeatureTests(SparkSessionTestCase):
+class FeatureTestsMixin:
+    def test_standard_scaler(self):
+        df = (
+            self.spark.createDataFrame(
+                [
+                    (1, 1.0, Vectors.dense([0.0])),
+                    (2, 2.0, Vectors.dense([2.0])),
+                    (3, 3.0, Vectors.sparse(1, [(0, 3.0)])),
+                ],
+                ["index", "weight", "features"],
+            )
+            .coalesce(1)
+            .sortWithinPartitions("weight")
+            .select("features")
+        )
+        scaler = StandardScaler(inputCol="features", outputCol="scaled")
+        self.assertEqual(scaler.getInputCol(), "features")
+        self.assertEqual(scaler.getOutputCol(), "scaled")
+
+        # Estimator save & load
+        with tempfile.TemporaryDirectory(prefix="standard_scaler") as d:
+            scaler.write().overwrite().save(d)
+            scaler2 = StandardScaler.load(d)
+            self.assertEqual(str(scaler), str(scaler2))
+
+        model = scaler.fit(df)
+        self.assertTrue(np.allclose(model.mean.toArray(), [1.66666667], atol=1e-4))
+        self.assertTrue(np.allclose(model.std.toArray(), [1.52752523], atol=1e-4))
+
+        output = model.transform(df)
+        self.assertEqual(output.columns, ["features", "scaled"])
+        self.assertEqual(output.count(), 3)
+
+        # Model save & load
+        with tempfile.TemporaryDirectory(prefix="standard_scaler_model") as d:
+            model.write().overwrite().save(d)
+            model2 = StandardScalerModel.load(d)
+            self.assertEqual(str(model), str(model2))
+
+    def test_maxabs_scaler(self):
+        df = (
+            self.spark.createDataFrame(
+                [
+                    (1, 1.0, Vectors.dense([0.0])),
+                    (2, 2.0, Vectors.dense([2.0])),
+                    (3, 3.0, Vectors.sparse(1, [(0, 3.0)])),
+                ],
+                ["index", "weight", "features"],
+            )
+            .coalesce(1)
+            .sortWithinPartitions("weight")
+            .select("features")
+        )
+
+        scaler = MaxAbsScaler(inputCol="features", outputCol="scaled")
+        self.assertEqual(scaler.getInputCol(), "features")
+        self.assertEqual(scaler.getOutputCol(), "scaled")
+
+        # Estimator save & load
+        with tempfile.TemporaryDirectory(prefix="maxabs_scaler") as d:
+            scaler.write().overwrite().save(d)
+            scaler2 = MaxAbsScaler.load(d)
+            self.assertEqual(str(scaler), str(scaler2))
+
+        model = scaler.fit(df)
+        self.assertTrue(np.allclose(model.maxAbs.toArray(), [3.0], atol=1e-4))
+
+        output = model.transform(df)
+        self.assertEqual(output.columns, ["features", "scaled"])
+        self.assertEqual(output.count(), 3)
+
+        # Model save & load
+        with tempfile.TemporaryDirectory(prefix="standard_scaler_model") as d:
+            model.write().overwrite().save(d)
+            model2 = MaxAbsScalerModel.load(d)
+            self.assertEqual(str(model), str(model2))
+
+    def test_minmax_scaler(self):
+        df = (
+            self.spark.createDataFrame(
+                [
+                    (1, 1.0, Vectors.dense([0.0])),
+                    (2, 2.0, Vectors.dense([2.0])),
+                    (3, 3.0, Vectors.sparse(1, [(0, 3.0)])),
+                ],
+                ["index", "weight", "features"],
+            )
+            .coalesce(1)
+            .sortWithinPartitions("weight")
+            .select("features")
+        )
+
+        scaler = MinMaxScaler(inputCol="features", outputCol="scaled")
+        self.assertEqual(scaler.getInputCol(), "features")
+        self.assertEqual(scaler.getOutputCol(), "scaled")
+
+        # Estimator save & load
+        with tempfile.TemporaryDirectory(prefix="maxabs_scaler") as d:
+            scaler.write().overwrite().save(d)
+            scaler2 = MinMaxScaler.load(d)
+            self.assertEqual(str(scaler), str(scaler2))
+
+        model = scaler.fit(df)
+        self.assertTrue(np.allclose(model.originalMax.toArray(), [3.0], atol=1e-4))
+        self.assertTrue(np.allclose(model.originalMin.toArray(), [0.0], atol=1e-4))
+
+        output = model.transform(df)
+        self.assertEqual(output.columns, ["features", "scaled"])
+        self.assertEqual(output.count(), 3)
+
+        # Model save & load
+        with tempfile.TemporaryDirectory(prefix="standard_scaler_model") as d:
+            model.write().overwrite().save(d)
+            model2 = MinMaxScalerModel.load(d)
+            self.assertEqual(str(model), str(model2))
+
     def test_binarizer(self):
         b0 = Binarizer()
         self.assertListEqual(
@@ -530,8 +654,6 @@ class FeatureTests(SparkSessionTestCase):
         expected = DenseVector([0.0, 10.0, 0.5])
         self.assertEqual(output, expected)
 
-
-class HashingTFTest(SparkSessionTestCase):
     def test_apply_binary_term_freqs(self):
         df = self.spark.createDataFrame([(0, ["a", "a", "b", "c", "c", "c"])], ["id", "words"])
         n = 10
@@ -552,6 +674,10 @@ class HashingTFTest(SparkSessionTestCase):
                 + ", got "
                 + str(features[i]),
             )
+
+
+class FeatureTests(FeatureTestsMixin, SparkSessionTestCase):
+    pass
 
 
 if __name__ == "__main__":
