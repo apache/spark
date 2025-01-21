@@ -274,7 +274,7 @@ class DataFrame(ParentDataFrame):
 
     @property
     def columns(self) -> List[str]:
-        return self.schema.names
+        return copy.deepcopy(self._original_schema.names)
 
     @property
     def sparkSession(self) -> "SparkSession":
@@ -1987,6 +1987,11 @@ class DataFrame(ParentDataFrame):
     def registerTempTable(self, name: str) -> None:
         warnings.warn("Deprecated in 2.0, use createOrReplaceTempView instead.", FutureWarning)
         self.createOrReplaceTempView(name)
+
+    def _original_schema(self) -> StructType:
+        if self._cached_schema:
+            return self._cached_schema
+        return self.schema
 
     def _map_partitions(
         self,
