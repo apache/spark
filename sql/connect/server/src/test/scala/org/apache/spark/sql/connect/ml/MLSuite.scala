@@ -339,7 +339,7 @@ class MLSuite extends MLHelper {
       MLHandler.handleMlCommand(sessionHolder, readCmd)
     }
     assert(
-      thrown.message.contains("Unsupported ML operator for loading, found " +
+      thrown.message.contains("Unsupported read for " +
         "org.apache.spark.sql.connect.ml.NotImplementingMLReadble"))
   }
 
