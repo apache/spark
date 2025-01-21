@@ -44,6 +44,8 @@ See also :class:`SparkSession`.
 .. autosummary::
     :toctree: api/
 
+    SparkSession.addArtifact
+    SparkSession.addArtifacts
     SparkSession.addTag
     SparkSession.catalog
     SparkSession.clearTags
@@ -84,8 +86,6 @@ Spark Connect Only
 .. autosummary::
     :toctree: api/
 
-    SparkSession.addArtifact
-    SparkSession.addArtifacts
     SparkSession.clearProgressHandlers
     SparkSession.client
     SparkSession.copyFromLocalToFs
