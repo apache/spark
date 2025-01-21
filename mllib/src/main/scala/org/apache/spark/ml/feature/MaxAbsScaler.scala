@@ -107,6 +107,8 @@ class MaxAbsScalerModel private[ml] (
 
   import MaxAbsScalerModel._
 
+  private[ml] def this() = this(Identifiable.randomUID("maxAbsScal"), Vectors.empty)
+
   /** @group setParam */
   @Since("2.0.0")
   def setInputCol(value: String): this.type = set(inputCol, value)

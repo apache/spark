@@ -425,6 +425,11 @@ private[ml] object MLUtils {
   // leave a security hole, we define an allowed attribute list that can be accessed.
   // The attributes could be retrieved from the corresponding python class
   private lazy val ALLOWED_ATTRIBUTES = HashSet(
+    "mean", // StandardScalerModel
+    "std", // StandardScalerModel
+    "maxAbs", // MaxAbsScalerModel
+    "originalMax", // MinMaxScalerModel
+    "originalMin", // MinMaxScalerModel
     "toString",
     "toDebugString",
     "numFeatures",
