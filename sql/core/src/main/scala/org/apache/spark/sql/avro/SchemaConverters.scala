@@ -151,7 +151,8 @@ object SchemaConverters extends Logging {
           throw new IncompatibleSchemaException(s"""
             |Found recursive reference in Avro schema, which can not be processed by Spark by
             | default: ${SchemaFormatter.getInstance("json/pretty").format(avroSchema)}.
-            | Try setting the option `recursiveFieldMaxDepth` to 1 - $RECURSIVE_FIELD_MAX_DEPTH_LIMIT.
+            | Try setting the option `recursiveFieldMaxDepth`
+            | to 1 - $RECURSIVE_FIELD_MAX_DEPTH_LIMIT.
           """.stripMargin)
         } else if (recursiveDepth > 0 && recursiveDepth >= recursiveFieldMaxDepth) {
           logInfo(
