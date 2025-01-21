@@ -82,6 +82,7 @@ import org.apache.spark.util.collection.Utils
  *                                         +- Relation [t1]
  *
  * Join conditions: [c <=> c']
+ * TODO(avery): trigger job rerun, remove this afterwards
  */
 object DecorrelateInnerQuery extends PredicateHelper {
 
