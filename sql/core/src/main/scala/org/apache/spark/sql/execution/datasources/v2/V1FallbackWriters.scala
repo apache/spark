@@ -23,7 +23,8 @@ import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.connector.catalog.SupportsWrite
 import org.apache.spark.sql.connector.write.V1Write
-import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.execution.{SparkPlan, SQLExecution}
+import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.sources.InsertableRelation
 
 /**
@@ -58,14 +59,27 @@ case class OverwriteByExpressionExecV1(
 sealed trait V1FallbackWriters extends LeafV2CommandExec with SupportsV1Write {
   override def output: Seq[Attribute] = Nil
 
+  override val metrics: Map[String, SQLMetric] =
+    write.supportedCustomMetrics().map { customMetric =>
+      customMetric.name() -> SQLMetrics.createV2CustomMetric(sparkContext, customMetric)
+    }.toMap
+
   def table: SupportsWrite
   def refreshCache: () => Unit
   def write: V1Write
 
   override def run(): Seq[InternalRow] = {
-    val writtenRows = writeWithV1(write.toInsertableRelation)
+    writeWithV1(write.toInsertableRelation)
     refreshCache()
-    writtenRows
+
+    write.reportDriverMetrics().foreach { customTaskMetric =>
+      metrics.get(customTaskMetric.name()).foreach(_.set(customTaskMetric.value()))
+    }
+
+    val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
+    SQLMetrics.postDriverMetricUpdates(sparkContext, executionId, metrics.values.toSeq)
+
+    Nil
   }
 }
 
@@ -75,8 +89,7 @@ sealed trait V1FallbackWriters extends LeafV2CommandExec with SupportsV1Write {
 trait SupportsV1Write extends SparkPlan {
   def plan: LogicalPlan
 
-  protected def writeWithV1(relation: InsertableRelation): Seq[InternalRow] = {
+  protected def writeWithV1(relation: InsertableRelation): Unit = {
     relation.insert(Dataset.ofRows(session, plan), overwrite = false)
-    Nil
   }
 }

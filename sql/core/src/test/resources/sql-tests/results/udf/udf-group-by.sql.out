@@ -520,27 +520,9 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 SELECT udf(every("true"))
 -- !query schema
-struct<>
+struct<udf(every(true)):boolean>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
-  "sqlState" : "42K09",
-  "messageParameters" : {
-    "inputSql" : "\"true\"",
-    "inputType" : "\"STRING\"",
-    "paramIndex" : "first",
-    "requiredType" : "\"BOOLEAN\"",
-    "sqlExpr" : "\"every(true)\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 12,
-    "stopIndex" : 24,
-    "fragment" : "every(\"true\")"
-  } ]
-}
+true
 
 
 -- !query

@@ -22,9 +22,16 @@ import org.apache.hadoop.fs.FileStatus
 
 import org.apache.spark.sql.{QueryTest, SparkSession}
 import org.apache.spark.sql.connector.read.ScanBuilder
-import org.apache.spark.sql.connector.write.{LogicalWriteInfo, WriteBuilder}
+import org.apache.spark.sql.connector.write.{LogicalWriteInfo, LogicalWriteInfoImpl, WriteBuilder}
+import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.datasources.FileFormat
 import org.apache.spark.sql.execution.datasources.text.TextFileFormat
+import org.apache.spark.sql.execution.datasources.v2.csv.CSVScanBuilder
+import org.apache.spark.sql.execution.datasources.v2.json.JsonScanBuilder
+import org.apache.spark.sql.execution.datasources.v2.orc.OrcScanBuilder
+import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetScanBuilder
+import org.apache.spark.sql.execution.datasources.v2.text.TextScanBuilder
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -52,6 +59,8 @@ class DummyFileTable(
 }
 
 class FileTableSuite extends QueryTest with SharedSparkSession {
+
+  private val allFileBasedDataSources = Seq("orc", "parquet", "csv", "json", "text")
 
   test("Data type validation should check data schema only") {
     withTempPath { dir =>
@@ -83,6 +92,49 @@ class FileTableSuite extends QueryTest with SharedSparkSession {
       val table =
         new DummyFileTable(spark, options, Seq(pathName), expectedDataSchema, userSpecifiedSchema)
       assert(table.dataSchema == expectedDataSchema)
+    }
+  }
+
+  allFileBasedDataSources.foreach { format =>
+    test("SPARK-49519, SPARK-50287: Merge options of table and relation when " +
+      s"constructing ScanBuilder and WriteBuilder in FileFormat - $format") {
+      withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "") {
+        val userSpecifiedSchema = StructType(Seq(StructField("c1", StringType)))
+
+        DataSource.lookupDataSourceV2(format, spark.sessionState.conf) match {
+          case Some(provider) =>
+            val dsOptions = new CaseInsensitiveStringMap(
+              Map("k1" -> "v1", "k2" -> "ds_v2").asJava)
+            val table = provider.getTable(
+              userSpecifiedSchema,
+              Array.empty,
+              dsOptions.asCaseSensitiveMap()).asInstanceOf[FileTable]
+            val tableOptions = new CaseInsensitiveStringMap(
+              Map("k2" -> "table_v2", "k3" -> "v3").asJava)
+
+            val mergedReadOptions = table.newScanBuilder(tableOptions) match {
+              case csv: CSVScanBuilder => csv.options
+              case json: JsonScanBuilder => json.options
+              case orc: OrcScanBuilder => orc.options
+              case parquet: ParquetScanBuilder => parquet.options
+              case text: TextScanBuilder => text.options
+            }
+            assert(mergedReadOptions.size === 3)
+            assert(mergedReadOptions.get("k1") === "v1")
+            assert(mergedReadOptions.get("k2") === "table_v2")
+            assert(mergedReadOptions.get("k3") === "v3")
+
+            val writeInfo = LogicalWriteInfoImpl("query-id", userSpecifiedSchema, tableOptions)
+            val mergedWriteOptions = table.newWriteBuilder(writeInfo).build()
+              .asInstanceOf[FileWrite].options
+            assert(mergedWriteOptions.size === 3)
+            assert(mergedWriteOptions.get("k1") === "v1")
+            assert(mergedWriteOptions.get("k2") === "table_v2")
+            assert(mergedWriteOptions.get("k3") === "v3")
+          case _ =>
+            throw new IllegalArgumentException(s"Failed to get table provider for $format")
+        }
+      }
     }
   }
 }

@@ -50,6 +50,92 @@ private[spark] trait SparkClassUtils {
   def classIsLoadable(clazz: String): Boolean = {
     Try { classForName(clazz, initialize = false) }.isSuccess
   }
+
+  /**
+   * Determines whether the provided class is loadable in the current thread and assignable
+   * from the target class.
+   *
+   * @param clazz the fully qualified class name of the class to check
+   *              for loadability and inheritance from `parent`
+   * @param targetClass the target class which the class represented. If target
+   *               is null, only checks if the class is loadable
+   * @return true if `clazz` is loadable and assignable from `target`, otherwise false
+   */
+  def classIsLoadableAndAssignableFrom(
+      clazz: String,
+      targetClass: Class[_]): Boolean = {
+    Try {
+      val cls = classForName(clazz, initialize = false)
+      targetClass == null || targetClass.isAssignableFrom(cls)
+    }.getOrElse(false)
+  }
+
+  /** Return the class name of the given object, removing all dollar signs */
+  def getFormattedClassName(obj: AnyRef): String = {
+    getSimpleName(obj.getClass).replace("$", "")
+  }
+
+  /**
+   * Safer than Class obj's getSimpleName which may throw Malformed class name error in scala.
+   * This method mimics scalatest's getSimpleNameOfAnObjectsClass.
+   */
+  def getSimpleName(cls: Class[_]): String = {
+    try {
+      cls.getSimpleName
+    } catch {
+      // TODO: the value returned here isn't even quite right; it returns simple names
+      // like UtilsSuite$MalformedClassObject$MalformedClass instead of MalformedClass
+      // The exact value may not matter much as it's used in log statements
+      case _: InternalError =>
+        stripDollars(stripPackages(cls.getName))
+    }
+  }
+
+  /**
+   * Remove the packages from full qualified class name
+   */
+  private def stripPackages(fullyQualifiedName: String): String = {
+    fullyQualifiedName.split("\\.").takeRight(1)(0)
+  }
+
+  /**
+   * Remove trailing dollar signs from qualified class name,
+   * and return the trailing part after the last dollar sign in the middle
+   */
+  @scala.annotation.tailrec
+  final def stripDollars(s: String): String = {
+    val lastDollarIndex = s.lastIndexOf('$')
+    if (lastDollarIndex < s.length - 1) {
+      // The last char is not a dollar sign
+      if (lastDollarIndex == -1 || !s.contains("$iw")) {
+        // The name does not have dollar sign or is not an interpreter
+        // generated class, so we should return the full string
+        s
+      } else {
+        // The class name is interpreter generated,
+        // return the part after the last dollar sign
+        // This is the same behavior as getClass.getSimpleName
+        s.substring(lastDollarIndex + 1)
+      }
+    }
+    else {
+      // The last char is a dollar sign
+      // Find last non-dollar char
+      val lastNonDollarChar = s.findLast(_ != '$')
+      lastNonDollarChar match {
+        case None => s
+        case Some(c) =>
+          val lastNonDollarIndex = s.lastIndexOf(c)
+          if (lastNonDollarIndex == -1) {
+            s
+          } else {
+            // Strip the trailing dollar signs
+            // Invoke stripDollars again to get the simple name
+            stripDollars(s.substring(0, lastNonDollarIndex + 1))
+          }
+      }
+    }
+  }
 }
 
 private[spark] object SparkClassUtils extends SparkClassUtils

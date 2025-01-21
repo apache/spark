@@ -60,7 +60,18 @@ trait SQLQueryTestHelper extends Logging {
       .replaceAll("CTERelationDef \\d+,", s"CTERelationDef xxxx,")
       .replaceAll("CTERelationRef \\d+,", s"CTERelationRef xxxx,")
       .replaceAll("@\\w*,", s"@xxxxxxxx,")
-      .replaceAll("\\*\\(\\d+\\) ", "*") // remove the WholeStageCodegen codegenStageIds
+      .replaceAll("\\*\\(\\d+\\) ", "*")
+      .replaceAll(
+        s""""location":.*?$clsName/""",
+        s""""location": "$notIncludedMsg/{warehouse_dir}/""")
+      .replaceAll(s""""created_by":".*?"""", s""""created_by $notIncludedMsg":"None"""")
+      .replaceAll(s""""created_time":".*?"""", s""""created_time $notIncludedMsg":"None"""")
+      .replaceAll(s""""last_access":".*?"""", s""""last_access $notIncludedMsg":"None"""")
+      .replaceAll(s""""owner":".*?"""", s""""owner $notIncludedMsg":"None"""")
+      .replaceAll(s""""partition_statistics":"\\d+"""",
+        s""""partition_statistics $notIncludedMsg":"None"""")
+      .replaceAll("cterelationdef \\d+,", "cterelationdef xxxx,")
+      .replaceAll("cterelationref \\d+,", "cterelationref xxxx,")
   }
 
   /**
@@ -114,7 +125,7 @@ trait SQLQueryTestHelper extends Logging {
          | _: DescribeColumnCommand
          | _: DescribeRelation
          | _: DescribeColumn => true
-    case PhysicalOperation(_, _, Sort(_, true, _)) => true
+    case PhysicalOperation(_, _, Sort(_, true, _, _)) => true
     case _ => plan.children.iterator.exists(isSemanticallySorted)
   }
 
@@ -148,7 +159,7 @@ trait SQLQueryTestHelper extends Logging {
     try {
       result
     } catch {
-      case e: SparkThrowable with Throwable if e.getErrorClass != null =>
+      case e: SparkThrowable with Throwable if e.getCondition != null =>
         (emptySchema, Seq(e.getClass.getName, getMessage(e, format)))
       case a: AnalysisException =>
         // Do not output the logical plan tree which contains expression IDs.
@@ -160,7 +171,7 @@ trait SQLQueryTestHelper extends Logging {
         // information of stage, task ID, etc.
         // To make result matching simpler, here we match the cause of the exception if it exists.
         s.getCause match {
-          case e: SparkThrowable with Throwable if e.getErrorClass != null =>
+          case e: SparkThrowable with Throwable if e.getCondition != null =>
             (emptySchema, Seq(e.getClass.getName, getMessage(e, format)))
           case cause =>
             (emptySchema, Seq(cause.getClass.getName, cause.getMessage))
@@ -185,8 +196,8 @@ trait SQLQueryTestHelper extends Logging {
    */
   protected trait PgSQLTest
 
-  /** Trait that indicates ANSI-related tests with the ANSI mode enabled. */
-  protected trait AnsiTest
+  /** Trait that indicates Non-ANSI-related tests with the ANSI mode disabled. */
+  protected trait NonAnsiTest
 
   /** Trait that indicates an analyzer test that shows the analyzed plan string as output. */
   protected trait AnalyzerTest extends TestCase {
@@ -214,10 +225,10 @@ trait SQLQueryTestHelper extends Logging {
   }
 
   /** An ANSI-related test case. */
-  protected case class AnsiTestCase(
-      name: String, inputFile: String, resultFile: String) extends TestCase with AnsiTest {
+  protected case class NonAnsiTestCase(
+      name: String, inputFile: String, resultFile: String) extends TestCase with NonAnsiTest {
     override def asAnalyzerTest(newName: String, newResultFile: String): TestCase =
-      AnsiAnalyzerTestCase(newName, inputFile, newResultFile)
+      NonAnsiAnalyzerTestCase(newName, inputFile, newResultFile)
   }
 
   /** An analyzer test that shows the analyzed plan string as output. */
@@ -290,9 +301,9 @@ trait SQLQueryTestHelper extends Logging {
   protected case class RegularAnalyzerTestCase(
       name: String, inputFile: String, resultFile: String)
     extends AnalyzerTest
-  protected case class AnsiAnalyzerTestCase(
+  protected case class NonAnsiAnalyzerTestCase(
       name: String, inputFile: String, resultFile: String)
-    extends AnalyzerTest with AnsiTest
+    extends AnalyzerTest with NonAnsiTest
   protected case class PgSQLAnalyzerTestCase(
       name: String, inputFile: String, resultFile: String)
     extends AnalyzerTest with PgSQLTest

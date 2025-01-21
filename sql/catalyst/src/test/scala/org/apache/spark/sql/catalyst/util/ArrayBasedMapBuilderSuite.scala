@@ -43,7 +43,7 @@ class ArrayBasedMapBuilderSuite extends SparkFunSuite with SQLHelper {
     builder.put(1, null) // null value is OK
     checkError(
       exception = intercept[SparkRuntimeException](builder.put(null, 1)),
-      errorClass = "NULL_MAP_KEY",
+      condition = "NULL_MAP_KEY",
       parameters = Map.empty
     )
   }
@@ -53,7 +53,7 @@ class ArrayBasedMapBuilderSuite extends SparkFunSuite with SQLHelper {
     builder.put(1, 1)
     checkError(
       exception = intercept[SparkRuntimeException](builder.put(1, 2)),
-      errorClass = "DUPLICATED_MAP_KEY",
+      condition = "DUPLICATED_MAP_KEY",
       parameters = Map(
         "key" -> "1",
         "mapKeyDedupPolicy" -> "\"spark.sql.mapKeyDedupPolicy\"")
@@ -65,7 +65,7 @@ class ArrayBasedMapBuilderSuite extends SparkFunSuite with SQLHelper {
     builderDouble.put(-0.0, 1)
     checkError(
       exception = intercept[SparkRuntimeException](builderDouble.put(0.0, 2)),
-      errorClass = "DUPLICATED_MAP_KEY",
+      condition = "DUPLICATED_MAP_KEY",
       parameters = Map(
         "key" -> "0.0",
         "mapKeyDedupPolicy" -> "\"spark.sql.mapKeyDedupPolicy\"")
@@ -110,7 +110,7 @@ class ArrayBasedMapBuilderSuite extends SparkFunSuite with SQLHelper {
     val arr = Array(1.toByte)
     checkError(
       exception = intercept[SparkRuntimeException](builder.put(arr, 3)),
-      errorClass = "DUPLICATED_MAP_KEY",
+      condition = "DUPLICATED_MAP_KEY",
       parameters = Map(
         "key" -> arr.toString,
         "mapKeyDedupPolicy" -> "\"spark.sql.mapKeyDedupPolicy\"")
@@ -146,7 +146,7 @@ class ArrayBasedMapBuilderSuite extends SparkFunSuite with SQLHelper {
     // By default duplicated map key fails the query.
     checkError(
       exception = intercept[SparkRuntimeException](builder.put(unsafeRow, 3)),
-      errorClass = "DUPLICATED_MAP_KEY",
+      condition = "DUPLICATED_MAP_KEY",
       parameters = Map(
         "key" -> "[0,1]",
         "mapKeyDedupPolicy" -> "\"spark.sql.mapKeyDedupPolicy\"")
@@ -180,7 +180,7 @@ class ArrayBasedMapBuilderSuite extends SparkFunSuite with SQLHelper {
     // By default duplicated map key fails the query.
     checkError(
       exception = intercept[SparkRuntimeException](builder.put(unsafeArray, 3)),
-      errorClass = "DUPLICATED_MAP_KEY",
+      condition = "DUPLICATED_MAP_KEY",
       parameters = Map(
         "key" -> unsafeArray.toString,
         "mapKeyDedupPolicy" -> "\"spark.sql.mapKeyDedupPolicy\"")

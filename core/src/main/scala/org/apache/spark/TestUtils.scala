@@ -421,7 +421,7 @@ private[spark] object TestUtils extends SparkTestUtils {
   def createTempScriptWithExpectedOutput(dir: File, prefix: String, output: String): String = {
     val file = File.createTempFile(prefix, ".sh", dir)
     val script = s"cat <<EOF\n$output\nEOF\n"
-    Files.write(script, file, StandardCharsets.UTF_8)
+    Files.asCharSink(file, StandardCharsets.UTF_8).write(script)
     JavaFiles.setPosixFilePermissions(file.toPath,
       EnumSet.of(OWNER_READ, OWNER_EXECUTE, OWNER_WRITE))
     file.getPath

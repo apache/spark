@@ -52,7 +52,7 @@ class ErrorsTest(unittest.TestCase):
 
     def test_invalid_error_class(self):
         with self.assertRaisesRegex(ValueError, "Cannot find main error class"):
-            PySparkValueError(error_class="invalid", message_parameters={})
+            PySparkValueError(errorClass="invalid", messageParameters={})
 
 
 if __name__ == "__main__":

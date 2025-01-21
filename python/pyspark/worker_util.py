@@ -75,8 +75,8 @@ def check_python_version(infile: IO) -> None:
     worker_version = "%d.%d" % sys.version_info[:2]
     if version != worker_version:
         raise PySparkRuntimeError(
-            error_class="PYTHON_VERSION_MISMATCH",
-            message_parameters={
+            errorClass="PYTHON_VERSION_MISMATCH",
+            messageParameters={
                 "worker_version": worker_version,
                 "driver_version": str(version),
             },
@@ -107,8 +107,8 @@ def setup_memory_limits(memory_limit_mb: int) -> None:
 
         except (resource.error, OSError, ValueError) as e:
             # not all systems support resource limits, so warn instead of failing
-            curent = currentframe()
-            lineno = getframeinfo(curent).lineno + 1 if curent is not None else 0
+            current = currentframe()
+            lineno = getframeinfo(current).lineno + 1 if current is not None else 0
             if "__file__" in globals():
                 print(
                     warnings.formatwarning(

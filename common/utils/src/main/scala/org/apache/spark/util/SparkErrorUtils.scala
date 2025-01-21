@@ -21,7 +21,7 @@ import java.nio.charset.StandardCharsets.UTF_8
 
 import scala.util.control.NonFatal
 
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, LogKeys, MDC}
 
 private[spark] trait SparkErrorUtils extends Logging {
   /**
@@ -46,6 +46,22 @@ private[spark] trait SparkErrorUtils extends Logging {
   def tryWithResource[R <: Closeable, T](createResource: => R)(f: R => T): T = {
     val resource = createResource
     try f.apply(resource) finally resource.close()
+  }
+
+  /**
+   * Try to initialize a resource. If an exception is throw during initialization, closes the
+   * resource before propagating the error. Otherwise, the caller is responsible for closing
+   * the resource. This means that [[T]] should provide some way to close the resource.
+   */
+  def tryInitializeResource[R <: Closeable, T](createResource: => R)(initialize: R => T): T = {
+    val resource = createResource
+    try {
+      initialize(resource)
+    } catch {
+      case e: Throwable =>
+        resource.close()
+        throw e
+    }
   }
 
   /**
@@ -74,7 +90,8 @@ private[spark] trait SparkErrorUtils extends Logging {
       } catch {
         case t: Throwable if (originalThrowable != null && originalThrowable != t) =>
           originalThrowable.addSuppressed(t)
-          logWarning(s"Suppressing exception in finally: ${t.getMessage}", t)
+          logWarning(
+            log"Suppressing exception in finally: ${MDC(LogKeys.MESSAGE, t.getMessage)}", t)
           throw originalThrowable
       }
     }

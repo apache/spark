@@ -25,7 +25,6 @@ from typing import (
     Generic,
     List,
     Optional,
-    Union,
 )
 
 import numpy as np
@@ -33,6 +32,7 @@ import pandas as pd
 from pandas.tseries.frequencies import to_offset
 
 from pyspark.sql import Column, functions as F
+from pyspark.sql.internal import InternalFunction as SF
 from pyspark.sql.types import (
     NumericType,
     StructField,
@@ -56,7 +56,6 @@ from pyspark.pandas.utils import (
     scol_for,
     verify_temp_column_name,
 )
-from pyspark.pandas.spark.functions import timestampdiff
 
 
 class Resampler(Generic[FrameLike], metaclass=ABCMeta):
@@ -131,19 +130,6 @@ class Resampler(Generic[FrameLike], metaclass=ABCMeta):
     def _agg_columns_scols(self) -> List[Column]:
         return [s.spark.column for s in self._agg_columns]
 
-    def get_make_interval(  # type: ignore[return]
-        self, unit: str, col: Union[Column, int, float]
-    ) -> Column:
-        col = col if not isinstance(col, (int, float)) else F.lit(col)
-        if unit == "MONTH":
-            return F.make_interval(months=col)
-        if unit == "HOUR":
-            return F.make_interval(hours=col)
-        if unit == "MINUTE":
-            return F.make_interval(mins=col)
-        if unit == "SECOND":
-            return F.make_interval(secs=col)
-
     def _bin_timestamp(self, origin: pd.Timestamp, ts_scol: Column) -> Column:
         key_type = self._resamplekey_type
         origin_scol = F.lit(origin)
@@ -204,18 +190,18 @@ class Resampler(Generic[FrameLike], metaclass=ABCMeta):
             truncated_ts_scol = F.date_trunc("MONTH", ts_scol)
             edge_label = truncated_ts_scol
             if left_closed and right_labeled:
-                edge_label += self.get_make_interval("MONTH", n)
+                edge_label += SF.make_interval("MONTH", n)
             elif right_closed and left_labeled:
-                edge_label -= self.get_make_interval("MONTH", n)
+                edge_label -= SF.make_interval("MONTH", n)
 
             if left_labeled:
                 non_edge_label = F.when(
                     mod == 0,
-                    truncated_ts_scol - self.get_make_interval("MONTH", n),
-                ).otherwise(truncated_ts_scol - self.get_make_interval("MONTH", mod))
+                    truncated_ts_scol - SF.make_interval("MONTH", n),
+                ).otherwise(truncated_ts_scol - SF.make_interval("MONTH", mod))
             else:
                 non_edge_label = F.when(mod == 0, truncated_ts_scol).otherwise(
-                    truncated_ts_scol - self.get_make_interval("MONTH", mod - n)
+                    truncated_ts_scol - SF.make_interval("MONTH", mod - n)
                 )
 
             ret = F.to_timestamp(
@@ -279,7 +265,7 @@ class Resampler(Generic[FrameLike], metaclass=ABCMeta):
             truncated_ts_scol = F.date_trunc(unit_str, ts_scol)
             if isinstance(key_type, TimestampNTZType):
                 truncated_ts_scol = F.to_timestamp_ntz(truncated_ts_scol)
-            diff = timestampdiff(unit_str, origin_scol, truncated_ts_scol)
+            diff = F.timestamp_diff(unit_str, origin_scol, truncated_ts_scol)
             mod = F.lit(0) if n == 1 else (diff % F.lit(n))
 
             if rule_code in ["h", "H"]:
@@ -293,19 +279,19 @@ class Resampler(Generic[FrameLike], metaclass=ABCMeta):
 
             edge_label = truncated_ts_scol
             if left_closed and right_labeled:
-                edge_label += self.get_make_interval(unit_str, n)
+                edge_label += SF.make_interval(unit_str, n)
             elif right_closed and left_labeled:
-                edge_label -= self.get_make_interval(unit_str, n)
+                edge_label -= SF.make_interval(unit_str, n)
 
             if left_labeled:
                 non_edge_label = F.when(mod == 0, truncated_ts_scol).otherwise(
-                    truncated_ts_scol - self.get_make_interval(unit_str, mod)
+                    truncated_ts_scol - SF.make_interval(unit_str, mod)
                 )
             else:
                 non_edge_label = F.when(
                     mod == 0,
-                    truncated_ts_scol + self.get_make_interval(unit_str, n),
-                ).otherwise(truncated_ts_scol - self.get_make_interval(unit_str, mod - n))
+                    truncated_ts_scol + SF.make_interval(unit_str, n),
+                ).otherwise(truncated_ts_scol - SF.make_interval(unit_str, mod - n))
 
             ret = F.when(edge_cond, edge_label).otherwise(non_edge_label)
 

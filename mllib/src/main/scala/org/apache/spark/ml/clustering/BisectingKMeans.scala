@@ -96,6 +96,10 @@ class BisectingKMeansModel private[ml] (
   extends Model[BisectingKMeansModel] with BisectingKMeansParams with MLWritable
   with HasTrainingSummary[BisectingKMeansSummary] {
 
+  @Since("4.0.0")
+  private[ml] def this() = this(Identifiable.randomUID("bisecting-kmeans"),
+    new MLlibBisectingKMeansModel(null))
+
   @Since("3.0.0")
   lazy val numFeatures: Int = parentModel.clusterCenters.head.size
 
@@ -186,7 +190,7 @@ object BisectingKMeansModel extends MLReadable[BisectingKMeansModel] {
 
     override protected def saveImpl(path: String): Unit = {
       // Save metadata and Params
-      DefaultParamsWriter.saveMetadata(instance, path, sc)
+      DefaultParamsWriter.saveMetadata(instance, path, sparkSession)
       val dataPath = new Path(path, "data").toString
       instance.parentModel.save(sc, dataPath)
     }
@@ -198,7 +202,7 @@ object BisectingKMeansModel extends MLReadable[BisectingKMeansModel] {
     private val className = classOf[BisectingKMeansModel].getName
 
     override def load(path: String): BisectingKMeansModel = {
-      val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
+      val metadata = DefaultParamsReader.loadMetadata(path, sparkSession, className)
       val dataPath = new Path(path, "data").toString
       val mllibModel = MLlibBisectingKMeansModel.load(sc, dataPath)
       val model = new BisectingKMeansModel(metadata.uid, mllibModel)

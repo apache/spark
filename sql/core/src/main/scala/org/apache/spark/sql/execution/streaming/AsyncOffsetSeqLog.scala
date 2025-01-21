@@ -23,6 +23,7 @@ import java.util.concurrent.atomic.AtomicLong
 
 import scala.jdk.CollectionConverters._
 
+import org.apache.spark.internal.{LogKeys, MDC}
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.util.{Clock, SystemClock}
@@ -159,7 +160,8 @@ class AsyncOffsetSeqLog(
             }
           } catch {
             case e: Throwable =>
-              logError(s"Encountered error while writing batch ${batchId} to offset log", e)
+              logError(log"Encountered error while writing batch " +
+                log"${MDC(LogKeys.BATCH_ID, batchId)} to offset log", e)
               future.completeExceptionally(e)
           }
         }

@@ -32,7 +32,6 @@ trait HDFSBackedStateStoreMap {
   def remove(key: UnsafeRow): UnsafeRow
   def iterator(): Iterator[UnsafeRowPair]
   def prefixScan(prefixKey: UnsafeRow): Iterator[UnsafeRowPair]
-  def clear(): Unit
 }
 
 object HDFSBackedStateStoreMap {
@@ -80,8 +79,6 @@ class NoPrefixHDFSBackedStateStoreMap extends HDFSBackedStateStoreMap {
   override def prefixScan(prefixKey: UnsafeRow): Iterator[UnsafeRowPair] = {
     throw SparkUnsupportedOperationException()
   }
-
-  override def clear(): Unit = map.clear()
 }
 
 class PrefixScannableHDFSBackedStateStoreMap(
@@ -169,10 +166,5 @@ class PrefixScannableHDFSBackedStateStoreMap(
     prefixKeyToKeysMap.getOrDefault(prefixKey, mutable.Set.empty[UnsafeRow])
       .iterator
       .map { key => unsafeRowPair.withRows(key, map.get(key)) }
-  }
-
-  override def clear(): Unit = {
-    map.clear()
-    prefixKeyToKeysMap.clear()
   }
 }

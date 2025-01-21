@@ -92,7 +92,7 @@ class SparkPlanSuite extends QueryTest with SharedSparkSession {
   }
 
   test("SPARK-30780 empty LocalTableScan should use RDD without partitions") {
-    assert(LocalTableScanExec(Nil, Nil).execute().getNumPartitions == 0)
+    assert(LocalTableScanExec(Nil, Nil, None).execute().getNumPartitions == 0)
   }
 
   test("SPARK-33617: change default parallelism of LocalTableScan") {
@@ -112,18 +112,18 @@ class SparkPlanSuite extends QueryTest with SharedSparkSession {
       exception = intercept[SparkException] {
         planner.plan(deduplicate)
       },
-      errorClass = "INTERNAL_ERROR",
+      condition = "INTERNAL_ERROR",
       parameters = Map(
         "message" -> ("Deduplicate operator for non streaming data source should have been " +
           "replaced by aggregate in the optimizer")))
   }
 
   test("SPARK-37221: The collect-like API in SparkPlan should support columnar output") {
-    val emptyResults = ColumnarOp(LocalTableScanExec(Nil, Nil)).toRowBased.executeCollect()
+    val emptyResults = ColumnarOp(LocalTableScanExec(Nil, Nil, None)).toRowBased.executeCollect()
     assert(emptyResults.isEmpty)
 
     val relation = LocalTableScanExec(
-      Seq(AttributeReference("val", IntegerType)()), Seq(InternalRow(1)))
+      Seq(AttributeReference("val", IntegerType)()), Seq(InternalRow(1)), None)
     val nonEmpty = ColumnarOp(relation).toRowBased.executeCollect()
     assert(nonEmpty === relation.executeCollect())
   }

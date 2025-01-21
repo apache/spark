@@ -20,6 +20,7 @@ package org.apache.spark.sql
 import java.io.{File, FilenameFilter}
 import java.nio.file.{Files, Paths}
 import java.time.{Duration, LocalDateTime, Period}
+import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.collection.mutable.HashSet
 import scala.concurrent.duration._
@@ -157,7 +158,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
         sql("CACHE TABLE tempView AS SELECT 1")
       }
       checkError(e,
-        errorClass = "TEMP_TABLE_OR_VIEW_ALREADY_EXISTS",
+        condition = "TEMP_TABLE_OR_VIEW_ALREADY_EXISTS",
         parameters = Map("relationName" -> "`tempView`"))
     }
   }
@@ -1107,7 +1108,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
     assert(queryStats1.map(_._1.name).isEmpty)
 
     val cacheManager = spark.sharedState.cacheManager
-    val cachedData = cacheManager.lookupCachedData(query().logicalPlan)
+    val cachedData = cacheManager.lookupCachedData(query())
     assert(cachedData.isDefined)
     val queryAttrs = cachedData.get.plan.output
     assert(queryAttrs.size === 3)
@@ -1436,7 +1437,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
       withSQLConf(SQLConf.STORE_ANALYZED_PLAN_FOR_VIEW.key -> storeAnalyzed.toString) {
         withGlobalTempView("view1") {
           withTempView("view2") {
-            val db = spark.sharedState.globalTempViewManager.database
+            val db = spark.sharedState.globalTempDB
             sql("CREATE GLOBAL TEMPORARY VIEW view1 AS SELECT * FROM testData WHERE key > 1")
             sql(s"CACHE TABLE view2 AS SELECT * FROM ${db}.view1 WHERE value > 1")
             assert(spark.catalog.isCached("view2"))
@@ -1473,7 +1474,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
           assert(spark.catalog.isCached("view2"))
 
           val oldView = spark.table("view2")
-          spark.sqlContext.uncacheTable("view1")
+          spark.catalog.uncacheTable("view1")
           assert(storeAnalyzed ==
             spark.sharedState.cacheManager.lookupCachedData(oldView).isDefined,
             s"when storeAnalyzed = $storeAnalyzed")
@@ -1487,13 +1488,13 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
       withSQLConf(SQLConf.STORE_ANALYZED_PLAN_FOR_VIEW.key -> storeAnalyzed.toString) {
         withGlobalTempView("view1") {
           withTempView("view2") {
-            val db = spark.sharedState.globalTempViewManager.database
+            val db = spark.sharedState.globalTempDB
             sql("CREATE GLOBAL TEMPORARY VIEW view1 AS SELECT * FROM testData WHERE key > 1")
             sql(s"CACHE TABLE view2 AS SELECT * FROM $db.view1 WHERE value > 1")
             assert(spark.catalog.isCached("view2"))
 
             val oldView = spark.table("view2")
-            spark.sqlContext.uncacheTable(s"$db.view1")
+            spark.catalog.uncacheTable(s"$db.view1")
             assert(storeAnalyzed ==
               spark.sharedState.cacheManager.lookupCachedData(oldView).isDefined,
               s"when storeAnalyzed = $storeAnalyzed")
@@ -1517,7 +1518,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
     Seq(true, false).foreach { storeAnalyzed =>
       withSQLConf(SQLConf.STORE_ANALYZED_PLAN_FOR_VIEW.key -> storeAnalyzed.toString) {
         withGlobalTempView("global_tv") {
-          val db = spark.sharedState.globalTempViewManager.database
+          val db = spark.sharedState.globalTempDB
           testAlterTemporaryViewAsWithCache(TableIdentifier("global_tv", Some(db)), storeAnalyzed)
         }
       }
@@ -1575,7 +1576,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
 
   test("SPARK-34699: CREATE GLOBAL TEMP VIEW USING should uncache correctly") {
     withGlobalTempView("global_tv") {
-      val db = spark.sharedState.globalTempViewManager.database
+      val db = spark.sharedState.globalTempDB
       testCreateTemporaryViewUsingWithCache(TableIdentifier("global_tv", Some(db)))
     }
   }
@@ -1787,6 +1788,47 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
         Row(0, 1, 0, 1) :: Row(1, 2, 1, 2) :: Nil)
       assert(getNumInMemoryRelations(df) == 1)
     }
+  }
 
+  Seq(true, false).foreach { callerEnableAQE =>
+    test(s"SPARK-49982: AQE negative caching with in memory table cache - callerEnableAQE=" +
+      callerEnableAQE) {
+      val triggered = new AtomicBoolean(false)
+      val func: Long => Boolean = (i: Long) => {
+        if (!triggered.get()) {
+          throw new Exception("SPARK-49982")
+        }
+        i % 2 == 0
+      }
+      withUserDefinedFunction("func" -> true) {
+        spark.udf.register("func", func)
+        // make sure the cached plan is AQE plan
+        withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
+          val df1 = spark.range(1024).select($"id".as("key1"))
+          val df2 = spark.range(2048).select($"id".as("key2"))
+            .withColumn("group_key", $"key2" % 1024)
+          val df = df1.filter(expr("func(key1)")).hint("MERGE").join(df2, $"key1" === $"key2")
+          df.cache()
+          try {
+            withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> callerEnableAQE.toString) {
+              val finalDf1 = df.groupBy($"group_key").agg("key1" -> "count")
+              val finalDf2 = df.groupBy($"group_key").agg("key1" -> "avg")
+              intercept[Throwable] {
+                finalDf1.collect()
+              }
+              triggered.set(true)
+              // Collect again on the same df will trigger AQE negative caching
+              intercept[Throwable] {
+                finalDf1.collect()
+              }
+              // Collect on a different df will use the refreshed InMemoryRelation
+              finalDf2.collect()
+            }
+          } finally {
+            df.unpersist(blocking = true)
+          }
+        }
+      }
+    }
   }
 }

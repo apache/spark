@@ -311,8 +311,8 @@ object InputOutputMetricsHelper {
       res.shuffleRecordsRead += taskEnd.taskMetrics.shuffleReadMetrics.recordsRead
 
       var maxOutputRows = 0L
-      for (accum <- taskEnd.taskMetrics.externalAccums) {
-        val info = accum.toInfo(Some(accum.value), None)
+      taskEnd.taskMetrics.withExternalAccums(_.foreach { accum =>
+        val info = accum.toInfoUpdate
         if (info.name.toString.contains("number of output rows")) {
           info.update match {
             case Some(n: Number) =>
@@ -322,7 +322,7 @@ object InputOutputMetricsHelper {
             case _ => // Ignore.
           }
         }
-      }
+      })
       res.sumMaxOutputRows += maxOutputRows
     }
   }

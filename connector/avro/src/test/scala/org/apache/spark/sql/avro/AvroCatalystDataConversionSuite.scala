@@ -252,11 +252,10 @@ class AvroCatalystDataConversionSuite extends SparkFunSuite
       exception = intercept[SparkRuntimeException] {
         CatalystDataToAvro(input, None).eval()
       },
-      errorClass = "AVRO_CANNOT_WRITE_NULL_FIELD",
+      condition = "AVRO_CANNOT_WRITE_NULL_FIELD",
       parameters = Map(
         "name" -> "outer",
-        "schema" -> "\"STRUCT<inner: STRING NOT NULL>\"",
-      )
+        "schema" -> "\"STRUCT<inner: STRING NOT NULL>\"")
     )
   }
 
@@ -310,7 +309,8 @@ class AvroCatalystDataConversionSuite extends SparkFunSuite
       RebaseSpec(LegacyBehaviorPolicy.CORRECTED),
       filters,
       false,
-      "")
+      "",
+      -1)
     val deserialized = deserializer.deserialize(data)
     expected match {
       case None => assert(deserialized == None)

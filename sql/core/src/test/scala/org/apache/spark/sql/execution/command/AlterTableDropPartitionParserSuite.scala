@@ -90,7 +90,7 @@ class AlterTableDropPartitionParserSuite extends AnalysisTest with SharedSparkSe
     val sql = "ALTER VIEW table_name DROP PARTITION (p=1)"
     checkError(
       exception = parseException(parsePlan)(sql),
-      errorClass = "INVALID_STATEMENT_OR_CLAUSE",
+      condition = "INVALID_STATEMENT_OR_CLAUSE",
       parameters = Map("operation" -> "ALTER VIEW ... DROP PARTITION"),
       context = ExpectedContext(
         fragment = sql,

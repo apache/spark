@@ -23,5 +23,4 @@ if [ -z "${SPARK_HOME}" ]; then
   source "$(dirname "$0")"/find-spark-home
 fi
 
-# This requires building the spark with `-Pconnect`, e,g, `build/sbt -Pconnect package`
 exec "${SPARK_HOME}"/bin/spark-shell --conf spark.plugins=org.apache.spark.sql.connect.SparkConnectPlugin "$@"

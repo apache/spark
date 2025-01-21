@@ -27,9 +27,9 @@ class PartitionBatchPruningSuite extends SharedSparkSession with AdaptiveSparkPl
 
   import testImplicits._
 
-  private lazy val originalColumnBatchSize = spark.conf.get(SQLConf.COLUMN_BATCH_SIZE)
+  private lazy val originalColumnBatchSize = spark.conf.get(SQLConf.COLUMN_BATCH_SIZE.key)
   private lazy val originalInMemoryPartitionPruning =
-    spark.conf.get(SQLConf.IN_MEMORY_PARTITION_PRUNING)
+    spark.conf.get(SQLConf.IN_MEMORY_PARTITION_PRUNING.key)
   private val testArrayData = (1 to 100).map { key =>
     Tuple1(Array.fill(key)(key))
   }

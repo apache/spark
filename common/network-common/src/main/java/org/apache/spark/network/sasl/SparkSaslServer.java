@@ -31,13 +31,13 @@ import java.nio.charset.StandardCharsets;
 import java.util.Map;
 
 import com.google.common.base.Preconditions;
-import com.google.common.base.Throwables;
 import com.google.common.collect.ImmutableMap;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.handler.codec.base64.Base64;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+
+import org.apache.spark.internal.SparkLogger;
+import org.apache.spark.internal.SparkLoggerFactory;
 
 /**
  * A SASL Server for Spark which simply keeps track of the state of a single SASL session, from the
@@ -45,7 +45,7 @@ import org.slf4j.LoggerFactory;
  * connections on some socket.)
  */
 public class SparkSaslServer implements SaslEncryptionBackend {
-  private static final Logger logger = LoggerFactory.getLogger(SparkSaslServer.class);
+  private static final SparkLogger logger = SparkLoggerFactory.getLogger(SparkSaslServer.class);
 
   /**
    * This is passed as the server name when creating the sasl client/server.
@@ -93,7 +93,7 @@ public class SparkSaslServer implements SaslEncryptionBackend {
       this.saslServer = Sasl.createSaslServer(DIGEST, null, DEFAULT_REALM, saslProps,
         new DigestCallbackHandler());
     } catch (SaslException e) {
-      throw Throwables.propagate(e);
+      throw new RuntimeException(e);
     }
   }
 
@@ -118,7 +118,7 @@ public class SparkSaslServer implements SaslEncryptionBackend {
     try {
       return saslServer != null ? saslServer.evaluateResponse(token) : new byte[0];
     } catch (SaslException e) {
-      throw Throwables.propagate(e);
+      throw new RuntimeException(e);
     }
   }
 

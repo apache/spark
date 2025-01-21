@@ -58,7 +58,7 @@ class ReassignLambdaVariableIDSuite extends PlanTest {
     val query = testRelation.where(var1 && var2)
     checkError(
       exception = intercept[SparkException](Optimize.execute(query)),
-      errorClass = "INTERNAL_ERROR",
+      condition = "INTERNAL_ERROR",
       parameters = Map(
         "message" -> "LambdaVariable IDs in a query should be all positive or negative."))
   }

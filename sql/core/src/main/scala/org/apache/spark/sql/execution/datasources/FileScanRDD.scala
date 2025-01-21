@@ -21,10 +21,12 @@ import java.io.{Closeable, FileNotFoundException, IOException}
 import java.net.URI
 
 import org.apache.hadoop.fs.Path
+import org.apache.hadoop.hdfs.BlockMissingException
+import org.apache.hadoop.security.AccessControlException
 
 import org.apache.spark.{Partition => RDDPartition, TaskContext}
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.internal.LogKeys.PATH
+import org.apache.spark.internal.LogKeys.{CURRENT_FILE, PATH}
 import org.apache.spark.internal.MDC
 import org.apache.spark.paths.SparkPath
 import org.apache.spark.rdd.{InputFileBlockHolder, RDD}
@@ -233,7 +235,7 @@ class FileScanRDD(
         if (files.hasNext) {
           currentFile = files.next()
           updateMetadataRow()
-          logInfo(s"Reading File $currentFile")
+          logInfo(log"Reading File ${MDC(CURRENT_FILE, currentFile)}")
           // Sets InputFileBlockHolder for the file block's information
           InputFileBlockHolder
             .set(currentFile.urlEncodedPath, currentFile.start, currentFile.length)
@@ -266,6 +268,7 @@ class FileScanRDD(
                     null
                   // Throw FileNotFoundException even if `ignoreCorruptFiles` is true
                   case e: FileNotFoundException if !ignoreMissingFiles => throw e
+                  case e @ (_ : AccessControlException | _ : BlockMissingException) => throw e
                   case e @ (_: RuntimeException | _: IOException) if ignoreCorruptFiles =>
                     logWarning(log"Skipped the rest of the content in the corrupted file: " +
                       log"${MDC(PATH, currentFile)}", e)

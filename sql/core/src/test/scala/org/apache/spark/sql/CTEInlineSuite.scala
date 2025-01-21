@@ -17,7 +17,8 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.catalyst.expressions.{And, GreaterThan, LessThan, Literal, Or}
+import org.apache.spark.sql.catalyst.expressions.{Alias, And, GreaterThan, LessThan, Literal, Or, Rand}
+import org.apache.spark.sql.catalyst.optimizer.InlineCTE
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.adaptive._
 import org.apache.spark.sql.execution.exchange.ReusedExchangeExec
@@ -511,7 +512,7 @@ abstract class CTEInlineSuiteBase
          """.stripMargin)
       checkAnswer(df1, Row(2, 2) :: Nil)
       df1.queryExecution.analyzed match {
-        case Aggregate(_, _, WithCTE(_, cteDefs)) => assert(cteDefs.length == 2)
+        case Aggregate(_, _, WithCTE(_, cteDefs), _) => assert(cteDefs.length == 2)
         case other => fail(s"Expect pattern Aggregate(WithCTE(_)) but got $other")
       }
 
@@ -530,7 +531,7 @@ abstract class CTEInlineSuiteBase
          """.stripMargin)
       checkAnswer(df2, Row(2, 2) :: Nil)
       df2.queryExecution.analyzed match {
-        case Aggregate(_, _, Join(_, SubqueryAlias(_, WithCTE(_, cteDefs)), _, _, _)) =>
+        case Aggregate(_, _, Join(_, SubqueryAlias(_, WithCTE(_, cteDefs)), _, _, _), _) =>
           assert(cteDefs.length == 1)
         case other => fail(s"Expect pattern Aggregate(Join(_, WithCTE(_))) but got $other")
       }
@@ -560,7 +561,7 @@ abstract class CTEInlineSuiteBase
          """.stripMargin)
       checkAnswer(df3, Row(4, 4) :: Nil)
       df3.queryExecution.analyzed match {
-        case Aggregate(_, _, Join(_, SubqueryAlias(_, WithCTE(_: Union, cteDefs)), _, _, _)) =>
+        case Aggregate(_, _, Join(_, SubqueryAlias(_, WithCTE(_: Union, cteDefs)), _, _, _), _) =>
           assert(cteDefs.length == 2)
         case other => fail(
           s"Expect pattern Aggregate(Join(_, (WithCTE(Union(_, _))))) but got $other")
@@ -585,7 +586,7 @@ abstract class CTEInlineSuiteBase
          """.stripMargin)
       checkAnswer(df4, Row(4, 4) :: Nil)
       df4.queryExecution.analyzed match {
-        case Aggregate(_, _, Join(_, SubqueryAlias(_, Union(children, _, _)), _, _, _))
+        case Aggregate(_, _, Join(_, SubqueryAlias(_, Union(children, _, _)), _, _, _), _)
           if children.head.find(_.isInstanceOf[WithCTE]).isDefined =>
           assert(
             children.head.collect {
@@ -618,7 +619,7 @@ abstract class CTEInlineSuiteBase
          """.stripMargin)
       checkAnswer(df5, Row(4, 4) :: Nil)
       df5.queryExecution.analyzed match {
-        case Aggregate(_, _, WithCTE(_, cteDefs)) => assert(cteDefs.length == 2)
+        case Aggregate(_, _, WithCTE(_, cteDefs), _) => assert(cteDefs.length == 2)
         case other => fail(s"Expect pattern Aggregate(WithCTE(_)) but got $other")
       }
 
@@ -702,6 +703,118 @@ abstract class CTEInlineSuiteBase
            |""".stripMargin))
       checkErrorTableNotFound(e, "`tab_non_exists`", ExpectedContext("tab_non_exists", 83, 96))
     }
+  }
+
+  test("SPARK-48307: not-inlined CTE references sibling") {
+    val df = sql(
+      """
+        |WITH
+        |v1 AS (SELECT 1 col),
+        |v2 AS (SELECT col, rand() FROM v1)
+        |SELECT l.col FROM v2 l JOIN v2 r ON l.col = r.col
+        |""".stripMargin)
+    checkAnswer(df, Row(1))
+  }
+
+  test("SPARK-49816: detect self-contained WithCTE nodes") {
+    withView("v") {
+      sql(
+        """
+          |WITH
+          |t1 AS (SELECT 1 col),
+          |t2 AS (SELECT * FROM t1)
+          |SELECT * FROM t2
+          |""".stripMargin).createTempView("v")
+      // r1 is un-referenced, but it should not decrease the ref count of t2 inside view v.
+      val df = sql(
+        """
+          |WITH
+          |r1 AS (SELECT * FROM v),
+          |r2 AS (SELECT * FROM v)
+          |SELECT * FROM r2
+          |""".stripMargin)
+      checkAnswer(df, Row(1))
+    }
+  }
+
+  test("SPARK-49816: complicated reference count") {
+    // Manually build the logical plan for
+    // WITH
+    //  r1 AS (SELECT random()),
+    //  r2 AS (
+    //    WITH
+    //      t1 AS (SELECT * FROM r1),
+    //      t2 AS (SELECT * FROM r1)
+    //    SELECT * FROM t2
+    //  )
+    // SELECT * FROM r2
+    // r1 should be inlined as it's only referenced once: main query -> r2 -> t2 -> r1
+    val r1 = CTERelationDef(Project(Seq(Alias(Rand(Literal(0)), "r")()), OneRowRelation()))
+    val r1Ref = CTERelationRef(r1.id, r1.resolved, r1.output, r1.isStreaming)
+    val t1 = CTERelationDef(Project(r1.output, r1Ref))
+    val t2 = CTERelationDef(Project(r1.output, r1Ref))
+    val t2Ref = CTERelationRef(t2.id, t2.resolved, t2.output, t2.isStreaming)
+    val r2 = CTERelationDef(WithCTE(Project(t2.output, t2Ref), Seq(t1, t2)))
+    val r2Ref = CTERelationRef(r2.id, r2.resolved, r2.output, r2.isStreaming)
+    val query = WithCTE(Project(r2.output, r2Ref), Seq(r1, r2))
+    val inlined = InlineCTE().apply(query)
+    assert(!inlined.exists(_.isInstanceOf[WithCTE]))
+  }
+
+  test("SPARK-49816: complicated reference count 2") {
+    // Manually build the logical plan for
+    // WITH
+    //  r1 AS (SELECT random()),
+    //  r2 AS (
+    //    WITH
+    //      t1 AS (SELECT * FROM r1),
+    //      t2 AS (SELECT * FROM t1)
+    //    SELECT * FROM t2
+    //  )
+    // SELECT * FROM r1
+    // This is similar to the previous test case, but t2 reference t1 instead of r1, and the main
+    // query references r1. r1 should be inlined as r2 is not referenced at all.
+    val r1 = CTERelationDef(Project(Seq(Alias(Rand(Literal(0)), "r")()), OneRowRelation()))
+    val r1Ref = CTERelationRef(r1.id, r1.resolved, r1.output, r1.isStreaming)
+    val t1 = CTERelationDef(Project(r1.output, r1Ref))
+    val t1Ref = CTERelationRef(t1.id, t1.resolved, t1.output, t1.isStreaming)
+    val t2 = CTERelationDef(Project(t1.output, t1Ref))
+    val t2Ref = CTERelationRef(t2.id, t2.resolved, t2.output, t2.isStreaming)
+    val r2 = CTERelationDef(WithCTE(Project(t2.output, t2Ref), Seq(t1, t2)))
+    val query = WithCTE(Project(r1.output, r1Ref), Seq(r1, r2))
+    val inlined = InlineCTE().apply(query)
+    assert(!inlined.exists(_.isInstanceOf[WithCTE]))
+  }
+
+  test("SPARK-49816: complicated reference count 3") {
+    // Manually build the logical plan for
+    // WITH
+    //  r1 AS (
+    //    WITH
+    //      t1 AS (SELECT random()),
+    //      t2 AS (SELECT * FROM t1)
+    //    SELECT * FROM t2
+    //  ),
+    //  r2 AS (
+    //    WITH
+    //      t1 AS (SELECT random()),
+    //      t2 AS (SELECT * FROM r1)
+    //    SELECT * FROM t2
+    //  )
+    // SELECT * FROM r1 UNION ALL SELECT * FROM r2
+    // The inner WITH in r1 and r2 should become `SELECT random()` and r1/r2 should be inlined.
+    val t1 = CTERelationDef(Project(Seq(Alias(Rand(Literal(0)), "r")()), OneRowRelation()))
+    val t1Ref = CTERelationRef(t1.id, t1.resolved, t1.output, t1.isStreaming)
+    val t2 = CTERelationDef(Project(t1.output, t1Ref))
+    val t2Ref = CTERelationRef(t2.id, t2.resolved, t2.output, t2.isStreaming)
+    val cte = WithCTE(Project(t2.output, t2Ref), Seq(t1, t2))
+    val r1 = CTERelationDef(cte)
+    val r1Ref = CTERelationRef(r1.id, r1.resolved, r1.output, r1.isStreaming)
+    val r2 = CTERelationDef(cte)
+    val r2Ref = CTERelationRef(r2.id, r2.resolved, r2.output, r2.isStreaming)
+    val query = WithCTE(Union(r1Ref, r2Ref), Seq(r1, r2))
+    val inlined = InlineCTE().apply(query)
+    assert(!inlined.exists(_.isInstanceOf[WithCTE]))
   }
 }
 

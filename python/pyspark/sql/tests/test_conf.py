@@ -69,8 +69,8 @@ class ConfTestsMixin:
 
             self.check_error(
                 exception=pe.exception,
-                error_class="NOT_STR",
-                message_parameters={
+                errorClass="NOT_STR",
+                messageParameters={
                     "arg_name": "key",
                     "arg_type": "int",
                 },

@@ -184,17 +184,17 @@ class DataSourceV2DataFrameSuite
         val v2Writer = df.writeTo("testcat.table_name")
         checkError(
           exception = intercept[AnalysisException](v2Writer.append()),
-          errorClass = "_LEGACY_ERROR_TEMP_1183",
+          condition = "_LEGACY_ERROR_TEMP_1183",
           parameters = Map.empty
         )
         checkError(
           exception = intercept[AnalysisException](v2Writer.overwrite(df("i"))),
-          errorClass = "_LEGACY_ERROR_TEMP_1183",
+          condition = "_LEGACY_ERROR_TEMP_1183",
           parameters = Map.empty
         )
         checkError(
           exception = intercept[AnalysisException](v2Writer.overwritePartitions()),
-          errorClass = "_LEGACY_ERROR_TEMP_1183",
+          condition = "_LEGACY_ERROR_TEMP_1183",
           parameters = Map.empty
         )
       }

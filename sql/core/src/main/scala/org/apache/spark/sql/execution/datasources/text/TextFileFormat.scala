@@ -32,7 +32,7 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.{DataType, StringType, StructType}
-import org.apache.spark.util.SerializableConfiguration
+import org.apache.spark.util.{SerializableConfiguration, Utils}
 
 /**
  * A data source for reading text files. The text files must be encoded as UTF-8.
@@ -45,6 +45,12 @@ class TextFileFormat extends TextBasedFileFormat with DataSourceRegister {
 
   private def verifySchema(schema: StructType): Unit = {
     if (schema.size != 1) {
+      throw QueryCompilationErrors.textDataSourceWithMultiColumnsError(schema)
+    }
+  }
+
+  private def verifyReadSchema(schema: StructType): Unit = {
+    if (schema.size > 1) {
       throw QueryCompilationErrors.textDataSourceWithMultiColumnsError(schema)
     }
   }
@@ -98,9 +104,7 @@ class TextFileFormat extends TextBasedFileFormat with DataSourceRegister {
       filters: Seq[Filter],
       options: Map[String, String],
       hadoopConf: Configuration): PartitionedFile => Iterator[InternalRow] = {
-    assert(
-      requiredSchema.length <= 1,
-      "Text data source only produces a single data column named \"value\".")
+    verifyReadSchema(requiredSchema)
     val textOptions = new TextOptions(options)
     val broadcastedHadoopConf =
       sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
@@ -115,10 +119,12 @@ class TextFileFormat extends TextBasedFileFormat with DataSourceRegister {
 
     (file: PartitionedFile) => {
       val confValue = conf.value.value
-      val reader = if (!textOptions.wholeText) {
-        new HadoopFileLinesReader(file, textOptions.lineSeparatorInRead, confValue)
-      } else {
-        new HadoopFileWholeTextReader(file, confValue)
+      val reader = Utils.createResourceUninterruptiblyIfInTaskThread {
+        if (!textOptions.wholeText) {
+          new HadoopFileLinesReader(file, textOptions.lineSeparatorInRead, confValue)
+        } else {
+          new HadoopFileWholeTextReader(file, confValue)
+        }
       }
       Option(TaskContext.get()).foreach(_.addTaskCompletionListener[Unit](_ => reader.close()))
       if (requiredSchema.isEmpty) {

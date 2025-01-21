@@ -1,0 +1,94 @@
+{
+  "common": {
+    "planId": "2"
+  },
+  "project": {
+    "input": {
+      "common": {
+        "planId": "1"
+      },
+      "withColumns": {
+        "input": {
+          "common": {
+            "planId": "0"
+          },
+          "localRelation": {
+            "schema": "struct\u003cd:date,t:timestamp,s:string,x:bigint,wt:struct\u003cstart:timestamp,end:timestamp\u003e\u003e"
+          }
+        },
+        "aliases": [{
+          "expr": {
+            "unresolvedAttribute": {
+              "unparsedIdentifier": "wt",
+              "planId": "0"
+            },
+            "common": {
+              "origin": {
+                "jvmOrigin": {
+                  "stackTrace": [{
+                    "classLoaderName": "app",
+                    "declaringClass": "org.apache.spark.sql.Dataset",
+                    "methodName": "withMetadata",
+                    "fileName": "Dataset.scala"
+                  }, {
+                    "classLoaderName": "app",
+                    "declaringClass": "org.apache.spark.sql.PlanGenerationTestSuite",
+                    "methodName": "~~trimmed~anonfun~~",
+                    "fileName": "PlanGenerationTestSuite.scala"
+                  }]
+                }
+              }
+            }
+          },
+          "name": ["wt"],
+          "metadata": "{\"spark.timeWindow\":true}"
+        }]
+      }
+    },
+    "expressions": [{
+      "unresolvedFunction": {
+        "functionName": "window_time",
+        "arguments": [{
+          "unresolvedAttribute": {
+            "unparsedIdentifier": "wt"
+          },
+          "common": {
+            "origin": {
+              "jvmOrigin": {
+                "stackTrace": [{
+                  "classLoaderName": "app",
+                  "declaringClass": "org.apache.spark.sql.functions$",
+                  "methodName": "col",
+                  "fileName": "functions.scala"
+                }, {
+                  "classLoaderName": "app",
+                  "declaringClass": "org.apache.spark.sql.PlanGenerationTestSuite",
+                  "methodName": "~~trimmed~anonfun~~",
+                  "fileName": "PlanGenerationTestSuite.scala"
+                }]
+              }
+            }
+          }
+        }],
+        "isInternal": false
+      },
+      "common": {
+        "origin": {
+          "jvmOrigin": {
+            "stackTrace": [{
+              "classLoaderName": "app",
+              "declaringClass": "org.apache.spark.sql.functions$",
+              "methodName": "window_time",
+              "fileName": "functions.scala"
+            }, {
+              "classLoaderName": "app",
+              "declaringClass": "org.apache.spark.sql.PlanGenerationTestSuite",
+              "methodName": "~~trimmed~anonfun~~",
+              "fileName": "PlanGenerationTestSuite.scala"
+            }]
+          }
+        }
+      }
+    }]
+  }
+}

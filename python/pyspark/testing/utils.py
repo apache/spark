@@ -15,14 +15,12 @@
 # limitations under the License.
 #
 
-import glob
 import os
 import struct
 import sys
 import unittest
 import difflib
 import functools
-import math
 from decimal import Decimal
 from time import time, sleep
 from typing import (
@@ -35,37 +33,85 @@ from typing import (
 )
 from itertools import zip_longest
 
-have_scipy = False
-have_numpy = False
-try:
-    import scipy.sparse  # noqa: F401
-
-    have_scipy = True
-except ImportError:
-    # No SciPy, but that's okay, we'll skip those tests
-    pass
-try:
-    import numpy as np  # noqa: F401
-
-    have_numpy = True
-except ImportError:
-    # No NumPy, but that's okay, we'll skip those tests
-    pass
-
 from pyspark import SparkConf
-from pyspark.errors import PySparkAssertionError, PySparkException
-from pyspark.errors.exceptions.captured import CapturedException
+from pyspark.errors import PySparkAssertionError, PySparkException, PySparkTypeError
 from pyspark.errors.exceptions.base import QueryContextType
-from pyspark.find_spark_home import _find_spark_home
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql import Row
-from pyspark.sql.types import StructType, StructField
+from pyspark.sql.types import StructType, StructField, VariantVal
 from pyspark.sql.functions import col, when
 
 
 __all__ = ["assertDataFrameEqual", "assertSchemaEqual"]
 
-SPARK_HOME = _find_spark_home()
+
+def have_package(name: str) -> bool:
+    import importlib
+
+    return importlib.util.find_spec(name) is not None
+
+
+have_numpy = have_package("numpy")
+numpy_requirement_message = None if have_numpy else "No module named 'numpy'"
+
+have_scipy = have_package("scipy")
+scipy_requirement_message = None if have_scipy else "No module named 'scipy'"
+
+have_sklearn = have_package("sklearn")
+sklearn_requirement_message = None if have_sklearn else "No module named 'sklearn'"
+
+have_torch = have_package("torch")
+torch_requirement_message = None if have_torch else "No module named 'torch'"
+
+have_torcheval = have_package("torcheval")
+torcheval_requirement_message = None if have_torcheval else "No module named 'torcheval'"
+
+have_deepspeed = have_package("deepspeed")
+deepspeed_requirement_message = None if have_deepspeed else "No module named 'deepspeed'"
+
+have_plotly = have_package("plotly")
+plotly_requirement_message = None if have_plotly else "No module named 'plotly'"
+
+have_matplotlib = have_package("matplotlib")
+matplotlib_requirement_message = None if have_matplotlib else "No module named 'matplotlib'"
+
+have_tabulate = have_package("tabulate")
+tabulate_requirement_message = None if have_tabulate else "No module named 'tabulate'"
+
+have_graphviz = have_package("graphviz")
+graphviz_requirement_message = None if have_graphviz else "No module named 'graphviz'"
+
+have_flameprof = have_package("flameprof")
+flameprof_requirement_message = None if have_flameprof else "No module named 'flameprof'"
+
+have_jinja2 = have_package("jinja2")
+jinja2_requirement_message = None if have_jinja2 else "No module named 'jinja2'"
+
+have_openpyxl = have_package("openpyxl")
+openpyxl_requirement_message = None if have_openpyxl else "No module named 'openpyxl'"
+
+pandas_requirement_message = None
+try:
+    from pyspark.sql.pandas.utils import require_minimum_pandas_version
+
+    require_minimum_pandas_version()
+except Exception as e:
+    # If Pandas version requirement is not satisfied, skip related tests.
+    pandas_requirement_message = str(e)
+
+have_pandas = pandas_requirement_message is None
+
+
+pyarrow_requirement_message = None
+try:
+    from pyspark.sql.pandas.utils import require_minimum_pyarrow_version
+
+    require_minimum_pyarrow_version()
+except Exception as e:
+    # If Arrow version requirement is not satisfied, skip related tests.
+    pyarrow_requirement_message = str(e)
+
+have_pyarrow = pyarrow_requirement_message is None
 
 
 def read_int(b):
@@ -185,7 +231,7 @@ class ReusedPySparkTestCase(unittest.TestCase):
     def tearDownClass(cls):
         cls.sc.stop()
 
-    def test_assert_vanilla_mode(self):
+    def test_assert_classic_mode(self):
         from pyspark.sql import is_remote
 
         self.assertFalse(is_remote())
@@ -205,31 +251,6 @@ class ByteArrayOutput:
 
     def close(self):
         pass
-
-
-def search_jar(project_relative_path, sbt_jar_name_prefix, mvn_jar_name_prefix):
-    # Note that 'sbt_jar_name_prefix' and 'mvn_jar_name_prefix' are used since the prefix can
-    # vary for SBT or Maven specifically. See also SPARK-26856
-    project_full_path = os.path.join(SPARK_HOME, project_relative_path)
-
-    # We should ignore the following jars
-    ignored_jar_suffixes = ("javadoc.jar", "sources.jar", "test-sources.jar", "tests.jar")
-
-    # Search jar in the project dir using the jar name_prefix for both sbt build and maven
-    # build because the artifact jars are in different directories.
-    sbt_build = glob.glob(
-        os.path.join(project_full_path, "target/scala-*/%s*.jar" % sbt_jar_name_prefix)
-    )
-    maven_build = glob.glob(os.path.join(project_full_path, "target/%s*.jar" % mvn_jar_name_prefix))
-    jar_paths = sbt_build + maven_build
-    jars = [jar for jar in jar_paths if not jar.endswith(ignored_jar_suffixes)]
-
-    if not jars:
-        return None
-    elif len(jars) > 1:
-        raise RuntimeError("Found multiple JARs: %s; please remove all but one" % (", ".join(jars)))
-    else:
-        return jars[0]
 
 
 def _terminal_color_support():
@@ -284,10 +305,11 @@ class PySparkErrorTestUtils:
     def check_error(
         self,
         exception: PySparkException,
-        error_class: str,
-        message_parameters: Optional[Dict[str, str]] = None,
+        errorClass: str,
+        messageParameters: Optional[Dict[str, str]] = None,
         query_context_type: Optional[QueryContextType] = None,
-        pyspark_fragment: Optional[str] = None,
+        fragment: Optional[str] = None,
+        matchPVals: bool = False,
     ):
         query_context = exception.getQueryContext()
         assert bool(query_context) == (query_context_type is not None), (
@@ -302,18 +324,39 @@ class PySparkErrorTestUtils:
         )
 
         # Test error class
-        expected = error_class
+        expected = errorClass
         actual = exception.getErrorClass()
         self.assertEqual(
             expected, actual, f"Expected error class was '{expected}', got '{actual}'."
         )
 
         # Test message parameters
-        expected = message_parameters
+        expected = messageParameters
         actual = exception.getMessageParameters()
-        self.assertEqual(
-            expected, actual, f"Expected message parameters was '{expected}', got '{actual}'"
-        )
+        if matchPVals:
+            self.assertEqual(
+                len(expected),
+                len(actual),
+                "Expected message parameters count does not match actual message parameters count"
+                f": {len(expected)}, {len(actual)}.",
+            )
+            for key, value in expected.items():
+                self.assertIn(
+                    key,
+                    actual,
+                    f"Expected message parameter key '{key}' was not found "
+                    "in actual message parameters.",
+                )
+                self.assertRegex(
+                    actual[key],
+                    value,
+                    f"Expected message parameter value '{value}' does not match actual message "
+                    f"parameter value '{actual[key]}'.",
+                ),
+        else:
+            self.assertEqual(
+                expected, actual, f"Expected message parameters was '{expected}', got '{actual}'"
+            )
 
         # Test query context
         if query_context:
@@ -326,10 +369,10 @@ class PySparkErrorTestUtils:
                 )
                 if actual == QueryContextType.DataFrame:
                     assert (
-                        pyspark_fragment is not None
-                    ), "`pyspark_fragment` is required when QueryContextType is DataFrame."
-                    expected = pyspark_fragment
-                    actual = actual_context.pysparkFragment()
+                        fragment is not None
+                    ), "`fragment` is required when QueryContextType is DataFrame."
+                    expected = fragment
+                    actual = actual_context.fragment()
                     self.assertEqual(
                         expected,
                         actual,
@@ -442,14 +485,14 @@ def assertSchemaEqual(
     >>> assertSchemaEqual(s1, s2, ignoreColumnName=True)
     """
     if not isinstance(actual, StructType):
-        raise PySparkAssertionError(
-            error_class="UNSUPPORTED_DATA_TYPE",
-            message_parameters={"data_type": type(actual)},
+        raise PySparkTypeError(
+            errorClass="NOT_STRUCT",
+            messageParameters={"arg_name": "actual", "arg_type": type(actual).__name__},
         )
     if not isinstance(expected, StructType):
-        raise PySparkAssertionError(
-            error_class="UNSUPPORTED_DATA_TYPE",
-            message_parameters={"data_type": type(expected)},
+        raise PySparkTypeError(
+            errorClass="NOT_STRUCT",
+            messageParameters={"arg_name": "expected", "arg_type": type(expected).__name__},
         )
 
     def compare_schemas_ignore_nullable(s1: StructType, s2: StructType):
@@ -504,8 +547,8 @@ def assertSchemaEqual(
         generated_diff = difflib.ndiff(str(actual).splitlines(), str(expected).splitlines())
         error_msg = "\n".join(generated_diff)
         raise PySparkAssertionError(
-            error_class="DIFFERENT_SCHEMA",
-            message_parameters={"error_msg": error_msg},
+            errorClass="DIFFERENT_SCHEMA",
+            messageParameters={"error_msg": error_msg},
         )
 
 
@@ -778,8 +821,8 @@ def assertDataFrameEqual(
         return True
     elif actual is None:
         raise PySparkAssertionError(
-            error_class="INVALID_TYPE_DF_EQUALITY_ARG",
-            message_parameters={
+            errorClass="INVALID_TYPE_DF_EQUALITY_ARG",
+            messageParameters={
                 "expected_type": "Union[DataFrame, ps.DataFrame, List[Row]]",
                 "arg_name": "actual",
                 "actual_type": None,
@@ -787,8 +830,8 @@ def assertDataFrameEqual(
         )
     elif expected is None:
         raise PySparkAssertionError(
-            error_class="INVALID_TYPE_DF_EQUALITY_ARG",
-            message_parameters={
+            errorClass="INVALID_TYPE_DF_EQUALITY_ARG",
+            messageParameters={
                 "expected_type": "Union[DataFrame, ps.DataFrame, List[Row]]",
                 "arg_name": "expected",
                 "actual_type": None,
@@ -829,24 +872,19 @@ def assertDataFrameEqual(
                 actual, expected, almost=True, rtol=rtol, atol=atol, check_row_order=checkRowOrder
             )
 
-    from pyspark.sql.utils import get_dataframe_class
-
-    # if is_remote(), allow Connect DataFrame
-    SparkDataFrame = get_dataframe_class()
-
-    if not isinstance(actual, (DataFrame, SparkDataFrame, list)):
+    if not isinstance(actual, (DataFrame, list)):
         raise PySparkAssertionError(
-            error_class="INVALID_TYPE_DF_EQUALITY_ARG",
-            message_parameters={
+            errorClass="INVALID_TYPE_DF_EQUALITY_ARG",
+            messageParameters={
                 "expected_type": "Union[DataFrame, ps.DataFrame, List[Row]]",
                 "arg_name": "actual",
                 "actual_type": type(actual),
             },
         )
-    elif not isinstance(expected, (DataFrame, SparkDataFrame, list)):
+    elif not isinstance(expected, (DataFrame, list)):
         raise PySparkAssertionError(
-            error_class="INVALID_TYPE_DF_EQUALITY_ARG",
-            message_parameters={
+            errorClass="INVALID_TYPE_DF_EQUALITY_ARG",
+            messageParameters={
                 "expected_type": "Union[DataFrame, ps.DataFrame, List[Row]]",
                 "arg_name": "expected",
                 "actual_type": type(expected),
@@ -904,6 +942,8 @@ def assertDataFrameEqual(
             elif isinstance(val1, Decimal) and isinstance(val2, Decimal):
                 if abs(val1 - val2) > (Decimal(atol) + Decimal(rtol) * abs(val2)):
                     return False
+            elif isinstance(val1, VariantVal) and isinstance(val2, VariantVal):
+                return compare_vals(val1.toPython(), val2.toPython())
             else:
                 if val1 != val2:
                     return False
@@ -953,7 +993,7 @@ def assertDataFrameEqual(
             error_msg += "\n" + "\n".join(generated_diff)
             data = diff_rows if includeDiffRows else None
             raise PySparkAssertionError(
-                error_class="DIFFERENT_ROWS", message_parameters={"error_msg": error_msg}, data=data
+                errorClass="DIFFERENT_ROWS", messageParameters={"error_msg": error_msg}, data=data
             )
 
     # only compare schema if expected is not a List
@@ -967,15 +1007,15 @@ def assertDataFrameEqual(
             error_msg = "\n".join(generated_diff)
 
             raise PySparkAssertionError(
-                error_class="DIFFERENT_SCHEMA",
-                message_parameters={"error_msg": error_msg},
+                errorClass="DIFFERENT_SCHEMA",
+                messageParameters={"error_msg": error_msg},
             )
 
     if not isinstance(actual, list):
         if actual.isStreaming:
             raise PySparkAssertionError(
-                error_class="UNSUPPORTED_OPERATION",
-                message_parameters={"operation": "assertDataFrameEqual on streaming DataFrame"},
+                errorClass="UNSUPPORTED_OPERATION",
+                messageParameters={"operation": "assertDataFrameEqual on streaming DataFrame"},
             )
         actual_list = actual.collect()
     else:
@@ -984,8 +1024,8 @@ def assertDataFrameEqual(
     if not isinstance(expected, list):
         if expected.isStreaming:
             raise PySparkAssertionError(
-                error_class="UNSUPPORTED_OPERATION",
-                message_parameters={"operation": "assertDataFrameEqual on streaming DataFrame"},
+                errorClass="UNSUPPORTED_OPERATION",
+                messageParameters={"operation": "assertDataFrameEqual on streaming DataFrame"},
             )
         expected_list = expected.collect()
     else:

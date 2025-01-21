@@ -19,7 +19,7 @@ package org.apache.spark.sql.jdbc
 
 class MsSQLServerDatabaseOnDocker extends DatabaseOnDocker {
   override val imageName = sys.env.getOrElse("MSSQLSERVER_DOCKER_IMAGE_NAME",
-    "mcr.microsoft.com/mssql/server:2022-CU12-GDR1-ubuntu-22.04")
+    "mcr.microsoft.com/mssql/server:2022-CU15-ubuntu-22.04")
   override val env = Map(
     "SA_PASSWORD" -> "Sapass123",
     "ACCEPT_EULA" -> "Y"

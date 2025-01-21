@@ -48,10 +48,9 @@ object OuterScopes {
 
   /**
    * Adds a new outer scope to this context that can be used when instantiating an `inner class`
-   * during deserialization. Inner classes are created when a case class is defined in the
-   * Spark REPL and registering the outer scope that this class was defined in allows us to create
-   * new instances on the spark executors.  In normal use, users should not need to call this
-   * function.
+   * during deserialization. Inner classes are created when a case class is defined in the Spark
+   * REPL and registering the outer scope that this class was defined in allows us to create new
+   * instances on the spark executors. In normal use, users should not need to call this function.
    *
    * Warning: this function operates on the assumption that there is only ever one instance of any
    * given wrapper class.
@@ -65,7 +64,7 @@ object OuterScopes {
   }
 
   /**
-   * Returns a function which can get the outer scope for the given inner class.  By using function
+   * Returns a function which can get the outer scope for the given inner class. By using function
    * as return type, we can delay the process of getting outer pointer to execution time, which is
    * useful for inner class defined in REPL.
    */
@@ -134,8 +133,8 @@ object OuterScopes {
           }
         case _ => null
       }
-    } else {
-      () => outer
+    } else { () =>
+      outer
     }
   }
 
@@ -162,7 +161,7 @@ object OuterScopes {
  * dead entries after GC (using a [[ReferenceQueue]]).
  */
 private[catalyst] class HashableWeakReference(v: AnyRef, queue: ReferenceQueue[AnyRef])
-  extends WeakReference[AnyRef](v, queue) {
+    extends WeakReference[AnyRef](v, queue) {
   def this(v: AnyRef) = this(v, null)
   private[this] val hash = v.hashCode()
   override def hashCode(): Int = hash

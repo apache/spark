@@ -278,7 +278,7 @@ class _ValidatorParams(HasSeed):
         gateway = SparkContext._gateway
         assert gateway is not None and SparkContext._jvm is not None
 
-        cls = SparkContext._jvm.org.apache.spark.ml.param.ParamMap
+        cls = getattr(SparkContext._jvm, "org.apache.spark.ml.param.ParamMap")
 
         estimator = self.getEstimator()
         if isinstance(estimator, JavaEstimator):
@@ -313,7 +313,7 @@ class _ValidatorSharedReadWrite:
             sc is not None and SparkContext._jvm is not None and SparkContext._gateway is not None
         )
 
-        paramMapCls = SparkContext._jvm.org.apache.spark.ml.param.ParamMap
+        paramMapCls = getattr(SparkContext._jvm, "org.apache.spark.ml.param.ParamMap")
         javaParamMaps = SparkContext._gateway.new_array(paramMapCls, len(pyParamMaps))
 
         for idx, pyParamMap in enumerate(pyParamMaps):
@@ -706,7 +706,7 @@ class CrossValidator(
     >>> cvModel = cv.fit(dataset)
     >>> cvModel.getNumFolds()
     3
-    >>> cvModel.avgMetrics[0]
+    >>> float(cvModel.avgMetrics[0])
     0.5
     >>> path = tempfile.mkdtemp()
     >>> model_path = path + "/model"

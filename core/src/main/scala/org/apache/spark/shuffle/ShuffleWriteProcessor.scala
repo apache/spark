@@ -18,7 +18,8 @@
 package org.apache.spark.shuffle
 
 import org.apache.spark.{ShuffleDependency, SparkEnv, TaskContext}
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys.{NUM_MERGER_LOCATIONS, SHUFFLE_ID, STAGE_ID}
 import org.apache.spark.scheduler.MapStatus
 
 /**
@@ -72,8 +73,10 @@ private[spark] class ShuffleWriteProcessor extends Serializable with Logging {
         if (!dep.shuffleMergeFinalized) {
           manager.shuffleBlockResolver match {
             case resolver: IndexShuffleBlockResolver =>
-              logInfo(s"Shuffle merge enabled with ${dep.getMergerLocs.size} merger locations " +
-                s" for stage ${context.stageId()} with shuffle ID ${dep.shuffleId}")
+              logInfo(log"Shuffle merge enabled with" +
+                log" ${MDC(NUM_MERGER_LOCATIONS, dep.getMergerLocs.size)} merger locations" +
+                log" for stage ${MDC(STAGE_ID, context.stageId())}" +
+                log" with shuffle ID ${MDC(SHUFFLE_ID, dep.shuffleId)}")
               logDebug(s"Starting pushing blocks for the task ${context.taskAttemptId()}")
               val dataFile = resolver.getDataFile(dep.shuffleId, mapId)
               new ShuffleBlockPusher(SparkEnv.get.conf)

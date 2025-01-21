@@ -212,7 +212,7 @@ object TimeWindow {
    * that we can use `window` in SQL.
    */
   def parseExpression(expr: Expression): Long = expr match {
-    case NonNullLiteral(s, StringType) => getIntervalInMicroSeconds(s.toString)
+    case NonNullLiteral(s, _: StringType) => getIntervalInMicroSeconds(s.toString)
     case IntegerLiteral(i) => i.toLong
     case NonNullLiteral(l, LongType) => l.toString.toLong
     case _ => throw QueryCompilationErrors.invalidLiteralForWindowDurationError()
@@ -237,7 +237,8 @@ object TimeWindow {
 case class PreciseTimestampConversion(
     child: Expression,
     fromType: DataType,
-    toType: DataType) extends UnaryExpression with ExpectsInputTypes with NullIntolerant {
+    toType: DataType) extends UnaryExpression with ExpectsInputTypes {
+  override def nullIntolerant: Boolean = true
   override def inputTypes: Seq[AbstractDataType] = Seq(fromType)
   override def dataType: DataType = toType
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {

@@ -30,4 +30,4 @@ SCALA_VER=`grep "scala.version" "${SPARK_HOME}/pom.xml" | grep ${SCALA_BINARY_VE
 SCALA_ARG="-Pscala-${SCALA_BINARY_VER}"
 
 # Build the jars needed for spark submit and spark connect JVM client
-build/sbt "${SCALA_ARG}" -Phive -Pconnect package "connect-client-jvm/package" || exit 1
+build/sbt "${SCALA_ARG}" -Phive package "connect-client-jvm/package" || exit 1

@@ -19,15 +19,14 @@ package org.apache.spark.network.shuffle.checksum;
 
 import java.io.*;
 import java.util.concurrent.TimeUnit;
-import java.util.zip.Adler32;
-import java.util.zip.CRC32;
-import java.util.zip.CheckedInputStream;
-import java.util.zip.Checksum;
+import java.util.zip.*;
 
 import com.google.common.io.ByteStreams;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
+import org.apache.spark.internal.SparkLogger;
+import org.apache.spark.internal.SparkLoggerFactory;
+import org.apache.spark.internal.LogKeys;
+import org.apache.spark.internal.MDC;
 import org.apache.spark.annotation.Private;
 import org.apache.spark.network.buffer.ManagedBuffer;
 
@@ -36,8 +35,8 @@ import org.apache.spark.network.buffer.ManagedBuffer;
  */
 @Private
 public class ShuffleChecksumHelper {
-  private static final Logger logger =
-    LoggerFactory.getLogger(ShuffleChecksumHelper.class);
+  private static final SparkLogger logger =
+    SparkLoggerFactory.getLogger(ShuffleChecksumHelper.class);
 
   public static final int CHECKSUM_CALCULATION_BUFFER = 8192;
   public static final Checksum[] EMPTY_CHECKSUM = new Checksum[0];
@@ -61,6 +60,13 @@ public class ShuffleChecksumHelper {
         checksums = new CRC32[num];
         for (int i = 0; i < num; i++) {
           checksums[i] = new CRC32();
+        }
+      }
+
+      case "CRC32C"  -> {
+        checksums = new CRC32C[num];
+        for (int i = 0; i < num; i++) {
+          checksums[i] = new CRC32C();
         }
       }
 
@@ -149,7 +155,8 @@ public class ShuffleChecksumHelper {
       cause = Cause.UNSUPPORTED_CHECKSUM_ALGORITHM;
     } catch (FileNotFoundException e) {
       // Even if checksum is enabled, a checksum file may not exist if error throws during writing.
-      logger.warn("Checksum file " + checksumFile.getName() + " doesn't exit");
+      logger.warn("Checksum file {} doesn't exit",
+        MDC.of(LogKeys.PATH$.MODULE$, checksumFile.getName()));
       cause = Cause.UNKNOWN_ISSUE;
     } catch (Exception e) {
       logger.warn("Unable to diagnose shuffle block corruption", e);
@@ -162,7 +169,9 @@ public class ShuffleChecksumHelper {
         checksumByReader, checksumByWriter, checksumByReCalculation);
     } else {
       logger.info("Shuffle corruption diagnosis took {} ms, checksum file {}, cause {}",
-        duration, checksumFile.getAbsolutePath(), cause);
+        MDC.of(LogKeys.TIME$.MODULE$, duration),
+        MDC.of(LogKeys.PATH$.MODULE$, checksumFile.getAbsolutePath()),
+        MDC.of(LogKeys.REASON$.MODULE$, cause));
     }
     return cause;
   }

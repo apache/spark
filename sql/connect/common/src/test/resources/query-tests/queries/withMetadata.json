@@ -1,0 +1,42 @@
+{
+  "common": {
+    "planId": "1"
+  },
+  "withColumns": {
+    "input": {
+      "common": {
+        "planId": "0"
+      },
+      "localRelation": {
+        "schema": "struct\u003cid:bigint,a:int,b:double\u003e"
+      }
+    },
+    "aliases": [{
+      "expr": {
+        "unresolvedAttribute": {
+          "unparsedIdentifier": "id",
+          "planId": "0"
+        },
+        "common": {
+          "origin": {
+            "jvmOrigin": {
+              "stackTrace": [{
+                "classLoaderName": "app",
+                "declaringClass": "org.apache.spark.sql.Dataset",
+                "methodName": "withMetadata",
+                "fileName": "Dataset.scala"
+              }, {
+                "classLoaderName": "app",
+                "declaringClass": "org.apache.spark.sql.PlanGenerationTestSuite",
+                "methodName": "~~trimmed~anonfun~~",
+                "fileName": "PlanGenerationTestSuite.scala"
+              }]
+            }
+          }
+        }
+      },
+      "name": ["id"],
+      "metadata": "{\"description\":\"unique identifier\"}"
+    }]
+  }
+}

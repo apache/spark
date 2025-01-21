@@ -28,7 +28,7 @@ except ImportError:
     pass  # Let it throw a better error message later when the API is invoked.
 
 from pyspark.sql.functions import pandas_udf
-from pyspark.sql.classic.column import Column, _to_java_column
+from pyspark.sql.column import Column
 from pyspark.sql.types import (
     ArrayType,
     ByteType,
@@ -116,11 +116,14 @@ def vector_to_array(col: Column, dtype: str = "float64") -> Column:
      StructField('oldVec', ArrayType(FloatType(), False), False)]
     """
     from pyspark.core.context import SparkContext
+    from pyspark.sql.classic.column import Column, _to_java_column
 
     sc = SparkContext._active_spark_context
     assert sc is not None and sc._jvm is not None
     return Column(
-        sc._jvm.org.apache.spark.ml.functions.vector_to_array(_to_java_column(col), dtype)
+        getattr(sc._jvm, "org.apache.spark.ml.functions").vector_to_array(
+            _to_java_column(col), dtype
+        )
     )
 
 
@@ -159,10 +162,13 @@ def array_to_vector(col: Column) -> Column:
     [Row(vec1=DenseVector([1.0, 3.0]))]
     """
     from pyspark.core.context import SparkContext
+    from pyspark.sql.classic.column import Column, _to_java_column
 
     sc = SparkContext._active_spark_context
     assert sc is not None and sc._jvm is not None
-    return Column(sc._jvm.org.apache.spark.ml.functions.array_to_vector(_to_java_column(col)))
+    return Column(
+        getattr(sc._jvm, "org.apache.spark.ml.functions").array_to_vector(_to_java_column(col))
+    )
 
 
 def _batched(

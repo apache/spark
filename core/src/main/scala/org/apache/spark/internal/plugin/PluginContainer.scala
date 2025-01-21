@@ -22,7 +22,7 @@ import scala.util.{Either, Left, Right}
 
 import org.apache.spark.{SparkContext, SparkEnv, TaskFailedReason}
 import org.apache.spark.api.plugin._
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.internal.config._
 import org.apache.spark.resource.ResourceInformation
 import org.apache.spark.util.Utils
@@ -56,7 +56,7 @@ private class DriverPluginContainer(
           sc.conf.set(s"${PluginContainer.EXTRA_CONF_PREFIX}$name.$k", v)
         }
       }
-      logInfo(s"Initialized driver component for plugin $name.")
+      logInfo(log"Initialized driver component for plugin ${MDC(LogKeys.CLASS_NAME, name)}.")
       Some((p.getClass().getName(), driverPlugin, ctx))
     } else {
       None
@@ -83,7 +83,7 @@ private class DriverPluginContainer(
         plugin.shutdown()
       } catch {
         case t: Throwable =>
-          logInfo(s"Exception while shutting down plugin $name.", t)
+          logInfo(log"Exception while shutting down plugin ${MDC(LogKeys.CLASS_NAME, name)}.", t)
       }
     }
   }
@@ -125,7 +125,7 @@ private class ExecutorPluginContainer(
         executorPlugin.init(ctx, extraConf)
         ctx.registerMetrics()
 
-        logInfo(s"Initialized executor component for plugin $name.")
+        logInfo(log"Initialized executor component for plugin ${MDC(LogKeys.CLASS_NAME, name)}.")
         Some(p.getClass().getName() -> executorPlugin)
       } else {
         None
@@ -144,7 +144,7 @@ private class ExecutorPluginContainer(
         plugin.shutdown()
       } catch {
         case t: Throwable =>
-          logInfo(s"Exception while shutting down plugin $name.", t)
+          logInfo(log"Exception while shutting down plugin ${MDC(LogKeys.CLASS_NAME, name)}.", t)
       }
     }
   }
@@ -155,7 +155,8 @@ private class ExecutorPluginContainer(
         plugin.onTaskStart()
       } catch {
         case t: Throwable =>
-          logInfo(s"Exception while calling onTaskStart on plugin $name.", t)
+          logInfo(log"Exception while calling onTaskStart on" +
+            log" plugin ${MDC(LogKeys.CLASS_NAME, name)}.", t)
       }
     }
   }
@@ -166,7 +167,8 @@ private class ExecutorPluginContainer(
         plugin.onTaskSucceeded()
       } catch {
         case t: Throwable =>
-          logInfo(s"Exception while calling onTaskSucceeded on plugin $name.", t)
+          logInfo(log"Exception while calling onTaskSucceeded on" +
+            log" plugin ${MDC(LogKeys.CLASS_NAME, name)}.", t)
       }
     }
   }
@@ -177,7 +179,8 @@ private class ExecutorPluginContainer(
         plugin.onTaskFailed(failureReason)
       } catch {
         case t: Throwable =>
-          logInfo(s"Exception while calling onTaskFailed on plugin $name.", t)
+          logInfo(log"Exception while calling onTaskFailed on" +
+            log" plugin ${MDC(LogKeys.CLASS_NAME, name)}.", t)
       }
     }
   }

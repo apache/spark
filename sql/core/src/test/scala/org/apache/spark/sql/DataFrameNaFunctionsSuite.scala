@@ -284,7 +284,7 @@ class DataFrameNaFunctionsSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         joined_df.na.fill("", cols = Seq("f2"))
       },
-      errorClass = "AMBIGUOUS_REFERENCE",
+      condition = "AMBIGUOUS_REFERENCE",
       parameters = Map(
         "name" -> "`f2`",
         "referenceNames" -> "[`f2`, `f2`]"
@@ -304,7 +304,7 @@ class DataFrameNaFunctionsSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         df.na.drop("any", Seq("*"))
       },
-      errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+      condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
       parameters = Map("objectName" -> "`*`", "proposal" -> "`name`, `age`, `height`")
     )
   }
@@ -411,7 +411,7 @@ class DataFrameNaFunctionsSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         df.na.fill("hello", Seq("col2"))
       },
-      errorClass = "AMBIGUOUS_REFERENCE",
+      condition = "AMBIGUOUS_REFERENCE",
       parameters = Map(
         "name" -> "`col2`",
         "referenceNames" -> "[`col2`, `col2`]"
@@ -434,7 +434,7 @@ class DataFrameNaFunctionsSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         df.na.drop("any", Seq("col2"))
       },
-      errorClass = "AMBIGUOUS_REFERENCE",
+      condition = "AMBIGUOUS_REFERENCE",
       parameters = Map(
         "name" -> "`col2`",
         "referenceNames" -> "[`col2`, `col2`]"
@@ -540,7 +540,7 @@ class DataFrameNaFunctionsSuite extends QueryTest with SharedSparkSession {
     }
     checkError(
       exception = exception,
-      errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+      condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
       parameters = Map("objectName" -> "`aa`", "proposal" -> "`Col`.`1`, `Col`.`2`")
     )
   }
@@ -551,7 +551,7 @@ class DataFrameNaFunctionsSuite extends QueryTest with SharedSparkSession {
       exception = intercept[SparkUnsupportedOperationException] {
         df.na.replace("c1.c1-1", Map("b1" ->"a1"))
       },
-      errorClass = "UNSUPPORTED_FEATURE.REPLACE_NESTED_COLUMN",
+      condition = "UNSUPPORTED_FEATURE.REPLACE_NESTED_COLUMN",
       parameters = Map("colName" -> "`c1`.`c1-1`")
     )
   }

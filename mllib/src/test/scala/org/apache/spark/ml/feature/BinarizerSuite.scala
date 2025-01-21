@@ -21,6 +21,7 @@ import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest}
 import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.sql.functions.{col, struct}
 import org.apache.spark.util.ArrayImplicits._
 
 class BinarizerSuite extends MLTest with DefaultReadWriteTest {
@@ -248,6 +249,22 @@ class BinarizerSuite extends MLTest with DefaultReadWriteTest {
     val df = data1.zip(data2).toSeq.toDF("input1", "input2")
     intercept[IllegalArgumentException] {
       binarizer.transform(df).count()
+    }
+  }
+
+  test("Binarize nested input") {
+    val defaultBinarized: Array[Double] = data.map(x => if (x > 0.0) 1.0 else 0.0)
+    val dataFrame: DataFrame = data.zip(defaultBinarized).toSeq.toDF("feature", "expected")
+      .select(struct(col("feature")).as("nest"), col("expected"))
+
+    val binarizer: Binarizer = new Binarizer()
+      .setInputCol("nest.feature")
+      .setOutputCol("binarized_feature")
+
+    val resultDF = binarizer.transform(dataFrame)
+    resultDF.select("binarized_feature", "expected").collect().foreach {
+      case Row(x: Double, y: Double) =>
+        assert(x === y, "The feature value is not correct after binarization.")
     }
   }
 }

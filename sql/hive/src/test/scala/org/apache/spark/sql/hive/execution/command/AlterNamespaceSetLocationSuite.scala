@@ -36,7 +36,7 @@ class AlterNamespaceSetLocationSuite extends v1.AlterNamespaceSetLocationSuiteBa
         exception = intercept[AnalysisException] {
           sql(s"ALTER DATABASE $ns SET LOCATION 'loc'")
         },
-        errorClass = "_LEGACY_ERROR_TEMP_1219",
+        condition = "_LEGACY_ERROR_TEMP_1219",
         parameters = Map.empty
       )
     }

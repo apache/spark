@@ -10,7 +10,7 @@ CreateViewCommand `m`, SELECT * FROM VALUES
   (null, 1.0),
   (2, 3.0),
   (4, 5.0)
-  AS m(a, b), false, false, LocalTempView, true
+  AS m(a, b), false, false, LocalTempView, UNSUPPORTED, true
    +- Project [a#x, b#x]
       +- SubqueryAlias m
          +- LocalRelation [a#x, b#x]

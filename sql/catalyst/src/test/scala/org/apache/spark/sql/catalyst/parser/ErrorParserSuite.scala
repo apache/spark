@@ -34,7 +34,7 @@ class ErrorParserSuite extends AnalysisTest {
   test("semantic errors") {
     checkError(
       exception = parseException("select *\nfrom r\norder by q\ncluster by q"),
-      errorClass = "UNSUPPORTED_FEATURE.COMBINATION_QUERY_RESULT_CLAUSES",
+      condition = "UNSUPPORTED_FEATURE.COMBINATION_QUERY_RESULT_CLAUSES",
       parameters = Map.empty,
       context = ExpectedContext(fragment = "order by q\ncluster by q", start = 16, stop = 38))
   }
@@ -43,42 +43,42 @@ class ErrorParserSuite extends AnalysisTest {
     // scalastyle:off
     checkError(
       exception = parseException("USE \u0196pfel"),
-      errorClass = "INVALID_IDENTIFIER",
+      condition = "INVALID_IDENTIFIER",
       parameters = Map("ident" -> "\u0196pfel"))
     checkError(
       exception = parseException("USE \u88681"),
-      errorClass = "INVALID_IDENTIFIER",
+      condition = "INVALID_IDENTIFIER",
       parameters = Map("ident" -> "\u88681"))
     // scalastyle:on
     checkError(
       exception = parseException("USE https://www.spa.rk/bucket/pa-th.json?=&#%"),
-      errorClass = "INVALID_IDENTIFIER",
+      condition = "INVALID_IDENTIFIER",
       parameters = Map("ident" -> "https://www.spa.rk/bucket/pa-th.json?=&#%"))
   }
 
   test("hyphen in identifier - DDL tests") {
     checkError(
       exception = parseException("USE test-test"),
-      errorClass = "INVALID_IDENTIFIER",
+      condition = "INVALID_IDENTIFIER",
       parameters = Map("ident" -> "test-test"))
     checkError(
       exception = parseException("SET CATALOG test-test"),
-      errorClass = "INVALID_IDENTIFIER",
+      condition = "INVALID_IDENTIFIER",
       parameters = Map("ident" -> "test-test"))
     checkError(
       exception = parseException("CREATE DATABASE IF NOT EXISTS my-database"),
-      errorClass = "INVALID_IDENTIFIER",
+      condition = "INVALID_IDENTIFIER",
       parameters = Map("ident" -> "my-database"))
     checkError(
       exception = parseException(
       """
         |ALTER DATABASE my-database
         |SET DBPROPERTIES ('p1'='v1')""".stripMargin),
-      errorClass = "INVALID_IDENTIFIER",
+      condition = "INVALID_IDENTIFIER",
       parameters = Map("ident" -> "my-database"))
     checkError(
       exception = parseException("DROP DATABASE my-database"),
-      errorClass = "INVALID_IDENTIFIER",
+      condition = "INVALID_IDENTIFIER",
       parameters = Map("ident" -> "my-database"))
     checkError(
       exception = parseException(
@@ -87,25 +87,7 @@ class ErrorParserSuite extends AnalysisTest {
           |CHANGE COLUMN
           |test-col TYPE BIGINT
         """.stripMargin),
-      errorClass = "INVALID_IDENTIFIER",
-      parameters = Map("ident" -> "test-col"))
-    checkError(
-      exception = parseException(
-        """
-          |ALTER TABLE t
-          |RENAME COLUMN
-          |test-col TO test
-        """.stripMargin),
-      errorClass = "INVALID_IDENTIFIER",
-      parameters = Map("ident" -> "test-col"))
-    checkError(
-      exception = parseException(
-        """
-          |ALTER TABLE t
-          |RENAME COLUMN
-          |test TO test-col
-        """.stripMargin),
-      errorClass = "INVALID_IDENTIFIER",
+      condition = "INVALID_IDENTIFIER",
       parameters = Map("ident" -> "test-col"))
     checkError(
       exception = parseException(
@@ -114,23 +96,23 @@ class ErrorParserSuite extends AnalysisTest {
           |DROP COLUMN
           |test-col, test
         """.stripMargin),
-      errorClass = "INVALID_IDENTIFIER",
+      condition = "INVALID_IDENTIFIER",
       parameters = Map("ident" -> "test-col"))
     checkError(
       exception = parseException("CREATE TABLE test (attri-bute INT)"),
-      errorClass = "INVALID_IDENTIFIER",
+      condition = "INVALID_IDENTIFIER",
       parameters = Map("ident" -> "attri-bute"))
     checkError(
       exception = parseException("CREATE FUNCTION test-func as org.test.func"),
-      errorClass = "INVALID_IDENTIFIER",
+      condition = "INVALID_IDENTIFIER",
       parameters = Map("ident" -> "test-func"))
     checkError(
       exception = parseException("DROP FUNCTION test-func as org.test.func"),
-      errorClass = "INVALID_IDENTIFIER",
+      condition = "INVALID_IDENTIFIER",
       parameters = Map("ident" -> "test-func"))
     checkError(
       exception = parseException("SHOW FUNCTIONS LIKE test-func"),
-      errorClass = "INVALID_IDENTIFIER",
+      condition = "INVALID_IDENTIFIER",
       parameters = Map("ident" -> "test-func"))
     checkError(
       exception = parseException(
@@ -141,7 +123,7 @@ class ErrorParserSuite extends AnalysisTest {
           |LOCATION '/user/external/page_view'
           |TBLPROPERTIES ('p1'='v1', 'p2'='v2')
           |AS SELECT * FROM src""".stripMargin),
-      errorClass = "INVALID_IDENTIFIER",
+      condition = "INVALID_IDENTIFIER",
       parameters = Map("ident" -> "page-view"))
     checkError(
       exception = parseException(
@@ -149,35 +131,31 @@ class ErrorParserSuite extends AnalysisTest {
           |CREATE TABLE IF NOT EXISTS tab
           |USING test-provider
           |AS SELECT * FROM src""".stripMargin),
-      errorClass = "INVALID_IDENTIFIER",
+      condition = "INVALID_IDENTIFIER",
       parameters = Map("ident" -> "test-provider"))
     checkError(
       exception = parseException("SHOW TABLES IN hyphen-database"),
-      errorClass = "INVALID_IDENTIFIER",
+      condition = "INVALID_IDENTIFIER",
       parameters = Map("ident" -> "hyphen-database"))
     checkError(
       exception = parseException("SHOW TABLE EXTENDED IN hyphen-db LIKE \"str\""),
-      errorClass = "INVALID_IDENTIFIER",
+      condition = "INVALID_IDENTIFIER",
       parameters = Map("ident" -> "hyphen-db"))
     checkError(
-      exception = parseException("SHOW COLUMNS IN t FROM test-db"),
-      errorClass = "INVALID_IDENTIFIER",
-      parameters = Map("ident" -> "test-db"))
-    checkError(
       exception = parseException("DESC SCHEMA EXTENDED test-db"),
-      errorClass = "INVALID_IDENTIFIER",
+      condition = "INVALID_IDENTIFIER",
       parameters = Map("ident" -> "test-db"))
     checkError(
       exception = parseException("ANALYZE TABLE test-table PARTITION (part1)"),
-      errorClass = "INVALID_IDENTIFIER",
+      condition = "INVALID_IDENTIFIER",
       parameters = Map("ident" -> "test-table"))
     checkError(
       exception = parseException("CREATE TABLE t(c1 struct<test-test INT, c2 INT>)"),
-      errorClass = "INVALID_IDENTIFIER",
+      condition = "INVALID_IDENTIFIER",
       parameters = Map("ident" -> "test-test"))
     checkError(
       exception = parseException("LOAD DATA INPATH \"path\" INTO TABLE my-tab"),
-      errorClass = "INVALID_IDENTIFIER",
+      condition = "INVALID_IDENTIFIER",
       parameters = Map("ident" -> "my-tab"))
   }
 
@@ -185,28 +163,28 @@ class ErrorParserSuite extends AnalysisTest {
     // dml tests
     checkError(
       exception = parseException("SELECT * FROM table-with-hyphen"),
-      errorClass = "INVALID_IDENTIFIER",
+      condition = "INVALID_IDENTIFIER",
       parameters = Map("ident" -> "table-with-hyphen"))
     // special test case: minus in expression shouldn't be treated as hyphen in identifiers
     checkError(
       exception = parseException("SELECT a-b FROM table-with-hyphen"),
-      errorClass = "INVALID_IDENTIFIER",
+      condition = "INVALID_IDENTIFIER",
       parameters = Map("ident" -> "table-with-hyphen"))
     checkError(
       exception = parseException("SELECT a-b AS a-b FROM t"),
-      errorClass = "INVALID_IDENTIFIER",
+      condition = "INVALID_IDENTIFIER",
       parameters = Map("ident" -> "a-b"))
     checkError(
       exception = parseException("SELECT a-b FROM table-hyphen WHERE a-b = 0"),
-      errorClass = "INVALID_IDENTIFIER",
+      condition = "INVALID_IDENTIFIER",
       parameters = Map("ident" -> "table-hyphen"))
     checkError(
       exception = parseException("SELECT (a - test_func(b-c)) FROM test-table"),
-      errorClass = "INVALID_IDENTIFIER",
+      condition = "INVALID_IDENTIFIER",
       parameters = Map("ident" -> "test-table"))
     checkError(
       exception = parseException("WITH a-b AS (SELECT 1 FROM s) SELECT * FROM s;"),
-      errorClass = "INVALID_IDENTIFIER",
+      condition = "INVALID_IDENTIFIER",
       parameters = Map("ident" -> "a-b"))
     checkError(
       exception = parseException(
@@ -215,7 +193,7 @@ class ErrorParserSuite extends AnalysisTest {
           |FROM t1 JOIN t2
           |USING (a, b, at-tr)
         """.stripMargin),
-      errorClass = "INVALID_IDENTIFIER",
+      condition = "INVALID_IDENTIFIER",
       parameters = Map("ident" -> "at-tr"))
     checkError(
       exception = parseException(
@@ -224,7 +202,7 @@ class ErrorParserSuite extends AnalysisTest {
           |OVER (PARTITION BY category ORDER BY revenue DESC) as hyphen-rank
           |FROM productRevenue
         """.stripMargin),
-      errorClass = "INVALID_IDENTIFIER",
+      condition = "INVALID_IDENTIFIER",
       parameters = Map("ident" -> "hyphen-rank"))
     checkError(
       exception = parseException(
@@ -235,7 +213,7 @@ class ErrorParserSuite extends AnalysisTest {
           |GROUP BY fake-breaker
           |ORDER BY c
         """.stripMargin),
-      errorClass = "INVALID_IDENTIFIER",
+      condition = "INVALID_IDENTIFIER",
       parameters = Map("ident" -> "grammar-breaker"))
     assert(parsePlan(
       """
@@ -256,7 +234,7 @@ class ErrorParserSuite extends AnalysisTest {
           |WINDOW hyphen-window AS
           |  (PARTITION BY a, b ORDER BY c rows BETWEEN 1 PRECEDING AND 1 FOLLOWING)
         """.stripMargin),
-      errorClass = "INVALID_IDENTIFIER",
+      condition = "INVALID_IDENTIFIER",
       parameters = Map("ident" -> "hyphen-window"))
     checkError(
       exception = parseException(
@@ -264,7 +242,7 @@ class ErrorParserSuite extends AnalysisTest {
           |SELECT * FROM tab
           |WINDOW window_ref AS window-ref
         """.stripMargin),
-      errorClass = "INVALID_IDENTIFIER",
+      condition = "INVALID_IDENTIFIER",
       parameters = Map("ident" -> "window-ref"))
     checkError(
       exception = parseException(
@@ -273,7 +251,7 @@ class ErrorParserSuite extends AnalysisTest {
           |FROM t-a INNER JOIN tb
           |ON ta.a = tb.a AND ta.tag = tb.tag
         """.stripMargin),
-      errorClass = "INVALID_IDENTIFIER",
+      condition = "INVALID_IDENTIFIER",
       parameters = Map("ident" -> "t-a"))
     checkError(
       exception = parseException(
@@ -282,7 +260,7 @@ class ErrorParserSuite extends AnalysisTest {
           |SELECT a
           |SELECT b
         """.stripMargin),
-      errorClass = "INVALID_IDENTIFIER",
+      condition = "INVALID_IDENTIFIER",
       parameters = Map("ident" -> "test-table"))
     checkError(
       exception = parseException(
@@ -295,7 +273,7 @@ class ErrorParserSuite extends AnalysisTest {
           |  FOR test-test IN ('dotNET', 'Java')
           |);
         """.stripMargin),
-      errorClass = "INVALID_IDENTIFIER",
+      condition = "INVALID_IDENTIFIER",
       parameters = Map("ident" -> "test-test"))
   }
 
@@ -303,23 +281,23 @@ class ErrorParserSuite extends AnalysisTest {
     // general bad types
     checkError(
       exception = parseException("SELECT cast(1 as badtype)"),
-      errorClass = "UNSUPPORTED_DATATYPE",
+      condition = "UNSUPPORTED_DATATYPE",
       parameters = Map("typeName" -> "\"BADTYPE\""),
       context = ExpectedContext(fragment = "badtype", start = 17, stop = 23))
     // special handling on char and varchar
     checkError(
       exception = parseException("SELECT cast('a' as CHAR)"),
-      errorClass = "DATATYPE_MISSING_SIZE",
+      condition = "DATATYPE_MISSING_SIZE",
       parameters = Map("type" -> "\"CHAR\""),
       context = ExpectedContext(fragment = "CHAR", start = 19, stop = 22))
     checkError(
       exception = parseException("SELECT cast('a' as Varchar)"),
-      errorClass = "DATATYPE_MISSING_SIZE",
+      condition = "DATATYPE_MISSING_SIZE",
       parameters = Map("type" -> "\"VARCHAR\""),
       context = ExpectedContext(fragment = "Varchar", start = 19, stop = 25))
     checkError(
       exception = parseException("SELECT cast('a' as Character)"),
-      errorClass = "DATATYPE_MISSING_SIZE",
+      condition = "DATATYPE_MISSING_SIZE",
       parameters = Map("type" -> "\"CHARACTER\""),
       context = ExpectedContext(fragment = "Character", start = 19, stop = 27))
   }
@@ -327,32 +305,32 @@ class ErrorParserSuite extends AnalysisTest {
   test("'!' where only NOT should be allowed") {
     checkError(
       exception = parseException("SELECT 1 ! IN (2)"),
-      errorClass = "SYNTAX_DISCONTINUED.BANG_EQUALS_NOT",
+      condition = "SYNTAX_DISCONTINUED.BANG_EQUALS_NOT",
       parameters = Map("clause" -> "!"),
       context = ExpectedContext(fragment = "!", start = 9, stop = 9))
     checkError(
       exception = parseException("SELECT 'a' ! LIKE 'b'"),
-      errorClass = "SYNTAX_DISCONTINUED.BANG_EQUALS_NOT",
+      condition = "SYNTAX_DISCONTINUED.BANG_EQUALS_NOT",
       parameters = Map("clause" -> "!"),
       context = ExpectedContext(fragment = "!", start = 11, stop = 11))
     checkError(
       exception = parseException("SELECT 1 ! BETWEEN 1 AND 2"),
-      errorClass = "SYNTAX_DISCONTINUED.BANG_EQUALS_NOT",
+      condition = "SYNTAX_DISCONTINUED.BANG_EQUALS_NOT",
       parameters = Map("clause" -> "!"),
       context = ExpectedContext(fragment = "!", start = 9, stop = 9))
     checkError(
       exception = parseException("SELECT 1 IS ! NULL"),
-      errorClass = "SYNTAX_DISCONTINUED.BANG_EQUALS_NOT",
+      condition = "SYNTAX_DISCONTINUED.BANG_EQUALS_NOT",
       parameters = Map("clause" -> "!"),
       context = ExpectedContext(fragment = "!", start = 12, stop = 12))
     checkError(
       exception = parseException("CREATE TABLE IF ! EXISTS t(c1 INT)"),
-      errorClass = "SYNTAX_DISCONTINUED.BANG_EQUALS_NOT",
+      condition = "SYNTAX_DISCONTINUED.BANG_EQUALS_NOT",
       parameters = Map("clause" -> "!"),
       context = ExpectedContext(fragment = "!", start = 16, stop = 16))
     checkError(
       exception = parseException("CREATE TABLE t(c1 INT ! NULL)"),
-      errorClass = "SYNTAX_DISCONTINUED.BANG_EQUALS_NOT",
+      condition = "SYNTAX_DISCONTINUED.BANG_EQUALS_NOT",
       parameters = Map("clause" -> "!"),
       context = ExpectedContext(fragment = "!", start = 22, stop = 22))
   }

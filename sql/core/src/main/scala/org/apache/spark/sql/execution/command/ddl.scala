@@ -28,8 +28,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
 import org.apache.hadoop.mapred.{FileInputFormat, JobConf}
 
-import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKeys._
+import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.internal.config.RDD_PARALLEL_LISTING_THRESHOLD
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
@@ -46,7 +45,7 @@ import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAM
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces._
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.errors.QueryExecutionErrors.hiveTableWithAnsiIntervalsError
-import org.apache.spark.sql.execution.datasources.{DataSource, DataSourceUtils, FileFormat, HadoopFsRelation, LogicalRelation}
+import org.apache.spark.sql.execution.datasources.{DataSource, DataSourceUtils, FileFormat, HadoopFsRelation, LogicalRelationWithTable}
 import org.apache.spark.sql.execution.datasources.v2.FileDataSourceV2
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
 import org.apache.spark.sql.types._
@@ -197,7 +196,8 @@ case class DescribeDatabaseCommand(
         if (properties.isEmpty) {
           ""
         } else {
-          conf.redactOptions(properties).toSeq.sortBy(_._1).mkString("(", ", ", ")")
+          sparkSession.sessionState.conf.redactOptions(properties).toSeq
+            .sortBy(_._1).mkString("(", ", ", ")")
         }
       result :+ Row("Properties", propertiesStr)
     } else {
@@ -336,14 +336,6 @@ case class AlterTableUnsetPropertiesCommand(
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
     val table = catalog.getTableRawMetadata(tableName)
-    if (!ifExists) {
-      val nonexistentKeys = propKeys.filter(key => !table.properties.contains(key)
-        && key != TableCatalog.PROP_COMMENT)
-      if (nonexistentKeys.nonEmpty) {
-        throw QueryCompilationErrors.unsetNonExistentPropertiesError(
-          nonexistentKeys, table.identifier)
-      }
-    }
     // If comment is in the table property, we reset it to None
     val tableComment = if (propKeys.contains(TableCatalog.PROP_COMMENT)) None else table.comment
     val newProperties = table.properties.filter { case (k, _) => !propKeys.contains(k) }
@@ -357,8 +349,8 @@ case class AlterTableUnsetPropertiesCommand(
 
 
 /**
- * A command to change the column for a table, only support changing the comment of a non-partition
- * column for now.
+ * A command to change the column for a table, only support changing the comment or collation of
+ * the data type or nested types (recursively) of a non-partition column for now.
  *
  * The syntax of using this command in SQL is:
  * {{{
@@ -388,32 +380,45 @@ case class AlterTableChangeColumnCommand(
     }
     // Find the origin column from dataSchema by column name.
     val originColumn = findColumnByName(table.dataSchema, columnName, resolver)
-    // Throw an AnalysisException if the column name/dataType is changed.
-    if (!columnEqual(originColumn, newColumn, resolver)) {
+    val validType = canEvolveType(originColumn, newColumn)
+    // Throw an AnalysisException on attempt to change collation of bucket column.
+    if (validType && originColumn.dataType != newColumn.dataType) {
+      val isBucketColumn = table.bucketSpec match {
+        case Some(bucketSpec) => bucketSpec.bucketColumnNames.exists(resolver(columnName, _))
+        case _ => false
+      }
+      if (isBucketColumn) {
+        throw QueryCompilationErrors.cannotAlterCollationBucketColumn(
+          table.qualifiedName, columnName)
+      }
+    }
+    // Throw an AnalysisException if the column name is changed or we cannot evolve the data type.
+    // Only changes in collation of column data type or its nested types (recursively) are allowed.
+    if (!validType || !namesEqual(originColumn, newColumn, resolver)) {
       throw QueryCompilationErrors.alterTableChangeColumnNotSupportedForColumnTypeError(
         toSQLId(table.identifier.nameParts), originColumn, newColumn, this.origin)
     }
 
     val newDataSchema = table.dataSchema.fields.map { field =>
       if (field.name == originColumn.name) {
-        // Create a new column from the origin column with the new comment.
-        val withNewComment: StructField =
-          addComment(field, newColumn.getComment())
+        // Create a new column from the origin column with the new type and new comment.
+        val withNewTypeAndComment: StructField =
+          addComment(withNewType(field, newColumn.dataType), newColumn.getComment())
         // Create a new column from the origin column with the new current default value.
         if (newColumn.getCurrentDefaultValue().isDefined) {
           if (newColumn.getCurrentDefaultValue().get.nonEmpty) {
             val result: StructField =
-              addCurrentDefaultValue(withNewComment, newColumn.getCurrentDefaultValue())
+              addCurrentDefaultValue(withNewTypeAndComment, newColumn.getCurrentDefaultValue())
             // Check that the proposed default value parses and analyzes correctly, and that the
             // type of the resulting expression is equivalent or coercible to the destination column
             // type.
             ResolveDefaultColumns.analyze(result, "ALTER TABLE ALTER COLUMN")
             result
           } else {
-            withNewComment.clearCurrentDefaultValue()
+            withNewTypeAndComment.clearCurrentDefaultValue()
           }
         } else {
-          withNewComment
+          withNewTypeAndComment
         }
       } else {
         field
@@ -433,6 +438,10 @@ case class AlterTableChangeColumnCommand(
     }.getOrElse(throw QueryCompilationErrors.cannotFindColumnError(name, schema.fieldNames))
   }
 
+  // Change the dataType of the column.
+  private def withNewType(column: StructField, dataType: DataType): StructField =
+    column.copy(dataType = dataType)
+
   // Add the comment to a column, if comment is empty, return the original column.
   private def addComment(column: StructField, comment: Option[String]): StructField =
     comment.map(column.withComment).getOrElse(column)
@@ -443,10 +452,17 @@ case class AlterTableChangeColumnCommand(
     value.map(column.withCurrentDefaultValue).getOrElse(column)
 
   // Compare a [[StructField]] to another, return true if they have the same column
-  // name(by resolver) and dataType.
-  private def columnEqual(
+  // name(by resolver).
+  private def namesEqual(
       field: StructField, other: StructField, resolver: Resolver): Boolean = {
-    resolver(field.name, other.name) && field.dataType == other.dataType
+    resolver(field.name, other.name)
+  }
+
+  // Compare dataType of [[StructField]] to another, return true if it is valid to evolve the type
+  // when altering column. Only changes in collation of data type or its nested types (recursively)
+  // are allowed.
+  private def canEvolveType(from: StructField, to: StructField): Boolean = {
+    DataType.equalsIgnoreCompatibleCollation(from.dataType, to.dataType)
   }
 }
 
@@ -478,7 +494,7 @@ case class AlterTableSerDePropertiesCommand(
       throw QueryCompilationErrors.alterTableSetSerdeForSpecificPartitionNotSupportedError()
     }
     if (serdeClassName.isDefined && DDLUtils.isDatasourceTable(table)) {
-      throw QueryCompilationErrors.alterTableSetSerdeNotSupportedError()
+      throw QueryCompilationErrors.alterTableSetSerdeNotSupportedError(table.qualifiedName)
     }
     if (partSpec.isEmpty) {
       val newTable = table.withNewStorage(
@@ -533,7 +549,7 @@ case class AlterTableAddPartitionCommand(
     // Hive metastore may not have enough memory to handle millions of partitions in single RPC.
     // Also the request to metastore times out when adding lot of partitions in one shot.
     // we should split them into smaller batches
-    val batchSize = conf.getConf(SQLConf.ADD_PARTITION_BATCH_SIZE)
+    val batchSize = sparkSession.sessionState.conf.getConf(SQLConf.ADD_PARTITION_BATCH_SIZE)
     parts.iterator.grouped(batchSize).foreach { batch =>
       catalog.createPartitions(table.identifier, batch, ignoreIfExists = ifNotExists)
     }
@@ -697,7 +713,7 @@ case class RepairTableCommand(
     }
 
     val root = new Path(table.location)
-    logInfo(s"Recover all the partitions in $root")
+    logInfo(log"Recover all the partitions in ${MDC(LogKeys.PATH, root)}")
     val hadoopConf = spark.sessionState.newHadoopConf()
     val fs = root.getFileSystem(hadoopConf)
 
@@ -717,14 +733,16 @@ case class RepairTableCommand(
           evalPool.shutdown()
         }
       val total = partitionSpecsAndLocs.length
-      logInfo(s"Found $total partitions in $root")
+      logInfo(log"Found ${MDC(LogKeys.NUM_PARTITIONS, total)} partitions " +
+        log"in ${MDC(LogKeys.PATH, root)}")
 
       val partitionStats = if (spark.sessionState.conf.gatherFastStats) {
         gatherPartitionStats(spark, partitionSpecsAndLocs, fs, pathFilter, threshold)
       } else {
         Map.empty[Path, PartitionStatistics]
       }
-      logInfo(s"Finished to gather the fast stats for all $total partitions.")
+      logInfo(log"Finished to gather the fast stats for all " +
+        log"${MDC(LogKeys.NUM_PARTITIONS, total)} partitions.")
 
       addPartitions(spark, table, partitionSpecsAndLocs, partitionStats)
       total
@@ -737,12 +755,14 @@ case class RepairTableCommand(
       spark.catalog.refreshTable(tableIdentWithDB)
     } catch {
       case NonFatal(e) =>
-        logError(log"Cannot refresh the table '${MDC(IDENTIFIER, tableIdentWithDB)}'. " +
+        logError(log"Cannot refresh the table '${MDC(LogKeys.TABLE_NAME, tableIdentWithDB)}'. " +
           log"A query of the table might return wrong result if the table was cached. " +
           log"To avoid such issue, you should uncache the table manually via the UNCACHE TABLE " +
           log"command after table recovering will complete fully.", e)
     }
-    logInfo(s"Recovered all partitions: added ($addedAmount), dropped ($droppedAmount).")
+    logInfo(log"Recovered all partitions: " +
+      log"added (${MDC(LogKeys.NUM_ADDED_PARTITIONS, addedAmount)}), " +
+      log"dropped (${MDC(LogKeys.NUM_DROPPED_PARTITIONS, droppedAmount)}).")
     Seq.empty[Row]
   }
 
@@ -783,13 +803,13 @@ case class RepairTableCommand(
           scanPartitions(spark, fs, filter, st.getPath, spec ++ Map(partitionNames.head -> value),
             partitionNames.drop(1), threshold, resolver, evalTaskSupport)
         } else {
-          logWarning(
-            log"expected partition column ${MDC(EXPECTED_PARTITION_COLUMN, partitionNames.head)}," +
-              log" but got ${MDC(ACTUAL_PARTITION_COLUMN, ps(0))}, ignoring it")
+          logWarning(log"expected partition column " +
+            log"${MDC(LogKeys.EXPECTED_PARTITION_COLUMN, partitionNames.head)}," +
+            log" but got ${MDC(LogKeys.ACTUAL_PARTITION_COLUMN, ps(0))}, ignoring it")
           Seq.empty
         }
       } else {
-        logWarning(log"ignore ${MDC(PATH, new Path(path, name))}")
+        logWarning(log"ignore ${MDC(LogKeys.PATH, new Path(path, name))}")
         Seq.empty
       }
     }
@@ -813,7 +833,8 @@ case class RepairTableCommand(
         Math.min(spark.sparkContext.defaultParallelism, 10000))
       // gather the fast stats for all the partitions otherwise Hive metastore will list all the
       // files for all the new partitions in sequential way, which is super slow.
-      logInfo(s"Gather the fast stats in parallel using $numParallelism tasks.")
+      logInfo(log"Gather the fast stats in parallel using ${MDC(LogKeys.COUNT, numParallelism)} " +
+        log"tasks.")
       spark.sparkContext.parallelize(locations, numParallelism)
         .mapPartitions { locationsEachPartition =>
           val pathFilter = getPathFilter(serializableConfiguration.value)
@@ -841,7 +862,7 @@ case class RepairTableCommand(
     // Hive metastore may not have enough memory to handle millions of partitions in single RPC,
     // we should split them into smaller batches. Since Hive client is not thread safe, we cannot
     // do this in parallel.
-    val batchSize = spark.conf.get(SQLConf.ADD_PARTITION_BATCH_SIZE)
+    val batchSize = spark.sessionState.conf.getConf(SQLConf.ADD_PARTITION_BATCH_SIZE)
     partitionSpecsAndLocs.iterator.grouped(batchSize).foreach { batch =>
       val now = MILLISECONDS.toSeconds(System.currentTimeMillis())
       val parts = batch.map { case (spec, location) =>
@@ -988,9 +1009,13 @@ object DDLUtils extends Logging {
     if (!catalog.isTempView(tableMetadata.identifier)) {
       tableMetadata.tableType match {
         case CatalogTableType.VIEW if !isView =>
-          throw QueryCompilationErrors.cannotAlterViewWithAlterTableError()
+          throw QueryCompilationErrors.cannotAlterViewWithAlterTableError(
+            viewName = tableMetadata.identifier.table
+          )
         case o if o != CatalogTableType.VIEW && isView =>
-          throw QueryCompilationErrors.cannotAlterTableWithAlterViewError()
+          throw QueryCompilationErrors.cannotAlterTableWithAlterViewError(
+            tableName = tableMetadata.identifier.table
+          )
         case _ =>
       }
     }
@@ -1030,7 +1055,7 @@ object DDLUtils extends Logging {
       DataSource.lookupDataSource(provider, SQLConf.get).getConstructor().newInstance()
     } catch {
       case e: Throwable =>
-        logError(log"Failed to find data source: ${MDC(DATA_SOURCE_PROVIDER, provider)} " +
+        logError(log"Failed to find data source: ${MDC(LogKeys.DATA_SOURCE, provider)} " +
           log"when check data column names.", e)
         return
     }
@@ -1051,7 +1076,7 @@ object DDLUtils extends Logging {
       outputPath: Path,
       table: Option[CatalogTable] = None) : Unit = {
     val inputPaths = query.collect {
-      case LogicalRelation(r: HadoopFsRelation, _, _, _) =>
+      case LogicalRelationWithTable(r: HadoopFsRelation, _) =>
         r.location.rootPaths
     }.flatten
 

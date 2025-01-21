@@ -25,7 +25,8 @@ import scala.xml.Utility
 
 import org.apache.commons.text.StringEscapeUtils
 
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.rdd.DeterministicLevel
 import org.apache.spark.scheduler.StageInfo
 import org.apache.spark.storage.StorageLevel
@@ -214,7 +215,8 @@ private[spark] object RDDOperationGraph extends Logging {
         case (true, false) => outgoingEdges += e
         case (false, true) => incomingEdges += e
         // should never happen
-        case _ => logWarning(s"Found an orphan edge in stage ${stage.stageId}: $e")
+        case _ => logWarning(log"Found an orphan edge in stage " +
+          log"${MDC(STAGE_ID, stage.stageId)}: ${MDC(ERROR, e)}")
       }
     }
 

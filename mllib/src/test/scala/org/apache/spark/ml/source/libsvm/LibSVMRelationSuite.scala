@@ -65,9 +65,9 @@ class LibSVMRelationSuite
     val succ = new File(dir, "_SUCCESS")
     val file0 = new File(dir, "part-00000")
     val file1 = new File(dir, "part-00001")
-    Files.write("", succ, StandardCharsets.UTF_8)
-    Files.write(lines0, file0, StandardCharsets.UTF_8)
-    Files.write(lines1, file1, StandardCharsets.UTF_8)
+    Files.asCharSink(succ, StandardCharsets.UTF_8).write("")
+    Files.asCharSink(file0, StandardCharsets.UTF_8).write(lines0)
+    Files.asCharSink(file1, StandardCharsets.UTF_8).write(lines1)
     path = dir.getPath
   }
 
@@ -158,7 +158,7 @@ class LibSVMRelationSuite
       StructField("labelFoo", DoubleType, false),
       StructField("featuresBar", VectorType, false))
     )
-    val df = spark.sqlContext.createDataFrame(rawData, struct)
+    val df = spark.createDataFrame(rawData, struct)
 
     val writePath = Utils.createTempDir().getPath
 

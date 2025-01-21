@@ -40,7 +40,7 @@ import org.apache.spark.sql.catalyst.util.RebaseDateTime.RebaseSpec
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.execution.datasources.DataSourceUtils
+import org.apache.spark.sql.execution.datasources.{DataSourceUtils, VariantMetadata}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{UTF8String, VariantVal}
@@ -95,7 +95,7 @@ private[parquet] class ParquetPrimitiveConverter(val updater: ParentContainerUpd
   override def addLong(value: Long): Unit = updater.setLong(value)
   override def addFloat(value: Float): Unit = updater.setFloat(value)
   override def addDouble(value: Double): Unit = updater.setDouble(value)
-  override def addBinary(value: Binary): Unit = updater.set(value.getBytes)
+  override def addBinary(value: Binary): Unit = updater.set(value.getBytesUnsafe)
 }
 
 /**
@@ -498,6 +498,9 @@ private[parquet] class ParquetRowConverter(
       case t: MapType =>
         new ParquetMapConverter(parquetType.asGroupType(), t, updater)
 
+      case t: StructType if VariantMetadata.isVariantStruct(t) =>
+        new ParquetVariantConverter(t, parquetType.asGroupType(), updater)
+
       case t: StructType =>
         val wrappedUpdater = {
           // SPARK-30338: avoid unnecessary InternalRow copying for nested structs:
@@ -535,7 +538,11 @@ private[parquet] class ParquetRowConverter(
           wrappedUpdater)
 
       case t: VariantType =>
-        new ParquetVariantConverter(parquetType.asGroupType(), updater)
+        if (SQLConf.get.getConf(SQLConf.VARIANT_ALLOW_READING_SHREDDED)) {
+          new ParquetVariantConverter(t, parquetType.asGroupType(), updater)
+        } else {
+          new ParquetUnshreddedVariantConverter(parquetType.asGroupType(), updater)
+        }
 
       case t =>
         throw QueryExecutionErrors.cannotCreateParquetConverterForDataTypeError(
@@ -562,7 +569,7 @@ private[parquet] class ParquetRowConverter(
 
     override def setDictionary(dictionary: Dictionary): Unit = {
       this.expandedDictionary = Array.tabulate(dictionary.getMaxId + 1) { i =>
-        UTF8String.fromBytes(dictionary.decodeToBinary(i).getBytes)
+        UTF8String.fromBytes(dictionary.decodeToBinary(i).getBytesUnsafe)
       }
     }
 
@@ -622,7 +629,7 @@ private[parquet] class ParquetRowConverter(
         Decimal(unscaled, precision, scale)
       } else {
         // Otherwise, resorts to an unscaled `BigInteger` instead.
-        Decimal(new BigDecimal(new BigInteger(value.getBytes), scale), precision, scale)
+        Decimal(new BigDecimal(new BigInteger(value.getBytesUnsafe), scale), precision, scale)
       }
     }
   }
@@ -845,8 +852,8 @@ private[parquet] class ParquetRowConverter(
     }
   }
 
-  /** Parquet converter for Variant */
-  private final class ParquetVariantConverter(
+  /** Parquet converter for unshredded Variant */
+  private final class ParquetUnshreddedVariantConverter(
      parquetType: GroupType,
      updater: ParentContainerUpdater)
     extends ParquetGroupConverter(updater) {
@@ -857,20 +864,18 @@ private[parquet] class ParquetRowConverter(
     private[this] val converters = {
       if (parquetType.getFieldCount() != 2) {
         // We may allow more than two children in the future, so consider this unsupported.
-        throw QueryCompilationErrors.
-          parquetTypeUnsupportedYetError("variant column must contain exactly two fields")
+        throw QueryCompilationErrors.invalidVariantWrongNumFieldsError()
       }
       val valueAndMetadata = Seq("value", "metadata").map { colName =>
         val idx = (0 until parquetType.getFieldCount())
             .find(parquetType.getFieldName(_) == colName)
         if (idx.isEmpty) {
-          throw QueryCompilationErrors.illegalParquetTypeError(s"variant missing $colName field")
+          throw QueryCompilationErrors.invalidVariantMissingFieldError(colName)
         }
         val child = parquetType.getType(idx.get)
         if (!child.isPrimitive || child.getRepetition != Type.Repetition.REQUIRED ||
             child.asPrimitiveType().getPrimitiveTypeName != BINARY) {
-          throw QueryCompilationErrors.illegalParquetTypeError(
-            s"variant column must be a non-nullable binary")
+          throw QueryCompilationErrors.invalidVariantNullableOrNotBinaryFieldError(colName)
         }
         child
       }
@@ -897,6 +902,47 @@ private[parquet] class ParquetRowConverter(
     override def start(): Unit = {
       currentValue = null
       currentMetadata = null
+    }
+  }
+
+  /** Parquet converter for Variant (shredded or unshredded) */
+  private final class ParquetVariantConverter(
+     targetType: DataType, parquetType: GroupType, updater: ParentContainerUpdater)
+    extends ParquetGroupConverter(updater) {
+
+    private[this] var currentRow: Any = _
+    private[this] val parquetSparkType = SparkShreddingUtils.parquetTypeToSparkType(parquetType)
+    private[this] val variantSchema = SparkShreddingUtils.buildVariantSchema(parquetSparkType)
+    private[this] val fieldsToExtract =
+      SparkShreddingUtils.getFieldsToExtract(targetType, variantSchema)
+    // A struct converter that reads the underlying file data.
+    private[this] val fileConverter = new ParquetRowConverter(
+      schemaConverter,
+      parquetType,
+      parquetSparkType.asInstanceOf[StructType],
+      convertTz,
+      datetimeRebaseSpec,
+      int96RebaseSpec,
+      new ParentContainerUpdater {
+        override def set(value: Any): Unit = currentRow = value
+      })
+
+    override def getConverter(fieldIndex: Int): Converter = fileConverter.getConverter(fieldIndex)
+
+    override def end(): Unit = {
+      fileConverter.end()
+      val row = currentRow.asInstanceOf[InternalRow]
+      val v = if (fieldsToExtract == null) {
+        SparkShreddingUtils.assembleVariant(row, variantSchema)
+      } else {
+        SparkShreddingUtils.assembleVariantStruct(row, variantSchema, fieldsToExtract)
+      }
+      updater.set(v)
+    }
+
+    override def start(): Unit = {
+      fileConverter.start()
+      currentRow = null
     }
   }
 

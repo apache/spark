@@ -29,6 +29,10 @@ import org.apache.spark.sql.types.{AbstractDataType, DataType, DoubleType, Numer
     Examples:
       > SELECT _FUNC_(y, x) FROM VALUES (1, 2), (2, 2), (2, 3), (2, 4) AS tab(y, x);
        4
+      > SELECT _FUNC_(y, x) FROM VALUES (1, null) AS tab(y, x);
+       0
+      > SELECT _FUNC_(y, x) FROM VALUES (null, 1) AS tab(y, x);
+       0
       > SELECT _FUNC_(y, x) FROM VALUES (1, 2), (2, null), (2, 3), (2, 4) AS tab(y, x);
        3
       > SELECT _FUNC_(y, x) FROM VALUES (1, 2), (2, null), (null, 3), (2, 4) AS tab(y, x);
@@ -158,6 +162,10 @@ case class RegrR2(y: Expression, x: Expression) extends PearsonCorrelation(y, x,
     Examples:
       > SELECT _FUNC_(y, x) FROM VALUES (1, 2), (2, 2), (2, 3), (2, 4) AS tab(y, x);
        2.75
+      > SELECT _FUNC_(y, x) FROM VALUES (1, null) AS tab(y, x);
+       NULL
+      > SELECT _FUNC_(y, x) FROM VALUES (null, 1) AS tab(y, x);
+       NULL
       > SELECT _FUNC_(y, x) FROM VALUES (1, 2), (2, null), (2, 3), (2, 4) AS tab(y, x);
        2.0
       > SELECT _FUNC_(y, x) FROM VALUES (1, 2), (2, null), (null, 3), (2, 4) AS tab(y, x);
@@ -189,6 +197,10 @@ case class RegrSXX(
     Examples:
       > SELECT _FUNC_(y, x) FROM VALUES (1, 2), (2, 2), (2, 3), (2, 4) AS tab(y, x);
        0.75
+      > SELECT _FUNC_(y, x) FROM VALUES (1, null) AS tab(y, x);
+       NULL
+      > SELECT _FUNC_(y, x) FROM VALUES (null, 1) AS tab(y, x);
+       NULL
       > SELECT _FUNC_(y, x) FROM VALUES (1, 2), (2, null), (2, 3), (2, 4) AS tab(y, x);
        1.0
       > SELECT _FUNC_(y, x) FROM VALUES (1, 2), (2, null), (null, 3), (2, 4) AS tab(y, x);
@@ -214,6 +226,10 @@ case class RegrSXY(y: Expression, x: Expression) extends Covariance(y, x, true) 
     Examples:
       > SELECT _FUNC_(y, x) FROM VALUES (1, 2), (2, 2), (2, 3), (2, 4) AS tab(y, x);
        0.75
+      > SELECT _FUNC_(y, x) FROM VALUES (1, null) AS tab(y, x);
+       NULL
+      > SELECT _FUNC_(y, x) FROM VALUES (null, 1) AS tab(y, x);
+       NULL
       > SELECT _FUNC_(y, x) FROM VALUES (1, 2), (2, null), (2, 3), (2, 4) AS tab(y, x);
        0.6666666666666666
       > SELECT _FUNC_(y, x) FROM VALUES (1, 2), (2, null), (null, 3), (2, 4) AS tab(y, x);
@@ -243,12 +259,16 @@ case class RegrSYY(
   usage = "_FUNC_(y, x) - Returns the slope of the linear regression line for non-null pairs in a group, where `y` is the dependent variable and `x` is the independent variable.",
   examples = """
     Examples:
-      > SELECT _FUNC_(y, x) FROM VALUES (1,1), (2,2), (3,3) AS tab(y, x);
+      > SELECT _FUNC_(y, x) FROM VALUES (1, 1), (2, 2), (3, 3), (4, 4) AS tab(y, x);
        1.0
       > SELECT _FUNC_(y, x) FROM VALUES (1, null) AS tab(y, x);
        NULL
       > SELECT _FUNC_(y, x) FROM VALUES (null, 1) AS tab(y, x);
        NULL
+      > SELECT _FUNC_(y, x) FROM VALUES (1, 1), (2, null), (3, 3), (4, 4) AS tab(y, x);
+       1.0
+      > SELECT _FUNC_(y, x) FROM VALUES (1, 1), (2, null), (null, 3), (4, 4) AS tab(y, x);
+       1.0
   """,
   group = "agg_funcs",
   since = "3.4.0")
@@ -271,8 +291,14 @@ case class RegrSlope(left: Expression, right: Expression) extends DeclarativeAgg
 
   override lazy val initialValues: Seq[Expression] = covarPop.initialValues ++ varPop.initialValues
 
-  override lazy val updateExpressions: Seq[Expression] =
-    covarPop.updateExpressions ++ varPop.updateExpressions
+  override lazy val updateExpressions: Seq[Expression] = {
+    // RegrSlope only handles pairs where both y and x are non-empty, so we need additional
+    // judgment for calculating VariancePop.
+    val isNull = left.isNull || right.isNull
+    covarPop.updateExpressions ++ varPop.updateExpressions.zip(varPop.aggBufferAttributes).map {
+      case (newValue, oldValue) => If(isNull, oldValue, newValue)
+    }
+  }
 
   override lazy val mergeExpressions: Seq[Expression] =
     covarPop.mergeExpressions ++ varPop.mergeExpressions
@@ -296,12 +322,16 @@ case class RegrSlope(left: Expression, right: Expression) extends DeclarativeAgg
   usage = "_FUNC_(y, x) - Returns the intercept of the univariate linear regression line for non-null pairs in a group, where `y` is the dependent variable and `x` is the independent variable.",
   examples = """
     Examples:
-      > SELECT _FUNC_(y, x) FROM VALUES (1,1), (2,2), (3,3) AS tab(y, x);
+      > SELECT _FUNC_(y, x) FROM VALUES (1, 1), (2, 2), (3, 3), (4, 4) AS tab(y, x);
        0.0
       > SELECT _FUNC_(y, x) FROM VALUES (1, null) AS tab(y, x);
        NULL
       > SELECT _FUNC_(y, x) FROM VALUES (null, 1) AS tab(y, x);
        NULL
+      > SELECT _FUNC_(y, x) FROM VALUES (1, 1), (2, null), (3, 3), (4, 4) AS tab(y, x);
+       0.0
+      > SELECT _FUNC_(y, x) FROM VALUES (1, 1), (2, null), (null, 3), (4, 4) AS tab(y, x);
+       0.0
   """,
   group = "agg_funcs",
   since = "3.4.0")
@@ -324,8 +354,14 @@ case class RegrIntercept(left: Expression, right: Expression) extends Declarativ
 
   override lazy val initialValues: Seq[Expression] = covarPop.initialValues ++ varPop.initialValues
 
-  override lazy val updateExpressions: Seq[Expression] =
-    covarPop.updateExpressions ++ varPop.updateExpressions
+  override lazy val updateExpressions: Seq[Expression] = {
+    // RegrIntercept only handles pairs where both y and x are non-empty, so we need additional
+    // judgment for calculating VariancePop.
+    val isNull = left.isNull || right.isNull
+    covarPop.updateExpressions ++ varPop.updateExpressions.zip(varPop.aggBufferAttributes).map {
+      case (newValue, oldValue) => If(isNull, oldValue, newValue)
+    }
+  }
 
   override lazy val mergeExpressions: Seq[Expression] =
     covarPop.mergeExpressions ++ varPop.mergeExpressions

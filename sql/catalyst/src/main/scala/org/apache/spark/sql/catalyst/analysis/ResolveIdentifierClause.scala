@@ -30,9 +30,9 @@ import org.apache.spark.sql.types.StringType
 object ResolveIdentifierClause extends Rule[LogicalPlan] with AliasHelper with EvalHelper {
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
-    _.containsAnyPattern(UNRESOLVED_IDENTIFIER)) {
-    case p: PlanWithUnresolvedIdentifier if p.identifierExpr.resolved =>
-      p.planBuilder.apply(evalIdentifierExpr(p.identifierExpr))
+    _.containsPattern(UNRESOLVED_IDENTIFIER)) {
+    case p: PlanWithUnresolvedIdentifier if p.identifierExpr.resolved && p.childrenResolved =>
+      p.planBuilder.apply(evalIdentifierExpr(p.identifierExpr), p.children)
     case other =>
       other.transformExpressionsWithPruning(_.containsAnyPattern(UNRESOLVED_IDENTIFIER)) {
         case e: ExpressionWithUnresolvedIdentifier if e.identifierExpr.resolved =>

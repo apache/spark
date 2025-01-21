@@ -228,7 +228,8 @@ object AvroSerdeSuite {
         RebaseSpec(CORRECTED),
         new NoopFilters,
         false,
-        "")
+        "",
+        -1)
   }
 
   /**

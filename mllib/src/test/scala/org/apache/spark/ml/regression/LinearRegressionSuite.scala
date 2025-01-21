@@ -962,8 +962,8 @@ class LinearRegressionSuite extends MLTest with DefaultReadWriteTest with PMMLRe
   }
 
   test("linear regression with weighted samples") {
-    val sqlContext = spark.sqlContext
-    import sqlContext.implicits._
+    val session = spark
+    import session.implicits._
     val numClasses = 0
     def modelEquals(m1: LinearRegressionModel, m2: LinearRegressionModel): Unit = {
       assert(m1.coefficients ~== m2.coefficients relTol 0.01)

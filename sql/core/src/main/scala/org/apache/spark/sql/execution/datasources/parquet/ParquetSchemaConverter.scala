@@ -28,6 +28,7 @@ import org.apache.parquet.schema.Type.Repetition._
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.execution.datasources.VariantMetadata
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -179,7 +180,15 @@ class ParquetToSparkSchemaConverter(
     field match {
       case primitiveColumn: PrimitiveColumnIO => convertPrimitiveField(primitiveColumn, targetType)
       case groupColumn: GroupColumnIO if targetType.contains(VariantType) =>
-        convertVariantField(groupColumn)
+        if (SQLConf.get.getConf(SQLConf.VARIANT_ALLOW_READING_SHREDDED)) {
+          val col = convertGroupField(groupColumn)
+          col.copy(sparkType = VariantType, variantFileType = Some(col))
+        } else {
+          convertVariantField(groupColumn)
+        }
+      case groupColumn: GroupColumnIO if targetType.exists(VariantMetadata.isVariantStruct) =>
+        val col = convertGroupField(groupColumn)
+        col.copy(sparkType = targetType.get, variantFileType = Some(col))
       case groupColumn: GroupColumnIO => convertGroupField(groupColumn, targetType)
     }
   }
@@ -404,23 +413,21 @@ class ParquetToSparkSchemaConverter(
   private def convertVariantField(groupColumn: GroupColumnIO): ParquetColumn = {
     if (groupColumn.getChildrenCount != 2) {
       // We may allow more than two children in the future, so consider this unsupported.
-      throw QueryCompilationErrors.
-        parquetTypeUnsupportedYetError("variant with more than two fields")
+      throw QueryCompilationErrors.invalidVariantWrongNumFieldsError()
     }
     // Find the binary columns, and validate that they have the correct type.
     val valueAndMetadata = Seq("value", "metadata").map { colName =>
       val idx = (0 until groupColumn.getChildrenCount)
           .find(groupColumn.getChild(_).getName == colName)
       if (idx.isEmpty) {
-        throw QueryCompilationErrors.illegalParquetTypeError(s"variant missing $colName field")
+        throw QueryCompilationErrors.invalidVariantMissingFieldError(colName)
       }
       val child = groupColumn.getChild(idx.get)
       // The value and metadata cannot be individually null, only the full struct can.
       if (child.getType.getRepetition != REQUIRED ||
           !child.isInstanceOf[PrimitiveColumnIO] ||
           child.asInstanceOf[PrimitiveColumnIO].getPrimitive != BINARY) {
-        throw QueryCompilationErrors.illegalParquetTypeError(
-          s"variant $colName must be a non-nullable binary")
+        throw QueryCompilationErrors.invalidVariantNullableOrNotBinaryFieldError(colName)
       }
       child
     }
@@ -748,6 +755,14 @@ class SparkToParquetSchemaConverter(
           .addField(convertField(StructField("value", BinaryType, nullable = false)))
           .addField(convertField(StructField("metadata", BinaryType, nullable = false)))
           .named(field.name)
+
+      case s: StructType if SparkShreddingUtils.isVariantShreddingStruct(s) =>
+        // Variant struct takes a Variant and writes to Parquet as a shredded schema.
+        val group = Types.buildGroup(repetition)
+        s.fields.foreach { f =>
+          group.addField(convertField(f))
+        }
+        group.named(field.name)
 
       case StructType(fields) =>
         fields.foldLeft(Types.buildGroup(repetition)) { (builder, field) =>

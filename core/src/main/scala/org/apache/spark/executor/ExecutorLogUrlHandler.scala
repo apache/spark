@@ -21,7 +21,8 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.util.matching.Regex
 
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys
 
 private[spark] class ExecutorLogUrlHandler(logUrlPattern: Option[String]) extends Logging {
   import ExecutorLogUrlHandler._
@@ -82,8 +83,10 @@ private[spark] class ExecutorLogUrlHandler(logUrlPattern: Option[String]) extend
       allPatterns: Set[String],
       allAttributes: Set[String]): Unit = {
     if (informedForMissingAttributes.compareAndSet(false, true)) {
-      logInfo(s"Fail to renew executor log urls: $reason. Required: $allPatterns / " +
-        s"available: $allAttributes. Falling back to show app's original log urls.")
+      logInfo(log"Fail to renew executor log urls: ${MDC(LogKeys.REASON, reason)}." +
+        log" Required: ${MDC(LogKeys.REGEX, allPatterns)} / " +
+        log"available: ${MDC(LogKeys.ATTRIBUTE_MAP, allAttributes)}." +
+        log" Falling back to show app's original log urls.")
     }
   }
 }

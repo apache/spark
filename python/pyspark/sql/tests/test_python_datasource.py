@@ -19,12 +19,13 @@ import tempfile
 import unittest
 from typing import Callable, Union
 
-from pyspark.errors import PythonException
+from pyspark.errors import PythonException, AnalysisException
 from pyspark.sql.datasource import (
     DataSource,
     DataSourceReader,
     InputPartition,
     DataSourceWriter,
+    DataSourceArrowWriter,
     WriterCommitMessage,
     CaseInsensitiveDict,
 )
@@ -35,8 +36,7 @@ from pyspark.testing.sqlutils import (
     pyarrow_requirement_message,
 )
 from pyspark.testing import assertDataFrameEqual
-from pyspark.testing.sqlutils import ReusedSQLTestCase
-from pyspark.testing.utils import SPARK_HOME
+from pyspark.testing.sqlutils import ReusedSQLTestCase, SPARK_HOME
 
 
 @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
@@ -154,7 +154,8 @@ class BasePythonDataSourceTestsMixin:
             read_func=lambda schema, partition: iter([Row(i=1, j=2), Row(j=3, k=4)])
         )
         with self.assertRaisesRegex(
-            PythonException, "PYTHON_DATA_SOURCE_READ_RETURN_SCHEMA_MISMATCH"
+            PythonException,
+            r"\[DATA_SOURCE_RETURN_SCHEMA_MISMATCH\] Return schema mismatch in the result",
         ):
             self.spark.read.format("test").load().show()
 
@@ -276,7 +277,7 @@ class BasePythonDataSourceTestsMixin:
                 from pyspark import TaskContext
 
                 context = TaskContext.get()
-                output_path = os.path.join(self.path, f"{context.partitionId}.json")
+                output_path = os.path.join(self.path, f"{context.partitionId()}.json")
                 count = 0
                 with open(output_path, "w") as file:
                     for row in iterator:
@@ -372,6 +373,140 @@ class BasePythonDataSourceTestsMixin:
         d2 = d.copy()
         self.assertEqual(d2["BaR"], 3)
         self.assertEqual(d2["baz"], 3)
+
+    def test_arrow_batch_data_source(self):
+        import pyarrow as pa
+
+        class ArrowBatchDataSource(DataSource):
+            """
+            A data source for testing Arrow Batch Serialization
+            """
+
+            @classmethod
+            def name(cls):
+                return "arrowbatch"
+
+            def schema(self):
+                return "key int, value string"
+
+            def reader(self, schema: str):
+                return ArrowBatchDataSourceReader(schema, self.options)
+
+        class ArrowBatchDataSourceReader(DataSourceReader):
+            def __init__(self, schema, options):
+                self.schema: str = schema
+                self.options = options
+
+            def read(self, partition):
+                # Create Arrow Record Batch
+                keys = pa.array([1, 2, 3, 4, 5], type=pa.int32())
+                values = pa.array(["one", "two", "three", "four", "five"], type=pa.string())
+                schema = pa.schema([("key", pa.int32()), ("value", pa.string())])
+                record_batch = pa.RecordBatch.from_arrays([keys, values], schema=schema)
+                yield record_batch
+
+            def partitions(self):
+                # hardcoded number of partitions
+                num_part = 1
+                return [InputPartition(i) for i in range(num_part)]
+
+        self.spark.dataSource.register(ArrowBatchDataSource)
+        df = self.spark.read.format("arrowbatch").load()
+        expected_data = [
+            Row(key=1, value="one"),
+            Row(key=2, value="two"),
+            Row(key=3, value="three"),
+            Row(key=4, value="four"),
+            Row(key=5, value="five"),
+        ]
+        assertDataFrameEqual(df, expected_data)
+
+        with self.assertRaisesRegex(
+            PythonException,
+            "PySparkRuntimeError: \\[DATA_SOURCE_RETURN_SCHEMA_MISMATCH\\] Return schema"
+            " mismatch in the result from 'read' method\\. Expected: 1 columns, Found: 2 columns",
+        ):
+            self.spark.read.format("arrowbatch").schema("dummy int").load().show()
+
+        with self.assertRaisesRegex(
+            PythonException,
+            "PySparkRuntimeError: \\[DATA_SOURCE_RETURN_SCHEMA_MISMATCH\\] Return schema mismatch"
+            " in the result from 'read' method\\. Expected: \\['key', 'dummy'\\] columns, Found:"
+            " \\['key', 'value'\\] columns",
+        ):
+            self.spark.read.format("arrowbatch").schema("key int, dummy string").load().show()
+
+    def test_arrow_batch_sink(self):
+        class TestDataSource(DataSource):
+            @classmethod
+            def name(cls):
+                return "arrow_sink"
+
+            def writer(self, schema, overwrite):
+                return TestArrowWriter(self.options["path"])
+
+        class TestArrowWriter(DataSourceArrowWriter):
+            def __init__(self, path):
+                self.path = path
+
+            def write(self, iterator):
+                from pyspark import TaskContext
+
+                context = TaskContext.get()
+                output_path = os.path.join(self.path, f"{context.partitionId()}.json")
+                with open(output_path, "w") as file:
+                    for batch in iterator:
+                        df = batch.to_pandas()
+                        df.to_json(file, orient="records", lines=True)
+                return WriterCommitMessage()
+
+        self.spark.dataSource.register(TestDataSource)
+        df = self.spark.range(3)
+        with tempfile.TemporaryDirectory(prefix="test_arrow_batch_sink") as d:
+            df.write.format("arrow_sink").mode("append").save(d)
+            df2 = self.spark.read.format("json").load(d)
+            assertDataFrameEqual(df2, df)
+
+    def test_data_source_type_mismatch(self):
+        class TestDataSource(DataSource):
+            @classmethod
+            def name(cls):
+                return "test"
+
+            def schema(self):
+                return "id int"
+
+            def reader(self, schema):
+                return TestReader()
+
+            def writer(self, schema, overwrite):
+                return TestWriter()
+
+        class TestReader:
+            def partitions(self):
+                return []
+
+            def read(self, partition):
+                yield (0,)
+
+        class TestWriter:
+            def write(self, iterator):
+                return WriterCommitMessage()
+
+        self.spark.dataSource.register(TestDataSource)
+
+        with self.assertRaisesRegex(
+            AnalysisException,
+            r"\[DATA_SOURCE_TYPE_MISMATCH\] Expected an instance of DataSourceReader",
+        ):
+            self.spark.read.format("test").load().show()
+
+        df = self.spark.range(10)
+        with self.assertRaisesRegex(
+            AnalysisException,
+            r"\[DATA_SOURCE_TYPE_MISMATCH\] Expected an instance of DataSourceWriter",
+        ):
+            df.write.format("test").mode("append").saveAsTable("test_table")
 
 
 class PythonDataSourceTests(BasePythonDataSourceTestsMixin, ReusedSQLTestCase):

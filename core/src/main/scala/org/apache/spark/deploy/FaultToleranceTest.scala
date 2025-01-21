@@ -18,7 +18,7 @@
 package org.apache.spark.deploy
 
 import java.io._
-import java.net.URL
+import java.net.URI
 import java.nio.charset.StandardCharsets
 import java.util.concurrent.TimeoutException
 
@@ -351,7 +351,7 @@ private class TestMasterInfo(val ip: String, val dockerId: DockerId, val logFile
   def readState(): Unit = {
     try {
       val masterStream = new InputStreamReader(
-        new URL("http://%s:8080/json".format(ip)).openStream, StandardCharsets.UTF_8)
+        new URI("http://%s:8080/json".format(ip)).toURL.openStream, StandardCharsets.UTF_8)
       val json = JsonMethods.parse(masterStream)
 
       val workers = json \ "workers"

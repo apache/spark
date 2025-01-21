@@ -89,7 +89,7 @@ case class JDBCScanBuilder(
   override def pushAggregation(aggregation: Aggregation): Boolean = {
     if (!jdbcOptions.pushDownAggregate) return false
 
-    val compiledAggs = aggregation.aggregateExpressions.flatMap(dialect.compileAggregate)
+    val compiledAggs = aggregation.aggregateExpressions.flatMap(dialect.compileExpression)
     if (compiledAggs.length != aggregation.aggregateExpressions.length) return false
 
     val compiledGroupBys = aggregation.groupByExpressions.flatMap(dialect.compileExpression)

@@ -1,2 +1,0 @@
-Project [to_json(struct(id, id#0L, a, a#0, b, b#0, d, d#0, e, e#0, f, f#0, g, g#0), Some(America/Los_Angeles)) AS to_json(struct(id, a, b, d, e, f, g))#0]
-+- LocalRelation <empty>, [id#0L, a#0, b#0, d#0, e#0, f#0, g#0]

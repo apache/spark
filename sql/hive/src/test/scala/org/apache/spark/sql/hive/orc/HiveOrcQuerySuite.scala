@@ -26,7 +26,7 @@ import org.apache.orc.OrcConf
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
-import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
+import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation, LogicalRelationWithTable}
 import org.apache.spark.sql.execution.datasources.orc.OrcQueryTest
 import org.apache.spark.sql.hive.{HiveSessionCatalog, HiveUtils}
 import org.apache.spark.sql.hive.test.TestHiveSingleton
@@ -58,7 +58,7 @@ class HiveOrcQuerySuite extends OrcQueryTest with TestHiveSingleton {
             exception = intercept[AnalysisException] {
               spark.read.orc(path)
             },
-            errorClass = "UNABLE_TO_INFER_SCHEMA",
+            condition = "UNABLE_TO_INFER_SCHEMA",
             parameters = Map("format" -> "ORC")
           )
 
@@ -234,7 +234,7 @@ class HiveOrcQuerySuite extends OrcQueryTest with TestHiveSingleton {
   private def checkCached(tableIdentifier: TableIdentifier): Unit = {
     getCachedDataSourceTable(tableIdentifier) match {
       case null => fail(s"Converted ${tableIdentifier.table} should be cached in the cache.")
-      case LogicalRelation(_: HadoopFsRelation, _, _, _) => // OK
+      case LogicalRelationWithTable(_: HadoopFsRelation, _) => // OK
       case other =>
         fail(
           s"The cached ${tableIdentifier.table} should be a HadoopFsRelation. " +
@@ -411,6 +411,25 @@ class HiveOrcQuerySuite extends OrcQueryTest with TestHiveSingleton {
               }
             }
           }
+        }
+      }
+    }
+  }
+
+  test("SPARK-49094: ignoreCorruptFiles works for hive orc w/ mergeSchema off") {
+    withTempDir { dir =>
+      val basePath = dir.getCanonicalPath
+      spark.range(0, 1).toDF("a").write.orc(new Path(basePath, "foo=1").toString)
+      spark.range(0, 1).toDF("b").write.json(new Path(basePath, "foo=2").toString)
+
+      withSQLConf(
+        SQLConf.IGNORE_CORRUPT_FILES.key -> "false",
+        SQLConf.ORC_IMPLEMENTATION.key -> "hive") {
+        Seq(true, false).foreach { mergeSchema =>
+          checkAnswer(spark.read
+            .option("mergeSchema", value = mergeSchema)
+            .option("ignoreCorruptFiles", value = true)
+            .orc(basePath), Row(0L, 1))
         }
       }
     }

@@ -130,9 +130,23 @@ struct<(5 / 2):double>
 -- !query
 select 5 / 0
 -- !query schema
-struct<(5 / 0):double>
+struct<>
 -- !query output
-NULL
+org.apache.spark.SparkArithmeticException
+{
+  "errorClass" : "DIVIDE_BY_ZERO",
+  "sqlState" : "22012",
+  "messageParameters" : {
+    "config" : "\"spark.sql.ansi.enabled\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 12,
+    "fragment" : "5 / 0"
+  } ]
+}
 
 
 -- !query
@@ -162,9 +176,23 @@ struct<(5 div 2):bigint>
 -- !query
 select 5 div 0
 -- !query schema
-struct<(5 div 0):bigint>
+struct<>
 -- !query output
-NULL
+org.apache.spark.SparkArithmeticException
+{
+  "errorClass" : "DIVIDE_BY_ZERO",
+  "sqlState" : "22012",
+  "messageParameters" : {
+    "config" : "\"spark.sql.ansi.enabled\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 14,
+    "fragment" : "5 div 0"
+  } ]
+}
 
 
 -- !query
@@ -194,9 +222,23 @@ struct<(CAST(51 AS DECIMAL(10,0)) div CAST(2 AS DECIMAL(2,0))):bigint>
 -- !query
 select cast(5 as decimal(1, 0)) div cast(0 as decimal(2, 0))
 -- !query schema
-struct<(CAST(5 AS DECIMAL(1,0)) div CAST(0 AS DECIMAL(2,0))):bigint>
+struct<>
 -- !query output
-NULL
+org.apache.spark.SparkArithmeticException
+{
+  "errorClass" : "DIVIDE_BY_ZERO",
+  "sqlState" : "22012",
+  "messageParameters" : {
+    "config" : "\"spark.sql.ansi.enabled\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 60,
+    "fragment" : "cast(5 as decimal(1, 0)) div cast(0 as decimal(2, 0))"
+  } ]
+}
 
 
 -- !query
@@ -450,9 +492,23 @@ true
 -- !query
 select mod(7, 2), mod(7, 0), mod(0, 2), mod(7, null), mod(null, 2), mod(null, null)
 -- !query schema
-struct<mod(7, 2):int,mod(7, 0):int,mod(0, 2):int,mod(7, NULL):int,mod(NULL, 2):int,mod(NULL, NULL):double>
+struct<>
 -- !query output
-1	NULL	0	NULL	NULL	NULL
+org.apache.spark.SparkArithmeticException
+{
+  "errorClass" : "DIVIDE_BY_ZERO",
+  "sqlState" : "22012",
+  "messageParameters" : {
+    "config" : "\"spark.sql.ansi.enabled\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 19,
+    "stopIndex" : 27,
+    "fragment" : "mod(7, 0)"
+  } ]
+}
 
 
 -- !query
@@ -506,17 +562,45 @@ struct<(+ -1.11):double,(+ -1.11):decimal(3,2),negative(-1.11):double,negative(-
 -- !query
 select pmod(-7, 2), pmod(0, 2), pmod(7, 0), pmod(7, null), pmod(null, 2), pmod(null, null)
 -- !query schema
-struct<pmod(-7, 2):int,pmod(0, 2):int,pmod(7, 0):int,pmod(7, NULL):int,pmod(NULL, 2):int,pmod(NULL, NULL):double>
+struct<>
 -- !query output
-1	0	NULL	NULL	NULL	NULL
+org.apache.spark.SparkArithmeticException
+{
+  "errorClass" : "DIVIDE_BY_ZERO",
+  "sqlState" : "22012",
+  "messageParameters" : {
+    "config" : "\"spark.sql.ansi.enabled\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 33,
+    "stopIndex" : 42,
+    "fragment" : "pmod(7, 0)"
+  } ]
+}
 
 
 -- !query
 select pmod(cast(3.13 as decimal), cast(0 as decimal)), pmod(cast(2 as smallint), cast(0 as smallint))
 -- !query schema
-struct<pmod(CAST(3.13 AS DECIMAL(10,0)), CAST(0 AS DECIMAL(10,0))):decimal(10,0),pmod(CAST(2 AS SMALLINT), CAST(0 AS SMALLINT)):smallint>
+struct<>
 -- !query output
-NULL	NULL
+org.apache.spark.SparkArithmeticException
+{
+  "errorClass" : "DIVIDE_BY_ZERO",
+  "sqlState" : "22012",
+  "messageParameters" : {
+    "config" : "\"spark.sql.ansi.enabled\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 54,
+    "fragment" : "pmod(cast(3.13 as decimal), cast(0 as decimal))"
+  } ]
+}
 
 
 -- !query

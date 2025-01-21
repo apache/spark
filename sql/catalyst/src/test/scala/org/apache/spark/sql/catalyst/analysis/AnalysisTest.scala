@@ -178,9 +178,9 @@ trait AnalysisTest extends PlanTest {
     }
   }
 
-  protected def assertAnalysisErrorClass(
+  protected def assertAnalysisErrorCondition(
       inputPlan: LogicalPlan,
-      expectedErrorClass: String,
+      expectedErrorCondition: String,
       expectedMessageParameters: Map[String, String],
       queryContext: Array[ExpectedContext] = Array.empty,
       caseSensitive: Boolean = true): Unit = {
@@ -191,22 +191,36 @@ trait AnalysisTest extends PlanTest {
       }
       checkError(
         exception = e,
-        errorClass = expectedErrorClass,
+        condition = expectedErrorCondition,
         parameters = expectedMessageParameters,
         queryContext = queryContext
       )
     }
   }
 
+  protected def assertParseErrorClass(
+      parser: String => Any,
+      sqlCommand: String,
+      errorClass: String,
+      parameters: Map[String, String],
+      queryContext: Array[ExpectedContext] = Array.empty): Unit = {
+    val e = parseException(parser)(sqlCommand)
+    checkError(
+      exception = e,
+      condition = errorClass,
+      parameters = parameters,
+      queryContext = queryContext
+    )
+  }
+
   protected def interceptParseException(parser: String => Any)(
-    sqlCommand: String, messages: String*)(
-    errorClass: Option[String] = None): Unit = {
+    sqlCommand: String, messages: String*)(condition: Option[String] = None): Unit = {
     val e = parseException(parser)(sqlCommand)
     messages.foreach { message =>
       assert(e.message.contains(message))
     }
-    if (errorClass.isDefined) {
-      assert(e.getErrorClass == errorClass.get)
+    if (condition.isDefined) {
+      assert(e.getCondition == condition.get)
     }
   }
 

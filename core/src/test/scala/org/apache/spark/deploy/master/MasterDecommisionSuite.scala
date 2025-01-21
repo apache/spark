@@ -17,7 +17,7 @@
 
 package org.apache.spark.deploy.master
 
-import java.net.{HttpURLConnection, URL}
+import java.net.{HttpURLConnection, URI}
 
 import scala.concurrent.duration._
 
@@ -38,7 +38,7 @@ class MasterDecommisionSuite extends MasterSuiteBase {
     val masterUrl = s"http://${Utils.localHostNameForURI()}:${localCluster.masterWebUIPort}"
     try {
       eventually(timeout(30.seconds), interval(100.milliseconds)) {
-        val url = new URL(s"$masterUrl/workers/kill/?host=${Utils.localHostNameForURI()}")
+        val url = new URI(s"$masterUrl/workers/kill/?host=${Utils.localHostNameForURI()}").toURL
         val conn = url.openConnection().asInstanceOf[HttpURLConnection]
         conn.setRequestMethod("POST")
         assert(conn.getResponseCode === 405)

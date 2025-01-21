@@ -25,14 +25,14 @@ import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes.Append
-import org.apache.spark.sql.test.{QueryTest, SQLHelper}
+import org.apache.spark.sql.test.{QueryTest, RemoteSparkSession}
 import org.apache.spark.sql.types.{StringType, StructField, StructType, TimestampType}
 
 case class ClickEvent(id: String, timestamp: Timestamp)
 
 case class ClickState(id: String, count: Int)
 
-class FlatMapGroupsWithStateStreamingSuite extends QueryTest with SQLHelper {
+class FlatMapGroupsWithStateStreamingSuite extends QueryTest with RemoteSparkSession {
 
   val flatMapGroupsWithStateSchema: StructType = StructType(
     Array(StructField("id", StringType), StructField("timestamp", TimestampType)))
@@ -55,7 +55,9 @@ class FlatMapGroupsWithStateStreamingSuite extends QueryTest with SQLHelper {
     val stateFunc =
       (key: String, values: Iterator[ClickEvent], state: GroupState[ClickState]) => {
         if (state.exists) throw new IllegalArgumentException("state.exists should be false")
-        Iterator(ClickState(key, values.size))
+        val newState = ClickState(key, values.size)
+        state.update(newState)
+        Iterator(newState)
       }
     spark.sql("DROP TABLE IF EXISTS my_sink")
 
@@ -96,7 +98,9 @@ class FlatMapGroupsWithStateStreamingSuite extends QueryTest with SQLHelper {
     val stateFunc =
       (key: String, values: Iterator[ClickEvent], state: GroupState[ClickState]) => {
         val currState = state.getOption.getOrElse(ClickState(key, 0))
-        Iterator(ClickState(key, currState.count + values.size))
+        val newState = ClickState(key, currState.count + values.size)
+        state.update(newState)
+        Iterator(newState)
       }
     val initialState = flatMapGroupsWithStateInitialStateData
       .toDS()
@@ -141,7 +145,9 @@ class FlatMapGroupsWithStateStreamingSuite extends QueryTest with SQLHelper {
     val stateFunc =
       (key: String, values: Iterator[ClickEvent], state: GroupState[ClickState]) => {
         if (state.exists) throw new IllegalArgumentException("state.exists should be false")
-        ClickState(key, values.size)
+        val newState = ClickState(key, values.size)
+        state.update(newState)
+        newState
       }
     spark.sql("DROP TABLE IF EXISTS my_sink")
 
@@ -183,7 +189,9 @@ class FlatMapGroupsWithStateStreamingSuite extends QueryTest with SQLHelper {
     val stateFunc =
       (key: String, values: Iterator[ClickEvent], state: GroupState[ClickState]) => {
         val currState = state.getOption.getOrElse(ClickState(key, 0))
-        ClickState(key, currState.count + values.size)
+        val newState = ClickState(key, currState.count + values.size)
+        state.update(newState)
+        newState
       }
     val initialState = flatMapGroupsWithStateInitialStateData
       .toDS()

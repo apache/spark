@@ -138,6 +138,11 @@ class KMeansModel private[ml] (
   extends Model[KMeansModel] with KMeansParams with GeneralMLWritable
     with HasTrainingSummary[KMeansSummary] {
 
+  // For ml connect only
+  @Since("4.0.0")
+  private[ml] def this() = this(Identifiable.randomUID("kmeans"),
+    new MLlibKMeansModel(clusterCenters = null))
+
   @Since("3.0.0")
   lazy val numFeatures: Int = parentModel.clusterCenters.head.size
 
@@ -219,9 +224,8 @@ private class InternalKMeansModelWriter extends MLWriterFormat with MLFormatRegi
   override def write(path: String, sparkSession: SparkSession,
     optionMap: mutable.Map[String, String], stage: PipelineStage): Unit = {
     val instance = stage.asInstanceOf[KMeansModel]
-    val sc = sparkSession.sparkContext
     // Save metadata and Params
-    DefaultParamsWriter.saveMetadata(instance, path, sc)
+    DefaultParamsWriter.saveMetadata(instance, path, sparkSession)
     // Save model data: cluster centers
     val data: Array[ClusterData] = instance.clusterCenters.zipWithIndex.map {
       case (center, idx) =>
@@ -272,7 +276,7 @@ object KMeansModel extends MLReadable[KMeansModel] {
       val sparkSession = super.sparkSession
       import sparkSession.implicits._
 
-      val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
+      val metadata = DefaultParamsReader.loadMetadata(path, sparkSession, className)
       val dataPath = new Path(path, "data").toString
 
       val clusterCenters = if (majorVersion(metadata.sparkVersion) >= 2) {
@@ -451,8 +455,8 @@ class KMeans @Since("1.5.0") (
 
   private def trainWithBlock(dataset: Dataset[_], instr: Instrumentation) = {
     if (dataset.storageLevel != StorageLevel.NONE) {
-      instr.logWarning(s"Input vectors will be blockified to blocks, and " +
-        s"then cached during training. Be careful of double caching!")
+      instr.logWarning("Input vectors will be blockified to blocks, and " +
+        "then cached during training. Be careful of double caching!")
     }
 
     val initStartTime = System.currentTimeMillis

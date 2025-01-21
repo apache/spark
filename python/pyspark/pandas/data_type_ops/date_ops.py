@@ -23,9 +23,8 @@ import numpy as np
 import pandas as pd
 from pandas.api.types import CategoricalDtype
 
-from pyspark.sql import functions as F
+from pyspark.sql import functions as F, Column as PySparkColumn
 from pyspark.sql.types import BooleanType, DateType, StringType
-from pyspark.sql.utils import get_column_class
 from pyspark.pandas._typing import Dtype, IndexOpsLike, SeriesOrIndex
 from pyspark.pandas.base import column_op, IndexOpsMixin
 from pyspark.pandas.data_type_ops.base import (
@@ -84,29 +83,25 @@ class DateOps(DataTypeOps):
         from pyspark.pandas.base import column_op
 
         _sanitize_list_like(right)
-        Column = get_column_class()
-        return column_op(Column.__lt__)(left, right)
+        return column_op(PySparkColumn.__lt__)(left, right)
 
     def le(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         from pyspark.pandas.base import column_op
 
         _sanitize_list_like(right)
-        Column = get_column_class()
-        return column_op(Column.__le__)(left, right)
+        return column_op(PySparkColumn.__le__)(left, right)
 
     def ge(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         from pyspark.pandas.base import column_op
 
         _sanitize_list_like(right)
-        Column = get_column_class()
-        return column_op(Column.__ge__)(left, right)
+        return column_op(PySparkColumn.__ge__)(left, right)
 
     def gt(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         from pyspark.pandas.base import column_op
 
         _sanitize_list_like(right)
-        Column = get_column_class()
-        return column_op(Column.__gt__)(left, right)
+        return column_op(PySparkColumn.__gt__)(left, right)
 
     def astype(self, index_ops: IndexOpsLike, dtype: Union[str, type, Dtype]) -> IndexOpsLike:
         dtype, spark_type = pandas_on_spark_type(dtype)

@@ -35,19 +35,29 @@ import java.util.Map;
  */
 @Evolving
 public interface SparkThrowable {
-  // Succinct, human-readable, unique, and consistent representation of the error category
-  // If null, error class is not set
-  String getErrorClass();
+  /**
+   * Succinct, human-readable, unique, and consistent representation of the error condition.
+   * If null, error condition is not set.
+   */
+  String getCondition();
+
+  /**
+   * Succinct, human-readable, unique, and consistent representation of the error category.
+   * If null, error class is not set.
+   * @deprecated Use {@link #getCondition()} instead.
+   */
+  @Deprecated
+  default String getErrorClass() { return getCondition(); }
 
   // Portable error identifier across SQL engines
   // If null, error class or SQLSTATE is not set
   default String getSqlState() {
-    return SparkThrowableHelper.getSqlState(this.getErrorClass());
+    return SparkThrowableHelper.getSqlState(this.getCondition());
   }
 
   // True if this error is an internal error.
   default boolean isInternalError() {
-    return SparkThrowableHelper.isInternalError(this.getErrorClass());
+    return SparkThrowableHelper.isInternalError(this.getCondition());
   }
 
   default Map<String, String> getMessageParameters() {

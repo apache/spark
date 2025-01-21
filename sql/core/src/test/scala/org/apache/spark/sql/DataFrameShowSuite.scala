@@ -112,13 +112,12 @@ class DataFrameShowSuite extends QueryTest with SharedSparkSession {
                            ||key|value|
                            |+---+-----+
                            |+---+-----+
-                           |only showing top 0 rows
-                           |""".stripMargin
+                           |only showing top 0 rows""".stripMargin
     assert(testData.select($"*").showString(-1) === expectedAnswer)
   }
 
   test("showString(negative), vertical = true") {
-    val expectedAnswer = "(0 rows)\n"
+    val expectedAnswer = "(0 rows)"
     assert(testData.select($"*").showString(-1, vertical = true) === expectedAnswer)
   }
 
@@ -127,8 +126,7 @@ class DataFrameShowSuite extends QueryTest with SharedSparkSession {
                            ||key|value|
                            |+---+-----+
                            |+---+-----+
-                           |only showing top 0 rows
-                           |""".stripMargin
+                           |only showing top 0 rows""".stripMargin
     assert(testData.select($"*").showString(0) === expectedAnswer)
   }
 
@@ -145,7 +143,7 @@ class DataFrameShowSuite extends QueryTest with SharedSparkSession {
   }
 
   test("showString(0), vertical = true") {
-    val expectedAnswer = "(0 rows)\n"
+    val expectedAnswer = "(0 rows)"
     assert(testData.select($"*").showString(0, vertical = true) === expectedAnswer)
   }
 
@@ -190,7 +188,9 @@ class DataFrameShowSuite extends QueryTest with SharedSparkSession {
                            ||[33 34]|[31 32 33 34 36]|
                            |+-------+----------------+
                            |""".stripMargin
-    assert(df.showString(10) === expectedAnswer)
+    withSQLConf(SQLConf.BINARY_OUTPUT_STYLE.key -> "HEX_DISCRETE") {
+      assert(df.showString(10) === expectedAnswer)
+    }
   }
 
   test("showString: binary, vertical = true") {
@@ -204,7 +204,9 @@ class DataFrameShowSuite extends QueryTest with SharedSparkSession {
                          "-RECORD 1---------------\n" +
                          " _1  | [33 34]          \n" +
                          " _2  | [31 32 33 34 36] \n"
-    assert(df.showString(10, vertical = true) === expectedAnswer)
+    withSQLConf(SQLConf.BINARY_OUTPUT_STYLE.key -> "HEX_DISCRETE") {
+      assert(df.showString(10, vertical = true) === expectedAnswer)
+    }
   }
 
   test("showString: minimum column width") {
@@ -282,8 +284,7 @@ class DataFrameShowSuite extends QueryTest with SharedSparkSession {
                            |+---+-----+
                            ||  1|    1|
                            |+---+-----+
-                           |only showing top 1 row
-                           |""".stripMargin
+                           |only showing top 1 row""".stripMargin
     assert(testData.select($"*").showString(1) === expectedAnswer)
   }
 
@@ -291,7 +292,7 @@ class DataFrameShowSuite extends QueryTest with SharedSparkSession {
     val expectedAnswer = "-RECORD 0----\n" +
                          " key   | 1   \n" +
                          " value | 1   \n" +
-                         "only showing top 1 row\n"
+                         "only showing top 1 row"
     assert(testData.select($"*").showString(1, vertical = true) === expectedAnswer)
   }
 
@@ -333,7 +334,7 @@ class DataFrameShowSuite extends QueryTest with SharedSparkSession {
   }
 
   test("SPARK-7327 show with empty dataFrame, vertical = true") {
-    assert(testData.select($"*").filter($"key" < 0).showString(1, vertical = true) === "(0 rows)\n")
+    assert(testData.select($"*").filter($"key" < 0).showString(1, vertical = true) === "(0 rows)")
   }
 
   test("SPARK-18350 show with session local timezone") {

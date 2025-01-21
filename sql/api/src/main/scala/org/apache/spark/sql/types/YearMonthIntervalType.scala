@@ -29,18 +29,19 @@ import org.apache.spark.sql.types.YearMonthIntervalType.fieldToString
  *
  * `YearMonthIntervalType` represents positive as well as negative year-month intervals.
  *
- * @param startField The leftmost field which the type comprises of. Valid values:
- *                   0 (YEAR), 1 (MONTH).
- * @param endField The rightmost field which the type comprises of. Valid values:
- *                 0 (YEAR), 1 (MONTH).
+ * @param startField
+ *   The leftmost field which the type comprises of. Valid values: 0 (YEAR), 1 (MONTH).
+ * @param endField
+ *   The rightmost field which the type comprises of. Valid values: 0 (YEAR), 1 (MONTH).
  *
  * @since 3.2.0
  */
 @Unstable
 case class YearMonthIntervalType(startField: Byte, endField: Byte) extends AnsiIntervalType {
+
   /**
-   * Year-month interval values always occupy 4 bytes.
-   * The YEAR field is constrained by the upper bound 178956970 to fit to `Int`.
+   * Year-month interval values always occupy 4 bytes. The YEAR field is constrained by the upper
+   * bound 178956970 to fit to `Int`.
    */
   override def defaultSize: Int = 4
 

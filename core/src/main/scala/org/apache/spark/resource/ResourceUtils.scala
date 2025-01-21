@@ -28,7 +28,8 @@ import org.json4s.jackson.JsonMethods._
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.api.resource.ResourceDiscoveryPlugin
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config.{EXECUTOR_CORES, RESOURCES_DISCOVERY_PLUGIN, SPARK_TASK_PREFIX}
 import org.apache.spark.internal.config.Tests.RESOURCES_WARNING_TESTING
 import org.apache.spark.util.ArrayImplicits._
@@ -454,13 +455,15 @@ private[spark] object ResourceUtils extends Logging {
     if (limitingResource.nonEmpty && !limitingResource.equals(ResourceProfile.CPUS)) {
       if ((taskCpus * maxTaskPerExec) < cores) {
         val resourceNumSlots = Math.floor(cores/taskCpus).toInt
-        val message = s"The configuration of cores (exec = ${cores} " +
-          s"task = ${taskCpus}, runnable tasks = ${resourceNumSlots}) will " +
-          s"result in wasted resources due to resource ${limitingResource} limiting the " +
-          s"number of runnable tasks per executor to: ${maxTaskPerExec}. Please adjust " +
-          "your configuration."
+        val message = log"The configuration of cores (exec = ${MDC(NUM_CORES, cores)} " +
+          log"task = ${MDC(NUM_TASK_CPUS, taskCpus)}, runnable tasks = " +
+          log"${MDC(NUM_RESOURCE_SLOTS, resourceNumSlots)}) will " +
+          log"result in wasted resources due to resource ${MDC(RESOURCE, limitingResource)} " +
+          log"limiting the number of runnable tasks per executor to: " +
+          log"${MDC(NUM_TASKS, maxTaskPerExec)}. Please adjust " +
+          log"your configuration."
         if (sparkConf.get(RESOURCES_WARNING_TESTING)) {
-          throw new SparkException(message)
+          throw new SparkException(message.message)
         } else {
           logWarning(message)
         }
@@ -476,14 +479,16 @@ private[spark] object ResourceUtils extends Logging {
         val origTaskAmount = treq.amount
         val taskReqStr = s"${origTaskAmount}/${numParts}"
         val resourceNumSlots = (execAmount * numParts / taskAmount).toInt
-        val message = s"The configuration of resource: ${treq.resourceName} " +
-          s"(exec = ${execAmount}, task = ${taskReqStr}, " +
-          s"runnable tasks = ${resourceNumSlots}) will " +
-          s"result in wasted resources due to resource ${limitingResource} limiting the " +
-          s"number of runnable tasks per executor to: ${maxTaskPerExec}. Please adjust " +
-          "your configuration."
+        val message = log"The configuration of resource: " +
+          log"${MDC(RESOURCE_NAME, treq.resourceName)} " +
+          log"(exec = ${MDC(EXEC_AMOUNT, execAmount)}, " +
+          log"task = ${MDC(TASK_REQUIREMENTS, taskReqStr)}, " +
+          log"runnable tasks = ${MDC(NUM_RESOURCE_SLOTS, resourceNumSlots)}) will " +
+          log"result in wasted resources due to resource ${MDC(RESOURCE, limitingResource)} " +
+          log"limiting the number of runnable tasks per executor to: " +
+          log"${MDC(NUM_TASKS, maxTaskPerExec)}. Please adjust your configuration."
         if (sparkConf.get(RESOURCES_WARNING_TESTING)) {
-          throw new SparkException(message)
+          throw new SparkException(message.message)
         } else {
           logWarning(message)
         }

@@ -220,7 +220,8 @@ class RFormula @Since("1.5.0") (@Since("1.5.0") override val uid: String)
 
     // First we index each string column referenced by the input terms.
     val indexed = terms.zipWithIndex.map { case (term, i) =>
-      dataset.schema(term).dataType match {
+      val termField = SchemaUtils.getSchemaField(dataset.schema, term)
+      termField.dataType match {
         case _: StringType =>
           val indexCol = tmpColumn("stridx")
           encoderStages += new StringIndexer()
@@ -231,7 +232,7 @@ class RFormula @Since("1.5.0") (@Since("1.5.0") override val uid: String)
           prefixesToRewrite(indexCol + "_") = term + "_"
           (term, indexCol)
         case _: VectorUDT =>
-          val group = AttributeGroup.fromStructField(dataset.schema(term))
+          val group = AttributeGroup.fromStructField(termField)
           val size = if (group.size < 0) {
             firstRow.getAs[Vector](i).size
           } else {
@@ -250,7 +251,7 @@ class RFormula @Since("1.5.0") (@Since("1.5.0") override val uid: String)
     // Then we handle one-hot encoding and interactions between terms.
     var keepReferenceCategory = false
     val encodedTerms = resolvedFormula.terms.map {
-      case Seq(term) if dataset.schema(term).dataType == StringType =>
+      case Seq(term) if SchemaUtils.getSchemaFieldType(dataset.schema, term) == StringType =>
         val encodedCol = tmpColumn("onehot")
         // Formula w/o intercept, one of the categories in the first category feature is
         // being used as reference category, we will not drop any category for that feature.
@@ -292,7 +293,8 @@ class RFormula @Since("1.5.0") (@Since("1.5.0") override val uid: String)
     encoderStages += new ColumnPruner(tempColumns.toSet)
 
     if ((dataset.schema.fieldNames.contains(resolvedFormula.label) &&
-      dataset.schema(resolvedFormula.label).dataType == StringType) || $(forceIndexLabel)) {
+      SchemaUtils.getSchemaFieldType(
+        dataset.schema, resolvedFormula.label) == StringType) || $(forceIndexLabel)) {
       encoderStages += new StringIndexer()
         .setInputCol(resolvedFormula.label)
         .setOutputCol($(labelCol))
@@ -359,8 +361,8 @@ class RFormulaModel private[feature](
     val withFeatures = pipelineModel.transformSchema(schema)
     if (resolvedFormula.label.isEmpty || hasLabelCol(withFeatures)) {
       withFeatures
-    } else if (schema.exists(_.name == resolvedFormula.label)) {
-      val nullable = schema(resolvedFormula.label).dataType match {
+    } else if (SchemaUtils.checkSchemaFieldExist(schema, resolvedFormula.label)) {
+      val nullable = SchemaUtils.getSchemaFieldType(schema, resolvedFormula.label) match {
         case _: NumericType | BooleanType => false
         case _ => true
       }
@@ -387,8 +389,8 @@ class RFormulaModel private[feature](
     val labelName = resolvedFormula.label
     if (labelName.isEmpty || hasLabelCol(dataset.schema)) {
       dataset.toDF()
-    } else if (dataset.schema.exists(_.name == labelName)) {
-      dataset.schema(labelName).dataType match {
+    } else if (SchemaUtils.checkSchemaFieldExist(dataset.schema, labelName)) {
+      SchemaUtils.getSchemaFieldType(dataset.schema, labelName) match {
         case _: NumericType | BooleanType =>
           dataset.withColumn($(labelCol), dataset(labelName).cast(DoubleType))
         case other =>
@@ -402,10 +404,12 @@ class RFormulaModel private[feature](
   }
 
   private def checkCanTransform(schema: StructType): Unit = {
-    val columnNames = schema.map(_.name)
-    require(!columnNames.contains($(featuresCol)), "Features column already exists.")
     require(
-      !columnNames.contains($(labelCol)) || schema($(labelCol)).dataType.isInstanceOf[NumericType],
+      !SchemaUtils.checkSchemaFieldExist(schema, $(featuresCol)), "Features column already exists."
+    )
+    require(
+      !SchemaUtils.checkSchemaFieldExist(schema, $(labelCol))
+      || SchemaUtils.getSchemaFieldType(schema, $(labelCol)).isInstanceOf[NumericType],
       s"Label column already exists and is not of type ${NumericType.simpleString}.")
   }
 
@@ -427,7 +431,7 @@ object RFormulaModel extends MLReadable[RFormulaModel] {
 
     override protected def saveImpl(path: String): Unit = {
       // Save metadata and Params
-      DefaultParamsWriter.saveMetadata(instance, path, sc)
+      DefaultParamsWriter.saveMetadata(instance, path, sparkSession)
       // Save model data: resolvedFormula
       val dataPath = new Path(path, "data").toString
       sparkSession.createDataFrame(Seq(instance.resolvedFormula))
@@ -444,7 +448,7 @@ object RFormulaModel extends MLReadable[RFormulaModel] {
     private val className = classOf[RFormulaModel].getName
 
     override def load(path: String): RFormulaModel = {
-      val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
+      val metadata = DefaultParamsReader.loadMetadata(path, sparkSession, className)
 
       val dataPath = new Path(path, "data").toString
       val data = sparkSession.read.parquet(dataPath).select("label", "terms", "hasIntercept").head()
@@ -502,11 +506,11 @@ private object ColumnPruner extends MLReadable[ColumnPruner] {
 
     override protected def saveImpl(path: String): Unit = {
       // Save metadata and Params
-      DefaultParamsWriter.saveMetadata(instance, path, sc)
+      DefaultParamsWriter.saveMetadata(instance, path, sparkSession)
       // Save model data: columnsToPrune
       val data = Data(instance.columnsToPrune.toSeq)
       val dataPath = new Path(path, "data").toString
-      sparkSession.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
+      sparkSession.createDataFrame(Seq(data)).write.parquet(dataPath)
     }
   }
 
@@ -516,7 +520,7 @@ private object ColumnPruner extends MLReadable[ColumnPruner] {
     private val className = classOf[ColumnPruner].getName
 
     override def load(path: String): ColumnPruner = {
-      val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
+      val metadata = DefaultParamsReader.loadMetadata(path, sparkSession, className)
 
       val dataPath = new Path(path, "data").toString
       val data = sparkSession.read.parquet(dataPath).select("columnsToPrune").head()
@@ -550,7 +554,9 @@ private class VectorAttributeRewriter(
 
   override def transform(dataset: Dataset[_]): DataFrame = {
     val metadata = {
-      val group = AttributeGroup.fromStructField(dataset.schema(vectorCol))
+      val group = AttributeGroup.fromStructField(
+        SchemaUtils.getSchemaField(dataset.schema, vectorCol)
+      )
       val attrs = group.attributes.get.map { attr =>
         if (attr.name.isDefined) {
           val name = prefixesToRewrite.foldLeft(attr.name.get) { case (curName, (from, to)) =>
@@ -563,7 +569,8 @@ private class VectorAttributeRewriter(
       }
       new AttributeGroup(vectorCol, attrs).toMetadata()
     }
-    val otherCols = dataset.columns.filter(_ != vectorCol).map(dataset.col)
+    val vectorColFieldName = SchemaUtils.getSchemaField(dataset.schema, vectorCol).name
+    val otherCols = dataset.columns.filter(_ != vectorColFieldName).map(dataset.col)
     val rewrittenCol = dataset.col(vectorCol).as(vectorCol, metadata)
     import org.apache.spark.util.ArrayImplicits._
     dataset.select((otherCols :+ rewrittenCol).toImmutableArraySeq : _*)
@@ -594,11 +601,11 @@ private object VectorAttributeRewriter extends MLReadable[VectorAttributeRewrite
 
     override protected def saveImpl(path: String): Unit = {
       // Save metadata and Params
-      DefaultParamsWriter.saveMetadata(instance, path, sc)
+      DefaultParamsWriter.saveMetadata(instance, path, sparkSession)
       // Save model data: vectorCol, prefixesToRewrite
       val data = Data(instance.vectorCol, instance.prefixesToRewrite)
       val dataPath = new Path(path, "data").toString
-      sparkSession.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
+      sparkSession.createDataFrame(Seq(data)).write.parquet(dataPath)
     }
   }
 
@@ -608,7 +615,7 @@ private object VectorAttributeRewriter extends MLReadable[VectorAttributeRewrite
     private val className = classOf[VectorAttributeRewriter].getName
 
     override def load(path: String): VectorAttributeRewriter = {
-      val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
+      val metadata = DefaultParamsReader.loadMetadata(path, sparkSession, className)
 
       val dataPath = new Path(path, "data").toString
       val data = sparkSession.read.parquet(dataPath).select("vectorCol", "prefixesToRewrite").head()

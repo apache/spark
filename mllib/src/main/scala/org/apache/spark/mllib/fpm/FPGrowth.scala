@@ -108,7 +108,7 @@ object FPGrowthModel extends Loader[FPGrowthModel[_]] {
 
       val metadata = compact(render(
         ("class" -> thisClassName) ~ ("version" -> thisFormatVersion)))
-      sc.parallelize(Seq(metadata), 1).saveAsTextFile(Loader.metadataPath(path))
+      spark.createDataFrame(Seq(Tuple1(metadata))).write.text(Loader.metadataPath(path))
 
       // Get the type of item class
       val sample = model.freqItemsets.first().items(0)

@@ -145,7 +145,7 @@ PySpark is included in the distributions available at the `Apache Spark website 
 You can download a distribution you want from the site. After that, uncompress the tar file into the directory where you want
 to install Spark, for example, as below:
 
-.. parsed-literal::
+.. code-block:: bash
 
     tar xzvf spark-\ |release|\-bin-hadoop3.tgz
 
@@ -153,7 +153,7 @@ Ensure the ``SPARK_HOME`` environment variable points to the directory where the
 Update ``PYTHONPATH`` environment variable such that it can find the PySpark and Py4J under ``SPARK_HOME/python/lib``.
 One example of doing this is shown below:
 
-.. parsed-literal::
+.. code-block:: bash
 
     cd spark-\ |release|\-bin-hadoop3
     export SPARK_HOME=`pwd`
@@ -177,12 +177,13 @@ PySpark requires the following dependencies.
 ========================== ========================= =============================
 Package                    Supported version         Note
 ========================== ========================= =============================
-`py4j`                     >=0.10.9.7                Required to interact with JVM
+`py4j`                     >=0.10.9.9                Required to interact with JVM
 ========================== ========================= =============================
 
 Additional libraries that enhance functionality but are not included in the installation packages:
 
 - **memory-profiler**: Used for PySpark UDF memory profiling, ``spark.profile.show(...)`` and ``spark.sql.pyspark.udf.profiler``.
+- **plotly**: Used for PySpark plotting, ``DataFrame.plot``.
 
 Note that PySpark requires Java 17 or later with ``JAVA_HOME`` properly set and refer to |downloading|_.
 
@@ -206,10 +207,11 @@ Installable with ``pip install "pyspark[connect]"``.
 Package                    Supported version Note
 ========================== ================= ==========================
 `pandas`                   >=2.0.0           Required for Spark Connect
-`pyarrow`                  >=10.0.0          Required for Spark Connect
-`grpcio`                   >=1.62.0          Required for Spark Connect
-`grpcio-status`            >=1.62.0          Required for Spark Connect
-`googleapis-common-protos` >=1.56.4          Required for Spark Connect
+`pyarrow`                  >=11.0.0          Required for Spark Connect
+`grpcio`                   >=1.67.0          Required for Spark Connect
+`grpcio-status`            >=1.67.0          Required for Spark Connect
+`googleapis-common-protos` >=1.65.0          Required for Spark Connect
+`graphviz`                 >=0.20            Optional for Spark Connect
 ========================== ================= ==========================
 
 Spark SQL
@@ -221,8 +223,12 @@ Installable with ``pip install "pyspark[sql]"``.
 Package   Supported version Note
 ========= ================= ======================
 `pandas`  >=2.0.0           Required for Spark SQL
-`pyarrow` >=10.0.0          Required for Spark SQL
+`pyarrow` >=11.0.0          Required for Spark SQL
 ========= ================= ======================
+
+Additional libraries that enhance functionality but are not included in the installation packages:
+
+- **flameprof**: Provide the default renderer for UDF performance profiling.
 
 
 Pandas API on Spark
@@ -233,8 +239,8 @@ Installable with ``pip install "pyspark[pandas_on_spark]"``.
 ========= ================= ================================
 Package   Supported version Note
 ========= ================= ================================
-`pandas`  >=2.0.0           Required for Pandas API on Spark
-`pyarrow` >=10.0.0          Required for Pandas API on Spark
+`pandas`  >=2.2.0           Required for Pandas API on Spark
+`pyarrow` >=11.0.0          Required for Pandas API on Spark
 ========= ================= ================================
 
 Additional libraries that enhance functionality but are not included in the installation packages:

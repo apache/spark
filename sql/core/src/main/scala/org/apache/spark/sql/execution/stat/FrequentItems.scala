@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.expressions.{Expression, UnsafeProjection, 
 import org.apache.spark.sql.catalyst.expressions.aggregate.{ImperativeAggregate, TypedImperativeAggregate}
 import org.apache.spark.sql.catalyst.trees.UnaryLike
 import org.apache.spark.sql.catalyst.util.GenericArrayData
+import org.apache.spark.sql.classic.ClassicConversions._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
@@ -51,14 +52,15 @@ object FrequentItems extends Logging {
       df: DataFrame,
       cols: Seq[String],
       support: Double): DataFrame = {
+    import df.sparkSession.expression
     require(support >= 1e-4 && support <= 1.0, s"Support must be in [1e-4, 1], but got $support.")
 
     // number of max items to keep counts for
     val sizeOfMap = (1 / support).toInt
 
     val frequentItemCols = cols.map { col =>
-      val aggExpr = new CollectFrequentItems(functions.col(col).expr, sizeOfMap)
-      Column(aggExpr.toAggregateExpression(isDistinct = false)).as(s"${col}_freqItems")
+      Column(new CollectFrequentItems(expression(functions.col(col)), sizeOfMap))
+        .as(s"${col}_freqItems")
     }
 
     df.select(frequentItemCols: _*)

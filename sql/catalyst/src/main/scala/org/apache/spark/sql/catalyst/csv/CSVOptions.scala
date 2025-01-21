@@ -103,10 +103,21 @@ class CSVOptions(
 
   val delimiter = CSVExprUtils.toDelimiterStr(
     parameters.getOrElse(SEP, parameters.getOrElse(DELIMITER, ",")))
+
+  val extension = {
+    val ext = parameters.getOrElse(EXTENSION, "csv")
+    if (ext.size != 3 && !ext.forall(_.isLetter)) {
+      throw QueryExecutionErrors.invalidFileExtensionError(EXTENSION, ext)
+    }
+
+    ext
+  }
+
   val parseMode: ParseMode =
     parameters.get(MODE).map(ParseMode.fromString).getOrElse(PermissiveMode)
-  val charset = parameters.getOrElse(ENCODING,
-    parameters.getOrElse(CHARSET, StandardCharsets.UTF_8.name()))
+  val charset = parameters.get(ENCODING).orElse(parameters.get(CHARSET))
+    .map(CharsetProvider.forName(_, SQLConf.get.legacyJavaCharsets, caller = "CSVOptions"))
+    .getOrElse(StandardCharsets.UTF_8).name()
 
   val quote = getChar(QUOTE, '\"')
   val escape = getChar(ESCAPE, '\\')
@@ -186,12 +197,8 @@ class CSVOptions(
     } else {
       parameters.get(TIMESTAMP_FORMAT)
     }
-  val timestampFormatInWrite: String = parameters.getOrElse(TIMESTAMP_FORMAT,
-    if (SQLConf.get.legacyTimeParserPolicy == LegacyBehaviorPolicy.LEGACY) {
-      s"${DateFormatter.defaultPattern}'T'HH:mm:ss.SSSXXX"
-    } else {
-      s"${DateFormatter.defaultPattern}'T'HH:mm:ss[.SSS][XXX]"
-    })
+  val timestampFormatInWrite: String =
+    parameters.getOrElse(TIMESTAMP_FORMAT, commonTimestampFormat)
 
   val timestampNTZFormatInRead: Option[String] = parameters.get(TIMESTAMP_NTZ_FORMAT)
   val timestampNTZFormatInWrite: String = parameters.getOrElse(TIMESTAMP_NTZ_FORMAT,
@@ -388,6 +395,7 @@ object CSVOptions extends DataSourceOptions {
   val NEGATIVE_INF = newOption("negativeInf")
   val TIME_ZONE = newOption("timeZone")
   val UNESCAPED_QUOTE_HANDLING = newOption("unescapedQuoteHandling")
+  val EXTENSION = newOption("extension")
   // Options with alternative
   val ENCODING = "encoding"
   val CHARSET = "charset"

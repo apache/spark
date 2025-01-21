@@ -224,7 +224,7 @@ class SparkConnectClientSuite extends ConnectFunSuite with BeforeAndAfterEach {
         val error = constructor(testParams).asInstanceOf[Throwable with SparkThrowable]
         assert(error.getMessage.contains(testParams.message))
         assert(error.getCause == null)
-        assert(error.getErrorClass == testParams.errorClass.get)
+        assert(error.getCondition == testParams.errorClass.get)
         assert(error.getMessageParameters.asScala == testParams.messageParameters)
         assert(error.getQueryContext.isEmpty)
       }
@@ -530,6 +530,25 @@ class SparkConnectClientSuite extends ConnectFunSuite with BeforeAndAfterEach {
     assert(reattachableIter.resultComplete)
   }
 
+  test("SPARK-48056: Client execute gets INVALID_HANDLE.SESSION_NOT_FOUND and proceeds") {
+    startDummyServer(0)
+    client = SparkConnectClient
+      .builder()
+      .connectionString(s"sc://localhost:${server.getPort}")
+      .enableReattachableExecute()
+      .build()
+    service.errorToThrowOnExecute = Some(
+      new StatusRuntimeException(
+        Status.INTERNAL.withDescription("INVALID_HANDLE.SESSION_NOT_FOUND")))
+
+    val plan = buildPlan("select * from range(1)")
+    val iter = client.execute(plan)
+    val reattachableIter =
+      ExecutePlanResponseReattachableIterator.fromIterator(iter)
+    reattachableIter.foreach(_ => ())
+    assert(reattachableIter.resultComplete)
+  }
+
   test("GRPC stub unary call throws error immediately") {
     // Spark Connect error retry handling depends on the error being returned from the unary
     // call immediately.
@@ -609,6 +628,8 @@ class DummySparkConnectService() extends SparkConnectServiceGrpc.SparkConnectSer
   private val inputArtifactRequests: mutable.ListBuffer[AddArtifactsRequest] =
     mutable.ListBuffer.empty
 
+  var errorToThrowOnExecute: Option[Throwable] = None
+
   private[sql] def getAndClearLatestInputPlan(): proto.Plan = {
     val plan = inputPlan
     inputPlan = null
@@ -624,6 +645,13 @@ class DummySparkConnectService() extends SparkConnectServiceGrpc.SparkConnectSer
   override def executePlan(
       request: ExecutePlanRequest,
       responseObserver: StreamObserver[ExecutePlanResponse]): Unit = {
+    if (errorToThrowOnExecute.isDefined) {
+      val error = errorToThrowOnExecute.get
+      errorToThrowOnExecute = None
+      responseObserver.onError(error)
+      return
+    }
+
     // Reply with a dummy response using the same client ID
     val requestSessionId = request.getSessionId
     val operationId = if (request.hasOperationId) {

@@ -45,6 +45,8 @@ class AuthEngine implements Closeable {
   public static final byte[] INPUT_IV_INFO = "inputIv".getBytes(UTF_8);
   public static final byte[] OUTPUT_IV_INFO = "outputIv".getBytes(UTF_8);
   private static final String MAC_ALGORITHM = "HMACSHA256";
+  private static final String LEGACY_CIPHER_ALGORITHM = "AES/CTR/NoPadding";
+  private static final String CIPHER_ALGORITHM = "AES/GCM/NoPadding";
   private static final int AES_GCM_KEY_SIZE_BYTES = 16;
   private static final byte[] EMPTY_TRANSCRIPT = new byte[0];
   private static final int UNSAFE_SKIP_HKDF_VERSION = 1;
@@ -227,12 +229,19 @@ class AuthEngine implements Closeable {
         OUTPUT_IV_INFO,  // This is the HKDF info field used to differentiate IV values
         AES_GCM_KEY_SIZE_BYTES);
     SecretKeySpec sessionKey = new SecretKeySpec(derivedKey, "AES");
-    return new TransportCipher(
-        cryptoConf,
-        conf.cipherTransformation(),
-        sessionKey,
-        isClient ? clientIv : serverIv,  // If it's the client, use the client IV first
-        isClient ? serverIv : clientIv);
+    if (LEGACY_CIPHER_ALGORITHM.equalsIgnoreCase(conf.cipherTransformation())) {
+      return new CtrTransportCipher(
+          cryptoConf,
+          sessionKey,
+          isClient ? clientIv : serverIv,  // If it's the client, use the client IV first
+          isClient ? serverIv : clientIv);
+    } else if (CIPHER_ALGORITHM.equalsIgnoreCase(conf.cipherTransformation())) {
+      return new GcmTransportCipher(sessionKey);
+    } else {
+      throw new IllegalArgumentException(
+              String.format("Unsupported cipher mode: %s. %s and %s are supported.",
+                      conf.cipherTransformation(), CIPHER_ALGORITHM, LEGACY_CIPHER_ALGORITHM));
+    }
   }
 
   private byte[] getTranscript(AuthMessage... encryptedPublicKeys) {

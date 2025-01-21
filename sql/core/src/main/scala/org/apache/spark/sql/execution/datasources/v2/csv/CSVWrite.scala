@@ -32,6 +32,9 @@ case class CSVWrite(
     formatName: String,
     supportsDataType: DataType => Boolean,
     info: LogicalWriteInfo) extends FileWrite {
+
+  override def allowDuplicatedColumnNames: Boolean = true
+
   override def prepareWrite(
       sqlConf: SQLConf,
       job: Job,
@@ -55,7 +58,7 @@ case class CSVWrite(
       }
 
       override def getFileExtension(context: TaskAttemptContext): String = {
-        ".csv" + CodecStreams.getCompressionExtension(context)
+        "." + csvOptions.extension + CodecStreams.getCompressionExtension(context)
       }
     }
   }

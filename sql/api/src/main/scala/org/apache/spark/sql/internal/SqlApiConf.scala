@@ -25,8 +25,8 @@ import org.apache.spark.util.SparkClassUtils
 
 /**
  * Configuration for all objects that are placed in the `sql/api` project. The normal way of
- * accessing this class is through `SqlApiConf.get`. If this code is being used with sql/core
- * then its values are bound to the currently set SQLConf. With Spark Connect, it will default to
+ * accessing this class is through `SqlApiConf.get`. If this code is being used with sql/core then
+ * its values are bound to the currently set SQLConf. With Spark Connect, it will default to
  * hardcoded values.
  */
 private[sql] trait SqlApiConf {
@@ -40,10 +40,14 @@ private[sql] trait SqlApiConf {
   def timestampType: AtomicType
   def allowNegativeScaleOfDecimalEnabled: Boolean
   def charVarcharAsString: Boolean
+  def preserveCharVarcharTypeInfo: Boolean
   def datetimeJava8ApiEnabled: Boolean
   def sessionLocalTimeZone: String
   def legacyTimeParserPolicy: LegacyBehaviorPolicy.Value
   def defaultStringType: StringType
+  def stackTracesInDataFrameContext: Int
+  def dataFrameQueryContextEnabled: Boolean
+  def legacyAllowUntypedScalaUDFs: Boolean
 }
 
 private[sql] object SqlApiConf {
@@ -77,8 +81,12 @@ private[sql] object DefaultSqlApiConf extends SqlApiConf {
   override def timestampType: AtomicType = TimestampType
   override def allowNegativeScaleOfDecimalEnabled: Boolean = false
   override def charVarcharAsString: Boolean = false
+  override def preserveCharVarcharTypeInfo: Boolean = false
   override def datetimeJava8ApiEnabled: Boolean = false
   override def sessionLocalTimeZone: String = TimeZone.getDefault.getID
   override def legacyTimeParserPolicy: LegacyBehaviorPolicy.Value = LegacyBehaviorPolicy.CORRECTED
   override def defaultStringType: StringType = StringType
+  override def stackTracesInDataFrameContext: Int = 1
+  override def dataFrameQueryContextEnabled: Boolean = true
+  override def legacyAllowUntypedScalaUDFs: Boolean = false
 }

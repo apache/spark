@@ -350,7 +350,7 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
       exception = intercept[AnalysisException] {
         Seq((1, 2, 3, 4)).toDF("a", "b", "c", "d").write.partitionBy("b", "c").insertInto(tableName)
       },
-      errorClass = "_LEGACY_ERROR_TEMP_1309",
+      condition = "_LEGACY_ERROR_TEMP_1309",
       parameters = Map.empty
     )
   }
@@ -362,7 +362,7 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
         exception = intercept[AnalysisException] {
           sql(s"INSERT INTO TABLE $tableName PARTITION(b=1, c=2) SELECT 1, 2, 3")
         },
-        errorClass = "INSERT_PARTITION_COLUMN_ARITY_MISMATCH",
+        condition = "INSERT_PARTITION_COLUMN_ARITY_MISMATCH",
         parameters = Map(
           "staticPartCols" -> "`b`, `c`",
           "tableColumns" -> "`a`, `d`, `b`, `c`",
@@ -720,7 +720,7 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
              |ROW FORMAT DELIMITED FIELDS TERMINATED BY ','
              |SELECT * FROM test_insert_table""".stripMargin)
         },
-        errorClass = "PARSE_SYNTAX_ERROR",
+        condition = "PARSE_SYNTAX_ERROR",
         parameters = Map("error" -> "'ROW'", "hint" -> ""))
     }
   }
@@ -740,7 +740,7 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
                |ROW FORMAT DELIMITED FIELDS TERMINATED BY ','
                |SELECT * FROM test_insert_table""".stripMargin)
         },
-        errorClass = "PARSE_SYNTAX_ERROR",
+        condition = "PARSE_SYNTAX_ERROR",
         parameters = Map("error" -> "'ROW'", "hint" -> ""))
     }
   }
@@ -809,7 +809,7 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
               }
               checkError(
                 exception = e,
-                errorClass = "COLUMN_ALREADY_EXISTS",
+                condition = "COLUMN_ALREADY_EXISTS",
                 parameters = Map("columnName" -> "`id`"))
             }
           }
@@ -858,7 +858,7 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
               |SELECT 1
             """.stripMargin)
         },
-        errorClass = "_LEGACY_ERROR_TEMP_1076",
+        condition = "_LEGACY_ERROR_TEMP_1076",
         parameters = Map(
           "details" -> "The spec ([d=Some()]) contains an empty partition column value")
       )

@@ -12,7 +12,7 @@ CreateViewCommand `integers`, select * from values
   (0, 2),
   (1, 3),
   (1, NULL)
-  as integers(g, i), false, false, LocalTempView, true
+  as integers(g, i), false, false, LocalTempView, UNSUPPORTED, true
    +- Project [g#x, i#x]
       +- SubqueryAlias integers
          +- LocalRelation [g#x, i#x]

@@ -143,6 +143,14 @@ private[spark] class BasicExecutorFeatureStep(
         (s"$ENV_JAVA_OPT_PREFIX$index", opt)
       }.toMap
 
+      val attributes = if (kubernetesConf.get(UI.CUSTOM_EXECUTOR_LOG_URL).isDefined) {
+        Map(
+          ENV_EXECUTOR_ATTRIBUTE_APP_ID -> kubernetesConf.appId,
+          ENV_EXECUTOR_ATTRIBUTE_EXECUTOR_ID -> kubernetesConf.executorId)
+      } else {
+        Map.empty[String, String]
+      }
+
       KubernetesUtils.buildEnvVars(
         Seq(
           ENV_DRIVER_URL -> driverUrl,
@@ -153,6 +161,7 @@ private[spark] class BasicExecutorFeatureStep(
           ENV_SPARK_CONF_DIR -> SPARK_CONF_DIR_INTERNAL,
           ENV_EXECUTOR_ID -> kubernetesConf.executorId,
           ENV_RESOURCE_PROFILE_ID -> resourceProfile.id.toString)
+          ++ attributes
           ++ kubernetesConf.environment
           ++ sparkAuthSecret
           ++ Seq(ENV_CLASSPATH -> kubernetesConf.get(EXECUTOR_CLASS_PATH).orNull)

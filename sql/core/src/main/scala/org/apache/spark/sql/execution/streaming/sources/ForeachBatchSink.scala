@@ -63,7 +63,7 @@ class ForeachBatchSink[T](batchWriter: (Dataset[T], Long) => Unit, encoder: Expr
 /**
  * Exception that wraps the exception thrown in the user provided function in ForeachBatch sink.
  */
-private[streaming] case class ForeachBatchUserFuncException(cause: Throwable)
+private[sql] case class ForeachBatchUserFuncException(cause: Throwable)
   extends SparkException(
     errorClass = "FOREACH_BATCH_USER_FUNCTION_ERROR",
     messageParameters = Map("reason" -> Option(cause.getMessage).getOrElse("")),

@@ -129,7 +129,7 @@ CreateViewCommand `INT8_TBL`, SELECT * FROM
     (4567890123456789, 123),
     (4567890123456789, 4567890123456789),
     (4567890123456789, -4567890123456789))
-  AS v(q1, q2), false, true, LocalTempView, true
+  AS v(q1, q2), false, true, LocalTempView, UNSUPPORTED, true
    +- Project [q1#xL, q2#xL]
       +- SubqueryAlias v
          +- Project [col1#xL AS q1#xL, col2#xL AS q2#xL]

@@ -33,12 +33,21 @@ class CSVExprUtilsSuite extends SparkFunSuite {
     assert(CSVExprUtils.toChar("""\\""") === '\\')
   }
 
+  test("Does not accept null delimiter") {
+    checkError(
+      exception = intercept[SparkIllegalArgumentException]{
+        CSVExprUtils.toDelimiterStr(null)
+      },
+      condition = "INVALID_DELIMITER_VALUE.NULL_VALUE",
+      parameters = Map.empty)
+  }
+
   test("Does not accept delimiter larger than one character") {
     checkError(
       exception = intercept[SparkIllegalArgumentException]{
         CSVExprUtils.toChar("ab")
       },
-      errorClass = "INVALID_DELIMITER_VALUE.DELIMITER_LONGER_THAN_EXPECTED",
+      condition = "INVALID_DELIMITER_VALUE.DELIMITER_LONGER_THAN_EXPECTED",
       parameters = Map("str" -> "ab"))
   }
 
@@ -47,7 +56,7 @@ class CSVExprUtilsSuite extends SparkFunSuite {
       exception = intercept[SparkIllegalArgumentException]{
         CSVExprUtils.toChar("""\1""")
       },
-      errorClass = "INVALID_DELIMITER_VALUE.UNSUPPORTED_SPECIAL_CHARACTER",
+      condition = "INVALID_DELIMITER_VALUE.UNSUPPORTED_SPECIAL_CHARACTER",
       parameters = Map("str" -> """\1"""))
   }
 
@@ -56,7 +65,7 @@ class CSVExprUtilsSuite extends SparkFunSuite {
       exception = intercept[SparkIllegalArgumentException]{
         CSVExprUtils.toChar("""\""")
       },
-      errorClass = "INVALID_DELIMITER_VALUE.SINGLE_BACKSLASH",
+      condition = "INVALID_DELIMITER_VALUE.SINGLE_BACKSLASH",
       parameters = Map.empty)
   }
 
@@ -65,7 +74,7 @@ class CSVExprUtilsSuite extends SparkFunSuite {
       exception = intercept[SparkIllegalArgumentException]{
         CSVExprUtils.toChar("")
       },
-      errorClass = "INVALID_DELIMITER_VALUE.EMPTY_STRING",
+      condition = "INVALID_DELIMITER_VALUE.EMPTY_STRING",
       parameters = Map.empty)
   }
 
@@ -84,8 +93,6 @@ class CSVExprUtilsSuite extends SparkFunSuite {
     // tab in the middle of some other letters
     ("""ba\tr""", Some("ba\tr"), None),
     // null character, expressed in Unicode literal syntax
-    ("\u0000", Some("\u0000"), None),
-    // and specified directly
     ("\u0000", Some("\u0000"), None)
   )
 
@@ -99,7 +106,7 @@ class CSVExprUtilsSuite extends SparkFunSuite {
       } catch {
         case e: SparkIllegalArgumentException =>
           assert(separatorStr.isEmpty)
-          assert(e.getErrorClass === expectedErrorClass.get)
+          assert(e.getCondition === expectedErrorClass.get)
       }
     }
   }

@@ -28,7 +28,7 @@ import scala.util.control.NonFatal
 
 import org.apache.commons.lang3.StringUtils
 
-import org.apache.spark.SparkUnsupportedOperationException
+import org.apache.spark.{SparkRuntimeException, SparkThrowable, SparkUnsupportedOperationException}
 import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
@@ -42,6 +42,7 @@ import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
 import org.apache.spark.sql.connector.catalog.index.TableIndex
 import org.apache.spark.sql.connector.expressions.{Expression, Literal, NamedReference}
 import org.apache.spark.sql.connector.expressions.aggregate.AggregateFunc
+import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.connector.util.V2ExpressionSQLBuilder
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.jdbc.{DriverRegistry, JDBCOptions, JdbcOptionsInWrite, JdbcUtils}
@@ -373,10 +374,23 @@ abstract class JdbcDialect extends Serializable with Logging {
     case dateValue: Date => "'" + dateValue + "'"
     case dateValue: LocalDate => s"'${DateFormatter().format(dateValue)}'"
     case arrayValue: Array[Any] => arrayValue.map(compileValue).mkString(", ")
+    case binaryValue: Array[Byte] => binaryValue.map("%02X".format(_)).mkString("X'", "", "'")
     case _ => value
   }
 
   private[jdbc] class JDBCSQLBuilder extends V2ExpressionSQLBuilder {
+    // Some dialects do not support boolean type and this convenient util function is
+    // provided to generate SQL string without boolean values.
+    protected def inputToSQLNoBool(input: Expression): String = input match {
+      case p: Predicate if p.name() == "ALWAYS_TRUE" => "1"
+      case p: Predicate if p.name() == "ALWAYS_FALSE" => "0"
+      case p: Predicate => predicateToIntSQL(inputToSQL(p))
+      case _ => inputToSQL(input)
+    }
+
+    protected def predicateToIntSQL(input: String): String =
+      "CASE WHEN " + input + " THEN 1 ELSE 0 END"
+
     override def visitLiteral(literal: Literal[_]): String = {
       Option(literal.value()).map(v =>
         compileValue(CatalystTypeConverters.convertToScala(v, literal.dataType())).toString)
@@ -391,10 +405,10 @@ abstract class JdbcDialect extends Serializable with Logging {
       quoteIdentifier(namedRef.fieldNames.head)
     }
 
-    override def visitCast(l: String, dataType: DataType): String = {
+    override def visitCast(expr: String, exprDataType: DataType, dataType: DataType): String = {
       val databaseTypeDefinition =
         getJDBCType(dataType).map(_.databaseTypeDefinition).getOrElse(dataType.typeName)
-      s"CAST($l AS $databaseTypeDefinition)"
+      s"CAST($expr AS $databaseTypeDefinition)"
     }
 
     override def visitSQLFunction(funcName: String, inputs: Array[String]): String = {
@@ -613,7 +627,7 @@ abstract class JdbcDialect extends Serializable with Logging {
           val name = updateNull.fieldNames
           updateClause += getUpdateColumnNullabilityQuery(tableName, name(0), updateNull.nullable())
         case _ =>
-          throw QueryCompilationErrors.unsupportedTableChangeInJDBCCatalogError(change)
+          throw QueryCompilationErrors.unsupportedTableChangeInJDBCCatalogError(change, tableName)
       }
     }
     updateClause.result()
@@ -741,13 +755,15 @@ abstract class JdbcDialect extends Serializable with Logging {
    * @param errorClass The error class assigned in the case of an unclassified `e`
    * @param messageParameters The message parameters of `errorClass`
    * @param description The error description
-   * @return `AnalysisException` or its sub-class.
+   * @param isRuntime Whether the exception is a runtime exception or not.
+   * @return `SparkThrowable + Throwable` or its sub-class.
    */
   def classifyException(
       e: Throwable,
       errorClass: String,
       messageParameters: Map[String, String],
-      description: String): AnalysisException = {
+      description: String,
+      isRuntime: Boolean): Throwable with SparkThrowable = {
     classifyException(description, e)
   }
 
@@ -839,6 +855,31 @@ abstract class JdbcDialect extends Serializable with Logging {
       rsmd: ResultSetMetaData,
       columnIdx: Int,
       metadata: MetadataBuilder): Unit = {}
+}
+
+/**
+ * Make the `classifyException` method throw out the original exception
+ */
+trait NoLegacyJDBCError extends JdbcDialect {
+
+  override def classifyException(
+      e: Throwable,
+      errorClass: String,
+      messageParameters: Map[String, String],
+      description: String,
+      isRuntime: Boolean): Throwable with SparkThrowable = {
+    if (isRuntime) {
+      new SparkRuntimeException(
+        errorClass = errorClass,
+        messageParameters = messageParameters,
+        cause = e)
+    } else {
+      new AnalysisException(
+        errorClass = errorClass,
+        messageParameters = messageParameters,
+        cause = Some(e))
+    }
+  }
 }
 
 /**

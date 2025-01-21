@@ -27,7 +27,8 @@ import scala.util.control.NonFatal
 import org.apache.spark.{SecurityManager, ShuffleDependency, SparkConf, SparkContext, SparkEnv}
 import org.apache.spark.annotation.Since
 import org.apache.spark.executor.{CoarseGrainedExecutorBackend, ExecutorBackend}
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config._
 import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer, NioManagedBuffer}
@@ -248,7 +249,8 @@ private[spark] class ShuffleBlockPusher(conf: SparkConf) extends Logging {
         if (!errorHandler.shouldLogError(exception)) {
           logTrace(s"Pushing block $blockId to $address failed.", exception)
         } else {
-          logWarning(s"Pushing block $blockId to $address failed.", exception)
+          logWarning(log"Pushing block ${MDC(BLOCK_ID, blockId)} " +
+            log"to ${MDC(HOST_PORT, address)} failed.", exception)
         }
         handleResult(PushResult(blockId, exception))
       }
@@ -329,9 +331,9 @@ private[spark] class ShuffleBlockPusher(conf: SparkConf) extends Logging {
         unreachableBlockMgrs.add(address)
         removed += pushRequests.dequeueAll(req => req.address == address).length
         removed += deferredPushRequests.remove(address).map(_.length).getOrElse(0)
-        logWarning(s"Received a ConnectException from $address. " +
-          s"Dropping $removed push-requests and " +
-          s"not pushing any more blocks to this address.")
+        logWarning(log"Received a ConnectException from ${MDC(HOST_PORT, address)}. " +
+          log"Dropping ${MDC(NUM_REQUESTS, removed)} push-requests and " +
+          log"not pushing any more blocks to this address.")
       }
     }
     if (pushResult.failure != null && !errorHandler.shouldRetryError(pushResult.failure)) {
@@ -360,7 +362,8 @@ private[spark] class ShuffleBlockPusher(conf: SparkConf) extends Logging {
         case Some(cb: CoarseGrainedExecutorBackend) =>
           cb.notifyDriverAboutPushCompletion(shuffleId, shuffleMergeId, mapIndex)
         case Some(eb: ExecutorBackend) =>
-          logWarning(s"Currently $eb doesn't support push-based shuffle")
+          logWarning(log"Currently ${MDC(EXECUTOR_BACKEND, eb)} " +
+            log"doesn't support push-based shuffle")
         case None =>
       }
       pushCompletionNotified = true

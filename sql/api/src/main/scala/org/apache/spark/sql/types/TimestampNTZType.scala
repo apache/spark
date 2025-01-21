@@ -20,16 +20,17 @@ package org.apache.spark.sql.types
 import org.apache.spark.annotation.Unstable
 
 /**
- * The timestamp without time zone type represents a local time in microsecond precision,
- * which is independent of time zone.
- * Its valid range is [0001-01-01T00:00:00.000000, 9999-12-31T23:59:59.999999].
- * To represent an absolute point in time, use `TimestampType` instead.
+ * The timestamp without time zone type represents a local time in microsecond precision, which is
+ * independent of time zone. Its valid range is [0001-01-01T00:00:00.000000,
+ * 9999-12-31T23:59:59.999999]. To represent an absolute point in time, use `TimestampType`
+ * instead.
  *
  * Please use the singleton `DataTypes.TimestampNTZType` to refer the type.
  * @since 3.4.0
  */
 @Unstable
-class TimestampNTZType private() extends DatetimeType {
+class TimestampNTZType private () extends DatetimeType {
+
   /**
    * The default size of a value of the TimestampNTZType is 8 bytes.
    */
@@ -42,9 +43,9 @@ class TimestampNTZType private() extends DatetimeType {
 
 /**
  * The companion case object and its class is separated so the companion object also subclasses
- * the TimestampNTZType class. Otherwise, the companion object would be of type
- * "TimestampNTZType" in byte code. Defined with a private constructor so the companion
- * object is the only possible instantiation.
+ * the TimestampNTZType class. Otherwise, the companion object would be of type "TimestampNTZType"
+ * in byte code. Defined with a private constructor so the companion object is the only possible
+ * instantiation.
  *
  * @since 3.4.0
  */

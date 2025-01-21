@@ -38,7 +38,7 @@ object HiveThriftServerErrors {
 
   def runningQueryError(e: Throwable, format: ErrorMessageFormat.Value): Throwable = e match {
     case st: SparkThrowable if format == ErrorMessageFormat.PRETTY =>
-      val errorClassPrefix = Option(st.getErrorClass).map(e => s"[$e] ").getOrElse("")
+      val errorClassPrefix = Option(st.getCondition).map(e => s"[$e] ").getOrElse("")
       new HiveSQLException(
         s"Error running query: $errorClassPrefix${st.toString}", st.getSqlState, st)
     case st: SparkThrowable with Throwable =>

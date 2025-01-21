@@ -22,7 +22,6 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.spark.sql.avro.{functions => avroFn}
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.protobuf.{functions => pbFn}
 import org.apache.spark.sql.test.ConnectFunSuite
 import org.apache.spark.sql.types.{DataType, StructType}
 
@@ -196,20 +195,18 @@ class FunctionTestSuite extends ConnectFunSuite {
     lead("a", 2, null),
     lead(a, 2, null, false))
   testEquals(
-    "aggregate",
-    aggregate(a, lit(0), (l, r) => l + r),
-    aggregate(a, lit(0), (l, r) => l + r, id => id))
-  testEquals(
-    "from_json",
+    "from_json with sql schema",
     from_json(a, schema.asInstanceOf[DataType]),
     from_json(a, schema),
-    from_json(a, lit(schema.json)),
-    from_json(a, schema.json, Map.empty[String, String]),
-    from_json(a, schema.json, Collections.emptyMap[String, String]),
     from_json(a, schema.asInstanceOf[DataType], Map.empty[String, String]),
     from_json(a, schema.asInstanceOf[DataType], Collections.emptyMap[String, String]),
     from_json(a, schema, Map.empty[String, String]),
-    from_json(a, schema, Collections.emptyMap[String, String]),
+    from_json(a, schema, Collections.emptyMap[String, String]))
+  testEquals(
+    "from_json with json schema",
+    from_json(a, lit(schema.json)),
+    from_json(a, schema.json, Map.empty[String, String]),
+    from_json(a, schema.json, Collections.emptyMap[String, String]),
     from_json(a, lit(schema.json), Collections.emptyMap[String, String]))
   testEquals("schema_of_json", schema_of_json(lit("x,y")), schema_of_json("x,y"))
   testEquals(
@@ -229,13 +226,15 @@ class FunctionTestSuite extends ConnectFunSuite {
     schema_of_csv(lit("x,y"), Collections.emptyMap()))
   testEquals("to_csv", to_csv(a), to_csv(a, Collections.emptyMap[String, String]))
   testEquals(
-    "from_xml",
+    "from_xml with sql schema",
     from_xml(a, schema),
+    from_xml(a, schema, Map.empty[String, String].asJava),
+    from_xml(a, schema, Collections.emptyMap[String, String]))
+  testEquals(
+    "from_xml with json schema",
     from_xml(a, lit(schema.json)),
     from_xml(a, schema.json, Collections.emptyMap[String, String]),
     from_xml(a, schema.json, Map.empty[String, String].asJava),
-    from_xml(a, schema, Map.empty[String, String].asJava),
-    from_xml(a, schema, Collections.emptyMap[String, String]),
     from_xml(a, lit(schema.json), Collections.emptyMap[String, String]))
   testEquals(
     "schema_of_xml",
@@ -251,28 +250,16 @@ class FunctionTestSuite extends ConnectFunSuite {
       a,
       """{"type": "int", "name": "id"}""",
       Collections.emptyMap[String, String]))
-  testEquals(
-    "from_protobuf",
-    pbFn.from_protobuf(
-      a,
-      "FakeMessage",
-      "fakeBytes".getBytes(),
-      Map.empty[String, String].asJava),
-    pbFn.from_protobuf(a, "FakeMessage", "fakeBytes".getBytes()))
-  testEquals(
-    "to_protobuf",
-    pbFn.to_protobuf(a, "FakeMessage", "fakeBytes".getBytes(), Map.empty[String, String].asJava),
-    pbFn.to_protobuf(a, "FakeMessage", "fakeBytes".getBytes()))
 
   testEquals("call_udf", callUDF("bob", lit(1)), call_udf("bob", lit(1)))
 
   test("assert_true no message") {
-    val e = assert_true(a).expr
+    val e = toExpr(assert_true(a))
     assert(e.hasUnresolvedFunction)
     val fn = e.getUnresolvedFunction
     assert(fn.getFunctionName == "assert_true")
     assert(fn.getArgumentsCount == 1)
-    assert(fn.getArguments(0) == a.expr)
+    assert(fn.getArguments(0) == toExpr(a))
   }
 
   test("json_tuple zero args") {
@@ -280,7 +267,7 @@ class FunctionTestSuite extends ConnectFunSuite {
   }
 
   test("rand no seed") {
-    val e = rand().expr
+    val e = toExpr(rand())
     assert(e.hasUnresolvedFunction)
     val fn = e.getUnresolvedFunction
     assert(fn.getFunctionName == "rand")
@@ -288,7 +275,7 @@ class FunctionTestSuite extends ConnectFunSuite {
   }
 
   test("randn no seed") {
-    val e = randn().expr
+    val e = toExpr(randn())
     assert(e.hasUnresolvedFunction)
     val fn = e.getUnresolvedFunction
     assert(fn.getFunctionName == "randn")

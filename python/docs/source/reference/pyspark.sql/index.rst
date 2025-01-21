@@ -44,3 +44,4 @@ This page gives an overview of all public Spark SQL API.
     variant_val
     protobuf
     datasource
+    stateful_processor

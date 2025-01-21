@@ -158,13 +158,13 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       exception = intercept[AnalysisException] {
         evaluateWithoutCodegen("""a""" like """\a""")
       },
-      errorClass = "INVALID_FORMAT.ESC_IN_THE_MIDDLE",
+      condition = "INVALID_FORMAT.ESC_IN_THE_MIDDLE",
       parameters = Map("format" -> """'\\a'""", "char" -> "'a'"))
     checkError(
       exception = intercept[AnalysisException] {
         evaluateWithoutCodegen("""a""" like """a\""")
       },
-      errorClass = "INVALID_FORMAT.ESC_AT_THE_END",
+      condition = "INVALID_FORMAT.ESC_AT_THE_END",
       parameters = Map("format" -> """'a\\'"""))
 
     // case
@@ -238,7 +238,7 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         exception = intercept[AnalysisException] {
           evaluateWithoutCodegen("""a""" like(s"""${escapeChar}a""", escapeChar))
         },
-        errorClass = "INVALID_FORMAT.ESC_IN_THE_MIDDLE",
+        condition = "INVALID_FORMAT.ESC_IN_THE_MIDDLE",
         parameters = Map("format" -> s"'${escapeChar}a'", "char" -> "'a'"))
 
       // case
@@ -283,7 +283,7 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       exception = intercept[SparkRuntimeException] {
         evaluateWithoutCodegen("abbbbc" rlike "**")
       },
-      errorClass = "INVALID_PARAMETER_VALUE.PATTERN",
+      condition = "INVALID_PARAMETER_VALUE.PATTERN",
       parameters = Map(
         "parameter" -> toSQLId("regexp"),
         "functionName" -> toSQLId("rlike"),
@@ -294,7 +294,7 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         val regex = $"a".string.at(0)
         evaluateWithoutCodegen("abbbbc" rlike regex, create_row("**"))
       },
-      errorClass = "INVALID_PARAMETER_VALUE.PATTERN",
+      condition = "INVALID_PARAMETER_VALUE.PATTERN",
       parameters = Map(
         "parameter" -> toSQLId("regexp"),
         "functionName" -> toSQLId("rlike"),

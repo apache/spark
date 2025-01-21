@@ -27,7 +27,6 @@ from pyspark.sql import Column as PySparkColumn, DataFrame as PySparkDataFrame
 from pyspark.sql.types import DataType, StructType
 from pyspark.pandas._typing import IndexOpsLike
 from pyspark.pandas.internal import InternalField
-from pyspark.sql.utils import get_column_class, get_dataframe_class
 
 if TYPE_CHECKING:
     from pyspark.sql._typing import OptionalPrimitiveType
@@ -116,8 +115,7 @@ class SparkIndexOpsMethods(Generic[IndexOpsLike], metaclass=ABCMeta):
         if isinstance(self._data, MultiIndex):
             raise NotImplementedError("MultiIndex does not support spark.transform yet.")
         output = func(self._data.spark.column)
-        Column = get_column_class()
-        if not isinstance(output, Column):
+        if not isinstance(output, PySparkColumn):
             raise ValueError(
                 "The output of the function [%s] should be of a "
                 "pyspark.sql.Column; however, got [%s]." % (func, type(output))
@@ -192,8 +190,7 @@ class SparkSeriesMethods(SparkIndexOpsMethods["ps.Series"]):
         from pyspark.pandas.internal import HIDDEN_COLUMNS
 
         output = func(self._data.spark.column)
-        Column = get_column_class()
-        if not isinstance(output, Column):
+        if not isinstance(output, PySparkColumn):
             raise ValueError(
                 "The output of the function [%s] should be of a "
                 "pyspark.sql.Column; however, got [%s]." % (func, type(output))
@@ -240,7 +237,8 @@ class SparkSeriesMethods(SparkIndexOpsMethods["ps.Series"]):
 
         However, it won't work with the same anchor Series.
 
-        >>> ser + ser.spark.analyzed
+        >>> with ps.option_context('compute.ops_on_diff_frames', False):
+        ...     ser + ser.spark.analyzed
         Traceback (most recent call last):
         ...
         ValueError: ... enable 'compute.ops_on_diff_frames' option.
@@ -290,7 +288,8 @@ class SparkIndexMethods(SparkIndexOpsMethods["ps.Index"]):
 
         However, it won't work with the same anchor Index.
 
-        >>> idx + idx.spark.analyzed
+        >>> with ps.option_context('compute.ops_on_diff_frames', False):
+        ...     idx + idx.spark.analyzed
         Traceback (most recent call last):
         ...
         ValueError: ... enable 'compute.ops_on_diff_frames' option.
@@ -733,7 +732,7 @@ class SparkFrameMethods:
         Examples
         --------
         >>> df = ps.DataFrame(dict(
-        ...    date=list(pd.date_range('2012-1-1 12:00:00', periods=3, freq='M')),
+        ...    date=list(pd.date_range('2012-1-1 12:00:00', periods=3, freq='ME')),
         ...    country=['KR', 'US', 'JP'],
         ...    code=[1, 2 ,3]), columns=['date', 'country', 'code'])
         >>> df
@@ -804,7 +803,7 @@ class SparkFrameMethods:
         Examples
         --------
         >>> df = ps.DataFrame(dict(
-        ...    date=list(pd.date_range('2012-1-1 12:00:00', periods=3, freq='M')),
+        ...    date=list(pd.date_range('2012-1-1 12:00:00', periods=3, freq='ME')),
         ...    country=['KR', 'US', 'JP'],
         ...    code=[1, 2 ,3]), columns=['date', 'country', 'code'])
         >>> df
@@ -936,8 +935,7 @@ class SparkFrameMethods:
         2  3      1
         """
         output = func(self.frame(index_col))
-        SparkDataFrame = get_dataframe_class()
-        if not isinstance(output, SparkDataFrame):
+        if not isinstance(output, PySparkDataFrame):
             raise ValueError(
                 "The output of the function [%s] should be of a "
                 "pyspark.sql.DataFrame; however, got [%s]." % (func, type(output))
@@ -1148,7 +1146,8 @@ class SparkFrameMethods:
 
         However, it won't work with the same anchor Series.
 
-        >>> df + df.spark.analyzed
+        >>> with ps.option_context('compute.ops_on_diff_frames', False):
+        ...     df + df.spark.analyzed
         Traceback (most recent call last):
         ...
         ValueError: ... enable 'compute.ops_on_diff_frames' option.

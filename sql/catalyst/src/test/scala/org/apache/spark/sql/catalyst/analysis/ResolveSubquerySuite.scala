@@ -71,7 +71,7 @@ class ResolveSubquerySuite extends AnalysisTest {
 
   test("lateral join with ambiguous join conditions") {
     val plan = lateralJoin(t1, t0.select($"b"), condition = Some($"b" ===  1))
-    assertAnalysisErrorClass(plan,
+    assertAnalysisErrorCondition(plan,
       "AMBIGUOUS_REFERENCE", Map("name" -> "`b`", "referenceNames" -> "[`b`, `b`]")
     )
   }
@@ -123,7 +123,7 @@ class ResolveSubquerySuite extends AnalysisTest {
 
     // SELECT * FROM t1, LATERAL (SELECT * FROM t2, LATERAL (SELECT a, b, c))
     // TODO: support accessing columns from outer outer query.
-    assertAnalysisErrorClass(
+    assertAnalysisErrorCondition(
       lateralJoin(t1, lateralJoin(t2, t0.select($"a", $"b", $"c"))),
       "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
       Map("objectName" -> "`a`")
@@ -132,25 +132,25 @@ class ResolveSubquerySuite extends AnalysisTest {
 
   test("lateral subquery with unresolvable attributes") {
     // SELECT * FROM t1, LATERAL (SELECT a, c)
-    assertAnalysisErrorClass(
+    assertAnalysisErrorCondition(
       lateralJoin(t1, t0.select($"a", $"c")),
       "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
       Map("objectName" -> "`c`")
     )
     // SELECT * FROM t1, LATERAL (SELECT a, b, c, d FROM t2)
-    assertAnalysisErrorClass(
+    assertAnalysisErrorCondition(
       lateralJoin(t1, t2.select($"a", $"b", $"c", $"d")),
       "UNRESOLVED_COLUMN.WITH_SUGGESTION",
       Map("objectName" -> "`d`", "proposal" -> "`b`, `c`")
     )
     // SELECT * FROM t1, LATERAL (SELECT * FROM t2, LATERAL (SELECT t1.a))
-    assertAnalysisErrorClass(
+    assertAnalysisErrorCondition(
       lateralJoin(t1, lateralJoin(t2, t0.select($"t1.a"))),
       "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
       Map("objectName" -> "`t1`.`a`")
     )
     // SELECT * FROM t1, LATERAL (SELECT * FROM t2, LATERAL (SELECT a, b))
-    assertAnalysisErrorClass(
+    assertAnalysisErrorCondition(
       lateralJoin(t1, lateralJoin(t2, t0.select($"a", $"b"))),
       "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
       Map("objectName" -> "`a`")
@@ -165,7 +165,7 @@ class ResolveSubquerySuite extends AnalysisTest {
       LateralJoin(t4, LateralSubquery(Project(Seq(xa, ya), t0), Seq(x, y)), Inner, None)
     )
     // Analyzer will try to resolve struct first before subquery alias.
-    assertAnalysisErrorClass(
+    assertAnalysisErrorCondition(
       lateralJoin(t1.as("x"), t4.select($"x.a", $"x.b")),
       "FIELD_NOT_FOUND",
       Map("fieldName" -> "`b`", "fields" -> "`a`"))
@@ -174,9 +174,9 @@ class ResolveSubquerySuite extends AnalysisTest {
   test("lateral join with unsupported expressions") {
     val plan = lateralJoin(t1, t0.select(($"a" + $"b").as("c")),
       condition = Some(sum($"a") === sum($"c")))
-    assertAnalysisErrorClass(
+    assertAnalysisErrorCondition(
       plan,
-      expectedErrorClass = "UNSUPPORTED_EXPR_FOR_OPERATOR",
+      expectedErrorCondition = "UNSUPPORTED_EXPR_FOR_OPERATOR",
       expectedMessageParameters = Map("invalidExprSqls" -> "\"sum(a)\", \"sum(c)\"")
     )
   }
@@ -206,17 +206,17 @@ class ResolveSubquerySuite extends AnalysisTest {
         LateralSubquery(Project(Seq(outerA, outerB, b, c), t2.as("t2")), Seq(a, b)), Inner, None)
     )
     // SELECT * FROM t1, LATERAL (SELECT t2.*)
-    assertAnalysisErrorClass(
+    assertAnalysisErrorCondition(
       lateralJoin(t1.as("t1"), t0.select(star("t2"))),
-      expectedErrorClass = "CANNOT_RESOLVE_STAR_EXPAND",
+      expectedErrorCondition = "CANNOT_RESOLVE_STAR_EXPAND",
       expectedMessageParameters = Map("targetString" -> "`t2`", "columns" -> "")
     )
     // Check case sensitivities.
     // SELECT * FROM t1, LATERAL (SELECT T1.*)
     val plan = lateralJoin(t1.as("t1"), t0.select(star("T1")))
-    assertAnalysisErrorClass(
+    assertAnalysisErrorCondition(
       plan,
-      expectedErrorClass = "CANNOT_RESOLVE_STAR_EXPAND",
+      expectedErrorCondition = "CANNOT_RESOLVE_STAR_EXPAND",
       expectedMessageParameters = Map("targetString" -> "`T1`", "columns" -> "")
     )
     assertAnalysisSuccess(plan, caseSensitive = false)
@@ -232,9 +232,9 @@ class ResolveSubquerySuite extends AnalysisTest {
       LateralJoin(t1,
         LateralSubquery(t0.select(newArray.as(newArray.sql)), Seq(a, b)), Inner, None)
     )
-    assertAnalysisErrorClass(
+    assertAnalysisErrorCondition(
       lateralJoin(t1.as("t1"), t0.select(Count(star("t1")))),
-      expectedErrorClass = "INVALID_USAGE_OF_STAR_OR_REGEX",
+      expectedErrorCondition = "INVALID_USAGE_OF_STAR_OR_REGEX",
       expectedMessageParameters = Map("elem" -> "'*'", "prettyName" -> "expression `count`"))
   }
 
@@ -293,9 +293,9 @@ class ResolveSubquerySuite extends AnalysisTest {
           :: lv(Symbol("X"))
           :: Nil))
 
-    assertAnalysisErrorClass(
+    assertAnalysisErrorCondition(
       inputPlan = lambdaPlanScanFromTable,
-      expectedErrorClass =
+      expectedErrorCondition =
         "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.HIGHER_ORDER_FUNCTION",
       expectedMessageParameters = Map.empty[String, String])
   }

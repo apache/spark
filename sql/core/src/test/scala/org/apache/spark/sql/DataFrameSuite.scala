@@ -32,7 +32,7 @@ import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Cast, EqualTo, ExpressionSet, GreaterThan, Literal, PythonUDF, ScalarSubquery, Uuid}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Cast, EqualTo, ExpressionSet, GreaterThan, Literal, PythonUDF, ScalarSubquery}
 import org.apache.spark.sql.catalyst.optimizer.ConvertToLocalRelation
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LeafNode, LocalRelation, LogicalPlan, OneRowRelation}
@@ -223,7 +223,7 @@ class DataFrameSuite extends QueryTest
       exception = intercept[AnalysisException] {
         df.select(explode($"*"))
       },
-      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+      condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       parameters = Map(
         "sqlExpr" -> "\"explode(csv)\"",
         "paramIndex" -> "first",
@@ -308,6 +308,69 @@ class DataFrameSuite extends QueryTest
       testData.select("key").collect().toSeq)
   }
 
+  test("SPARK-50503 - cannot partition by variant columns") {
+    val df = sql("select parse_json(case when id = 0 then 'null' else '1' end)" +
+      " as v, id % 5 as id, named_struct('v', parse_json(id::string)) s from range(0, 100, 1, 5)")
+    // variant column
+    checkError(
+      exception = intercept[AnalysisException](df.repartition(5, col("v"))),
+      condition = "UNSUPPORTED_FEATURE.PARTITION_BY_VARIANT",
+      parameters = Map(
+        "expr" -> "\"v\"",
+        "dataType" -> "\"VARIANT\"")
+    )
+    // nested variant column
+    checkError(
+      exception = intercept[AnalysisException](df.repartition(5, col("s"))),
+      condition = "UNSUPPORTED_FEATURE.PARTITION_BY_VARIANT",
+      parameters = Map(
+        "expr" -> "\"s\"",
+        "dataType" -> "\"STRUCT<v: VARIANT NOT NULL>\"")
+    )
+    // variant producing expression
+    checkError(
+      exception =
+        intercept[AnalysisException](df.repartition(5, parse_json(col("id").cast("string")))),
+      condition = "UNSUPPORTED_FEATURE.PARTITION_BY_VARIANT",
+      parameters = Map(
+        "expr" -> "\"parse_json(CAST(id AS STRING))\"",
+        "dataType" -> "\"VARIANT\"")
+    )
+    // Partitioning by non-variant column works
+    try {
+      df.repartition(5, col("id")).collect()
+    } catch {
+      case e: Exception =>
+        fail(s"Expected no exception to be thrown but an exception was thrown: ${e.getMessage}")
+    }
+    // SQL
+    withTempView("tv") {
+      df.createOrReplaceTempView("tv")
+      checkError(
+        exception = intercept[AnalysisException](sql("SELECT * FROM tv DISTRIBUTE BY v")),
+        condition = "UNSUPPORTED_FEATURE.PARTITION_BY_VARIANT",
+        parameters = Map(
+          "expr" -> "\"v\"",
+          "dataType" -> "\"VARIANT\""),
+        context = ExpectedContext(
+          fragment = "DISTRIBUTE BY v",
+          start = 17,
+          stop = 31)
+      )
+      checkError(
+        exception = intercept[AnalysisException](sql("SELECT * FROM tv DISTRIBUTE BY s")),
+        condition = "UNSUPPORTED_FEATURE.PARTITION_BY_VARIANT",
+        parameters = Map(
+          "expr" -> "\"s\"",
+          "dataType" -> "\"STRUCT<v: VARIANT NOT NULL>\""),
+        context = ExpectedContext(
+          fragment = "DISTRIBUTE BY s",
+          start = 17,
+          stop = 31)
+      )
+    }
+  }
+
   test("repartition with SortOrder") {
     // passing SortOrder expressions to .repartition() should result in an informative error
 
@@ -363,6 +426,35 @@ class DataFrameSuite extends QueryTest
     intercept[IllegalArgumentException] {
       data1d.toDF("val").repartitionByRange(data1d.size, Seq.empty: _*)
     }
+  }
+
+  test("repartition by MapType") {
+    Seq("int", "long", "float", "double", "decimal(10, 2)", "string", "varchar(6)").foreach { dt =>
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+        val df = spark.range(20)
+          .withColumn("c1",
+            when(col("id") % 3 === 1, typedLit(Map(1 -> 1)))
+              .when(col("id") % 3 === 2, typedLit(Map(1 -> 1, 2 -> 2)))
+              .otherwise(typedLit(Map(2 -> 2, 1 -> 1))).cast(s"map<$dt, $dt>"))
+          .withColumn("c2", typedLit(Map(1 -> null)).cast(s"map<$dt, $dt>"))
+          .withColumn("c3", lit(null).cast(s"map<$dt, $dt>"))
+
+        assertPartitionNumber(df.repartition(4, col("c1")), 2)
+        assertPartitionNumber(df.repartition(4, col("c2")), 1)
+        assertPartitionNumber(df.repartition(4, col("c3")), 1)
+        assertPartitionNumber(df.repartition(4, col("c1"), col("c2")), 2)
+        assertPartitionNumber(df.repartition(4, col("c1"), col("c3")), 2)
+        assertPartitionNumber(df.repartition(4, col("c1"), col("c2"), col("c3")), 2)
+        assertPartitionNumber(df.repartition(4, col("c2"), col("c3")), 2)
+      }
+    }
+  }
+
+  private def assertPartitionNumber(df: => DataFrame, max: Int): Unit = {
+    val dfGrouped = df.groupBy(spark_partition_id()).count()
+    // Result number of partition can be lower or equal to max,
+    // but no more than that.
+    assert(dfGrouped.count() <= max, dfGrouped.queryExecution.simpleString)
   }
 
   test("coalesce") {
@@ -567,7 +659,7 @@ class DataFrameSuite extends QueryTest
         testData.toDF().withColumns(Seq("newCol1", "newCOL1"),
           Seq(col("key") + 1, col("key") + 2))
       },
-      errorClass = "COLUMN_ALREADY_EXISTS",
+      condition = "COLUMN_ALREADY_EXISTS",
       parameters = Map("columnName" -> "`newcol1`"))
   }
 
@@ -587,7 +679,7 @@ class DataFrameSuite extends QueryTest
           testData.toDF().withColumns(Seq("newCol1", "newCol1"),
             Seq(col("key") + 1, col("key") + 2))
         },
-        errorClass = "COLUMN_ALREADY_EXISTS",
+        condition = "COLUMN_ALREADY_EXISTS",
         parameters = Map("columnName" -> "`newCol1`"))
     }
   }
@@ -630,7 +722,7 @@ class DataFrameSuite extends QueryTest
       exception = intercept[AnalysisException] {
         df1.withMetadata("x1", metadata)
       },
-      errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+      condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
       parameters = Map("objectName" -> "`x1`", "proposal" -> "`x`")
     )
   }
@@ -1043,11 +1135,46 @@ class DataFrameSuite extends QueryTest
       ("12".getBytes(StandardCharsets.UTF_8), "ABC.".getBytes(StandardCharsets.UTF_8)),
       ("34".getBytes(StandardCharsets.UTF_8), "12346".getBytes(StandardCharsets.UTF_8))
     ).toDF()
-    val expectedAnswer = Seq(
-      Seq("_1", "_2"),
-      Seq("[31 32]", "[41 42 43 2E]"),
-      Seq("[33 34]", "[31 32 33 34 36]"))
-    assert(df.getRows(10, 20) === expectedAnswer)
+
+    withSQLConf(SQLConf.BINARY_OUTPUT_STYLE.key -> "HEX_DISCRETE") {
+      val expectedAnswer = Seq(
+        Seq("_1", "_2"),
+        Seq("[31 32]", "[41 42 43 2E]"),
+        Seq("[33 34]", "[31 32 33 34 36]"))
+      assert(df.getRows(10, 20) === expectedAnswer)
+    }
+    withSQLConf(SQLConf.BINARY_OUTPUT_STYLE.key -> "HEX") {
+      val expectedAnswer = Seq(
+        Seq("_1", "_2"),
+        Seq("3132", "4142432E"),
+        Seq("3334", "3132333436")
+      )
+      assert(df.getRows(10, 20) === expectedAnswer)
+    }
+    withSQLConf(SQLConf.BINARY_OUTPUT_STYLE.key -> "BASE64") {
+      val expectedAnswer = Seq(
+        Seq("_1", "_2"),
+        Seq("MTI", "QUJDLg"),
+        Seq("MzQ", "MTIzNDY")
+      )
+      assert(df.getRows(10, 20) === expectedAnswer)
+    }
+    withSQLConf(SQLConf.BINARY_OUTPUT_STYLE.key -> "UTF-8") {
+      val expectedAnswer = Seq(
+        Seq("_1", "_2"),
+        Seq("12", "ABC."),
+        Seq("34", "12346")
+      )
+      assert(df.getRows(10, 20) === expectedAnswer)
+    }
+    withSQLConf(SQLConf.BINARY_OUTPUT_STYLE.key -> "BASIC") {
+      val expectedAnswer = Seq(
+        Seq("_1", "_2"),
+        Seq("[49, 50]", "[65, 66, 67, 46]"),
+        Seq("[51, 52]", "[49, 50, 51, 52, 54]")
+      )
+      assert(df.getRows(10, 20) === expectedAnswer)
+    }
   }
 
   test("createDataFrame(RDD[Row], StructType) should convert UDTs (SPARK-6672)") {
@@ -1080,7 +1207,7 @@ class DataFrameSuite extends QueryTest
           exception = intercept[org.apache.spark.sql.AnalysisException] {
             df(name)
           },
-          errorClass = "_LEGACY_ERROR_TEMP_1049",
+          condition = "INVALID_ATTRIBUTE_NAME_SYNTAX",
           parameters = Map("name" -> name))
       }
 
@@ -1166,7 +1293,7 @@ class DataFrameSuite extends QueryTest
     }
     checkError(
       exception = e,
-      errorClass = "COLUMN_ALREADY_EXISTS",
+      condition = "COLUMN_ALREADY_EXISTS",
       parameters = Map("columnName" -> "`column1`"))
 
     // multiple duplicate columns present
@@ -1177,7 +1304,7 @@ class DataFrameSuite extends QueryTest
     }
     checkError(
       exception = f,
-      errorClass = "COLUMN_ALREADY_EXISTS",
+      condition = "COLUMN_ALREADY_EXISTS",
       parameters = Map("columnName" -> "`column1`"))
   }
 
@@ -1209,7 +1336,7 @@ class DataFrameSuite extends QueryTest
           exception = intercept[AnalysisException] {
             insertion.write.insertInto("rdd_base")
           },
-          errorClass = "UNSUPPORTED_INSERT.RDD_BASED",
+          condition = "UNSUPPORTED_INSERT.RDD_BASED",
           parameters = Map.empty
         )
 
@@ -1220,7 +1347,7 @@ class DataFrameSuite extends QueryTest
           exception = intercept[AnalysisException] {
             insertion.write.insertInto("indirect_ds")
           },
-          errorClass = "UNSUPPORTED_INSERT.RDD_BASED",
+          condition = "UNSUPPORTED_INSERT.RDD_BASED",
           parameters = Map.empty
         )
 
@@ -1230,7 +1357,7 @@ class DataFrameSuite extends QueryTest
           exception = intercept[AnalysisException] {
             insertion.write.insertInto("one_row")
           },
-          errorClass = "UNSUPPORTED_INSERT.RDD_BASED",
+          condition = "UNSUPPORTED_INSERT.RDD_BASED",
           parameters = Map.empty
         )
       }
@@ -1531,7 +1658,7 @@ class DataFrameSuite extends QueryTest
   test("SPARK-46794: exclude subqueries from LogicalRDD constraints") {
     withTempDir { checkpointDir =>
       val subquery =
-        new Column(ScalarSubquery(spark.range(10).selectExpr("max(id)").logicalPlan))
+        Column(ScalarSubquery(spark.range(10).selectExpr("max(id)").logicalPlan))
       val df = spark.range(1000).filter($"id" === subquery)
       assert(df.logicalPlan.constraints.exists(_.exists(_.isInstanceOf[ScalarSubquery])))
 
@@ -1804,7 +1931,7 @@ class DataFrameSuite extends QueryTest
   }
 
   test("Uuid expressions should produce same results at retries in the same DataFrame") {
-    val df = spark.range(1).select($"id", new Column(Uuid()))
+    val df = spark.range(1).select($"id", uuid())
     checkAnswer(df, df.collect())
   }
 
@@ -1931,7 +2058,7 @@ class DataFrameSuite extends QueryTest
   test("SPARK-29442 Set `default` mode should override the existing mode") {
     val df = Seq(Tuple1(1)).toDF()
     val writer = df.write.mode("overwrite").mode("default")
-    val modeField = classOf[DataFrameWriter[Tuple1[Int]]].getDeclaredField("mode")
+    val modeField = classOf[DataFrameWriter[_]].getDeclaredField("mode")
     modeField.setAccessible(true)
     assert(SaveMode.ErrorIfExists === modeField.get(writer).asInstanceOf[SaveMode])
   }
@@ -2000,7 +2127,7 @@ class DataFrameSuite extends QueryTest
       exception = intercept[AnalysisException] {
         df.groupBy($"d", $"b").as[GroupByKey, Row]
       },
-      errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+      condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
       parameters = Map("objectName" -> "`d`", "proposal" -> "`a`, `b`, `c`"),
       context = ExpectedContext(fragment = "$", callSitePattern = getCurrentClassCallSitePattern))
   }
@@ -2018,18 +2145,18 @@ class DataFrameSuite extends QueryTest
     // the number of keys must match
     val exception1 = intercept[IllegalArgumentException] {
       df1.groupBy($"key1", $"key2").flatMapCoGroupsInPandas(
-        df2.groupBy($"key2"), flatMapCoGroupsInPandasUDF)
+        df2.groupBy($"key2"), Column(flatMapCoGroupsInPandasUDF))
     }
     assert(exception1.getMessage.contains("Cogroup keys must have same size: 2 != 1"))
     val exception2 = intercept[IllegalArgumentException] {
       df1.groupBy($"key1").flatMapCoGroupsInPandas(
-        df2.groupBy($"key1", $"key2"), flatMapCoGroupsInPandasUDF)
+        df2.groupBy($"key1", $"key2"), Column(flatMapCoGroupsInPandasUDF))
     }
     assert(exception2.getMessage.contains("Cogroup keys must have same size: 1 != 2"))
 
     // but different keys are allowed
     val actual = df1.groupBy($"key1").flatMapCoGroupsInPandas(
-      df2.groupBy($"key2"), flatMapCoGroupsInPandasUDF)
+      df2.groupBy($"key2"), Column(flatMapCoGroupsInPandasUDF))
     // can't evaluate the DataFrame as there is no PythonFunction given
     assert(actual != null)
   }
@@ -2038,7 +2165,7 @@ class DataFrameSuite extends QueryTest
     val emptyDf = spark.emptyDataFrame.withColumn("id", lit(1L))
     val joined = spark.range(10).join(emptyDf, "id")
     joined.queryExecution.optimizedPlan match {
-      case LocalRelation(Seq(id), Nil, _) =>
+      case LocalRelation(Seq(id), Nil, _, _) =>
         assert(id.name == "id")
       case _ =>
         fail("emptyDataFrame should be foldable")
@@ -2280,7 +2407,8 @@ class DataFrameSuite extends QueryTest
   }
 
   test("SPARK-36338: DataFrame.withSequenceColumn should append unique sequence IDs") {
-    val ids = spark.range(10).repartition(5).withSequenceColumn("default_index")
+    val ids = spark.range(10).repartition(5).select(
+      Column.internalFn("distributed_sequence_id").alias("default_index"), col("id"))
     assert(ids.collect().map(_.getLong(0)).toSet === Range(0, 10).toSet)
     assert(ids.take(5).map(_.getLong(0)).toSet === Range(0, 5).toSet)
   }
@@ -2469,6 +2597,14 @@ class DataFrameSuite extends QueryTest
       assert(row.getInt(0).toString == row.getString(2))
       assert(row.getInt(0).toString == row.getString(3))
     }
+
+    val v3 = map(lit("key"), lit("value"))
+    val v4 = to_csv(struct(v3.as("a"))) // to_csv is CodegenFallback
+    df.select(v3, v3, v4, v4).collect().foreach { row =>
+      assert(row.getMap(0).toString() == row.getMap(1).toString())
+      assert(row.getString(2) == s"{key -> ${row.getMap(0).get("key").get}}")
+      assert(row.getString(3) == s"{key -> ${row.getMap(0).get("key").get}}")
+    }
   }
 
   test("SPARK-45216: Non-deterministic functions with seed") {
@@ -2504,7 +2640,7 @@ class DataFrameSuite extends QueryTest
         exception = intercept[ParseException] {
           spark.range(1).toDF("CASE").filter("CASE").collect()
         },
-        errorClass = "PARSE_SYNTAX_ERROR",
+        condition = "PARSE_SYNTAX_ERROR",
         parameters = Map("error" -> "'CASE'", "hint" -> ""))
     }
   }
@@ -2516,7 +2652,7 @@ class DataFrameSuite extends QueryTest
         exception = intercept[AnalysisException] {
           spark.range(1).createTempView("AUTHORIZATION")
         },
-        errorClass = "_LEGACY_ERROR_TEMP_1321",
+        condition = "_LEGACY_ERROR_TEMP_1321",
         parameters = Map("viewName" -> "AUTHORIZATION"))
     }
   }

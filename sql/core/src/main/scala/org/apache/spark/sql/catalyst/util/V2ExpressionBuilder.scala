@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.util
 
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys.EXPR
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, AggregateFunction, Complete}
 import org.apache.spark.sql.catalyst.expressions.objects.{Invoke, StaticInvoke}
@@ -25,14 +27,42 @@ import org.apache.spark.sql.connector.expressions.{Cast => V2Cast, Expression =>
 import org.apache.spark.sql.connector.expressions.aggregate.{AggregateFunc, Avg, Count, CountStar, GeneralAggregateFunc, Max, Min, Sum, UserDefinedAggregateFunc}
 import org.apache.spark.sql.connector.expressions.filter.{AlwaysFalse, AlwaysTrue, And => V2And, Not => V2Not, Or => V2Or, Predicate => V2Predicate}
 import org.apache.spark.sql.execution.datasources.PushableExpression
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{BooleanType, DataType, IntegerType, StringType}
 
 /**
  * The builder to generate V2 expressions from catalyst expressions.
  */
-class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) {
+class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) extends Logging  {
 
   def build(): Option[V2Expression] = generateExpression(e, isPredicate)
+
+  def buildPredicate(): Option[V2Predicate] = {
+
+    if (isPredicate) {
+      val translated = build()
+
+      val modifiedExprOpt = if (
+        SQLConf.get.getConf(SQLConf.DATA_SOURCE_DONT_ASSERT_ON_PREDICATE)
+          && translated.isDefined
+          && !translated.get.isInstanceOf[V2Predicate]) {
+
+        // If a predicate is expected but the translation yields something else,
+        // log a warning and proceed as if the translation was not possible.
+        logWarning(log"Predicate expected but got class: ${MDC(EXPR, translated.get.describe())}")
+        None
+      } else {
+        translated
+      }
+
+      modifiedExprOpt.map { v =>
+        assert(v.isInstanceOf[V2Predicate], s"Expected Predicate but got ${v.describe()}")
+        v.asInstanceOf[V2Predicate]
+      }
+    } else {
+      None
+    }
+  }
 
   private def canTranslate(b: BinaryOperator) = b match {
     case _: BinaryComparison => true
@@ -95,7 +125,7 @@ class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) {
       }
     case Cast(child, dataType, _, evalMode)
         if evalMode == EvalMode.ANSI || Cast.canUpCast(child.dataType, dataType) =>
-      generateExpression(child).map(v => new V2Cast(v, dataType))
+      generateExpression(child).map(v => new V2Cast(v, child.dataType, dataType))
     case AggregateExpression(aggregateFunction, Complete, isDistinct, None, _) =>
       generateAggregateFunc(aggregateFunction, isDistinct)
     case Abs(_, true) => generateExpressionWithName("ABS", expr, isPredicate)
@@ -191,8 +221,8 @@ class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) {
     case _: BitwiseNot => generateExpressionWithName("~", expr, isPredicate)
     case caseWhen @ CaseWhen(branches, elseValue) =>
       val conditions = branches.map(_._1).flatMap(generateExpression(_, true))
-      val values = branches.map(_._2).flatMap(generateExpression(_))
-      val elseExprOpt = elseValue.flatMap(generateExpression(_))
+      val values = branches.map(_._2).flatMap(generateExpression(_, isPredicate))
+      val elseExprOpt = elseValue.flatMap(generateExpression(_, isPredicate))
       if (conditions.length == branches.length && values.length == branches.length &&
           elseExprOpt.size == elseValue.size) {
         val branchExpressions = conditions.zip(values).flatMap { case (c, v) =>
@@ -275,6 +305,8 @@ class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) {
     case _: Md5 => generateExpressionWithName("MD5", expr, isPredicate)
     case _: Sha1 => generateExpressionWithName("SHA1", expr, isPredicate)
     case _: Sha2 => generateExpressionWithName("SHA2", expr, isPredicate)
+    case _: StringLPad => generateExpressionWithName("LPAD", expr, isPredicate)
+    case _: StringRPad => generateExpressionWithName("RPAD", expr, isPredicate)
     // TODO supports other expressions
     case ApplyFunctionExpression(function, children) =>
       val childrenExpressions = children.flatMap(generateExpression(_))
@@ -391,7 +423,7 @@ class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) {
       children: Seq[Expression],
       dataType: DataType,
       isPredicate: Boolean): Option[V2Expression] = {
-    val childrenExpressions = children.flatMap(generateExpression(_))
+    val childrenExpressions = children.flatMap(generateExpression(_, isPredicate))
     if (childrenExpressions.length == children.length) {
       if (isPredicate && dataType.isInstanceOf[BooleanType]) {
         Some(new V2Predicate(v2ExpressionName, childrenExpressions.toArray[V2Expression]))

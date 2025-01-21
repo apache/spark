@@ -24,7 +24,8 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.spark.SparkEnv
 import org.apache.spark.executor.ProcfsMetricsGetter
-import org.apache.spark.internal.{config, Logging}
+import org.apache.spark.internal.{config, Logging, MDC}
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.memory.MemoryManager
 
 /**
@@ -157,10 +158,13 @@ case object GarbageCollectionMetrics extends ExecutorMetricType with Logging {
       } else if (!nonBuiltInCollectors.contains(mxBean.getName)) {
         nonBuiltInCollectors = mxBean.getName +: nonBuiltInCollectors
         // log it when first seen
-        logWarning(s"To enable non-built-in garbage collector(s) " +
-          s"$nonBuiltInCollectors, users should configure it(them) to " +
-          s"${config.EVENT_LOG_GC_METRICS_YOUNG_GENERATION_GARBAGE_COLLECTORS.key} or " +
-          s"${config.EVENT_LOG_GC_METRICS_OLD_GENERATION_GARBAGE_COLLECTORS.key}")
+        val youngGenerationGc = MDC(YOUNG_GENERATION_GC,
+          config.EVENT_LOG_GC_METRICS_YOUNG_GENERATION_GARBAGE_COLLECTORS.key)
+        val oldGenerationGc = MDC(OLD_GENERATION_GC,
+          config.EVENT_LOG_GC_METRICS_OLD_GENERATION_GARBAGE_COLLECTORS.key)
+        logWarning(log"To enable non-built-in garbage collector(s) " +
+          log"${MDC(NON_BUILT_IN_CONNECTORS, nonBuiltInCollectors)}, " +
+          log"users should configure it(them) to $youngGenerationGc or $oldGenerationGc")
       } else {
         // do nothing
       }

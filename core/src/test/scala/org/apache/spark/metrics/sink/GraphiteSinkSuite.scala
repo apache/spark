@@ -88,7 +88,7 @@ class GraphiteSinkSuite extends SparkFunSuite {
     val e = intercept[SparkException] {
       new GraphiteSink(props, registry)
     }
-    checkError(e, errorClass = "GRAPHITE_SINK_PROPERTY_MISSING",
+    checkError(e, condition = "GRAPHITE_SINK_PROPERTY_MISSING",
       parameters = Map("property" -> "host"))
   }
 
@@ -100,7 +100,7 @@ class GraphiteSinkSuite extends SparkFunSuite {
     val e = intercept[SparkException] {
       new GraphiteSink(props, registry)
     }
-    checkError(e, errorClass = "GRAPHITE_SINK_PROPERTY_MISSING",
+    checkError(e, condition = "GRAPHITE_SINK_PROPERTY_MISSING",
       parameters = Map("property" -> "port"))
   }
 
@@ -115,7 +115,7 @@ class GraphiteSinkSuite extends SparkFunSuite {
       exception = intercept[SparkException] {
         new GraphiteSink(props, registry)
       },
-      errorClass = "GRAPHITE_SINK_INVALID_PROTOCOL",
+      condition = "GRAPHITE_SINK_INVALID_PROTOCOL",
       parameters = Map("protocol" -> "http")
     )
   }

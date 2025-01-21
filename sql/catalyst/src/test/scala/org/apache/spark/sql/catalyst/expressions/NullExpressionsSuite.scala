@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.sql.Timestamp
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkFunSuite, SparkRuntimeException}
 import org.apache.spark.sql.catalyst.analysis.SimpleAnalyzer
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 import org.apache.spark.sql.catalyst.expressions.objects.AssertNotNull
@@ -53,10 +53,13 @@ class NullExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("AssertNotNUll") {
-    val ex = intercept[RuntimeException] {
-      evaluateWithoutCodegen(AssertNotNull(Literal(null)))
-    }.getMessage
-    assert(ex.contains("Null value appeared in non-nullable field"))
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        evaluateWithoutCodegen(AssertNotNull(Literal(null)))
+      },
+      condition = "NOT_NULL_ASSERT_VIOLATION",
+      sqlState = "42000",
+      parameters = Map("walkedTypePath" -> "\n\n"))
   }
 
   test("IsNaN") {

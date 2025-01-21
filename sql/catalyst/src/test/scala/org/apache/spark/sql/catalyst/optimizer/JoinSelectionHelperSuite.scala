@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.optimizer
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.AttributeMap
 import org.apache.spark.sql.catalyst.plans.{Inner, PlanTest}
-import org.apache.spark.sql.catalyst.plans.logical.{BROADCAST, HintInfo, JoinHint, NO_BROADCAST_HASH, SHUFFLE_HASH}
+import org.apache.spark.sql.catalyst.plans.logical.{BROADCAST, HintInfo, Join, JoinHint, NO_BROADCAST_HASH, SHUFFLE_HASH}
 import org.apache.spark.sql.catalyst.statsEstimation.StatsTestPlan
 import org.apache.spark.sql.internal.SQLConf
 
@@ -38,16 +38,15 @@ class JoinSelectionHelperSuite extends PlanTest with JoinSelectionHelper {
     size = Some(1000),
     attributeStats = AttributeMap(Seq()))
 
+  private val join = Join(left, right, Inner, None, JoinHint(None, None))
+
   private val hintBroadcast = Some(HintInfo(Some(BROADCAST)))
   private val hintNotToBroadcast = Some(HintInfo(Some(NO_BROADCAST_HASH)))
   private val hintShuffleHash = Some(HintInfo(Some(SHUFFLE_HASH)))
 
   test("getBroadcastBuildSide (hintOnly = true) return BuildLeft with only a left hint") {
     val broadcastSide = getBroadcastBuildSide(
-      left,
-      right,
-      Inner,
-      JoinHint(hintBroadcast, None),
+      join.copy(hint = JoinHint(hintBroadcast, None)),
       hintOnly = true,
       SQLConf.get
     )
@@ -56,10 +55,7 @@ class JoinSelectionHelperSuite extends PlanTest with JoinSelectionHelper {
 
   test("getBroadcastBuildSide (hintOnly = true) return BuildRight with only a right hint") {
     val broadcastSide = getBroadcastBuildSide(
-      left,
-      right,
-      Inner,
-      JoinHint(None, hintBroadcast),
+      join.copy(hint = JoinHint(None, hintBroadcast)),
       hintOnly = true,
       SQLConf.get
     )
@@ -68,10 +64,7 @@ class JoinSelectionHelperSuite extends PlanTest with JoinSelectionHelper {
 
   test("getBroadcastBuildSide (hintOnly = true) return smaller side with both having hints") {
     val broadcastSide = getBroadcastBuildSide(
-      left,
-      right,
-      Inner,
-      JoinHint(hintBroadcast, hintBroadcast),
+      join.copy(hint = JoinHint(hintBroadcast, hintBroadcast)),
       hintOnly = true,
       SQLConf.get
     )
@@ -80,10 +73,7 @@ class JoinSelectionHelperSuite extends PlanTest with JoinSelectionHelper {
 
   test("getBroadcastBuildSide (hintOnly = true) return None when no side has a hint") {
     val broadcastSide = getBroadcastBuildSide(
-      left,
-      right,
-      Inner,
-      JoinHint(None, None),
+      join.copy(hint = JoinHint(None, None)),
       hintOnly = true,
       SQLConf.get
     )
@@ -92,10 +82,7 @@ class JoinSelectionHelperSuite extends PlanTest with JoinSelectionHelper {
 
   test("getBroadcastBuildSide (hintOnly = false) return BuildRight when right is broadcastable") {
     val broadcastSide = getBroadcastBuildSide(
-      left,
-      right,
-      Inner,
-      JoinHint(None, None),
+      join.copy(hint = JoinHint(None, None)),
       hintOnly = false,
       SQLConf.get
     )
@@ -105,10 +92,7 @@ class JoinSelectionHelperSuite extends PlanTest with JoinSelectionHelper {
   test("getBroadcastBuildSide (hintOnly = false) return None when right has no broadcast hint") {
     withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "10MB") {
       val broadcastSide = getBroadcastBuildSide(
-        left,
-        right,
-        Inner,
-        JoinHint(None, hintNotToBroadcast ),
+        join.copy(hint = JoinHint(None, hintNotToBroadcast)),
         hintOnly = false,
         SQLConf.get
       )
@@ -118,10 +102,7 @@ class JoinSelectionHelperSuite extends PlanTest with JoinSelectionHelper {
 
   test("getShuffleHashJoinBuildSide (hintOnly = true) return BuildLeft with only a left hint") {
     val broadcastSide = getShuffleHashJoinBuildSide(
-      left,
-      right,
-      Inner,
-      JoinHint(hintShuffleHash, None),
+      join.copy(hint = JoinHint(hintShuffleHash, None)),
       hintOnly = true,
       SQLConf.get
     )
@@ -130,10 +111,7 @@ class JoinSelectionHelperSuite extends PlanTest with JoinSelectionHelper {
 
   test("getShuffleHashJoinBuildSide (hintOnly = true) return BuildRight with only a right hint") {
     val broadcastSide = getShuffleHashJoinBuildSide(
-      left,
-      right,
-      Inner,
-      JoinHint(None, hintShuffleHash),
+      join.copy(hint = JoinHint(None, hintShuffleHash)),
       hintOnly = true,
       SQLConf.get
     )
@@ -142,10 +120,7 @@ class JoinSelectionHelperSuite extends PlanTest with JoinSelectionHelper {
 
   test("getShuffleHashJoinBuildSide (hintOnly = true) return smaller side when both have hints") {
     val broadcastSide = getShuffleHashJoinBuildSide(
-      left,
-      right,
-      Inner,
-      JoinHint(hintShuffleHash, hintShuffleHash),
+      join.copy(hint = JoinHint(hintShuffleHash, hintShuffleHash)),
       hintOnly = true,
       SQLConf.get
     )
@@ -154,10 +129,7 @@ class JoinSelectionHelperSuite extends PlanTest with JoinSelectionHelper {
 
   test("getShuffleHashJoinBuildSide (hintOnly = true) return None when no side has a hint") {
     val broadcastSide = getShuffleHashJoinBuildSide(
-      left,
-      right,
-      Inner,
-      JoinHint(None, None),
+      join.copy(hint = JoinHint(None, None)),
       hintOnly = true,
       SQLConf.get
     )
@@ -166,10 +138,7 @@ class JoinSelectionHelperSuite extends PlanTest with JoinSelectionHelper {
 
   test("getShuffleHashJoinBuildSide (hintOnly = false) return BuildRight when right is smaller") {
     val broadcastSide = getBroadcastBuildSide(
-      left,
-      right,
-      Inner,
-      JoinHint(None, None),
+      join.copy(hint = JoinHint(None, None)),
       hintOnly = false,
       SQLConf.get
     )

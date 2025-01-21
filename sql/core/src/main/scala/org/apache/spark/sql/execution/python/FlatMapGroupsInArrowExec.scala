@@ -25,11 +25,11 @@ import org.apache.spark.sql.types.{StructField, StructType}
 
 
 /**
- * Physical node for [[org.apache.spark.sql.catalyst.plans.logical.FlatMapGroupsInPandas]]
+ * Physical node for [[org.apache.spark.sql.catalyst.plans.logical.FlatMapGroupsInArrow]]
  *
  * Rows in each group are passed to the Python worker as an Arrow record batch.
- * The Python worker turns the record batch to a `pandas.DataFrame`, invoke the
- * user-defined function, and passes the resulting `pandas.DataFrame`
+ * The Python worker turns the record batch to a `pyarrow.Table`, invokes the
+ * user-defined function, and passes the resulting `pyarrow.Table`
  * as an Arrow record batch. Finally, each record batch is turned to
  * Iterator[InternalRow] using ColumnarBatch.
  *
@@ -37,7 +37,7 @@ import org.apache.spark.sql.types.{StructField, StructType}
  * Both the Python worker and the Java executor need to have enough memory to
  * hold the largest group. The memory on the Java side is used to construct the
  * record batch (off heap memory). The memory on the Python side is used for
- * holding the `pandas.DataFrame`. It's possible to further split one group into
+ * holding the `pyarrow.Table`. It's possible to further split one group into
  * multiple record batches to reduce the memory footprint on the Java side, this
  * is left as future work.
  */

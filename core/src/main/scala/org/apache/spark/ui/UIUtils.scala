@@ -236,14 +236,17 @@ private[spark] object UIUtils extends Logging {
 
   def dataTablesHeaderNodes(request: HttpServletRequest): Seq[Node] = {
     <link rel="stylesheet"
-          href={prependBaseUri(request, "/static/dataTables.bootstrap4.1.13.5.min.css")}
+          href={prependBaseUri(request, "/static/dataTables.bootstrap4.min.css")}
+          type="text/css"/>
+    <link rel="stylesheet"
+          href={prependBaseUri(request, "/static/jquery.dataTables.min.css")}
           type="text/css"/>
     <link rel="stylesheet"
           href={prependBaseUri(request, "/static/webui-dataTables.css")} type="text/css"/>
-    <script src={prependBaseUri(request, "/static/jquery.dataTables.1.13.5.min.js")}></script>
+    <script src={prependBaseUri(request, "/static/jquery.dataTables.min.js")}></script>
     <script src={prependBaseUri(request, "/static/jquery.cookies.2.2.0.min.js")}></script>
     <script src={prependBaseUri(request, "/static/jquery.blockUI.min.js")}></script>
-    <script src={prependBaseUri(request, "/static/dataTables.bootstrap4.1.13.5.min.js")}></script>
+    <script src={prependBaseUri(request, "/static/dataTables.bootstrap4.min.js")}></script>
     <script src={prependBaseUri(request, "/static/jquery.mustache.js")}></script>
   }
 
@@ -446,16 +449,24 @@ private[spark] object UIUtils extends Logging {
     val startRatio = if (total == 0) 0.0 else (boundedStarted.toDouble / total) * 100
     val startWidth = "width: %s%%".format(startRatio)
 
+    val killTaskReasonText = reasonToNumKilled.toSeq.sortBy(-_._2).map {
+        case (reason, count) => s" ($count killed: $reason)"
+      }.mkString
+    val progressTitle = s"$completed/$total" + {
+      if (started > 0) s" ($started running)" else ""
+    } + {
+      if (failed > 0) s" ($failed failed)" else ""
+    } + {
+      if (skipped > 0) s" ($skipped skipped)" else ""
+    } + killTaskReasonText
+
     <div class="progress">
-      <span style="text-align:center; position:absolute; width:100%;">
+      <span style="text-align:center; position:absolute; width:100%;" title={progressTitle}>
         {completed}/{total}
         { if (failed == 0 && skipped == 0 && started > 0) s"($started running)" }
         { if (failed > 0) s"($failed failed)" }
         { if (skipped > 0) s"($skipped skipped)" }
-        { reasonToNumKilled.toSeq.sortBy(-_._2).map {
-            case (reason, count) => s"($count killed: $reason)"
-          }
-        }
+        { killTaskReasonText }
       </span>
       <div class="progress-bar progress-completed" style={completeWidth}></div>
       <div class="progress-bar progress-started" style={startWidth}></div>

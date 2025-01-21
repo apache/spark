@@ -44,7 +44,7 @@ class HiveSerDeReadWriteSuite extends QueryTest with SQLTestUtils with TestHiveS
     super.beforeAll()
     originalConvertMetastoreParquet = spark.conf.get(CONVERT_METASTORE_PARQUET.key)
     originalConvertMetastoreORC = spark.conf.get(CONVERT_METASTORE_ORC.key)
-    originalORCImplementation = spark.conf.get(ORC_IMPLEMENTATION)
+    originalORCImplementation = spark.conf.get(ORC_IMPLEMENTATION.key)
 
     spark.conf.set(CONVERT_METASTORE_PARQUET.key, "false")
     spark.conf.set(CONVERT_METASTORE_ORC.key, "false")

@@ -25,6 +25,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path, RawLocalFileSystem}
 import org.scalatest.PrivateMethodTester
 
+import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.util.Utils
@@ -128,7 +129,7 @@ class DataSourceSuite extends SharedSparkSession with PrivateMethodTester {
           enableGlobbing = true
         )
       ),
-      errorClass = "PATH_NOT_FOUND",
+      condition = "PATH_NOT_FOUND",
       parameters = Map("path" -> nonExistentPath.toString)
     )
   }
@@ -173,7 +174,7 @@ class DataSourceSuite extends SharedSparkSession with PrivateMethodTester {
           new File(uuid, "file3").getAbsolutePath,
           uuid).rdd
       },
-      errorClass = "PATH_NOT_FOUND",
+      condition = "PATH_NOT_FOUND",
       parameters = Map("path" -> "file:.*"),
       matchPVals = true
     )
@@ -187,7 +188,7 @@ class DataSourceSuite extends SharedSparkSession with PrivateMethodTester {
       exception = intercept[AnalysisException] {
         spark.read.format("text").load(s"$nonExistentBasePath/*")
       },
-      errorClass = "PATH_NOT_FOUND",
+      condition = "PATH_NOT_FOUND",
       parameters = Map("path" -> s"file:$nonExistentBasePath/*")
     )
 
@@ -200,12 +201,24 @@ class DataSourceSuite extends SharedSparkSession with PrivateMethodTester {
         exception = intercept[AnalysisException] {
           spark.read.json(s"${baseDir.getAbsolutePath}/*/*-xyz.json").rdd
         },
-        errorClass = "PATH_NOT_FOUND",
+        condition = "PATH_NOT_FOUND",
         parameters = Map("path" -> s"file:${baseDir.getAbsolutePath}/*/*-xyz.json")
       )
     } finally {
       Utils.deleteRecursively(baseDir)
     }
+  }
+
+  test("SPARK-50458: Proper error handling for unsupported file system") {
+    val loc = "https://raw.githubusercontent.com/apache/spark/refs/heads/master/examples/" +
+      "src/main/resources/employees.json"
+    checkError(exception = intercept[SparkUnsupportedOperationException](
+      sql(s"CREATE TABLE HTTP USING JSON LOCATION '$loc'")),
+      condition = "FAILED_READ_FILE.UNSUPPORTED_FILE_SYSTEM",
+      parameters = Map(
+        "path" -> loc,
+        "fileSystemClass" -> "org.apache.hadoop.fs.http.HttpsFileSystem",
+        "method" -> "listStatus"))
   }
 }
 

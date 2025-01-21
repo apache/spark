@@ -22,12 +22,12 @@ import io.fabric8.kubernetes.api.model.{LocalObjectReference, LocalObjectReferen
 import org.apache.commons.lang3.StringUtils
 
 import org.apache.spark.{SPARK_VERSION, SparkConf}
+import org.apache.spark.annotation.{DeveloperApi, Since, Unstable}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.features.DriverServiceFeatureStep._
 import org.apache.spark.deploy.k8s.submit._
-import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKeys.{CONFIG, EXECUTOR_ENV_REGEX}
+import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.internal.config.ConfigEntry
 import org.apache.spark.resource.ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
 import org.apache.spark.util.{Clock, SystemClock, Utils}
@@ -78,7 +78,15 @@ private[spark] abstract class KubernetesConf(val sparkConf: SparkConf) {
   def getOption(key: String): Option[String] = sparkConf.getOption(key)
 }
 
-private[spark] class KubernetesDriverConf(
+/**
+ * :: DeveloperApi ::
+ *
+ * Used for K8s operations internally and Spark K8s operator.
+ */
+@Unstable
+@DeveloperApi
+@Since("4.0.0")
+class KubernetesDriverConf(
     sparkConf: SparkConf,
     val appId: String,
     val mainAppResource: MainAppResource,
@@ -98,9 +106,11 @@ private[spark] class KubernetesDriverConf(
     } else {
       val randomServiceId = KubernetesUtils.uniqueID(clock)
       val shorterServiceName = s"spark-$randomServiceId$DRIVER_SVC_POSTFIX"
-      logWarning(s"Driver's hostname would preferably be $preferredServiceName, but this is " +
-        s"too long (must be <= $MAX_SERVICE_NAME_LENGTH characters). Falling back to use " +
-        s"$shorterServiceName as the driver service's name.")
+      logWarning(log"Driver's hostname would preferably be " +
+        log"${MDC(LogKeys.PREFERRED_SERVICE_NAME, preferredServiceName)}, but this is too long " +
+        log"(must be <= ${MDC(LogKeys.MAX_SERVICE_NAME_LENGTH, MAX_SERVICE_NAME_LENGTH)} " +
+        log"characters). Falling back to use " +
+        log"${MDC(LogKeys.SHORTER_SERVICE_NAME, shorterServiceName)} as the driver service's name.")
       shorterServiceName
     }
   }
@@ -233,10 +243,10 @@ private[spark] class KubernetesExecutorConf(
     if (executorEnvRegex.pattern.matcher(key).matches()) {
       true
     } else {
-      logWarning(log"Invalid key: ${MDC(CONFIG, key)}, " +
+      logWarning(log"Invalid key: ${MDC(LogKeys.CONFIG, key)}, " +
         log"a valid environment variable name must consist of alphabetic characters, " +
         log"digits, '_', '-', or '.', and must not start with a digit. " +
-        log"Regex used for validation is '${MDC(EXECUTOR_ENV_REGEX, executorEnvRegex)}'")
+        log"Regex used for validation is '${MDC(LogKeys.EXECUTOR_ENV_REGEX, executorEnvRegex)}'")
       false
     }
   }

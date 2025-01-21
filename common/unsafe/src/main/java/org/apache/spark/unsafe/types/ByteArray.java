@@ -135,27 +135,57 @@ public final class ByteArray {
     return Arrays.copyOfRange(bytes, start, end);
   }
 
+  /**
+   * Concatenate multiple byte arrays into one.
+   * If one of the inputs is null then null will be returned.
+   *
+   * @param inputs byte arrays to concatenate
+   * @return the concatenated byte array or null if one of the arguments is null
+   */
   public static byte[] concat(byte[]... inputs) {
+    return concatWS(EMPTY_BYTE, inputs);
+  }
+
+  /**
+   * Concatenate multiple byte arrays with a given delimiter.
+   * If the delimiter or one of the inputs is null then null will be returned.
+   *
+   * @param delimiter byte array to be placed between each input
+   * @param inputs    byte arrays to concatenate
+   * @return the concatenated byte array or null if one of the arguments is null
+   */
+  public static byte[] concatWS(byte[] delimiter, byte[]... inputs) {
+    if (delimiter == null) {
+      return null;
+    }
     // Compute the total length of the result
     long totalLength = 0;
     for (byte[] input : inputs) {
       if (input != null) {
-        totalLength += input.length;
+        totalLength += input.length + delimiter.length;
       } else {
         return null;
       }
     }
-
+    if (totalLength > 0) totalLength -= delimiter.length;
     // Allocate a new byte array, and copy the inputs one by one into it
     final byte[] result = new byte[Ints.checkedCast(totalLength)];
     int offset = 0;
-    for (byte[] input : inputs) {
+    for (int i = 0; i < inputs.length; i++) {
+      byte[] input = inputs[i];
       int len = input.length;
       Platform.copyMemory(
         input, Platform.BYTE_ARRAY_OFFSET,
         result, Platform.BYTE_ARRAY_OFFSET + offset,
         len);
       offset += len;
+      if (delimiter.length > 0 && i < inputs.length - 1) {
+        Platform.copyMemory(
+          delimiter, Platform.BYTE_ARRAY_OFFSET,
+          result, Platform.BYTE_ARRAY_OFFSET + offset,
+          delimiter.length);
+        offset += delimiter.length;
+      }
     }
     return result;
   }

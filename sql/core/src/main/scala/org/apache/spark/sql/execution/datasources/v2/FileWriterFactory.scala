@@ -38,7 +38,7 @@ case class FileWriterFactory (
   @transient private lazy val jobId = SparkHadoopWriterUtils.createJobID(jobTrackerID, 0)
 
   override def createWriter(partitionId: Int, realTaskId: Long): DataWriter[InternalRow] = {
-    val taskAttemptContext = createTaskAttemptContext(partitionId)
+    val taskAttemptContext = createTaskAttemptContext(partitionId, realTaskId.toInt & Int.MaxValue)
     committer.setupTask(taskAttemptContext)
     if (description.partitionColumns.isEmpty) {
       new SingleDirectoryDataWriter(description, taskAttemptContext, committer)
@@ -47,9 +47,11 @@ case class FileWriterFactory (
     }
   }
 
-  private def createTaskAttemptContext(partitionId: Int): TaskAttemptContextImpl = {
+  private def createTaskAttemptContext(
+      partitionId: Int,
+      realTaskId: Int): TaskAttemptContextImpl = {
     val taskId = new TaskID(jobId, TaskType.MAP, partitionId)
-    val taskAttemptId = new TaskAttemptID(taskId, 0)
+    val taskAttemptId = new TaskAttemptID(taskId, realTaskId)
     // Set up the configuration object
     val hadoopConf = description.serializableHadoopConf.value
     hadoopConf.set("mapreduce.job.id", jobId.toString)

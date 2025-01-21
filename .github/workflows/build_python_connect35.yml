@@ -1,0 +1,114 @@
+#
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#   http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
+#
+
+name: Build / Spark Connect Python-only (master-server, 35-client, Python 3.11)
+
+on:
+  schedule:
+    - cron: '0 21 * * *'
+  workflow_dispatch:
+
+jobs:
+  # Build: build Spark and run the tests for specified modules using SBT
+  build:
+    name: "Build modules: pyspark-connect"
+    runs-on: ubuntu-latest
+    timeout-minutes: 100
+    if: github.repository == 'apache/spark'
+    steps:
+      - name: Checkout Spark repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Cache SBT and Maven
+        uses: actions/cache@v4
+        with:
+          path: |
+            build/apache-maven-*
+            build/*.jar
+            ~/.sbt
+          key: build-spark-connect-python-only-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
+          restore-keys: |
+            build-spark-connect-python-only-
+      - name: Cache Coursier local repository
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/coursier
+          key: coursier-build-spark-connect-python-only-${{ hashFiles('**/pom.xml') }}
+          restore-keys: |
+            coursier-build-spark-connect-python-only-
+      - name: Install Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: zulu
+          java-version: 17
+      - name: Install Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          architecture: x64
+      - name: Build Spark
+        run: |
+          ./build/sbt -Phive Test/package
+      - name: Install Python dependencies
+        run: |
+          pip install 'numpy==1.25.1' 'pyarrow==12.0.1' 'pandas<=2.0.3' scipy unittest-xml-reporting plotly>=4.8 'mlflow>=2.3.1' coverage 'matplotlib==3.7.2' openpyxl 'memory-profiler==0.60.0' 'scikit-learn==1.1.*'
+
+          # Add Python deps for Spark Connect.
+          pip install 'grpcio==1.67.0' 'grpcio-status==1.67.0' 'protobuf==5.29.1' 'googleapis-common-protos==1.65.0' 'graphviz==0.20.3'
+
+          # Add torch as a testing dependency for TorchDistributor
+          pip install 'torch==2.0.1' 'torchvision==0.15.2' torcheval
+      - name: Run tests
+        env:
+          SPARK_TESTING: 1
+          SPARK_SKIP_CONNECT_COMPAT_TESTS: 1
+          SPARK_CONNECT_TESTING_REMOTE: sc://localhost
+        run: |
+          # Make less noisy
+          cp conf/log4j2.properties.template conf/log4j2.properties
+          sed -i 's/rootLogger.level = info/rootLogger.level = warn/g' conf/log4j2.properties
+
+          # Start a Spark Connect server for local
+          PYTHONPATH="python/lib/pyspark.zip:python/lib/py4j-0.10.9.9-src.zip:$PYTHONPATH" ./sbin/start-connect-server.sh \
+            --driver-java-options "-Dlog4j.configurationFile=file:$GITHUB_WORKSPACE/conf/log4j2.properties" \
+            --jars "`find connector/protobuf/target -name spark-protobuf-*SNAPSHOT.jar`,`find connector/avro/target -name spark-avro*SNAPSHOT.jar`"
+
+          # Checkout to branch-3.5 to use the tests in branch-3.5.
+          cd ..
+          git clone --single-branch --branch branch-3.5 $GITHUB_SERVER_URL/$GITHUB_REPOSITORY spark-3.5
+          cd spark-3.5
+
+          # Several tests related to catalog requires to run them sequencially, e.g., writing a table in a listener.
+          # Run branch-3.5 tests
+          ./python/run-tests --parallelism=1 --python-executables=python3 --modules pyspark-connect
+          # None of tests are dependent on each other in Pandas API on Spark so run them in parallel
+          ./python/run-tests --parallelism=1 --python-executables=python3 --modules pyspark-pandas-connect,pyspark-pandas-slow-connect
+      - name: Upload test results to report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-spark-connect-python-only
+          path: "**/target/test-reports/*.xml"
+      - name: Upload Spark Connect server log file
+        if: ${{ !success() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-tests-log-spark-connect-python-only
+          path: logs/*.out

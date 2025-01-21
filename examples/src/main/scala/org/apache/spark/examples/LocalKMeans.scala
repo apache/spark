@@ -90,7 +90,7 @@ object LocalKMeans {
 
     println(s"Initial centers: $kPoints")
 
-    while(tempDist > convergeDist) {
+    while (tempDist > convergeDist) {
       val closest = data.map (p => (closestPoint(p, kPoints), (p, 1)))
 
       val mappings = closest.groupBy[Int] (x => x._1)

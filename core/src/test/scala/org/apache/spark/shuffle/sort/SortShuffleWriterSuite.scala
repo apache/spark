@@ -85,6 +85,7 @@ class SortShuffleWriterSuite
       shuffleHandle,
       mapId = 1,
       context,
+      context.taskMetrics().shuffleWriteMetrics,
       shuffleExecutorComponents)
     writer.write(Iterator.empty)
     writer.stop(success = true)
@@ -102,6 +103,7 @@ class SortShuffleWriterSuite
       shuffleHandle,
       mapId = 2,
       context,
+      context.taskMetrics().shuffleWriteMetrics,
       shuffleExecutorComponents)
     writer.write(records.iterator)
     writer.stop(success = true)
@@ -158,6 +160,7 @@ class SortShuffleWriterSuite
         shuffleHandle,
         mapId = 0,
         context,
+        context.taskMetrics().shuffleWriteMetrics,
         new LocalDiskShuffleExecutorComponents(
           conf, shuffleBlockResolver._blockManager, shuffleBlockResolver))
       writer.write(records.iterator)

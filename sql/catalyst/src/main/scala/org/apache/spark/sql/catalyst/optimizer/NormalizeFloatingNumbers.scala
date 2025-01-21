@@ -134,7 +134,17 @@ object NormalizeFloatingNumbers extends Rule[LogicalPlan] {
         case (name, i) => Seq(Literal(name), normalize(GetStructField(expr, i)))
       }
       val struct = CreateNamedStruct(fields.flatten.toImmutableArraySeq)
-      KnownFloatingPointNormalized(If(IsNull(expr), Literal(null, struct.dataType), struct))
+      // For nested structs (and other complex types), this branch is called again with either a
+      // `GetStructField` or a `NamedLambdaVariable` expression. Even if the field for which this
+      // has been recursively called might have `nullable = false`, directly creating an `If`
+      // predicate would end up creating an expression with `nullable = true` (as the trueBranch is
+      // nullable). Hence, use the `expr.nullable` to create an `If` predicate only when the column
+      // is nullable.
+      if (expr.nullable) {
+        KnownFloatingPointNormalized(If(IsNull(expr), Literal(null, struct.dataType), struct))
+      } else {
+        KnownFloatingPointNormalized(struct)
+      }
 
     case _ if expr.dataType.isInstanceOf[ArrayType] =>
       val ArrayType(et, containsNull) = expr.dataType

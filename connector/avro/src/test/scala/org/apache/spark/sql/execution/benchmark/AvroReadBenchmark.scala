@@ -66,7 +66,7 @@ object AvroReadBenchmark extends SqlBasedBenchmark {
         import spark.implicits._
         spark.range(values).map(_ => Random.nextLong()).createOrReplaceTempView("t1")
 
-        prepareTable(dir, spark.sql(s"SELECT CAST(value as ${dataType.sql}) id FROM t1"))
+        prepareTable(dir, spark.sql(s"SELECT mod(value, 255) id FROM t1"))
 
         benchmark.addCase("Sum") { _ =>
           spark.sql("SELECT sum(id) FROM avroTable").noop()
@@ -87,7 +87,7 @@ object AvroReadBenchmark extends SqlBasedBenchmark {
 
         prepareTable(
           dir,
-          spark.sql("SELECT CAST(value AS INT) AS c1, CAST(value as STRING) AS c2 FROM t1"))
+          spark.sql(s"SELECT value % ${Int.MaxValue} AS c1, CAST(value as STRING) AS c2 FROM t1"))
 
         benchmark.addCase("Sum of columns") { _ =>
           spark.sql("SELECT sum(c1), sum(length(c2)) FROM avroTable").noop()
@@ -106,7 +106,8 @@ object AvroReadBenchmark extends SqlBasedBenchmark {
         import spark.implicits._
         spark.range(values).map(_ => Random.nextLong()).createOrReplaceTempView("t1")
 
-        prepareTable(dir, spark.sql("SELECT value % 2 AS p, value AS id FROM t1"), Some("p"))
+        prepareTable(dir,
+          spark.sql(s"SELECT value % 2 AS p, value % ${Int.MaxValue} AS id FROM t1"), Some("p"))
 
         benchmark.addCase("Data column") { _ =>
           spark.sql("SELECT sum(id) FROM avroTable").noop()
@@ -176,7 +177,7 @@ object AvroReadBenchmark extends SqlBasedBenchmark {
       withTempTable("t1", "avroTable") {
         import spark.implicits._
         val middle = width / 2
-        val selectExpr = (1 to width).map(i => s"value as c$i")
+        val selectExpr = (1 to width).map(i => s"value % ${Int.MaxValue} as c$i")
         spark.range(values).map(_ => Random.nextLong()).toDF()
           .selectExpr(selectExpr: _*).createOrReplaceTempView("t1")
 
@@ -198,7 +199,6 @@ object AvroReadBenchmark extends SqlBasedBenchmark {
     withTempPath { dir =>
       withTempTable("t1", "avroTable") {
         import spark.implicits._
-        val middle = width / 2
         val selectExpr = (1 to width).map(i => s"value as c$i")
         spark.range(values).map(_ => Random.nextLong()).toDF()
           .selectExpr(selectExpr: _*)

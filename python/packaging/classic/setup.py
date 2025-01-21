@@ -152,9 +152,9 @@ if in_spark:
 # python/packaging/connect/setup.py
 _minimum_pandas_version = "2.0.0"
 _minimum_numpy_version = "1.21"
-_minimum_pyarrow_version = "10.0.0"
-_minimum_grpc_version = "1.62.0"
-_minimum_googleapis_common_protos_version = "1.56.4"
+_minimum_pyarrow_version = "11.0.0"
+_minimum_grpc_version = "1.67.0"
+_minimum_googleapis_common_protos_version = "1.65.0"
 
 
 class InstallCommand(install):
@@ -204,8 +204,13 @@ try:
     copyfile("pyspark/shell.py", "pyspark/python/pyspark/shell.py")
 
     if in_spark:
+        # !!HACK ALTERT!!
+        # `setup.py` has to be located with the same directory with the package.
+        # Therefore, we copy the current file, and place it at `spark/python` directory.
+        # After that, we remove it in the end.
         copyfile("packaging/classic/setup.py", "setup.py")
         copyfile("packaging/classic/setup.cfg", "setup.cfg")
+
         # Construct the symlink farm - this is nein_sparkcessary since we can't refer to
         # the path above the package root and we need to copy the jars and scripts which
         # are up above the python root.
@@ -283,6 +288,7 @@ try:
             "pyspark.sql.connect.streaming.worker",
             "pyspark.sql.functions",
             "pyspark.sql.pandas",
+            "pyspark.sql.plot",
             "pyspark.sql.protobuf",
             "pyspark.sql.streaming",
             "pyspark.sql.worker",
@@ -307,6 +313,7 @@ try:
             "pyspark.errors",
             "pyspark.errors.exceptions",
             "pyspark.examples.src.main.python",
+            "pyspark.logger",
         ],
         include_package_data=True,
         package_dir={
@@ -336,7 +343,7 @@ try:
         license="http://www.apache.org/licenses/LICENSE-2.0",
         # Don't forget to update python/docs/source/getting_started/install.rst
         # if you're updating the versions or dependencies.
-        install_requires=["py4j==0.10.9.7"],
+        install_requires=["py4j==0.10.9.9"],
         extras_require={
             "ml": ["numpy>=%s" % _minimum_numpy_version],
             "mllib": ["numpy>=%s" % _minimum_numpy_version],
@@ -367,6 +374,7 @@ try:
             "Programming Language :: Python :: 3.10",
             "Programming Language :: Python :: 3.11",
             "Programming Language :: Python :: 3.12",
+            "Programming Language :: Python :: 3.13",
             "Programming Language :: Python :: Implementation :: CPython",
             "Programming Language :: Python :: Implementation :: PyPy",
             "Typing :: Typed",

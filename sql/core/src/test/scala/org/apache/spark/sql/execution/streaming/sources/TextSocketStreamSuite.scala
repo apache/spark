@@ -198,7 +198,7 @@ class TextSocketStreamSuite extends StreamTest with SharedSparkSession {
       exception = intercept[SparkUnsupportedOperationException] {
         spark.readStream.schema(userSpecifiedSchema).format("socket").options(params).load()
       },
-      errorClass = "_LEGACY_ERROR_TEMP_2242",
+      condition = "_LEGACY_ERROR_TEMP_2242",
       parameters = Map("provider" -> "TextSocketSourceProvider"))
   }
 

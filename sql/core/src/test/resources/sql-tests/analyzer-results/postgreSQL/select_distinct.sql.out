@@ -5,7 +5,7 @@ SELECT two, stringu1, ten, string4
 FROM onek
 -- !query analysis
 CreateViewCommand `tmp`, SELECT two, stringu1, ten, string4
-FROM onek, false, true, LocalTempView, true
+FROM onek, false, true, LocalTempView, UNSUPPORTED, true
    +- Project [two#x, stringu1#x, ten#x, string4#x]
       +- SubqueryAlias spark_catalog.default.onek
          +- Relation spark_catalog.default.onek[unique1#x,unique2#x,two#x,four#x,ten#x,twenty#x,hundred#x,thousand#x,twothousand#x,fivethous#x,tenthous#x,odd#x,even#x,stringu1#x,stringu2#x,string4#x] parquet
@@ -88,7 +88,7 @@ CREATE OR REPLACE TEMPORARY VIEW disttable AS SELECT * FROM
 -- !query analysis
 CreateViewCommand `disttable`, SELECT * FROM
   (VALUES (1), (2), (3), (NULL))
-  AS v(f1), false, true, LocalTempView, true
+  AS v(f1), false, true, LocalTempView, UNSUPPORTED, true
    +- Project [f1#x]
       +- SubqueryAlias v
          +- Project [col1#x AS f1#x]

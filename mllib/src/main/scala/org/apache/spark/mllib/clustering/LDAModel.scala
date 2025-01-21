@@ -460,7 +460,7 @@ object LocalLDAModel extends Loader[LocalLDAModel] {
           ("docConcentration" -> docConcentration.toArray.toImmutableArraySeq) ~
           ("topicConcentration" -> topicConcentration) ~
           ("gammaShape" -> gammaShape)))
-      sc.parallelize(Seq(metadata), 1).saveAsTextFile(Loader.metadataPath(path))
+      spark.createDataFrame(Seq(Tuple1(metadata))).write.text(Loader.metadataPath(path))
 
       val topicsDenseMatrix = topicsMatrix.asBreeze.toDenseMatrix
       val topics = Range(0, k).map { topicInd =>
@@ -869,7 +869,7 @@ object DistributedLDAModel extends Loader[DistributedLDAModel] {
           ("topicConcentration" -> topicConcentration) ~
           ("iterationTimes" -> iterationTimes.toImmutableArraySeq) ~
           ("gammaShape" -> gammaShape)))
-      sc.parallelize(Seq(metadata), 1).saveAsTextFile(Loader.metadataPath(path))
+      spark.createDataFrame(Seq(Tuple1(metadata))).write.text(Loader.metadataPath(path))
 
       val newPath = new Path(Loader.dataPath(path), "globalTopicTotals").toUri.toString
       spark.createDataFrame(Seq(Data(Vectors.fromBreeze(globalTopicTotals)))).write.parquet(newPath)

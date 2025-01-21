@@ -18,12 +18,15 @@
 package org.apache.spark.deploy.rest
 
 import java.io.DataOutputStream
-import java.net.{HttpURLConnection, URL}
+import java.net.{HttpURLConnection, URI}
 import java.nio.charset.StandardCharsets
+import java.util.Base64
 
 import scala.collection.mutable
 
 import jakarta.servlet.http.HttpServletResponse
+import org.eclipse.jetty.util.thread.QueuedThreadPool
+import org.eclipse.jetty.util.thread.ThreadPool.SizedThreadPool
 import org.json4s.JsonAST._
 import org.json4s.jackson.JsonMethods._
 
@@ -32,6 +35,7 @@ import org.apache.spark.deploy.{SparkSubmit, SparkSubmitArguments}
 import org.apache.spark.deploy.DeployMessages._
 import org.apache.spark.deploy.master.DriverState._
 import org.apache.spark.deploy.master.RecoveryState
+import org.apache.spark.internal.config.{MASTER_REST_SERVER_FILTERS, MASTER_REST_SERVER_MAX_THREADS, MASTER_REST_SERVER_VIRTUAL_THREADS}
 import org.apache.spark.rpc._
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
@@ -92,7 +96,6 @@ class StandaloneRestSubmitSuite extends SparkFunSuite {
     val RANDOM_PORT = 9000
     val allMasters = s"$masterUrl,${Utils.localHostName()}:$RANDOM_PORT"
     conf.set("spark.master", allMasters)
-    conf.set("spark.app.name", "dreamer")
     val appArgs = Array("one", "two", "six")
     // main method calls this
     val response = new RestSubmissionClientApp().run("app-resource", "main-class", appArgs, conf)
@@ -110,7 +113,6 @@ class StandaloneRestSubmitSuite extends SparkFunSuite {
     val masterUrl = startDummyServer(submitId = submittedDriverId, submitMessage = submitMessage)
     val conf = new SparkConf(loadDefaults = false)
     conf.set("spark.master", masterUrl)
-    conf.set("spark.app.name", "dreamer")
     val appArgs = Array("one", "two", "six")
     // main method calls this
     val response = new RestSubmissionClientApp().run("app-resource", "main-class", appArgs, conf)
@@ -445,6 +447,30 @@ class StandaloneRestSubmitSuite extends SparkFunSuite {
     assert(filteredVariables == Map("SPARK_VAR" -> "1"))
   }
 
+  test("SPARK-49033: Support server-side environment variable replacement in REST Submission API") {
+    val request = new CreateSubmissionRequest
+    request.appResource = ""
+    request.mainClass = ""
+    request.appArgs = Array.empty[String]
+    request.sparkProperties = Map.empty[String, String]
+    request.environmentVariables = Map("AWS_ENDPOINT_URL" -> "{{SPARK_SCALA_VERSION}}")
+    val servlet = new StandaloneSubmitRequestServlet(null, null, null)
+    val desc = servlet.buildDriverDescription(request, "spark://master:7077", 6066)
+    assert(desc.command.environment.get("AWS_ENDPOINT_URL") === Some("2.13"))
+  }
+
+  test("SPARK-49034: Support server-side sparkProperties replacement in REST Submission API") {
+    val request = new CreateSubmissionRequest
+    request.appResource = ""
+    request.mainClass = ""
+    request.appArgs = Array.empty[String]
+    request.sparkProperties = Map("spark.hadoop.fs.s3a.endpoint" -> "{{SPARK_SCALA_VERSION}}")
+    request.environmentVariables = Map.empty[String, String]
+    val servlet = new StandaloneSubmitRequestServlet(null, null, null)
+    val desc = servlet.buildDriverDescription(request, "spark://master:7077", 6066)
+    assert(desc.command.javaOpts.exists(_.contains("-Dspark.hadoop.fs.s3a.endpoint=2.13")))
+  }
+
   test("SPARK-45197: Make StandaloneRestServer add JavaModuleOptions to drivers") {
     val request = new CreateSubmissionRequest
     request.appResource = ""
@@ -455,6 +481,100 @@ class StandaloneRestSubmitSuite extends SparkFunSuite {
     val servlet = new StandaloneSubmitRequestServlet(null, null, null)
     val desc = servlet.buildDriverDescription(request, "spark://master:7077", 6066)
     assert(desc.command.javaOpts.exists(_.startsWith("--add-opens")))
+  }
+
+  test("SPARK-49103: `spark.master.rest.filters` loads filters successfully") {
+    val conf = new SparkConf()
+    val localhost = Utils.localHostName()
+    val securityManager = new SecurityManager(conf)
+    rpcEnv = Some(RpcEnv.create("rest-with-filter", localhost, 0, conf, securityManager))
+    val fakeMasterRef = rpcEnv.get.setupEndpoint("fake-master", new DummyMaster(rpcEnv.get))
+
+    // Causes exceptions in order to verify new configuration loads filters successfully
+    conf.set(MASTER_REST_SERVER_FILTERS.key, "org.apache.spark.ui.JWSFilter")
+    server = Some(new StandaloneRestServer(localhost, 0, conf, fakeMasterRef, "spark://fake:7077"))
+    val m = intercept[IllegalArgumentException] {
+      server.get.start()
+    }.getMessage()
+    assert(m.contains("Decode argument cannot be null"))
+  }
+
+  private val TEST_KEY = Base64.getUrlEncoder.encodeToString(
+    "Visit https://spark.apache.org to download Apache Spark.".getBytes())
+
+  test("SPARK-49103: REST server stars successfully with `spark.master.rest.filters`") {
+    val conf = new SparkConf()
+    val localhost = Utils.localHostName()
+    val securityManager = new SecurityManager(conf)
+    rpcEnv = Some(RpcEnv.create("rest-with-filter", localhost, 0, conf, securityManager))
+    val fakeMasterRef = rpcEnv.get.setupEndpoint("fake-master", new DummyMaster(rpcEnv.get))
+    conf.set(MASTER_REST_SERVER_FILTERS.key, "org.apache.spark.ui.JWSFilter")
+    conf.set("spark.org.apache.spark.ui.JWSFilter.param.secretKey", TEST_KEY)
+    server = Some(new StandaloneRestServer(localhost, 0, conf, fakeMasterRef, "spark://fake:7077"))
+    server.get.start()
+  }
+
+  test("SPARK-49103: JWSFilter successfully protects REST API via configurations") {
+    val conf = new SparkConf()
+    val localhost = Utils.localHostName()
+    val securityManager = new SecurityManager(conf)
+    rpcEnv = Some(RpcEnv.create("rest-with-filter", localhost, 0, conf, securityManager))
+    val fakeMasterRef = rpcEnv.get.setupEndpoint("fake-master", new DummyMaster(rpcEnv.get))
+    conf.set(MASTER_REST_SERVER_FILTERS.key, "org.apache.spark.ui.JWSFilter")
+    conf.set("spark.org.apache.spark.ui.JWSFilter.param.secretKey", TEST_KEY)
+    server = Some(new StandaloneRestServer(localhost, 0, conf, fakeMasterRef, "spark://fake:7077"))
+    val port = server.get.start()
+    val masterUrl = s"spark://$localhost:$port"
+    val json = constructSubmitRequest(masterUrl).toJson
+    val httpUrl = masterUrl.replace("spark://", "http://")
+    val submitRequestPath = s"$httpUrl/${RestSubmissionServer.PROTOCOL_VERSION}/submissions/create"
+    val conn = sendHttpRequest(submitRequestPath, "POST", json)
+    assert(conn.getResponseCode === HttpServletResponse.SC_FORBIDDEN)
+  }
+
+  test("SPARK-50195: Fix StandaloneRestServer to propagate app name to SparkSubmit properly") {
+    Seq((classOf[SparkSubmit].getName, Seq("-c", "spark.app.name=app1")),
+        ("", Seq.empty)).foreach { case (mainClass, expectedArguments) =>
+      val request = new CreateSubmissionRequest
+      request.appResource = ""
+      request.mainClass = mainClass
+      request.appArgs = Array.empty[String]
+      request.sparkProperties = Map("spark.app.name" -> "app1")
+      request.environmentVariables = Map.empty[String, String]
+      val servlet = new StandaloneSubmitRequestServlet(null, null, null)
+      val desc = servlet.buildDriverDescription(request, "spark://master:7077", 6066)
+      assert(desc.command.arguments.slice(3, 5) === expectedArguments)
+    }
+  }
+
+  test("SPARK-50381: Support spark.master.rest.maxThreads") {
+    val conf = new SparkConf()
+    val localhost = Utils.localHostName()
+    val securityManager = new SecurityManager(conf)
+    rpcEnv = Some(RpcEnv.create("rest-with-maxThreads", localhost, 0, conf, securityManager))
+    val fakeMasterRef = rpcEnv.get.setupEndpoint("fake-master", new DummyMaster(rpcEnv.get))
+    conf.set(MASTER_REST_SERVER_MAX_THREADS, 2000)
+    server = Some(new StandaloneRestServer(localhost, 0, conf, fakeMasterRef, "spark://fake:7077"))
+    server.get.start()
+    val pool = server.get._server.get.getThreadPool.asInstanceOf[SizedThreadPool]
+    assert(pool.getMaxThreads === 2000)
+  }
+
+  test("SPARK-50383: Support spark.master.rest.virtualThread.enabled") {
+    val conf = new SparkConf()
+    val localhost = Utils.localHostName()
+    val securityManager = new SecurityManager(conf)
+    rpcEnv = Some(RpcEnv.create("rest-with-virtualThreads", localhost, 0, conf, securityManager))
+    val fakeMasterRef = rpcEnv.get.setupEndpoint("fake-master", new DummyMaster(rpcEnv.get))
+    conf.set(MASTER_REST_SERVER_VIRTUAL_THREADS, true)
+    server = Some(new StandaloneRestServer(localhost, 0, conf, fakeMasterRef, "spark://fake:7077"))
+    server.get.start()
+    val pool = server.get._server.get.getThreadPool.asInstanceOf[QueuedThreadPool]
+    if (Utils.isJavaVersionAtLeast21) {
+      assert(pool.getVirtualThreadsExecutor != null)
+    } else {
+      assert(pool.getVirtualThreadsExecutor == null)
+    }
   }
 
   /* --------------------- *
@@ -599,7 +719,7 @@ class StandaloneRestSubmitSuite extends SparkFunSuite {
       url: String,
       method: String,
       body: String = ""): HttpURLConnection = {
-    val conn = new URL(url).openConnection().asInstanceOf[HttpURLConnection]
+    val conn = new URI(url).toURL.openConnection().asInstanceOf[HttpURLConnection]
     conn.setRequestMethod(method)
     if (body.nonEmpty) {
       conn.setDoOutput(true)

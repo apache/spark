@@ -27,15 +27,14 @@ import org.apache.spark.annotation.{DeveloperApi, Since}
 /**
  * The data type for User Defined Types (UDTs).
  *
- * This interface allows a user to make their own classes more interoperable with SparkSQL;
- * e.g., by creating a [[UserDefinedType]] for a class X, it becomes possible to create
- * a `DataFrame` which has class X in the schema.
+ * This interface allows a user to make their own classes more interoperable with SparkSQL; e.g.,
+ * by creating a [[UserDefinedType]] for a class X, it becomes possible to create a `DataFrame`
+ * which has class X in the schema.
  *
- * For SparkSQL to recognize UDTs, the UDT must be annotated with
- * [[SQLUserDefinedType]].
+ * For SparkSQL to recognize UDTs, the UDT must be annotated with [[SQLUserDefinedType]].
  *
- * The conversion via `serialize` occurs when instantiating a `DataFrame` from another RDD.
- * The conversion via `deserialize` occurs when reading from a `DataFrame`.
+ * The conversion via `serialize` occurs when instantiating a `DataFrame` from another RDD. The
+ * conversion via `deserialize` occurs when reading from a `DataFrame`.
  */
 @DeveloperApi
 @Since("3.2.0")
@@ -81,7 +80,7 @@ abstract class UserDefinedType[UserType >: Null] extends DataType with Serializa
   override private[sql] def acceptsType(dataType: DataType): Boolean = dataType match {
     case other: UserDefinedType[_] if this.userClass != null && other.userClass != null =>
       this.getClass == other.getClass ||
-        this.userClass.isAssignableFrom(other.userClass)
+      this.userClass.isAssignableFrom(other.userClass)
     case _ => false
   }
 
@@ -98,6 +97,7 @@ abstract class UserDefinedType[UserType >: Null] extends DataType with Serializa
 }
 
 private[spark] object UserDefinedType {
+
   /**
    * Get the sqlType of a (potential) [[UserDefinedType]].
    */
@@ -115,7 +115,8 @@ private[spark] object UserDefinedType {
 private[sql] class PythonUserDefinedType(
     val sqlType: DataType,
     override val pyUDT: String,
-    override val serializedPyClass: String) extends UserDefinedType[Any] {
+    override val serializedPyClass: String)
+    extends UserDefinedType[Any] {
 
   /* The serialization is handled by UDT class in Python */
   override def serialize(obj: Any): Any = obj

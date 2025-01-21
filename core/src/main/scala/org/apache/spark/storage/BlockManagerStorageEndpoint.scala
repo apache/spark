@@ -60,7 +60,13 @@ class BlockManagerStorageEndpoint(
         if (mapOutputTracker != null) {
           mapOutputTracker.unregisterShuffle(shuffleId)
         }
-        SparkEnv.get.shuffleManager.unregisterShuffle(shuffleId)
+        val shuffleManager = SparkEnv.get.shuffleManager
+        if (shuffleManager != null) {
+          shuffleManager.unregisterShuffle(shuffleId)
+        } else {
+          logDebug(log"Ignore remove shuffle ${MDC(SHUFFLE_ID, shuffleId)}")
+          true
+        }
       }
 
     case DecommissionBlockManager =>

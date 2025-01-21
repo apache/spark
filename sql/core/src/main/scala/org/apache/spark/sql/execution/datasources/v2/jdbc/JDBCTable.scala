@@ -70,7 +70,8 @@ case class JDBCTable(ident: Identifier, schema: StructType, jdbcOptions: JDBCOpt
           "indexName" -> toSQLId(indexName),
           "tableName" -> toSQLId(name)),
         dialect = JdbcDialects.get(jdbcOptions.url),
-        description = s"Failed to create index $indexName in ${name()}") {
+        description = s"Failed to create index $indexName in ${name()}",
+        isRuntime = false) {
         JdbcUtils.createIndex(
           conn, indexName, ident, columns, columnsProperties, properties, jdbcOptions)
       }
@@ -92,7 +93,8 @@ case class JDBCTable(ident: Identifier, schema: StructType, jdbcOptions: JDBCOpt
           "indexName" -> toSQLId(indexName),
           "tableName" -> toSQLId(name)),
         dialect = JdbcDialects.get(jdbcOptions.url),
-        description = s"Failed to drop index $indexName in ${name()}") {
+        description = s"Failed to drop index $indexName in ${name()}",
+        isRuntime = false) {
         JdbcUtils.dropIndex(conn, indexName, ident, jdbcOptions)
       }
     }

@@ -74,7 +74,7 @@ object IntegrationTestUtils {
 
         // Redirect server log into console
         "--conf",
-        s"spark.driver.extraJavaOptions=-Dlog4j.configuration=$log4j2")
+        s"spark.driver.extraJavaOptions=-Dlog4j.configurationFile=$log4j2")
     } else Seq.empty
   }
 

@@ -24,13 +24,7 @@ from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 class DataFramePlotParityTests(
     DataFramePlotTestsMixin, PandasOnSparkTestUtils, ReusedConnectTestCase
 ):
-    @unittest.skip("Test depends on Spark ML which is not supported from Spark Connect.")
-    def test_compute_hist_multi_columns(self):
-        super().test_compute_hist_multi_columns()
-
-    @unittest.skip("Test depends on Spark ML which is not supported from Spark Connect.")
-    def test_compute_hist_single_column(self):
-        super().test_compute_hist_single_column()
+    pass
 
 
 if __name__ == "__main__":

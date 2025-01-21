@@ -24,6 +24,7 @@ import scala.collection.{immutable, mutable}
 import scala.jdk.CollectionConverters._
 import scala.util.{Failure, Success, Try}
 
+import com.google.protobuf
 import com.google.protobuf.util.JsonFormat
 import com.google.protobuf.util.JsonFormat.TypeRegistry
 import io.grpc.inprocess.InProcessChannelBuilder
@@ -36,6 +37,8 @@ import org.apache.spark.sql.{functions => fn}
 import org.apache.spark.sql.avro.{functions => avroFn}
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.StringEncoder
+import org.apache.spark.sql.catalyst.util.CollationFactory
+import org.apache.spark.sql.connect.ConnectConversions._
 import org.apache.spark.sql.connect.client.SparkConnectClient
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions.lit
@@ -70,7 +73,7 @@ import org.apache.spark.util.SparkFileUtils
  * compatibility.
  *
  * Note that the plan protos are used as the input for the `ProtoToParsedPlanTestSuite` in the
- * `connector/connect/server` module
+ * `sql/connect/server` module
  */
 // scalastyle:on
 class PlanGenerationTestSuite
@@ -87,7 +90,7 @@ class PlanGenerationTestSuite
 
   protected val queryFilePath: Path = commonResourcePath.resolve("query-tests/queries")
 
-  // A relative path to /connector/connect/server, used by `ProtoToParsedPlanTestSuite` to run
+  // A relative path to /sql/connect/server, used by `ProtoToParsedPlanTestSuite` to run
   // with the datasource.
   protected val testDataPath: Path = java.nio.file.Paths.get(
     "../",
@@ -117,6 +120,7 @@ class PlanGenerationTestSuite
 
   override protected def beforeEach(): Unit = {
     session.resetPlanIdGenerator()
+    internal.UnresolvedNamedLambdaVariable.resetIdGenerator()
   }
 
   override protected def afterAll(): Unit = {
@@ -143,7 +147,7 @@ class PlanGenerationTestSuite
   }
 
   private def test(name: String)(f: => Dataset[_]): Unit = super.test(name) {
-    val actual = f.plan.getRoot
+    val actual = trimJvmOriginFields(f.plan.getRoot)
     val goldenFile = queryFilePath.resolve(name.replace(' ', '_') + ".proto.bin")
     Try(readRelation(goldenFile)) match {
       case Success(expected) if expected == actual =>
@@ -155,10 +159,10 @@ class PlanGenerationTestSuite
         fail(s"""
              |Expected and actual plans do not match:
              |
-             |=== Expected Plan ===
+             |=== Expected Plan (with excess fields trimmed) ===
              |$expected
              |
-             |=== Actual Plan ===
+             |=== Actual Plan (with excess fields trimmed) ===
              |$actual
              |""".stripMargin)
       case Failure(_) if regenerateGoldenFiles =>
@@ -193,6 +197,50 @@ class PlanGenerationTestSuite
     finally {
       writer.close()
     }
+  }
+
+  private def trimJvmOriginFields[T <: protobuf.Message](message: T): T = {
+    def trim(builder: proto.JvmOrigin.Builder): Unit = {
+      builder
+        .clearLine()
+        .clearStartPosition()
+        .clearStartIndex()
+        .clearStopIndex()
+      val trimmedStackTraces = builder.getStackTraceBuilderList.asScala.map { element =>
+        element.clearLineNumber()
+        if (element.getMethodName != null && element.getMethodName.startsWith("$anonfun")) {
+          // Anonymous functions contain an sequence ID that is not stable.
+          element.setMethodName("~~trimmed~anonfun~~")
+        }
+        element.build()
+      }
+      builder.clearStackTrace().addAllStackTrace(trimmedStackTraces.asJava)
+    }
+
+    val builder = message.toBuilder
+
+    builder match {
+      case exp: proto.Relation.Builder
+          if exp.hasCommon && exp.getCommon.hasOrigin && exp.getCommon.getOrigin.hasJvmOrigin =>
+        trim(exp.getCommonBuilder.getOriginBuilder.getJvmOriginBuilder)
+      case exp: proto.Expression.Builder
+          if exp.hasCommon && exp.getCommon.hasOrigin && exp.getCommon.getOrigin.hasJvmOrigin =>
+        trim(exp.getCommonBuilder.getOriginBuilder.getJvmOriginBuilder)
+      case _ => // Other stuff that does not have origin
+    }
+
+    builder.getAllFields.asScala.foreach {
+      case (desc, msg: protobuf.Message) =>
+        builder.setField(desc, trimJvmOriginFields(msg))
+      case (desc, list: java.util.List[_]) =>
+        val newList = list.asScala.map {
+          case msg: protobuf.Message => trimJvmOriginFields(msg)
+          case other => other // Primitive types
+        }
+        builder.setField(desc, newList.asJava)
+      case _ => // Primitive types
+    }
+    builder.build().asInstanceOf[T]
   }
 
   private val urlWithUserAndPass = "jdbc:h2:mem:testdb0;user=testUser;password=testPass"
@@ -550,6 +598,14 @@ class PlanGenerationTestSuite
       valueColumnName = "value")
   }
 
+  test("transpose index_column") {
+    simple.transpose(indexColumn = fn.col("id"))
+  }
+
+  test("transpose no_index_column") {
+    simple.transpose()
+  }
+
   test("offset") {
     simple.offset(1000)
   }
@@ -699,7 +755,8 @@ class PlanGenerationTestSuite
   }
 
   test("select collated string") {
-    val schema = StructType(StructField("s", StringType(1)) :: Nil)
+    val schema =
+      StructType(StructField("s", StringType(CollationFactory.UTF8_LCASE_COLLATION_ID)) :: Nil)
     createLocalRelation(schema.catalogString).select("s")
   }
 
@@ -1778,6 +1835,10 @@ class PlanGenerationTestSuite
     fn.substring(fn.col("g"), 4, 5)
   }
 
+  functionTest("substring using columns") {
+    fn.substring(fn.col("g"), fn.col("a"), fn.col("b"))
+  }
+
   functionTest("substring_index") {
     fn.substring_index(fn.col("g"), ";", 5)
   }
@@ -1794,7 +1855,11 @@ class PlanGenerationTestSuite
     fn.sentences(fn.col("g"))
   }
 
-  functionTest("sentences with locale") {
+  functionTest("sentences with language") {
+    fn.sentences(fn.col("g"), lit("en"))
+  }
+
+  functionTest("sentences with language and country") {
     fn.sentences(fn.col("g"), lit("en"), lit("US"))
   }
 
@@ -1905,6 +1970,47 @@ class PlanGenerationTestSuite
     fn.make_interval()
   }
 
+  functionTest("try_make_interval years months weeks days hours mins secs") {
+    fn.try_make_interval(
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("b"))
+  }
+
+  functionTest("try_make_interval years months weeks days hours mins") {
+    fn.try_make_interval(
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("a"))
+  }
+
+  functionTest("try_make_interval years months weeks days hours") {
+    fn.try_make_interval(fn.col("a"), fn.col("a"), fn.col("a"), fn.col("a"), fn.col("a"))
+  }
+
+  functionTest("try_make_interval years months weeks days") {
+    fn.try_make_interval(fn.col("a"), fn.col("a"), fn.col("a"), fn.col("a"))
+  }
+
+  functionTest("try_make_interval years months weeks") {
+    fn.try_make_interval(fn.col("a"), fn.col("a"), fn.col("a"))
+  }
+
+  functionTest("try_make_interval years months") {
+    fn.try_make_interval(fn.col("a"), fn.col("a"))
+  }
+
+  functionTest("try_make_interval years") {
+    fn.try_make_interval(fn.col("a"))
+  }
+
   functionTest("make_timestamp with timezone") {
     fn.make_timestamp(
       fn.col("a"),
@@ -1949,6 +2055,58 @@ class PlanGenerationTestSuite
 
   functionTest("make_timestamp_ntz") {
     fn.make_timestamp_ntz(
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("b"))
+  }
+
+  functionTest("try_make_timestamp with timezone") {
+    fn.try_make_timestamp(
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("b"),
+      fn.col("g"))
+  }
+
+  functionTest("try_make_timestamp without timezone") {
+    fn.try_make_timestamp(
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("b"))
+  }
+
+  functionTest("try_make_timestamp_ltz with timezone") {
+    fn.try_make_timestamp_ltz(
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("b"),
+      fn.col("g"))
+  }
+
+  functionTest("try_make_timestamp_ltz without timezone") {
+    fn.try_make_timestamp_ltz(
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("b"))
+  }
+
+  functionTest("try_make_timestamp_ntz") {
+    fn.try_make_timestamp_ntz(
       fn.col("a"),
       fn.col("a"),
       fn.col("a"),
@@ -2305,6 +2463,14 @@ class PlanGenerationTestSuite
     fn.timestamp_micros(fn.col("x"))
   }
 
+  temporalFunctionTest("timestamp_diff") {
+    fn.timestamp_diff("year", fn.col("t"), fn.col("t"))
+  }
+
+  temporalFunctionTest("timestamp_add") {
+    fn.timestamp_add("week", fn.col("x"), fn.col("t"))
+  }
+
   // Array of Long
   // Array of Long
   // Array of Array of Long
@@ -2419,6 +2585,10 @@ class PlanGenerationTestSuite
     fn.aggregate(fn.col("e"), lit(0), (x, y) => x + y)
   }
 
+  functionTest("aggregate with finish lambda") {
+    fn.aggregate(fn.col("e"), lit(0), (x, y) => x + y, x => x + lit(2))
+  }
+
   functionTest("reduce") {
     fn.reduce(fn.col("e"), lit(0), (x, y) => x + y)
   }
@@ -2477,6 +2647,10 @@ class PlanGenerationTestSuite
 
   functionTest("from_json") {
     fn.from_json(fn.col("g"), simpleSchema)
+  }
+
+  functionTest("from_json with json schema") {
+    fn.from_json(fn.col("g"), fn.lit(simpleSchema.json))
   }
 
   functionTest("schema_of_json") {
@@ -2655,12 +2829,24 @@ class PlanGenerationTestSuite
     fn.parse_url(fn.col("g"), fn.col("g"), fn.col("g"))
   }
 
+  functionTest("try_parse_url") {
+    fn.try_parse_url(fn.col("g"), fn.col("g"))
+  }
+
+  functionTest("try_parse_url with key") {
+    fn.try_parse_url(fn.col("g"), fn.col("g"), fn.col("g"))
+  }
+
   functionTest("printf") {
     fn.printf(fn.col("g"), fn.col("a"), fn.col("g"))
   }
 
   functionTest("url_decode") {
     fn.url_decode(fn.col("g"))
+  }
+
+  functionTest("try_url_decode") {
+    fn.try_url_decode(fn.col("g"))
   }
 
   functionTest("url_encode") {
@@ -2950,6 +3136,14 @@ class PlanGenerationTestSuite
     fn.call_function("lower", fn.col("g"))
   }
 
+  functionTest("from_xml") {
+    fn.from_xml(fn.col("g"), simpleSchema)
+  }
+
+  functionTest("from_xml with json schema") {
+    fn.from_xml(fn.col("g"), fn.lit(simpleSchema.json))
+  }
+
   test("hll_sketch_agg with column lgConfigK") {
     binary.select(fn.hll_sketch_agg(fn.col("bytes"), lit(0)))
   }
@@ -3227,34 +3421,12 @@ class PlanGenerationTestSuite
   }
 
   /* Extensions */
-  test("relation extension deprecated") {
-    val input = proto.ExamplePluginRelation
-      .newBuilder()
-      .setInput(simple.plan.getRoot)
-      .build()
-    session.newDataFrame(com.google.protobuf.Any.pack(input))
-  }
-
-  test("expression extension deprecated") {
-    val extension = proto.ExamplePluginExpression
-      .newBuilder()
-      .setChild(
-        proto.Expression
-          .newBuilder()
-          .setUnresolvedAttribute(proto.Expression.UnresolvedAttribute
-            .newBuilder()
-            .setUnparsedIdentifier("id")))
-      .setCustomField("abc")
-      .build()
-    simple.select(Column(com.google.protobuf.Any.pack(extension)))
-  }
-
   test("relation extension") {
     val input = proto.ExamplePluginRelation
       .newBuilder()
       .setInput(simple.plan.getRoot)
       .build()
-    session.newDataFrame(com.google.protobuf.Any.pack(input).toByteArray)
+    session.newDataFrame(_.setExtension(com.google.protobuf.Any.pack(input)))
   }
 
   test("expression extension") {
@@ -3268,7 +3440,7 @@ class PlanGenerationTestSuite
             .setUnparsedIdentifier("id")))
       .setCustomField("abc")
       .build()
-    simple.select(Column.forExtension(com.google.protobuf.Any.pack(extension).toByteArray))
+    simple.select(column(_.setExtension(com.google.protobuf.Any.pack(extension))))
   }
 
   test("crosstab") {
@@ -3329,11 +3501,11 @@ class PlanGenerationTestSuite
   /* Protobuf functions */
   // scalastyle:off line.size.limit
   // If `common.desc` needs to be updated, execute the following command to regenerate it:
-  //  1. cd connector/connect/common/src/main/protobuf/spark/connect
+  //  1. cd sql/connect/common/src/main/protobuf/spark/connect
   //  2. protoc --include_imports --descriptor_set_out=../../../../test/resources/protobuf-tests/common.desc common.proto
   // scalastyle:on line.size.limit
-  private val testDescFilePath: String = s"${IntegrationTestUtils.sparkHome}/connector/" +
-    "connect/common/src/test/resources/protobuf-tests/common.desc"
+  private val testDescFilePath: String = s"${IntegrationTestUtils.sparkHome}/sql/connect/" +
+    "common/src/test/resources/protobuf-tests/common.desc"
 
   // TODO(SPARK-45030): Re-enable this test when all Maven test scenarios succeed and there
   //  are no other negative impacts. For the problem description, please refer to SPARK-45029
@@ -3365,27 +3537,35 @@ class PlanGenerationTestSuite
   }
 
   test("to_protobuf messageClassName") {
-    binary.select(pbFn.to_protobuf(fn.col("bytes"), classOf[StorageLevel].getName))
+    val df = binary.select(
+      pbFn.from_protobuf(fn.col("bytes"), "StorageLevel", testDescFilePath).alias("col"))
+    df.select(pbFn.to_protobuf(fn.col("col"), classOf[StorageLevel].getName))
   }
 
   test("to_protobuf messageClassName options") {
-    binary.select(
+    val df = binary.select(
+      pbFn.from_protobuf(fn.col("bytes"), "StorageLevel", testDescFilePath).alias("col"))
+    df.select(
       pbFn.to_protobuf(
-        fn.col("bytes"),
+        fn.col("col"),
         classOf[StorageLevel].getName,
         Map("recursive.fields.max.depth" -> "2").asJava))
   }
 
   test("to_protobuf messageClassName descFilePath options") {
-    binary.select(
+    val df = binary.select(
+      pbFn.from_protobuf(fn.col("bytes"), "StorageLevel", testDescFilePath).alias("col"))
+    df.select(
       pbFn.to_protobuf(
-        fn.col("bytes"),
+        fn.col("col"),
         "StorageLevel",
         testDescFilePath,
         Map("recursive.fields.max.depth" -> "2").asJava))
   }
 
   test("to_protobuf messageClassName descFilePath") {
-    binary.select(pbFn.to_protobuf(fn.col("bytes"), "StorageLevel", testDescFilePath))
+    val df = binary.select(
+      pbFn.from_protobuf(fn.col("bytes"), "StorageLevel", testDescFilePath).alias("col"))
+    df.select(pbFn.to_protobuf(fn.col("col"), "StorageLevel", testDescFilePath))
   }
 }

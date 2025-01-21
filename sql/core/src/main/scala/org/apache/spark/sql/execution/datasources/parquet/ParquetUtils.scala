@@ -45,7 +45,7 @@ import org.apache.spark.sql.execution.datasources.{AggregatePushDownUtils, Outpu
 import org.apache.spark.sql.execution.datasources.v2.V2ColumnUtils
 import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
 import org.apache.spark.sql.internal.SQLConf.PARQUET_AGGREGATE_PUSHDOWN_ENABLED
-import org.apache.spark.sql.types.{ArrayType, AtomicType, DataType, MapType, StructField, StructType, UserDefinedType}
+import org.apache.spark.sql.types.{ArrayType, AtomicType, DataType, MapType, StructField, StructType, UserDefinedType, VariantType}
 import org.apache.spark.util.ArrayImplicits._
 
 object ParquetUtils extends Logging {
@@ -420,6 +420,22 @@ object ParquetUtils extends Logging {
     statistics.getNumNulls;
   }
 
+  // Replaces each VariantType in the schema with the corresponding type in the shredding schema.
+  // Used for testing, where we force a single shredding schema for all Variant fields.
+  // Does not touch Variant fields nested in arrays, maps, or UDTs.
+  private def replaceVariantTypes(schema: StructType, shreddingSchema: StructType): StructType = {
+    val newFields = schema.fields.zip(shreddingSchema.fields).map {
+      case (field, shreddingField) =>
+        field.dataType match {
+          case s: StructType =>
+            field.copy(dataType = replaceVariantTypes(s, shreddingSchema))
+          case VariantType => field.copy(dataType = shreddingSchema)
+          case _ => field
+        }
+    }
+    StructType(newFields)
+  }
+
   def prepareWrite(
       sqlConf: SQLConf,
       job: Job,
@@ -434,10 +450,11 @@ object ParquetUtils extends Logging {
         classOf[OutputCommitter])
 
     if (conf.get(SQLConf.PARQUET_OUTPUT_COMMITTER_CLASS.key) == null) {
-      logInfo("Using default output committer for Parquet: " +
-        classOf[ParquetOutputCommitter].getCanonicalName)
+      logInfo(log"Using default output committer for Parquet: " +
+        log"${MDC(CLASS_NAME, classOf[ParquetOutputCommitter].getCanonicalName)}")
     } else {
-      logInfo("Using user defined output committer for Parquet: " + committerClass.getCanonicalName)
+      logInfo(log"Using user defined output committer for Parquet: " +
+        log"${MDC(CLASS_NAME, committerClass.getCanonicalName)}")
     }
 
     conf.setClass(
@@ -453,8 +470,23 @@ object ParquetUtils extends Logging {
 
     ParquetOutputFormat.setWriteSupportClass(job, classOf[ParquetWriteSupport])
 
+    val shreddingSchema = if (sqlConf.getConf(SQLConf.VARIANT_WRITE_SHREDDING_ENABLED) &&
+        !sqlConf.getConf(SQLConf.VARIANT_FORCE_SHREDDING_SCHEMA_FOR_TEST).isEmpty) {
+      // Convert the schema to a shredding schema, and replace it anywhere that there is a
+      // VariantType in the original schema.
+      val simpleShreddingSchema = DataType.fromDDL(
+        sqlConf.getConf(SQLConf.VARIANT_FORCE_SHREDDING_SCHEMA_FOR_TEST)
+      )
+      val oneShreddingSchema = SparkShreddingUtils.variantShreddingSchema(simpleShreddingSchema)
+      val schemaWithMetadata = SparkShreddingUtils.addWriteShreddingMetadata(oneShreddingSchema)
+      Some(replaceVariantTypes(dataSchema, schemaWithMetadata))
+    } else {
+      None
+    }
+
     // This metadata is useful for keeping UDTs like Vector/Matrix.
     ParquetWriteSupport.setSchema(dataSchema, conf)
+    shreddingSchema.foreach(ParquetWriteSupport.setShreddingSchema(_, conf))
 
     // Sets flags for `ParquetWriteSupport`, which converts Catalyst schema to Parquet
     // schema and writes actual rows to Parquet files.

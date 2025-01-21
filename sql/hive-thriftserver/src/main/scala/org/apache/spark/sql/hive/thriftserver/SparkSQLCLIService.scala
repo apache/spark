@@ -33,21 +33,21 @@ import org.apache.hive.service.Service.STATE
 import org.apache.hive.service.auth.HiveAuthFactory
 import org.apache.hive.service.cli._
 import org.apache.hive.service.server.HiveServer2
-import org.slf4j.Logger
 
-import org.apache.spark.sql.SQLContext
+import org.apache.spark.internal.SparkLogger
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.util.SQLKeywordUtils
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.hive.thriftserver.ReflectionUtils._
 
-private[hive] class SparkSQLCLIService(hiveServer: HiveServer2, sqlContext: SQLContext)
+private[hive] class SparkSQLCLIService(hiveServer: HiveServer2, sparkSession: SparkSession)
   extends CLIService(hiveServer)
   with ReflectedCompositeService {
 
   override def init(hiveConf: HiveConf): Unit = {
     setSuperField(this, "hiveConf", hiveConf)
 
-    val sparkSqlSessionManager = new SparkSQLSessionManager(hiveServer, sqlContext)
+    val sparkSqlSessionManager = new SparkSQLSessionManager(hiveServer, sparkSession)
     setSuperField(this, "sessionManager", sparkSqlSessionManager)
     addService(sparkSqlSessionManager)
     var sparkServiceUGI: UserGroupInformation = null
@@ -103,7 +103,7 @@ private[hive] class SparkSQLCLIService(hiveServer: HiveServer2, sqlContext: SQLC
     getInfoType match {
       case GetInfoType.CLI_SERVER_NAME => new GetInfoValue("Spark SQL")
       case GetInfoType.CLI_DBMS_NAME => new GetInfoValue("Spark SQL")
-      case GetInfoType.CLI_DBMS_VER => new GetInfoValue(sqlContext.sparkContext.version)
+      case GetInfoType.CLI_DBMS_VER => new GetInfoValue(sparkSession.version)
       case GetInfoType.CLI_ODBC_KEYWORDS =>
         new GetInfoValue(SQLKeywordUtils.keywords.mkString(","))
       case _ => super.getInfo(sessionHandle, getInfoType)
@@ -113,10 +113,10 @@ private[hive] class SparkSQLCLIService(hiveServer: HiveServer2, sqlContext: SQLC
 
 private[thriftserver] trait ReflectedCompositeService { this: AbstractService =>
 
-  private val logInfo = (msg: String) => getAncestorField[Logger](this, 3, "LOG").info(msg)
+  private val logInfo = (msg: String) => getAncestorField[SparkLogger](this, 3, "LOG").info(msg)
 
   private val logError = (msg: String, e: Throwable) =>
-    getAncestorField[Logger](this, 3, "LOG").error(msg, e)
+    getAncestorField[SparkLogger](this, 3, "LOG").error(msg, e)
 
   def initCompositeService(hiveConf: HiveConf): Unit = {
     // Emulating `CompositeService.init(hiveConf)`

@@ -176,7 +176,7 @@ def as_spark_type(
             return None
         return types.ArrayType(element_type)
     # BinaryType
-    elif tpe in (bytes, np.character, np.bytes_, np.string_):
+    elif tpe in (bytes, np.character, np.bytes_):
         return types.BinaryType()
     # BooleanType
     elif tpe in (bool, np.bool_, "bool", "?"):
@@ -190,7 +190,7 @@ def as_spark_type(
     elif tpe in (decimal.Decimal,):
         # TODO: considering the precision & scale for decimal type.
         return types.DecimalType(38, 18)
-    elif tpe in (float, np.float_, np.float64, "float", "float64", "double"):
+    elif tpe in (float, np.double, np.float64, "float", "float64", "double"):
         return types.DoubleType()
     elif tpe in (np.float32, "float32", "f"):
         return types.FloatType()
@@ -201,7 +201,7 @@ def as_spark_type(
     elif tpe in (np.int16, "int16", "short"):
         return types.ShortType()
     # StringType
-    elif tpe in (str, np.unicode_, "str", "U"):
+    elif tpe in (str, np.str_, "str", "U"):
         return types.StringType()
     # TimestampType or TimestampNTZType if timezone is not specified.
     elif tpe in (datetime.datetime, np.datetime64, "datetime64[ns]", "M", pd.Timestamp):

@@ -26,7 +26,7 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.spark._
 import org.apache.spark.executor.{ExecutorMetrics, TaskMetrics}
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.internal.config.CPUS_PER_TASK
 import org.apache.spark.internal.config.Status._
 import org.apache.spark.resource.ResourceProfile.CPUS
@@ -662,7 +662,7 @@ private[spark] class AppStatusListener(
         case e: TaskFailedReason => // All other failure cases
           Some(e.toErrorString)
         case other =>
-          logInfo(s"Unhandled task end reason: $other")
+          logInfo(log"Unhandled task end reason: ${MDC(LogKeys.REASON, other)}")
           None
       }
       task.errorMessage = errorMessage

@@ -259,4 +259,22 @@ public class DataTypes {
 
     return StructType$.MODULE$.apply(fields);
   }
+
+  /**
+   * Creates a CharType with the given length.
+   *
+   * @since 4.0.0
+   */
+  public static CharType createCharType(int length) {
+    return new CharType(length);
+  }
+
+  /**
+   * Creates a VarcharType with the given length.
+   *
+   * @since 4.0.0
+   */
+  public static VarcharType createVarcharType(int length) {
+    return new VarcharType(length);
+  }
 }

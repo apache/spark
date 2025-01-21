@@ -333,8 +333,8 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
       epsilon, maxBlockSizeInMB)
 
     if (dataset.storageLevel != StorageLevel.NONE) {
-      instr.logWarning(s"Input instances will be standardized, blockified to blocks, and " +
-        s"then cached during training. Be careful of double caching!")
+      instr.logWarning("Input instances will be standardized, blockified to blocks, and " +
+        "then cached during training. Be careful of double caching!")
     }
 
     // Extract the number of features before deciding optimization solver.
@@ -377,7 +377,7 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
       } else {
         require($(regParam) == 0.0, "The standard deviation of the label is zero. " +
           "Model cannot be regularized.")
-        instr.logWarning(s"The standard deviation of the label is zero. " +
+        instr.logWarning("The standard deviation of the label is zero. " +
           "Consider setting fitIntercept=true.")
       }
     }
@@ -472,13 +472,13 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
     // Also, if rawYStd==0 and yMean==0, all the coefficients are zero regardless of
     // the fitIntercept.
     if (yMean == 0.0) {
-      instr.logWarning(s"Mean and standard deviation of the label are zero, so the " +
-        s"coefficients and the intercept will all be zero; as a result, training is not " +
-        s"needed.")
+      instr.logWarning("Mean and standard deviation of the label are zero, so the " +
+        "coefficients and the intercept will all be zero; as a result, training is not " +
+        "needed.")
     } else {
-      instr.logWarning(s"The standard deviation of the label is zero, so the coefficients " +
-        s"will be zeros and the intercept will be the mean of the label; as a result, " +
-        s"training is not needed.")
+      instr.logWarning("The standard deviation of the label is zero, so the coefficients " +
+        "will be zeros and the intercept will be the mean of the label; as a result, " +
+        "training is not needed.")
     }
     val coefficients = Vectors.sparse(numFeatures, Seq.empty)
     val intercept = yMean
@@ -702,6 +702,10 @@ class LinearRegressionModel private[ml] (
   private[ml] def this(uid: String, coefficients: Vector, intercept: Double) =
     this(uid, coefficients, intercept, 1.0)
 
+  // For ml connect only
+  @Since("4.0.0")
+  private[ml] def this() = this(Identifiable.randomUID("linReg"), Vectors.zeros(0), 0.0, 0.0)
+
   override val numFeatures: Int = coefficients.size
 
   /**
@@ -780,11 +784,11 @@ private class InternalLinearRegressionModelWriter
     val instance = stage.asInstanceOf[LinearRegressionModel]
     val sc = sparkSession.sparkContext
     // Save metadata and Params
-    DefaultParamsWriter.saveMetadata(instance, path, sc)
+    DefaultParamsWriter.saveMetadata(instance, path, sparkSession)
     // Save model data: intercept, coefficients, scale
     val data = Data(instance.intercept, instance.coefficients, instance.scale)
     val dataPath = new Path(path, "data").toString
-    sparkSession.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
+    sparkSession.createDataFrame(Seq(data)).write.parquet(dataPath)
   }
 }
 
@@ -824,7 +828,7 @@ object LinearRegressionModel extends MLReadable[LinearRegressionModel] {
     private val className = classOf[LinearRegressionModel].getName
 
     override def load(path: String): LinearRegressionModel = {
-      val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
+      val metadata = DefaultParamsReader.loadMetadata(path, sparkSession, className)
 
       val dataPath = new Path(path, "data").toString
       val data = sparkSession.read.format("parquet").load(dataPath)
@@ -903,7 +907,7 @@ class LinearRegressionSummary private[regression] (
     val labelCol: String,
     val featuresCol: String,
     private val privateModel: LinearRegressionModel,
-    private val diagInvAtWA: Array[Double]) extends Serializable {
+    private val diagInvAtWA: Array[Double]) extends Summary with Serializable {
 
   @transient private val metrics = {
     val weightCol =

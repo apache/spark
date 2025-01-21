@@ -9,7 +9,7 @@ FROM   (SELECT * FROM t1
 
 -- Type Coerced Union
 SELECT *
-FROM   (SELECT * FROM t1
+FROM   (SELECT * FROM t1 where c1 = 1
         UNION ALL
         SELECT * FROM t2
         UNION ALL

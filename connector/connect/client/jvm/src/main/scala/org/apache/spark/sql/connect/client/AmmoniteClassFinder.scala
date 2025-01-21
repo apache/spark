@@ -22,6 +22,8 @@ import java.nio.file.Paths
 import ammonite.repl.api.Session
 import ammonite.runtime.SpecialClassLoader
 
+import org.apache.spark.sql.Artifact
+
 /**
  * A special [[ClassFinder]] for the Ammonite REPL to handle in-memory class files.
  *

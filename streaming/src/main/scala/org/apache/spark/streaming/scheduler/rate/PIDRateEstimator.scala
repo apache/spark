@@ -17,7 +17,7 @@
 
 package org.apache.spark.streaming.scheduler.rate
 
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, LogKeys, MDC}
 
 /**
  * Implements a proportional-integral-derivative (PID) controller which acts on
@@ -74,8 +74,11 @@ private[streaming] class PIDRateEstimator(
     minRate > 0,
     s"Minimum rate in PIDRateEstimator should be > 0")
 
-  logInfo(s"Created PIDRateEstimator with proportional = $proportional, integral = $integral, " +
-    s"derivative = $derivative, min rate = $minRate")
+  logInfo(log"Created PIDRateEstimator with proportional = " +
+    log"${MDC(LogKeys.PROPORTIONAL, proportional)}, integral = " +
+    log"${MDC(LogKeys.INTEGRAL, integral)}, derivative = " +
+    log"${MDC(LogKeys.DERIVATIVE, derivative)}, min rate = " +
+    log"${MDC(LogKeys.MIN_RATE, minRate)}")
 
   def compute(
       time: Long, // in milliseconds

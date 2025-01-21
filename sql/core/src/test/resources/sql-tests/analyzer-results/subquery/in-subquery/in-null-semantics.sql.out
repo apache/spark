@@ -2,14 +2,14 @@
 -- !query
 create temp view v (c) as values (1), (null)
 -- !query analysis
-CreateViewCommand `v`, [(c,None)], values (1), (null), false, false, LocalTempView, true
+CreateViewCommand `v`, [(c,None)], values (1), (null), false, false, LocalTempView, UNSUPPORTED, true
    +- LocalRelation [col1#x]
 
 
 -- !query
 create temp view v_empty (e) as select 1 where false
 -- !query analysis
-CreateViewCommand `v_empty`, [(e,None)], select 1 where false, false, false, LocalTempView, true
+CreateViewCommand `v_empty`, [(e,None)], select 1 where false, false, false, LocalTempView, UNSUPPORTED, true
    +- Project [1 AS 1#x]
       +- Filter false
          +- OneRowRelation

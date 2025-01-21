@@ -18,7 +18,7 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.Literal
+import org.apache.spark.sql.catalyst.expressions.{Literal, Round}
 import org.apache.spark.sql.catalyst.expressions.aggregate.CollectSet
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Expand, LocalRelation, LogicalPlan}
@@ -31,7 +31,7 @@ class RewriteDistinctAggregatesSuite extends PlanTest {
   val testRelation2 = LocalRelation($"a".double, $"b".int, $"c".int, $"d".int, $"e".int)
 
   private def checkRewrite(rewrite: LogicalPlan): Unit = rewrite match {
-    case Aggregate(_, _, Aggregate(_, _, _: Expand)) =>
+    case Aggregate(_, _, Aggregate(_, _, _: Expand, _), _) =>
     case _ => fail(s"Plan is not rewritten:\n$rewrite")
   }
 
@@ -87,7 +87,7 @@ class RewriteDistinctAggregatesSuite extends PlanTest {
 
     val rewrite = RewriteDistinctAggregates(input)
     rewrite match {
-      case Aggregate(_, _, LocalRelation(_, _, _)) =>
+      case Aggregate(_, _, _: LocalRelation, _) =>
       case _ => fail(s"Plan is not as expected:\n$rewrite")
     }
   }
@@ -104,9 +104,25 @@ class RewriteDistinctAggregatesSuite extends PlanTest {
 
     val rewrite = RewriteDistinctAggregates(input)
     rewrite match {
-      case Aggregate(_, _, Aggregate(_, _, e: Expand)) =>
+      case Aggregate(_, _, Aggregate(_, _, e: Expand, _), _) =>
         assert(e.projections.size == 3)
       case _ => fail(s"Plan is not rewritten:\n$rewrite")
+    }
+  }
+
+  test("SPARK-49261: Literals in grouping expressions shouldn't result in unresolved aggregation") {
+    val relation = testRelation2
+      .select(Literal(6).as("gb"), $"a", $"b", $"c", $"d")
+    val input = relation
+      .groupBy($"a", $"gb")(
+        countDistinct($"b").as("agg1"),
+        countDistinct($"d").as("agg2"),
+        Round(sum($"c").as("sum1"), 6)).analyze
+    val rewriteFold = FoldablePropagation(input)
+    // without the fix, the below produces an unresolved plan
+    val rewrite = RewriteDistinctAggregates(rewriteFold)
+    if (!rewrite.resolved) {
+      fail(s"Plan is not as expected:\n$rewrite")
     }
   }
 }

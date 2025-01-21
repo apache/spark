@@ -20,10 +20,12 @@ package org.apache.spark.sql.catalyst.json
 import java.io.{ByteArrayOutputStream, CharConversionException}
 import java.nio.charset.MalformedInputException
 
+import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.util.control.NonFatal
 
 import com.fasterxml.jackson.core._
+import org.apache.hadoop.fs.PositionedReadable
 
 import org.apache.spark.SparkUpgradeException
 import org.apache.spark.internal.Logging
@@ -115,6 +117,8 @@ class JacksonParser(
     }
   }
 
+  private val variantAllowDuplicateKeys = SQLConf.get.getConf(SQLConf.VARIANT_ALLOW_DUPLICATE_KEYS)
+
   protected final def parseVariant(parser: JsonParser): VariantVal = {
     // Skips `FIELD_NAME` at the beginning. This check is adapted from `parseJsonToken`, but we
     // cannot directly use the function here because it also handles the `VALUE_NULL` token and
@@ -123,7 +127,7 @@ class JacksonParser(
       parser.nextToken()
     }
     try {
-      val v = VariantBuilder.parseJson(parser)
+      val v = VariantBuilder.parseJson(parser, variantAllowDuplicateKeys)
       new VariantVal(v.getValue, v.getMetadata)
     } catch {
       case _: VariantSizeLimitException =>
@@ -200,7 +204,18 @@ class JacksonParser(
         //
         val st = at.elementType.asInstanceOf[StructType]
         val fieldConverters = st.map(_.dataType).map(makeConverter).toArray
-        Some(InternalRow(new GenericArrayData(convertObject(parser, st, fieldConverters).toArray)))
+
+        val res = try {
+          convertObject(parser, st, fieldConverters)
+        } catch {
+          case err: PartialResultException =>
+            throw PartialArrayDataResultException(
+              new GenericArrayData(Seq(err.partialResult)),
+              err.cause
+            )
+        }
+
+        Some(InternalRow(new GenericArrayData(res.toArray[Any])))
     }
   }
 
@@ -275,19 +290,62 @@ class JacksonParser(
           }
       }
 
-    case StringType =>
-      (parser: JsonParser) => parseJsonToken[UTF8String](parser, dataType) {
+    case _: StringType => (parser: JsonParser) => {
+      // This must be enabled if we will retrieve the bytes directly from the raw content:
+      val oldFeature = parser.getFeatureMask
+      val featureToAdd = JsonParser.Feature.INCLUDE_SOURCE_IN_LOCATION.getMask
+      parser.overrideStdFeatures(oldFeature | featureToAdd, featureToAdd)
+      val result = parseJsonToken[UTF8String](parser, dataType) {
         case VALUE_STRING =>
           UTF8String.fromString(parser.getText)
 
-        case _ =>
+        case other =>
           // Note that it always tries to convert the data as string without the case of failure.
-          val writer = new ByteArrayOutputStream()
-          Utils.tryWithResource(factory.createGenerator(writer, JsonEncoding.UTF8)) {
-            generator => generator.copyCurrentStructure(parser)
+          val startLocation = parser.currentTokenLocation()
+          def skipAhead(): Unit = {
+            other match {
+              case START_OBJECT =>
+                parser.skipChildren()
+              case START_ARRAY =>
+                parser.skipChildren()
+              case _ =>
+              // Do nothing in this case; we've already read the token
+            }
           }
-          UTF8String.fromBytes(writer.toByteArray)
-      }
+
+          // PositionedReadable
+          startLocation.contentReference().getRawContent match {
+            case byteArray: Array[Byte] if exactStringParsing =>
+              skipAhead()
+              val endLocation = parser.currentLocation.getByteOffset
+
+              UTF8String.fromBytes(
+                byteArray,
+                startLocation.getByteOffset.toInt,
+                endLocation.toInt - (startLocation.getByteOffset.toInt))
+            case positionedReadable: PositionedReadable if exactStringParsing =>
+              skipAhead()
+              val endLocation = parser.currentLocation.getByteOffset
+
+              val size = endLocation.toInt - (startLocation.getByteOffset.toInt)
+              val buffer = new Array[Byte](size)
+              positionedReadable.read(startLocation.getByteOffset, buffer, 0, size)
+              UTF8String.fromBytes(buffer, 0, size)
+            case _ =>
+              val writer = new ByteArrayOutputStream()
+              Utils.tryWithResource(factory.createGenerator(writer, JsonEncoding.UTF8)) {
+                generator => generator.copyCurrentStructure(parser)
+              }
+              UTF8String.fromBytes(writer.toByteArray)
+          }
+        }
+      // Reset back to the original configuration using `~0` as the mask,
+      // which is a bitmask with all bits set, effectively allowing all features
+      // to be reset. This ensures that every feature is restored to its previous
+      // state as defined by `oldFeature`.
+      parser.overrideStdFeatures(oldFeature, ~0)
+      result
+    }
 
     case TimestampType =>
       (parser: JsonParser) => parseJsonToken[java.lang.Long](parser, dataType) {
@@ -429,6 +487,8 @@ class JacksonParser(
 
   private val allowEmptyString = SQLConf.get.getConf(SQLConf.LEGACY_ALLOW_EMPTY_STRING_IN_JSON)
 
+  private val exactStringParsing = SQLConf.get.getConf(SQLConf.JSON_EXACT_STRING_PARSING)
+
   /**
    * This function throws an exception for failed conversion. For empty string on data types
    * except for string and binary types, this also throws an exception.
@@ -453,6 +513,21 @@ class JacksonParser(
       // We cannot parse this token based on the given data type. So, we throw a
       // RuntimeException and this exception will be caught by `parse` method.
       throw CannotParseJSONFieldException(parser.currentName, parser.getText, token, dataType)
+  }
+
+  private val useUnsafeRow = options.useUnsafeRow
+  private val cachedUnsafeProjection = mutable.HashMap.empty[StructType, UnsafeProjection]
+
+  protected final def convertRow(row: InternalRow, schema: StructType): InternalRow = {
+    if (useUnsafeRow) {
+      val p = cachedUnsafeProjection.getOrElseUpdate(schema, UnsafeProjection.create(schema))
+      // The copy is necessary: each time `UnsafeProjection` produces a row, it updates an
+      // internal `UnsafeRow` object and returns the reference. We need to avoid overwriting
+      // previously returned results.
+      p(row).copy()
+    } else {
+      row
+    }
   }
 
   /**
@@ -498,7 +573,7 @@ class JacksonParser(
       None
     } else if (badRecordException.isEmpty) {
       applyExistenceDefaultValuesToRow(schema, row, bitmask)
-      Some(row)
+      Some(convertRow(row, schema))
     } else {
       throw PartialResultException(row, badRecordException.get)
     }

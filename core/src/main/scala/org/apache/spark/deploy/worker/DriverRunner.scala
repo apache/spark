@@ -23,7 +23,7 @@ import java.nio.charset.StandardCharsets
 
 import scala.jdk.CollectionConverters._
 
-import com.google.common.io.Files
+import com.google.common.io.{Files, FileWriteMode}
 
 import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.deploy.{DriverDescription, SparkHadoopUtil}
@@ -31,7 +31,8 @@ import org.apache.spark.deploy.DeployMessages.DriverStateChanged
 import org.apache.spark.deploy.StandaloneResourceUtils.prepareResourcesFile
 import org.apache.spark.deploy.master.DriverState
 import org.apache.spark.deploy.master.DriverState.DriverState
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config.{DRIVER_RESOURCES_FILE, SPARK_DRIVER_PREFIX}
 import org.apache.spark.internal.config.UI.UI_REVERSE_PROXY
 import org.apache.spark.internal.config.Worker.WORKER_DRIVER_TERMINATE_TIMEOUT
@@ -91,7 +92,7 @@ private[deploy] class DriverRunner(
         var shutdownHook: AnyRef = null
         try {
           shutdownHook = ShutdownHookManager.addShutdownHook { () =>
-            logInfo(s"Worker shutting down, killing driver $driverId")
+            logInfo(log"Worker shutting down, killing driver ${MDC(DRIVER_ID, driverId)}")
             kill()
           }
 
@@ -131,8 +132,8 @@ private[deploy] class DriverRunner(
       process.foreach { p =>
         val exitCode = Utils.terminateProcess(p, driverTerminateTimeoutMs)
         if (exitCode.isEmpty) {
-          logWarning("Failed to terminate driver process: " + p +
-              ". This process will likely be orphaned.")
+          logWarning(log"Failed to terminate driver process: ${MDC(PROCESS, p)} " +
+              log". This process will likely be orphaned.")
         }
       }
     }
@@ -158,7 +159,8 @@ private[deploy] class DriverRunner(
     val jarFileName = new URI(driverDesc.jarUrl).getPath.split("/").last
     val localJarFile = new File(driverDir, jarFileName)
     if (!localJarFile.exists()) { // May already exist if running multiple workers on one node
-      logInfo(s"Copying user jar ${driverDesc.jarUrl} to $localJarFile")
+      logInfo(log"Copying user jar ${MDC(JAR_URL, driverDesc.jarUrl)}" +
+        log" to ${MDC(FILE_NAME, localJarFile)}")
       Utils.fetchFile(
         driverDesc.jarUrl,
         driverDir,
@@ -214,7 +216,7 @@ private[deploy] class DriverRunner(
       val redactedCommand = Utils.redactCommandLineArgs(conf, builder.command.asScala.toSeq)
         .mkString("\"", "\" \"", "\"")
       val header = "Launch Command: %s\n%s\n\n".format(redactedCommand, "=" * 40)
-      Files.append(header, stderr, StandardCharsets.UTF_8)
+      Files.asCharSink(stderr, StandardCharsets.UTF_8, FileWriteMode.APPEND).write(header)
       CommandUtils.redirectStream(process.getErrorStream, stderr)
     }
     runCommandWithRetry(ProcessBuilderLike(builder), initialize, supervise)
@@ -232,7 +234,7 @@ private[deploy] class DriverRunner(
     val redactedCommand = Utils.redactCommandLineArgs(conf, command.command)
       .mkString("\"", "\" \"", "\"")
     while (keepTrying) {
-      logInfo("Launch Command: " + redactedCommand)
+      logInfo(log"Launch Command: ${MDC(COMMAND, redactedCommand)}")
 
       synchronized {
         if (killed) { return exitCode }
@@ -249,7 +251,8 @@ private[deploy] class DriverRunner(
         if (clock.getTimeMillis() - processStart > successfulRunDuration * 1000L) {
           waitSeconds = 1
         }
-        logInfo(s"Command exited with status $exitCode, re-launching after $waitSeconds s.")
+        logInfo(log"Command exited with status ${MDC(EXIT_CODE, exitCode)}," +
+          log" re-launching after ${MDC(TIME_UNITS, waitSeconds)} s.")
         sleeper.sleep(waitSeconds)
         waitSeconds = waitSeconds * 2 // exponential back-off
       }

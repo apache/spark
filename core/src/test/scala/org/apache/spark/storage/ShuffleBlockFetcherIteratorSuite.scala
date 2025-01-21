@@ -392,9 +392,11 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
 
     configureMockTransfer(Map())
     val iterator = createShuffleBlockIteratorWithDefaults(
-      Map(hostLocalBmId -> toBlockList(hostLocalBlocks.keys, 1L, 1))
+      Map(hostLocalBmId -> toBlockList(hostLocalBlocks.keys, 1L, 1)),
+      blockManager = Some(blockManager)
     )
     intercept[FetchFailedException] { iterator.next() }
+    verify(mockExternalBlockStoreClient, times(1)).getHostLocalDirs(any(), any(), any(), any())
   }
 
   test("Hit maxBytesInFlight limitation before maxBlocksInFlightPerAddress") {
@@ -1940,5 +1942,32 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
     }
 
     assert(err2.getMessage.contains("corrupt at reset"))
+  }
+
+  test("SPARK-43242: Fix throw 'Unexpected type of BlockId' in shuffle corruption diagnose") {
+    val remoteBmId = BlockManagerId("test-client-1", "test-client-1", 2)
+    val blocks = Map[BlockId, ManagedBuffer](
+      ShuffleBlockBatchId(0, 0, 0, 3) -> createMockManagedBuffer())
+    answerFetchBlocks { invocation =>
+      val listener = invocation.getArgument[BlockFetchingListener](4)
+      listener.onBlockFetchSuccess(ShuffleBlockBatchId(0, 0, 0, 3).toString, mockCorruptBuffer())
+    }
+
+    val logAppender = new LogAppender("diagnose corruption")
+    withLogAppender(logAppender) {
+      val iterator = createShuffleBlockIteratorWithDefaults(
+        Map(remoteBmId -> toBlockList(blocks.keys, 1L, 0)),
+        streamWrapperLimitSize = Some(100)
+      )
+      intercept[FetchFailedException](iterator.next())
+      verify(transfer, times(2))
+        .fetchBlocks(any(), any(), any(), any(), any(), any())
+      assert(logAppender.loggingEvents.count(
+        _.getMessage.getFormattedMessage.contains("Start corruption diagnosis")) === 1)
+      assert(logAppender.loggingEvents.exists(
+        _.getMessage.getFormattedMessage.contains("shuffle_0_0_0_3 is corrupted " +
+          "but corruption diagnosis is skipped due to lack of " +
+          "shuffle checksum support for ShuffleBlockBatchId")))
+    }
   }
 }

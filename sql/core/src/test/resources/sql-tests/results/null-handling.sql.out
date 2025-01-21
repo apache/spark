@@ -78,6 +78,22 @@ struct<a:int,(b + c):int>
 
 
 -- !query
+select b + 0 from t1 where a = 5
+-- !query schema
+struct<(b + 0):int>
+-- !query output
+NULL
+
+
+-- !query
+select -100 + b + 100 from t1 where a = 5
+-- !query schema
+struct<((-100 + b) + 100):int>
+-- !query output
+NULL
+
+
+-- !query
 select a+10, b*0 from t1
 -- !query schema
 struct<(a + 10):int,(b * 0):int>

@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.adaptive
 
 import org.apache.spark.sql.catalyst.optimizer.PropagateEmptyRelationBase
 import org.apache.spark.sql.catalyst.planning.ExtractSingleColumnNullAwareAntiJoin
+import org.apache.spark.sql.catalyst.plans.logical.EmptyRelation
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.trees.TreePattern.{LOCAL_RELATION, LOGICAL_QUERY_STAGE, TRUE_OR_FALSE_LITERAL}
 import org.apache.spark.sql.execution.aggregate.BaseAggregateExec
@@ -38,6 +39,8 @@ object AQEPropagateEmptyRelation extends PropagateEmptyRelationBase {
 
   override protected def nonEmpty(plan: LogicalPlan): Boolean =
     super.nonEmpty(plan) || getEstimatedRowCount(plan).exists(_ > 0)
+
+  override protected def empty(plan: LogicalPlan): LogicalPlan = EmptyRelation(plan)
 
   private def isRootRepartition(plan: LogicalPlan): Boolean = plan match {
     case l: LogicalQueryStage if l.getTagValue(ROOT_REPARTITION).isDefined => true
@@ -61,6 +64,8 @@ object AQEPropagateEmptyRelation extends PropagateEmptyRelationBase {
         None
       }
 
+    case _: EmptyRelation => Some(0)
+
     case _ => None
   }
 
@@ -80,6 +85,13 @@ object AQEPropagateEmptyRelation extends PropagateEmptyRelationBase {
       if shuffle.shuffleOrigin == REPARTITION_BY_COL ||
         shuffle.shuffleOrigin == REPARTITION_BY_NUM => true
     case _ => false
+  }
+
+  // A broadcast query stage can't be executed without the join operator.
+  // TODO: we can return the original query plan before broadcast.
+  override protected def canExecuteWithoutJoin(plan: LogicalPlan): Boolean = plan match {
+    case LogicalQueryStage(_, _: BroadcastQueryStageExec) => false
+    case _ => true
   }
 
   override protected def applyInternal(p: LogicalPlan): LogicalPlan = p.transformUpWithPruning(

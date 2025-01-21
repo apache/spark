@@ -219,8 +219,8 @@ class GroupedApplyInPandasTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="INVALID_UDF_EVAL_TYPE",
-            message_parameters={
+            errorClass="INVALID_UDF_EVAL_TYPE",
+            messageParameters={
                 "eval_type": "SQL_BATCHED_UDF, SQL_ARROW_BATCHED_UDF, SQL_SCALAR_PANDAS_UDF, "
                 "SQL_SCALAR_PANDAS_ITER_UDF or SQL_GROUPED_AGG_PANDAS_UDF"
             },
@@ -437,6 +437,26 @@ class GroupedApplyInPandasTestsMixin:
         with self.assertRaisesRegex(PySparkValueError, "INVALID_PANDAS_UDF"):
             df.groupby("id").apply(
                 pandas_udf(lambda: 1, StructType([StructField("d", DoubleType())]))
+            )
+
+    def test_wrong_args_in_apply_func(self):
+        df1 = self.spark.range(11)
+        df2 = self.spark.range(22)
+
+        with self.assertRaisesRegex(PySparkValueError, "INVALID_PANDAS_UDF"):
+            df1.groupby("id").applyInPandas(lambda: 1, StructType([StructField("d", DoubleType())]))
+
+        with self.assertRaisesRegex(PySparkValueError, "INVALID_PANDAS_UDF"):
+            df1.groupby("id").applyInArrow(lambda: 1, StructType([StructField("d", DoubleType())]))
+
+        with self.assertRaisesRegex(PySparkValueError, "INVALID_PANDAS_UDF"):
+            df1.groupby("id").cogroup(df2.groupby("id")).applyInPandas(
+                lambda: 1, StructType([StructField("d", DoubleType())])
+            )
+
+        with self.assertRaisesRegex(PySparkValueError, "INVALID_PANDAS_UDF"):
+            df1.groupby("id").cogroup(df2.groupby("id")).applyInArrow(
+                lambda: 1, StructType([StructField("d", DoubleType())])
             )
 
     def test_unsupported_types(self):
@@ -680,13 +700,13 @@ class GroupedApplyInPandasTestsMixin:
         data = [Row(id=1, x=2), Row(id=1, x=3), Row(id=2, x=4)]
         expected = [Row(id=1, x=5), Row(id=1, x=5), Row(id=2, x=4)]
         num_parts = len(data) + 1
-        df = self.spark.createDataFrame(self.sc.parallelize(data, numSlices=num_parts))
+        df = self.spark.createDataFrame(data).repartition(num_parts)
 
         f = pandas_udf(
             lambda pdf: pdf.assign(x=pdf["x"].sum()), "id long, x int", PandasUDFType.GROUPED_MAP
         )
 
-        result = df.groupBy("id").apply(f).collect()
+        result = df.groupBy("id").apply(f).sort("id").collect()
         self.assertEqual(result, expected)
 
     def test_grouped_over_window(self):

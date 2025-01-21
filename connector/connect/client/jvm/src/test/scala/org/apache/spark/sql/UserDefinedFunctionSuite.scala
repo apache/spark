@@ -21,7 +21,7 @@ import scala.reflect.runtime.universe.typeTag
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.connect.common.UdfPacket
-import org.apache.spark.sql.functions.udf
+import org.apache.spark.sql.functions.{lit, udf}
 import org.apache.spark.sql.test.ConnectFunSuite
 import org.apache.spark.util.SparkSerDeUtils
 
@@ -30,16 +30,17 @@ class UserDefinedFunctionSuite extends ConnectFunSuite {
   test("udf and encoder serialization") {
     def func(x: Int): Int = x + 1
 
+    val dummyCol = Column("dummy")
     val myUdf = udf(func _)
-    val colWithUdf = myUdf(Column("dummy"))
+    val colWithUdf = myUdf(dummyCol)
 
-    val udfExpr = colWithUdf.expr.getCommonInlineUserDefinedFunction
+    val udfExpr = toExpr(colWithUdf).getCommonInlineUserDefinedFunction
     assert(udfExpr.getDeterministic)
     assert(udfExpr.getArgumentsCount == 1)
-    assert(udfExpr.getArguments(0) == Column("dummy").expr)
+    assert(udfExpr.getArguments(0) == toExpr(dummyCol))
     val udfObj = udfExpr.getScalarScalaUdf
 
-    assert(udfObj.getNullable)
+    assert(!udfObj.getNullable)
 
     val deSer = SparkSerDeUtils.deserialize[UdfPacket](udfObj.getPayload.toByteArray)
 
@@ -49,7 +50,7 @@ class UserDefinedFunctionSuite extends ConnectFunSuite {
   }
 
   private def testNonDeserializable(f: Int => Int): Unit = {
-    val e = intercept[SparkException](udf(f))
+    val e = intercept[SparkException](toExpr(udf(f).apply(lit(1))))
     assert(
       e.getMessage.contains(
         "UDF cannot be executed on a Spark cluster: it cannot be deserialized."))

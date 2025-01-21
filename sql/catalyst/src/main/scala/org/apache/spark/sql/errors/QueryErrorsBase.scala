@@ -47,10 +47,6 @@ private[sql] trait QueryErrorsBase extends DataTypeErrorsBase {
     quoteByDefault(conf)
   }
 
-  def toDSOption(option: String): String = {
-    quoteByDefault(option)
-  }
-
   def toSQLExpr(e: Expression): String = {
     quoteByDefault(toPrettySQL(e))
   }

@@ -14,7 +14,7 @@ CreateViewCommand `courseSales`, select * from values
   ("dotNET", 2012, 5000),
   ("dotNET", 2013, 48000),
   ("Java", 2013, 30000)
-  as courseSales(course, year, earnings), false, false, LocalTempView, true
+  as courseSales(course, year, earnings), false, false, LocalTempView, UNSUPPORTED, true
    +- Project [course#x, year#x, earnings#x]
       +- SubqueryAlias courseSales
          +- LocalRelation [course#x, year#x, earnings#x]
@@ -29,7 +29,7 @@ create temporary view years as select * from values
 CreateViewCommand `years`, select * from values
   (2012, 1),
   (2013, 2)
-  as years(y, s), false, false, LocalTempView, true
+  as years(y, s), false, false, LocalTempView, UNSUPPORTED, true
    +- Project [y#x, s#x]
       +- SubqueryAlias years
          +- LocalRelation [y#x, s#x]
@@ -44,7 +44,7 @@ create temporary view yearsWithComplexTypes as select * from values
 CreateViewCommand `yearsWithComplexTypes`, select * from values
   (2012, array(1, 1), map('1', 1), struct(1, 'a')),
   (2013, array(2, 2), map('2', 2), struct(2, 'b'))
-  as yearsWithComplexTypes(y, a, m, s), false, false, LocalTempView, true
+  as yearsWithComplexTypes(y, a, m, s), false, false, LocalTempView, UNSUPPORTED, true
    +- Project [y#x, a#x, m#x, s#x]
       +- SubqueryAlias yearsWithComplexTypes
          +- LocalRelation [y#x, a#x, m#x, s#x]

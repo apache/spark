@@ -25,7 +25,7 @@
 import sys
 from setuptools import setup
 import os
-from shutil import copyfile
+from shutil import copyfile, move
 import glob
 from pathlib import Path
 
@@ -69,15 +69,19 @@ test_packages = []
 if "SPARK_TESTING" in os.environ:
     test_packages = [
         "pyspark.tests",  # for Memory profiler parity tests
-        "pyspark.testing",
         "pyspark.resource.tests",
         "pyspark.sql.tests",
+        "pyspark.sql.tests.arrow",
         "pyspark.sql.tests.connect",
+        "pyspark.sql.tests.connect.arrow",
         "pyspark.sql.tests.connect.streaming",
         "pyspark.sql.tests.connect.client",
+        "pyspark.sql.tests.connect.pandas",
         "pyspark.sql.tests.connect.shell",
         "pyspark.sql.tests.pandas",
+        "pyspark.sql.tests.plot",
         "pyspark.sql.tests.streaming",
+        "pyspark.ml.tests",
         "pyspark.ml.tests.connect",
         "pyspark.pandas.tests",
         "pyspark.pandas.tests.computation",
@@ -105,10 +109,19 @@ if "SPARK_TESTING" in os.environ:
         "pyspark.pandas.tests.connect.reshape",
         "pyspark.pandas.tests.connect.series",
         "pyspark.pandas.tests.connect.window",
+        "pyspark.logger.tests",
+        "pyspark.logger.tests.connect",
     ]
 
 try:
     if in_spark:
+        # !!HACK ALTERT!!
+        # 1. `setup.py` has to be located with the same directory with the package.
+        #    Therefore, we copy the current file, and place it at `spark/python` directory.
+        #    After that, we remove it in the end.
+        # 2. Here it renames `lib` to `lib.ack` so MANIFEST.in does not pick `py4j` up.
+        #    We rename it back in the end.
+        move("lib", "lib.back")
         copyfile("packaging/connect/setup.py", "setup.py")
         copyfile("packaging/connect/setup.cfg", "setup.cfg")
 
@@ -119,7 +132,7 @@ try:
     # python/packaging/classic/setup.py
     _minimum_pandas_version = "2.0.0"
     _minimum_numpy_version = "1.21"
-    _minimum_pyarrow_version = "10.0.0"
+    _minimum_pyarrow_version = "11.0.0"
     _minimum_grpc_version = "1.59.3"
     _minimum_googleapis_common_protos_version = "1.56.4"
 
@@ -152,6 +165,7 @@ try:
         "pyspark.sql.connect.streaming.worker",
         "pyspark.sql.functions",
         "pyspark.sql.pandas",
+        "pyspark.sql.plot",
         "pyspark.sql.protobuf",
         "pyspark.sql.streaming",
         "pyspark.sql.worker",
@@ -168,6 +182,7 @@ try:
         "pyspark.resource",
         "pyspark.errors",
         "pyspark.errors.exceptions",
+        "pyspark.logger",
     ]
 
     setup(
@@ -180,6 +195,7 @@ try:
         author_email="dev@spark.apache.org",
         url="https://github.com/apache/spark/tree/master/python",
         packages=connect_packages + test_packages,
+        include_package_data=True,
         license="http://www.apache.org/licenses/LICENSE-2.0",
         # Don't forget to update python/docs/source/getting_started/install.rst
         # if you're updating the versions or dependencies.
@@ -199,6 +215,7 @@ try:
             "Programming Language :: Python :: 3.10",
             "Programming Language :: Python :: 3.11",
             "Programming Language :: Python :: 3.12",
+            "Programming Language :: Python :: 3.13",
             "Programming Language :: Python :: Implementation :: CPython",
             "Programming Language :: Python :: Implementation :: PyPy",
             "Typing :: Typed",
@@ -206,5 +223,6 @@ try:
     )
 finally:
     if in_spark:
+        move("lib.back", "lib")
         os.remove("setup.py")
         os.remove("setup.cfg")

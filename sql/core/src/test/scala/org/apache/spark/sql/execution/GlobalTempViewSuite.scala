@@ -30,7 +30,7 @@ class GlobalTempViewSuite extends QueryTest with SharedSparkSession {
 
   override protected def beforeAll(): Unit = {
     super.beforeAll()
-    globalTempDB = spark.sharedState.globalTempViewManager.database
+    globalTempDB = spark.sharedState.globalTempDB
   }
 
   private var globalTempDB: String = _

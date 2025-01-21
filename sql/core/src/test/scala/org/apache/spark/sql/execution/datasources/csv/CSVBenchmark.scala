@@ -371,6 +371,38 @@ object CSVBenchmark extends SqlBasedBenchmark {
     }
   }
 
+  private def intervalBenchmark(rowsNum: Int, numIters: Int): Unit = {
+    val benchmark = new Benchmark(s"Interval", rowsNum, output = output)
+    withTempPath { path =>
+      spark
+        .range(rowsNum)
+        .map { i =>
+          (s"${i % 1000}-${"%02d".format(i % 12)}",
+            s"${i % 1000} " +
+            s"${"%02d".format(i % 24)}:" +
+            s"${"%02d".format(i % 60)}:" +
+            s"${"%02d".format(i % 60)}.${i % 1000000}")
+        }
+        .toDF("ym", "ds")
+        .write
+        .option("header", true)
+        .mode("overwrite")
+        .csv(path.getAbsolutePath)
+      benchmark.addCase("Read as Intervals", numIters) { _ =>
+        spark.read.option("header", true)
+          .schema("ym INTERVAL YEAR TO MONTH, ds INTERVAL DAY TO SECOND")
+          .csv(path.getAbsolutePath)
+          .noop()
+      }
+      benchmark.addCase("Read Raw Strings", numIters) { _ =>
+        spark.read.option("header", true)
+          .csv(path.getAbsolutePath)
+          .noop()
+      }
+      benchmark.run()
+    }
+  }
+
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
     runBenchmark("Benchmark to measure CSV read/write performance") {
       val numIters = 3
@@ -379,6 +411,7 @@ object CSVBenchmark extends SqlBasedBenchmark {
       countBenchmark(rowsNum = 10 * 1000 * 1000, numIters)
       datetimeBenchmark(rowsNum = 10 * 1000 * 1000, numIters)
       filtersPushdownBenchmark(rowsNum = 100 * 1000, numIters)
+      intervalBenchmark(rowsNum = 300 * 1000, numIters)
     }
   }
 }

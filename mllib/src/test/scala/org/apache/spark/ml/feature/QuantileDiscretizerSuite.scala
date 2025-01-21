@@ -21,6 +21,7 @@ import org.apache.spark.ml.Pipeline
 import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest}
 import org.apache.spark.sql._
+import org.apache.spark.sql.functions.{col, struct}
 import org.apache.spark.util.ArrayImplicits._
 
 class QuantileDiscretizerSuite extends MLTest with DefaultReadWriteTest {
@@ -531,5 +532,45 @@ class QuantileDiscretizerSuite extends MLTest with DefaultReadWriteTest {
       .setRelativeError(0.0)
 
     qd.fit(df1) // assert no exception raised here.
+  }
+
+  test("Test nested input columns") {
+    val spark = this.spark
+    import spark.implicits._
+
+    val datasetSize = 30000
+    val numBuckets = 5
+    val df = sc.parallelize(1 to datasetSize).map(_.toDouble).toDF("input")
+      .select(struct(col("input")).alias("nest"))
+
+    val discretizer1 = new QuantileDiscretizer()
+      .setInputCol("nest.input")
+      .setOutputCol("result")
+      .setNumBuckets(numBuckets)
+    val discretizer2 = new QuantileDiscretizer()
+      .setInputCols(Array("nest.input"))
+      .setOutputCols(Array("result"))
+      .setNumBuckets(numBuckets)
+
+    for (discretizer <- Seq(discretizer1, discretizer2)) {
+      val model = discretizer.fit(df)
+
+      val rows = model.transform(df).select("result").collect().toSeq
+
+      val result = rows.map(_.getDouble(0)).toDF("result").cache()
+      try {
+        val observedNumBuckets = result.select("result").distinct().count()
+        assert(observedNumBuckets === numBuckets,
+          "Observed number of buckets does not equal expected number of buckets.")
+        val relativeError = discretizer.getRelativeError
+        val numGoodBuckets = result.groupBy("result").count()
+          .filter(s"abs(count - ${datasetSize / numBuckets}) <= ${relativeError * datasetSize}")
+          .count()
+        assert(numGoodBuckets === numBuckets,
+          "Bucket sizes are not within expected relative error tolerance.")
+      } finally {
+        result.unpersist()
+      }
+    }
   }
 }

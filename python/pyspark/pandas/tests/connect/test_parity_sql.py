@@ -22,13 +22,7 @@ from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 
 
 class SQLParityTests(SQLTestsMixin, PandasOnSparkTestUtils, ReusedConnectTestCase):
-    @unittest.skip("Test depends on temp view issue on JVM side.")
-    def test_sql_with_index_col(self):
-        super().test_sql_with_index_col()
-
-    @unittest.skip("Test depends on temp view issue on JVM side.")
-    def test_sql_with_pandas_on_spark_objects(self):
-        super().test_sql_with_pandas_on_spark_objects()
+    pass
 
 
 if __name__ == "__main__":

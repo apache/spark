@@ -15,7 +15,6 @@
 # limitations under the License.
 #
 from pyspark.sql.connect.utils import check_dependencies
-from pyspark.sql.utils import is_timestamp_ntz_preferred
 
 check_dependencies(__name__)
 
@@ -61,7 +60,7 @@ from pyspark.sql.types import (
 )
 
 import pyspark.sql.connect.proto as proto
-from pyspark.sql.connect.types import (
+from pyspark.util import (
     JVM_BYTE_MIN,
     JVM_BYTE_MAX,
     JVM_SHORT_MIN,
@@ -70,15 +69,20 @@ from pyspark.sql.connect.types import (
     JVM_INT_MAX,
     JVM_LONG_MIN,
     JVM_LONG_MAX,
+)
+from pyspark.sql.connect.types import (
     UnparsedDataType,
     pyspark_types_to_proto_types,
     proto_schema_to_pyspark_data_type,
 )
 from pyspark.errors import PySparkTypeError, PySparkValueError
+from pyspark.errors.utils import current_origin
+from pyspark.sql.utils import is_timestamp_ntz_preferred, enum_to_value
 
 if TYPE_CHECKING:
     from pyspark.sql.connect.client import SparkConnectClient
     from pyspark.sql.connect.window import WindowSpec
+    from pyspark.sql.connect.plan import LogicalPlan
 
 
 class Expression:
@@ -87,7 +91,16 @@ class Expression:
     """
 
     def __init__(self) -> None:
-        pass
+        origin = current_origin()
+        fragment = origin.fragment
+        call_site = origin.call_site
+        self.origin = None
+        if fragment is not None and call_site is not None:
+            self.origin = proto.Origin(
+                python_origin=proto.PythonOrigin(
+                    fragment=origin.fragment, call_site=origin.call_site
+                )
+            )
 
     def to_plan(  # type: ignore[empty-body]
         self, session: "SparkConnectClient"
@@ -101,14 +114,29 @@ class Expression:
         metadata = kwargs.pop("metadata", None)
         if len(alias) > 1 and metadata is not None:
             raise PySparkValueError(
-                error_class="ONLY_ALLOWED_FOR_SINGLE_COLUMN",
-                message_parameters={"arg_name": "metadata"},
+                errorClass="ONLY_ALLOWED_FOR_SINGLE_COLUMN",
+                messageParameters={"arg_name": "metadata"},
             )
         assert not kwargs, "Unexpected kwargs where passed: %s" % kwargs
         return ColumnAlias(self, list(alias), metadata)
 
     def name(self) -> str:  # type: ignore[empty-body]
         ...
+
+    def _create_proto_expression(self) -> proto.Expression:
+        plan = proto.Expression()
+        if self.origin is not None:
+            plan.common.origin.CopyFrom(self.origin)
+        return plan
+
+    @property
+    def children(self) -> Sequence["Expression"]:
+        return []
+
+    def foreach(self, f: Callable[["Expression"], None]) -> None:
+        f(self)
+        for c in self.children:
+            c.foreach(f)
 
 
 class CaseWhen(Expression):
@@ -144,6 +172,16 @@ class CaseWhen(Expression):
 
         return unresolved_function.to_plan(session)
 
+    @property
+    def children(self) -> Sequence["Expression"]:
+        children = []
+        for branch in self._branches:
+            children.append(branch[0])
+            children.append(branch[1])
+        if self._else_value is not None:
+            children.append(self._else_value)
+        return children
+
     def __repr__(self) -> str:
         _cases = "".join([f" WHEN {c} THEN {v}" for c, v in self._branches])
         _else = f" ELSE {self._else_value}" if self._else_value is not None else ""
@@ -151,18 +189,18 @@ class CaseWhen(Expression):
 
 
 class ColumnAlias(Expression):
-    def __init__(self, parent: Expression, alias: Sequence[str], metadata: Any):
+    def __init__(self, child: Expression, alias: Sequence[str], metadata: Any):
         super().__init__()
 
         self._alias = alias
         self._metadata = metadata
-        self._parent = parent
+        self._child = child
 
     def to_plan(self, session: "SparkConnectClient") -> "proto.Expression":
         if len(self._alias) == 1:
-            exp = proto.Expression()
+            exp = self._create_proto_expression()
             exp.alias.name.append(self._alias[0])
-            exp.alias.expr.CopyFrom(self._parent.to_plan(session))
+            exp.alias.expr.CopyFrom(self._child.to_plan(session))
 
             if self._metadata:
                 exp.alias.metadata = json.dumps(self._metadata)
@@ -170,16 +208,20 @@ class ColumnAlias(Expression):
         else:
             if self._metadata:
                 raise PySparkValueError(
-                    error_class="CANNOT_PROVIDE_METADATA",
-                    message_parameters={},
+                    errorClass="CANNOT_PROVIDE_METADATA",
+                    messageParameters={},
                 )
-            exp = proto.Expression()
+            exp = self._create_proto_expression()
             exp.alias.name.extend(self._alias)
-            exp.alias.expr.CopyFrom(self._parent.to_plan(session))
+            exp.alias.expr.CopyFrom(self._child.to_plan(session))
             return exp
 
+    @property
+    def children(self) -> Sequence["Expression"]:
+        return [self._child]
+
     def __repr__(self) -> str:
-        return f"{self._parent} AS {','.join(self._alias)}"
+        return f"{self._child} AS {','.join(self._alias)}"
 
 
 class LiteralExpression(Expression):
@@ -213,6 +255,7 @@ class LiteralExpression(Expression):
             ),
         )
 
+        value = enum_to_value(value)
         if isinstance(dataType, NullType):
             assert value is None
 
@@ -247,7 +290,8 @@ class LiteralExpression(Expression):
             elif isinstance(dataType, DecimalType):
                 assert isinstance(value, decimal.Decimal)
             elif isinstance(dataType, StringType):
-                assert isinstance(value, str)
+                assert isinstance(value, (str, np.str_))
+                value = str(value)
             elif isinstance(dataType, DateType):
                 assert isinstance(value, (datetime.date, datetime.datetime))
                 if isinstance(value, datetime.date):
@@ -268,8 +312,8 @@ class LiteralExpression(Expression):
                 assert isinstance(value, list)
             else:
                 raise PySparkTypeError(
-                    error_class="UNSUPPORTED_DATA_TYPE",
-                    message_parameters={"data_type": str(dataType)},
+                    errorClass="UNSUPPORTED_DATA_TYPE",
+                    messageParameters={"data_type": str(dataType)},
                 )
 
         self._value = value
@@ -277,11 +321,12 @@ class LiteralExpression(Expression):
 
     @classmethod
     def _infer_type(cls, value: Any) -> DataType:
+        value = enum_to_value(value)
         if value is None:
             return NullType()
         elif isinstance(value, (bytes, bytearray)):
             return BinaryType()
-        elif isinstance(value, bool):
+        elif isinstance(value, (bool, np.bool_)):
             return BooleanType()
         elif isinstance(value, int):
             if JVM_INT_MIN <= value <= JVM_INT_MAX:
@@ -290,8 +335,8 @@ class LiteralExpression(Expression):
                 return LongType()
             else:
                 raise PySparkValueError(
-                    error_class="VALUE_NOT_BETWEEN",
-                    message_parameters={
+                    errorClass="VALUE_NOT_BETWEEN",
+                    messageParameters={
                         "arg_name": "value",
                         "min": str(JVM_LONG_MIN),
                         "max": str(JVM_SHORT_MAX),
@@ -299,14 +344,12 @@ class LiteralExpression(Expression):
                 )
         elif isinstance(value, float):
             return DoubleType()
-        elif isinstance(value, str):
+        elif isinstance(value, (str, np.str_)):
             return StringType()
         elif isinstance(value, decimal.Decimal):
             return DecimalType()
-        elif isinstance(value, datetime.datetime) and is_timestamp_ntz_preferred():
-            return TimestampNTZType()
         elif isinstance(value, datetime.datetime):
-            return TimestampType()
+            return TimestampNTZType() if is_timestamp_ntz_preferred() else TimestampType()
         elif isinstance(value, datetime.date):
             return DateType()
         elif isinstance(value, datetime.timedelta):
@@ -315,27 +358,19 @@ class LiteralExpression(Expression):
             dt = _from_numpy_type(value.dtype)
             if dt is not None:
                 return dt
-            elif isinstance(value, np.bool_):
-                return BooleanType()
         elif isinstance(value, list):
             # follow the 'infer_array_from_first_element' strategy in 'sql.types._infer_type'
             # right now, it's dedicated for pyspark.ml params like array<...>, array<array<...>>
-            if len(value) == 0:
-                raise PySparkValueError(
-                    error_class="CANNOT_BE_EMPTY",
-                    message_parameters={"item": "value"},
-                )
-            first = value[0]
-            if first is None:
+            if len(value) == 0 or value[0] is None:
                 raise PySparkTypeError(
-                    error_class="CANNOT_INFER_ARRAY_TYPE",
-                    message_parameters={},
+                    errorClass="CANNOT_INFER_ARRAY_ELEMENT_TYPE",
+                    messageParameters={},
                 )
-            return ArrayType(LiteralExpression._infer_type(first), True)
+            return ArrayType(LiteralExpression._infer_type(value[0]), True)
 
         raise PySparkTypeError(
-            error_class="UNSUPPORTED_DATA_TYPE",
-            message_parameters={"data_type": type(value).__name__},
+            errorClass="UNSUPPORTED_DATA_TYPE",
+            messageParameters={"data_type": type(value).__name__},
         )
 
     @classmethod
@@ -398,14 +433,14 @@ class LiteralExpression(Expression):
             return [LiteralExpression._to_value(v, elementType) for v in literal.array.elements]
 
         raise PySparkTypeError(
-            error_class="UNSUPPORTED_LITERAL",
-            message_parameters={"literal": str(literal)},
+            errorClass="UNSUPPORTED_LITERAL",
+            messageParameters={"literal": str(literal)},
         )
 
     def to_plan(self, session: "SparkConnectClient") -> "proto.Expression":
         """Converts the literal expression to the literal in proto."""
 
-        expr = proto.Expression()
+        expr = self._create_proto_expression()
 
         if self._value is None:
             expr.literal.null.CopyFrom(pyspark_types_to_proto_types(self._dataType))
@@ -448,13 +483,38 @@ class LiteralExpression(Expression):
                 )
         else:
             raise PySparkTypeError(
-                error_class="UNSUPPORTED_DATA_TYPE",
-                message_parameters={"data_type": str(self._dataType)},
+                errorClass="UNSUPPORTED_DATA_TYPE",
+                messageParameters={"data_type": str(self._dataType)},
             )
 
         return expr
 
     def __repr__(self) -> str:
+        if self._value is None:
+            return "NULL"
+        elif isinstance(self._dataType, DateType):
+            dt = DateType().fromInternal(self._value)
+            if dt is not None and isinstance(dt, datetime.date):
+                return dt.strftime("%Y-%m-%d")
+        elif isinstance(self._dataType, TimestampType):
+            ts = TimestampType().fromInternal(self._value)
+            if ts is not None and isinstance(ts, datetime.datetime):
+                return ts.strftime("%Y-%m-%d %H:%M:%S.%f")
+        elif isinstance(self._dataType, TimestampNTZType):
+            ts = TimestampNTZType().fromInternal(self._value)
+            if ts is not None and isinstance(ts, datetime.datetime):
+                return ts.strftime("%Y-%m-%d %H:%M:%S.%f")
+        elif isinstance(self._dataType, DayTimeIntervalType):
+            delta = DayTimeIntervalType().fromInternal(self._value)
+            if delta is not None and isinstance(delta, datetime.timedelta):
+                import pandas as pd
+
+                # Note: timedelta itself does not provide isoformat method.
+                # Both Pandas and java.time.Duration provide it, but the format
+                # is sightly different:
+                # java.time.Duration only applies HOURS, MINUTES, SECONDS units,
+                # while Pandas applies all supported units.
+                return pd.Timedelta(delta).isoformat()
         return f"{self._value}"
 
 
@@ -464,7 +524,12 @@ class ColumnReference(Expression):
     treat it as an unresolved attribute. Attributes that have the same fully
     qualified name are identical"""
 
-    def __init__(self, unparsed_identifier: str, plan_id: Optional[int] = None) -> None:
+    def __init__(
+        self,
+        unparsed_identifier: str,
+        plan_id: Optional[int] = None,
+        is_metadata_column: bool = False,
+    ) -> None:
         super().__init__()
         assert isinstance(unparsed_identifier, str)
         self._unparsed_identifier = unparsed_identifier
@@ -472,16 +537,19 @@ class ColumnReference(Expression):
         assert plan_id is None or isinstance(plan_id, int)
         self._plan_id = plan_id
 
+        self._is_metadata_column = is_metadata_column
+
     def name(self) -> str:
         """Returns the qualified name of the column reference."""
         return self._unparsed_identifier
 
     def to_plan(self, session: "SparkConnectClient") -> proto.Expression:
         """Returns the Proto representation of the expression."""
-        expr = proto.Expression()
+        expr = self._create_proto_expression()
         expr.unresolved_attribute.unparsed_identifier = self._unparsed_identifier
         if self._plan_id is not None:
             expr.unresolved_attribute.plan_id = self._plan_id
+        expr.unresolved_attribute.is_metadata_column = self._is_metadata_column
         return expr
 
     def __repr__(self) -> str:
@@ -507,7 +575,7 @@ class UnresolvedStar(Expression):
         self._plan_id = plan_id
 
     def to_plan(self, session: "SparkConnectClient") -> "proto.Expression":
-        expr = proto.Expression()
+        expr = self._create_proto_expression()
         expr.unresolved_star.SetInParent()
         if self._unparsed_target is not None:
             expr.unresolved_star.unparsed_target = self._unparsed_target
@@ -536,16 +604,20 @@ class SQLExpression(Expression):
 
     def __init__(self, expr: str) -> None:
         super().__init__()
+        assert isinstance(expr, str)
         self._expr: str = expr
 
     def to_plan(self, session: "SparkConnectClient") -> proto.Expression:
         """Returns the Proto representation of the SQL expression."""
-        expr = proto.Expression()
+        expr = self._create_proto_expression()
         expr.expression_string.expression = self._expr
         return expr
 
     def __eq__(self, other: Any) -> bool:
         return other is not None and isinstance(other, SQLExpression) and other._expr == self._expr
+
+    def __repr__(self) -> str:
+        return self._expr
 
 
 class SortOrder(Expression):
@@ -563,7 +635,7 @@ class SortOrder(Expression):
         )
 
     def to_plan(self, session: "SparkConnectClient") -> proto.Expression:
-        sort = proto.Expression()
+        sort = self._create_proto_expression()
         sort.sort_order.child.CopyFrom(self._child.to_plan(session))
 
         if self._ascending:
@@ -581,6 +653,10 @@ class SortOrder(Expression):
             sort.sort_order.null_ordering = proto.Expression.SortOrder.NullOrdering.SORT_NULLS_LAST
 
         return sort
+
+    @property
+    def children(self) -> Sequence["Expression"]:
+        return [self._child]
 
 
 class UnresolvedFunction(Expression):
@@ -602,12 +678,16 @@ class UnresolvedFunction(Expression):
         self._is_distinct = is_distinct
 
     def to_plan(self, session: "SparkConnectClient") -> proto.Expression:
-        fun = proto.Expression()
+        fun = self._create_proto_expression()
         fun.unresolved_function.function_name = self._name
         if len(self._args) > 0:
             fun.unresolved_function.arguments.extend([arg.to_plan(session) for arg in self._args])
         fun.unresolved_function.is_distinct = self._is_distinct
         return fun
+
+    @property
+    def children(self) -> Sequence["Expression"]:
+        return self._args
 
     def __repr__(self) -> str:
         # Default print handling:
@@ -690,16 +770,16 @@ class CommonInlineUserDefinedFunction(Expression):
         function_name: str,
         function: Union[PythonUDF, JavaUDF],
         deterministic: bool = False,
-        arguments: Sequence[Expression] = [],
+        arguments: Optional[Sequence[Expression]] = None,
     ):
         super().__init__()
         self._function_name = function_name
         self._deterministic = deterministic
-        self._arguments = arguments
+        self._arguments: Sequence[Expression] = arguments or []
         self._function = function
 
     def to_plan(self, session: "SparkConnectClient") -> "proto.Expression":
-        expr = proto.Expression()
+        expr = self._create_proto_expression()
         expr.common_inline_user_defined_function.function_name = self._function_name
         expr.common_inline_user_defined_function.deterministic = self._deterministic
         if len(self._arguments) > 0:
@@ -730,6 +810,10 @@ class CommonInlineUserDefinedFunction(Expression):
         expr.java_udf.CopyFrom(cast(proto.JavaUDF, self._function.to_plan(session)))
         return expr
 
+    @property
+    def children(self) -> Sequence["Expression"]:
+        return self._arguments
+
     def __repr__(self) -> str:
         return f"{self._function_name}({', '.join([str(arg) for arg in self._arguments])})"
 
@@ -753,14 +837,18 @@ class WithField(Expression):
         self._valueExpr = valueExpr
 
     def to_plan(self, session: "SparkConnectClient") -> proto.Expression:
-        expr = proto.Expression()
+        expr = self._create_proto_expression()
         expr.update_fields.struct_expression.CopyFrom(self._structExpr.to_plan(session))
         expr.update_fields.field_name = self._fieldName
         expr.update_fields.value_expression.CopyFrom(self._valueExpr.to_plan(session))
         return expr
 
+    @property
+    def children(self) -> Sequence["Expression"]:
+        return [self._structExpr, self._valueExpr]
+
     def __repr__(self) -> str:
-        return f"WithField({self._structExpr}, {self._fieldName}, {self._valueExpr})"
+        return f"update_field({self._structExpr}, {self._fieldName}, {self._valueExpr})"
 
 
 class DropField(Expression):
@@ -778,13 +866,17 @@ class DropField(Expression):
         self._fieldName = fieldName
 
     def to_plan(self, session: "SparkConnectClient") -> proto.Expression:
-        expr = proto.Expression()
+        expr = self._create_proto_expression()
         expr.update_fields.struct_expression.CopyFrom(self._structExpr.to_plan(session))
         expr.update_fields.field_name = self._fieldName
         return expr
 
+    @property
+    def children(self) -> Sequence["Expression"]:
+        return [self._structExpr]
+
     def __repr__(self) -> str:
-        return f"DropField({self._structExpr}, {self._fieldName})"
+        return f"drop_field({self._structExpr}, {self._fieldName})"
 
 
 class UnresolvedExtractValue(Expression):
@@ -802,13 +894,17 @@ class UnresolvedExtractValue(Expression):
         self._extraction = extraction
 
     def to_plan(self, session: "SparkConnectClient") -> proto.Expression:
-        expr = proto.Expression()
+        expr = self._create_proto_expression()
         expr.unresolved_extract_value.child.CopyFrom(self._child.to_plan(session))
         expr.unresolved_extract_value.extraction.CopyFrom(self._extraction.to_plan(session))
         return expr
 
+    @property
+    def children(self) -> Sequence["Expression"]:
+        return [self._child, self._extraction]
+
     def __repr__(self) -> str:
-        return f"UnresolvedExtractValue({str(self._child)}, {str(self._extraction)})"
+        return f"{self._child}['{self._extraction}']"
 
 
 class UnresolvedRegex(Expression):
@@ -822,7 +918,7 @@ class UnresolvedRegex(Expression):
         self._plan_id = plan_id
 
     def to_plan(self, session: "SparkConnectClient") -> proto.Expression:
-        expr = proto.Expression()
+        expr = self._create_proto_expression()
         expr.unresolved_regex.col_name = self.col_name
         if self._plan_id is not None:
             expr.unresolved_regex.plan_id = self._plan_id
@@ -841,6 +937,7 @@ class CastExpression(Expression):
     ) -> None:
         super().__init__()
         self._expr = expr
+        assert isinstance(data_type, (DataType, str))
         self._data_type = data_type
         if eval_mode is not None:
             assert isinstance(eval_mode, str)
@@ -848,7 +945,7 @@ class CastExpression(Expression):
         self._eval_mode = eval_mode
 
     def to_plan(self, session: "SparkConnectClient") -> proto.Expression:
-        fun = proto.Expression()
+        fun = self._create_proto_expression()
         fun.cast.expr.CopyFrom(self._expr.to_plan(session))
         if isinstance(self._data_type, str):
             fun.cast.type_str = self._data_type
@@ -865,8 +962,23 @@ class CastExpression(Expression):
 
         return fun
 
+    @property
+    def children(self) -> Sequence["Expression"]:
+        return [self._expr]
+
     def __repr__(self) -> str:
-        return f"({self._expr} ({self._data_type}))"
+        # We cannot guarantee the string representations be exactly the same, e.g.
+        # str(sf.col("a").cast("long")):
+        #   Column<'CAST(a AS BIGINT)'>     <- Spark Classic
+        #   Column<'CAST(a AS LONG)'>       <- Spark Connect
+        if isinstance(self._data_type, DataType):
+            str_data_type = self._data_type.simpleString().upper()
+        else:
+            str_data_type = str(self._data_type).upper()
+        if self._eval_mode is not None and self._eval_mode == "try":
+            return f"TRY_CAST({self._expr} AS {str_data_type})"
+        else:
+            return f"CAST({self._expr} AS {str_data_type})"
 
 
 class UnresolvedNamedLambdaVariable(Expression):
@@ -888,12 +1000,12 @@ class UnresolvedNamedLambdaVariable(Expression):
         self._name_parts = name_parts
 
     def to_plan(self, session: "SparkConnectClient") -> proto.Expression:
-        expr = proto.Expression()
+        expr = self._create_proto_expression()
         expr.unresolved_named_lambda_variable.name_parts.extend(self._name_parts)
         return expr
 
     def __repr__(self) -> str:
-        return f"(UnresolvedNamedLambdaVariable({', '.join(self._name_parts)})"
+        return ", ".join(self._name_parts)
 
     @staticmethod
     def fresh_var_name(name: str) -> str:
@@ -930,15 +1042,22 @@ class LambdaFunction(Expression):
         self._arguments = arguments
 
     def to_plan(self, session: "SparkConnectClient") -> proto.Expression:
-        expr = proto.Expression()
+        expr = self._create_proto_expression()
         expr.lambda_function.function.CopyFrom(self._function.to_plan(session))
         expr.lambda_function.arguments.extend(
             [arg.to_plan(session).unresolved_named_lambda_variable for arg in self._arguments]
         )
         return expr
 
+    @property
+    def children(self) -> Sequence["Expression"]:
+        return [self._function] + self._arguments
+
     def __repr__(self) -> str:
-        return f"(LambdaFunction({str(self._function)}, {', '.join(self._arguments)})"
+        return (
+            f"LambdaFunction({str(self._function)}, "
+            + f"{', '.join([str(arg) for arg in self._arguments])})"
+        )
 
 
 class WindowExpression(Expression):
@@ -960,7 +1079,7 @@ class WindowExpression(Expression):
         self._windowSpec = windowSpec
 
     def to_plan(self, session: "SparkConnectClient") -> proto.Expression:
-        expr = proto.Expression()
+        expr = self._create_proto_expression()
 
         expr.window.window_function.CopyFrom(self._windowFunction.to_plan(session))
 
@@ -995,8 +1114,8 @@ class WindowExpression(Expression):
                     expr.window.frame_spec.lower.value.literal.integer = start
                 else:
                     raise PySparkValueError(
-                        error_class="VALUE_NOT_BETWEEN",
-                        message_parameters={
+                        errorClass="VALUE_NOT_BETWEEN",
+                        messageParameters={
                             "arg_name": "start",
                             "min": str(JVM_INT_MIN),
                             "max": str(JVM_INT_MAX),
@@ -1012,8 +1131,8 @@ class WindowExpression(Expression):
                     expr.window.frame_spec.upper.value.literal.integer = end
                 else:
                     raise PySparkValueError(
-                        error_class="VALUE_NOT_BETWEEN",
-                        message_parameters={
+                        errorClass="VALUE_NOT_BETWEEN",
+                        messageParameters={
                             "arg_name": "end",
                             "min": str(JVM_INT_MIN),
                             "max": str(JVM_INT_MAX),
@@ -1043,6 +1162,12 @@ class WindowExpression(Expression):
 
         return expr
 
+    @property
+    def children(self) -> Sequence["Expression"]:
+        return (
+            [self._windowFunction] + self._windowSpec._partitionSpec + self._windowSpec._orderSpec
+        )
+
     def __repr__(self) -> str:
         return f"WindowExpression({str(self._windowFunction)}, ({str(self._windowSpec)}))"
 
@@ -1067,11 +1192,15 @@ class CallFunction(Expression):
         self._args = args
 
     def to_plan(self, session: "SparkConnectClient") -> "proto.Expression":
-        expr = proto.Expression()
+        expr = self._create_proto_expression()
         expr.call_function.function_name = self._name
         if len(self._args) > 0:
             expr.call_function.arguments.extend([arg.to_plan(session) for arg in self._args])
         return expr
+
+    @property
+    def children(self) -> Sequence["Expression"]:
+        return self._args
 
     def __repr__(self) -> str:
         if len(self._args) > 0:
@@ -1091,10 +1220,55 @@ class NamedArgumentExpression(Expression):
         self._value = value
 
     def to_plan(self, session: "SparkConnectClient") -> "proto.Expression":
-        expr = proto.Expression()
+        expr = self._create_proto_expression()
         expr.named_argument_expression.key = self._key
         expr.named_argument_expression.value.CopyFrom(self._value.to_plan(session))
         return expr
 
+    @property
+    def children(self) -> Sequence["Expression"]:
+        return [self._value]
+
     def __repr__(self) -> str:
         return f"{self._key} => {self._value}"
+
+
+class LazyExpression(Expression):
+    def __init__(self, expr: Expression):
+        assert isinstance(expr, Expression)
+        super().__init__()
+        self._expr = expr
+
+    def to_plan(self, session: "SparkConnectClient") -> proto.Expression:
+        expr = self._create_proto_expression()
+        expr.lazy_expression.child.CopyFrom(self._expr.to_plan(session))
+        return expr
+
+    @property
+    def children(self) -> Sequence["Expression"]:
+        return [self._expr]
+
+    def __repr__(self) -> str:
+        return f"lazy({self._expr})"
+
+
+class SubqueryExpression(Expression):
+    def __init__(self, plan: "LogicalPlan", subquery_type: str) -> None:
+        assert isinstance(subquery_type, str)
+        assert subquery_type in ("scalar", "exists")
+
+        super().__init__()
+        self._plan = plan
+        self._subquery_type = subquery_type
+
+    def to_plan(self, session: "SparkConnectClient") -> proto.Expression:
+        expr = self._create_proto_expression()
+        expr.subquery_expression.plan_id = self._plan._plan_id
+        if self._subquery_type == "scalar":
+            expr.subquery_expression.subquery_type = proto.SubqueryExpression.SUBQUERY_TYPE_SCALAR
+        elif self._subquery_type == "exists":
+            expr.subquery_expression.subquery_type = proto.SubqueryExpression.SUBQUERY_TYPE_EXISTS
+        return expr
+
+    def __repr__(self) -> str:
+        return f"SubqueryExpression({self._plan}, {self._subquery_type})"

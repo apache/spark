@@ -526,7 +526,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
             |GROUP BY key
           """.stripMargin)
       },
-      errorClass = "AGGREGATE_FUNCTION_WITH_NONDETERMINISTIC_EXPRESSION",
+      condition = "AGGREGATE_FUNCTION_WITH_NONDETERMINISTIC_EXPRESSION",
       parameters = Map("sqlExpr" -> "\"mydoublesum(((value + (1.5 * key)) + rand()))\""),
       context = ExpectedContext(
         fragment = "value + 1.5 * key + rand()",

@@ -40,7 +40,7 @@ class ResolveDefaultColumnsSuite extends QueryTest with SharedSparkSession {
         exception = intercept[AnalysisException] {
           sql("insert into t values (timestamp'2020-12-31')")
         },
-        errorClass = "INSERT_COLUMN_ARITY_MISMATCH.NOT_ENOUGH_DATA_COLUMNS",
+        condition = "INSERT_COLUMN_ARITY_MISMATCH.NOT_ENOUGH_DATA_COLUMNS",
         parameters = Map(
           "tableName" -> "`spark_catalog`.`default`.`t`",
           "tableColumns" -> "`c1`, `c2`",
@@ -68,7 +68,7 @@ class ResolveDefaultColumnsSuite extends QueryTest with SharedSparkSession {
         exception = intercept[AnalysisException] {
           sql("insert into t values (timestamp'2020-12-31')")
         },
-        errorClass = "INSERT_COLUMN_ARITY_MISMATCH.NOT_ENOUGH_DATA_COLUMNS",
+        condition = "INSERT_COLUMN_ARITY_MISMATCH.NOT_ENOUGH_DATA_COLUMNS",
         parameters = Map(
           "tableName" -> "`spark_catalog`.`default`.`t`",
           "tableColumns" -> "`c1`, `c2`",
@@ -85,7 +85,7 @@ class ResolveDefaultColumnsSuite extends QueryTest with SharedSparkSession {
         exception = intercept[AnalysisException] {
           sql("insert into t values (1, 2, 3)")
         },
-        errorClass = "INSERT_COLUMN_ARITY_MISMATCH.NOT_ENOUGH_DATA_COLUMNS",
+        condition = "INSERT_COLUMN_ARITY_MISMATCH.NOT_ENOUGH_DATA_COLUMNS",
         parameters = Map(
           "tableName" -> "`spark_catalog`.`default`.`t`",
           "tableColumns" -> "`c1`, `c2`, `c3`, `c4`",
@@ -102,7 +102,7 @@ class ResolveDefaultColumnsSuite extends QueryTest with SharedSparkSession {
         exception = intercept[AnalysisException] {
           sql("insert into t partition(c3=3, c4=4) values (1)")
         },
-        errorClass = "INSERT_PARTITION_COLUMN_ARITY_MISMATCH",
+        condition = "INSERT_PARTITION_COLUMN_ARITY_MISMATCH",
         parameters = Map(
           "tableName" -> "`spark_catalog`.`default`.`t`",
           "tableColumns" -> "`c1`, `c2`, `c3`, `c4`",
@@ -120,7 +120,7 @@ class ResolveDefaultColumnsSuite extends QueryTest with SharedSparkSession {
         exception = intercept[AnalysisException] {
           sql("insert into t partition(c3=3, c4) values (1, 2)")
         },
-        errorClass = "INSERT_PARTITION_COLUMN_ARITY_MISMATCH",
+        condition = "INSERT_PARTITION_COLUMN_ARITY_MISMATCH",
         parameters = Map(
           "tableName" -> "`spark_catalog`.`default`.`t`",
           "tableColumns" -> "`c1`, `c2`, `c3`, `c4`",
@@ -173,7 +173,7 @@ class ResolveDefaultColumnsSuite extends QueryTest with SharedSparkSession {
           exception = intercept[AnalysisException] {
             sql("create table demos.test_ts_other (a int default 'abc') using parquet")
           },
-          errorClass = "INVALID_DEFAULT_VALUE.DATA_TYPE",
+          condition = "INVALID_DEFAULT_VALUE.DATA_TYPE",
           parameters = Map(
             "statement" -> "CREATE TABLE",
             "colName" -> "`a`",
@@ -184,7 +184,7 @@ class ResolveDefaultColumnsSuite extends QueryTest with SharedSparkSession {
           exception = intercept[AnalysisException] {
             sql("create table demos.test_ts_other (a timestamp default 'invalid') using parquet")
           },
-          errorClass = "INVALID_DEFAULT_VALUE.DATA_TYPE",
+          condition = "INVALID_DEFAULT_VALUE.DATA_TYPE",
           parameters = Map(
             "statement" -> "CREATE TABLE",
             "colName" -> "`a`",
@@ -195,7 +195,7 @@ class ResolveDefaultColumnsSuite extends QueryTest with SharedSparkSession {
           exception = intercept[AnalysisException] {
             sql("create table demos.test_ts_other (a boolean default 'true') using parquet")
           },
-          errorClass = "INVALID_DEFAULT_VALUE.DATA_TYPE",
+          condition = "INVALID_DEFAULT_VALUE.DATA_TYPE",
           parameters = Map(
             "statement" -> "CREATE TABLE",
             "colName" -> "`a`",
@@ -206,7 +206,7 @@ class ResolveDefaultColumnsSuite extends QueryTest with SharedSparkSession {
           exception = intercept[AnalysisException] {
             sql("create table demos.test_ts_other (a int default true) using parquet")
           },
-          errorClass = "INVALID_DEFAULT_VALUE.DATA_TYPE",
+          condition = "INVALID_DEFAULT_VALUE.DATA_TYPE",
           parameters = Map(
             "statement" -> "CREATE TABLE",
             "colName" -> "`a`",
@@ -237,7 +237,7 @@ class ResolveDefaultColumnsSuite extends QueryTest with SharedSparkSession {
       checkError(
         exception = intercept[SparkRuntimeException](
           sql(s"CREATE TABLE t(c $typeName(3) DEFAULT 'spark') USING parquet")),
-        errorClass = "EXCEED_LIMIT_LENGTH",
+        condition = "EXCEED_LIMIT_LENGTH",
         parameters = Map("limit" -> "3"))
     }
   }
@@ -285,6 +285,27 @@ class ResolveDefaultColumnsSuite extends QueryTest with SharedSparkSession {
       sql("CREATE TABLE t(v VARIANT DEFAULT parse_json('1')) USING PARQUET")
       sql("INSERT INTO t VALUES(DEFAULT)")
       checkAnswer(sql("select v from t"), sql("select parse_json('1')").collect())
+    }
+  }
+
+  test("SPARK-49054: Create table with current_user() default") {
+    val tableName = "test_current_user"
+    val user = spark.sparkContext.sparkUser
+    withTable(tableName) {
+      sql(s"CREATE TABLE $tableName(i int, s string default current_user()) USING parquet")
+      sql(s"INSERT INTO $tableName (i) VALUES ((0))")
+      checkAnswer(sql(s"SELECT * FROM $tableName"), Seq(Row(0, user)))
+    }
+  }
+
+  test("SPARK-49054: Alter table with current_user() default") {
+    val tableName = "test_current_user"
+    val user = spark.sparkContext.sparkUser
+    withTable(tableName) {
+      sql(s"CREATE TABLE $tableName(i int, s string) USING parquet")
+      sql(s"ALTER TABLE $tableName ALTER COLUMN s SET DEFAULT current_user()")
+      sql(s"INSERT INTO $tableName (i) VALUES ((0))")
+      checkAnswer(sql(s"SELECT * FROM $tableName"), Seq(Row(0, user)))
     }
   }
 }

@@ -27,6 +27,7 @@ from pyspark.errors import (
     PySparkValueError,
     IllegalArgumentException,
     SparkUpgradeException,
+    PySparkTypeError,
 )
 from pyspark.testing.utils import assertDataFrameEqual, assertSchemaEqual, _context_diff, have_numpy
 from pyspark.testing.sqlutils import ReusedSQLTestCase
@@ -175,8 +176,8 @@ class UtilsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="DIFFERENT_ROWS",
-            message_parameters={"error_msg": error_msg},
+            errorClass="DIFFERENT_ROWS",
+            messageParameters={"error_msg": error_msg},
         )
 
         with self.assertRaises(PySparkAssertionError) as pe:
@@ -184,8 +185,8 @@ class UtilsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="DIFFERENT_ROWS",
-            message_parameters={"error_msg": error_msg},
+            errorClass="DIFFERENT_ROWS",
+            messageParameters={"error_msg": error_msg},
         )
 
     def test_assert_approx_equal_arraytype_float_custom_rtol_pass(self):
@@ -332,8 +333,8 @@ class UtilsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="DIFFERENT_ROWS",
-            message_parameters={"error_msg": error_msg},
+            errorClass="DIFFERENT_ROWS",
+            messageParameters={"error_msg": error_msg},
         )
 
         rows_str1 = ""
@@ -358,8 +359,8 @@ class UtilsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="DIFFERENT_ROWS",
-            message_parameters={"error_msg": error_msg},
+            errorClass="DIFFERENT_ROWS",
+            messageParameters={"error_msg": error_msg},
         )
 
     def test_assert_equal_maptype(self):
@@ -653,8 +654,8 @@ class UtilsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="DIFFERENT_ROWS",
-            message_parameters={"error_msg": error_msg},
+            errorClass="DIFFERENT_ROWS",
+            messageParameters={"error_msg": error_msg},
         )
 
         with self.assertRaises(PySparkAssertionError) as pe:
@@ -662,8 +663,8 @@ class UtilsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="DIFFERENT_ROWS",
-            message_parameters={"error_msg": error_msg},
+            errorClass="DIFFERENT_ROWS",
+            messageParameters={"error_msg": error_msg},
         )
 
     def test_assert_equal_nulldf(self):
@@ -688,8 +689,8 @@ class UtilsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="INVALID_TYPE_DF_EQUALITY_ARG",
-            message_parameters={
+            errorClass="INVALID_TYPE_DF_EQUALITY_ARG",
+            messageParameters={
                 "expected_type": "Union[DataFrame, ps.DataFrame, List[Row]]",
                 "arg_name": "actual",
                 "actual_type": None,
@@ -701,8 +702,8 @@ class UtilsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="INVALID_TYPE_DF_EQUALITY_ARG",
-            message_parameters={
+            errorClass="INVALID_TYPE_DF_EQUALITY_ARG",
+            messageParameters={
                 "expected_type": "Union[DataFrame, ps.DataFrame, List[Row]]",
                 "arg_name": "actual",
                 "actual_type": None,
@@ -724,8 +725,8 @@ class UtilsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="INVALID_TYPE_DF_EQUALITY_ARG",
-            message_parameters={
+            errorClass="INVALID_TYPE_DF_EQUALITY_ARG",
+            messageParameters={
                 "expected_type": "Union[DataFrame, ps.DataFrame, List[Row]]",
                 "arg_name": "expected",
                 "actual_type": None,
@@ -737,8 +738,8 @@ class UtilsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="INVALID_TYPE_DF_EQUALITY_ARG",
-            message_parameters={
+            errorClass="INVALID_TYPE_DF_EQUALITY_ARG",
+            messageParameters={
                 "expected_type": "Union[DataFrame, ps.DataFrame, List[Row]]",
                 "arg_name": "expected",
                 "actual_type": None,
@@ -803,8 +804,8 @@ class UtilsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="DIFFERENT_PANDAS_DATAFRAME",
-            message_parameters={
+            errorClass="DIFFERENT_PANDAS_DATAFRAME",
+            messageParameters={
                 "left": df1.to_string(),
                 "left_dtype": str(df1.dtypes),
                 "right": df2.to_string(),
@@ -817,8 +818,8 @@ class UtilsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="DIFFERENT_PANDAS_DATAFRAME",
-            message_parameters={
+            errorClass="DIFFERENT_PANDAS_DATAFRAME",
+            messageParameters={
                 "left": df1.to_string(),
                 "left_dtype": str(df1.dtypes),
                 "right": df2.to_string(),
@@ -846,8 +847,8 @@ class UtilsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="DIFFERENT_PANDAS_DATAFRAME",
-            message_parameters={
+            errorClass="DIFFERENT_PANDAS_DATAFRAME",
+            messageParameters={
                 "left": df1.to_string(),
                 "left_dtype": str(df1.dtypes),
                 "right": df2.to_string(),
@@ -860,8 +861,8 @@ class UtilsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="DIFFERENT_PANDAS_DATAFRAME",
-            message_parameters={
+            errorClass="DIFFERENT_PANDAS_DATAFRAME",
+            messageParameters={
                 "left": df1.to_string(),
                 "left_dtype": str(df1.dtypes),
                 "right": df2.to_string(),
@@ -888,8 +889,8 @@ class UtilsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="DIFFERENT_PANDAS_DATAFRAME",
-            message_parameters={
+            errorClass="DIFFERENT_PANDAS_DATAFRAME",
+            messageParameters={
                 "left": df1.to_string(),
                 "left_dtype": str(df1.dtypes),
                 "right": df2.to_string(),
@@ -902,8 +903,8 @@ class UtilsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="DIFFERENT_PANDAS_DATAFRAME",
-            message_parameters={
+            errorClass="DIFFERENT_PANDAS_DATAFRAME",
+            messageParameters={
                 "left": df1.to_string(),
                 "left_dtype": str(df1.dtypes),
                 "right": df2.to_string(),
@@ -953,8 +954,8 @@ class UtilsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="INVALID_TYPE_DF_EQUALITY_ARG",
-            message_parameters={
+            errorClass="INVALID_TYPE_DF_EQUALITY_ARG",
+            messageParameters={
                 "expected_type": f"{ps.DataFrame.__name__}, "
                 f"{pd.DataFrame.__name__}, "
                 f"{ps.Series.__name__}, "
@@ -971,8 +972,8 @@ class UtilsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="INVALID_TYPE_DF_EQUALITY_ARG",
-            message_parameters={
+            errorClass="INVALID_TYPE_DF_EQUALITY_ARG",
+            messageParameters={
                 "expected_type": f"{ps.DataFrame.__name__}, "
                 f"{pd.DataFrame.__name__}, "
                 f"{ps.Series.__name__}, "
@@ -993,8 +994,8 @@ class UtilsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="INVALID_TYPE_DF_EQUALITY_ARG",
-            message_parameters={
+            errorClass="INVALID_TYPE_DF_EQUALITY_ARG",
+            messageParameters={
                 "expected_type": "Union[DataFrame, ps.DataFrame, List[Row]]",
                 "arg_name": "actual",
                 "actual_type": type(dict1),
@@ -1006,8 +1007,8 @@ class UtilsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="INVALID_TYPE_DF_EQUALITY_ARG",
-            message_parameters={
+            errorClass="INVALID_TYPE_DF_EQUALITY_ARG",
+            messageParameters={
                 "expected_type": "Union[DataFrame, ps.DataFrame, List[Row]]",
                 "arg_name": "actual",
                 "actual_type": type(dict1),
@@ -1072,8 +1073,8 @@ class UtilsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="DIFFERENT_ROWS",
-            message_parameters={"error_msg": error_msg},
+            errorClass="DIFFERENT_ROWS",
+            messageParameters={"error_msg": error_msg},
         )
 
     def test_remove_non_word_characters_long(self):
@@ -1167,8 +1168,8 @@ class UtilsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="DIFFERENT_ROWS",
-            message_parameters={"error_msg": error_msg},
+            errorClass="DIFFERENT_ROWS",
+            messageParameters={"error_msg": error_msg},
         )
 
         with self.assertRaises(PySparkAssertionError) as pe:
@@ -1176,8 +1177,8 @@ class UtilsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="DIFFERENT_ROWS",
-            message_parameters={"error_msg": error_msg},
+            errorClass="DIFFERENT_ROWS",
+            messageParameters={"error_msg": error_msg},
         )
 
     def test_assert_notequal_schema(self):
@@ -1205,8 +1206,8 @@ class UtilsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="DIFFERENT_SCHEMA",
-            message_parameters={"error_msg": expected_error_msg},
+            errorClass="DIFFERENT_SCHEMA",
+            messageParameters={"error_msg": expected_error_msg},
         )
 
     def test_diff_schema_lens(self):
@@ -1235,8 +1236,8 @@ class UtilsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="DIFFERENT_SCHEMA",
-            message_parameters={"error_msg": expected_error_msg},
+            errorClass="DIFFERENT_SCHEMA",
+            messageParameters={"error_msg": expected_error_msg},
         )
 
     def test_schema_ignore_nullable(self):
@@ -1285,8 +1286,8 @@ class UtilsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="DIFFERENT_SCHEMA",
-            message_parameters={"error_msg": expected_error_msg},
+            errorClass="DIFFERENT_SCHEMA",
+            messageParameters={"error_msg": expected_error_msg},
         )
 
     def test_schema_struct_unequal(self):
@@ -1306,8 +1307,8 @@ class UtilsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="DIFFERENT_SCHEMA",
-            message_parameters={"error_msg": expected_error_msg},
+            errorClass="DIFFERENT_SCHEMA",
+            messageParameters={"error_msg": expected_error_msg},
         )
 
     def test_schema_more_nested_struct_unequal(self):
@@ -1350,21 +1351,21 @@ class UtilsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="DIFFERENT_SCHEMA",
-            message_parameters={"error_msg": expected_error_msg},
+            errorClass="DIFFERENT_SCHEMA",
+            messageParameters={"error_msg": expected_error_msg},
         )
 
     def test_schema_unsupported_type(self):
         s1 = "names: int"
         s2 = "names: int"
 
-        with self.assertRaises(PySparkAssertionError) as pe:
+        with self.assertRaises(PySparkTypeError) as pe:
             assertSchemaEqual(s1, s2)
 
         self.check_error(
             exception=pe.exception,
-            error_class="UNSUPPORTED_DATA_TYPE",
-            message_parameters={"data_type": type(s1)},
+            errorClass="NOT_STRUCT",
+            messageParameters={"arg_name": "actual", "arg_type": "str"},
         )
 
     def test_spark_sql(self):
@@ -1522,8 +1523,8 @@ class UtilsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="DIFFERENT_ROWS",
-            message_parameters={"error_msg": error_msg},
+            errorClass="DIFFERENT_ROWS",
+            messageParameters={"error_msg": error_msg},
         )
 
         with self.assertRaises(PySparkAssertionError) as pe:
@@ -1531,8 +1532,8 @@ class UtilsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="DIFFERENT_ROWS",
-            message_parameters={"error_msg": error_msg},
+            errorClass="DIFFERENT_ROWS",
+            messageParameters={"error_msg": error_msg},
         )
 
     def test_list_row_unequal_schema(self):
@@ -1569,8 +1570,8 @@ class UtilsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="DIFFERENT_ROWS",
-            message_parameters={"error_msg": error_msg},
+            errorClass="DIFFERENT_ROWS",
+            messageParameters={"error_msg": error_msg},
         )
 
         with self.assertRaises(PySparkAssertionError) as pe:
@@ -1578,8 +1579,8 @@ class UtilsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="DIFFERENT_ROWS",
-            message_parameters={"error_msg": error_msg},
+            errorClass="DIFFERENT_ROWS",
+            messageParameters={"error_msg": error_msg},
         )
 
     def test_list_row_unequal_schema(self):
@@ -1617,8 +1618,8 @@ class UtilsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="DIFFERENT_ROWS",
-            message_parameters={"error_msg": error_msg},
+            errorClass="DIFFERENT_ROWS",
+            messageParameters={"error_msg": error_msg},
         )
 
         with self.assertRaises(PySparkAssertionError) as pe:
@@ -1626,8 +1627,8 @@ class UtilsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="DIFFERENT_ROWS",
-            message_parameters={"error_msg": error_msg},
+            errorClass="DIFFERENT_ROWS",
+            messageParameters={"error_msg": error_msg},
         )
 
     def test_dataframe_include_diff_rows(self):

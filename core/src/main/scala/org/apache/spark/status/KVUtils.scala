@@ -31,7 +31,8 @@ import org.rocksdb.RocksDBException
 
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.history.{FsHistoryProvider, FsHistoryProviderMetadata}
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config.History
 import org.apache.spark.internal.config.History.HYBRID_STORE_DISK_BACKEND
 import org.apache.spark.internal.config.History.HybridStoreDiskBackend
@@ -154,7 +155,7 @@ private[spark] object KVUtils extends Logging {
           open(dbPath, metadata, conf, live)
         case dbExc @ (_: NativeDB.DBException | _: RocksDBException) =>
           // Get rid of the corrupted data and re-create it.
-          logWarning(s"Failed to load disk store $dbPath :", dbExc)
+          logWarning(log"Failed to load disk store ${MDC(PATH, dbPath)} :", dbExc)
           Utils.deleteRecursively(dbPath)
           open(dbPath, metadata, conf, live)
       }

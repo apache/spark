@@ -6,7 +6,7 @@ AS testData(a, b)
 -- !query analysis
 CreateViewCommand `testData`, SELECT * FROM VALUES
 (1, 1), (1, 2), (2, 1), (2, 2), (3, 1), (3, 2)
-AS testData(a, b), false, true, LocalTempView, true
+AS testData(a, b), false, true, LocalTempView, UNSUPPORTED, true
    +- Project [a#x, b#x]
       +- SubqueryAlias testData
          +- LocalRelation [a#x, b#x]
@@ -75,7 +75,7 @@ AS courseSales(course, year, earnings)
 -- !query analysis
 CreateViewCommand `courseSales`, SELECT * FROM VALUES
 ("dotNET", 2012, 10000), ("Java", 2012, 20000), ("dotNET", 2012, 5000), ("dotNET", 2013, 48000), ("Java", 2013, 30000)
-AS courseSales(course, year, earnings), false, true, LocalTempView, true
+AS courseSales(course, year, earnings), false, true, LocalTempView, UNSUPPORTED, true
    +- Project [course#x, year#x, earnings#x]
       +- SubqueryAlias courseSales
          +- LocalRelation [course#x, year#x, earnings#x]

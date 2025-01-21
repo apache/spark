@@ -178,22 +178,19 @@ class DataType(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
         TYPE_VARIATION_REFERENCE_FIELD_NUMBER: builtins.int
-        COLLATION_ID_FIELD_NUMBER: builtins.int
+        COLLATION_FIELD_NUMBER: builtins.int
         type_variation_reference: builtins.int
-        collation_id: builtins.int
+        collation: builtins.str
         def __init__(
             self,
             *,
             type_variation_reference: builtins.int = ...,
-            collation_id: builtins.int = ...,
+            collation: builtins.str = ...,
         ) -> None: ...
         def ClearField(
             self,
             field_name: typing_extensions.Literal[
-                "collation_id",
-                b"collation_id",
-                "type_variation_reference",
-                b"type_variation_reference",
+                "collation", b"collation", "type_variation_reference", b"type_variation_reference"
             ],
         ) -> None: ...
 
@@ -670,10 +667,14 @@ class DataType(google.protobuf.message.Message):
         SQL_TYPE_FIELD_NUMBER: builtins.int
         type: builtins.str
         jvm_class: builtins.str
+        """Required for Scala/Java UDT"""
         python_class: builtins.str
+        """Required for Python UDT"""
         serialized_python_class: builtins.str
+        """Required for Python UDT"""
         @property
-        def sql_type(self) -> global___DataType: ...
+        def sql_type(self) -> global___DataType:
+            """Required for Python UDT"""
         def __init__(
             self,
             *,
@@ -692,6 +693,8 @@ class DataType(google.protobuf.message.Message):
                 b"_python_class",
                 "_serialized_python_class",
                 b"_serialized_python_class",
+                "_sql_type",
+                b"_sql_type",
                 "jvm_class",
                 b"jvm_class",
                 "python_class",
@@ -711,6 +714,8 @@ class DataType(google.protobuf.message.Message):
                 b"_python_class",
                 "_serialized_python_class",
                 b"_serialized_python_class",
+                "_sql_type",
+                b"_sql_type",
                 "jvm_class",
                 b"jvm_class",
                 "python_class",
@@ -738,6 +743,10 @@ class DataType(google.protobuf.message.Message):
                 "_serialized_python_class", b"_serialized_python_class"
             ],
         ) -> typing_extensions.Literal["serialized_python_class"] | None: ...
+        @typing.overload
+        def WhichOneof(
+            self, oneof_group: typing_extensions.Literal["_sql_type", b"_sql_type"]
+        ) -> typing_extensions.Literal["sql_type"] | None: ...
 
     class Unparsed(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor

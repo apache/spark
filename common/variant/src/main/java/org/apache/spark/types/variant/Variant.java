@@ -113,6 +113,11 @@ public final class Variant {
     return VariantUtil.getString(value, pos);
   }
 
+  // Get the type info bits from a variant value.
+  public int getTypeInfo() {
+    return VariantUtil.getTypeInfo(value, pos);
+  }
+
   // Get the value type of the variant.
   public Type getType() {
     return VariantUtil.getType(value, pos);
@@ -185,6 +190,18 @@ public final class Variant {
       String key = getMetadataKey(metadata, id);
       Variant v = new Variant(value, metadata, dataStart + offset);
       return new ObjectField(key, v);
+    });
+  }
+
+  // Get the dictionary ID for the object field at the `index` slot. Throws malformedVariant if
+  // `index` is out of the bound of `[0, objectSize())`.
+  // It is only legal to call it when `getType()` is `Type.OBJECT`.
+  public int getDictionaryIdAtIndex(int index) {
+    return handleObject(value, pos, (size, idSize, offsetSize, idStart, offsetStart, dataStart) -> {
+      if (index < 0 || index >= size) {
+        throw malformedVariant();
+      }
+      return readUnsigned(value, idStart + idSize * index, idSize);
     });
   }
 

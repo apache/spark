@@ -149,7 +149,7 @@ class SeriesArgOpsMixin:
         self.assert_eq(pser.argmax(), psser.argmax())
         self.assert_eq(pser.argmax(skipna=False), psser.argmax(skipna=False))
 
-        pser2 = pd.Series([np.NaN, 1.0, 2.0, np.NaN])
+        pser2 = pd.Series([np.nan, 1.0, 2.0, np.nan])
         psser2 = ps.from_pandas(pser2)
         self.assert_eq(pser2.argmin(), psser2.argmin())
         self.assert_eq(pser2.argmax(), psser2.argmax())

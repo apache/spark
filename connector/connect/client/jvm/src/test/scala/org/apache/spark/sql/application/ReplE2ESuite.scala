@@ -25,13 +25,13 @@ import scala.util.Properties
 import org.apache.commons.io.output.ByteArrayOutputStream
 import org.scalatest.BeforeAndAfterEach
 
-import org.apache.spark.sql.test.{IntegrationTestUtils, RemoteSparkSession}
+import org.apache.spark.sql.test.{ConnectFunSuite, IntegrationTestUtils, RemoteSparkSession}
 import org.apache.spark.tags.AmmoniteTest
 import org.apache.spark.util.IvyTestUtils
 import org.apache.spark.util.MavenUtils.MavenCoordinate
 
 @AmmoniteTest
-class ReplE2ESuite extends RemoteSparkSession with BeforeAndAfterEach {
+class ReplE2ESuite extends ConnectFunSuite with RemoteSparkSession with BeforeAndAfterEach {
 
   private val executorService = Executors.newSingleThreadExecutor()
   private val TIMEOUT_SECONDS = 30
@@ -64,6 +64,7 @@ class ReplE2ESuite extends RemoteSparkSession with BeforeAndAfterEach {
     val args = Array("--port", serverPort.toString)
     val task = new Runnable {
       override def run(): Unit = {
+        System.setProperty("spark.sql.abc", "abc")
         ConnectRepl.doMain(
           args = args,
           semaphore = Some(semaphore),
@@ -554,5 +555,14 @@ class ReplE2ESuite extends RemoteSparkSession with BeforeAndAfterEach {
         |""".stripMargin
     val output = runCommandsInShell(input)
     assertContains(": Long = 1045", output)
+  }
+
+  test("Simple configuration set in startup") {
+    val input =
+      """
+        |spark.conf.get("spark.sql.abc")
+      """.stripMargin
+    val output = runCommandsInShell(input)
+    assertContains("abc", output)
   }
 }

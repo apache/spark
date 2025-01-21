@@ -99,7 +99,7 @@ SHOW VIEWS FROM default LIKE 'sam*';
 | default   | sam1       | false        |
 +-----------+------------+--------------+
 
--- List all views from the current database matching the pattern `sam|suj｜temp*`
+-- List all views from the current database matching the pattern `sam|suj|temp*`
 SHOW VIEWS LIKE 'sam|suj|temp*';
 +-------------+------------+--------------+
 | namespace   | viewName   | isTemporary  |

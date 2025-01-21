@@ -24,11 +24,13 @@ import scala.collection.mutable.ArrayBuffer
 import net.razorvine.pickle.Pickler
 
 import org.apache.spark.api.python.{PythonEvalType, PythonFunction, PythonWorkerUtils, SpecialLengths}
-import org.apache.spark.sql.{Column, DataFrame, Dataset, SparkSession}
+import org.apache.spark.sql.{Column, DataFrame, Dataset, SparkSession, TableArg, TableValuedFunctionArgument}
 import org.apache.spark.sql.catalyst.expressions.{Alias, Ascending, Descending, Expression, FunctionTableSubqueryArgumentExpression, NamedArgumentExpression, NullsFirst, NullsLast, PythonUDAF, PythonUDF, PythonUDTF, PythonUDTFAnalyzeResult, PythonUDTFSelectedExpression, SortOrder, UnresolvedPolymorphicPythonUDTF}
 import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.plans.logical.{Generate, LogicalPlan, NamedParametersSupport, OneRowRelation}
+import org.apache.spark.sql.classic.ClassicConversions._
 import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.internal.ExpressionUtils.expression
 import org.apache.spark.sql.types.{DataType, StructType}
 
 /**
@@ -63,19 +65,21 @@ case class UserDefinedPythonFunction(
     }
   }
 
+  def builderWithColumns(e: Seq[Column]): Expression = builder(e.map(expression))
+
   /** Returns a [[Column]] that will evaluate to calling this UDF with the given input. */
   def apply(exprs: Column*): Column = {
-    fromUDFExpr(builder(exprs.map(_.expr)))
+    fromUDFExpr(builder(exprs.map(expression)))
   }
 
   /**
    * Returns a [[Column]] that will evaluate the UDF expression with the given input.
    */
   def fromUDFExpr(expr: Expression): Column = {
-    expr match {
-      case udaf: PythonUDAF => Column(udaf.toAggregateExpression())
-      case _ => Column(expr)
-    }
+    Column(expr match {
+      case udaf: PythonUDAF => udaf.toAggregateExpression()
+      case _ => expr
+    })
   }
 }
 
@@ -156,8 +160,16 @@ case class UserDefinedPythonTableFunction(
   }
 
   /** Returns a [[DataFrame]] that will evaluate to calling this UDTF with the given input. */
-  def apply(session: SparkSession, exprs: Column*): DataFrame = {
-    val udtf = builder(exprs.map(_.expr), session.sessionState.sqlParser)
+  def apply(session: SparkSession, exprs: TableValuedFunctionArgument*): DataFrame = {
+    val parser = session.sessionState.sqlParser
+    val expressions = exprs.map {
+      case col: Column => session.expression(col)
+      case tableArg: TableArg => tableArg.expression
+      case other => throw new IllegalArgumentException(
+        s"Unsupported argument type: ${other.getClass.getName}"
+      )
+    }
+    val udtf = builder(expressions, parser)
     Dataset.ofRows(session, udtf)
   }
 }

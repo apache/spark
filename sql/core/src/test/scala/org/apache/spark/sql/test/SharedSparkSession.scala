@@ -77,6 +77,7 @@ trait SharedSparkSessionBase
     conf.set(
       StaticSQLConf.WAREHOUSE_PATH,
       conf.get(StaticSQLConf.WAREHOUSE_PATH) + "/" + getClass.getCanonicalName)
+    conf.set(StaticSQLConf.LOAD_SESSION_EXTENSIONS_FROM_CLASSPATH, false)
   }
 
   /**
@@ -101,6 +102,8 @@ trait SharedSparkSessionBase
     SparkSession.cleanupAnyExistingSession()
     new TestSparkSession(sparkConf)
   }
+
+  protected def sqlConf: SQLConf = _spark.sessionState.conf
 
   /**
    * Initialize the [[TestSparkSession]].  Generally, this is just called from

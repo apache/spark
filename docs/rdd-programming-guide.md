@@ -39,14 +39,14 @@ along with if you launch Spark's interactive shell -- either `bin/spark-shell` f
 
 <div data-lang="python"  markdown="1">
 
-Spark {{site.SPARK_VERSION}} works with Python 3.8+. It can use the standard CPython interpreter,
+Spark {{site.SPARK_VERSION}} works with Python 3.9+. It can use the standard CPython interpreter,
 so C libraries like NumPy can be used. It also works with PyPy 7.3.6+.
 
 Spark applications in Python can either be run with the `bin/spark-submit` script which includes Spark at runtime, or by including it in your setup.py as:
 
 {% highlight python %}
     install_requires=[
-        'pyspark=={site.SPARK_VERSION}'
+        'pyspark=={{site.SPARK_VERSION}}'
     ]
 {% endhighlight %}
 
@@ -214,13 +214,13 @@ can be passed to the `--repositories` argument. For example, to run
 `bin/pyspark` on exactly four cores, use:
 
 {% highlight bash %}
-$ ./bin/pyspark --master local[4]
+$ ./bin/pyspark --master "local[4]"
 {% endhighlight %}
 
 Or, to also add `code.py` to the search path (in order to later be able to `import code`), use:
 
 {% highlight bash %}
-$ ./bin/pyspark --master local[4] --py-files code.py
+$ ./bin/pyspark --master "local[4]" --py-files code.py
 {% endhighlight %}
 
 For a complete list of options, run `pyspark --help`. Behind the scenes,
@@ -260,19 +260,19 @@ can be passed to the `--repositories` argument. For example, to run `bin/spark-s
 four cores, use:
 
 {% highlight bash %}
-$ ./bin/spark-shell --master local[4]
+$ ./bin/spark-shell --master "local[4]"
 {% endhighlight %}
 
 Or, to also add `code.jar` to its classpath, use:
 
 {% highlight bash %}
-$ ./bin/spark-shell --master local[4] --jars code.jar
+$ ./bin/spark-shell --master "local[4]" --jars code.jar
 {% endhighlight %}
 
 To include a dependency using Maven coordinates:
 
 {% highlight bash %}
-$ ./bin/spark-shell --master local[4] --packages "org.example:example:0.1"
+$ ./bin/spark-shell --master "local[4]" --packages "org.example:example:0.1"
 {% endhighlight %}
 
 For a complete list of options, run `spark-shell --help`. Behind the scenes,
@@ -781,7 +781,7 @@ One of the harder things about Spark is understanding the scope and life cycle o
 
 #### Example
 
-Consider the naive RDD element sum below, which may behave differently depending on whether execution is happening within the same JVM. A common example of this is when running Spark in `local` mode (`--master = local[n]`) versus deploying a Spark application to a cluster (e.g. via spark-submit to YARN):
+Consider the naive RDD element sum below, which may behave differently depending on whether execution is happening within the same JVM. A common example of this is when running Spark in `local` mode (`--master = "local[n]"`) versus deploying a Spark application to a cluster (e.g. via spark-submit to YARN):
 
 <div class="codetabs">
 

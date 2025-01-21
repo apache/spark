@@ -69,21 +69,16 @@ Running Tests for Python Client
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 In order to test the changes in Protobuf definitions, for example, at
-`spark/connector/connect/common/src/main/protobuf/spark/connect <https://github.com/apache/spark/tree/master/connector/connect/common/src/main/protobuf/spark/connect>`_,
+`spark/sql/connect/common/src/main/protobuf/spark/connect <https://github.com/apache/spark/tree/master/sql/connect/common/src/main/protobuf/spark/connect>`_,
 you should regenerate Python Protobuf client first by running ``dev/connect-gen-protos.sh``.
 
 
 Running PySpark Shell with Python Client
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-For Apache Spark you locally built:
+The command below starts Spark Connect server automatically locally, and creates a Spark Connect client connected to the server.
 
 .. code-block:: bash
 
     bin/pyspark --remote "local[*]"
 
-For the Apache Spark release:
-
-.. code-block:: bash
-
-    bin/pyspark --remote "local[*]" --packages org.apache.spark:spark-connect_2.13:$SPARK_VERSION

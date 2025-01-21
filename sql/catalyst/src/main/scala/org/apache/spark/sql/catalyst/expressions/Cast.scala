@@ -128,7 +128,10 @@ object Cast extends QueryErrorsBase {
     case (TimestampType, _: NumericType) => true
 
     case (VariantType, _) => variant.VariantGet.checkDataType(to)
-    case (_, VariantType) => variant.VariantGet.checkDataType(from)
+    // Structs and Maps can't be cast to Variants since the Variant spec does not yet contain
+    // lossless equivalents for these types. The `to_variant_object` expression can be used instead
+    // to convert data of these types to Variant Objects.
+    case (_, VariantType) => variant.VariantGet.checkDataType(from, allowStructsAndMaps = false)
 
     case (ArrayType(fromType, fn), ArrayType(toType, tn)) =>
       canAnsiCast(fromType, toType) && resolvableNullability(fn, tn)
@@ -237,7 +240,10 @@ object Cast extends QueryErrorsBase {
     case (_: NumericType, _: NumericType) => true
 
     case (VariantType, _) => variant.VariantGet.checkDataType(to)
-    case (_, VariantType) => variant.VariantGet.checkDataType(from)
+    // Structs and Maps can't be cast to Variants since the Variant spec does not yet contain
+    // lossless equivalents for these types. The `to_variant_object` expression can be used instead
+    // to convert data of these types to Variant Objects.
+    case (_, VariantType) => variant.VariantGet.checkDataType(from, allowStructsAndMaps = false)
 
     case (ArrayType(fromType, fn), ArrayType(toType, tn)) =>
       canCast(fromType, toType) &&
@@ -275,7 +281,7 @@ object Cast extends QueryErrorsBase {
   def needsTimeZone(from: DataType, to: DataType): Boolean = (from, to) match {
     case (VariantType, _) => true
     case (_: StringType, TimestampType) => true
-    case (TimestampType, StringType) => true
+    case (TimestampType, _: StringType) => true
     case (DateType, TimestampType) => true
     case (TimestampType, DateType) => true
     case (TimestampType, TimestampNTZType) => true
@@ -467,9 +473,9 @@ case class Cast(
   extends UnaryExpression
   with TimeZoneAwareExpression
   with ToStringBase
-  with NullIntolerant
   with SupportQueryContext
   with QueryErrorsBase {
+  override def nullIntolerant: Boolean = true
 
   def this(child: Expression, dataType: DataType, timeZoneId: Option[String]) =
     this(child, dataType, timeZoneId, evalMode = EvalMode.fromSQLConf(SQLConf.get))
@@ -559,6 +565,11 @@ case class Cast(
     }
   }
 
+  private lazy val castArgs = variant.VariantCastArgs(
+    evalMode != EvalMode.TRY,
+    timeZoneId,
+    zoneId)
+
   def needsTimeZone: Boolean = Cast.needsTimeZone(child.dataType, dataType)
 
   // [[func]] assumes the input is no longer null because eval already does the null check.
@@ -574,8 +585,6 @@ case class Cast(
   // as strings. Otherwise, the casting is using `BigDecimal.toString` which may use scientific
   // notation if an exponent is needed.
   override protected def useDecimalPlainString: Boolean = ansiEnabled
-
-  override protected def useHexFormatForBinary: Boolean = false
 
   // The class name of `DateTimeUtils`
   protected def dateTimeUtilsCls: String = DateTimeUtils.getClass.getName.stripSuffix("$")
@@ -1014,7 +1023,7 @@ case class Cast(
         try doubleStr.toDouble catch {
           case _: NumberFormatException =>
             val d = Cast.processFloatingPointSpecialLiterals(doubleStr, false)
-            if(ansiEnabled && d == null) {
+            if (ansiEnabled && d == null) {
               throw QueryExecutionErrors.invalidInputInCastToNumberError(
                 DoubleType, s, getContextOrNull())
             } else {
@@ -1116,13 +1125,13 @@ case class Cast(
       _ => throw QueryExecutionErrors.cannotCastFromNullTypeError(to)
     } else if (from.isInstanceOf[VariantType]) {
       buildCast[VariantVal](_, v => {
-        variant.VariantGet.cast(v, to, evalMode != EvalMode.TRY, timeZoneId, zoneId)
+        variant.VariantGet.cast(v, to, castArgs)
       })
     } else {
       to match {
         case dt if dt == from => identity[Any]
         case VariantType => input => variant.VariantExpressionEvalUtils.castToVariant(input, from)
-        case _: StringType => castToString(from)
+        case s: StringType => castToString(from, s.constraint)
         case BinaryType => castToBinary(from)
         case DateType => castToDate(from)
         case decimal: DecimalType => castToDecimal(from, decimal)
@@ -1214,12 +1223,10 @@ case class Cast(
     case _ if from.isInstanceOf[VariantType] => (c, evPrim, evNull) =>
       val tmp = ctx.freshVariable("tmp", classOf[Object])
       val dataTypeArg = ctx.addReferenceObj("dataType", to)
-      val zoneStrArg = ctx.addReferenceObj("zoneStr", timeZoneId)
-      val zoneIdArg = ctx.addReferenceObj("zoneId", zoneId, classOf[ZoneId].getName)
-      val failOnError = evalMode != EvalMode.TRY
+      val castArgsArg = ctx.addReferenceObj("castArgs", castArgs)
       val cls = classOf[variant.VariantGet].getName
       code"""
-        Object $tmp = $cls.cast($c, $dataTypeArg, $failOnError, $zoneStrArg, $zoneIdArg);
+        Object $tmp = $cls.cast($c, $dataTypeArg, $castArgsArg);
         if ($tmp == null) {
           $evNull = true;
         } else {
@@ -1230,7 +1237,8 @@ case class Cast(
       val cls = variant.VariantExpressionEvalUtils.getClass.getName.stripSuffix("$")
       val fromArg = ctx.addReferenceObj("from", from)
       (c, evPrim, evNull) => code"$evPrim = $cls.castToVariant($c, $fromArg);"
-    case _: StringType => (c, evPrim, _) => castToStringCode(from, ctx).apply(c, evPrim)
+    case s: StringType =>
+      (c, evPrim, _) => castToStringCode(from, ctx, s.constraint).apply(c, evPrim)
     case BinaryType => castToBinaryCode(from)
     case DateType => castToDateCode(from, ctx)
     case decimal: DecimalType => castToDecimalCode(from, decimal, ctx)
@@ -1571,7 +1579,7 @@ case class Cast(
       val util = IntervalUtils.getClass.getCanonicalName.stripSuffix("$")
       (c, evPrim, evNull) =>
         code"""$evPrim = $util.safeStringToInterval($c);
-           if(${evPrim} == null) {
+           if (${evPrim} == null) {
              ${evNull} = true;
            }
          """.stripMargin

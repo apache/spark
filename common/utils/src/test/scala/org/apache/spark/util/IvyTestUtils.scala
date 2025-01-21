@@ -365,7 +365,7 @@ private[spark] object IvyTestUtils {
       useIvyLayout: Boolean = false,
       withPython: Boolean = false,
       withR: Boolean = false,
-      ivySettings: IvySettings = new IvySettings)(f: String => Unit): Unit = {
+      ivySettings: IvySettings = defaultIvySettings())(f: String => Unit): Unit = {
     val deps = dependencies.map(MavenUtils.extractMavenCoordinates)
     purgeLocalIvyCache(artifact, deps, ivySettings)
     val repo = createLocalRepositoryForTests(artifact, dependencies, rootDir, useIvyLayout,
@@ -400,5 +400,17 @@ private[spark] object IvyTestUtils {
         FileUtils.deleteDirectory(new File(ivySettings.getDefaultCache, dep.groupId))
       }
     }
+  }
+
+  /**
+   * Creates and initializes a new instance of IvySettings with default configurations.
+   * The method processes the Ivy path argument using MavenUtils to ensure proper setup.
+   *
+   * @return A newly created and configured instance of IvySettings.
+   */
+  private def defaultIvySettings(): IvySettings = {
+    val settings = new IvySettings
+    MavenUtils.processIvyPathArg(ivySettings = settings, ivyPath = None)
+    settings
   }
 }

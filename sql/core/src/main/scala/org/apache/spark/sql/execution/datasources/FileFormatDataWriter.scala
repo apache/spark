@@ -22,7 +22,8 @@ import org.apache.hadoop.fs.{FileAlreadyExistsException, Path}
 import org.apache.hadoop.mapreduce.TaskAttemptContext
 
 import org.apache.spark.TaskOutputFileAlreadyExistException
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys.{CONFIG, NUM_CONCURRENT_WRITER}
 import org.apache.spark.internal.io.{FileCommitProtocol, FileNameSpec}
 import org.apache.spark.internal.io.FileCommitProtocol.TaskCommitMessage
 import org.apache.spark.shuffle.FetchFailedException
@@ -558,9 +559,11 @@ class DynamicPartitionDataConcurrentWriter(
         new WriterStatus(currentWriter, recordsInFile, fileCounter))
       if (concurrentWriters.size >= concurrentOutputWriterSpec.maxWriters && !sorted) {
         // Fall back to sort-based sequential writer mode.
-        logInfo(s"Number of concurrent writers ${concurrentWriters.size} reaches the threshold. " +
-          "Fall back from concurrent writers to sort-based sequential writer. You may change " +
-          s"threshold with configuration ${SQLConf.MAX_CONCURRENT_OUTPUT_FILE_WRITERS.key}")
+        logInfo(log"Number of concurrent writers " +
+          log"${MDC(NUM_CONCURRENT_WRITER, concurrentWriters.size)} reaches the threshold. " +
+          log"Fall back from concurrent writers to sort-based sequential writer. You may change " +
+          log"threshold with configuration " +
+          log"${MDC(CONFIG, SQLConf.MAX_CONCURRENT_OUTPUT_FILE_WRITERS.key)}")
         sorted = true
       }
     }

@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.streaming.state
 
-import org.apache.spark.{SparkException, SparkUnsupportedOperationException}
+import org.apache.spark.{SparkException, SparkRuntimeException, SparkUnsupportedOperationException}
 
 /**
  * Object for grouping error messages from (most) exceptions thrown from State API V2
@@ -37,6 +37,16 @@ object StateStoreErrors {
       msg = s"Failed to find time values for timeMode=$timeMode",
       category = "TWS"
     )
+  }
+
+  def keyRowFormatValidationFailure(errorMsg: String):
+    StateStoreKeyRowFormatValidationFailure = {
+    new StateStoreKeyRowFormatValidationFailure(errorMsg)
+  }
+
+  def valueRowFormatValidationFailure(errorMsg: String):
+    StateStoreValueRowFormatValidationFailure = {
+    new StateStoreValueRowFormatValidationFailure(errorMsg)
   }
 
   def unsupportedOperationOnMissingColumnFamily(operationName: String, colFamilyName: String):
@@ -113,11 +123,6 @@ object StateStoreErrors {
     new StatefulProcessorCannotPerformOperationWithInvalidHandleState(operationType, handleState)
   }
 
-  def cannotReInitializeStateOnKey(groupingKey: String):
-    StatefulProcessorCannotReInitializeState = {
-    new StatefulProcessorCannotReInitializeState(groupingKey)
-  }
-
   def cannotProvideTTLConfigForTimeMode(stateName: String, timeMode: String):
     StatefulProcessorCannotAssignTTLInTimeMode = {
     new StatefulProcessorCannotAssignTTLInTimeMode(stateName, timeMode)
@@ -127,7 +132,109 @@ object StateStoreErrors {
       stateName: String): StatefulProcessorTTLMustBePositive = {
     new StatefulProcessorTTLMustBePositive(operationType, stateName)
   }
+
+  def stateStoreKeySchemaNotCompatible(
+      storedKeySchema: String,
+      newKeySchema: String): StateStoreKeySchemaNotCompatible = {
+    new StateStoreKeySchemaNotCompatible(storedKeySchema, newKeySchema)
+  }
+
+  def stateStoreValueSchemaNotCompatible(
+      storedValueSchema: String,
+      newValueSchema: String): StateStoreValueSchemaNotCompatible = {
+    new StateStoreValueSchemaNotCompatible(storedValueSchema, newValueSchema)
+  }
+
+  def stateStoreInvalidValueSchemaEvolution(
+      oldValueSchema: String,
+      newValueSchema: String): StateStoreInvalidValueSchemaEvolution = {
+    new StateStoreInvalidValueSchemaEvolution(oldValueSchema, newValueSchema)
+  }
+
+  def stateStoreValueSchemaEvolutionThresholdExceeded(
+      numSchemaEvolutions: Int,
+      maxSchemaEvolutions: Int,
+      colFamilyName: String): StateStoreValueSchemaEvolutionThresholdExceeded = {
+    new StateStoreValueSchemaEvolutionThresholdExceeded(
+      numSchemaEvolutions, maxSchemaEvolutions, colFamilyName)
+  }
+
+  def streamingStateSchemaFilesThresholdExceeded(
+      numSchemaFiles: Int,
+      schemaFilesThreshold: Int,
+      addedColFamilies: List[String],
+      removedColFamilies: List[String]): StateStoreStateSchemaFilesThresholdExceeded = {
+    new StateStoreStateSchemaFilesThresholdExceeded(
+      numSchemaFiles, schemaFilesThreshold, addedColFamilies, removedColFamilies)
+  }
+
+  def stateStoreColumnFamilyMismatch(
+      columnFamilyName: String,
+      oldColumnFamilySchema: String,
+      newColumnFamilySchema: String): StateStoreColumnFamilyMismatch = {
+    new StateStoreColumnFamilyMismatch(
+      columnFamilyName, oldColumnFamilySchema, newColumnFamilySchema)
+  }
+
+  def stateStoreSnapshotFileNotFound(fileToRead: String, clazz: String):
+    StateStoreSnapshotFileNotFound = {
+    new StateStoreSnapshotFileNotFound(fileToRead, clazz)
+  }
+
+  def stateStoreSnapshotPartitionNotFound(
+      snapshotPartitionId: Long, operatorId: Int, checkpointLocation: String):
+    StateStoreSnapshotPartitionNotFound = {
+    new StateStoreSnapshotPartitionNotFound(snapshotPartitionId, operatorId, checkpointLocation)
+  }
+
+  def stateStoreProviderDoesNotSupportFineGrainedReplay(inputClass: String):
+    StateStoreProviderDoesNotSupportFineGrainedReplay = {
+    new StateStoreProviderDoesNotSupportFineGrainedReplay(inputClass)
+  }
+
+  def invalidConfigChangedAfterRestart(configName: String, oldConfig: String, newConfig: String):
+    StateStoreInvalidConfigAfterRestart = {
+    new StateStoreInvalidConfigAfterRestart(configName, oldConfig, newConfig)
+  }
+
+  def duplicateStateVariableDefined(stateName: String):
+    StateStoreDuplicateStateVariableDefined = {
+    new StateStoreDuplicateStateVariableDefined(stateName)
+  }
+
+  def invalidVariableTypeChange(stateName: String, oldType: String, newType: String):
+    StateStoreInvalidVariableTypeChange = {
+    new StateStoreInvalidVariableTypeChange(stateName, oldType, newType)
+  }
 }
+
+class StateStoreDuplicateStateVariableDefined(stateVarName: String)
+  extends SparkRuntimeException(
+    errorClass = "STATEFUL_PROCESSOR_DUPLICATE_STATE_VARIABLE_DEFINED",
+    messageParameters = Map(
+      "stateVarName" -> stateVarName
+    )
+  )
+
+class StateStoreInvalidConfigAfterRestart(configName: String, oldConfig: String, newConfig: String)
+  extends SparkUnsupportedOperationException(
+    errorClass = "STATE_STORE_INVALID_CONFIG_AFTER_RESTART",
+    messageParameters = Map(
+      "configName" -> configName,
+      "oldConfig" -> oldConfig,
+      "newConfig" -> newConfig
+    )
+  )
+
+class StateStoreInvalidVariableTypeChange(stateVarName: String, oldType: String, newType: String)
+  extends SparkUnsupportedOperationException(
+    errorClass = "STATE_STORE_INVALID_VARIABLE_TYPE_CHANGE",
+    messageParameters = Map(
+      "stateVarName" -> stateVarName,
+      "oldType" -> oldType,
+      "newType" -> newType
+    )
+  )
 
 class StateStoreMultipleColumnFamiliesNotSupportedException(stateStoreProvider: String)
   extends SparkUnsupportedOperationException(
@@ -156,6 +263,17 @@ class StateStoreUnsupportedOperationException(operationType: String, entity: Str
     messageParameters = Map("operationType" -> operationType, "entity" -> entity)
   )
 
+class StateStoreColumnFamilyMismatch(
+    columnFamilyName: String,
+    oldColumnFamilySchema: String,
+    newColumnFamilySchema: String)
+  extends SparkUnsupportedOperationException(
+    errorClass = "STATE_STORE_COLUMN_FAMILY_SCHEMA_INCOMPATIBLE",
+    messageParameters = Map(
+      "columnFamilyName" -> columnFamilyName,
+      "oldColumnFamilySchema" -> oldColumnFamilySchema,
+      "newColumnFamilySchema" -> newColumnFamilySchema))
+
 class StatefulProcessorCannotPerformOperationWithInvalidTimeMode(
     operationType: String,
     timeMode: String)
@@ -171,11 +289,6 @@ class StatefulProcessorCannotPerformOperationWithInvalidHandleState(
     errorClass = "STATEFUL_PROCESSOR_CANNOT_PERFORM_OPERATION_WITH_INVALID_HANDLE_STATE",
     messageParameters = Map("operationType" -> operationType, "handleState" -> handleState)
   )
-
-class StatefulProcessorCannotReInitializeState(groupingKey: String)
-  extends SparkUnsupportedOperationException(
-  errorClass = "STATEFUL_PROCESSOR_CANNOT_REINITIALIZE_STATE_ON_KEY",
-  messageParameters = Map("groupingKey" -> groupingKey))
 
 class StateStoreUnsupportedOperationOnMissingColumnFamily(
     operationType: String,
@@ -214,3 +327,85 @@ class StatefulProcessorTTLMustBePositive(
   extends SparkUnsupportedOperationException(
     errorClass = "STATEFUL_PROCESSOR_TTL_DURATION_MUST_BE_POSITIVE",
     messageParameters = Map("operationType" -> operationType, "stateName" -> stateName))
+
+class StateStoreKeySchemaNotCompatible(
+    storedKeySchema: String,
+    newKeySchema: String)
+  extends SparkUnsupportedOperationException(
+    errorClass = "STATE_STORE_KEY_SCHEMA_NOT_COMPATIBLE",
+    messageParameters = Map(
+      "storedKeySchema" -> storedKeySchema,
+      "newKeySchema" -> newKeySchema))
+
+class StateStoreValueSchemaNotCompatible(
+    storedValueSchema: String,
+    newValueSchema: String)
+  extends SparkUnsupportedOperationException(
+    errorClass = "STATE_STORE_VALUE_SCHEMA_NOT_COMPATIBLE",
+    messageParameters = Map(
+      "storedValueSchema" -> storedValueSchema,
+      "newValueSchema" -> newValueSchema))
+
+class StateStoreInvalidValueSchemaEvolution(
+    oldValueSchema: String,
+    newValueSchema: String)
+  extends SparkUnsupportedOperationException(
+    errorClass = "STATE_STORE_INVALID_VALUE_SCHEMA_EVOLUTION",
+    messageParameters = Map(
+      "oldValueSchema" -> oldValueSchema,
+      "newValueSchema" -> newValueSchema))
+
+class StateStoreValueSchemaEvolutionThresholdExceeded(
+    numSchemaEvolutions: Int,
+    maxSchemaEvolutions: Int,
+    colFamilyName: String)
+  extends SparkUnsupportedOperationException(
+    errorClass = "STATE_STORE_VALUE_SCHEMA_EVOLUTION_THRESHOLD_EXCEEDED",
+    messageParameters = Map(
+      "numSchemaEvolutions" -> numSchemaEvolutions.toString,
+      "maxSchemaEvolutions" -> maxSchemaEvolutions.toString,
+      "colFamilyName" -> colFamilyName))
+
+class StateStoreStateSchemaFilesThresholdExceeded(
+    numStateSchemaFiles: Int,
+    maxStateSchemaFiles: Int,
+    addedColFamilies: List[String],
+    removedColFamilies: List[String])
+  extends SparkUnsupportedOperationException(
+    errorClass = "STATE_STORE_STATE_SCHEMA_FILES_THRESHOLD_EXCEEDED",
+    messageParameters = Map(
+      "numStateSchemaFiles" -> numStateSchemaFiles.toString,
+      "maxStateSchemaFiles" -> maxStateSchemaFiles.toString,
+      "addedColumnFamilies" -> addedColFamilies.mkString("(", ",", ")"),
+      "removedColumnFamilies" -> removedColFamilies.mkString("(", ",", ")")))
+
+class StateStoreSnapshotFileNotFound(fileToRead: String, clazz: String)
+  extends SparkRuntimeException(
+    errorClass = "CANNOT_LOAD_STATE_STORE.CANNOT_READ_MISSING_SNAPSHOT_FILE",
+    messageParameters = Map(
+      "fileToRead" -> fileToRead,
+      "clazz" -> clazz))
+
+class StateStoreSnapshotPartitionNotFound(
+  snapshotPartitionId: Long, operatorId: Int, checkpointLocation: String)
+  extends SparkRuntimeException(
+    errorClass = "CANNOT_LOAD_STATE_STORE.SNAPSHOT_PARTITION_ID_NOT_FOUND",
+    messageParameters = Map(
+      "snapshotPartitionId" -> snapshotPartitionId.toString,
+      "operatorId" -> operatorId.toString,
+      "checkpointLocation" -> checkpointLocation))
+
+class StateStoreKeyRowFormatValidationFailure(errorMsg: String)
+  extends SparkRuntimeException(
+    errorClass = "STATE_STORE_KEY_ROW_FORMAT_VALIDATION_FAILURE",
+    messageParameters = Map("errorMsg" -> errorMsg))
+
+class StateStoreValueRowFormatValidationFailure(errorMsg: String)
+  extends SparkRuntimeException(
+    errorClass = "STATE_STORE_VALUE_ROW_FORMAT_VALIDATION_FAILURE",
+    messageParameters = Map("errorMsg" -> errorMsg))
+
+class StateStoreProviderDoesNotSupportFineGrainedReplay(inputClass: String)
+  extends SparkUnsupportedOperationException(
+    errorClass = "STATE_STORE_PROVIDER_DOES_NOT_SUPPORT_FINE_GRAINED_STATE_REPLAY",
+    messageParameters = Map("inputClass" -> inputClass))

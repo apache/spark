@@ -17,8 +17,8 @@
 package org.apache.spark.sql.catalyst
 
 import org.apache.spark.sql.catalyst.FileSourceOptions.{IGNORE_CORRUPT_FILES, IGNORE_MISSING_FILES}
-import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateFormatter}
+import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
 
 /**
  * Common options for the file-based data source.
@@ -28,6 +28,17 @@ class FileSourceOptions(
   extends Serializable {
 
   def this(parameters: Map[String, String]) = this(CaseInsensitiveMap(parameters))
+
+  protected def commonTimestampFormat =
+    if (SQLConf.get.legacyTimeParserPolicy == LegacyBehaviorPolicy.LEGACY) {
+      s"${DateFormatter.defaultPattern}'T'HH:mm:ss.SSSXXX"
+    } else {
+      if (SQLConf.get.supportSecondOffsetFormat) {
+        s"${DateFormatter.defaultPattern}'T'HH:mm:ss[.SSS][XXXXX]"
+      } else {
+        s"${DateFormatter.defaultPattern}'T'HH:mm:ss[.SSS][XXX]"
+      }
+    }
 
   val ignoreCorruptFiles: Boolean = parameters.get(IGNORE_CORRUPT_FILES).map(_.toBoolean)
     .getOrElse(SQLConf.get.ignoreCorruptFiles)

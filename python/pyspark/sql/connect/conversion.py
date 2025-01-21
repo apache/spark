@@ -48,12 +48,10 @@ from pyspark.storagelevel import StorageLevel
 import pyspark.sql.connect.proto as pb2
 from pyspark.sql.pandas.types import to_arrow_schema, _dedup_names, _deduplicate_field_names
 
-from typing import (
-    Any,
-    Callable,
-    Sequence,
-    List,
-)
+from typing import Any, Callable, Sequence, List, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from pyspark.sql.connect.dataframe import DataFrame
 
 
 class LocalDataToArrowConversion:
@@ -106,6 +104,7 @@ class LocalDataToArrowConversion:
     def _create_converter(
         dataType: DataType,
         nullable: bool = True,
+        variants_as_dicts: bool = False,  # some code paths may require python internal types
     ) -> Callable:
         assert dataType is not None and isinstance(dataType, DataType)
         assert isinstance(nullable, bool)
@@ -128,8 +127,7 @@ class LocalDataToArrowConversion:
 
             field_convs = [
                 LocalDataToArrowConversion._create_converter(
-                    field.dataType,
-                    field.nullable,
+                    field.dataType, field.nullable, variants_as_dicts
                 )
                 for field in dataType.fields
             ]
@@ -157,8 +155,8 @@ class LocalDataToArrowConversion:
                     else:
                         if len(value) != len(field_names):
                             raise PySparkValueError(
-                                error_class="AXIS_LENGTH_MISMATCH",
-                                message_parameters={
+                                errorClass="AXIS_LENGTH_MISMATCH",
+                                messageParameters={
                                     "expected_length": str(len(field_names)),
                                     "actual_length": str(len(value)),
                                 },
@@ -172,8 +170,7 @@ class LocalDataToArrowConversion:
 
         elif isinstance(dataType, ArrayType):
             element_conv = LocalDataToArrowConversion._create_converter(
-                dataType.elementType,
-                dataType.containsNull,
+                dataType.elementType, dataType.containsNull, variants_as_dicts
             )
 
             def convert_array(value: Any) -> Any:
@@ -190,8 +187,7 @@ class LocalDataToArrowConversion:
         elif isinstance(dataType, MapType):
             key_conv = LocalDataToArrowConversion._create_converter(dataType.keyType)
             value_conv = LocalDataToArrowConversion._create_converter(
-                dataType.valueType,
-                dataType.valueContainsNull,
+                dataType.valueType, dataType.valueContainsNull, variants_as_dicts
             )
 
             def convert_map(value: Any) -> Any:
@@ -305,10 +301,13 @@ class LocalDataToArrowConversion:
                     isinstance(value, dict)
                     and all(key in value for key in ["value", "metadata"])
                     and all(isinstance(value[key], bytes) for key in ["value", "metadata"])
+                    and not variants_as_dicts
                 ):
                     return VariantVal(value["value"], value["metadata"])
+                elif isinstance(value, VariantVal) and variants_as_dicts:
+                    return VariantType().toInternal(value)
                 else:
-                    raise PySparkValueError(error_class="MALFORMED_VARIANT")
+                    raise PySparkValueError(errorClass="MALFORMED_VARIANT")
 
             return convert_variant
 
@@ -333,8 +332,7 @@ class LocalDataToArrowConversion:
 
         column_convs = [
             LocalDataToArrowConversion._create_converter(
-                field.dataType,
-                field.nullable,
+                field.dataType, field.nullable, variants_as_dicts=True
             )
             for field in schema.fields
         ]
@@ -354,8 +352,8 @@ class LocalDataToArrowConversion:
             else:
                 if len(item) != len(column_names):
                     raise PySparkValueError(
-                        error_class="AXIS_LENGTH_MISMATCH",
-                        message_parameters={
+                        errorClass="AXIS_LENGTH_MISMATCH",
+                        messageParameters={
                             "expected_length": str(len(column_names)),
                             "actual_length": str(len(item)),
                         },
@@ -524,7 +522,7 @@ class ArrowTableToRowsConversion:
                 ):
                     return VariantVal(value["value"], value["metadata"])
                 else:
-                    raise PySparkValueError(error_class="MALFORMED_VARIANT")
+                    raise PySparkValueError(errorClass="MALFORMED_VARIANT")
 
             return convert_variant
 
@@ -569,4 +567,18 @@ def proto_to_storage_level(storage_level: pb2.StorageLevel) -> StorageLevel:
         useOffHeap=storage_level.use_off_heap,
         deserialized=storage_level.deserialized,
         replication=storage_level.replication,
+    )
+
+
+def proto_to_remote_cached_dataframe(relation: pb2.CachedRemoteRelation) -> "DataFrame":
+    assert relation is not None and isinstance(relation, pb2.CachedRemoteRelation)
+
+    from pyspark.sql.connect.dataframe import DataFrame
+    from pyspark.sql.connect.session import SparkSession
+    import pyspark.sql.connect.plan as plan
+
+    session = SparkSession.active()
+    return DataFrame(
+        plan=plan.CachedRemoteRelation(relation.relation_id, session),
+        session=session,
     )

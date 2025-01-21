@@ -25,6 +25,9 @@ import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
 import scala.util.Try
 
+import org.json4s.JsonDSL._
+import org.json4s.jackson.JsonMethods.{compact, render}
+
 import org.apache.spark.{SparkConf, SparkUserAppException}
 import org.apache.spark.api.python.{Py4JServer, PythonUtils}
 import org.apache.spark.internal.config._
@@ -50,18 +53,21 @@ object PythonRunner {
     val formattedPythonFile = formatPath(pythonFile)
     val formattedPyFiles = resolvePyFiles(formatPaths(pyFiles))
 
-    val gatewayServer = new Py4JServer(sparkConf)
+    var gatewayServer: Option[Py4JServer] = None
+    if (sparkConf.getOption("spark.remote").isEmpty) {
+      gatewayServer = Some(new Py4JServer(sparkConf))
 
-    val thread = new Thread(() => Utils.logUncaughtExceptions { gatewayServer.start() })
-    thread.setName("py4j-gateway-init")
-    thread.setDaemon(true)
-    thread.start()
+      val thread = new Thread(() => Utils.logUncaughtExceptions { gatewayServer.get.start() })
+      thread.setName("py4j-gateway-init")
+      thread.setDaemon(true)
+      thread.start()
 
-    // Wait until the gateway server has started, so that we know which port is it bound to.
-    // `gatewayServer.start()` will start a new thread and run the server code there, after
-    // initializing the socket, so the thread started above will end as soon as the server is
-    // ready to serve connections.
-    thread.join()
+      // Wait until the gateway server has started, so that we know which port is it bound to.
+      // `gatewayServer.start()` will start a new thread and run the server code there, after
+      // initializing the socket, so the thread started above will end as soon as the server is
+      // ready to serve connections.
+      thread.join()
+    }
 
     // Build up a PYTHONPATH that includes the Spark assembly (where this class is), the
     // python directories in SPARK_HOME (if set), and any files in the pyFiles argument
@@ -74,12 +80,22 @@ object PythonRunner {
     // Launch Python process
     val builder = new ProcessBuilder((Seq(pythonExec, formattedPythonFile) ++ otherArgs).asJava)
     val env = builder.environment()
+    if (sparkConf.getOption("spark.remote").nonEmpty) {
+      // For non-local remote, pass configurations to environment variables so
+      // Spark Connect client sets them. For local remotes, they will be set
+      // via Py4J.
+      val grouped = sparkConf.getAll.toMap.grouped(10).toSeq
+      env.put("PYSPARK_REMOTE_INIT_CONF_LEN", grouped.length.toString)
+      grouped.zipWithIndex.foreach { case (group, idx) =>
+        env.put(s"PYSPARK_REMOTE_INIT_CONF_$idx", compact(render(group)))
+      }
+    }
     sparkConf.getOption("spark.remote").foreach(url => env.put("SPARK_REMOTE", url))
     env.put("PYTHONPATH", pythonPath)
     // This is equivalent to setting the -u flag; we use it because ipython doesn't support -u:
     env.put("PYTHONUNBUFFERED", "YES") // value is needed to be set to a non-empty string
-    env.put("PYSPARK_GATEWAY_PORT", "" + gatewayServer.getListeningPort)
-    env.put("PYSPARK_GATEWAY_SECRET", gatewayServer.secret)
+    gatewayServer.foreach(s => env.put("PYSPARK_GATEWAY_PORT", s.getListeningPort.toString))
+    gatewayServer.foreach(s => env.put("PYSPARK_GATEWAY_SECRET", s.secret))
     // pass conf spark.pyspark.python to python process, the only way to pass info to
     // python process is through environment variable.
     sparkConf.get(PYSPARK_PYTHON).foreach(env.put("PYSPARK_PYTHON", _))
@@ -103,7 +119,7 @@ object PythonRunner {
         throw new SparkUserAppException(exitCode)
       }
     } finally {
-      gatewayServer.shutdown()
+      gatewayServer.foreach(_.shutdown())
     }
   }
 

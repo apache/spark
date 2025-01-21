@@ -18,7 +18,7 @@ CreateViewCommand `tbl_view`, SELECT * FROM VALUES
   (50, "name5", named_struct("f1", 5, "s2", named_struct("f2", 505, "f3", "e"))),
   (60, "name6", named_struct("f1", 6, "s2", named_struct("f2", 606, "f3", "f"))),
   (70, "name7", named_struct("f1", 7, "s2", named_struct("f2", 707, "f3", "g")))
-AS tbl_view(id, name, data), false, false, LocalTempView, true
+AS tbl_view(id, name, data), false, false, LocalTempView, UNSUPPORTED, true
    +- Project [id#x, name#x, data#x]
       +- SubqueryAlias tbl_view
          +- LocalRelation [id#x, name#x, data#x]
@@ -351,7 +351,7 @@ DropTempViewCommand tbl_view
 -- !query
 CREATE TEMPORARY VIEW v1 AS VALUES (1, 2, NULL, 4, 5) AS T(c1, c2, c3, c4, c5)
 -- !query analysis
-CreateViewCommand `v1`, VALUES (1, 2, NULL, 4, 5) AS T(c1, c2, c3, c4, c5), false, false, LocalTempView, true
+CreateViewCommand `v1`, VALUES (1, 2, NULL, 4, 5) AS T(c1, c2, c3, c4, c5), false, false, LocalTempView, UNSUPPORTED, true
    +- SubqueryAlias T
       +- LocalRelation [c1#x, c2#x, c3#x, c4#x, c5#x]
 

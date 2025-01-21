@@ -25,7 +25,7 @@ license: |
 `DATABASE`, `SCHEMA` and `NAMESPACE` are interchangeable and one can be used in place of the others. An error message
 is issued if the database is not found in the system.
 
-### ALTER PROPERTIES
+### SET PROPERTIES
 `ALTER DATABASE SET DBPROPERTIES` statement changes the properties associated with a database.
 The specified property values override any existing value with the same property name. 
 This command is mostly used to record the metadata for a database and may be used for auditing purposes.
@@ -43,7 +43,25 @@ ALTER { DATABASE | SCHEMA | NAMESPACE } database_name
 
     Specifies the name of the database to be altered.
 
-### ALTER LOCATION
+### UNSET PROPERTIES
+`ALTER DATABASE UNSET DBPROPERTIES` statement unsets the properties associated with a database.
+If the specified property key does not exist, the command will ignore it and finally succeed.
+(available since Spark 4.0.0).
+
+#### Syntax
+
+```sql
+ALTER { DATABASE | SCHEMA | NAMESPACE } database_name
+    UNSET { DBPROPERTIES | PROPERTIES } ( property_name [ , ... ] )
+```
+
+#### Parameters
+
+* **database_name**
+
+  Specifies the name of the database to be altered.
+
+### SET LOCATION
 `ALTER DATABASE SET LOCATION` statement changes the default parent-directory where new tables will be added 
 for a database. Please note that it does not move the contents of the database's current directory to the newly 
 specified location or change the locations associated with any tables/partitions under the specified database 
@@ -95,6 +113,24 @@ DESCRIBE DATABASE EXTENDED inventory;
 |                 Location|file:/temp/spark-warehouse/new_inventory.db|
 |               Properties| ((Edit-date,01/01/2001), (Edited-by,John))|
 +-------------------------+-------------------------------------------+
+
+-- Alters the database to unset the property `Edited-by`
+ALTER DATABASE inventory UNSET DBPROPERTIES ('Edited-by');
+
+-- Verify that the property `Edited-by` has been unset.
+DESCRIBE DATABASE EXTENDED inventory;
++-------------------------+-------------------------------------------+
+|database_description_item|                 database_description_value|
++-------------------------+-------------------------------------------+
+|            Database Name|                                  inventory|
+|              Description|                                           |
+|                 Location|file:/temp/spark-warehouse/new_inventory.db|
+|               Properties| ((Edit-date,01/01/2001))                  |
++-------------------------+-------------------------------------------+
+
+-- Alters the database to unset a non-existent property `non-existent`
+-- Note: The command will ignore 'non-existent' and finally succeed
+ALTER DATABASE inventory UNSET DBPROPERTIES ('non-existent');
 ```
 
 ### Related Statements

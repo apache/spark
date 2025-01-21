@@ -108,7 +108,7 @@ class CatalystTypeConvertersSuite extends SparkFunSuite with SQLHelper {
       exception = intercept[SparkIllegalArgumentException] {
         CatalystTypeConverters.createToCatalystConverter(structType)("test")
       },
-      errorClass = "_LEGACY_ERROR_TEMP_3219",
+      condition = "_LEGACY_ERROR_TEMP_3219",
       parameters = Map(
         "other" -> "test",
         "otherClass" -> "java.lang.String",
@@ -121,7 +121,7 @@ class CatalystTypeConvertersSuite extends SparkFunSuite with SQLHelper {
       exception = intercept[SparkIllegalArgumentException] {
         CatalystTypeConverters.createToCatalystConverter(mapType)("test")
       },
-      errorClass = "_LEGACY_ERROR_TEMP_3221",
+      condition = "_LEGACY_ERROR_TEMP_3221",
       parameters = Map(
         "other" -> "test",
         "otherClass" -> "java.lang.String",
@@ -135,7 +135,7 @@ class CatalystTypeConvertersSuite extends SparkFunSuite with SQLHelper {
       exception = intercept[SparkIllegalArgumentException] {
         CatalystTypeConverters.createToCatalystConverter(arrayType)("test")
       },
-      errorClass = "_LEGACY_ERROR_TEMP_3220",
+      condition = "_LEGACY_ERROR_TEMP_3220",
       parameters = Map(
         "other" -> "test",
         "otherClass" -> "java.lang.String",
@@ -148,7 +148,7 @@ class CatalystTypeConvertersSuite extends SparkFunSuite with SQLHelper {
       exception = intercept[SparkIllegalArgumentException] {
         CatalystTypeConverters.createToCatalystConverter(decimalType)("test")
       },
-      errorClass = "_LEGACY_ERROR_TEMP_3219",
+      condition = "_LEGACY_ERROR_TEMP_3219",
       parameters = Map(
         "other" -> "test",
         "otherClass" -> "java.lang.String",
@@ -160,7 +160,7 @@ class CatalystTypeConvertersSuite extends SparkFunSuite with SQLHelper {
       exception = intercept[SparkIllegalArgumentException] {
         CatalystTypeConverters.createToCatalystConverter(StringType)(0.1)
       },
-      errorClass = "_LEGACY_ERROR_TEMP_3219",
+      condition = "_LEGACY_ERROR_TEMP_3219",
       parameters = Map(
         "other" -> "0.1",
         "otherClass" -> "java.lang.Double",

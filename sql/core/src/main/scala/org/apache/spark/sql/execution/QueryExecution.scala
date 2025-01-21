@@ -31,10 +31,10 @@ import org.apache.spark.internal.LogKeys.EXTENDED_EXPLAIN_GENERATOR
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{AnalysisException, ExtendedExplainGenerator, Row, SparkSession}
 import org.apache.spark.sql.catalyst.{InternalRow, QueryPlanningTracker}
-import org.apache.spark.sql.catalyst.analysis.UnsupportedOperationChecker
+import org.apache.spark.sql.catalyst.analysis.{LazyExpression, UnsupportedOperationChecker}
 import org.apache.spark.sql.catalyst.expressions.codegen.ByteCodeStats
 import org.apache.spark.sql.catalyst.plans.QueryPlan
-import org.apache.spark.sql.catalyst.plans.logical.{AppendData, Command, CommandResult, CreateTableAsSelect, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, ReplaceTableAsSelect, ReturnAnswer}
+import org.apache.spark.sql.catalyst.plans.logical.{AppendData, Command, CommandResult, CreateTableAsSelect, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, ReplaceTableAsSelect, ReturnAnswer, Union}
 import org.apache.spark.sql.catalyst.rules.{PlanChangeLogger, Rule}
 import org.apache.spark.sql.catalyst.util.StringUtils.PlanStringConcat
 import org.apache.spark.sql.catalyst.util.truncatedString
@@ -46,8 +46,8 @@ import org.apache.spark.sql.execution.reuse.ReuseExchangeAndSubquery
 import org.apache.spark.sql.execution.streaming.{IncrementalExecution, OffsetSeqMetadata, WatermarkPropagator}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.OutputMode
+import org.apache.spark.util.{LazyTry, Utils}
 import org.apache.spark.util.ArrayImplicits._
-import org.apache.spark.util.Utils
 
 /**
  * The primary workflow for executing relational queries using Spark.  Designed to allow easy
@@ -68,6 +68,11 @@ class QueryExecution(
   // TODO: Move the planner an optimizer into here from SessionState.
   protected def planner = sparkSession.sessionState.planner
 
+  lazy val isLazyAnalysis: Boolean = {
+    // Only check the main query as subquery expression can be resolved now with the main query.
+    logical.exists(_.expressions.exists(_.exists(_.isInstanceOf[LazyExpression])))
+  }
+
   def assertAnalyzed(): Unit = {
     try {
       analyzed
@@ -86,20 +91,32 @@ class QueryExecution(
     }
   }
 
-  lazy val analyzed: LogicalPlan = {
-    val plan = executePhase(QueryPlanningTracker.ANALYSIS) {
-      // We can't clone `logical` here, which will reset the `_analyzed` flag.
-      sparkSession.sessionState.analyzer.executeAndCheck(logical, tracker)
+  private val lazyAnalyzed = LazyTry {
+    try {
+      val plan = executePhase(QueryPlanningTracker.ANALYSIS) {
+        // We can't clone `logical` here, which will reset the `_analyzed` flag.
+        sparkSession.sessionState.analyzer.executeAndCheck(logical, tracker)
+      }
+      tracker.setAnalyzed(plan)
+      plan
+    } catch {
+      case NonFatal(e) =>
+        tracker.setAnalysisFailed(logical)
+        throw e
     }
-    tracker.setAnalyzed(plan)
-    plan
   }
 
-  lazy val commandExecuted: LogicalPlan = mode match {
-    case CommandExecutionMode.NON_ROOT => analyzed.mapChildren(eagerlyExecuteCommands)
-    case CommandExecutionMode.ALL => eagerlyExecuteCommands(analyzed)
-    case CommandExecutionMode.SKIP => analyzed
+  def analyzed: LogicalPlan = lazyAnalyzed.get
+
+  private val lazyCommandExecuted = LazyTry {
+    mode match {
+      case CommandExecutionMode.NON_ROOT => analyzed.mapChildren(eagerlyExecuteCommands)
+      case CommandExecutionMode.ALL => eagerlyExecuteCommands(analyzed)
+      case CommandExecutionMode.SKIP => analyzed
+    }
   }
+
+  def commandExecuted: LogicalPlan = lazyCommandExecuted.get
 
   private def commandExecutionName(command: Command): String = command match {
     case _: CreateTableAsSelect => "create"
@@ -110,15 +127,17 @@ class QueryExecution(
     case _ => "command"
   }
 
-  private def eagerlyExecuteCommands(p: LogicalPlan) = p transformDown {
-    case c: Command =>
+  private def eagerlyExecuteCommands(p: LogicalPlan) = {
+    def eagerlyExecute(
+        p: LogicalPlan,
+        name: String,
+        mode: CommandExecutionMode.Value): LogicalPlan = {
       // Since Command execution will eagerly take place here,
       // and in most cases be the bulk of time and effort,
       // with the rest of processing of the root plan being just outputting command results,
       // for eagerly executed commands we mark this place as beginning of execution.
       tracker.setReadyForExecution()
-      val qe = sparkSession.sessionState.executePlan(c, CommandExecutionMode.NON_ROOT)
-      val name = commandExecutionName(c)
+      val qe = sparkSession.sessionState.executePlan(p, mode)
       val result = QueryExecution.withInternalError(s"Eagerly executed $name failed.") {
         SQLExecution.withNewExecutionId(qe, Some(name)) {
           qe.executedPlan.executeCollect()
@@ -129,37 +148,38 @@ class QueryExecution(
         qe.commandExecuted,
         qe.executedPlan,
         result.toImmutableArraySeq)
-    case other => other
-  }
-
-  // The plan that has been normalized by custom rules, so that it's more likely to hit cache.
-  lazy val normalized: LogicalPlan = {
-    val normalizationRules = sparkSession.sessionState.planNormalizationRules
-    if (normalizationRules.isEmpty) {
-      commandExecuted
-    } else {
-      val planChangeLogger = new PlanChangeLogger[LogicalPlan]()
-      val normalized = normalizationRules.foldLeft(commandExecuted) { (p, rule) =>
-        val result = rule.apply(p)
-        planChangeLogger.logRule(rule.ruleName, p, result)
-        result
-      }
-      planChangeLogger.logBatch("Plan Normalization", commandExecuted, normalized)
-      normalized
+    }
+    p transformDown {
+      case u @ Union(children, _, _) if children.forall(_.isInstanceOf[Command]) =>
+        eagerlyExecute(u, "multi-commands", CommandExecutionMode.SKIP)
+      case c: Command =>
+        val name = commandExecutionName(c)
+        eagerlyExecute(c, name, CommandExecutionMode.NON_ROOT)
     }
   }
 
-  lazy val withCachedData: LogicalPlan = sparkSession.withActive {
-    assertAnalyzed()
-    assertSupported()
-    // clone the plan to avoid sharing the plan instance between different stages like analyzing,
-    // optimizing and planning.
-    sparkSession.sharedState.cacheManager.useCachedData(normalized.clone())
+  private val lazyNormalized = LazyTry {
+    QueryExecution.normalize(sparkSession, commandExecuted, Some(tracker))
   }
+
+  // The plan that has been normalized by custom rules, so that it's more likely to hit cache.
+  def normalized: LogicalPlan = lazyNormalized.get
+
+  private val lazyWithCachedData = LazyTry {
+    sparkSession.withActive {
+      assertAnalyzed()
+      assertSupported()
+      // clone the plan to avoid sharing the plan instance between different stages like analyzing,
+      // optimizing and planning.
+      sparkSession.sharedState.cacheManager.useCachedData(normalized.clone())
+    }
+  }
+
+  def withCachedData: LogicalPlan = lazyWithCachedData.get
 
   def assertCommandExecuted(): Unit = commandExecuted
 
-  lazy val optimizedPlan: LogicalPlan = {
+  private val lazyOptimizedPlan = LazyTry {
     // We need to materialize the commandExecuted here because optimizedPlan is also tracked under
     // the optimizing phase
     assertCommandExecuted()
@@ -177,9 +197,11 @@ class QueryExecution(
     }
   }
 
+  def optimizedPlan: LogicalPlan = lazyOptimizedPlan.get
+
   def assertOptimized(): Unit = optimizedPlan
 
-  lazy val sparkPlan: SparkPlan = {
+  private val lazySparkPlan = LazyTry {
     // We need to materialize the optimizedPlan here because sparkPlan is also tracked under
     // the planning phase
     assertOptimized()
@@ -190,11 +212,11 @@ class QueryExecution(
     }
   }
 
+  def sparkPlan: SparkPlan = lazySparkPlan.get
+
   def assertSparkPlanPrepared(): Unit = sparkPlan
 
-  // executedPlan should not be used to initialize any SparkPlan. It should be
-  // only used for execution.
-  lazy val executedPlan: SparkPlan = {
+  private val lazyExecutedPlan = LazyTry {
     // We need to materialize the optimizedPlan here, before tracking the planning phase, to ensure
     // that the optimization time is not counted as part of the planning phase.
     assertOptimized()
@@ -209,7 +231,15 @@ class QueryExecution(
     plan
   }
 
+  // executedPlan should not be used to initialize any SparkPlan. It should be
+  // only used for execution.
+  def executedPlan: SparkPlan = lazyExecutedPlan.get
+
   def assertExecutedPlanPrepared(): Unit = executedPlan
+
+  val lazyToRdd = LazyTry {
+    new SQLExecutionRDD(executedPlan.execute(), sparkSession.sessionState.conf)
+  }
 
   /**
    * Internal version of the RDD. Avoids copies and has no schema.
@@ -221,8 +251,7 @@ class QueryExecution(
    * Given QueryExecution is not a public class, end users are discouraged to use this: please
    * use `Dataset.rdd` instead where conversion will be applied.
    */
-  lazy val toRdd: RDD[InternalRow] = new SQLExecutionRDD(
-    executedPlan.execute(), sparkSession.sessionState.conf)
+  def toRdd: RDD[InternalRow] = lazyToRdd.get
 
   /** Get the metrics observed during the execution of the query plan. */
   def observedMetrics: Map[String, Row] = CollectMetricsExec.collect(executedPlan)
@@ -500,6 +529,8 @@ object QueryExecution {
       PlanSubqueries(sparkSession),
       RemoveRedundantProjects,
       EnsureRequirements(),
+      // This rule must be run after `EnsureRequirements`.
+      InsertSortForLimitAndOffset,
       // `ReplaceHashWithSortAgg` needs to be added after `EnsureRequirements` to guarantee the
       // sort order of each node is checked to be valid.
       ReplaceHashWithSortAgg,
@@ -611,6 +642,29 @@ object QueryExecution {
       block
     } catch {
       case e: Throwable => throw toInternalError(msg, e)
+    }
+  }
+
+  def normalize(
+      session: SparkSession,
+      plan: LogicalPlan,
+      tracker: Option[QueryPlanningTracker] = None): LogicalPlan = {
+    val normalizationRules = session.sessionState.planNormalizationRules
+    if (normalizationRules.isEmpty) {
+      plan
+    } else {
+      val planChangeLogger = new PlanChangeLogger[LogicalPlan]()
+      val normalized = normalizationRules.foldLeft(plan) { (p, rule) =>
+        val startTime = System.nanoTime()
+        val result = rule.apply(p)
+        val runTime = System.nanoTime() - startTime
+        val effective = !result.fastEquals(p)
+        tracker.foreach(_.recordRuleInvocation(rule.ruleName, runTime, effective))
+        planChangeLogger.logRule(rule.ruleName, p, result)
+        result
+      }
+      planChangeLogger.logBatch("Plan Normalization", plan, normalized)
+      normalized
     }
   }
 }

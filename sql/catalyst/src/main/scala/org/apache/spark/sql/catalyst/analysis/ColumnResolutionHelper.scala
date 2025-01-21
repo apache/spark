@@ -53,9 +53,10 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
       (exprs, plan)
     } else {
       plan match {
-        // For `Distinct` and `SubqueryAlias`, we can't recursively resolve and add attributes
-        // via its children.
-        case u: UnaryNode if !u.isInstanceOf[Distinct] && !u.isInstanceOf[SubqueryAlias] =>
+        // For `Distinct` and `SubqueryAlias` and `PipeOperator`, we can't recursively resolve and
+        // add attributes via its children.
+        case u: UnaryNode if !u.isInstanceOf[Distinct] && !u.isInstanceOf[SubqueryAlias]
+          && !u.isInstanceOf[PipeOperator] =>
           val (newExprs, newChild) = {
             // Resolving expressions against current plan.
             val maybeResolvedExprs = exprs.map(resolveExpressionByPlanOutput(_, u))
@@ -72,7 +73,7 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
               newProject.copyTagsFrom(p)
               (newExprs, newProject)
 
-            case a @ Aggregate(groupExprs, aggExprs, child) =>
+            case a @ Aggregate(groupExprs, aggExprs, child, _) =>
               if (missingAttrs.forall(attr => groupExprs.exists(_.semanticEquals(attr)))) {
                 // All the missing attributes are grouping expressions, valid case.
                 (newExprs,
@@ -146,7 +147,12 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
 
         case GetColumnByOrdinal(ordinal, _) =>
           val attrCandidates = getAttrCandidates()
-          assert(ordinal >= 0 && ordinal < attrCandidates.length)
+          if (ordinal < 0 || ordinal >= attrCandidates.length) {
+            throw QueryCompilationErrors.ordinalOutOfBoundsError(
+              ordinal,
+              attrCandidates
+            )
+          }
           attrCandidates(ordinal)
 
         case GetViewColumnByNameAndOrdinal(
@@ -234,7 +240,8 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
         None
     }
 
-    e.transformWithPruning(_.containsAnyPattern(UNRESOLVED_ATTRIBUTE, TEMP_RESOLVED_COLUMN)) {
+    e.transformWithPruning(
+      _.containsAnyPattern(UNRESOLVED_ATTRIBUTE, TEMP_RESOLVED_COLUMN)) {
       case u: UnresolvedAttribute =>
         resolve(u.nameParts).getOrElse(u)
       // Re-resolves `TempResolvedColumn` as outer references if it has tried to be resolved with
@@ -585,7 +592,12 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
       }
       (resolved.map(r => (r, currentDepth)), true)
     } else {
-      resolveDataFrameColumnByPlanId(u, id, isMetadataAccess, p.children, currentDepth + 1)
+      val children = p match {
+        // treat Union node as the leaf node
+        case _: Union => Seq.empty[LogicalPlan]
+        case _ => p.children
+      }
+      resolveDataFrameColumnByPlanId(u, id, isMetadataAccess, children, currentDepth + 1)
     }
 
     // In self join case like:

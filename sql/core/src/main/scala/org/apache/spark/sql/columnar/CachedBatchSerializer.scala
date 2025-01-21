@@ -18,7 +18,8 @@
 package org.apache.spark.sql.columnar
 
 import org.apache.spark.annotation.{DeveloperApi, Since}
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys.{FILTER, PREDICATE}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.dsl.expressions._
@@ -307,7 +308,8 @@ abstract class SimpleMetricsCachedBatchSerializer extends CachedBatchSerializer 
               allowFailures = true))
 
         boundFilter.foreach(_ =>
-          filter.foreach(f => logInfo(s"Predicate $p generates partition filter: $f")))
+          filter.foreach(f => logInfo(log"Predicate ${MDC(PREDICATE, p)} generates " +
+            log"partition filter: ${MDC(FILTER, f)}")))
 
         // If the filter can't be resolved then we are missing required statistics.
         boundFilter.filter(_.resolved)

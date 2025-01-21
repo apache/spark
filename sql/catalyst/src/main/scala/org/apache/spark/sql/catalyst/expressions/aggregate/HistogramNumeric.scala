@@ -126,7 +126,10 @@ case class HistogramNumeric(
     // Ignore empty rows, for example: histogram_numeric(null)
     if (value != null) {
       // Convert the value to a double value
-      val doubleValue = value.asInstanceOf[Number].doubleValue
+      val doubleValue = value match {
+        case d: Decimal => d.toDouble
+        case o => o.asInstanceOf[Number].doubleValue()
+      }
       buffer.add(doubleValue)
     }
     buffer
@@ -143,7 +146,8 @@ case class HistogramNumeric(
     if (buffer.getUsedBins < 1) {
       null
     } else {
-      val result = (0 until buffer.getUsedBins).map { index =>
+      val array = new Array[AnyRef](buffer.getUsedBins)
+      (0 until buffer.getUsedBins).foreach { index =>
         // Note that the 'coord.x' and 'coord.y' have double-precision floating point type here.
         val coord = buffer.getBin(index)
         if (propagateInputType) {
@@ -161,18 +165,23 @@ case class HistogramNumeric(
             case ShortType => coord.x.toShort
             case _: DayTimeIntervalType | LongType | TimestampType | TimestampNTZType =>
               coord.x.toLong
+            case d: DecimalType =>
+              val bigDecimal = BigDecimal
+                .decimal(coord.x, new java.math.MathContext(d.precision))
+                .setScale(d.scale, BigDecimal.RoundingMode.HALF_UP)
+              Decimal(bigDecimal)
             case _ => coord.x
           }
-          InternalRow.apply(result, coord.y)
+          array(index) = InternalRow.apply(result, coord.y)
         } else {
           // Otherwise, just apply the double-precision values in 'coord.x' and 'coord.y' to the
           // output row directly. In this case: 'SELECT histogram_numeric(val, 3)
           // FROM VALUES (0L), (1L), (2L), (10L) AS tab(col)' returns an array of structs where the
           // first field has DoubleType.
-          InternalRow.apply(coord.x, coord.y)
+          array(index) = InternalRow.apply(coord.x, coord.y)
         }
       }
-      new GenericArrayData(result)
+      new GenericArrayData(array)
     }
   }
 

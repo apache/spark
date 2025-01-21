@@ -32,6 +32,20 @@ SELECT * FROM explode(array(1, 2)), explode(array(3, 4));
 SELECT * FROM explode(array(1, 2)) AS t, LATERAL explode(array(3 * t.col, 4 * t.col));
 SELECT num, val, 'Spark' FROM explode(map(1, 'a', 2, 'b')) AS t(num, val);
 
+-- Test for tabled value functions posexplode and posexplode_outer
+SELECT * FROM posexplode(collection => array(1, 2));
+SELECT * FROM posexplode_outer(collection => map('a', 1, 'b', 2));
+SELECT * FROM posexplode(array(1, 2)), posexplode(array(3, 4));
+SELECT * FROM posexplode(array(1, 2)) AS t, LATERAL posexplode(array(3 * t.col, 4 * t.col));
+SELECT pos, num, val, 'Spark' FROM posexplode(map(1, 'a', 2, 'b')) AS t(pos, num, val);
+
+-- Test for tabled value functions inline and inline_outer
+SELECT * FROM inline(input => array(struct(1, 'a'), struct(2, 'b')));
+SELECT * FROM inline_outer(input => array(struct(1, 'a'), struct(2, 'b')));
+SELECT * FROM inline(array(struct(1, 'a'), struct(2, 'b'))), inline(array(struct(3, 'c'), struct(4, 'd')));
+SELECT * FROM inline(array(struct(1, 'a'), struct(2, 'b'))) AS t, LATERAL inline(array(struct(3 * t.col1, 4 * t.col1)));
+SELECT num, val, 'Spark' FROM inline(array(struct(1, 'a'), struct(2, 'b'))) AS t(num, val);
+
 -- Test for wrapped EXPLODE call to check error preservation
 SELECT * FROM explode(collection => explode(array(1)));
 SELECT * FROM explode(collection => explode(collection => array(1)));

@@ -1,2 +1,0 @@
-openjdk-17-jre
-git

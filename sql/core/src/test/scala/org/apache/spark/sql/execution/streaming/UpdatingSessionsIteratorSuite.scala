@@ -270,7 +270,7 @@ class UpdatingSessionsIteratorSuite extends SharedSparkSession {
       exception = intercept[SparkException] {
         iterator.next()
       },
-      errorClass = "INTERNAL_ERROR",
+      condition = "INTERNAL_ERROR",
       parameters = Map("message" -> "The iterator must be sorted by key and session start!"))
 
     // afterwards, calling either hasNext() or next() will throw IllegalStateException
@@ -278,14 +278,14 @@ class UpdatingSessionsIteratorSuite extends SharedSparkSession {
       exception = intercept[SparkException] {
         iterator.hasNext
       },
-      errorClass = "INTERNAL_ERROR",
+      condition = "INTERNAL_ERROR",
       parameters = Map("message" -> "The iterator is already corrupted."))
 
     checkError(
       exception = intercept[SparkException] {
         iterator.next()
       },
-      errorClass = "INTERNAL_ERROR",
+      condition = "INTERNAL_ERROR",
       parameters = Map("message" -> "The iterator is already corrupted."))
   }
 
@@ -312,7 +312,7 @@ class UpdatingSessionsIteratorSuite extends SharedSparkSession {
       exception = intercept[SparkException] {
         iterator.next()
       },
-      errorClass = "INTERNAL_ERROR",
+      condition = "INTERNAL_ERROR",
       parameters = Map("message" -> "The iterator must be sorted by key and session start!"))
 
     // afterwards, calling either hasNext() or next() will throw IllegalStateException
@@ -320,14 +320,14 @@ class UpdatingSessionsIteratorSuite extends SharedSparkSession {
       exception = intercept[SparkException] {
         iterator.hasNext
       },
-      errorClass = "INTERNAL_ERROR",
+      condition = "INTERNAL_ERROR",
       parameters = Map("message" -> "The iterator is already corrupted."))
 
     checkError(
       exception = intercept[SparkException] {
         iterator.next()
       },
-      errorClass = "INTERNAL_ERROR",
+      condition = "INTERNAL_ERROR",
       parameters = Map("message" -> "The iterator is already corrupted."))
   }
 

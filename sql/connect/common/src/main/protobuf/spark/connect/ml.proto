@@ -1,0 +1,118 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+syntax = 'proto3';
+
+package spark.connect;
+
+import "spark/connect/relations.proto";
+import "spark/connect/expressions.proto";
+import "spark/connect/ml_common.proto";
+
+option java_multiple_files = true;
+option java_package = "org.apache.spark.connect.proto";
+option go_package = "internal/generated";
+
+// Command for ML
+message MlCommand {
+  oneof command {
+    Fit fit = 1;
+    Fetch fetch = 2;
+    Delete delete = 3;
+    Write write = 4;
+    Read read = 5;
+    Evaluate evaluate = 6;
+  }
+
+  // Command for estimator.fit(dataset)
+  message Fit {
+    // Estimator information
+    MlOperator estimator = 1;
+    // parameters of the Estimator
+    MlParams params = 2;
+    // the training dataset
+    Relation dataset = 3;
+  }
+
+  // Command to delete the cached object which could be a model
+  // or summary evaluated by a model
+  message Delete {
+    ObjectRef obj_ref = 1;
+  }
+
+  // Command to write ML operator
+  message Write {
+    // It could be an estimator/evaluator or the cached model
+    oneof type {
+      // Estimator or evaluator
+      MlOperator operator = 1;
+      // The cached model
+      ObjectRef obj_ref = 2;
+    }
+    // The parameters of operator which could be estimator/evaluator or a cached model
+    MlParams params = 3;
+    // Save the ML instance to the path
+    string path = 4;
+    // Overwrites if the output path already exists.
+    bool should_overwrite = 5;
+    // The options of the writer
+    map<string, string> options = 6;
+  }
+
+  // Command to load ML operator.
+  message Read {
+    // ML operator information
+    MlOperator operator = 1;
+    // Load the ML instance from the input path
+    string path = 2;
+  }
+
+  // Command for evaluator.evaluate(dataset)
+  message Evaluate {
+    // Evaluator information
+    MlOperator evaluator = 1;
+    // parameters of the Evaluator
+    MlParams params = 2;
+    // the evaluating dataset
+    Relation dataset = 3;
+  }
+}
+
+// The result of MlCommand
+message MlCommandResult {
+  oneof result_type {
+    // The result of the attribute
+    Expression.Literal param = 1;
+    // Evaluate a Dataset in a model and return the cached ID of summary
+    string summary = 2;
+    // Operator information
+    MlOperatorInfo operator_info = 3;
+  }
+
+  // Represents an operator info
+  message MlOperatorInfo {
+    oneof type {
+      // The cached object which could be a model or summary evaluated by a model
+      ObjectRef obj_ref = 1;
+      // Operator name
+      string name = 2;
+    }
+    string uid = 3;
+    MlParams params = 4;
+  }
+
+}

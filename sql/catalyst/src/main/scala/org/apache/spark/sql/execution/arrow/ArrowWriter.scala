@@ -373,7 +373,7 @@ private[arrow] class StructWriter(
     val valueVector: StructVector,
     children: Array[ArrowFieldWriter]) extends ArrowFieldWriter {
 
-  lazy val isVariant = valueVector.getField.getMetadata.get("variant") == "true"
+  lazy val isVariant = ArrowUtils.isVariantField(valueVector.getField)
 
   override def setNull(): Unit = {
     var i = 0

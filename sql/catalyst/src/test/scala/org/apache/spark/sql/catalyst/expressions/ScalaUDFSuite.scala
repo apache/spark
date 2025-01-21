@@ -24,8 +24,10 @@ import scala.reflect.runtime.universe.TypeTag
 import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
+import org.apache.spark.sql.catalyst.expressions.variant.{ParseJson, VariantGet}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{DecimalType, IntegerType, StringType}
+import org.apache.spark.sql.types.{DecimalType, IntegerType, StringType, VariantType}
+import org.apache.spark.unsafe.types.VariantVal
 
 class ScalaUDFSuite extends SparkFunSuite with ExpressionEvalHelper {
 
@@ -41,6 +43,34 @@ class ScalaUDFSuite extends SparkFunSuite with ExpressionEvalHelper {
     val stringUdf = ScalaUDF((s: String) => s + "x", StringType, Literal("a") :: Nil,
       Option(resolvedEncoder[String]()) :: Nil)
     checkEvaluation(stringUdf, "ax")
+  }
+
+  test("variant basic input output") {
+    val variantUdf = ScalaUDF(
+      (v: VariantVal) => v,
+      VariantType,
+      ParseJson(Literal("{\"a\": \"b\"}")).replacement :: Nil,
+      Option(resolvedEncoder[VariantVal]()) :: Nil)
+    checkEvaluation(VariantGet(variantUdf, Literal("$.a"), StringType, true), "b")
+  }
+
+  test("variant basic output string") {
+    val variantUdf = ScalaUDF(
+      (v: VariantVal) => v.toString(),
+      StringType,
+      ParseJson(Literal("{\"a\": \"b\"}")).replacement :: Nil,
+      Option(resolvedEncoder[VariantVal]()) :: Nil)
+    checkEvaluation(variantUdf, "{\"a\":\"b\"}")
+  }
+
+  test("variant basic output variant") {
+    val variantUdf = ScalaUDF(
+      // The variant value below corresponds to a JSON string of {"a": "b"}.
+      () => new VariantVal(Array[Byte](2, 1, 0, 0, 2, 5, 98), Array[Byte](1, 1, 0, 1, 97)),
+      VariantType,
+      Seq(),
+      Option(resolvedEncoder[VariantVal]()) :: Nil)
+    checkEvaluation(VariantGet(variantUdf, Literal("$.a"), StringType, true), "b")
   }
 
   test("better error message for NPE") {

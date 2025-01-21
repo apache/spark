@@ -247,7 +247,7 @@ class CompactibleFileStreamLogSuite extends SharedSparkSession {
           exception = intercept[SparkUnsupportedOperationException] {
             compactibleLog.purge(2)
           },
-          errorClass = "_LEGACY_ERROR_TEMP_2260",
+          condition = "_LEGACY_ERROR_TEMP_2260",
           parameters = Map.empty)
 
         // Below line would fail with IllegalStateException if we don't prevent purge:

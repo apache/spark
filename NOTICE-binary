@@ -33,11 +33,12 @@ services.
 // Version 2.0, in this case for
 // ------------------------------------------------------------------
 
-Hive Beeline
-Copyright 2016 The Apache Software Foundation
+=== NOTICE FOR com.clearspring.analytics:streams ===
+stream-api
+Copyright 2016 AddThis
 
-This product includes software developed at
-The Apache Software Foundation (http://www.apache.org/).
+This product includes software developed by AddThis.
+=== END OF NOTICE FOR com.clearspring.analytics:streams ===
 
 Apache Avro
 Copyright 2009-2014 The Apache Software Foundation
@@ -130,14 +131,6 @@ been derived from the works by JSR-166 EG, Doug Lea, and Jason T. Greene:
   * HOMEPAGE:
     * http://gee.cs.oswego.edu/cgi-bin/viewcvs.cgi/jsr166/
     * http://viewvc.jboss.org/cgi-bin/viewvc.cgi/jbosscache/experimental/jsr166/
-
-This product contains a modified version of Robert Harder's Public Domain
-Base64 Encoder and Decoder, which can be obtained at:
-
-  * LICENSE:
-    * license/LICENSE.base64.txt (Public Domain)
-  * HOMEPAGE:
-    * http://iharder.sourceforge.net/current/java/base64/
 
 This product contains a modified portion of 'Webbit', an event based
 WebSocket and HTTP server, which can be obtained at:
@@ -338,120 +331,102 @@ which has the following notices:
     Copyright 2002-2012 Ramnivas Laddad, Juergen Hoeller, Chris Beams
 
 The binary distribution of this product bundles binaries of
-Jetty 6.1.26,
+Jetty 11.0.20,
 which has the following notices:
- * ==============================================================
-    Jetty Web Container
-    Copyright 1995-2016 Mort Bay Consulting Pty Ltd.
-   ==============================================================
+=========================
+Notices for Eclipse Jetty
+=========================
+This content is produced and maintained by the Eclipse Jetty project.
 
-   The Jetty Web Container is Copyright Mort Bay Consulting Pty Ltd
-   unless otherwise noted.
+Project home: https://eclipse.dev/jetty/
 
-   Jetty is dual licensed under both
+Trademarks
+----------
+Eclipse Jetty, and Jetty are trademarks of the Eclipse Foundation.
 
-     * The Apache 2.0 License
-       http://www.apache.org/licenses/LICENSE-2.0.html
+Copyright
+---------
+All contributions are the property of the respective authors or of
+entities to which copyright has been assigned by the authors (eg. employer).
 
-         and
+Declared Project Licenses
+-------------------------
+This artifacts of this project are made available under the terms of:
 
-     * The Eclipse Public 1.0 License
-       http://www.eclipse.org/legal/epl-v10.html
+  * the Eclipse Public License v2.0
+    https://www.eclipse.org/legal/epl-2.0
+    SPDX-License-Identifier: EPL-2.0
 
-   Jetty may be distributed under either license.
+  or
 
-   ------
-   Eclipse
+  * the Apache License, Version 2.0
+    https://www.apache.org/licenses/LICENSE-2.0
+    SPDX-License-Identifier: Apache-2.0
 
-   The following artifacts are EPL.
-    * org.eclipse.jetty.orbit:org.eclipse.jdt.core
+The following dependencies are EPL.
+ * org.eclipse.jetty.orbit:org.eclipse.jdt.core
 
-   The following artifacts are EPL and ASL2.
-    * org.eclipse.jetty.orbit:javax.security.auth.message
+The following dependencies are EPL and ASL2.
+ * org.eclipse.jetty.orbit:javax.security.auth.message
 
-   The following artifacts are EPL and CDDL 1.0.
-    * org.eclipse.jetty.orbit:javax.mail.glassfish
+The following dependencies are EPL and CDDL 1.0.
+ * org.eclipse.jetty.orbit:javax.mail.glassfish
 
-   ------
-   Oracle
+The following dependencies are CDDL + GPLv2 with classpath exception.
+https://glassfish.dev.java.net/nonav/public/CDDL+GPL.html
 
-   The following artifacts are CDDL + GPLv2 with classpath exception.
-   https://glassfish.dev.java.net/nonav/public/CDDL+GPL.html
+ * jakarta.servlet:jakarta.servlet-api
+ * javax.annotation:javax.annotation-api
+ * javax.transaction:javax.transaction-api
+ * javax.websocket:javax.websocket-api
 
-    * javax.servlet:javax.servlet-api
-    * javax.annotation:javax.annotation-api
-    * javax.transaction:javax.transaction-api
-    * javax.websocket:javax.websocket-api
+The following dependencies are licensed by the OW2 Foundation according to the
+terms of http://asm.ow2.org/license.html
 
-   ------
-   Oracle OpenJDK
+ * org.ow2.asm:asm-commons
+ * org.ow2.asm:asm
 
-   If ALPN is used to negotiate HTTP/2 connections, then the following
-   artifacts may be included in the distribution or downloaded when ALPN
-   module is selected.
+The following dependencies are ASL2 licensed.
 
-    * java.sun.security.ssl
+ * org.apache.taglibs:taglibs-standard-spec
+ * org.apache.taglibs:taglibs-standard-impl
 
-   These artifacts replace/modify OpenJDK classes.  The modififications
-   are hosted at github and both modified and original are under GPL v2 with
-   classpath exceptions.
-   http://openjdk.java.net/legal/gplv2+ce.html
+The following dependencies are ASL2 licensed.  Based on selected classes from
+following Apache Tomcat jars, all ASL2 licensed.
 
-   ------
-   OW2
+ * org.mortbay.jasper:apache-jsp
+ * org.apache.tomcat:tomcat-jasper
+ * org.apache.tomcat:tomcat-juli
+ * org.apache.tomcat:tomcat-jsp-api
+ * org.apache.tomcat:tomcat-el-api
+ * org.apache.tomcat:tomcat-jasper-el
+ * org.apache.tomcat:tomcat-api
+ * org.apache.tomcat:tomcat-util-scan
+ * org.apache.tomcat:tomcat-util
+ * org.mortbay.jasper:apache-el
+ * org.apache.tomcat:tomcat-jasper-el
+ * org.apache.tomcat:tomcat-el-api
 
-   The following artifacts are licensed by the OW2 Foundation according to the
-   terms of http://asm.ow2.org/license.html
+The following artifacts are CDDL + GPLv2 with classpath exception.
+https://glassfish.dev.java.net/nonav/public/CDDL+GPL.html
 
-   org.ow2.asm:asm-commons
-   org.ow2.asm:asm
+ * org.eclipse.jetty.toolchain:jetty-schemas
 
-   ------
-   Apache
+Cryptography
+------------
+Content may contain encryption software. The country in which you are currently
+may have restrictions on the import, possession, and use, and/or re-export to
+another country, of encryption software. BEFORE using any encryption software,
+please check the country's laws, regulations and policies concerning the import,
+possession, or use, and re-export of encryption software, to see if this is
+permitted.
 
-   The following artifacts are ASL2 licensed.
-
-   org.apache.taglibs:taglibs-standard-spec
-   org.apache.taglibs:taglibs-standard-impl
-
-   ------
-   MortBay
-
-   The following artifacts are ASL2 licensed.  Based on selected classes from
-   following Apache Tomcat jars, all ASL2 licensed.
-
-   org.mortbay.jasper:apache-jsp
-     org.apache.tomcat:tomcat-jasper
-     org.apache.tomcat:tomcat-juli
-     org.apache.tomcat:tomcat-jsp-api
-     org.apache.tomcat:tomcat-el-api
-     org.apache.tomcat:tomcat-jasper-el
-     org.apache.tomcat:tomcat-api
-     org.apache.tomcat:tomcat-util-scan
-     org.apache.tomcat:tomcat-util
-
-   org.mortbay.jasper:apache-el
-     org.apache.tomcat:tomcat-jasper-el
-     org.apache.tomcat:tomcat-el-api
-
-   ------
-   Mortbay
-
-   The following artifacts are CDDL + GPLv2 with classpath exception.
-
-   https://glassfish.dev.java.net/nonav/public/CDDL+GPL.html
-
-   org.eclipse.jetty.toolchain:jetty-schemas
-
-   ------
-   Assorted
-
-   The UnixCrypt.java code implements the one way cryptography used by
-   Unix systems for simple password protection.  Copyright 1996 Aki Yoshida,
-   modified April 2001  by Iris Van den Broeke, Daniel Deville.
-   Permission to use, copy, modify and distribute UnixCrypt
-   for non-commercial or commercial purposes and without fee is
-   granted provided that the copyright notice appears in all copies./
+The UnixCrypt.java code implements the one way cryptography used by
+Unix systems for simple password protection.  Copyright 1996 Aki Yoshida,
+modified April 2001  by Iris Van den Broeke, Daniel Deville.
+Permission to use, copy, modify and distribute UnixCrypt
+for non-commercial or commercial purposes and without fee is
+granted provided that the copyright notice appears in all copies.
 
 The binary distribution of this product bundles binaries of
 Snappy for Java 1.0.4.1,
@@ -473,27 +448,6 @@ which has the following notices:
      * Alec Wysoker
        * Performance and memory usage improvement
 
-The binary distribution of this product bundles binaries of
-Xerces2 Java Parser 2.9.1,
-which has the following notices:
- * =========================================================================
-   ==  NOTICE file corresponding to section 4(d) of the Apache License,   ==
-   ==  Version 2.0, in this case for the Apache Xerces Java distribution. ==
-   =========================================================================
-
-   Apache Xerces Java
-   Copyright 1999-2007 The Apache Software Foundation
-
-   This product includes software developed at
-   The Apache Software Foundation (http://www.apache.org/).
-
-   Portions of this software were originally based on the following:
-     - software copyright (c) 1999, IBM Corporation., http://www.ibm.com.
-     - software copyright (c) 1999, Sun Microsystems., http://www.sun.com.
-     - voluntary contributions made by Paul Eng on behalf of the
-       Apache Software Foundation that were originally developed at iClick, Inc.,
-       software copyright (c) 1999.
-
 Apache Commons Collections
 Copyright 2001-2015 The Apache Software Foundation
 
@@ -506,35 +460,8 @@ Copyright 2001-2006 The Apache Software Foundation
 Apache Commons BeanUtils
 Copyright 2000-2008 The Apache Software Foundation
 
-ApacheDS Protocol Kerberos Codec
-Copyright 2003-2013 The Apache Software Foundation
-
-ApacheDS I18n
-Copyright 2003-2013 The Apache Software Foundation
-
-Apache Directory API ASN.1 API
-Copyright 2003-2013 The Apache Software Foundation
-
-Apache Directory LDAP API Utilities
-Copyright 2003-2013 The Apache Software Foundation
-
 Curator Client
 Copyright 2011-2015 The Apache Software Foundation
-
-htrace-core
-Copyright 2015 The Apache Software Foundation
-
-   =========================================================================
-   ==  NOTICE file corresponding to section 4(d) of the Apache License,   ==
-   ==  Version 2.0, in this case for the Apache Xerces Java distribution. ==
-   =========================================================================
-
-   Portions of this software were originally based on the following:
-     - software copyright (c) 1999, IBM Corporation., http://www.ibm.com.
-     - software copyright (c) 1999, Sun Microsystems., http://www.sun.com.
-     - voluntary contributions made by Paul Eng on behalf of the
-       Apache Software Foundation that were originally developed at iClick, Inc.,
-       software copyright (c) 1999.
 
 # Jackson JSON processor
 
@@ -656,20 +583,11 @@ Copyright 2001-2009 The Apache Software Foundation
 Apache Commons Daemon
 Copyright 1999-2019 The Apache Software Foundation
 
-Google Guice - Extensions - Servlet
-Copyright 2006-2011 Google, Inc.
-
 Apache Commons IO
 Copyright 2002-2012 The Apache Software Foundation
 
-Google Guice - Core Library
-Copyright 2006-2011 Google, Inc.
-
 Apache Parquet Hadoop Bundle (Incubating)
 Copyright 2015 The Apache Software Foundation
-
-Hive Query Language
-Copyright 2016 The Apache Software Foundation
 
 Apache Extras Companion for log4j 1.2.
 Copyright 2007 The Apache Software Foundation
@@ -883,18 +801,6 @@ and Copyright (c) 1995-2008 International Business Machines Corporation and othe
 Some data files (under analysis/icu/src/data) are derived from Unicode data such
 as the Unicode Character Database. See http://unicode.org/copyright.html for more
 details.
-
-Brics Automaton (under core/src/java/org/apache/lucene/util/automaton) is
-BSD-licensed, created by Anders Møller. See http://www.brics.dk/automaton/
-
-The levenshtein automata tables (under core/src/java/org/apache/lucene/util/automaton) were
-automatically generated with the moman/finenight FSA library, created by
-Jean-Philippe Barrette-LaPierre. This library is available under an MIT license,
-see http://sites.google.com/site/rrettesite/moman and
-http://bitbucket.org/jpbarrette/moman/overview/
-
-The class org.apache.lucene.util.WeakIdentityMap was derived from
-the Apache CXF project and is Apache License 2.0.
 
 The Google Code Prettify is Apache License 2.0.
 See http://code.google.com/p/google-code-prettify/
@@ -1378,13 +1284,6 @@ Copyright (C) 2010 The Android Open Source Project
 This product includes software developed by
 The Android Open Source Project
 
-Apache Velocity
-
-Copyright (C) 2000-2007 The Apache Software Foundation
-
-This product includes software developed at
-The Apache Software Foundation (http://www.apache.org/).
-
 Apache Yetus - Audience Annotations
 Copyright 2015-2017 The Apache Software Foundation
 
@@ -1404,102 +1303,6 @@ This product includes software developed at
 The Apache Software Foundation (http://www.apache.org/).
 
 
-Kerby-kerb Admin
-Copyright 2014-2017 The Apache Software Foundation
-
-This product includes software developed at
-The Apache Software Foundation (http://www.apache.org/).
-
-
-Kerby-kerb Client
-Copyright 2014-2017 The Apache Software Foundation
-
-This product includes software developed at
-The Apache Software Foundation (http://www.apache.org/).
-
-
-Kerby-kerb Common
-Copyright 2014-2017 The Apache Software Foundation
-
-This product includes software developed at
-The Apache Software Foundation (http://www.apache.org/).
-
-
-Kerby-kerb core
-Copyright 2014-2017 The Apache Software Foundation
-
-This product includes software developed at
-The Apache Software Foundation (http://www.apache.org/).
-
-
-Kerby-kerb Crypto
-Copyright 2014-2017 The Apache Software Foundation
-
-This product includes software developed at
-The Apache Software Foundation (http://www.apache.org/).
-
-
-Kerby-kerb Identity
-Copyright 2014-2017 The Apache Software Foundation
-
-This product includes software developed at
-The Apache Software Foundation (http://www.apache.org/).
-
-
-Kerby-kerb Server
-Copyright 2014-2017 The Apache Software Foundation
-
-This product includes software developed at
-The Apache Software Foundation (http://www.apache.org/).
-
-
-Kerb Simple Kdc
-Copyright 2014-2017 The Apache Software Foundation
-
-This product includes software developed at
-The Apache Software Foundation (http://www.apache.org/).
-
-
-Kerby-kerb Util
-Copyright 2014-2017 The Apache Software Foundation
-
-This product includes software developed at
-The Apache Software Foundation (http://www.apache.org/).
-
-
-Kerby ASN1 Project
-Copyright 2014-2017 The Apache Software Foundation
-
-This product includes software developed at
-The Apache Software Foundation (http://www.apache.org/).
-
-
-Kerby Config
-Copyright 2014-2017 The Apache Software Foundation
-
-This product includes software developed at
-The Apache Software Foundation (http://www.apache.org/).
-
-
-Kerby PKIX Project
-Copyright 2014-2017 The Apache Software Foundation
-
-This product includes software developed at
-The Apache Software Foundation (http://www.apache.org/).
-
-
-Kerby Util
-Copyright 2014-2017 The Apache Software Foundation
-
-This product includes software developed at
-The Apache Software Foundation (http://www.apache.org/).
-
-
-Kerby XDR Project
-Copyright 2014-2017 The Apache Software Foundation
-
-This product includes software developed at
-The Apache Software Foundation (http://www.apache.org/).
 
 
 Token provider

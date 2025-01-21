@@ -33,6 +33,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{convertSpecialDate, convertSpecialTimestamp, convertSpecialTimestampNTZ, instantToMicros, localDateTimeToMicros}
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLExpr
 import org.apache.spark.sql.connector.catalog.CatalogManager
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 
@@ -83,23 +84,26 @@ object RewriteNonCorrelatedExists extends Rule[LogicalPlan] {
 object EvalInlineTables extends Rule[LogicalPlan] with CastSupport {
   override def apply(plan: LogicalPlan): LogicalPlan = {
     plan.transformDownWithSubqueriesAndPruning(_.containsPattern(INLINE_TABLE_EVAL)) {
-      case table: ResolvedInlineTable =>
-        val newRows: Seq[InternalRow] =
-          table.rows.map { row => InternalRow.fromSeq(row.map { e =>
-              try {
-                prepareForEval(e).eval()
-              } catch {
-                case NonFatal(ex) =>
-                  table.failAnalysis(
-                    errorClass = "INVALID_INLINE_TABLE.FAILED_SQL_EXPRESSION_EVALUATION",
-                    messageParameters = Map("sqlExpr" -> toSQLExpr(e)),
-                    cause = ex)
-              }})
-          }
-
-        LocalRelation(table.output, newRows)
+      case table: ResolvedInlineTable => eval(table)
     }
   }
+
+    def eval(table: ResolvedInlineTable): LocalRelation = {
+      val newRows: Seq[InternalRow] =
+        table.rows.map { row => InternalRow.fromSeq(row.map { e =>
+          try {
+            prepareForEval(e).eval()
+          } catch {
+            case NonFatal(ex) =>
+              table.failAnalysis(
+                errorClass = "INVALID_INLINE_TABLE.FAILED_SQL_EXPRESSION_EVALUATION",
+                messageParameters = Map("sqlExpr" -> toSQLExpr(e)),
+                cause = ex)
+          }})
+        }
+
+      LocalRelation(table.output, newRows)
+    }
 }
 
 /**
@@ -151,11 +155,11 @@ case class ReplaceCurrentLike(catalogManager: CatalogManager) extends Rule[Logic
 
     plan.transformAllExpressionsWithPruning(_.containsPattern(CURRENT_LIKE)) {
       case CurrentDatabase() =>
-        Literal.create(currentNamespace, StringType)
+        Literal.create(currentNamespace, SQLConf.get.defaultStringType)
       case CurrentCatalog() =>
-        Literal.create(currentCatalog, StringType)
+        Literal.create(currentCatalog, SQLConf.get.defaultStringType)
       case CurrentUser() =>
-        Literal.create(currentUser, StringType)
+        Literal.create(currentUser, SQLConf.get.defaultStringType)
     }
   }
 }
@@ -178,5 +182,12 @@ object SpecialDatetimeValues extends Rule[LogicalPlan] {
           .map(Literal(_, dt))
           .getOrElse(cast)
     }
+  }
+}
+
+object ReplaceTranspose extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan.transform {
+    case t @ Transpose(output, data) =>
+      LocalRelation(output, data)
   }
 }

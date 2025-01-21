@@ -34,6 +34,7 @@ import org.scalatest.Assertions
 
 import org.apache.spark._
 import org.apache.spark.Partitioner
+import org.apache.spark.internal.config._
 import org.apache.spark.util.ArrayImplicits._
 
 class PairRDDFunctionsSuite extends SparkFunSuite with SharedSparkContext {
@@ -332,44 +333,44 @@ class PairRDDFunctionsSuite extends SparkFunSuite with SharedSparkContext {
   }
 
   test("cogroup between multiple RDD when defaultParallelism is set without proper partitioner") {
-    assert(!sc.conf.contains("spark.default.parallelism"))
+    assert(!sc.conf.contains(DEFAULT_PARALLELISM.key))
     try {
-      sc.conf.set("spark.default.parallelism", "4")
+      sc.conf.set(DEFAULT_PARALLELISM.key, "4")
       val rdd1 = sc.parallelize((1 to 1000).map(x => (x, x)), 20)
       val rdd2 = sc.parallelize(Seq((1, 1), (1, 2), (2, 1), (3, 1)), 10)
       val joined = rdd1.cogroup(rdd2)
       assert(joined.getNumPartitions == sc.defaultParallelism)
     } finally {
-      sc.conf.remove("spark.default.parallelism")
+      sc.conf.remove(DEFAULT_PARALLELISM.key)
     }
   }
 
   test("cogroup between multiple RDD when defaultParallelism is set with proper partitioner") {
-    assert(!sc.conf.contains("spark.default.parallelism"))
+    assert(!sc.conf.contains(DEFAULT_PARALLELISM.key))
     try {
-      sc.conf.set("spark.default.parallelism", "4")
+      sc.conf.set(DEFAULT_PARALLELISM.key, "4")
       val rdd1 = sc.parallelize((1 to 1000).map(x => (x, x)), 20)
       val rdd2 = sc.parallelize(Seq((1, 1), (1, 2), (2, 1), (3, 1)))
         .partitionBy(new HashPartitioner(10))
       val joined = rdd1.cogroup(rdd2)
       assert(joined.getNumPartitions == rdd2.getNumPartitions)
     } finally {
-      sc.conf.remove("spark.default.parallelism")
+      sc.conf.remove(DEFAULT_PARALLELISM.key)
     }
   }
 
   test("cogroup between multiple RDD when defaultParallelism is set; with huge number of " +
     "partitions in upstream RDDs") {
-    assert(!sc.conf.contains("spark.default.parallelism"))
+    assert(!sc.conf.contains(DEFAULT_PARALLELISM.key))
     try {
-      sc.conf.set("spark.default.parallelism", "4")
+      sc.conf.set(DEFAULT_PARALLELISM.key, "4")
       val rdd1 = sc.parallelize((1 to 1000).map(x => (x, x)), 1000)
       val rdd2 = sc.parallelize(Seq((1, 1), (1, 2), (2, 1), (3, 1)))
         .partitionBy(new HashPartitioner(10))
       val joined = rdd1.cogroup(rdd2)
       assert(joined.getNumPartitions == rdd2.getNumPartitions)
     } finally {
-      sc.conf.remove("spark.default.parallelism")
+      sc.conf.remove(DEFAULT_PARALLELISM.key)
     }
   }
 

@@ -165,24 +165,27 @@ object StaxXmlParserUtils {
 
   /**
    * Skip the children of the current XML element.
+   * Before this function is called, the 'startElement' of the object has already been consumed.
+   * Upon completion, this function consumes the 'endElement' of the object,
+   * which effectively skipping the entire object enclosed within these elements.
    */
-  def skipChildren(parser: XMLEventReader): Unit = {
-    var shouldStop = checkEndElement(parser)
+  def skipChildren(
+      parser: XMLEventReader,
+      expectedNextEndElementName: String,
+      options: XmlOptions): Unit = {
+    var shouldStop = false
     while (!shouldStop) {
       parser.nextEvent match {
-        case _: StartElement =>
-          val e = parser.peek
-          if (e.isCharacters && e.asCharacters.isWhiteSpace) {
-            // There can be a `Characters` event between `StartElement`s.
-            // So, we need to check further to decide if this is a data or just
-            // a whitespace between them.
-            parser.next
-          }
-          if (parser.peek.isStartElement) {
-            skipChildren(parser)
-          }
-        case _: EndElement =>
-          shouldStop = checkEndElement(parser)
+        case startElement: StartElement =>
+          val childField = StaxXmlParserUtils.getName(startElement.asStartElement.getName, options)
+          skipChildren(parser, childField, options)
+        case endElement: EndElement =>
+          val endElementName = getName(endElement.getName, options)
+          assert(
+            endElementName == expectedNextEndElementName,
+            s"Expected EndElement </$expectedNextEndElementName>, but found </$endElementName>"
+          )
+          shouldStop = true
         case _: XMLEvent => // do nothing
       }
     }
@@ -197,9 +200,10 @@ object StaxXmlParserUtils {
       case c: Characters if c.isWhiteSpace =>
         skipNextEndElement(parser, expectedNextEndElementName, options)
       case endElement: EndElement =>
+        val endElementName = getName(endElement.getName, options)
         assert(
-          getName(endElement.getName, options) == expectedNextEndElementName,
-          s"Expected EndElement </$expectedNextEndElementName>")
+          endElementName == expectedNextEndElementName,
+          s"Expected EndElement </$expectedNextEndElementName>, but found </$endElementName>")
       case _ => throw new IllegalStateException(
         s"Expected EndElement </$expectedNextEndElementName>")
     }

@@ -35,7 +35,6 @@ from pyspark.sql.types import (
 from pyspark.testing.sqlutils import MyObject, PythonOnlyUDT
 
 from pyspark.testing.connectutils import should_test_connect
-from pyspark.errors.exceptions.connect import ParseException
 from pyspark.sql.tests.connect.test_connect_basic import SparkConnectSQLTestCase
 
 if should_test_connect:
@@ -43,6 +42,7 @@ if should_test_connect:
     import numpy as np
     from pyspark.sql import functions as SF
     from pyspark.sql.connect import functions as CF
+    from pyspark.errors.exceptions.connect import ParseException
 
 
 class SparkConnectCreationTests(SparkConnectSQLTestCase):
@@ -97,8 +97,8 @@ class SparkConnectCreationTests(SparkConnectSQLTestCase):
 
         self.check_error(
             exception=pe.exception,
-            error_class="AXIS_LENGTH_MISMATCH",
-            message_parameters={"expected_length": "5", "actual_length": "4"},
+            errorClass="AXIS_LENGTH_MISMATCH",
+            messageParameters={"expected_length": "5", "actual_length": "4"},
         )
 
         with self.assertRaises(ParseException):
@@ -109,8 +109,8 @@ class SparkConnectCreationTests(SparkConnectSQLTestCase):
 
         self.check_error(
             exception=pe.exception,
-            error_class="AXIS_LENGTH_MISMATCH",
-            message_parameters={"expected_length": "3", "actual_length": "4"},
+            errorClass="AXIS_LENGTH_MISMATCH",
+            messageParameters={"expected_length": "3", "actual_length": "4"},
         )
 
         # test 1 dim ndarray
@@ -150,8 +150,8 @@ class SparkConnectCreationTests(SparkConnectSQLTestCase):
 
         self.check_error(
             exception=pe.exception,
-            error_class="AXIS_LENGTH_MISMATCH",
-            message_parameters={"expected_length": "5", "actual_length": "4"},
+            errorClass="AXIS_LENGTH_MISMATCH",
+            messageParameters={"expected_length": "5", "actual_length": "4"},
         )
 
         with self.assertRaises(ParseException):
@@ -162,8 +162,8 @@ class SparkConnectCreationTests(SparkConnectSQLTestCase):
 
         self.check_error(
             exception=pe.exception,
-            error_class="AXIS_LENGTH_MISMATCH",
-            message_parameters={"expected_length": "3", "actual_length": "4"},
+            errorClass="AXIS_LENGTH_MISMATCH",
+            messageParameters={"expected_length": "3", "actual_length": "4"},
         )
 
     def test_with_local_rows(self):
@@ -339,8 +339,8 @@ class SparkConnectCreationTests(SparkConnectSQLTestCase):
 
         self.check_error(
             exception=pe.exception,
-            error_class="CANNOT_INFER_EMPTY_SCHEMA",
-            message_parameters={},
+            errorClass="CANNOT_INFER_EMPTY_SCHEMA",
+            messageParameters={},
         )
 
     def test_create_dataframe_from_arrays(self):

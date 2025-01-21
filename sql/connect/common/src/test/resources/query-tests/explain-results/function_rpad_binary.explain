@@ -1,0 +1,2 @@
+Project [static_invoke(ByteArray.rpad(bytes#0, 5, 0x0B0A0B0E)) AS rpad(bytes, 5, X'0B0A0B0E')#0]
++- LocalRelation <empty>, [id#0L, bytes#0]

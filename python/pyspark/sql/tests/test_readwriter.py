@@ -23,6 +23,7 @@ from pyspark.errors import AnalysisException
 from pyspark.sql.functions import col, lit
 from pyspark.sql.readwriter import DataFrameWriterV2
 from pyspark.sql.types import StructType, StructField, StringType
+from pyspark.testing import assertDataFrameEqual
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 
@@ -34,15 +35,15 @@ class ReadwriterTestsMixin:
         try:
             df.write.json(tmpPath)
             actual = self.spark.read.json(tmpPath)
-            self.assertEqual(sorted(df.collect()), sorted(actual.collect()))
+            assertDataFrameEqual(df, actual)
 
             schema = StructType([StructField("value", StringType(), True)])
             actual = self.spark.read.json(tmpPath, schema)
-            self.assertEqual(sorted(df.select("value").collect()), sorted(actual.collect()))
+            assertDataFrameEqual(df.select("value"), actual)
 
             df.write.json(tmpPath, "overwrite")
             actual = self.spark.read.json(tmpPath)
-            self.assertEqual(sorted(df.collect()), sorted(actual.collect()))
+            assertDataFrameEqual(df, actual)
 
             df.write.save(
                 format="json",
@@ -53,14 +54,11 @@ class ReadwriterTestsMixin:
             actual = self.spark.read.load(
                 format="json", path=tmpPath, noUse="this options will not be used in load."
             )
-            self.assertEqual(sorted(df.collect()), sorted(actual.collect()))
+            assertDataFrameEqual(df, actual)
 
-            try:
-                self.spark.sql("SET spark.sql.sources.default=org.apache.spark.sql.json")
+            with self.sql_conf({"spark.sql.sources.default": "org.apache.spark.sql.json"}):
                 actual = self.spark.read.load(path=tmpPath)
-                self.assertEqual(sorted(df.collect()), sorted(actual.collect()))
-            finally:
-                self.spark.sql("RESET spark.sql.sources.default")
+                assertDataFrameEqual(df, actual)
 
             csvpath = os.path.join(tempfile.mkdtemp(), "data")
             df.write.option("quote", None).format("csv").save(csvpath)
@@ -74,15 +72,15 @@ class ReadwriterTestsMixin:
         try:
             df.write.json(tmpPath)
             actual = self.spark.read.json(tmpPath)
-            self.assertEqual(sorted(df.collect()), sorted(actual.collect()))
+            assertDataFrameEqual(df, actual)
 
             schema = StructType([StructField("value", StringType(), True)])
             actual = self.spark.read.json(tmpPath, schema)
-            self.assertEqual(sorted(df.select("value").collect()), sorted(actual.collect()))
+            assertDataFrameEqual(df.select("value"), actual)
 
             df.write.mode("overwrite").json(tmpPath)
             actual = self.spark.read.json(tmpPath)
-            self.assertEqual(sorted(df.collect()), sorted(actual.collect()))
+            assertDataFrameEqual(df, actual)
 
             df.write.mode("overwrite").options(
                 noUse="this options will not be used in save."
@@ -92,14 +90,11 @@ class ReadwriterTestsMixin:
             actual = self.spark.read.format("json").load(
                 path=tmpPath, noUse="this options will not be used in load."
             )
-            self.assertEqual(sorted(df.collect()), sorted(actual.collect()))
+            assertDataFrameEqual(df, actual)
 
-            try:
-                self.spark.sql("SET spark.sql.sources.default=org.apache.spark.sql.json")
+            with self.sql_conf({"spark.sql.sources.default": "org.apache.spark.sql.json"}):
                 actual = self.spark.read.load(path=tmpPath)
-                self.assertEqual(sorted(df.collect()), sorted(actual.collect()))
-            finally:
-                self.spark.sql("RESET spark.sql.sources.default")
+                assertDataFrameEqual(df, actual)
         finally:
             shutil.rmtree(tmpPath)
 
@@ -159,6 +154,47 @@ class ReadwriterTestsMixin:
                 .saveAsTable("pyspark_bucket")
             )
             self.assertSetEqual(set(data), set(self.spark.table("pyspark_bucket").collect()))
+
+    def test_cluster_by(self):
+        data = [
+            (1, "foo", 3.0),
+            (2, "foo", 5.0),
+            (3, "bar", -1.0),
+            (4, "bar", 6.0),
+        ]
+        df = self.spark.createDataFrame(data, ["x", "y", "z"])
+
+        def get_cluster_by_cols(table="pyspark_cluster_by"):
+            cols = self.spark.catalog.listColumns(table)
+            return [c.name for c in cols if c.isCluster]
+
+        table_name = "pyspark_cluster_by"
+        with self.table(table_name):
+            # Test write with one clustering column
+            df.write.clusterBy("x").mode("overwrite").saveAsTable(table_name)
+            self.assertEqual(get_cluster_by_cols(), ["x"])
+            self.assertSetEqual(set(data), set(self.spark.table(table_name).collect()))
+
+            # Test write with two clustering columns
+            df.write.clusterBy("x", "y").mode("overwrite").option(
+                "overwriteSchema", "true"
+            ).saveAsTable(table_name)
+            self.assertEqual(get_cluster_by_cols(), ["x", "y"])
+            self.assertSetEqual(set(data), set(self.spark.table(table_name).collect()))
+
+            # Test write with a list of columns
+            df.write.clusterBy(["y", "z"]).mode("overwrite").option(
+                "overwriteSchema", "true"
+            ).saveAsTable(table_name)
+            self.assertEqual(get_cluster_by_cols(), ["y", "z"])
+            self.assertSetEqual(set(data), set(self.spark.table(table_name).collect()))
+
+            # Test write with a tuple of columns
+            df.write.clusterBy(("x", "z")).mode("overwrite").option(
+                "overwriteSchema", "true"
+            ).saveAsTable(table_name)
+            self.assertEqual(get_cluster_by_cols(), ["x", "z"])
+            self.assertSetEqual(set(data), set(self.spark.table(table_name).collect()))
 
     def test_insert_into(self):
         df = self.spark.createDataFrame([("a", 1), ("b", 2)], ["C1", "C2"])
@@ -220,6 +256,7 @@ class ReadwriterV2TestsMixin:
 
     def test_partitioning_functions(self):
         self.check_partitioning_functions(DataFrameWriterV2)
+        self.partitioning_functions_user_error()
 
     def check_partitioning_functions(self, tpe):
         import datetime
@@ -239,6 +276,35 @@ class ReadwriterV2TestsMixin:
         self.assertIsInstance(writer.partitionedBy(bucket(11, col("id"))), tpe)
         self.assertIsInstance(writer.partitionedBy(bucket(3, "id"), hours(col("ts"))), tpe)
 
+    def partitioning_functions_user_error(self):
+        import datetime
+        from pyspark.sql.functions.partitioning import years, months, days, hours, bucket
+
+        df = self.spark.createDataFrame(
+            [(1, datetime.datetime(2000, 1, 1), "foo")], ("id", "ts", "value")
+        )
+
+        with self.assertRaisesRegex(
+            Exception, "PARTITION_TRANSFORM_EXPRESSION_NOT_IN_PARTITIONED_BY"
+        ):
+            df.select(years("ts")).collect()
+        with self.assertRaisesRegex(
+            Exception, "PARTITION_TRANSFORM_EXPRESSION_NOT_IN_PARTITIONED_BY"
+        ):
+            df.select(months("ts")).collect()
+        with self.assertRaisesRegex(
+            Exception, "PARTITION_TRANSFORM_EXPRESSION_NOT_IN_PARTITIONED_BY"
+        ):
+            df.select(days("ts")).collect()
+        with self.assertRaisesRegex(
+            Exception, "PARTITION_TRANSFORM_EXPRESSION_NOT_IN_PARTITIONED_BY"
+        ):
+            df.select(hours("ts")).collect()
+        with self.assertRaisesRegex(
+            Exception, "PARTITION_TRANSFORM_EXPRESSION_NOT_IN_PARTITIONED_BY"
+        ):
+            df.select(bucket(2, "ts")).collect()
+
     def test_create(self):
         df = self.df
         with self.table("test_table"):
@@ -247,15 +313,36 @@ class ReadwriterV2TestsMixin:
 
     def test_create_without_provider(self):
         df = self.df
-        with self.assertRaisesRegex(
-            AnalysisException, "NOT_SUPPORTED_COMMAND_WITHOUT_HIVE_SUPPORT"
-        ):
+        with self.table("test_table"):
             df.writeTo("test_table").create()
+            self.assertEqual(100, self.spark.sql("select * from test_table").count())
 
     def test_table_overwrite(self):
         df = self.df
         with self.assertRaisesRegex(AnalysisException, "TABLE_OR_VIEW_NOT_FOUND"):
             df.writeTo("test_table").overwrite(lit(True))
+
+    def test_cluster_by(self):
+        data = [
+            (1, "foo", 3.0),
+            (2, "foo", 5.0),
+            (3, "bar", -1.0),
+            (4, "bar", 6.0),
+        ]
+        df = self.spark.createDataFrame(data, ["x", "y", "z"])
+
+        def get_cluster_by_cols(table="pyspark_cluster_by"):
+            # Note that listColumns only returns top-level clustering columns and doesn't consider
+            # nested clustering columns as isCluster. This is fine for this test.
+            cols = self.spark.catalog.listColumns(table)
+            return [c.name for c in cols if c.isCluster]
+
+        table_name = "pyspark_cluster_by"
+        with self.table(table_name):
+            # Test write with one clustering column
+            df.writeTo(table_name).using("parquet").clusterBy("x").create()
+            self.assertEqual(get_cluster_by_cols(), ["x"])
+            self.assertSetEqual(set(data), set(self.spark.table(table_name).collect()))
 
 
 class ReadwriterTests(ReadwriterTestsMixin, ReusedSQLTestCase):

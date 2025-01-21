@@ -21,7 +21,7 @@ import scala.reflect.ClassTag
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.JavaSparkContext._
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.internal.LogKeys.{CLUSTER_CENTROIDS, CLUSTER_LABEL, CLUSTER_WEIGHT, LARGEST_CLUSTER_INDEX, SMALLEST_CLUSTER_INDEX}
 import org.apache.spark.mllib.linalg.{BLAS, Vector, Vectors}
 import org.apache.spark.rdd.RDD
@@ -222,7 +222,7 @@ class StreamingKMeans @Since("1.2.0") (
       throw new IllegalArgumentException("Invalid time unit for decay: " + timeUnit)
     }
     this.decayFactor = math.exp(math.log(0.5) / halfLife)
-    logInfo("Setting decay factor to: %g ".format (this.decayFactor))
+    logInfo(log"Setting decay factor to: ${MDC(LogKeys.VALUE, this.decayFactor)}")
     this.timeUnit = timeUnit
     this
   }

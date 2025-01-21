@@ -19,10 +19,9 @@ package org.apache.spark.sql.execution.datasources.jdbc
 
 import java.math.{BigDecimal => JBigDecimal}
 import java.nio.charset.StandardCharsets
-import java.sql.{Connection, Date, JDBCType, PreparedStatement, ResultSet, ResultSetMetaData, SQLException, Timestamp}
-import java.time.{Instant, LocalDate, LocalDateTime}
+import java.sql.{Connection, Date, JDBCType, PreparedStatement, ResultSet, ResultSetMetaData, SQLException, Time, Timestamp}
+import java.time.{Instant, LocalDate}
 import java.util
-import java.util.concurrent.TimeUnit
 
 import scala.annotation.tailrec
 import scala.collection.mutable.ArrayBuffer
@@ -36,11 +35,12 @@ import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys.{DEFAULT_ISOLATION_LEVEL, ISOLATION_LEVEL}
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.catalyst.{InternalRow, SQLConfHelper}
-import org.apache.spark.sql.catalyst.analysis.{DecimalPrecision, Resolver}
+import org.apache.spark.sql.catalyst.analysis.{DecimalPrecisionTypeCoercion, Resolver}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.SpecificInternalRow
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CharVarcharUtils, GenericArrayData}
+import org.apache.spark.sql.catalyst.util.DateTimeConstants.MICROS_PER_MILLIS
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.connector.catalog.{Identifier, TableChange}
 import org.apache.spark.sql.connector.catalog.index.{SupportsIndex, TableIndex}
@@ -127,7 +127,8 @@ object JdbcUtils extends Logging with SQLConfHelper {
       // RDD column names for user convenience.
       rddSchema.fields.map { col =>
         tableSchema.get.find(f => conf.resolver(f.name, col.name)).getOrElse {
-          throw QueryCompilationErrors.columnNotFoundInSchemaError(col, tableSchema)
+          throw QueryCompilationErrors.columnNotFoundInSchemaError(
+            col.dataType, col.name, table, rddSchema.fieldNames)
         }
       }
     }
@@ -202,7 +203,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
     case java.sql.Types.DECIMAL | java.sql.Types.NUMERIC if scale < 0 =>
       DecimalType.bounded(precision - scale, 0)
     case java.sql.Types.DECIMAL | java.sql.Types.NUMERIC =>
-      DecimalPrecision.bounded(precision, scale)
+      DecimalPrecisionTypeCoercion.bounded(precision, scale)
     case java.sql.Types.DOUBLE => DoubleType
     case java.sql.Types.FLOAT => FloatType
     case java.sql.Types.INTEGER => if (signed) IntegerType else LongType
@@ -487,15 +488,8 @@ object JdbcUtils extends Logging with SQLConfHelper {
     // It stores the number of milliseconds after midnight, 00:00:00.000000
     case TimestampType if metadata.contains("logical_time_type") =>
       (rs: ResultSet, row: InternalRow, pos: Int) => {
-        val rawTime = rs.getTime(pos + 1)
-        if (rawTime != null) {
-          val localTimeMicro = TimeUnit.NANOSECONDS.toMicros(
-            rawTime.toLocalTime().toNanoOfDay())
-          val utcTimeMicro = toUTCTime(localTimeMicro, conf.sessionLocalTimeZone)
-          row.setLong(pos, utcTimeMicro)
-        } else {
-          row.update(pos, null)
-        }
+        row.update(pos, nullSafeConvert[Time](
+          rs.getTime(pos + 1), t => Math.multiplyExact(t.getTime, MICROS_PER_MILLIS)))
       }
 
     case TimestampType =>
@@ -509,8 +503,10 @@ object JdbcUtils extends Logging with SQLConfHelper {
 
     case TimestampNTZType if metadata.contains("logical_time_type") =>
       (rs: ResultSet, row: InternalRow, pos: Int) =>
-        val micros = nullSafeConvert[java.sql.Time](rs.getTime(pos + 1), t =>
-          localDateTimeToMicros(LocalDateTime.of(LocalDate.EPOCH, t.toLocalTime)))
+        val micros = nullSafeConvert[Time](rs.getTime(pos + 1), t => {
+          val time = dialect.convertJavaTimestampToTimestampNTZ(new Timestamp(t.getTime))
+          localDateTimeToMicros(time)
+        })
         row.update(pos, micros)
 
     case TimestampNTZType =>
@@ -590,14 +586,26 @@ object JdbcUtils extends Logging with SQLConfHelper {
             arr => new GenericArrayData(elementConversion(et0)(arr))
           }
 
+        case IntegerType => arrayConverter[Int]((i: Int) => i)
+        case FloatType => arrayConverter[Float]((f: Float) => f)
+        case DoubleType => arrayConverter[Double]((d: Double) => d)
+        case ShortType => arrayConverter[Short]((s: Short) => s)
+        case BooleanType => arrayConverter[Boolean]((b: Boolean) => b)
+        case LongType => arrayConverter[Long]((l: Long) => l)
+
         case _ => (array: Object) => array.asInstanceOf[Array[Any]]
       }
 
       (rs: ResultSet, row: InternalRow, pos: Int) =>
-        val array = nullSafeConvert[java.sql.Array](
-          input = rs.getArray(pos + 1),
-          array => new GenericArrayData(elementConversion(et)(array.getArray)))
-        row.update(pos, array)
+        try {
+          val array = nullSafeConvert[java.sql.Array](
+            input = rs.getArray(pos + 1),
+            array => new GenericArrayData(elementConversion(et)(array.getArray())))
+          row.update(pos, array)
+        } catch {
+          case e: java.lang.ClassCastException =>
+            throw QueryExecutionErrors.wrongDatatypeInSomeRows(pos, dt)
+        }
 
     case NullType =>
       (_: ResultSet, row: InternalRow, pos: Int) => row.update(pos, null)
@@ -1267,13 +1275,14 @@ object JdbcUtils extends Logging with SQLConfHelper {
       errorClass: String,
       messageParameters: Map[String, String],
       dialect: JdbcDialect,
-      description: String)(f: => T): T = {
+      description: String,
+      isRuntime: Boolean)(f: => T): T = {
     try {
       f
     } catch {
       case e: SparkThrowable with Throwable => throw e
       case e: Throwable =>
-        throw dialect.classifyException(e, errorClass, messageParameters, description)
+        throw dialect.classifyException(e, errorClass, messageParameters, description, isRuntime)
     }
   }
 

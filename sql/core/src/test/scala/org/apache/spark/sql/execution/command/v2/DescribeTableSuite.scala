@@ -106,7 +106,7 @@ class DescribeTableSuite extends command.DescribeTableSuiteBase
         exception = intercept[AnalysisException] {
           sql(query).collect()
         },
-        errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+        condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
         sqlState = "42703",
         parameters = Map(
           "objectName" -> "`key1`",
@@ -137,7 +137,7 @@ class DescribeTableSuite extends command.DescribeTableSuiteBase
           exception = intercept[AnalysisException] {
             sql(query).collect()
           },
-          errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+          condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
           sqlState = "42703",
           parameters = Map(
             "objectName" -> "`KEY`",

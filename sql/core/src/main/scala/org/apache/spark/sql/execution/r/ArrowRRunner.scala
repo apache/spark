@@ -30,6 +30,7 @@ import org.apache.spark.TaskContext
 import org.apache.spark.api.r._
 import org.apache.spark.api.r.SpecialLengths
 import org.apache.spark.broadcast.Broadcast
+import org.apache.spark.internal.{LogKeys, MDC}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.arrow.ArrowWriter
 import org.apache.spark.sql.types.StructType
@@ -138,6 +139,10 @@ class ArrowRRunner(
 
       private var batchLoaded = true
 
+      private def format(v: Double): String = {
+        "%.3f".format(v)
+      }
+
       protected override def read(): ColumnarBatch = try {
         if (reader != null && batchLoaded) {
           batchLoaded = reader.loadNextBatch()
@@ -161,17 +166,14 @@ class ArrowRRunner(
               val input = dataStream.readDouble
               val compute = dataStream.readDouble
               val output = dataStream.readDouble
-              logInfo(
-                ("Times: boot = %.3f s, init = %.3f s, broadcast = %.3f s, " +
-                  "read-input = %.3f s, compute = %.3f s, write-output = %.3f s, " +
-                  "total = %.3f s").format(
-                  boot,
-                  init,
-                  broadcast,
-                  input,
-                  compute,
-                  output,
-                  boot + init + broadcast + input + compute + output))
+              logInfo(log"Times: boot = ${MDC(LogKeys.BOOT, format(boot))} s, " +
+                log"init = ${MDC(LogKeys.INIT, format(init))} s, " +
+                log"broadcast = ${MDC(LogKeys.BROADCAST, format(broadcast))} s, " +
+                log"read-input = ${MDC(LogKeys.INPUT, format(input))} s, " +
+                log"compute = ${MDC(LogKeys.COMPUTE, format(compute))} s, " +
+                log"write-output = ${MDC(LogKeys.OUTPUT, format(output))} s, " +
+                log"total = ${MDC(LogKeys.TOTAL,
+                  format(boot + init + broadcast + input + compute + output))} s")
               read()
             case length if length > 0 =>
               // Likewise, there looks no way to send each batch in streaming format via socket

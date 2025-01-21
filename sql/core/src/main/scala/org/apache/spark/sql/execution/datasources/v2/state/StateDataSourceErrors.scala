@@ -63,6 +63,12 @@ object StateDataSourceErrors {
     new StateDataSourceReadStateSchemaFailure(sourceOptions, cause)
   }
 
+  def failedToReadOperatorMetadata(
+      checkpointLocation: String,
+      batchId: Long): StateDataSourceException = {
+    new StateDataSourceReadOperatorMetadataFailure(checkpointLocation, batchId)
+  }
+
   def conflictOptions(options: Seq[String]): StateDataSourceException = {
     new StateDataSourceConflictOptions(options)
   }
@@ -157,4 +163,12 @@ class StateDataSourceNoPartitionDiscoveredInStateStore(sourceOptions: StateSourc
   extends StateDataSourceException(
     "STDS_NO_PARTITION_DISCOVERED_IN_STATE_STORE",
     Map("sourceOptions" -> sourceOptions.toString),
+    cause = null)
+
+class StateDataSourceReadOperatorMetadataFailure(
+    checkpointLocation: String,
+    batchId: Long)
+  extends StateDataSourceException(
+    "STDS_FAILED_TO_READ_OPERATOR_METADATA",
+    Map("checkpointLocation" -> checkpointLocation, "batchId" -> batchId.toString),
     cause = null)

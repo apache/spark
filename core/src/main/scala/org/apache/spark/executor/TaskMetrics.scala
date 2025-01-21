@@ -17,7 +17,7 @@
 
 package org.apache.spark.executor
 
-import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.locks.ReentrantReadWriteLock
 
 import scala.collection.mutable.{ArrayBuffer, LinkedHashMap}
 import scala.jdk.CollectionConverters._
@@ -29,7 +29,6 @@ import org.apache.spark.internal.config.Tests.IS_TESTING
 import org.apache.spark.scheduler.AccumulableInfo
 import org.apache.spark.storage.{BlockId, BlockStatus}
 import org.apache.spark.util._
-
 
 /**
  * :: DeveloperApi ::
@@ -57,6 +56,8 @@ class TaskMetrics private[spark] () extends Serializable {
   private val _memoryBytesSpilled = new LongAccumulator
   private val _diskBytesSpilled = new LongAccumulator
   private val _peakExecutionMemory = new LongAccumulator
+  private val _peakOnHeapExecutionMemory = new LongAccumulator
+  private val _peakOffHeapExecutionMemory = new LongAccumulator
   private val _updatedBlockStatuses = new CollectionAccumulator[(BlockId, BlockStatus)]
 
   /**
@@ -110,8 +111,21 @@ class TaskMetrics private[spark] () extends Serializable {
    * joins. The value of this accumulator should be approximately the sum of the peak sizes
    * across all such data structures created in this task. For SQL jobs, this only tracks all
    * unsafe operators and ExternalSort.
+   * This is not equal to peakOnHeapExecutionMemory + peakOffHeapExecutionMemory
    */
+  // TODO: SPARK-48789: the naming is confusing since this does not really reflect the whole
+  //  execution memory. We'd better deprecate this once we have a replacement.
   def peakExecutionMemory: Long = _peakExecutionMemory.sum
+
+  /**
+   * Peak on heap execution memory as tracked by TaskMemoryManager.
+   */
+  def peakOnHeapExecutionMemory: Long = _peakOnHeapExecutionMemory.sum
+
+  /**
+   * Peak off heap execution memory as tracked by TaskMemoryManager.
+   */
+  def peakOffHeapExecutionMemory: Long = _peakOffHeapExecutionMemory.sum
 
   /**
    * Storage statuses of any blocks that have been updated as a result of this task.
@@ -140,6 +154,10 @@ class TaskMetrics private[spark] () extends Serializable {
   private[spark] def setResultSerializationTime(v: Long): Unit =
     _resultSerializationTime.setValue(v)
   private[spark] def setPeakExecutionMemory(v: Long): Unit = _peakExecutionMemory.setValue(v)
+  private[spark] def setPeakOnHeapExecutionMemory(v: Long): Unit =
+    _peakOnHeapExecutionMemory.setValue(v)
+  private[spark] def setPeakOffHeapExecutionMemory(v: Long): Unit =
+    _peakOffHeapExecutionMemory.setValue(v)
   private[spark] def incMemoryBytesSpilled(v: Long): Unit = _memoryBytesSpilled.add(v)
   private[spark] def incDiskBytesSpilled(v: Long): Unit = _diskBytesSpilled.add(v)
   private[spark] def incPeakExecutionMemory(v: Long): Unit = _peakExecutionMemory.add(v)
@@ -149,6 +167,11 @@ class TaskMetrics private[spark] () extends Serializable {
     _updatedBlockStatuses.setValue(v)
   private[spark] def setUpdatedBlockStatuses(v: Seq[(BlockId, BlockStatus)]): Unit =
     _updatedBlockStatuses.setValue(v.asJava)
+
+  private val (readLock, writeLock) = {
+    val lock = new ReentrantReadWriteLock()
+    (lock.readLock(), lock.writeLock())
+  }
 
   /**
    * Metrics related to reading data from a [[org.apache.spark.rdd.HadoopRDD]] or from persisted
@@ -221,6 +244,8 @@ class TaskMetrics private[spark] () extends Serializable {
     MEMORY_BYTES_SPILLED -> _memoryBytesSpilled,
     DISK_BYTES_SPILLED -> _diskBytesSpilled,
     PEAK_EXECUTION_MEMORY -> _peakExecutionMemory,
+    PEAK_ON_HEAP_EXECUTION_MEMORY -> _peakOnHeapExecutionMemory,
+    PEAK_OFF_HEAP_EXECUTION_MEMORY -> _peakOffHeapExecutionMemory,
     UPDATED_BLOCK_STATUSES -> _updatedBlockStatuses,
     shuffleRead.REMOTE_BLOCKS_FETCHED -> shuffleReadMetrics._remoteBlocksFetched,
     shuffleRead.LOCAL_BLOCKS_FETCHED -> shuffleReadMetrics._localBlocksFetched,
@@ -264,15 +289,46 @@ class TaskMetrics private[spark] () extends Serializable {
   /**
    * External accumulators registered with this task.
    */
-  @transient private[spark] lazy val _externalAccums = new CopyOnWriteArrayList[AccumulatorV2[_, _]]
+  @transient private[spark] lazy val _externalAccums = new ArrayBuffer[AccumulatorV2[_, _]]
 
-  private[spark] def externalAccums = _externalAccums.asScala
-
-  private[spark] def registerAccumulator(a: AccumulatorV2[_, _]): Unit = {
-    _externalAccums.add(a)
+  /**
+   * Perform an `op` conversion on the `_externalAccums` within the read lock.
+   *
+   * Note `op` is expected to not modify the `_externalAccums` and not being
+   * lazy evaluation for safe concern since `ArrayBuffer` is lazily evaluated.
+   * And we intentionally keeps `_externalAccums` as mutable instead of converting
+   * it to immutable for the performance concern.
+   */
+  private[spark] def withExternalAccums[T](op: ArrayBuffer[AccumulatorV2[_, _]] => T)
+    : T = withReadLock {
+    op(_externalAccums)
   }
 
-  private[spark] def accumulators(): Seq[AccumulatorV2[_, _]] = internalAccums ++ externalAccums
+  private def withReadLock[B](fn: => B): B = {
+    readLock.lock()
+    try {
+      fn
+    } finally {
+      readLock.unlock()
+    }
+  }
+
+  private def withWriteLock[B](fn: => B): B = {
+    writeLock.lock()
+    try {
+      fn
+    } finally {
+      writeLock.unlock()
+    }
+  }
+
+  private[spark] def registerAccumulator(a: AccumulatorV2[_, _]): Unit = withWriteLock {
+    _externalAccums += a
+  }
+
+  private[spark] def accumulators(): Seq[AccumulatorV2[_, _]] = withReadLock {
+    internalAccums ++ _externalAccums
+  }
 
   private[spark] def nonZeroInternalAccums(): Seq[AccumulatorV2[_, _]] = {
     // RESULT_SIZE accumulator is always zero at executor, we need to send it back as its
@@ -335,7 +391,7 @@ private[spark] object TaskMetrics extends Logging {
         tmAcc.metadata = acc.metadata
         tmAcc.merge(acc.asInstanceOf[AccumulatorV2[Any, Any]])
       } else {
-        tm._externalAccums.add(acc)
+        tm._externalAccums += acc
       }
     }
     tm

@@ -1,0 +1,173 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+syntax = 'proto3';
+
+package spark.connect;
+
+option java_multiple_files = true;
+option java_package = "org.apache.spark.connect.proto";
+option go_package = "internal/generated";
+
+// StorageLevel for persisting Datasets/Tables.
+message StorageLevel {
+  // (Required) Whether the cache should use disk or not.
+  bool use_disk = 1;
+  // (Required) Whether the cache should use memory or not.
+  bool use_memory = 2;
+  // (Required) Whether the cache should use off-heap or not.
+  bool use_off_heap = 3;
+  // (Required) Whether the cached data is deserialized or not.
+  bool deserialized = 4;
+  // (Required) The number of replicas.
+  int32 replication = 5;
+}
+
+
+// ResourceInformation to hold information about a type of Resource.
+// The corresponding class is 'org.apache.spark.resource.ResourceInformation'
+message ResourceInformation {
+  // (Required) The name of the resource
+  string name = 1;
+  // (Required) An array of strings describing the addresses of the resource.
+  repeated string addresses = 2;
+}
+
+// An executor resource request.
+message ExecutorResourceRequest {
+  // (Required) resource name.
+  string resource_name = 1;
+
+  // (Required) resource amount requesting.
+  int64 amount = 2;
+
+  // Optional script used to discover the resources.
+  optional string discovery_script = 3;
+
+  // Optional vendor, required for some cluster managers.
+  optional string vendor = 4;
+}
+
+// A task resource request.
+message TaskResourceRequest {
+  // (Required) resource name.
+  string resource_name = 1;
+
+  // (Required) resource amount requesting as a double to support fractional
+  // resource requests.
+  double amount = 2;
+}
+
+message ResourceProfile {
+  // (Optional) Resource requests for executors. Mapped from the resource name
+  // (e.g., cores, memory, CPU) to its specific request.
+  map<string, ExecutorResourceRequest> executor_resources = 1;
+
+  // (Optional) Resource requests for tasks. Mapped from the resource name
+  // (e.g., cores, memory, CPU) to its specific request.
+  map<string, TaskResourceRequest> task_resources = 2;
+}
+
+message Origin {
+  // (Required) Indicate the origin type.
+  oneof function {
+    PythonOrigin python_origin = 1;
+    JvmOrigin jvm_origin = 2;
+  }
+}
+
+message PythonOrigin {
+  // (Required) Name of the origin, for example, the name of the function
+  string fragment = 1;
+
+  // (Required) Callsite to show to end users, for example, stacktrace.
+  string call_site = 2;
+}
+
+message JvmOrigin {
+  // (Optional) Line number in the source file.
+  optional int32 line = 1;
+
+  // (Optional) Start position in the source file.
+  optional int32 start_position = 2;
+
+  // (Optional) Start index in the source file.
+  optional int32 start_index = 3;
+
+  // (Optional) Stop index in the source file.
+  optional int32 stop_index = 4;
+
+  // (Optional) SQL text.
+  optional string sql_text = 5;
+
+  // (Optional) Object type.
+  optional string object_type = 6;
+
+  // (Optional) Object name.
+  optional string object_name = 7;
+
+  // (Optional) Stack trace.
+  repeated StackTraceElement stack_trace = 8;
+}
+
+// A message to hold a [[java.lang.StackTraceElement]].
+message StackTraceElement {
+  // (Optional) Class loader name
+  optional string class_loader_name = 1;
+
+  // (Optional) Module name
+  optional string module_name = 2;
+
+  // (Optional) Module version
+  optional string module_version = 3;
+
+  // (Required) Declaring class
+  string declaring_class = 4;
+
+  // (Required) Method name
+  string method_name = 5;
+
+  // (Optional) File name
+  optional string file_name = 6;
+
+  // (Required) Line number
+  int32 line_number = 7;
+}
+
+message Bools {
+  repeated bool values = 1;
+}
+
+message Ints {
+  repeated int32 values = 1;
+}
+
+message Longs {
+  repeated int64 values = 1;
+}
+
+message Floats {
+  repeated float values = 1;
+}
+
+message Doubles {
+  repeated double values = 1;
+}
+
+message Strings {
+  repeated string values = 1;
+}

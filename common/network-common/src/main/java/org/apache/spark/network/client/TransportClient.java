@@ -35,9 +35,11 @@ import io.netty.util.concurrent.Future;
 import io.netty.util.concurrent.GenericFutureListener;
 import org.apache.commons.lang3.builder.ToStringBuilder;
 import org.apache.commons.lang3.builder.ToStringStyle;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
+import org.apache.spark.internal.SparkLogger;
+import org.apache.spark.internal.SparkLoggerFactory;
+import org.apache.spark.internal.LogKeys;
+import org.apache.spark.internal.MDC;
 import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.buffer.NioManagedBuffer;
 import org.apache.spark.network.protocol.*;
@@ -71,7 +73,7 @@ import static org.apache.spark.network.util.NettyUtils.getRemoteAddress;
  * Concurrency: thread safe and can be called from multiple threads.
  */
 public class TransportClient implements Closeable {
-  private static final Logger logger = LoggerFactory.getLogger(TransportClient.class);
+  private static final SparkLogger logger = SparkLoggerFactory.getLogger(TransportClient.class);
 
   private final Channel channel;
   private final TransportResponseHandler handler;
@@ -288,9 +290,11 @@ public class TransportClient implements Closeable {
     try {
       return result.get(timeoutMs, TimeUnit.MILLISECONDS);
     } catch (ExecutionException e) {
-      throw Throwables.propagate(e.getCause());
+      Throwables.throwIfUnchecked(e.getCause());
+      throw new RuntimeException(e.getCause());
     } catch (Exception e) {
-      throw Throwables.propagate(e);
+      Throwables.throwIfUnchecked(e);
+      throw new RuntimeException(e);
     }
   }
 
@@ -364,11 +368,13 @@ public class TransportClient implements Closeable {
               getRemoteAddress(channel), timeTaken);
         }
       } else {
-        String errorMsg = String.format("Failed to send RPC %s to %s: %s", requestId,
-            getRemoteAddress(channel), future.cause());
-        logger.error(errorMsg, future.cause());
+        logger.error("Failed to send RPC {} to {}", future.cause(),
+            MDC.of(LogKeys.REQUEST_ID$.MODULE$, requestId),
+            MDC.of(LogKeys.HOST_PORT$.MODULE$, getRemoteAddress(channel)));
         channel.close();
         try {
+          String errorMsg = String.format("Failed to send RPC %s to %s: %s", requestId,
+            getRemoteAddress(channel), future.cause());
           handleFailure(errorMsg, future.cause());
         } catch (Exception e) {
           logger.error("Uncaught exception in RPC response callback handler!", e);

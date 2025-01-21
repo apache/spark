@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.expressions.variant
 import scala.util.control.NonFatal
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.util.{ArrayData, BadRecordException, MapData}
+import org.apache.spark.sql.catalyst.util.{ArrayData, MapData}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types._
 import org.apache.spark.types.variant.{Variant, VariantBuilder, VariantSizeLimitException, VariantUtil}
@@ -31,7 +31,10 @@ import org.apache.spark.unsafe.types.{UTF8String, VariantVal}
  */
 object VariantExpressionEvalUtils {
 
-  def parseJson(input: UTF8String, failOnError: Boolean = true): VariantVal = {
+  def parseJson(
+      input: UTF8String,
+      allowDuplicateKeys: Boolean = false,
+      failOnError: Boolean = true): VariantVal = {
     def parseJsonFailure(exception: Throwable): VariantVal = {
       if (failOnError) {
         throw exception
@@ -40,7 +43,7 @@ object VariantExpressionEvalUtils {
       }
     }
     try {
-      val v = VariantBuilder.parseJson(input.toString)
+      val v = VariantBuilder.parseJson(input.toString, allowDuplicateKeys)
       new VariantVal(v.getValue, v.getMetadata)
     } catch {
       case _: VariantSizeLimitException =>
@@ -48,7 +51,7 @@ object VariantExpressionEvalUtils {
           .variantSizeLimitError(VariantUtil.SIZE_LIMIT, "parse_json"))
       case NonFatal(e) =>
         parseJsonFailure(QueryExecutionErrors.malformedRecordsDetectedInRecordParsingError(
-          input.toString, BadRecordException(() => input, cause = e)))
+          input.toString, e))
     }
   }
 
@@ -58,17 +61,33 @@ object VariantExpressionEvalUtils {
       false
     } else {
       val variantValue = input.getValue
-      // Variant NULL is denoted by basic_type == 0 and val_header == 0
-      variantValue(0) == 0
-     }
+      if (variantValue.isEmpty) {
+        throw QueryExecutionErrors.malformedVariant()
+      } else {
+        // Variant NULL is denoted by basic_type == 0 and val_header == 0
+        variantValue(0) == 0
+      }
+    }
   }
 
   /** Cast a Spark value from `dataType` into the variant type. */
   def castToVariant(input: Any, dataType: DataType): VariantVal = {
-    val builder = new VariantBuilder
+    // Enforce strict check because it is illegal for input struct/map/variant to contain duplicate
+    // keys.
+    val builder = new VariantBuilder(false)
     buildVariant(builder, input, dataType)
     val v = builder.result()
     new VariantVal(v.getValue, v.getMetadata)
+  }
+
+  /** Returns `true` if a data type is or has a child variant type. */
+  def typeContainsVariant(dt: DataType): Boolean = dt match {
+    case _: VariantType => true
+    case st: StructType => st.fields.exists(f => typeContainsVariant(f.dataType))
+    case at: ArrayType => typeContainsVariant(at.elementType)
+    // Variants cannot be map keys.
+    case mt: MapType => typeContainsVariant(mt.valueType)
+    case _ => false
   }
 
   private def buildVariant(builder: VariantBuilder, input: Any, dataType: DataType): Unit = {
@@ -99,10 +118,11 @@ object VariantExpressionEvalUtils {
         val offsets = new java.util.ArrayList[java.lang.Integer](data.numElements())
         for (i <- 0 until data.numElements()) {
           offsets.add(builder.getWritePos - start)
-          buildVariant(builder, data.get(i, elementType), elementType)
+          val element = if (data.isNullAt(i)) null else data.get(i, elementType)
+          buildVariant(builder, element, elementType)
         }
         builder.finishWritingArray(start, offsets)
-      case MapType(StringType, valueType, _) =>
+      case MapType(_: StringType, valueType, _) =>
         val data = input.asInstanceOf[MapData]
         val keys = data.keyArray()
         val values = data.valueArray()
@@ -112,7 +132,8 @@ object VariantExpressionEvalUtils {
           val key = keys.getUTF8String(i).toString
           val id = builder.addKey(key)
           fields.add(new VariantBuilder.FieldEntry(key, id, builder.getWritePos - start))
-          buildVariant(builder, values.get(i, valueType), valueType)
+          val value = if (values.isNullAt(i)) null else values.get(i, valueType)
+          buildVariant(builder, value, valueType)
         }
         builder.finishWritingObject(start, fields)
       case StructType(structFields) =>
@@ -123,7 +144,8 @@ object VariantExpressionEvalUtils {
           val key = structFields(i).name
           val id = builder.addKey(key)
           fields.add(new VariantBuilder.FieldEntry(key, id, builder.getWritePos - start))
-          buildVariant(builder, data.get(i, structFields(i).dataType), structFields(i).dataType)
+          val value = if (data.isNullAt(i)) null else data.get(i, structFields(i).dataType)
+          buildVariant(builder, value, structFields(i).dataType)
         }
         builder.finishWritingObject(start, fields)
     }

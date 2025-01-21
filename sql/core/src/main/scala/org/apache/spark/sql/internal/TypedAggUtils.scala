@@ -17,7 +17,9 @@
 
 package org.apache.spark.sql.internal
 
+import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.analysis.UnresolvedDeserializer
+import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.agnosticEncoderFor
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.aggregate.TypedAggregateExpression
@@ -25,10 +27,10 @@ import org.apache.spark.sql.execution.aggregate.TypedAggregateExpression
 private[sql] object TypedAggUtils {
 
   def aggKeyColumn[A](
-      encoder: ExpressionEncoder[A],
+      encoder: Encoder[A],
       groupingAttributes: Seq[Attribute]): NamedExpression = {
-    if (!encoder.isSerializedAsStructForTopLevel) {
-      assert(groupingAttributes.length == 1)
+    val agnosticEncoder = agnosticEncoderFor(encoder)
+    if (!agnosticEncoder.isStruct) {
       if (SQLConf.get.nameNonStructGroupingKeyAsValue) {
         groupingAttributes.head
       } else {
@@ -43,13 +45,12 @@ private[sql] object TypedAggUtils {
    * Insert inputs into typed aggregate expressions. For untyped aggregate expressions,
    * the resolving is handled in the analyzer directly.
    */
-  private[sql] def withInputType(
-      expr: Expression,
+  private[sql] def withInputType[T <: Expression](
+      expr: T,
       inputEncoder: ExpressionEncoder[_],
-      inputAttributes: Seq[Attribute]): Expression = {
+      inputAttributes: Seq[Attribute]): T = {
     val unresolvedDeserializer = UnresolvedDeserializer(inputEncoder.deserializer, inputAttributes)
-
-    expr transform {
+    val transformed = expr transform {
       case ta: TypedAggregateExpression if ta.inputDeserializer.isEmpty =>
         ta.withInputInfo(
           deser = unresolvedDeserializer,
@@ -57,6 +58,7 @@ private[sql] object TypedAggUtils {
           schema = inputEncoder.schema
         )
     }
+    transformed.asInstanceOf[T]
   }
 }
 

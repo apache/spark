@@ -151,11 +151,11 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
   }
 
   test("explain table valued functions") {
-    checkKeywordsExistsInExplain(sql("select * from RaNgE(2)"), "Range (0, 2, step=1, splits=None)")
+    checkKeywordsExistsInExplain(sql("select * from RaNgE(2)"), "Range (0, 2, step=1)")
     checkKeywordsExistsInExplain(sql("SELECT * FROM range(3) CROSS JOIN range(3)"),
       "Join Cross",
-      ":- Range (0, 3, step=1, splits=None)",
-      "+- Range (0, 3, step=1, splits=None)")
+      ":- Range (0, 3, step=1)",
+      "+- Range (0, 3, step=1)")
   }
 
   test("explain lateral joins") {
@@ -192,9 +192,11 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
           |)
         """.stripMargin)
       checkKeywordsExistsInExplain(df2,
-        "Project [concat(cast(id#xL as string), cast((id#xL + 1) as string), " +
-          "cast(encode(cast((id#xL + 2) as string), utf-8, false) as string), " +
-          "cast(encode(cast((id#xL + 3) as string), utf-8, false) as string)) AS col#x]")
+        "Project [concat(concat(col1#x, col2#x), cast(concat(col3#x, col4#x) as string)) AS col#x]",
+        "Project [cast(id#xL as string) AS col1#x, " +
+          "cast((id#xL + cast(1 as bigint)) as string) AS col2#x, " +
+          "encode(cast((id#xL + cast(2 as bigint)) as string), utf-8) AS col3#x, " +
+          "encode(cast((id#xL + cast(3 as bigint)) as string), utf-8) AS col4#x]")
 
       val df3 = sql(
         """
@@ -208,9 +210,10 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
           |)
         """.stripMargin)
       checkKeywordsExistsInExplain(df3,
-        "Project [concat(cast(id#xL as string), " +
-          "cast(encode(cast((id#xL + 2) as string), utf-8, false) as string), " +
-          "cast(encode(cast((id#xL + 3) as string), utf-8, false) as string)) AS col#x]")
+        "Project [concat(col1#x, cast(concat(col3#x, col4#x) as string)) AS col#x]",
+        "Project [cast(id#xL as string) AS col1#x, " +
+          "encode(cast((id#xL + cast(2 as bigint)) as string), utf-8) AS col3#x, " +
+          "encode(cast((id#xL + cast(3 as bigint)) as string), utf-8) AS col4#x]")
     }
   }
 

@@ -22,7 +22,6 @@ import javax.xml.stream.XMLOutputFactory
 
 import scala.collection.Map
 
-import com.sun.xml.txw2.output.IndentingXMLStreamWriter
 import org.apache.hadoop.shaded.com.ctc.wstx.api.WstxOutputProperties
 
 import org.apache.spark.SparkIllegalArgumentException
@@ -169,8 +168,8 @@ class StaxXmlGenerator(
 
   def writeElement(dt: DataType, v: Any, options: XmlOptions): Unit = (dt, v) match {
     case (_, null) | (NullType, _) => gen.writeCharacters(options.nullValue)
-    case (StringType, v: UTF8String) => gen.writeCharacters(v.toString)
-    case (StringType, v: String) => gen.writeCharacters(v)
+    case (_: StringType, v: UTF8String) => gen.writeCharacters(v.toString)
+    case (_: StringType, v: String) => gen.writeCharacters(v)
     case (TimestampType, v: Timestamp) =>
       gen.writeCharacters(timestampFormatter.format(v.toInstant()))
     case (TimestampType, v: Long) =>

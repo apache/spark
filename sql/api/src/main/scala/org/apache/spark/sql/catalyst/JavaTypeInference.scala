@@ -36,10 +36,13 @@ import org.apache.spark.util.ArrayImplicits._
  * Type-inference utilities for POJOs and Java collections.
  */
 object JavaTypeInference {
+
   /**
    * Infers the corresponding SQL data type of a Java type.
-   * @param beanType Java type
-   * @return (SQL data type, nullable)
+   * @param beanType
+   *   Java type
+   * @return
+   *   (SQL data type, nullable)
    */
   def inferDataType(beanType: Type): (DataType, Boolean) = {
     val encoder = encoderFor(beanType)
@@ -60,8 +63,10 @@ object JavaTypeInference {
     encoderFor(beanType, Set.empty).asInstanceOf[AgnosticEncoder[T]]
   }
 
-  private def encoderFor(t: Type, seenTypeSet: Set[Class[_]],
-    typeVariables: Map[TypeVariable[_], Type] = Map.empty): AgnosticEncoder[_] = t match {
+  private def encoderFor(
+      t: Type,
+      seenTypeSet: Set[Class[_]],
+      typeVariables: Map[TypeVariable[_], Type] = Map.empty): AgnosticEncoder[_] = t match {
 
     case c: Class[_] if c == java.lang.Boolean.TYPE => PrimitiveBooleanEncoder
     case c: Class[_] if c == java.lang.Byte.TYPE => PrimitiveByteEncoder
@@ -94,14 +99,22 @@ object JavaTypeInference {
     case c: Class[_] if c.isEnum => JavaEnumEncoder(ClassTag(c))
 
     case c: Class[_] if c.isAnnotationPresent(classOf[SQLUserDefinedType]) =>
-      val udt = c.getAnnotation(classOf[SQLUserDefinedType]).udt()
-        .getConstructor().newInstance().asInstanceOf[UserDefinedType[Any]]
+      val udt = c
+        .getAnnotation(classOf[SQLUserDefinedType])
+        .udt()
+        .getConstructor()
+        .newInstance()
+        .asInstanceOf[UserDefinedType[Any]]
       val udtClass = udt.userClass.getAnnotation(classOf[SQLUserDefinedType]).udt()
       UDTEncoder(udt, udtClass)
 
     case c: Class[_] if UDTRegistration.exists(c.getName) =>
-      val udt = UDTRegistration.getUDTFor(c.getName).get.getConstructor().
-        newInstance().asInstanceOf[UserDefinedType[Any]]
+      val udt = UDTRegistration
+        .getUDTFor(c.getName)
+        .get
+        .getConstructor()
+        .newInstance()
+        .asInstanceOf[UserDefinedType[Any]]
       UDTEncoder(udt, udt.getClass)
 
     case c: Class[_] if c.isArray =>
@@ -160,7 +173,8 @@ object JavaTypeInference {
 
   def getJavaBeanReadableProperties(beanClass: Class[_]): Array[PropertyDescriptor] = {
     val beanInfo = Introspector.getBeanInfo(beanClass)
-    beanInfo.getPropertyDescriptors.filterNot(_.getName == "class")
+    beanInfo.getPropertyDescriptors
+      .filterNot(_.getName == "class")
       .filterNot(_.getName == "declaringClass")
       .filter(_.getReadMethod != null)
   }

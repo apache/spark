@@ -27,7 +27,8 @@ case class SQLQueryContext(
     originStopIndex: Option[Int],
     sqlText: Option[String],
     originObjectType: Option[String],
-    originObjectName: Option[String]) extends QueryContext {
+    originObjectName: Option[String])
+    extends QueryContext {
   override val contextType = QueryContextType.SQL
 
   override val objectType = originObjectType.getOrElse("")
@@ -37,9 +38,8 @@ case class SQLQueryContext(
 
   /**
    * The SQL query context of current node. For example:
-   * == SQL of VIEW v1 (line 1, position 25) ==
-   * SELECT '' AS five, i.f1, i.f1 - int('2') AS x FROM INT4_TBL i
-   *                          ^^^^^^^^^^^^^^^
+   * ==SQL of VIEW v1 (line 1, position 25)==
+   * SELECT '' AS five, i.f1, i.f1 - int('2') AS x FROM INT4_TBL i ^^^^^^^^^^^^^^^
    */
   override lazy val summary: String = {
     // If the query context is missing or incorrect, simply return an empty string.
@@ -127,8 +127,8 @@ case class SQLQueryContext(
 
   def isValid: Boolean = {
     sqlText.isDefined && originStartIndex.isDefined && originStopIndex.isDefined &&
-      originStartIndex.get >= 0 && originStopIndex.get < sqlText.get.length &&
-      originStartIndex.get <= originStopIndex.get
+    originStartIndex.get >= 0 && originStopIndex.get < sqlText.get.length &&
+    originStartIndex.get <= originStopIndex.get
   }
 
   override def callSite: String = throw SparkUnsupportedOperationException()
@@ -136,7 +136,8 @@ case class SQLQueryContext(
 
 case class DataFrameQueryContext(
     stackTrace: Seq[StackTraceElement],
-    pysparkErrorContext: Option[(String, String)]) extends QueryContext {
+    pysparkErrorContext: Option[(String, String)])
+    extends QueryContext {
   override val contextType = QueryContextType.DataFrame
 
   override def objectType: String = throw SparkUnsupportedOperationException()
@@ -145,36 +146,32 @@ case class DataFrameQueryContext(
   override def stopIndex: Int = throw SparkUnsupportedOperationException()
 
   override val fragment: String = {
-    stackTrace.headOption.map { firstElem =>
-      val methodName = firstElem.getMethodName
-      if (methodName.length > 1 && methodName(0) == '$') {
-        methodName.substring(1)
-      } else {
-        methodName
-      }
-    }.getOrElse("")
+    pysparkErrorContext.map(_._1).getOrElse {
+      stackTrace.headOption
+        .map { firstElem =>
+          val methodName = firstElem.getMethodName
+          if (methodName.length > 1 && methodName(0) == '$') {
+            methodName.substring(1)
+          } else {
+            methodName
+          }
+        }
+        .getOrElse("")
+    }
   }
 
-  override val callSite: String = stackTrace.tail.mkString("\n")
-
-  val pysparkFragment: String = pysparkErrorContext.map(_._1).getOrElse("")
-  val pysparkCallSite: String = pysparkErrorContext.map(_._2).getOrElse("")
-
-  val (displayedFragment, displayedCallsite) = if (pysparkErrorContext.nonEmpty) {
-    (pysparkFragment, pysparkCallSite)
-  } else {
-    (fragment, callSite)
-  }
+  override val callSite: String =
+    pysparkErrorContext.map(_._2).getOrElse(stackTrace.tail.mkString("\n"))
 
   override lazy val summary: String = {
     val builder = new StringBuilder
     builder ++= "== DataFrame ==\n"
     builder ++= "\""
 
-    builder ++= displayedFragment
+    builder ++= fragment
     builder ++= "\""
     builder ++= " was called from\n"
-    builder ++= displayedCallsite
+    builder ++= callSite
     builder += '\n'
 
     builder.result()

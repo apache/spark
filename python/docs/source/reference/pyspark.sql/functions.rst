@@ -48,9 +48,11 @@ Conditional Functions
     ifnull
     nanvl
     nullif
+    nullifzero
     nvl
     nvl2
     when
+    zeroifnull
 
 
 Predicate Functions
@@ -142,9 +144,11 @@ Mathematical Functions
     tanh
     try_add
     try_divide
+    try_mod
     try_multiply
     try_subtract
     unhex
+    uniform
     width_bucket
 
 
@@ -173,6 +177,7 @@ String Functions
     format_string
     initcap
     instr
+    is_valid_utf8
     lcase
     left
     length
@@ -181,11 +186,13 @@ String Functions
     lower
     lpad
     ltrim
+    make_valid_utf8
     mask
     octet_length
     overlay
     position
     printf
+    randstr
     regexp_count
     regexp_extract
     regexp_extract_all
@@ -213,9 +220,11 @@ String Functions
     trim
     try_to_binary
     try_to_number
+    try_validate_utf8
     ucase
     unbase64
     upper
+    validate_utf8
 
 
 Bitwise Functions
@@ -280,6 +289,8 @@ Date and Timestamp Functions
     quarter
     second
     session_window
+    timestamp_add
+    timestamp_diff
     timestamp_micros
     timestamp_millis
     timestamp_seconds
@@ -290,6 +301,10 @@ Date and Timestamp Functions
     to_unix_timestamp
     to_utc_timestamp
     trunc
+    try_make_interval
+    try_make_timestamp
+    try_make_timestamp_ltz
+    try_make_timestamp_ntz
     try_to_timestamp
     unix_date
     unix_micros
@@ -436,6 +451,8 @@ Aggregate Functions
     kurtosis
     last
     last_value
+    listagg
+    listagg_distinct
     max
     max_by
     mean
@@ -461,6 +478,8 @@ Aggregate Functions
     stddev
     stddev_pop
     stddev_samp
+    string_agg
+    string_agg_distinct
     sum
     sum_distinct
     try_avg
@@ -548,6 +567,7 @@ VARIANT Functions
     try_variant_get
     variant_get
     try_parse_json
+    to_variant_object
 
 
 XML Functions
@@ -575,8 +595,10 @@ URL Functions
     :toctree: api/
 
     parse_url
+    try_parse_url
     url_decode
     url_encode
+    try_url_decode
 
 
 Misc Functions

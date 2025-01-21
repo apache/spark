@@ -22,6 +22,7 @@ import java.util.Locale
 
 import com.github.luben.zstd.{NoPool, RecyclingBufferPool, ZstdInputStreamNoFinalizer, ZstdOutputStreamNoFinalizer}
 import com.ning.compress.lzf.{LZFInputStream, LZFOutputStream}
+import com.ning.compress.lzf.parallel.PLZFOutputStream
 import net.jpountz.lz4.{LZ4BlockInputStream, LZ4BlockOutputStream, LZ4Factory}
 import net.jpountz.xxhash.XXHashFactory
 import org.xerial.snappy.{Snappy, SnappyInputStream, SnappyOutputStream}
@@ -100,8 +101,9 @@ private[spark] object CompressionCodec {
    * If it is already a short name, just return it.
    */
   def getShortName(codecName: String): String = {
-    if (shortCompressionCodecNames.contains(codecName)) {
-      codecName
+    val lowercasedCodec = codecName.toLowerCase(Locale.ROOT)
+    if (shortCompressionCodecNames.contains(lowercasedCodec)) {
+      lowercasedCodec
     } else {
       shortCompressionCodecNames
         .collectFirst { case (k, v) if v == codecName => k }
@@ -170,9 +172,14 @@ class LZ4CompressionCodec(conf: SparkConf) extends CompressionCodec {
  */
 @DeveloperApi
 class LZFCompressionCodec(conf: SparkConf) extends CompressionCodec {
+  private val parallelCompression = conf.get(IO_COMPRESSION_LZF_PARALLEL)
 
   override def compressedOutputStream(s: OutputStream): OutputStream = {
-    new LZFOutputStream(s).setFinishBlockOnFlush(true)
+    if (parallelCompression) {
+      new PLZFOutputStream(s)
+    } else {
+      new LZFOutputStream(s).setFinishBlockOnFlush(true)
+    }
   }
 
   override def compressedInputStream(s: InputStream): InputStream = new LZFInputStream(s)

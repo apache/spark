@@ -108,14 +108,14 @@ class ResolveNaturalJoinSuite extends AnalysisTest {
   }
 
   test("using unresolved attribute") {
-    assertAnalysisErrorClass(
+    assertAnalysisErrorCondition(
       r1.join(r2, UsingJoin(Inner, Seq("d"))),
-      expectedErrorClass = "UNRESOLVED_USING_COLUMN_FOR_JOIN",
+      expectedErrorCondition = "UNRESOLVED_USING_COLUMN_FOR_JOIN",
       expectedMessageParameters = Map(
         "colName" -> "`d`", "side" -> "left", "suggestion" -> "`a`, `b`"))
-    assertAnalysisErrorClass(
+    assertAnalysisErrorCondition(
       r1.join(r2, UsingJoin(Inner, Seq("b"))),
-      expectedErrorClass = "UNRESOLVED_USING_COLUMN_FOR_JOIN",
+      expectedErrorCondition = "UNRESOLVED_USING_COLUMN_FOR_JOIN",
       expectedMessageParameters = Map(
         "colName" -> "`b`", "side" -> "right", "suggestion" -> "`a`, `c`"))
   }
@@ -126,17 +126,17 @@ class ResolveNaturalJoinSuite extends AnalysisTest {
     val usingPlan = r1.join(r2, UsingJoin(Inner, Seq("a")), None)
     checkAnalysis(usingPlan, expected, caseSensitive = true)
 
-    assertAnalysisErrorClass(
+    assertAnalysisErrorCondition(
       r1.join(r2, UsingJoin(Inner, Seq("A"))),
-      expectedErrorClass = "UNRESOLVED_USING_COLUMN_FOR_JOIN",
+      expectedErrorCondition = "UNRESOLVED_USING_COLUMN_FOR_JOIN",
       expectedMessageParameters = Map(
         "colName" -> "`A`", "side" -> "left", "suggestion" -> "`a`, `b`"))
   }
 
   test("using join on nested fields") {
-    assertAnalysisErrorClass(
+    assertAnalysisErrorCondition(
       r5.join(r6, UsingJoin(Inner, Seq("d.f1"))),
-      expectedErrorClass = "UNRESOLVED_USING_COLUMN_FOR_JOIN",
+      expectedErrorCondition = "UNRESOLVED_USING_COLUMN_FOR_JOIN",
       expectedMessageParameters = Map(
         "colName" -> "`d`.`f1`", "side" -> "left", "suggestion" -> "`d`"))
   }

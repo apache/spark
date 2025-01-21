@@ -67,6 +67,7 @@ class TPCDSCollationQueryTestSuite extends QueryTest with TPCDSBase with SQLQuer
   // To make output results deterministic
   override protected def sparkConf: SparkConf = super.sparkConf
     .set(SQLConf.SHUFFLE_PARTITIONS.key, "1")
+    .remove("spark.hadoop.fs.file.impl")
 
   protected override def createSparkSession: TestSparkSession = {
     new TestSparkSession(new SparkContext("local[1]", this.getClass.getSimpleName, sparkConf))
@@ -123,7 +124,7 @@ class TPCDSCollationQueryTestSuite extends QueryTest with TPCDSBase with SQLQuer
   val checks: Seq[Seq[CollationCheck]] = Seq(
     Seq(
       CaseSensitiveCollationCheck("tpcds_utf8", "UTF8_BINARY", "lower"),
-      CaseInsensitiveCollationCheck("tpcds_utf8_random", "UTF8_BINARY_LCASE", randomizeCase)
+      CaseInsensitiveCollationCheck("tpcds_utf8_random", "UTF8_LCASE", randomizeCase)
     ),
     Seq(
       CaseSensitiveCollationCheck("tpcds_unicode", "UNICODE", "lower"),
@@ -250,7 +251,11 @@ class TPCDSCollationQueryTestSuite extends QueryTest with TPCDSBase with SQLQuer
       test(name)(runQuery(queryString, Map.empty, emptyResults.contains(name)))
     }
 
-    tpcdsQueriesV2_7_0.foreach { name =>
+    // Skip q22-v2.7 in GitHub Action environment because it takes 14 minutes.
+    // TODO(SPARK-50887) Re-enable q22-v2.7 in GitHub Action environment.
+    tpcdsQueriesV2_7_0
+      .filterNot(sys.env.contains("GITHUB_ACTIONS") && _.equals("q22"))
+      .foreach { name =>
       val queryString = resourceToString(
         s"tpcds-v2.7.0/$name.sql",
         classLoader = Thread.currentThread().getContextClassLoader)

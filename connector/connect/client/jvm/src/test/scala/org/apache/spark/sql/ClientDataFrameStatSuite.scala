@@ -22,9 +22,9 @@ import java.util.Random
 import org.scalatest.matchers.must.Matchers._
 
 import org.apache.spark.SparkIllegalArgumentException
-import org.apache.spark.sql.test.RemoteSparkSession
+import org.apache.spark.sql.test.{ConnectFunSuite, RemoteSparkSession}
 
-class ClientDataFrameStatSuite extends RemoteSparkSession {
+class ClientDataFrameStatSuite extends ConnectFunSuite with RemoteSparkSession {
   private def toLetter(i: Int): String = (i + 97).toChar.toString
 
   test("approxQuantile") {
@@ -251,16 +251,16 @@ class ClientDataFrameStatSuite extends RemoteSparkSession {
     val error1 = intercept[AnalysisException] {
       df.stat.bloomFilter("id", -1000, 100)
     }
-    assert(error1.getErrorClass === "DATATYPE_MISMATCH.VALUE_OUT_OF_RANGE")
+    assert(error1.getCondition === "DATATYPE_MISMATCH.VALUE_OUT_OF_RANGE")
 
     val error2 = intercept[AnalysisException] {
       df.stat.bloomFilter("id", 1000, -100)
     }
-    assert(error2.getErrorClass === "DATATYPE_MISMATCH.VALUE_OUT_OF_RANGE")
+    assert(error2.getCondition === "DATATYPE_MISMATCH.VALUE_OUT_OF_RANGE")
 
     val error3 = intercept[AnalysisException] {
       df.stat.bloomFilter("id", 1000, -1.0)
     }
-    assert(error3.getErrorClass === "DATATYPE_MISMATCH.VALUE_OUT_OF_RANGE")
+    assert(error3.getCondition === "DATATYPE_MISMATCH.VALUE_OUT_OF_RANGE")
   }
 }

@@ -34,6 +34,8 @@ import org.apache.spark.sql.connector.read.*;
 import org.apache.spark.sql.types.StructType;
 import org.apache.spark.sql.util.CaseInsensitiveStringMap;
 
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+
 public class JavaAdvancedDataSourceV2WithV2Filter implements TestingV2Source {
 
   @Override
@@ -66,9 +68,9 @@ public class JavaAdvancedDataSourceV2WithV2Filter implements TestingV2Source {
     public Predicate[] pushPredicates(Predicate[] predicates) {
       Predicate[] supported = Arrays.stream(predicates).filter(f -> {
         if (f.name().equals(">")) {
-          assert(f.children()[0] instanceof FieldReference);
+          assertInstanceOf(FieldReference.class, f.children()[0]);
           FieldReference column = (FieldReference) f.children()[0];
-          assert(f.children()[1] instanceof LiteralValue);
+          assertInstanceOf(LiteralValue.class, f.children()[1]);
           Literal value = (Literal) f.children()[1];
           return column.describe().equals("i") && value.value() instanceof Integer;
         } else {
@@ -78,9 +80,9 @@ public class JavaAdvancedDataSourceV2WithV2Filter implements TestingV2Source {
 
       Predicate[] unsupported = Arrays.stream(predicates).filter(f -> {
         if (f.name().equals(">")) {
-          assert(f.children()[0] instanceof FieldReference);
+          assertInstanceOf(FieldReference.class, f.children()[0]);
           FieldReference column = (FieldReference) f.children()[0];
-          assert(f.children()[1] instanceof LiteralValue);
+          assertInstanceOf(LiteralValue.class, f.children()[1]);
           Literal value = (LiteralValue) f.children()[1];
           return !column.describe().equals("i") || !(value.value() instanceof Integer);
         } else {
@@ -125,9 +127,9 @@ public class JavaAdvancedDataSourceV2WithV2Filter implements TestingV2Source {
       Integer lowerBound = null;
       for (Predicate predicate : predicates) {
         if (predicate.name().equals(">")) {
-          assert(predicate.children()[0] instanceof FieldReference);
+          assertInstanceOf(FieldReference.class, predicate.children()[0]);
           FieldReference column = (FieldReference) predicate.children()[0];
-          assert(predicate.children()[1] instanceof LiteralValue);
+          assertInstanceOf(LiteralValue.class, predicate.children()[1]);
           Literal value = (Literal) predicate.children()[1];
           if ("i".equals(column.describe()) && value.value() instanceof Integer integer) {
             lowerBound = integer;

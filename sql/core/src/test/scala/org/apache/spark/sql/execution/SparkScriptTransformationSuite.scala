@@ -54,7 +54,7 @@ class SparkScriptTransformationSuite extends BaseScriptTransformationSuite with 
           |FROM v""".stripMargin
       checkError(
         exception = intercept[ParseException](sql(sqlText)),
-        errorClass = "UNSUPPORTED_FEATURE.TRANSFORM_NON_HIVE",
+        condition = "UNSUPPORTED_FEATURE.TRANSFORM_NON_HIVE",
         parameters = Map.empty,
         context = ExpectedContext(sqlText, 0, 185))
     }

@@ -369,16 +369,14 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
       }
 
       withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> sqlConf) {
-        withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "false") {
-          val exception = intercept[SparkException] {
-            testIgnoreCorruptFiles(options)
-          }.getCause
-          assert(exception.getMessage().contains("is not a Parquet file"))
-          val exception2 = intercept[SparkException] {
-            testIgnoreCorruptFilesWithoutSchemaInfer(options)
-          }.getCause
-          assert(exception2.getMessage().contains("is not a Parquet file"))
-        }
+        val exception = intercept[SparkException] {
+          testIgnoreCorruptFiles(options)
+        }.getCause
+        assert(exception.getMessage().contains("is not a Parquet file"))
+        val exception2 = intercept[SparkException] {
+          testIgnoreCorruptFilesWithoutSchemaInfer(options)
+        }.getCause
+        assert(exception2.getMessage().contains("is not a Parquet file"))
       }
     }
   }
@@ -471,6 +469,26 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
             Row(Row(2, 2, null)),
             Row(Row(1, 1, 1)),
             Row(Row(2, 2, 2))))
+      }
+    }
+  }
+
+  test("SPARK-50463: Partition values can be read over multiple batches") {
+    withTempDir { dir =>
+      withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_BATCH_SIZE.key -> "1") {
+        val path = dir.getAbsolutePath
+        spark.range(0, 5)
+          .selectExpr("concat(cast(id % 2 as string), 'a') as partCol", "id")
+          .write
+          .format("parquet")
+          .mode("overwrite")
+          .partitionBy("partCol").save(path)
+        val df = spark.read.format("parquet").load(path).selectExpr("partCol")
+        val expected = spark.range(0, 5)
+          .selectExpr("concat(cast(id % 2 as string), 'a') as partCol")
+          .collect()
+
+        checkAnswer(df, expected)
       }
     }
   }
@@ -1077,7 +1095,7 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
         val e = intercept[SparkException] {
           readParquet("d DECIMAL(3, 2)", path).collect()
         }
-        assert(e.getErrorClass.startsWith("FAILED_READ_FILE"))
+        assert(e.getCondition.startsWith("FAILED_READ_FILE"))
         assert(e.getCause.getMessage.contains("Please read this column/field as Spark BINARY type"))
       }
 

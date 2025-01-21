@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGe
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.types.{DataType, NumericType}
 
-case class TryEval(child: Expression) extends UnaryExpression with NullIntolerant {
+case class TryEval(child: Expression) extends UnaryExpression {
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val childGen = child.genCode(ctx)
     ev.copy(code = code"""
@@ -48,6 +48,7 @@ case class TryEval(child: Expression) extends UnaryExpression with NullIntoleran
   override def dataType: DataType = child.dataType
 
   override def nullable: Boolean = true
+  override def nullIntolerant: Boolean = true
 
   override protected def withNewChildInternal(newChild: Expression): Expression =
     copy(child = newChild)
@@ -124,6 +125,43 @@ case class TryDivide(left: Expression, right: Expression, replacement: Expressio
   )
 
   override def prettyName: String = "try_divide"
+
+  override def parameters: Seq[Expression] = Seq(left, right)
+
+  override protected def withNewChildInternal(newChild: Expression): Expression = {
+    copy(replacement = newChild)
+  }
+}
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(dividend, divisor) - Returns the remainder after `expr1`/`expr2`. " +
+    "`dividend` must be a numeric. `divisor` must be a numeric.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(3, 2);
+       1
+      > SELECT _FUNC_(2L, 2L);
+       0
+      > SELECT _FUNC_(3.0, 2.0);
+       1.0
+      > SELECT _FUNC_(1, 0);
+       NULL
+  """,
+  since = "4.0.0",
+  group = "math_funcs")
+// scalastyle:on line.size.limit
+case class TryMod(left: Expression, right: Expression, replacement: Expression)
+  extends RuntimeReplaceable with InheritAnalysisRules {
+  def this(left: Expression, right: Expression) = this(left, right,
+    (left.dataType, right.dataType) match {
+      case (_: NumericType, _: NumericType) => Remainder(left, right, EvalMode.TRY)
+      // TODO: support TRY eval mode on datetime arithmetic expressions.
+      case _ => TryEval(Remainder(left, right, EvalMode.ANSI))
+    }
+  )
+
+  override def prettyName: String = "try_mod"
 
   override def parameters: Seq[Expression] = Seq(left, right)
 

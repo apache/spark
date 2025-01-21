@@ -166,7 +166,7 @@ class HiveUDFDynamicLoadSuite extends QueryTest with SQLTestUtils with TestHiveS
 
           assert(Thread.currentThread().getContextClassLoader ne sparkClassLoader)
           assert(Thread.currentThread().getContextClassLoader eq
-            spark.sqlContext.sharedState.jarClassLoader)
+            spark.sharedState.jarClassLoader)
 
           val udfExpr = udfInfo.fnCreateHiveUDFExpression()
           // force initializing - this is what we do in HiveSessionCatalog

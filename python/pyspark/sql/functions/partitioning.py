@@ -189,6 +189,8 @@ def bucket(numBuckets: Union[Column, int], col: "ColumnOrName") -> Column:
 
     Parameters
     ----------
+    numBuckets : :class:`~pyspark.sql.Column` or int
+        the number of buckets
     col : :class:`~pyspark.sql.Column` or str
         target date or timestamp column to work on.
 
@@ -208,8 +210,8 @@ def bucket(numBuckets: Union[Column, int], col: "ColumnOrName") -> Column:
 
     if not isinstance(numBuckets, (int, Column)):
         raise PySparkTypeError(
-            error_class="NOT_COLUMN_OR_INT",
-            message_parameters={
+            errorClass="NOT_COLUMN_OR_INT",
+            messageParameters={
                 "arg_name": "numBuckets",
                 "arg_type": type(numBuckets).__name__,
             },

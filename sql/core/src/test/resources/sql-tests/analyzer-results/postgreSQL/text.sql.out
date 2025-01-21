@@ -137,7 +137,7 @@ Sort [i#xL ASC NULLS FIRST], true
 +- Project [i#xL, left(ahoj, cast(i#xL as int)) AS left(ahoj, i)#x, right(ahoj, cast(i#xL as int)) AS right(ahoj, i)#x]
    +- SubqueryAlias t
       +- Project [id#xL AS i#xL]
-         +- Range (-5, 6, step=1, splits=None)
+         +- Range (-5, 6, step=1)
 
 
 -- !query

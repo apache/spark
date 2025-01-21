@@ -19,6 +19,7 @@ package org.apache.spark.sql.connector
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.internal.MergeIntoWriterImpl
 
 class MergeIntoDataFrameSuite extends RowLevelOperationSuiteBase {
 
@@ -941,6 +942,33 @@ class MergeIntoDataFrameSuite extends RowLevelOperationSuiteBase {
           Row(1, Row("x1 ", "x2"), "hr"), // update (matched)
           Row(2, Row("x1 ", "x2"), "software"), // update (matched)
           Row(3, Row("y1 ", "y2"), "hr"))) // update (not matched by source)
+    }
+  }
+
+  test("withSchemaEvolution carries over existing when clauses") {
+    withTempView("source") {
+      Seq(1, 2, 4).toDF("pk").createOrReplaceTempView("source")
+
+      // an arbitrary merge
+      val writer1 = spark.table("source")
+        .mergeInto("dummy", $"colA" === $"colB")
+        .whenMatched(col("col") === 1)
+        .updateAll()
+        .whenMatched()
+        .delete()
+        .whenNotMatched(col("col") === 1)
+        .insertAll()
+        .whenNotMatchedBySource(col("col") === 1)
+        .delete()
+        .asInstanceOf[MergeIntoWriterImpl[Row]]
+      val writer2 = writer1.withSchemaEvolution()
+        .asInstanceOf[MergeIntoWriterImpl[Row]]
+
+      assert(writer1 eq writer2)
+      assert(writer1.matchedActions.length === 2)
+      assert(writer1.notMatchedActions.length === 1)
+      assert(writer1.notMatchedBySourceActions.length === 1)
+      assert(writer1.schemaEvolutionEnabled)
     }
   }
 }

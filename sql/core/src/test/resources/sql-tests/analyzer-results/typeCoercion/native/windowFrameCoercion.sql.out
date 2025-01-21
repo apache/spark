@@ -2,7 +2,7 @@
 -- !query
 CREATE TEMPORARY VIEW t AS SELECT 1
 -- !query analysis
-CreateViewCommand `t`, SELECT 1, false, false, LocalTempView, true
+CreateViewCommand `t`, SELECT 1, false, false, LocalTempView, UNSUPPORTED, true
    +- Project [1 AS 1#x]
       +- OneRowRelation
 
@@ -301,13 +301,12 @@ SELECT COUNT(*) OVER (PARTITION BY 1 ORDER BY cast('1' as binary) DESC RANGE BET
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.SPECIFIED_WINDOW_FRAME_UNACCEPTED_TYPE",
+  "errorClass" : "DATATYPE_MISMATCH.RANGE_FRAME_INVALID_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
-    "expectedType" : "(\"NUMERIC\" or \"INTERVAL DAY TO SECOND\" or \"INTERVAL YEAR TO MONTH\" or \"INTERVAL\")",
-    "exprType" : "\"BINARY\"",
-    "location" : "upper",
-    "sqlExpr" : "\"RANGE BETWEEN CURRENT ROW AND 1 FOLLOWING\""
+    "orderSpecType" : "\"BINARY\"",
+    "sqlExpr" : "\"(PARTITION BY 1 ORDER BY CAST(1 AS BINARY) DESC NULLS LAST RANGE BETWEEN CURRENT ROW AND 1 FOLLOWING)\"",
+    "valueBoundaryType" : "\"INT\""
   },
   "queryContext" : [ {
     "objectType" : "",

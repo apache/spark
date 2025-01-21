@@ -30,7 +30,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SQLQueryTestSuite
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
 import org.apache.spark.sql.catalyst.util.fileToString
-import org.apache.spark.sql.execution.HiveResult.{getTimeFormatters, toHiveString, TimeFormatters}
+import org.apache.spark.sql.execution.HiveResult.{getBinaryFormatter, getTimeFormatters, toHiveString, BinaryFormatter, TimeFormatters}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.TimestampTypes
 import org.apache.spark.sql.types._
@@ -94,6 +94,7 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite with SharedThriftServ
     // SPARK-28636
     "decimalArithmeticOperations.sql",
     "literals.sql",
+    "random.sql",
     "subquery/scalar-subquery/scalar-subquery-predicate.sql",
     "subquery/in-subquery/in-limit.sql",
     "subquery/in-subquery/in-group-by.sql",
@@ -103,7 +104,11 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite with SharedThriftServ
     // SPARK-42921
     "timestampNTZ/datetime-special-ansi.sql",
     // SPARK-47264
-    "collations.sql"
+    "collations.sql",
+    "listagg-collations.sql",
+    "pipe-operators.sql",
+    // VARIANT type
+    "variant/named-function-arguments.sql"
   )
 
   override def runQueries(
@@ -121,23 +126,25 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite with SharedThriftServ
         case _: SQLQueryTestSuite#PgSQLTest =>
           statement.execute(s"SET ${SQLConf.ANSI_ENABLED.key} = true")
           statement.execute(s"SET ${SQLConf.LEGACY_INTERVAL_ENABLED.key} = true")
-        case _: SQLQueryTestSuite#AnsiTest =>
-          statement.execute(s"SET ${SQLConf.ANSI_ENABLED.key} = true")
+        case _: SQLQueryTestSuite#NonAnsiTest =>
+          statement.execute(s"SET ${SQLConf.ANSI_ENABLED.key} = false")
         case _: SQLQueryTestSuite#TimestampNTZTest =>
           statement.execute(s"SET ${SQLConf.TIMESTAMP_TYPE.key} = " +
             s"${TimestampTypes.TIMESTAMP_NTZ.toString}")
         case _ =>
-          statement.execute(s"SET ${SQLConf.ANSI_ENABLED.key} = false")
+          statement.execute(s"SET ${SQLConf.ANSI_ENABLED.key} = true")
       }
 
       // Run the SQL queries preparing them for comparison.
-      val outputs: Seq[QueryTestOutput] = queries.map { sql =>
-        val (_, output) = handleExceptions(getNormalizedResult(statement, sql))
-        // We might need to do some query canonicalization in the future.
-        ExecutionOutput(
-          sql = sql,
-          schema = Some(""),
-          output = output.mkString("\n").replaceAll("\\s+$", ""))
+      val outputs: Seq[QueryTestOutput] = withSQLConf(configSet: _*) {
+        queries.map { sql =>
+          val (_, output) = handleExceptions(getNormalizedResult(statement, sql))
+          // We might need to do some query canonicalization in the future.
+          ExecutionOutput(
+            sql = sql,
+            schema = Some(""),
+            output = output.mkString("\n").replaceAll("\\s+$", ""))
+        }
       }
 
       // Read back the golden file.
@@ -265,8 +272,8 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite with SharedThriftServ
         Seq.empty
       } else if (file.getAbsolutePath.startsWith(s"$inputFilePath${File.separator}postgreSQL")) {
         PgSQLTestCase(testCaseName, absPath, resultFile) :: Nil
-      } else if (file.getAbsolutePath.startsWith(s"$inputFilePath${File.separator}ansi")) {
-        AnsiTestCase(testCaseName, absPath, resultFile) :: Nil
+      } else if (file.getAbsolutePath.startsWith(s"$inputFilePath${File.separator}nonansi")) {
+        NonAnsiTestCase(testCaseName, absPath, resultFile) :: Nil
       } else if (file.getAbsolutePath.startsWith(s"$inputFilePath${File.separator}timestampNTZ")) {
         TimestampNTZTestCase(testCaseName, absPath, resultFile) :: Nil
       } else {
@@ -298,8 +305,9 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite with SharedThriftServ
     val rs = statement.executeQuery(sql)
     val cols = rs.getMetaData.getColumnCount
     val timeFormatters = getTimeFormatters
+    val binaryFormatter = getBinaryFormatter
     val buildStr = () => (for (i <- 1 to cols) yield {
-      getHiveResult(rs.getObject(i), timeFormatters)
+      getHiveResult(rs.getObject(i), timeFormatters, binaryFormatter)
     }).mkString("\t")
 
     val answer = Iterator.continually(rs.next()).takeWhile(identity).map(_ => buildStr()).toSeq
@@ -321,18 +329,20 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite with SharedThriftServ
       upperCase.startsWith("(")
   }
 
-  private def getHiveResult(obj: Object, timeFormatters: TimeFormatters): String = {
+  private def getHiveResult(
+      obj: Object, timeFormatters: TimeFormatters, binaryFormatter: BinaryFormatter): String = {
     obj match {
       case null =>
-        toHiveString((null, StringType), false, timeFormatters)
+        toHiveString((null, StringType), false, timeFormatters, binaryFormatter)
       case d: java.sql.Date =>
-        toHiveString((d, DateType), false, timeFormatters)
+        toHiveString((d, DateType), false, timeFormatters, binaryFormatter)
       case t: Timestamp =>
-        toHiveString((t, TimestampType), false, timeFormatters)
+        toHiveString((t, TimestampType), false, timeFormatters, binaryFormatter)
       case d: java.math.BigDecimal =>
-        toHiveString((d, DecimalType.fromDecimal(Decimal(d))), false, timeFormatters)
+        toHiveString((
+          d, DecimalType.fromDecimal(Decimal(d))), false, timeFormatters, binaryFormatter)
       case bin: Array[Byte] =>
-        toHiveString((bin, BinaryType), false, timeFormatters)
+        toHiveString((bin, BinaryType), false, timeFormatters, binaryFormatter)
       case other =>
         other.toString
     }

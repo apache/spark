@@ -35,7 +35,7 @@ SCALA_ARG="-Pscala-${SCALA_BINARY_VER}"
 SCBUILD="${SCBUILD:-1}"
 if [ "$SCBUILD" -eq "1" ]; then
   # Build the jars needed for spark submit and spark connect
-  build/sbt "${SCALA_ARG}" -Phive -Pconnect package || exit 1
+  build/sbt "${SCALA_ARG}" -Phive package || exit 1
 fi
 
 # This jar is already in the classpath, but the submit commands wants a jar as the input.

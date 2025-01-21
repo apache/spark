@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.plans.logical.TableSpec
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Column, Identifier, StagedTable, StagingTableCatalog, Table, TableCatalog}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.util.Utils
 
 case class ReplaceTableExec(
@@ -65,6 +66,9 @@ case class AtomicReplaceTableExec(
 
   val tableProperties = CatalogV2Util.convertTableProperties(tableSpec)
 
+  override val metrics: Map[String, SQLMetric] =
+    DataSourceV2Utils.commitMetrics(sparkContext, catalog)
+
   override protected def run(): Seq[InternalRow] = {
     if (catalog.tableExists(identifier)) {
       val table = catalog.loadTable(identifier)
@@ -92,7 +96,7 @@ case class AtomicReplaceTableExec(
 
   private def commitOrAbortStagedChanges(staged: StagedTable): Unit = {
     Utils.tryWithSafeFinallyAndFailureCallbacks({
-      staged.commitStagedChanges()
+      DataSourceV2Utils.commitStagedChanges(sparkContext, staged, metrics)
     })(catchBlock = {
       staged.abortStagedChanges()
     })

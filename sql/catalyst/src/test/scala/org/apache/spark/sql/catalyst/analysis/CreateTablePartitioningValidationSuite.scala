@@ -30,7 +30,7 @@ import org.apache.spark.util.ArrayImplicits._
 
 class CreateTablePartitioningValidationSuite extends AnalysisTest {
   val tableSpec =
-    UnresolvedTableSpec(Map.empty, None, OptionList(Seq.empty), None, None, None, false)
+    UnresolvedTableSpec(Map.empty, None, OptionList(Seq.empty), None, None, None, None, false)
   test("CreateTableAsSelect: fail missing top-level column") {
     val plan = CreateTableAsSelect(
       UnresolvedIdentifier(Array("table_name").toImmutableArraySeq),
@@ -41,8 +41,8 @@ class CreateTablePartitioningValidationSuite extends AnalysisTest {
       ignoreIfExists = false)
 
     assert(!plan.resolved)
-    assertAnalysisErrorClass(plan,
-      expectedErrorClass = "UNSUPPORTED_FEATURE.PARTITION_WITH_NESTED_COLUMN_IS_UNSUPPORTED",
+    assertAnalysisErrorCondition(plan,
+      expectedErrorCondition = "UNSUPPORTED_FEATURE.PARTITION_WITH_NESTED_COLUMN_IS_UNSUPPORTED",
       expectedMessageParameters = Map("cols" -> "`does_not_exist`"))
   }
 
@@ -56,8 +56,8 @@ class CreateTablePartitioningValidationSuite extends AnalysisTest {
       ignoreIfExists = false)
 
     assert(!plan.resolved)
-    assertAnalysisErrorClass(plan,
-      expectedErrorClass = "UNSUPPORTED_FEATURE.PARTITION_WITH_NESTED_COLUMN_IS_UNSUPPORTED",
+    assertAnalysisErrorCondition(plan,
+      expectedErrorCondition = "UNSUPPORTED_FEATURE.PARTITION_WITH_NESTED_COLUMN_IS_UNSUPPORTED",
       expectedMessageParameters = Map("cols" -> "`does_not_exist`.`z`"))
   }
 
@@ -71,8 +71,8 @@ class CreateTablePartitioningValidationSuite extends AnalysisTest {
       ignoreIfExists = false)
 
     assert(!plan.resolved)
-    assertAnalysisErrorClass(plan,
-      expectedErrorClass = "UNSUPPORTED_FEATURE.PARTITION_WITH_NESTED_COLUMN_IS_UNSUPPORTED",
+    assertAnalysisErrorCondition(plan,
+      expectedErrorCondition = "UNSUPPORTED_FEATURE.PARTITION_WITH_NESTED_COLUMN_IS_UNSUPPORTED",
       expectedMessageParameters = Map("cols" -> "`point`.`z`"))
   }
 
@@ -86,8 +86,8 @@ class CreateTablePartitioningValidationSuite extends AnalysisTest {
       ignoreIfExists = false)
 
     assert(!plan.resolved)
-    assertAnalysisErrorClass(plan,
-      expectedErrorClass = "UNSUPPORTED_FEATURE.PARTITION_WITH_NESTED_COLUMN_IS_UNSUPPORTED",
+    assertAnalysisErrorCondition(plan,
+      expectedErrorCondition = "UNSUPPORTED_FEATURE.PARTITION_WITH_NESTED_COLUMN_IS_UNSUPPORTED",
       expectedMessageParameters = Map("cols" -> "`does_not_exist`, `point`.`z`"))
   }
 

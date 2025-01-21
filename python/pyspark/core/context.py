@@ -75,6 +75,7 @@ from py4j.java_gateway import is_instance_of, JavaGateway, JavaObject, JVMView
 
 if TYPE_CHECKING:
     from pyspark.accumulators import AccumulatorParam
+    from pyspark.sql.types import DataType, StructType
 
 __all__ = ["SparkContext"]
 
@@ -84,6 +85,8 @@ __all__ = ["SparkContext"]
 DEFAULT_CONFIGS: Dict[str, Any] = {
     "spark.serializer.objectStreamReset": 100,
     "spark.rdd.compress": True,
+    # Disable artifact isolation in PySpark, or user-added .py file won't work
+    "spark.sql.artifact.isolation.enabled": "false",
 }
 
 T = TypeVar("T")
@@ -184,8 +187,8 @@ class SparkContext:
     ):
         if "SPARK_CONNECT_MODE_ENABLED" in os.environ and "SPARK_LOCAL_REMOTE" not in os.environ:
             raise PySparkRuntimeError(
-                error_class="CONTEXT_UNAVAILABLE_FOR_REMOTE_CLIENT",
-                message_parameters={},
+                errorClass="CONTEXT_UNAVAILABLE_FOR_REMOTE_CLIENT",
+                messageParameters={},
             )
 
         if conf is None or conf.get("spark.executor.allowSparkContext", "false").lower() != "true":
@@ -271,13 +274,13 @@ class SparkContext:
         # Check that we have at least the required parameters
         if not self._conf.contains("spark.master"):
             raise PySparkRuntimeError(
-                error_class="MASTER_URL_NOT_SET",
-                message_parameters={},
+                errorClass="MASTER_URL_NOT_SET",
+                messageParameters={},
             )
         if not self._conf.contains("spark.app.name"):
             raise PySparkRuntimeError(
-                error_class="APPLICATION_NAME_NOT_SET",
-                message_parameters={},
+                errorClass="APPLICATION_NAME_NOT_SET",
+                messageParameters={},
             )
 
         # Read back our properties from the conf in case we loaded some of them from
@@ -360,10 +363,14 @@ class SparkContext:
 
         # Create a temporary directory inside spark.local.dir:
         assert self._jvm is not None
-        local_dir = self._jvm.org.apache.spark.util.Utils.getLocalDir(self._jsc.sc().conf())
-        self._temp_dir = self._jvm.org.apache.spark.util.Utils.createTempDir(
-            local_dir, "pyspark"
-        ).getAbsolutePath()
+        local_dir = getattr(self._jvm, "org.apache.spark.util.Utils").getLocalDir(
+            self._jsc.sc().conf()
+        )
+        self._temp_dir = (
+            getattr(self._jvm, "org.apache.spark.util.Utils")
+            .createTempDir(local_dir, "pyspark")
+            .getAbsolutePath()
+        )
 
         # profiling stats collected for each PythonRDD
         if (
@@ -465,8 +472,8 @@ class SparkContext:
     def __getnewargs__(self) -> NoReturn:
         # This method is called when attempting to pickle SparkContext, which is always an error:
         raise PySparkRuntimeError(
-            error_class="CONTEXT_ONLY_VALID_ON_DRIVER",
-            message_parameters={},
+            errorClass="CONTEXT_ONLY_VALID_ON_DRIVER",
+            messageParameters={},
         )
 
     def __enter__(self) -> "SparkContext":
@@ -552,7 +559,29 @@ class SparkContext:
         """
         SparkContext._ensure_initialized()
         assert SparkContext._jvm is not None
-        SparkContext._jvm.java.lang.System.setProperty(key, value)
+        getattr(SparkContext._jvm, "java.lang.System").setProperty(key, value)
+
+    @classmethod
+    def getSystemProperty(cls, key: str) -> str:
+        """
+        Get a Java system property, such as `java.home`.
+
+        .. versionadded:: 4.0.0
+
+        Parameters
+        ----------
+        key : str
+            The key of a new Java system property.
+
+        Examples
+        --------
+        >>> sc.getSystemProperty("SPARK_SUBMIT")
+        'true'
+        >>> _ = sc.getSystemProperty("java.home")
+        """
+        SparkContext._ensure_initialized()
+        assert SparkContext._jvm is not None
+        return getattr(SparkContext._jvm, "java.lang.System").getProperty(key)
 
     @property
     def version(self) -> str:
@@ -1177,7 +1206,7 @@ class SparkContext:
 
     def _dictToJavaMap(self, d: Optional[Dict[str, str]]) -> JavaMap:
         assert self._jvm is not None
-        jm = self._jvm.java.util.HashMap()
+        jm = getattr(self._jvm, "java.util.HashMap")()
         if not d:
             d = {}
         for k, v in d.items():
@@ -1716,9 +1745,9 @@ class SparkContext:
         assert gw is not None
         jvm = SparkContext._jvm
         assert jvm is not None
-        jrdd_cls = jvm.org.apache.spark.api.java.JavaRDD
-        jpair_rdd_cls = jvm.org.apache.spark.api.java.JavaPairRDD
-        jdouble_rdd_cls = jvm.org.apache.spark.api.java.JavaDoubleRDD
+        jrdd_cls = getattr(jvm, "org.apache.spark.api.java.JavaRDD")
+        jpair_rdd_cls = getattr(jvm, "org.apache.spark.api.java.JavaPairRDD")
+        jdouble_rdd_cls = getattr(jvm, "org.apache.spark.api.java.JavaDoubleRDD")
         if is_instance_of(gw, rdds[0]._jrdd, jrdd_cls):
             cls = jrdd_cls
         elif is_instance_of(gw, rdds[0]._jrdd, jpair_rdd_cls):
@@ -1909,7 +1938,7 @@ class SparkContext:
         :meth:`SparkContext.addFile`
         """
         return list(
-            self._jvm.scala.jdk.javaapi.CollectionConverters.asJava(  # type: ignore[union-attr]
+            getattr(self._jvm, "scala.jdk.javaapi.CollectionConverters").asJava(
                 self._jsc.sc().listFiles()
             )
         )
@@ -2037,7 +2066,7 @@ class SparkContext:
         :meth:`SparkContext.addArchive`
         """
         return list(
-            self._jvm.scala.jdk.javaapi.CollectionConverters.asJava(  # type: ignore[union-attr]
+            getattr(self._jvm, "scala.jdk.javaapi.CollectionConverters").asJava(
                 self._jsc.sc().listArchives()
             )
         )
@@ -2087,7 +2116,7 @@ class SparkContext:
         if not isinstance(storageLevel, StorageLevel):
             raise TypeError("storageLevel must be of type pyspark.StorageLevel")
         assert self._jvm is not None
-        newStorageLevel = self._jvm.org.apache.spark.storage.StorageLevel
+        newStorageLevel = getattr(self._jvm, "org.apache.spark.storage.StorageLevel")
         return newStorageLevel(
             storageLevel.useDisk,
             storageLevel.useMemory,
@@ -2535,8 +2564,8 @@ class SparkContext:
             self.profiler_collector.show_profiles()
         else:
             raise PySparkRuntimeError(
-                error_class="INCORRECT_CONF_FOR_PROFILE",
-                message_parameters={},
+                errorClass="INCORRECT_CONF_FOR_PROFILE",
+                messageParameters={},
             )
 
     def dump_profiles(self, path: str) -> None:
@@ -2552,8 +2581,8 @@ class SparkContext:
             self.profiler_collector.dump_profiles(path)
         else:
             raise PySparkRuntimeError(
-                error_class="INCORRECT_CONF_FOR_PROFILE",
-                message_parameters={},
+                errorClass="INCORRECT_CONF_FOR_PROFILE",
+                messageParameters={},
             )
 
     def getConf(self) -> SparkConf:
@@ -2591,9 +2620,19 @@ class SparkContext:
         """
         if TaskContext.get() is not None:
             raise PySparkRuntimeError(
-                error_class="CONTEXT_ONLY_VALID_ON_DRIVER",
-                message_parameters={},
+                errorClass="CONTEXT_ONLY_VALID_ON_DRIVER",
+                messageParameters={},
             )
+
+    def _to_ddl(self, struct: "StructType") -> str:
+        assert self._jvm is not None
+        return self._jvm.PythonSQLUtils.jsonToDDL(struct.json())
+
+    def _parse_ddl(self, ddl: str) -> "DataType":
+        from pyspark.sql.types import _parse_datatype_json_string
+
+        assert self._jvm is not None
+        return _parse_datatype_json_string(self._jvm.PythonSQLUtils.ddlToJson(ddl))
 
 
 def _test() -> None:

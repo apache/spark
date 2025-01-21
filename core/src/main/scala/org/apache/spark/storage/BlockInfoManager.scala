@@ -238,7 +238,7 @@ private[storage] class BlockInfoManager(trackingCacheVisibility: Boolean = false
       f: BlockInfo => Boolean): Option[BlockInfo] = {
     var done = false
     var result: Option[BlockInfo] = None
-    while(!done) {
+    while (!done) {
       val wrapper = blockInfoWrappers.get(blockId)
       if (wrapper == null) {
         done = true

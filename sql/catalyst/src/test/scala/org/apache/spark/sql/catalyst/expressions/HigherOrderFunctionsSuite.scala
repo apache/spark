@@ -471,7 +471,7 @@ class HigherOrderFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper 
 
     checkErrorInExpression[SparkRuntimeException](
       transformKeys(ai0, modKey),
-      errorClass = "DUPLICATED_MAP_KEY",
+      condition = "DUPLICATED_MAP_KEY",
       parameters = Map(
         "key" -> "1",
         "mapKeyDedupPolicy" -> "\"spark.sql.mapKeyDedupPolicy\"")
@@ -858,7 +858,7 @@ class HigherOrderFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper 
         SQLConf.LEGACY_ALLOW_NULL_COMPARISON_RESULT_IN_ARRAY_SORT.key -> "false") {
       checkErrorInExpression[SparkException](
         expression = arraySort(Literal.create(Seq(3, 1, 1, 2)), comparator),
-        errorClass = "COMPARATOR_RETURNS_NULL",
+        condition = "COMPARATOR_RETURNS_NULL",
         parameters = Map("firstValue" -> "1", "secondValue" -> "1")
       )
     }

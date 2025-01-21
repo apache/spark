@@ -1,0 +1,38 @@
+{
+  "common": {
+    "planId": "1"
+  },
+  "hint": {
+    "input": {
+      "common": {
+        "planId": "0"
+      },
+      "localRelation": {
+        "schema": "struct\u003cid:bigint,a:int,b:double\u003e"
+      }
+    },
+    "name": "coalesce",
+    "parameters": [{
+      "literal": {
+        "integer": 100
+      },
+      "common": {
+        "origin": {
+          "jvmOrigin": {
+            "stackTrace": [{
+              "classLoaderName": "app",
+              "declaringClass": "org.apache.spark.sql.Dataset",
+              "methodName": "~~trimmed~anonfun~~",
+              "fileName": "Dataset.scala"
+            }, {
+              "classLoaderName": "app",
+              "declaringClass": "org.apache.spark.sql.SparkSession",
+              "methodName": "newDataset",
+              "fileName": "SparkSession.scala"
+            }]
+          }
+        }
+      }
+    }]
+  }
+}

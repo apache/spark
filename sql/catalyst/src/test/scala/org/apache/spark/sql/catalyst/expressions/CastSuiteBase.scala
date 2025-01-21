@@ -729,6 +729,8 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
       assert(Cast.canUpCast(DateType, TimestampNTZType))
       assert(Cast.canUpCast(TimestampType, TimestampNTZType))
       assert(Cast.canUpCast(TimestampNTZType, TimestampType))
+      assert(Cast.canUpCast(IntegerType, StringType("UTF8_LCASE")))
+      assert(Cast.canUpCast(CalendarIntervalType, StringType("UTF8_LCASE")))
       assert(!Cast.canUpCast(TimestampType, DateType))
       assert(!Cast.canUpCast(TimestampNTZType, DateType))
     }
@@ -1013,6 +1015,13 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
+  test("allow type conversions between calendar interval type and char/varchar types") {
+    Seq(CharType(10), VarcharType(10))
+      .foreach { typ =>
+        assert(cast(Literal.default(CalendarIntervalType), typ).checkInputDataTypes().isSuccess)
+    }
+  }
+
   test("SPARK-35720: cast string to timestamp without timezone") {
     specialTs.foreach { s =>
       val expectedTs = LocalDateTime.parse(s)
@@ -1107,8 +1116,10 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
       .foreach { interval =>
         checkErrorInExpression[SparkIllegalArgumentException](
           cast(Literal.create(interval), YearMonthIntervalType()),
-          "_LEGACY_ERROR_TEMP_3213",
-          Map("interval" -> "year-month", "msg" -> "integer overflow"))
+          "INVALID_INTERVAL_FORMAT.INTERVAL_PARSING",
+          Map(
+            "interval" -> "year-month",
+            "input" -> interval))
       }
 
     Seq(Byte.MaxValue, Short.MaxValue, Int.MaxValue, Int.MinValue + 1, Int.MinValue)
@@ -1176,9 +1187,8 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
       val dataType = YearMonthIntervalType()
       checkErrorInExpression[SparkIllegalArgumentException](
         cast(Literal.create(interval), dataType),
-        "_LEGACY_ERROR_TEMP_3214",
+        "INVALID_INTERVAL_FORMAT.UNMATCHED_FORMAT_STRING",
         Map(
-          "fallBackNotice" -> "",
           "typeName" -> "interval year to month",
           "intervalStr" -> "year-month",
           "supportedFormat" -> "`[+|-]y-m`, `INTERVAL [+|-]'[+|-]y-m' YEAR TO MONTH`",
@@ -1198,9 +1208,8 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
       .foreach { case (interval, dataType) =>
         checkErrorInExpression[SparkIllegalArgumentException](
           cast(Literal.create(interval), dataType),
-          "_LEGACY_ERROR_TEMP_3214",
+          "INVALID_INTERVAL_FORMAT.UNMATCHED_FORMAT_STRING",
           Map(
-            "fallBackNotice" -> "",
             "typeName" -> dataType.typeName,
             "intervalStr" -> "year-month",
             "supportedFormat" ->
@@ -1322,10 +1331,8 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
       .foreach { case (interval, dataType) =>
         checkErrorInExpression[SparkIllegalArgumentException](
           cast(Literal.create(interval), dataType),
-          "_LEGACY_ERROR_TEMP_3214",
-          Map("fallBackNotice" -> (", set spark.sql.legacy.fromDayTimeString.enabled" +
-            " to true to restore the behavior before Spark 3.0."),
-            "intervalStr" -> "day-time",
+          "INVALID_INTERVAL_FORMAT.UNMATCHED_FORMAT_STRING_WITH_NOTICE",
+          Map("intervalStr" -> "day-time",
             "typeName" -> dataType.typeName,
             "input" -> interval,
             "supportedFormat" ->
@@ -1348,10 +1355,8 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
       .foreach { case (interval, dataType) =>
         checkErrorInExpression[SparkIllegalArgumentException](
           cast(Literal.create(interval), dataType),
-          "_LEGACY_ERROR_TEMP_3214",
-          Map("fallBackNotice" -> (", set spark.sql.legacy.fromDayTimeString.enabled" +
-            " to true to restore the behavior before Spark 3.0."),
-            "intervalStr" -> "day-time",
+          "INVALID_INTERVAL_FORMAT.UNMATCHED_FORMAT_STRING_WITH_NOTICE",
+          Map("intervalStr" -> "day-time",
             "typeName" -> dataType.typeName,
             "input" -> interval,
             "supportedFormat" ->
@@ -1412,5 +1417,44 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     val timestampNTZLiteral = Literal.create(1L, TimestampNTZType)
     assert(!Cast(timestampLiteral, TimestampNTZType).resolved)
     assert(!Cast(timestampNTZLiteral, TimestampType).resolved)
+  }
+
+  test("Casting between TimestampType and StringType requires timezone") {
+    val timestampLiteral = Literal.create(1L, TimestampType)
+    assert(!Cast(timestampLiteral, StringType).resolved)
+    assert(!Cast(timestampLiteral, StringType("UTF8_LCASE")).resolved)
+  }
+
+  test(s"Casting from char/varchar") {
+    Seq(CharType(10), VarcharType(10)).foreach { typ =>
+      Seq(
+        IntegerType -> ("123", 123),
+        LongType -> ("123 ", 123L),
+        BooleanType -> ("true ", true),
+        BooleanType -> ("false", false),
+        DoubleType -> ("1.2", 1.2)
+      ).foreach { case (toType, (from, to)) =>
+        checkEvaluation(cast(Literal.create(from, typ), toType), to)
+      }
+    }
+  }
+
+  test("Casting to char/varchar") {
+    Seq(CharType(10), VarcharType(10)).foreach { typ =>
+      Seq(
+        IntegerType -> (123, "123"),
+        LongType -> (123L, "123"),
+        BooleanType -> (true, "true"),
+        BooleanType -> (false, "false"),
+        DoubleType -> (1.2, "1.2")
+      ).foreach { case (fromType, (from, to)) =>
+        val paddedTo = if (typ.isInstanceOf[CharType]) {
+          to.padTo(10, ' ')
+        } else {
+          to
+        }
+        checkEvaluation(cast(Literal.create(from, fromType), typ), paddedTo)
+      }
+    }
   }
 }

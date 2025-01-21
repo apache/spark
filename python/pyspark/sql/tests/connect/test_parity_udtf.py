@@ -17,6 +17,8 @@
 import unittest
 
 from pyspark.testing.connectutils import should_test_connect
+from pyspark.sql.tests.test_udtf import BaseUDTFTestsMixin, UDTFArrowTestsMixin
+from pyspark.testing.connectutils import ReusedConnectTestCase
 
 if should_test_connect:
     from pyspark import sql
@@ -24,11 +26,7 @@ if should_test_connect:
 
     sql.udtf.UserDefinedTableFunction = UserDefinedTableFunction
     from pyspark.sql.connect.functions import lit, udtf
-
-from pyspark.util import is_remote_only
-from pyspark.sql.tests.test_udtf import BaseUDTFTestsMixin, UDTFArrowTestsMixin
-from pyspark.testing.connectutils import ReusedConnectTestCase
-from pyspark.errors.exceptions.connect import SparkConnectGrpcException, PythonException
+    from pyspark.errors.exceptions.connect import SparkConnectGrpcException, PythonException
 
 
 class UDTFParityTests(BaseUDTFTestsMixin, ReusedConnectTestCase):
@@ -68,17 +66,23 @@ class UDTFParityTests(BaseUDTFTestsMixin, ReusedConnectTestCase):
     def test_udtf_with_analyze_using_accumulator(self):
         super().test_udtf_with_analyze_using_accumulator()
 
-    @unittest.skipIf(is_remote_only(), "pyspark-connect does not have SparkFiles")
     def test_udtf_with_analyze_using_archive(self):
-        super().test_udtf_with_analyze_using_archive()
+        super().check_udtf_with_analyze_using_archive(".")
 
-    @unittest.skipIf(is_remote_only(), "pyspark-connect does not have SparkFiles")
     def test_udtf_with_analyze_using_file(self):
-        super().test_udtf_with_analyze_using_file()
+        super().check_udtf_with_analyze_using_file(".")
 
     @unittest.skip("pyspark-connect can serialize SparkSession, but fails on executor")
     def test_udtf_access_spark_session(self):
         super().test_udtf_access_spark_session()
+
+    @unittest.skip("TODO(SPARK-50393): support df.asTable() in Spark Connect")
+    def test_df_asTable(self):
+        super().test_df_asTable()
+
+    @unittest.skip("TODO(SPARK-50393): support df.asTable() in Spark Connect")
+    def test_df_asTable_chaining_methods(self):
+        super().test_df_asTable_chaining_methods()
 
     def _add_pyfile(self, path):
         self.spark.addArtifacts(path, pyfile=True)

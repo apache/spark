@@ -34,7 +34,7 @@ class GroupBasedDeleteFromTableSuite extends DeleteFromTableSuiteBase {
     checkError(
       exception = intercept[AnalysisException](
         sql(s"DELETE FROM $tableNameAsString WHERE id <= 1 AND rand() > 0.5")),
-      errorClass = "INVALID_NON_DETERMINISTIC_EXPRESSIONS",
+      condition = "INVALID_NON_DETERMINISTIC_EXPRESSIONS",
       parameters = Map(
         "sqlExprs" -> "\"((id <= 1) AND (rand() > 0.5))\", \"((id <= 1) AND (rand() > 0.5))\""),
       context = ExpectedContext(

@@ -123,7 +123,7 @@ trait AlterTableRecoverPartitionsSuiteBase extends command.AlterTableRecoverPart
       }
       checkError(
         exception = exception,
-        errorClass = "NOT_A_PARTITIONED_TABLE",
+        condition = "NOT_A_PARTITIONED_TABLE",
         parameters = Map(
           "operation" -> "ALTER TABLE RECOVER PARTITIONS",
           "tableIdentWithDB" -> "`spark_catalog`.`default`.`tbl`")

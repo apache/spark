@@ -20,7 +20,7 @@ import java.io.File
 import java.net.{URI, URISyntaxException}
 import java.nio.file.Files
 
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.network.util.JavaUtils
 
 private[spark] trait SparkFileUtils extends Logging {
@@ -77,12 +77,12 @@ private[spark] trait SparkFileUtils extends Logging {
       // remove the check when we're sure that Files.createDirectories() would never fail silently.
       Files.createDirectories(dir.toPath)
       if ( !dir.exists() || !dir.isDirectory) {
-        logError(s"Failed to create directory " + dir)
+        logError(log"Failed to create directory ${MDC(LogKeys.PATH, dir)}")
       }
       dir.isDirectory
     } catch {
       case e: Exception =>
-        logError(s"Failed to create directory " + dir, e)
+        logError(log"Failed to create directory ${MDC(LogKeys.PATH, dir)}", e)
         false
     }
   }

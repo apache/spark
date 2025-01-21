@@ -22,13 +22,14 @@ import time
 
 from pyspark.sql import Row
 from pyspark.sql.functions import lit
-from pyspark.sql.types import StructType, StructField, IntegerType, StringType
+from pyspark.sql.types import StructType, StructField, IntegerType, StringType, TimestampType
 from pyspark.testing.sqlutils import ReusedSQLTestCase
+from pyspark.errors import PySparkValueError
 
 
 class StreamingTestsMixin:
     def test_streaming_query_functions_basic(self):
-        df = self.spark.readStream.format("rate").option("rowsPerSecond", 10).load()
+        df = self.spark.readStream.format("text").load("python/test_support/sql/streaming")
         query = (
             df.writeStream.format("memory")
             .queryName("test_streaming_query_functions_basic")
@@ -42,8 +43,8 @@ class StreamingTestsMixin:
             self.assertEqual(query.exception(), None)
             self.assertFalse(query.awaitTermination(1))
             query.processAllAvailable()
-            recentProgress = query.recentProgress
             lastProgress = query.lastProgress
+            recentProgress = query.recentProgress
             self.assertEqual(lastProgress["name"], query.name)
             self.assertEqual(lastProgress["id"], query.id)
             self.assertTrue(any(p == lastProgress for p in recentProgress))
@@ -57,6 +58,66 @@ class StreamingTestsMixin:
 
         finally:
             query.stop()
+
+    def test_streaming_progress(self):
+        """
+        Should be able to access fields using attributes in lastProgress / recentProgress
+        e.g. q.lastProgress.id
+        """
+        df = self.spark.readStream.format("text").load("python/test_support/sql/streaming")
+        query = df.writeStream.format("noop").start()
+        try:
+            query.processAllAvailable()
+            lastProgress = query.lastProgress
+            recentProgress = query.recentProgress
+            self.assertEqual(lastProgress["name"], query.name)
+            # Return str when accessed using dict get.
+            self.assertEqual(lastProgress["id"], query.id)
+            # SPARK-48567 Use attribute to access fields in q.lastProgress
+            self.assertEqual(lastProgress.name, query.name)
+            # Return uuid when accessed using attribute.
+            self.assertEqual(str(lastProgress.id), query.id)
+            self.assertTrue(any(p == lastProgress for p in recentProgress))
+            self.assertTrue(lastProgress.numInputRows > 0)
+            # Also access source / sink progress with attributes
+            self.assertTrue(len(lastProgress.sources) > 0)
+            self.assertTrue(lastProgress.sources[0].numInputRows > 0)
+            self.assertTrue(lastProgress["sources"][0]["numInputRows"] > 0)
+            self.assertTrue(lastProgress.sink.numOutputRows > 0)
+            self.assertTrue(lastProgress["sink"]["numOutputRows"] > 0)
+            # In Python, for historical reasons, changing field value
+            # in StreamingQueryProgress is allowed.
+            new_name = "myNewQuery"
+            lastProgress["name"] = new_name
+            self.assertEqual(lastProgress.name, new_name)
+
+        except Exception as e:
+            self.fail(
+                "Streaming query functions sanity check shouldn't throw any error. "
+                "Error message: " + str(e)
+            )
+        finally:
+            query.stop()
+
+    def test_streaming_query_name_edge_case(self):
+        # Query name should be None when not specified
+        q1 = self.spark.readStream.format("rate").load().writeStream.format("noop").start()
+        self.assertEqual(q1.name, None)
+
+        # Cannot set query name to be an empty string
+        error_thrown = False
+        try:
+            (
+                self.spark.readStream.format("rate")
+                .load()
+                .writeStream.format("noop")
+                .queryName("")
+                .start()
+            )
+        except PySparkValueError:
+            error_thrown = True
+
+        self.assertTrue(error_thrown)
 
     def test_stream_trigger(self):
         df = self.spark.readStream.format("text").load("python/test_support/sql/streaming")
@@ -263,36 +324,37 @@ class StreamingTestsMixin:
             shutil.rmtree(tmpPath)
 
     def test_stream_exception(self):
-        sdf = self.spark.readStream.format("text").load("python/test_support/sql/streaming")
-        sq = sdf.writeStream.format("memory").queryName("query_explain").start()
-        try:
-            sq.processAllAvailable()
-            self.assertEqual(sq.exception(), None)
-        finally:
-            sq.stop()
+        with self.sql_conf({"spark.sql.execution.pyspark.udf.simplifiedTraceback.enabled": True}):
+            sdf = self.spark.readStream.format("text").load("python/test_support/sql/streaming")
+            sq = sdf.writeStream.format("memory").queryName("query_explain").start()
+            try:
+                sq.processAllAvailable()
+                self.assertEqual(sq.exception(), None)
+            finally:
+                sq.stop()
 
-        from pyspark.sql.functions import col, udf
-        from pyspark.errors import StreamingQueryException
+            from pyspark.sql.functions import col, udf
+            from pyspark.errors import StreamingQueryException
 
-        bad_udf = udf(lambda x: 1 / 0)
-        sq = (
-            sdf.select(bad_udf(col("value")))
-            .writeStream.format("memory")
-            .queryName("this_query")
-            .start()
-        )
-        try:
-            # Process some data to fail the query
-            sq.processAllAvailable()
-            self.fail("bad udf should fail the query")
-        except StreamingQueryException as e:
-            # This is expected
-            self._assert_exception_tree_contains_msg(e, "ZeroDivisionError")
-        finally:
-            exception = sq.exception()
-            sq.stop()
-        self.assertIsInstance(exception, StreamingQueryException)
-        self._assert_exception_tree_contains_msg(exception, "ZeroDivisionError")
+            bad_udf = udf(lambda x: 1 / 0)
+            sq = (
+                sdf.select(bad_udf(col("value")))
+                .writeStream.format("memory")
+                .queryName("this_query")
+                .start()
+            )
+            try:
+                # Process some data to fail the query
+                sq.processAllAvailable()
+                self.fail("bad udf should fail the query")
+            except StreamingQueryException as e:
+                # This is expected
+                self._assert_exception_tree_contains_msg(e, "ZeroDivisionError")
+            finally:
+                exception = sq.exception()
+                sq.stop()
+            self.assertIsInstance(exception, StreamingQueryException)
+            self._assert_exception_tree_contains_msg(exception, "ZeroDivisionError")
 
     def test_query_manager_no_recreation(self):
         # SPARK-46873: There should not be a new StreamingQueryManager created every time
@@ -367,6 +429,31 @@ class StreamingTestsMixin:
             result = self.spark.sql("SELECT value FROM output_table").collect()
             self.assertTrue(len(result) > 0)
 
+    def test_streaming_write_to_table_cluster_by(self):
+        with self.table("output_table"), tempfile.TemporaryDirectory(prefix="to_table") as tmpdir:
+            df = self.spark.readStream.format("rate").option("rowsPerSecond", 10).load()
+            q = df.writeStream.clusterBy("value").toTable(
+                "output_table", format="parquet", checkpointLocation=tmpdir
+            )
+            self.assertTrue(q.isActive)
+            time.sleep(10)
+            q.stop()
+            result = self.spark.sql("DESCRIBE output_table").collect()
+            self.assertEqual(
+                set(
+                    [
+                        Row(col_name="timestamp", data_type="timestamp", comment=None),
+                        Row(col_name="value", data_type="bigint", comment=None),
+                        Row(col_name="# Clustering Information", data_type="", comment=""),
+                        Row(col_name="# col_name", data_type="data_type", comment="comment"),
+                        Row(col_name="value", data_type="bigint", comment=None),
+                    ]
+                ),
+                set(result),
+            )
+            result = self.spark.sql("SELECT value FROM output_table").collect()
+            self.assertTrue(len(result) > 0)
+
     def test_streaming_with_temporary_view(self):
         """
         This verifies createOrReplaceTempView() works with a streaming dataframe. An SQL
@@ -390,6 +477,30 @@ class StreamingTestsMixin:
             self.assertEqual(
                 set([Row(value="view_a"), Row(value="view_b"), Row(value="view_c")]), set(result)
             )
+
+    def test_streaming_drop_duplicate_within_watermark(self):
+        """
+        This verifies dropDuplicatesWithinWatermark works with a streaming dataframe.
+        """
+        user_schema = StructType().add("time", TimestampType()).add("id", "integer")
+        df = (
+            self.spark.readStream.option("sep", ";")
+            .schema(user_schema)
+            .csv("python/test_support/sql/streaming/time")
+        )
+        q1 = (
+            df.withWatermark("time", "2 seconds")
+            .dropDuplicatesWithinWatermark(["id"])
+            .writeStream.outputMode("update")
+            .format("memory")
+            .queryName("test_streaming_drop_duplicates_within_wm")
+            .start()
+        )
+        self.assertTrue(q1.isActive)
+        q1.processAllAvailable()
+        q1.stop()
+        result = self.spark.sql("SELECT * FROM test_streaming_drop_duplicates_within_wm").collect()
+        self.assertTrue(len(result) >= 6 and len(result) <= 9)
 
 
 class StreamingTests(StreamingTestsMixin, ReusedSQLTestCase):

@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.types.{ArrayType, AtomicType, DataType, NullType, StructType, UserDefinedType, VariantType}
 
 object OrderUtils {
+
   /**
    * Returns true iff the data type can be ordered (i.e. can be sorted).
    */

@@ -122,7 +122,7 @@ class GroupBasedUpdateTableSuite extends UpdateTableSuiteBase {
       exception = intercept[AnalysisException] {
         sql(s"UPDATE $tableNameAsString SET dep = 'invalid' WHERE id <= 1 AND rand() > 0.5")
       },
-      errorClass = "INVALID_NON_DETERMINISTIC_EXPRESSIONS",
+      condition = "INVALID_NON_DETERMINISTIC_EXPRESSIONS",
       parameters = Map(
         "sqlExprs" -> "\"((id <= 1) AND (rand() > 0.5))\", \"((id <= 1) AND (rand() > 0.5))\""),
       context = ExpectedContext(

@@ -959,6 +959,11 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
       SQLMetrics.createNanoTimingMetric(sparkContext, name = "m", initValue = 5)
     }
   }
+
+  test("SQLMetric#toInfoUpdate") {
+    assert(SQLMetrics.createSizeMetric(sparkContext, name = "m").toInfoUpdate.update === Some(-1))
+    assert(SQLMetrics.createMetric(sparkContext, name = "m").toInfoUpdate.update === Some(0))
+  }
 }
 
 case class CustomFileCommitProtocol(

@@ -26,7 +26,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
 
 import org.apache.spark.{SparkContext, TaskContext}
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.internal.LogKeys.{ACTUAL_NUM_FILES, EXPECTED_NUM_FILES}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.SQLExecution
@@ -120,9 +120,9 @@ class BasicWriteTaskStatsTracker(
     } catch {
       case e: NumberFormatException =>
         // warn but don't dump the whole stack
-        logInfo(s"Failed to parse" +
-          s" ${BasicWriteJobStatsTracker.FILE_LENGTH_XATTR}:$e;" +
-          s" bytes written may be under-reported");
+        logInfo(log"Failed to parse " +
+          log"${MDC(LogKeys.FILE_LENGTH_XATTR, BasicWriteJobStatsTracker.FILE_LENGTH_XATTR)}:" +
+          log"${MDC(LogKeys.ERROR, e)}; bytes written may be under-reported");
       case e: UnsupportedOperationException =>
         // this is not unusual; ignore
         logDebug(s"XAttr not supported on path $path", e);

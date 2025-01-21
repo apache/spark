@@ -95,6 +95,14 @@ class SerdeTestsMixin:
         self.assertEqual(now, now1)
         self.assertEqual(now, utcnow1)
 
+    def test_ntz_from_internal(self):
+        for ts in [1, 22, 333, 44444444, 5555555555]:
+            t1 = datetime.datetime.utcfromtimestamp(ts // 1000000).replace(microsecond=ts % 1000000)
+            t2 = datetime.datetime.fromtimestamp(ts // 1000000, datetime.timezone.utc).replace(
+                microsecond=ts % 1000000, tzinfo=None
+            )
+            self.assertEqual(t1, t2)
+
     # regression test for SPARK-19561
     def test_datetime_at_epoch(self):
         epoch = datetime.datetime.fromtimestamp(0)

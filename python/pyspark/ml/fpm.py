@@ -20,7 +20,7 @@ from typing import Any, Dict, Optional, TYPE_CHECKING
 
 from pyspark import keyword_only, since
 from pyspark.sql import DataFrame
-from pyspark.ml.util import JavaMLWritable, JavaMLReadable
+from pyspark.ml.util import JavaMLWritable, JavaMLReadable, try_remote_attribute_relation
 from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaParams
 from pyspark.ml.param.shared import HasPredictionCol, Param, TypeConverters, Params
 
@@ -126,6 +126,7 @@ class FPGrowthModel(JavaModel, _FPGrowthParams, JavaMLWritable, JavaMLReadable["
 
     @property
     @since("2.2.0")
+    @try_remote_attribute_relation
     def freqItemsets(self) -> DataFrame:
         """
         DataFrame with two columns:
@@ -136,6 +137,7 @@ class FPGrowthModel(JavaModel, _FPGrowthParams, JavaMLWritable, JavaMLReadable["
 
     @property
     @since("2.2.0")
+    @try_remote_attribute_relation
     def associationRules(self) -> DataFrame:
         """
         DataFrame with four columns:
@@ -213,7 +215,6 @@ class FPGrowth(
     |      [q]|   2|
     +---------+----+
     only showing top 5 rows
-    ...
     >>> fpm.associationRules.sort("antecedent", "consequent").show(5)
     +----------+----------+----------+----+------------------+
     |antecedent|consequent|confidence|lift|           support|
@@ -225,7 +226,6 @@ class FPGrowth(
     |       [q]|       [t]|       1.0| 2.0|0.3333333333333333|
     +----------+----------+----------+----+------------------+
     only showing top 5 rows
-    ...
     >>> new_data = spark.createDataFrame([(["t", "s"], )], ["items"])
     >>> sorted(fpm.transform(new_data).first().newPrediction)
     ['x', 'y', 'z']

@@ -58,7 +58,7 @@ CreateViewCommand `t2`, select * from values
   ('val1e', 8S, null, 19L, float(17), 25D, 26E2, timestamp '2014-09-04 01:01:00.000', date '2014-09-04'),
   ('val1f', 19S, null, 19L, float(17), 25D, 26E2, timestamp '2014-10-04 01:01:00.000', date '2014-10-04'),
   ('val1b', null, 16, 19L, float(17), 25D, 26E2, timestamp '2014-05-04 01:01:00.000', null)
-  as t2(t2a, t2b, t2c, t2d, t2e, t2f, t2g, t2h, t2i), false, false, LocalTempView, true
+  as t2(t2a, t2b, t2c, t2d, t2e, t2f, t2g, t2h, t2i), false, false, LocalTempView, UNSUPPORTED, true
    +- Project [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x]
       +- SubqueryAlias t2
          +- LocalRelation [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x]
@@ -150,6 +150,104 @@ Project [num#x, val#x, Spark AS Spark#x]
 
 
 -- !query
+SELECT * FROM posexplode(collection => array(1, 2))
+-- !query analysis
+Project [pos#x, col#x]
++- Generate posexplode(array(1, 2)), false, [pos#x, col#x]
+   +- OneRowRelation
+
+
+-- !query
+SELECT * FROM posexplode_outer(collection => map('a', 1, 'b', 2))
+-- !query analysis
+Project [pos#x, key#x, value#x]
++- Generate posexplode(map(a, 1, b, 2)), true, [pos#x, key#x, value#x]
+   +- OneRowRelation
+
+
+-- !query
+SELECT * FROM posexplode(array(1, 2)), posexplode(array(3, 4))
+-- !query analysis
+Project [pos#x, col#x, pos#x, col#x]
++- Join Inner
+   :- Generate posexplode(array(1, 2)), false, [pos#x, col#x]
+   :  +- OneRowRelation
+   +- Generate posexplode(array(3, 4)), false, [pos#x, col#x]
+      +- OneRowRelation
+
+
+-- !query
+SELECT * FROM posexplode(array(1, 2)) AS t, LATERAL posexplode(array(3 * t.col, 4 * t.col))
+-- !query analysis
+Project [pos#x, col#x, pos#x, col#x]
++- LateralJoin lateral-subquery#x [col#x && col#x], Inner
+   :  +- Generate posexplode(array((3 * outer(col#x)), (4 * outer(col#x)))), false, [pos#x, col#x]
+   :     +- OneRowRelation
+   +- SubqueryAlias t
+      +- Generate posexplode(array(1, 2)), false, [pos#x, col#x]
+         +- OneRowRelation
+
+
+-- !query
+SELECT pos, num, val, 'Spark' FROM posexplode(map(1, 'a', 2, 'b')) AS t(pos, num, val)
+-- !query analysis
+Project [pos#x, num#x, val#x, Spark AS Spark#x]
++- SubqueryAlias t
+   +- Project [pos#x AS pos#x, key#x AS num#x, value#x AS val#x]
+      +- Generate posexplode(map(1, a, 2, b)), false, [pos#x, key#x, value#x]
+         +- OneRowRelation
+
+
+-- !query
+SELECT * FROM inline(input => array(struct(1, 'a'), struct(2, 'b')))
+-- !query analysis
+Project [col1#x, col2#x]
++- Generate inline(array(struct(col1, 1, col2, a), struct(col1, 2, col2, b))), false, [col1#x, col2#x]
+   +- OneRowRelation
+
+
+-- !query
+SELECT * FROM inline_outer(input => array(struct(1, 'a'), struct(2, 'b')))
+-- !query analysis
+Project [col1#x, col2#x]
++- Generate inline(array(struct(col1, 1, col2, a), struct(col1, 2, col2, b))), true, [col1#x, col2#x]
+   +- OneRowRelation
+
+
+-- !query
+SELECT * FROM inline(array(struct(1, 'a'), struct(2, 'b'))), inline(array(struct(3, 'c'), struct(4, 'd')))
+-- !query analysis
+Project [col1#x, col2#x, col1#x, col2#x]
++- Join Inner
+   :- Generate inline(array(struct(col1, 1, col2, a), struct(col1, 2, col2, b))), false, [col1#x, col2#x]
+   :  +- OneRowRelation
+   +- Generate inline(array(struct(col1, 3, col2, c), struct(col1, 4, col2, d))), false, [col1#x, col2#x]
+      +- OneRowRelation
+
+
+-- !query
+SELECT * FROM inline(array(struct(1, 'a'), struct(2, 'b'))) AS t, LATERAL inline(array(struct(3 * t.col1, 4 * t.col1)))
+-- !query analysis
+Project [col1#x, col2#x, col1#x, col2#x]
++- LateralJoin lateral-subquery#x [col1#x && col1#x], Inner
+   :  +- Generate inline(array(struct(col1, (3 * outer(col1#x)), col2, (4 * outer(col1#x))))), false, [col1#x, col2#x]
+   :     +- OneRowRelation
+   +- SubqueryAlias t
+      +- Generate inline(array(struct(col1, 1, col2, a), struct(col1, 2, col2, b))), false, [col1#x, col2#x]
+         +- OneRowRelation
+
+
+-- !query
+SELECT num, val, 'Spark' FROM inline(array(struct(1, 'a'), struct(2, 'b'))) AS t(num, val)
+-- !query analysis
+Project [num#x, val#x, Spark AS Spark#x]
++- SubqueryAlias t
+   +- Project [col1#x AS num#x, col2#x AS val#x]
+      +- Generate inline(array(struct(col1, 1, col2, a), struct(col1, 2, col2, b))), false, [col1#x, col2#x]
+         +- OneRowRelation
+
+
+-- !query
 SELECT * FROM explode(collection => explode(array(1)))
 -- !query analysis
 org.apache.spark.sql.AnalysisException
@@ -192,9 +290,9 @@ org.apache.spark.sql.AnalysisException
 -- !query
 CREATE OR REPLACE TEMPORARY VIEW v AS SELECT id FROM range(0, 8)
 -- !query analysis
-CreateViewCommand `v`, SELECT id FROM range(0, 8), false, true, LocalTempView, true
+CreateViewCommand `v`, SELECT id FROM range(0, 8), false, true, LocalTempView, UNSUPPORTED, true
    +- Project [id#xL]
-      +- Range (0, 8, step=1, splits=None)
+      +- Range (0, 8, step=1)
 
 
 -- !query
@@ -202,17 +300,21 @@ SELECT * FROM explode(collection => TABLE(v))
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.UNSUPPORTED_TABLE_ARGUMENT",
-  "sqlState" : "0A000",
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
   "messageParameters" : {
-    "treeNode" : "'Generate explode(table-argument#x []), false\n:  +- SubqueryAlias v\n:     +- View (`v`, [id#xL])\n:        +- Project [cast(id#xL as bigint) AS id#xL]\n:           +- Project [id#xL]\n:              +- Range (0, 8, step=1, splits=None)\n+- OneRowRelation\n"
+    "inputSql" : "\"functiontablesubqueryargumentexpression()\"",
+    "inputType" : "\"STRUCT<id: BIGINT NOT NULL>\"",
+    "paramIndex" : "first",
+    "requiredType" : "(\"ARRAY\" or \"MAP\")",
+    "sqlExpr" : "\"explode(functiontablesubqueryargumentexpression())\""
   },
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 37,
-    "stopIndex" : 44,
-    "fragment" : "TABLE(v)"
+    "startIndex" : 15,
+    "stopIndex" : 45,
+    "fragment" : "explode(collection => TABLE(v))"
   } ]
 }
 
@@ -225,8 +327,8 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "UNEXPECTED_POSITIONAL_ARGUMENT",
   "sqlState" : "4274K",
   "messageParameters" : {
-    "functionName" : "`mask`",
-    "parameterName" : "`lowerChar`"
+    "parameterName" : "`lowerChar`",
+    "routineName" : "`mask`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -246,8 +348,8 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DUPLICATE_ROUTINE_PARAMETER_ASSIGNMENT.DOUBLE_NAMED_ARGUMENT_REFERENCE",
   "sqlState" : "4274K",
   "messageParameters" : {
-    "functionName" : "`mask`",
-    "parameterName" : "`digitChar`"
+    "parameterName" : "`digitChar`",
+    "routineName" : "`mask`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -267,8 +369,8 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DUPLICATE_ROUTINE_PARAMETER_ASSIGNMENT.BOTH_POSITIONAL_AND_NAMED",
   "sqlState" : "4274K",
   "messageParameters" : {
-    "functionName" : "`mask`",
-    "parameterName" : "`str`"
+    "parameterName" : "`str`",
+    "routineName" : "`mask`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -288,9 +390,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "REQUIRED_PARAMETER_NOT_FOUND",
   "sqlState" : "4274K",
   "messageParameters" : {
-    "functionName" : "`mask`",
     "index" : "0",
-    "parameterName" : "`str`"
+    "parameterName" : "`str`",
+    "routineName" : "`mask`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -311,8 +413,8 @@ org.apache.spark.sql.AnalysisException
   "sqlState" : "4274K",
   "messageParameters" : {
     "argumentName" : "`cellular`",
-    "functionName" : "`mask`",
-    "proposal" : "`str` `upperChar` `otherChar`"
+    "proposal" : "`str` `upperChar` `otherChar`",
+    "routineName" : "`mask`"
   },
   "queryContext" : [ {
     "objectType" : "",

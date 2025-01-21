@@ -47,6 +47,7 @@ from pandas.api.types import is_number, is_hashable, is_list_like  # type: ignor
 from pandas.core.common import _builtin_table  # type: ignore[attr-defined]
 
 from pyspark.sql import Column, DataFrame as SparkDataFrame, Window, functions as F
+from pyspark.sql.internal import InternalFunction as SF
 from pyspark.sql.types import (
     BooleanType,
     DataType,
@@ -74,7 +75,6 @@ from pyspark.pandas.missing.groupby import (
     MissingPandasLikeSeriesGroupBy,
 )
 from pyspark.pandas.series import Series, first_series
-from pyspark.pandas.spark import functions as SF
 from pyspark.pandas.config import get_option
 from pyspark.pandas.correlation import (
     compute,
@@ -308,6 +308,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
             )
 
         if not self._as_index:
+            index_cols = psdf._internal.column_labels
             should_drop_index = set(
                 i for i, gkey in enumerate(self._groupkeys) if gkey._psdf is not self._psdf
             )
@@ -322,8 +323,12 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
                 psdf = psdf.reset_index(level=should_drop_index, drop=drop)
             if len(should_drop_index) < len(self._groupkeys):
                 psdf = psdf.reset_index()
+            index_cols = [c for c in psdf._internal.column_labels if c not in index_cols]
+            if relabeling:
+                psdf = psdf[pd.Index(index_cols + list(order))]
+                psdf.columns = pd.Index([c[0] for c in index_cols] + list(columns))
 
-        if relabeling:
+        if relabeling and self._as_index:
             psdf = psdf[order]
             psdf.columns = columns  # type: ignore[assignment]
         return psdf

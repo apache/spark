@@ -303,7 +303,7 @@ class MetadataColumnSuite extends DatasourceV2SQLBase {
         exception = intercept[AnalysisException] {
           df.metadataColumn("foo")
         },
-        errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+        condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
         parameters = Map("objectName" -> "`foo`", "proposal" -> "`index`, `_partition`"),
         queryContext = Array(ExpectedContext("select index from testcat.t", 0, 26)))
 
@@ -312,7 +312,7 @@ class MetadataColumnSuite extends DatasourceV2SQLBase {
         exception = intercept[AnalysisException] {
           df.metadataColumn("data")
         },
-        errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+        condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
         parameters = Map("objectName" -> "`data`", "proposal" -> "`index`, `_partition`"),
         queryContext = Array(ExpectedContext("select index from testcat.t", 0, 26)))
     }

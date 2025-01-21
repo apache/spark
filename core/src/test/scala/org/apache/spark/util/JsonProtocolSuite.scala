@@ -32,6 +32,7 @@ import org.scalatest.exceptions.TestFailedException
 
 import org.apache.spark._
 import org.apache.spark.executor._
+import org.apache.spark.internal.config._
 import org.apache.spark.metrics.ExecutorMetricType
 import org.apache.spark.rdd.{DeterministicLevel, RDDOperationScope}
 import org.apache.spark.resource._
@@ -276,7 +277,8 @@ class JsonProtocolSuite extends SparkFunSuite {
 
   test("StageInfo backward compatibility (details, accumulables)") {
     val info = makeStageInfo(1, 2, 3, 4L, 5L)
-    val newJson = toJsonString(JsonProtocol.stageInfoToJson(info, _, includeAccumulables = true))
+    val newJson = toJsonString(
+      JsonProtocol.stageInfoToJson(info, _, defaultOptions, includeAccumulables = true))
 
     // Fields added after 1.0.0.
     assert(info.details.nonEmpty)
@@ -294,7 +296,8 @@ class JsonProtocolSuite extends SparkFunSuite {
 
   test("StageInfo resourceProfileId") {
     val info = makeStageInfo(1, 2, 3, 4L, 5L, 5)
-    val json = toJsonString(JsonProtocol.stageInfoToJson(info, _, includeAccumulables = true))
+    val json = toJsonString(
+      JsonProtocol.stageInfoToJson(info, _, defaultOptions, includeAccumulables = true))
 
     // Fields added after 1.0.0.
     assert(info.details.nonEmpty)
@@ -471,7 +474,7 @@ class JsonProtocolSuite extends SparkFunSuite {
       stageIds.map(id => new StageInfo(id, 0, "unknown", 0, Seq.empty, Seq.empty, "unknown",
         resourceProfileId = ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID))
     val jobStart = SparkListenerJobStart(10, jobSubmissionTime, stageInfos, properties)
-    val oldEvent = toJsonString(JsonProtocol.jobStartToJson(jobStart, _)).removeField("Stage Infos")
+    val oldEvent = sparkEventToJsonString(jobStart).removeField("Stage Infos")
     val expectedJobStart =
       SparkListenerJobStart(10, jobSubmissionTime, dummyStageInfos, properties)
     assertEquals(expectedJobStart, JsonProtocol.jobStartFromJson(oldEvent))
@@ -483,8 +486,7 @@ class JsonProtocolSuite extends SparkFunSuite {
     val stageIds = Seq[Int](1, 2, 3, 4)
     val stageInfos = stageIds.map(x => makeStageInfo(x * 10, x * 20, x * 30, x * 40L, x * 50L))
     val jobStart = SparkListenerJobStart(11, jobSubmissionTime, stageInfos, properties)
-    val oldStartEvent = toJsonString(JsonProtocol.jobStartToJson(jobStart, _))
-      .removeField("Submission Time")
+    val oldStartEvent = sparkEventToJsonString(jobStart).removeField("Submission Time")
     val expectedJobStart = SparkListenerJobStart(11, -1, stageInfos, properties)
     assertEquals(expectedJobStart, JsonProtocol.jobStartFromJson(oldStartEvent))
 
@@ -519,8 +521,9 @@ class JsonProtocolSuite extends SparkFunSuite {
     val stageInfo = new StageInfo(1, 1, "me-stage", 1, Seq.empty, Seq(1, 2, 3), "details",
       resourceProfileId = ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
     val oldStageInfo =
-      toJsonString(JsonProtocol.stageInfoToJson(stageInfo, _, includeAccumulables = true))
-        .removeField("Parent IDs")
+      toJsonString(
+        JsonProtocol.stageInfoToJson(stageInfo, _, defaultOptions, includeAccumulables = true)
+      ).removeField("Parent IDs")
     val expectedStageInfo = new StageInfo(1, 1, "me-stage", 1, Seq.empty, Seq.empty, "details",
       resourceProfileId = ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
     assertEquals(expectedStageInfo, JsonProtocol.stageInfoFromJson(oldStageInfo))
@@ -785,6 +788,87 @@ class JsonProtocolSuite extends SparkFunSuite {
     assert(JsonProtocol.sparkEventFromJson(unknownFieldsJson) === expected)
   }
 
+  test("SPARK-42204: spark.eventLog.includeTaskMetricsAccumulators config") {
+    val includeConf = new JsonProtocolOptions(
+      new SparkConf().set(EVENT_LOG_INCLUDE_TASK_METRICS_ACCUMULATORS, true))
+    val excludeConf = new JsonProtocolOptions(
+      new SparkConf().set(EVENT_LOG_INCLUDE_TASK_METRICS_ACCUMULATORS, false))
+
+    val taskMetricsAccumulables = TaskMetrics
+      .empty
+      .nameToAccums
+      .view
+      .filterKeys(!JsonProtocol.accumulableExcludeList.contains(_))
+      .values
+      .map(_.toInfo(Some(1), None))
+      .toSeq
+
+    val taskInfoWithTaskMetricsAccums = makeTaskInfo(222L, 333, 1, 333, 444L, false)
+    taskInfoWithTaskMetricsAccums.setAccumulables(taskMetricsAccumulables)
+    val taskInfoWithoutTaskMetricsAccums = makeTaskInfo(222L, 333, 1, 333, 444L, false)
+    taskInfoWithoutTaskMetricsAccums.setAccumulables(Seq.empty)
+
+    val stageInfoWithTaskMetricsAccums = makeStageInfo(100, 200, 300, 400L, 500L)
+    stageInfoWithTaskMetricsAccums.accumulables.clear()
+    stageInfoWithTaskMetricsAccums.accumulables ++= taskMetricsAccumulables.map(x => (x.id, x))
+    val stageInfoWithoutTaskMetricsAccums = makeStageInfo(100, 200, 300, 400L, 500L)
+    stageInfoWithoutTaskMetricsAccums.accumulables.clear()
+
+    // Test events which should be impacted by the config.
+
+    // TaskEnd
+    {
+      val originalEvent = SparkListenerTaskEnd(1, 0, "ShuffleMapTask", Success,
+        taskInfoWithTaskMetricsAccums,
+        new ExecutorMetrics(Array(12L, 23L, 45L, 67L, 78L, 89L,
+          90L, 123L, 456L, 789L, 40L, 20L, 20L, 10L, 20L, 10L, 301L)),
+        makeTaskMetrics(300L, 400L, 500L, 600L, 700, 800, 0,
+          hasHadoopInput = false, hasOutput = false))
+      assertEquals(
+        originalEvent,
+        sparkEventFromJson(sparkEventToJsonString(originalEvent, includeConf)))
+      val trimmedEvent = originalEvent.copy(taskInfo = taskInfoWithoutTaskMetricsAccums)
+      assertEquals(
+        trimmedEvent,
+        sparkEventFromJson(sparkEventToJsonString(originalEvent, excludeConf)))
+    }
+
+    // StageCompleted
+    {
+      val originalEvent = SparkListenerStageCompleted(stageInfoWithTaskMetricsAccums)
+      assertEquals(
+        originalEvent,
+        sparkEventFromJson(sparkEventToJsonString(originalEvent, includeConf)))
+      val trimmedEvent = originalEvent.copy(stageInfo = stageInfoWithoutTaskMetricsAccums)
+      assertEquals(
+        trimmedEvent,
+        sparkEventFromJson(sparkEventToJsonString(originalEvent, excludeConf)))
+    }
+
+    // JobStart
+    {
+      val originalEvent =
+        SparkListenerJobStart(1, 1, Seq(stageInfoWithTaskMetricsAccums), properties)
+      assertEquals(
+        originalEvent,
+        sparkEventFromJson(sparkEventToJsonString(originalEvent, includeConf)))
+      val trimmedEvent = originalEvent.copy(stageInfos = Seq(stageInfoWithoutTaskMetricsAccums))
+      assertEquals(
+        trimmedEvent,
+        sparkEventFromJson(sparkEventToJsonString(originalEvent, excludeConf)))
+    }
+
+    // ExecutorMetricsUpdate events should be unaffected by the config:
+    val executorMetricsUpdate =
+      SparkListenerExecutorMetricsUpdate("0", Seq((0, 0, 0, taskMetricsAccumulables)))
+    assert(
+      sparkEventToJsonString(executorMetricsUpdate, includeConf) ===
+      sparkEventToJsonString(executorMetricsUpdate, excludeConf))
+    assertEquals(
+      JsonProtocol.sparkEventFromJson(sparkEventToJsonString(executorMetricsUpdate, includeConf)),
+      executorMetricsUpdate)
+    }
+
   test("SPARK-42403: properly handle null string values") {
     // Null string values can appear in a few different event types,
     // so we test multiple known cases here:
@@ -966,7 +1050,8 @@ private[spark] object JsonProtocolSuite extends Assertions {
 
   private def testStageInfo(info: StageInfo): Unit = {
     val newInfo = JsonProtocol.stageInfoFromJson(
-      toJsonString(JsonProtocol.stageInfoToJson(info, _, includeAccumulables = true)))
+      toJsonString(
+        JsonProtocol.stageInfoToJson(info, _, defaultOptions, includeAccumulables = true)))
     assertEquals(info, newInfo)
   }
 
@@ -990,7 +1075,8 @@ private[spark] object JsonProtocolSuite extends Assertions {
 
   private def testTaskInfo(info: TaskInfo): Unit = {
     val newInfo = JsonProtocol.taskInfoFromJson(
-      toJsonString(JsonProtocol.taskInfoToJson(info, _, includeAccumulables = true)))
+      toJsonString(
+        JsonProtocol.taskInfoToJson(info, _, defaultOptions, includeAccumulables = true)))
     assertEquals(info, newInfo)
   }
 
@@ -1453,6 +1539,8 @@ private[spark] object JsonProtocolSuite extends Assertions {
     t.setExecutorRunTime(b)
     t.setExecutorCpuTime(b)
     t.setPeakExecutionMemory(c)
+    t.setPeakOnHeapExecutionMemory(c)
+    t.setPeakOffHeapExecutionMemory(c)
     t.setResultSize(c)
     t.setJvmGCTime(d)
     t.setResultSerializationTime(a + b)
@@ -1731,6 +1819,8 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |    "Executor Run Time": 400,
       |    "Executor CPU Time": 400,
       |    "Peak Execution Memory": 500,
+      |    "Peak On Heap Execution Memory": 500,
+      |    "Peak Off Heap Execution Memory": 500,
       |    "Result Size": 500,
       |    "JVM GC Time": 600,
       |    "Result Serialization Time": 700,
@@ -1872,6 +1962,8 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |    "Executor Run Time": 400,
       |    "Executor CPU Time": 400,
       |    "Peak Execution Memory": 500,
+      |    "Peak On Heap Execution Memory": 500,
+      |    "Peak Off Heap Execution Memory": 500,
       |    "Result Size": 500,
       |    "JVM GC Time": 600,
       |    "Result Serialization Time": 700,
@@ -2013,6 +2105,8 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |    "Executor Run Time": 400,
       |    "Executor CPU Time": 400,
       |    "Peak Execution Memory": 500,
+      |    "Peak On Heap Execution Memory": 500,
+      |    "Peak Off Heap Execution Memory": 500,
       |    "Result Size": 500,
       |    "JVM GC Time": 600,
       |    "Result Serialization Time": 700,
@@ -2683,6 +2777,20 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |        },
       |        {
       |          "ID": 10,
+      |          "Name": "$PEAK_ON_HEAP_EXECUTION_MEMORY",
+      |          "Update": 500,
+      |          "Internal": true,
+      |          "Count Failed Values": true
+      |        },
+      |        {
+      |          "ID": 11,
+      |          "Name": "$PEAK_OFF_HEAP_EXECUTION_MEMORY",
+      |          "Update": 500,
+      |          "Internal": true,
+      |          "Count Failed Values": true
+      |        },
+      |        {
+      |          "ID": 12,
       |          "Name": "$UPDATED_BLOCK_STATUSES",
       |          "Update": [
       |            {
@@ -2704,175 +2812,175 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |          "Count Failed Values": true
       |        },
       |        {
-      |          "ID": 11,
+      |          "ID": 13,
       |          "Name": "${shuffleRead.REMOTE_BLOCKS_FETCHED}",
       |          "Update": 0,
       |          "Internal": true,
       |          "Count Failed Values": true
       |        },
       |        {
-      |          "ID": 12,
+      |          "ID": 14,
       |          "Name": "${shuffleRead.LOCAL_BLOCKS_FETCHED}",
       |          "Update": 0,
       |          "Internal": true,
       |          "Count Failed Values": true
       |        },
       |        {
-      |          "ID": 13,
+      |          "ID": 15,
       |          "Name": "${shuffleRead.REMOTE_BYTES_READ}",
       |          "Update": 0,
       |          "Internal": true,
       |          "Count Failed Values": true
       |        },
       |        {
-      |          "ID": 14,
+      |          "ID": 16,
       |          "Name": "${shuffleRead.REMOTE_BYTES_READ_TO_DISK}",
       |          "Update": 0,
       |          "Internal": true,
       |          "Count Failed Values": true
       |        },
       |        {
-      |          "ID": 15,
+      |          "ID": 17,
       |          "Name": "${shuffleRead.LOCAL_BYTES_READ}",
       |          "Update": 0,
       |          "Internal": true,
       |          "Count Failed Values": true
       |        },
       |        {
-      |          "ID": 16,
+      |          "ID": 18,
       |          "Name": "${shuffleRead.FETCH_WAIT_TIME}",
       |          "Update": 0,
       |          "Internal": true,
       |          "Count Failed Values": true
       |        },
       |        {
-      |          "ID": 17,
+      |          "ID": 19,
       |          "Name": "${shuffleRead.RECORDS_READ}",
       |          "Update": 0,
       |          "Internal": true,
       |          "Count Failed Values": true
       |        },
       |        {
-      |          "ID": 18,
+      |          "ID": 20,
       |          "Name": "${shuffleRead.CORRUPT_MERGED_BLOCK_CHUNKS}",
       |          "Update": 0,
       |          "Internal": true,
       |          "Count Failed Values": true
       |        },
       |        {
-      |          "ID": 19,
+      |          "ID": 21,
       |          "Name": "${shuffleRead.MERGED_FETCH_FALLBACK_COUNT}",
       |          "Update": 0,
       |          "Internal": true,
       |          "Count Failed Values": true
       |        },
       |        {
-      |          "ID" : 20,
+      |          "ID" : 22,
       |          "Name" : "${shuffleRead.REMOTE_MERGED_BLOCKS_FETCHED}",
       |          "Update" : 0,
       |          "Internal" : true,
       |          "Count Failed Values" : true
       |        },
       |        {
-      |          "ID" : 21,
+      |          "ID" : 23,
       |          "Name" : "${shuffleRead.LOCAL_MERGED_BLOCKS_FETCHED}",
       |          "Update" : 0,
       |          "Internal" : true,
       |          "Count Failed Values" : true
       |        },
       |        {
-      |          "ID" : 22,
+      |          "ID" : 24,
       |          "Name" : "${shuffleRead.REMOTE_MERGED_CHUNKS_FETCHED}",
       |          "Update" : 0,
       |          "Internal" : true,
       |          "Count Failed Values" : true
       |        },
       |        {
-      |          "ID" : 23,
+      |          "ID" : 25,
       |          "Name" : "${shuffleRead.LOCAL_MERGED_CHUNKS_FETCHED}",
       |          "Update" : 0,
       |          "Internal" : true,
       |          "Count Failed Values" : true
       |        },
       |        {
-      |          "ID" : 24,
+      |          "ID" : 26,
       |          "Name" : "${shuffleRead.REMOTE_MERGED_BYTES_READ}",
       |          "Update" : 0,
       |          "Internal" : true,
       |          "Count Failed Values" : true
       |        },
       |        {
-      |          "ID" : 25,
+      |          "ID" : 27,
       |          "Name" : "${shuffleRead.LOCAL_MERGED_BYTES_READ}",
       |          "Update" : 0,
       |          "Internal" : true,
       |          "Count Failed Values" : true
       |        },
       |        {
-      |          "ID" : 26,
+      |          "ID" : 28,
       |          "Name" : "${shuffleRead.REMOTE_REQS_DURATION}",
       |          "Update" : 0,
       |          "Internal" : true,
       |          "Count Failed Values" : true
       |        },
       |        {
-      |          "ID" : 27,
+      |          "ID" : 29,
       |          "Name" : "${shuffleRead.REMOTE_MERGED_REQS_DURATION}",
       |          "Update" : 0,
       |          "Internal" : true,
       |          "Count Failed Values" : true
       |        },
       |        {
-      |          "ID": 28,
+      |          "ID": 30,
       |          "Name": "${shuffleWrite.BYTES_WRITTEN}",
       |          "Update": 0,
       |          "Internal": true,
       |          "Count Failed Values": true
       |        },
       |        {
-      |          "ID": 29,
+      |          "ID": 31,
       |          "Name": "${shuffleWrite.RECORDS_WRITTEN}",
       |          "Update": 0,
       |          "Internal": true,
       |          "Count Failed Values": true
       |        },
       |        {
-      |          "ID": 30,
+      |          "ID": 32,
       |          "Name": "${shuffleWrite.WRITE_TIME}",
       |          "Update": 0,
       |          "Internal": true,
       |          "Count Failed Values": true
       |        },
       |        {
-      |          "ID": 31,
+      |          "ID": 33,
       |          "Name": "${input.BYTES_READ}",
       |          "Update": 2100,
       |          "Internal": true,
       |          "Count Failed Values": true
       |        },
       |        {
-      |          "ID": 32,
+      |          "ID": 34,
       |          "Name": "${input.RECORDS_READ}",
       |          "Update": 21,
       |          "Internal": true,
       |          "Count Failed Values": true
       |        },
       |        {
-      |          "ID": 33,
+      |          "ID": 35,
       |          "Name": "${output.BYTES_WRITTEN}",
       |          "Update": 1200,
       |          "Internal": true,
       |          "Count Failed Values": true
       |        },
       |        {
-      |          "ID": 34,
+      |          "ID": 36,
       |          "Name": "${output.RECORDS_WRITTEN}",
       |          "Update": 12,
       |          "Internal": true,
       |          "Count Failed Values": true
       |        },
       |        {
-      |          "ID": 35,
+      |          "ID": 37,
       |          "Name": "$TEST_ACCUM",
       |          "Update": 0,
       |          "Internal": true,

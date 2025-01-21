@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 
+import glob
 import datetime
 import math
 import os
@@ -22,23 +23,46 @@ import shutil
 import tempfile
 from contextlib import contextmanager
 
-pandas_requirement_message = None
-try:
-    from pyspark.sql.pandas.utils import require_minimum_pandas_version
+from pyspark.sql import SparkSession
+from pyspark.sql.types import ArrayType, DoubleType, UserDefinedType, Row
+from pyspark.testing.utils import (
+    ReusedPySparkTestCase,
+    PySparkErrorTestUtils,
+    have_pandas,
+    pandas_requirement_message,
+    have_pyarrow,
+    pyarrow_requirement_message,
+)
+from pyspark.find_spark_home import _find_spark_home
 
-    require_minimum_pandas_version()
-except ImportError as e:
-    # If Pandas version requirement is not satisfied, skip related tests.
-    pandas_requirement_message = str(e)
 
-pyarrow_requirement_message = None
-try:
-    from pyspark.sql.pandas.utils import require_minimum_pyarrow_version
+SPARK_HOME = _find_spark_home()
 
-    require_minimum_pyarrow_version()
-except ImportError as e:
-    # If Arrow version requirement is not satisfied, skip related tests.
-    pyarrow_requirement_message = str(e)
+
+def search_jar(project_relative_path, sbt_jar_name_prefix, mvn_jar_name_prefix):
+    # Note that 'sbt_jar_name_prefix' and 'mvn_jar_name_prefix' are used since the prefix can
+    # vary for SBT or Maven specifically. See also SPARK-26856
+    project_full_path = os.path.join(SPARK_HOME, project_relative_path)
+
+    # We should ignore the following jars
+    ignored_jar_suffixes = ("javadoc.jar", "sources.jar", "test-sources.jar", "tests.jar")
+
+    # Search jar in the project dir using the jar name_prefix for both sbt build and maven
+    # build because the artifact jars are in different directories.
+    sbt_build = glob.glob(
+        os.path.join(project_full_path, "target/scala-*/%s*.jar" % sbt_jar_name_prefix)
+    )
+    maven_build = glob.glob(os.path.join(project_full_path, "target/%s*.jar" % mvn_jar_name_prefix))
+    jar_paths = sbt_build + maven_build
+    jars = [jar for jar in jar_paths if not jar.endswith(ignored_jar_suffixes)]
+
+    if not jars:
+        return None
+    elif len(jars) > 1:
+        raise RuntimeError("Found multiple JARs: %s; please remove all but one" % (", ".join(jars)))
+    else:
+        return jars[0]
+
 
 test_not_compiled_message = None
 try:
@@ -48,13 +72,6 @@ try:
 except Exception as e:
     test_not_compiled_message = str(e)
 
-from pyspark.sql import SparkSession
-from pyspark.sql.types import ArrayType, DoubleType, UserDefinedType, Row
-from pyspark.testing.utils import ReusedPySparkTestCase, PySparkErrorTestUtils
-
-
-have_pandas = pandas_requirement_message is None
-have_pyarrow = pyarrow_requirement_message is None
 test_compiled = test_not_compiled_message is None
 
 
@@ -246,6 +263,29 @@ class SQLTestUtils:
         finally:
             for f in functions:
                 self.spark.sql("DROP FUNCTION IF EXISTS %s" % f)
+
+    @contextmanager
+    def temp_env(self, pairs):
+        assert isinstance(pairs, dict), "pairs should be a dictionary."
+
+        keys = pairs.keys()
+        new_values = pairs.values()
+        old_values = [os.environ.get(key, None) for key in keys]
+        for key, new_value in zip(keys, new_values):
+            if new_value is None:
+                if key in os.environ:
+                    del os.environ[key]
+            else:
+                os.environ[key] = new_value
+        try:
+            yield
+        finally:
+            for key, old_value in zip(keys, old_values):
+                if old_value is None:
+                    if key in os.environ:
+                        del os.environ[key]
+                else:
+                    os.environ[key] = old_value
 
     @staticmethod
     def assert_close(a, b):

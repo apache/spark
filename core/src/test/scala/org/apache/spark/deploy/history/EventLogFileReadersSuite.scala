@@ -221,7 +221,7 @@ class SingleFileEventLogFileReaderSuite extends EventLogFileReadersSuite {
       val entry = is.getNextEntry
       assert(entry != null)
       val actual = new String(ByteStreams.toByteArray(is), StandardCharsets.UTF_8)
-      val expected = Files.toString(new File(logPath.toString), StandardCharsets.UTF_8)
+      val expected = Files.asCharSource(new File(logPath.toString), StandardCharsets.UTF_8).read()
       assert(actual === expected)
       assert(is.getNextEntry === null)
     }
@@ -368,8 +368,8 @@ class RollingEventLogFilesReaderSuite extends EventLogFileReadersSuite {
           assert(allFileNames.contains(fileName))
 
           val actual = new String(ByteStreams.toByteArray(is), StandardCharsets.UTF_8)
-          val expected = Files.toString(new File(logPath.toString, fileName),
-            StandardCharsets.UTF_8)
+          val expected = Files.asCharSource(
+            new File(logPath.toString, fileName), StandardCharsets.UTF_8).read()
           assert(actual === expected)
         }
       }

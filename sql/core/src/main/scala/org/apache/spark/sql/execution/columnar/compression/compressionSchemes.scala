@@ -176,7 +176,7 @@ private[columnar] case object RunLengthEncoding extends CompressionScheme {
   }
 
   override def supports(columnType: ColumnType[_]): Boolean = columnType match {
-    case INT | LONG | SHORT | BYTE | STRING | BOOLEAN => true
+    case INT | LONG | SHORT | BYTE | _: STRING | BOOLEAN => true
     case _ => false
   }
 
@@ -373,7 +373,7 @@ private[columnar] case object DictionaryEncoding extends CompressionScheme {
   }
 
   override def supports(columnType: ColumnType[_]): Boolean = columnType match {
-    case INT | LONG | STRING => true
+    case INT | LONG | _: STRING => true
     case _ => false
   }
 

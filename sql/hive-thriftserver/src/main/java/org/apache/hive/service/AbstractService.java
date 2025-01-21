@@ -21,8 +21,11 @@ import java.util.ArrayList;
 import java.util.List;
 
 import org.apache.hadoop.hive.conf.HiveConf;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+
+import org.apache.spark.internal.SparkLogger;
+import org.apache.spark.internal.SparkLoggerFactory;
+import org.apache.spark.internal.LogKeys;
+import org.apache.spark.internal.MDC;
 
 /**
  * AbstractService.
@@ -30,7 +33,7 @@ import org.slf4j.LoggerFactory;
  */
 public abstract class AbstractService implements Service {
 
-  private static final Logger LOG = LoggerFactory.getLogger(AbstractService.class);
+  private static final SparkLogger LOG = SparkLoggerFactory.getLogger(AbstractService.class);
 
   /**
    * Service state: initially {@link STATE#NOTINITED}.
@@ -85,7 +88,7 @@ public abstract class AbstractService implements Service {
     ensureCurrentState(STATE.NOTINITED);
     this.hiveConf = hiveConf;
     changeState(STATE.INITED);
-    LOG.info("Service:" + getName() + " is inited.");
+    LOG.info("Service:{} is inited.", MDC.of(LogKeys.SERVICE_NAME$.MODULE$, getName()));
   }
 
   /**
@@ -100,7 +103,7 @@ public abstract class AbstractService implements Service {
     startTime = System.currentTimeMillis();
     ensureCurrentState(STATE.INITED);
     changeState(STATE.STARTED);
-    LOG.info("Service:" + getName() + " is started.");
+    LOG.info("Service:{} is started.", MDC.of(LogKeys.SERVICE_NAME$.MODULE$, getName()));
   }
 
   /**
@@ -121,7 +124,7 @@ public abstract class AbstractService implements Service {
     }
     ensureCurrentState(STATE.STARTED);
     changeState(STATE.STOPPED);
-    LOG.info("Service:" + getName() + " is stopped.");
+    LOG.info("Service:{} is stopped.", MDC.of(LogKeys.SERVICE_NAME$.MODULE$, getName()));
   }
 
   @Override

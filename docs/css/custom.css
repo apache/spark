@@ -1,3 +1,7 @@
+:root {
+  --navbar-height: 80px;
+}
+
 body {
   color: #666666;
   font-family: "DM Sans", sans-serif;
@@ -5,8 +9,8 @@ body {
   font-weight: 400;
   overflow-wrap: anywhere;
   overflow-x: auto;
-  padding-top: 80px;
   padding-bottom: 20px;
+  padding-top: var(--navbar-height);
 }
 
 a {
@@ -25,6 +29,17 @@ a:focus {
   border-radius: 0;
   z-index: 9999;
   transition: none !important;
+  height: var(--navbar-height);
+}
+
+/*
+Any element with an id attribute can be scrolled to via the URL hash fragment.
+But since the navbar is fixed at the top, elements will, by default, get hidden
+by the navbar. To prevent this, we make sure that there's a margin above these
+links.
+*/
+*[id] {
+  scroll-margin-top: var(--navbar-height);
 }
 
 .navbar .nav-item:hover .dropdown-menu,

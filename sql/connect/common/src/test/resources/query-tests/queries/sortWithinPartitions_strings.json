@@ -1,0 +1,67 @@
+{
+  "common": {
+    "planId": "1"
+  },
+  "sort": {
+    "input": {
+      "common": {
+        "planId": "0"
+      },
+      "localRelation": {
+        "schema": "struct\u003cid:bigint,a:int,b:double\u003e"
+      }
+    },
+    "order": [{
+      "child": {
+        "unresolvedAttribute": {
+          "unparsedIdentifier": "a"
+        },
+        "common": {
+          "origin": {
+            "jvmOrigin": {
+              "stackTrace": [{
+                "classLoaderName": "app",
+                "declaringClass": "org.apache.spark.sql.Dataset",
+                "methodName": "sortWithinPartitions",
+                "fileName": "Dataset.scala"
+              }, {
+                "classLoaderName": "app",
+                "declaringClass": "org.apache.spark.sql.PlanGenerationTestSuite",
+                "methodName": "~~trimmed~anonfun~~",
+                "fileName": "PlanGenerationTestSuite.scala"
+              }]
+            }
+          }
+        }
+      },
+      "direction": "SORT_DIRECTION_ASCENDING",
+      "nullOrdering": "SORT_NULLS_FIRST"
+    }, {
+      "child": {
+        "unresolvedAttribute": {
+          "unparsedIdentifier": "id"
+        },
+        "common": {
+          "origin": {
+            "jvmOrigin": {
+              "stackTrace": [{
+                "classLoaderName": "app",
+                "declaringClass": "org.apache.spark.sql.Dataset",
+                "methodName": "sortWithinPartitions",
+                "fileName": "Dataset.scala"
+              }, {
+                "classLoaderName": "app",
+                "declaringClass": "org.apache.spark.sql.PlanGenerationTestSuite",
+                "methodName": "~~trimmed~anonfun~~",
+                "fileName": "PlanGenerationTestSuite.scala"
+              }]
+            }
+          }
+        }
+      },
+      "direction": "SORT_DIRECTION_ASCENDING",
+      "nullOrdering": "SORT_NULLS_FIRST"
+    }],
+    "isGlobal": false
+  }
+}

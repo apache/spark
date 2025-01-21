@@ -1,0 +1,26 @@
+================================================================================================
+Large Row Benchmark
+================================================================================================
+
+OpenJDK 64-Bit Server VM 21.0.5+11-LTS on Linux 6.8.0-1017-azure
+AMD EPYC 7763 64-Core Processor
+#rows: 100, #cols: 10, cell: 1.3 MB:      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+built-in UPPER                                     5909           6154         347          0.0    59088236.5       1.0X
+udf UPPER                                          4106           4364         364          0.0    41062501.9       1.4X
+
+OpenJDK 64-Bit Server VM 21.0.5+11-LTS on Linux 6.8.0-1017-azure
+AMD EPYC 7763 64-Core Processor
+#rows: 1, #cols: 1, cell: 300.0 MB:       Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+built-in UPPER                                     1317           1319           3          0.0  1317449498.0       1.0X
+udf UPPER                                           954            975          25          0.0   953744994.0       1.4X
+
+OpenJDK 64-Bit Server VM 21.0.5+11-LTS on Linux 6.8.0-1017-azure
+AMD EPYC 7763 64-Core Processor
+#rows: 1, #cols: 200, cell: 1.0 MB:       Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+built-in UPPER                                     1118           1138          28          0.0  1117901962.0       1.0X
+udf UPPER                                          1145           1210          91          0.0  1145234313.0       1.0X
+
+

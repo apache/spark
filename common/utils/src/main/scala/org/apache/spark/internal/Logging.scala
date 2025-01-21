@@ -30,6 +30,44 @@ import org.apache.spark.internal.Logging.SparkShellLoggingFilter
 import org.apache.spark.util.SparkClassUtils
 
 /**
+ * Guidelines for the Structured Logging Framework - Scala Logging
+ * <p>
+ *
+ * Use the `org.apache.spark.internal.Logging` trait for logging in Scala code:
+ * Logging Messages with Variables:
+ *   When logging a message with variables, wrap all the variables with `MDC`s and they will be
+ *   automatically added to the Mapped Diagnostic Context (MDC).
+ * This allows for structured logging and better log analysis.
+ * <p>
+ *
+ * logInfo(log"Trying to recover app: ${MDC(LogKeys.APP_ID, app.id)}")
+ * <p>
+ *
+ * Constant String Messages:
+ *   If you are logging a constant string message, use the log methods that accept a constant
+ *   string.
+ * <p>
+ *
+ * logInfo("StateStore stopped")
+ * <p>
+ *
+ * Exceptions:
+ *   To ensure logs are compatible with Spark SQL and log analysis tools, avoid
+ *   `Exception.printStackTrace()`. Use `logError`, `logWarning`, and `logInfo` methods from
+ *   the `Logging` trait to log exceptions, maintaining structured and parsable logs.
+ * <p>
+ *
+ * If you want to output logs in `scala code` through the structured log framework,
+ * you can define `custom LogKey` and use it in `scala` code as follows:
+ * <p>
+ *
+ * // To add a `custom LogKey`, implement `LogKey`
+ * case object CUSTOM_LOG_KEY extends LogKey
+ * import org.apache.spark.internal.MDC;
+ * logInfo(log"${MDC(CUSTOM_LOG_KEY, "key")}")
+ */
+
+/**
  * Mapped Diagnostic Context (MDC) that will be used in log messages.
  * The values of the MDC will be inline in the log message, while the key-value pairs will be
  * part of the ThreadContext.
@@ -37,6 +75,10 @@ import org.apache.spark.util.SparkClassUtils
 case class MDC(key: LogKey, value: Any) {
   require(!value.isInstanceOf[MessageWithContext],
     "the class of value cannot be MessageWithContext")
+}
+
+object MDC {
+  def of(key: LogKey, value: Any): MDC = MDC(key, value)
 }
 
 /**
@@ -57,9 +99,11 @@ case class MessageWithContext(message: String, context: java.util.HashMap[String
  * Companion class for lazy evaluation of the MessageWithContext instance.
  */
 class LogEntry(messageWithContext: => MessageWithContext) {
-  def message: String = messageWithContext.message
+  private lazy val cachedMessageWithContext: MessageWithContext = messageWithContext
 
-  def context: java.util.HashMap[String, String] = messageWithContext.context
+  def message: String = cachedMessageWithContext.message
+
+  def context: java.util.HashMap[String, String] = cachedMessageWithContext.context
 }
 
 /**
@@ -101,7 +145,7 @@ trait Logging {
   implicit class LogStringContext(val sc: StringContext) {
     def log(args: MDC*): MessageWithContext = {
       val processedParts = sc.parts.iterator
-      val sb = new StringBuilder(processedParts.next())
+      val sb = new StringBuilder(StringContext.processEscapes(processedParts.next()))
       val context = new java.util.HashMap[String, String]()
 
       args.foreach { mdc =>
@@ -112,7 +156,7 @@ trait Logging {
         }
 
         if (processedParts.hasNext) {
-          sb.append(processedParts.next())
+          sb.append(StringContext.processEscapes(processedParts.next()))
         }
       }
 
@@ -121,11 +165,17 @@ trait Logging {
   }
 
   protected def withLogContext(context: java.util.HashMap[String, String])(body: => Unit): Unit = {
-    val threadContext = CloseableThreadContext.putAll(context)
+    // put into thread context only when structured logging is enabled
+    val closeableThreadContextOpt = if (Logging.isStructuredLoggingEnabled) {
+      Some(CloseableThreadContext.putAll(context))
+    } else {
+      None
+    }
+
     try {
       body
     } finally {
-      threadContext.close()
+      closeableThreadContextOpt.foreach(_.close())
     }
   }
 
@@ -284,12 +334,12 @@ trait Logging {
       // If Log4j 2 is used but is initialized by default configuration,
       // load a default properties file
       // scalastyle:off println
-      if (Logging.islog4j2DefaultConfigured()) {
+      if (Logging.defaultSparkLog4jConfig || Logging.islog4j2DefaultConfigured()) {
         Logging.defaultSparkLog4jConfig = true
         val defaultLogProps = if (Logging.isStructuredLoggingEnabled) {
-          "org/apache/spark/log4j2-defaults.properties"
+          "org/apache/spark/log4j2-json-layout.properties"
         } else {
-          "org/apache/spark/log4j2-pattern-layout-defaults.properties"
+          "org/apache/spark/log4j2-defaults.properties"
         }
         Option(SparkClassUtils.getSparkClassLoader.getResource(defaultLogProps)) match {
           case Some(url) =>
@@ -348,7 +398,7 @@ private[spark] object Logging {
   @volatile private var initialized = false
   @volatile private var defaultRootLevel: Level = null
   @volatile private var defaultSparkLog4jConfig = false
-  @volatile private var structuredLoggingEnabled = true
+  @volatile private var structuredLoggingEnabled = false
   @volatile private[spark] var sparkShellThresholdLevel: Level = null
   @volatile private[spark] var setLogLevelPrinted: Boolean = false
 
@@ -374,7 +424,6 @@ private[spark] object Logging {
   def uninitialize(): Unit = initLock.synchronized {
     if (isLog4j2()) {
       if (defaultSparkLog4jConfig) {
-        defaultSparkLog4jConfig = false
         val context = LogManager.getContext(false).asInstanceOf[LoggerContext]
         context.reconfigure()
       } else {

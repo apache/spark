@@ -53,6 +53,8 @@ class Estimator(Params, Generic[M], metaclass=ABCMeta):
     Abstract class for estimators that fit models to data.
 
     .. versionadded:: 3.5.0
+
+    .. deprecated:: 4.0.0
     """
 
     @abstractmethod
@@ -82,6 +84,8 @@ class Estimator(Params, Generic[M], metaclass=ABCMeta):
         Fits a model to the input dataset with optional parameters.
 
         .. versionadded:: 3.5.0
+
+        .. deprecated:: 4.0.0
 
         Parameters
         ----------
@@ -119,6 +123,8 @@ class Transformer(Params, metaclass=ABCMeta):
     Abstract class for transformers that transform one dataset into another.
 
     .. versionadded:: 3.5.0
+
+    .. deprecated:: 4.0.0
     """
 
     def _input_columns(self) -> List[str]:
@@ -208,6 +214,8 @@ class Evaluator(Params, metaclass=ABCMeta):
     Base class for evaluators that compute metrics from predictions.
 
     .. versionadded:: 3.5.0
+
+    .. deprecated:: 4.0.0
     """
 
     @abstractmethod
@@ -232,6 +240,8 @@ class Evaluator(Params, metaclass=ABCMeta):
         Evaluates the output with optional parameters.
 
         .. versionadded:: 3.5.0
+
+        .. deprecated:: 4.0.0
 
         Parameters
         ----------
@@ -271,6 +281,8 @@ class Model(Transformer, metaclass=ABCMeta):
     Abstract class for models that are fitted by estimators.
 
     .. versionadded:: 3.5.0
+
+    .. deprecated:: 4.0.0
     """
 
     pass
@@ -282,6 +294,8 @@ class _PredictorParams(HasLabelCol, HasFeaturesCol, HasPredictionCol):
     Params for :py:class:`Predictor` and :py:class:`PredictorModel`.
 
     .. versionadded:: 3.5.0
+
+    .. deprecated:: 4.0.0
     """
 
     pass

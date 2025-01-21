@@ -85,7 +85,7 @@ SELECT var1, var2;
 
 -- Too many rows
 SET VAR (var1, var2) = (SELECT c1, CAST(c1 AS STRING) FROM VALUES(1), (2) AS t(c1));
-Error: ROW_SUBQUERY_TOO_MANY_ROWS
+[ROW_SUBQUERY_TOO_MANY_ROWS] More than one row returned by a subquery used as a row. SQLSTATE: 21000
 
 -- No rows
 SET VAR (var1, var2) = (SELECT c1, CAST(c1 AS STRING) FROM VALUES(1), (2) AS t(c1) WHERE 1=0);

@@ -12,7 +12,7 @@ AS testData(key, value1, value2)
 -- !query analysis
 CreateViewCommand `testData`, SELECT * FROM VALUES
 (1, "1", "11"), (2, "2", "22"), (3, "3", "33"), (4, "4", "44"), (5, "5", "55"), (6, "6", "66")
-AS testData(key, value1, value2), false, true, LocalTempView, true
+AS testData(key, value1, value2), false, true, LocalTempView, UNSUPPORTED, true
    +- Project [key#x, value1#x, value2#x]
       +- SubqueryAlias testData
          +- LocalRelation [key#x, value1#x, value2#x]
@@ -25,7 +25,7 @@ AS testData2(A, B, c, d)
 -- !query analysis
 CreateViewCommand `testData2`, SELECT * FROM VALUES
 (1, 1, 1, 2), (1, 2, 1, 2), (2, 1, 2, 3), (2, 2, 2, 3), (3, 1, 3, 4), (3, 2, 3, 4)
-AS testData2(A, B, c, d), false, true, LocalTempView, true
+AS testData2(A, B, c, d), false, true, LocalTempView, UNSUPPORTED, true
    +- Project [A#x, B#x, c#x, d#x]
       +- SubqueryAlias testData2
          +- LocalRelation [A#x, B#x, c#x, d#x]
@@ -349,7 +349,7 @@ AS testdata3(a, b)
 -- !query analysis
 CreateViewCommand `testdata3`, SELECT * FROM VALUES
 (0, 1), (1, 2), (2, 3), (3, 4)
-AS testdata3(a, b), false, true, LocalTempView, true
+AS testdata3(a, b), false, true, LocalTempView, UNSUPPORTED, true
    +- Project [a#x, b#x]
       +- SubqueryAlias testdata3
          +- LocalRelation [a#x, b#x]

@@ -25,11 +25,13 @@ import java.util.{Date, Locale}
 import scala.reflect.ClassTag
 
 import org.apache.hadoop.conf.{Configurable, Configuration}
+import org.apache.hadoop.hdfs.BlockMissingException
 import org.apache.hadoop.io.compress.CompressionCodecFactory
 import org.apache.hadoop.mapred._
 import org.apache.hadoop.mapred.lib.CombineFileSplit
 import org.apache.hadoop.mapreduce.TaskType
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat
+import org.apache.hadoop.security.AccessControlException
 import org.apache.hadoop.util.ReflectionUtils
 
 import org.apache.spark._
@@ -37,7 +39,8 @@ import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.errors.SparkCoreErrors
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config._
 import org.apache.spark.rdd.HadoopRDD.HadoopMapPartitionsWithSplitRDD
 import org.apache.spark.scheduler.{HDFSCacheTaskLocation, HostTaskLocation}
@@ -239,11 +242,13 @@ class HadoopRDD[K, V](
         if (fileSplit.getLength > conf.get(IO_WARNING_LARGEFILETHRESHOLD)) {
           val codecFactory = new CompressionCodecFactory(jobConf)
           if (Utils.isFileSplittable(path, codecFactory)) {
-            logWarning(s"Loading one large file ${path.toString} with only one partition, " +
-              s"we can increase partition numbers for improving performance.")
+            logWarning(log"Loading one large file ${MDC(PATH, path.toString)} " +
+              log"with only one partition, " +
+              log"we can increase partition numbers for improving performance.")
           } else {
-            logWarning(s"Loading one large unsplittable file ${path.toString} with only one " +
-              s"partition, because the file is compressed by unsplittable compression codec.")
+            logWarning(log"Loading one large unsplittable file ${MDC(PATH, path.toString)} " +
+              log"with only one " +
+              log"partition, because the file is compressed by unsplittable compression codec.")
           }
         }
       }
@@ -254,8 +259,8 @@ class HadoopRDD[K, V](
       array
     } catch {
       case e: InvalidInputException if ignoreMissingFiles =>
-        logWarning(s"${jobConf.get(FileInputFormat.INPUT_DIR)} doesn't exist and no" +
-            s" partitions returned from this path.", e)
+        logWarning(log"${MDC(PATH, jobConf.get(FileInputFormat.INPUT_DIR))} " +
+          log"doesn't exist and no partitions returned from this path.", e)
         Array.empty[Partition]
       case e: IOException if e.getMessage.startsWith("Not a file:") =>
         val path = e.getMessage.split(":").map(_.trim).apply(2)
@@ -267,7 +272,8 @@ class HadoopRDD[K, V](
     val iter = new NextIterator[(K, V)] {
 
       private val split = theSplit.asInstanceOf[HadoopPartition]
-      logInfo("Input split: " + split.inputSplit)
+      logInfo(log"Task (TID ${MDC(TASK_ID, context.taskAttemptId())}) input split: " +
+        log"${MDC(INPUT_SPLIT, split.inputSplit)}")
       private val jobConf = getJobConf()
 
       private val inputMetrics = context.taskMetrics().inputMetrics
@@ -310,13 +316,15 @@ class HadoopRDD[K, V](
           inputFormat.getRecordReader(split.inputSplit.value, jobConf, Reporter.NULL)
         } catch {
           case e: FileNotFoundException if ignoreMissingFiles =>
-            logWarning(s"Skipped missing file: ${split.inputSplit}", e)
+            logWarning(log"Skipped missing file: ${MDC(PATH, split.inputSplit)}", e)
             finished = true
             null
           // Throw FileNotFoundException even if `ignoreCorruptFiles` is true
           case e: FileNotFoundException if !ignoreMissingFiles => throw e
+          case e @ (_ : AccessControlException | _ : BlockMissingException) => throw e
           case e: IOException if ignoreCorruptFiles =>
-            logWarning(s"Skipped the rest content in the corrupted file: ${split.inputSplit}", e)
+            logWarning(log"Skipped the rest content in the corrupted file: " +
+              log"${MDC(PATH, split.inputSplit)}", e)
             finished = true
             null
         }
@@ -336,12 +344,14 @@ class HadoopRDD[K, V](
           finished = !reader.next(key, value)
         } catch {
           case e: FileNotFoundException if ignoreMissingFiles =>
-            logWarning(s"Skipped missing file: ${split.inputSplit}", e)
+            logWarning(log"Skipped missing file: ${MDC(PATH, split.inputSplit)}", e)
             finished = true
           // Throw FileNotFoundException even if `ignoreCorruptFiles` is true
           case e: FileNotFoundException if !ignoreMissingFiles => throw e
+          case e @ (_ : AccessControlException | _ : BlockMissingException) => throw e
           case e: IOException if ignoreCorruptFiles =>
-            logWarning(s"Skipped the rest content in the corrupted file: ${split.inputSplit}", e)
+            logWarning(log"Skipped the rest content in the corrupted file: " +
+              log"${MDC(PATH, split.inputSplit)}", e)
             finished = true
         }
         if (!finished) {

@@ -32,6 +32,8 @@ import scala.util.control.NonFatal
 import scala.xml.SAXException
 
 import org.apache.commons.lang3.exception.ExceptionUtils
+import org.apache.hadoop.hdfs.BlockMissingException
+import org.apache.hadoop.security.AccessControlException
 
 import org.apache.spark.{SparkIllegalArgumentException, SparkUpgradeException}
 import org.apache.spark.internal.Logging
@@ -397,8 +399,7 @@ class StaxXmlParser(
                     row(anyIndex) = values :+ newValue
                 }
               } else {
-                StaxXmlParserUtils.skipChildren(parser)
-                StaxXmlParserUtils.skipNextEndElement(parser, field, options)
+                StaxXmlParserUtils.skipChildren(parser, field, options)
               }
           }
         } catch {
@@ -656,6 +657,10 @@ class XmlTokenizer(
             e)
         case NonFatal(e) =>
           ExceptionUtils.getRootCause(e) match {
+            case _: AccessControlException | _: BlockMissingException =>
+              reader.close()
+              reader = null
+              throw e
             case _: RuntimeException | _: IOException if options.ignoreCorruptFiles =>
               logWarning(
                 "Skipping the rest of" +
