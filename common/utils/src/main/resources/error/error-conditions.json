@@ -2289,7 +2289,7 @@
     "message" : [
       "Invalid condition declaration. Condition <conditionName> can only be declared at the beginning of the compound."
     ],
-    "sqlState" : "42KOR"
+    "sqlState" : "42K0R"
   },
   "INVALID_CONF_VALUE" : {
     "message" : [
@@ -2617,7 +2617,7 @@
     "message" : [
       "Invalid handler declaration. Handlers must be declared after variable/condition declaration, and before other statements."
     ],
-    "sqlState" : "42KOQ"
+    "sqlState" : "42K0Q"
   },
   "INVALID_IDENTIFIER" : {
     "message" : [

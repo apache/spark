@@ -264,11 +264,178 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
     verifySqlScriptResult(sqlScript, expected = expected)
   }
 
+  test("handler - double chained handlers") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE OR REPLACE VARIABLE flag INT = -1;
+        |  l1: BEGIN
+        |    DECLARE EXIT HANDLER FOR SQLEXCEPTION
+        |    BEGIN
+        |      SELECT flag;
+        |      SET VAR flag = 2;
+        |    END;
+        |    l2: BEGIN
+        |      DECLARE EXIT HANDLER FOR SQLEXCEPTION
+        |      BEGIN
+        |        SELECT flag;
+        |        SET VAR flag = 1;
+        |        SELECT 1/0;
+        |        SELECT 2;
+        |      END;
+        |      SELECT 5;
+        |      SELECT 1/0;
+        |      SELECT 6;
+        |    END;
+        |  END;
+        |
+        |  SELECT flag;
+        |END
+        |""".stripMargin
+    val expected = Seq(
+      Seq(Row(5)),    // select
+      Seq(Row(-1)),   // select flag from handler in l2
+      Seq(Row(1)),   // select flag from handler in l1
+      Seq(Row(2))     // select flag from the outer body
+    )
+    verifySqlScriptResult(sqlScript, expected = expected)
+  }
+
+  test("handler - triple chained handlers") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE OR REPLACE VARIABLE flag INT = -1;
+        |  l1: BEGIN
+        |    DECLARE EXIT HANDLER FOR SQLEXCEPTION
+        |    BEGIN
+        |      SELECT flag;
+        |      SET VAR flag = 3;
+        |    END;
+        |    l2: BEGIN
+        |      DECLARE EXIT HANDLER FOR SQLEXCEPTION
+        |      BEGIN
+        |        SELECT flag;
+        |        SET VAR flag = 2;
+        |        SELECT 1/0;
+        |        SELECT 2;
+        |      END;
+        |
+        |      l3: BEGIN
+        |        DECLARE EXIT HANDLER FOR SQLEXCEPTION
+        |        BEGIN
+        |          SELECT flag;
+        |          SET VAR flag = 1;
+        |          SELECT 1/0;
+        |          SELECT 2;
+        |        END;
+        |
+        |        SELECT 5;
+        |        SELECT 1/0;
+        |        SELECT 6;
+        |      END;
+        |    END;
+        |  END;
+        |
+        |  SELECT flag;
+        |END
+        |""".stripMargin
+    val expected = Seq(
+      Seq(Row(5)),    // select
+      Seq(Row(-1)),   // select flag from handler in l3
+      Seq(Row(1)),    // select flag from handler in l2
+      Seq(Row(2)),    // select flag from handler in l1
+      Seq(Row(3))     // select flag from the outer body
+    )
+    verifySqlScriptResult(sqlScript, expected = expected)
+  }
+
+  test("handler in handler") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE OR REPLACE VARIABLE flag INT = -1;
+        |  lbl_0: BEGIN
+        |    DECLARE EXIT HANDLER FOR SQLEXCEPTION
+        |      lbl_1: BEGIN
+        |        DECLARE EXIT HANDLER FOR SQLEXCEPTION
+        |        lbl_2: BEGIN
+        |          SELECT flag;
+        |          SET VAR flag = 2;
+        |        END;
+        |
+        |        SELECT flag;
+        |        SET VAR flag = 1;
+        |        SELECT 1/0;
+        |        SELECT 2;
+        |      END;
+        |
+        |      SELECT 5;
+        |      SELECT 1/0;
+        |      SELECT 6;
+        |  END;
+        |  SELECT flag;
+        |END
+        |""".stripMargin
+    val expected = Seq(
+      Seq(Row(5)),    // select
+      Seq(Row(-1)),   // select flag from outer handler
+      Seq(Row(1)),    // select flag from inner handler
+      Seq(Row(2))     // select flag from the outer body
+    )
+    verifySqlScriptResult(sqlScript, expected = expected)
+  }
+
+  test("triple nested handler") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE OR REPLACE VARIABLE flag INT = -1;
+        |  lbl_0: BEGIN
+        |    DECLARE EXIT HANDLER FOR SQLEXCEPTION
+        |    lbl_1: BEGIN
+        |      DECLARE EXIT HANDLER FOR SQLEXCEPTION
+        |      lbl_2: BEGIN
+        |        DECLARE EXIT HANDLER FOR SQLEXCEPTION
+        |        lbl_3: BEGIN
+        |          SELECT flag; -- third select flag (2)
+        |          SET VAR flag = 3;
+        |        END;
+        |
+        |        SELECT flag; -- second select flag (1)
+        |        SET VAR flag = 2;
+        |        SELECT 1/0; -- third error will be thrown here
+        |        SELECT 2;
+        |      END;
+        |
+        |      SELECT flag; -- first select flag (-1)
+        |      SET VAR flag = 1;
+        |      SELECT 1/0; -- second error will be thrown here
+        |      SELECT 2;
+        |    END;
+        |
+        |    SELECT 5;
+        |    SELECT 1/0;  -- first error will be thrown here
+        |    SELECT 6;
+        |  END;
+        |  SELECT flag; -- fourth select flag (3)
+        |END
+        |""".stripMargin
+    val expected = Seq(
+      Seq(Row(5)),    // select
+      Seq(Row(-1)),   // select flag in handler
+      Seq(Row(1)),    // select flag in handler
+      Seq(Row(2)),    // select flag in handler
+      Seq(Row(3))     // select flag from the outer body
+    )
+    verifySqlScriptResult(sqlScript, expected = expected)
+  }
+
   test("handler - exit catch-all in the same block") {
     val sqlScript =
       """
         |BEGIN
-        |  DECLARE flag INT = -1;
+        |  DECLARE OR REPLACE flag INT = -1;
         |  l1: BEGIN
         |    DECLARE EXIT HANDLER FOR SQLSTATE '22012'
         |    BEGIN

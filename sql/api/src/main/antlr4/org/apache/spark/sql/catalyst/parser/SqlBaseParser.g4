@@ -101,7 +101,7 @@ conditionValues
     ;
 
 declareHandlerStatement
-    : DECLARE (CONTINUE | EXIT) HANDLER FOR conditionValues (BEGIN compoundBody END | statement | setStatementWithOptionalVarKeyword)
+    : DECLARE (CONTINUE | EXIT) HANDLER FOR conditionValues (beginEndCompoundBlock | statement | setStatementWithOptionalVarKeyword)
     ;
 
 whileStatement

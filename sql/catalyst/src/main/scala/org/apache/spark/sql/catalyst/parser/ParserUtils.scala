@@ -152,7 +152,7 @@ class SqlScriptingParsingContext {
 
   private var currentState: State.State = State.INIT
 
-  /** Transition to VARIABLES_AND_CONDITIONS state. */
+  /** Transition to VARIABLE state. */
   def variable(createVariable: CreateVariable, allowVarDeclare: Boolean): Unit = {
     if (!allowVarDeclare) {
       throw SqlScriptingErrors.variableDeclarationNotAllowedInScope(
@@ -161,17 +161,17 @@ class SqlScriptingParsingContext {
     transitionTo(State.VARIABLE, createVariable = Some(createVariable), None)
   }
 
-  /** Transition to VARIABLES_AND_CONDITIONS state. */
+  /** Transition to CONDITION state. */
   def condition(errorCondition: ErrorCondition): Unit = {
     transitionTo(State.CONDITION, None, errorCondition = Some(errorCondition))
   }
 
-  /** Transition to HANDLERS state. */
+  /** Transition to HANDLER state. */
   def handler(): Unit = {
     transitionTo(State.HANDLER)
   }
 
-  /** Transition to STATEMENTS state. */
+  /** Transition to STATEMENT state. */
   def statement(): Unit = {
     transitionTo(State.STATEMENT)
   }
@@ -179,7 +179,8 @@ class SqlScriptingParsingContext {
   /**
    * Helper method to transition to a new state.
    * Possible states are:
-   * 1. VARIABLES_AND_CONDITIONS (1)
+   * 1a. VARIABLE (1)
+   * 2b. CONDITION (1)
    * 2. HANDLERS (2)
    * 3. STATEMENTS (3)
    * Transition is allowed from state with number n to state with number m,

@@ -27,7 +27,8 @@ import org.apache.spark.sql.scripting.SqlScriptingFrameType.SqlScriptingFrameTyp
  */
 class SqlScriptingExecutionContext {
   // List of frames that are currently active.
-  val frames: ListBuffer[SqlScriptingExecutionFrame] = ListBuffer.empty
+  private[scripting] val frames: ListBuffer[SqlScriptingExecutionFrame] = ListBuffer.empty
+  private[scripting] var firstHandlerScope: Option[String] = None
 
   def enterScope(
       label: String,
@@ -50,10 +51,22 @@ class SqlScriptingExecutionContext {
       throw SparkException.internalError(s"Cannot find handler: no frames.")
     }
 
-    frames.reverseIterator.foreach { frame =>
-      val handler = frame.findHandler(condition, sqlState)
+    // If the last frame is a handler, try to find a handler in it first.
+    if (frames.last.frameType == SqlScriptingFrameType.HANDLER) {
+      val handler = frames.last.findHandler(condition, sqlState, firstHandlerScope)
       if (handler.isDefined) {
         return handler
+      }
+    }
+
+    frames.reverseIterator.foreach { frame =>
+      // Skip the current frame if it is a handler.
+      if (frame.frameType != SqlScriptingFrameType.HANDLER) {
+        val handler = frame.findHandler(condition, sqlState, firstHandlerScope)
+        if (handler.isDefined) {
+          firstHandlerScope = handler.get.scopeLabel
+          return handler
+        }
       }
     }
     None
@@ -111,15 +124,32 @@ class SqlScriptingExecutionFrame(
     }
   }
 
-  def findHandler(condition: String, sqlState: String): Option[ErrorHandlerExec] = {
-    if (scopes.isEmpty) {
-      throw SparkException.internalError(s"Cannot find handler: no scopes.")
-    }
+  def findHandler(
+      condition: String,
+      sqlState: String,
+      firstHandlerScope: Option[String]): Option[ErrorHandlerExec] = {
 
+    // Find the most outer scope where an active handler is defined.
+    // Search for handler should start from the scope that is surrounding that scope.
+    var found: Boolean = false
     scopes.reverseIterator.foreach { scope =>
-      val handler = scope.findHandler(condition, sqlState)
-      if (handler.isDefined) {
-        return handler
+      // If there is no active handler or the current frame is a handler, try to find a handler
+      // in this scope. That is because handlers can have nested handlers defined in their body.
+      if (firstHandlerScope.isEmpty || frameType == SqlScriptingFrameType.HANDLER) {
+        found = true
+      }
+
+      if (found) {
+        val handler = scope.findHandler(condition, sqlState)
+        if (handler.isDefined) {
+          return handler
+        }
+      }
+
+      // If there are active handlers, iterate we reach the most outer scope where
+      // an active handler is defined.
+      if (firstHandlerScope.isDefined && scope.label == firstHandlerScope.get) {
+        found = true
       }
     }
     None

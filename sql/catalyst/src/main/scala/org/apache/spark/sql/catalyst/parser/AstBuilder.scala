@@ -211,14 +211,10 @@ class AstBuilder extends DataTypeAstBuilder
     }
 
     val handlerType = HandlerType.EXIT
-
-    val body = if (Option(ctx.compoundBody()).isDefined) {
-      visitCompoundBodyImpl(
-        ctx.compoundBody(),
-        None,
-        allowVarDeclare = true,
-        labelCtx,
-        isScope = false)
+    val body = if (Option(ctx.beginEndCompoundBlock()).isDefined) {
+      visitBeginEndCompoundBlockImpl(
+        ctx.beginEndCompoundBlock(),
+        labelCtx)
     } else {
       // If there is no compound body, then there must be a statement or set statement.
       val statement = Option(ctx.statement().asInstanceOf[ParserRuleContext])
