@@ -31,11 +31,13 @@ import org.apache.avro.generic.GenericData.{EnumSymbol, Fixed}
 import org.apache.avro.generic.GenericData.Record
 import org.apache.avro.util.Utf8
 
+import org.apache.spark.SparkRuntimeException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.avro.AvroUtils.{nonNullUnionBranches, toFieldStr, AvroMatchedField}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{SpecializedGetters, SpecificInternalRow}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.errors.DataTypeErrors.toSQLType
 import org.apache.spark.sql.execution.datasources.DataSourceUtils
 import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
 import org.apache.spark.sql.types._
@@ -275,13 +277,13 @@ private[sql] class AvroSerializer(
     avroSchemaHelper.validateNoExtraCatalystFields(ignoreNullable = false)
     avroSchemaHelper.validateNoExtraRequiredAvroFields()
 
-    val (avroIndices, fieldConverters) = avroSchemaHelper.matchedFields.map {
+    val (avroIndices, fieldConverters, catalystFields) = avroSchemaHelper.matchedFields.map {
       case AvroMatchedField(catalystField, _, avroField) =>
         val converter = newConverter(catalystField.dataType,
           resolveNullableType(avroField.schema(), catalystField.nullable),
           catalystPath :+ catalystField.name, avroPath :+ avroField.name)
-        (avroField.pos(), converter)
-    }.toArray.unzip
+        (avroField.pos(), converter, catalystField)
+    }.toArray.unzip3
 
     val numFields = catalystStruct.length
     row: InternalRow =>
@@ -289,6 +291,15 @@ private[sql] class AvroSerializer(
       var i = 0
       while (i < numFields) {
         if (row.isNullAt(i)) {
+          if (!catalystFields(i).nullable) {
+            throw new SparkRuntimeException(
+              errorClass = "AVRO_CANNOT_WRITE_NULL_FIELD",
+              messageParameters = Map(
+                "name" -> catalystFields(i).name,
+                "schema" -> toSQLType(catalystFields(i).dataType)
+              )
+            )
+          }
           result.put(avroIndices(i), null)
         } else {
           result.put(avroIndices(i), fieldConverters(i).apply(row, i))

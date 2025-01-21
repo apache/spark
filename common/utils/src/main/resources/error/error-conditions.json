@@ -94,6 +94,13 @@
     },
     "sqlState" : "42604"
   },
+  "AVRO_CANNOT_WRITE_NULL_FIELD": {
+    "message" : [
+      "The record to be written to Avro contains null value for non-null field <name> with schema <schema> from Avro schema.",
+      "To allow writing this field, explicitly specifying the avroSchema as option."
+    ],
+    "sqlState" : "22004"
+  },
   "AVRO_INCOMPATIBLE_READ_TYPE" : {
     "message" : [
       "Cannot convert Avro <avroPath> to SQL <sqlPath> because the original encoded data type is <avroType>, however you're trying to read the field as <sqlType>, which would lead to an incorrect answer.",
