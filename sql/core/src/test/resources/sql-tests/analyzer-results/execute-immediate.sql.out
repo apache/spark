@@ -33,14 +33,14 @@ CreateDataSourceTableCommand `spark_catalog`.`default`.`x`, false
 -- !query
 DECLARE sql_string STRING
 -- !query analysis
-CreateVariable defaultvalueexpression(null, null), false
+CreateVariable defaultvalueexpression(null, null), false, false
 +- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.sql_string
 
 
 -- !query
 SET VAR sql_string = 'SELECT * from tbl_view where name = \'name1\''
 -- !query analysis
-SetVariable [variablereference(system.session.sql_string=CAST(NULL AS STRING))]
+SetVariable [variablereference(system.session.sql_string=CAST(NULL AS STRING))], false, false
 +- Project [SELECT * from tbl_view where name = 'name1' AS sql_string#x]
    +- OneRowRelation
 
@@ -115,7 +115,7 @@ Project [id#x, name#x, data#x]
 -- !query
 SET VAR sql_string = 'SELECT * from tbl_view where name = ? or name = ?'
 -- !query analysis
-SetVariable [variablereference(system.session.sql_string='SELECT * from tbl_view where name = \'name1\'')]
+SetVariable [variablereference(system.session.sql_string='SELECT * from tbl_view where name = \'name1\'')], false, false
 +- Project [SELECT * from tbl_view where name = ? or name = ? AS sql_string#x]
    +- OneRowRelation
 
@@ -123,14 +123,14 @@ SetVariable [variablereference(system.session.sql_string='SELECT * from tbl_view
 -- !query
 DECLARE a STRING
 -- !query analysis
-CreateVariable defaultvalueexpression(null, null), false
+CreateVariable defaultvalueexpression(null, null), false, false
 +- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.a
 
 
 -- !query
 SET VAR a = 'name1'
 -- !query analysis
-SetVariable [variablereference(system.session.a=CAST(NULL AS STRING))]
+SetVariable [variablereference(system.session.a=CAST(NULL AS STRING))], false, false
 +- Project [name1 AS a#x]
    +- OneRowRelation
 
@@ -219,7 +219,7 @@ Project [id#x]
 -- !query
 SET VAR sql_string = 'SELECT * from tbl_view where name = :first or id = :second'
 -- !query analysis
-SetVariable [variablereference(system.session.sql_string='SELECT * from tbl_view where name = ? or name = ?')]
+SetVariable [variablereference(system.session.sql_string='SELECT * from tbl_view where name = ? or name = ?')], false, false
 +- Project [SELECT * from tbl_view where name = :first or id = :second AS sql_string#x]
    +- OneRowRelation
 
@@ -227,14 +227,14 @@ SetVariable [variablereference(system.session.sql_string='SELECT * from tbl_view
 -- !query
 DECLARE b INT
 -- !query analysis
-CreateVariable defaultvalueexpression(null, null), false
+CreateVariable defaultvalueexpression(null, null), false, false
 +- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.b
 
 
 -- !query
 SET VAR b = 40
 -- !query analysis
-SetVariable [variablereference(system.session.b=CAST(NULL AS INT))]
+SetVariable [variablereference(system.session.b=CAST(NULL AS INT))], false, false
 +- Project [40 AS b#x]
    +- OneRowRelation
 
@@ -307,7 +307,7 @@ Project [id#x, name#x, data#x, name7 AS p#x]
 -- !query
 EXECUTE IMMEDIATE 'SET VAR sql_string = ?' USING 'SELECT id from tbl_view where name = :first'
 -- !query analysis
-SetVariable [variablereference(system.session.sql_string='SELECT * from tbl_view where name = :first or id = :second')]
+SetVariable [variablereference(system.session.sql_string='SELECT * from tbl_view where name = :first or id = :second')], true, false
 +- Project [SELECT id from tbl_view where name = :first AS sql_string#x]
    +- OneRowRelation
 
@@ -322,14 +322,14 @@ Project [variablereference(system.session.sql_string='SELECT id from tbl_view wh
 -- !query
 DECLARE res_id INT
 -- !query analysis
-CreateVariable defaultvalueexpression(null, null), false
+CreateVariable defaultvalueexpression(null, null), false, false
 +- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.res_id
 
 
 -- !query
 EXECUTE IMMEDIATE sql_string INTO res_id USING 'name7' as first
 -- !query analysis
-SetVariable [variablereference(system.session.res_id=CAST(NULL AS INT))]
+SetVariable [variablereference(system.session.res_id=CAST(NULL AS INT))], false, true
 +- GlobalLimit 2
    +- LocalLimit 2
       +- Project [id#x]
@@ -352,7 +352,7 @@ Project [variablereference(system.session.res_id=70) AS res_id#x]
 -- !query
 EXECUTE IMMEDIATE sql_string INTO res_id USING a as first
 -- !query analysis
-SetVariable [variablereference(system.session.res_id=70)]
+SetVariable [variablereference(system.session.res_id=70)], false, true
 +- GlobalLimit 2
    +- LocalLimit 2
       +- Project [id#x]
@@ -375,7 +375,7 @@ Project [variablereference(system.session.res_id=10) AS res_id#x]
 -- !query
 SET VAR sql_string = 'SELECT * from tbl_view where name = :first or id = :second'
 -- !query analysis
-SetVariable [variablereference(system.session.sql_string='SELECT id from tbl_view where name = :first')]
+SetVariable [variablereference(system.session.sql_string='SELECT id from tbl_view where name = :first')], false, false
 +- Project [SELECT * from tbl_view where name = :first or id = :second AS sql_string#x]
    +- OneRowRelation
 
@@ -383,7 +383,7 @@ SetVariable [variablereference(system.session.sql_string='SELECT id from tbl_vie
 -- !query
 EXECUTE IMMEDIATE 'SELECT 42' INTO res_id
 -- !query analysis
-SetVariable [variablereference(system.session.res_id=10)]
+SetVariable [variablereference(system.session.res_id=10)], false, true
 +- Project [42 AS 42#x]
    +- OneRowRelation
 
@@ -398,7 +398,7 @@ Project [variablereference(system.session.res_id=42) AS res_id#x]
 -- !query
 EXECUTE IMMEDIATE 'SELECT id, name FROM tbl_view WHERE id = ?' INTO b, a USING 10
 -- !query analysis
-SetVariable [variablereference(system.session.b=40), variablereference(system.session.a='name1')]
+SetVariable [variablereference(system.session.b=40), variablereference(system.session.a='name1')], false, true
 +- GlobalLimit 2
    +- LocalLimit 2
       +- Project [id#x, name#x]
@@ -434,7 +434,7 @@ Project [id#x, name#x, data#x]
 -- !query
 EXECUTE IMMEDIATE 'SELECT 42 WHERE 2 = 1' INTO res_id
 -- !query analysis
-SetVariable [variablereference(system.session.res_id=42)]
+SetVariable [variablereference(system.session.res_id=42)], false, true
 +- Project [42 AS 42#x]
    +- Filter (2 = 1)
       +- OneRowRelation
@@ -450,7 +450,7 @@ Project [variablereference(system.session.res_id=CAST(NULL AS INT)) AS res_id#x]
 -- !query
 EXECUTE IMMEDIATE 'SELECT \'1707\'' INTO res_id
 -- !query analysis
-SetVariable [variablereference(system.session.res_id=CAST(NULL AS INT))]
+SetVariable [variablereference(system.session.res_id=CAST(NULL AS INT))], false, true
 +- Project [cast(1707#x as int) AS res_id#x]
    +- Project [1707 AS 1707#x]
       +- OneRowRelation
@@ -600,7 +600,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SET VAR sql_string = 'SELECT * from tbl_view where name = :first or id = :second'
 -- !query analysis
-SetVariable [variablereference(system.session.sql_string='SELECT * from tbl_view where name = :first or id = :second')]
+SetVariable [variablereference(system.session.sql_string='SELECT * from tbl_view where name = :first or id = :second')], false, false
 +- Project [SELECT * from tbl_view where name = :first or id = :second AS sql_string#x]
    +- OneRowRelation
 
@@ -608,7 +608,7 @@ SetVariable [variablereference(system.session.sql_string='SELECT * from tbl_view
 -- !query
 SET VAR a = 'na'
 -- !query analysis
-SetVariable [variablereference(system.session.a='name1')]
+SetVariable [variablereference(system.session.a='name1')], false, false
 +- Project [na AS a#x]
    +- OneRowRelation
 
@@ -750,7 +750,7 @@ org.apache.spark.sql.catalyst.parser.ParseException
 -- !query
 DECLARE p = 10
 -- !query analysis
-CreateVariable defaultvalueexpression(10, 10), false
+CreateVariable defaultvalueexpression(10, 10), false, false
 +- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.p
 
 
@@ -809,7 +809,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SET VAR sql_string = null
 -- !query analysis
-SetVariable [variablereference(system.session.sql_string='SELECT * from tbl_view where name = :first or id = :second')]
+SetVariable [variablereference(system.session.sql_string='SELECT * from tbl_view where name = :first or id = :second')], false, false
 +- Project [cast(sql_string#x as string) AS sql_string#x]
    +- Project [null AS sql_string#x]
       +- OneRowRelation

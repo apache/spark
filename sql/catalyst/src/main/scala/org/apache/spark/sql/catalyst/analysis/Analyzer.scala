@@ -139,6 +139,9 @@ object FakeV2SessionCatalog extends TableCatalog with FunctionCatalog with Suppo
  *                              even if a temp view `t` has been created.
  * @param outerPlan The query plan from the outer query that can be used to resolve star
  *                  expressions in a subquery.
+ * @param isExecuteImmediate Whether the current plan is created by EXECUTE IMMEDIATE. Used when
+ *                           resolving variables, as SQL Scripting local variables should not be
+ *                           visible from EXECUTE IMMEDIATE.
  */
 case class AnalysisContext(
     catalogAndNamespace: Seq[String] = Nil,
@@ -154,8 +157,6 @@ case class AnalysisContext(
     referredTempFunctionNames: mutable.Set[String] = mutable.Set.empty,
     referredTempVariableNames: Seq[Seq[String]] = Seq.empty,
     outerPlan: Option[LogicalPlan] = None,
-    // Whether the current plan is created by EXECUTE IMMEDIATE. Used when resolving variables,
-    // as SQL Scripting local variables should not be visible from EXECUTE IMMEDIATE.
     var isExecuteImmediate: Boolean = false,
 
     /**

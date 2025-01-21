@@ -13,7 +13,7 @@ CreateDataSourceTableAsSelectCommand `spark_catalog`.`default`.`t`, ErrorIfExist
 -- !query
 declare avro_schema string
 -- !query analysis
-CreateVariable defaultvalueexpression(null, null), false
+CreateVariable defaultvalueexpression(null, null), false, false
 +- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.avro_schema
 
 
@@ -21,7 +21,7 @@ CreateVariable defaultvalueexpression(null, null), false
 set variable avro_schema =
   '{ "type": "record", "name": "struct", "fields": [{ "name": "u", "type": ["int","string"] }] }'
 -- !query analysis
-SetVariable [variablereference(system.session.avro_schema=CAST(NULL AS STRING))]
+SetVariable [variablereference(system.session.avro_schema=CAST(NULL AS STRING))], false, false
 +- Project [{ "type": "record", "name": "struct", "fields": [{ "name": "u", "type": ["int","string"] }] } AS avro_schema#x]
    +- OneRowRelation
 
