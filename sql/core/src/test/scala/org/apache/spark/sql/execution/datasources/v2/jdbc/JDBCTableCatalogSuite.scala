@@ -444,9 +444,11 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
         exception = intercept[AnalysisException] {
           sql(s"ALTER TABLE $tableName ALTER COLUMN ID COMMENT 'test'")
         },
-        condition = "_LEGACY_ERROR_TEMP_1305",
-        parameters = Map("change" ->
-          "org.apache.spark.sql.connector.catalog.TableChange\\$UpdateColumnComment.*"),
+        condition = "UNSUPPORTED_TABLE_CHANGE_IN_JDBC_CATALOG",
+        parameters = Map(
+          "change" -> "org.apache.spark.sql.connector.catalog.TableChange\\$UpdateColumnComment.*",
+          "tableName" -> "`test`.`alt_table`"
+        ),
         matchPVals = true)
       // Update comment for not existing column
       val sqlText = s"ALTER TABLE $tableName ALTER COLUMN bad_column COMMENT 'test'"

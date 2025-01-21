@@ -18,6 +18,7 @@
 package org.apache.spark.sql.connect.ml
 
 import java.util.{Optional, ServiceLoader}
+import java.util.stream.Collectors
 
 import scala.collection.immutable.HashSet
 import scala.jdk.CollectionConverters._
@@ -29,14 +30,14 @@ import org.apache.spark.ml.{Estimator, Transformer}
 import org.apache.spark.ml.evaluation.Evaluator
 import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.param.Params
-import org.apache.spark.ml.util.{MLReadable, MLWritable}
+import org.apache.spark.ml.util.MLWritable
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.classic.Dataset
 import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, LiteralValueProtoConverter}
 import org.apache.spark.sql.connect.planner.SparkConnectPlanner
 import org.apache.spark.sql.connect.plugin.SparkConnectPluginRegistry
 import org.apache.spark.sql.connect.service.SessionHolder
-import org.apache.spark.util.{SparkClassUtils, Utils}
+import org.apache.spark.util.Utils
 
 private[ml] object MLUtils {
 
@@ -51,8 +52,18 @@ private[ml] object MLUtils {
   private def loadOperators(mlCls: Class[_]): Map[String, Class[_]] = {
     val loader = Utils.getContextOrSparkClassLoader
     val serviceLoader = ServiceLoader.load(mlCls, loader)
-    val providers = serviceLoader.asScala.toList
-    providers.map(est => est.getClass.getName -> est.getClass).toMap
+    // Instead of using the iterator, we use the "stream()" method that allows
+    // to iterate over a collection of providers that do not instantiate the class
+    // directly. Since there is no good way to convert a Java stream to a Scala stream,
+    // we collect the Java stream to a Java map and then convert it to a Scala map.
+    serviceLoader
+      .stream()
+      .collect(
+        Collectors.toMap(
+          (est: ServiceLoader.Provider[_]) => est.`type`().getName,
+          (est: ServiceLoader.Provider[_]) => est.`type`()))
+      .asScala
+      .toMap
   }
 
   private def parseInts(ints: proto.Ints): Array[Int] = {
@@ -353,34 +364,73 @@ private[ml] object MLUtils {
   }
 
   /**
-   * Call "load" function on the ML operator given the operator name
+   * Load an ML component (Estimator, Transformer, or Evaluator) from the given path.
    *
+   * @param sessionHolder
+   *   the session holder
    * @param className
    *   the ML operator name
    * @param path
    *   the path to be loaded
+   * @param operatorClass
+   *   the class type of the ML operator (Estimator, Transformer, or Evaluator)
+   * @tparam T
+   *   the type of the ML operator
    * @return
-   *   the ML instance
+   *   the instance of the ML operator
    */
-  def load(sessionHolder: SessionHolder, className: String, path: String): Object = {
+  private def loadOperator[T](
+      sessionHolder: SessionHolder,
+      className: String,
+      path: String,
+      operatorClass: Class[T]): T = {
     val name = replaceOperator(sessionHolder, className)
-
-    // It's the companion object of the corresponding spark operators to load.
-    val objectCls = SparkClassUtils.classForName(name + "$")
-    val mlReadableClass = classOf[MLReadable[_]]
-    // Make sure it is implementing MLReadable
-    if (!mlReadableClass.isAssignableFrom(objectCls)) {
-      throw MlUnsupportedException(s"$name must implement MLReadable.")
+    val operators = loadOperators(operatorClass)
+    if (operators.isEmpty || !operators.contains(name)) {
+      throw MlUnsupportedException(s"Unsupported read for $name")
     }
+    operators(name)
+      .getMethod("load", classOf[String])
+      .invoke(null, path)
+      .asInstanceOf[T]
+  }
 
-    val loadedMethod = SparkClassUtils.classForName(name).getMethod("load", classOf[String])
-    loadedMethod.invoke(null, path)
+  /**
+   * Load an estimator from the specified path.
+   */
+  def loadEstimator(
+      sessionHolder: SessionHolder,
+      className: String,
+      path: String): Estimator[_] = {
+    loadOperator(sessionHolder, className, path, classOf[Estimator[_]])
+  }
+
+  /**
+   * Load a transformer from the specified path.
+   */
+  def loadTransformer(
+      sessionHolder: SessionHolder,
+      className: String,
+      path: String): Transformer = {
+    loadOperator(sessionHolder, className, path, classOf[Transformer])
+  }
+
+  /**
+   * Load an evaluator from the specified path.
+   */
+  def loadEvaluator(sessionHolder: SessionHolder, className: String, path: String): Evaluator = {
+    loadOperator(sessionHolder, className, path, classOf[Evaluator])
   }
 
   // Since we're using reflection way to get the attribute, in order not to
   // leave a security hole, we define an allowed attribute list that can be accessed.
   // The attributes could be retrieved from the corresponding python class
   private lazy val ALLOWED_ATTRIBUTES = HashSet(
+    "mean", // StandardScalerModel
+    "std", // StandardScalerModel
+    "maxAbs", // MaxAbsScalerModel
+    "originalMax", // MinMaxScalerModel
+    "originalMin", // MinMaxScalerModel
     "toString",
     "toDebugString",
     "numFeatures",
@@ -443,7 +493,22 @@ private[ml] object MLUtils {
     "residuals", // LinearRegressionSummary
     "rootMeanSquaredError", // LinearRegressionSummary
     "tValues", // LinearRegressionSummary
-    "totalIterations" // LinearRegressionSummary
+    "totalIterations", // LinearRegressionSummary
+    "k", // KMeansSummary
+    "numIter", // KMeansSummary
+    "clusterSizes", // KMeansSummary
+    "trainingCost", // KMeansSummary
+    "cluster", // KMeansSummary
+    "computeCost", // BisectingKMeansModel
+    "rank", // ALSModel
+    "itemFactors", // ALSModel
+    "userFactors", // ALSModel
+    "recommendForAllUsers", // ALSModel
+    "recommendForAllItems", // ALSModel
+    "recommendForUserSubset", // ALSModel
+    "recommendForItemSubset", // ALSModel
+    "associationRules", // FPGrowthModel
+    "freqItemsets" // FPGrowthModel
   )
 
   def invokeMethodAllowed(obj: Object, methodName: String): Object = {
