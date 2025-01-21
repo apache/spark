@@ -740,10 +740,10 @@ class CollationExpressionWalkerSuite extends SparkFunSuite with SharedSparkSessi
     for (funInfo <- funInfos.filter(f => !toSkip.contains(f.getName))) {
       for (query <- "> .*;".r.findAllIn(funInfo.getExamples).map(s => s.substring(2))) {
         try {
-          val resultUTF8 = sql(query)
+          val resultUTF8 = sql(query).collect()
           withSQLConf(SqlApiConf.DEFAULT_COLLATION -> "UTF8_LCASE") {
-            val resultUTF8Lcase = sql(query)
-            assert(resultUTF8.collect() === resultUTF8Lcase.collect())
+            val resultUTF8Lcase = sql(query).collect()
+            assert(resultUTF8 === resultUTF8Lcase)
           }
         } catch {
           case e: SparkRuntimeException => assert(e.getCondition == "USER_RAISED_EXCEPTION")
