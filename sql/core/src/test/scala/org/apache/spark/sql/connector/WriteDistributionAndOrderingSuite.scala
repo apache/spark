@@ -70,7 +70,7 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
   private val tableNameAsString = "testcat." + ident.toString
   private val emptyProps = Collections.emptyMap[String, String]
   private val schema = new StructType()
-    .add("id", IntegerType)
+    .add("id", LongType)
     .add("data", StringType)
     .add("day", DateType)
 
@@ -1122,7 +1122,7 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
         Seq.empty
       ),
       catalyst.expressions.SortOrder(
-        ApplyFunctionExpression(BucketFunction, Seq(Literal(10), Cast(attr("id"), LongType))),
+        ApplyFunctionExpression(BucketFunction, Seq(Literal(10), attr("id"))),
         catalyst.expressions.Descending,
         catalyst.expressions.NullsFirst,
         Seq.empty
