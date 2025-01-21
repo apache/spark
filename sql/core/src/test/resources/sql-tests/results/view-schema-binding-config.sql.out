@@ -137,7 +137,7 @@ Type                	VIEW
 View Text           	SELECT 1            	                    
 View Original Text  	SELECT 1            	                    
 View Catalog and Namespace	spark_catalog.default	                    
-View Query Output Columns	[1]
+View Query Output Columns	[`1`]
 
 
 -- !query
@@ -155,7 +155,7 @@ Type: VIEW
 View Text: SELECT 1
 View Original Text: SELECT 1
 View Catalog and Namespace: spark_catalog.default
-View Query Output Columns: [1]
+View Query Output Columns: [`1`]
 Schema: root
  |-- 1: integer (nullable = false)
 
@@ -206,7 +206,7 @@ Created By [not included in comparison]
 Type: VIEW
 View Text: SELECT 1
 View Catalog and Namespace: spark_catalog.default
-View Query Output Columns: [1]
+View Query Output Columns: [`1`]
 Schema: root
  |-- 1: integer (nullable = false)
 
@@ -269,7 +269,7 @@ Type                	VIEW
 View Text           	SELECT * FROM t     	                    
 View Original Text  	SELECT * FROM t     	                    
 View Catalog and Namespace	spark_catalog.default	                    
-View Query Output Columns	[c1]
+View Query Output Columns	[`c1`]
 
 
 -- !query
@@ -324,7 +324,7 @@ Type                	VIEW
 View Text           	SELECT * FROM t     	                    
 View Original Text  	SELECT * FROM t     	                    
 View Catalog and Namespace	spark_catalog.default	                    
-View Query Output Columns	[c1]
+View Query Output Columns	[`c1`]
 
 
 -- !query
@@ -402,7 +402,7 @@ View Text           	SELECT * FROM t
 View Original Text  	SELECT * FROM t     	                    
 View Schema Mode    	BINDING             	                    
 View Catalog and Namespace	spark_catalog.default	                    
-View Query Output Columns	[c1]
+View Query Output Columns	[`c1`]
 
 
 -- !query
@@ -477,7 +477,7 @@ View Text           	SELECT * FROM t
 View Original Text  	SELECT * FROM t     	                    
 View Schema Mode    	BINDING             	                    
 View Catalog and Namespace	spark_catalog.default	                    
-View Query Output Columns	[c1]
+View Query Output Columns	[`c1`]
 
 
 -- !query
@@ -550,7 +550,7 @@ View Text           	SELECT * FROM t
 View Original Text  	SELECT * FROM t     	                    
 View Schema Mode    	COMPENSATION        	                    
 View Catalog and Namespace	spark_catalog.default	                    
-View Query Output Columns	[c1]
+View Query Output Columns	[`c1`]
 
 
 -- !query
@@ -615,7 +615,7 @@ View Text           	SELECT * FROM t
 View Original Text  	SELECT * FROM t     	                    
 View Schema Mode    	COMPENSATION        	                    
 View Catalog and Namespace	spark_catalog.default	                    
-View Query Output Columns	[c1]
+View Query Output Columns	[`c1`]
 
 
 -- !query
@@ -680,7 +680,7 @@ View Text           	SELECT * FROM t
 View Original Text  	SELECT * FROM t     	                    
 View Schema Mode    	COMPENSATION        	                    
 View Catalog and Namespace	spark_catalog.default	                    
-View Query Output Columns	[c1]
+View Query Output Columns	[`c1`]
 
 
 -- !query
@@ -774,7 +774,7 @@ View Text           	SELECT * FROM t
 View Original Text  	SELECT * FROM t     	                    
 View Schema Mode    	COMPENSATION        	                    
 View Catalog and Namespace	spark_catalog.default	                    
-View Query Output Columns	[c1]
+View Query Output Columns	[`c1`]
 
 
 -- !query
@@ -837,7 +837,7 @@ View Text           	SELECT * FROM t
 View Original Text  	SELECT * FROM t     	                    
 View Schema Mode    	COMPENSATION        	                    
 View Catalog and Namespace	spark_catalog.default	                    
-View Query Output Columns	[c1, c2]
+View Query Output Columns	[`c1`, `c2`]
 
 
 -- !query
@@ -895,7 +895,7 @@ View Text           	SELECT * FROM t
 View Original Text  	SELECT * FROM t     	                    
 View Schema Mode    	COMPENSATION        	                    
 View Catalog and Namespace	spark_catalog.default	                    
-View Query Output Columns	[c1, c2]
+View Query Output Columns	[`c1`, `c2`]
 
 
 -- !query
@@ -953,7 +953,7 @@ View Text           	SELECT * FROM t
 View Original Text  	SELECT * FROM t     	                    
 View Schema Mode    	COMPENSATION        	                    
 View Catalog and Namespace	spark_catalog.default	                    
-View Query Output Columns	[c1, c2]
+View Query Output Columns	[`c1`, `c2`]
 
 
 -- !query
@@ -1007,7 +1007,7 @@ View Text           	SELECT 1
 View Original Text  	SELECT 1            	                    
 View Schema Mode    	BINDING             	                    
 View Catalog and Namespace	spark_catalog.default	                    
-View Query Output Columns	[1]
+View Query Output Columns	[`1`]
 
 
 -- !query
@@ -1026,7 +1026,7 @@ View Text: SELECT 1
 View Original Text: SELECT 1
 View Schema Mode: BINDING
 View Catalog and Namespace: spark_catalog.default
-View Query Output Columns: [1]
+View Query Output Columns: [`1`]
 Schema: root
  |-- 1: integer (nullable = false)
 
@@ -1069,7 +1069,7 @@ View Text           	SELECT 1
 View Original Text  	SELECT 1            	                    
 View Schema Mode    	BINDING             	                    
 View Catalog and Namespace	spark_catalog.default	                    
-View Query Output Columns	[1]
+View Query Output Columns	[`1`]
 
 
 -- !query
@@ -1088,7 +1088,7 @@ View Text: SELECT 1
 View Original Text: SELECT 1
 View Schema Mode: BINDING
 View Catalog and Namespace: spark_catalog.default
-View Query Output Columns: [1]
+View Query Output Columns: [`1`]
 Schema: root
  |-- 1: integer (nullable = false)
 
@@ -1165,7 +1165,7 @@ Type: VIEW
 View Text: SELECT 1
 View Schema Mode: BINDING
 View Catalog and Namespace: spark_catalog.default
-View Query Output Columns: [1]
+View Query Output Columns: [`1`]
 Schema: root
  |-- 1: integer (nullable = false)
 
@@ -1199,7 +1199,7 @@ Type: VIEW
 View Text: SELECT 1
 View Schema Mode: BINDING
 View Catalog and Namespace: spark_catalog.default
-View Query Output Columns: [1]
+View Query Output Columns: [`1`]
 Schema: root
  |-- 1: integer (nullable = false)
 

@@ -67,6 +67,36 @@ class VariantWriteShreddingSuite extends SparkFunSuite with ExpressionEvalHelper
 
   private val emptyMetadata: Array[Byte] = parseJson("null").getMetadata
 
+  test("variantShreddingSchema") {
+    // Validate the schema produced by SparkShreddingUtils.variantShreddingSchema for a few simple
+    // cases.
+    // metadata is always non-nullable.
+    assert(SparkShreddingUtils.variantShreddingSchema(IntegerType) ==
+      StructType(Seq(
+        StructField("metadata", BinaryType, nullable = false),
+        StructField("value", BinaryType, nullable = true),
+        StructField("typed_value", IntegerType, nullable = true))))
+
+    val fieldA = StructType(Seq(
+      StructField("value", BinaryType, nullable = true),
+      StructField("typed_value", TimestampNTZType, nullable = true)))
+    val arrayType = ArrayType(StructType(Seq(
+      StructField("value", BinaryType, nullable = true),
+      StructField("typed_value", StringType, nullable = true))), containsNull = false)
+    val fieldB = StructType(Seq(
+      StructField("value", BinaryType, nullable = true),
+      StructField("typed_value", arrayType, nullable = true)))
+    val objectType = StructType(Seq(
+      StructField("a", fieldA, nullable = false),
+      StructField("b", fieldB, nullable = false)))
+    val structSchema = DataType.fromDDL("a timestamp_ntz, b array<string>")
+    assert(SparkShreddingUtils.variantShreddingSchema(structSchema) ==
+      StructType(Seq(
+        StructField("metadata", BinaryType, nullable = false),
+        StructField("value", BinaryType, nullable = true),
+        StructField("typed_value", objectType, nullable = true))))
+  }
+
   test("shredding as fixed numeric types") {
     /* Cast integer to any wider numeric type. */
     testWithSchema("1", IntegerType, Row(emptyMetadata, null, 1))

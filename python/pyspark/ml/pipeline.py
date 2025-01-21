@@ -207,7 +207,7 @@ class Pipeline(Estimator["PipelineModel"], MLReadable["Pipeline"], MLWritable):
         gateway = SparkContext._gateway
         assert gateway is not None and SparkContext._jvm is not None
 
-        cls = SparkContext._jvm.org.apache.spark.ml.PipelineStage
+        cls = getattr(SparkContext._jvm, "org.apache.spark.ml.PipelineStage")
         java_stages = gateway.new_array(cls, len(self.getStages()))
         for idx, stage in enumerate(self.getStages()):
             java_stages[idx] = cast(JavaParams, stage)._to_java()
@@ -361,7 +361,7 @@ class PipelineModel(Model, MLReadable["PipelineModel"], MLWritable):
         gateway = SparkContext._gateway
         assert gateway is not None and SparkContext._jvm is not None
 
-        cls = SparkContext._jvm.org.apache.spark.ml.Transformer
+        cls = getattr(SparkContext._jvm, "org.apache.spark.ml.Transformer")
         java_stages = gateway.new_array(cls, len(self.stages))
         for idx, stage in enumerate(self.stages):
             java_stages[idx] = cast(JavaParams, stage)._to_java()

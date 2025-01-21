@@ -1354,19 +1354,24 @@ trait UserDefinedExpression {
 }
 
 trait CommutativeExpression extends Expression {
-  /** Collects adjacent commutative operations. */
-  private def gatherCommutative(
+  /**
+   * Collects adjacent commutative operations.
+   *
+   * Exposed for testing
+   */
+  private[spark] def gatherCommutative(
       e: Expression,
       f: PartialFunction[CommutativeExpression, Seq[Expression]]): Seq[Expression] = {
     val resultBuffer = scala.collection.mutable.Buffer[Expression]()
-    val stack = scala.collection.mutable.Stack[Expression](e)
+    val queue = scala.collection.mutable.Queue[Expression](e)
 
     // [SPARK-49977]: Use iterative approach to avoid creating many temporary List objects
     // for deep expression trees through recursion.
-    while (stack.nonEmpty) {
-      stack.pop() match {
+    while (queue.nonEmpty) {
+      val current = queue.dequeue()
+      current match {
         case c: CommutativeExpression if f.isDefinedAt(c) =>
-          stack.pushAll(f(c))
+          queue ++= f(c)
         case other =>
           resultBuffer += other.canonicalized
       }
@@ -1456,4 +1461,11 @@ case class MultiCommutativeOp(
     this.copy(operands = newChildren)(originalRoot)
 
   override protected final def otherCopyArgs: Seq[AnyRef] = originalRoot :: Nil
+}
+
+/**
+ * Trait for expressions whose data type should be a default string type.
+ */
+trait DefaultStringProducingExpression extends Expression {
+  override def dataType: DataType = SQLConf.get.defaultStringType
 }

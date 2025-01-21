@@ -24,7 +24,7 @@ import scala.collection.mutable.ArrayBuffer
 import net.razorvine.pickle.Pickler
 
 import org.apache.spark.api.python.{PythonEvalType, PythonFunction, PythonWorkerUtils, SpecialLengths}
-import org.apache.spark.sql.{Column, DataFrame, Dataset, SparkSession}
+import org.apache.spark.sql.{Column, DataFrame, Dataset, SparkSession, TableArg, TableValuedFunctionArgument}
 import org.apache.spark.sql.catalyst.expressions.{Alias, Ascending, Descending, Expression, FunctionTableSubqueryArgumentExpression, NamedArgumentExpression, NullsFirst, NullsLast, PythonUDAF, PythonUDF, PythonUDTF, PythonUDTFAnalyzeResult, PythonUDTFSelectedExpression, SortOrder, UnresolvedPolymorphicPythonUDTF}
 import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.plans.logical.{Generate, LogicalPlan, NamedParametersSupport, OneRowRelation}
@@ -160,8 +160,16 @@ case class UserDefinedPythonTableFunction(
   }
 
   /** Returns a [[DataFrame]] that will evaluate to calling this UDTF with the given input. */
-  def apply(session: SparkSession, exprs: Column*): DataFrame = {
-    val udtf = builder(exprs.map(session.expression), session.sessionState.sqlParser)
+  def apply(session: SparkSession, exprs: TableValuedFunctionArgument*): DataFrame = {
+    val parser = session.sessionState.sqlParser
+    val expressions = exprs.map {
+      case col: Column => session.expression(col)
+      case tableArg: TableArg => tableArg.expression
+      case other => throw new IllegalArgumentException(
+        s"Unsupported argument type: ${other.getClass.getName}"
+      )
+    }
+    val udtf = builder(expressions, parser)
     Dataset.ofRows(session, udtf)
   }
 }

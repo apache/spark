@@ -2609,9 +2609,6 @@ case class ElementAt(
 
   @transient private lazy val mapKeyType = left.dataType.asInstanceOf[MapType].keyType
 
-  @transient private lazy val mapValueContainsNull =
-    left.dataType.asInstanceOf[MapType].valueContainsNull
-
   @transient private lazy val arrayElementNullable =
     left.dataType.asInstanceOf[ArrayType].containsNull
 

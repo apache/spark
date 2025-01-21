@@ -20,7 +20,7 @@ from typing import Any, Dict, Optional, TYPE_CHECKING
 
 from pyspark import keyword_only, since
 from pyspark.sql import DataFrame
-from pyspark.ml.util import JavaMLWritable, JavaMLReadable
+from pyspark.ml.util import JavaMLWritable, JavaMLReadable, try_remote_attribute_relation
 from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaParams
 from pyspark.ml.param.shared import HasPredictionCol, Param, TypeConverters, Params
 
@@ -126,6 +126,7 @@ class FPGrowthModel(JavaModel, _FPGrowthParams, JavaMLWritable, JavaMLReadable["
 
     @property
     @since("2.2.0")
+    @try_remote_attribute_relation
     def freqItemsets(self) -> DataFrame:
         """
         DataFrame with two columns:
@@ -136,6 +137,7 @@ class FPGrowthModel(JavaModel, _FPGrowthParams, JavaMLWritable, JavaMLReadable["
 
     @property
     @since("2.2.0")
+    @try_remote_attribute_relation
     def associationRules(self) -> DataFrame:
         """
         DataFrame with four columns:

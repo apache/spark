@@ -1056,6 +1056,15 @@ Aggregate [histogram_numeric(col#xL, 3, 0, 0) AS histogram_numeric(col, 3)#x]
 
 
 -- !query
+SELECT histogram_numeric(col, 3) FROM VALUES
+  (CAST(1 AS DECIMAL(4, 2))), (CAST(2 AS DECIMAL(4, 2))), (CAST(3 AS DECIMAL(4, 2))) AS tab(col)
+-- !query analysis
+Aggregate [histogram_numeric(col#x, 3, 0, 0) AS histogram_numeric(col, 3)#x]
++- SubqueryAlias tab
+   +- LocalRelation [col#x]
+
+
+-- !query
 SELECT histogram_numeric(col, 3) FROM VALUES (TIMESTAMP '2017-03-01 00:00:00'),
   (TIMESTAMP '2017-04-01 00:00:00'), (TIMESTAMP '2017-05-01 00:00:00') AS tab(col)
 -- !query analysis

@@ -859,6 +859,60 @@ abstract class Dataset[T] extends Serializable {
     joinWith(other, condition, "inner")
   }
 
+  /**
+   * Lateral join with another `DataFrame`.
+   *
+   * Behaves as an JOIN LATERAL.
+   *
+   * @param right
+   *   Right side of the join operation.
+   * @group untypedrel
+   * @since 4.0.0
+   */
+  def lateralJoin(right: DS[_]): Dataset[Row]
+
+  /**
+   * Lateral join with another `DataFrame`.
+   *
+   * Behaves as an JOIN LATERAL.
+   *
+   * @param right
+   *   Right side of the join operation.
+   * @param joinExprs
+   *   Join expression.
+   * @group untypedrel
+   * @since 4.0.0
+   */
+  def lateralJoin(right: DS[_], joinExprs: Column): Dataset[Row]
+
+  /**
+   * Lateral join with another `DataFrame`.
+   *
+   * @param right
+   *   Right side of the join operation.
+   * @param joinType
+   *   Type of join to perform. Default `inner`. Must be one of: `inner`, `cross`, `left`,
+   *   `leftouter`, `left_outer`.
+   * @group untypedrel
+   * @since 4.0.0
+   */
+  def lateralJoin(right: DS[_], joinType: String): Dataset[Row]
+
+  /**
+   * Lateral join with another `DataFrame`.
+   *
+   * @param right
+   *   Right side of the join operation.
+   * @param joinExprs
+   *   Join expression.
+   * @param joinType
+   *   Type of join to perform. Default `inner`. Must be one of: `inner`, `cross`, `left`,
+   *   `leftouter`, `left_outer`.
+   * @group untypedrel
+   * @since 4.0.0
+   */
+  def lateralJoin(right: DS[_], joinExprs: Column, joinType: String): Dataset[Row]
+
   protected def sortInternal(global: Boolean, sortExprs: Seq[Column]): Dataset[T]
 
   /**

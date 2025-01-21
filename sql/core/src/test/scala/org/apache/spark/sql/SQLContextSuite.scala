@@ -99,6 +99,29 @@ class SQLContextSuite extends SparkFunSuite with SharedSparkContext {
     assert(sqlContext.tables().filter("tableName = 'listtablessuitetable'").count() === 0)
   }
 
+  test("get tables from a database") {
+    val sqlContext = SQLContext.getOrCreate(sc)
+
+    try {
+      sqlContext.sql("CREATE DATABASE IF NOT EXISTS temp_db_1")
+      sqlContext.sql("CREATE TABLE temp_db_1.temp_table_1 (key int)")
+      sqlContext.sql("INSERT INTO temp_db_1.temp_table_1 VALUES (1)")
+
+      assert(sqlContext.tableNames("temp_db_1").sameElements(Array("temp_table_1")))
+
+      assert(sqlContext.tables("temp_db_1").collect().toSeq ==
+        Row("temp_db_1", "temp_table_1", false) :: Nil)
+
+      assert(sqlContext.tables().collect().toSeq == Nil)
+      sqlContext.sql("USE temp_db_1")
+      assert(sqlContext.tableNames().sameElements(Array("temp_table_1")))
+      assert(sqlContext.tables().collect().toSeq == Row("temp_db_1", "temp_table_1", false) :: Nil)
+    } finally {
+      sqlContext.sql("USE default")
+      sqlContext.sql("DROP DATABASE IF EXISTS temp_db_1 CASCADE")
+    }
+  }
+
   test("getting all tables with a database name has no impact on returned table names") {
     val sqlContext = SQLContext.getOrCreate(sc)
     val df = sqlContext.range(10)

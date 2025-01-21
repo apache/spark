@@ -874,6 +874,26 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
     )
   }
 
+  testWithAllStateVersions("test that avro encoding is not supported") {
+    val inputData = MemoryStream[Int]
+
+    val aggregated =
+      inputData.toDF()
+        .groupBy($"value")
+        .agg(count("*"))
+        .as[(Int, Long)]
+
+    val ex = intercept[Exception] {
+      withSQLConf(SQLConf.STREAMING_STATE_STORE_ENCODING_FORMAT.key -> "avro") {
+        testStream(aggregated, Update)(
+          AddData(inputData, 3),
+          ProcessAllAvailable()
+        )
+      }
+    }
+    assert(ex.getMessage.contains("State store encoding format as avro is not supported"))
+  }
+
   private def prepareTestForChangingSchemaOfState(
       tempDir: File): (MemoryStream[Int], DataFrame) = {
     val inputData = MemoryStream[Int]

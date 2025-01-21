@@ -95,6 +95,8 @@ class _CrossValidatorParams(_ValidatorParams):
     Params for :py:class:`CrossValidator` and :py:class:`CrossValidatorModel`.
 
     .. versionadded:: 3.5.0
+
+    .. deprecated:: 4.0.0
     """
 
     numFolds: Param[int] = Param(
@@ -279,6 +281,8 @@ class CrossValidator(
     test set exactly once.
 
     .. versionadded:: 3.5.0
+
+    .. deprecated:: 4.0.0
 
     Examples
     --------
@@ -493,8 +497,9 @@ class CrossValidator(
         and some extra params. This copies creates a deep copy of
         the embedded paramMap, and copies the embedded and extra parameters over.
 
-
         .. versionadded:: 3.5.0
+
+        .. deprecated:: 4.0.0
 
         Parameters
         ----------
@@ -524,6 +529,8 @@ class CrossValidatorModel(Model, _CrossValidatorParams, _CrossValidatorReadWrite
     also tracks the metrics for each param map evaluated.
 
     .. versionadded:: 3.5.0
+
+    .. deprecated:: 4.0.0
     """
 
     def __init__(
@@ -554,6 +561,8 @@ class CrossValidatorModel(Model, _CrossValidatorParams, _CrossValidatorReadWrite
         It does not copy the extra Params into the subModels.
 
         .. versionadded:: 3.5.0
+
+        .. deprecated:: 4.0.0
 
         Parameters
         ----------

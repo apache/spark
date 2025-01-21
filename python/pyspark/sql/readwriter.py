@@ -1174,7 +1174,9 @@ class DataFrameReader(OptionUtils):
         if predicates is not None:
             gateway = self._spark._sc._gateway
             assert gateway is not None
-            jpredicates = utils.to_java_array(gateway, gateway.jvm.java.lang.String, predicates)
+            jpredicates = utils.to_java_array(
+                gateway, getattr(gateway.jvm, "java.lang.String"), predicates
+            )
             return self._df(self._jreader.jdbc(url, table, jpredicates, jprop))
         return self._df(self._jreader.jdbc(url, table, jprop))
 

@@ -134,7 +134,9 @@ class SparkConnectSessionManager extends Logging {
   }
 
   // Removes session from sessionStore and returns it.
-  private def removeSessionHolder(key: SessionKey): Option[SessionHolder] = {
+  private def removeSessionHolder(
+      key: SessionKey,
+      allowReconnect: Boolean = false): Option[SessionHolder] = {
     var sessionHolder: Option[SessionHolder] = None
 
     // The session holder should remain in the session store until it is added to the closed session
@@ -144,9 +146,11 @@ class SparkConnectSessionManager extends Logging {
     sessionHolder = Option(sessionStore.get(key))
 
     sessionHolder.foreach { s =>
-      // Put into closedSessionsCache to prevent the same session from being recreated by
-      // getOrCreateIsolatedSession.
-      closedSessionsCache.put(s.key, s.getSessionHolderInfo)
+      if (!allowReconnect) {
+        // Put into closedSessionsCache to prevent the same session from being recreated by
+        // getOrCreateIsolatedSession when reconnection isn't allowed.
+        closedSessionsCache.put(s.key, s.getSessionHolderInfo)
+      }
 
       // Then, remove the session holder from the session store.
       sessionStore.remove(key)
@@ -154,17 +158,21 @@ class SparkConnectSessionManager extends Logging {
     sessionHolder
   }
 
-  // Shut downs the session after removing.
-  private def shutdownSessionHolder(sessionHolder: SessionHolder): Unit = {
+  // Shuts down the session after removing.
+  private def shutdownSessionHolder(
+      sessionHolder: SessionHolder,
+      allowReconnect: Boolean = false): Unit = {
     sessionHolder.close()
-    // Update in closedSessionsCache: above it wasn't updated with closedTime etc. yet.
-    closedSessionsCache.put(sessionHolder.key, sessionHolder.getSessionHolderInfo)
+    if (!allowReconnect) {
+      // Update in closedSessionsCache: above it wasn't updated with closedTime etc. yet.
+      closedSessionsCache.put(sessionHolder.key, sessionHolder.getSessionHolderInfo)
+    }
   }
 
-  def closeSession(key: SessionKey): Unit = {
-    val sessionHolder = removeSessionHolder(key)
+  def closeSession(key: SessionKey, allowReconnect: Boolean = false): Unit = {
+    val sessionHolder = removeSessionHolder(key, allowReconnect)
     // Rest of the cleanup: the session cannot be accessed anymore by getOrCreateIsolatedSession.
-    sessionHolder.foreach(shutdownSessionHolder(_))
+    sessionHolder.foreach(shutdownSessionHolder(_, allowReconnect))
   }
 
   private[connect] def shutdown(): Unit = {
@@ -289,8 +297,10 @@ class SparkConnectSessionManager extends Logging {
    * Used for testing
    */
   private[connect] def invalidateAllSessions(): Unit = {
-    periodicMaintenance(defaultInactiveTimeoutMs = 0L, ignoreCustomTimeout = true)
-    assert(sessionStore.isEmpty)
+    sessionStore.forEach((key, sessionHolder) => {
+      removeSessionHolder(key)
+      shutdownSessionHolder(sessionHolder)
+    })
     closedSessionsCache.invalidateAll()
   }
 

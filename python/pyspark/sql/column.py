@@ -25,6 +25,7 @@ from typing import (
     Union,
 )
 
+from pyspark.sql.tvf_argument import TableValuedFunctionArgument
 from pyspark.sql.utils import dispatch_col_method
 from pyspark.sql.types import DataType
 from pyspark.errors import PySparkValueError
@@ -37,7 +38,7 @@ if TYPE_CHECKING:
 __all__ = ["Column"]
 
 
-class Column:
+class Column(TableValuedFunctionArgument):
 
     """
     A column in a DataFrame.

@@ -196,7 +196,8 @@ case class DescribeDatabaseCommand(
         if (properties.isEmpty) {
           ""
         } else {
-          conf.redactOptions(properties).toSeq.sortBy(_._1).mkString("(", ", ", ")")
+          sparkSession.sessionState.conf.redactOptions(properties).toSeq
+            .sortBy(_._1).mkString("(", ", ", ")")
         }
       result :+ Row("Properties", propertiesStr)
     } else {
@@ -548,7 +549,7 @@ case class AlterTableAddPartitionCommand(
     // Hive metastore may not have enough memory to handle millions of partitions in single RPC.
     // Also the request to metastore times out when adding lot of partitions in one shot.
     // we should split them into smaller batches
-    val batchSize = conf.getConf(SQLConf.ADD_PARTITION_BATCH_SIZE)
+    val batchSize = sparkSession.sessionState.conf.getConf(SQLConf.ADD_PARTITION_BATCH_SIZE)
     parts.iterator.grouped(batchSize).foreach { batch =>
       catalog.createPartitions(table.identifier, batch, ignoreIfExists = ifNotExists)
     }

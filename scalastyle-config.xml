@@ -460,33 +460,6 @@ This file is divided into 3 sections:
     <parameters><parameter name="ignore">-1,0,1,2,3</parameter></parameters>
   </check>
 
-  <check customId="GuavaToStringHelper" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
-    <parameters><parameter name="regex">Objects.toStringHelper</parameter></parameters>
-    <customMessage>Avoid using Object.toStringHelper. Use ToStringBuilder instead.</customMessage>
-  </check>
-
-  <check customId="GuavaFilesCreateTempDir" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
-    <parameters><parameter name="regex">Files\.createTempDir\(</parameter></parameters>
-    <customMessage>Avoid using com.google.common.io.Files.createTempDir due to CVE-2020-8908.
-      Use org.apache.spark.util.Utils.createTempDir instead.
-    </customMessage>
-  </check>
-
-  <check customId="GuavaFileBackedOutputStream" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
-    <parameters><parameter name="regex">FileBackedOutputStream</parameter></parameters>
-    <customMessage>Avoid using FileBackedOutputStream due to CVE-2023-2976.</customMessage>
-  </check>
-
-  <check customId="GuavaAtomicDoubleArray" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
-    <parameters><parameter name="regex">AtomicDoubleArray</parameter></parameters>
-    <customMessage>Avoid using AtomicDoubleArray due to CVE-2018-10237.</customMessage>
-  </check>
-
-  <check customId="GuavaCompoundOrdering" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
-    <parameters><parameter name="regex">CompoundOrdering</parameter></parameters>
-    <customMessage>Avoid using CompoundOrdering due to CVE-2018-10237.</customMessage>
-  </check>
-
   <check customId="byteCountToDisplaySize" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
     <parameters><parameter name="regex">byteCountToDisplaySize</parameter></parameters>
     <customMessage>Use Utils.bytesToString instead of byteCountToDisplaySize for consistency.</customMessage>

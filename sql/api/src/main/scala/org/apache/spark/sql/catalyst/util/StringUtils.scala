@@ -73,7 +73,7 @@ object SparkStringUtils extends Logging {
 
   /**
    * Format a sequence with semantics similar to calling .mkString(). Any elements beyond
-   * maxNumToStringFields will be dropped and replaced by a "... N more fields" placeholder.
+   * `maxFields` will be dropped and replaced by a "... N more fields" placeholder.
    *
    * @return
    *   the trimmed and formatted string.
@@ -90,10 +90,11 @@ object SparkStringUtils extends Logging {
           "Truncated the string representation of a plan since it was too large. This " +
             s"behavior can be adjusted by setting 'spark.sql.debug.maxToStringFields'.")
       }
-      val numFields = math.max(0, maxFields - 1)
-      seq
-        .take(numFields)
-        .mkString(start, sep, sep + "... " + (seq.length - numFields) + " more fields" + end)
+      val numFields = math.max(0, maxFields)
+      val restNum = seq.length - numFields
+      val ending = (if (numFields == 0) "" else sep) +
+        (if (restNum == 0) "" else s"... $restNum more fields") + end
+      seq.take(numFields).mkString(start, sep, ending)
     } else {
       seq.mkString(start, sep, end)
     }

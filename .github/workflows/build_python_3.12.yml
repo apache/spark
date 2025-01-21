@@ -22,6 +22,7 @@ name: "Build / Python-only (master, Python 3.12)"
 on:
   schedule:
     - cron: '0 19 * * *'
+  workflow_dispatch:
 
 jobs:
   run-build:
@@ -36,6 +37,7 @@ jobs:
       hadoop: hadoop3
       envs: >-
         {
+          "PYSPARK_IMAGE_TO_TEST": "python-312",
           "PYTHON_TO_TEST": "python3.12"
         }
       jobs: >-

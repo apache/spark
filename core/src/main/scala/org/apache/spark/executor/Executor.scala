@@ -1210,6 +1210,7 @@ private[spark] class Executor(
           if (sourceURI.getFragment != null) sourceURI.getFragment else source.getName)
         logInfo(
           log"Unpacking an archive ${LogMDC(ARCHIVE_NAME, name)}" +
+            log" (${LogMDC(BYTE_SIZE, source.length)} bytes)" +
             log" from ${LogMDC(SOURCE_PATH, source.getAbsolutePath)}" +
             log" to ${LogMDC(DESTINATION_PATH, dest.getAbsolutePath)}")
         Utils.deleteRecursively(dest)

@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.scripting
 
-import org.apache.spark.SparkException
 import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.logical.{CommandResult, CompoundBody}
@@ -25,6 +24,9 @@ import org.apache.spark.sql.catalyst.plans.logical.{CommandResult, CompoundBody}
 /**
  * SQL scripting executor - executes script and returns result statements.
  * This supports returning multiple result statements from a single script.
+ * The caller of the SqlScriptingExecution API must adhere to the contract of executing
+ * the returned statement before continuing iteration. Executing the statement needs to be done
+ * inside withErrorHandling block.
  *
  * @param sqlScript CompoundBody which need to be executed.
  * @param session Spark session that SQL script is executed within.
@@ -33,29 +35,49 @@ import org.apache.spark.sql.catalyst.plans.logical.{CommandResult, CompoundBody}
 class SqlScriptingExecution(
     sqlScript: CompoundBody,
     session: SparkSession,
-    args: Map[String, Expression]) extends Iterator[DataFrame] {
+    args: Map[String, Expression]) {
 
-  // Build the execution plan for the script.
-  private val executionPlan: Iterator[CompoundStatementExec] =
-    SqlScriptingInterpreter(session).buildExecutionPlan(sqlScript, args)
+  private val interpreter = SqlScriptingInterpreter(session)
 
-  private var current = getNextResult
-
-  override def hasNext: Boolean = current.isDefined
-
-  override def next(): DataFrame = {
-    if (!hasNext) throw SparkException.internalError("No more elements to iterate through.")
-    val nextDataFrame = current.get
-    current = getNextResult
-    nextDataFrame
+  // Frames to keep what is being executed.
+  private val context: SqlScriptingExecutionContext = {
+    val ctx = new SqlScriptingExecutionContext()
+    val executionPlan = interpreter.buildExecutionPlan(sqlScript, args, ctx)
+    // Add frame which represents SQL Script to the context.
+    ctx.frames.append(new SqlScriptingExecutionFrame(executionPlan.getTreeIterator))
+    // Enter the scope of the top level compound.
+    // We don't need to exit this scope explicitly as it will be done automatically
+    // when the frame is removed during iteration.
+    executionPlan.enterScope()
+    ctx
   }
 
-  /** Helper method to iterate through statements until next result statement is encountered. */
-  private def getNextResult: Option[DataFrame] = {
 
-    def getNextStatement: Option[CompoundStatementExec] =
-      if (executionPlan.hasNext) Some(executionPlan.next()) else None
+  /** Helper method to iterate get next statements from the first available frame. */
+  private def getNextStatement: Option[CompoundStatementExec] = {
+    // Remove frames that are already executed.
+    while (context.frames.nonEmpty && !context.frames.last.hasNext) {
+      context.frames.remove(context.frames.size - 1)
+    }
+    // If there are still frames available, get the next statement.
+    if (context.frames.nonEmpty) {
+      return Some(context.frames.last.next())
+    }
+    None
+  }
 
+  /**
+   * Advances through the script and executes statements until a result statement or
+   * end of script is encountered.
+   *
+   * To know if there is result statement available, the method has to advance through script and
+   * execute statements until the result statement or end of script is encountered. For that reason
+   * the returned result must be executed before subsequent calls. Multiple calls without executing
+   * the intermediate results will lead to incorrect behavior.
+   *
+   * @return Result DataFrame if it is available, otherwise None.
+   */
+  def getNextResult: Option[DataFrame] = {
     var currentStatement = getNextStatement
     // While we don't have a result statement, execute the statements.
     while (currentStatement.isDefined) {

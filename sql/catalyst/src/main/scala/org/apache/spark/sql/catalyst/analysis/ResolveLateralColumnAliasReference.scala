@@ -17,6 +17,10 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import java.util.LinkedHashSet
+
+import scala.jdk.CollectionConverters._
+
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.WindowExpression.hasWindowExpression
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
@@ -147,7 +151,7 @@ object ResolveLateralColumnAliasReference extends Rule[LogicalPlan] {
           && pOriginal.projectList.exists(_.containsPattern(LATERAL_COLUMN_ALIAS_REFERENCE)) =>
         val p @ Project(projectList, child) = pOriginal.mapChildren(apply0)
         var aliasMap = AttributeMap.empty[AliasEntry]
-        val referencedAliases = collection.mutable.Set.empty[AliasEntry]
+        val referencedAliases = new LinkedHashSet[AliasEntry]
         def unwrapLCAReference(e: NamedExpression): NamedExpression = {
           e.transformWithPruning(_.containsPattern(LATERAL_COLUMN_ALIAS_REFERENCE)) {
             case lcaRef: LateralColumnAliasReference if aliasMap.contains(lcaRef.a) =>
@@ -156,7 +160,7 @@ object ResolveLateralColumnAliasReference extends Rule[LogicalPlan] {
               // and unwrap the LateralColumnAliasReference to the NamedExpression inside
               // If there is chaining, don't resolve and save to future rounds
               if (!aliasEntry.alias.containsPattern(LATERAL_COLUMN_ALIAS_REFERENCE)) {
-                referencedAliases += aliasEntry
+                referencedAliases.add(aliasEntry)
                 lcaRef.ne
               } else {
                 lcaRef
@@ -182,7 +186,7 @@ object ResolveLateralColumnAliasReference extends Rule[LogicalPlan] {
           val outerProjectList = collection.mutable.Seq(newProjectList: _*)
           val innerProjectList =
             collection.mutable.ArrayBuffer(child.output.map(_.asInstanceOf[NamedExpression]): _*)
-          referencedAliases.foreach { case AliasEntry(alias: Alias, idx) =>
+          referencedAliases.forEach { case AliasEntry(alias: Alias, idx) =>
             outerProjectList.update(idx, alias.toAttribute)
             innerProjectList += alias
           }
@@ -222,7 +226,7 @@ object ResolveLateralColumnAliasReference extends Rule[LogicalPlan] {
         if (!aggregateExpressions.forall(eligibleToLiftUp)) {
           agg
         } else {
-          val newAggExprs = collection.mutable.Set.empty[NamedExpression]
+          val newAggExprs = new LinkedHashSet[NamedExpression]
           val expressionMap = collection.mutable.LinkedHashMap.empty[Expression, NamedExpression]
           // Extract the expressions to keep in the Aggregate. Return the transformed expression
           // fully substituted with the attribute reference to the extracted expressions.
@@ -249,11 +253,11 @@ object ResolveLateralColumnAliasReference extends Rule[LogicalPlan] {
                   }
                 }
                 val ne = expressionMap.getOrElseUpdate(aggExpr.canonicalized, assignAlias(aggExpr))
-                newAggExprs += ne
+                newAggExprs.add(ne)
                 ne.toAttribute
               case e if groupingExpressions.exists(_.semanticEquals(e)) =>
                 val ne = expressionMap.getOrElseUpdate(e.canonicalized, assignAlias(e))
-                newAggExprs += ne
+                newAggExprs.add(ne)
                 ne.toAttribute
               case e => e.mapChildren(extractExpressions)
             }
@@ -262,7 +266,7 @@ object ResolveLateralColumnAliasReference extends Rule[LogicalPlan] {
             extractExpressions(_).asInstanceOf[NamedExpression])
           Project(
             projectList = projectExprs,
-            child = agg.copy(aggregateExpressions = newAggExprs.toSeq)
+            child = agg.copy(aggregateExpressions = newAggExprs.asScala.toSeq)
           )
         }
 

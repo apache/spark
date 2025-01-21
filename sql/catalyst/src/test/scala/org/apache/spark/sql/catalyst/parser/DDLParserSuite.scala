@@ -2655,7 +2655,7 @@ class DDLParserSuite extends AnalysisTest {
     val createTableResult =
       CreateTable(UnresolvedIdentifier(Seq("my_tab")), columnsWithDefaultValue,
         Seq.empty[Transform], UnresolvedTableSpec(Map.empty[String, String], Some("parquet"),
-         OptionList(Seq.empty), None, None, None, false), false)
+         OptionList(Seq.empty), None, None, None, None, false), false)
     // Parse the CREATE TABLE statement twice, swapping the order of the NOT NULL and DEFAULT
     // options, to make sure that the parser accepts any ordering of these options.
     comparePlans(parsePlan(
@@ -2668,7 +2668,7 @@ class DDLParserSuite extends AnalysisTest {
       "b STRING NOT NULL DEFAULT 'abc') USING parquet"),
       ReplaceTable(UnresolvedIdentifier(Seq("my_tab")), columnsWithDefaultValue,
         Seq.empty[Transform], UnresolvedTableSpec(Map.empty[String, String], Some("parquet"),
-          OptionList(Seq.empty), None, None, None, false), false))
+          OptionList(Seq.empty), None, None, None, None, false), false))
     // These ALTER TABLE statements should parse successfully.
     comparePlans(
       parsePlan("ALTER TABLE t1 ADD COLUMN x int NOT NULL DEFAULT 42"),
@@ -2828,12 +2828,12 @@ class DDLParserSuite extends AnalysisTest {
       "CREATE TABLE my_tab(a INT, b INT NOT NULL GENERATED ALWAYS AS (a+1)) USING parquet"),
       CreateTable(UnresolvedIdentifier(Seq("my_tab")), columnsWithGenerationExpr,
         Seq.empty[Transform], UnresolvedTableSpec(Map.empty[String, String], Some("parquet"),
-          OptionList(Seq.empty), None, None, None, false), false))
+          OptionList(Seq.empty), None, None, None, None, false), false))
     comparePlans(parsePlan(
       "REPLACE TABLE my_tab(a INT, b INT NOT NULL GENERATED ALWAYS AS (a+1)) USING parquet"),
       ReplaceTable(UnresolvedIdentifier(Seq("my_tab")), columnsWithGenerationExpr,
         Seq.empty[Transform], UnresolvedTableSpec(Map.empty[String, String], Some("parquet"),
-          OptionList(Seq.empty), None, None, None, false), false))
+          OptionList(Seq.empty), None, None, None, None, false), false))
     // Two generation expressions
     checkError(
       exception = parseException("CREATE TABLE my_tab(a INT, " +
@@ -2903,6 +2903,7 @@ class DDLParserSuite extends AnalysisTest {
             None,
             None,
             None,
+            None,
             false
           ),
           false
@@ -2922,6 +2923,7 @@ class DDLParserSuite extends AnalysisTest {
             Map.empty[String, String],
             Some("parquet"),
             OptionList(Seq.empty),
+            None,
             None,
             None,
             None,
@@ -3197,5 +3199,50 @@ class DDLParserSuite extends AnalysisTest {
       exception = internalException(insertDirSql),
       condition = "INTERNAL_ERROR",
       parameters = Map("message" -> "INSERT OVERWRITE DIRECTORY is not supported."))
+  }
+
+  test("create table with bad collation name") {
+    checkError(
+      exception = internalException("CREATE TABLE t DEFAULT COLLATION XD"),
+      condition = "COLLATION_INVALID_NAME",
+      parameters = Map("proposals" -> "id, xh, af", "collationName" -> "XD")
+    )
+  }
+
+  private val testSuppCollations =
+    Seq("UTF8_BINARY", "UTF8_LCASE", "UNICODE", "UNICODE_CI", "UNICODE_CI_RTRIM", "sr", "sr_CI_AI")
+
+  test("create table with default collation") {
+    testSuppCollations.foreach { collation =>
+      comparePlans(parsePlan(
+        s"CREATE TABLE t (c STRING) USING parquet DEFAULT COLLATION ${collation.toLowerCase()}"),
+        CreateTable(UnresolvedIdentifier(Seq("t")),
+          Seq(ColumnDefinition("c", StringType)),
+          Seq.empty[Transform],
+          UnresolvedTableSpec(Map.empty[String, String], Some("parquet"), OptionList(Seq.empty),
+            None, None, Some(collation), None, false), false))
+    }
+  }
+
+  test("replace table with default collation") {
+    testSuppCollations.foreach { collation =>
+      comparePlans(parsePlan(
+        s"REPLACE TABLE t (c STRING) USING parquet DEFAULT COLLATION ${collation.toLowerCase()}"),
+        ReplaceTable(UnresolvedIdentifier(Seq("t")),
+          Seq(ColumnDefinition("c", StringType)),
+          Seq.empty[Transform],
+          UnresolvedTableSpec(Map.empty[String, String], Some("parquet"), OptionList(Seq.empty),
+            None, None, Some(collation), None, false), false))
+    }
+  }
+
+  test("alter table collation") {
+    testSuppCollations.foreach { collation =>
+      comparePlans(parsePlan(
+        s"ALTER TABLE t DEFAULT COLLATION ${collation.toLowerCase()}"),
+        AlterTableCollation(UnresolvedTable(Seq("t"),
+          "ALTER TABLE ... DEFAULT COLLATION"), collation)
+      )
+    }
   }
 }

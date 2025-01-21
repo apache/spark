@@ -1893,26 +1893,26 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("SPARK-38195: add a quantity of interval units to a timestamp") {
     // Check case-insensitivity
     checkEvaluation(
-      TimestampAdd("Hour", Literal(1), Literal(LocalDateTime.of(2022, 2, 15, 12, 57, 0))),
+      TimestampAdd("Hour", Literal(1L), Literal(LocalDateTime.of(2022, 2, 15, 12, 57, 0))),
       LocalDateTime.of(2022, 2, 15, 13, 57, 0))
     // Check nulls as input values
     checkEvaluation(
       TimestampAdd(
         "MINUTE",
-        Literal.create(null, IntegerType),
+        Literal.create(null, LongType),
         Literal(LocalDateTime.of(2022, 2, 15, 12, 57, 0))),
       null)
     checkEvaluation(
       TimestampAdd(
         "MINUTE",
-        Literal(1),
+        Literal(1L),
         Literal.create(null, TimestampType)),
       null)
     // Check crossing the daylight saving time
     checkEvaluation(
       TimestampAdd(
         "HOUR",
-        Literal(6),
+        Literal(6L),
         Literal(Instant.parse("2022-03-12T23:30:00Z")),
         Some("America/Los_Angeles")),
       Instant.parse("2022-03-13T05:30:00Z"))
@@ -1920,7 +1920,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(
       TimestampAdd(
         "DAY",
-        Literal(2),
+        Literal(2L),
         Literal(LocalDateTime.of(2020, 2, 28, 10, 11, 12)),
         Some("America/Los_Angeles")),
       LocalDateTime.of(2020, 3, 1, 10, 11, 12))
@@ -1940,7 +1940,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
                 quantity,
                 timestamp,
                 Some(tz)),
-            IntegerType, tsType)
+            LongType, tsType)
         }
       }
     }
@@ -1961,84 +1961,127 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
       // timestampadd(DAY, 1, 2011-03-12 03:00:00) = 2011-03-13 03:00:00
       checkEvaluation(
-        TimestampAdd("DAY", Literal(1), Literal(skippedTime - 23 * MICROS_PER_HOUR, TimestampType)),
+        TimestampAdd("DAY", Literal(1L),
+          Literal(skippedTime - 23 * MICROS_PER_HOUR, TimestampType)),
         skippedTime)
       // timestampadd(HOUR, 24, 2011-03-12 03:00:00) = 2011-03-13 04:00:00
       checkEvaluation(
-        TimestampAdd("HOUR", Literal(24),
+        TimestampAdd("HOUR", Literal(24L),
           Literal(skippedTime - 23 * MICROS_PER_HOUR, TimestampType)),
         skippedTime + MICROS_PER_HOUR)
       // timestampadd(HOUR, 23, 2011-03-12 03:00:00) = 2011-03-13 03:00:00
       checkEvaluation(
-        TimestampAdd("HOUR", Literal(23),
+        TimestampAdd("HOUR", Literal(23L),
           Literal(skippedTime - 23 * MICROS_PER_HOUR, TimestampType)),
         skippedTime)
       // timestampadd(SECOND, SECONDS_PER_DAY, 2011-03-12 03:00:00) = 2011-03-13 04:00:00
       checkEvaluation(
         TimestampAdd(
-          "SECOND", Literal(SECONDS_PER_DAY.toInt),
+          "SECOND", Literal(SECONDS_PER_DAY),
           Literal(skippedTime - 23 * MICROS_PER_HOUR, TimestampType)),
         skippedTime + MICROS_PER_HOUR)
       // timestampadd(SECOND, SECONDS_PER_DAY, 2011-03-12 03:00:00) = 2011-03-13 03:59:59
       checkEvaluation(
         TimestampAdd(
-          "SECOND", Literal(SECONDS_PER_DAY.toInt - 1),
+          "SECOND", Literal(SECONDS_PER_DAY - 1),
           Literal(skippedTime - 23 * MICROS_PER_HOUR, TimestampType)),
         skippedTime + MICROS_PER_HOUR - MICROS_PER_SECOND)
 
       // timestampadd(DAY, 1, 2011-11-05 02:00:00) = 2011-11-06 02:00:00
       checkEvaluation(
-        TimestampAdd("DAY", Literal(1),
+        TimestampAdd("DAY", Literal(1L),
           Literal(repeatedTime - 24 * MICROS_PER_HOUR, TimestampType)),
         repeatedTime + MICROS_PER_HOUR)
       // timestampadd(DAY, 1, 2011-11-05 01:00:00) = 2011-11-06 01:00:00 (pre-transition)
       checkEvaluation(
-        TimestampAdd("DAY", Literal(1),
+        TimestampAdd("DAY", Literal(1L),
           Literal(repeatedTime - 25 * MICROS_PER_HOUR, TimestampType)),
         repeatedTime - MICROS_PER_HOUR)
       // timestampadd(DAY, -1, 2011-11-07 01:00:00) = 2011-11-06 01:00:00 (post-transition)
       checkEvaluation(
-        TimestampAdd("DAY", Literal(-1),
+        TimestampAdd("DAY", Literal(-1L),
           Literal(repeatedTime + 24 * MICROS_PER_HOUR, TimestampType)),
         repeatedTime)
       // timestampadd(MONTH, 1, 2011-10-06 01:00:00) = 2011-11-06 01:00:00 (pre-transition)
       checkEvaluation(
         TimestampAdd(
-          "MONTH", Literal(1),
+          "MONTH", Literal(1L),
           Literal(repeatedTime - MICROS_PER_HOUR - 31 * MICROS_PER_DAY, TimestampType)),
         repeatedTime - MICROS_PER_HOUR)
       // timestampadd(MONTH, -1, 2011-12-06 01:00:00) = 2011-11-06 01:00:00 (post-transition)
       checkEvaluation(
         TimestampAdd(
-          "MONTH", Literal(-1),
+          "MONTH", Literal(-1L),
           Literal(repeatedTime + 30 * MICROS_PER_DAY, TimestampType)),
         repeatedTime)
       // timestampadd(HOUR, 23, 2011-11-05 02:00:00) = 2011-11-06 01:00:00 (pre-transition)
       checkEvaluation(
-        TimestampAdd("HOUR", Literal(23),
+        TimestampAdd("HOUR", Literal(23L),
           Literal(repeatedTime - 24 * MICROS_PER_HOUR, TimestampType)),
         repeatedTime - MICROS_PER_HOUR)
       // timestampadd(HOUR, 24, 2011-11-05 02:00:00) = 2011-11-06 01:00:00 (post-transition)
       checkEvaluation(
-        TimestampAdd("HOUR", Literal(24),
+        TimestampAdd("HOUR", Literal(24L),
           Literal(repeatedTime - 24 * MICROS_PER_HOUR, TimestampType)),
         repeatedTime)
+    }
+  }
+
+  test("SPARK-50669: timestampadd with long types") {
+    // A value that is larger than Int.MaxValue.
+    val longValue = 10_000_000_000L
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+      checkEvaluation(
+        TimestampAdd("MICROSECOND", Literal(longValue), Literal(0L, TimestampType)),
+        longValue)
+      checkEvaluation(
+        TimestampAdd("MILLISECOND", Literal(longValue), Literal(0L, TimestampType)),
+        longValue * MICROS_PER_MILLIS)
+      checkEvaluation(
+        TimestampAdd("SECOND", Literal(longValue), Literal(0L, TimestampType)),
+        longValue * MICROS_PER_SECOND)
+      checkEvaluation(
+        TimestampAdd("MINUTE", Literal(longValue), Literal(0L, TimestampType)),
+        longValue * MICROS_PER_MINUTE)
+
+      // Add a smaller value so overflow doesn't happen.
+      val valueToAdd = 1_000L
+      checkEvaluation(
+        TimestampAdd("HOUR", Literal(valueToAdd), Literal(0L, TimestampType)),
+        valueToAdd * MICROS_PER_HOUR)
+      checkEvaluation(
+        TimestampAdd("DAY", Literal(valueToAdd), Literal(0L, TimestampType)),
+        valueToAdd * MICROS_PER_DAY)
+      checkEvaluation(
+        TimestampAdd("WEEK", Literal(valueToAdd), Literal(0L, TimestampType)),
+        valueToAdd * MICROS_PER_DAY * DAYS_PER_WEEK)
+
+      // Make sure overflow are thrown for larger values.
+      val overflowVal = Long.MaxValue
+      Seq("MILLISECOND", "SECOND", "MINUTE", "HOUR", "DAY", "WEEK").foreach { interval =>
+        checkErrorInExpression[SparkArithmeticException](TimestampAdd(interval,
+          Literal(overflowVal),
+          Literal(0L, TimestampType)),
+          condition = "DATETIME_OVERFLOW",
+          parameters = Map("operation" ->
+            s"add ${overflowVal}L $interval to TIMESTAMP '1970-01-01 00:00:00'"))
+      }
     }
   }
 
   test("SPARK-42635: timestampadd unit conversion overflow") {
     withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
       checkErrorInExpression[SparkArithmeticException](TimestampAdd("DAY",
-        Literal(106751992),
+        Literal(106751992L),
         Literal(0L, TimestampType)),
         condition = "DATETIME_OVERFLOW",
-        parameters = Map("operation" -> "add 106751992 DAY to TIMESTAMP '1970-01-01 00:00:00'"))
+        parameters = Map("operation" -> "add 106751992L DAY to TIMESTAMP '1970-01-01 00:00:00'"))
       checkErrorInExpression[SparkArithmeticException](TimestampAdd("QUARTER",
-        Literal(1431655764),
+        Literal(1431655764L),
         Literal(0L, TimestampType)),
         condition = "DATETIME_OVERFLOW",
         parameters = Map("operation" ->
-          "add 1431655764 QUARTER to TIMESTAMP '1970-01-01 00:00:00'"))
+          "add 1431655764L QUARTER to TIMESTAMP '1970-01-01 00:00:00'"))
     }
   }
 

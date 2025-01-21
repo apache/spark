@@ -27,6 +27,7 @@ import org.apache.spark.sql.Dataset
 import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, InvalidPlanInput, StorageLevelProtoConverter}
 import org.apache.spark.sql.connect.planner.SparkConnectPlanner
 import org.apache.spark.sql.execution.{CodegenMode, CostMode, ExtendedMode, FormattedMode, SimpleMode}
+import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.util.ArrayImplicits._
 
 private[connect] class SparkConnectAnalyzeHandler(
@@ -204,6 +205,17 @@ private[connect] class SparkConnectAnalyzeHandler(
           proto.AnalyzePlanResponse.GetStorageLevel
             .newBuilder()
             .setStorageLevel(StorageLevelProtoConverter.toConnectProtoType(storageLevel))
+            .build())
+
+      case proto.AnalyzePlanRequest.AnalyzeCase.JSON_TO_DDL =>
+        val ddl = DataType
+          .fromJson(request.getJsonToDdl.getJsonString)
+          .asInstanceOf[StructType]
+          .toDDL
+        builder.setJsonToDdl(
+          proto.AnalyzePlanResponse.JsonToDDL
+            .newBuilder()
+            .setDdlString(ddl)
             .build())
 
       case other => throw InvalidPlanInput(s"Unknown Analyze Method $other!")

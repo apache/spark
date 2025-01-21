@@ -301,6 +301,14 @@ class UserDefinedFunctionE2ETestSuite extends QueryTest with RemoteSparkSession 
     checkDataset(df.filter(r => r.getInt(1) > 5), Row("a", 10), Row("a", 20))
   }
 
+  test("SPARK-50693: Filter with row input encoder on unresolved plan") {
+    val session: SparkSession = spark
+    import session.implicits._
+    val df = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDF("c1", "c2")
+
+    checkDataset(df.select("*").filter(r => r.getInt(1) > 5), Row("a", 10), Row("a", 20))
+  }
+
   test("mapPartitions with row input encoder") {
     val session: SparkSession = spark
     import session.implicits._
@@ -393,6 +401,13 @@ class UserDefinedFunctionE2ETestSuite extends QueryTest with RemoteSparkSession 
     assert(ds.select(aggCol).head() == 135) // 45 + 90
   }
 
+  test("SPARK-50789: UDAF custom Aggregator - toColumn on unresolved plan") {
+    val encoder = Encoders.product[UdafTestInput]
+    val aggCol = new CompleteUdafTestInputAggregator().toColumn
+    val ds = spark.range(10).withColumn("extra", col("id") * 2).select("*").as(encoder)
+    assert(ds.select(aggCol).head() == 135) // 45 + 90
+  }
+
   test("UDAF custom Aggregator - multiple extends - toColumn") {
     val encoder = Encoders.product[UdafTestInput]
     val aggCol = new CompleteGrandChildUdafTestInputAggregator().toColumn
@@ -400,8 +415,21 @@ class UserDefinedFunctionE2ETestSuite extends QueryTest with RemoteSparkSession 
     assert(ds.select(aggCol).head() == 540) // (45 + 90) * 4
   }
 
-  test("UDAF custom aggregator - with rows - toColumn") {
+  test("SPARK-50789: UDAF custom Aggregator - multiple extends - toColumn on unresolved plan") {
+    val encoder = Encoders.product[UdafTestInput]
+    val aggCol = new CompleteGrandChildUdafTestInputAggregator().toColumn
+    val ds = spark.range(10).withColumn("extra", col("id") * 2).select("*").as(encoder)
+    assert(ds.select(aggCol).head() == 540) // (45 + 90) * 4
+  }
+
+  test("UDAF custom Aggregator - with rows - toColumn") {
     val ds = spark.range(10).withColumn("extra", col("id") * 2)
+    assert(ds.select(RowAggregator.toColumn).head() == 405)
+    assert(ds.agg(RowAggregator.toColumn).head().getLong(0) == 405)
+  }
+
+  test("SPARK-50789: UDAF custom Aggregator - with rows - toColumn on unresolved plan") {
+    val ds = spark.range(10).withColumn("extra", col("id") * 2).select("*")
     assert(ds.select(RowAggregator.toColumn).head() == 405)
     assert(ds.agg(RowAggregator.toColumn).head().getLong(0) == 405)
   }

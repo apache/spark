@@ -751,7 +751,7 @@ class DataFrameWriter(OptionUtils):
         self.mode(mode)
         if partitionBy is not None:
             self.partitionBy(partitionBy)
-        self.option("compression", compression)
+        self._set_opts(compression=compression)
         self.format("parquet").save(path)
 
     parquet.__doc__ = PySparkDataFrameWriter.parquet.__doc__

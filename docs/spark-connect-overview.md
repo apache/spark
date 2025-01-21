@@ -228,7 +228,7 @@ Welcome to
       ____              __
      / __/__  ___ _____/ /__
     _\ \/ _ \/ _ `/ __/  '_/
-   /___/ .__/\_,_/_/ /_/\_\   version 4.0.0-SNAPSHOT
+   /___/ .__/\_,_/_/ /_/\_\   version 4.1.0-SNAPSHOT
       /_/
 
 Type in expressions to have them evaluated.

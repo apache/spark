@@ -261,3 +261,15 @@ case class AlterTableClusterBy(
 
   protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan = copy(table = newChild)
 }
+
+/**
+ * The logical plan of the ALTER TABLE ... DEFAULT COLLATION name command.
+ */
+case class AlterTableCollation(
+    table: LogicalPlan, collation: String) extends AlterTableCommand {
+  override def changes: Seq[TableChange] = {
+    Seq(TableChange.setProperty(TableCatalog.PROP_COLLATION, collation))
+  }
+
+  protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan = copy(table = newChild)
+}

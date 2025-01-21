@@ -102,6 +102,8 @@ object AnsiTypeCoercion extends TypeCoercionBase {
     case (NullType, t1) => Some(t1)
     case (t1, NullType) => Some(t1)
 
+    case(s1: StringType, s2: StringType) => StringHelper.tightestCommonString(s1, s2)
+
     case (t1: IntegralType, t2: DecimalType) if t2.isWiderThan(t1) =>
       Some(t2)
     case (t1: DecimalType, t2: IntegralType) if t1.isWiderThan(t2) =>
@@ -168,7 +170,12 @@ object AnsiTypeCoercion extends TypeCoercionBase {
 
       // If a function expects a StringType, no StringType instance should be implicitly cast to
       // StringType with a collation that's not accepted (aka. lockdown unsupported collations).
-      case (_: StringType, _: StringType) => None
+      case (s1: StringType, s2: StringType) =>
+        if (s1.collationId == s2.collationId && StringHelper.isMoreConstrained(s1, s2)) {
+          Some(s2)
+        } else {
+          None
+        }
       case (_: StringType, _: AbstractStringType) => None
 
       // If a function expects integral type, fractional input is not allowed.

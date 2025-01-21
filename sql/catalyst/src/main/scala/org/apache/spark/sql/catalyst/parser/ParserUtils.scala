@@ -163,6 +163,14 @@ class SqlScriptingLabelContext {
             bl.multipartIdentifier().getText,
             el.multipartIdentifier().getText)
         }
+      case (Some(bl: BeginLabelContext), _)
+        if bl.multipartIdentifier().parts.size() > 1 =>
+        withOrigin(bl) {
+          throw SqlScriptingErrors.labelCannotBeQualified(
+            CurrentOrigin.get,
+            bl.multipartIdentifier().getText.toLowerCase(Locale.ROOT)
+          )
+        }
       case (None, Some(el: EndLabelContext)) =>
         withOrigin(el) {
           throw SqlScriptingErrors.endLabelWithoutBeginLabel(

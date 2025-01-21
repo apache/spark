@@ -17,20 +17,23 @@
 
 package org.apache.spark.sql.execution.streaming.state
 
+import scala.jdk.CollectionConverters.IterableHasAsJava
 import scala.util.Try
 
+import org.apache.avro.{SchemaValidationException, SchemaValidatorBuilder}
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.Path
+import org.apache.hadoop.fs.{FSDataInputStream, Path}
 
 import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.internal.{Logging, LogKeys, MDC}
-import org.apache.spark.sql.avro.{AvroDeserializer, AvroSerializer}
+import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.avro.{AvroDeserializer, AvroSerializer, SchemaConverters}
 import org.apache.spark.sql.catalyst.util.UnsafeRowUtils
 import org.apache.spark.sql.execution.streaming.{CheckpointFileManager, StatefulOperatorStateInfo}
 import org.apache.spark.sql.execution.streaming.state.SchemaHelper.{SchemaReader, SchemaWriter}
 import org.apache.spark.sql.execution.streaming.state.StateSchemaCompatibilityChecker.SCHEMA_FORMAT_V3
 import org.apache.spark.sql.internal.SessionState
-import org.apache.spark.sql.types.{DataType, StructType}
+import org.apache.spark.sql.types._
 
 // Result returned after validating the schema of the state store for schema changes
 case class StateSchemaValidationResult(
@@ -65,7 +68,9 @@ case class AvroEncoder(
 // Used to represent the schema of a column family in the state store
 case class StateStoreColFamilySchema(
     colFamilyName: String,
+    keySchemaId: Short,
     keySchema: StructType,
+    valueSchemaId: Short,
     valueSchema: StructType,
     keyStateEncoderSpec: Option[KeyStateEncoderSpec] = None,
     userKeyEncoderSchema: Option[StructType] = None
@@ -74,47 +79,46 @@ case class StateStoreColFamilySchema(
 class StateSchemaCompatibilityChecker(
     providerId: StateStoreProviderId,
     hadoopConf: Configuration,
-    oldSchemaFilePath: Option[Path] = None,
+    oldSchemaFilePaths: List[Path] = List.empty,
     newSchemaFilePath: Option[Path] = None) extends Logging {
 
-  private val schemaFileLocation = if (oldSchemaFilePath.isEmpty) {
+  // For OperatorStateMetadataV1: Only one schema file present per operator
+  // per query
+  // For OperatorStateMetadataV2: Multiple schema files present per operator
+  // per query. This variable is the latest one
+  private val schemaFileLocation = if (oldSchemaFilePaths.isEmpty) {
     val storeCpLocation = providerId.storeId.storeCheckpointLocation()
     schemaFile(storeCpLocation)
   } else {
-    oldSchemaFilePath.get
+    oldSchemaFilePaths.last
   }
 
   private val fm = CheckpointFileManager.create(schemaFileLocation, hadoopConf)
 
   fm.mkdirs(schemaFileLocation.getParent)
 
+  private val conf = SparkSession.getActiveSession.get.sessionState.conf
+
+  // Read most recent schema file
   def readSchemaFile(): List[StateStoreColFamilySchema] = {
     val inStream = fm.open(schemaFileLocation)
-    try {
-      val versionStr = inStream.readUTF()
-      val schemaReader = SchemaReader.createSchemaReader(versionStr)
-      schemaReader.read(inStream)
-    } catch {
-      case e: Throwable =>
-        logError(log"Fail to read schema file from ${MDC(LogKeys.PATH, schemaFileLocation)}", e)
-        throw e
-    } finally {
-      inStream.close()
-    }
+    StateSchemaCompatibilityChecker.readSchemaFile(inStream)
   }
 
-  /**
-   * Function to read and return the list of existing state store column family schemas from the
-   * schema file, if it exists
-   * @return - List of state store column family schemas if the schema file exists and empty l
-   *         otherwise
-   */
-  private def getExistingKeyAndValueSchema(): List[StateStoreColFamilySchema] = {
-    if (fm.exists(schemaFileLocation)) {
-      readSchemaFile()
-    } else {
-      List.empty
-    }
+  // Read all old schema files, group by column family name
+  // This method is used for OperatorStateMetadataV2 when schema evolution
+  // is supported, to read all active schemas in the StateStore for this operator
+  def readSchemaFiles(): Map[String, List[StateStoreColFamilySchema]] = {
+    val stateSchemaFilePaths = (oldSchemaFilePaths ++ List(schemaFileLocation)).distinct
+    stateSchemaFilePaths.flatMap { schemaFile =>
+        if (fm.exists(schemaFile)) {
+          val inStream = fm.open(schemaFile)
+          StateSchemaCompatibilityChecker.readSchemaFile(inStream)
+        } else {
+          List.empty
+        }
+      }
+      .groupBy(_.colFamilyName)
   }
 
   private def createSchemaFile(
@@ -151,34 +155,92 @@ class StateSchemaCompatibilityChecker(
     }
   }
 
+  /**
+   * Function to read and return the list of existing state store column family schemas from the
+   * schema file, if it exists
+   * @return - List of state store column family schemas if the schema file exists and empty l
+   *         otherwise
+   */
+  private def getExistingKeyAndValueSchema(): List[StateStoreColFamilySchema] = {
+    if (fm.exists(schemaFileLocation)) {
+      readSchemaFile()
+    } else {
+      List.empty
+    }
+  }
+
   private def schemasCompatible(storedSchema: StructType, schema: StructType): Boolean =
     DataType.equalsIgnoreNameAndCompatibleNullability(schema, storedSchema)
 
   /**
    * Function to check if new state store schema is compatible with the existing schema.
-   * @param oldSchema - old state schema
+   * @param oldSchemas - old state schemas
    * @param newSchema - new state schema
    * @param ignoreValueSchema - whether to ignore value schema or not
    */
   private def check(
-      oldSchema: StateStoreColFamilySchema,
+      oldSchemas: List[StateStoreColFamilySchema],
       newSchema: StateStoreColFamilySchema,
-      ignoreValueSchema: Boolean) : Unit = {
-    val (storedKeySchema, storedValueSchema) = (oldSchema.keySchema,
-      oldSchema.valueSchema)
+      ignoreValueSchema: Boolean,
+      schemaEvolutionEnabled: Boolean): (StateStoreColFamilySchema, Boolean) = {
+
+    def incrementSchemaId(id: Short): Short = (id + 1).toShort
+
+    val mostRecentSchema = oldSchemas.last
+    // Initialize with old schema IDs
+    val resultSchema = newSchema.copy(
+      keySchemaId = mostRecentSchema.keySchemaId,
+      valueSchemaId = mostRecentSchema.valueSchemaId
+    )
+    val (storedKeySchema, storedValueSchema) = (mostRecentSchema.keySchema,
+      mostRecentSchema.valueSchema)
     val (keySchema, valueSchema) = (newSchema.keySchema, newSchema.valueSchema)
 
     if (storedKeySchema.equals(keySchema) &&
       (ignoreValueSchema || storedValueSchema.equals(valueSchema))) {
       // schema is exactly same
+      (mostRecentSchema, false)
     } else if (!schemasCompatible(storedKeySchema, keySchema)) {
       throw StateStoreErrors.stateStoreKeySchemaNotCompatible(storedKeySchema.toString,
         keySchema.toString)
+    } else if (!ignoreValueSchema && schemaEvolutionEnabled) {
+      // Check value schema evolution
+      // Sort schemas by most recent to least recent
+      val oldStateSchemas = oldSchemas.sortBy(_.valueSchemaId).reverse.map { oldSchema =>
+        StateSchemaMetadataValue(
+          oldSchema.valueSchema, SchemaConverters.toAvroTypeWithDefaults(oldSchema.valueSchema))
+      }.asJava
+
+      val newAvroSchema = SchemaConverters.toAvroTypeWithDefaults(valueSchema)
+
+      val validator = new SchemaValidatorBuilder().canReadStrategy.validateAll()
+      oldStateSchemas.forEach { oldStateSchema =>
+        try {
+          validator.validate(newAvroSchema, List(oldStateSchema.avroSchema).asJava)
+        } catch {
+          case _: SchemaValidationException =>
+            throw StateStoreErrors.stateStoreInvalidValueSchemaEvolution(
+              oldStateSchema.sqlSchema.toString, valueSchema.toString)
+          case e: Throwable => throw e
+        }
+      }
+
+      if (resultSchema.valueSchemaId + 1 >=
+        conf.streamingValueStateSchemaEvolutionThreshold) {
+        throw StateStoreErrors.stateStoreValueSchemaEvolutionThresholdExceeded(
+          resultSchema.valueSchemaId + 1,
+          conf.streamingValueStateSchemaEvolutionThreshold,
+          newSchema.colFamilyName
+        )
+      }
+      // Schema evolved - increment value schema ID
+      (resultSchema.copy(valueSchemaId = incrementSchemaId(mostRecentSchema.valueSchemaId)), true)
     } else if (!ignoreValueSchema && !schemasCompatible(storedValueSchema, valueSchema)) {
       throw StateStoreErrors.stateStoreValueSchemaNotCompatible(storedValueSchema.toString,
         valueSchema.toString)
     } else {
       logInfo("Detected schema change which is compatible. Allowing to put rows.")
+      (mostRecentSchema, true)
     }
   }
 
@@ -192,33 +254,52 @@ class StateSchemaCompatibilityChecker(
   def validateAndMaybeEvolveStateSchema(
       newStateSchema: List[StateStoreColFamilySchema],
       ignoreValueSchema: Boolean,
-      stateSchemaVersion: Int): Boolean = {
-    val existingStateSchemaList = getExistingKeyAndValueSchema()
-    val newStateSchemaList = newStateSchema
-
-    if (existingStateSchemaList.isEmpty) {
-      // write the schema file if it doesn't exist
-      createSchemaFile(newStateSchemaList.sortBy(_.colFamilyName), stateSchemaVersion)
+      stateSchemaVersion: Int,
+      schemaEvolutionEnabled: Boolean): Boolean = {
+    val existingStateSchemaMap = readSchemaFiles()
+    val mostRecentColFamilies = getExistingKeyAndValueSchema().map(_.colFamilyName)
+    if (mostRecentColFamilies.isEmpty) {
+      // Initialize schemas with ID 0 when no existing schema
+      val initializedSchemas = newStateSchema.map { schema =>
+        schema.copy(keySchemaId = 0, valueSchemaId = 0)
+      }
+      createSchemaFile(initializedSchemas.sortBy(_.colFamilyName), stateSchemaVersion)
       true
     } else {
-      // validate if the new schema is compatible with the existing schema
-      val existingSchemaMap = existingStateSchemaList.map { schema =>
-        schema.colFamilyName -> schema
-      }.toMap
-      // For each new state variable, we want to compare it to the old state variable
-      // schema with the same name
-      newStateSchemaList.foreach { newSchema =>
-        existingSchemaMap.get(newSchema.colFamilyName).foreach { existingStateSchema =>
-          check(existingStateSchema, newSchema, ignoreValueSchema)
-        }
+      // Process each new schema and track if any have evolved
+      val (evolvedSchemas, hasEvolutions) = newStateSchema.foldLeft(
+        (List.empty[StateStoreColFamilySchema], false)) {
+        case ((schemas, evolved), newSchema) =>
+          existingStateSchemaMap.get(newSchema.colFamilyName) match {
+            case Some(existingSchemas) =>
+              val (updatedSchema, hasEvolved) = check(
+                existingSchemas, newSchema, ignoreValueSchema, schemaEvolutionEnabled)
+              (updatedSchema :: schemas, evolved || hasEvolved)
+            case None =>
+              // New column family - initialize with schema ID 0
+              val newSchemaWithIds = newSchema.copy(keySchemaId = 0, valueSchemaId = 0)
+              (newSchemaWithIds :: schemas, true)
+          }
       }
-      val colFamiliesAddedOrRemoved =
-        (newStateSchemaList.map(_.colFamilyName).toSet != existingSchemaMap.keySet)
-      if (stateSchemaVersion == SCHEMA_FORMAT_V3 && colFamiliesAddedOrRemoved) {
-        createSchemaFile(newStateSchemaList.sortBy(_.colFamilyName), stateSchemaVersion)
+
+      val newColFamilies = newStateSchema.map(_.colFamilyName).toSet
+      val oldColFamilies = mostRecentColFamilies.toSet
+      val colFamiliesAddedOrRemoved = newColFamilies != oldColFamilies
+      val newSchemaFileWritten = hasEvolutions || colFamiliesAddedOrRemoved
+
+      if (oldSchemaFilePaths.size == conf.streamingStateSchemaFilesThreshold &&
+        colFamiliesAddedOrRemoved) {
+        throw StateStoreErrors.streamingStateSchemaFilesThresholdExceeded(
+          oldSchemaFilePaths.size + 1,
+          conf.streamingStateSchemaFilesThreshold,
+          newColFamilies.diff(oldColFamilies).toList,
+          oldColFamilies.diff(newColFamilies).toList)
       }
-      // TODO: [SPARK-49535] Write Schema files after schema has changed for StateSchemaV3
-      colFamiliesAddedOrRemoved
+      if (stateSchemaVersion == SCHEMA_FORMAT_V3 && newSchemaFileWritten) {
+        createSchemaFile(evolvedSchemas.sortBy(_.colFamilyName), stateSchemaVersion)
+      }
+
+      newSchemaFileWritten
     }
   }
 
@@ -226,7 +307,7 @@ class StateSchemaCompatibilityChecker(
     new Path(new Path(storeCpLocation, "_metadata"), "schema")
 }
 
-object StateSchemaCompatibilityChecker {
+object StateSchemaCompatibilityChecker extends Logging {
 
   val SCHEMA_FORMAT_V3: Int = 3
 
@@ -236,6 +317,20 @@ object StateSchemaCompatibilityChecker {
         errorClass = "STATE_STORE_UNSUPPORTED_OPERATION_BINARY_INEQUALITY",
         messageParameters = Map("schema" -> schema.json)
       )
+    }
+  }
+
+  def readSchemaFile(inStream: FSDataInputStream): List[StateStoreColFamilySchema] = {
+    try {
+      val versionStr = inStream.readUTF()
+      val schemaReader = SchemaReader.createSchemaReader(versionStr)
+      schemaReader.read(inStream)
+    } catch {
+      case e: Throwable =>
+        logError(log"Fail to read schema file", e)
+        throw e
+    } finally {
+      inStream.close()
     }
   }
 
@@ -266,8 +361,9 @@ object StateSchemaCompatibilityChecker {
       stateSchemaVersion: Int,
       extraOptions: Map[String, String] = Map.empty,
       storeName: String = StateStoreId.DEFAULT_STORE_NAME,
-      oldSchemaFilePath: Option[Path] = None,
-      newSchemaFilePath: Option[Path] = None): StateSchemaValidationResult = {
+      oldSchemaFilePaths: List[Path] = List.empty,
+      newSchemaFilePath: Option[Path] = None,
+      schemaEvolutionEnabled: Boolean = false): StateSchemaValidationResult = {
     // SPARK-47776: collation introduces the concept of binary (in)equality, which means
     // in some collation we no longer be able to just compare the binary format of two
     // UnsafeRows to determine equality. For example, 'aaa' and 'AAA' can be "semantically"
@@ -285,7 +381,7 @@ object StateSchemaCompatibilityChecker {
     val providerId = StateStoreProviderId(StateStoreId(stateInfo.checkpointLocation,
       stateInfo.operatorId, 0, storeName), stateInfo.queryRunId)
     val checker = new StateSchemaCompatibilityChecker(providerId, hadoopConf,
-      oldSchemaFilePath = oldSchemaFilePath, newSchemaFilePath = newSchemaFilePath)
+      oldSchemaFilePaths = oldSchemaFilePaths, newSchemaFilePath = newSchemaFilePath)
     // regardless of configuration, we check compatibility to at least write schema file
     // if necessary
     // if the format validation for value schema is disabled, we also disable the schema
@@ -298,7 +394,7 @@ object StateSchemaCompatibilityChecker {
     val result = Try(
       checker.validateAndMaybeEvolveStateSchema(newStateSchema,
         ignoreValueSchema = !storeConf.formatValidationCheckValue,
-        stateSchemaVersion = stateSchemaVersion)
+        stateSchemaVersion = stateSchemaVersion, schemaEvolutionEnabled)
     ).toEither.fold(Some(_),
       hasEvolvedSchema => {
         evolvedSchema = hasEvolvedSchema
@@ -326,7 +422,7 @@ object StateSchemaCompatibilityChecker {
       // so we would just populate the next run's metadata file with this
       // file path
       if (stateSchemaVersion == SCHEMA_FORMAT_V3) {
-        oldSchemaFilePath.get.toString
+        oldSchemaFilePaths.last.toString
       } else {
         // if we are using any version less than v3, we have written
         // the schema to this static location, which we will return

@@ -144,6 +144,33 @@ private[sql] object PythonSQLUtils extends Logging {
     }
   }
 
+  def jsonToDDL(json: String): String = {
+    DataType.fromJson(json).asInstanceOf[StructType].toDDL
+  }
+
+  def ddlToJson(ddl: String): String = {
+    val dataType = try {
+      // DDL format, "fieldname datatype, fieldname datatype".
+      StructType.fromDDL(ddl)
+    } catch {
+      case e: Throwable =>
+        try {
+          // For backwards compatibility, "integer", "struct<fieldname: datatype>" and etc.
+          parseDataType(ddl)
+        } catch {
+          case _: Throwable =>
+            try {
+              // For backwards compatibility, "fieldname: datatype, fieldname: datatype" case.
+              parseDataType(s"struct<${ddl.trim}>")
+            } catch {
+              case _: Throwable =>
+                throw e
+            }
+        }
+    }
+    dataType.json
+  }
+
   def unresolvedNamedLambdaVariable(name: String): Column =
     Column(internal.UnresolvedNamedLambdaVariable.apply(name))
 

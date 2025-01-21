@@ -667,33 +667,44 @@ object DateTimeUtils extends SparkDateTimeUtils {
    * @param zoneId The time zone ID at which the operation is performed.
    * @return A timestamp value, expressed in microseconds since 1970-01-01 00:00:00Z.
    */
-  def timestampAdd(unit: String, quantity: Int, micros: Long, zoneId: ZoneId): Long = {
+  def timestampAdd(unit: String, quantity: Long, micros: Long, zoneId: ZoneId): Long = {
     try {
       unit.toUpperCase(Locale.ROOT) match {
         case "MICROSECOND" =>
           timestampAddInterval(micros, 0, 0, quantity, zoneId)
         case "MILLISECOND" =>
           timestampAddInterval(micros, 0, 0,
-            Math.multiplyExact(quantity.toLong, MICROS_PER_MILLIS), zoneId)
+            Math.multiplyExact(quantity, MICROS_PER_MILLIS), zoneId)
         case "SECOND" =>
           timestampAddInterval(micros, 0, 0,
-            Math.multiplyExact(quantity.toLong, MICROS_PER_SECOND), zoneId)
+            Math.multiplyExact(quantity, MICROS_PER_SECOND), zoneId)
         case "MINUTE" =>
           timestampAddInterval(micros, 0, 0,
-            Math.multiplyExact(quantity.toLong, MICROS_PER_MINUTE), zoneId)
+            Math.multiplyExact(quantity, MICROS_PER_MINUTE), zoneId)
         case "HOUR" =>
           timestampAddInterval(micros, 0, 0,
-            Math.multiplyExact(quantity.toLong, MICROS_PER_HOUR), zoneId)
+            Math.multiplyExact(quantity, MICROS_PER_HOUR), zoneId)
         case "DAY" | "DAYOFYEAR" =>
-          timestampAddInterval(micros, 0, quantity, 0, zoneId)
+          // Given that more than `Int32.MaxValue` days will cause an `ArithmeticException` due to
+          // overflow, we can safely cast the quantity to an `Int` here. Same follows for larger
+          // unites.
+          timestampAddInterval(micros, 0, Math.toIntExact(quantity), 0, zoneId)
         case "WEEK" =>
-          timestampAddInterval(micros, 0, Math.multiplyExact(quantity, DAYS_PER_WEEK), 0, zoneId)
+          timestampAddInterval(
+            micros,
+            0,
+            Math.multiplyExact(Math.toIntExact(quantity), DAYS_PER_WEEK),
+            0,
+            zoneId)
         case "MONTH" =>
-          timestampAddMonths(micros, quantity, zoneId)
+          timestampAddMonths(micros, Math.toIntExact(quantity), zoneId)
         case "QUARTER" =>
-          timestampAddMonths(micros, Math.multiplyExact(quantity, 3), zoneId)
+          timestampAddMonths(micros, Math.multiplyExact(Math.toIntExact(quantity), 3), zoneId)
         case "YEAR" =>
-          timestampAddMonths(micros, Math.multiplyExact(quantity, MONTHS_PER_YEAR), zoneId)
+          timestampAddMonths(
+            micros,
+            Math.multiplyExact(Math.toIntExact(quantity), MONTHS_PER_YEAR),
+            zoneId)
       }
     } catch {
       case _: scala.MatchError =>

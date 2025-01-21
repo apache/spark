@@ -176,6 +176,13 @@ case class OrderedDistribution(ordering: Seq[SortOrder]) extends Distribution {
   override def createPartitioning(numPartitions: Int): Partitioning = {
     RangePartitioning(ordering, numPartitions)
   }
+
+  def areAllClusterKeysMatched(expressions: Seq[Expression]): Boolean = {
+    expressions.length == ordering.length &&
+      expressions.zip(ordering).forall {
+        case (x, o) => x.semanticEquals(o.child)
+      }
+  }
 }
 
 /**
@@ -393,6 +400,9 @@ case class KeyGroupedPartitioning(
               attributes.forall(x => requiredClustering.exists(_.semanticEquals(x)))
             }
           }
+
+        case o @ OrderedDistribution(_) if SQLConf.get.v2BucketingAllowSorting =>
+          o.areAllClusterKeysMatched(expressions)
 
         case _ =>
           false

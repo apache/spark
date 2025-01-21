@@ -370,6 +370,62 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
     checkAnswer(df.sort("res"), Seq(Row(10.0), Row(15.5), Row(41.0)))
   }
 
+  test("SPARK-48655: order by on partition keys should not introduce additional shuffle") {
+    val items_partitions = Array(identity("price"), identity("id"))
+    createTable(items, itemsColumns, items_partitions)
+    sql(s"INSERT INTO testcat.ns.$items VALUES " +
+      s"(1, 'aa', 40.0, cast('2020-01-01' as timestamp)), " +
+      s"(1, 'aa', 41.0, cast('2020-01-02' as timestamp)), " +
+      s"(2, 'bb', 10.0, cast('2020-01-01' as timestamp)), " +
+      s"(3, 'cc', 15.5, cast('2020-02-01' as timestamp)), " +
+      s"(null, 'cc', 15.5, cast('2020-02-01' as timestamp)), " +
+      s"(3, 'cc', null, cast('2020-02-01' as timestamp))")
+
+    Seq(true, false).foreach { sortingEnabled =>
+      withSQLConf(SQLConf.V2_BUCKETING_SORTING_ENABLED.key -> sortingEnabled.toString) {
+
+        def verifyShuffle(cmd: String, answer: Seq[Row]): Unit = {
+          val df = sql(cmd)
+          if (sortingEnabled) {
+            assert(collectAllShuffles(df.queryExecution.executedPlan).isEmpty,
+              "should contain no shuffle when sorting by partition values")
+          } else {
+            assert(collectAllShuffles(df.queryExecution.executedPlan).size == 1,
+              "should contain one shuffle when optimization is disabled")
+          }
+          checkAnswer(df, answer)
+        }: Unit
+
+        verifyShuffle(
+          s"SELECT price, id FROM testcat.ns.$items ORDER BY price ASC, id ASC",
+          Seq(Row(null, 3), Row(10.0, 2), Row(15.5, null),
+            Row(15.5, 3), Row(40.0, 1), Row(41.0, 1)))
+
+        verifyShuffle(
+          s"SELECT price, id FROM testcat.ns.$items " +
+            s"ORDER BY price ASC NULLS LAST, id ASC NULLS LAST",
+          Seq(Row(10.0, 2), Row(15.5, 3), Row(15.5, null),
+            Row(40.0, 1), Row(41.0, 1), Row(null, 3)))
+
+        verifyShuffle(
+          s"SELECT price, id FROM testcat.ns.$items ORDER BY price DESC, id ASC",
+          Seq(Row(41.0, 1), Row(40.0, 1), Row(15.5, null),
+            Row(15.5, 3), Row(10.0, 2), Row(null, 3)))
+
+        verifyShuffle(
+          s"SELECT price, id FROM testcat.ns.$items ORDER BY price DESC, id DESC",
+          Seq(Row(41.0, 1), Row(40.0, 1), Row(15.5, 3),
+            Row(15.5, null), Row(10.0, 2), Row(null, 3)))
+
+        verifyShuffle(
+          s"SELECT price, id FROM testcat.ns.$items " +
+            s"ORDER BY price DESC NULLS FIRST, id DESC NULLS FIRST",
+          Seq(Row(null, 3), Row(41.0, 1), Row(40.0, 1),
+            Row(15.5, null), Row(15.5, 3), Row(10.0, 2)));
+      }
+    }
+  }
+
   test("SPARK-49179: Fix v2 multi bucketed inner joins throw AssertionError") {
     val cols = Array(
       Column.create("id", LongType),

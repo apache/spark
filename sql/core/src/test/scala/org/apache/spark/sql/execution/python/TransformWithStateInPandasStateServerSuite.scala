@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
 import org.apache.spark.sql.execution.streaming.{StatefulProcessorHandleImpl, StatefulProcessorHandleState}
 import org.apache.spark.sql.execution.streaming.state.StateMessage
-import org.apache.spark.sql.execution.streaming.state.StateMessage.{AppendList, AppendValue, Clear, ContainsKey, DeleteTimer, Exists, ExpiryTimerRequest, Get, GetProcessingTime, GetValue, GetWatermark, HandleState, Keys, ListStateCall, ListStateGet, ListStatePut, ListTimers, MapStateCall, RegisterTimer, RemoveKey, SetHandleState, StateCallCommand, StatefulProcessorCall, TimerRequest, TimerStateCallCommand, TimerValueRequest, UpdateValue, Values, ValueStateCall, ValueStateUpdate}
+import org.apache.spark.sql.execution.streaming.state.StateMessage.{AppendList, AppendValue, Clear, ContainsKey, DeleteTimer, Exists, ExpiryTimerRequest, Get, GetProcessingTime, GetValue, GetWatermark, HandleState, Keys, ListStateCall, ListStateGet, ListStatePut, ListTimers, MapStateCall, ParseStringSchema, RegisterTimer, RemoveKey, SetHandleState, StateCallCommand, StatefulProcessorCall, TimerRequest, TimerStateCallCommand, TimerValueRequest, UpdateValue, UtilsRequest, Values, ValueStateCall, ValueStateUpdate}
 import org.apache.spark.sql.streaming.{ListState, MapState, TTLConfig, ValueState}
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 
@@ -572,6 +572,16 @@ class TransformWithStateInPandasStateServerSuite extends SparkFunSuite with Befo
     verify(statefulProcessorHandle, times(1)).listTimers()
     verify(arrowStreamWriter).writeRow(any)
     verify(arrowStreamWriter).finalizeCurrentArrowBatch()
+  }
+
+  test("utils request - parse string schema") {
+    val message = UtilsRequest.newBuilder().setParseStringSchema(
+      ParseStringSchema.newBuilder().setSchema(
+        "value int"
+      ).build()
+    ).build()
+    stateServer.handleUtilsRequest(message)
+    verify(outputStream).writeInt(argThat((x: Int) => x > 0))
   }
 
   private def getIntegerRow(value: Int): Row = {

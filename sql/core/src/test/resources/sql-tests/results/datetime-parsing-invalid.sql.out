@@ -18,7 +18,7 @@ org.apache.spark.SparkDateTimeException
   "errorClass" : "CANNOT_PARSE_TIMESTAMP",
   "sqlState" : "22007",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
+    "func" : "`try_to_timestamp`",
     "message" : "Text '1' could not be parsed at index 0"
   }
 }
@@ -34,7 +34,7 @@ org.apache.spark.SparkDateTimeException
   "errorClass" : "CANNOT_PARSE_TIMESTAMP",
   "sqlState" : "22007",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
+    "func" : "`try_to_timestamp`",
     "message" : "Text '-12' could not be parsed at index 0"
   }
 }
@@ -50,7 +50,7 @@ org.apache.spark.SparkDateTimeException
   "errorClass" : "CANNOT_PARSE_TIMESTAMP",
   "sqlState" : "22007",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
+    "func" : "`try_to_timestamp`",
     "message" : "Text '123' could not be parsed, unparsed text found at index 2"
   }
 }
@@ -66,7 +66,7 @@ org.apache.spark.SparkDateTimeException
   "errorClass" : "CANNOT_PARSE_TIMESTAMP",
   "sqlState" : "22007",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
+    "func" : "`try_to_timestamp`",
     "message" : "Text '1' could not be parsed at index 0"
   }
 }
@@ -99,7 +99,7 @@ org.apache.spark.SparkDateTimeException
   "errorClass" : "CANNOT_PARSE_TIMESTAMP",
   "sqlState" : "22007",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
+    "func" : "`try_to_timestamp`",
     "message" : "Invalid date 'DayOfYear 366' as '1970' is not a leap year"
   }
 }
@@ -115,7 +115,7 @@ org.apache.spark.SparkDateTimeException
   "errorClass" : "CANNOT_PARSE_TIMESTAMP",
   "sqlState" : "22007",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
+    "func" : "`try_to_timestamp`",
     "message" : "Text '9' could not be parsed at index 0"
   }
 }
@@ -131,7 +131,7 @@ org.apache.spark.SparkDateTimeException
   "errorClass" : "CANNOT_PARSE_TIMESTAMP",
   "sqlState" : "22007",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
+    "func" : "`try_to_timestamp`",
     "message" : "Invalid date 'DayOfYear 366' as '1970' is not a leap year"
   }
 }
@@ -147,7 +147,7 @@ org.apache.spark.SparkDateTimeException
   "errorClass" : "CANNOT_PARSE_TIMESTAMP",
   "sqlState" : "22007",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
+    "func" : "`try_to_timestamp`",
     "message" : "Text '9' could not be parsed at index 0"
   }
 }
@@ -163,7 +163,7 @@ org.apache.spark.SparkDateTimeException
   "errorClass" : "CANNOT_PARSE_TIMESTAMP",
   "sqlState" : "22007",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
+    "func" : "`try_to_timestamp`",
     "message" : "Text '99' could not be parsed at index 0"
   }
 }
@@ -179,7 +179,7 @@ org.apache.spark.SparkDateTimeException
   "errorClass" : "CANNOT_PARSE_TIMESTAMP",
   "sqlState" : "22007",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
+    "func" : "`try_to_timestamp`",
     "message" : "Conflict found: Field DayOfMonth 30 differs from DayOfMonth 31 derived from 1970-12-31."
   }
 }
@@ -195,7 +195,7 @@ org.apache.spark.SparkDateTimeException
   "errorClass" : "CANNOT_PARSE_TIMESTAMP",
   "sqlState" : "22007",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
+    "func" : "`try_to_timestamp`",
     "message" : "Conflict found: Field MonthOfYear 11 differs from MonthOfYear 12 derived from 1970-12-31."
   }
 }
@@ -211,7 +211,7 @@ org.apache.spark.SparkDateTimeException
   "errorClass" : "CANNOT_PARSE_TIMESTAMP",
   "sqlState" : "22007",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
+    "func" : "`try_to_timestamp`",
     "message" : "Text '2019-366' could not be parsed: Invalid date 'DayOfYear 366' as '2019' is not a leap year"
   }
 }
@@ -227,7 +227,7 @@ org.apache.spark.SparkDateTimeException
   "errorClass" : "CANNOT_PARSE_TIMESTAMP",
   "sqlState" : "22007",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
+    "func" : "`try_to_timestamp`",
     "message" : "Conflict found: Field DayOfMonth 30 differs from DayOfMonth 31 derived from 1970-12-31."
   }
 }
@@ -243,7 +243,7 @@ org.apache.spark.SparkDateTimeException
   "errorClass" : "CANNOT_PARSE_TIMESTAMP",
   "sqlState" : "22007",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
+    "func" : "`try_to_timestamp`",
     "message" : "Text '2020-01-365' could not be parsed: Conflict found: Field DayOfMonth 30 differs from DayOfMonth 1 derived from 2020-12-30"
   }
 }
@@ -259,7 +259,7 @@ org.apache.spark.SparkDateTimeException
   "errorClass" : "CANNOT_PARSE_TIMESTAMP",
   "sqlState" : "22007",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
+    "func" : "`try_to_timestamp`",
     "message" : "Text '2020-10-350' could not be parsed: Conflict found: Field MonthOfYear 12 differs from MonthOfYear 10 derived from 2020-12-15"
   }
 }
@@ -275,7 +275,7 @@ org.apache.spark.SparkDateTimeException
   "errorClass" : "CANNOT_PARSE_TIMESTAMP",
   "sqlState" : "22007",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
+    "func" : "`try_to_timestamp`",
     "message" : "Text '2020-11-31-366' could not be parsed: Invalid date 'NOVEMBER 31'"
   }
 }
@@ -299,7 +299,7 @@ org.apache.spark.SparkDateTimeException
   "errorClass" : "CANNOT_PARSE_TIMESTAMP",
   "sqlState" : "22007",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
+    "func" : "`try_to_date`",
     "message" : "Text '2020-01-27T20:06:11.847' could not be parsed at index 10"
   }
 }
@@ -315,7 +315,7 @@ org.apache.spark.SparkDateTimeException
   "errorClass" : "CANNOT_PARSE_TIMESTAMP",
   "sqlState" : "22007",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
+    "func" : "`try_to_date`",
     "message" : "Text 'Unparseable' could not be parsed at index 0"
   }
 }
@@ -331,7 +331,7 @@ org.apache.spark.SparkDateTimeException
   "errorClass" : "CANNOT_PARSE_TIMESTAMP",
   "sqlState" : "22007",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
+    "func" : "`try_to_timestamp`",
     "message" : "Text '2020-01-27T20:06:11.847' could not be parsed at index 10"
   }
 }
@@ -347,7 +347,7 @@ org.apache.spark.SparkDateTimeException
   "errorClass" : "CANNOT_PARSE_TIMESTAMP",
   "sqlState" : "22007",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
+    "func" : "`try_to_timestamp`",
     "message" : "Text 'Unparseable' could not be parsed at index 0"
   }
 }
@@ -363,7 +363,7 @@ org.apache.spark.SparkDateTimeException
   "errorClass" : "CANNOT_PARSE_TIMESTAMP",
   "sqlState" : "22007",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
+    "func" : "`try_to_timestamp`",
     "message" : "Text '2020-01-27T20:06:11.847' could not be parsed at index 10"
   }
 }
@@ -379,7 +379,7 @@ org.apache.spark.SparkDateTimeException
   "errorClass" : "CANNOT_PARSE_TIMESTAMP",
   "sqlState" : "22007",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
+    "func" : "`try_to_timestamp`",
     "message" : "Text 'Unparseable' could not be parsed at index 0"
   }
 }
@@ -395,7 +395,7 @@ org.apache.spark.SparkDateTimeException
   "errorClass" : "CANNOT_PARSE_TIMESTAMP",
   "sqlState" : "22007",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
+    "func" : "`try_to_timestamp`",
     "message" : "Text '2020-01-27T20:06:11.847' could not be parsed at index 10"
   }
 }
@@ -411,7 +411,7 @@ org.apache.spark.SparkDateTimeException
   "errorClass" : "CANNOT_PARSE_TIMESTAMP",
   "sqlState" : "22007",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
+    "func" : "`try_to_timestamp`",
     "message" : "Text 'Unparseable' could not be parsed at index 0"
   }
 }

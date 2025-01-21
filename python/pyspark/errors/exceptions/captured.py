@@ -67,7 +67,7 @@ class CapturedException(PySparkException):
         self._stackTrace = (
             stackTrace
             if stackTrace is not None
-            else (SparkContext._jvm.org.apache.spark.util.Utils.exceptionString(origin))
+            else (getattr(SparkContext._jvm, "org.apache.spark.util.Utils").exceptionString(origin))
         )
         self._cause = convert_exception(cause) if cause is not None else None
         if self._cause is None and origin is not None and origin.getCause() is not None:
@@ -85,7 +85,7 @@ class CapturedException(PySparkException):
         # SPARK-42752: default to True to see issues with initialization
         debug_enabled = True
         try:
-            sql_conf = jvm.org.apache.spark.sql.internal.SQLConf.get()
+            sql_conf = getattr(jvm, "org.apache.spark.sql.internal.SQLConf").get()
             debug_enabled = sql_conf.pysparkJVMStacktraceEnabled()
         except BaseException:
             pass
@@ -149,7 +149,7 @@ class CapturedException(PySparkException):
             errorClass = self._origin.getErrorClass()
             messageParameters = self._origin.getMessageParameters()
 
-            error_message = gw.jvm.org.apache.spark.SparkThrowableHelper.getMessage(
+            error_message = getattr(gw.jvm, "org.apache.spark.SparkThrowableHelper").getMessage(
                 errorClass, messageParameters
             )
 
@@ -220,7 +220,7 @@ def convert_exception(e: "Py4JJavaError") -> CapturedException:
         return SparkNoSuchElementException(origin=e)
 
     c: "Py4JJavaError" = e.getCause()
-    stacktrace: str = jvm.org.apache.spark.util.Utils.exceptionString(e)
+    stacktrace: str = getattr(jvm, "org.apache.spark.util.Utils").exceptionString(e)
     if c is not None and (
         is_instance_of(gw, c, "org.apache.spark.api.python.PythonException")
         # To make sure this only catches Python UDFs.

@@ -28,9 +28,8 @@ import org.scalatest.concurrent.Futures.timeout
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.SparkException
-import org.apache.spark.api.java.function.VoidFunction2
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{DataFrame, ForeachWriter, Row, SparkSession}
+import org.apache.spark.sql.{DataFrame, Dataset, ForeachWriter, Row, SparkSession}
 import org.apache.spark.sql.functions.{col, lit, udf, window}
 import org.apache.spark.sql.streaming.StreamingQueryListener.{QueryIdleEvent, QueryProgressEvent, QueryStartedEvent, QueryTerminatedEvent}
 import org.apache.spark.sql.test.{IntegrationTestUtils, QueryTest, RemoteSparkSession}
@@ -567,7 +566,7 @@ class ClientStreamingQuerySuite extends QueryTest with RemoteSparkSession with L
     }
   }
 
-  test("foreachBatch") {
+  test("foreachBatch with DataFrame") {
     // Starts a streaming query with a foreachBatch function, which writes batchId and row count
     // to a temp view. The test verifies that the view is populated with data.
 
@@ -581,7 +580,12 @@ class ClientStreamingQuerySuite extends QueryTest with RemoteSparkSession with L
         .option("numPartitions", "1")
         .load()
         .writeStream
-        .foreachBatch(new ForeachBatchFn(viewName))
+        .foreachBatch((df: DataFrame, batchId: Long) => {
+          val count = df.collect().map(row => row.getLong(1)).sum
+          df.sparkSession
+            .createDataFrame(Seq((batchId, count)))
+            .createOrReplaceGlobalTempView(viewName)
+        })
         .start()
 
       eventually(timeout(30.seconds)) { // Wait for first progress.
@@ -596,11 +600,81 @@ class ClientStreamingQuerySuite extends QueryTest with RemoteSparkSession with L
           .collect()
           .toSeq
         assert(rows.size > 0)
+        assert(rows.map(_.getLong(1)).sum > 0)
         logInfo(s"Rows in $tableName: $rows")
       }
 
       q.stop()
     }
+  }
+
+  test("foreachBatch with Dataset[java.lang.Long]") {
+    val viewName = "test_view"
+    val tableName = s"global_temp.$viewName"
+
+    withTable(tableName) {
+      val session = spark
+      import session.implicits._
+      val q = spark.readStream
+        .format("rate")
+        .option("rowsPerSecond", "10")
+        .option("numPartitions", "1")
+        .load()
+        .select($"value")
+        .as[java.lang.Long]
+        .writeStream
+        .foreachBatch((ds: Dataset[java.lang.Long], batchId: Long) => {
+          val count = ds.collect().map(v => v.asInstanceOf[Long]).sum
+          ds.sparkSession
+            .createDataFrame(Seq((batchId, count)))
+            .createOrReplaceGlobalTempView(viewName)
+        })
+        .start()
+
+      eventually(timeout(30.seconds)) { // Wait for first progress.
+        assert(q.lastProgress != null, "Failed to make progress")
+        assert(q.lastProgress.numInputRows > 0)
+      }
+
+      eventually(timeout(30.seconds)) {
+        // There should be row(s) in temporary view created by foreachBatch.
+        val rows = spark
+          .sql(s"select * from $tableName")
+          .collect()
+          .toSeq
+        assert(rows.size > 0)
+        assert(rows.map(_.getLong(1)).sum > 0)
+        logInfo(s"Rows in $tableName: $rows")
+      }
+
+      q.stop()
+    }
+  }
+
+  test("foreachBatch with Dataset[TestClass]") {
+    val session: SparkSession = spark
+    import session.implicits._
+    val viewName = "test_view"
+    val tableName = s"global_temp.$viewName"
+
+    val df = spark.readStream
+      .format("rate")
+      .option("rowsPerSecond", "10")
+      .load()
+
+    val q = df
+      .selectExpr("CAST(value AS INT)")
+      .as[TestClass]
+      .writeStream
+      .foreachBatch((ds: Dataset[TestClass], batchId: Long) => {
+        val count = ds.collect().map(_.value).sum
+      })
+      .start()
+    eventually(timeout(30.seconds)) {
+      assert(q.isActive)
+      assert(q.exception.isEmpty)
+    }
+    q.stop()
   }
 
   abstract class EventCollector extends StreamingQueryListener {
@@ -699,15 +773,4 @@ class TestForeachWriter[T] extends ForeachWriter[T] {
 
 case class TestClass(value: Int) {
   override def toString: String = value.toString
-}
-
-class ForeachBatchFn(val viewName: String)
-    extends VoidFunction2[DataFrame, java.lang.Long]
-    with Serializable {
-  override def call(df: DataFrame, batchId: java.lang.Long): Unit = {
-    val count = df.count()
-    df.sparkSession
-      .createDataFrame(Seq((batchId.toLong, count)))
-      .createOrReplaceGlobalTempView(viewName)
-  }
 }
