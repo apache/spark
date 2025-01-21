@@ -58,15 +58,6 @@ object ResolveWithCTE extends Rule[LogicalPlan] {
           case cteDef if !cteDef.hasRecursiveCTERelationRef =>
             if (cteDef.resolved) {
               cteDefMap.put(cteDef.id, cteDef)
-              // Additional checks should be performed in recursive CTE case:
-              // For the resolved cteDefs, hasItsOwnUnionLoopRef checks if this is actually a
-              // recursive cteDef.
-              // If yes, we should check if data types of anchor and recursive terms match,
-              // and if the self-reference is placed correctly.
-              if (cteDef.hasItsOwnUnionLoopRef) {
-                checkDataTypesAnchorAndRecursiveTerm(cteDef)
-                checkIfSelfReferenceIsPlacedCorrectly(cteDef)
-              }
             }
             cteDef
           case cteDef =>
@@ -215,8 +206,7 @@ object ResolveWithCTE extends Rule[LogicalPlan] {
   /**
    * Checks if data types of anchor and recursive terms of a recursive CTE definition match.
    */
-  private def checkDataTypesAnchorAndRecursiveTerm(cteDef: CTERelationDef): Unit = {
-    val unionLoop = cteDef.find(_.isInstanceOf[UnionLoop]).get.asInstanceOf[UnionLoop]
+  def checkDataTypesAnchorAndRecursiveTerm(unionLoop: UnionLoop): Unit = {
     val anchorOutputDatatypes = unionLoop.anchor.output.map(_.dataType)
     val recursiveTermOutputDatatypes = unionLoop.recursion.output.map(_.dataType)
 
@@ -234,16 +224,16 @@ object ResolveWithCTE extends Rule[LogicalPlan] {
    * right side of left outer/semi/anti joins, left side of right outer joins,
    * in full outer joins and in aggregates
    */
-  private def checkIfSelfReferenceIsPlacedCorrectly(cteDef: CTERelationDef): Unit = {
+  def checkIfSelfReferenceIsPlacedCorrectly(unionLoop: UnionLoop): Unit = {
     def unionLoopRefNotAllowedUnderCurrentNode(currentNode: LogicalPlan) : Unit =
       currentNode.foreach {
-        case UnionLoopRef(cteDef.id, _, _) =>
+        case UnionLoopRef(unionLoop.id, _, _) =>
           throw new AnalysisException(
             errorClass = "INVALID_RECURSIVE_REFERENCE.PLACE",
             messageParameters = Map.empty)
         case other => ()
       }
-    cteDef.foreach {
+    unionLoop.foreach {
       case Join(left, right, LeftOuter, _, _) =>
         unionLoopRefNotAllowedUnderCurrentNode(right)
       case Join(left, right, RightOuter, _, _) =>
