@@ -1514,6 +1514,8 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     // Test that plan is transformed to SET operation
     val actual3 = parsePlan(
       "EXECUTE IMMEDIATE 'SELECT 17, 7 WHERE ? = 1' INTO res, res2 USING 2").analyze
+      // Normalize to make the plan equivalent to the below set statement.
+      .asInstanceOf[SetVariable].copy(isExecuteImmediateIntoClause = false)
     val expected3 = parsePlan("SET var (res, res2) = (SELECT 17, 7 where 2 = 1)").analyze
       comparePlans(actual3, expected3)
     } finally {

@@ -206,6 +206,7 @@ class PlanResolutionSuite extends AnalysisTest {
     when(manager.currentNamespace).thenReturn(Array.empty[String])
     when(manager.v1SessionCatalog).thenReturn(v1SessionCatalog)
     when(manager.tempVariableManager).thenReturn(tempVariableManager)
+    when(manager.getSqlScriptingLocalVariableManager).thenReturn(None)
     manager
   }
 
@@ -222,6 +223,7 @@ class PlanResolutionSuite extends AnalysisTest {
     when(manager.currentNamespace).thenReturn(Array("default"))
     when(manager.v1SessionCatalog).thenReturn(v1SessionCatalog)
     when(manager.tempVariableManager).thenReturn(tempVariableManager)
+    when(manager.getSqlScriptingLocalVariableManager).thenReturn(None)
     manager
   }
 

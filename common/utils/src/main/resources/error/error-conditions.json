@@ -3362,7 +3362,7 @@
         ]
       },
       "REPLACE_LOCAL_VARIABLE" : {
-        "message": [
+        "message" : [
           "The variable <varName> does not support DECLARE OR REPLACE, as local variables cannot be replaced."
         ]
       }
