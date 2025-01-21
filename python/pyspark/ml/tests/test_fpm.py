@@ -18,7 +18,7 @@
 import tempfile
 import unittest
 
-from pyspark.sql import SparkSession, DataFrame
+from pyspark.sql import SparkSession
 import pyspark.sql.functions as sf
 from pyspark.ml.fpm import (
     FPGrowth,
