@@ -725,7 +725,9 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan {
  * @param anchor The logical plan of the initial element of the loop.
  * @param recursion The logical plan that describes the recursion with an [[UnionLoopRef]] node.
  * @param output The output attributes of this loop.
- * @param limit An optional limit that can be pushed down to the node to stop the loop earlier.
+ * @param limit In case we have a plan with the limit node, it is pushed down to UnionLoop and then
+ *              transferred to UnionLoopExec, to stop the recursion after specific amount of rows
+ *              is generated.
  */
 case class UnionLoopExec(
     loopId: Long,
@@ -753,6 +755,8 @@ case class UnionLoopExec(
    */
   private def executeAndCacheAndCount(
      plan: LogicalPlan, limit: Option[Long]) = {
+    // In case limit is defined, we create a limit node above the plan and execute
+    // the newly created plan.
     val limitedPlan = limit.map(l => Limit(Literal(l.toInt), plan)).getOrElse(plan)
     val df = Dataset.ofRows(session, limitedPlan)
     val cachedDF = cacheMode match {
@@ -770,8 +774,11 @@ case class UnionLoopExec(
     val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
     val numOutputRows = longMetric("numOutputRows")
 
-    val unionChildren = mutable.ArrayBuffer.empty[LogicalRDD]
+    // currentLimit is initialized from the limit argument, and in each step it is decreased by
+    // the number of rows generated in that step.
     var currentLimit = limit.map(_.toLong)
+    val unionChildren = mutable.ArrayBuffer.empty[LogicalRDD]
+
     var (prevDF, prevCount) = executeAndCacheAndCount(anchor, currentLimit)
 
     var currentLevel = 1
