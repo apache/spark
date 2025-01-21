@@ -147,6 +147,8 @@ class StandardScalerModel private[ml] (
 
   import StandardScalerModel._
 
+  private[ml] def this() = this(Identifiable.randomUID("stdScal"), Vectors.empty, Vectors.empty)
+
   /** @group setParam */
   @Since("1.2.0")
   def setInputCol(value: String): this.type = set(inputCol, value)
