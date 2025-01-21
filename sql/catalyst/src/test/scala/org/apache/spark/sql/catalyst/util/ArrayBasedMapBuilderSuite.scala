@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.util
 
+import java.nio.ByteOrder.{nativeOrder, BIG_ENDIAN}
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.SparkRuntimeException
 import org.apache.spark.sql.catalyst.InternalRow
@@ -143,12 +145,15 @@ class ArrayBasedMapBuilderSuite extends SparkFunSuite with SQLHelper {
     val builder = new ArrayBasedMapBuilder(new StructType().add("i", "int"), IntegerType)
     builder.put(InternalRow(1), 1)
     builder.put(InternalRow(2), 2)
+    // The UnsafeRow.toString() method output is based on the underlying bytes and is
+    // endian dependent.
+    val keyAsString = if (nativeOrder().equals(BIG_ENDIAN)) "[0,100000000]" else "[0,1]"
     // By default duplicated map key fails the query.
     checkError(
       exception = intercept[SparkRuntimeException](builder.put(unsafeRow, 3)),
       condition = "DUPLICATED_MAP_KEY",
       parameters = Map(
-        "key" -> "[0,1]",
+        "key" -> keyAsString,
         "mapKeyDedupPolicy" -> "\"spark.sql.mapKeyDedupPolicy\"")
     )
 
