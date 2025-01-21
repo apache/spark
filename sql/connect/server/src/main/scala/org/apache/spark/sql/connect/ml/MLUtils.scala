@@ -500,7 +500,9 @@ private[ml] object MLUtils {
     "recommendForAllUsers", // ALSModel
     "recommendForAllItems", // ALSModel
     "recommendForUserSubset", // ALSModel
-    "recommendForItemSubset" // ALSModel
+    "recommendForItemSubset", // ALSModel
+    "associationRules", // FPGrowthModel
+    "freqItemsets" // FPGrowthModel
   )
 
   def invokeMethodAllowed(obj: Object, methodName: String): Object = {
