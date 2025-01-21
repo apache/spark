@@ -2127,13 +2127,15 @@ class SparkSession(SparkConversionMixin):
                     continue
                 else:
                     raise PySparkRuntimeError(
-                        errorClass="DUPLICATE_ARTIFACT",
+                        errorClass="DUPLICATED_ARTIFACT",
                         messageParameters={"normalized_path": normalized_path},
                     )
         if archive:
             self._sc.addArchive(*path)
-        else:
+        elif pyfile:
             self._sc.addPyFile(*path)
+        elif file:
+            self._sc.addFile(*path)
 
     addArtifact = addArtifacts
 

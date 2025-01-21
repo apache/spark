@@ -70,7 +70,7 @@ class ArtifactTests(ArtifactTestsMixin, ReusedSQLTestCase):
 
             self.check_error(
                 exception=pe.exception,
-                errorClass="DUPLICATE_ARTIFACT",
+                errorClass="DUPLICATED_ARTIFACT",
                 messageParameters={"normalized_path": pyfile_path},
             )
 
