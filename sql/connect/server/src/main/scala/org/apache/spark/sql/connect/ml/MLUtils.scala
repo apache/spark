@@ -454,6 +454,8 @@ private[ml] object MLUtils {
     "maxAbs", // MaxAbsScalerModel
     "originalMax", // MinMaxScalerModel
     "originalMin", // MinMaxScalerModel
+    "range", // RobustScalerModel
+    "median", // RobustScalerModel
     "toString",
     "toDebugString",
     "numFeatures",
