@@ -183,6 +183,8 @@ class KeyValueGroupedDataset[K, V] private[sql] () extends sql.KeyValueGroupedDa
       Some(initialState),
       eventTimeColumnName)
 
+  // This is an interface, and it should not be used. The real implementation is in the
+  // inherited class.
   private[sql] def transformWithStateHelper[U: Encoder, S: Encoder](
       statefulProcessor: StatefulProcessor[K, V, U],
       timeMode: TimeMode,
@@ -683,6 +685,7 @@ private class KeyValueGroupedDatasetImpl[K, V, IK, IV](
     } else {
       null
     }
+
     val statefulProcessorStr = if (!initialState.isDefined) {
       ByteString.copyFrom(SparkSerDeUtils.serialize(statefulProcessor))
     } else {
