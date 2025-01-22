@@ -18,6 +18,7 @@
 
 import tempfile
 import unittest
+from typing import List, Tuple, Any
 
 import numpy as np
 
@@ -35,11 +36,16 @@ from pyspark.ml.feature import (
     MaxAbsScalerModel,
     MinMaxScaler,
     MinMaxScalerModel,
+    RobustScaler,
+    RobustScalerModel,
     StopWordsRemover,
     StringIndexer,
     StringIndexerModel,
     TargetEncoder,
     VectorSizeHint,
+    VectorAssembler,
+    PCA,
+    PCAModel,
 )
 from pyspark.ml.linalg import DenseVector, SparseVector, Vectors
 from pyspark.sql import Row
@@ -48,6 +54,155 @@ from pyspark.testing.mlutils import check_params, SparkSessionTestCase
 
 
 class FeatureTestsMixin:
+    def test_string_indexer(self):
+        df = (
+            self.spark.createDataFrame(
+                [
+                    (1, "a", "e"),
+                    (2, "b", "f"),
+                    (3, "c", "e"),
+                    (4, "a", "f"),
+                    (5, "a", "f"),
+                    (6, "c", "f"),
+                ],
+                ["id", "label1", "label2"],
+            )
+            .coalesce(1)
+            .sortWithinPartitions("id")
+        )
+        # single input
+        si = StringIndexer(inputCol="label1", outputCol="index1")
+        model = si.fit(df.select("label1"))
+
+        # read/write
+        with tempfile.TemporaryDirectory(prefix="read_write") as tmp_dir:
+            si.write().overwrite().save(tmp_dir)
+            si2 = StringIndexer.load(tmp_dir)
+            self.assertEqual(str(si), str(si2))
+            self.assertEqual(si.getInputCol(), "label1")
+            self.assertEqual(si2.getInputCol(), "label1")
+
+            model.write().overwrite().save(tmp_dir)
+            model2 = StringIndexerModel.load(tmp_dir)
+            self.assertEqual(str(model), str(model2))
+            self.assertEqual(model.getInputCol(), "label1")
+            self.assertEqual(model.getOutputCol(), "index1")
+            self.assertEqual(model2.getInputCol(), "label1")
+
+        indexed_df = model.transform(df.select("label1"))
+        self.assertEqual(sorted(indexed_df.schema.names), sorted(["label1", "index1"]))
+
+        def check_a_b(result: List[Tuple[Any, Any]]) -> None:
+            self.assertTrue(result[0][0] == "a" and result[1][0] == "b" and result[2][0] == "c")
+            sorted_value = sorted([v for _, v in result])
+            self.assertEqual(sorted_value, [0.0, 1.0, 2.0])
+
+        check_a_b(sorted(set([(i[0], i[1]) for i in indexed_df.collect()]), key=lambda x: x[0]))
+
+        # multiple inputs
+        input_cols = ["label1", "label2"]
+        output_cols = ["index1", "index2"]
+        si = StringIndexer(inputCols=input_cols, outputCols=output_cols)
+        model = si.fit(df.select(*input_cols))
+        self.assertEqual(model.getInputCols(), input_cols)
+        self.assertEqual(model.getOutputCols(), output_cols)
+
+        indexed_df = model.transform(df.select(*input_cols))
+        self.assertEqual(
+            sorted(indexed_df.schema.names), sorted(["label1", "index1", "label2", "index2"])
+        )
+
+        rows = indexed_df.collect()
+        check_a_b(sorted(set([(i[0], i[2]) for i in rows]), key=lambda x: x[0]))
+
+        # check e f
+        result = sorted(set([(i[1], i[3]) for i in rows]), key=lambda x: x[0])
+        self.assertTrue(result[0][0] == "e" and result[1][0] == "f")
+        sorted_value = sorted([v for _, v in result])
+        self.assertEqual(sorted_value, [0.0, 1.0])
+
+    def test_pca(self):
+        df = self.spark.createDataFrame(
+            [
+                (Vectors.sparse(5, [(1, 1.0), (3, 7.0)]),),
+                (Vectors.dense([2.0, 0.0, 3.0, 4.0, 5.0]),),
+                (Vectors.dense([4.0, 0.0, 0.0, 6.0, 7.0]),),
+            ],
+            ["features"],
+        )
+        pca = PCA(k=2, inputCol="features", outputCol="pca_features")
+
+        model = pca.fit(df)
+        self.assertEqual(model.getK(), 2)
+        self.assertTrue(
+            np.allclose(model.explainedVariance.toArray(), [0.79439, 0.20560], atol=1e-4)
+        )
+        model.setOutputCol("output")
+        # Transform the data using the PCA model
+        transformed_df = model.transform(df)
+        self.assertTrue(
+            np.allclose(
+                transformed_df.collect()[0].output.toArray(), [1.64857, -4.013282], atol=1e-4
+            )
+        )
+
+        # read/write
+        with tempfile.TemporaryDirectory(prefix="read_write") as tmp_dir:
+            pca.write().overwrite().save(tmp_dir)
+            pca2 = PCA.load(tmp_dir)
+            self.assertEqual(str(pca), str(pca2))
+            self.assertEqual(pca.getInputCol(), "features")
+            self.assertEqual(pca2.getInputCol(), "features")
+
+            model.write().overwrite().save(tmp_dir)
+            model2 = PCAModel.load(tmp_dir)
+            self.assertEqual(str(model), str(model2))
+            self.assertEqual(model.getInputCol(), "features")
+            self.assertEqual(model2.getInputCol(), "features")
+
+    def test_vector_assembler(self):
+        # Create a DataFrame
+        df = (
+            self.spark.createDataFrame(
+                [
+                    (1, 5.0, 6.0, 7.0),
+                    (2, 1.0, 2.0, None),
+                    (3, 3.0, float("nan"), 4.0),
+                ],
+                ["index", "a", "b", "c"],
+            )
+            .coalesce(1)
+            .sortWithinPartitions("index")
+        )
+
+        # Initialize VectorAssembler
+        vec_assembler = VectorAssembler(outputCol="features").setInputCols(["a", "b", "c"])
+        output = vec_assembler.transform(df)
+        self.assertEqual(output.columns, ["index", "a", "b", "c", "features"])
+        self.assertEqual(output.head().features, Vectors.dense([5.0, 6.0, 7.0]))
+
+        # Set custom parameters and transform the DataFrame
+        params = {vec_assembler.inputCols: ["b", "a"], vec_assembler.outputCol: "vector"}
+        self.assertEqual(
+            vec_assembler.transform(df, params).head().vector, Vectors.dense([6.0, 5.0])
+        )
+
+        # read/write
+        with tempfile.TemporaryDirectory(prefix="read_write") as tmp_dir:
+            vec_assembler.write().overwrite().save(tmp_dir)
+            vec_assembler2 = VectorAssembler.load(tmp_dir)
+            self.assertEqual(str(vec_assembler), str(vec_assembler2))
+
+        # Initialize a new VectorAssembler with handleInvalid="keep"
+        vec_assembler3 = VectorAssembler(
+            inputCols=["a", "b", "c"], outputCol="features", handleInvalid="keep"
+        )
+        self.assertEqual(vec_assembler3.transform(df).count(), 3)
+
+        # Update handleInvalid to "skip" and transform the DataFrame
+        vec_assembler3.setParams(handleInvalid="skip")
+        self.assertEqual(vec_assembler3.transform(df).count(), 1)
+
     def test_standard_scaler(self):
         df = (
             self.spark.createDataFrame(
@@ -59,7 +214,7 @@ class FeatureTestsMixin:
                 ["index", "weight", "features"],
             )
             .coalesce(1)
-            .sortWithinPartitions("weight")
+            .sortWithinPartitions("index")
             .select("features")
         )
         scaler = StandardScaler(inputCol="features", outputCol="scaled")
@@ -97,7 +252,7 @@ class FeatureTestsMixin:
                 ["index", "weight", "features"],
             )
             .coalesce(1)
-            .sortWithinPartitions("weight")
+            .sortWithinPartitions("index")
             .select("features")
         )
 
@@ -135,7 +290,7 @@ class FeatureTestsMixin:
                 ["index", "weight", "features"],
             )
             .coalesce(1)
-            .sortWithinPartitions("weight")
+            .sortWithinPartitions("index")
             .select("features")
         )
 
@@ -161,6 +316,45 @@ class FeatureTestsMixin:
         with tempfile.TemporaryDirectory(prefix="standard_scaler_model") as d:
             model.write().overwrite().save(d)
             model2 = MinMaxScalerModel.load(d)
+            self.assertEqual(str(model), str(model2))
+
+    def test_robust_scaler(self):
+        df = (
+            self.spark.createDataFrame(
+                [
+                    (1, 1.0, Vectors.dense([0.0])),
+                    (2, 2.0, Vectors.dense([2.0])),
+                    (3, 3.0, Vectors.sparse(1, [(0, 3.0)])),
+                ],
+                ["index", "weight", "features"],
+            )
+            .coalesce(1)
+            .sortWithinPartitions("index")
+            .select("features")
+        )
+
+        scaler = RobustScaler(inputCol="features", outputCol="scaled")
+        self.assertEqual(scaler.getInputCol(), "features")
+        self.assertEqual(scaler.getOutputCol(), "scaled")
+
+        # Estimator save & load
+        with tempfile.TemporaryDirectory(prefix="robust_scaler") as d:
+            scaler.write().overwrite().save(d)
+            scaler2 = RobustScaler.load(d)
+            self.assertEqual(str(scaler), str(scaler2))
+
+        model = scaler.fit(df)
+        self.assertTrue(np.allclose(model.range.toArray(), [3.0], atol=1e-4))
+        self.assertTrue(np.allclose(model.median.toArray(), [2.0], atol=1e-4))
+
+        output = model.transform(df)
+        self.assertEqual(output.columns, ["features", "scaled"])
+        self.assertEqual(output.count(), 3)
+
+        # Model save & load
+        with tempfile.TemporaryDirectory(prefix="robust_scaler_model") as d:
+            model.write().overwrite().save(d)
+            model2 = RobustScalerModel.load(d)
             self.assertEqual(str(model), str(model2))
 
     def test_binarizer(self):

@@ -20,7 +20,16 @@ package org.apache.spark.sql.catalyst.plans
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{AssertTrue, Cast, If, Literal, TimeZoneAwareExpression}
+import org.apache.spark.sql.catalyst.expressions.{
+  AssertTrue,
+  Cast,
+  CommonExpressionDef,
+  CommonExpressionId,
+  CommonExpressionRef,
+  If,
+  Literal,
+  TimeZoneAwareExpression
+}
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.types.BooleanType
 
@@ -68,6 +77,27 @@ class NormalizePlanSuite extends SparkFunSuite with SQLConfHelper {
     // However, plans are still different.
     assert(resolvedBaselinePlan != resolvedTestPlan)
     assert(NormalizePlan(resolvedBaselinePlan) == NormalizePlan(resolvedTestPlan))
+  }
+
+  test("Normalize CommonExpressionId") {
+    val baselineCommonExpressionRef =
+      CommonExpressionRef(id = new CommonExpressionId, dataType = BooleanType, nullable = false)
+    val baselineCommonExpressionDef = CommonExpressionDef(child = Literal(0))
+    val testCommonExpressionRef =
+      CommonExpressionRef(id = new CommonExpressionId, dataType = BooleanType, nullable = false)
+    val testCommonExpressionDef = CommonExpressionDef(child = Literal(0))
+
+    val baselinePlanRef = LocalRelation().select(baselineCommonExpressionRef)
+    val testPlanRef = LocalRelation().select(testCommonExpressionRef)
+
+    assert(baselinePlanRef != testPlanRef)
+    assert(NormalizePlan(baselinePlanRef) == NormalizePlan(testPlanRef))
+
+    val baselinePlanDef = LocalRelation().select(baselineCommonExpressionDef)
+    val testPlanDef = LocalRelation().select(testCommonExpressionDef)
+
+    assert(baselinePlanDef != testPlanDef)
+    assert(NormalizePlan(baselinePlanDef) == NormalizePlan(testPlanDef))
   }
 
   private def setTimezoneForAllExpression(plan: LogicalPlan): LogicalPlan = {
