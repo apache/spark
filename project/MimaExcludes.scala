@@ -223,6 +223,9 @@ object MimaExcludes {
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.streaming.DataStreamWriter$"),
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.streaming.StreamingQueryManager"),
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.streaming.StreamingQuery"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.SQLContext"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.SQLContext$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.SQLContext$implicits$"),
 
     // SPARK-50768: Introduce TaskContext.createResourceUninterruptibly to avoid stream leak by task interruption
     ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.TaskContext.interruptible"),

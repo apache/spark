@@ -636,7 +636,7 @@ abstract class SQLContext private[sql] (val sparkSession: SparkSession)
 
   /**
    * Returns a `StreamingQueryManager` that allows managing all the
-   * [[org.apache.spark.sql.api.StreamingQuery StreamingQueries]] active on `this` context.
+   * [[org.apache.spark.sql.streaming.StreamingQuery StreamingQueries]] active on `this` context.
    *
    * @since 2.0.0
    */
