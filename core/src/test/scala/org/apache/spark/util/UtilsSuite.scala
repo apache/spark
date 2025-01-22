@@ -526,16 +526,13 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
 
     // The following 3 scenarios are only for the method: createDirectory(File)
     // 6. Symbolic link
-    lazy val (majorVersion: Int, patchVersion: Int) = {
-      // JAVA_RUNTIME_VERSION is like "17.0.14+7-LTS"
-      val splits = SystemUtils.JAVA_RUNTIME_VERSION.split("\\.")
-      (splits(0).toInt, splits(2).split("\\+").head.toInt)
-    }
+    // JAVA_RUNTIME_VERSION is like "17.0.14+7-LTS"
+    lazy val javaVersion = Runtime.Version.parse(SystemUtils.JAVA_RUNTIME_VERSION)
     val scenario6 = java.nio.file.Files.createSymbolicLink(new File(testDir, "scenario6")
       .toPath, scenario1.toPath).toFile
     if (Utils.isJavaVersionAtLeast21) {
       assert(Utils.createDirectory(scenario6))
-    } else if (majorVersion == 17 && patchVersion >= 14) {
+    } else if (javaVersion.feature() == 17 && javaVersion.update() >= 14) {
       // SPARK-50946: Java 17.0.14 includes JDK-8294193, so scenario6 can succeed.
       assert(Utils.createDirectory(scenario6))
     } else {
