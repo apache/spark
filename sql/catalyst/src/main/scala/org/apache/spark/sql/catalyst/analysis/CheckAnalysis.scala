@@ -22,7 +22,7 @@ import org.apache.spark.{SparkException, SparkThrowable}
 import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
-import org.apache.spark.sql.catalyst.analysis.ResolveWithCTE.{checkDataTypesAnchorAndRecursiveTerm, checkIfSelfReferenceIsPlacedCorrectly}
+import org.apache.spark.sql.catalyst.analysis.ResolveWithCTE.checkIfSelfReferenceIsPlacedCorrectly
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.SubExprUtils._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, AggregateFunction, ListAgg, Median, PercentileCont, PercentileDisc}
@@ -278,7 +278,6 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
       case unionLoop: UnionLoop =>
         // Recursive CTEs have already substituted Union to UnionLoop at this stage.
         // Here we perform additional checks for them.
-        checkDataTypesAnchorAndRecursiveTerm(unionLoop)
         checkIfSelfReferenceIsPlacedCorrectly(unionLoop)
 
       case _ =>
