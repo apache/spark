@@ -67,9 +67,9 @@ class SqlScriptingExecution(
       // innermost scope that should be exited.
       if (lastFrame.frameType == SqlScriptingFrameType.HANDLER && context.frames.nonEmpty) {
         // Remove the scope if handler is executed.
-        if (context.firstHandlerScope.isDefined
-          && lastFrame.scopeLabel.get == context.firstHandlerScope.get) {
-          context.firstHandlerScope = None
+        if (context.firstHandlerScopeLabel.isDefined
+          && lastFrame.scopeLabel.get == context.firstHandlerScopeLabel.get) {
+          context.firstHandlerScopeLabel = None
         }
 
         var execPlan: CompoundBodyExec = context.frames.last.executionPlan

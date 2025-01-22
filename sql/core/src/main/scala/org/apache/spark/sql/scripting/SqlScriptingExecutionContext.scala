@@ -28,7 +28,7 @@ import org.apache.spark.sql.scripting.SqlScriptingFrameType.SqlScriptingFrameTyp
 class SqlScriptingExecutionContext {
   // List of frames that are currently active.
   private[scripting] val frames: ListBuffer[SqlScriptingExecutionFrame] = ListBuffer.empty
-  private[scripting] var firstHandlerScope: Option[String] = None
+  private[scripting] var firstHandlerScopeLabel: Option[String] = None
 
   def enterScope(
       label: String,
@@ -53,7 +53,7 @@ class SqlScriptingExecutionContext {
 
     // If the last frame is a handler, try to find a handler in its body first.
     if (frames.last.frameType == SqlScriptingFrameType.HANDLER) {
-      val handler = frames.last.findHandler(condition, sqlState, firstHandlerScope)
+      val handler = frames.last.findHandler(condition, sqlState, firstHandlerScopeLabel)
       if (handler.isDefined) {
         return handler
       }
@@ -64,9 +64,9 @@ class SqlScriptingExecutionContext {
     //       script/stored procedure frames on call stack. We will have to iterate over all
     //       frames and skip frames representing error handlers.
     val scriptFrame = frames.head
-    val handler = scriptFrame.findHandler(condition, sqlState, firstHandlerScope)
+    val handler = scriptFrame.findHandler(condition, sqlState, firstHandlerScopeLabel)
     if (handler.isDefined) {
-      firstHandlerScope = handler.get.scopeLabel
+      firstHandlerScopeLabel = handler.get.scopeLabel
       return handler
     }
 
