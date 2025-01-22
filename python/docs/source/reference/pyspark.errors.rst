@@ -69,7 +69,7 @@ Methods
 .. autosummary::
     :toctree: api/
 
-    PySparkException.getErrorClass
+    PySparkException.getCondition
     PySparkException.getMessage
     PySparkException.getMessageParameters
     PySparkException.getQueryContext
