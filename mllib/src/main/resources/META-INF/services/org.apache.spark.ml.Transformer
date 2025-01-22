@@ -47,3 +47,4 @@ org.apache.spark.ml.fpm.FPGrowthModel
 org.apache.spark.ml.feature.StandardScalerModel
 org.apache.spark.ml.feature.MaxAbsScalerModel
 org.apache.spark.ml.feature.MinMaxScalerModel
+org.apache.spark.ml.feature.RobustScalerModel

@@ -35,6 +35,8 @@ from pyspark.ml.feature import (
     MaxAbsScalerModel,
     MinMaxScaler,
     MinMaxScalerModel,
+    RobustScaler,
+    RobustScalerModel,
     StopWordsRemover,
     StringIndexer,
     StringIndexerModel,
@@ -103,7 +105,7 @@ class FeatureTestsMixin:
                 ["index", "weight", "features"],
             )
             .coalesce(1)
-            .sortWithinPartitions("weight")
+            .sortWithinPartitions("index")
             .select("features")
         )
         scaler = StandardScaler(inputCol="features", outputCol="scaled")
@@ -141,7 +143,7 @@ class FeatureTestsMixin:
                 ["index", "weight", "features"],
             )
             .coalesce(1)
-            .sortWithinPartitions("weight")
+            .sortWithinPartitions("index")
             .select("features")
         )
 
@@ -179,7 +181,7 @@ class FeatureTestsMixin:
                 ["index", "weight", "features"],
             )
             .coalesce(1)
-            .sortWithinPartitions("weight")
+            .sortWithinPartitions("index")
             .select("features")
         )
 
@@ -205,6 +207,45 @@ class FeatureTestsMixin:
         with tempfile.TemporaryDirectory(prefix="standard_scaler_model") as d:
             model.write().overwrite().save(d)
             model2 = MinMaxScalerModel.load(d)
+            self.assertEqual(str(model), str(model2))
+
+    def test_robust_scaler(self):
+        df = (
+            self.spark.createDataFrame(
+                [
+                    (1, 1.0, Vectors.dense([0.0])),
+                    (2, 2.0, Vectors.dense([2.0])),
+                    (3, 3.0, Vectors.sparse(1, [(0, 3.0)])),
+                ],
+                ["index", "weight", "features"],
+            )
+            .coalesce(1)
+            .sortWithinPartitions("index")
+            .select("features")
+        )
+
+        scaler = RobustScaler(inputCol="features", outputCol="scaled")
+        self.assertEqual(scaler.getInputCol(), "features")
+        self.assertEqual(scaler.getOutputCol(), "scaled")
+
+        # Estimator save & load
+        with tempfile.TemporaryDirectory(prefix="robust_scaler") as d:
+            scaler.write().overwrite().save(d)
+            scaler2 = RobustScaler.load(d)
+            self.assertEqual(str(scaler), str(scaler2))
+
+        model = scaler.fit(df)
+        self.assertTrue(np.allclose(model.range.toArray(), [3.0], atol=1e-4))
+        self.assertTrue(np.allclose(model.median.toArray(), [2.0], atol=1e-4))
+
+        output = model.transform(df)
+        self.assertEqual(output.columns, ["features", "scaled"])
+        self.assertEqual(output.count(), 3)
+
+        # Model save & load
+        with tempfile.TemporaryDirectory(prefix="robust_scaler_model") as d:
+            model.write().overwrite().save(d)
+            model2 = RobustScalerModel.load(d)
             self.assertEqual(str(model), str(model2))
 
     def test_binarizer(self):
