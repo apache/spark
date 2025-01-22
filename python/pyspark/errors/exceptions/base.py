@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import warnings
 from abc import ABC, abstractmethod
 from enum import Enum
 from typing import Dict, Optional, cast, Iterable, TYPE_CHECKING, List
@@ -53,11 +54,11 @@ class PySparkException(Exception):
         self._messageParameters = messageParameters
         self._contexts = contexts
 
-    def getErrorClass(self) -> Optional[str]:
+    def getCondition(self) -> Optional[str]:
         """
-        Returns an error class as a string.
+        Returns an error condition.
 
-        .. versionadded:: 3.4.0
+        .. versionadded:: 4.0.0
 
         See Also
         --------
@@ -68,6 +69,24 @@ class PySparkException(Exception):
         """
         return self._errorClass
 
+    def getErrorClass(self) -> Optional[str]:
+        """
+        Returns an error class as a string.
+
+        .. versionadded:: 3.4.0
+
+        .. deprecated:: 4.0.0
+
+        See Also
+        --------
+        :meth:`PySparkException.getMessage`
+        :meth:`PySparkException.getMessageParameters`
+        :meth:`PySparkException.getQueryContext`
+        :meth:`PySparkException.getSqlState`
+        """
+        warnings.warn("Deprecated in 4.0.0, use getCondition instead.", FutureWarning)
+        return self.getCondition()
+
     def getMessageParameters(self) -> Optional[Dict[str, str]]:
         """
         Returns a message parameters as a dictionary.
@@ -76,7 +95,7 @@ class PySparkException(Exception):
 
         See Also
         --------
-        :meth:`PySparkException.getErrorClass`
+        :meth:`PySparkException.getCondition`
         :meth:`PySparkException.getMessage`
         :meth:`PySparkException.getQueryContext`
         :meth:`PySparkException.getSqlState`
@@ -93,7 +112,7 @@ class PySparkException(Exception):
 
         See Also
         --------
-        :meth:`PySparkException.getErrorClass`
+        :meth:`PySparkException.getCondition`
         :meth:`PySparkException.getMessage`
         :meth:`PySparkException.getMessageParameters`
         :meth:`PySparkException.getQueryContext`
@@ -108,12 +127,12 @@ class PySparkException(Exception):
 
         See Also
         --------
-        :meth:`PySparkException.getErrorClass`
+        :meth:`PySparkException.getCondition`
         :meth:`PySparkException.getMessageParameters`
         :meth:`PySparkException.getQueryContext`
         :meth:`PySparkException.getSqlState`
         """
-        return f"[{self.getErrorClass()}] {self._message}"
+        return f"[{self.getCondition()}] {self._message}"
 
     def getQueryContext(self) -> List["QueryContext"]:
         """
@@ -123,7 +142,7 @@ class PySparkException(Exception):
 
         See Also
         --------
-        :meth:`PySparkException.getErrorClass`
+        :meth:`PySparkException.getCondition`
         :meth:`PySparkException.getMessageParameters`
         :meth:`PySparkException.getMessage`
         :meth:`PySparkException.getSqlState`
@@ -143,17 +162,17 @@ class PySparkException(Exception):
                     file=call_site[0],
                     line=line,
                     fragment=context.fragment(),
-                    errorClass=self.getErrorClass(),
+                    errorClass=self.getCondition(),
                 )
             else:
                 logger = PySparkLogger.getLogger("SQLQueryContextLogger")
                 logger.exception(
                     self.getMessage(),
-                    errorClass=self.getErrorClass(),
+                    errorClass=self.getCondition(),
                 )
 
     def __str__(self) -> str:
-        if self.getErrorClass() is not None:
+        if self.getCondition() is not None:
             return self.getMessage()
         else:
             return self._message
