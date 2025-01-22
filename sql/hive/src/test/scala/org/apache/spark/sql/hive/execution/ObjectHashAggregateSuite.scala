@@ -24,7 +24,6 @@ import org.scalatest.matchers.must.Matchers._
 
 import org.apache.spark.sql.{Column, QueryTest, RandomDataGenerator, Row}
 import org.apache.spark.sql.catalyst.expressions.ExpressionEvalHelper
-import org.apache.spark.sql.classic.ClassicConversions._
 import org.apache.spark.sql.classic.DataFrame
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAggregateExec, SortAggregateExec}

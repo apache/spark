@@ -18,7 +18,6 @@
 package org.apache.spark.sql.avro
 
 import org.apache.spark.sql.FileScanSuiteBase
-import org.apache.spark.sql.classic.ClassicConversions.castToImpl
 import org.apache.spark.sql.v2.avro.AvroScan
 
 class AvroScanSuite extends FileScanSuiteBase {

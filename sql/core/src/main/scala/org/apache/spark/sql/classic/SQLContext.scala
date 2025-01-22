@@ -57,9 +57,7 @@ import org.apache.spark.sql.util.ExecutionListenerManager
  */
 @Stable
 class SQLContext private[sql] (override val sparkSession: SparkSession)
-    extends sql.SQLContext(sparkSession) {
-
-  self =>
+    extends sql.SQLContext(sparkSession) { self =>
 
   sparkSession.sparkContext.assertNotStopped()
 

@@ -48,6 +48,8 @@ trait ClassicConversions {
   implicit def castToImpl[K, V](kvds: sql.KeyValueGroupedDataset[K, V])
   : KeyValueGroupedDataset[K, V] = kvds.asInstanceOf[KeyValueGroupedDataset[K, V]]
 
+  implicit def castToImpl(context: sql.SQLContext): SQLContext = context.asInstanceOf[SQLContext]
+
   /**
    * Helper that makes it easy to construct a Column from an Expression.
    */
