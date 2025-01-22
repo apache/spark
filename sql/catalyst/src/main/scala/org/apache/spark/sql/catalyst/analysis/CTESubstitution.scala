@@ -19,7 +19,6 @@ package org.apache.spark.sql.catalyst.analysis
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
 import org.apache.spark.sql.catalyst.plans.logical.{Command, CTEInChildren, CTERelationDef, CTERelationRef, InsertIntoDir, LogicalPlan, ParsedStatement, SubqueryAlias, UnresolvedWith, WithCTE}
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -157,7 +156,7 @@ object CTESubstitution extends Rule[LogicalPlan] {
     plan.resolveOperatorsUp {
       case cte @ UnresolvedWith(child, relations, allowRecursion) =>
         if (allowRecursion) {
-          throw new AnalysisException(
+          cte.failAnalysis(
             errorClass = "RECURSIVE_CTE_IN_LEGACY_MODE",
             messageParameters = Map.empty)
         }
@@ -216,7 +215,7 @@ object CTESubstitution extends Rule[LogicalPlan] {
       // allowRecursion flag is set to `True` by the parser if the `RECURSIVE` keyword is used.
       case cte @ UnresolvedWith(child: LogicalPlan, relations, allowRecursion) =>
         if (allowRecursion && forceInline) {
-          throw new AnalysisException(
+          cte.failAnalysis(
             errorClass = "RECURSIVE_CTE_WHEN_INLINING_IS_FORCED",
             messageParameters = Map.empty)
         }
@@ -439,7 +438,7 @@ object CTESubstitution extends Rule[LogicalPlan] {
       case ref: CTERelationRef if ref.cteId == cteDef.id => ref
     }.length
     if (numOfSelfRef > 1) {
-      throw new AnalysisException(
+      cteDef.failAnalysis(
         errorClass = "INVALID_RECURSIVE_REFERENCE.NUMBER",
         messageParameters = Map.empty)
     }
