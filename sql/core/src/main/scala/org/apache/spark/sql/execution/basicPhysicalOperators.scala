@@ -761,10 +761,10 @@ case class UnionLoopExec(
    * with the caching mode specified in config.
    */
   private def executeAndCacheAndCount(
-     plan: LogicalPlan, limit: Option[Long]) = {
+     plan: LogicalPlan, currentLimit: Int) = {
     // In case limit is defined, we create a limit node above the plan and execute
     // the newly created plan.
-    val limitedPlan = limit.map(l => Limit(Literal(l.toInt), plan)).getOrElse(plan)
+    val limitedPlan = Limit(Literal(currentLimit), plan)
     val df = Dataset.ofRows(session, limitedPlan)
     val cachedDF = cacheMode match {
       case CTERecursionCacheMode.NONE => df
@@ -784,7 +784,7 @@ case class UnionLoopExec(
 
     // currentLimit is initialized from the limit argument, and in each step it is decreased by
     // the number of rows generated in that step.
-    var currentLimit = limit.map(_.toLong)
+    var currentLimit = limit.getOrElse(Int.MaxValue)
     val unionChildren = mutable.ArrayBuffer.empty[LogicalRDD]
 
     var (prevDF, prevCount) = executeAndCacheAndCount(anchor, currentLimit)
@@ -792,7 +792,7 @@ case class UnionLoopExec(
     var currentLevel = 1
 
     // Main loop for obtaining the result of the recursive query.
-    while (prevCount > 0 && currentLimit.forall(_ > 0)) {
+    while (prevCount > 0 && currentLimit > 0) {
       unionDFs += prevDF
 
       if (levelLimit != -1 && currentLevel > levelLimit) {
@@ -822,7 +822,7 @@ case class UnionLoopExec(
       prevDF = df
       prevCount = count
 
-      currentLimit = currentLimit.map(_ - count)
+      currentLimit -= count.toInt
       currentLevel += 1
     }
 
