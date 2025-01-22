@@ -54,7 +54,7 @@ object ResolveWithCTE extends Rule[LogicalPlan] {
           // are already substituted to UnionLoopRef in the previous pass, or it is not recursive
           // at all. In both cases we need to put it in the map in case it is resolved.
           // Second case is performing the substitution of recursive CTERelationRefs.
-          case cteDef if !cteDef.hasRecursiveCTERelationRef =>
+          case cteDef if !cteDef.hasSelfReferenceAsCTERef =>
             if (cteDef.resolved) {
               cteDefMap.put(cteDef.id, cteDef)
             }
