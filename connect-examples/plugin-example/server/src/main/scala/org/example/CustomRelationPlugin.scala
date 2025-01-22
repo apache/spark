@@ -27,6 +27,14 @@ import org.example.{CustomPluginBase, CustomTable}
 import org.example.proto
 
 class CustomRelationPlugin extends RelationPlugin with CustomPluginBase {
+
+  /**
+   * Transforms the raw byte array containing the relation into a Spark logical plan.
+   *
+   * @param raw The raw byte array of the relation.
+   * @param planner The SparkConnectPlanner instance.
+   * @return An Optional containing the LogicalPlan if the relation was processed, empty otherwise.
+   */
   override def transform(
       raw: Array[Byte],
       planner: SparkConnectPlanner): Optional[LogicalPlan] = {
@@ -40,6 +48,13 @@ class CustomRelationPlugin extends RelationPlugin with CustomPluginBase {
     }
   }
 
+  /**
+   * Transforms the unpacked CustomRelation into a Spark logical plan.
+   *
+   * @param relation The unpacked CustomRelation.
+   * @param planner The SparkConnectPlanner instance.
+   * @return The corresponding Spark LogicalPlan.
+   */
   private def transformInner(
       relation: proto.CustomRelation,
       planner: SparkConnectPlanner): LogicalPlan = {
@@ -52,8 +67,16 @@ class CustomRelationPlugin extends RelationPlugin with CustomPluginBase {
     }
   }
 
+  /**
+   * Transforms the Scan relation into a Spark logical plan.
+   *
+   * @param scan The Scan message.
+   * @param planner The SparkConnectPlanner instance.
+   * @return The corresponding Spark LogicalPlan.
+   */
   private def transformScan(scan: proto.Scan, planner: SparkConnectPlanner): LogicalPlan = {
     val customTable = getCustomTable(scan.getTable)
+    // Convert the custom table to a DataFrame and get its logical plan
     customTable.toDF().queryExecution.analyzed
   }
 }

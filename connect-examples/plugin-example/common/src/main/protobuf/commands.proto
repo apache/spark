@@ -59,4 +59,3 @@ message CloneTable {
   // (Required) Overwrites the target location when true.
   bool replace = 3;
 }
-

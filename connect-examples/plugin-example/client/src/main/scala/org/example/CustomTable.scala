@@ -23,17 +23,42 @@ import org.example.proto
 import org.example.proto.CreateTable.Column.{DataType => ProtoDataType}
 import org.apache.spark.sql.{functions, Column, DataFrame, Dataset, Row, SparkSession}
 
+/**
+ * Represents a custom table with associated DataFrame and metadata.
+ *
+ * @param df    The underlying DataFrame.
+ * @param table The metadata of the custom table.
+ */
 class CustomTable private (private val df: Dataset[Row], private val table: proto.CustomTable) {
 
+  /**
+   * Returns the Spark session associated with the DataFrame.
+   */
   private def spark = df.sparkSession
 
+  /**
+   * Converts the custom table to a DataFrame.
+   *
+   * @return The underlying DataFrame.
+   */
   def toDF: Dataset[Row] = df
 
+  /**
+   * Prints the execution plan of the custom table.
+   */
   def explain(): Unit = {
     println(s"Explaning plan for custom table: ${table.getName} with path: ${table.getPath}")
     df.explain("extended")
   }
 
+  /**
+   * Clones the custom table to a new location with a new name.
+   *
+   * @param target  The target path for the cloned table.
+   * @param newName The new name for the cloned table.
+   * @param replace Whether to replace the target location if it exists.
+   * @return A new `CustomTable` instance representing the cloned table.
+   */
   def clone(target: String, newName: String, replace: Boolean): CustomTable = {
     val cloneTableProto = proto.CloneTable
       .newBuilder()
@@ -67,6 +92,14 @@ class CustomTable private (private val df: Dataset[Row], private val table: prot
 }
 
 object CustomTable {
+  /**
+   * Creates a `CustomTable` from the given Spark session, name, and path.
+   *
+   * @param spark The Spark session.
+   * @param name  The name of the table.
+   * @param path  The path of the table.
+   * @return A new `CustomTable` instance.
+   */
   def from(spark: SparkSession, name: String, path: String): CustomTable = {
     val table = proto.CustomTable
       .newBuilder()
@@ -82,12 +115,27 @@ object CustomTable {
     new CustomTable(df, table)
   }
 
+  /**
+   * Creates a new `CustomTableBuilder` instance.
+   *
+   * @param spark The Spark session.
+   * @return A new `CustomTableBuilder` instance.
+   */
   def create(spark: SparkSession): CustomTableBuilder = new CustomTableBuilder(spark)
 
+  /**
+   * Enumeration for data types.
+   */
   object DataType extends Enumeration {
     type DataType = Value
     val Int, String, Float, Boolean = Value
 
+    /**
+     * Converts a `DataType` to its corresponding `ProtoDataType`.
+     *
+     * @param dataType The data type to convert.
+     * @return The corresponding `ProtoDataType`.
+     */
     def toProto(dataType: DataType): ProtoDataType = {
       dataType match {
         case Int => ProtoDataType.INT

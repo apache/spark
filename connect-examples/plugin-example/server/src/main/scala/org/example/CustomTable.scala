@@ -22,11 +22,26 @@ import com.github.mrpowers.spark.daria.sql.DariaWriters
 import org.apache.spark.sql.{Dataset, Row, SparkSession}
 import org.apache.spark.sql.types.StructType
 
+/**
+ * Represents a custom table with an identifier and a DataFrame.
+ *
+ * @param identifier The unique identifier for the table.
+ * @param df The DataFrame associated with the table.
+ */
 class CustomTable private (identifier: CustomTable.Identifier, df: Dataset[Row]) {
 
+  /**
+   * Returns the DataFrame associated with the table.
+   *
+   * @return The DataFrame.
+   */
   def toDF(): Dataset[Row] = df
+
+  /**
+   * Writes the DataFrame to disk as a CSV file.
+   */
   def flush(): Unit = {
-    // write dataset to disk as csv file
+    // Write dataset to disk as a CSV file
     DariaWriters.writeSingleFile(
       df = df,
       format = "csv",
@@ -39,10 +54,26 @@ class CustomTable private (identifier: CustomTable.Identifier, df: Dataset[Row])
 
 object CustomTable {
 
+  /**
+   * Represents the unique identifier for a custom table.
+   *
+   * @param name The name of the table.
+   * @param path The path where the table is stored.
+   */
   private case class Identifier(name: String, path: String)
-  // Collection holding all the CustomTable instances and searchable by the identifer
+
+  // Collection holding all the CustomTable instances and searchable by the identifier
   private val tablesByIdentifier = scala.collection.mutable.Map[Identifier, CustomTable]()
 
+  /**
+   * Creates a new custom table.
+   *
+   * @param name The name of the table.
+   * @param path The path where the table is stored.
+   * @param spark The SparkSession instance.
+   * @param schema The schema of the table.
+   * @return The created CustomTable instance.
+   */
   private[example] def createTable(
       name: String,
       path: String,
@@ -58,6 +89,15 @@ object CustomTable {
     table
   }
 
+  /**
+   * Clones an existing custom table.
+   *
+   * @param sourceTable The source table to clone.
+   * @param newName The name of the new table.
+   * @param newPath The path where the new table will be stored.
+   * @param replace Whether to replace the existing table if it exists.
+   * @return The cloned CustomTable instance.
+   */
   private[example] def cloneTable(
       sourceTable: CustomTable,
       newName: String,
@@ -71,7 +111,14 @@ object CustomTable {
     clonedTable
   }
 
-  // Factory method to get a CustomTable based on it's identifer
+  /**
+   * Retrieves a custom table based on its identifier.
+   *
+   * @param name The name of the table.
+   * @param path The path where the table is stored.
+   * @return The CustomTable instance.
+   * @throws IllegalArgumentException if the table is not found.
+   */
   def getTable(name: String, path: String): CustomTable = {
     val identifier = Identifier(name, path)
     tablesByIdentifier.get(identifier) match {

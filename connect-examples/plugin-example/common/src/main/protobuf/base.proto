@@ -21,6 +21,8 @@ option java_multiple_files = true;
 option java_package = "org.example.proto";
 
 message CustomTable {
+    // Path to the custom table.
     string path = 1;
+    // Name of the custom table.
     string name = 2;
 }

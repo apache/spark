@@ -29,6 +29,14 @@ import org.example.proto.CreateTable.Column.{DataType => ProtoDataType}
 import scala.collection.JavaConverters._
 
 class CustomCommandPlugin extends CommandPlugin with CustomPluginBase {
+
+  /**
+   * Processes the raw byte array containing the command.
+   *
+   * @param raw The raw byte array of the command.
+   * @param planner The SparkConnectPlanner instance.
+   * @return True if the command was processed, false otherwise.
+   */
   override def process(raw: Array[Byte], planner: SparkConnectPlanner): Boolean = {
     val command = Any.parseFrom(raw)
     println(s"Received command: ${command}")
@@ -40,6 +48,12 @@ class CustomCommandPlugin extends CommandPlugin with CustomPluginBase {
     }
   }
 
+  /**
+   * Processes the unpacked CustomCommand.
+   *
+   * @param command The unpacked CustomCommand.
+   * @param planner The SparkConnectPlanner instance.
+   */
   private def processInternal(
       command: proto.CustomCommand,
       planner: SparkConnectPlanner): Unit = {
@@ -54,12 +68,19 @@ class CustomCommandPlugin extends CommandPlugin with CustomPluginBase {
     }
   }
 
+  /**
+   * Processes the CreateTable command.
+   *
+   * @param planner The SparkConnectPlanner instance.
+   * @param createTable The CreateTable message.
+   */
   private def processCreateTable(
       planner: SparkConnectPlanner,
       createTable: proto.CreateTable): Unit = {
     val tableName = createTable.getTable.getName
     val tablePath = createTable.getTable.getPath
 
+    // Convert the list of columns from the protobuf message to a Spark schema
     val schema = StructType(createTable.getColumnsList.asScala.toSeq.map { column =>
       StructField(
         column.getName,
@@ -68,9 +89,16 @@ class CustomCommandPlugin extends CommandPlugin with CustomPluginBase {
       )
     })
 
+    // Create the table using the CustomTable utility
     CustomTable.createTable(tableName, tablePath, planner.session, schema)
   }
 
+  /**
+   * Converts a protobuf DataType to a Spark DataType.
+   *
+   * @param protoType The protobuf DataType.
+   * @return The corresponding Spark DataType.
+   */
   private def protoDataTypeToSparkType(protoType: ProtoDataType): DataType = {
     protoType match {
       case ProtoDataType.INT => IntegerType
@@ -82,6 +110,12 @@ class CustomCommandPlugin extends CommandPlugin with CustomPluginBase {
     }
   }
 
+  /**
+   * Processes the CloneTable command.
+   *
+   * @param planner The SparkConnectPlanner instance.
+   * @param msg The CloneTable message.
+   */
   private def processCloneTable(planner: SparkConnectPlanner, msg: proto.CloneTable): Unit = {
     val sourceTable = getCustomTable(msg.getTable)
     CustomTable.cloneTable(

@@ -29,5 +29,6 @@ message CustomRelation {
 }
 
 message Scan {
+  // (Required) Table to scan.
   CustomTable table = 1;
 }
