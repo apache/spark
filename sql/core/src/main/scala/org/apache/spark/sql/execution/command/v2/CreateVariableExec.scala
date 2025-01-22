@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.command.v2
 
 import java.util.Locale
 
-import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.{InternalRow, SqlScriptingVariableManager}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, ExpressionsEvaluator, Literal}
 import org.apache.spark.sql.catalyst.plans.logical.DefaultValueExpression
 import org.apache.spark.sql.connector.catalog.Identifier
@@ -35,8 +35,7 @@ case class CreateVariableExec(
     sessionVariablesOnly: Boolean) extends LeafV2CommandExec with ExpressionsEvaluator {
 
   override protected def run(): Seq[InternalRow] = {
-    val scriptingVariableManager =
-      session.sessionState.catalogManager.getSqlScriptingLocalVariableManager
+    val scriptingVariableManager = SqlScriptingVariableManager.get()
     val tempVariableManager = session.sessionState.catalogManager.tempVariableManager
 
     val exprs = prepareExpressions(Seq(defaultExpr.child), subExprEliminationEnabled = false)

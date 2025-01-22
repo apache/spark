@@ -17,16 +17,16 @@
 
 package org.apache.spark.sql.scripting
 
-import java.io.Closeable
-
 import org.apache.spark.sql.{DataFrame, SparkSession}
+import org.apache.spark.sql.catalyst.SqlScriptingVariableManager
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.logical.{CommandResult, CompoundBody}
 
 /**
  * SQL scripting executor - executes script and returns result statements.
  * This supports returning multiple result statements from a single script.
- * The caller of the SqlScriptingExecution API must adhere to the contract of executing
+ * The caller of the SqlScriptingExecution API must wrap the interpretation and execution of
+ * statements with the [[runWithContext]] method, and adhere to the contract of executing
  * the returned statement before continuing iteration. Executing the statement needs to be done
  * inside withErrorHandling block.
  *
@@ -37,7 +37,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{CommandResult, CompoundBody}
 class SqlScriptingExecution(
     sqlScript: CompoundBody,
     session: SparkSession,
-    args: Map[String, Expression]) extends Closeable {
+    args: Map[String, Expression]) {
 
   private val interpreter = SqlScriptingInterpreter(session)
 
@@ -55,7 +55,15 @@ class SqlScriptingExecution(
   }
 
   private val variableManager = new SqlScriptingVariableManager(context)
-  session.sessionState.catalogManager.setSqlScriptingLocalVariableManager(Some(variableManager))
+  private val handle = SqlScriptingVariableManager.create(variableManager)
+
+  /**
+   * Handles scripting context creation/access/deletion. Calls to execution API must be wrapped
+   * with this method.
+   */
+  def runWithContext[R](f: => R): R = {
+    handle.runWith(f)
+  }
 
   /** Helper method to iterate get next statements from the first available frame. */
   private def getNextStatement: Option[CompoundStatementExec] = {
@@ -114,10 +122,5 @@ class SqlScriptingExecution(
       case e: Throwable =>
         handleException(e)
     }
-  }
-
-  /** Cleans up resources associated with the execution. */
-  override def close(): Unit = {
-    session.sessionState.catalogManager.setSqlScriptingLocalVariableManager(None)
   }
 }

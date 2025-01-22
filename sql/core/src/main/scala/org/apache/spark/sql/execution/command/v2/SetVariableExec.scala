@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.command.v2
 import java.util.Locale
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.{InternalRow, SqlScriptingVariableManager}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Literal, VariableReference}
 import org.apache.spark.sql.catalyst.trees.UnaryLike
 import org.apache.spark.sql.errors.QueryCompilationErrors.unresolvedVariableError
@@ -67,8 +67,7 @@ case class SetVariableExec(
     }
 
     val tempVariableManager = session.sessionState.catalogManager.tempVariableManager
-    val scriptingVariableManager =
-      session.sessionState.catalogManager.getSqlScriptingLocalVariableManager
+    val scriptingVariableManager = SqlScriptingVariableManager.get()
 
     val variableManager = scriptingVariableManager
       .filterNot(_ => sessionVariablesOnly)

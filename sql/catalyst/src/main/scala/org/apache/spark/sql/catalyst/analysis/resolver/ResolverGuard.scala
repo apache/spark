@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis.resolver
 
-import org.apache.spark.sql.catalyst.SQLConfHelper
+import org.apache.spark.sql.catalyst.{SQLConfHelper, SqlScriptingVariableManager}
 import org.apache.spark.sql.catalyst.analysis.{
   ResolvedInlineTable,
   UnresolvedAlias,
@@ -211,7 +211,7 @@ class ResolverGuard(catalogManager: CatalogManager) extends SQLConfHelper {
 
   private def checkVariables() =
     catalogManager.tempVariableManager.isEmpty &&
-    catalogManager.getSqlScriptingLocalVariableManager.forall(_.isEmpty)
+      SqlScriptingVariableManager.get().forall(_.isEmpty)
 }
 
 object ResolverGuard {

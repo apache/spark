@@ -26,7 +26,6 @@ import org.apache.spark.sql.catalyst.plans.logical.CompoundBody
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLId
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.util.Utils
 
 /**
  * SQL Scripting interpreter tests.
@@ -47,7 +46,8 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
       args: Map[String, Expression] = Map.empty): Seq[Array[Row]] = {
     val compoundBody = spark.sessionState.sqlParser.parsePlan(sqlText).asInstanceOf[CompoundBody]
 
-    Utils.tryWithResource(new SqlScriptingExecution(compoundBody, spark, args)) { sse =>
+    val sse = new SqlScriptingExecution(compoundBody, spark, args)
+    sse.runWithContext {
       val result: ListBuffer[Array[Row]] = ListBuffer.empty
 
       var df = sse.getNextResult
@@ -1663,12 +1663,6 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
         verifySqlScriptResult(sqlScript, Seq.empty[Seq[Row]])
       }
     }
-
-    // TODO: Once execution is changed to support exception handling, remove this manual cleanup.
-    //  The reason it is neccessary now is that with the current execution logic,
-    //  the SqlScriptingExecution errors while being constructed,
-    //  meaning it doesn't get cleaned up properly.
-    spark.sessionState.catalogManager.setSqlScriptingLocalVariableManager(None)
 
     checkError(
       exception = e,
