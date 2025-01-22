@@ -47,7 +47,7 @@ class CustomTable private (private val df: Dataset[Row], private val table: prot
    * Prints the execution plan of the custom table.
    */
   def explain(): Unit = {
-    println(s"Explaning plan for custom table: ${table.getName} with path: ${table.getPath}")
+    println(s"Explaining plan for custom table: ${table.getName} with path: ${table.getPath}")
     df.explain("extended")
   }
 

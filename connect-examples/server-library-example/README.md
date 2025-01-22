@@ -1,6 +1,8 @@
-# Spark Plugin Example - Custom Datasource Handler
+# Spark Server Library Example - Custom Datasource Handler
 
-This example demonstrates a modular maven-based project architecture with separate client, server and common components. It leverages the extensibility of Spark Connect to create a plugin that may be attached to the server to extend the functionality of the Spark Connect server as a whole. Below is a detailed overview of the setup and functionality.
+This example demonstrates a modular maven-based project architecture with separate client, server 
+and common components. It leverages the extensibility of Spark Connect to create a server library 
+that may be attached to the server to extend the functionality of the Spark Connect server as a whole. Below is a detailed overview of the setup and functionality.
 
 ## Project Structure
 
@@ -68,7 +70,7 @@ reading, writing and processing data in the custom format. The plugins (`CustomC
 
 1. **Navigate to the sample project from `SPARK_HOME`**:
    ```bash
-   cd connect-examples/plugin-example
+   cd connect-examples/server-library-example
    ```
 
 2. **Build and package the modules**:
@@ -83,25 +85,25 @@ reading, writing and processing data in the custom format. The plugins (`CustomC
 4. **Copy relevant JARs to the root of the unpacked Spark distribution**:
    ```bash
     cp \
-    <SPARK_HOME>/connect-examples/plugin-example/resources/spark-daria_2.13-1.2.3.jar \
-    <SPARK_HOME>/connect-examples/plugin-example/common/target/spark-plugin-example-common-1.0-SNAPSHOT.jar \
-    <SPARK_HOME>/connect-examples/plugin-example/server/target/spark-plugin-example-server-1.0-SNAPSHOT.jar \
+    <SPARK_HOME>/connect-examples/server-library-example/resources/spark-daria_2.13-1.2.3.jar \
+    <SPARK_HOME>/connect-examples/server-library-example/common/target/spark-server-library-example-common-1.0-SNAPSHOT.jar \
+    <SPARK_HOME>/connect-examples/server-library-example/server/target/spark-server-library-example-server-extension-1.0-SNAPSHOT.jar \
     .
    ```
 5. **Start the Spark Connect Server with the relevant JARs**:
    ```bash
     bin/spark-connect-shell \
-   --jars spark-plugin-example-server-1.0-SNAPSHOT.jar,spark-plugin-example-common-1.0-SNAPSHOT.jar,spark-daria_2.13-1.2.3.jar \
+   --jars spark-server-library-example-server-extension,spark-server-library-example-common-1.0-SNAPSHOT.jar,spark-daria_2.13-1.2.3.jar \
    --conf spark.connect.extensions.relation.classes=org.example.CustomRelationPlugin \
    --conf spark.connect.extensions.command.classes=org.example.CustomCommandPlugin
    ```
 6. **In a different terminal, navigate back to the root of the sample project and start the client**:
    ```bash
-   java -cp client/target/spark-plugin-example-client-scala-1.0-SNAPSHOT.jar org.example.Main
+   java -cp client/target/spark-server-library-client-package-scala-1.0-SNAPSHOT.jar org.example.Main
    ```
 7. **Notice the printed output in the client terminal as well as the creation of the cloned table**:
 ```protobuf
-Explaning plan for custom table: sample_table with path: <SPARK_HOME>/spark/connect-examples/plugin-example/client/../resources/dummy_data.custom
+Explaining plan for custom table: sample_table with path: <SPARK_HOME>/spark/connect-examples/server-library-example/client/../resources/dummy_data.custom
 == Parsed Logical Plan ==
 Relation [id#2,name#3] csv
 
@@ -113,9 +115,9 @@ Relation [id#2,name#3] csv
 Relation [id#2,name#3] csv
 
 == Physical Plan ==
-FileScan csv [id#2,name#3] Batched: false, DataFilters: [], Format: CSV, Location: InMemoryFileIndex(1 paths)[file:/Users/venkata.gudesa/spark/connect-examples/plugin-example/resou..., PartitionFilters: [], PushedFilters: [], ReadSchema: struct<id:int,name:string>
+FileScan csv [id#2,name#3] Batched: false, DataFilters: [], Format: CSV, Location: InMemoryFileIndex(1 paths)[file:/Users/venkata.gudesa/spark/connect-examples/server-library-example/resou..., PartitionFilters: [], PushedFilters: [], ReadSchema: struct<id:int,name:string>
 
-Explaning plan for custom table: cloned_table with path: <SPARK_HOME>/connect-examples/plugin-example/client/../resources/cloned_data.custom
+Explaining plan for custom table: cloned_table with path: <SPARK_HOME>/connect-examples/server-library-example/client/../resources/cloned_data.custom
 == Parsed Logical Plan ==
 Relation [id#2,name#3] csv
 
@@ -127,5 +129,5 @@ Relation [id#2,name#3] csv
 Relation [id#2,name#3] csv
 
 == Physical Plan ==
-FileScan csv [id#2,name#3] Batched: false, DataFilters: [], Format: CSV, Location: InMemoryFileIndex(1 paths)[file:/Users/venkata.gudesa/spark/connect-examples/plugin-example/resou..., PartitionFilters: [], PushedFilters: [], ReadSchema: struct<id:int,name:string>
+FileScan csv [id#2,name#3] Batched: false, DataFilters: [], Format: CSV, Location: InMemoryFileIndex(1 paths)[file:/Users/venkata.gudesa/spark/connect-examples/server-library-example/resou..., PartitionFilters: [], PushedFilters: [], ReadSchema: struct<id:int,name:string>
 ```

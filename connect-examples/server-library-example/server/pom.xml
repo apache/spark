@@ -23,50 +23,65 @@
 
   <parent>
     <groupId>org.example</groupId>
-    <artifactId>spark-plugin-example</artifactId>
+    <artifactId>spark-server-library-example</artifactId>
     <version>1.0-SNAPSHOT</version>
     <relativePath>../pom.xml</relativePath>
   </parent>
 
-  <artifactId>spark-plugin-example-common</artifactId>
+  <artifactId>spark-server-library-example-server-extension</artifactId>
   <packaging>jar</packaging>
 
   <dependencies>
-    <!--Required to compile the proto files-->
+    <!-- Custom Proto definitions are in the common module -->
     <dependency>
-      <groupId>com.google.protobuf</groupId>
-      <artifactId>protobuf-java</artifactId>
-      <version>${protobuf.version}</version>
+      <groupId>org.example</groupId>
+      <artifactId>spark-server-library-example-common</artifactId>
+      <version>1.0-SNAPSHOT</version>
     </dependency>
+
     <dependency>
       <groupId>org.scala-lang</groupId>
       <artifactId>scala-library</artifactId>
       <version>${scala.version}</version>
     </dependency>
+
+    <dependency>
+      <groupId>org.apache.spark</groupId>
+      <artifactId>spark-sql_${scala.binary}</artifactId>
+      <version>${spark.version}</version>
+      <scope>provided</scope>
+    </dependency>
+
+    <dependency>
+      <groupId>org.apache.spark</groupId>
+      <artifactId>spark-connect_${scala.binary}</artifactId>
+      <version>${spark.version}</version>
+      <scope>provided</scope>
+    </dependency>
+
+    <!-- Include Spark Daria for utility Dataframe write methods -->
+    <dependency>
+      <groupId>com.github.mrpowers</groupId>
+      <artifactId>spark-daria_2.12</artifactId>
+      <version>1.2.3</version>
+      <scope>provided</scope>
+    </dependency>
   </dependencies>
 
   <build>
+    <sourceDirectory>src/main/scala</sourceDirectory>
     <plugins>
-      <!-- os-maven-plugin helps resolve ${os.detected.classifier} automatically -->
+      <!-- Scala -->
       <plugin>
-        <groupId>kr.motd.maven</groupId>
-        <artifactId>os-maven-plugin</artifactId>
-        <version>1.7.0</version>
-        <extensions>true</extensions>
-      </plugin>
-      <plugin>
-        <groupId>org.xolstice.maven.plugins</groupId>
-        <artifactId>protobuf-maven-plugin</artifactId>
-        <version>0.6.1</version>
-        <configuration>
-          <protocArtifact>com.google.protobuf:protoc:${protobuf.version}:exe:${os.detected.classifier}</protocArtifact>
-          <protoSourceRoot>src/main/protobuf</protoSourceRoot>
-        </configuration>
+        <!-- see http://davidb.github.com/scala-maven-plugin -->
+        <groupId>net.alchim31.maven</groupId>
+        <artifactId>scala-maven-plugin</artifactId>
+        <version>4.9.2</version>
         <executions>
           <execution>
-            <phase>generate-sources</phase>
             <goals>
               <goal>compile</goal>
+              <goal>testCompile</goal>
             </goals>
           </execution>
         </executions>
