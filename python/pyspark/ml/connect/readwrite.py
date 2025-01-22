@@ -106,6 +106,14 @@ class RemoteMLWriter(MLWriter):
         elif isinstance(instance, (Pipeline, PipelineModel)):
             from pyspark.ml.pipeline import PipelineSharedReadWrite
 
+            if shouldOverwrite:
+                # mimic MLWriter._handleOverwrite
+                # We cannot call 'org.apache.spark.ml.util.FileSystemOverwrite' in connect,
+                # so overwrite the path with an empty text file.
+                session.range(0, numPartitions=1).selectExpr(
+                    "'' AS _pipeline_overwrite"
+                ).write.mode("overwrite").text(path)
+
             if isinstance(instance, Pipeline):
                 stages = instance.getStages()
             else:
@@ -145,6 +153,7 @@ class RemoteMLReader(MLReader[RL]):
         if (
             issubclass(clazz, JavaModel)
             or issubclass(clazz, JavaEstimator)
+            or issubclass(clazz, JavaEvaluator)
             or issubclass(clazz, JavaTransformer)
         ):
             if issubclass(clazz, JavaModel):
