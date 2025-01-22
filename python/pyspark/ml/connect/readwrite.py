@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 
-from typing import cast, Type, TYPE_CHECKING, List, Dict, Any
+from typing import cast, Type, TYPE_CHECKING, Union, List, Dict, Any
 
 import pyspark.sql.connect.proto as pb2
 from pyspark.ml.connect.serialize import serialize_ml_params, deserialize, deserialize_param
@@ -81,6 +81,7 @@ class RemoteMLWriter(MLWriter):
             session.client.execute_command(command)
 
         elif isinstance(instance, (JavaEstimator, JavaTransformer, JavaEvaluator)):
+            operator: Union[JavaEstimator, JavaTransformer, JavaEvaluator]
             if isinstance(instance, JavaEstimator):
                 ml_type = pb2.MlOperator.ESTIMATOR
                 operator = cast("JavaEstimator", instance)
@@ -116,12 +117,17 @@ class RemoteMLWriter(MLWriter):
                 ).write.mode("overwrite").text(path)
 
             if isinstance(instance, Pipeline):
-                stages = instance.getStages()
+                stages = instance.getStages()  # type: ignore[attr-defined]
             else:
                 stages = instance.stages
 
             PipelineSharedReadWrite.validateStages(stages)
-            PipelineSharedReadWrite.saveImpl(instance, stages, session, path)
+            PipelineSharedReadWrite.saveImpl(
+                instance,  # type: ignore[arg-type]
+                stages,
+                session,  # type: ignore[arg-type]
+                path,
+            )
 
         else:
             raise NotImplementedError(f"Unsupported write for {instance.__class__}")
