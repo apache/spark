@@ -1220,8 +1220,8 @@ class DDLParserSuite extends AnalysisTest {
       parsePlan("ALTER TABLE table_name ALTER COLUMN a.b.c TYPE bigint"),
       AlterColumns(
         UnresolvedTable(Seq("table_name"), "ALTER TABLE ... ALTER COLUMN"),
-        Seq(UnresolvedFieldName(Seq("a", "b", "c"))),
         Seq(AlterColumnSpec(
+          UnresolvedFieldName(Seq("a", "b", "c")),
           Some(LongType),
           None,
           None,
@@ -1247,8 +1247,8 @@ class DDLParserSuite extends AnalysisTest {
       parsePlan("ALTER TABLE table_name CHANGE COLUMN a.b.c TYPE bigint"),
       AlterColumns(
         UnresolvedTable(Seq("table_name"), "ALTER TABLE ... CHANGE COLUMN"),
-        Seq(UnresolvedFieldName(Seq("a", "b", "c"))),
         Seq(AlterColumnSpec(
+          UnresolvedFieldName(Seq("a", "b", "c")),
           Some(LongType),
           None,
           None,
@@ -1261,8 +1261,8 @@ class DDLParserSuite extends AnalysisTest {
       parsePlan("ALTER TABLE table_name CHANGE COLUMN a.b.c COMMENT 'new comment'"),
       AlterColumns(
         UnresolvedTable(Seq("table_name"), "ALTER TABLE ... CHANGE COLUMN"),
-        Seq(UnresolvedFieldName(Seq("a", "b", "c"))),
         Seq(AlterColumnSpec(
+          UnresolvedFieldName(Seq("a", "b", "c")),
           None,
           None,
           Some("new comment"),
@@ -1275,8 +1275,8 @@ class DDLParserSuite extends AnalysisTest {
       parsePlan("ALTER TABLE table_name CHANGE COLUMN a.b.c FIRST"),
       AlterColumns(
         UnresolvedTable(Seq("table_name"), "ALTER TABLE ... CHANGE COLUMN"),
-        Seq(UnresolvedFieldName(Seq("a", "b", "c"))),
         Seq(AlterColumnSpec(
+          UnresolvedFieldName(Seq("a", "b", "c")),
           None,
           None,
           None,
@@ -1309,8 +1309,8 @@ class DDLParserSuite extends AnalysisTest {
       parsePlan("ALTER TABLE table_name ALTER COLUMN a.b.c SET NOT NULL"),
       AlterColumns(
         UnresolvedTable(Seq("table_name"), "ALTER TABLE ... ALTER COLUMN"),
-        Seq(UnresolvedFieldName(Seq("a", "b", "c"))),
         Seq(AlterColumnSpec(
+          UnresolvedFieldName(Seq("a", "b", "c")),
           None,
           Some(false),
           None,
@@ -1321,8 +1321,8 @@ class DDLParserSuite extends AnalysisTest {
       parsePlan("ALTER TABLE table_name ALTER COLUMN a.b.c DROP NOT NULL"),
       AlterColumns(
         UnresolvedTable(Seq("table_name"), "ALTER TABLE ... ALTER COLUMN"),
-        Seq(UnresolvedFieldName(Seq("a", "b", "c"))),
         Seq(AlterColumnSpec(
+          UnresolvedFieldName(Seq("a", "b", "c")),
           None,
           Some(true),
           None,
@@ -1341,30 +1341,29 @@ class DDLParserSuite extends AnalysisTest {
       AlterColumns(
         UnresolvedTable(Seq("table_name"), "ALTER TABLE ... ALTER COLUMN"),
         Seq(
-          UnresolvedFieldName(Seq("a", "b", "c")),
-          UnresolvedFieldName(Seq("d", "e", "f")),
-          UnresolvedFieldName(Seq("x")),
-          UnresolvedFieldName(Seq("y"))),
-        Seq(
           AlterColumnSpec(
+            UnresolvedFieldName(Seq("a", "b", "c")),
             None,
             Some(false),
             None,
             None,
             None),
           AlterColumnSpec(
+            UnresolvedFieldName(Seq("d", "e", "f")),
             None,
             None,
             Some("new comment"),
             None,
             None),
           AlterColumnSpec(
+            UnresolvedFieldName(Seq("x")),
             Some(IntegerType),
             None,
             None,
             None,
             None),
           AlterColumnSpec(
+            UnresolvedFieldName(Seq("y")),
             None,
             None,
             None,
@@ -1381,8 +1380,8 @@ class DDLParserSuite extends AnalysisTest {
       parsePlan(sql1),
       AlterColumns(
         UnresolvedTable(Seq("table_name"), "ALTER TABLE ... CHANGE COLUMN"),
-        Seq(UnresolvedFieldName(Seq("a", "b", "c"))),
         Seq(AlterColumnSpec(
+          UnresolvedFieldName(Seq("a", "b", "c")),
           Some(IntegerType),
           None,
           None,
@@ -1393,8 +1392,8 @@ class DDLParserSuite extends AnalysisTest {
       parsePlan(sql2),
       AlterColumns(
         UnresolvedTable(Seq("table_name"), "ALTER TABLE ... CHANGE COLUMN"),
-        Seq(UnresolvedFieldName(Seq("a", "b", "c"))),
         Seq(AlterColumnSpec(
+          UnresolvedFieldName(Seq("a", "b", "c")),
           Some(IntegerType),
           None,
           Some("new_comment"),
@@ -1405,8 +1404,8 @@ class DDLParserSuite extends AnalysisTest {
       parsePlan(sql3),
       AlterColumns(
         UnresolvedTable(Seq("table_name"), "ALTER TABLE ... CHANGE COLUMN"),
-        Seq(UnresolvedFieldName(Seq("a", "b", "c"))),
         Seq(AlterColumnSpec(
+          UnresolvedFieldName(Seq("a", "b", "c")),
           Some(IntegerType),
           None,
           None,
@@ -2729,8 +2728,8 @@ class DDLParserSuite extends AnalysisTest {
       parsePlan("ALTER TABLE t1 ALTER COLUMN a.b.c SET DEFAULT 42"),
       AlterColumns(
         UnresolvedTable(Seq("t1"), "ALTER TABLE ... ALTER COLUMN"),
-        Seq(UnresolvedFieldName(Seq("a", "b", "c"))),
         Seq(AlterColumnSpec(
+          UnresolvedFieldName(Seq("a", "b", "c")),
           None,
           None,
           None,
@@ -2741,8 +2740,8 @@ class DDLParserSuite extends AnalysisTest {
       parsePlan("ALTER TABLE t1 ALTER COLUMN a.b.c SET DEFAULT ''"),
       AlterColumns(
         UnresolvedTable(Seq("t1"), "ALTER TABLE ... ALTER COLUMN"),
-        Seq(UnresolvedFieldName(Seq("a", "b", "c"))),
         Seq(AlterColumnSpec(
+          UnresolvedFieldName(Seq("a", "b", "c")),
           None,
           None,
           None,
@@ -2767,8 +2766,8 @@ class DDLParserSuite extends AnalysisTest {
       parsePlan("ALTER TABLE t1 ALTER COLUMN a.b.c DROP DEFAULT"),
       AlterColumns(
         UnresolvedTable(Seq("t1"), "ALTER TABLE ... ALTER COLUMN"),
-        Seq(UnresolvedFieldName(Seq("a", "b", "c"))),
         Seq(AlterColumnSpec(
+          UnresolvedFieldName(Seq("a", "b", "c")),
           None,
           None,
           None,

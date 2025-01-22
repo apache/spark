@@ -3847,9 +3847,9 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         resolved.copyTagsFrom(a)
         resolved
 
-      case a @ AlterColumns(table: ResolvedTable, columns, specs) =>
-        val resolvedSpecs = columns.zip(specs).map {
-          case (ResolvedFieldName(path, field), s @ AlterColumnSpec(dataType, _, _, position, _)) =>
+      case a @ AlterColumns(table: ResolvedTable, specs) =>
+        val resolvedSpecs = specs.map {
+          case s @ AlterColumnSpec(ResolvedFieldName(path, field), dataType, _, _, position, _) =>
             val newDataType = dataType.flatMap { dt =>
               // Hive style syntax provides the column type, even if it may not have changed.
               val existing = CharVarcharUtils.getRawType(field.metadata).getOrElse(field.dataType)
@@ -3866,8 +3866,8 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
               case u: UnresolvedFieldPosition => ResolvedFieldPosition(u.position)
               case other => other
             }
-            s.copy(dataType = newDataType, position = newPosition)
-          case (_, spec) => spec
+            s.copy(newDataType = newDataType, newPosition = newPosition)
+          case spec => spec
         }
         val resolved = a.copy(specs = resolvedSpecs)
         resolved.copyTagsFrom(a)

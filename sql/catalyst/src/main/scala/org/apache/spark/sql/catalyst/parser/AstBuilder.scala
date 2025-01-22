@@ -4925,7 +4925,7 @@ class AstBuilder extends DataTypeAstBuilder
   override def visitAlterTableAlterColumn(
       ctx: AlterTableAlterColumnContext): LogicalPlan = withOrigin(ctx) {
     val verb = if (ctx.CHANGE != null) "CHANGE" else "ALTER"
-    val (columns, specs) = ctx.columns.alterColumnSpec.asScala.map { spec =>
+    val specs = ctx.columns.alterColumnSpec.asScala.map { spec =>
       val action = spec.alterColumnAction
       if (action == null) {
         operationNotAllowed(
@@ -4971,19 +4971,16 @@ class AstBuilder extends DataTypeAstBuilder
       assert(Seq(dataType, nullable, comment, position, setDefaultExpression)
         .count(_.nonEmpty) == 1)
 
-      (
+      AlterColumnSpec(
         UnresolvedFieldName(typedVisit[Seq[String]](spec.column)),
-        AlterColumnSpec(
-          dataType,
-          nullable,
-          comment,
-          position,
-          setDefaultExpression)
-      )
-    }.unzip
+        dataType,
+        nullable,
+        comment,
+        position,
+        setDefaultExpression)
+    }
     AlterColumns(
       createUnresolvedTable(ctx.table, s"ALTER TABLE ... $verb COLUMN"),
-      columns.toSeq,
       specs.toSeq)
   }
 
@@ -5014,14 +5011,14 @@ class AstBuilder extends DataTypeAstBuilder
 
     AlterColumns(
       createUnresolvedTable(ctx.table, "ALTER TABLE ... CHANGE COLUMN"),
-      Seq(UnresolvedFieldName(columnNameParts)),
       Seq(AlterColumnSpec(
-        dataType = Option(ctx.colType().dataType()).map(typedVisit[DataType]),
-        nullable = None,
-        comment = Option(ctx.colType().commentSpec()).map(visitCommentSpec),
-        position = Option(ctx.colPosition).map(
+        UnresolvedFieldName(columnNameParts),
+        newDataType = Option(ctx.colType().dataType()).map(typedVisit[DataType]),
+        newNullability = None,
+        newComment = Option(ctx.colType().commentSpec()).map(visitCommentSpec),
+        newPosition = Option(ctx.colPosition).map(
           pos => UnresolvedFieldPosition(typedVisit[ColumnPosition](pos))),
-        setDefaultExpression = None)))
+        newDefaultExpression = None)))
   }
 
   override def visitHiveReplaceColumns(

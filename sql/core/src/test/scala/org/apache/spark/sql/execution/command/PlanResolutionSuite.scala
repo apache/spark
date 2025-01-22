@@ -1381,8 +1381,8 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
           parsed1 match {
             case AlterColumns(
                 _: ResolvedTable,
-                Seq(column: ResolvedFieldName),
                 Seq(AlterColumnSpec(
+                  column: ResolvedFieldName,
                   Some(LongType),
                   None,
                   None,
@@ -1395,8 +1395,8 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
           parsed2 match {
             case AlterColumns(
                 _: ResolvedTable,
-                Seq(column: ResolvedFieldName),
                 Seq(AlterColumnSpec(
+                  column: ResolvedFieldName,
                   None,
                   None,
                   Some("new comment"),
@@ -1411,11 +1411,20 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
             case AlterColumns(
                 _: ResolvedTable,
                 Seq(
-                  column1: ResolvedFieldName,
-                  column2: ResolvedFieldName),
-                Seq(
-                  AlterColumnSpec(Some(LongType), None, None, None, None),
-                  AlterColumnSpec(None, None, None, None, Some("'value'")))) =>
+                  AlterColumnSpec(
+                    column1: ResolvedFieldName,
+                    Some(LongType),
+                    None,
+                    None,
+                    None,
+                    None),
+                  AlterColumnSpec(
+                    column2: ResolvedFieldName,
+                    None,
+                    None,
+                    None,
+                    None,
+                    Some("'value'")))) =>
               assert(column1.name == Seq("i"))
               assert(column2.name == Seq("s"))
             case _ => fail("expect AlterTableAlterColumn")
@@ -1477,8 +1486,13 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
       parseAndResolve(s"ALTER TABLE $tblName CHANGE COLUMN i i int COMMENT 'an index'") match {
         case AlterColumns(
             _: ResolvedTable,
-            Seq(_: ResolvedFieldName),
-            Seq(AlterColumnSpec(None, None, Some(comment), None, None))) =>
+            Seq(AlterColumnSpec(
+              _: ResolvedFieldName,
+              None,
+              None,
+              Some(comment),
+              None,
+              None))) =>
           assert(comment == "an index")
         case _ => fail("expect AlterTableAlterColumn with comment change only")
       }
@@ -1486,8 +1500,13 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
       parseAndResolve(s"ALTER TABLE $tblName CHANGE COLUMN i i long COMMENT 'an index'") match {
         case AlterColumns(
             _: ResolvedTable,
-            Seq(_: ResolvedFieldName),
-            Seq(AlterColumnSpec(Some(dataType), None, Some(comment), None, None))) =>
+            Seq(AlterColumnSpec(
+              _: ResolvedFieldName,
+              Some(dataType),
+              None,
+              Some(comment),
+              None,
+              None))) =>
           assert(comment == "an index")
           assert(dataType == LongType)
         case _ => fail("expect AlterTableAlterColumn with type and comment changes")
@@ -1522,7 +1541,7 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
       val catalog = if (isSessionCatalog) v2SessionCatalog else testCat
       val tableIdent = if (isSessionCatalog) "v2Table" else "tab"
       parsed match {
-        case AlterColumns(r: ResolvedTable, _, _) =>
+        case AlterColumns(r: ResolvedTable, _) =>
           assert(r.catalog == catalog)
           assert(r.identifier.name() == tableIdent)
         case Project(_, AsDataSourceV2Relation(r)) =>

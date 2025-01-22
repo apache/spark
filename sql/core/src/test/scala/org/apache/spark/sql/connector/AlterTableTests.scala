@@ -1082,11 +1082,10 @@ trait AlterTableTests extends SharedSparkSession with QueryErrorsBase {
           exception = intercept[AnalysisException] {
             sql(sqlText)
           },
-          condition = "NOT_SUPPORTED_CHANGE_PARENT_CHILD_COLUMN",
+          condition = "NOT_SUPPORTED_CHANGE_SAME_COLUMN",
           parameters = Map(
             "table" -> s"${toSQLId(prependCatalogName(t))}",
-            "parentField" -> "`parent`",
-            "childField" -> "`parent`.`element`.`child`"),
+            "fieldName" -> "`parent`"),
           context = ExpectedContext(
             fragment = sqlText,
             start = 0,

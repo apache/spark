@@ -115,10 +115,10 @@ object ResolveDefaultStringTypes extends Rule[LogicalPlan] {
       case replaceCols: ReplaceColumns =>
         replaceCols.copy(columnsToAdd = replaceColumnTypes(replaceCols.columnsToAdd, newType))
 
-      case a @ AlterColumns(_, _, specs: Seq[AlterColumnSpec]) =>
+      case a @ AlterColumns(_, specs: Seq[AlterColumnSpec]) =>
         val newSpecs = specs.map {
-          case spec if spec.dataType.isDefined && hasDefaultStringType(spec.dataType.get) =>
-            spec.copy(dataType = Some(replaceDefaultStringType(spec.dataType.get, newType)))
+          case spec if spec.newDataType.isDefined && hasDefaultStringType(spec.newDataType.get) =>
+            spec.copy(newDataType = Some(replaceDefaultStringType(spec.newDataType.get, newType)))
           case col => col
         }
         a.copy(specs = newSpecs)

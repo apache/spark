@@ -1622,8 +1622,8 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
       case RenameColumn(table: ResolvedTable, col: ResolvedFieldName, newName) =>
         checkColumnNotExists("rename", col.path :+ newName, table.schema)
 
-      case AlterColumns(table: ResolvedTable, columns, specs) =>
-        val groupedColumns = columns.groupBy(_.name)
+      case AlterColumns(table: ResolvedTable, specs) =>
+        val groupedColumns = specs.groupBy(_.column.name)
         groupedColumns.collect {
           case (name, occurrences) if occurrences.length > 1 =>
             alter.failAnalysis(
@@ -1633,24 +1633,22 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
                 "fieldName" -> toSQLId(name)))
         }
         groupedColumns.keys.foreach { name =>
-          val child = groupedColumns.keys.find(child => child != name && child.startsWith(name))
-          if (child.isDefined) {
+          if (groupedColumns.keys.exists(child => child != name && child.startsWith(name))) {
             alter.failAnalysis(
-              errorClass = "NOT_SUPPORTED_CHANGE_PARENT_CHILD_COLUMN",
+              errorClass = "NOT_SUPPORTED_CHANGE_SAME_COLUMN",
               messageParameters = Map(
                 "table" -> toSQLId(table.name),
-                "parentField" -> toSQLId(name),
-                "childField" -> toSQLId(child.get)))
+                "fieldName" -> toSQLId(name)))
           }
         }
-        columns.zip(specs).foreach {
-          case (col: ResolvedFieldName, a: AlterColumnSpec) =>
+        specs.foreach {
+          case AlterColumnSpec(col: ResolvedFieldName, dataType, nullable, _, _, _) =>
             val fieldName = col.name.quoted
-            if (a.dataType.isDefined) {
+            if (dataType.isDefined) {
               val field = CharVarcharUtils.getRawType(col.field.metadata)
                 .map(dt => col.field.copy(dataType = dt))
                 .getOrElse(col.field)
-              val newDataType = a.dataType.get
+              val newDataType = dataType.get
               newDataType match {
                 case _: StructType => alter.failAnalysis(
                   "CANNOT_UPDATE_FIELD.STRUCT_TYPE",
@@ -1691,8 +1689,8 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
                     "newType" -> toSQLType(newDataType)))
               }
             }
-            if (a.nullable.isDefined) {
-              if (!a.nullable.get && col.field.nullable) {
+            if (nullable.isDefined) {
+              if (!nullable.get && col.field.nullable) {
                 alter.failAnalysis(
                   errorClass = "_LEGACY_ERROR_TEMP_2330",
                   messageParameters = Map("fieldName" -> fieldName))

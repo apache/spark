@@ -41,7 +41,7 @@ object ReplaceCharWithVarchar extends Rule[LogicalPlan] {
         })
       case cmd: AlterColumns =>
         cmd.copy(specs = cmd.specs.map { spec =>
-          spec.copy(dataType = spec.dataType.map(CharVarcharUtils.replaceCharWithVarchar))
+          spec.copy(newDataType = spec.newDataType.map(CharVarcharUtils.replaceCharWithVarchar))
         })
       case cmd: ReplaceColumns =>
         cmd.copy(columnsToAdd = cmd.columnsToAdd.map { col =>

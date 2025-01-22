@@ -368,8 +368,8 @@ class V2CommandsCaseSensitivitySuite
   test("AlterTable: drop column nullability resolution") {
     Seq(Array("ID"), Array("point", "X"), Array("POINT", "X"), Array("POINT", "x")).foreach { ref =>
       alterTableTest(
-        AlterColumns(table, Seq(UnresolvedFieldName(ref.toImmutableArraySeq)),
-          Seq(AlterColumnSpec(None, Some(true), None, None, None))),
+        AlterColumns(table, Seq(AlterColumnSpec(
+          UnresolvedFieldName(ref.toImmutableArraySeq), None, Some(true), None, None, None))),
         expectedErrorCondition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
         expectedMessageParameters = Map(
           "objectName" -> s"${toSQLId(ref.toImmutableArraySeq)}",
@@ -381,8 +381,8 @@ class V2CommandsCaseSensitivitySuite
   test("AlterTable: change column type resolution") {
     Seq(Array("ID"), Array("point", "X"), Array("POINT", "X"), Array("POINT", "x")).foreach { ref =>
       alterTableTest(
-        AlterColumns(table, Seq(UnresolvedFieldName(ref.toImmutableArraySeq)),
-          Seq(AlterColumnSpec(Some(StringType), None, None, None, None))),
+        AlterColumns(table, Seq(AlterColumnSpec(
+          UnresolvedFieldName(ref.toImmutableArraySeq), Some(StringType), None, None, None, None))),
         expectedErrorCondition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
         expectedMessageParameters = Map(
           "objectName" -> s"${toSQLId(ref.toImmutableArraySeq)}",
@@ -394,8 +394,8 @@ class V2CommandsCaseSensitivitySuite
   test("AlterTable: change column comment resolution") {
     Seq(Array("ID"), Array("point", "X"), Array("POINT", "X"), Array("POINT", "x")).foreach { ref =>
       alterTableTest(
-        AlterColumns(table, Seq(UnresolvedFieldName(ref.toImmutableArraySeq)),
-          Seq(AlterColumnSpec(None, None, Some("comment"), None, None))),
+        AlterColumns(table, Seq(AlterColumnSpec(
+          UnresolvedFieldName(ref.toImmutableArraySeq), None, None, Some("comment"), None, None))),
         expectedErrorCondition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
         expectedMessageParameters = Map(
           "objectName" -> s"${toSQLId(ref.toImmutableArraySeq)}",
