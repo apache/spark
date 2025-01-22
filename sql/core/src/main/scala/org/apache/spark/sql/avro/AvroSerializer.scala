@@ -35,7 +35,7 @@ import org.apache.spark.sql.avro.AvroUtils.{nonNullUnionBranches, toFieldStr, Av
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{SpecializedGetters, SpecificInternalRow}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
-import org.apache.spark.sql.errors.DataTypeErrors.toSQLType
+import org.apache.spark.sql.errors.DataTypeErrors.{toSQLId, toSQLType}
 import org.apache.spark.sql.execution.datasources.DataSourceUtils
 import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
 import org.apache.spark.sql.types._
@@ -275,28 +275,28 @@ private[sql] class AvroSerializer(
     avroSchemaHelper.validateNoExtraCatalystFields(ignoreNullable = false)
     avroSchemaHelper.validateNoExtraRequiredAvroFields()
 
-    val (avroIndices, fieldConverters, catalystFields) = avroSchemaHelper.matchedFields.map {
+    val (avroIndices, fieldConverters) = avroSchemaHelper.matchedFields.map {
       case AvroMatchedField(catalystField, _, avroField) =>
         val converter = newConverter(catalystField.dataType,
           resolveNullableType(avroField.schema(), catalystField.nullable),
           catalystPath :+ catalystField.name, avroPath :+ avroField.name)
-        (avroField.pos(), converter, catalystField)
-    }.toArray.unzip3
+        (avroField.pos(), converter)
+    }.toArray.unzip
 
     val numFields = catalystStruct.length
+    val avroFields = avroStruct.getFields()
     row: InternalRow =>
       val result = new Record(avroStruct)
       var i = 0
       while (i < numFields) {
         if (row.isNullAt(i)) {
-          if (!catalystFields(i).nullable) {
+          val avroField = avroFields.get(i)
+          if (!avroField.schema().isNullable) {
             throw new SparkRuntimeException(
               errorClass = "AVRO_CANNOT_WRITE_NULL_FIELD",
               messageParameters = Map(
-                "name" -> catalystFields(i).name,
-                "schema" -> toSQLType(catalystFields(i).dataType)
-              )
-            )
+                "name" -> toSQLId(avroField.name),
+                "schema" -> toSQLType(SchemaConverters.toSqlType(avroField.schema()).dataType)))
           }
           result.put(avroIndices(i), null)
         } else {

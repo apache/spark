@@ -24,7 +24,7 @@ import org.apache.avro.Schema
 import org.apache.avro.generic.{GenericData, GenericRecordBuilder}
 import org.apache.avro.message.{BinaryMessageDecoder, BinaryMessageEncoder}
 
-import org.apache.spark.{SparkException, SparkFunSuite, SparkRuntimeException}
+import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.sql.{RandomDataGenerator, Row}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, NoopFilters, OrderedFilters, StructFilters}
 import org.apache.spark.sql.catalyst.expressions.{ExpressionEvalHelper, GenericInternalRow, Literal}
@@ -239,24 +239,6 @@ class AvroCatalystDataConversionSuite extends SparkFunSuite
       val avroSchema = SchemaConverters.toAvroType(expectedSchema).toString
       checkUnsupportedRead(input, avroSchema)
     }
-  }
-
-  test("schema nullability mismatch") {
-    val innerSchema = StructType(Seq(StructField("inner", StringType, false)))
-    val nestedSchema = StructType(Seq(StructField("outer", innerSchema, false)))
-
-    val nestedRow = Row.fromSeq(Seq(null))
-    val converter = CatalystTypeConverters.createToCatalystConverter(nestedSchema)
-    val input = Literal.create(converter(nestedRow), nestedSchema)
-    checkError(
-      exception = intercept[SparkRuntimeException] {
-        CatalystDataToAvro(input, None).eval()
-      },
-      condition = "AVRO_CANNOT_WRITE_NULL_FIELD",
-      parameters = Map(
-        "name" -> "outer",
-        "schema" -> "\"STRUCT<inner: STRING NOT NULL>\"")
-    )
   }
 
   test("user-specified output schema") {

@@ -26,7 +26,7 @@ import org.apache.avro.file.SeekableByteArrayInput
 import org.apache.avro.generic.{GenericDatumReader, GenericDatumWriter, GenericRecord, GenericRecordBuilder}
 import org.apache.avro.io.{DecoderFactory, EncoderFactory}
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkException, SparkRuntimeException}
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.avro.{functions => Fns}
 import org.apache.spark.sql.execution.LocalTableScanExec
@@ -664,5 +664,48 @@ class AvroFunctionsSuite extends QueryTest with SharedSparkSession {
         |}""".stripMargin
     checkAnswer(df.select(functions.schema_of_avro(avroMultiType)),
       Row("STRUCT<u: STRUCT<member0: INT, member1: STRING> NOT NULL>"))
+  }
+
+  test("to_avro schema nullability mismatch") {
+    val innerSchema = StructType(Seq(StructField("field1", IntegerType, false)))
+    val outerSchema = StructType(Seq(StructField("innerStruct", innerSchema, true))) // nullable
+    val nestedSchema = StructType(Seq(StructField("outerStruct", outerSchema, false)))
+
+    val data = Seq(
+      Row(Row(Row(1))),
+      Row(Row(null)),
+      Row(Row(Row(3))))
+
+    val df = spark.createDataFrame(
+      spark.sparkContext.parallelize(data),
+      nestedSchema)
+
+    val avroTypeStruct = s"""{
+      |  "type": "record",
+      |  "name": "outerStruct",
+      |  "fields": [
+      |    {
+      |      "name": "innerStruct",
+      |      "type": {
+      |        "type": "record",
+      |        "name": "innerStruct",
+      |        "fields": [
+      |          {"name": "field1", "type": "int"}
+      |        ]
+      |      }
+      |    }
+      |  ]
+      |}
+    """.stripMargin // nullability mismatch for innerStruct
+
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        df.select(functions.to_avro($"outerStruct", avroTypeStruct)).collect()
+      },
+      condition = "AVRO_CANNOT_WRITE_NULL_FIELD",
+      parameters = Map(
+        "name" -> "`innerStruct`",
+        "schema" -> "\"STRUCT<field1: INT NOT NULL>\""
+      ))
   }
 }
