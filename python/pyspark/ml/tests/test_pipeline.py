@@ -28,7 +28,7 @@ from pyspark.ml.feature import (
 )
 from pyspark.ml.classification import LogisticRegression, LogisticRegressionModel
 from pyspark.ml.clustering import KMeans, KMeansModel
-from pyspark.testing.mlutils import MockDataset, MockEstimator, MockTransformer, PySparkTestCase
+from pyspark.testing.mlutils import MockDataset, MockEstimator, MockTransformer
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 

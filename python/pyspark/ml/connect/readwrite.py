@@ -23,8 +23,9 @@ from pyspark.ml.util import MLWriter, MLReader, RL
 from pyspark.ml.wrapper import JavaWrapper
 
 if TYPE_CHECKING:
-    from pyspark.ml.util import JavaMLReadable, JavaMLWritable, JavaTransformer
     from pyspark.core.context import SparkContext
+    from pyspark.sql.connect.session import SparkSession
+    from pyspark.ml.util import JavaMLReadable, JavaMLWritable
 
 
 class RemoteMLWriter(MLWriter):
