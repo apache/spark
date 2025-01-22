@@ -744,7 +744,6 @@ case class UnionLoopExec(
     override val output: Seq[Attribute],
     limit: Option[Int] = None) extends LeafExecNode {
 
-  val levelLimit = conf.getConf(SQLConf.CTE_RECURSION_LEVEL_LIMIT)
   val cacheMode = CTERecursionCacheMode.withName(conf.getConf(SQLConf.CTE_RECURSION_CACHE_MODE))
 
   // We store the initial and generated children of the loop in this buffer.
@@ -781,6 +780,7 @@ case class UnionLoopExec(
   override protected def doExecute(): RDD[InternalRow] = {
     val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
     val numOutputRows = longMetric("numOutputRows")
+    val levelLimit = conf.getConf(SQLConf.CTE_RECURSION_LEVEL_LIMIT)
 
     // currentLimit is initialized from the limit argument, and in each step it is decreased by
     // the number of rows generated in that step.
