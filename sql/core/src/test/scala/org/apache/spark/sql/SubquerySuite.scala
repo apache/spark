@@ -2802,11 +2802,13 @@ class SubquerySuite extends QueryTest
   }
 
   test("SPARK-50091: Handle aggregates in left-hand operand of IN-subquery") {
-    withTable("v1", "v2") {
-      sql("""CREATE OR REPLACE TEMP VIEW v1 (c1, c2, c3) AS VALUES
-            |(1, 2, 2), (1, 5, 3), (2, 0, 4), (3, 7, 7), (3, 8, 8)""".stripMargin)
-      sql("""CREATE OR REPLACE TEMP VIEW v2 (col1, col2, col3) AS VALUES
-            |(1, 2, 2), (1, 3, 3), (2, 2, 4), (3, 7, 7), (3, 1, 1)""".stripMargin)
+    withView("v1", "v2") {
+      Seq((1, 2, 2), (1, 5, 3), (2, 0, 4), (3, 7, 7), (3, 8, 8))
+        .toDF("c1", "c2", "c3")
+        .createOrReplaceTempView("v1")
+      Seq((1, 2, 2), (1, 3, 3), (2, 2, 4), (3, 7, 7), (3, 1, 1))
+        .toDF("col1", "col2", "col3")
+        .createOrReplaceTempView("v2")
 
       val df1 = sql("SELECT col1, SUM(col2) IN (SELECT c3 FROM v1) FROM v2 GROUP BY col1")
       checkAnswer(df1,
