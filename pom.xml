@@ -280,7 +280,7 @@
     <orc.deps.scope>compile</orc.deps.scope>
     <parquet.deps.scope>compile</parquet.deps.scope>
     <parquet.test.deps.scope>test</parquet.test.deps.scope>
-    <jjwt.deps.scope>test</jjwt.deps.scope>
+    <jjwt.deps.scope>compile</jjwt.deps.scope>
 
     <spark.yarn.isHadoopProvided>false</spark.yarn.isHadoopProvided>
 
@@ -3531,7 +3531,7 @@
       <id>sparkr</id>
     </profile>
     <profile>
-      <id>jjwt</id>
+      <id>jjwt-provided</id>
     </profile>
     <!-- use org.openlabtesting.leveldbjni on aarch64 platform except MacOS -->
     <profile>
