@@ -435,10 +435,9 @@ object CTESubstitution extends Rule[LogicalPlan] {
    * if that number is bigger than 1.
    */
   private def checkNumberOfSelfReferences(cteDef: CTERelationDef): Unit = {
-    val numOfSelfRef = cteDef.map[Boolean] {
-      case CTERelationRef(cteDef.id, _, _, _, _, true) => true
-      case other => false
-    }.count(_ == true)
+    val numOfSelfRef = cteDef.collectWithSubqueries {
+      case ref: CTERelationRef if ref.cteId == cteDef.id => ref
+    }.length
     if (numOfSelfRef > 1) {
       throw new AnalysisException(
         errorClass = "INVALID_RECURSIVE_REFERENCE.NUMBER",

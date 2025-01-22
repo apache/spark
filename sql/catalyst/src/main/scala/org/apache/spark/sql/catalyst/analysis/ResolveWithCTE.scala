@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.plans.{LeftAnti, LeftOuter, LeftSemi, Right
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{CTE, PLAN_EXPRESSION}
+import org.apache.spark.sql.errors.DataTypeErrors.toSQLType
 import org.apache.spark.sql.types.DataType
 
 /**
@@ -189,15 +190,23 @@ object ResolveWithCTE extends Rule[LogicalPlan] {
    * Checks if data types of anchor and recursive terms of a recursive CTE definition match.
    */
   def checkDataTypesAnchorAndRecursiveTerm(unionLoop: UnionLoop): Unit = {
+    def compareOutputDatatypes(
+        anchorDatatypes: Seq[DataType],
+        recursiveDatatypes: Seq[DataType]): Boolean = {
+      anchorDatatypes.zip(recursiveDatatypes).forall {
+        case (anchorDT, recursionDT) => DataType.equalsStructurally(anchorDT, recursionDT, true)
+      }
+    }
     val anchorOutputDatatypes = unionLoop.anchor.output.map(_.dataType)
     val recursiveTermOutputDatatypes = unionLoop.recursion.output.map(_.dataType)
 
-    if (!anchorOutputDatatypes.zip(recursiveTermOutputDatatypes).forall {
-      case (anchorDT, recursionDT) => DataType.equalsStructurally(anchorDT, recursionDT, true)
-    }) {
+    if (compareOutputDatatypes(anchorOutputDatatypes, recursiveTermOutputDatatypes)) {
       throw new AnalysisException(
         errorClass = "INVALID_RECURSIVE_REFERENCE.DATA_TYPE",
-        messageParameters = Map.empty)
+        messageParameters = Map(
+          "fromDataType" -> anchorOutputDatatypes.map(toSQLType).mkString(", "),
+          "toDataType" -> recursiveTermOutputDatatypes.map(toSQLType).mkString(", ")
+        ))
     }
   }
 
@@ -213,7 +222,7 @@ object ResolveWithCTE extends Rule[LogicalPlan] {
           throw new AnalysisException(
             errorClass = "INVALID_RECURSIVE_REFERENCE.PLACE",
             messageParameters = Map.empty)
-        case other => ()
+        case other =>
       }
     unionLoop.foreach {
       case Join(left, right, LeftOuter, _, _) =>
@@ -229,7 +238,7 @@ object ResolveWithCTE extends Rule[LogicalPlan] {
         unionLoopRefNotAllowedUnderCurrentNode(right)
       case Aggregate(_, _, child, _) =>
         unionLoopRefNotAllowedUnderCurrentNode(child)
-      case other => ()
+      case other =>
     }
   }
 }
