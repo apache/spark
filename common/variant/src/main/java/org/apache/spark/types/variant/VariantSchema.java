@@ -138,6 +138,12 @@ public class VariantSchema {
     this.arraySchema = arraySchema;
   }
 
+  // Return whether the variant column is unshrededed. The user is not required to do anything
+  // special, but can have certain optimizations for unshrededed variant.
+  public boolean isUnshredded() {
+    return topLevelMetadataIdx >= 0 && variantIdx >= 0 && typedIdx < 0;
+  }
+
   @Override
   public String toString() {
     return "VariantSchema{" +

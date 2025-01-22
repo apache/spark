@@ -236,11 +236,12 @@ message RemoveKey {
 }
 
 enum HandleState {
-  CREATED = 0;
-  INITIALIZED = 1;
-  DATA_PROCESSED = 2;
-  TIMER_PROCESSED = 3;
-  CLOSED = 4;
+  PRE_INIT = 0;
+  CREATED = 1;
+  INITIALIZED = 2;
+  DATA_PROCESSED = 3;
+  TIMER_PROCESSED = 4;
+  CLOSED = 5;
 }
 
 message SetHandleState {

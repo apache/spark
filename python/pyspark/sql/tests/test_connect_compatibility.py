@@ -262,13 +262,8 @@ class ConnectCompatibilityTestsMixin:
         expected_missing_connect_properties = {"sparkContext"}
         expected_missing_classic_properties = {"is_stopped", "session_id"}
         expected_missing_connect_methods = {
-            "addArtifact",
-            "addArtifacts",
             "clearProgressHandlers",
             "copyFromLocalToFs",
-            "interruptAll",
-            "interruptOperation",
-            "interruptTag",
             "newSession",
             "registerProgressHandler",
             "removeProgressHandler",

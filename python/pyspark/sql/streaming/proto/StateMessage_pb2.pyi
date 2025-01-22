@@ -56,19 +56,21 @@ class _HandleStateEnumTypeWrapper(
     builtins.type,
 ):  # noqa: F821
     DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
-    CREATED: _HandleState.ValueType  # 0
-    INITIALIZED: _HandleState.ValueType  # 1
-    DATA_PROCESSED: _HandleState.ValueType  # 2
-    TIMER_PROCESSED: _HandleState.ValueType  # 3
-    CLOSED: _HandleState.ValueType  # 4
+    PRE_INIT: _HandleState.ValueType  # 0
+    CREATED: _HandleState.ValueType  # 1
+    INITIALIZED: _HandleState.ValueType  # 2
+    DATA_PROCESSED: _HandleState.ValueType  # 3
+    TIMER_PROCESSED: _HandleState.ValueType  # 4
+    CLOSED: _HandleState.ValueType  # 5
 
 class HandleState(_HandleState, metaclass=_HandleStateEnumTypeWrapper): ...
 
-CREATED: HandleState.ValueType  # 0
-INITIALIZED: HandleState.ValueType  # 1
-DATA_PROCESSED: HandleState.ValueType  # 2
-TIMER_PROCESSED: HandleState.ValueType  # 3
-CLOSED: HandleState.ValueType  # 4
+PRE_INIT: HandleState.ValueType  # 0
+CREATED: HandleState.ValueType  # 1
+INITIALIZED: HandleState.ValueType  # 2
+DATA_PROCESSED: HandleState.ValueType  # 3
+TIMER_PROCESSED: HandleState.ValueType  # 4
+CLOSED: HandleState.ValueType  # 5
 global___HandleState = HandleState
 
 class StateRequest(google.protobuf.message.Message):

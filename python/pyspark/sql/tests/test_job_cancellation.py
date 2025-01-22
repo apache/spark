@@ -166,13 +166,35 @@ class JobCancellationTestsMixin:
         self.assertEqual(first, {"a", "b"})
         self.assertEqual(second, {"a", "b", "c"})
 
+    def test_interrupt_tag(self):
+        thread_ids = range(4)
+        self.check_job_cancellation(
+            lambda job_group: self.spark.addTag(job_group),
+            lambda job_group: self.spark.interruptTag(job_group),
+            thread_ids,
+            [i for i in thread_ids if i % 2 == 0],
+            [i for i in thread_ids if i % 2 != 0],
+        )
+        self.spark.clearTags()
+
+    def test_interrupt_all(self):
+        thread_ids = range(4)
+        self.check_job_cancellation(
+            lambda job_group: None,
+            lambda job_group: self.spark.interruptAll(),
+            thread_ids,
+            thread_ids,
+            [],
+        )
+        self.spark.clearTags()
+
 
 class JobCancellationTests(JobCancellationTestsMixin, ReusedSQLTestCase):
     pass
 
 
 if __name__ == "__main__":
-    from pyspark.sql.tests.test_session import *  # noqa: F401
+    from pyspark.sql.tests.test_job_cancellation import *  # noqa: F401
 
     try:
         import xmlrunner

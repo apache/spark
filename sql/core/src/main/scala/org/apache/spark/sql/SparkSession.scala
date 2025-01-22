@@ -448,16 +448,17 @@ class SparkSession private(
     val sse = new SqlScriptingExecution(script, this, args)
     var result: Option[Seq[Row]] = None
 
-    while (sse.hasNext) {
+    // We must execute returned df before calling sse.getNextResult again because sse.hasNext
+    // advances the script execution and executes all statements until the next result. We must
+    // collect results immediately to maintain execution order.
+    // This ensures we respect the contract of SqlScriptingExecution API.
+    var df: Option[DataFrame] = sse.getNextResult
+    while (df.isDefined) {
       sse.withErrorHandling {
-        val df = sse.next()
-        if (sse.hasNext) {
-          df.write.format("noop").mode("overwrite").save()
-        } else {
-          // Collect results from the last DataFrame.
-          result = Some(df.collect().toSeq)
-        }
+        // Collect results from the current DataFrame.
+        result = Some(df.get.collect().toSeq)
       }
+      df = sse.getNextResult
     }
 
     if (result.isEmpty) {

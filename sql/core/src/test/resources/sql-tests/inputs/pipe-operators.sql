@@ -359,6 +359,18 @@ table t
 |> extend 1 as z
 |> set z = first_value(x) over (partition by y);
 
+-- Any prior table aliases remain visible after a SET operator.
+values (0), (1) lhs(a)
+|> inner join values (1), (2) rhs(a) using (a)
+|> extend lhs.a + rhs.a as z1
+|> extend lhs.a - rhs.a as z2
+|> drop z1
+|> where z2 = 0
+|> order by lhs.a, rhs.a, z2
+|> set z2 = 4
+|> limit 2
+|> select lhs.a, rhs.a, z2;
+
 -- SET operators: negative tests.
 ---------------------------------
 
@@ -540,6 +552,21 @@ select * from t where sum(x) over (partition by y) = 1;
 -- pipe operator, not from earlier ones.
 table t
 |> select x, length(y) as z
+|> where x + length(y) < 4;
+
+table t
+|> select x, length(y) as z
+|> limit 1000
+|> where x + length(y) < 4;
+
+table t
+|> select x, length(y) as z
+|> limit 1000 offset 1
+|> where x + length(y) < 4;
+
+table t
+|> select x, length(y) as z
+|> order by x, y
 |> where x + length(y) < 4;
 
 -- If the WHERE clause wants to filter rows produced by an aggregation, it is not valid to try to
@@ -843,9 +870,16 @@ values (0, 'abc') tab(x, y)
 |> union all table t;
 
 -- Union distinct with a VALUES list.
-values (0, 1) tab(x, y)
+-- The |> WHERE operator applies to the result of the |> UNION operator, not to the "table t" input.
+values (2, 'xyz') tab(x, y)
 |> union table t
 |> where x = 0;
+
+-- Union distinct with a VALUES list.
+-- The |> DROP operator applies to the result of the |> UNION operator, not to the "table t" input.
+values (2, 'xyz') tab(x, y)
+|> union table t
+|> drop x;
 
 -- Union all with a table subquery on both the source and target sides.
 (select * from t)
@@ -997,6 +1031,36 @@ select 1 as x, 2 as y
 -- Basic aggregation with group by ordinals.
 select 3 as x, 4 as y
 |> aggregate group by 1, 2;
+
+values (3, 4) as tab(x, y)
+|> aggregate sum(y) group by 1;
+
+values (3, 4), (5, 4) as tab(x, y)
+|> aggregate sum(y) group by 1;
+
+select 3 as x, 4 as y
+|> aggregate sum(y) group by 1, 1;
+
+select 1 as `1`, 2 as `2`
+|> aggregate sum(`2`) group by `1`;
+
+select 3 as x, 4 as y
+|> aggregate sum(y) group by 2;
+
+select 3 as x, 4 as y, 5 as z
+|> aggregate sum(y) group by 2;
+
+select 3 as x, 4 as y, 5 as z
+|> aggregate sum(y) group by 3;
+
+select 3 as x, 4 as y, 5 as z
+|> aggregate sum(y) group by 2, 3;
+
+select 3 as x, 4 as y, 5 as z
+|> aggregate sum(y) group by 1, 2, 3;
+
+select 3 as x, 4 as y, 5 as z
+|> aggregate sum(y) group by x, 2, 3;
 
 -- Basic table aggregation.
 table t

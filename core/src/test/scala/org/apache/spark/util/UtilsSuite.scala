@@ -22,6 +22,7 @@ import java.lang.reflect.Field
 import java.net.{BindException, ServerSocket, URI}
 import java.nio.{ByteBuffer, ByteOrder}
 import java.nio.charset.StandardCharsets.UTF_8
+import java.nio.file.{Files => JFiles}
 import java.text.DecimalFormatSymbols
 import java.util.Locale
 import java.util.concurrent.TimeUnit
@@ -729,6 +730,43 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
     assert(!tempDir2.exists())
     assert(!tempDir3.exists())
     assert(!sourceFile2.exists())
+  }
+
+  test("SPARK-50716: deleteRecursively - SymbolicLink To File") {
+    val tempDir = Utils.createTempDir()
+    val sourceFile = new File(tempDir, "foo.txt")
+    JFiles.write(sourceFile.toPath, "Some content".getBytes)
+    assert(sourceFile.exists())
+
+    val symlinkFile = new File(tempDir, "bar.txt")
+    JFiles.createSymbolicLink(symlinkFile.toPath, sourceFile.toPath)
+
+    // Check that the symlink was created successfully
+    assert(JFiles.isSymbolicLink(symlinkFile.toPath))
+    Utils.deleteRecursively(tempDir)
+
+    // Verify that everything is deleted
+    assert(!tempDir.exists)
+  }
+
+  test("SPARK-50716: deleteRecursively - SymbolicLink To Dir") {
+    val tempDir = Utils.createTempDir()
+    val sourceDir = new File(tempDir, "sourceDir")
+    assert(sourceDir.mkdir())
+    val sourceFile = new File(sourceDir, "file.txt")
+    JFiles.write(sourceFile.toPath, "Some content".getBytes)
+
+    val symlinkDir = new File(tempDir, "targetDir")
+    JFiles.createSymbolicLink(symlinkDir.toPath, sourceDir.toPath)
+
+    // Check that the symlink was created successfully
+    assert(JFiles.isSymbolicLink(symlinkDir.toPath))
+
+    // Now delete recursively
+    Utils.deleteRecursively(tempDir)
+
+    // Verify that everything is deleted
+    assert(!tempDir.exists)
   }
 
   test("loading properties from file") {

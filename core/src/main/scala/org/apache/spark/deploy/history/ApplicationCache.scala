@@ -24,7 +24,7 @@ import scala.jdk.CollectionConverters._
 import com.codahale.metrics.{Counter, MetricRegistry, Timer}
 import com.google.common.cache.{CacheBuilder, CacheLoader, LoadingCache, RemovalListener, RemovalNotification}
 import com.google.common.util.concurrent.UncheckedExecutionException
-import jakarta.servlet.{DispatcherType, Filter, FilterChain, FilterConfig, ServletException, ServletRequest, ServletResponse}
+import jakarta.servlet.{DispatcherType, Filter, FilterChain, ServletException, ServletRequest, ServletResponse}
 import jakarta.servlet.http.{HttpServletRequest, HttpServletResponse}
 import org.eclipse.jetty.servlet.FilterHolder
 
@@ -428,9 +428,4 @@ private[history] class ApplicationCacheCheckFilter(
       httpResponse.sendRedirect(redirectUrl)
     }
   }
-
-  override def init(config: FilterConfig): Unit = { }
-
-  override def destroy(): Unit = { }
-
 }

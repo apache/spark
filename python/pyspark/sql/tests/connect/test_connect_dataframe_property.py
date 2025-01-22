@@ -110,6 +110,12 @@ class SparkConnectDataFramePropertyTests(SparkConnectSQLTestCase):
             cdf1 = cdf.mapInPandas(func, schema)
             self.assertEqual(cdf1._cached_schema, schema)
 
+        with self.temp_env({"SPARK_CONNECT_MODE_ENABLED": "1"}):
+            self.assertTrue(is_remote())
+            cdf1 = cdf.mapInPandas(func, "a int, b string")
+            # Properly cache the parsed schema
+            self.assertEqual(cdf1._cached_schema, schema)
+
         with self.temp_env({"SPARK_CONNECT_MODE_ENABLED": None}):
             # 'mapInPandas' depends on the method 'pandas_udf', which is dispatched
             # based on 'is_remote'. However, in SparkConnectSQLTestCase, the remote
@@ -178,6 +184,12 @@ class SparkConnectDataFramePropertyTests(SparkConnectSQLTestCase):
         with self.temp_env({"SPARK_CONNECT_MODE_ENABLED": "1"}):
             self.assertTrue(is_remote())
             cdf1 = cdf.groupby("id").applyInPandas(normalize, schema)
+            self.assertEqual(cdf1._cached_schema, schema)
+
+        with self.temp_env({"SPARK_CONNECT_MODE_ENABLED": "1"}):
+            self.assertTrue(is_remote())
+            cdf1 = cdf.groupby("id").applyInPandas(normalize, "id long, v double")
+            # Properly cache the parsed schema
             self.assertEqual(cdf1._cached_schema, schema)
 
         with self.temp_env({"SPARK_CONNECT_MODE_ENABLED": None}):

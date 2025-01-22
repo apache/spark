@@ -47,7 +47,7 @@ class TableValuedFunction(sparkSession: SparkSession) extends api.TableValuedFun
   }
 
   private def fn(name: String, args: Seq[Column]): Dataset[Row] = {
-    sparkSession.newDataFrame { builder =>
+    sparkSession.newDataFrame(args) { builder =>
       builder.getUnresolvedTableValuedFunctionBuilder
         .setFunctionName(name)
         .addAllArguments(args.map(toExpr).asJava)

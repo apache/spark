@@ -32,7 +32,6 @@ package rdd {
 package sql {
   class ExperimentalMethods
   class SparkSessionExtensions
-  class SQLContext
 
   package execution {
     class QueryExecution

@@ -23,7 +23,7 @@ import os
 from pyspark.util import is_remote_only
 from pyspark.sql import SparkSession
 from pyspark.testing.connectutils import ReusedConnectTestCase, should_test_connect
-from pyspark.testing.utils import SPARK_HOME
+from pyspark.testing.sqlutils import SPARK_HOME
 from pyspark.sql.functions import udf, assert_true, lit
 
 if should_test_connect:

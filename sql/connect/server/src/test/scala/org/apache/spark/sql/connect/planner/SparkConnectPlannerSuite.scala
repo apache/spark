@@ -26,9 +26,10 @@ import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.Expression.{Alias, ExpressionString, UnresolvedStar}
 import org.apache.spark.sql.{AnalysisException, Dataset, Row}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
+import org.apache.spark.sql.catalyst.analysis.{UnresolvedAlias, UnresolvedFunction, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, UnsafeProjection}
 import org.apache.spark.sql.catalyst.plans.logical
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.connect.SparkConnectTestUtils
 import org.apache.spark.sql.connect.common.InvalidPlanInput
@@ -88,7 +89,8 @@ trait SparkConnectPlanTest extends SharedSparkSession {
   def createLocalRelationProto(
       attrs: Seq[AttributeReference],
       data: Seq[InternalRow],
-      timeZoneId: String = "UTC"): proto.Relation = {
+      timeZoneId: String = "UTC",
+      schema: Option[StructType] = None): proto.Relation = {
     val localRelationBuilder = proto.LocalRelation.newBuilder()
 
     val bytes = ArrowConverters
@@ -102,6 +104,7 @@ trait SparkConnectPlanTest extends SharedSparkSession {
       .next()
 
     localRelationBuilder.setData(ByteString.copyFrom(bytes))
+    schema.foreach(s => localRelationBuilder.setSchema(s.json))
     proto.Relation.newBuilder().setLocalRelation(localRelationBuilder.build()).build()
   }
 }
@@ -503,26 +506,27 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
   }
 
   test("Test duplicated names in WithColumns") {
-    intercept[AnalysisException] {
-      transform(
-        proto.Relation
-          .newBuilder()
-          .setWithColumns(
-            proto.WithColumns
-              .newBuilder()
-              .setInput(readRel)
-              .addAliases(proto.Expression.Alias
+    val logical = transform(
+      proto.Relation
+        .newBuilder()
+        .setWithColumns(
+          proto.WithColumns
+            .newBuilder()
+            .setInput(readRel)
+            .addAliases(
+              proto.Expression.Alias
                 .newBuilder()
                 .addName("test")
                 .setExpr(proto.Expression.newBuilder
                   .setLiteral(proto.Expression.Literal.newBuilder.setInteger(32))))
-              .addAliases(proto.Expression.Alias
-                .newBuilder()
-                .addName("test")
-                .setExpr(proto.Expression.newBuilder
-                  .setLiteral(proto.Expression.Literal.newBuilder.setInteger(32)))))
-          .build())
-    }
+            .addAliases(proto.Expression.Alias
+              .newBuilder()
+              .addName("test")
+              .setExpr(proto.Expression.newBuilder
+                .setLiteral(proto.Expression.Literal.newBuilder.setInteger(32)))))
+        .build())
+
+    intercept[AnalysisException](Dataset.ofRows(spark, logical))
   }
 
   test("Test multi nameparts for column names in WithColumns") {
@@ -883,5 +887,37 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
         .build())
 
     intercept[AnalysisException](Dataset.ofRows(spark, logical))
+  }
+
+  test("Internal functions") {
+    def getProjectRelationWithFn(name: String, isInternal: Option[Boolean]): proto.Relation = {
+      val fn = proto.Expression.UnresolvedFunction.newBuilder.setFunctionName(name)
+      isInternal.foreach(fn.setIsInternal)
+      val proj = proto.Project.newBuilder
+        .setInput(readRel)
+        .addExpressions(proto.Expression.newBuilder.setUnresolvedFunction(fn))
+      proto.Relation.newBuilder.setProject(proj).build()
+    }
+
+    def getUnresolvedFunction(plan: LogicalPlan): UnresolvedFunction =
+      plan.expressions.head.asInstanceOf[UnresolvedAlias].child.asInstanceOf[UnresolvedFunction]
+
+    // "bloom_filter_agg" is an internal function.
+    val plan1 = transform(getProjectRelationWithFn("bloom_filter_agg", isInternal = None))
+    val fn1 = getUnresolvedFunction(plan1)
+    assert(fn1.nameParts.head == "bloom_filter_agg")
+    assert(fn1.isInternal)
+
+    // "abcde" is not an internal function.
+    val plan2 = transform(getProjectRelationWithFn("abcde", isInternal = None))
+    val fn2 = getUnresolvedFunction(plan2)
+    assert(fn2.nameParts.head == "abcde")
+    assert(!fn2.isInternal)
+
+    // "abcde" is not an internal function but we could set it to be internal.
+    val plan3 = transform(getProjectRelationWithFn("abcde", isInternal = Some(true)))
+    val fn3 = getUnresolvedFunction(plan3)
+    assert(fn3.nameParts.head == "abcde")
+    assert(fn3.isInternal)
   }
 }

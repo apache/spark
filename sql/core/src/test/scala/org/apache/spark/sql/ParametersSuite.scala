@@ -769,4 +769,36 @@ class ParametersSuite extends QueryTest with SharedSparkSession with PlanTest {
     checkAnswer(spark.sql(query(":cte"), args = Map("cte" -> "t1")), Row(1))
     checkAnswer(spark.sql(query("?"), args = Array("t1")), Row(1))
   }
+
+  test("SPARK-50403: parameterized execute immediate") {
+    checkAnswer(spark.sql("execute immediate 'select ?' using ?", Array(1)), Row(1))
+    checkAnswer(spark.sql("execute immediate 'select ?, ?' using ?, 2", Array(1)), Row(1, 2))
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.sql("execute immediate 'select ?, ?' using 1", Array(2))
+      },
+      condition = "UNBOUND_SQL_PARAMETER",
+      parameters = Map("name" -> "_10"),
+      context = ExpectedContext("?", 10, 10))
+
+    checkAnswer(spark.sql("execute immediate 'select ?' using 1", Map("param1" -> "1")), Row(1))
+    checkAnswer(spark.sql("execute immediate 'select :param1' using :param2 as param1",
+      Map("param2" -> 42)), Row(42))
+    checkAnswer(spark.sql(
+      "execute immediate 'select :param1, :param2' using :param2 as param1, 43 as param2",
+      Map("param2" -> 42)), Row(42, 43))
+    checkAnswer(spark.sql("execute immediate 'select :param' using 0 as param",
+      Map("param" -> 42)), Row(0))
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.sql("execute immediate 'select :param1, :param2' using 1 as param1",
+          Map("param2" -> 2))
+      },
+      condition = "UNBOUND_SQL_PARAMETER",
+      parameters = Map("name" -> "param2"),
+      context = ExpectedContext(":param2", 16, 22))
+
+    checkAnswer(spark.sql("execute immediate 'select ?' using :param", Map("param" -> 2)), Row(2))
+    checkAnswer(spark.sql("execute immediate 'select :param' using ? as param", Array(3)), Row(3))
+  }
 }

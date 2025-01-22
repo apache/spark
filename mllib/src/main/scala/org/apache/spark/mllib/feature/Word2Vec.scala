@@ -520,9 +520,15 @@ class Word2VecModel private[spark] (
     }
   }
 
+  // Auxiliary constructor must begin with call to 'this'.
+  // Helper constructor for `def this(model: Map[String, Array[Float]])`.
+  private def this(model: (Map[String, Int], Array[Float])) = {
+    this(model._1, model._2)
+  }
+
   @Since("1.5.0")
   def this(model: Map[String, Array[Float]]) = {
-    this(Word2VecModel.buildWordIndex(model), Word2VecModel.buildWordVectors(model))
+    this(Word2VecModel.buildFromVecMap(model))
   }
 
   @Since("1.4.0")
@@ -642,21 +648,22 @@ class Word2VecModel private[spark] (
 @Since("1.4.0")
 object Word2VecModel extends Loader[Word2VecModel] {
 
-  private def buildWordIndex(model: Map[String, Array[Float]]): Map[String, Int] = {
-    CUtils.toMapWithIndex(model.keys)
-  }
-
-  private def buildWordVectors(model: Map[String, Array[Float]]): Array[Float] = {
+  private def buildFromVecMap(
+      model: Map[String, Array[Float]]): (Map[String, Int], Array[Float]) = {
     require(model.nonEmpty, "Word2VecMap should be non-empty")
+
     val (vectorSize, numWords) = (model.head._2.length, model.size)
-    val wordList = model.keys.toArray
     val wordVectors = new Array[Float](vectorSize * numWords)
-    var i = 0
-    while (i < numWords) {
-      Array.copy(model(wordList(i)), 0, wordVectors, i * vectorSize, vectorSize)
-      i += 1
+
+    val wordIndex = collection.immutable.Map.newBuilder[String, Int]
+    wordIndex.sizeHint(numWords)
+
+    model.iterator.zipWithIndex.foreach {
+      case ((word, vector), i) =>
+        wordIndex += ((word, i))
+        Array.copy(vector, 0, wordVectors, i * vectorSize, vectorSize)
     }
-    wordVectors
+    (wordIndex.result(), wordVectors)
   }
 
   private object SaveLoadV1_0 {

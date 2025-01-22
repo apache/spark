@@ -94,6 +94,7 @@ private[spark] object LogKeys {
   case object BATCH_TIMESTAMP extends LogKey
   case object BATCH_WRITE extends LogKey
   case object BIND_ADDRESS extends LogKey
+  case object BLOCK_GENERATOR_STATUS extends LogKey
   case object BLOCK_ID extends LogKey
   case object BLOCK_IDS extends LogKey
   case object BLOCK_MANAGER_ID extends LogKey
@@ -549,7 +550,7 @@ private[spark] object LogKeys {
   case object NUM_RULE_OF_RUNS extends LogKey
   case object NUM_SEQUENCES extends LogKey
   case object NUM_SLOTS extends LogKey
-  case object NUM_SPILL_INFOS extends LogKey
+  case object NUM_SPILLS extends LogKey
   case object NUM_SPILL_WRITERS extends LogKey
   case object NUM_SUB_DIRS extends LogKey
   case object NUM_SUCCESSFUL_TASKS extends LogKey
@@ -725,6 +726,7 @@ private[spark] object LogKeys {
   case object SHUFFLE_DB_BACKEND_KEY extends LogKey
   case object SHUFFLE_DB_BACKEND_NAME extends LogKey
   case object SHUFFLE_ID extends LogKey
+  case object SHUFFLE_IDS extends LogKey
   case object SHUFFLE_MERGE_ID extends LogKey
   case object SHUFFLE_MERGE_RECOVERY_FILE extends LogKey
   case object SHUFFLE_SERVICE_CONF_OVERLAY_URL extends LogKey
@@ -755,14 +757,18 @@ private[spark] object LogKeys {
   case object STAGE extends LogKey
   case object STAGES extends LogKey
   case object STAGE_ATTEMPT extends LogKey
+  case object STAGE_ATTEMPT_ID extends LogKey
   case object STAGE_ID extends LogKey
   case object STAGE_NAME extends LogKey
   case object START_INDEX extends LogKey
   case object START_TIME extends LogKey
   case object STATEMENT_ID extends LogKey
   case object STATE_NAME extends LogKey
+  case object STATE_STORE_COORDINATOR extends LogKey
   case object STATE_STORE_ID extends LogKey
   case object STATE_STORE_PROVIDER extends LogKey
+  case object STATE_STORE_PROVIDER_ID extends LogKey
+  case object STATE_STORE_PROVIDER_IDS extends LogKey
   case object STATE_STORE_VERSION extends LogKey
   case object STATS extends LogKey
   case object STATUS extends LogKey

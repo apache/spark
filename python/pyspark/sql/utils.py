@@ -62,14 +62,6 @@ if TYPE_CHECKING:
     from pyspark.sql.dataframe import DataFrame
     from pyspark.pandas._typing import IndexOpsLike, SeriesOrIndex
 
-has_numpy: bool = False
-try:
-    import numpy as np  # noqa: F401
-
-    has_numpy = True
-except ImportError:
-    pass
-
 
 FuncT = TypeVar("FuncT", bound=Callable[..., Any])
 
@@ -118,18 +110,34 @@ def require_test_compiled() -> None:
 
 def require_minimum_plotly_version() -> None:
     """Raise ImportError if plotly is not installed"""
+    from pyspark.loose_version import LooseVersion
+
     minimum_plotly_version = "4.8"
 
     try:
-        import plotly  # noqa: F401
+        import plotly
+
+        have_plotly = True
     except ImportError as error:
+        have_plotly = False
+        raised_error = error
+    if not have_plotly:
         raise PySparkImportError(
             errorClass="PACKAGE_NOT_INSTALLED",
             messageParameters={
-                "package_name": "plotly",
+                "package_name": "Plotly",
                 "minimum_version": str(minimum_plotly_version),
             },
-        ) from error
+        ) from raised_error
+    if LooseVersion(plotly.__version__) < LooseVersion(minimum_plotly_version):
+        raise PySparkImportError(
+            errorClass="UNSUPPORTED_PACKAGE_VERSION",
+            messageParameters={
+                "package_name": "Plotly",
+                "minimum_version": str(minimum_plotly_version),
+                "current_version": str(plotly.__version__),
+            },
+        )
 
 
 class ForeachBatchFunction:

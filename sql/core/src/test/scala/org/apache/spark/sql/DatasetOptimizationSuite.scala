@@ -184,16 +184,18 @@ class DatasetOptimizationSuite extends QueryTest with SharedSparkSession {
       assert(count3 == count2)
     }
 
-    withClue("array type") {
-      checkCodegenCache(() => Seq(Seq("abc")).toDS())
-    }
+    withSQLConf(SQLConf.ARTIFACTS_SESSION_ISOLATION_ALWAYS_APPLY_CLASSLOADER.key -> "true") {
+      withClue("array type") {
+        checkCodegenCache(() => Seq(Seq("abc")).toDS())
+      }
 
-    withClue("map type") {
-      checkCodegenCache(() => Seq(Map("abc" -> 1)).toDS())
-    }
+      withClue("map type") {
+        checkCodegenCache(() => Seq(Map("abc" -> 1)).toDS())
+      }
 
-    withClue("array of map") {
-      checkCodegenCache(() => Seq(Seq(Map("abc" -> 1))).toDS())
+      withClue("array of map") {
+        checkCodegenCache(() => Seq(Seq(Map("abc" -> 1))).toDS())
+      }
     }
   }
 

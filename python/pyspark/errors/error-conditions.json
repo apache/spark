@@ -266,6 +266,11 @@
       "Argument `<arg_name>`(type: <arg_type>) should only contain a type in [<allowed_types>], got <item_type>"
     ]
   },
+  "DUPLICATED_ARTIFACT": {
+    "message": [
+      "Duplicate Artifact: <normalized_path>. Artifacts cannot be overwritten."
+    ]
+  },
   "DUPLICATED_FIELD_NAME_IN_ARROW_STRUCT": {
     "message": [
       "Duplicated field names in Arrow Struct are not allowed, got <field_names>"
@@ -1101,6 +1106,11 @@
   "UNSUPPORTED_PARAM_TYPE_FOR_HIGHER_ORDER_FUNCTION": {
     "message": [
       "Function `<func_name>` should use only POSITIONAL or POSITIONAL OR KEYWORD arguments."
+    ]
+  },
+  "UNSUPPORTED_PIE_PLOT_PARAM": {
+    "message": [
+      "Pie plot requires either a `y` column or `subplots=True`."
     ]
   },
   "UNSUPPORTED_PLOT_BACKEND": {

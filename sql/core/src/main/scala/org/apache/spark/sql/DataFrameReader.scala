@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql
 
-import java.util.{Locale, Properties}
+import java.util.Properties
 
 import scala.jdk.CollectionConverters._
 
@@ -29,17 +29,15 @@ import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.csv.{CSVHeaderChecker, CSVOptions, UnivocityParser}
 import org.apache.spark.sql.catalyst.expressions.ExprUtils
 import org.apache.spark.sql.catalyst.json.{CreateJacksonParser, JacksonParser, JSONOptions}
+import org.apache.spark.sql.catalyst.plans.logical.UnresolvedDataSource
 import org.apache.spark.sql.catalyst.util.FailureSafeParser
 import org.apache.spark.sql.catalyst.xml.{StaxXmlParser, XmlOptions}
 import org.apache.spark.sql.classic.ClassicConversions._
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.execution.command.DDLUtils
-import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.datasources.csv._
-import org.apache.spark.sql.execution.datasources.jdbc._
+import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JDBCPartition, JDBCRelation}
 import org.apache.spark.sql.execution.datasources.json.JsonUtils.checkJsonSchema
 import org.apache.spark.sql.execution.datasources.json.TextInputJsonDataSource
-import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Utils
 import org.apache.spark.sql.execution.datasources.xml.TextInputXmlDataSource
 import org.apache.spark.sql.execution.datasources.xml.XmlUtils.checkXmlSchema
 import org.apache.spark.sql.internal.SQLConf
@@ -104,38 +102,10 @@ class DataFrameReader private[sql](sparkSession: SparkSession)
   /** @inheritdoc */
   @scala.annotation.varargs
   def load(paths: String*): DataFrame = {
-    if (source.toLowerCase(Locale.ROOT) == DDLUtils.HIVE_PROVIDER) {
-      throw QueryCompilationErrors.cannotOperateOnHiveDataSourceFilesError("read")
-    }
-
-    val legacyPathOptionBehavior = sparkSession.sessionState.conf.legacyPathOptionBehavior
-    if (!legacyPathOptionBehavior &&
-        (extraOptions.contains("path") || extraOptions.contains("paths")) && paths.nonEmpty) {
-      throw QueryCompilationErrors.pathOptionNotSetCorrectlyWhenReadingError()
-    }
-
-    DataSource.lookupDataSourceV2(source, sparkSession.sessionState.conf).flatMap { provider =>
-      DataSourceV2Utils.loadV2Source(sparkSession, provider, userSpecifiedSchema, extraOptions,
-        source, paths: _*)
-    }.getOrElse(loadV1Source(paths: _*))
-  }
-
-  private def loadV1Source(paths: String*) = {
-    val legacyPathOptionBehavior = sparkSession.sessionState.conf.legacyPathOptionBehavior
-    val (finalPaths, finalOptions) = if (!legacyPathOptionBehavior && paths.length == 1) {
-      (Nil, extraOptions + ("path" -> paths.head))
-    } else {
-      (paths, extraOptions)
-    }
-
-    // Code path for data source v1.
-    sparkSession.baseRelationToDataFrame(
-      DataSource.apply(
-        sparkSession,
-        paths = finalPaths,
-        userSpecifiedSchema = userSpecifiedSchema,
-        className = source,
-        options = finalOptions.originalMap).resolveRelation())
+    Dataset.ofRows(
+      sparkSession,
+      UnresolvedDataSource(source, userSpecifiedSchema, extraOptions, isStreaming = false, paths)
+    )
   }
 
   /** @inheritdoc */
@@ -164,7 +134,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession)
     val params = extraOptions ++ connectionProperties.asScala
     val options = new JDBCOptions(url, table, params)
     val parts: Array[Partition] = predicates.zipWithIndex.map { case (part, i) =>
-      JDBCPartition(part, i) : Partition
+      JDBCPartition(part, i): Partition
     }
     val relation = JDBCRelation(parts, options)(sparkSession)
     sparkSession.baseRelationToDataFrame(relation)

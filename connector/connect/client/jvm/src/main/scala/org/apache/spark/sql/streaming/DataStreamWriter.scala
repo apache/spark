@@ -135,7 +135,10 @@ final class DataStreamWriter[T] private[sql] (ds: Dataset[T]) extends api.DataSt
   /** @inheritdoc */
   @Evolving
   def foreachBatch(function: (Dataset[T], Long) => Unit): this.type = {
-    val serializedFn = SparkSerDeUtils.serialize(function)
+    // SPARK-50661: the client should send the encoder for the input dataset together with the
+    //  function to the server.
+    val serializedFn =
+      SparkSerDeUtils.serialize(ForeachWriterPacket(function, ds.agnosticEncoder))
     sinkBuilder.getForeachBatchBuilder.getScalaFunctionBuilder
       .setPayload(ByteString.copyFrom(serializedFn))
       .setOutputType(DataTypeProtoConverter.toConnectProtoType(NullType)) // Unused.

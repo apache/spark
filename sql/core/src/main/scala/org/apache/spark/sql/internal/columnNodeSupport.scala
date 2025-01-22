@@ -273,6 +273,8 @@ private[sql] case class ExpressionColumnNode private(
   }
 
   override def sql: String = expression.sql
+
+  override private[internal] def children: Seq[ColumnNodeLike] = Seq.empty
 }
 
 private[sql] object ExpressionColumnNode {

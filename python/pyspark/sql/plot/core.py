@@ -19,11 +19,10 @@ import math
 
 from typing import Any, TYPE_CHECKING, List, Optional, Union, Sequence
 from types import ModuleType
-from pyspark.errors import PySparkTypeError, PySparkValueError
+from pyspark.errors import PySparkValueError
 from pyspark.sql import Column, functions as F
 from pyspark.sql.internal import InternalFunction as SF
 from pyspark.sql.pandas.utils import require_minimum_pandas_version
-from pyspark.sql.types import NumericType
 from pyspark.sql.utils import NumpyHelper, require_minimum_plotly_version
 
 if TYPE_CHECKING:
@@ -295,7 +294,7 @@ class PySparkPlotAccessor:
         """
         return self(kind="area", x=x, y=y, **kwargs)
 
-    def pie(self, x: str, y: str, **kwargs: Any) -> "Figure":
+    def pie(self, x: str, y: Optional[str], **kwargs: Any) -> "Figure":
         """
         Generate a pie plot.
 
@@ -306,8 +305,8 @@ class PySparkPlotAccessor:
         ----------
         x : str
             Name of column to be used as the category labels for the pie plot.
-        y : str
-            Name of the column to plot.
+        y : str, optional
+            Name of the column to plot. If not provided, `subplots=True` must be passed at `kwargs`.
         **kwargs
             Additional keyword arguments.
 
@@ -327,19 +326,8 @@ class PySparkPlotAccessor:
         >>> columns = ["sales", "signups", "visits", "date"]
         >>> df = spark.createDataFrame(data, columns)
         >>> df.plot.pie(x='date', y='sales')  # doctest: +SKIP
+        >>> df.plot.pie(x='date', subplots=True)  # doctest: +SKIP
         """
-        schema = self.data.schema
-
-        # Check if 'y' is a numerical column
-        y_field = schema[y] if y in schema.names else None
-        if y_field is None or not isinstance(y_field.dataType, NumericType):
-            raise PySparkTypeError(
-                errorClass="PLOT_NOT_NUMERIC_COLUMN_ARGUMENT",
-                messageParameters={
-                    "arg_name": "y",
-                    "arg_type": str(y_field.dataType.__class__.__name__) if y_field else "None",
-                },
-            )
         return self(kind="pie", x=x, y=y, **kwargs)
 
     def box(self, column: Optional[Union[str, List[str]]] = None, **kwargs: Any) -> "Figure":

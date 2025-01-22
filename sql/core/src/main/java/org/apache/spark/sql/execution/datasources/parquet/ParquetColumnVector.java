@@ -35,7 +35,6 @@ import org.apache.spark.sql.types.MapType;
 import org.apache.spark.sql.types.StructType;
 import org.apache.spark.sql.types.VariantType;
 import org.apache.spark.types.variant.VariantSchema;
-import org.apache.spark.unsafe.types.VariantVal;
 
 /**
  * Contains necessary information representing a Parquet column, either of primitive or nested type.
@@ -49,6 +48,9 @@ final class ParquetColumnVector {
   // contains only one child that reads the underlying file content. This `ParquetColumnVector`
   // should assemble Spark variant values from the file content.
   private VariantSchema variantSchema;
+  // Only meaningful if `variantSchema` is not null. See `SparkShreddingUtils.getFieldsToExtract`
+  // for its meaning.
+  private FieldToExtract[] fieldsToExtract;
 
   /**
    * Repetition & Definition levels
@@ -117,6 +119,7 @@ final class ParquetColumnVector {
           fileContent, capacity, memoryMode, missingColumns, false, null);
       children.add(contentVector);
       variantSchema = SparkShreddingUtils.buildVariantSchema(fileContentCol.sparkType());
+      fieldsToExtract = SparkShreddingUtils.getFieldsToExtract(column.sparkType(), variantSchema);
       repetitionLevels = contentVector.repetitionLevels;
       definitionLevels = contentVector.definitionLevels;
     } else if (isPrimitive) {
@@ -188,20 +191,11 @@ final class ParquetColumnVector {
     if (variantSchema != null) {
       children.get(0).assemble();
       WritableColumnVector fileContent = children.get(0).getValueVector();
-      int numRows = fileContent.getElementsAppended();
-      vector.reset();
-      vector.reserve(numRows);
-      WritableColumnVector valueChild = vector.getChild(0);
-      WritableColumnVector metadataChild = vector.getChild(1);
-      for (int i = 0; i < numRows; ++i) {
-        if (fileContent.isNullAt(i)) {
-          vector.appendStruct(true);
-        } else {
-          vector.appendStruct(false);
-          VariantVal v = SparkShreddingUtils.rebuild(fileContent.getStruct(i), variantSchema);
-          valueChild.appendByteArray(v.getValue(), 0, v.getValue().length);
-          metadataChild.appendByteArray(v.getMetadata(), 0, v.getMetadata().length);
-        }
+      if (fieldsToExtract == null) {
+        SparkShreddingUtils.assembleVariantBatch(fileContent, vector, variantSchema);
+      } else {
+        SparkShreddingUtils.assembleVariantStructBatch(fileContent, vector, variantSchema,
+            fieldsToExtract);
       }
       return;
     }

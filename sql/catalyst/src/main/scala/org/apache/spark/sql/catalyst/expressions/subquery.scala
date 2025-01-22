@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import scala.collection.mutable.ArrayBuffer
 
+import org.apache.spark.sql.catalyst.analysis.UnresolvedPlanId
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -439,6 +440,14 @@ object ScalarSubquery {
   }
 }
 
+case class UnresolvedScalarSubqueryPlanId(planId: Long)
+  extends UnresolvedPlanId {
+
+  override def withPlan(plan: LogicalPlan): Expression = {
+    ScalarSubquery(plan)
+  }
+}
+
 /**
  * A subquery that can return multiple rows and columns. This should be rewritten as a join
  * with the outer query during the optimization phase.
@@ -591,4 +600,12 @@ case class Exists(
       joinCond = newChildren.drop(outerAttrs.size))
 
   final override def nodePatternsInternal(): Seq[TreePattern] = Seq(EXISTS_SUBQUERY)
+}
+
+case class UnresolvedExistsPlanId(planId: Long)
+  extends UnresolvedPlanId {
+
+  override def withPlan(plan: LogicalPlan): Expression = {
+    Exists(plan)
+  }
 }
