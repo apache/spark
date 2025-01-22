@@ -48,3 +48,5 @@ org.apache.spark.ml.feature.StandardScalerModel
 org.apache.spark.ml.feature.MaxAbsScalerModel
 org.apache.spark.ml.feature.MinMaxScalerModel
 org.apache.spark.ml.feature.RobustScalerModel
+org.apache.spark.ml.feature.StringIndexerModel
+org.apache.spark.ml.feature.PCAModel
