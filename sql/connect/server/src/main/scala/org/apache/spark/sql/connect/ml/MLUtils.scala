@@ -455,19 +455,19 @@ private[ml] object MLUtils {
   // leave a security hole, we define an allowed attribute list that can be accessed.
   // The attributes could be retrieved from the corresponding python class
   private lazy val ALLOWED_ATTRIBUTES = Seq(
-    (classOf[Identifiable], Array("toString")),
+    (classOf[Identifiable], Set("toString")),
 
     // Model Traits
-    (classOf[PredictionModel[_, _]], Array("predict", "numFeatures")),
-    (classOf[ClassificationModel[_, _]], Array("predictRaw", "numClasses")),
-    (classOf[ProbabilisticClassificationModel[_, _]], Array("predictProbability")),
+    (classOf[PredictionModel[_, _]], Set("predict", "numFeatures")),
+    (classOf[ClassificationModel[_, _]], Set("predictRaw", "numClasses")),
+    (classOf[ProbabilisticClassificationModel[_, _]], Set("predictProbability")),
 
     // Summary Traits
-    (classOf[HasTrainingSummary[_]], Array("hasSummary", "summary")),
-    (classOf[TrainingSummary], Array("objectiveHistory", "totalIterations")),
+    (classOf[HasTrainingSummary[_]], Set("hasSummary", "summary")),
+    (classOf[TrainingSummary], Set("objectiveHistory", "totalIterations")),
     (
       classOf[ClassificationSummary],
-      Array(
+      Set(
         "predictions",
         "predictionCol",
         "labelCol",
@@ -487,7 +487,7 @@ private[ml] object MLUtils {
         "weightedFMeasure")),
     (
       classOf[BinaryClassificationSummary],
-      Array(
+      Set(
         "scoreCol",
         "roc",
         "areaUnderROC",
@@ -497,7 +497,7 @@ private[ml] object MLUtils {
         "recallByThreshold")),
     (
       classOf[ClusteringSummary],
-      Array(
+      Set(
         "predictions",
         "predictionCol",
         "featuresCol",
@@ -507,10 +507,10 @@ private[ml] object MLUtils {
         "clusterSizes")),
 
     // Tree Models
-    (classOf[DecisionTreeModel], Array("predictLeaf", "numNodes", "depth", "toDebugString")),
+    (classOf[DecisionTreeModel], Set("predictLeaf", "numNodes", "depth", "toDebugString")),
     (
       classOf[TreeEnsembleModel[_]],
-      Array(
+      Set(
         "predictLeaf",
         "trees",
         "treeWeights",
@@ -518,25 +518,25 @@ private[ml] object MLUtils {
         "getNumTrees",
         "totalNumNodes",
         "toDebugString")),
-    (classOf[DecisionTreeClassificationModel], Array("featureImportances")),
-    (classOf[RandomForestClassificationModel], Array("featureImportances", "evaluate")),
-    (classOf[GBTClassificationModel], Array("featureImportances", "evaluateEachIteration")),
-    (classOf[DecisionTreeRegressionModel], Array("featureImportances")),
-    (classOf[RandomForestRegressionModel], Array("featureImportances")),
-    (classOf[GBTRegressionModel], Array("featureImportances", "evaluateEachIteration")),
+    (classOf[DecisionTreeClassificationModel], Set("featureImportances")),
+    (classOf[RandomForestClassificationModel], Set("featureImportances", "evaluate")),
+    (classOf[GBTClassificationModel], Set("featureImportances", "evaluateEachIteration")),
+    (classOf[DecisionTreeRegressionModel], Set("featureImportances")),
+    (classOf[RandomForestRegressionModel], Set("featureImportances")),
+    (classOf[GBTRegressionModel], Set("featureImportances", "evaluateEachIteration")),
 
     // Classification Models
     (
       classOf[LogisticRegressionModel],
-      Array("intercept", "coefficients", "interceptVector", "coefficientMatrix", "evaluate")),
-    (classOf[LogisticRegressionSummary], Array("probabilityCol", "featuresCol")),
-    (classOf[BinaryLogisticRegressionSummary], Array("scoreCol")),
+      Set("intercept", "coefficients", "interceptVector", "coefficientMatrix", "evaluate")),
+    (classOf[LogisticRegressionSummary], Set("probabilityCol", "featuresCol")),
+    (classOf[BinaryLogisticRegressionSummary], Set("scoreCol")),
 
     // Regression Models
-    (classOf[LinearRegressionModel], Array("intercept", "coefficients", "scale", "evaluate")),
+    (classOf[LinearRegressionModel], Set("intercept", "coefficients", "scale", "evaluate")),
     (
       classOf[LinearRegressionSummary],
-      Array(
+      Set(
         "predictions",
         "predictionCol",
         "labelCol",
@@ -554,20 +554,20 @@ private[ml] object MLUtils {
         "coefficientStandardErrors",
         "tValues",
         "pValues")),
-    (classOf[LinearRegressionTrainingSummary], Array("objectiveHistory", "totalIterations")),
+    (classOf[LinearRegressionTrainingSummary], Set("objectiveHistory", "totalIterations")),
 
     // Clustering Models
-    (classOf[KMeansModel], Array("predict", "numFeatures", "clusterCenters")),
-    (classOf[KMeansSummary], Array("trainingCost")),
+    (classOf[KMeansModel], Set("predict", "numFeatures", "clusterCenters")),
+    (classOf[KMeansSummary], Set("trainingCost")),
     (
       classOf[BisectingKMeansModel],
-      Array("predict", "numFeatures", "clusterCenters", "computeCost")),
-    (classOf[BisectingKMeansSummary], Array("trainingCost")),
+      Set("predict", "numFeatures", "clusterCenters", "computeCost")),
+    (classOf[BisectingKMeansSummary], Set("trainingCost")),
 
     // Recommendation Models
     (
       classOf[ALSModel],
-      Array(
+      Set(
         "rank",
         "itemFactors",
         "userFactors",
@@ -577,13 +577,13 @@ private[ml] object MLUtils {
         "recommendForItemSubset")),
 
     // Association Rules
-    (classOf[FPGrowthModel], Array("associationRules", "freqItemsets")),
+    (classOf[FPGrowthModel], Set("associationRules", "freqItemsets")),
 
     // Feature Models
-    (classOf[StandardScalerModel], Array("mean", "std")),
-    (classOf[MaxAbsScalerModel], Array("maxAbs")),
-    (classOf[MinMaxScalerModel], Array("originalMax", "originalMin")),
-    (classOf[RobustScalerModel], Array("range", "median")))
+    (classOf[StandardScalerModel], Set("mean", "std")),
+    (classOf[MaxAbsScalerModel], Set("maxAbs")),
+    (classOf[MinMaxScalerModel], Set("originalMax", "originalMin")),
+    (classOf[RobustScalerModel], Set("range", "median")))
 
   private def validate(obj: Any, method: String): Unit = {
     assert(obj != null)
