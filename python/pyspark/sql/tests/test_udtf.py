@@ -2761,6 +2761,43 @@ class BaseUDTFTestsMixin:
         res = self.spark.sql("select i, to_json(v['v1']) from test_udtf_struct(8)")
         assertDataFrameEqual(res, [Row(i=n, s=f'{{"a":"{chr(99 + n)}"}}') for n in range(8)])
 
+    def test_udtf_segfault(self):
+        for enabled, expected in [
+            (True, "Segmentation fault"),
+            (False, "Consider setting .* for the better Python traceback."),
+        ]:
+            with self.subTest(enabled=enabled), self.sql_conf(
+                {"spark.sql.execution.pyspark.udf.faulthandler.enabled": enabled}
+            ):
+                with self.subTest(method="eval"):
+
+                    class TestUDTF:
+                        def eval(self):
+                            import ctypes
+
+                            yield ctypes.string_at(0),
+
+                    self._check_result_or_exception(
+                        TestUDTF, "x: string", expected, err_type=Exception
+                    )
+
+                with self.subTest(method="analyze"):
+
+                    class TestUDTFWithAnalyze:
+                        @staticmethod
+                        def analyze():
+                            import ctypes
+
+                            ctypes.string_at(0)
+                            return AnalyzeResult(StructType().add("x", StringType()))
+
+                        def eval(self):
+                            yield "x",
+
+                    self._check_result_or_exception(
+                        TestUDTFWithAnalyze, None, expected, err_type=Exception
+                    )
+
 
 class UDTFTests(BaseUDTFTestsMixin, ReusedSQLTestCase):
     @classmethod
