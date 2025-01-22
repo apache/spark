@@ -3136,6 +3136,11 @@
         "message" : [
           "Recursive references cannot be used on the right side of left outer/semi/anti joins, on the left side of right outer joins, in full outer joins and in aggregates."
         ]
+      },
+      "SUBQUERY" : {
+        "message" : [
+          "Recursive reference must not appear within a subquery."
+        ]
       }
     },
     "sqlState" : "42836"

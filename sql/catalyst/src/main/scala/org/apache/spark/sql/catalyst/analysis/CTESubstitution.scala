@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.analysis
 
 import scala.collection.mutable.ArrayBuffer
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
 import org.apache.spark.sql.catalyst.plans.logical.{Command, CTEInChildren, CTERelationDef, CTERelationRef, InsertIntoDir, LogicalPlan, ParsedStatement, SubqueryAlias, UnresolvedWith, WithCTE}
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -318,6 +319,11 @@ object CTESubstitution extends Rule[LogicalPlan] {
       } else {
         None
       }
+      // Also, if recursion is allowed, we should check that there is no self-reference within
+      // subqueries inside the CTE definition.
+      if (allowRecursion) {
+        checkForSelfReferenceInSubquery(name, relation)
+      }
       // CTE definition can reference a previous one or itself if recursion allowed.
       val substituted = substituteCTE(innerCTEResolved, alwaysInline,
         resolvedCTERelations, recursiveCTERelation)
@@ -441,6 +447,22 @@ object CTESubstitution extends Rule[LogicalPlan] {
       cteDef.failAnalysis(
         errorClass = "INVALID_RECURSIVE_REFERENCE.NUMBER",
         messageParameters = Map.empty)
+    }
+  }
+
+  /**
+   * Checks if there is any self-reference within subqueries and throws an error
+   * if that is the case.
+   */
+  private def checkForSelfReferenceInSubquery(name: String, relation: SubqueryAlias): Unit = {
+    relation.subqueriesAll.foreach { subquery =>
+      subquery.foreach {
+        case UnresolvedRelation(Seq(table), _, _) if conf.resolver(name, table) =>
+          throw new AnalysisException(
+            errorClass = "INVALID_RECURSIVE_REFERENCE.SUBQUERY",
+            messageParameters = Map.empty)
+        case _ =>
+      }
     }
   }
 }
