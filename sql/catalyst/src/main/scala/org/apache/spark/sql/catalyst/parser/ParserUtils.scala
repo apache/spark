@@ -180,7 +180,7 @@ class SqlScriptingParsingContext {
    * Helper method to transition to a new state.
    * Possible states are:
    * 1a. VARIABLE (1)
-   * 2b. CONDITION (1)
+   * 1b. CONDITION (1)
    * 2. HANDLERS (2)
    * 3. STATEMENTS (3)
    * Transition is allowed from state with number n to state with number m,
