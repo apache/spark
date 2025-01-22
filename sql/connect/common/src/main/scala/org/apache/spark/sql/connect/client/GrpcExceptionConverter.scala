@@ -298,7 +298,7 @@ private[client] object GrpcExceptionConverter {
       if (error.hasCauseIdx) Some(errorsToThrowable(error.getCauseIdx, errors)) else None
 
     val errorClass = if (error.hasSparkThrowable && error.getSparkThrowable.hasErrorClass) {
-      Some(error.getSparkThrowable.getCondition)
+      Some(error.getSparkThrowable.getErrorClass)
     } else None
 
     val messageParameters = if (error.hasSparkThrowable) {
