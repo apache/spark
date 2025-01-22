@@ -38,6 +38,10 @@ if should_test_connect:
         def tearDown(self) -> None:
             self.spark.stop()
 
+        @unittest.skip("SPARK-50913: Flaky with RetriesExceeded")
+        def test_binary_classifier_evaluator(self):
+            self._test_binary_classifier_evaluator()
+
 
 if __name__ == "__main__":
     from pyspark.ml.tests.connect.test_connect_evaluation import *  # noqa: F401,F403

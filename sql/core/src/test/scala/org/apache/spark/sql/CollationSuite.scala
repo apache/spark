@@ -1974,48 +1974,66 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
     checkAnswer(df,
       Seq(Row("SYSTEM", "BUILTIN", "UTF8_BINARY", null, null,
         "ACCENT_SENSITIVE", "CASE_SENSITIVE", "NO_PAD", null),
+        Row("SYSTEM", "BUILTIN", "UTF8_BINARY_RTRIM", null, null,
+          "ACCENT_SENSITIVE", "CASE_SENSITIVE", "RTRIM", null),
         Row("SYSTEM", "BUILTIN", "UTF8_LCASE", null, null,
           "ACCENT_SENSITIVE", "CASE_INSENSITIVE", "NO_PAD", null),
+        Row("SYSTEM", "BUILTIN", "UTF8_LCASE_RTRIM", null, null,
+          "ACCENT_SENSITIVE", "CASE_INSENSITIVE", "RTRIM", null),
         Row("SYSTEM", "BUILTIN", "UNICODE", null, null,
           "ACCENT_SENSITIVE", "CASE_SENSITIVE", "NO_PAD", icvVersion),
         Row("SYSTEM", "BUILTIN", "UNICODE_AI", null, null,
           "ACCENT_INSENSITIVE", "CASE_SENSITIVE", "NO_PAD", icvVersion),
+        Row("SYSTEM", "BUILTIN", "UNICODE_AI_RTRIM", null, null,
+          "ACCENT_INSENSITIVE", "CASE_SENSITIVE", "RTRIM", icvVersion),
         Row("SYSTEM", "BUILTIN", "UNICODE_CI", null, null,
           "ACCENT_SENSITIVE", "CASE_INSENSITIVE", "NO_PAD", icvVersion),
         Row("SYSTEM", "BUILTIN", "UNICODE_CI_AI", null, null,
           "ACCENT_INSENSITIVE", "CASE_INSENSITIVE", "NO_PAD", icvVersion),
-        Row("SYSTEM", "BUILTIN", "af", "Afrikaans", null,
-          "ACCENT_SENSITIVE", "CASE_SENSITIVE", "NO_PAD", icvVersion),
-        Row("SYSTEM", "BUILTIN", "af_AI", "Afrikaans", null,
-          "ACCENT_INSENSITIVE", "CASE_SENSITIVE", "NO_PAD", icvVersion),
-        Row("SYSTEM", "BUILTIN", "af_CI", "Afrikaans", null,
-          "ACCENT_SENSITIVE", "CASE_INSENSITIVE", "NO_PAD", icvVersion),
-        Row("SYSTEM", "BUILTIN", "af_CI_AI", "Afrikaans", null,
-          "ACCENT_INSENSITIVE", "CASE_INSENSITIVE", "NO_PAD", icvVersion)))
+        Row("SYSTEM", "BUILTIN", "UNICODE_CI_AI_RTRIM", null, null,
+          "ACCENT_INSENSITIVE", "CASE_INSENSITIVE", "RTRIM", icvVersion)))
 
     checkAnswer(sql("SELECT * FROM collations() WHERE NAME LIKE '%UTF8_BINARY%'"),
-      Row("SYSTEM", "BUILTIN", "UTF8_BINARY", null, null,
-        "ACCENT_SENSITIVE", "CASE_SENSITIVE", "NO_PAD", null))
+      Seq(Row("SYSTEM", "BUILTIN", "UTF8_BINARY", null, null,
+        "ACCENT_SENSITIVE", "CASE_SENSITIVE", "NO_PAD", null),
+      Row("SYSTEM", "BUILTIN", "UTF8_BINARY_RTRIM", null, null,
+        "ACCENT_SENSITIVE", "CASE_SENSITIVE", "RTRIM", null)))
 
     checkAnswer(sql("SELECT * FROM collations() WHERE NAME LIKE '%zh_Hant_HKG%'"),
       Seq(Row("SYSTEM", "BUILTIN", "zh_Hant_HKG", "Chinese", "Hong Kong SAR China",
         "ACCENT_SENSITIVE", "CASE_SENSITIVE", "NO_PAD", icvVersion),
         Row("SYSTEM", "BUILTIN", "zh_Hant_HKG_AI", "Chinese", "Hong Kong SAR China",
           "ACCENT_INSENSITIVE", "CASE_SENSITIVE", "NO_PAD", icvVersion),
+        Row("SYSTEM", "BUILTIN", "zh_Hant_HKG_AI_RTRIM", "Chinese", "Hong Kong SAR China",
+          "ACCENT_INSENSITIVE", "CASE_SENSITIVE", "RTRIM", icvVersion),
         Row("SYSTEM", "BUILTIN", "zh_Hant_HKG_CI", "Chinese", "Hong Kong SAR China",
           "ACCENT_SENSITIVE", "CASE_INSENSITIVE", "NO_PAD", icvVersion),
         Row("SYSTEM", "BUILTIN", "zh_Hant_HKG_CI_AI", "Chinese", "Hong Kong SAR China",
-          "ACCENT_INSENSITIVE", "CASE_INSENSITIVE", "NO_PAD", icvVersion)))
+          "ACCENT_INSENSITIVE", "CASE_INSENSITIVE", "NO_PAD", icvVersion),
+        Row("SYSTEM", "BUILTIN", "zh_Hant_HKG_CI_AI_RTRIM", "Chinese", "Hong Kong SAR China",
+          "ACCENT_INSENSITIVE", "CASE_INSENSITIVE", "RTRIM", icvVersion),
+        Row("SYSTEM", "BUILTIN", "zh_Hant_HKG_CI_RTRIM", "Chinese", "Hong Kong SAR China",
+          "ACCENT_SENSITIVE", "CASE_INSENSITIVE", "RTRIM", icvVersion),
+        Row("SYSTEM", "BUILTIN", "zh_Hant_HKG_RTRIM", "Chinese", "Hong Kong SAR China",
+          "ACCENT_SENSITIVE", "CASE_SENSITIVE", "RTRIM", icvVersion)))
 
     checkAnswer(sql("SELECT * FROM collations() WHERE COUNTRY = 'Singapore'"),
       Seq(Row("SYSTEM", "BUILTIN", "zh_Hans_SGP", "Chinese", "Singapore",
         "ACCENT_SENSITIVE", "CASE_SENSITIVE", "NO_PAD", icvVersion),
         Row("SYSTEM", "BUILTIN", "zh_Hans_SGP_AI", "Chinese", "Singapore",
           "ACCENT_INSENSITIVE", "CASE_SENSITIVE", "NO_PAD", icvVersion),
+        Row("SYSTEM", "BUILTIN", "zh_Hans_SGP_AI_RTRIM", "Chinese", "Singapore",
+          "ACCENT_INSENSITIVE", "CASE_SENSITIVE", "RTRIM", icvVersion),
         Row("SYSTEM", "BUILTIN", "zh_Hans_SGP_CI", "Chinese", "Singapore",
           "ACCENT_SENSITIVE", "CASE_INSENSITIVE", "NO_PAD", icvVersion),
         Row("SYSTEM", "BUILTIN", "zh_Hans_SGP_CI_AI", "Chinese", "Singapore",
-          "ACCENT_INSENSITIVE", "CASE_INSENSITIVE", "NO_PAD", icvVersion)))
+          "ACCENT_INSENSITIVE", "CASE_INSENSITIVE", "NO_PAD", icvVersion),
+        Row("SYSTEM", "BUILTIN", "zh_Hans_SGP_CI_AI_RTRIM", "Chinese", "Singapore",
+          "ACCENT_INSENSITIVE", "CASE_INSENSITIVE", "RTRIM", icvVersion),
+        Row("SYSTEM", "BUILTIN", "zh_Hans_SGP_CI_RTRIM", "Chinese", "Singapore",
+          "ACCENT_SENSITIVE", "CASE_INSENSITIVE", "RTRIM", icvVersion),
+        Row("SYSTEM", "BUILTIN", "zh_Hans_SGP_RTRIM", "Chinese", "Singapore",
+          "ACCENT_SENSITIVE", "CASE_SENSITIVE", "RTRIM", icvVersion)))
 
     checkAnswer(sql("SELECT * FROM collations() WHERE LANGUAGE = 'English' " +
       "and COUNTRY = 'United States'"),
@@ -2023,20 +2041,33 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         "ACCENT_SENSITIVE", "CASE_SENSITIVE", "NO_PAD", icvVersion),
         Row("SYSTEM", "BUILTIN", "en_USA_AI", "English", "United States",
           "ACCENT_INSENSITIVE", "CASE_SENSITIVE", "NO_PAD", icvVersion),
+        Row("SYSTEM", "BUILTIN", "en_USA_AI_RTRIM", "English", "United States",
+          "ACCENT_INSENSITIVE", "CASE_SENSITIVE", "RTRIM", icvVersion),
         Row("SYSTEM", "BUILTIN", "en_USA_CI", "English", "United States",
           "ACCENT_SENSITIVE", "CASE_INSENSITIVE", "NO_PAD", icvVersion),
         Row("SYSTEM", "BUILTIN", "en_USA_CI_AI", "English", "United States",
-          "ACCENT_INSENSITIVE", "CASE_INSENSITIVE", "NO_PAD", icvVersion)))
+          "ACCENT_INSENSITIVE", "CASE_INSENSITIVE", "NO_PAD", icvVersion),
+        Row("SYSTEM", "BUILTIN", "en_USA_CI_AI_RTRIM", "English", "United States",
+          "ACCENT_INSENSITIVE", "CASE_INSENSITIVE", "RTRIM", icvVersion),
+        Row("SYSTEM", "BUILTIN", "en_USA_CI_RTRIM", "English", "United States",
+          "ACCENT_SENSITIVE", "CASE_INSENSITIVE", "RTRIM", icvVersion),
+        Row("SYSTEM", "BUILTIN", "en_USA_RTRIM", "English", "United States",
+          "ACCENT_SENSITIVE", "CASE_SENSITIVE", "RTRIM", icvVersion)))
 
     checkAnswer(sql("SELECT NAME, LANGUAGE, ACCENT_SENSITIVITY, CASE_SENSITIVITY " +
       "FROM collations() WHERE COUNTRY = 'United States'"),
       Seq(Row("en_USA", "English", "ACCENT_SENSITIVE", "CASE_SENSITIVE"),
         Row("en_USA_AI", "English", "ACCENT_INSENSITIVE", "CASE_SENSITIVE"),
+        Row("en_USA_AI_RTRIM", "English", "ACCENT_INSENSITIVE", "CASE_SENSITIVE"),
         Row("en_USA_CI", "English", "ACCENT_SENSITIVE", "CASE_INSENSITIVE"),
-        Row("en_USA_CI_AI", "English", "ACCENT_INSENSITIVE", "CASE_INSENSITIVE")))
+        Row("en_USA_CI_AI", "English", "ACCENT_INSENSITIVE", "CASE_INSENSITIVE"),
+        Row("en_USA_CI_AI_RTRIM", "English", "ACCENT_INSENSITIVE", "CASE_INSENSITIVE"),
+        Row("en_USA_CI_RTRIM", "English", "ACCENT_SENSITIVE", "CASE_INSENSITIVE"),
+        Row("en_USA_RTRIM", "English", "ACCENT_SENSITIVE", "CASE_SENSITIVE")))
 
     checkAnswer(sql("SELECT NAME FROM collations() WHERE ICU_VERSION is null"),
-      Seq(Row("UTF8_BINARY"), Row("UTF8_LCASE")))
+      Seq(Row("UTF8_BINARY"), Row("UTF8_LCASE"), Row("UTF8_BINARY_RTRIM"),
+        Row("UTF8_LCASE_RTRIM")))
   }
 
   test("fully qualified name") {
