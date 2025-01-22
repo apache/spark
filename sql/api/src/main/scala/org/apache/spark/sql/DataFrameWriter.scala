@@ -503,7 +503,8 @@ abstract class DataFrameWriter[T] {
 
   protected var mode: SaveMode = SaveMode.ErrorIfExists
 
-  protected var extraOptions: CaseInsensitiveMap[String] = CaseInsensitiveMap[String](Map.empty)
+  protected var extraOptions: CaseInsensitiveMap[String] = CaseInsensitiveMap[String](
+    scala.collection.immutable.Map.empty)
 
   protected var partitioningColumns: Option[Seq[String]] = None
 
