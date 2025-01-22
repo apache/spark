@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 
-from typing import cast, Type, TYPE_CHECKING
+from typing import cast, Type, TYPE_CHECKING, Union
 
 import pyspark.sql.connect.proto as pb2
 from pyspark.ml.connect.serialize import serialize_ml_params, deserialize, deserialize_param
@@ -37,7 +37,7 @@ class RemoteMLWriter(MLWriter):
         raise RuntimeError("Accessing SparkContext is not supported on Connect")
 
     def save(self, path: str) -> None:
-        from pyspark.ml.wrapper import JavaModel, JavaEstimator
+        from pyspark.ml.wrapper import JavaModel, JavaEstimator, JavaTransformer
         from pyspark.ml.evaluation import JavaEvaluator
         from pyspark.sql.connect.session import SparkSession
 
@@ -57,35 +57,29 @@ class RemoteMLWriter(MLWriter):
                 should_overwrite=self.shouldOverwrite,
                 options=self.optionMap,
             )
-        elif isinstance(self._instance, JavaEstimator):
-            estimator = cast("JavaEstimator", self._instance)
-            params = serialize_ml_params(estimator, session.client)
-            assert isinstance(estimator._java_obj, str)
-            writer = pb2.MlCommand.Write(
-                operator=pb2.MlOperator(
-                    name=estimator._java_obj, uid=estimator.uid, type=pb2.MlOperator.ESTIMATOR
-                ),
-                params=params,
-                path=path,
-                should_overwrite=self.shouldOverwrite,
-                options=self.optionMap,
-            )
-        elif isinstance(self._instance, JavaEvaluator):
-            evaluator = cast("JavaEvaluator", self._instance)
-            params = serialize_ml_params(evaluator, session.client)
-            assert isinstance(evaluator._java_obj, str)
-            writer = pb2.MlCommand.Write(
-                operator=pb2.MlOperator(
-                    name=evaluator._java_obj, uid=evaluator.uid, type=pb2.MlOperator.EVALUATOR
-                ),
-                params=params,
-                path=path,
-                should_overwrite=self.shouldOverwrite,
-                options=self.optionMap,
-            )
         else:
-            raise NotImplementedError(f"Unsupported writing for {self._instance}")
+            operator: Union[JavaEstimator, JavaTransformer, JavaEvaluator]
+            if isinstance(self._instance, JavaEstimator):
+                ml_type = pb2.MlOperator.ESTIMATOR
+                operator = cast("JavaEstimator", self._instance)
+            elif isinstance(self._instance, JavaEvaluator):
+                ml_type = pb2.MlOperator.EVALUATOR
+                operator = cast("JavaEvaluator", self._instance)
+            elif isinstance(self._instance, JavaTransformer):
+                ml_type = pb2.MlOperator.TRANSFORMER
+                operator = cast("JavaTransformer", self._instance)
+            else:
+                raise NotImplementedError(f"Unsupported writing for {self._instance}")
 
+            params = serialize_ml_params(operator, session.client)
+            assert isinstance(operator._java_obj, str)
+            writer = pb2.MlCommand.Write(
+                operator=pb2.MlOperator(name=operator._java_obj, uid=operator.uid, type=ml_type),
+                params=params,
+                path=path,
+                should_overwrite=self.shouldOverwrite,
+                options=self.optionMap,
+            )
         command = pb2.Command()
         command.ml_command.write.CopyFrom(writer)
         session.client.execute_command(command)
@@ -98,7 +92,7 @@ class RemoteMLReader(MLReader[RL]):
 
     def load(self, path: str) -> RL:
         from pyspark.sql.connect.session import SparkSession
-        from pyspark.ml.wrapper import JavaModel, JavaEstimator
+        from pyspark.ml.wrapper import JavaModel, JavaEstimator, JavaTransformer
         from pyspark.ml.evaluation import JavaEvaluator
 
         session = SparkSession.getActiveSession()
@@ -116,6 +110,8 @@ class RemoteMLReader(MLReader[RL]):
             ml_type = pb2.MlOperator.ESTIMATOR
         elif issubclass(self._clazz, JavaEvaluator):
             ml_type = pb2.MlOperator.EVALUATOR
+        elif issubclass(self._clazz, JavaTransformer):
+            ml_type = pb2.MlOperator.TRANSFORMER
         else:
             raise ValueError(f"Unsupported reading for {java_qualified_class_name}")
 

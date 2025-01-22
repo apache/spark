@@ -49,3 +49,6 @@ org.apache.spark.ml.fpm.FPGrowth
 org.apache.spark.ml.feature.StandardScaler
 org.apache.spark.ml.feature.MaxAbsScaler
 org.apache.spark.ml.feature.MinMaxScaler
+org.apache.spark.ml.feature.RobustScaler
+org.apache.spark.ml.feature.StringIndexer
+org.apache.spark.ml.feature.PCA

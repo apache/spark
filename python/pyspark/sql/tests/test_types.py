@@ -2345,7 +2345,7 @@ class TypesTestsMixin:
                 with self.assertRaises(ParseException) as udf_pe:
                     schema_from_udf(test)
                 self.assertEqual(
-                    from_ddl_pe.exception.getErrorClass(), udf_pe.exception.getErrorClass()
+                    from_ddl_pe.exception.getCondition(), udf_pe.exception.getCondition()
                 )
 
     def test_collated_string(self):

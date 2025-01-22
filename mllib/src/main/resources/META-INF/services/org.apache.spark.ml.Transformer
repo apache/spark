@@ -17,6 +17,7 @@
 
 # Spark Connect ML uses ServiceLoader to find out the supported Spark Ml non-model transformer.
 # So register the supported transformer here if you're trying to add a new one.
+########### Transformers
 org.apache.spark.ml.feature.VectorAssembler
 
 ########### Model for loading
@@ -46,3 +47,6 @@ org.apache.spark.ml.fpm.FPGrowthModel
 org.apache.spark.ml.feature.StandardScalerModel
 org.apache.spark.ml.feature.MaxAbsScalerModel
 org.apache.spark.ml.feature.MinMaxScalerModel
+org.apache.spark.ml.feature.RobustScalerModel
+org.apache.spark.ml.feature.StringIndexerModel
+org.apache.spark.ml.feature.PCAModel
