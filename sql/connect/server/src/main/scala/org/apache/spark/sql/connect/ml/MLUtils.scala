@@ -20,17 +20,23 @@ package org.apache.spark.sql.connect.ml
 import java.util.{Optional, ServiceLoader}
 import java.util.stream.Collectors
 
-import scala.collection.immutable.HashSet
 import scala.jdk.CollectionConverters._
 
 import org.apache.commons.lang3.reflect.MethodUtils.invokeMethod
 
 import org.apache.spark.connect.proto
-import org.apache.spark.ml.{Estimator, Transformer}
+import org.apache.spark.ml._
+import org.apache.spark.ml.classification._
+import org.apache.spark.ml.clustering._
 import org.apache.spark.ml.evaluation.Evaluator
+import org.apache.spark.ml.feature._
+import org.apache.spark.ml.fpm._
 import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.param.Params
-import org.apache.spark.ml.util.MLWritable
+import org.apache.spark.ml.recommendation._
+import org.apache.spark.ml.regression._
+import org.apache.spark.ml.tree.{DecisionTreeModel, TreeEnsembleModel}
+import org.apache.spark.ml.util.{HasTrainingSummary, Identifiable, MLWritable}
 import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, LiteralValueProtoConverter}
 import org.apache.spark.sql.connect.planner.SparkConnectPlanner
@@ -448,98 +454,149 @@ private[ml] object MLUtils {
   // Since we're using reflection way to get the attribute, in order not to
   // leave a security hole, we define an allowed attribute list that can be accessed.
   // The attributes could be retrieved from the corresponding python class
-  private lazy val ALLOWED_ATTRIBUTES = HashSet(
-    "mean", // StandardScalerModel
-    "std", // StandardScalerModel
-    "maxAbs", // MaxAbsScalerModel
-    "originalMax", // MinMaxScalerModel
-    "originalMin", // MinMaxScalerModel
-    "range", // RobustScalerModel
-    "median", // RobustScalerModel
-    "toString",
-    "toDebugString",
-    "numFeatures",
-    "predict", // PredictionModel
-    "predictLeaf", // Tree models
-    "numClasses",
-    "depth", // DecisionTreeClassificationModel
-    "numNodes", // Tree models
-    "totalNumNodes", // Tree models
-    "javaTreeWeights", // Tree models
-    "treeWeights", // Tree models
-    "featureImportances", // Tree models
-    "predictRaw", // ClassificationModel
-    "predictProbability", // ProbabilisticClassificationModel
-    "scale", // LinearRegressionModel
-    "coefficients",
-    "intercept",
-    "coefficientMatrix",
-    "interceptVector", // LogisticRegressionModel
-    "summary",
-    "hasSummary",
-    "evaluate", // LogisticRegressionModel
-    "evaluateEachIteration", // GBTClassificationModel
-    "predictions",
-    "predictionCol",
-    "labelCol",
-    "weightCol",
-    "labels", // _ClassificationSummary
-    "truePositiveRateByLabel",
-    "falsePositiveRateByLabel", // _ClassificationSummary
-    "precisionByLabel",
-    "recallByLabel",
-    "fMeasureByLabel",
-    "accuracy", // _ClassificationSummary
-    "weightedTruePositiveRate",
-    "weightedFalsePositiveRate", // _ClassificationSummary
-    "weightedRecall",
-    "weightedPrecision",
-    "weightedFMeasure", // _ClassificationSummary
-    "scoreCol",
-    "roc",
-    "areaUnderROC",
-    "pr",
-    "fMeasureByThreshold", // _BinaryClassificationSummary
-    "precisionByThreshold",
-    "recallByThreshold", // _BinaryClassificationSummary
-    "probabilityCol",
-    "featuresCol", // LogisticRegressionSummary
-    "objectiveHistory",
-    "coefficientStandardErrors", // _TrainingSummary
-    "degreesOfFreedom", // LinearRegressionSummary
-    "devianceResiduals", // LinearRegressionSummary
-    "explainedVariance", // LinearRegressionSummary
-    "meanAbsoluteError", // LinearRegressionSummary
-    "meanSquaredError", // LinearRegressionSummary
-    "numInstances", // LinearRegressionSummary
-    "pValues", // LinearRegressionSummary
-    "r2", // LinearRegressionSummary
-    "r2adj", // LinearRegressionSummary
-    "residuals", // LinearRegressionSummary
-    "rootMeanSquaredError", // LinearRegressionSummary
-    "tValues", // LinearRegressionSummary
-    "totalIterations", // LinearRegressionSummary
-    "k", // KMeansSummary
-    "numIter", // KMeansSummary
-    "clusterSizes", // KMeansSummary
-    "trainingCost", // KMeansSummary
-    "cluster", // KMeansSummary
-    "computeCost", // BisectingKMeansModel
-    "rank", // ALSModel
-    "itemFactors", // ALSModel
-    "userFactors", // ALSModel
-    "recommendForAllUsers", // ALSModel
-    "recommendForAllItems", // ALSModel
-    "recommendForUserSubset", // ALSModel
-    "recommendForItemSubset", // ALSModel
-    "associationRules", // FPGrowthModel
-    "freqItemsets" // FPGrowthModel
-  )
+  private lazy val ALLOWED_ATTRIBUTES = Seq(
+    (classOf[Identifiable], Array("toString")),
+
+    // Model Traits
+    (classOf[PredictionModel[_, _]], Array("predict", "numFeatures")),
+    (classOf[ClassificationModel[_, _]], Array("predictRaw", "numClasses")),
+    (classOf[ProbabilisticClassificationModel[_, _]], Array("predictProbability")),
+
+    // Summary Traits
+    (classOf[HasTrainingSummary[_]], Array("hasSummary", "summary")),
+    (classOf[TrainingSummary], Array("objectiveHistory", "totalIterations")),
+    (
+      classOf[ClassificationSummary],
+      Array(
+        "predictions",
+        "predictionCol",
+        "labelCol",
+        "weightCol",
+        "labels",
+        "truePositiveRateByLabel",
+        "falsePositiveRateByLabel",
+        "precisionByLabel",
+        "recallByLabel",
+        "fMeasureByLabel",
+        "accuracy",
+        "weightedTruePositiveRate",
+        "weightedFalsePositiveRate",
+        "weightedRecall",
+        "weightedPrecision",
+        "weightedFMeasure",
+        "weightedFMeasure")),
+    (
+      classOf[BinaryClassificationSummary],
+      Array(
+        "scoreCol",
+        "roc",
+        "areaUnderROC",
+        "pr",
+        "fMeasureByThreshold",
+        "precisionByThreshold",
+        "recallByThreshold")),
+    (
+      classOf[ClusteringSummary],
+      Array(
+        "predictions",
+        "predictionCol",
+        "featuresCol",
+        "k",
+        "numIter",
+        "cluster",
+        "clusterSizes")),
+
+    // Tree Models
+    (classOf[DecisionTreeModel], Array("predictLeaf", "numNodes", "depth", "toDebugString")),
+    (
+      classOf[TreeEnsembleModel[_]],
+      Array(
+        "predictLeaf",
+        "trees",
+        "treeWeights",
+        "javaTreeWeights",
+        "getNumTrees",
+        "totalNumNodes",
+        "toDebugString")),
+    (classOf[DecisionTreeClassificationModel], Array("featureImportances")),
+    (classOf[RandomForestClassificationModel], Array("featureImportances", "evaluate")),
+    (classOf[GBTClassificationModel], Array("featureImportances", "evaluateEachIteration")),
+    (classOf[DecisionTreeRegressionModel], Array("featureImportances")),
+    (classOf[RandomForestRegressionModel], Array("featureImportances")),
+    (classOf[GBTRegressionModel], Array("featureImportances", "evaluateEachIteration")),
+
+    // Classification Models
+    (
+      classOf[LogisticRegressionModel],
+      Array("intercept", "coefficients", "interceptVector", "coefficientMatrix", "evaluate")),
+    (classOf[LogisticRegressionSummary], Array("probabilityCol", "featuresCol")),
+    (classOf[BinaryLogisticRegressionSummary], Array("scoreCol")),
+
+    // Regression Models
+    (classOf[LinearRegressionModel], Array("intercept", "coefficients", "scale", "evaluate")),
+    (
+      classOf[LinearRegressionSummary],
+      Array(
+        "predictions",
+        "predictionCol",
+        "labelCol",
+        "featuresCol",
+        "explainedVariance",
+        "meanAbsoluteError",
+        "meanSquaredError",
+        "rootMeanSquaredError",
+        "r2",
+        "r2adj",
+        "residuals",
+        "numInstances",
+        "degreesOfFreedom",
+        "devianceResiduals",
+        "coefficientStandardErrors",
+        "tValues",
+        "pValues")),
+    (classOf[LinearRegressionTrainingSummary], Array("objectiveHistory", "totalIterations")),
+
+    // Clustering Models
+    (classOf[KMeansModel], Array("predict", "numFeatures", "clusterCenters")),
+    (classOf[KMeansSummary], Array("trainingCost")),
+    (
+      classOf[BisectingKMeansModel],
+      Array("predict", "numFeatures", "clusterCenters", "computeCost")),
+    (classOf[BisectingKMeansSummary], Array("trainingCost")),
+
+    // Recommendation Models
+    (
+      classOf[ALSModel],
+      Array(
+        "rank",
+        "itemFactors",
+        "userFactors",
+        "recommendForAllUsers",
+        "recommendForAllItems",
+        "recommendForUserSubset",
+        "recommendForItemSubset")),
+
+    // Association Rules
+    (classOf[FPGrowthModel], Array("associationRules", "freqItemsets")),
+
+    // Feature Models
+    (classOf[StandardScalerModel], Array("mean", "std")),
+    (classOf[MaxAbsScalerModel], Array("maxAbs")),
+    (classOf[MinMaxScalerModel], Array("originalMax", "originalMin")),
+    (classOf[RobustScalerModel], Array("range", "median")))
+
+  private def validate(obj: Any, method: String): Unit = {
+    assert(obj != null)
+    val valid = ALLOWED_ATTRIBUTES.exists { case (cls, methods) =>
+      cls.isInstance(obj) && methods.contains(method)
+    }
+    if (!valid) {
+      throw MLAttributeNotAllowedException(method)
+    }
+  }
 
   def invokeMethodAllowed(obj: Object, methodName: String): Object = {
-    if (!ALLOWED_ATTRIBUTES.contains(methodName)) {
-      throw MLAttributeNotAllowedException(methodName)
-    }
+    validate(obj, methodName)
     invokeMethod(obj, methodName)
   }
 
@@ -548,9 +605,7 @@ private[ml] object MLUtils {
       methodName: String,
       args: Array[Object],
       parameterTypes: Array[Class[_]]): Object = {
-    if (!ALLOWED_ATTRIBUTES.contains(methodName)) {
-      throw MLAttributeNotAllowedException(methodName)
-    }
+    validate(obj, methodName)
     invokeMethod(obj, methodName, args, parameterTypes)
   }
 
