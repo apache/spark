@@ -21,6 +21,7 @@ import java.util.concurrent.{Future => JFuture}
 import java.util.concurrent.TimeUnit._
 
 import scala.collection.mutable
+import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration.Duration
 
@@ -214,6 +215,87 @@ trait GeneratePredicateHelper extends PredicateHelper {
        |$nullChecks
      """.stripMargin
   }
+
+  protected def subexpressionEliminationGeneratePredicateCode(
+      ctx: CodegenContext,
+      inputAttrs: Seq[Attribute],
+      inputExprCode: Seq[ExprCode],
+      outputAttrs: Seq[Attribute],
+      notNullPreds: Seq[Expression],
+      otherPreds: Seq[Expression],
+      nonNullAttrExprIds: Seq[ExprId]): String = {
+
+    def genPredicate(
+        bound: Expression,
+        unbound: Expression,
+        in: Seq[ExprCode],
+        attrs: Seq[Attribute]): String = {
+      val evaluated = evaluateRequiredVariables(attrs, in, unbound.references)
+
+      // Generate the code for the predicate.
+      val ev = ExpressionCanonicalizer.execute(bound).genCode(ctx)
+      val nullCheck = if (bound.nullable) { s"${ev.isNull} || " } else { "" }
+      s"""
+         |$evaluated
+         |${ev.code}
+         |if ($nullCheck!${ev.value}) continue;
+       """.stripMargin
+    }
+
+    val boundOtherPreds = bindReferences[Expression](otherPreds, inputAttrs)
+    val boundNotNullPreds = bindReferences[Expression](notNullPreds, inputAttrs)
+    val boundExprs = boundOtherPreds ++ boundNotNullPreds
+    val subExprs = ctx.subexpressionEliminationForWholeStageCodegen(boundExprs)
+    val commonPredicateCodes = ctx.evaluateSubExprEliminationState(subExprs.states.values)
+    val predicateCodes = ArrayBuffer[String]()
+    ctx.withSubExprEliminationExprs(subExprs.states) {
+      val generatedIsNotNullChecks = new Array[Boolean](notNullPreds.length)
+      val extraIsNotNullAttrs = mutable.Set[Attribute]()
+      val generated = otherPreds.zipWithIndex.map { case (c, index) =>
+        val nullChecks = c.references.map { r =>
+          val idx = notNullPreds.indexWhere {
+            n => n.asInstanceOf[IsNotNull].child.semanticEquals(r)}
+          if (idx != -1 && !generatedIsNotNullChecks(idx)) {
+            generatedIsNotNullChecks(idx) = true
+            // Use the child's output. The nullability is what the child produced.
+            genPredicate(boundNotNullPreds(idx), notNullPreds(idx), inputExprCode, inputAttrs)
+          } else if (nonNullAttrExprIds.contains(r.exprId) && !extraIsNotNullAttrs.contains(r)) {
+            val newIsNotNull = IsNotNull(r)
+            extraIsNotNullAttrs += r
+            genPredicate(BindReferences.bindReference(newIsNotNull, inputAttrs),
+              newIsNotNull, inputExprCode, inputAttrs)
+          } else {
+            ""
+          }
+        }.mkString("\n").trim
+
+        // Here we use *this* operator's output with this output's nullability since we already
+        // enforced them with the IsNotNull checks above.
+        s"""
+           |$nullChecks
+           |${genPredicate(boundOtherPreds(index), c, inputExprCode, outputAttrs)}
+         """.stripMargin.trim
+      }.mkString("\n")
+
+      val nullChecks = notNullPreds.zipWithIndex.map { case (c, idx) =>
+        if (!generatedIsNotNullChecks(idx)) {
+          genPredicate(boundNotNullPreds(idx), c, inputExprCode, inputAttrs)
+        } else {
+          ""
+        }
+      }.mkString("\n")
+
+      predicateCodes.append(generated)
+      predicateCodes.append(nullChecks)
+
+      Seq.empty // workaround for `withSubExprEliminationExprs`
+    }
+    s"""
+       |${evaluateVariables(subExprs.exprCodesNeedEvaluate)}
+       |$commonPredicateCodes
+       |${predicateCodes.mkString("\n")}
+     """.stripMargin
+  }
 }
 
 /** Physical plan for Filter. */
@@ -248,26 +330,12 @@ case class FilterExec(condition: Expression, child: SparkPlan)
 
   override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
     val numOutput = metricTerm(ctx, "numOutputRows")
-    val (predicateCode, localValInputs) = if (conf.subexpressionEliminationEnabled) {
-      val bound = BindReferences.bindReference(condition, child.output)
-      val exprs = Seq(bound)
-      val subExprs = ctx.subexpressionEliminationForWholeStageCodegen(exprs)
-      val genVars = ctx.withSubExprEliminationExprs(subExprs.states) {
-        exprs.map(_.genCode(ctx))
-      }
-      val ev = genVars.head
-      val nullCheck = if (bound.nullable) { s"${ev.isNull} || " } else { "" }
-      val predicateCode =
-        s"""
-           |${ctx.evaluateSubExprEliminationState(subExprs.states.values)}
-           |${genVars.map(_.code.code).mkString("\n")}
-           |if ($nullCheck!${ev.value}) continue;
-         """.stripMargin
-      (predicateCode, subExprs.exprCodesNeedEvaluate)
-    } else {
-      val predicateCode = generatePredicateCode(
+    val predicateCode = if (conf.subexpressionEliminationEnabled) {
+      subexpressionEliminationGeneratePredicateCode(
         ctx, child.output, input, output, notNullPreds, otherPreds, notNullAttributes)
-      (predicateCode, Seq.empty)
+    } else {
+      generatePredicateCode(
+        ctx, child.output, input, output, notNullPreds, otherPreds, notNullAttributes)
     }
 
     // Reset the isNull to false for the not-null columns, then the followed operators could
@@ -282,7 +350,6 @@ case class FilterExec(condition: Expression, child: SparkPlan)
     // Note: wrap in "do { } while (false);", so the generated checks can jump out with "continue;"
     s"""
        |do {
-       |  ${evaluateVariables(localValInputs)}
        |  $predicateCode
        |  $numOutput.add(1);
        |  ${consume(ctx, resultVars)}
