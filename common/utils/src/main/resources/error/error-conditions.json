@@ -1229,6 +1229,12 @@
     ],
     "sqlState" : "42710"
   },
+  "DUPLICATED_ARTIFACT" : {
+    "message" : [
+      "Duplicate Artifact: <normalizedRemoteRelativePath>. Artifacts cannot be overwritten."
+    ],
+    "sqlState" : "42713"
+  },
   "DUPLICATE_ASSIGNMENTS" : {
     "message" : [
       "The columns or variables <nameList> appear more than once as assignment targets."
