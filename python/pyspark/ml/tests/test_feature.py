@@ -40,6 +40,7 @@ from pyspark.ml.feature import (
     StringIndexerModel,
     TargetEncoder,
     VectorSizeHint,
+    VectorAssembler,
 )
 from pyspark.ml.linalg import DenseVector, SparseVector, Vectors
 from pyspark.sql import Row
@@ -48,6 +49,49 @@ from pyspark.testing.mlutils import check_params, SparkSessionTestCase
 
 
 class FeatureTestsMixin:
+    def test_vector_assembler(self):
+        # Create a DataFrame
+        df = (
+            self.spark.createDataFrame(
+                [
+                    (1, 5.0, 6.0, 7.0),
+                    (2, 1.0, 2.0, None),
+                    (3, 3.0, float("nan"), 4.0),
+                ],
+                ["index", "a", "b", "c"],
+            )
+            .coalesce(1)
+            .sortWithinPartitions("index")
+        )
+
+        # Initialize VectorAssembler
+        vec_assembler = VectorAssembler(outputCol="features").setInputCols(["a", "b", "c"])
+        output = vec_assembler.transform(df)
+        self.assertEqual(output.columns, ["index", "a", "b", "c", "features"])
+        self.assertEqual(output.head().features, Vectors.dense([5.0, 6.0, 7.0]))
+
+        # Set custom parameters and transform the DataFrame
+        params = {vec_assembler.inputCols: ["b", "a"], vec_assembler.outputCol: "vector"}
+        self.assertEqual(
+            vec_assembler.transform(df, params).head().vector, Vectors.dense([6.0, 5.0])
+        )
+
+        # read/write
+        with tempfile.TemporaryDirectory(prefix="read_write") as tmp_dir:
+            vec_assembler.write().overwrite().save(tmp_dir)
+            vec_assembler2 = VectorAssembler.load(tmp_dir)
+            self.assertEqual(str(vec_assembler), str(vec_assembler2))
+
+        # Initialize a new VectorAssembler with handleInvalid="keep"
+        vec_assembler3 = VectorAssembler(
+            inputCols=["a", "b", "c"], outputCol="features", handleInvalid="keep"
+        )
+        self.assertEqual(vec_assembler3.transform(df).count(), 3)
+
+        # Update handleInvalid to "skip" and transform the DataFrame
+        vec_assembler3.setParams(handleInvalid="skip")
+        self.assertEqual(vec_assembler3.transform(df).count(), 1)
+
     def test_standard_scaler(self):
         df = (
             self.spark.createDataFrame(
