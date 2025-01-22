@@ -36,7 +36,6 @@ import org.apache.spark.sql.catalyst.plans.logical.{Limit, LogicalPlan, Project,
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
-import org.apache.spark.sql.internal.SQLConf.CTERecursionCacheMode
 import org.apache.spark.sql.types.{LongType, StructType}
 import org.apache.spark.sql.vectorized.ColumnarBatch
 import org.apache.spark.util.ThreadUtils
@@ -744,8 +743,6 @@ case class UnionLoopExec(
     override val output: Seq[Attribute],
     limit: Option[Int] = None) extends LeafExecNode {
 
-  val cacheMode = CTERecursionCacheMode.withName(conf.getConf(SQLConf.CTE_RECURSION_CACHE_MODE))
-
   // We store the initial and generated children of the loop in this buffer.
   // Please note that all elements are cached because of performance reasons as they are needed for
   // next iteration.
@@ -766,13 +763,7 @@ case class UnionLoopExec(
     // the newly created plan.
     val limitedPlan = Limit(Literal(currentLimit), plan)
     val df = Dataset.ofRows(session, limitedPlan)
-    val cachedDF = cacheMode match {
-      case CTERecursionCacheMode.NONE => df
-      case CTERecursionCacheMode.REPARTITION => df.repartition()
-      case CTERecursionCacheMode.PERSIST => df.persist()
-      case CTERecursionCacheMode.LOCAL_CHECKPOINT => df.localCheckpoint()
-      case CTERecursionCacheMode.CHECKPOINT => df.checkpoint()
-    }
+    val cachedDF = df.repartition()
     val count = cachedDF.count()
     (cachedDF, count)
   }
@@ -826,30 +817,12 @@ case class UnionLoopExec(
       currentLevel += 1
     }
 
-    cacheMode match {
-      case CTERecursionCacheMode.PERSIST => prevDF.unpersist()
-      case _ =>
-    }
-
     if (unionChildren.isEmpty) {
       new EmptyRDD[InternalRow](sparkContext)
     } else if (unionChildren.length == 1) {
       Dataset.ofRows(session, unionChildren.head).queryExecution.toRdd
     } else {
       Dataset.ofRows(session, Union(unionChildren.toSeq)).queryExecution.toRdd
-    }
-  }
-
-  override def cleanupResources(): Unit = {
-    try {
-      if (unionDFs != null) {
-        cacheMode match {
-          case CTERecursionCacheMode.PERSIST => unionDFs.foreach(_.unpersist())
-          case _ =>
-        }
-      }
-    } finally {
-      super.cleanupResources()
     }
   }
 
