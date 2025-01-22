@@ -17,9 +17,10 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.catalyst.expressions.{Cast, Expression, Literal}
+import org.apache.spark.sql.catalyst.expressions.{Cast, DefaultStringProducingExpression, Expression, Literal}
 import org.apache.spark.sql.catalyst.plans.logical.{AddColumns, AlterColumn, AlterViewAs, ColumnDefinition, CreateView, LogicalPlan, QualifiedColType, ReplaceColumns, V1CreateTablePlan, V2CreateTablePlan}
 import org.apache.spark.sql.catalyst.rules.{Rule, RuleExecutor}
+import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.types.{DataType, StringType}
 
 /**
@@ -29,6 +30,8 @@ import org.apache.spark.sql.types.{DataType, StringType}
  * So, we will just use UTF8_BINARY for now.
  */
 object ResolveDefaultStringTypes extends Rule[LogicalPlan] {
+  private val CAST_ADDED_TAG = new TreeNodeTag[Unit]("castAddedTag")
+
   def apply(plan: LogicalPlan): LogicalPlan = {
     val newPlan = apply0(plan)
     if (plan.ne(newPlan)) {
@@ -145,6 +148,21 @@ object ResolveDefaultStringTypes extends Rule[LogicalPlan] {
 
     case Literal(value, dt) if hasDefaultStringType(dt) =>
       newType => Literal(value, replaceDefaultStringType(dt, newType))
+
+    case expression if needsCast(expression) =>
+      expression.setTagValue(CAST_ADDED_TAG, ())
+      newType => {
+        if (expression.dataType.sameType(newType)) {
+          expression
+        } else {
+          Cast(expression, replaceDefaultStringType(expression.dataType, newType))
+        }
+      }
+  }
+
+  private def needsCast(expression: Expression): Boolean = expression match {
+    case ex: DefaultStringProducingExpression => ex.getTagValue(CAST_ADDED_TAG).isEmpty
+    case _ => false
   }
 
   private def hasDefaultStringType(dataType: DataType): Boolean =
