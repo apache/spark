@@ -720,6 +720,12 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan {
 
 /**
  * The physical node for recursion. Currently only UNION ALL case is supported.
+ * In the first iteration, anchor term is executed.
+ * Then, in each following iteration, the UnionLoopRef node is substituted with the plan from the
+ * previous iteration, and such plan is executed.
+ * After every iteration, the dataframe is repartitioned.
+ * The recursion stops when the generated dataframe is empty, or either the limit or
+ * the specified maximum depth from the config is reached.
  *
  * @param loopId The id of the loop.
  * @param anchor The logical plan of the initial element of the loop.
@@ -728,6 +734,8 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan {
  * @param limit In case we have a plan with the limit node, it is pushed down to UnionLoop and then
  *              transferred to UnionLoopExec, to stop the recursion after specific amount of rows
  *              is generated.
+ *              Note here: limit can be applied in the main query calling the recursive CTE, and not
+ *              inside the recursive term of recursive CTE.
  */
 case class UnionLoopExec(
     loopId: Long,
