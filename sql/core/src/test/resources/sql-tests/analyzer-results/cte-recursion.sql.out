@@ -277,8 +277,15 @@ SELECT * FROM r
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_RECURSIVE_REFERENCE.SUBQUERY",
-  "sqlState" : "42836"
+  "errorClass" : "INVALID_RECURSIVE_REFERENCE.NUMBER",
+  "sqlState" : "42836",
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 132,
+    "fragment" : "WITH RECURSIVE r(level) AS (\n  VALUES 0\n  UNION ALL\n  SELECT level + 1 FROM r WHERE (SELECT SUM(level) FROM r) < 9\n)\nSELECT * FROM r"
+  } ]
 }
 
 
