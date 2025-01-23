@@ -1736,6 +1736,8 @@ Many usecases require more advanced stateful operations than aggregations. For e
 
 Though Spark cannot check and force it, the state function should be implemented with respect to the semantics of the output mode. For example, in Update mode Spark doesn't expect that the state function will emit rows which are older than current watermark plus allowed late record delay, whereas in Append mode the state function can emit these rows.
 
+Note also that for the initial state feature within flatMapGroupsWithState, the keys that are part of the initial state dataFrame are also emitted as part of the output. In case the user does not want these to be part of the output, they need to be filtered explicitly.  
+
 ### Unsupported Operations
 There are a few DataFrame/Dataset operations that are not supported with streaming DataFrames/Datasets.
 Some of them are as follows.
