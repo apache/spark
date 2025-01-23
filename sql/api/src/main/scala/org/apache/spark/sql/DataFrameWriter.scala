@@ -43,7 +43,7 @@ abstract class DataFrameWriter[T] {
    * @since 1.4.0
    */
   def mode(saveMode: SaveMode): this.type = {
-    this.mode = saveMode
+    this.curmode = saveMode
     this
   }
 
@@ -501,7 +501,7 @@ abstract class DataFrameWriter[T] {
 
   protected var source: String = ""
 
-  protected var mode: SaveMode = SaveMode.ErrorIfExists
+  protected var curmode: SaveMode = SaveMode.ErrorIfExists
 
   protected var extraOptions: CaseInsensitiveMap[String] =
     CaseInsensitiveMap[String](scala.collection.immutable.Map.empty)

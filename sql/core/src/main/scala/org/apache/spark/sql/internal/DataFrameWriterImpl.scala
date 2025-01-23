@@ -160,7 +160,7 @@ final class DataFrameWriterImpl[T] private[sql](ds: Dataset[T]) extends DataFram
 
       import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
       val catalogManager = df.sparkSession.sessionState.catalogManager
-      mode match {
+      curmode match {
         case SaveMode.Append | SaveMode.Overwrite =>
           val (table, catalog, ident) = provider match {
             case supportsExtract: SupportsCatalogOptions =>
@@ -183,7 +183,7 @@ final class DataFrameWriterImpl[T] private[sql](ds: Dataset[T]) extends DataFram
 
           val relation = DataSourceV2Relation.create(table, catalog, ident, dsOptions)
           checkPartitioningMatchesV2Table(table)
-          if (mode == SaveMode.Append) {
+          if (curmode == SaveMode.Append) {
             runCommand(df.sparkSession) {
               AppendData.byName(relation, df.logicalPlan, finalOptions)
             }
@@ -268,7 +268,7 @@ final class DataFrameWriterImpl[T] private[sql](ds: Dataset[T]) extends DataFram
         sparkSession = df.sparkSession,
         className = source,
         partitionColumns = partitioningColumns.getOrElse(Nil),
-        options = optionsWithPath.originalMap).planForWriting(mode, df.logicalPlan)
+        options = optionsWithPath.originalMap).planForWriting(curmode, df.logicalPlan)
     }
   }
 
@@ -338,7 +338,7 @@ final class DataFrameWriterImpl[T] private[sql](ds: Dataset[T]) extends DataFram
         DataSourceV2Relation.create(t, Some(catalog), Some(ident))
     }
 
-    val command = mode match {
+    val command = curmode match {
       case SaveMode.Append | SaveMode.ErrorIfExists | SaveMode.Ignore =>
         AppendData.byPosition(table, df.logicalPlan, extraOptions.toMap)
 
@@ -366,12 +366,12 @@ final class DataFrameWriterImpl[T] private[sql](ds: Dataset[T]) extends DataFram
         partitionSpec = Map.empty[String, Option[String]],
         Nil,
         query = df.logicalPlan,
-        overwrite = mode == SaveMode.Overwrite,
+        overwrite = curmode == SaveMode.Overwrite,
         ifPartitionNotExists = false)
     }
   }
 
-  private def getWritePrivileges: Seq[TableWritePrivilege] = mode match {
+  private def getWritePrivileges: Seq[TableWritePrivilege] = curmode match {
     case SaveMode.Overwrite => Seq(INSERT, DELETE)
     case _ => Seq(INSERT)
   }
@@ -458,7 +458,7 @@ final class DataFrameWriterImpl[T] private[sql](ds: Dataset[T]) extends DataFram
       case _: NoSuchTableException => None
     }
 
-    val command = (mode, tableOpt) match {
+    val command = (curmode, tableOpt) match {
       case (_, Some(_: V1Table)) =>
         return saveAsTable(TableIdentifier(ident.name(), ident.namespace().headOption))
 
@@ -518,7 +518,7 @@ final class DataFrameWriterImpl[T] private[sql](ds: Dataset[T]) extends DataFram
     val qualifiedIdent = catalog.qualifyIdentifier(tableIdent)
     val tableExists = catalog.tableExists(qualifiedIdent)
 
-    (tableExists, mode) match {
+    (tableExists, curmode) match {
       case (true, SaveMode.Ignore) =>
         // Do nothing
 
@@ -582,7 +582,7 @@ final class DataFrameWriterImpl[T] private[sql](ds: Dataset[T]) extends DataFram
       properties = properties)
 
     runCommand(df.sparkSession)(
-      CreateTable(tableDesc, mode, Some(df.logicalPlan)))
+      CreateTable(tableDesc, curmode, Some(df.logicalPlan)))
   }
 
   /** Converts the provided partitioning and bucketing information to DataSourceV2 Transforms. */
