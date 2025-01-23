@@ -21,7 +21,6 @@ import java.io.Serializable;
 import java.util.Iterator;
 
 import org.apache.spark.annotation.Evolving;
-import org.apache.spark.annotation.Experimental;
 import org.apache.spark.sql.streaming.GroupState;
 
 /**
