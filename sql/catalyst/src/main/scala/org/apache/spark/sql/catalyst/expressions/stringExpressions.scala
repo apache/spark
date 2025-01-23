@@ -3741,8 +3741,6 @@ case class Quote(input: Expression)
   with ImplicitCastInputTypes
   with DefaultStringProducingExpression {
 
-  override def nullIntolerant: Boolean = true
-
   override lazy val replacement: Expression = StaticInvoke(
     classOf[ExpressionImplUtils],
     dataType,
