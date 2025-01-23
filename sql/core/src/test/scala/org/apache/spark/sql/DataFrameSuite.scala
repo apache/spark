@@ -2711,6 +2711,16 @@ class DataFrameSuite extends QueryTest
     val expected = getQueryResult(false).map(_.getTimestamp(0).toString).sorted
     assert(actual == expected)
   }
+
+  test("SPARK-50962: Avoid StringIndexOutOfBoundsException in AttributeNameParser") {
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.emptyDataFrame.colRegex(".whatever")
+      },
+      condition = "INVALID_ATTRIBUTE_NAME_SYNTAX",
+      parameters = Map("name" -> ".whatever")
+    )
+  }
 }
 
 case class GroupByKey(a: Int, b: Int)
