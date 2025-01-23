@@ -103,6 +103,9 @@ object ResolveWithCTE extends Rule[LogicalPlan] {
               // and we exclude those rows from the current iteration result.
               case alias @ SubqueryAlias(_,
                   Distinct(Union(Seq(anchor, recursion), false, false))) =>
+                cteDef.failAnalysis(
+                  errorClass = "UNION_NOT_SUPPORTED_IN_RECURSIVE_CTE",
+                  messageParameters = Map.empty)
                 if (!anchor.resolved) {
                   cteDef
                 } else {
@@ -124,6 +127,9 @@ object ResolveWithCTE extends Rule[LogicalPlan] {
                   colNames,
                   Distinct(Union(Seq(anchor, recursion), false, false))
                 )) =>
+                cteDef.failAnalysis(
+                  errorClass = "UNION_NOT_SUPPORTED_IN_RECURSIVE_CTE",
+                  messageParameters = Map.empty)
                 if (!anchor.resolved) {
                   cteDef
                 } else {

@@ -5029,6 +5029,12 @@
     ],
     "sqlState" : "42846"
   },
+  "UNION_NOT_SUPPORTED_IN_RECURSIVE_CTE" : {
+    "message" : [
+      "UNION operator not yet supported in recursive CTEs. Use UNION ALL."
+    ],
+    "sqlState" : "42836"
+  },
   "UNKNOWN_PRIMITIVE_TYPE_IN_VARIANT" : {
     "message" : [
       "Unknown primitive type with id <id> was found in a variant value."
