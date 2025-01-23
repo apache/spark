@@ -87,11 +87,6 @@ object CTESubstitution extends Rule[LogicalPlan] {
         case LegacyBehaviorPolicy.CORRECTED =>
           traverseAndSubstituteCTE(plan, forceInline, Seq.empty, cteDefs)
     }
-    // Recursive CTEs allow only one self-reference per CTE. Here, we perform this check and
-    // throw an error if it is not fulfilled
-    cteDefs.foreach { cteDef =>
-      checkNumberOfSelfReferences(cteDef)
-    }
     if (cteDefs.isEmpty) {
       substituted
     } else if (substituted eq firstSubstituted.get) {
@@ -426,21 +421,6 @@ object CTESubstitution extends Rule[LogicalPlan] {
     p match {
       case c: CTEInChildren => c.withCTEDefs(cteDefs)
       case _ => WithCTE(p, cteDefs)
-    }
-  }
-
-  /**
-   * Counts number of self-references in a recursive CTE definition and throws an error
-   * if that number is bigger than 1.
-   */
-  private def checkNumberOfSelfReferences(cteDef: CTERelationDef): Unit = {
-    val numOfSelfRef = cteDef.collectWithSubqueries {
-      case ref: CTERelationRef if ref.cteId == cteDef.id => ref
-    }.length
-    if (numOfSelfRef > 1) {
-      cteDef.failAnalysis(
-        errorClass = "INVALID_RECURSIVE_REFERENCE.NUMBER",
-        messageParameters = Map.empty)
     }
   }
 }
