@@ -38,7 +38,7 @@ import org.apache.spark.ml.regression._
 import org.apache.spark.ml.tree.{DecisionTreeModel, TreeEnsembleModel}
 import org.apache.spark.ml.util.{HasTrainingSummary, Identifiable, MLWritable}
 import org.apache.spark.sql.{DataFrame, Dataset}
-import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, LiteralValueProtoConverter}
+import org.apache.spark.sql.connect.common.LiteralValueProtoConverter
 import org.apache.spark.sql.connect.planner.SparkConnectPlanner
 import org.apache.spark.sql.connect.plugin.SparkConnectPluginRegistry
 import org.apache.spark.sql.connect.service.SessionHolder
@@ -147,13 +147,11 @@ private[ml] object MLUtils {
       val value = literal.getLiteralTypeCase match {
         case proto.Expression.Literal.LiteralTypeCase.STRUCT =>
           val s = literal.getStruct
-          val schema = DataTypeProtoConverter.toCatalystType(s.getStructType)
-          if (schema == VectorUDT.sqlType) {
-            deserializeVector(s)
-          } else if (schema == MatrixUDT.sqlType) {
-            deserializeMatrix(s)
-          } else {
-            throw MlUnsupportedException(s"Unsupported parameter struct ${schema} for ${name}")
+          s.getStructType.getUdt.getJvmClass match {
+            case "org.apache.spark.ml.linalg.VectorUDT" => deserializeVector(s)
+            case "org.apache.spark.ml.linalg.MatrixUDT" => deserializeMatrix(s)
+            case _ =>
+              throw MlUnsupportedException(s"Unsupported struct ${literal.getStruct} for ${name}")
           }
 
         case _ =>
