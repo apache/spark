@@ -583,7 +583,8 @@ private[ml] object MLUtils {
     (classOf[StandardScalerModel], Set("mean", "std")),
     (classOf[MaxAbsScalerModel], Set("maxAbs")),
     (classOf[MinMaxScalerModel], Set("originalMax", "originalMin")),
-    (classOf[RobustScalerModel], Set("range", "median")))
+    (classOf[RobustScalerModel], Set("range", "median")),
+    (classOf[PCAModel], Set("pc", "explainedVariance")))
 
   private def validate(obj: Any, method: String): Unit = {
     assert(obj != null)
