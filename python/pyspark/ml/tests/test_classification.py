@@ -24,6 +24,10 @@ import numpy as np
 from pyspark.ml.linalg import Vectors, Matrices
 from pyspark.sql import SparkSession, DataFrame
 from pyspark.ml.classification import (
+    LinearSVC,
+    LinearSVCModel,
+    LinearSVCSummary,
+    LinearSVCTrainingSummary,
     LogisticRegression,
     LogisticRegressionModel,
     LogisticRegressionSummary,
@@ -298,6 +302,78 @@ class ClassificationTestsMixin:
             rmtree(path)
         except OSError:
             pass
+
+    def test_linear_svc(self):
+        df = (
+            self.spark.createDataFrame(
+                [
+                    (1.0, 1.0, Vectors.dense(0.0, 5.0)),
+                    (0.0, 2.0, Vectors.dense(1.0, 2.0)),
+                    (1.0, 3.0, Vectors.dense(2.0, 1.0)),
+                    (0.0, 4.0, Vectors.dense(3.0, 3.0)),
+                ],
+                ["label", "weight", "features"],
+            )
+            .coalesce(1)
+            .sortWithinPartitions("weight")
+        )
+
+        svc = LinearSVC(maxIter=1, regParam=1.0)
+        self.assertEqual(svc.getMaxIter(), 1)
+        self.assertEqual(svc.getRegParam(), 1.0)
+
+        model = svc.fit(df)
+        self.assertEqual(model.numClasses, 2)
+        self.assertEqual(model.numFeatures, 2)
+        self.assertTrue(np.allclose(model.intercept, 0.025877458475338313, atol=1e-4))
+        self.assertTrue(
+            np.allclose(model.coefficients.toArray(), [-0.03622844, 0.01035098], atol=1e-4)
+        )
+
+        vec = Vectors.dense(0.0, 5.0)
+        self.assertEqual(model.predict(vec), 1.0)
+        self.assertTrue(
+            np.allclose(model.predictRaw(vec).toArray(), [-0.07763238, 0.07763238], atol=1e-4)
+        )
+
+        output = model.transform(df)
+        expected_cols = [
+            "label",
+            "weight",
+            "features",
+            "rawPrediction",
+            "prediction",
+        ]
+        self.assertEqual(output.columns, expected_cols)
+        self.assertEqual(output.count(), 4)
+
+        # model summary
+        self.assertTrue(model.hasSummary)
+        summary = model.summary()
+        self.assertIsInstance(summary, LinearSVCSummary)
+        self.assertIsInstance(summary, LinearSVCTrainingSummary)
+        self.assertEqual(summary.labels, [0.0, 1.0])
+        self.assertEqual(summary.accuracy, 0.5)
+        self.assertEqual(summary.areaUnderROC, 0.75)
+        self.assertEqual(summary.predictions.columns, expected_cols)
+
+        summary2 = model.evaluate(df)
+        self.assertIsInstance(summary2, LinearSVCSummary)
+        self.assertFalse(isinstance(summary2, LinearSVCTrainingSummary))
+        self.assertEqual(summary2.labels, [0.0, 1.0])
+        self.assertEqual(summary2.accuracy, 0.5)
+        self.assertEqual(summary2.areaUnderROC, 0.75)
+        self.assertEqual(summary2.predictions.columns, expected_cols)
+
+        # Model save & load
+        with tempfile.TemporaryDirectory(prefix="binary_random_forest") as d:
+            svc.write().overwrite().save(d)
+            svc2 = LinearSVC.load(d)
+            self.assertEqual(str(svc), str(svc2))
+
+            model.write().overwrite().save(d)
+            model2 = LinearSVCModel.load(d)
+            self.assertEqual(str(model), str(model2))
 
     def test_decision_tree_classifier(self):
         df = (
