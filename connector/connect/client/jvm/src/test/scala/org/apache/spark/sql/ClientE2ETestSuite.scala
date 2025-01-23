@@ -42,8 +42,10 @@ import org.apache.spark.sql.connect.client.{RetryPolicy, SparkConnectClient, Spa
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SqlApiConf
 import org.apache.spark.sql.test.{ConnectFunSuite, IntegrationTestUtils, RemoteSparkSession, SQLHelper}
+import org.apache.spark.sql.test.QueryTest.checkAnswer
 import org.apache.spark.sql.test.SparkConnectServerUtils.port
 import org.apache.spark.sql.types._
+import org.apache.spark.util.ArrayImplicits.SparkArrayOps
 import org.apache.spark.util.SparkThreadUtils
 
 class ClientE2ETestSuite
@@ -1628,6 +1630,16 @@ class ClientE2ETestSuite
           .build())
       .create()
     assert(sparkWithLowerMaxMessageSize.range(maxBatchSize).collect().length == maxBatchSize)
+  }
+
+  test("Multiple parametrization nodes in the parsed logical plan") {
+    val result = spark.sql("select * from range(10)")
+    var df = spark.sql("SELECT ?", Array(0))
+    for (i <- 1 to 9) {
+      val temp = spark.sql("SELECT ?", Array(i))
+      df = df.union(temp)
+    }
+    checkAnswer(df, result.collect().toImmutableArraySeq)
   }
 }
 
