@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import os
 import unittest
 
 from pyspark import pandas as ps
@@ -22,6 +23,7 @@ from pyspark.testing.connectutils import ReusedConnectTestCase
 from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 
 
+@unittest.skipIf("SPARK_SKIP_CONNECT_COMPAT_TESTS" in os.environ, "Fails with OOM")
 class FrameParityTakeTests(FrameTakeMixin, PandasOnSparkTestUtils, ReusedConnectTestCase):
     @property
     def psdf(self):
