@@ -20457,7 +20457,7 @@ def try_variant_get(v: "ColumnOrName", path: Union[Column, str], targetType: str
 
     Examples
     --------
-    >>> df = spark.createDataFrame([ {'json': '''{ "a" : 1 }'''} ])
+    >>> df = spark.createDataFrame([ {'json': '''{ "a" : 1 }''', 'path': '$.a'} ])
     >>> df.select(try_variant_get(parse_json(df.json), "$.a", "int").alias("r")).collect()
     [Row(r=1)]
     >>> df.select(try_variant_get(parse_json(df.json), "$.b", "int").alias("r")).collect()
