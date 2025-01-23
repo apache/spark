@@ -103,8 +103,8 @@ class SQLMetric(
       SQLMetrics.cachedSQLAccumIdentifier)
   }
 
-  // We should provide the raw value which can be -1, so that `MetricUtils.stringValue` can correctly
-  // filter out the invalid -1 values.
+  // We should provide the raw value which can be -1, so that `MetricUtils.stringValue` can
+  // correctly filter out the invalid -1 values.
   override def toInfoUpdate: AccumulableInfo = {
     AccumulableInfo(id, name, internOption(Some(_value)), None, true, true,
       SQLMetrics.cachedSQLAccumIdentifier)
