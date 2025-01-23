@@ -379,6 +379,7 @@ class FeatureTestsMixin:
         self.assertEqual(synonyms.columns, ["word", "similarity"])
         self.assertEqual(synonyms.count(), 2)
 
+        # TODO(SPARK-50958): Support Word2VecModel.findSynonymsArray
         # synonyms = model.findSynonymsArray("a", 2)
         # self.assertEqual(len(synonyms), 2)
         # self.assertEqual(synonyms[0][0], "b")
