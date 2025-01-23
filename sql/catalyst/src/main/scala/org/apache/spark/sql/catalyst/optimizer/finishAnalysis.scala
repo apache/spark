@@ -152,7 +152,7 @@ case class ReplaceCurrentLike(catalogManager: CatalogManager) extends Rule[Logic
     val currentCatalog = catalogManager.currentCatalog.name()
     val currentUser = CurrentUserContext.getCurrentUser
 
-    val res = plan.transformAllExpressionsWithPruning(_.containsPattern(CURRENT_LIKE)) {
+    plan.transformAllExpressionsWithPruning(_.containsPattern(CURRENT_LIKE)) {
       case CurrentDatabase() =>
         Literal.create(currentNamespace)
       case CurrentCatalog() =>
@@ -160,7 +160,6 @@ case class ReplaceCurrentLike(catalogManager: CatalogManager) extends Rule[Logic
       case CurrentUser() =>
         Literal.create(currentUser)
     }
-    res
   }
 }
 
