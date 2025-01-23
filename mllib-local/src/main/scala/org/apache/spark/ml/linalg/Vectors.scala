@@ -240,6 +240,8 @@ sealed trait Vector extends Serializable {
 @Since("2.0.0")
 object Vectors {
 
+  private[ml] val empty: Vector = zeros(0)
+
   /**
    * Creates a dense vector from its values.
    */

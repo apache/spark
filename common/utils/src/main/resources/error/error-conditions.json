@@ -82,6 +82,12 @@
     ],
     "sqlState" : "22003"
   },
+  "ARTIFACT_ALREADY_EXISTS" : {
+    "message" : [
+      "The artifact <normalizedRemoteRelativePath> already exists. Please choose a different name for the new artifact because it cannot be overwritten."
+    ],
+    "sqlState" : "42713"
+  },
   "ASSIGNMENT_ARITY_MISMATCH" : {
     "message" : [
       "The number of columns or variables assigned or aliased: <numTarget> does not match the number of source expressions: <numExpr>."
@@ -3962,6 +3968,12 @@
     ],
     "sqlState" : "0A000"
   },
+  "NOT_SUPPORTED_CHANGE_SAME_COLUMN" : {
+    "message" : [
+      "ALTER TABLE ALTER/CHANGE COLUMN is not supported for changing <table>'s column <fieldName> including its nested fields multiple times in the same command."
+    ],
+    "sqlState" : "0A000"
+  },
   "NOT_SUPPORTED_COMMAND_FOR_V2_TABLE" : {
     "message" : [
       "<cmd> is not supported for v2 tables."
@@ -6007,6 +6019,12 @@
     },
     "sqlState" : "0A000"
   },
+  "UNSUPPORTED_TABLE_CHANGE_IN_JDBC_CATALOG" : {
+    "message" : [
+      "The table change <change> is not supported for the JDBC catalog on table <tableName>. Supported changes include: AddColumn, RenameColumn, DeleteColumn, UpdateColumnType, UpdateColumnNullability."
+    ],
+    "sqlState" : "42000"
+  },
   "UNSUPPORTED_TYPED_LITERAL" : {
     "message" : [
       "Literals of the type <unsupportedType> are not supported. Supported types are <supportedTypes>."
@@ -7173,11 +7191,6 @@
   "_LEGACY_ERROR_TEMP_1300" : {
     "message" : [
       "Unable to find the column `<colName>` given [<actualColumns>]."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1305" : {
-    "message" : [
-      "Unsupported TableChange <change> in JDBC catalog."
     ]
   },
   "_LEGACY_ERROR_TEMP_1306" : {
