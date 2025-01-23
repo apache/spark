@@ -217,7 +217,7 @@ class ArtifactManager(session: SparkSession) extends AutoCloseable with Logging 
         }
 
         throw new SparkRuntimeException(
-          "DUPLICATED_ARTIFACT",
+          "ARTIFACT_ALREADY_EXISTS",
           Map("normalizedRemoteRelativePath" -> normalizedRemoteRelativePath.toString)
         )
       }

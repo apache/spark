@@ -78,7 +78,7 @@ class ArtifactTestsMixin:
 
             self.check_error(
                 exception=pe.exception,
-                errorClass="DUPLICATED_ARTIFACT",
+                errorClass="ARTIFACT_ALREADY_EXISTS",
                 messageParameters={"normalizedRemoteRelativePath": "pyfiles/my_pyfile.py"},
             )
 
