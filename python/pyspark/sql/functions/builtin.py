@@ -20420,6 +20420,7 @@ def variant_get(v: "ColumnOrName", path: Union[Column, str], targetType: str) ->
     """
     from pyspark.sql.classic.column import _to_java_column
 
+    assert isinstance(path, (Column, str))
     if isinstance(path, str):
         return _invoke_function(
             "variant_get", _to_java_column(v), _enum_to_value(path), _enum_to_value(targetType)
