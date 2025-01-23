@@ -49,6 +49,10 @@ object ResolveWithCTE extends Rule[LogicalPlan] {
       cteDefMap: mutable.HashMap[Long, CTERelationDef]): LogicalPlan = {
     plan.resolveOperatorsDownWithPruning(_.containsAllPatterns(CTE)) {
       case withCTE @ WithCTE(_, cteDefs) =>
+        // Check for self-reference in subqueries and throw an error if that is the case.
+        // We don't want to resolve any such reference, therefore we need to perform this check
+        // here.
+        cteDefs.foreach(checkForSelfReferenceInSubquery)
         val newCTEDefs = cteDefs.map {
           // cteDef in the first case is either recursive and all the recursive CTERelationRefs
           // are already substituted to UnionLoopRef in the previous pass, or it is not recursive
@@ -181,6 +185,22 @@ object ResolveWithCTE extends Rule[LogicalPlan] {
       case r: CTERelationRef if r.recursive && r.cteId == cteDefId =>
         val ref = UnionLoopRef(r.cteId, anchor.output, false)
         columnNames.map(UnresolvedSubqueryColumnAliases(_, ref)).getOrElse(ref)
+    }
+  }
+
+  /**
+   * Checks if there is any self-reference within subqueries and throws an error
+   * if that is the case.
+   */
+  private def checkForSelfReferenceInSubquery(cteDef: CTERelationDef): Unit = {
+    cteDef.subqueriesAll.foreach { subquery =>
+      subquery.foreach {
+        case CTERelationRef(cteDef.id, _, _, _, _, true) =>
+          cteDef.failAnalysis(
+            errorClass = "INVALID_RECURSIVE_REFERENCE.SUBQUERY",
+            messageParameters = Map.empty)
+        case _ =>
+      }
     }
   }
 
