@@ -22,9 +22,10 @@ import java.util.Optional
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.connect.proto
-import org.apache.spark.ml.{Estimator, Model, Transformer}
+import org.apache.spark.ml.{Estimator, Transformer}
+import org.apache.spark.ml.classification.ClassificationModel
 import org.apache.spark.ml.evaluation.Evaluator
-import org.apache.spark.ml.linalg.{Vectors, VectorUDT}
+import org.apache.spark.ml.linalg.{Vector, Vectors, VectorUDT}
 import org.apache.spark.ml.param.{IntParam, Param, ParamMap, Params}
 import org.apache.spark.ml.param.shared.{HasHandleInvalid, HasInputCols, HasMaxIter, HasOutputCol}
 import org.apache.spark.ml.util.{DefaultParamsReadable, DefaultParamsWritable, Identifiable, MLReadable, MLReader}
@@ -298,7 +299,7 @@ class MyLogisticRegressionModel(
     override val uid: String,
     val intercept: Float,
     val coefficients: Float)
-    extends Model[MyLogisticRegressionModel]
+    extends ClassificationModel[Double, MyLogisticRegressionModel]
     with HasMaxIter
     with HasFakedParam
     with DefaultParamsWritable {
@@ -320,7 +321,11 @@ class MyLogisticRegressionModel(
   // fake a function
   def predictRaw: Double = 1.11
 
+  override def predictRaw(features: Double): Vector = Vectors.dense(1.11)
+
   override def transformSchema(schema: StructType): StructType = schema
+
+  override def numClasses: Int = 2
 }
 
 object MyLogisticRegressionModel extends MLReadable[MyLogisticRegressionModel] {
