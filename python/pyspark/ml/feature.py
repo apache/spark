@@ -4970,7 +4970,8 @@ class StopWordsRemover(
 
     Notes
     -----
-    null values from input array are preserved unless adding null to stopWords explicitly.
+    - null values from input array are preserved unless adding null to stopWords explicitly.
+    - In Spark Connect Mode, the default value of parameter `locale` is always 'en_US'.
 
     Examples
     --------
