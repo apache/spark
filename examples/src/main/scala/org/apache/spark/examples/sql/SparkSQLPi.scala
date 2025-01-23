@@ -16,26 +16,25 @@
  */
 
 // scalastyle:off println
-package org.apache.spark.examples
-
-import scala.math.random
+package org.apache.spark.examples.sql
 
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.functions._
 
-/** Computes an approximation to pi */
-object SparkPi {
+/** Computes an approximation to pi with SparkSession/DataFrame APIs */
+object SparkSQLPi {
   def main(args: Array[String]): Unit = {
     val spark = SparkSession
       .builder()
-      .appName("Spark Pi")
+      .appName("Spark SQL Pi")
       .getOrCreate()
+    import spark.implicits._
     val slices = if (args.length > 0) args(0).toInt else 2
     val n = math.min(100000L * slices, Int.MaxValue).toInt // avoid overflow
-    val count = spark.sparkContext.parallelize(1 until n, slices).map { i =>
-      val x = random() * 2 - 1
-      val y = random() * 2 - 1
-      if (x*x + y*y <= 1) 1 else 0
-    }.reduce(_ + _)
+    val count = spark.range(0, n, 1, slices)
+      .select((pow(rand() * 2 - 1, lit(2)) + pow(rand() * 2 - 1, lit(2))).as("v"))
+      .where($"v" <= 1)
+      .count()
     println(s"Pi is roughly ${4.0 * count / (n - 1)}")
     spark.stop()
   }
