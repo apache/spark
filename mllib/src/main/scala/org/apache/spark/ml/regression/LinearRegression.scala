@@ -704,7 +704,7 @@ class LinearRegressionModel private[ml] (
 
   // For ml connect only
   @Since("4.0.0")
-  private[ml] def this() = this(Identifiable.randomUID("linReg"), Vectors.zeros(0), 0.0, 0.0)
+  private[ml] def this() = this(Identifiable.randomUID("linReg"), Vectors.empty, 0.0, 0.0)
 
   override val numFeatures: Int = coefficients.size
 
