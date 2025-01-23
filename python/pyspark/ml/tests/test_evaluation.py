@@ -42,6 +42,7 @@ class EvaluatorTestsMixin:
 
         # Initialize RankingEvaluator
         evaluator = RankingEvaluator().setPredictionCol("prediction")
+        self.assertTrue(evaluator.isLargerBetter())
 
         # Evaluate the dataset using the default metric (mean average precision)
         mean_average_precision = evaluator.evaluate(dataset)
@@ -93,6 +94,25 @@ class EvaluatorTestsMixin:
             evaluator2 = MultilabelClassificationEvaluator.load(tmp_dir)
             self.assertEqual(evaluator2.getPredictionCol(), "prediction")
             self.assertEqual(str(evaluator), str(evaluator2))
+
+        for metric in [
+            "subsetAccuracy",
+            "accuracy",
+            "precision",
+            "recall",
+            "f1Measure",
+            "precisionByLabel",
+            "recallByLabel",
+            "f1MeasureByLabel",
+            "microPrecision",
+            "microRecall",
+            "microF1Measure",
+        ]:
+            evaluator.setMetricName(metric)
+            self.assertTrue(evaluator.isLargerBetter())
+
+        evaluator.setMetricName("hammingLoss")
+        self.assertTrue(not evaluator.isLargerBetter())
 
     def test_multiclass_classification_evaluator(self):
         dataset = self.spark.createDataFrame(
@@ -163,6 +183,29 @@ class EvaluatorTestsMixin:
         log_loss = evaluator.evaluate(dataset)
         self.assertTrue(np.allclose(log_loss, 1.0093, atol=1e-4))
 
+        for metric in [
+            "f1",
+            "accuracy",
+            "weightedPrecision",
+            "weightedRecall",
+            "weightedTruePositiveRate",
+            "weightedFMeasure",
+            "truePositiveRateByLabel",
+            "precisionByLabel",
+            "recallByLabel",
+            "fMeasureByLabel",
+        ]:
+            evaluator.setMetricName(metric)
+            self.assertTrue(evaluator.isLargerBetter())
+        for metric in [
+            "weightedFalsePositiveRate",
+            "falsePositiveRateByLabel",
+            "logLoss",
+            "hammingLoss",
+        ]:
+            evaluator.setMetricName(metric)
+            self.assertTrue(not evaluator.isLargerBetter())
+
     def test_binary_classification_evaluator(self):
         # Define score and labels data
         data = map(
@@ -180,6 +223,8 @@ class EvaluatorTestsMixin:
         dataset = self.spark.createDataFrame(data, ["raw", "label", "weight"])
 
         evaluator = BinaryClassificationEvaluator().setRawPredictionCol("raw")
+        self.assertTrue(evaluator.isLargerBetter())
+
         auc_roc = evaluator.evaluate(dataset)
         self.assertTrue(np.allclose(auc_roc, 0.7083, atol=1e-4))
 
@@ -226,6 +271,8 @@ class EvaluatorTestsMixin:
         dataset = self.spark.createDataFrame(data, ["features", "prediction", "weight"])
 
         evaluator = ClusteringEvaluator().setPredictionCol("prediction")
+        self.assertTrue(evaluator.isLargerBetter())
+
         score = evaluator.evaluate(dataset)
         self.assertTrue(np.allclose(score, 0.9079, atol=1e-4))
 
@@ -299,6 +346,13 @@ class EvaluatorTestsMixin:
         self.assertTrue(np.allclose(weighted_rmse, 2.7405, atol=1e-4))
         through_origin = evaluator_with_weights.getThroughOrigin()
         self.assertEqual(through_origin, False)
+
+        for metric in ["mse", "rmse", "mae"]:
+            evaluator.setMetricName(metric)
+            self.assertTrue(not evaluator.isLargerBetter())
+        for metric in ["r2", "var"]:
+            evaluator.setMetricName(metric)
+            self.assertTrue(evaluator.isLargerBetter())
 
 
 class EvaluatorTests(EvaluatorTestsMixin, unittest.TestCase):

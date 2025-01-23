@@ -311,6 +311,9 @@ class BinaryClassificationEvaluator(
         kwargs = self._input_kwargs
         return self._set(**kwargs)
 
+    def isLargerBetter(self) -> bool:
+        return True
+
 
 @inherit_doc
 class RegressionEvaluator(
@@ -466,6 +469,11 @@ class RegressionEvaluator(
         """
         kwargs = self._input_kwargs
         return self._set(**kwargs)
+
+    def isLargerBetter(self) -> bool:
+        if self.getMetricName() in ["r2", "var"]:
+            return True
+        return False
 
 
 @inherit_doc
@@ -700,6 +708,16 @@ class MulticlassClassificationEvaluator(
         kwargs = self._input_kwargs
         return self._set(**kwargs)
 
+    def isLargerBetter(self) -> bool:
+        if self.getMetricName() in [
+            "weightedFalsePositiveRate",
+            "falsePositiveRateByLabel",
+            "logLoss",
+            "hammingLoss",
+        ]:
+            return False
+        return True
+
 
 @inherit_doc
 class MultilabelClassificationEvaluator(
@@ -842,6 +860,11 @@ class MultilabelClassificationEvaluator(
         """
         kwargs = self._input_kwargs
         return self._set(**kwargs)
+
+    def isLargerBetter(self) -> bool:
+        if self.getMetricName() == "hammingLoss":
+            return False
+        return True
 
 
 @inherit_doc
@@ -1002,6 +1025,9 @@ class ClusteringEvaluator(
         """
         return self._set(weightCol=value)
 
+    def isLargerBetter(self) -> bool:
+        return True
+
 
 @inherit_doc
 class RankingEvaluator(
@@ -1137,6 +1163,9 @@ class RankingEvaluator(
         """
         kwargs = self._input_kwargs
         return self._set(**kwargs)
+
+    def isLargerBetter(self) -> bool:
+        return True
 
 
 if __name__ == "__main__":
