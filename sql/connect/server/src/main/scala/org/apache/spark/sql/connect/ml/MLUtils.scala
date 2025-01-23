@@ -584,7 +584,8 @@ private[ml] object MLUtils {
     (classOf[MaxAbsScalerModel], Set("maxAbs")),
     (classOf[MinMaxScalerModel], Set("originalMax", "originalMin")),
     (classOf[RobustScalerModel], Set("range", "median")),
-    (classOf[PCAModel], Set("pc", "explainedVariance")))
+    (classOf[PCAModel], Set("pc", "explainedVariance")),
+    (classOf[Word2VecModel], Set("getVectors", "findSynonyms", "findSynonymsArray")))
 
   private def validate(obj: Any, method: String): Unit = {
     assert(obj != null)

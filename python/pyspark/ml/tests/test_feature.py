@@ -46,6 +46,8 @@ from pyspark.ml.feature import (
     VectorAssembler,
     PCA,
     PCAModel,
+    Word2Vec,
+    Word2VecModel,
 )
 from pyspark.ml.linalg import DenseVector, SparseVector, Vectors
 from pyspark.sql import Row
@@ -356,6 +358,48 @@ class FeatureTestsMixin:
             model2 = RobustScalerModel.load(d)
             self.assertEqual(str(model), str(model2))
             self.assertEqual(model2.getOutputCol(), "scaled")
+
+    def test_word2vec(self):
+        sent = ("a b " * 100 + "a c " * 10).split(" ")
+        df = self.spark.createDataFrame([(sent,), (sent,)], ["sentence"]).coalesce(1)
+
+        w2v = Word2Vec(vectorSize=3, seed=42, inputCol="sentence", outputCol="model")
+        w2v.setMaxIter(1)
+        self.assertEqual(w2v.getInputCol(), "sentence")
+        self.assertEqual(w2v.getOutputCol(), "model")
+        self.assertEqual(w2v.getVectorSize(), 3)
+        self.assertEqual(w2v.getSeed(), 42)
+        self.assertEqual(w2v.getMaxIter(), 1)
+
+        model = w2v.fit(df)
+        self.assertEqual(model.getVectors().columns, ["word", "vector"])
+        self.assertEqual(model.getVectors().count(), 3)
+
+        synonyms = model.findSynonyms("a", 2)
+        self.assertEqual(synonyms.columns, ["word", "similarity"])
+        self.assertEqual(synonyms.count(), 2)
+
+        # TODO(SPARK-50958): Support Word2VecModel.findSynonymsArray
+        # synonyms = model.findSynonymsArray("a", 2)
+        # self.assertEqual(len(synonyms), 2)
+        # self.assertEqual(synonyms[0][0], "b")
+        # self.assertTrue(np.allclose(synonyms[0][1], -0.024012837558984756, atol=1e-4))
+        # self.assertEqual(synonyms[1][0], "c")
+        # self.assertTrue(np.allclose(synonyms[1][1], -0.19355154037475586, atol=1e-4))
+
+        output = model.transform(df)
+        self.assertEqual(output.columns, ["sentence", "model"])
+        self.assertEqual(output.count(), 2)
+
+        # save & load
+        with tempfile.TemporaryDirectory(prefix="word2vec") as d:
+            w2v.write().overwrite().save(d)
+            w2v2 = Word2Vec.load(d)
+            self.assertEqual(str(w2v), str(w2v2))
+
+            model.write().overwrite().save(d)
+            model2 = Word2VecModel.load(d)
+            self.assertEqual(str(model), str(model2))
 
     def test_binarizer(self):
         b0 = Binarizer()
