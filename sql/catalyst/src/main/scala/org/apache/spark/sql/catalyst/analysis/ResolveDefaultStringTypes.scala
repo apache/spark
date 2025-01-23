@@ -156,11 +156,10 @@ object ResolveDefaultStringTypes extends Rule[LogicalPlan] {
     case expression if needsCast(expression) =>
       expression.setTagValue(CAST_ADDED_TAG, ())
       newType => {
-        val replacedType = replaceDefaultStringType(expression.dataType, newType)
-        if (newType == StringType || replacedType.sameType(newType)) {
+        if (newType == StringType) {
           expression
         } else {
-          Cast(expression, replacedType)
+          Cast(expression, replaceDefaultStringType(expression.dataType, newType))
         }
       }
   }

@@ -33,7 +33,6 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{convertSpecialDate, convertSpecialTimestamp, convertSpecialTimestampNTZ, instantToMicros, localDateTimeToMicros}
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLExpr
 import org.apache.spark.sql.connector.catalog.CatalogManager
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 
@@ -153,14 +152,15 @@ case class ReplaceCurrentLike(catalogManager: CatalogManager) extends Rule[Logic
     val currentCatalog = catalogManager.currentCatalog.name()
     val currentUser = CurrentUserContext.getCurrentUser
 
-    plan.transformAllExpressionsWithPruning(_.containsPattern(CURRENT_LIKE)) {
+    val res = plan.transformAllExpressionsWithPruning(_.containsPattern(CURRENT_LIKE)) {
       case CurrentDatabase() =>
-        Literal.create(currentNamespace, SQLConf.get.defaultStringType)
+        Literal.create(currentNamespace)
       case CurrentCatalog() =>
-        Literal.create(currentCatalog, SQLConf.get.defaultStringType)
+        Literal.create(currentCatalog)
       case CurrentUser() =>
-        Literal.create(currentUser, SQLConf.get.defaultStringType)
+        Literal.create(currentUser)
     }
+    res
   }
 }
 
