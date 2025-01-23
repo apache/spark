@@ -25,7 +25,7 @@ import java.util.UUID
 
 import scala.jdk.CollectionConverters._
 
-import org.apache.avro.{AvroTypeException, Schema, SchemaBuilder}
+import org.apache.avro.{Schema, SchemaBuilder}
 import org.apache.avro.Schema.{Field, Type}
 import org.apache.avro.Schema.Type._
 import org.apache.avro.file.{DataFileReader, DataFileWriter}
@@ -33,7 +33,7 @@ import org.apache.avro.generic.{GenericData, GenericDatumReader, GenericDatumWri
 import org.apache.avro.generic.GenericData.{EnumSymbol, Fixed}
 import org.apache.commons.io.FileUtils
 
-import org.apache.spark.{SPARK_VERSION_SHORT, SparkConf, SparkException, SparkUpgradeException}
+import org.apache.spark.{SPARK_VERSION_SHORT, SparkConf, SparkException, SparkThrowable, SparkUpgradeException}
 import org.apache.spark.TestUtils.assertExceptionMsg
 import org.apache.spark.sql._
 import org.apache.spark.sql.TestingUDT.IntervalData
@@ -97,6 +97,14 @@ abstract class AvroSuite
           .head
       }
     }, new GenericDatumReader[Any]()).getSchema.toString(false)
+  }
+
+  private def getRootCause(ex: Throwable): Throwable = {
+    var rootCause = ex
+    while (rootCause.getCause != null) {
+      rootCause = rootCause.getCause
+    }
+    rootCause
   }
 
   // Check whether an Avro schema of union type is converted to SQL in an expected way, when the
@@ -1316,7 +1324,13 @@ abstract class AvroSuite
         dfWithNull.write.format("avro")
           .option("avroSchema", avroSchema).save(s"$tempDir/${UUID.randomUUID()}")
       }
-      assertExceptionMsg[AvroTypeException](e1, "value null is not a SuitEnumType")
+
+      checkError(
+        getRootCause(e1).asInstanceOf[SparkThrowable],
+        condition = "AVRO_CANNOT_WRITE_NULL_FIELD",
+        parameters = Map(
+          "name" -> "`Suit`",
+          "schema" -> "\"STRING\""))
 
       // Writing df containing data not in the enum will throw an exception
       val e2 = intercept[SparkException] {
@@ -1516,9 +1530,12 @@ abstract class AvroSuite
           .save(s"$tempDir/${UUID.randomUUID()}")
       }
       assert(ex.getCondition == "TASK_WRITE_FAILED")
-      assert(ex.getCause.isInstanceOf[java.lang.NullPointerException])
-      assert(ex.getCause.getMessage.contains(
-        "null value for (non-nullable) string at test_schema.Name"))
+      checkError(
+        ex.getCause.asInstanceOf[SparkThrowable],
+        condition = "AVRO_CANNOT_WRITE_NULL_FIELD",
+        parameters = Map(
+          "name" -> "`Name`",
+          "schema" -> "\"STRING\""))
     }
   }
 
