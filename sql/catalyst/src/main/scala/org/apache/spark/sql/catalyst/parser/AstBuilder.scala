@@ -169,37 +169,60 @@ class AstBuilder extends DataTypeAstBuilder
     }
   }
 
-  override def visitConditionValue(ctx: ConditionValueContext): String = {
+  private def visitConditionValueImpl(
+      ctx: ConditionValueContext,
+      handlerTriggers: HandlerTriggers): Unit = {
+    // Current element is SQLSTATE.
     Option(ctx.sqlStateValue())
-      .map { sqlStateValueContext =>
+      .foreach { sqlStateValueContext =>
         val sqlState = sqlStateValueContext.getText.replace("'", "")
         assertSqlState(sqlState)
-        sqlState
+        handlerTriggers.addUniqueSqlState(sqlState)
       }
-      .getOrElse(ctx.getText)
+
+    // Current element is condition.
+    Option(ctx.multipartIdentifier())
+      .foreach { conditionContext =>
+        handlerTriggers.addUniqueCondition(conditionContext.getText)
+      }
+
+    Option(ctx.SQLEXCEPTION())
+      .foreach { _ =>
+        handlerTriggers.addUniqueSqlException()
+      }
+
+    // It is sufficient to check only NOT for NOT FOUND handler.
+    Option(ctx.NOT()).foreach { _ =>
+      handlerTriggers.addUniqueNotFound()
+    }
   }
 
-  override def visitConditionValues(ctx: ConditionValuesContext): Seq[String] = {
-    val buff = scala.collection.mutable.Set[String]()
-    ctx.cvList.forEach { conditionValue =>
-      val elem = visit(conditionValue).asInstanceOf[String]
-      if (buff(elem)) {
-        throw SqlScriptingErrors.duplicateConditionInHandlerDeclaration(CurrentOrigin.get, elem)
-      }
-      buff += elem
+  /**
+   * Visit list of condition/sqlstate values in handler declaration.
+   */
+  private def visitConditionValuesImpl(
+      ctx: ConditionValuesContext): HandlerTriggers = {
+
+    val handlerTriggers: HandlerTriggers = new HandlerTriggers()
+
+    ctx.cvList.forEach { cvContext =>
+      visitConditionValueImpl(cvContext, handlerTriggers)
     }
-    buff.toSeq
+
+    handlerTriggers
   }
 
   private def visitDeclareConditionStatementImpl(
       ctx: DeclareConditionStatementContext): ErrorCondition = {
     val conditionName = ctx.multipartIdentifier().getText
 
+    // Qualified user defined condition name is not allowed.
     if (ctx.multipartIdentifier().parts.size() > 1) {
       throw SqlScriptingErrors
         .conditionCannotBeQualified(CurrentOrigin.get, conditionName)
     }
 
+    // If SQLSTATE is not provided, default to 45000.
     val sqlState = Option(ctx.sqlStateValue())
       .map(_.getText.replace("'", "")).getOrElse("45000")
 
@@ -210,7 +233,7 @@ class AstBuilder extends DataTypeAstBuilder
   private def visitDeclareHandlerStatementImpl(
       ctx: DeclareHandlerStatementContext,
       labelCtx: SqlScriptingLabelContext): ErrorHandler = {
-    val conditions = visit(ctx.conditionValues()).asInstanceOf[Seq[String]]
+    val handlerTriggers = visitConditionValuesImpl(ctx.conditionValues())
 
     if (Option(ctx.CONTINUE()).isDefined) {
       throw SqlScriptingErrors.continueHandlerNotSupported(CurrentOrigin.get)
@@ -231,7 +254,7 @@ class AstBuilder extends DataTypeAstBuilder
       CompoundBody(Seq(statement.get), None, isScope = false)
     }
 
-    ErrorHandler(conditions, body, handlerType)
+    ErrorHandler(handlerTriggers, body, handlerType)
   }
 
   private def visitCompoundBodyImpl(

@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.scripting
 
-import scala.collection.mutable.{HashMap, ListBuffer}
+import scala.collection.mutable.ListBuffer
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.scripting.SqlScriptingFrameType.SqlScriptingFrameType
@@ -32,11 +32,11 @@ class SqlScriptingExecutionContext {
 
   def enterScope(
       label: String,
-      conditionHandlerMap: HashMap[String, ErrorHandlerExec]): Unit = {
+      triggerHandlerMap: TriggerHandlerMap): Unit = {
     if (frames.isEmpty) {
       throw SparkException.internalError("Cannot enter scope: no frames.")
     }
-    frames.last.enterScope(label, conditionHandlerMap)
+    frames.last.enterScope(label, triggerHandlerMap)
   }
 
   def exitScope(label: String): Unit = {
@@ -105,8 +105,8 @@ class SqlScriptingExecutionFrame(
 
   def enterScope(
       label: String,
-      conditionHandlerMap: HashMap[String, ErrorHandlerExec]): Unit = {
-    scopes.append(new SqlScriptingExecutionScope(label, conditionHandlerMap))
+      triggerHandlerMap: TriggerHandlerMap): Unit = {
+    scopes.append(new SqlScriptingExecutionScope(label, triggerHandlerMap))
   }
 
   def exitScope(label: String): Unit = {
@@ -162,14 +162,12 @@ class SqlScriptingExecutionFrame(
  *
  * @param label
  *   Label of the scope.
- * @param conditionHandlerMap
- *   Map holding condition/sqlState to handler mapping.
- * @return
- *   Handler for the given condition.
+ * @param triggerHandlerMap
+ *   Object holding condition/sqlState/sqlexception/not found to handler mapping.
  */
 class SqlScriptingExecutionScope(
     val label: String,
-    val conditionHandlerMap: HashMap[String, ErrorHandlerExec]) {
+    val triggerHandlerMap: TriggerHandlerMap) {
 
   /**
    * Finds the most appropriate error handler for exception based on its condition and SQL state.
@@ -191,29 +189,32 @@ class SqlScriptingExecutionScope(
    */
   def findHandler(condition: String, sqlState: String): Option[ErrorHandlerExec] = {
     // Check if there is a specific handler for the given condition.
-    conditionHandlerMap.get(condition)
-      .orElse {
-        conditionHandlerMap.get(sqlState) match {
-          // If SQLSTATE handler is defined, use it only for errors with class != '02'.
-          case Some(handler) if !sqlState.startsWith("02") => Some(handler)
-          case _ => None
-        }
+    var errorHandler: Option[ErrorHandlerExec] = None
+
+    errorHandler = triggerHandlerMap.getHandlerForCondition(condition)
+
+    if (errorHandler.isEmpty) {
+      // Check if there is a specific handler for the given SQLSTATE.
+      errorHandler = triggerHandlerMap.getHandlerForSqlState(sqlState)
+    }
+
+    if (errorHandler.isEmpty) {
+      errorHandler = triggerHandlerMap.getNotFoundHandler match {
+        case Some(handler) if sqlState.startsWith("02") => Some(handler)
+        case _ => None
       }
-      .orElse {
-        conditionHandlerMap.get("NOT FOUND") match {
-          // If NOT FOUND handler is defined, use it only for errors with class == '02'.
-          case Some(handler) if sqlState.startsWith("02") => Some(handler)
-          case _ => None
-        }
+    }
+
+    if (errorHandler.isEmpty) {
+      // If SQLEXCEPTION handler is defined, use it only for errors with class
+      // different from 'XX' and '02'.
+      errorHandler = triggerHandlerMap.getSqlExceptionHandler match {
+        case Some(handler) if !sqlState.startsWith("XX") && !sqlState.startsWith("02") =>
+          Some(handler)
+        case _ => None
       }
-      .orElse {
-        conditionHandlerMap.get("SQLEXCEPTION") match {
-          // If SQLEXCEPTION handler is defined, use it only for errors with class
-          // different from 'XX' and '02'.
-          case Some(handler) if
-            !sqlState.startsWith("XX") && !sqlState.startsWith("02") => Some(handler)
-          case _ => None
-        }
-      }
+    }
+
+    errorHandler
   }
 }

@@ -18,8 +18,7 @@
 package org.apache.spark.sql.scripting
 
 import scala.collection.mutable.ListBuffer
-
-import org.apache.spark.SparkConf
+import org.apache.spark.{SparkArithmeticException, SparkConf}
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.logical.CompoundBody
@@ -296,7 +295,7 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
     val expected = Seq(
       Seq(Row(5)),    // select
       Seq(Row(-1)),   // select flag from handler in l2
-      Seq(Row(1)),   // select flag from handler in l1
+      Seq(Row(1)),    // select flag from handler in l1
       Seq(Row(2))     // select flag from the outer body
     )
     verifySqlScriptResult(sqlScript, expected = expected)
@@ -333,7 +332,7 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
     val expected = Seq(
       Seq(Row(5)),    // select
       Seq(Row(-1)),   // select flag from handler in l2
-      Seq(Row(1)),   // select flag from handler in l1
+      Seq(Row(1)),    // select flag from handler in l1
       Seq(Row(2))     // select flag from the outer body
     )
     verifySqlScriptResult(sqlScript, expected = expected)
@@ -506,6 +505,74 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
       Seq(Row(2))     // select flag from the outer body
     )
     verifySqlScriptResult(sqlScript, expected = expected)
+  }
+
+  test("handler with condition and sqlState with equal string value") {
+    // This test is intended to verify that the condition and sqlState are not
+    // treated equally if they have the same string value. Conditions are prioritized
+    // over sqlStates when choosing most appropriate Error Handler.
+    val sqlScript1 =
+      """
+        |BEGIN
+        |  DECLARE OR REPLACE flag INT = -1;
+        |  DECLARE `22012` CONDITION FOR SQLSTATE '12345';
+        |  DECLARE EXIT HANDLER FOR `22012`
+        |  BEGIN
+        |    SET VAR flag = 1;
+        |  END;
+        |  SELECT 1/0;
+        |  SELECT flag;
+        |END
+        |""".stripMargin
+    checkError(
+      exception = intercept[SparkArithmeticException] {
+        verifySqlScriptResult(sqlScript1, Seq.empty)
+      },
+      condition = "DIVIDE_BY_ZERO",
+      parameters = Map("config" -> "\"spark.sql.ansi.enabled\""),
+      queryContext = Array(ExpectedContext("", "", 174, 176, "1/0")))
+
+    val sqlScript2 =
+      """
+        |BEGIN
+        |  DECLARE OR REPLACE flag INT = -1;
+        |  BEGIN
+        |    DECLARE `22012` CONDITION FOR SQLSTATE '12345';
+        |    DECLARE EXIT HANDLER FOR `22012`
+        |    BEGIN
+        |      SET VAR flag = 1;
+        |    END;
+        |
+        |    DECLARE EXIT HANDLER FOR SQLSTATE '22012'
+        |    BEGIN
+        |      SET VAR flag = 2;
+        |    END;
+        |
+        |    SELECT 1/0;
+        |  END;
+        |  SELECT flag;
+        |END
+        |""".stripMargin
+    val expected2 = Seq(Seq(Row(2))) // select flag from the outer body
+    verifySqlScriptResult(sqlScript2, expected = expected2)
+
+    val sqlScript3 =
+      """
+        |BEGIN
+        |  DECLARE OR REPLACE flag INT = -1;
+        |  BEGIN
+        |    DECLARE EXIT HANDLER FOR `22012`, SQLSTATE '22012'
+        |    BEGIN
+        |      SET VAR flag = 1;
+        |    END;
+        |
+        |    SELECT 1/0;
+        |  END;
+        |  SELECT flag;
+        |END
+        |""".stripMargin
+    val expected3 = Seq(Seq(Row(1))) // select flag from the outer body
+    verifySqlScriptResult(sqlScript3, expected = expected3)
   }
 
   test("handler - no appropriate handler is defined") {

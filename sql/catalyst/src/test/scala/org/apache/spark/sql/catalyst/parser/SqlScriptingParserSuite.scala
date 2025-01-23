@@ -2415,8 +2415,8 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     val tree = parsePlan(sqlScriptText).asInstanceOf[CompoundBody]
     assert(tree.handlers.length == 1)
     assert(tree.handlers.head.isInstanceOf[ErrorHandler])
-    assert(tree.handlers.head.conditions.length == 1)
-    assert(tree.handlers.head.conditions.head == "test_condition")
+    assert(tree.handlers.head.handlerTriggers.conditions.size == 1)
+    assert(tree.handlers.head.handlerTriggers.conditions.contains("test_condition"))
     assert(tree.handlers.head.body.collection.size == 1)
     assert(tree.handlers.head.body.collection.head.isInstanceOf[SingleStatement])
     assert(tree.handlers.head.body.collection.head.asInstanceOf[SingleStatement]
@@ -2434,8 +2434,8 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     val tree = parsePlan(sqlScriptText).asInstanceOf[CompoundBody]
     assert(tree.handlers.length == 1)
     assert(tree.handlers.head.isInstanceOf[ErrorHandler])
-    assert(tree.handlers.head.conditions.length == 1)
-    assert(tree.handlers.head.conditions.head == "test_condition")
+    assert(tree.handlers.head.handlerTriggers.conditions.size == 1)
+    assert(tree.handlers.head.handlerTriggers.conditions.contains("test_condition"))
     assert(tree.handlers.head.body.collection.size == 1)
     assert(tree.handlers.head.body.collection.head.isInstanceOf[SingleStatement])
     assert(tree.handlers.head.body.collection.head.asInstanceOf[SingleStatement]
@@ -2451,8 +2451,8 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     val tree = parsePlan(sqlScriptText).asInstanceOf[CompoundBody]
     assert(tree.handlers.length == 1)
     assert(tree.handlers.head.isInstanceOf[ErrorHandler])
-    assert(tree.handlers.head.conditions.length == 1)
-    assert(tree.handlers.head.conditions.head == "test_condition")
+    assert(tree.handlers.head.handlerTriggers.conditions.size == 1)
+    assert(tree.handlers.head.handlerTriggers.conditions.contains("test_condition"))
     assert(tree.handlers.head.body.collection.size == 1)
     assert(tree.handlers.head.body.collection.head.isInstanceOf[SingleStatement])
     assert(tree.handlers.head.body.collection.head.asInstanceOf[SingleStatement]
@@ -2468,8 +2468,8 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     val tree = parsePlan(sqlScriptText).asInstanceOf[CompoundBody]
     assert(tree.handlers.length == 1)
     assert(tree.handlers.head.isInstanceOf[ErrorHandler])
-    assert(tree.handlers.head.conditions.length == 1)
-    assert(tree.handlers.head.conditions.head == "test_condition")
+    assert(tree.handlers.head.handlerTriggers.conditions.size == 1)
+    assert(tree.handlers.head.handlerTriggers.conditions.contains("test_condition"))
     assert(tree.handlers.head.body.collection.size == 1)
     assert(tree.handlers.head.body.collection.head.isInstanceOf[SingleStatement])
     assert(tree.handlers.head.body.collection.head.asInstanceOf[SingleStatement]
@@ -2486,14 +2486,66 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     val tree = parsePlan(sqlScriptText).asInstanceOf[CompoundBody]
     assert(tree.handlers.length == 1)
     assert(tree.handlers.head.isInstanceOf[ErrorHandler])
-    assert(tree.handlers.head.conditions.length == 3)
-    assert(tree.handlers.head.conditions.contains("test_condition_1"))
-    assert(tree.handlers.head.conditions.contains("test_condition_2"))
-    assert(tree.handlers.head.conditions.contains("22012"))
+    assert(tree.handlers.head.handlerTriggers.conditions.size == 2)
+    assert(tree.handlers.head.handlerTriggers.conditions.contains("test_condition_1"))
+    assert(tree.handlers.head.handlerTriggers.conditions.contains("test_condition_2"))
+    assert(tree.handlers.head.handlerTriggers.sqlStates.size == 1)
+    assert(tree.handlers.head.handlerTriggers.sqlStates.contains("22012"))
     assert(tree.handlers.head.body.collection.size == 1)
     assert(tree.handlers.head.body.collection.head.isInstanceOf[SingleStatement])
     assert(tree.handlers.head.body.collection.head.asInstanceOf[SingleStatement]
       .parsedPlan.isInstanceOf[SetVariable])
+  }
+
+  test("declare handler for SQLEXCEPTION") {
+    val sqlScriptText =
+      """
+        |BEGIN
+        |  DECLARE EXIT HANDLER FOR SQLEXCEPTION SET test_var = 1;
+        |END""".stripMargin
+    val tree = parsePlan(sqlScriptText).asInstanceOf[CompoundBody]
+    assert(tree.handlers.length == 1)
+    assert(tree.handlers.head.isInstanceOf[ErrorHandler])
+    assert(tree.handlers.head.handlerTriggers.conditions.isEmpty)
+    assert(tree.handlers.head.handlerTriggers.sqlStates.isEmpty)
+    assert(tree.handlers.head.handlerTriggers.sqlException) // true
+    assert(!tree.handlers.head.handlerTriggers.notFound) // false
+    assert(tree.handlers.head.body.collection.size == 1)
+  }
+
+  test("declare handler for NOT FOUND") {
+    val sqlScriptText =
+      """
+        |BEGIN
+        |  DECLARE EXIT HANDLER FOR NOT FOUND SET test_var = 1;
+        |END""".stripMargin
+    val tree = parsePlan(sqlScriptText).asInstanceOf[CompoundBody]
+    assert(tree.handlers.length == 1)
+    assert(tree.handlers.head.isInstanceOf[ErrorHandler])
+    assert(tree.handlers.head.handlerTriggers.conditions.isEmpty)
+    assert(tree.handlers.head.handlerTriggers.sqlStates.isEmpty)
+    assert(!tree.handlers.head.handlerTriggers.sqlException) // true
+    assert(tree.handlers.head.handlerTriggers.notFound) // false
+    assert(tree.handlers.head.body.collection.size == 1)
+  }
+
+  test("declare handler with condition and sqlstate with same value") {
+    val sqlScriptText =
+      """
+        |BEGIN
+        |  DECLARE K2000 CONDITION FOR SQLSTATE '12345';
+        |  DECLARE EXIT HANDLER FOR K2000, SQLSTATE VALUE 'K2000' SET test_var = 1;
+        |END""".stripMargin
+    val tree = parsePlan(sqlScriptText).asInstanceOf[CompoundBody]
+    assert(tree.handlers.length == 1)
+    assert(tree.handlers.head.isInstanceOf[ErrorHandler])
+    assert(tree.handlers.head.handlerTriggers.conditions.size == 1)
+    assert(tree.handlers.head.handlerTriggers.conditions.contains("K2000"))
+    assert(tree.handlers.head.handlerTriggers.sqlStates.size == 1)
+    assert(tree.handlers.head.handlerTriggers.sqlStates.contains("K2000"))
+    assert(!tree.handlers.head.handlerTriggers.sqlException) // true
+    assert(!tree.handlers.head.handlerTriggers.notFound) // false
+    assert(tree.handlers.head.body.collection.size == 1)
   }
 
 

@@ -19,8 +19,6 @@ package org.apache.spark.sql.scripting
 
 import java.util
 
-import scala.collection.mutable.HashMap
-
 import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
@@ -177,6 +175,25 @@ class NoOpStatementExec extends LeafStatementExec {
   override def reset(): Unit = ()
 }
 
+class TriggerHandlerMap(
+    conditionHandlerMap: Map[String, ErrorHandlerExec],
+    sqlStateHandlerMap: Map[String, ErrorHandlerExec],
+    sqlExceptionHandler: Option[ErrorHandlerExec],
+    notFoundHandler: Option[ErrorHandlerExec]) {
+
+  def getHandlerForCondition(condition: String): Option[ErrorHandlerExec] = {
+    conditionHandlerMap.get(condition)
+  }
+
+  def getHandlerForSqlState(sqlState: String): Option[ErrorHandlerExec] = {
+    sqlStateHandlerMap.get(sqlState)
+  }
+
+  def getSqlExceptionHandler: Option[ErrorHandlerExec] = sqlExceptionHandler
+
+  def getNotFoundHandler: Option[ErrorHandlerExec] = notFoundHandler
+}
+
 /**
  * Executable node for CompoundBody.
  * @param statements
@@ -188,7 +205,7 @@ class NoOpStatementExec extends LeafStatementExec {
  *   Scopes are used for grouping local variables and exception handlers.
  * @param context
  *   SqlScriptingExecutionContext keeps the execution state of current script.
- * @param conditionHandlerMap
+ * @param triggerHandlerMap
  *   Map of condition names/sqlstates to error handlers defined in this compound body.
  */
 class CompoundBodyExec(
@@ -196,7 +213,7 @@ class CompoundBodyExec(
     label: Option[String] = None,
     isScope: Boolean,
     context: SqlScriptingExecutionContext,
-    conditionHandlerMap: HashMap[String, ErrorHandlerExec] = HashMap.empty)
+    triggerHandlerMap: TriggerHandlerMap)
   extends NonLeafStatementExec {
 
   private object ScopeStatus extends Enumeration {
@@ -220,7 +237,7 @@ class CompoundBodyExec(
     // This check makes this operation idempotent.
     if (isScope && scopeStatus == ScopeStatus.NOT_ENTERED) {
       scopeStatus = ScopeStatus.INSIDE
-      context.enterScope(label.get, conditionHandlerMap)
+      context.enterScope(label.get, triggerHandlerMap)
     }
   }
 
@@ -924,7 +941,8 @@ class ForStatementExec(
         variablesMap.keys.toSeq.map(colName => createDropVarExec(colName)),
         None,
         isScope = false,
-        context
+        context,
+        new TriggerHandlerMap(Map.empty, Map.empty, None, None)
       )
       ForState.VariableCleanup
     }

@@ -17,11 +17,11 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
-import scala.collection.mutable.HashMap
-
+import scala.collection.mutable.{HashMap, Set}
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.HandlerType.HandlerType
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
+import org.apache.spark.sql.errors.SqlScriptingErrors
 
 
 /**
@@ -328,14 +328,61 @@ object HandlerType extends Enumeration {
 }
 
 /**
+ * Class holding information about what triggers the handler.
+ * @param sqlStates Name of the error condition.
+ * @param conditions SQLSTATE or Error Code.
+ * @param sqlException Flag indicating if the handler is triggered by SQLEXCEPTION.
+ * @param notFound Flag indicating if the handler is triggered by NOT FOUND.
+ */
+class HandlerTriggers(
+    val sqlStates: Set[String] = Set.empty,
+    val conditions: Set[String] = Set.empty,
+    var sqlException: Boolean = false,
+    var notFound: Boolean = false) {
+
+  def addUniqueSqlException(): Unit = {
+    if (sqlException) {
+      throw SqlScriptingErrors
+        .duplicateConditionInHandlerDeclaration(CurrentOrigin.get, "SQLEXCEPTION")
+    }
+    sqlException = true
+  }
+
+  def addUniqueNotFound(): Unit = {
+    if (notFound) {
+      throw SqlScriptingErrors
+        .duplicateConditionInHandlerDeclaration(CurrentOrigin.get, "NOT FOUND")
+    }
+    notFound = true
+  }
+
+  def addUniqueCondition(value: String): Unit = {
+    if (conditions.contains(value)) {
+      throw SqlScriptingErrors.duplicateConditionInHandlerDeclaration(CurrentOrigin.get, value)
+    }
+    conditions += value
+  }
+
+  def addUniqueSqlState(value: String): Unit = {
+    if (sqlStates.contains(value)) {
+      throw SqlScriptingErrors.duplicateConditionInHandlerDeclaration(CurrentOrigin.get, value)
+    }
+    sqlStates += value
+  }
+}
+
+/**
  * Logical operator for an error handler.
- * @param conditions Collection of error conditions handler is defined for. Possible values are:
- *                   Error Conditions, SQLSTATEs, NOT FOUND, SQLEXCEPTION.
+ * @param handlerTriggers Collection of different handlertriggers:
+ *                   sqlStates -> set of sqlStates that will trigger handler
+ *                   conditions -> set of conditions that will trigger handler
+ *                   sqlException -> if handler is triggered by SQLEXCEPTION
+ *                   notFound -> if handler is triggered by NotFound
  * @param body CompoundBody of the handler.
  * @param handlerType Type of the handler (CONTINUE or EXIT).
  */
 case class ErrorHandler(
-    conditions: Seq[String],
+    handlerTriggers: HandlerTriggers,
     body: CompoundBody,
     handlerType: HandlerType) extends CompoundPlanStatement {
   override def output: Seq[Attribute] = Seq.empty
@@ -345,6 +392,6 @@ case class ErrorHandler(
   override protected def withNewChildrenInternal(
       newChildren: IndexedSeq[LogicalPlan]): LogicalPlan = {
     assert(newChildren.length == 1)
-    ErrorHandler(conditions, newChildren(0).asInstanceOf[CompoundBody], handlerType)
+    ErrorHandler(handlerTriggers, newChildren(0).asInstanceOf[CompoundBody], handlerType)
   }
 }
