@@ -20,7 +20,6 @@ package org.apache.spark.sql.streaming
 import java.io.{BufferedWriter, FileWriter}
 import java.nio.file.{Files, Paths}
 import java.sql.Timestamp
-import java.time.Duration
 
 import org.scalatest.concurrent.Eventually.eventually
 import org.scalatest.concurrent.Futures.timeout
@@ -108,6 +107,8 @@ class ChainingOfOpsStatefulProcessor
 
 class TTLTestStatefulProcessor
   extends StatefulProcessor[String, (String, String), (String, String)] {
+  import java.time.Duration
+
   @transient protected var countState: ValueState[Int] = _
   @transient protected var ttlCountState: ValueState[Int] = _
   @transient protected var ttlListState: ListState[Int] = _
@@ -116,11 +117,11 @@ class TTLTestStatefulProcessor
       outputMode: OutputMode, timeMode: TimeMode): Unit = {
     countState = getHandle.getValueState[Int]("countState", Encoders.scalaInt, TTLConfig.NONE)
     ttlCountState = getHandle.getValueState[Int]("ttlCountState",
-      Encoders.scalaInt, TTLConfig(Duration.ofMillis(8000)))
+      Encoders.scalaInt, TTLConfig(Duration.ofMillis(1000)))
     ttlListState = getHandle.getListState[Int]("ttlListState",
-      Encoders.scalaInt, TTLConfig(Duration.ofMillis(8000)))
+      Encoders.scalaInt, TTLConfig(Duration.ofMillis(1000)))
     ttlMapState = getHandle.getMapState[String, Int]("ttlMapState",
-      Encoders.STRING, Encoders.scalaInt, TTLConfig(Duration.ofMillis(8000)))
+      Encoders.STRING, Encoders.scalaInt, TTLConfig(Duration.ofMillis(1000)))
   }
   override def handleInputRows(
       key: String,
@@ -157,10 +158,10 @@ class TTLTestStatefulProcessor
       ttlMapState.updateValue(key, ttlMapStateCount)
     }
     val output = List(
-      (s"count-$$key", count.toString),
-      (s"ttlCount-$$key", ttlCount.toString),
-      (s"ttlListState-$$key", ttlListStateCount.toString),
-      (s"ttlMapState-$$key", ttlMapStateCount.toString)
+      (s"count-$key", count.toString),
+      (s"ttlCount-$key", ttlCount.toString),
+      (s"ttlListState-$key", ttlListStateCount.toString),
+      (s"ttlMapState-$key", ttlMapStateCount.toString)
     )
     output.iterator
   }
@@ -345,6 +346,8 @@ class TransformWithStateConnectSuite extends QueryTest with RemoteSparkSession w
       val session: SparkSession = spark
       import session.implicits._
 
+
+      val exceptionMessageSignalQueryEnd = "Passed checks, ending the query"
       val checkResultFunc = (batchDF: Dataset[(String, String)], batchId: Long) => {
         if (batchId == 0) {
           val expectedDF = Seq(("count-0", "1"), ("ttlCount-0", "1"),
@@ -353,24 +356,23 @@ class TransformWithStateConnectSuite extends QueryTest with RemoteSparkSession w
             ("ttlListState-1", "1"), ("ttlMapState-1", "1")).toSet
 
           val realDf = batchDF.collect().toSet
-           assert(realDf == expectedDF,
-             s"BatchId: $${batchId}, RealDF: $${realDf}, ExpectedDF: $${expectedDF}")
+           assert(realDf == expectedDF)
+
         } else if (batchId == 1) {
           val expectedDF = Seq(("count-0", "2"), ("ttlCount-0", "1"),
             ("ttlListState-0", "1"), ("ttlMapState-0", "1"),
-            ("count-1", "2"), ("ttlCount-1", "2"),
-            ("ttlListState-1", "2"), ("ttlMapState-1", "2")).toSet
+            ("count-1", "2"), ("ttlCount-1", "1"),
+            ("ttlListState-1", "1"), ("ttlMapState-1", "1")).toSet
 
           val realDf = batchDF.collect().toSet
-           assert(realDf == expectedDF,
-             s"BatchId: $${batchId}, RealDF: $${realDf}, ExpectedDF: $${expectedDF}")
+          assert(realDf == expectedDF)
         } else {
-           spark.streams.active.foreach(_.stop())
+          throw new Exception(exceptionMessageSignalQueryEnd)
         }
 
-        // let key = 0 expires and update key = 1 in the second batch
         if (batchId == 0) {
-           Thread.sleep(8000)
+          // let ttl state expires
+          Thread.sleep(2000)
         }
       }
 
@@ -380,22 +382,22 @@ class TransformWithStateConnectSuite extends QueryTest with RemoteSparkSession w
         Thread.sleep(2000)
         prepareInputData(path + "/text-test4.txt", Seq("1", "0"), Seq(0, 0))
 
-        val q = buildTestDf(path, spark)
-          .as[(String, String)]
-          .groupByKey(x => x._1)
-          .transformWithState(
-            new TTLTestStatefulProcessor(),
-            TimeMode.ProcessingTime(),
-            OutputMode.Update())
-          .writeStream
-          .foreachBatch(checkResultFunc)
-          .outputMode("Update")
-          .start()
-
-        q.processAllAvailable()
-        eventually(timeout(30.seconds)) {
-          q.stop()
+        val e = intercept[Exception] {
+          val q = buildTestDf(path, spark)
+            .as[(String, String)]
+            .groupByKey(x => x._1)
+            .transformWithState(
+              new TTLTestStatefulProcessor(),
+              TimeMode.ProcessingTime(),
+              OutputMode.Update())
+            .writeStream
+            .foreachBatch(checkResultFunc)
+            .trigger(Trigger.AvailableNow())
+            .outputMode("Update")
+            .start()
+          q.processAllAvailable()
         }
+        assert(e.getMessage.contains(exceptionMessageSignalQueryEnd))
       }
     }
   }
