@@ -5072,7 +5072,7 @@ class StopWordsRemover(
         self._setDefault(
             stopWords=StopWordsRemover.loadDefaultStopWords("english"),
             caseSensitive=False,
-            locale=self._java_obj.getLocale(),
+            locale="en_US" if isinstance(self._java_obj, str) else self._java_obj.getLocale(),
         )
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
