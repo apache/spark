@@ -4971,7 +4971,7 @@ class StopWordsRemover(
     Notes
     -----
     - null values from input array are preserved unless adding null to stopWords explicitly.
-    - In Spark Connect Mode, the default value of parameter `locale` is always 'en_US'.
+    - In Spark Connect Mode, the default value of parameter `locale` is not set.
 
     Examples
     --------
@@ -5070,11 +5070,19 @@ class StopWordsRemover(
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.feature.StopWordsRemover", self.uid
         )
-        self._setDefault(
-            stopWords=StopWordsRemover.loadDefaultStopWords("english"),
-            caseSensitive=False,
-            locale="en_US" if isinstance(self._java_obj, str) else self._java_obj.getLocale(),
-        )
+        if isinstance(self._java_obj, str):
+            # Skip setting the default value of 'locale', which needs to invoke a JVM method.
+            # So if users don't explicitly set 'locale', then getLocale fails.
+            self._setDefault(
+                stopWords=StopWordsRemover.loadDefaultStopWords("english"),
+                caseSensitive=False,
+            )
+        else:
+            self._setDefault(
+                stopWords=StopWordsRemover.loadDefaultStopWords("english"),
+                caseSensitive=False,
+                locale=self._java_obj.getLocale(),
+            )
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
