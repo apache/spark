@@ -7143,7 +7143,7 @@ object functions {
    * @param targetType
    *   the target data type to cast into, in a DDL-formatted string.
    * @group variant_funcs
-   * @since 4.1.0
+   * @since 4.0.0
    */
   def variant_get(v: Column, path: Column, targetType: String): Column =
     Column.fn("variant_get", v, path, lit(targetType))
@@ -7177,7 +7177,7 @@ object functions {
    * @param targetType
    *   the target data type to cast into, in a DDL-formatted string.
    * @group variant_funcs
-   * @since 4.1.0
+   * @since 4.0.0
    */
   def try_variant_get(v: Column, path: Column, targetType: String): Column =
     Column.fn("try_variant_get", v, lit(path), lit(targetType))
