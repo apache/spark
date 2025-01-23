@@ -858,11 +858,12 @@ case class SchemaOfVariantAgg(
     extends TypedImperativeAggregate[DataType]
     with ExpectsInputTypes
     with QueryErrorsBase
-    with DefaultStringProducingExpression
     with UnaryLike[Expression] {
   def this(child: Expression) = this(child, 0, 0)
 
   override def inputTypes: Seq[AbstractDataType] = Seq(VariantType)
+
+  override def dataType: DataType = SQLConf.get.defaultStringType
 
   override def nullable: Boolean = false
 
