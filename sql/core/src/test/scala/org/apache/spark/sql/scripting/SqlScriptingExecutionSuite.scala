@@ -20,9 +20,10 @@ package org.apache.spark.sql.scripting
 import scala.collection.mutable.ListBuffer
 
 import org.apache.spark.SparkConf
-import org.apache.spark.sql.{QueryTest, Row}
+import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.logical.CompoundBody
+import org.apache.spark.sql.errors.DataTypeErrors.toSQLId
 import org.apache.spark.sql.exceptions.SqlScriptingException
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -264,6 +265,43 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
     verifySqlScriptResult(sqlScript, expected = expected)
   }
 
+  test("handler - chained handlers for different exceptions") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE OR REPLACE VARIABLE flag INT = -1;
+        |  l1: BEGIN
+        |    DECLARE EXIT HANDLER FOR UNRESOLVED_COLUMN.WITHOUT_SUGGESTION
+        |    BEGIN
+        |      SELECT flag;
+        |      SET VAR flag = 2;
+        |    END;
+        |    l2: BEGIN
+        |      DECLARE EXIT HANDLER FOR DIVIDE_BY_ZERO
+        |      BEGIN
+        |        SELECT flag;
+        |        SET VAR flag = 1;
+        |        select X; -- select non existing variable
+        |        SELECT 2;
+        |      END;
+        |      SELECT 5;
+        |      SELECT 1/0; -- divide by zero
+        |      SELECT 6;
+        |    END;
+        |  END;
+        |
+        |  SELECT flag;
+        |END
+        |""".stripMargin
+    val expected = Seq(
+      Seq(Row(5)),    // select
+      Seq(Row(-1)),   // select flag from handler in l2
+      Seq(Row(1)),   // select flag from handler in l1
+      Seq(Row(2))     // select flag from the outer body
+    )
+    verifySqlScriptResult(sqlScript, expected = expected)
+  }
+
   test("handler - double chained handlers") {
     val sqlScript =
       """
@@ -468,6 +506,26 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
       Seq(Row(2))     // select flag from the outer body
     )
     verifySqlScriptResult(sqlScript, expected = expected)
+  }
+
+  test("handler - no appropriate handler is defined") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE EXIT HANDLER FOR DIVIDE_BY_ZERO
+        |  BEGIN
+        |    SELECT 1; -- this will not execute
+        |  END;
+        |  SELECT flag;
+        |END
+        |""".stripMargin
+    checkError(
+      exception = intercept[AnalysisException] {
+        verifySqlScriptResult(sqlScript, Seq.empty)
+      },
+      condition = "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
+      parameters = Map("objectName" -> toSQLId("flag")),
+      queryContext = Array(ExpectedContext("", "", 112, 115, "flag")))
   }
 
   test("invalid sqlState in handler declaration") {
