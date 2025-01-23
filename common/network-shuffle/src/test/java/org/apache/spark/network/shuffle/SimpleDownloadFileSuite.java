@@ -28,7 +28,7 @@ import org.junit.jupiter.api.Assertions;
 
 public class SimpleDownloadFileSuite {
   @Test
-  public void testChanenlIsClosedAfterCloseAndRead() throws IOException {
+  public void testChannelIsClosedAfterCloseAndRead() throws IOException {
     File tempFile = File.createTempFile("testChannelIsClosed", ".tmp");
     tempFile.deleteOnExit();
     TransportConf conf = new TransportConf("test", MapConfigProvider.EMPTY);
