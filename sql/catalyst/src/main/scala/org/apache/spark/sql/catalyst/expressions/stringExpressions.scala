@@ -3724,11 +3724,9 @@ case class Luhncheck(input: Expression) extends RuntimeReplaceable with Implicit
  * A function that prepends a backslash to each instance of single quote
  * in the given string and encloses the result by single quotes.
  */
+// scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = """
-    _FUNC_(str) - Returns `str` enclosed by single quotes and
-    each instance of single quote in it is preceded by a backslash.
-  """,
+  usage = "_FUNC_(str) - Returns `str` enclosed by single quotes and each instance of single quote in it is preceded by a backslash.",
   examples = """
     Examples:
       > SELECT _FUNC_('Don\'t');
@@ -3736,11 +3734,21 @@ case class Luhncheck(input: Expression) extends RuntimeReplaceable with Implicit
   """,
   since = "4.0.0",
   group = "string_funcs")
-case class Quote(input: Expression) extends RuntimeReplaceable with ImplicitCastInputTypes
-  with UnaryLike[Expression] {
+// scalastyle:on line.size.limit
+case class Quote(input: Expression)
+  extends UnaryExpression
+  with RuntimeReplaceable
+  with ImplicitCastInputTypes
+  with DefaultStringProducingExpression {
+
   override def nullIntolerant: Boolean = true
 
-  override lazy val replacement: Expression = Invoke(input, "quote", input.dataType)
+  override lazy val replacement: Expression = StaticInvoke(
+    classOf[ExpressionImplUtils],
+    dataType,
+    "quote",
+    Seq(input),
+    inputTypes)
 
   override def inputTypes: Seq[AbstractDataType] = {
     Seq(StringTypeWithCollation(supportsTrimCollation = true))
