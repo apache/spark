@@ -67,7 +67,7 @@ class HashAggregateCodegenInterruptionSuite extends QueryTest with SharedSparkSe
         // The dataset is set to 100k as we are monitoring interruptions for every 1k rows. Two
         // tasks (50 seconds each, totaling 100k / 2) exceed `spark.task.reaper.killTimeout` (10s),
         // which should provide a proper test for the interruption behavior.
-        val slowDF = spark.range(1, 100000).rdd.mapPartitions { iter =>
+        val slowDF = spark.range(1, 100000, 1, 2).rdd.mapPartitions { iter =>
           new Iterator[Long] {
             var cnt = 0
             override def hasNext: Boolean = iter.hasNext
