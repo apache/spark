@@ -320,8 +320,6 @@ case class VariantGet(
       val dataTypeArg = ctx.addReferenceObj("dataType", dataType)
       val castArgsArg = ctx.addReferenceObj("castArgs", castArgs)
       val parsedPathVar = ctx.freshName("parsedPath")
-      val optionalParsedPathType =
-        CodeGenerator.typeName(classOf[Option[Array[VariantPathSegment]]])
       val parsedPathType = CodeGenerator.typeName(classOf[Array[VariantPathSegment]])
       val code = code"""
         ${childCode.code}
