@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 
+import os
 import tempfile
 import unittest
 
@@ -84,13 +85,6 @@ class PipelineTestsMixin:
         pipeline = Pipeline(stages=[assembler, scaler, lr])
         self.assertEqual(len(pipeline.getStages()), 3)
 
-        # Pipeline save & load
-        with tempfile.TemporaryDirectory(prefix="classification_pipeline") as d:
-            pipeline.write().overwrite().save(d)
-            pipeline2 = Pipeline.load(d)
-            self.assertEqual(str(pipeline), str(pipeline2))
-            self.assertEqual(str(pipeline.getStages()), str(pipeline2.getStages()))
-
         model = pipeline.fit(df)
         self.assertEqual(len(model.stages), 3)
         self.assertIsInstance(model.stages[0], VectorAssembler)
@@ -114,10 +108,17 @@ class PipelineTestsMixin:
         )
         self.assertEqual(output.count(), 2)
 
-        # PipelineModel save & load
-        with tempfile.TemporaryDirectory(prefix="classification_pipeline_model") as d:
-            model.write().overwrite().save(d)
-            model2 = PipelineModel.load(d)
+        # save & load
+        with tempfile.TemporaryDirectory(prefix="classification_pipeline") as d:
+            path1 = os.path.join(d, "pipeline")
+            pipeline.write().save(path1)
+            pipeline2 = Pipeline.load(path1)
+            self.assertEqual(str(pipeline), str(pipeline2))
+            self.assertEqual(str(pipeline.getStages()), str(pipeline2.getStages()))
+
+            path2 = os.path.join(d, "pipeline_model")
+            model.write().save(path2)
+            model2 = PipelineModel.load(path2)
             self.assertEqual(str(model), str(model2))
             self.assertEqual(str(model.stages), str(model2.stages))
 
@@ -163,9 +164,16 @@ class PipelineTestsMixin:
         self.assertEqual(output.count(), 2)
 
         # PipelineModel save & load
-        with tempfile.TemporaryDirectory(prefix="clustering_pipeline_model") as d:
-            model.write().overwrite().save(d)
-            model2 = PipelineModel.load(d)
+        with tempfile.TemporaryDirectory(prefix="clustering_pipeline") as d:
+            path1 = os.path.join(d, "pipeline")
+            pipeline.write().save(path1)
+            pipeline2 = Pipeline.load(path1)
+            self.assertEqual(str(pipeline), str(pipeline2))
+            self.assertEqual(str(pipeline.getStages()), str(pipeline2.getStages()))
+
+            path2 = os.path.join(d, "pipeline_model")
+            model.write().save(path2)
+            model2 = PipelineModel.load(path2)
             self.assertEqual(str(model), str(model2))
             self.assertEqual(str(model.stages), str(model2.stages))
 
