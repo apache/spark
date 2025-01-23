@@ -31,7 +31,7 @@ import scala.reflect.ClassTag
 import org.apache.commons.io.{FilenameUtils, FileUtils}
 import org.apache.hadoop.fs.{LocalFileSystem, Path => FSPath}
 
-import org.apache.spark.{JobArtifactSet, JobArtifactState, SparkContext, SparkEnv, SparkException, SparkUnsupportedOperationException}
+import org.apache.spark.{JobArtifactSet, JobArtifactState, SparkContext, SparkEnv, SparkException, SparkRuntimeException, SparkUnsupportedOperationException}
 import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.internal.config.{CONNECT_SCALA_UDF_STUB_PREFIXES, EXECUTOR_USER_CLASS_PATH_FIRST}
 import org.apache.spark.sql.{Artifact, SparkSession}
@@ -216,8 +216,10 @@ class ArtifactManager(session: SparkSession) extends AutoCloseable with Logging 
           return
         }
 
-        throw new RuntimeException(s"Duplicate Artifact: $normalizedRemoteRelativePath. " +
-            "Artifacts cannot be overwritten.")
+        throw new SparkRuntimeException(
+          "ARTIFACT_ALREADY_EXISTS",
+          Map("normalizedRemoteRelativePath" -> normalizedRemoteRelativePath.toString)
+        )
       }
       transferFile(serverLocalStagingPath, target, deleteSource = deleteStagedFile)
 

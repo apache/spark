@@ -103,7 +103,7 @@ final class DataFrameWriterImpl[T] private[sql] (ds: Dataset[T]) extends DataFra
     // Cannot both be set
     require(!(builder.hasPath && builder.hasTable))
 
-    builder.setMode(mode match {
+    builder.setMode(curmode match {
       case SaveMode.Append => proto.WriteOperation.SaveMode.SAVE_MODE_APPEND
       case SaveMode.Overwrite => proto.WriteOperation.SaveMode.SAVE_MODE_OVERWRITE
       case SaveMode.Ignore => proto.WriteOperation.SaveMode.SAVE_MODE_IGNORE

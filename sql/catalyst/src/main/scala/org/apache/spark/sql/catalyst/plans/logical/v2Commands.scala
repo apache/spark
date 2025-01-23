@@ -829,7 +829,7 @@ object MergeIntoTable {
 sealed abstract class MergeAction extends Expression with Unevaluable {
   def condition: Option[Expression]
   override def nullable: Boolean = false
-  override def dataType: DataType = throw new UnresolvedException("nullable")
+  override def dataType: DataType = throw new UnresolvedException("dataType")
   override def children: Seq[Expression] = condition.toSeq
 }
 
