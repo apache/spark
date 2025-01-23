@@ -49,10 +49,6 @@ object ResolveWithCTE extends Rule[LogicalPlan] {
       cteDefMap: mutable.HashMap[Long, CTERelationDef]): LogicalPlan = {
     plan.resolveOperatorsDownWithPruning(_.containsAllPatterns(CTE)) {
       case withCTE @ WithCTE(_, cteDefs) =>
-        // Check for self-reference in subqueries and throw an error if that is the case.
-        // We don't want to resolve any such reference, therefore we need to perform this check
-        // here.
-        cteDefs.foreach(checkForSelfReferenceInSubquery)
         val newCTEDefs = cteDefs.map {
           // cteDef in the first case is either recursive and all the recursive CTERelationRefs
           // are already substituted to UnionLoopRef in the previous pass, or it is not recursive
@@ -64,6 +60,8 @@ object ResolveWithCTE extends Rule[LogicalPlan] {
             }
             cteDef
           case cteDef =>
+            // Multiple self-references are not allowed within one cteDef.
+            checkNumberOfSelfReferences(cteDef)
             cteDef.child match {
               // If it is a supported recursive CTE query pattern (4 so far), extract the anchor and
               // recursive plans from the Union and rewrite Union with UnionLoop. The recursive CTE
@@ -192,15 +190,30 @@ object ResolveWithCTE extends Rule[LogicalPlan] {
    * Checks if there is any self-reference within subqueries and throws an error
    * if that is the case.
    */
-  private def checkForSelfReferenceInSubquery(cteDef: CTERelationDef): Unit = {
-    cteDef.subqueriesAll.foreach { subquery =>
+  def checkForSelfReferenceInSubquery(plan: LogicalPlan): Unit = {
+    plan.subqueriesAll.foreach { subquery =>
       subquery.foreach {
-        case CTERelationRef(cteDef.id, _, _, _, _, true) =>
-          cteDef.failAnalysis(
+        case r: CTERelationRef if r.recursive =>
+          throw new AnalysisException(
             errorClass = "INVALID_RECURSIVE_REFERENCE.SUBQUERY",
             messageParameters = Map.empty)
         case _ =>
       }
+    }
+  }
+
+  /**
+   * Counts number of self-references in a recursive CTE definition and throws an error
+   * if that number is bigger than 1.
+   */
+  private def checkNumberOfSelfReferences(cteDef: CTERelationDef): Unit = {
+    val numOfSelfRef = cteDef.collectWithSubqueries {
+      case ref: CTERelationRef if ref.cteId == cteDef.id => ref
+    }.length
+    if (numOfSelfRef > 1) {
+      cteDef.failAnalysis(
+        errorClass = "INVALID_RECURSIVE_REFERENCE.NUMBER",
+        messageParameters = Map.empty)
     }
   }
 
