@@ -50,7 +50,7 @@ trait AttributeNameParser {
           if (tmp.nonEmpty) throw e
           inBacktick = true
         } else if (char == '.') {
-          if (name(i - 1) == '.' || i == name.length - 1) throw e
+          if (i == 0 || name(i - 1) == '.' || i == name.length - 1) throw e
           nameParts += tmp.mkString
           tmp.clear()
         } else {
