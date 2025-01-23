@@ -41,10 +41,12 @@ object NormalizePlan extends PredicateHelper {
   def normalizeExpressions(plan: LogicalPlan): LogicalPlan = {
     val withNormalizedRuntimeReplaceable = normalizeRuntimeReplaceable(plan)
     withNormalizedRuntimeReplaceable transformAllExpressions {
-      case c: CommonExpressionDef =>
-        c.copy(id = new CommonExpressionId(id = 0))
-      case c: CommonExpressionRef =>
-        c.copy(id = new CommonExpressionId(id = 0))
+      case commonExpressionDef: CommonExpressionDef =>
+        commonExpressionDef.copy(id = new CommonExpressionId(id = 0))
+      case commonExpressionRef: CommonExpressionRef =>
+        commonExpressionRef.copy(id = new CommonExpressionId(id = 0))
+      case expressionWithRandomSeed: ExpressionWithRandomSeed =>
+        expressionWithRandomSeed.withNewSeed(0)
     }
   }
 
