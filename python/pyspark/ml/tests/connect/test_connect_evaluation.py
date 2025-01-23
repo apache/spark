@@ -40,7 +40,11 @@ if should_test_connect:
 
         @unittest.skip("SPARK-50913: Flaky with RetriesExceeded")
         def test_binary_classifier_evaluator(self):
-            self._test_binary_classifier_evaluator()
+            self.test_binary_classifier_evaluator()
+
+        @unittest.skip("SPARK-50956: Flaky with RetriesExceeded")
+        def test_multiclass_classifier_evaluator(self):
+            self.test_multiclass_classifier_evaluator()
 
 
 if __name__ == "__main__":
