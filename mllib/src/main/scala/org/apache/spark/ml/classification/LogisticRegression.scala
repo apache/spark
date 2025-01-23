@@ -1078,7 +1078,7 @@ class LogisticRegressionModel private[spark] (
 
   // For ml connect only
   @Since("4.0.0")
-  private[ml] def this() = this(Identifiable.randomUID("logreg"), Vectors.zeros(0), 0)
+  private[ml] def this() = this(Identifiable.randomUID("logreg"), Vectors.empty, 0)
 
   /**
    * A vector of model coefficients for "binomial" logistic regression. If this model was trained
