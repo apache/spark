@@ -2367,9 +2367,25 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     }
     checkError(
       exception = exception,
-      condition = "INVALID_CONDITION_DECLARATION",
+      condition = "INVALID_ERROR_CONDITION_DECLARATION.ONLY_AT_BEGINNING",
       parameters = Map("conditionName" -> "`test_condition`"))
     assert(exception.origin.line.contains(2))
+  }
+
+  test("declare qualified condition") {
+    val sqlScriptText =
+      """
+        |BEGIN
+        |  DECLARE TEST.CONDITION CONDITION FOR SQLSTATE '12345';
+        |END""".stripMargin
+    val exception = intercept[SqlScriptingException] {
+      parsePlan(sqlScriptText)
+    }
+    checkError(
+      exception = exception,
+      condition = "INVALID_ERROR_CONDITION_DECLARATION.QUALIFIED_CONDITION_NAME",
+      parameters = Map("conditionName" -> "TEST.CONDITION"))
+    assert(exception.origin.line.contains(3))
   }
 
   test("declare handler in wrong place") {

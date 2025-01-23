@@ -144,12 +144,22 @@ private[sql] object SqlScriptingErrors {
       messageParameters = Map("labelName" -> toSQLStmt(labelName)))
   }
 
+  def conditionCannotBeQualified(
+      origin: Origin,
+      conditionName: String): Throwable = {
+    new SqlScriptingException(
+      origin = origin,
+      errorClass = "INVALID_ERROR_CONDITION_DECLARATION.QUALIFIED_CONDITION_NAME",
+      cause = null,
+      messageParameters = Map("conditionName" -> toSQLStmt(conditionName)))
+  }
+
   def conditionDeclarationOnlyAtBeginning(
       origin: Origin,
       conditionName: String): Throwable = {
     new SqlScriptingException(
       origin = origin,
-      errorClass = "INVALID_CONDITION_DECLARATION",
+      errorClass = "INVALID_ERROR_CONDITION_DECLARATION.ONLY_AT_BEGINNING",
       cause = null,
       messageParameters = Map("conditionName" -> toSQLId(conditionName)))
   }

@@ -194,6 +194,12 @@ class AstBuilder extends DataTypeAstBuilder
   private def visitDeclareConditionStatementImpl(
       ctx: DeclareConditionStatementContext): ErrorCondition = {
     val conditionName = ctx.multipartIdentifier().getText
+
+    if (ctx.multipartIdentifier().parts.size() > 1) {
+      throw SqlScriptingErrors
+        .conditionCannotBeQualified(CurrentOrigin.get, conditionName)
+    }
+
     val sqlState = Option(ctx.sqlStateValue())
       .map(_.getText.replace("'", "")).getOrElse("45000")
 

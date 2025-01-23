@@ -2285,10 +2285,22 @@
     ],
     "sqlState" : "42000"
   },
-  "INVALID_CONDITION_DECLARATION" : {
+  "INVALID_ERROR_CONDITION_DECLARATION" : {
     "message" : [
-      "Invalid condition declaration. Condition <conditionName> can only be declared at the beginning of the compound."
+      "Invalid condition declaration."
     ],
+    "subClass" : {
+      "ONLY_AT_BEGINNING" : {
+        "message" : [
+          "Condition <conditionName> can only be declared at the beginning of the compound."
+        ]
+      },
+      "QUALIFIED_CONDITION_NAME" : {
+        "message" : [
+          "Condition <conditionName> cannot be qualified."
+        ]
+      }
+    },
     "sqlState" : "42K0R"
   },
   "INVALID_CONF_VALUE" : {
