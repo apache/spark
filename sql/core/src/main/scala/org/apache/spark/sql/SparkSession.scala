@@ -446,7 +446,7 @@ class SparkSession private(
       script: CompoundBody,
       args: Map[String, Expression] = Map.empty): DataFrame = {
     val sse = new SqlScriptingExecution(script, this, args)
-    sse.runWithContext {
+    sse.withVariableManager {
       var result: Option[Seq[Row]] = None
 
       // We must execute returned df before calling sse.getNextResult again because sse.hasNext

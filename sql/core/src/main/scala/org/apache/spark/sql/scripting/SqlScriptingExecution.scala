@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{CommandResult, CompoundBody}
  * SQL scripting executor - executes script and returns result statements.
  * This supports returning multiple result statements from a single script.
  * The caller of the SqlScriptingExecution API must wrap the interpretation and execution of
- * statements with the [[runWithContext]] method, and adhere to the contract of executing
+ * statements with the [[withVariableManager]] method, and adhere to the contract of executing
  * the returned statement before continuing iteration. Executing the statement needs to be done
  * inside withErrorHandling block.
  *
@@ -55,14 +55,14 @@ class SqlScriptingExecution(
   }
 
   private val variableManager = new SqlScriptingVariableManager(context)
-  private val handle = SqlScriptingVariableManager.create(variableManager)
+  private val variableManagerHandle = SqlScriptingVariableManager.create(variableManager)
 
   /**
    * Handles scripting context creation/access/deletion. Calls to execution API must be wrapped
    * with this method.
    */
-  def runWithContext[R](f: => R): R = {
-    handle.runWith(f)
+  def withVariableManager[R](f: => R): R = {
+    variableManagerHandle.runWith(f)
   }
 
   /** Helper method to iterate get next statements from the first available frame. */

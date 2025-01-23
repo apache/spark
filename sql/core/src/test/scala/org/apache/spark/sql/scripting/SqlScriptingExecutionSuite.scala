@@ -47,7 +47,7 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
     val compoundBody = spark.sessionState.sqlParser.parsePlan(sqlText).asInstanceOf[CompoundBody]
 
     val sse = new SqlScriptingExecution(compoundBody, spark, args)
-    sse.runWithContext {
+    sse.withVariableManager {
       val result: ListBuffer[Array[Row]] = ListBuffer.empty
 
       var df = sse.getNextResult
