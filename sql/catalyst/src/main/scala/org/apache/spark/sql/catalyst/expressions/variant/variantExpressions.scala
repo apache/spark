@@ -19,8 +19,6 @@ package org.apache.spark.sql.catalyst.expressions.variant
 
 import java.time.ZoneId
 
-import scala.util.parsing.combinator.RegexParsers
-
 import org.apache.spark.SparkRuntimeException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, GeneratorBuilder, TypeCheckResult}
@@ -32,7 +30,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.json.JsonInferSchema
 import org.apache.spark.sql.catalyst.plans.logical.{FunctionSignature, InputParameter}
-import org.apache.spark.sql.catalyst.trees.TreePattern.{TreePattern, VARIANT_GET}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{RUNTIME_REPLACEABLE, TreePattern, VARIANT_GET}
 import org.apache.spark.sql.catalyst.trees.UnaryLike
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData, QuotingUtils}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
@@ -192,36 +190,6 @@ case class ObjectExtraction(key: String) extends VariantPathSegment
 
 case class ArrayExtraction(index: Int) extends VariantPathSegment
 
-object VariantPathParser extends RegexParsers {
-  private def root: Parser[Char] = '$'
-
-  // Parse index segment like `[123]`.
-  private def index: Parser[VariantPathSegment] =
-    for {
-      index <- '[' ~> "\\d+".r <~ ']'
-    } yield {
-      ArrayExtraction(index.toInt)
-    }
-
-  // Parse key segment like `.name`, `['name']`, or `["name"]`.
-  private def key: Parser[VariantPathSegment] =
-    for {
-      key <- '.' ~> "[^\\.\\[]+".r | "['" ~> "[^\\'\\?]+".r <~ "']" |
-        "[\"" ~> "[^\\\"\\?]+".r <~ "\"]"
-    } yield {
-      ObjectExtraction(key)
-    }
-
-  private val parser: Parser[List[VariantPathSegment]] = phrase(root ~> rep(key | index))
-
-  def parse(str: String): Option[Array[VariantPathSegment]] = {
-    this.parseAll(parser, str) match {
-      case Success(result, _) => Some(result.toArray)
-      case _ => None
-    }
-  }
-}
-
 /**
  * The implementation for `variant_get` and `try_variant_get` expressions. Extracts a sub-variant
  * value according to a path and cast it into a concrete data type.
@@ -239,25 +207,20 @@ case class VariantGet(
     failOnError: Boolean,
     timeZoneId: Option[String] = None)
     extends BinaryExpression
-    with TimeZoneAwareExpression
+    with RuntimeReplaceable
     with ExpectsInputTypes
+    with TimeZoneAwareExpression
     with QueryErrorsBase {
   override def checkInputDataTypes(): TypeCheckResult = {
     val check = super.checkInputDataTypes()
     if (check.isFailure) {
       check
-    } else if (!path.foldable) {
-      DataTypeMismatch(
-        errorSubClass = "NON_FOLDABLE_INPUT",
-        messageParameters = Map(
-          "inputName" -> toSQLId("path"),
-          "inputType" -> toSQLType(path.dataType),
-          "inputExpr" -> toSQLExpr(path)))
     } else if (!VariantGet.checkDataType(targetType)) {
       DataTypeMismatch(
         errorSubClass = "CAST_WITHOUT_SUGGESTION",
-        messageParameters =
-          Map("srcType" -> toSQLType(VariantType), "targetType" -> toSQLType(targetType)))
+        messageParameters = Map(
+          "srcType" -> toSQLType(VariantType),
+          "targetType" -> toSQLType(targetType)))
     } else {
       TypeCheckResult.TypeCheckSuccess
     }
@@ -265,14 +228,8 @@ case class VariantGet(
 
   override lazy val dataType: DataType = targetType.asNullable
 
-  @transient private lazy val parsedPath = {
-    val pathValue = path.eval().toString
-    VariantPathParser.parse(pathValue).getOrElse {
-      throw QueryExecutionErrors.invalidVariantGetPath(pathValue, prettyName)
-    }
-  }
-
-  final override def nodePatternsInternal(): Seq[TreePattern] = Seq(VARIANT_GET)
+  final override def nodePatternsInternal(): Seq[TreePattern] =
+    Seq(RUNTIME_REPLACEABLE, VARIANT_GET)
 
   override def inputTypes: Seq[AbstractDataType] =
     Seq(VariantType, StringTypeWithCollation(supportsTrimCollation = true))
@@ -282,41 +239,27 @@ case class VariantGet(
   override def nullable: Boolean = true
   override def nullIntolerant: Boolean = true
 
-  private lazy val castArgs = VariantCastArgs(
-    failOnError,
-    timeZoneId,
-    zoneId)
-
-  protected override def nullSafeEval(input: Any, path: Any): Any = {
-    VariantGet.variantGet(input.asInstanceOf[VariantVal], parsedPath, dataType, castArgs)
-  }
-
-  protected override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val childCode = child.genCode(ctx)
-    val tmp = ctx.freshVariable("tmp", classOf[Object])
-    val parsedPathArg = ctx.addReferenceObj("parsedPath", parsedPath)
-    val dataTypeArg = ctx.addReferenceObj("dataType", dataType)
-    val castArgsArg = ctx.addReferenceObj("castArgs", castArgs)
-    val code = code"""
-      ${childCode.code}
-      boolean ${ev.isNull} = ${childCode.isNull};
-      ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
-      if (!${ev.isNull}) {
-        Object $tmp = org.apache.spark.sql.catalyst.expressions.variant.VariantGet.variantGet(
-          ${childCode.value}, $parsedPathArg, $dataTypeArg, $castArgsArg);
-        if ($tmp == null) {
-          ${ev.isNull} = true;
-        } else {
-          ${ev.value} = (${CodeGenerator.boxedType(dataType)})$tmp;
-        }
-      }
-    """
-    ev.copy(code = code)
-  }
+  private lazy val castArgs = VariantCastArgs(failOnError, timeZoneId, zoneId)
 
   override def left: Expression = child
 
   override def right: Expression = path
+
+  @transient
+  private lazy val dataTypeObjectType = ObjectType(classOf[DataType])
+  @transient
+  private lazy val variantCastArgsObjectType = ObjectType(classOf[VariantCastArgs])
+
+  override def replacement: Expression = {
+    val parsedPath = ToVariantPathSegmentArray(path, prettyName)
+    StaticInvoke(
+      classOf[org.apache.spark.sql.catalyst.expressions.variant.VariantGet],
+      dataType,
+      "variantGet",
+      Seq(child, parsedPath, Literal(dataType, dataTypeObjectType),
+        Literal(castArgs, variantCastArgsObjectType)),
+      Seq(child.dataType, parsedPath.dataType, dataTypeObjectType, variantCastArgsObjectType))
+  }
 
   override protected def withNewChildrenInternal(
       newChild: Expression,

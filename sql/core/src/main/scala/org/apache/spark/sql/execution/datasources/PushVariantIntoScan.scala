@@ -26,10 +26,10 @@ import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan, Project, Subquery}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns
-import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
 // A metadata class of a struct field. All struct fields in a struct must either all have this
 // metadata, or all don't have it.
@@ -55,10 +55,8 @@ case class VariantMetadata(
     ).build()
 
   def parsedPath(): Array[VariantPathSegment] = {
-    VariantPathParser.parse(path).getOrElse {
-      val name = if (failOnError) "variant_get" else "try_variant_get"
-      throw QueryExecutionErrors.invalidVariantGetPath(path, name)
-    }
+    val name = if (failOnError) "variant_get" else "try_variant_get"
+    VariantPathParser.parse(UTF8String.fromString(path), UTF8String.fromString(name))
   }
 }
 
