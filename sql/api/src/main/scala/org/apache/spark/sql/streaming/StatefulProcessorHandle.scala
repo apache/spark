@@ -18,14 +18,13 @@ package org.apache.spark.sql.streaming
 
 import java.io.Serializable
 
-import org.apache.spark.annotation.{Evolving, Experimental}
+import org.apache.spark.annotation.Evolving
 import org.apache.spark.sql.Encoder
 
 /**
  * Represents the operation handle provided to the stateful processor used in the arbitrary state
  * API v2.
  */
-@Experimental
 @Evolving
 trait StatefulProcessorHandle extends Serializable {
 

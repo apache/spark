@@ -19,12 +19,11 @@ package org.apache.spark.sql.streaming
 
 import java.io.Serializable
 
-import org.apache.spark.annotation.{Evolving, Experimental}
+import org.apache.spark.annotation.Evolving
 
 /**
  * Class used to provide access to expired timer's expiry time.
  */
-@Experimental
 @Evolving
 trait ExpiredTimerInfo extends Serializable {
 

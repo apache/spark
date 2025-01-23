@@ -19,7 +19,7 @@ package org.apache.spark.sql.streaming
 
 import java.io.Serializable
 
-import org.apache.spark.annotation.{Evolving, Experimental}
+import org.apache.spark.annotation.Evolving
 import org.apache.spark.sql.api.EncoderImplicits
 import org.apache.spark.sql.errors.ExecutionErrors
 
@@ -30,7 +30,6 @@ import org.apache.spark.sql.errors.ExecutionErrors
  * Users can also explicitly use `import implicits._` to access the EncoderImplicits and use the
  * state variable APIs relying on implicit encoders.
  */
-@Experimental
 @Evolving
 abstract class StatefulProcessor[K, I, O] extends Serializable {
 
@@ -123,7 +122,6 @@ abstract class StatefulProcessor[K, I, O] extends Serializable {
  * initial state to be initialized in the first batch. This can be used for starting a new
  * streaming query with existing state from a previous streaming query.
  */
-@Experimental
 @Evolving
 abstract class StatefulProcessorWithInitialState[K, I, O, S] extends StatefulProcessor[K, I, O] {
 

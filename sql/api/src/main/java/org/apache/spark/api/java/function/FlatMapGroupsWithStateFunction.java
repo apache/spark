@@ -32,7 +32,6 @@ import org.apache.spark.sql.streaming.GroupState;
  * org.apache.spark.sql.Encoder, org.apache.spark.sql.Encoder)}
  * @since 2.1.1
  */
-@Experimental
 @Evolving
 public interface FlatMapGroupsWithStateFunction<K, V, S, R> extends Serializable {
   Iterator<R> call(K key, Iterator<V> values, GroupState<S> state) throws Exception;
