@@ -366,7 +366,7 @@ class ClassificationTestsMixin:
         self.assertEqual(summary2.predictions.columns, expected_cols)
 
         # Model save & load
-        with tempfile.TemporaryDirectory(prefix="binary_random_forest") as d:
+        with tempfile.TemporaryDirectory(prefix="linear_svc") as d:
             svc.write().overwrite().save(d)
             svc2 = LinearSVC.load(d)
             self.assertEqual(str(svc), str(svc2))
