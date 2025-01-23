@@ -1218,14 +1218,15 @@ class DDLParserSuite extends AnalysisTest {
   test("alter table: update column type using ALTER") {
     comparePlans(
       parsePlan("ALTER TABLE table_name ALTER COLUMN a.b.c TYPE bigint"),
-      AlterColumn(
+      AlterColumns(
         UnresolvedTable(Seq("table_name"), "ALTER TABLE ... ALTER COLUMN"),
-        UnresolvedFieldName(Seq("a", "b", "c")),
-        Some(LongType),
-        None,
-        None,
-        None,
-        None))
+        Seq(AlterColumnSpec(
+          UnresolvedFieldName(Seq("a", "b", "c")),
+          Some(LongType),
+          None,
+          None,
+          None,
+          None))))
   }
 
   test("alter table: update column type invalid type") {
@@ -1244,40 +1245,43 @@ class DDLParserSuite extends AnalysisTest {
   test("alter table: update column type") {
     comparePlans(
       parsePlan("ALTER TABLE table_name CHANGE COLUMN a.b.c TYPE bigint"),
-      AlterColumn(
+      AlterColumns(
         UnresolvedTable(Seq("table_name"), "ALTER TABLE ... CHANGE COLUMN"),
-        UnresolvedFieldName(Seq("a", "b", "c")),
-        Some(LongType),
-        None,
-        None,
-        None,
-        None))
+        Seq(AlterColumnSpec(
+          UnresolvedFieldName(Seq("a", "b", "c")),
+          Some(LongType),
+          None,
+          None,
+          None,
+          None))))
   }
 
   test("alter table: update column comment") {
     comparePlans(
       parsePlan("ALTER TABLE table_name CHANGE COLUMN a.b.c COMMENT 'new comment'"),
-      AlterColumn(
+      AlterColumns(
         UnresolvedTable(Seq("table_name"), "ALTER TABLE ... CHANGE COLUMN"),
-        UnresolvedFieldName(Seq("a", "b", "c")),
-        None,
-        None,
-        Some("new comment"),
-        None,
-        None))
+        Seq(AlterColumnSpec(
+          UnresolvedFieldName(Seq("a", "b", "c")),
+          None,
+          None,
+          Some("new comment"),
+          None,
+          None))))
   }
 
   test("alter table: update column position") {
     comparePlans(
       parsePlan("ALTER TABLE table_name CHANGE COLUMN a.b.c FIRST"),
-      AlterColumn(
+      AlterColumns(
         UnresolvedTable(Seq("table_name"), "ALTER TABLE ... CHANGE COLUMN"),
-        UnresolvedFieldName(Seq("a", "b", "c")),
-        None,
-        None,
-        None,
-        Some(UnresolvedFieldPosition(first())),
-        None))
+        Seq(AlterColumnSpec(
+          UnresolvedFieldName(Seq("a", "b", "c")),
+          None,
+          None,
+          None,
+          Some(UnresolvedFieldPosition(first())),
+          None))))
   }
 
   test("alter table: multiple property changes are not allowed") {
@@ -1303,25 +1307,68 @@ class DDLParserSuite extends AnalysisTest {
   test("alter table: SET/DROP NOT NULL") {
     comparePlans(
       parsePlan("ALTER TABLE table_name ALTER COLUMN a.b.c SET NOT NULL"),
-      AlterColumn(
+      AlterColumns(
         UnresolvedTable(Seq("table_name"), "ALTER TABLE ... ALTER COLUMN"),
-        UnresolvedFieldName(Seq("a", "b", "c")),
-        None,
-        Some(false),
-        None,
-        None,
-        None))
+        Seq(AlterColumnSpec(
+          UnresolvedFieldName(Seq("a", "b", "c")),
+          None,
+          Some(false),
+          None,
+          None,
+          None))))
 
     comparePlans(
       parsePlan("ALTER TABLE table_name ALTER COLUMN a.b.c DROP NOT NULL"),
-      AlterColumn(
+      AlterColumns(
         UnresolvedTable(Seq("table_name"), "ALTER TABLE ... ALTER COLUMN"),
-        UnresolvedFieldName(Seq("a", "b", "c")),
-        None,
-        Some(true),
-        None,
-        None,
-        None))
+        Seq(AlterColumnSpec(
+          UnresolvedFieldName(Seq("a", "b", "c")),
+          None,
+          Some(true),
+          None,
+          None,
+          None))))
+  }
+
+  test("alter table: bulk alter column") {
+    comparePlans(
+      parsePlan(
+        """ALTER TABLE table_name ALTER COLUMN
+          | a.b.c SET NOT NULL,
+          | d.e.f COMMENT 'new comment',
+          | x TYPE INT,
+          | y FIRST""".stripMargin),
+      AlterColumns(
+        UnresolvedTable(Seq("table_name"), "ALTER TABLE ... ALTER COLUMN"),
+        Seq(
+          AlterColumnSpec(
+            UnresolvedFieldName(Seq("a", "b", "c")),
+            None,
+            Some(false),
+            None,
+            None,
+            None),
+          AlterColumnSpec(
+            UnresolvedFieldName(Seq("d", "e", "f")),
+            None,
+            None,
+            Some("new comment"),
+            None,
+            None),
+          AlterColumnSpec(
+            UnresolvedFieldName(Seq("x")),
+            Some(IntegerType),
+            None,
+            None,
+            None,
+            None),
+          AlterColumnSpec(
+            UnresolvedFieldName(Seq("y")),
+            None,
+            None,
+            None,
+            Some(UnresolvedFieldPosition(first())),
+            None))))
   }
 
   test("alter table: hive style change column") {
@@ -1331,36 +1378,39 @@ class DDLParserSuite extends AnalysisTest {
 
     comparePlans(
       parsePlan(sql1),
-      AlterColumn(
+      AlterColumns(
         UnresolvedTable(Seq("table_name"), "ALTER TABLE ... CHANGE COLUMN"),
-        UnresolvedFieldName(Seq("a", "b", "c")),
-        Some(IntegerType),
-        None,
-        None,
-        None,
-        None))
+        Seq(AlterColumnSpec(
+          UnresolvedFieldName(Seq("a", "b", "c")),
+          Some(IntegerType),
+          None,
+          None,
+          None,
+          None))))
 
     comparePlans(
       parsePlan(sql2),
-      AlterColumn(
+      AlterColumns(
         UnresolvedTable(Seq("table_name"), "ALTER TABLE ... CHANGE COLUMN"),
-        UnresolvedFieldName(Seq("a", "b", "c")),
-        Some(IntegerType),
-        None,
-        Some("new_comment"),
-        None,
-        None))
+        Seq(AlterColumnSpec(
+          UnresolvedFieldName(Seq("a", "b", "c")),
+          Some(IntegerType),
+          None,
+          Some("new_comment"),
+          None,
+          None))))
 
     comparePlans(
       parsePlan(sql3),
-      AlterColumn(
+      AlterColumns(
         UnresolvedTable(Seq("table_name"), "ALTER TABLE ... CHANGE COLUMN"),
-        UnresolvedFieldName(Seq("a", "b", "c")),
-        Some(IntegerType),
-        None,
-        None,
-        Some(UnresolvedFieldPosition(after("other_col"))),
-        None))
+        Seq(AlterColumnSpec(
+          UnresolvedFieldName(Seq("a", "b", "c")),
+          Some(IntegerType),
+          None,
+          None,
+          Some(UnresolvedFieldPosition(after("other_col"))),
+          None))))
 
     // renaming column not supported in hive style ALTER COLUMN.
     val sql4 = "ALTER TABLE table_name CHANGE COLUMN a.b.c new_name INT"
@@ -2676,25 +2726,27 @@ class DDLParserSuite extends AnalysisTest {
         Seq(QualifiedColType(None, "x", IntegerType, false, None, None, Some("42")))))
     comparePlans(
       parsePlan("ALTER TABLE t1 ALTER COLUMN a.b.c SET DEFAULT 42"),
-      AlterColumn(
+      AlterColumns(
         UnresolvedTable(Seq("t1"), "ALTER TABLE ... ALTER COLUMN"),
-        UnresolvedFieldName(Seq("a", "b", "c")),
-        None,
-        None,
-        None,
-        None,
-        Some("42")))
+        Seq(AlterColumnSpec(
+          UnresolvedFieldName(Seq("a", "b", "c")),
+          None,
+          None,
+          None,
+          None,
+          Some("42")))))
     // It is possible to pass an empty string default value using quotes.
     comparePlans(
       parsePlan("ALTER TABLE t1 ALTER COLUMN a.b.c SET DEFAULT ''"),
-      AlterColumn(
+      AlterColumns(
         UnresolvedTable(Seq("t1"), "ALTER TABLE ... ALTER COLUMN"),
-        UnresolvedFieldName(Seq("a", "b", "c")),
-        None,
-        None,
-        None,
-        None,
-        Some("''")))
+        Seq(AlterColumnSpec(
+          UnresolvedFieldName(Seq("a", "b", "c")),
+          None,
+          None,
+          None,
+          None,
+          Some("''")))))
     // It is not possible to pass an empty string default value without using quotes.
     // This results in a parsing error.
     val sql1 = "ALTER TABLE t1 ALTER COLUMN a.b.c SET DEFAULT "
@@ -2712,14 +2764,15 @@ class DDLParserSuite extends AnalysisTest {
 
     comparePlans(
       parsePlan("ALTER TABLE t1 ALTER COLUMN a.b.c DROP DEFAULT"),
-      AlterColumn(
+      AlterColumns(
         UnresolvedTable(Seq("t1"), "ALTER TABLE ... ALTER COLUMN"),
-        UnresolvedFieldName(Seq("a", "b", "c")),
-        None,
-        None,
-        None,
-        None,
-        Some("")))
+        Seq(AlterColumnSpec(
+          UnresolvedFieldName(Seq("a", "b", "c")),
+          None,
+          None,
+          None,
+          None,
+          Some("")))))
     // Make sure that the parser returns an exception when the feature is disabled.
     withSQLConf(SQLConf.ENABLE_DEFAULT_COLUMNS.key -> "false") {
       val sql = "CREATE TABLE my_tab(a INT, b STRING NOT NULL DEFAULT \"abc\") USING parquet"
