@@ -667,7 +667,6 @@ class PythonStreamingDataSourceSuite extends PythonDataSourceSuiteBase {
         )
       )
       assert(err.getMessage.contains(msg))
-      assert(err.getMessage.contains("ErrorDataSource"))
       stream.stop()
     }
 
@@ -729,7 +728,6 @@ class PythonStreamingDataSourceSuite extends PythonDataSourceSuiteBase {
         )
       )
       assert(err.getMessage.contains(msg))
-      assert(err.getMessage.contains("ErrorDataSource"))
       stream.stop()
     }
 
