@@ -22,7 +22,7 @@ import org.apache.spark.{SparkException, SparkThrowable}
 import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
-import org.apache.spark.sql.catalyst.analysis.ResolveWithCTE.checkIfSelfReferenceIsPlacedCorrectly
+import org.apache.spark.sql.catalyst.analysis.ResolveWithCTE.{checkForSelfReferenceInSubquery, checkIfSelfReferenceIsPlacedCorrectly}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.SubExprUtils._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, AggregateFunction, ListAgg, Median, PercentileCont, PercentileDisc}
@@ -282,6 +282,9 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
 
       case _ =>
     }
+
+    // Check if there is any self-reference within subqueries
+    checkForSelfReferenceInSubquery(plan)
 
     // We transform up and order the rules so as to catch the first possible failure instead
     // of the result of cascading resolution failures.
