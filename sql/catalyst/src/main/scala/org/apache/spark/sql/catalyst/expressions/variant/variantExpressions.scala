@@ -246,13 +246,6 @@ case class VariantGet(
     val check = super.checkInputDataTypes()
     if (check.isFailure) {
       check
-    } else if (!path.foldable) {
-      DataTypeMismatch(
-        errorSubClass = "NON_FOLDABLE_INPUT",
-        messageParameters = Map(
-          "inputName" -> toSQLId("path"),
-          "inputType" -> toSQLType(path.dataType),
-          "inputExpr" -> toSQLExpr(path)))
     } else if (!VariantGet.checkDataType(targetType)) {
       DataTypeMismatch(
         errorSubClass = "CAST_WITHOUT_SUGGESTION",
@@ -265,10 +258,16 @@ case class VariantGet(
 
   override lazy val dataType: DataType = targetType.asNullable
 
+  private lazy val pathIsFoldable: Boolean = path.foldable
+
   @transient private lazy val parsedPath = {
-    val pathValue = path.eval().toString
-    VariantPathParser.parse(pathValue).getOrElse {
-      throw QueryExecutionErrors.invalidVariantGetPath(pathValue, prettyName)
+    if (pathIsFoldable) {
+      val pathValue = path.eval().toString
+      VariantPathParser.parse(pathValue).getOrElse {
+        throw QueryExecutionErrors.invalidVariantGetPath(pathValue, prettyName)
+      }
+    } else {
+      new Array[VariantPathSegment](0)
     }
   }
 
@@ -288,30 +287,84 @@ case class VariantGet(
     zoneId)
 
   protected override def nullSafeEval(input: Any, path: Any): Any = {
-    VariantGet.variantGet(input.asInstanceOf[VariantVal], parsedPath, dataType, castArgs)
+    if (pathIsFoldable) {
+      VariantGet.variantGet(input.asInstanceOf[VariantVal], parsedPath, dataType, castArgs)
+    } else {
+      val pathValue = path.toString
+      val parsedRowPath = VariantPathParser.parse(pathValue).getOrElse {
+        throw QueryExecutionErrors.invalidVariantGetPath(pathValue, prettyName)
+      }
+      VariantGet.variantGet(input.asInstanceOf[VariantVal], parsedRowPath, dataType, castArgs)
+    }
   }
 
   protected override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val childCode = child.genCode(ctx)
-    val tmp = ctx.freshVariable("tmp", classOf[Object])
-    val parsedPathArg = ctx.addReferenceObj("parsedPath", parsedPath)
-    val dataTypeArg = ctx.addReferenceObj("dataType", dataType)
-    val castArgsArg = ctx.addReferenceObj("castArgs", castArgs)
-    val code = code"""
-      ${childCode.code}
-      boolean ${ev.isNull} = ${childCode.isNull};
-      ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
-      if (!${ev.isNull}) {
-        Object $tmp = org.apache.spark.sql.catalyst.expressions.variant.VariantGet.variantGet(
-          ${childCode.value}, $parsedPathArg, $dataTypeArg, $castArgsArg);
-        if ($tmp == null) {
-          ${ev.isNull} = true;
-        } else {
-          ${ev.value} = (${CodeGenerator.boxedType(dataType)})$tmp;
+    if (pathIsFoldable) {
+      val childCode = child.genCode(ctx)
+      val tmp = ctx.freshVariable("tmp", classOf[Object])
+      val parsedPathArg = ctx.addReferenceObj("parsedPath", parsedPath)
+      val dataTypeArg = ctx.addReferenceObj("dataType", dataType)
+      val castArgsArg = ctx.addReferenceObj("castArgs", castArgs)
+      val code = code"""
+        ${childCode.code}
+        boolean ${ev.isNull} = ${childCode.isNull};
+        ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+        if (!${ev.isNull}) {
+          Object $tmp = org.apache.spark.sql.catalyst.expressions.variant.VariantGet.variantGet(
+            ${childCode.value}, $parsedPathArg, $dataTypeArg, $castArgsArg);
+          if ($tmp == null) {
+            ${ev.isNull} = true;
+          } else {
+            ${ev.value} = (${CodeGenerator.boxedType(dataType)})$tmp;
+          }
         }
-      }
-    """
-    ev.copy(code = code)
+      """
+      ev.copy(code = code)
+    } else {
+      val tmp = ctx.freshVariable("tmp", classOf[Object])
+      val childCode = child.genCode(ctx)
+      val pathCode = path.genCode(ctx)
+      val dataTypeArg = ctx.addReferenceObj("dataType", dataType)
+      val castArgsArg = ctx.addReferenceObj("castArgs", castArgs)
+      val parsedPathVar = ctx.freshName("parsedPath")
+      val ensureNonEmpty = ctx.freshName("ensureNonEmpty")
+      val optionalParsedPathType =
+          CodeGenerator.typeName(classOf[Option[Array[VariantPathSegment]]])
+      val parsedPathType = CodeGenerator.typeName(classOf[Array[VariantPathSegment]])
+      ctx.addNewFunction(ensureNonEmpty,
+        s"""
+          private void $ensureNonEmpty($optionalParsedPathType p, String pathString)
+            throws Throwable {
+            if (p.isEmpty()) {
+              throw QueryExecutionErrors.invalidVariantGetPath(pathString, "$prettyName");
+            }
+          }
+          """)
+      val code = code"""
+        ${childCode.code}
+        ${pathCode.code}
+        boolean ${ev.isNull} = ${childCode.isNull} || ${pathCode.isNull};
+        ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+        if (!${ev.isNull}) {
+          $optionalParsedPathType $parsedPathVar = ($optionalParsedPathType)
+            org.apache.spark.sql.catalyst.expressions.variant.VariantPathParser.parse(
+              ${pathCode.value}.toString());
+          try {
+            $ensureNonEmpty($parsedPathVar, ${pathCode.value}.toString());
+          } catch (Throwable e) {
+            throw e;
+          }
+          Object $tmp = org.apache.spark.sql.catalyst.expressions.variant.VariantGet.variantGet(
+            ${childCode.value}, ($parsedPathType) $parsedPathVar.get(), $dataTypeArg, $castArgsArg);
+          if ($tmp == null) {
+            ${ev.isNull} = true;
+          } else {
+            ${ev.value} = (${CodeGenerator.boxedType(dataType)})$tmp;
+          }
+        }
+      """
+      ev.copy(code = code)
+    }
   }
 
   override def left: Expression = child
