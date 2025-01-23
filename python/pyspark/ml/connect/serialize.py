@@ -18,8 +18,6 @@ from typing import Any, List, TYPE_CHECKING, Mapping, Dict
 
 import pyspark.sql.connect.proto as pb2
 from pyspark.ml.linalg import (
-    VectorUDT,
-    MatrixUDT,
     DenseVector,
     SparseVector,
     DenseMatrix,
@@ -184,7 +182,7 @@ def deserialize_param(literal: pb2.Expression.Literal) -> Any:
             else:
                 raise ValueError(f"Unknown Matrix type {tpe}")
         else:
-            raise ValueError(f"Unsupported parameter struct {schema}")
+            raise ValueError(f"Unknown UDT {jvm_class}")
     else:
         return LiteralExpression._to_value(literal)
 
