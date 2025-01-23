@@ -18,6 +18,7 @@
 package org.apache.spark.sql.scripting
 
 import scala.collection.mutable.ListBuffer
+
 import org.apache.spark.{SparkArithmeticException, SparkConf}
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.expressions.Expression

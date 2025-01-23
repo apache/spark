@@ -2285,24 +2285,6 @@
     ],
     "sqlState" : "42000"
   },
-  "INVALID_ERROR_CONDITION_DECLARATION" : {
-    "message" : [
-      "Invalid condition declaration."
-    ],
-    "subClass" : {
-      "ONLY_AT_BEGINNING" : {
-        "message" : [
-          "Condition <conditionName> can only be declared at the beginning of the compound."
-        ]
-      },
-      "QUALIFIED_CONDITION_NAME" : {
-        "message" : [
-          "Condition <conditionName> cannot be qualified."
-        ]
-      }
-    },
-    "sqlState" : "42K0R"
-  },
   "INVALID_CONF_VALUE" : {
     "message" : [
       "The value '<confValue>' in the config \"<confName>\" is invalid."
@@ -2456,6 +2438,24 @@
       "The location name cannot be empty string, but `<location>` was given."
     ],
     "sqlState" : "42K05"
+  },
+  "INVALID_ERROR_CONDITION_DECLARATION" : {
+    "message" : [
+      "Invalid condition declaration."
+    ],
+    "subClass" : {
+      "ONLY_AT_BEGINNING" : {
+        "message" : [
+          "Condition <conditionName> can only be declared at the beginning of the compound."
+        ]
+      },
+      "QUALIFIED_CONDITION_NAME" : {
+        "message" : [
+          "Condition <conditionName> cannot be qualified."
+        ]
+      }
+    },
+    "sqlState" : "42K0R"
   },
   "INVALID_ESC" : {
     "message" : [
