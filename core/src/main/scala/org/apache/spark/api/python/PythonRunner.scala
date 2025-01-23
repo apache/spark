@@ -33,7 +33,7 @@ import org.apache.spark._
 import org.apache.spark.api.python.PythonFunction.PythonAccumulator
 import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.internal.LogKeys.TASK_NAME
-import org.apache.spark.internal.config.{BUFFER_SIZE, EXECUTOR_CORES, Python}
+import org.apache.spark.internal.config.{BUFFER_SIZE, EXECUTOR_CORES}
 import org.apache.spark.internal.config.Python._
 import org.apache.spark.rdd.InputFileBlockHolder
 import org.apache.spark.resource.ResourceProfile.{EXECUTOR_CORES_LOCAL_PROPERTY, PYSPARK_MEMORY_LOCAL_PROPERTY}
@@ -90,11 +90,11 @@ private[spark] object PythonEvalType {
   }
 }
 
-private object BasePythonRunner {
+private[spark] object BasePythonRunner {
 
-  private lazy val faultHandlerLogDir = Utils.createTempDir(namePrefix = "faulthandler")
+  private[spark] lazy val faultHandlerLogDir = Utils.createTempDir(namePrefix = "faulthandler")
 
-  private def faultHandlerLogPath(pid: Int): Path = {
+  private[spark] def faultHandlerLogPath(pid: Int): Path = {
     new File(faultHandlerLogDir, pid.toString).toPath
   }
 }
@@ -574,15 +574,15 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
         JavaFiles.deleteIfExists(path)
         throw new SparkException(s"Python worker exited unexpectedly (crashed): $error", e)
 
-      case eof: EOFException if !faultHandlerEnabled =>
+      case e: IOException if !faultHandlerEnabled =>
         throw new SparkException(
           s"Python worker exited unexpectedly (crashed). " +
             "Consider setting 'spark.sql.execution.pyspark.udf.faulthandler.enabled' or" +
-            s"'${Python.PYTHON_WORKER_FAULTHANLDER_ENABLED.key}' configuration to 'true' for" +
-            "the better Python traceback.", eof)
+            s"'${PYTHON_WORKER_FAULTHANLDER_ENABLED.key}' configuration to 'true' for " +
+            "the better Python traceback.", e)
 
-      case eof: EOFException =>
-        throw new SparkException("Python worker exited unexpectedly (crashed)", eof)
+      case e: IOException =>
+        throw new SparkException("Python worker exited unexpectedly (crashed)", e)
     }
   }
 
