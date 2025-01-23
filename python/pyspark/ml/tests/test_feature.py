@@ -75,7 +75,7 @@ class FeatureTestsMixin:
         model = si.fit(df.select("label1"))
 
         # read/write
-        with tempfile.TemporaryDirectory(prefix="read_write") as tmp_dir:
+        with tempfile.TemporaryDirectory(prefix="string_indexer") as tmp_dir:
             si.write().overwrite().save(tmp_dir)
             si2 = StringIndexer.load(tmp_dir)
             self.assertEqual(str(si), str(si2))
@@ -147,7 +147,7 @@ class FeatureTestsMixin:
         )
 
         # read/write
-        with tempfile.TemporaryDirectory(prefix="read_write") as tmp_dir:
+        with tempfile.TemporaryDirectory(prefix="pca") as tmp_dir:
             pca.write().overwrite().save(tmp_dir)
             pca2 = PCA.load(tmp_dir)
             self.assertEqual(str(pca), str(pca2))
@@ -188,7 +188,7 @@ class FeatureTestsMixin:
         )
 
         # read/write
-        with tempfile.TemporaryDirectory(prefix="read_write") as tmp_dir:
+        with tempfile.TemporaryDirectory(prefix="vector_assembler") as tmp_dir:
             vec_assembler.write().overwrite().save(tmp_dir)
             vec_assembler2 = VectorAssembler.load(tmp_dir)
             self.assertEqual(str(vec_assembler), str(vec_assembler2))
@@ -221,12 +221,6 @@ class FeatureTestsMixin:
         self.assertEqual(scaler.getInputCol(), "features")
         self.assertEqual(scaler.getOutputCol(), "scaled")
 
-        # Estimator save & load
-        with tempfile.TemporaryDirectory(prefix="standard_scaler") as d:
-            scaler.write().overwrite().save(d)
-            scaler2 = StandardScaler.load(d)
-            self.assertEqual(str(scaler), str(scaler2))
-
         model = scaler.fit(df)
         self.assertTrue(np.allclose(model.mean.toArray(), [1.66666667], atol=1e-4))
         self.assertTrue(np.allclose(model.std.toArray(), [1.52752523], atol=1e-4))
@@ -236,10 +230,16 @@ class FeatureTestsMixin:
         self.assertEqual(output.count(), 3)
 
         # Model save & load
-        with tempfile.TemporaryDirectory(prefix="standard_scaler_model") as d:
+        with tempfile.TemporaryDirectory(prefix="standard_scaler") as d:
+            scaler.write().overwrite().save(d)
+            scaler2 = StandardScaler.load(d)
+            self.assertEqual(str(scaler), str(scaler2))
+            self.assertEqual(scaler2.getOutputCol(), "scaled")
+
             model.write().overwrite().save(d)
             model2 = StandardScalerModel.load(d)
             self.assertEqual(str(model), str(model2))
+            self.assertEqual(model2.getOutputCol(), "scaled")
 
     def test_maxabs_scaler(self):
         df = (
@@ -260,12 +260,6 @@ class FeatureTestsMixin:
         self.assertEqual(scaler.getInputCol(), "features")
         self.assertEqual(scaler.getOutputCol(), "scaled")
 
-        # Estimator save & load
-        with tempfile.TemporaryDirectory(prefix="maxabs_scaler") as d:
-            scaler.write().overwrite().save(d)
-            scaler2 = MaxAbsScaler.load(d)
-            self.assertEqual(str(scaler), str(scaler2))
-
         model = scaler.fit(df)
         self.assertTrue(np.allclose(model.maxAbs.toArray(), [3.0], atol=1e-4))
 
@@ -273,11 +267,17 @@ class FeatureTestsMixin:
         self.assertEqual(output.columns, ["features", "scaled"])
         self.assertEqual(output.count(), 3)
 
-        # Model save & load
-        with tempfile.TemporaryDirectory(prefix="standard_scaler_model") as d:
+        # save & load
+        with tempfile.TemporaryDirectory(prefix="standard_scaler") as d:
+            scaler.write().overwrite().save(d)
+            scaler2 = MaxAbsScaler.load(d)
+            self.assertEqual(str(scaler), str(scaler2))
+            self.assertEqual(scaler2.getOutputCol(), "scaled")
+
             model.write().overwrite().save(d)
             model2 = MaxAbsScalerModel.load(d)
             self.assertEqual(str(model), str(model2))
+            self.assertEqual(model2.getOutputCol(), "scaled")
 
     def test_minmax_scaler(self):
         df = (
@@ -298,12 +298,6 @@ class FeatureTestsMixin:
         self.assertEqual(scaler.getInputCol(), "features")
         self.assertEqual(scaler.getOutputCol(), "scaled")
 
-        # Estimator save & load
-        with tempfile.TemporaryDirectory(prefix="maxabs_scaler") as d:
-            scaler.write().overwrite().save(d)
-            scaler2 = MinMaxScaler.load(d)
-            self.assertEqual(str(scaler), str(scaler2))
-
         model = scaler.fit(df)
         self.assertTrue(np.allclose(model.originalMax.toArray(), [3.0], atol=1e-4))
         self.assertTrue(np.allclose(model.originalMin.toArray(), [0.0], atol=1e-4))
@@ -312,11 +306,17 @@ class FeatureTestsMixin:
         self.assertEqual(output.columns, ["features", "scaled"])
         self.assertEqual(output.count(), 3)
 
-        # Model save & load
-        with tempfile.TemporaryDirectory(prefix="standard_scaler_model") as d:
+        # save & load
+        with tempfile.TemporaryDirectory(prefix="min_max_scaler") as d:
+            scaler.write().overwrite().save(d)
+            scaler2 = MinMaxScaler.load(d)
+            self.assertEqual(str(scaler), str(scaler2))
+            self.assertEqual(scaler2.getOutputCol(), "scaled")
+
             model.write().overwrite().save(d)
             model2 = MinMaxScalerModel.load(d)
             self.assertEqual(str(model), str(model2))
+            self.assertEqual(model2.getOutputCol(), "scaled")
 
     def test_robust_scaler(self):
         df = (
@@ -337,12 +337,6 @@ class FeatureTestsMixin:
         self.assertEqual(scaler.getInputCol(), "features")
         self.assertEqual(scaler.getOutputCol(), "scaled")
 
-        # Estimator save & load
-        with tempfile.TemporaryDirectory(prefix="robust_scaler") as d:
-            scaler.write().overwrite().save(d)
-            scaler2 = RobustScaler.load(d)
-            self.assertEqual(str(scaler), str(scaler2))
-
         model = scaler.fit(df)
         self.assertTrue(np.allclose(model.range.toArray(), [3.0], atol=1e-4))
         self.assertTrue(np.allclose(model.median.toArray(), [2.0], atol=1e-4))
@@ -351,11 +345,17 @@ class FeatureTestsMixin:
         self.assertEqual(output.columns, ["features", "scaled"])
         self.assertEqual(output.count(), 3)
 
-        # Model save & load
-        with tempfile.TemporaryDirectory(prefix="robust_scaler_model") as d:
+        # save & load
+        with tempfile.TemporaryDirectory(prefix="robust_scaler") as d:
+            scaler.write().overwrite().save(d)
+            scaler2 = RobustScaler.load(d)
+            self.assertEqual(str(scaler), str(scaler2))
+            self.assertEqual(scaler2.getOutputCol(), "scaled")
+
             model.write().overwrite().save(d)
             model2 = RobustScalerModel.load(d)
             self.assertEqual(str(model), str(model2))
+            self.assertEqual(model2.getOutputCol(), "scaled")
 
     def test_binarizer(self):
         b0 = Binarizer()

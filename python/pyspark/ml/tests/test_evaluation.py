@@ -54,7 +54,7 @@ class EvaluatorTestsMixin:
         self.assertTrue(np.allclose(precision_at_k, 0.3333, atol=1e-4))
 
         # read/write
-        with tempfile.TemporaryDirectory(prefix="save") as tmp_dir:
+        with tempfile.TemporaryDirectory(prefix="ranking_evaluator") as tmp_dir:
             # Save the evaluator
             evaluator.write().overwrite().save(tmp_dir)
             # Load the saved evaluator
@@ -86,7 +86,7 @@ class EvaluatorTestsMixin:
         self.assertTrue(np.allclose(accuracy, 0.5476, atol=1e-4))
 
         # read/write
-        with tempfile.TemporaryDirectory(prefix="save") as tmp_dir:
+        with tempfile.TemporaryDirectory(prefix="multi_label_class_eval") as tmp_dir:
             # Save the evaluator
             evaluator.write().overwrite().save(tmp_dir)
             # Load the saved evaluator
@@ -133,7 +133,7 @@ class EvaluatorTestsMixin:
         self.assertTrue(np.allclose(hamming_loss, 0.3333, atol=1e-4))
 
         # read/write
-        with tempfile.TemporaryDirectory(prefix="save") as tmp_dir:
+        with tempfile.TemporaryDirectory(prefix="multi_class_classification_evaluator") as tmp_dir:
             # Save the evaluator
             evaluator.write().overwrite().save(tmp_dir)
             # Load the saved evaluator
@@ -188,7 +188,7 @@ class EvaluatorTestsMixin:
         self.assertTrue(np.allclose(auc_pr, 0.8339, atol=1e-4))
 
         # read/write
-        with tempfile.TemporaryDirectory(prefix="save") as tmp_dir:
+        with tempfile.TemporaryDirectory(prefix="binary_classification_evaluator") as tmp_dir:
             # Save the evaluator
             evaluator.write().overwrite().save(tmp_dir)
             # Load the saved evaluator
@@ -236,12 +236,13 @@ class EvaluatorTestsMixin:
         self.assertTrue(np.allclose(score_with_weight, 0.9079, atol=1e-4))
 
         # read/write
-        with tempfile.TemporaryDirectory(prefix="save") as tmp_dir:
+        with tempfile.TemporaryDirectory(prefix="clustering_evaluator") as tmp_dir:
             # Save the evaluator
             evaluator.write().overwrite().save(tmp_dir)
             # Load the saved evaluator
             evaluator2 = ClusteringEvaluator.load(tmp_dir)
             self.assertEqual(evaluator2.getPredictionCol(), "prediction")
+            self.assertTrue(str(evaluator) == str(evaluator2))
 
     def test_clustering_evaluator_with_cosine_distance(self):
         featureAndPredictions = map(
@@ -291,6 +292,7 @@ class EvaluatorTestsMixin:
             # Load the saved evaluator
             evaluator2 = RegressionEvaluator.load(tmp_dir)
             self.assertEqual(evaluator2.getPredictionCol(), "raw")
+            self.assertTrue(str(evaluator) == str(evaluator2))
 
         evaluator_with_weights = RegressionEvaluator(predictionCol="raw", weightCol="weight")
         weighted_rmse = evaluator_with_weights.evaluate(dataset)

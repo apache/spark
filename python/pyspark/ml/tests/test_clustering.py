@@ -63,12 +63,6 @@ class ClusteringTestsMixin:
         self.assertEqual(km.getMaxIter(), 2)
         self.assertEqual(km.getWeightCol(), "weight")
 
-        # Estimator save & load
-        with tempfile.TemporaryDirectory(prefix="kmeans") as d:
-            km.write().overwrite().save(d)
-            km2 = KMeans.load(d)
-            self.assertEqual(str(km), str(km2))
-
         model = km.fit(df)
         # TODO: support KMeansModel.numFeatures in Python
         # self.assertEqual(model.numFeatures, 2)
@@ -102,8 +96,12 @@ class ClusteringTestsMixin:
         self.assertEqual(summary.predictions.columns, expected_cols)
         self.assertEqual(summary.predictions.count(), 6)
 
-        # Model save & load
+        # save & load
         with tempfile.TemporaryDirectory(prefix="kmeans_model") as d:
+            km.write().overwrite().save(d)
+            km2 = KMeans.load(d)
+            self.assertEqual(str(km), str(km2))
+
             model.write().overwrite().save(d)
             model2 = KMeansModel.load(d)
             self.assertEqual(str(model), str(model2))
@@ -121,12 +119,6 @@ class ClusteringTestsMixin:
         self.assertEqual(bkm.getMaxIter(), 2)
         self.assertEqual(bkm.getMinDivisibleClusterSize(), 1.0)
         self.assertEqual(bkm.getWeightCol(), "weight")
-
-        # Estimator save & load
-        with tempfile.TemporaryDirectory(prefix="bisecting_kmeans") as d:
-            bkm.write().overwrite().save(d)
-            bkm2 = BisectingKMeans.load(d)
-            self.assertEqual(str(bkm), str(bkm2))
 
         model = bkm.fit(df)
         # TODO: support KMeansModel.numFeatures in Python
@@ -164,8 +156,12 @@ class ClusteringTestsMixin:
         self.assertEqual(summary.predictions.columns, expected_cols)
         self.assertEqual(summary.predictions.count(), 6)
 
-        # Model save & load
-        with tempfile.TemporaryDirectory(prefix="bisecting_kmeans_model") as d:
+        # save & load
+        with tempfile.TemporaryDirectory(prefix="bisecting_kmeans") as d:
+            bkm.write().overwrite().save(d)
+            bkm2 = BisectingKMeans.load(d)
+            self.assertEqual(str(bkm), str(bkm2))
+
             model.write().overwrite().save(d)
             model2 = BisectingKMeansModel.load(d)
             self.assertEqual(str(model), str(model2))
