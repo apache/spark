@@ -43,7 +43,9 @@ class BasicCountStatefulProcessor
 
   override def init(outputMode: OutputMode, timeMode: TimeMode): Unit = {
     _countState = getHandle.getValueState[StateRowForConnectTest](
-      "countState", Encoders.product[StateRowForConnectTest], TTLConfig.NONE)
+      "countState",
+      Encoders.product[StateRowForConnectTest],
+      TTLConfig.NONE)
   }
 
   override def handleInputRows(
@@ -105,23 +107,26 @@ class ChainingOfOpsStatefulProcessor
   }
 }
 
+// A basic stateful processor contains composite state variables and TTL
 class TTLTestStatefulProcessor
-  extends StatefulProcessor[String, (String, String), (String, String)] {
+    extends StatefulProcessor[String, (String, String), (String, String)] {
   import java.time.Duration
 
   @transient protected var countState: ValueState[Int] = _
   @transient protected var ttlCountState: ValueState[Int] = _
   @transient protected var ttlListState: ListState[Int] = _
   @transient protected var ttlMapState: MapState[String, Int] = _
-  override def init(
-      outputMode: OutputMode, timeMode: TimeMode): Unit = {
+  override def init(outputMode: OutputMode, timeMode: TimeMode): Unit = {
     countState = getHandle.getValueState[Int]("countState", Encoders.scalaInt, TTLConfig.NONE)
-    ttlCountState = getHandle.getValueState[Int]("ttlCountState",
-      Encoders.scalaInt, TTLConfig(Duration.ofMillis(1000)))
-    ttlListState = getHandle.getListState[Int]("ttlListState",
-      Encoders.scalaInt, TTLConfig(Duration.ofMillis(1000)))
-    ttlMapState = getHandle.getMapState[String, Int]("ttlMapState",
-      Encoders.STRING, Encoders.scalaInt, TTLConfig(Duration.ofMillis(1000)))
+    ttlCountState = getHandle
+      .getValueState[Int]("ttlCountState", Encoders.scalaInt, TTLConfig(Duration.ofMillis(1000)))
+    ttlListState = getHandle
+      .getListState[Int]("ttlListState", Encoders.scalaInt, TTLConfig(Duration.ofMillis(1000)))
+    ttlMapState = getHandle.getMapState[String, Int](
+      "ttlMapState",
+      Encoders.STRING,
+      Encoders.scalaInt,
+      TTLConfig(Duration.ofMillis(1000)))
   }
   override def handleInputRows(
       key: String,
@@ -161,8 +166,7 @@ class TTLTestStatefulProcessor
       (s"count-$key", count.toString),
       (s"ttlCount-$key", ttlCount.toString),
       (s"ttlListState-$key", ttlListStateCount.toString),
-      (s"ttlMapState-$key", ttlMapStateCount.toString)
-    )
+      (s"ttlMapState-$key", ttlMapStateCount.toString))
     output.iterator
   }
 }
@@ -346,27 +350,38 @@ class TransformWithStateConnectSuite extends QueryTest with RemoteSparkSession w
       val session: SparkSession = spark
       import session.implicits._
 
-
       val exceptionMessageSignalQueryEnd = "Passed checks, ending the query"
       val checkResultFunc = (batchDF: Dataset[(String, String)], batchId: Long) => {
         if (batchId == 0) {
-          val expectedDF = Seq(("count-0", "1"), ("ttlCount-0", "1"),
-            ("ttlListState-0", "1"), ("ttlMapState-0", "1"),
-            ("count-1", "1"), ("ttlCount-1", "1"),
-            ("ttlListState-1", "1"), ("ttlMapState-1", "1")).toSet
+          val expectedDF = Seq(
+            ("count-0", "1"),
+            ("ttlCount-0", "1"),
+            ("ttlListState-0", "1"),
+            ("ttlMapState-0", "1"),
+            ("count-1", "1"),
+            ("ttlCount-1", "1"),
+            ("ttlListState-1", "1"),
+            ("ttlMapState-1", "1")).toSet
 
           val realDf = batchDF.collect().toSet
-           assert(realDf == expectedDF)
+          assert(realDf == expectedDF)
 
         } else if (batchId == 1) {
-          val expectedDF = Seq(("count-0", "2"), ("ttlCount-0", "1"),
-            ("ttlListState-0", "1"), ("ttlMapState-0", "1"),
-            ("count-1", "2"), ("ttlCount-1", "1"),
-            ("ttlListState-1", "1"), ("ttlMapState-1", "1")).toSet
+          val expectedDF = Seq(
+            ("count-0", "2"),
+            ("ttlCount-0", "1"),
+            ("ttlListState-0", "1"),
+            ("ttlMapState-0", "1"),
+            ("count-1", "2"),
+            ("ttlCount-1", "1"),
+            ("ttlListState-1", "1"),
+            ("ttlMapState-1", "1")).toSet
 
           val realDf = batchDF.collect().toSet
           assert(realDf == expectedDF)
         } else {
+          // Note that for processing time mode, query won't stop even after consumes all data.
+          // We need to throw an exception to explicitly ending the query.
           throw new Exception(exceptionMessageSignalQueryEnd)
         }
 
@@ -392,7 +407,6 @@ class TransformWithStateConnectSuite extends QueryTest with RemoteSparkSession w
               OutputMode.Update())
             .writeStream
             .foreachBatch(checkResultFunc)
-            .trigger(Trigger.AvailableNow())
             .outputMode("Update")
             .start()
           q.processAllAvailable()
