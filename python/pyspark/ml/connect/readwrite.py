@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 
+import warnings
 from typing import cast, Type, TYPE_CHECKING, Union, List, Dict, Any
 
 import pyspark.sql.connect.proto as pb2
@@ -109,12 +110,8 @@ class RemoteMLWriter(MLWriter):
             from pyspark.ml.pipeline import PipelineSharedReadWrite
 
             if shouldOverwrite:
-                # mimic MLWriter._handleOverwrite
-                # We cannot call 'org.apache.spark.ml.util.FileSystemOverwrite' in connect,
-                # so overwrite the path with an empty text file.
-                session.range(0, numPartitions=1).selectExpr(
-                    "'' AS _pipeline_overwrite"
-                ).write.mode("overwrite").text(path)
+                # TODO(SPARK-50954): Support client side model path overwrite
+                warnings.warn("Overwrite doesn't take effect for Pipeline and PipelineModel")
 
             if isinstance(instance, Pipeline):
                 stages = instance.getStages()  # type: ignore[attr-defined]
