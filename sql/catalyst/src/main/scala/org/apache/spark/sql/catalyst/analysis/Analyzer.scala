@@ -218,6 +218,14 @@ object AnalysisContext {
     try f finally { set(originContext) }
   }
 
+  def withExecuteImmediateContext[A](isExecuteImmediate: Boolean)(f: => A): A = {
+    val originContext = value.get()
+    val context = originContext.copy(isExecuteImmediate = isExecuteImmediate)
+
+    set(context)
+    try f finally { set(originContext) }
+  }
+
   def withNewAnalysisContext[A](f: => A): A = {
     val originContext = value.get()
     reset()
@@ -330,7 +338,10 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
 
   override def batches: Seq[Batch] = Seq(
     Batch("Substitution", fixedPoint,
-      new SubstituteExecuteImmediate(catalogManager),
+      new SubstituteExecuteImmediate(
+        catalogManager,
+        resolveChild = executeSameContext,
+        checkAnalysis = checkAnalysis),
       // This rule optimizes `UpdateFields` expression chains so looks more like optimization rule.
       // However, when manipulating deeply nested schema, `UpdateFields` expression tree could be
       // very complex and make analysis impossible. Thus we need to optimize `UpdateFields` early

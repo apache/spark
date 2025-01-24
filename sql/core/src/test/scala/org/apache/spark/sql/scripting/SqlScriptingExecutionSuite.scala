@@ -1803,6 +1803,7 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
   }
 
   test("local variable - execute immediate can't access local var") {
+
     val sqlScript =
       """
         |BEGIN
