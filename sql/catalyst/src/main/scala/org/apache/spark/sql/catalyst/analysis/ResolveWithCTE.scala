@@ -195,7 +195,7 @@ object ResolveWithCTE extends Rule[LogicalPlan] {
       subquery.foreach {
         case r: CTERelationRef if r.recursive =>
           throw new AnalysisException(
-            errorClass = "INVALID_RECURSIVE_REFERENCE.SUBQUERY",
+            errorClass = "INVALID_RECURSIVE_REFERENCE.PLACE",
             messageParameters = Map.empty)
         case _ =>
       }
