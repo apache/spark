@@ -82,6 +82,12 @@
     ],
     "sqlState" : "22003"
   },
+  "ARTIFACT_ALREADY_EXISTS" : {
+    "message" : [
+      "The artifact <normalizedRemoteRelativePath> already exists. Please choose a different name for the new artifact because it cannot be overwritten."
+    ],
+    "sqlState" : "42713"
+  },
   "ASSIGNMENT_ARITY_MISMATCH" : {
     "message" : [
       "The number of columns or variables assigned or aliased: <numTarget> does not match the number of source expressions: <numExpr>."

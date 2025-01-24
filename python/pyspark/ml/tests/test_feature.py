@@ -23,6 +23,7 @@ from typing import List, Tuple, Any
 import numpy as np
 
 from pyspark.ml.feature import (
+    DCT,
     Binarizer,
     CountVectorizer,
     CountVectorizerModel,
@@ -30,6 +31,9 @@ from pyspark.ml.feature import (
     IDF,
     NGram,
     RFormula,
+    Tokenizer,
+    SQLTransformer,
+    RegexTokenizer,
     StandardScaler,
     StandardScalerModel,
     MaxAbsScaler,
@@ -46,6 +50,8 @@ from pyspark.ml.feature import (
     VectorAssembler,
     PCA,
     PCAModel,
+    Word2Vec,
+    Word2VecModel,
 )
 from pyspark.ml.linalg import DenseVector, SparseVector, Vectors
 from pyspark.sql import Row
@@ -54,6 +60,34 @@ from pyspark.testing.mlutils import check_params, SparkSessionTestCase
 
 
 class FeatureTestsMixin:
+    def test_dct(self):
+        df = self.spark.createDataFrame([(Vectors.dense([5.0, 8.0, 6.0]),)], ["vec"])
+        dct = DCT()
+        dct.setInverse(False)
+        dct.setInputCol("vec")
+        dct.setOutputCol("resultVec")
+
+        self.assertFalse(dct.getInverse())
+        self.assertEqual(dct.getInputCol(), "vec")
+        self.assertEqual(dct.getOutputCol(), "resultVec")
+
+        output = dct.transform(df)
+        self.assertEqual(output.columns, ["vec", "resultVec"])
+        self.assertEqual(output.count(), 1)
+        self.assertTrue(
+            np.allclose(
+                output.head().resultVec.toArray(),
+                [10.96965511, -0.70710678, -2.04124145],
+                atol=1e-4,
+            )
+        )
+
+        # save & load
+        with tempfile.TemporaryDirectory(prefix="dct") as d:
+            dct.write().overwrite().save(d)
+            dct2 = DCT.load(d)
+            self.assertEqual(str(dct), str(dct2))
+
     def test_string_indexer(self):
         df = (
             self.spark.createDataFrame(
@@ -356,6 +390,132 @@ class FeatureTestsMixin:
             model2 = RobustScalerModel.load(d)
             self.assertEqual(str(model), str(model2))
             self.assertEqual(model2.getOutputCol(), "scaled")
+
+    def test_word2vec(self):
+        sent = ("a b " * 100 + "a c " * 10).split(" ")
+        df = self.spark.createDataFrame([(sent,), (sent,)], ["sentence"]).coalesce(1)
+
+        w2v = Word2Vec(vectorSize=3, seed=42, inputCol="sentence", outputCol="model")
+        w2v.setMaxIter(1)
+        self.assertEqual(w2v.getInputCol(), "sentence")
+        self.assertEqual(w2v.getOutputCol(), "model")
+        self.assertEqual(w2v.getVectorSize(), 3)
+        self.assertEqual(w2v.getSeed(), 42)
+        self.assertEqual(w2v.getMaxIter(), 1)
+
+        model = w2v.fit(df)
+        self.assertEqual(model.getVectors().columns, ["word", "vector"])
+        self.assertEqual(model.getVectors().count(), 3)
+
+        synonyms = model.findSynonyms("a", 2)
+        self.assertEqual(synonyms.columns, ["word", "similarity"])
+        self.assertEqual(synonyms.count(), 2)
+
+        # TODO(SPARK-50958): Support Word2VecModel.findSynonymsArray
+        # synonyms = model.findSynonymsArray("a", 2)
+        # self.assertEqual(len(synonyms), 2)
+        # self.assertEqual(synonyms[0][0], "b")
+        # self.assertTrue(np.allclose(synonyms[0][1], -0.024012837558984756, atol=1e-4))
+        # self.assertEqual(synonyms[1][0], "c")
+        # self.assertTrue(np.allclose(synonyms[1][1], -0.19355154037475586, atol=1e-4))
+
+        output = model.transform(df)
+        self.assertEqual(output.columns, ["sentence", "model"])
+        self.assertEqual(output.count(), 2)
+
+        # save & load
+        with tempfile.TemporaryDirectory(prefix="word2vec") as d:
+            w2v.write().overwrite().save(d)
+            w2v2 = Word2Vec.load(d)
+            self.assertEqual(str(w2v), str(w2v2))
+
+            model.write().overwrite().save(d)
+            model2 = Word2VecModel.load(d)
+            self.assertEqual(str(model), str(model2))
+
+    def test_tokenizer(self):
+        df = self.spark.createDataFrame([("a b c",)], ["text"])
+
+        tokenizer = Tokenizer(outputCol="words")
+        tokenizer.setInputCol("text")
+        self.assertEqual(tokenizer.getInputCol(), "text")
+        self.assertEqual(tokenizer.getOutputCol(), "words")
+
+        output = tokenizer.transform(df)
+        self.assertEqual(output.columns, ["text", "words"])
+        self.assertEqual(output.count(), 1)
+        self.assertEqual(output.head().words, ["a", "b", "c"])
+
+        # save & load
+        with tempfile.TemporaryDirectory(prefix="tokenizer") as d:
+            tokenizer.write().overwrite().save(d)
+            tokenizer2 = Tokenizer.load(d)
+            self.assertEqual(str(tokenizer), str(tokenizer2))
+
+    def test_regex_tokenizer(self):
+        df = self.spark.createDataFrame([("A B  c",)], ["text"])
+
+        tokenizer = RegexTokenizer(outputCol="words")
+        tokenizer.setInputCol("text")
+        self.assertEqual(tokenizer.getInputCol(), "text")
+        self.assertEqual(tokenizer.getOutputCol(), "words")
+
+        output = tokenizer.transform(df)
+        self.assertEqual(output.columns, ["text", "words"])
+        self.assertEqual(output.count(), 1)
+        self.assertEqual(output.head().words, ["a", "b", "c"])
+
+        # save & load
+        with tempfile.TemporaryDirectory(prefix="regex_tokenizer") as d:
+            tokenizer.write().overwrite().save(d)
+            tokenizer2 = RegexTokenizer.load(d)
+            self.assertEqual(str(tokenizer), str(tokenizer2))
+
+    def test_sql_transformer(self):
+        df = self.spark.createDataFrame([(0, 1.0, 3.0), (2, 2.0, 5.0)], ["id", "v1", "v2"])
+
+        statement = "SELECT *, (v1 + v2) AS v3, (v1 * v2) AS v4 FROM __THIS__"
+        sql = SQLTransformer(statement=statement)
+        self.assertEqual(sql.getStatement(), statement)
+
+        output = sql.transform(df)
+        self.assertEqual(output.columns, ["id", "v1", "v2", "v3", "v4"])
+        self.assertEqual(output.count(), 2)
+        self.assertEqual(
+            output.collect(),
+            [
+                Row(id=0, v1=1.0, v2=3.0, v3=4.0, v4=3.0),
+                Row(id=2, v1=2.0, v2=5.0, v3=7.0, v4=10.0),
+            ],
+        )
+
+        # save & load
+        with tempfile.TemporaryDirectory(prefix="sql_transformer") as d:
+            sql.write().overwrite().save(d)
+            sql2 = SQLTransformer.load(d)
+            self.assertEqual(str(sql), str(sql2))
+
+    def test_stop_words_remover(self):
+        df = self.spark.createDataFrame([(["a", "b", "c"],)], ["text"])
+
+        remover = StopWordsRemover(stopWords=["b"])
+        remover.setInputCol("text")
+        remover.setOutputCol("words")
+
+        self.assertEqual(remover.getStopWords(), ["b"])
+        self.assertEqual(remover.getInputCol(), "text")
+        self.assertEqual(remover.getOutputCol(), "words")
+
+        output = remover.transform(df)
+        self.assertEqual(output.columns, ["text", "words"])
+        self.assertEqual(output.count(), 1)
+        self.assertEqual(output.head().words, ["a", "c"])
+
+        # save & load
+        with tempfile.TemporaryDirectory(prefix="stop_words_remover") as d:
+            remover.write().overwrite().save(d)
+            remover2 = StopWordsRemover.load(d)
+            self.assertEqual(str(remover), str(remover2))
 
     def test_binarizer(self):
         b0 = Binarizer()

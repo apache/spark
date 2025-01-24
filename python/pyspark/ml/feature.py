@@ -50,7 +50,7 @@ from pyspark.ml.param.shared import (
     Param,
     Params,
 )
-from pyspark.ml.util import JavaMLReadable, JavaMLWritable
+from pyspark.ml.util import JavaMLReadable, JavaMLWritable, try_remote_attribute_relation
 from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaParams, JavaTransformer, _jvm
 from pyspark.ml.common import inherit_doc
 
@@ -4970,7 +4970,8 @@ class StopWordsRemover(
 
     Notes
     -----
-    null values from input array are preserved unless adding null to stopWords explicitly.
+    - null values from input array are preserved unless adding null to stopWords explicitly.
+    - In Spark Connect Mode, the default value of parameter `locale` is not set.
 
     Examples
     --------
@@ -5069,11 +5070,19 @@ class StopWordsRemover(
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.feature.StopWordsRemover", self.uid
         )
-        self._setDefault(
-            stopWords=StopWordsRemover.loadDefaultStopWords("english"),
-            caseSensitive=False,
-            locale=self._java_obj.getLocale(),
-        )
+        if isinstance(self._java_obj, str):
+            # Skip setting the default value of 'locale', which needs to invoke a JVM method.
+            # So if users don't explicitly set 'locale', then getLocale fails.
+            self._setDefault(
+                stopWords=StopWordsRemover.loadDefaultStopWords("english"),
+                caseSensitive=False,
+            )
+        else:
+            self._setDefault(
+                stopWords=StopWordsRemover.loadDefaultStopWords("english"),
+                caseSensitive=False,
+                locale=self._java_obj.getLocale(),
+            )
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
@@ -6381,6 +6390,7 @@ class Word2VecModel(JavaModel, _Word2VecParams, JavaMLReadable["Word2VecModel"],
     """
 
     @since("1.5.0")
+    @try_remote_attribute_relation
     def getVectors(self) -> DataFrame:
         """
         Returns the vector representation of the words as a dataframe
@@ -6401,6 +6411,7 @@ class Word2VecModel(JavaModel, _Word2VecParams, JavaMLReadable["Word2VecModel"],
         return self._set(outputCol=value)
 
     @since("1.5.0")
+    @try_remote_attribute_relation
     def findSynonyms(self, word: Union[str, Vector], num: int) -> DataFrame:
         """
         Find "num" number of words closest in similarity to "word".

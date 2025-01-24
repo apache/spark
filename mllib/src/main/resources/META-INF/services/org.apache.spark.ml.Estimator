@@ -19,6 +19,7 @@
 # So register the supported estimator here if you're trying to add a new one.
 
 # classification
+org.apache.spark.ml.classification.LinearSVC
 org.apache.spark.ml.classification.LogisticRegression
 org.apache.spark.ml.classification.DecisionTreeClassifier
 org.apache.spark.ml.classification.RandomForestClassifier
@@ -52,3 +53,4 @@ org.apache.spark.ml.feature.MinMaxScaler
 org.apache.spark.ml.feature.RobustScaler
 org.apache.spark.ml.feature.StringIndexer
 org.apache.spark.ml.feature.PCA
+org.apache.spark.ml.feature.Word2Vec

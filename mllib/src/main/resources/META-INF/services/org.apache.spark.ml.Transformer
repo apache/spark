@@ -18,10 +18,16 @@
 # Spark Connect ML uses ServiceLoader to find out the supported Spark Ml non-model transformer.
 # So register the supported transformer here if you're trying to add a new one.
 ########### Transformers
+org.apache.spark.ml.feature.DCT
 org.apache.spark.ml.feature.VectorAssembler
+org.apache.spark.ml.feature.Tokenizer
+org.apache.spark.ml.feature.RegexTokenizer
+org.apache.spark.ml.feature.SQLTransformer
+org.apache.spark.ml.feature.StopWordsRemover
 
 ########### Model for loading
 # classification
+org.apache.spark.ml.classification.LinearSVCModel
 org.apache.spark.ml.classification.LogisticRegressionModel
 org.apache.spark.ml.classification.DecisionTreeClassificationModel
 org.apache.spark.ml.classification.RandomForestClassificationModel
@@ -50,3 +56,4 @@ org.apache.spark.ml.feature.MinMaxScalerModel
 org.apache.spark.ml.feature.RobustScalerModel
 org.apache.spark.ml.feature.StringIndexerModel
 org.apache.spark.ml.feature.PCAModel
+org.apache.spark.ml.feature.Word2VecModel
