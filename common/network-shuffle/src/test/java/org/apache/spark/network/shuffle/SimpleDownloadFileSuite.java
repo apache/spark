@@ -19,12 +19,12 @@ package org.apache.spark.network.shuffle;
 
 import org.apache.spark.network.util.MapConfigProvider;
 import org.apache.spark.network.util.TransportConf;
-import org.junit.jupiter.api.Test;
+import org.junit.Test;
+
+import static org.junit.Assert.*;
 
 import java.io.File;
 import java.io.IOException;
-
-import org.junit.jupiter.api.Assertions;
 
 public class SimpleDownloadFileSuite {
   @Test
@@ -38,7 +38,7 @@ public class SimpleDownloadFileSuite {
       downloadFile = new SimpleDownloadFile(tempFile, conf);
       DownloadFileWritableChannel channel = downloadFile.openForWriting();
       channel.closeAndRead();
-      Assertions.assertFalse(channel.isOpen(), "Channel should be closed after closeAndRead.");
+      assertFalse("Channel should be closed after closeAndRead.", channel.isOpen());
     } finally {
       if (downloadFile != null) {
         downloadFile.delete();
