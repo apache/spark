@@ -499,7 +499,7 @@ class GroupedData:
             evalType=PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_UDF,
         )
 
-        # TODO figure out if we need to handle for string type
+        # TODO add a string struct type test
         output_schema: str = (
             outputStructType.json()
             if isinstance(outputStructType, StructType)

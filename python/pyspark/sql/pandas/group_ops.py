@@ -519,7 +519,7 @@ class PandasGroupedOpsMixin:
             # won't be used again on JVM.
             statefulProcessor.close()
 
-            # return a dummy results, no return value is needed for pre init
+            # return a dummy result, no return value is needed for pre init
             return iter([])
 
         def handle_data_rows(
