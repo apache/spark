@@ -29,13 +29,15 @@ from pyspark.ml.clustering import (
     BisectingKMeans,
     BisectingKMeansModel,
     BisectingKMeansSummary,
+    GaussianMixture,
+    GaussianMixtureModel,
+    GaussianMixtureSummary,
 )
 
 
 class ClusteringTestsMixin:
-    @property
-    def df(self):
-        return (
+    def test_kmeans(self):
+        df = (
             self.spark.createDataFrame(
                 [
                     (1, 1.0, Vectors.dense([-0.1, -0.05])),
@@ -49,10 +51,8 @@ class ClusteringTestsMixin:
             )
             .coalesce(1)
             .sortWithinPartitions("index")
+            .select("weight", "features")
         )
-
-    def test_kmeans(self):
-        df = self.df.select("weight", "features")
 
         km = KMeans(
             k=2,
@@ -68,11 +68,7 @@ class ClusteringTestsMixin:
         # self.assertEqual(model.numFeatures, 2)
 
         output = model.transform(df)
-        expected_cols = [
-            "weight",
-            "features",
-            "prediction",
-        ]
+        expected_cols = ["weight", "features", "prediction"]
         self.assertEqual(output.columns, expected_cols)
         self.assertEqual(output.count(), 6)
 
@@ -107,7 +103,22 @@ class ClusteringTestsMixin:
             self.assertEqual(str(model), str(model2))
 
     def test_bisecting_kmeans(self):
-        df = self.df.select("weight", "features")
+        df = (
+            self.spark.createDataFrame(
+                [
+                    (1, 1.0, Vectors.dense([-0.1, -0.05])),
+                    (2, 2.0, Vectors.dense([-0.01, -0.1])),
+                    (3, 3.0, Vectors.dense([0.9, 0.8])),
+                    (4, 1.0, Vectors.dense([0.75, 0.935])),
+                    (5, 1.0, Vectors.dense([-0.83, -0.68])),
+                    (6, 1.0, Vectors.dense([-0.91, -0.76])),
+                ],
+                ["index", "weight", "features"],
+            )
+            .coalesce(1)
+            .sortWithinPartitions("index")
+            .select("weight", "features")
+        )
 
         bkm = BisectingKMeans(
             k=2,
@@ -125,11 +136,7 @@ class ClusteringTestsMixin:
         # self.assertEqual(model.numFeatures, 2)
 
         output = model.transform(df)
-        expected_cols = [
-            "weight",
-            "features",
-            "prediction",
-        ]
+        expected_cols = ["weight", "features", "prediction"]
         self.assertEqual(output.columns, expected_cols)
         self.assertEqual(output.count(), 6)
 
@@ -164,6 +171,94 @@ class ClusteringTestsMixin:
 
             model.write().overwrite().save(d)
             model2 = BisectingKMeansModel.load(d)
+            self.assertEqual(str(model), str(model2))
+
+    def test_gaussian_mixture(self):
+        df = (
+            self.spark.createDataFrame(
+                [
+                    (1, 1.0, Vectors.dense([-0.1, -0.05])),
+                    (2, 2.0, Vectors.dense([-0.01, -0.1])),
+                    (3, 3.0, Vectors.dense([0.9, 0.8])),
+                    (4, 1.0, Vectors.dense([0.75, 0.935])),
+                    (5, 1.0, Vectors.dense([-0.83, -0.68])),
+                    (6, 1.0, Vectors.dense([-0.91, -0.76])),
+                ],
+                ["index", "weight", "features"],
+            )
+            .coalesce(1)
+            .sortWithinPartitions("index")
+            .select("weight", "features")
+        )
+
+        gmm = GaussianMixture(
+            k=2,
+            maxIter=2,
+            weightCol="weight",
+            seed=1,
+        )
+        self.assertEqual(gmm.getK(), 2)
+        self.assertEqual(gmm.getMaxIter(), 2)
+        self.assertEqual(gmm.getWeightCol(), "weight")
+        self.assertEqual(gmm.getSeed(), 1)
+
+        model = gmm.fit(df)
+        # TODO: support GMM.numFeatures in Python
+        # self.assertEqual(model.numFeatures, 2)
+        self.assertEqual(len(model.weights), 2)
+        self.assertTrue(
+            np.allclose(model.weights, [0.541014115744985, 0.4589858842550149], atol=1e-4),
+            model.weights,
+        )
+        # TODO: support GMM.gaussians on connect
+        # self.assertEqual(model.gaussians, xxx)
+        self.assertEqual(model.gaussiansDF.columns, ["mean", "cov"])
+        self.assertEqual(model.gaussiansDF.count(), 2)
+
+        vec = Vectors.dense(0.0, 5.0)
+        pred = model.predict(vec)
+        self.assertTrue(np.allclose(pred, 0, atol=1e-4), pred)
+        pred = model.predictProbability(vec)
+        self.assertTrue(np.allclose(pred.toArray(), [0.5, 0.5], atol=1e-4), pred)
+
+        output = model.transform(df)
+        expected_cols = ["weight", "features", "probability", "prediction"]
+        self.assertEqual(output.columns, expected_cols)
+        self.assertEqual(output.count(), 6)
+
+        # Model summary
+        self.assertTrue(model.hasSummary)
+        summary = model.summary
+        self.assertTrue(isinstance(summary, GaussianMixtureSummary))
+        self.assertEqual(summary.k, 2)
+        self.assertEqual(summary.numIter, 2)
+        self.assertEqual(len(summary.clusterSizes), 2)
+        self.assertEqual(summary.clusterSizes, [3, 3])
+        ll = summary.logLikelihood
+        self.assertTrue(ll < 0, ll)
+        self.assertTrue(np.allclose(ll, -1.311264553744033, atol=1e-4), ll)
+
+        self.assertEqual(summary.featuresCol, "features")
+        self.assertEqual(summary.predictionCol, "prediction")
+        self.assertEqual(summary.probabilityCol, "probability")
+
+        self.assertEqual(summary.cluster.columns, ["prediction"])
+        self.assertEqual(summary.cluster.count(), 6)
+
+        self.assertEqual(summary.predictions.columns, expected_cols)
+        self.assertEqual(summary.predictions.count(), 6)
+
+        self.assertEqual(summary.probability.columns, ["probability"])
+        self.assertEqual(summary.predictions.count(), 6)
+
+        # save & load
+        with tempfile.TemporaryDirectory(prefix="gaussian_mixture") as d:
+            gmm.write().overwrite().save(d)
+            gmm2 = GaussianMixture.load(d)
+            self.assertEqual(str(gmm), str(gmm2))
+
+            model.write().overwrite().save(d)
+            model2 = GaussianMixtureModel.load(d)
             self.assertEqual(str(model), str(model2))
 
 
