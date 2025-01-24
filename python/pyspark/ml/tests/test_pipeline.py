@@ -14,13 +14,26 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+
+import os
+import tempfile
 import unittest
 
-from pyspark.ml.pipeline import Pipeline
-from pyspark.testing.mlutils import MockDataset, MockEstimator, MockTransformer, PySparkTestCase
+from pyspark.ml.pipeline import Pipeline, PipelineModel
+from pyspark.ml.feature import (
+    VectorAssembler,
+    MaxAbsScaler,
+    MaxAbsScalerModel,
+    MinMaxScaler,
+    MinMaxScalerModel,
+)
+from pyspark.ml.classification import LogisticRegression, LogisticRegressionModel
+from pyspark.ml.clustering import KMeans, KMeansModel
+from pyspark.testing.mlutils import MockDataset, MockEstimator, MockTransformer
+from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 
-class PipelineTests(PySparkTestCase):
+class PipelineTestsMixin:
     def test_pipeline(self):
         dataset = MockDataset()
         estimator0 = MockEstimator()
@@ -57,6 +70,116 @@ class PipelineTests(PySparkTestCase):
         self.assertEqual(dataset.index, doTransform(Pipeline(stages=[])).index)
         # check that failure to set stages param will raise KeyError for missing param
         self.assertRaises(KeyError, lambda: doTransform(Pipeline()))
+
+    def test_classification_pipeline(self):
+        df = self.spark.createDataFrame([(1, 1, 0, 3), (0, 2, 0, 1)], ["y", "a", "b", "c"])
+
+        assembler = VectorAssembler(outputCol="features")
+        assembler.setInputCols(["a", "b", "c"])
+
+        scaler = MaxAbsScaler(inputCol="features", outputCol="scaled_features")
+
+        lr = LogisticRegression(featuresCol="scaled_features", labelCol="y")
+        lr.setMaxIter(1)
+
+        pipeline = Pipeline(stages=[assembler, scaler, lr])
+        self.assertEqual(len(pipeline.getStages()), 3)
+
+        model = pipeline.fit(df)
+        self.assertEqual(len(model.stages), 3)
+        self.assertIsInstance(model.stages[0], VectorAssembler)
+        self.assertIsInstance(model.stages[1], MaxAbsScalerModel)
+        self.assertIsInstance(model.stages[2], LogisticRegressionModel)
+
+        output = model.transform(df)
+        self.assertEqual(
+            output.columns,
+            [
+                "y",
+                "a",
+                "b",
+                "c",
+                "features",
+                "scaled_features",
+                "rawPrediction",
+                "probability",
+                "prediction",
+            ],
+        )
+        self.assertEqual(output.count(), 2)
+
+        # save & load
+        with tempfile.TemporaryDirectory(prefix="classification_pipeline") as d:
+            path1 = os.path.join(d, "pipeline")
+            pipeline.write().save(path1)
+            pipeline2 = Pipeline.load(path1)
+            self.assertEqual(str(pipeline), str(pipeline2))
+            self.assertEqual(str(pipeline.getStages()), str(pipeline2.getStages()))
+
+            path2 = os.path.join(d, "pipeline_model")
+            model.write().save(path2)
+            model2 = PipelineModel.load(path2)
+            self.assertEqual(str(model), str(model2))
+            self.assertEqual(str(model.stages), str(model2.stages))
+
+    def test_clustering_pipeline(self):
+        df = self.spark.createDataFrame([(1, 1, 0, 3), (0, 2, 0, 1)], ["y", "a", "b", "c"])
+
+        assembler = VectorAssembler(outputCol="features")
+        assembler.setInputCols(["a", "b", "c"])
+
+        scaler = MinMaxScaler(inputCol="features", outputCol="scaled_features")
+
+        km = KMeans(k=2, maxIter=2)
+
+        pipeline = Pipeline(stages=[assembler, scaler, km])
+        self.assertEqual(len(pipeline.getStages()), 3)
+
+        # Pipeline save & load
+        with tempfile.TemporaryDirectory(prefix="clustering_pipeline") as d:
+            pipeline.write().overwrite().save(d)
+            pipeline2 = Pipeline.load(d)
+            self.assertEqual(str(pipeline), str(pipeline2))
+            self.assertEqual(str(pipeline.getStages()), str(pipeline2.getStages()))
+
+        model = pipeline.fit(df)
+        self.assertEqual(len(model.stages), 3)
+        self.assertIsInstance(model.stages[0], VectorAssembler)
+        self.assertIsInstance(model.stages[1], MinMaxScalerModel)
+        self.assertIsInstance(model.stages[2], KMeansModel)
+
+        output = model.transform(df)
+        self.assertEqual(
+            output.columns,
+            [
+                "y",
+                "a",
+                "b",
+                "c",
+                "features",
+                "scaled_features",
+                "prediction",
+            ],
+        )
+        self.assertEqual(output.count(), 2)
+
+        # PipelineModel save & load
+        with tempfile.TemporaryDirectory(prefix="clustering_pipeline") as d:
+            path1 = os.path.join(d, "pipeline")
+            pipeline.write().save(path1)
+            pipeline2 = Pipeline.load(path1)
+            self.assertEqual(str(pipeline), str(pipeline2))
+            self.assertEqual(str(pipeline.getStages()), str(pipeline2.getStages()))
+
+            path2 = os.path.join(d, "pipeline_model")
+            model.write().save(path2)
+            model2 = PipelineModel.load(path2)
+            self.assertEqual(str(model), str(model2))
+            self.assertEqual(str(model.stages), str(model2.stages))
+
+
+class PipelineTests(PipelineTestsMixin, ReusedSQLTestCase):
+    pass
 
 
 if __name__ == "__main__":

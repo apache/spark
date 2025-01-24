@@ -66,12 +66,6 @@ class RegressionTestsMixin:
         self.assertEqual(lr.getSolver(), "normal")
         self.assertEqual(lr.getWeightCol(), "weight")
 
-        # Estimator save & load
-        with tempfile.TemporaryDirectory(prefix="linear_regression") as d:
-            lr.write().overwrite().save(d)
-            lr2 = LinearRegression.load(d)
-            self.assertEqual(str(lr), str(lr2))
-
         model = lr.fit(df)
         self.assertEqual(model.numFeatures, 2)
         self.assertTrue(np.allclose(model.scale, 1.0, atol=1e-4))
@@ -160,7 +154,11 @@ class RegressionTestsMixin:
         self.assertTrue(np.allclose(summary2.r2adj, -0.6718362282878414, atol=1e-4))
 
         # Model save & load
-        with tempfile.TemporaryDirectory(prefix="linear_regression_model") as d:
+        with tempfile.TemporaryDirectory(prefix="linear_regression") as d:
+            lr.write().overwrite().save(d)
+            lr2 = LinearRegression.load(d)
+            self.assertEqual(str(lr), str(lr2))
+
             model.write().overwrite().save(d)
             model2 = LinearRegressionModel.load(d)
             self.assertEqual(str(model), str(model2))
@@ -178,12 +176,6 @@ class RegressionTestsMixin:
         self.assertEqual(dt.getSeed(), 1)
         self.assertEqual(dt.getLabelCol(), "label")
         self.assertEqual(dt.getLeafCol(), "leaf")
-
-        # Estimator save & load
-        with tempfile.TemporaryDirectory(prefix="decision_tree_regressor") as d:
-            dt.write().overwrite().save(d)
-            dt2 = DecisionTreeRegressor.load(d)
-            self.assertEqual(str(dt), str(dt2))
 
         model = dt.fit(df)
         self.assertEqual(model.numFeatures, 2)
@@ -216,7 +208,11 @@ class RegressionTestsMixin:
         self.assertEqual(output.count(), 4)
 
         # Model save & load
-        with tempfile.TemporaryDirectory(prefix="decision_tree_regression_model") as d:
+        with tempfile.TemporaryDirectory(prefix="decision_tree_regression") as d:
+            dt.write().overwrite().save(d)
+            dt2 = DecisionTreeRegressor.load(d)
+            self.assertEqual(str(dt), str(dt2))
+
             model.write().overwrite().save(d)
             model2 = DecisionTreeRegressionModel.load(d)
             self.assertEqual(str(model), str(model2))
@@ -237,12 +233,6 @@ class RegressionTestsMixin:
         self.assertEqual(gbt.getSeed(), 1)
         self.assertEqual(gbt.getLabelCol(), "label")
         self.assertEqual(gbt.getLeafCol(), "leaf")
-
-        # Estimator save & load
-        with tempfile.TemporaryDirectory(prefix="gbt_regressor") as d:
-            gbt.write().overwrite().save(d)
-            gbt2 = GBTRegressor.load(d)
-            self.assertEqual(str(gbt), str(gbt2))
 
         model = gbt.fit(df)
         self.assertEqual(model.numFeatures, 2)
@@ -292,8 +282,12 @@ class RegressionTestsMixin:
         self.assertEqual(output.columns, expected_cols)
         self.assertEqual(output.count(), 4)
 
-        # Model save & load
-        with tempfile.TemporaryDirectory(prefix="gbt_regression_model") as d:
+        # save & load
+        with tempfile.TemporaryDirectory(prefix="gbt_regression") as d:
+            gbt.write().overwrite().save(d)
+            gbt2 = GBTRegressor.load(d)
+            self.assertEqual(str(gbt), str(gbt2))
+
             model.write().overwrite().save(d)
             model2 = GBTRegressionModel.load(d)
             self.assertEqual(str(model), str(model2))
@@ -314,12 +308,6 @@ class RegressionTestsMixin:
         self.assertEqual(rf.getSeed(), 1)
         self.assertEqual(rf.getLabelCol(), "label")
         self.assertEqual(rf.getLeafCol(), "leaf")
-
-        # Estimator save & load
-        with tempfile.TemporaryDirectory(prefix="random_forest_regressor") as d:
-            rf.write().overwrite().save(d)
-            rf2 = RandomForestRegressor.load(d)
-            self.assertEqual(str(rf), str(rf2))
 
         model = rf.fit(df)
         self.assertEqual(model.numFeatures, 2)
@@ -353,8 +341,11 @@ class RegressionTestsMixin:
         self.assertEqual(output.columns, expected_cols)
         self.assertEqual(output.count(), 4)
 
-        # Model save & load
-        with tempfile.TemporaryDirectory(prefix="random_forest_regression_model") as d:
+        with tempfile.TemporaryDirectory(prefix="random_forest_regression") as d:
+            rf.write().overwrite().save(d)
+            rf2 = RandomForestRegressor.load(d)
+            self.assertEqual(str(rf), str(rf2))
+
             model.write().overwrite().save(d)
             model2 = RandomForestRegressionModel.load(d)
             self.assertEqual(str(model), str(model2))

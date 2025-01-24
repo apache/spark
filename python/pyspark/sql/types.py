@@ -1478,6 +1478,9 @@ class StructType(DataType):
         if obj is None:
             return
 
+        if isinstance(obj, VariantVal):
+            raise PySparkValueError("Rows cannot be of type VariantVal")
+
         if self._needSerializeAnyField:
             # Only calling toInternal function for fields that need conversion
             if isinstance(obj, dict):
