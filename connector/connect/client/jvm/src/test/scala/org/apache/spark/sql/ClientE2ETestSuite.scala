@@ -45,7 +45,6 @@ import org.apache.spark.sql.test.{ConnectFunSuite, IntegrationTestUtils, RemoteS
 import org.apache.spark.sql.test.QueryTest.checkAnswer
 import org.apache.spark.sql.test.SparkConnectServerUtils.port
 import org.apache.spark.sql.types._
-import org.apache.spark.util.ArrayImplicits.SparkArrayOps
 import org.apache.spark.util.SparkThreadUtils
 
 class ClientE2ETestSuite
@@ -1632,14 +1631,35 @@ class ClientE2ETestSuite
     assert(sparkWithLowerMaxMessageSize.range(maxBatchSize).collect().length == maxBatchSize)
   }
 
-  test("Multiple parametrization nodes in the parsed logical plan") {
-    val result = spark.sql("select * from range(10)")
+  test("Multiple positional parameterized nodes in the parsed logical plan") {
     var df = spark.sql("SELECT ?", Array(0))
-    for (i <- 1 to 9) {
+    for (i <- 1 until 10) {
       val temp = spark.sql("SELECT ?", Array(i))
       df = df.union(temp)
     }
-    checkAnswer(df, result.collect().toImmutableArraySeq)
+    checkAnswer(df, (0 until 10).map(i => Row(i)))
+  }
+
+  test("Multiple named parameterized nodes in the parsed logical plan") {
+    var df = spark.sql("SELECT :ordinal", args = Map("ordinal" -> 0))
+    for (i <- 1 until 10) {
+      val temp = spark.sql("SELECT :ordinal", args = Map("ordinal" -> i))
+      df = df.union(temp)
+    }
+    checkAnswer(df, (0 until 10).map(i => Row(i)))
+  }
+
+  test("Multiple named and positional parameterized nodes in the parsed logical plan") {
+    var df = spark.sql("SELECT ?", Array(0))
+    for (i <- 1 until 5) {
+      val temp = spark.sql("SELECT ?", Array(i))
+      df = df.union(temp)
+    }
+    for (i <- 5 until 10) {
+      val temp = spark.sql("SELECT :ordinal", args = Map("ordinal" -> i))
+      df = df.union(temp)
+    }
+    checkAnswer(df, (0 until 10).map(i => Row(i)))
   }
 }
 
