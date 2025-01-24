@@ -21,7 +21,7 @@ import scala.collection.mutable
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
-import org.apache.spark.sql.catalyst.plans.{LeftAnti, LeftOuter, LeftSemi, RightOuter}
+import org.apache.spark.sql.catalyst.plans.{Inner, LeftAnti, LeftOuter, LeftSemi, RightOuter}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{CTE, PLAN_EXPRESSION}
@@ -222,30 +222,35 @@ object ResolveWithCTE extends Rule[LogicalPlan] {
    * right side of left outer/semi/anti joins, left side of right outer joins,
    * in full outer joins and in aggregates
    */
-  def checkIfSelfReferenceIsPlacedCorrectly(unionLoop: UnionLoop): Unit = {
-    def unionLoopRefNotAllowedUnderCurrentNode(currentNode: LogicalPlan) : Unit =
-      currentNode.foreach {
-        case UnionLoopRef(unionLoop.id, _, _) =>
-          throw new AnalysisException(
-            errorClass = "INVALID_RECURSIVE_REFERENCE.PLACE",
-            messageParameters = Map.empty)
-        case other =>
-      }
-    unionLoop.foreach {
-      case Join(left, right, LeftOuter, _, _) =>
-        unionLoopRefNotAllowedUnderCurrentNode(right)
-      case Join(left, right, RightOuter, _, _) =>
-        unionLoopRefNotAllowedUnderCurrentNode(left)
-      case Join(left, right, LeftSemi, _, _) =>
-        unionLoopRefNotAllowedUnderCurrentNode(right)
-      case Join(left, right, LeftAnti, _, _) =>
-        unionLoopRefNotAllowedUnderCurrentNode(right)
-      case Join(left, right, _, _, _) =>
-        unionLoopRefNotAllowedUnderCurrentNode(left)
-        unionLoopRefNotAllowedUnderCurrentNode(right)
-      case Aggregate(_, _, child, _) =>
-        unionLoopRefNotAllowedUnderCurrentNode(child)
-      case other =>
-    }
+  def checkIfSelfReferenceIsPlacedCorrectly(
+      plan: LogicalPlan,
+      cteId: Long,
+      allowRecursiveRef: Boolean = true): Unit = plan match {
+    case Join(left, right, Inner, _, _) =>
+      checkIfSelfReferenceIsPlacedCorrectly(left, cteId, allowRecursiveRef)
+      checkIfSelfReferenceIsPlacedCorrectly(right, cteId, allowRecursiveRef)
+    case Join(left, right, LeftOuter, _, _) =>
+      checkIfSelfReferenceIsPlacedCorrectly(left, cteId, allowRecursiveRef)
+      checkIfSelfReferenceIsPlacedCorrectly(right, cteId, allowRecursiveRef = false)
+    case Join(left, right, RightOuter, _, _) =>
+      checkIfSelfReferenceIsPlacedCorrectly(left, cteId, allowRecursiveRef = false)
+      checkIfSelfReferenceIsPlacedCorrectly(right, cteId, allowRecursiveRef)
+    case Join(left, right, LeftSemi, _, _) =>
+      checkIfSelfReferenceIsPlacedCorrectly(left, cteId, allowRecursiveRef)
+      checkIfSelfReferenceIsPlacedCorrectly(right, cteId, allowRecursiveRef = false)
+    case Join(left, right, LeftAnti, _, _) =>
+      checkIfSelfReferenceIsPlacedCorrectly(left, cteId, allowRecursiveRef)
+      checkIfSelfReferenceIsPlacedCorrectly(right, cteId, allowRecursiveRef = false)
+    case Join(left, right, _, _, _) =>
+      checkIfSelfReferenceIsPlacedCorrectly(left, cteId, allowRecursiveRef = false)
+      checkIfSelfReferenceIsPlacedCorrectly(right, cteId, allowRecursiveRef = false)
+    case Aggregate(_, _, child, _) =>
+      checkIfSelfReferenceIsPlacedCorrectly(child, cteId, allowRecursiveRef = false)
+    case r: UnionLoopRef if !allowRecursiveRef && r.loopId == cteId =>
+      throw new AnalysisException(
+        errorClass = "INVALID_RECURSIVE_REFERENCE.PLACE",
+        messageParameters = Map.empty)
+    case other =>
+      other.children.foreach(checkIfSelfReferenceIsPlacedCorrectly(_, cteId, allowRecursiveRef))
   }
 }

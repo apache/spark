@@ -278,7 +278,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
       case unionLoop: UnionLoop =>
         // Recursive CTEs have already substituted Union to UnionLoop at this stage.
         // Here we perform additional checks for them.
-        checkIfSelfReferenceIsPlacedCorrectly(unionLoop)
+        checkIfSelfReferenceIsPlacedCorrectly(unionLoop, unionLoop.id)
 
       case _ =>
     }
