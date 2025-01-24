@@ -96,6 +96,10 @@ class BisectingKMeansModel private[ml] (
   extends Model[BisectingKMeansModel] with BisectingKMeansParams with MLWritable
   with HasTrainingSummary[BisectingKMeansSummary] {
 
+  @Since("4.0.0")
+  private[ml] def this() = this(Identifiable.randomUID("bisecting-kmeans"),
+    new MLlibBisectingKMeansModel(null))
+
   @Since("3.0.0")
   lazy val numFeatures: Int = parentModel.clusterCenters.head.size
 

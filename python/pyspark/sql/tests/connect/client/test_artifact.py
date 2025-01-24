@@ -29,7 +29,7 @@ from pyspark.sql.functions import udf, assert_true, lit
 if should_test_connect:
     from pyspark.sql.connect.client.artifact import ArtifactManager
     from pyspark.sql.connect.client import DefaultChannelBuilder
-    from pyspark.errors.exceptions.connect import SparkConnectGrpcException
+    from pyspark.errors import SparkRuntimeException
 
 
 class ArtifactTestsMixin:
@@ -73,10 +73,14 @@ class ArtifactTestsMixin:
             with open(pyfile_path, "w+") as f:
                 f.write("my_func = lambda: 11")
 
-            with self.assertRaisesRegex(
-                SparkConnectGrpcException, "\\(java.lang.RuntimeException\\) Duplicate Artifact"
-            ):
+            with self.assertRaises(SparkRuntimeException) as pe:
                 self.spark.addArtifacts(pyfile_path, pyfile=True)
+
+            self.check_error(
+                exception=pe.exception,
+                errorClass="ARTIFACT_ALREADY_EXISTS",
+                messageParameters={"normalizedRemoteRelativePath": "pyfiles/my_pyfile.py"},
+            )
 
     def check_add_zipped_package(self, spark_session):
         with tempfile.TemporaryDirectory(prefix="check_add_zipped_package") as d:

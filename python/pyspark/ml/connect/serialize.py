@@ -18,8 +18,6 @@ from typing import Any, List, TYPE_CHECKING, Mapping, Dict
 
 import pyspark.sql.connect.proto as pb2
 from pyspark.ml.linalg import (
-    VectorUDT,
-    MatrixUDT,
     DenseVector,
     SparseVector,
     DenseMatrix,
@@ -49,13 +47,23 @@ def build_float_list(value: List[float]) -> pb2.Expression.Literal:
     return p
 
 
+def build_proto_udt(jvm_class: str) -> pb2.DataType:
+    ret = pb2.DataType()
+    ret.udt.type = "udt"
+    ret.udt.jvm_class = jvm_class
+    return ret
+
+
+proto_vector_udt = build_proto_udt("org.apache.spark.ml.linalg.VectorUDT")
+proto_matrix_udt = build_proto_udt("org.apache.spark.ml.linalg.MatrixUDT")
+
+
 def serialize_param(value: Any, client: "SparkConnectClient") -> pb2.Expression.Literal:
-    from pyspark.sql.connect.types import pyspark_types_to_proto_types
     from pyspark.sql.connect.expressions import LiteralExpression
 
     if isinstance(value, SparseVector):
         p = pb2.Expression.Literal()
-        p.struct.struct_type.CopyFrom(pyspark_types_to_proto_types(VectorUDT.sqlType()))
+        p.struct.struct_type.CopyFrom(proto_vector_udt)
         # type = 0
         p.struct.elements.append(pb2.Expression.Literal(byte=0))
         # size
@@ -68,7 +76,7 @@ def serialize_param(value: Any, client: "SparkConnectClient") -> pb2.Expression.
 
     elif isinstance(value, DenseVector):
         p = pb2.Expression.Literal()
-        p.struct.struct_type.CopyFrom(pyspark_types_to_proto_types(VectorUDT.sqlType()))
+        p.struct.struct_type.CopyFrom(proto_vector_udt)
         # type = 1
         p.struct.elements.append(pb2.Expression.Literal(byte=1))
         # size = null
@@ -81,7 +89,7 @@ def serialize_param(value: Any, client: "SparkConnectClient") -> pb2.Expression.
 
     elif isinstance(value, SparseMatrix):
         p = pb2.Expression.Literal()
-        p.struct.struct_type.CopyFrom(pyspark_types_to_proto_types(MatrixUDT.sqlType()))
+        p.struct.struct_type.CopyFrom(proto_matrix_udt)
         # type = 0
         p.struct.elements.append(pb2.Expression.Literal(byte=0))
         # numRows
@@ -100,7 +108,7 @@ def serialize_param(value: Any, client: "SparkConnectClient") -> pb2.Expression.
 
     elif isinstance(value, DenseMatrix):
         p = pb2.Expression.Literal()
-        p.struct.struct_type.CopyFrom(pyspark_types_to_proto_types(MatrixUDT.sqlType()))
+        p.struct.struct_type.CopyFrom(proto_matrix_udt)
         # type = 1
         p.struct.elements.append(pb2.Expression.Literal(byte=1))
         # numRows
@@ -134,14 +142,13 @@ def serialize(client: "SparkConnectClient", *args: Any) -> List[Any]:
 
 
 def deserialize_param(literal: pb2.Expression.Literal) -> Any:
-    from pyspark.sql.connect.types import proto_schema_to_pyspark_data_type
     from pyspark.sql.connect.expressions import LiteralExpression
 
     if literal.HasField("struct"):
         s = literal.struct
-        schema = proto_schema_to_pyspark_data_type(s.struct_type)
+        jvm_class = s.struct_type.udt.jvm_class
 
-        if schema == VectorUDT.sqlType():
+        if jvm_class == "org.apache.spark.ml.linalg.VectorUDT":
             assert len(s.elements) == 4
             tpe = s.elements[0].byte
             if tpe == 0:
@@ -155,7 +162,7 @@ def deserialize_param(literal: pb2.Expression.Literal) -> Any:
             else:
                 raise ValueError(f"Unknown Vector type {tpe}")
 
-        elif schema == MatrixUDT.sqlType():
+        elif jvm_class == "org.apache.spark.ml.linalg.MatrixUDT":
             assert len(s.elements) == 7
             tpe = s.elements[0].byte
             if tpe == 0:
@@ -175,7 +182,7 @@ def deserialize_param(literal: pb2.Expression.Literal) -> Any:
             else:
                 raise ValueError(f"Unknown Matrix type {tpe}")
         else:
-            raise ValueError(f"Unsupported parameter struct {schema}")
+            raise ValueError(f"Unknown UDT {jvm_class}")
     else:
         return LiteralExpression._to_value(literal)
 

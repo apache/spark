@@ -272,6 +272,11 @@ class GBTClassificationModel private[ml](
   def this(uid: String, _trees: Array[DecisionTreeRegressionModel], _treeWeights: Array[Double]) =
     this(uid, _trees, _treeWeights, -1, 2)
 
+  // For ml connect only
+  @Since("4.0.0")
+  private[ml] def this() = this(Identifiable.randomUID("gbtc"),
+    Array(new DecisionTreeRegressionModel), Array(0.0))
+
   @Since("1.4.0")
   override def trees: Array[DecisionTreeRegressionModel] = _trees
 
