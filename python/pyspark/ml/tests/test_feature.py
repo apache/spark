@@ -574,6 +574,46 @@ class FeatureTestsMixin:
         self.assertEqual(b1.getInputCol(), "input")
         self.assertEqual(b1.getOutputCol(), "output")
 
+        df = self.spark.createDataFrame(
+            [
+                (0.1, 0.0),
+                (0.4, 1.0),
+                (1.2, 1.3),
+                (1.5, float("nan")),
+                (float("nan"), 1.0),
+                (float("nan"), 0.0),
+            ],
+            ["v1", "v2"],
+        )
+
+        bucketizer = Binarizer(threshold=1.0, inputCol="v1", outputCol="f1")
+        output = bucketizer.transform(df)
+        self.assertEqual(output.columns, ["v1", "v2", "f1"])
+        self.assertEqual(output.count(), 6)
+        self.assertEqual(
+            [r.f1 for r in output.select("f1").collect()],
+            [0.0, 0.0, 1.0, 1.0, 0.0, 0.0],
+        )
+
+        bucketizer = Binarizer(threshold=1.0, inputCols=["v1", "v2"], outputCols=["f1", "f2"])
+        output = bucketizer.transform(df)
+        self.assertEqual(output.columns, ["v1", "v2", "f1", "f2"])
+        self.assertEqual(output.count(), 6)
+        self.assertEqual(
+            [r.f1 for r in output.select("f1").collect()],
+            [0.0, 0.0, 1.0, 1.0, 0.0, 0.0],
+        )
+        self.assertEqual(
+            [r.f2 for r in output.select("f2").collect()],
+            [0.0, 0.0, 1.0, 0.0, 0.0, 0.0],
+        )
+
+        # save & load
+        with tempfile.TemporaryDirectory(prefix="binarizer") as d:
+            bucketizer.write().overwrite().save(d)
+            bucketizer2 = Binarizer.load(d)
+            self.assertEqual(str(bucketizer), str(bucketizer2))
+
     def test_idf(self):
         dataset = self.spark.createDataFrame(
             [(DenseVector([1.0, 2.0]),), (DenseVector([0.0, 1.0]),), (DenseVector([3.0, 0.2]),)],
