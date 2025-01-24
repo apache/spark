@@ -4531,7 +4531,6 @@ object SQLConf {
     .createWithDefault(LegacyBehaviorPolicy.CORRECTED.toString)
 
   val CTE_RECURSION_LEVEL_LIMIT = buildConf("spark.sql.cteRecursionLevelLimit")
-    .internal()
     .doc("Maximum level of recursion that is allowed wile executing a recursive CTE definition." +
       "If a query does not get exhausted before reaching this limit it fails. Use -1 for " +
       "unlimited.")
