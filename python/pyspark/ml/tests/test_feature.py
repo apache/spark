@@ -28,6 +28,8 @@ from pyspark.ml.feature import (
     Bucketizer,
     CountVectorizer,
     CountVectorizerModel,
+    OneHotEncoder,
+    OneHotEncoderModel,
     HashingTF,
     IDF,
     NGram,
@@ -534,6 +536,61 @@ class FeatureTestsMixin:
 
             model.write().overwrite().save(d)
             model2 = Word2VecModel.load(d)
+            self.assertEqual(str(model), str(model2))
+
+    def test_count_vectorizer(self):
+        df = self.spark.createDataFrame(
+            [(0, ["a", "b", "c"]), (1, ["a", "b", "b", "c", "a"])],
+            ["label", "raw"],
+        )
+
+        cv = CountVectorizer()
+        cv.setInputCol("raw")
+        cv.setOutputCol("vectors")
+        self.assertEqual(cv.getInputCol(), "raw")
+        self.assertEqual(cv.getOutputCol(), "vectors")
+
+        model = cv.fit(df)
+        self.assertEqual(sorted(model.vocabulary), ["a", "b", "c"])
+
+        output = model.transform(df)
+        self.assertEqual(output.columns, ["label", "raw", "vectors"])
+        self.assertEqual(output.count(), 2)
+
+        # save & load
+        with tempfile.TemporaryDirectory(prefix="count_vectorizer") as d:
+            cv.write().overwrite().save(d)
+            cv2 = CountVectorizer.load(d)
+            self.assertEqual(str(cv), str(cv2))
+
+            model.write().overwrite().save(d)
+            model2 = CountVectorizerModel.load(d)
+            self.assertEqual(str(model), str(model2))
+
+    def test_one_hot_encoder(self):
+        df = self.spark.createDataFrame([(0.0,), (1.0,), (2.0,)], ["input"])
+
+        encoder = OneHotEncoder()
+        encoder.setInputCols(["input"])
+        encoder.setOutputCols(["output"])
+        self.assertEqual(encoder.getInputCols(), ["input"])
+        self.assertEqual(encoder.getOutputCols(), ["output"])
+
+        model = encoder.fit(df)
+        self.assertEqual(model.categorySizes, [3])
+
+        output = model.transform(df)
+        self.assertEqual(output.columns, ["input", "output"])
+        self.assertEqual(output.count(), 3)
+
+        # save & load
+        with tempfile.TemporaryDirectory(prefix="count_vectorizer") as d:
+            encoder.write().overwrite().save(d)
+            encoder2 = OneHotEncoder.load(d)
+            self.assertEqual(str(encoder), str(encoder2))
+
+            model.write().overwrite().save(d)
+            model2 = OneHotEncoderModel.load(d)
             self.assertEqual(str(model), str(model2))
 
     def test_tokenizer(self):
