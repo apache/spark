@@ -201,7 +201,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
   }
 
   /** @inheritdoc */
-  private[sql] def transformWithState[U: Encoder](
+  def transformWithState[U: Encoder](
       statefulProcessor: StatefulProcessor[K, V, U],
       timeMode: TimeMode,
       outputMode: OutputMode): Dataset[U] = {
@@ -219,7 +219,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
   }
 
   /** @inheritdoc */
-  private[sql] def transformWithState[U: Encoder](
+  def transformWithState[U: Encoder](
       statefulProcessor: StatefulProcessor[K, V, U],
       eventTimeColumnName: String,
       outputMode: OutputMode): Dataset[U] = {
@@ -235,7 +235,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
   }
 
   /** @inheritdoc */
-  private[sql] def transformWithState[U: Encoder, S: Encoder](
+  def transformWithState[U: Encoder, S: Encoder](
       statefulProcessor: StatefulProcessorWithInitialState[K, V, U, S],
       timeMode: TimeMode,
       outputMode: OutputMode,
@@ -257,7 +257,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
   }
 
   /** @inheritdoc */
-  private[sql] def transformWithState[U: Encoder, S: Encoder](
+  def transformWithState[U: Encoder, S: Encoder](
       statefulProcessor: StatefulProcessorWithInitialState[K, V, U, S],
       eventTimeColumnName: String,
       outputMode: OutputMode,
