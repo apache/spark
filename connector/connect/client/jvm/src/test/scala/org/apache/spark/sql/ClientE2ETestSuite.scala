@@ -48,8 +48,8 @@ import org.apache.spark.sql.types._
 import org.apache.spark.util.SparkThreadUtils
 
 class ClientE2ETestSuite
-    extends ConnectFunSuite
-    with QueryTest
+    extends QueryTest
+    with ConnectFunSuite
     with RemoteSparkSession
     with SQLHelper
     with PrivateMethodTester {
