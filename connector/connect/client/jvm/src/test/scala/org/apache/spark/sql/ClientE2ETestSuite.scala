@@ -1641,9 +1641,9 @@ class ClientE2ETestSuite
   }
 
   test("Multiple named parameterized nodes in the parsed logical plan") {
-    var df = spark.sql("SELECT :ordinal", args = Map("ordinal" -> 0))
+    var df = spark.sql("SELECT :key", args = Map("key" -> 0))
     for (i <- 1 until 10) {
-      val temp = spark.sql("SELECT :ordinal", args = Map("ordinal" -> i))
+      val temp = spark.sql("SELECT :key", args = Map("key" -> i))
       df = df.union(temp)
     }
     checkAnswer(df, (0 until 10).map(i => Row(i)))
@@ -1651,13 +1651,10 @@ class ClientE2ETestSuite
 
   test("Multiple named and positional parameterized nodes in the parsed logical plan") {
     var df = spark.sql("SELECT ?", Array(0))
+    df = df.union(spark.sql("SELECT :key", args = Map("key" -> 1)))
     for (i <- 1 until 5) {
-      val temp = spark.sql("SELECT ?", Array(i))
-      df = df.union(temp)
-    }
-    for (i <- 5 until 10) {
-      val temp = spark.sql("SELECT :ordinal", args = Map("ordinal" -> i))
-      df = df.union(temp)
+      df = df.union(spark.sql("SELECT ?", Array(2 * i)))
+      df = df.union(spark.sql("SELECT :key", args = Map("key" -> (2 * i + 1))))
     }
     checkAnswer(df, (0 until 10).map(i => Row(i)))
   }
