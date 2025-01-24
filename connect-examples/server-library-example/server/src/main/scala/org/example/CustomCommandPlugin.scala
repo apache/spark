@@ -28,6 +28,13 @@ import org.example.proto.CreateTable.Column.{DataType => ProtoDataType}
 
 import scala.collection.JavaConverters._
 
+/**
+ * Commands are distinct actions that can be  executed. Unlike relations, which focus on the
+ * transformation and nesting of output data, commands represent singular operations that perform
+ * specific tasks on the data.
+ * In this example, the `CustomCommandPlugin` handles operations related to creating and duplicating
+ * custom tables.
+ */
 class CustomCommandPlugin extends CommandPlugin with CustomPluginBase {
 
   /**
@@ -39,7 +46,6 @@ class CustomCommandPlugin extends CommandPlugin with CustomPluginBase {
    */
   override def process(raw: Array[Byte], planner: SparkConnectPlanner): Boolean = {
     val command = Any.parseFrom(raw)
-    println(s"Received command: ${command}")
     if (command.is(classOf[proto.CustomCommand])) {
       processInternal(command.unpack(classOf[proto.CustomCommand]), planner)
       true

@@ -26,6 +26,14 @@ import org.apache.spark.sql.connect.plugin.RelationPlugin
 import org.example.{CustomPluginBase, CustomTable}
 import org.example.proto
 
+/**
+ * Relations are fundamental to dataset transformations, acting as the mechanism through which an
+ * input dataset is transformed into an output dataset. Conceptually, relations can be likened to
+ * tables within a database, manipulated to achieve desired outcomes.
+ * In this example, the `CustomRelationPlugin` handles the transformation related to scanning
+ * custom tables. The scan relation would appear as leaf nodes in a dataset's associated logical
+ * plan node when it involves reads from the custom tables.
+ */
 class CustomRelationPlugin extends RelationPlugin with CustomPluginBase {
 
   /**
