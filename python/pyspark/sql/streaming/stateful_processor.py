@@ -81,9 +81,7 @@ class TimerValues:
     .. versionadded:: 4.0.0
     """
 
-    def __init__(
-        self, currentProcessingTimeInMs: int = -1, currentWatermarkInMs: int = -1
-    ) -> None:
+    def __init__(self, currentProcessingTimeInMs: int = -1, currentWatermarkInMs: int = -1) -> None:
         self._currentProcessingTimeInMs = currentProcessingTimeInMs
         self._currentWatermarkInMs = currentWatermarkInMs
 

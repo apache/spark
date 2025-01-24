@@ -1518,9 +1518,7 @@ class StatefulProcessorWithInitialStateTimers(SimpleStatefulProcessorWithInitial
     def handleExpiredTimer(self, key, timerValues, expiredTimerInfo) -> Iterator[pd.DataFrame]:
         self.handle.deleteTimer(expiredTimerInfo.getExpiryTimeInMs())
         str_key = f"{str(key[0])}-expired"
-        yield pd.DataFrame(
-            {"id": (str_key,), "value": str(expiredTimerInfo.getExpiryTimeInMs())}
-        )
+        yield pd.DataFrame({"id": (str_key,), "value": str(expiredTimerInfo.getExpiryTimeInMs())})
 
     def handleInitialState(self, key, initialState, timerValues) -> None:
         super().handleInitialState(key, initialState, timerValues)
