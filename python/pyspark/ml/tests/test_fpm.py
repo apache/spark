@@ -46,12 +46,6 @@ class FPMTestsMixin:
         self.assertEqual(fp.getMinConfidence(), 0.7)
         self.assertEqual(fp.getNumPartitions(), 1)
 
-        # Estimator save & load
-        with tempfile.TemporaryDirectory(prefix="fp_growth") as d:
-            fp.write().overwrite().save(d)
-            fp2 = FPGrowth.load(d)
-            self.assertEqual(str(fp), str(fp2))
-
         model = fp.fit(df)
 
         self.assertEqual(model.freqItemsets.columns, ["items", "freq"])
@@ -67,8 +61,12 @@ class FPMTestsMixin:
         self.assertEqual(output.columns, ["items", "prediction"])
         self.assertEqual(output.count(), 6)
 
-        # Model save & load
-        with tempfile.TemporaryDirectory(prefix="fp_growth_model") as d:
+        # save & load
+        with tempfile.TemporaryDirectory(prefix="fp_growth") as d:
+            fp.write().overwrite().save(d)
+            fp2 = FPGrowth.load(d)
+            self.assertEqual(str(fp), str(fp2))
+
             model.write().overwrite().save(d)
             model2 = FPGrowthModel.load(d)
             self.assertEqual(str(model), str(model2))

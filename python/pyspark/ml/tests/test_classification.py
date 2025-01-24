@@ -15,7 +15,6 @@
 # limitations under the License.
 #
 
-import os
 import tempfile
 import unittest
 from shutil import rmtree
@@ -25,6 +24,10 @@ import numpy as np
 from pyspark.ml.linalg import Vectors, Matrices
 from pyspark.sql import SparkSession, DataFrame
 from pyspark.ml.classification import (
+    LinearSVC,
+    LinearSVCModel,
+    LinearSVCSummary,
+    LinearSVCTrainingSummary,
     LogisticRegression,
     LogisticRegressionModel,
     LogisticRegressionSummary,
@@ -70,11 +73,18 @@ class ClassificationTestsMixin:
 
         check_result(lor_model)
 
-        # Model save
-        with tempfile.TemporaryDirectory(prefix="model_save") as tmp_dir:
-            local_path = os.path.join(tmp_dir, "model")
-            lor_model.write().save(local_path)
-            loaded_model = LogisticRegressionModel.load(local_path)
+        with tempfile.TemporaryDirectory(prefix="blr") as tmp_dir:
+            lor.write().overwrite().save(tmp_dir)
+            lor2 = LogisticRegression.load(tmp_dir)
+            self.assertEqual(str(lor), str(lor2))
+            self.assertEqual(lor.getRegParam(), 0.01)
+            self.assertEqual(lor2.getRegParam(), 0.01)
+
+            lor_model.write().overwrite().save(tmp_dir)
+            loaded_model = LogisticRegressionModel.load(tmp_dir)
+            self.assertEqual(str(lor_model), str(loaded_model))
+            self.assertEqual(lor_model.getRegParam(), 0.01)
+            self.assertEqual(loaded_model.getRegParam(), 0.01)
             check_result(loaded_model)
 
     def test_multinomial_logistic_regression_with_bound(self):
@@ -104,11 +114,11 @@ class ClassificationTestsMixin:
 
         check_result(lor_model)
 
-        # Model save
-        with tempfile.TemporaryDirectory(prefix="model_save") as tmp_dir:
-            local_path = os.path.join(tmp_dir, "model")
-            lor_model.write().save(local_path)
-            loaded_model = LogisticRegressionModel.load(local_path)
+        # test_binomial_logistic_regression_with_bound has covered the read/write for LR
+        with tempfile.TemporaryDirectory(prefix="mlr") as tmp_dir:
+            lor_model.write().overwrite().save(tmp_dir)
+            loaded_model = LogisticRegressionModel.load(tmp_dir)
+            self.assertEqual(str(lor_model), str(loaded_model))
             check_result(loaded_model)
 
     def test_logistic_regression_with_threshold(self):
@@ -293,6 +303,78 @@ class ClassificationTestsMixin:
         except OSError:
             pass
 
+    def test_linear_svc(self):
+        df = (
+            self.spark.createDataFrame(
+                [
+                    (1.0, 1.0, Vectors.dense(0.0, 5.0)),
+                    (0.0, 2.0, Vectors.dense(1.0, 2.0)),
+                    (1.0, 3.0, Vectors.dense(2.0, 1.0)),
+                    (0.0, 4.0, Vectors.dense(3.0, 3.0)),
+                ],
+                ["label", "weight", "features"],
+            )
+            .coalesce(1)
+            .sortWithinPartitions("weight")
+        )
+
+        svc = LinearSVC(maxIter=1, regParam=1.0)
+        self.assertEqual(svc.getMaxIter(), 1)
+        self.assertEqual(svc.getRegParam(), 1.0)
+
+        model = svc.fit(df)
+        self.assertEqual(model.numClasses, 2)
+        self.assertEqual(model.numFeatures, 2)
+        self.assertTrue(np.allclose(model.intercept, 0.025877458475338313, atol=1e-4))
+        self.assertTrue(
+            np.allclose(model.coefficients.toArray(), [-0.03622844, 0.01035098], atol=1e-4)
+        )
+
+        vec = Vectors.dense(0.0, 5.0)
+        self.assertEqual(model.predict(vec), 1.0)
+        self.assertTrue(
+            np.allclose(model.predictRaw(vec).toArray(), [-0.07763238, 0.07763238], atol=1e-4)
+        )
+
+        output = model.transform(df)
+        expected_cols = [
+            "label",
+            "weight",
+            "features",
+            "rawPrediction",
+            "prediction",
+        ]
+        self.assertEqual(output.columns, expected_cols)
+        self.assertEqual(output.count(), 4)
+
+        # model summary
+        self.assertTrue(model.hasSummary)
+        summary = model.summary()
+        self.assertIsInstance(summary, LinearSVCSummary)
+        self.assertIsInstance(summary, LinearSVCTrainingSummary)
+        self.assertEqual(summary.labels, [0.0, 1.0])
+        self.assertEqual(summary.accuracy, 0.5)
+        self.assertEqual(summary.areaUnderROC, 0.75)
+        self.assertEqual(summary.predictions.columns, expected_cols)
+
+        summary2 = model.evaluate(df)
+        self.assertIsInstance(summary2, LinearSVCSummary)
+        self.assertFalse(isinstance(summary2, LinearSVCTrainingSummary))
+        self.assertEqual(summary2.labels, [0.0, 1.0])
+        self.assertEqual(summary2.accuracy, 0.5)
+        self.assertEqual(summary2.areaUnderROC, 0.75)
+        self.assertEqual(summary2.predictions.columns, expected_cols)
+
+        # Model save & load
+        with tempfile.TemporaryDirectory(prefix="linear_svc") as d:
+            svc.write().overwrite().save(d)
+            svc2 = LinearSVC.load(d)
+            self.assertEqual(str(svc), str(svc2))
+
+            model.write().overwrite().save(d)
+            model2 = LinearSVCModel.load(d)
+            self.assertEqual(str(model), str(model2))
+
     def test_decision_tree_classifier(self):
         df = (
             self.spark.createDataFrame(
@@ -318,12 +400,6 @@ class ClassificationTestsMixin:
         self.assertEqual(dt.getSeed(), 1)
         self.assertEqual(dt.getLabelCol(), "label")
         self.assertEqual(dt.getLeafCol(), "leaf")
-
-        # Estimator save & load
-        with tempfile.TemporaryDirectory(prefix="decision_tree_classifier") as d:
-            dt.write().overwrite().save(d)
-            dt2 = DecisionTreeClassifier.load(d)
-            self.assertEqual(str(dt), str(dt2))
 
         model = dt.fit(df)
         self.assertEqual(model.numClasses, 2)
@@ -353,8 +429,12 @@ class ClassificationTestsMixin:
         self.assertEqual(output.columns, expected_cols)
         self.assertEqual(output.count(), 4)
 
-        # Model save & load
-        with tempfile.TemporaryDirectory(prefix="decision_tree_model") as d:
+        # save & load
+        with tempfile.TemporaryDirectory(prefix="decision_tree") as d:
+            dt.write().overwrite().save(d)
+            dt2 = DecisionTreeClassifier.load(d)
+            self.assertEqual(str(dt), str(dt2))
+
             model.write().overwrite().save(d)
             model2 = DecisionTreeClassificationModel.load(d)
             self.assertEqual(str(model), str(model2))
@@ -387,12 +467,6 @@ class ClassificationTestsMixin:
         self.assertEqual(gbt.getSeed(), 1)
         self.assertEqual(gbt.getLabelCol(), "label")
         self.assertEqual(gbt.getLeafCol(), "leaf")
-
-        # Estimator save & load
-        with tempfile.TemporaryDirectory(prefix="gbt_classifier") as d:
-            gbt.write().overwrite().save(d)
-            gbt2 = GBTClassifier.load(d)
-            self.assertEqual(str(gbt), str(gbt2))
 
         model = gbt.fit(df)
         self.assertEqual(model.numClasses, 2)
@@ -433,8 +507,12 @@ class ClassificationTestsMixin:
         self.assertEqual(output.columns, expected_cols)
         self.assertEqual(output.count(), 4)
 
-        # Model save & load
-        with tempfile.TemporaryDirectory(prefix="gbt_classification_model") as d:
+        # save & load
+        with tempfile.TemporaryDirectory(prefix="gbt_classification") as d:
+            gbt.write().overwrite().save(d)
+            gbt2 = GBTClassifier.load(d)
+            self.assertEqual(str(gbt), str(gbt2))
+
             model.write().overwrite().save(d)
             model2 = GBTClassificationModel.load(d)
             self.assertEqual(str(model), str(model2))
@@ -467,12 +545,6 @@ class ClassificationTestsMixin:
         self.assertEqual(rf.getSeed(), 1)
         self.assertEqual(rf.getLabelCol(), "label")
         self.assertEqual(rf.getLeafCol(), "leaf")
-
-        # Estimator save & load
-        with tempfile.TemporaryDirectory(prefix="binary_random_forest_classifier") as d:
-            rf.write().overwrite().save(d)
-            rf2 = RandomForestClassifier.load(d)
-            self.assertEqual(str(rf), str(rf2))
 
         model = rf.fit(df)
         self.assertEqual(model.numClasses, 2)
@@ -522,7 +594,11 @@ class ClassificationTestsMixin:
         self.assertEqual(summary2.predictions.columns, expected_cols)
 
         # Model save & load
-        with tempfile.TemporaryDirectory(prefix="binary_random_forest_model") as d:
+        with tempfile.TemporaryDirectory(prefix="binary_random_forest") as d:
+            rf.write().overwrite().save(d)
+            rf2 = RandomForestClassifier.load(d)
+            self.assertEqual(str(rf), str(rf2))
+
             model.write().overwrite().save(d)
             model2 = RandomForestClassificationModel.load(d)
             self.assertEqual(str(model), str(model2))
@@ -555,12 +631,6 @@ class ClassificationTestsMixin:
         self.assertEqual(rf.getSeed(), 1)
         self.assertEqual(rf.getLabelCol(), "label")
         self.assertEqual(rf.getLeafCol(), "leaf")
-
-        # Estimator save & load
-        with tempfile.TemporaryDirectory(prefix="binary_random_forest_classifier") as d:
-            rf.write().overwrite().save(d)
-            rf2 = RandomForestClassifier.load(d)
-            self.assertEqual(str(rf), str(rf2))
 
         model = rf.fit(df)
         self.assertEqual(model.numClasses, 3)
@@ -607,8 +677,12 @@ class ClassificationTestsMixin:
         self.assertEqual(summary2.accuracy, 0.5)
         self.assertEqual(summary2.predictions.columns, expected_cols)
 
-        # Model save & load
-        with tempfile.TemporaryDirectory(prefix="multiclass_random_forest_model") as d:
+        # save & load
+        with tempfile.TemporaryDirectory(prefix="multiclass_random_forest") as d:
+            rf.write().overwrite().save(d)
+            rf2 = RandomForestClassifier.load(d)
+            self.assertEqual(str(rf), str(rf2))
+
             model.write().overwrite().save(d)
             model2 = RandomForestClassificationModel.load(d)
             self.assertEqual(str(model), str(model2))

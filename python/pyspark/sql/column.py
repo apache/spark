@@ -31,7 +31,6 @@ from pyspark.sql.types import DataType
 from pyspark.errors import PySparkValueError
 
 if TYPE_CHECKING:
-    from py4j.java_gateway import JavaObject
     from pyspark.sql._typing import LiteralType, DecimalLiteral, DateTimeLiteral
     from pyspark.sql.window import WindowSpec
 
@@ -72,16 +71,10 @@ class Column(TableValuedFunctionArgument):
     # HACK ALERT!! this is to reduce the backward compatibility concern, and returns
     # Spark Classic Column by default. This is NOT an API, and NOT supposed to
     # be directly invoked. DO NOT use this constructor.
-    def __new__(
-        cls,
-        jc: "JavaObject",
-    ) -> "Column":
+    def __new__(cls, *args: Any, **kwargs: Any) -> "Column":
         from pyspark.sql.classic.column import Column
 
-        return Column.__new__(Column, jc)
-
-    def __init__(self, jc: "JavaObject") -> None:
-        self._jc = jc
+        return Column.__new__(Column, *args, **kwargs)
 
     # arithmetic operators
     @dispatch_col_method

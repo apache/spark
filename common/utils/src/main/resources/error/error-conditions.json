@@ -82,6 +82,12 @@
     ],
     "sqlState" : "22003"
   },
+  "ARTIFACT_ALREADY_EXISTS" : {
+    "message" : [
+      "The artifact <normalizedRemoteRelativePath> already exists. Please choose a different name for the new artifact because it cannot be overwritten."
+    ],
+    "sqlState" : "42713"
+  },
   "ASSIGNMENT_ARITY_MISMATCH" : {
     "message" : [
       "The number of columns or variables assigned or aliased: <numTarget> does not match the number of source expressions: <numExpr>."
@@ -3959,6 +3965,12 @@
   "NOT_SUPPORTED_CHANGE_COLUMN" : {
     "message" : [
       "ALTER TABLE ALTER/CHANGE COLUMN is not supported for changing <table>'s column <originName> with type <originType> to <newName> with type <newType>."
+    ],
+    "sqlState" : "0A000"
+  },
+  "NOT_SUPPORTED_CHANGE_SAME_COLUMN" : {
+    "message" : [
+      "ALTER TABLE ALTER/CHANGE COLUMN is not supported for changing <table>'s column <fieldName> including its nested fields multiple times in the same command."
     ],
     "sqlState" : "0A000"
   },

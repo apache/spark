@@ -23,20 +23,12 @@ from pyspark.testing.connectutils import ReusedConnectTestCase
 
 class FeatureParityTests(FeatureTestsMixin, ReusedConnectTestCase):
     @unittest.skip("Need to support.")
-    def test_binarizer(self):
-        super().test_binarizer()
-
-    @unittest.skip("Need to support.")
     def test_idf(self):
         super().test_idf()
 
     @unittest.skip("Need to support.")
     def test_ngram(self):
         super().test_ngram()
-
-    @unittest.skip("Need to support.")
-    def test_stopwordsremover(self):
-        super().test_stopwordsremover()
 
     @unittest.skip("Need to support.")
     def test_count_vectorizer_with_binary(self):
