@@ -149,9 +149,10 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
         case _: DynamicPruning => true
         case _ => false
       }
-      val batchExec = BatchScanExec(relation.output, relation.scan, runtimeFilters,
-        relation.ordering, relation.relation.table,
-        StoragePartitionJoinParams(relation.keyGroupedPartitioning))
+      val batchExec = relation.getTagValue(BatchScanExec.PRESERVE_BATCH_EXEC_TO_USE).getOrElse {
+        BatchScanExec(relation.output, relation.scan, runtimeFilters, relation.ordering,
+          relation.relation.table, StoragePartitionJoinParams(relation.keyGroupedPartitioning))
+      }
       DataSourceV2Strategy.withProjectAndFilter(
         project, postScanFilters, batchExec, !batchExec.supportsColumnar) :: Nil
 

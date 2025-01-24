@@ -119,6 +119,22 @@ private[execution] sealed trait HashedRelation extends KnownSizeEstimation {
    * Release any used resources.
    */
   def close(): Unit
+
+  /**
+   * @param key
+   * @return
+   */
+  def containsKey(key: InternalRow): Boolean = {
+    throw new UnsupportedOperationException
+  }
+
+  /**
+   * @param key
+   * @return
+   */
+  def containsKey(key: Long): Boolean = {
+    throw new UnsupportedOperationException
+  }
 }
 
 private[execution] object HashedRelation {
@@ -261,6 +277,15 @@ private[joins] class UnsafeHashedRelation(
     }
   }
 
+  override def containsKey(key: InternalRow): Boolean = {
+    val unsafeKey = key.asInstanceOf[UnsafeRow]
+    val map = binaryMap // avoid the compiler error
+    val loc = new map.Location
+    binaryMap.safeLookup(unsafeKey.getBaseObject, unsafeKey.getBaseOffset, unsafeKey.getSizeInBytes,
+      loc, unsafeKey.hashCode())
+    loc.isDefined
+  }
+
   override def getWithKeyIndex(key: InternalRow): Iterator[ValueRowWithKeyIndex] = {
     val unsafeKey = key.asInstanceOf[UnsafeRow]
     val map = binaryMap  // avoid the compiler error
@@ -353,8 +378,8 @@ private[joins] class UnsafeHashedRelation(
   }
 
   private def write(
-      writeInt: (Int) => Unit,
-      writeLong: (Long) => Unit,
+      writeInt: Int => Unit,
+      writeLong: Long => Unit,
       writeBuffer: (Array[Byte], Int, Int) => Unit) : Unit = {
     writeInt(numKeys)
     writeInt(numFields)
@@ -624,6 +649,24 @@ private[execution] final class LongToUnsafeRowMap(
   private def firstSlot(key: Long): Int = {
     val h = key * 0x9E3779B9L
     (h ^ (h >> 32)).toInt & mask
+  }
+
+  def containsKey(key: Long): Boolean = {
+    if (isDense) {
+      if (key >= minKey && key <= maxKey) {
+        val value = array((key - minKey).toInt)
+        return value > 0
+      }
+    } else {
+      var pos = firstSlot(key)
+      while (array(pos + 1) != 0) {
+        if (array(pos) == key) {
+          return true
+        }
+        pos = nextSlot(pos)
+      }
+    }
+    false
   }
 
   /**
@@ -919,8 +962,8 @@ private[execution] final class LongToUnsafeRowMap(
   }
 
   private def write(
-      writeBoolean: (Boolean) => Unit,
-      writeLong: (Long) => Unit,
+      writeBoolean: Boolean => Unit,
+      writeLong: Long => Unit,
       writeBuffer: (Array[Byte], Int, Int) => Unit): Unit = {
     writeBoolean(isDense)
     writeLong(minKey)
@@ -1021,6 +1064,16 @@ class LongHashedRelation(
   override def getValue(key: Long): InternalRow = map.getValue(key, resultRow)
 
   override def keyIsUnique: Boolean = map.keyIsUnique
+
+  override def containsKey(key: Long): Boolean = map.containsKey(key)
+
+  override def containsKey(key: InternalRow): Boolean = {
+    if (key.isNullAt(0)) {
+      false
+    } else {
+      containsKey(key.getLong(0))
+    }
+  }
 
   override def close(): Unit = {
     map.free()
