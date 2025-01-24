@@ -591,7 +591,9 @@ private[ml] object MLUtils {
     (classOf[UnivariateFeatureSelectorModel], Set("selectedFeatures")),
     (classOf[VarianceThresholdSelectorModel], Set("selectedFeatures")),
     (classOf[PCAModel], Set("pc", "explainedVariance")),
-    (classOf[Word2VecModel], Set("getVectors", "findSynonyms", "findSynonymsArray")))
+    (classOf[Word2VecModel], Set("getVectors", "findSynonyms", "findSynonymsArray")),
+    (classOf[CountVectorizerModel], Set("vocabulary")),
+    (classOf[OneHotEncoderModel], Set("categorySizes")))
 
   private def validate(obj: Any, method: String): Unit = {
     assert(obj != null)
