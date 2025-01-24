@@ -23,6 +23,7 @@ from typing import List, Tuple, Any
 import numpy as np
 
 from pyspark.ml.feature import (
+    DCT,
     Binarizer,
     CountVectorizer,
     CountVectorizerModel,
@@ -59,6 +60,34 @@ from pyspark.testing.mlutils import check_params, SparkSessionTestCase
 
 
 class FeatureTestsMixin:
+    def test_dct(self):
+        df = self.spark.createDataFrame([(Vectors.dense([5.0, 8.0, 6.0]),)], ["vec"])
+        dct = DCT()
+        dct.setInverse(False)
+        dct.setInputCol("vec")
+        dct.setOutputCol("resultVec")
+
+        self.assertFalse(dct.getInverse())
+        self.assertEqual(dct.getInputCol(), "vec")
+        self.assertEqual(dct.getOutputCol(), "resultVec")
+
+        output = dct.transform(df)
+        self.assertEqual(output.columns, ["vec", "resultVec"])
+        self.assertEqual(output.count(), 1)
+        self.assertTrue(
+            np.allclose(
+                output.head().resultVec.toArray(),
+                [10.96965511, -0.70710678, -2.04124145],
+                atol=1e-4,
+            )
+        )
+
+        # save & load
+        with tempfile.TemporaryDirectory(prefix="dct") as d:
+            dct.write().overwrite().save(d)
+            dct2 = DCT.load(d)
+            self.assertEqual(str(dct), str(dct2))
+
     def test_string_indexer(self):
         df = (
             self.spark.createDataFrame(
