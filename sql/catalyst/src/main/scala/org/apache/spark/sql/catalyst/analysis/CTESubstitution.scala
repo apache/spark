@@ -402,7 +402,7 @@ object CTESubstitution extends Rule[LogicalPlan] {
         other.transformExpressionsWithPruning(_.containsPattern(PLAN_EXPRESSION)) {
           case e: SubqueryExpression =>
             e.withNewPlan(
-              apply(substituteCTE(e.plan, alwaysInline, cteRelations, None)))
+              apply(substituteCTE(e.plan, alwaysInline, cteRelations, recursiveCTERelation)))
         }
     }
   }
