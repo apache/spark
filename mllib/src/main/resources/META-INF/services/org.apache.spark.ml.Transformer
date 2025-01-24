@@ -26,6 +26,7 @@ org.apache.spark.ml.feature.StopWordsRemover
 
 ########### Model for loading
 # classification
+org.apache.spark.ml.classification.LinearSVCModel
 org.apache.spark.ml.classification.LogisticRegressionModel
 org.apache.spark.ml.classification.DecisionTreeClassificationModel
 org.apache.spark.ml.classification.RandomForestClassificationModel

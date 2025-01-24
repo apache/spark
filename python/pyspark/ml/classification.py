@@ -62,7 +62,6 @@ from pyspark.ml.param.shared import (
     HasSolver,
     HasParallelism,
 )
-from pyspark.ml.util import try_remote_attribute_relation
 from pyspark.ml.tree import (
     _DecisionTreeModel,
     _DecisionTreeParams,
@@ -86,6 +85,7 @@ from pyspark.ml.util import (
     MLWriter,
     MLWritable,
     HasTrainingSummary,
+    try_remote_attribute_relation,
 )
 from pyspark.ml.wrapper import JavaParams, JavaPredictor, JavaPredictionModel, JavaWrapper
 from pyspark.ml.common import inherit_doc
