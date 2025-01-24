@@ -137,6 +137,9 @@ final class ChiSqSelectorModel private[ml] (
 
   import ChiSqSelectorModel._
 
+  private[ml] def this() = this(
+    Identifiable.randomUID("chiSqSelector"), Array.emptyIntArray)
+
   override protected def isNumericAttribute = false
 
   /** @group setParam */

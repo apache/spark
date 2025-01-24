@@ -42,6 +42,12 @@ from pyspark.ml.feature import (
     MinMaxScalerModel,
     RobustScaler,
     RobustScalerModel,
+    ChiSqSelector,
+    ChiSqSelectorModel,
+    UnivariateFeatureSelector,
+    UnivariateFeatureSelectorModel,
+    VarianceThresholdSelector,
+    VarianceThresholdSelectorModel,
     StopWordsRemover,
     StringIndexer,
     StringIndexerModel,
@@ -390,6 +396,102 @@ class FeatureTestsMixin:
             model2 = RobustScalerModel.load(d)
             self.assertEqual(str(model), str(model2))
             self.assertEqual(model2.getOutputCol(), "scaled")
+
+    def test_chi_sq_selector(self):
+        df = self.spark.createDataFrame(
+            [
+                (Vectors.dense([0.0, 0.0, 18.0, 1.0]), 1.0),
+                (Vectors.dense([0.0, 1.0, 12.0, 0.0]), 0.0),
+                (Vectors.dense([1.0, 0.0, 15.0, 0.1]), 0.0),
+            ],
+            ["features", "label"],
+        )
+
+        selector = ChiSqSelector(numTopFeatures=1, outputCol="selectedFeatures")
+        self.assertEqual(selector.getNumTopFeatures(), 1)
+        self.assertEqual(selector.getOutputCol(), "selectedFeatures")
+
+        model = selector.fit(df)
+        self.assertEqual(model.selectedFeatures, [2])
+
+        output = model.transform(df)
+        self.assertEqual(output.columns, ["features", "label", "selectedFeatures"])
+        self.assertEqual(output.count(), 3)
+
+        # save & load
+        with tempfile.TemporaryDirectory(prefix="chi_sq_selector") as d:
+            selector.write().overwrite().save(d)
+            selector2 = ChiSqSelector.load(d)
+            self.assertEqual(str(selector), str(selector2))
+
+            model.write().overwrite().save(d)
+            model2 = ChiSqSelectorModel.load(d)
+            self.assertEqual(str(model), str(model2))
+
+    def test_univariate_selector(self):
+        df = self.spark.createDataFrame(
+            [
+                (Vectors.dense([0.0, 0.0, 18.0, 1.0]), 1.0),
+                (Vectors.dense([0.0, 1.0, 12.0, 0.0]), 0.0),
+                (Vectors.dense([1.0, 0.0, 15.0, 0.1]), 0.0),
+            ],
+            ["features", "label"],
+        )
+
+        selector = UnivariateFeatureSelector(outputCol="selectedFeatures")
+        selector.setFeatureType("continuous").setLabelType("categorical").setSelectionThreshold(1)
+        self.assertEqual(selector.getFeatureType(), "continuous")
+        self.assertEqual(selector.getLabelType(), "categorical")
+        self.assertEqual(selector.getOutputCol(), "selectedFeatures")
+        self.assertEqual(selector.getSelectionThreshold(), 1)
+
+        model = selector.fit(df)
+        self.assertEqual(model.selectedFeatures, [3])
+
+        output = model.transform(df)
+        self.assertEqual(output.columns, ["features", "label", "selectedFeatures"])
+        self.assertEqual(output.count(), 3)
+
+        # save & load
+        with tempfile.TemporaryDirectory(prefix="univariate_selector") as d:
+            selector.write().overwrite().save(d)
+            selector2 = UnivariateFeatureSelector.load(d)
+            self.assertEqual(str(selector), str(selector2))
+
+            model.write().overwrite().save(d)
+            model2 = UnivariateFeatureSelectorModel.load(d)
+            self.assertEqual(str(model), str(model2))
+
+    def test_variance_threshold_selector(self):
+        df = self.spark.createDataFrame(
+            [
+                (Vectors.dense([0.0, 0.0, 18.0, 1.0]), 1.0),
+                (Vectors.dense([0.0, 1.0, 12.0, 0.0]), 0.0),
+                (Vectors.dense([1.0, 0.0, 15.0, 0.1]), 0.0),
+            ],
+            ["features", "label"],
+        )
+
+        selector = VarianceThresholdSelector(varianceThreshold=2, outputCol="selectedFeatures")
+        self.assertEqual(selector.getVarianceThreshold(), 2)
+        self.assertEqual(selector.getOutputCol(), "selectedFeatures")
+
+        model = selector.fit(df)
+        self.assertEqual(model.selectedFeatures, [2])
+
+        output = model.transform(df)
+        self.assertEqual(output.columns, ["features", "label", "selectedFeatures"])
+        self.assertEqual(output.count(), 3)
+
+        # save & load
+        with tempfile.TemporaryDirectory(prefix="variance_threshold_selector") as d:
+            selector.write().overwrite().save(d)
+            selector2 = VarianceThresholdSelector.load(d)
+            self.assertEqual(str(selector), str(selector2))
+
+            model.write().overwrite().save(d)
+            model2 = VarianceThresholdSelectorModel.load(d)
+            self.assertEqual(str(model), str(model2))
 
     def test_word2vec(self):
         sent = ("a b " * 100 + "a c " * 10).split(" ")

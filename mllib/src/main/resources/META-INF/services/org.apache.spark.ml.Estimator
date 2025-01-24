@@ -52,6 +52,9 @@ org.apache.spark.ml.feature.StandardScaler
 org.apache.spark.ml.feature.MaxAbsScaler
 org.apache.spark.ml.feature.MinMaxScaler
 org.apache.spark.ml.feature.RobustScaler
+org.apache.spark.ml.feature.ChiSqSelector
+org.apache.spark.ml.feature.UnivariateFeatureSelector
+org.apache.spark.ml.feature.VarianceThresholdSelector
 org.apache.spark.ml.feature.StringIndexer
 org.apache.spark.ml.feature.PCA
 org.apache.spark.ml.feature.Word2Vec
