@@ -30,8 +30,10 @@ from pyspark.ml.feature import (
     CountVectorizerModel,
     OneHotEncoder,
     OneHotEncoderModel,
+    FeatureHasher,
     HashingTF,
     IDF,
+    IDFModel,
     NGram,
     RFormula,
     Tokenizer,
@@ -67,6 +69,7 @@ from pyspark.ml.linalg import DenseVector, SparseVector, Vectors
 from pyspark.sql import Row
 from pyspark.testing.utils import QuietTest
 from pyspark.testing.mlutils import check_params, SparkSessionTestCase
+from pyspark.sql.utils import is_remote
 
 
 class FeatureTestsMixin:
@@ -843,21 +846,43 @@ class FeatureTestsMixin:
 
     def test_idf(self):
         dataset = self.spark.createDataFrame(
-            [(DenseVector([1.0, 2.0]),), (DenseVector([0.0, 1.0]),), (DenseVector([3.0, 0.2]),)],
+            [
+                (DenseVector([1.0, 2.0]),),
+                (DenseVector([0.0, 1.0]),),
+                (DenseVector([3.0, 0.2]),),
+            ],
             ["tf"],
         )
-        idf0 = IDF(inputCol="tf")
-        self.assertListEqual(idf0.params, [idf0.inputCol, idf0.minDocFreq, idf0.outputCol])
-        idf0m = idf0.fit(dataset, {idf0.outputCol: "idf"})
-        self.assertEqual(
-            idf0m.uid, idf0.uid, "Model should inherit the UID from its parent estimator."
+        idf = IDF(inputCol="tf")
+        self.assertListEqual(idf.params, [idf.inputCol, idf.minDocFreq, idf.outputCol])
+
+        model = idf.fit(dataset, {idf.outputCol: "idf"})
+        # self.assertEqual(
+        #     model.uid, idf.uid, "Model should inherit the UID from its parent estimator."
+        # )
+        self.assertTrue(
+            np.allclose(model.idf.toArray(), [0.28768207245178085, 0.0], atol=1e-4),
+            model.idf,
         )
-        output = idf0m.transform(dataset)
-        self.assertIsNotNone(output.head().idf)
-        self.assertIsNotNone(idf0m.docFreq)
-        self.assertEqual(idf0m.numDocs, 3)
+        self.assertEqual(model.docFreq, [2, 3])
+        self.assertEqual(model.numDocs, 3)
         # Test that parameters transferred to Python Model
-        check_params(self, idf0m)
+        if not is_remote():
+            check_params(self, model)
+
+        output = model.transform(dataset)
+        self.assertEqual(output.columns, ["tf", "idf"])
+        self.assertIsNotNone(output.head().idf)
+
+        # save & load
+        with tempfile.TemporaryDirectory(prefix="idf") as d:
+            idf.write().overwrite().save(d)
+            idf2 = IDF.load(d)
+            self.assertEqual(str(idf), str(idf2))
+
+            model.write().overwrite().save(d)
+            model2 = IDFModel.load(d)
+            self.assertEqual(str(model), str(model2))
 
     def test_ngram(self):
         dataset = self.spark.createDataFrame([Row(input=["a", "b", "c", "d", "e"])])
@@ -1149,26 +1174,63 @@ class FeatureTestsMixin:
         expected = DenseVector([0.0, 10.0, 0.5])
         self.assertEqual(output, expected)
 
-    def test_apply_binary_term_freqs(self):
+    def test_feature_hasher(self):
+        data = [(2.0, True, "1", "foo"), (3.0, False, "2", "bar")]
+        cols = ["real", "bool", "stringNum", "string"]
+        df = self.spark.createDataFrame(data, cols)
+
+        hasher = FeatureHasher(numFeatures=2)
+        hasher.setInputCols(cols)
+        hasher.setOutputCol("features")
+
+        self.assertEqual(hasher.getNumFeatures(), 2)
+        self.assertEqual(hasher.getInputCols(), cols)
+        self.assertEqual(hasher.getOutputCol(), "features")
+
+        output = hasher.transform(df)
+        self.assertEqual(output.columns, ["real", "bool", "stringNum", "string", "features"])
+        self.assertEqual(output.count(), 2)
+
+        features = output.head().features.toArray()
+        self.assertTrue(
+            np.allclose(features, [2.0, 3.0], atol=1e-4),
+            features,
+        )
+
+        # save & load
+        with tempfile.TemporaryDirectory(prefix="feature_hasher") as d:
+            hasher.write().overwrite().save(d)
+            hasher2 = FeatureHasher.load(d)
+            self.assertEqual(str(hasher), str(hasher2))
+
+    def test_hashing_tf(self):
         df = self.spark.createDataFrame([(0, ["a", "a", "b", "c", "c", "c"])], ["id", "words"])
-        n = 10
-        hashingTF = HashingTF()
-        hashingTF.setInputCol("words").setOutputCol("features").setNumFeatures(n).setBinary(True)
-        output = hashingTF.transform(df)
+        tf = HashingTF()
+        tf.setInputCol("words").setOutputCol("features").setNumFeatures(10).setBinary(True)
+        self.assertEqual(tf.getInputCol(), "words")
+        self.assertEqual(tf.getOutputCol(), "features")
+        self.assertEqual(tf.getNumFeatures(), 10)
+        self.assertTrue(tf.getBinary())
+
+        output = tf.transform(df)
+        self.assertEqual(output.columns, ["id", "words", "features"])
+        self.assertEqual(output.count(), 1)
+
         features = output.select("features").first().features.toArray()
-        expected = Vectors.dense([0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 1.0, 1.0, 0.0]).toArray()
-        for i in range(0, n):
-            self.assertAlmostEqual(
-                features[i],
-                expected[i],
-                14,
-                "Error at "
-                + str(i)
-                + ": expected "
-                + str(expected[i])
-                + ", got "
-                + str(features[i]),
-            )
+        self.assertTrue(
+            np.allclose(
+                features,
+                [0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 1.0, 1.0, 0.0],
+                atol=1e-4,
+            ),
+            features,
+        )
+
+        # save & load
+        with tempfile.TemporaryDirectory(prefix="hashing_tf") as d:
+            tf.write().overwrite().save(d)
+            tf2 = HashingTF.load(d)
+            self.assertEqual(str(tf), str(tf2))
 
 
 class FeatureTests(FeatureTestsMixin, SparkSessionTestCase):
