@@ -20,6 +20,19 @@ CREATE FUNCTION foo1a2(a INT, b INT, c INT, d INT) RETURNS INT RETURN 1;
 -- Expect: 1
 SELECT foo1a2(1, 2, 3, 4);
 
+-- 1.1.b A table function with various numbers of arguments
+CREATE FUNCTION foo1b0() RETURNS TABLE (c1 INT) RETURN SELECT 1;
+-- Expect (1)
+SELECT * FROM foo1b0();
+
+CREATE FUNCTION foo1b1(a INT) RETURNS TABLE (c1 INT) RETURN SELECT 1;
+-- Expect (1)
+SELECT * FROM foo1b1(1);
+
+CREATE FUNCTION foo1b2(a INT, b INT, c INT, d INT) RETURNS TABLE(c1 INT) RETURN SELECT 1;
+-- Expect (1)
+SELECT * FROM foo1b2(1, 2, 3, 4);
+
 -------------------------------
 -- 2. Scalar SQL UDF
 -- 2.1 deterministic simple expressions
@@ -120,3 +133,42 @@ SELECT foo2_4b(map('a', 'hello', 'b', 'world'), 'a');
 -- Clean up
 DROP VIEW V2;
 DROP VIEW V1;
+
+-- 3. Misc
+CREATE VIEW t1(c1, c2) AS VALUES (0, 1), (0, 2), (1, 2);
+CREATE VIEW t2(c1, c2) AS VALUES (0, 2), (0, 3);
+
+-- 4. SQL table functions
+CREATE FUNCTION foo4_0() RETURNS TABLE (x INT) RETURN SELECT 1;
+CREATE FUNCTION foo4_1(x INT) RETURNS TABLE (a INT) RETURN SELECT x;
+CREATE FUNCTION foo4_2(x INT) RETURNS TABLE (a INT) RETURN SELECT c2 FROM t2 WHERE c1 = x;
+CREATE FUNCTION foo4_3(x INT) RETURNS TABLE (a INT, cnt INT) RETURN SELECT c1, COUNT(*) FROM t2 WHERE c1 = x GROUP BY c1;
+
+-- 4.1 SQL table function with literals
+SELECT * FROM foo4_0();
+SELECT * FROM foo4_1(1);
+SELECT * FROM foo4_2(2);
+SELECT * FROM foo4_3(0);
+-- with non-deterministic inputs
+SELECT * FROM foo4_1(rand(0) * 0);
+
+-- 4.2 SQL table function with lateral references
+SELECT * FROM t1, LATERAL foo4_1(c1);
+SELECT * FROM t1, LATERAL foo4_2(c1);
+SELECT * FROM t1 JOIN LATERAL foo4_2(c1) ON t1.c2 = foo4_2.a;
+SELECT * FROM t1, LATERAL foo4_3(c1);
+SELECT * FROM t1, LATERAL (SELECT cnt FROM foo4_3(c1));
+SELECT * FROM t1, LATERAL foo4_1(c1 + rand(0) * 0);
+
+-- 4.3 multiple SQL table functions
+SELECT * FROM t1 JOIN foo4_1(1) AS foo4_1(x) ON t1.c1 = foo4_1.x;
+SELECT * FROM t1, LATERAL foo4_1(c1), LATERAL foo4_2(foo4_1.a + c1);
+
+-- 4.4 table functions inside scalar subquery
+SELECT (SELECT MAX(a) FROM foo4_1(c1)) FROM t1;
+SELECT (SELECT MAX(a) FROM foo4_1(c1) WHERE a = c2) FROM t1;
+SELECT (SELECT MAX(cnt) FROM foo4_3(c1)) FROM t1;
+
+-- Clean up
+DROP VIEW t1;
+DROP VIEW t2;
