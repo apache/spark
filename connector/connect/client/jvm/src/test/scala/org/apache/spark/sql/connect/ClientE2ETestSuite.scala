@@ -42,12 +42,10 @@ import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.connect.ConnectConversions._
 import org.apache.spark.sql.connect.client.{RetryPolicy, SparkConnectClient, SparkResult}
 import org.apache.spark.sql.connect.test.{ConnectFunSuite, IntegrationTestUtils, RemoteSparkSession, SQLHelper}
+import org.apache.spark.sql.connect.test.QueryTest
 import org.apache.spark.sql.connect.test.SparkConnectServerUtils.port
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SqlApiConf
-import org.apache.spark.sql.test.{ConnectFunSuite, IntegrationTestUtils, RemoteSparkSession, SQLHelper}
-import org.apache.spark.sql.test.QueryTest
-import org.apache.spark.sql.test.SparkConnectServerUtils.port
 import org.apache.spark.sql.types._
 import org.apache.spark.util.SparkThreadUtils
 
