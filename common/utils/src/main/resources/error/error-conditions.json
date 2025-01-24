@@ -5906,6 +5906,11 @@
           "Correlated scalar subqueries must be aggregated to return at most one row."
         ]
       },
+      "NESTED_CORRELATED_SUBQUERIES_NOT_SUPPORTED" : {
+        "message" : [
+          "Nested correlated subqueries are not supported."
+        ]
+      },
       "NON_CORRELATED_COLUMNS_IN_GROUP_BY" : {
         "message" : [
           "A GROUP BY clause in a scalar correlated subquery cannot contain non-correlated columns: <value>."
