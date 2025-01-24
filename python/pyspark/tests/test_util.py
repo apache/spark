@@ -153,7 +153,9 @@ class HandleWorkerExceptionTests(unittest.TestCase):
         self.assertIn(self.exception_bytes, result)
         self.assertNotIn(self.traceback_bytes, result)
 
+    @patch.dict(os.environ, {"SPARK_HIDE_TRACEBACK": "1"})
     def test_full(self):
+        # Should ignore the environment variable because hide_traceback is explicitly set.
         result = self.run_handle_worker_exception(False)
         self.assertIn(self.exception_bytes, result)
         self.assertIn(self.traceback_bytes, result)
