@@ -968,7 +968,7 @@ class FeatureTestsMixin:
         )
         self.assertEqual(len(transformed_list), 5)
 
-    def test_target_encoder(self):
+    def test_target_encoder_binary(self):
         df = self.spark.createDataFrame(
             [
                 (0, 3, 5.0, 0.0),
