@@ -973,7 +973,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
   def unrecognizedSqlTypeError(jdbcTypeId: String, typeName: String): Throwable = {
     new SparkSQLException(
       errorClass = "UNRECOGNIZED_SQL_TYPE",
-      messageParameters = Map("typeName" -> typeName, "jdbcType" -> jdbcTypeId))
+      messageParameters = Map(ExecutionErrors.TYPE_NAME -> typeName, "jdbcType" -> jdbcTypeId))
   }
 
   def unsupportedJdbcTypeError(content: String): SparkSQLException = {

@@ -21,6 +21,7 @@ import scala.reflect.ClassTag
 
 import org.apache.spark.{SPARK_DOC_ROOT, SparkFunSuite, SparkUnsupportedOperationException}
 import org.apache.spark.sql.Encoders
+import org.apache.spark.sql.errors.ExecutionErrors
 
 class NonEncodable(i: Int)
 
@@ -55,45 +56,45 @@ class EncoderErrorMessageSuite extends SparkFunSuite {
     checkError(
       exception = intercept[
         SparkUnsupportedOperationException](ExpressionEncoder[ComplexNonEncodable1]()),
-      condition = "ENCODER_NOT_FOUND",
+      condition = ExecutionErrors.ENCODER_NOT_FOUND_ERROR,
       parameters = Map(
-        "typeName" -> "org.apache.spark.sql.catalyst.encoders.NonEncodable",
+        ExecutionErrors.TYPE_NAME -> "org.apache.spark.sql.catalyst.encoders.NonEncodable",
         "docroot" -> SPARK_DOC_ROOT)
     )
 
     checkError(
       exception = intercept[
         SparkUnsupportedOperationException](ExpressionEncoder[ComplexNonEncodable2]()),
-      condition = "ENCODER_NOT_FOUND",
+      condition = ExecutionErrors.ENCODER_NOT_FOUND_ERROR,
       parameters = Map(
-        "typeName" -> "org.apache.spark.sql.catalyst.encoders.NonEncodable",
+        ExecutionErrors.TYPE_NAME -> "org.apache.spark.sql.catalyst.encoders.NonEncodable",
         "docroot" -> SPARK_DOC_ROOT)
     )
 
     checkError(
       exception = intercept[
         SparkUnsupportedOperationException](ExpressionEncoder[ComplexNonEncodable3]()),
-      condition = "ENCODER_NOT_FOUND",
+      condition = ExecutionErrors.ENCODER_NOT_FOUND_ERROR,
       parameters = Map(
-        "typeName" -> "org.apache.spark.sql.catalyst.encoders.NonEncodable",
+        ExecutionErrors.TYPE_NAME -> "org.apache.spark.sql.catalyst.encoders.NonEncodable",
         "docroot" -> SPARK_DOC_ROOT)
     )
 
     checkError(
       exception = intercept[
         SparkUnsupportedOperationException](ExpressionEncoder[ComplexNonEncodable4]()),
-      condition = "ENCODER_NOT_FOUND",
+       condition = ExecutionErrors.ENCODER_NOT_FOUND_ERROR,
       parameters = Map(
-        "typeName" -> "org.apache.spark.sql.catalyst.encoders.NonEncodable",
+        ExecutionErrors.TYPE_NAME -> "org.apache.spark.sql.catalyst.encoders.NonEncodable",
         "docroot" -> SPARK_DOC_ROOT)
     )
 
     checkError(
       exception = intercept[
         SparkUnsupportedOperationException](ExpressionEncoder[ComplexNonEncodable5]()),
-      condition = "ENCODER_NOT_FOUND",
+      condition = ExecutionErrors.ENCODER_NOT_FOUND_ERROR,
       parameters = Map(
-        "typeName" -> "org.apache.spark.sql.catalyst.encoders.NonEncodable",
+        ExecutionErrors.TYPE_NAME -> "org.apache.spark.sql.catalyst.encoders.NonEncodable",
         "docroot" -> SPARK_DOC_ROOT)
     )
   }

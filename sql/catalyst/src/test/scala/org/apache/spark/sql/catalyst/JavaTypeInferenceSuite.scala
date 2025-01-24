@@ -23,9 +23,12 @@ import java.util.{HashSet, LinkedList, List => JList, Map => JMap, Set => JSet}
 import scala.beans.{BeanProperty, BooleanBeanProperty}
 import scala.reflect.{classTag, ClassTag}
 
+import com.esotericsoftware.kryo.KryoSerializable
+
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.Encoders
 import org.apache.spark.sql.catalyst.JavaTypeInferenceBeans.{JavaBeanWithGenericBase, JavaBeanWithGenericHierarchy, JavaBeanWithGenericsABC}
-import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, UDTCaseClass, UDTForCaseClass}
+import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, UDTCaseClass, UDTDerivedClass, UDTForCaseClass}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders._
 import org.apache.spark.sql.types.{DecimalType, MapType, Metadata, StringType, StructField, StructType}
 
@@ -39,6 +42,22 @@ class GenericCollectionBean {
   @BeanProperty var linkedListOfStrings: LinkedList[String] = _
   @BeanProperty var hashSetOfString: HashSet[String] = _
   @BeanProperty var setOfSetOfStrings: JSet[JSet[String]] = _
+}
+
+class ScalaSerializable extends scala.Serializable
+
+class JavaSerializable extends java.io.Serializable
+
+class GenericTypePropertiesBean[S <: JavaSerializable, T <: ScalaSerializable,
+  U <: KryoSerializable, V <: UDTCaseClass, W <: UDTDerivedClass, X <: S, Y <: V] {
+
+  @BeanProperty var javaSerializable: S = _
+  @BeanProperty var scalaSerializable: T = _
+  @BeanProperty var kryoSerializable: U = _
+  @BeanProperty var udtSerializable: V = _
+  @BeanProperty var nonUdtSerializable: W = _
+  @BeanProperty var indirectSerializable: X = _
+  @BeanProperty var indirectUDTSerializable: Y = _
 }
 
 class LeafBean {
@@ -89,6 +108,7 @@ class ArrayBean {
 
 class UDTBean {
   @BeanProperty var udt: UDTCaseClass = _
+  @BeanProperty var derivedUdt: UDTDerivedClass = _
 }
 
 /**
@@ -190,6 +210,40 @@ class JavaTypeInferenceSuite extends SparkFunSuite {
     assert(encoder === expected)
   }
 
+  test("SPARK-49789 resolve bean encoder with generic types as getter/setter") {
+    val encoder = JavaTypeInference.encoderFor(
+      classOf[GenericTypePropertiesBean[_, _, _, _, _, _, _]])
+    val expected = JavaBeanEncoder(
+      ClassTag(classOf[GenericTypePropertiesBean[_, _, _, _, _, _, _]]),
+      Seq(
+        // The order is different from the definition because fields are ordered by name.
+        encoderField("indirectSerializable",
+          Encoders.javaSerialization(classOf[JavaSerializable]).asInstanceOf[AgnosticEncoder[_]]),
+        encoderField("indirectUDTSerializable",
+          UDTEncoder(new UDTForCaseClass, classOf[UDTForCaseClass])),
+        encoderField("javaSerializable",
+          Encoders.javaSerialization(classOf[JavaSerializable]).asInstanceOf[AgnosticEncoder[_]]),
+        encoderField("kryoSerializable",
+          Encoders.kryo(classOf[KryoSerializable]).asInstanceOf[AgnosticEncoder[_]]),
+        encoderField("nonUdtSerializable",
+          Encoders.javaSerialization(classOf[UDTDerivedClass]).asInstanceOf[AgnosticEncoder[_]]),
+        encoderField("scalaSerializable",
+          Encoders.javaSerialization(classOf[ScalaSerializable]).asInstanceOf[AgnosticEncoder[_]]),
+        encoderField("udtSerializable", UDTEncoder(new UDTForCaseClass, classOf[UDTForCaseClass]))
+      ))
+    assert(encoder === expected)
+  }
+
+  test("exception for bean encoder with generic types as getter/setter for spark client") {
+    JavaTypeInference.setSparkClientFlag()
+    val thrown = intercept[Exception] {
+      JavaTypeInference.encoderFor(classOf[GenericTypePropertiesBean[_, _, _, _, _, _, _]])
+    }
+    JavaTypeInference.unsetSparkClientFlag()
+   assert(thrown.getMessage.
+     indexOf("[ENCODER_NOT_FOUND] Not found an encoder of the type U ") != -1)
+  }
+
   test("resolve leaf encoders") {
     val encoder = JavaTypeInference.encoderFor(classOf[LeafBean])
     val expected = JavaBeanEncoder(ClassTag(classOf[LeafBean]), Seq(
@@ -252,6 +306,8 @@ class JavaTypeInferenceSuite extends SparkFunSuite {
   test("resolve UDT encoders") {
     val encoder = JavaTypeInference.encoderFor(classOf[UDTBean])
     val expected = JavaBeanEncoder(ClassTag(classOf[UDTBean]), Seq(
+      encoderField("derivedUdt",
+        Encoders.javaSerialization(classOf[UDTDerivedClass]).asInstanceOf[AgnosticEncoder[_]]),
       encoderField("udt", UDTEncoder(new UDTForCaseClass, classOf[UDTForCaseClass]))
     ))
     assert(encoder === expected)
