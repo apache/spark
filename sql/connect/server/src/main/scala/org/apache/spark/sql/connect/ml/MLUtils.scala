@@ -37,7 +37,8 @@ import org.apache.spark.ml.recommendation._
 import org.apache.spark.ml.regression._
 import org.apache.spark.ml.tree.{DecisionTreeModel, TreeEnsembleModel}
 import org.apache.spark.ml.util.{HasTrainingSummary, Identifiable, MLWritable}
-import org.apache.spark.sql.{DataFrame, Dataset}
+import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.classic.Dataset
 import org.apache.spark.sql.connect.common.LiteralValueProtoConverter
 import org.apache.spark.sql.connect.planner.SparkConnectPlanner
 import org.apache.spark.sql.connect.plugin.SparkConnectPluginRegistry
@@ -187,6 +188,8 @@ private[ml] object MLUtils {
       array.map(_.asInstanceOf[Double])
     } else if (elementType == classOf[String]) {
       array.map(_.asInstanceOf[String])
+    } else if (elementType.isArray && elementType.getComponentType == classOf[Double]) {
+      array.map(_.asInstanceOf[Array[_]].map(_.asInstanceOf[Double]))
     } else {
       throw MlUnsupportedException(
         s"array element type unsupported, " +
@@ -228,14 +231,10 @@ private[ml] object MLUtils {
       value.asInstanceOf[String]
     } else if (paramType.isArray) {
       val compType = paramType.getComponentType
-      if (compType.isArray) {
-        throw MlUnsupportedException(s"Array of array unsupported")
-      } else {
-        val array = value.asInstanceOf[Array[_]].map { e =>
-          reconcileParam(compType, e)
-        }
-        reconcileArray(compType, array)
+      val array = value.asInstanceOf[Array[_]].map { e =>
+        reconcileParam(compType, e)
       }
+      reconcileArray(compType, array)
     } else {
       throw MlUnsupportedException(s"Unsupported parameter type, found ${paramType.getName}")
     }
@@ -591,7 +590,9 @@ private[ml] object MLUtils {
     (classOf[UnivariateFeatureSelectorModel], Set("selectedFeatures")),
     (classOf[VarianceThresholdSelectorModel], Set("selectedFeatures")),
     (classOf[PCAModel], Set("pc", "explainedVariance")),
-    (classOf[Word2VecModel], Set("getVectors", "findSynonyms", "findSynonymsArray")))
+    (classOf[Word2VecModel], Set("getVectors", "findSynonyms", "findSynonymsArray")),
+    (classOf[CountVectorizerModel], Set("vocabulary")),
+    (classOf[OneHotEncoderModel], Set("categorySizes")))
 
   private def validate(obj: Any, method: String): Unit = {
     assert(obj != null)

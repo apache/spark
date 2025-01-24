@@ -58,3 +58,6 @@ org.apache.spark.ml.feature.VarianceThresholdSelector
 org.apache.spark.ml.feature.StringIndexer
 org.apache.spark.ml.feature.PCA
 org.apache.spark.ml.feature.Word2Vec
+org.apache.spark.ml.feature.CountVectorizer
+org.apache.spark.ml.feature.OneHotEncoder
+

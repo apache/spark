@@ -30,6 +30,7 @@ import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent, SparkListenerJobStart}
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.SQLConfHelper
+import org.apache.spark.sql.classic
 import org.apache.spark.sql.execution.ui.SparkListenerSQLExecutionStart
 import org.apache.spark.sql.types._
 import org.apache.spark.util.ThreadUtils
@@ -136,7 +137,7 @@ class SQLExecutionSuite extends SparkFunSuite with SQLConfHelper {
     val executor1 = Executors.newSingleThreadExecutor()
     val executor2 = Executors.newSingleThreadExecutor()
     var session: SparkSession = null
-    SparkSession.cleanupAnyExistingSession()
+    classic.SparkSession.cleanupAnyExistingSession()
 
     withTempDir { tempDir =>
       try {

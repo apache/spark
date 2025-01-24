@@ -19,12 +19,13 @@ package org.apache.spark.sql.connect.planner
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.connect.proto
-import org.apache.spark.sql._
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst._
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.classic
 import org.apache.spark.sql.connect.SparkConnectTestUtils
 import org.apache.spark.sql.types.{DataType, StructType}
 
@@ -57,7 +58,7 @@ class SparkConnectWithSessionExtensionSuite extends SparkFunSuite {
   }
 
   test("Parse table name with test parser") {
-    val spark = SparkSession
+    val spark = classic.SparkSession
       .builder()
       .master("local[1]")
       .withExtensions(extension => extension.injectParser(MyParser))
