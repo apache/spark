@@ -3109,7 +3109,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
 
       val df = sql(s"SELECT * FROM $tableName WHERE binary_col = $binary")
       checkFiltersRemoved(df)
-      checkPushedInfo(df, "PushedFilters: [binary_col IS NOT NULL, binary_col = X'123456']")
+      checkPushedInfo(df, "PushedFilters: [binary_col IS NOT NULL, binary_col = 0x123456]")
       checkAnswer(df, Row(Array(18, 52, 86)))
     }
   }
