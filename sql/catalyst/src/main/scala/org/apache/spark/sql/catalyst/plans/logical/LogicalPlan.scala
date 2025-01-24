@@ -217,7 +217,6 @@ object LogicalPlan {
   //    to the old code path.
   private[spark] val PLAN_ID_TAG = TreeNodeTag[Long]("plan_id")
   private[spark] val IS_METADATA_COL = TreeNodeTag[Unit]("is_metadata_col")
-  private[spark] val EXEC_IMMEDIATE_TAG = TreeNodeTag[Unit]("inside_execute_immediate")
 }
 
 /**

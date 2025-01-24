@@ -1865,6 +1865,4 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
       verifySqlScriptResult(sqlScript, expected)
     }
   }
-
-  // todo: add test for exec immediate accessing session var
 }
