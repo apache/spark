@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.execution.metric
 
-// import scala.concurrent.duration._
-
 import com.google.common.cache.{CacheBuilder, CacheLoader, LoadingCache}
 
 import org.apache.spark.SparkContext
