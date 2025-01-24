@@ -59,6 +59,7 @@ from pyspark.errors import (
     PySparkValueError,
     PySparkPicklingError,
 )
+from pyspark.sql.streaming.stateful_processor import StatefulProcessor
 
 if TYPE_CHECKING:
     from pyspark.sql.connect.client import SparkConnectClient
@@ -2543,6 +2544,45 @@ class ApplyInPandasWithState(LogicalPlan):
         plan.apply_in_pandas_with_state.state_schema = self._state_schema
         plan.apply_in_pandas_with_state.output_mode = self._output_mode
         plan.apply_in_pandas_with_state.timeout_conf = self._timeout_conf
+        return self._with_relations(plan, session)
+
+
+class TransformWithStateInPandas(LogicalPlan):
+    """Logical plan object for a applyInPandasWithState."""
+
+    def __init__(
+            self,
+            child: Optional["LogicalPlan"],
+            grouping_cols: Sequence[Column],
+            function: "UserDefinedFunction",
+            output_schema: str,
+            output_mode: str,
+            time_mode: str,
+            cols: List[str],
+    ):
+        assert isinstance(grouping_cols, list) and all(isinstance(c, Column) for c in grouping_cols)
+
+        super().__init__(child, self._collect_references(grouping_cols))
+        self._grouping_cols = grouping_cols
+        self._output_schema = output_schema
+        self._output_mode = output_mode
+        self._time_mode = time_mode
+        self._function = function._build_common_inline_user_defined_function(*cols)
+
+    def plan(self, session: "SparkConnectClient") -> proto.Relation:
+        assert self._child is not None
+        plan = self._create_proto_relation()
+        plan.transform_with_state_in_pandas.input.CopyFrom(self._child.plan(session))
+        plan.transform_with_state_in_pandas.grouping_expressions.extend(
+            [c.to_plan(session) for c in self._grouping_cols]
+        )
+
+        # this is to deserialize stateful processor
+        plan.transform_with_state_in_pandas.transform_with_state_udf.CopyFrom(
+            self._function.to_plan_udf(session))
+        plan.transform_with_state_in_pandas.output_schema = self._output_schema
+        plan.transform_with_state_in_pandas.output_mode = self._output_mode
+        plan.transform_with_state_in_pandas.time_mode = self._time_mode
         return self._with_relations(plan, session)
 
 

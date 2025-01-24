@@ -108,6 +108,7 @@ class Relation(google.protobuf.message.Message):
     TRANSPOSE_FIELD_NUMBER: builtins.int
     UNRESOLVED_TABLE_VALUED_FUNCTION_FIELD_NUMBER: builtins.int
     LATERAL_JOIN_FIELD_NUMBER: builtins.int
+    TRANSFORM_WITH_STATE_IN_PANDAS_FIELD_NUMBER: builtins.int
     FILL_NA_FIELD_NUMBER: builtins.int
     DROP_NA_FIELD_NUMBER: builtins.int
     REPLACE_FIELD_NUMBER: builtins.int
@@ -216,6 +217,8 @@ class Relation(google.protobuf.message.Message):
     @property
     def lateral_join(self) -> global___LateralJoin: ...
     @property
+    def transform_with_state_in_pandas(self) -> global___TransformWithStateInPandas: ...
+    @property
     def fill_na(self) -> global___NAFill:
         """NA functions"""
     @property
@@ -301,6 +304,7 @@ class Relation(google.protobuf.message.Message):
         transpose: global___Transpose | None = ...,
         unresolved_table_valued_function: global___UnresolvedTableValuedFunction | None = ...,
         lateral_join: global___LateralJoin | None = ...,
+        transform_with_state_in_pandas: global___TransformWithStateInPandas | None = ...,
         fill_na: global___NAFill | None = ...,
         drop_na: global___NADrop | None = ...,
         replace: global___NAReplace | None = ...,
@@ -424,6 +428,8 @@ class Relation(google.protobuf.message.Message):
             b"to_df",
             "to_schema",
             b"to_schema",
+            "transform_with_state_in_pandas",
+            b"transform_with_state_in_pandas",
             "transpose",
             b"transpose",
             "unknown",
@@ -549,6 +555,8 @@ class Relation(google.protobuf.message.Message):
             b"to_df",
             "to_schema",
             b"to_schema",
+            "transform_with_state_in_pandas",
+            b"transform_with_state_in_pandas",
             "transpose",
             b"transpose",
             "unknown",
@@ -614,6 +622,7 @@ class Relation(google.protobuf.message.Message):
             "transpose",
             "unresolved_table_valued_function",
             "lateral_join",
+            "transform_with_state_in_pandas",
             "fill_na",
             "drop_na",
             "replace",
@@ -3929,6 +3938,118 @@ class ApplyInPandasWithState(google.protobuf.message.Message):
     ) -> None: ...
 
 global___ApplyInPandasWithState = ApplyInPandasWithState
+
+class TransformWithStateInPandas(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    INPUT_FIELD_NUMBER: builtins.int
+    GROUPING_EXPRESSIONS_FIELD_NUMBER: builtins.int
+    TRANSFORM_WITH_STATE_UDF_FIELD_NUMBER: builtins.int
+    OUTPUT_SCHEMA_FIELD_NUMBER: builtins.int
+    OUTPUT_MODE_FIELD_NUMBER: builtins.int
+    TIME_MODE_FIELD_NUMBER: builtins.int
+    INITIAL_INPUT_FIELD_NUMBER: builtins.int
+    INITIAL_GROUPING_EXPRESSIONS_FIELD_NUMBER: builtins.int
+    EVENT_TIME_COL_NAME_FIELD_NUMBER: builtins.int
+    @property
+    def input(self) -> global___Relation:
+        """(Required) Input relation for transformWithStateInPandas."""
+    @property
+    def grouping_expressions(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+        pyspark.sql.connect.proto.expressions_pb2.Expression
+    ]:
+        """(Required) Expressions for grouping keys."""
+    @property
+    def transform_with_state_udf(
+        self,
+    ) -> pyspark.sql.connect.proto.expressions_pb2.CommonInlineUserDefinedFunction:
+        """(Required) Bytes for java serialized user-defined stateful processor."""
+    output_schema: builtins.str
+    """(Required) Schema for the output DataFrame."""
+    output_mode: builtins.str
+    """(Required) The output mode of the function."""
+    time_mode: builtins.str
+    """(Required) Time mode for transformWithStateInPandas"""
+    @property
+    def initial_input(self) -> global___Relation:
+        """(Optional) Input relation for initial State."""
+    @property
+    def initial_grouping_expressions(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+        pyspark.sql.connect.proto.expressions_pb2.Expression
+    ]:
+        """(Optional) Expressions for grouping keys of the initial state input relation."""
+    event_time_col_name: builtins.str
+    """(Optional) Event time column name"""
+    def __init__(
+        self,
+        *,
+        input: global___Relation | None = ...,
+        grouping_expressions: collections.abc.Iterable[
+            pyspark.sql.connect.proto.expressions_pb2.Expression
+        ]
+        | None = ...,
+        transform_with_state_udf: pyspark.sql.connect.proto.expressions_pb2.CommonInlineUserDefinedFunction
+        | None = ...,
+        output_schema: builtins.str = ...,
+        output_mode: builtins.str = ...,
+        time_mode: builtins.str = ...,
+        initial_input: global___Relation | None = ...,
+        initial_grouping_expressions: collections.abc.Iterable[
+            pyspark.sql.connect.proto.expressions_pb2.Expression
+        ]
+        | None = ...,
+        event_time_col_name: builtins.str | None = ...,
+    ) -> None: ...
+    def HasField(
+        self,
+        field_name: typing_extensions.Literal[
+            "_event_time_col_name",
+            b"_event_time_col_name",
+            "event_time_col_name",
+            b"event_time_col_name",
+            "initial_input",
+            b"initial_input",
+            "input",
+            b"input",
+            "transform_with_state_udf",
+            b"transform_with_state_udf",
+        ],
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "_event_time_col_name",
+            b"_event_time_col_name",
+            "event_time_col_name",
+            b"event_time_col_name",
+            "grouping_expressions",
+            b"grouping_expressions",
+            "initial_grouping_expressions",
+            b"initial_grouping_expressions",
+            "initial_input",
+            b"initial_input",
+            "input",
+            b"input",
+            "output_mode",
+            b"output_mode",
+            "output_schema",
+            b"output_schema",
+            "time_mode",
+            b"time_mode",
+            "transform_with_state_udf",
+            b"transform_with_state_udf",
+        ],
+    ) -> None: ...
+    def WhichOneof(
+        self,
+        oneof_group: typing_extensions.Literal["_event_time_col_name", b"_event_time_col_name"],
+    ) -> typing_extensions.Literal["event_time_col_name"] | None: ...
+
+global___TransformWithStateInPandas = TransformWithStateInPandas
 
 class CommonInlineUserDefinedTableFunction(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor

@@ -22,7 +22,7 @@ from pyspark.sql.tests.pandas.test_pandas_transform_with_state import (
 from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
-class TransformWithStateInPandasTests(
+class TransformWithStateInPandasParityTests(
     TransformWithStateInPandasTestsMixin, ReusedConnectTestCase
 ):
     pass

@@ -41,6 +41,19 @@ import pyspark.sql.connect.plan as plan
 from pyspark.sql.column import Column
 from pyspark.sql.connect.functions import builtin as F
 from pyspark.errors import PySparkNotImplementedError, PySparkTypeError
+from pyspark.sql.streaming.stateful_processor_api_client import (
+    StatefulProcessorApiClient,
+    StatefulProcessorHandleState,
+)
+from pyspark.sql.streaming.stateful_processor import (
+    ExpiredTimerInfo,
+    StatefulProcessor,
+    StatefulProcessorHandle,
+    TimerValues,
+)
+from pyspark.sql.streaming.stateful_processor import StatefulProcessor, StatefulProcessorHandle
+from pyspark.sql.streaming.stateful_processor_util import TransformWithStateInPandasFuncMode
+
 
 if TYPE_CHECKING:
     from pyspark.sql.connect._typing import (
@@ -354,6 +367,153 @@ class GroupedData:
                 state_schema=state_schema,
                 output_mode=outputMode,
                 timeout_conf=timeoutConf,
+                cols=self._df.columns,
+            ),
+            session=self._df._session,
+        )
+
+    applyInPandasWithState.__doc__ = PySparkGroupedData.applyInPandasWithState.__doc__
+
+    def transformWithStateInPandas(
+            self,
+            statefulProcessor: StatefulProcessor,
+            outputStructType: Union[StructType, str],
+            outputMode: str,
+            timeMode: str,
+            initialState: Optional["GroupedData"] = None,
+            eventTimeColumnName: str = "",
+    ) -> "DataFrame":
+        from pyspark.sql.connect.udf import UserDefinedFunction
+        from pyspark.sql.connect.dataframe import DataFrame
+        import itertools
+        from typing import Any, Iterator
+
+        def handle_pre_init(
+                statefulProcessorApiClient: StatefulProcessorApiClient,
+        ) -> Iterator["PandasDataFrameLike"]:
+            # Driver handle is different from the handle used on executors;
+            # On JVM side, we will use `DriverStatefulProcessorHandleImpl` for driver handle which
+            # will only be used for handling init() and get the state schema on the driver.
+            driver_handle = StatefulProcessorHandle(statefulProcessorApiClient)
+            statefulProcessorApiClient.set_handle_state(StatefulProcessorHandleState.PRE_INIT)
+            statefulProcessor.init(driver_handle)
+
+            # This method is used for the driver-side stateful processor after we have collected
+            # all the necessary schemas. This instance of the DriverStatefulProcessorHandleImpl
+            # won't be used again on JVM.
+            statefulProcessor.close()
+
+            # return a dummy results, no return value is needed for pre init
+            return iter([])
+
+        def handle_data_rows(
+                statefulProcessorApiClient: StatefulProcessorApiClient,
+                key: Any,
+                inputRows: Optional[Iterator["PandasDataFrameLike"]] = None,
+        ) -> Iterator["PandasDataFrameLike"]:
+            statefulProcessorApiClient.set_implicit_key(key)
+
+            batch_timestamp, watermark_timestamp = statefulProcessorApiClient.get_timestamps(
+                timeMode
+            )
+
+            # process with data rows
+            if inputRows is not None:
+                data_iter = statefulProcessor.handleInputRows(
+                    key, inputRows, TimerValues(batch_timestamp, watermark_timestamp)
+                )
+                return data_iter
+            else:
+                return iter([])
+
+        def handle_expired_timers(
+                statefulProcessorApiClient: StatefulProcessorApiClient,
+        ) -> Iterator["PandasDataFrameLike"]:
+            batch_timestamp, watermark_timestamp = statefulProcessorApiClient.get_timestamps(
+                timeMode
+            )
+
+            if timeMode.lower() == "processingtime":
+                expiry_list_iter = statefulProcessorApiClient.get_expiry_timers_iterator(
+                    batch_timestamp
+                )
+            elif timeMode.lower() == "eventtime":
+                expiry_list_iter = statefulProcessorApiClient.get_expiry_timers_iterator(
+                    watermark_timestamp
+                )
+            else:
+                expiry_list_iter = iter([[]])
+
+            # process with expiry timers, only timer related rows will be emitted
+            for expiry_list in expiry_list_iter:
+                for key_obj, expiry_timestamp in expiry_list:
+                    statefulProcessorApiClient.set_implicit_key(key_obj)
+                    for pd in statefulProcessor.handleExpiredTimer(
+                            key=key_obj,
+                            timer_values=TimerValues(batch_timestamp, watermark_timestamp),
+                            expired_timer_info=ExpiredTimerInfo(expiry_timestamp),
+                    ):
+                        yield pd
+                    statefulProcessorApiClient.delete_timer(expiry_timestamp)
+
+        def transformWithStateUDF(
+                statefulProcessorApiClient: StatefulProcessorApiClient,
+                mode: TransformWithStateInPandasFuncMode,
+                key: Any,
+                inputRows: Iterator["PandasDataFrameLike"],
+        ) -> Iterator["PandasDataFrameLike"]:
+            if mode == TransformWithStateInPandasFuncMode.PRE_INIT:
+                return handle_pre_init(statefulProcessorApiClient)
+
+            handle = StatefulProcessorHandle(statefulProcessorApiClient)
+
+            if statefulProcessorApiClient.handle_state == StatefulProcessorHandleState.CREATED:
+                statefulProcessor.init(handle)
+                statefulProcessorApiClient.set_handle_state(
+                    StatefulProcessorHandleState.INITIALIZED
+                )
+
+            if mode == TransformWithStateInPandasFuncMode.PROCESS_TIMER:
+                statefulProcessorApiClient.set_handle_state(
+                    StatefulProcessorHandleState.DATA_PROCESSED
+                )
+                result = handle_expired_timers(statefulProcessorApiClient)
+                return result
+            elif mode == TransformWithStateInPandasFuncMode.COMPLETE:
+                statefulProcessorApiClient.set_handle_state(
+                    StatefulProcessorHandleState.TIMER_PROCESSED
+                )
+                statefulProcessorApiClient.remove_implicit_key()
+                statefulProcessor.close()
+                statefulProcessorApiClient.set_handle_state(StatefulProcessorHandleState.CLOSED)
+                return iter([])
+            else:
+                # mode == TransformWithStateInPandasFuncMode.PROCESS_DATA
+                result = handle_data_rows(statefulProcessorApiClient, key, inputRows)
+                return result
+
+        # TODO add initial state
+        udf_obj = UserDefinedFunction(
+            transformWithStateUDF,
+            returnType=outputStructType,
+            evalType=PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_UDF,
+        )
+
+        # TODO figure out if we need to handle for string type
+        output_schema: str = (
+            outputStructType.json()
+            if isinstance(outputStructType, StructType)
+            else outputStructType
+        )
+
+        return DataFrame(
+            plan.TransformWithStateInPandas(
+                child=self._df._plan,
+                grouping_cols=self._grouping_cols,
+                function=udf_obj,
+                output_schema=output_schema,
+                output_mode=outputMode,
+                time_mode=timeMode,
                 cols=self._df.columns,
             ),
             session=self._df._session,

@@ -210,6 +210,8 @@ class SparkConnectPlanner(
           transformCoGroupMap(rel.getCoGroupMap)
         case proto.Relation.RelTypeCase.APPLY_IN_PANDAS_WITH_STATE =>
           transformApplyInPandasWithState(rel.getApplyInPandasWithState)
+        case proto.Relation.RelTypeCase.TRANSFORM_WITH_STATE_IN_PANDAS =>
+          transformTransformWithStateInPandas(rel.getTransformWithStateInPandas)
         case proto.Relation.RelTypeCase.COMMON_INLINE_USER_DEFINED_TABLE_FUNCTION =>
           transformCommonInlineUserDefinedTableFunction(
             rel.getCommonInlineUserDefinedTableFunction)
@@ -1018,6 +1020,25 @@ class SparkConnectPlanner(
         stateSchema,
         rel.getOutputMode,
         rel.getTimeoutConf)
+      .logicalPlan
+  }
+
+  private def transformTransformWithStateInPandas(
+      rel: proto.TransformWithStateInPandas): LogicalPlan = {
+    val pythonUdf = transformPythonUDF(rel.getTransformWithStateUdf)
+    val cols =
+      rel.getGroupingExpressionsList.asScala.toSeq.map(expr => Column(transformExpression(expr)))
+
+    val outputSchema = parseSchema(rel.getOutputSchema)
+    Dataset
+      .ofRows(session, transformRelation(rel.getInput))
+      .groupBy(cols: _*)
+      .transformWithStateInPandas(
+        Column(pythonUdf),
+        outputSchema,
+        rel.getOutputMode,
+        rel.getTimeMode,
+        null, "")
       .logicalPlan
   }
 

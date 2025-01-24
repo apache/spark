@@ -1087,8 +1087,8 @@ message TransformWithStateInPandas {
   // (Required) Expressions for grouping keys.
   repeated Expression grouping_expressions = 2;
 
-  // (Required) Input user-defined function.
-  CommonInlineUserDefinedFunction func = 3;
+  // (Required) Bytes for java serialized user-defined stateful processor.
+  CommonInlineUserDefinedFunction transform_with_state_udf = 3;
 
   // (Required) Schema for the output DataFrame.
   string output_schema = 4;
