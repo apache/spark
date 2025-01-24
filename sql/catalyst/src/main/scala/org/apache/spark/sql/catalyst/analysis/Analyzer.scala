@@ -2713,9 +2713,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         function.getSQLConfigs.foreach { case (k, v) => conf.settings.put(k, v) }
         val resolved = SQLConf.withExistingConf(conf) {
           SQLFunctionContext.withSQLFunction {
-            AnalysisContext.withAnalysisContext(function) {
-              executeSameContext(plan)
-            }
+            executeSameContext(plan)
           }
         }
         // Remove unnecessary lateral joins that are used to resolve the SQL function.
