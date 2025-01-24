@@ -46,7 +46,6 @@ import scala.jdk.javaapi.CollectionConverters;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Iterables;
-import com.google.common.collect.Iterators;
 import com.google.common.collect.Lists;
 import com.google.common.base.Throwables;
 import com.google.common.io.Files;
@@ -1207,16 +1206,46 @@ public class JavaAPISuite implements Serializable {
     JavaPairRDD<Integer, Double> zipped = rdd.zip(doubles);
     zipped.count();
   }
+  @Test
+  public void zipPartitions2() {
+    JavaRDD<String> rdd1 = sc.parallelize(Arrays.asList("a", "b", "c", "d"), 2);
+    JavaRDD<String> rdd2 = sc.parallelize(Arrays.asList("e", "f", "g", "h"), 2);
+    JavaRDD<String> zipped = rdd1.zipPartitions(
+        rdd2, ZipPartitionsFunction.ZIP_PARTITIONS_2_FUNCTION);
+    assertEquals(Arrays.asList("abef", "cdgh"), zipped.collect());
+  }
 
   @Test
-  public void zipPartitions() {
-    JavaRDD<Integer> rdd1 = sc.parallelize(Arrays.asList(1, 2, 3, 4, 5, 6), 2);
-    JavaRDD<String> rdd2 = sc.parallelize(Arrays.asList("1", "2", "3", "4"), 2);
-    FlatMapFunction2<Iterator<Integer>, Iterator<String>, Integer> sizesFn =
-        (i, s) -> Arrays.asList(Iterators.size(i), Iterators.size(s)).iterator();
+  public void zipPartitions3() {
+    JavaRDD<String> rdd1 = sc.parallelize(Arrays.asList("a", "b", "c", "d"), 2);
+    JavaRDD<String> rdd2 = sc.parallelize(Arrays.asList("e", "f", "g", "h"), 2);
+    JavaRDD<String> rdd3 = sc.parallelize(Arrays.asList("i", "j", "k", "l"), 2);
+    JavaRDD<String> zipped = rdd1.zipPartitions(
+        rdd2, rdd3, ZipPartitionsFunction.ZIP_PARTITIONS_3_FUNCTION);
+    assertEquals(Arrays.asList("abefij", "cdghkl"), zipped.collect());
+  }
 
-    JavaRDD<Integer> sizes = rdd1.zipPartitions(rdd2, sizesFn);
-    assertEquals("[3, 2, 3, 2]", sizes.collect().toString());
+  @Test
+  public void zipPartitions4() {
+    JavaRDD<String> rdd1 = sc.parallelize(Arrays.asList("a", "b", "c", "d"), 2);
+    JavaRDD<String> rdd2 = sc.parallelize(Arrays.asList("e", "f", "g", "h"), 2);
+    JavaRDD<String> rdd3 = sc.parallelize(Arrays.asList("i", "j", "k", "l"), 2);
+    JavaRDD<String> rdd4 = sc.parallelize(Arrays.asList("m", "n", "o", "p"), 2);
+    JavaRDD<String> zipped = rdd1.zipPartitions(
+        rdd2, rdd3, rdd4, ZipPartitionsFunction.ZIP_PARTITIONS_4_FUNCTION);
+    assertEquals(Arrays.asList("abefijmn", "cdghklop"), zipped.collect());
+  }
+
+  @Test
+  public void zipPartitionsN() {
+    JavaRDD<String> rdd1 = sc.parallelize(Arrays.asList("a", "b", "c", "d"), 2);
+    JavaRDD<String> rdd2 = sc.parallelize(Arrays.asList("e", "f", "g", "h"), 2);
+    JavaRDD<String> rdd3 = sc.parallelize(Arrays.asList("i", "j", "k", "l"), 2);
+    JavaRDD<String> rdd4 = sc.parallelize(Arrays.asList("m", "n", "o", "p"), 2);
+    JavaRDD<String> rdd5 = sc.parallelize(Arrays.asList("q", "r", "s", "t"), 2);
+    JavaRDD<String> zipped = rdd1.zipPartitions(
+        ZipPartitionsFunction.ZIP_PARTITIONS_N_FUNCTION, rdd2, rdd3, rdd4, rdd5);
+    assertEquals(Arrays.asList("abefijmnqr", "cdghklopst"), zipped.collect());
   }
 
   @Test
@@ -1532,4 +1561,35 @@ public class JavaAPISuite implements Serializable {
     assertEquals("RDD2", cachedRddsMap.get(1).name());
   }
 
+  private static class ZipPartitionsFunction
+      implements FlatMapFunction<List<Iterator<String>>, String> {
+
+    private static final ZipPartitionsFunction ZIP_PARTITIONS_N_FUNCTION =
+        new ZipPartitionsFunction();
+
+    private static final FlatMapFunction2<Iterator<String>, Iterator<String>, String>
+        ZIP_PARTITIONS_2_FUNCTION =
+            (i1, i2) -> ZIP_PARTITIONS_N_FUNCTION.call(Arrays.asList(i1, i2));
+
+    private static final FlatMapFunction3<
+            Iterator<String>, Iterator<String>, Iterator<String>, String>
+        ZIP_PARTITIONS_3_FUNCTION =
+            (i1, i2, i3) -> ZIP_PARTITIONS_N_FUNCTION.call(Arrays.asList(i1, i2, i3));
+
+    private static final FlatMapFunction4<
+            Iterator<String>, Iterator<String>, Iterator<String>, Iterator<String>, String>
+        ZIP_PARTITIONS_4_FUNCTION =
+            (i1, i2, i3, i4) -> ZIP_PARTITIONS_N_FUNCTION.call(Arrays.asList(i1, i2, i3, i4));
+
+    @Override
+    public Iterator<String> call(List<Iterator<String>> iterators) {
+      StringBuilder stringBuilder = new StringBuilder();
+      for (Iterator<String> iterator : iterators) {
+        while (iterator.hasNext()) {
+          stringBuilder.append(iterator.next());
+        }
+      }
+      return Collections.singleton(stringBuilder.toString()).iterator();
+    }
+  }
 }

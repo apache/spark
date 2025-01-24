@@ -1028,6 +1028,26 @@ abstract class RDD[T: ClassTag](
     zipPartitions(rdd2, rdd3, rdd4, preservesPartitioning = false)(f)
   }
 
+  /**
+   * A generic version of `zipPartitions` for an arbitrary number of RDDs. It may be type unsafe
+   * and other `zipPartitions` methods should be preferred.
+   */
+  @Since("4.1.0")
+  def zipPartitions[V: ClassTag](preservesPartitioning: Boolean, rdds: RDD[_]*)(
+      f: Seq[Iterator[_]] => Iterator[V]): RDD[V] = withScope {
+    new ZippedPartitionsRDDN(sc, sc.clean(f), this +: rdds, preservesPartitioning)
+  }
+
+  /**
+   * A generic version of `zipPartitions` for an arbitrary number of RDDs. It may be type unsafe
+   * and other `zipPartitions` methods should be preferred.
+   */
+  @Since("4.1.0")
+  def zipPartitions[V: ClassTag](rdds: RDD[_]*)(f: Seq[Iterator[_]] => Iterator[V]): RDD[V] =
+    withScope {
+      zipPartitions(preservesPartitioning = false, rdds: _*)(f)
+    }
+
 
   // Actions (launch a job to return a value to the user program)
 

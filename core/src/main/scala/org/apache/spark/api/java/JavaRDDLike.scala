@@ -21,6 +21,7 @@ import java.{lang => jl}
 import java.lang.{Iterable => JIterable}
 import java.util.{Comparator, Iterator => JIterator, List => JList, Map => JMap}
 
+import scala.annotation.varargs
 import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 
@@ -308,20 +309,83 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
     JavaPairRDD.fromRDD(rdd.zip(other.rdd)(other.classTag))(classTag, other.classTag)
   }
 
-  /**
-   * Zip this RDD's partitions with one (or more) RDD(s) and return a new RDD by
-   * applying a function to the zipped partitions. Assumes that all the RDDs have the
-   * *same number of partitions*, but does *not* require them to have the same number
-   * of elements in each partition.
+  /*
+   * Zip this RDD's partitions with one other RDD and return a new RDD by applying a function to
+   * the zipped partitions. Assumes that both the RDDs have the *same number of partitions*, but
+   * does *not* require them to have the same number of elements in each partition.
    */
   def zipPartitions[U, V](
       other: JavaRDDLike[U, _],
       f: FlatMapFunction2[JIterator[T], JIterator[U], V]): JavaRDD[V] = {
-    def fn: (Iterator[T], Iterator[U]) => Iterator[V] = {
-      (x: Iterator[T], y: Iterator[U]) => f.call(x.asJava, y.asJava).asScala
+    def fn: (Iterator[T], Iterator[U]) => Iterator[V] = { (x: Iterator[T], y: Iterator[U]) =>
+      f.call(x.asJava, y.asJava).asScala
     }
+    JavaRDD
+      .fromRDD(rdd.zipPartitions(other.rdd)(fn)(other.classTag, fakeClassTag[V]))(fakeClassTag[V])
+  }
+
+  /**
+   * Zip this RDD's partitions with two more RDDs and return a new RDD by applying a function to
+   * the zipped partitions. Assumes that all the RDDs have the *same number of partitions*, but
+   * does *not* require them to have the same number of elements in each partition.
+   */
+  @Since("4.1.0")
+  def zipPartitions[U1, U2, V](
+      other1: JavaRDDLike[U1, _],
+      other2: JavaRDDLike[U2, _],
+      f: FlatMapFunction3[JIterator[T], JIterator[U1], JIterator[U2], V]): JavaRDD[V] = {
+    def fn: (Iterator[T], Iterator[U1], Iterator[U2]) => Iterator[V] =
+      (t: Iterator[T], u1: Iterator[U1], u2: Iterator[U2]) =>
+        f.call(t.asJava, u1.asJava, u2.asJava).asScala
     JavaRDD.fromRDD(
-      rdd.zipPartitions(other.rdd)(fn)(other.classTag, fakeClassTag[V]))(fakeClassTag[V])
+      rdd.zipPartitions(other1.rdd, other2.rdd)(fn)(
+        other1.classTag,
+        other2.classTag,
+        fakeClassTag[V]))(fakeClassTag[V])
+  }
+
+  /**
+   * Zip this RDD's partitions with three more RDDs and return a new RDD by applying a function to
+   * the zipped partitions. Assumes that all the RDDs have the *same number of partitions*, but
+   * does *not* require them to have the same number of elements in each partition.
+   */
+  @Since("4.1.0")
+  def zipPartitions[U1, U2, U3, V](
+      other1: JavaRDDLike[U1, _],
+      other2: JavaRDDLike[U2, _],
+      other3: JavaRDDLike[U3, _],
+      f: FlatMapFunction4[JIterator[T], JIterator[U1], JIterator[U2], JIterator[U3], V])
+      : JavaRDD[V] = {
+    def fn: (Iterator[T], Iterator[U1], Iterator[U2], Iterator[U3]) => Iterator[V] =
+      (t: Iterator[T], u1: Iterator[U1], u2: Iterator[U2], u3: Iterator[U3]) =>
+        f.call(t.asJava, u1.asJava, u2.asJava, u3.asJava).asScala
+    JavaRDD.fromRDD(
+      rdd.zipPartitions(other1.rdd, other2.rdd, other3.rdd)(fn)(
+        other1.classTag,
+        other2.classTag,
+        other3.classTag,
+        fakeClassTag[V]))(fakeClassTag[V])
+  }
+
+  /**
+   * Zip this RDD's partitions with one (or more) RDD(s) and return a new RDD by applying a
+   * function to the zipped partitions. Assumes that all the RDDs have the *same number of
+   * partitions*, but does *not* require them to have the same number of elements in each
+   * partition.
+   *
+   * @note
+   *   A generic version of `zipPartitions` for an arbitrary number of RDDs. It may be type unsafe
+   *   and other `zipPartitions` methods should be preferred.
+   */
+  @Since("4.1.0")
+  @varargs
+  def zipPartitions[U, V](
+      f: FlatMapFunction[JList[JIterator[U]], V],
+      others: JavaRDDLike[_, _]*): JavaRDD[V] = {
+    def fn: Seq[Iterator[_]] => Iterator[V] =
+      (i: Seq[Iterator[_]]) => f.call(i.map(_.asInstanceOf[Iterator[U]].asJava).asJava).asScala
+    JavaRDD
+      .fromRDD(rdd.zipPartitions(others.map(_.rdd): _*)(fn)(fakeClassTag[V]))(fakeClassTag[V])
   }
 
   /**
