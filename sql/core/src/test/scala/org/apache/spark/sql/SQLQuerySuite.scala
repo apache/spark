@@ -4941,6 +4941,79 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       Row(Array(0), Array(0)), Row(Array(1), Array(1)), Row(Array(2), Array(2)))
     checkAnswer(df, expectedAnswer)
   }
+
+  test("SPARK-50983: Support nested correlated subquery") {
+    sql("Create table Sales (product_id int, amount int)")
+    sql("create table Products (product_id int, category_id int, price double)")
+
+    withTable("Sales", "Products") {
+      sql("insert into Sales values (1, 10), (2, 20), (3, 30), (4, 40), (5, 50)")
+      sql(
+        "insert into " +
+          "Products values (1, 1, 100.0), (2, 1, 200.0)," +
+          " (3, 2, 300.0), (4, 2, 400.0), (5, 3, 500.0)"
+      )
+      val query =
+        """
+          |SELECT p.product_id, p.category_id, p.price
+          |FROM Products p
+          |WHERE p.product_id IN (
+          |    SELECT s.product_id
+          |    FROM Sales s
+          |    WHERE s.amount > (
+          |        SELECT AVG(s2.amount)
+          |        FROM Sales s2
+          |        WHERE s2.product_id IN (
+          |            SELECT p2.product_id
+          |            FROM Products p2
+          |            WHERE p2.category_id = p.category_id
+          |        )
+          |    )
+          |);
+          |""".stripMargin
+
+      val query2 =
+        """
+          |SELECT p.product_id, p.category_id, p.price
+          |FROM Products p
+          |WHERE p.product_id IN (
+          |    SELECT s.product_id
+          |    FROM Sales s
+          |    WHERE s.product_id = p.product_id
+          |);
+          |""".stripMargin
+
+      val query3 =
+        """
+          |SELECT p.product_id, p.category_id, p.price
+          |FROM Products p
+          |WHERE p.product_id IN (
+          |    SELECT s.product_id
+          |    FROM Sales s
+          |    WHERE s.amount > (
+          |        SELECT AVG(s2.amount)
+          |        FROM Sales s2
+          |        WHERE s2.product_id IN (
+          |            SELECT p2.product_id
+          |            FROM Products p2
+          |        )
+          |    )
+          |);
+          |""".stripMargin
+      withSQLConf(
+        "spark.sql.planChangeLog.level" -> "info",
+        "spark.sql.optimizer.supportNestedCorrelatedSubqueries.enabled" -> "false"
+      ) {
+        try {
+          sql(query).collect()
+        } catch {
+          case e: AnalysisException =>
+            assert(e.errorClass.isDefined && e.errorClass.get ==
+              "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.NESTED_CORRELATED_SUBQUERIES_NOT_SUPPORTED")
+        }
+      }
+    }
+  }
 }
 
 case class Foo(bar: Option[String])
