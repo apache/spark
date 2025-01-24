@@ -187,15 +187,8 @@ private[ml] object MLUtils {
       array.map(_.asInstanceOf[Double])
     } else if (elementType == classOf[String]) {
       array.map(_.asInstanceOf[String])
-    } else if (elementType.isArray) {
-      val compType = elementType.getComponentType
-      if (compType == classOf[Double]) {
-        array.map(_.asInstanceOf[Array[_]].map(_.asInstanceOf[Double]))
-      } else {
-        throw MlUnsupportedException(
-          s"Nested arrays other than Array[Array[Double]] are not supported, " +
-            s"found Array[Array[${compType.getName}]]")
-      }
+    } else if (elementType.isArray && elementType.getComponentType == classOf[Double]) {
+      array.map(_.asInstanceOf[Array[_]].map(_.asInstanceOf[Double]))
     } else {
       throw MlUnsupportedException(
         s"array element type unsupported, " +
