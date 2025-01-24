@@ -32,7 +32,7 @@ object MetricUtils {
   val TIMING_METRIC: String = "timing"
   val NS_TIMING_METRIC: String = "nsTiming"
   val AVERAGE_METRIC: String = "average"
-  private val baseForAvgMetric: Int = 1000
+  private val baseForAvgMetric: Int = 10
   private val METRICS_NAME_SUFFIX = "(min, med, max (stageId: taskId))"
 
   private def toNumberFormat(value: Long): String = {
