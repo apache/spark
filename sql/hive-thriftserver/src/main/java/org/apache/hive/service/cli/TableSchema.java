@@ -36,10 +36,6 @@ public class TableSchema {
   public TableSchema() {
   }
 
-  public TableSchema(int numColumns) {
-    // TODO: remove this constructor
-  }
-
   public TableSchema(TTableSchema tTableSchema) {
     for (TColumnDesc tColumnDesc : tTableSchema.getColumns()) {
       columns.add(new ColumnDescriptor(tColumnDesc));
