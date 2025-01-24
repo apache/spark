@@ -2058,7 +2058,7 @@ class DataFrameSuite extends QueryTest
   test("SPARK-29442 Set `default` mode should override the existing mode") {
     val df = Seq(Tuple1(1)).toDF()
     val writer = df.write.mode("overwrite").mode("default")
-    val modeField = classOf[DataFrameWriter[_]].getDeclaredField("mode")
+    val modeField = classOf[DataFrameWriter[_]].getDeclaredField("curmode")
     modeField.setAccessible(true)
     assert(SaveMode.ErrorIfExists === modeField.get(writer).asInstanceOf[SaveMode])
   }
@@ -2710,6 +2710,16 @@ class DataFrameSuite extends QueryTest
     val actual = getQueryResult(true).map(_.getTimestamp(0).toString).sorted
     val expected = getQueryResult(false).map(_.getTimestamp(0).toString).sorted
     assert(actual == expected)
+  }
+
+  test("SPARK-50962: Avoid StringIndexOutOfBoundsException in AttributeNameParser") {
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.emptyDataFrame.colRegex(".whatever")
+      },
+      condition = "INVALID_ATTRIBUTE_NAME_SYNTAX",
+      parameters = Map("name" -> ".whatever")
+    )
   }
 }
 

@@ -14,25 +14,19 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+
 import unittest
 
-from pyspark import is_remote_only
-from pyspark.pandas.tests.frame.test_take_adv import FrameTakeAdvMixin
+from pyspark.ml.tests.test_pipeline import PipelineTestsMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
-from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 
 
-@unittest.skipIf(is_remote_only(), "Flaky with OOM")
-class FrameTakeAdvParityTests(
-    FrameTakeAdvMixin,
-    PandasOnSparkTestUtils,
-    ReusedConnectTestCase,
-):
+class PipelineParityTests(PipelineTestsMixin, ReusedConnectTestCase):
     pass
 
 
 if __name__ == "__main__":
-    from pyspark.pandas.tests.connect.frame.test_parity_take_adv import *  # noqa: F401
+    from pyspark.ml.tests.connect.test_parity_pipeline import *  # noqa: F401
 
     try:
         import xmlrunner  # type: ignore[import]

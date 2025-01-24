@@ -2278,6 +2278,10 @@ class TypesTestsMixin:
         self.assertEqual(create_df_variants[2][2], None)
         self.assertEqual(create_df_variants[2][3], None)
 
+        # Rows in createDataFrame cannot be of type VariantVal
+        with self.assertRaises(PySparkValueError, msg="Rows cannot be of type VariantVal"):
+            self.spark.createDataFrame([VariantVal.parseJson("2")], "v variant")
+
     def test_to_ddl(self):
         schema = StructType().add("a", NullType()).add("b", BooleanType()).add("c", BinaryType())
         self.assertEqual(schema.toDDL(), "a VOID,b BOOLEAN,c BINARY")
@@ -2345,7 +2349,7 @@ class TypesTestsMixin:
                 with self.assertRaises(ParseException) as udf_pe:
                     schema_from_udf(test)
                 self.assertEqual(
-                    from_ddl_pe.exception.getErrorClass(), udf_pe.exception.getErrorClass()
+                    from_ddl_pe.exception.getCondition(), udf_pe.exception.getCondition()
                 )
 
     def test_collated_string(self):

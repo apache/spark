@@ -20,20 +20,26 @@ package org.apache.spark.sql.connect.ml
 import java.util.{Optional, ServiceLoader}
 import java.util.stream.Collectors
 
-import scala.collection.immutable.HashSet
 import scala.jdk.CollectionConverters._
 
 import org.apache.commons.lang3.reflect.MethodUtils.invokeMethod
 
 import org.apache.spark.connect.proto
-import org.apache.spark.ml.{Estimator, Transformer}
+import org.apache.spark.ml._
+import org.apache.spark.ml.classification._
+import org.apache.spark.ml.clustering._
 import org.apache.spark.ml.evaluation.Evaluator
+import org.apache.spark.ml.feature._
+import org.apache.spark.ml.fpm._
 import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.param.Params
-import org.apache.spark.ml.util.MLWritable
+import org.apache.spark.ml.recommendation._
+import org.apache.spark.ml.regression._
+import org.apache.spark.ml.tree.{DecisionTreeModel, TreeEnsembleModel}
+import org.apache.spark.ml.util.{HasTrainingSummary, Identifiable, MLWritable}
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.classic.Dataset
-import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, LiteralValueProtoConverter}
+import org.apache.spark.sql.connect.common.LiteralValueProtoConverter
 import org.apache.spark.sql.connect.planner.SparkConnectPlanner
 import org.apache.spark.sql.connect.plugin.SparkConnectPluginRegistry
 import org.apache.spark.sql.connect.service.SessionHolder
@@ -142,13 +148,11 @@ private[ml] object MLUtils {
       val value = literal.getLiteralTypeCase match {
         case proto.Expression.Literal.LiteralTypeCase.STRUCT =>
           val s = literal.getStruct
-          val schema = DataTypeProtoConverter.toCatalystType(s.getStructType)
-          if (schema == VectorUDT.sqlType) {
-            deserializeVector(s)
-          } else if (schema == MatrixUDT.sqlType) {
-            deserializeMatrix(s)
-          } else {
-            throw MlUnsupportedException(s"Unsupported parameter struct ${schema} for ${name}")
+          s.getStructType.getUdt.getJvmClass match {
+            case "org.apache.spark.ml.linalg.VectorUDT" => deserializeVector(s)
+            case "org.apache.spark.ml.linalg.MatrixUDT" => deserializeMatrix(s)
+            case _ =>
+              throw MlUnsupportedException(s"Unsupported struct ${literal.getStruct} for ${name}")
           }
 
         case _ =>
@@ -184,6 +188,8 @@ private[ml] object MLUtils {
       array.map(_.asInstanceOf[Double])
     } else if (elementType == classOf[String]) {
       array.map(_.asInstanceOf[String])
+    } else if (elementType.isArray && elementType.getComponentType == classOf[Double]) {
+      array.map(_.asInstanceOf[Array[_]].map(_.asInstanceOf[Double]))
     } else {
       throw MlUnsupportedException(
         s"array element type unsupported, " +
@@ -225,14 +231,10 @@ private[ml] object MLUtils {
       value.asInstanceOf[String]
     } else if (paramType.isArray) {
       val compType = paramType.getComponentType
-      if (compType.isArray) {
-        throw MlUnsupportedException(s"Array of array unsupported")
-      } else {
-        val array = value.asInstanceOf[Array[_]].map { e =>
-          reconcileParam(compType, e)
-        }
-        reconcileArray(compType, array)
+      val array = value.asInstanceOf[Array[_]].map { e =>
+        reconcileParam(compType, e)
       }
+      reconcileArray(compType, array)
     } else {
       throw MlUnsupportedException(s"Unsupported parameter type, found ${paramType.getName}")
     }
@@ -340,6 +342,30 @@ private[ml] object MLUtils {
   }
 
   /**
+   * Get the Transformer instance according to the proto information
+   *
+   * @param sessionHolder
+   *   session holder to hold the Spark Connect session state
+   * @param operator
+   *   MlOperator information
+   * @param params
+   *   The optional parameters of the transformer
+   * @return
+   *   the transformer
+   */
+  def getTransformer(
+      sessionHolder: SessionHolder,
+      operator: proto.MlOperator,
+      params: Option[proto.MlParams]): Transformer = {
+    val name = replaceOperator(sessionHolder, operator.getName)
+    val uid = operator.getUid
+
+    // Load the transformers by ServiceLoader everytime
+    val transformers = loadOperators(classOf[Transformer])
+    getInstance[Transformer](name, uid, transformers, params)
+  }
+
+  /**
    * Get the Evaluator instance according to the proto information
    *
    * @param sessionHolder
@@ -425,96 +451,161 @@ private[ml] object MLUtils {
   // Since we're using reflection way to get the attribute, in order not to
   // leave a security hole, we define an allowed attribute list that can be accessed.
   // The attributes could be retrieved from the corresponding python class
-  private lazy val ALLOWED_ATTRIBUTES = HashSet(
-    "mean", // StandardScalerModel
-    "std", // StandardScalerModel
-    "maxAbs", // MaxAbsScalerModel
-    "originalMax", // MinMaxScalerModel
-    "originalMin", // MinMaxScalerModel
-    "toString",
-    "toDebugString",
-    "numFeatures",
-    "predict", // PredictionModel
-    "predictLeaf", // Tree models
-    "numClasses",
-    "depth", // DecisionTreeClassificationModel
-    "numNodes", // Tree models
-    "totalNumNodes", // Tree models
-    "javaTreeWeights", // Tree models
-    "treeWeights", // Tree models
-    "featureImportances", // Tree models
-    "predictRaw", // ClassificationModel
-    "predictProbability", // ProbabilisticClassificationModel
-    "scale", // LinearRegressionModel
-    "coefficients",
-    "intercept",
-    "coefficientMatrix",
-    "interceptVector", // LogisticRegressionModel
-    "summary",
-    "hasSummary",
-    "evaluate", // LogisticRegressionModel
-    "evaluateEachIteration", // GBTClassificationModel
-    "predictions",
-    "predictionCol",
-    "labelCol",
-    "weightCol",
-    "labels", // _ClassificationSummary
-    "truePositiveRateByLabel",
-    "falsePositiveRateByLabel", // _ClassificationSummary
-    "precisionByLabel",
-    "recallByLabel",
-    "fMeasureByLabel",
-    "accuracy", // _ClassificationSummary
-    "weightedTruePositiveRate",
-    "weightedFalsePositiveRate", // _ClassificationSummary
-    "weightedRecall",
-    "weightedPrecision",
-    "weightedFMeasure", // _ClassificationSummary
-    "scoreCol",
-    "roc",
-    "areaUnderROC",
-    "pr",
-    "fMeasureByThreshold", // _BinaryClassificationSummary
-    "precisionByThreshold",
-    "recallByThreshold", // _BinaryClassificationSummary
-    "probabilityCol",
-    "featuresCol", // LogisticRegressionSummary
-    "objectiveHistory",
-    "coefficientStandardErrors", // _TrainingSummary
-    "degreesOfFreedom", // LinearRegressionSummary
-    "devianceResiduals", // LinearRegressionSummary
-    "explainedVariance", // LinearRegressionSummary
-    "meanAbsoluteError", // LinearRegressionSummary
-    "meanSquaredError", // LinearRegressionSummary
-    "numInstances", // LinearRegressionSummary
-    "pValues", // LinearRegressionSummary
-    "r2", // LinearRegressionSummary
-    "r2adj", // LinearRegressionSummary
-    "residuals", // LinearRegressionSummary
-    "rootMeanSquaredError", // LinearRegressionSummary
-    "tValues", // LinearRegressionSummary
-    "totalIterations", // LinearRegressionSummary
-    "k", // KMeansSummary
-    "numIter", // KMeansSummary
-    "clusterSizes", // KMeansSummary
-    "trainingCost", // KMeansSummary
-    "cluster", // KMeansSummary
-    "computeCost", // BisectingKMeansModel
-    "rank", // ALSModel
-    "itemFactors", // ALSModel
-    "userFactors", // ALSModel
-    "recommendForAllUsers", // ALSModel
-    "recommendForAllItems", // ALSModel
-    "recommendForUserSubset", // ALSModel
-    "recommendForItemSubset", // ALSModel
-    "associationRules", // FPGrowthModel
-    "freqItemsets" // FPGrowthModel
-  )
+  private lazy val ALLOWED_ATTRIBUTES = Seq(
+    (classOf[Identifiable], Set("toString")),
+
+    // Model Traits
+    (classOf[PredictionModel[_, _]], Set("predict", "numFeatures")),
+    (classOf[ClassificationModel[_, _]], Set("predictRaw", "numClasses")),
+    (classOf[ProbabilisticClassificationModel[_, _]], Set("predictProbability")),
+
+    // Summary Traits
+    (classOf[HasTrainingSummary[_]], Set("hasSummary", "summary")),
+    (classOf[TrainingSummary], Set("objectiveHistory", "totalIterations")),
+    (
+      classOf[ClassificationSummary],
+      Set(
+        "predictions",
+        "predictionCol",
+        "labelCol",
+        "weightCol",
+        "labels",
+        "truePositiveRateByLabel",
+        "falsePositiveRateByLabel",
+        "precisionByLabel",
+        "recallByLabel",
+        "fMeasureByLabel",
+        "accuracy",
+        "weightedTruePositiveRate",
+        "weightedFalsePositiveRate",
+        "weightedRecall",
+        "weightedPrecision",
+        "weightedFMeasure",
+        "weightedFMeasure")),
+    (
+      classOf[BinaryClassificationSummary],
+      Set(
+        "scoreCol",
+        "roc",
+        "areaUnderROC",
+        "pr",
+        "fMeasureByThreshold",
+        "precisionByThreshold",
+        "recallByThreshold")),
+    (
+      classOf[ClusteringSummary],
+      Set(
+        "predictions",
+        "predictionCol",
+        "featuresCol",
+        "k",
+        "numIter",
+        "cluster",
+        "clusterSizes")),
+
+    // Tree Models
+    (classOf[DecisionTreeModel], Set("predictLeaf", "numNodes", "depth", "toDebugString")),
+    (
+      classOf[TreeEnsembleModel[_]],
+      Set(
+        "predictLeaf",
+        "trees",
+        "treeWeights",
+        "javaTreeWeights",
+        "getNumTrees",
+        "totalNumNodes",
+        "toDebugString")),
+    (classOf[DecisionTreeClassificationModel], Set("featureImportances")),
+    (classOf[RandomForestClassificationModel], Set("featureImportances", "evaluate")),
+    (classOf[GBTClassificationModel], Set("featureImportances", "evaluateEachIteration")),
+    (classOf[DecisionTreeRegressionModel], Set("featureImportances")),
+    (classOf[RandomForestRegressionModel], Set("featureImportances")),
+    (classOf[GBTRegressionModel], Set("featureImportances", "evaluateEachIteration")),
+
+    // Classification Models
+    (classOf[LinearSVCModel], Set("intercept", "coefficients", "evaluate")),
+    (
+      classOf[LogisticRegressionModel],
+      Set("intercept", "coefficients", "interceptVector", "coefficientMatrix", "evaluate")),
+    (classOf[LogisticRegressionSummary], Set("probabilityCol", "featuresCol")),
+    (classOf[BinaryLogisticRegressionSummary], Set("scoreCol")),
+
+    // Regression Models
+    (classOf[LinearRegressionModel], Set("intercept", "coefficients", "scale", "evaluate")),
+    (
+      classOf[LinearRegressionSummary],
+      Set(
+        "predictions",
+        "predictionCol",
+        "labelCol",
+        "featuresCol",
+        "explainedVariance",
+        "meanAbsoluteError",
+        "meanSquaredError",
+        "rootMeanSquaredError",
+        "r2",
+        "r2adj",
+        "residuals",
+        "numInstances",
+        "degreesOfFreedom",
+        "devianceResiduals",
+        "coefficientStandardErrors",
+        "tValues",
+        "pValues")),
+    (classOf[LinearRegressionTrainingSummary], Set("objectiveHistory", "totalIterations")),
+
+    // Clustering Models
+    (classOf[KMeansModel], Set("predict", "numFeatures", "clusterCenters")),
+    (classOf[KMeansSummary], Set("trainingCost")),
+    (
+      classOf[BisectingKMeansModel],
+      Set("predict", "numFeatures", "clusterCenters", "computeCost")),
+    (classOf[BisectingKMeansSummary], Set("trainingCost")),
+    (
+      classOf[GaussianMixtureModel],
+      Set("predict", "numFeatures", "weights", "gaussians", "predictProbability", "gaussiansDF")),
+    (classOf[GaussianMixtureSummary], Set("probability", "probabilityCol", "logLikelihood")),
+
+    // Recommendation Models
+    (
+      classOf[ALSModel],
+      Set(
+        "rank",
+        "itemFactors",
+        "userFactors",
+        "recommendForAllUsers",
+        "recommendForAllItems",
+        "recommendForUserSubset",
+        "recommendForItemSubset")),
+
+    // Association Rules
+    (classOf[FPGrowthModel], Set("associationRules", "freqItemsets")),
+
+    // Feature Models
+    (classOf[StandardScalerModel], Set("mean", "std")),
+    (classOf[MaxAbsScalerModel], Set("maxAbs")),
+    (classOf[MinMaxScalerModel], Set("originalMax", "originalMin")),
+    (classOf[RobustScalerModel], Set("range", "median")),
+    (classOf[ChiSqSelectorModel], Set("selectedFeatures")),
+    (classOf[UnivariateFeatureSelectorModel], Set("selectedFeatures")),
+    (classOf[VarianceThresholdSelectorModel], Set("selectedFeatures")),
+    (classOf[PCAModel], Set("pc", "explainedVariance")),
+    (classOf[Word2VecModel], Set("getVectors", "findSynonyms", "findSynonymsArray")),
+    (classOf[CountVectorizerModel], Set("vocabulary")),
+    (classOf[OneHotEncoderModel], Set("categorySizes")))
+
+  private def validate(obj: Any, method: String): Unit = {
+    assert(obj != null)
+    val valid = ALLOWED_ATTRIBUTES.exists { case (cls, methods) =>
+      cls.isInstance(obj) && methods.contains(method)
+    }
+    if (!valid) {
+      throw MLAttributeNotAllowedException(method)
+    }
+  }
 
   def invokeMethodAllowed(obj: Object, methodName: String): Object = {
-    if (!ALLOWED_ATTRIBUTES.contains(methodName)) {
-      throw MLAttributeNotAllowedException(methodName)
-    }
+    validate(obj, methodName)
     invokeMethod(obj, methodName)
   }
 
@@ -523,9 +614,7 @@ private[ml] object MLUtils {
       methodName: String,
       args: Array[Object],
       parameterTypes: Array[Class[_]]): Object = {
-    if (!ALLOWED_ATTRIBUTES.contains(methodName)) {
-      throw MLAttributeNotAllowedException(methodName)
-    }
+    validate(obj, methodName)
     invokeMethod(obj, methodName, args, parameterTypes)
   }
 

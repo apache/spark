@@ -20,6 +20,7 @@ package org.apache.spark.sql.connector.catalog
 import java.util
 
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
 import org.apache.spark.sql.connector.distributions.{Distribution, Distributions}
 import org.apache.spark.sql.connector.expressions.{FieldReference, LogicalExpressions, NamedReference, SortDirection, SortOrder, Transform}
 import org.apache.spark.sql.connector.read.{Scan, ScanBuilder}
@@ -27,6 +28,8 @@ import org.apache.spark.sql.connector.write.{BatchWrite, DeltaBatchWrite, DeltaW
 import org.apache.spark.sql.connector.write.RowLevelOperation.Command
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.util.ArrayImplicits._
 
 class InMemoryRowLevelOperationTable(
     name: String,
@@ -36,11 +39,17 @@ class InMemoryRowLevelOperationTable(
   extends InMemoryTable(name, schema, partitioning, properties) with SupportsRowLevelOperations {
 
   private final val PARTITION_COLUMN_REF = FieldReference(PartitionKeyColumn.name)
+  private final val INDEX_COLUMN_REF = FieldReference(IndexColumn.name)
   private final val SUPPORTS_DELTAS = "supports-deltas"
   private final val SPLIT_UPDATES = "split-updates"
 
   // used in row-level operation tests to verify replaced partitions
   var replacedPartitions: Seq[Seq[Any]] = Seq.empty
+  // used in row-level operation tests to verify reported write schema
+  var lastWriteInfo: LogicalWriteInfo = _
+  // used in row-level operation tests to verify passed records
+  // (operation, id, metadata, row)
+  var lastWriteLog: Seq[InternalRow] = Seq.empty
 
   override def newRowLevelOperationBuilder(
       info: RowLevelOperationInfo): RowLevelOperationBuilder = {
@@ -55,7 +64,7 @@ class InMemoryRowLevelOperationTable(
     var configuredScan: InMemoryBatchScan = _
 
     override def requiredMetadataAttributes(): Array[NamedReference] = {
-      Array(PARTITION_COLUMN_REF)
+      Array(PARTITION_COLUMN_REF, INDEX_COLUMN_REF)
     }
 
     override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
@@ -68,25 +77,26 @@ class InMemoryRowLevelOperationTable(
       }
     }
 
-    override def newWriteBuilder(info: LogicalWriteInfo): WriteBuilder = new WriteBuilder {
+    override def newWriteBuilder(info: LogicalWriteInfo): WriteBuilder = {
+      lastWriteInfo = info
+      new WriteBuilder {
+        override def build(): Write = new Write with RequiresDistributionAndOrdering {
+          override def requiredDistribution: Distribution = {
+            Distributions.clustered(Array(PARTITION_COLUMN_REF))
+          }
 
-      override def build(): Write = new Write with RequiresDistributionAndOrdering {
-        override def requiredDistribution(): Distribution = {
-          Distributions.clustered(Array(PARTITION_COLUMN_REF))
+          override def requiredOrdering: Array[SortOrder] = {
+            Array[SortOrder](
+              LogicalExpressions.sort(
+                PARTITION_COLUMN_REF,
+                SortDirection.ASCENDING,
+                SortDirection.ASCENDING.defaultNullOrdering()))
+          }
+
+          override def toBatch: BatchWrite = PartitionBasedReplaceData(configuredScan)
+
+          override def description: String = "InMemoryWrite"
         }
-
-        override def requiredOrdering(): Array[SortOrder] = {
-          Array[SortOrder](
-            LogicalExpressions.sort(
-              PARTITION_COLUMN_REF,
-              SortDirection.ASCENDING,
-              SortDirection.ASCENDING.defaultNullOrdering())
-          )
-        }
-
-        override def toBatch: BatchWrite = PartitionBasedReplaceData(configuredScan)
-
-        override def description(): String = "InMemoryWrite"
       }
     }
 
@@ -102,6 +112,7 @@ class InMemoryRowLevelOperationTable(
       dataMap --= readPartitions
       replacedPartitions = readPartitions
       withData(newData, schema)
+      lastWriteLog = newData.flatMap(buffer => buffer.log).toImmutableArraySeq
     }
   }
 
@@ -109,7 +120,7 @@ class InMemoryRowLevelOperationTable(
     private final val PK_COLUMN_REF = FieldReference("pk")
 
     override def requiredMetadataAttributes(): Array[NamedReference] = {
-      Array(PARTITION_COLUMN_REF)
+      Array(PARTITION_COLUMN_REF, INDEX_COLUMN_REF)
     }
 
     override def rowId(): Array[NamedReference] = Array(PK_COLUMN_REF)
@@ -118,7 +129,8 @@ class InMemoryRowLevelOperationTable(
       new InMemoryScanBuilder(schema, options)
     }
 
-    override def newWriteBuilder(info: LogicalWriteInfo): DeltaWriteBuilder =
+    override def newWriteBuilder(info: LogicalWriteInfo): DeltaWriteBuilder = {
+      lastWriteInfo = info
       new DeltaWriteBuilder {
         override def build(): DeltaWrite = new DeltaWrite with RequiresDistributionAndOrdering {
 
@@ -138,6 +150,7 @@ class InMemoryRowLevelOperationTable(
           override def toBatch: DeltaBatchWrite = TestDeltaBatchWrite
         }
       }
+    }
 
     override def representUpdateAsDeleteAndInsert(): Boolean = {
       properties.getOrDefault(SPLIT_UPDATES, "false").toBoolean
@@ -150,8 +163,10 @@ class InMemoryRowLevelOperationTable(
     }
 
     override def commit(messages: Array[WriterCommitMessage]): Unit = {
-      withDeletes(messages.map(_.asInstanceOf[BufferedRows]))
-      withData(messages.map(_.asInstanceOf[BufferedRows]))
+      val newData = messages.map(_.asInstanceOf[BufferedRows])
+      withDeletes(newData)
+      withData(newData)
+      lastWriteLog = newData.flatMap(buffer => buffer.log).toIndexedSeq
     }
 
     override def abort(messages: Array[WriterCommitMessage]): Unit = {}
@@ -166,16 +181,41 @@ private object DeltaBufferedRowsWriterFactory extends DeltaWriterFactory {
 
 private class DeltaBufferWriter extends BufferWriter with DeltaWriter[InternalRow] {
 
-  override def delete(meta: InternalRow, id: InternalRow): Unit = buffer.deletes += id.getInt(0)
+  private final val DELETE = UTF8String.fromString(Delete.toString)
+  private final val UPDATE = UTF8String.fromString(Update.toString)
+  private final val REINSERT = UTF8String.fromString(Reinsert.toString)
+  private final val INSERT = UTF8String.fromString(Insert.toString)
 
-  override def update(meta: InternalRow, id: InternalRow, row: InternalRow): Unit = {
-    buffer.deletes += id.getInt(0)
-    write(row)
+  override def delete(meta: InternalRow, id: InternalRow): Unit = {
+    val pk = id.getInt(0)
+    buffer.deletes += pk
+    val logEntry = new GenericInternalRow(Array[Any](DELETE, pk, meta.copy(), null))
+    buffer.log += logEntry
   }
 
-  override def insert(row: InternalRow): Unit = write(row)
+  override def update(meta: InternalRow, id: InternalRow, row: InternalRow): Unit = {
+    val pk = id.getInt(0)
+    buffer.deletes += pk
+    buffer.rows.append(row.copy())
+    val logEntry = new GenericInternalRow(Array[Any](UPDATE, pk, meta.copy(), row.copy()))
+    buffer.log += logEntry
+  }
 
-  override def write(row: InternalRow): Unit = super[BufferWriter].write(row)
+  override def reinsert(meta: InternalRow, row: InternalRow): Unit = {
+    buffer.rows.append(row.copy())
+    val logEntry = new GenericInternalRow(Array[Any](REINSERT, null, meta.copy(), row.copy()))
+    buffer.log += logEntry
+  }
+
+  override def insert(row: InternalRow): Unit = {
+    buffer.rows.append(row.copy())
+    val logEntry = new GenericInternalRow(Array[Any](INSERT, null, null, row.copy()))
+    buffer.log += logEntry
+  }
+
+  override def write(row: InternalRow): Unit = {
+    throw new UnsupportedOperationException()
+  }
 
   override def commit(): WriterCommitMessage = buffer
 }

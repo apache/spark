@@ -55,8 +55,7 @@ To enable authorization, Spark Master should have
 `spark.master.rest.filters=org.apache.spark.ui.JWSFilter` and
 `spark.org.apache.spark.ui.JWSFilter.param.secretKey=BASE64URL-ENCODED-KEY` configurations, and
 client should provide HTTP `Authorization` header which contains JSON Web Token signed by
-the shared secret key. Please note that this feature requires a Spark distribution built with
-`jjwt` profile.
+the shared secret key.
 
 ### YARN
 
@@ -816,7 +815,7 @@ be limited to origin hosts that need to access the services.
 
 However, like the REST Submission port, Spark also supports HTTP `Authorization` header
 with a cryptographically signed JSON Web Token (JWT) for all UI ports.
-To use it, a user needs the Spark distribution built with `jjwt` profile and to configure
+To use it, a user needs to configure
 `spark.ui.filters=org.apache.spark.ui.JWSFilter` and
 `spark.org.apache.spark.ui.JWSFilter.param.secretKey=BASE64URL-ENCODED-KEY`.
 
