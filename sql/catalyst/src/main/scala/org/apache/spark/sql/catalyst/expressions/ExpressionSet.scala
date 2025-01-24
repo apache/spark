@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.sql.catalyst.util.truncatedString
+import org.apache.spark.sql.catalyst.util.SparkStringUtils
 
 object ExpressionSet {
   /**
@@ -182,7 +182,10 @@ class ExpressionSet protected(
      """.stripMargin
 
   /** Returns a length limited string that must be used for logging only. */
-  def simpleString(maxFields: Int): String =
-    s"Set(${truncatedString(originals.map(_.simpleString(maxFields)).toSeq, ", ", maxFields)})"
+  def simpleString(maxFields: Int): String = {
+    val customToString = { e: Expression => e.simpleString(maxFields) }
+    s"Set(${SparkStringUtils.truncatedString(
+      seq = originals.toSeq, start = "", sep = ", ", end = "", maxFields, Some(customToString))})"
+  }
 }
 
