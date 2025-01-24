@@ -175,18 +175,18 @@ class NoOpStatementExec extends LeafStatementExec {
   override def reset(): Unit = ()
 }
 
-class TriggerHandlerMap(
-    conditionHandlerMap: Map[String, ErrorHandlerExec],
-    sqlStateHandlerMap: Map[String, ErrorHandlerExec],
+class TriggerToExceptionHandlerMap(
+    conditionToExceptionHandlerMap: Map[String, ErrorHandlerExec],
+    sqlStateToExceptionHandlerMap: Map[String, ErrorHandlerExec],
     sqlExceptionHandler: Option[ErrorHandlerExec],
     notFoundHandler: Option[ErrorHandlerExec]) {
 
   def getHandlerForCondition(condition: String): Option[ErrorHandlerExec] = {
-    conditionHandlerMap.get(condition)
+    conditionToExceptionHandlerMap.get(condition)
   }
 
   def getHandlerForSqlState(sqlState: String): Option[ErrorHandlerExec] = {
-    sqlStateHandlerMap.get(sqlState)
+    sqlStateToExceptionHandlerMap.get(sqlState)
   }
 
   def getSqlExceptionHandler: Option[ErrorHandlerExec] = sqlExceptionHandler
@@ -205,7 +205,7 @@ class TriggerHandlerMap(
  *   Scopes are used for grouping local variables and exception handlers.
  * @param context
  *   SqlScriptingExecutionContext keeps the execution state of current script.
- * @param triggerHandlerMap
+ * @param triggerToExceptionHandlerMap
  *   Map of condition names/sqlstates to error handlers defined in this compound body.
  */
 class CompoundBodyExec(
@@ -213,7 +213,7 @@ class CompoundBodyExec(
     label: Option[String] = None,
     isScope: Boolean,
     context: SqlScriptingExecutionContext,
-    triggerHandlerMap: TriggerHandlerMap)
+    triggerToExceptionHandlerMap: TriggerToExceptionHandlerMap)
   extends NonLeafStatementExec {
 
   private object ScopeStatus extends Enumeration {
@@ -237,7 +237,7 @@ class CompoundBodyExec(
     // This check makes this operation idempotent.
     if (isScope && scopeStatus == ScopeStatus.NOT_ENTERED) {
       scopeStatus = ScopeStatus.INSIDE
-      context.enterScope(label.get, triggerHandlerMap)
+      context.enterScope(label.get, triggerToExceptionHandlerMap)
     }
   }
 
@@ -942,7 +942,7 @@ class ForStatementExec(
         None,
         isScope = false,
         context,
-        new TriggerHandlerMap(Map.empty, Map.empty, None, None)
+        new TriggerToExceptionHandlerMap(Map.empty, Map.empty, None, None)
       )
       ForState.VariableCleanup
     }

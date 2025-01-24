@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.parser
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.expressions.{Alias, EqualTo, Expression, In, Literal, ScalarSubquery}
 import org.apache.spark.sql.catalyst.plans.SQLHelper
-import org.apache.spark.sql.catalyst.plans.logical.{CaseStatement, CompoundBody, CreateVariable, ErrorHandler, ForStatement, IfElseStatement, IterateStatement, LeaveStatement, LoopStatement, Project, RepeatStatement, SetVariable, SingleStatement, WhileStatement}
+import org.apache.spark.sql.catalyst.plans.logical.{CaseStatement, CompoundBody, CreateVariable, ExceptionHandler, ForStatement, IfElseStatement, IterateStatement, LeaveStatement, LoopStatement, Project, RepeatStatement, SetVariable, SingleStatement, WhileStatement}
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLId
 import org.apache.spark.sql.exceptions.SqlScriptingException
 import org.apache.spark.sql.internal.SQLConf
@@ -2414,7 +2414,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
         |END""".stripMargin
     val tree = parsePlan(sqlScriptText).asInstanceOf[CompoundBody]
     assert(tree.handlers.length == 1)
-    assert(tree.handlers.head.isInstanceOf[ErrorHandler])
+    assert(tree.handlers.head.isInstanceOf[ExceptionHandler])
     assert(tree.handlers.head.handlerTriggers.conditions.size == 1)
     assert(tree.handlers.head.handlerTriggers.conditions.contains("test_condition"))
     assert(tree.handlers.head.body.collection.size == 1)
@@ -2433,7 +2433,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
         |END""".stripMargin
     val tree = parsePlan(sqlScriptText).asInstanceOf[CompoundBody]
     assert(tree.handlers.length == 1)
-    assert(tree.handlers.head.isInstanceOf[ErrorHandler])
+    assert(tree.handlers.head.isInstanceOf[ExceptionHandler])
     assert(tree.handlers.head.handlerTriggers.conditions.size == 1)
     assert(tree.handlers.head.handlerTriggers.conditions.contains("test_condition"))
     assert(tree.handlers.head.body.collection.size == 1)
@@ -2450,7 +2450,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
         |END""".stripMargin
     val tree = parsePlan(sqlScriptText).asInstanceOf[CompoundBody]
     assert(tree.handlers.length == 1)
-    assert(tree.handlers.head.isInstanceOf[ErrorHandler])
+    assert(tree.handlers.head.isInstanceOf[ExceptionHandler])
     assert(tree.handlers.head.handlerTriggers.conditions.size == 1)
     assert(tree.handlers.head.handlerTriggers.conditions.contains("test_condition"))
     assert(tree.handlers.head.body.collection.size == 1)
@@ -2467,7 +2467,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
         |END""".stripMargin
     val tree = parsePlan(sqlScriptText).asInstanceOf[CompoundBody]
     assert(tree.handlers.length == 1)
-    assert(tree.handlers.head.isInstanceOf[ErrorHandler])
+    assert(tree.handlers.head.isInstanceOf[ExceptionHandler])
     assert(tree.handlers.head.handlerTriggers.conditions.size == 1)
     assert(tree.handlers.head.handlerTriggers.conditions.contains("test_condition"))
     assert(tree.handlers.head.body.collection.size == 1)
@@ -2485,7 +2485,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
         |END""".stripMargin
     val tree = parsePlan(sqlScriptText).asInstanceOf[CompoundBody]
     assert(tree.handlers.length == 1)
-    assert(tree.handlers.head.isInstanceOf[ErrorHandler])
+    assert(tree.handlers.head.isInstanceOf[ExceptionHandler])
     assert(tree.handlers.head.handlerTriggers.conditions.size == 2)
     assert(tree.handlers.head.handlerTriggers.conditions.contains("test_condition_1"))
     assert(tree.handlers.head.handlerTriggers.conditions.contains("test_condition_2"))
@@ -2505,7 +2505,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
         |END""".stripMargin
     val tree = parsePlan(sqlScriptText).asInstanceOf[CompoundBody]
     assert(tree.handlers.length == 1)
-    assert(tree.handlers.head.isInstanceOf[ErrorHandler])
+    assert(tree.handlers.head.isInstanceOf[ExceptionHandler])
     assert(tree.handlers.head.handlerTriggers.conditions.isEmpty)
     assert(tree.handlers.head.handlerTriggers.sqlStates.isEmpty)
     assert(tree.handlers.head.handlerTriggers.sqlException) // true
@@ -2521,7 +2521,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
         |END""".stripMargin
     val tree = parsePlan(sqlScriptText).asInstanceOf[CompoundBody]
     assert(tree.handlers.length == 1)
-    assert(tree.handlers.head.isInstanceOf[ErrorHandler])
+    assert(tree.handlers.head.isInstanceOf[ExceptionHandler])
     assert(tree.handlers.head.handlerTriggers.conditions.isEmpty)
     assert(tree.handlers.head.handlerTriggers.sqlStates.isEmpty)
     assert(!tree.handlers.head.handlerTriggers.sqlException) // true
@@ -2538,7 +2538,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
         |END""".stripMargin
     val tree = parsePlan(sqlScriptText).asInstanceOf[CompoundBody]
     assert(tree.handlers.length == 1)
-    assert(tree.handlers.head.isInstanceOf[ErrorHandler])
+    assert(tree.handlers.head.isInstanceOf[ExceptionHandler])
     assert(tree.handlers.head.handlerTriggers.conditions.size == 1)
     assert(tree.handlers.head.handlerTriggers.conditions.contains("K2000"))
     assert(tree.handlers.head.handlerTriggers.sqlStates.size == 1)

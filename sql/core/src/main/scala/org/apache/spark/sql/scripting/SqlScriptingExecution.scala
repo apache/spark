@@ -126,7 +126,7 @@ class SqlScriptingExecution(
         handleException(e)
         getNextResult // After setup for exception handling, try to get the next result again.
       case throwable: Throwable =>
-        throw throwable // Rethrow the exception.
+        throw throwable // Uncaught exception will be thrown.
     }
   }
 

@@ -22,6 +22,8 @@ import scala.collection.mutable.ListBuffer
 import org.apache.spark.SparkException
 import org.apache.spark.sql.scripting.SqlScriptingFrameType.SqlScriptingFrameType
 
+import java.util.Locale
+
 /**
  * SQL scripting execution context - keeps track of the current execution state.
  */
@@ -32,7 +34,7 @@ class SqlScriptingExecutionContext {
 
   def enterScope(
       label: String,
-      triggerHandlerMap: TriggerHandlerMap): Unit = {
+      triggerHandlerMap: TriggerToExceptionHandlerMap): Unit = {
     if (frames.isEmpty) {
       throw SparkException.internalError("Cannot enter scope: no frames.")
     }
@@ -105,8 +107,8 @@ class SqlScriptingExecutionFrame(
 
   def enterScope(
       label: String,
-      triggerHandlerMap: TriggerHandlerMap): Unit = {
-    scopes.append(new SqlScriptingExecutionScope(label, triggerHandlerMap))
+      triggerToExceptionHandlerMap: TriggerToExceptionHandlerMap): Unit = {
+    scopes.append(new SqlScriptingExecutionScope(label, triggerToExceptionHandlerMap))
   }
 
   def exitScope(label: String): Unit = {
@@ -162,12 +164,12 @@ class SqlScriptingExecutionFrame(
  *
  * @param label
  *   Label of the scope.
- * @param triggerHandlerMap
+ * @param triggerToExceptionHandlerMap
  *   Object holding condition/sqlState/sqlexception/not found to handler mapping.
  */
 class SqlScriptingExecutionScope(
     val label: String,
-    val triggerHandlerMap: TriggerHandlerMap) {
+    val triggerToExceptionHandlerMap: TriggerToExceptionHandlerMap) {
 
   /**
    * Finds the most appropriate error handler for exception based on its condition and SQL state.
@@ -190,17 +192,19 @@ class SqlScriptingExecutionScope(
   def findHandler(condition: String, sqlState: String): Option[ErrorHandlerExec] = {
     // Check if there is a specific handler for the given condition.
     var errorHandler: Option[ErrorHandlerExec] = None
+    val lowercaseCondition = condition.toLowerCase(Locale.ROOT)
+    val lowercaseSqlState = sqlState.toLowerCase(Locale.ROOT)
 
-    errorHandler = triggerHandlerMap.getHandlerForCondition(condition)
+    errorHandler = triggerToExceptionHandlerMap.getHandlerForCondition(lowercaseCondition)
 
     if (errorHandler.isEmpty) {
       // Check if there is a specific handler for the given SQLSTATE.
-      errorHandler = triggerHandlerMap.getHandlerForSqlState(sqlState)
+      errorHandler = triggerToExceptionHandlerMap.getHandlerForSqlState(lowercaseSqlState)
     }
 
     if (errorHandler.isEmpty) {
-      errorHandler = triggerHandlerMap.getNotFoundHandler match {
-        case Some(handler) if sqlState.startsWith("02") => Some(handler)
+      errorHandler = triggerToExceptionHandlerMap.getNotFoundHandler match {
+        case Some(handler) if lowercaseSqlState.startsWith("02") => Some(handler)
         case _ => None
       }
     }
@@ -208,8 +212,9 @@ class SqlScriptingExecutionScope(
     if (errorHandler.isEmpty) {
       // If SQLEXCEPTION handler is defined, use it only for errors with class
       // different from 'XX' and '02'.
-      errorHandler = triggerHandlerMap.getSqlExceptionHandler match {
-        case Some(handler) if !sqlState.startsWith("XX") && !sqlState.startsWith("02") =>
+      errorHandler = triggerToExceptionHandlerMap.getSqlExceptionHandler match {
+        case Some(handler)
+          if !lowercaseSqlState.startsWith("xx") && !lowercaseSqlState.startsWith("02") =>
           Some(handler)
         case _ => None
       }

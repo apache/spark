@@ -171,7 +171,7 @@ class AstBuilder extends DataTypeAstBuilder
 
   private def visitConditionValueImpl(
       ctx: ConditionValueContext,
-      handlerTriggers: HandlerTriggers): Unit = {
+      handlerTriggers: ExceptionHandlerTriggers): Unit = {
     // Current element is SQLSTATE.
     Option(ctx.sqlStateValue())
       .foreach { sqlStateValueContext =>
@@ -183,6 +183,7 @@ class AstBuilder extends DataTypeAstBuilder
     // Current element is condition.
     Option(ctx.multipartIdentifier())
       .foreach { conditionContext =>
+        val condition = visitMultipartIdentifier(conditionContext)
         handlerTriggers.addUniqueCondition(conditionContext.getText)
       }
 
@@ -201,12 +202,20 @@ class AstBuilder extends DataTypeAstBuilder
    * Visit list of condition/sqlstate values in handler declaration.
    */
   private def visitConditionValuesImpl(
-      ctx: ConditionValuesContext): HandlerTriggers = {
+      ctx: ConditionValuesContext): ExceptionHandlerTriggers = {
 
-    val handlerTriggers: HandlerTriggers = new HandlerTriggers()
+    val handlerTriggers: ExceptionHandlerTriggers = new ExceptionHandlerTriggers()
 
     ctx.cvList.forEach { cvContext =>
       visitConditionValueImpl(cvContext, handlerTriggers)
+    }
+
+    if (handlerTriggers.sqlException || handlerTriggers.notFound) {
+      if (handlerTriggers.conditions.nonEmpty && handlerTriggers.sqlStates.nonEmpty) {
+        throw SqlScriptingErrors
+          .sqlExceptionOrNotFoundCannotBeCombinedWithOtherConditions(CurrentOrigin.get)
+      }
+
     }
 
     handlerTriggers
@@ -227,12 +236,13 @@ class AstBuilder extends DataTypeAstBuilder
       .map(_.getText.replace("'", "")).getOrElse("45000")
 
     assertSqlState(sqlState)
-    ErrorCondition(conditionName, sqlState)
+    // Convert everything to lower case.
+    ErrorCondition(conditionName.toLowerCase(Locale.ROOT), sqlState.toLowerCase(Locale.ROOT))
   }
 
   private def visitDeclareHandlerStatementImpl(
       ctx: DeclareHandlerStatementContext,
-      labelCtx: SqlScriptingLabelContext): ErrorHandler = {
+      labelCtx: SqlScriptingLabelContext): ExceptionHandler = {
     val handlerTriggers = visitConditionValuesImpl(ctx.conditionValues())
 
     if (Option(ctx.CONTINUE()).isDefined) {
@@ -254,7 +264,7 @@ class AstBuilder extends DataTypeAstBuilder
       CompoundBody(Seq(statement.get), None, isScope = false)
     }
 
-    ErrorHandler(handlerTriggers, body, handlerType)
+    ExceptionHandler(handlerTriggers, body, handlerType)
   }
 
   private def visitCompoundBodyImpl(
@@ -265,7 +275,7 @@ class AstBuilder extends DataTypeAstBuilder
       isScope: Boolean): CompoundBody = {
     val buff = ListBuffer[CompoundPlanStatement]()
 
-    val handlers = ListBuffer[ErrorHandler]()
+    val handlers = ListBuffer[ExceptionHandler]()
     val conditions = HashMap[String, String]()
 
     val scriptingParserContext = new SqlScriptingParsingContext()
@@ -273,17 +283,20 @@ class AstBuilder extends DataTypeAstBuilder
     ctx.compoundStatements.forEach(compoundStatement => {
       val stmt = visitCompoundStatementImpl(compoundStatement, labelCtx)
       stmt match {
-        case handler: ErrorHandler =>
+        case handler: ExceptionHandler =>
           scriptingParserContext.handler()
           handlers += handler
         case condition: ErrorCondition =>
+          // Convert everything to lower case for case insensitive comparisons.
+          val lowercaseConditionName = condition.conditionName.toLowerCase(Locale.ROOT)
+          val lowercaseSqlState = condition.sqlState.toLowerCase(Locale.ROOT)
           scriptingParserContext.condition(condition)
           // Check for duplicate condition names in each scope.
-          if (conditions.contains(condition.conditionName)) {
+          if (conditions.contains(lowercaseConditionName)) {
             throw SqlScriptingErrors
-              .duplicateConditionInScope(CurrentOrigin.get, condition.conditionName)
+              .duplicateConditionInScope(CurrentOrigin.get, lowercaseConditionName)
           }
-          conditions += condition.conditionName -> condition.sqlState
+          conditions += lowercaseConditionName -> lowercaseSqlState
         case statement =>
           statement match {
             case SingleStatement(createVariable: CreateVariable) =>
