@@ -28,7 +28,7 @@ import org.antlr.v4.runtime.{ParserRuleContext, RuleContext, Token}
 import org.antlr.v4.runtime.misc.Interval
 import org.antlr.v4.runtime.tree.{ParseTree, RuleNode, TerminalNode}
 
-import org.apache.spark.{SparkArithmeticException, SparkException, SparkIllegalArgumentException, SparkThrowable}
+import org.apache.spark.{SparkArithmeticException, SparkException, SparkIllegalArgumentException, SparkThrowable, SparkThrowableHelper}
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys.PARTITION_SPECIFICATION
 import org.apache.spark.sql.catalyst.{EvaluateUnresolvedInlineTable, FunctionIdentifier, SQLConfHelper, TableIdentifier}
@@ -183,8 +183,15 @@ class AstBuilder extends DataTypeAstBuilder
     // Current element is condition.
     Option(ctx.multipartIdentifier())
       .foreach { conditionContext =>
-        val condition = visitMultipartIdentifier(conditionContext)
-        handlerTriggers.addUniqueCondition(conditionContext.getText)
+        val conditionNameParts = visitMultipartIdentifier(conditionContext)
+        if (conditionNameParts.size > 1) {
+          if (!SparkThrowableHelper.isValidErrorClass(conditionNameParts.mkString("."))) {
+            throw SqlScriptingErrors
+              .conditionCannotBeQualified(CurrentOrigin.get, conditionNameParts.mkString("."))
+          }
+        }
+        handlerTriggers
+          .addUniqueCondition(conditionNameParts.mkString(".").toLowerCase(Locale.ROOT))
       }
 
     Option(ctx.SQLEXCEPTION())

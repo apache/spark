@@ -138,7 +138,7 @@ case class SqlScriptingInterpreter(session: SparkSession) {
       // to the sqlStateHandlerMap.
       handler.handlerTriggers.sqlStates.foreach(sqlState => {
         if (sqlStateToExceptionHandlerMap.contains(sqlState)) {
-          throw SqlScriptingErrors.duplicateHandlerForSameCondition(CurrentOrigin.get, sqlState)
+          throw SqlScriptingErrors.duplicateHandlerForSameSqlState(CurrentOrigin.get, sqlState)
         } else {
           sqlStateToExceptionHandlerMap.put(sqlState, handlerExec)
         }

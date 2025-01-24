@@ -70,37 +70,16 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
   }
 
   // Handler tests
-  test("continue handler not supported") {
+  test("duplicate handler for the same condition") {
     val sqlScript =
       """
         |BEGIN
         |  DECLARE OR REPLACE flag INT = -1;
-        |  DECLARE CONTINUE HANDLER FOR SQLSTATE '22012'
+        |  DECLARE EXIT HANDLER FOR duplicate_condition
         |  BEGIN
         |    SET VAR flag = 1;
         |  END;
-        |  SELECT 1/0;
-        |  SELECT flag;
-        |END
-        |""".stripMargin
-    checkError(
-      exception = intercept[SqlScriptingException] {
-        verifySqlScriptResult(sqlScript, Seq.empty)
-      },
-      condition = "UNSUPPORTED_FEATURE.CONTINUE_ERROR_HANDLER",
-      parameters = Map.empty)
-  }
-
-  test("duplicate handler") {
-    val sqlScript =
-      """
-        |BEGIN
-        |  DECLARE OR REPLACE flag INT = -1;
-        |  DECLARE EXIT HANDLER FOR SQLSTATE '22012'
-        |  BEGIN
-        |    SET VAR flag = 1;
-        |  END;
-        |  DECLARE EXIT HANDLER FOR SQLSTATE '22012'
+        |  DECLARE EXIT HANDLER FOR duplicate_condition
         |  BEGIN
         |    SET VAR flag = 2;
         |  END;
@@ -112,8 +91,33 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
       exception = intercept[SqlScriptingException] {
         verifySqlScriptResult(sqlScript, Seq.empty)
       },
-      condition = "DUPLICATE_HANDLER_FOR_SAME_CONDITION",
-      parameters = Map("condition" -> "22012"))
+      condition = "DUPLICATE_EXCEPTION_HANDLER.CONDITION",
+      parameters = Map("condition" -> "duplicate_condition"))
+  }
+
+  test("duplicate handler for the same sqlState") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE OR REPLACE flag INT = -1;
+        |  DECLARE EXIT HANDLER FOR SQLSTATE '12345'
+        |  BEGIN
+        |    SET VAR flag = 1;
+        |  END;
+        |  DECLARE EXIT HANDLER FOR SQLSTATE '12345'
+        |  BEGIN
+        |    SET VAR flag = 2;
+        |  END;
+        |  SELECT 1/0;
+        |  SELECT flag;
+        |END
+        |""".stripMargin
+    checkError(
+      exception = intercept[SqlScriptingException] {
+        verifySqlScriptResult(sqlScript, Seq.empty)
+      },
+      condition = "DUPLICATE_EXCEPTION_HANDLER.SQLSTATE",
+      parameters = Map("sqlState" -> "12345"))
   }
 
   test("Specific condition takes precedence over sqlState") {

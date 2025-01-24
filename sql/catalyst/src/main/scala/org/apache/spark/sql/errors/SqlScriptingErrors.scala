@@ -164,14 +164,6 @@ private[sql] object SqlScriptingErrors {
       messageParameters = Map("conditionName" -> toSQLId(conditionName)))
   }
 
-  def duplicateConditionInHandlerDeclaration(origin: Origin, condition: String): Throwable = {
-    new SqlScriptingException(
-      origin = origin,
-      errorClass = "DUPLICATE_CONDITION_IN_HANDLER_DECLARATION",
-      cause = null,
-      messageParameters = Map("condition" -> condition))
-  }
-
   def duplicateConditionInScope(origin: Origin, condition: String): Throwable = {
     new SqlScriptingException(
       origin = origin,
@@ -183,23 +175,48 @@ private[sql] object SqlScriptingErrors {
   def handlerDeclarationInWrongPlace(origin: Origin): Throwable = {
     new SqlScriptingException(
       origin = origin,
-      errorClass = "INVALID_HANDLER_DECLARATION",
+      errorClass = "INVALID_HANDLER_DECLARATION.WRONG_PLACE_OF_DECLARATION",
       cause = null,
       messageParameters = Map.empty)
+  }
+
+  def duplicateConditionInHandlerDeclaration(origin: Origin, condition: String): Throwable = {
+    new SqlScriptingException(
+      origin = origin,
+      errorClass = "INVALID_HANDLER_DECLARATION.DUPLICATE_CONDITION_IN_HANDLER_DECLARATION",
+      cause = null,
+      messageParameters = Map("condition" -> condition))
+  }
+
+  def duplicateSqlStateInHandlerDeclaration(origin: Origin, sqlState: String): Throwable = {
+    new SqlScriptingException(
+      origin = origin,
+      errorClass = "INVALID_HANDLER_DECLARATION.DUPLICATE_SQLSTATE_IN_HANDLER_DECLARATION",
+      cause = null,
+      messageParameters = Map("sqlState" -> sqlState))
   }
 
   def duplicateHandlerForSameCondition(origin: Origin, condition: String): Throwable = {
     new SqlScriptingException(
       origin = origin,
-      errorClass = "DUPLICATE_HANDLER_FOR_SAME_CONDITION",
+      errorClass = "DUPLICATE_EXCEPTION_HANDLER.CONDITION",
       cause = null,
       messageParameters = Map("condition" -> condition))
   }
 
+  def duplicateHandlerForSameSqlState(origin: Origin, sqlState: String): Throwable = {
+    new SqlScriptingException(
+      origin = origin,
+      errorClass = "DUPLICATE_EXCEPTION_HANDLER.SQLSTATE",
+      cause = null,
+      messageParameters = Map("sqlState" -> sqlState))
+  }
+
+
   def continueHandlerNotSupported(origin: Origin): Throwable = {
     new SqlScriptingException(
       origin = origin,
-      errorClass = "UNSUPPORTED_FEATURE.CONTINUE_ERROR_HANDLER",
+      errorClass = "UNSUPPORTED_FEATURE.CONTINUE_EXCEPTION_HANDLER",
       cause = null,
       messageParameters = Map.empty)
   }

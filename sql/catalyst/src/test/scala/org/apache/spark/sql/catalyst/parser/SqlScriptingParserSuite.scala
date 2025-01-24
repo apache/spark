@@ -2388,6 +2388,48 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     assert(exception.origin.line.contains(3))
   }
 
+  test("continue handler not supported") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE OR REPLACE flag INT = -1;
+        |  DECLARE CONTINUE HANDLER FOR SQLSTATE '22012'
+        |  BEGIN
+        |    SET VAR flag = 1;
+        |  END;
+        |  SELECT 1/0;
+        |  SELECT flag;
+        |END
+        |""".stripMargin
+    checkError(
+      exception = intercept[SqlScriptingException] {
+        parsePlan(sqlScript)
+      },
+      condition = "UNSUPPORTED_FEATURE.CONTINUE_EXCEPTION_HANDLER",
+      parameters = Map.empty)
+  }
+
+  test("declare handler for qualified condition name that is not supported") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE OR REPLACE flag INT = -1;
+        |  DECLARE EXIT HANDLER FOR qualified.condition.name
+        |  BEGIN
+        |    SET VAR flag = 1;
+        |  END;
+        |  SELECT 1/0;
+        |  SELECT flag;
+        |END
+        |""".stripMargin
+    checkError(
+      exception = intercept[SqlScriptingException] {
+        parsePlan(sqlScript)
+      },
+      condition = "INVALID_ERROR_CONDITION_DECLARATION.QUALIFIED_CONDITION_NAME",
+      parameters = Map("conditionName" -> "QUALIFIED.CONDITION.NAME"))
+  }
+
   test("declare handler in wrong place") {
     val sqlScriptText =
       """
@@ -2400,9 +2442,51 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     }
     checkError(
       exception = exception,
-      condition = "INVALID_HANDLER_DECLARATION",
+      condition = "INVALID_HANDLER_DECLARATION.WRONG_PLACE_OF_DECLARATION",
       parameters = Map.empty)
     assert(exception.origin.line.contains(2))
+  }
+
+  test("duplicate condition in handler declaration") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE OR REPLACE flag INT = -1;
+        |  DECLARE EXIT HANDLER FOR duplicate_condition, duplicate_condition
+        |  BEGIN
+        |    SET VAR flag = 1;
+        |  END;
+        |  SELECT 1/0;
+        |  SELECT flag;
+        |END
+        |""".stripMargin
+    checkError(
+      exception = intercept[SqlScriptingException] {
+        parsePlan(sqlScript)
+      },
+      condition = "INVALID_HANDLER_DECLARATION.DUPLICATE_CONDITION_IN_HANDLER_DECLARATION",
+      parameters = Map("condition" -> "duplicate_condition"))
+  }
+
+  test("duplicate sqlState in handler declaration") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE OR REPLACE flag INT = -1;
+        |  DECLARE EXIT HANDLER FOR SQLSTATE '12345', SQLSTATE '12345'
+        |  BEGIN
+        |    SET VAR flag = 1;
+        |  END;
+        |  SELECT 1/0;
+        |  SELECT flag;
+        |END
+        |""".stripMargin
+    checkError(
+      exception = intercept[SqlScriptingException] {
+        parsePlan(sqlScript)
+      },
+      condition = "INVALID_HANDLER_DECLARATION.DUPLICATE_SQLSTATE_IN_HANDLER_DECLARATION",
+      parameters = Map("sqlState" -> "12345"))
   }
 
 
@@ -2540,9 +2624,9 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     assert(tree.handlers.length == 1)
     assert(tree.handlers.head.isInstanceOf[ExceptionHandler])
     assert(tree.handlers.head.handlerTriggers.conditions.size == 1)
-    assert(tree.handlers.head.handlerTriggers.conditions.contains("K2000"))
+    assert(tree.handlers.head.handlerTriggers.conditions.contains("k2000"))
     assert(tree.handlers.head.handlerTriggers.sqlStates.size == 1)
-    assert(tree.handlers.head.handlerTriggers.sqlStates.contains("K2000"))
+    assert(tree.handlers.head.handlerTriggers.sqlStates.contains("k2000"))
     assert(!tree.handlers.head.handlerTriggers.sqlException) // true
     assert(!tree.handlers.head.handlerTriggers.notFound) // false
     assert(tree.handlers.head.body.collection.size == 1)

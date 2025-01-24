@@ -372,7 +372,7 @@ class ExceptionHandlerTriggers(
     val lowercaseValue = value.toLowerCase(Locale.ROOT)
     if (sqlStates.contains(lowercaseValue)) {
       throw SqlScriptingErrors
-        .duplicateConditionInHandlerDeclaration(CurrentOrigin.get, lowercaseValue)
+        .duplicateSqlStateInHandlerDeclaration(CurrentOrigin.get, lowercaseValue)
     }
     sqlStates += lowercaseValue
   }

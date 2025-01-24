@@ -1253,10 +1253,22 @@
     ],
     "sqlState" : "42734"
   },
-  "DUPLICATE_HANDLER_FOR_SAME_CONDITION" : {
+  "DUPLICATE_EXCEPTION_HANDLER" : {
     "message" : [
-      "Found duplicate handlers for the same condition <condition>. Please, remove one of them."
+      "Found duplicate handlers. Please, remove one of them."
     ],
+    "subClass" : {
+      "CONDITION" : {
+        "message" : [
+          "Found duplicate handlers for the same condition <condition>."
+        ]
+      },
+      "SQLSTATE" :  {
+        "message" : [
+          "Found duplicate handlers for the same SQLSTATE <sqlState>."
+        ]
+      }
+    },
     "sqlState" : "42734"
   },
   "DUPLICATE_KEY" : {
@@ -2627,8 +2639,25 @@
   },
   "INVALID_HANDLER_DECLARATION" : {
     "message" : [
-      "Invalid handler declaration. Handlers must be declared after variable/condition declaration, and before other statements."
+      "Invalid handler declaration."
     ],
+    "subClass" : {
+      "WRONG_PLACE_OF_DECLARATION" : {
+        "message" : [
+          "Handlers must be declared after variable/condition declaration, and before other statements."
+        ]
+      },
+      "DUPLICATE_CONDITION_IN_HANDLER_DECLARATION" : {
+        "message" : [
+          "Found duplicate condition <condition> in the handler declaration. Please, remove one of them."
+        ]
+      },
+      "DUPLICATE_SQLSTATE_IN_HANDLER_DECLARATION" : {
+        "message" : [
+          "Found duplicate sqlState <sqlState> in the handler declaration. Please, remove one of them."
+        ]
+      }
+    },
     "sqlState" : "42K0Q"
   },
   "INVALID_IDENTIFIER" : {
@@ -5462,9 +5491,9 @@
           "Attach a comment to the namespace <namespace>."
         ]
       },
-      "CONTINUE_ERROR_HANDLER" : {
+      "CONTINUE_EXCEPTION_HANDLER" : {
         "message" : [
-          "CONTINUE error handler is not supported. Use EXIT handler."
+          "CONTINUE exception handler is not supported. Use EXIT handler."
         ]
       },
       "DESC_TABLE_COLUMN_JSON" : {
