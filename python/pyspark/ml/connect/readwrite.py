@@ -14,7 +14,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-
 import warnings
 from typing import cast, Type, TYPE_CHECKING, Union, List, Dict, Any
 
@@ -63,6 +62,7 @@ class RemoteMLWriter(MLWriter):
         from pyspark.ml.wrapper import JavaModel, JavaEstimator, JavaTransformer
         from pyspark.ml.evaluation import JavaEvaluator
         from pyspark.ml.pipeline import Pipeline, PipelineModel
+        from pyspark.ml.tuning import CrossValidator, CrossValidatorModel
 
         # Spark Connect ML is built on scala Spark.ML, that means we're only
         # supporting JavaModel or JavaEstimator or JavaEvaluator
@@ -126,6 +126,24 @@ class RemoteMLWriter(MLWriter):
                 path,
             )
 
+        elif isinstance(instance, CrossValidator):
+            from pyspark.ml.tuning import CrossValidatorWriter
+
+            if shouldOverwrite:
+                # TODO(SPARK-50954): Support client side model path overwrite
+                warnings.warn("Overwrite doesn't take effect for CrossValidator")
+            cv_writer = CrossValidatorWriter(instance)
+            cv_writer.session(session)  # type: ignore[arg-type]
+            cv_writer.save(path)
+        elif isinstance(instance, CrossValidatorModel):
+            from pyspark.ml.tuning import CrossValidatorModelWriter
+
+            if shouldOverwrite:
+                # TODO(SPARK-50954): Support client side model path overwrite
+                warnings.warn("Overwrite doesn't take effect for CrossValidatorModel")
+            cvm_writer = CrossValidatorModelWriter(instance)
+            cvm_writer.session(session)  # type: ignore[arg-type]
+            cvm_writer.save(path)
         else:
             raise NotImplementedError(f"Unsupported write for {instance.__class__}")
 
@@ -153,6 +171,7 @@ class RemoteMLReader(MLReader[RL]):
         from pyspark.ml.wrapper import JavaModel, JavaEstimator, JavaTransformer
         from pyspark.ml.evaluation import JavaEvaluator
         from pyspark.ml.pipeline import Pipeline, PipelineModel
+        from pyspark.ml.tuning import CrossValidator, CrossValidatorModel
 
         if (
             issubclass(clazz, JavaModel)
@@ -216,6 +235,20 @@ class RemoteMLReader(MLReader[RL]):
                 return Pipeline(stages=stages)._resetUid(uid)
             else:
                 return PipelineModel(stages=cast(List[Transformer], stages))._resetUid(uid)
+
+        elif issubclass(clazz, CrossValidator):
+            from pyspark.ml.tuning import CrossValidatorReader
+
+            cv_reader = CrossValidatorReader(CrossValidator)
+            cv_reader.session(session)
+            return cv_reader.load(path)
+
+        elif issubclass(clazz, CrossValidatorModel):
+            from pyspark.ml.tuning import CrossValidatorModelReader
+
+            cvm_reader = CrossValidatorModelReader(CrossValidator)
+            cvm_reader.session(session)
+            return cvm_reader.load(path)
 
         else:
             raise RuntimeError(f"Unsupported read for {clazz}")
