@@ -450,7 +450,6 @@ class FlatMapGroupsWithStateWithInitialStateSuite extends StateStoreMetricsTest 
     }
   }
 
-
   def testWithAllStateVersions(name: String)(func: => Unit): Unit = {
     for (version <- FlatMapGroupsWithStateExecHelper.supportedVersions) {
       test(s"$name - state format version $version") {
