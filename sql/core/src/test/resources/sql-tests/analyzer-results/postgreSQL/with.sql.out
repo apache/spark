@@ -41,13 +41,13 @@ WithCTE
 :- CTERelationDef xxxx, false
 :  +- SubqueryAlias t
 :     +- Project [col1#x AS n#x]
-:        +- UnionLoop 79
+:        +- UnionLoop xxxx
 :           :- LocalRelation [col1#x]
 :           +- Project [(n#x + 1) AS (n + 1)#x]
 :              +- Filter (n#x < 100)
 :                 +- SubqueryAlias t
 :                    +- Project [col1#x AS n#x]
-:                       +- UnionLoopRef 79, [col1#x], false
+:                       +- UnionLoopRef xxxx, [col1#x], false
 +- Aggregate [sum(n#x) AS sum(n)#xL]
    +- SubqueryAlias t
       +- CTERelationRef xxxx, true, [n#x], false, false
@@ -65,7 +65,7 @@ WithCTE
 :- CTERelationDef xxxx, false
 :  +- SubqueryAlias t
 :     +- Project [scalarsubquery()#x AS n#x]
-:        +- UnionLoop 80
+:        +- UnionLoop xxxx
 :           :- Project [scalar-subquery#x [] AS scalarsubquery()#x]
 :           :  :  +- LocalRelation [col1#x]
 :           :  +- OneRowRelation
@@ -73,7 +73,7 @@ WithCTE
 :              +- Filter (n#x < 5)
 :                 +- SubqueryAlias t
 :                    +- Project [scalarsubquery()#x AS n#x]
-:                       +- UnionLoopRef 80, [scalarsubquery()#x], false
+:                       +- UnionLoopRef xxxx, [scalarsubquery()#x], false
 +- Project [n#x]
    +- SubqueryAlias t
       +- CTERelationRef xxxx, true, [n#x], false, false
@@ -98,13 +98,13 @@ SELECT * FROM nums, false, false, LocalTempView, UNSUPPORTED, true
       :- CTERelationDef xxxx, false
       :  +- SubqueryAlias nums
       :     +- Project [col1#x AS n#x]
-      :        +- UnionLoop 81
+      :        +- UnionLoop xxxx
       :           :- LocalRelation [col1#x]
       :           +- Project [(n#x + 1) AS (n + 1)#x]
       :              +- Filter (n#x < 5)
       :                 +- SubqueryAlias nums
       :                    +- Project [col1#x AS n#x]
-      :                       +- UnionLoopRef 81, [col1#x], false
+      :                       +- UnionLoopRef xxxx, [col1#x], false
       +- Project [n#x]
          +- SubqueryAlias nums
             +- CTERelationRef xxxx, true, [n#x], false, false
@@ -121,13 +121,13 @@ Project [n#x]
             :- CTERelationDef xxxx, false
             :  +- SubqueryAlias nums
             :     +- Project [col1#x AS n#x]
-            :        +- UnionLoop 82
+            :        +- UnionLoop xxxx
             :           :- LocalRelation [col1#x]
             :           +- Project [(n#x + 1) AS (n + 1)#x]
             :              +- Filter (n#x < 5)
             :                 +- SubqueryAlias nums
             :                    +- Project [col1#x AS n#x]
-            :                       +- UnionLoopRef 82, [col1#x], false
+            :                       +- UnionLoopRef xxxx, [col1#x], false
             +- Project [n#x]
                +- SubqueryAlias nums
                   +- CTERelationRef xxxx, true, [n#x], false, false
@@ -152,13 +152,13 @@ SELECT * FROM nums, false, true, LocalTempView, UNSUPPORTED, true
       :- CTERelationDef xxxx, false
       :  +- SubqueryAlias nums
       :     +- Project [col1#x AS n#x]
-      :        +- UnionLoop 83
+      :        +- UnionLoop xxxx
       :           :- LocalRelation [col1#x]
       :           +- Project [(n#x + 1) AS (n + 1)#x]
       :              +- Filter (n#x < 6)
       :                 +- SubqueryAlias nums
       :                    +- Project [col1#x AS n#x]
-      :                       +- UnionLoopRef 83, [col1#x], false
+      :                       +- UnionLoopRef xxxx, [col1#x], false
       +- Project [n#x]
          +- SubqueryAlias nums
             +- CTERelationRef xxxx, true, [n#x], false, false
@@ -175,13 +175,13 @@ Project [n#x]
             :- CTERelationDef xxxx, false
             :  +- SubqueryAlias nums
             :     +- Project [col1#x AS n#x]
-            :        +- UnionLoop 84
+            :        +- UnionLoop xxxx
             :           :- LocalRelation [col1#x]
             :           +- Project [(n#x + 1) AS (n + 1)#x]
             :              +- Filter (n#x < 6)
             :                 +- SubqueryAlias nums
             :                    +- Project [col1#x AS n#x]
-            :                       +- UnionLoopRef 84, [col1#x], false
+            :                       +- UnionLoopRef xxxx, [col1#x], false
             +- Project [n#x]
                +- SubqueryAlias nums
                   +- CTERelationRef xxxx, true, [n#x], false, false
@@ -219,12 +219,12 @@ WithCTE
 :- CTERelationDef xxxx, false
 :  +- SubqueryAlias t
 :     +- Project [col1#x AS n#x]
-:        +- UnionLoop 86
+:        +- UnionLoop xxxx
 :           :- LocalRelation [col1#x]
 :           +- Project [(n#x + 1) AS (n + 1)#x]
 :              +- SubqueryAlias t
 :                 +- Project [col1#x AS n#x]
-:                    +- UnionLoopRef 86, [col1#x], false
+:                    +- UnionLoopRef xxxx, [col1#x], false
 +- GlobalLimit 10
    +- LocalLimit 10
       +- Project [n#x]
@@ -279,14 +279,14 @@ WithCTE
 :- CTERelationDef xxxx, false
 :  +- SubqueryAlias t
 :     +- Project [foo#x AS n#x]
-:        +- UnionLoop 89
+:        +- UnionLoop xxxx
 :           :- Project [foo AS foo#x]
 :           :  +- OneRowRelation
 :           +- Project [concat(n#x,  bar) AS concat(n,  bar)#x]
 :              +- Filter (length(n#x) < 20)
 :                 +- SubqueryAlias t
 :                    +- Project [foo#x AS n#x]
-:                       +- UnionLoopRef 89, [foo#x], false
+:                       +- UnionLoopRef xxxx, [foo#x], false
 +- Project [n#x AS is_text#x]
    +- SubqueryAlias t
       +- CTERelationRef xxxx, true, [n#x], false, false
@@ -400,7 +400,7 @@ SELECT * FROM subdepartment ORDER BY name
 WithCTE
 :- CTERelationDef xxxx, false
 :  +- SubqueryAlias subdepartment
-:     +- UnionLoop 91
+:     +- UnionLoop xxxx
 :        :- Project [name#x AS root_name#x, id#x, parent_department#x, name#x]
 :        :  +- Filter (name#x = A)
 :        :     +- SubqueryAlias spark_catalog.default.department
@@ -413,7 +413,7 @@ WithCTE
 :                 :     +- Relation spark_catalog.default.department[id#x,parent_department#x,name#x] parquet
 :                 +- SubqueryAlias sd
 :                    +- SubqueryAlias subdepartment
-:                       +- UnionLoopRef 91, [root_name#x, id#x, parent_department#x, name#x], false
+:                       +- UnionLoopRef xxxx, [root_name#x, id#x, parent_department#x, name#x], false
 +- Sort [name#x ASC NULLS FIRST], true
    +- Project [root_name#x, id#x, parent_department#x, name#x]
       +- SubqueryAlias subdepartment
@@ -436,7 +436,7 @@ WithCTE
 :- CTERelationDef xxxx, false
 :  +- SubqueryAlias subdepartment
 :     +- Project [1#x AS level#x, id#x AS id#x, parent_department#x AS parent_department#x, name#x AS name#x]
-:        +- UnionLoop 92
+:        +- UnionLoop xxxx
 :           :- Project [1 AS 1#x, id#x, parent_department#x, name#x]
 :           :  +- Filter (name#x = A)
 :           :     +- SubqueryAlias spark_catalog.default.department
@@ -450,7 +450,7 @@ WithCTE
 :                    +- SubqueryAlias sd
 :                       +- SubqueryAlias subdepartment
 :                          +- Project [1#x AS level#x, id#x AS id#x, parent_department#x AS parent_department#x, name#x AS name#x]
-:                             +- UnionLoopRef 92, [1#x, id#x, parent_department#x, name#x], false
+:                             +- UnionLoopRef xxxx, [1#x, id#x, parent_department#x, name#x], false
 +- Sort [name#x ASC NULLS FIRST], true
    +- Project [level#x, id#x, parent_department#x, name#x]
       +- SubqueryAlias subdepartment
@@ -473,7 +473,7 @@ WithCTE
 :- CTERelationDef xxxx, false
 :  +- SubqueryAlias subdepartment
 :     +- Project [1#x AS level#x, id#x AS id#x, parent_department#x AS parent_department#x, name#x AS name#x]
-:        +- UnionLoop 93
+:        +- UnionLoop xxxx
 :           :- Project [1 AS 1#x, id#x, parent_department#x, name#x]
 :           :  +- Filter (name#x = A)
 :           :     +- SubqueryAlias spark_catalog.default.department
@@ -487,7 +487,7 @@ WithCTE
 :                    +- SubqueryAlias sd
 :                       +- SubqueryAlias subdepartment
 :                          +- Project [1#x AS level#x, id#x AS id#x, parent_department#x AS parent_department#x, name#x AS name#x]
-:                             +- UnionLoopRef 93, [1#x, id#x, parent_department#x, name#x], false
+:                             +- UnionLoopRef xxxx, [1#x, id#x, parent_department#x, name#x], false
 +- Sort [name#x ASC NULLS FIRST], true
    +- Project [level#x, id#x, parent_department#x, name#x]
       +- Filter (level#x >= 2)
@@ -543,14 +543,14 @@ Aggregate [count(1) AS count(1)#xL]
    :              :- CTERelationDef xxxx, false
    :              :  +- SubqueryAlias t
    :              :     +- Project [1#x AS n#x]
-   :              :        +- UnionLoop 95
+   :              :        +- UnionLoop xxxx
    :              :           :- Project [1 AS 1#x]
    :              :           :  +- OneRowRelation
    :              :           +- Project [(n#x + 1) AS (n + 1)#x]
    :              :              +- Filter (n#x < 100)
    :              :                 +- SubqueryAlias t
    :              :                    +- Project [1#x AS n#x]
-   :              :                       +- UnionLoopRef 95, [1#x], false
+   :              :                       +- UnionLoopRef xxxx, [1#x], false
    :              +- Project [n#x]
    :                 +- Filter (n#x < 50000)
    :                    +- SubqueryAlias t
@@ -560,14 +560,14 @@ Aggregate [count(1) AS count(1)#xL]
          :- CTERelationDef xxxx, false
          :  +- SubqueryAlias t
          :     +- Project [1#x AS n#x]
-         :        +- UnionLoop 96
+         :        +- UnionLoop xxxx
          :           :- Project [1 AS 1#x]
          :           :  +- OneRowRelation
          :           +- Project [(n#x + 1) AS (n + 1)#x]
          :              +- Filter (n#x < 200)
          :                 +- SubqueryAlias t
          :                    +- Project [1#x AS n#x]
-         :                       +- UnionLoopRef 96, [1#x], false
+         :                       +- UnionLoopRef xxxx, [1#x], false
          +- Project [n#x]
             +- SubqueryAlias t
                +- CTERelationRef xxxx, true, [n#x], false, false
@@ -624,7 +624,7 @@ CreateViewCommand `vsubdepartment`, WITH RECURSIVE subdepartment AS
    +- WithCTE
       :- CTERelationDef xxxx, false
       :  +- SubqueryAlias subdepartment
-      :     +- UnionLoop 98
+      :     +- UnionLoop xxxx
       :        :- Project [id#x, parent_department#x, name#x]
       :        :  +- Filter (name#x = A)
       :        :     +- SubqueryAlias spark_catalog.default.department
@@ -637,7 +637,7 @@ CreateViewCommand `vsubdepartment`, WITH RECURSIVE subdepartment AS
       :                 :     +- Relation spark_catalog.default.department[id#x,parent_department#x,name#x] parquet
       :                 +- SubqueryAlias sd
       :                    +- SubqueryAlias subdepartment
-      :                       +- UnionLoopRef 98, [id#x, parent_department#x, name#x], false
+      :                       +- UnionLoopRef xxxx, [id#x, parent_department#x, name#x], false
       +- Project [id#x, parent_department#x, name#x]
          +- SubqueryAlias subdepartment
             +- CTERelationRef xxxx, true, [id#x, parent_department#x, name#x], false, false
@@ -654,7 +654,7 @@ Sort [name#x ASC NULLS FIRST], true
             +- WithCTE
                :- CTERelationDef xxxx, false
                :  +- SubqueryAlias subdepartment
-               :     +- UnionLoop 99
+               :     +- UnionLoop xxxx
                :        :- Project [id#x, parent_department#x, name#x]
                :        :  +- Filter (name#x = A)
                :        :     +- SubqueryAlias spark_catalog.default.department
@@ -667,7 +667,7 @@ Sort [name#x ASC NULLS FIRST], true
                :                 :     +- Relation spark_catalog.default.department[id#x,parent_department#x,name#x] parquet
                :                 +- SubqueryAlias sd
                :                    +- SubqueryAlias subdepartment
-               :                       +- UnionLoopRef 99, [id#x, parent_department#x, name#x], false
+               :                       +- UnionLoopRef xxxx, [id#x, parent_department#x, name#x], false
                +- Project [id#x, parent_department#x, name#x]
                   +- SubqueryAlias subdepartment
                      +- CTERelationRef xxxx, true, [id#x, parent_department#x, name#x], false, false
@@ -692,13 +692,13 @@ SELECT sum(n) AS sum FROM t, false, false, PersistedView, COMPENSATION, true
       :- CTERelationDef xxxx, false
       :  +- SubqueryAlias t
       :     +- Project [col1#x AS n#x]
-      :        +- UnionLoop 100
+      :        +- UnionLoop xxxx
       :           :- LocalRelation [col1#x]
       :           +- Project [(n#x + 1) AS (n + 1)#x]
       :              +- Filter (n#x < 100)
       :                 +- SubqueryAlias t
       :                    +- Project [col1#x AS n#x]
-      :                       +- UnionLoopRef 100, [col1#x], false
+      :                       +- UnionLoopRef xxxx, [col1#x], false
       +- Aggregate [sum(n#x) AS sum#xL]
          +- SubqueryAlias t
             +- CTERelationRef xxxx, true, [n#x], false, false
@@ -715,13 +715,13 @@ Project [sum#xL]
             :- CTERelationDef xxxx, false
             :  +- SubqueryAlias t
             :     +- Project [col1#x AS n#x]
-            :        +- UnionLoop 101
+            :        +- UnionLoop xxxx
             :           :- LocalRelation [col1#x]
             :           +- Project [(n#x + 1) AS (n + 1)#x]
             :              +- Filter (n#x < 100)
             :                 +- SubqueryAlias t
             :                    +- Project [col1#x AS n#x]
-            :                       +- UnionLoopRef 101, [col1#x], false
+            :                       +- UnionLoopRef xxxx, [col1#x], false
             +- Aggregate [sum(n#x) AS sum#xL]
                +- SubqueryAlias t
                   +- CTERelationRef xxxx, true, [n#x], false, false
@@ -741,7 +741,7 @@ WithCTE
 :- CTERelationDef xxxx, false
 :  +- SubqueryAlias t
 :     +- Project [col1#x AS i#x, col2#x AS j#x]
-:        +- UnionLoop 102
+:        +- UnionLoop xxxx
 :           :- LocalRelation [col1#x, col2#x]
 :           +- Project [i#x, (j#x + 1) AS (j + 1)#x]
 :              +- Join Inner, (i#x = (i#x + 1))
@@ -753,7 +753,7 @@ WithCTE
 :                 :        +- OneRowRelation
 :                 +- SubqueryAlias t
 :                    +- Project [col1#x AS i#x, col2#x AS j#x]
-:                       +- UnionLoopRef 102, [col1#x, col2#x], false
+:                       +- UnionLoopRef xxxx, [col1#x, col2#x], false
 +- Project [i#x, j#x]
    +- SubqueryAlias t
       +- CTERelationRef xxxx, true, [i#x, j#x], false, false
@@ -795,7 +795,7 @@ WithCTE
 :- CTERelationDef xxxx, false
 :  +- SubqueryAlias t
 :     +- Project [col1#x AS id#x, col2#x AS path#x]
-:        +- UnionLoop 103
+:        +- UnionLoop xxxx
 :           :- LocalRelation [col1#x, col2#x]
 :           +- Project [id#x, concat(path#x, array(id#x)) AS concat(path, array(id))#x]
 :              +- Join Inner, (parent_id#x = id#x)
@@ -803,7 +803,7 @@ WithCTE
 :                 :  +- Relation spark_catalog.default.tree[id#x,parent_id#x] parquet
 :                 +- SubqueryAlias t
 :                    +- Project [col1#x AS id#x, col2#x AS path#x]
-:                       +- UnionLoopRef 103, [col1#x, col2#x], false
+:                       +- UnionLoopRef xxxx, [col1#x, col2#x], false
 +- Sort [id#x ASC NULLS FIRST, id#x ASC NULLS FIRST], true
    +- Project [id#x, path#x, id#x, path#x]
       +- Join Inner, (((path#x[0] = path#x[0]) AND (size(path#x, false) = 1)) AND (size(path#x, false) > 1))
@@ -833,7 +833,7 @@ WithCTE
 :- CTERelationDef xxxx, false
 :  +- SubqueryAlias t
 :     +- Project [col1#x AS id#x, col2#x AS path#x]
-:        +- UnionLoop 104
+:        +- UnionLoop xxxx
 :           :- LocalRelation [col1#x, col2#x]
 :           +- Project [id#x, concat(path#x, array(id#x)) AS concat(path, array(id))#x]
 :              +- Join Inner, (parent_id#x = id#x)
@@ -841,7 +841,7 @@ WithCTE
 :                 :  +- Relation spark_catalog.default.tree[id#x,parent_id#x] parquet
 :                 +- SubqueryAlias t
 :                    +- Project [col1#x AS id#x, col2#x AS path#x]
-:                       +- UnionLoopRef 104, [col1#x, col2#x], false
+:                       +- UnionLoopRef xxxx, [col1#x, col2#x], false
 +- Sort [id#x ASC NULLS FIRST], true
    +- Aggregate [id#x], [id#x, count(1) AS count(1)#xL]
       +- Join Inner, (((path#x[0] = path#x[0]) AND (size(path#x, false) = 1)) AND (size(path#x, false) > 1))
@@ -867,7 +867,7 @@ WithCTE
 :- CTERelationDef xxxx, false
 :  +- SubqueryAlias t
 :     +- Project [col1#x AS id#x, col2#x AS path#x]
-:        +- UnionLoop 105
+:        +- UnionLoop xxxx
 :           :- LocalRelation [col1#x, col2#x]
 :           +- Project [id#x, concat(path#x, array(id#x)) AS concat(path, array(id))#x]
 :              +- Join Inner, (parent_id#x = id#x)
@@ -875,7 +875,7 @@ WithCTE
 :                 :  +- Relation spark_catalog.default.tree[id#x,parent_id#x] parquet
 :                 +- SubqueryAlias t
 :                    +- Project [col1#x AS id#x, col2#x AS path#x]
-:                       +- UnionLoopRef 105, [col1#x, col2#x], false
+:                       +- UnionLoopRef xxxx, [col1#x, col2#x], false
 +- Project [id#x, path#x, struct(id, id#x, path, path#x) AS struct(id, path)#x]
    +- Join Inner, (id#x = id#x)
       :- SubqueryAlias t1
@@ -920,7 +920,7 @@ WithCTE
 :- CTERelationDef xxxx, false
 :  +- SubqueryAlias search_graph
 :     +- Project [f#x AS f#x, t#x AS t#x, label#x AS label#x, array(struct(f, t))#x AS path#x, false#x AS cycle#x]
-:        +- UnionLoop 106
+:        +- UnionLoop xxxx
 :           :- Project [f#x, t#x, label#x, array(struct(f, f#x, t, t#x)) AS array(struct(f, t))#x, false AS false#x]
 :           :  +- SubqueryAlias g
 :           :     +- SubqueryAlias spark_catalog.default.graph
@@ -934,7 +934,7 @@ WithCTE
 :                    +- SubqueryAlias sg
 :                       +- SubqueryAlias search_graph
 :                          +- Project [f#x AS f#x, t#x AS t#x, label#x AS label#x, array(struct(f, t))#x AS path#x, false#x AS cycle#x]
-:                             +- UnionLoopRef 106, [f#x, t#x, label#x, array(struct(f, t))#x, false#x], false
+:                             +- UnionLoopRef xxxx, [f#x, t#x, label#x, array(struct(f, t))#x, false#x], false
 +- Project [f#x, t#x, label#x, path#x, cycle#x]
    +- SubqueryAlias search_graph
       +- CTERelationRef xxxx, true, [f#x, t#x, label#x, path#x, cycle#x], false, false
@@ -954,7 +954,7 @@ WithCTE
 :- CTERelationDef xxxx, false
 :  +- SubqueryAlias search_graph
 :     +- Project [f#x AS f#x, t#x AS t#x, label#x AS label#x, array(struct(f, t))#x AS path#x, false#x AS cycle#x]
-:        +- UnionLoop 107
+:        +- UnionLoop xxxx
 :           :- Project [f#x, t#x, label#x, array(struct(f, f#x, t, t#x)) AS array(struct(f, t))#x, false AS false#x]
 :           :  +- SubqueryAlias g
 :           :     +- SubqueryAlias spark_catalog.default.graph
@@ -968,7 +968,7 @@ WithCTE
 :                    +- SubqueryAlias sg
 :                       +- SubqueryAlias search_graph
 :                          +- Project [f#x AS f#x, t#x AS t#x, label#x AS label#x, array(struct(f, t))#x AS path#x, false#x AS cycle#x]
-:                             +- UnionLoopRef 107, [f#x, t#x, label#x, array(struct(f, t))#x, false#x], false
+:                             +- UnionLoopRef xxxx, [f#x, t#x, label#x, array(struct(f, t))#x, false#x], false
 +- Sort [path#x ASC NULLS FIRST], true
    +- Project [f#x, t#x, label#x, path#x, cycle#x]
       +- SubqueryAlias search_graph
@@ -989,7 +989,7 @@ WithCTE
 :- CTERelationDef xxxx, false
 :  +- SubqueryAlias x
 :     +- Project [id#x AS id#x]
-:        +- UnionLoop 109
+:        +- UnionLoop xxxx
 :           :- Project [id#x]
 :           :  +- SubqueryAlias y
 :           :     +- CTERelationRef xxxx, true, [id#x], false, false
@@ -997,7 +997,7 @@ WithCTE
 :              +- Filter (id#x < 5)
 :                 +- SubqueryAlias x
 :                    +- Project [id#x AS id#x]
-:                       +- UnionLoopRef 109, [id#x], false
+:                       +- UnionLoopRef xxxx, [id#x], false
 +- Project [id#x]
    +- SubqueryAlias x
       +- CTERelationRef xxxx, true, [id#x], false, false
@@ -1017,14 +1017,14 @@ WithCTE
 :- CTERelationDef xxxx, false
 :  +- SubqueryAlias x
 :     +- Project [1#x AS id#x]
-:        +- UnionLoop 110
+:        +- UnionLoop xxxx
 :           :- Project [1 AS 1#x]
 :           :  +- OneRowRelation
 :           +- Project [(id#x + 1) AS (id + 1)#x]
 :              +- Filter (id#x < 3)
 :                 +- SubqueryAlias x
 :                    +- Project [1#x AS id#x]
-:                       +- UnionLoopRef 110, [1#x], false
+:                       +- UnionLoopRef xxxx, [1#x], false
 :- CTERelationDef xxxx, false
 :  +- SubqueryAlias y
 :     +- Project [id#x AS id#x]
@@ -1038,7 +1038,7 @@ WithCTE
 :- CTERelationDef xxxx, false
 :  +- SubqueryAlias z
 :     +- Project [id#x AS id#x]
-:        +- UnionLoop 112
+:        +- UnionLoop xxxx
 :           :- Project [id#x]
 :           :  +- SubqueryAlias x
 :           :     +- CTERelationRef xxxx, true, [id#x], false, false
@@ -1046,7 +1046,7 @@ WithCTE
 :              +- Filter (id#x < 10)
 :                 +- SubqueryAlias z
 :                    +- Project [id#x AS id#x]
-:                       +- UnionLoopRef 112, [id#x], false
+:                       +- UnionLoopRef xxxx, [id#x], false
 +- Project [id#x]
    +- SubqueryAlias z
       +- CTERelationRef xxxx, true, [id#x], false, false
@@ -1066,14 +1066,14 @@ WithCTE
 :- CTERelationDef xxxx, false
 :  +- SubqueryAlias x
 :     +- Project [1#x AS id#x]
-:        +- UnionLoop 113
+:        +- UnionLoop xxxx
 :           :- Project [1 AS 1#x]
 :           :  +- OneRowRelation
 :           +- Project [(id#x + 1) AS (id + 1)#x]
 :              +- Filter (id#x < 3)
 :                 +- SubqueryAlias x
 :                    +- Project [1#x AS id#x]
-:                       +- UnionLoopRef 113, [1#x], false
+:                       +- UnionLoopRef xxxx, [1#x], false
 :- CTERelationDef xxxx, false
 :  +- SubqueryAlias y
 :     +- Project [id#x AS id#x]
@@ -1087,7 +1087,7 @@ WithCTE
 :- CTERelationDef xxxx, false
 :  +- SubqueryAlias z
 :     +- Project [id#x AS id#x]
-:        +- UnionLoop 115
+:        +- UnionLoop xxxx
 :           :- Project [id#x]
 :           :  +- SubqueryAlias y
 :           :     +- CTERelationRef xxxx, true, [id#x], false, false
@@ -1095,7 +1095,7 @@ WithCTE
 :              +- Filter (id#x < 10)
 :                 +- SubqueryAlias z
 :                    +- Project [id#x AS id#x]
-:                       +- UnionLoopRef 115, [id#x], false
+:                       +- UnionLoopRef xxxx, [id#x], false
 +- Project [id#x]
    +- SubqueryAlias z
       +- CTERelationRef xxxx, true, [id#x], false, false
@@ -1493,7 +1493,7 @@ org.apache.spark.SparkException
   "sqlState" : "XXKD0",
   "messageParameters" : {
     "batch" : "Resolution",
-    "reason" : "Multiple attributes have the same expression ID 5480 but different data types: DECIMAL(3,0), DECIMAL(10,0). The plan tree:\n'WithCTE\n:- 'CTERelationDef 138, false\n:  +- 'SubqueryAlias foo\n:     +- 'UnresolvedSubqueryColumnAliases [i]\n:        +- UnionLoop 138\n:           :- Project [cast(i#x as decimal(3,0)) AS i#x]\n:           :  +- SubqueryAlias t\n:           :     +- Project [col1#x AS i#x]\n:           :        +- LocalRelation [col1#x]\n:           +- Project [cast((i#x + cast(1 as decimal(1,0))) as decimal(10,0)) AS CAST((i + 1) AS DECIMAL(10,0))#x]\n:              +- Filter (i#x < cast(cast(10 as decimal(2,0)) as decimal(3,0)))\n:                 +- SubqueryAlias foo\n:                    +- Project [i#x AS i#x]\n:                       +- UnionLoopRef 138, [i#x], false\n+- 'Project [*]\n   +- 'SubqueryAlias foo\n      +- 'CTERelationRef 138, false, false, false\n",
+    "reason" : "Multiple attributes have the same expression ID 8441 but different data types: DECIMAL(3,0), DECIMAL(10,0). The plan tree:\n'WithCTE\n:- 'CTERelationDef 226, false\n:  +- 'SubqueryAlias foo\n:     +- 'UnresolvedSubqueryColumnAliases [i]\n:        +- UnionLoop 226\n:           :- Project [cast(i#x as decimal(3,0)) AS i#x]\n:           :  +- SubqueryAlias t\n:           :     +- Project [col1#x AS i#x]\n:           :        +- LocalRelation [col1#x]\n:           +- Project [cast((i#x + cast(1 as decimal(1,0))) as decimal(10,0)) AS CAST((i + 1) AS DECIMAL(10,0))#x]\n:              +- Filter (i#x < cast(cast(10 as decimal(2,0)) as decimal(3,0)))\n:                 +- SubqueryAlias foo\n:                    +- Project [i#x AS i#x]\n:                       +- UnionLoopRef 226, [i#x], false\n+- 'Project [*]\n   +- 'SubqueryAlias foo\n      +- 'CTERelationRef 226, false, false, false\n",
     "rule" : "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveAliases"
   }
 }
@@ -1532,17 +1532,17 @@ WithCTE
 :- CTERelationDef xxxx, false
 :  +- SubqueryAlias s
 :     +- Project [col1#x AS i#x]
-:        +- UnionLoop 140
+:        +- UnionLoop xxxx
 :           :- LocalRelation [col1#x]
 :           +- Project [(i#x + 1) AS (i + 1)#x]
 :              +- Filter (i#x < 10)
 :                 +- SubqueryAlias s
 :                    +- Project [col1#x AS i#x]
-:                       +- UnionLoopRef 140, [col1#x], false
+:                       +- UnionLoopRef xxxx, [col1#x], false
 :- CTERelationDef xxxx, false
 :  +- SubqueryAlias t
 :     +- Project [i#x AS j#x]
-:        +- UnionLoop 141
+:        +- UnionLoop xxxx
 :           :- Project [i#x]
 :           :  +- SubqueryAlias s
 :           :     +- CTERelationRef xxxx, true, [i#x], false, false
@@ -1550,7 +1550,7 @@ WithCTE
 :              +- Filter (j#x < 10)
 :                 +- SubqueryAlias t
 :                    +- Project [i#x AS j#x]
-:                       +- UnionLoopRef 141, [i#x], false
+:                       +- UnionLoopRef xxxx, [i#x], false
 +- Project [j#x]
    +- SubqueryAlias t
       +- CTERelationRef xxxx, true, [j#x], false, false
