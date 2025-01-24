@@ -3135,6 +3135,24 @@
     ],
     "sqlState" : "42836"
   },
+  "INVALID_RECURSIVE_REFERENCE" : {
+    "message" : [
+      "Invalid recursive reference found inside WITH RECURSIVE clause."
+    ],
+    "subClass" : {
+      "NUMBER" : {
+        "message" : [
+          "Multiple self-references to one recursive CTE are not allowed."
+        ]
+      },
+      "PLACE" : {
+        "message" : [
+          "Recursive references cannot be used on the right side of left outer/semi/anti joins, on the left side of right outer joins, in full outer joins, in aggregates, and in subquery expressions."
+        ]
+      }
+    },
+    "sqlState" : "42836"
+  },
   "INVALID_REGEXP_REPLACE" : {
     "message" : [
       "Could not perform regexp_replace for source = \"<source>\", pattern = \"<pattern>\", replacement = \"<replacement>\" and position = <position>."
