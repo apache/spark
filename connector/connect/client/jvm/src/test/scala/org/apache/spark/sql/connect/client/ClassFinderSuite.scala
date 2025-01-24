@@ -20,7 +20,7 @@ import java.nio.file.Paths
 
 import org.apache.commons.io.FileUtils
 
-import org.apache.spark.sql.test.ConnectFunSuite
+import org.apache.spark.sql.connect.test.ConnectFunSuite
 import org.apache.spark.util.SparkFileUtils
 
 class ClassFinderSuite extends ConnectFunSuite {

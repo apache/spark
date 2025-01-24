@@ -20,9 +20,10 @@ package org.apache.spark.sql.execution.stat
 import java.util.Locale
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{Column, DataFrame, Dataset, Row}
+import org.apache.spark.sql.{Column, Row}
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.util.QuantileSummaries
+import org.apache.spark.sql.classic.{DataFrame, Dataset}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._

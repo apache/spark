@@ -18,7 +18,7 @@ package org.apache.spark.sql.connect.client
 
 import java.util.UUID
 
-import org.apache.spark.sql.test.ConnectFunSuite
+import org.apache.spark.sql.connect.test.ConnectFunSuite
 
 /**
  * Test suite for [[SparkConnectClient.Builder]] parsing and configuration.
