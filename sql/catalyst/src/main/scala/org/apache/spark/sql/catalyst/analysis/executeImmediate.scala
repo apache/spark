@@ -149,6 +149,7 @@ class SubstituteExecuteImmediate(val catalogManager: CatalogManager)
           }
         }
         AnalysisContext.get.isExecuteImmediate = true
+        tagVariables(queryPlan)
 
         if (targetVariables.nonEmpty) {
           SetVariable(targetVariables, queryPlan, isExecuteImmediateIntoClause = true)
@@ -195,5 +196,15 @@ class SubstituteExecuteImmediate(val catalogManager: CatalogManager)
             Seq(CatalogManager.SYSTEM_CATALOG_NAME, CatalogManager.SESSION_NAMESPACE),
             expr.origin)
     }
+  }
+
+  private def tagVariables(plan: LogicalPlan): Unit = {
+    plan.expressions.foreach(_.foreach {
+      case u: UnresolvedAttribute =>
+        u.setTagValue(LogicalPlan.EXEC_IMMEDIATE_TAG, ())
+      case _ =>
+    })
+    plan.subqueries.foreach(tagVariables)
+    plan.children.foreach(tagVariables)
   }
 }
