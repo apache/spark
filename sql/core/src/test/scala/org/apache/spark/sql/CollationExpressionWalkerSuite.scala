@@ -462,7 +462,7 @@ class CollationExpressionWalkerSuite extends SparkFunSuite with SharedSparkSessi
    */
   def generateTableData(
       inputTypes: Seq[AbstractDataType],
-      collationType: CollationType): DataFrame = {
+      collationType: CollationType): classic.DataFrame = {
     val tblName = collationType match {
       case Utf8Binary => "tbl"
       case Utf8Lcase => "tbl_lcase"
