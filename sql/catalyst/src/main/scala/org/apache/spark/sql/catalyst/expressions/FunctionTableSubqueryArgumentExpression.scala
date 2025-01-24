@@ -89,7 +89,7 @@ case class FunctionTableSubqueryArgumentExpression(
       unresolvedOuterAttrs: Seq[Expression]
   ): FunctionTableSubqueryArgumentExpression = {
     if (!unresolvedOuterAttrs.forall(outerAttrs.contains(_))) {
-      // throw
+      // TODO(avery): create suitable error subclass to throw
     }
     copy(unresolvedOuterAttrs = unresolvedOuterAttrs)
   }

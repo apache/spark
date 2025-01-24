@@ -424,7 +424,7 @@ case class ScalarSubquery(
       unresolvedOuterAttrs: Seq[Expression]
   ): ScalarSubquery = {
     if (!unresolvedOuterAttrs.forall(outerAttrs.contains(_))) {
-      // throw
+      // TODO(avery): create suitable error subclass to throw
     }
     copy(unresolvedOuterAttrs = unresolvedOuterAttrs)
   }
@@ -489,7 +489,7 @@ case class LateralSubquery(
       unresolvedOuterAttrs: Seq[Expression]
   ): LateralSubquery = {
     if (!unresolvedOuterAttrs.forall(outerAttrs.contains(_))) {
-      // throw
+      // TODO(avery): create suitable error subclass to throw
     }
     copy(unresolvedOuterAttrs = unresolvedOuterAttrs)
   }
@@ -560,7 +560,7 @@ case class ListQuery(
       unresolvedOuterAttrs: Seq[Expression]
   ): ListQuery = {
     if (!unresolvedOuterAttrs.forall(outerAttrs.contains(_))) {
-      // throw
+      // TODO(avery): create suitable error subclass to throw
     }
     copy(unresolvedOuterAttrs = unresolvedOuterAttrs)
   }
@@ -628,7 +628,7 @@ case class Exists(
             unresolvedOuterAttrs: Seq[Expression]
   ): Exists = {
     if (!unresolvedOuterAttrs.forall(outerAttrs.contains(_))) {
-      // throw
+      // TODO(avery): create suitable error subclass to throw
     }
     copy(unresolvedOuterAttrs = unresolvedOuterAttrs)
   }
