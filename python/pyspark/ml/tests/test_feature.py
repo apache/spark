@@ -517,6 +517,37 @@ class FeatureTestsMixin:
             remover2 = StopWordsRemover.load(d)
             self.assertEqual(str(remover), str(remover2))
 
+    def test_stop_words_remover_II(self):
+        dataset = self.spark.createDataFrame([Row(input=["a", "panda"])])
+        stopWordRemover = StopWordsRemover(inputCol="input", outputCol="output")
+        # Default
+        self.assertEqual(stopWordRemover.getInputCol(), "input")
+        transformedDF = stopWordRemover.transform(dataset)
+        self.assertEqual(transformedDF.head().output, ["panda"])
+        self.assertEqual(type(stopWordRemover.getStopWords()), list)
+        self.assertTrue(isinstance(stopWordRemover.getStopWords()[0], str))
+        # Custom
+        stopwords = ["panda"]
+        stopWordRemover.setStopWords(stopwords)
+        self.assertEqual(stopWordRemover.getInputCol(), "input")
+        self.assertEqual(stopWordRemover.getStopWords(), stopwords)
+        transformedDF = stopWordRemover.transform(dataset)
+        self.assertEqual(transformedDF.head().output, ["a"])
+        # with language selection
+        stopwords = StopWordsRemover.loadDefaultStopWords("turkish")
+        dataset = self.spark.createDataFrame([Row(input=["acaba", "ama", "biri"])])
+        stopWordRemover.setStopWords(stopwords)
+        self.assertEqual(stopWordRemover.getStopWords(), stopwords)
+        transformedDF = stopWordRemover.transform(dataset)
+        self.assertEqual(transformedDF.head().output, [])
+        # with locale
+        stopwords = ["BELKİ"]
+        dataset = self.spark.createDataFrame([Row(input=["belki"])])
+        stopWordRemover.setStopWords(stopwords).setLocale("tr")
+        self.assertEqual(stopWordRemover.getStopWords(), stopwords)
+        transformedDF = stopWordRemover.transform(dataset)
+        self.assertEqual(transformedDF.head().output, [])
+
     def test_binarizer(self):
         b0 = Binarizer()
         self.assertListEqual(
@@ -569,37 +600,6 @@ class FeatureTestsMixin:
         self.assertEqual(ngram0.getOutputCol(), "output")
         transformedDF = ngram0.transform(dataset)
         self.assertEqual(transformedDF.head().output, ["a b c d", "b c d e"])
-
-    def test_stopwordsremover(self):
-        dataset = self.spark.createDataFrame([Row(input=["a", "panda"])])
-        stopWordRemover = StopWordsRemover(inputCol="input", outputCol="output")
-        # Default
-        self.assertEqual(stopWordRemover.getInputCol(), "input")
-        transformedDF = stopWordRemover.transform(dataset)
-        self.assertEqual(transformedDF.head().output, ["panda"])
-        self.assertEqual(type(stopWordRemover.getStopWords()), list)
-        self.assertTrue(isinstance(stopWordRemover.getStopWords()[0], str))
-        # Custom
-        stopwords = ["panda"]
-        stopWordRemover.setStopWords(stopwords)
-        self.assertEqual(stopWordRemover.getInputCol(), "input")
-        self.assertEqual(stopWordRemover.getStopWords(), stopwords)
-        transformedDF = stopWordRemover.transform(dataset)
-        self.assertEqual(transformedDF.head().output, ["a"])
-        # with language selection
-        stopwords = StopWordsRemover.loadDefaultStopWords("turkish")
-        dataset = self.spark.createDataFrame([Row(input=["acaba", "ama", "biri"])])
-        stopWordRemover.setStopWords(stopwords)
-        self.assertEqual(stopWordRemover.getStopWords(), stopwords)
-        transformedDF = stopWordRemover.transform(dataset)
-        self.assertEqual(transformedDF.head().output, [])
-        # with locale
-        stopwords = ["BELKİ"]
-        dataset = self.spark.createDataFrame([Row(input=["belki"])])
-        stopWordRemover.setStopWords(stopwords).setLocale("tr")
-        self.assertEqual(stopWordRemover.getStopWords(), stopwords)
-        transformedDF = stopWordRemover.transform(dataset)
-        self.assertEqual(transformedDF.head().output, [])
 
     def test_count_vectorizer_with_binary(self):
         dataset = self.spark.createDataFrame(
