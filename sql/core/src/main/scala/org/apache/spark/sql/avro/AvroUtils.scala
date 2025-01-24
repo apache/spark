@@ -44,6 +44,10 @@ import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
 private[sql] object AvroUtils extends Logging {
+
+  val JSON_INLINE_FORMAT: String = "json/inline"
+  val JSON_PRETTY_FORMAT: String = "json/pretty"
+
   def inferSchema(
       spark: SparkSession,
       options: Map[String, String],
@@ -71,7 +75,7 @@ private[sql] object AvroUtils extends Logging {
       case _ => throw new RuntimeException(
         s"""Avro schema cannot be converted to a Spark SQL StructType:
            |
-           |${SchemaFormatter.getInstance("json/pretty").format(avroSchema)}
+           |${SchemaFormatter.getInstance(JSON_PRETTY_FORMAT).format(avroSchema)}
            |""".stripMargin)
     }
   }

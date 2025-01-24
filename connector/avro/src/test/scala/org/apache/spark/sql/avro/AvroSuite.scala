@@ -97,7 +97,7 @@ abstract class AvroSuite
           .head
       }
     }, new GenericDatumReader[Any]()).getSchema
-    SchemaFormatter.getInstance("json/inline").format(schema)
+    SchemaFormatter.getInstance(AvroUtils.JSON_INLINE_FORMAT).format(schema)
   }
 
   // Check whether an Avro schema of union type is converted to SQL in an expected way, when the
