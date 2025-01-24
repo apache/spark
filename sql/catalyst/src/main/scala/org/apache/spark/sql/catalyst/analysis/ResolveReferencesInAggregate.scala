@@ -21,7 +21,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.expressions.{AliasHelper, Attribute, Expression, IntegerLiteral, Literal, NamedExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, AppendColumns, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{LATERAL_COLUMN_ALIAS_REFERENCE, UNRESOLVED_ATTRIBUTE}
 import org.apache.spark.sql.connector.catalog.CatalogManager
 
@@ -51,18 +51,10 @@ class ResolveReferencesInAggregate(val catalogManager: CatalogManager) extends S
   with ColumnResolutionHelper with AliasHelper {
 
   def apply(a: Aggregate): Aggregate = {
-    val planForResolve = a.child match {
-      // SPARK-25942: Resolves aggregate expressions with `AppendColumns`'s children, instead of
-      // `AppendColumns`, because `AppendColumns`'s serializer might produce conflict attribute
-      // names leading to ambiguous references exception.
-      case appendColumns: AppendColumns => appendColumns
-      case _ => a
-    }
-
     val resolvedGroupExprsBasic = a.groupingExpressions
-      .map(resolveExpressionByPlanChildren(_, planForResolve))
+      .map(resolveExpressionByPlanChildren(_, a))
     val resolvedAggExprsBasic = a.aggregateExpressions.map(
-      resolveExpressionByPlanChildren(_, planForResolve))
+      resolveExpressionByPlanChildren(_, a))
     val resolvedAggExprsWithLCA = resolveLateralColumnAlias(resolvedAggExprsBasic)
     val resolvedAggExprsFinal = resolvedAggExprsWithLCA.map(resolveColsLastResort)
       .map(_.asInstanceOf[NamedExpression])

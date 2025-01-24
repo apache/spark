@@ -27,7 +27,8 @@ import org.apache.spark.sql.catalyst.expressions.{
   Generator,
   GeneratorOuter,
   Literal,
-  NamedExpression
+  NamedExpression,
+  ScopedExpression
 }
 import org.apache.spark.sql.catalyst.trees.TreePattern.UNRESOLVED_ALIAS
 import org.apache.spark.sql.catalyst.util.{toPrettySQL, AUTO_GENERATED_ALIAS}
@@ -54,6 +55,11 @@ object AliasResolution {
       case e if !e.resolved => u
       case g: Generator => MultiAlias(g, Nil)
       case c @ Cast(ne: NamedExpression, _, _, _) => Alias(c, ne.name)()
+      case se @ ScopedExpression(e: Expression, _) =>
+        resolve(UnresolvedAlias(e, optGenAliasFunc)) match {
+          case ne: NamedExpression => Alias(se, ne.name)()
+          case _ => se
+        }
       case e: ExtractValue if extractOnly(e) => Alias(e, toPrettySQL(e))()
       case e if optGenAliasFunc.isDefined =>
         Alias(child, optGenAliasFunc.get.apply(e))()
