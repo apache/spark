@@ -1595,8 +1595,12 @@ class Dataset[T] private[sql](
   /** @inheritdoc */
   lazy val rdd: RDD[T] = {
     val objectType = exprEnc.deserializer.dataType
-    rddQueryExecution.toRdd.mapPartitions { rows =>
-      rows.map(_.get(0, objectType).asInstanceOf[T])
+    // we need to propagate conf here because simply calling QueryExecution#toRdd
+    // can launch jobs. See tests for SPARK-47193
+    SQLExecution.withSQLConfPropagated(sparkSession) {
+      rddQueryExecution.toRdd.mapPartitions { rows =>
+        rows.map(_.get(0, objectType).asInstanceOf[T])
+      }
     }
   }
 

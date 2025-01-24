@@ -27,7 +27,7 @@ import org.scalatest.Assertions
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.util._
-import org.apache.spark.sql.execution.{QueryExecution, SQLExecution}
+import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.sql.util.QueryExecutionListener
 import org.apache.spark.storage.StorageLevel
@@ -286,9 +286,7 @@ object QueryTest extends Assertions {
       checkToRDD: Boolean = true): Option[String] = {
     val isSorted = df.logicalPlan.collect { case s: logical.Sort => s }.nonEmpty
     if (checkToRDD) {
-      SQLExecution.withSQLConfPropagated(df.sparkSession) {
-        df.rdd.count() // Also attempt to deserialize as an RDD [SPARK-15791]
-      }
+      df.rdd.count() // Also attempt to deserialize as an RDD [SPARK-15791]
     }
 
     val sparkAnswer = try df.collect().toSeq catch {
