@@ -20,6 +20,8 @@ package org.apache.spark.sql.catalyst.expressions
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
+import org.apache.spark.sql.catalyst.util.truncatedString
+
 object ExpressionSet {
   /**
    * Constructs a new [[ExpressionSet]] by applying [[Expression#canonicalized]] to `expressions`.
@@ -178,5 +180,9 @@ class ExpressionSet protected(
        |baseSet: ${baseSet.mkString(", ")}
        |originals: ${originals.mkString(", ")}
      """.stripMargin
+
+  /** Returns a length limited string that must be used for logging only. */
+  def simpleString(maxFields: Int): String =
+    s"Set(${truncatedString(originals.map(_.simpleString(maxFields)).toSeq, ", ", maxFields)})"
 }
 

@@ -240,4 +240,14 @@ class ExpressionSetSuite extends SparkFunSuite {
     assert((initialSet -- setToRemoveWithOutSameExpression).size == 2)
   }
 
+  test("simpleString limits the number of expressions recursively") {
+    val expressionSet =
+      ExpressionSet(InSet(aUpper, Set(0, 1)) :: Rand(1) :: Rand(2) :: Rand(3) :: Nil)
+    assert(expressionSet.simpleString(1) ==
+      "Set(A#1 INSET 0, ... 1 more fields, ... 3 more fields)")
+    assert(expressionSet.simpleString(2) == "Set(A#1 INSET 0, 1, rand(1), ... 2 more fields)")
+    assert(expressionSet.simpleString(3) ==
+      "Set(A#1 INSET 0, 1, rand(1), rand(2), ... 1 more fields)")
+    assert(expressionSet.simpleString(4) == expressionSet.toString)
+  }
 }
