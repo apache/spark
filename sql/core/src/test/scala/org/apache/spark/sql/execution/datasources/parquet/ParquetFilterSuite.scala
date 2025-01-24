@@ -43,6 +43,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.optimizer.InferFiltersFromConstraints
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.util.RebaseDateTime.RebaseSpec
+import org.apache.spark.sql.classic.ClassicConversions._
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.parseColumnPath
 import org.apache.spark.sql.execution.ExplainMode
 import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, HadoopFsRelation, LogicalRelationWithTable, PushableColumnAndNestedColumn}
@@ -2262,7 +2263,7 @@ class ParquetV1FilterSuite extends ParquetFilterSuite {
         SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false",
         SQLConf.NESTED_PREDICATE_PUSHDOWN_FILE_SOURCE_LIST.key -> pushdownDsList) {
         val query = df
-          .select(output.map(Column(_)): _*)
+          .select(output.map(e => Column(e)): _*)
           .where(Column(predicate))
 
         val nestedOrAttributes = predicate.collectFirst {
@@ -2343,7 +2344,7 @@ class ParquetV2FilterSuite extends ParquetFilterSuite {
       SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> InferFiltersFromConstraints.ruleName,
       SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false") {
       val query = df
-        .select(output.map(Column(_)): _*)
+        .select(output.map(e => Column(e)): _*)
         .where(Column(predicate))
 
       query.queryExecution.optimizedPlan.collectFirst {

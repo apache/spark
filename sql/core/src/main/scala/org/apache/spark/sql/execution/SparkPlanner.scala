@@ -17,10 +17,12 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.sql._
+import org.apache.spark.sql.ExperimentalMethods
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.classic.SparkSession
+import org.apache.spark.sql.execution.{SparkStrategy => Strategy}
 import org.apache.spark.sql.execution.adaptive.LogicalQueryStageStrategy
 import org.apache.spark.sql.execution.command.v2.V2CommandStrategy
 import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, FileSourceStrategy}
@@ -92,7 +94,7 @@ class SparkPlanner(val session: SparkSession, val experimentalMethods: Experimen
     val projectSet = AttributeSet(projectList.flatMap(_.references))
     val filterSet = AttributeSet(filterPredicates.flatMap(_.references))
     val filterCondition: Option[Expression] =
-      prunePushedDownFilters(filterPredicates).reduceLeftOption(catalyst.expressions.And)
+      prunePushedDownFilters(filterPredicates).reduceLeftOption(And)
 
     // Right now we still use a projection even if the only evaluation is applying an alias
     // to a column.  Since this is a no-op, it could be avoided. However, using this

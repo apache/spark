@@ -38,12 +38,13 @@ import org.apache.spark.sql.avro.{functions => avroFn}
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.StringEncoder
 import org.apache.spark.sql.catalyst.util.CollationFactory
+import org.apache.spark.sql.connect.{DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.connect.ConnectConversions._
 import org.apache.spark.sql.connect.client.SparkConnectClient
+import org.apache.spark.sql.connect.test.{ConnectFunSuite, IntegrationTestUtils}
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.protobuf.{functions => pbFn}
-import org.apache.spark.sql.test.{ConnectFunSuite, IntegrationTestUtils}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
 import org.apache.spark.util.SparkFileUtils

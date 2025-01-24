@@ -25,7 +25,7 @@ import scala.reflect.runtime.universe.TypeTag
 import org.apache.commons.io.FileUtils
 import org.scalatest.BeforeAndAfterAll
 
-import org.apache.spark.sql._
+import org.apache.spark.sql.{Column, DataFrame, QueryTest}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Predicate}
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.classic.ClassicConversions._

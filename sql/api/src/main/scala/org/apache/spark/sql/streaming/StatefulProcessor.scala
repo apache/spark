@@ -20,7 +20,7 @@ package org.apache.spark.sql.streaming
 import java.io.Serializable
 
 import org.apache.spark.annotation.Evolving
-import org.apache.spark.sql.api.EncoderImplicits
+import org.apache.spark.sql.EncoderImplicits
 import org.apache.spark.sql.errors.ExecutionErrors
 
 /**
