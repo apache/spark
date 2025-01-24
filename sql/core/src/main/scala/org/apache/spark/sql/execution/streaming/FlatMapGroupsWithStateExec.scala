@@ -22,7 +22,7 @@ import scala.util.control.NonFatal
 
 import org.apache.hadoop.conf.Configuration
 
-import org.apache.spark.{SparkException, SparkThrowable}
+import org.apache.spark.{SparkException, SparkThrowable, SparkUnsupportedOperationException}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
@@ -52,6 +52,7 @@ trait FlatMapGroupsWithStateExecBase
   protected val initialStateDataAttrs: Seq[Attribute]
   protected val initialState: SparkPlan
   protected val hasInitialState: Boolean
+  protected val skipEmittingInitialStateKeys: Boolean
 
   val stateInfo: Option[StatefulOperatorStateInfo]
   protected val stateEncoder: ExpressionEncoder[Any]
@@ -145,7 +146,8 @@ trait FlatMapGroupsWithStateExecBase
 
     val processedOutputIterator = initialStateIterOption match {
       case Some(initStateIter) if initStateIter.hasNext =>
-        processor.processNewDataWithInitialState(filteredIter, initStateIter)
+        processor.processNewDataWithInitialState(filteredIter, initStateIter,
+          skipEmittingInitialStateKeys)
       case _ => processor.processNewData(filteredIter)
     }
 
@@ -301,7 +303,8 @@ trait FlatMapGroupsWithStateExecBase
      */
     def processNewDataWithInitialState(
         childDataIter: Iterator[InternalRow],
-        initStateIter: Iterator[InternalRow]
+        initStateIter: Iterator[InternalRow],
+        skipEmittingInitialStateKeys: Boolean
       ): Iterator[InternalRow] = {
 
       if (!childDataIter.hasNext && !initStateIter.hasNext) return Iterator.empty
@@ -312,10 +315,10 @@ trait FlatMapGroupsWithStateExecBase
       val groupedInitialStateIter =
         GroupedIterator(initStateIter, initialStateGroupAttrs, initialState.output)
 
-      // Create a CoGroupedIterator that will group the two iterators together for every key group.
-      new CoGroupedIterator(
-          groupedChildDataIter, groupedInitialStateIter, groupingAttributes).flatMap {
-        case (keyRow, valueRowIter, initialStateRowIter) =>
+      if (skipEmittingInitialStateKeys) {
+        // If we are skipping emitting initial state keys, we can just process the initial state
+        // rows to populate the state store and then process the child data rows.
+        groupedInitialStateIter.foreach { case (keyRow, initialStateRowIter) =>
           val keyUnsafeRow = keyRow.asInstanceOf[UnsafeRow]
           var foundInitialStateForKey = false
           initialStateRowIter.foreach { initialStateRow =>
@@ -326,14 +329,40 @@ trait FlatMapGroupsWithStateExecBase
             val initStateObj = getStateObj.get(initialStateRow)
             stateManager.putState(store, keyUnsafeRow, initStateObj, NO_TIMESTAMP)
           }
-          // We apply the values for the key after applying the initial state.
+        }
+
+        groupedChildDataIter.flatMap { case (keyRow, valueRowIter) =>
+          val keyUnsafeRow = keyRow.asInstanceOf[UnsafeRow]
           callFunctionAndUpdateState(
             stateManager.getState(store, keyUnsafeRow),
-              valueRowIter,
-              hasTimedOut = false
-          )
+            valueRowIter,
+            hasTimedOut = false)
+        }
+      } else {
+        // Create a CoGroupedIterator that will group the two iterators together for every
+        // key group.
+        new CoGroupedIterator(
+            groupedChildDataIter, groupedInitialStateIter, groupingAttributes).flatMap {
+          case (keyRow, valueRowIter, initialStateRowIter) =>
+            val keyUnsafeRow = keyRow.asInstanceOf[UnsafeRow]
+            var foundInitialStateForKey = false
+            initialStateRowIter.foreach { initialStateRow =>
+              if (foundInitialStateForKey) {
+                FlatMapGroupsWithStateExec.foundDuplicateInitialKeyException()
+              }
+              foundInitialStateForKey = true
+              val initStateObj = getStateObj.get(initialStateRow)
+              stateManager.putState(store, keyUnsafeRow, initStateObj, NO_TIMESTAMP)
+            }
+            // We apply the values for the key after applying the initial state.
+            callFunctionAndUpdateState(
+              stateManager.getState(store, keyUnsafeRow),
+                valueRowIter,
+                hasTimedOut = false
+            )
       }
     }
+  }
 
     /** Find the groups that have timeout set and are timing out right now, and call the function */
     def processTimedOutState(): Iterator[InternalRow] = {
@@ -388,6 +417,7 @@ trait FlatMapGroupsWithStateExecBase
  * @param eventTimeWatermarkForEviction event time watermark for state eviction
  * @param initialState the user specified initial state
  * @param hasInitialState indicates whether the initial state is provided or not
+ * @param skipEmittingInitialStateKeys whether to skip emitting initial state df keys
  * @param child the physical plan for the underlying data
  */
 case class FlatMapGroupsWithStateExec(
@@ -410,6 +440,7 @@ case class FlatMapGroupsWithStateExec(
     eventTimeWatermarkForEviction: Option[Long],
     initialState: SparkPlan,
     hasInitialState: Boolean,
+    skipEmittingInitialStateKeys: Boolean,
     child: SparkPlan)
   extends FlatMapGroupsWithStateExecBase with BinaryExecNode with  ObjectProducerExec {
   import GroupStateImpl._
@@ -533,9 +564,16 @@ object FlatMapGroupsWithStateExec {
       outputObjAttr: Attribute,
       timeoutConf: GroupStateTimeout,
       hasInitialState: Boolean,
+      skipEmittingInitialStateKeys: Boolean,
       initialState: SparkPlan,
       child: SparkPlan): SparkPlan = {
     if (hasInitialState) {
+      // we wont support skipping emitting initial state keys for batch queries
+      // since the underlying CoGroupExec does not support it
+      if (skipEmittingInitialStateKeys) {
+        throw SparkUnsupportedOperationException()
+      }
+
       val watermarkPresent = child.output.exists {
         case a: Attribute if a.metadata.contains(EventTimeWatermark.delayKey) => true
         case _ => false

@@ -351,6 +351,66 @@ class FlatMapGroupsWithStateWithInitialStateSuite extends StateStoreMetricsTest 
     )
   }
 
+  testWithAllStateVersions("flatMapGroupsWithState - initial state - " +
+    s"skipEmittingInitialStateKeys=true") {
+    withSQLConf(SQLConf.FLATMAPGROUPSWITHSTATE_SKIP_EMITTING_INITIAL_STATE_KEYS.key -> "true") {
+      val initialState = Seq(
+        ("apple", 1L),
+        ("orange", 2L),
+        ("mango", 5L)).toDS().groupByKey(_._1).mapValues(_._2)
+
+      val fruitCountFunc = (key: String, values: Iterator[String], state: GroupState[Long]) => {
+        val count = state.getOption.map( x => x).getOrElse(0L) + values.size
+        state.update(count)
+        Iterator.single((key, count))
+      }
+
+      val inputData = MemoryStream[String]
+      val result =
+        inputData.toDS()
+          .groupByKey(x => x)
+          .flatMapGroupsWithState(Update, NoTimeout(), initialState)(fruitCountFunc)
+      testStream(result, Update)(
+        AddData(inputData, "apple"),
+        AddData(inputData, "banana"),
+        CheckNewAnswer(("apple", 2), ("banana", 1)),
+        AddData(inputData, "orange"),
+        CheckNewAnswer(("orange", 3)),
+        StopStream
+      )
+    }
+  }
+
+  testWithAllStateVersions("flatMapGroupsWithState - initial state - " +
+    s"skipEmittingInitialStateKeys=false") {
+    withSQLConf(SQLConf.FLATMAPGROUPSWITHSTATE_SKIP_EMITTING_INITIAL_STATE_KEYS.key -> "false") {
+      val initialState = Seq(
+        ("apple", 1L),
+        ("orange", 2L),
+        ("mango", 5L)).toDS().groupByKey(_._1).mapValues(_._2)
+
+      val fruitCountFunc = (key: String, values: Iterator[String], state: GroupState[Long]) => {
+        val count = state.getOption.map( x => x).getOrElse(0L) + values.size
+        state.update(count)
+        Iterator.single((key, count))
+      }
+
+      val inputData = MemoryStream[String]
+      val result =
+        inputData.toDS()
+          .groupByKey(x => x)
+          .flatMapGroupsWithState(Update, NoTimeout(), initialState)(fruitCountFunc)
+      testStream(result, Update)(
+        AddData(inputData, "apple"),
+        AddData(inputData, "banana"),
+        CheckNewAnswer(("apple", 2), ("banana", 1), ("orange", 2), ("mango", 5)),
+        AddData(inputData, "orange"),
+        CheckNewAnswer(("orange", 3)),
+        StopStream
+      )
+    }
+  }
+
   def testWithAllStateVersions(name: String)(func: => Unit): Unit = {
     for (version <- FlatMapGroupsWithStateExecHelper.supportedVersions) {
       test(s"$name - state format version $version") {
