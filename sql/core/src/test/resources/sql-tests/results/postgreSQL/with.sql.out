@@ -307,13 +307,13 @@ WITH RECURSIVE subdepartment AS
 )
 SELECT * FROM subdepartment ORDER BY name
 -- !query schema
-struct<>
+struct<root_name:string,id:int,parent_department:int,name:string>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "INVALID_RECURSIVE_REFERENCE.PLACE",
-  "sqlState" : "42836"
-}
+A	1	0	A
+A	2	1	B
+A	3	2	C
+A	4	2	D
+A	6	4	F
 
 
 -- !query
@@ -328,13 +328,13 @@ WITH RECURSIVE subdepartment(level, id, parent_department, name) AS
 )
 SELECT * FROM subdepartment ORDER BY name
 -- !query schema
-struct<>
+struct<level:int,id:int,parent_department:int,name:string>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "INVALID_RECURSIVE_REFERENCE.PLACE",
-  "sqlState" : "42836"
-}
+1	1	0	A
+2	2	1	B
+3	3	2	C
+3	4	2	D
+4	6	4	F
 
 
 -- !query
@@ -349,13 +349,12 @@ WITH RECURSIVE subdepartment(level, id, parent_department, name) AS
 )
 SELECT * FROM subdepartment WHERE level >= 2 ORDER BY name
 -- !query schema
-struct<>
+struct<level:int,id:int,parent_department:int,name:string>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "INVALID_RECURSIVE_REFERENCE.PLACE",
-  "sqlState" : "42836"
-}
+2	2	1	B
+3	3	2	C
+3	4	2	D
+4	6	4	F
 
 
 -- !query
@@ -428,33 +427,19 @@ CREATE TEMPORARY VIEW vsubdepartment AS
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "INVALID_RECURSIVE_REFERENCE.PLACE",
-  "sqlState" : "42836"
-}
+
 
 
 -- !query
 SELECT * FROM vsubdepartment ORDER BY name
 -- !query schema
-struct<>
+struct<id:int,parent_department:int,name:string>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
-  "sqlState" : "42P01",
-  "messageParameters" : {
-    "relationName" : "`vsubdepartment`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 15,
-    "stopIndex" : 28,
-    "fragment" : "vsubdepartment"
-  } ]
-}
+1	0	A
+2	1	B
+3	2	C
+4	2	D
+6	4	F
 
 
 -- !query
@@ -489,13 +474,11 @@ WITH RECURSIVE t(i,j) AS (
 
 	SELECT * FROM t
 -- !query schema
-struct<>
+struct<i:int,j:int>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "INVALID_RECURSIVE_REFERENCE.PLACE",
-  "sqlState" : "42836"
-}
+1	2
+2	3
+3	4
 
 
 -- !query
@@ -532,13 +515,21 @@ SELECT t1.*, t2.* FROM t AS t1 JOIN t AS t2 ON
 	size(t2.path) > 1)
 	ORDER BY t1.id, t2.id
 -- !query schema
-struct<>
+struct<id:int,path:array<int>,id:int,path:array<int>>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "INVALID_RECURSIVE_REFERENCE.PLACE",
-  "sqlState" : "42836"
-}
+2	[2]	4	[2,4]
+2	[2]	5	[2,5]
+2	[2]	6	[2,6]
+2	[2]	9	[2,4,9]
+2	[2]	10	[2,4,10]
+2	[2]	14	[2,4,9,14]
+3	[3]	7	[3,7]
+3	[3]	8	[3,8]
+3	[3]	11	[3,7,11]
+3	[3]	12	[3,7,12]
+3	[3]	13	[3,7,13]
+3	[3]	15	[3,7,11,15]
+3	[3]	16	[3,7,11,16]
 
 
 -- !query
@@ -555,13 +546,10 @@ SELECT t1.id, count(*) FROM t AS t1 JOIN t AS t2 ON
 	GROUP BY t1.id
 	ORDER BY t1.id
 -- !query schema
-struct<>
+struct<id:int,count(1):bigint>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "INVALID_RECURSIVE_REFERENCE.PLACE",
-  "sqlState" : "42836"
-}
+2	6
+3	7
 
 
 -- !query
@@ -574,13 +562,24 @@ UNION ALL
 SELECT t1.id, t2.path, struct(t2.*) FROM t AS t1 JOIN t AS t2 ON
 (t1.id=t2.id)
 -- !query schema
-struct<>
+struct<id:int,path:array<int>,struct(id, path):struct<id:int,path:array<int>>>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "INVALID_RECURSIVE_REFERENCE.PLACE",
-  "sqlState" : "42836"
-}
+1	[]	{"id":1,"path":[]}
+10	[2,4,10]	{"id":10,"path":[2,4,10]}
+11	[3,7,11]	{"id":11,"path":[3,7,11]}
+12	[3,7,12]	{"id":12,"path":[3,7,12]}
+13	[3,7,13]	{"id":13,"path":[3,7,13]}
+14	[2,4,9,14]	{"id":14,"path":[2,4,9,14]}
+15	[3,7,11,15]	{"id":15,"path":[3,7,11,15]}
+16	[3,7,11,16]	{"id":16,"path":[3,7,11,16]}
+2	[2]	{"id":2,"path":[2]}
+3	[3]	{"id":3,"path":[3]}
+4	[2,4]	{"id":4,"path":[2,4]}
+5	[2,5]	{"id":5,"path":[2,5]}
+6	[2,6]	{"id":6,"path":[2,6]}
+7	[3,7]	{"id":7,"path":[3,7]}
+8	[3,8]	{"id":8,"path":[3,8]}
+9	[2,4,9]	{"id":9,"path":[2,4,9]}
 
 
 -- !query
@@ -615,13 +614,33 @@ with recursive search_graph(f, t, label, path, cycle) as (
 )
 select * from search_graph
 -- !query schema
-struct<>
+struct<f:int,t:int,label:string,path:array<struct<f:int,t:int>>,cycle:boolean>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "INVALID_RECURSIVE_REFERENCE.PLACE",
-  "sqlState" : "42836"
-}
+1	2	arc 1 -> 2	[{"f":1,"t":2}]	false
+1	2	arc 1 -> 2	[{"f":1,"t":4},{"f":4,"t":5},{"f":5,"t":1},{"f":1,"t":2}]	false
+1	2	arc 1 -> 2	[{"f":4,"t":5},{"f":5,"t":1},{"f":1,"t":2}]	false
+1	2	arc 1 -> 2	[{"f":5,"t":1},{"f":1,"t":2}]	false
+1	3	arc 1 -> 3	[{"f":1,"t":3}]	false
+1	3	arc 1 -> 3	[{"f":1,"t":4},{"f":4,"t":5},{"f":5,"t":1},{"f":1,"t":3}]	false
+1	3	arc 1 -> 3	[{"f":4,"t":5},{"f":5,"t":1},{"f":1,"t":3}]	false
+1	3	arc 1 -> 3	[{"f":5,"t":1},{"f":1,"t":3}]	false
+1	4	arc 1 -> 4	[{"f":1,"t":4},{"f":4,"t":5},{"f":5,"t":1},{"f":1,"t":4}]	true
+1	4	arc 1 -> 4	[{"f":1,"t":4}]	false
+1	4	arc 1 -> 4	[{"f":4,"t":5},{"f":5,"t":1},{"f":1,"t":4}]	false
+1	4	arc 1 -> 4	[{"f":5,"t":1},{"f":1,"t":4}]	false
+2	3	arc 2 -> 3	[{"f":1,"t":2},{"f":2,"t":3}]	false
+2	3	arc 2 -> 3	[{"f":1,"t":4},{"f":4,"t":5},{"f":5,"t":1},{"f":1,"t":2},{"f":2,"t":3}]	false
+2	3	arc 2 -> 3	[{"f":2,"t":3}]	false
+2	3	arc 2 -> 3	[{"f":4,"t":5},{"f":5,"t":1},{"f":1,"t":2},{"f":2,"t":3}]	false
+2	3	arc 2 -> 3	[{"f":5,"t":1},{"f":1,"t":2},{"f":2,"t":3}]	false
+4	5	arc 4 -> 5	[{"f":1,"t":4},{"f":4,"t":5}]	false
+4	5	arc 4 -> 5	[{"f":4,"t":5},{"f":5,"t":1},{"f":1,"t":4},{"f":4,"t":5}]	true
+4	5	arc 4 -> 5	[{"f":4,"t":5}]	false
+4	5	arc 4 -> 5	[{"f":5,"t":1},{"f":1,"t":4},{"f":4,"t":5}]	false
+5	1	arc 5 -> 1	[{"f":1,"t":4},{"f":4,"t":5},{"f":5,"t":1}]	false
+5	1	arc 5 -> 1	[{"f":4,"t":5},{"f":5,"t":1}]	false
+5	1	arc 5 -> 1	[{"f":5,"t":1},{"f":1,"t":4},{"f":4,"t":5},{"f":5,"t":1}]	true
+5	1	arc 5 -> 1	[{"f":5,"t":1}]	false
 
 
 -- !query
@@ -634,13 +653,33 @@ with recursive search_graph(f, t, label, path, cycle) as (
 )
 select * from search_graph order by path
 -- !query schema
-struct<>
+struct<f:int,t:int,label:string,path:array<struct<f:int,t:int>>,cycle:boolean>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "INVALID_RECURSIVE_REFERENCE.PLACE",
-  "sqlState" : "42836"
-}
+1	2	arc 1 -> 2	[{"f":1,"t":2}]	false
+2	3	arc 2 -> 3	[{"f":1,"t":2},{"f":2,"t":3}]	false
+1	3	arc 1 -> 3	[{"f":1,"t":3}]	false
+1	4	arc 1 -> 4	[{"f":1,"t":4}]	false
+4	5	arc 4 -> 5	[{"f":1,"t":4},{"f":4,"t":5}]	false
+5	1	arc 5 -> 1	[{"f":1,"t":4},{"f":4,"t":5},{"f":5,"t":1}]	false
+1	2	arc 1 -> 2	[{"f":1,"t":4},{"f":4,"t":5},{"f":5,"t":1},{"f":1,"t":2}]	false
+2	3	arc 2 -> 3	[{"f":1,"t":4},{"f":4,"t":5},{"f":5,"t":1},{"f":1,"t":2},{"f":2,"t":3}]	false
+1	3	arc 1 -> 3	[{"f":1,"t":4},{"f":4,"t":5},{"f":5,"t":1},{"f":1,"t":3}]	false
+1	4	arc 1 -> 4	[{"f":1,"t":4},{"f":4,"t":5},{"f":5,"t":1},{"f":1,"t":4}]	true
+2	3	arc 2 -> 3	[{"f":2,"t":3}]	false
+4	5	arc 4 -> 5	[{"f":4,"t":5}]	false
+5	1	arc 5 -> 1	[{"f":4,"t":5},{"f":5,"t":1}]	false
+1	2	arc 1 -> 2	[{"f":4,"t":5},{"f":5,"t":1},{"f":1,"t":2}]	false
+2	3	arc 2 -> 3	[{"f":4,"t":5},{"f":5,"t":1},{"f":1,"t":2},{"f":2,"t":3}]	false
+1	3	arc 1 -> 3	[{"f":4,"t":5},{"f":5,"t":1},{"f":1,"t":3}]	false
+1	4	arc 1 -> 4	[{"f":4,"t":5},{"f":5,"t":1},{"f":1,"t":4}]	false
+4	5	arc 4 -> 5	[{"f":4,"t":5},{"f":5,"t":1},{"f":1,"t":4},{"f":4,"t":5}]	true
+5	1	arc 5 -> 1	[{"f":5,"t":1}]	false
+1	2	arc 1 -> 2	[{"f":5,"t":1},{"f":1,"t":2}]	false
+2	3	arc 2 -> 3	[{"f":5,"t":1},{"f":1,"t":2},{"f":2,"t":3}]	false
+1	3	arc 1 -> 3	[{"f":5,"t":1},{"f":1,"t":3}]	false
+1	4	arc 1 -> 4	[{"f":5,"t":1},{"f":1,"t":4}]	false
+4	5	arc 4 -> 5	[{"f":5,"t":1},{"f":1,"t":4},{"f":4,"t":5}]	false
+5	1	arc 5 -> 1	[{"f":5,"t":1},{"f":1,"t":4},{"f":4,"t":5},{"f":5,"t":1}]	true
 
 
 -- !query
@@ -1204,7 +1243,7 @@ org.apache.spark.SparkException
   "sqlState" : "XXKD0",
   "messageParameters" : {
     "batch" : "Resolution",
-    "reason" : "Multiple attributes have the same expression ID 4143 but different data types: DECIMAL(3,0), DECIMAL(10,0). The plan tree:\n'WithCTE\n:- 'CTERelationDef 60, false\n:  +- 'SubqueryAlias foo\n:     +- 'UnresolvedSubqueryColumnAliases [i]\n:        +- UnionLoop 60\n:           :- Project [cast(i#x as decimal(3,0)) AS i#x]\n:           :  +- SubqueryAlias t\n:           :     +- Project [col1#x AS i#x]\n:           :        +- LocalRelation [col1#x]\n:           +- Project [cast((i#x + cast(1 as decimal(1,0))) as decimal(10,0)) AS CAST((i + 1) AS DECIMAL(10,0))#x]\n:              +- Filter (i#x < cast(cast(10 as decimal(2,0)) as decimal(3,0)))\n:                 +- SubqueryAlias foo\n:                    +- Project [i#x AS i#x]\n:                       +- UnionLoopRef 60, [i#x], false\n+- 'Project [*]\n   +- 'SubqueryAlias foo\n      +- 'CTERelationRef 60, false, false, false\n",
+    "reason" : "Multiple attributes have the same expression ID 4735 but different data types: DECIMAL(3,0), DECIMAL(10,0). The plan tree:\n'WithCTE\n:- 'CTERelationDef 61, false\n:  +- 'SubqueryAlias foo\n:     +- 'UnresolvedSubqueryColumnAliases [i]\n:        +- UnionLoop 61\n:           :- Project [cast(i#x as decimal(3,0)) AS i#x]\n:           :  +- SubqueryAlias t\n:           :     +- Project [col1#x AS i#x]\n:           :        +- LocalRelation [col1#x]\n:           +- Project [cast((i#x + cast(1 as decimal(1,0))) as decimal(10,0)) AS CAST((i + 1) AS DECIMAL(10,0))#x]\n:              +- Filter (i#x < cast(cast(10 as decimal(2,0)) as decimal(3,0)))\n:                 +- SubqueryAlias foo\n:                    +- Project [i#x AS i#x]\n:                       +- UnionLoopRef 61, [i#x], false\n+- 'Project [*]\n   +- 'SubqueryAlias foo\n      +- 'CTERelationRef 61, false, false, false\n",
     "rule" : "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveAliases"
   }
 }
@@ -1623,14 +1662,7 @@ DROP VIEW vsubdepartment
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.analysis.NoSuchTableException
-{
-  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
-  "sqlState" : "42P01",
-  "messageParameters" : {
-    "relationName" : "`spark_catalog`.`default`.`vsubdepartment`"
-  }
-}
+
 
 
 -- !query

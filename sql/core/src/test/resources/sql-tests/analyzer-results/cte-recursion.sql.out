@@ -994,11 +994,25 @@ WITH RECURSIVE destinations_from_new_york AS (
 )
 SELECT * FROM destinations_from_new_york
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "INVALID_RECURSIVE_REFERENCE.PLACE",
-  "sqlState" : "42836"
-}
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias destinations_from_new_york
+:     +- UnionLoop 86
+:        :- Project [New York AS destination#x, array(New York) AS path#x, 0 AS length#x]
+:        :  +- OneRowRelation
+:        +- Project [destination#x, concat(path#x, array(destination#x)) AS concat(path, array(destination))#x, (length#x + 1) AS (length + 1)#x]
+:           +- Join Inner, ((destination#x = origin#x) AND NOT array_contains(path#x, destination#x))
+:              :- SubqueryAlias r
+:              :  +- SubqueryAlias routes
+:              :     +- View (`routes`, [origin#x, destination#x])
+:              :        +- Project [cast(col1#x as string) AS origin#x, cast(col2#x as string) AS destination#x]
+:              :           +- LocalRelation [col1#x, col2#x]
+:              +- SubqueryAlias d
+:                 +- SubqueryAlias destinations_from_new_york
+:                    +- UnionLoopRef 86, [destination#x, path#x, length#x], false
++- Project [destination#x, path#x, length#x]
+   +- SubqueryAlias destinations_from_new_york
+      +- CTERelationRef xxxx, true, [destination#x, path#x, length#x], false, false
 
 
 -- !query

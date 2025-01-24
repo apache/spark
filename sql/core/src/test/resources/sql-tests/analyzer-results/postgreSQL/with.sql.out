@@ -41,13 +41,13 @@ WithCTE
 :- CTERelationDef xxxx, false
 :  +- SubqueryAlias t
 :     +- Project [col1#x AS n#x]
-:        +- UnionLoop 78
+:        +- UnionLoop 79
 :           :- LocalRelation [col1#x]
 :           +- Project [(n#x + 1) AS (n + 1)#x]
 :              +- Filter (n#x < 100)
 :                 +- SubqueryAlias t
 :                    +- Project [col1#x AS n#x]
-:                       +- UnionLoopRef 78, [col1#x], false
+:                       +- UnionLoopRef 79, [col1#x], false
 +- Aggregate [sum(n#x) AS sum(n)#xL]
    +- SubqueryAlias t
       +- CTERelationRef xxxx, true, [n#x], false, false
@@ -65,7 +65,7 @@ WithCTE
 :- CTERelationDef xxxx, false
 :  +- SubqueryAlias t
 :     +- Project [scalarsubquery()#x AS n#x]
-:        +- UnionLoop 79
+:        +- UnionLoop 80
 :           :- Project [scalar-subquery#x [] AS scalarsubquery()#x]
 :           :  :  +- LocalRelation [col1#x]
 :           :  +- OneRowRelation
@@ -73,7 +73,7 @@ WithCTE
 :              +- Filter (n#x < 5)
 :                 +- SubqueryAlias t
 :                    +- Project [scalarsubquery()#x AS n#x]
-:                       +- UnionLoopRef 79, [scalarsubquery()#x], false
+:                       +- UnionLoopRef 80, [scalarsubquery()#x], false
 +- Project [n#x]
    +- SubqueryAlias t
       +- CTERelationRef xxxx, true, [n#x], false, false
@@ -98,13 +98,13 @@ SELECT * FROM nums, false, false, LocalTempView, UNSUPPORTED, true
       :- CTERelationDef xxxx, false
       :  +- SubqueryAlias nums
       :     +- Project [col1#x AS n#x]
-      :        +- UnionLoop 80
+      :        +- UnionLoop 81
       :           :- LocalRelation [col1#x]
       :           +- Project [(n#x + 1) AS (n + 1)#x]
       :              +- Filter (n#x < 5)
       :                 +- SubqueryAlias nums
       :                    +- Project [col1#x AS n#x]
-      :                       +- UnionLoopRef 80, [col1#x], false
+      :                       +- UnionLoopRef 81, [col1#x], false
       +- Project [n#x]
          +- SubqueryAlias nums
             +- CTERelationRef xxxx, true, [n#x], false, false
@@ -121,13 +121,13 @@ Project [n#x]
             :- CTERelationDef xxxx, false
             :  +- SubqueryAlias nums
             :     +- Project [col1#x AS n#x]
-            :        +- UnionLoop 81
+            :        +- UnionLoop 82
             :           :- LocalRelation [col1#x]
             :           +- Project [(n#x + 1) AS (n + 1)#x]
             :              +- Filter (n#x < 5)
             :                 +- SubqueryAlias nums
             :                    +- Project [col1#x AS n#x]
-            :                       +- UnionLoopRef 81, [col1#x], false
+            :                       +- UnionLoopRef 82, [col1#x], false
             +- Project [n#x]
                +- SubqueryAlias nums
                   +- CTERelationRef xxxx, true, [n#x], false, false
@@ -152,13 +152,13 @@ SELECT * FROM nums, false, true, LocalTempView, UNSUPPORTED, true
       :- CTERelationDef xxxx, false
       :  +- SubqueryAlias nums
       :     +- Project [col1#x AS n#x]
-      :        +- UnionLoop 82
+      :        +- UnionLoop 83
       :           :- LocalRelation [col1#x]
       :           +- Project [(n#x + 1) AS (n + 1)#x]
       :              +- Filter (n#x < 6)
       :                 +- SubqueryAlias nums
       :                    +- Project [col1#x AS n#x]
-      :                       +- UnionLoopRef 82, [col1#x], false
+      :                       +- UnionLoopRef 83, [col1#x], false
       +- Project [n#x]
          +- SubqueryAlias nums
             +- CTERelationRef xxxx, true, [n#x], false, false
@@ -175,13 +175,13 @@ Project [n#x]
             :- CTERelationDef xxxx, false
             :  +- SubqueryAlias nums
             :     +- Project [col1#x AS n#x]
-            :        +- UnionLoop 83
+            :        +- UnionLoop 84
             :           :- LocalRelation [col1#x]
             :           +- Project [(n#x + 1) AS (n + 1)#x]
             :              +- Filter (n#x < 6)
             :                 +- SubqueryAlias nums
             :                    +- Project [col1#x AS n#x]
-            :                       +- UnionLoopRef 83, [col1#x], false
+            :                       +- UnionLoopRef 84, [col1#x], false
             +- Project [n#x]
                +- SubqueryAlias nums
                   +- CTERelationRef xxxx, true, [n#x], false, false
@@ -219,12 +219,12 @@ WithCTE
 :- CTERelationDef xxxx, false
 :  +- SubqueryAlias t
 :     +- Project [col1#x AS n#x]
-:        +- UnionLoop 85
+:        +- UnionLoop 86
 :           :- LocalRelation [col1#x]
 :           +- Project [(n#x + 1) AS (n + 1)#x]
 :              +- SubqueryAlias t
 :                 +- Project [col1#x AS n#x]
-:                    +- UnionLoopRef 85, [col1#x], false
+:                    +- UnionLoopRef 86, [col1#x], false
 +- GlobalLimit 10
    +- LocalLimit 10
       +- Project [n#x]
@@ -279,14 +279,14 @@ WithCTE
 :- CTERelationDef xxxx, false
 :  +- SubqueryAlias t
 :     +- Project [foo#x AS n#x]
-:        +- UnionLoop 88
+:        +- UnionLoop 89
 :           :- Project [foo AS foo#x]
 :           :  +- OneRowRelation
 :           +- Project [concat(n#x,  bar) AS concat(n,  bar)#x]
 :              +- Filter (length(n#x) < 20)
 :                 +- SubqueryAlias t
 :                    +- Project [foo#x AS n#x]
-:                       +- UnionLoopRef 88, [foo#x], false
+:                       +- UnionLoopRef 89, [foo#x], false
 +- Project [n#x AS is_text#x]
    +- SubqueryAlias t
       +- CTERelationRef xxxx, true, [n#x], false, false
@@ -397,11 +397,27 @@ WITH RECURSIVE subdepartment AS
 )
 SELECT * FROM subdepartment ORDER BY name
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "INVALID_RECURSIVE_REFERENCE.PLACE",
-  "sqlState" : "42836"
-}
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias subdepartment
+:     +- UnionLoop 91
+:        :- Project [name#x AS root_name#x, id#x, parent_department#x, name#x]
+:        :  +- Filter (name#x = A)
+:        :     +- SubqueryAlias spark_catalog.default.department
+:        :        +- Relation spark_catalog.default.department[id#x,parent_department#x,name#x] parquet
+:        +- Project [root_name#x, id#x, parent_department#x, name#x]
+:           +- Filter (parent_department#x = id#x)
+:              +- Join Inner
+:                 :- SubqueryAlias d
+:                 :  +- SubqueryAlias spark_catalog.default.department
+:                 :     +- Relation spark_catalog.default.department[id#x,parent_department#x,name#x] parquet
+:                 +- SubqueryAlias sd
+:                    +- SubqueryAlias subdepartment
+:                       +- UnionLoopRef 91, [root_name#x, id#x, parent_department#x, name#x], false
++- Sort [name#x ASC NULLS FIRST], true
+   +- Project [root_name#x, id#x, parent_department#x, name#x]
+      +- SubqueryAlias subdepartment
+         +- CTERelationRef xxxx, true, [root_name#x, id#x, parent_department#x, name#x], false, false
 
 
 -- !query
@@ -416,11 +432,29 @@ WITH RECURSIVE subdepartment(level, id, parent_department, name) AS
 )
 SELECT * FROM subdepartment ORDER BY name
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "INVALID_RECURSIVE_REFERENCE.PLACE",
-  "sqlState" : "42836"
-}
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias subdepartment
+:     +- Project [1#x AS level#x, id#x AS id#x, parent_department#x AS parent_department#x, name#x AS name#x]
+:        +- UnionLoop 92
+:           :- Project [1 AS 1#x, id#x, parent_department#x, name#x]
+:           :  +- Filter (name#x = A)
+:           :     +- SubqueryAlias spark_catalog.default.department
+:           :        +- Relation spark_catalog.default.department[id#x,parent_department#x,name#x] parquet
+:           +- Project [(level#x + 1) AS (level + 1)#x, id#x, parent_department#x, name#x]
+:              +- Filter (parent_department#x = id#x)
+:                 +- Join Inner
+:                    :- SubqueryAlias d
+:                    :  +- SubqueryAlias spark_catalog.default.department
+:                    :     +- Relation spark_catalog.default.department[id#x,parent_department#x,name#x] parquet
+:                    +- SubqueryAlias sd
+:                       +- SubqueryAlias subdepartment
+:                          +- Project [1#x AS level#x, id#x AS id#x, parent_department#x AS parent_department#x, name#x AS name#x]
+:                             +- UnionLoopRef 92, [1#x, id#x, parent_department#x, name#x], false
++- Sort [name#x ASC NULLS FIRST], true
+   +- Project [level#x, id#x, parent_department#x, name#x]
+      +- SubqueryAlias subdepartment
+         +- CTERelationRef xxxx, true, [level#x, id#x, parent_department#x, name#x], false, false
 
 
 -- !query
@@ -435,11 +469,30 @@ WITH RECURSIVE subdepartment(level, id, parent_department, name) AS
 )
 SELECT * FROM subdepartment WHERE level >= 2 ORDER BY name
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "INVALID_RECURSIVE_REFERENCE.PLACE",
-  "sqlState" : "42836"
-}
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias subdepartment
+:     +- Project [1#x AS level#x, id#x AS id#x, parent_department#x AS parent_department#x, name#x AS name#x]
+:        +- UnionLoop 93
+:           :- Project [1 AS 1#x, id#x, parent_department#x, name#x]
+:           :  +- Filter (name#x = A)
+:           :     +- SubqueryAlias spark_catalog.default.department
+:           :        +- Relation spark_catalog.default.department[id#x,parent_department#x,name#x] parquet
+:           +- Project [(level#x + 1) AS (level + 1)#x, id#x, parent_department#x, name#x]
+:              +- Filter (parent_department#x = id#x)
+:                 +- Join Inner
+:                    :- SubqueryAlias d
+:                    :  +- SubqueryAlias spark_catalog.default.department
+:                    :     +- Relation spark_catalog.default.department[id#x,parent_department#x,name#x] parquet
+:                    +- SubqueryAlias sd
+:                       +- SubqueryAlias subdepartment
+:                          +- Project [1#x AS level#x, id#x AS id#x, parent_department#x AS parent_department#x, name#x AS name#x]
+:                             +- UnionLoopRef 93, [1#x, id#x, parent_department#x, name#x], false
++- Sort [name#x ASC NULLS FIRST], true
+   +- Project [level#x, id#x, parent_department#x, name#x]
+      +- Filter (level#x >= 2)
+         +- SubqueryAlias subdepartment
+            +- CTERelationRef xxxx, true, [level#x, id#x, parent_department#x, name#x], false, false
 
 
 -- !query
@@ -490,14 +543,14 @@ Aggregate [count(1) AS count(1)#xL]
    :              :- CTERelationDef xxxx, false
    :              :  +- SubqueryAlias t
    :              :     +- Project [1#x AS n#x]
-   :              :        +- UnionLoop 94
+   :              :        +- UnionLoop 95
    :              :           :- Project [1 AS 1#x]
    :              :           :  +- OneRowRelation
    :              :           +- Project [(n#x + 1) AS (n + 1)#x]
    :              :              +- Filter (n#x < 100)
    :              :                 +- SubqueryAlias t
    :              :                    +- Project [1#x AS n#x]
-   :              :                       +- UnionLoopRef 94, [1#x], false
+   :              :                       +- UnionLoopRef 95, [1#x], false
    :              +- Project [n#x]
    :                 +- Filter (n#x < 50000)
    :                    +- SubqueryAlias t
@@ -507,14 +560,14 @@ Aggregate [count(1) AS count(1)#xL]
          :- CTERelationDef xxxx, false
          :  +- SubqueryAlias t
          :     +- Project [1#x AS n#x]
-         :        +- UnionLoop 95
+         :        +- UnionLoop 96
          :           :- Project [1 AS 1#x]
          :           :  +- OneRowRelation
          :           +- Project [(n#x + 1) AS (n + 1)#x]
          :              +- Filter (n#x < 200)
          :                 +- SubqueryAlias t
          :                    +- Project [1#x AS n#x]
-         :                       +- UnionLoopRef 95, [1#x], false
+         :                       +- UnionLoopRef 96, [1#x], false
          +- Project [n#x]
             +- SubqueryAlias t
                +- CTERelationRef xxxx, true, [n#x], false, false
@@ -560,31 +613,64 @@ CREATE TEMPORARY VIEW vsubdepartment AS
 	)
 	SELECT * FROM subdepartment
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "INVALID_RECURSIVE_REFERENCE.PLACE",
-  "sqlState" : "42836"
-}
+CreateViewCommand `vsubdepartment`, WITH RECURSIVE subdepartment AS
+	(
+		SELECT * FROM department WHERE name = 'A'
+		UNION ALL
+		SELECT d.* FROM department AS d, subdepartment AS sd
+			WHERE d.parent_department = sd.id
+	)
+	SELECT * FROM subdepartment, false, false, LocalTempView, UNSUPPORTED, true
+   +- WithCTE
+      :- CTERelationDef xxxx, false
+      :  +- SubqueryAlias subdepartment
+      :     +- UnionLoop 98
+      :        :- Project [id#x, parent_department#x, name#x]
+      :        :  +- Filter (name#x = A)
+      :        :     +- SubqueryAlias spark_catalog.default.department
+      :        :        +- Relation spark_catalog.default.department[id#x,parent_department#x,name#x] parquet
+      :        +- Project [id#x, parent_department#x, name#x]
+      :           +- Filter (parent_department#x = id#x)
+      :              +- Join Inner
+      :                 :- SubqueryAlias d
+      :                 :  +- SubqueryAlias spark_catalog.default.department
+      :                 :     +- Relation spark_catalog.default.department[id#x,parent_department#x,name#x] parquet
+      :                 +- SubqueryAlias sd
+      :                    +- SubqueryAlias subdepartment
+      :                       +- UnionLoopRef 98, [id#x, parent_department#x, name#x], false
+      +- Project [id#x, parent_department#x, name#x]
+         +- SubqueryAlias subdepartment
+            +- CTERelationRef xxxx, true, [id#x, parent_department#x, name#x], false, false
 
 
 -- !query
 SELECT * FROM vsubdepartment ORDER BY name
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
-  "sqlState" : "42P01",
-  "messageParameters" : {
-    "relationName" : "`vsubdepartment`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 15,
-    "stopIndex" : 28,
-    "fragment" : "vsubdepartment"
-  } ]
-}
+Sort [name#x ASC NULLS FIRST], true
++- Project [id#x, parent_department#x, name#x]
+   +- SubqueryAlias vsubdepartment
+      +- View (`vsubdepartment`, [id#x, parent_department#x, name#x])
+         +- Project [cast(id#x as int) AS id#x, cast(parent_department#x as int) AS parent_department#x, cast(name#x as string) AS name#x]
+            +- WithCTE
+               :- CTERelationDef xxxx, false
+               :  +- SubqueryAlias subdepartment
+               :     +- UnionLoop 99
+               :        :- Project [id#x, parent_department#x, name#x]
+               :        :  +- Filter (name#x = A)
+               :        :     +- SubqueryAlias spark_catalog.default.department
+               :        :        +- Relation spark_catalog.default.department[id#x,parent_department#x,name#x] parquet
+               :        +- Project [id#x, parent_department#x, name#x]
+               :           +- Filter (parent_department#x = id#x)
+               :              +- Join Inner
+               :                 :- SubqueryAlias d
+               :                 :  +- SubqueryAlias spark_catalog.default.department
+               :                 :     +- Relation spark_catalog.default.department[id#x,parent_department#x,name#x] parquet
+               :                 +- SubqueryAlias sd
+               :                    +- SubqueryAlias subdepartment
+               :                       +- UnionLoopRef 99, [id#x, parent_department#x, name#x], false
+               +- Project [id#x, parent_department#x, name#x]
+                  +- SubqueryAlias subdepartment
+                     +- CTERelationRef xxxx, true, [id#x, parent_department#x, name#x], false, false
 
 
 -- !query
@@ -606,13 +692,13 @@ SELECT sum(n) AS sum FROM t, false, false, PersistedView, COMPENSATION, true
       :- CTERelationDef xxxx, false
       :  +- SubqueryAlias t
       :     +- Project [col1#x AS n#x]
-      :        +- UnionLoop 98
+      :        +- UnionLoop 100
       :           :- LocalRelation [col1#x]
       :           +- Project [(n#x + 1) AS (n + 1)#x]
       :              +- Filter (n#x < 100)
       :                 +- SubqueryAlias t
       :                    +- Project [col1#x AS n#x]
-      :                       +- UnionLoopRef 98, [col1#x], false
+      :                       +- UnionLoopRef 100, [col1#x], false
       +- Aggregate [sum(n#x) AS sum#xL]
          +- SubqueryAlias t
             +- CTERelationRef xxxx, true, [n#x], false, false
@@ -629,13 +715,13 @@ Project [sum#xL]
             :- CTERelationDef xxxx, false
             :  +- SubqueryAlias t
             :     +- Project [col1#x AS n#x]
-            :        +- UnionLoop 99
+            :        +- UnionLoop 101
             :           :- LocalRelation [col1#x]
             :           +- Project [(n#x + 1) AS (n + 1)#x]
             :              +- Filter (n#x < 100)
             :                 +- SubqueryAlias t
             :                    +- Project [col1#x AS n#x]
-            :                       +- UnionLoopRef 99, [col1#x], false
+            :                       +- UnionLoopRef 101, [col1#x], false
             +- Aggregate [sum(n#x) AS sum#xL]
                +- SubqueryAlias t
                   +- CTERelationRef xxxx, true, [n#x], false, false
@@ -651,11 +737,26 @@ WITH RECURSIVE t(i,j) AS (
 
 	SELECT * FROM t
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "INVALID_RECURSIVE_REFERENCE.PLACE",
-  "sqlState" : "42836"
-}
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias t
+:     +- Project [col1#x AS i#x, col2#x AS j#x]
+:        +- UnionLoop 102
+:           :- LocalRelation [col1#x, col2#x]
+:           +- Project [i#x, (j#x + 1) AS (j + 1)#x]
+:              +- Join Inner, (i#x = (i#x + 1))
+:                 :- SubqueryAlias t2
+:                 :  +- Union false, false
+:                 :     :- Project [2 AS i#x]
+:                 :     :  +- OneRowRelation
+:                 :     +- Project [3 AS i#x]
+:                 :        +- OneRowRelation
+:                 +- SubqueryAlias t
+:                    +- Project [col1#x AS i#x, col2#x AS j#x]
+:                       +- UnionLoopRef 102, [col1#x, col2#x], false
++- Project [i#x, j#x]
+   +- SubqueryAlias t
+      +- CTERelationRef xxxx, true, [i#x, j#x], false, false
 
 
 -- !query
@@ -690,11 +791,28 @@ SELECT t1.*, t2.* FROM t AS t1 JOIN t AS t2 ON
 	size(t2.path) > 1)
 	ORDER BY t1.id, t2.id
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "INVALID_RECURSIVE_REFERENCE.PLACE",
-  "sqlState" : "42836"
-}
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias t
+:     +- Project [col1#x AS id#x, col2#x AS path#x]
+:        +- UnionLoop 103
+:           :- LocalRelation [col1#x, col2#x]
+:           +- Project [id#x, concat(path#x, array(id#x)) AS concat(path, array(id))#x]
+:              +- Join Inner, (parent_id#x = id#x)
+:                 :- SubqueryAlias spark_catalog.default.tree
+:                 :  +- Relation spark_catalog.default.tree[id#x,parent_id#x] parquet
+:                 +- SubqueryAlias t
+:                    +- Project [col1#x AS id#x, col2#x AS path#x]
+:                       +- UnionLoopRef 103, [col1#x, col2#x], false
++- Sort [id#x ASC NULLS FIRST, id#x ASC NULLS FIRST], true
+   +- Project [id#x, path#x, id#x, path#x]
+      +- Join Inner, (((path#x[0] = path#x[0]) AND (size(path#x, false) = 1)) AND (size(path#x, false) > 1))
+         :- SubqueryAlias t1
+         :  +- SubqueryAlias t
+         :     +- CTERelationRef xxxx, true, [id#x, path#x], false, false
+         +- SubqueryAlias t2
+            +- SubqueryAlias t
+               +- CTERelationRef xxxx, true, [id#x, path#x], false, false
 
 
 -- !query
@@ -711,11 +829,28 @@ SELECT t1.id, count(*) FROM t AS t1 JOIN t AS t2 ON
 	GROUP BY t1.id
 	ORDER BY t1.id
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "INVALID_RECURSIVE_REFERENCE.PLACE",
-  "sqlState" : "42836"
-}
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias t
+:     +- Project [col1#x AS id#x, col2#x AS path#x]
+:        +- UnionLoop 104
+:           :- LocalRelation [col1#x, col2#x]
+:           +- Project [id#x, concat(path#x, array(id#x)) AS concat(path, array(id))#x]
+:              +- Join Inner, (parent_id#x = id#x)
+:                 :- SubqueryAlias spark_catalog.default.tree
+:                 :  +- Relation spark_catalog.default.tree[id#x,parent_id#x] parquet
+:                 +- SubqueryAlias t
+:                    +- Project [col1#x AS id#x, col2#x AS path#x]
+:                       +- UnionLoopRef 104, [col1#x, col2#x], false
++- Sort [id#x ASC NULLS FIRST], true
+   +- Aggregate [id#x], [id#x, count(1) AS count(1)#xL]
+      +- Join Inner, (((path#x[0] = path#x[0]) AND (size(path#x, false) = 1)) AND (size(path#x, false) > 1))
+         :- SubqueryAlias t1
+         :  +- SubqueryAlias t
+         :     +- CTERelationRef xxxx, true, [id#x, path#x], false, false
+         +- SubqueryAlias t2
+            +- SubqueryAlias t
+               +- CTERelationRef xxxx, true, [id#x, path#x], false, false
 
 
 -- !query
@@ -728,11 +863,27 @@ UNION ALL
 SELECT t1.id, t2.path, struct(t2.*) FROM t AS t1 JOIN t AS t2 ON
 (t1.id=t2.id)
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "INVALID_RECURSIVE_REFERENCE.PLACE",
-  "sqlState" : "42836"
-}
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias t
+:     +- Project [col1#x AS id#x, col2#x AS path#x]
+:        +- UnionLoop 105
+:           :- LocalRelation [col1#x, col2#x]
+:           +- Project [id#x, concat(path#x, array(id#x)) AS concat(path, array(id))#x]
+:              +- Join Inner, (parent_id#x = id#x)
+:                 :- SubqueryAlias spark_catalog.default.tree
+:                 :  +- Relation spark_catalog.default.tree[id#x,parent_id#x] parquet
+:                 +- SubqueryAlias t
+:                    +- Project [col1#x AS id#x, col2#x AS path#x]
+:                       +- UnionLoopRef 105, [col1#x, col2#x], false
++- Project [id#x, path#x, struct(id, id#x, path, path#x) AS struct(id, path)#x]
+   +- Join Inner, (id#x = id#x)
+      :- SubqueryAlias t1
+      :  +- SubqueryAlias t
+      :     +- CTERelationRef xxxx, true, [id#x, path#x], false, false
+      +- SubqueryAlias t2
+         +- SubqueryAlias t
+            +- CTERelationRef xxxx, true, [id#x, path#x], false, false
 
 
 -- !query
@@ -765,11 +916,28 @@ with recursive search_graph(f, t, label, path, cycle) as (
 )
 select * from search_graph
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "INVALID_RECURSIVE_REFERENCE.PLACE",
-  "sqlState" : "42836"
-}
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias search_graph
+:     +- Project [f#x AS f#x, t#x AS t#x, label#x AS label#x, array(struct(f, t))#x AS path#x, false#x AS cycle#x]
+:        +- UnionLoop 106
+:           :- Project [f#x, t#x, label#x, array(struct(f, f#x, t, t#x)) AS array(struct(f, t))#x, false AS false#x]
+:           :  +- SubqueryAlias g
+:           :     +- SubqueryAlias spark_catalog.default.graph
+:           :        +- Relation spark_catalog.default.graph[f#x,t#x,label#x] parquet
+:           +- Project [f#x, t#x, label#x, concat(path#x, array(struct(f, f#x, t, t#x))) AS concat(path, array(struct(f, t)))#x, array_contains(path#x, struct(f, f#x, t, t#x)) AS array_contains(path, struct(f, t))#x]
+:              +- Filter ((f#x = t#x) AND NOT cycle#x)
+:                 +- Join Inner
+:                    :- SubqueryAlias g
+:                    :  +- SubqueryAlias spark_catalog.default.graph
+:                    :     +- Relation spark_catalog.default.graph[f#x,t#x,label#x] parquet
+:                    +- SubqueryAlias sg
+:                       +- SubqueryAlias search_graph
+:                          +- Project [f#x AS f#x, t#x AS t#x, label#x AS label#x, array(struct(f, t))#x AS path#x, false#x AS cycle#x]
+:                             +- UnionLoopRef 106, [f#x, t#x, label#x, array(struct(f, t))#x, false#x], false
++- Project [f#x, t#x, label#x, path#x, cycle#x]
+   +- SubqueryAlias search_graph
+      +- CTERelationRef xxxx, true, [f#x, t#x, label#x, path#x, cycle#x], false, false
 
 
 -- !query
@@ -782,11 +950,29 @@ with recursive search_graph(f, t, label, path, cycle) as (
 )
 select * from search_graph order by path
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "INVALID_RECURSIVE_REFERENCE.PLACE",
-  "sqlState" : "42836"
-}
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias search_graph
+:     +- Project [f#x AS f#x, t#x AS t#x, label#x AS label#x, array(struct(f, t))#x AS path#x, false#x AS cycle#x]
+:        +- UnionLoop 107
+:           :- Project [f#x, t#x, label#x, array(struct(f, f#x, t, t#x)) AS array(struct(f, t))#x, false AS false#x]
+:           :  +- SubqueryAlias g
+:           :     +- SubqueryAlias spark_catalog.default.graph
+:           :        +- Relation spark_catalog.default.graph[f#x,t#x,label#x] parquet
+:           +- Project [f#x, t#x, label#x, concat(path#x, array(struct(f, f#x, t, t#x))) AS concat(path, array(struct(f, t)))#x, array_contains(path#x, struct(f, f#x, t, t#x)) AS array_contains(path, struct(f, t))#x]
+:              +- Filter ((f#x = t#x) AND NOT cycle#x)
+:                 +- Join Inner
+:                    :- SubqueryAlias g
+:                    :  +- SubqueryAlias spark_catalog.default.graph
+:                    :     +- Relation spark_catalog.default.graph[f#x,t#x,label#x] parquet
+:                    +- SubqueryAlias sg
+:                       +- SubqueryAlias search_graph
+:                          +- Project [f#x AS f#x, t#x AS t#x, label#x AS label#x, array(struct(f, t))#x AS path#x, false#x AS cycle#x]
+:                             +- UnionLoopRef 107, [f#x, t#x, label#x, array(struct(f, t))#x, false#x], false
++- Sort [path#x ASC NULLS FIRST], true
+   +- Project [f#x, t#x, label#x, path#x, cycle#x]
+      +- SubqueryAlias search_graph
+         +- CTERelationRef xxxx, true, [f#x, t#x, label#x, path#x, cycle#x], false, false
 
 
 -- !query
@@ -803,7 +989,7 @@ WithCTE
 :- CTERelationDef xxxx, false
 :  +- SubqueryAlias x
 :     +- Project [id#x AS id#x]
-:        +- UnionLoop 107
+:        +- UnionLoop 109
 :           :- Project [id#x]
 :           :  +- SubqueryAlias y
 :           :     +- CTERelationRef xxxx, true, [id#x], false, false
@@ -811,7 +997,7 @@ WithCTE
 :              +- Filter (id#x < 5)
 :                 +- SubqueryAlias x
 :                    +- Project [id#x AS id#x]
-:                       +- UnionLoopRef 107, [id#x], false
+:                       +- UnionLoopRef 109, [id#x], false
 +- Project [id#x]
    +- SubqueryAlias x
       +- CTERelationRef xxxx, true, [id#x], false, false
@@ -831,14 +1017,14 @@ WithCTE
 :- CTERelationDef xxxx, false
 :  +- SubqueryAlias x
 :     +- Project [1#x AS id#x]
-:        +- UnionLoop 108
+:        +- UnionLoop 110
 :           :- Project [1 AS 1#x]
 :           :  +- OneRowRelation
 :           +- Project [(id#x + 1) AS (id + 1)#x]
 :              +- Filter (id#x < 3)
 :                 +- SubqueryAlias x
 :                    +- Project [1#x AS id#x]
-:                       +- UnionLoopRef 108, [1#x], false
+:                       +- UnionLoopRef 110, [1#x], false
 :- CTERelationDef xxxx, false
 :  +- SubqueryAlias y
 :     +- Project [id#x AS id#x]
@@ -852,7 +1038,7 @@ WithCTE
 :- CTERelationDef xxxx, false
 :  +- SubqueryAlias z
 :     +- Project [id#x AS id#x]
-:        +- UnionLoop 110
+:        +- UnionLoop 112
 :           :- Project [id#x]
 :           :  +- SubqueryAlias x
 :           :     +- CTERelationRef xxxx, true, [id#x], false, false
@@ -860,7 +1046,7 @@ WithCTE
 :              +- Filter (id#x < 10)
 :                 +- SubqueryAlias z
 :                    +- Project [id#x AS id#x]
-:                       +- UnionLoopRef 110, [id#x], false
+:                       +- UnionLoopRef 112, [id#x], false
 +- Project [id#x]
    +- SubqueryAlias z
       +- CTERelationRef xxxx, true, [id#x], false, false
@@ -880,14 +1066,14 @@ WithCTE
 :- CTERelationDef xxxx, false
 :  +- SubqueryAlias x
 :     +- Project [1#x AS id#x]
-:        +- UnionLoop 111
+:        +- UnionLoop 113
 :           :- Project [1 AS 1#x]
 :           :  +- OneRowRelation
 :           +- Project [(id#x + 1) AS (id + 1)#x]
 :              +- Filter (id#x < 3)
 :                 +- SubqueryAlias x
 :                    +- Project [1#x AS id#x]
-:                       +- UnionLoopRef 111, [1#x], false
+:                       +- UnionLoopRef 113, [1#x], false
 :- CTERelationDef xxxx, false
 :  +- SubqueryAlias y
 :     +- Project [id#x AS id#x]
@@ -901,7 +1087,7 @@ WithCTE
 :- CTERelationDef xxxx, false
 :  +- SubqueryAlias z
 :     +- Project [id#x AS id#x]
-:        +- UnionLoop 113
+:        +- UnionLoop 115
 :           :- Project [id#x]
 :           :  +- SubqueryAlias y
 :           :     +- CTERelationRef xxxx, true, [id#x], false, false
@@ -909,7 +1095,7 @@ WithCTE
 :              +- Filter (id#x < 10)
 :                 +- SubqueryAlias z
 :                    +- Project [id#x AS id#x]
-:                       +- UnionLoopRef 113, [id#x], false
+:                       +- UnionLoopRef 115, [id#x], false
 +- Project [id#x]
    +- SubqueryAlias z
       +- CTERelationRef xxxx, true, [id#x], false, false
@@ -1307,7 +1493,7 @@ org.apache.spark.SparkException
   "sqlState" : "XXKD0",
   "messageParameters" : {
     "batch" : "Resolution",
-    "reason" : "Multiple attributes have the same expression ID 4881 but different data types: DECIMAL(3,0), DECIMAL(10,0). The plan tree:\n'WithCTE\n:- 'CTERelationDef 136, false\n:  +- 'SubqueryAlias foo\n:     +- 'UnresolvedSubqueryColumnAliases [i]\n:        +- UnionLoop 136\n:           :- Project [cast(i#x as decimal(3,0)) AS i#x]\n:           :  +- SubqueryAlias t\n:           :     +- Project [col1#x AS i#x]\n:           :        +- LocalRelation [col1#x]\n:           +- Project [cast((i#x + cast(1 as decimal(1,0))) as decimal(10,0)) AS CAST((i + 1) AS DECIMAL(10,0))#x]\n:              +- Filter (i#x < cast(cast(10 as decimal(2,0)) as decimal(3,0)))\n:                 +- SubqueryAlias foo\n:                    +- Project [i#x AS i#x]\n:                       +- UnionLoopRef 136, [i#x], false\n+- 'Project [*]\n   +- 'SubqueryAlias foo\n      +- 'CTERelationRef 136, false, false, false\n",
+    "reason" : "Multiple attributes have the same expression ID 5480 but different data types: DECIMAL(3,0), DECIMAL(10,0). The plan tree:\n'WithCTE\n:- 'CTERelationDef 138, false\n:  +- 'SubqueryAlias foo\n:     +- 'UnresolvedSubqueryColumnAliases [i]\n:        +- UnionLoop 138\n:           :- Project [cast(i#x as decimal(3,0)) AS i#x]\n:           :  +- SubqueryAlias t\n:           :     +- Project [col1#x AS i#x]\n:           :        +- LocalRelation [col1#x]\n:           +- Project [cast((i#x + cast(1 as decimal(1,0))) as decimal(10,0)) AS CAST((i + 1) AS DECIMAL(10,0))#x]\n:              +- Filter (i#x < cast(cast(10 as decimal(2,0)) as decimal(3,0)))\n:                 +- SubqueryAlias foo\n:                    +- Project [i#x AS i#x]\n:                       +- UnionLoopRef 138, [i#x], false\n+- 'Project [*]\n   +- 'SubqueryAlias foo\n      +- 'CTERelationRef 138, false, false, false\n",
     "rule" : "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveAliases"
   }
 }
@@ -1346,17 +1532,17 @@ WithCTE
 :- CTERelationDef xxxx, false
 :  +- SubqueryAlias s
 :     +- Project [col1#x AS i#x]
-:        +- UnionLoop 138
+:        +- UnionLoop 140
 :           :- LocalRelation [col1#x]
 :           +- Project [(i#x + 1) AS (i + 1)#x]
 :              +- Filter (i#x < 10)
 :                 +- SubqueryAlias s
 :                    +- Project [col1#x AS i#x]
-:                       +- UnionLoopRef 138, [col1#x], false
+:                       +- UnionLoopRef 140, [col1#x], false
 :- CTERelationDef xxxx, false
 :  +- SubqueryAlias t
 :     +- Project [i#x AS j#x]
-:        +- UnionLoop 139
+:        +- UnionLoop 141
 :           :- Project [i#x]
 :           :  +- SubqueryAlias s
 :           :     +- CTERelationRef xxxx, true, [i#x], false, false
@@ -1364,7 +1550,7 @@ WithCTE
 :              +- Filter (j#x < 10)
 :                 +- SubqueryAlias t
 :                    +- Project [i#x AS j#x]
-:                       +- UnionLoopRef 139, [i#x], false
+:                       +- UnionLoopRef 141, [i#x], false
 +- Project [j#x]
    +- SubqueryAlias t
       +- CTERelationRef xxxx, true, [j#x], false, false
@@ -1704,14 +1890,7 @@ DropTempViewCommand nums
 -- !query
 DROP VIEW vsubdepartment
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.NoSuchTableException
-{
-  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
-  "sqlState" : "42P01",
-  "messageParameters" : {
-    "relationName" : "`spark_catalog`.`default`.`vsubdepartment`"
-  }
-}
+DropTempViewCommand vsubdepartment
 
 
 -- !query
