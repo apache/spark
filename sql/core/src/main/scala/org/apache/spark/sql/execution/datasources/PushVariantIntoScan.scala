@@ -20,7 +20,8 @@ package org.apache.spark.sql.execution.datasources
 import scala.collection.mutable.HashMap
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.{Expression, _}
+import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.expressions.variant._
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan, Project, Subquery}
@@ -96,6 +97,14 @@ object RequestedVariantField {
   def apply(v: VariantGet): RequestedVariantField =
     RequestedVariantField(
       VariantMetadata(v.path.eval().toString, v.failOnError, v.timeZoneId.get), v.dataType)
+
+  def apply(
+      path: Expression,
+      failOnError: Boolean,
+      timeZoneId: Option[String],
+      dataType: DataType): RequestedVariantField =
+    RequestedVariantField(
+      VariantMetadata(path.eval().toString, failOnError, timeZoneId.get), dataType)
 
   def apply(c: Cast): RequestedVariantField =
     RequestedVariantField(
@@ -203,6 +212,12 @@ class VariantInRelation {
     map.getOrElseUpdate(field, idx)
   }
 
+  private val variantGetClz = classOf[org.apache.spark.sql.catalyst.expressions.variant.VariantGet]
+  private val variantPathParserClz =
+    org.apache.spark.sql.catalyst.expressions.variant.VariantPathParser.getClass
+  private lazy val dataTypeObjectType = ObjectType(classOf[DataType])
+  private lazy val variantCastArgsObjectType = ObjectType(classOf[VariantCastArgs])
+
   // Update `mapping` with any access to a variant. Add the requested fields of each variant and
   // potentially remove non-eligible variants.
   // If a struct containing a variant is directly used, this variant is not eligible for push down.
@@ -212,6 +227,21 @@ class VariantInRelation {
   def collectRequestedFields(expr: Expression): Unit = expr match {
     case v@VariantGet(StructPathToVariant(fields), _, _, _, _) =>
       addField(fields, RequestedVariantField(v))
+    case s @ StaticInvoke(
+      variantGetClz,
+      _,
+      "variantGet",
+      Seq(StructPathToVariant(fields),
+        StaticInvoke(variantPathParserClz, _, "parse", Seq(path, _), _, _, _, _, _),
+        Literal(dataType, dataTypeObjectType),
+        Literal(d, variantCastArgsObjectType)),
+      _, _, _, _, _) =>
+      assert(d.isInstanceOf[VariantCastArgs])
+      val castArgs = d.asInstanceOf[VariantCastArgs]
+      if (path.foldable) {
+        addField(fields, RequestedVariantField(path, castArgs.failOnError, castArgs.zoneStr,
+          dataType.asInstanceOf[org.apache.spark.sql.types.DataType]))
+      }
     case c@Cast(StructPathToVariant(fields), _, _, _) => addField(fields, RequestedVariantField(c))
     case IsNotNull(StructPath(_, _)) | IsNull(StructPath(_, _)) =>
     case StructPath(attrId, path) =>
@@ -242,6 +272,24 @@ class VariantInRelation {
         // Rewrite the attribute in advance, rather than depending on the last branch to rewrite it.
         // Ww need to avoid the `v@StructPathToVariant(fields)` branch to rewrite the child again.
         GetStructField(rewriteAttribute(v), fields(RequestedVariantField(g)))
+      case s @ StaticInvoke(
+        variantGetClz,
+        _,
+        "variantGet",
+        Seq(v @ StructPathToVariant(fields),
+          StaticInvoke(variantPathParserClz, _, "parse", Seq(path, _), _, _, _, _, _),
+          Literal(dataType, dataTypeObjectType),
+          Literal(d, variantCastArgsObjectType)),
+        _, _, _, _, _) =>
+        assert(d.isInstanceOf[VariantCastArgs])
+        val castArgs = d.asInstanceOf[VariantCastArgs]
+        if (path.foldable) {
+          GetStructField(rewriteAttribute(v), fields(RequestedVariantField(path,
+            castArgs.failOnError, castArgs.zoneStr,
+            dataType.asInstanceOf[org.apache.spark.sql.types.DataType])))
+        } else {
+          s
+        }
       case c@Cast(v@StructPathToVariant(fields), _, _, _) =>
         GetStructField(rewriteAttribute(v), fields(RequestedVariantField(c)))
       case i@IsNotNull(StructPath(_, _)) => rewriteAttribute(i)
