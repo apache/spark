@@ -25,7 +25,7 @@ import java.util.UUID
 
 import scala.jdk.CollectionConverters._
 
-import org.apache.avro.{AvroTypeException, Schema, SchemaBuilder}
+import org.apache.avro.{AvroTypeException, Schema, SchemaBuilder, SchemaFormatter}
 import org.apache.avro.Schema.{Field, Type}
 import org.apache.avro.Schema.Type._
 import org.apache.avro.file.{DataFileReader, DataFileWriter}
@@ -86,7 +86,7 @@ abstract class AvroSuite
   }
 
   def getAvroSchemaStringFromFiles(filePath: String): String = {
-    new DataFileReader({
+    val schema = new DataFileReader({
       val file = new File(filePath)
       if (file.isFile) {
         file
@@ -96,7 +96,8 @@ abstract class AvroSuite
           .filter(_.getName.endsWith("avro"))
           .head
       }
-    }, new GenericDatumReader[Any]()).getSchema.toString(false)
+    }, new GenericDatumReader[Any]()).getSchema
+    SchemaFormatter.format(AvroUtils.JSON_INLINE_FORMAT, schema)
   }
 
   // Check whether an Avro schema of union type is converted to SQL in an expected way, when the
