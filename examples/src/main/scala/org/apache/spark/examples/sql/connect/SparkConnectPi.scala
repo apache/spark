@@ -16,17 +16,17 @@
  */
 
 // scalastyle:off println
-package org.apache.spark.examples.sql
+package org.apache.spark.examples.sql.connect
 
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.functions._
 
 /** Computes an approximation to pi with SparkSession/DataFrame APIs */
-object SparkSQLPi {
+object SparkConnectPi {
   def main(args: Array[String]): Unit = {
     val spark = SparkSession
       .builder()
-      .appName("Spark SQL Pi")
+      .appName("Spark Connect Pi")
       .getOrCreate()
     import spark.implicits._
     val slices = if (args.length > 0) args(0).toInt else 2
