@@ -41,7 +41,7 @@ class ParquetAvroCompatibilitySuite extends ParquetCompatibilityTest with Shared
     logInfo(
       s"""Writing Avro records with the following Avro schema into Parquet file:
          |
-         |${SchemaFormatter.getInstance(AvroUtils.JSON_PRETTY_FORMAT).format(schema)}
+         |${SchemaFormatter.format(AvroUtils.JSON_PRETTY_FORMAT, schema)}
        """.stripMargin)
 
     val writer = AvroParquetWriter.builder[T](new Path(path)).withSchema(schema).build()

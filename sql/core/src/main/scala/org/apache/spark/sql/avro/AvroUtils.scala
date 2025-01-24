@@ -75,7 +75,7 @@ private[sql] object AvroUtils extends Logging {
       case _ => throw new RuntimeException(
         s"""Avro schema cannot be converted to a Spark SQL StructType:
            |
-           |${SchemaFormatter.getInstance(JSON_PRETTY_FORMAT).format(avroSchema)}
+           |${SchemaFormatter.format(JSON_PRETTY_FORMAT, avroSchema)}
            |""".stripMargin)
     }
   }

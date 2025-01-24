@@ -148,8 +148,7 @@ object SchemaConverters extends Logging {
       case RECORD =>
         val recursiveDepth: Int = existingRecordNames.getOrElse(avroSchema.getFullName, 0)
         if (recursiveDepth > 0 && recursiveFieldMaxDepth <= 0) {
-          val formattedAvroSchema = SchemaFormatter.getInstance(AvroUtils.JSON_PRETTY_FORMAT)
-            .format(avroSchema)
+          val formattedAvroSchema = SchemaFormatter.format(AvroUtils.JSON_PRETTY_FORMAT, avroSchema)
           throw new IncompatibleSchemaException(s"""
             |Found recursive reference in Avro schema, which can not be processed by Spark by
             | default: $formattedAvroSchema. Try setting the option `recursiveFieldMaxDepth`
