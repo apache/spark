@@ -42,13 +42,14 @@ import org.apache.spark.sql.connect.client.{RetryPolicy, SparkConnectClient, Spa
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SqlApiConf
 import org.apache.spark.sql.test.{ConnectFunSuite, IntegrationTestUtils, RemoteSparkSession, SQLHelper}
-import org.apache.spark.sql.test.QueryTest.checkAnswer
+import org.apache.spark.sql.test.QueryTest
 import org.apache.spark.sql.test.SparkConnectServerUtils.port
 import org.apache.spark.sql.types._
 import org.apache.spark.util.SparkThreadUtils
 
 class ClientE2ETestSuite
     extends ConnectFunSuite
+    with QueryTest
     with RemoteSparkSession
     with SQLHelper
     with PrivateMethodTester {
