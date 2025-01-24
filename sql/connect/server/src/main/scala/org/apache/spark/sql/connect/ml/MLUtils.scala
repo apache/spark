@@ -187,6 +187,8 @@ private[ml] object MLUtils {
       array.map(_.asInstanceOf[Double])
     } else if (elementType == classOf[String]) {
       array.map(_.asInstanceOf[String])
+    } else if (elementType.isArray && elementType.getComponentType == classOf[Double]) {
+      array.map(_.asInstanceOf[Array[_]].map(_.asInstanceOf[Double]))
     } else {
       throw MlUnsupportedException(
         s"array element type unsupported, " +
@@ -228,14 +230,10 @@ private[ml] object MLUtils {
       value.asInstanceOf[String]
     } else if (paramType.isArray) {
       val compType = paramType.getComponentType
-      if (compType.isArray) {
-        throw MlUnsupportedException(s"Array of array unsupported")
-      } else {
-        val array = value.asInstanceOf[Array[_]].map { e =>
-          reconcileParam(compType, e)
-        }
-        reconcileArray(compType, array)
+      val array = value.asInstanceOf[Array[_]].map { e =>
+        reconcileParam(compType, e)
       }
+      reconcileArray(compType, array)
     } else {
       throw MlUnsupportedException(s"Unsupported parameter type, found ${paramType.getName}")
     }
