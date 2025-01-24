@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.connect
+package org.apache.spark.sql
 
 import java.nio.file.{Files, Path}
 import java.util.{Collections, Properties}
@@ -33,11 +33,12 @@ import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach}
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.StorageLevel
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{functions, functions => fn, internal, Column}
+import org.apache.spark.sql.{functions => fn}
 import org.apache.spark.sql.avro.{functions => avroFn}
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.StringEncoder
 import org.apache.spark.sql.catalyst.util.CollationFactory
+import org.apache.spark.sql.connect.{DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.connect.ConnectConversions._
 import org.apache.spark.sql.connect.client.SparkConnectClient
 import org.apache.spark.sql.connect.test.{ConnectFunSuite, IntegrationTestUtils}
