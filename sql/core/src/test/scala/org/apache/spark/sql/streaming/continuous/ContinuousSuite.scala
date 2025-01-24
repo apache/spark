@@ -19,7 +19,7 @@ package org.apache.spark.sql.streaming.continuous
 
 import java.sql.Timestamp
 
-import org.apache.spark.{SparkContext, SparkException}
+import org.apache.spark.SparkContext
 import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskStart}
 import org.apache.spark.sql._
 import org.apache.spark.sql.execution.streaming._
@@ -245,9 +245,8 @@ class ContinuousSuite extends ContinuousSuiteBase {
           }
           spark.sparkContext.killTaskAttempt(taskId)
         },
-        ExpectFailure[SparkException] { e =>
-          e.getCause != null && e.getCause.getCause.isInstanceOf[ContinuousTaskRetryException]
-        })
+        ExpectFailure[ContinuousTaskRetryException] { _ => }
+      )
     } finally {
       spark.sparkContext.removeSparkListener(listener)
     }

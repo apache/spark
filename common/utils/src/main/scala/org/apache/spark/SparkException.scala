@@ -24,19 +24,13 @@ import java.util.ConcurrentModificationException
 
 import scala.jdk.CollectionConverters._
 
-class SparkException(
+class SparkException private(
     message: String,
     cause: Throwable,
     errorClass: Option[String],
     messageParameters: Map[String, String],
     context: Array[QueryContext] = Array.empty)
   extends Exception(message, cause) with SparkThrowable {
-
-  def this(message: String, cause: Throwable) =
-    this(message = message, cause = cause, errorClass = None, messageParameters = Map.empty)
-
-  def this(message: String) =
-    this(message = message, cause = null)
 
   def this(
       errorClass: String,
@@ -66,6 +60,13 @@ class SparkException(
       errorClass = Some(errorClass),
       messageParameters = messageParameters,
       context = context)
+
+
+  def this(message: String, cause: Throwable) =
+    this("_LEGACY_ERROR_TEMP_3264", Map("message" -> message), cause)
+
+  def this(message: String) =
+    this(message = message, cause = null)
 
   override def getMessageParameters: java.util.Map[String, String] = messageParameters.asJava
 
