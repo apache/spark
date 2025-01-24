@@ -589,6 +589,9 @@ private[ml] object MLUtils {
     (classOf[MaxAbsScalerModel], Set("maxAbs")),
     (classOf[MinMaxScalerModel], Set("originalMax", "originalMin")),
     (classOf[RobustScalerModel], Set("range", "median")),
+    (classOf[ChiSqSelectorModel], Set("selectedFeatures")),
+    (classOf[UnivariateFeatureSelectorModel], Set("selectedFeatures")),
+    (classOf[VarianceThresholdSelectorModel], Set("selectedFeatures")),
     (classOf[PCAModel], Set("pc", "explainedVariance")),
     (classOf[Word2VecModel], Set("getVectors", "findSynonyms", "findSynonymsArray")))
 
