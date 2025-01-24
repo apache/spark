@@ -20,6 +20,7 @@
 ########### Transformers
 org.apache.spark.ml.feature.DCT
 org.apache.spark.ml.feature.Binarizer
+org.apache.spark.ml.feature.Bucketizer
 org.apache.spark.ml.feature.VectorAssembler
 org.apache.spark.ml.feature.Tokenizer
 org.apache.spark.ml.feature.RegexTokenizer

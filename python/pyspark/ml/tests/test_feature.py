@@ -25,6 +25,7 @@ import numpy as np
 from pyspark.ml.feature import (
     DCT,
     Binarizer,
+    Bucketizer,
     CountVectorizer,
     CountVectorizerModel,
     HashingTF,
@@ -688,8 +689,8 @@ class FeatureTestsMixin:
             ["v1", "v2"],
         )
 
-        bucketizer = Binarizer(threshold=1.0, inputCol="v1", outputCol="f1")
-        output = bucketizer.transform(df)
+        binarizer = Binarizer(threshold=1.0, inputCol="v1", outputCol="f1")
+        output = binarizer.transform(df)
         self.assertEqual(output.columns, ["v1", "v2", "f1"])
         self.assertEqual(output.count(), 6)
         self.assertEqual(
@@ -697,8 +698,8 @@ class FeatureTestsMixin:
             [0.0, 0.0, 1.0, 1.0, 0.0, 0.0],
         )
 
-        bucketizer = Binarizer(threshold=1.0, inputCols=["v1", "v2"], outputCols=["f1", "f2"])
-        output = bucketizer.transform(df)
+        binarizer = Binarizer(threshold=1.0, inputCols=["v1", "v2"], outputCols=["f1", "f2"])
+        output = binarizer.transform(df)
         self.assertEqual(output.columns, ["v1", "v2", "f1", "f2"])
         self.assertEqual(output.count(), 6)
         self.assertEqual(
@@ -712,8 +713,74 @@ class FeatureTestsMixin:
 
         # save & load
         with tempfile.TemporaryDirectory(prefix="binarizer") as d:
+            binarizer.write().overwrite().save(d)
+            binarizer2 = Binarizer.load(d)
+            self.assertEqual(str(binarizer), str(binarizer2))
+
+    def test_bucketizer(self):
+        df = self.spark.createDataFrame(
+            [
+                (0.1, 0.0),
+                (0.4, 1.0),
+                (1.2, 1.3),
+                (1.5, float("nan")),
+                (float("nan"), 1.0),
+                (float("nan"), 0.0),
+            ],
+            ["v1", "v2"],
+        )
+
+        splits = [-float("inf"), 0.5, 1.4, float("inf")]
+        bucketizer = Bucketizer()
+        bucketizer.setSplits(splits)
+        bucketizer.setHandleInvalid("keep")
+        bucketizer.setInputCol("v1")
+        bucketizer.setOutputCol("b1")
+
+        self.assertEqual(bucketizer.getSplits(), splits)
+        self.assertEqual(bucketizer.getHandleInvalid(), "keep")
+        self.assertEqual(bucketizer.getInputCol(), "v1")
+        self.assertEqual(bucketizer.getOutputCol(), "b1")
+
+        output = bucketizer.transform(df)
+        self.assertEqual(output.columns, ["v1", "v2", "b1"])
+        self.assertEqual(output.count(), 6)
+        self.assertEqual(
+            [r.b1 for r in output.select("b1").collect()],
+            [0.0, 0.0, 1.0, 2.0, 3.0, 3.0],
+        )
+
+        splitsArray = [
+            [-float("inf"), 0.5, 1.4, float("inf")],
+            [-float("inf"), 0.5, float("inf")],
+        ]
+        bucketizer = Bucketizer(
+            splitsArray=splitsArray,
+            inputCols=["v1", "v2"],
+            outputCols=["b1", "b2"],
+        )
+        bucketizer.setHandleInvalid("keep")
+        self.assertEqual(bucketizer.getSplitsArray(), splitsArray)
+        self.assertEqual(bucketizer.getHandleInvalid(), "keep")
+        self.assertEqual(bucketizer.getInputCols(), ["v1", "v2"])
+        self.assertEqual(bucketizer.getOutputCols(), ["b1", "b2"])
+
+        output = bucketizer.transform(df)
+        self.assertEqual(output.columns, ["v1", "v2", "b1", "b2"])
+        self.assertEqual(output.count(), 6)
+        self.assertEqual(
+            [r.b1 for r in output.select("b1").collect()],
+            [0.0, 0.0, 1.0, 2.0, 3.0, 3.0],
+        )
+        self.assertEqual(
+            [r.b2 for r in output.select("b2").collect()],
+            [0.0, 1.0, 1.0, 2.0, 1.0, 0.0],
+        )
+
+        # save & load
+        with tempfile.TemporaryDirectory(prefix="bucketizer") as d:
             bucketizer.write().overwrite().save(d)
-            bucketizer2 = Binarizer.load(d)
+            bucketizer2 = Bucketizer.load(d)
             self.assertEqual(str(bucketizer), str(bucketizer2))
 
     def test_idf(self):
