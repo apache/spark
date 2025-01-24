@@ -19,6 +19,7 @@
 # So register the supported transformer here if you're trying to add a new one.
 ########### Transformers
 org.apache.spark.ml.feature.DCT
+org.apache.spark.ml.feature.Binarizer
 org.apache.spark.ml.feature.VectorAssembler
 org.apache.spark.ml.feature.Tokenizer
 org.apache.spark.ml.feature.RegexTokenizer
