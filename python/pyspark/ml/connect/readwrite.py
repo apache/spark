@@ -15,10 +15,11 @@
 # limitations under the License.
 #
 import warnings
-from typing import cast, Type, TYPE_CHECKING, Union, List, Dict, Any
+from typing import cast, Type, TYPE_CHECKING, Union, List, Dict, Any, Optional
 
 import pyspark.sql.connect.proto as pb2
 from pyspark.ml.connect.serialize import serialize_ml_params, deserialize, deserialize_param
+from pyspark.ml.tuning import CrossValidatorModelWriter, CrossValidatorModel
 from pyspark.ml.util import MLWriter, MLReader, RL
 from pyspark.ml.wrapper import JavaWrapper
 
@@ -26,6 +27,19 @@ if TYPE_CHECKING:
     from pyspark.core.context import SparkContext
     from pyspark.sql.connect.session import SparkSession
     from pyspark.ml.util import JavaMLReadable, JavaMLWritable
+
+
+class RemoteCrossValidatorModelWriter(CrossValidatorModelWriter):
+    def __init__(
+        self,
+        instance: "CrossValidatorModel",
+        optionMap: Dict[str, Any] = {},
+        session: Optional["SparkSession"] = None,
+    ):
+        super(RemoteCrossValidatorModelWriter, self).__init__(instance)
+        self.instance = instance
+        self.optionMap = optionMap
+        self.session(session)  # type: ignore[arg-type]
 
 
 class RemoteMLWriter(MLWriter):
@@ -62,7 +76,7 @@ class RemoteMLWriter(MLWriter):
         from pyspark.ml.wrapper import JavaModel, JavaEstimator, JavaTransformer
         from pyspark.ml.evaluation import JavaEvaluator
         from pyspark.ml.pipeline import Pipeline, PipelineModel
-        from pyspark.ml.tuning import CrossValidator, CrossValidatorModel
+        from pyspark.ml.tuning import CrossValidator
 
         # Spark Connect ML is built on scala Spark.ML, that means we're only
         # supporting JavaModel or JavaEstimator or JavaEvaluator
@@ -136,13 +150,10 @@ class RemoteMLWriter(MLWriter):
             cv_writer.session(session)  # type: ignore[arg-type]
             cv_writer.save(path)
         elif isinstance(instance, CrossValidatorModel):
-            from pyspark.ml.tuning import CrossValidatorModelWriter
-
             if shouldOverwrite:
                 # TODO(SPARK-50954): Support client side model path overwrite
                 warnings.warn("Overwrite doesn't take effect for CrossValidatorModel")
-            cvm_writer = CrossValidatorModelWriter(instance)
-            cvm_writer.session(session)  # type: ignore[arg-type]
+            cvm_writer = RemoteCrossValidatorModelWriter(instance, optionMap, session)
             cvm_writer.save(path)
         else:
             raise NotImplementedError(f"Unsupported write for {instance.__class__}")
@@ -171,7 +182,7 @@ class RemoteMLReader(MLReader[RL]):
         from pyspark.ml.wrapper import JavaModel, JavaEstimator, JavaTransformer
         from pyspark.ml.evaluation import JavaEvaluator
         from pyspark.ml.pipeline import Pipeline, PipelineModel
-        from pyspark.ml.tuning import CrossValidator, CrossValidatorModel
+        from pyspark.ml.tuning import CrossValidator
 
         if (
             issubclass(clazz, JavaModel)
