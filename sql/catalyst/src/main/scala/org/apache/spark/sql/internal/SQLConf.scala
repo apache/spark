@@ -4013,7 +4013,7 @@ object SQLConf {
     buildConf("spark.sql.optimizer.supportNestedCorrelatedSubqueries.enabled")
       .internal()
       .doc("If enabled, support nested correlated subqueries")
-      .version("4.0.0")
+      .version("4.1.0")
       .booleanConf
       .createWithDefault(false)
 
