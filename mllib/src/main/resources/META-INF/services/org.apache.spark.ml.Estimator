@@ -36,6 +36,7 @@ org.apache.spark.ml.regression.GBTRegressor
 # clustering
 org.apache.spark.ml.clustering.KMeans
 org.apache.spark.ml.clustering.BisectingKMeans
+org.apache.spark.ml.clustering.GaussianMixture
 
 
 # recommendation

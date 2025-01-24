@@ -564,6 +564,10 @@ private[ml] object MLUtils {
       classOf[BisectingKMeansModel],
       Set("predict", "numFeatures", "clusterCenters", "computeCost")),
     (classOf[BisectingKMeansSummary], Set("trainingCost")),
+    (
+      classOf[GaussianMixtureModel],
+      Set("predict", "numFeatures", "weights", "gaussians", "predictProbability", "gaussiansDF")),
+    (classOf[GaussianMixtureSummary], Set("probability", "probabilityCol", "logLikelihood")),
 
     // Recommendation Models
     (

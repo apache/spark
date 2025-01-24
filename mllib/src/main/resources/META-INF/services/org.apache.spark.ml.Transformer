@@ -42,6 +42,7 @@ org.apache.spark.ml.regression.GBTRegressionModel
 # clustering
 org.apache.spark.ml.clustering.KMeansModel
 org.apache.spark.ml.clustering.BisectingKMeansModel
+org.apache.spark.ml.clustering.GaussianMixtureModel
 
 # recommendation
 org.apache.spark.ml.recommendation.ALSModel
