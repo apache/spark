@@ -68,7 +68,7 @@ from pyspark.ml.feature import (
 from pyspark.ml.linalg import DenseVector, SparseVector, Vectors
 from pyspark.sql import Row
 from pyspark.testing.utils import QuietTest
-from pyspark.testing.mlutils import check_params, SparkSessionTestCase
+from pyspark.testing.mlutils import SparkSessionTestCase
 
 
 class FeatureTestsMixin:
