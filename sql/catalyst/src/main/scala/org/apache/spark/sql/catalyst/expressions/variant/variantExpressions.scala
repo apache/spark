@@ -286,9 +286,8 @@ case class VariantGet(
     case Some(pp) =>
       VariantGet.variantGet(input.asInstanceOf[VariantVal], pp, dataType, castArgs)
     case _ =>
-      val pathValue = path.toString
-      val parsedRowPath = VariantGet.getParsedPath(pathValue, prettyName)
-      VariantGet.variantGet(input.asInstanceOf[VariantVal], parsedRowPath, dataType, castArgs)
+      VariantGet.variantGet(input.asInstanceOf[VariantVal], path.asInstanceOf[UTF8String], dataType,
+        castArgs, prettyName)
   }
 
   protected override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = parsedPath match {
@@ -321,6 +320,7 @@ case class VariantGet(
       val castArgsArg = ctx.addReferenceObj("castArgs", castArgs)
       val parsedPathVar = ctx.freshName("parsedPath")
       val parsedPathType = CodeGenerator.typeName(classOf[Array[VariantPathSegment]])
+      val UTF8Type = CodeGenerator.typeName(classOf[UTF8String])
       val code = code"""
         ${childCode.code}
         ${pathCode.code}
@@ -331,7 +331,8 @@ case class VariantGet(
             org.apache.spark.sql.catalyst.expressions.variant.VariantGet.getParsedPath(
               ${pathCode.value}.toString(), "$prettyName");
           Object $tmp = org.apache.spark.sql.catalyst.expressions.variant.VariantGet.variantGet(
-            ${childCode.value}, $parsedPathVar, $dataTypeArg, $castArgsArg);
+            ${childCode.value}, ($UTF8Type) ${pathCode.value}, $dataTypeArg, $castArgsArg,
+            "$prettyName");
           if ($tmp == null) {
             ${ev.isNull} = true;
           } else {
@@ -403,6 +404,20 @@ case object VariantGet {
       if (v == null) return null
     }
     VariantGet.cast(v, dataType, castArgs)
+  }
+
+  /**
+   * Implementation of the `VariantGet` expression where the path is provided as a UTF8String
+   */
+  def variantGet(
+      input: VariantVal,
+      path: UTF8String,
+      dataType: DataType,
+      castArgs: VariantCastArgs,
+      prettyName: String): Any = {
+    val pathValue = path.toString
+    val parsedPath = VariantGet.getParsedPath(pathValue, prettyName)
+    variantGet(input, parsedPath, dataType, castArgs)
   }
 
   /**
