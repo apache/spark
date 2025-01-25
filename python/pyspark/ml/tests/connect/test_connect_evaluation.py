@@ -19,7 +19,7 @@ import os
 import unittest
 
 from pyspark.sql import SparkSession
-from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
+from pyspark.testing.connectutils import should_test_connect
 
 if should_test_connect:
     from pyspark.ml.tests.connect.test_legacy_mode_evaluation import EvaluationTestsMixin
