@@ -249,7 +249,14 @@ class JDBCOptions(
       .map(_.toBoolean)
       .getOrElse(SQLConf.get.timestampType == TimestampNTZType)
 
-  val hint = parameters.get(JDBC_HINT_STRING).map(_ + " ").getOrElse("")
+  val hint = {
+    parameters.get(JDBC_HINT_STRING).map(value => {
+      require(value.startsWith("/*+ ") && value.endsWith(" */"),
+        s"Invalid value `$value` for option `$JDBC_HINT_STRING`." +
+          s" It should start with `/*+ ` and end with ` */`.")
+      s"$value "
+    }).getOrElse("")
+  }
 
   override def hashCode: Int = this.parameters.hashCode()
 

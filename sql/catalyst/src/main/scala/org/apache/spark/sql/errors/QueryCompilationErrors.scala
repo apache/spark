@@ -1561,6 +1561,12 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map("changes" -> changes.toString()))
   }
 
+  def hintUnsupportedForJdbcDatabasesError(jdbcDialect: String): AnalysisException = {
+    new AnalysisException(
+      errorClass = "HINT_UNSUPPORTED_FOR_JDBC_DIALECT",
+      messageParameters = Map("jdbcDialect" -> jdbcDialect))
+  }
+
   private def tableDoesNotSupportError(cmd: String, table: Table): Throwable = {
     new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1121",

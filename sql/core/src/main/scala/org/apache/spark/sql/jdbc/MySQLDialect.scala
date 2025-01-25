@@ -404,9 +404,8 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper with No
       } else {
         ""
       }
-
       options.prepareQuery +
-        s"SELECT ${options.hint}$columnList FROM ${options.tableOrQuery} $tableSampleClause" +
+        s"SELECT $hintClause$columnList FROM ${options.tableOrQuery} $tableSampleClause" +
         s" $whereClause $groupByClause $orderByClause $limitOrOffsetStmt"
     }
   }
@@ -417,4 +416,6 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper with No
   override def supportsLimit: Boolean = true
 
   override def supportsOffset: Boolean = true
+
+  override def supportsHint: Boolean = true
 }

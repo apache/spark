@@ -2208,42 +2208,40 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
   }
 
   test("SPARK-50666: reading hint test") {
+    // hint format check
+    Seq("INDEX(test idx1) */", "/*+ INDEX(test idx1)", "").foreach { hint =>
+      val e = intercept[IllegalArgumentException] {
+        val options = new JDBCOptions(Map("url" -> "jdbc:h2://host:port", "dbtable" -> "test",
+          "hint" -> hint))
+      }.getMessage
+      assert(e.contains(s"Invalid value `$hint` for option `hint`." +
+        s" It should start with `/*+ ` and end with ` */`."))
+    }
+
+    // dialect supported check
     // JDBC url is a required option but is not used in this test.
     val options = new JDBCOptions(Map("url" -> "jdbc:h2://host:port", "dbtable" -> "test",
       "hint" -> "/*+ INDEX(test idx1) */"))
-    // hint supported
-    assert(
-      OracleDialect()
-        .getJdbcSQLQueryBuilder(options)
+    // supported
+    Seq(OracleDialect(), MySQLDialect(), DatabricksDialect()).foreach { dialect =>
+      assert(dialect.getJdbcSQLQueryBuilder(options)
         .withColumns(Array("a", "b"))
-        .build()
-        .trim() == "SELECT /*+ INDEX(test idx1) */ a,b FROM test")
-    assert(
-      MySQLDialect()
-        .getJdbcSQLQueryBuilder(options)
-        .withColumns(Array("a", "b"))
-        .build()
-        .trim() == "SELECT /*+ INDEX(test idx1) */ a,b FROM test")
-
-    // hint not supported with rewritten JdbcSQLQueryBuilder
-    assert(
-      DB2Dialect()
-        .getJdbcSQLQueryBuilder(options)
-        .withColumns(Array("a", "b"))
-        .build()
-        .trim() == "SELECT a,b FROM test")
-    assert(
-      MsSqlServerDialect()
-        .getJdbcSQLQueryBuilder(options)
-        .withColumns(Array("a", "b"))
-        .build()
-        .trim() == "SELECT  a,b FROM test")
-    // hint not supported with default JdbcSQLQueryBuilder
-    assert(
-      PostgresDialect()
-        .getJdbcSQLQueryBuilder(options)
-        .withColumns(Array("a", "b"))
-        .build()
-        .trim() == "SELECT a,b FROM test")
+        .withHint(options.hint)
+        .build().trim() == "SELECT /*+ INDEX(test idx1) */ a,b FROM test")
+    }
+    // not supported
+    Seq(
+      DB2Dialect(), DerbyDialect(), H2Dialect(), MsSqlServerDialect(), PostgresDialect(),
+      SnowflakeDialect(), TeradataDialect()).foreach { dialect =>
+      checkError(
+        exception = intercept[AnalysisException] {
+          dialect.getJdbcSQLQueryBuilder(options)
+            .withColumns(Array("a", "b"))
+            .withHint(options.hint)
+            .build().trim()
+        },
+        condition = "HINT_UNSUPPORTED_FOR_JDBC_DIALECT",
+        parameters = Map("jdbcDialect" -> dialect.getClass.getSimpleName))
+    }
   }
 }

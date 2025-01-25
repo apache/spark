@@ -68,6 +68,11 @@ class JdbcSQLQueryBuilder(dialect: JdbcDialect, options: JDBCOptions) {
   protected var tableSampleClause: String = ""
 
   /**
+   * A hint sample clause representing query hints.
+   */
+  protected var hintClause: String = ""
+
+  /**
    * The columns names that following dialect's SQL syntax.
    * e.g. The column name is the raw name or quoted name.
    */
@@ -152,6 +157,14 @@ class JdbcSQLQueryBuilder(dialect: JdbcDialect, options: JDBCOptions) {
   }
 
   /**
+   * Saves the hint value used to construct HINT clause.
+   */
+  def withHint(hint: String): JdbcSQLQueryBuilder = {
+    hintClause = dialect.getHint(hint)
+    this
+  }
+
+  /**
    * Build the final SQL query that following dialect's SQL syntax.
    */
   def build(): String = {
@@ -161,7 +174,7 @@ class JdbcSQLQueryBuilder(dialect: JdbcDialect, options: JDBCOptions) {
     val offsetClause = dialect.getOffsetClause(offset)
 
     options.prepareQuery +
-      s"SELECT $columnList FROM ${options.tableOrQuery} $tableSampleClause" +
+      s"SELECT $hintClause$columnList FROM ${options.tableOrQuery} $tableSampleClause" +
       s" $whereClause $groupByClause $orderByClause $limitClause $offsetClause"
   }
 }
