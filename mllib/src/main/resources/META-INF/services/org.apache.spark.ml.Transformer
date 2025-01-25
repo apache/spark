@@ -65,4 +65,4 @@ org.apache.spark.ml.feature.PCAModel
 org.apache.spark.ml.feature.Word2VecModel
 org.apache.spark.ml.feature.CountVectorizerModel
 org.apache.spark.ml.feature.OneHotEncoderModel
-
+org.apache.spark.ml.feature.TargetEncoderModel

@@ -59,14 +59,6 @@ class FeatureParityTests(FeatureTestsMixin, ReusedConnectTestCase):
         super().test_string_indexer_from_labels()
 
     @unittest.skip("Need to support.")
-    def test_target_encoder_binary(self):
-        super().test_target_encoder_binary()
-
-    @unittest.skip("Need to support.")
-    def test_target_encoder_continuous(self):
-        super().test_target_encoder_continuous()
-
-    @unittest.skip("Need to support.")
     def test_vector_size_hint(self):
         super().test_vector_size_hint()
 
