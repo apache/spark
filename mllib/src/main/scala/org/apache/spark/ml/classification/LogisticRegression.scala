@@ -1076,6 +1076,10 @@ class LogisticRegressionModel private[spark] (
     this(uid, new DenseMatrix(1, coefficients.size, coefficients.toArray, isTransposed = true),
       Vectors.dense(intercept), 2, isMultinomial = false)
 
+  // For ml connect only
+  @Since("4.0.0")
+  private[ml] def this() = this(Identifiable.randomUID("logreg"), Vectors.empty, 0)
+
   /**
    * A vector of model coefficients for "binomial" logistic regression. If this model was trained
    * using the "multinomial" family then an exception is thrown.

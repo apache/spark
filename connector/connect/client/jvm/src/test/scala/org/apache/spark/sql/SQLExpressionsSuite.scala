@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.test.{QueryTest, RemoteSparkSession}
+import org.apache.spark.sql.connect.test.{QueryTest, RemoteSparkSession}
 import org.apache.spark.unsafe.types.VariantVal
 
 class SQLExpressionsSuite extends QueryTest with RemoteSparkSession {

@@ -128,7 +128,7 @@ object CurrentOrigin {
   }
 
   private val sparkCodePattern = Pattern.compile("(org\\.apache\\.spark\\.sql\\." +
-    "(?:api\\.)?" +
+    "(?:(classic|connect)\\.)?" +
     "(?:functions|Column|ColumnName|SQLImplicits|Dataset|DataFrameStatFunctions|DatasetHolder)" +
     "(?:|\\..*|\\$.*))" +
     "|(scala\\.collection\\..*)")

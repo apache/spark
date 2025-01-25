@@ -151,7 +151,7 @@
     If you change codahale.metrics.version, you also need to change
     the link to metrics.dropwizard.io in docs/monitoring.md.
     -->
-    <codahale.metrics.version>4.2.29</codahale.metrics.version>
+    <codahale.metrics.version>4.2.30</codahale.metrics.version>
     <!-- Should be consistent with SparkBuild.scala and docs -->
     <avro.version>1.12.0</avro.version>
     <aws.kinesis.client.version>1.12.0</aws.kinesis.client.version>
@@ -195,7 +195,7 @@
     <!-- org.apache.commons/commons-pool2/-->
     <commons-pool2.version>2.12.0</commons-pool2.version>
     <datanucleus-core.version>4.1.17</datanucleus-core.version>
-    <guava.version>33.3.1-jre</guava.version>
+    <guava.version>33.4.0-jre</guava.version>
     <gson.version>2.11.0</gson.version>
     <janino.version>3.1.9</janino.version>
     <jersey.version>3.0.16</jersey.version>
@@ -280,7 +280,7 @@
     <orc.deps.scope>compile</orc.deps.scope>
     <parquet.deps.scope>compile</parquet.deps.scope>
     <parquet.test.deps.scope>test</parquet.test.deps.scope>
-    <jjwt.deps.scope>test</jjwt.deps.scope>
+    <jjwt.deps.scope>compile</jjwt.deps.scope>
 
     <spark.yarn.isHadoopProvided>false</spark.yarn.isHadoopProvided>
 
@@ -294,7 +294,7 @@
     <spark.test.docker.removePulledImage>true</spark.test.docker.removePulledImage>
 
     <!-- Version used in Connect -->
-    <connect.guava.version>33.3.1-jre</connect.guava.version>
+    <connect.guava.version>33.4.0-jre</connect.guava.version>
     <guava.failureaccess.version>1.0.2</guava.failureaccess.version>
     <io.grpc.version>1.67.1</io.grpc.version>
     <mima.version>1.1.4</mima.version>
@@ -330,7 +330,7 @@
     </extraJavaTestArgs>
     <mariadb.java.client.version>2.7.12</mariadb.java.client.version>
     <mysql.connector.version>9.1.0</mysql.connector.version>
-    <postgresql.version>42.7.4</postgresql.version>
+    <postgresql.version>42.7.5</postgresql.version>
     <db2.jcc.version>11.5.9.0</db2.jcc.version>
     <mssql.jdbc.version>12.8.1.jre11</mssql.jdbc.version>
     <ojdbc17.version>23.6.0.24.10</ojdbc17.version>
@@ -463,7 +463,7 @@
       <dependency>
         <groupId>org.scala-lang.modules</groupId>
         <artifactId>scala-parallel-collections_${scala.binary.version}</artifactId>
-        <version>1.0.4</version>
+        <version>1.2.0</version>
       </dependency>
       <dependency>
         <groupId>com.twitter</groupId>
@@ -728,7 +728,7 @@
       <dependency>
         <groupId>org.rocksdb</groupId>
         <artifactId>rocksdbjni</artifactId>
-        <version>9.7.3</version>
+        <version>9.8.4</version>
       </dependency>
       <dependency>
         <groupId>${leveldbjni.group}</groupId>
@@ -3531,7 +3531,7 @@
       <id>sparkr</id>
     </profile>
     <profile>
-      <id>jjwt</id>
+      <id>jjwt-provided</id>
     </profile>
     <!-- use org.openlabtesting.leveldbjni on aarch64 platform except MacOS -->
     <profile>

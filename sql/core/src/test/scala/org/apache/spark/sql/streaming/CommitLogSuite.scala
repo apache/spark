@@ -117,13 +117,24 @@ class CommitLogSuite extends SparkFunSuite with SharedSparkSession {
 
   // Old metadata structure with no state unique ids should not affect the deserialization
   test("Cross-version V1 SerDe") {
-    val commitlogV1 = """v1
-                        |{"nextBatchWatermarkMs":233}""".stripMargin
-    val inputStream: ByteArrayInputStream =
-      new ByteArrayInputStream(commitlogV1.getBytes("UTF-8"))
-    val commitMetadata: CommitMetadata = new CommitLog(
-      spark, testCommitLogV1FilePath.toString).deserialize(inputStream)
-    assert(commitMetadata.nextBatchWatermarkMs === 233)
-    assert(commitMetadata.stateUniqueIds === None)
+    withSQLConf(SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key -> "2") {
+      val commitlogV1 = """v1
+                          |{"nextBatchWatermarkMs":233}""".stripMargin
+      val inputStream: ByteArrayInputStream =
+        new ByteArrayInputStream(commitlogV1.getBytes("UTF-8"))
+
+      // TODO [SPARK-50653]: Uncomment the below when v2 -> v1 backward compatibility is added
+      // val commitMetadata: CommitMetadata = new CommitLog(
+      // spark, testCommitLogV1FilePath.toString).deserialize(inputStream)
+      // assert(commitMetadata.nextBatchWatermarkMs === 233)
+      // assert(commitMetadata.stateUniqueIds === Map.empty)
+
+      // TODO [SPARK-50653]: remove the below when v2 -> v1 backward compatibility is added
+      val e = intercept[IllegalStateException] {
+        new CommitLog(spark, testCommitLogV1FilePath.toString).deserialize(inputStream)
+      }
+
+      assert (e.getMessage.contains("only supported log version"))
+    }
   }
 }

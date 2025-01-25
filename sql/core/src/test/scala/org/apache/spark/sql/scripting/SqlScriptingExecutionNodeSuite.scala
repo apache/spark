@@ -18,10 +18,11 @@
 package org.apache.spark.sql.scripting
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.{DataFrame, Row, SparkSession}
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Literal}
 import org.apache.spark.sql.catalyst.plans.logical.{DropVariable, LeafNode, OneRowRelation, Project}
 import org.apache.spark.sql.catalyst.trees.Origin
+import org.apache.spark.sql.classic.{DataFrame, SparkSession}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 

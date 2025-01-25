@@ -43,7 +43,7 @@ import org.apache.spark.sql.catalyst.util.SparkDateTimeUtils._
 import org.apache.spark.sql.catalyst.util.SparkIntervalUtils._
 import org.apache.spark.sql.connect.client.CloseableIterator
 import org.apache.spark.sql.connect.client.arrow.FooEnum.FooEnum
-import org.apache.spark.sql.test.ConnectFunSuite
+import org.apache.spark.sql.connect.test.ConnectFunSuite
 import org.apache.spark.sql.types.{ArrayType, DataType, DayTimeIntervalType, Decimal, DecimalType, IntegerType, Metadata, SQLUserDefinedType, StringType, StructType, UserDefinedType, YearMonthIntervalType}
 import org.apache.spark.unsafe.types.VariantVal
 
@@ -291,23 +291,24 @@ class ArrowEncoderSuite extends ConnectFunSuite with BeforeAndAfterAll {
       val maybeNull11 = MaybeNull(11)
       val maybeNull13 = MaybeNull(13)
       val maybeNull17 = MaybeNull(17)
-      Iterator.tabulate(100)(i =>
-        Row(
-          maybeNull5(
-            Row(
-              i,
-              maybeNull7(new VariantVal(Array[Byte](12, i.toByte), Array[Byte](1, 0, 0))),
-              i + 1,
-              maybeNull11(
-                new VariantVal(Array[Byte](12, (i + 1).toByte), Array[Byte](1, 0, 0))))),
-          maybeNull7((0 until 10).map(j =>
-            new VariantVal(Array[Byte](12, (i + j).toByte), Array[Byte](1, 0, 0)))),
-          maybeNull13(
-            Map(
-              (
-                i.toString,
-                maybeNull17(
-                  new VariantVal(Array[Byte](12, (i + 2).toByte), Array[Byte](1, 0, 0))))))))
+      Iterator
+        .tabulate(100)(i =>
+          Row(
+            maybeNull5(
+              Row(
+                i,
+                maybeNull7(new VariantVal(Array[Byte](12, i.toByte), Array[Byte](1, 0, 0))),
+                i + 1,
+                maybeNull11(
+                  new VariantVal(Array[Byte](12, (i + 1).toByte), Array[Byte](1, 0, 0))))),
+            maybeNull7((0 until 10).map(j =>
+              new VariantVal(Array[Byte](12, (i + j).toByte), Array[Byte](1, 0, 0)))),
+            maybeNull13(
+              Map(
+                (
+                  i.toString,
+                  maybeNull17(
+                    new VariantVal(Array[Byte](12, (i + 2).toByte), Array[Byte](1, 0, 0))))))))
     }
   }
 

@@ -2631,6 +2631,34 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       cause = null)
   }
 
+  def malformedLogFile(text: String): Throwable = {
+    new SparkIllegalStateException(
+      errorClass = "MALFORMED_LOG_FILE",
+      messageParameters = Map("text" -> text),
+      cause = null
+    )
+  }
+
+  def logVersionGreaterThanSupported(version: Int, maxSupportedVersion: Int): Throwable = {
+    new SparkIllegalStateException(
+      errorClass = "INVALID_LOG_VERSION.MAX_SUPPORTED_VERSION",
+      messageParameters = Map(
+        "version" -> version.toString,
+        "maxSupportedVersion" -> maxSupportedVersion.toString),
+      cause = null
+    )
+  }
+
+  def logVersionNotMatch(version: Int, matchVersion: Int): Throwable = {
+    new SparkIllegalStateException(
+      errorClass = "INVALID_LOG_VERSION.EXACT_MATCH_VERSION",
+      messageParameters = Map(
+        "version" -> version.toString,
+        "matchVersion" -> matchVersion.toString),
+      cause = null
+    )
+  }
+
   def invalidChangeLogReaderVersion(version: Long): Throwable = {
     new SparkException(
       errorClass = "CANNOT_LOAD_STATE_STORE.INVALID_CHANGE_LOG_READER_VERSION",

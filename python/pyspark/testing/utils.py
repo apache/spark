@@ -325,7 +325,7 @@ class PySparkErrorTestUtils:
 
         # Test error class
         expected = errorClass
-        actual = exception.getErrorClass()
+        actual = exception.getCondition()
         self.assertEqual(
             expected, actual, f"Expected error class was '{expected}', got '{actual}'."
         )

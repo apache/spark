@@ -664,6 +664,7 @@ pyspark_ml = Module(
         # unittests
         "pyspark.ml.tests.test_algorithms",
         "pyspark.ml.tests.test_als",
+        "pyspark.ml.tests.test_fpm",
         "pyspark.ml.tests.test_base",
         "pyspark.ml.tests.test_evaluation",
         "pyspark.ml.tests.test_feature",
@@ -696,6 +697,8 @@ pyspark_ml = Module(
         "pyspark.ml.tests.connect.test_legacy_mode_pipeline",
         "pyspark.ml.tests.connect.test_legacy_mode_tuning",
         "pyspark.ml.tests.test_classification",
+        "pyspark.ml.tests.test_regression",
+        "pyspark.ml.tests.test_clustering",
     ],
     excluded_python_implementations=[
         "PyPy"  # Skip these tests under PyPy since they require numpy and it isn't available there
@@ -1116,7 +1119,14 @@ pyspark_ml_connect = Module(
         "pyspark.ml.tests.connect.test_connect_classification",
         "pyspark.ml.tests.connect.test_connect_pipeline",
         "pyspark.ml.tests.connect.test_connect_tuning",
+        "pyspark.ml.tests.connect.test_parity_als",
+        "pyspark.ml.tests.connect.test_parity_fpm",
         "pyspark.ml.tests.connect.test_parity_classification",
+        "pyspark.ml.tests.connect.test_parity_regression",
+        "pyspark.ml.tests.connect.test_parity_clustering",
+        "pyspark.ml.tests.connect.test_parity_evaluation",
+        "pyspark.ml.tests.connect.test_parity_feature",
+        "pyspark.ml.tests.connect.test_parity_pipeline",
     ],
     excluded_python_implementations=[
         "PyPy"  # Skip these tests under PyPy since they require numpy, pandas, and pyarrow and

@@ -57,12 +57,15 @@ class JavaWrapper:
 
     @try_remote_del
     def __del__(self) -> None:
-        from pyspark.core.context import SparkContext
+        try:
+            from pyspark.core.context import SparkContext
 
-        if SparkContext._active_spark_context and self._java_obj is not None:
-            SparkContext._active_spark_context._gateway.detach(  # type: ignore[union-attr]
-                self._java_obj
-            )
+            if SparkContext._active_spark_context and self._java_obj is not None:
+                SparkContext._active_spark_context._gateway.detach(  # type: ignore[union-attr]
+                    self._java_obj
+                )
+        except Exception:
+            pass
 
     @classmethod
     def _create_from_java_class(cls: Type[JW], java_class: str, *args: Any) -> JW:
@@ -353,7 +356,7 @@ class JavaParams(JavaWrapper, Params, metaclass=ABCMeta):
         if extra is None:
             extra = dict()
         that = super(JavaParams, self).copy(extra)
-        if self._java_obj is not None:
+        if self._java_obj is not None and not isinstance(self._java_obj, str):
             that._java_obj = self._java_obj.copy(self._empty_java_param_map())
             that._transfer_params_to_java()
         return that

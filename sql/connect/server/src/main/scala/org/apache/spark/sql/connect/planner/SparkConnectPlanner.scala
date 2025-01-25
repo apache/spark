@@ -43,7 +43,7 @@ import org.apache.spark.connect.proto.WriteStreamOperationStart.TriggerCase
 import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.internal.LogKeys.{DATAFRAME_ID, SESSION_ID}
 import org.apache.spark.resource.{ExecutorResourceRequest, ResourceProfile, TaskResourceProfile, TaskResourceRequest}
-import org.apache.spark.sql.{Column, Dataset, Encoders, ForeachWriter, Observation, RelationalGroupedDataset, Row, SparkSession}
+import org.apache.spark.sql.{Column, Encoders, ForeachWriter, Observation, Row}
 import org.apache.spark.sql.catalyst.{expressions, AliasIdentifier, FunctionIdentifier, QueryPlanningTracker}
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, GlobalTempView, LazyExpression, LocalTempView, MultiAlias, NameParameterizedQuery, PosParameterizedQuery, UnresolvedAlias, UnresolvedAttribute, UnresolvedDataFrameStar, UnresolvedDeserializer, UnresolvedExtractValue, UnresolvedFunction, UnresolvedPlanId, UnresolvedRegex, UnresolvedRelation, UnresolvedStar, UnresolvedStarWithColumns, UnresolvedStarWithColumnsRenames, UnresolvedSubqueryColumnAliases, UnresolvedTableValuedFunction, UnresolvedTranspose}
 import org.apache.spark.sql.catalyst.encoders.{encoderFor, AgnosticEncoder, ExpressionEncoder, RowEncoder}
@@ -55,9 +55,10 @@ import org.apache.spark.sql.catalyst.plans.{Cross, FullOuter, Inner, JoinType, L
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical.{AppendColumns, Assignment, CoGroup, CollectMetrics, CommandResult, Deduplicate, DeduplicateWithinWatermark, DeleteAction, DeserializeToObject, Except, FlatMapGroupsWithState, InsertAction, InsertStarAction, Intersect, JoinWith, LocalRelation, LogicalGroupState, LogicalPlan, MapGroups, MapPartitions, MergeAction, Project, Sample, SerializeFromObject, Sort, SubqueryAlias, TypedFilter, Union, Unpivot, UnresolvedHint, UpdateAction, UpdateStarAction}
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
-import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, TreePattern}
+import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin, TreePattern}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CharVarcharUtils}
+import org.apache.spark.sql.classic.{Catalog, Dataset, MergeIntoWriter, RelationalGroupedDataset, SparkSession, TypedAggUtils, UserDefinedFunctionUtils}
 import org.apache.spark.sql.classic.ClassicConversions._
 import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, ForeachWriterPacket, InvalidCommandInput, InvalidPlanInput, LiteralValueProtoConverter, StorageLevelProtoConverter, StreamingListenerPacket, UdfPacket}
 import org.apache.spark.sql.connect.config.Connect.CONNECT_GRPC_ARROW_MAX_BATCH_SIZE
@@ -78,7 +79,6 @@ import org.apache.spark.sql.execution.stat.StatFunctions
 import org.apache.spark.sql.execution.streaming.GroupStateImpl.groupStateTimeoutFromString
 import org.apache.spark.sql.execution.streaming.StreamingQueryWrapper
 import org.apache.spark.sql.expressions.{Aggregator, ReduceAggregator, SparkUserDefinedFunction, UserDefinedAggregator, UserDefinedFunction}
-import org.apache.spark.sql.internal.{CatalogImpl, MergeIntoWriterImpl, TypedAggUtils, UserDefinedFunctionUtils}
 import org.apache.spark.sql.streaming.{GroupStateTimeout, OutputMode, StreamingQuery, StreamingQueryListener, StreamingQueryProgress, Trigger}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -1537,17 +1537,56 @@ class SparkConnectPlanner(
   @DeveloperApi
   def transformExpression(
       exp: proto.Expression,
-      baseRelationOpt: Option[LogicalPlan]): Expression = if (exp.hasCommon) {
-    CurrentOrigin.withOrigin {
-      val pythonOrigin = exp.getCommon.getOrigin.getPythonOrigin
-      val pysparkErrorContext = (pythonOrigin.getFragment, pythonOrigin.getCallSite)
-      val newOrigin = CurrentOrigin.get.copy(pysparkErrorContext = Some(pysparkErrorContext))
-      CurrentOrigin.withOrigin(newOrigin) {
+      baseRelationOpt: Option[LogicalPlan]): Expression = {
+    if (exp.hasCommon && exp.getCommon.hasOrigin) {
+      val origin = transformOrigin(exp.getCommon.getOrigin)
+      CurrentOrigin.withOrigin(origin) {
         doTransformExpression(exp, baseRelationOpt)
       }
+    } else {
+      doTransformExpression(exp, baseRelationOpt)
     }
-  } else {
-    doTransformExpression(exp, baseRelationOpt)
+  }
+
+  private def transformOrigin(origin: proto.Origin): Origin = {
+    if (origin.hasPythonOrigin) {
+      CurrentOrigin.withOrigin {
+        val pythonOrigin = origin.getPythonOrigin
+        val pysparkErrorContext = (pythonOrigin.getFragment, pythonOrigin.getCallSite)
+        CurrentOrigin.get.copy(pysparkErrorContext = Some(pysparkErrorContext))
+      }
+    } else if (origin.hasJvmOrigin) {
+      transformJvmOrigin(origin.getJvmOrigin)
+    } else {
+      Origin()
+    }
+  }
+
+  private def transformJvmOrigin(origin: proto.JvmOrigin): Origin = {
+    Origin(
+      line = if (origin.hasLine) Some(origin.getLine) else None,
+      startPosition = if (origin.hasStartPosition) Some(origin.getStartPosition) else None,
+      startIndex = if (origin.hasStartIndex) Some(origin.getStartIndex) else None,
+      stopIndex = if (origin.hasStopIndex) Some(origin.getStopIndex) else None,
+      sqlText = if (origin.hasSqlText) Some(origin.getSqlText) else None,
+      objectType = if (origin.hasObjectType) Some(origin.getObjectType) else None,
+      objectName = if (origin.hasObjectName) Some(origin.getObjectName) else None,
+      stackTrace = if (origin.getStackTraceCount > 0) {
+        Some(origin.getStackTraceList.asScala.map(transformStackTraceElement).toArray)
+      } else {
+        None
+      })
+  }
+
+  private def transformStackTraceElement(element: proto.StackTraceElement): StackTraceElement = {
+    new StackTraceElement(
+      /* classLoaderName */ if (element.hasClassLoaderName) element.getClassLoaderName else null,
+      /* moduleName */ if (element.hasModuleName) element.getModuleName else null,
+      /* moduleVersion */ if (element.hasModuleVersion) element.getModuleVersion else null,
+      /* @NotNull declaringClass */ element.getDeclaringClass,
+      /* @NotNull methodName */ element.getMethodName,
+      /* fileName */ if (element.hasFileName) element.getFileName else null,
+      /* lineNumber */ element.getLineNumber)
   }
 
   private def doTransformExpression(
@@ -3485,7 +3524,7 @@ class SparkConnectPlanner(
     val sourceDs = Dataset.ofRows(session, transformRelation(cmd.getSourceTablePlan))
     val mergeInto = sourceDs
       .mergeInto(cmd.getTargetTableName, Column(transformExpression(cmd.getMergeCondition)))
-      .asInstanceOf[MergeIntoWriterImpl[Row]]
+      .asInstanceOf[MergeIntoWriter[Row]]
     mergeInto.matchedActions ++= matchedActions
     mergeInto.notMatchedActions ++= notMatchedActions
     mergeInto.notMatchedBySourceActions ++= notMatchedBySourceActions
@@ -3561,14 +3600,14 @@ class SparkConnectPlanner(
   }
 
   private def transformGetDatabase(getGetDatabase: proto.GetDatabase): LogicalPlan = {
-    CatalogImpl
+    Catalog
       .makeDataset(session.catalog.getDatabase(getGetDatabase.getDbName) :: Nil, session)
       .logicalPlan
   }
 
   private def transformGetTable(getGetTable: proto.GetTable): LogicalPlan = {
     if (getGetTable.hasDbName) {
-      CatalogImpl
+      Catalog
         .makeDataset(
           session.catalog.getTable(
             dbName = getGetTable.getDbName,
@@ -3576,7 +3615,7 @@ class SparkConnectPlanner(
           session)
         .logicalPlan
     } else {
-      CatalogImpl
+      Catalog
         .makeDataset(session.catalog.getTable(getGetTable.getTableName) :: Nil, session)
         .logicalPlan
     }
@@ -3584,7 +3623,7 @@ class SparkConnectPlanner(
 
   private def transformGetFunction(getGetFunction: proto.GetFunction): LogicalPlan = {
     if (getGetFunction.hasDbName) {
-      CatalogImpl
+      Catalog
         .makeDataset(
           session.catalog.getFunction(
             dbName = getGetFunction.getDbName,
@@ -3592,7 +3631,7 @@ class SparkConnectPlanner(
           session)
         .logicalPlan
     } else {
-      CatalogImpl
+      Catalog
         .makeDataset(session.catalog.getFunction(getGetFunction.getFunctionName) :: Nil, session)
         .logicalPlan
     }
