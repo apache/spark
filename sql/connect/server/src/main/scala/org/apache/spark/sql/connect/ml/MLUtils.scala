@@ -523,6 +523,7 @@ private[ml] object MLUtils {
     (classOf[GBTRegressionModel], Set("featureImportances", "evaluateEachIteration")),
 
     // Classification Models
+    (classOf[NaiveBayesModel], Set("pi", "theta", "sigma")),
     (classOf[LinearSVCModel], Set("intercept", "coefficients", "evaluate")),
     (
       classOf[LogisticRegressionModel],
