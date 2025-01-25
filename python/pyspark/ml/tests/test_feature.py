@@ -22,7 +22,49 @@ from typing import List, Tuple, Any
 
 import numpy as np
 
-from pyspark.ml.feature import *
+from pyspark.ml.feature import (
+    DCT,
+    Binarizer,
+    Bucketizer,
+    CountVectorizer,
+    CountVectorizerModel,
+    OneHotEncoder,
+    OneHotEncoderModel,
+    HashingTF,
+    IDF,
+    NGram,
+    Normalizer,
+    Interaction,
+    RFormula,
+    Tokenizer,
+    SQLTransformer,
+    RegexTokenizer,
+    StandardScaler,
+    StandardScalerModel,
+    MaxAbsScaler,
+    MaxAbsScalerModel,
+    MinMaxScaler,
+    MinMaxScalerModel,
+    RobustScaler,
+    RobustScalerModel,
+    ChiSqSelector,
+    ChiSqSelectorModel,
+    UnivariateFeatureSelector,
+    UnivariateFeatureSelectorModel,
+    VarianceThresholdSelector,
+    VarianceThresholdSelectorModel,
+    StopWordsRemover,
+    StringIndexer,
+    StringIndexerModel,
+    TargetEncoder,
+    TargetEncoderModel,
+    VectorSizeHint,
+    VectorAssembler,
+    PCA,
+    PCAModel,
+    Word2Vec,
+    Word2VecModel,
+)
 from pyspark.ml.linalg import DenseVector, SparseVector, Vectors
 from pyspark.sql import Row
 from pyspark.testing.utils import QuietTest
