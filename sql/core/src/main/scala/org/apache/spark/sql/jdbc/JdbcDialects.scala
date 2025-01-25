@@ -829,7 +829,7 @@ abstract class JdbcDialect extends Serializable with Logging {
   def supportsHint: Boolean = false
 
   def getHint(hint: String): String = {
-    if (this.supportsHint) {
+    if (this.supportsHint || hint == "") {
       hint
     } else {
       throw QueryCompilationErrors.hintUnsupportedForJdbcDatabasesError(this.getClass.getSimpleName)
