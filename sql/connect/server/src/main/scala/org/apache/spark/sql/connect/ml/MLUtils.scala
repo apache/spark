@@ -582,6 +582,7 @@ private[ml] object MLUtils {
     (classOf[FPGrowthModel], Set("associationRules", "freqItemsets")),
 
     // Feature Models
+    (classOf[ImputerModel], Set("surrogateDF")),
     (classOf[StandardScalerModel], Set("mean", "std")),
     (classOf[MaxAbsScalerModel], Set("maxAbs")),
     (classOf[MinMaxScalerModel], Set("originalMax", "originalMin")),

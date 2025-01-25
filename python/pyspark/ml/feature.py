@@ -2261,6 +2261,7 @@ class ImputerModel(JavaModel, _ImputerParams, JavaMLReadable["ImputerModel"], Ja
 
     @property
     @since("2.2.0")
+    @try_remote_attribute_relation
     def surrogateDF(self) -> DataFrame:
         """
         Returns a DataFrame containing inputCols and their corresponding surrogates,
