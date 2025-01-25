@@ -37,6 +37,8 @@ from pyspark.ml.feature import (
     Imputer,
     ImputerModel,
     NGram,
+    Normalizer,
+    Interaction,
     RFormula,
     Tokenizer,
     SQLTransformer,
@@ -923,13 +925,64 @@ class FeatureTestsMixin:
             self.assertEqual(str(model), str(model2))
 
     def test_ngram(self):
-        dataset = self.spark.createDataFrame([Row(input=["a", "b", "c", "d", "e"])])
-        ngram0 = NGram(n=4, inputCol="input", outputCol="output")
-        self.assertEqual(ngram0.getN(), 4)
-        self.assertEqual(ngram0.getInputCol(), "input")
-        self.assertEqual(ngram0.getOutputCol(), "output")
-        transformedDF = ngram0.transform(dataset)
-        self.assertEqual(transformedDF.head().output, ["a b c d", "b c d e"])
+        spark = self.spark
+        df = spark.createDataFrame([Row(input=["a", "b", "c", "d", "e"])])
+
+        ngram = NGram(n=4, inputCol="input", outputCol="output")
+        self.assertEqual(ngram.getN(), 4)
+        self.assertEqual(ngram.getInputCol(), "input")
+        self.assertEqual(ngram.getOutputCol(), "output")
+
+        output = ngram.transform(df)
+        self.assertEqual(output.head().output, ["a b c d", "b c d e"])
+
+        # save & load
+        with tempfile.TemporaryDirectory(prefix="ngram") as d:
+            ngram.write().overwrite().save(d)
+            ngram2 = NGram.load(d)
+            self.assertEqual(str(ngram), str(ngram2))
+
+    def test_normalizer(self):
+        spark = self.spark
+        df = spark.createDataFrame(
+            [(Vectors.dense([3.0, -4.0]),), (Vectors.sparse(4, {1: 4.0, 3: 3.0}),)],
+            ["input"],
+        )
+
+        normalizer = Normalizer(p=2.0, inputCol="input", outputCol="output")
+        self.assertEqual(normalizer.getP(), 2.0)
+        self.assertEqual(normalizer.getInputCol(), "input")
+        self.assertEqual(normalizer.getOutputCol(), "output")
+
+        output = normalizer.transform(df)
+        self.assertEqual(output.columns, ["input", "output"])
+        self.assertEqual(output.count(), 2)
+
+        # save & load
+        with tempfile.TemporaryDirectory(prefix="normalizer") as d:
+            normalizer.write().overwrite().save(d)
+            normalizer2 = Normalizer.load(d)
+            self.assertEqual(str(normalizer), str(normalizer2))
+
+    def test_interaction(self):
+        spark = self.spark
+        df = spark.createDataFrame([(0.0, 1.0), (2.0, 3.0)], ["a", "b"])
+
+        interaction = Interaction()
+        interaction.setInputCols(["a", "b"])
+        interaction.setOutputCol("ab")
+        self.assertEqual(interaction.getInputCols(), ["a", "b"])
+        self.assertEqual(interaction.getOutputCol(), "ab")
+
+        output = interaction.transform(df)
+        self.assertEqual(output.columns, ["a", "b", "ab"])
+        self.assertEqual(output.count(), 2)
+
+        # save & load
+        with tempfile.TemporaryDirectory(prefix="interaction") as d:
+            interaction.write().overwrite().save(d)
+            interaction2 = Interaction.load(d)
+            self.assertEqual(str(interaction), str(interaction2))
 
     def test_count_vectorizer_with_binary(self):
         dataset = self.spark.createDataFrame(
