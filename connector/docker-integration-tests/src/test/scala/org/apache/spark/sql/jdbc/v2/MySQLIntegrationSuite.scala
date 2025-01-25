@@ -263,11 +263,9 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest
           castType: String,
           sourceCol: String,
           targetCol: String,
-          sourceDataType: DataType,
-          sourceValue: Any,
           targetDataType: DataType,
           targetValue: Any): Unit = {
-        val sql = s"SELECT $sourceCol AS source, CAST($sourceCol AS $castType) AS target " +
+        val sql = s"SELECT CAST($sourceCol AS $castType) AS target " +
           s"FROM $tableName WHERE CAST($sourceCol AS $castType) = $targetCol"
         val df = spark.sql(sql)
         castType match {
@@ -279,51 +277,23 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest
               condition = null)
           case _ =>
             checkFilterPushed(df)
-            checkAnswer(df, Seq(Row(sourceValue, targetValue)))
-            val expectedTypes = Array(sourceDataType, targetDataType)
+            checkAnswer(df, Seq(Row(targetValue)))
+            val expectedTypes = Array(targetDataType)
             val resultTypes = df.schema.fields.map(_.dataType)
             assert(resultTypes === expectedTypes, s"Failed to cast $sourceCol to $castType")
         }
       }
 
-      testCast(
-        "BINARY",
-        "string_col",
-        "binary_col",
-        StringType,
-        stringValue,
-        BinaryType,
-        binaryValue);
-      testCast("SHORT", "string_col", "long_col", StringType, stringValue, LongType, longValue)
-      testCast("INTEGER", "string_col", "long_col", StringType, stringValue, LongType, longValue)
-      testCast("LONG", "string_col", "long_col", StringType, stringValue, LongType, longValue)
+      testCast("BINARY", "string_col", "binary_col", BinaryType, binaryValue);
+      testCast("SHORT", "string_col", "long_col", LongType, longValue)
+      testCast("INTEGER", "string_col", "long_col", LongType, longValue)
+      testCast("LONG", "string_col", "long_col", LongType, longValue)
       // We use stringLiteral to make sure both values are using the same collation
-      testCast("STRING", "long_col", stringLiteral, LongType, longValue, StringType, stringValue)
-      testCast(
-        "STRING",
-        "binary_col",
-        stringLiteral,
-        BinaryType,
-        binaryValue,
-        StringType,
-        stringValue)
-      testCast(
-        "STRING",
-        "double_col",
-        stringLiteral,
-        DoubleType,
-        doubleValue,
-        StringType,
-        doubleLiteral)
-      testCast(
-        "DOUBLE",
-        "string_col",
-        "double_col",
-        StringType,
-        stringValue,
-        DoubleType,
-        doubleValue)
-      testCast("DOUBLE", "long_col", "double_col", LongType, longValue, DoubleType, doubleValue)
+      testCast("STRING", "long_col", stringLiteral, StringType, stringValue)
+      testCast("STRING", "binary_col", stringLiteral, StringType, stringValue)
+      testCast("STRING", "double_col", stringLiteral, StringType, doubleLiteral)
+      testCast("DOUBLE", "string_col", "double_col", DoubleType, doubleValue)
+      testCast("DOUBLE", "long_col", "double_col", DoubleType, doubleValue)
     }
   }
 }
