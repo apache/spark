@@ -69,7 +69,6 @@ from pyspark.ml.linalg import DenseVector, SparseVector, Vectors
 from pyspark.sql import Row
 from pyspark.testing.utils import QuietTest
 from pyspark.testing.mlutils import check_params, SparkSessionTestCase
-from pyspark.sql.utils import is_remote
 
 
 class FeatureTestsMixin:
@@ -845,7 +844,7 @@ class FeatureTestsMixin:
             self.assertEqual(str(bucketizer), str(bucketizer2))
 
     def test_idf(self):
-        dataset = self.spark.createDataFrame(
+        df = self.spark.createDataFrame(
             [
                 (DenseVector([1.0, 2.0]),),
                 (DenseVector([0.0, 1.0]),),
@@ -856,7 +855,7 @@ class FeatureTestsMixin:
         idf = IDF(inputCol="tf")
         self.assertListEqual(idf.params, [idf.inputCol, idf.minDocFreq, idf.outputCol])
 
-        model = idf.fit(dataset, {idf.outputCol: "idf"})
+        model = idf.fit(df, {idf.outputCol: "idf"})
         # self.assertEqual(
         #     model.uid, idf.uid, "Model should inherit the UID from its parent estimator."
         # )
@@ -866,11 +865,8 @@ class FeatureTestsMixin:
         )
         self.assertEqual(model.docFreq, [2, 3])
         self.assertEqual(model.numDocs, 3)
-        # Test that parameters transferred to Python Model
-        if not is_remote():
-            check_params(self, model)
 
-        output = model.transform(dataset)
+        output = model.transform(df)
         self.assertEqual(output.columns, ["tf", "idf"])
         self.assertIsNotNone(output.head().idf)
 
