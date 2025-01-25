@@ -246,6 +246,8 @@ class ImputerModel private[ml] (
 
   import ImputerModel._
 
+  private[ml] def this() = this(Identifiable.randomUID("imputer"), null)
+
   /** @group setParam */
   @Since("3.0.0")
   def setInputCol(value: String): this.type = set(inputCol, value)

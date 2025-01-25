@@ -2743,7 +2743,7 @@
   },
   "INVALID_INTERVAL_WITH_MICROSECONDS_ADDITION" : {
     "message" : [
-      "Cannot add an interval to a date because its microseconds part is not 0. If necessary set <ansiConfig> to \"false\" to bypass this error."
+      "Cannot add an interval to a date because its microseconds part is not 0. To resolve this, cast the input date to a timestamp, which supports the addition of intervals with non-zero microseconds."
     ],
     "sqlState" : "22006"
   },
@@ -3133,6 +3133,24 @@
     "message" : [
       "Invalid recursive definition found. Recursive queries must contain an UNION or an UNION ALL statement with 2 children. The first child needs to be the anchor term without any recursive references."
     ],
+    "sqlState" : "42836"
+  },
+  "INVALID_RECURSIVE_REFERENCE" : {
+    "message" : [
+      "Invalid recursive reference found inside WITH RECURSIVE clause."
+    ],
+    "subClass" : {
+      "NUMBER" : {
+        "message" : [
+          "Multiple self-references to one recursive CTE are not allowed."
+        ]
+      },
+      "PLACE" : {
+        "message" : [
+          "Recursive references cannot be used on the right side of left outer/semi/anti joins, on the left side of right outer joins, in full outer joins, in aggregates, and in subquery expressions."
+        ]
+      }
+    },
     "sqlState" : "42836"
   },
   "INVALID_REGEXP_REPLACE" : {
@@ -5257,6 +5275,11 @@
       "RDD" : {
         "message" : [
           "Resilient Distributed Datasets (RDDs)."
+        ]
+      },
+      "REGISTER_UDAF" : {
+        "message" : [
+          "Registering User Defined Aggregate Functions (UDAFs)."
         ]
       },
       "SESSION_BASE_RELATION_TO_DATAFRAME" : {

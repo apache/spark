@@ -29,9 +29,9 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Expression, ImplicitCastInputTypes}
 import org.apache.spark.sql.catalyst.expressions.aggregate.TypedImperativeAggregate
 import org.apache.spark.sql.catalyst.trees.BinaryLike
-import org.apache.spark.sql.classic.ClassicConversions._
+import org.apache.spark.sql.classic.ClassicConversions.ColumnConstructorExt
+import org.apache.spark.sql.classic.ExpressionUtils.expression
 import org.apache.spark.sql.functions.lit
-import org.apache.spark.sql.internal.ExpressionUtils.expression
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 

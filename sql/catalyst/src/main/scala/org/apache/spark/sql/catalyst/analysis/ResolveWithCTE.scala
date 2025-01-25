@@ -21,6 +21,7 @@ import scala.collection.mutable
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
+import org.apache.spark.sql.catalyst.plans.{Inner, LeftAnti, LeftOuter, LeftSemi, RightOuter}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{CTE, PLAN_EXPRESSION}
@@ -49,17 +50,18 @@ object ResolveWithCTE extends Rule[LogicalPlan] {
     plan.resolveOperatorsDownWithPruning(_.containsAllPatterns(CTE)) {
       case withCTE @ WithCTE(_, cteDefs) =>
         val newCTEDefs = cteDefs.map {
-          // `cteDef.recursive` means "presence of a recursive CTERelationRef under cteDef". The
-          // side effect of node substitution below is that after CTERelationRef substitution
-          // its cteDef is no more considered `recursive`. This code path is common for `cteDef`
-          // that were non-recursive from the get go, as well as those that are no more recursive
-          // due to node substitution.
-          case cteDef if !cteDef.recursive =>
+          // cteDef in the first case is either recursive and all the recursive CTERelationRefs
+          // are already substituted to UnionLoopRef in the previous pass, or it is not recursive
+          // at all. In both cases we need to put it in the map in case it is resolved.
+          // Second case is performing the substitution of recursive CTERelationRefs.
+          case cteDef if !cteDef.hasSelfReferenceAsCTERef =>
             if (cteDef.resolved) {
               cteDefMap.put(cteDef.id, cteDef)
             }
             cteDef
           case cteDef =>
+            // Multiple self-references are not allowed within one cteDef.
+            checkNumberOfSelfReferences(cteDef)
             cteDef.child match {
               // If it is a supported recursive CTE query pattern (4 so far), extract the anchor and
               // recursive plans from the Union and rewrite Union with UnionLoop. The recursive CTE
@@ -182,5 +184,73 @@ object ResolveWithCTE extends Rule[LogicalPlan] {
         val ref = UnionLoopRef(r.cteId, anchor.output, false)
         columnNames.map(UnresolvedSubqueryColumnAliases(_, ref)).getOrElse(ref)
     }
+  }
+
+  /**
+   * Checks if there is any self-reference within subqueries and throws an error
+   * if that is the case.
+   */
+  def checkForSelfReferenceInSubquery(plan: LogicalPlan): Unit = {
+    plan.subqueriesAll.foreach { subquery =>
+      subquery.foreach {
+        case r: CTERelationRef if r.recursive =>
+          throw new AnalysisException(
+            errorClass = "INVALID_RECURSIVE_REFERENCE.PLACE",
+            messageParameters = Map.empty)
+        case _ =>
+      }
+    }
+  }
+
+  /**
+   * Counts number of self-references in a recursive CTE definition and throws an error
+   * if that number is bigger than 1.
+   */
+  private def checkNumberOfSelfReferences(cteDef: CTERelationDef): Unit = {
+    val numOfSelfRef = cteDef.collectWithSubqueries {
+      case ref: CTERelationRef if ref.cteId == cteDef.id => ref
+    }.length
+    if (numOfSelfRef > 1) {
+      cteDef.failAnalysis(
+        errorClass = "INVALID_RECURSIVE_REFERENCE.NUMBER",
+        messageParameters = Map.empty)
+    }
+  }
+
+  /**
+   * Throws error if self-reference is placed in places which are not allowed:
+   * right side of left outer/semi/anti joins, left side of right outer joins,
+   * in full outer joins and in aggregates
+   */
+  def checkIfSelfReferenceIsPlacedCorrectly(
+      plan: LogicalPlan,
+      cteId: Long,
+      allowRecursiveRef: Boolean = true): Unit = plan match {
+    case Join(left, right, Inner, _, _) =>
+      checkIfSelfReferenceIsPlacedCorrectly(left, cteId, allowRecursiveRef)
+      checkIfSelfReferenceIsPlacedCorrectly(right, cteId, allowRecursiveRef)
+    case Join(left, right, LeftOuter, _, _) =>
+      checkIfSelfReferenceIsPlacedCorrectly(left, cteId, allowRecursiveRef)
+      checkIfSelfReferenceIsPlacedCorrectly(right, cteId, allowRecursiveRef = false)
+    case Join(left, right, RightOuter, _, _) =>
+      checkIfSelfReferenceIsPlacedCorrectly(left, cteId, allowRecursiveRef = false)
+      checkIfSelfReferenceIsPlacedCorrectly(right, cteId, allowRecursiveRef)
+    case Join(left, right, LeftSemi, _, _) =>
+      checkIfSelfReferenceIsPlacedCorrectly(left, cteId, allowRecursiveRef)
+      checkIfSelfReferenceIsPlacedCorrectly(right, cteId, allowRecursiveRef = false)
+    case Join(left, right, LeftAnti, _, _) =>
+      checkIfSelfReferenceIsPlacedCorrectly(left, cteId, allowRecursiveRef)
+      checkIfSelfReferenceIsPlacedCorrectly(right, cteId, allowRecursiveRef = false)
+    case Join(left, right, _, _, _) =>
+      checkIfSelfReferenceIsPlacedCorrectly(left, cteId, allowRecursiveRef = false)
+      checkIfSelfReferenceIsPlacedCorrectly(right, cteId, allowRecursiveRef = false)
+    case Aggregate(_, _, child, _) =>
+      checkIfSelfReferenceIsPlacedCorrectly(child, cteId, allowRecursiveRef = false)
+    case r: UnionLoopRef if !allowRecursiveRef && r.loopId == cteId =>
+      throw new AnalysisException(
+        errorClass = "INVALID_RECURSIVE_REFERENCE.PLACE",
+        messageParameters = Map.empty)
+    case other =>
+      other.children.foreach(checkIfSelfReferenceIsPlacedCorrectly(_, cteId, allowRecursiveRef))
   }
 }

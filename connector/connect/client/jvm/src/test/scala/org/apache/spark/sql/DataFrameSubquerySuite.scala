@@ -18,8 +18,8 @@
 package org.apache.spark.sql
 
 import org.apache.spark.SparkRuntimeException
+import org.apache.spark.sql.connect.test.{QueryTest, RemoteSparkSession}
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.test.{QueryTest, RemoteSparkSession}
 
 class DataFrameSubquerySuite extends QueryTest with RemoteSparkSession {
   import testImplicits._

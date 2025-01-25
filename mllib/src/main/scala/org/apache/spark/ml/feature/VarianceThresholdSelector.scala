@@ -126,6 +126,9 @@ class VarianceThresholdSelectorModel private[ml](
   extends Model[VarianceThresholdSelectorModel] with VarianceThresholdSelectorParams
     with MLWritable {
 
+  private[ml] def this() = this(
+    Identifiable.randomUID("VarianceThresholdSelector"), Array.emptyIntArray)
+
   if (selectedFeatures.length >= 2) {
     require(selectedFeatures.sliding(2).forall(l => l(0) < l(1)),
       "Index should be strictly increasing.")
