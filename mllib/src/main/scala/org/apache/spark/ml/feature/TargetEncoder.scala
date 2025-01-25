@@ -286,6 +286,8 @@ class TargetEncoderModel private[ml] (
     @Since("4.0.0") private[ml] val stats: Array[Map[Double, (Double, Double)]])
   extends Model[TargetEncoderModel] with TargetEncoderBase with MLWritable {
 
+  private[ml] def this() = this(Identifiable.randomUID("TargetEncoder"), Array.empty)
+
   /** @group setParam */
   @Since("4.0.0")
   def setInputCol(value: String): this.type = set(inputCol, value)
