@@ -17,9 +17,10 @@
 
 package org.apache.spark.sql.execution.python
 
-import java.io.{BufferedInputStream, BufferedOutputStream, DataInputStream, DataOutputStream, EOFException, InputStream}
+import java.io.{BufferedInputStream, BufferedOutputStream, DataInputStream, DataOutputStream, InputStream, IOException}
 import java.nio.ByteBuffer
 import java.nio.channels.SelectionKey
+import java.nio.file.{Files => JavaFiles}
 import java.util.HashMap
 
 import scala.jdk.CollectionConverters._
@@ -27,7 +28,7 @@ import scala.jdk.CollectionConverters._
 import net.razorvine.pickle.Pickler
 
 import org.apache.spark.{JobArtifactSet, SparkEnv, SparkException}
-import org.apache.spark.api.python.{PythonFunction, PythonWorker, PythonWorkerUtils, SpecialLengths}
+import org.apache.spark.api.python.{BasePythonRunner, PythonFunction, PythonWorker, PythonWorkerUtils, SpecialLengths}
 import org.apache.spark.internal.config.BUFFER_SIZE
 import org.apache.spark.internal.config.Python._
 import org.apache.spark.sql.internal.SQLConf
@@ -50,6 +51,7 @@ abstract class PythonPlannerRunner[T](func: PythonFunction) {
     val authSocketTimeout = env.conf.get(PYTHON_AUTH_SOCKET_TIMEOUT)
     val reuseWorker = env.conf.get(PYTHON_WORKER_REUSE)
     val localdir = env.blockManager.diskBlockManager.localDirs.map(f => f.getPath()).mkString(",")
+    val faultHandlerEnabled: Boolean = SQLConf.get.pythonUDFWorkerFaulthandlerEnabled
     val simplifiedTraceback: Boolean = SQLConf.get.pysparkSimplifiedTraceback
     val workerMemoryMb = SQLConf.get.pythonPlannerExecMemory
 
@@ -74,6 +76,9 @@ abstract class PythonPlannerRunner[T](func: PythonFunction) {
     }
     envVars.put("SPARK_AUTH_SOCKET_TIMEOUT", authSocketTimeout.toString)
     envVars.put("SPARK_BUFFER_SIZE", bufferSize.toString)
+    if (faultHandlerEnabled) {
+      envVars.put("PYTHON_FAULTHANDLER_DIR", BasePythonRunner.faultHandlerLogDir.toString)
+    }
 
     envVars.put("SPARK_JOB_ARTIFACT_UUID", jobArtifactUUID.getOrElse("default"))
 
@@ -81,7 +86,7 @@ abstract class PythonPlannerRunner[T](func: PythonFunction) {
     val pickler = new Pickler(/* useMemo = */ true,
       /* valueCompare = */ false)
 
-    val (worker: PythonWorker, _) =
+    val (worker: PythonWorker, pid: Option[Int]) =
       env.createPythonWorker(pythonExec, workerModule, envVars.asScala.toMap, useDaemon)
     var releasedOrClosed = false
     val bufferStream = new DirectByteBufferOutputStream()
@@ -115,8 +120,22 @@ abstract class PythonPlannerRunner[T](func: PythonFunction) {
 
       res
     } catch {
-      case eof: EOFException =>
-        throw new SparkException("Python worker exited unexpectedly (crashed)", eof)
+      case e: IOException if faultHandlerEnabled && pid.isDefined &&
+        JavaFiles.exists(BasePythonRunner.faultHandlerLogPath(pid.get)) =>
+        val path = BasePythonRunner.faultHandlerLogPath(pid.get)
+        val error = String.join("\n", JavaFiles.readAllLines(path)) + "\n"
+        JavaFiles.deleteIfExists(path)
+        throw new SparkException(s"Python worker exited unexpectedly (crashed): $error", e)
+
+      case e: IOException if !faultHandlerEnabled =>
+        throw new SparkException(
+          s"Python worker exited unexpectedly (crashed). " +
+            "Consider setting 'spark.sql.execution.pyspark.udf.faulthandler.enabled' or" +
+            s"'${PYTHON_WORKER_FAULTHANLDER_ENABLED.key}' configuration to 'true' for " +
+            "the better Python traceback.", e)
+
+      case e: IOException =>
+        throw new SparkException("Python worker exited unexpectedly (crashed)", e)
     } finally {
       try {
         bufferStream.close()
