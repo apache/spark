@@ -20,6 +20,9 @@
 
 ########### Transformers
 org.apache.spark.ml.feature.DCT
+org.apache.spark.ml.feature.NGram
+org.apache.spark.ml.feature.Normalizer
+org.apache.spark.ml.feature.Interaction
 org.apache.spark.ml.feature.Binarizer
 org.apache.spark.ml.feature.Bucketizer
 org.apache.spark.ml.feature.VectorAssembler
