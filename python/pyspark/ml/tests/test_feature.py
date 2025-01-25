@@ -34,6 +34,8 @@ from pyspark.ml.feature import (
     HashingTF,
     IDF,
     IDFModel,
+    Imputer,
+    ImputerModel,
     NGram,
     RFormula,
     Tokenizer,
@@ -539,6 +541,46 @@ class FeatureTestsMixin:
 
             model.write().overwrite().save(d)
             model2 = Word2VecModel.load(d)
+            self.assertEqual(str(model), str(model2))
+
+    def test_imputer(self):
+        spark = self.spark
+        df = spark.createDataFrame(
+            [
+                (1.0, float("nan")),
+                (2.0, float("nan")),
+                (float("nan"), 3.0),
+                (4.0, 4.0),
+                (5.0, 5.0),
+            ],
+            ["a", "b"],
+        )
+
+        imputer = Imputer(strategy="mean")
+        imputer.setInputCols(["a", "b"])
+        imputer.setOutputCols(["out_a", "out_b"])
+
+        self.assertEqual(imputer.getStrategy(), "mean")
+        self.assertEqual(imputer.getInputCols(), ["a", "b"])
+        self.assertEqual(imputer.getOutputCols(), ["out_a", "out_b"])
+
+        model = imputer.fit(df)
+        self.assertEqual(model.surrogateDF.columns, ["a", "b"])
+        self.assertEqual(model.surrogateDF.count(), 1)
+        self.assertEqual(list(model.surrogateDF.head()), [3.0, 4.0])
+
+        output = model.transform(df)
+        self.assertEqual(output.columns, ["a", "b", "out_a", "out_b"])
+        self.assertEqual(output.count(), 5)
+
+        # save & load
+        with tempfile.TemporaryDirectory(prefix="word2vec") as d:
+            imputer.write().overwrite().save(d)
+            imputer2 = Imputer.load(d)
+            self.assertEqual(str(imputer), str(imputer2))
+
+            model.write().overwrite().save(d)
+            model2 = ImputerModel.load(d)
             self.assertEqual(str(model), str(model2))
 
     def test_count_vectorizer(self):
