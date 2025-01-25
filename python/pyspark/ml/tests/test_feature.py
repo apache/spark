@@ -574,7 +574,7 @@ class FeatureTestsMixin:
         self.assertEqual(output.count(), 5)
 
         # save & load
-        with tempfile.TemporaryDirectory(prefix="word2vec") as d:
+        with tempfile.TemporaryDirectory(prefix="imputer") as d:
             imputer.write().overwrite().save(d)
             imputer2 = Imputer.load(d)
             self.assertEqual(str(imputer), str(imputer2))
