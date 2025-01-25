@@ -580,7 +580,7 @@ CreateDataSourceTableCommand `spark_catalog`.`default`.`sometable`, false
 -- !query
 SET VAR var = 'c1'
 -- !query analysis
-SetVariable [variablereference(system.session.var='sometable')], false, false
+SetVariable [variablereference(system.session.var='sometable')], false
 +- Project [c1 AS var#x]
    +- OneRowRelation
 
@@ -596,7 +596,7 @@ Project [c1#x]
 -- !query
 SET VAR var = 'some'
 -- !query analysis
-SetVariable [variablereference(system.session.var='c1')], false, false
+SetVariable [variablereference(system.session.var='c1')], false
 +- Project [some AS var#x]
    +- OneRowRelation
 

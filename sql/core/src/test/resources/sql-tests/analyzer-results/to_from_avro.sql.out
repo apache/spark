@@ -21,7 +21,7 @@ CreateVariable defaultvalueexpression(null, null), false, false
 set variable avro_schema =
   '{ "type": "record", "name": "struct", "fields": [{ "name": "u", "type": ["int","string"] }] }'
 -- !query analysis
-SetVariable [variablereference(system.session.avro_schema=CAST(NULL AS STRING))], false, false
+SetVariable [variablereference(system.session.avro_schema=CAST(NULL AS STRING))], false
 +- Project [{ "type": "record", "name": "struct", "fields": [{ "name": "u", "type": ["int","string"] }] } AS avro_schema#x]
    +- OneRowRelation
 

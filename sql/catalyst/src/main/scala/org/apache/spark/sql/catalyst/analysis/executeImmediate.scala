@@ -151,17 +151,14 @@ class SubstituteExecuteImmediate(
           }
         }
 
-        val intoClauseResolvedPlan = if (targetVariables.nonEmpty) {
-          SetVariable(targetVariables, queryPlan, isExecuteImmediateIntoClause = true)
-        } else { queryPlan }
-
-        val finalPlan =
-          AnalysisContext.withExecuteImmediateContext(isExecuteImmediate = true) {
-          resolveChild(intoClauseResolvedPlan)
+        val finalPlan = AnalysisContext.withExecuteImmediateContext(isExecuteImmediate = true) {
+          resolveChild(queryPlan)
         }
         checkAnalysis(finalPlan)
 
-        finalPlan
+        if (targetVariables.nonEmpty) {
+          SetVariable(targetVariables, finalPlan)
+        } else { finalPlan }
     }
 
   private def parseStatement(

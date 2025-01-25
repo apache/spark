@@ -33,7 +33,7 @@ object V2CommandStrategy extends Strategy {
     case DropVariable(ident: ResolvedIdentifier, ifExists) =>
       DropVariableExec(ident.identifier.name, ifExists) :: Nil
 
-    case SetVariable(variables, query, sessionVariablesOnly, _) =>
+    case SetVariable(variables, query, sessionVariablesOnly) =>
       SetVariableExec(
         variables.map(_.asInstanceOf[VariableReference]),
         planLater(query),

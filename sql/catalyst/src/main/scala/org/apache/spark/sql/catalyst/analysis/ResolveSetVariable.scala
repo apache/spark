@@ -38,8 +38,7 @@ class ResolveSetVariable(val catalogManager: CatalogManager) extends Rule[Logica
     _.containsPattern(COMMAND), ruleId) {
     // Resolve the left hand side of the SET VAR command
     case setVariable: SetVariable if !setVariable.targetVariables.forall(_.resolved) =>
-      val sessionVariablesOnly =
-        AnalysisContext.get.isExecuteImmediate && !setVariable.isExecuteImmediateIntoClause
+      val sessionVariablesOnly = AnalysisContext.get.isExecuteImmediate
       val lookupVariableMode = if (sessionVariablesOnly) {
         LookupVariableMode.EXCLUDE_LOCAL_VARS
       } else {

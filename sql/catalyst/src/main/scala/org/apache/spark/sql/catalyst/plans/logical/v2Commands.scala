@@ -1619,9 +1619,7 @@ case class SetVariable(
     sourceQuery: LogicalPlan,
     // When false, this node can set local variables from SQL scripting.
     // When true, it can only set session variables.
-    sessionVariablesOnly: Boolean = false,
-    // Whether this node was created by EXECUTE IMMEDIATE for the INTO clause.
-    isExecuteImmediateIntoClause: Boolean = false)
+    sessionVariablesOnly: Boolean = false)
   extends UnaryCommand {
   override def child: LogicalPlan = sourceQuery
   override protected def withNewChildInternal(newChild: LogicalPlan): SetVariable =
