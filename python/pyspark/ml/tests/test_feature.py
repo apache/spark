@@ -123,6 +123,7 @@ class FeatureTestsMixin:
         # single input
         si = StringIndexer(inputCol="label1", outputCol="index1")
         model = si.fit(df.select("label1"))
+        self.assertEqual(si.uid, model.uid)
 
         # read/write
         with tempfile.TemporaryDirectory(prefix="string_indexer") as tmp_dir:
@@ -183,6 +184,7 @@ class FeatureTestsMixin:
         pca = PCA(k=2, inputCol="features", outputCol="pca_features")
 
         model = pca.fit(df)
+        self.assertEqual(pca.uid, model.uid)
         self.assertEqual(model.getK(), 2)
         self.assertTrue(
             np.allclose(model.explainedVariance.toArray(), [0.79439, 0.20560], atol=1e-4)
@@ -272,6 +274,7 @@ class FeatureTestsMixin:
         self.assertEqual(scaler.getOutputCol(), "scaled")
 
         model = scaler.fit(df)
+        self.assertEqual(scaler.uid, model.uid)
         self.assertTrue(np.allclose(model.mean.toArray(), [1.66666667], atol=1e-4))
         self.assertTrue(np.allclose(model.std.toArray(), [1.52752523], atol=1e-4))
 
@@ -311,6 +314,7 @@ class FeatureTestsMixin:
         self.assertEqual(scaler.getOutputCol(), "scaled")
 
         model = scaler.fit(df)
+        self.assertEqual(scaler.uid, model.uid)
         self.assertTrue(np.allclose(model.maxAbs.toArray(), [3.0], atol=1e-4))
 
         output = model.transform(df)
@@ -349,6 +353,7 @@ class FeatureTestsMixin:
         self.assertEqual(scaler.getOutputCol(), "scaled")
 
         model = scaler.fit(df)
+        self.assertEqual(scaler.uid, model.uid)
         self.assertTrue(np.allclose(model.originalMax.toArray(), [3.0], atol=1e-4))
         self.assertTrue(np.allclose(model.originalMin.toArray(), [0.0], atol=1e-4))
 
@@ -388,6 +393,7 @@ class FeatureTestsMixin:
         self.assertEqual(scaler.getOutputCol(), "scaled")
 
         model = scaler.fit(df)
+        self.assertEqual(scaler.uid, model.uid)
         self.assertTrue(np.allclose(model.range.toArray(), [3.0], atol=1e-4))
         self.assertTrue(np.allclose(model.median.toArray(), [2.0], atol=1e-4))
 
@@ -422,6 +428,7 @@ class FeatureTestsMixin:
         self.assertEqual(selector.getOutputCol(), "selectedFeatures")
 
         model = selector.fit(df)
+        self.assertEqual(selector.uid, model.uid)
         self.assertEqual(model.selectedFeatures, [2])
 
         output = model.transform(df)
@@ -456,6 +463,7 @@ class FeatureTestsMixin:
         self.assertEqual(selector.getSelectionThreshold(), 1)
 
         model = selector.fit(df)
+        self.assertEqual(selector.uid, model.uid)
         self.assertEqual(model.selectedFeatures, [3])
 
         output = model.transform(df)
@@ -487,6 +495,7 @@ class FeatureTestsMixin:
         self.assertEqual(selector.getOutputCol(), "selectedFeatures")
 
         model = selector.fit(df)
+        self.assertEqual(selector.uid, model.uid)
         self.assertEqual(model.selectedFeatures, [2])
 
         output = model.transform(df)
@@ -516,6 +525,7 @@ class FeatureTestsMixin:
         self.assertEqual(w2v.getMaxIter(), 1)
 
         model = w2v.fit(df)
+        self.assertEqual(w2v.uid, model.uid)
         self.assertEqual(model.getVectors().columns, ["word", "vector"])
         self.assertEqual(model.getVectors().count(), 3)
 
@@ -567,6 +577,7 @@ class FeatureTestsMixin:
         self.assertEqual(imputer.getOutputCols(), ["out_a", "out_b"])
 
         model = imputer.fit(df)
+        self.assertEqual(imputer.uid, model.uid)
         self.assertEqual(model.surrogateDF.columns, ["a", "b"])
         self.assertEqual(model.surrogateDF.count(), 1)
         self.assertEqual(list(model.surrogateDF.head()), [3.0, 4.0])
@@ -598,6 +609,7 @@ class FeatureTestsMixin:
         self.assertEqual(cv.getOutputCol(), "vectors")
 
         model = cv.fit(df)
+        self.assertEqual(cv.uid, model.uid)
         self.assertEqual(sorted(model.vocabulary), ["a", "b", "c"])
 
         output = model.transform(df)
@@ -624,6 +636,7 @@ class FeatureTestsMixin:
         self.assertEqual(encoder.getOutputCols(), ["output"])
 
         model = encoder.fit(df)
+        self.assertEqual(encoder.uid, model.uid)
         self.assertEqual(model.categorySizes, [3])
 
         output = model.transform(df)
@@ -900,6 +913,7 @@ class FeatureTestsMixin:
         self.assertListEqual(idf.params, [idf.inputCol, idf.minDocFreq, idf.outputCol])
 
         model = idf.fit(df, {idf.outputCol: "idf"})
+        self.assertEqual(idf.uid, model.uid)
         # self.assertEqual(
         #     model.uid, idf.uid, "Model should inherit the UID from its parent estimator."
         # )
@@ -1012,6 +1026,7 @@ class FeatureTestsMixin:
         )
         cv = CountVectorizer(binary=True, inputCol="words", outputCol="features")
         model = cv.fit(dataset)
+        self.assertEqual(cv.uid, model.uid)
 
         transformedList = model.transform(dataset).select("features", "expected").collect()
 
@@ -1047,6 +1062,8 @@ class FeatureTestsMixin:
         )
         cv = CountVectorizer(inputCol="words", outputCol="features")
         model1 = cv.setMaxDF(3).fit(dataset)
+        self.assertEqual(cv.uid, model1.uid)
+
         self.assertEqual(model1.vocabulary, ["b", "c", "d"])
 
         transformedList1 = model1.transform(dataset).select("features", "expected").collect()
@@ -1119,6 +1136,8 @@ class FeatureTestsMixin:
         # Does not index label by default since it's numeric type.
         rf = RFormula(formula="y ~ x + s")
         model = rf.fit(df)
+        self.assertEqual(rf.uid, model.uid)
+
         transformedDF = model.transform(df)
         self.assertEqual(transformedDF.head().label, 1.0)
         # Force to index label.

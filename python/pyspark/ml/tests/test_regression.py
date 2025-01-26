@@ -67,6 +67,7 @@ class RegressionTestsMixin:
         self.assertEqual(lr.getWeightCol(), "weight")
 
         model = lr.fit(df)
+        self.assertEqual(lr.uid, model.uid)
         self.assertEqual(model.numFeatures, 2)
         self.assertTrue(np.allclose(model.scale, 1.0, atol=1e-4))
         self.assertTrue(np.allclose(model.intercept, -0.35, atol=1e-4))
@@ -178,6 +179,7 @@ class RegressionTestsMixin:
         self.assertEqual(dt.getLeafCol(), "leaf")
 
         model = dt.fit(df)
+        self.assertEqual(dt.uid, model.uid)
         self.assertEqual(model.numFeatures, 2)
         self.assertEqual(model.depth, 2)
         self.assertEqual(model.numNodes, 5)
@@ -235,6 +237,7 @@ class RegressionTestsMixin:
         self.assertEqual(gbt.getLeafCol(), "leaf")
 
         model = gbt.fit(df)
+        self.assertEqual(gbt.uid, model.uid)
         self.assertEqual(model.numFeatures, 2)
         # TODO(SPARK-50843): Support access submodel in TreeEnsembleModel
         # model.trees
@@ -310,6 +313,7 @@ class RegressionTestsMixin:
         self.assertEqual(rf.getLeafCol(), "leaf")
 
         model = rf.fit(df)
+        self.assertEqual(rf.uid, model.uid)
         self.assertEqual(model.numFeatures, 2)
         # TODO(SPARK-50843): Support access submodel in TreeEnsembleModel
         # model.trees
