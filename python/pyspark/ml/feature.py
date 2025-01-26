@@ -2261,6 +2261,7 @@ class ImputerModel(JavaModel, _ImputerParams, JavaMLReadable["ImputerModel"], Ja
 
     @property
     @since("2.2.0")
+    @try_remote_attribute_relation
     def surrogateDF(self) -> DataFrame:
         """
         Returns a DataFrame containing inputCols and their corresponding surrogates,
@@ -5499,15 +5500,6 @@ class TargetEncoderModel(
         Sets the value of :py:attr:`smoothing`.
         """
         return self._set(smoothing=value)
-
-    @property
-    @since("4.0.0")
-    def stats(self) -> List[Dict[float, Tuple[float, float]]]:
-        """
-        Fitted statistics for each feature to being encoded.
-        The list contains a dictionary for each input column.
-        """
-        return self._call_java("stats")
 
 
 @inherit_doc

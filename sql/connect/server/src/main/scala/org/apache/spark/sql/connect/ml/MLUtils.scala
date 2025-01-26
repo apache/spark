@@ -523,6 +523,7 @@ private[ml] object MLUtils {
     (classOf[GBTRegressionModel], Set("featureImportances", "evaluateEachIteration")),
 
     // Classification Models
+    (classOf[NaiveBayesModel], Set("pi", "theta", "sigma")),
     (classOf[LinearSVCModel], Set("intercept", "coefficients", "evaluate")),
     (
       classOf[LogisticRegressionModel],
@@ -531,6 +532,34 @@ private[ml] object MLUtils {
     (classOf[BinaryLogisticRegressionSummary], Set("scoreCol")),
 
     // Regression Models
+    (
+      classOf[GeneralizedLinearRegressionModel],
+      Set("intercept", "coefficients", "numFeatures", "evaluate")),
+    (
+      classOf[GeneralizedLinearRegressionSummary],
+      Set(
+        "aic",
+        "degreesOfFreedom",
+        "deviance",
+        "dispersion",
+        "nullDeviance",
+        "numInstances",
+        "predictionCol",
+        "predictions",
+        "rank",
+        "residualDegreeOfFreedom",
+        "residualDegreeOfFreedomNull",
+        "residuals")),
+    (
+      classOf[GeneralizedLinearRegressionTrainingSummary],
+      Set(
+        "numIterations",
+        "solver",
+        "tValues",
+        "pValues",
+        "coefficientStandardErrors",
+        "coefficientsWithStatistics",
+        "toString")),
     (classOf[LinearRegressionModel], Set("intercept", "coefficients", "scale", "evaluate")),
     (
       classOf[LinearRegressionSummary],
@@ -582,6 +611,7 @@ private[ml] object MLUtils {
     (classOf[FPGrowthModel], Set("associationRules", "freqItemsets")),
 
     // Feature Models
+    (classOf[ImputerModel], Set("surrogateDF")),
     (classOf[StandardScalerModel], Set("mean", "std")),
     (classOf[MaxAbsScalerModel], Set("maxAbs")),
     (classOf[MinMaxScalerModel], Set("originalMax", "originalMin")),
@@ -592,7 +622,8 @@ private[ml] object MLUtils {
     (classOf[PCAModel], Set("pc", "explainedVariance")),
     (classOf[Word2VecModel], Set("getVectors", "findSynonyms", "findSynonymsArray")),
     (classOf[CountVectorizerModel], Set("vocabulary")),
-    (classOf[OneHotEncoderModel], Set("categorySizes")))
+    (classOf[OneHotEncoderModel], Set("categorySizes")),
+    (classOf[IDFModel], Set("idf", "docFreq", "numDocs")))
 
   private def validate(obj: Any, method: String): Unit = {
     assert(obj != null)

@@ -282,9 +282,11 @@ object TargetEncoder extends DefaultParamsReadable[TargetEncoder] {
  */
 @Since("4.0.0")
 class TargetEncoderModel private[ml] (
-                     @Since("4.0.0") override val uid: String,
-                     @Since("4.0.0") val stats: Array[Map[Double, (Double, Double)]])
+    @Since("4.0.0") override val uid: String,
+    @Since("4.0.0") private[ml] val stats: Array[Map[Double, (Double, Double)]])
   extends Model[TargetEncoderModel] with TargetEncoderBase with MLWritable {
+
+  private[ml] def this() = this(Identifiable.randomUID("TargetEncoder"), Array.empty)
 
   /** @group setParam */
   @Since("4.0.0")
@@ -403,13 +405,18 @@ object TargetEncoderModel extends MLReadable[TargetEncoderModel] {
   private[TargetEncoderModel]
   class TargetEncoderModelWriter(instance: TargetEncoderModel) extends MLWriter {
 
-    private case class Data(stats: Array[Map[Double, (Double, Double)]])
+    private case class Data(index: Int, categories: Array[Double],
+        counts: Array[Double], stats: Array[Double])
 
     override protected def saveImpl(path: String): Unit = {
       DefaultParamsWriter.saveMetadata(instance, path, sparkSession)
-      val data = Data(instance.stats)
+      val datum = instance.stats.iterator.zipWithIndex.map { case (stat, index) =>
+        val (_categories, _countsAndStats) = stat.toSeq.unzip
+        val (_counts, _stats) = _countsAndStats.unzip
+        Data(index, _categories.toArray, _counts.toArray, _stats.toArray)
+      }.toSeq
       val dataPath = new Path(path, "data").toString
-      sparkSession.createDataFrame(Seq(data)).write.parquet(dataPath)
+      sparkSession.createDataFrame(datum).write.parquet(dataPath)
     }
   }
 
@@ -420,10 +427,18 @@ object TargetEncoderModel extends MLReadable[TargetEncoderModel] {
     override def load(path: String): TargetEncoderModel = {
       val metadata = DefaultParamsReader.loadMetadata(path, sparkSession, className)
       val dataPath = new Path(path, "data").toString
-      val data = sparkSession.read.parquet(dataPath)
-        .select("encodings")
-        .head()
-      val stats = data.getAs[Array[Map[Double, (Double, Double)]]](0)
+
+      val stats = sparkSession.read.parquet(dataPath)
+        .select("index", "categories", "counts", "stats")
+        .collect()
+        .map { row =>
+          val index = row.getInt(0)
+          val categories = row.getAs[Seq[Double]](1).toArray
+          val counts = row.getAs[Seq[Double]](2).toArray
+          val stats = row.getAs[Seq[Double]](3).toArray
+          (index, categories.zip(counts.zip(stats)).toMap)
+        }.sortBy(_._1).map(_._2)
+
       val model = new TargetEncoderModel(metadata.uid, stats)
       metadata.getAndSetParams(model)
       model

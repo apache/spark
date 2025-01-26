@@ -25,6 +25,10 @@ from pyspark.sql import SparkSession
 from pyspark.ml.regression import (
     LinearRegression,
     LinearRegressionModel,
+    GeneralizedLinearRegression,
+    GeneralizedLinearRegressionModel,
+    GeneralizedLinearRegressionSummary,
+    GeneralizedLinearRegressionTrainingSummary,
     LinearRegressionSummary,
     LinearRegressionTrainingSummary,
     DecisionTreeRegressor,
@@ -67,6 +71,7 @@ class RegressionTestsMixin:
         self.assertEqual(lr.getWeightCol(), "weight")
 
         model = lr.fit(df)
+        self.assertEqual(lr.uid, model.uid)
         self.assertEqual(model.numFeatures, 2)
         self.assertTrue(np.allclose(model.scale, 1.0, atol=1e-4))
         self.assertTrue(np.allclose(model.intercept, -0.35, atol=1e-4))
@@ -163,6 +168,104 @@ class RegressionTestsMixin:
             model2 = LinearRegressionModel.load(d)
             self.assertEqual(str(model), str(model2))
 
+    def test_generalized_linear_regression(self):
+        spark = self.spark
+        df = (
+            spark.createDataFrame(
+                [
+                    (1, 1.0, Vectors.dense(0.0, 0.0)),
+                    (2, 1.0, Vectors.dense(1.0, 2.0)),
+                    (3, 2.0, Vectors.dense(0.0, 0.0)),
+                    (4, 2.0, Vectors.dense(1.0, 1.0)),
+                ],
+                ["index", "label", "features"],
+            )
+            .coalesce(1)
+            .sortWithinPartitions("index")
+            .select("label", "features")
+        )
+
+        glr = GeneralizedLinearRegression(
+            family="gaussian",
+            link="identity",
+            linkPredictionCol="p",
+        )
+        glr.setRegParam(0.1)
+        glr.setMaxIter(1)
+        self.assertEqual(glr.getFamily(), "gaussian")
+        self.assertEqual(glr.getLink(), "identity")
+        self.assertEqual(glr.getLinkPredictionCol(), "p")
+        self.assertEqual(glr.getRegParam(), 0.1)
+        self.assertEqual(glr.getMaxIter(), 1)
+
+        model = glr.fit(df)
+        self.assertTrue(np.allclose(model.intercept, 1.543859649122807, atol=1e-4), model.intercept)
+        self.assertTrue(
+            np.allclose(model.coefficients.toArray(), [0.43859649, -0.35087719], atol=1e-4),
+            model.coefficients,
+        )
+        self.assertEqual(model.numFeatures, 2)
+
+        vec = Vectors.dense(1.0, 2.0)
+        pred = model.predict(vec)
+        self.assertTrue(np.allclose(pred, 1.280701754385965, atol=1e-4), pred)
+
+        expected_cols = ["label", "features", "p", "prediction"]
+
+        output = model.transform(df)
+        self.assertEqual(output.columns, expected_cols)
+        self.assertEqual(output.count(), 4)
+
+        # Model summary
+        self.assertTrue(model.hasSummary)
+
+        summary = model.summary
+        self.assertIsInstance(summary, GeneralizedLinearRegressionSummary)
+        self.assertIsInstance(summary, GeneralizedLinearRegressionTrainingSummary)
+        self.assertEqual(summary.numIterations, 1)
+        self.assertEqual(summary.numInstances, 4)
+        self.assertEqual(summary.rank, 3)
+        self.assertTrue(
+            np.allclose(
+                summary.tValues,
+                [0.3725037662281711, -0.49418209022924164, 2.6589353685797654],
+                atol=1e-4,
+            ),
+            summary.tValues,
+        )
+        self.assertTrue(
+            np.allclose(
+                summary.pValues,
+                [0.7729938686180984, 0.707802691825973, 0.22900885781807023],
+                atol=1e-4,
+            ),
+            summary.pValues,
+        )
+        self.assertEqual(summary.predictions.columns, expected_cols)
+        self.assertEqual(summary.predictions.count(), 4)
+        self.assertEqual(summary.residuals().columns, ["devianceResiduals"])
+        self.assertEqual(summary.residuals().count(), 4)
+
+        summary2 = model.evaluate(df)
+        self.assertIsInstance(summary2, GeneralizedLinearRegressionSummary)
+        self.assertNotIsInstance(summary2, GeneralizedLinearRegressionTrainingSummary)
+        self.assertEqual(summary2.numInstances, 4)
+        self.assertEqual(summary2.rank, 3)
+        self.assertEqual(summary.predictions.columns, expected_cols)
+        self.assertEqual(summary.predictions.count(), 4)
+        self.assertEqual(summary2.residuals().columns, ["devianceResiduals"])
+        self.assertEqual(summary2.residuals().count(), 4)
+
+        # Model save & load
+        with tempfile.TemporaryDirectory(prefix="generalized_linear_regression") as d:
+            glr.write().overwrite().save(d)
+            glr2 = GeneralizedLinearRegression.load(d)
+            self.assertEqual(str(glr), str(glr2))
+
+            model.write().overwrite().save(d)
+            model2 = GeneralizedLinearRegressionModel.load(d)
+            self.assertEqual(str(model), str(model2))
+
     def test_decision_tree_regressor(self):
         df = self.df
 
@@ -178,6 +281,7 @@ class RegressionTestsMixin:
         self.assertEqual(dt.getLeafCol(), "leaf")
 
         model = dt.fit(df)
+        self.assertEqual(dt.uid, model.uid)
         self.assertEqual(model.numFeatures, 2)
         self.assertEqual(model.depth, 2)
         self.assertEqual(model.numNodes, 5)
@@ -235,6 +339,7 @@ class RegressionTestsMixin:
         self.assertEqual(gbt.getLeafCol(), "leaf")
 
         model = gbt.fit(df)
+        self.assertEqual(gbt.uid, model.uid)
         self.assertEqual(model.numFeatures, 2)
         # TODO(SPARK-50843): Support access submodel in TreeEnsembleModel
         # model.trees
@@ -310,6 +415,7 @@ class RegressionTestsMixin:
         self.assertEqual(rf.getLeafCol(), "leaf")
 
         model = rf.fit(df)
+        self.assertEqual(rf.uid, model.uid)
         self.assertEqual(model.numFeatures, 2)
         # TODO(SPARK-50843): Support access submodel in TreeEnsembleModel
         # model.trees

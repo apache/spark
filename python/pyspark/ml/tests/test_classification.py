@@ -22,8 +22,10 @@ from shutil import rmtree
 import numpy as np
 
 from pyspark.ml.linalg import Vectors, Matrices
-from pyspark.sql import SparkSession, DataFrame
+from pyspark.sql import SparkSession, DataFrame, Row
 from pyspark.ml.classification import (
+    NaiveBayes,
+    NaiveBayesModel,
     LinearSVC,
     LinearSVCModel,
     LinearSVCSummary,
@@ -46,6 +48,67 @@ from pyspark.ml.classification import (
 
 
 class ClassificationTestsMixin:
+    def test_naive_bayes(self):
+        spark = self.spark
+        df = spark.createDataFrame(
+            [
+                Row(label=0.0, weight=0.1, features=Vectors.dense([0.0, 0.0])),
+                Row(label=0.0, weight=0.5, features=Vectors.dense([0.0, 1.0])),
+                Row(label=1.0, weight=1.0, features=Vectors.dense([1.0, 0.0])),
+            ]
+        )
+
+        nb = NaiveBayes(smoothing=1.0, modelType="multinomial", weightCol="weight")
+        self.assertEqual(nb.getSmoothing(), 1.0)
+        self.assertEqual(nb.getModelType(), "multinomial")
+        self.assertEqual(nb.getWeightCol(), "weight")
+
+        model = nb.fit(df)
+        self.assertEqual(model.uid, nb.uid)
+        self.assertEqual(model.numClasses, 2)
+        self.assertEqual(model.numFeatures, 2)
+        self.assertTrue(
+            np.allclose(model.pi.toArray(), [-0.81093022, -0.58778666], atol=1e-4), model.pi
+        )
+        self.assertTrue(
+            np.allclose(
+                model.theta.toArray(),
+                [[-0.91629073, -0.51082562], [-0.40546511, -1.09861229]],
+                atol=1e-4,
+            ),
+            model.theta,
+        )
+        self.assertTrue(np.allclose(model.sigma.toArray(), [], atol=1e-4), model.sigma)
+
+        vec = Vectors.dense(0.0, 5.0)
+        self.assertEqual(model.predict(vec), 0.0)
+        pred = model.predictRaw(vec)
+        self.assertTrue(np.allclose(pred.toArray(), [-3.36505834, -6.08084811], atol=1e-4), pred)
+        pred = model.predictProbability(vec)
+        self.assertTrue(np.allclose(pred.toArray(), [0.93795196, 0.06204804], atol=1e-4), pred)
+
+        output = model.transform(df)
+        expected_cols = [
+            "label",
+            "weight",
+            "features",
+            "rawPrediction",
+            "probability",
+            "prediction",
+        ]
+        self.assertEqual(output.columns, expected_cols)
+        self.assertEqual(output.count(), 3)
+
+        # Model save & load
+        with tempfile.TemporaryDirectory(prefix="naive_bayes") as d:
+            nb.write().overwrite().save(d)
+            nb2 = NaiveBayes.load(d)
+            self.assertEqual(str(nb), str(nb2))
+
+            model.write().overwrite().save(d)
+            model2 = NaiveBayesModel.load(d)
+            self.assertEqual(str(model), str(model2))
+
     def test_binomial_logistic_regression_with_bound(self):
         df = self.spark.createDataFrame(
             [
@@ -64,6 +127,7 @@ class ClassificationTestsMixin:
             upperBoundsOnIntercepts=Vectors.dense(0.0),
         )
         lor_model = lor.fit(df)
+        self.assertEqual(lor.uid, lor_model.uid)
 
         def check_result(model: LogisticRegressionModel) -> None:
             self.assertTrue(
@@ -97,6 +161,7 @@ class ClassificationTestsMixin:
             upperBoundsOnIntercepts=Vectors.dense(0.0, 0.0, 0.0),
         )
         lor_model = lor.fit(df)
+        self.assertEqual(lor.uid, lor_model.uid)
 
         def check_result(model: LogisticRegressionModel) -> None:
             expected = [
@@ -134,6 +199,7 @@ class ClassificationTestsMixin:
 
         lor = LogisticRegression(weightCol="weight")
         model = lor.fit(df)
+        self.assertEqual(lor.uid, model.uid)
 
         # status changes 1
         for t in [0.0, 0.1, 0.2, 0.5, 1.0]:
@@ -162,6 +228,7 @@ class ClassificationTestsMixin:
         )
         lr = LogisticRegression(maxIter=5, regParam=0.01, weightCol="weight", fitIntercept=False)
         model = lr.fit(df)
+        self.assertEqual(lr.uid, model.uid)
         self.assertTrue(model.hasSummary)
         s = model.summary
         # test that api is callable and returns expected types
@@ -323,6 +390,7 @@ class ClassificationTestsMixin:
         self.assertEqual(svc.getRegParam(), 1.0)
 
         model = svc.fit(df)
+        self.assertEqual(svc.uid, model.uid)
         self.assertEqual(model.numClasses, 2)
         self.assertEqual(model.numFeatures, 2)
         self.assertTrue(np.allclose(model.intercept, 0.025877458475338313, atol=1e-4))
@@ -402,6 +470,7 @@ class ClassificationTestsMixin:
         self.assertEqual(dt.getLeafCol(), "leaf")
 
         model = dt.fit(df)
+        self.assertEqual(dt.uid, model.uid)
         self.assertEqual(model.numClasses, 2)
         self.assertEqual(model.numFeatures, 2)
         self.assertEqual(model.depth, 2)
@@ -469,6 +538,7 @@ class ClassificationTestsMixin:
         self.assertEqual(gbt.getLeafCol(), "leaf")
 
         model = gbt.fit(df)
+        self.assertEqual(gbt.uid, model.uid)
         self.assertEqual(model.numClasses, 2)
         self.assertEqual(model.numFeatures, 2)
         # TODO(SPARK-50843): Support access submodel in TreeEnsembleModel
@@ -547,6 +617,7 @@ class ClassificationTestsMixin:
         self.assertEqual(rf.getLeafCol(), "leaf")
 
         model = rf.fit(df)
+        self.assertEqual(rf.uid, model.uid)
         self.assertEqual(model.numClasses, 2)
         self.assertEqual(model.numFeatures, 2)
         # TODO(SPARK-50843): Support access submodel in TreeEnsembleModel
@@ -633,6 +704,7 @@ class ClassificationTestsMixin:
         self.assertEqual(rf.getLeafCol(), "leaf")
 
         model = rf.fit(df)
+        self.assertEqual(rf.uid, model.uid)
         self.assertEqual(model.numClasses, 3)
         self.assertEqual(model.numFeatures, 2)
         # TODO(SPARK-50843): Support access submodel in TreeEnsembleModel
