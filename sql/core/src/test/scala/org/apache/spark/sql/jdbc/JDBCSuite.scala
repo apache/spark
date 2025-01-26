@@ -2226,7 +2226,6 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
     Seq(OracleDialect(), MySQLDialect(), DatabricksDialect()).foreach { dialect =>
       assert(dialect.getJdbcSQLQueryBuilder(options)
         .withColumns(Array("a", "b"))
-        .withHint(options.hint)
         .build().trim() == "SELECT /*+ INDEX(test idx1) */ a,b FROM test")
     }
     // not supported
@@ -2237,7 +2236,6 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
         exception = intercept[AnalysisException] {
           dialect.getJdbcSQLQueryBuilder(options)
             .withColumns(Array("a", "b"))
-            .withHint(options.hint)
             .build().trim()
         },
         condition = "HINT_UNSUPPORTED_FOR_JDBC_DIALECT",
