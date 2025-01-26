@@ -101,7 +101,11 @@ object SparkStringUtils extends Logging {
         seq.take(numFields).mkString(start, sep, ending)
       }
     } else {
-      seq.mkString(start, sep, end)
+      if (customToString.isDefined) {
+        seq.map(customToString.get).mkString(start, sep, end)
+      } else {
+        seq.mkString(start, sep, end)
+      }
     }
   }
 
