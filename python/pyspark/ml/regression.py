@@ -2795,6 +2795,7 @@ class GeneralizedLinearRegressionSummary(JavaWrapper):
 
     @property
     @since("2.0.0")
+    @try_remote_attribute_relation
     def predictions(self) -> DataFrame:
         """
         Predictions output by the model's `transform` method.
@@ -2850,6 +2851,7 @@ class GeneralizedLinearRegressionSummary(JavaWrapper):
         """
         return self._call_java("residualDegreeOfFreedomNull")
 
+    @try_remote_attribute_relation
     def residuals(self, residualsType: str = "deviance") -> DataFrame:
         """
         Get the residuals of the fitted model by type.

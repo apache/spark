@@ -532,6 +532,34 @@ private[ml] object MLUtils {
     (classOf[BinaryLogisticRegressionSummary], Set("scoreCol")),
 
     // Regression Models
+    (
+      classOf[GeneralizedLinearRegressionModel],
+      Set("intercept", "coefficients", "numFeatures", "evaluate")),
+    (
+      classOf[GeneralizedLinearRegressionSummary],
+      Set(
+        "aic",
+        "degreesOfFreedom",
+        "deviance",
+        "dispersion",
+        "nullDeviance",
+        "numInstances",
+        "predictionCol",
+        "predictions",
+        "rank",
+        "residualDegreeOfFreedom",
+        "residualDegreeOfFreedomNull",
+        "residuals")),
+    (
+      classOf[GeneralizedLinearRegressionTrainingSummary],
+      Set(
+        "numIterations",
+        "solver",
+        "tValues",
+        "pValues",
+        "coefficientStandardErrors",
+        "coefficientsWithStatistics",
+        "toString")),
     (classOf[LinearRegressionModel], Set("intercept", "coefficients", "scale", "evaluate")),
     (
       classOf[LinearRegressionSummary],
