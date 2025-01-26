@@ -53,6 +53,8 @@ from pyspark.ml.util import (
     MLWriter,
     JavaMLReader,
     JavaMLWriter,
+    try_remote_write,
+    try_remote_read,
 )
 from pyspark.ml.wrapper import JavaParams, JavaEstimator, JavaWrapper
 from pyspark.sql.functions import col, lit, rand, UserDefinedFunction
@@ -386,7 +388,7 @@ class _ValidatorSharedReadWrite:
     def saveImpl(
         path: str,
         instance: _ValidatorParams,
-        sc: "SparkContext",
+        sc: Union["SparkContext", "SparkSession"],
         extraMetadata: Optional[Dict[str, Any]] = None,
     ) -> None:
         numParamsNotJson = 0
@@ -430,7 +432,7 @@ class _ValidatorSharedReadWrite:
 
     @staticmethod
     def load(
-        path: str, sc: "SparkContext", metadata: Dict[str, Any]
+        path: str, sc: Union["SparkContext", "SparkSession"], metadata: Dict[str, Any]
     ) -> Tuple[Dict[str, Any], Estimator, Evaluator, List["ParamMap"]]:
         evaluatorPath = os.path.join(path, "evaluator")
         evaluator: Evaluator = DefaultParamsReader.loadParamsInstance(evaluatorPath, sc)
@@ -513,12 +515,12 @@ class CrossValidatorReader(MLReader["CrossValidator"]):
         self.cls = cls
 
     def load(self, path: str) -> "CrossValidator":
-        metadata = DefaultParamsReader.loadMetadata(path, self.sc)
+        metadata = DefaultParamsReader.loadMetadata(path, self.sparkSession)
         if not DefaultParamsReader.isPythonParamsInstance(metadata):
             return JavaMLReader(self.cls).load(path)  # type: ignore[arg-type]
         else:
             metadata, estimator, evaluator, estimatorParamMaps = _ValidatorSharedReadWrite.load(
-                path, self.sc, metadata
+                path, self.sparkSession, metadata
             )
             cv = CrossValidator(
                 estimator=estimator, estimatorParamMaps=estimatorParamMaps, evaluator=evaluator
@@ -536,7 +538,7 @@ class CrossValidatorWriter(MLWriter):
 
     def saveImpl(self, path: str) -> None:
         _ValidatorSharedReadWrite.validateParams(self.instance)
-        _ValidatorSharedReadWrite.saveImpl(path, self.instance, self.sc)
+        _ValidatorSharedReadWrite.saveImpl(path, self.instance, self.sparkSession)
 
 
 @inherit_doc
@@ -546,16 +548,18 @@ class CrossValidatorModelReader(MLReader["CrossValidatorModel"]):
         self.cls = cls
 
     def load(self, path: str) -> "CrossValidatorModel":
-        metadata = DefaultParamsReader.loadMetadata(path, self.sc)
+        metadata = DefaultParamsReader.loadMetadata(path, self.sparkSession)
         if not DefaultParamsReader.isPythonParamsInstance(metadata):
             return JavaMLReader(self.cls).load(path)  # type: ignore[arg-type]
         else:
             metadata, estimator, evaluator, estimatorParamMaps = _ValidatorSharedReadWrite.load(
-                path, self.sc, metadata
+                path, self.sparkSession, metadata
             )
             numFolds = metadata["paramMap"]["numFolds"]
             bestModelPath = os.path.join(path, "bestModel")
-            bestModel: Model = DefaultParamsReader.loadParamsInstance(bestModelPath, self.sc)
+            bestModel: Model = DefaultParamsReader.loadParamsInstance(
+                bestModelPath, self.sparkSession
+            )
             avgMetrics = metadata["avgMetrics"]
             if "stdMetrics" in metadata:
                 stdMetrics = metadata["stdMetrics"]
@@ -571,7 +575,7 @@ class CrossValidatorModelReader(MLReader["CrossValidatorModel"]):
                             path, "subModels", f"fold{splitIndex}", f"{paramIndex}"
                         )
                         subModels[splitIndex][paramIndex] = DefaultParamsReader.loadParamsInstance(
-                            modelPath, self.sc
+                            modelPath, self.sparkSession
                         )
             else:
                 subModels = None
@@ -608,7 +612,9 @@ class CrossValidatorModelWriter(MLWriter):
         if instance.stdMetrics:
             extraMetadata["stdMetrics"] = instance.stdMetrics
 
-        _ValidatorSharedReadWrite.saveImpl(path, instance, self.sc, extraMetadata=extraMetadata)
+        _ValidatorSharedReadWrite.saveImpl(
+            path, instance, self.sparkSession, extraMetadata=extraMetadata
+        )
         bestModelPath = os.path.join(path, "bestModel")
         cast(MLWritable, instance.bestModel).save(bestModelPath)
         if persistSubModels:
@@ -845,7 +851,7 @@ class CrossValidator(
             train = datasets[i][0].cache()
 
             tasks = map(
-                inheritable_thread_target,
+                inheritable_thread_target(dataset.sparkSession),
                 _parallelFitTasks(est, train, eva, validation, epm, collectSubModelsParam),
             )
             for j, metric, subModel in pool.imap_unordered(lambda f: f(), tasks):
@@ -939,6 +945,7 @@ class CrossValidator(
         return newCV
 
     @since("2.3.0")
+    @try_remote_write
     def write(self) -> MLWriter:
         """Returns an MLWriter instance for this ML instance."""
         if _ValidatorSharedReadWrite.is_java_convertible(self):
@@ -947,6 +954,7 @@ class CrossValidator(
 
     @classmethod
     @since("2.3.0")
+    @try_remote_read
     def read(cls) -> CrossValidatorReader:
         """Returns an MLReader instance for this class."""
         return CrossValidatorReader(cls)
@@ -1077,6 +1085,7 @@ class CrossValidatorModel(
         )
 
     @since("2.3.0")
+    @try_remote_write
     def write(self) -> MLWriter:
         """Returns an MLWriter instance for this ML instance."""
         if _ValidatorSharedReadWrite.is_java_convertible(self):
@@ -1085,6 +1094,7 @@ class CrossValidatorModel(
 
     @classmethod
     @since("2.3.0")
+    @try_remote_read
     def read(cls) -> CrossValidatorModelReader:
         """Returns an MLReader instance for this class."""
         return CrossValidatorModelReader(cls)

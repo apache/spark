@@ -149,11 +149,10 @@ def try_remote_transform_relation(f: FuncT) -> FuncT:
     def wrapped(self: "JavaWrapper", dataset: "ConnectDataFrame") -> Any:
         if is_remote() and "PYSPARK_NO_NAMESPACE_SHARE" not in os.environ:
             from pyspark.ml import Model, Transformer
-            from pyspark.sql.connect.session import SparkSession
             from pyspark.sql.connect.dataframe import DataFrame as ConnectDataFrame
             from pyspark.ml.connect.serialize import serialize_ml_params
 
-            session = SparkSession.getActiveSession()
+            session = dataset.sparkSession
             assert session is not None
             # Model is also a Transformer, so we much match Model first
             if isinstance(self, Model):
