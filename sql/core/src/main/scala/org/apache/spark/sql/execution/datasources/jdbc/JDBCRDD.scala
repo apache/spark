@@ -188,7 +188,6 @@ class JDBCRDD(
       .withSortOrders(sortOrders)
       .withLimit(limit)
       .withOffset(offset)
-      .withHint(options.hint)
 
     groupByColumns.foreach { groupByKeys =>
       builder = builder.withGroupByColumns(groupByKeys)

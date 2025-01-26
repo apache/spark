@@ -18,6 +18,7 @@
 package org.apache.spark.sql.jdbc
 
 import org.apache.spark.sql.connector.expressions.filter.Predicate
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JDBCPartition}
 import org.apache.spark.sql.execution.datasources.v2.TableSampleInfo
 
@@ -70,7 +71,13 @@ class JdbcSQLQueryBuilder(dialect: JdbcDialect, options: JDBCOptions) {
   /**
    * A hint sample clause representing query hints.
    */
-  protected var hintClause: String = ""
+  protected val hintClause: String = {
+    if (options.hint == "" || dialect.supportsHint) {
+      options.hint
+    } else {
+      throw QueryCompilationErrors.hintUnsupportedForJdbcDatabasesError(this.getClass.getSimpleName)
+    }
+  }
 
   /**
    * The columns names that following dialect's SQL syntax.
@@ -153,14 +160,6 @@ class JdbcSQLQueryBuilder(dialect: JdbcDialect, options: JDBCOptions) {
   def withTableSample(sample: TableSampleInfo): JdbcSQLQueryBuilder = {
     tableSampleClause = dialect.getTableSample(sample)
 
-    this
-  }
-
-  /**
-   * Saves the hint value used to construct HINT clause.
-   */
-  def withHint(hint: String): JdbcSQLQueryBuilder = {
-    hintClause = dialect.getHint(hint)
     this
   }
 
