@@ -1493,7 +1493,7 @@ See the [configuration page](configuration.html) for information on Spark config
 </tr>
 <tr>
   <td><code>spark.kubernetes.configMap.maxSize</code></td>
-  <td><code>1572864</code></td>
+  <td><code>1048576</code></td>
   <td>
     Max size limit for a config map.
     This is configurable as per <a href="https://etcd.io/docs/latest/dev-guide/limit/">limit</a> on k8s server end.
