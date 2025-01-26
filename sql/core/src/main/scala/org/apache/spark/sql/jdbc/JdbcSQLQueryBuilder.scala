@@ -18,7 +18,7 @@
 package org.apache.spark.sql.jdbc
 
 import org.apache.spark.sql.connector.expressions.filter.Predicate
-import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JDBCPartition}
 import org.apache.spark.sql.execution.datasources.v2.TableSampleInfo
 
@@ -75,7 +75,7 @@ class JdbcSQLQueryBuilder(dialect: JdbcDialect, options: JDBCOptions) {
     if (options.hint == "" || dialect.supportsHint) {
       options.hint
     } else {
-      throw QueryCompilationErrors.hintUnsupportedForJdbcDatabasesError(
+      throw QueryExecutionErrors.hintUnsupportedForJdbcDialectError(
         dialect.getClass.getSimpleName)
     }
   }

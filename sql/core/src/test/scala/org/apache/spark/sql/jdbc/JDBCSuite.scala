@@ -29,7 +29,7 @@ import scala.util.Random
 import org.mockito.ArgumentMatchers._
 import org.mockito.Mockito._
 
-import org.apache.spark.{SparkException, SparkSQLException}
+import org.apache.spark.{SparkException, SparkSQLException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.{AnalysisException, DataFrame, Observation, QueryTest, Row}
 import org.apache.spark.sql.catalyst.{analysis, TableIdentifier}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
@@ -2233,7 +2233,7 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
       DB2Dialect(), DerbyDialect(), H2Dialect(), MsSqlServerDialect(), PostgresDialect(),
       SnowflakeDialect(), TeradataDialect()).foreach { dialect =>
       checkError(
-        exception = intercept[AnalysisException] {
+        exception = intercept[SparkUnsupportedOperationException] {
           dialect.getJdbcSQLQueryBuilder(options)
             .withColumns(Array("a", "b"))
             .build().trim()
