@@ -75,7 +75,7 @@ class JdbcSQLQueryBuilder(dialect: JdbcDialect, options: JDBCOptions) {
     if (options.hint == "" || dialect.supportsHint) {
       options.hint
     } else {
-      throw QueryCompilationErrors.hintUnsupportedForJdbcDatabasesError(this.getClass.getSimpleName)
+      throw QueryCompilationErrors.hintUnsupportedForJdbcDatabasesError(dialect.getClass.getSimpleName)
     }
   }
 
