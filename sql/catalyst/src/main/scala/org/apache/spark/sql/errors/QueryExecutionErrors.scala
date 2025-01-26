@@ -2937,4 +2937,11 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       )
     )
   }
+
+  def nullDataSourceOption(option: String): Throwable = {
+    new SparkIllegalArgumentException(
+      errorClass = "NULL_DATA_SOURCE_OPTION",
+      messageParameters = Map("option" -> option)
+    )
+  }
 }
