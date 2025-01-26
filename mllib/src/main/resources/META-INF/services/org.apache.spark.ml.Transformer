@@ -35,6 +35,7 @@ org.apache.spark.ml.feature.HashingTF
 
 ########### Model for loading
 # classification
+org.apache.spark.ml.classification.NaiveBayesModel
 org.apache.spark.ml.classification.LinearSVCModel
 org.apache.spark.ml.classification.LogisticRegressionModel
 org.apache.spark.ml.classification.DecisionTreeClassificationModel
