@@ -555,9 +555,9 @@ private[ml] object MLUtils {
       Set(
         "numIterations",
         "solver",
-        "coefficientStandardErrors",
         "tValues",
         "pValues",
+        "coefficientStandardErrors",
         "coefficientsWithStatistics",
         "toString")),
     (classOf[LinearRegressionModel], Set("intercept", "coefficients", "scale", "evaluate")),
