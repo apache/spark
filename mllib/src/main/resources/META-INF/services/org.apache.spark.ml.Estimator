@@ -37,6 +37,7 @@ org.apache.spark.ml.regression.GBTRegressor
 org.apache.spark.ml.clustering.KMeans
 org.apache.spark.ml.clustering.BisectingKMeans
 org.apache.spark.ml.clustering.GaussianMixture
+org.apache.spark.ml.clustering.LDA
 
 # recommendation
 org.apache.spark.ml.recommendation.ALS
