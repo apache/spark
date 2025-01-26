@@ -533,7 +533,8 @@ object SparkParallelTestGrouping {
     "org.apache.spark.sql.kafka010.KafkaDelegationTokenSuite",
     "org.apache.spark.sql.streaming.RocksDBStateStoreStreamingAggregationSuite",
     "org.apache.spark.shuffle.KubernetesLocalDiskShuffleDataIOSuite",
-    "org.apache.spark.sql.hive.HiveScalaReflectionSuite"
+    "org.apache.spark.sql.hive.HiveScalaReflectionSuite",
+    "org.apache.spark.sql.catalyst.encoders.EncoderResolutionSuite"
   ) ++ sys.env.get("DEDICATED_JVM_SBT_TESTS").map(_.split(",")).getOrElse(Array.empty).toSet
 
   private val DEFAULT_TEST_GROUP = "default_test_group"
