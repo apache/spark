@@ -47,7 +47,7 @@ class FPMTestsMixin:
         self.assertEqual(fp.getNumPartitions(), 1)
 
         model = fp.fit(df)
-
+        self.assertEqual(fp.uid, model.uid)
         self.assertEqual(model.freqItemsets.columns, ["items", "freq"])
         self.assertEqual(model.freqItemsets.count(), 54)
 

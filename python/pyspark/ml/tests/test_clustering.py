@@ -64,6 +64,7 @@ class ClusteringTestsMixin:
         self.assertEqual(km.getWeightCol(), "weight")
 
         model = km.fit(df)
+        self.assertEqual(km.uid, model.uid)
         # TODO: support KMeansModel.numFeatures in Python
         # self.assertEqual(model.numFeatures, 2)
 
@@ -132,6 +133,7 @@ class ClusteringTestsMixin:
         self.assertEqual(bkm.getWeightCol(), "weight")
 
         model = bkm.fit(df)
+        self.assertEqual(bkm.uid, model.uid)
         # TODO: support KMeansModel.numFeatures in Python
         # self.assertEqual(model.numFeatures, 2)
 
@@ -203,6 +205,7 @@ class ClusteringTestsMixin:
         self.assertEqual(gmm.getSeed(), 1)
 
         model = gmm.fit(df)
+        self.assertEqual(gmm.uid, model.uid)
         # TODO: support GMM.numFeatures in Python
         # self.assertEqual(model.numFeatures, 2)
         self.assertEqual(len(model.weights), 2)
