@@ -135,7 +135,9 @@ def try_remote_fit(f: FuncT) -> FuncT:
             (_, properties, _) = client.execute_command(command)
             model_info = deserialize(properties)
             client.add_ml_cache(model_info.obj_ref.id)
-            return model_info.obj_ref.id
+            model = self._create_model(model_info.obj_ref.id)
+            model._resetUid(self.uid)
+            return self._copyValues(model)
         else:
             return f(self, dataset)
 

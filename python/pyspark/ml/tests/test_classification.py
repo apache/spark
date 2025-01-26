@@ -64,6 +64,7 @@ class ClassificationTestsMixin:
         self.assertEqual(nb.getWeightCol(), "weight")
 
         model = nb.fit(df)
+        self.assertEqual(model.uid, nb.uid)
         self.assertEqual(model.numClasses, 2)
         self.assertEqual(model.numFeatures, 2)
         self.assertTrue(
@@ -126,6 +127,7 @@ class ClassificationTestsMixin:
             upperBoundsOnIntercepts=Vectors.dense(0.0),
         )
         lor_model = lor.fit(df)
+        self.assertEqual(lor.uid, lor_model.uid)
 
         def check_result(model: LogisticRegressionModel) -> None:
             self.assertTrue(
@@ -159,6 +161,7 @@ class ClassificationTestsMixin:
             upperBoundsOnIntercepts=Vectors.dense(0.0, 0.0, 0.0),
         )
         lor_model = lor.fit(df)
+        self.assertEqual(lor.uid, lor_model.uid)
 
         def check_result(model: LogisticRegressionModel) -> None:
             expected = [
@@ -196,6 +199,7 @@ class ClassificationTestsMixin:
 
         lor = LogisticRegression(weightCol="weight")
         model = lor.fit(df)
+        self.assertEqual(lor.uid, model.uid)
 
         # status changes 1
         for t in [0.0, 0.1, 0.2, 0.5, 1.0]:
@@ -224,6 +228,7 @@ class ClassificationTestsMixin:
         )
         lr = LogisticRegression(maxIter=5, regParam=0.01, weightCol="weight", fitIntercept=False)
         model = lr.fit(df)
+        self.assertEqual(lr.uid, model.uid)
         self.assertTrue(model.hasSummary)
         s = model.summary
         # test that api is callable and returns expected types
@@ -385,6 +390,7 @@ class ClassificationTestsMixin:
         self.assertEqual(svc.getRegParam(), 1.0)
 
         model = svc.fit(df)
+        self.assertEqual(svc.uid, model.uid)
         self.assertEqual(model.numClasses, 2)
         self.assertEqual(model.numFeatures, 2)
         self.assertTrue(np.allclose(model.intercept, 0.025877458475338313, atol=1e-4))
@@ -464,6 +470,7 @@ class ClassificationTestsMixin:
         self.assertEqual(dt.getLeafCol(), "leaf")
 
         model = dt.fit(df)
+        self.assertEqual(dt.uid, model.uid)
         self.assertEqual(model.numClasses, 2)
         self.assertEqual(model.numFeatures, 2)
         self.assertEqual(model.depth, 2)
@@ -531,6 +538,7 @@ class ClassificationTestsMixin:
         self.assertEqual(gbt.getLeafCol(), "leaf")
 
         model = gbt.fit(df)
+        self.assertEqual(gbt.uid, model.uid)
         self.assertEqual(model.numClasses, 2)
         self.assertEqual(model.numFeatures, 2)
         # TODO(SPARK-50843): Support access submodel in TreeEnsembleModel
@@ -609,6 +617,7 @@ class ClassificationTestsMixin:
         self.assertEqual(rf.getLeafCol(), "leaf")
 
         model = rf.fit(df)
+        self.assertEqual(rf.uid, model.uid)
         self.assertEqual(model.numClasses, 2)
         self.assertEqual(model.numFeatures, 2)
         # TODO(SPARK-50843): Support access submodel in TreeEnsembleModel
@@ -695,6 +704,7 @@ class ClassificationTestsMixin:
         self.assertEqual(rf.getLeafCol(), "leaf")
 
         model = rf.fit(df)
+        self.assertEqual(rf.uid, model.uid)
         self.assertEqual(model.numClasses, 3)
         self.assertEqual(model.numFeatures, 2)
         # TODO(SPARK-50843): Support access submodel in TreeEnsembleModel
