@@ -22,6 +22,7 @@
 org.apache.spark.ml.classification.NaiveBayes
 org.apache.spark.ml.classification.LinearSVC
 org.apache.spark.ml.classification.LogisticRegression
+org.apache.spark.ml.classification.MultilayerPerceptronClassifier
 org.apache.spark.ml.classification.DecisionTreeClassifier
 org.apache.spark.ml.classification.RandomForestClassifier
 org.apache.spark.ml.classification.GBTClassifier

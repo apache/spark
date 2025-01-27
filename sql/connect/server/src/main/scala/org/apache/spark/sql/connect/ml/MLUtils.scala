@@ -530,6 +530,7 @@ private[ml] object MLUtils {
       Set("intercept", "coefficients", "interceptVector", "coefficientMatrix", "evaluate")),
     (classOf[LogisticRegressionSummary], Set("probabilityCol", "featuresCol")),
     (classOf[BinaryLogisticRegressionSummary], Set("scoreCol")),
+    (classOf[MultilayerPerceptronClassificationModel], Set("weights", "evaluate")),
 
     // Regression Models
     (
