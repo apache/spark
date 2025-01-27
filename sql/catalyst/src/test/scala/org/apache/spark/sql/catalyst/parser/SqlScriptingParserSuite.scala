@@ -501,12 +501,12 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
       .getText == "SELECT 2")
   }
 
-  test("if else if") {
+  test("if elseif") {
     val sqlScriptText =
       """BEGIN
         |IF 1 = 1 THEN
         |  SELECT 1;
-        |ELSE IF 2 = 2 THEN
+        |ELSEIF 2 = 2 THEN
         |  SELECT 2;
         |ELSE
         |  SELECT 3;
@@ -546,9 +546,9 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
       """BEGIN
         |IF 1 = 1 THEN
         |  SELECT 1;
-        |ELSE IF 2 = 2 THEN
+        |ELSEIF 2 = 2 THEN
         |  SELECT 2;
-        |ELSE IF 3 = 3 THEN
+        |ELSEIF 3 = 3 THEN
         |  SELECT 3;
         |END IF;
         |END

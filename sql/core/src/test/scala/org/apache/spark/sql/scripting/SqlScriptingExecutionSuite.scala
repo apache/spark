@@ -225,7 +225,7 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
         |  IF 1=2
         |  THEN
         |    SELECT 42;
-        |  ELSE IF 1=1
+        |  ELSEIF 1=1
         |  THEN
         |    SELECT 43;
         |  ELSE
@@ -260,7 +260,7 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
         |  IF 1=2
         |  THEN
         |    SELECT 42;
-        |  ELSE IF 1=3
+        |  ELSEIF 1=3
         |  THEN
         |    SELECT 43;
         |  ELSE
@@ -302,7 +302,7 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
           |  INSERT INTO t VALUES (1, 'a', 1.0);
           |  IF (SELECT COUNT(*) > 2 FROM t) THEN
           |    SELECT 42;
-          |  ELSE IF (SELECT COUNT(*) > 1 FROM t) THEN
+          |  ELSEIF (SELECT COUNT(*) > 1 FROM t) THEN
           |    SELECT 43;
           |  ELSE
           |    SELECT 44;
