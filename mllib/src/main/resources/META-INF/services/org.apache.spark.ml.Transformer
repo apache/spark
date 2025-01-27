@@ -38,6 +38,7 @@ org.apache.spark.ml.feature.HashingTF
 org.apache.spark.ml.classification.NaiveBayesModel
 org.apache.spark.ml.classification.LinearSVCModel
 org.apache.spark.ml.classification.LogisticRegressionModel
+org.apache.spark.ml.classification.FMClassificationModel
 org.apache.spark.ml.classification.MultilayerPerceptronClassificationModel
 org.apache.spark.ml.classification.DecisionTreeClassificationModel
 org.apache.spark.ml.classification.RandomForestClassificationModel
@@ -48,6 +49,7 @@ org.apache.spark.ml.regression.AFTSurvivalRegressionModel
 org.apache.spark.ml.regression.IsotonicRegressionModel
 org.apache.spark.ml.regression.LinearRegressionModel
 org.apache.spark.ml.regression.GeneralizedLinearRegressionModel
+org.apache.spark.ml.regression.FMRegressionModel
 org.apache.spark.ml.regression.DecisionTreeRegressionModel
 org.apache.spark.ml.regression.RandomForestRegressionModel
 org.apache.spark.ml.regression.GBTRegressionModel

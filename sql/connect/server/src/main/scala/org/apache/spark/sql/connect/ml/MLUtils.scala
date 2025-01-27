@@ -530,6 +530,7 @@ private[ml] object MLUtils {
       Set("intercept", "coefficients", "interceptVector", "coefficientMatrix", "evaluate")),
     (classOf[LogisticRegressionSummary], Set("probabilityCol", "featuresCol")),
     (classOf[BinaryLogisticRegressionSummary], Set("scoreCol")),
+    (classOf[FMClassificationModel], Set("intercept", "linear", "factors", "evaluate")),
     (classOf[MultilayerPerceptronClassificationModel], Set("weights", "evaluate")),
 
     // Regression Models
@@ -589,6 +590,7 @@ private[ml] object MLUtils {
         "tValues",
         "pValues")),
     (classOf[LinearRegressionTrainingSummary], Set("objectiveHistory", "totalIterations")),
+    (classOf[FMRegressionModel], Set("intercept", "linear", "factors")),
 
     // Clustering Models
     (classOf[KMeansModel], Set("predict", "numFeatures", "clusterCenterMatrix")),
