@@ -19,17 +19,14 @@ package org.apache.spark.sql.classic
 
 import java.io.{ByteArrayOutputStream, CharArrayWriter, DataOutputStream}
 import java.util
-
 import scala.collection.mutable.{ArrayBuffer, HashSet}
 import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.control.NonFatal
-
 import org.apache.commons.lang3.StringUtils
 import org.apache.commons.text.StringEscapeUtils
-
-import org.apache.spark.{sql, TaskContext}
+import org.apache.spark.{TaskContext, sql}
 import org.apache.spark.annotation.{DeveloperApi, Stable, Unstable}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.api.java.function._
@@ -43,9 +40,9 @@ import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, Query
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
 import org.apache.spark.sql.catalyst.encoders._
-import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{agnosticEncoderFor, ProductEncoder, StructEncoder}
+import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{ProductEncoder, StructEncoder, agnosticEncoderFor}
 import org.apache.spark.sql.catalyst.expressions.{ScalarSubquery => ScalarSubqueryExpr, _}
-import org.apache.spark.sql.catalyst.json.{JacksonGenerator, JSONOptions}
+import org.apache.spark.sql.catalyst.json.{JSONOptions, JacksonGenerator}
 import org.apache.spark.sql.catalyst.parser.{ParseException, ParserUtils}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -2007,9 +2004,6 @@ class Dataset[T] private[sql](
       func: MapFunction[T, K],
       encoder: Encoder[K]): KeyValueGroupedDataset[K, T] =
     super.groupByKey(func, encoder).asInstanceOf[KeyValueGroupedDataset[K, T]]
-
-  /** @inheritdoc */
-  override def transform[U](t: DS[T] => DS[U]): Dataset[U] = t(this.asInstanceOf[DS[T]])
 
   override private[spark] def withColumns(
       colNames: Seq[String],

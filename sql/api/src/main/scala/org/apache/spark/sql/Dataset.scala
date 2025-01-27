@@ -124,7 +124,6 @@ import org.apache.spark.util.SparkClassUtils
 @Stable
 abstract class Dataset[T] extends Serializable {
 
-  type DS[D] = Dataset[D]
   val sparkSession: SparkSession
 
   val encoder: Encoder[T]
@@ -2700,7 +2699,9 @@ abstract class Dataset[T] extends Serializable {
    * @group typedrel
    * @since 1.6.0
    */
-  def transform[U](t: DS[T] => DS[U]): Dataset[U] = t(this.asInstanceOf[DS[T]])
+  // SPARK-49961 - as the base Dataset is now used the output cannot be specific
+  def transform[DSI[_] <: Dataset[_], O](t: DSI[T] => O): O =
+    t(this.asInstanceOf[DSI[T]])
 
   /**
    * (Scala-specific) Returns a new Dataset that contains the result of applying `func` to each
