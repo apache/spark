@@ -26,6 +26,8 @@ org.apache.spark.ml.feature.Interaction
 org.apache.spark.ml.feature.Binarizer
 org.apache.spark.ml.feature.Bucketizer
 org.apache.spark.ml.feature.VectorAssembler
+org.apache.spark.ml.feature.VectorSlicer
+org.apache.spark.ml.feature.VectorSizeHint
 org.apache.spark.ml.feature.Tokenizer
 org.apache.spark.ml.feature.RegexTokenizer
 org.apache.spark.ml.feature.SQLTransformer
