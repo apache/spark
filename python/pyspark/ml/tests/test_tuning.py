@@ -35,7 +35,7 @@ from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 
 class TuningTestsMixin:
-    def test_TrainValidationSplit(self):
+    def test_train_validation_split(self):
         dataset = self.spark.createDataFrame(
             [
                 (Vectors.dense([0.0]), 0.0),
