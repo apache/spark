@@ -26,7 +26,7 @@ import scala.concurrent.duration.Duration
 
 import org.apache.spark.{InterruptibleIterator, Partition, SparkContext, SparkException, TaskContext}
 import org.apache.spark.rdd.{EmptyRDD, PartitionwiseSampledRDD, RDD}
-import org.apache.spark.sql.{DataFrame, Dataset}
+import org.apache.spark.sql.Dataset
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReferences
@@ -743,11 +743,6 @@ case class UnionLoopExec(
     override val output: Seq[Attribute],
     limit: Option[Int] = None) extends LeafExecNode {
 
-  // We store the initial and generated children of the loop in this buffer.
-  // Please note that all elements are cached because of performance reasons as they are needed for
-  // next iteration.
-  @transient private val unionDFs = mutable.ArrayBuffer.empty[DataFrame]
-
   override def innerChildren: Seq[QueryPlan[_]] = Seq(anchor, recursion)
 
   override lazy val metrics = Map(
@@ -784,7 +779,6 @@ case class UnionLoopExec(
 
     // Main loop for obtaining the result of the recursive query.
     while (prevCount > 0 && currentLimit > 0) {
-      unionDFs += prevDF
 
       if (levelLimit != -1 && currentLevel > levelLimit) {
         throw new SparkException(s"Recursion level limit ${levelLimit} reached but query has not " +
