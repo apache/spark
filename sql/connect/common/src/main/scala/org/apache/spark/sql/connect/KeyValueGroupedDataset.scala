@@ -26,7 +26,6 @@ import org.apache.spark.api.java.function._
 import org.apache.spark.connect.proto
 import org.apache.spark.sql
 import org.apache.spark.sql.{Column, Encoder, TypedColumn}
-import org.apache.spark.connect.proto.TransformWithStateInfo
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{agnosticEncoderFor, ProductEncoder, StructEncoder}
 import org.apache.spark.sql.connect.ColumnNodeToProtoConverter.{toExpr, toExprWithTransformation, toTypedExpr}
@@ -701,7 +700,7 @@ private class KeyValueGroupedDatasetImpl[K, V, IK, IV](
         .addAllGroupingExpressions(groupingExprs)
         .setFunc(udf)
         .setTransformWithStateInfo(
-          TransformWithStateInfo
+          proto.TransformWithStateInfo
             .newBuilder()
             .setOutputMode(outputMode.toString)
             // we pass time mode as string here and restore it in planner
