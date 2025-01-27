@@ -334,6 +334,9 @@
     <db2.jcc.version>11.5.9.0</db2.jcc.version>
     <mssql.jdbc.version>12.8.1.jre11</mssql.jdbc.version>
     <ojdbc17.version>23.6.0.24.10</ojdbc17.version>
+    <databricks.jdbc.version>2.7.1</databricks.jdbc.version>
+    <snowflake.jdbc.version>3.21.0</snowflake.jdbc.version>
+    <terajdbc.version>20.00.00.39</terajdbc.version>
     <!-- Used for SBT build to retrieve the Spark version -->
     <spark.version>${project.version}</spark.version>
   </properties>
@@ -1348,6 +1351,24 @@
         <groupId>com.oracle.database.jdbc</groupId>
         <artifactId>ojdbc17</artifactId>
         <version>${ojdbc17.version}</version>
+        <scope>test</scope>
+      </dependency>
+      <dependency>
+        <groupId>com.databricks</groupId>
+        <artifactId>databricks-jdbc</artifactId>
+        <version>${databricks.jdbc.version}</version>
+        <scope>test</scope>
+      </dependency>
+      <dependency>
+        <groupId>net.snowflake</groupId>
+        <artifactId>snowflake-jdbc</artifactId>
+        <version>${snowflake.jdbc.version}</version>
+        <scope>test</scope>
+      </dependency>
+      <dependency>
+        <groupId>com.teradata.jdbc</groupId>
+        <artifactId>terajdbc</artifactId>
+        <version>${terajdbc.version}</version>
         <scope>test</scope>
       </dependency>
       <dependency>
