@@ -66,3 +66,5 @@ org.apache.spark.ml.feature.Word2Vec
 org.apache.spark.ml.feature.CountVectorizer
 org.apache.spark.ml.feature.OneHotEncoder
 org.apache.spark.ml.feature.TargetEncoder
+org.apache.spark.ml.feature.BucketedRandomProjectionLSH
+org.apache.spark.ml.feature.MinHashLSH
