@@ -1263,7 +1263,7 @@
           "Found duplicate handlers for the same condition <condition>."
         ]
       },
-      "SQLSTATE" :  {
+      "SQLSTATE" : {
         "message" : [
           "Found duplicate handlers for the same SQLSTATE <sqlState>."
         ]
@@ -2642,11 +2642,6 @@
       "Invalid handler declaration."
     ],
     "subClass" : {
-      "WRONG_PLACE_OF_DECLARATION" : {
-        "message" : [
-          "Handlers must be declared after variable/condition declaration, and before other statements."
-        ]
-      },
       "DUPLICATE_CONDITION_IN_HANDLER_DECLARATION" : {
         "message" : [
           "Found duplicate condition <condition> in the handler declaration. Please, remove one of them."
@@ -2660,6 +2655,11 @@
       "INVALID_CONDITION_COMBINATION" : {
         "message" : [
           "Invalid combination of conditions in the handler declaration. SQLEXCEPTION and NOT FOUND cannot be used together with other condition/sqlstate values."
+        ]
+      },
+      "WRONG_PLACE_OF_DECLARATION" : {
+        "message" : [
+          "Handlers must be declared after variable/condition declaration, and before other statements."
         ]
       }
     },
