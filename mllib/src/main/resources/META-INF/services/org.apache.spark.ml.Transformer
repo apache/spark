@@ -38,6 +38,7 @@ org.apache.spark.ml.feature.HashingTF
 org.apache.spark.ml.classification.NaiveBayesModel
 org.apache.spark.ml.classification.LinearSVCModel
 org.apache.spark.ml.classification.LogisticRegressionModel
+org.apache.spark.ml.classification.MultilayerPerceptronClassificationModel
 org.apache.spark.ml.classification.DecisionTreeClassificationModel
 org.apache.spark.ml.classification.RandomForestClassificationModel
 org.apache.spark.ml.classification.GBTClassificationModel

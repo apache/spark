@@ -44,6 +44,10 @@ from pyspark.ml.classification import (
     BinaryRandomForestClassificationTrainingSummary,
     GBTClassifier,
     GBTClassificationModel,
+    MultilayerPerceptronClassifier,
+    MultilayerPerceptronClassificationModel,
+    MultilayerPerceptronClassificationSummary,
+    MultilayerPerceptronClassificationTrainingSummary,
 )
 
 
@@ -759,6 +763,100 @@ class ClassificationTestsMixin:
             model2 = RandomForestClassificationModel.load(d)
             self.assertEqual(str(model), str(model2))
             self.assertEqual(model.toDebugString, model2.toDebugString)
+
+    def test_mlp(self):
+        df = (
+            self.spark.createDataFrame(
+                [
+                    (1.0, 1.0, Vectors.dense(0.0, 5.0)),
+                    (0.0, 2.0, Vectors.dense(1.0, 2.0)),
+                    (1.0, 3.0, Vectors.dense(2.0, 1.0)),
+                    (0.0, 4.0, Vectors.dense(3.0, 3.0)),
+                ],
+                ["label", "weight", "features"],
+            )
+            .coalesce(1)
+            .sortWithinPartitions("weight")
+        )
+
+        mlp = MultilayerPerceptronClassifier(
+            layers=[2, 2],
+            maxIter=1,
+            seed=1,
+        )
+        self.assertEqual(mlp.getLayers(), [2, 2])
+        self.assertEqual(mlp.getMaxIter(), 1)
+        self.assertEqual(mlp.getSeed(), 1)
+
+        model = mlp.fit(df)
+        self.assertEqual(mlp.uid, model.uid)
+        self.assertEqual(model.numClasses, 2)
+        self.assertEqual(model.numFeatures, 2)
+        self.assertTrue(
+            np.allclose(
+                model.weights.toArray(),
+                [
+                    0.43562736294302623,
+                    0.364580202422002,
+                    -1.4112729385978997,
+                    -1.2643591053546168,
+                    1.1512595235805883,
+                    0.7857317704872436,
+                ],
+                atol=1e-4,
+            ),
+            model.weights,
+        )
+
+        vec = Vectors.dense(0.0, 5.0)
+        pred = model.predict(vec)
+        self.assertEqual(pred, 1.0)
+        pred = model.predictRaw(vec)
+        self.assertTrue(
+            np.allclose(pred.toArray(), [-5.905105169408911, -5.53606375628584], atol=1e-4), pred
+        )
+        pred = model.predictProbability(vec)
+        self.assertTrue(
+            np.allclose(pred.toArray(), [0.4087726702431394, 0.5912273297568605], atol=1e-4), pred
+        )
+
+        output = model.transform(df)
+        expected_cols = [
+            "label",
+            "weight",
+            "features",
+            "rawPrediction",
+            "probability",
+            "prediction",
+        ]
+        self.assertEqual(output.columns, expected_cols)
+        self.assertEqual(output.count(), 4)
+
+        # model summary
+        self.assertTrue(model.hasSummary)
+        summary = model.summary()
+        self.assertIsInstance(summary, MultilayerPerceptronClassificationSummary)
+        self.assertIsInstance(summary, MultilayerPerceptronClassificationTrainingSummary)
+        self.assertEqual(summary.labels, [0.0, 1.0])
+        self.assertEqual(summary.accuracy, 0.75)
+        self.assertEqual(summary.predictions.columns, expected_cols)
+
+        summary2 = model.evaluate(df)
+        self.assertIsInstance(summary2, MultilayerPerceptronClassificationSummary)
+        self.assertNotIsInstance(summary2, MultilayerPerceptronClassificationTrainingSummary)
+        self.assertEqual(summary2.labels, [0.0, 1.0])
+        self.assertEqual(summary2.accuracy, 0.75)
+        self.assertEqual(summary2.predictions.columns, expected_cols)
+
+        # Model save & load
+        with tempfile.TemporaryDirectory(prefix="mlpc") as d:
+            mlp.write().overwrite().save(d)
+            mlp2 = MultilayerPerceptronClassifier.load(d)
+            self.assertEqual(str(mlp), str(mlp2))
+
+            model.write().overwrite().save(d)
+            model2 = MultilayerPerceptronClassificationModel.load(d)
+            self.assertEqual(str(model), str(model2))
 
 
 class ClassificationTests(ClassificationTestsMixin, unittest.TestCase):
