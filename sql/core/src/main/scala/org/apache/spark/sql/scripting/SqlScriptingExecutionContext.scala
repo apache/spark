@@ -17,12 +17,12 @@
 
 package org.apache.spark.sql.scripting
 
+import java.util.Locale
+
 import scala.collection.mutable.ListBuffer
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.scripting.SqlScriptingFrameType.SqlScriptingFrameType
-
-import java.util.Locale
 
 /**
  * SQL scripting execution context - keeps track of the current execution state.

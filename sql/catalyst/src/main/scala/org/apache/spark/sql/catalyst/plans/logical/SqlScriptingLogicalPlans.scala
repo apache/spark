@@ -17,15 +17,14 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
+import java.util.Locale
+
 import scala.collection.mutable.{HashMap, Set}
 
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.HandlerType.HandlerType
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
 import org.apache.spark.sql.errors.SqlScriptingErrors
-
-import java.util.Locale
-
 
 /**
  * Trait for all SQL Scripting logical operators that are product of parsing phase.
