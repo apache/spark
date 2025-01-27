@@ -151,7 +151,7 @@ class SubstituteExecuteImmediate(
           }
         }
 
-        val finalPlan = AnalysisContext.withExecuteImmediateContext(isExecuteImmediate = true) {
+        val finalPlan = AnalysisContext.withExecuteImmediateContext {
           resolveChild(queryPlan)
         }
         checkAnalysis(finalPlan)

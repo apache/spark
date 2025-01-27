@@ -23,7 +23,7 @@ import scala.collection.mutable
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.SqlScriptingVariableManager
+import org.apache.spark.sql.catalyst.SqlScriptingLocalVariableManager
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.SubExprUtils.wrapOuterReference
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -307,7 +307,7 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
       nameParts.map(_.toLowerCase(Locale.ROOT))
     }
 
-    SqlScriptingVariableManager.get()
+    SqlScriptingLocalVariableManager.get()
       // If sessionOnly is set to true lookup only session variables.
       .filterNot(_ => sessionVariablesOnly)
       // If variable name is qualified with system.session.<varName> treat it as a session variable.

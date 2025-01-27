@@ -19,7 +19,7 @@ package org.apache.spark.sql.scripting
 
 import org.apache.spark.{SparkConf, SparkException, SparkNumberFormatException}
 import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, QueryTest, Row}
-import org.apache.spark.sql.catalyst.{QueryPlanningTracker, SqlScriptingVariableManager}
+import org.apache.spark.sql.catalyst.{QueryPlanningTracker, SqlScriptingLocalVariableManager}
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.logical.CompoundBody
 import org.apache.spark.sql.exceptions.SqlScriptingException
@@ -52,7 +52,8 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
     context.frames.append(new SqlScriptingExecutionFrame(executionPlan.getTreeIterator))
     executionPlan.enterScope()
 
-    val handle = SqlScriptingVariableManager.create(new SqlScriptingVariableManager(context))
+    val handle =
+      SqlScriptingLocalVariableManager.create(new SqlScriptingLocalVariableManager(context))
     handle.runWith {
       executionPlan.getTreeIterator.flatMap {
         case statement: SingleStatementExec =>

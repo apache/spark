@@ -25,7 +25,7 @@ import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.errors.DataTypeErrorsBase
  import org.apache.spark.sql.errors.QueryCompilationErrors.unresolvedVariableError
 
-class SqlScriptingVariableManager(context: SqlScriptingExecutionContext)
+class SqlScriptingLocalVariableManager(context: SqlScriptingExecutionContext)
   extends VariableManager with DataTypeErrorsBase {
 
   override def create(

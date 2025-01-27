@@ -47,7 +47,7 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
     val compoundBody = spark.sessionState.sqlParser.parsePlan(sqlText).asInstanceOf[CompoundBody]
 
     val sse = new SqlScriptingExecution(compoundBody, spark, args)
-    sse.withVariableManager {
+    sse.withLocalVariableManager {
       val result: ListBuffer[Array[Row]] = ListBuffer.empty
 
       var df = sse.getNextResult
@@ -1803,7 +1803,6 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
   }
 
   test("local variable - execute immediate can't access local var") {
-
     val sqlScript =
       """
         |BEGIN

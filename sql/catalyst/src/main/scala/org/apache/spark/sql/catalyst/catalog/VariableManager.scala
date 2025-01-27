@@ -43,10 +43,10 @@ trait VariableManager {
    *                         with the same identifier, if it exists.
    */
   def create(
-    identifier: Identifier,
-    defaultValueSQL: String,
-    initValue: Literal,
-    overrideIfExists: Boolean): Unit
+      identifier: Identifier,
+      defaultValueSQL: String,
+      initValue: Literal,
+      overrideIfExists: Boolean): Unit
 
   /**
    * Set an existing variable to a new value.
@@ -57,10 +57,10 @@ trait VariableManager {
    * @param identifier Identifier of the variable.
    */
   def set(
-    nameParts: Seq[String],
-    defaultValueSQL: String,
-    initValue: Literal,
-    identifier: Identifier): Unit
+      nameParts: Seq[String],
+      defaultValueSQL: String,
+      initValue: Literal,
+      identifier: Identifier): Unit
 
 /**
  * Get an existing variable.

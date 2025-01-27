@@ -20,6 +20,6 @@ package org.apache.spark.sql.catalyst
 import org.apache.spark.sql.catalyst.catalog.VariableManager
 import org.apache.spark.util.LexicalThreadLocal
 
-object SqlScriptingVariableManager extends LexicalThreadLocal[VariableManager] {
+object SqlScriptingLocalVariableManager extends LexicalThreadLocal[VariableManager] {
   def create(variableManager: VariableManager): Handle = createHandle(Option(variableManager))
 }

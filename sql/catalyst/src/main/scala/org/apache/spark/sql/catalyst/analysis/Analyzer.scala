@@ -157,7 +157,7 @@ case class AnalysisContext(
     referredTempFunctionNames: mutable.Set[String] = mutable.Set.empty,
     referredTempVariableNames: Seq[Seq[String]] = Seq.empty,
     outerPlan: Option[LogicalPlan] = None,
-    var isExecuteImmediate: Boolean = false,
+    isExecuteImmediate: Boolean = false,
 
     /**
      * This is a bridge state between this fixed-point [[Analyzer]] and a single-pass [[Resolver]].
@@ -218,9 +218,9 @@ object AnalysisContext {
     try f finally { set(originContext) }
   }
 
-  def withExecuteImmediateContext[A](isExecuteImmediate: Boolean)(f: => A): A = {
+  def withExecuteImmediateContext[A](f: => A): A = {
     val originContext = value.get()
-    val context = originContext.copy(isExecuteImmediate = isExecuteImmediate)
+    val context = originContext.copy(isExecuteImmediate = true)
 
     set(context)
     try f finally { set(originContext) }

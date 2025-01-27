@@ -18,7 +18,7 @@
 package org.apache.spark.sql.scripting
 
 import org.apache.spark.sql.{DataFrame, SparkSession}
-import org.apache.spark.sql.catalyst.SqlScriptingVariableManager
+import org.apache.spark.sql.catalyst.SqlScriptingLocalVariableManager
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.logical.{CommandResult, CompoundBody}
 
@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{CommandResult, CompoundBody}
  * SQL scripting executor - executes script and returns result statements.
  * This supports returning multiple result statements from a single script.
  * The caller of the SqlScriptingExecution API must wrap the interpretation and execution of
- * statements with the [[withVariableManager]] method, and adhere to the contract of executing
+ * statements with the [[withLocalVariableManager]] method, and adhere to the contract of executing
  * the returned statement before continuing iteration. Executing the statement needs to be done
  * inside withErrorHandling block.
  *
@@ -54,14 +54,14 @@ class SqlScriptingExecution(
     ctx
   }
 
-  private val variableManager = new SqlScriptingVariableManager(context)
-  private val variableManagerHandle = SqlScriptingVariableManager.create(variableManager)
+  private val variableManager = new SqlScriptingLocalVariableManager(context)
+  private val variableManagerHandle = SqlScriptingLocalVariableManager.create(variableManager)
 
   /**
    * Handles scripting context creation/access/deletion. Calls to execution API must be wrapped
    * with this method.
    */
-  def withVariableManager[R](f: => R): R = {
+  def withLocalVariableManager[R](f: => R): R = {
     variableManagerHandle.runWith(f)
   }
 

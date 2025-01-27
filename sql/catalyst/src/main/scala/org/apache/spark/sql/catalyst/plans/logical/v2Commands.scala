@@ -1592,8 +1592,9 @@ case class CreateVariable(
     name: LogicalPlan,
     defaultExpr: DefaultValueExpression,
     replace: Boolean,
-    // When false, this node can create local variables from SQL scripting.
-    // When true, it can only create session variables.
+    // When false, this node creates local variables if in a SQL script, and session variables
+    // if not in a SQL script.
+    // When true, it creates session variables.
     sessionVariablesOnly: Boolean = false) extends UnaryCommand with SupportsSubquery {
   override def child: LogicalPlan = name
   override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan =
