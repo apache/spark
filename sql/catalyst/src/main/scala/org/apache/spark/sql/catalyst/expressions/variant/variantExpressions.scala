@@ -290,57 +290,36 @@ case class VariantGet(
         castArgs, prettyName)
   }
 
-  protected override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = parsedPath match {
-    case Some(pp) =>
-      val childCode = child.genCode(ctx)
-      val tmp = ctx.freshVariable("tmp", classOf[Object])
-      val parsedPathArg = ctx.addReferenceObj("parsedPath", pp)
-      val dataTypeArg = ctx.addReferenceObj("dataType", dataType)
-      val castArgsArg = ctx.addReferenceObj("castArgs", castArgs)
-      val code = code"""
-        ${childCode.code}
-        boolean ${ev.isNull} = ${childCode.isNull};
-        ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
-        if (!${ev.isNull}) {
-          Object $tmp = org.apache.spark.sql.catalyst.expressions.variant.VariantGet.variantGet(
-            ${childCode.value}, $parsedPathArg, $dataTypeArg, $castArgsArg);
-          if ($tmp == null) {
-            ${ev.isNull} = true;
-          } else {
-            ${ev.value} = (${CodeGenerator.boxedType(dataType)})$tmp;
-          }
+  protected override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val tmp = ctx.freshVariable("tmp", classOf[Object])
+    val childCode = child.genCode(ctx)
+    val pathCode = path.genCode(ctx)
+    val dataTypeArg = ctx.addReferenceObj("dataType", dataType)
+    val castArgsArg = ctx.addReferenceObj("castArgs", castArgs)
+    val UTF8Type = CodeGenerator.typeName(classOf[UTF8String])
+    val parsedPathArg = if (parsedPath.isEmpty) {
+      s"($UTF8Type) ${pathCode.value}"
+    } else {
+      ctx.addReferenceObj("parsedPath", parsedPath.get)
+    }
+    val code = code"""
+      ${childCode.code}
+      ${if (parsedPath.isEmpty) pathCode.code else EmptyBlock}
+      boolean ${ev.isNull} = ${childCode.isNull} ||
+        ${if (parsedPath.isEmpty) pathCode.isNull else "false"};
+      ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+      if (!${ev.isNull}) {
+        Object $tmp = org.apache.spark.sql.catalyst.expressions.variant.VariantGet.variantGet(
+          ${childCode.value}, $parsedPathArg, $dataTypeArg,
+          $castArgsArg${if (parsedPath.isEmpty) s""", "$prettyName"""" else ""});
+        if ($tmp == null) {
+          ${ev.isNull} = true;
+        } else {
+          ${ev.value} = (${CodeGenerator.boxedType(dataType)})$tmp;
         }
-      """
-      ev.copy(code = code)
-    case None =>
-      val tmp = ctx.freshVariable("tmp", classOf[Object])
-      val childCode = child.genCode(ctx)
-      val pathCode = path.genCode(ctx)
-      val dataTypeArg = ctx.addReferenceObj("dataType", dataType)
-      val castArgsArg = ctx.addReferenceObj("castArgs", castArgs)
-      val parsedPathVar = ctx.freshName("parsedPath")
-      val parsedPathType = CodeGenerator.typeName(classOf[Array[VariantPathSegment]])
-      val UTF8Type = CodeGenerator.typeName(classOf[UTF8String])
-      val code = code"""
-        ${childCode.code}
-        ${pathCode.code}
-        boolean ${ev.isNull} = ${childCode.isNull} || ${pathCode.isNull};
-        ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
-        if (!${ev.isNull}) {
-          $parsedPathType $parsedPathVar = ($parsedPathType)
-            org.apache.spark.sql.catalyst.expressions.variant.VariantGet.getParsedPath(
-              ${pathCode.value}.toString(), "$prettyName");
-          Object $tmp = org.apache.spark.sql.catalyst.expressions.variant.VariantGet.variantGet(
-            ${childCode.value}, ($UTF8Type) ${pathCode.value}, $dataTypeArg, $castArgsArg,
-            "$prettyName");
-          if ($tmp == null) {
-            ${ev.isNull} = true;
-          } else {
-            ${ev.value} = (${CodeGenerator.boxedType(dataType)})$tmp;
-          }
-        }
-      """
-      ev.copy(code = code)
+      }
+    """
+    ev.copy(code = code)
   }
 
   override def left: Expression = child
