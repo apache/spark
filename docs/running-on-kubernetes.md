@@ -682,7 +682,7 @@ See the [configuration page](configuration.html) for information on Spark config
 </tr>
 <tr>
   <td><code>spark.kubernetes.allocation.batch.size</code></td>
-  <td><code>5</code></td>
+  <td><code>10</code></td>
   <td>
     Number of pods to launch at once in each round of executor pod allocation.
   </td>
