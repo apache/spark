@@ -594,6 +594,19 @@ private[ml] object MLUtils {
       classOf[GaussianMixtureModel],
       Set("predict", "numFeatures", "weights", "gaussians", "predictProbability", "gaussiansDF")),
     (classOf[GaussianMixtureSummary], Set("probability", "probabilityCol", "logLikelihood")),
+    (
+      classOf[LDAModel],
+      Set(
+        "estimatedDocConcentration",
+        "topicsMatrix",
+        "isDistributed",
+        "logLikelihood",
+        "logPerplexity",
+        "describeTopics")),
+    (classOf[LocalLDAModel], Set("vocabSize")),
+    (
+      classOf[DistributedLDAModel],
+      Set("trainingLogLikelihood", "logPrior", "getCheckpointFiles")),
 
     // Recommendation Models
     (
