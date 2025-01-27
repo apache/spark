@@ -24,7 +24,7 @@ import scala.util.control.NonFatal
 
 import test.org.apache.spark.sql.connector.catalog.functions.JavaStrLen.JavaStrLenStaticMagic
 
-import org.apache.spark.{SparkConf, SparkException}
+import org.apache.spark.{SparkConf, SparkException, SparkIllegalArgumentException}
 import org.apache.spark.sql.{AnalysisException, DataFrame, ExplainSuiteHelper, QueryTest, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, IndexAlreadyExistsException, NoSuchIndexException}
@@ -396,7 +396,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       .option("pushDownOffset", null)
       .table("h2.test.employee")
     checkError(
-      exception = intercept[AnalysisException] {
+      exception = intercept[SparkIllegalArgumentException] {
         df.collect()
       },
       condition = "NULL_DATA_SOURCE_OPTION",
@@ -3107,13 +3107,10 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       sql(s"CREATE TABLE $tableName (binary_col BINARY)")
       sql(s"INSERT INTO $tableName VALUES ($binary)")
 
-      val select = s"SELECT * FROM $tableName WHERE binary_col = $binary"
-      val df = sql(select)
-      val filter = df.queryExecution.optimizedPlan.collect {
-        case f: Filter => f
-      }
-      assert(filter.isEmpty, "Filter is not pushed")
-      assert(df.collect().length === 1, s"Binary literal test failed: $select")
+      val df = sql(s"SELECT * FROM $tableName WHERE binary_col = $binary")
+      checkFiltersRemoved(df)
+      checkPushedInfo(df, "PushedFilters: [binary_col IS NOT NULL, binary_col = 0x123456]")
+      checkAnswer(df, Row(Array(18, 52, 86)))
     }
   }
 

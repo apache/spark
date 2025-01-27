@@ -18,8 +18,8 @@
 package org.apache.spark.sql.connector
 
 import org.apache.spark.sql.Row
+import org.apache.spark.sql.classic.MergeIntoWriter
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.internal.MergeIntoWriterImpl
 
 class MergeIntoDataFrameSuite extends RowLevelOperationSuiteBase {
 
@@ -960,9 +960,9 @@ class MergeIntoDataFrameSuite extends RowLevelOperationSuiteBase {
         .insertAll()
         .whenNotMatchedBySource(col("col") === 1)
         .delete()
-        .asInstanceOf[MergeIntoWriterImpl[Row]]
+        .asInstanceOf[MergeIntoWriter[Row]]
       val writer2 = writer1.withSchemaEvolution()
-        .asInstanceOf[MergeIntoWriterImpl[Row]]
+        .asInstanceOf[MergeIntoWriter[Row]]
 
       assert(writer1 eq writer2)
       assert(writer1.matchedActions.length === 2)

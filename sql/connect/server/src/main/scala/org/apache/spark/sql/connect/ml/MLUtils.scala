@@ -37,7 +37,8 @@ import org.apache.spark.ml.recommendation._
 import org.apache.spark.ml.regression._
 import org.apache.spark.ml.tree.{DecisionTreeModel, TreeEnsembleModel}
 import org.apache.spark.ml.util.{HasTrainingSummary, Identifiable, MLWritable}
-import org.apache.spark.sql.{DataFrame, Dataset}
+import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.classic.Dataset
 import org.apache.spark.sql.connect.common.LiteralValueProtoConverter
 import org.apache.spark.sql.connect.planner.SparkConnectPlanner
 import org.apache.spark.sql.connect.plugin.SparkConnectPluginRegistry
@@ -457,6 +458,7 @@ private[ml] object MLUtils {
     (classOf[PredictionModel[_, _]], Set("predict", "numFeatures")),
     (classOf[ClassificationModel[_, _]], Set("predictRaw", "numClasses")),
     (classOf[ProbabilisticClassificationModel[_, _]], Set("predictProbability")),
+    (classOf[LSHModel[_]], Set("approxNearestNeighbors", "approxSimilarityJoin")),
 
     // Summary Traits
     (classOf[HasTrainingSummary[_]], Set("hasSummary", "summary")),
@@ -522,14 +524,51 @@ private[ml] object MLUtils {
     (classOf[GBTRegressionModel], Set("featureImportances", "evaluateEachIteration")),
 
     // Classification Models
+    (classOf[NaiveBayesModel], Set("pi", "theta", "sigma")),
     (classOf[LinearSVCModel], Set("intercept", "coefficients", "evaluate")),
     (
       classOf[LogisticRegressionModel],
       Set("intercept", "coefficients", "interceptVector", "coefficientMatrix", "evaluate")),
     (classOf[LogisticRegressionSummary], Set("probabilityCol", "featuresCol")),
     (classOf[BinaryLogisticRegressionSummary], Set("scoreCol")),
+    (classOf[FMClassificationModel], Set("intercept", "linear", "factors", "evaluate")),
+    (classOf[MultilayerPerceptronClassificationModel], Set("weights", "evaluate")),
 
     // Regression Models
+    (
+      classOf[AFTSurvivalRegressionModel],
+      Set("intercept", "coefficients", "scale", "predictQuantiles")),
+    (
+      classOf[IsotonicRegressionModel],
+      Set("boundaries", "predictions", "numFeatures", "predict")),
+    (
+      classOf[GeneralizedLinearRegressionModel],
+      Set("intercept", "coefficients", "numFeatures", "evaluate")),
+    (
+      classOf[GeneralizedLinearRegressionSummary],
+      Set(
+        "aic",
+        "degreesOfFreedom",
+        "deviance",
+        "dispersion",
+        "nullDeviance",
+        "numInstances",
+        "predictionCol",
+        "predictions",
+        "rank",
+        "residualDegreeOfFreedom",
+        "residualDegreeOfFreedomNull",
+        "residuals")),
+    (
+      classOf[GeneralizedLinearRegressionTrainingSummary],
+      Set(
+        "numIterations",
+        "solver",
+        "tValues",
+        "pValues",
+        "coefficientStandardErrors",
+        "coefficientsWithStatistics",
+        "toString")),
     (classOf[LinearRegressionModel], Set("intercept", "coefficients", "scale", "evaluate")),
     (
       classOf[LinearRegressionSummary],
@@ -552,18 +591,32 @@ private[ml] object MLUtils {
         "tValues",
         "pValues")),
     (classOf[LinearRegressionTrainingSummary], Set("objectiveHistory", "totalIterations")),
+    (classOf[FMRegressionModel], Set("intercept", "linear", "factors")),
 
     // Clustering Models
-    (classOf[KMeansModel], Set("predict", "numFeatures", "clusterCenters")),
+    (classOf[KMeansModel], Set("predict", "numFeatures", "clusterCenterMatrix")),
     (classOf[KMeansSummary], Set("trainingCost")),
     (
       classOf[BisectingKMeansModel],
-      Set("predict", "numFeatures", "clusterCenters", "computeCost")),
+      Set("predict", "numFeatures", "clusterCenterMatrix", "computeCost")),
     (classOf[BisectingKMeansSummary], Set("trainingCost")),
     (
       classOf[GaussianMixtureModel],
       Set("predict", "numFeatures", "weights", "gaussians", "predictProbability", "gaussiansDF")),
     (classOf[GaussianMixtureSummary], Set("probability", "probabilityCol", "logLikelihood")),
+    (
+      classOf[LDAModel],
+      Set(
+        "estimatedDocConcentration",
+        "topicsMatrix",
+        "isDistributed",
+        "logLikelihood",
+        "logPerplexity",
+        "describeTopics")),
+    (classOf[LocalLDAModel], Set("vocabSize")),
+    (
+      classOf[DistributedLDAModel],
+      Set("trainingLogLikelihood", "logPrior", "getCheckpointFiles")),
 
     // Recommendation Models
     (
@@ -581,6 +634,7 @@ private[ml] object MLUtils {
     (classOf[FPGrowthModel], Set("associationRules", "freqItemsets")),
 
     // Feature Models
+    (classOf[ImputerModel], Set("surrogateDF")),
     (classOf[StandardScalerModel], Set("mean", "std")),
     (classOf[MaxAbsScalerModel], Set("maxAbs")),
     (classOf[MinMaxScalerModel], Set("originalMax", "originalMin")),
@@ -591,7 +645,8 @@ private[ml] object MLUtils {
     (classOf[PCAModel], Set("pc", "explainedVariance")),
     (classOf[Word2VecModel], Set("getVectors", "findSynonyms", "findSynonymsArray")),
     (classOf[CountVectorizerModel], Set("vocabulary")),
-    (classOf[OneHotEncoderModel], Set("categorySizes")))
+    (classOf[OneHotEncoderModel], Set("categorySizes")),
+    (classOf[IDFModel], Set("idf", "docFreq", "numDocs")))
 
   private def validate(obj: Any, method: String): Unit = {
     assert(obj != null)

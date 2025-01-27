@@ -20,7 +20,7 @@ import unittest
 
 import numpy as np
 
-from pyspark.ml.linalg import Vectors
+from pyspark.ml.linalg import Vectors, SparseVector
 from pyspark.sql import SparkSession
 from pyspark.ml.clustering import (
     KMeans,
@@ -32,6 +32,10 @@ from pyspark.ml.clustering import (
     GaussianMixture,
     GaussianMixtureModel,
     GaussianMixtureSummary,
+    LDA,
+    LDAModel,
+    LocalLDAModel,
+    DistributedLDAModel,
 )
 
 
@@ -64,6 +68,13 @@ class ClusteringTestsMixin:
         self.assertEqual(km.getWeightCol(), "weight")
 
         model = km.fit(df)
+        self.assertEqual(km.uid, model.uid)
+
+        centers = model.clusterCenters()
+        self.assertEqual(len(centers), 2)
+        self.assertTrue(np.allclose(centers[0], [-0.372, -0.338], atol=1e-3), centers[0])
+        self.assertTrue(np.allclose(centers[1], [0.8625, 0.83375], atol=1e-3), centers[1])
+
         # TODO: support KMeansModel.numFeatures in Python
         # self.assertEqual(model.numFeatures, 2)
 
@@ -132,6 +143,13 @@ class ClusteringTestsMixin:
         self.assertEqual(bkm.getWeightCol(), "weight")
 
         model = bkm.fit(df)
+        self.assertEqual(bkm.uid, model.uid)
+
+        centers = model.clusterCenters()
+        self.assertEqual(len(centers), 2)
+        self.assertTrue(np.allclose(centers[0], [-0.372, -0.338], atol=1e-3), centers[0])
+        self.assertTrue(np.allclose(centers[1], [0.8625, 0.83375], atol=1e-3), centers[1])
+
         # TODO: support KMeansModel.numFeatures in Python
         # self.assertEqual(model.numFeatures, 2)
 
@@ -203,6 +221,7 @@ class ClusteringTestsMixin:
         self.assertEqual(gmm.getSeed(), 1)
 
         model = gmm.fit(df)
+        self.assertEqual(gmm.uid, model.uid)
         # TODO: support GMM.numFeatures in Python
         # self.assertEqual(model.numFeatures, 2)
         self.assertEqual(len(model.weights), 2)
@@ -259,6 +278,139 @@ class ClusteringTestsMixin:
 
             model.write().overwrite().save(d)
             model2 = GaussianMixtureModel.load(d)
+            self.assertEqual(str(model), str(model2))
+
+    def test_local_lda(self):
+        spark = self.spark
+        df = (
+            spark.createDataFrame(
+                [
+                    [1, Vectors.dense([0.0, 1.0])],
+                    [2, SparseVector(2, {0: 1.0})],
+                ],
+                ["id", "features"],
+            )
+            .coalesce(1)
+            .sortWithinPartitions("id")
+        )
+
+        lda = LDA(k=2, optimizer="online", seed=1)
+        lda.setMaxIter(1)
+        self.assertEqual(lda.getK(), 2)
+        self.assertEqual(lda.getOptimizer(), "online")
+        self.assertEqual(lda.getMaxIter(), 1)
+        self.assertEqual(lda.getSeed(), 1)
+
+        model = lda.fit(df)
+        self.assertEqual(lda.uid, model.uid)
+        self.assertIsInstance(model, LDAModel)
+        self.assertIsInstance(model, LocalLDAModel)
+        self.assertNotIsInstance(model, DistributedLDAModel)
+        self.assertFalse(model.isDistributed())
+
+        dc = model.estimatedDocConcentration()
+        self.assertTrue(np.allclose(dc.toArray(), [0.5, 0.5], atol=1e-4), dc)
+        topics = model.topicsMatrix()
+        self.assertTrue(
+            np.allclose(
+                topics.toArray(), [[1.20296728, 1.15740442], [0.99357675, 1.02993164]], atol=1e-4
+            ),
+            topics,
+        )
+
+        ll = model.logLikelihood(df)
+        self.assertTrue(np.allclose(ll, -3.2125122434040088, atol=1e-4), ll)
+        lp = model.logPerplexity(df)
+        self.assertTrue(np.allclose(lp, 1.6062561217020044, atol=1e-4), lp)
+        dt = model.describeTopics()
+        self.assertEqual(dt.columns, ["topic", "termIndices", "termWeights"])
+        self.assertEqual(dt.count(), 2)
+
+        # LocalLDAModel specific methods
+        self.assertEqual(model.vocabSize(), 2)
+
+        output = model.transform(df)
+        expected_cols = ["id", "features", "topicDistribution"]
+        self.assertEqual(output.columns, expected_cols)
+        self.assertEqual(output.count(), 2)
+
+        # save & load
+        with tempfile.TemporaryDirectory(prefix="local_lda") as d:
+            lda.write().overwrite().save(d)
+            lda2 = LDA.load(d)
+            self.assertEqual(str(lda), str(lda2))
+
+            model.write().overwrite().save(d)
+            model2 = LocalLDAModel.load(d)
+            self.assertEqual(str(model), str(model2))
+
+    def test_distributed_lda(self):
+        spark = self.spark
+        df = (
+            spark.createDataFrame(
+                [
+                    [1, Vectors.dense([0.0, 1.0])],
+                    [2, SparseVector(2, {0: 1.0})],
+                ],
+                ["id", "features"],
+            )
+            .coalesce(1)
+            .sortWithinPartitions("id")
+        )
+
+        lda = LDA(k=2, optimizer="em", seed=1)
+        lda.setMaxIter(1)
+
+        self.assertEqual(lda.getK(), 2)
+        self.assertEqual(lda.getOptimizer(), "em")
+        self.assertEqual(lda.getMaxIter(), 1)
+        self.assertEqual(lda.getSeed(), 1)
+
+        model = lda.fit(df)
+        self.assertEqual(lda.uid, model.uid)
+        self.assertIsInstance(model, LDAModel)
+        self.assertNotIsInstance(model, LocalLDAModel)
+        self.assertIsInstance(model, DistributedLDAModel)
+
+        dc = model.estimatedDocConcentration()
+        self.assertTrue(np.allclose(dc.toArray(), [26.0, 26.0], atol=1e-4), dc)
+        topics = model.topicsMatrix()
+        self.assertTrue(
+            np.allclose(
+                topics.toArray(), [[0.39149926, 0.60850074], [0.60991237, 0.39008763]], atol=1e-4
+            ),
+            topics,
+        )
+
+        ll = model.logLikelihood(df)
+        self.assertTrue(np.allclose(ll, -3.719138517085772, atol=1e-4), ll)
+        lp = model.logPerplexity(df)
+        self.assertTrue(np.allclose(lp, 1.859569258542886, atol=1e-4), lp)
+
+        dt = model.describeTopics()
+        self.assertEqual(dt.columns, ["topic", "termIndices", "termWeights"])
+        self.assertEqual(dt.count(), 2)
+
+        # DistributedLDAModel specific methods
+        ll = model.trainingLogLikelihood()
+        self.assertTrue(np.allclose(ll, -1.3847360462201639, atol=1e-4), ll)
+        lp = model.logPrior()
+        self.assertTrue(np.allclose(lp, -69.59963186898915, atol=1e-4), lp)
+        model.getCheckpointFiles()
+
+        output = model.transform(df)
+        expected_cols = ["id", "features", "topicDistribution"]
+        self.assertEqual(output.columns, expected_cols)
+        self.assertEqual(output.count(), 2)
+
+        # save & load
+        with tempfile.TemporaryDirectory(prefix="distributed_lda") as d:
+            lda.write().overwrite().save(d)
+            lda2 = LDA.load(d)
+            self.assertEqual(str(lda), str(lda2))
+
+            model.write().overwrite().save(d)
+            model2 = DistributedLDAModel.load(d)
             self.assertEqual(str(model), str(model2))
 
 

@@ -2743,7 +2743,7 @@
   },
   "INVALID_INTERVAL_WITH_MICROSECONDS_ADDITION" : {
     "message" : [
-      "Cannot add an interval to a date because its microseconds part is not 0. If necessary set <ansiConfig> to \"false\" to bypass this error."
+      "Cannot add an interval to a date because its microseconds part is not 0. To resolve this, cast the input date to a timestamp, which supports the addition of intervals with non-zero microseconds."
     ],
     "sqlState" : "22006"
   },
@@ -5281,6 +5281,11 @@
       "RDD" : {
         "message" : [
           "Resilient Distributed Datasets (RDDs)."
+        ]
+      },
+      "REGISTER_UDAF" : {
+        "message" : [
+          "Registering User Defined Aggregate Functions (UDAFs)."
         ]
       },
       "SESSION_BASE_RELATION_TO_DATAFRAME" : {

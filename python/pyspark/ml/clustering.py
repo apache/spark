@@ -686,7 +686,8 @@ class KMeansModel(
     @since("1.5.0")
     def clusterCenters(self) -> List[np.ndarray]:
         """Get the cluster centers, represented as a list of NumPy arrays."""
-        return [c.toArray() for c in self._call_java("clusterCenters")]
+        matrix = self._call_java("clusterCenterMatrix")
+        return [vec for vec in matrix.toArray()]
 
     @property
     @since("2.1.0")
@@ -1006,7 +1007,8 @@ class BisectingKMeansModel(
     @since("2.0.0")
     def clusterCenters(self) -> List[np.ndarray]:
         """Get the cluster centers, represented as a list of NumPy arrays."""
-        return [c.toArray() for c in self._call_java("clusterCenters")]
+        matrix = self._call_java("clusterCenterMatrix")
+        return [vec for vec in matrix.toArray()]
 
     @since("2.0.0")
     def computeCost(self, dataset: DataFrame) -> float:
@@ -1511,6 +1513,7 @@ class LDAModel(JavaModel, _LDAParams):
         return self._call_java("logPerplexity", dataset)
 
     @since("2.0.0")
+    @try_remote_attribute_relation
     def describeTopics(self, maxTermsPerTopic: int = 10) -> DataFrame:
         """
         Return the topics described by their top-weighted terms.
