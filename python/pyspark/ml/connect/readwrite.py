@@ -19,7 +19,12 @@ from typing import cast, Type, TYPE_CHECKING, Union, List, Dict, Any, Optional
 
 import pyspark.sql.connect.proto as pb2
 from pyspark.ml.connect.serialize import serialize_ml_params, deserialize, deserialize_param
-from pyspark.ml.tuning import CrossValidatorModelWriter, CrossValidatorModel
+from pyspark.ml.tuning import (
+    CrossValidatorModelWriter,
+    CrossValidatorModel,
+    TrainValidationSplitModel,
+    TrainValidationSplitModelWriter,
+)
 from pyspark.ml.util import MLWriter, MLReader, RL
 from pyspark.ml.wrapper import JavaWrapper
 
@@ -37,6 +42,19 @@ class RemoteCrossValidatorModelWriter(CrossValidatorModelWriter):
         session: Optional["SparkSession"] = None,
     ):
         super(RemoteCrossValidatorModelWriter, self).__init__(instance)
+        self.instance = instance
+        self.optionMap = optionMap
+        self.session(session)  # type: ignore[arg-type]
+
+
+class RemoteTrainValidationSplitModelWriter(TrainValidationSplitModelWriter):
+    def __init__(
+        self,
+        instance: "TrainValidationSplitModel",
+        optionMap: Dict[str, Any] = {},
+        session: Optional["SparkSession"] = None,
+    ):
+        super(RemoteTrainValidationSplitModelWriter, self).__init__(instance)
         self.instance = instance
         self.optionMap = optionMap
         self.session(session)  # type: ignore[arg-type]
@@ -76,7 +94,7 @@ class RemoteMLWriter(MLWriter):
         from pyspark.ml.wrapper import JavaModel, JavaEstimator, JavaTransformer
         from pyspark.ml.evaluation import JavaEvaluator
         from pyspark.ml.pipeline import Pipeline, PipelineModel
-        from pyspark.ml.tuning import CrossValidator
+        from pyspark.ml.tuning import CrossValidator, TrainValidationSplit
 
         # Spark Connect ML is built on scala Spark.ML, that means we're only
         # supporting JavaModel or JavaEstimator or JavaEvaluator
@@ -155,6 +173,20 @@ class RemoteMLWriter(MLWriter):
                 warnings.warn("Overwrite doesn't take effect for CrossValidatorModel")
             cvm_writer = RemoteCrossValidatorModelWriter(instance, optionMap, session)
             cvm_writer.save(path)
+        elif isinstance(instance, TrainValidationSplit):
+            from pyspark.ml.tuning import TrainValidationSplitWriter
+
+            if shouldOverwrite:
+                # TODO(SPARK-50954): Support client side model path overwrite
+                warnings.warn("Overwrite doesn't take effect for TrainValidationSplit")
+            tvs_writer = TrainValidationSplitWriter(instance)
+            tvs_writer.save(path)
+        elif isinstance(instance, TrainValidationSplitModel):
+            if shouldOverwrite:
+                # TODO(SPARK-50954): Support client side model path overwrite
+                warnings.warn("Overwrite doesn't take effect for TrainValidationSplitModel")
+            tvsm_writer = RemoteTrainValidationSplitModelWriter(instance, optionMap, session)
+            tvsm_writer.save(path)
         else:
             raise NotImplementedError(f"Unsupported write for {instance.__class__}")
 
@@ -182,7 +214,7 @@ class RemoteMLReader(MLReader[RL]):
         from pyspark.ml.wrapper import JavaModel, JavaEstimator, JavaTransformer
         from pyspark.ml.evaluation import JavaEvaluator
         from pyspark.ml.pipeline import Pipeline, PipelineModel
-        from pyspark.ml.tuning import CrossValidator
+        from pyspark.ml.tuning import CrossValidator, TrainValidationSplit
 
         if (
             issubclass(clazz, JavaModel)
@@ -260,6 +292,20 @@ class RemoteMLReader(MLReader[RL]):
             cvm_reader = CrossValidatorModelReader(CrossValidator)
             cvm_reader.session(session)
             return cvm_reader.load(path)
+
+        elif issubclass(clazz, TrainValidationSplit):
+            from pyspark.ml.tuning import TrainValidationSplitReader
+
+            tvs_reader = TrainValidationSplitReader(TrainValidationSplit)
+            tvs_reader.session(session)
+            return tvs_reader.load(path)
+
+        elif issubclass(clazz, TrainValidationSplitModel):
+            from pyspark.ml.tuning import TrainValidationSplitModelReader
+
+            tvs_reader = TrainValidationSplitModelReader(TrainValidationSplitModel)
+            tvs_reader.session(session)
+            return tvs_reader.load(path)
 
         else:
             raise RuntimeError(f"Unsupported read for {clazz}")

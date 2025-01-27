@@ -1186,12 +1186,12 @@ class TrainValidationSplitReader(MLReader["TrainValidationSplit"]):
         self.cls = cls
 
     def load(self, path: str) -> "TrainValidationSplit":
-        metadata = DefaultParamsReader.loadMetadata(path, self.sc)
+        metadata = DefaultParamsReader.loadMetadata(path, self.sparkSession)
         if not DefaultParamsReader.isPythonParamsInstance(metadata):
             return JavaMLReader(self.cls).load(path)  # type: ignore[arg-type]
         else:
             metadata, estimator, evaluator, estimatorParamMaps = _ValidatorSharedReadWrite.load(
-                path, self.sc, metadata
+                path, self.sparkSession, metadata
             )
             tvs = TrainValidationSplit(
                 estimator=estimator, estimatorParamMaps=estimatorParamMaps, evaluator=evaluator
@@ -1209,7 +1209,7 @@ class TrainValidationSplitWriter(MLWriter):
 
     def saveImpl(self, path: str) -> None:
         _ValidatorSharedReadWrite.validateParams(self.instance)
-        _ValidatorSharedReadWrite.saveImpl(path, self.instance, self.sc)
+        _ValidatorSharedReadWrite.saveImpl(path, self.instance, self.sparkSession)
 
 
 @inherit_doc
@@ -1219,15 +1219,17 @@ class TrainValidationSplitModelReader(MLReader["TrainValidationSplitModel"]):
         self.cls = cls
 
     def load(self, path: str) -> "TrainValidationSplitModel":
-        metadata = DefaultParamsReader.loadMetadata(path, self.sc)
+        metadata = DefaultParamsReader.loadMetadata(path, self.sparkSession)
         if not DefaultParamsReader.isPythonParamsInstance(metadata):
             return JavaMLReader(self.cls).load(path)  # type: ignore[arg-type]
         else:
             metadata, estimator, evaluator, estimatorParamMaps = _ValidatorSharedReadWrite.load(
-                path, self.sc, metadata
+                path, self.sparkSession, metadata
             )
             bestModelPath = os.path.join(path, "bestModel")
-            bestModel: Model = DefaultParamsReader.loadParamsInstance(bestModelPath, self.sc)
+            bestModel: Model = DefaultParamsReader.loadParamsInstance(
+                bestModelPath, self.sparkSession
+            )
             validationMetrics = metadata["validationMetrics"]
             persistSubModels = ("persistSubModels" in metadata) and metadata["persistSubModels"]
 
@@ -1236,7 +1238,7 @@ class TrainValidationSplitModelReader(MLReader["TrainValidationSplitModel"]):
                 for paramIndex in range(len(estimatorParamMaps)):
                     modelPath = os.path.join(path, "subModels", f"{paramIndex}")
                     subModels[paramIndex] = DefaultParamsReader.loadParamsInstance(
-                        modelPath, self.sc
+                        modelPath, self.sparkSession
                     )
             else:
                 subModels = None
@@ -1273,7 +1275,9 @@ class TrainValidationSplitModelWriter(MLWriter):
             "validationMetrics": instance.validationMetrics,
             "persistSubModels": persistSubModels,
         }
-        _ValidatorSharedReadWrite.saveImpl(path, instance, self.sc, extraMetadata=extraMetadata)
+        _ValidatorSharedReadWrite.saveImpl(
+            path, instance, self.sparkSession, extraMetadata=extraMetadata
+        )
         bestModelPath = os.path.join(path, "bestModel")
         cast(MLWritable, instance.bestModel).save(bestModelPath)
         if persistSubModels:
@@ -1473,7 +1477,7 @@ class TrainValidationSplit(
             subModels = [None for i in range(numModels)]
 
         tasks = map(
-            inheritable_thread_target,
+            inheritable_thread_target(dataset.sparkSession),
             _parallelFitTasks(est, train, eva, validation, epm, collectSubModelsParam),
         )
         pool = ThreadPool(processes=min(self.getParallelism(), numModels))
@@ -1529,6 +1533,7 @@ class TrainValidationSplit(
         return newTVS
 
     @since("2.3.0")
+    @try_remote_write
     def write(self) -> MLWriter:
         """Returns an MLWriter instance for this ML instance."""
         if _ValidatorSharedReadWrite.is_java_convertible(self):
@@ -1537,6 +1542,7 @@ class TrainValidationSplit(
 
     @classmethod
     @since("2.3.0")
+    @try_remote_read
     def read(cls) -> TrainValidationSplitReader:
         """Returns an MLReader instance for this class."""
         return TrainValidationSplitReader(cls)
@@ -1649,6 +1655,7 @@ class TrainValidationSplitModel(
         )
 
     @since("2.3.0")
+    @try_remote_write
     def write(self) -> MLWriter:
         """Returns an MLWriter instance for this ML instance."""
         if _ValidatorSharedReadWrite.is_java_convertible(self):
@@ -1657,6 +1664,7 @@ class TrainValidationSplitModel(
 
     @classmethod
     @since("2.3.0")
+    @try_remote_read
     def read(cls) -> TrainValidationSplitModelReader:
         """Returns an MLReader instance for this class."""
         return TrainValidationSplitModelReader(cls)
