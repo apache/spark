@@ -35,6 +35,8 @@ from pyspark.ml.regression import (
     GeneralizedLinearRegressionTrainingSummary,
     LinearRegressionSummary,
     LinearRegressionTrainingSummary,
+    FMRegressor,
+    FMRegressionModel,
     DecisionTreeRegressor,
     DecisionTreeRegressionModel,
     RandomForestRegressor,
@@ -366,6 +368,69 @@ class RegressionTestsMixin:
 
             model.write().overwrite().save(d)
             model2 = GeneralizedLinearRegressionModel.load(d)
+            self.assertEqual(str(model), str(model2))
+
+    def test_factorization_machine(self):
+        spark = self.spark
+        df = (
+            spark.createDataFrame(
+                [
+                    (1, 1.0, Vectors.dense(0.0, 0.0)),
+                    (2, 1.0, Vectors.dense(1.0, 2.0)),
+                    (3, 2.0, Vectors.dense(0.0, 0.0)),
+                    (4, 2.0, Vectors.dense(1.0, 1.0)),
+                ],
+                ["index", "label", "features"],
+            )
+            .coalesce(1)
+            .sortWithinPartitions("index")
+            .select("label", "features")
+        )
+
+        fm = FMRegressor(factorSize=2, maxIter=1, regParam=1.0, seed=1)
+        self.assertEqual(fm.getFactorSize(), 2)
+        self.assertEqual(fm.getMaxIter(), 1)
+        self.assertEqual(fm.getRegParam(), 1.0)
+        self.assertEqual(fm.getSeed(), 1)
+
+        model = fm.fit(df)
+        self.assertEqual(fm.uid, model.uid)
+        self.assertEqual(model.numFeatures, 2)
+        self.assertTrue(
+            np.allclose(model.intercept, 0.9999999966668874, atol=1e-4), model.intercept
+        )
+        self.assertTrue(
+            np.allclose(
+                model.linear.toArray(), [0.9999999933342161, 0.9999999950008276], atol=1e-4
+            ),
+            model.linear,
+        )
+        self.assertTrue(
+            np.allclose(
+                model.factors.toArray(),
+                [[-0.99999954, -0.9999992], [0.99999968, -0.99999918]],
+                atol=1e-4,
+            ),
+            model.factors,
+        )
+
+        vec = Vectors.dense(0.0, 5.0)
+        pred = model.predict(vec)
+        self.assertTrue(np.allclose(pred, 5.999999971671025, atol=1e-4), pred)
+
+        output = model.transform(df)
+        expected_cols = ["label", "features", "prediction"]
+        self.assertEqual(output.columns, expected_cols)
+        self.assertEqual(output.count(), 4)
+
+        # Model save & load
+        with tempfile.TemporaryDirectory(prefix="factorization_machine") as d:
+            fm.write().overwrite().save(d)
+            fm2 = FMRegressor.load(d)
+            self.assertEqual(str(fm), str(fm2))
+
+            model.write().overwrite().save(d)
+            model2 = FMRegressionModel.load(d)
             self.assertEqual(str(model), str(model2))
 
     def test_decision_tree_regressor(self):
