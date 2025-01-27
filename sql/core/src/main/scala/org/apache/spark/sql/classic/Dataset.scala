@@ -955,7 +955,7 @@ class Dataset[T] private[sql](
 
   /** @inheritdoc */
   def reduce(func: (T, T) => T): T = withNewRDDExecutionId("reduce") {
-    rdd.reduce(func)
+    materializedRdd.reduce(func)
   }
 
   /** @inheritdoc */
@@ -1471,8 +1471,8 @@ class Dataset[T] private[sql](
 
   /** @inheritdoc */
   def foreachPartition(f: Iterator[T] => Unit): Unit = withNewRDDExecutionId("foreachPartition") {
-    rdd.foreachPartition(f)
-  }
+      materializedRdd.foreachPartition(f)
+    }
 
   /** @inheritdoc */
   def tail(n: Int): Array[T] = withAction(
@@ -1573,13 +1573,17 @@ class Dataset[T] private[sql](
     sparkSession.sessionState.executePlan(deserialized)
   }
 
+  private lazy val materializedRdd: RDD[T] = {
+    val objectType = exprEnc.deserializer.dataType
+    rddQueryExecution.toRdd.mapPartitions { rows =>
+      rows.map(_.get(0, objectType).asInstanceOf[T])
+    }
+  }
+
   /** @inheritdoc */
   lazy val rdd: RDD[T] = {
     withNewRDDExecutionId("rdd") {
-      val objectType = exprEnc.deserializer.dataType
-      rddQueryExecution.toRdd.mapPartitions { rows =>
-        rows.map(_.get(0, objectType).asInstanceOf[T])
-      }
+      materializedRdd
     }
   }
 
