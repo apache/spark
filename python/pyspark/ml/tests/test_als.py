@@ -48,13 +48,19 @@ class ALSTestsMixin:
         self.assertEqual(als.getSeed(), 1)
         self.assertEqual(als.getMaxIter(), 2)
 
+        model = als.fit(df)
+
         # Estimator save & load
         with tempfile.TemporaryDirectory(prefix="ALS") as d:
             als.write().overwrite().save(d)
             als2 = ALS.load(d)
             self.assertEqual(str(als), str(als2))
 
-        model = als.fit(df)
+            model.write().overwrite().save(d)
+            model2 = ALSModel.load(d)
+            self.assertEqual(str(model), str(model2))
+
+        self.assertEqual(als.uid, model.uid)
         self.assertEqual(model.rank, 10)
 
         self.assertEqual(model.itemFactors.columns, ["id", "features"])
@@ -83,12 +89,6 @@ class ALSTestsMixin:
         output4 = model.recommendForItemSubset(df, 3)
         self.assertEqual(output4.columns, ["item", "recommendations"])
         self.assertEqual(output4.count(), 3)
-
-        # Model save & load
-        with tempfile.TemporaryDirectory(prefix="als_model") as d:
-            model.write().overwrite().save(d)
-            model2 = ALSModel.load(d)
-            self.assertEqual(str(model), str(model2))
 
     def test_ambiguous_column(self):
         data = self.spark.createDataFrame(

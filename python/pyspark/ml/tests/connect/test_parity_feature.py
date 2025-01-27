@@ -23,14 +23,6 @@ from pyspark.testing.connectutils import ReusedConnectTestCase
 
 class FeatureParityTests(FeatureTestsMixin, ReusedConnectTestCase):
     @unittest.skip("Need to support.")
-    def test_idf(self):
-        super().test_idf()
-
-    @unittest.skip("Need to support.")
-    def test_ngram(self):
-        super().test_ngram()
-
-    @unittest.skip("Need to support.")
     def test_count_vectorizer_with_binary(self):
         super().test_count_vectorizer_with_binary()
 
@@ -59,20 +51,8 @@ class FeatureParityTests(FeatureTestsMixin, ReusedConnectTestCase):
         super().test_string_indexer_from_labels()
 
     @unittest.skip("Need to support.")
-    def test_target_encoder_binary(self):
-        super().test_target_encoder_binary()
-
-    @unittest.skip("Need to support.")
-    def test_target_encoder_continuous(self):
-        super().test_target_encoder_continuous()
-
-    @unittest.skip("Need to support.")
     def test_vector_size_hint(self):
         super().test_vector_size_hint()
-
-    @unittest.skip("Need to support.")
-    def test_apply_binary_term_freqs(self):
-        super().test_apply_binary_term_freqs()
 
 
 if __name__ == "__main__":

@@ -387,7 +387,6 @@ class JavaEstimator(JavaParams, Estimator[JM], metaclass=ABCMeta):
         """
         raise NotImplementedError()
 
-    @try_remote_fit
     def _fit_java(self, dataset: DataFrame) -> "JavaObject":
         """
         Fits a Java model to the input dataset.
@@ -407,6 +406,7 @@ class JavaEstimator(JavaParams, Estimator[JM], metaclass=ABCMeta):
         self._transfer_params_to_java()
         return self._java_obj.fit(dataset._jdf)
 
+    @try_remote_fit
     def _fit(self, dataset: DataFrame) -> JM:
         java_model = self._fit_java(dataset)
         model = self._create_model(java_model)
