@@ -1247,12 +1247,6 @@
     ],
     "sqlState" : "42614"
   },
-  "DUPLICATE_CONDITION_IN_HANDLER_DECLARATION" : {
-    "message" : [
-      "Found duplicate condition <condition> in the handler declaration. Please, remove one of them."
-    ],
-    "sqlState" : "42734"
-  },
   "DUPLICATE_CONDITION_IN_SCOPE" : {
     "message" : [
       "Found duplicate condition <condition> in the scope. Please, remove one of them."
@@ -2661,6 +2655,11 @@
       "DUPLICATE_SQLSTATE_IN_HANDLER_DECLARATION" : {
         "message" : [
           "Found duplicate sqlState <sqlState> in the handler declaration. Please, remove one of them."
+        ]
+      },
+      "INVALID_CONDITION_COMBINATION" : {
+        "message" : [
+          "Invalid combination of conditions in the handler declaration. SQLEXCEPTION and NOT FOUND cannot be used together with other condition/sqlstate values."
         ]
       }
     },

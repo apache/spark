@@ -232,7 +232,7 @@ private[sql] object SqlScriptingErrors {
   def sqlExceptionOrNotFoundCannotBeCombinedWithOtherConditions(get: Origin): Throwable = {
     new SqlScriptingException(
       origin = get,
-      errorClass = "INVALID_CONDITION_COMBINATION",
+      errorClass = "INVALID_HANDLER_DECLARATION.INVALID_CONDITION_COMBINATION",
       cause = null,
       messageParameters = Map.empty)
   }

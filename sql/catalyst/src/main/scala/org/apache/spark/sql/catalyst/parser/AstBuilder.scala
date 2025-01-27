@@ -218,7 +218,7 @@ class AstBuilder extends DataTypeAstBuilder
     }
 
     if (handlerTriggers.sqlException || handlerTriggers.notFound) {
-      if (handlerTriggers.conditions.nonEmpty && handlerTriggers.sqlStates.nonEmpty) {
+      if (handlerTriggers.conditions.nonEmpty || handlerTriggers.sqlStates.nonEmpty) {
         throw SqlScriptingErrors
           .sqlExceptionOrNotFoundCannotBeCombinedWithOtherConditions(CurrentOrigin.get)
       }

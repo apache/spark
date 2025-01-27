@@ -380,16 +380,16 @@ class ExceptionHandlerTriggers(
 
 /**
  * Logical operator for an error handler.
- * @param handlerTriggers Collection of different handler triggers:
- *                        sqlStates -> set of sqlStates that will trigger handler
- *                        conditions -> set of conditions that will trigger handler
- *                        sqlException -> if handler is triggered by SQLEXCEPTION
- *                        notFound -> if handler is triggered by NotFound
+ * @param exceptionHandlerTriggers Collection of different handler triggers:
+ *        sqlStates -> set of sqlStates that will trigger handler
+ *        conditions -> set of conditions that will trigger handler
+ *        sqlException -> if handler is triggered by SQLEXCEPTION
+ *        notFound -> if handler is triggered by NotFound
  * @param body CompoundBody of the handler.
  * @param handlerType Type of the handler (CONTINUE or EXIT).
  */
 case class ExceptionHandler(
-    handlerTriggers: ExceptionHandlerTriggers,
+    exceptionHandlerTriggers: ExceptionHandlerTriggers,
     body: CompoundBody,
     handlerType: HandlerType) extends CompoundPlanStatement {
   override def output: Seq[Attribute] = Seq.empty
@@ -399,6 +399,9 @@ case class ExceptionHandler(
   override protected def withNewChildrenInternal(
       newChildren: IndexedSeq[LogicalPlan]): LogicalPlan = {
     assert(newChildren.length == 1)
-    ExceptionHandler(handlerTriggers, newChildren(0).asInstanceOf[CompoundBody], handlerType)
+    ExceptionHandler(
+      exceptionHandlerTriggers,
+      newChildren(0).asInstanceOf[CompoundBody],
+      handlerType)
   }
 }

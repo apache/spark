@@ -38,8 +38,8 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
       label: Option[String] = None,
       isScope: Boolean = false,
       context: SqlScriptingExecutionContext = null,
-      triggerHandlerMap: TriggerToExceptionHandlerMap = null)
-    extends CompoundBodyExec(statements, label, isScope, context, triggerHandlerMap) {
+      triggerToExceptionHandlerMap: TriggerToExceptionHandlerMap = null)
+    extends CompoundBodyExec(statements, label, isScope, context, triggerToExceptionHandlerMap) {
 
     // No-op to remove unnecessary logic for these tests.
     override def enterScope(): Unit = ()

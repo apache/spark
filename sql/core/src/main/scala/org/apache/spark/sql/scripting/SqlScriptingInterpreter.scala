@@ -20,11 +20,11 @@ package org.apache.spark.sql.scripting
 import scala.collection.mutable.HashMap
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.catalyst.analysis.UnresolvedIdentifier
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.logical.{CaseStatement, CompoundBody, CompoundPlanStatement, CreateVariable, DropVariable, ForStatement, HandlerType, IfElseStatement, IterateStatement, LeaveStatement, LogicalPlan, LoopStatement, RepeatStatement, SingleStatement, WhileStatement}
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
+import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.errors.SqlScriptingErrors
 
 /**
@@ -125,7 +125,7 @@ case class SqlScriptingInterpreter(session: SparkSession) {
 
       // For each condition handler is defined for, add corresponding key value pair
       // to the conditionHandlerMap.
-      handler.handlerTriggers.conditions.foreach(condition => {
+      handler.exceptionHandlerTriggers.conditions.foreach(condition => {
         // Condition can either be the key in conditions map or SqlState.
         if (conditionToExceptionHandlerMap.contains(condition)) {
           throw SqlScriptingErrors.duplicateHandlerForSameCondition(CurrentOrigin.get, condition)
@@ -136,7 +136,7 @@ case class SqlScriptingInterpreter(session: SparkSession) {
 
       // For each sqlState handler is defined for, add corresponding key value pair
       // to the sqlStateHandlerMap.
-      handler.handlerTriggers.sqlStates.foreach(sqlState => {
+      handler.exceptionHandlerTriggers.sqlStates.foreach(sqlState => {
         if (sqlStateToExceptionHandlerMap.contains(sqlState)) {
           throw SqlScriptingErrors.duplicateHandlerForSameSqlState(CurrentOrigin.get, sqlState)
         } else {
@@ -145,18 +145,18 @@ case class SqlScriptingInterpreter(session: SparkSession) {
       })
 
       // Get NOT FOUND handler.
-      notFoundHandler = if (handler.handlerTriggers.notFound) {
+      notFoundHandler = if (handler.exceptionHandlerTriggers.notFound) {
         Some(handlerExec)
       } else None
 
       // Get SQLEXCEPTION handler.
-      sqlExceptionHandler = if (handler.handlerTriggers.sqlException) {
+      sqlExceptionHandler = if (handler.exceptionHandlerTriggers.sqlException) {
         Some(handlerExec)
       } else None
     })
 
     // Create a trigger handler map for the current CompoundBody.
-    val triggerHandlerMap = new TriggerToExceptionHandlerMap(
+    val triggerToExceptionHandlerMap = new TriggerToExceptionHandlerMap(
       conditionToExceptionHandlerMap = conditionToExceptionHandlerMap.toMap,
       sqlStateToExceptionHandlerMap = sqlStateToExceptionHandlerMap.toMap,
       sqlExceptionHandler = sqlExceptionHandler,
@@ -173,7 +173,7 @@ case class SqlScriptingInterpreter(session: SparkSession) {
       compoundBody.label,
       compoundBody.isScope,
       context,
-      triggerHandlerMap)
+      triggerToExceptionHandlerMap)
   }
 
   /**
