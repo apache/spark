@@ -128,6 +128,8 @@ SELECT * FROM t2;
 
 
 -- recursive reference is not allowed in a nested CTE
+-- TABLE_OR_VIEW_NOT_FOUND is thrown now, although it some check should be added to exactly inform
+-- that this is not allowed
 WITH RECURSIVE
   t1 AS (
     SELECT 1 AS level
@@ -146,7 +148,7 @@ WITH
     WITH RECURSIVE
       t1 AS (
         SELECT 1 AS level
-        UNION (
+        UNION ALL (
           WITH t3 AS (SELECT level + 1 FROM t1 WHERE level < 10)
           SELECT * FROM t3
         )
@@ -288,6 +290,13 @@ WITH RECURSIVE r(level, data) AS (
   UNION ALL
   SELECT MAX(level) + 1, SUM(data) FROM r WHERE level < 9
 )
+SELECT * FROM r;
+
+-- group by inside recursion not allowed (considered as aggregate as well)
+WITH RECURSIVE r(n) AS (
+    SELECT 1
+    UNION ALL
+    SELECT n+1 FROM r GROUP BY n)
 SELECT * FROM r;
 
 -- recursion is allowed in simple commands

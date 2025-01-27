@@ -347,7 +347,7 @@ WITH
     WITH RECURSIVE
       t1 AS (
         SELECT 1 AS level
-        UNION (
+        UNION ALL (
           WITH t3 AS (SELECT level + 1 FROM t1 WHERE level < 10)
           SELECT * FROM t3
         )
@@ -368,8 +368,8 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 155,
-    "stopIndex" : 156,
+    "startIndex" : 159,
+    "stopIndex" : 160,
     "fragment" : "t1"
   } ]
 }
@@ -632,6 +632,22 @@ WITH RECURSIVE r(level, data) AS (
   UNION ALL
   SELECT MAX(level) + 1, SUM(data) FROM r WHERE level < 9
 )
+SELECT * FROM r
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INVALID_RECURSIVE_REFERENCE.PLACE",
+  "sqlState" : "42836"
+}
+
+
+-- !query
+WITH RECURSIVE r(n) AS (
+    SELECT 1
+    UNION ALL
+    SELECT n+1 FROM r GROUP BY n)
 SELECT * FROM r
 -- !query schema
 struct<>
