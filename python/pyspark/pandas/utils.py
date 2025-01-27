@@ -957,6 +957,18 @@ def spark_column_equals(left: Column, right: Column) -> bool:
             )
         return repr(left).replace("`", "") == repr(right).replace("`", "")
     else:
+        from pyspark.sql.classic.column import Column as ClassicColumn
+
+        if not isinstance(left, ClassicColumn):
+            raise PySparkTypeError(
+                errorClass="NOT_COLUMN",
+                messageParameters={"arg_name": "left", "arg_type": type(left).__name__},
+            )
+        if not isinstance(right, ClassicColumn):
+            raise PySparkTypeError(
+                errorClass="NOT_COLUMN",
+                messageParameters={"arg_name": "right", "arg_type": type(right).__name__},
+            )
         return left._jc.equals(right._jc)
 
 

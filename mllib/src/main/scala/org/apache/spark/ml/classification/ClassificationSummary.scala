@@ -29,7 +29,7 @@ import org.apache.spark.sql.types.DoubleType
 /**
  * Abstraction for multiclass classification results for a given model.
  */
-private[classification] trait ClassificationSummary extends Summary with Serializable {
+private[spark] trait ClassificationSummary extends Summary with Serializable {
 
   /**
    * Dataframe output by the model's `transform` method.
@@ -148,7 +148,7 @@ private[classification] trait ClassificationSummary extends Summary with Seriali
 /**
  * Abstraction for training results.
  */
-private[classification] trait TrainingSummary {
+private[spark] trait TrainingSummary {
 
   /**
    *  objective function (scaled loss + regularization) at each iteration.
@@ -168,7 +168,7 @@ private[classification] trait TrainingSummary {
 /**
  * Abstraction for binary classification results for a given model.
  */
-private[classification] trait BinaryClassificationSummary extends ClassificationSummary {
+private[spark] trait BinaryClassificationSummary extends ClassificationSummary {
 
   private val sparkSession = predictions.sparkSession
   import sparkSession.implicits._

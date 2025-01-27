@@ -127,6 +127,11 @@ class PCAModel private[ml] (
 
   import PCAModel._
 
+  // For ml connect only
+  @Since("4.0.0")
+  private[ml] def this() = this(Identifiable.randomUID("pca"),
+    DenseMatrix.zeros(1, 1), Vectors.empty)
+
   /** @group setParam */
   @Since("1.5.0")
   def setInputCol(value: String): this.type = set(inputCol, value)

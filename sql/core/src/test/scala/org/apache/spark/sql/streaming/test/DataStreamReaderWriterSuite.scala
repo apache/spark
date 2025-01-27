@@ -30,6 +30,9 @@ import org.mockito.Mockito._
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql._
+import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
+import org.apache.spark.sql.classic.ClassicConversions.castToImpl
+import org.apache.spark.sql.classic.Dataset.ofRows
 import org.apache.spark.sql.execution.datasources.DataSourceUtils
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.internal.SQLConf
@@ -91,8 +94,8 @@ class DefaultSource extends StreamSourceProvider with StreamSinkProvider {
 
       override def getOffset: Option[Offset] = Some(new LongOffset(0))
 
-      override def getBatch(start: Option[Offset], end: Offset): DataFrame = {
-        spark.internalCreateDataFrame(spark.sparkContext.emptyRDD, schema, isStreaming = true)
+      override def getBatch(start: Option[Offset], end: Offset): classic.DataFrame = {
+        ofRows(spark.sparkSession, LocalRelation(schema).copy(isStreaming = true))
       }
 
       override def stop(): Unit = {}

@@ -1064,7 +1064,14 @@ object DecorrelateInnerQuery extends PredicateHelper {
                 // Project, they could get added at the beginning or the end of the output columns
                 // depending on the child plan.
                 // The inner expressions for the domain are the values of newOuterReferenceMap.
-                val domainProjections = newOuterReferences.map(newOuterReferenceMap(_))
+                val domainProjections =
+                  if (SQLConf.get.getConf(
+                    SQLConf.DECORRELATE_UNION_OR_SET_OP_UNDER_LIMIT_ENABLED
+                  )) {
+                    newOuterReferences.map(newOuterReferenceMap(_))
+                  } else {
+                    collectedChildOuterReferences.map(newOuterReferenceMap(_))
+                  }
                 val newChild = Project(child.output ++ domainProjections, decorrelatedChild)
                 (newChild, newJoinCond, newOuterReferenceMap)
               }

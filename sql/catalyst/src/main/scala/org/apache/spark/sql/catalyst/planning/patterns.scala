@@ -437,7 +437,7 @@ object GroupBasedRowLevelOperation {
 
   def unapply(plan: LogicalPlan): Option[ReturnType] = plan match {
     case rd @ ReplaceData(DataSourceV2Relation(table, _, _, _, _),
-        cond, query, _, groupFilterCond, _) =>
+        cond, query, _, _, groupFilterCond, _) =>
       // group-based UPDATEs that are rewritten as UNION read the table twice
       val allowMultipleReads = rd.operation.command == UPDATE
       val readRelation = findReadRelation(table, query, allowMultipleReads)

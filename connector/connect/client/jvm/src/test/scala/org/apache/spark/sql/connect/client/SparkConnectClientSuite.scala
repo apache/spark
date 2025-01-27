@@ -33,9 +33,9 @@ import org.scalatest.time.SpanSugar._
 import org.apache.spark.{SparkException, SparkThrowable}
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.{AddArtifactsRequest, AddArtifactsResponse, AnalyzePlanRequest, AnalyzePlanResponse, ArtifactStatusesRequest, ArtifactStatusesResponse, ExecutePlanRequest, ExecutePlanResponse, Relation, SparkConnectServiceGrpc, SQL}
-import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.connect.SparkSession
 import org.apache.spark.sql.connect.common.config.ConnectCommon
-import org.apache.spark.sql.test.ConnectFunSuite
+import org.apache.spark.sql.connect.test.ConnectFunSuite
 
 class SparkConnectClientSuite extends ConnectFunSuite with BeforeAndAfterEach {
 
@@ -630,26 +630,29 @@ class DummySparkConnectService() extends SparkConnectServiceGrpc.SparkConnectSer
 
   var errorToThrowOnExecute: Option[Throwable] = None
 
-  private[sql] def getAndClearLatestInputPlan(): proto.Plan = {
+  private[sql] def getAndClearLatestInputPlan(): proto.Plan = synchronized {
     val plan = inputPlan
     inputPlan = null
     plan
   }
 
-  private[sql] def getAndClearLatestAddArtifactRequests(): Seq[AddArtifactsRequest] = {
-    val requests = inputArtifactRequests.toSeq
-    inputArtifactRequests.clear()
-    requests
-  }
+  private[sql] def getAndClearLatestAddArtifactRequests(): Seq[AddArtifactsRequest] =
+    synchronized {
+      val requests = inputArtifactRequests.toSeq
+      inputArtifactRequests.clear()
+      requests
+    }
 
   override def executePlan(
       request: ExecutePlanRequest,
       responseObserver: StreamObserver[ExecutePlanResponse]): Unit = {
-    if (errorToThrowOnExecute.isDefined) {
-      val error = errorToThrowOnExecute.get
-      errorToThrowOnExecute = None
-      responseObserver.onError(error)
-      return
+    synchronized {
+      if (errorToThrowOnExecute.isDefined) {
+        val error = errorToThrowOnExecute.get
+        errorToThrowOnExecute = None
+        responseObserver.onError(error)
+        return
+      }
     }
 
     // Reply with a dummy response using the same client ID
@@ -659,7 +662,9 @@ class DummySparkConnectService() extends SparkConnectServiceGrpc.SparkConnectSer
     } else {
       UUID.randomUUID().toString
     }
-    inputPlan = request.getPlan
+    synchronized {
+      inputPlan = request.getPlan
+    }
     val response = ExecutePlanResponse
       .newBuilder()
       .setSessionId(requestSessionId)
@@ -668,7 +673,7 @@ class DummySparkConnectService() extends SparkConnectServiceGrpc.SparkConnectSer
     responseObserver.onNext(response)
     // Reattachable execute must end with ResultComplete
     if (request.getRequestOptionsList.asScala.exists { option =>
-        option.hasReattachOptions && option.getReattachOptions.getReattachable == true
+        option.hasReattachOptions && option.getReattachOptions.getReattachable
       }) {
       val resultComplete = ExecutePlanResponse
         .newBuilder()
@@ -686,20 +691,22 @@ class DummySparkConnectService() extends SparkConnectServiceGrpc.SparkConnectSer
       responseObserver: StreamObserver[AnalyzePlanResponse]): Unit = {
     // Reply with a dummy response using the same client ID
     val requestSessionId = request.getSessionId
-    request.getAnalyzeCase match {
-      case proto.AnalyzePlanRequest.AnalyzeCase.SCHEMA =>
-        inputPlan = request.getSchema.getPlan
-      case proto.AnalyzePlanRequest.AnalyzeCase.EXPLAIN =>
-        inputPlan = request.getExplain.getPlan
-      case proto.AnalyzePlanRequest.AnalyzeCase.TREE_STRING =>
-        inputPlan = request.getTreeString.getPlan
-      case proto.AnalyzePlanRequest.AnalyzeCase.IS_LOCAL =>
-        inputPlan = request.getIsLocal.getPlan
-      case proto.AnalyzePlanRequest.AnalyzeCase.IS_STREAMING =>
-        inputPlan = request.getIsStreaming.getPlan
-      case proto.AnalyzePlanRequest.AnalyzeCase.INPUT_FILES =>
-        inputPlan = request.getInputFiles.getPlan
-      case _ => inputPlan = null
+    synchronized {
+      request.getAnalyzeCase match {
+        case proto.AnalyzePlanRequest.AnalyzeCase.SCHEMA =>
+          inputPlan = request.getSchema.getPlan
+        case proto.AnalyzePlanRequest.AnalyzeCase.EXPLAIN =>
+          inputPlan = request.getExplain.getPlan
+        case proto.AnalyzePlanRequest.AnalyzeCase.TREE_STRING =>
+          inputPlan = request.getTreeString.getPlan
+        case proto.AnalyzePlanRequest.AnalyzeCase.IS_LOCAL =>
+          inputPlan = request.getIsLocal.getPlan
+        case proto.AnalyzePlanRequest.AnalyzeCase.IS_STREAMING =>
+          inputPlan = request.getIsStreaming.getPlan
+        case proto.AnalyzePlanRequest.AnalyzeCase.INPUT_FILES =>
+          inputPlan = request.getInputFiles.getPlan
+        case _ => inputPlan = null
+      }
     }
     val response = AnalyzePlanResponse
       .newBuilder()
@@ -711,7 +718,8 @@ class DummySparkConnectService() extends SparkConnectServiceGrpc.SparkConnectSer
 
   override def addArtifacts(responseObserver: StreamObserver[AddArtifactsResponse])
       : StreamObserver[AddArtifactsRequest] = new StreamObserver[AddArtifactsRequest] {
-    override def onNext(v: AddArtifactsRequest): Unit = inputArtifactRequests.append(v)
+    override def onNext(v: AddArtifactsRequest): Unit =
+      synchronized(inputArtifactRequests.append(v))
 
     override def onError(throwable: Throwable): Unit = responseObserver.onError(throwable)
 
@@ -728,13 +736,15 @@ class DummySparkConnectService() extends SparkConnectServiceGrpc.SparkConnectSer
     request.getNamesList().iterator().asScala.foreach { name =>
       val status = proto.ArtifactStatusesResponse.ArtifactStatus.newBuilder()
       val exists = if (name.startsWith("cache/")) {
-        inputArtifactRequests.exists { artifactReq =>
-          if (artifactReq.hasBatch) {
-            val batch = artifactReq.getBatch
-            batch.getArtifactsList.asScala.exists { singleArtifact =>
-              singleArtifact.getName == name
-            }
-          } else false
+        synchronized {
+          inputArtifactRequests.exists { artifactReq =>
+            if (artifactReq.hasBatch) {
+              val batch = artifactReq.getBatch
+              batch.getArtifactsList.asScala.exists { singleArtifact =>
+                singleArtifact.getName == name
+              }
+            } else false
+          }
         }
       } else false
       builder.putStatuses(name, status.setExists(exists).build())
