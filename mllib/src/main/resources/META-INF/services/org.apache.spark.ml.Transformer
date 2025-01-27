@@ -44,6 +44,8 @@ org.apache.spark.ml.classification.RandomForestClassificationModel
 org.apache.spark.ml.classification.GBTClassificationModel
 
 # regression
+org.apache.spark.ml.regression.AFTSurvivalRegressionModel
+org.apache.spark.ml.regression.IsotonicRegressionModel
 org.apache.spark.ml.regression.LinearRegressionModel
 org.apache.spark.ml.regression.GeneralizedLinearRegressionModel
 org.apache.spark.ml.regression.DecisionTreeRegressionModel
