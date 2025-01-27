@@ -1651,7 +1651,8 @@ class ClientE2ETestSuite
     checkAnswer(df, (0 until 3).map(i => Row(i)))
   }
 
-  test("SPARK-50965: Multiple named and positional parameterized nodes in the parsed logical plan") {
+  test(
+    "SPARK-50965: Multiple named and positional parameterized nodes in the parsed logical plan") {
     var df = spark.sql("SELECT ?", Array(0))
     df = df.union(spark.sql("SELECT :key", args = Map("key" -> 1)))
     for (i <- 1 until 3) {
