@@ -88,6 +88,15 @@ WITH RECURSIVE r(level) AS (
 )
 SELECT * FROM r;
 
+--recursive keyword but no self-reference
+--other sql engines don't throw an error in this case, so Spark doesn't throw it as well
+WITH RECURSIVE t(n) AS (
+    SELECT 1
+    UNION ALL
+    SELECT 2
+)
+SELECT * FROM t;
+
 -- fails because a recursive query should contain UNION ALL or UNION combinator
 WITH RECURSIVE r(level) AS (
   VALUES 0
@@ -97,12 +106,26 @@ WITH RECURSIVE r(level) AS (
 SELECT * FROM r;
 
 -- recursive reference is not allowed in a subquery expression
-WITH RECURSIVE r(level) AS (
-  VALUES 0
+WITH RECURSIVE t(col) (
+  SELECT 1
   UNION ALL
-  SELECT level + 1 FROM r WHERE (SELECT SUM(level) FROM r) < 9
+  SELECT (SELECT max(col) FROM t)
 )
-SELECT * FROM r;
+SELECT * FROM t;
+
+-- complicated subquery example: self-reference in subquery in an inner CTE
+WITH
+  t1 AS (SELECT 1 as n),
+  t2(n) AS (
+    WITH RECURSIVE t3(n) AS (
+      SELECT 1
+      UNION ALL
+      SELECT n+1 FROM (SELECT MAX(n) FROM t3)
+    )
+    SELECT * FROM t3
+  )
+SELECT * FROM t2;
+
 
 -- recursive reference is not allowed in a nested CTE
 WITH RECURSIVE

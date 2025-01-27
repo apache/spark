@@ -253,6 +253,28 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 
 
 -- !query
+WITH RECURSIVE t(n) AS (
+    SELECT 1
+    UNION ALL
+    SELECT 2
+)
+SELECT * FROM t
+-- !query analysis
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias t
+:     +- Project [1#x AS n#x]
+:        +- Union false, false
+:           :- Project [1 AS 1#x]
+:           :  +- OneRowRelation
+:           +- Project [2 AS 2#x]
+:              +- OneRowRelation
++- Project [n#x]
+   +- SubqueryAlias t
+      +- CTERelationRef xxxx, true, [n#x], false, false
+
+
+-- !query
 WITH RECURSIVE r(level) AS (
   VALUES 0
   INTERSECT
@@ -268,24 +290,37 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
-WITH RECURSIVE r(level) AS (
-  VALUES 0
+WITH RECURSIVE t(col) (
+  SELECT 1
   UNION ALL
-  SELECT level + 1 FROM r WHERE (SELECT SUM(level) FROM r) < 9
+  SELECT (SELECT max(col) FROM t)
 )
-SELECT * FROM r
+SELECT * FROM t
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "INVALID_RECURSIVE_REFERENCE.NUMBER",
-  "sqlState" : "42836",
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 132,
-    "fragment" : "WITH RECURSIVE r(level) AS (\n  VALUES 0\n  UNION ALL\n  SELECT level + 1 FROM r WHERE (SELECT SUM(level) FROM r) < 9\n)\nSELECT * FROM r"
-  } ]
+  "errorClass" : "INVALID_RECURSIVE_REFERENCE.PLACE",
+  "sqlState" : "42836"
+}
+
+
+-- !query
+WITH
+  t1 AS (SELECT 1 as n),
+  t2(n) AS (
+    WITH RECURSIVE t3(n) AS (
+      SELECT 1
+      UNION ALL
+      SELECT n+1 FROM (SELECT MAX(n) FROM t3)
+    )
+    SELECT * FROM t3
+  )
+SELECT * FROM t2
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INVALID_RECURSIVE_REFERENCE.PLACE",
+  "sqlState" : "42836"
 }
 
 
