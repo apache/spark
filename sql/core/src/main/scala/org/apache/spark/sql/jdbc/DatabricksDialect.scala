@@ -63,6 +63,8 @@ private case class DatabricksDialect() extends JdbcDialect with NoLegacyJDBCErro
     s"TABLESAMPLE (${(sample.upperBound - sample.lowerBound) * 100}) REPEATABLE (${sample.seed})"
   }
 
+  override def supportsHint: Boolean = true
+
   // Override listSchemas to run "show schemas" as a PreparedStatement instead of
   // invoking getMetaData.getSchemas as it may not work correctly in older versions of the driver.
   override def schemasExists(conn: Connection, options: JDBCOptions, schema: String): Boolean = {

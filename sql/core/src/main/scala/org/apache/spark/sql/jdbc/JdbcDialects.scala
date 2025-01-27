@@ -826,6 +826,8 @@ abstract class JdbcDialect extends Serializable with Logging {
   def getTableSample(sample: TableSampleInfo): String =
     throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3183")
 
+  def supportsHint: Boolean = false
+
   /**
    * Return the DB-specific quoted and fully qualified table name
    */

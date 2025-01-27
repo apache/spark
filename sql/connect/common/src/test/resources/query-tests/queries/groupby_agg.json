@@ -47,12 +47,12 @@
               "jvmOrigin": {
                 "stackTrace": [{
                   "classLoaderName": "app",
-                  "declaringClass": "org.apache.spark.sql.Dataset",
+                  "declaringClass": "org.apache.spark.sql.connect.Dataset",
                   "methodName": "col",
                   "fileName": "Dataset.scala"
                 }, {
                   "classLoaderName": "app",
-                  "declaringClass": "org.apache.spark.sql.api.RelationalGroupedDataset",
+                  "declaringClass": "org.apache.spark.sql.RelationalGroupedDataset",
                   "methodName": "toAggCol",
                   "fileName": "RelationalGroupedDataset.scala"
                 }]
@@ -72,7 +72,7 @@
               "fileName": "Column.scala"
             }, {
               "classLoaderName": "app",
-              "declaringClass": "org.apache.spark.sql.api.RelationalGroupedDataset",
+              "declaringClass": "org.apache.spark.sql.RelationalGroupedDataset",
               "methodName": "toAggCol",
               "fileName": "RelationalGroupedDataset.scala"
             }]
@@ -92,12 +92,12 @@
               "jvmOrigin": {
                 "stackTrace": [{
                   "classLoaderName": "app",
-                  "declaringClass": "org.apache.spark.sql.Dataset",
+                  "declaringClass": "org.apache.spark.sql.connect.Dataset",
                   "methodName": "col",
                   "fileName": "Dataset.scala"
                 }, {
                   "classLoaderName": "app",
-                  "declaringClass": "org.apache.spark.sql.api.RelationalGroupedDataset",
+                  "declaringClass": "org.apache.spark.sql.RelationalGroupedDataset",
                   "methodName": "toAggCol",
                   "fileName": "RelationalGroupedDataset.scala"
                 }]
@@ -117,7 +117,7 @@
               "fileName": "functions.scala"
             }, {
               "classLoaderName": "app",
-              "declaringClass": "org.apache.spark.sql.api.RelationalGroupedDataset",
+              "declaringClass": "org.apache.spark.sql.RelationalGroupedDataset",
               "methodName": "toAggCol",
               "fileName": "RelationalGroupedDataset.scala"
             }]
@@ -137,12 +137,12 @@
               "jvmOrigin": {
                 "stackTrace": [{
                   "classLoaderName": "app",
-                  "declaringClass": "org.apache.spark.sql.Dataset",
+                  "declaringClass": "org.apache.spark.sql.connect.Dataset",
                   "methodName": "col",
                   "fileName": "Dataset.scala"
                 }, {
                   "classLoaderName": "app",
-                  "declaringClass": "org.apache.spark.sql.api.RelationalGroupedDataset",
+                  "declaringClass": "org.apache.spark.sql.RelationalGroupedDataset",
                   "methodName": "toAggCol",
                   "fileName": "RelationalGroupedDataset.scala"
                 }]
@@ -162,7 +162,7 @@
               "fileName": "functions.scala"
             }, {
               "classLoaderName": "app",
-              "declaringClass": "org.apache.spark.sql.api.RelationalGroupedDataset",
+              "declaringClass": "org.apache.spark.sql.RelationalGroupedDataset",
               "methodName": "toAggCol",
               "fileName": "RelationalGroupedDataset.scala"
             }]
@@ -182,12 +182,12 @@
               "jvmOrigin": {
                 "stackTrace": [{
                   "classLoaderName": "app",
-                  "declaringClass": "org.apache.spark.sql.Dataset",
+                  "declaringClass": "org.apache.spark.sql.connect.Dataset",
                   "methodName": "col",
                   "fileName": "Dataset.scala"
                 }, {
                   "classLoaderName": "app",
-                  "declaringClass": "org.apache.spark.sql.api.RelationalGroupedDataset",
+                  "declaringClass": "org.apache.spark.sql.RelationalGroupedDataset",
                   "methodName": "toAggCol",
                   "fileName": "RelationalGroupedDataset.scala"
                 }]
@@ -207,7 +207,7 @@
               "fileName": "functions.scala"
             }, {
               "classLoaderName": "app",
-              "declaringClass": "org.apache.spark.sql.api.RelationalGroupedDataset",
+              "declaringClass": "org.apache.spark.sql.RelationalGroupedDataset",
               "methodName": "toAggCol",
               "fileName": "RelationalGroupedDataset.scala"
             }]
@@ -227,12 +227,12 @@
               "jvmOrigin": {
                 "stackTrace": [{
                   "classLoaderName": "app",
-                  "declaringClass": "org.apache.spark.sql.Dataset",
+                  "declaringClass": "org.apache.spark.sql.connect.Dataset",
                   "methodName": "col",
                   "fileName": "Dataset.scala"
                 }, {
                   "classLoaderName": "app",
-                  "declaringClass": "org.apache.spark.sql.api.RelationalGroupedDataset",
+                  "declaringClass": "org.apache.spark.sql.RelationalGroupedDataset",
                   "methodName": "toAggCol",
                   "fileName": "RelationalGroupedDataset.scala"
                 }]
@@ -252,7 +252,7 @@
               "fileName": "functions.scala"
             }, {
               "classLoaderName": "app",
-              "declaringClass": "org.apache.spark.sql.api.RelationalGroupedDataset",
+              "declaringClass": "org.apache.spark.sql.RelationalGroupedDataset",
               "methodName": "toAggCol",
               "fileName": "RelationalGroupedDataset.scala"
             }]
@@ -272,12 +272,12 @@
               "jvmOrigin": {
                 "stackTrace": [{
                   "classLoaderName": "app",
-                  "declaringClass": "org.apache.spark.sql.Dataset",
+                  "declaringClass": "org.apache.spark.sql.connect.Dataset",
                   "methodName": "col",
                   "fileName": "Dataset.scala"
                 }, {
                   "classLoaderName": "app",
-                  "declaringClass": "org.apache.spark.sql.api.RelationalGroupedDataset",
+                  "declaringClass": "org.apache.spark.sql.RelationalGroupedDataset",
                   "methodName": "toAggCol",
                   "fileName": "RelationalGroupedDataset.scala"
                 }]
@@ -297,7 +297,7 @@
               "fileName": "functions.scala"
             }, {
               "classLoaderName": "app",
-              "declaringClass": "org.apache.spark.sql.api.RelationalGroupedDataset",
+              "declaringClass": "org.apache.spark.sql.RelationalGroupedDataset",
               "methodName": "toAggCol",
               "fileName": "RelationalGroupedDataset.scala"
             }]
@@ -316,12 +316,12 @@
               "jvmOrigin": {
                 "stackTrace": [{
                   "classLoaderName": "app",
-                  "declaringClass": "org.apache.spark.sql.Dataset",
+                  "declaringClass": "org.apache.spark.sql.connect.Dataset",
                   "methodName": "col",
                   "fileName": "Dataset.scala"
                 }, {
                   "classLoaderName": "app",
-                  "declaringClass": "org.apache.spark.sql.api.RelationalGroupedDataset",
+                  "declaringClass": "org.apache.spark.sql.RelationalGroupedDataset",
                   "methodName": "toAggCol",
                   "fileName": "RelationalGroupedDataset.scala"
                 }]
@@ -341,7 +341,7 @@
               "fileName": "functions.scala"
             }, {
               "classLoaderName": "app",
-              "declaringClass": "org.apache.spark.sql.api.RelationalGroupedDataset",
+              "declaringClass": "org.apache.spark.sql.RelationalGroupedDataset",
               "methodName": "toAggCol",
               "fileName": "RelationalGroupedDataset.scala"
             }]
@@ -361,12 +361,12 @@
               "jvmOrigin": {
                 "stackTrace": [{
                   "classLoaderName": "app",
-                  "declaringClass": "org.apache.spark.sql.Dataset",
+                  "declaringClass": "org.apache.spark.sql.connect.Dataset",
                   "methodName": "col",
                   "fileName": "Dataset.scala"
                 }, {
                   "classLoaderName": "app",
-                  "declaringClass": "org.apache.spark.sql.api.RelationalGroupedDataset",
+                  "declaringClass": "org.apache.spark.sql.RelationalGroupedDataset",
                   "methodName": "toAggCol",
                   "fileName": "RelationalGroupedDataset.scala"
                 }]
@@ -386,7 +386,7 @@
               "fileName": "functions.scala"
             }, {
               "classLoaderName": "app",
-              "declaringClass": "org.apache.spark.sql.api.RelationalGroupedDataset",
+              "declaringClass": "org.apache.spark.sql.RelationalGroupedDataset",
               "methodName": "toAggCol",
               "fileName": "RelationalGroupedDataset.scala"
             }]

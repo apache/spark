@@ -122,7 +122,7 @@ private[spark] trait DecisionTreeModel {
  * Abstraction for models which are ensembles of decision trees
  * @tparam M  Type of tree model in this ensemble
  */
-private[ml] trait TreeEnsembleModel[M <: DecisionTreeModel] {
+private[spark] trait TreeEnsembleModel[M <: DecisionTreeModel] {
 
   // Note: We use getTrees since subclasses of TreeEnsembleModel will store subclasses of
   //       DecisionTreeModel.
