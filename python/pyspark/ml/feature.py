@@ -387,6 +387,7 @@ class _LSHModel(JavaModel, _LSHParams):
         """
         return self._set(outputCol=value)
 
+    @try_remote_attribute_relation
     def approxNearestNeighbors(
         self,
         dataset: DataFrame,
@@ -424,6 +425,7 @@ class _LSHModel(JavaModel, _LSHParams):
         """
         return self._call_java("approxNearestNeighbors", dataset, key, numNearestNeighbors, distCol)
 
+    @try_remote_attribute_relation
     def approxSimilarityJoin(
         self,
         datasetA: DataFrame,

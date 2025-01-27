@@ -458,6 +458,7 @@ private[ml] object MLUtils {
     (classOf[PredictionModel[_, _]], Set("predict", "numFeatures")),
     (classOf[ClassificationModel[_, _]], Set("predictRaw", "numClasses")),
     (classOf[ProbabilisticClassificationModel[_, _]], Set("predictProbability")),
+    (classOf[LSHModel[_]], Set("approxNearestNeighbors", "approxSimilarityJoin")),
 
     // Summary Traits
     (classOf[HasTrainingSummary[_]], Set("hasSummary", "summary")),
