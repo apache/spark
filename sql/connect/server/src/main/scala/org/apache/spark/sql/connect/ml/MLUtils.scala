@@ -584,11 +584,11 @@ private[ml] object MLUtils {
     (classOf[LinearRegressionTrainingSummary], Set("objectiveHistory", "totalIterations")),
 
     // Clustering Models
-    (classOf[KMeansModel], Set("predict", "numFeatures", "clusterCenters")),
+    (classOf[KMeansModel], Set("predict", "numFeatures", "clusterCenterMatrix")),
     (classOf[KMeansSummary], Set("trainingCost")),
     (
       classOf[BisectingKMeansModel],
-      Set("predict", "numFeatures", "clusterCenters", "computeCost")),
+      Set("predict", "numFeatures", "clusterCenterMatrix", "computeCost")),
     (classOf[BisectingKMeansSummary], Set("trainingCost")),
     (
       classOf[GaussianMixtureModel],
