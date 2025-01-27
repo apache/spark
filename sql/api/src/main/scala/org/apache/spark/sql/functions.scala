@@ -7138,8 +7138,9 @@ object functions {
    * @param v
    *   a variant column.
    * @param path
-   *   the column containing the extraction path strings. A valid path string should start with `$`
-   *   and is followed by zero or more segments like `[123]`, `.name`, `['name']`, or `["name"]`.
+   *   the column containing the extraction path strings. A valid path string should start with
+   *   `$` and is followed by zero or more segments like `[123]`, `.name`, `['name']`, or
+   *   `["name"]`.
    * @param targetType
    *   the target data type to cast into, in a DDL-formatted string.
    * @group variant_funcs
@@ -7172,8 +7173,9 @@ object functions {
    * @param v
    *   a variant column.
    * @param path
-   *   the column containing the extraction path strings. A valid path string should start with `$`
-   *   and is followed by zero or more segments like `[123]`, `.name`, `['name']`, or `["name"]`.
+   *   the column containing the extraction path strings. A valid path string should start with
+   *   `$` and is followed by zero or more segments like `[123]`, `.name`, `['name']`, or
+   *   `["name"]`.
    * @param targetType
    *   the target data type to cast into, in a DDL-formatted string.
    * @group variant_funcs
