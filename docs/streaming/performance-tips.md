@@ -43,9 +43,9 @@ val stream = spark.readStream
       .load()
 val query = stream.writeStream
      .format("kafka")
-	.option("topic", "out")
+     .option("topic", "out")
      .option("checkpointLocation", "/tmp/checkpoint")
-	.option("asyncProgressTrackingEnabled", "true")
+     .option("asyncProgressTrackingEnabled", "true")
      .start()
 ```
 
