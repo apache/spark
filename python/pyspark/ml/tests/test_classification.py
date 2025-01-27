@@ -842,15 +842,15 @@ class ClassificationTestsMixin:
 
         # model summary
         summary = model.summary
-        self.assertTrue(isinstance(summary, RandomForestClassificationSummary))
-        self.assertTrue(isinstance(summary, RandomForestClassificationTrainingSummary))
+        self.assertIsInstance(summary, RandomForestClassificationSummary)
+        self.assertIsInstance(summary, RandomForestClassificationTrainingSummary)
         self.assertEqual(summary.labels, [0.0, 1.0, 2.0])
         self.assertEqual(summary.accuracy, 0.5)
         self.assertEqual(summary.predictions.columns, expected_cols)
 
         summary2 = model.evaluate(df)
-        self.assertTrue(isinstance(summary2, RandomForestClassificationSummary))
-        self.assertFalse(isinstance(summary2, RandomForestClassificationTrainingSummary))
+        self.assertIsInstance(summary, RandomForestClassificationSummary)
+        self.assertNotIsInstance(summary, RandomForestClassificationTrainingSummary)
         self.assertEqual(summary2.labels, [0.0, 1.0, 2.0])
         self.assertEqual(summary2.accuracy, 0.5)
         self.assertEqual(summary2.predictions.columns, expected_cols)
