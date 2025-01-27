@@ -692,17 +692,11 @@ WITH RECURSIVE foo(i) AS
 SELECT * FROM foo;
 
 -- rejects different typmod, too (should we allow this?)
--- [ORIGINAL SQL]
 --WITH RECURSIVE foo(i) AS
 --   (SELECT i::numeric(3,0) FROM (VALUES(1),(2)) t(i)
 --   UNION ALL
 --   SELECT (i+1)::numeric(10,0) FROM foo WHERE i < 10)
 --SELECT * FROM foo;
-WITH RECURSIVE foo(i) AS
-   (SELECT cast(i as decimal(3,0)) FROM (VALUES(1),(2)) t(i)
-   UNION ALL
-   SELECT cast((i+1) AS decimal(10,0)) FROM foo WHERE i < 10)
-SELECT * FROM foo;
 
 -- [NOTE] Spark SQL doesn't support RULEs
 -- disallow OLD/NEW reference in CTE

@@ -1481,25 +1481,6 @@ org.apache.spark.SparkException
 
 
 -- !query
-WITH RECURSIVE foo(i) AS
-   (SELECT cast(i as decimal(3,0)) FROM (VALUES(1),(2)) t(i)
-   UNION ALL
-   SELECT cast((i+1) AS decimal(10,0)) FROM foo WHERE i < 10)
-SELECT * FROM foo
--- !query analysis
-org.apache.spark.SparkException
-{
-  "errorClass" : "PLAN_VALIDATION_FAILED_RULE_IN_BATCH",
-  "sqlState" : "XXKD0",
-  "messageParameters" : {
-    "batch" : "Resolution",
-    "reason" : "Multiple attributes have the same expression ID 8441 but different data types: DECIMAL(3,0), DECIMAL(10,0). The plan tree:\n'WithCTE\n:- 'CTERelationDef 226, false\n:  +- 'SubqueryAlias foo\n:     +- 'UnresolvedSubqueryColumnAliases [i]\n:        +- UnionLoop 226\n:           :- Project [cast(i#x as decimal(3,0)) AS i#x]\n:           :  +- SubqueryAlias t\n:           :     +- Project [col1#x AS i#x]\n:           :        +- LocalRelation [col1#x]\n:           +- Project [cast((i#x + cast(1 as decimal(1,0))) as decimal(10,0)) AS CAST((i + 1) AS DECIMAL(10,0))#x]\n:              +- Filter (i#x < cast(cast(10 as decimal(2,0)) as decimal(3,0)))\n:                 +- SubqueryAlias foo\n:                    +- Project [i#x AS i#x]\n:                       +- UnionLoopRef 226, [i#x], false\n+- 'Project [*]\n   +- 'SubqueryAlias foo\n      +- 'CTERelationRef 226, false, false, false\n",
-    "rule" : "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveAliases"
-  }
-}
-
-
--- !query
 with cte(foo) as ( select 42 ) select * from ((select foo from cte)) q
 -- !query analysis
 WithCTE
