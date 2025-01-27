@@ -754,10 +754,15 @@ case class UnionLoopExec(
    */
   private def executeAndCacheAndCount(
      plan: LogicalPlan, currentLimit: Int) = {
-    // In case limit is defined, we create a limit node above the plan and execute
+    // In case limit is defined, we create a (global) limit node above the plan and execute
     // the newly created plan.
-    val limitedPlan = Limit(Literal(currentLimit), plan)
-    val df = Dataset.ofRows(session, limitedPlan)
+    // Note here: global limit requires coordination (shuffle) between partitions.
+    val planOrLimitedPlan = if (limit.isDefined) {
+      Limit(Literal(currentLimit), plan)
+    } else {
+      plan
+    }
+    val df = Dataset.ofRows(session, planOrLimitedPlan)
     val cachedDF = df.repartition()
     val count = cachedDF.count()
     (cachedDF, count)
@@ -770,7 +775,9 @@ case class UnionLoopExec(
 
     // currentLimit is initialized from the limit argument, and in each step it is decreased by
     // the number of rows generated in that step.
-    var currentLimit = limit.getOrElse(Int.MaxValue)
+    // If limit is not passed down, currentLimit is set to be zero and won't be considered in the
+    // condition of while loop down (limit.isEmpty will be true).
+    var currentLimit = limit.getOrElse(0)
     val unionChildren = mutable.ArrayBuffer.empty[LogicalRDD]
 
     var (prevDF, prevCount) = executeAndCacheAndCount(anchor, currentLimit)
@@ -778,7 +785,7 @@ case class UnionLoopExec(
     var currentLevel = 1
 
     // Main loop for obtaining the result of the recursive query.
-    while (prevCount > 0 && currentLimit > 0) {
+    while (prevCount > 0 && (limit.isEmpty || currentLimit > 0)) {
 
       if (levelLimit != -1 && currentLevel > levelLimit) {
         throw new SparkException(s"Recursion level limit ${levelLimit} reached but query has not " +
@@ -807,8 +814,10 @@ case class UnionLoopExec(
       prevDF = df
       prevCount = count
 
-      currentLimit -= count.toInt
       currentLevel += 1
+      if (limit.isDefined) {
+        currentLimit -= count.toInt
+      }
     }
 
     if (unionChildren.isEmpty) {
