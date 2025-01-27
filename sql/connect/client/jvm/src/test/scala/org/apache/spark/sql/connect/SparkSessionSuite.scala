@@ -21,8 +21,8 @@ import java.util.concurrent.{Executors, Phaser}
 import scala.util.control.NonFatal
 
 import io.grpc.{CallOptions, Channel, ClientCall, ClientInterceptor, MethodDescriptor}
-import org.apache.spark.SparkException
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.connect.test.ConnectFunSuite
 import org.apache.spark.util.SparkSerDeUtils
 

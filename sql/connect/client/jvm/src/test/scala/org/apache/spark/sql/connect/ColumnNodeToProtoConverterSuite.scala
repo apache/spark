@@ -17,7 +17,6 @@
 package org.apache.spark.sql.connect
 
 import org.apache.spark.SparkException
-
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.Expression.Window.WindowFrame.FrameBoundary
 import org.apache.spark.sql.{Column, Encoder}

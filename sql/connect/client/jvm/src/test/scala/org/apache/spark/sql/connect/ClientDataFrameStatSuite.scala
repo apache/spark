@@ -19,9 +19,9 @@ package org.apache.spark.sql.connect
 
 import java.util.Random
 
-import org.apache.spark.SparkIllegalArgumentException
 import org.scalatest.matchers.must.Matchers._
 
+import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.connect.test.{ConnectFunSuite, RemoteSparkSession}
 

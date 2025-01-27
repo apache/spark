@@ -23,9 +23,9 @@ import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
 import scala.concurrent.duration._
 import scala.util.{Failure, Success}
 
-import org.apache.spark.SparkException
 import org.scalatest.concurrent.Eventually._
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.connect.test.{ConnectFunSuite, RemoteSparkSession}
 import org.apache.spark.util.SparkThreadUtils.awaitResult
 

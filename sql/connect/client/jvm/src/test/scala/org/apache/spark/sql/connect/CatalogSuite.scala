@@ -20,8 +20,8 @@ package org.apache.spark.sql.connect
 import java.io.{File, FilenameFilter}
 
 import org.apache.commons.io.FileUtils
-import org.apache.spark.SparkException
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.connect.test.{ConnectFunSuite, RemoteSparkSession, SQLHelper}
 import org.apache.spark.sql.types.{DoubleType, LongType, StructType}

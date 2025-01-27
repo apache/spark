@@ -17,7 +17,6 @@
 package org.apache.spark.sql.connect
 
 import org.apache.spark.sql
-
 import org.apache.spark.sql.SparkSessionBuilder
 import org.apache.spark.sql.connect.test.{ConnectFunSuite, RemoteSparkSession}
 

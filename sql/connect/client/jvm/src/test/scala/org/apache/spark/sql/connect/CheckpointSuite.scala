@@ -21,10 +21,10 @@ import java.io.{ByteArrayOutputStream, PrintStream}
 import scala.concurrent.duration.DurationInt
 
 import org.apache.commons.io.output.TeeOutputStream
-import org.apache.spark.SparkException
 import org.scalatest.concurrent.Eventually.{eventually, interval, timeout}
 import org.scalatest.exceptions.TestFailedDueToTimeoutException
 
+import org.apache.spark.SparkException
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.connect.test.{ConnectFunSuite, RemoteSparkSession, SQLHelper}
 import org.apache.spark.storage.StorageLevel

@@ -19,18 +19,18 @@ package org.apache.spark.sql.connect.client.arrow
 import java.math.BigInteger
 import java.time.{Duration, Period, ZoneOffset}
 import java.time.temporal.ChronoUnit
+import java.util
 import java.util.{Collections, Objects}
 
 import scala.beans.BeanProperty
 import scala.collection.mutable
 import scala.reflect.classTag
 
-import java.util
 import org.apache.arrow.memory.{BufferAllocator, RootAllocator}
 import org.apache.arrow.vector.VarBinaryVector
-import org.apache.spark.{SparkRuntimeException, SparkUnsupportedOperationException}
 import org.scalatest.BeforeAndAfterAll
 
+import org.apache.spark.{SparkRuntimeException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.{AnalysisException, Encoders, Row}
 import org.apache.spark.sql.catalyst.{DefinedByConstructorParams, JavaTypeInference, ScalaReflection}
 import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, Codec, OuterScopes}

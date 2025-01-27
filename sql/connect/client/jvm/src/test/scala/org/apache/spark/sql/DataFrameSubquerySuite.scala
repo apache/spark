@@ -18,7 +18,6 @@
 package org.apache.spark.sql
 
 import org.apache.spark.SparkRuntimeException
-
 import org.apache.spark.sql.connect.test.{QueryTest, RemoteSparkSession}
 import org.apache.spark.sql.functions._
 

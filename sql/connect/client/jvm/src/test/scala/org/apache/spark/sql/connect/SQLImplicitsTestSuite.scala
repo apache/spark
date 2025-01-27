@@ -54,9 +54,8 @@ class SQLImplicitsTestSuite extends ConnectFunSuite with BeforeAndAfterAll {
 
   test("test implicit encoder resolution") {
     val spark = session
-    import spark.implicits._
-
     import org.apache.spark.util.ArrayImplicits._
+    import spark.implicits._
     def testImplicit[T: Encoder](expected: T): Unit = {
       val encoder = agnosticEncoderFor[T]
       val allocator = new RootAllocator()

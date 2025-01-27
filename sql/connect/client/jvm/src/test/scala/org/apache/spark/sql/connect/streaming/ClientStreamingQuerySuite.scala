@@ -23,11 +23,11 @@ import java.util.concurrent.TimeUnit
 
 import scala.jdk.CollectionConverters._
 
-import org.apache.spark.SparkException
 import org.scalatest.concurrent.Eventually.{eventually, interval}
 import org.scalatest.concurrent.Futures.timeout
 import org.scalatest.time.SpanSugar._
 
+import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{DataFrame, Dataset, ForeachWriter, Row}
 import org.apache.spark.sql.connect.SparkSession

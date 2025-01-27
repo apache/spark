@@ -18,7 +18,7 @@ package org.apache.spark.sql.connect.test
 
 import java.nio.file.Path
 
-import org.scalatest.funsuite.AnyFunSuite
+import org.scalatest.funsuite.AnyFunSuite // scalastyle:ignore funsuite
 
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.Column

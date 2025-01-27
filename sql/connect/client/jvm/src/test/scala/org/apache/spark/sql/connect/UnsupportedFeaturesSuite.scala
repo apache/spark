@@ -17,7 +17,6 @@
 package org.apache.spark.sql.connect
 
 import org.apache.spark.SparkUnsupportedOperationException
-
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Encoders, Row}
