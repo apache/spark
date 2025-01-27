@@ -25,7 +25,7 @@ import java.util.UUID
 
 import scala.jdk.CollectionConverters._
 
-import org.apache.avro.{AvroTypeException, Schema, SchemaBuilder, SchemaFormatter}
+import org.apache.avro.{Schema, SchemaBuilder, SchemaFormatter}
 import org.apache.avro.Schema.{Field, Type}
 import org.apache.avro.Schema.Type._
 import org.apache.avro.file.{DataFileReader, DataFileWriter}
@@ -1380,7 +1380,7 @@ abstract class AvroSuite
 
         checkError(
           exception = intercept[SparkRuntimeException] {
-            df.select(to_avro($"outerStruct", avroTypeStruct)).collect()
+            df.select(avro.functions.to_avro($"outerStruct", avroTypeStruct)).collect()
           },
           condition = "AVRO_CANNOT_WRITE_NULL_FIELD",
           parameters = Map(
