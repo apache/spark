@@ -533,6 +533,12 @@ private[ml] object MLUtils {
 
     // Regression Models
     (
+      classOf[AFTSurvivalRegressionModel],
+      Set("intercept", "coefficients", "scale", "predictQuantiles")),
+    (
+      classOf[IsotonicRegressionModel],
+      Set("boundaries", "predictions", "numFeatures", "predict")),
+    (
       classOf[GeneralizedLinearRegressionModel],
       Set("intercept", "coefficients", "numFeatures", "evaluate")),
     (
