@@ -850,12 +850,12 @@ object LimitPushDown extends Rule[LogicalPlan] {
 
     // If limit node is present, we should propagate it down to UnionLoop, so that it is later
     // propagated to UnionLoopExec.
-    case Limit(ie @ IntegerLiteral(limit), ul: UnionLoop) =>
+    case Limit(le @ IntegerLiteral(limit), ul: UnionLoop) =>
       val newUnionLoop = EliminateSorts(ul.copy(limit = Some(limit))).asInstanceOf[UnionLoop]
-      Limit(ie, Project(newUnionLoop.output, newUnionLoop))
-    case Limit(ie @ IntegerLiteral(limit), p @ Project(_, ul: UnionLoop)) =>
+      Limit(le, Project(newUnionLoop.output, newUnionLoop))
+    case Limit(le @ IntegerLiteral(limit), p @ Project(_, ul: UnionLoop)) =>
       val newUnionLoop = EliminateSorts(ul.copy(limit = Some(limit))).asInstanceOf[UnionLoop]
-      Limit(ie, p.copy(child = Project(newUnionLoop.output, newUnionLoop)))
+      Limit(le, p.copy(child = Project(newUnionLoop.output, newUnionLoop)))
 
 
     // Add extra limits below JOIN:
