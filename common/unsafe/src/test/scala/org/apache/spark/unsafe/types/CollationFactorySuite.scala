@@ -37,6 +37,10 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
 
   test("collationId stability") {
     assert(INDETERMINATE_COLLATION_ID == -1)
+    val indeterminate = fetchCollation(INDETERMINATE_COLLATION_ID)
+    assert(indeterminate.collationName == "null")
+    assert(indeterminate.provider == "null")
+    assert(indeterminate.version == null)
 
     assert(UTF8_BINARY_COLLATION_ID == 0)
     val utf8Binary = fetchCollation(UTF8_BINARY_COLLATION_ID)
@@ -286,7 +290,7 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
     // if we don't handle the concurrency properly on Collator level
 
     (0 to 10).foreach(_ => {
-      val collator = fetchCollation("UNICODE").collator
+      val collator = fetchCollation("UNICODE").getCollator
 
       ParSeq(0 to 100).foreach { _ =>
         collator.getCollationKey("aaa")
@@ -340,7 +344,7 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
       "sr_Cyrl_SRB_AI"
     ).foreach(collationICU => {
       val col = fetchCollation(collationICU)
-      assert(col.collator.getLocale(ULocale.VALID_LOCALE) != ULocale.ROOT)
+      assert(col.getCollator.getLocale(ULocale.VALID_LOCALE) != ULocale.ROOT)
     })
   }
 
@@ -431,7 +435,6 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
 
   test("invalid collationId") {
     val badCollationIds = Seq(
-      INDETERMINATE_COLLATION_ID, // Indeterminate collation.
       1 << 30, // User-defined collation range.
       (1 << 30) | 1, // User-defined collation range.
       (1 << 30) | (1 << 29), // User-defined collation range.

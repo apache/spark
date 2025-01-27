@@ -74,25 +74,30 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
     case ReplaceColumns(ResolvedV1TableIdentifier(ident), _) =>
       throw QueryCompilationErrors.unsupportedTableOperationError(ident, "REPLACE COLUMNS")
 
-    case a @ AlterColumn(ResolvedTable(catalog, ident, table: V1Table, _), _, _, _, _, _, _)
+    case AlterColumns(ResolvedTable(catalog, ident, table: V1Table, _), specs)
         if supportsV1Command(catalog) =>
-      if (a.column.name.length > 1) {
+      if (specs.size > 1) {
+        throw QueryCompilationErrors.unsupportedTableOperationError(
+          catalog, ident, "ALTER COLUMN in bulk")
+      }
+      val s = specs.head
+      if (s.column.name.length > 1) {
         throw QueryCompilationErrors.unsupportedTableOperationError(
           catalog, ident, "ALTER COLUMN with qualified column")
       }
-      if (a.nullable.isDefined) {
+      if (s.newNullability.isDefined) {
         throw QueryCompilationErrors.unsupportedTableOperationError(
           catalog, ident, "ALTER COLUMN ... SET NOT NULL")
       }
-      if (a.position.isDefined) {
+      if (s.newPosition.isDefined) {
         throw QueryCompilationErrors.unsupportedTableOperationError(
           catalog, ident, "ALTER COLUMN ... FIRST | AFTER")
       }
       val builder = new MetadataBuilder
       // Add comment to metadata
-      a.comment.map(c => builder.putString("comment", c))
-      val colName = a.column.name(0)
-      val dataType = a.dataType.getOrElse {
+      s.newComment.map(c => builder.putString("comment", c))
+      val colName = s.column.name.head
+      val dataType = s.newDataType.getOrElse {
         table.schema.findNestedField(Seq(colName), resolver = conf.resolver)
           .map {
             case (_, StructField(_, st: StringType, _, metadata)) =>
@@ -101,11 +106,11 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
           }
           .getOrElse {
             throw QueryCompilationErrors.unresolvedColumnError(
-              toSQLId(a.column.name), table.schema.fieldNames)
+              toSQLId(s.column.name), table.schema.fieldNames)
           }
       }
       // Add the current default column value string (if any) to the column metadata.
-      a.setDefaultExpression.map { c => builder.putString(CURRENT_DEFAULT_COLUMN_METADATA_KEY, c) }
+      s.newDefaultExpression.map { c => builder.putString(CURRENT_DEFAULT_COLUMN_METADATA_KEY, c) }
       val newColumn = StructField(
         colName,
         dataType,
@@ -151,10 +156,6 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
 
     case RenameTable(ResolvedV1TableOrViewIdentifier(oldIdent), newName, isView) =>
       AlterTableRenameCommand(oldIdent, newName.asTableIdentifier, isView)
-
-    case DescribeRelationJson(
-        ResolvedV1TableOrViewIdentifier(ident), partitionSpec, isExtended) =>
-      DescribeTableJsonCommand(ident, partitionSpec, isExtended)
 
     // Use v1 command to describe (temp) view, as v2 catalog doesn't support view yet.
     case DescribeRelation(

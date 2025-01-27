@@ -80,15 +80,15 @@ This page displays the details of a specific job identified by its job ID.
 </p>
 
 * List of stages (grouped by state active, pending, completed, skipped, and failed)
-	* Stage ID
-	* Description of the stage
-	* Submitted timestamp
-	* Duration of the stage
-	* Tasks progress bar
-	* Input: Bytes read from storage in this stage
-	* Output: Bytes written in storage in this stage
-	* Shuffle read: Total shuffle bytes and records read, includes both data read locally and data read from remote executors
-	* Shuffle write: Bytes and records written to disk in order to be read by a shuffle in a future stage
+    * Stage ID
+    * Description of the stage
+    * Submitted timestamp
+    * Duration of the stage
+    * Tasks progress bar
+    * Input: Bytes read from storage in this stage
+    * Output: Bytes written in storage in this stage
+    * Shuffle read: Total shuffle bytes and records read, includes both data read locally and data read from remote executors
+    * Shuffle write: Bytes and records written to disk in order to be read by a shuffle in a future stage
 
 <p style="text-align: center;">
   <img src="img/JobPageDetail3.png" title="DAG" alt="DAG">
@@ -479,12 +479,12 @@ The third section has the SQL statistics of the submitted operations.
 * **Duration time** is the difference between close time and start time.
 * **Statement** is the operation being executed.
 * **State** of the process.
-	* _Started_, first state, when the process begins.
-	* _Compiled_, execution plan generated.
-	* _Failed_, final state when the execution failed or finished with error.
-	* _Canceled_, final state when the execution is canceled.
-	* _Finished_ processing and waiting to fetch results.
-	* _Closed_, final state when client closed the statement.
+    * _Started_, first state, when the process begins.
+    * _Compiled_, execution plan generated.
+    * _Failed_, final state when the execution failed or finished with error.
+    * _Canceled_, final state when the execution is canceled.
+    * _Finished_ processing and waiting to fetch results.
+    * _Closed_, final state when client closed the statement.
 * **Detail** of the execution plan with parsed logical plan, analyzed logical plan, optimized logical plan and physical plan or errors in the SQL statement.
 
 <p style="text-align: center;">

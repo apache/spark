@@ -38,9 +38,9 @@ import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
 import org.apache.spark.sql.catalyst.analysis.TableFunctionRegistry.TableFunctionBuilder
 import org.apache.spark.sql.catalyst.catalog.SQLFunction.parseDefault
-import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference, Cast, Expression, ExpressionInfo, NamedArgumentExpression, NamedExpression, UpCast}
+import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference, Cast, Expression, ExpressionInfo, NamedArgumentExpression, NamedExpression, ScalarSubquery, UpCast}
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParserInterface}
-import org.apache.spark.sql.catalyst.plans.logical.{FunctionSignature, InputParameter, LogicalPlan, NamedParametersSupport, Project, SubqueryAlias, View}
+import org.apache.spark.sql.catalyst.plans.logical.{FunctionSignature, InputParameter, LocalRelation, LogicalPlan, NamedParametersSupport, Project, SubqueryAlias, View}
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, StringUtils}
 import org.apache.spark.sql.connector.catalog.CatalogManager
@@ -48,7 +48,7 @@ import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAM
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.GLOBAL_TEMP_DATABASE
-import org.apache.spark.sql.types.{StructField, StructType}
+import org.apache.spark.sql.types.{MetadataBuilder, StructField, StructType}
 import org.apache.spark.sql.util.{CaseInsensitiveStringMap, PartitioningUtils}
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
@@ -1558,6 +1558,103 @@ class SessionCatalog(
       val returnType = function.getScalarFuncReturnType
       SQLFunctionExpression(
         function.name.unquotedString, function, args, Some(returnType))
+    }
+  }
+
+  /**
+   * Constructs a scalar SQL function logical plan. The logical plan will be used to
+   * construct actual expression from the function inputs and body.
+   *
+   * The body of a scalar SQL function can either be an expression or a query returns
+   * one single column.
+   *
+   * Example scalar SQL function with an expression:
+   *
+   *   CREATE FUNCTION area(width DOUBLE, height DOUBLE) RETURNS DOUBLE
+   *   RETURN width * height;
+   *
+   * Query:
+   *
+   *   SELECT area(a, b) FROM t;
+   *
+   * SQL function plan:
+   *
+   *   Project [CAST(width * height AS DOUBLE) AS area]
+   *   +- Project [CAST(a AS DOUBLE) AS width, CAST(b AS DOUBLE) AS height]
+   *      +- LocalRelation [a, b]
+   *
+   * Example scalar SQL function with a subquery:
+   *
+   *   CREATE FUNCTION foo(x INT) RETURNS INT
+   *   RETURN SELECT SUM(b) FROM t WHERE x = a;
+   *
+   *   SELECT foo(a) FROM t;
+   *
+   * SQL function plan:
+   *
+   *   Project [scalar-subquery AS foo]
+   *   :  +- Aggregate [] [sum(b)]
+   *   :     +- Filter [outer(x) = a]
+   *   :        +- Relation [a, b]
+   *   +- Project [CAST(a AS INT) AS x]
+   *      +- LocalRelation [a, b]
+   */
+  def makeSQLFunctionPlan(
+      name: String,
+      function: SQLFunction,
+      input: Seq[Expression]): LogicalPlan = {
+    def metaForFuncInputAlias = {
+      new MetadataBuilder()
+        .putString("__funcInputAlias", "true")
+        .build()
+    }
+    assert(!function.isTableFunc)
+    val funcName = function.name.funcName
+
+    // Use captured SQL configs when parsing a SQL function.
+    val conf = new SQLConf()
+    function.getSQLConfigs.foreach { case (k, v) => conf.settings.put(k, v) }
+    SQLConf.withExistingConf(conf) {
+      val inputParam = function.inputParam
+      val returnType = function.getScalarFuncReturnType
+      val (expression, query) = function.getExpressionAndQuery(parser, isTableFunc = false)
+      assert(expression.isDefined || query.isDefined)
+
+      // Check function arguments
+      val paramSize = inputParam.map(_.size).getOrElse(0)
+      if (input.size > paramSize) {
+        throw QueryCompilationErrors.wrongNumArgsError(
+          name, paramSize.toString, input.size)
+      }
+
+      val inputs = inputParam.map { param =>
+        // Attributes referencing the input parameters inside the function can use the
+        // function name as a qualifier. E.G.:
+        // `create function foo(a int) returns int return foo.a`
+        val qualifier = Seq(funcName)
+        val paddedInput = input ++
+          param.takeRight(paramSize - input.size).map { p =>
+            val defaultExpr = p.getDefault()
+            if (defaultExpr.isDefined) {
+              Cast(parseDefault(defaultExpr.get, parser), p.dataType)
+            } else {
+              throw QueryCompilationErrors.wrongNumArgsError(
+                name, paramSize.toString, input.size)
+            }
+          }
+
+        paddedInput.zip(param.fields).map {
+          case (expr, param) =>
+            Alias(Cast(expr, param.dataType), param.name)(
+              qualifier = qualifier,
+              // mark the alias as function input
+              explicitMetadata = Some(metaForFuncInputAlias))
+        }
+      }.getOrElse(Nil)
+
+      val body = if (query.isDefined) ScalarSubquery(query.get) else expression.get
+      Project(Alias(Cast(body, returnType), funcName)() :: Nil,
+        Project(inputs, LocalRelation(inputs.flatMap(_.references))))
     }
   }
 

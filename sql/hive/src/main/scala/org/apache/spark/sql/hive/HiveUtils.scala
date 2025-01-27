@@ -38,8 +38,8 @@ import org.apache.spark.SparkConf
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys
-import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.catalog.CatalogTable
+import org.apache.spark.sql.classic.SQLContext
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.hive.client._
@@ -220,15 +220,6 @@ private[spark] object HiveUtils extends Logging {
       .version("3.4.0")
       .booleanConf
       .createWithDefault(true)
-
-  val QUOTE_HIVE_STRUCT_FIELD_NAME =
-    buildConf("spark.sql.hive.quoteHiveStructFieldName")
-      .doc("When true, for a column defined in struct type, when it contains special characters " +
-        "in the field name, Spark will quote it for verification. E.g. struct<x:int,y.z:int>" +
-        " is read as struct<`x`:int,`y.z`:int> for verification.")
-      .version("4.0.0")
-      .booleanConf
-      .createWithDefault(false)
 
   /**
    * The version of the hive client that will be used to communicate with the metastore.  Note that

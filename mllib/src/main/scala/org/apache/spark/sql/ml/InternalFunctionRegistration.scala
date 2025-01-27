@@ -21,10 +21,10 @@ import org.apache.spark.mllib.linalg.{SparseVector => OldSparseVector, Vector =>
 import org.apache.spark.sql.{SparkSessionExtensions, SparkSessionExtensionsProvider}
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.expressions.{Expression, StringLiteral}
+import org.apache.spark.sql.classic.UserDefinedFunctionUtils.toScalaUDF
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.expressions.{SparkUserDefinedFunction, UserDefinedFunction}
 import org.apache.spark.sql.functions.udf
-import org.apache.spark.sql.internal.UserDefinedFunctionUtils.toScalaUDF
 
 /**
  * Register a couple ML vector conversion UDFs in the internal function registry.

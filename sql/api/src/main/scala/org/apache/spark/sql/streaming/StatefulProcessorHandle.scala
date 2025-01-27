@@ -18,16 +18,15 @@ package org.apache.spark.sql.streaming
 
 import java.io.Serializable
 
-import org.apache.spark.annotation.{Evolving, Experimental}
+import org.apache.spark.annotation.Evolving
 import org.apache.spark.sql.Encoder
 
 /**
  * Represents the operation handle provided to the stateful processor used in the arbitrary state
  * API v2.
  */
-@Experimental
 @Evolving
-private[sql] trait StatefulProcessorHandle extends Serializable {
+trait StatefulProcessorHandle extends Serializable {
 
   /**
    * Function to create new or return existing single value state variable of given type with ttl.

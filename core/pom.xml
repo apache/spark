@@ -21,7 +21,7 @@
   <parent>
     <groupId>org.apache.spark</groupId>
     <artifactId>spark-parent_2.13</artifactId>
-    <version>4.0.0-SNAPSHOT</version>
+    <version>4.1.0-SNAPSHOT</version>
     <relativePath>../pom.xml</relativePath>
   </parent>
 
@@ -426,7 +426,7 @@
     <dependency>
       <groupId>net.sf.py4j</groupId>
       <artifactId>py4j</artifactId>
-      <version>0.10.9.8</version>
+      <version>0.10.9.9</version>
     </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
@@ -620,12 +620,6 @@
       </activation>
       <properties>
         <script.extension>.sh</script.extension>
-      </properties>
-    </profile>
-    <profile>
-      <id>jjwt</id>
-      <properties>
-        <jjwt.deps.scope>compile</jjwt.deps.scope>
       </properties>
     </profile>
     <profile>

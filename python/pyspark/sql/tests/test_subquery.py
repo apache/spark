@@ -939,7 +939,44 @@ class SubqueryTestsMixin:
                     .select(sf.col("c1").outer() + sf.col("c2").outer())
                     .scalar(),
                 ),
-                t1.withColumn("scalar", sf.col("c1") + sf.col("c2")),
+                t1.select("*", (sf.col("c1") + sf.col("c2")).alias("scalar")),
+            )
+            assertDataFrameEqual(
+                t1.withColumn(
+                    "scalar",
+                    self.spark.range(1)
+                    .withColumn("c1", sf.col("c1").outer())
+                    .select(sf.col("c1") + sf.col("c2").outer())
+                    .scalar(),
+                ),
+                t1.select("*", (sf.col("c1") + sf.col("c2")).alias("scalar")),
+            )
+            assertDataFrameEqual(
+                t1.withColumn(
+                    "scalar",
+                    self.spark.range(1)
+                    .select(sf.col("c1").outer().alias("c1"))
+                    .withColumn("c2", sf.col("c2").outer())
+                    .select(sf.col("c1") + sf.col("c2"))
+                    .scalar(),
+                ),
+                t1.select("*", (sf.col("c1") + sf.col("c2")).alias("scalar")),
+            )
+
+    def test_subquery_in_with_columns_renamed(self):
+        with self.tempView("t1"):
+            t1 = self.table1()
+
+            assertDataFrameEqual(
+                t1.withColumn(
+                    "scalar",
+                    self.spark.range(1)
+                    .select(sf.col("c1").outer().alias("c1"), sf.col("c2").outer().alias("c2"))
+                    .withColumnsRenamed({"c1": "x", "c2": "y"})
+                    .select(sf.col("x") + sf.col("y"))
+                    .scalar(),
+                ),
+                t1.select("*", (sf.col("c1").alias("x") + sf.col("c2").alias("y")).alias("scalar")),
             )
 
     def test_subquery_in_drop(self):

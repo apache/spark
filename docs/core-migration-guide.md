@@ -36,6 +36,8 @@ license: |
 
 - In Spark 4.0, support for Apache Mesos as a resource manager was removed.
 
+- Since Spark 4.0, Spark will allocate executor pods with a batch size of `10`. To restore the legacy behavior, you can set `spark.kubernetes.allocation.batch.size` to `5`.
+
 - Since Spark 4.0, Spark uses `ReadWriteOncePod` instead of `ReadWriteOnce` access mode in persistence volume claims. To restore the legacy behavior, you can set `spark.kubernetes.legacy.useReadWriteOnceAccessMode` to `true`.
 
 - Since Spark 4.0, Spark reports its executor pod status by checking all containers of that pod. To restore the legacy behavior, you can set `spark.kubernetes.executor.checkAllContainers` to `false`.
@@ -43,10 +45,6 @@ license: |
 - Since Spark 4.0, Spark uses `~/.ivy2.5.2` as Ivy user directory by default to isolate the existing systems from Apache Ivy's incompatibility. To restore the legacy behavior, you can set `spark.jars.ivy` to `~/.ivy2`.
 
 - Since Spark 4.0, Spark uses the external shuffle service for deleting shuffle blocks for deallocated executors when the shuffle is no longer needed. To restore the legacy behavior, you can set `spark.shuffle.service.removeShuffle` to `false`.
-
-- Starting with Spark 4.0, the default logging format for `spark-submit` has changed from plain text to JSON lines to improve log analysis. If you prefer plain text logs, you have two options:
-  - Set the Spark configuration `spark.log.structuredLogging.enabled` to `false`. For example, you can use `JDK_JAVA_OPTIONS=-Dspark.log.structuredLogging.enabled=false`.
-  - Use a custom log4j configuration file, such as renaming the template file `conf/log4j2.properties.pattern-layout-template` to `conf/log4j2.properties`.
 
 - Since Spark 4.0, the MDC (Mapped Diagnostic Context) key for Spark task names in Spark logs has been changed from `mdc.taskName` to `task_name`. To use the key `mdc.taskName`, you can set `spark.log.legacyTaskNameMdc.enabled` to `true`.
 

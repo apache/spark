@@ -281,8 +281,8 @@ Note, arithmetic operations have special rules to calculate the least common typ
 | Operation  | Result precision                         | Result scale        |
 |------------|------------------------------------------|---------------------|
 | e1 + e2    | max(s1, s2) + max(p1 - s1, p2 - s2) + 1  | max(s1, s2)         |
-| e1 - e2    | max(s1, s2) + max(p1 - s1, p2 - s2) + 1	| max(s1, s2)         |
-| e1 * e2    | p1 + p2 + 1	                        | s1 + s2             |
+| e1 - e2    | max(s1, s2) + max(p1 - s1, p2 - s2) + 1  | max(s1, s2)         |
+| e1 * e2    | p1 + p2 + 1                              | s1 + s2             |
 | e1 / e2    | p1 - s1 + s2 + max(6, s1 + p2 + 1)       | max(6, s1 + p2 + 1) |
 | e1 % e2    | min(p1 - s1, p2 - s2) + max(s1, s2)      | max(s1, s2)         |
 

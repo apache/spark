@@ -25,6 +25,7 @@ import "spark/connect/common.proto";
 import "spark/connect/expressions.proto";
 import "spark/connect/relations.proto";
 import "spark/connect/types.proto";
+import "spark/connect/ml.proto";
 
 option java_multiple_files = true;
 option java_package = "org.apache.spark.connect.proto";
@@ -394,6 +395,9 @@ message ExecutePlanResponse {
 
     // Response for command that checkpoints a DataFrame.
     CheckpointCommandResult checkpoint_command_result = 19;
+
+    // ML command response
+    MlCommandResult ml_command_result = 20;
 
     // Support arbitrary result objects.
     google.protobuf.Any extension = 999;

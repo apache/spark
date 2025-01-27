@@ -24,6 +24,7 @@ import "spark/connect/expressions.proto";
 import "spark/connect/types.proto";
 import "spark/connect/catalog.proto";
 import "spark/connect/common.proto";
+import "spark/connect/ml_common.proto";
 
 option java_multiple_files = true;
 option java_package = "org.apache.spark.connect.proto";
@@ -98,10 +99,62 @@ message Relation {
     // Catalog API (experimental / unstable)
     Catalog catalog = 200;
 
+    // ML relation
+    MlRelation ml_relation = 300;
+
     // This field is used to mark extensions to the protocol. When plugins generate arbitrary
     // relations they can add them here. During the planning the correct resolution is done.
     google.protobuf.Any extension = 998;
     Unknown unknown = 999;
+  }
+}
+
+// Relation to represent ML world
+message MlRelation {
+  oneof ml_type {
+    Transform transform = 1;
+    Fetch fetch = 2;
+  }
+  // Relation to represent transform(input) of the operator
+  // which could be a cached model or a new transformer
+  message Transform {
+    oneof operator {
+      // Object reference
+      ObjectRef obj_ref = 1;
+      // Could be an ML transformer like VectorAssembler
+      MlOperator transformer = 2;
+    }
+    // the input dataframe
+    Relation input = 3;
+    // the operator specific parameters
+    MlParams params = 4;
+  }
+}
+
+// Message for fetching attribute from object on the server side.
+// Fetch can be represented as a Relation or a ML command
+// Command: model.coefficients, model.summary.weightedPrecision which
+// returns the final literal result
+// Relation: model.summary.roc which returns a DataFrame (Relation)
+message Fetch {
+  // (Required) reference to the object on the server side
+  ObjectRef obj_ref = 1;
+  // (Required) the calling method chains
+  repeated Method methods = 2;
+
+  // Represents a method with inclusion of method name and its arguments
+  message Method {
+    // (Required) the method name
+    string method = 1;
+    // (Optional) the arguments of the method
+    repeated Args args = 2;
+
+    message Args {
+      oneof args_type {
+        Expression.Literal param = 1;
+        Relation input = 2;
+      }
+    }
   }
 }
 

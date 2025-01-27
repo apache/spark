@@ -17,10 +17,10 @@
 
 package org.apache.spark.sql.scripting
 
-import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.catalyst.SqlScriptingLocalVariableManager
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.logical.{CommandResult, CompoundBody}
+import org.apache.spark.sql.classic.{DataFrame, SparkSession}
 
 /**
  * SQL scripting executor - executes script and returns result statements.

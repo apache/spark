@@ -21,7 +21,7 @@
   <parent>
     <groupId>org.apache.spark</groupId>
     <artifactId>spark-parent_2.13</artifactId>
-    <version>4.0.0-SNAPSHOT</version>
+    <version>4.1.0-SNAPSHOT</version>
     <relativePath>../pom.xml</relativePath>
   </parent>
 
@@ -345,11 +345,10 @@
       </properties>
     </profile>
 
-    <!-- Pull in jjwt-impl and jjwt-jackson jars -->
     <profile>
-      <id>jjwt</id>
+      <id>jjwt-provided</id>
       <properties>
-        <jjwt.deps.scope>compile</jjwt.deps.scope>
+        <jjwt.deps.scope>provided</jjwt.deps.scope>
       </properties>
     </profile>
 

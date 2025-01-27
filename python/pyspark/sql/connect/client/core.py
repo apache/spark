@@ -20,6 +20,8 @@ __all__ = [
     "SparkConnectClient",
 ]
 
+import atexit
+
 from pyspark.sql.connect.utils import check_dependencies
 
 check_dependencies(__name__)
@@ -674,6 +676,9 @@ class SparkConnectClient(object):
         self._profiler_collector = ConnectProfilerCollector()
 
         self._progress_handlers: List[ProgressHandler] = []
+
+        # cleanup ml cache if possible
+        atexit.register(self._cleanup_ml)
 
     def register_progress_handler(self, handler: ProgressHandler) -> None:
         """
@@ -1479,6 +1484,8 @@ class SparkConnectClient(object):
                         b.checkpoint_command_result.relation
                     )
                 }
+            if b.HasField("ml_command_result"):
+                yield {"ml_command_result": b.ml_command_result}
 
         try:
             if self._use_reattachable_execute:
@@ -1931,3 +1938,33 @@ class SparkConnectClient(object):
         (_, properties, _) = self.execute_command(cmd)
         profile_id = properties["create_resource_profile_command_result"]
         return profile_id
+
+    def add_ml_cache(self, cache_id: str) -> None:
+        if not hasattr(self.thread_local, "ml_caches"):
+            self.thread_local.ml_caches = set()
+        self.thread_local.ml_caches.add(cache_id)
+
+    def remove_ml_cache(self, cache_id: str) -> None:
+        if not hasattr(self.thread_local, "ml_caches"):
+            self.thread_local.ml_caches = set()
+
+        if cache_id in self.thread_local.ml_caches:
+            self._delete_ml_cache(cache_id)
+
+    def _delete_ml_cache(self, cache_id: str) -> None:
+        # try best to delete the cache
+        try:
+            command = pb2.Command()
+            command.ml_command.delete.obj_ref.CopyFrom(pb2.ObjectRef(id=cache_id))
+            self.execute_command(command)
+        except Exception:
+            pass
+
+    def _cleanup_ml(self) -> None:
+        if not hasattr(self.thread_local, "ml_caches"):
+            self.thread_local.ml_caches = set()
+
+        self.disable_reattachable_execute()
+        # Todo add a pattern to delete all model in one command
+        for model_id in self.thread_local.ml_caches:
+            self._delete_ml_cache(model_id)

@@ -22,11 +22,51 @@ import java.util.HashMap
 import org.apache.spark.sql.catalyst.analysis.GetViewColumnByNameAndOrdinal
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
+import org.apache.spark.sql.catalyst.optimizer.ReplaceExpressions
 import org.apache.spark.sql.catalyst.plans.logical._
 
 object NormalizePlan extends PredicateHelper {
-  def apply(plan: LogicalPlan): LogicalPlan =
-    normalizePlan(normalizeExprIds(plan))
+  def apply(plan: LogicalPlan): LogicalPlan = {
+    val withNormalizedExpressions = normalizeExpressions(plan)
+    val withNormalizedExprIds = normalizeExprIds(withNormalizedExpressions)
+    normalizePlan(withNormalizedExprIds)
+  }
+
+  /**
+   * Normalizes expressions in a plan, that either produces non-deterministic results or
+   * will be different between fixed-point and single-pass analyzer, due to the nature
+   * of bottom-up resolution. Before normalization, pre-process the plan by replacing all
+   * [[RuntimeReplaceable]] nodes with their replacements.
+   */
+  def normalizeExpressions(plan: LogicalPlan): LogicalPlan = {
+    val withNormalizedRuntimeReplaceable = normalizeRuntimeReplaceable(plan)
+    withNormalizedRuntimeReplaceable transformAllExpressions {
+      case commonExpressionDef: CommonExpressionDef =>
+        commonExpressionDef.copy(id = new CommonExpressionId(id = 0))
+      case commonExpressionRef: CommonExpressionRef =>
+        commonExpressionRef.copy(id = new CommonExpressionId(id = 0))
+      case expressionWithRandomSeed: ExpressionWithRandomSeed =>
+        expressionWithRandomSeed.withNewSeed(0)
+    }
+  }
+
+  /**
+   * Normalize [[RuntimeReplaceable]] nodes by replacing them with their replacement expressions.
+   * This is necessary because fixed-point analyzer may produce non-deterministic results when
+   * resolving original expressions. For example, in a query like:
+   *
+   * {{{ SELECT assert_true(1) }}}
+   *
+   * Before resolution, we have [[UnresolvedFunction]] whose child is Literal(1). This child will
+   * first be converted to Cast(Literal(1), BooleanType) by type coercion. Because in this case
+   * [[Cast]] doesn't require timezone, the expression will be implicitly resolved. Because the
+   * child of initially unresolved function is resolved, the function can be converted to
+   * [[AssertTrue]], which is of type [[InheritAnalysisRules]]. However, because the only child of
+   * [[InheritAnalysisRules]] is the replacement expression, the original expression will be lost
+   * and timezone will never be applied. This causes inconsistencies, because fixed-point semantic
+   * is to ALWAYS apply timezone, regardless of whether the Cast actually needs it.
+   */
+  def normalizeRuntimeReplaceable(plan: LogicalPlan): LogicalPlan = ReplaceExpressions(plan)
 
   /**
    * Since attribute references are given globally unique ids during analysis,
@@ -102,14 +142,15 @@ object NormalizePlan extends PredicateHelper {
             .sortBy(_.hashCode())
             .reduce(And)
         Join(left, right, newJoinType, Some(newCondition), hint)
-      case Project(outerProjectList, innerProject: Project) =>
-        val normalizedInnerProjectList = normalizeProjectList(innerProject.projectList)
-        val orderedInnerProjectList = normalizedInnerProjectList.sortBy(_.name)
-        val newInnerProject =
-          Project(orderedInnerProjectList, innerProject.child)
-        Project(normalizeProjectList(outerProjectList), newInnerProject)
       case Project(projectList, child) =>
-        Project(normalizeProjectList(projectList), child)
+        val projList = projectList
+          .map { e =>
+            e.transformUp {
+              case g: GetViewColumnByNameAndOrdinal => g.copy(viewDDL = None)
+            }
+          }
+          .asInstanceOf[Seq[NamedExpression]]
+        Project(projList, child)
       case c: KeepAnalyzedQuery => c.storeAnalyzedQuery()
       case localRelation: LocalRelation if !localRelation.data.isEmpty =>
         /**
@@ -125,16 +166,6 @@ object NormalizePlan extends PredicateHelper {
       case cteRelationRef: CTERelationRef =>
         cteIdNormalizer.normalizeRef(cteRelationRef)
     }
-  }
-
-  private def normalizeProjectList(projectList: Seq[NamedExpression]): Seq[NamedExpression] = {
-    projectList
-      .map { e =>
-        e.transformUp {
-          case g: GetViewColumnByNameAndOrdinal => g.copy(viewDDL = None)
-        }
-      }
-      .asInstanceOf[Seq[NamedExpression]]
   }
 
   /**

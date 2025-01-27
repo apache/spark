@@ -59,7 +59,8 @@ DescribeTableCommand `spark_catalog`.`default`.`t`, false, [col_name#x, data_typ
 -- !query
 DESCRIBE EXTENDED t AS JSON
 -- !query analysis
-DescribeTableJsonCommand `spark_catalog`.`default`.`t`, true
+DescribeRelationJsonCommand true, [json_metadata#x]
++- ResolvedTable V2SessionCatalog(spark_catalog), default.t, V1Table(default.t), [a#x, b#x, c#x, d#x]
 
 
 -- !query
@@ -142,7 +143,8 @@ DescribeTableCommand `spark_catalog`.`default`.`t`, [c=Us, d=1], false, [col_nam
 -- !query
 DESC EXTENDED t PARTITION (c='Us', d=1) AS JSON
 -- !query analysis
-DescribeTableJsonCommand `spark_catalog`.`default`.`t`, [c=Us, d=1], true
+DescribeRelationJsonCommand [c=Us, d=1], true, [json_metadata#x]
++- ResolvedTable V2SessionCatalog(spark_catalog), default.t, V1Table(default.t), [a#x, b#x, c#x, d#x]
 
 
 -- !query
@@ -328,7 +330,7 @@ ExplainCommand 'DescribeRelation [c=Us, d=2], false, [col_name#x, data_type#x, c
 -- !query
 EXPLAIN DESCRIBE EXTENDED t PARTITION (c='Us', d=2) AS JSON
 -- !query analysis
-ExplainCommand 'DescribeRelationJson [c=Us, d=2], true, SimpleMode
+ExplainCommand 'DescribeRelationJsonCommand [c=Us, d=2], true, [json_metadata#x], SimpleMode
 
 
 -- !query

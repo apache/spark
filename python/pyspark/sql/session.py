@@ -17,6 +17,7 @@
 import os
 import sys
 import warnings
+import filecmp
 from collections.abc import Sized
 from functools import reduce, cached_property
 from threading import RLock
@@ -1467,7 +1468,9 @@ class SparkSession(SparkConversionMixin):
         +-----+---+
         |Alice|  1|
         +-----+---+
-        >>> spark.createDataFrame(pandas.DataFrame([[1, 2]])).collect()  # doctest: +SKIP
+
+        >>> pdf = pandas.DataFrame([[1, 2]])  # doctest: +SKIP
+        >>> spark.createDataFrame(pdf).show()  # doctest: +SKIP
         +---+---+
         |  0|  1|
         +---+---+
@@ -1482,8 +1485,9 @@ class SparkSession(SparkConversionMixin):
         +-----+---+
         |Alice|  1|
         +-----+---+
+
         >>> table = pyarrow.table({'0': [1], '1': [2]})  # doctest: +SKIP
-        >>> spark.createDataFrame(table).collect()  # doctest: +SKIP
+        >>> spark.createDataFrame(table).show()  # doctest: +SKIP
         +---+---+
         |  0|  1|
         +---+---+
@@ -2074,7 +2078,6 @@ class SparkSession(SparkConversionMixin):
             messageParameters={"feature": "SparkSession.client"},
         )
 
-    @remote_only
     def addArtifacts(
         self, *path: str, pyfile: bool = False, archive: bool = False, file: bool = False
     ) -> None:
@@ -2082,6 +2085,9 @@ class SparkSession(SparkConversionMixin):
         Add artifact(s) to the client session. Currently only local files are supported.
 
         .. versionadded:: 3.5.0
+
+        .. versionchanged:: 4.0.0
+            Supports Spark Classic.
 
         Parameters
         ----------
@@ -2097,16 +2103,40 @@ class SparkSession(SparkConversionMixin):
         file : bool
             Add a file to be downloaded with this Spark job on every node.
             The ``path`` passed can only be a local file for now.
-
-        Notes
-        -----
-        This is an API dedicated to Spark Connect client only. With regular Spark Session, it throws
-        an exception.
         """
-        raise PySparkRuntimeError(
-            errorClass="ONLY_SUPPORTED_WITH_SPARK_CONNECT",
-            messageParameters={"feature": "SparkSession.addArtifact(s)"},
-        )
+        from pyspark.core.files import SparkFiles
+
+        if sum([file, pyfile, archive]) > 1:
+            raise PySparkValueError(
+                errorClass="INVALID_MULTIPLE_ARGUMENT_CONDITIONS",
+                messageParameters={
+                    "arg_names": "'pyfile', 'archive' and/or 'file'",
+                    "condition": "True together",
+                },
+            )
+        for p in path:
+            normalized_path = os.path.abspath(p)
+            target_dir = os.path.join(
+                SparkFiles.getRootDirectory(), os.path.basename(normalized_path)
+            )
+
+            # Check if the target path already exists
+            if os.path.exists(target_dir):
+                # Compare the contents of the files. If identical, skip adding this file.
+                # If different, raise an exception.
+                if filecmp.cmp(normalized_path, target_dir, shallow=False):
+                    continue
+                else:
+                    raise PySparkRuntimeError(
+                        errorClass="DUPLICATED_ARTIFACT",
+                        messageParameters={"normalized_path": normalized_path},
+                    )
+        if archive:
+            self._sc.addArchive(*path)
+        elif pyfile:
+            self._sc.addPyFile(*path)
+        elif file:
+            self._sc.addFile(*path)  # type: ignore[arg-type]
 
     addArtifact = addArtifacts
 
