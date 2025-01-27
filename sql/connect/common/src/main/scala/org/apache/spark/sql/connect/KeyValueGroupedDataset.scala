@@ -174,7 +174,7 @@ class KeyValueGroupedDataset[K, V] private[sql] () extends sql.KeyValueGroupedDa
       statefulProcessor: StatefulProcessorWithInitialState[K, V, U, S],
       eventTimeColumnName: String,
       outputMode: OutputMode,
-      initialState: sql.KeyValueGroupedDataset[K, S]): Dataset[U] = unsupported()
+      initialState: sql.KeyValueGroupedDataset[K, S]): Dataset[U] =
     transformWithStateHelper(
       statefulProcessor,
       TimeMode.EventTime(),
