@@ -20,8 +20,10 @@
 SCRIPT_DIR="$( cd "$( dirname "$0" )" && pwd )"
 SPARK_ROOT_DIR="$(dirname $SCRIPT_DIR)"
 
+set -e
 "$SCRIPT_DIR/scalastyle" "$1"
 
+set +e
 # For Spark Connect, we actively enforce scalafmt and check that the produced diff is empty.
 ERRORS=$(./build/mvn \
     -Pscala-2.13 \

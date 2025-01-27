@@ -212,7 +212,7 @@ select
   size(timestamp_array)
 from primitive_arrays
 -- !query analysis
-Project [size(boolean_array#x, true) AS size(boolean_array)#x, size(tinyint_array#x, true) AS size(tinyint_array)#x, size(smallint_array#x, true) AS size(smallint_array)#x, size(int_array#x, true) AS size(int_array)#x, size(bigint_array#x, true) AS size(bigint_array)#x, size(decimal_array#x, true) AS size(decimal_array)#x, size(double_array#x, true) AS size(double_array)#x, size(float_array#x, true) AS size(float_array)#x, size(date_array#x, true) AS size(date_array)#x, size(timestamp_array#x, true) AS size(timestamp_array)#x]
+Project [size(boolean_array#x, false) AS size(boolean_array)#x, size(tinyint_array#x, false) AS size(tinyint_array)#x, size(smallint_array#x, false) AS size(smallint_array)#x, size(int_array#x, false) AS size(int_array)#x, size(bigint_array#x, false) AS size(bigint_array)#x, size(decimal_array#x, false) AS size(decimal_array)#x, size(double_array#x, false) AS size(double_array)#x, size(float_array#x, false) AS size(float_array)#x, size(date_array#x, false) AS size(date_array)#x, size(timestamp_array#x, false) AS size(timestamp_array)#x]
 +- SubqueryAlias primitive_arrays
    +- View (`primitive_arrays`, [boolean_array#x, tinyint_array#x, smallint_array#x, int_array#x, bigint_array#x, decimal_array#x, double_array#x, float_array#x, date_array#x, timestamp_array#x])
       +- Project [cast(boolean_array#x as array<boolean>) AS boolean_array#x, cast(tinyint_array#x as array<tinyint>) AS tinyint_array#x, cast(smallint_array#x as array<smallint>) AS smallint_array#x, cast(int_array#x as array<int>) AS int_array#x, cast(bigint_array#x as array<bigint>) AS bigint_array#x, cast(decimal_array#x as array<decimal(19,0)>) AS decimal_array#x, cast(double_array#x as array<double>) AS double_array#x, cast(float_array#x as array<float>) AS float_array#x, cast(date_array#x as array<date>) AS date_array#x, cast(timestamp_array#x as array<timestamp>) AS timestamp_array#x]
@@ -224,70 +224,70 @@ Project [size(boolean_array#x, true) AS size(boolean_array)#x, size(tinyint_arra
 -- !query
 select element_at(array(1, 2, 3), 5)
 -- !query analysis
-Project [element_at(array(1, 2, 3), 5, None, false) AS element_at(array(1, 2, 3), 5)#x]
+Project [element_at(array(1, 2, 3), 5, None, true) AS element_at(array(1, 2, 3), 5)#x]
 +- OneRowRelation
 
 
 -- !query
 select element_at(array(1, 2, 3), -5)
 -- !query analysis
-Project [element_at(array(1, 2, 3), -5, None, false) AS element_at(array(1, 2, 3), -5)#x]
+Project [element_at(array(1, 2, 3), -5, None, true) AS element_at(array(1, 2, 3), -5)#x]
 +- OneRowRelation
 
 
 -- !query
 select element_at(array(1, 2, 3), 0)
 -- !query analysis
-Project [element_at(array(1, 2, 3), 0, None, false) AS element_at(array(1, 2, 3), 0)#x]
+Project [element_at(array(1, 2, 3), 0, None, true) AS element_at(array(1, 2, 3), 0)#x]
 +- OneRowRelation
 
 
 -- !query
 select elt(4, '123', '456')
 -- !query analysis
-Project [elt(4, 123, 456, false) AS elt(4, 123, 456)#x]
+Project [elt(4, 123, 456, true) AS elt(4, 123, 456)#x]
 +- OneRowRelation
 
 
 -- !query
 select elt(0, '123', '456')
 -- !query analysis
-Project [elt(0, 123, 456, false) AS elt(0, 123, 456)#x]
+Project [elt(0, 123, 456, true) AS elt(0, 123, 456)#x]
 +- OneRowRelation
 
 
 -- !query
 select elt(-1, '123', '456')
 -- !query analysis
-Project [elt(-1, 123, 456, false) AS elt(-1, 123, 456)#x]
+Project [elt(-1, 123, 456, true) AS elt(-1, 123, 456)#x]
 +- OneRowRelation
 
 
 -- !query
 select elt(null, '123', '456')
 -- !query analysis
-Project [elt(cast(null as int), 123, 456, false) AS elt(NULL, 123, 456)#x]
+Project [elt(cast(null as int), 123, 456, true) AS elt(NULL, 123, 456)#x]
 +- OneRowRelation
 
 
 -- !query
 select elt(null, '123', null)
 -- !query analysis
-Project [elt(cast(null as int), 123, cast(null as string), false) AS elt(NULL, 123, NULL)#x]
+Project [elt(cast(null as int), 123, cast(null as string), true) AS elt(NULL, 123, NULL)#x]
 +- OneRowRelation
 
 
 -- !query
 select elt(1, '123', null)
 -- !query analysis
-Project [elt(1, 123, cast(null as string), false) AS elt(1, 123, NULL)#x]
+Project [elt(1, 123, cast(null as string), true) AS elt(1, 123, NULL)#x]
 +- OneRowRelation
 
 
 -- !query
 select elt(2, '123', null)
 -- !query analysis
-Project [elt(2, 123, cast(null as string), false) AS elt(2, 123, NULL)#x]
+Project [elt(2, 123, cast(null as string), true) AS elt(2, 123, NULL)#x]
 +- OneRowRelation
 
 
@@ -360,21 +360,21 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 select size(arrays_zip(array(1, 2, 3), array(4), array(7, 8, 9, 10)))
 -- !query analysis
-Project [size(arrays_zip(array(1, 2, 3), array(4), array(7, 8, 9, 10), 0, 1, 2), true) AS size(arrays_zip(array(1, 2, 3), array(4), array(7, 8, 9, 10)))#x]
+Project [size(arrays_zip(array(1, 2, 3), array(4), array(7, 8, 9, 10), 0, 1, 2), false) AS size(arrays_zip(array(1, 2, 3), array(4), array(7, 8, 9, 10)))#x]
 +- OneRowRelation
 
 
 -- !query
 select size(arrays_zip(array(), array(1, 2, 3), array(4), array(7, 8, 9, 10)))
 -- !query analysis
-Project [size(arrays_zip(array(), array(1, 2, 3), array(4), array(7, 8, 9, 10), 0, 1, 2, 3), true) AS size(arrays_zip(array(), array(1, 2, 3), array(4), array(7, 8, 9, 10)))#x]
+Project [size(arrays_zip(array(), array(1, 2, 3), array(4), array(7, 8, 9, 10), 0, 1, 2, 3), false) AS size(arrays_zip(array(), array(1, 2, 3), array(4), array(7, 8, 9, 10)))#x]
 +- OneRowRelation
 
 
 -- !query
 select size(arrays_zip(array(1, 2, 3), array(4), null, array(7, 8, 9, 10)))
 -- !query analysis
-Project [size(arrays_zip(array(1, 2, 3), array(4), null, array(7, 8, 9, 10), 0, 1, 2, 3), true) AS size(arrays_zip(array(1, 2, 3), array(4), NULL, array(7, 8, 9, 10)))#x]
+Project [size(arrays_zip(array(1, 2, 3), array(4), null, array(7, 8, 9, 10), 0, 1, 2, 3), false) AS size(arrays_zip(array(1, 2, 3), array(4), NULL, array(7, 8, 9, 10)))#x]
 +- OneRowRelation
 
 

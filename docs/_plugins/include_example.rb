@@ -114,8 +114,8 @@ module Jekyll
         range = Range.new(start + 1, endline - 1)
         trimmed = trim_codeblock(lines[range])
         # Filter out possible example tags of overlapped labels.
-        taggs_filtered = trimmed.select { |l| !l.include? '$example ' }
-        result += taggs_filtered.join
+        tags_filtered = trimmed.select { |l| !l.include? '$example ' }
+        result += tags_filtered.join
         result += "\n"
       end
       result

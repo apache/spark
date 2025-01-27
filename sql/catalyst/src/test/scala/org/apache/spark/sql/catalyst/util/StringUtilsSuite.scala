@@ -136,4 +136,19 @@ class StringUtilsSuite extends SparkFunSuite with SQLHelper {
     val expectedOutput = Seq("`c1`", "`v2.c2`", "`v1`.`c2`")
     assert(orderSuggestedIdentifiersBySimilarity(baseString, testStrings) === expectedOutput)
   }
+
+  test("SPARK-50579: truncated string") {
+    assert(truncatedString(Seq.empty, ", ", -1) === "")
+    assert(truncatedString(Seq("a"), ", ", -1) === "... 1 more fields")
+    assert(truncatedString(Seq("B"), "(", ", ", ")", -1) === "(... 1 more fields)")
+    assert(truncatedString(Seq.empty, ", ", 0) === "")
+    assert(truncatedString(Seq.empty, "[", ", ", "]", 0) === "[]")
+    assert(truncatedString(Seq("a", "b"), ", ", 0) === "... 2 more fields")
+    assert(truncatedString(Seq.empty, ",", 1) === "")
+    assert(truncatedString(Seq("a"), ",", 1) === "a")
+    assert(truncatedString(Seq("a", "b"), ", ", 1) === "a, ... 1 more fields")
+    assert(truncatedString(Seq("a", "b"), ", ", 2) === "a, b")
+    assert(truncatedString(Seq("a", "b", "c"), ", ", Int.MaxValue) === "a, b, c")
+    assert(truncatedString(Seq("a", "b", "c"), ", ", Int.MinValue) === "... 3 more fields")
+  }
 }

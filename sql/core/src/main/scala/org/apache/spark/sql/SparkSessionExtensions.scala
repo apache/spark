@@ -223,6 +223,24 @@ class SparkSessionExtensions {
     resolutionRuleBuilders += builder
   }
 
+  private[this] val hintResolutionRuleBuilders = mutable.Buffer.empty[RuleBuilder]
+
+  /**
+   * Build the analyzer hint resolution rules using the given [[SparkSession]].
+   */
+  private[sql] def buildHintResolutionRules(session: SparkSession): Seq[Rule[LogicalPlan]] = {
+    hintResolutionRuleBuilders.map(_.apply(session)).toSeq
+  }
+
+  /**
+   * Inject an analyzer hint resolution rule builder into the [[SparkSession]]. These analyzer
+   * rules will be executed as part of the early resolution phase of the analyzer, together with
+   * other hint resolution rules.
+   */
+  def injectHintResolutionRule(builder: RuleBuilder): Unit = {
+    hintResolutionRuleBuilders += builder
+  }
+
   private[this] val postHocResolutionRuleBuilders = mutable.Buffer.empty[RuleBuilder]
 
   /**

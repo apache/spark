@@ -20,7 +20,6 @@ from pyspark.sql.connect.utils import check_dependencies
 check_dependencies(__name__)
 
 from threading import RLock
-import warnings
 import uuid
 from collections.abc import Generator
 from typing import Optional, Any, Iterator, Iterable, Tuple, Callable, cast, Type, ClassVar
@@ -30,6 +29,7 @@ import os
 import grpc
 from grpc_status import rpc_status
 
+from pyspark.sql.connect.logging import logger
 import pyspark.sql.connect.proto as pb2
 import pyspark.sql.connect.proto.base_pb2_grpc as grpc_lib
 from pyspark.errors import PySparkRuntimeError
@@ -60,9 +60,8 @@ class ExecutePlanResponseReattachableIterator(Generator):
     _lock: ClassVar[RLock] = RLock()
     _release_thread_pool_instance: Optional[ThreadPoolExecutor] = None
 
-    @classmethod  # type: ignore[misc]
-    @property
-    def _release_thread_pool(cls) -> ThreadPoolExecutor:
+    @classmethod
+    def _get_or_create_release_thread_pool(cls) -> ThreadPoolExecutor:
         # Perform a first check outside the critical path.
         if cls._release_thread_pool_instance is not None:
             return cls._release_thread_pool_instance
@@ -80,7 +79,7 @@ class ExecutePlanResponseReattachableIterator(Generator):
         """
         with cls._lock:
             if cls._release_thread_pool_instance is not None:
-                cls._release_thread_pool.shutdown()  # type: ignore[attr-defined]
+                cls._get_or_create_release_thread_pool().shutdown()
                 cls._release_thread_pool_instance = None
 
     def __init__(
@@ -129,6 +128,10 @@ class ExecutePlanResponseReattachableIterator(Generator):
 
         # Current item from this iterator.
         self._current: Optional[pb2.ExecutePlanResponse] = None
+
+    @property
+    def _release_thread_pool(self) -> ThreadPoolExecutor:
+        return self._get_or_create_release_thread_pool()
 
     def send(self, value: Any) -> pb2.ExecutePlanResponse:
         # will trigger reattach in case the stream completed without result_complete
@@ -206,7 +209,7 @@ class ExecutePlanResponseReattachableIterator(Generator):
                     with attempt:
                         self._stub.ReleaseExecute(request, metadata=self._metadata)
             except Exception as e:
-                warnings.warn(f"ReleaseExecute failed with exception: {e}.")
+                logger.warn(f"ReleaseExecute failed with exception: {e}.")
 
         with self._lock:
             if self._release_thread_pool_instance is not None:
@@ -231,7 +234,7 @@ class ExecutePlanResponseReattachableIterator(Generator):
                     with attempt:
                         self._stub.ReleaseExecute(request, metadata=self._metadata)
             except Exception as e:
-                warnings.warn(f"ReleaseExecute failed with exception: {e}.")
+                logger.warn(f"ReleaseExecute failed with exception: {e}.")
 
         with self._lock:
             if self._release_thread_pool_instance is not None:

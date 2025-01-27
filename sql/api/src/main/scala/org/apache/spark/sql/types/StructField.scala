@@ -122,7 +122,7 @@ case class StructField(
   }
 
   private def schemaCollationValue(dt: DataType): String = dt match {
-    case st: StringType =>
+    case st: StringType if st != IndeterminateStringType =>
       val collation = CollationFactory.fetchCollation(st.collationId)
       collation.identifier().toStringWithoutVersion()
     case _ =>
@@ -145,6 +145,18 @@ case class StructField(
    */
   def getComment(): Option[String] = {
     if (metadata.contains("comment")) Option(metadata.getString("comment")) else None
+  }
+
+  /**
+   * Return the default value of this StructField. This is used for storing the default value of a
+   * function parameter.
+   */
+  private[sql] def getDefault(): Option[String] = {
+    if (metadata.contains("default")) {
+      Option(metadata.getString("default"))
+    } else {
+      None
+    }
   }
 
   /**

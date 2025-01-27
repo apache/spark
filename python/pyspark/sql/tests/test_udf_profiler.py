@@ -31,20 +31,14 @@ from pyspark.sql import SparkSession
 from pyspark.sql.functions import col, pandas_udf, udf
 from pyspark.sql.window import Window
 from pyspark.profiler import UDFBasicProfiler
-from pyspark.testing.sqlutils import (
-    ReusedSQLTestCase,
+from pyspark.testing.sqlutils import ReusedSQLTestCase
+from pyspark.testing.utils import (
     have_pandas,
     have_pyarrow,
+    have_flameprof,
     pandas_requirement_message,
     pyarrow_requirement_message,
 )
-
-try:
-    import flameprof  # noqa: F401
-
-    has_flameprof = True
-except ImportError:
-    has_flameprof = False
 
 
 def _do_computation(spark, *, action=lambda df: df.collect(), use_arrow=False):
@@ -208,7 +202,7 @@ class UDFProfiler2TestsMixin:
                 )
                 self.assertTrue(f"udf_{id}_perf.pstats" in os.listdir(d))
 
-                if has_flameprof:
+                if have_flameprof:
                     self.assertIn("svg", self.spark.profile.render(id))
 
     @unittest.skipIf(
@@ -230,7 +224,7 @@ class UDFProfiler2TestsMixin:
                 io.getvalue(), f"10.*{os.path.basename(inspect.getfile(_do_computation))}"
             )
 
-            if has_flameprof:
+            if have_flameprof:
                 self.assertIn("svg", self.spark.profile.render(id))
 
     def test_perf_profiler_udf_multiple_actions(self):
@@ -252,7 +246,7 @@ class UDFProfiler2TestsMixin:
                 io.getvalue(), f"20.*{os.path.basename(inspect.getfile(_do_computation))}"
             )
 
-            if has_flameprof:
+            if have_flameprof:
                 self.assertIn("svg", self.spark.profile.render(id))
 
     def test_perf_profiler_udf_registered(self):
@@ -276,7 +270,7 @@ class UDFProfiler2TestsMixin:
                 io.getvalue(), f"10.*{os.path.basename(inspect.getfile(_do_computation))}"
             )
 
-            if has_flameprof:
+            if have_flameprof:
                 self.assertIn("svg", self.spark.profile.render(id))
 
     @unittest.skipIf(
@@ -309,7 +303,7 @@ class UDFProfiler2TestsMixin:
                 io.getvalue(), f"2.*{os.path.basename(inspect.getfile(_do_computation))}"
             )
 
-            if has_flameprof:
+            if have_flameprof:
                 self.assertIn("svg", self.spark.profile.render(id))
 
     @unittest.skipIf(
@@ -345,7 +339,7 @@ class UDFProfiler2TestsMixin:
                 io.getvalue(), f"2.*{os.path.basename(inspect.getfile(_do_computation))}"
             )
 
-            if has_flameprof:
+            if have_flameprof:
                 self.assertIn("svg", self.spark.profile.render(id))
 
     @unittest.skipIf(
@@ -395,7 +389,7 @@ class UDFProfiler2TestsMixin:
                 io.getvalue(), f"5.*{os.path.basename(inspect.getfile(_do_computation))}"
             )
 
-            if has_flameprof:
+            if have_flameprof:
                 self.assertIn("svg", self.spark.profile.render(id))
 
     @unittest.skipIf(
@@ -427,7 +421,7 @@ class UDFProfiler2TestsMixin:
                 io.getvalue(), f"2.*{os.path.basename(inspect.getfile(_do_computation))}"
             )
 
-            if has_flameprof:
+            if have_flameprof:
                 self.assertIn("svg", self.spark.profile.render(id))
 
     @unittest.skipIf(
@@ -458,7 +452,7 @@ class UDFProfiler2TestsMixin:
                 io.getvalue(), f"2.*{os.path.basename(inspect.getfile(_do_computation))}"
             )
 
-            if has_flameprof:
+            if have_flameprof:
                 self.assertIn("svg", self.spark.profile.render(id))
 
     @unittest.skipIf(
@@ -496,7 +490,7 @@ class UDFProfiler2TestsMixin:
                 io.getvalue(), f"2.*{os.path.basename(inspect.getfile(_do_computation))}"
             )
 
-            if has_flameprof:
+            if have_flameprof:
                 self.assertIn("svg", self.spark.profile.render(id))
 
     @unittest.skipIf(
@@ -530,7 +524,7 @@ class UDFProfiler2TestsMixin:
                 io.getvalue(), f"2.*{os.path.basename(inspect.getfile(_do_computation))}"
             )
 
-            if has_flameprof:
+            if have_flameprof:
                 self.assertIn("svg", self.spark.profile.render(id))
 
     @unittest.skipIf(
@@ -562,7 +556,7 @@ class UDFProfiler2TestsMixin:
                 io.getvalue(), f"2.*{os.path.basename(inspect.getfile(_do_computation))}"
             )
 
-            if has_flameprof:
+            if have_flameprof:
                 self.assertIn("svg", self.spark.profile.render(id))
 
     def test_perf_profiler_render(self):
@@ -572,7 +566,7 @@ class UDFProfiler2TestsMixin:
 
         id = list(self.profile_results.keys())[0]
 
-        if has_flameprof:
+        if have_flameprof:
             self.assertIn("svg", self.spark.profile.render(id))
             self.assertIn("svg", self.spark.profile.render(id, type="perf"))
             self.assertIn("svg", self.spark.profile.render(id, renderer="flameprof"))

@@ -10,25 +10,67 @@ struct<>
 -- !query
 select a / b from t
 -- !query schema
-struct<(a / b):decimal(8,6)>
+struct<>
 -- !query output
-NULL
+org.apache.spark.SparkArithmeticException
+{
+  "errorClass" : "DIVIDE_BY_ZERO",
+  "sqlState" : "22012",
+  "messageParameters" : {
+    "config" : "\"spark.sql.ansi.enabled\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 12,
+    "fragment" : "a / b"
+  } ]
+}
 
 
 -- !query
 select a % b from t
 -- !query schema
-struct<(a % b):decimal(1,1)>
+struct<>
 -- !query output
-NULL
+org.apache.spark.SparkArithmeticException
+{
+  "errorClass" : "DIVIDE_BY_ZERO",
+  "sqlState" : "22012",
+  "messageParameters" : {
+    "config" : "\"spark.sql.ansi.enabled\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 12,
+    "fragment" : "a % b"
+  } ]
+}
 
 
 -- !query
 select pmod(a, b) from t
 -- !query schema
-struct<pmod(a, b):decimal(1,1)>
+struct<>
 -- !query output
-NULL
+org.apache.spark.SparkArithmeticException
+{
+  "errorClass" : "DIVIDE_BY_ZERO",
+  "sqlState" : "22012",
+  "messageParameters" : {
+    "config" : "\"spark.sql.ansi.enabled\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 17,
+    "fragment" : "pmod(a, b)"
+  } ]
+}
 
 
 -- !query
@@ -121,41 +163,126 @@ struct<(2.35E10 * 1.0):double>
 -- !query
 select (5e36BD + 0.1) + 5e36BD
 -- !query schema
-struct<((5000000000000000000000000000000000000 + 0.1) + 5000000000000000000000000000000000000):decimal(38,1)>
+struct<>
 -- !query output
-NULL
+org.apache.spark.SparkArithmeticException
+{
+  "errorClass" : "NUMERIC_VALUE_OUT_OF_RANGE.WITH_SUGGESTION",
+  "sqlState" : "22003",
+  "messageParameters" : {
+    "config" : "\"spark.sql.ansi.enabled\"",
+    "precision" : "38",
+    "scale" : "1",
+    "value" : "10000000000000000000000000000000000000.1"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 30,
+    "fragment" : "(5e36BD + 0.1) + 5e36BD"
+  } ]
+}
 
 
 -- !query
 select (-4e36BD - 0.1) - 7e36BD
 -- !query schema
-struct<((-4000000000000000000000000000000000000 - 0.1) - 7000000000000000000000000000000000000):decimal(38,1)>
+struct<>
 -- !query output
-NULL
+org.apache.spark.SparkArithmeticException
+{
+  "errorClass" : "NUMERIC_VALUE_OUT_OF_RANGE.WITH_SUGGESTION",
+  "sqlState" : "22003",
+  "messageParameters" : {
+    "config" : "\"spark.sql.ansi.enabled\"",
+    "precision" : "38",
+    "scale" : "1",
+    "value" : "-11000000000000000000000000000000000000.1"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 31,
+    "fragment" : "(-4e36BD - 0.1) - 7e36BD"
+  } ]
+}
 
 
 -- !query
 select 12345678901234567890.0 * 12345678901234567890.0
 -- !query schema
-struct<(12345678901234567890.0 * 12345678901234567890.0):decimal(38,2)>
+struct<>
 -- !query output
-NULL
+org.apache.spark.SparkArithmeticException
+{
+  "errorClass" : "NUMERIC_VALUE_OUT_OF_RANGE.WITH_SUGGESTION",
+  "sqlState" : "22003",
+  "messageParameters" : {
+    "config" : "\"spark.sql.ansi.enabled\"",
+    "precision" : "38",
+    "scale" : "2",
+    "value" : "152415787532388367501905199875019052100"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 54,
+    "fragment" : "12345678901234567890.0 * 12345678901234567890.0"
+  } ]
+}
 
 
 -- !query
 select 1e35BD / 0.1
 -- !query schema
-struct<(100000000000000000000000000000000000 / 0.1):decimal(38,6)>
+struct<>
 -- !query output
-NULL
+org.apache.spark.SparkArithmeticException
+{
+  "errorClass" : "NUMERIC_VALUE_OUT_OF_RANGE.WITH_SUGGESTION",
+  "sqlState" : "22003",
+  "messageParameters" : {
+    "config" : "\"spark.sql.ansi.enabled\"",
+    "precision" : "38",
+    "scale" : "6",
+    "value" : "1000000000000000000000000000000000000.000000000000000000000000000000000000000"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 19,
+    "fragment" : "1e35BD / 0.1"
+  } ]
+}
 
 
 -- !query
 select 1.2345678901234567890E30BD * 1.2345678901234567890E25BD
 -- !query schema
-struct<(1234567890123456789000000000000 * 12345678901234567890000000):decimal(38,0)>
+struct<>
 -- !query output
-NULL
+org.apache.spark.SparkArithmeticException
+{
+  "errorClass" : "NUMERIC_VALUE_OUT_OF_RANGE.WITH_SUGGESTION",
+  "sqlState" : "22003",
+  "messageParameters" : {
+    "config" : "\"spark.sql.ansi.enabled\"",
+    "precision" : "38",
+    "scale" : "0",
+    "value" : "15241578753238836750190519987501905210000000000000000000"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 62,
+    "fragment" : "1.2345678901234567890E30BD * 1.2345678901234567890E25BD"
+  } ]
+}
 
 
 -- !query
@@ -268,14 +395,28 @@ spark.sql.decimalOperations.allowPrecisionLoss	false
 
 
 -- !query
-select id, a+b, a-b, a*b, a/b from decimals_test order by id
+select /*+ COALESCE(1) */ id, a+b, a-b, a*b, a/b from decimals_test order by id
 -- !query schema
-struct<id:int,(a + b):decimal(38,18),(a - b):decimal(38,18),(a * b):decimal(38,36),(a / b):decimal(38,18)>
+struct<>
 -- !query output
-1	1099.000000000000000000	-899.000000000000000000	NULL	0.100100100100100100
-2	24690.246000000000000000	0.000000000000000000	NULL	1.000000000000000000
-3	1234.223456789101100000	-1233.976543210898900000	NULL	0.000100037913541123
-4	123456789123456790.123456789123456789	123456789123456787.876543210876543211	NULL	109890109097814272.043109406191131436
+org.apache.spark.SparkArithmeticException
+{
+  "errorClass" : "NUMERIC_VALUE_OUT_OF_RANGE.WITH_SUGGESTION",
+  "sqlState" : "22003",
+  "messageParameters" : {
+    "config" : "\"spark.sql.ansi.enabled\"",
+    "precision" : "38",
+    "scale" : "36",
+    "value" : "152.358023429667510000000000000000000000"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 41,
+    "stopIndex" : 43,
+    "fragment" : "a*b"
+  } ]
+}
 
 
 -- !query
@@ -324,9 +465,26 @@ struct<(10.300000000000000000 * 3.000000000000000000):decimal(38,36)>
 -- !query
 select 10.300000000000000000 * 3.0000000000000000000
 -- !query schema
-struct<(10.300000000000000000 * 3.0000000000000000000):decimal(38,37)>
+struct<>
 -- !query output
-NULL
+org.apache.spark.SparkArithmeticException
+{
+  "errorClass" : "NUMERIC_VALUE_OUT_OF_RANGE.WITH_SUGGESTION",
+  "sqlState" : "22003",
+  "messageParameters" : {
+    "config" : "\"spark.sql.ansi.enabled\"",
+    "precision" : "38",
+    "scale" : "37",
+    "value" : "30.9000000000000000000000000000000000000"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 52,
+    "fragment" : "10.300000000000000000 * 3.0000000000000000000"
+  } ]
+}
 
 
 -- !query
@@ -340,81 +498,251 @@ struct<(2.35E10 * 1.0):double>
 -- !query
 select (5e36BD + 0.1) + 5e36BD
 -- !query schema
-struct<((5000000000000000000000000000000000000 + 0.1) + 5000000000000000000000000000000000000):decimal(38,1)>
+struct<>
 -- !query output
-NULL
+org.apache.spark.SparkArithmeticException
+{
+  "errorClass" : "NUMERIC_VALUE_OUT_OF_RANGE.WITH_SUGGESTION",
+  "sqlState" : "22003",
+  "messageParameters" : {
+    "config" : "\"spark.sql.ansi.enabled\"",
+    "precision" : "38",
+    "scale" : "1",
+    "value" : "10000000000000000000000000000000000000.1"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 30,
+    "fragment" : "(5e36BD + 0.1) + 5e36BD"
+  } ]
+}
 
 
 -- !query
 select (-4e36BD - 0.1) - 7e36BD
 -- !query schema
-struct<((-4000000000000000000000000000000000000 - 0.1) - 7000000000000000000000000000000000000):decimal(38,1)>
+struct<>
 -- !query output
-NULL
+org.apache.spark.SparkArithmeticException
+{
+  "errorClass" : "NUMERIC_VALUE_OUT_OF_RANGE.WITH_SUGGESTION",
+  "sqlState" : "22003",
+  "messageParameters" : {
+    "config" : "\"spark.sql.ansi.enabled\"",
+    "precision" : "38",
+    "scale" : "1",
+    "value" : "-11000000000000000000000000000000000000.1"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 31,
+    "fragment" : "(-4e36BD - 0.1) - 7e36BD"
+  } ]
+}
 
 
 -- !query
 select 12345678901234567890.0 * 12345678901234567890.0
 -- !query schema
-struct<(12345678901234567890.0 * 12345678901234567890.0):decimal(38,2)>
+struct<>
 -- !query output
-NULL
+org.apache.spark.SparkArithmeticException
+{
+  "errorClass" : "NUMERIC_VALUE_OUT_OF_RANGE.WITH_SUGGESTION",
+  "sqlState" : "22003",
+  "messageParameters" : {
+    "config" : "\"spark.sql.ansi.enabled\"",
+    "precision" : "38",
+    "scale" : "2",
+    "value" : "152415787532388367501905199875019052100"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 54,
+    "fragment" : "12345678901234567890.0 * 12345678901234567890.0"
+  } ]
+}
 
 
 -- !query
 select 1e35BD / 0.1
 -- !query schema
-struct<(100000000000000000000000000000000000 / 0.1):decimal(38,3)>
+struct<>
 -- !query output
-NULL
+org.apache.spark.SparkArithmeticException
+{
+  "errorClass" : "NUMERIC_VALUE_OUT_OF_RANGE.WITH_SUGGESTION",
+  "sqlState" : "22003",
+  "messageParameters" : {
+    "config" : "\"spark.sql.ansi.enabled\"",
+    "precision" : "38",
+    "scale" : "3",
+    "value" : "1000000000000000000000000000000000000.000000000000000000000000000000000000000"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 19,
+    "fragment" : "1e35BD / 0.1"
+  } ]
+}
 
 
 -- !query
 select 1.2345678901234567890E30BD * 1.2345678901234567890E25BD
 -- !query schema
-struct<(1234567890123456789000000000000 * 12345678901234567890000000):decimal(38,0)>
+struct<>
 -- !query output
-NULL
+org.apache.spark.SparkArithmeticException
+{
+  "errorClass" : "NUMERIC_VALUE_OUT_OF_RANGE.WITH_SUGGESTION",
+  "sqlState" : "22003",
+  "messageParameters" : {
+    "config" : "\"spark.sql.ansi.enabled\"",
+    "precision" : "38",
+    "scale" : "0",
+    "value" : "15241578753238836750190519987501905210000000000000000000"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 62,
+    "fragment" : "1.2345678901234567890E30BD * 1.2345678901234567890E25BD"
+  } ]
+}
 
 
 -- !query
 select 12345678912345678912345678912.1234567 + 9999999999999999999999999999999.12345
 -- !query schema
-struct<(12345678912345678912345678912.1234567 + 9999999999999999999999999999999.12345):decimal(38,7)>
+struct<>
 -- !query output
-NULL
+org.apache.spark.SparkArithmeticException
+{
+  "errorClass" : "NUMERIC_VALUE_OUT_OF_RANGE.WITH_SUGGESTION",
+  "sqlState" : "22003",
+  "messageParameters" : {
+    "config" : "\"spark.sql.ansi.enabled\"",
+    "precision" : "38",
+    "scale" : "7",
+    "value" : "10012345678912345678912345678911.2469067"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 84,
+    "fragment" : "12345678912345678912345678912.1234567 + 9999999999999999999999999999999.12345"
+  } ]
+}
 
 
 -- !query
 select 123456789123456789.1234567890 * 1.123456789123456789
 -- !query schema
-struct<(123456789123456789.1234567890 * 1.123456789123456789):decimal(38,28)>
+struct<>
 -- !query output
-NULL
+org.apache.spark.SparkArithmeticException
+{
+  "errorClass" : "NUMERIC_VALUE_OUT_OF_RANGE.WITH_SUGGESTION",
+  "sqlState" : "22003",
+  "messageParameters" : {
+    "config" : "\"spark.sql.ansi.enabled\"",
+    "precision" : "38",
+    "scale" : "28",
+    "value" : "138698367904130467.654320988515622620750"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 59,
+    "fragment" : "123456789123456789.1234567890 * 1.123456789123456789"
+  } ]
+}
 
 
 -- !query
 select 12345678912345.123456789123 / 0.000000012345678
 -- !query schema
-struct<(12345678912345.123456789123 / 1.2345678E-8):decimal(38,18)>
+struct<>
 -- !query output
-NULL
+org.apache.spark.SparkArithmeticException
+{
+  "errorClass" : "NUMERIC_VALUE_OUT_OF_RANGE.WITH_SUGGESTION",
+  "sqlState" : "22003",
+  "messageParameters" : {
+    "config" : "\"spark.sql.ansi.enabled\"",
+    "precision" : "38",
+    "scale" : "18",
+    "value" : "1000000073899961059796.725866331521039184725213147467478092333"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 54,
+    "fragment" : "12345678912345.123456789123 / 0.000000012345678"
+  } ]
+}
 
 
 -- !query
 select 1.0123456789012345678901234567890123456e36BD / 0.1
 -- !query schema
-struct<(1012345678901234567890123456789012345.6 / 0.1):decimal(38,2)>
+struct<>
 -- !query output
-NULL
+org.apache.spark.SparkArithmeticException
+{
+  "errorClass" : "NUMERIC_VALUE_OUT_OF_RANGE.WITH_SUGGESTION",
+  "sqlState" : "22003",
+  "messageParameters" : {
+    "config" : "\"spark.sql.ansi.enabled\"",
+    "precision" : "38",
+    "scale" : "2",
+    "value" : "10123456789012345678901234567890123456.000000000000000000000000000000000000000"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 57,
+    "fragment" : "1.0123456789012345678901234567890123456e36BD / 0.1"
+  } ]
+}
 
 
 -- !query
 select 1.0123456789012345678901234567890123456e35BD / 1.0
 -- !query schema
-struct<(101234567890123456789012345678901234.56 / 1.0):decimal(38,3)>
+struct<>
 -- !query output
-NULL
+org.apache.spark.SparkArithmeticException
+{
+  "errorClass" : "NUMERIC_VALUE_OUT_OF_RANGE.WITH_SUGGESTION",
+  "sqlState" : "22003",
+  "messageParameters" : {
+    "config" : "\"spark.sql.ansi.enabled\"",
+    "precision" : "38",
+    "scale" : "3",
+    "value" : "101234567890123456789012345678901234.560000000000000000000000000000000000000"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 57,
+    "fragment" : "1.0123456789012345678901234567890123456e35BD / 1.0"
+  } ]
+}
 
 
 -- !query
@@ -452,9 +780,26 @@ struct<(10123456789012345678901234567890.123456 / 1.0):decimal(38,6)>
 -- !query
 select 1.0123456789012345678901234567890123456e31BD / 0.1
 -- !query schema
-struct<(10123456789012345678901234567890.123456 / 0.1):decimal(38,6)>
+struct<>
 -- !query output
-NULL
+org.apache.spark.SparkArithmeticException
+{
+  "errorClass" : "NUMERIC_VALUE_OUT_OF_RANGE.WITH_SUGGESTION",
+  "sqlState" : "22003",
+  "messageParameters" : {
+    "config" : "\"spark.sql.ansi.enabled\"",
+    "precision" : "38",
+    "scale" : "6",
+    "value" : "101234567890123456789012345678901.234560000000000000000000000000000000000"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 57,
+    "fragment" : "1.0123456789012345678901234567890123456e31BD / 0.1"
+  } ]
+}
 
 
 -- !query

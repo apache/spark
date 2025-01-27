@@ -36,11 +36,11 @@ class GroupTestsMixin:
         data = [Row(key=1, value=10), Row(key=1, value=20), Row(key=1, value=30)]
         df = self.spark.createDataFrame(data)
         g = df.groupBy("key")
-        self.assertEqual(g.max("value").collect(), [Row(**{"key": 1, "max(value)": 30})])
-        self.assertEqual(g.min("value").collect(), [Row(**{"key": 1, "min(value)": 10})])
-        self.assertEqual(g.sum("value").collect(), [Row(**{"key": 1, "sum(value)": 60})])
-        self.assertEqual(g.count().collect(), [Row(key=1, count=3)])
-        self.assertEqual(g.mean("value").collect(), [Row(**{"key": 1, "avg(value)": 20.0})])
+        assertDataFrameEqual(g.max("value"), [Row(**{"key": 1, "max(value)": 30})])
+        assertDataFrameEqual(g.min("value"), [Row(**{"key": 1, "min(value)": 10})])
+        assertDataFrameEqual(g.sum("value"), [Row(**{"key": 1, "sum(value)": 60})])
+        assertDataFrameEqual(g.count(), [Row(key=1, count=3)])
+        assertDataFrameEqual(g.mean("value"), [Row(**{"key": 1, "avg(value)": 20.0})])
 
         data = [
             Row(electronic="Smartphone", year=2018, sales=150000),
@@ -59,7 +59,7 @@ class GroupTestsMixin:
         df = self.df
         g = df.groupBy()
         self.assertEqual([99, 100], sorted(g.agg({"key": "max", "value": "count"}).collect()[0]))
-        self.assertEqual([Row(**{"AVG(key#0)": 49.5})], g.mean().collect())
+        assertDataFrameEqual([Row(**{"AVG(key#0)": 49.5})], g.mean().collect())
 
         from pyspark.sql import functions
 

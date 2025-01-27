@@ -91,19 +91,20 @@ SELECT cast(1 as tinyint) FROM t UNION SELECT cast(2 as float) FROM t
 -- !query analysis
 Distinct
 +- Union false, false
-   :- Project [cast(CAST(1 AS TINYINT)#x as float) AS CAST(1 AS TINYINT)#x]
+   :- Project [cast(CAST(1 AS TINYINT)#x as double) AS CAST(1 AS TINYINT)#x]
    :  +- Project [cast(1 as tinyint) AS CAST(1 AS TINYINT)#x]
    :     +- SubqueryAlias t
    :        +- View (`t`, [1#x])
    :           +- Project [cast(1#x as int) AS 1#x]
    :              +- Project [1 AS 1#x]
    :                 +- OneRowRelation
-   +- Project [cast(2 as float) AS CAST(2 AS FLOAT)#x]
-      +- SubqueryAlias t
-         +- View (`t`, [1#x])
-            +- Project [cast(1#x as int) AS 1#x]
-               +- Project [1 AS 1#x]
-                  +- OneRowRelation
+   +- Project [cast(CAST(2 AS FLOAT)#x as double) AS CAST(2 AS FLOAT)#x]
+      +- Project [cast(2 as float) AS CAST(2 AS FLOAT)#x]
+         +- SubqueryAlias t
+            +- View (`t`, [1#x])
+               +- Project [cast(1#x as int) AS 1#x]
+                  +- Project [1 AS 1#x]
+                     +- OneRowRelation
 
 
 -- !query
@@ -151,19 +152,20 @@ SELECT cast(1 as tinyint) FROM t UNION SELECT cast(2 as string) FROM t
 -- !query analysis
 Distinct
 +- Union false, false
-   :- Project [cast(CAST(1 AS TINYINT)#x as string) AS CAST(1 AS TINYINT)#x]
+   :- Project [cast(CAST(1 AS TINYINT)#x as bigint) AS CAST(1 AS TINYINT)#xL]
    :  +- Project [cast(1 as tinyint) AS CAST(1 AS TINYINT)#x]
    :     +- SubqueryAlias t
    :        +- View (`t`, [1#x])
    :           +- Project [cast(1#x as int) AS 1#x]
    :              +- Project [1 AS 1#x]
    :                 +- OneRowRelation
-   +- Project [cast(2 as string) AS CAST(2 AS STRING)#x]
-      +- SubqueryAlias t
-         +- View (`t`, [1#x])
-            +- Project [cast(1#x as int) AS 1#x]
-               +- Project [1 AS 1#x]
-                  +- OneRowRelation
+   +- Project [cast(CAST(2 AS STRING)#x as bigint) AS CAST(2 AS STRING)#xL]
+      +- Project [cast(2 as string) AS CAST(2 AS STRING)#x]
+         +- SubqueryAlias t
+            +- View (`t`, [1#x])
+               +- Project [cast(1#x as int) AS 1#x]
+                  +- Project [1 AS 1#x]
+                     +- OneRowRelation
 
 
 -- !query
@@ -350,19 +352,20 @@ SELECT cast(1 as smallint) FROM t UNION SELECT cast(2 as float) FROM t
 -- !query analysis
 Distinct
 +- Union false, false
-   :- Project [cast(CAST(1 AS SMALLINT)#x as float) AS CAST(1 AS SMALLINT)#x]
+   :- Project [cast(CAST(1 AS SMALLINT)#x as double) AS CAST(1 AS SMALLINT)#x]
    :  +- Project [cast(1 as smallint) AS CAST(1 AS SMALLINT)#x]
    :     +- SubqueryAlias t
    :        +- View (`t`, [1#x])
    :           +- Project [cast(1#x as int) AS 1#x]
    :              +- Project [1 AS 1#x]
    :                 +- OneRowRelation
-   +- Project [cast(2 as float) AS CAST(2 AS FLOAT)#x]
-      +- SubqueryAlias t
-         +- View (`t`, [1#x])
-            +- Project [cast(1#x as int) AS 1#x]
-               +- Project [1 AS 1#x]
-                  +- OneRowRelation
+   +- Project [cast(CAST(2 AS FLOAT)#x as double) AS CAST(2 AS FLOAT)#x]
+      +- Project [cast(2 as float) AS CAST(2 AS FLOAT)#x]
+         +- SubqueryAlias t
+            +- View (`t`, [1#x])
+               +- Project [cast(1#x as int) AS 1#x]
+                  +- Project [1 AS 1#x]
+                     +- OneRowRelation
 
 
 -- !query
@@ -410,19 +413,20 @@ SELECT cast(1 as smallint) FROM t UNION SELECT cast(2 as string) FROM t
 -- !query analysis
 Distinct
 +- Union false, false
-   :- Project [cast(CAST(1 AS SMALLINT)#x as string) AS CAST(1 AS SMALLINT)#x]
+   :- Project [cast(CAST(1 AS SMALLINT)#x as bigint) AS CAST(1 AS SMALLINT)#xL]
    :  +- Project [cast(1 as smallint) AS CAST(1 AS SMALLINT)#x]
    :     +- SubqueryAlias t
    :        +- View (`t`, [1#x])
    :           +- Project [cast(1#x as int) AS 1#x]
    :              +- Project [1 AS 1#x]
    :                 +- OneRowRelation
-   +- Project [cast(2 as string) AS CAST(2 AS STRING)#x]
-      +- SubqueryAlias t
-         +- View (`t`, [1#x])
-            +- Project [cast(1#x as int) AS 1#x]
-               +- Project [1 AS 1#x]
-                  +- OneRowRelation
+   +- Project [cast(CAST(2 AS STRING)#x as bigint) AS CAST(2 AS STRING)#xL]
+      +- Project [cast(2 as string) AS CAST(2 AS STRING)#x]
+         +- SubqueryAlias t
+            +- View (`t`, [1#x])
+               +- Project [cast(1#x as int) AS 1#x]
+                  +- Project [1 AS 1#x]
+                     +- OneRowRelation
 
 
 -- !query
@@ -609,19 +613,20 @@ SELECT cast(1 as int) FROM t UNION SELECT cast(2 as float) FROM t
 -- !query analysis
 Distinct
 +- Union false, false
-   :- Project [cast(CAST(1 AS INT)#x as float) AS CAST(1 AS INT)#x]
+   :- Project [cast(CAST(1 AS INT)#x as double) AS CAST(1 AS INT)#x]
    :  +- Project [cast(1 as int) AS CAST(1 AS INT)#x]
    :     +- SubqueryAlias t
    :        +- View (`t`, [1#x])
    :           +- Project [cast(1#x as int) AS 1#x]
    :              +- Project [1 AS 1#x]
    :                 +- OneRowRelation
-   +- Project [cast(2 as float) AS CAST(2 AS FLOAT)#x]
-      +- SubqueryAlias t
-         +- View (`t`, [1#x])
-            +- Project [cast(1#x as int) AS 1#x]
-               +- Project [1 AS 1#x]
-                  +- OneRowRelation
+   +- Project [cast(CAST(2 AS FLOAT)#x as double) AS CAST(2 AS FLOAT)#x]
+      +- Project [cast(2 as float) AS CAST(2 AS FLOAT)#x]
+         +- SubqueryAlias t
+            +- View (`t`, [1#x])
+               +- Project [cast(1#x as int) AS 1#x]
+                  +- Project [1 AS 1#x]
+                     +- OneRowRelation
 
 
 -- !query
@@ -669,19 +674,20 @@ SELECT cast(1 as int) FROM t UNION SELECT cast(2 as string) FROM t
 -- !query analysis
 Distinct
 +- Union false, false
-   :- Project [cast(CAST(1 AS INT)#x as string) AS CAST(1 AS INT)#x]
+   :- Project [cast(CAST(1 AS INT)#x as bigint) AS CAST(1 AS INT)#xL]
    :  +- Project [cast(1 as int) AS CAST(1 AS INT)#x]
    :     +- SubqueryAlias t
    :        +- View (`t`, [1#x])
    :           +- Project [cast(1#x as int) AS 1#x]
    :              +- Project [1 AS 1#x]
    :                 +- OneRowRelation
-   +- Project [cast(2 as string) AS CAST(2 AS STRING)#x]
-      +- SubqueryAlias t
-         +- View (`t`, [1#x])
-            +- Project [cast(1#x as int) AS 1#x]
-               +- Project [1 AS 1#x]
-                  +- OneRowRelation
+   +- Project [cast(CAST(2 AS STRING)#x as bigint) AS CAST(2 AS STRING)#xL]
+      +- Project [cast(2 as string) AS CAST(2 AS STRING)#x]
+         +- SubqueryAlias t
+            +- View (`t`, [1#x])
+               +- Project [cast(1#x as int) AS 1#x]
+                  +- Project [1 AS 1#x]
+                     +- OneRowRelation
 
 
 -- !query
@@ -868,19 +874,20 @@ SELECT cast(1 as bigint) FROM t UNION SELECT cast(2 as float) FROM t
 -- !query analysis
 Distinct
 +- Union false, false
-   :- Project [cast(CAST(1 AS BIGINT)#xL as float) AS CAST(1 AS BIGINT)#x]
+   :- Project [cast(CAST(1 AS BIGINT)#xL as double) AS CAST(1 AS BIGINT)#x]
    :  +- Project [cast(1 as bigint) AS CAST(1 AS BIGINT)#xL]
    :     +- SubqueryAlias t
    :        +- View (`t`, [1#x])
    :           +- Project [cast(1#x as int) AS 1#x]
    :              +- Project [1 AS 1#x]
    :                 +- OneRowRelation
-   +- Project [cast(2 as float) AS CAST(2 AS FLOAT)#x]
-      +- SubqueryAlias t
-         +- View (`t`, [1#x])
-            +- Project [cast(1#x as int) AS 1#x]
-               +- Project [1 AS 1#x]
-                  +- OneRowRelation
+   +- Project [cast(CAST(2 AS FLOAT)#x as double) AS CAST(2 AS FLOAT)#x]
+      +- Project [cast(2 as float) AS CAST(2 AS FLOAT)#x]
+         +- SubqueryAlias t
+            +- View (`t`, [1#x])
+               +- Project [cast(1#x as int) AS 1#x]
+                  +- Project [1 AS 1#x]
+                     +- OneRowRelation
 
 
 -- !query
@@ -929,19 +936,19 @@ SELECT cast(1 as bigint) FROM t UNION SELECT cast(2 as string) FROM t
 -- !query analysis
 Distinct
 +- Union false, false
-   :- Project [cast(CAST(1 AS BIGINT)#xL as string) AS CAST(1 AS BIGINT)#x]
-   :  +- Project [cast(1 as bigint) AS CAST(1 AS BIGINT)#xL]
-   :     +- SubqueryAlias t
-   :        +- View (`t`, [1#x])
-   :           +- Project [cast(1#x as int) AS 1#x]
-   :              +- Project [1 AS 1#x]
-   :                 +- OneRowRelation
-   +- Project [cast(2 as string) AS CAST(2 AS STRING)#x]
-      +- SubqueryAlias t
-         +- View (`t`, [1#x])
-            +- Project [cast(1#x as int) AS 1#x]
-               +- Project [1 AS 1#x]
-                  +- OneRowRelation
+   :- Project [cast(1 as bigint) AS CAST(1 AS BIGINT)#xL]
+   :  +- SubqueryAlias t
+   :     +- View (`t`, [1#x])
+   :        +- Project [cast(1#x as int) AS 1#x]
+   :           +- Project [1 AS 1#x]
+   :              +- OneRowRelation
+   +- Project [cast(CAST(2 AS STRING)#x as bigint) AS CAST(2 AS STRING)#xL]
+      +- Project [cast(2 as string) AS CAST(2 AS STRING)#x]
+         +- SubqueryAlias t
+            +- View (`t`, [1#x])
+               +- Project [cast(1#x as int) AS 1#x]
+                  +- Project [1 AS 1#x]
+                     +- OneRowRelation
 
 
 -- !query
@@ -1049,13 +1056,14 @@ SELECT cast(1 as float) FROM t UNION SELECT cast(2 as tinyint) FROM t
 -- !query analysis
 Distinct
 +- Union false, false
-   :- Project [cast(1 as float) AS CAST(1 AS FLOAT)#x]
-   :  +- SubqueryAlias t
-   :     +- View (`t`, [1#x])
-   :        +- Project [cast(1#x as int) AS 1#x]
-   :           +- Project [1 AS 1#x]
-   :              +- OneRowRelation
-   +- Project [cast(CAST(2 AS TINYINT)#x as float) AS CAST(2 AS TINYINT)#x]
+   :- Project [cast(CAST(1 AS FLOAT)#x as double) AS CAST(1 AS FLOAT)#x]
+   :  +- Project [cast(1 as float) AS CAST(1 AS FLOAT)#x]
+   :     +- SubqueryAlias t
+   :        +- View (`t`, [1#x])
+   :           +- Project [cast(1#x as int) AS 1#x]
+   :              +- Project [1 AS 1#x]
+   :                 +- OneRowRelation
+   +- Project [cast(CAST(2 AS TINYINT)#x as double) AS CAST(2 AS TINYINT)#x]
       +- Project [cast(2 as tinyint) AS CAST(2 AS TINYINT)#x]
          +- SubqueryAlias t
             +- View (`t`, [1#x])
@@ -1069,13 +1077,14 @@ SELECT cast(1 as float) FROM t UNION SELECT cast(2 as smallint) FROM t
 -- !query analysis
 Distinct
 +- Union false, false
-   :- Project [cast(1 as float) AS CAST(1 AS FLOAT)#x]
-   :  +- SubqueryAlias t
-   :     +- View (`t`, [1#x])
-   :        +- Project [cast(1#x as int) AS 1#x]
-   :           +- Project [1 AS 1#x]
-   :              +- OneRowRelation
-   +- Project [cast(CAST(2 AS SMALLINT)#x as float) AS CAST(2 AS SMALLINT)#x]
+   :- Project [cast(CAST(1 AS FLOAT)#x as double) AS CAST(1 AS FLOAT)#x]
+   :  +- Project [cast(1 as float) AS CAST(1 AS FLOAT)#x]
+   :     +- SubqueryAlias t
+   :        +- View (`t`, [1#x])
+   :           +- Project [cast(1#x as int) AS 1#x]
+   :              +- Project [1 AS 1#x]
+   :                 +- OneRowRelation
+   +- Project [cast(CAST(2 AS SMALLINT)#x as double) AS CAST(2 AS SMALLINT)#x]
       +- Project [cast(2 as smallint) AS CAST(2 AS SMALLINT)#x]
          +- SubqueryAlias t
             +- View (`t`, [1#x])
@@ -1089,13 +1098,14 @@ SELECT cast(1 as float) FROM t UNION SELECT cast(2 as int) FROM t
 -- !query analysis
 Distinct
 +- Union false, false
-   :- Project [cast(1 as float) AS CAST(1 AS FLOAT)#x]
-   :  +- SubqueryAlias t
-   :     +- View (`t`, [1#x])
-   :        +- Project [cast(1#x as int) AS 1#x]
-   :           +- Project [1 AS 1#x]
-   :              +- OneRowRelation
-   +- Project [cast(CAST(2 AS INT)#x as float) AS CAST(2 AS INT)#x]
+   :- Project [cast(CAST(1 AS FLOAT)#x as double) AS CAST(1 AS FLOAT)#x]
+   :  +- Project [cast(1 as float) AS CAST(1 AS FLOAT)#x]
+   :     +- SubqueryAlias t
+   :        +- View (`t`, [1#x])
+   :           +- Project [cast(1#x as int) AS 1#x]
+   :              +- Project [1 AS 1#x]
+   :                 +- OneRowRelation
+   +- Project [cast(CAST(2 AS INT)#x as double) AS CAST(2 AS INT)#x]
       +- Project [cast(2 as int) AS CAST(2 AS INT)#x]
          +- SubqueryAlias t
             +- View (`t`, [1#x])
@@ -1109,13 +1119,14 @@ SELECT cast(1 as float) FROM t UNION SELECT cast(2 as bigint) FROM t
 -- !query analysis
 Distinct
 +- Union false, false
-   :- Project [cast(1 as float) AS CAST(1 AS FLOAT)#x]
-   :  +- SubqueryAlias t
-   :     +- View (`t`, [1#x])
-   :        +- Project [cast(1#x as int) AS 1#x]
-   :           +- Project [1 AS 1#x]
-   :              +- OneRowRelation
-   +- Project [cast(CAST(2 AS BIGINT)#xL as float) AS CAST(2 AS BIGINT)#x]
+   :- Project [cast(CAST(1 AS FLOAT)#x as double) AS CAST(1 AS FLOAT)#x]
+   :  +- Project [cast(1 as float) AS CAST(1 AS FLOAT)#x]
+   :     +- SubqueryAlias t
+   :        +- View (`t`, [1#x])
+   :           +- Project [cast(1#x as int) AS 1#x]
+   :              +- Project [1 AS 1#x]
+   :                 +- OneRowRelation
+   +- Project [cast(CAST(2 AS BIGINT)#xL as double) AS CAST(2 AS BIGINT)#x]
       +- Project [cast(2 as bigint) AS CAST(2 AS BIGINT)#xL]
          +- SubqueryAlias t
             +- View (`t`, [1#x])
@@ -1189,19 +1200,20 @@ SELECT cast(1 as float) FROM t UNION SELECT cast(2 as string) FROM t
 -- !query analysis
 Distinct
 +- Union false, false
-   :- Project [cast(CAST(1 AS FLOAT)#x as string) AS CAST(1 AS FLOAT)#x]
+   :- Project [cast(CAST(1 AS FLOAT)#x as double) AS CAST(1 AS FLOAT)#x]
    :  +- Project [cast(1 as float) AS CAST(1 AS FLOAT)#x]
    :     +- SubqueryAlias t
    :        +- View (`t`, [1#x])
    :           +- Project [cast(1#x as int) AS 1#x]
    :              +- Project [1 AS 1#x]
    :                 +- OneRowRelation
-   +- Project [cast(2 as string) AS CAST(2 AS STRING)#x]
-      +- SubqueryAlias t
-         +- View (`t`, [1#x])
-            +- Project [cast(1#x as int) AS 1#x]
-               +- Project [1 AS 1#x]
-                  +- OneRowRelation
+   +- Project [cast(CAST(2 AS STRING)#x as double) AS CAST(2 AS STRING)#x]
+      +- Project [cast(2 as string) AS CAST(2 AS STRING)#x]
+         +- SubqueryAlias t
+            +- View (`t`, [1#x])
+               +- Project [cast(1#x as int) AS 1#x]
+                  +- Project [1 AS 1#x]
+                     +- OneRowRelation
 
 
 -- !query
@@ -1448,19 +1460,19 @@ SELECT cast(1 as double) FROM t UNION SELECT cast(2 as string) FROM t
 -- !query analysis
 Distinct
 +- Union false, false
-   :- Project [cast(CAST(1 AS DOUBLE)#x as string) AS CAST(1 AS DOUBLE)#x]
-   :  +- Project [cast(1 as double) AS CAST(1 AS DOUBLE)#x]
-   :     +- SubqueryAlias t
-   :        +- View (`t`, [1#x])
-   :           +- Project [cast(1#x as int) AS 1#x]
-   :              +- Project [1 AS 1#x]
-   :                 +- OneRowRelation
-   +- Project [cast(2 as string) AS CAST(2 AS STRING)#x]
-      +- SubqueryAlias t
-         +- View (`t`, [1#x])
-            +- Project [cast(1#x as int) AS 1#x]
-               +- Project [1 AS 1#x]
-                  +- OneRowRelation
+   :- Project [cast(1 as double) AS CAST(1 AS DOUBLE)#x]
+   :  +- SubqueryAlias t
+   :     +- View (`t`, [1#x])
+   :        +- Project [cast(1#x as int) AS 1#x]
+   :           +- Project [1 AS 1#x]
+   :              +- OneRowRelation
+   +- Project [cast(CAST(2 AS STRING)#x as double) AS CAST(2 AS STRING)#x]
+      +- Project [cast(2 as string) AS CAST(2 AS STRING)#x]
+         +- SubqueryAlias t
+            +- View (`t`, [1#x])
+               +- Project [cast(1#x as int) AS 1#x]
+                  +- Project [1 AS 1#x]
+                     +- OneRowRelation
 
 
 -- !query
@@ -1709,19 +1721,20 @@ SELECT cast(1 as decimal(10, 0)) FROM t UNION SELECT cast(2 as string) FROM t
 -- !query analysis
 Distinct
 +- Union false, false
-   :- Project [cast(CAST(1 AS DECIMAL(10,0))#x as string) AS CAST(1 AS DECIMAL(10,0))#x]
+   :- Project [cast(CAST(1 AS DECIMAL(10,0))#x as double) AS CAST(1 AS DECIMAL(10,0))#x]
    :  +- Project [cast(1 as decimal(10,0)) AS CAST(1 AS DECIMAL(10,0))#x]
    :     +- SubqueryAlias t
    :        +- View (`t`, [1#x])
    :           +- Project [cast(1#x as int) AS 1#x]
    :              +- Project [1 AS 1#x]
    :                 +- OneRowRelation
-   +- Project [cast(2 as string) AS CAST(2 AS STRING)#x]
-      +- SubqueryAlias t
-         +- View (`t`, [1#x])
-            +- Project [cast(1#x as int) AS 1#x]
-               +- Project [1 AS 1#x]
-                  +- OneRowRelation
+   +- Project [cast(CAST(2 AS STRING)#x as double) AS CAST(2 AS STRING)#x]
+      +- Project [cast(2 as string) AS CAST(2 AS STRING)#x]
+         +- SubqueryAlias t
+            +- View (`t`, [1#x])
+               +- Project [cast(1#x as int) AS 1#x]
+                  +- Project [1 AS 1#x]
+                     +- OneRowRelation
 
 
 -- !query
@@ -1829,13 +1842,14 @@ SELECT cast(1 as string) FROM t UNION SELECT cast(2 as tinyint) FROM t
 -- !query analysis
 Distinct
 +- Union false, false
-   :- Project [cast(1 as string) AS CAST(1 AS STRING)#x]
-   :  +- SubqueryAlias t
-   :     +- View (`t`, [1#x])
-   :        +- Project [cast(1#x as int) AS 1#x]
-   :           +- Project [1 AS 1#x]
-   :              +- OneRowRelation
-   +- Project [cast(CAST(2 AS TINYINT)#x as string) AS CAST(2 AS TINYINT)#x]
+   :- Project [cast(CAST(1 AS STRING)#x as bigint) AS CAST(1 AS STRING)#xL]
+   :  +- Project [cast(1 as string) AS CAST(1 AS STRING)#x]
+   :     +- SubqueryAlias t
+   :        +- View (`t`, [1#x])
+   :           +- Project [cast(1#x as int) AS 1#x]
+   :              +- Project [1 AS 1#x]
+   :                 +- OneRowRelation
+   +- Project [cast(CAST(2 AS TINYINT)#x as bigint) AS CAST(2 AS TINYINT)#xL]
       +- Project [cast(2 as tinyint) AS CAST(2 AS TINYINT)#x]
          +- SubqueryAlias t
             +- View (`t`, [1#x])
@@ -1849,13 +1863,14 @@ SELECT cast(1 as string) FROM t UNION SELECT cast(2 as smallint) FROM t
 -- !query analysis
 Distinct
 +- Union false, false
-   :- Project [cast(1 as string) AS CAST(1 AS STRING)#x]
-   :  +- SubqueryAlias t
-   :     +- View (`t`, [1#x])
-   :        +- Project [cast(1#x as int) AS 1#x]
-   :           +- Project [1 AS 1#x]
-   :              +- OneRowRelation
-   +- Project [cast(CAST(2 AS SMALLINT)#x as string) AS CAST(2 AS SMALLINT)#x]
+   :- Project [cast(CAST(1 AS STRING)#x as bigint) AS CAST(1 AS STRING)#xL]
+   :  +- Project [cast(1 as string) AS CAST(1 AS STRING)#x]
+   :     +- SubqueryAlias t
+   :        +- View (`t`, [1#x])
+   :           +- Project [cast(1#x as int) AS 1#x]
+   :              +- Project [1 AS 1#x]
+   :                 +- OneRowRelation
+   +- Project [cast(CAST(2 AS SMALLINT)#x as bigint) AS CAST(2 AS SMALLINT)#xL]
       +- Project [cast(2 as smallint) AS CAST(2 AS SMALLINT)#x]
          +- SubqueryAlias t
             +- View (`t`, [1#x])
@@ -1869,13 +1884,14 @@ SELECT cast(1 as string) FROM t UNION SELECT cast(2 as int) FROM t
 -- !query analysis
 Distinct
 +- Union false, false
-   :- Project [cast(1 as string) AS CAST(1 AS STRING)#x]
-   :  +- SubqueryAlias t
-   :     +- View (`t`, [1#x])
-   :        +- Project [cast(1#x as int) AS 1#x]
-   :           +- Project [1 AS 1#x]
-   :              +- OneRowRelation
-   +- Project [cast(CAST(2 AS INT)#x as string) AS CAST(2 AS INT)#x]
+   :- Project [cast(CAST(1 AS STRING)#x as bigint) AS CAST(1 AS STRING)#xL]
+   :  +- Project [cast(1 as string) AS CAST(1 AS STRING)#x]
+   :     +- SubqueryAlias t
+   :        +- View (`t`, [1#x])
+   :           +- Project [cast(1#x as int) AS 1#x]
+   :              +- Project [1 AS 1#x]
+   :                 +- OneRowRelation
+   +- Project [cast(CAST(2 AS INT)#x as bigint) AS CAST(2 AS INT)#xL]
       +- Project [cast(2 as int) AS CAST(2 AS INT)#x]
          +- SubqueryAlias t
             +- View (`t`, [1#x])
@@ -1889,19 +1905,19 @@ SELECT cast(1 as string) FROM t UNION SELECT cast(2 as bigint) FROM t
 -- !query analysis
 Distinct
 +- Union false, false
-   :- Project [cast(1 as string) AS CAST(1 AS STRING)#x]
-   :  +- SubqueryAlias t
-   :     +- View (`t`, [1#x])
-   :        +- Project [cast(1#x as int) AS 1#x]
-   :           +- Project [1 AS 1#x]
-   :              +- OneRowRelation
-   +- Project [cast(CAST(2 AS BIGINT)#xL as string) AS CAST(2 AS BIGINT)#x]
-      +- Project [cast(2 as bigint) AS CAST(2 AS BIGINT)#xL]
-         +- SubqueryAlias t
-            +- View (`t`, [1#x])
-               +- Project [cast(1#x as int) AS 1#x]
-                  +- Project [1 AS 1#x]
-                     +- OneRowRelation
+   :- Project [cast(CAST(1 AS STRING)#x as bigint) AS CAST(1 AS STRING)#xL]
+   :  +- Project [cast(1 as string) AS CAST(1 AS STRING)#x]
+   :     +- SubqueryAlias t
+   :        +- View (`t`, [1#x])
+   :           +- Project [cast(1#x as int) AS 1#x]
+   :              +- Project [1 AS 1#x]
+   :                 +- OneRowRelation
+   +- Project [cast(2 as bigint) AS CAST(2 AS BIGINT)#xL]
+      +- SubqueryAlias t
+         +- View (`t`, [1#x])
+            +- Project [cast(1#x as int) AS 1#x]
+               +- Project [1 AS 1#x]
+                  +- OneRowRelation
 
 
 -- !query
@@ -1909,13 +1925,14 @@ SELECT cast(1 as string) FROM t UNION SELECT cast(2 as float) FROM t
 -- !query analysis
 Distinct
 +- Union false, false
-   :- Project [cast(1 as string) AS CAST(1 AS STRING)#x]
-   :  +- SubqueryAlias t
-   :     +- View (`t`, [1#x])
-   :        +- Project [cast(1#x as int) AS 1#x]
-   :           +- Project [1 AS 1#x]
-   :              +- OneRowRelation
-   +- Project [cast(CAST(2 AS FLOAT)#x as string) AS CAST(2 AS FLOAT)#x]
+   :- Project [cast(CAST(1 AS STRING)#x as double) AS CAST(1 AS STRING)#x]
+   :  +- Project [cast(1 as string) AS CAST(1 AS STRING)#x]
+   :     +- SubqueryAlias t
+   :        +- View (`t`, [1#x])
+   :           +- Project [cast(1#x as int) AS 1#x]
+   :              +- Project [1 AS 1#x]
+   :                 +- OneRowRelation
+   +- Project [cast(CAST(2 AS FLOAT)#x as double) AS CAST(2 AS FLOAT)#x]
       +- Project [cast(2 as float) AS CAST(2 AS FLOAT)#x]
          +- SubqueryAlias t
             +- View (`t`, [1#x])
@@ -1929,19 +1946,19 @@ SELECT cast(1 as string) FROM t UNION SELECT cast(2 as double) FROM t
 -- !query analysis
 Distinct
 +- Union false, false
-   :- Project [cast(1 as string) AS CAST(1 AS STRING)#x]
-   :  +- SubqueryAlias t
-   :     +- View (`t`, [1#x])
-   :        +- Project [cast(1#x as int) AS 1#x]
-   :           +- Project [1 AS 1#x]
-   :              +- OneRowRelation
-   +- Project [cast(CAST(2 AS DOUBLE)#x as string) AS CAST(2 AS DOUBLE)#x]
-      +- Project [cast(2 as double) AS CAST(2 AS DOUBLE)#x]
-         +- SubqueryAlias t
-            +- View (`t`, [1#x])
-               +- Project [cast(1#x as int) AS 1#x]
-                  +- Project [1 AS 1#x]
-                     +- OneRowRelation
+   :- Project [cast(CAST(1 AS STRING)#x as double) AS CAST(1 AS STRING)#x]
+   :  +- Project [cast(1 as string) AS CAST(1 AS STRING)#x]
+   :     +- SubqueryAlias t
+   :        +- View (`t`, [1#x])
+   :           +- Project [cast(1#x as int) AS 1#x]
+   :              +- Project [1 AS 1#x]
+   :                 +- OneRowRelation
+   +- Project [cast(2 as double) AS CAST(2 AS DOUBLE)#x]
+      +- SubqueryAlias t
+         +- View (`t`, [1#x])
+            +- Project [cast(1#x as int) AS 1#x]
+               +- Project [1 AS 1#x]
+                  +- OneRowRelation
 
 
 -- !query
@@ -1949,13 +1966,14 @@ SELECT cast(1 as string) FROM t UNION SELECT cast(2 as decimal(10, 0)) FROM t
 -- !query analysis
 Distinct
 +- Union false, false
-   :- Project [cast(1 as string) AS CAST(1 AS STRING)#x]
-   :  +- SubqueryAlias t
-   :     +- View (`t`, [1#x])
-   :        +- Project [cast(1#x as int) AS 1#x]
-   :           +- Project [1 AS 1#x]
-   :              +- OneRowRelation
-   +- Project [cast(CAST(2 AS DECIMAL(10,0))#x as string) AS CAST(2 AS DECIMAL(10,0))#x]
+   :- Project [cast(CAST(1 AS STRING)#x as double) AS CAST(1 AS STRING)#x]
+   :  +- Project [cast(1 as string) AS CAST(1 AS STRING)#x]
+   :     +- SubqueryAlias t
+   :        +- View (`t`, [1#x])
+   :           +- Project [cast(1#x as int) AS 1#x]
+   :              +- Project [1 AS 1#x]
+   :                 +- OneRowRelation
+   +- Project [cast(CAST(2 AS DECIMAL(10,0))#x as double) AS CAST(2 AS DECIMAL(10,0))#x]
       +- Project [cast(2 as decimal(10,0)) AS CAST(2 AS DECIMAL(10,0))#x]
          +- SubqueryAlias t
             +- View (`t`, [1#x])
@@ -1986,51 +2004,41 @@ Distinct
 -- !query
 SELECT cast(1 as string) FROM t UNION SELECT cast('2' as binary) FROM t
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
-  "sqlState" : "42825",
-  "messageParameters" : {
-    "columnOrdinalNumber" : "first",
-    "dataType1" : "\"BINARY\"",
-    "dataType2" : "\"STRING\"",
-    "hint" : "",
-    "operator" : "UNION",
-    "tableOrdinalNumber" : "second"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 71,
-    "fragment" : "SELECT cast(1 as string) FROM t UNION SELECT cast('2' as binary) FROM t"
-  } ]
-}
+Distinct
++- Union false, false
+   :- Project [cast(CAST(1 AS STRING)#x as binary) AS CAST(1 AS STRING)#x]
+   :  +- Project [cast(1 as string) AS CAST(1 AS STRING)#x]
+   :     +- SubqueryAlias t
+   :        +- View (`t`, [1#x])
+   :           +- Project [cast(1#x as int) AS 1#x]
+   :              +- Project [1 AS 1#x]
+   :                 +- OneRowRelation
+   +- Project [cast(2 as binary) AS CAST(2 AS BINARY)#x]
+      +- SubqueryAlias t
+         +- View (`t`, [1#x])
+            +- Project [cast(1#x as int) AS 1#x]
+               +- Project [1 AS 1#x]
+                  +- OneRowRelation
 
 
 -- !query
 SELECT cast(1 as string) FROM t UNION SELECT cast(2 as boolean) FROM t
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
-  "sqlState" : "42825",
-  "messageParameters" : {
-    "columnOrdinalNumber" : "first",
-    "dataType1" : "\"BOOLEAN\"",
-    "dataType2" : "\"STRING\"",
-    "hint" : "",
-    "operator" : "UNION",
-    "tableOrdinalNumber" : "second"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 70,
-    "fragment" : "SELECT cast(1 as string) FROM t UNION SELECT cast(2 as boolean) FROM t"
-  } ]
-}
+Distinct
++- Union false, false
+   :- Project [cast(CAST(1 AS STRING)#x as boolean) AS CAST(1 AS STRING)#x]
+   :  +- Project [cast(1 as string) AS CAST(1 AS STRING)#x]
+   :     +- SubqueryAlias t
+   :        +- View (`t`, [1#x])
+   :           +- Project [cast(1#x as int) AS 1#x]
+   :              +- Project [1 AS 1#x]
+   :                 +- OneRowRelation
+   +- Project [cast(2 as boolean) AS CAST(2 AS BOOLEAN)#x]
+      +- SubqueryAlias t
+         +- View (`t`, [1#x])
+            +- Project [cast(1#x as int) AS 1#x]
+               +- Project [1 AS 1#x]
+                  +- OneRowRelation
 
 
 -- !query
@@ -2038,19 +2046,19 @@ SELECT cast(1 as string) FROM t UNION SELECT cast('2017-12-11 09:30:00.0' as tim
 -- !query analysis
 Distinct
 +- Union false, false
-   :- Project [cast(1 as string) AS CAST(1 AS STRING)#x]
-   :  +- SubqueryAlias t
-   :     +- View (`t`, [1#x])
-   :        +- Project [cast(1#x as int) AS 1#x]
-   :           +- Project [1 AS 1#x]
-   :              +- OneRowRelation
-   +- Project [cast(CAST(2017-12-11 09:30:00.0 AS TIMESTAMP)#x as string) AS CAST(2017-12-11 09:30:00.0 AS TIMESTAMP)#x]
-      +- Project [cast(2017-12-11 09:30:00.0 as timestamp) AS CAST(2017-12-11 09:30:00.0 AS TIMESTAMP)#x]
-         +- SubqueryAlias t
-            +- View (`t`, [1#x])
-               +- Project [cast(1#x as int) AS 1#x]
-                  +- Project [1 AS 1#x]
-                     +- OneRowRelation
+   :- Project [cast(CAST(1 AS STRING)#x as timestamp) AS CAST(1 AS STRING)#x]
+   :  +- Project [cast(1 as string) AS CAST(1 AS STRING)#x]
+   :     +- SubqueryAlias t
+   :        +- View (`t`, [1#x])
+   :           +- Project [cast(1#x as int) AS 1#x]
+   :              +- Project [1 AS 1#x]
+   :                 +- OneRowRelation
+   +- Project [cast(2017-12-11 09:30:00.0 as timestamp) AS CAST(2017-12-11 09:30:00.0 AS TIMESTAMP)#x]
+      +- SubqueryAlias t
+         +- View (`t`, [1#x])
+            +- Project [cast(1#x as int) AS 1#x]
+               +- Project [1 AS 1#x]
+                  +- OneRowRelation
 
 
 -- !query
@@ -2058,19 +2066,19 @@ SELECT cast(1 as string) FROM t UNION SELECT cast('2017-12-11 09:30:00' as date)
 -- !query analysis
 Distinct
 +- Union false, false
-   :- Project [cast(1 as string) AS CAST(1 AS STRING)#x]
-   :  +- SubqueryAlias t
-   :     +- View (`t`, [1#x])
-   :        +- Project [cast(1#x as int) AS 1#x]
-   :           +- Project [1 AS 1#x]
-   :              +- OneRowRelation
-   +- Project [cast(CAST(2017-12-11 09:30:00 AS DATE)#x as string) AS CAST(2017-12-11 09:30:00 AS DATE)#x]
-      +- Project [cast(2017-12-11 09:30:00 as date) AS CAST(2017-12-11 09:30:00 AS DATE)#x]
-         +- SubqueryAlias t
-            +- View (`t`, [1#x])
-               +- Project [cast(1#x as int) AS 1#x]
-                  +- Project [1 AS 1#x]
-                     +- OneRowRelation
+   :- Project [cast(CAST(1 AS STRING)#x as date) AS CAST(1 AS STRING)#x]
+   :  +- Project [cast(1 as string) AS CAST(1 AS STRING)#x]
+   :     +- SubqueryAlias t
+   :        +- View (`t`, [1#x])
+   :           +- Project [cast(1#x as int) AS 1#x]
+   :              +- Project [1 AS 1#x]
+   :                 +- OneRowRelation
+   +- Project [cast(2017-12-11 09:30:00 as date) AS CAST(2017-12-11 09:30:00 AS DATE)#x]
+      +- SubqueryAlias t
+         +- View (`t`, [1#x])
+            +- Project [cast(1#x as int) AS 1#x]
+               +- Project [1 AS 1#x]
+                  +- OneRowRelation
 
 
 -- !query
@@ -2251,26 +2259,21 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 SELECT cast('1' as binary) FROM t UNION SELECT cast(2 as string) FROM t
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
-  "sqlState" : "42825",
-  "messageParameters" : {
-    "columnOrdinalNumber" : "first",
-    "dataType1" : "\"STRING\"",
-    "dataType2" : "\"BINARY\"",
-    "hint" : "",
-    "operator" : "UNION",
-    "tableOrdinalNumber" : "second"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 71,
-    "fragment" : "SELECT cast('1' as binary) FROM t UNION SELECT cast(2 as string) FROM t"
-  } ]
-}
+Distinct
++- Union false, false
+   :- Project [cast(1 as binary) AS CAST(1 AS BINARY)#x]
+   :  +- SubqueryAlias t
+   :     +- View (`t`, [1#x])
+   :        +- Project [cast(1#x as int) AS 1#x]
+   :           +- Project [1 AS 1#x]
+   :              +- OneRowRelation
+   +- Project [cast(CAST(2 AS STRING)#x as binary) AS CAST(2 AS STRING)#x]
+      +- Project [cast(2 as string) AS CAST(2 AS STRING)#x]
+         +- SubqueryAlias t
+            +- View (`t`, [1#x])
+               +- Project [cast(1#x as int) AS 1#x]
+                  +- Project [1 AS 1#x]
+                     +- OneRowRelation
 
 
 -- !query
@@ -2545,26 +2548,21 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 SELECT cast(1 as boolean) FROM t UNION SELECT cast(2 as string) FROM t
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
-  "sqlState" : "42825",
-  "messageParameters" : {
-    "columnOrdinalNumber" : "first",
-    "dataType1" : "\"STRING\"",
-    "dataType2" : "\"BOOLEAN\"",
-    "hint" : "",
-    "operator" : "UNION",
-    "tableOrdinalNumber" : "second"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 70,
-    "fragment" : "SELECT cast(1 as boolean) FROM t UNION SELECT cast(2 as string) FROM t"
-  } ]
-}
+Distinct
++- Union false, false
+   :- Project [cast(1 as boolean) AS CAST(1 AS BOOLEAN)#x]
+   :  +- SubqueryAlias t
+   :     +- View (`t`, [1#x])
+   :        +- Project [cast(1#x as int) AS 1#x]
+   :           +- Project [1 AS 1#x]
+   :              +- OneRowRelation
+   +- Project [cast(CAST(2 AS STRING)#x as boolean) AS CAST(2 AS STRING)#x]
+      +- Project [cast(2 as string) AS CAST(2 AS STRING)#x]
+         +- SubqueryAlias t
+            +- View (`t`, [1#x])
+               +- Project [cast(1#x as int) AS 1#x]
+                  +- Project [1 AS 1#x]
+                     +- OneRowRelation
 
 
 -- !query
@@ -2841,19 +2839,19 @@ SELECT cast('2017-12-12 09:30:00.0' as timestamp) FROM t UNION SELECT cast(2 as 
 -- !query analysis
 Distinct
 +- Union false, false
-   :- Project [cast(CAST(2017-12-12 09:30:00.0 AS TIMESTAMP)#x as string) AS CAST(2017-12-12 09:30:00.0 AS TIMESTAMP)#x]
-   :  +- Project [cast(2017-12-12 09:30:00.0 as timestamp) AS CAST(2017-12-12 09:30:00.0 AS TIMESTAMP)#x]
-   :     +- SubqueryAlias t
-   :        +- View (`t`, [1#x])
-   :           +- Project [cast(1#x as int) AS 1#x]
-   :              +- Project [1 AS 1#x]
-   :                 +- OneRowRelation
-   +- Project [cast(2 as string) AS CAST(2 AS STRING)#x]
-      +- SubqueryAlias t
-         +- View (`t`, [1#x])
-            +- Project [cast(1#x as int) AS 1#x]
-               +- Project [1 AS 1#x]
-                  +- OneRowRelation
+   :- Project [cast(2017-12-12 09:30:00.0 as timestamp) AS CAST(2017-12-12 09:30:00.0 AS TIMESTAMP)#x]
+   :  +- SubqueryAlias t
+   :     +- View (`t`, [1#x])
+   :        +- Project [cast(1#x as int) AS 1#x]
+   :           +- Project [1 AS 1#x]
+   :              +- OneRowRelation
+   +- Project [cast(CAST(2 AS STRING)#x as timestamp) AS CAST(2 AS STRING)#x]
+      +- Project [cast(2 as string) AS CAST(2 AS STRING)#x]
+         +- SubqueryAlias t
+            +- View (`t`, [1#x])
+               +- Project [cast(1#x as int) AS 1#x]
+                  +- Project [1 AS 1#x]
+                     +- OneRowRelation
 
 
 -- !query
@@ -3125,19 +3123,19 @@ SELECT cast('2017-12-12 09:30:00' as date) FROM t UNION SELECT cast(2 as string)
 -- !query analysis
 Distinct
 +- Union false, false
-   :- Project [cast(CAST(2017-12-12 09:30:00 AS DATE)#x as string) AS CAST(2017-12-12 09:30:00 AS DATE)#x]
-   :  +- Project [cast(2017-12-12 09:30:00 as date) AS CAST(2017-12-12 09:30:00 AS DATE)#x]
-   :     +- SubqueryAlias t
-   :        +- View (`t`, [1#x])
-   :           +- Project [cast(1#x as int) AS 1#x]
-   :              +- Project [1 AS 1#x]
-   :                 +- OneRowRelation
-   +- Project [cast(2 as string) AS CAST(2 AS STRING)#x]
-      +- SubqueryAlias t
-         +- View (`t`, [1#x])
-            +- Project [cast(1#x as int) AS 1#x]
-               +- Project [1 AS 1#x]
-                  +- OneRowRelation
+   :- Project [cast(2017-12-12 09:30:00 as date) AS CAST(2017-12-12 09:30:00 AS DATE)#x]
+   :  +- SubqueryAlias t
+   :     +- View (`t`, [1#x])
+   :        +- Project [cast(1#x as int) AS 1#x]
+   :           +- Project [1 AS 1#x]
+   :              +- OneRowRelation
+   +- Project [cast(CAST(2 AS STRING)#x as date) AS CAST(2 AS STRING)#x]
+      +- Project [cast(2 as string) AS CAST(2 AS STRING)#x]
+         +- SubqueryAlias t
+            +- View (`t`, [1#x])
+               +- Project [cast(1#x as int) AS 1#x]
+                  +- Project [1 AS 1#x]
+                     +- OneRowRelation
 
 
 -- !query

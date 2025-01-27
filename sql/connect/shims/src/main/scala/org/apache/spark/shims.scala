@@ -17,3 +17,34 @@
 package org.apache.spark
 
 class SparkContext
+class SparkConf {
+  def getAll: Array[(String, String)] = Array.empty
+}
+
+package api.java {
+  class JavaRDD[T]
+}
+
+package rdd {
+  class RDD[T]
+}
+
+package sql {
+  class ExperimentalMethods
+  class SparkSessionExtensions
+
+  package execution {
+    class QueryExecution
+    class SparkStrategy
+  }
+  package internal {
+    class SharedState
+    class SessionState
+  }
+  package util {
+    class ExecutionListenerManager
+  }
+  package sources {
+    class BaseRelation
+  }
+}

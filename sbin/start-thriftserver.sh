@@ -52,7 +52,7 @@ function usage {
 
 if [[ "$@" = *--help ]] || [[ "$@" = *-h ]]; then
   usage
-  exit 1
+  exit 0
 fi
 
 export SUBMIT_USAGE_FUNCTION=usage

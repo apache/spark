@@ -61,9 +61,10 @@ import org.apache.spark.util.ArrayImplicits._
   since = "1.5.0",
   group = "hash_funcs")
 case class Md5(child: Expression)
-  extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
-
-  override def dataType: DataType = SQLConf.get.defaultStringType
+  extends UnaryExpression
+  with ImplicitCastInputTypes
+  with DefaultStringProducingExpression {
+  override def nullIntolerant: Boolean = true
 
   override def inputTypes: Seq[DataType] = Seq(BinaryType)
 
@@ -101,9 +102,12 @@ case class Md5(child: Expression)
   group = "hash_funcs")
 // scalastyle:on line.size.limit
 case class Sha2(left: Expression, right: Expression)
-  extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant with Serializable {
+  extends BinaryExpression
+  with ImplicitCastInputTypes
+  with Serializable
+  with DefaultStringProducingExpression {
+  override def nullIntolerant: Boolean = true
 
-  override def dataType: DataType = SQLConf.get.defaultStringType
   override def nullable: Boolean = true
 
   override def inputTypes: Seq[DataType] = Seq(BinaryType, IntegerType)
@@ -167,9 +171,10 @@ case class Sha2(left: Expression, right: Expression)
   since = "1.5.0",
   group = "hash_funcs")
 case class Sha1(child: Expression)
-  extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
-
-  override def dataType: DataType = SQLConf.get.defaultStringType
+  extends UnaryExpression
+  with ImplicitCastInputTypes
+  with DefaultStringProducingExpression {
+  override def nullIntolerant: Boolean = true
 
   override def inputTypes: Seq[DataType] = Seq(BinaryType)
 
@@ -199,7 +204,8 @@ case class Sha1(child: Expression)
   since = "1.5.0",
   group = "hash_funcs")
 case class Crc32(child: Expression)
-  extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
+  extends UnaryExpression with ImplicitCastInputTypes {
+  override def nullIntolerant: Boolean = true
 
   override def dataType: DataType = LongType
 
@@ -415,7 +421,7 @@ abstract class HashExpression[E] extends Expression {
 
   protected def genHashString(
       ctx: CodegenContext, stringType: StringType, input: String, result: String): String = {
-    if (stringType.supportsBinaryEquality && !stringType.usesTrimCollation) {
+    if (stringType.supportsBinaryEquality) {
       val baseObject = s"$input.getBaseObject()"
       val baseOffset = s"$input.getBaseOffset()"
       val numBytes = s"$input.numBytes()"
@@ -566,7 +572,7 @@ abstract class InterpretedHashFunction {
         hashUnsafeBytes(a, Platform.BYTE_ARRAY_OFFSET, a.length, seed)
       case s: UTF8String =>
         val st = dataType.asInstanceOf[StringType]
-        if (st.supportsBinaryEquality && !st.usesTrimCollation) {
+        if (st.supportsBinaryEquality) {
           hashUnsafeBytes(s.getBaseObject, s.getBaseOffset, s.numBytes(), seed)
         } else {
           val stringHash = CollationFactory
@@ -817,7 +823,7 @@ case class HiveHash(children: Seq[Expression]) extends HashExpression[Int] {
 
   override protected def genHashString(
       ctx: CodegenContext, stringType: StringType, input: String, result: String): String = {
-    if (stringType.supportsBinaryEquality && !stringType.usesTrimCollation) {
+    if (stringType.supportsBinaryEquality) {
       val baseObject = s"$input.getBaseObject()"
       val baseOffset = s"$input.getBaseOffset()"
       val numBytes = s"$input.numBytes()"

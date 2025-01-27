@@ -255,8 +255,10 @@ class XmlSuite
           .option("mode", FailFastMode.name)
           .xml(inputFile)
       },
-      condition = "_LEGACY_ERROR_TEMP_2165",
-      parameters = Map("failFastMode" -> "FAILFAST")
+      condition = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
+      parameters = Map(
+        "badRecord" -> "_corrupt_record",
+        "failFastMode" -> "FAILFAST")
     )
     val exceptionInParsing = intercept[SparkException] {
       spark.read
@@ -288,8 +290,10 @@ class XmlSuite
           .option("mode", FailFastMode.name)
           .xml(inputFile)
       },
-      condition = "_LEGACY_ERROR_TEMP_2165",
-      parameters = Map("failFastMode" -> "FAILFAST"))
+      condition = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
+      parameters = Map(
+        "badRecord" -> "_corrupt_record",
+        "failFastMode" -> "FAILFAST"))
     val exceptionInParsing = intercept[SparkException] {
       spark.read
         .schema("_id string")
@@ -1315,12 +1319,10 @@ class XmlSuite
         spark.sql(s"""SELECT schema_of_xml('<ROW><a>1<ROW>', map('mode', 'DROPMALFORMED'))""")
           .collect()
       },
-      condition = "_LEGACY_ERROR_TEMP_1099",
+      condition = "PARSE_MODE_UNSUPPORTED",
       parameters = Map(
-        "funcName" -> "schema_of_xml",
-        "mode" -> "DROPMALFORMED",
-        "permissiveMode" -> "PERMISSIVE",
-        "failFastMode" -> FailFastMode.name)
+        "funcName" -> "`schema_of_xml`",
+        "mode" -> "DROPMALFORMED")
     )
   }
 
@@ -1330,9 +1332,10 @@ class XmlSuite
         spark.sql(s"""SELECT schema_of_xml('<ROW><a>1<ROW>', map('mode', 'FAILFAST'))""")
           .collect()
       },
-      condition = "_LEGACY_ERROR_TEMP_2165",
+      condition = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
       parameters = Map(
-        "failFastMode" -> FailFastMode.name)
+        "badRecord" -> "_corrupt_record",
+        "failFastMode" -> "FAILFAST")
     )
   }
 
@@ -1927,7 +1930,7 @@ class XmlSuite
     }
 
     checkXmlOptionErrorMessage(Map.empty,
-      "[XML_ROW_TAG_MISSING] `rowTag` option is required for reading files in XML format.",
+      "[XML_ROW_TAG_MISSING] `rowTag` option is required for reading/writing files in XML format.",
       QueryCompilationErrors.xmlRowTagRequiredError(XmlOptions.ROW_TAG).getCause)
     checkXmlOptionErrorMessage(Map("rowTag" -> ""),
       "'rowTag' option should not be an empty string.")
@@ -1946,6 +1949,20 @@ class XmlSuite
       .option("rowTag", "ROW")
       .schema(schema)
       .xml(spark.createDataset(Seq(xmlString)))
+  }
+
+  test("SPARK-50688: rowTag requirement for write") {
+    withTempDir { dir =>
+      dir.delete()
+      val e = intercept[AnalysisException] {
+        spark.range(1).write.xml(dir.getCanonicalPath)
+      }
+      checkError(
+        exception = e,
+        condition = "XML_ROW_TAG_MISSING",
+        parameters = Map("rowTag" -> "`rowTag`")
+      )
+    }
   }
 
   test("Primitive field casting") {

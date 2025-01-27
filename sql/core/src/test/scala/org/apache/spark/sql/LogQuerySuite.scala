@@ -21,7 +21,7 @@ import java.io.File
 
 import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.util.LogUtils.LOG_SCHEMA
+import org.apache.spark.util.LogUtils.SPARK_LOG_SCHEMA
 
 /**
  * Test suite for querying Spark logs using SQL.
@@ -33,16 +33,26 @@ class LogQuerySuite extends QueryTest with SharedSparkSession with Logging {
     new File(pwd + "/target/LogQuerySuite.log")
   }
 
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    Logging.enableStructuredLogging()
+  }
+
   override def afterAll(): Unit = {
     super.afterAll()
     // Clear the log file
     if (logFile.exists()) {
       logFile.delete()
     }
+    Logging.disableStructuredLogging()
   }
 
   private def createTempView(viewName: String): Unit = {
-    spark.read.schema(LOG_SCHEMA).json(logFile.getCanonicalPath).createOrReplaceTempView(viewName)
+    spark
+      .read
+      .schema(SPARK_LOG_SCHEMA)
+      .json(logFile.getCanonicalPath)
+      .createOrReplaceTempView(viewName)
   }
 
   test("Query Spark logs using SQL") {

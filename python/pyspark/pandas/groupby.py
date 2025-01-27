@@ -47,6 +47,7 @@ from pandas.api.types import is_number, is_hashable, is_list_like  # type: ignor
 from pandas.core.common import _builtin_table  # type: ignore[attr-defined]
 
 from pyspark.sql import Column, DataFrame as SparkDataFrame, Window, functions as F
+from pyspark.sql.internal import InternalFunction as SF
 from pyspark.sql.types import (
     BooleanType,
     DataType,
@@ -74,7 +75,6 @@ from pyspark.pandas.missing.groupby import (
     MissingPandasLikeSeriesGroupBy,
 )
 from pyspark.pandas.series import Series, first_series
-from pyspark.pandas.spark import functions as SF
 from pyspark.pandas.config import get_option
 from pyspark.pandas.correlation import (
     compute,

@@ -111,8 +111,7 @@ class HivePartitionFilteringSuite(version: String)
       ), storageFormat)
     assert(partitions.size == testPartitionCount)
 
-    client.createPartitions(
-      "default", "test", partitions, ignoreIfExists = false)
+    client.createPartitions(table, partitions, ignoreIfExists = false)
     client
   }
 

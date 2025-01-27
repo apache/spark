@@ -96,6 +96,11 @@ public abstract class WritableColumnVector extends ColumnVector {
     releaseMemory();
   }
 
+  @Override
+  public void closeIfFreeable() {
+    // no-op
+  }
+
   public void reserveAdditional(int additionalCapacity) {
     reserve(elementsAppended + additionalCapacity);
   }

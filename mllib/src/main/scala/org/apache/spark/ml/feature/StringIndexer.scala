@@ -301,6 +301,10 @@ class StringIndexerModel (
   @Since("3.0.0")
   def this(labelsArray: Array[Array[String]]) = this(Identifiable.randomUID("strIdx"), labelsArray)
 
+  // For ml connect only
+  @Since("4.0.0")
+  private[ml] def this() = this(labels = Array.empty)
+
   @deprecated("`labels` is deprecated and will be removed in 3.1.0. Use `labelsArray` " +
     "instead.", "3.0.0")
   @Since("1.5.0")
@@ -564,7 +568,7 @@ class IndexToString @Since("2.2.0") (@Since("1.5.0") override val uid: String)
   @Since("1.5.0")
   override def transformSchema(schema: StructType): StructType = {
     val inputColName = $(inputCol)
-    val inputDataType = schema(inputColName).dataType
+    val inputDataType = SchemaUtils.getSchemaFieldType(schema, inputColName)
     require(inputDataType.isInstanceOf[NumericType],
       s"The input column $inputColName must be a numeric type, " +
         s"but got $inputDataType.")
@@ -579,7 +583,7 @@ class IndexToString @Since("2.2.0") (@Since("1.5.0") override val uid: String)
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
-    val inputColSchema = dataset.schema($(inputCol))
+    val inputColSchema = SchemaUtils.getSchemaField(dataset.schema, $(inputCol))
     // If the labels array is empty use column metadata
     val values = if (!isDefined(labels) || $(labels).isEmpty) {
       Attribute.fromStructField(inputColSchema)

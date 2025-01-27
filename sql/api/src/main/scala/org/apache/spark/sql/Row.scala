@@ -18,7 +18,7 @@
 package org.apache.spark.sql
 
 import java.sql.{Date, Timestamp}
-import java.time.{Instant, LocalDate}
+import java.time.{Instant, LocalDate, LocalDateTime}
 import java.util.Base64
 
 import scala.collection.mutable
@@ -627,6 +627,7 @@ trait Row extends Serializable {
       case (d: Date, _) => JString(dateFormatter.format(d))
       case (i: Instant, _) => JString(timestampFormatter.format(i))
       case (t: Timestamp, _) => JString(timestampFormatter.format(t))
+      case (d: LocalDateTime, _) => JString(timestampFormatter.format(d))
       case (i: CalendarInterval, _) => JString(i.toString)
       case (a: Array[_], ArrayType(elementType, _)) =>
         iteratorToJsonArray(a.iterator, elementType)

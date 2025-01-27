@@ -27,11 +27,12 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.SparkException
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys._
-import org.apache.spark.sql.{AnalysisException, SparkSession}
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{QualifiedTableName, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
+import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.parquet.{ParquetFileFormat, ParquetOptions}
@@ -84,7 +85,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
 
     catalogProxy.getCachedTable(tableIdentifier) match {
       case null => None // Cache miss
-      case logical @ LogicalRelation(relation: HadoopFsRelation, _, _, _) =>
+      case logical @ LogicalRelationWithTable(relation: HadoopFsRelation, _) =>
         val cachedRelationFileFormatClass = relation.fileFormat.getClass
 
         expectedFileFormat match {

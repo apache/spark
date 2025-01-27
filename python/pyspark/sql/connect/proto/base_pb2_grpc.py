@@ -34,51 +34,61 @@ class SparkConnectServiceStub(object):
             "/spark.connect.SparkConnectService/ExecutePlan",
             request_serializer=spark_dot_connect_dot_base__pb2.ExecutePlanRequest.SerializeToString,
             response_deserializer=spark_dot_connect_dot_base__pb2.ExecutePlanResponse.FromString,
+            _registered_method=True,
         )
         self.AnalyzePlan = channel.unary_unary(
             "/spark.connect.SparkConnectService/AnalyzePlan",
             request_serializer=spark_dot_connect_dot_base__pb2.AnalyzePlanRequest.SerializeToString,
             response_deserializer=spark_dot_connect_dot_base__pb2.AnalyzePlanResponse.FromString,
+            _registered_method=True,
         )
         self.Config = channel.unary_unary(
             "/spark.connect.SparkConnectService/Config",
             request_serializer=spark_dot_connect_dot_base__pb2.ConfigRequest.SerializeToString,
             response_deserializer=spark_dot_connect_dot_base__pb2.ConfigResponse.FromString,
+            _registered_method=True,
         )
         self.AddArtifacts = channel.stream_unary(
             "/spark.connect.SparkConnectService/AddArtifacts",
             request_serializer=spark_dot_connect_dot_base__pb2.AddArtifactsRequest.SerializeToString,
             response_deserializer=spark_dot_connect_dot_base__pb2.AddArtifactsResponse.FromString,
+            _registered_method=True,
         )
         self.ArtifactStatus = channel.unary_unary(
             "/spark.connect.SparkConnectService/ArtifactStatus",
             request_serializer=spark_dot_connect_dot_base__pb2.ArtifactStatusesRequest.SerializeToString,
             response_deserializer=spark_dot_connect_dot_base__pb2.ArtifactStatusesResponse.FromString,
+            _registered_method=True,
         )
         self.Interrupt = channel.unary_unary(
             "/spark.connect.SparkConnectService/Interrupt",
             request_serializer=spark_dot_connect_dot_base__pb2.InterruptRequest.SerializeToString,
             response_deserializer=spark_dot_connect_dot_base__pb2.InterruptResponse.FromString,
+            _registered_method=True,
         )
         self.ReattachExecute = channel.unary_stream(
             "/spark.connect.SparkConnectService/ReattachExecute",
             request_serializer=spark_dot_connect_dot_base__pb2.ReattachExecuteRequest.SerializeToString,
             response_deserializer=spark_dot_connect_dot_base__pb2.ExecutePlanResponse.FromString,
+            _registered_method=True,
         )
         self.ReleaseExecute = channel.unary_unary(
             "/spark.connect.SparkConnectService/ReleaseExecute",
             request_serializer=spark_dot_connect_dot_base__pb2.ReleaseExecuteRequest.SerializeToString,
             response_deserializer=spark_dot_connect_dot_base__pb2.ReleaseExecuteResponse.FromString,
+            _registered_method=True,
         )
         self.ReleaseSession = channel.unary_unary(
             "/spark.connect.SparkConnectService/ReleaseSession",
             request_serializer=spark_dot_connect_dot_base__pb2.ReleaseSessionRequest.SerializeToString,
             response_deserializer=spark_dot_connect_dot_base__pb2.ReleaseSessionResponse.FromString,
+            _registered_method=True,
         )
         self.FetchErrorDetails = channel.unary_unary(
             "/spark.connect.SparkConnectService/FetchErrorDetails",
             request_serializer=spark_dot_connect_dot_base__pb2.FetchErrorDetailsRequest.SerializeToString,
             response_deserializer=spark_dot_connect_dot_base__pb2.FetchErrorDetailsResponse.FromString,
+            _registered_method=True,
         )
 
 
@@ -220,6 +230,7 @@ def add_SparkConnectServiceServicer_to_server(servicer, server):
         "spark.connect.SparkConnectService", rpc_method_handlers
     )
     server.add_generic_rpc_handlers((generic_handler,))
+    server.add_registered_method_handlers("spark.connect.SparkConnectService", rpc_method_handlers)
 
 
 # This class is part of an EXPERIMENTAL API.
@@ -253,6 +264,7 @@ class SparkConnectService(object):
             wait_for_ready,
             timeout,
             metadata,
+            _registered_method=True,
         )
 
     @staticmethod
@@ -282,6 +294,7 @@ class SparkConnectService(object):
             wait_for_ready,
             timeout,
             metadata,
+            _registered_method=True,
         )
 
     @staticmethod
@@ -311,6 +324,7 @@ class SparkConnectService(object):
             wait_for_ready,
             timeout,
             metadata,
+            _registered_method=True,
         )
 
     @staticmethod
@@ -340,6 +354,7 @@ class SparkConnectService(object):
             wait_for_ready,
             timeout,
             metadata,
+            _registered_method=True,
         )
 
     @staticmethod
@@ -369,6 +384,7 @@ class SparkConnectService(object):
             wait_for_ready,
             timeout,
             metadata,
+            _registered_method=True,
         )
 
     @staticmethod
@@ -398,6 +414,7 @@ class SparkConnectService(object):
             wait_for_ready,
             timeout,
             metadata,
+            _registered_method=True,
         )
 
     @staticmethod
@@ -427,6 +444,7 @@ class SparkConnectService(object):
             wait_for_ready,
             timeout,
             metadata,
+            _registered_method=True,
         )
 
     @staticmethod
@@ -456,6 +474,7 @@ class SparkConnectService(object):
             wait_for_ready,
             timeout,
             metadata,
+            _registered_method=True,
         )
 
     @staticmethod
@@ -485,6 +504,7 @@ class SparkConnectService(object):
             wait_for_ready,
             timeout,
             metadata,
+            _registered_method=True,
         )
 
     @staticmethod
@@ -514,4 +534,5 @@ class SparkConnectService(object):
             wait_for_ready,
             timeout,
             metadata,
+            _registered_method=True,
         )

@@ -95,6 +95,16 @@ object QueryPlanningTracker {
  */
 abstract class QueryPlanningTrackerCallback {
   /**
+   * Called when query fails analysis
+   *
+   * @param tracker      tracker that triggered the callback.
+   * @param parsedPlan   The plan prior to analysis
+   *                     see @org.apache.spark.sql.catalyst.analysis.Analyzer
+   */
+  def analysisFailed(tracker: QueryPlanningTracker, parsedPlan: LogicalPlan): Unit = {
+    // Noop by default for backward compatibility
+  }
+  /**
    * Called when query has been analyzed.
    *
    * @param tracker tracker that triggered the callback.
@@ -145,6 +155,17 @@ class QueryPlanningTracker(
       phasesMap.put(phase, new PhaseSummary(startTime, endTime))
     }
     ret
+  }
+
+  /**
+   * Set when the query has been parsed but failed to be analyzed.
+   * Can be called multiple times upon plan change.
+   *
+   * @param parsedPlan The plan prior analysis
+   *                   see @org.apache.spark.sql.catalyst.analysis.Analyzer
+   */
+  private[sql] def setAnalysisFailed(parsedPlan: LogicalPlan): Unit = {
+    trackerCallback.foreach(_.analysisFailed(this, parsedPlan))
   }
 
   /**

@@ -37,5 +37,6 @@ Grouping
     GroupedData.min
     GroupedData.pivot
     GroupedData.sum
+    GroupedData.transformWithStateInPandas
     PandasCogroupedOps.applyInArrow
     PandasCogroupedOps.applyInPandas

@@ -94,7 +94,7 @@ class PandasMapOpsMixin:
                 jvm = self.sparkSession.sparkContext._jvm
                 assert jvm is not None
 
-                builder = jvm.org.apache.spark.resource.ResourceProfileBuilder()
+                builder = getattr(jvm, "org.apache.spark.resource.ResourceProfileBuilder")()
                 ereqs = ExecutorResourceRequests(jvm, profile._executor_resource_requests)
                 treqs = TaskResourceRequests(jvm, profile._task_resource_requests)
                 builder.require(ereqs._java_executor_resource_requests)

@@ -21,7 +21,7 @@ set -ex
 if [[ $# -gt 1 ]]; then
   echo "Illegal number of parameters."
   echo "Usage: ./dev/protobuf-breaking-changes-check.sh [branch]"
-  echo "the default branch is 'master', available options are 'master', 'branch-3.4', etc"
+  echo "the default branch is 'master'"
   exit -1
 fi
 

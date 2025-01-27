@@ -17,15 +17,17 @@
 package org.apache.spark.sql.internal
 
 import org.apache.spark.annotation.Unstable
-import org.apache.spark.sql.{ExperimentalMethods, SparkSession, UDFRegistration, _}
+import org.apache.spark.sql.{DataSourceRegistration, ExperimentalMethods, SparkSessionExtensions, Strategy, UDTFRegistration}
 import org.apache.spark.sql.artifact.ArtifactManager
-import org.apache.spark.sql.catalyst.analysis.{Analyzer, EvalSubqueriesForTimeTravel, FunctionRegistry, InvokeProcedures, ReplaceCharWithVarchar, ResolveSessionCatalog, ResolveTranspose, TableFunctionRegistry}
+import org.apache.spark.sql.catalyst.analysis.{Analyzer, EvalSubqueriesForTimeTravel, FunctionRegistry, InvokeProcedures, ReplaceCharWithVarchar, ResolveDataSource, ResolveSessionCatalog, ResolveTranspose, TableFunctionRegistry}
+import org.apache.spark.sql.catalyst.analysis.resolver.ResolverExtension
 import org.apache.spark.sql.catalyst.catalog.{FunctionExpressionBuilder, SessionCatalog}
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.optimizer.Optimizer
 import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.classic.{SparkSession, StreamingQueryManager, UDFRegistration}
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.{ColumnarRule, CommandExecutionMode, QueryExecution, SparkOptimizer, SparkPlanner, SparkSqlParser}
@@ -37,7 +39,6 @@ import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.v2.{TableCapabilityCheck, V2SessionCatalog}
 import org.apache.spark.sql.execution.streaming.ResolveWriteToStream
 import org.apache.spark.sql.expressions.UserDefinedAggregateFunction
-import org.apache.spark.sql.streaming.StreamingQueryManager
 import org.apache.spark.sql.util.ExecutionListenerManager
 
 /**
@@ -181,7 +182,7 @@ abstract class BaseSessionStateBuilder(
    * Note 1: The user-defined functions must be deterministic.
    * Note 2: This depends on the `functionRegistry` field.
    */
-  protected def udfRegistration: UDFRegistration = new UDFRegistration(functionRegistry)
+  protected def udfRegistration: UDFRegistration = new UDFRegistration(session, functionRegistry)
 
   protected def udtfRegistration: UDTFRegistration = new UDTFRegistration(tableFunctionRegistry)
 
@@ -197,8 +198,20 @@ abstract class BaseSessionStateBuilder(
    * Note: this depends on the `conf` and `catalog` fields.
    */
   protected def analyzer: Analyzer = new Analyzer(catalogManager) {
+    override val hintResolutionRules: Seq[Rule[LogicalPlan]] =
+      customHintResolutionRules
+
+    override val singlePassResolverExtensions: Seq[ResolverExtension] = Seq(
+      new DataSourceResolver(session)
+    )
+
+    override val singlePassMetadataResolverExtensions: Seq[ResolverExtension] = Seq(
+      new FileResolver(session)
+    )
+
     override val extendedResolutionRules: Seq[Rule[LogicalPlan]] =
-      new FindDataSourceTable(session) +:
+      new ResolveDataSource(session) +:
+        new FindDataSourceTable(session) +:
         new ResolveSQLOnFile(session) +:
         new FallBackFileSourceV2(session) +:
         ResolveEncodersInScalaAgg +:
@@ -237,6 +250,13 @@ abstract class BaseSessionStateBuilder(
    */
   protected def customResolutionRules: Seq[Rule[LogicalPlan]] = {
     extensions.buildResolutionRules(session)
+  }
+
+  /**
+   * Custom hint resolution rules to add to the Analyzer.
+   */
+  protected def customHintResolutionRules: Seq[Rule[LogicalPlan]] = {
+    extensions.buildHintResolutionRules(session)
   }
 
   /**
@@ -371,7 +391,9 @@ abstract class BaseSessionStateBuilder(
    * Resource manager that handles the storage of artifacts as well as preparing the artifacts for
    * use.
    */
-  protected def artifactManager: ArtifactManager = new ArtifactManager(session)
+  protected def artifactManager: ArtifactManager = {
+    parentState.map(_.artifactManager.clone(session)).getOrElse(new ArtifactManager(session))
+  }
 
   /**
    * Function used to make clones of the session state.

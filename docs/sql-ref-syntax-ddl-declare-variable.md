@@ -83,7 +83,7 @@ DECLARE OR REPLACE five = 55;
 -- Explicitly declare the default value of a variable using the keyword `DEFAULT`
 DECLARE VARIABLE size DEFAULT 6;
 
--- STRING variable initialialized to `NULL`
+-- STRING variable initialized to `NULL`
 DECLARE some_var STRING;
 ```
 

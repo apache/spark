@@ -111,7 +111,8 @@ abstract class PropagateEmptyRelationBase extends Rule[LogicalPlan] with CastSup
           // Except is handled as LeftAnti by `ReplaceExceptWithAntiJoin` rule.
           case LeftOuter | LeftSemi | LeftAnti if isLeftEmpty => empty(p)
           case LeftSemi if isRightEmpty | isFalseCondition => empty(p)
-          case LeftAnti if isRightEmpty | isFalseCondition => p.left
+          case LeftAnti if (isRightEmpty | isFalseCondition) && canExecuteWithoutJoin(p.left) =>
+            p.left
           case FullOuter if isLeftEmpty && isRightEmpty => empty(p)
           case LeftOuter | FullOuter if isRightEmpty && canExecuteWithoutJoin(p.left) =>
             Project(p.left.output ++ nullValueProjectList(p.right), p.left)
@@ -168,7 +169,7 @@ abstract class PropagateEmptyRelationBase extends Rule[LogicalPlan] with CastSup
       // Aggregation on empty LocalRelation generated from a streaming source is not eliminated
       // as stateful streaming aggregation need to perform other state management operations other
       // than just processing the input data.
-      case Aggregate(ge, _, _) if ge.nonEmpty && !p.isStreaming => empty(p)
+      case Aggregate(ge, _, _, _) if ge.nonEmpty && !p.isStreaming => empty(p)
       // Generators like Hive-style UDTF may return their records within `close`.
       case Generate(_: Explode, _, _, _, _, _) => empty(p)
       case Expand(_, _, _) => empty(p)

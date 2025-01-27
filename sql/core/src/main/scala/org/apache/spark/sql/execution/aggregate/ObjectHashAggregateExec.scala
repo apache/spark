@@ -69,7 +69,7 @@ case class ObjectHashAggregateExec(
     child: SparkPlan)
   extends BaseAggregateExec {
 
-  override lazy val allAttributes: AttributeSeq =
+  override def allAttributes: AttributeSeq =
     child.output ++ aggregateBufferAttributes ++ aggregateAttributes ++
       aggregateExpressions.flatMap(_.aggregateFunction.inputAggBufferAttributes)
 

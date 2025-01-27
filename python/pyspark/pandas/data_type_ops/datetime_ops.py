@@ -34,7 +34,7 @@ from pyspark.sql.types import (
 )
 from pyspark.sql.utils import pyspark_column_op
 from pyspark.pandas._typing import Dtype, IndexOpsLike, SeriesOrIndex
-from pyspark.pandas.spark import functions as SF
+from pyspark.sql.internal import InternalFunction as SF
 from pyspark.pandas.base import IndexOpsMixin
 from pyspark.pandas.data_type_ops.base import (
     DataTypeOps,

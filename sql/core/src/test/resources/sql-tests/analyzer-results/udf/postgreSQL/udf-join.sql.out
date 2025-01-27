@@ -1330,7 +1330,7 @@ Aggregate [cast(udf(cast(cast(udf(cast(count(1) as string)) as bigint) as string
 +- Filter cast(udf(cast(cast(udf(cast(unique1#x as string)) as int) as string)) as int) IN (list#x [])
    :  +- Project [cast(udf(cast(unique1#x as string)) as int) AS udf(unique1)#x]
    :     +- Filter (cast(udf(cast(cast(udf(cast(unique2#x as string)) as int) as string)) as int) = cast(udf(cast(42 as string)) as int))
-   :        +- Project [unique1#x, unique2#x, two#x, four#x, ten#x, twenty#x, hundred#x, thousand#x, twothousand#x, fivethous#x, tenthous#x, odd#x, even#x, stringu1#x, stringu2#x, string4#x, unique2#x, two#x, four#x, ten#x, twenty#x, hundred#x, thousand#x, twothousand#x, ... 7 more fields]
+   :        +- Project [unique1#x, unique2#x, two#x, four#x, ten#x, twenty#x, hundred#x, thousand#x, twothousand#x, fivethous#x, tenthous#x, odd#x, even#x, stringu1#x, stringu2#x, string4#x, unique2#x, two#x, four#x, ten#x, twenty#x, hundred#x, thousand#x, twothousand#x, fivethous#x, ... 6 more fields]
    :           +- Join Inner, (unique1#x = unique1#x)
    :              :- SubqueryAlias b
    :              :  +- SubqueryAlias spark_catalog.default.tenk1

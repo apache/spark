@@ -20,11 +20,11 @@ package org.apache.spark.sql.catalyst
 import org.apache.spark.sql.catalyst.{expressions => exprs}
 import org.apache.spark.sql.catalyst.analysis.{GetColumnByOrdinal, UnresolvedExtractValue}
 import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, AgnosticEncoders, Codec, JavaSerializationCodec, KryoSerializationCodec}
-import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{ArrayEncoder, BoxedLeafEncoder, DateEncoder, DayTimeIntervalEncoder, InstantEncoder, IterableEncoder, JavaBeanEncoder, JavaBigIntEncoder, JavaDecimalEncoder, JavaEnumEncoder, LocalDateEncoder, LocalDateTimeEncoder, MapEncoder, OptionEncoder, PrimitiveBooleanEncoder, PrimitiveByteEncoder, PrimitiveDoubleEncoder, PrimitiveFloatEncoder, PrimitiveIntEncoder, PrimitiveLongEncoder, PrimitiveShortEncoder, ProductEncoder, ScalaBigIntEncoder, ScalaDecimalEncoder, ScalaEnumEncoder, StringEncoder, TimestampEncoder, TransformingEncoder, UDTEncoder, YearMonthIntervalEncoder}
+import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{ArrayEncoder, BoxedLeafEncoder, CharEncoder, DateEncoder, DayTimeIntervalEncoder, InstantEncoder, IterableEncoder, JavaBeanEncoder, JavaBigIntEncoder, JavaDecimalEncoder, JavaEnumEncoder, LocalDateEncoder, LocalDateTimeEncoder, MapEncoder, OptionEncoder, PrimitiveBooleanEncoder, PrimitiveByteEncoder, PrimitiveDoubleEncoder, PrimitiveFloatEncoder, PrimitiveIntEncoder, PrimitiveLongEncoder, PrimitiveShortEncoder, ProductEncoder, ScalaBigIntEncoder, ScalaDecimalEncoder, ScalaEnumEncoder, StringEncoder, TimestampEncoder, TransformingEncoder, UDTEncoder, VarcharEncoder, YearMonthIntervalEncoder}
 import org.apache.spark.sql.catalyst.encoders.EncoderUtils.{externalDataTypeFor, isNativeEncoder}
 import org.apache.spark.sql.catalyst.expressions.{Expression, GetStructField, IsNull, Literal, MapKeys, MapValues, UpCast}
 import org.apache.spark.sql.catalyst.expressions.objects.{AssertNotNull, CreateExternalRow, DecodeUsingSerializer, InitializeJavaBean, Invoke, NewInstance, StaticInvoke, UnresolvedCatalystToExternalMap, UnresolvedMapObjects, WrapOption}
-import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, DateTimeUtils, IntervalUtils}
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, CharVarcharCodegenUtils, DateTimeUtils, IntervalUtils}
 import org.apache.spark.sql.types._
 
 object DeserializerBuildHelper {
@@ -78,6 +78,32 @@ object DeserializerBuildHelper {
       "valueOf",
       path :: Nil,
       returnNullable = false)
+  }
+
+  def createDeserializerForChar(
+      path: Expression,
+      returnNullable: Boolean,
+      length: Int): Expression = {
+    val expr = StaticInvoke(
+      classOf[CharVarcharCodegenUtils],
+      StringType,
+      "charTypeWriteSideCheck",
+      path :: Literal(length) :: Nil,
+      returnNullable = returnNullable)
+    createDeserializerForString(expr, returnNullable)
+  }
+
+  def createDeserializerForVarchar(
+      path: Expression,
+      returnNullable: Boolean,
+      length: Int): Expression = {
+    val expr = StaticInvoke(
+      classOf[CharVarcharCodegenUtils],
+      StringType,
+      "varcharTypeWriteSideCheck",
+      path :: Literal(length) :: Nil,
+      returnNullable = returnNullable)
+    createDeserializerForString(expr, returnNullable)
   }
 
   def createDeserializerForString(path: Expression, returnNullable: Boolean): Expression = {
@@ -258,6 +284,10 @@ object DeserializerBuildHelper {
         "withName",
         createDeserializerForString(path, returnNullable = false) :: Nil,
         returnNullable = false)
+    case CharEncoder(length) =>
+      createDeserializerForChar(path, returnNullable = false, length)
+    case VarcharEncoder(length) =>
+      createDeserializerForVarchar(path, returnNullable = false, length)
     case StringEncoder =>
       createDeserializerForString(path, returnNullable = false)
     case _: ScalaDecimalEncoder =>

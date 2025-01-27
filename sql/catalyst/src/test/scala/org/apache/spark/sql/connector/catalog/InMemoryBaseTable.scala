@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, JoinedRow,
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, DateTimeUtils}
 import org.apache.spark.sql.connector.distributions.{Distribution, Distributions}
 import org.apache.spark.sql.connector.expressions._
-import org.apache.spark.sql.connector.metric.{CustomMetric, CustomTaskMetric}
+import org.apache.spark.sql.connector.metric.{CustomMetric, CustomSumMetric, CustomTaskMetric}
 import org.apache.spark.sql.connector.read._
 import org.apache.spark.sql.connector.read.colstats.{ColumnStatistics, Histogram, HistogramBin}
 import org.apache.spark.sql.connector.read.partitioning.{KeyGroupedPartitioning, Partitioning, UnknownPartitioning}
@@ -63,13 +63,29 @@ abstract class InMemoryBaseTable(
   protected object PartitionKeyColumn extends MetadataColumn {
     override def name: String = "_partition"
     override def dataType: DataType = StringType
+    override def isNullable: Boolean = false
     override def comment: String = "Partition key used to store the row"
+    override def metadataInJSON(): String = {
+      val metadata = new MetadataBuilder()
+        .putBoolean(MetadataColumn.PRESERVE_ON_UPDATE, value = true)
+        .putBoolean(MetadataColumn.PRESERVE_ON_REINSERT, value = true)
+        .build()
+      metadata.json
+    }
   }
 
-  private object IndexColumn extends MetadataColumn {
+  protected object IndexColumn extends MetadataColumn {
     override def name: String = "index"
     override def dataType: DataType = IntegerType
+    override def isNullable: Boolean = false
     override def comment: String = "Metadata column used to conflict with a data column"
+    override def metadataInJSON(): String = {
+      val metadata = new MetadataBuilder()
+        .putBoolean(MetadataColumn.PRESERVE_ON_DELETE, value = false)
+        .putBoolean(MetadataColumn.PRESERVE_ON_UPDATE, value = false)
+        .build()
+      metadata.json
+    }
   }
 
   // purposely exposes a metadata column that conflicts with a data column in some tests
@@ -295,7 +311,7 @@ abstract class InMemoryBaseTable(
     TableCapability.TRUNCATE)
 
   override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
-    new InMemoryScanBuilder(schema)
+    new InMemoryScanBuilder(schema, options)
   }
 
   private def canEvaluate(filter: Filter): Boolean = {
@@ -309,8 +325,10 @@ abstract class InMemoryBaseTable(
     }
   }
 
-  class InMemoryScanBuilder(tableSchema: StructType) extends ScanBuilder
-      with SupportsPushDownRequiredColumns with SupportsPushDownFilters {
+  class InMemoryScanBuilder(
+      tableSchema: StructType,
+      options: CaseInsensitiveStringMap) extends ScanBuilder
+    with SupportsPushDownRequiredColumns with SupportsPushDownFilters {
     private var schema: StructType = tableSchema
     private var postScanFilters: Array[Filter] = Array.empty
     private var evaluableFilters: Array[Filter] = Array.empty
@@ -318,7 +336,7 @@ abstract class InMemoryBaseTable(
 
     override def build: Scan = {
       val scan = InMemoryBatchScan(
-        data.map(_.asInstanceOf[InputPartition]).toImmutableArraySeq, schema, tableSchema)
+        data.map(_.asInstanceOf[InputPartition]).toImmutableArraySeq, schema, tableSchema, options)
       if (evaluableFilters.nonEmpty) {
         scan.filter(evaluableFilters)
       }
@@ -442,7 +460,8 @@ abstract class InMemoryBaseTable(
   case class InMemoryBatchScan(
       var _data: Seq[InputPartition],
       readSchema: StructType,
-      tableSchema: StructType)
+      tableSchema: StructType,
+      options: CaseInsensitiveStringMap)
     extends BatchScanBaseClass(_data, readSchema, tableSchema) with SupportsRuntimeFiltering {
 
     override def filterAttributes(): Array[NamedReference] = {
@@ -474,17 +493,17 @@ abstract class InMemoryBaseTable(
     }
   }
 
-  abstract class InMemoryWriterBuilder() extends SupportsTruncate with SupportsDynamicOverwrite
-    with SupportsStreamingUpdateAsAppend {
+  abstract class InMemoryWriterBuilder(val info: LogicalWriteInfo)
+    extends SupportsTruncate with SupportsDynamicOverwrite with SupportsStreamingUpdateAsAppend {
 
-    protected var writer: BatchWrite = Append
-    protected var streamingWriter: StreamingWrite = StreamingAppend
+    protected var writer: BatchWrite = new Append(info)
+    protected var streamingWriter: StreamingWrite = new StreamingAppend(info)
 
     override def overwriteDynamicPartitions(): WriteBuilder = {
-      if (writer != Append) {
+      if (!writer.isInstanceOf[Append]) {
         throw new IllegalArgumentException(s"Unsupported writer type: $writer")
       }
-      writer = DynamicOverwrite
+      writer = new DynamicOverwrite(info)
       streamingWriter = new StreamingNotSupportedOperation("overwriteDynamicPartitions")
       this
     }
@@ -512,7 +531,11 @@ abstract class InMemoryBaseTable(
       }
 
       override def supportedCustomMetrics(): Array[CustomMetric] = {
-        Array(new InMemorySimpleCustomMetric)
+        Array(new InMemorySimpleCustomMetric, new InMemoryCustomDriverMetric)
+      }
+
+      override def reportDriverMetrics(): Array[CustomTaskMetric] = {
+        Array(new InMemoryCustomDriverTaskMetric(rows.size))
       }
     }
   }
@@ -525,13 +548,13 @@ abstract class InMemoryBaseTable(
     override def abort(messages: Array[WriterCommitMessage]): Unit = {}
   }
 
-  protected object Append extends TestBatchWrite {
+  class Append(val info: LogicalWriteInfo) extends TestBatchWrite {
     override def commit(messages: Array[WriterCommitMessage]): Unit = dataMap.synchronized {
       withData(messages.map(_.asInstanceOf[BufferedRows]))
     }
   }
 
-  private object DynamicOverwrite extends TestBatchWrite {
+  class DynamicOverwrite(val info: LogicalWriteInfo) extends TestBatchWrite {
     override def commit(messages: Array[WriterCommitMessage]): Unit = dataMap.synchronized {
       val newData = messages.map(_.asInstanceOf[BufferedRows])
       dataMap --= newData.flatMap(_.rows.map(getKey))
@@ -539,7 +562,7 @@ abstract class InMemoryBaseTable(
     }
   }
 
-  protected object TruncateAndAppend extends TestBatchWrite {
+  class TruncateAndAppend(val info: LogicalWriteInfo) extends TestBatchWrite {
     override def commit(messages: Array[WriterCommitMessage]): Unit = dataMap.synchronized {
       dataMap.clear()
       withData(messages.map(_.asInstanceOf[BufferedRows]))
@@ -568,7 +591,7 @@ abstract class InMemoryBaseTable(
       s"${operation} isn't supported for streaming query.")
   }
 
-  private object StreamingAppend extends TestStreamingWrite {
+  class StreamingAppend(val info: LogicalWriteInfo) extends TestStreamingWrite {
     override def commit(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {
       dataMap.synchronized {
         withData(messages.map(_.asInstanceOf[BufferedRows]))
@@ -576,7 +599,7 @@ abstract class InMemoryBaseTable(
     }
   }
 
-  protected object StreamingTruncateAndAppend extends TestStreamingWrite {
+  class StreamingTruncateAndAppend(val info: LogicalWriteInfo) extends TestStreamingWrite {
     override def commit(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {
       dataMap.synchronized {
         dataMap.clear()
@@ -610,6 +633,7 @@ object InMemoryBaseTable {
 
 class BufferedRows(val key: Seq[Any] = Seq.empty) extends WriterCommitMessage
     with InputPartition with HasPartitionKey with HasPartitionStatistics with Serializable {
+  val log = new mutable.ArrayBuffer[InternalRow]()
   val rows = new mutable.ArrayBuffer[InternalRow]()
   val deletes = new mutable.ArrayBuffer[Int]()
 
@@ -727,9 +751,22 @@ private object BufferedRowsWriterFactory extends DataWriterFactory with Streamin
 }
 
 private class BufferWriter extends DataWriter[InternalRow] {
+
+  private final val WRITE = UTF8String.fromString(Write.toString)
+
   protected val buffer = new BufferedRows
 
-  override def write(row: InternalRow): Unit = buffer.rows.append(row.copy())
+  override def write(metadata: InternalRow, row: InternalRow): Unit = {
+    buffer.rows.append(row.copy())
+    val logEntry = new GenericInternalRow(Array[Any](WRITE, null, metadata.copy(), row.copy()))
+    buffer.log.append(logEntry)
+  }
+
+  override def write(row: InternalRow): Unit = {
+    buffer.rows.append(row.copy())
+    val logEntry = new GenericInternalRow(Array[Any](WRITE, null, null, row.copy()))
+    buffer.log.append(logEntry)
+  }
 
   override def commit(): WriterCommitMessage = buffer
 
@@ -754,3 +791,20 @@ class InMemorySimpleCustomMetric extends CustomMetric {
     s"in-memory rows: ${taskMetrics.sum}"
   }
 }
+
+class InMemoryCustomDriverMetric extends CustomSumMetric {
+  override def name(): String = "number_of_rows_from_driver"
+  override def description(): String = "number of rows from driver"
+}
+
+class InMemoryCustomDriverTaskMetric(value: Long) extends CustomTaskMetric {
+  override def name(): String = "number_of_rows_from_driver"
+  override def value(): Long = value
+}
+
+sealed trait Operation
+case object Write extends Operation
+case object Delete extends Operation
+case object Update extends Operation
+case object Reinsert extends Operation
+case object Insert extends Operation

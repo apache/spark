@@ -124,36 +124,104 @@ struct<m:map<double,struct<k:double,v1:decimal(36,35),v2:double>>>
 SELECT map_zip_with(string_map1, int_map, (k, v1, v2) -> struct(k, v1, v2)) m
 FROM various_maps
 -- !query schema
-struct<m:map<string,struct<k:string,v1:string,v2:int>>>
+struct<>
 -- !query output
-{"2":{"k":"2","v1":"1","v2":1},"true":{"k":"true","v1":"false","v2":null}}
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.MAP_ZIP_WITH_DIFF_TYPES",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "functionName" : "`map_zip_with`",
+    "leftType" : "\"STRING\"",
+    "rightType" : "\"INT\"",
+    "sqlExpr" : "\"map_zip_with(string_map1, int_map, lambdafunction(struct(k, v1, v2), k, v1, v2))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 75,
+    "fragment" : "map_zip_with(string_map1, int_map, (k, v1, v2) -> struct(k, v1, v2))"
+  } ]
+}
 
 
 -- !query
 SELECT map_zip_with(string_map2, date_map, (k, v1, v2) -> struct(k, v1, v2)) m
 FROM various_maps
 -- !query schema
-struct<m:map<string,struct<k:string,v1:string,v2:date>>>
+struct<>
 -- !query output
-{"2016-03-14":{"k":"2016-03-14","v1":"2016-03-13","v2":2016-03-13}}
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.MAP_ZIP_WITH_DIFF_TYPES",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "functionName" : "`map_zip_with`",
+    "leftType" : "\"STRING\"",
+    "rightType" : "\"DATE\"",
+    "sqlExpr" : "\"map_zip_with(string_map2, date_map, lambdafunction(struct(k, v1, v2), k, v1, v2))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 76,
+    "fragment" : "map_zip_with(string_map2, date_map, (k, v1, v2) -> struct(k, v1, v2))"
+  } ]
+}
 
 
 -- !query
 SELECT map_zip_with(timestamp_map, string_map3, (k, v1, v2) -> struct(k, v1, v2)) m
 FROM various_maps
 -- !query schema
-struct<m:map<string,struct<k:string,v1:timestamp,v2:string>>>
+struct<>
 -- !query output
-{"2016-11-15 20:54:00":{"k":"2016-11-15 20:54:00","v1":2016-11-12 20:54:00,"v2":null},"2016-11-15 20:54:00.000":{"k":"2016-11-15 20:54:00.000","v1":null,"v2":"2016-11-12 20:54:00.000"}}
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.MAP_ZIP_WITH_DIFF_TYPES",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "functionName" : "`map_zip_with`",
+    "leftType" : "\"TIMESTAMP\"",
+    "rightType" : "\"STRING\"",
+    "sqlExpr" : "\"map_zip_with(timestamp_map, string_map3, lambdafunction(struct(k, v1, v2), k, v1, v2))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 81,
+    "fragment" : "map_zip_with(timestamp_map, string_map3, (k, v1, v2) -> struct(k, v1, v2))"
+  } ]
+}
 
 
 -- !query
 SELECT map_zip_with(decimal_map1, string_map4, (k, v1, v2) -> struct(k, v1, v2)) m
 FROM various_maps
 -- !query schema
-struct<m:map<string,struct<k:string,v1:decimal(36,0),v2:string>>>
+struct<>
 -- !query output
-{"922337203685477897945456575809789456":{"k":"922337203685477897945456575809789456","v1":922337203685477897945456575809789456,"v2":"text"}}
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.MAP_ZIP_WITH_DIFF_TYPES",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "functionName" : "`map_zip_with`",
+    "leftType" : "\"DECIMAL(36,0)\"",
+    "rightType" : "\"STRING\"",
+    "sqlExpr" : "\"map_zip_with(decimal_map1, string_map4, lambdafunction(struct(k, v1, v2), k, v1, v2))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 80,
+    "fragment" : "map_zip_with(decimal_map1, string_map4, (k, v1, v2) -> struct(k, v1, v2))"
+  } ]
+}
 
 
 -- !query

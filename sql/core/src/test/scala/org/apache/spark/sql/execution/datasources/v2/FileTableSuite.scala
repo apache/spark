@@ -22,7 +22,7 @@ import org.apache.hadoop.fs.FileStatus
 
 import org.apache.spark.sql.{QueryTest, SparkSession}
 import org.apache.spark.sql.connector.read.ScanBuilder
-import org.apache.spark.sql.connector.write.{LogicalWriteInfo, WriteBuilder}
+import org.apache.spark.sql.connector.write.{LogicalWriteInfo, LogicalWriteInfoImpl, WriteBuilder}
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.datasources.FileFormat
 import org.apache.spark.sql.execution.datasources.text.TextFileFormat
@@ -96,8 +96,8 @@ class FileTableSuite extends QueryTest with SharedSparkSession {
   }
 
   allFileBasedDataSources.foreach { format =>
-    test(s"SPARK-49519: Merge options of table and relation when constructing FileScanBuilder" +
-      s" - $format") {
+    test("SPARK-49519, SPARK-50287: Merge options of table and relation when " +
+      s"constructing ScanBuilder and WriteBuilder in FileFormat - $format") {
       withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "") {
         val userSpecifiedSchema = StructType(Seq(StructField("c1", StringType)))
 
@@ -108,20 +108,29 @@ class FileTableSuite extends QueryTest with SharedSparkSession {
             val table = provider.getTable(
               userSpecifiedSchema,
               Array.empty,
-              dsOptions.asCaseSensitiveMap())
+              dsOptions.asCaseSensitiveMap()).asInstanceOf[FileTable]
             val tableOptions = new CaseInsensitiveStringMap(
               Map("k2" -> "table_v2", "k3" -> "v3").asJava)
-            val mergedOptions = table.asInstanceOf[FileTable].newScanBuilder(tableOptions) match {
+
+            val mergedReadOptions = table.newScanBuilder(tableOptions) match {
               case csv: CSVScanBuilder => csv.options
               case json: JsonScanBuilder => json.options
               case orc: OrcScanBuilder => orc.options
               case parquet: ParquetScanBuilder => parquet.options
               case text: TextScanBuilder => text.options
             }
-            assert(mergedOptions.size() == 3)
-            assert("v1".equals(mergedOptions.get("k1")))
-            assert("table_v2".equals(mergedOptions.get("k2")))
-            assert("v3".equals(mergedOptions.get("k3")))
+            assert(mergedReadOptions.size === 3)
+            assert(mergedReadOptions.get("k1") === "v1")
+            assert(mergedReadOptions.get("k2") === "table_v2")
+            assert(mergedReadOptions.get("k3") === "v3")
+
+            val writeInfo = LogicalWriteInfoImpl("query-id", userSpecifiedSchema, tableOptions)
+            val mergedWriteOptions = table.newWriteBuilder(writeInfo).build()
+              .asInstanceOf[FileWrite].options
+            assert(mergedWriteOptions.size === 3)
+            assert(mergedWriteOptions.get("k1") === "v1")
+            assert(mergedWriteOptions.get("k2") === "table_v2")
+            assert(mergedWriteOptions.get("k3") === "v3")
           case _ =>
             throw new IllegalArgumentException(s"Failed to get table provider for $format")
         }

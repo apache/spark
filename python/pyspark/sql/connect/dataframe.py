@@ -79,17 +79,15 @@ from pyspark.sql.connect.streaming.readwriter import DataStreamWriter
 from pyspark.sql.column import Column
 from pyspark.sql.connect.expressions import (
     ColumnReference,
+    SubqueryExpression,
     UnresolvedRegex,
     UnresolvedStar,
 )
 from pyspark.sql.connect.functions import builtin as F
 from pyspark.sql.pandas.types import from_arrow_schema, to_arrow_schema
 from pyspark.sql.pandas.functions import _validate_pandas_udf  # type: ignore[attr-defined]
+from pyspark.sql.table_arg import TableArg
 
-try:
-    from pyspark.sql.plot import PySparkPlotAccessor
-except ImportError:
-    PySparkPlotAccessor = None  # type: ignore
 
 if TYPE_CHECKING:
     from pyspark.sql.connect._typing import (
@@ -275,6 +273,14 @@ class DataFrame(ParentDataFrame):
         res = DataFrame(plan.SubqueryAlias(self._plan, alias), session=self._session)
         res._cached_schema = self._cached_schema
         return res
+
+    def metadataColumn(self, colName: str) -> Column:
+        if not isinstance(colName, str):
+            raise PySparkTypeError(
+                errorClass="NOT_STR",
+                messageParameters={"arg_name": "colName", "arg_type": type(colName).__name__},
+            )
+        return self._col(colName, is_metadata_column=True)
 
     def colRegex(self, colName: str) -> Column:
         from pyspark.sql.connect.column import Column as ConnectColumn
@@ -687,6 +693,22 @@ class DataFrame(ParentDataFrame):
             how = how.lower().replace("_", "")
         return DataFrame(
             plan.Join(left=self._plan, right=other._plan, on=on, how=how),  # type: ignore[arg-type]
+            session=self._session,
+        )
+
+    def lateralJoin(
+        self,
+        other: ParentDataFrame,
+        on: Optional[Column] = None,
+        how: Optional[str] = None,
+    ) -> ParentDataFrame:
+        self._check_same_session(other)
+        if how is not None and isinstance(how, str):
+            how = how.lower().replace("_", "")
+        return DataFrame(
+            plan.LateralJoin(
+                left=self._plan, right=cast(plan.LogicalPlan, other._plan), on=on, how=how
+            ),
             session=self._session,
         )
 
@@ -1736,13 +1758,14 @@ class DataFrame(ParentDataFrame):
                 messageParameters={"arg_name": "item", "arg_type": type(item).__name__},
             )
 
-    def _col(self, name: str) -> Column:
+    def _col(self, name: str, is_metadata_column: bool = False) -> Column:
         from pyspark.sql.connect.column import Column as ConnectColumn
 
         return ConnectColumn(
             ColumnReference(
                 unparsed_identifier=name,
                 plan_id=self._plan._plan_id,
+                is_metadata_column=is_metadata_column,
             )
         )
 
@@ -1787,6 +1810,23 @@ class DataFrame(ParentDataFrame):
             plan.Transpose(self._plan, [F._to_col(indexColumn)] if indexColumn is not None else []),
             self._session,
         )
+
+    def asTable(self) -> TableArg:
+        # TODO(SPARK-50393): Support DataFrame conversion to table argument in Spark Connect
+        raise PySparkNotImplementedError(
+            errorClass="NOT_IMPLEMENTED",
+            messageParameters={"feature": "asTable()"},
+        )
+
+    def scalar(self) -> Column:
+        from pyspark.sql.connect.column import Column as ConnectColumn
+
+        return ConnectColumn(SubqueryExpression(self._plan, subquery_type="scalar"))
+
+    def exists(self) -> Column:
+        from pyspark.sql.connect.column import Column as ConnectColumn
+
+        return ConnectColumn(SubqueryExpression(self._plan, subquery_type="exists"))
 
     @property
     def schema(self) -> StructType:
@@ -2013,6 +2053,8 @@ class DataFrame(ParentDataFrame):
         from pyspark.sql.connect.udf import UserDefinedFunction
 
         _validate_pandas_udf(func, evalType)
+        if isinstance(schema, str):
+            schema = cast(StructType, self._session._parse_ddl(schema))
         udf_obj = UserDefinedFunction(
             func,
             returnType=schema,
@@ -2166,7 +2208,9 @@ class DataFrame(ParentDataFrame):
         return self._execution_info
 
     @property
-    def plot(self) -> PySparkPlotAccessor:
+    def plot(self) -> "PySparkPlotAccessor":  # type: ignore[name-defined] # noqa: F821
+        from pyspark.sql.plot import PySparkPlotAccessor
+
         return PySparkPlotAccessor(self)
 
 

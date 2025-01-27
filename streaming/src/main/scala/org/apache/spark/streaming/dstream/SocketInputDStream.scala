@@ -88,7 +88,7 @@ class SocketReceiver[T: ClassTag](
   def receive(): Unit = {
     try {
       val iterator = bytesToObjects(socket.getInputStream())
-      while(!isStopped() && iterator.hasNext) {
+      while (!isStopped() && iterator.hasNext) {
         store(iterator.next())
       }
       if (!isStopped()) {

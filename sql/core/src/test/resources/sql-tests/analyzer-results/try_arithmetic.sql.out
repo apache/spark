@@ -23,7 +23,7 @@ Project [try_add(2147483647, cast(1 as decimal(10,0))) AS try_add(2147483647, 1)
 -- !query
 SELECT try_add(2147483647, "1")
 -- !query analysis
-Project [try_add(2147483647, 1) AS try_add(2147483647, 1)#x]
+Project [try_add(2147483647, 1) AS try_add(2147483647, 1)#xL]
 +- OneRowRelation
 
 
@@ -305,7 +305,7 @@ Project [try_subtract(2147483647, cast(-1 as decimal(10,0))) AS try_subtract(214
 -- !query
 SELECT try_subtract(2147483647, "-1")
 -- !query analysis
-Project [try_subtract(2147483647, -1) AS try_subtract(2147483647, -1)#x]
+Project [try_subtract(2147483647, -1) AS try_subtract(2147483647, -1)#xL]
 +- OneRowRelation
 
 
@@ -403,7 +403,7 @@ Project [try_multiply(2147483647, cast(-2 as decimal(10,0))) AS try_multiply(214
 -- !query
 SELECT try_multiply(2147483647, "-2")
 -- !query analysis
-Project [try_multiply(2147483647, -2) AS try_multiply(2147483647, -2)#x]
+Project [try_multiply(2147483647, -2) AS try_multiply(2147483647, -2)#xL]
 +- OneRowRelation
 
 

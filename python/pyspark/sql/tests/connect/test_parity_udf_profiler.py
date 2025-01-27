@@ -21,9 +21,9 @@ import unittest
 from pyspark.sql.tests.test_udf_profiler import (
     UDFProfiler2TestsMixin,
     _do_computation,
-    has_flameprof,
 )
 from pyspark.testing.connectutils import ReusedConnectTestCase
+from pyspark.testing.utils import have_flameprof
 
 
 class UDFProfilerParityTests(UDFProfiler2TestsMixin, ReusedConnectTestCase):
@@ -65,7 +65,7 @@ class UDFProfilerWithoutPlanCacheParityTests(UDFProfilerParityTests):
                 io.getvalue(), f"10.*{os.path.basename(inspect.getfile(_do_computation))}"
             )
 
-            if has_flameprof:
+            if have_flameprof:
                 self.assertIn("svg", self.spark.profile.render(id))
 
 

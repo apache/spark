@@ -29,11 +29,13 @@ import org.apache.spark.SparkException
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys.{CLASS_NAME, DATA_SOURCE, DATA_SOURCES, PATHS}
-import org.apache.spark.sql._
+import org.apache.spark.sql.{AnalysisException, SaveMode, SparkSession}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogUtils}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, TypeUtils}
+import org.apache.spark.sql.classic.ClassicConversions.castToImpl
+import org.apache.spark.sql.classic.Dataset
 import org.apache.spark.sql.connector.catalog.TableProvider
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.command.DataWritingCommand
@@ -466,7 +468,7 @@ case class DataSource(
 
     val fileIndex = catalogTable.map(_.identifier).map { tableIdent =>
       sparkSession.table(tableIdent).queryExecution.analyzed.collect {
-        case LogicalRelation(t: HadoopFsRelation, _, _, _) => t.location
+        case LogicalRelationWithTable(t: HadoopFsRelation, _) => t.location
       }.head
     }
     // For partitioned relation r, r.schema's column ordering can be different from the column
@@ -682,11 +684,10 @@ object DataSource extends Logging {
                 throw e
               }
           }
-        case _ :: Nil if isUserDefinedDataSource =>
-          // There was DSv1 or DSv2 loaded, but the same name source was found
-          // in user defined data source.
-          throw QueryCompilationErrors.foundMultipleDataSources(provider)
         case head :: Nil =>
+          // We do not check whether the provider is a Python data source
+          // (isUserDefinedDataSource) to avoid the lookup cost. Java data sources
+          // always take precedence over Python user-defined data sources.
           head.getClass
         case sources =>
           // There are multiple registered aliases for the input. If there is single datasource
