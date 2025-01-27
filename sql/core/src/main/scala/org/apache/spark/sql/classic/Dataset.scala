@@ -1471,8 +1471,8 @@ class Dataset[T] private[sql](
 
   /** @inheritdoc */
   def foreachPartition(f: Iterator[T] => Unit): Unit = withNewRDDExecutionId("foreachPartition") {
-      materializedRdd.foreachPartition(f)
-    }
+    materializedRdd.foreachPartition(f)
+  }
 
   /** @inheritdoc */
   def tail(n: Int): Array[T] = withAction(
