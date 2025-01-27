@@ -285,18 +285,19 @@ private[sql] class AvroSerializer(
 
     val numFields = catalystStruct.length
     val avroFields = avroStruct.getFields()
+    val isSchemaNullable = avroFields.asScala.map(_.schema().isNullable)
     row: InternalRow =>
       val result = new Record(avroStruct)
       var i = 0
       while (i < numFields) {
         if (row.isNullAt(i)) {
-          val avroField = avroFields.get(i)
-          if (!avroField.schema().isNullable) {
+          if (!isSchemaNullable(i)) {
             throw new SparkRuntimeException(
               errorClass = "AVRO_CANNOT_WRITE_NULL_FIELD",
               messageParameters = Map(
-                "name" -> toSQLId(avroField.name),
-                "schema" -> toSQLType(SchemaConverters.toSqlType(avroField.schema()).dataType)))
+                "name" -> toSQLId(avroFields.get(i).name),
+                "schema" -> toSQLType(SchemaConverters.toSqlType(
+                  avroFields.get(i).schema()).dataType)))
           }
           result.put(avroIndices(i), null)
         } else {

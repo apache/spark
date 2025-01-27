@@ -33,7 +33,7 @@ import org.apache.avro.generic.{GenericData, GenericDatumReader, GenericDatumWri
 import org.apache.avro.generic.GenericData.{EnumSymbol, Fixed}
 import org.apache.commons.io.FileUtils
 
-import org.apache.spark.{SPARK_VERSION_SHORT, SparkConf, SparkException, SparkThrowable, SparkUpgradeException}
+import org.apache.spark.{SPARK_VERSION_SHORT, SparkConf, SparkException, SparkRuntimeException, SparkThrowable, SparkUpgradeException}
 import org.apache.spark.TestUtils.assertExceptionMsg
 import org.apache.spark.sql._
 import org.apache.spark.sql.TestingUDT.IntervalData
@@ -45,7 +45,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{withDefaultTimeZone
 import org.apache.spark.sql.execution.{FormattedMode, SparkPlan}
 import org.apache.spark.sql.execution.datasources.{CommonFileDataSourceSuite, DataSource, FilePartition}
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
-import org.apache.spark.sql.functions.col
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.LegacyBehaviorPolicy
 import org.apache.spark.sql.internal.LegacyBehaviorPolicy._
 import org.apache.spark.sql.internal.SQLConf
@@ -1342,6 +1342,49 @@ abstract class AvroSuite
       }
       assertExceptionMsg[IncompatibleSchemaException](e2,
         """"NOT-IN-ENUM" cannot be written since it's not defined in enum""")
+    }
+  }
+
+  test("to_avro nested struct schema nullability mismatch") {
+    Seq((true, false), (false, true)).foreach {
+      case (innerNull, outerNull) =>
+        val innerSchema = StructType(Seq(StructField("field1", IntegerType, innerNull)))
+        val outerSchema = StructType(Seq(StructField("innerStruct", innerSchema, outerNull)))
+        val nestedSchema = StructType(Seq(StructField("outerStruct", outerSchema, false)))
+
+        val rowWithNull = if (innerNull) Row(Row(null)) else Row(null)
+        val data = Seq(Row(Row(Row(1))), Row(rowWithNull), Row(Row(Row(3))))
+        val df = spark.createDataFrame(spark.sparkContext.parallelize(data), nestedSchema)
+
+        val avroTypeStruct = s"""{
+          |  "type": "record",
+          |  "name": "outerStruct",
+          |  "fields": [
+          |    {
+          |      "name": "innerStruct",
+          |      "type": {
+          |        "type": "record",
+          |        "name": "innerStruct",
+          |        "fields": [
+          |          {"name": "field1", "type": "int"}
+          |        ]
+          |      }
+          |    }
+          |  ]
+          |}
+        """.stripMargin // nullability mismatch for innerStruct
+
+        val expectedErrorName = if (outerNull) "`innerStruct`" else "`field1`"
+        val expectedErrorSchema = if (outerNull) "\"STRUCT<field1: INT NOT NULL>\"" else "\"INT\""
+
+        checkError(
+          exception = intercept[SparkRuntimeException] {
+            df.select(to_avro($"outerStruct", avroTypeStruct)).collect()
+          },
+          condition = "AVRO_CANNOT_WRITE_NULL_FIELD",
+          parameters = Map(
+            "name" -> expectedErrorName,
+            "schema" -> expectedErrorSchema))
     }
   }
 
