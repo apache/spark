@@ -129,7 +129,8 @@ object CurrentOrigin {
 
   private val sparkCodePattern = Pattern.compile("(org\\.apache\\.spark\\.sql\\." +
     "(?:(classic|connect)\\.)?" +
-    "(?:functions|Column|ColumnName|SQLImplicits|Dataset|DataFrameStatFunctions|DatasetHolder)" +
+    "(?:functions|Column|ColumnName|SQLImplicits|Dataset|DataFrameStatFunctions|DatasetHolder" +
+    "|SparkSession|ColumnNodeToProtoConverter)" +
     "(?:|\\..*|\\$.*))" +
     "|(scala\\.collection\\..*)")
 
