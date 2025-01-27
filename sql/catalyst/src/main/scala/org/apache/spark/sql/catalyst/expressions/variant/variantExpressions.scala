@@ -298,7 +298,7 @@ case class VariantGet(
     val castArgsArg = ctx.addReferenceObj("castArgs", castArgs)
     val UTF8Type = CodeGenerator.typeName(classOf[UTF8String])
     val parsedPathArg = if (parsedPath.isEmpty) {
-      s"($UTF8Type) ${pathCode.value}"
+      pathCode.value
     } else {
       ctx.addReferenceObj("parsedPath", parsedPath.get)
     }
