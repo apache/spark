@@ -25,7 +25,6 @@ import scala.tools.nsc.GenericRunnerSettings
 import org.apache.spark._
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.classic.SparkSession.hiveClassesArePresent
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
 import org.apache.spark.util.Utils
@@ -109,7 +108,7 @@ object Main extends Logging {
 
       val builder = SparkSession.builder().config(conf)
       if (conf.get(CATALOG_IMPLEMENTATION.key, "hive") == "hive") {
-        if (hiveClassesArePresent) {
+        if (SparkSession.hiveClassesArePresent) {
           // In the case that the property is not set at all, builder's config
           // does not have this value set to 'hive' yet. The original default
           // behavior is that when there are hive classes, we use hive catalog.

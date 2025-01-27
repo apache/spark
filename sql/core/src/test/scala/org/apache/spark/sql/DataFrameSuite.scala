@@ -1352,7 +1352,7 @@ class DataFrameSuite extends QueryTest
         )
 
         // error case: insert into an OneRowRelation
-        classic.Dataset.ofRows(spark, OneRowRelation()).createOrReplaceTempView("one_row")
+        Dataset.ofRows(spark, OneRowRelation()).createOrReplaceTempView("one_row")
         checkError(
           exception = intercept[AnalysisException] {
             insertion.write.insertInto("one_row")
@@ -1470,7 +1470,7 @@ class DataFrameSuite extends QueryTest
   /**
    * Verifies that there is no Exchange between the Aggregations for `df`
    */
-  private def verifyNonExchangingAgg(df: classic.DataFrame) = {
+  private def verifyNonExchangingAgg(df: DataFrame) = {
     var atFirstAgg: Boolean = false
     df.queryExecution.executedPlan.foreach {
       case agg: HashAggregateExec =>
@@ -1485,7 +1485,7 @@ class DataFrameSuite extends QueryTest
   /**
    * Verifies that there is an Exchange between the Aggregations for `df`
    */
-  private def verifyExchangingAgg(df: classic.DataFrame) = {
+  private def verifyExchangingAgg(df: DataFrame) = {
     var atFirstAgg: Boolean = false
     df.queryExecution.executedPlan.foreach {
       case agg: HashAggregateExec =>
@@ -1623,7 +1623,7 @@ class DataFrameSuite extends QueryTest
 
     val statsPlan = OutputListAwareConstraintsTestPlan(outputList = outputList)
 
-    val df = classic.Dataset.ofRows(spark, statsPlan)
+    val df = Dataset.ofRows(spark, statsPlan)
       // add some map-like operations which optimizer will optimize away, and make a divergence
       // for output between logical plan and optimized plan
       // logical plan
@@ -1791,7 +1791,7 @@ class DataFrameSuite extends QueryTest
   }
 
   private def verifyNullabilityInFilterExec(
-      df: classic.DataFrame,
+      df: DataFrame,
       expr: String,
       expectedNonNullableColumns: Seq[String]): Unit = {
     val dfWithFilter = df.where(s"isnotnull($expr)").selectExpr(expr)

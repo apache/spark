@@ -22,7 +22,6 @@ import scala.reflect.ClassTag
 import org.apache.spark.TaskContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SQLContext
-import org.apache.spark.sql.classic.ClassicConversions.castToImpl
 import org.apache.spark.sql.internal.SessionState
 import org.apache.spark.sql.types.StructType
 
@@ -44,8 +43,8 @@ package object state {
         keySchema,
         valueSchema,
         keyStateEncoderSpec,
-        sqlContext.sparkSession.sessionState,
-        Some(castToImpl(sqlContext.sparkSession).streams.stateStoreCoordinator))(
+        sqlContext.sessionState,
+        Some(sqlContext.streams.stateStoreCoordinator))(
         storeUpdateFunction)
     }
 

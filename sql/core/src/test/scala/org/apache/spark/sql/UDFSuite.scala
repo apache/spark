@@ -1109,8 +1109,7 @@ class UDFSuite extends QueryTest with SharedSparkSession {
     spark.udf.register("dummyUDF", (x: Int) => x + 1)
     val expressionInfo = spark.sessionState.catalog
       .lookupFunctionInfo(FunctionIdentifier("dummyUDF"))
-    assert(expressionInfo.getClassName.contains(
-      "org.apache.spark.sql.classic.UDFRegistration$$Lambda"))
+    assert(expressionInfo.getClassName.contains("org.apache.spark.sql.UDFRegistration$$Lambda"))
   }
 
   test("SPARK-11725: correctly handle null inputs for ScalaUDF") {

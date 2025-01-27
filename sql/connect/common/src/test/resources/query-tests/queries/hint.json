@@ -21,12 +21,12 @@
           "jvmOrigin": {
             "stackTrace": [{
               "classLoaderName": "app",
-              "declaringClass": "org.apache.spark.sql.connect.Dataset",
+              "declaringClass": "org.apache.spark.sql.Dataset",
               "methodName": "~~trimmed~anonfun~~",
               "fileName": "Dataset.scala"
             }, {
               "classLoaderName": "app",
-              "declaringClass": "org.apache.spark.sql.connect.SparkSession",
+              "declaringClass": "org.apache.spark.sql.SparkSession",
               "methodName": "newDataset",
               "fileName": "SparkSession.scala"
             }]
