@@ -190,6 +190,10 @@ abstract class BaseYarnClusterSuite extends SparkFunSuite with Matchers {
       .setPropertiesFile(propsFile)
       .addAppArgs(appArgs.toArray: _*)
 
+    extraConf.get("spark.api.mode").foreach { v =>
+      launcher.setConf("spark.api.mode", v)
+    }
+
     sparkArgs.foreach { case (name, value) =>
       if (value != null) {
         launcher.addSparkArg(name, value)
