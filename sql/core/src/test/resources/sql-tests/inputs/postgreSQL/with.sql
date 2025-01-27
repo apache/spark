@@ -613,10 +613,12 @@ WITH RECURSIVE x(n) AS (SELECT 1 UNION ALL SELECT n+1 FROM x
   SELECT * FROM x;
 
 -- aggregate functions
-WITH RECURSIVE x(n) AS (SELECT 1 UNION ALL SELECT count(*) FROM x)
+-- we need to cast 1 as bigint, as otherwise it will throw an error that the data types
+-- are different
+WITH RECURSIVE x(n) AS (SELECT cast(1 as bigint) UNION ALL SELECT count(*) FROM x)
   SELECT * FROM x;
 
-WITH RECURSIVE x(n) AS (SELECT 1 UNION ALL SELECT sum(n) FROM x)
+WITH RECURSIVE x(n) AS (SELECT cast(1 as bigint) UNION ALL SELECT sum(n) FROM x)
   SELECT * FROM x;
 
 -- ORDER BY
