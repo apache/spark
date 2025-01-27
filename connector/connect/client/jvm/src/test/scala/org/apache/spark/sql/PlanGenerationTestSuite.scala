@@ -24,6 +24,7 @@ import scala.collection.{immutable, mutable}
 import scala.jdk.CollectionConverters._
 import scala.util.{Failure, Success, Try}
 
+import com.google.protobuf
 import com.google.protobuf.util.JsonFormat
 import com.google.protobuf.util.JsonFormat.TypeRegistry
 import io.grpc.inprocess.InProcessChannelBuilder
@@ -37,12 +38,13 @@ import org.apache.spark.sql.avro.{functions => avroFn}
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.StringEncoder
 import org.apache.spark.sql.catalyst.util.CollationFactory
+import org.apache.spark.sql.connect.{DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.connect.ConnectConversions._
 import org.apache.spark.sql.connect.client.SparkConnectClient
+import org.apache.spark.sql.connect.test.{ConnectFunSuite, IntegrationTestUtils}
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.protobuf.{functions => pbFn}
-import org.apache.spark.sql.test.{ConnectFunSuite, IntegrationTestUtils}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
 import org.apache.spark.util.SparkFileUtils
@@ -146,7 +148,7 @@ class PlanGenerationTestSuite
   }
 
   private def test(name: String)(f: => Dataset[_]): Unit = super.test(name) {
-    val actual = f.plan.getRoot
+    val actual = trimJvmOriginFields(f.plan.getRoot)
     val goldenFile = queryFilePath.resolve(name.replace(' ', '_') + ".proto.bin")
     Try(readRelation(goldenFile)) match {
       case Success(expected) if expected == actual =>
@@ -158,10 +160,10 @@ class PlanGenerationTestSuite
         fail(s"""
              |Expected and actual plans do not match:
              |
-             |=== Expected Plan ===
+             |=== Expected Plan (with excess fields trimmed) ===
              |$expected
              |
-             |=== Actual Plan ===
+             |=== Actual Plan (with excess fields trimmed) ===
              |$actual
              |""".stripMargin)
       case Failure(_) if regenerateGoldenFiles =>
@@ -196,6 +198,50 @@ class PlanGenerationTestSuite
     finally {
       writer.close()
     }
+  }
+
+  private def trimJvmOriginFields[T <: protobuf.Message](message: T): T = {
+    def trim(builder: proto.JvmOrigin.Builder): Unit = {
+      builder
+        .clearLine()
+        .clearStartPosition()
+        .clearStartIndex()
+        .clearStopIndex()
+      val trimmedStackTraces = builder.getStackTraceBuilderList.asScala.map { element =>
+        element.clearLineNumber()
+        if (element.getMethodName != null && element.getMethodName.startsWith("$anonfun")) {
+          // Anonymous functions contain an sequence ID that is not stable.
+          element.setMethodName("~~trimmed~anonfun~~")
+        }
+        element.build()
+      }
+      builder.clearStackTrace().addAllStackTrace(trimmedStackTraces.asJava)
+    }
+
+    val builder = message.toBuilder
+
+    builder match {
+      case exp: proto.Relation.Builder
+          if exp.hasCommon && exp.getCommon.hasOrigin && exp.getCommon.getOrigin.hasJvmOrigin =>
+        trim(exp.getCommonBuilder.getOriginBuilder.getJvmOriginBuilder)
+      case exp: proto.Expression.Builder
+          if exp.hasCommon && exp.getCommon.hasOrigin && exp.getCommon.getOrigin.hasJvmOrigin =>
+        trim(exp.getCommonBuilder.getOriginBuilder.getJvmOriginBuilder)
+      case _ => // Other stuff that does not have origin
+    }
+
+    builder.getAllFields.asScala.foreach {
+      case (desc, msg: protobuf.Message) =>
+        builder.setField(desc, trimJvmOriginFields(msg))
+      case (desc, list: java.util.List[_]) =>
+        val newList = list.asScala.map {
+          case msg: protobuf.Message => trimJvmOriginFields(msg)
+          case other => other // Primitive types
+        }
+        builder.setField(desc, newList.asJava)
+      case _ => // Primitive types
+    }
+    builder.build().asInstanceOf[T]
   }
 
   private val urlWithUserAndPass = "jdbc:h2:mem:testdb0;user=testUser;password=testPass"
@@ -3492,27 +3538,35 @@ class PlanGenerationTestSuite
   }
 
   test("to_protobuf messageClassName") {
-    binary.select(pbFn.to_protobuf(fn.col("bytes"), classOf[StorageLevel].getName))
+    val df = binary.select(
+      pbFn.from_protobuf(fn.col("bytes"), "StorageLevel", testDescFilePath).alias("col"))
+    df.select(pbFn.to_protobuf(fn.col("col"), classOf[StorageLevel].getName))
   }
 
   test("to_protobuf messageClassName options") {
-    binary.select(
+    val df = binary.select(
+      pbFn.from_protobuf(fn.col("bytes"), "StorageLevel", testDescFilePath).alias("col"))
+    df.select(
       pbFn.to_protobuf(
-        fn.col("bytes"),
+        fn.col("col"),
         classOf[StorageLevel].getName,
         Map("recursive.fields.max.depth" -> "2").asJava))
   }
 
   test("to_protobuf messageClassName descFilePath options") {
-    binary.select(
+    val df = binary.select(
+      pbFn.from_protobuf(fn.col("bytes"), "StorageLevel", testDescFilePath).alias("col"))
+    df.select(
       pbFn.to_protobuf(
-        fn.col("bytes"),
+        fn.col("col"),
         "StorageLevel",
         testDescFilePath,
         Map("recursive.fields.max.depth" -> "2").asJava))
   }
 
   test("to_protobuf messageClassName descFilePath") {
-    binary.select(pbFn.to_protobuf(fn.col("bytes"), "StorageLevel", testDescFilePath))
+    val df = binary.select(
+      pbFn.from_protobuf(fn.col("bytes"), "StorageLevel", testDescFilePath).alias("col"))
+    df.select(pbFn.to_protobuf(fn.col("col"), "StorageLevel", testDescFilePath))
   }
 }

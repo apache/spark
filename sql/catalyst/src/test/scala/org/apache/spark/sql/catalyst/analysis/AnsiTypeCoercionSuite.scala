@@ -1057,11 +1057,11 @@ class AnsiTypeCoercionSuite extends TypeCoercionSuiteBase {
       ArrayType(IntegerType))
     shouldCast(
       ArrayType(StringType),
-      AbstractArrayType(StringTypeWithCollation),
+      AbstractArrayType(StringTypeWithCollation(supportsTrimCollation = true)),
       ArrayType(StringType))
     shouldCast(
       ArrayType(IntegerType),
-      AbstractArrayType(StringTypeWithCollation),
+      AbstractArrayType(StringTypeWithCollation(supportsTrimCollation = true)),
       ArrayType(StringType))
     shouldCast(
       ArrayType(StringType),
@@ -1075,11 +1075,11 @@ class AnsiTypeCoercionSuite extends TypeCoercionSuiteBase {
       ArrayType(ArrayType(IntegerType)))
     shouldCast(
       ArrayType(ArrayType(StringType)),
-      AbstractArrayType(AbstractArrayType(StringTypeWithCollation)),
+      AbstractArrayType(AbstractArrayType(StringTypeWithCollation(supportsTrimCollation = true))),
       ArrayType(ArrayType(StringType)))
     shouldCast(
       ArrayType(ArrayType(IntegerType)),
-      AbstractArrayType(AbstractArrayType(StringTypeWithCollation)),
+      AbstractArrayType(AbstractArrayType(StringTypeWithCollation(supportsTrimCollation = true))),
       ArrayType(ArrayType(StringType)))
     shouldCast(
       ArrayType(ArrayType(StringType)),
@@ -1088,16 +1088,16 @@ class AnsiTypeCoercionSuite extends TypeCoercionSuiteBase {
 
     // Invalid casts involving casting arrays into non-complex types.
     shouldNotCast(ArrayType(IntegerType), IntegerType)
-    shouldNotCast(ArrayType(StringType), StringTypeWithCollation)
+    shouldNotCast(ArrayType(StringType), StringTypeWithCollation(supportsTrimCollation = true))
     shouldNotCast(ArrayType(StringType), IntegerType)
-    shouldNotCast(ArrayType(IntegerType), StringTypeWithCollation)
+    shouldNotCast(ArrayType(IntegerType), StringTypeWithCollation(supportsTrimCollation = true))
 
     // Invalid casts involving casting arrays of arrays into arrays of non-complex types.
     shouldNotCast(ArrayType(ArrayType(IntegerType)), AbstractArrayType(IntegerType))
     shouldNotCast(ArrayType(ArrayType(StringType)),
-      AbstractArrayType(StringTypeWithCollation))
+      AbstractArrayType(StringTypeWithCollation(supportsTrimCollation = true)))
     shouldNotCast(ArrayType(ArrayType(StringType)), AbstractArrayType(IntegerType))
     shouldNotCast(ArrayType(ArrayType(IntegerType)),
-      AbstractArrayType(StringTypeWithCollation))
+      AbstractArrayType(StringTypeWithCollation(supportsTrimCollation = true)))
   }
 }

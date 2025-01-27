@@ -85,7 +85,12 @@ case class RaiseError(errorClass: Expression, errorParms: Expression, dataType: 
   override def foldable: Boolean = false
   override def nullable: Boolean = true
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(StringTypeWithCollation, AbstractMapType(StringTypeWithCollation, StringTypeWithCollation))
+    Seq(
+      StringTypeWithCollation(supportsTrimCollation = true),
+      AbstractMapType(
+        StringTypeWithCollation(supportsTrimCollation = true),
+        StringTypeWithCollation(supportsTrimCollation = true)
+      ))
 
   override def left: Expression = errorClass
   override def right: Expression = errorParms
@@ -199,8 +204,10 @@ object AssertTrue {
   """,
   since = "1.6.0",
   group = "misc_funcs")
-case class CurrentDatabase() extends LeafExpression with Unevaluable {
-  override def dataType: DataType = SQLConf.get.defaultStringType
+case class CurrentDatabase()
+  extends LeafExpression
+  with DefaultStringProducingExpression
+  with Unevaluable {
   override def nullable: Boolean = false
   override def prettyName: String = "current_schema"
   final override val nodePatterns: Seq[TreePattern] = Seq(CURRENT_LIKE)
@@ -218,8 +225,10 @@ case class CurrentDatabase() extends LeafExpression with Unevaluable {
   """,
   since = "3.1.0",
   group = "misc_funcs")
-case class CurrentCatalog() extends LeafExpression with Unevaluable {
-  override def dataType: DataType = SQLConf.get.defaultStringType
+case class CurrentCatalog()
+  extends LeafExpression
+  with DefaultStringProducingExpression
+  with Unevaluable {
   override def nullable: Boolean = false
   override def prettyName: String = "current_catalog"
   final override val nodePatterns: Seq[TreePattern] = Seq(CURRENT_LIKE)
@@ -240,7 +249,8 @@ case class CurrentCatalog() extends LeafExpression with Unevaluable {
   group = "misc_funcs")
 // scalastyle:on line.size.limit
 case class Uuid(randomSeed: Option[Long] = None) extends LeafExpression with Nondeterministic
-    with ExpressionWithRandomSeed {
+  with DefaultStringProducingExpression
+  with ExpressionWithRandomSeed {
 
   def this() = this(None)
 
@@ -253,8 +263,6 @@ case class Uuid(randomSeed: Option[Long] = None) extends LeafExpression with Non
   override lazy val resolved: Boolean = randomSeed.isDefined
 
   override def nullable: Boolean = false
-
-  override def dataType: DataType = SQLConf.get.defaultStringType
 
   override def stateful: Boolean = true
 
@@ -290,12 +298,15 @@ case class Uuid(randomSeed: Option[Long] = None) extends LeafExpression with Non
   since = "3.0.0",
   group = "misc_funcs")
 // scalastyle:on line.size.limit
-case class SparkVersion() extends LeafExpression with RuntimeReplaceable {
+case class SparkVersion()
+  extends LeafExpression
+  with RuntimeReplaceable
+  with DefaultStringProducingExpression {
   override def prettyName: String = "version"
 
   override lazy val replacement: Expression = StaticInvoke(
     classOf[ExpressionImplUtils],
-    SQLConf.get.defaultStringType,
+    dataType,
     "getSparkVersion",
     returnNullable = false)
 }
@@ -311,10 +322,9 @@ case class SparkVersion() extends LeafExpression with RuntimeReplaceable {
   """,
   since = "3.0.0",
   group = "misc_funcs")
-case class TypeOf(child: Expression) extends UnaryExpression {
+case class TypeOf(child: Expression) extends UnaryExpression with DefaultStringProducingExpression {
   override def nullable: Boolean = false
   override def foldable: Boolean = true
-  override def dataType: DataType = SQLConf.get.defaultStringType
   override def eval(input: InternalRow): Any = UTF8String.fromString(child.dataType.catalogString)
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -335,9 +345,11 @@ case class TypeOf(child: Expression) extends UnaryExpression {
   since = "3.2.0",
   group = "misc_funcs")
 // scalastyle:on line.size.limit
-case class CurrentUser() extends LeafExpression with Unevaluable {
+case class CurrentUser()
+  extends LeafExpression
+  with DefaultStringProducingExpression
+  with Unevaluable {
   override def nullable: Boolean = false
-  override def dataType: DataType = SQLConf.get.defaultStringType
   override def prettyName: String =
     getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("current_user")
   final override val nodePatterns: Seq[TreePattern] = Seq(CURRENT_LIKE)
@@ -416,8 +428,8 @@ case class AesEncrypt(
 
   override def inputTypes: Seq[AbstractDataType] =
     Seq(BinaryType, BinaryType,
-      StringTypeWithCollation,
-      StringTypeWithCollation,
+      StringTypeWithCollation(supportsTrimCollation = true),
+      StringTypeWithCollation(supportsTrimCollation = true),
       BinaryType, BinaryType)
 
   override def children: Seq[Expression] = Seq(input, key, mode, padding, iv, aad)
@@ -493,8 +505,8 @@ case class AesDecrypt(
   override def inputTypes: Seq[AbstractDataType] = {
     Seq(BinaryType,
       BinaryType,
-      StringTypeWithCollation,
-      StringTypeWithCollation, BinaryType)
+      StringTypeWithCollation(supportsTrimCollation = true),
+      StringTypeWithCollation(supportsTrimCollation = true), BinaryType)
   }
 
   override def prettyName: String = "aes_decrypt"

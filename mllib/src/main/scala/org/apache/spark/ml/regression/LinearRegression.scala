@@ -702,6 +702,10 @@ class LinearRegressionModel private[ml] (
   private[ml] def this(uid: String, coefficients: Vector, intercept: Double) =
     this(uid, coefficients, intercept, 1.0)
 
+  // For ml connect only
+  @Since("4.0.0")
+  private[ml] def this() = this(Identifiable.randomUID("linReg"), Vectors.empty, 0.0, 0.0)
+
   override val numFeatures: Int = coefficients.size
 
   /**
@@ -903,7 +907,7 @@ class LinearRegressionSummary private[regression] (
     val labelCol: String,
     val featuresCol: String,
     private val privateModel: LinearRegressionModel,
-    private val diagInvAtWA: Array[Double]) extends Serializable {
+    private val diagInvAtWA: Array[Double]) extends Summary with Serializable {
 
   @transient private val metrics = {
     val weightCol =

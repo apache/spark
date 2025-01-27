@@ -23,7 +23,8 @@ import java.nio.file.{Files, Path, Paths}
 import org.apache.commons.io.FileUtils
 
 import org.apache.spark.{SparkConf, SparkException}
-import org.apache.spark.sql.SparkSession
+import org.apache.spark.metrics.source.CodegenMetrics
+import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -47,7 +48,7 @@ class ArtifactManagerSuite extends SharedSparkSession {
   private def sessionUUID: String = spark.sessionUUID
 
   override def afterEach(): Unit = {
-    artifactManager.cleanUpResources()
+    artifactManager.cleanUpResourcesForTesting()
     super.afterEach()
   }
 
@@ -208,7 +209,7 @@ class ArtifactManagerSuite extends SharedSparkSession {
         assert(expectedPath.toFile.exists())
 
         // Remove resources
-        artifactManager.cleanUpResources()
+        artifactManager.cleanUpResourcesForTesting()
 
         assert(blockManager.getLocalBytes(blockId).isEmpty)
         assert(!expectedPath.toFile.exists())
@@ -293,7 +294,7 @@ class ArtifactManagerSuite extends SharedSparkSession {
     val sessionDirectory = artifactManager.artifactPath.toFile
     assert(sessionDirectory.exists())
 
-    artifactManager.cleanUpResources()
+    artifactManager.cleanUpResourcesForTesting()
     assert(!sessionDirectory.exists())
     assert(ArtifactManager.artifactRootDirectory.toFile.exists())
   }
@@ -445,6 +446,60 @@ class ArtifactManagerSuite extends SharedSparkSession {
 
       val msg = instance.getClass.getMethod("msg").invoke(instance)
       assert(msg == "Hello Talon! Nice to meet you!")
+    }
+  }
+
+  test("Codegen cache should be invalid when artifacts are added - class artifact") {
+    withTempDir { dir =>
+      runCodegenTest("class artifact") {
+        val randomFilePath = dir.toPath.resolve("random.class")
+        val testBytes = "test".getBytes(StandardCharsets.UTF_8)
+        Files.write(randomFilePath, testBytes)
+        spark.addArtifact(randomFilePath.toString)
+      }
+    }
+  }
+
+  test("Codegen cache should be invalid when artifacts are added - JAR artifact") {
+    withTempDir { dir =>
+      runCodegenTest("JAR artifact") {
+        val randomFilePath = dir.toPath.resolve("random.jar")
+        val testBytes = "test".getBytes(StandardCharsets.UTF_8)
+        Files.write(randomFilePath, testBytes)
+        spark.addArtifact(randomFilePath.toString)
+      }
+    }
+  }
+
+  private def getCodegenCount: Long = CodegenMetrics.METRIC_COMPILATION_TIME.getCount
+
+  private def runCodegenTest(msg: String)(addOneArtifact: => Unit): Unit = {
+    withSQLConf(SQLConf.ARTIFACTS_SESSION_ISOLATION_ALWAYS_APPLY_CLASSLOADER.key -> "true") {
+      val s = spark
+      import s.implicits._
+
+      val count1 = getCodegenCount
+      // trigger codegen for Dataset
+      Seq(Seq("abc")).toDS().collect()
+      val count2 = getCodegenCount
+      // codegen happens
+      assert(count2 > count1, s"$msg: codegen should happen at the first time")
+
+      // add one artifact, codegen cache should be invalid after this
+      addOneArtifact
+
+      // trigger codegen for another Dataset of same type
+      Seq(Seq("abc")).toDS().collect()
+      // codegen cache should not work for Datasets of same type.
+      val count3 = getCodegenCount
+      assert(count3 > count2, s"$msg: codegen should happen again after adding artifact")
+
+      // trigger again
+      Seq(Seq("abc")).toDS().collect()
+      // codegen should work now as classloader is not changed
+      val count4 = getCodegenCount
+      assert(count4 == count3,
+        s"$msg: codegen should not happen again as classloader is not changed")
     }
   }
 }

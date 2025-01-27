@@ -67,6 +67,36 @@ class VariantWriteShreddingSuite extends SparkFunSuite with ExpressionEvalHelper
 
   private val emptyMetadata: Array[Byte] = parseJson("null").getMetadata
 
+  test("variantShreddingSchema") {
+    // Validate the schema produced by SparkShreddingUtils.variantShreddingSchema for a few simple
+    // cases.
+    // metadata is always non-nullable.
+    assert(SparkShreddingUtils.variantShreddingSchema(IntegerType) ==
+      StructType(Seq(
+        StructField("metadata", BinaryType, nullable = false),
+        StructField("value", BinaryType, nullable = true),
+        StructField("typed_value", IntegerType, nullable = true))))
+
+    val fieldA = StructType(Seq(
+      StructField("value", BinaryType, nullable = true),
+      StructField("typed_value", TimestampNTZType, nullable = true)))
+    val arrayType = ArrayType(StructType(Seq(
+      StructField("value", BinaryType, nullable = true),
+      StructField("typed_value", StringType, nullable = true))), containsNull = false)
+    val fieldB = StructType(Seq(
+      StructField("value", BinaryType, nullable = true),
+      StructField("typed_value", arrayType, nullable = true)))
+    val objectType = StructType(Seq(
+      StructField("a", fieldA, nullable = false),
+      StructField("b", fieldB, nullable = false)))
+    val structSchema = DataType.fromDDL("a timestamp_ntz, b array<string>")
+    assert(SparkShreddingUtils.variantShreddingSchema(structSchema) ==
+      StructType(Seq(
+        StructField("metadata", BinaryType, nullable = false),
+        StructField("value", BinaryType, nullable = true),
+        StructField("typed_value", objectType, nullable = true))))
+  }
+
   test("shredding as fixed numeric types") {
     /* Cast integer to any wider numeric type. */
     testWithSchema("1", IntegerType, Row(emptyMetadata, null, 1))
@@ -179,6 +209,17 @@ class VariantWriteShreddingSuite extends SparkFunSuite with ExpressionEvalHelper
     // Not an object
     testWithSchema(obj, ArrayType(StructType.fromDDL("a int, b string")),
       Row(obj.getMetadata, untypedValue(obj), null))
+
+    // Similar to the case above where "b" was not in the shredding schema, but with the unshredded
+    // value being an object. Check that the copied value has correct dictionary IDs.
+    val obj2 = parseJson("""{"a": 1, "b": {"c": "hello"}}""")
+    val residual2 = untypedValue("""{"b": {"c": "hello"}}""")
+    // First byte is the type, second is number of fields, and the third is the ID for "b"
+    residual2(2) = 1
+    // Followed by 2 bytes for offsets, inner object type and number of fields, then ID for "c".
+    residual2(7) = 2
+    testWithSchema(obj2, StructType.fromDDL("a int, c string"),
+      Row(obj2.getMetadata, residual2, Row(Row(null, 1), Row(null, null))))
   }
 
   test("shredding as array") {

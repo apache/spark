@@ -22,6 +22,7 @@ import java.sql.Connection
 import org.apache.spark.{SparkConf, SparkSQLException}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
+import org.apache.spark.sql.execution.FilterExec
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
 import org.apache.spark.sql.jdbc.PostgresDatabaseOnDocker
 import org.apache.spark.sql.types._
@@ -241,6 +242,15 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCT
         parameters = Map("relationName" -> "`t2`")
       )
     }
+  }
+
+  test("SPARK-49695: Postgres fix xor push-down") {
+    val df = spark.sql(s"select dept, name from $catalogName.employee where dept ^ 6 = 0")
+    val rows = df.collect()
+    assert(!df.queryExecution.sparkPlan.exists(_.isInstanceOf[FilterExec]))
+    assert(rows.length == 1)
+    assert(rows(0).getInt(0) === 6)
+    assert(rows(0).getString(1) === "jen")
   }
 
   override def testDatetime(tbl: String): Unit = {

@@ -32,6 +32,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LeafNode, LogicalPlan, Project, Union}
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.util.{CollationFactory, TypeUtils}
+import org.apache.spark.sql.catalyst.util.SparkStringUtils.truncatedString
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -487,7 +488,10 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
     }
   }
 
-  override def toString: String = s"$value IN ${list.mkString("(", ",", ")")}"
+  override def simpleString(maxFields: Int): String =
+    s"$value IN ${truncatedString(list, "(", ",", ")", maxFields)}"
+
+  override def toString: String = simpleString(Int.MaxValue)
 
   override def eval(input: InternalRow): Any = {
     if (list.isEmpty && !legacyNullInEmptyBehavior) {
@@ -608,14 +612,28 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
 
   require(hset != null, "hset could not be null")
 
-  override def toString: String = {
-    val listString = hset.toSeq
-      .map(elem => Literal(elem, child.dataType).toString)
-      // Sort elements for deterministic behaviours
-      .sorted
-      .mkString(", ")
-    s"$child INSET $listString"
+  override def simpleString(maxFields: Int): String = {
+    if (!child.resolved) {
+      return s"$child INSET (values with unresolved data types)"
+    }
+    if (hset.size <= maxFields) {
+      val listString = hset.toSeq
+        .map(elem => Literal(elem, child.dataType).toString)
+        // Sort elements for deterministic behaviours
+        .sorted
+        .mkString(", ")
+      s"$child INSET $listString"
+    } else {
+      // Skip sorting if there are many elements. Do not use truncatedString because we would have
+      // to convert elements we do not print to Literals.
+      val listString = hset.take(maxFields).toSeq
+        .map(elem => Literal(elem, child.dataType).toString)
+        .mkString(", ")
+      s"$child INSET $listString, ... ${hset.size - maxFields} more fields"
+    }
   }
+
+  override def toString: String = simpleString(Int.MaxValue)
 
   @transient private[this] lazy val hasNull: Boolean = hset.contains(null)
   @transient private[this] lazy val isNaN: Any => Boolean = child.dataType match {

@@ -27,7 +27,7 @@ import org.apache.spark.sql.execution.datasources.text.TextOptions
 import org.apache.spark.sql.execution.datasources.v2._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.util.SerializableConfiguration
+import org.apache.spark.util.{SerializableConfiguration, Utils}
 
 /**
  * A factory used to create Text readers.
@@ -47,10 +47,12 @@ case class TextPartitionReaderFactory(
 
   override def buildReader(file: PartitionedFile): PartitionReader[InternalRow] = {
     val confValue = broadcastedConf.value.value
-    val reader = if (!options.wholeText) {
-      new HadoopFileLinesReader(file, options.lineSeparatorInRead, confValue)
-    } else {
-      new HadoopFileWholeTextReader(file, confValue)
+    val reader = Utils.createResourceUninterruptiblyIfInTaskThread {
+      if (!options.wholeText) {
+        new HadoopFileLinesReader(file, options.lineSeparatorInRead, confValue)
+      } else {
+        new HadoopFileWholeTextReader(file, confValue)
+      }
     }
     Option(TaskContext.get()).foreach(_.addTaskCompletionListener[Unit](_ => reader.close()))
     val iter = if (readDataSchema.isEmpty) {

@@ -17,6 +17,7 @@
 package org.apache.spark.sql
 
 import org.apache.spark.annotation.Stable
+import org.apache.spark.internal.config.{ConfigEntry, OptionalConfigEntry}
 
 /**
  * Runtime configuration interface for Spark. To access this, use `SparkSession.conf`.
@@ -54,6 +55,11 @@ abstract class RuntimeConfig {
   }
 
   /**
+   * Sets the given Spark runtime configuration property.
+   */
+  private[sql] def set[T](entry: ConfigEntry[T], value: T): Unit
+
+  /**
    * Returns the value of Spark runtime configuration property for the given key. If the key is
    * not set yet, return its default value if possible, otherwise `NoSuchElementException` will be
    * thrown.
@@ -73,6 +79,25 @@ abstract class RuntimeConfig {
    * @since 2.0.0
    */
   def get(key: String, default: String): String
+
+  /**
+   * Returns the value of Spark runtime configuration property for the given key. If the key is
+   * not set yet, return `defaultValue` in [[ConfigEntry]].
+   */
+  @throws[NoSuchElementException]("if the key is not set")
+  private[sql] def get[T](entry: ConfigEntry[T]): T
+
+  /**
+   * Returns the value of Spark runtime configuration property for the given key. If the key is
+   * not set yet, return None.
+   */
+  private[sql] def get[T](entry: OptionalConfigEntry[T]): Option[T]
+
+  /**
+   * Returns the value of Spark runtime configuration property for the given key. If the key is
+   * not set yet, return the user given `default`.
+   */
+  private[sql] def get[T](entry: ConfigEntry[T], default: T): T
 
   /**
    * Returns all properties set in this conf.

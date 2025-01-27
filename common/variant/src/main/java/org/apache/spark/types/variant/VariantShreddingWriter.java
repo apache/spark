@@ -101,7 +101,9 @@ public class VariantShreddingWriter {
           int id = v.getDictionaryIdAtIndex(i);
           fieldEntries.add(new VariantBuilder.FieldEntry(
               field.key, id, variantBuilder.getWritePos() - start));
-          variantBuilder.appendVariant(field.value);
+          // shallowAppendVariant is needed for correctness, since we're relying on the metadata IDs
+          // being unchanged.
+          variantBuilder.shallowAppendVariant(field.value);
         }
       }
       if (numFieldsMatched < objectSchema.length) {
@@ -133,8 +135,6 @@ public class VariantShreddingWriter {
         // Store the typed value.
         result.addScalar(typedValue);
       } else {
-        VariantBuilder variantBuilder = new VariantBuilder(false);
-        variantBuilder.appendVariant(v);
         result.addVariantValue(v.getValue());
       }
     } else {

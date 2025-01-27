@@ -759,14 +759,14 @@ Project [from_csv(StructField(t,TimestampNTZType,true), (timestampFormat,dd/MMMM
 -- !query
 select timestampadd(MONTH, -1, timestamp'2022-02-14 01:02:03')
 -- !query analysis
-Project [timestampadd(MONTH, -1, 2022-02-14 01:02:03, Some(America/Los_Angeles)) AS timestampadd(MONTH, -1, TIMESTAMP_NTZ '2022-02-14 01:02:03')#x]
+Project [timestampadd(MONTH, cast(-1 as bigint), 2022-02-14 01:02:03, Some(America/Los_Angeles)) AS timestampadd(MONTH, -1, TIMESTAMP_NTZ '2022-02-14 01:02:03')#x]
 +- OneRowRelation
 
 
 -- !query
 select timestampadd(MINUTE, 58, timestamp'2022-02-14 01:02:03')
 -- !query analysis
-Project [timestampadd(MINUTE, 58, 2022-02-14 01:02:03, Some(America/Los_Angeles)) AS timestampadd(MINUTE, 58, TIMESTAMP_NTZ '2022-02-14 01:02:03')#x]
+Project [timestampadd(MINUTE, cast(58 as bigint), 2022-02-14 01:02:03, Some(America/Los_Angeles)) AS timestampadd(MINUTE, 58, TIMESTAMP_NTZ '2022-02-14 01:02:03')#x]
 +- OneRowRelation
 
 

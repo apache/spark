@@ -69,7 +69,7 @@ def _create_py_udf(
                 == "true"
             )
         except PySparkRuntimeError as e:
-            if e.getErrorClass() == "NO_ACTIVE_OR_DEFAULT_SESSION":
+            if e.getCondition() == "NO_ACTIVE_OR_DEFAULT_SESSION":
                 pass  # Just uses the default if no session found.
             else:
                 raise e

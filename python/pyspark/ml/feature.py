@@ -50,7 +50,7 @@ from pyspark.ml.param.shared import (
     Param,
     Params,
 )
-from pyspark.ml.util import JavaMLReadable, JavaMLWritable
+from pyspark.ml.util import JavaMLReadable, JavaMLWritable, try_remote_attribute_relation
 from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaParams, JavaTransformer, _jvm
 from pyspark.ml.common import inherit_doc
 
@@ -387,6 +387,7 @@ class _LSHModel(JavaModel, _LSHParams):
         """
         return self._set(outputCol=value)
 
+    @try_remote_attribute_relation
     def approxNearestNeighbors(
         self,
         dataset: DataFrame,
@@ -424,6 +425,7 @@ class _LSHModel(JavaModel, _LSHParams):
         """
         return self._call_java("approxNearestNeighbors", dataset, key, numNearestNeighbors, distCol)
 
+    @try_remote_attribute_relation
     def approxSimilarityJoin(
         self,
         datasetA: DataFrame,
@@ -1208,7 +1210,7 @@ class CountVectorizerModel(
 
         sc = SparkContext._active_spark_context
         assert sc is not None and sc._gateway is not None
-        java_class = sc._gateway.jvm.java.lang.String
+        java_class = getattr(sc._gateway.jvm, "java.lang.String")
         jvocab = CountVectorizerModel._new_java_array(vocabulary, java_class)
         model = CountVectorizerModel._create_from_java_class(
             "org.apache.spark.ml.feature.CountVectorizerModel", jvocab
@@ -2261,6 +2263,7 @@ class ImputerModel(JavaModel, _ImputerParams, JavaMLReadable["ImputerModel"], Ja
 
     @property
     @since("2.2.0")
+    @try_remote_attribute_relation
     def surrogateDF(self) -> DataFrame:
         """
         Returns a DataFrame containing inputCols and their corresponding surrogates,
@@ -4799,7 +4802,7 @@ class StringIndexerModel(
 
         sc = SparkContext._active_spark_context
         assert sc is not None and sc._gateway is not None
-        java_class = sc._gateway.jvm.java.lang.String
+        java_class = getattr(sc._gateway.jvm, "java.lang.String")
         jlabels = StringIndexerModel._new_java_array(labels, java_class)
         model = StringIndexerModel._create_from_java_class(
             "org.apache.spark.ml.feature.StringIndexerModel", jlabels
@@ -4828,7 +4831,7 @@ class StringIndexerModel(
 
         sc = SparkContext._active_spark_context
         assert sc is not None and sc._gateway is not None
-        java_class = sc._gateway.jvm.java.lang.String
+        java_class = getattr(sc._gateway.jvm, "java.lang.String")
         jlabels = StringIndexerModel._new_java_array(arrayOfLabels, java_class)
         model = StringIndexerModel._create_from_java_class(
             "org.apache.spark.ml.feature.StringIndexerModel", jlabels
@@ -4970,7 +4973,8 @@ class StopWordsRemover(
 
     Notes
     -----
-    null values from input array are preserved unless adding null to stopWords explicitly.
+    - null values from input array are preserved unless adding null to stopWords explicitly.
+    - In Spark Connect Mode, the default value of parameter `locale` is not set.
 
     Examples
     --------
@@ -5069,11 +5073,19 @@ class StopWordsRemover(
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.feature.StopWordsRemover", self.uid
         )
-        self._setDefault(
-            stopWords=StopWordsRemover.loadDefaultStopWords("english"),
-            caseSensitive=False,
-            locale=self._java_obj.getLocale(),
-        )
+        if isinstance(self._java_obj, str):
+            # Skip setting the default value of 'locale', which needs to invoke a JVM method.
+            # So if users don't explicitly set 'locale', then getLocale fails.
+            self._setDefault(
+                stopWords=StopWordsRemover.loadDefaultStopWords("english"),
+                caseSensitive=False,
+            )
+        else:
+            self._setDefault(
+                stopWords=StopWordsRemover.loadDefaultStopWords("english"),
+                caseSensitive=False,
+                locale=self._java_obj.getLocale(),
+            )
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
@@ -5198,7 +5210,7 @@ class StopWordsRemover(
         Supported languages: danish, dutch, english, finnish, french, german, hungarian,
         italian, norwegian, portuguese, russian, spanish, swedish, turkish
         """
-        stopWordsObj = _jvm().org.apache.spark.ml.feature.StopWordsRemover
+        stopWordsObj = getattr(_jvm(), "org.apache.spark.ml.feature.StopWordsRemover")
         return list(stopWordsObj.loadDefaultStopWords(language))
 
 
@@ -5490,15 +5502,6 @@ class TargetEncoderModel(
         Sets the value of :py:attr:`smoothing`.
         """
         return self._set(smoothing=value)
-
-    @property
-    @since("4.0.0")
-    def stats(self) -> List[Dict[float, Tuple[float, float]]]:
-        """
-        Fitted statistics for each feature to being encoded.
-        The list contains a dictionary for each input column.
-        """
-        return self._call_java("stats")
 
 
 @inherit_doc
@@ -6381,6 +6384,7 @@ class Word2VecModel(JavaModel, _Word2VecParams, JavaMLReadable["Word2VecModel"],
     """
 
     @since("1.5.0")
+    @try_remote_attribute_relation
     def getVectors(self) -> DataFrame:
         """
         Returns the vector representation of the words as a dataframe
@@ -6401,6 +6405,7 @@ class Word2VecModel(JavaModel, _Word2VecParams, JavaMLReadable["Word2VecModel"],
         return self._set(outputCol=value)
 
     @since("1.5.0")
+    @try_remote_attribute_relation
     def findSynonyms(self, word: Union[str, Vector], num: int) -> DataFrame:
         """
         Find "num" number of words closest in similarity to "word".

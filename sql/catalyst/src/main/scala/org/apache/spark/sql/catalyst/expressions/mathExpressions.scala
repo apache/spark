@@ -455,7 +455,7 @@ case class Conv(
   override def second: Expression = fromBaseExpr
   override def third: Expression = toBaseExpr
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(StringTypeWithCollation, IntegerType, IntegerType)
+    Seq(StringTypeWithCollation(supportsTrimCollation = true), IntegerType, IntegerType)
   override def dataType: DataType = first.dataType
   override def nullable: Boolean = true
 
@@ -1005,10 +1005,12 @@ case class ToRadians(child: Expression) extends UnaryMathExpression(math.toRadia
   group = "math_funcs")
 // scalastyle:on line.size.limit
 case class Bin(child: Expression)
-  extends UnaryExpression with ImplicitCastInputTypes with Serializable {
+  extends UnaryExpression
+  with ImplicitCastInputTypes
+  with Serializable
+  with DefaultStringProducingExpression {
   override def nullIntolerant: Boolean = true
   override def inputTypes: Seq[DataType] = Seq(LongType)
-  override def dataType: DataType = SQLConf.get.defaultStringType
 
   protected override def nullSafeEval(input: Any): Any =
     UTF8String.toBinaryString(input.asInstanceOf[Long])
@@ -1114,15 +1116,17 @@ object Hex {
   since = "1.5.0",
   group = "math_funcs")
 case class Hex(child: Expression)
-  extends UnaryExpression with ImplicitCastInputTypes {
+  extends UnaryExpression
+  with ImplicitCastInputTypes
+  with DefaultStringProducingExpression {
   override def nullIntolerant: Boolean = true
 
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(TypeCollection(LongType, BinaryType, StringTypeWithCollation))
+    Seq(TypeCollection(LongType, BinaryType, StringTypeWithCollation(supportsTrimCollation = true)))
 
   override def dataType: DataType = child.dataType match {
     case st: StringType => st
-    case _ => SQLConf.get.defaultStringType
+    case _ => super.dataType
   }
 
   protected override def nullSafeEval(num: Any): Any = child.dataType match {
@@ -1163,7 +1167,8 @@ case class Unhex(child: Expression, failOnError: Boolean = false)
 
   def this(expr: Expression) = this(expr, false)
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(StringTypeWithCollation)
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(StringTypeWithCollation(supportsTrimCollation = true))
 
   override def nullable: Boolean = true
   override def dataType: DataType = BinaryType

@@ -25,7 +25,7 @@ import org.apache.commons.io.FilenameUtils
 import org.apache.spark.SparkFiles
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
-import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.TimestampNTZType
 import org.apache.spark.util.Utils
@@ -56,7 +56,7 @@ class JDBCOptions(
       // If an option value is `null`, throw a user-friendly error. Keys here cannot be null, as
       // scala's implementation of Maps prohibits null keys.
       if (v == null) {
-        throw QueryCompilationErrors.nullDataSourceOption(k)
+        throw QueryExecutionErrors.nullDataSourceOption(k)
       }
       properties.setProperty(k, v)
     }

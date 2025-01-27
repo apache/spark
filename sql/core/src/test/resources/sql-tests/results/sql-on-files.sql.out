@@ -257,3 +257,27 @@ DROP DATABASE sql_on_files
 struct<>
 -- !query output
 
+
+
+-- !query
+SELECT * FROM json.`https://raw.githubusercontent.com/apache/spark/refs/heads/master/examples/src/main/resources/employees.json`
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "FAILED_READ_FILE.UNSUPPORTED_FILE_SYSTEM",
+  "sqlState" : "KD001",
+  "messageParameters" : {
+    "fileSystemClass" : "org.apache.hadoop.fs.http.HttpsFileSystem",
+    "method" : "listStatus",
+    "path" : "https://raw.githubusercontent.com/apache/spark/refs/heads/master/examples/src/main/resources/employees.json"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 15,
+    "stopIndex" : 128,
+    "fragment" : "json.`https://raw.githubusercontent.com/apache/spark/refs/heads/master/examples/src/main/resources/employees.json`"
+  } ]
+}

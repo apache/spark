@@ -32,10 +32,10 @@ package rdd {
 package sql {
   class ExperimentalMethods
   class SparkSessionExtensions
-  class SQLContext
 
   package execution {
     class QueryExecution
+    class SparkStrategy
   }
   package internal {
     class SharedState

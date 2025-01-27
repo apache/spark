@@ -2324,9 +2324,9 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
       // Plain `StringType`.
       sql("CREATE TABLE t1(col STRING) USING parquet")
       sql("INSERT INTO t1 VALUES ('a')")
-      checkAnswer(sql("SELECT COLLATION(col) FROM t1"), Row("UTF8_BINARY"))
+      checkAnswer(sql("SELECT COLLATION(col) FROM t1"), Row("SYSTEM.BUILTIN.UTF8_BINARY"))
       sql("ALTER TABLE t1 ALTER COLUMN col TYPE STRING COLLATE UTF8_LCASE")
-      checkAnswer(sql("SELECT COLLATION(col) FROM t1"), Row("UTF8_LCASE"))
+      checkAnswer(sql("SELECT COLLATION(col) FROM t1"), Row("SYSTEM.BUILTIN.UTF8_LCASE"))
 
       // Invalid "ALTER COLUMN" to Integer.
       val alterInt = "ALTER TABLE t1 ALTER COLUMN col TYPE INTEGER"
@@ -2348,23 +2348,23 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
       // `ArrayType` with collation.
       sql("CREATE TABLE t2(col ARRAY<STRING>) USING parquet")
       sql("INSERT INTO t2 VALUES (ARRAY('a'))")
-      checkAnswer(sql("SELECT COLLATION(col[0]) FROM t2"), Row("UTF8_BINARY"))
+      checkAnswer(sql("SELECT COLLATION(col[0]) FROM t2"), Row("SYSTEM.BUILTIN.UTF8_BINARY"))
       assertThrows[AnalysisException] {
         sql("ALTER TABLE t2 ALTER COLUMN col TYPE ARRAY<STRING COLLATE UTF8_LCASE>")
       }
-      checkAnswer(sql("SELECT COLLATION(col[0]) FROM t2"), Row("UTF8_BINARY"))
+      checkAnswer(sql("SELECT COLLATION(col[0]) FROM t2"), Row("SYSTEM.BUILTIN.UTF8_BINARY"))
 
       // `MapType` with collation.
       sql("CREATE TABLE t3(col MAP<STRING, STRING>) USING parquet")
       sql("INSERT INTO t3 VALUES (MAP('k', 'v'))")
-      checkAnswer(sql("SELECT COLLATION(col['k']) FROM t3"), Row("UTF8_BINARY"))
+      checkAnswer(sql("SELECT COLLATION(col['k']) FROM t3"), Row("SYSTEM.BUILTIN.UTF8_BINARY"))
       assertThrows[AnalysisException] {
         sql(
           """
             |ALTER TABLE t3 ALTER COLUMN col TYPE
             |MAP<STRING, STRING COLLATE UTF8_LCASE>""".stripMargin)
       }
-      checkAnswer(sql("SELECT COLLATION(col['k']) FROM t3"), Row("UTF8_BINARY"))
+      checkAnswer(sql("SELECT COLLATION(col['k']) FROM t3"), Row("SYSTEM.BUILTIN.UTF8_BINARY"))
 
       // Invalid change of map key collation.
       val alterMap =
@@ -2388,11 +2388,11 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
       // `StructType` with collation.
       sql("CREATE TABLE t4(col STRUCT<a:STRING>) USING parquet")
       sql("INSERT INTO t4 VALUES (NAMED_STRUCT('a', 'value'))")
-      checkAnswer(sql("SELECT COLLATION(col.a) FROM t4"), Row("UTF8_BINARY"))
+      checkAnswer(sql("SELECT COLLATION(col.a) FROM t4"), Row("SYSTEM.BUILTIN.UTF8_BINARY"))
       assertThrows[AnalysisException] {
         sql("ALTER TABLE t4 ALTER COLUMN col TYPE STRUCT<a:STRING COLLATE UTF8_LCASE>")
       }
-      checkAnswer(sql("SELECT COLLATION(col.a) FROM t4"), Row("UTF8_BINARY"))
+      checkAnswer(sql("SELECT COLLATION(col.a) FROM t4"), Row("SYSTEM.BUILTIN.UTF8_BINARY"))
     }
   }
 

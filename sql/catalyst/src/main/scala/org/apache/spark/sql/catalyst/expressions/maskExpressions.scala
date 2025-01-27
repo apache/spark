@@ -193,11 +193,11 @@ case class Mask(
    */
   override def inputTypes: Seq[AbstractDataType] =
     Seq(
-      StringTypeWithCollation,
-      StringTypeWithCollation,
-      StringTypeWithCollation,
-      StringTypeWithCollation,
-      StringTypeWithCollation)
+      StringTypeWithCollation(supportsTrimCollation = true),
+      StringTypeWithCollation(supportsTrimCollation = true),
+      StringTypeWithCollation(supportsTrimCollation = true),
+      StringTypeWithCollation(supportsTrimCollation = true),
+      StringTypeWithCollation(supportsTrimCollation = true))
 
   override def nullable: Boolean = true
 

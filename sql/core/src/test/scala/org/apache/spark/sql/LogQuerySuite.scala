@@ -33,12 +33,18 @@ class LogQuerySuite extends QueryTest with SharedSparkSession with Logging {
     new File(pwd + "/target/LogQuerySuite.log")
   }
 
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    Logging.enableStructuredLogging()
+  }
+
   override def afterAll(): Unit = {
     super.afterAll()
     // Clear the log file
     if (logFile.exists()) {
       logFile.delete()
     }
+    Logging.disableStructuredLogging()
   }
 
   private def createTempView(viewName: String): Unit = {

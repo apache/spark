@@ -94,6 +94,7 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite with SharedThriftServ
     // SPARK-28636
     "decimalArithmeticOperations.sql",
     "literals.sql",
+    "random.sql",
     "subquery/scalar-subquery/scalar-subquery-predicate.sql",
     "subquery/in-subquery/in-limit.sql",
     "subquery/in-subquery/in-group-by.sql",

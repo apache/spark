@@ -22,7 +22,6 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.objects.Invoke
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.types.StringTypeWithCollation
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -41,7 +40,9 @@ abstract class XPathExtract
   override def nullable: Boolean = true
 
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(StringTypeWithCollation, StringTypeWithCollation)
+    Seq(
+      StringTypeWithCollation(supportsTrimCollation = true),
+      StringTypeWithCollation(supportsTrimCollation = true))
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (!path.foldable) {
@@ -49,7 +50,7 @@ abstract class XPathExtract
         errorSubClass = "NON_FOLDABLE_INPUT",
         messageParameters = Map(
           "inputName" -> toSQLId("path"),
-          "inputType" -> toSQLType(StringTypeWithCollation),
+          "inputType" -> toSQLType(StringTypeWithCollation(supportsTrimCollation = true)),
           "inputExpr" -> toSQLExpr(path)
         )
       )
@@ -217,12 +218,13 @@ case class XPathDouble(xml: Expression, path: Expression) extends XPathExtract {
   since = "2.0.0",
   group = "xml_funcs")
 // scalastyle:on line.size.limit
-case class XPathString(xml: Expression, path: Expression) extends XPathExtract {
+case class XPathString(xml: Expression, path: Expression)
+  extends XPathExtract
+  with DefaultStringProducingExpression {
 
   @transient override lazy val evaluator: XPathEvaluator = XPathStringEvaluator(pathUTF8String)
 
   override def prettyName: String = "xpath_string"
-  override def dataType: DataType = SQLConf.get.defaultStringType
 
   override protected def withNewChildrenInternal(
     newLeft: Expression, newRight: Expression): Expression = copy(xml = newLeft, path = newRight)
@@ -241,12 +243,14 @@ case class XPathString(xml: Expression, path: Expression) extends XPathExtract {
   since = "2.0.0",
   group = "xml_funcs")
 // scalastyle:on line.size.limit
-case class XPathList(xml: Expression, path: Expression) extends XPathExtract {
+case class XPathList(xml: Expression, path: Expression)
+  extends XPathExtract
+  with DefaultStringProducingExpression {
 
   @transient override lazy val evaluator: XPathEvaluator = XPathListEvaluator(pathUTF8String)
 
   override def prettyName: String = "xpath"
-  override def dataType: DataType = ArrayType(SQLConf.get.defaultStringType)
+  override def dataType: DataType = ArrayType(super.dataType)
 
   override protected def withNewChildrenInternal(
     newLeft: Expression, newRight: Expression): XPathList = copy(xml = newLeft, path = newRight)

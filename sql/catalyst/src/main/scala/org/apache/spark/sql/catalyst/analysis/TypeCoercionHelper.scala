@@ -44,6 +44,7 @@ import org.apache.spark.sql.catalyst.expressions.{
   MapConcat,
   MapZipWith,
   NaNvl,
+  RandStr,
   RangeFrame,
   ScalaUDF,
   Sequence,
@@ -318,7 +319,8 @@ abstract class TypeCoercionHelper {
         }
 
       case aj @ ArrayJoin(arr, d, nr)
-          if !AbstractArrayType(StringTypeWithCollation).acceptsType(arr.dataType) &&
+          if !AbstractArrayType(StringTypeWithCollation(supportsTrimCollation = true)).
+            acceptsType(arr.dataType) &&
           ArrayType.acceptsType(arr.dataType) =>
         val containsNull = arr.dataType.asInstanceOf[ArrayType].containsNull
         implicitCast(arr, ArrayType(StringType, containsNull)) match {
@@ -398,6 +400,11 @@ abstract class TypeCoercionHelper {
       case NaNvl(l, r) if l.dataType == FloatType && r.dataType == DoubleType =>
         NaNvl(Cast(l, DoubleType), r)
       case NaNvl(l, r) if r.dataType == NullType => NaNvl(l, Cast(r, l.dataType))
+
+      case r: RandStr if r.length.dataType != IntegerType =>
+        implicitCast(r.length, IntegerType).map { casted =>
+          r.copy(length = casted)
+        }.getOrElse(r)
 
       case other => other
     }

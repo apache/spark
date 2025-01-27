@@ -450,7 +450,9 @@ class CollationSQLRegexpSuite
         },
         condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
         parameters = Map(
-          "sqlExpr" -> "\"regexp_replace(collate(ABCDE, UNICODE_CI), .c., FFF, 1)\"",
+          "sqlExpr" ->
+            ("\"regexp_replace(collate(ABCDE, UNICODE_CI), '.c.' collate UNICODE_CI," +
+              " 'FFF' collate UNICODE_CI, 1)\""),
           "paramIndex" -> "first",
           "inputSql" -> "\"collate(ABCDE, UNICODE_CI)\"",
           "inputType" -> "\"STRING COLLATE UNICODE_CI\"",
