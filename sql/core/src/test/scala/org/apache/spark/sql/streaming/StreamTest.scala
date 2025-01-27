@@ -37,7 +37,6 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.plans.physical.AllTuples
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
 import org.apache.spark.sql.catalyst.util._
-import org.apache.spark.sql.classic.ClassicConversions.castToImpl
 import org.apache.spark.sql.connector.read.streaming.{Offset => OffsetV2, SparkDataStream}
 import org.apache.spark.sql.execution.datasources.v2.StreamingDataSourceV2ScanRelation
 import org.apache.spark.sql.execution.streaming._
@@ -356,8 +355,7 @@ trait StreamTest extends QueryTest with SharedSparkSession with TimeLimits with 
     // and it may not work correctly when multiple `testStream`s run concurrently.
 
     val stream = _stream.toDF()
-    // use the session in DF, not the default session
-    val sparkSession = castToImpl(stream.sparkSession)
+    val sparkSession = stream.sparkSession  // use the session in DF, not the default session
     var pos = 0
     var currentStream: StreamExecution = null
     var lastStream: StreamExecution = null

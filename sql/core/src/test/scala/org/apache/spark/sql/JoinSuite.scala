@@ -46,7 +46,7 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
 
   setupTestData()
 
-  def statisticSizeInByte(df: classic.DataFrame): BigInt = {
+  def statisticSizeInByte(df: DataFrame): BigInt = {
     df.queryExecution.optimizedPlan.stats.sizeInBytes
   }
 
@@ -1768,7 +1768,7 @@ class ThreadLeakInSortMergeJoinSuite
 
   setupTestData()
   override protected def createSparkSession: TestSparkSession = {
-    classic.SparkSession.cleanupAnyExistingSession()
+    SparkSession.cleanupAnyExistingSession()
     new TestSparkSession(
       sparkConf.set(SHUFFLE_SPILL_NUM_ELEMENTS_FORCE_SPILL_THRESHOLD, 20))
   }

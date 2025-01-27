@@ -90,12 +90,12 @@
             "jvmOrigin": {
               "stackTrace": [{
                 "classLoaderName": "app",
-                "declaringClass": "org.apache.spark.sql.connect.Dataset",
+                "declaringClass": "org.apache.spark.sql.Dataset",
                 "methodName": "col",
                 "fileName": "Dataset.scala"
               }, {
                 "classLoaderName": "app",
-                "declaringClass": "org.apache.spark.sql.RelationalGroupedDataset",
+                "declaringClass": "org.apache.spark.sql.api.RelationalGroupedDataset",
                 "methodName": "pivot",
                 "fileName": "RelationalGroupedDataset.scala"
               }]

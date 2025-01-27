@@ -20,14 +20,13 @@ package org.apache.spark.sql
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.internal.config
 import org.apache.spark.internal.config.DEFAULT_PARALLELISM
-import org.apache.spark.sql.classic.RuntimeConfig
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.{RuntimeConfigImpl, SQLConf}
 import org.apache.spark.sql.internal.SQLConf.CHECKPOINT_LOCATION
 import org.apache.spark.sql.internal.StaticSQLConf.GLOBAL_TEMP_DATABASE
 
 class RuntimeConfigSuite extends SparkFunSuite {
 
-  private def newConf(): RuntimeConfig = new RuntimeConfig()
+  private def newConf(): RuntimeConfig = new RuntimeConfigImpl()
 
   test("set and get") {
     val conf = newConf()

@@ -251,7 +251,7 @@ class DataFrameNaFunctionsSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  def createDFsWithSameFieldsName(): (classic.DataFrame, classic.DataFrame) = {
+  def createDFsWithSameFieldsName(): (DataFrame, DataFrame) = {
     val df1 = Seq(
       ("f1-1", "f2", null),
       ("f1-2", null, null),

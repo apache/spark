@@ -108,7 +108,7 @@ object StreamingForeachBatchHelper extends Logging {
             args.df.asInstanceOf[Dataset[Any]]
           } else {
             // Recover the Dataset from the DataFrame using the encoder.
-            args.df.as(encoder)
+            Dataset.apply(args.df.sparkSession, args.df.logicalPlan)(encoder)
           }
           fn(ds, args.batchId)
         } catch {

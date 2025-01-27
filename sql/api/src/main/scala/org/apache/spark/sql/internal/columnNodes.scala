@@ -85,7 +85,7 @@ trait ColumnNodeLike {
   }
 }
 
-private[sql] object ColumnNode {
+private[internal] object ColumnNode {
   val NO_ORIGIN: Origin = Origin()
   def normalize[T <: ColumnNodeLike](option: Option[T]): Option[T] =
     option.map(_.normalize().asInstanceOf[T])

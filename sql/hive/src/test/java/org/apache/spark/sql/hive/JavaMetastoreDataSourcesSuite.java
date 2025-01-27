@@ -60,8 +60,7 @@ public class JavaMetastoreDataSourcesSuite {
     if (path.exists()) {
       path.delete();
     }
-    HiveSessionCatalog catalog =
-        (HiveSessionCatalog) sqlContext.sparkSession().sessionState().catalog();
+    HiveSessionCatalog catalog = (HiveSessionCatalog) sqlContext.sessionState().catalog();
     hiveManagedPath = new Path(catalog.defaultTablePath(new TableIdentifier("javaSavedTable")));
     fs = hiveManagedPath.getFileSystem(sc.hadoopConfiguration());
     fs.delete(hiveManagedPath, true);

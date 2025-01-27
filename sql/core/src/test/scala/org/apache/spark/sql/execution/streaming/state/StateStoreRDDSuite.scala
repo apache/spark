@@ -31,7 +31,6 @@ import org.apache.spark.scheduler.ExecutorCacheTaskLocation
 import org.apache.spark.sql.LocalSparkSession._
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.util.quietly
-import org.apache.spark.sql.classic.ClassicConversions._
 import org.apache.spark.sql.execution.streaming.StatefulOperatorStateInfo
 import org.apache.spark.tags.ExtendedSQLTest
 import org.apache.spark.util.{CompletionIterator, Utils}
@@ -169,7 +168,7 @@ class StateStoreRDDSuite extends SparkFunSuite with BeforeAndAfter {
 
       withSparkSession(SparkSession.builder().config(sparkConf).getOrCreate()) { spark =>
         implicit val sqlContext = spark.sqlContext
-        val coordinatorRef = castToImpl(spark).streams.stateStoreCoordinator
+        val coordinatorRef = sqlContext.streams.stateStoreCoordinator
         val storeProviderId1 = StateStoreProviderId(StateStoreId(path, opId, 0), queryRunId)
         val storeProviderId2 = StateStoreProviderId(StateStoreId(path, opId, 1), queryRunId)
         coordinatorRef.reportActiveInstance(storeProviderId1, "host1", "exec1", Seq.empty)
