@@ -188,7 +188,7 @@ class KeyValueGroupedDataset[K, V] private[sql] () extends sql.KeyValueGroupedDa
       statefulProcessor: StatefulProcessor[K, V, U],
       timeMode: TimeMode,
       outputMode: OutputMode,
-      initialState: Option[KeyValueGroupedDataset[K, S]] = None,
+      initialState: Option[sql.KeyValueGroupedDataset[K, S]] = None,
       eventTimeColumnName: String = ""): Dataset[U] = unsupported()
 
   // Overrides...
@@ -663,7 +663,7 @@ private class KeyValueGroupedDatasetImpl[K, V, IK, IV](
       statefulProcessor: StatefulProcessor[K, V, U],
       timeMode: TimeMode,
       outputMode: OutputMode,
-      initialState: Option[KeyValueGroupedDataset[K, S]] = None,
+      initialState: Option[sql.KeyValueGroupedDataset[K, S]] = None,
       eventTimeColumnName: String = ""): Dataset[U] = {
     val outputEncoder = agnosticEncoderFor[U]
     val stateEncoder = agnosticEncoderFor[S]
