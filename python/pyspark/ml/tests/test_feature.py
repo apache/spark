@@ -103,9 +103,12 @@ class FeatureTestsMixin:
             .setLabels(indexer.labels)
         )
 
-        self.assertEqual(idx2str.getInputCol(), "labelIndex")
-        self.assertEqual(idx2str.getOutputCol(), "sameLabel")
-        self.assertEqual(idx2str.getLabels(), indexer.labels)
+        def check(t: IndexToString) -> None:
+            self.assertEqual(t.getInputCol(), "labelIndex")
+            self.assertEqual(t.getOutputCol(), "sameLabel")
+            self.assertEqual(t.getLabels(), indexer.labels)
+
+        check(idx2str)
 
         ret = idx2str.transform(transformed)
         self.assertEqual(
@@ -115,6 +118,13 @@ class FeatureTestsMixin:
         rows = ret.select("label", "sameLabel").collect()
         for r in rows:
             self.assertEqual(r.label, r.sameLabel)
+
+        # save & load
+        with tempfile.TemporaryDirectory(prefix="index_string") as d:
+            idx2str.write().overwrite().save(d)
+            idx2str2 = IndexToString.load(d)
+            self.assertEqual(str(idx2str), str(idx2str2))
+            check(idx2str2)
 
     def test_dct(self):
         df = self.spark.createDataFrame([(Vectors.dense([5.0, 8.0, 6.0]),)], ["vec"])
