@@ -850,13 +850,12 @@ object LimitPushDown extends Rule[LogicalPlan] {
 
     // If limit node is present, we should propagate it down to UnionLoop, so that it is later
     // propagated to UnionLoopExec.
-    case Limit(le @ IntegerLiteral(limit), ul: UnionLoop) =>
-      val newUnionLoop = EliminateSorts(ul.copy(limit = Some(limit))).asInstanceOf[UnionLoop]
-      Limit(le, Project(newUnionLoop.output, newUnionLoop))
-    case Limit(le @ IntegerLiteral(limit), p @ Project(_, ul: UnionLoop)) =>
-      val newUnionLoop = EliminateSorts(ul.copy(limit = Some(limit))).asInstanceOf[UnionLoop]
-      Limit(le, p.copy(child = Project(newUnionLoop.output, newUnionLoop)))
-
+    // Limit node is constructed by placing GlobalLimit over LocalLimit (look at Limit apply method)
+    // that is the reason why we match it this way.
+    case g @ GlobalLimit(IntegerLiteral(limit), l @ LocalLimit(_, p @ Project(_, ul: UnionLoop))) =>
+      g.copy(child = l.copy(child = p.copy(child = ul.copy(limit = Some(limit)))))
+    case g @ GlobalLimit(IntegerLiteral(limit), l @ LocalLimit(_, u: UnionLoop)) =>
+      g.copy(child = l.copy(child = u.copy(limit = Some(limit))))
 
     // Add extra limits below JOIN:
     // 1. For LEFT OUTER and RIGHT OUTER JOIN, we push limits to the left and right sides

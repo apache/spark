@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReferences
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
-import org.apache.spark.sql.catalyst.plans.logical.{LocalLimit, LogicalPlan, Project, Union, UnionLoopRef}
+import org.apache.spark.sql.catalyst.plans.logical.{Limit, LogicalPlan, Project, Union, UnionLoopRef}
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
@@ -756,7 +756,7 @@ case class UnionLoopExec(
      plan: LogicalPlan, currentLimit: Int) = {
     // In case limit is defined, we create a limit node above the plan and execute
     // the newly created plan.
-    val limitedPlan = LocalLimit(Literal(currentLimit), plan)
+    val limitedPlan = Limit(Literal(currentLimit), plan)
     val df = Dataset.ofRows(session, limitedPlan)
     val cachedDF = df.repartition()
     val count = cachedDF.count()
