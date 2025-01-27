@@ -32,6 +32,7 @@ org.apache.spark.ml.feature.SQLTransformer
 org.apache.spark.ml.feature.StopWordsRemover
 org.apache.spark.ml.feature.FeatureHasher
 org.apache.spark.ml.feature.HashingTF
+org.apache.spark.ml.feature.IndexToString
 
 ########### Model for loading
 # classification

@@ -72,6 +72,7 @@ from pyspark.ml.feature import (
     BucketedRandomProjectionLSHModel,
     MinHashLSH,
     MinHashLSHModel,
+    IndexToString,
 )
 from pyspark.ml.linalg import DenseVector, SparseVector, Vectors
 from pyspark.sql import Row
@@ -80,6 +81,41 @@ from pyspark.testing.mlutils import SparkSessionTestCase
 
 
 class FeatureTestsMixin:
+    def test_index_string(self):
+        dataset = self.spark.createDataFrame(
+            [
+                (0, "a"),
+                (1, "b"),
+                (2, "c"),
+                (3, "a"),
+                (4, "a"),
+                (5, "c"),
+            ],
+            ["id", "label"],
+        )
+
+        indexer = StringIndexer(inputCol="label", outputCol="labelIndex").fit(dataset)
+        transformed = indexer.transform(dataset)
+        idx2str = (
+            IndexToString()
+            .setInputCol("labelIndex")
+            .setOutputCol("sameLabel")
+            .setLabels(indexer.labels)
+        )
+
+        self.assertEqual(idx2str.getInputCol(), "labelIndex")
+        self.assertEqual(idx2str.getOutputCol(), "sameLabel")
+        self.assertEqual(idx2str.getLabels(), indexer.labels)
+
+        ret = idx2str.transform(transformed)
+        self.assertEqual(
+            sorted(ret.schema.names), sorted(["id", "label", "labelIndex", "sameLabel"])
+        )
+
+        rows = ret.select("label", "sameLabel").collect()
+        for r in rows:
+            self.assertEqual(r.label, r.sameLabel)
+
     def test_dct(self):
         df = self.spark.createDataFrame([(Vectors.dense([5.0, 8.0, 6.0]),)], ["vec"])
         dct = DCT()
@@ -128,6 +164,7 @@ class FeatureTestsMixin:
         si = StringIndexer(inputCol="label1", outputCol="index1")
         model = si.fit(df.select("label1"))
         self.assertEqual(si.uid, model.uid)
+        self.assertEqual(model.labels, list(model.labelsArray[0]))
 
         # read/write
         with tempfile.TemporaryDirectory(prefix="string_indexer") as tmp_dir:
@@ -188,6 +225,7 @@ class FeatureTestsMixin:
         pca = PCA(k=2, inputCol="features", outputCol="pca_features")
 
         model = pca.fit(df)
+        self.assertTrue(np.allclose(model.pc.toArray()[0], [-0.44859172, -0.28423808], atol=1e-4))
         self.assertEqual(pca.uid, model.uid)
         self.assertEqual(model.getK(), 2)
         self.assertTrue(
