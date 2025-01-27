@@ -802,6 +802,7 @@ case class UnionLoopExec(
       // the current plan is created by substituting UnionLoopRef node with the project node of
       // the previous plan.
       // This way we support only UNION ALL case. Additional case should be added for UNION case.
+      // One way of supporting UNION case can be seen at SPARK-24497 PR from Peter Toth.
       val newRecursion = recursion.transform {
         case r: UnionLoopRef =>
           val prevPlanToRefMapping = prevPlan.output.zip(r.output).map {
