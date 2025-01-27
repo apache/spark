@@ -24,11 +24,69 @@ import numpy as np
 from pyspark.ml.evaluation import BinaryClassificationEvaluator
 from pyspark.ml.linalg import Vectors
 from pyspark.ml.classification import LogisticRegression
-from pyspark.ml.tuning import ParamGridBuilder, CrossValidator, CrossValidatorModel
+from pyspark.ml.tuning import (
+    ParamGridBuilder,
+    CrossValidator,
+    CrossValidatorModel,
+    TrainValidationSplit,
+    TrainValidationSplitModel,
+)
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 
 class TuningTestsMixin:
+    def test_train_validation_split(self):
+        dataset = self.spark.createDataFrame(
+            [
+                (Vectors.dense([0.0]), 0.0),
+                (Vectors.dense([0.4]), 1.0),
+                (Vectors.dense([0.5]), 0.0),
+                (Vectors.dense([0.6]), 1.0),
+                (Vectors.dense([1.0]), 1.0),
+            ]
+            * 10,  # Repeat the data 10 times
+            ["features", "label"],
+        ).repartition(1)
+
+        lr = LogisticRegression()
+        grid = ParamGridBuilder().addGrid(lr.maxIter, [0, 1]).build()
+        evaluator = BinaryClassificationEvaluator()
+
+        tvs = TrainValidationSplit(
+            estimator=lr, estimatorParamMaps=grid, evaluator=evaluator, parallelism=1, seed=42
+        )
+        self.assertEqual(tvs.getEstimator(), lr)
+        self.assertEqual(tvs.getEvaluator(), evaluator)
+        self.assertEqual(tvs.getParallelism(), 1)
+        self.assertEqual(tvs.getEstimatorParamMaps(), grid)
+
+        tvs_model = tvs.fit(dataset)
+
+        # Access the train ratio
+        self.assertEqual(tvs_model.getTrainRatio(), 0.75)
+        print("----------- ", tvs_model.validationMetrics)
+        self.assertTrue(np.isclose(tvs_model.validationMetrics[0], 0.5, atol=1e-4))
+        self.assertTrue(np.isclose(tvs_model.validationMetrics[1], 0.8857142857142857, atol=1e-4))
+
+        evaluation_score = evaluator.evaluate(tvs_model.transform(dataset))
+        self.assertTrue(np.isclose(evaluation_score, 0.8333333333333333, atol=1e-4))
+
+        # save & load
+        with tempfile.TemporaryDirectory(prefix="train_validation_split") as d:
+            path1 = os.path.join(d, "cv")
+            tvs.write().save(path1)
+            tvs2 = TrainValidationSplit.load(path1)
+            self.assertEqual(str(tvs), str(tvs2))
+            self.assertEqual(str(tvs.getEstimator()), str(tvs2.getEstimator()))
+            self.assertEqual(str(tvs.getEvaluator()), str(tvs2.getEvaluator()))
+
+            path2 = os.path.join(d, "cv_model")
+            tvs_model.write().save(path2)
+            model2 = TrainValidationSplitModel.load(path2)
+            self.assertEqual(str(tvs_model), str(model2))
+            self.assertEqual(str(tvs_model.getEstimator()), str(model2.getEstimator()))
+            self.assertEqual(str(tvs_model.getEvaluator()), str(model2.getEvaluator()))
+
     def test_cross_validator(self):
         dataset = self.spark.createDataFrame(
             [
