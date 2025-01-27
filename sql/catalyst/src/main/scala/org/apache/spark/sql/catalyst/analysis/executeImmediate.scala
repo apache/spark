@@ -151,6 +151,8 @@ class SubstituteExecuteImmediate(
           }
         }
 
+        // Fully analyze the generated plan. AnalysisContext.withExecuteImmediateContext makes sure
+        // that SQL scripting local variables will not be accessed from the plan.
         val finalPlan = AnalysisContext.withExecuteImmediateContext {
           resolveChild(queryPlan)
         }
@@ -192,7 +194,7 @@ class SubstituteExecuteImmediate(
   }
 
   private def getVariableReference(expr: Expression, nameParts: Seq[String]): VariableReference = {
-    lookupVariable(nameParts, LookupVariableMode.INCLUDE_LOCAL_VARS) match {
+    lookupVariable(nameParts) match {
       case Some(variable) => variable
       case _ =>
         throw QueryCompilationErrors
