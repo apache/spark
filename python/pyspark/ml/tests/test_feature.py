@@ -68,6 +68,10 @@ from pyspark.ml.feature import (
     PCAModel,
     Word2Vec,
     Word2VecModel,
+    BucketedRandomProjectionLSH,
+    BucketedRandomProjectionLSHModel,
+    MinHashLSH,
+    MinHashLSHModel,
 )
 from pyspark.ml.linalg import DenseVector, SparseVector, Vectors
 from pyspark.sql import Row
@@ -1341,6 +1345,112 @@ class FeatureTestsMixin:
             tf.write().overwrite().save(d)
             tf2 = HashingTF.load(d)
             self.assertEqual(str(tf), str(tf2))
+
+    def test_bucketed_random_projection_lsh(self):
+        spark = self.spark
+
+        data = [
+            (0, Vectors.dense([-1.0, -1.0])),
+            (1, Vectors.dense([-1.0, 1.0])),
+            (2, Vectors.dense([1.0, -1.0])),
+            (3, Vectors.dense([1.0, 1.0])),
+        ]
+        df = spark.createDataFrame(data, ["id", "features"])
+
+        data2 = [
+            (4, Vectors.dense([2.0, 2.0])),
+            (5, Vectors.dense([2.0, 3.0])),
+            (6, Vectors.dense([3.0, 2.0])),
+            (7, Vectors.dense([3.0, 3.0])),
+        ]
+        df2 = spark.createDataFrame(data2, ["id", "features"])
+
+        brp = BucketedRandomProjectionLSH()
+        brp.setInputCol("features")
+        brp.setOutputCol("hashes")
+        brp.setSeed(12345)
+        brp.setBucketLength(1.0)
+
+        self.assertEqual(brp.getInputCol(), "features")
+        self.assertEqual(brp.getOutputCol(), "hashes")
+        self.assertEqual(brp.getBucketLength(), 1.0)
+        self.assertEqual(brp.getSeed(), 12345)
+
+        model = brp.fit(df)
+
+        output = model.transform(df)
+        self.assertEqual(output.columns, ["id", "features", "hashes"])
+        self.assertEqual(output.count(), 4)
+
+        output = model.approxNearestNeighbors(df2, Vectors.dense([1.0, 2.0]), 1)
+        self.assertEqual(output.columns, ["id", "features", "hashes", "distCol"])
+        self.assertEqual(output.count(), 1)
+
+        output = model.approxSimilarityJoin(df, df2, 3)
+        self.assertEqual(output.columns, ["datasetA", "datasetB", "distCol"])
+        self.assertEqual(output.count(), 1)
+
+        # save & load
+        with tempfile.TemporaryDirectory(prefix="bucketed_random_projection_lsh") as d:
+            brp.write().overwrite().save(d)
+            brp2 = BucketedRandomProjectionLSH.load(d)
+            self.assertEqual(str(brp), str(brp2))
+
+            model.write().overwrite().save(d)
+            model2 = BucketedRandomProjectionLSHModel.load(d)
+            self.assertEqual(str(model), str(model2))
+
+    def test_min_hash_lsh(self):
+        spark = self.spark
+
+        data = [
+            (0, Vectors.dense([-1.0, -1.0])),
+            (1, Vectors.dense([-1.0, 1.0])),
+            (2, Vectors.dense([1.0, -1.0])),
+            (3, Vectors.dense([1.0, 1.0])),
+        ]
+        df = spark.createDataFrame(data, ["id", "features"])
+
+        data2 = [
+            (4, Vectors.dense([2.0, 2.0])),
+            (5, Vectors.dense([2.0, 3.0])),
+            (6, Vectors.dense([3.0, 2.0])),
+            (7, Vectors.dense([3.0, 3.0])),
+        ]
+        df2 = spark.createDataFrame(data2, ["id", "features"])
+
+        mh = MinHashLSH()
+        mh.setInputCol("features")
+        mh.setOutputCol("hashes")
+        mh.setSeed(12345)
+
+        self.assertEqual(mh.getInputCol(), "features")
+        self.assertEqual(mh.getOutputCol(), "hashes")
+        self.assertEqual(mh.getSeed(), 12345)
+
+        model = mh.fit(df)
+
+        output = model.transform(df)
+        self.assertEqual(output.columns, ["id", "features", "hashes"])
+        self.assertEqual(output.count(), 4)
+
+        output = model.approxNearestNeighbors(df2, Vectors.dense([1.0, 2.0]), 1)
+        self.assertEqual(output.columns, ["id", "features", "hashes", "distCol"])
+        self.assertEqual(output.count(), 1)
+
+        output = model.approxSimilarityJoin(df, df2, 3)
+        self.assertEqual(output.columns, ["datasetA", "datasetB", "distCol"])
+        self.assertEqual(output.count(), 16)
+
+        # save & load
+        with tempfile.TemporaryDirectory(prefix="min_hash_lsh") as d:
+            mh.write().overwrite().save(d)
+            mh2 = MinHashLSH.load(d)
+            self.assertEqual(str(mh), str(mh2))
+
+            model.write().overwrite().save(d)
+            model2 = MinHashLSHModel.load(d)
+            self.assertEqual(str(model), str(model2))
 
 
 class FeatureTests(FeatureTestsMixin, SparkSessionTestCase):
