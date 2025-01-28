@@ -41,6 +41,7 @@ from pyspark.ml.feature import (
     Normalizer,
     Interaction,
     RFormula,
+    RFormulaModel,
     Tokenizer,
     SQLTransformer,
     RegexTokenizer,
@@ -77,6 +78,7 @@ from pyspark.ml.feature import (
     MinHashLSH,
     MinHashLSHModel,
     IndexToString,
+    PolynomialExpansion,
 )
 from pyspark.ml.linalg import DenseVector, SparseVector, Vectors
 from pyspark.sql import Row
@@ -85,6 +87,31 @@ from pyspark.testing.mlutils import SparkSessionTestCase
 
 
 class FeatureTestsMixin:
+    def test_polynomial_expansion(self):
+        df = self.spark.createDataFrame([(Vectors.dense([0.5, 2.0]),)], ["dense"])
+        px = PolynomialExpansion(degree=2)
+        px.setInputCol("dense")
+        px.setOutputCol("expanded")
+        self.assertTrue(
+            np.allclose(
+                px.transform(df).head().expanded.toArray(), [0.5, 0.25, 2.0, 1.0, 4.0], atol=1e-4
+            )
+        )
+
+        def check(p: PolynomialExpansion) -> None:
+            self.assertEqual(p.getInputCol(), "dense")
+            self.assertEqual(p.getOutputCol(), "expanded")
+            self.assertEqual(p.getDegree(), 2)
+
+        check(px)
+
+        # save & load
+        with tempfile.TemporaryDirectory(prefix="px") as d:
+            px.write().overwrite().save(d)
+            px2 = PolynomialExpansion.load(d)
+            self.assertEqual(str(px), str(px2))
+            check(px2)
+
     def test_index_string(self):
         dataset = self.spark.createDataFrame(
             [
@@ -1269,11 +1296,25 @@ class FeatureTestsMixin:
         )
         rf = RFormula(formula="y ~ x + s", stringIndexerOrderType="alphabetDesc")
         self.assertEqual(rf.getStringIndexerOrderType(), "alphabetDesc")
-        transformedDF = rf.fit(df).transform(df)
+        model = rf.fit(df)
+        self.assertEqual(rf.uid, model.uid)
+        transformedDF = model.transform(df)
         observed = transformedDF.select("features").collect()
         expected = [[1.0, 0.0], [2.0, 1.0], [0.0, 0.0]]
         for i in range(0, len(expected)):
             self.assertTrue(all(observed[i]["features"].toArray() == expected[i]))
+
+        # save & load
+        with tempfile.TemporaryDirectory(prefix="rformula") as d:
+            rf.write().overwrite().save(d)
+            rf2 = RFormula.load(d)
+            self.assertEqual(str(rf), str(rf2))
+
+            model.write().overwrite().save(d)
+            model2 = RFormulaModel.load(d)
+            # TODO: fix str(model)
+            # self.assertEqual(str(model), str(model2))
+            self.assertEqual(model.getFormula(), model2.getFormula())
 
     def test_string_indexer_handle_invalid(self):
         df = self.spark.createDataFrame([(0, "a"), (1, "d"), (2, None)], ["id", "label"])

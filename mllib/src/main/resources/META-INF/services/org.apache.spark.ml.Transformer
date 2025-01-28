@@ -36,6 +36,7 @@ org.apache.spark.ml.feature.FeatureHasher
 org.apache.spark.ml.feature.ElementwiseProduct
 org.apache.spark.ml.feature.HashingTF
 org.apache.spark.ml.feature.IndexToString
+org.apache.spark.ml.feature.PolynomialExpansion
 
 ########### Model for loading
 # classification
@@ -72,6 +73,7 @@ org.apache.spark.ml.recommendation.ALSModel
 org.apache.spark.ml.fpm.FPGrowthModel
 
 # feature
+org.apache.spark.ml.feature.RFormulaModel
 org.apache.spark.ml.feature.ImputerModel
 org.apache.spark.ml.feature.StandardScalerModel
 org.apache.spark.ml.feature.MaxAbsScalerModel
