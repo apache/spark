@@ -198,7 +198,6 @@ class RemoteMLWriter(MLWriter):
             ovr_writer = OneVsRestWriter(instance)
             ovr_writer.session(session)  # type: ignore[arg-type]
             ovr_writer.save(path)
-            # _OneVsRestSharedReadWrite.saveImpl(self.instance, self.sparkSession, path)
         elif isinstance(instance, OneVsRestModel):
             from pyspark.ml.classification import OneVsRestModelWriter
 
@@ -206,9 +205,9 @@ class RemoteMLWriter(MLWriter):
                 # TODO(SPARK-50954): Support client side model path overwrite
                 warnings.warn("Overwrite doesn't take effect for OneVsRestModel")
 
-            ovr_writer = OneVsRestModelWriter(instance)
-            ovr_writer.session(session)  # type: ignore[arg-type]
-            ovr_writer.save(path)
+            ovrm_writer = OneVsRestModelWriter(instance)
+            ovrm_writer.session(session)  # type: ignore[arg-type]
+            ovrm_writer.save(path)
         else:
             raise NotImplementedError(f"Unsupported write for {instance.__class__}")
 
@@ -340,9 +339,9 @@ class RemoteMLReader(MLReader[RL]):
         elif issubclass(clazz, OneVsRestModel):
             from pyspark.ml.classification import OneVsRestModelReader
 
-            ovr_reader = OneVsRestModelReader(OneVsRestModel)
-            ovr_reader.session(session)
-            return ovr_reader.load(path)
+            ovrm_reader = OneVsRestModelReader(OneVsRestModel)
+            ovrm_reader.session(session)
+            return ovrm_reader.load(path)
 
         else:
             raise RuntimeError(f"Unsupported read for {clazz}")
