@@ -36,6 +36,7 @@ org.apache.spark.ml.feature.FeatureHasher
 org.apache.spark.ml.feature.ElementwiseProduct
 org.apache.spark.ml.feature.HashingTF
 org.apache.spark.ml.feature.IndexToString
+org.apache.spark.ml.feature.PolynomialExpansion
 
 ########### Model for loading
 # classification
