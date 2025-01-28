@@ -35,6 +35,8 @@ from typing import (
     cast,
     overload,
     TYPE_CHECKING,
+    Tuple,
+    Callable,
 )
 
 from pyspark import keyword_only, since, inheritable_thread_target
@@ -3575,10 +3577,10 @@ class OneVsRest(
         if handlePersistence:
             multiclassLabeled.persist(StorageLevel.MEMORY_AND_DISK)
 
-        def _oneClassFitTasks(numClasses: int):
+        def _oneClassFitTasks(numClasses: int) -> List[Callable[[], Tuple[int, CM]]]:
             indices = iter(range(numClasses))
 
-            def trainSingleClass() -> CM:
+            def trainSingleClass() -> Tuple[int, CM]:
                 index = next(indices)
 
                 binaryLabelCol = "mc2b$" + str(index)
@@ -3613,7 +3615,7 @@ class OneVsRest(
         if handlePersistence:
             multiclassLabeled.unpersist()
 
-        return self._copyValues(OneVsRestModel(models=subModels))
+        return self._copyValues(OneVsRestModel(models=cast(List[ClassificationModel], subModels)))
 
     def copy(self, extra: Optional["ParamMap"] = None) -> "OneVsRest":
         """

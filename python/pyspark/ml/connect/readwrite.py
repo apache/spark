@@ -195,9 +195,9 @@ class RemoteMLWriter(MLWriter):
                 # TODO(SPARK-50954): Support client side model path overwrite
                 warnings.warn("Overwrite doesn't take effect for OneVsRest")
 
-            writer = OneVsRestWriter(instance)
-            writer.session(session)
-            writer.save(path)
+            ovr_writer = OneVsRestWriter(instance)
+            ovr_writer.session(session)  # type: ignore[arg-type]
+            ovr_writer.save(path)
             # _OneVsRestSharedReadWrite.saveImpl(self.instance, self.sparkSession, path)
         elif isinstance(instance, OneVsRestModel):
             from pyspark.ml.classification import OneVsRestModelWriter
@@ -206,9 +206,9 @@ class RemoteMLWriter(MLWriter):
                 # TODO(SPARK-50954): Support client side model path overwrite
                 warnings.warn("Overwrite doesn't take effect for OneVsRestModel")
 
-            writer = OneVsRestModelWriter(instance)
-            writer.session(session)
-            writer.save(path)
+            ovr_writer = OneVsRestModelWriter(instance)
+            ovr_writer.session(session)  # type: ignore[arg-type]
+            ovr_writer.save(path)
         else:
             raise NotImplementedError(f"Unsupported write for {instance.__class__}")
 
