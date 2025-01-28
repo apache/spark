@@ -1271,6 +1271,7 @@ class FeatureTestsMixin:
         rf = RFormula(formula="y ~ x + s", stringIndexerOrderType="alphabetDesc")
         self.assertEqual(rf.getStringIndexerOrderType(), "alphabetDesc")
         model = rf.fit(df)
+        self.assertEqual(rf.uid, model.uid)
         transformedDF = model.transform(df)
         observed = transformedDF.select("features").collect()
         expected = [[1.0, 0.0], [2.0, 1.0], [0.0, 0.0]]
@@ -1278,7 +1279,7 @@ class FeatureTestsMixin:
             self.assertTrue(all(observed[i]["features"].toArray() == expected[i]))
 
         # save & load
-        with tempfile.TemporaryDirectory(prefix="vector_indexer") as d:
+        with tempfile.TemporaryDirectory(prefix="rformula") as d:
             rf.write().overwrite().save(d)
             rf2 = RFormula.load(d)
             self.assertEqual(str(rf), str(rf2))
