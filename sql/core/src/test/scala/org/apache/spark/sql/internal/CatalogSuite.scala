@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
 import org.apache.spark.sql.catalyst.plans.logical.Range
+import org.apache.spark.sql.classic.Catalog
 import org.apache.spark.sql.connector.FakeV2Provider
 import org.apache.spark.sql.connector.catalog.{CatalogManager, Identifier, InMemoryCatalog}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.CatalogHelper
@@ -526,10 +527,10 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest with BeforeAndAf
       functionFields(5)) == ("nama", "cataloa", "descripta", "classa", false))
     assert(functionFields(2).asInstanceOf[Array[String]].sameElements(Array("databasa")))
     assert(columnFields == Seq("nama", "descripta", "typa", false, true, true, true))
-    val dbString = CatalogImpl.makeDataset(Seq(db), spark).showString(10)
-    val tableString = CatalogImpl.makeDataset(Seq(table), spark).showString(10)
-    val functionString = CatalogImpl.makeDataset(Seq(function), spark).showString(10)
-    val columnString = CatalogImpl.makeDataset(Seq(column), spark).showString(10)
+    val dbString = Catalog.makeDataset(Seq(db), spark).showString(10)
+    val tableString = Catalog.makeDataset(Seq(table), spark).showString(10)
+    val functionString = Catalog.makeDataset(Seq(function), spark).showString(10)
+    val columnString = Catalog.makeDataset(Seq(column), spark).showString(10)
     dbFields.foreach { f => assert(dbString.contains(f.toString)) }
     tableFields.foreach { f => assert(tableString.contains(f.toString) ||
       tableString.contains(f.asInstanceOf[Array[String]].mkString(""))) }
@@ -1117,7 +1118,7 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest with BeforeAndAf
   }
 
   test("SPARK-46145: listTables does not throw exception when the table or view is not found") {
-    val impl = spark.catalog.asInstanceOf[CatalogImpl]
+    val impl = spark.catalog.asInstanceOf[Catalog]
     for ((isTemp, dbName) <- Seq((true, ""), (false, "non_existing_db"))) {
       val row = new GenericInternalRow(
         Array(UTF8String.fromString(dbName), UTF8String.fromString("non_existing_table"), isTemp))
