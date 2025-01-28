@@ -3852,8 +3852,7 @@ class SparkConnectPlanner(
             options.getWithSinglePartition
           } else {
             false
-          }
-        )
+          })
       case other => throw InvalidPlanInput(s"Unknown SubqueryType $other")
     }
   }
