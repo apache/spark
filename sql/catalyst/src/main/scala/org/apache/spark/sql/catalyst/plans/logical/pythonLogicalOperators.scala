@@ -240,7 +240,6 @@ case class FlatMapCoGroupsInArrow(
   override val producedAttributes = AttributeSet(output)
   override lazy val references: AttributeSet =
     AttributeSet(leftAttributes ++ rightAttributes ++ functionExpr.references) -- producedAttributes
-  throw new Exception(s"what is the references here: ${references.toSeq}")
 
   def leftAttributes: Seq[Attribute] = left.output.take(leftGroupingLen)
 

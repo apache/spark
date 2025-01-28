@@ -479,9 +479,11 @@ class RelationalGroupedDataset protected[sql](
       timeModeStr: String,
       initialState: RelationalGroupedDataset,
       eventTimeColumnName: String): DataFrame = {
-    def exprToAttr(expr: Seq[Expression]) = expr.map {
+    def exprToAttr(expr: Seq[Expression]): Seq[Attribute] = {
+      expr.map {
         case ne: NamedExpression => ne
         case other => Alias(other, other.toString)()
+      }.map(_.toAttribute)
     }
 
     val groupingAttrs = exprToAttr(groupingExprs)

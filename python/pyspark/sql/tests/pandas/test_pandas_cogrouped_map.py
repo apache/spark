@@ -71,7 +71,6 @@ class CogroupedApplyInPandasTestsMixin:
             .drop("ks")
         )
 
-    """ 
     def test_simple(self):
         self._test_merge(self.data1, self.data2)
 
@@ -357,7 +356,6 @@ class CogroupedApplyInPandasTestsMixin:
             errorClass=ValueError,
             error_message_regex="Invalid function",
         )
-    """
 
     def test_case_insensitive_grouping_column(self):
         # SPARK-31915: case-insensitive grouping column should work.
@@ -381,7 +379,6 @@ class CogroupedApplyInPandasTestsMixin:
         )
         self.assertEqual(row.asDict(), Row(column=2, value=2).asDict())
 
-    """
     def test_self_join(self):
         # SPARK-34319: self-join with FlatMapCoGroupsInPandas
         df = self.spark.createDataFrame([(1, 1)], ("column", "value"))
@@ -481,7 +478,6 @@ class CogroupedApplyInPandasTestsMixin:
             "|        2|           3|         1|            2|\n"
             "+---------+------------+----------+-------------+\n",
         )
-    """
 
     @staticmethod
     def _test_with_key(left, right, isLeft):

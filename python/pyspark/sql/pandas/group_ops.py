@@ -492,9 +492,6 @@ class PandasGroupedOpsMixin:
         if isinstance(outputStructType, str):
             outputStructType = cast(StructType, self._df._session._parse_ddl(outputStructType))
 
-        if isinstance(outputStructType, str):
-            outputStructType = cast(StructType, self._df._session._parse_ddl(outputStructType))
-
         df = self._df
         udf_util = TransformWithStateInPandasUdfUtils(statefulProcessor, timeMode)
 

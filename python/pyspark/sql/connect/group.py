@@ -395,7 +395,6 @@ class GroupedData:
             initial_state_plan = initialState._df._plan
             initial_state_grouping_cols = initialState._grouping_cols
 
-        # TODO add a string struct type test
         output_schema: str = (
             outputStructType.json()
             if isinstance(outputStructType, StructType)

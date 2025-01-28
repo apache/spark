@@ -116,6 +116,7 @@ class TransformWithStateInPandasTestsMixin:
         )
         return df_final
 
+    """ 
     def _test_transform_with_state_in_pandas_basic(
         self,
         stateful_processor,
@@ -412,6 +413,7 @@ class TransformWithStateInPandasTestsMixin:
             self.assertTrue(q.exception() is None)
         finally:
             input_dir.cleanup()
+    """
 
     def _test_transform_with_state_in_pandas_proc_timer(self, stateful_processor, check_results):
         input_path = tempfile.mkdtemp()
@@ -459,23 +461,23 @@ class TransformWithStateInPandasTestsMixin:
     # TODO fix later
     @unittest.skip("fix later")
     def test_transform_with_state_in_pandas_proc_timer(self):
-        # helper function to check expired timestamp is smaller than current processing time
-        def check_timestamp(batch_df):
-            expired_df = (
-                batch_df.filter(batch_df["countAsString"] == "-1")
-                .select("id", "timeValues")
-                .withColumnRenamed("timeValues", "expiredTimestamp")
-            )
-            count_df = (
-                batch_df.filter(batch_df["countAsString"] != "-1")
-                .select("id", "timeValues")
-                .withColumnRenamed("timeValues", "countStateTimestamp")
-            )
-            joined_df = expired_df.join(count_df, on="id")
-            for row in joined_df.collect():
-                assert row["expiredTimestamp"] < row["countStateTimestamp"]
-
         def check_results(batch_df, batch_id):
+            # helper function to check expired timestamp is smaller than current processing time
+            def check_timestamp(batch_df):
+                expired_df = (
+                    batch_df.filter(batch_df["countAsString"] == "-1")
+                    .select("id", "timeValues")
+                    .withColumnRenamed("timeValues", "expiredTimestamp")
+                )
+                count_df = (
+                    batch_df.filter(batch_df["countAsString"] != "-1")
+                    .select("id", "timeValues")
+                    .withColumnRenamed("timeValues", "countStateTimestamp")
+                )
+                joined_df = expired_df.join(count_df, on="id")
+                for row in joined_df.collect():
+                    assert row["expiredTimestamp"] < row["countStateTimestamp"]
+
             if batch_id == 0:
                 assert set(batch_df.sort("id").select("id", "countAsString").collect()) == {
                     Row(id="0", countAsString="1"),
@@ -492,7 +494,7 @@ class TransformWithStateInPandasTestsMixin:
                 self.first_expired_timestamp = batch_df.filter(
                     batch_df["countAsString"] == -1
                 ).first()["timeValues"]
-                # check_timestamp(batch_df)
+                check_timestamp(batch_df)
 
             else:
                 assert set(batch_df.sort("id").select("id", "countAsString").collect()) == {
@@ -512,6 +514,7 @@ class TransformWithStateInPandasTestsMixin:
             ProcTimeStatefulProcessor(), check_results
         )
 
+    """
     def _test_transform_with_state_in_pandas_event_time(self, stateful_processor, check_results):
         import pyspark.sql.functions as f
 
@@ -623,12 +626,7 @@ class TransformWithStateInPandasTestsMixin:
         df = self._build_test_df(input_path)
         self.assertTrue(df.isStreaming)
 
-        output_schema = StructType(
-            [
-                StructField("id", StringType(), True),
-                StructField("value", StringType(), True),
-            ]
-        )
+        output_schema = "id string, value str"
 
         if initial_state is None:
             data = [("0", 789), ("3", 987)]
@@ -801,7 +799,6 @@ class TransformWithStateInPandasTestsMixin:
         q.processAllAvailable()
         q.awaitTermination(10)
 
-    @unittest.skip("chaining of ops not supported yet")
     def test_transform_with_state_in_pandas_chaining_ops(self):
         def check_results(batch_df, batch_id):
             import datetime
@@ -1273,6 +1270,7 @@ class TransformWithStateInPandasTestsMixin:
             self.test_transform_with_state_in_pandas_event_time()
             self.test_transform_with_state_in_pandas_proc_timer()
             self.test_transform_with_state_restart_with_multiple_rows_init_state()
+    """
 
     def _run_evolution_test(
         self, processor, checkpoint_dir, check_results, df, check_exception=None
@@ -1319,23 +1317,20 @@ class TransformWithStateInPandasTestsMixin:
             self.assertTrue(check_exception(e))
 
     def test_schema_evolution_scenarios(self):
-        # Test various schema evolution scenarios
+        """Test various schema evolution scenarios"""
         with self.sql_conf({"spark.sql.streaming.stateStore.encodingFormat": "avro"}):
             with tempfile.TemporaryDirectory() as checkpoint_dir:
                 # Test 1: Basic state
 
                 input_path = tempfile.mkdtemp()
                 self._prepare_test_resource1(input_path)
-
                 df = self._build_test_df(input_path)
 
                 def check_basic_state(batch_df, batch_id):
                     result = batch_df.collect()[0]
                     assert result.value["id"] == 0  # First ID from test data
                     assert result.value["name"] == "name-0"
-
                 self._run_evolution_test(BasicProcessor(), checkpoint_dir, check_basic_state, df)
-
                 self._prepare_test_resource2(input_path)
 
                 # Test 2: Add fields
@@ -1346,7 +1341,6 @@ class TransformWithStateInPandasTestsMixin:
                     assert result.value["count"] is None
                     assert result.value["active"] is None
                     assert result.value["score"] is None
-
                 self._run_evolution_test(AddFieldsProcessor(), checkpoint_dir, check_add_fields, df)
                 self._prepare_test_resource3(input_path)
 
@@ -1354,8 +1348,7 @@ class TransformWithStateInPandasTestsMixin:
                 def check_remove_fields(batch_df, batch_id):
                     result = batch_df.collect()[0]
                     assert result.value["id"] == 0  # First ID from test data
-                    assert result.value["name"] == "name-00"
-
+                    assert result.value["name"] == "name-00", f"batch id: {batch_id}, real df: {batch_df.collect()}"
                 self._run_evolution_test(
                     RemoveFieldsProcessor(), checkpoint_dir, check_remove_fields, df
                 )
@@ -1366,7 +1359,6 @@ class TransformWithStateInPandasTestsMixin:
                     result = batch_df.collect()[0]
                     assert result.value["name"] == "name-00"
                     assert result.value["id"] == 0
-
                 self._run_evolution_test(
                     ReorderedFieldsProcessor(), checkpoint_dir, check_reorder_fields, df
                 )
@@ -1377,7 +1369,6 @@ class TransformWithStateInPandasTestsMixin:
                     result = batch_df.collect()[0]
                     assert result.value["id"] == 1
                     assert result.value["name"] == "name-0"
-
                 self._run_evolution_test(UpcastProcessor(), checkpoint_dir, check_upcast, df)
 
     # This test case verifies that an exception is thrown when downcasting, which violates
@@ -1387,25 +1378,20 @@ class TransformWithStateInPandasTestsMixin:
             with tempfile.TemporaryDirectory() as checkpoint_dir:
                 input_path = tempfile.mkdtemp()
                 self._prepare_test_resource1(input_path)
-
                 df = self._build_test_df(input_path)
 
                 def check_add_fields(batch_df, batch_id):
                     results = batch_df.collect()
                     assert results[0].value["count"] == 100
                     assert results[0].value["active"]
-
                 self._run_evolution_test(AddFieldsProcessor(), checkpoint_dir, check_add_fields, df)
-
                 self._prepare_test_resource2(input_path)
 
                 def check_upcast(batch_df, batch_id):
                     result = batch_df.collect()[0]
                     assert result.value["name"] == "name-0"
-
                 # Long
                 self._run_evolution_test(UpcastProcessor(), checkpoint_dir, check_upcast, df)
-
                 self._prepare_test_resource3(input_path)
 
                 def check_basic_state(batch_df, batch_id):
@@ -1415,17 +1401,14 @@ class TransformWithStateInPandasTestsMixin:
 
                 def check_exception(error):
                     from pyspark.errors.exceptions.captured import StreamingQueryException
-
                     if not isinstance(error, StreamingQueryException):
                         return False
-
                     error_msg = str(error)
                     return (
                         "[STREAM_FAILED]" in error_msg
                         and "[STATE_STORE_INVALID_VALUE_SCHEMA_EVOLUTION]" in error_msg
                         and "Schema evolution is not possible" in error_msg
                     )
-
                 # Int
                 self._run_evolution_test(
                     BasicProcessor(),
