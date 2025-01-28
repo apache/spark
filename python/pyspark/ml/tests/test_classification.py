@@ -53,6 +53,7 @@ from pyspark.ml.classification import (
     MultilayerPerceptronClassificationSummary,
     MultilayerPerceptronClassificationTrainingSummary,
 )
+from pyspark.ml.regression import DecisionTreeRegressionModel
 
 
 class ClassificationTestsMixin:
@@ -683,6 +684,17 @@ class ClassificationTestsMixin:
         self.assertEqual(output.columns, expected_cols)
         self.assertEqual(output.count(), 4)
 
+        trees = model.trees
+        self.assertEqual(len(trees), 3)
+        for tree in trees:
+            self.assertIsInstance(tree, DecisionTreeRegressionModel)
+            self.assertTrue(tree.predict(vec) > -10)
+            self.assertEqual(tree.transform(df).count(), 4)
+            self.assertEqual(
+                tree.transform(df).columns,
+                ["label", "weight", "features", "prediction", "leaf"],
+            )
+
         # save & load
         with tempfile.TemporaryDirectory(prefix="gbt_classification") as d:
             gbt.write().overwrite().save(d)
@@ -726,8 +738,6 @@ class ClassificationTestsMixin:
         self.assertEqual(rf.uid, model.uid)
         self.assertEqual(model.numClasses, 2)
         self.assertEqual(model.numFeatures, 2)
-        # TODO(SPARK-50843): Support access submodel in TreeEnsembleModel
-        # model.trees
         self.assertEqual(model.treeWeights, [1.0, 1.0, 1.0])
         self.assertEqual(model.totalNumNodes, 9)
         self.assertTrue(np.allclose(model.featureImportances, [0.7778, 0.2222], atol=1e-4))
@@ -752,6 +762,14 @@ class ClassificationTestsMixin:
         ]
         self.assertEqual(output.columns, expected_cols)
         self.assertEqual(output.count(), 4)
+
+        trees = model.trees
+        self.assertEqual(len(trees), 3)
+        for tree in trees:
+            self.assertIsInstance(tree, DecisionTreeClassificationModel)
+            self.assertTrue(tree.predict(vec) > -10)
+            self.assertEqual(tree.transform(df).count(), 4)
+            self.assertEqual(tree.transform(df).columns, expected_cols)
 
         # model summary
         summary = model.summary
@@ -813,8 +831,7 @@ class ClassificationTestsMixin:
         self.assertEqual(rf.uid, model.uid)
         self.assertEqual(model.numClasses, 3)
         self.assertEqual(model.numFeatures, 2)
-        # TODO(SPARK-50843): Support access submodel in TreeEnsembleModel
-        # model.trees
+        self.assertEqual(len(model.trees), 3)
         self.assertEqual(model.treeWeights, [1.0, 1.0, 1.0])
         self.assertEqual(model.totalNumNodes, 9)
         self.assertEqual(model.featureImportances, Vectors.sparse(2, [0], [1.0]))
