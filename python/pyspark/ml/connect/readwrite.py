@@ -95,6 +95,7 @@ class RemoteMLWriter(MLWriter):
         from pyspark.ml.evaluation import JavaEvaluator
         from pyspark.ml.pipeline import Pipeline, PipelineModel
         from pyspark.ml.tuning import CrossValidator, TrainValidationSplit
+        from pyspark.ml.classification import OneVsRest, OneVsRestModel
 
         # Spark Connect ML is built on scala Spark.ML, that means we're only
         # supporting JavaModel or JavaEstimator or JavaEvaluator
@@ -187,6 +188,26 @@ class RemoteMLWriter(MLWriter):
                 warnings.warn("Overwrite doesn't take effect for TrainValidationSplitModel")
             tvsm_writer = RemoteTrainValidationSplitModelWriter(instance, optionMap, session)
             tvsm_writer.save(path)
+        elif isinstance(instance, OneVsRest):
+            from pyspark.ml.classification import OneVsRestWriter
+
+            if shouldOverwrite:
+                # TODO(SPARK-50954): Support client side model path overwrite
+                warnings.warn("Overwrite doesn't take effect for OneVsRest")
+
+            ovr_writer = OneVsRestWriter(instance)
+            ovr_writer.session(session)  # type: ignore[arg-type]
+            ovr_writer.save(path)
+        elif isinstance(instance, OneVsRestModel):
+            from pyspark.ml.classification import OneVsRestModelWriter
+
+            if shouldOverwrite:
+                # TODO(SPARK-50954): Support client side model path overwrite
+                warnings.warn("Overwrite doesn't take effect for OneVsRestModel")
+
+            ovrm_writer = OneVsRestModelWriter(instance)
+            ovrm_writer.session(session)  # type: ignore[arg-type]
+            ovrm_writer.save(path)
         else:
             raise NotImplementedError(f"Unsupported write for {instance.__class__}")
 
@@ -215,6 +236,7 @@ class RemoteMLReader(MLReader[RL]):
         from pyspark.ml.evaluation import JavaEvaluator
         from pyspark.ml.pipeline import Pipeline, PipelineModel
         from pyspark.ml.tuning import CrossValidator, TrainValidationSplit
+        from pyspark.ml.classification import OneVsRest, OneVsRestModel
 
         if (
             issubclass(clazz, JavaModel)
@@ -306,6 +328,20 @@ class RemoteMLReader(MLReader[RL]):
             tvs_reader = TrainValidationSplitModelReader(TrainValidationSplitModel)
             tvs_reader.session(session)
             return tvs_reader.load(path)
+
+        elif issubclass(clazz, OneVsRest):
+            from pyspark.ml.classification import OneVsRestReader
+
+            ovr_reader = OneVsRestReader(OneVsRest)
+            ovr_reader.session(session)
+            return ovr_reader.load(path)
+
+        elif issubclass(clazz, OneVsRestModel):
+            from pyspark.ml.classification import OneVsRestModelReader
+
+            ovrm_reader = OneVsRestModelReader(OneVsRestModel)
+            ovrm_reader.session(session)
+            return ovrm_reader.load(path)
 
         else:
             raise RuntimeError(f"Unsupported read for {clazz}")
