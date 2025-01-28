@@ -755,6 +755,8 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan {
  * @param recursion The logical plan that describes the recursion with an [[UnionLoopRef]] node.
  *                  CTERelationRef, which is marked as recursive, gets substituted with
  *                  [[UnionLoopRef]] in ResolveWithCTE.
+ *                  Both anchor and recursion are marked with @transient annotation, so that they
+ *                  are not serialized.
  * @param output The output attributes of this loop.
  * @param limit If defined, the total number of rows output by this operator will be bounded by
  *              limit.
@@ -765,8 +767,8 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan {
  */
 case class UnionLoopExec(
     loopId: Long,
-    anchor: LogicalPlan,
-    recursion: LogicalPlan,
+    @transient anchor: LogicalPlan,
+    @transient recursion: LogicalPlan,
     override val output: Seq[Attribute],
     limit: Option[Int] = None) extends LeafExecNode {
 
@@ -779,9 +781,6 @@ case class UnionLoopExec(
   /**
    * This function executes the plan (optionally with appended limit node) and caches the result,
    * with the caching mode specified in config.
-   * Note here: in case the "caching" mode is changed from repartition to cache/persist,
-   * it should be considered to mark anchor and recursion as transient so that they are not
-   * serialized.
    */
   private def executeAndCacheAndCount(
      plan: LogicalPlan, currentLimit: Int) = {
