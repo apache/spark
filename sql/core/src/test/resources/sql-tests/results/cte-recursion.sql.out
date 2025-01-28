@@ -103,7 +103,13 @@ SELECT * FROM r
 struct<>
 -- !query output
 org.apache.spark.SparkException
-Recursion level limit 100 reached but query has not exhausted, try increasing spark.sql.cteRecursionLevelLimit
+{
+  "errorClass" : "RECURSION_LEVEL_LIMIT_EXCEEDED",
+  "sqlState" : "42836",
+  "messageParameters" : {
+    "levelLimit" : "100"
+  }
+}
 
 
 -- !query
@@ -187,7 +193,13 @@ SELECT level, level FROM r ORDER BY 1 LIMIT 10
 struct<>
 -- !query output
 org.apache.spark.SparkException
-Recursion level limit 100 reached but query has not exhausted, try increasing spark.sql.cteRecursionLevelLimit
+{
+  "errorClass" : "RECURSION_LEVEL_LIMIT_EXCEEDED",
+  "sqlState" : "42836",
+  "messageParameters" : {
+    "levelLimit" : "100"
+  }
+}
 
 
 -- !query
