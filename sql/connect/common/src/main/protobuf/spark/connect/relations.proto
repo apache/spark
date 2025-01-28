@@ -1105,8 +1105,8 @@ message TransformWithStateInPandas {
   // (Optional) Expressions for grouping keys of the initial state input relation.
   repeated Expression initial_grouping_expressions = 8;
 
-  // (Optional) Event time column name
-  optional string event_time_col_name = 9;
+  // (Required) Event time column name. Default to be empty string.
+  string event_time_col_name = 9;
 }
 
 message CommonInlineUserDefinedTableFunction {

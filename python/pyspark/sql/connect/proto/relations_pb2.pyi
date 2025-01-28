@@ -3983,7 +3983,7 @@ class TransformWithStateInPandas(google.protobuf.message.Message):
     ]:
         """(Optional) Expressions for grouping keys of the initial state input relation."""
     event_time_col_name: builtins.str
-    """(Optional) Event time column name"""
+    """(Required) Event time column name. Default to be empty string."""
     def __init__(
         self,
         *,
@@ -4002,15 +4002,11 @@ class TransformWithStateInPandas(google.protobuf.message.Message):
             pyspark.sql.connect.proto.expressions_pb2.Expression
         ]
         | None = ...,
-        event_time_col_name: builtins.str | None = ...,
+        event_time_col_name: builtins.str = ...,
     ) -> None: ...
     def HasField(
         self,
         field_name: typing_extensions.Literal[
-            "_event_time_col_name",
-            b"_event_time_col_name",
-            "event_time_col_name",
-            b"event_time_col_name",
             "initial_input",
             b"initial_input",
             "input",
@@ -4022,8 +4018,6 @@ class TransformWithStateInPandas(google.protobuf.message.Message):
     def ClearField(
         self,
         field_name: typing_extensions.Literal[
-            "_event_time_col_name",
-            b"_event_time_col_name",
             "event_time_col_name",
             b"event_time_col_name",
             "grouping_expressions",
@@ -4044,10 +4038,6 @@ class TransformWithStateInPandas(google.protobuf.message.Message):
             b"transform_with_state_udf",
         ],
     ) -> None: ...
-    def WhichOneof(
-        self,
-        oneof_group: typing_extensions.Literal["_event_time_col_name", b"_event_time_col_name"],
-    ) -> typing_extensions.Literal["event_time_col_name"] | None: ...
 
 global___TransformWithStateInPandas = TransformWithStateInPandas
 
