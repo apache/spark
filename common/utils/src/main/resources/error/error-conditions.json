@@ -4326,6 +4326,12 @@
     ],
     "sqlState" : "38000"
   },
+  "RECURSION_LEVEL_LIMIT_EXCEEDED" : {
+    "message" : [
+      "Recursion level limit <levelLimit> reached but query has not exhausted, try increasing CTE_RECURSION_LEVEL_LIMIT"
+    ],
+    "sqlState" : "42836"
+  },
   "RECURSIVE_CTE_IN_LEGACY_MODE" : {
     "message" : [
       "Recursive definitions cannot be used in legacy CTE precedence mode (spark.sql.legacy.ctePrecedencePolicy=LEGACY)."

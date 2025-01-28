@@ -788,8 +788,10 @@ case class UnionLoopExec(
     while (prevCount > 0 && (limit.isEmpty || currentLimit > 0)) {
 
       if (levelLimit != -1 && currentLevel > levelLimit) {
-        throw new SparkException(s"Recursion level limit ${levelLimit} reached but query has not " +
-          s"exhausted, try increasing ${SQLConf.CTE_RECURSION_LEVEL_LIMIT.key}")
+        throw new SparkException(
+          errorClass = "RECURSION_LEVEL_LIMIT_EXCEEDED",
+          messageParameters = Map("levelLimit" -> levelLimit.toString),
+          cause = null)
       }
 
       // Inherit stats and constraints from the dataset of the previous iteration.
