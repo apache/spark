@@ -719,20 +719,47 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan {
 
 /**
  * The physical node for recursion. Currently only UNION ALL case is supported.
- * In the first iteration, anchor term is executed.
- * Then, in each following iteration, the UnionLoopRef node is substituted with the plan from the
- * previous iteration, and such plan is executed.
- * After every iteration, the dataframe is repartitioned.
- * The recursion stops when the generated dataframe is empty, or either the limit or
- * the specified maximum depth from the config is reached.
+ * For the details about the execution, look at the comment above doExecute function.
  *
- * @param loopId The id of the loop.
+ * A simple recursive query:
+ * {{{
+ * WITH RECURSIVE t(n) AS (
+ *     SELECT 1
+ *     UNION ALL
+ *     SELECT n+1 FROM t WHERE n < 5)
+ * SELECT * FROM t;
+ * }}}
+ * Corresponding logical plan for the recursive query above:
+ * {{{
+ * WithCTE
+ * :- CTERelationDef 0, false
+ * :  +- SubqueryAlias t
+ * :     +- Project [1#0 AS n#3]
+ * :        +- UnionLoop 0
+ * :           :- Project [1 AS 1#0]
+ * :           :  +- OneRowRelation
+ * :           +- Project [(n#1 + 1) AS (n + 1)#2]
+ * :              +- Filter (n#1 < 5)
+ * :                 +- SubqueryAlias t
+ * :                    +- Project [1#0 AS n#1]
+ * :                       +- UnionLoopRef 0, [1#0], false
+ * +- Project [n#3]
+ * +- SubqueryAlias t
+ * +- CTERelationRef 0, true, [n#3], false, false
+ * }}}
+ *
+ * @param loopId This is id of the CTERelationDef containing the recursive query. Its value is
+ *               first passed down to UnionLoop when creating it, and then to UnionLoopExec in
+ *               SparkStrategies.
  * @param anchor The logical plan of the initial element of the loop.
  * @param recursion The logical plan that describes the recursion with an [[UnionLoopRef]] node.
+ *                  CTERelationRef, which is marked as recursive, gets substituted with
+ *                  [[UnionLoopRef]] in ResolveWithCTE.
  * @param output The output attributes of this loop.
- * @param limit In case we have a plan with the limit node, it is pushed down to UnionLoop and then
- *              transferred to UnionLoopExec, to stop the recursion after specific amount of rows
- *              is generated.
+ * @param limit If defined, the total number of rows output by this operator will be bounded by
+ *              limit.
+ *              Its value is pushed down to UnionLoop in Optimizer in case Limit node is present
+ *              in the logical plan and then transferred to UnionLoopExec in SparkStrategies.
  *              Note here: limit can be applied in the main query calling the recursive CTE, and not
  *              inside the recursive term of recursive CTE.
  */
@@ -768,6 +795,14 @@ case class UnionLoopExec(
     (cachedDF, count)
   }
 
+  /**
+   * In the first iteration, anchor term is executed.
+   * Then, in each following iteration, the UnionLoopRef node is substituted with the plan from the
+   * previous iteration, and such plan is executed.
+   * After every iteration, the dataframe is repartitioned.
+   * The recursion stops when the generated dataframe is empty, or either the limit or
+   * the specified maximum depth from the config is reached.
+   */
   override protected def doExecute(): RDD[InternalRow] = {
     val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
     val numOutputRows = longMetric("numOutputRows")
