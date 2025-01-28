@@ -1293,7 +1293,9 @@ class SubqueryExpression(Expression):
                     [p.to_plan(session) for p in self._partition_spec]
                 )
             if len(self._order_spec) > 0:
-                table_arg_options.order_spec.extend([o.to_plan(session) for o in self._order_spec])
+                table_arg_options.order_spec.extend(
+                    [o.to_plan(session).sort_order for o in self._order_spec]
+                )
             if self._with_single_partition is not None:
                 table_arg_options.with_single_partition = self._with_single_partition
 

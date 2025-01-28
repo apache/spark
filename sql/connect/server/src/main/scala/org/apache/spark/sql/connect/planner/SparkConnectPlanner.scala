@@ -3849,9 +3849,9 @@ class SparkConnectPlanner(
             .map(transformSortOrder)
             .toSeq,
           withSinglePartition = if (options.hasWithSinglePartition) {
-            Some(options.getWithSinglePartition)
+            options.getWithSinglePartition
           } else {
-            None
+            false
           }
         )
       case other => throw InvalidPlanInput(s"Unknown SubqueryType $other")

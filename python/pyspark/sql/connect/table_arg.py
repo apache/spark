@@ -15,47 +15,79 @@
 # limitations under the License.
 #
 
-from typing import TYPE_CHECKING
+from typing import (
+    Iterable,
+    TYPE_CHECKING,
+    Union,
+    Sequence,
+    List,
+    Tuple,
+    cast,
+)
 
 import pyspark.sql.connect.proto as proto
-from pyspark.sql.connect.expressions import SubqueryExpression
-
+from pyspark.sql.column import Column
+from pyspark.sql.connect.expressions import SubqueryExpression, SortOrder
+from pyspark.sql.connect.functions import builtin as F
 from pyspark.sql.table_arg import TableArg as ParentTableArg
 
+from pyspark.errors import PySparkValueError
 
 if TYPE_CHECKING:
     from pyspark.sql._typing import ColumnOrName
     from pyspark.sql.connect.client import SparkConnectClient
 
 
+def _to_cols(cols: Tuple[Union["ColumnOrName", Sequence["ColumnOrName"]], ...]) -> List[Column]:
+    if len(cols) == 1 and isinstance(cols[0], list):
+        cols = cols[0]  # type: ignore[assignment]
+    return [F._to_col(c) for c in cast(Iterable["ColumnOrName"], cols)]
+
+
 class TableArg(ParentTableArg):
     def __init__(self, subquery_expr: SubqueryExpression):
         self._subquery_expr = subquery_expr
 
+    def _is_partitioned(self) -> bool:
+        """Checks if partitioning is already applied."""
+        return (
+            bool(self._subquery_expr._partition_spec) or self._subquery_expr._with_single_partition
+        )
+
     def partitionBy(self, *cols: "ColumnOrName") -> "TableArg":
-        # Create a new SubqueryExpression with updated partition_spec
+        if self._is_partitioned():
+            raise PySparkValueError(
+                "Cannot call partitionBy() after partitionBy() or withSinglePartition() has been called."
+            )
         new_expr = SubqueryExpression(
             plan=self._subquery_expr._plan,
             subquery_type=self._subquery_expr._subquery_type,
-            partition_spec=self._subquery_expr._partition_spec + list(cols),
+            partition_spec=self._subquery_expr._partition_spec + [c._expr for c in _to_cols(cols)],
             order_spec=self._subquery_expr._order_spec,
             with_single_partition=self._subquery_expr._with_single_partition,
         )
         return TableArg(new_expr)
 
     def orderBy(self, *cols: "ColumnOrName") -> "TableArg":
-        # Create a new SubqueryExpression with updated order_spec
+        if not self._is_partitioned():
+            raise PySparkValueError(
+                "Please call partitionBy() or withSinglePartition() before orderBy()."
+            )
+        new_order_spec = [cast(SortOrder, F._sort_col(c)._expr) for c in _to_cols(cols)]
         new_expr = SubqueryExpression(
             plan=self._subquery_expr._plan,
             subquery_type=self._subquery_expr._subquery_type,
             partition_spec=self._subquery_expr._partition_spec,
-            order_spec=self._subquery_expr._order_spec + list(cols),
+            order_spec=self._subquery_expr._order_spec + new_order_spec,
             with_single_partition=self._subquery_expr._with_single_partition,
         )
         return TableArg(new_expr)
 
     def withSinglePartition(self) -> "TableArg":
-        # Create a new SubqueryExpression with updated with_single_partition
+        if self._is_partitioned():
+            raise PySparkValueError(
+                "Cannot call withSinglePartition() after partitionBy() or withSinglePartition() has been called."
+            )
         new_expr = SubqueryExpression(
             plan=self._subquery_expr._plan,
             subquery_type=self._subquery_expr._subquery_type,
