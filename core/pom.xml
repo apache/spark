@@ -623,12 +623,6 @@
       </properties>
     </profile>
     <profile>
-      <id>jjwt</id>
-      <properties>
-        <jjwt.deps.scope>compile</jjwt.deps.scope>
-      </properties>
-    </profile>
-    <profile>
       <id>sparkr</id>
       <build>
         <plugins>

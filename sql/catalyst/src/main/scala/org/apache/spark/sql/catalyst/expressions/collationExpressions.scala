@@ -151,12 +151,15 @@ case class ResolvedCollation(collationName: String) extends LeafExpression with 
   group = "string_funcs")
 // scalastyle:on line.contains.tab
 case class Collation(child: Expression)
-  extends UnaryExpression with RuntimeReplaceable with ExpectsInputTypes {
+  extends UnaryExpression
+  with RuntimeReplaceable
+  with ExpectsInputTypes
+  with DefaultStringProducingExpression {
   override protected def withNewChildInternal(newChild: Expression): Collation = copy(newChild)
   override lazy val replacement: Expression = {
     val collationId = child.dataType.asInstanceOf[StringType].collationId
     val fullyQualifiedCollationName = CollationFactory.fullyQualifiedName(collationId)
-    Literal.create(fullyQualifiedCollationName, SQLConf.get.defaultStringType)
+    Literal.create(fullyQualifiedCollationName, dataType)
   }
   override def inputTypes: Seq[AbstractDataType] =
     Seq(StringTypeWithCollation(supportsTrimCollation = true))

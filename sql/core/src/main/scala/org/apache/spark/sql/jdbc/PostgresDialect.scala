@@ -327,6 +327,12 @@ private case class PostgresDialect()
     }
   }
 
+  override def compileValue(value: Any): Any = value match {
+    case binaryValue: Array[Byte] =>
+      binaryValue.map("%02X".format(_)).mkString("'\\x", "", "'::bytea")
+    case other => super.compileValue(other)
+  }
+
   override def supportsLimit: Boolean = true
 
   override def supportsOffset: Boolean = true

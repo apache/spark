@@ -657,6 +657,21 @@ class DescribeTableSuite extends DescribeTableSuiteBase with CommandSuiteBase {
           Row("Table Properties", "[bar=baz]", ""),
           Row("Location", "file:/tmp/testcat/table_name", ""),
           Row("Partition Provider", "Catalog", "")))
+
+      // example date format: Mon Nov 01 12:00:00 UTC 2021
+      val dayOfWeek = raw"[A-Z][a-z]{2}"
+      val month = raw"[A-Z][a-z]{2}"
+      val day = raw"\s?[0-9]{1,2}"
+      val time = raw"[0-9]{2}:[0-9]{2}:[0-9]{2}"
+      val timezone = raw"[A-Z]{3,4}"
+      val year = raw"[0-9]{4}"
+
+      val timeRegex = raw"""$dayOfWeek $month $day $time $timezone $year""".r
+
+      val createdTimeValue = descriptionDf.filter("col_name = 'Created Time'")
+        .collect().head.getString(1).trim
+
+      assert(timeRegex.matches(createdTimeValue))
     }
   }
 

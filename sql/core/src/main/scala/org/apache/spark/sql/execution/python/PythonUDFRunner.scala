@@ -42,6 +42,7 @@ abstract class BasePythonUDFRunner(
     SQLConf.get.pysparkWorkerPythonExecutable.getOrElse(
       funcs.head._1.funcs.head.pythonExec)
 
+  override val hideTraceback: Boolean = SQLConf.get.pysparkHideTraceback
   override val simplifiedTraceback: Boolean = SQLConf.get.pysparkSimplifiedTraceback
 
   override val faultHandlerEnabled: Boolean = SQLConf.get.pythonUDFWorkerFaulthandlerEnabled

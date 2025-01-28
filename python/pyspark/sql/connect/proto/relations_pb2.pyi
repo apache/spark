@@ -756,13 +756,13 @@ class Fetch(google.protobuf.message.Message):
             PARAM_FIELD_NUMBER: builtins.int
             INPUT_FIELD_NUMBER: builtins.int
             @property
-            def param(self) -> pyspark.sql.connect.proto.ml_common_pb2.Param: ...
+            def param(self) -> pyspark.sql.connect.proto.expressions_pb2.Expression.Literal: ...
             @property
             def input(self) -> global___Relation: ...
             def __init__(
                 self,
                 *,
-                param: pyspark.sql.connect.proto.ml_common_pb2.Param | None = ...,
+                param: pyspark.sql.connect.proto.expressions_pb2.Expression.Literal | None = ...,
                 input: global___Relation | None = ...,
             ) -> None: ...
             def HasField(

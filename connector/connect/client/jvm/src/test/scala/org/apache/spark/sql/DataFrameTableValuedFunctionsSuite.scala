@@ -17,8 +17,8 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.sql.connect.test.{QueryTest, RemoteSparkSession}
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.test.{QueryTest, RemoteSparkSession}
 
 class DataFrameTableValuedFunctionsSuite extends QueryTest with RemoteSparkSession {
   import testImplicits._

@@ -578,6 +578,82 @@ class Expression(google.protobuf.message.Message):
                 ],
             ) -> None: ...
 
+        class SpecializedArray(google.protobuf.message.Message):
+            DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+            BOOLS_FIELD_NUMBER: builtins.int
+            INTS_FIELD_NUMBER: builtins.int
+            LONGS_FIELD_NUMBER: builtins.int
+            FLOATS_FIELD_NUMBER: builtins.int
+            DOUBLES_FIELD_NUMBER: builtins.int
+            STRINGS_FIELD_NUMBER: builtins.int
+            @property
+            def bools(self) -> pyspark.sql.connect.proto.common_pb2.Bools: ...
+            @property
+            def ints(self) -> pyspark.sql.connect.proto.common_pb2.Ints: ...
+            @property
+            def longs(self) -> pyspark.sql.connect.proto.common_pb2.Longs: ...
+            @property
+            def floats(self) -> pyspark.sql.connect.proto.common_pb2.Floats: ...
+            @property
+            def doubles(self) -> pyspark.sql.connect.proto.common_pb2.Doubles: ...
+            @property
+            def strings(self) -> pyspark.sql.connect.proto.common_pb2.Strings: ...
+            def __init__(
+                self,
+                *,
+                bools: pyspark.sql.connect.proto.common_pb2.Bools | None = ...,
+                ints: pyspark.sql.connect.proto.common_pb2.Ints | None = ...,
+                longs: pyspark.sql.connect.proto.common_pb2.Longs | None = ...,
+                floats: pyspark.sql.connect.proto.common_pb2.Floats | None = ...,
+                doubles: pyspark.sql.connect.proto.common_pb2.Doubles | None = ...,
+                strings: pyspark.sql.connect.proto.common_pb2.Strings | None = ...,
+            ) -> None: ...
+            def HasField(
+                self,
+                field_name: typing_extensions.Literal[
+                    "bools",
+                    b"bools",
+                    "doubles",
+                    b"doubles",
+                    "floats",
+                    b"floats",
+                    "ints",
+                    b"ints",
+                    "longs",
+                    b"longs",
+                    "strings",
+                    b"strings",
+                    "value_type",
+                    b"value_type",
+                ],
+            ) -> builtins.bool: ...
+            def ClearField(
+                self,
+                field_name: typing_extensions.Literal[
+                    "bools",
+                    b"bools",
+                    "doubles",
+                    b"doubles",
+                    "floats",
+                    b"floats",
+                    "ints",
+                    b"ints",
+                    "longs",
+                    b"longs",
+                    "strings",
+                    b"strings",
+                    "value_type",
+                    b"value_type",
+                ],
+            ) -> None: ...
+            def WhichOneof(
+                self, oneof_group: typing_extensions.Literal["value_type", b"value_type"]
+            ) -> (
+                typing_extensions.Literal["bools", "ints", "longs", "floats", "doubles", "strings"]
+                | None
+            ): ...
+
         NULL_FIELD_NUMBER: builtins.int
         BINARY_FIELD_NUMBER: builtins.int
         BOOLEAN_FIELD_NUMBER: builtins.int
@@ -598,6 +674,7 @@ class Expression(google.protobuf.message.Message):
         ARRAY_FIELD_NUMBER: builtins.int
         MAP_FIELD_NUMBER: builtins.int
         STRUCT_FIELD_NUMBER: builtins.int
+        SPECIALIZED_ARRAY_FIELD_NUMBER: builtins.int
         @property
         def null(self) -> pyspark.sql.connect.proto.types_pb2.DataType: ...
         binary: builtins.bytes
@@ -627,6 +704,8 @@ class Expression(google.protobuf.message.Message):
         def map(self) -> global___Expression.Literal.Map: ...
         @property
         def struct(self) -> global___Expression.Literal.Struct: ...
+        @property
+        def specialized_array(self) -> global___Expression.Literal.SpecializedArray: ...
         def __init__(
             self,
             *,
@@ -650,6 +729,7 @@ class Expression(google.protobuf.message.Message):
             array: global___Expression.Literal.Array | None = ...,
             map: global___Expression.Literal.Map | None = ...,
             struct: global___Expression.Literal.Struct | None = ...,
+            specialized_array: global___Expression.Literal.SpecializedArray | None = ...,
         ) -> None: ...
         def HasField(
             self,
@@ -686,6 +766,8 @@ class Expression(google.protobuf.message.Message):
                 b"null",
                 "short",
                 b"short",
+                "specialized_array",
+                b"specialized_array",
                 "string",
                 b"string",
                 "struct",
@@ -733,6 +815,8 @@ class Expression(google.protobuf.message.Message):
                 b"null",
                 "short",
                 b"short",
+                "specialized_array",
+                b"specialized_array",
                 "string",
                 b"string",
                 "struct",
@@ -769,6 +853,7 @@ class Expression(google.protobuf.message.Message):
                 "array",
                 "map",
                 "struct",
+                "specialized_array",
             ]
             | None
         ): ...

@@ -276,6 +276,18 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val ANALYZER_DUAL_RUN_RETURN_SINGLE_PASS_RESULT =
+    buildConf("spark.sql.analyzer.singlePassResolver.returnSinglePassResultInDualRun")
+      .internal()
+      .doc(
+        "When true, return the result of the single-pass resolver as the result of the dual run " +
+        "analysis (which is used if the ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER flag " +
+        "value is true). Otherwise, return the result of the fixed-point analyzer."
+      )
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(Utils.isTesting)
+
   val ANALYZER_SINGLE_PASS_RESOLVER_VALIDATION_ENABLED =
     buildConf("spark.sql.analyzer.singlePassResolver.validationEnabled")
       .internal()
@@ -874,20 +886,33 @@ object SQLConf {
   lazy val TRIM_COLLATION_ENABLED =
     buildConf("spark.sql.collation.trim.enabled")
       .internal()
-      .doc(
-        "Trim collation feature is under development and its use should be done under this" +
-        "feature flag. Trim collation trims trailing whitespaces from strings."
+      .doc("When enabled allows the use of trim collations which trim trailing whitespaces from" +
+        " strings."
       )
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(true)
+
+  lazy val DEFAULT_COLLATION_ENABLED =
+    buildConf("spark.sql.sessionDefaultCollation.enabled")
+      .internal()
+      .doc("Session default collation feature is under development and its use should be done " +
+        "under this feature flag.")
       .version("4.0.0")
       .booleanConf
       .createWithDefault(Utils.isTesting)
 
   val DEFAULT_COLLATION =
     buildConf(SqlApiConfHelper.DEFAULT_COLLATION)
+      .internal()
       .doc("Sets default collation to use for string literals, parameter markers or the string" +
         " produced by a builtin function such as to_char or CAST")
       .version("4.0.0")
       .stringConf
+      .checkValue(
+        value => value == CollationNames.UTF8_BINARY || get.getConf(DEFAULT_COLLATION_ENABLED),
+        errorClass = "DEFAULT_COLLATION_NOT_SUPPORTED",
+        parameters = _ => Map.empty)
       .checkValue(
         collationName => {
           try {
@@ -2335,6 +2360,14 @@ object SQLConf {
       .intConf
       .createWithDefault(1)
 
+  val STREAMING_MAX_NUM_STATE_SCHEMA_FILES =
+    buildConf("spark.sql.streaming.stateStore.maxNumStateSchemaFiles")
+      .internal()
+      .doc("The maximum number of StateSchemaV3 files allowed per operator")
+      .version("4.0.0")
+      .intConf
+      .createWithDefault(128)
+
   val STREAMING_STATE_STORE_ENCODING_FORMAT =
     buildConf("spark.sql.streaming.stateStore.encodingFormat")
       .doc("The encoding format used for stateful operators to store information " +
@@ -2345,6 +2378,14 @@ object SQLConf {
       .checkValue(v => Set("unsaferow", "avro").contains(v),
         "Valid values are 'unsaferow' and 'avro'")
       .createWithDefault("unsaferow")
+
+  val STREAMING_VALUE_STATE_SCHEMA_EVOLUTION_THRESHOLD =
+    buildConf("spark.sql.streaming.stateStore.valueStateSchemaEvolutionThreshold")
+      .internal()
+      .doc("The maximum number of value state schema evolutions allowed per column family")
+      .version("4.0.0")
+      .intConf
+      .createWithDefault(16)
 
   val STATE_STORE_COMPRESSION_CODEC =
     buildConf("spark.sql.streaming.stateStore.compression.codec")
@@ -3434,6 +3475,15 @@ object SQLConf {
       .checkValues(Set("legacy", "row", "dict"))
       .createWithDefaultString("legacy")
 
+  val PYSPARK_HIDE_TRACEBACK =
+    buildConf("spark.sql.execution.pyspark.udf.hideTraceback.enabled")
+      .doc(
+        "When true, only show the message of the exception from Python UDFs, " +
+        "hiding the stack trace. If this is enabled, simplifiedTraceback has no effect.")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val PYSPARK_SIMPLIFIED_TRACEBACK =
     buildConf("spark.sql.execution.pyspark.udf.simplifiedTraceback.enabled")
       .doc(
@@ -3953,6 +4003,16 @@ object SQLConf {
     buildConf("spark.sql.optimizer.decorrelateOffset.enabled")
       .internal()
       .doc("Decorrelate subqueries with correlation under LIMIT with OFFSET.")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(true)
+
+  val DECORRELATE_UNION_OR_SET_OP_UNDER_LIMIT_ENABLED =
+    buildConf("spark.sql.optimizer.decorrelateUnionOrSetOpUnderLimit.enabled")
+      .internal()
+      .doc("Decorrelate UNION or SET operation under LIMIT operator. If not enabled," +
+        "revert to legacy incorrect behavior for certain subqueries with correlation under" +
+        "UNION/SET operator with a LIMIT operator above it.")
       .version("4.0.0")
       .booleanConf
       .createWithDefault(true)
@@ -5819,6 +5879,12 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def stateStoreEncodingFormat: String = getConf(STREAMING_STATE_STORE_ENCODING_FORMAT)
 
+  def streamingValueStateSchemaEvolutionThreshold: Int =
+    getConf(STREAMING_VALUE_STATE_SCHEMA_EVOLUTION_THRESHOLD)
+
+  def streamingStateSchemaFilesThreshold: Int =
+    getConf(STREAMING_MAX_NUM_STATE_SCHEMA_FILES)
+
   def checkpointRenamedFileCheck: Boolean = getConf(CHECKPOINT_RENAMEDFILE_CHECK_ENABLED)
 
   def parquetFilterPushDown: Boolean = getConf(PARQUET_FILTER_PUSHDOWN_ENABLED)
@@ -6228,6 +6294,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def pandasUDFBufferSize: Int = getConf(PANDAS_UDF_BUFFER_SIZE)
 
   def pandasStructHandlingMode: String = getConf(PANDAS_STRUCT_HANDLING_MODE)
+
+  def pysparkHideTraceback: Boolean = getConf(PYSPARK_HIDE_TRACEBACK)
 
   def pysparkSimplifiedTraceback: Boolean = getConf(PYSPARK_SIMPLIFIED_TRACEBACK)
 
