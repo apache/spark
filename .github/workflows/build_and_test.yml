@@ -25,7 +25,7 @@ on:
       java:
         required: false
         type: string
-        default: 17
+        default: 21
       branch:
         description: Branch to run the build against
         required: false
