@@ -363,19 +363,17 @@ class GroupedData:
     applyInPandasWithState.__doc__ = PySparkGroupedData.applyInPandasWithState.__doc__
 
     def transformWithStateInPandas(
-            self,
-            statefulProcessor: StatefulProcessor,
-            outputStructType: Union[StructType, str],
-            outputMode: str,
-            timeMode: str,
-            initialState: Optional["GroupedData"] = None,
-            eventTimeColumnName: str = "",
+        self,
+        statefulProcessor: StatefulProcessor,
+        outputStructType: Union[StructType, str],
+        outputMode: str,
+        timeMode: str,
+        initialState: Optional["GroupedData"] = None,
+        eventTimeColumnName: str = "",
     ) -> "DataFrame":
         from pyspark.sql.connect.udf import UserDefinedFunction
         from pyspark.sql.connect.dataframe import DataFrame
         from pyspark.sql.streaming.stateful_processor_util import TransformWithStateInPandasUdfUtils
-
-        self._df._check_same_session(initialState._df)
 
         udf_util = TransformWithStateInPandasUdfUtils(statefulProcessor, timeMode)
         if initialState is None:
@@ -388,6 +386,7 @@ class GroupedData:
             initial_state_grouping_cols = None
 
         else:
+            self._df._check_same_session(initialState._df)
             udf_obj = UserDefinedFunction(
                 udf_util.transformWithStateWithInitStateUDF,  # type: ignore
                 returnType=outputStructType,
@@ -411,6 +410,7 @@ class GroupedData:
                 output_schema=output_schema,
                 output_mode=outputMode,
                 time_mode=timeMode,
+                event_time_col_name=eventTimeColumnName,
                 cols=self._df.columns,
                 initial_state_plan=initial_state_plan,
                 initial_state_grouping_cols=initial_state_grouping_cols,

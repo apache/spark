@@ -348,16 +348,12 @@ class RelationalGroupedDataset protected[sql](
 
     val leftGroupingNamedExpressions = groupingExprs.map {
       case ne: NamedExpression => ne
-      case other =>
-        throw new Exception(s"I am here, attaching alias")
-        Alias(other, other.toString)()
+      case other => Alias(other, other.toString)()
     }
 
     val rightGroupingNamedExpressions = r.groupingExprs.map {
       case ne: NamedExpression => ne
-      case other =>
-        throw new Exception(s"I am here, attaching alias")
-        Alias(other, other.toString)()
+      case other => Alias(other, other.toString)()
     }
 
     val leftChild = df.logicalPlan
@@ -367,13 +363,6 @@ class RelationalGroupedDataset protected[sql](
       Project(leftGroupingNamedExpressions ++ leftChild.output, leftChild)).analyzed
     val right = r.df.sparkSession.sessionState.executePlan(
       Project(rightGroupingNamedExpressions ++ rightChild.output, rightChild)).analyzed
-    /*
-    throw new Exception(f"initial state grouping expr: ${r.groupingExprs}, " +
-      f"initGroupingAttrs: $rightGroupingNamedExpressions, df grouping expr: ${groupingExprs}, " +
-      f"df grouping attrs: ${leftGroupingNamedExpressions}")
-
-    throw new Exception(f"rightChild plan: ${rightChild}," +
-      f" rightGroupingNamedExpressions: $rightGroupingNamedExpressions, right: $right") */
 
     val output = toAttributes(expr.dataType.asInstanceOf[StructType])
     val plan = FlatMapCoGroupsInPandas(
@@ -490,13 +479,9 @@ class RelationalGroupedDataset protected[sql](
       timeModeStr: String,
       initialState: RelationalGroupedDataset,
       eventTimeColumnName: String): DataFrame = {
-    def exprToAttr(expr: Seq[Expression]) = {
-      expr.map {
+    def exprToAttr(expr: Seq[Expression]) = expr.map {
         case ne: NamedExpression => ne
-        case other =>
-          println(s"I am here, attaching alias")
-          Alias(other, other.toString)()
-      }
+        case other => Alias(other, other.toString)()
     }
 
     val groupingAttrs = exprToAttr(groupingExprs)

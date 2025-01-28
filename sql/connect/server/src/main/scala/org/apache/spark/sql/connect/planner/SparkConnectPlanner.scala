@@ -1054,7 +1054,7 @@ class SparkConnectPlanner(
           outputSchema,
           rel.getOutputMode,
           rel.getTimeMode,
-          initialStateDs, "")
+          initialStateDs, rel.getEventTimeColName)
         .logicalPlan
     } else {
       Dataset
@@ -1065,7 +1065,7 @@ class SparkConnectPlanner(
           outputSchema,
           rel.getOutputMode,
           rel.getTimeMode,
-          null, "")
+          null, rel.getEventTimeColName)
         .logicalPlan
     }
   }

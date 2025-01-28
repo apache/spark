@@ -67,6 +67,7 @@ class TransformWithStateInPandasTestsMixin:
         )
         cfg.set("spark.sql.execution.arrow.transformWithStateInPandas.maxRecordsPerBatch", "2")
         cfg.set("spark.sql.session.timeZone", "UTC")
+        cfg.set("spark.sql.streaming.noDataMicroBatches.enabled", "false")
         return cfg
 
     def _prepare_input_data(self, input_path, col1, col2):
@@ -105,12 +106,6 @@ class TransformWithStateInPandasTestsMixin:
             for e1, e2, e3 in zip(col1, col2, col3):
                 fw.write(f"{e1},{e2},{e3}\n")
 
-    # TODO SPARK-50180 This is a hack to exit the query when all assertions are passed
-    #  for processing time mode
-    def _check_query_end_exception(self, error):
-        error_msg = str(error)
-        return "Checks passed, ending the query for processing time mode" in error_msg
-
     def build_test_df_with_3_cols(self, input_path):
         df = self.spark.readStream.format("text").option("maxFilesPerTrigger", 1).load(input_path)
         df_split = df.withColumn("split_values", split(df["value"], ","))
@@ -121,7 +116,6 @@ class TransformWithStateInPandasTestsMixin:
         )
         return df_final
 
-    """
     def _test_transform_with_state_in_pandas_basic(
         self,
         stateful_processor,
@@ -277,22 +271,14 @@ class TransformWithStateInPandasTestsMixin:
     # test list state with ttl has the same behavior as list state when state doesn't expire.
     def test_transform_with_state_in_pandas_list_state_large_ttl(self):
         def check_results(batch_df, batch_id):
-            if batch_id == 0:
-                assert set(batch_df.sort("id").collect()) == {
-                    Row(id="0", countAsString="2"),
-                    Row(id="1", countAsString="2"),
-                }
-            else:
-                # TODO SPARK-50180 This is a hack to exit the query when all assertions are passed
-                #  for processing time mode
-                raise Exception("Checks passed, ending the query for processing time mode")
+            assert set(batch_df.sort("id").collect()) == {
+                Row(id="0", countAsString="2"),
+                Row(id="1", countAsString="2"),
+            }
 
-        try:
-            self._test_transform_with_state_in_pandas_basic(
-                ListStateLargeTTLProcessor(), check_results, True, "processingTime"
-            )
-        except Exception as e:
-            self.assertTrue(self._check_query_end_exception(e))
+        self._test_transform_with_state_in_pandas_basic(
+            ListStateLargeTTLProcessor(), check_results, True, "processingTime"
+        )
 
     def test_transform_with_state_in_pandas_map_state(self):
         def check_results(batch_df, _):
@@ -306,22 +292,14 @@ class TransformWithStateInPandasTestsMixin:
     # test map state with ttl has the same behavior as map state when state doesn't expire.
     def test_transform_with_state_in_pandas_map_state_large_ttl(self):
         def check_results(batch_df, batch_id):
-            if batch_id == 0:
-                assert set(batch_df.sort("id").collect()) == {
-                    Row(id="0", countAsString="2"),
-                    Row(id="1", countAsString="2"),
-                }
-            else:
-                # TODO SPARK-50180 This is a hack to exit the query when all assertions are passed
-                #  for processing time mode
-                raise Exception("Checks passed, ending the query for processing time mode")
+            assert set(batch_df.sort("id").collect()) == {
+                Row(id="0", countAsString="2"),
+                Row(id="1", countAsString="2"),
+            }
 
-        try:
-            self._test_transform_with_state_in_pandas_basic(
-                MapStateLargeTTLProcessor(), check_results, True, "processingTime"
-            )
-        except Exception as e:
-            self.assertTrue(self._check_query_end_exception(e))
+        self._test_transform_with_state_in_pandas_basic(
+            MapStateLargeTTLProcessor(), check_results, True, "processingTime"
+        )
 
     # test value state with ttl has the same behavior as value state when
     # state doesn't expire.
@@ -332,21 +310,15 @@ class TransformWithStateInPandasTestsMixin:
                     Row(id="0", countAsString="2"),
                     Row(id="1", countAsString="2"),
                 }
-            elif batch_id == 1:
+            else:
                 assert set(batch_df.sort("id").collect()) == {
                     Row(id="0", countAsString="3"),
                     Row(id="1", countAsString="2"),
                 }
-            else:
-                # TODO SPARK-50180 This is a hack to exit the query when all assertions are passed
-                #  for processing time mode
-                raise Exception("Checks passed, ending the query for processing time mode")
-        try:
-            self._test_transform_with_state_in_pandas_basic(
-                SimpleTTLStatefulProcessor(), check_results, False, "processingTime"
-            )
-        except Exception as e:
-            self.assertTrue(self._check_query_end_exception(e))
+
+        self._test_transform_with_state_in_pandas_basic(
+            SimpleTTLStatefulProcessor(), check_results, False, "processingTime"
+        )
 
     # TODO SPARK-50908 holistic fix for TTL suite
     @unittest.skip("test is flaky and it is only a timing issue, skipping until we can resolve")
@@ -401,10 +373,7 @@ class TransformWithStateInPandasTestsMixin:
                         Row(id="ttl-map-state-count-1", count=3),
                     ],
                 )
-            else:
-                # TODO SPARK-50180 This is a hack to exit the query when all assertions are passed
-                #  for processing time mode
-                raise Exception("Checks passed, ending the query for processing time mode")
+
             if batch_id == 0 or batch_id == 1:
                 time.sleep(4)
 
@@ -441,8 +410,6 @@ class TransformWithStateInPandasTestsMixin:
             q.stop()
             q.awaitTermination()
             self.assertTrue(q.exception() is None)
-        except Exception as e:
-            self.assertTrue(self._check_query_end_exception(e))
         finally:
             input_dir.cleanup()
 
@@ -490,6 +457,7 @@ class TransformWithStateInPandasTestsMixin:
         self.assertTrue(q.exception() is None)
 
     # TODO fix later
+    @unittest.skip("fix later")
     def test_transform_with_state_in_pandas_proc_timer(self):
         # helper function to check expired timestamp is smaller than current processing time
         def check_timestamp(batch_df):
@@ -526,7 +494,7 @@ class TransformWithStateInPandasTestsMixin:
                 ).first()["timeValues"]
                 # check_timestamp(batch_df)
 
-            elif batch_id == 2:
+            else:
                 assert set(batch_df.sort("id").select("id", "countAsString").collect()) == {
                     Row(id="0", countAsString="3"),
                     Row(id="0", countAsString="-1"),
@@ -540,17 +508,9 @@ class TransformWithStateInPandasTestsMixin:
                 ).first()["timeValues"]
                 # assert current_batch_expired_timestamp > self.first_expired_timestamp
 
-            else:
-                # TODO SPARK-50180 This is a hack to exit the query when all assertions are passed
-                #  for processing time mode
-                raise Exception("Checks passed, ending the query for processing time mode")
-
-        try:
-            self._test_transform_with_state_in_pandas_proc_timer(
-                ProcTimeStatefulProcessor(), check_results
-            )
-        except Exception as e:
-            self.assertTrue(self._check_query_end_exception(e))
+        self._test_transform_with_state_in_pandas_proc_timer(
+            ProcTimeStatefulProcessor(), check_results
+        )
 
     def _test_transform_with_state_in_pandas_event_time(self, stateful_processor, check_results):
         import pyspark.sql.functions as f
@@ -629,7 +589,7 @@ class TransformWithStateInPandasTestsMixin:
                     Row(id="a", timestamp="4"),
                     Row(id="a-expired", timestamp="10000"),
                 }
-            elif batch_id == 2:
+            else:
                 # watermark for late event = 10
                 # watermark for eviction = 10 (unchanged as 4 < 10)
                 # timer is registered with expiration time = 10, hence expired at the same batch
@@ -637,18 +597,10 @@ class TransformWithStateInPandasTestsMixin:
                     Row(id="a", timestamp="15"),
                     Row(id="a-expired", timestamp="10000"),
                 }
-            else:
-                # TODO SPARK-50180 This is a hack to exit the query when all assertions are passed
-                #  for processing time mode
-                raise Exception("Checks passed, ending the query for processing time mode")
 
-        try:
-            self._test_transform_with_state_in_pandas_event_time(
-                EventTimeStatefulProcessor(), check_results
-            )
-        except Exception as e:
-            self.assertTrue(self._check_query_end_exception(e))
-    """
+        self._test_transform_with_state_in_pandas_event_time(
+            EventTimeStatefulProcessor(), check_results
+        )
 
     def _test_transform_with_state_init_state_in_pandas(
         self,
@@ -727,7 +679,6 @@ class TransformWithStateInPandasTestsMixin:
             SimpleStatefulProcessorWithInitialState(), check_results
         )
 
-    """
     def _test_transform_with_state_non_contiguous_grouping_cols(
         self, stateful_processor, check_results, initial_state=None
     ):
@@ -773,35 +724,22 @@ class TransformWithStateInPandasTestsMixin:
 
     def test_transform_with_state_non_contiguous_grouping_cols(self):
         def check_results(batch_df, batch_id):
-            if batch_id == 0:
-                assert set(batch_df.collect()) == {
-                    Row(id1="0", id2="1", value=str(123 + 46)),
-                    Row(id1="1", id2="2", value=str(146 + 346)),
-                }
-            else:
-                # TODO SPARK-50180 This is a hack to exit the query when all assertions are passed
-                #  for processing time mode
-                raise Exception("Checks passed, ending the query for processing time mode")
+            assert set(batch_df.collect()) == {
+                Row(id1="0", id2="1", value=str(123 + 46)),
+                Row(id1="1", id2="2", value=str(146 + 346)),
+            }
 
-        try:
-            self._test_transform_with_state_non_contiguous_grouping_cols(
-                SimpleStatefulProcessorWithInitialState(), check_results
-            )
-        except Exception as e:
-            self.assertTrue(self._check_query_end_exception(e))
+        self._test_transform_with_state_non_contiguous_grouping_cols(
+            SimpleStatefulProcessorWithInitialState(), check_results
+        )
 
     def test_transform_with_state_non_contiguous_grouping_cols_with_init_state(self):
         def check_results(batch_df, batch_id):
-            if batch_id == 0:
-                # initial state for key (0, 1) is processed
-                assert set(batch_df.collect()) == {
-                    Row(id1="0", id2="1", value=str(789 + 123 + 46)),
-                    Row(id1="1", id2="2", value=str(146 + 346)),
-                }
-            else:
-                # TODO SPARK-50180 This is a hack to exit the query when all assertions are passed
-                #  for processing time mode
-                raise Exception("Checks passed, ending the query for processing time mode")
+            # initial state for key (0, 1) is processed
+            assert set(batch_df.collect()) == {
+                Row(id1="0", id2="1", value=str(789 + 123 + 46)),
+                Row(id1="1", id2="2", value=str(146 + 346)),
+            }
 
         # grouping key of initial state is also not starting from the beginning of attributes
         data = [(789, "0", "1"), (987, "3", "2")]
@@ -809,14 +747,10 @@ class TransformWithStateInPandasTestsMixin:
             data, "initVal int, id1 string, id2 string"
         ).groupBy("id1", "id2")
 
-        try:
-            self._test_transform_with_state_non_contiguous_grouping_cols(
-                SimpleStatefulProcessorWithInitialState(), check_results, initial_state
-            )
-        except Exception as e:
-            self.assertTrue(self._check_query_end_exception(e))
+        self._test_transform_with_state_non_contiguous_grouping_cols(
+            SimpleStatefulProcessorWithInitialState(), check_results, initial_state
+        )
 
-    @unittest.skip("chaining of ops not supported yet")
     def _test_transform_with_state_in_pandas_chaining_ops(
         self, stateful_processor, check_results, timeMode="None", grouping_cols=["outputTimestamp"]
     ):
@@ -867,6 +801,7 @@ class TransformWithStateInPandasTestsMixin:
         q.processAllAvailable()
         q.awaitTermination(10)
 
+    @unittest.skip("chaining of ops not supported yet")
     def test_transform_with_state_in_pandas_chaining_ops(self):
         def check_results(batch_df, batch_id):
             import datetime
@@ -916,24 +851,17 @@ class TransformWithStateInPandasTestsMixin:
                     Row(id="0", value=str(789 + 123 + 46)),
                     Row(id="1", value=str(146 + 346)),
                 }
-            elif batch_id == 1:
+            else:
                 # handleInitialState is only processed in the first batch,
                 # no more timer is registered so no more expired timers
                 assert set(batch_df.sort("id").collect()) == {
                     Row(id="0", value=str(789 + 123 + 46 + 67)),
                     Row(id="3", value=str(987 + 12)),
                 }
-            else:
-                # TODO SPARK-50180 This is a hack to exit the query when all assertions are passed
-                #  for processing time mode
-                raise Exception("Checks passed, ending the query for processing time mode")
 
-        try:
-            self._test_transform_with_state_init_state_in_pandas(
-                StatefulProcessorWithInitialStateTimers(), check_results, "processingTime"
-            )
-        except Exception as e:
-            self.assertTrue(self._check_query_end_exception(e))
+        self._test_transform_with_state_init_state_in_pandas(
+            StatefulProcessorWithInitialStateTimers(), check_results, "processingTime"
+        )
 
     def test_transform_with_state_in_pandas_batch_query(self):
         data = [("0", 123), ("0", 46), ("1", 146), ("1", 346)]
@@ -1091,21 +1019,14 @@ class TransformWithStateInPandasTestsMixin:
                 )
                 assert list_state_df.isEmpty()
 
-                # TODO SPARK-50180 This is a hack to exit the query when all assertions are passed
-                #  for processing time mode
-                raise Exception("Checks passed, ending the query for processing time mode")
-
-        try:
-            self._test_transform_with_state_in_pandas_basic(
-                MapStateLargeTTLProcessor(),
-                check_results,
-                True,
-                "processingTime",
-                checkpoint_path=checkpoint_path,
-                initial_state=None,
-            )
-        except Exception as e:
-            self.assertTrue(self._check_query_end_exception(e))
+        self._test_transform_with_state_in_pandas_basic(
+            MapStateLargeTTLProcessor(),
+            check_results,
+            True,
+            "processingTime",
+            checkpoint_path=checkpoint_path,
+            initial_state=None,
+        )
 
         # run the same test suite again but with no-op initial state
         # TWS with initial state is using a different python runner
@@ -1113,17 +1034,15 @@ class TransformWithStateInPandasTestsMixin:
         initial_state = self.spark.createDataFrame(init_data, "id string, temperature int").groupBy(
             "id"
         )
-        try:
-            self._test_transform_with_state_in_pandas_basic(
-                MapStateLargeTTLProcessor(),
-                check_results,
-                True,
-                "processingTime",
-                checkpoint_path=checkpoint_path,
-                initial_state=initial_state,
-            )
-        except Exception as e:
-            self.assertTrue(self._check_query_end_exception(e))
+
+        self._test_transform_with_state_in_pandas_basic(
+            MapStateLargeTTLProcessor(),
+            check_results,
+            True,
+            "processingTime",
+            checkpoint_path=checkpoint_path,
+            initial_state=initial_state,
+        )
 
     # This test covers multiple list state variables and flatten option
     def test_transform_with_list_state_metadata(self):
@@ -1192,21 +1111,14 @@ class TransformWithStateInPandasTestsMixin:
                     Row(groupingKey="1", valueSortedList=[20, 20, 120, 120, 222]),
                 ]
 
-                # TODO SPARK-50180 This is a hack to exit the query when all assertions are passed
-                #  for processing time mode
-                raise Exception("Checks passed, ending the query for processing time mode")
-
-        try:
-            self._test_transform_with_state_in_pandas_basic(
-                ListStateProcessor(),
-                check_results,
-                True,
-                "processingTime",
-                checkpoint_path=checkpoint_path,
-                initial_state=None,
-            )
-        except Exception as e:
-            self.assertTrue(self._check_query_end_exception(e))
+        self._test_transform_with_state_in_pandas_basic(
+            ListStateProcessor(),
+            check_results,
+            True,
+            "processingTime",
+            checkpoint_path=checkpoint_path,
+            initial_state=None,
+        )
 
     # This test covers value state variable and read change feed,
     # snapshotStartBatchId related options
@@ -1286,23 +1198,16 @@ class TransformWithStateInPandasTestsMixin:
                         .collect()
                     )
 
-                # TODO SPARK-50180 This is a hack to exit the query when all assertions are passed
-                #  for processing time mode
-                raise Exception("Checks passed, ending the query for processing time mode")
-
         with self.sql_conf(
             {"spark.sql.streaming.stateStore.rocksdb.changelogCheckpointing.enabled": "true"}
         ):
-            try:
-                self._test_transform_with_state_in_pandas_basic(
-                    SimpleStatefulProcessor(),
-                    check_results,
-                    False,
-                    "processingTime",
-                    checkpoint_path=checkpoint_path,
-                )
-            except Exception as e:
-                self.assertTrue(self._check_query_end_exception(e))
+            self._test_transform_with_state_in_pandas_basic(
+                SimpleStatefulProcessor(),
+                check_results,
+                False,
+                "processingTime",
+                checkpoint_path=checkpoint_path,
+            )
 
     def test_transform_with_state_restart_with_multiple_rows_init_state(self):
         def check_results(batch_df, _):
@@ -1529,7 +1434,7 @@ class TransformWithStateInPandasTestsMixin:
                     df,
                     check_exception=check_exception,
                 )
-    """
+
 
 class SimpleStatefulProcessorWithInitialState(StatefulProcessor):
     # this dict is the same as input initial state dataframe
