@@ -26,9 +26,10 @@ import org.scalatest.concurrent.Futures.timeout
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{DataFrame, Dataset, Encoders, Row, SparkSession}
+import org.apache.spark.sql.{DataFrame, Dataset, Encoders, Row}
+import org.apache.spark.sql.connect.SparkSession
+import org.apache.spark.sql.connect.test.{QueryTest, RemoteSparkSession}
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.test.{QueryTest, RemoteSparkSession}
 import org.apache.spark.sql.types._
 
 case class InputRowForConnectTest(key: String, value: String)
@@ -177,7 +178,8 @@ class TransformWithStateConnectSuite extends QueryTest with RemoteSparkSession w
     "spark.sql.streaming.stateStore.providerClass" ->
       "org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider",
     "spark.sql.shuffle.partitions" -> "5",
-    "spark.sql.session.timeZone" -> "UTC")
+    "spark.sql.session.timeZone" -> "UTC",
+    "spark.sql.streaming.noDataMicroBatches.enabled" -> "false")
 
   test("transformWithState - streaming with state variable, case class type") {
     withSQLConf(twsAdditionalSQLConf: _*) {
@@ -350,7 +352,6 @@ class TransformWithStateConnectSuite extends QueryTest with RemoteSparkSession w
       val session: SparkSession = spark
       import session.implicits._
 
-      val exceptionMessageSignalQueryEnd = "Passed checks, ending the query"
       val checkResultFunc = (batchDF: Dataset[(String, String)], batchId: Long) => {
         if (batchId == 0) {
           val expectedDF = Seq(
@@ -379,10 +380,6 @@ class TransformWithStateConnectSuite extends QueryTest with RemoteSparkSession w
 
           val realDf = batchDF.collect().toSet
           assert(realDf == expectedDF)
-        } else {
-          // Note that for processing time mode, query won't stop even after consumes all data.
-          // We need to throw an exception to explicitly ending the query.
-          throw new Exception(exceptionMessageSignalQueryEnd)
         }
 
         if (batchId == 0) {
@@ -397,21 +394,22 @@ class TransformWithStateConnectSuite extends QueryTest with RemoteSparkSession w
         Thread.sleep(2000)
         prepareInputData(path + "/text-test4.txt", Seq("1", "0"), Seq(0, 0))
 
-        val e = intercept[Exception] {
-          val q = buildTestDf(path, spark)
-            .as[(String, String)]
-            .groupByKey(x => x._1)
-            .transformWithState(
-              new TTLTestStatefulProcessor(),
-              TimeMode.ProcessingTime(),
-              OutputMode.Update())
-            .writeStream
-            .foreachBatch(checkResultFunc)
-            .outputMode("Update")
-            .start()
-          q.processAllAvailable()
+        val q = buildTestDf(path, spark)
+          .as[(String, String)]
+          .groupByKey(x => x._1)
+          .transformWithState(
+            new TTLTestStatefulProcessor(),
+            TimeMode.ProcessingTime(),
+            OutputMode.Update())
+          .writeStream
+          .foreachBatch(checkResultFunc)
+          .outputMode("Update")
+          .start()
+        q.processAllAvailable()
+
+        eventually(timeout(30.seconds)) {
+          q.stop()
         }
-        assert(e.getMessage.contains(exceptionMessageSignalQueryEnd))
       }
     }
   }
