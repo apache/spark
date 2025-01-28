@@ -557,7 +557,8 @@ public class JavaDataFrameSuite {
   @Test
   public void testTransformAsClassic() {
     // SPARK-49961 - transform must have the correct type
-    org.apache.spark.sql.classic.Dataset<Integer> ds = spark.createDataset(Arrays.asList(1,2), Encoders.INT());
+    org.apache.spark.sql.classic.Dataset<Integer> ds =
+            spark.createDataset(Arrays.asList(1,2), Encoders.INT());
     org.apache.spark.sql.classic.Dataset<Integer> transformed =
             ds.transform((Dataset<Integer> d) ->
               ds.selectExpr("(value + 1) value").as(Encoders.INT()));
