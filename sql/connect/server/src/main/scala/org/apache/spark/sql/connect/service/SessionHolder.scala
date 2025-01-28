@@ -451,7 +451,7 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
   private[connect] def usePlanCache(rel: proto.Relation)(
       transform: proto.Relation => LogicalPlan): (LogicalPlan, Boolean) =
     planCache match {
-      case Some(cache) if planCacheEnabled(rel) =>
+      case Some(cache) if canCachePlan(rel) =>
         Option(cache.getIfPresent(rel)) match {
           case Some(plan) =>
             logDebug(s"Using cached plan for relation '$rel': $plan")
@@ -481,7 +481,7 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
         Dataset.ofRows(session, plan, tracker, shuffleCleanupMode)
       case _ => Dataset.ofRows(session, plan)
     }
-    if (!cacheHit && planCache.isDefined && planCacheEnabled(rel)) {
+    if (!cacheHit && planCache.isDefined && canCachePlan(rel)) {
       if (df.queryExecution.isLazyAnalysis) {
         val plan = df.queryExecution.logical
         logDebug(s"Cache a lazyily analyzed logical plan for '$rel': $plan")
@@ -496,7 +496,7 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
   }
 
   // Return true if the plan cache is enabled for the session and the relation.
-  private def planCacheEnabled(rel: proto.Relation): Boolean = {
+  private def canCachePlan(rel: proto.Relation): Boolean = {
     // We only cache plans that have a plan ID.
     rel.hasCommon && rel.getCommon.hasPlanId &&
     Option(session)

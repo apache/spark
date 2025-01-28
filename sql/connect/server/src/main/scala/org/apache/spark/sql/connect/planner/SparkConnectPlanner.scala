@@ -131,7 +131,8 @@ class SparkConnectPlanner(
 
   /**
    * The root of the query plan is a relation and we apply the transformations to it. If the
-   * relation exists in the plan cache, return the cached plan.
+   * relation exists in the plan cache, return the cached plan, but it does not update the plan
+   * cache.
    * @param rel
    *   The relation to transform.
    * @return
