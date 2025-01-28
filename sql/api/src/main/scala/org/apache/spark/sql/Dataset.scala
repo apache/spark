@@ -2700,7 +2700,7 @@ abstract class Dataset[T] extends Serializable {
    * @since 1.6.0
    */
   // SPARK-49961 - as the base Dataset is now used the output cannot be specific
-  def transform[DSI[_] <: Dataset[_], O](t: DSI[T] => O): O =
+  def transform[U, DSI[_] <: Dataset[_], DSO[_] <: Dataset[_]](t: DSI[T] => DSO[U]): DSO[U] =
     t(this.asInstanceOf[DSI[T]])
 
   /**
