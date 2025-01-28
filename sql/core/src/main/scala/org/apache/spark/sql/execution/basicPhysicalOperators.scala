@@ -773,7 +773,8 @@ case class UnionLoopExec(
   override def innerChildren: Seq[QueryPlan[_]] = Seq(anchor, recursion)
 
   override lazy val metrics = Map(
-    "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
+    "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
+    "numRecursiveLoops" -> SQLMetrics.createMetric(sparkContext, "number of recursive loops"))
 
   /**
    * This function executes the plan (optionally with appended limit node) and caches the result,
@@ -809,6 +810,7 @@ case class UnionLoopExec(
   override protected def doExecute(): RDD[InternalRow] = {
     val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
     val numOutputRows = longMetric("numOutputRows")
+    val numRecursiveLoops = longMetric("numRecursiveLoops")
     val levelLimit = conf.getConf(SQLConf.CTE_RECURSION_LEVEL_LIMIT)
 
     // currentLimit is initialized from the limit argument, and in each step it is decreased by
@@ -836,7 +838,10 @@ case class UnionLoopExec(
       val prevPlan = LogicalRDD.fromDataset(prevDF.queryExecution.toRdd, prevDF, prevDF.isStreaming)
         .newInstance()
       unionChildren += prevPlan
+
+      // Update metrics
       numOutputRows += prevCount
+      numRecursiveLoops += 1
       SQLMetrics.postDriverMetricUpdates(sparkContext, executionId, metrics.values.toSeq)
 
       // the current plan is created by substituting UnionLoopRef node with the project node of
