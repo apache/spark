@@ -765,8 +765,8 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan {
  */
 case class UnionLoopExec(
     loopId: Long,
-    @transient anchor: LogicalPlan,
-    @transient recursion: LogicalPlan,
+    anchor: LogicalPlan,
+    recursion: LogicalPlan,
     override val output: Seq[Attribute],
     limit: Option[Int] = None) extends LeafExecNode {
 
@@ -778,6 +778,9 @@ case class UnionLoopExec(
   /**
    * This function executes the plan (optionally with appended limit node) and caches the result,
    * with the caching mode specified in config.
+   * Note here: in case the "caching" mode is changed from repartition to cache/persist,
+   * it should be considered to mark anchor and recursion as transient so that they are not
+   * serialized.
    */
   private def executeAndCacheAndCount(
      plan: LogicalPlan, currentLimit: Int) = {
