@@ -41,6 +41,7 @@ from pyspark.ml.feature import (
     Normalizer,
     Interaction,
     RFormula,
+    RFormulaModel,
     Tokenizer,
     SQLTransformer,
     RegexTokenizer,
@@ -1269,11 +1270,24 @@ class FeatureTestsMixin:
         )
         rf = RFormula(formula="y ~ x + s", stringIndexerOrderType="alphabetDesc")
         self.assertEqual(rf.getStringIndexerOrderType(), "alphabetDesc")
-        transformedDF = rf.fit(df).transform(df)
+        model = rf.fit(df)
+        transformedDF = model.transform(df)
         observed = transformedDF.select("features").collect()
         expected = [[1.0, 0.0], [2.0, 1.0], [0.0, 0.0]]
         for i in range(0, len(expected)):
             self.assertTrue(all(observed[i]["features"].toArray() == expected[i]))
+
+        # save & load
+        with tempfile.TemporaryDirectory(prefix="vector_indexer") as d:
+            rf.write().overwrite().save(d)
+            rf2 = RFormula.load(d)
+            self.assertEqual(str(rf), str(rf2))
+
+            model.write().overwrite().save(d)
+            model2 = RFormulaModel.load(d)
+            # TODO: fix str(model)
+            # self.assertEqual(str(model), str(model2))
+            self.assertEqual(model.getFormula(), model2.getFormula())
 
     def test_string_indexer_handle_invalid(self):
         df = self.spark.createDataFrame([(0, "a"), (1, "d"), (2, None)], ["id", "label"])

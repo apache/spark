@@ -72,6 +72,7 @@ org.apache.spark.ml.recommendation.ALSModel
 org.apache.spark.ml.fpm.FPGrowthModel
 
 # feature
+org.apache.spark.ml.feature.RFormulaModel
 org.apache.spark.ml.feature.ImputerModel
 org.apache.spark.ml.feature.StandardScalerModel
 org.apache.spark.ml.feature.MaxAbsScalerModel

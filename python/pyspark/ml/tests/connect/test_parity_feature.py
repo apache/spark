@@ -35,14 +35,6 @@ class FeatureParityTests(FeatureTestsMixin, ReusedConnectTestCase):
         super().test_count_vectorizer_from_vocab()
 
     @unittest.skip("Need to support.")
-    def test_rformula_force_index_label(self):
-        super().test_rformula_force_index_label()
-
-    @unittest.skip("Need to support.")
-    def test_rformula_string_indexer_order_type(self):
-        super().test_rformula_string_indexer_order_type()
-
-    @unittest.skip("Need to support.")
     def test_string_indexer_handle_invalid(self):
         super().test_string_indexer_handle_invalid()
 
