@@ -2811,6 +2811,14 @@ class DatasetSuite extends QueryTest
     assert(transformed.collect().sorted === Array(2, 3))
   }
 
+  test("SPARK-49961: transform type should be consistent (base to classic)") {
+    val ds = Seq(1, 2).toDS()
+    val f: Dataset[Int] => classic.Dataset[Int] =
+      d => d.selectExpr("(value + 1) value").as[Int]
+    val transformed = ds.transform(f)
+    assert(transformed.collect().sorted === Array(2, 3))
+  }
+
   test("SPARK-49961: transform type should be consistent (as base)") {
     val ds = Seq(1, 2).toDS().asInstanceOf[Dataset[Int]]
     val f: Dataset[Int] => Dataset[Int] =
