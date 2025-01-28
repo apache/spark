@@ -136,7 +136,7 @@
       <artifactId>tink</artifactId>
     </dependency>
     <dependency>
-      <groupId>org.roaringbitmap</groupId>
+      <groupId>com.github.RoaringBitmap</groupId>
       <artifactId>RoaringBitmap</artifactId>
     </dependency>
 
