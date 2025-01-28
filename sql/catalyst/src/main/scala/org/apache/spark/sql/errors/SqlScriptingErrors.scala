@@ -229,11 +229,19 @@ private[sql] object SqlScriptingErrors {
       messageParameters = Map("sqlState" -> sqlState))
   }
 
-  def sqlExceptionOrNotFoundCannotBeCombinedWithOtherConditions(get: Origin): Throwable = {
+  def sqlExceptionOrNotFoundCannotBeCombinedWithOtherConditions(origin: Origin): Throwable = {
     new SqlScriptingException(
-      origin = get,
+      origin = origin,
       errorClass = "INVALID_HANDLER_DECLARATION.INVALID_CONDITION_COMBINATION",
       cause = null,
       messageParameters = Map.empty)
+  }
+
+  def conditionNotFound(origin: Origin, condition: String): Throwable = {
+    new SqlScriptingException(
+      origin = origin,
+      errorClass = "INVALID_HANDLER_DECLARATION.CONDITION_NOT_FOUND",
+      cause = null,
+      messageParameters = Map("condition" -> condition))
   }
 }

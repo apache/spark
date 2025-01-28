@@ -74,6 +74,7 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
     val sqlScript =
       """
         |BEGIN
+        |  DECLARE duplicate_condition CONDITION FOR SQLSTATE '12345';
         |  DECLARE OR REPLACE flag INT = -1;
         |  DECLARE EXIT HANDLER FOR duplicate_condition
         |  BEGIN
@@ -92,7 +93,7 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
         verifySqlScriptResult(sqlScript, Seq.empty)
       },
       condition = "DUPLICATE_EXCEPTION_HANDLER.CONDITION",
-      parameters = Map("condition" -> "duplicate_condition"))
+      parameters = Map("condition" -> "DUPLICATE_CONDITION"))
   }
 
   test("duplicate handler for the same sqlState") {
@@ -566,6 +567,7 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
         |BEGIN
         |  DECLARE OR REPLACE flag INT = -1;
         |  BEGIN
+        |    DECLARE `22012` CONDITION FOR SQLSTATE '12345';
         |    DECLARE EXIT HANDLER FOR `22012`, SQLSTATE '22012'
         |    BEGIN
         |      SET VAR flag = 1;

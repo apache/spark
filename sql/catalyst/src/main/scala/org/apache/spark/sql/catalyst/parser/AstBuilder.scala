@@ -184,14 +184,14 @@ class AstBuilder extends DataTypeAstBuilder
     Option(ctx.multipartIdentifier())
       .foreach { conditionContext =>
         val conditionNameParts = visitMultipartIdentifier(conditionContext)
+        val conditionNameString = conditionNameParts.mkString(".").toUpperCase(Locale.ROOT)
         if (conditionNameParts.size > 1) {
-          if (!SparkThrowableHelper.isValidErrorClass(conditionNameParts.mkString("."))) {
+          if (!SparkThrowableHelper.isValidErrorClass(conditionNameString)) {
             throw SqlScriptingErrors
-              .conditionCannotBeQualified(CurrentOrigin.get, conditionNameParts.mkString("."))
+              .conditionCannotBeQualified(CurrentOrigin.get, conditionNameString)
           }
         }
-        handlerTriggers
-          .addUniqueCondition(conditionNameParts.mkString(".").toLowerCase(Locale.ROOT))
+        handlerTriggers.addUniqueCondition(conditionNameString)
       }
 
     Option(ctx.SQLEXCEPTION())
@@ -243,14 +243,14 @@ class AstBuilder extends DataTypeAstBuilder
       .map(_.getText.replace("'", "")).getOrElse("45000")
 
     assertSqlState(sqlState)
-    // Convert everything to lower case.
-    ErrorCondition(conditionName.toLowerCase(Locale.ROOT), sqlState.toLowerCase(Locale.ROOT))
+    // Convert everything to upper case.
+    ErrorCondition(conditionName.toUpperCase(Locale.ROOT), sqlState.toUpperCase(Locale.ROOT))
   }
 
   private def visitDeclareHandlerStatementImpl(
       ctx: DeclareHandlerStatementContext,
       labelCtx: SqlScriptingLabelContext): ExceptionHandler = {
-    val handlerTriggers = visitConditionValuesImpl(ctx.conditionValues())
+    val exceptionHandlerTriggers = visitConditionValuesImpl(ctx.conditionValues())
 
     if (Option(ctx.CONTINUE()).isDefined) {
       throw SqlScriptingErrors.continueHandlerNotSupported(CurrentOrigin.get)
@@ -271,7 +271,7 @@ class AstBuilder extends DataTypeAstBuilder
       CompoundBody(Seq(statement.get), None, isScope = false)
     }
 
-    ExceptionHandler(handlerTriggers, body, handlerType)
+    ExceptionHandler(exceptionHandlerTriggers, body, handlerType)
   }
 
   private def visitCompoundBodyImpl(
@@ -292,18 +292,29 @@ class AstBuilder extends DataTypeAstBuilder
       stmt match {
         case handler: ExceptionHandler =>
           scriptingParserContext.handler()
+          // All conditions are already visited when we encounter a handler.
+          handler.exceptionHandlerTriggers.conditions.foreach(conditionName => {
+            // Everything is stored in upper case so we can make case-insensitive comparisons.
+            // If condition is not spark-defined error condition, check if user defined it.
+            if (!SparkThrowableHelper.isValidErrorClass(conditionName)) {
+              if (!conditions.contains(conditionName)) {
+                throw SqlScriptingErrors
+                  .conditionNotFound(CurrentOrigin.get, conditionName)
+              }
+            }
+          })
+
           handlers += handler
         case condition: ErrorCondition =>
-          // Convert everything to lower case for case insensitive comparisons.
-          val lowercaseConditionName = condition.conditionName.toLowerCase(Locale.ROOT)
-          val lowercaseSqlState = condition.sqlState.toLowerCase(Locale.ROOT)
           scriptingParserContext.condition(condition)
           // Check for duplicate condition names in each scope.
-          if (conditions.contains(lowercaseConditionName)) {
+          // When conditions are visited, everything is converted to upper-case
+          // for case-insensitive comparisons.
+          if (conditions.contains(condition.conditionName)) {
             throw SqlScriptingErrors
-              .duplicateConditionInScope(CurrentOrigin.get, lowercaseConditionName)
+              .duplicateConditionInScope(CurrentOrigin.get, condition.conditionName)
           }
-          conditions += lowercaseConditionName -> lowercaseSqlState
+          conditions += condition.conditionName -> condition.sqlState
         case statement =>
           statement match {
             case SingleStatement(createVariable: CreateVariable) =>

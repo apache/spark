@@ -192,19 +192,19 @@ class SqlScriptingExecutionScope(
   def findHandler(condition: String, sqlState: String): Option[ErrorHandlerExec] = {
     // Check if there is a specific handler for the given condition.
     var errorHandler: Option[ErrorHandlerExec] = None
-    val lowercaseCondition = condition.toLowerCase(Locale.ROOT)
-    val lowercaseSqlState = sqlState.toLowerCase(Locale.ROOT)
+    val uppercaseCondition = condition.toUpperCase(Locale.ROOT)
+    val uppercaseSqlState = sqlState.toUpperCase(Locale.ROOT)
 
-    errorHandler = triggerToExceptionHandlerMap.getHandlerForCondition(lowercaseCondition)
+    errorHandler = triggerToExceptionHandlerMap.getHandlerForCondition(uppercaseCondition)
 
     if (errorHandler.isEmpty) {
       // Check if there is a specific handler for the given SQLSTATE.
-      errorHandler = triggerToExceptionHandlerMap.getHandlerForSqlState(lowercaseSqlState)
+      errorHandler = triggerToExceptionHandlerMap.getHandlerForSqlState(uppercaseSqlState)
     }
 
     if (errorHandler.isEmpty) {
       errorHandler = triggerToExceptionHandlerMap.getNotFoundHandler match {
-        case Some(handler) if lowercaseSqlState.startsWith("02") => Some(handler)
+        case Some(handler) if uppercaseSqlState.startsWith("02") => Some(handler)
         case _ => None
       }
     }
@@ -214,7 +214,7 @@ class SqlScriptingExecutionScope(
       // different from 'XX' and '02'.
       errorHandler = triggerToExceptionHandlerMap.getSqlExceptionHandler match {
         case Some(handler)
-          if !lowercaseSqlState.startsWith("xx") && !lowercaseSqlState.startsWith("02") =>
+          if !uppercaseSqlState.startsWith("XX") && !uppercaseSqlState.startsWith("02") =>
           Some(handler)
         case _ => None
       }

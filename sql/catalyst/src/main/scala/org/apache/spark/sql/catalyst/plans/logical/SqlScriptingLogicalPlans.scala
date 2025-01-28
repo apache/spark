@@ -345,7 +345,7 @@ class ExceptionHandlerTriggers(
   def addUniqueSqlException(): Unit = {
     if (sqlException) {
       throw SqlScriptingErrors
-        .duplicateConditionInHandlerDeclaration(CurrentOrigin.get, "sqlexception")
+        .duplicateConditionInHandlerDeclaration(CurrentOrigin.get, "SQLEXCEPTION")
     }
     sqlException = true
   }
@@ -353,27 +353,27 @@ class ExceptionHandlerTriggers(
   def addUniqueNotFound(): Unit = {
     if (notFound) {
       throw SqlScriptingErrors
-        .duplicateConditionInHandlerDeclaration(CurrentOrigin.get, "not found")
+        .duplicateConditionInHandlerDeclaration(CurrentOrigin.get, "NOT FOUND")
     }
     notFound = true
   }
 
   def addUniqueCondition(value: String): Unit = {
-    val lowercaseValue = value.toLowerCase(Locale.ROOT)
-    if (conditions.contains(lowercaseValue)) {
+    val uppercaseValue = value.toUpperCase(Locale.ROOT)
+    if (conditions.contains(uppercaseValue)) {
       throw SqlScriptingErrors
-        .duplicateConditionInHandlerDeclaration(CurrentOrigin.get, lowercaseValue)
+        .duplicateConditionInHandlerDeclaration(CurrentOrigin.get, uppercaseValue)
     }
-    conditions += lowercaseValue
+    conditions += uppercaseValue
   }
 
   def addUniqueSqlState(value: String): Unit = {
-    val lowercaseValue = value.toLowerCase(Locale.ROOT)
-    if (sqlStates.contains(lowercaseValue)) {
+    val uppercaseValue = value.toUpperCase(Locale.ROOT)
+    if (sqlStates.contains(uppercaseValue)) {
       throw SqlScriptingErrors
-        .duplicateSqlStateInHandlerDeclaration(CurrentOrigin.get, lowercaseValue)
+        .duplicateSqlStateInHandlerDeclaration(CurrentOrigin.get, uppercaseValue)
     }
-    sqlStates += lowercaseValue
+    sqlStates += uppercaseValue
   }
 }
 
