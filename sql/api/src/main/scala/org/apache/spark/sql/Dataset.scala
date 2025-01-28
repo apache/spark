@@ -2699,9 +2699,8 @@ abstract class Dataset[T] extends Serializable {
    * @group typedrel
    * @since 1.6.0
    */
-  // SPARK-49961 - as the base Dataset is now used the output cannot be specific
-  def transform[U, DSI[_] <: Dataset[_], DSO[_] <: Dataset[_]](t: DSI[T] => DSO[U]): DSO[U] =
-    t(this.asInstanceOf[DSI[T]])
+  def transform[U, DSO[_] <: Dataset[_]](t: this.type => DSO[U]): DSO[U] =
+    t(this)
 
   /**
    * (Scala-specific) Returns a new Dataset that contains the result of applying `func` to each
