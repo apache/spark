@@ -19,11 +19,14 @@ package org.apache.spark.util
 
 import scala.concurrent.duration._
 
-import org.apache.spark.internal.{DeadlineWithTimeSource, LogThrottler, NanoTimeTimeSource}
-
 import org.scalatest.funsuite.AnyFunSuite // scalastyle:ignore funsuite
 
-class LogThrottlingSuite extends AnyFunSuite {
+import org.apache.spark.internal.{DeadlineWithTimeSource, Logging, LogThrottler, NanoTimeTimeSource}
+
+
+class LogThrottlingSuite
+  extends AnyFunSuite  // scalastyle:ignore funsuite
+  with Logging {
 
   // Make sure that the helper works right.
   test("time control") {
