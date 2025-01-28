@@ -375,6 +375,8 @@ class GroupedData:
         from pyspark.sql.connect.dataframe import DataFrame
         from pyspark.sql.streaming.stateful_processor_util import TransformWithStateInPandasUdfUtils
 
+        self._df._check_same_session(initialState._df)
+
         udf_util = TransformWithStateInPandasUdfUtils(statefulProcessor, timeMode)
         if initialState is None:
             udf_obj = UserDefinedFunction(
@@ -382,12 +384,17 @@ class GroupedData:
                 returnType=outputStructType,
                 evalType=PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_UDF,
             )
+            initial_state_plan = None
+            initial_state_grouping_cols = None
+
         else:
             udf_obj = UserDefinedFunction(
                 udf_util.transformWithStateWithInitStateUDF,  # type: ignore
                 returnType=outputStructType,
                 evalType=PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_INIT_STATE_UDF,
             )
+            initial_state_plan = initialState._df._plan
+            initial_state_grouping_cols = initialState._grouping_cols
 
         # TODO add a string struct type test
         output_schema: str = (
@@ -405,6 +412,8 @@ class GroupedData:
                 output_mode=outputMode,
                 time_mode=timeMode,
                 cols=self._df.columns,
+                initial_state_plan=initial_state_plan,
+                initial_state_grouping_cols=initial_state_grouping_cols,
             ),
             session=self._df._session,
         )

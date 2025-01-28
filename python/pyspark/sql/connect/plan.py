@@ -2559,15 +2559,22 @@ class TransformWithStateInPandas(LogicalPlan):
             output_mode: str,
             time_mode: str,
             cols: List[str],
+            initial_state_plan: Optional["LogicalPlan"],
+            initial_state_grouping_cols: Optional[Sequence[Column]],
     ):
         assert isinstance(grouping_cols, list) and all(isinstance(c, Column) for c in grouping_cols)
+        assert isinstance(initial_state_grouping_cols, list)\
+               and all(isinstance(c, Column) for c in initial_state_grouping_cols)
 
-        super().__init__(child, self._collect_references(grouping_cols))
+        super().__init__(child, self._collect_references(grouping_cols + initial_state_grouping_cols))
+        # raise Exception(f"collect references: {self._collect_references(grouping_cols + initial_state_grouping_cols)}")
         self._grouping_cols = grouping_cols
         self._output_schema = output_schema
         self._output_mode = output_mode
         self._time_mode = time_mode
         self._function = function._build_common_inline_user_defined_function(*cols)
+        self._initial_state_plan = initial_state_plan
+        self._initial_state_grouping_cols = initial_state_grouping_cols
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
         assert self._child is not None
@@ -2576,13 +2583,21 @@ class TransformWithStateInPandas(LogicalPlan):
         plan.transform_with_state_in_pandas.grouping_expressions.extend(
             [c.to_plan(session) for c in self._grouping_cols]
         )
+        # fill in initial state related fields
+        if self._initial_state_plan is not None:
+            self._initial_state_plan = cast(LogicalPlan, self._initial_state_plan)
+            plan.transform_with_state_in_pandas.initial_input.CopyFrom(self._initial_state_plan.plan(session))
+            plan.transform_with_state_in_pandas.initial_grouping_expressions.extend(
+                [c.to_plan(session) for c in self._initial_state_grouping_cols]
+            )
 
-        # this is to deserialize stateful processor
-        plan.transform_with_state_in_pandas.transform_with_state_udf.CopyFrom(
-            self._function.to_plan_udf(session))
+        # wrap transformWithStateInPandasUdf in a function
         plan.transform_with_state_in_pandas.output_schema = self._output_schema
         plan.transform_with_state_in_pandas.output_mode = self._output_mode
         plan.transform_with_state_in_pandas.time_mode = self._time_mode
+        plan.transform_with_state_in_pandas.transform_with_state_udf.CopyFrom(
+            self._function.to_plan_udf(session))
+
         return self._with_relations(plan, session)
 
 
