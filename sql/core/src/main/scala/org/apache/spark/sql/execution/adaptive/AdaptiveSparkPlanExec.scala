@@ -236,6 +236,14 @@ case class AdaptiveSparkPlanExec(
 
   @volatile private var currentPhysicalPlan = initialPlan
 
+  // Use inputPlan logicalLink here in case some top level physical nodes may be removed
+  // during `initialPlan`
+  @transient @volatile private var currentLogicalPlan: LogicalPlan = {
+    inputPlan.logicalLink.get
+  }
+
+  val stagesToReplace = mutable.ArrayBuffer.empty[QueryStageExec]
+
   @volatile private var _isFinalPlan = false
 
   private var currentStageId = 0
@@ -289,26 +297,24 @@ case class AdaptiveSparkPlanExec(
 
   def finalPhysicalPlan: SparkPlan = withFinalPlanUpdate(identity)
 
-  private def getFinalPhysicalPlan(): SparkPlan = lock.synchronized {
-    if (isFinalPlan) return currentPhysicalPlan
-
+  /**
+   * Run `fun` on finalized physical plan
+   */
+  def withFinalPlanUpdate[T](fun: SparkPlan => T): T = lock.synchronized {
+    _isFinalPlan = false
     // In case of this adaptive plan being executed out of `withActive` scoped functions, e.g.,
     // `plan.queryExecution.rdd`, we need to set active session here as new plan nodes can be
     // created in the middle of the execution.
     context.session.withActive {
       val executionId = getExecutionId
-      // Use inputPlan logicalLink here in case some top level physical nodes may be removed
-      // during `initialPlan`
-      var currentLogicalPlan = inputPlan.logicalLink.get
-      var result = createQueryStages(currentPhysicalPlan)
+      var result = createQueryStages(fun, currentPhysicalPlan, true)
       val events = new LinkedBlockingQueue[StageMaterializationEvent]()
       val errors = new mutable.ArrayBuffer[Throwable]()
-      var stagesToReplace = Seq.empty[QueryStageExec]
       while (!result.allChildStagesMaterialized) {
         ruleContext.clearConfigs()
         currentPhysicalPlan = result.newPlan
         if (result.newStages.nonEmpty) {
-          stagesToReplace = result.newStages ++ stagesToReplace
+          stagesToReplace ++= result.newStages
           executionId.foreach(onUpdatePlan(_, result.newStages.map(_.plan)))
 
           // SPARK-33933: we should submit tasks of broadcast stages first, to avoid waiting
@@ -366,50 +372,44 @@ case class AdaptiveSparkPlanExec(
         if (errors.nonEmpty) {
           cleanUpAndThrowException(errors.toSeq, None)
         }
-
-        // Try re-optimizing and re-planning. Adopt the new plan if its cost is equal to or less
-        // than that of the current plan; otherwise keep the current physical plan together with
-        // the current logical plan since the physical plan's logical links point to the logical
-        // plan it has originated from.
-        // Meanwhile, we keep a list of the query stages that have been created since last plan
-        // update, which stands for the "semantic gap" between the current logical and physical
-        // plans. And each time before re-planning, we replace the corresponding nodes in the
-        // current logical plan with logical query stages to make it semantically in sync with
-        // the current physical plan. Once a new plan is adopted and both logical and physical
-        // plans are updated, we can clear the query stage list because at this point the two plans
-        // are semantically and physically in sync again.
-        val logicalPlan = replaceWithQueryStagesInLogicalPlan(currentLogicalPlan, stagesToReplace)
-        val afterReOptimize = reOptimize(logicalPlan)
-        if (afterReOptimize.isDefined) {
-          val (newPhysicalPlan, newLogicalPlan) = afterReOptimize.get
-          val origCost = costEvaluator.evaluateCost(currentPhysicalPlan)
-          val newCost = costEvaluator.evaluateCost(newPhysicalPlan)
-          if (newCost < origCost ||
-            (newCost == origCost && currentPhysicalPlan != newPhysicalPlan)) {
-            lazy val plans =
-              sideBySide(currentPhysicalPlan.treeString, newPhysicalPlan.treeString).mkString("\n")
-            logOnLevel(log"Plan changed:\n${MDC(QUERY_PLAN, plans)}")
-            cleanUpTempTags(newPhysicalPlan)
-            currentPhysicalPlan = newPhysicalPlan
-            currentLogicalPlan = newLogicalPlan
-            stagesToReplace = Seq.empty[QueryStageExec]
+        if (!currentPhysicalPlan.isInstanceOf[ResultQueryStageExec]) {
+          // Try re-optimizing and re-planning. Adopt the new plan if its cost is equal to or less
+          // than that of the current plan; otherwise keep the current physical plan together with
+          // the current logical plan since the physical plan's logical links point to the logical
+          // plan it has originated from.
+          // Meanwhile, we keep a list of the query stages that have been created since last plan
+          // update, which stands for the "semantic gap" between the current logical and physical
+          // plans. And each time before re-planning, we replace the corresponding nodes in the
+          // current logical plan with logical query stages to make it semantically in sync with
+          // the current physical plan. Once a new plan is adopted and both logical and physical
+          // plans are updated, we can clear the query stage list because at this point the two
+          // plans are semantically and physically in sync again.
+          val logicalPlan = replaceWithQueryStagesInLogicalPlan(currentLogicalPlan,
+            stagesToReplace.toSeq)
+          val afterReOptimize = reOptimize(logicalPlan)
+          if (afterReOptimize.isDefined) {
+            val (newPhysicalPlan, newLogicalPlan) = afterReOptimize.get
+            val origCost = costEvaluator.evaluateCost(currentPhysicalPlan)
+            val newCost = costEvaluator.evaluateCost(newPhysicalPlan)
+            if (newCost < origCost ||
+              (newCost == origCost && currentPhysicalPlan != newPhysicalPlan)) {
+              lazy val plans = sideBySide(
+                currentPhysicalPlan.treeString, newPhysicalPlan.treeString).mkString("\n")
+              logOnLevel(log"Plan changed:\n${MDC(QUERY_PLAN, plans)}")
+              cleanUpTempTags(newPhysicalPlan)
+              currentPhysicalPlan = newPhysicalPlan
+              currentLogicalPlan = newLogicalPlan
+              stagesToReplace.clear()
+            }
           }
+          // Now that some stages have finished, we can try creating new stages.
+          result = createQueryStages(fun, currentPhysicalPlan, false)
         }
-        // Now that some stages have finished, we can try creating new stages.
-        result = createQueryStages(currentPhysicalPlan)
       }
-
-      ruleContext = ruleContext.withFinalStage(isFinalStage = true)
-      // Run the final plan when there's no more unfinished stages.
-      currentPhysicalPlan = applyPhysicalRulesWithRuleContext(
-        optimizeQueryStage(result.newPlan, isFinalStage = true),
-        postStageCreationRules(supportsColumnar),
-        Some((planChangeLogger, "AQE Post Stage Creation")))
-      ruleContext.clearConfigs()
-      _isFinalPlan = true
-      executionId.foreach(onUpdatePlan(_, Seq(currentPhysicalPlan)))
-      currentPhysicalPlan
     }
+    _isFinalPlan = true
+    finalPlanUpdate
+    currentPhysicalPlan.asInstanceOf[ResultQueryStageExec].resultOption.get().get.asInstanceOf[T]
   }
 
   // Use a lazy val to avoid this being called more than once.
@@ -448,13 +448,6 @@ case class AdaptiveSparkPlanExec(
       assert(finalPlan.isInstanceOf[BroadcastQueryStageExec])
       finalPlan.doExecuteBroadcast()
     }
-  }
-
-  private def withFinalPlanUpdate[T](fun: SparkPlan => T): T = {
-    val plan = getFinalPhysicalPlan()
-    val result = fun(plan)
-    finalPlanUpdate
-    result
   }
 
   protected override def stringArgs: Iterator[Any] = Iterator(s"isFinalPlan=$isFinalPlan")
@@ -546,6 +539,66 @@ case class AdaptiveSparkPlanExec(
   }
 
   /**
+   * This method is a wrapper of `createQueryStagesInternal`, which deals with result stage creation
+   */
+  private def createQueryStages(
+    resultHandler: SparkPlan => Any,
+    plan: SparkPlan,
+    firstRun: Boolean): CreateStageResult = {
+    plan match {
+      case resultStage@ResultQueryStageExec(_, optimizedPlan, _) =>
+        return if (firstRun) {
+          // There is already an existing ResultQueryStage created in previous `withFinalPlanUpdate`
+          val newResultStage = ResultQueryStageExec(currentStageId, optimizedPlan, resultHandler)
+          currentStageId += 1
+          setLogicalLinkForNewQueryStage(newResultStage, optimizedPlan)
+          stagesToReplace.append(newResultStage)
+          CreateStageResult(newPlan = newResultStage,
+            allChildStagesMaterialized = false,
+            newStages = Seq(newResultStage))
+        } else {
+          // result stage already created, do nothing
+          CreateStageResult(newPlan = plan,
+            allChildStagesMaterialized = resultStage.isMaterialized,
+            newStages = Seq.empty)
+        }
+      case _ =>
+    }
+    val result = createQueryStagesInternal(plan)
+    var allNewStages = result.newStages
+    var newPlan = result.newPlan
+    var allChildStagesMaterialized = result.allChildStagesMaterialized
+    // Create result stage
+    if (allNewStages.isEmpty && allChildStagesMaterialized) {
+      val resultStage = createResultQueryStage(resultHandler, newPlan)
+      stagesToReplace.append(resultStage)
+      newPlan = resultStage
+      allChildStagesMaterialized = false
+      allNewStages :+= resultStage
+    }
+    CreateStageResult(
+      newPlan = newPlan,
+      allChildStagesMaterialized = allChildStagesMaterialized,
+      newStages = allNewStages)
+  }
+
+  private def createResultQueryStage(
+      resultHandler: SparkPlan => Any,
+      plan: SparkPlan): ResultQueryStageExec = {
+    ruleContext = ruleContext.withFinalStage(isFinalStage = true)
+    // Run the final plan when there's no more unfinished stages.
+    val optimizedRootPlan = applyPhysicalRulesWithRuleContext(
+      optimizeQueryStage(plan, isFinalStage = true),
+      postStageCreationRules(supportsColumnar),
+      Some((planChangeLogger, "AQE Post Stage Creation")))
+    ruleContext.clearConfigs()
+    val resultStage = ResultQueryStageExec(currentStageId, optimizedRootPlan, resultHandler)
+    currentStageId += 1
+    setLogicalLinkForNewQueryStage(resultStage, plan)
+    resultStage
+  }
+
+  /**
    * This method is called recursively to traverse the plan tree bottom-up and create a new query
    * stage or try reusing an existing stage if the current node is an [[Exchange]] node and all of
    * its child stages have been materialized.
@@ -555,7 +608,7 @@ case class AdaptiveSparkPlanExec(
    * 2) Whether the child query stages (if any) of the current node have all been materialized.
    * 3) A list of the new query stages that have been created.
    */
-  private def createQueryStages(plan: SparkPlan): CreateStageResult = plan match {
+  private def createQueryStagesInternal(plan: SparkPlan): CreateStageResult = plan match {
     case e: Exchange =>
       // First have a quick check in the `stageCache` without having to traverse down the node.
       context.stageCache.get(e.canonicalized) match {
@@ -568,7 +621,7 @@ case class AdaptiveSparkPlanExec(
             newStages = if (isMaterialized) Seq.empty else Seq(stage))
 
         case _ =>
-          val result = createQueryStages(e.child)
+          val result = createQueryStagesInternal(e.child)
           val newPlan = e.withNewChildren(Seq(result.newPlan)).asInstanceOf[Exchange]
           // Create a query stage only when all the child query stages are ready.
           if (result.allChildStagesMaterialized) {
@@ -612,7 +665,7 @@ case class AdaptiveSparkPlanExec(
       if (plan.children.isEmpty) {
         CreateStageResult(newPlan = plan, allChildStagesMaterialized = true, newStages = Seq.empty)
       } else {
-        val results = plan.children.map(createQueryStages)
+        val results = plan.children.map(createQueryStagesInternal)
         CreateStageResult(
           newPlan = plan.withNewChildren(results.map(_.newPlan)),
           allChildStagesMaterialized = results.forall(_.allChildStagesMaterialized),
