@@ -21,7 +21,7 @@ import unittest
 
 import numpy as np
 
-from pyspark.ml.linalg import Vectors, Matrices
+from pyspark.ml.linalg import Vectors
 from pyspark.ml.classification import (
     LinearSVC,
     LinearSVCModel,
