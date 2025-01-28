@@ -85,8 +85,6 @@ from pyspark.ml.util import (
     MLWriter,
     MLWritable,
     HasTrainingSummary,
-    try_remote_read,
-    try_remote_write,
     try_remote_attribute_relation,
 )
 from pyspark.ml.wrapper import JavaParams, JavaPredictor, JavaPredictionModel, JavaWrapper
@@ -96,7 +94,6 @@ from pyspark.sql import DataFrame, Row, SparkSession
 from pyspark.sql.functions import udf, when
 from pyspark.sql.types import ArrayType, DoubleType
 from pyspark.storagelevel import StorageLevel
-from pyspark.sql.utils import is_remote
 
 if TYPE_CHECKING:
     from pyspark.ml._typing import P, ParamMap
@@ -3575,45 +3572,31 @@ class OneVsRest(
         if handlePersistence:
             multiclassLabeled.persist(StorageLevel.MEMORY_AND_DISK)
 
-        def _oneClassFitTasks(numClasses: int):
-            indices = iter(range(numClasses))
+        def trainSingleClass(index: int) -> CM:
+            binaryLabelCol = "mc2b$" + str(index)
+            trainingDataset = multiclassLabeled.withColumn(
+                binaryLabelCol,
+                when(multiclassLabeled[labelCol] == float(index), 1.0).otherwise(0.0),
+            )
+            paramMap = dict(
+                [
+                    (classifier.labelCol, binaryLabelCol),
+                    (classifier.featuresCol, featuresCol),
+                    (classifier.predictionCol, predictionCol),
+                ]
+            )
+            if weightCol:
+                paramMap[cast(HasWeightCol, classifier).weightCol] = weightCol
+            return classifier.fit(trainingDataset, paramMap)
 
-            def trainSingleClass() -> CM:
-                index = next(indices)
-
-                binaryLabelCol = "mc2b$" + str(index)
-                trainingDataset = multiclassLabeled.withColumn(
-                    binaryLabelCol,
-                    when(multiclassLabeled[labelCol] == float(index), 1.0).otherwise(0.0),
-                )
-                paramMap = dict(
-                    [
-                        (classifier.labelCol, binaryLabelCol),
-                        (classifier.featuresCol, featuresCol),
-                        (classifier.predictionCol, predictionCol),
-                    ]
-                )
-                if weightCol:
-                    paramMap[cast(HasWeightCol, classifier).weightCol] = weightCol
-                return index, classifier.fit(trainingDataset, paramMap)
-
-            return [trainSingleClass] * numClasses
-
-        tasks = map(
-            inheritable_thread_target(dataset.sparkSession),
-            _oneClassFitTasks(numClasses),
-        )
         pool = ThreadPool(processes=min(self.getParallelism(), numClasses))
 
-        subModels = [None] * numClasses
-        for j, subModel in pool.imap_unordered(lambda f: f(), tasks):
-            assert subModels is not None
-            subModels[j] = subModel
+        models = pool.map(inheritable_thread_target(trainSingleClass), range(numClasses))
 
         if handlePersistence:
             multiclassLabeled.unpersist()
 
-        return self._copyValues(OneVsRestModel(models=subModels))
+        return self._copyValues(OneVsRestModel(models=models))
 
     def copy(self, extra: Optional["ParamMap"] = None) -> "OneVsRest":
         """
@@ -3688,11 +3671,9 @@ class OneVsRest(
         return _java_obj
 
     @classmethod
-    @try_remote_read
     def read(cls) -> "OneVsRestReader":
         return OneVsRestReader(cls)
 
-    @try_remote_write
     def write(self) -> MLWriter:
         if isinstance(self.getClassifier(), JavaMLWritable):
             return JavaMLWriter(self)  # type: ignore[arg-type]
@@ -3806,7 +3787,7 @@ class OneVsRestModel(
         from pyspark.core.context import SparkContext
 
         self.models = models
-        if is_remote() or not isinstance(models[0], JavaMLWritable):
+        if not isinstance(models[0], JavaMLWritable):
             return
         # set java instance
         java_models = [cast(_JavaClassificationModel, model)._to_java() for model in self.models]
@@ -3974,11 +3955,9 @@ class OneVsRestModel(
         return _java_obj
 
     @classmethod
-    @try_remote_read
     def read(cls) -> "OneVsRestModelReader":
         return OneVsRestModelReader(cls)
 
-    @try_remote_write
     def write(self) -> MLWriter:
         if all(
             map(
