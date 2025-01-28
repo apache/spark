@@ -119,8 +119,8 @@
   },
   "AVRO_CANNOT_WRITE_NULL_FIELD" : {
     "message" : [
-      "The record to be written to Avro contains null value for non-null field <name> with schema <schema> from Avro schema.",
-      "To allow writing this field, explicitly specifying the avroSchema as option."
+      "Cannot write null value for field <name> defined as non-null Avro data type <dataType>.",
+      "To allow null value for this field, specify its avro schema as a union type with \"null\" using `avroSchema` option."
     ],
     "sqlState" : "22004"
   },

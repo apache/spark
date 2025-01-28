@@ -35,7 +35,7 @@ import org.apache.spark.sql.avro.AvroUtils.{nonNullUnionBranches, toFieldStr, Av
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{SpecializedGetters, SpecificInternalRow}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
-import org.apache.spark.sql.errors.DataTypeErrors.{toSQLId, toSQLType}
+import org.apache.spark.sql.errors.DataTypeErrors.toSQLId
 import org.apache.spark.sql.execution.datasources.DataSourceUtils
 import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
 import org.apache.spark.sql.types._
@@ -296,8 +296,7 @@ private[sql] class AvroSerializer(
               errorClass = "AVRO_CANNOT_WRITE_NULL_FIELD",
               messageParameters = Map(
                 "name" -> toSQLId(avroFields.get(i).name),
-                "schema" -> toSQLType(SchemaConverters.toSqlType(
-                  avroFields.get(i).schema()).dataType)))
+                "dataType" -> avroFields.get(i).schema().toString))
           }
           result.put(avroIndices(i), null)
         } else {

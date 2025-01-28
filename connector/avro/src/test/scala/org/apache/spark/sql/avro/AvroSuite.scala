@@ -1326,12 +1326,15 @@ abstract class AvroSuite
           .option("avroSchema", avroSchema).save(s"$tempDir/${UUID.randomUUID()}")
       }
 
+      val expectedDatatype = "{\"type\":\"enum\",\"name\":\"SuitEnumType\"," +
+        "\"symbols\":[\"SPADES\",\"HEARTS\",\"DIAMONDS\",\"CLUBS\"]}"
+
       checkError(
         getRootCause(e1).asInstanceOf[SparkThrowable],
         condition = "AVRO_CANNOT_WRITE_NULL_FIELD",
         parameters = Map(
           "name" -> "`Suit`",
-          "schema" -> "\"STRING\""))
+          "dataType" -> expectedDatatype))
 
       // Writing df containing data not in the enum will throw an exception
       val e2 = intercept[SparkException] {
@@ -1376,7 +1379,8 @@ abstract class AvroSuite
         """.stripMargin // nullability mismatch for innerStruct
 
         val expectedErrorName = if (outerNull) "`innerStruct`" else "`field1`"
-        val expectedErrorSchema = if (outerNull) "\"STRUCT<field1: INT NOT NULL>\"" else "\"INT\""
+        val expectedErrorSchema = if (outerNull) "{\"type\":\"record\",\"name\":\"innerStruct\"" +
+          ",\"fields\":[{\"name\":\"field1\",\"type\":\"int\"}]}" else "\"int\""
 
         checkError(
           exception = intercept[SparkRuntimeException] {
@@ -1385,7 +1389,7 @@ abstract class AvroSuite
           condition = "AVRO_CANNOT_WRITE_NULL_FIELD",
           parameters = Map(
             "name" -> expectedErrorName,
-            "schema" -> expectedErrorSchema))
+            "dataType" -> expectedErrorSchema))
     }
   }
 
@@ -1579,7 +1583,7 @@ abstract class AvroSuite
         condition = "AVRO_CANNOT_WRITE_NULL_FIELD",
         parameters = Map(
           "name" -> "`Name`",
-          "schema" -> "\"STRING\""))
+          "dataType" -> "\"string\""))
     }
   }
 
