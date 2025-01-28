@@ -879,8 +879,8 @@
         <scope>provided</scope>
       </dependency>
       <dependency>
-        <groupId>com.github.RoaringBitmap</groupId>
-        <artifactId>RoaringBitmap</artifactId>
+        <groupId>com.github.RoaringBitmap.RoaringBitmap</groupId>
+        <artifactId>roaringbitmap</artifactId>
         <version>1.3.19</version>
       </dependency>
 
