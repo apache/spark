@@ -25,7 +25,7 @@ import scala.concurrent.duration._
 import org.apache.spark.SparkException
 import org.apache.spark.util.Utils
 
-object MetricUtils {
+private[spark] object MetricUtils {
 
   val SUM_METRIC: String = "sum"
   val SIZE_METRIC: String = "size"
