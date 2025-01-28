@@ -21,7 +21,7 @@ import scala.concurrent.duration._
 
 import org.apache.spark.internal.{DeadlineWithTimeSource, LogThrottler, NanoTimeTimeSource}
 
-import org.scalatest.funsuite.AnyFunSuite
+import org.scalatest.funsuite.AnyFunSuite // scalastyle:ignore funsuite
 
 class LogThrottlingSuite extends AnyFunSuite {
 
