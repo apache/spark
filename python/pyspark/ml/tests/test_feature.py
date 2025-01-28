@@ -77,6 +77,7 @@ from pyspark.ml.feature import (
     MinHashLSH,
     MinHashLSHModel,
     IndexToString,
+    PolynomialExpansion,
 )
 from pyspark.ml.linalg import DenseVector, SparseVector, Vectors
 from pyspark.sql import Row
@@ -85,6 +86,31 @@ from pyspark.testing.mlutils import SparkSessionTestCase
 
 
 class FeatureTestsMixin:
+    def test_polynomial_expansion(self):
+        df = self.spark.createDataFrame([(Vectors.dense([0.5, 2.0]),)], ["dense"])
+        px = PolynomialExpansion(degree=2)
+        px.setInputCol("dense")
+        px.setOutputCol("expanded")
+        self.assertTrue(
+            np.allclose(
+                px.transform(df).head().expanded.toArray(), [0.5, 0.25, 2.0, 1.0, 4.0], atol=1e-4
+            )
+        )
+
+        def check(p: PolynomialExpansion) -> None:
+            self.assertEqual(p.getInputCol(), "dense")
+            self.assertEqual(p.getOutputCol(), "expanded")
+            self.assertEqual(p.getDegree(), 2)
+
+        check(px)
+
+        # save & load
+        with tempfile.TemporaryDirectory(prefix="px") as d:
+            px.write().overwrite().save(d)
+            px2 = PolynomialExpansion.load(d)
+            self.assertEqual(str(px), str(px2))
+            check(px2)
+
     def test_index_string(self):
         dataset = self.spark.createDataFrame(
             [
