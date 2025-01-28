@@ -3475,6 +3475,15 @@ object SQLConf {
       .checkValues(Set("legacy", "row", "dict"))
       .createWithDefaultString("legacy")
 
+  val PYSPARK_HIDE_TRACEBACK =
+    buildConf("spark.sql.execution.pyspark.udf.hideTraceback.enabled")
+      .doc(
+        "When true, only show the message of the exception from Python UDFs, " +
+        "hiding the stack trace. If this is enabled, simplifiedTraceback has no effect.")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val PYSPARK_SIMPLIFIED_TRACEBACK =
     buildConf("spark.sql.execution.pyspark.udf.simplifiedTraceback.enabled")
       .doc(
@@ -6285,6 +6294,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def pandasUDFBufferSize: Int = getConf(PANDAS_UDF_BUFFER_SIZE)
 
   def pandasStructHandlingMode: String = getConf(PANDAS_STRUCT_HANDLING_MODE)
+
+  def pysparkHideTraceback: Boolean = getConf(PYSPARK_HIDE_TRACEBACK)
 
   def pysparkSimplifiedTraceback: Boolean = getConf(PYSPARK_SIMPLIFIED_TRACEBACK)
 

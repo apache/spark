@@ -59,6 +59,7 @@ class ArrowPythonUDTFRunner(
 
   override val errorOnDuplicatedFieldNames: Boolean = true
 
+  override val hideTraceback: Boolean = SQLConf.get.pysparkHideTraceback
   override val simplifiedTraceback: Boolean = SQLConf.get.pysparkSimplifiedTraceback
 
   override val bufferSize: Int = SQLConf.get.pandasUDFBufferSize
