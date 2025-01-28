@@ -57,6 +57,7 @@ class OneVsRestTestsMixin:
         self.assertEqual(ovr.getParallelism(), 1)
 
         model = ovr.fit(df)
+        self.assertEqual(ovr.uid, model.uid)
         self.assertIsInstance(model, OneVsRestModel)
         self.assertEqual(len(model.models), 3)
         for submodel in model.models:
