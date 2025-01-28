@@ -512,6 +512,9 @@ private[spark] class Executor(
     def kill(interruptThread: Boolean, reason: String): Unit = {
       logInfo(log"Executor is trying to kill ${LogMDC(TASK_NAME, taskName)}," +
         log" reason: ${LogMDC(REASON, reason)}")
+      logInfo(log"Executor is trying to kill ${LogMDC(TASK_NAME, taskName)}, " +
+        log"interruptThread=${LogMDC(INTERRUPT_THREAD, interruptThread)}, " +
+        log"reason: ${LogMDC(REASON, reason)}")
       reasonIfKilled = Some(reason)
       if (task != null) {
         synchronized {
