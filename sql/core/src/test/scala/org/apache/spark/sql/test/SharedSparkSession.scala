@@ -24,9 +24,10 @@ import org.scalatest.concurrent.Eventually
 
 import org.apache.spark.{DebugFilesystem, SparkConf}
 import org.apache.spark.internal.config.UNSAFE_EXCEPTION_ON_MEMORY_LEAK
-import org.apache.spark.sql.{SparkSession, SQLContext}
+import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode
 import org.apache.spark.sql.catalyst.optimizer.ConvertToLocalRelation
+import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 
 trait SharedSparkSession extends SQLTestUtils with SharedSparkSessionBase {
