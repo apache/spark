@@ -27,6 +27,7 @@ import org.scalatest.Assertions
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.classic.ClassicConversions._
 import org.apache.spark.sql.execution.{QueryExecution, SQLExecution}
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.sql.util.QueryExecutionListener

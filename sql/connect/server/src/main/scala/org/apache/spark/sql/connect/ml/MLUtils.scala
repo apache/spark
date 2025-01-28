@@ -18,23 +18,32 @@
 package org.apache.spark.sql.connect.ml
 
 import java.util.{Optional, ServiceLoader}
+import java.util.stream.Collectors
 
-import scala.collection.immutable.HashSet
 import scala.jdk.CollectionConverters._
 
 import org.apache.commons.lang3.reflect.MethodUtils.invokeMethod
 
 import org.apache.spark.connect.proto
-import org.apache.spark.ml.{Estimator, Transformer}
+import org.apache.spark.ml._
+import org.apache.spark.ml.classification._
+import org.apache.spark.ml.clustering._
+import org.apache.spark.ml.evaluation.Evaluator
+import org.apache.spark.ml.feature._
+import org.apache.spark.ml.fpm._
 import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.param.Params
-import org.apache.spark.ml.util.{MLReadable, MLWritable}
-import org.apache.spark.sql.{DataFrame, Dataset}
-import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, LiteralValueProtoConverter}
+import org.apache.spark.ml.recommendation._
+import org.apache.spark.ml.regression._
+import org.apache.spark.ml.tree.{DecisionTreeModel, TreeEnsembleModel}
+import org.apache.spark.ml.util.{HasTrainingSummary, Identifiable, MLWritable}
+import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.classic.Dataset
+import org.apache.spark.sql.connect.common.LiteralValueProtoConverter
 import org.apache.spark.sql.connect.planner.SparkConnectPlanner
 import org.apache.spark.sql.connect.plugin.SparkConnectPluginRegistry
 import org.apache.spark.sql.connect.service.SessionHolder
-import org.apache.spark.util.{SparkClassUtils, Utils}
+import org.apache.spark.util.Utils
 
 private[ml] object MLUtils {
 
@@ -49,8 +58,18 @@ private[ml] object MLUtils {
   private def loadOperators(mlCls: Class[_]): Map[String, Class[_]] = {
     val loader = Utils.getContextOrSparkClassLoader
     val serviceLoader = ServiceLoader.load(mlCls, loader)
-    val providers = serviceLoader.asScala.toList
-    providers.map(est => est.getClass.getName -> est.getClass).toMap
+    // Instead of using the iterator, we use the "stream()" method that allows
+    // to iterate over a collection of providers that do not instantiate the class
+    // directly. Since there is no good way to convert a Java stream to a Scala stream,
+    // we collect the Java stream to a Java map and then convert it to a Scala map.
+    serviceLoader
+      .stream()
+      .collect(
+        Collectors.toMap(
+          (est: ServiceLoader.Provider[_]) => est.`type`().getName,
+          (est: ServiceLoader.Provider[_]) => est.`type`()))
+      .asScala
+      .toMap
   }
 
   private def parseInts(ints: proto.Ints): Array[Int] = {
@@ -129,13 +148,11 @@ private[ml] object MLUtils {
       val value = literal.getLiteralTypeCase match {
         case proto.Expression.Literal.LiteralTypeCase.STRUCT =>
           val s = literal.getStruct
-          val schema = DataTypeProtoConverter.toCatalystType(s.getStructType)
-          if (schema == VectorUDT.sqlType) {
-            deserializeVector(s)
-          } else if (schema == MatrixUDT.sqlType) {
-            deserializeMatrix(s)
-          } else {
-            throw MlUnsupportedException(s"Unsupported parameter struct ${schema} for ${name}")
+          s.getStructType.getUdt.getJvmClass match {
+            case "org.apache.spark.ml.linalg.VectorUDT" => deserializeVector(s)
+            case "org.apache.spark.ml.linalg.MatrixUDT" => deserializeMatrix(s)
+            case _ =>
+              throw MlUnsupportedException(s"Unsupported struct ${literal.getStruct} for ${name}")
           }
 
         case _ =>
@@ -171,6 +188,8 @@ private[ml] object MLUtils {
       array.map(_.asInstanceOf[Double])
     } else if (elementType == classOf[String]) {
       array.map(_.asInstanceOf[String])
+    } else if (elementType.isArray && elementType.getComponentType == classOf[Double]) {
+      array.map(_.asInstanceOf[Array[_]].map(_.asInstanceOf[Double]))
     } else {
       throw MlUnsupportedException(
         s"array element type unsupported, " +
@@ -212,14 +231,10 @@ private[ml] object MLUtils {
       value.asInstanceOf[String]
     } else if (paramType.isArray) {
       val compType = paramType.getComponentType
-      if (compType.isArray) {
-        throw MlUnsupportedException(s"Array of array unsupported")
-      } else {
-        val array = value.asInstanceOf[Array[_]].map { e =>
-          reconcileParam(compType, e)
-        }
-        reconcileArray(compType, array)
+      val array = value.asInstanceOf[Array[_]].map { e =>
+        reconcileParam(compType, e)
       }
+      reconcileArray(compType, array)
     } else {
       throw MlUnsupportedException(s"Unsupported parameter type, found ${paramType.getName}")
     }
@@ -327,89 +342,325 @@ private[ml] object MLUtils {
   }
 
   /**
-   * Call "load" function on the ML operator given the operator name
+   * Get the Transformer instance according to the proto information
    *
+   * @param sessionHolder
+   *   session holder to hold the Spark Connect session state
+   * @param operator
+   *   MlOperator information
+   * @param params
+   *   The optional parameters of the transformer
+   * @return
+   *   the transformer
+   */
+  def getTransformer(
+      sessionHolder: SessionHolder,
+      operator: proto.MlOperator,
+      params: Option[proto.MlParams]): Transformer = {
+    val name = replaceOperator(sessionHolder, operator.getName)
+    val uid = operator.getUid
+
+    // Load the transformers by ServiceLoader everytime
+    val transformers = loadOperators(classOf[Transformer])
+    getInstance[Transformer](name, uid, transformers, params)
+  }
+
+  /**
+   * Get the Evaluator instance according to the proto information
+   *
+   * @param sessionHolder
+   *   session holder to hold the Spark Connect session state
+   * @param operator
+   *   MlOperator information
+   * @param params
+   *   The optional parameters of the evaluator
+   * @return
+   *   the evaluator
+   */
+  def getEvaluator(
+      sessionHolder: SessionHolder,
+      operator: proto.MlOperator,
+      params: Option[proto.MlParams]): Evaluator = {
+    val name = replaceOperator(sessionHolder, operator.getName)
+    val uid = operator.getUid
+
+    // Load the evaluators by ServiceLoader everytime
+    val evaluators = loadOperators(classOf[Evaluator])
+    getInstance[Evaluator](name, uid, evaluators, params)
+  }
+
+  /**
+   * Load an ML component (Estimator, Transformer, or Evaluator) from the given path.
+   *
+   * @param sessionHolder
+   *   the session holder
    * @param className
    *   the ML operator name
    * @param path
    *   the path to be loaded
+   * @param operatorClass
+   *   the class type of the ML operator (Estimator, Transformer, or Evaluator)
+   * @tparam T
+   *   the type of the ML operator
    * @return
-   *   the ML instance
+   *   the instance of the ML operator
    */
-  def load(sessionHolder: SessionHolder, className: String, path: String): Object = {
+  private def loadOperator[T](
+      sessionHolder: SessionHolder,
+      className: String,
+      path: String,
+      operatorClass: Class[T]): T = {
     val name = replaceOperator(sessionHolder, className)
-
-    // It's the companion object of the corresponding spark operators to load.
-    val objectCls = SparkClassUtils.classForName(name + "$")
-    val mlReadableClass = classOf[MLReadable[_]]
-    // Make sure it is implementing MLReadable
-    if (!mlReadableClass.isAssignableFrom(objectCls)) {
-      throw MlUnsupportedException(s"$name must implement MLReadable.")
+    val operators = loadOperators(operatorClass)
+    if (operators.isEmpty || !operators.contains(name)) {
+      throw MlUnsupportedException(s"Unsupported read for $name")
     }
+    operators(name)
+      .getMethod("load", classOf[String])
+      .invoke(null, path)
+      .asInstanceOf[T]
+  }
 
-    val loadedMethod = SparkClassUtils.classForName(name).getMethod("load", classOf[String])
-    loadedMethod.invoke(null, path)
+  /**
+   * Load an estimator from the specified path.
+   */
+  def loadEstimator(
+      sessionHolder: SessionHolder,
+      className: String,
+      path: String): Estimator[_] = {
+    loadOperator(sessionHolder, className, path, classOf[Estimator[_]])
+  }
+
+  /**
+   * Load a transformer from the specified path.
+   */
+  def loadTransformer(
+      sessionHolder: SessionHolder,
+      className: String,
+      path: String): Transformer = {
+    loadOperator(sessionHolder, className, path, classOf[Transformer])
+  }
+
+  /**
+   * Load an evaluator from the specified path.
+   */
+  def loadEvaluator(sessionHolder: SessionHolder, className: String, path: String): Evaluator = {
+    loadOperator(sessionHolder, className, path, classOf[Evaluator])
   }
 
   // Since we're using reflection way to get the attribute, in order not to
   // leave a security hole, we define an allowed attribute list that can be accessed.
   // The attributes could be retrieved from the corresponding python class
-  private lazy val ALLOWED_ATTRIBUTES = HashSet(
-    "toString",
-    "toDebugString",
-    "numFeatures",
-    "predict", // PredictionModel
-    "predictLeaf", // Tree models
-    "numClasses",
-    "depth", // DecisionTreeClassificationModel
-    "numNodes", // Tree models
-    "totalNumNodes", // Tree models
-    "javaTreeWeights", // Tree models
-    "treeWeights", // Tree models
-    "featureImportances", // Tree models
-    "predictRaw", // ClassificationModel
-    "predictProbability", // ProbabilisticClassificationModel
-    "coefficients",
-    "intercept",
-    "coefficientMatrix",
-    "interceptVector", // LogisticRegressionModel
-    "summary",
-    "hasSummary",
-    "evaluate", // LogisticRegressionModel
-    "evaluateEachIteration", // GBTClassificationModel
-    "predictions",
-    "predictionCol",
-    "labelCol",
-    "weightCol",
-    "labels", // _ClassificationSummary
-    "truePositiveRateByLabel",
-    "falsePositiveRateByLabel", // _ClassificationSummary
-    "precisionByLabel",
-    "recallByLabel",
-    "fMeasureByLabel",
-    "accuracy", // _ClassificationSummary
-    "weightedTruePositiveRate",
-    "weightedFalsePositiveRate", // _ClassificationSummary
-    "weightedRecall",
-    "weightedPrecision",
-    "weightedFMeasure", // _ClassificationSummary
-    "scoreCol",
-    "roc",
-    "areaUnderROC",
-    "pr",
-    "fMeasureByThreshold", // _BinaryClassificationSummary
-    "precisionByThreshold",
-    "recallByThreshold", // _BinaryClassificationSummary
-    "probabilityCol",
-    "featuresCol", // LogisticRegressionSummary
-    "objectiveHistory",
-    "totalIterations" // _TrainingSummary
-  )
+  private lazy val ALLOWED_ATTRIBUTES = Seq(
+    (classOf[Identifiable], Set("toString")),
+
+    // Model Traits
+    (classOf[PredictionModel[_, _]], Set("predict", "numFeatures")),
+    (classOf[ClassificationModel[_, _]], Set("predictRaw", "numClasses")),
+    (classOf[ProbabilisticClassificationModel[_, _]], Set("predictProbability")),
+    (classOf[LSHModel[_]], Set("approxNearestNeighbors", "approxSimilarityJoin")),
+
+    // Summary Traits
+    (classOf[HasTrainingSummary[_]], Set("hasSummary", "summary")),
+    (classOf[TrainingSummary], Set("objectiveHistory", "totalIterations")),
+    (
+      classOf[ClassificationSummary],
+      Set(
+        "predictions",
+        "predictionCol",
+        "labelCol",
+        "weightCol",
+        "labels",
+        "truePositiveRateByLabel",
+        "falsePositiveRateByLabel",
+        "precisionByLabel",
+        "recallByLabel",
+        "fMeasureByLabel",
+        "accuracy",
+        "weightedTruePositiveRate",
+        "weightedFalsePositiveRate",
+        "weightedRecall",
+        "weightedPrecision",
+        "weightedFMeasure",
+        "weightedFMeasure")),
+    (
+      classOf[BinaryClassificationSummary],
+      Set(
+        "scoreCol",
+        "roc",
+        "areaUnderROC",
+        "pr",
+        "fMeasureByThreshold",
+        "precisionByThreshold",
+        "recallByThreshold")),
+    (
+      classOf[ClusteringSummary],
+      Set(
+        "predictions",
+        "predictionCol",
+        "featuresCol",
+        "k",
+        "numIter",
+        "cluster",
+        "clusterSizes")),
+
+    // Tree Models
+    (classOf[DecisionTreeModel], Set("predictLeaf", "numNodes", "depth", "toDebugString")),
+    (
+      classOf[TreeEnsembleModel[_]],
+      Set(
+        "predictLeaf",
+        "trees",
+        "treeWeights",
+        "javaTreeWeights",
+        "getNumTrees",
+        "totalNumNodes",
+        "toDebugString")),
+    (classOf[DecisionTreeClassificationModel], Set("featureImportances")),
+    (classOf[RandomForestClassificationModel], Set("featureImportances", "evaluate")),
+    (classOf[GBTClassificationModel], Set("featureImportances", "evaluateEachIteration")),
+    (classOf[DecisionTreeRegressionModel], Set("featureImportances")),
+    (classOf[RandomForestRegressionModel], Set("featureImportances")),
+    (classOf[GBTRegressionModel], Set("featureImportances", "evaluateEachIteration")),
+
+    // Classification Models
+    (classOf[NaiveBayesModel], Set("pi", "theta", "sigma")),
+    (classOf[LinearSVCModel], Set("intercept", "coefficients", "evaluate")),
+    (
+      classOf[LogisticRegressionModel],
+      Set("intercept", "coefficients", "interceptVector", "coefficientMatrix", "evaluate")),
+    (classOf[LogisticRegressionSummary], Set("probabilityCol", "featuresCol")),
+    (classOf[BinaryLogisticRegressionSummary], Set("scoreCol")),
+    (classOf[FMClassificationModel], Set("intercept", "linear", "factors", "evaluate")),
+    (classOf[MultilayerPerceptronClassificationModel], Set("weights", "evaluate")),
+
+    // Regression Models
+    (
+      classOf[AFTSurvivalRegressionModel],
+      Set("intercept", "coefficients", "scale", "predictQuantiles")),
+    (
+      classOf[IsotonicRegressionModel],
+      Set("boundaries", "predictions", "numFeatures", "predict")),
+    (
+      classOf[GeneralizedLinearRegressionModel],
+      Set("intercept", "coefficients", "numFeatures", "evaluate")),
+    (
+      classOf[GeneralizedLinearRegressionSummary],
+      Set(
+        "aic",
+        "degreesOfFreedom",
+        "deviance",
+        "dispersion",
+        "nullDeviance",
+        "numInstances",
+        "predictionCol",
+        "predictions",
+        "rank",
+        "residualDegreeOfFreedom",
+        "residualDegreeOfFreedomNull",
+        "residuals")),
+    (
+      classOf[GeneralizedLinearRegressionTrainingSummary],
+      Set(
+        "numIterations",
+        "solver",
+        "tValues",
+        "pValues",
+        "coefficientStandardErrors",
+        "coefficientsWithStatistics",
+        "toString")),
+    (classOf[LinearRegressionModel], Set("intercept", "coefficients", "scale", "evaluate")),
+    (
+      classOf[LinearRegressionSummary],
+      Set(
+        "predictions",
+        "predictionCol",
+        "labelCol",
+        "featuresCol",
+        "explainedVariance",
+        "meanAbsoluteError",
+        "meanSquaredError",
+        "rootMeanSquaredError",
+        "r2",
+        "r2adj",
+        "residuals",
+        "numInstances",
+        "degreesOfFreedom",
+        "devianceResiduals",
+        "coefficientStandardErrors",
+        "tValues",
+        "pValues")),
+    (classOf[LinearRegressionTrainingSummary], Set("objectiveHistory", "totalIterations")),
+    (classOf[FMRegressionModel], Set("intercept", "linear", "factors")),
+
+    // Clustering Models
+    (classOf[KMeansModel], Set("predict", "numFeatures", "clusterCenterMatrix")),
+    (classOf[KMeansSummary], Set("trainingCost")),
+    (
+      classOf[BisectingKMeansModel],
+      Set("predict", "numFeatures", "clusterCenterMatrix", "computeCost")),
+    (classOf[BisectingKMeansSummary], Set("trainingCost")),
+    (
+      classOf[GaussianMixtureModel],
+      Set("predict", "numFeatures", "weights", "gaussians", "predictProbability", "gaussiansDF")),
+    (classOf[GaussianMixtureSummary], Set("probability", "probabilityCol", "logLikelihood")),
+    (
+      classOf[LDAModel],
+      Set(
+        "estimatedDocConcentration",
+        "topicsMatrix",
+        "isDistributed",
+        "logLikelihood",
+        "logPerplexity",
+        "describeTopics")),
+    (classOf[LocalLDAModel], Set("vocabSize")),
+    (
+      classOf[DistributedLDAModel],
+      Set("trainingLogLikelihood", "logPrior", "getCheckpointFiles")),
+
+    // Recommendation Models
+    (
+      classOf[ALSModel],
+      Set(
+        "rank",
+        "itemFactors",
+        "userFactors",
+        "recommendForAllUsers",
+        "recommendForAllItems",
+        "recommendForUserSubset",
+        "recommendForItemSubset")),
+
+    // Association Rules
+    (classOf[FPGrowthModel], Set("associationRules", "freqItemsets")),
+
+    // Feature Models
+    (classOf[ImputerModel], Set("surrogateDF")),
+    (classOf[StandardScalerModel], Set("mean", "std")),
+    (classOf[MaxAbsScalerModel], Set("maxAbs")),
+    (classOf[MinMaxScalerModel], Set("originalMax", "originalMin")),
+    (classOf[RobustScalerModel], Set("range", "median")),
+    (classOf[ChiSqSelectorModel], Set("selectedFeatures")),
+    (classOf[UnivariateFeatureSelectorModel], Set("selectedFeatures")),
+    (classOf[VarianceThresholdSelectorModel], Set("selectedFeatures")),
+    (classOf[PCAModel], Set("pc", "explainedVariance")),
+    (classOf[Word2VecModel], Set("getVectors", "findSynonyms", "findSynonymsArray")),
+    (classOf[CountVectorizerModel], Set("vocabulary")),
+    (classOf[OneHotEncoderModel], Set("categorySizes")),
+    (classOf[StringIndexerModel], Set("labels", "labelsArray")),
+    (classOf[IDFModel], Set("idf", "docFreq", "numDocs")))
+
+  private def validate(obj: Any, method: String): Unit = {
+    assert(obj != null)
+    val valid = ALLOWED_ATTRIBUTES.exists { case (cls, methods) =>
+      cls.isInstance(obj) && methods.contains(method)
+    }
+    if (!valid) {
+      throw MLAttributeNotAllowedException(method)
+    }
+  }
 
   def invokeMethodAllowed(obj: Object, methodName: String): Object = {
-    if (!ALLOWED_ATTRIBUTES.contains(methodName)) {
-      throw MLAttributeNotAllowedException(methodName)
-    }
+    validate(obj, methodName)
     invokeMethod(obj, methodName)
   }
 
@@ -418,9 +669,7 @@ private[ml] object MLUtils {
       methodName: String,
       args: Array[Object],
       parameterTypes: Array[Class[_]]): Object = {
-    if (!ALLOWED_ATTRIBUTES.contains(methodName)) {
-      throw MLAttributeNotAllowedException(methodName)
-    }
+    validate(obj, methodName)
     invokeMethod(obj, methodName, args, parameterTypes)
   }
 

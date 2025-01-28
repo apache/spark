@@ -138,6 +138,11 @@ class KMeansModel private[ml] (
   extends Model[KMeansModel] with KMeansParams with GeneralMLWritable
     with HasTrainingSummary[KMeansSummary] {
 
+  // For ml connect only
+  @Since("4.0.0")
+  private[ml] def this() = this(Identifiable.randomUID("kmeans"),
+    new MLlibKMeansModel(clusterCenters = null))
+
   @Since("3.0.0")
   lazy val numFeatures: Int = parentModel.clusterCenters.head.size
 
@@ -181,6 +186,9 @@ class KMeansModel private[ml] (
 
   @Since("2.0.0")
   def clusterCenters: Array[Vector] = parentModel.clusterCenters.map(_.asML)
+
+  private[ml] def clusterCenterMatrix: Matrix =
+    Matrices.fromVectors(clusterCenters.toSeq)
 
   /**
    * Returns a [[org.apache.spark.ml.util.GeneralMLWriter]] instance for this ML instance.

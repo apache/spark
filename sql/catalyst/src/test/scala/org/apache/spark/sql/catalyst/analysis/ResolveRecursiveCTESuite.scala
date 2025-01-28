@@ -18,102 +18,79 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.catalyst.analysis.SimpleAnalyzer.ResolveSubqueryColumnAliases
+import org.apache.spark.sql.catalyst.dsl.expressions._
+import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions.{Alias, Literal}
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.rules.RuleExecutor
 
 class ResolveRecursiveCTESuite extends AnalysisTest {
   // Motivated by:
   // WITH RECURSIVE t AS (SELECT 1 UNION ALL SELECT * FROM t) SELECT * FROM t;
   test("ResolveWithCTE rule on recursive CTE without UnresolvedSubqueryColumnAliases") {
-    // The analyzer will repeat ResolveWithCTE rule twice.
-    val rules = Seq(ResolveWithCTE, ResolveWithCTE)
-    val analyzer = new RuleExecutor[LogicalPlan] {
-      override val batches = Seq(Batch("Resolution", Once, rules: _*))
-    }
-    // Since cteDef IDs need to be the same, cteDef for each case will be created by copying
-    // this one with its child replaced.
-    val cteDef = CTERelationDef(OneRowRelation())
-    val anchor = Project(Seq(Alias(Literal(1), "1")()), OneRowRelation())
+    val cteId = 0
+    val anchor = Project(Seq(Alias(Literal(1), "c")()), OneRowRelation())
 
-    def getBeforePlan(cteDef: CTERelationDef): LogicalPlan = {
-      val recursionPart = SubqueryAlias("t",
-          CTERelationRef(cteDef.id, false, Seq(), false, recursive = true))
-
-      val cteDefFinal = cteDef.copy(child =
-        SubqueryAlias("t", Union(Seq(anchor, recursionPart))))
-
+    def getBeforePlan(): LogicalPlan = {
+      val cteRef = CTERelationRef(
+        cteId,
+        _resolved = false,
+        output = Seq(),
+        isStreaming = false)
+      val recursion = cteRef.copy(recursive = true).subquery("t")
       WithCTE(
-        SubqueryAlias("t", CTERelationRef(cteDefFinal.id, false, Seq(), false, recursive = false)),
-        Seq(cteDefFinal))
+        cteRef.copy(recursive = false),
+        Seq(CTERelationDef(anchor.union(recursion).subquery("t"), cteId)))
     }
 
-    def getAfterPlan(cteDef: CTERelationDef): LogicalPlan = {
-      val saRecursion = SubqueryAlias("t",
-        UnionLoopRef(cteDef.id, anchor.output, false))
-
-      val cteDefFinal = cteDef.copy(child =
-        SubqueryAlias("t", UnionLoop(cteDef.id, anchor, saRecursion)))
-
-      val outerCteRef = CTERelationRef(cteDefFinal.id, true, cteDefFinal.output, false,
-        recursive = false)
-
-      WithCTE(SubqueryAlias("t", outerCteRef), Seq(cteDefFinal))
+    def getAfterPlan(): LogicalPlan = {
+      val recursion = UnionLoopRef(cteId, anchor.output, accumulated = false).subquery("t")
+      val cteDef = CTERelationDef(UnionLoop(cteId, anchor, recursion).subquery("t"), cteId)
+      val cteRef = CTERelationRef(
+        cteId,
+        _resolved = true,
+        output = cteDef.output,
+        isStreaming = false)
+      WithCTE(cteRef, Seq(cteDef))
     }
 
-    val beforePlan = getBeforePlan(cteDef)
-    val afterPlan = getAfterPlan(cteDef)
-
-    comparePlans(analyzer.execute(beforePlan), afterPlan)
+    comparePlans(getAnalyzer.execute(getBeforePlan()), getAfterPlan())
   }
 
   // Motivated by:
   // WITH RECURSIVE t(n) AS (SELECT 1 UNION ALL SELECT * FROM t) SELECT * FROM t;
   test("ResolveWithCTE rule on recursive CTE with UnresolvedSubqueryColumnAliases") {
-    // The analyzer will repeat ResolveWithCTE rule twice.
-    val rules = Seq(ResolveWithCTE, ResolveSubqueryColumnAliases, ResolveWithCTE)
-    val analyzer = new RuleExecutor[LogicalPlan] {
-      override val batches = Seq(Batch("Resolution", Once, rules: _*))
-    }
-    // Since cteDef IDs need to be the same, cteDef for each case will be created by copying
-    // this one with its child replaced.
-    val cteDef = CTERelationDef(OneRowRelation())
-    val anchor = Project(Seq(Alias(Literal(1), "1")()), OneRowRelation())
+    val cteId = 0
+    val anchor = Project(Seq(Alias(Literal(1), "c")()), OneRowRelation())
 
-    def getBeforePlan(cteDef: CTERelationDef): LogicalPlan = {
-      val recursionPart = SubqueryAlias("t",
-          CTERelationRef(cteDef.id, false, Seq(), false, recursive = true))
-
-      val cteDefFinal = cteDef.copy(child =
-        SubqueryAlias("t",
-          UnresolvedSubqueryColumnAliases(Seq("n"),
-            Union(Seq(anchor, recursionPart)))))
-
-      WithCTE(
-        SubqueryAlias("t", CTERelationRef(cteDefFinal.id, false, Seq(), false, recursive = false)),
-        Seq(cteDefFinal))
+    def getBeforePlan(): LogicalPlan = {
+      val cteRef = CTERelationRef(
+        cteId,
+        _resolved = false,
+        output = Seq(),
+        isStreaming = false)
+      val recursion = cteRef.copy(recursive = true).subquery("t")
+      val cteDef = CTERelationDef(
+        UnresolvedSubqueryColumnAliases(Seq("n"), anchor.union(recursion)).subquery("t"),
+        cteId)
+      WithCTE(cteRef.copy(recursive = false), Seq(cteDef))
     }
 
-    def getAfterPlan(cteDef: CTERelationDef): LogicalPlan = {
-      val saRecursion = SubqueryAlias("t",
-        Project(Seq(Alias(anchor.output.head, "n")()),
-          UnionLoopRef(cteDef.id, anchor.output, false)))
-
-      val cteDefFinal = cteDef.copy(child =
-        SubqueryAlias("t",
-          Project(Seq(Alias(anchor.output.head, "n")()),
-            UnionLoop(cteDef.id, anchor, saRecursion))))
-
-      val outerCteRef = CTERelationRef(cteDefFinal.id, true, cteDefFinal.output, false,
-        recursive = false)
-
-      WithCTE(SubqueryAlias("t", outerCteRef), Seq(cteDefFinal))
+    def getAfterPlan(): LogicalPlan = {
+      val col = anchor.output.head
+      val recursion = UnionLoopRef(cteId, anchor.output, accumulated = false)
+        .select(col.as("n"))
+        .subquery("t")
+      val cteDef = CTERelationDef(
+        UnionLoop(cteId, anchor, recursion).select(col.as("n")).subquery("t"),
+        cteId)
+      val cteRef = CTERelationRef(
+        cteId,
+        _resolved = true,
+        output = cteDef.output,
+        isStreaming = false)
+      WithCTE(cteRef, Seq(cteDef))
     }
 
-    val beforePlan = getBeforePlan(cteDef)
-    val afterPlan = getAfterPlan(cteDef)
-
-    comparePlans(analyzer.execute(beforePlan), afterPlan)
+    comparePlans(getAnalyzer.execute(getBeforePlan()), getAfterPlan())
   }
 }

@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.catalyst.catalog.CatalogTable
-import org.apache.spark.sql.catalyst.plans.logical.{AddColumns, AlterColumn, ColumnDefinition, CreateTable, LogicalPlan, ReplaceColumns, ReplaceTable}
+import org.apache.spark.sql.catalyst.plans.logical.{AddColumns, AlterColumns, ColumnDefinition, CreateTable, LogicalPlan, ReplaceColumns, ReplaceTable}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.execution.command.{AlterTableAddColumnsCommand, AlterTableChangeColumnCommand, CreateDataSourceTableCommand, CreateTableCommand}
@@ -39,8 +39,10 @@ object ReplaceCharWithVarchar extends Rule[LogicalPlan] {
         cmd.copy(columnsToAdd = cmd.columnsToAdd.map { col =>
           col.copy(dataType = CharVarcharUtils.replaceCharWithVarchar(col.dataType))
         })
-      case cmd: AlterColumn =>
-        cmd.copy(dataType = cmd.dataType.map(CharVarcharUtils.replaceCharWithVarchar))
+      case cmd: AlterColumns =>
+        cmd.copy(specs = cmd.specs.map { spec =>
+          spec.copy(newDataType = spec.newDataType.map(CharVarcharUtils.replaceCharWithVarchar))
+        })
       case cmd: ReplaceColumns =>
         cmd.copy(columnsToAdd = cmd.columnsToAdd.map { col =>
           col.copy(dataType = CharVarcharUtils.replaceCharWithVarchar(col.dataType))

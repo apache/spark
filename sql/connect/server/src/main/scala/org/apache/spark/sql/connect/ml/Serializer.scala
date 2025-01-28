@@ -21,7 +21,7 @@ import org.apache.spark.connect.proto
 import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.param.Params
 import org.apache.spark.sql.Dataset
-import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, LiteralValueProtoConverter, ProtoDataTypes}
+import org.apache.spark.sql.connect.common.{LiteralValueProtoConverter, ProtoDataTypes}
 import org.apache.spark.sql.connect.service.SessionHolder
 
 private[ml] object Serializer {
@@ -37,7 +37,7 @@ private[ml] object Serializer {
     data match {
       case v: SparseVector =>
         val builder = proto.Expression.Literal.Struct.newBuilder()
-        builder.setStructType(DataTypeProtoConverter.toConnectProtoType(VectorUDT.sqlType))
+        builder.setStructType(ProtoDataTypes.VectorUDT)
         // type = 0
         builder.addElements(proto.Expression.Literal.newBuilder().setByte(0))
         // size
@@ -50,7 +50,7 @@ private[ml] object Serializer {
 
       case v: DenseVector =>
         val builder = proto.Expression.Literal.Struct.newBuilder()
-        builder.setStructType(DataTypeProtoConverter.toConnectProtoType(VectorUDT.sqlType))
+        builder.setStructType(ProtoDataTypes.VectorUDT)
         // type = 1
         builder.addElements(proto.Expression.Literal.newBuilder().setByte(1))
         // size = null
@@ -65,7 +65,7 @@ private[ml] object Serializer {
 
       case m: SparseMatrix =>
         val builder = proto.Expression.Literal.Struct.newBuilder()
-        builder.setStructType(DataTypeProtoConverter.toConnectProtoType(MatrixUDT.sqlType))
+        builder.setStructType(ProtoDataTypes.MatrixUDT)
         // type = 0
         builder.addElements(proto.Expression.Literal.newBuilder().setByte(0))
         // numRows
@@ -84,7 +84,7 @@ private[ml] object Serializer {
 
       case m: DenseMatrix =>
         val builder = proto.Expression.Literal.Struct.newBuilder()
-        builder.setStructType(DataTypeProtoConverter.toConnectProtoType(MatrixUDT.sqlType))
+        builder.setStructType(ProtoDataTypes.MatrixUDT)
         // type = 1
         builder.addElements(proto.Expression.Literal.newBuilder().setByte(1))
         // numRows
@@ -146,13 +146,13 @@ private[ml] object Serializer {
         literal.getLiteralTypeCase match {
           case proto.Expression.Literal.LiteralTypeCase.STRUCT =>
             val struct = literal.getStruct
-            val schema = DataTypeProtoConverter.toCatalystType(struct.getStructType)
-            if (schema == VectorUDT.sqlType) {
-              (MLUtils.deserializeVector(struct), classOf[Vector])
-            } else if (schema == MatrixUDT.sqlType) {
-              (MLUtils.deserializeMatrix(struct), classOf[Matrix])
-            } else {
-              throw MlUnsupportedException(s"$schema not supported")
+            struct.getStructType.getUdt.getJvmClass match {
+              case "org.apache.spark.ml.linalg.VectorUDT" =>
+                (MLUtils.deserializeVector(struct), classOf[Vector])
+              case "org.apache.spark.ml.linalg.MatrixUDT" =>
+                (MLUtils.deserializeMatrix(struct), classOf[Matrix])
+              case _ =>
+                throw MlUnsupportedException(s"Unsupported struct ${literal.getStruct}")
             }
           case proto.Expression.Literal.LiteralTypeCase.INTEGER =>
             (literal.getInteger.asInstanceOf[Object], classOf[Int])

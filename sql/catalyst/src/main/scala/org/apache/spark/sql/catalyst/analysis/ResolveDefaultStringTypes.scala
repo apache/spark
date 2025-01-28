@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.catalyst.expressions.{Cast, Expression, Literal}
-import org.apache.spark.sql.catalyst.plans.logical.{AddColumns, AlterColumn, AlterViewAs, ColumnDefinition, CreateView, LogicalPlan, QualifiedColType, ReplaceColumns, V1CreateTablePlan, V2CreateTablePlan}
+import org.apache.spark.sql.catalyst.plans.logical.{AddColumns, AlterColumns, AlterColumnSpec, AlterViewAs, ColumnDefinition, CreateView, LogicalPlan, QualifiedColType, ReplaceColumns, V1CreateTablePlan, V2CreateTablePlan}
 import org.apache.spark.sql.catalyst.rules.{Rule, RuleExecutor}
 import org.apache.spark.sql.types.{DataType, StringType}
 
@@ -93,7 +93,7 @@ object ResolveDefaultStringTypes extends Rule[LogicalPlan] {
     StringType(conf.defaultStringType.collationId)
 
   private def isDDLCommand(plan: LogicalPlan): Boolean = plan exists {
-    case _: AddColumns | _: ReplaceColumns | _: AlterColumn => true
+    case _: AddColumns | _: ReplaceColumns | _: AlterColumns => true
     case _ => isCreateOrAlterPlan(plan)
   }
 
@@ -115,9 +115,13 @@ object ResolveDefaultStringTypes extends Rule[LogicalPlan] {
       case replaceCols: ReplaceColumns =>
         replaceCols.copy(columnsToAdd = replaceColumnTypes(replaceCols.columnsToAdd, newType))
 
-      case alter: AlterColumn
-        if alter.dataType.isDefined && hasDefaultStringType(alter.dataType.get) =>
-        alter.copy(dataType = Some(replaceDefaultStringType(alter.dataType.get, newType)))
+      case a @ AlterColumns(_, specs: Seq[AlterColumnSpec]) =>
+        val newSpecs = specs.map {
+          case spec if spec.newDataType.isDefined && hasDefaultStringType(spec.newDataType.get) =>
+            spec.copy(newDataType = Some(replaceDefaultStringType(spec.newDataType.get, newType)))
+          case col => col
+        }
+        a.copy(specs = newSpecs)
     }
   }
 

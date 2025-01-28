@@ -207,7 +207,7 @@ private case class DB2Dialect() extends JdbcDialect with SQLConfHelper with NoLe
       val offsetClause = dialect.getOffsetClause(offset)
 
       options.prepareQuery +
-        s"SELECT $columnList FROM ${options.tableOrQuery} $tableSampleClause" +
+        s"SELECT $hintClause$columnList FROM ${options.tableOrQuery} $tableSampleClause" +
         s" $whereClause $groupByClause $orderByClause $offsetClause $limitClause"
     }
   }

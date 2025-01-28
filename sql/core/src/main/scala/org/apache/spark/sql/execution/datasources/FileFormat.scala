@@ -23,7 +23,7 @@ import org.apache.hadoop.io.compress.{CompressionCodecFactory, SplittableCompres
 import org.apache.hadoop.mapreduce.Job
 
 import org.apache.spark.paths.SparkPath
-import org.apache.spark.sql._
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection

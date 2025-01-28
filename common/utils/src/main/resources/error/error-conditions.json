@@ -82,6 +82,12 @@
     ],
     "sqlState" : "22003"
   },
+  "ARTIFACT_ALREADY_EXISTS" : {
+    "message" : [
+      "The artifact <normalizedRemoteRelativePath> already exists. Please choose a different name for the new artifact because it cannot be overwritten."
+    ],
+    "sqlState" : "42713"
+  },
   "ASSIGNMENT_ARITY_MISMATCH" : {
     "message" : [
       "The number of columns or variables assigned or aliased: <numTarget> does not match the number of source expressions: <numExpr>."
@@ -1695,6 +1701,12 @@
     ],
     "sqlState" : "42822"
   },
+  "HINT_UNSUPPORTED_FOR_JDBC_DIALECT" : {
+    "message" : [
+      "The option `hint` is not supported for <jdbcDialect> in JDBC data source. Supported dialects are `MySQLDialect`, `OracleDialect` and `DatabricksDialect`."
+    ],
+    "sqlState" : "42822"
+  },
   "HLL_INVALID_INPUT_SKETCH_BUFFER" : {
     "message" : [
       "Invalid call to <function>; only valid HLL sketch buffers are supported as inputs (such as those produced by the `hll_sketch_agg` function)."
@@ -2737,7 +2749,7 @@
   },
   "INVALID_INTERVAL_WITH_MICROSECONDS_ADDITION" : {
     "message" : [
-      "Cannot add an interval to a date because its microseconds part is not 0. If necessary set <ansiConfig> to \"false\" to bypass this error."
+      "Cannot add an interval to a date because its microseconds part is not 0. To resolve this, cast the input date to a timestamp, which supports the addition of intervals with non-zero microseconds."
     ],
     "sqlState" : "22006"
   },
@@ -2869,6 +2881,24 @@
       }
     },
     "sqlState" : "42K0E"
+  },
+  "INVALID_LOG_VERSION" : {
+    "message" : [
+      "UnsupportedLogVersion."
+    ],
+    "subClass" : {
+      "EXACT_MATCH_VERSION" : {
+        "message" : [
+          "The only supported log version is v<matchVersion>, but encountered v<version>."
+        ]
+      },
+      "MAX_SUPPORTED_VERSION" : {
+        "message" : [
+          "The maximum supported log version is v<maxSupportedVersion>, but encountered v<version>. The log file was produced by a newer version of Spark and cannot be read by this version. You need to upgrade."
+        ]
+      }
+    },
+    "sqlState" : "KD002"
   },
   "INVALID_NON_DETERMINISTIC_EXPRESSIONS" : {
     "message" : [
@@ -3109,6 +3139,24 @@
     "message" : [
       "Invalid recursive definition found. Recursive queries must contain an UNION or an UNION ALL statement with 2 children. The first child needs to be the anchor term without any recursive references."
     ],
+    "sqlState" : "42836"
+  },
+  "INVALID_RECURSIVE_REFERENCE" : {
+    "message" : [
+      "Invalid recursive reference found inside WITH RECURSIVE clause."
+    ],
+    "subClass" : {
+      "NUMBER" : {
+        "message" : [
+          "Multiple self-references to one recursive CTE are not allowed."
+        ]
+      },
+      "PLACE" : {
+        "message" : [
+          "Recursive references cannot be used on the right side of left outer/semi/anti joins, on the left side of right outer joins, in full outer joins, in aggregates, and in subquery expressions."
+        ]
+      }
+    },
     "sqlState" : "42836"
   },
   "INVALID_REGEXP_REPLACE" : {
@@ -3627,6 +3675,12 @@
     ],
     "sqlState" : "KD000"
   },
+  "MALFORMED_LOG_FILE" : {
+    "message" : [
+      "Log file was malformed: failed to read correct log version from <text>."
+    ],
+    "sqlState" : "KD002"
+  },
   "MALFORMED_PROTOBUF_MESSAGE" : {
     "message" : [
       "Malformed Protobuf messages are detected in message deserialization. Parse Mode: <failFastMode>. To process malformed protobuf message as null result, try setting the option 'mode' as 'PERMISSIVE'."
@@ -3935,6 +3989,12 @@
   "NOT_SUPPORTED_CHANGE_COLUMN" : {
     "message" : [
       "ALTER TABLE ALTER/CHANGE COLUMN is not supported for changing <table>'s column <originName> with type <originType> to <newName> with type <newType>."
+    ],
+    "sqlState" : "0A000"
+  },
+  "NOT_SUPPORTED_CHANGE_SAME_COLUMN" : {
+    "message" : [
+      "ALTER TABLE ALTER/CHANGE COLUMN is not supported for changing <table>'s column <fieldName> including its nested fields multiple times in the same command."
     ],
     "sqlState" : "0A000"
   },
@@ -5223,6 +5283,11 @@
           "Resilient Distributed Datasets (RDDs)."
         ]
       },
+      "REGISTER_UDAF" : {
+        "message" : [
+          "Registering User Defined Aggregate Functions (UDAFs)."
+        ]
+      },
       "SESSION_BASE_RELATION_TO_DATAFRAME" : {
         "message" : [
           "Invoking SparkSession 'baseRelationToDataFrame'. This is server side developer API"
@@ -5982,6 +6047,12 @@
       }
     },
     "sqlState" : "0A000"
+  },
+  "UNSUPPORTED_TABLE_CHANGE_IN_JDBC_CATALOG" : {
+    "message" : [
+      "The table change <change> is not supported for the JDBC catalog on table <tableName>. Supported changes include: AddColumn, RenameColumn, DeleteColumn, UpdateColumnType, UpdateColumnNullability."
+    ],
+    "sqlState" : "42000"
   },
   "UNSUPPORTED_TYPED_LITERAL" : {
     "message" : [
@@ -7149,11 +7220,6 @@
   "_LEGACY_ERROR_TEMP_1300" : {
     "message" : [
       "Unable to find the column `<colName>` given [<actualColumns>]."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1305" : {
-    "message" : [
-      "Unsupported TableChange <change> in JDBC catalog."
     ]
   },
   "_LEGACY_ERROR_TEMP_1306" : {

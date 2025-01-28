@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import faulthandler
 import os
 import sys
 from typing import IO
@@ -47,7 +48,13 @@ def main(infile: IO, outfile: IO) -> None:
     responsible for invoking either the `commit` or the `abort` method on a data source
     writer instance, given a list of commit messages.
     """
+    faulthandler_log_path = os.environ.get("PYTHON_FAULTHANDLER_DIR", None)
     try:
+        if faulthandler_log_path:
+            faulthandler_log_path = os.path.join(faulthandler_log_path, str(os.getpid()))
+            faulthandler_log_file = open(faulthandler_log_path, "w")
+            faulthandler.enable(file=faulthandler_log_file)
+
         check_python_version(infile)
 
         memory_limit_mb = int(os.environ.get("PYSPARK_PLANNER_MEMORY_MB", "-1"))
@@ -93,6 +100,11 @@ def main(infile: IO, outfile: IO) -> None:
     except BaseException as e:
         handle_worker_exception(e, outfile)
         sys.exit(-1)
+    finally:
+        if faulthandler_log_path:
+            faulthandler.disable()
+            faulthandler_log_file.close()
+            os.remove(faulthandler_log_path)
 
     send_accumulator_updates(outfile)
 

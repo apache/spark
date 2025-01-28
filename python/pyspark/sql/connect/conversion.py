@@ -340,6 +340,8 @@ class LocalDataToArrowConversion:
         pylist: List[List] = [[] for _ in range(len(column_names))]
 
         for item in data:
+            if isinstance(item, VariantVal):
+                raise PySparkValueError("Rows cannot be of type VariantVal")
             if (
                 not isinstance(item, Row)
                 and not isinstance(item, tuple)  # inherited namedtuple

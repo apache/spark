@@ -31,8 +31,8 @@ import ammonite.util.Util.newLine
 
 import org.apache.spark.SparkBuildInfo.spark_version
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.SparkSession.withLocalConnectServer
+import org.apache.spark.sql.connect.SparkSession
+import org.apache.spark.sql.connect.SparkSession.withLocalConnectServer
 import org.apache.spark.sql.connect.client.{SparkConnectClient, SparkConnectClientParser}
 
 /**

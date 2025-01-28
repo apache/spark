@@ -224,11 +224,49 @@ class MlCommand(google.protobuf.message.Message):
             self, field_name: typing_extensions.Literal["operator", b"operator", "path", b"path"]
         ) -> None: ...
 
+    class Evaluate(google.protobuf.message.Message):
+        """Command for evaluator.evaluate(dataset)"""
+
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        EVALUATOR_FIELD_NUMBER: builtins.int
+        PARAMS_FIELD_NUMBER: builtins.int
+        DATASET_FIELD_NUMBER: builtins.int
+        @property
+        def evaluator(self) -> pyspark.sql.connect.proto.ml_common_pb2.MlOperator:
+            """Evaluator information"""
+        @property
+        def params(self) -> pyspark.sql.connect.proto.ml_common_pb2.MlParams:
+            """parameters of the Evaluator"""
+        @property
+        def dataset(self) -> pyspark.sql.connect.proto.relations_pb2.Relation:
+            """the evaluating dataset"""
+        def __init__(
+            self,
+            *,
+            evaluator: pyspark.sql.connect.proto.ml_common_pb2.MlOperator | None = ...,
+            params: pyspark.sql.connect.proto.ml_common_pb2.MlParams | None = ...,
+            dataset: pyspark.sql.connect.proto.relations_pb2.Relation | None = ...,
+        ) -> None: ...
+        def HasField(
+            self,
+            field_name: typing_extensions.Literal[
+                "dataset", b"dataset", "evaluator", b"evaluator", "params", b"params"
+            ],
+        ) -> builtins.bool: ...
+        def ClearField(
+            self,
+            field_name: typing_extensions.Literal[
+                "dataset", b"dataset", "evaluator", b"evaluator", "params", b"params"
+            ],
+        ) -> None: ...
+
     FIT_FIELD_NUMBER: builtins.int
     FETCH_FIELD_NUMBER: builtins.int
     DELETE_FIELD_NUMBER: builtins.int
     WRITE_FIELD_NUMBER: builtins.int
     READ_FIELD_NUMBER: builtins.int
+    EVALUATE_FIELD_NUMBER: builtins.int
     @property
     def fit(self) -> global___MlCommand.Fit: ...
     @property
@@ -239,6 +277,8 @@ class MlCommand(google.protobuf.message.Message):
     def write(self) -> global___MlCommand.Write: ...
     @property
     def read(self) -> global___MlCommand.Read: ...
+    @property
+    def evaluate(self) -> global___MlCommand.Evaluate: ...
     def __init__(
         self,
         *,
@@ -247,6 +287,7 @@ class MlCommand(google.protobuf.message.Message):
         delete: global___MlCommand.Delete | None = ...,
         write: global___MlCommand.Write | None = ...,
         read: global___MlCommand.Read | None = ...,
+        evaluate: global___MlCommand.Evaluate | None = ...,
     ) -> None: ...
     def HasField(
         self,
@@ -255,6 +296,8 @@ class MlCommand(google.protobuf.message.Message):
             b"command",
             "delete",
             b"delete",
+            "evaluate",
+            b"evaluate",
             "fetch",
             b"fetch",
             "fit",
@@ -272,6 +315,8 @@ class MlCommand(google.protobuf.message.Message):
             b"command",
             "delete",
             b"delete",
+            "evaluate",
+            b"evaluate",
             "fetch",
             b"fetch",
             "fit",
@@ -284,7 +329,9 @@ class MlCommand(google.protobuf.message.Message):
     ) -> None: ...
     def WhichOneof(
         self, oneof_group: typing_extensions.Literal["command", b"command"]
-    ) -> typing_extensions.Literal["fit", "fetch", "delete", "write", "read"] | None: ...
+    ) -> (
+        typing_extensions.Literal["fit", "fetch", "delete", "write", "read", "evaluate"] | None
+    ): ...
 
 global___MlCommand = MlCommand
 
