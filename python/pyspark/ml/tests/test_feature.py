@@ -66,6 +66,7 @@ from pyspark.ml.feature import (
     TargetEncoder,
     TargetEncoderModel,
     VectorSizeHint,
+    VectorSlicer,
     VectorAssembler,
     PCA,
     PCAModel,
@@ -1392,13 +1393,48 @@ class FeatureTestsMixin:
             ["id", "vector"],
         )
 
-        sizeHint = VectorSizeHint(inputCol="vector", handleInvalid="skip")
-        sizeHint.setSize(3)
-        self.assertEqual(sizeHint.getSize(), 3)
+        sh = VectorSizeHint(inputCol="vector", handleInvalid="skip")
+        sh.setSize(3)
+        self.assertEqual(sh.getSize(), 3)
 
-        output = sizeHint.transform(df).head().vector
+        output = sh.transform(df).head().vector
         expected = DenseVector([0.0, 10.0, 0.5])
         self.assertEqual(output, expected)
+
+        # save & load
+        with tempfile.TemporaryDirectory(prefix="vector_size_hint") as d:
+            sh.write().overwrite().save(d)
+            sh2 = VectorSizeHint.load(d)
+            self.assertEqual(str(sh), str(sh2))
+
+    def test_vector_slicer(self):
+        spark = self.spark
+
+        df = spark.createDataFrame(
+            [
+                (Vectors.dense([-2.0, 2.3, 0.0, 0.0, 1.0]),),
+                (Vectors.dense([0.0, 0.0, 0.0, 0.0, 0.0]),),
+                (Vectors.dense([0.6, -1.1, -3.0, 4.5, 3.3]),),
+            ],
+            ["features"],
+        )
+
+        vs = VectorSlicer(outputCol="sliced", indices=[1, 4])
+        vs.setInputCol("features")
+        self.assertEqual(vs.getIndices(), [1, 4])
+        self.assertEqual(vs.getInputCol(), "features")
+        self.assertEqual(vs.getOutputCol(), "sliced")
+
+        output = vs.transform(df)
+        self.assertEqual(output.columns, ["features", "sliced"])
+        self.assertEqual(output.count(), 3)
+        self.assertEqual(output.head().sliced, Vectors.dense([2.3, 1.0]))
+
+        # save & load
+        with tempfile.TemporaryDirectory(prefix="vector_slicer") as d:
+            vs.write().overwrite().save(d)
+            vs2 = VectorSlicer.load(d)
+            self.assertEqual(str(vs), str(vs2))
 
     def test_feature_hasher(self):
         data = [(2.0, True, "1", "foo"), (3.0, False, "2", "bar")]
