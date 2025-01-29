@@ -24,7 +24,7 @@ import org.apache.spark.connect.proto.Expression
 import org.apache.spark.connect.proto.Expression.SortOrder.NullOrdering.{SORT_NULLS_FIRST, SORT_NULLS_LAST}
 import org.apache.spark.connect.proto.Expression.SortOrder.SortDirection.{SORT_DIRECTION_ASCENDING, SORT_DIRECTION_DESCENDING}
 import org.apache.spark.connect.proto.Expression.Window.WindowFrame.{FrameBoundary, FrameType}
-import org.apache.spark.sql.{Column, Encoder}
+import org.apache.spark.sql.{functions, Column, Encoder}
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
 import org.apache.spark.sql.connect.common.DataTypeProtoConverter
 import org.apache.spark.sql.connect.common.LiteralValueProtoConverter.toLiteralProtoBuilder
@@ -36,6 +36,8 @@ import org.apache.spark.sql.internal.{Alias, CaseWhenOtherwise, Cast, ColumnNode
  */
 object ColumnNodeToProtoConverter extends (ColumnNode => proto.Expression) {
   def toExpr(column: Column): proto.Expression = apply(column.node, None)
+
+  def toLiteral(v: Any): proto.Expression = apply(functions.lit(v).node, None)
 
   def toTypedExpr[I](column: Column, encoder: Encoder[I]): proto.Expression = {
     apply(column.node, Option(encoder))
