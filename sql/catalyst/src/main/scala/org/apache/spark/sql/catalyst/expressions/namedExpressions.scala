@@ -112,8 +112,8 @@ abstract class Attribute extends LeafExpression with NamedExpression {
   override lazy val references: AttributeSet = AttributeSet(this)
 
   override lazy val exprValHasIndeterministicCharacter: Boolean =
-    metadata.contains(AttributeReference.KEY_HAS_INDETERMINISTIC_COMPONENT) &&
-      metadata.getBoolean(AttributeReference.KEY_HAS_INDETERMINISTIC_COMPONENT)
+    metadata.contains(Attribute.KEY_HAS_INDETERMINISTIC_COMPONENT) &&
+      metadata.getBoolean(Attribute.KEY_HAS_INDETERMINISTIC_COMPONENT)
 
   def withNullability(newNullability: Boolean): Attribute
   def withQualifier(newQualifier: Seq[String]): Attribute
@@ -125,6 +125,10 @@ abstract class Attribute extends LeafExpression with NamedExpression {
   override def toAttribute: Attribute = this
   def newInstance(): Attribute
 
+}
+
+object Attribute {
+  val KEY_HAS_INDETERMINISTIC_COMPONENT = "hasIndeterministicComponent"
 }
 
 /**
@@ -200,7 +204,7 @@ case class Alias(child: Expression, name: String)(
     if (resolved) {
       val mdForAttrib = if (this.exprValHasIndeterministicCharacter) {
         new MetadataBuilder().withMetadata(metadata).
-          putBoolean(AttributeReference.KEY_HAS_INDETERMINISTIC_COMPONENT, true).build()
+          putBoolean(Attribute.KEY_HAS_INDETERMINISTIC_COMPONENT, true).build()
       } else {
         metadata
       }
@@ -394,10 +398,6 @@ case class AttributeReference(
       if (qualifier.nonEmpty) qualifier.map(quoteIfNeeded).mkString(".") + "." else ""
     s"$qualifierPrefix${quoteIfNeeded(name)}"
   }
-}
-
-object AttributeReference {
-  val KEY_HAS_INDETERMINISTIC_COMPONENT = "hasIndeterministicComponent"
 }
 
 /**
