@@ -69,6 +69,7 @@ class TransformWithStateInPandasTestsMixin:
         )
         cfg.set("spark.sql.execution.arrow.transformWithStateInPandas.maxRecordsPerBatch", "2")
         cfg.set("spark.sql.session.timeZone", "UTC")
+        # TODO SPARK-50180 this config is to allow tests suite to stop query from FEB sink gracefully
         cfg.set("spark.sql.streaming.noDataMicroBatches.enabled", "false")
         return cfg
 
@@ -888,7 +889,9 @@ class TransformWithStateInPandasTestsMixin:
                 }
             else:
                 # check for state metadata source
-                metadata_df = batch_df.sparkSession.read.format("state-metadata").load(checkpoint_path)
+                metadata_df = batch_df.sparkSession.read.format("state-metadata").load(
+                    checkpoint_path
+                )
                 assert set(
                     metadata_df.select(
                         "operatorId",
@@ -1017,7 +1020,9 @@ class TransformWithStateInPandasTestsMixin:
                 }
             else:
                 # check for state metadata source
-                metadata_df = batch_df.sparkSession.read.format("state-metadata").load(checkpoint_path)
+                metadata_df = batch_df.sparkSession.read.format("state-metadata").load(
+                    checkpoint_path
+                )
                 operator_properties_json_obj = json.loads(
                     metadata_df.select("operatorProperties").collect()[0][0]
                 )
@@ -1099,7 +1104,9 @@ class TransformWithStateInPandasTestsMixin:
                 }
 
                 # check for state metadata source
-                metadata_df = batch_df.sparkSession.read.format("state-metadata").load(checkpoint_path)
+                metadata_df = batch_df.sparkSession.read.format("state-metadata").load(
+                    checkpoint_path
+                )
                 operator_properties_json_obj = json.loads(
                     metadata_df.select("operatorProperties").collect()[0][0]
                 )
