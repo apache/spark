@@ -501,12 +501,12 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
       .getText == "SELECT 2")
   }
 
-  test("if else if") {
+  test("if elseif") {
     val sqlScriptText =
       """BEGIN
         |IF 1 = 1 THEN
         |  SELECT 1;
-        |ELSE IF 2 = 2 THEN
+        |ELSEIF 2 = 2 THEN
         |  SELECT 2;
         |ELSE
         |  SELECT 3;
@@ -541,14 +541,14 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
       .getText == "SELECT 3")
   }
 
-  test("if multi else if") {
+  test("if multi elseif") {
     val sqlScriptText =
       """BEGIN
         |IF 1 = 1 THEN
         |  SELECT 1;
-        |ELSE IF 2 = 2 THEN
+        |ELSEIF 2 = 2 THEN
         |  SELECT 2;
-        |ELSE IF 3 = 3 THEN
+        |ELSEIF 3 = 3 THEN
         |  SELECT 3;
         |END IF;
         |END
@@ -582,6 +582,87 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     assert(ifStmt.conditionalBodies(2).collection.head.isInstanceOf[SingleStatement])
     assert(ifStmt.conditionalBodies(2).collection.head.asInstanceOf[SingleStatement]
       .getText == "SELECT 3")
+  }
+
+  test("if - multi elseif - else nested") {
+    val sqlScriptText =
+      """BEGIN
+        |IF 1 = 1 THEN
+        |  SELECT 1;
+        |ELSEIF 2 = 2 THEN
+        |  SELECT 2;
+        |ELSE
+        |  IF 3 = 3 THEN
+        |    SELECT 3;
+        |  ELSEIF 4 = 4 THEN
+        |    SELECT 4;
+        |  ELSE
+        |    IF 5 = 5 THEN
+        |      SELECT 5;
+        |    ELSE
+        |      SELECT 6;
+        |    END IF;
+        |  END IF;
+        |END IF;
+        |END
+      """.stripMargin
+    val tree = parsePlan(sqlScriptText).asInstanceOf[CompoundBody]
+    assert(tree.collection.length == 1)
+    assert(tree.collection.head.isInstanceOf[IfElseStatement])
+
+    val ifStmt = tree.collection.head.asInstanceOf[IfElseStatement]
+    assert(ifStmt.conditions.length == 2)
+    assert(ifStmt.conditionalBodies.length == 2)
+    assert(ifStmt.elseBody.nonEmpty)
+
+    assert(ifStmt.conditions.head.isInstanceOf[SingleStatement])
+    assert(ifStmt.conditions.head.getText == "1 = 1")
+
+    assert(ifStmt.conditionalBodies.head.collection.head.isInstanceOf[SingleStatement])
+    assert(ifStmt.conditionalBodies.head.collection.head.asInstanceOf[SingleStatement]
+      .getText == "SELECT 1")
+
+    assert(ifStmt.conditions(1).isInstanceOf[SingleStatement])
+    assert(ifStmt.conditions(1).getText == "2 = 2")
+
+    assert(ifStmt.conditionalBodies(1).collection.head.isInstanceOf[SingleStatement])
+    assert(ifStmt.conditionalBodies(1).collection.head.asInstanceOf[SingleStatement]
+      .getText == "SELECT 2")
+
+    assert(ifStmt.elseBody.get.collection.head.isInstanceOf[IfElseStatement])
+    val nestedIf_1 = ifStmt.elseBody.get.collection.head.asInstanceOf[IfElseStatement]
+
+    assert(nestedIf_1.conditions.length == 2)
+    assert(nestedIf_1.conditionalBodies.length == 2)
+    assert(nestedIf_1.elseBody.nonEmpty)
+
+
+    assert(nestedIf_1.conditions.head.isInstanceOf[SingleStatement])
+    assert(nestedIf_1.conditions.head.getText == "3 = 3")
+
+    assert(nestedIf_1.conditionalBodies.head.collection.head.isInstanceOf[SingleStatement])
+    assert(nestedIf_1.conditionalBodies.head.collection.head.asInstanceOf[SingleStatement]
+      .getText == "SELECT 3")
+
+    assert(nestedIf_1.conditions(1).isInstanceOf[SingleStatement])
+    assert(nestedIf_1.conditions(1).getText == "4 = 4")
+
+    assert(nestedIf_1.conditionalBodies(1).collection.head.isInstanceOf[SingleStatement])
+    assert(nestedIf_1.conditionalBodies(1).collection.head.asInstanceOf[SingleStatement]
+      .getText == "SELECT 4")
+
+    assert(nestedIf_1.elseBody.get.collection.head.isInstanceOf[IfElseStatement])
+    val nestedIf_2 = nestedIf_1.elseBody.get.collection.head.asInstanceOf[IfElseStatement]
+
+    assert(nestedIf_2.conditions.length == 1)
+    assert(nestedIf_2.conditionalBodies.length == 1)
+    assert(nestedIf_2.elseBody.nonEmpty)
+
+    assert(nestedIf_2.conditionalBodies.head.collection.head.asInstanceOf[SingleStatement]
+      .getText == "SELECT 5")
+
+    assert(nestedIf_2.elseBody.get.collection.head.asInstanceOf[SingleStatement]
+      .getText == "SELECT 6")
   }
 
   test("if nested") {
