@@ -53,7 +53,7 @@ object IntegrationTestUtils {
     sys.props.getOrElse("spark.test.home", sys.env("SPARK_HOME"))
   }
 
-  private[sql] lazy val connectClientHomeDir = s"$sparkHome/connector/connect/client/jvm"
+  private[sql] lazy val connectClientHomeDir = s"$sparkHome/sql/connect/client/jvm"
 
   private[sql] lazy val connectClientTestClassDir = {
     s"$connectClientHomeDir/target/$scalaDir/test-classes"
