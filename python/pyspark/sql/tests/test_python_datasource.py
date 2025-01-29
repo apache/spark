@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 import os
+import platform
 import tempfile
 import unittest
 from typing import Callable, Union
@@ -508,6 +509,9 @@ class BasePythonDataSourceTestsMixin:
         ):
             df.write.format("test").mode("append").saveAsTable("test_table")
 
+    @unittest.skipIf(
+        "pypy" in platform.python_implementation().lower(), "cannot run in environment pypy"
+    )
     def test_data_source_segfault(self):
         import ctypes
 
