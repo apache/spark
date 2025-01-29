@@ -41,7 +41,7 @@ import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.connect.ConnectConversions._
 import org.apache.spark.sql.connect.client.{RetryPolicy, SparkConnectClient, SparkResult}
-import org.apache.spark.sql.connect.test.{ConnectFunSuite, IntegrationTestUtils, RemoteSparkSession, SQLHelper}
+import org.apache.spark.sql.connect.test.{ConnectFunSuite, IntegrationTestUtils, QueryTest, RemoteSparkSession, SQLHelper}
 import org.apache.spark.sql.connect.test.SparkConnectServerUtils.port
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SqlApiConf
@@ -49,7 +49,8 @@ import org.apache.spark.sql.types._
 import org.apache.spark.util.SparkThreadUtils
 
 class ClientE2ETestSuite
-    extends ConnectFunSuite
+    extends QueryTest
+    with ConnectFunSuite
     with RemoteSparkSession
     with SQLHelper
     with PrivateMethodTester {
@@ -1630,6 +1631,35 @@ class ClientE2ETestSuite
           .build())
       .create()
     assert(sparkWithLowerMaxMessageSize.range(maxBatchSize).collect().length == maxBatchSize)
+  }
+
+  test("SPARK-50965: Multiple positional parameterized nodes in the parsed logical plan") {
+    var df = spark.sql("SELECT ?", Array(0))
+    for (i <- 1 until 3) {
+      val temp = spark.sql("SELECT ?", Array(i))
+      df = df.union(temp)
+    }
+    checkAnswer(df, (0 until 3).map(i => Row(i)))
+  }
+
+  test("SPARK-50965: Multiple named parameterized nodes in the parsed logical plan") {
+    var df = spark.sql("SELECT :key", args = Map("key" -> 0))
+    for (i <- 1 until 3) {
+      val temp = spark.sql("SELECT :key", args = Map("key" -> i))
+      df = df.union(temp)
+    }
+    checkAnswer(df, (0 until 3).map(i => Row(i)))
+  }
+
+  test(
+    "SPARK-50965: Multiple named and positional parameterized nodes in the parsed logical plan") {
+    var df = spark.sql("SELECT ?", Array(0))
+    df = df.union(spark.sql("SELECT :key", args = Map("key" -> 1)))
+    for (i <- 1 until 3) {
+      df = df.union(spark.sql("SELECT ?", Array(2 * i)))
+      df = df.union(spark.sql("SELECT :key", args = Map("key" -> (2 * i + 1))))
+    }
+    checkAnswer(df, (0 until 6).map(i => Row(i)))
   }
 }
 
