@@ -23,14 +23,7 @@ import numpy as np
 from pyspark.util import is_remote_only
 from pyspark.sql import SparkSession
 from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
-
-have_torcheval = True
-torcheval_requirement_message = None
-try:
-    import torcheval  # noqa: F401
-except ImportError:
-    have_torcheval = False
-    torcheval_requirement_message = "torcheval is required"
+from pyspark.testing.utils import have_torcheval, torcheval_requirement_message
 
 if should_test_connect:
     from pyspark.ml.connect.evaluation import (

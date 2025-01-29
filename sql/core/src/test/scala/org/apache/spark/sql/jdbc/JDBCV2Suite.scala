@@ -24,7 +24,7 @@ import scala.util.control.NonFatal
 
 import test.org.apache.spark.sql.connector.catalog.functions.JavaStrLen.JavaStrLenStaticMagic
 
-import org.apache.spark.{SparkConf, SparkException}
+import org.apache.spark.{SparkConf, SparkException, SparkIllegalArgumentException}
 import org.apache.spark.sql.{AnalysisException, DataFrame, ExplainSuiteHelper, QueryTest, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, IndexAlreadyExistsException, NoSuchIndexException}
@@ -396,7 +396,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       .option("pushDownOffset", null)
       .table("h2.test.employee")
     checkError(
-      exception = intercept[AnalysisException] {
+      exception = intercept[SparkIllegalArgumentException] {
         df.collect()
       },
       condition = "NULL_DATA_SOURCE_OPTION",
@@ -1633,15 +1633,15 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     checkAnswer(df4, Seq(Row(6, "jen", 12000, 1200, true)))
 
     val df5 = sql("SELECT name FROM h2.test.employee WHERE " +
-      "aes_encrypt(cast(null as string), name) is null")
+      "aes_encrypt(name, '1234567812345678') != 'spark'")
     checkFiltersRemoved(df5, false)
-    val expectedPlanFragment5 = "PushedFilters: [], "
+    val expectedPlanFragment5 = "PushedFilters: [NAME IS NOT NULL], "
     checkPushedInfo(df5, expectedPlanFragment5)
     checkAnswer(df5, Seq(Row("amy"), Row("cathy"), Row("alex"), Row("david"), Row("jen")))
 
     val df6 = sql("SELECT name FROM h2.test.employee WHERE " +
       "aes_decrypt(cast(null as binary), name) is null")
-    checkFiltersRemoved(df6, false)
+    checkFiltersRemoved(df6) // removed by null intolerant opt
     val expectedPlanFragment6 = "PushedFilters: [], "
     checkPushedInfo(df6, expectedPlanFragment6)
     checkAnswer(df6, Seq(Row("amy"), Row("cathy"), Row("alex"), Row("david"), Row("jen")))
@@ -3097,4 +3097,21 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     assert(rows.contains(Row(null)))
     assert(rows.contains(Row("a a a")))
   }
+
+  test("SPARK-50792: Format binary data as a binary literal in JDBC.") {
+    val tableName = "h2.test.binary_literal"
+    withTable(tableName) {
+      // Create a table with binary column
+      val binary = "X'123456'"
+
+      sql(s"CREATE TABLE $tableName (binary_col BINARY)")
+      sql(s"INSERT INTO $tableName VALUES ($binary)")
+
+      val df = sql(s"SELECT * FROM $tableName WHERE binary_col = $binary")
+      checkFiltersRemoved(df)
+      checkPushedInfo(df, "PushedFilters: [binary_col IS NOT NULL, binary_col = 0x123456]")
+      checkAnswer(df, Row(Array(18, 52, 86)))
+    }
+  }
+
 }

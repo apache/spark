@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.expressions.{ExpectsInputTypes, Expression,
 import org.apache.spark.sql.catalyst.trees.BinaryLike
 import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.internal.types.StringTypeWithCaseAccentSensitivity
+import org.apache.spark.sql.internal.types.StringTypeWithCollation
 import org.apache.spark.sql.types.{AbstractDataType, BinaryType, BooleanType, DataType, IntegerType, LongType, StringType, TypeCollection}
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -109,7 +109,7 @@ case class HllSketchAgg(
       TypeCollection(
         IntegerType,
         LongType,
-        StringTypeWithCaseAccentSensitivity(/* supportsTrimCollation = */ true),
+        StringTypeWithCollation(supportsTrimCollation = true),
         BinaryType),
       IntegerType)
 

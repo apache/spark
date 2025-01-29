@@ -19,15 +19,15 @@ import unittest
 
 from pyspark.errors import PySparkTypeError, PySparkValueError
 from pyspark.testing.connectutils import should_test_connect
-from pyspark.errors.exceptions.connect import (
-    AnalysisException,
-    SparkConnectException,
-)
 from pyspark.sql.tests.connect.test_connect_basic import SparkConnectSQLTestCase
 
 if should_test_connect:
     from pyspark.sql import functions as SF
     from pyspark.sql.connect import functions as CF
+    from pyspark.errors.exceptions.connect import (
+        AnalysisException,
+        SparkConnectException,
+    )
 
 
 class SparkConnectStatTests(SparkConnectSQLTestCase):

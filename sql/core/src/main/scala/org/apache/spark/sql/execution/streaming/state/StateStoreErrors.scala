@@ -123,11 +123,6 @@ object StateStoreErrors {
     new StatefulProcessorCannotPerformOperationWithInvalidHandleState(operationType, handleState)
   }
 
-  def cannotReInitializeStateOnKey(groupingKey: String):
-    StatefulProcessorCannotReInitializeState = {
-    new StatefulProcessorCannotReInitializeState(groupingKey)
-  }
-
   def cannotProvideTTLConfigForTimeMode(stateName: String, timeMode: String):
     StatefulProcessorCannotAssignTTLInTimeMode = {
     new StatefulProcessorCannotAssignTTLInTimeMode(stateName, timeMode)
@@ -148,6 +143,29 @@ object StateStoreErrors {
       storedValueSchema: String,
       newValueSchema: String): StateStoreValueSchemaNotCompatible = {
     new StateStoreValueSchemaNotCompatible(storedValueSchema, newValueSchema)
+  }
+
+  def stateStoreInvalidValueSchemaEvolution(
+      oldValueSchema: String,
+      newValueSchema: String): StateStoreInvalidValueSchemaEvolution = {
+    new StateStoreInvalidValueSchemaEvolution(oldValueSchema, newValueSchema)
+  }
+
+  def stateStoreValueSchemaEvolutionThresholdExceeded(
+      numSchemaEvolutions: Int,
+      maxSchemaEvolutions: Int,
+      colFamilyName: String): StateStoreValueSchemaEvolutionThresholdExceeded = {
+    new StateStoreValueSchemaEvolutionThresholdExceeded(
+      numSchemaEvolutions, maxSchemaEvolutions, colFamilyName)
+  }
+
+  def streamingStateSchemaFilesThresholdExceeded(
+      numSchemaFiles: Int,
+      schemaFilesThreshold: Int,
+      addedColFamilies: List[String],
+      removedColFamilies: List[String]): StateStoreStateSchemaFilesThresholdExceeded = {
+    new StateStoreStateSchemaFilesThresholdExceeded(
+      numSchemaFiles, schemaFilesThreshold, addedColFamilies, removedColFamilies)
   }
 
   def stateStoreColumnFamilyMismatch(
@@ -272,11 +290,6 @@ class StatefulProcessorCannotPerformOperationWithInvalidHandleState(
     messageParameters = Map("operationType" -> operationType, "handleState" -> handleState)
   )
 
-class StatefulProcessorCannotReInitializeState(groupingKey: String)
-  extends SparkUnsupportedOperationException(
-  errorClass = "STATEFUL_PROCESSOR_CANNOT_REINITIALIZE_STATE_ON_KEY",
-  messageParameters = Map("groupingKey" -> groupingKey))
-
 class StateStoreUnsupportedOperationOnMissingColumnFamily(
     operationType: String,
     colFamilyName: String) extends SparkUnsupportedOperationException(
@@ -332,6 +345,39 @@ class StateStoreValueSchemaNotCompatible(
     messageParameters = Map(
       "storedValueSchema" -> storedValueSchema,
       "newValueSchema" -> newValueSchema))
+
+class StateStoreInvalidValueSchemaEvolution(
+    oldValueSchema: String,
+    newValueSchema: String)
+  extends SparkUnsupportedOperationException(
+    errorClass = "STATE_STORE_INVALID_VALUE_SCHEMA_EVOLUTION",
+    messageParameters = Map(
+      "oldValueSchema" -> oldValueSchema,
+      "newValueSchema" -> newValueSchema))
+
+class StateStoreValueSchemaEvolutionThresholdExceeded(
+    numSchemaEvolutions: Int,
+    maxSchemaEvolutions: Int,
+    colFamilyName: String)
+  extends SparkUnsupportedOperationException(
+    errorClass = "STATE_STORE_VALUE_SCHEMA_EVOLUTION_THRESHOLD_EXCEEDED",
+    messageParameters = Map(
+      "numSchemaEvolutions" -> numSchemaEvolutions.toString,
+      "maxSchemaEvolutions" -> maxSchemaEvolutions.toString,
+      "colFamilyName" -> colFamilyName))
+
+class StateStoreStateSchemaFilesThresholdExceeded(
+    numStateSchemaFiles: Int,
+    maxStateSchemaFiles: Int,
+    addedColFamilies: List[String],
+    removedColFamilies: List[String])
+  extends SparkUnsupportedOperationException(
+    errorClass = "STATE_STORE_STATE_SCHEMA_FILES_THRESHOLD_EXCEEDED",
+    messageParameters = Map(
+      "numStateSchemaFiles" -> numStateSchemaFiles.toString,
+      "maxStateSchemaFiles" -> maxStateSchemaFiles.toString,
+      "addedColumnFamilies" -> addedColFamilies.mkString("(", ",", ")"),
+      "removedColumnFamilies" -> removedColFamilies.mkString("(", ",", ")")))
 
 class StateStoreSnapshotFileNotFound(fileToRead: String, clazz: String)
   extends SparkRuntimeException(

@@ -177,7 +177,7 @@ public class LevelDB implements KVStore {
 
       // Deserialize outside synchronized block
       List<byte[]> list = new ArrayList<>(entry.getValue().size());
-      for (Object value : values) {
+      for (Object value : entry.getValue()) {
         list.add(serializer.serialize(value));
       }
       serializedValueIter = list.iterator();
@@ -191,6 +191,7 @@ public class LevelDB implements KVStore {
 
         try (WriteBatch batch = db().createWriteBatch()) {
           while (valueIter.hasNext()) {
+            assert serializedValueIter.hasNext();
             updateBatch(batch, valueIter.next(), serializedValueIter.next(), klass,
               naturalIndex, indices);
           }

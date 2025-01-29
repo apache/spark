@@ -168,7 +168,8 @@ class HadoopMapReduceCommitProtocol(
     // Note that %05d does not truncate the split number, so if we have more than 100000 tasks,
     // the file name is fine and won't overflow.
     val split = taskContext.getTaskAttemptID.getTaskID.getId
-    f"${spec.prefix}part-$split%05d-$jobId${spec.suffix}"
+    val basename = taskContext.getConfiguration.get("mapreduce.output.basename", "part")
+    f"${spec.prefix}$basename-$split%05d-$jobId${spec.suffix}"
   }
 
   override def setupJob(jobContext: JobContext): Unit = {

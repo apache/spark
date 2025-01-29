@@ -50,9 +50,16 @@ struct<make_timestamp_ltz(2021, 7, 11, 6, 30, 45.678, CET):timestamp>
 -- !query
 SELECT make_timestamp_ltz(2021, 07, 11, 6, 30, 60.007)
 -- !query schema
-struct<make_timestamp_ltz(2021, 7, 11, 6, 30, 60.007):timestamp>
+struct<>
 -- !query output
-NULL
+org.apache.spark.SparkDateTimeException
+{
+  "errorClass" : "INVALID_FRACTION_OF_SECOND",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "secAndMicros" : "60.007"
+  }
+}
 
 
 -- !query

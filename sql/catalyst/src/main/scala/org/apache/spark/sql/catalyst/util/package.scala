@@ -25,6 +25,7 @@ import com.google.common.io.ByteStreams
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.connector.catalog.MetadataColumn
 import org.apache.spark.sql.types.{MetadataBuilder, NumericType, StringType, StructType}
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.{SparkErrorUtils, Utils}
@@ -193,7 +194,10 @@ package object util extends Logging {
     QUALIFIED_ACCESS_ONLY,
     FileSourceMetadataAttribute.FILE_SOURCE_METADATA_COL_ATTR_KEY,
     FileSourceConstantMetadataStructField.FILE_SOURCE_CONSTANT_METADATA_COL_ATTR_KEY,
-    FileSourceGeneratedMetadataStructField.FILE_SOURCE_GENERATED_METADATA_COL_ATTR_KEY
+    FileSourceGeneratedMetadataStructField.FILE_SOURCE_GENERATED_METADATA_COL_ATTR_KEY,
+    MetadataColumn.PRESERVE_ON_DELETE,
+    MetadataColumn.PRESERVE_ON_UPDATE,
+    MetadataColumn.PRESERVE_ON_REINSERT
   )
 
   def removeInternalMetadata(schema: StructType): StructType = {

@@ -776,7 +776,7 @@ Project [NULL AS Expected#x, variablereference(system.session.var1=CAST(NULL AS 
 -- !query
 DECLARE OR REPLACE VARIABLE var1 STRING DEFAULT CURRENT_DATABASE()
 -- !query analysis
-CreateVariable defaultvalueexpression(cast(current_database() as string), CURRENT_DATABASE()), true
+CreateVariable defaultvalueexpression(cast(current_schema() as string), CURRENT_DATABASE()), true
 +- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.var1
 
 
@@ -2050,7 +2050,7 @@ WithCTE
 :        +- OneRowRelation
 +- Project [c1#x AS 1#x]
    +- SubqueryAlias v1
-      +- CTERelationRef xxxx, true, [c1#x], false
+      +- CTERelationRef xxxx, true, [c1#x], false, false
 
 
 -- !query

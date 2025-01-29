@@ -19,8 +19,6 @@ package org.apache.spark.shuffle
 
 import java.util.zip.{Adler32, CRC32, CRC32C}
 
-import org.apache.hadoop.util.PureJavaCrc32C
-
 import org.apache.spark.benchmark.{Benchmark, BenchmarkBase}
 
 /**
@@ -41,17 +39,14 @@ object ChecksumBenchmark extends BenchmarkBase {
     runBenchmark("Benchmark Checksum Algorithms") {
       val data: Array[Byte] = (1 until 32 * 1024 * 1024).map(_.toByte).toArray
       val benchmark = new Benchmark("Checksum Algorithms", N, 3, output = output)
+      benchmark.addCase(s"Adler32") { _ =>
+        (1 to N).foreach(_ => new Adler32().update(data))
+      }
       benchmark.addCase("CRC32") { _ =>
         (1 to N).foreach(_ => new CRC32().update(data))
       }
       benchmark.addCase(s"CRC32C") { _ =>
         (1 to N).foreach(_ => new CRC32C().update(data))
-      }
-      benchmark.addCase(s"Adler32") { _ =>
-        (1 to N).foreach(_ => new Adler32().update(data))
-      }
-      benchmark.addCase(s"hadoop PureJavaCrc32C") { _ =>
-        (1 to N).foreach(_ => new PureJavaCrc32C().update(data))
       }
       benchmark.run()
     }

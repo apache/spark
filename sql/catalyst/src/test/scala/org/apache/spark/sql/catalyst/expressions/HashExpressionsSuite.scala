@@ -625,8 +625,8 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       val s1 = "aaa"
       val s2 = "AAA"
 
-      val murmur3Hash1 = Murmur3Hash(Seq(Collate(Literal(s1), collation)), 42)
-      val murmur3Hash2 = Murmur3Hash(Seq(Collate(Literal(s2), collation)), 42)
+      val murmur3Hash1 = Murmur3Hash(Seq(Collate(Literal(s1), ResolvedCollation(collation))), 42)
+      val murmur3Hash2 = Murmur3Hash(Seq(Collate(Literal(s2), ResolvedCollation(collation))), 42)
 
       // Interpreted hash values for s1 and s2
       val interpretedHash1 = murmur3Hash1.eval()
@@ -636,7 +636,7 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       checkEvaluation(murmur3Hash1, interpretedHash1)
       checkEvaluation(murmur3Hash2, interpretedHash2)
 
-      if (CollationFactory.fetchCollation(collation).supportsBinaryEquality) {
+      if (CollationFactory.fetchCollation(collation).isUtf8BinaryType) {
         assert(interpretedHash1 != interpretedHash2)
       } else {
         assert(interpretedHash1 == interpretedHash2)

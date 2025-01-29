@@ -467,7 +467,7 @@ abstract class DStream[T: ClassTag] (
         // Explicitly remove blocks of BlockRDD
         rdd match {
           case b: BlockRDD[_] =>
-            logInfo(log"Removing blocks of RDD ${MDC(LogKeys.RDD_ID, b)} " +
+            logInfo(log"Removing blocks of RDD ${MDC(LogKeys.RDD, b)} " +
               log"of time ${MDC(LogKeys.TIME, time)}")
             b.removeBlocks()
           case _ =>

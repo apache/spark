@@ -193,52 +193,96 @@ Project [map_zip_with(cast(decimal_map2#x as map<double,decimal(36,35)>), double
 SELECT map_zip_with(string_map1, int_map, (k, v1, v2) -> struct(k, v1, v2)) m
 FROM various_maps
 -- !query analysis
-Project [map_zip_with(string_map1#x, cast(int_map#x as map<string,int>), lambdafunction(struct(k, lambda k#x, v1, lambda v1#x, v2, lambda v2#x), lambda k#x, lambda v1#x, lambda v2#x, false)) AS m#x]
-+- SubqueryAlias various_maps
-   +- View (`various_maps`, [boolean_map#x, tinyint_map#x, smallint_map#x, int_map#x, bigint_map#x, decimal_map1#x, decimal_map2#x, double_map#x, float_map#x, date_map#x, timestamp_map#x, string_map1#x, string_map2#x, string_map3#x, string_map4#x, array_map1#x, array_map2#x, struct_map1#x, struct_map2#x])
-      +- Project [cast(boolean_map#x as map<boolean,boolean>) AS boolean_map#x, cast(tinyint_map#x as map<tinyint,tinyint>) AS tinyint_map#x, cast(smallint_map#x as map<smallint,smallint>) AS smallint_map#x, cast(int_map#x as map<int,int>) AS int_map#x, cast(bigint_map#x as map<bigint,bigint>) AS bigint_map#x, cast(decimal_map1#x as map<decimal(36,0),decimal(36,0)>) AS decimal_map1#x, cast(decimal_map2#x as map<decimal(36,35),decimal(36,35)>) AS decimal_map2#x, cast(double_map#x as map<double,double>) AS double_map#x, cast(float_map#x as map<float,float>) AS float_map#x, cast(date_map#x as map<date,date>) AS date_map#x, cast(timestamp_map#x as map<timestamp,timestamp>) AS timestamp_map#x, cast(string_map1#x as map<string,string>) AS string_map1#x, cast(string_map2#x as map<string,string>) AS string_map2#x, cast(string_map3#x as map<string,string>) AS string_map3#x, cast(string_map4#x as map<string,string>) AS string_map4#x, cast(array_map1#x as map<array<bigint>,array<bigint>>) AS array_map1#x, cast(array_map2#x as map<array<int>,array<int>>) AS array_map2#x, cast(struct_map1#x as map<struct<col1:smallint,col2:bigint>,struct<col1:smallint,col2:bigint>>) AS struct_map1#x, cast(struct_map2#x as map<struct<col1:int,col2:int>,struct<col1:int,col2:int>>) AS struct_map2#x]
-         +- Project [boolean_map#x, tinyint_map#x, smallint_map#x, int_map#x, bigint_map#x, decimal_map1#x, decimal_map2#x, double_map#x, float_map#x, date_map#x, timestamp_map#x, string_map1#x, string_map2#x, string_map3#x, string_map4#x, array_map1#x, array_map2#x, struct_map1#x, struct_map2#x]
-            +- SubqueryAlias various_maps
-               +- LocalRelation [boolean_map#x, tinyint_map#x, smallint_map#x, int_map#x, bigint_map#x, decimal_map1#x, decimal_map2#x, double_map#x, float_map#x, date_map#x, timestamp_map#x, string_map1#x, string_map2#x, string_map3#x, string_map4#x, array_map1#x, array_map2#x, struct_map1#x, struct_map2#x]
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.MAP_ZIP_WITH_DIFF_TYPES",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "functionName" : "`map_zip_with`",
+    "leftType" : "\"STRING\"",
+    "rightType" : "\"INT\"",
+    "sqlExpr" : "\"map_zip_with(string_map1, int_map, lambdafunction(struct(k, v1, v2), k, v1, v2))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 75,
+    "fragment" : "map_zip_with(string_map1, int_map, (k, v1, v2) -> struct(k, v1, v2))"
+  } ]
+}
 
 
 -- !query
 SELECT map_zip_with(string_map2, date_map, (k, v1, v2) -> struct(k, v1, v2)) m
 FROM various_maps
 -- !query analysis
-Project [map_zip_with(string_map2#x, cast(date_map#x as map<string,date>), lambdafunction(struct(k, lambda k#x, v1, lambda v1#x, v2, lambda v2#x), lambda k#x, lambda v1#x, lambda v2#x, false)) AS m#x]
-+- SubqueryAlias various_maps
-   +- View (`various_maps`, [boolean_map#x, tinyint_map#x, smallint_map#x, int_map#x, bigint_map#x, decimal_map1#x, decimal_map2#x, double_map#x, float_map#x, date_map#x, timestamp_map#x, string_map1#x, string_map2#x, string_map3#x, string_map4#x, array_map1#x, array_map2#x, struct_map1#x, struct_map2#x])
-      +- Project [cast(boolean_map#x as map<boolean,boolean>) AS boolean_map#x, cast(tinyint_map#x as map<tinyint,tinyint>) AS tinyint_map#x, cast(smallint_map#x as map<smallint,smallint>) AS smallint_map#x, cast(int_map#x as map<int,int>) AS int_map#x, cast(bigint_map#x as map<bigint,bigint>) AS bigint_map#x, cast(decimal_map1#x as map<decimal(36,0),decimal(36,0)>) AS decimal_map1#x, cast(decimal_map2#x as map<decimal(36,35),decimal(36,35)>) AS decimal_map2#x, cast(double_map#x as map<double,double>) AS double_map#x, cast(float_map#x as map<float,float>) AS float_map#x, cast(date_map#x as map<date,date>) AS date_map#x, cast(timestamp_map#x as map<timestamp,timestamp>) AS timestamp_map#x, cast(string_map1#x as map<string,string>) AS string_map1#x, cast(string_map2#x as map<string,string>) AS string_map2#x, cast(string_map3#x as map<string,string>) AS string_map3#x, cast(string_map4#x as map<string,string>) AS string_map4#x, cast(array_map1#x as map<array<bigint>,array<bigint>>) AS array_map1#x, cast(array_map2#x as map<array<int>,array<int>>) AS array_map2#x, cast(struct_map1#x as map<struct<col1:smallint,col2:bigint>,struct<col1:smallint,col2:bigint>>) AS struct_map1#x, cast(struct_map2#x as map<struct<col1:int,col2:int>,struct<col1:int,col2:int>>) AS struct_map2#x]
-         +- Project [boolean_map#x, tinyint_map#x, smallint_map#x, int_map#x, bigint_map#x, decimal_map1#x, decimal_map2#x, double_map#x, float_map#x, date_map#x, timestamp_map#x, string_map1#x, string_map2#x, string_map3#x, string_map4#x, array_map1#x, array_map2#x, struct_map1#x, struct_map2#x]
-            +- SubqueryAlias various_maps
-               +- LocalRelation [boolean_map#x, tinyint_map#x, smallint_map#x, int_map#x, bigint_map#x, decimal_map1#x, decimal_map2#x, double_map#x, float_map#x, date_map#x, timestamp_map#x, string_map1#x, string_map2#x, string_map3#x, string_map4#x, array_map1#x, array_map2#x, struct_map1#x, struct_map2#x]
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.MAP_ZIP_WITH_DIFF_TYPES",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "functionName" : "`map_zip_with`",
+    "leftType" : "\"STRING\"",
+    "rightType" : "\"DATE\"",
+    "sqlExpr" : "\"map_zip_with(string_map2, date_map, lambdafunction(struct(k, v1, v2), k, v1, v2))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 76,
+    "fragment" : "map_zip_with(string_map2, date_map, (k, v1, v2) -> struct(k, v1, v2))"
+  } ]
+}
 
 
 -- !query
 SELECT map_zip_with(timestamp_map, string_map3, (k, v1, v2) -> struct(k, v1, v2)) m
 FROM various_maps
 -- !query analysis
-Project [map_zip_with(cast(timestamp_map#x as map<string,timestamp>), string_map3#x, lambdafunction(struct(k, lambda k#x, v1, lambda v1#x, v2, lambda v2#x), lambda k#x, lambda v1#x, lambda v2#x, false)) AS m#x]
-+- SubqueryAlias various_maps
-   +- View (`various_maps`, [boolean_map#x, tinyint_map#x, smallint_map#x, int_map#x, bigint_map#x, decimal_map1#x, decimal_map2#x, double_map#x, float_map#x, date_map#x, timestamp_map#x, string_map1#x, string_map2#x, string_map3#x, string_map4#x, array_map1#x, array_map2#x, struct_map1#x, struct_map2#x])
-      +- Project [cast(boolean_map#x as map<boolean,boolean>) AS boolean_map#x, cast(tinyint_map#x as map<tinyint,tinyint>) AS tinyint_map#x, cast(smallint_map#x as map<smallint,smallint>) AS smallint_map#x, cast(int_map#x as map<int,int>) AS int_map#x, cast(bigint_map#x as map<bigint,bigint>) AS bigint_map#x, cast(decimal_map1#x as map<decimal(36,0),decimal(36,0)>) AS decimal_map1#x, cast(decimal_map2#x as map<decimal(36,35),decimal(36,35)>) AS decimal_map2#x, cast(double_map#x as map<double,double>) AS double_map#x, cast(float_map#x as map<float,float>) AS float_map#x, cast(date_map#x as map<date,date>) AS date_map#x, cast(timestamp_map#x as map<timestamp,timestamp>) AS timestamp_map#x, cast(string_map1#x as map<string,string>) AS string_map1#x, cast(string_map2#x as map<string,string>) AS string_map2#x, cast(string_map3#x as map<string,string>) AS string_map3#x, cast(string_map4#x as map<string,string>) AS string_map4#x, cast(array_map1#x as map<array<bigint>,array<bigint>>) AS array_map1#x, cast(array_map2#x as map<array<int>,array<int>>) AS array_map2#x, cast(struct_map1#x as map<struct<col1:smallint,col2:bigint>,struct<col1:smallint,col2:bigint>>) AS struct_map1#x, cast(struct_map2#x as map<struct<col1:int,col2:int>,struct<col1:int,col2:int>>) AS struct_map2#x]
-         +- Project [boolean_map#x, tinyint_map#x, smallint_map#x, int_map#x, bigint_map#x, decimal_map1#x, decimal_map2#x, double_map#x, float_map#x, date_map#x, timestamp_map#x, string_map1#x, string_map2#x, string_map3#x, string_map4#x, array_map1#x, array_map2#x, struct_map1#x, struct_map2#x]
-            +- SubqueryAlias various_maps
-               +- LocalRelation [boolean_map#x, tinyint_map#x, smallint_map#x, int_map#x, bigint_map#x, decimal_map1#x, decimal_map2#x, double_map#x, float_map#x, date_map#x, timestamp_map#x, string_map1#x, string_map2#x, string_map3#x, string_map4#x, array_map1#x, array_map2#x, struct_map1#x, struct_map2#x]
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.MAP_ZIP_WITH_DIFF_TYPES",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "functionName" : "`map_zip_with`",
+    "leftType" : "\"TIMESTAMP\"",
+    "rightType" : "\"STRING\"",
+    "sqlExpr" : "\"map_zip_with(timestamp_map, string_map3, lambdafunction(struct(k, v1, v2), k, v1, v2))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 81,
+    "fragment" : "map_zip_with(timestamp_map, string_map3, (k, v1, v2) -> struct(k, v1, v2))"
+  } ]
+}
 
 
 -- !query
 SELECT map_zip_with(decimal_map1, string_map4, (k, v1, v2) -> struct(k, v1, v2)) m
 FROM various_maps
 -- !query analysis
-Project [map_zip_with(cast(decimal_map1#x as map<string,decimal(36,0)>), string_map4#x, lambdafunction(struct(k, lambda k#x, v1, lambda v1#x, v2, lambda v2#x), lambda k#x, lambda v1#x, lambda v2#x, false)) AS m#x]
-+- SubqueryAlias various_maps
-   +- View (`various_maps`, [boolean_map#x, tinyint_map#x, smallint_map#x, int_map#x, bigint_map#x, decimal_map1#x, decimal_map2#x, double_map#x, float_map#x, date_map#x, timestamp_map#x, string_map1#x, string_map2#x, string_map3#x, string_map4#x, array_map1#x, array_map2#x, struct_map1#x, struct_map2#x])
-      +- Project [cast(boolean_map#x as map<boolean,boolean>) AS boolean_map#x, cast(tinyint_map#x as map<tinyint,tinyint>) AS tinyint_map#x, cast(smallint_map#x as map<smallint,smallint>) AS smallint_map#x, cast(int_map#x as map<int,int>) AS int_map#x, cast(bigint_map#x as map<bigint,bigint>) AS bigint_map#x, cast(decimal_map1#x as map<decimal(36,0),decimal(36,0)>) AS decimal_map1#x, cast(decimal_map2#x as map<decimal(36,35),decimal(36,35)>) AS decimal_map2#x, cast(double_map#x as map<double,double>) AS double_map#x, cast(float_map#x as map<float,float>) AS float_map#x, cast(date_map#x as map<date,date>) AS date_map#x, cast(timestamp_map#x as map<timestamp,timestamp>) AS timestamp_map#x, cast(string_map1#x as map<string,string>) AS string_map1#x, cast(string_map2#x as map<string,string>) AS string_map2#x, cast(string_map3#x as map<string,string>) AS string_map3#x, cast(string_map4#x as map<string,string>) AS string_map4#x, cast(array_map1#x as map<array<bigint>,array<bigint>>) AS array_map1#x, cast(array_map2#x as map<array<int>,array<int>>) AS array_map2#x, cast(struct_map1#x as map<struct<col1:smallint,col2:bigint>,struct<col1:smallint,col2:bigint>>) AS struct_map1#x, cast(struct_map2#x as map<struct<col1:int,col2:int>,struct<col1:int,col2:int>>) AS struct_map2#x]
-         +- Project [boolean_map#x, tinyint_map#x, smallint_map#x, int_map#x, bigint_map#x, decimal_map1#x, decimal_map2#x, double_map#x, float_map#x, date_map#x, timestamp_map#x, string_map1#x, string_map2#x, string_map3#x, string_map4#x, array_map1#x, array_map2#x, struct_map1#x, struct_map2#x]
-            +- SubqueryAlias various_maps
-               +- LocalRelation [boolean_map#x, tinyint_map#x, smallint_map#x, int_map#x, bigint_map#x, decimal_map1#x, decimal_map2#x, double_map#x, float_map#x, date_map#x, timestamp_map#x, string_map1#x, string_map2#x, string_map3#x, string_map4#x, array_map1#x, array_map2#x, struct_map1#x, struct_map2#x]
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.MAP_ZIP_WITH_DIFF_TYPES",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "functionName" : "`map_zip_with`",
+    "leftType" : "\"DECIMAL(36,0)\"",
+    "rightType" : "\"STRING\"",
+    "sqlExpr" : "\"map_zip_with(decimal_map1, string_map4, lambdafunction(struct(k, v1, v2), k, v1, v2))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 80,
+    "fragment" : "map_zip_with(decimal_map1, string_map4, (k, v1, v2) -> struct(k, v1, v2))"
+  } ]
+}
 
 
 -- !query

@@ -1124,7 +1124,7 @@ case class MapZipWith(left: Expression, right: Expression, function: Expression)
 
   private def getKeysWithIndexesFast(keys1: ArrayData, keys2: ArrayData) = {
     val hashMap = new mutable.LinkedHashMap[Any, Array[Option[Int]]]
-    for((z, array) <- Array((0, keys1), (1, keys2))) {
+    for ((z, array) <- Array((0, keys1), (1, keys2))) {
       var i = 0
       while (i < array.numElements()) {
         val key = array.get(i, keyType)
@@ -1146,7 +1146,7 @@ case class MapZipWith(left: Expression, right: Expression, function: Expression)
 
   private def getKeysWithIndexesBruteForce(keys1: ArrayData, keys2: ArrayData) = {
     val arrayBuffer = new mutable.ArrayBuffer[(Any, Array[Option[Int]])]
-    for((z, array) <- Array((0, keys1), (1, keys2))) {
+    for ((z, array) <- Array((0, keys1), (1, keys2))) {
       var i = 0
       while (i < array.numElements()) {
         val key = array.get(i, keyType)
@@ -1156,7 +1156,7 @@ case class MapZipWith(left: Expression, right: Expression, function: Expression)
           val (bufferKey, indexes) = arrayBuffer(j)
           if (ordering.equiv(bufferKey, key)) {
             found = true
-            if(indexes(z).isEmpty) {
+            if (indexes(z).isEmpty) {
               indexes(z) = Some(i)
             }
           }

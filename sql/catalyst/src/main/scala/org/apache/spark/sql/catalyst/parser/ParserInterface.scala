@@ -62,10 +62,4 @@ trait ParserInterface extends DataTypeParserInterface {
    */
   @throws[ParseException]("Text cannot be parsed to a LogicalPlan")
   def parseQuery(sqlText: String): LogicalPlan
-
-  /**
-   * Parse a SQL script string to a [[CompoundBody]].
-   */
-  @throws[ParseException]("Text cannot be parsed to a CompoundBody")
-  def parseScript(sqlScriptText: String): CompoundBody
 }

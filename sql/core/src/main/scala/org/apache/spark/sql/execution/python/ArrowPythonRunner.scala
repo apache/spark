@@ -38,7 +38,7 @@ abstract class BaseArrowPythonRunner(
     override val pythonMetrics: Map[String, SQLMetric],
     jobArtifactUUID: Option[String])
   extends BasePythonRunner[Iterator[InternalRow], ColumnarBatch](
-    funcs.map(_._1), evalType, argOffsets, jobArtifactUUID)
+    funcs.map(_._1), evalType, argOffsets, jobArtifactUUID, pythonMetrics)
   with BasicPythonArrowInput
   with BasicPythonArrowOutput {
 
@@ -50,6 +50,7 @@ abstract class BaseArrowPythonRunner(
 
   override val errorOnDuplicatedFieldNames: Boolean = true
 
+  override val hideTraceback: Boolean = SQLConf.get.pysparkHideTraceback
   override val simplifiedTraceback: Boolean = SQLConf.get.pysparkSimplifiedTraceback
 
   // Use lazy val to initialize the fields before these are accessed in [[PythonArrowInput]]'s
@@ -116,6 +117,9 @@ object ArrowPythonRunner {
       conf.pandasGroupedMapAssignColumnsByName.toString)
     val arrowSafeTypeCheck = Seq(SQLConf.PANDAS_ARROW_SAFE_TYPE_CONVERSION.key ->
       conf.arrowSafeTypeConversion.toString)
-    Map(timeZoneConf ++ pandasColsByName ++ arrowSafeTypeCheck: _*)
+    val arrowAyncParallelism = conf.pythonUDFArrowConcurrencyLevel.map(v =>
+      Seq(SQLConf.PYTHON_UDF_ARROW_CONCURRENCY_LEVEL.key -> v.toString)
+    ).getOrElse(Seq.empty)
+    Map(timeZoneConf ++ pandasColsByName ++ arrowSafeTypeCheck ++ arrowAyncParallelism: _*)
   }
 }

@@ -78,9 +78,25 @@ SELECT
     map_concat(int_string_map1, tinyint_map2) istt_map
 FROM various_maps
 -- !query schema
-struct<ts_map:map<smallint,smallint>,si_map:map<int,int>,ib_map:map<bigint,bigint>,bd_map:map<decimal(20,0),decimal(20,0)>,df_map:map<double,double>,std_map:map<string,string>,tst_map:map<string,string>,sti_map:map<string,string>,istt_map:map<int,string>>
+struct<>
 -- !query output
-{1:2,3:4}	{1:2,7:8}	{4:6,8:9}	{6:7,9223372036854775808:9223372036854775809}	{3.0:4.0,9.223372036854776E18:9.223372036854776E18}	{"2016-03-12":"2016-03-11","a":"b"}	{"2016-11-15 20:54:00":"2016-11-12 20:54:00","c":"d"}	{"7":"8","a":"b"}	{1:"a",3:"4"}
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "dataType" : "(\"MAP<STRING, STRING>\" or \"MAP<DATE, DATE>\")",
+    "functionName" : "`map_concat`",
+    "sqlExpr" : "\"map_concat(string_map1, date_map2)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 257,
+    "stopIndex" : 290,
+    "fragment" : "map_concat(string_map1, date_map2)"
+  } ]
+}
 
 
 -- !query

@@ -23,29 +23,6 @@ from contextlib import contextmanager
 import decimal
 from typing import Any, Union
 
-tabulate_requirement_message = None
-try:
-    from tabulate import tabulate
-except ImportError as e:
-    # If tabulate requirement is not satisfied, skip related tests.
-    tabulate_requirement_message = str(e)
-have_tabulate = tabulate_requirement_message is None
-
-matplotlib_requirement_message = None
-try:
-    import matplotlib
-except ImportError as e:
-    # If matplotlib requirement is not satisfied, skip related tests.
-    matplotlib_requirement_message = str(e)
-have_matplotlib = matplotlib_requirement_message is None
-
-plotly_requirement_message = None
-try:
-    import plotly
-except ImportError as e:
-    # If plotly requirement is not satisfied, skip related tests.
-    plotly_requirement_message = str(e)
-have_plotly = plotly_requirement_message is None
 
 try:
     from pyspark.sql.pandas.utils import require_minimum_pandas_version

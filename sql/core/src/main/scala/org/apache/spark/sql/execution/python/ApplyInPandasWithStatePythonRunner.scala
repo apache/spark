@@ -65,7 +65,8 @@ class ApplyInPandasWithStatePythonRunner(
     stateValueSchema: StructType,
     override val pythonMetrics: Map[String, SQLMetric],
     jobArtifactUUID: Option[String])
-  extends BasePythonRunner[InType, OutType](funcs.map(_._1), evalType, argOffsets, jobArtifactUUID)
+  extends BasePythonRunner[InType, OutType](
+    funcs.map(_._1), evalType, argOffsets, jobArtifactUUID, pythonMetrics)
   with PythonArrowInput[InType]
   with PythonArrowOutput[OutType] {
 
@@ -83,6 +84,7 @@ class ApplyInPandasWithStatePythonRunner(
   override protected lazy val timeZoneId: String = _timeZoneId
   override val errorOnDuplicatedFieldNames: Boolean = true
 
+  override val hideTraceback: Boolean = sqlConf.pysparkHideTraceback
   override val simplifiedTraceback: Boolean = sqlConf.pysparkSimplifiedTraceback
 
   override protected val largeVarTypes: Boolean = sqlConf.arrowUseLargeVarTypes

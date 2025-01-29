@@ -297,6 +297,8 @@ class VectorIndexerModel private[ml] (
 
   import VectorIndexerModel._
 
+  private[ml] def this() = this(Identifiable.randomUID("vecIdx"), -1, Map.empty)
+
   /** Java-friendly version of [[categoryMaps]] */
   @Since("1.4.0")
   def javaCategoryMaps: JMap[JInt, JMap[JDouble, JInt]] = {
@@ -445,7 +447,9 @@ class VectorIndexerModel private[ml] (
     SchemaUtils.checkColumnType(schema, $(inputCol), dataType)
 
     // If the input metadata specifies numFeatures, compare with expected numFeatures.
-    val origAttrGroup = AttributeGroup.fromStructField(schema($(inputCol)))
+    val origAttrGroup = AttributeGroup.fromStructField(
+      SchemaUtils.getSchemaField(schema, $(inputCol))
+    )
     val origNumFeatures: Option[Int] = if (origAttrGroup.attributes.nonEmpty) {
       Some(origAttrGroup.attributes.get.length)
     } else {
@@ -466,7 +470,9 @@ class VectorIndexerModel private[ml] (
    * @return  Output column field.  This field does not contain non-ML metadata.
    */
   private def prepOutputField(schema: StructType): StructField = {
-    val origAttrGroup = AttributeGroup.fromStructField(schema($(inputCol)))
+    val origAttrGroup = AttributeGroup.fromStructField(
+      SchemaUtils.getSchemaField(schema, $(inputCol))
+    )
     val featureAttributes: Array[Attribute] = if (origAttrGroup.attributes.nonEmpty) {
       // Convert original attributes to modified attributes
       val origAttrs: Array[Attribute] = origAttrGroup.attributes.get

@@ -57,7 +57,7 @@ class DB2KrbIntegrationSuite extends DockerKrbJDBCIntegrationSuite {
     override def beforeContainerStart(
         hostConfigBuilder: HostConfig,
         containerConfigBuilder: ContainerConfig): Unit = {
-      copyExecutableResource("db2_krb_setup.sh", initDbDir, replaceIp)
+      copyExecutableResource("db2-krb-setup.sh", initDbDir, replaceIp)
 
       val newBind = new Bind(
         initDbDir.getAbsolutePath,

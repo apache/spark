@@ -1463,7 +1463,7 @@ class DatasetSuite extends QueryTest
     checkAnswer(df.map(row => row)(ExpressionEncoder(df.schema)).select("b", "a"), Row(2, 1))
   }
 
-  private def checkShowString[T](ds: Dataset[T], expected: String): Unit = {
+  private def checkShowString[T](ds: classic.Dataset[T], expected: String): Unit = {
     val numRows = expected.split("\n").length - 4
     val actual = ds.showString(numRows, truncate = 20)
 
@@ -1928,20 +1928,20 @@ class DatasetSuite extends QueryTest
       exception = intercept[SparkUnsupportedOperationException] {
         Seq(CircularReferenceClassA(null)).toDS()
       },
-      condition = "_LEGACY_ERROR_TEMP_2139",
-      parameters = Map("t" -> "org.apache.spark.sql.CircularReferenceClassA"))
+      condition = "CIRCULAR_CLASS_REFERENCE",
+      parameters = Map("t" -> "'org.apache.spark.sql.CircularReferenceClassA'"))
     checkError(
       exception = intercept[SparkUnsupportedOperationException] {
         Seq(CircularReferenceClassC(null)).toDS()
       },
-      condition = "_LEGACY_ERROR_TEMP_2139",
-      parameters = Map("t" -> "org.apache.spark.sql.CircularReferenceClassC"))
+      condition = "CIRCULAR_CLASS_REFERENCE",
+      parameters = Map("t" -> "'org.apache.spark.sql.CircularReferenceClassC'"))
     checkError(
       exception = intercept[SparkUnsupportedOperationException] {
         Seq(CircularReferenceClassD(null)).toDS()
       },
-      condition = "_LEGACY_ERROR_TEMP_2139",
-      parameters = Map("t" -> "org.apache.spark.sql.CircularReferenceClassD"))
+      condition = "CIRCULAR_CLASS_REFERENCE",
+      parameters = Map("t" -> "'org.apache.spark.sql.CircularReferenceClassD'"))
   }
 
   test("SPARK-20125: option of map") {
@@ -2431,9 +2431,9 @@ class DatasetSuite extends QueryTest
   }
 
   test("SparkSession.active should be the same instance after dataset operations") {
-    val active = SparkSession.getActiveSession.get
+    val active = classic.SparkSession.getActiveSession.get
     val clone = active.cloneSession()
-    val ds = new Dataset(clone, spark.range(10).queryExecution.logical, Encoders.INT)
+    val ds = new classic.Dataset(clone, spark.range(10).queryExecution.logical, Encoders.INT)
 
     ds.queryExecution.analyzed
 
@@ -2820,6 +2820,29 @@ class DatasetSuite extends QueryTest
       Row(1, "a", 1) :: Row(1, "a", 1) :: Row(2, "b", 2) :: Nil)
   }
 
+  test("SPARK-49961: transform type should be consistent (classic)") {
+    val ds = Seq(1, 2).toDS()
+    val f: classic.Dataset[Int] => classic.Dataset[Int] =
+      d => d.selectExpr("(value + 1) value").as[Int]
+    val transformed = ds.transform(f)
+    assert(transformed.collect().sorted === Array(2, 3))
+  }
+
+  test("SPARK-49961: transform type should be consistent (base to classic)") {
+    val ds = Seq(1, 2).toDS()
+    val f: Dataset[Int] => classic.Dataset[Int] =
+      d => d.selectExpr("(value + 1) value").as[Int]
+    val transformed = ds.transform(f)
+    assert(transformed.collect().sorted === Array(2, 3))
+  }
+
+  test("SPARK-49961: transform type should be consistent (as base)") {
+    val ds = Seq(1, 2).toDS().asInstanceOf[Dataset[Int]]
+    val f: Dataset[Int] => Dataset[Int] =
+      d => d.selectExpr("(value + 1) value").as[Int]
+    val transformed = ds.transform(f)
+    assert(transformed.collect().sorted === Array(2, 3))
+  }
 }
 
 /**
@@ -2972,7 +2995,7 @@ object JavaData {
 
 /** Used to test importing dataset.spark.implicits._ */
 object DatasetTransform {
-  def addOne(ds: Dataset[Int]): Dataset[Int] = {
+  def addOne(ds: classic.Dataset[Int]): Dataset[Int] = {
     import ds.sparkSession.implicits._
     ds.map(_ + 1)
   }

@@ -806,7 +806,7 @@ private[spark] class TaskSetManager(
     val info = taskInfos(tid)
     // SPARK-37300: when the task was already finished state, just ignore it,
     // so that there won't cause successful and tasksSuccessful wrong result.
-    if(info.finished) {
+    if (info.finished) {
       if (dropTaskInfoAccumulablesOnTaskCompletion) {
         // SPARK-46383: Clear out the accumulables for a completed task to reduce accumulable
         // lifetime.
@@ -1001,7 +1001,7 @@ private[spark] class TaskSetManager(
           logError(
             log"Task ${MDC(TASK_INDEX, info.index)}.${MDC(TASK_ATTEMPT_ID, info.attemptNumber)} " +
               log"in stage ${MDC(STAGE_ID, taskSet.stageId)}." +
-            log"${MDC(STAGE_ATTEMPT, taskSet.stageAttemptId)} (TID ${MDC(TASK_ID, tid)}) " +
+            log"${MDC(STAGE_ATTEMPT_ID, taskSet.stageAttemptId)} (TID ${MDC(TASK_ID, tid)}) " +
             log"can not write to output file: ${MDC(ERROR, ef.description)}; not retrying")
           emptyTaskInfoAccumulablesAndNotifyDagScheduler(tid, tasks(index), reason, null,
             accumUpdates, metricPeaks)

@@ -22,6 +22,7 @@ name: "Build (branch-3.5, Scala 2.13, Hadoop 3, JDK 8)"
 on:
   schedule:
     - cron: '0 11 * * *'
+  workflow_dispatch:
 
 jobs:
   run-build:
@@ -37,6 +38,7 @@ jobs:
       envs: >-
         {
           "SCALA_PROFILE": "scala2.13",
+          "PYSPARK_IMAGE_TO_TEST": "",
           "PYTHON_TO_TEST": "",
           "ORACLE_DOCKER_IMAGE_NAME": "gvenzl/oracle-xe:21.3.0"
         }

@@ -177,7 +177,7 @@ private[spark] class Executor(
   // Whether to monitor killed / interrupted tasks
   private val taskReaperEnabled = conf.get(TASK_REAPER_ENABLED)
 
-  private val killOnFatalErrorDepth = conf.get(EXECUTOR_KILL_ON_FATAL_ERROR_DEPTH)
+  private val killOnFatalErrorDepth = conf.get(KILL_ON_FATAL_ERROR_DEPTH)
 
   private val systemLoader = Utils.getContextOrSparkClassLoader
 
@@ -1195,6 +1195,7 @@ private[spark] class Executor(
           if (sourceURI.getFragment != null) sourceURI.getFragment else source.getName)
         logInfo(
           log"Unpacking an archive ${LogMDC(ARCHIVE_NAME, name)}" +
+            log" (${LogMDC(BYTE_SIZE, source.length)} bytes)" +
             log" from ${LogMDC(SOURCE_PATH, source.getAbsolutePath)}" +
             log" to ${LogMDC(DESTINATION_PATH, dest.getAbsolutePath)}")
         Utils.deleteRecursively(dest)

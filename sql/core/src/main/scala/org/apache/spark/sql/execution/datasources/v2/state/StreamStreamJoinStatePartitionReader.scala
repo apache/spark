@@ -102,10 +102,15 @@ class StreamStreamJoinStatePartitionReader(
 
   private lazy val iter = {
     if (joinStateManager == null) {
+      // Here we don't know the StateStoreCheckpointID, so we set it to None in both stateInfo
+      // and `keyToNumValuesStateStoreCkptId` and `keyWithIndexToValueStateStoreCkptId` passed
+      // into SymmetricHashJoinStateManager.
+      // TODO after we persistent the StateStoreCheckpointID to the commit log, we can get it from
+      // there and pass it in.
       val stateInfo = StatefulOperatorStateInfo(
         partition.sourceOptions.stateCheckpointLocation.toString,
         partition.queryId, partition.sourceOptions.operatorId,
-        partition.sourceOptions.batchId + 1, -1)
+        partition.sourceOptions.batchId + 1, -1, None)
       joinStateManager = new SymmetricHashJoinStateManager(
         joinSide,
         inputAttributes,
@@ -114,6 +119,8 @@ class StreamStreamJoinStatePartitionReader(
         storeConf = storeConf,
         hadoopConf = hadoopConf.value,
         partitionId = partition.partition,
+        keyToNumValuesStateStoreCkptId = None,
+        keyWithIndexToValueStateStoreCkptId = None,
         formatVersion,
         skippedNullValueCount = None,
         useStateStoreCoordinator = false,

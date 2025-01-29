@@ -273,8 +273,9 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with 
   }
 
   test("json_tuple escaping") {
-    GenerateUnsafeProjection.generate(
-      JsonTuple(Literal("\"quote") ::  Literal("\"quote") :: Nil) :: Nil)
+    checkJsonTuple(
+      JsonTuple(Literal("\"quote") ::  Literal("\"quote") :: Nil),
+      InternalRow.fromSeq(Seq(null).map(UTF8String.fromString)))
   }
 
   test("json_tuple - hive key 1") {
@@ -582,7 +583,7 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with 
     val schema = StructType(StructField("\"quote", IntegerType) :: Nil)
     val struct = Literal.create(create_row(1), schema)
     GenerateUnsafeProjection.generate(
-      StructsToJson(Map.empty, struct, UTC_OPT) :: Nil)
+      StructsToJson(Map.empty, struct, UTC_OPT).replacement :: Nil)
   }
 
   test("to_json - struct") {
@@ -791,13 +792,13 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with 
   }
 
   test("verify corrupt column") {
-    checkExceptionInExpression[AnalysisException](
+    checkErrorInExpression[AnalysisException](
       JsonToStructs(
         schema = StructType.fromDDL("i int, _unparsed boolean"),
         options = Map("columnNameOfCorruptRecord" -> "_unparsed"),
         child = Literal.create("""{"i":"a"}"""),
-        timeZoneId = UTC_OPT),
-      expectedErrMsg = "The field for corrupt records must be string type and nullable")
+        timeZoneId = UTC_OPT), null, "INVALID_CORRUPT_RECORD_TYPE",
+      Map("columnName" -> "`_unparsed`", "actualType" -> "\"BOOLEAN\""))
   }
 
   def decimalInput(langTag: String): (Decimal, String) = {

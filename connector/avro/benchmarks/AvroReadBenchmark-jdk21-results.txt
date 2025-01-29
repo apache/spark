@@ -2,140 +2,140 @@
 SQL Single Numeric Column Scan
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 21.0.4+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 21.0.5+11-LTS on Linux 6.8.0-1017-azure
 AMD EPYC 7763 64-Core Processor
 SQL Single TINYINT Column Scan:           Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Sum                                                2061           2066           7          7.6         131.0       1.0X
+Sum                                                1971           1989          26          8.0         125.3       1.0X
 
-OpenJDK 64-Bit Server VM 21.0.4+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 21.0.5+11-LTS on Linux 6.8.0-1017-azure
 AMD EPYC 7763 64-Core Processor
 SQL Single SMALLINT Column Scan:          Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Sum                                                2032           2033           2          7.7         129.2       1.0X
+Sum                                                1958           2014          80          8.0         124.5       1.0X
 
-OpenJDK 64-Bit Server VM 21.0.4+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 21.0.5+11-LTS on Linux 6.8.0-1017-azure
 AMD EPYC 7763 64-Core Processor
 SQL Single INT Column Scan:               Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Sum                                                1992           2005          19          7.9         126.6       1.0X
+Sum                                                1956           1987          44          8.0         124.3       1.0X
 
-OpenJDK 64-Bit Server VM 21.0.4+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 21.0.5+11-LTS on Linux 6.8.0-1017-azure
 AMD EPYC 7763 64-Core Processor
 SQL Single BIGINT Column Scan:            Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Sum                                                1992           2017          35          7.9         126.6       1.0X
+Sum                                                1953           1962          12          8.1         124.2       1.0X
 
-OpenJDK 64-Bit Server VM 21.0.4+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 21.0.5+11-LTS on Linux 6.8.0-1017-azure
 AMD EPYC 7763 64-Core Processor
 SQL Single FLOAT Column Scan:             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Sum                                                1981           1981           0          7.9         125.9       1.0X
+Sum                                                1948           1950           3          8.1         123.9       1.0X
 
-OpenJDK 64-Bit Server VM 21.0.4+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 21.0.5+11-LTS on Linux 6.8.0-1017-azure
 AMD EPYC 7763 64-Core Processor
 SQL Single DOUBLE Column Scan:            Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Sum                                                1981           1984           4          7.9         126.0       1.0X
+Sum                                                1933           1938           6          8.1         122.9       1.0X
 
 
 ================================================================================================
 Int and String Scan
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 21.0.4+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 21.0.5+11-LTS on Linux 6.8.0-1017-azure
 AMD EPYC 7763 64-Core Processor
 Int and String Scan:                      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Sum of columns                                     3863           3867           5          2.7         368.4       1.0X
+Sum of columns                                     3570           3574           6          2.9         340.4       1.0X
 
 
 ================================================================================================
 Partitioned Table Scan
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 21.0.4+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 21.0.5+11-LTS on Linux 6.8.0-1017-azure
 AMD EPYC 7763 64-Core Processor
 Partitioned Table:                        Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Data column                                        2129           2143          20          7.4         135.4       1.0X
-Partition column                                   1984           1986           2          7.9         126.1       1.1X
-Both columns                                       2209           2231          31          7.1         140.4       1.0X
+Data column                                        2062           2083          30          7.6         131.1       1.0X
+Partition column                                   1869           1873           5          8.4         118.9       1.1X
+Both columns                                       2057           2093          51          7.6         130.8       1.0X
 
 
 ================================================================================================
 Repeated String Scan
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 21.0.4+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 21.0.5+11-LTS on Linux 6.8.0-1017-azure
 AMD EPYC 7763 64-Core Processor
 Repeated String:                          Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Sum of string length                               2511           2564          75          4.2         239.5       1.0X
+Sum of string length                               2010           2012           3          5.2         191.7       1.0X
 
 
 ================================================================================================
 String with Nulls Scan
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 21.0.4+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 21.0.5+11-LTS on Linux 6.8.0-1017-azure
 AMD EPYC 7763 64-Core Processor
 String with Nulls Scan (0.0%):            Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Sum of string length                               3303           3317          20          3.2         315.0       1.0X
+Sum of string length                               3082           3094          16          3.4         293.9       1.0X
 
-OpenJDK 64-Bit Server VM 21.0.4+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 21.0.5+11-LTS on Linux 6.8.0-1017-azure
 AMD EPYC 7763 64-Core Processor
 String with Nulls Scan (50.0%):           Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Sum of string length                               2221           2252          44          4.7         211.8       1.0X
+Sum of string length                               2220           2245          36          4.7         211.7       1.0X
 
-OpenJDK 64-Bit Server VM 21.0.4+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 21.0.5+11-LTS on Linux 6.8.0-1017-azure
 AMD EPYC 7763 64-Core Processor
 String with Nulls Scan (95.0%):           Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Sum of string length                               1170           1174           6          9.0         111.6       1.0X
+Sum of string length                               1152           1159          10          9.1         109.9       1.0X
 
 
 ================================================================================================
 Select All From Wide Columns
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 21.0.4+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 21.0.5+11-LTS on Linux 6.8.0-1017-azure
 AMD EPYC 7763 64-Core Processor
 Wide Column Scan from 1000 columns:       Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Select of all columns                             19095          19150          78          0.0       38190.4       1.0X
+Select of all columns                             20941          20946           6          0.0       41882.8       1.0X
 
 
 ================================================================================================
 Single Column Scan From Wide Columns
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 21.0.4+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 21.0.5+11-LTS on Linux 6.8.0-1017-azure
 AMD EPYC 7763 64-Core Processor
 Single Column Scan from 100 columns:      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Sum of single column                               3188           3192           4          0.3        3040.7       1.0X
+Sum of single column                               3425           3440          21          0.3        3266.1       1.0X
 
-OpenJDK 64-Bit Server VM 21.0.4+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 21.0.5+11-LTS on Linux 6.8.0-1017-azure
 AMD EPYC 7763 64-Core Processor
 Single Column Scan from 200 columns:      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Sum of single column                               6229           6254          35          0.2        5940.6       1.0X
+Sum of single column                               6740           6770          43          0.2        6427.4       1.0X
 
-OpenJDK 64-Bit Server VM 21.0.4+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 21.0.5+11-LTS on Linux 6.8.0-1017-azure
 AMD EPYC 7763 64-Core Processor
 Single Column Scan from 300 columns:      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Sum of single column                               9279           9318          56          0.1        8848.8       1.0X
+Sum of single column                               9988          10056          96          0.1        9525.4       1.0X
 
 
-OpenJDK 64-Bit Server VM 21.0.4+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 21.0.5+11-LTS on Linux 6.8.0-1017-azure
 AMD EPYC 7763 64-Core Processor
 Filters pushdown:                         Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-w/o filters                                        5538           5544           7          0.2        5537.5       1.0X
-pushdown disabled                                  5546           5571          24          0.2        5546.5       1.0X
-w/ filters                                         2312           2324          18          0.4        2312.4       2.4X
+w/o filters                                        5802           5844          44          0.2        5801.7       1.0X
+pushdown disabled                                  5544           5616          97          0.2        5543.9       1.0X
+w/ filters                                         2605           2609           5          0.4        2605.4       2.2X
 

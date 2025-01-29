@@ -146,7 +146,7 @@ class StreamingTestsForeachBatchMixin:
     def my_test_function_2():
         return 2
 
-    def test_streaming_foreach_batch_fuction_calling(self):
+    def test_streaming_foreach_batch_function_calling(self):
         def my_test_function_3():
             return 3
 

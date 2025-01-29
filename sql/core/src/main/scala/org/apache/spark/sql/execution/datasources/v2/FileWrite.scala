@@ -49,7 +49,7 @@ trait FileWrite extends Write {
 
   private val schema = info.schema()
   private val queryId = info.queryId()
-  private val options = info.options()
+  val options = info.options()
 
   override def description(): String = formatName
 

@@ -901,6 +901,23 @@ class QueryCompilationErrorsSuite
     }
   }
 
+  test("SPARK-50779: the object level collations feature is unsupported when flag is disabled") {
+    withSQLConf(SQLConf.OBJECT_LEVEL_COLLATIONS_ENABLED.key -> "false") {
+      Seq(
+        "CREATE TABLE t (c STRING) USING parquet DEFAULT COLLATION UNICODE",
+        "REPLACE TABLE t (c STRING) USING parquet DEFAULT COLLATION UNICODE_CI",
+        "ALTER TABLE t DEFAULT COLLATION sr_CI_AI",
+        "CREATE VIEW v DEFAULT COLLATION UNICODE as SELECT * FROM t",
+        "CREATE TEMPORARY VIEW v DEFAULT COLLATION UTF8_LCASE as SELECT * FROM t"
+      ).foreach { sqlText =>
+        checkError(
+          exception = intercept[AnalysisException](sql(sqlText)),
+          condition = "UNSUPPORTED_FEATURE.OBJECT_LEVEL_COLLATIONS"
+        )
+      }
+    }
+  }
+
   test("UNSUPPORTED_CALL: call the unsupported method update()") {
     checkError(
       exception = intercept[SparkUnsupportedOperationException] {

@@ -79,7 +79,7 @@ trait ExpressionEvalHelper extends ScalaCheckDrivenPropertyChecks with PlanTestB
   private def prepareEvaluation(expression: Expression): Expression = {
     val serializer = new JavaSerializer(new SparkConf()).newInstance()
     val resolver = ResolveTimeZone
-    val expr = resolver.resolveTimeZones(replace(expression))
+    val expr = replace(resolver.resolveTimeZones(expression))
     assert(expr.resolved)
     serializer.deserialize(serializer.serialize(expr))
   }

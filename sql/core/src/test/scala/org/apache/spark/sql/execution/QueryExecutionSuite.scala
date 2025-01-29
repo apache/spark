@@ -18,15 +18,17 @@ package org.apache.spark.sql.execution
 
 import scala.collection.mutable
 import scala.io.Source
+import scala.util.Try
 
-import org.apache.spark.sql.{AnalysisException, Dataset, ExtendedExplainGenerator, FastOperator}
-import org.apache.spark.sql.catalyst.{QueryPlanningTracker, QueryPlanningTrackerCallback}
-import org.apache.spark.sql.catalyst.analysis.CurrentNamespace
-import org.apache.spark.sql.catalyst.expressions.UnsafeRow
+import org.apache.spark.sql.{AnalysisException, ExtendedExplainGenerator, FastOperator}
+import org.apache.spark.sql.catalyst.{QueryPlanningTracker, QueryPlanningTrackerCallback, TableIdentifier}
+import org.apache.spark.sql.catalyst.analysis.{CurrentNamespace, UnresolvedFunction, UnresolvedRelation}
+import org.apache.spark.sql.catalyst.expressions.{Alias, UnsafeRow}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{CommandResult, LogicalPlan, OneRowRelation, Project, ShowTables, SubqueryAlias}
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.catalyst.util.StringUtils.PlanStringConcat
+import org.apache.spark.sql.classic.Dataset
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, QueryStageExec}
 import org.apache.spark.sql.execution.datasources.v2.ShowTablesExec
@@ -405,6 +407,21 @@ class QueryExecutionSuite extends SharedSparkSession {
     }
   }
 
+  test("SPARK-50600: Failed analysis should send analyzed event") {
+    val mockCallback = MockCallback()
+
+    def table(ref: String): LogicalPlan = UnresolvedRelation(TableIdentifier(ref))
+
+    val unresolvedUndefinedFunc = UnresolvedFunction("unknown", Seq.empty, isDistinct = false)
+    val plan = Project(Seq(Alias(unresolvedUndefinedFunc, "call1")()), table("table"))
+    val dataset = Try {
+      val df = Dataset.ofRows(spark, plan, new QueryPlanningTracker(Some(mockCallback)))
+      df.queryExecution.assertAnalyzed()
+    }
+    assert(dataset.failed.get.isInstanceOf[AnalysisException])
+    mockCallback.assertAnalyzed()
+  }
+
   case class MockCallbackEagerCommand(
       var trackerAnalyzed: QueryPlanningTracker = null,
       var trackerReadyForExecution: QueryPlanningTracker = null)
@@ -447,6 +464,15 @@ class QueryExecutionSuite extends SharedSparkSession {
       var trackerAnalyzed: QueryPlanningTracker = null,
       var trackerReadyForExecution: QueryPlanningTracker = null)
       extends QueryPlanningTrackerCallback {
+    override def analysisFailed(
+        trackerFromCallback: QueryPlanningTracker,
+        analyzedPlan: LogicalPlan): Unit = {
+      trackerAnalyzed = trackerFromCallback
+      assert(!trackerAnalyzed.phases.keySet.contains(QueryPlanningTracker.ANALYSIS))
+      assert(!trackerAnalyzed.phases.keySet.contains(QueryPlanningTracker.OPTIMIZATION))
+      assert(!trackerAnalyzed.phases.keySet.contains(QueryPlanningTracker.PLANNING))
+      assert(analyzedPlan != null)
+    }
     def analyzed(trackerFromCallback: QueryPlanningTracker, plan: LogicalPlan): Unit = {
       trackerAnalyzed = trackerFromCallback
       assert(trackerAnalyzed.phases.keySet.contains(QueryPlanningTracker.ANALYSIS))

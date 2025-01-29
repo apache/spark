@@ -936,7 +936,7 @@ class PandasOnSparkSeriesMethods:
 
         def pandas_concat(*series: pd.Series) -> pd.DataFrame:
             # The input can only be a DataFrame for struct from Spark 3.0.
-            # This works around makeing the input as a frame. See SPARK-27240
+            # This works around making the input as a frame. See SPARK-27240
             pdf = pd.concat(series, axis=1)
             pdf.columns = columns
             return pdf

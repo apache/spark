@@ -419,7 +419,7 @@ def choose_jira_assignee(issue):
                     annotations.append("Commentator")
                 print("[%d] %s (%s)" % (idx, author.displayName, ",".join(annotations)))
             raw_assignee = bold_input(
-                "Enter number of user, or userid, to assign to (blank to leave unassigned):"
+                "Enter number of user, or userid, to assign to (blank to leave unassigned): "
             )
             if raw_assignee == "":
                 return None

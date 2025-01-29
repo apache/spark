@@ -20,10 +20,10 @@ package org.apache.spark.sql.execution.analysis
 import scala.collection.mutable
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.Dataset
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, AttributeSet, Cast, Equality, Expression, ExprId}
 import org.apache.spark.sql.catalyst.plans.logical.{Join, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.classic.Dataset
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.MetadataBuilder

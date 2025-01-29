@@ -415,6 +415,20 @@ case class UnclosedCommentProcessor(command: String, tokenStream: CommonTokenStr
     }
   }
 
+  override def exitCompoundOrSingleStatement(
+      ctx: SqlBaseParser.CompoundOrSingleStatementContext): Unit = {
+    // Same as in exitSingleStatement, we shouldn't parse the comments in SET command.
+    if (Option(ctx.singleStatement()).forall(
+        !_.setResetStatement().isInstanceOf[SqlBaseParser.SetConfigurationContext])) {
+      checkUnclosedComment(tokenStream, command)
+    }
+  }
+
+  override def exitSingleCompoundStatement(
+      ctx: SqlBaseParser.SingleCompoundStatementContext): Unit = {
+    checkUnclosedComment(tokenStream, command)
+  }
+
   /** check `has_unclosed_bracketed_comment` to find out the unclosed bracketed comment. */
   private def checkUnclosedComment(tokenStream: CommonTokenStream, command: String) = {
     assert(tokenStream.getTokenSource.isInstanceOf[SqlBaseLexer])

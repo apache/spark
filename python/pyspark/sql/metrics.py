@@ -21,10 +21,10 @@ from typing import Optional, List, Tuple, Dict, Any, Union, TYPE_CHECKING, Seque
 from pyspark.errors import PySparkValueError
 
 if TYPE_CHECKING:
-    from pyspark.testing.connectutils import have_graphviz
-
-    if have_graphviz:
+    try:
         import graphviz  # type: ignore
+    except ImportError:
+        pass
 
 
 class ObservedMetrics(abc.ABC):

@@ -21,6 +21,7 @@ import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.analysis.{NoSuchPartitionException, PartitionsAlreadyExistException}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util.quoteIdentifier
+import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -170,10 +171,20 @@ trait AlterTableRenamePartitionSuiteBase extends QueryTest with DDLCommandTestUt
       checkPartitions(t, Map("id" -> "1"))
 
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
-        val errMsg = intercept[AnalysisException] {
-          sql(s"ALTER TABLE $t PARTITION (ID = 1) RENAME TO PARTITION (id = 2)")
-        }.getMessage
-        assert(errMsg.contains("ID is not a valid partition column"))
+        val expectedTableName = if (commandVersion == DDLCommandTestUtils.V1_COMMAND_VERSION) {
+          s"`$SESSION_CATALOG_NAME`.`ns`.`tbl`"
+        } else {
+          "`test_catalog`.`ns`.`tbl`"
+        }
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql(s"ALTER TABLE $t PARTITION (ID = 1) RENAME TO PARTITION (id = 2)")
+          },
+          condition = "PARTITIONS_NOT_FOUND",
+          parameters = Map(
+            "partitionList" -> "`ID`",
+            "tableName" -> expectedTableName)
+        )
         checkPartitions(t, Map("id" -> "1"))
       }
 

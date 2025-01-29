@@ -27,11 +27,12 @@ import org.scalatest.Assertions
 
 import org.apache.spark.{SparkEnv, SparkException, SparkUnsupportedOperationException}
 import org.apache.spark.rdd.BlockRDD
-import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, Row, SparkSession}
+import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.plans.logical.Aggregate
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, SinglePartition}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
+import org.apache.spark.sql.classic.{DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.execution.exchange.Exchange
 import org.apache.spark.sql.execution.streaming._
@@ -872,6 +873,26 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
       assertNumStateRows(
         total = Seq(1), updated = Seq(1), droppedByWatermark = Seq(0), removed = Some(Seq(2)))
     )
+  }
+
+  testWithAllStateVersions("test that avro encoding is not supported") {
+    val inputData = MemoryStream[Int]
+
+    val aggregated =
+      inputData.toDF()
+        .groupBy($"value")
+        .agg(count("*"))
+        .as[(Int, Long)]
+
+    val ex = intercept[Exception] {
+      withSQLConf(SQLConf.STREAMING_STATE_STORE_ENCODING_FORMAT.key -> "avro") {
+        testStream(aggregated, Update)(
+          AddData(inputData, 3),
+          ProcessAllAvailable()
+        )
+      }
+    }
+    assert(ex.getMessage.contains("State store encoding format as avro is not supported"))
   }
 
   private def prepareTestForChangingSchemaOfState(

@@ -12,10 +12,10 @@ WithCTE
 +- Project [x#x, y#x, x#x, y#x]
    +- Join Inner
       :- SubqueryAlias q1
-      :  +- CTERelationRef xxxx, true, [x#x, y#x], false
+      :  +- CTERelationRef xxxx, true, [x#x, y#x], false, false
       +- SubqueryAlias q2
          +- SubqueryAlias q1
-            +- CTERelationRef xxxx, true, [x#x, y#x], false
+            +- CTERelationRef xxxx, true, [x#x, y#x], false, false
 
 
 -- !query
@@ -194,7 +194,7 @@ WithCTE
    +- SubqueryAlias q
       +- Project [foo#x]
          +- SubqueryAlias cte
-            +- CTERelationRef xxxx, true, [foo#x], false
+            +- CTERelationRef xxxx, true, [foo#x], false, false
 
 
 -- !query
@@ -222,13 +222,13 @@ WithCTE
 :                 +- Union false, false
 :                    :- Project [2#x]
 :                    :  +- SubqueryAlias innermost
-:                    :     +- CTERelationRef xxxx, true, [2#x], false
+:                    :     +- CTERelationRef xxxx, true, [2#x], false, false
 :                    +- Project [3 AS 3#x]
 :                       +- OneRowRelation
 +- Sort [x#x ASC NULLS FIRST], true
    +- Project [x#x]
       +- SubqueryAlias outermost
-         +- CTERelationRef xxxx, true, [x#x], false
+         +- CTERelationRef xxxx, true, [x#x], false, false
 
 
 -- !query
@@ -418,7 +418,7 @@ WithCTE
 :        +- OneRowRelation
 +- Project [x#x]
    +- SubqueryAlias ordinality
-      +- CTERelationRef xxxx, true, [x#x], false
+      +- CTERelationRef xxxx, true, [x#x], false, false
 
 
 -- !query
@@ -459,7 +459,7 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
       :        +- OneRowRelation
       +- Project [42#x]
          +- SubqueryAlias test
-            +- CTERelationRef xxxx, true, [42#x], false
+            +- CTERelationRef xxxx, true, [42#x], false, false
 
 
 -- !query

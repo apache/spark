@@ -21,6 +21,7 @@ import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.analysis.NoSuchPartitionException
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util.quoteIdentifier
+import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -103,10 +104,20 @@ trait TruncateTableSuiteBase extends QueryTest with DDLCommandTestUtils {
       }
 
       // throw exception if the column in partition spec is not a partition column.
-      val errMsg = intercept[AnalysisException] {
-        sql(s"TRUNCATE TABLE $t PARTITION (unknown = 1)")
-      }.getMessage
-      assert(errMsg.contains("unknown is not a valid partition column"))
+      val expectedTableName = if (commandVersion == DDLCommandTestUtils.V1_COMMAND_VERSION) {
+        s"`$SESSION_CATALOG_NAME`.`ns`.`parttable`"
+      } else {
+        "`test_catalog`.`ns`.`partTable`"
+      }
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"TRUNCATE TABLE $t PARTITION (unknown = 1)")
+        },
+        condition = "PARTITIONS_NOT_FOUND",
+        parameters = Map(
+          "partitionList" -> "`unknown`",
+          "tableName" -> expectedTableName)
+      )
     }
   }
 
@@ -117,10 +128,28 @@ trait TruncateTableSuiteBase extends QueryTest with DDLCommandTestUtils {
       sql(s"CREATE TABLE $t (c0 INT) $defaultUsing")
       sql(s"INSERT INTO $t SELECT 0")
 
-      val errMsg = intercept[AnalysisException] {
-        sql(s"TRUNCATE TABLE $t PARTITION (c0=1)")
-      }.getMessage
-      assert(errMsg.contains(invalidPartColumnError))
+      val expectedTableName = if (commandVersion == DDLCommandTestUtils.V1_COMMAND_VERSION) {
+        s"`$SESSION_CATALOG_NAME`.`ns`.`tbl`"
+      } else {
+        "`test_catalog`.`ns`.`tbl`"
+      }
+      val expectedCondition = if (commandVersion == DDLCommandTestUtils.V1_COMMAND_VERSION) {
+        "_LEGACY_ERROR_TEMP_1267"
+      } else {
+        "PARTITIONS_NOT_FOUND"
+      }
+      val expectedParameters = if (commandVersion == DDLCommandTestUtils.V1_COMMAND_VERSION) {
+        Map("tableIdentWithDB" -> expectedTableName)
+      } else {
+        Map("partitionList" -> "`c0`", "tableName" -> expectedTableName)
+      }
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"TRUNCATE TABLE $t PARTITION (c0=1)")
+        },
+        condition = expectedCondition,
+        parameters = expectedParameters
+      )
     }
   }
 
@@ -145,10 +174,20 @@ trait TruncateTableSuiteBase extends QueryTest with DDLCommandTestUtils {
       sql(s"INSERT INTO $t PARTITION (id=0) SELECT 'abc'")
       sql(s"INSERT INTO $t PARTITION (id=1) SELECT 'def'")
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
-        val errMsg = intercept[AnalysisException] {
-          sql(s"TRUNCATE TABLE $t PARTITION (ID=1)")
-        }.getMessage
-        assert(errMsg.contains("ID is not a valid partition column"))
+        val expectedTableName = if (commandVersion == DDLCommandTestUtils.V1_COMMAND_VERSION) {
+          s"`$SESSION_CATALOG_NAME`.`ns`.`tbl`"
+        } else {
+          "`test_catalog`.`ns`.`tbl`"
+        }
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql(s"TRUNCATE TABLE $t PARTITION (ID=1)")
+          },
+          condition = "PARTITIONS_NOT_FOUND",
+          parameters = Map(
+            "partitionList" -> "`ID`",
+            "tableName" -> expectedTableName)
+        )
       }
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
         sql(s"TRUNCATE TABLE $t PARTITION (ID=1)")

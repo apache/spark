@@ -3286,7 +3286,9 @@ class RDD(Generic[T_co]):
         assert self.ctx._jvm is not None
 
         if compressionCodecClass:
-            compressionCodec = self.ctx._jvm.java.lang.Class.forName(compressionCodecClass)
+            compressionCodec = getattr(self.ctx._jvm, "java.lang.Class").forName(
+                compressionCodecClass
+            )
             keyed._jrdd.map(self.ctx._jvm.BytesToString()).saveAsTextFile(path, compressionCodec)
         else:
             keyed._jrdd.map(self.ctx._jvm.BytesToString()).saveAsTextFile(path)
@@ -4998,8 +5000,8 @@ class RDD(Generic[T_co]):
         -----
         For additional information see
 
-        - `SPIP: Barrier Execution Mode <http://jira.apache.org/jira/browse/SPARK-24374>`_
-        - `Design Doc <https://jira.apache.org/jira/browse/SPARK-24582>`_
+        - `SPIP: Barrier Execution Mode <https://issues.apache.org/jira/browse/SPARK-24374>`_
+        - `Design Doc <https://issues.apache.org/jira/browse/SPARK-24582>`_
 
         This API is experimental
         """
@@ -5044,7 +5046,7 @@ class RDD(Generic[T_co]):
         else:
             assert self.ctx._jvm is not None
 
-            builder = self.ctx._jvm.org.apache.spark.resource.ResourceProfileBuilder()
+            builder = getattr(self.ctx._jvm, "org.apache.spark.resource.ResourceProfileBuilder")()
             ereqs = ExecutorResourceRequests(self.ctx._jvm, profile._executor_resource_requests)
             treqs = TaskResourceRequests(self.ctx._jvm, profile._task_resource_requests)
             builder.require(ereqs._java_executor_resource_requests)

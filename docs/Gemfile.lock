@@ -53,8 +53,8 @@ GEM
     rb-fsevent (0.11.2)
     rb-inotify (0.10.1)
       ffi (~> 1.0)
-    rexml (3.2.6)
-    rouge (3.30.0)
+    rexml (3.3.9)
+    rouge (4.5.1)
     safe_yaml (1.0.5)
     sass-embedded (1.63.6)
       google-protobuf (~> 3.23)
@@ -71,7 +71,7 @@ DEPENDENCIES
   ffi (~> 1.15)
   jekyll (~> 4.3)
   jekyll-redirect-from (~> 0.16)
-  rouge (~> 3.26)
+  rexml (~> 3.3.9)
 
 BUNDLED WITH
    2.4.22

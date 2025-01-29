@@ -29,6 +29,7 @@ import com.google.common.util.concurrent.{ExecutionError, UncheckedExecutionExce
 import org.codehaus.commons.compiler.{CompileException, InternalCompilerException}
 import org.codehaus.janino.ClassBodyEvaluator
 import org.codehaus.janino.util.ClassFile
+import org.codehaus.janino.util.ClassFile.CodeAttribute
 
 import org.apache.spark.{SparkException, SparkIllegalArgumentException, TaskContext, TaskKilledException}
 import org.apache.spark.executor.InputMetrics
@@ -1578,9 +1579,6 @@ object CodeGenerator extends Logging {
     val classes = evaluator.getBytecodes.asScala
 
     // Then walk the classes to get at the method bytecode.
-    val codeAttr = Utils.classForName("org.codehaus.janino.util.ClassFile$CodeAttribute")
-    val codeAttrField = codeAttr.getDeclaredField("code")
-    codeAttrField.setAccessible(true)
     val codeStats = classes.map { case (_, classBytes) =>
       val classCodeSize = classBytes.length
       CodegenMetrics.METRIC_GENERATED_CLASS_BYTECODE_SIZE.update(classCodeSize)
@@ -1588,8 +1586,8 @@ object CodeGenerator extends Logging {
         val cf = new ClassFile(new ByteArrayInputStream(classBytes))
         val constPoolSize = cf.getConstantPoolSize
         val methodCodeSizes = cf.methodInfos.asScala.flatMap { method =>
-          method.getAttributes().filter(_.getClass eq codeAttr).map { a =>
-            val byteCodeSize = codeAttrField.get(a).asInstanceOf[Array[Byte]].length
+          method.getAttributes.collect { case attr: CodeAttribute =>
+            val byteCodeSize = attr.code.length
             CodegenMetrics.METRIC_GENERATED_METHOD_BYTECODE_SIZE.update(byteCodeSize)
 
             if (byteCodeSize > DEFAULT_JVM_HUGE_METHOD_LIMIT) {

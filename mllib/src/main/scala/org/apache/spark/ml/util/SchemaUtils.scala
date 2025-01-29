@@ -41,7 +41,7 @@ private[spark] object SchemaUtils {
       colName: String,
       dataType: DataType,
       msg: String = ""): Unit = {
-    val actualDataType = schema(colName).dataType
+    val actualDataType = SchemaUtils.getSchemaField(schema, colName).dataType
     val message = if (msg != null && msg.trim.length > 0) " " + msg else ""
     require(actualDataType.equals(dataType),
       s"Column $colName must be of type ${dataType.getClass}:${dataType.catalogString} " +
@@ -237,5 +237,16 @@ private[spark] object SchemaUtils {
    */
   def getSchemaFieldType(schema: StructType, colName: String): DataType = {
     getSchemaField(schema, colName).dataType
+  }
+
+  /**
+   * Check whether a certain column name exists in the schema.
+   * @param schema input schema
+   * @param colName column name, nested column name is supported.
+   */
+  def checkSchemaFieldExist(schema: StructType, colName: String): Boolean = {
+    val colSplits = AttributeNameParser.parseAttributeName(colName)
+    val fieldOpt = schema.findNestedField(colSplits, resolver = SQLConf.get.resolver)
+    fieldOpt.isDefined
   }
 }

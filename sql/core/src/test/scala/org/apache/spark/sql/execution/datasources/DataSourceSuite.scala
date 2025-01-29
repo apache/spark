@@ -25,6 +25,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path, RawLocalFileSystem}
 import org.scalatest.PrivateMethodTester
 
+import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.util.Utils
@@ -206,6 +207,18 @@ class DataSourceSuite extends SharedSparkSession with PrivateMethodTester {
     } finally {
       Utils.deleteRecursively(baseDir)
     }
+  }
+
+  test("SPARK-50458: Proper error handling for unsupported file system") {
+    val loc = "https://raw.githubusercontent.com/apache/spark/refs/heads/master/examples/" +
+      "src/main/resources/employees.json"
+    checkError(exception = intercept[SparkUnsupportedOperationException](
+      sql(s"CREATE TABLE HTTP USING JSON LOCATION '$loc'")),
+      condition = "FAILED_READ_FILE.UNSUPPORTED_FILE_SYSTEM",
+      parameters = Map(
+        "path" -> loc,
+        "fileSystemClass" -> "org.apache.hadoop.fs.http.HttpsFileSystem",
+        "method" -> "listStatus"))
   }
 }
 

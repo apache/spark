@@ -24,8 +24,8 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.util.quoteIdentifier
+import org.apache.spark.sql.connector.catalog.{Column, Table}
 import org.apache.spark.sql.connector.catalog.CatalogV2Util.withDefaultOwnership
-import org.apache.spark.sql.connector.catalog.Table
 import org.apache.spark.sql.errors.QueryErrorsBase
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -1017,6 +1017,84 @@ trait AlterTableTests extends SharedSparkSession with QueryErrorsBase {
     }
   }
 
+  test("AlterTable: alter multiple columns/fields in the same command") {
+    withSQLConf(SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS.key -> s"$v2Format, ") {
+      val t = fullTableName("table_name")
+      withTable(t) {
+        sql(s"""CREATE TABLE $t (
+             |  id int,
+             |  data string,
+             |  ts timestamp NOT NULL,
+             |  points array<struct<x: double, y: double>>) USING $v2Format""".stripMargin)
+        sql(s"""ALTER TABLE $t ALTER COLUMN
+             |  id TYPE bigint,
+             |  data FIRST,
+             |  ts DROP NOT NULL,
+             |  points.element.x SET DEFAULT (1.0 + 2.0),
+             |  points.element.y COMMENT 'comment on y'""".stripMargin)
+
+        val table = getTableMetadata(t)
+
+        assert(table.name === t)
+        assert(
+          table.columns() === Array(
+            Column.create("data", StringType),
+            Column.create("id", LongType),
+            Column.create("ts", TimestampType, true),
+            Column.create("points", ArrayType(
+              StructType(
+                Seq(
+                  StructField("x", DoubleType).withCurrentDefaultValue("(1.0 + 2.0)"),
+                  StructField("y", DoubleType).withComment("comment on y")
+                ))))))
+      }
+    }
+  }
+
+  test("AlterTable: cannot alter the same column in the same command") {
+    val t = fullTableName("table_name")
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id int, data string, ts timestamp) USING $v2Format")
+      val sqlText = s"ALTER TABLE $t ALTER COLUMN id TYPE bigint, id COMMENT 'id', data FIRST"
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(sqlText)
+        },
+        condition = "NOT_SUPPORTED_CHANGE_SAME_COLUMN",
+        parameters = Map(
+          "table" -> s"${toSQLId(prependCatalogName(t))}",
+          "fieldName" -> "`id`"),
+        context = ExpectedContext(fragment = sqlText, start = 0, stop = sqlText.length - 1)
+      )
+    }
+  }
+
+  test("AlterTable: cannot alter parent and child fields in the same command") {
+    withSQLConf(SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS.key -> s"$v2Format, ") {
+      val t = fullTableName("table_name")
+      withTable(t) {
+        sql(s"CREATE TABLE $t (parent array<struct<child: int>>) USING $v2Format")
+        val sqlText = s"""ALTER TABLE $t ALTER COLUMN
+                         | parent.element.child TYPE string,
+                         | parent SET DEFAULT array(struct(1000))""".stripMargin
+
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql(sqlText)
+          },
+          condition = "NOT_SUPPORTED_CHANGE_SAME_COLUMN",
+          parameters = Map(
+            "table" -> s"${toSQLId(prependCatalogName(t))}",
+            "fieldName" -> "`parent`"),
+          context = ExpectedContext(
+            fragment = sqlText,
+            start = 0,
+            stop = sqlText.length - 1)
+        )
+      }
+    }
+  }
+
   test("AlterTable: rename column") {
     val t = fullTableName("table_name")
     withTable(t) {
@@ -1395,5 +1473,40 @@ trait AlterTableTests extends SharedSparkSession with QueryErrorsBase {
         condition = "COLUMN_ALREADY_EXISTS",
         parameters = Map("columnName" -> "`data`"))
     }
+  }
+
+  test("Alter column type between string and char/varchar") {
+    val types = Seq(
+      ("STRING", "\"STRING\""),
+      ("STRING COLLATE UTF8_LCASE", "\"STRING COLLATE UTF8_LCASE\""),
+      ("CHAR(5)", "\"CHAR\\(5\\)\""),
+      ("VARCHAR(5)", "\"VARCHAR\\(5\\)\""))
+    types.flatMap { a => types.map { b => (a, b) } }
+      .filter { case (a, b) => a != b }
+      .filter { case ((a, _), (b, _)) => !a.startsWith("STRING") || !b.startsWith("STRING") }
+      .foreach { case ((from, originType), (to, newType)) =>
+        val t = "table_name"
+        withTable(t) {
+          sql(s"CREATE TABLE $t (id $from) USING PARQUET")
+          val sql1 = s"ALTER TABLE $t ALTER COLUMN id TYPE $to"
+          checkErrorMatchPVals(
+            exception = intercept[AnalysisException] {
+              sql(sql1)
+            },
+            condition = "NOT_SUPPORTED_CHANGE_COLUMN",
+            sqlState = None,
+            parameters = Map(
+              "originType" -> originType,
+              "newType" -> newType,
+              "newName" -> "`id`",
+              "originName" -> "`id`",
+              "table" -> ".*table_name.*"),
+            context = ExpectedContext(
+              fragment = sql1,
+              start = 0,
+              stop = sql1.length - 1)
+          )
+        }
+      }
   }
 }

@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.python.EvalPythonExec.ArgumentMetadata
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{StructField, StructType}
 
 /**
@@ -39,10 +40,12 @@ case class BatchEvalPythonExec(udfs: Seq[PythonUDF], resultAttrs: Seq[Attribute]
   private[this] val jobArtifactUUID = JobArtifactSet.getCurrentJobArtifactState.map(_.uuid)
 
   override protected def evaluatorFactory: EvalPythonEvaluatorFactory = {
+    val batchSize = conf.getConf(SQLConf.PYTHON_UDF_MAX_RECORDS_PER_BATCH)
     new BatchEvalPythonEvaluatorFactory(
       child.output,
       udfs,
       output,
+      batchSize,
       pythonMetrics,
       jobArtifactUUID,
       conf.pythonUDFProfiler)
@@ -56,6 +59,7 @@ class BatchEvalPythonEvaluatorFactory(
     childOutput: Seq[Attribute],
     udfs: Seq[PythonUDF],
     output: Seq[Attribute],
+    batchSize: Int,
     pythonMetrics: Map[String, SQLMetric],
     jobArtifactUUID: Option[String],
     profiler: Option[String])
@@ -70,7 +74,7 @@ class BatchEvalPythonEvaluatorFactory(
     EvaluatePython.registerPicklers() // register pickler for Row
 
     // Input iterator to Python.
-    val inputIterator = BatchEvalPythonExec.getInputIterator(iter, schema)
+    val inputIterator = BatchEvalPythonExec.getInputIterator(iter, schema, batchSize)
 
     // Output iterator for results from Python.
     val outputIterator =
@@ -107,7 +111,8 @@ class BatchEvalPythonEvaluatorFactory(
 object BatchEvalPythonExec {
   def getInputIterator(
       iter: Iterator[InternalRow],
-      schema: StructType): Iterator[Array[Byte]] = {
+      schema: StructType,
+      batchSize: Int): Iterator[Array[Byte]] = {
     val dataTypes = schema.map(_.dataType)
     val needConversion = dataTypes.exists(EvaluatePython.needConversionInPython)
 
@@ -140,6 +145,6 @@ object BatchEvalPythonExec {
         }
         fields
       }
-    }.grouped(100).map(x => pickle.dumps(x.toArray))
+    }.grouped(batchSize).map(x => pickle.dumps(x.toArray))
   }
 }

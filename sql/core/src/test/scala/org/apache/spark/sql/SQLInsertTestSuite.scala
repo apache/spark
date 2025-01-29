@@ -26,6 +26,7 @@ import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.exchange.ReusedExchangeExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
+import org.apache.spark.sql.types.{DataType, IntegerType, SQLUserDefinedType, UserDefinedType}
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
@@ -549,6 +550,56 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils with AdaptiveSparkP
       assert(reusedExchanges.size == 1)
     }
   }
+
+  test("SPARK-50340: unwrap UDT before insertion") {
+    withTempView("v") {
+      Seq((1, MyInt(2))).toDF("c1", "c2").createTempView("v")
+
+      withTable("t") {
+        createTable("t", Seq("c1", "c2"), Seq("int", "int"))
+        sql("INSERT INTO t SELECT * FROM v")
+        checkAnswer(spark.table("t"), Row(1, 2))
+      }
+
+      // can upcast UDT input
+      withTable("t") {
+        createTable("t", Seq("c1", "c2"), Seq("int", "long"))
+        sql("INSERT INTO t SELECT * FROM v")
+        checkAnswer(spark.table("t"), Row(1, 2L))
+      }
+
+      // Array of UDT
+      withTable("t") {
+        createTable("t", Seq("c1", "c2"), Seq("int", "array<int>"))
+        sql("INSERT INTO t SELECT c1, array(c2) FROM v")
+        checkAnswer(spark.table("t"), Row(1, Seq(2)))
+      }
+
+      // Map of UDT
+      withTable("t") {
+        createTable("t", Seq("c1", "c2"), Seq("int", "map<int, int>"))
+        sql("INSERT INTO t SELECT c1, map(c2, c2) FROM v")
+        checkAnswer(spark.table("t"), Row(1, Map(2 -> 2)))
+      }
+
+      // Struct of UDT
+      withTable("t") {
+        createTable("t", Seq("c1", "c2"), Seq("int", "struct<f1 int, f2 int>"))
+        sql("INSERT INTO t SELECT c1, struct(c2 as f1, c2 as f2) FROM v")
+        checkAnswer(spark.table("t"), Row(1, Row(2, 2)))
+      }
+    }
+  }
+}
+
+@SQLUserDefinedType(udt = classOf[MyIntUDT])
+private case class MyInt(i: Int)
+
+private class MyIntUDT extends UserDefinedType[MyInt] {
+  override def sqlType: DataType = IntegerType
+  override def serialize(obj: MyInt): Any = obj.i
+  override def deserialize(datum: Any): MyInt = MyInt(datum.asInstanceOf[Int])
+  override def userClass: Class[MyInt] = classOf[MyInt]
 }
 
 class FileSourceSQLInsertTestSuite extends SQLInsertTestSuite with SharedSparkSession {
