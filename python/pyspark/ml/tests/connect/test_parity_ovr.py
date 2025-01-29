@@ -17,34 +17,16 @@
 
 import unittest
 
-from pyspark.ml.tests.test_feature import FeatureTestsMixin
+from pyspark.ml.tests.test_ovr import OneVsRestTestsMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
-class FeatureParityTests(FeatureTestsMixin, ReusedConnectTestCase):
-    @unittest.skip("Need to support.")
-    def test_count_vectorizer_with_binary(self):
-        super().test_count_vectorizer_with_binary()
-
-    @unittest.skip("Need to support.")
-    def test_count_vectorizer_with_maxDF(self):
-        super().test_count_vectorizer_with_maxDF()
-
-    @unittest.skip("Need to support.")
-    def test_count_vectorizer_from_vocab(self):
-        super().test_count_vectorizer_from_vocab()
-
-    @unittest.skip("Need to support.")
-    def test_string_indexer_handle_invalid(self):
-        super().test_string_indexer_handle_invalid()
-
-    @unittest.skip("Need to support.")
-    def test_string_indexer_from_labels(self):
-        super().test_string_indexer_from_labels()
+class OneVsRestParityTests(OneVsRestTestsMixin, ReusedConnectTestCase):
+    pass
 
 
 if __name__ == "__main__":
-    from pyspark.ml.tests.connect.test_parity_feature import *  # noqa: F401
+    from pyspark.ml.tests.connect.test_parity_ovr import *  # noqa: F401
 
     try:
         import xmlrunner  # type: ignore[import]
