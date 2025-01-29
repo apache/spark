@@ -250,7 +250,7 @@ private case class MsSqlServerDialect() extends JdbcDialect with NoLegacyJDBCErr
 
       options.prepareQuery +
         s"SELECT $limitClause $columnList FROM ${options.tableOrQuery}" +
-        s" $tableSampleClause $whereClause $groupByClause $orderByClause"
+        s" $whereClause $groupByClause $orderByClause"
     }
   }
 
