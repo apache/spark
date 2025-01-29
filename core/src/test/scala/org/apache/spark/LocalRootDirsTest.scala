@@ -46,7 +46,7 @@ trait LocalRootDirsTest extends SparkFunSuite with LocalSparkContext {
 
   override def afterEach(): Unit = {
     try {
-      if (!ShutdownHookManager.hasRootAsShutdownDeleteDir(tempDir)) {
+      if (!ShutdownHookManager.hasShutdownDeleteDir(tempDir)) {
         Utils.deleteRecursively(tempDir)
       }
       Utils.clearLocalRootDirs()
