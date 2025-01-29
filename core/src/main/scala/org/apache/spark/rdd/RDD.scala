@@ -1028,6 +1028,11 @@ abstract class RDD[T: ClassTag](
     zipPartitions(rdd2, rdd3, rdd4, preservesPartitioning = false)(f)
   }
 
+  private[spark] def zipPartitions[V: ClassTag](rdds: RDD[_]*)
+      (f: Seq[Iterator[Any]] => Iterator[V]): RDD[V] = withScope {
+    new ZippedPartitionsRDDN(sc, sc.clean(f), this +: rdds)
+  }
+
 
   // Actions (launch a job to return a value to the user program)
 

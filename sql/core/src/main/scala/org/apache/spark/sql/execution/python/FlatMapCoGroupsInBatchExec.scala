@@ -75,8 +75,8 @@ trait FlatMapCoGroupsInBatchExec extends SparkPlan with BinaryExecNode with Pyth
 
         val leftGrouped = groupAndProject(leftData, leftGroup, left.output, leftDedup)
         val rightGrouped = groupAndProject(rightData, rightGroup, right.output, rightDedup)
-        val data = new CoGroupedIterator(leftGrouped, rightGrouped, leftGroup)
-          .map { case (_, l, r) => (l, r) }
+        val data = new CoGroupedIterator(Seq(leftGrouped, rightGrouped), leftGroup)
+          .map { case (_, Seq(l, r)) => (l, r) }
 
         val runner = new CoGroupedArrowPythonRunner(
           chainedFunc,

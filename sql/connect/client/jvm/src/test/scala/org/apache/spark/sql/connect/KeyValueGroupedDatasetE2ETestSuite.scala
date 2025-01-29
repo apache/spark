@@ -191,7 +191,7 @@ class KeyValueGroupedDatasetE2ETestSuite extends QueryTest with RemoteSparkSessi
     assert(message.contains("Invalid usage of '*' in MapGroups"))
   }
 
-  test("cogroup") {
+  test("cogroup2") {
     val grouped = spark
       .range(10)
       .groupByKey(v => v % 2)
@@ -199,39 +199,350 @@ class KeyValueGroupedDatasetE2ETestSuite extends QueryTest with RemoteSparkSessi
       .range(10)
       .groupByKey(v => v / 2)
     val values = grouped
-      .cogroup(otherGrouped) { (k, it, otherIt) =>
-        Seq(it.toSeq.size + otherIt.size)
+      .cogroup(otherGrouped) { (_, v, u) =>
+        Seq(v.mkString + ";" + u.mkString)
       }
       .collectAsList()
 
-    assert(values == Arrays.asList[Int](7, 7, 2, 2, 2))
+    assert(values == Arrays.asList[String]("02468;01", "13579;23", ";45", ";67", ";89"))
   }
 
-  test("cogroupSorted") {
+  test("cogroup3") {
     val grouped = spark
       .range(10)
       .groupByKey(v => v % 2)
-    val otherGrouped = spark
+    val other1Grouped = spark
       .range(10)
       .groupByKey(v => v / 2)
+    val other2Grouped = spark
+      .range(10)
+      .groupByKey(v => v % 3)
     val values = grouped
-      .cogroupSorted(otherGrouped)(desc("id"))(desc("id")) { (k, it, otherIt) =>
-        Iterator(String.valueOf(k), it.mkString(",") + ";" + otherIt.mkString(","))
+      .cogroup(other1Grouped, other2Grouped) { (_, v, u1, u2) =>
+        Seq(v.mkString + ";" + u1.mkString + ";" + u2.mkString)
+      }
+      .collectAsList()
+
+    assert(
+      values == Arrays.asList[String]("02468;01;0369", "13579;23;147", ";45;258", ";67;", ";89;"))
+  }
+
+  test("cogroup4") {
+    val grouped = spark
+      .range(10)
+      .groupByKey(v => v % 2)
+    val other1Grouped = spark
+      .range(10)
+      .groupByKey(v => v / 2)
+    val other2Grouped = spark
+      .range(10)
+      .groupByKey(v => v % 3)
+    val other3Grouped = spark
+      .range(10)
+      .groupByKey(v => v / 3)
+    val values = grouped
+      .cogroup(other1Grouped, other2Grouped, other3Grouped) { (_, v, u1, u2, u3) =>
+        Seq(v.mkString + ";" + u1.mkString + ";" + u2.mkString + ";" + u3.mkString)
+      }
+      .collectAsList()
+
+    assert(values == Arrays
+      .asList[String]("02468;01;0369;012", "13579;23;147;345", ";45;258;678", ";67;;9", ";89;;"))
+  }
+
+  test("cogroup5") {
+    val grouped = spark
+      .range(10)
+      .groupByKey(v => v % 2)
+    val other1Grouped = spark
+      .range(10)
+      .groupByKey(v => v / 2)
+    val other2Grouped = spark
+      .range(10)
+      .groupByKey(v => v % 3)
+    val other3Grouped = spark
+      .range(10)
+      .groupByKey(v => v / 3)
+    val other4Grouped = spark
+      .range(10)
+      .groupByKey(v => v % 4)
+    val values = grouped
+      .cogroup(other1Grouped, other2Grouped, other3Grouped, other4Grouped) {
+        (_, v, u1, u2, u3, u4) =>
+          Seq(
+            v.mkString + ";" + u1.mkString
+              + ";" + u2.mkString + ";" + u3.mkString + ";" + u4.mkString)
       }
       .collectAsList()
 
     assert(
       values == Arrays.asList[String](
-        "0",
-        "8,6,4,2,0;1,0",
-        "1",
-        "9,7,5,3,1;3,2",
-        "2",
-        ";5,4",
-        "3",
-        ";7,6",
-        "4",
-        ";9,8"))
+        "02468;01;0369;012;048",
+        "13579;23;147;345;159",
+        ";45;258;678;26",
+        ";67;;9;37",
+        ";89;;;"))
+  }
+
+  test("cogroup6") {
+    val grouped = spark
+      .range(10)
+      .groupByKey(v => v % 2)
+    val other1Grouped = spark
+      .range(10)
+      .groupByKey(v => v / 2)
+    val other2Grouped = spark
+      .range(10)
+      .groupByKey(v => v % 3)
+    val other3Grouped = spark
+      .range(10)
+      .groupByKey(v => v / 3)
+    val other4Grouped = spark
+      .range(10)
+      .groupByKey(v => v % 4)
+    val other5Grouped = spark
+      .range(10)
+      .groupByKey(v => v / 4)
+    val values = grouped
+      .cogroup(other1Grouped, other2Grouped, other3Grouped, other4Grouped, other5Grouped) {
+        (_, v, u1, u2, u3, u4, u5) =>
+          Seq(
+            v.mkString + ";" + u1.mkString
+              + ";" + u2.mkString + ";" + u3.mkString + ";" + u4.mkString + ";" + u5.mkString)
+      }
+      .collectAsList()
+
+    assert(
+      values == Arrays.asList[String](
+        "02468;01;0369;012;048;0123",
+        "13579;23;147;345;159;4567",
+        ";45;258;678;26;89",
+        ";67;;9;37;",
+        ";89;;;;"))
+  }
+
+  test("cogroup7") {
+    val grouped = spark
+      .range(10)
+      .groupByKey(v => v % 2)
+    val other1Grouped = spark
+      .range(10)
+      .groupByKey(v => v / 2)
+    val other2Grouped = spark
+      .range(10)
+      .groupByKey(v => v % 3)
+    val other3Grouped = spark
+      .range(10)
+      .groupByKey(v => v / 3)
+    val other4Grouped = spark
+      .range(10)
+      .groupByKey(v => v % 4)
+    val other5Grouped = spark
+      .range(10)
+      .groupByKey(v => v / 4)
+    val other6Grouped = spark
+      .range(10)
+      .groupByKey(v => v % 5)
+    val values = grouped
+      .cogroup(
+        other1Grouped,
+        other2Grouped,
+        other3Grouped,
+        other4Grouped,
+        other5Grouped,
+        other6Grouped) { (_, v, u1, u2, u3, u4, u5, u6) =>
+        Seq(
+          v.mkString + ";" + u1.mkString + ";" + u2.mkString + ";" + u3.mkString + ";"
+            + u4.mkString + ";" + u5.mkString + ";" + u6.mkString)
+      }
+      .collectAsList()
+
+    assert(
+      values == Arrays.asList[String](
+        "02468;01;0369;012;048;0123;05",
+        "13579;23;147;345;159;4567;16",
+        ";45;258;678;26;89;27",
+        ";67;;9;37;;38",
+        ";89;;;;;49"))
+  }
+
+  test("cogroupSorted2") {
+    val grouped = spark
+      .range(10)
+      .groupByKey(v => v % 2)
+    val otherGrouped = spark
+      .range(10)
+      .groupByKey(v => v / 2)
+    val values = grouped
+      .cogroupSorted(otherGrouped)(desc("id"))(desc("id")) { (_, v, u) =>
+        Seq(v.mkString + ";" + u.mkString)
+      }
+      .collectAsList()
+
+    assert(values == Arrays.asList[String]("86420;10", "97531;32", ";54", ";76", ";98"))
+  }
+
+  test("cogroupSorted3") {
+    val grouped = spark
+      .range(10)
+      .groupByKey(v => v % 2)
+    val other1Grouped = spark
+      .range(10)
+      .groupByKey(v => v / 2)
+    val other2Grouped = spark
+      .range(10)
+      .groupByKey(v => v % 3)
+    val values = grouped
+      .cogroupSorted(other1Grouped, other2Grouped)(desc("id"))(desc("id"))(desc("id")) {
+        (_, v, u1, u2) =>
+          Seq(v.mkString + ";" + u1.mkString + ";" + u2.mkString)
+      }
+      .collectAsList()
+
+    assert(
+      values == Arrays.asList[String]("86420;10;9630", "97531;32;741", ";54;852", ";76;", ";98;"))
+  }
+
+  test("cogroupSorted4") {
+    val grouped = spark
+      .range(10)
+      .groupByKey(v => v % 2)
+    val other1Grouped = spark
+      .range(10)
+      .groupByKey(v => v / 2)
+    val other2Grouped = spark
+      .range(10)
+      .groupByKey(v => v % 3)
+    val other3Grouped = spark
+      .range(10)
+      .groupByKey(v => v / 3)
+    val values = grouped
+      .cogroupSorted(other1Grouped, other2Grouped, other3Grouped)(desc("id"))(desc("id"))(
+        desc("id"))(desc("id")) { (_, v, u1, u2, u3) =>
+        Seq(v.mkString + ";" + u1.mkString + ";" + u2.mkString + ";" + u3.mkString)
+      }
+      .collectAsList()
+
+    assert(values == Arrays
+      .asList[String]("86420;10;9630;210", "97531;32;741;543", ";54;852;876", ";76;;9", ";98;;"))
+  }
+
+  test("cogroupSorted5") {
+    val grouped = spark
+      .range(10)
+      .groupByKey(v => v % 2)
+    val other1Grouped = spark
+      .range(10)
+      .groupByKey(v => v / 2)
+    val other2Grouped = spark
+      .range(10)
+      .groupByKey(v => v % 3)
+    val other3Grouped = spark
+      .range(10)
+      .groupByKey(v => v / 3)
+    val other4Grouped = spark
+      .range(10)
+      .groupByKey(v => v % 4)
+    val values = grouped
+      .cogroupSorted(other1Grouped, other2Grouped, other3Grouped, other4Grouped)(desc("id"))(
+        desc("id"))(desc("id"))(desc("id"))(desc("id")) { (_, v, u1, u2, u3, u4) =>
+        Seq(
+          v.mkString + ";" + u1.mkString
+            + ";" + u2.mkString + ";" + u3.mkString + ";" + u4.mkString)
+      }
+      .collectAsList()
+
+    assert(
+      values == Arrays.asList[String](
+        "86420;10;9630;210;840",
+        "97531;32;741;543;951",
+        ";54;852;876;62",
+        ";76;;9;73",
+        ";98;;;"))
+  }
+
+  test("cogroupSorted6") {
+    val grouped = spark
+      .range(10)
+      .groupByKey(v => v % 2)
+    val other1Grouped = spark
+      .range(10)
+      .groupByKey(v => v / 2)
+    val other2Grouped = spark
+      .range(10)
+      .groupByKey(v => v % 3)
+    val other3Grouped = spark
+      .range(10)
+      .groupByKey(v => v / 3)
+    val other4Grouped = spark
+      .range(10)
+      .groupByKey(v => v % 4)
+    val other5Grouped = spark
+      .range(10)
+      .groupByKey(v => v / 4)
+    val values = grouped
+      .cogroupSorted(other1Grouped, other2Grouped, other3Grouped, other4Grouped, other5Grouped)(
+        desc("id"))(desc("id"))(desc("id"))(desc("id"))(desc("id"))(desc("id")) {
+        (_, v, u1, u2, u3, u4, u5) =>
+          Seq(
+            v.mkString + ";" + u1.mkString
+              + ";" + u2.mkString + ";" + u3.mkString + ";" + u4.mkString + ";" + u5.mkString)
+      }
+      .collectAsList()
+
+    assert(
+      values == Arrays.asList[String](
+        "86420;10;9630;210;840;3210",
+        "97531;32;741;543;951;7654",
+        ";54;852;876;62;98",
+        ";76;;9;73;",
+        ";98;;;;"))
+  }
+
+  test("cogroupSorted7") {
+    val grouped = spark
+      .range(10)
+      .groupByKey(v => v % 2)
+    val other1Grouped = spark
+      .range(10)
+      .groupByKey(v => v / 2)
+    val other2Grouped = spark
+      .range(10)
+      .groupByKey(v => v % 3)
+    val other3Grouped = spark
+      .range(10)
+      .groupByKey(v => v / 3)
+    val other4Grouped = spark
+      .range(10)
+      .groupByKey(v => v % 4)
+    val other5Grouped = spark
+      .range(10)
+      .groupByKey(v => v / 4)
+    val other6Grouped = spark
+      .range(10)
+      .groupByKey(v => v % 5)
+    val values = grouped
+      .cogroupSorted(
+        other1Grouped,
+        other2Grouped,
+        other3Grouped,
+        other4Grouped,
+        other5Grouped,
+        other6Grouped)(desc("id"))(desc("id"))(desc("id"))(desc("id"))(desc("id"))(desc("id"))(
+        desc("id")) { (_, v, u1, u2, u3, u4, u5, u6) =>
+        Seq(
+          v.mkString + ";" + u1.mkString + ";" + u2.mkString + ";" + u3.mkString + ";"
+            + u4.mkString + ";" + u5.mkString + ";" + u6.mkString)
+      }
+      .collectAsList()
+
+    assert(
+      values == Arrays.asList[String](
+        "86420;10;9630;210;840;3210;50",
+        "97531;32;741;543;951;7654;61",
+        ";54;852;876;62;98;72",
+        ";76;;9;73;;83",
+        ";98;;;;;94"))
   }
 
   test("agg, keyAs") {

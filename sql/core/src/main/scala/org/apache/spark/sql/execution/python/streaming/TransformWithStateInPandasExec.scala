@@ -416,7 +416,9 @@ case class TransformWithStateInPandasExec(
           initialState.output, initDedupAttributes)
       // group input rows and initial state rows by the same grouping key
       val groupedData: Iterator[(InternalRow, Iterator[InternalRow], Iterator[InternalRow])] =
-        new CoGroupedIterator(data, initData, groupingAttributes)
+        new CoGroupedIterator(Seq(data, initData), groupingAttributes).map {
+          case (key, Seq(left, right)) => (key, left, right)
+        }
 
       val runner = new TransformWithStateInPandasPythonInitialStateRunner(
         chainedFunc,

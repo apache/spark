@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.{AliasAwareQueryOutputOrdering, QueryPlan}
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.LogicalPlanStats
-import org.apache.spark.sql.catalyst.trees.{BinaryLike, LeafLike, TreeNodeTag, UnaryLike}
+import org.apache.spark.sql.catalyst.trees.{BinaryLike, LeafLike, NaryLike, TreeNodeTag, UnaryLike}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{LOGICAL_QUERY_STAGE, TreePattern}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.MetadataColumnHelper
@@ -290,6 +290,11 @@ trait UnaryNode extends LogicalPlan with UnaryLike[LogicalPlan] {
  * A logical plan node with a left and right child.
  */
 trait BinaryNode extends LogicalPlan with BinaryLike[LogicalPlan]
+
+/**
+ * A logical plan node with n children.
+ */
+trait NaryNode extends LogicalPlan with NaryLike[LogicalPlan]
 
 trait OrderPreservingUnaryNode extends UnaryNode
   with AliasAwareQueryOutputOrdering[LogicalPlan] {

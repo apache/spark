@@ -987,10 +987,23 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         // TODO(SPARK-40443): support applyInPandasWithState in batch query
         throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3176")
       case logical.CoGroup(
-          f, key, lObj, rObj, lGroup, rGroup, lAttr, rAttr, lOrder, rOrder, oAttr, left, right) =>
+          func,
+          keyDeserializer,
+          valueDeserializers,
+          groups,
+          attributes,
+          orders,
+          outputObjAttr,
+          children) =>
         execution.CoGroupExec(
-          f, key, lObj, rObj, lGroup, rGroup, lAttr, rAttr, lOrder, rOrder, oAttr,
-          planLater(left), planLater(right)) :: Nil
+          func,
+          keyDeserializer,
+          valueDeserializers,
+          groups,
+          attributes,
+          orders,
+          outputObjAttr,
+          children.map(planLater)) :: Nil
 
       case r @ logical.Repartition(numPartitions, shuffle, child) =>
         if (shuffle) {

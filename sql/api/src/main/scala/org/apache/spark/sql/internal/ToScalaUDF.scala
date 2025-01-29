@@ -18,7 +18,7 @@ package org.apache.spark.sql.internal
 
 import scala.jdk.CollectionConverters._
 
-import org.apache.spark.api.java.function.{CoGroupFunction, FilterFunction, FlatMapFunction, FlatMapGroupsFunction, FlatMapGroupsWithStateFunction, ForeachFunction, ForeachPartitionFunction, MapFunction, MapGroupsFunction, MapGroupsWithStateFunction, MapPartitionsFunction, ReduceFunction}
+import org.apache.spark.api.java.function.{CoGroupFunction, CoGroupFunction3, CoGroupFunction4, CoGroupFunction5, CoGroupFunction6, CoGroupFunction7, FilterFunction, FlatMapFunction, FlatMapGroupsFunction, FlatMapGroupsWithStateFunction, ForeachFunction, ForeachPartitionFunction, MapFunction, MapGroupsFunction, MapGroupsWithStateFunction, MapPartitionsFunction, ReduceFunction}
 import org.apache.spark.sql.api.java._
 import org.apache.spark.sql.streaming.GroupState
 
@@ -60,6 +60,44 @@ private[sql] object ToScalaUDF extends Serializable {
   def apply[K, V, U, R](
       f: CoGroupFunction[K, V, U, R]): (K, Iterator[V], Iterator[U]) => Iterator[R] =
     (key, left, right) => f.call(key, left.asJava, right.asJava).asScala
+
+  def apply[K, V1, V2, V3, R](f: CoGroupFunction3[K, V1, V2, V3, R])
+      : (K, Iterator[V1], Iterator[V2], Iterator[V3]) => Iterator[R] =
+    (key, v1, v2, v3) => f.call(key, v1.asJava, v2.asJava, v3.asJava).asScala
+
+  def apply[K, V1, V2, V3, V4, R](f: CoGroupFunction4[K, V1, V2, V3, V4, R])
+      : (K, Iterator[V1], Iterator[V2], Iterator[V3], Iterator[V4]) => Iterator[R] =
+    (key, v1, v2, v3, v4) => f.call(key, v1.asJava, v2.asJava, v3.asJava, v4.asJava).asScala
+
+  def apply[K, V1, V2, V3, V4, V5, R](f: CoGroupFunction5[K, V1, V2, V3, V4, V5, R])
+      : (K, Iterator[V1], Iterator[V2], Iterator[V3], Iterator[V4], Iterator[V5]) => Iterator[R] =
+    (key, v1, v2, v3, v4, v5) =>
+      f.call(key, v1.asJava, v2.asJava, v3.asJava, v4.asJava, v5.asJava).asScala
+
+  def apply[K, V1, V2, V3, V4, V5, V6, R](f: CoGroupFunction6[K, V1, V2, V3, V4, V5, V6, R]): (
+      K,
+      Iterator[V1],
+      Iterator[V2],
+      Iterator[V3],
+      Iterator[V4],
+      Iterator[V5],
+      Iterator[V6]) => Iterator[R] =
+    (key, v1, v2, v3, v4, v5, v6) =>
+      f.call(key, v1.asJava, v2.asJava, v3.asJava, v4.asJava, v5.asJava, v6.asJava).asScala
+
+  def apply[K, V1, V2, V3, V4, V5, V6, V7, R](
+      f: CoGroupFunction7[K, V1, V2, V3, V4, V5, V6, V7, R]): (
+      K,
+      Iterator[V1],
+      Iterator[V2],
+      Iterator[V3],
+      Iterator[V4],
+      Iterator[V5],
+      Iterator[V6],
+      Iterator[V7]) => Iterator[R] =
+    (key, v1, v2, v3, v4, v5, v6, v7) =>
+      f.call(key, v1.asJava, v2.asJava, v3.asJava, v4.asJava, v5.asJava, v6.asJava, v7.asJava)
+        .asScala
 
   def apply[V](f: ForeachFunction[V]): V => Unit = f.call
 
@@ -825,6 +863,117 @@ object UDFAdaptors extends Serializable {
         (k, left, right) => f(k, left.asInstanceOf[Iterator[V]], right.map(mapRight))
       case (Some(mapLeft), Some(mapRight)) =>
         (k, left, right) => f(k, left.map(mapLeft), right.map(mapRight))
+    }
+  }
+
+  def coGroupWithMappedValues[K, V1, V2, R](
+      f: (K, Iterator[V1], Iterator[V2]) => IterableOnce[R],
+      v1: Option[Any => V1],
+      v2: Option[Any => V2]): (K, Seq[Iterator[Any]]) => IterableOnce[R] = (k, iterators) =>
+    f(k, mapIterator(iterators(0), v1), mapIterator(iterators(1), v2))
+
+  def coGroupWithMappedValues[K, V1, V2, V3, R](
+      f: (K, Iterator[V1], Iterator[V2], Iterator[V3]) => IterableOnce[R],
+      v1: Option[Any => V1],
+      v2: Option[Any => V2],
+      v3: Option[Any => V3]): (K, Seq[Iterator[Any]]) => IterableOnce[R] = (k, iterators) =>
+    f(
+      k,
+      mapIterator(iterators(0), v1),
+      mapIterator(iterators(1), v2),
+      mapIterator(iterators(2), v3))
+
+  def coGroupWithMappedValues[K, V1, V2, V3, V4, R](
+      f: (K, Iterator[V1], Iterator[V2], Iterator[V3], Iterator[V4]) => IterableOnce[R],
+      v1: Option[Any => V1],
+      v2: Option[Any => V2],
+      v3: Option[Any => V3],
+      v4: Option[Any => V4]): (K, Seq[Iterator[Any]]) => IterableOnce[R] = (k, iterators) =>
+    f(
+      k,
+      mapIterator(iterators(0), v1),
+      mapIterator(iterators(1), v2),
+      mapIterator(iterators(2), v3),
+      mapIterator(iterators(3), v4))
+
+  def coGroupWithMappedValues[K, V1, V2, V3, V4, V5, R](
+      f: (
+          K,
+          Iterator[V1],
+          Iterator[V2],
+          Iterator[V3],
+          Iterator[V4],
+          Iterator[V5]) => IterableOnce[R],
+      v1: Option[Any => V1],
+      v2: Option[Any => V2],
+      v3: Option[Any => V3],
+      v4: Option[Any => V4],
+      v5: Option[Any => V5]): (K, Seq[Iterator[Any]]) => IterableOnce[R] = (k, iterators) =>
+    f(
+      k,
+      mapIterator(iterators(0), v1),
+      mapIterator(iterators(1), v2),
+      mapIterator(iterators(2), v3),
+      mapIterator(iterators(3), v4),
+      mapIterator(iterators(4), v5))
+
+  def coGroupWithMappedValues[K, V1, V2, V3, V4, V5, V6, R](
+      f: (
+          K,
+          Iterator[V1],
+          Iterator[V2],
+          Iterator[V3],
+          Iterator[V4],
+          Iterator[V5],
+          Iterator[V6]) => IterableOnce[R],
+      v1: Option[Any => V1],
+      v2: Option[Any => V2],
+      v3: Option[Any => V3],
+      v4: Option[Any => V4],
+      v5: Option[Any => V5],
+      v6: Option[Any => V6]): (K, Seq[Iterator[Any]]) => IterableOnce[R] = (k, iterators) =>
+    f(
+      k,
+      mapIterator(iterators(0), v1),
+      mapIterator(iterators(1), v2),
+      mapIterator(iterators(2), v3),
+      mapIterator(iterators(3), v4),
+      mapIterator(iterators(4), v5),
+      mapIterator(iterators(5), v6))
+
+  def coGroupWithMappedValues[K, V1, V2, V3, V4, V5, V6, V7, R](
+      f: (
+          K,
+          Iterator[V1],
+          Iterator[V2],
+          Iterator[V3],
+          Iterator[V4],
+          Iterator[V5],
+          Iterator[V6],
+          Iterator[V7]) => IterableOnce[R],
+      v1: Option[Any => V1],
+      v2: Option[Any => V2],
+      v3: Option[Any => V3],
+      v4: Option[Any => V4],
+      v5: Option[Any => V5],
+      v6: Option[Any => V6],
+      v7: Option[Any => V7]): (K, Seq[Iterator[Any]]) => IterableOnce[R] = (k, iterators) =>
+    f(
+      k,
+      mapIterator(iterators(0), v1),
+      mapIterator(iterators(1), v2),
+      mapIterator(iterators(2), v3),
+      mapIterator(iterators(3), v4),
+      mapIterator(iterators(4), v5),
+      mapIterator(iterators(5), v6),
+      mapIterator(iterators(6), v7))
+
+  private def mapIterator[V](
+      iterator: Iterator[Any],
+      valueMapFunc: Option[Any => V]): Iterator[V] = {
+    valueMapFunc match {
+      case Some(f) => iterator.map(f)
+      case None => iterator.asInstanceOf[Iterator[V]]
     }
   }
 
