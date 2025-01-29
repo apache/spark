@@ -20,7 +20,7 @@ package org.apache.spark
 import java.io.File
 import java.util.UUID
 
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{ShutdownHookManager, Utils}
 
 
 trait LocalRootDirsTest extends SparkFunSuite with LocalSparkContext {
@@ -46,7 +46,9 @@ trait LocalRootDirsTest extends SparkFunSuite with LocalSparkContext {
 
   override def afterEach(): Unit = {
     try {
-      Utils.deleteRecursively(tempDir)
+      if (!ShutdownHookManager.hasRootAsShutdownDeleteDir(tempDir)) {
+        Utils.deleteRecursively(tempDir)
+      }
       Utils.clearLocalRootDirs()
     } finally {
       super.afterEach()
