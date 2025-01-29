@@ -95,6 +95,44 @@ class DescribeTableSuite extends command.DescribeTableSuiteBase
     }
   }
 
+  test("DESCRIBE TABLE EXTENDED AS JSON of a partitioned table") {
+    withNamespaceAndTable("ns", "table") { tbl =>
+      spark.sql(s"CREATE TABLE $tbl (id bigint, data string) $defaultUsing" +
+        " PARTITIONED BY (id)" +
+        " TBLPROPERTIES ('bar'='baz')" +
+        " COMMENT 'this is a test table'" +
+        " LOCATION 'file:/tmp/testcat/table_name'")
+      val descriptionDf = spark.sql(s"DESCRIBE TABLE EXTENDED $tbl AS JSON")
+      System.out.print(descriptionDf.show(truncate = false))
+//      assert(descriptionDf.schema.map(field => (field.name, field.dataType)) === Seq(
+//        ("col_name", StringType),
+//        ("data_type", StringType),
+//        ("comment", StringType)))
+//      QueryTest.checkAnswer(
+//        descriptionDf,
+//        Seq(
+//          Row("id", "bigint", null),
+//          Row("data", "string", null),
+//          Row("# Partition Information", "", ""),
+//          Row("# col_name", "data_type", "comment"),
+//          Row("id", "bigint", null),
+//          Row("", "", ""),
+//          Row("# Metadata Columns", "", ""),
+//          Row("index", "int", "Metadata column used to conflict with a data column"),
+//          Row("_partition", "string", "Partition key used to store the row"),
+//          Row("", "", ""),
+//          Row("# Detailed Table Information", "", ""),
+//          Row("Name", tbl, ""),
+//          Row("Type", "MANAGED", ""),
+//          Row("Comment", "this is a test table", ""),
+//          Row("Location", "file:/tmp/testcat/table_name", ""),
+//          Row("Provider", "_", ""),
+//          Row(TableCatalog.PROP_OWNER.capitalize, Utils.getCurrentUserName(), ""),
+//          Row("Table Properties", "[bar=baz]", ""),
+//          Row("Statistics", "0 bytes, 0 rows", null)))
+    }
+  }
+
   test("describe a non-existent column") {
     withNamespaceAndTable("ns", "tbl") { tbl =>
       sql(s"""
