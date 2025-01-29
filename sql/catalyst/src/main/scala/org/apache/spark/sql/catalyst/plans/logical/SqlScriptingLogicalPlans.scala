@@ -81,9 +81,9 @@ case class CompoundBody(
 /**
  * Logical operator for IF ELSE statement.
  * @param conditions Collection of conditions. First condition corresponds to IF clause,
- *                   while others (if any) correspond to following ELSE IF clauses.
+ *                   while others (if any) correspond to following ELSEIF clauses.
  * @param conditionalBodies Collection of bodies that have a corresponding condition,
- *                          in IF or ELSE IF branches.
+ *                          in IF or ELSEIF branches.
  * @param elseBody Body that is executed if none of the conditions are met,
  *                          i.e. ELSE branch.
  */
