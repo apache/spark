@@ -28,7 +28,7 @@ import org.apache.spark.sql
 import org.apache.spark.sql.{Column, Encoder, TypedColumn}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{agnosticEncoderFor, ProductEncoder}
-import org.apache.spark.sql.connect.ColumnNodeToProtoConverter.toExpr
+import org.apache.spark.sql.connect.ColumnNodeToProtoConverter.{toExpr, toTypedExpr}
 import org.apache.spark.sql.connect.ConnectConversions._
 import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, UdfUtils}
 import org.apache.spark.sql.expressions.SparkUserDefinedFunction
@@ -394,7 +394,6 @@ private class KeyValueGroupedDatasetImpl[K, V, IK, IV](
     private val valueMapFunc: Option[IV => V],
     private val keysFunc: () => Dataset[IK])
     extends KeyValueGroupedDataset[K, V] {
-  import sparkSession.RichColumn
 
   override def keyAs[L: Encoder]: KeyValueGroupedDataset[L, V] = {
     new KeyValueGroupedDatasetImpl[L, V, IK, IV](
@@ -436,7 +435,7 @@ private class KeyValueGroupedDatasetImpl[K, V, IK, IV](
     sparkSession.newDataset[U](outputEncoder) { builder =>
       builder.getGroupMapBuilder
         .setInput(plan.getRoot)
-        .addAllSortingExpressions(sortExprs.map(e => e.expr).asJava)
+        .addAllSortingExpressions(sortExprs.map(toExpr).asJava)
         .addAllGroupingExpressions(groupingExprs)
         .setFunc(getUdf(nf, outputEncoder)(ivEncoder))
     }
@@ -453,10 +452,10 @@ private class KeyValueGroupedDatasetImpl[K, V, IK, IV](
       builder.getCoGroupMapBuilder
         .setInput(plan.getRoot)
         .addAllInputGroupingExpressions(groupingExprs)
-        .addAllInputSortingExpressions(thisSortExprs.map(e => e.expr).asJava)
+        .addAllInputSortingExpressions(thisSortExprs.map(toExpr).asJava)
         .setOther(otherImpl.plan.getRoot)
         .addAllOtherGroupingExpressions(otherImpl.groupingExprs)
-        .addAllOtherSortingExpressions(otherSortExprs.map(e => e.expr).asJava)
+        .addAllOtherSortingExpressions(otherSortExprs.map(toExpr).asJava)
         .setFunc(getUdf(nf, outputEncoder)(ivEncoder, otherImpl.ivEncoder))
     }
   }
@@ -469,7 +468,7 @@ private class KeyValueGroupedDatasetImpl[K, V, IK, IV](
         .setInput(plan.getRoot)
         .setGroupType(proto.Aggregate.GroupType.GROUP_TYPE_GROUPBY)
         .addAllGroupingExpressions(groupingExprs)
-        .addAllAggregateExpressions(columns.map(_.typedExpr(vEncoder)).asJava)
+        .addAllAggregateExpressions(columns.map(c => toTypedExpr(c, vEncoder)).asJava)
     }
   }
 
@@ -534,7 +533,7 @@ private class KeyValueGroupedDatasetImpl[K, V, IK, IV](
       function = nf,
       inputEncoders = inputEncoders,
       outputEncoder = outputEncoder)
-    udf.apply(inputEncoders.map(_ => col("*")): _*).expr.getCommonInlineUserDefinedFunction
+    toExpr(udf.apply(inputEncoders.map(_ => col("*")): _*)).getCommonInlineUserDefinedFunction
   }
 
   private def getUdf[U: Encoder, S: Encoder](
@@ -549,7 +548,7 @@ private class KeyValueGroupedDatasetImpl[K, V, IK, IV](
       function = nf,
       inputEncoders = inputEncoders,
       outputEncoder = outputEncoder)
-    udf.apply(inputEncoders.map(_ => col("*")): _*).expr.getCommonInlineUserDefinedFunction
+    toExpr(udf.apply(inputEncoders.map(_ => col("*")): _*)).getCommonInlineUserDefinedFunction
   }
 
   /**
