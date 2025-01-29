@@ -2565,9 +2565,12 @@ class TransformWithStateInPandas(LogicalPlan):
     ):
         assert isinstance(grouping_cols, list) and all(isinstance(c, Column) for c in grouping_cols)
         if initial_state_plan is not None:
-            assert isinstance(initial_state_grouping_cols, list)\
-                   and all(isinstance(c, Column) for c in initial_state_grouping_cols)
-            super().__init__(child, self._collect_references(grouping_cols + initial_state_grouping_cols))
+            assert isinstance(initial_state_grouping_cols, list) and all(
+                isinstance(c, Column) for c in initial_state_grouping_cols
+            )
+            super().__init__(
+                child, self._collect_references(grouping_cols + initial_state_grouping_cols)
+            )
         else:
             super().__init__(child, self._collect_references(grouping_cols))
         self._grouping_cols = grouping_cols
@@ -2589,7 +2592,9 @@ class TransformWithStateInPandas(LogicalPlan):
         # fill in initial state related fields
         if self._initial_state_plan is not None:
             self._initial_state_plan = cast(LogicalPlan, self._initial_state_plan)
-            plan.transform_with_state_in_pandas.initial_input.CopyFrom(self._initial_state_plan.plan(session))
+            plan.transform_with_state_in_pandas.initial_input.CopyFrom(
+                self._initial_state_plan.plan(session)
+            )
             plan.transform_with_state_in_pandas.initial_grouping_expressions.extend(
                 [c.to_plan(session) for c in self._initial_state_grouping_cols]
             )
@@ -2600,7 +2605,8 @@ class TransformWithStateInPandas(LogicalPlan):
         plan.transform_with_state_in_pandas.event_time_col_name = self._event_time_col_name
         # wrap transformWithStateInPandasUdf in a function
         plan.transform_with_state_in_pandas.transform_with_state_udf.CopyFrom(
-            self._function.to_plan_udf(session))
+            self._function.to_plan_udf(session)
+        )
 
         return self._with_relations(plan, session)
 

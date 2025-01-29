@@ -1032,8 +1032,8 @@ class SparkConnectPlanner(
     val outputSchema = parseSchema(rel.getOutputSchema)
 
     if (rel.hasInitialInput) {
-      val initialGroupingCols = rel.getInitialGroupingExpressionsList.asScala.toSeq.map(
-        expr => Column(transformExpression(expr)))
+      val initialGroupingCols = rel.getInitialGroupingExpressionsList.asScala.toSeq.map(expr =>
+        Column(transformExpression(expr)))
 
       val input = Dataset
         .ofRows(session, transformRelation(rel.getInput))
@@ -1054,7 +1054,8 @@ class SparkConnectPlanner(
           outputSchema,
           rel.getOutputMode,
           rel.getTimeMode,
-          initialStateDs, rel.getEventTimeColName)
+          initialStateDs,
+          rel.getEventTimeColName)
         .logicalPlan
     } else {
       Dataset
@@ -1065,7 +1066,8 @@ class SparkConnectPlanner(
           outputSchema,
           rel.getOutputMode,
           rel.getTimeMode,
-          null, rel.getEventTimeColName)
+          null,
+          rel.getEventTimeColName)
         .logicalPlan
     }
   }

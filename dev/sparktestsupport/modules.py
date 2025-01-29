@@ -1096,7 +1096,7 @@ pyspark_connect = Module(
         "pyspark.sql.tests.connect.pandas.test_parity_pandas_udf_scalar",
         "pyspark.sql.tests.connect.pandas.test_parity_pandas_udf_grouped_agg",
         "pyspark.sql.tests.connect.pandas.test_parity_pandas_udf_window",
-        "pyspark.sql.tests.connect.pandas.test_parity_pandas_transform_with_state"
+        "pyspark.sql.tests.connect.pandas.test_parity_pandas_transform_with_state",
     ],
     excluded_python_implementations=[
         "PyPy"  # Skip these tests under PyPy since they require numpy, pandas, and pyarrow and

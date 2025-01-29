@@ -29,6 +29,7 @@ from pyspark.sql.streaming.stateful_processor import (
     TimerValues,
 )
 from pyspark.sql.streaming.stateful_processor import StatefulProcessor, StatefulProcessorHandle
+
 if TYPE_CHECKING:
     from pyspark.sql.pandas._typing import DataFrameLike as PandasDataFrameLike
     from pyspark.sql.streaming.stateful_processor_util import TransformWithStateInPandasFuncMode
@@ -45,17 +46,16 @@ class TransformWithStateInPandasFuncMode(Enum):
 
 
 class TransformWithStateInPandasUdfUtils:
-
     def __init__(self, stateful_processor: StatefulProcessor, time_mode: str):
         self._stateful_processor = stateful_processor
         self._time_mode = time_mode
 
     def transformWithStateUDF(
-            self,
-            stateful_processor_api_client: StatefulProcessorApiClient,
-            mode: TransformWithStateInPandasFuncMode,
-            key: Any,
-            input_rows: Iterator["PandasDataFrameLike"],
+        self,
+        stateful_processor_api_client: StatefulProcessorApiClient,
+        mode: TransformWithStateInPandasFuncMode,
+        key: Any,
+        input_rows: Iterator["PandasDataFrameLike"],
     ) -> Iterator["PandasDataFrameLike"]:
         if mode == TransformWithStateInPandasFuncMode.PRE_INIT:
             return self._handle_pre_init(stateful_processor_api_client)
@@ -64,9 +64,7 @@ class TransformWithStateInPandasUdfUtils:
 
         if stateful_processor_api_client.handle_state == StatefulProcessorHandleState.CREATED:
             self._stateful_processor.init(handle)
-            stateful_processor_api_client.set_handle_state(
-                StatefulProcessorHandleState.INITIALIZED
-            )
+            stateful_processor_api_client.set_handle_state(StatefulProcessorHandleState.INITIALIZED)
 
         if mode == TransformWithStateInPandasFuncMode.PROCESS_TIMER:
             stateful_processor_api_client.set_handle_state(
@@ -88,12 +86,12 @@ class TransformWithStateInPandasUdfUtils:
             return result
 
     def transformWithStateWithInitStateUDF(
-            self,
-            stateful_processor_api_client: StatefulProcessorApiClient,
-            mode: TransformWithStateInPandasFuncMode,
-            key: Any,
-            input_rows: Iterator["PandasDataFrameLike"],
-            initial_states: Optional[Iterator["PandasDataFrameLike"]] = None,
+        self,
+        stateful_processor_api_client: StatefulProcessorApiClient,
+        mode: TransformWithStateInPandasFuncMode,
+        key: Any,
+        input_rows: Iterator["PandasDataFrameLike"],
+        initial_states: Optional[Iterator["PandasDataFrameLike"]] = None,
     ) -> Iterator["PandasDataFrameLike"]:
         """
         UDF for TWS operator with non-empty initial states. Possible input combinations
@@ -114,9 +112,7 @@ class TransformWithStateInPandasUdfUtils:
 
         if stateful_processor_api_client.handle_state == StatefulProcessorHandleState.CREATED:
             self._stateful_processor.init(handle)
-            stateful_processor_api_client.set_handle_state(
-                StatefulProcessorHandleState.INITIALIZED
-            )
+            stateful_processor_api_client.set_handle_state(StatefulProcessorHandleState.INITIALIZED)
 
         if mode == TransformWithStateInPandasFuncMode.PROCESS_TIMER:
             stateful_processor_api_client.set_handle_state(
@@ -161,8 +157,7 @@ class TransformWithStateInPandasUdfUtils:
         return result
 
     def _handle_pre_init(
-            self,
-            stateful_processor_api_client: StatefulProcessorApiClient
+        self, stateful_processor_api_client: StatefulProcessorApiClient
     ) -> Iterator["PandasDataFrameLike"]:
         # Driver handle is different from the handle used on executors;
         # On JVM side, we will use `DriverStatefulProcessorHandleImpl` for driver handle which
@@ -180,10 +175,10 @@ class TransformWithStateInPandasUdfUtils:
         return iter([])
 
     def _handle_data_rows(
-            self,
-            stateful_processor_api_client: StatefulProcessorApiClient,
-            key: Any,
-            input_rows: Optional[Iterator["PandasDataFrameLike"]] = None,
+        self,
+        stateful_processor_api_client: StatefulProcessorApiClient,
+        key: Any,
+        input_rows: Optional[Iterator["PandasDataFrameLike"]] = None,
     ) -> Iterator["PandasDataFrameLike"]:
         stateful_processor_api_client.set_implicit_key(key)
 
@@ -201,8 +196,8 @@ class TransformWithStateInPandasUdfUtils:
             return iter([])
 
     def _handle_expired_timers(
-            self,
-            stateful_processor_api_client: StatefulProcessorApiClient,
+        self,
+        stateful_processor_api_client: StatefulProcessorApiClient,
     ) -> Iterator["PandasDataFrameLike"]:
         batch_timestamp, watermark_timestamp = stateful_processor_api_client.get_timestamps(
             self._time_mode
@@ -224,9 +219,9 @@ class TransformWithStateInPandasUdfUtils:
             for key_obj, expiry_timestamp in expiry_list:
                 stateful_processor_api_client.set_implicit_key(key_obj)
                 for pd in self._stateful_processor.handleExpiredTimer(
-                        key=key_obj,
-                        timerValues=TimerValues(batch_timestamp, watermark_timestamp),
-                        expiredTimerInfo=ExpiredTimerInfo(expiry_timestamp),
+                    key=key_obj,
+                    timerValues=TimerValues(batch_timestamp, watermark_timestamp),
+                    expiredTimerInfo=ExpiredTimerInfo(expiry_timestamp),
                 ):
                     yield pd
                 stateful_processor_api_client.delete_timer(expiry_timestamp)
