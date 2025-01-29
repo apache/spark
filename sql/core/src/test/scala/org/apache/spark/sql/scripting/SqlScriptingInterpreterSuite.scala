@@ -370,7 +370,7 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
     verifySqlScriptResult(commands, expected)
   }
 
-  test("if else if going in else if") {
+  test("if elseif going in elseif") {
     val commands =
       """
         |BEGIN
@@ -407,7 +407,7 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
     verifySqlScriptResult(commands, expected)
   }
 
-  test("if else if going in else") {
+  test("if elseif going in else") {
     val commands =
       """
         |BEGIN
@@ -448,7 +448,7 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("if else if with count") {
+  test("if elseif with count") {
     withTable("t") {
       val commands =
         """
