@@ -317,6 +317,7 @@ class QueryExecution(
     }
 
     mode match {
+      case OffMode =>
       case SimpleMode =>
         queryExecution.simpleString(false, maxFields, append)
       case ExtendedMode =>
