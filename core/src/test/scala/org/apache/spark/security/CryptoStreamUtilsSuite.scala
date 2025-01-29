@@ -115,7 +115,7 @@ class CryptoStreamUtilsSuite extends SparkFunSuite {
           bytes.toByteArray()
         }.collect()(0)
 
-      assert(content != encrypted)
+      assert(!content.getBytes(UTF_8).sameElements(encrypted))
 
       val in = CryptoStreamUtils.createCryptoInputStream(new ByteArrayInputStream(encrypted),
         sc.conf, SparkEnv.get.securityManager.getIOEncryptionKey().get)
