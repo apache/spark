@@ -51,6 +51,7 @@ org.apache.spark.ml.recommendation.ALS
 org.apache.spark.ml.fpm.FPGrowth
 
 # feature
+org.apache.spark.ml.feature.RFormula
 org.apache.spark.ml.feature.Imputer
 org.apache.spark.ml.feature.StandardScaler
 org.apache.spark.ml.feature.MaxAbsScaler
@@ -60,6 +61,7 @@ org.apache.spark.ml.feature.ChiSqSelector
 org.apache.spark.ml.feature.UnivariateFeatureSelector
 org.apache.spark.ml.feature.VarianceThresholdSelector
 org.apache.spark.ml.feature.StringIndexer
+org.apache.spark.ml.feature.VectorIndexer
 org.apache.spark.ml.feature.PCA
 org.apache.spark.ml.feature.IDF
 org.apache.spark.ml.feature.Word2Vec

@@ -31,6 +31,7 @@ from pyspark.ml.feature import (
     OneHotEncoder,
     OneHotEncoderModel,
     FeatureHasher,
+    ElementwiseProduct,
     HashingTF,
     IDF,
     IDFModel,
@@ -40,6 +41,7 @@ from pyspark.ml.feature import (
     Normalizer,
     Interaction,
     RFormula,
+    RFormulaModel,
     Tokenizer,
     SQLTransformer,
     RegexTokenizer,
@@ -60,9 +62,12 @@ from pyspark.ml.feature import (
     StopWordsRemover,
     StringIndexer,
     StringIndexerModel,
+    VectorIndexer,
+    VectorIndexerModel,
     TargetEncoder,
     TargetEncoderModel,
     VectorSizeHint,
+    VectorSlicer,
     VectorAssembler,
     PCA,
     PCAModel,
@@ -73,6 +78,7 @@ from pyspark.ml.feature import (
     MinHashLSH,
     MinHashLSHModel,
     IndexToString,
+    PolynomialExpansion,
 )
 from pyspark.ml.linalg import DenseVector, SparseVector, Vectors
 from pyspark.sql import Row
@@ -81,6 +87,31 @@ from pyspark.testing.mlutils import SparkSessionTestCase
 
 
 class FeatureTestsMixin:
+    def test_polynomial_expansion(self):
+        df = self.spark.createDataFrame([(Vectors.dense([0.5, 2.0]),)], ["dense"])
+        px = PolynomialExpansion(degree=2)
+        px.setInputCol("dense")
+        px.setOutputCol("expanded")
+        self.assertTrue(
+            np.allclose(
+                px.transform(df).head().expanded.toArray(), [0.5, 0.25, 2.0, 1.0, 4.0], atol=1e-4
+            )
+        )
+
+        def check(p: PolynomialExpansion) -> None:
+            self.assertEqual(p.getInputCol(), "dense")
+            self.assertEqual(p.getOutputCol(), "expanded")
+            self.assertEqual(p.getDegree(), 2)
+
+        check(px)
+
+        # save & load
+        with tempfile.TemporaryDirectory(prefix="px") as d:
+            px.write().overwrite().save(d)
+            px2 = PolynomialExpansion.load(d)
+            self.assertEqual(str(px), str(px2))
+            check(px2)
+
     def test_index_string(self):
         dataset = self.spark.createDataFrame(
             [
@@ -222,6 +253,67 @@ class FeatureTestsMixin:
         self.assertTrue(result[0][0] == "e" and result[1][0] == "f")
         sorted_value = sorted([v for _, v in result])
         self.assertEqual(sorted_value, [0.0, 1.0])
+
+    def test_vector_indexer(self):
+        spark = self.spark
+        df = spark.createDataFrame(
+            [
+                (Vectors.dense([-1.0, 0.0]),),
+                (Vectors.dense([0.0, 1.0]),),
+                (Vectors.dense([0.0, 2.0]),),
+            ],
+            ["a"],
+        )
+
+        indexer = VectorIndexer(maxCategories=2, inputCol="a")
+        indexer.setOutputCol("indexed")
+        self.assertEqual(indexer.getMaxCategories(), 2)
+        self.assertEqual(indexer.getInputCol(), "a")
+        self.assertEqual(indexer.getOutputCol(), "indexed")
+
+        model = indexer.fit(df)
+        self.assertEqual(indexer.uid, model.uid)
+        self.assertEqual(model.numFeatures, 2)
+
+        output = model.transform(df)
+        self.assertEqual(output.columns, ["a", "indexed"])
+        self.assertEqual(output.count(), 3)
+
+        # save & load
+        with tempfile.TemporaryDirectory(prefix="vector_indexer") as d:
+            indexer.write().overwrite().save(d)
+            indexer2 = VectorIndexer.load(d)
+            self.assertEqual(str(indexer), str(indexer2))
+            self.assertEqual(indexer2.getOutputCol(), "indexed")
+
+            model.write().overwrite().save(d)
+            model2 = VectorIndexerModel.load(d)
+            self.assertEqual(str(model), str(model2))
+            self.assertEqual(model2.getOutputCol(), "indexed")
+
+    def test_elementwise_product(self):
+        spark = self.spark
+        df = spark.createDataFrame([(Vectors.dense([2.0, 1.0, 3.0]),)], ["values"])
+
+        ep = ElementwiseProduct()
+        ep.setScalingVec(Vectors.dense([1.0, 2.0, 3.0]))
+        ep.setInputCol("values")
+        ep.setOutputCol("eprod")
+
+        self.assertEqual(ep.getScalingVec(), Vectors.dense([1.0, 2.0, 3.0]))
+        self.assertEqual(ep.getInputCol(), "values")
+        self.assertEqual(ep.getOutputCol(), "eprod")
+
+        output = ep.transform(df)
+        self.assertEqual(output.columns, ["values", "eprod"])
+        self.assertEqual(output.count(), 1)
+
+        # save & load
+        with tempfile.TemporaryDirectory(prefix="elementwise_product") as d:
+            ep.write().overwrite().save(d)
+            ep2 = ElementwiseProduct.load(d)
+            self.assertEqual(str(ep), str(ep2))
+            self.assertEqual(ep2.getOutputCol(), "eprod")
 
     def test_pca(self):
         df = self.spark.createDataFrame(
@@ -1204,11 +1296,25 @@ class FeatureTestsMixin:
         )
         rf = RFormula(formula="y ~ x + s", stringIndexerOrderType="alphabetDesc")
         self.assertEqual(rf.getStringIndexerOrderType(), "alphabetDesc")
-        transformedDF = rf.fit(df).transform(df)
+        model = rf.fit(df)
+        self.assertEqual(rf.uid, model.uid)
+        transformedDF = model.transform(df)
         observed = transformedDF.select("features").collect()
         expected = [[1.0, 0.0], [2.0, 1.0], [0.0, 0.0]]
         for i in range(0, len(expected)):
             self.assertTrue(all(observed[i]["features"].toArray() == expected[i]))
+
+        # save & load
+        with tempfile.TemporaryDirectory(prefix="rformula") as d:
+            rf.write().overwrite().save(d)
+            rf2 = RFormula.load(d)
+            self.assertEqual(str(rf), str(rf2))
+
+            model.write().overwrite().save(d)
+            model2 = RFormulaModel.load(d)
+            # TODO: fix str(model)
+            # self.assertEqual(str(model), str(model2))
+            self.assertEqual(model.getFormula(), model2.getFormula())
 
     def test_string_indexer_handle_invalid(self):
         df = self.spark.createDataFrame([(0, "a"), (1, "d"), (2, None)], ["id", "label"])
@@ -1328,13 +1434,48 @@ class FeatureTestsMixin:
             ["id", "vector"],
         )
 
-        sizeHint = VectorSizeHint(inputCol="vector", handleInvalid="skip")
-        sizeHint.setSize(3)
-        self.assertEqual(sizeHint.getSize(), 3)
+        sh = VectorSizeHint(inputCol="vector", handleInvalid="skip")
+        sh.setSize(3)
+        self.assertEqual(sh.getSize(), 3)
 
-        output = sizeHint.transform(df).head().vector
+        output = sh.transform(df).head().vector
         expected = DenseVector([0.0, 10.0, 0.5])
         self.assertEqual(output, expected)
+
+        # save & load
+        with tempfile.TemporaryDirectory(prefix="vector_size_hint") as d:
+            sh.write().overwrite().save(d)
+            sh2 = VectorSizeHint.load(d)
+            self.assertEqual(str(sh), str(sh2))
+
+    def test_vector_slicer(self):
+        spark = self.spark
+
+        df = spark.createDataFrame(
+            [
+                (Vectors.dense([-2.0, 2.3, 0.0, 0.0, 1.0]),),
+                (Vectors.dense([0.0, 0.0, 0.0, 0.0, 0.0]),),
+                (Vectors.dense([0.6, -1.1, -3.0, 4.5, 3.3]),),
+            ],
+            ["features"],
+        )
+
+        vs = VectorSlicer(outputCol="sliced", indices=[1, 4])
+        vs.setInputCol("features")
+        self.assertEqual(vs.getIndices(), [1, 4])
+        self.assertEqual(vs.getInputCol(), "features")
+        self.assertEqual(vs.getOutputCol(), "sliced")
+
+        output = vs.transform(df)
+        self.assertEqual(output.columns, ["features", "sliced"])
+        self.assertEqual(output.count(), 3)
+        self.assertEqual(output.head().sliced, Vectors.dense([2.3, 1.0]))
+
+        # save & load
+        with tempfile.TemporaryDirectory(prefix="vector_slicer") as d:
+            vs.write().overwrite().save(d)
+            vs2 = VectorSlicer.load(d)
+            self.assertEqual(str(vs), str(vs2))
 
     def test_feature_hasher(self):
         data = [(2.0, True, "1", "foo"), (3.0, False, "2", "bar")]

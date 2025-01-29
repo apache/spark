@@ -297,6 +297,8 @@ class VectorIndexerModel private[ml] (
 
   import VectorIndexerModel._
 
+  private[ml] def this() = this(Identifiable.randomUID("vecIdx"), -1, Map.empty)
+
   /** Java-friendly version of [[categoryMaps]] */
   @Since("1.4.0")
   def javaCategoryMaps: JMap[JInt, JMap[JDouble, JInt]] = {
