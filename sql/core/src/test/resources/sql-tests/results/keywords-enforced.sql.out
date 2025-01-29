@@ -104,6 +104,7 @@ DO	false
 DOUBLE	false
 DROP	false
 ELSE	true
+ELSEIF	false
 END	true
 ESCAPE	true
 ESCAPED	false
