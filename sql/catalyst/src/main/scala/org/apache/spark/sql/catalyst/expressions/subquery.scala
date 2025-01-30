@@ -94,6 +94,7 @@ abstract class SubqueryExpression(
   def withNewHint(hint: Option[HintInfo]): SubqueryExpression
   def withNewUnresolvedOuterAttrs(unresolvedOuterAttrs: Seq[Expression]): SubqueryExpression
   def getUnresolvedOuterAttrs: Seq[Expression] = unresolvedOuterAttrs
+  def getOuterAttrs: Seq[Expression] = outerAttrs
 }
 
 object SubqueryExpression {
