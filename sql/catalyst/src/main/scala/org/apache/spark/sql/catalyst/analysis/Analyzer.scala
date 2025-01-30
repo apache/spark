@@ -335,7 +335,8 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       WindowsSubstitution,
       EliminateUnions,
       SubstituteUnresolvedOrdinals,
-      EliminateLazyExpression),
+      EliminateLazyExpression,
+      RegexSubstitution),
     Batch("Disable Hints", Once,
       new ResolveHints.DisableHints),
     Batch("Hints", fixedPoint,
@@ -3849,5 +3850,22 @@ object RemoveTempResolvedColumn extends Rule[LogicalPlan] {
           t.child
         }
     }
+  }
+}
+
+object RegexSubstitution extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
+    case Like(left, right, escapeChar) if (conf.regexEngine.equalsIgnoreCase("JONI")) =>
+      LikeJoni(left, right, escapeChar)
+    case RLike(left, right) if (conf.regexEngine.equalsIgnoreCase("JONI")) =>
+      RLikeJoni(left, right)
+    case LikeAll(child, patterns) if (conf.regexEngine.equalsIgnoreCase("JONI")) =>
+      LikeAllJoni(child, patterns)
+    case NotLikeAll(child, patterns) if (conf.regexEngine.equalsIgnoreCase("JONI")) =>
+      NotLikeAllJoni(child, patterns)
+    case LikeAny(child, patterns) if (conf.regexEngine.equalsIgnoreCase("JONI")) =>
+      LikeAnyJoni(child, patterns)
+    case NotLikeAny(child, patterns) if (conf.regexEngine.equalsIgnoreCase("JONI")) =>
+      NotLikeAnyJoni(child, patterns)
   }
 }

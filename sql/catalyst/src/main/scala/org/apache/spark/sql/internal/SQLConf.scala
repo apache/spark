@@ -22,16 +22,13 @@ import java.util
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
 import java.util.zip.Deflater
-
 import scala.collection.immutable
 import scala.jdk.CollectionConverters._
 import scala.util.Try
 import scala.util.control.NonFatal
 import scala.util.matching.Regex
-
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce.OutputCommitter
-
 import org.apache.spark.{ErrorMessageFormat, SparkConf, SparkContext, SparkException, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
@@ -5162,6 +5159,14 @@ object SQLConf {
     .checkValues(ErrorMessageFormat.values.map(_.toString))
     .createWithDefault(ErrorMessageFormat.PRETTY.toString)
 
+  val REGEX_ENGINE =
+    buildConf("spark.sql.regex.engine")
+      .version("3.5.0")
+      .stringConf
+      .transform(_.toUpperCase(Locale.ROOT))
+      .checkValues(RegexEngineType.values.map(_.toString))
+      .createWithDefault(RegexEngineType.JAVA.toString())
+
   val LATERAL_COLUMN_ALIAS_IMPLICIT_ENABLED =
     buildConf("spark.sql.lateralColumnAlias.enableImplicitResolution")
       .internal()
@@ -5577,6 +5582,10 @@ object SQLConf {
 
     Map(configs.map { cfg => cfg.key -> cfg } : _*)
   }
+}
+
+object RegexEngineType extends Enumeration {
+  val JAVA, JONI = Value
 }
 
 /**
@@ -6413,6 +6422,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
     ErrorMessageFormat.withName(getConf(SQLConf.ERROR_MESSAGE_FORMAT))
 
   def defaultDatabase: String = getConf(StaticSQLConf.CATALOG_DEFAULT_DATABASE)
+
+  def regexEngine: String = getConf(REGEX_ENGINE)
 
   def globalTempDatabase: String = getConf(StaticSQLConf.GLOBAL_TEMP_DATABASE)
 

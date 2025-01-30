@@ -19,9 +19,7 @@ package org.apache.spark.sql.catalyst
 
 import java.sql.{Date, Timestamp}
 import java.time.{Duration, Instant, LocalDate, LocalDateTime, Period}
-
 import scala.language.implicitConversions
-
 import org.apache.spark.api.java.function.FilterFunction
 import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.analysis._
@@ -32,6 +30,7 @@ import org.apache.spark.sql.catalyst.plans.{Inner, JoinType}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.CollationFactory
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -66,6 +65,7 @@ import org.apache.spark.unsafe.types.UTF8String
  */
 package object dsl {
   trait ImplicitOperators {
+    val conf = SQLConf.get
     def expr: Expression
 
     def unary_+ : Expression = UnaryPositive(expr)
@@ -102,19 +102,54 @@ package object dsl {
       case _ => In(expr, list)
     }
 
-    def like(other: Expression, escapeChar: Char = '\\'): Predicate =
-      Like(expr, other, escapeChar)
+    def like(other: Expression, escapeChar: Char = '\\'): Predicate = {
+      if (conf.regexEngine.equalsIgnoreCase("JONI")) {
+        LikeJoni(expr, other, escapeChar)
+      } else {
+        Like(expr, other, escapeChar)
+      }
+    }
     def ilike(other: Expression, escapeChar: Char = '\\'): Expression =
       new ILike(expr, other, escapeChar)
-    def rlike(other: Expression): Predicate = RLike(expr, other)
-    def likeAll(others: Expression*): Predicate =
-      LikeAll(expr, others.map(_.eval(EmptyRow).asInstanceOf[UTF8String]))
-    def notLikeAll(others: Expression*): Predicate =
-      NotLikeAll(expr, others.map(_.eval(EmptyRow).asInstanceOf[UTF8String]))
-    def likeAny(others: Expression*): Predicate =
-      LikeAny(expr, others.map(_.eval(EmptyRow).asInstanceOf[UTF8String]))
-    def notLikeAny(others: Expression*): Predicate =
-      NotLikeAny(expr, others.map(_.eval(EmptyRow).asInstanceOf[UTF8String]))
+    def rlike(other: Expression): Predicate = {
+      if (conf.regexEngine.equalsIgnoreCase("JONI")) {
+        RLikeJoni(expr, other)
+      } else {
+        RLike(expr, other)
+      }
+    }
+
+    def likeAll(others: Expression*): Predicate = {
+      if (conf.regexEngine.equalsIgnoreCase("JONI")) {
+        LikeAllJoni(expr, others.map(_.eval(EmptyRow).asInstanceOf[UTF8String]))
+      } else {
+        LikeAll(expr, others.map(_.eval(EmptyRow).asInstanceOf[UTF8String]))
+      }
+    }
+
+    def notLikeAll(others: Expression*): Predicate = {
+      if (conf.regexEngine.equalsIgnoreCase("JONI")) {
+        NotLikeAllJoni(expr, others.map(_.eval(EmptyRow).asInstanceOf[UTF8String]))
+      } else {
+        NotLikeAll(expr, others.map(_.eval(EmptyRow).asInstanceOf[UTF8String]))
+      }
+    }
+
+    def likeAny(others: Expression*): Predicate = {
+      if (conf.regexEngine.equalsIgnoreCase("JONI")) {
+        LikeAnyJoni(expr, others.map(_.eval(EmptyRow).asInstanceOf[UTF8String]))
+      } else {
+        LikeAny(expr, others.map(_.eval(EmptyRow).asInstanceOf[UTF8String]))
+      }
+    }
+
+    def notLikeAny(others: Expression*): Predicate = {
+      if (conf.regexEngine.equalsIgnoreCase("JONI")) {
+        NotLikeAnyJoni(expr, others.map(_.eval(EmptyRow).asInstanceOf[UTF8String]))
+      } else {
+        NotLikeAny(expr, others.map(_.eval(EmptyRow).asInstanceOf[UTF8String]))
+      }
+    }
     def contains(other: Expression): Predicate = Contains(expr, other)
     def startsWith(other: Expression): Predicate = StartsWith(expr, other)
     def endsWith(other: Expression): Predicate = EndsWith(expr, other)

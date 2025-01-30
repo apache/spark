@@ -807,6 +807,33 @@ object LikeSimplification extends Rule[LogicalPlan] with PredicateHelper {
     }
   }
 
+  private def simplifyMultiLikeJoni(child: Expression, patterns: Seq[UTF8String],
+                                    multi: MultiLikeJoniBase): Expression = {
+    val (remainPatternMap, replacementMap) =
+      patterns.map { p =>
+        p -> Option(p).flatMap(p => simplifyLike(child, p.toString))
+      }.partition(_._2.isEmpty)
+    val remainPatterns = remainPatternMap.map(_._1)
+    val replacements = replacementMap.map(_._2.get)
+    if (replacements.isEmpty) {
+      multi
+    } else {
+      multi match {
+        case l: LikeAllJoni =>
+          val and = buildBalancedPredicate(replacements, And)
+          if (remainPatterns.nonEmpty) And(and, l.copy(patterns = remainPatterns)) else and
+        case l: NotLikeAllJoni =>
+          val and = buildBalancedPredicate(replacements.map(Not(_)), And)
+          if (remainPatterns.nonEmpty) And(and, l.copy(patterns = remainPatterns)) else and
+        case l: LikeAnyJoni =>
+          val or = buildBalancedPredicate(replacements, Or)
+          if (remainPatterns.nonEmpty) Or(or, l.copy(patterns = remainPatterns)) else or
+        case l: NotLikeAnyJoni =>
+          val or = buildBalancedPredicate(replacements.map(Not(_)), Or)
+          if (remainPatterns.nonEmpty) Or(or, l.copy(patterns = remainPatterns)) else or
+      }
+    }
+  }
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformAllExpressionsWithPruning(
     _.containsPattern(LIKE_FAMLIY), ruleId) {
     case l @ Like(input, Literal(pattern, _: StringType), escapeChar) =>
@@ -824,6 +851,20 @@ object LikeSimplification extends Rule[LogicalPlan] with PredicateHelper {
       simplifyMultiLike(child, patterns, l)
     case l @ NotLikeAny(child, patterns) if CollapseProject.isCheap(child) =>
       simplifyMultiLike(child, patterns, l)
+    case l @ LikeJoni(input, Literal(pattern, StringType), escapeChar) =>
+      if (pattern == null) {
+        Literal(null, BooleanType)
+      } else {
+        simplifyLike(input, pattern.toString, escapeChar).getOrElse(l)
+      }
+    case l @ LikeAllJoni(child, patterns) if CollapseProject.isCheap(child) =>
+      simplifyMultiLikeJoni(child, patterns, l)
+    case l @ NotLikeAllJoni(child, patterns) if CollapseProject.isCheap(child) =>
+      simplifyMultiLikeJoni(child, patterns, l)
+    case l @ LikeAnyJoni(child, patterns) if CollapseProject.isCheap(child) =>
+      simplifyMultiLikeJoni(child, patterns, l)
+    case l @ NotLikeAnyJoni(child, patterns) if CollapseProject.isCheap(child) =>
+      simplifyMultiLikeJoni(child, patterns, l)
   }
 }
 

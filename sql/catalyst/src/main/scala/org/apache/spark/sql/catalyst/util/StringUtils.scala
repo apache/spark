@@ -18,15 +18,16 @@
 package org.apache.spark.sql.catalyst.util
 
 import java.util.regex.{Pattern, PatternSyntaxException}
-
 import org.apache.commons.text.similarity.LevenshteinDistance
-
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.unsafe.types.UTF8String
+
+import java.nio.charset.StandardCharsets
+import scala.collection.mutable.ArrayBuffer
 
 object StringUtils extends Logging {
 
@@ -64,6 +65,38 @@ object StringUtils extends Logging {
       }
     }
     "(?s)" + out.result() // (?s) enables dotall mode, causing "." to match new lines
+  }
+
+  def escapeLikeJoniRegex(pattern: Array[Byte], escapeChar: Char): Array[Byte] = {
+    val in = pattern.iterator
+    val out = new ArrayBuffer[Byte]()
+    out.appendAll("(?s)".getBytes())
+
+    def fail(message: String) = throw QueryCompilationErrors.escapeCharacterInTheMiddleError(
+      new String(pattern, StandardCharsets.UTF_8), message)
+
+    while (in.hasNext) {
+      in.next() match {
+        case c1 if c1 == escapeChar && in.hasNext =>
+          val c = in.next()
+          c match {
+            case '_' | '%' =>
+              out.appendAll(Pattern.quote(Character.toString(c.toChar)).getBytes())
+            case c if c == escapeChar =>
+              out.appendAll(Pattern.quote(Character.toString(c.toChar)).getBytes())
+            case _ => throw QueryCompilationErrors.escapeCharacterInTheMiddleError(
+              new String(pattern, StandardCharsets.UTF_8), Character.toString(c.toChar))
+          }
+        case c if c == escapeChar =>
+          throw QueryCompilationErrors.escapeCharacterAtTheEndError(
+            new String(pattern, StandardCharsets.UTF_8))
+        case '_' => out += '.'
+        case '%' => out.appendAll(Array[Byte]('.', '*'))
+        case c if c < 0 => out.append(c)
+        case c => out.appendAll(Pattern.quote(Character.toString(c.toChar)).getBytes())
+      }
+    }
+    out.toArray
   }
 
   private[this] val trueStrings =
