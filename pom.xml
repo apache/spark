@@ -2255,7 +2255,7 @@
         <groupId>${hive.group}</groupId>
         <artifactId>hive-llap-common</artifactId>
         <version>${hive.version}</version>
-        <scope>${hive.deps.scope}</scope>
+        <scope>${hive.llap.scope}</scope>
         <exclusions>
           <exclusion>
             <groupId>${hive.group}</groupId>
