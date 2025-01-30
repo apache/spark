@@ -29,9 +29,8 @@ import pyspark.sql.connect.proto as proto
 from pyspark.sql.column import Column
 from pyspark.sql.connect.expressions import SubqueryExpression, SortOrder
 from pyspark.sql.connect.functions import builtin as F
-from pyspark.sql.table_arg import TableArg as ParentTableArg
 
-from pyspark.errors import PySparkValueError
+from pyspark.errors import IllegalArgumentException
 
 if TYPE_CHECKING:
     from pyspark.sql._typing import ColumnOrName
@@ -44,7 +43,7 @@ def _to_cols(cols: Tuple[Union["ColumnOrName", Sequence["ColumnOrName"]], ...]) 
     return [F._to_col(c) for c in cast(Iterable["ColumnOrName"], cols)]
 
 
-class TableArg(ParentTableArg):
+class TableArg:
     def __init__(self, subquery_expr: SubqueryExpression):
         self._subquery_expr = subquery_expr
 
@@ -56,7 +55,7 @@ class TableArg(ParentTableArg):
 
     def partitionBy(self, *cols: "ColumnOrName") -> "TableArg":
         if self._is_partitioned():
-            raise PySparkValueError(
+            raise IllegalArgumentException(
                 "Cannot call partitionBy() after partitionBy() or withSinglePartition() has been called."
             )
         new_expr = SubqueryExpression(
@@ -70,7 +69,7 @@ class TableArg(ParentTableArg):
 
     def orderBy(self, *cols: "ColumnOrName") -> "TableArg":
         if not self._is_partitioned():
-            raise PySparkValueError(
+            raise IllegalArgumentException(
                 "Please call partitionBy() or withSinglePartition() before orderBy()."
             )
         new_order_spec = [cast(SortOrder, F._sort_col(c)._expr) for c in _to_cols(cols)]
@@ -85,7 +84,7 @@ class TableArg(ParentTableArg):
 
     def withSinglePartition(self) -> "TableArg":
         if self._is_partitioned():
-            raise PySparkValueError(
+            raise IllegalArgumentException(
                 "Cannot call withSinglePartition() after partitionBy() or withSinglePartition() has been called."
             )
         new_expr = SubqueryExpression(

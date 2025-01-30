@@ -146,10 +146,8 @@ class UserDefinedTableFunction:
                 return col._expr
             elif isinstance(col, TableArg):
                 return col._subquery_expr
-            elif isinstance(col, str):
-                return ColumnReference(col)  # type: ignore[arg-type]
             else:
-                raise TypeError(f"Unsupported column or argument type: {type(col)}")
+                return ColumnReference(col)  # type: ignore[arg-type]
 
         arg_exprs: List[Expression] = [to_expr(arg) for arg in args] + [
             NamedArgumentExpression(key, to_expr(value)) for key, value in kwargs.items()
