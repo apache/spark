@@ -591,7 +591,7 @@ class TransformWithStateInPandasTestsMixin:
         df = self._build_test_df(input_path)
         self.assertTrue(df.isStreaming)
 
-        output_schema = "id string, value str"
+        output_schema = "id string, value string"
 
         if initial_state is None:
             data = [("0", 789), ("3", 987)]
@@ -879,6 +879,18 @@ class TransformWithStateInPandasTestsMixin:
         "COVERAGE_PROCESS_START" in os.environ, "Flaky with coverage enabled, skipping for now."
     )
     def test_transform_with_map_state_metadata(self):
+        self._test_transform_with_map_state_metadata(None)
+
+    def test_transform_with_map_state_metadata_with_init_state(self):
+        # run the same test suite again but with no-op initial state
+        # TWS with initial state is using a different python runner
+        init_data = [("0", 789), ("3", 987)]
+        initial_state = self.spark.createDataFrame(init_data, "id string, temperature int").groupBy(
+            "id"
+        )
+        self._test_transform_with_map_state_metadata(initial_state)
+
+    def _test_transform_with_map_state_metadata(self, initial_state):
         checkpoint_path = tempfile.mktemp()
 
         def check_results(batch_df, batch_id):
@@ -982,22 +994,6 @@ class TransformWithStateInPandasTestsMixin:
                     .load()
                 )
                 assert list_state_df.isEmpty()
-
-        self._test_transform_with_state_in_pandas_basic(
-            MapStateLargeTTLProcessor(),
-            check_results,
-            True,
-            "processingTime",
-            checkpoint_path=checkpoint_path,
-            initial_state=None,
-        )
-
-        # run the same test suite again but with no-op initial state
-        # TWS with initial state is using a different python runner
-        init_data = [("0", 789), ("3", 987)]
-        initial_state = self.spark.createDataFrame(init_data, "id string, temperature int").groupBy(
-            "id"
-        )
 
         self._test_transform_with_state_in_pandas_basic(
             MapStateLargeTTLProcessor(),
