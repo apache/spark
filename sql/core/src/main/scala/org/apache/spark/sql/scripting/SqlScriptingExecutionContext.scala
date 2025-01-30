@@ -91,7 +91,7 @@ object SqlScriptingFrameType extends Enumeration {
  *                   Available only for frameType = HANDLER.
  */
 class SqlScriptingExecutionFrame(
-    private[scripting] val executionPlan: CompoundBodyExec,
+    val executionPlan: CompoundBodyExec,
     val frameType: SqlScriptingFrameType,
     val scopeLabel: Option[String] = None) extends Iterator[CompoundStatementExec] {
 

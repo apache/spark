@@ -48,8 +48,8 @@ class SqlScriptingExecution(
     ctx.frames.append(
       new SqlScriptingExecutionFrame(executionPlan, SqlScriptingFrameType.SQL_SCRIPT))
     // Enter the scope of the top level compound.
-    // We don't need to exit this scope explicitly as it will be done automatically
-    // when the frame is removed during iteration.
+    // We exit this scope explicitly in the getNextStatement method when there are no more
+    // statements to execute.
     executionPlan.enterScope()
     // Return the context.
     ctx
