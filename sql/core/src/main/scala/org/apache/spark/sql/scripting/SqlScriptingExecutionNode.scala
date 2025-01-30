@@ -234,7 +234,7 @@ class CompoundBodyExec(
    * iteration, but it should be executed only once when compound body that represent
    * scope is encountered for the first time.
    */
-  def enterScope(): Unit = {
+  private[scripting] def enterScope(): Unit = {
     // This check makes this operation idempotent.
     if (isScope && scopeStatus == ScopeStatus.NOT_ENTERED) {
       scopeStatus = ScopeStatus.INSIDE
@@ -247,7 +247,7 @@ class CompoundBodyExec(
    *
    * Even though this operation is called exactly once, we are making it idempotent.
    */
-  protected def exitScope(): Unit = {
+  private[scripting] def exitScope(): Unit = {
     // This check makes this operation idempotent.
     if (isScope && scopeStatus == ScopeStatus.INSIDE) {
       scopeStatus = ScopeStatus.EXITED

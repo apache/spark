@@ -61,6 +61,14 @@ class SqlScriptingExecution(
     // Remove frames that are already executed.
     while (context.frames.nonEmpty && !context.frames.last.hasNext) {
       val lastFrame = context.frames.last
+
+      // First frame on stack is always script frame. If there are no more statements to execute,
+      // exit the scope of the script frame.
+      // This scope was entered when the script frame was created and added to the context.
+      if (context.frames.size == 1 && context.frames.last.scopes.size == 1) {
+        context.frames.last.executionPlan.exitScope()
+      }
+
       context.frames.remove(context.frames.size - 1)
 
       // If the last frame is a handler, set leave statement to be the next one in the

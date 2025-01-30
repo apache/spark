@@ -91,12 +91,12 @@ object SqlScriptingFrameType extends Enumeration {
  *                   Available only for frameType = HANDLER.
  */
 class SqlScriptingExecutionFrame(
-    val executionPlan: CompoundBodyExec,
+    private[scripting] val executionPlan: CompoundBodyExec,
     val frameType: SqlScriptingFrameType,
     val scopeLabel: Option[String] = None) extends Iterator[CompoundStatementExec] {
 
   // List of scopes that are currently active.
-  private val scopes: ListBuffer[SqlScriptingExecutionScope] = ListBuffer.empty
+  private[scripting] val scopes: ListBuffer[SqlScriptingExecutionScope] = ListBuffer.empty
 
   override def hasNext: Boolean = executionPlan.getTreeIterator.hasNext
 
