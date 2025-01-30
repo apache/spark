@@ -59,7 +59,6 @@ from pyspark.errors import (
     PySparkValueError,
     PySparkPicklingError,
 )
-from pyspark.sql.streaming.stateful_processor import StatefulProcessor
 
 if TYPE_CHECKING:
     from pyspark.sql.connect.client import SparkConnectClient

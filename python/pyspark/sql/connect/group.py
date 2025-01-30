@@ -41,7 +41,7 @@ import pyspark.sql.connect.plan as plan
 from pyspark.sql.column import Column
 from pyspark.sql.connect.functions import builtin as F
 from pyspark.errors import PySparkNotImplementedError, PySparkTypeError
-from pyspark.sql.streaming.stateful_processor import StatefulProcessor, StatefulProcessorHandle
+from pyspark.sql.streaming.stateful_processor import StatefulProcessor
 
 if TYPE_CHECKING:
     from pyspark.sql.connect._typing import (

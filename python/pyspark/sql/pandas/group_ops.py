@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 import sys
-from typing import Any, Iterator, List, Optional, Union, TYPE_CHECKING, cast
+from typing import List, Optional, Union, TYPE_CHECKING, cast
 import warnings
 
 from pyspark.errors import PySparkTypeError
@@ -23,7 +23,7 @@ from pyspark.util import PythonEvalType
 from pyspark.sql.column import Column
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.streaming.state import GroupStateTimeout
-from pyspark.sql.streaming.stateful_processor import StatefulProcessor, StatefulProcessorHandle
+from pyspark.sql.streaming.stateful_processor import StatefulProcessor
 from pyspark.sql.types import StructType
 
 if TYPE_CHECKING:
