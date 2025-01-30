@@ -242,20 +242,26 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest
     assert(rows10(1).getString(0) === "alex")
   }
 
+  def testCastStringTarget(stringLiteral: String, stringCol: String): String = stringCol
+
   test("SPARK-50793: MySQL JDBC Connector failed to cast some types") {
     val tableName = catalogName + ".test_cast_function"
     withTable(tableName) {
       val stringValue = "0"
       val stringLiteral = "'0'"
+      val stringCol = "string_col"
       val longValue = 0L
+      val longCol = "long_col"
       val binaryValue = Array[Byte](0x30)
       val binaryLiteral = "x'30'"
+      val binaryCol = "binary_col"
       val doubleValue = 0.0
       val doubleLiteral = "0.0"
+      val doubleCol = "double_col"
       // CREATE table to use types defined in Spark SQL
       sql(
-        s"CREATE TABLE $tableName (string_col STRING, long_col LONG, " +
-          "binary_col BINARY, double_col DOUBLE)")
+        s"CREATE TABLE $tableName ($stringCol STRING, $longCol LONG, " +
+          s"$binaryCol BINARY, $doubleCol DOUBLE)")
       sql(
         s"INSERT INTO $tableName VALUES($stringLiteral, $longValue, $binaryLiteral, $doubleValue)")
 
@@ -284,16 +290,30 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest
         }
       }
 
-      testCast("BINARY", "string_col", "binary_col", BinaryType, binaryValue);
-      testCast("SHORT", "string_col", "long_col", LongType, longValue)
-      testCast("INTEGER", "string_col", "long_col", LongType, longValue)
-      testCast("LONG", "string_col", "long_col", LongType, longValue)
-      // We use stringLiteral to make sure both values are using the same collation
-      testCast("STRING", "long_col", stringLiteral, StringType, stringValue)
-      testCast("STRING", "binary_col", stringLiteral, StringType, stringValue)
-      testCast("STRING", "double_col", stringLiteral, StringType, doubleLiteral)
-      testCast("DOUBLE", "string_col", "double_col", DoubleType, doubleValue)
-      testCast("DOUBLE", "long_col", "double_col", DoubleType, doubleValue)
+      testCast("BINARY", stringCol, binaryCol, BinaryType, binaryValue);
+      testCast("SHORT", stringCol, longCol, LongType, longValue)
+      testCast("INTEGER", stringCol, longCol, LongType, longValue)
+      testCast("LONG", stringCol, longCol, LongType, longValue)
+      testCast(
+        "STRING",
+        longCol,
+        testCastStringTarget(stringLiteral, stringCol),
+        StringType,
+        stringValue)
+      testCast(
+        "STRING",
+        binaryCol,
+        testCastStringTarget(stringLiteral, stringCol),
+        StringType,
+        stringValue)
+      testCast(
+        "STRING",
+        doubleCol,
+        testCastStringTarget(stringLiteral, stringCol),
+        StringType,
+        doubleLiteral)
+      testCast("DOUBLE", stringCol, doubleCol, DoubleType, doubleValue)
+      testCast("DOUBLE", longCol, doubleCol, DoubleType, doubleValue)
     }
   }
 }
@@ -319,4 +339,7 @@ class MySQLOverMariaConnectorIntegrationSuite extends MySQLIntegrationSuite {
       s"jdbc:mysql://$ip:$port/mysql?user=root&password=rootpass&allowPublicKeyRetrieval=true" +
         s"&useSSL=false"
   }
+
+  override def testCastStringTarget(stringLiteral: String, stringCol: String): String =
+    stringLiteral
 }
