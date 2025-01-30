@@ -595,7 +595,7 @@ class LogThrottler(
   def throttledWithSkippedLogMessage(thunk: MessageWithContext => Unit): Unit = {
     this.throttled { numSkipped =>
       val skippedStr = if (numSkipped != 0L) {
-        log" [${MDC(LogKeys.NUM_SKIPPED, numSkipped)} similar messages were skipped.]"
+        log"[${MDC(LogKeys.NUM_SKIPPED, numSkipped)} similar messages were skipped.]"
       } else {
         log""
       }
@@ -617,11 +617,13 @@ class LogThrottler(
         remainingTokens += 1
         nextRecovery += tokenRecoveryInterval
       }
+
+      val currentTime = DeadlineWithTimeSource.now(timeSource)
       if (remainingTokens == bucketSize &&
-        (DeadlineWithTimeSource.now(timeSource) - nextRecovery) > tokenRecoveryInterval) {
+        (currentTime - nextRecovery) > tokenRecoveryInterval) {
         // Reset the recovery time, so we don't accumulate infinite recovery while nothing is
         // going on.
-        nextRecovery = DeadlineWithTimeSource.now(timeSource) + tokenRecoveryInterval
+        nextRecovery = currentTime + tokenRecoveryInterval
       }
     } catch {
       case _: IllegalArgumentException =>
