@@ -2365,7 +2365,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
           val res = resolveSubQuery(e, outer)(Exists(_, _, Seq.empty, exprId))
           val unresolvedOuterReferences = getUnresolvedOuterReferences(res, plan)
           res.withNewUnresolvedOuterAttrs(unresolvedOuterReferences)
-        case InSubquery(values, l @ ListQuery(_, _, exprId, _, _, _))
+        case InSubquery(values, l @ ListQuery(_, _, _, exprId, _, _, _))
             if values.forall(_.resolved) && !l.resolved =>
           val expr = resolveSubQuery(l, outer)((plan, exprs) => {
             ListQuery(plan, exprs, Seq.empty, exprId, plan.output.length)
