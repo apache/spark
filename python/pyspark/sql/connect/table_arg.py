@@ -49,19 +49,21 @@ class TableArg:
 
     def _is_partitioned(self) -> bool:
         """Checks if partitioning is already applied."""
-        return (
-            bool(self._subquery_expr._partition_spec) or self._subquery_expr._with_single_partition
+        return bool(self._subquery_expr._partition_spec) or bool(
+            self._subquery_expr._with_single_partition
         )
 
     def partitionBy(self, *cols: "ColumnOrName") -> "TableArg":
         if self._is_partitioned():
             raise IllegalArgumentException(
-                "Cannot call partitionBy() after partitionBy() or withSinglePartition() has been called."
+                "Cannot call partitionBy() after partitionBy() or "
+                "withSinglePartition() has been called."
             )
         new_expr = SubqueryExpression(
             plan=self._subquery_expr._plan,
             subquery_type=self._subquery_expr._subquery_type,
-            partition_spec=self._subquery_expr._partition_spec + [c._expr for c in _to_cols(cols)],
+            partition_spec=list(self._subquery_expr._partition_spec)
+            + [c._expr for c in _to_cols(cols)],
             order_spec=self._subquery_expr._order_spec,
             with_single_partition=self._subquery_expr._with_single_partition,
         )
@@ -77,7 +79,7 @@ class TableArg:
             plan=self._subquery_expr._plan,
             subquery_type=self._subquery_expr._subquery_type,
             partition_spec=self._subquery_expr._partition_spec,
-            order_spec=self._subquery_expr._order_spec + new_order_spec,
+            order_spec=list(self._subquery_expr._order_spec) + new_order_spec,
             with_single_partition=self._subquery_expr._with_single_partition,
         )
         return TableArg(new_expr)
@@ -85,7 +87,8 @@ class TableArg:
     def withSinglePartition(self) -> "TableArg":
         if self._is_partitioned():
             raise IllegalArgumentException(
-                "Cannot call withSinglePartition() after partitionBy() or withSinglePartition() has been called."
+                "Cannot call withSinglePartition() after partitionBy() "
+                "or withSinglePartition() has been called."
             )
         new_expr = SubqueryExpression(
             plan=self._subquery_expr._plan,

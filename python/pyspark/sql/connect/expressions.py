@@ -1283,9 +1283,6 @@ class SubqueryExpression(Expression):
                 proto.SubqueryExpression.SUBQUERY_TYPE_TABLE_ARG
             )
 
-            if not expr.subquery_expression.HasField("table_arg_options"):
-                expr.subquery_expression.table_arg_options.SetInParent()
-
             # Populate TableArgOptions
             table_arg_options = expr.subquery_expression.table_arg_options
             if len(self._partition_spec) > 0:
