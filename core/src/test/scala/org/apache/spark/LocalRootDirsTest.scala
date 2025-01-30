@@ -46,6 +46,9 @@ trait LocalRootDirsTest extends SparkFunSuite with LocalSparkContext {
 
   override def afterEach(): Unit = {
     try {
+      // SPARK-51030: Only perform manual cleanup of the `tempDir` if it has
+      // not been registered for cleanup via a shutdown hook, to avoid potential
+      // IOException due to race conditions during multithreaded cleanup.
       if (!ShutdownHookManager.hasShutdownDeleteDir(tempDir) &&
         !ShutdownHookManager.hasRootAsShutdownDeleteDir(tempDir)) {
         Utils.deleteRecursively(tempDir)
