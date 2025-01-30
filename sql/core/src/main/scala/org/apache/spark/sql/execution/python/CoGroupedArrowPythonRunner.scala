@@ -60,6 +60,7 @@ class CoGroupedArrowPythonRunner(
 
   override val faultHandlerEnabled: Boolean = SQLConf.get.pythonUDFWorkerFaulthandlerEnabled
 
+  override val hideTraceback: Boolean = SQLConf.get.pysparkHideTraceback
   override val simplifiedTraceback: Boolean = SQLConf.get.pysparkSimplifiedTraceback
 
   protected def newWriter(

@@ -401,6 +401,9 @@ class NaiveBayesModel private[ml] (
 
   import NaiveBayes._
 
+  private[ml] def this() = this(Identifiable.randomUID("nb"),
+    Vectors.empty, Matrices.empty, Matrices.empty)
+
   /**
    * mllib NaiveBayes is a wrapper of ml implementation currently.
    * Input labels of mllib could be {-1, +1} and mllib NaiveBayesModel exposes labels,

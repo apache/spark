@@ -121,6 +121,8 @@ class IDFModel private[ml] (
 
   import IDFModel._
 
+  private[ml] def this() = this(Identifiable.randomUID("idf"), null)
+
   /** @group setParam */
   @Since("1.4.0")
   def setInputCol(value: String): this.type = set(inputCol, value)

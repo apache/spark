@@ -173,10 +173,10 @@ class MapState:
 
     def __init__(
         self,
-        MapStateClient: MapStateClient,
+        mapStateClient: MapStateClient,
         stateName: str,
     ) -> None:
-        self._mapStateClient = MapStateClient
+        self._mapStateClient = mapStateClient
         self._stateName = stateName
 
     def exists(self) -> bool:

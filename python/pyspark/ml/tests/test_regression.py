@@ -23,10 +23,20 @@ import numpy as np
 from pyspark.ml.linalg import Vectors
 from pyspark.sql import SparkSession
 from pyspark.ml.regression import (
+    AFTSurvivalRegression,
+    AFTSurvivalRegressionModel,
+    IsotonicRegression,
+    IsotonicRegressionModel,
     LinearRegression,
     LinearRegressionModel,
+    GeneralizedLinearRegression,
+    GeneralizedLinearRegressionModel,
+    GeneralizedLinearRegressionSummary,
+    GeneralizedLinearRegressionTrainingSummary,
     LinearRegressionSummary,
     LinearRegressionTrainingSummary,
+    FMRegressor,
+    FMRegressionModel,
     DecisionTreeRegressor,
     DecisionTreeRegressionModel,
     RandomForestRegressor,
@@ -53,6 +63,104 @@ class RegressionTestsMixin:
             .sortWithinPartitions("weight")
         )
 
+    def test_aft_survival(self):
+        spark = self.spark
+        df = spark.createDataFrame(
+            [(1.0, Vectors.dense(1.0), 1.0), (1e-40, Vectors.sparse(1, [], []), 0.0)],
+            ["label", "features", "censor"],
+        )
+
+        aft = AFTSurvivalRegression()
+        aft.setMaxIter(1)
+        self.assertEqual(aft.getMaxIter(), 1)
+
+        model = aft.fit(df)
+        self.assertEqual(aft.uid, model.uid)
+        self.assertEqual(model.numFeatures, 1)
+        self.assertTrue(np.allclose(model.intercept, 0.0, atol=1e-4), model.intercept)
+        self.assertTrue(
+            np.allclose(model.coefficients.toArray(), [0.0], atol=1e-4), model.coefficients
+        )
+        self.assertTrue(np.allclose(model.scale, 1.0, atol=1e-4), model.scale)
+
+        vec = Vectors.dense(6.3)
+        pred = model.predict(vec)
+        self.assertEqual(pred, 1.0)
+        pred = model.predictQuantiles(vec)
+        self.assertTrue(
+            np.allclose(
+                pred,
+                [
+                    0.010050335853501444,
+                    0.051293294387550536,
+                    0.1053605156578263,
+                    0.2876820724517809,
+                    0.6931471805599453,
+                    1.3862943611198906,
+                    2.302585092994046,
+                    2.9957322735539895,
+                    4.60517018598809,
+                ],
+                atol=1e-4,
+            ),
+            pred,
+        )
+
+        output = model.transform(df)
+        expected_cols = ["label", "features", "censor", "prediction"]
+        self.assertEqual(output.columns, expected_cols)
+        self.assertEqual(output.count(), 2)
+
+        # Model save & load
+        with tempfile.TemporaryDirectory(prefix="aft_survival") as d:
+            aft.write().overwrite().save(d)
+            aft2 = AFTSurvivalRegression.load(d)
+            self.assertEqual(str(aft), str(aft2))
+
+            model.write().overwrite().save(d)
+            model2 = AFTSurvivalRegressionModel.load(d)
+            self.assertEqual(str(model), str(model2))
+
+    def test_isotonic_regression(self):
+        spark = self.spark
+        df = spark.createDataFrame(
+            [(1.0, Vectors.dense(1.0)), (0.0, Vectors.sparse(1, [], []))], ["label", "features"]
+        )
+
+        ir = IsotonicRegression(
+            isotonic=True,
+            featureIndex=0,
+        )
+        self.assertTrue(ir.getIsotonic())
+        self.assertEqual(ir.getFeatureIndex(), 0)
+
+        model = ir.fit(df)
+        self.assertEqual(model.numFeatures, 1)
+        self.assertTrue(
+            np.allclose(model.boundaries.toArray(), [0.0, 1.0], atol=1e-4), model.boundaries
+        )
+        self.assertTrue(
+            np.allclose(model.predictions.toArray(), [0.0, 1.0], atol=1e-4), model.predictions
+        )
+
+        pred = model.predict(1.0)
+        self.assertTrue(np.allclose(pred, 1.0, atol=1e-4), pred)
+
+        output = model.transform(df)
+        expected_cols = ["label", "features", "prediction"]
+        self.assertEqual(output.columns, expected_cols)
+        self.assertEqual(output.count(), 2)
+
+        # Model save & load
+        with tempfile.TemporaryDirectory(prefix="isotonic_regression") as d:
+            ir.write().overwrite().save(d)
+            ir2 = IsotonicRegression.load(d)
+            self.assertEqual(str(ir), str(ir2))
+
+            model.write().overwrite().save(d)
+            model2 = IsotonicRegressionModel.load(d)
+            self.assertEqual(str(model), str(model2))
+
     def test_linear_regression(self):
         df = self.df
         lr = LinearRegression(
@@ -67,6 +175,7 @@ class RegressionTestsMixin:
         self.assertEqual(lr.getWeightCol(), "weight")
 
         model = lr.fit(df)
+        self.assertEqual(lr.uid, model.uid)
         self.assertEqual(model.numFeatures, 2)
         self.assertTrue(np.allclose(model.scale, 1.0, atol=1e-4))
         self.assertTrue(np.allclose(model.intercept, -0.35, atol=1e-4))
@@ -163,6 +272,167 @@ class RegressionTestsMixin:
             model2 = LinearRegressionModel.load(d)
             self.assertEqual(str(model), str(model2))
 
+    def test_generalized_linear_regression(self):
+        spark = self.spark
+        df = (
+            spark.createDataFrame(
+                [
+                    (1, 1.0, Vectors.dense(0.0, 0.0)),
+                    (2, 1.0, Vectors.dense(1.0, 2.0)),
+                    (3, 2.0, Vectors.dense(0.0, 0.0)),
+                    (4, 2.0, Vectors.dense(1.0, 1.0)),
+                ],
+                ["index", "label", "features"],
+            )
+            .coalesce(1)
+            .sortWithinPartitions("index")
+            .select("label", "features")
+        )
+
+        glr = GeneralizedLinearRegression(
+            family="gaussian",
+            link="identity",
+            linkPredictionCol="p",
+        )
+        glr.setRegParam(0.1)
+        glr.setMaxIter(1)
+        self.assertEqual(glr.getFamily(), "gaussian")
+        self.assertEqual(glr.getLink(), "identity")
+        self.assertEqual(glr.getLinkPredictionCol(), "p")
+        self.assertEqual(glr.getRegParam(), 0.1)
+        self.assertEqual(glr.getMaxIter(), 1)
+
+        model = glr.fit(df)
+        self.assertTrue(np.allclose(model.intercept, 1.543859649122807, atol=1e-4), model.intercept)
+        self.assertTrue(
+            np.allclose(model.coefficients.toArray(), [0.43859649, -0.35087719], atol=1e-4),
+            model.coefficients,
+        )
+        self.assertEqual(model.numFeatures, 2)
+
+        vec = Vectors.dense(1.0, 2.0)
+        pred = model.predict(vec)
+        self.assertTrue(np.allclose(pred, 1.280701754385965, atol=1e-4), pred)
+
+        expected_cols = ["label", "features", "p", "prediction"]
+
+        output = model.transform(df)
+        self.assertEqual(output.columns, expected_cols)
+        self.assertEqual(output.count(), 4)
+
+        # Model summary
+        self.assertTrue(model.hasSummary)
+
+        summary = model.summary
+        self.assertIsInstance(summary, GeneralizedLinearRegressionSummary)
+        self.assertIsInstance(summary, GeneralizedLinearRegressionTrainingSummary)
+        self.assertEqual(summary.numIterations, 1)
+        self.assertEqual(summary.numInstances, 4)
+        self.assertEqual(summary.rank, 3)
+        self.assertTrue(
+            np.allclose(
+                summary.tValues,
+                [0.3725037662281711, -0.49418209022924164, 2.6589353685797654],
+                atol=1e-4,
+            ),
+            summary.tValues,
+        )
+        self.assertTrue(
+            np.allclose(
+                summary.pValues,
+                [0.7729938686180984, 0.707802691825973, 0.22900885781807023],
+                atol=1e-4,
+            ),
+            summary.pValues,
+        )
+        self.assertEqual(summary.predictions.columns, expected_cols)
+        self.assertEqual(summary.predictions.count(), 4)
+        self.assertEqual(summary.residuals().columns, ["devianceResiduals"])
+        self.assertEqual(summary.residuals().count(), 4)
+
+        summary2 = model.evaluate(df)
+        self.assertIsInstance(summary2, GeneralizedLinearRegressionSummary)
+        self.assertNotIsInstance(summary2, GeneralizedLinearRegressionTrainingSummary)
+        self.assertEqual(summary2.numInstances, 4)
+        self.assertEqual(summary2.rank, 3)
+        self.assertEqual(summary.predictions.columns, expected_cols)
+        self.assertEqual(summary.predictions.count(), 4)
+        self.assertEqual(summary2.residuals().columns, ["devianceResiduals"])
+        self.assertEqual(summary2.residuals().count(), 4)
+
+        # Model save & load
+        with tempfile.TemporaryDirectory(prefix="generalized_linear_regression") as d:
+            glr.write().overwrite().save(d)
+            glr2 = GeneralizedLinearRegression.load(d)
+            self.assertEqual(str(glr), str(glr2))
+
+            model.write().overwrite().save(d)
+            model2 = GeneralizedLinearRegressionModel.load(d)
+            self.assertEqual(str(model), str(model2))
+
+    def test_factorization_machine(self):
+        spark = self.spark
+        df = (
+            spark.createDataFrame(
+                [
+                    (1, 1.0, Vectors.dense(0.0, 0.0)),
+                    (2, 1.0, Vectors.dense(1.0, 2.0)),
+                    (3, 2.0, Vectors.dense(0.0, 0.0)),
+                    (4, 2.0, Vectors.dense(1.0, 1.0)),
+                ],
+                ["index", "label", "features"],
+            )
+            .coalesce(1)
+            .sortWithinPartitions("index")
+            .select("label", "features")
+        )
+
+        fm = FMRegressor(factorSize=2, maxIter=1, regParam=1.0, seed=1)
+        self.assertEqual(fm.getFactorSize(), 2)
+        self.assertEqual(fm.getMaxIter(), 1)
+        self.assertEqual(fm.getRegParam(), 1.0)
+        self.assertEqual(fm.getSeed(), 1)
+
+        model = fm.fit(df)
+        self.assertEqual(fm.uid, model.uid)
+        self.assertEqual(model.numFeatures, 2)
+        self.assertTrue(
+            np.allclose(model.intercept, 0.9999999966668874, atol=1e-4), model.intercept
+        )
+        self.assertTrue(
+            np.allclose(
+                model.linear.toArray(), [0.9999999933342161, 0.9999999950008276], atol=1e-4
+            ),
+            model.linear,
+        )
+        self.assertTrue(
+            np.allclose(
+                model.factors.toArray(),
+                [[-0.99999954, -0.9999992], [0.99999968, -0.99999918]],
+                atol=1e-4,
+            ),
+            model.factors,
+        )
+
+        vec = Vectors.dense(0.0, 5.0)
+        pred = model.predict(vec)
+        self.assertTrue(np.allclose(pred, 5.999999971671025, atol=1e-4), pred)
+
+        output = model.transform(df)
+        expected_cols = ["label", "features", "prediction"]
+        self.assertEqual(output.columns, expected_cols)
+        self.assertEqual(output.count(), 4)
+
+        # Model save & load
+        with tempfile.TemporaryDirectory(prefix="factorization_machine") as d:
+            fm.write().overwrite().save(d)
+            fm2 = FMRegressor.load(d)
+            self.assertEqual(str(fm), str(fm2))
+
+            model.write().overwrite().save(d)
+            model2 = FMRegressionModel.load(d)
+            self.assertEqual(str(model), str(model2))
+
     def test_decision_tree_regressor(self):
         df = self.df
 
@@ -178,6 +448,7 @@ class RegressionTestsMixin:
         self.assertEqual(dt.getLeafCol(), "leaf")
 
         model = dt.fit(df)
+        self.assertEqual(dt.uid, model.uid)
         self.assertEqual(model.numFeatures, 2)
         self.assertEqual(model.depth, 2)
         self.assertEqual(model.numNodes, 5)
@@ -235,6 +506,7 @@ class RegressionTestsMixin:
         self.assertEqual(gbt.getLeafCol(), "leaf")
 
         model = gbt.fit(df)
+        self.assertEqual(gbt.uid, model.uid)
         self.assertEqual(model.numFeatures, 2)
         # TODO(SPARK-50843): Support access submodel in TreeEnsembleModel
         # model.trees
@@ -310,6 +582,7 @@ class RegressionTestsMixin:
         self.assertEqual(rf.getLeafCol(), "leaf")
 
         model = rf.fit(df)
+        self.assertEqual(rf.uid, model.uid)
         self.assertEqual(model.numFeatures, 2)
         # TODO(SPARK-50843): Support access submodel in TreeEnsembleModel
         # model.trees

@@ -249,7 +249,7 @@ private case class MsSqlServerDialect() extends JdbcDialect with NoLegacyJDBCErr
       val limitClause = dialect.getLimitClause(limit)
 
       options.prepareQuery +
-        s"SELECT $limitClause $columnList FROM ${options.tableOrQuery} $tableSampleClause" +
+        s"SELECT $limitClause $columnList FROM ${options.tableOrQuery}" +
         s" $whereClause $groupByClause $orderByClause"
     }
   }
