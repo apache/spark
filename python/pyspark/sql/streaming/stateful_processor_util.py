@@ -17,7 +17,7 @@
 
 from enum import Enum
 import itertools
-from typing import Any, Iterator, List, Optional, Union, TYPE_CHECKING, cast
+from typing import Optional, TYPE_CHECKING
 from pyspark.sql.streaming.stateful_processor_api_client import (
     StatefulProcessorApiClient,
     StatefulProcessorHandleState,
@@ -28,7 +28,6 @@ from pyspark.sql.streaming.stateful_processor import (
     StatefulProcessorHandle,
     TimerValues,
 )
-from pyspark.sql.streaming.stateful_processor import StatefulProcessor, StatefulProcessorHandle
 
 if TYPE_CHECKING:
     from pyspark.sql.pandas._typing import DataFrameLike as PandasDataFrameLike

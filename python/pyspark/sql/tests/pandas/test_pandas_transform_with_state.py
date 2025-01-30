@@ -1376,7 +1376,7 @@ class TransformWithStateInPandasTestsMixin:
 
                     if not isinstance(e, StreamingQueryException):
                         return False
-                    error_msg = str(error)
+                    error_msg = str(e)
                     assert (
                         "[STREAM_FAILED]" in error_msg
                         and "[STATE_STORE_INVALID_VALUE_SCHEMA_EVOLUTION]" in error_msg
