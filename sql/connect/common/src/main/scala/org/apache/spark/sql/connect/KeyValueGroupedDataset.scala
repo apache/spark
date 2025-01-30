@@ -674,7 +674,8 @@ private class KeyValueGroupedDatasetImpl[K, V, IK, IV](
       inputEncoders = inputEncoders,
       outputEncoder = outputEncoder)
     val udf = toExpr(
-      dummyGroupingFunc.apply(inputEncoders.map(_ => col("*")): _*)).getCommonInlineUserDefinedFunction
+      dummyGroupingFunc.apply(
+        inputEncoders.map(_ => col("*")): _*)).getCommonInlineUserDefinedFunction
 
     val initialStateImpl = if (initialState.isDefined) {
       assert(initialState.get.isInstanceOf[KeyValueGroupedDatasetImpl[K, S, _, _]])
