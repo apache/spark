@@ -142,9 +142,9 @@ class CollationStringExpressionsSuite
         condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
         sqlState = Some("42K09"),
         parameters = Map(
-          "sqlExpr" -> "\"split_part('1a2' collate UNICODE_AI, 'a' collate UNICODE_AI, 2)\"",
+          "sqlExpr" -> "\"split_part(1a2, a, 2)\"",
           "paramIndex" -> "first",
-          "inputSql" -> "\"'1a2' collate UNICODE_AI\"",
+          "inputSql" -> "\"1a2\"",
           "inputType" -> "\"STRING COLLATE UNICODE_AI\"",
           "requiredType" -> "\"STRING\""),
         context = ExpectedContext(fragment = "split_part('1a2', 'a', 2)", start = 7, stop = 31)
@@ -238,9 +238,9 @@ class CollationStringExpressionsSuite
         condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
         sqlState = Some("42K09"),
         parameters = Map(
-          "sqlExpr" -> "\"contains('abcde' collate UNICODE_AI, 'A' collate UNICODE_AI)\"",
+          "sqlExpr" -> "\"contains(abcde, A)\"",
           "paramIndex" -> "first",
-          "inputSql" -> "\"'abcde' collate UNICODE_AI\"",
+          "inputSql" -> "\"abcde\"",
           "inputType" -> "\"STRING COLLATE UNICODE_AI\"",
           "requiredType" -> "\"STRING\""),
         context = ExpectedContext(fragment = "contains('abcde', 'A')", start = 7, stop = 28)
@@ -295,10 +295,9 @@ class CollationStringExpressionsSuite
         condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
         sqlState = Some("42K09"),
         parameters = Map(
-          "sqlExpr" -> ("\"substring_index('abacde' collate UNICODE_AI, " +
-            "'a' collate UNICODE_AI, 2)\""),
+          "sqlExpr" -> ("\"substring_index(abacde, a, 2)\""),
           "paramIndex" -> "first",
-          "inputSql" -> "\"'abacde' collate UNICODE_AI\"",
+          "inputSql" -> "\"abacde\"",
           "inputType" -> "\"STRING COLLATE UNICODE_AI\"",
           "requiredType" -> "\"STRING\""),
         context = ExpectedContext(
@@ -347,9 +346,9 @@ class CollationStringExpressionsSuite
         condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
         sqlState = Some("42K09"),
         parameters = Map(
-          "sqlExpr" -> "\"instr('a' collate UNICODE_AI, 'abcde' collate UNICODE_AI)\"",
+          "sqlExpr" -> "\"instr(a, abcde)\"",
           "paramIndex" -> "first",
-          "inputSql" -> "\"'a' collate UNICODE_AI\"",
+          "inputSql" -> "\"a\"",
           "inputType" -> "\"STRING COLLATE UNICODE_AI\"",
           "requiredType" -> "\"STRING\""),
         context = ExpectedContext(fragment = "instr('a', 'abcde')", start = 7, stop = 25)
@@ -426,9 +425,9 @@ class CollationStringExpressionsSuite
         condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
         sqlState = Some("42K09"),
         parameters = Map(
-          "sqlExpr" -> "\"startswith('abcde' collate UNICODE_AI, 'A' collate UNICODE_AI)\"",
+          "sqlExpr" -> "\"startswith(abcde, A)\"",
           "paramIndex" -> "first",
-          "inputSql" -> "\"'abcde' collate UNICODE_AI\"",
+          "inputSql" -> "\"abcde\"",
           "inputType" -> "\"STRING COLLATE UNICODE_AI\"",
           "requiredType" -> "\"STRING\""),
         context = ExpectedContext(fragment = "startswith('abcde', 'A')", start = 7, stop = 30)
@@ -481,10 +480,9 @@ class CollationStringExpressionsSuite
         condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
         sqlState = Some("42K09"),
         parameters = Map(
-          "sqlExpr" -> ("\"translate('ABC' collate UNICODE_AI, 'AB' collate UNICODE_AI, " +
-            "'12' collate UNICODE_AI)\""),
+          "sqlExpr" -> "\"translate(ABC, AB, 12)\"",
           "paramIndex" -> "first",
-          "inputSql" -> "\"'ABC' collate UNICODE_AI\"",
+          "inputSql" -> "\"ABC\"",
           "inputType" -> "\"STRING COLLATE UNICODE_AI\"",
           "requiredType" -> "\"STRING\""),
         context = ExpectedContext(fragment = "translate('ABC', 'AB', '12')", start = 7, stop = 34)
@@ -538,10 +536,9 @@ class CollationStringExpressionsSuite
         condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
         sqlState = Some("42K09"),
         parameters = Map(
-          "sqlExpr" -> ("\"replace('abcde' collate UNICODE_AI, 'A' collate UNICODE_AI, " +
-            "'B' collate UNICODE_AI)\""),
+          "sqlExpr" -> "\"replace(abcde, A, B)\"",
           "paramIndex" -> "first",
-          "inputSql" -> "\"'abcde' collate UNICODE_AI\"",
+          "inputSql" -> "\"abcde\"",
           "inputType" -> "\"STRING COLLATE UNICODE_AI\"",
           "requiredType" -> "\"STRING\""),
         context = ExpectedContext(fragment = "replace('abcde', 'A', 'B')", start = 7, stop = 32)
@@ -591,9 +588,9 @@ class CollationStringExpressionsSuite
           condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
           sqlState = Some("42K09"),
           parameters = Map(
-            "sqlExpr" -> "\"endswith('abcde' collate UNICODE_AI, 'A' collate UNICODE_AI)\"",
+            "sqlExpr" -> "\"endswith(abcde, A)\"",
             "paramIndex" -> "first",
-            "inputSql" -> "\"'abcde' collate UNICODE_AI\"",
+            "inputSql" -> "\"abcde\"",
             "inputType" -> "\"STRING COLLATE UNICODE_AI\"",
             "requiredType" -> "\"STRING\""),
           context = ExpectedContext(fragment = "endswith('abcde', 'A')", start = 7, stop = 28)
@@ -1530,9 +1527,9 @@ class CollationStringExpressionsSuite
         condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
         sqlState = Some("42K09"),
         parameters = Map(
-          "sqlExpr" -> "\"locate('aa' collate UNICODE_AI, 'Aaads' collate UNICODE_AI, 0)\"",
+          "sqlExpr" -> "\"locate(aa, Aaads, 0)\"",
           "paramIndex" -> "first",
-          "inputSql" -> "\"'aa' collate UNICODE_AI\"",
+          "inputSql" -> "\"aa\"",
           "inputType" -> "\"STRING COLLATE UNICODE_AI\"",
           "requiredType" -> "\"STRING\""),
         context = ExpectedContext(fragment = "locate('aa', 'Aaads', 0)", start = 7, stop = 30)
@@ -1590,9 +1587,9 @@ class CollationStringExpressionsSuite
         condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
         sqlState = Some("42K09"),
         parameters = Map(
-          "sqlExpr" -> "\"TRIM(LEADING 'x' collate UNICODE_AI FROM 'xxasdxx' collate UNICODE_AI)\"",
+          "sqlExpr" -> "\"TRIM(LEADING x FROM xxasdxx)\"",
           "paramIndex" -> "first",
-          "inputSql" -> "\"'xxasdxx' collate UNICODE_AI\"",
+          "inputSql" -> "\"xxasdxx\"",
           "inputType" -> "\"STRING COLLATE UNICODE_AI\"",
           "requiredType" -> "\"STRING\""),
         context = ExpectedContext(fragment = "ltrim('x', 'xxasdxx')", start = 7, stop = 27)
@@ -1652,10 +1649,9 @@ class CollationStringExpressionsSuite
         condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
         sqlState = Some("42K09"),
         parameters = Map(
-          "sqlExpr" -> ("\"TRIM(TRAILING 'x' collate UNICODE_AI FROM 'xxasdxx'" +
-            " collate UNICODE_AI)\""),
+          "sqlExpr" -> "\"TRIM(TRAILING x FROM xxasdxx)\"",
           "paramIndex" -> "first",
-          "inputSql" -> "\"'xxasdxx' collate UNICODE_AI\"",
+          "inputSql" -> "\"xxasdxx\"",
           "inputType" -> "\"STRING COLLATE UNICODE_AI\"",
           "requiredType" -> "\"STRING\""),
         context = ExpectedContext(fragment = "rtrim('x', 'xxasdxx')", start = 7, stop = 27)
@@ -1716,9 +1712,9 @@ class CollationStringExpressionsSuite
         condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
         sqlState = Some("42K09"),
         parameters = Map(
-          "sqlExpr" -> "\"TRIM(BOTH 'x' collate UNICODE_AI FROM 'xxasdxx' collate UNICODE_AI)\"",
+          "sqlExpr" -> "\"TRIM(BOTH x FROM xxasdxx)\"",
           "paramIndex" -> "first",
-          "inputSql" -> "\"'xxasdxx' collate UNICODE_AI\"",
+          "inputSql" -> "\"xxasdxx\"",
           "inputType" -> "\"STRING COLLATE UNICODE_AI\"",
           "requiredType" -> "\"STRING\""),
         context = ExpectedContext(fragment = "trim('x', 'xxasdxx')", start = 7, stop = 26)

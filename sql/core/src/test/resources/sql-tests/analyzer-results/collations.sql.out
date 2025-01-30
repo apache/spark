@@ -442,77 +442,77 @@ Project [array_except(array(collate(aaa, utf8_lcase)), array(collate(AAA, utf8_l
 -- !query
 select 'a' collate unicode < 'A'
 -- !query analysis
-Project [(collate(a, unicode) < A) AS (collate(a, unicode) < 'A' collate UNICODE)#x]
+Project [(collate(a, unicode) < A) AS (collate(a, unicode) < A)#x]
 +- OneRowRelation
 
 
 -- !query
 select 'a' collate unicode_ci = 'A'
 -- !query analysis
-Project [(collate(a, unicode_ci) = A) AS (collate(a, unicode_ci) = 'A' collate UNICODE_CI)#x]
+Project [(collate(a, unicode_ci) = A) AS (collate(a, unicode_ci) = A)#x]
 +- OneRowRelation
 
 
 -- !query
 select 'a' collate unicode_ai = 'å'
 -- !query analysis
-Project [(collate(a, unicode_ai) = å) AS (collate(a, unicode_ai) = 'å' collate UNICODE_AI)#x]
+Project [(collate(a, unicode_ai) = å) AS (collate(a, unicode_ai) = å)#x]
 +- OneRowRelation
 
 
 -- !query
 select 'a' collate unicode_ci_ai = 'Å'
 -- !query analysis
-Project [(collate(a, unicode_ci_ai) = Å) AS (collate(a, unicode_ci_ai) = 'Å' collate UNICODE_CI_AI)#x]
+Project [(collate(a, unicode_ci_ai) = Å) AS (collate(a, unicode_ci_ai) = Å)#x]
 +- OneRowRelation
 
 
 -- !query
 select 'a' collate en < 'A'
 -- !query analysis
-Project [(collate(a, en) < A) AS (collate(a, en) < 'A' collate en)#x]
+Project [(collate(a, en) < A) AS (collate(a, en) < A)#x]
 +- OneRowRelation
 
 
 -- !query
 select 'a' collate en_ci = 'A'
 -- !query analysis
-Project [(collate(a, en_ci) = A) AS (collate(a, en_ci) = 'A' collate en_CI)#x]
+Project [(collate(a, en_ci) = A) AS (collate(a, en_ci) = A)#x]
 +- OneRowRelation
 
 
 -- !query
 select 'a' collate en_ai = 'å'
 -- !query analysis
-Project [(collate(a, en_ai) = å) AS (collate(a, en_ai) = 'å' collate en_AI)#x]
+Project [(collate(a, en_ai) = å) AS (collate(a, en_ai) = å)#x]
 +- OneRowRelation
 
 
 -- !query
 select 'a' collate en_ci_ai = 'Å'
 -- !query analysis
-Project [(collate(a, en_ci_ai) = Å) AS (collate(a, en_ci_ai) = 'Å' collate en_CI_AI)#x]
+Project [(collate(a, en_ci_ai) = Å) AS (collate(a, en_ci_ai) = Å)#x]
 +- OneRowRelation
 
 
 -- !query
 select 'Kypper' collate sv < 'Köpfe'
 -- !query analysis
-Project [(collate(Kypper, sv) < Köpfe) AS (collate(Kypper, sv) < 'Köpfe' collate sv)#x]
+Project [(collate(Kypper, sv) < Köpfe) AS (collate(Kypper, sv) < Köpfe)#x]
 +- OneRowRelation
 
 
 -- !query
 select 'Kypper' collate de > 'Köpfe'
 -- !query analysis
-Project [(collate(Kypper, de) > Köpfe) AS (collate(Kypper, de) > 'Köpfe' collate de)#x]
+Project [(collate(Kypper, de) > Köpfe) AS (collate(Kypper, de) > Köpfe)#x]
 +- OneRowRelation
 
 
 -- !query
 select 'I' collate tr_ci = 'ı'
 -- !query analysis
-Project [(collate(I, tr_ci) = ı) AS (collate(I, tr_ci) = 'ı' collate tr_CI)#x]
+Project [(collate(I, tr_ci) = ı) AS (collate(I, tr_ci) = ı)#x]
 +- OneRowRelation
 
 
@@ -919,7 +919,7 @@ Project [elt(1, collate(utf8_binary#x, utf8_binary), cast(utf8_lcase#x as string
 -- !query
 select elt(1, utf8_binary, 'word'), elt(1, utf8_lcase, 'word') from t5
 -- !query analysis
-Project [elt(1, utf8_binary#x, word, true) AS elt(1, utf8_binary, word)#x, elt(1, utf8_lcase#x, word, true) AS elt(1, utf8_lcase, 'word' collate UTF8_LCASE)#x]
+Project [elt(1, utf8_binary#x, word, true) AS elt(1, utf8_binary, word)#x, elt(1, utf8_lcase#x, word, true) AS elt(1, utf8_lcase, word)#x]
 +- SubqueryAlias spark_catalog.default.t5
    +- Relation spark_catalog.default.t5[s#x,utf8_binary#x,utf8_lcase#x] parquet
 
@@ -1684,7 +1684,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "inputType" : "\"STRING COLLATE UNICODE_AI\"",
     "paramIndex" : "first",
     "requiredType" : "\"STRING\"",
-    "sqlExpr" : "\"replace(collate(utf8_binary, unicode_ai), collate(utf8_lcase, unicode_ai), 'abc' collate UNICODE_AI)\""
+    "sqlExpr" : "\"replace(collate(utf8_binary, unicode_ai), collate(utf8_lcase, unicode_ai), abc)\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2073,7 +2073,7 @@ Project [overlay(collate(utf8_binary#x, utf8_lcase), collate(utf8_lcase#x, utf8_
 -- !query
 select overlay(utf8_binary, 'a', 2), overlay(utf8_lcase, 'a', 2) from t5
 -- !query analysis
-Project [overlay(utf8_binary#x, a, 2, -1) AS overlay(utf8_binary, a, 2, -1)#x, overlay(utf8_lcase#x, a, 2, -1) AS overlay(utf8_lcase, 'a' collate UTF8_LCASE, 2, -1)#x]
+Project [overlay(utf8_binary#x, a, 2, -1) AS overlay(utf8_binary, a, 2, -1)#x, overlay(utf8_lcase#x, a, 2, -1) AS overlay(utf8_lcase, a, 2, -1)#x]
 +- SubqueryAlias spark_catalog.default.t5
    +- Relation spark_catalog.default.t5[s#x,utf8_binary#x,utf8_lcase#x] parquet
 
