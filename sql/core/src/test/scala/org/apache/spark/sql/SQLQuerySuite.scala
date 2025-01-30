@@ -5014,6 +5014,35 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       }
     }
   }
+
+  test("SPARK-50983: Support nested correlated subquery for analyzer") {
+    sql("Create table Sales (product_id int, amount int)")
+    sql("create table Products (product_id int, category_id int, price double)")
+
+    val query =
+      """
+        |    SELECT s.product_id
+        |    FROM Sales s
+        |    WHERE s.amount > (
+        |        SELECT AVG(s2.amount)
+        |        FROM Sales s2
+        |        WHERE s2.product_id IN (
+        |            SELECT p2.product_id
+        |            FROM Products p2
+        |            WHERE p2.product_id = s2.product_id
+        |        )
+        |    );
+        |""".stripMargin
+
+    withTable("Sales", "Products") {
+      withSQLConf(
+        "spark.sql.optimizer.supportNestedCorrelatedSubqueries.enabled" -> "true",
+        "spark.sql.planChangeLog.level" -> "info"
+      ) {
+        val res = sql(query).collect()
+      }
+    }
+  }
 }
 
 case class Foo(bar: Option[String])
