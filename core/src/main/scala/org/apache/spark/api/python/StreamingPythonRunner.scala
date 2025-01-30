@@ -59,8 +59,6 @@ private[spark] class StreamingPythonRunner(
    * to be used with the functions.
    */
   def init(): (DataOutputStream, DataInputStream) = {
-    logInfo(log"Initializing Python runner (session: ${MDC(SESSION_ID, sessionId)}," +
-      log" pythonExec: ${MDC(PYTHON_EXEC, pythonExec)})")
     val env = SparkEnv.get
 
     val localdir = env.blockManager.diskBlockManager.localDirs.map(f => f.getPath()).mkString(",")
@@ -78,9 +76,14 @@ private[spark] class StreamingPythonRunner(
     pythonWorker = Some(worker)
     pythonWorkerFactory = Some(workerFactory)
 
+    logInfo(log"[session: ${MDC(SESSION_ID, sessionId)}] Python worker created")
+
     val stream = new BufferedOutputStream(
       pythonWorker.get.channel.socket().getOutputStream, bufferSize)
     val dataOut = new DataOutputStream(stream)
+
+    logInfo(log"[session: ${MDC(SESSION_ID, sessionId)}] Sending necessary information to the " +
+      log"Python worker")
 
     PythonWorkerUtils.writePythonVersion(pythonVer, dataOut)
 
@@ -93,6 +96,9 @@ private[spark] class StreamingPythonRunner(
     PythonWorkerUtils.writePythonFunction(func, dataOut)
     dataOut.flush()
 
+    logInfo(log"[session: ${MDC(SESSION_ID, sessionId)}] Reading initialization response from " +
+      log"Python runner.")
+
     val dataIn = new DataInputStream(
       new BufferedInputStream(pythonWorker.get.channel.socket().getInputStream, bufferSize))
 
@@ -101,8 +107,8 @@ private[spark] class StreamingPythonRunner(
       val errMessage = PythonWorkerUtils.readUTF(dataIn)
       throw streamingPythonRunnerInitializationFailure(resFromPython, errMessage)
     }
-    logInfo(log"Runner initialization succeeded (returned" +
-      log" ${MDC(PYTHON_WORKER_RESPONSE, resFromPython)}).")
+    logInfo(log"[session: ${MDC(SESSION_ID, sessionId)}] Runner initialization succeeded " +
+      log"(returned ${MDC(PYTHON_WORKER_RESPONSE, resFromPython)}).")
 
     (dataOut, dataIn)
   }
@@ -123,7 +129,7 @@ private[spark] class StreamingPythonRunner(
    * Stops the Python worker.
    */
   def stop(): Unit = {
-    logInfo(log"Stopping streaming runner for sessionId: ${MDC(SESSION_ID, sessionId)}," +
+    logInfo(log"[session: ${MDC(SESSION_ID, sessionId)}] Stopping streaming runner," +
       log" module: ${MDC(PYTHON_WORKER_MODULE, workerModule)}.")
 
     try {
