@@ -1395,9 +1395,9 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
     // +- Project [c1#87, c2#88]
     // :  (Aggregate or Window operator)
     // :  +- Filter [outer(c2#77) >= c2#88)]
-    // : - SubqueryAlias t2, `t2`
-    // :  - Project [_1#84 AS c1#87, _2#85 AS c2#88]
-    // :     - LocalRelation [_1#84, _2#85]
+    // :     +- SubqueryAlias t2, `t2`
+    // :        +- Project [_1#84 AS c1#87, _2#85 AS c2#88]
+    // :           +- LocalRelation [_1#84, _2#85]
     // +- SubqueryAlias t1, `t1`
     // +- Project [_1#73 AS c1#76, _2#74 AS c2#77]
     // +- LocalRelation [_1#73, _2#74]
@@ -1414,7 +1414,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
     // Original subquery plan:
     //   Aggregate [count(1)]
     //   +- Filter ((a + b) = outer(c))
-    //- LocalRelation [a, b]
+    //      +- LocalRelation [a, b]
     //
     // Plan after pulling up correlated predicates:
     //   Aggregate [a, b] [count(1), a, b]
@@ -1424,8 +1424,8 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
     //   Project [c1, count(1)]
     //   +- Join LeftOuter ((a + b) = c)
     //      :- LocalRelation [c]
-    //- Aggregate [a, b] [count(1), a, b]
-    //   - LocalRelation [a, b]
+    //      +- Aggregate [a, b] [count(1), a, b]
+    //         +- LocalRelation [a, b]
     //
     // The right hand side of the join transformed from the subquery will output
     //   count(1) | a | b
