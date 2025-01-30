@@ -43,11 +43,10 @@ import org.apache.spark.sql.{Column, Encoder, ExperimentalMethods, Observation, 
 import org.apache.spark.sql.catalyst.{JavaTypeInference, ScalaReflection}
 import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, RowEncoder}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{agnosticEncoderFor, BoxedLongEncoder, UnboundRowEncoder}
-import org.apache.spark.sql.connect.ColumnNodeToProtoConverter.{toExpr, toTypedExpr}
+import org.apache.spark.sql.connect.ColumnNodeToProtoConverter.toLiteral
 import org.apache.spark.sql.connect.client.{ClassFinder, CloseableIterator, SparkConnectClient, SparkResult}
 import org.apache.spark.sql.connect.client.SparkConnectClient.Configuration
 import org.apache.spark.sql.connect.client.arrow.ArrowSerializer
-import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.internal.{SessionState, SharedState, SqlApiConf}
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.types.StructType
@@ -213,7 +212,7 @@ class SparkSession private[sql] (
     val sqlCommand = proto.SqlCommand
       .newBuilder()
       .setSql(sqlText)
-      .addAllPosArguments(args.map(lit(_).expr).toImmutableArraySeq.asJava)
+      .addAllPosArguments(args.map(a => toLiteral(a)).toImmutableArraySeq.asJava)
       .build()
     sql(sqlCommand)
   }
@@ -228,7 +227,7 @@ class SparkSession private[sql] (
     val sqlCommand = proto.SqlCommand
       .newBuilder()
       .setSql(sqlText)
-      .putAllNamedArguments(args.asScala.map { case (k, v) => (k, lit(v).expr) }.asJava)
+      .putAllNamedArguments(args.asScala.map { case (k, v) => (k, toLiteral(v)) }.asJava)
       .build()
     sql(sqlCommand)
   }
@@ -653,11 +652,6 @@ class SparkSession private[sql] (
   }
 
   override private[sql] def isUsable: Boolean = client.isSessionValid
-
-  implicit class RichColumn(c: Column) {
-    def expr: proto.Expression = toExpr(c)
-    def typedExpr[T](e: Encoder[T]): proto.Expression = toTypedExpr(c, e)
-  }
 }
 
 // The minimal builder needed to create a spark session.
