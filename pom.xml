@@ -169,7 +169,7 @@
     <!-- managed up from 3.2.1 for SPARK-11652 -->
     <commons.collections.version>3.2.2</commons.collections.version>
     <commons.collections4.version>4.4</commons.collections4.version>
-    <scala.version>2.13.15</scala.version>
+    <scala.version>2.13.16</scala.version>
     <scala.binary.version>2.13</scala.binary.version>
     <scalatest-maven-plugin.version>2.2.0</scalatest-maven-plugin.version>
     <scala-maven-plugin.version>4.9.2</scala-maven-plugin.version>
@@ -230,7 +230,7 @@
     and ./python/packaging/connect/setup.py too.
     -->
     <arrow.version>18.1.0</arrow.version>
-    <ammonite.version>3.0.0</ammonite.version>
+    <ammonite.version>3.0.1</ammonite.version>
     <jjwt.version>0.12.6</jjwt.version>
 
     <!-- org.fusesource.leveldbjni will be used except on arm64 platform. -->
@@ -2657,14 +2657,6 @@
                     <maxJdkVersion>${java.version}</maxJdkVersion>
                     <ignoredScopes>test</ignoredScopes>
                     <ignoredScopes>provided</ignoredScopes>
-                    <ignoreClasses>
-                      <!--
-                        The package `org.jline.terminal.impl.ffm.*` contains some class files
-                        that are not compatible with JDK17 (only JDK21 is supported).
-                        However, it will not cause problems for use. See: https://github.com/scala/bug/issues/12994
-                      -->
-                      <ignoreClass>org.jline.terminal.impl.ffm.*</ignoreClass>
-                    </ignoreClasses>
                   </enforceBytecodeVersion>
                 </rules>
               </configuration>
