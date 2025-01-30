@@ -17,7 +17,7 @@
 
 from enum import Enum
 import itertools
-from typing import Optional, TYPE_CHECKING
+from typing import Any, Iterator, Optional, TYPE_CHECKING
 from pyspark.sql.streaming.stateful_processor_api_client import (
     StatefulProcessorApiClient,
     StatefulProcessorHandleState,
