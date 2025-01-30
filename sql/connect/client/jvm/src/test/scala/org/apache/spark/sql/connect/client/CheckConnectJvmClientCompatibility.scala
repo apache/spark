@@ -64,7 +64,7 @@ object CheckConnectJvmClientCompatibility {
   private val clientJar = {
     val path = Paths.get(
       sparkHome,
-      "connector",
+      "sql",
       "connect",
       "client",
       "jvm",
