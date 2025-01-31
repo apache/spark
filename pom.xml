@@ -97,6 +97,7 @@
     <module>sql/hive</module>
     <module>sql/connect/server</module>
     <module>sql/connect/common</module>
+    <module>sql/connect/client/jvm</module>
     <module>assembly</module>
     <module>examples</module>
     <module>repl</module>
@@ -106,7 +107,6 @@
     <module>connector/kafka-0-10-assembly</module>
     <module>connector/kafka-0-10-sql</module>
     <module>connector/avro</module>
-    <module>connector/connect/client/jvm</module>
     <module>connector/protobuf</module>
     <!-- See additional modules enabled by profiles below -->
   </modules>
@@ -169,7 +169,7 @@
     <!-- managed up from 3.2.1 for SPARK-11652 -->
     <commons.collections.version>3.2.2</commons.collections.version>
     <commons.collections4.version>4.4</commons.collections4.version>
-    <scala.version>2.13.15</scala.version>
+    <scala.version>2.13.16</scala.version>
     <scala.binary.version>2.13</scala.binary.version>
     <scalatest-maven-plugin.version>2.2.0</scalatest-maven-plugin.version>
     <scala-maven-plugin.version>4.9.2</scala-maven-plugin.version>
@@ -230,7 +230,7 @@
     and ./python/packaging/connect/setup.py too.
     -->
     <arrow.version>18.1.0</arrow.version>
-    <ammonite.version>3.0.0</ammonite.version>
+    <ammonite.version>3.0.1</ammonite.version>
     <jjwt.version>0.12.6</jjwt.version>
 
     <!-- org.fusesource.leveldbjni will be used except on arm64 platform. -->
@@ -274,7 +274,7 @@
     <hive.storage.scope>compile</hive.storage.scope>
     <hive.jackson.scope>compile</hive.jackson.scope>
     <hive.common.scope>compile</hive.common.scope>
-    <hive.llap.scope>compile</hive.llap.scope>
+    <hive.llap.scope>test</hive.llap.scope>
     <hive.serde.scope>compile</hive.serde.scope>
     <hive.shims.scope>compile</hive.shims.scope>
     <orc.deps.scope>compile</orc.deps.scope>
@@ -335,7 +335,7 @@
     <mssql.jdbc.version>12.8.1.jre11</mssql.jdbc.version>
     <ojdbc17.version>23.6.0.24.10</ojdbc17.version>
     <databricks.jdbc.version>2.7.1</databricks.jdbc.version>
-    <snowflake.jdbc.version>3.21.0</snowflake.jdbc.version>
+    <snowflake.jdbc.version>3.22.0</snowflake.jdbc.version>
     <terajdbc.version>20.00.00.39</terajdbc.version>
     <!-- Used for SBT build to retrieve the Spark version -->
     <spark.version>${project.version}</spark.version>
@@ -2266,7 +2266,7 @@
         <groupId>${hive.group}</groupId>
         <artifactId>hive-llap-common</artifactId>
         <version>${hive.version}</version>
-        <scope>${hive.deps.scope}</scope>
+        <scope>${hive.llap.scope}</scope>
         <exclusions>
           <exclusion>
             <groupId>${hive.group}</groupId>
@@ -2668,14 +2668,6 @@
                     <maxJdkVersion>${java.version}</maxJdkVersion>
                     <ignoredScopes>test</ignoredScopes>
                     <ignoredScopes>provided</ignoredScopes>
-                    <ignoreClasses>
-                      <!--
-                        The package `org.jline.terminal.impl.ffm.*` contains some class files
-                        that are not compatible with JDK17 (only JDK21 is supported).
-                        However, it will not cause problems for use. See: https://github.com/scala/bug/issues/12994
-                      -->
-                      <ignoreClass>org.jline.terminal.impl.ffm.*</ignoreClass>
-                    </ignoreClasses>
                   </enforceBytecodeVersion>
                 </rules>
               </configuration>

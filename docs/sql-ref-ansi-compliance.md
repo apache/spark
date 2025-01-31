@@ -503,6 +503,7 @@ Below is a list of all the keywords in Spark SQL.
 |DOUBLE|non-reserved|non-reserved|reserved|
 |DROP|non-reserved|non-reserved|reserved|
 |ELSE|reserved|non-reserved|reserved|
+|ELSEIF|non-reserved|non-reserved|non-reserved|
 |END|reserved|non-reserved|reserved|
 |ESCAPE|reserved|non-reserved|reserved|
 |ESCAPED|non-reserved|non-reserved|non-reserved|

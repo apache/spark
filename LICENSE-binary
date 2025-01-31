@@ -296,7 +296,6 @@ jakarta.inject:jakarta.inject-api
 jakarta.validation:jakarta.validation-api
 javax.jdo:jdo-api
 joda-time:joda-time
-net.java.dev.jna:jna
 net.sf.opencsv:opencsv
 net.sf.supercsv:super-csv
 net.sf.jpam:jpam
