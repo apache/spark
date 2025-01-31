@@ -3846,8 +3846,8 @@ class SparkConnectPlanner(
             orderSpec = options.getOrderSpecList.asScala
               .map(transformSortOrder)
               .toSeq,
-            withSinglePartition = options.hasWithSinglePartition && options.getWithSinglePartition
-          )
+            withSinglePartition =
+              options.hasWithSinglePartition && options.getWithSinglePartition)
         } else {
           UnresolvedTableArgPlanId(planId)
         }
