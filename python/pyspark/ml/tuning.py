@@ -1764,7 +1764,7 @@ class TrainValidationSplitModel(
 if __name__ == "__main__":
     import doctest
 
-    from pyspark.sql import SparkSession, is_remote
+    from pyspark.sql import SparkSession
 
     globs = globals().copy()
 
