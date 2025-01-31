@@ -21,7 +21,7 @@
 #
 # Start a local server:
 # A local spark-connect server with default settings can be started using the following command:
-#  `connector/connect/bin/spark-connect`
+#  `sql/connect/bin/spark-connect`
 # The client should be able to connect to this server directly with the default client settings.
 #
 # Connect to a remote server:
@@ -49,7 +49,7 @@ if [ "$SCBUILD" -eq "1" ]; then
 fi
 
 if [ -z "$SCCLASSPATH" ]; then
-  SCCLASSPATH=$(connector/connect/bin/spark-connect-scala-client-classpath)
+  SCCLASSPATH=$(sql/connect/bin/spark-connect-scala-client-classpath)
 fi
 
 JVM_ARGS="-XX:+IgnoreUnrecognizedVMOptions \
