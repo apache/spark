@@ -552,6 +552,11 @@ class JavaSparkContext(val sc: SparkContext) extends Closeable {
     sc.stop()
   }
 
+  /** Shut down the SparkContext with exit code. */
+  def stop(exitCode: Int): Unit = {
+    sc.stop(exitCode)
+  }
+
   override def close(): Unit = stop()
 
   /**
