@@ -402,9 +402,9 @@ case class AdaptiveSparkPlanExec(
               stagesToReplace.clear()
             }
           }
-          // Now that some stages have finished, we can try creating new stages.
-          result = createQueryStages(fun, currentPhysicalPlan, false)
         }
+        // Now that some stages have finished, we can try creating new stages.
+        result = createQueryStages(fun, currentPhysicalPlan, false)
       }
     }
     _isFinalPlan = true
@@ -417,7 +417,7 @@ case class AdaptiveSparkPlanExec(
     // Subqueries that don't belong to any query stage of the main query will execute after the
     // last UI update in `getFinalPhysicalPlan`, so we need to update UI here again to make sure
     // the newly generated nodes of those subqueries are updated.
-    if (shouldUpdatePlan && currentPhysicalPlan.exists(_.subqueries.nonEmpty)) {
+    if (shouldUpdatePlan) {
       getExecutionId.foreach(onUpdatePlan(_, Seq.empty))
     }
     logOnLevel(log"Final plan:\n${MDC(QUERY_PLAN, currentPhysicalPlan)}")
