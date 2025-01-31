@@ -86,7 +86,7 @@ from pyspark.sql.connect.expressions import (
 from pyspark.sql.connect.functions import builtin as F
 from pyspark.sql.pandas.types import from_arrow_schema, to_arrow_schema
 from pyspark.sql.pandas.functions import _validate_pandas_udf  # type: ignore[attr-defined]
-from pyspark.sql.connect.table_arg import TableArg
+from pyspark.sql.table_arg import TableArg
 
 
 if TYPE_CHECKING:
@@ -1812,7 +1812,9 @@ class DataFrame(ParentDataFrame):
         )
 
     def asTable(self) -> TableArg:
-        return TableArg(SubqueryExpression(self._plan, subquery_type="table_arg"))
+        from pyspark.sql.connect.table_arg import TableArg as ConnectTableArg
+
+        return ConnectTableArg(SubqueryExpression(self._plan, subquery_type="table_arg"))
 
     def scalar(self) -> Column:
         from pyspark.sql.connect.column import Column as ConnectColumn
