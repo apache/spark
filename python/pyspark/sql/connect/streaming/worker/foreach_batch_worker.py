@@ -69,7 +69,9 @@ def main(infile: IO, outfile: IO) -> None:
         print(f"{log_name} Started batch {batch_id} with DF id {df_id} and session id {session_id}")
         batch_df = spark_connect_session._create_remote_dataframe(df_id)
         func(batch_df, batch_id)
-        print(f"{log_name} Completed batch {batch_id} with DF id {df_id} and session id {session_id}")
+        print(
+            f"{log_name} Completed batch {batch_id} with DF id {df_id} and session id {session_id}"
+        )
 
     try:
         func = worker.read_command(pickle_ser, infile)
