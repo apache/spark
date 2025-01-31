@@ -344,9 +344,9 @@ class CompoundBodyExec(
 /**
  * Executable node for IfElseStatement.
  * @param conditions Collection of executable conditions. First condition corresponds to IF clause,
- *                   while others (if any) correspond to following ELSE IF clauses.
+ *                   while others (if any) correspond to following ELSEIF clauses.
  * @param conditionalBodies Collection of executable bodies that have a corresponding condition,
-*                 in IF or ELSE IF branches.
+*                 in IF or ELSEIF branches.
  * @param elseBody Body that is executed if none of the conditions are met,
  *                          i.e. ELSE branch.
  * @param session Spark session that SQL script is executed within.
@@ -380,7 +380,7 @@ class IfElseStatementExec(
           } else {
             clauseIdx += 1
             if (clauseIdx < conditionsCount) {
-              // There are ELSE IF clauses remaining.
+              // There are ELSEIF clauses remaining.
               state = IfElseState.Condition
               curr = Some(conditions(clauseIdx))
             } else if (elseBody.isDefined) {

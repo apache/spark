@@ -549,6 +549,7 @@ private[spark] object LogKeys {
   case object NUM_ROWS extends LogKey
   case object NUM_RULE_OF_RUNS extends LogKey
   case object NUM_SEQUENCES extends LogKey
+  case object NUM_SKIPPED extends LogKey
   case object NUM_SLOTS extends LogKey
   case object NUM_SPILLS extends LogKey
   case object NUM_SPILL_WRITERS extends LogKey

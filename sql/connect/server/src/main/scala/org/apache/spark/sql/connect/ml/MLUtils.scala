@@ -639,6 +639,7 @@ private[ml] object MLUtils {
     (classOf[MaxAbsScalerModel], Set("maxAbs")),
     (classOf[MinMaxScalerModel], Set("originalMax", "originalMin")),
     (classOf[RobustScalerModel], Set("range", "median")),
+    (classOf[VectorIndexerModel], Set("numFeatures")),
     (classOf[ChiSqSelectorModel], Set("selectedFeatures")),
     (classOf[UnivariateFeatureSelectorModel], Set("selectedFeatures")),
     (classOf[VarianceThresholdSelectorModel], Set("selectedFeatures")),
@@ -646,6 +647,7 @@ private[ml] object MLUtils {
     (classOf[Word2VecModel], Set("getVectors", "findSynonyms", "findSynonymsArray")),
     (classOf[CountVectorizerModel], Set("vocabulary")),
     (classOf[OneHotEncoderModel], Set("categorySizes")),
+    (classOf[StringIndexerModel], Set("labels", "labelsArray")),
     (classOf[IDFModel], Set("idf", "docFreq", "numDocs")))
 
   private def validate(obj: Any, method: String): Unit = {

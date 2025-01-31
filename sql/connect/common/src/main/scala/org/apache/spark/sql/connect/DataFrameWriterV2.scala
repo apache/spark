@@ -23,6 +23,7 @@ import org.apache.spark.annotation.Experimental
 import org.apache.spark.connect.proto
 import org.apache.spark.sql
 import org.apache.spark.sql.Column
+import org.apache.spark.sql.connect.ColumnNodeToProtoConverter.toExpr
 
 /**
  * Interface used to write a [[org.apache.spark.sql.Dataset]] to external storage using the v2
@@ -33,7 +34,6 @@ import org.apache.spark.sql.Column
 @Experimental
 final class DataFrameWriterV2[T] private[sql] (table: String, ds: Dataset[T])
     extends sql.DataFrameWriterV2[T] {
-  import ds.sparkSession.RichColumn
 
   private val builder = proto.WriteOperationV2
     .newBuilder()
@@ -73,7 +73,7 @@ final class DataFrameWriterV2[T] private[sql] (table: String, ds: Dataset[T])
   /** @inheritdoc */
   @scala.annotation.varargs
   override def partitionedBy(column: Column, columns: Column*): this.type = {
-    builder.addAllPartitioningColumns((column +: columns).map(_.expr).asJava)
+    builder.addAllPartitioningColumns((column +: columns).map(toExpr).asJava)
     this
   }
 
@@ -106,7 +106,7 @@ final class DataFrameWriterV2[T] private[sql] (table: String, ds: Dataset[T])
 
   /** @inheritdoc */
   def overwrite(condition: Column): Unit = {
-    builder.setOverwriteCondition(condition.expr)
+    builder.setOverwriteCondition(toExpr(condition))
     executeWriteOperation(proto.WriteOperationV2.Mode.MODE_OVERWRITE)
   }
 
