@@ -68,8 +68,9 @@ object StreamingForeachBatchHelper extends Logging {
     {
       val dfId = UUID.randomUUID().toString
       // TODO: Add query id to the log.
-      logInfo(log"[session: ${MDC(SESSION_ID, sessionHolder.sessionId)}] " +
-        log"Caching DataFrame with id ${MDC(DATAFRAME_ID, dfId)}")
+      logInfo(
+        log"[session: ${MDC(SESSION_ID, sessionHolder.sessionId)}] " +
+          log"Caching DataFrame with id ${MDC(DATAFRAME_ID, dfId)}")
 
       // TODO(SPARK-44462): Sanity check there is no other active DataFrame for this query.
       //  The query id needs to be saved in the cache for this check.
@@ -78,8 +79,9 @@ object StreamingForeachBatchHelper extends Logging {
       try {
         fn(FnArgsWithId(dfId, df, batchId))
       } finally {
-        logInfo(log"[session: ${MDC(SESSION_ID, sessionHolder.sessionId)}] " +
-          log"Removing DataFrame with id ${MDC(DATAFRAME_ID, dfId)} from the cache")
+        logInfo(
+          log"[session: ${MDC(SESSION_ID, sessionHolder.sessionId)}] " +
+            log"Removing DataFrame with id ${MDC(DATAFRAME_ID, dfId)} from the cache")
         sessionHolder.removeCachedDataFrame(dfId)
       }
     }
@@ -140,9 +142,10 @@ object StreamingForeachBatchHelper extends Logging {
       sessionHolder.sessionId,
       "pyspark.sql.connect.streaming.worker.foreach_batch_worker")
 
-    logInfo(log"[session: ${MDC(SESSION_ID, sessionHolder.sessionId)}] " +
-      log"[userId: ${MDC(USER_ID, sessionHolder.userId)}] Initializing Python runner, " +
-      log"pythonExec: ${MDC(PYTHON_EXEC, pythonFn.pythonExec)})")
+    logInfo(
+      log"[session: ${MDC(SESSION_ID, sessionHolder.sessionId)}] " +
+        log"[userId: ${MDC(USER_ID, sessionHolder.userId)}] Initializing Python runner, " +
+        log"pythonExec: ${MDC(PYTHON_EXEC, pythonFn.pythonExec)})")
 
     val (dataOut, dataIn) = runner.init()
 
@@ -177,7 +180,7 @@ object StreamingForeachBatchHelper extends Logging {
           case otherValue =>
             throw new IllegalStateException(
               s"[session: ${sessionHolder.sessionId}] [userId: ${sessionHolder.userId}] " +
-              s"Unexpected return value $otherValue from the " +
+                s"Unexpected return value $otherValue from the " +
                 s"Python worker.")
         }
       } catch {
@@ -186,7 +189,8 @@ object StreamingForeachBatchHelper extends Logging {
         case eof: EOFException =>
           throw new SparkException(
             s"[session: ${sessionHolder.sessionId}] [userId: ${sessionHolder.userId}] " +
-              "Python worker exited unexpectedly (crashed)", eof)
+              "Python worker exited unexpectedly (crashed)",
+            eof)
       }
     }
 
