@@ -4715,6 +4715,14 @@
     ],
     "sqlState" : "42K06"
   },
+  "STATE_STORE_SCHEMA_MUST_BE_NULLABLE" : {
+    "message" : [
+      "If schema evolution is enabled, all the fields in the schema for column family <columnFamilyName> must be nullable.",
+      "Please set the 'spark.sql.streaming.stateStore.encodingFormat' to 'UnsafeRow' or make the schema nullable.",
+      "Current schema: <schema>"
+    ],
+    "sqlState" : "XXKST"
+  },
   "STATE_STORE_VALUE_SCHEMA_NOT_COMPATIBLE" : {
     "message" : [
       "Provided value schema does not match existing state value schema.",
