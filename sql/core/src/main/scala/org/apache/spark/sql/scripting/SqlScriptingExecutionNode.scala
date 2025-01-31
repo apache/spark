@@ -22,13 +22,17 @@ import java.util
 import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.catalyst.analysis.{NameParameterizedQuery, UnresolvedAttribute, UnresolvedIdentifier}
-import org.apache.spark.sql.catalyst.expressions.{Alias, CreateArray, CreateMap, CreateNamedStruct, Expression, Literal}
+import org.apache.spark.sql.catalyst.analysis.{ColumnResolutionHelper, NameParameterizedQuery, UnresolvedAttribute, UnresolvedIdentifier}
+import org.apache.spark.sql.catalyst.expressions.{Alias, CreateArray, CreateMap, CreateNamedStruct, Expression, Literal, VariableReference}
 import org.apache.spark.sql.catalyst.plans.logical.{CreateVariable, DefaultValueExpression, DropVariable, LogicalPlan, OneRowRelation, Project, SetVariable}
-import org.apache.spark.sql.catalyst.trees.{Origin, WithOrigin}
+import org.apache.spark.sql.catalyst.plans.logical.HandlerType.HandlerType
+import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin, WithOrigin}
 import org.apache.spark.sql.classic.{DataFrame, Dataset, SparkSession}
-import org.apache.spark.sql.errors.SqlScriptingErrors
-import org.apache.spark.sql.types.BooleanType
+import org.apache.spark.sql.connector.catalog.CatalogManager
+import org.apache.spark.sql.errors.{QueryCompilationErrors, SqlScriptingErrors}
+import org.apache.spark.sql.exceptions.SqlScriptingRuntimeException
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.{BooleanType, StringType}
 
 /**
  * Trait for all SQL scripting execution nodes used during interpretation phase.
@@ -175,6 +179,25 @@ class NoOpStatementExec extends LeafStatementExec {
   override def reset(): Unit = ()
 }
 
+class TriggerToExceptionHandlerMap(
+    conditionToExceptionHandlerMap: Map[String, ErrorHandlerExec],
+    sqlStateToExceptionHandlerMap: Map[String, ErrorHandlerExec],
+    sqlExceptionHandler: Option[ErrorHandlerExec],
+    notFoundHandler: Option[ErrorHandlerExec]) {
+
+  def getHandlerForCondition(condition: String): Option[ErrorHandlerExec] = {
+    conditionToExceptionHandlerMap.get(condition)
+  }
+
+  def getHandlerForSqlState(sqlState: String): Option[ErrorHandlerExec] = {
+    sqlStateToExceptionHandlerMap.get(sqlState)
+  }
+
+  def getSqlExceptionHandler: Option[ErrorHandlerExec] = sqlExceptionHandler
+
+  def getNotFoundHandler: Option[ErrorHandlerExec] = notFoundHandler
+}
+
 /**
  * Executable node for CompoundBody.
  * @param statements
@@ -186,12 +209,15 @@ class NoOpStatementExec extends LeafStatementExec {
  *   Scopes are used for grouping local variables and exception handlers.
  * @param context
  *   SqlScriptingExecutionContext keeps the execution state of current script.
+ * @param triggerToExceptionHandlerMap
+ *   Map of condition names/sqlstates to error handlers defined in this compound body.
  */
 class CompoundBodyExec(
     statements: Seq[CompoundStatementExec],
     label: Option[String] = None,
     isScope: Boolean,
-    context: SqlScriptingExecutionContext)
+    context: SqlScriptingExecutionContext,
+    triggerToExceptionHandlerMap: TriggerToExceptionHandlerMap)
   extends NonLeafStatementExec {
 
   private object ScopeStatus extends Enumeration {
@@ -200,7 +226,8 @@ class CompoundBodyExec(
   }
 
   private var localIterator = statements.iterator
-  private var curr = if (localIterator.hasNext) Some(localIterator.next()) else None
+  private[scripting] var curr: Option[CompoundStatementExec] =
+    if (localIterator.hasNext) Some(localIterator.next()) else None
   private var scopeStatus = ScopeStatus.NOT_ENTERED
 
   /**
@@ -214,7 +241,7 @@ class CompoundBodyExec(
     // This check makes this operation idempotent.
     if (isScope && scopeStatus == ScopeStatus.NOT_ENTERED) {
       scopeStatus = ScopeStatus.INSIDE
-      context.enterScope(label.get)
+      context.enterScope(label.get, triggerToExceptionHandlerMap)
     }
   }
 
@@ -918,7 +945,8 @@ class ForStatementExec(
         variablesMap.keys.toSeq.map(colName => createDropVarExec(colName)),
         None,
         isScope = false,
-        context
+        context,
+        new TriggerToExceptionHandlerMap(Map.empty, Map.empty, None, None)
       )
       ForState.VariableCleanup
     }
@@ -965,4 +993,86 @@ class ForStatementExec(
     interrupted = false
     body.reset()
   }
+}
+
+/**
+ * Executable node for ErrorHandlerStatement.
+ * @param body Executable CompoundBody of the error handler.
+ * @param handlerType Handler type: EXIT, CONTINUE.
+ * @param scopeLabel Label of the scope where handler is defined.
+ */
+class ErrorHandlerExec(
+    val body: CompoundBodyExec,
+    val handlerType: HandlerType,
+    val scopeLabel: Option[String]) extends NonLeafStatementExec {
+
+  override def getTreeIterator: Iterator[CompoundStatementExec] = body.getTreeIterator
+
+  override def reset(): Unit = body.reset()
+}
+
+/**
+ * Executable node for Signal Statement.
+ * @param errorCondition Name of the error condition/SQL State for error that will be thrown.
+ * @param sqlState SQL State of the error that will be thrown.
+ * @param message Error message (either string or variable name).
+ * @param session Spark session that SQL script is executed within.
+ */
+class SignalStatementExec(
+    val errorCondition: Option[String] = None,
+    val sqlState: Option[String] = None,
+    val message: Either[String, UnresolvedAttribute],
+    val session: SparkSession)
+  extends LeafStatementExec
+    with ColumnResolutionHelper {
+
+  override def catalogManager: CatalogManager = session.sessionState.catalogManager
+  override def conf: SQLConf = session.sessionState.conf
+
+  def getMessageText: String = {
+    message match {
+      case Left(v) => v
+      case Right(u) =>
+        val varReference = getVariableReference(u, u.nameParts)
+
+        if (!varReference.dataType.sameType(StringType)) {
+          throw QueryCompilationErrors.invalidExecuteImmediateVariableType(varReference.dataType)
+        }
+
+        // Call eval with null value passed instead of a row.
+        // This is ok as this is variable and invoking eval should
+        // be independent of row value.
+        val varReferenceValue = varReference.eval(null)
+
+        if (varReferenceValue == null) {
+          throw QueryCompilationErrors.nullSQLStringExecuteImmediate(u.name)
+        }
+
+        varReferenceValue.toString
+    }
+  }
+
+  private def getVariableReference(expr: Expression, nameParts: Seq[String]): VariableReference = {
+    lookupVariable(nameParts) match {
+      case Some(variable) => variable
+      case _ =>
+        throw QueryCompilationErrors
+          .unresolvedVariableError(
+            nameParts,
+            Seq(CatalogManager.SYSTEM_CATALOG_NAME, CatalogManager.SESSION_NAMESPACE),
+            expr.origin)
+    }
+  }
+
+  private[scripting] def getException: SqlScriptingRuntimeException = {
+    new SqlScriptingRuntimeException(
+      condition = errorCondition.getOrElse("USER_RAISED_EXCEPTION"),
+      sqlState = sqlState,
+      message = getMessageText,
+      cause = null,
+      origin = CurrentOrigin.get
+    )
+  }
+
+  override def reset(): Unit = ()
 }

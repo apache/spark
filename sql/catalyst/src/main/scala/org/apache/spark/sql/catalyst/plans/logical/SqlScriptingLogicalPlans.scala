@@ -17,9 +17,16 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
-import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
+import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 
+import java.util.Locale
+
+import scala.collection.mutable.{HashMap, Set}
+
+import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.plans.logical.HandlerType.HandlerType
+import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
+import org.apache.spark.sql.errors.SqlScriptingErrors
 
 /**
  * Trait for all SQL Scripting logical operators that are product of parsing phase.
@@ -64,11 +71,15 @@ case class SingleStatement(parsedPlan: LogicalPlan)
  *              for example when CompoundBody is inside loop or conditional block.
  * @param isScope Flag indicating if the CompoundBody is a labeled scope.
  *                Scopes are used for grouping local variables and exception handlers.
+ * @param handlers Collection of error handlers that are defined within the compound body.
+ * @param conditions Collection of conditions that are defined within the compound body.
  */
 case class CompoundBody(
     collection: Seq[CompoundPlanStatement],
     label: Option[String],
-    isScope: Boolean) extends Command with CompoundPlanStatement {
+    isScope: Boolean,
+    handlers: Seq[ExceptionHandler] = Seq.empty,
+    conditions: HashMap[String, String] = HashMap()) extends Command with CompoundPlanStatement {
 
   override def children: Seq[LogicalPlan] = collection
 
@@ -297,4 +308,119 @@ case class ForStatement(
     case IndexedSeq(query: SingleStatement, body: CompoundBody) =>
       ForStatement(query, variableName, body, label)
   }
+}
+
+/**
+ * Logical operator for an error condition.
+ * @param conditionName Name of the error condition.
+ * @param sqlState SQLSTATE or Error Code.
+ */
+case class ErrorCondition(
+    conditionName: String,
+    sqlState: String) extends CompoundPlanStatement {
+  override def output: Seq[Attribute] = Seq.empty
+
+  override def children: Seq[LogicalPlan] = Seq.empty
+
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[LogicalPlan]): LogicalPlan = this.copy()
+}
+
+object HandlerType extends Enumeration {
+  type HandlerType = Value
+  val EXIT, CONTINUE = Value
+}
+
+/**
+ * Class holding information about what triggers the handler.
+ * @param sqlStates Set of sqlStates that will trigger handler.
+ * @param conditions  Set of error condition names that will trigger handler.
+ * @param sqlException Flag indicating if the handler is triggered by SQLEXCEPTION.
+ * @param notFound Flag indicating if the handler is triggered by NOT FOUND.
+ */
+class ExceptionHandlerTriggers(
+    val sqlStates: Set[String] = Set.empty,
+    val conditions: Set[String] = Set.empty,
+    var sqlException: Boolean = false,
+    var notFound: Boolean = false) {
+
+  def addUniqueSqlException(): Unit = {
+    if (sqlException) {
+      throw SqlScriptingErrors
+        .duplicateConditionInHandlerDeclaration(CurrentOrigin.get, "SQLEXCEPTION")
+    }
+    sqlException = true
+  }
+
+  def addUniqueNotFound(): Unit = {
+    if (notFound) {
+      throw SqlScriptingErrors
+        .duplicateConditionInHandlerDeclaration(CurrentOrigin.get, "NOT FOUND")
+    }
+    notFound = true
+  }
+
+  def addUniqueCondition(value: String): Unit = {
+    val uppercaseValue = value.toUpperCase(Locale.ROOT)
+    if (conditions.contains(uppercaseValue)) {
+      throw SqlScriptingErrors
+        .duplicateConditionInHandlerDeclaration(CurrentOrigin.get, uppercaseValue)
+    }
+    conditions += uppercaseValue
+  }
+
+  def addUniqueSqlState(value: String): Unit = {
+    val uppercaseValue = value.toUpperCase(Locale.ROOT)
+    if (sqlStates.contains(uppercaseValue)) {
+      throw SqlScriptingErrors
+        .duplicateSqlStateInHandlerDeclaration(CurrentOrigin.get, uppercaseValue)
+    }
+    sqlStates += uppercaseValue
+  }
+}
+
+/**
+ * Logical operator for an error handler.
+ * @param exceptionHandlerTriggers Collection of different handler triggers:
+ *        sqlStates -> set of sqlStates that will trigger handler
+ *        conditions -> set of conditions that will trigger handler
+ *        sqlException -> if handler is triggered by SQLEXCEPTION
+ *        notFound -> if handler is triggered by NotFound
+ * @param body CompoundBody of the handler.
+ * @param handlerType Type of the handler (CONTINUE or EXIT).
+ */
+case class ExceptionHandler(
+    exceptionHandlerTriggers: ExceptionHandlerTriggers,
+    body: CompoundBody,
+    handlerType: HandlerType) extends CompoundPlanStatement {
+  override def output: Seq[Attribute] = Seq.empty
+
+  override def children: Seq[LogicalPlan] = Seq(body)
+
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[LogicalPlan]): LogicalPlan = {
+    assert(newChildren.length == 1)
+    ExceptionHandler(
+      exceptionHandlerTriggers,
+      newChildren(0).asInstanceOf[CompoundBody],
+      handlerType)
+  }
+}
+
+/**
+ * Logical operator for Signal Statement.
+ * @param errorCondition Name of the error condition/SQL State for error that will be thrown.
+ * @param sqlState SQL State for error that will be thrown.
+ * @param message Error message (either string or variable name).
+ */
+case class SignalStatement(
+    errorCondition: Option[String] = None,
+    sqlState: Option[String] = None,
+    message: Either[String, UnresolvedAttribute]) extends CompoundPlanStatement {
+  override def output: Seq[Attribute] = Seq.empty
+
+  override def children: Seq[LogicalPlan] = Seq.empty
+
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[LogicalPlan]): LogicalPlan = this.copy()
 }
