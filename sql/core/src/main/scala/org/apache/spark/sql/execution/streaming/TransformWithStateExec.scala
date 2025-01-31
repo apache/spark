@@ -150,7 +150,7 @@ case class TransformWithStateExec(
       Some(NoPrefixKeyStateEncoderSpec(keySchema)))
 
     val columnFamilySchemas = getDriverProcessorHandle()
-      .getColumnFamilySchemas(setNullableFields) ++
+      .getColumnFamilySchemas(setNullableFields = setNullableFields) ++
         Map(StateStore.DEFAULT_COL_FAMILY_NAME -> defaultSchema)
     closeProcessorHandle()
     columnFamilySchemas
