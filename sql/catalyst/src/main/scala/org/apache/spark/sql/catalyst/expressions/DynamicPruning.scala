@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCo
 import org.apache.spark.sql.catalyst.plans.logical.{HintInfo, LogicalPlan}
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.trees.UnaryLike
+import org.apache.spark.sql.errors.QueryExecutionErrors
 
 trait DynamicPruning extends Predicate
 
@@ -47,7 +48,7 @@ case class DynamicPruningSubquery(
     onlyInBroadcast: Boolean,
     exprId: ExprId = NamedExpression.newExprId,
     hint: Option[HintInfo] = None)
-  extends SubqueryExpression(buildQuery, Seq(pruningKey), exprId, Seq.empty, hint)
+  extends SubqueryExpression(buildQuery, Seq(pruningKey), Seq.empty, exprId, Seq.empty, hint)
   with DynamicPruning
   with Unevaluable
   with UnaryLike[Expression] {
@@ -65,6 +66,14 @@ case class DynamicPruningSubquery(
     // pruningKey and return a copy without any changes.
     assert(outerAttrs.size == 1 && outerAttrs.head.semanticEquals(pruningKey))
     copy()
+  }
+
+  override def withNewUnresolvedOuterAttrs(
+       unresolvedOuterAttrs: Seq[Expression]
+  ): DynamicPruningSubquery = {
+    // TODO(avery): create suitable error subclass to throw
+    // DynamicPruningSubquery should not have this method called on it.
+    return this
   }
 
   override def withNewHint(hint: Option[HintInfo]): SubqueryExpression = copy(hint = hint)
