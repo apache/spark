@@ -247,7 +247,7 @@ res0: Long = 10L
 
 By default, the REPL will attempt to connect to a local Spark Server on port 15002.
 The connection, however, may be configured in several ways as described in this configuration
-[reference](https://github.com/apache/spark/blob/master/connector/connect/docs/client-connection-string.md).
+[reference](https://github.com/apache/spark/blob/master/sql/connect/docs/client-connection-string.md).
 
 #### Set SPARK_REMOTE environment variable
 

@@ -192,7 +192,7 @@
               <executable>cp</executable>
               <arguments>
                 <argument>-r</argument>
-                <argument>${basedir}/../connector/connect/client/jvm/target/connect-repl</argument>
+                <argument>${basedir}/../sql/connect/client/jvm/target/connect-repl</argument>
                 <argument>${basedir}/target/scala-${scala.binary.version}/jars/</argument>
               </arguments>
             </configuration>
@@ -206,7 +206,7 @@
             <configuration>
               <executable>cp</executable>
               <arguments>
-                <argument>${basedir}/../connector/connect/client/jvm/target/spark-connect-client-jvm_${scala.binary.version}-${project.version}.jar</argument>
+                <argument>${basedir}/../sql/connect/client/jvm/target/spark-connect-client-jvm_${scala.binary.version}-${project.version}.jar</argument>
                 <argument>${basedir}/target/scala-${scala.binary.version}/jars/connect-repl</argument>
               </arguments>
             </configuration>
