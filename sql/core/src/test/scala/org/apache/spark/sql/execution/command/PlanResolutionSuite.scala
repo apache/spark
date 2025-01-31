@@ -1008,7 +1008,7 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
           query match {
             case ListQuery(Project(projects, SubqueryAlias(AliasIdentifier("s", Seq()),
                 UnresolvedSubqueryColumnAliases(outputColumnNames, Project(_, _: OneRowRelation)))),
-                _, _, _, _, _) =>
+                _, _, _, _, _, _) =>
               assert(projects.size == 1 && projects.head.name == "s.name")
               assert(outputColumnNames.size == 1 && outputColumnNames.head == "name")
             case o => fail("Unexpected subquery: \n" + o.treeString)
@@ -1089,7 +1089,7 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
           query match {
             case ListQuery(Project(projects, SubqueryAlias(AliasIdentifier("s", Seq()),
                 UnresolvedSubqueryColumnAliases(outputColumnNames, Project(_, _: OneRowRelation)))),
-                _, _, _, _, _) =>
+                _, _, _, _, _, _) =>
               assert(projects.size == 1 && projects.head.name == "s.name")
               assert(outputColumnNames.size == 1 && outputColumnNames.head == "name")
             case o => fail("Unexpected subquery: \n" + o.treeString)
