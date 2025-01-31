@@ -6841,7 +6841,7 @@ class RFormulaModel(JavaModel, _RFormulaParams, JavaMLReadable["RFormulaModel"],
     """
 
     def __str__(self) -> str:
-        resolvedFormula = self._call_java("resolvedFormula")
+        resolvedFormula = self._call_java("resolvedFormulaString")
         return "RFormulaModel(%s) (uid=%s)" % (resolvedFormula, self.uid)
 
 
