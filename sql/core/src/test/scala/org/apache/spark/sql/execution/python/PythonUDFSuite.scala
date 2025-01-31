@@ -123,7 +123,7 @@ class PythonUDFSuite extends QueryTest with SharedSparkSession {
         spark.range(1).select(transform(array("id"), x => pythonTestUDF(x))).collect()
       },
       condition = "UNSUPPORTED_FEATURE.LAMBDA_FUNCTION_WITH_PYTHON_UDF",
-      parameters = Map("funcName" -> "\"pyUDF(namedlambdavariable())\""),
+      parameters = Map("funcName" -> "\"pyUDF:UDF(namedlambdavariable())\""),
       context = ExpectedContext(
         "transform", s".*${this.getClass.getSimpleName}.*"))
   }
