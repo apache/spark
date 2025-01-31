@@ -363,26 +363,19 @@ class DriverStatefulProcessorHandleImpl(timeMode: TimeMode, keyExprEnc: Expressi
     addTimerColFamily()
   }
 
-  def getColumnFamilySchemas(
-      setNullableFields: Boolean = true,
-      ensureNullableFields: Boolean = false
-  ): Map[String, StateStoreColFamilySchema] = {
+  def getColumnFamilySchemas(): Map[String, StateStoreColFamilySchema] = {
     val schemas = columnFamilySchemas.toMap
-    if (setNullableFields) {
-      schemas.map { case (colFamilyName, schema) =>
-        // assert that each field is nullable if schema evolution is enabled
-        schema.valueSchema.fields.foreach { field =>
-          if (!field.nullable && ensureNullableFields) {
-            throw StateStoreErrors.stateStoreSchemaMustBeNullable(
-              schema.colFamilyName, schema.valueSchema.toString())
-          }
+    schemas.map { case (colFamilyName, schema) =>
+      // assert that each field is nullable if schema evolution is enabled
+      schema.valueSchema.fields.foreach { field =>
+        if (!field.nullable) {
+          throw StateStoreErrors.stateStoreSchemaMustBeNullable(
+            schema.colFamilyName, schema.valueSchema.toString())
         }
-        colFamilyName -> schema.copy(
-          valueSchema = schema.valueSchema.toNullable
-        )
       }
-    } else {
-      schemas
+      colFamilyName -> schema.copy(
+        valueSchema = schema.valueSchema.toNullable
+      )
     }
   }
 
