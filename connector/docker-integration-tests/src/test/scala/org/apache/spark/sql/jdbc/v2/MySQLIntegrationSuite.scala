@@ -242,6 +242,9 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest
     assert(rows10(1).getString(0) === "alex")
   }
 
+  // MySQL Connector/J uses collation 'utf8mb4_0900_ai_ci' as collation for connection.
+  // The MySQL server 9.1.0 uses collation 'utf8mb4_0900_ai_ci' for database by default.
+  // This method uses string colume directly as the result of cast has the same collation.
   def testCastStringTarget(stringLiteral: String, stringCol: String): String = stringCol
 
   test("SPARK-50793: MySQL JDBC Connector failed to cast some types") {
@@ -340,6 +343,9 @@ class MySQLOverMariaConnectorIntegrationSuite extends MySQLIntegrationSuite {
         s"&useSSL=false"
   }
 
+  // MariaDB Connector/J uses collation 'utf8mb4_unicode_ci' as collation for connection.
+  // The MySQL server 9.1.0 uses collation 'utf8mb4_0900_ai_ci' for database by default.
+  // This method uses string literal so the result of cast and literal have the same collation.
   override def testCastStringTarget(stringLiteral: String, stringCol: String): String =
     stringLiteral
 }
