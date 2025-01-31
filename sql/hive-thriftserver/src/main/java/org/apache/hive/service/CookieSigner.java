@@ -32,7 +32,7 @@ import org.apache.spark.internal.SparkLoggerFactory;
  */
 public class CookieSigner {
   private static final String SIGNATURE = "&s=";
-  private static final String SHA_STRING = "SHA-256";
+  private static final String SHA_STRING = "SHA-512";
   private byte[] secretBytes;
   private static final SparkLogger LOG = SparkLoggerFactory.getLogger(CookieSigner.class);
 
