@@ -22,7 +22,6 @@ import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCo
 import org.apache.spark.sql.catalyst.plans.logical.{HintInfo, LogicalPlan}
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.trees.UnaryLike
-import org.apache.spark.sql.errors.QueryExecutionErrors
 
 trait DynamicPruning extends Predicate
 
