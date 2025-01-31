@@ -117,7 +117,7 @@ case class TransformWithStateInPandasExec(
   override def getColFamilySchemas(
       setNullableFields: Boolean
   ): Map[String, StateStoreColFamilySchema] = {
-    driverProcessorHandle.getColumnFamilySchemas()
+    driverProcessorHandle.getColumnFamilySchemas(true)
   }
 
   override def getStateVariableInfos(): Map[String, TransformWithStateVariableInfo] = {
