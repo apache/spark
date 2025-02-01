@@ -17,7 +17,9 @@
 
 package org.apache.spark.sql.connect
 
+import org.apache.spark.connect.proto
 import org.apache.spark.sql
+import org.apache.spark.sql.connect.common.DataTypeProtoConverter
 import org.apache.spark.sql.expressions.{UserDefinedAggregateFunction, UserDefinedFunction}
 import org.apache.spark.sql.types.DataType
 
@@ -42,8 +44,12 @@ class UDFRegistration(session: SparkSession) extends sql.UDFRegistration {
   }
 
   override def registerJava(name: String, className: String, returnDataType: DataType): Unit = {
-    throw new UnsupportedOperationException(
-      "registerJava is currently not supported in Spark Connect.")
+    val builder = proto.CommonInlineUserDefinedFunction.newBuilder().setFunctionName(name)
+    builder.getJavaUdfBuilder
+      .setClassName(className)
+      .setOutputType(DataTypeProtoConverter.toConnectProtoType(returnDataType))
+      .setAggregate(false)
+    session.registerUdf(builder.build())
   }
 
   /** @inheritdoc */

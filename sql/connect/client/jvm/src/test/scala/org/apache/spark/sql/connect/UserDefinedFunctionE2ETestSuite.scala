@@ -25,11 +25,11 @@ import scala.jdk.CollectionConverters._
 import org.apache.spark.api.java.function._
 import org.apache.spark.sql.{AnalysisException, Encoder, Encoders, Row}
 import org.apache.spark.sql.api.java.UDF2
-import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{PrimitiveIntEncoder, PrimitiveLongEncoder}
+import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{PrimitiveIntEncoder, PrimitiveLongEncoder, StringEncoder}
 import org.apache.spark.sql.connect.test.{QueryTest, RemoteSparkSession}
 import org.apache.spark.sql.expressions.Aggregator
-import org.apache.spark.sql.functions.{col, struct, udaf, udf}
-import org.apache.spark.sql.types.IntegerType
+import org.apache.spark.sql.functions.{call_function, col, struct, udaf, udf}
+import org.apache.spark.sql.types.{IntegerType, StringType}
 
 /**
  * All tests in this class requires client UDF defined in this test class synced with the server.
@@ -433,6 +433,15 @@ class UserDefinedFunctionE2ETestSuite extends QueryTest with RemoteSparkSession 
     assert(ds.select(RowAggregator.toColumn).head() == 405)
     assert(ds.agg(RowAggregator.toColumn).head().getLong(0) == 405)
   }
+
+  test("registerJavaUdf") {
+    spark.udf.registerJava("sconcat", classOf[StringConcat].getName, StringType)
+    val ds = spark
+      .range(2)
+      .select(call_function("sconcat", col("id").cast("string"), (col("id") + 1).cast("string")))
+      .as(StringEncoder)
+    checkDataset(ds, "01", "12")
+  }
 }
 
 case class UdafTestInput(id: Long, extra: Long)
@@ -489,4 +498,8 @@ object RowAggregator extends Aggregator[Row, (Long, Long), Long] {
   override def bufferEncoder: Encoder[(Long, Long)] =
     Encoders.tuple(Encoders.scalaLong, Encoders.scalaLong)
   override def outputEncoder: Encoder[Long] = Encoders.scalaLong
+}
+
+class StringConcat extends UDF2[String, String, String] {
+  override def call(t1: String, t2: String): String = t1 + t2
 }
