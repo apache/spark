@@ -643,7 +643,7 @@ class SparkSession(SparkConversionMixin):
         self._profiler_collector = AccumulatorProfilerCollector()
 
     @staticmethod
-    def _should_update_active_session():
+    def _should_update_active_session() -> bool:
         return (
             SparkSession._instantiatedSession is None
             or SparkSession._instantiatedSession._sc._jsc is None
