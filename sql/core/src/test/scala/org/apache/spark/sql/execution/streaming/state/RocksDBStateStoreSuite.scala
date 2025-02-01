@@ -350,6 +350,10 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
       tryWithProviderResource(newStoreProvider(keySchema,
         RangeKeyScanStateEncoderSpec(
           keySchema, Seq(1)), colFamiliesEnabled)) { provider =>
+
+        def getRandStr(): String = Random.alphanumeric.filter(_.isLetter)
+          .take(Random.nextInt() % 10 + 1).mkString
+
         val store = provider.getStore(0)
 
         // use non-default col family if column families are enabled
@@ -360,12 +364,10 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
             RangeKeyScanStateEncoderSpec(keySchema, Seq(1)))
         }
 
-        val timerTimestamps = Seq(931L, 8000L, 452300L, 4200L, -1L, 90L, 1L, 2L, 8L,
-          -230L, -14569L, -92L, -7434253L, 35L, 6L, 9L, -323L, 5L)
+        val timerTimestamps = Seq(931, 8000, 452300, 4200, -1, 90, 1, 2, 8,
+          -230, -14569, -92, -7434253, 35, 6, 9, -323, 5)
         timerTimestamps.foreach { ts =>
-          val keyRow = dataToKeyRow(Random.alphanumeric.filter(_.isLetter)
-            .take(Random.nextInt() % 10 + 1).mkString,
-            ts.asInstanceOf[Int])
+          val keyRow = dataToKeyRow(getRandStr(), ts)
           val valueRow = dataToValueRow(1)
           store.put(keyRow, valueRow, cfName)
           assert(valueRowToData(store.get(keyRow, cfName)) === 1)
@@ -380,11 +382,9 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
 
         // test with a different set of power of 2 timestamps
         val store1 = provider.getStore(1)
-        val timerTimestamps1 = Seq(-32L, -64L, -256L, 64L, 32L, 1024L, 4096L, 0L)
+        val timerTimestamps1 = Seq(-32, -64, -256, 64, 32, 1024, 4096, 0)
         timerTimestamps1.foreach { ts =>
-          val keyRow = dataToKeyRow(Random.alphanumeric.filter(_.isLetter)
-            .take(Random.nextInt() % 10 + 1).mkString,
-            ts.asInstanceOf[Int])
+          val keyRow = dataToKeyRow(getRandStr(), ts)
           val valueRow = dataToValueRow(1)
           store1.put(keyRow, valueRow, cfName)
           assert(valueRowToData(store1.get(keyRow, cfName)) === 1)
@@ -550,8 +550,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
 
           val result = store.iterator(cfName).map { kv =>
             val keyRow = kv.key
-            val key = (keyRow.getString(0), keyRow.getLong(1), keyRow.getInt(2))
-            (key._2, key._3)
+            (keyRow.getLong(1), keyRow.getInt(2))
           }.toSeq
 
           def getOrderedTs(
@@ -1268,8 +1267,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
           .iterator(cfName)
           .map { kv =>
             val keyRow = kv.key
-            val key = (keyRow.getLong(0), keyRow.getInt(2), keyRow.getDouble(4))
-            (key._1, key._2, key._3)
+            (keyRow.getLong(0), keyRow.getInt(2), keyRow.getDouble(4))
           }
           .toSeq
 
