@@ -436,7 +436,8 @@ class UserDefinedFunctionE2ETestSuite extends QueryTest with RemoteSparkSession 
 
   test("registerJavaUdf") {
     spark.udf.registerJava("sconcat", classOf[StringConcat].getName, StringType)
-    val ds = spark.range(2)
+    val ds = spark
+      .range(2)
       .select(call_function("sconcat", col("id").cast("string"), (col("id") + 1).cast("string")))
       .as(StringEncoder)
     checkDataset(ds, "01", "12")
