@@ -727,7 +727,7 @@ class SparkSession(SparkConversionMixin):
             return None
         else:
             assert sc._jvm is not None
-            jSparkSessionClass = getattr(sc._jvm, "org.apache.spark.sql.SparkSession")
+            jSparkSessionClass = SparkSession._get_j_spark_session_class(sc._jvm)
             if jSparkSessionClass.getActiveSession().isDefined():
                 if SparkSession._should_update_active_session():
                     SparkSession(sc, jSparkSessionClass.getActiveSession().get())
