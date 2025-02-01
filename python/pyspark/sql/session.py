@@ -633,10 +633,7 @@ class SparkSession(SparkConversionMixin):
         # If we had an instantiated SparkSession attached with a SparkContext
         # which is stopped now, we need to renew the instantiated SparkSession.
         # Otherwise, we will use invalid SparkSession when we call Builder.getOrCreate.
-        if (
-            SparkSession._instantiatedSession is None
-            or SparkSession._instantiatedSession._sc._jsc is None
-        ):
+        if SparkSession._should_update_active_session():
             SparkSession._instantiatedSession = self
             SparkSession._activeSession = self
             assert self._jvm is not None
@@ -644,6 +641,13 @@ class SparkSession(SparkConversionMixin):
             self._jvm.SparkSession.setActiveSession(self._jsparkSession)
 
         self._profiler_collector = AccumulatorProfilerCollector()
+
+    @staticmethod
+    def _should_update_active_session() -> bool:
+        return (
+            SparkSession._instantiatedSession is None
+            or SparkSession._instantiatedSession._sc._jsc is None
+        )
 
     def _repr_html_(self) -> str:
         return """
@@ -718,7 +722,8 @@ class SparkSession(SparkConversionMixin):
         else:
             assert sc._jvm is not None
             if sc._jvm.SparkSession.getActiveSession().isDefined():
-                SparkSession(sc, sc._jvm.SparkSession.getActiveSession().get())
+                if SparkSession._should_update_active_session():
+                    SparkSession(sc, sc._jvm.SparkSession.getActiveSession().get())
                 return SparkSession._activeSession
             else:
                 return None
