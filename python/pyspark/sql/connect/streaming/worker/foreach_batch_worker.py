@@ -55,10 +55,7 @@ def main(infile: IO, outfile: IO) -> None:
         connect_url = os.environ["SPARK_CONNECT_LOCAL_URL"]
         session_id = utf8_deserializer.loads(infile)
 
-        print(
-            f"{log_name} is starting with "
-            f"url {connect_url} and sessionId {session_id}."
-        )
+        print(f"{log_name} is starting with " f"url {connect_url} and sessionId {session_id}.")
 
         # To attach to the existing SparkSession, we're setting the session_id in the URL.
         connect_url = connect_url + ";session_id=" + session_id
@@ -70,7 +67,6 @@ def main(infile: IO, outfile: IO) -> None:
         write_int(0, outfile)
         outfile.flush()
 
-
     def process(df_id, batch_id):  # type: ignore[no-untyped-def]
         global spark
         print(f"{log_name} Started batch {batch_id} with DF id {df_id}")
@@ -80,7 +76,7 @@ def main(infile: IO, outfile: IO) -> None:
 
     try:
         init()
-       
+
         while True:
             df_ref_id = utf8_deserializer.loads(infile)
             batch_id = read_long(infile)
