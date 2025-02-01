@@ -652,7 +652,7 @@ class SparkSession(SparkConversionMixin):
         return getattr(jvm, "org.apache.spark.sql.classic.SparkSession")
 
     @staticmethod
-    def _get_j_spark_session_module(jvm: "JVMView") -> "JavaClass":
+    def _get_j_spark_session_module(jvm: "JVMView") -> "JavaObject":
         return getattr(getattr(jvm, "org.apache.spark.sql.classic.SparkSession$"), "MODULE$")
 
     def _repr_html_(self) -> str:
