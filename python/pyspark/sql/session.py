@@ -542,7 +542,7 @@ class SparkSession(SparkConversionMixin):
                     # by all sessions.
                     session = SparkSession(sc, options=self._options)
                 else:
-                    module = SparkSession._get_j_spark_session_module_class(session._jvm)
+                    module = SparkSession._get_j_spark_session_module(session._jvm)
                     module.applyModifiableSettings(session._jsparkSession, self._options)
                 return session
 
@@ -612,7 +612,7 @@ class SparkSession(SparkConversionMixin):
         assert self._jvm is not None
 
         jSparkSessionClass = SparkSession._get_j_spark_session_class(self._jvm)
-        jSparkSessionModule = SparkSession._get_j_spark_session_module_class(self._jvm)
+        jSparkSessionModule = SparkSession._get_j_spark_session_module(self._jvm)
 
         if jsparkSession is None:
             if (
@@ -652,7 +652,7 @@ class SparkSession(SparkConversionMixin):
         return getattr(jvm, "org.apache.spark.sql.classic.SparkSession")
 
     @staticmethod
-    def _get_j_spark_session_module_class(jvm: "JVMView") -> "JavaClass":
+    def _get_j_spark_session_module(jvm: "JVMView") -> "JavaClass":
         return getattr(getattr(jvm, "org.apache.spark.sql.classic.SparkSession$"), "MODULE$")
 
     def _repr_html_(self) -> str:
