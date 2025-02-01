@@ -396,9 +396,12 @@ class QueryExecutionSuite extends SharedSparkSession {
       val df = data.selectExpr("l2 + r2")
       // execute the plan so that the final adaptive plan is available
       df.collect()
+      logWarning("ziqi dev here")
+      df.explain(true)
       val qe = df.queryExecution
       qe.extendedExplainInfo(concat.append, qe.executedPlan)
       val info = concat.toString
+      logWarning(s"ziqi dev here2 ${info}")
       val expected = "\n== Extended Information (Test) ==\n" +
         "Scan Info: LocalTableScan\n" +
         "Project Info: Project\n" +
@@ -521,7 +524,7 @@ class ExtendedInfo extends ExtendedExplainGenerator {
 
   def getActualPlan(plan: SparkPlan): SparkPlan = {
     plan match {
-      case p : AdaptiveSparkPlanExec => p.executedPlan
+      case p : AdaptiveSparkPlanExec => getActualPlan(p.executedPlan)
       case p : QueryStageExec => p.plan
       case p : WholeStageCodegenExec => p.child
       case p => p
