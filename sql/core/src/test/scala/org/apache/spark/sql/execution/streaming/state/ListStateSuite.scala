@@ -111,7 +111,7 @@ class ListStateSuite extends StateVariableSuiteBase {
       ImplicitGroupingKeyTracker.setImplicitKey("test_key")
 
       var testSeq = Seq(931L, 8000L, 452300L, 4200L, -1L, 90L, 1L, 2L, 8L,
-          -230L, -14569L, -92L, -7434253L, 35L, 6L, 9L, -323L, 5L)
+        -230L, -14569L, -92L, -7434253L, 35L, 6L, 9L, -323L, 5L)
       testState.put(testSeq.toArray)
       assert(testState.get().toSeq === testSeq)
       testState.appendValue(100L)
@@ -120,8 +120,9 @@ class ListStateSuite extends StateVariableSuiteBase {
       testSeq = testSeq ++ Seq(100L, 9L, 48972L)
       assert(testState.get().toSeq === testSeq)
 
-      testState.appendList(Array(-1L, 2942450L, 7L))
-      testSeq = testSeq ++ Seq(-1L, 2942450L, 7L)
+      var appendSeq = Seq(-1L, 2942450L, 7L)
+      testState.appendList(appendSeq.toArray)
+      testSeq = testSeq ++ appendSeq
       assert(testState.get().toSeq === testSeq)
 
       testState.clear()
@@ -131,8 +132,8 @@ class ListStateSuite extends StateVariableSuiteBase {
       testSeq = Seq(3451L, 24L, -14342429L)
       assert(testState.get().toSeq === testSeq)
 
-      val appendSeq = Seq(931L, 8000L, 452300L, 4200L, -1L, 90L, 1L, 2L, 8L,
-          -230L, -14569L, -92L, -7434253L, 35L, 6L, 9L, -323L, 5L)
+      appendSeq = Seq(931L, 8000L, 452300L, 4200L, -1L, 90L, 1L, 2L, 8L,
+        -230L, -14569L, -92L, -7434253L, 35L, 6L, 9L, -323L, 5L)
       testState.appendList(appendSeq.toArray)
       testSeq = testSeq ++ appendSeq
       assert(testState.get().toSeq === testSeq)
@@ -174,11 +175,11 @@ class ListStateSuite extends StateVariableSuiteBase {
       testState.appendValue("validate space in back ")
       testState.appendValue(" validate space in both ")
       testSeq = Seq(" validate space in front", "validate space in back ",
-          " validate space in both ")
+        " validate space in both ")
       assert(testState.get().toSeq === testSeq)
 
       appendSeq = Seq("test", "actual", "state", "value", "ordering", "string", "", "type",
-          "hello", "world", "verification")
+        "hello", "world", "verification")
       testState.appendList(appendSeq.toArray)
       testSeq = testSeq ++ appendSeq
       assert(testState.get().toSeq === testSeq)
@@ -202,15 +203,15 @@ class ListStateSuite extends StateVariableSuiteBase {
       ImplicitGroupingKeyTracker.setImplicitKey("test_key")
 
       var testSeq = Seq(TestClass(931L, "test"), TestClass(8000L, "verification"),
-          TestClass(452300L, "state"), TestClass(4200L, "actual"), TestClass(-1L, "value"),
-          TestClass(90L, "ordering"), TestClass(1L, "string"))
+        TestClass(452300L, "state"), TestClass(4200L, "actual"), TestClass(-1L, "value"),
+        TestClass(90L, "ordering"), TestClass(1L, "string"))
       testState.put(testSeq.toArray)
       assert(testState.get().toSeq === testSeq)
       testState.appendValue(TestClass(2L, "type"))
       testState.appendValue(TestClass(-323L, "hello"))
       testState.appendValue(TestClass(48972L, " verify with space"))
       testSeq = testSeq ++ Seq(TestClass(2L, "type"), TestClass(-323L, "hello"),
-          TestClass(48972L, " verify with space"))
+        TestClass(48972L, " verify with space"))
 
       assert(testState.get().toSeq === testSeq)
 
@@ -225,12 +226,12 @@ class ListStateSuite extends StateVariableSuiteBase {
       testState.appendValue(TestClass(24L, "ordering"))
       testState.appendValue(TestClass(-14342429L, "state"))
       testSeq = Seq(TestClass(3451L, "values"), TestClass(24L, "ordering"),
-          TestClass(-14342429L, "state"))
+        TestClass(-14342429L, "state"))
       assert(testState.get().toSeq === testSeq)
 
       appendSeq = Seq(TestClass(931L, "test"), TestClass(8000L, "verification"),
-          TestClass(452300L, "state"), TestClass(4200L, "actual"), TestClass(-1L, "value"),
-          TestClass(90L, "ordering"), TestClass(1L, "string"))
+        TestClass(452300L, "state"), TestClass(4200L, "actual"), TestClass(-1L, "value"),
+        TestClass(90L, "ordering"), TestClass(1L, "string"))
       testState.appendList(appendSeq.toArray)
       testSeq = testSeq ++ appendSeq
       assert(testState.get().toSeq === testSeq)
