@@ -214,7 +214,7 @@
     <bouncycastle.version>1.79</bouncycastle.version>
     <tink.version>1.16.0</tink.version>
     <datasketches.version>6.1.1</datasketches.version>
-    <netty.version>4.1.115.Final</netty.version>
+    <netty.version>4.1.117.Final</netty.version>
     <netty-tcnative.version>2.0.69.Final</netty-tcnative.version>
     <icu4j.version>76.1</icu4j.version>
     <junit-jupiter.version>5.11.4</junit-jupiter.version>
@@ -881,10 +881,6 @@
         <exclusions>
           <exclusion>
             <groupId>io.netty</groupId>
-            <artifactId>netty-codec-dns</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>io.netty</groupId>
             <artifactId>netty-codec-haproxy</artifactId>
           </exclusion>
           <exclusion>
@@ -910,10 +906,6 @@
           <exclusion>
             <groupId>io.netty</groupId>
             <artifactId>netty-codec-xml</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>io.netty</groupId>
-            <artifactId>netty-resolver-dns</artifactId>
           </exclusion>
           <exclusion>
             <groupId>io.netty</groupId>
