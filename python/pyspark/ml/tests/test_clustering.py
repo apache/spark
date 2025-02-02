@@ -371,6 +371,7 @@ class ClusteringTestsMixin:
         self.assertIsInstance(model, LDAModel)
         self.assertNotIsInstance(model, LocalLDAModel)
         self.assertIsInstance(model, DistributedLDAModel)
+        self.assertTrue(model.isDistributed())
 
         dc = model.estimatedDocConcentration()
         self.assertTrue(np.allclose(dc.toArray(), [26.0, 26.0], atol=1e-4), dc)
@@ -399,6 +400,17 @@ class ClusteringTestsMixin:
         model.getCheckpointFiles()
 
         output = model.transform(df)
+        expected_cols = ["id", "features", "topicDistribution"]
+        self.assertEqual(output.columns, expected_cols)
+        self.assertEqual(output.count(), 2)
+
+        # Test toLocal()
+        localModel = model.toLocal()
+        self.assertIsInstance(localModel, LDAModel)
+        self.assertIsInstance(localModel, LocalLDAModel)
+        self.assertNotIsInstance(localModel, DistributedLDAModel)
+        self.assertFalse(localModel.isDistributed())
+        output = localModel.transform(df)
         expected_cols = ["id", "features", "topicDistribution"]
         self.assertEqual(output.columns, expected_cols)
         self.assertEqual(output.count(), 2)

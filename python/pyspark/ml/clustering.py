@@ -18,6 +18,7 @@
 import sys
 import warnings
 from typing import Any, Dict, List, Optional, TYPE_CHECKING
+import functools
 
 import numpy as np
 
@@ -51,6 +52,7 @@ from pyspark.ml.common import inherit_doc, _java2py
 from pyspark.ml.stat import MultivariateGaussian
 from pyspark.sql import DataFrame
 from pyspark.ml.linalg import Vector, Matrix
+from pyspark.sql.utils import is_remote
 
 if TYPE_CHECKING:
     from pyspark.ml._typing import M
@@ -1542,6 +1544,7 @@ class DistributedLDAModel(LDAModel, JavaMLReadable["DistributedLDAModel"], JavaM
     .. versionadded:: 2.0.0
     """
 
+    @functools.cache
     @since("2.0.0")
     def toLocal(self) -> "LocalLDAModel":
         """
@@ -1551,6 +1554,8 @@ class DistributedLDAModel(LDAModel, JavaMLReadable["DistributedLDAModel"], JavaM
         .. warning:: This involves collecting a large :py:func:`topicsMatrix` to the driver.
         """
         model = LocalLDAModel(self._call_java("toLocal"))
+        if is_remote():
+            return model
 
         # SPARK-10931: Temporary fix to be removed once LDAModel defines Params
         model._create_params_from_java()
