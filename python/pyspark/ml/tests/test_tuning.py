@@ -31,6 +31,7 @@ from pyspark.ml.tuning import (
     TrainValidationSplit,
     TrainValidationSplitModel,
 )
+from pyspark.sql.functions import rand
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 
@@ -64,7 +65,6 @@ class TuningTestsMixin:
 
         # Access the train ratio
         self.assertEqual(tvs_model.getTrainRatio(), 0.75)
-        print("----------- ", tvs_model.validationMetrics)
         self.assertTrue(np.isclose(tvs_model.validationMetrics[0], 0.5, atol=1e-4))
         self.assertTrue(np.isclose(tvs_model.validationMetrics[1], 0.8857142857142857, atol=1e-4))
 
@@ -73,14 +73,14 @@ class TuningTestsMixin:
 
         # save & load
         with tempfile.TemporaryDirectory(prefix="train_validation_split") as d:
-            path1 = os.path.join(d, "cv")
+            path1 = os.path.join(d, "tvs")
             tvs.write().save(path1)
             tvs2 = TrainValidationSplit.load(path1)
             self.assertEqual(str(tvs), str(tvs2))
             self.assertEqual(str(tvs.getEstimator()), str(tvs2.getEstimator()))
             self.assertEqual(str(tvs.getEvaluator()), str(tvs2.getEvaluator()))
 
-            path2 = os.path.join(d, "cv_model")
+            path2 = os.path.join(d, "tvsm")
             tvs_model.write().save(path2)
             model2 = TrainValidationSplitModel.load(path2)
             self.assertEqual(str(tvs_model), str(model2))
@@ -103,7 +103,11 @@ class TuningTestsMixin:
         grid = ParamGridBuilder().addGrid(lr.maxIter, [0, 1]).build()
         evaluator = BinaryClassificationEvaluator()
         cv = CrossValidator(
-            estimator=lr, estimatorParamMaps=grid, evaluator=evaluator, parallelism=1
+            estimator=lr,
+            estimatorParamMaps=grid,
+            evaluator=evaluator,
+            parallelism=1,
+            collectSubModels=True,
         )
 
         self.assertEqual(cv.getEstimator(), lr)
@@ -123,8 +127,21 @@ class TuningTestsMixin:
         )
         self.assertEqual(output.count(), 50)
 
+        numFolds = cv.getNumFolds()
+
+        def checkSubModels(subModels):
+            self.assertEqual(len(subModels), numFolds)
+            for i in range(numFolds):
+                self.assertEqual(len(subModels[i]), len(grid))
+
+        checkSubModels(model.subModels)
+
+        for i in range(numFolds):
+            for j in range(len(grid)):
+                self.assertEqual(model.subModels[i][j].uid, model.subModels[i][j].uid)
+
         # save & load
-        with tempfile.TemporaryDirectory(prefix="cv_lr") as d:
+        with tempfile.TemporaryDirectory(prefix="cv") as d:
             path1 = os.path.join(d, "cv")
             cv.write().save(path1)
             cv2 = CrossValidator.load(path1)
@@ -135,9 +152,89 @@ class TuningTestsMixin:
             path2 = os.path.join(d, "cv_model")
             model.write().save(path2)
             model2 = CrossValidatorModel.load(path2)
+            checkSubModels(model2.subModels)
             self.assertEqual(str(model), str(model2))
             self.assertEqual(str(model.getEstimator()), str(model2.getEstimator()))
             self.assertEqual(str(model.getEvaluator()), str(model2.getEvaluator()))
+
+            path2 = os.path.join(d, "cv_model2")
+            model.write().option("persistSubModels", "false").save(path2)
+            cvModel2 = CrossValidatorModel.load(path2)
+            self.assertEqual(cvModel2.subModels, None)
+
+            model3 = model2.copy()
+            checkSubModels(model3.subModels)
+
+    def test_cv_user_specified_folds(self):
+        from pyspark.sql import functions as F
+
+        dataset = self.spark.createDataFrame(
+            [
+                (Vectors.dense([0.0]), 0.0),
+                (Vectors.dense([0.4]), 1.0),
+                (Vectors.dense([0.5]), 0.0),
+                (Vectors.dense([0.6]), 1.0),
+                (Vectors.dense([1.0]), 1.0),
+            ]
+            * 10,
+            ["features", "label"],
+        ).repartition(2, "features")
+
+        dataset_with_folds = (
+            dataset.repartition(1)
+            .withColumn("random", rand(100))
+            .withColumn(
+                "fold",
+                F.when(F.col("random") < 0.33, 0).when(F.col("random") < 0.66, 1).otherwise(2),
+            )
+            .repartition(2, "features")
+        )
+
+        lr = LogisticRegression()
+        grid = ParamGridBuilder().addGrid(lr.maxIter, [20]).build()
+        evaluator = BinaryClassificationEvaluator()
+
+        cv = CrossValidator(estimator=lr, estimatorParamMaps=grid, evaluator=evaluator, numFolds=3)
+        cv_with_user_folds = CrossValidator(
+            estimator=lr, estimatorParamMaps=grid, evaluator=evaluator, numFolds=3, foldCol="fold"
+        )
+
+        self.assertEqual(cv.getEstimator().uid, cv_with_user_folds.getEstimator().uid)
+
+        cvModel1 = cv.fit(dataset)
+        cvModel2 = cv_with_user_folds.fit(dataset_with_folds)
+        for index in range(len(cvModel1.avgMetrics)):
+            print(abs(cvModel1.avgMetrics[index] - cvModel2.avgMetrics[index]))
+            self.assertTrue(abs(cvModel1.avgMetrics[index] - cvModel2.avgMetrics[index]) < 0.1)
+
+    def test_cv_invalid_user_specified_folds(self):
+        dataset_with_folds = self.spark.createDataFrame(
+            [
+                (Vectors.dense([0.0]), 0.0, 0),
+                (Vectors.dense([0.4]), 1.0, 1),
+                (Vectors.dense([0.5]), 0.0, 2),
+                (Vectors.dense([0.6]), 1.0, 0),
+                (Vectors.dense([1.0]), 1.0, 1),
+            ]
+            * 10,
+            ["features", "label", "fold"],
+        )
+
+        lr = LogisticRegression()
+        grid = ParamGridBuilder().addGrid(lr.maxIter, [20]).build()
+        evaluator = BinaryClassificationEvaluator()
+
+        cv = CrossValidator(
+            estimator=lr, estimatorParamMaps=grid, evaluator=evaluator, numFolds=2, foldCol="fold"
+        )
+        with self.assertRaisesRegex(Exception, "Fold number must be in range"):
+            cv.fit(dataset_with_folds)
+
+        cv = CrossValidator(
+            estimator=lr, estimatorParamMaps=grid, evaluator=evaluator, numFolds=4, foldCol="fold"
+        )
+        with self.assertRaisesRegex(Exception, "The validation data at fold 3 is empty"):
+            cv.fit(dataset_with_folds)
 
 
 class TuningTests(TuningTestsMixin, ReusedSQLTestCase):
