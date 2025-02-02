@@ -998,7 +998,7 @@ class FeatureTestsMixin:
         bucketizer = qds.fit(df)
         self.assertIsInstance(bucketizer, Bucketizer)
         # Bucketizer doesn't inherit uid from QuantileDiscretizer
-        # self.assertEqual(qds.uid, bucketizer.uid)
+        self.assertNotEqual(qds.uid, bucketizer.uid)
 
         # check model coefficients
         self.assertEqual(bucketizer.getSplits(), [float("-inf"), 0.4, float("inf")])
@@ -1046,7 +1046,7 @@ class FeatureTestsMixin:
         bucketizer = qds.fit(df)
         self.assertIsInstance(bucketizer, Bucketizer)
         # Bucketizer doesn't inherit uid from QuantileDiscretizer
-        # self.assertEqual(qds.uid, bucketizer.uid)
+        self.assertNotEqual(qds.uid, bucketizer.uid)
 
         # check model coefficients
         self.assertEqual(
