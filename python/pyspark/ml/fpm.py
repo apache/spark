@@ -16,7 +16,6 @@
 #
 
 import sys
-import copy
 from typing import Any, Dict, Optional, TYPE_CHECKING
 
 from pyspark import keyword_only, since
