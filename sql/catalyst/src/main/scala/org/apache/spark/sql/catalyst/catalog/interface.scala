@@ -61,59 +61,55 @@ trait MetadataMapSupport {
     jsonToString(toJsonLinkedHashMap)
   }
 
-  private def jsonToStringReformat(
-      key: String, jValue: JValue, map: mutable.LinkedHashMap[String, String]): Unit = {
-    val reformattedValue: String = if (key == "Statistics") {
-      jValue match {
-        case JObject(fields) =>
-          fields.flatMap {
-            case ("size_in_bytes", JDecimal(bytes)) =>
-              Some(s"$bytes bytes")
-            case ("num_rows", JDecimal(rows)) =>
-              Some(s"$rows rows")
-            case _ => None
-          }.mkString(", ")
-        case _ => jValue.values.toString
-      }
-    } else if (key == "Created Time" || key == "Last Access") {
-      jValue match {
-        case JLong(value) => new Date(value).toString
-        case _ => jValue.values.toString
-      }
-    } else {
-      jValue.values.toString
+  private def jsonToStringReformat(key: String, jValue: JValue): Option[(String, String)] = {
+    val reformattedValue: Option[String] = key match {
+      case "Statistics" =>
+        jValue match {
+          case JObject(fields) =>
+            Some(fields.flatMap {
+              case ("size_in_bytes", JDecimal(bytes)) => Some(s"$bytes bytes")
+              case ("num_rows", JDecimal(rows)) => Some(s"$rows rows")
+              case _ => None
+            }.mkString(", "))
+          case _ => Some(jValue.values.toString)
+        }
+      case "Created Time" | "Last Access" =>
+        jValue match {
+          case JLong(value) => Some(new Date(value).toString)
+          case _ => Some(jValue.values.toString)
+        }
+      case _ => None
     }
-    map.put(key, reformattedValue)
+    reformattedValue.map(value => key -> value)
   }
 
   protected def jsonToString(
       jsonMap: mutable.LinkedHashMap[String, JValue]): mutable.LinkedHashMap[String, String] = {
     val map = new mutable.LinkedHashMap[String, String]()
-    val reformatKeys = Set("Statistics", "Created Time", "Last Access")
     jsonMap.foreach { case (key, jValue) =>
-      if (reformatKeys.contains(key)) {
-        jsonToStringReformat(key, jValue, map)
-      } else {
-        val stringValue = jValue match {
-          case JString(value) => value
-          case JArray(values) =>
-            values.map(_.values)
-              .map {
-                case str: String => quoteIdentifier(str)
-                case other => other.toString
-              }
-              .mkString("[", ", ", "]")
-          case JObject(fields) =>
-            fields.map { case (k, v) =>
-              s"$k=${v.values.toString}"
-            }
-              .mkString("[", ", ", "]")
-          case JInt(value) => value.toString
-          case JDouble(value) => value.toString
-          case JLong(value) => value.toString
-          case _ => jValue.values.toString
-        }
-        map.put(key, stringValue)
+      jsonToStringReformat(key, jValue) match {
+        case Some((formattedKey, formattedValue)) =>
+          map.put(formattedKey, formattedValue)
+        case None =>
+          val stringValue = jValue match {
+            case JString(value) => value
+            case JArray(values) =>
+              values.map(_.values)
+                .map {
+                  case str: String => quoteIdentifier(str)
+                  case other => other.toString
+                }
+                .mkString("[", ", ", "]")
+            case JObject(fields) =>
+              fields.map { case (k, v) =>
+                s"$k=${v.values.toString}"
+              }.mkString("[", ", ", "]")
+            case JInt(value) => value.toString
+            case JDouble(value) => value.toString
+            case JLong(value) => value.toString
+            case _ => jValue.values.toString
+          }
+          map.put(key, stringValue)
       }
     }
     map
