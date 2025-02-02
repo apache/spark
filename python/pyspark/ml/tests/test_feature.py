@@ -1312,8 +1312,7 @@ class FeatureTestsMixin:
 
             model.write().overwrite().save(d)
             model2 = RFormulaModel.load(d)
-            # TODO: fix str(model)
-            # self.assertEqual(str(model), str(model2))
+            self.assertEqual(str(model), str(model2))
             self.assertEqual(model.getFormula(), model2.getFormula())
 
     def test_string_indexer_handle_invalid(self):
