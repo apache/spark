@@ -510,12 +510,12 @@ private[ml] object MLUtils {
       classOf[TreeEnsembleModel[_]],
       Set(
         "predictLeaf",
-        "trees",
         "treeWeights",
         "javaTreeWeights",
         "getNumTrees",
         "totalNumNodes",
-        "toDebugString")),
+        "toDebugString",
+        "getTree")),
     (classOf[DecisionTreeClassificationModel], Set("featureImportances")),
     (classOf[RandomForestClassificationModel], Set("featureImportances", "evaluate")),
     (classOf[GBTClassificationModel], Set("featureImportances", "evaluateEachIteration")),
@@ -616,7 +616,7 @@ private[ml] object MLUtils {
     (classOf[LocalLDAModel], Set("vocabSize")),
     (
       classOf[DistributedLDAModel],
-      Set("trainingLogLikelihood", "logPrior", "getCheckpointFiles")),
+      Set("trainingLogLikelihood", "logPrior", "getCheckpointFiles", "toLocal")),
 
     // Recommendation Models
     (

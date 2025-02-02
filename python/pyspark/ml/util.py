@@ -219,6 +219,12 @@ def try_remote_call(f: FuncT) -> FuncT:
                 summary = ml_command_result.summary
                 session.client.add_ml_cache(summary)
                 return summary
+            elif ml_command_result.HasField("operator_info"):
+                model_info = deserialize(properties)
+                session._client.add_ml_cache(model_info.obj_ref.id)
+                # get a new model ref id from the existing model,
+                # it is up to the caller to build the model
+                return model_info.obj_ref.id
             else:
                 return deserialize(properties)
         else:
