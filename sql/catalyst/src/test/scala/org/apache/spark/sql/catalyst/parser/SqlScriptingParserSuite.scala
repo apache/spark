@@ -2469,6 +2469,22 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     assert(exception.origin.line.contains(3))
   }
 
+  test("declare condition with special characters") {
+    val sqlScriptText =
+      """
+        |BEGIN
+        |  DECLARE `test-condition` CONDITION FOR SQLSTATE '12345';
+        |END""".stripMargin
+    val exception = intercept[SqlScriptingException] {
+      parsePlan(sqlScriptText)
+    }
+    checkError(
+      exception = exception,
+      condition = "INVALID_ERROR_CONDITION_DECLARATION.SPECIAL_CHARACTER_FOUND",
+      parameters = Map("conditionName" -> toSQLId("test-condition")))
+    assert(exception.origin.line.contains(3))
+  }
+
   test("continue handler not supported") {
     val sqlScript =
       """
@@ -2507,8 +2523,8 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
       exception = intercept[SqlScriptingException] {
         parsePlan(sqlScript)
       },
-      condition = "INVALID_ERROR_CONDITION_DECLARATION.QUALIFIED_CONDITION_NAME",
-      parameters = Map("conditionName" -> "QUALIFIED.CONDITION.NAME"))
+      condition = "INVALID_HANDLER_DECLARATION.CONDITION_NOT_FOUND",
+      parameters = Map("condition" -> "QUALIFIED.CONDITION.NAME"))
   }
 
   test("declare handler for undefined condition") {

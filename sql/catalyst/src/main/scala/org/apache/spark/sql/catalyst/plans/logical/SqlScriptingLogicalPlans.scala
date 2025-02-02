@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.plans.logical
 
 import java.util.Locale
 
-import scala.collection.mutable.{HashMap, Set}
+import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.HandlerType.HandlerType
@@ -70,14 +70,15 @@ case class SingleStatement(parsedPlan: LogicalPlan)
  * @param isScope Flag indicating if the CompoundBody is a labeled scope.
  *                Scopes are used for grouping local variables and exception handlers.
  * @param handlers Collection of error handlers that are defined within the compound body.
- * @param conditions Collection of conditions that are defined within the compound body.
+ * @param conditions Collection of error conditions that are defined within the compound body.
  */
 case class CompoundBody(
     collection: Seq[CompoundPlanStatement],
     label: Option[String],
     isScope: Boolean,
     handlers: Seq[ExceptionHandler] = Seq.empty,
-    conditions: HashMap[String, String] = HashMap()) extends Command with CompoundPlanStatement {
+    conditions: mutable.Map[String, String] = mutable.HashMap())
+  extends Command with CompoundPlanStatement {
 
   override def children: Seq[LogicalPlan] = collection
 
@@ -337,8 +338,8 @@ object HandlerType extends Enumeration {
  * @param notFound Flag indicating if the handler is triggered by NOT FOUND.
  */
 class ExceptionHandlerTriggers(
-    val sqlStates: Set[String] = Set.empty,
-    val conditions: Set[String] = Set.empty,
+    val sqlStates: mutable.Set[String] = mutable.Set.empty,
+    val conditions: mutable.Set[String] = mutable.Set.empty,
     var sqlException: Boolean = false,
     var notFound: Boolean = false) {
 
