@@ -148,6 +148,17 @@ private[connect] object MLHandler extends Logging {
                   .newBuilder()
                   .setObjRef(proto.ObjectRef.newBuilder().setId(id)))
               .build()
+          case a: Array[_] if a.nonEmpty && a.forall(_.isInstanceOf[Model[_]]) =>
+            val ids = a.map { m =>
+              mlCache.register(m.asInstanceOf[Model[_]])
+            }
+            proto.MlCommandResult
+              .newBuilder()
+              .setOperatorInfo(
+                proto.MlCommandResult.MlOperatorInfo
+                  .newBuilder()
+                  .setObjRef(proto.ObjectRef.newBuilder().setId(ids.mkString(","))))
+              .build()
           case _ =>
             val param = Serializer.serializeParam(attrResult)
             proto.MlCommandResult.newBuilder().setParam(param).build()
