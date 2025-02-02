@@ -26,6 +26,7 @@ from pyspark.ml.feature import (
     DCT,
     Binarizer,
     Bucketizer,
+    QuantileDiscretizer,
     CountVectorizer,
     CountVectorizerModel,
     OneHotEncoder,
@@ -977,6 +978,98 @@ class FeatureTestsMixin:
             binarizer.write().overwrite().save(d)
             binarizer2 = Binarizer.load(d)
             self.assertEqual(str(binarizer), str(binarizer2))
+
+    def test_quantile_discretizer_single_column(self):
+        spark = self.spark
+        values = [(0.1,), (0.4,), (1.2,), (1.5,), (float("nan"),), (float("nan"),)]
+        df = spark.createDataFrame(values, ["values"])
+
+        qds = QuantileDiscretizer(inputCol="values", outputCol="buckets")
+        qds.setNumBuckets(2)
+        qds.setRelativeError(0.01)
+        qds.setHandleInvalid("keep")
+
+        self.assertEqual(qds.getInputCol(), "values")
+        self.assertEqual(qds.getOutputCol(), "buckets")
+        self.assertEqual(qds.getNumBuckets(), 2)
+        self.assertEqual(qds.getRelativeError(), 0.01)
+        self.assertEqual(qds.getHandleInvalid(), "keep")
+
+        bucketizer = qds.fit(df)
+        self.assertIsInstance(bucketizer, Bucketizer)
+        # Bucketizer doesn't inherit uid from QuantileDiscretizer
+        # self.assertEqual(qds.uid, bucketizer.uid)
+
+        # check model coefficients
+        self.assertEqual(bucketizer.getSplits(), [float("-inf"), 0.4, float("inf")])
+
+        output = bucketizer.transform(df)
+        self.assertEqual(output.columns, ["values", "buckets"])
+        self.assertEqual(output.count(), 6)
+
+        # save & load
+        with tempfile.TemporaryDirectory(prefix="quantile_discretizer_single_column") as d:
+            qds.write().overwrite().save(d)
+            qds2 = QuantileDiscretizer.load(d)
+            self.assertEqual(str(qds), str(qds2))
+
+            bucketizer.write().overwrite().save(d)
+            bucketizer2 = Bucketizer.load(d)
+            self.assertEqual(str(bucketizer), str(bucketizer2))
+
+    def test_quantile_discretizer_multiple_columns(self):
+        spark = self.spark
+        inputs = [
+            (0.1, 0.0),
+            (0.4, 1.0),
+            (1.2, 1.3),
+            (1.5, 1.5),
+            (float("nan"), float("nan")),
+            (float("nan"), float("nan")),
+        ]
+        df = spark.createDataFrame(inputs, ["input1", "input2"])
+
+        qds = QuantileDiscretizer(
+            relativeError=0.01,
+            handleInvalid="keep",
+            numBuckets=2,
+            inputCols=["input1", "input2"],
+            outputCols=["output1", "output2"],
+        )
+
+        self.assertEqual(qds.getInputCols(), ["input1", "input2"])
+        self.assertEqual(qds.getOutputCols(), ["output1", "output2"])
+        self.assertEqual(qds.getNumBuckets(), 2)
+        self.assertEqual(qds.getRelativeError(), 0.01)
+        self.assertEqual(qds.getHandleInvalid(), "keep")
+
+        bucketizer = qds.fit(df)
+        self.assertIsInstance(bucketizer, Bucketizer)
+        # Bucketizer doesn't inherit uid from QuantileDiscretizer
+        # self.assertEqual(qds.uid, bucketizer.uid)
+
+        # check model coefficients
+        self.assertEqual(
+            bucketizer.getSplitsArray(),
+            [
+                [float("-inf"), 0.4, float("inf")],
+                [float("-inf"), 1.0, float("inf")],
+            ],
+        )
+
+        output = bucketizer.transform(df)
+        self.assertEqual(output.columns, ["input1", "input2", "output1", "output2"])
+        self.assertEqual(output.count(), 6)
+
+        # save & load
+        with tempfile.TemporaryDirectory(prefix="quantile_discretizer_multiple_columns") as d:
+            qds.write().overwrite().save(d)
+            qds2 = QuantileDiscretizer.load(d)
+            self.assertEqual(str(qds), str(qds2))
+
+            bucketizer.write().overwrite().save(d)
+            bucketizer2 = Bucketizer.load(d)
+            self.assertEqual(str(bucketizer), str(bucketizer2))
 
     def test_bucketizer(self):
         df = self.spark.createDataFrame(
