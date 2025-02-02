@@ -160,7 +160,7 @@ def try_remote_transform_relation(f: FuncT) -> FuncT:
             if hasattr(self, "_serialized_ml_params"):
                 params = self._serialized_ml_params
             else:
-                params = serialize_ml_params(self, session.client)
+                params = serialize_ml_params(self, session.client)  # type: ignore[arg-type]
 
             # Model is also a Transformer, so we much match Model first
             if isinstance(self, Model):

@@ -23,7 +23,6 @@ from pyspark.sql import DataFrame
 from pyspark.ml.util import JavaMLWritable, JavaMLReadable, try_remote_attribute_relation
 from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaParams
 from pyspark.ml.param.shared import HasPredictionCol, Param, TypeConverters, Params
-from pyspark.sql.utils import is_remote
 
 if TYPE_CHECKING:
     from py4j.java_gateway import JavaObject
@@ -507,17 +506,22 @@ class PrefixSpan(JavaParams):
             - `sequence: ArrayType(ArrayType(T))` (T is the item type)
             - `freq: Long`
         """
+        from pyspark.sql.utils import is_remote
+
         assert self._java_obj is not None
 
         if is_remote():
-            from python.pyspark.ml.wrapper import JavaTransformer
+            from pyspark.ml.wrapper import JavaTransformer
             from pyspark.ml.connect.serialize import serialize_ml_params
 
-            instance = JavaTransformer(self._java_obj)
+            instance = JavaTransformer()
             instance._java_obj = "org.apache.spark.ml.fpm.PrefixSpanWrapper"
             # The helper object is just a JavaTransformer without any Param Mixin,
             # copying the params by .copy() or directly assigning the _paramMap won't work
-            instance._serialized_ml_params = serialize_ml_params(self, dataset.sparkSession.client)
+            instance._serialized_ml_params = serialize_ml_params(  # type: ignore[attr-defined]
+                self,
+                dataset.sparkSession.client,  # type: ignore[arg-type,operator]
+            )
             return instance.transform(dataset)
 
         self._transfer_params_to_java()
