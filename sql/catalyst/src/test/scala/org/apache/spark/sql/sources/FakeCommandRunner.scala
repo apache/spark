@@ -14,25 +14,17 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package org.apache.spark.sql.sources
 
-import org.apache.spark.sql.{QueryTest, Row}
-import org.apache.spark.sql.test.SharedSparkSession
+import scala.jdk.CollectionConverters._
 
-class ExternalCommandRunnerSuite extends QueryTest with SharedSparkSession {
-  test("execute command") {
-    try {
-      System.setProperty("command", "hello")
-      assert(System.getProperty("command") === "hello")
+import org.apache.spark.sql.connector.ExternalCommandRunner
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
-      val options = Map("one" -> "1", "two" -> "2")
-      val df = spark.executeCommand(classOf[FakeCommandRunner].getName, "world", options)
-      // executeCommand should execute the command eagerly
-      assert(System.getProperty("command") === "world")
-      checkAnswer(df, Seq(Row("one"), Row("two")))
-    } finally {
-      System.clearProperty("command")
-    }
+class FakeCommandRunner extends ExternalCommandRunner {
+
+  override def executeCommand(command: String, options: CaseInsensitiveStringMap): Array[String] = {
+    System.setProperty("command", command)
+    options.keySet().iterator().asScala.toSeq.sorted.toArray
   }
 }
