@@ -486,11 +486,7 @@ class RunningCountStatefulProcessorWithProcTimeTimer extends RunningCountStatefu
       key: String,
       inputRows: Iterator[String],
       timerValues: TimerValues): Iterator[(String, String)] = {
-    val currCount = if (_countState.exists()) {
-      _countState.get() + 1
-    } else {
-      1
-    }
+    val currCount = if (_countState.exists()) _countState.get() else 0L
 
     if (currCount == 0 && (key == "a" || key == "c")) {
       getHandle.registerTimer(timerValues.getCurrentProcessingTimeInMs()
@@ -554,11 +550,7 @@ class RunningCountStatefulProcessorWithProcTimeTimerUpdates
       key: String,
       inputRows: Iterator[String],
       timerValues: TimerValues): Iterator[(String, String)] = {
-    val currCount = if (_countState.exists()) {
-      _countState.get() + 1
-    } else {
-      1
-    }
+    val currCount = if (_countState.exists()) _countState.get() else 0L
 
     val count = currCount + inputRows.size
     processUnexpiredRows(key, currCount, count, timerValues)
