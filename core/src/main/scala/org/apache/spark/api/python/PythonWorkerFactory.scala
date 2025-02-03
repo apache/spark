@@ -219,7 +219,6 @@ private[spark] class PythonWorkerFactory(
         if (!blockingMode) {
           socketChannel.configureBlocking(false)
         }
-//        socketChannel.setOption()
         val selector = Selector.open()
         val selectionKey = if (blockingMode) {
           null
