@@ -78,25 +78,32 @@ private[spark] class StreamingPythonRunner(
     pythonWorker = Some(worker)
     pythonWorkerFactory = Some(workerFactory)
 
-    val stream = new BufferedOutputStream(
-      pythonWorker.get.channel.socket().getOutputStream, bufferSize)
+    val socket = pythonWorker.get.channel.socket()
+    val stream = new BufferedOutputStream(socket.getOutputStream, bufferSize)
+    val dataIn = new DataInputStream(new BufferedInputStream(socket.getInputStream, bufferSize))
     val dataOut = new DataOutputStream(stream)
 
-    PythonWorkerUtils.writePythonVersion(pythonVer, dataOut)
+    val resFromPython = try {
+      socket.setSoTimeout(5 * 60 * 1000)
+//      socket.setKeepAlive(true)
+      PythonWorkerUtils.writePythonVersion(pythonVer, dataOut)
 
-    // Send sessionId
-    if (!sessionId.isEmpty) {
-      PythonRDD.writeUTF(sessionId, dataOut)
+      // Send sessionId
+      if (!sessionId.isEmpty) {
+        PythonRDD.writeUTF(sessionId, dataOut)
+      }
+
+      // Send the user function to python process
+      PythonWorkerUtils.writePythonFunction(func, dataOut)
+      dataOut.flush()
+
+      dataIn.readInt()
+    } except {
+      case e: Exception =>
+//        throw streamingPythonRunnerInitializationFailure(-1, e.getMessage)
+    } finally {
+      socket.setSoTimeout(0)
     }
-
-    // Send the user function to python process
-    PythonWorkerUtils.writePythonFunction(func, dataOut)
-    dataOut.flush()
-
-    val dataIn = new DataInputStream(
-      new BufferedInputStream(pythonWorker.get.channel.socket().getInputStream, bufferSize))
-
-    val resFromPython = dataIn.readInt()
     if (resFromPython != 0) {
       val errMessage = PythonWorkerUtils.readUTF(dataIn)
       throw streamingPythonRunnerInitializationFailure(resFromPython, errMessage)
