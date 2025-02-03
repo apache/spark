@@ -18,6 +18,7 @@
 from typing import TYPE_CHECKING
 
 from pyspark.sql.tvf_argument import TableValuedFunctionArgument
+from pyspark.sql.utils import dispatch_table_arg_method
 
 
 if TYPE_CHECKING:
@@ -25,20 +26,23 @@ if TYPE_CHECKING:
 
 
 class TableArg(TableValuedFunctionArgument):
+    @dispatch_table_arg_method
     def partitionBy(self, *cols: "ColumnOrName") -> "TableArg":
         """
         Abstract method to partition data by specified columns.
         """
-        pass
+        ...
 
+    @dispatch_table_arg_method
     def orderBy(self, *cols: "ColumnOrName") -> "TableArg":
         """
         Abstract method to order data by specified columns.
         """
-        pass
+        ...
 
+    @dispatch_table_arg_method
     def withSinglePartition(self) -> "TableArg":
         """
         Abstract method to enforce a single partition.
         """
-        pass
+        ...
