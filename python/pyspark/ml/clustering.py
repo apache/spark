@@ -48,7 +48,7 @@ from pyspark.ml.util import (
     try_remote_attribute_relation,
 )
 from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaParams, JavaWrapper
-from pyspark.ml.common import inherit_doc, _java2py
+from pyspark.ml.common import inherit_doc
 from pyspark.ml.stat import MultivariateGaussian
 from pyspark.sql import DataFrame
 from pyspark.ml.linalg import Vector, Matrix
