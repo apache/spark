@@ -547,13 +547,13 @@ class JavaSparkContext(val sc: SparkContext) extends Closeable {
    */
   def broadcast[T](value: T): Broadcast[T] = sc.broadcast(value)(fakeClassTag)
 
-  /** Shut down the JavaSparkContext. */
+  /** Shut down the SparkContext. */
   def stop(): Unit = {
     sc.stop()
   }
 
   /**
-   * Shut down the `JavaSparkContext` with given exit code that will be passed to scheduler backend.
+   * Shut down the `SparkContext` with given exit code that will be passed to scheduler backend.
    *
    * @param exitCode Specified exit code that will be passed to scheduler backend in client mode.
    */
