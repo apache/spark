@@ -84,8 +84,7 @@ private[spark] class StreamingPythonRunner(
     val dataOut = new DataOutputStream(stream)
 
     val resFromPython = try {
-      socket.setSoTimeout(5 * 60 * 1000)
-//      socket.setKeepAlive(true)
+      socket.setSoTimeout(5 * 1000)
       PythonWorkerUtils.writePythonVersion(pythonVer, dataOut)
 
       // Send sessionId
@@ -98,9 +97,9 @@ private[spark] class StreamingPythonRunner(
       dataOut.flush()
 
       dataIn.readInt()
-    } except {
+    } catch {
       case e: Exception =>
-//        throw streamingPythonRunnerInitializationFailure(-1, e.getMessage)
+        throw streamingPythonRunnerInitializationFailure(-1, e.getMessage)
     } finally {
       socket.setSoTimeout(0)
     }

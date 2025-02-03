@@ -73,6 +73,8 @@ def main(infile: IO, outfile: IO) -> None:
 
     try:
         func = worker.read_command(pickle_ser, infile)
+        import time
+        time.sleep(30)
         write_int(0, outfile)
         outfile.flush()
 
