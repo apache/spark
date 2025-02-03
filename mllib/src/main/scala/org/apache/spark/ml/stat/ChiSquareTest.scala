@@ -120,7 +120,7 @@ private[spark] class ChiSquareTestWrapper(override val uid: String)
     if ($(flatten)) {
       new StructType()
         .add("featureIndex", IntegerType, nullable = false)
-        .add("pValues", DoubleType, nullable = false)
+        .add("pValue", DoubleType, nullable = false)
         .add("degreesOfFreedom", IntegerType, nullable = false)
         .add("statistic", DoubleType, nullable = false)
     } else {
