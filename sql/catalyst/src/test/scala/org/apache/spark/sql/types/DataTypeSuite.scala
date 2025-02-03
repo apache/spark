@@ -864,7 +864,7 @@ class DataTypeSuite extends SparkFunSuite {
   checkEqualsIgnoreCompatibleCollation(StringType, StringType("UTF8_LCASE"),
     expected = true)
   checkEqualsIgnoreCompatibleCollation(
-    StringType("UTF8_BINARY"), StringType("UTF8_LCASE"), expected = true)
+    StringType("UTF8_LCASE"), StringType("UTF8_BINARY"), expected = true)
   checkEqualsIgnoreCompatibleCollation(
     StringType("UTF8_LCASE"), CharType(5), expected = false)
   checkEqualsIgnoreCompatibleCollation(
