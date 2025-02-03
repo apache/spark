@@ -108,7 +108,7 @@ object ChiSquareTest {
 
 /**
  * [[ChiSquareTest]] is not an Estimator/Transformer and thus needs to be wrapped in a wrapper
- * to make it usable on Spark Connect.
+ * to be compatible with Spark Connect.
  */
 private[spark] class ChiSquareTestWrapper(override val uid: String)
   extends Transformer with HasFeaturesCol with HasLabelCol {
