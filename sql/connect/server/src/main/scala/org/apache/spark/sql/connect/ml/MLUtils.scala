@@ -602,7 +602,7 @@ private[ml] object MLUtils {
     (classOf[BisectingKMeansSummary], Set("trainingCost")),
     (
       classOf[GaussianMixtureModel],
-      Set("predict", "numFeatures", "weights", "gaussians", "predictProbability", "gaussiansDF")),
+      Set("predict", "numFeatures", "weights", "predictProbability", "gaussiansDF")),
     (classOf[GaussianMixtureSummary], Set("probability", "probabilityCol", "logLikelihood")),
     (
       classOf[LDAModel],

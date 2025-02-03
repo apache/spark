@@ -230,15 +230,9 @@ class GaussianMixtureModel(
         Array of :py:class:`MultivariateGaussian` where gaussians[i] represents
         the Multivariate Gaussian (Normal) Distribution for Gaussian i
         """
-        from pyspark.core.context import SparkContext
-
-        sc = SparkContext._active_spark_context
-        assert sc is not None and self._java_obj is not None
-
-        jgaussians = self._java_obj.gaussians()
         return [
-            MultivariateGaussian(_java2py(sc, jgaussian.mean()), _java2py(sc, jgaussian.cov()))
-            for jgaussian in jgaussians
+            MultivariateGaussian(row.mean.asML(), row.cov.asML())
+            for row in self.gaussiansDF.collect()
         ]
 
     @property
