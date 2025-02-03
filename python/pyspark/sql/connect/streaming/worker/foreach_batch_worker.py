@@ -46,7 +46,14 @@ def main(infile: IO, outfile: IO) -> None:
 
     log_name = "Streaming ForeachBatch worker"
 
-    def init():
+    def process(df_id, batch_id):  # type: ignore[no-untyped-def]
+        global spark
+        print(f"{log_name} Started batch {batch_id} with DF id {df_id}")
+        batch_df = spark_connect_session._create_remote_dataframe(df_id)
+        func(batch_df, batch_id)
+        print(f"{log_name} Completed batch {batch_id} with DF id {df_id}")
+
+    try:
         check_python_version(infile)
 
         # Enable Spark Connect Mode
@@ -66,16 +73,6 @@ def main(infile: IO, outfile: IO) -> None:
         func = worker.read_command(pickle_ser, infile)
         write_int(0, outfile)
         outfile.flush()
-
-    def process(df_id, batch_id):  # type: ignore[no-untyped-def]
-        global spark
-        print(f"{log_name} Started batch {batch_id} with DF id {df_id}")
-        batch_df = spark_connect_session._create_remote_dataframe(df_id)
-        func(batch_df, batch_id)
-        print(f"{log_name} Completed batch {batch_id} with DF id {df_id}")
-
-    try:
-        init()
 
         while True:
             df_ref_id = utf8_deserializer.loads(infile)

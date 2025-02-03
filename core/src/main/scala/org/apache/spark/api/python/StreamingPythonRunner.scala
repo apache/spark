@@ -82,6 +82,7 @@ private[spark] class StreamingPythonRunner(
       pythonWorker.get.channel.socket().getOutputStream, bufferSize)
     val dataOut = new DataOutputStream(stream)
 
+//    sock.setSoTimeout(10000)
     PythonWorkerUtils.writePythonVersion(pythonVer, dataOut)
 
     // Send sessionId
@@ -104,6 +105,7 @@ private[spark] class StreamingPythonRunner(
     logInfo(log"Runner initialization succeeded (returned" +
       log" ${MDC(PYTHON_WORKER_RESPONSE, resFromPython)}).")
 
+    sock.setSoTimeout(0)
     (dataOut, dataIn)
   }
 
