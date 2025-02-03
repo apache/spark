@@ -19,13 +19,28 @@ import unittest
 from pyspark.sql.tests.pandas.test_pandas_transform_with_state import (
     TransformWithStateInPandasTestsMixin,
 )
+from pyspark import SparkConf
 from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
 class TransformWithStateInPandasParityTests(
     TransformWithStateInPandasTestsMixin, ReusedConnectTestCase
 ):
-    pass
+    @classmethod
+    def conf(cls):
+        cfg = SparkConf(loadDefaults=False)
+        # explicitly setting configs in both TransformWithStateInPandasTestsMixin and ReusedConnectTestCase
+        for base in cls.__bases__:
+            if hasattr(base, "conf"):
+                parent_cfg = base.conf()
+                for k, v in parent_cfg.getAll():
+                    cfg.set(k, v)
+
+        # Extra removing config for connect suites
+        if cfg._jconf is not None:
+            cfg._jconf.remove("spark.master")
+
+        return cfg
 
 
 if __name__ == "__main__":

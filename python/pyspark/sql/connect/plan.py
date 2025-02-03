@@ -2590,10 +2590,10 @@ class TransformWithStateInPandas(LogicalPlan):
         )
         # fill in initial state related fields
         if self._initial_state_plan is not None:
-            self._initial_state_plan = cast(LogicalPlan, self._initial_state_plan)
             plan.transform_with_state_in_pandas.initial_input.CopyFrom(
                 self._initial_state_plan.plan(session)
             )
+            assert self._initial_state_grouping_cols is not None
             plan.transform_with_state_in_pandas.initial_grouping_expressions.extend(
                 [c.to_plan(session) for c in self._initial_state_grouping_cols]
             )

@@ -378,7 +378,7 @@ class GroupedData:
         udf_util = TransformWithStateInPandasUdfUtils(statefulProcessor, timeMode)
         if initialState is None:
             udf_obj = UserDefinedFunction(
-                udf_util.transformWithStateUDF,  # type: ignore
+                udf_util.transformWithStateUDF,
                 returnType=outputStructType,
                 evalType=PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_UDF,
             )
@@ -388,7 +388,7 @@ class GroupedData:
         else:
             self._df._check_same_session(initialState._df)
             udf_obj = UserDefinedFunction(
-                udf_util.transformWithStateWithInitStateUDF,  # type: ignore
+                udf_util.transformWithStateWithInitStateUDF,
                 returnType=outputStructType,
                 evalType=PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_INIT_STATE_UDF,
             )

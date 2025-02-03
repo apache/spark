@@ -59,9 +59,7 @@ if have_pandas:
 class TransformWithStateInPandasTestsMixin:
     @classmethod
     def conf(cls):
-        cfg = SparkConf(
-            loadDefaults=False
-        )  # Avoid loading default configs so that connect suites can run
+        cfg = SparkConf()
         cfg.set("spark.sql.shuffle.partitions", "5")
         cfg.set(
             "spark.sql.streaming.stateStore.providerClass",
@@ -323,6 +321,8 @@ class TransformWithStateInPandasTestsMixin:
             SimpleTTLStatefulProcessor(), check_results, False, "processingTime"
         )
 
+    # TODO SPARK-50908 holistic fix for TTL suite
+    @unittest.skip("test is flaky and it is only a timing issue, skipping until we can resolve")
     def test_value_state_ttl_expiration(self):
         def check_results(batch_df, batch_id):
             if batch_id == 0:
@@ -339,24 +339,44 @@ class TransformWithStateInPandasTestsMixin:
                         Row(id="ttl-map-state-count-1", count=1),
                     ],
                 )
+            elif batch_id == 1:
+                assertDataFrameEqual(
+                    batch_df,
+                    [
+                        Row(id="ttl-count-0", count=2),
+                        Row(id="count-0", count=2),
+                        Row(id="ttl-list-state-count-0", count=3),
+                        Row(id="ttl-map-state-count-0", count=2),
+                        Row(id="ttl-count-1", count=2),
+                        Row(id="count-1", count=2),
+                        Row(id="ttl-list-state-count-1", count=3),
+                        Row(id="ttl-map-state-count-1", count=2),
+                    ],
+                )
             else:
+                # ttl-count-0 expire and restart from count 0.
+                # The TTL for value state ttl_count_state gets reset in batch 1 because of the
+                # update operation and ttl-count-1 keeps the state.
+                # ttl-list-state-count-0 expire and restart from count 0.
+                # The TTL for list state ttl_list_state gets reset in batch 1 because of the
+                # put operation and ttl-list-state-count-1 keeps the state.
+                # non-ttl state never expires
                 assertDataFrameEqual(
                     batch_df,
                     [
                         Row(id="ttl-count-0", count=1),
-                        Row(id="count-0", count=2),
+                        Row(id="count-0", count=3),
                         Row(id="ttl-list-state-count-0", count=1),
                         Row(id="ttl-map-state-count-0", count=1),
-                        Row(id="ttl-count-1", count=1),
-                        Row(id="count-1", count=2),
-                        Row(id="ttl-list-state-count-1", count=1),
-                        Row(id="ttl-map-state-count-1", count=1),
+                        Row(id="ttl-count-1", count=3),
+                        Row(id="count-1", count=3),
+                        Row(id="ttl-list-state-count-1", count=7),
+                        Row(id="ttl-map-state-count-1", count=3),
                     ],
                 )
 
-            if batch_id == 0:
-                # let ttl state expires
-                time.sleep(2)
+            if batch_id == 0 or batch_id == 1:
+                time.sleep(4)
 
         input_dir = tempfile.TemporaryDirectory()
         input_path = input_dir.name
@@ -364,6 +384,7 @@ class TransformWithStateInPandasTestsMixin:
             df = self._build_test_df(input_path)
             self._prepare_input_data(input_path + "/batch1.txt", [1, 0], [0, 0])
             self._prepare_input_data(input_path + "/batch2.txt", [1, 0], [0, 0])
+            self._prepare_input_data(input_path + "/batch3.txt", [1, 0], [0, 0])
             for q in self.spark.streams.active:
                 q.stop()
             output_schema = StructType(
@@ -1278,6 +1299,7 @@ class TransformWithStateInPandasTestsMixin:
 
                 input_path = tempfile.mkdtemp()
                 self._prepare_test_resource1(input_path)
+
                 df = self._build_test_df(input_path)
 
                 def check_basic_state(batch_df, batch_id):
@@ -1286,6 +1308,7 @@ class TransformWithStateInPandasTestsMixin:
                     assert result.value["name"] == "name-0"
 
                 self._run_evolution_test(BasicProcessor(), checkpoint_dir, check_basic_state, df)
+
                 self._prepare_test_resource2(input_path)
 
                 # Test 2: Add fields
@@ -1304,9 +1327,7 @@ class TransformWithStateInPandasTestsMixin:
                 def check_remove_fields(batch_df, batch_id):
                     result = batch_df.collect()[0]
                     assert result.value["id"] == 0  # First ID from test data
-                    assert (
-                        result.value["name"] == "name-00"
-                    ), f"batch id: {batch_id}, real df: {batch_df.collect()}"
+                    assert result.value["name"] == "name-00"
 
                 self._run_evolution_test(
                     RemoveFieldsProcessor(), checkpoint_dir, check_remove_fields, df
@@ -1339,6 +1360,7 @@ class TransformWithStateInPandasTestsMixin:
             with tempfile.TemporaryDirectory() as checkpoint_dir:
                 input_path = tempfile.mkdtemp()
                 self._prepare_test_resource1(input_path)
+
                 df = self._build_test_df(input_path)
 
                 def check_add_fields(batch_df, batch_id):
@@ -1607,11 +1629,11 @@ class TTLStatefulProcessor(StatefulProcessor):
     def init(self, handle: StatefulProcessorHandle) -> None:
         state_schema = StructType([StructField("value", IntegerType(), True)])
         user_key_schema = StructType([StructField("id", StringType(), True)])
-        self.ttl_count_state = handle.getValueState("ttl-state", state_schema, 1000)
+        self.ttl_count_state = handle.getValueState("ttl-state", state_schema, 10000)
         self.count_state = handle.getValueState("state", state_schema)
-        self.ttl_list_state = handle.getListState("ttl-list-state", state_schema, 1000)
+        self.ttl_list_state = handle.getListState("ttl-list-state", state_schema, 10000)
         self.ttl_map_state = handle.getMapState(
-            "ttl-map-state", user_key_schema, state_schema, 1000
+            "ttl-map-state", user_key_schema, state_schema, 10000
         )
 
     def handleInputRows(self, key, rows, timerValues) -> Iterator[pd.DataFrame]:

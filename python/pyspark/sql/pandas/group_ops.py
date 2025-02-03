@@ -363,7 +363,7 @@ class PandasGroupedOpsMixin:
         timeMode: str,
         initialState: Optional["GroupedData"] = None,
         eventTimeColumnName: str = "",
-    ) -> DataFrame:
+    ) -> "DataFrame":
         """
         Invokes methods defined in the stateful processor used in arbitrary state API v2. It
         requires protobuf, pandas and pyarrow as dependencies to process input/state data. We

@@ -1028,6 +1028,9 @@ class SparkConnectPlanner(
     val pythonUdf = transformPythonUDF(rel.getTransformWithStateUdf)
     val cols =
       rel.getGroupingExpressionsList.asScala.toSeq.map(expr => Column(transformExpression(expr)))
+    val input = Dataset
+      .ofRows(session, transformRelation(rel.getInput))
+      .groupBy(cols: _*)
 
     val outputSchema = parseSchema(rel.getOutputSchema)
 
@@ -1035,9 +1038,6 @@ class SparkConnectPlanner(
       val initialGroupingCols = rel.getInitialGroupingExpressionsList.asScala.toSeq.map(expr =>
         Column(transformExpression(expr)))
 
-      val input = Dataset
-        .ofRows(session, transformRelation(rel.getInput))
-        .groupBy(cols: _*)
       val initialStateDs = Dataset
         .ofRows(session, transformRelation(rel.getInitialInput))
         .groupBy(initialGroupingCols: _*)
@@ -1058,9 +1058,7 @@ class SparkConnectPlanner(
           rel.getEventTimeColName)
         .logicalPlan
     } else {
-      Dataset
-        .ofRows(session, transformRelation(rel.getInput))
-        .groupBy(cols: _*)
+      input
         .transformWithStateInPandas(
           Column(pythonUdf),
           outputSchema,

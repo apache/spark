@@ -31,13 +31,17 @@ from pyspark.sql.streaming.stateful_processor import (
 
 if TYPE_CHECKING:
     from pyspark.sql.pandas._typing import DataFrameLike as PandasDataFrameLike
-    from pyspark.sql.streaming.stateful_processor_util import TransformWithStateInPandasFuncMode
 
 # This file places the utilities for transformWithStateInPandas; we have a separate file to avoid
 # putting internal classes to the stateful_processor.py file which contains public APIs.
 
 
 class TransformWithStateInPandasFuncMode(Enum):
+    """
+    Internal mode for python worker UDF mode for transformWithStateInPandas; external mode are in
+    `StatefulProcessorHandleState` for public use purposes.
+    """
+
     PROCESS_DATA = 1
     PROCESS_TIMER = 2
     COMPLETE = 3
@@ -45,6 +49,11 @@ class TransformWithStateInPandasFuncMode(Enum):
 
 
 class TransformWithStateInPandasUdfUtils:
+    """
+    Internal Utility class used for python worker UDF for transformWithStateInPandas. This class is
+    shared for both classic and spark connect mode.
+    """
+
     def __init__(self, stateful_processor: StatefulProcessor, time_mode: str):
         self._stateful_processor = stateful_processor
         self._time_mode = time_mode
