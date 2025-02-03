@@ -20,17 +20,18 @@ import unittest
 from pyspark.ml.linalg import Vectors
 from pyspark.ml.stat import ChiSquareTest
 from pyspark.sql import DataFrame
-from pyspark.testing.mlutils import SparkSessionTestCase
+from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 
-class ChiSquareTestTests(SparkSessionTestCase):
+class StatTestsMixin:
     def test_chisquaretest(self):
+        spark = self.spark
         data = [
             [0, Vectors.dense([0, 1, 2])],
             [1, Vectors.dense([1, 1, 1])],
             [2, Vectors.dense([2, 1, 0])],
         ]
-        df = self.spark.createDataFrame(data, ["label", "feat"])
+        df = spark.createDataFrame(data, ["label", "feat"])
         res = ChiSquareTest.test(df, "feat", "label")
         # This line is hitting the collect bug described in #17218, commented for now.
         # pValues = res.select("degreesOfFreedom").collect())
@@ -38,6 +39,17 @@ class ChiSquareTestTests(SparkSessionTestCase):
         fieldNames = set(field.name for field in res.schema.fields)
         expectedFields = ["pValues", "degreesOfFreedom", "statistics"]
         self.assertTrue(all(field in fieldNames for field in expectedFields))
+
+        self.assertEqual(res.columns, ["pValues", "degreesOfFreedom", "statistics"])
+        self.assertEqual(res.count(), 1)
+
+        res2 = ChiSquareTest.test(df, "feat", "label", True)
+        self.assertEqual(res2.columns, ["featureIndex", "pValue", "degreesOfFreedom", "statistic"])
+        self.assertEqual(res2.count(), 3)
+
+
+class StatTests(StatTestsMixin, ReusedSQLTestCase):
+    pass
 
 
 if __name__ == "__main__":
