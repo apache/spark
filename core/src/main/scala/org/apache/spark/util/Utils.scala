@@ -44,6 +44,7 @@ import scala.util.control.{ControlThrowable, NonFatal}
 import scala.util.matching.Regex
 
 import _root_.io.netty.channel.unix.Errors.NativeIoException
+import com.google.common.annotations.VisibleForTesting
 import com.google.common.cache.{CacheBuilder, CacheLoader, LoadingCache}
 import com.google.common.collect.Interners
 import com.google.common.io.{ByteStreams, Files => GFiles}
@@ -54,6 +55,7 @@ import org.apache.commons.io.IOUtils
 import org.apache.commons.lang3.{JavaVersion, SystemUtils}
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, FileUtil, Path}
+import org.apache.hadoop.fs.audit.CommonAuditContext.currentAuditContext
 import org.apache.hadoop.io.compress.{CompressionCodecFactory, SplittableCompressionCodec}
 import org.apache.hadoop.ipc.{CallerContext => HadoopCallerContext}
 import org.apache.hadoop.ipc.CallerContext.{Builder => HadoopCallerContextBuilder}
@@ -3164,6 +3166,9 @@ private[util] object CallerContext extends Logging {
  * specific applications impacting parts of the Hadoop system and potential problems they may be
  * creating (e.g. overloading NN). As HDFS mentioned in HDFS-9184, for a given HDFS operation, it's
  * very helpful to track which upper level job issues it.
+ * The context information is also set in the audit context for cloud storage
+ * connectors. If supported, this gets marshalled as part of the HTTP Referrer header
+ * or similar field, and so ends up in the store service logs themselves.
  *
  * @param from who sets up the caller context (TASK, CLIENT, APPMASTER)
  *
@@ -3214,12 +3219,28 @@ private[spark] class CallerContext(
 
   /**
    * Set up the caller context [[context]] by invoking Hadoop CallerContext API of
-   * [[HadoopCallerContext]].
+   * [[HadoopCallerContext]], which is included in IPC calls.
+   * and the hadoop audit context, which may be included in cloud storage
+   * requests for collection in cloud service logs.
    */
-  def setCurrentContext(): Unit = if (CallerContext.callerContextEnabled) {
-    val hdfsContext = new HadoopCallerContextBuilder(context).build()
-    HadoopCallerContext.setCurrent(hdfsContext)
+  def setCurrentContext(): Unit = {
+    setCurrentContext(CallerContext.callerContextEnabled)
   }
+
+  /**
+   * Inner method to set the context.
+   * @param enabled should the thread-level contexts be updated?
+   */
+  @VisibleForTesting
+  private[util] def setCurrentContext(enabled: Boolean): Unit = {
+    if (enabled) {
+      val hdfsContext = new HadoopCallerContextBuilder(context).build()
+      HadoopCallerContext.setCurrent(hdfsContext)
+      // audit context as passed down to object stores, use prefix "spark"
+      currentAuditContext.put("spark", context)
+    }
+  }
+
 }
 
 /**
