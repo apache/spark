@@ -273,7 +273,6 @@ class TransformWithValueStateTTLSuite extends TransformWithStateTTLTest {
     ) {
       withTempDir { checkpointDir =>
         // When Avro is used, we want to set the StructFields to nullable
-        val shouldBeNullable = usingAvroEncoding()
         val metadataPathPostfix = "state/0/_stateSchema/default"
         val stateSchemaPath = new Path(checkpointDir.toString, s"$metadataPathPostfix")
         val hadoopConf = spark.sessionState.newHadoopConf()
@@ -317,7 +316,7 @@ class TransformWithValueStateTTLSuite extends TransformWithStateTTLTest {
         val schema2 = StateStoreColFamilySchema(
           "$count_listState", 0,
           keySchema, 0,
-          new StructType().add("count", LongType, nullable = shouldBeNullable),
+          new StructType().add("count", LongType, nullable = true),
           Some(NoPrefixKeyStateEncoderSpec(keySchema)),
           None
         )
@@ -325,7 +324,7 @@ class TransformWithValueStateTTLSuite extends TransformWithStateTTLTest {
         val schema3 = StateStoreColFamilySchema(
           "$rowCounter_listState", 0,
           keySchema, 0,
-          new StructType().add("count", LongType, nullable = shouldBeNullable),
+          new StructType().add("count", LongType, nullable = true),
           Some(NoPrefixKeyStateEncoderSpec(keySchema)),
           None
         )
@@ -409,7 +408,7 @@ class TransformWithValueStateTTLSuite extends TransformWithStateTTLTest {
           "valueStateTTL", 0,
           keySchema, 0,
           new StructType()
-            .add("value", new StructType().add("value", IntegerType, nullable = shouldBeNullable))
+            .add("value", new StructType().add("value", IntegerType, nullable = true))
             .add("ttlExpirationMs", LongType),
           Some(NoPrefixKeyStateEncoderSpec(keySchema)),
           None
@@ -418,7 +417,7 @@ class TransformWithValueStateTTLSuite extends TransformWithStateTTLTest {
         val schema10 = StateStoreColFamilySchema(
           "valueState", 0,
           keySchema, 0,
-          new StructType().add("value", IntegerType, nullable = shouldBeNullable),
+          new StructType().add("value", IntegerType, nullable = true),
           Some(NoPrefixKeyStateEncoderSpec(keySchema)),
           None
         )
@@ -428,7 +427,7 @@ class TransformWithValueStateTTLSuite extends TransformWithStateTTLTest {
           keySchema, 0,
           new StructType()
             .add("value", new StructType()
-              .add("id", LongType, nullable = shouldBeNullable)
+              .add("id", LongType, nullable = true)
               .add("name", StringType))
             .add("ttlExpirationMs", LongType),
           Some(NoPrefixKeyStateEncoderSpec(keySchema)),
