@@ -1608,8 +1608,7 @@ class RandomForestRegressionModel(
     def trees(self) -> List[DecisionTreeRegressionModel]:
         """Trees in this ensemble. Warning: These have null parent Estimators."""
         if is_remote():
-            n = self.getNumTrees
-            return [DecisionTreeRegressionModel(self._call_java("getTree", i)) for i in range(n)]
+            return [DecisionTreeRegressionModel(m) for m in self._call_java("trees").split(",")]
         return [DecisionTreeRegressionModel(m) for m in list(self._call_java("trees"))]
 
     @property
@@ -2000,8 +1999,7 @@ class GBTRegressionModel(
     def trees(self) -> List[DecisionTreeRegressionModel]:
         """Trees in this ensemble. Warning: These have null parent Estimators."""
         if is_remote():
-            n = self.getNumTrees
-            return [DecisionTreeRegressionModel(self._call_java("getTree", i)) for i in range(n)]
+            return [DecisionTreeRegressionModel(m) for m in self._call_java("trees").split(",")]
         return [DecisionTreeRegressionModel(m) for m in list(self._call_java("trees"))]
 
     def evaluateEachIteration(self, dataset: DataFrame, loss: str) -> List[float]:
