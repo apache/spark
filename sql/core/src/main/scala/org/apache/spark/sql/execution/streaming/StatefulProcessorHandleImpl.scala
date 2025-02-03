@@ -363,6 +363,10 @@ class DriverStatefulProcessorHandleImpl(timeMode: TimeMode, keyExprEnc: Expressi
     addTimerColFamily()
   }
 
+  private def isInternal(columnFamilyName: String): Boolean = {
+    columnFamilyName.startsWith("_") || columnFamilyName.startsWith("$")
+  }
+
   def getColumnFamilySchemas(
       shouldCheckNullable: Boolean
   ): Map[String, StateStoreColFamilySchema] = {
@@ -370,7 +374,7 @@ class DriverStatefulProcessorHandleImpl(timeMode: TimeMode, keyExprEnc: Expressi
     schemas.map { case (colFamilyName, schema) =>
       // assert that each field is nullable if schema evolution is enabled
       schema.valueSchema.fields.foreach { field =>
-        if (!field.nullable && shouldCheckNullable) {
+        if (!field.nullable && shouldCheckNullable && !isInternal(colFamilyName)) {
           throw StateStoreErrors.stateStoreSchemaMustBeNullable(
             schema.colFamilyName, schema.valueSchema.toString())
         }
