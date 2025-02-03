@@ -105,6 +105,13 @@ abstract class DataType extends AbstractDataType {
    */
   private[spark] def existsRecursively(f: (DataType) => Boolean): Boolean = f(this)
 
+  /**
+   * Recursively applies the provided partial function `f` to transform this DataType tree.
+   */
+  private[spark] def transformRecursively(f: PartialFunction[DataType, DataType]): DataType = {
+    if (f.isDefinedAt(this)) f(this) else this
+  }
+
   final override private[sql] def defaultConcreteType: DataType = this
 
   override private[sql] def acceptsType(other: DataType): Boolean = sameType(other)
