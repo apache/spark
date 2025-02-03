@@ -331,6 +331,7 @@ private[spark] object LogKeys {
   case object INPUT extends LogKey
   case object INPUT_SPLIT extends LogKey
   case object INTEGRAL extends LogKey
+  case object INTERRUPT_THREAD extends LogKey
   case object INTERVAL extends LogKey
   case object INVALID_PARAMS extends LogKey
   case object ISOLATION_LEVEL extends LogKey
