@@ -1253,13 +1253,23 @@ class LazyExpression(Expression):
 
 
 class SubqueryExpression(Expression):
-    def __init__(self, plan: "LogicalPlan", subquery_type: str) -> None:
+    def __init__(
+        self,
+        plan: "LogicalPlan",
+        subquery_type: str,
+        partition_spec: Optional[Sequence["Expression"]] = None,
+        order_spec: Optional[Sequence["SortOrder"]] = None,
+        with_single_partition: Optional[bool] = None,
+    ) -> None:
         assert isinstance(subquery_type, str)
-        assert subquery_type in ("scalar", "exists")
+        assert subquery_type in ("scalar", "exists", "table_arg")
 
         super().__init__()
         self._plan = plan
         self._subquery_type = subquery_type
+        self._partition_spec = partition_spec or []
+        self._order_spec = order_spec or []
+        self._with_single_partition = with_single_partition
 
     def to_plan(self, session: "SparkConnectClient") -> proto.Expression:
         expr = self._create_proto_expression()
@@ -1268,7 +1278,34 @@ class SubqueryExpression(Expression):
             expr.subquery_expression.subquery_type = proto.SubqueryExpression.SUBQUERY_TYPE_SCALAR
         elif self._subquery_type == "exists":
             expr.subquery_expression.subquery_type = proto.SubqueryExpression.SUBQUERY_TYPE_EXISTS
+        elif self._subquery_type == "table_arg":
+            expr.subquery_expression.subquery_type = (
+                proto.SubqueryExpression.SUBQUERY_TYPE_TABLE_ARG
+            )
+
+            # Populate TableArgOptions
+            table_arg_options = expr.subquery_expression.table_arg_options
+            if len(self._partition_spec) > 0:
+                table_arg_options.partition_spec.extend(
+                    [p.to_plan(session) for p in self._partition_spec]
+                )
+            if len(self._order_spec) > 0:
+                table_arg_options.order_spec.extend(
+                    [o.to_plan(session).sort_order for o in self._order_spec]
+                )
+            if self._with_single_partition is not None:
+                table_arg_options.with_single_partition = self._with_single_partition
+
         return expr
 
     def __repr__(self) -> str:
-        return f"SubqueryExpression({self._plan}, {self._subquery_type})"
+        repr_parts = [f"plan={self._plan}", f"type={self._subquery_type}"]
+
+        if self._partition_spec:
+            repr_parts.append(f"partition_spec={self._partition_spec}")
+        if self._order_spec:
+            repr_parts.append(f"order_spec={self._order_spec}")
+        if self._with_single_partition is not None:
+            repr_parts.append(f"with_single_partition={self._with_single_partition}")
+
+        return f"SubqueryExpression({', '.join(repr_parts)})"
