@@ -21,6 +21,7 @@ import java.math.BigInteger
 import java.sql.{Date, Timestamp}
 import java.util.Arrays
 
+import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.reflect.classTag
 import scala.reflect.runtime.universe.TypeTag
@@ -427,6 +428,10 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
     "SPARK-40385 class with only a companion object constructor")
 
   encodeDecodeTest(Array(Set(1, 2), Set(2, 3)), "array of sets")
+
+  encodeDecodeTest(Array(mutable.Set(1, 2)), "SPARK-51070: array of mutable set")
+  encodeDecodeTest(Seq(mutable.Set(1, 2)), "SPARK-51070: seq of mutable set")
+  encodeDecodeTest(Map(0 -> mutable.Set(1, 2)), "SPARK-51070: map of mutable set")
 
   productTest(("UDT", new ExamplePoint(0.1, 0.2)))
 
