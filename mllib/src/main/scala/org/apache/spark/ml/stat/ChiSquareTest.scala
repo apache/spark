@@ -18,12 +18,16 @@
 package org.apache.spark.ml.stat
 
 import org.apache.spark.annotation.Since
+import org.apache.spark.ml.Transformer
 import org.apache.spark.ml.linalg.{Vector, Vectors, VectorUDT}
-import org.apache.spark.ml.util.SchemaUtils
+import org.apache.spark.ml.param._
+import org.apache.spark.ml.param.shared.{HasFeaturesCol, HasLabelCol}
+import org.apache.spark.ml.util.{Identifiable, SchemaUtils}
 import org.apache.spark.mllib.linalg.{Vectors => OldVectors}
 import org.apache.spark.mllib.stat.test.{ChiSqTest => OldChiSqTest}
-import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.sql._
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.types._
 
 
 /**
@@ -101,3 +105,36 @@ object ChiSquareTest {
     }
   }
 }
+
+private[spark] class ChiSquareTestWrapper(override val uid: String)
+  extends Transformer with HasFeaturesCol with HasLabelCol {
+
+  val flatten = new BooleanParam(this, "flatten",
+    "If false, the returned DataFrame contains only a single Row, otherwise, one row per feature.")
+
+  setDefault(flatten -> false)
+
+  def this() = this(Identifiable.randomUID("ChiSquareTestWrapper"))
+
+  override def transformSchema(schema: StructType): StructType = {
+    if ($(flatten)) {
+      new StructType()
+        .add("featureIndex", IntegerType, nullable = false)
+        .add("pValues", DoubleType, nullable = false)
+        .add("degreesOfFreedom", IntegerType, nullable = false)
+        .add("statistic", DoubleType, nullable = false)
+    } else {
+      new StructType()
+        .add("pValues", new VectorUDT, nullable = false)
+        .add("degreesOfFreedom", ArrayType(IntegerType, containsNull = false), nullable = false)
+        .add("statistics", new VectorUDT, nullable = false)
+    }
+  }
+
+  override def transform(dataset: Dataset[_]): DataFrame = {
+    ChiSquareTest.test(dataset.toDF(), $(featuresCol), $(labelCol), $(flatten))
+  }
+
+  override def copy(extra: ParamMap): ChiSquareTestWrapper = defaultCopy(extra)
+}
+

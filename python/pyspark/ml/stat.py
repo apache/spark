@@ -102,14 +102,29 @@ class ChiSquareTest:
         >>> row[0].statistic
         4.0
         """
-        from pyspark.core.context import SparkContext
+        from pyspark.sql.utils import is_remote
 
-        sc = SparkContext._active_spark_context
-        assert sc is not None
+        if is_remote():
+            from pyspark.ml.wrapper import JavaTransformer
+            from pyspark.ml.connect.serialize import serialize_ml_params_values
 
-        javaTestObj = getattr(_jvm(), "org.apache.spark.ml.stat.ChiSquareTest")
-        args = [_py2java(sc, arg) for arg in (dataset, featuresCol, labelCol, flatten)]
-        return _java2py(sc, javaTestObj.test(*args))
+            instance = JavaTransformer()
+            instance._java_obj = "org.apache.spark.ml.stat.ChiSquareTestWrapper"
+            instance._serialized_ml_params = serialize_ml_params_values(  # type: ignore[attr-defined]
+                {"featuresCol": featuresCol, "labelCol": labelCol, "flatten": flatten},
+                dataset.sparkSession.client,  # type: ignore[arg-type,operator]
+            )
+            return instance.transform(dataset)
+
+        else:
+            from pyspark.core.context import SparkContext
+
+            sc = SparkContext._active_spark_context
+            assert sc is not None
+
+            javaTestObj = getattr(_jvm(), "org.apache.spark.ml.stat.ChiSquareTest")
+            args = [_py2java(sc, arg) for arg in (dataset, featuresCol, labelCol, flatten)]
+            return _java2py(sc, javaTestObj.test(*args))
 
 
 class Correlation:
