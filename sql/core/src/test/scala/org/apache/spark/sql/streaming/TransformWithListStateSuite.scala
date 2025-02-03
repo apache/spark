@@ -193,9 +193,7 @@ class ToggleSaveAndEmitProcessor
       key: String,
       rows: Iterator[String],
       timerValues: TimerValues): Iterator[String] = {
-    val valueStateOption = _valueState.getOption()
-
-    if (valueStateOption.isEmpty || !valueStateOption.get) {
+    if (!_valueState.exists() || !_valueState.get()) {
       _listState.appendList(rows.toArray)
       _valueState.update(true)
       Seq().iterator

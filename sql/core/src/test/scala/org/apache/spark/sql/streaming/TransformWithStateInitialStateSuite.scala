@@ -68,7 +68,8 @@ abstract class StatefulProcessorWithInitialStateTestClass[V]
     var output = List[(String, String, Double)]()
     for (row <- inputRows) {
       if (row.action == "getOption") {
-        output = (key, row.action, _valState.getOption().getOrElse(-1.0)) :: output
+        val currVal = if (_valState.exists()) _valState.get() else -1.0
+        output = (key, row.action, currVal) :: output
       } else if (row.action == "update") {
         _valState.update(row.value)
       } else if (row.action == "remove") {
@@ -195,10 +196,20 @@ class AccumulateStatefulProcessorWithInitState
     var output = List[(String, String, Double)]()
     for (row <- inputRows) {
       if (row.action == "getOption") {
-        output = (key, row.action, _valState.getOption().getOrElse(0.0)) :: output
+        val currVal = if (_valState.exists()) {
+          _valState.get()
+        } else {
+          0.0
+        }
+        output = (key, row.action, currVal) :: output
       } else if (row.action == "add") {
         // Update state variable as accumulative sum
-        val accumulateSum = _valState.getOption().getOrElse(0.0) + row.value
+        val currVal = if (_valState.exists()) {
+          _valState.get()
+        } else {
+          0.0
+        }
+        val accumulateSum = currVal + row.value
         _valState.update(accumulateSum)
       } else if (row.action == "remove") {
         _valState.clear()
@@ -277,7 +288,11 @@ class StatefulProcessorWithInitialStateProcTimerClass
       key: String,
       inputRows: Iterator[String],
       timerValues: TimerValues): Iterator[(String, String)] = {
-    val currCount = _countState.getOption().getOrElse(0L)
+    val currCount = if (_countState.exists()) {
+      _countState.get()
+    } else {
+      0L
+    }
     val count = currCount + inputRows.size
     processUnexpiredRows(key, currCount, count, timerValues)
     Iterator((key, count.toString))
@@ -317,7 +332,11 @@ class StatefulProcessorWithInitialStateEventTimerClass
     val timeoutTimestampMs = (maxEventTimeSec + timeoutDelaySec) * 1000
     _maxEventTimeState.update(maxEventTimeSec)
 
-    val registeredTimerMs: Long = _timerState.getOption().getOrElse(0L)
+    val registeredTimerMs: Long = if (_timerState.exists()) {
+      _timerState.get()
+    } else {
+      0L
+    }
     if (registeredTimerMs < timeoutTimestampMs) {
       getHandle.deleteTimer(registeredTimerMs)
       getHandle.registerTimer(timeoutTimestampMs)
@@ -331,8 +350,12 @@ class StatefulProcessorWithInitialStateEventTimerClass
       timerValues: TimerValues): Unit = {
     // keep a _maxEventTimeState to track the max eventTime seen so far
     // register a timer if bigger eventTime is seen
-    val maxEventTimeSec = math.max(initialState._2,
-      _maxEventTimeState.getOption().getOrElse(0L))
+    val maxVal = if (_maxEventTimeState.exists()) {
+      _maxEventTimeState.get()
+    } else {
+      0L
+    }
+    val maxEventTimeSec = math.max(initialState._2, maxVal)
     processUnexpiredRows(maxEventTimeSec)
   }
 
@@ -341,8 +364,12 @@ class StatefulProcessorWithInitialStateEventTimerClass
       inputRows: Iterator[(String, Long)],
       timerValues: TimerValues): Iterator[(String, Int)] = {
     val valuesSeq = inputRows.toSeq
-    val maxEventTimeSec = math.max(valuesSeq.map(_._2).max,
-      _maxEventTimeState.getOption().getOrElse(0L))
+    val maxVal = if (_maxEventTimeState.exists()) {
+      _maxEventTimeState.get()
+    } else {
+      0L
+    }
+    val maxEventTimeSec = math.max(valuesSeq.map(_._2).max, maxVal)
     processUnexpiredRows(maxEventTimeSec)
     Iterator((key, maxEventTimeSec.toInt))
   }

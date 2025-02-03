@@ -47,7 +47,11 @@ class StatefulProcessorWithSingleValueVar extends RunningCountStatefulProcessor 
       key: String,
       inputRows: Iterator[String],
       timerValues: TimerValues): Iterator[(String, String)] = {
-    val count = _valueState.getOption().getOrElse(TestClass(0L, "dummyKey")).id + 1
+    val count = if (_valueState.exists()) {
+      _valueState.get().id + 1
+    } else {
+      1
+    }
     _valueState.update(TestClass(count, "dummyKey"))
     Iterator((key, count.toString))
   }
@@ -68,7 +72,11 @@ class StatefulProcessorWithTTL
       key: String,
       inputRows: Iterator[String],
       timerValues: TimerValues): Iterator[(String, String)] = {
-    val count = _countState.getOption().getOrElse(0L) + 1
+    val count = if (_countState.exists()) {
+      _countState.get() + 1
+    } else {
+      1
+    }
     if (count == 3) {
       _countState.clear()
       Iterator.empty
@@ -1025,7 +1033,7 @@ class StateDataSourceTransformWithStateSuite extends StateStoreMetricsTest
           key: Int,
           inputRows: Iterator[(Int, Long)],
           timerValues: TimerValues): Iterator[(Int, Long)] = {
-        val count = _countState.getOption().getOrElse(0L)
+        val count = if (_countState.exists()) _countState.get() else 0L
         var totalSum = 0L
         inputRows.foreach { entry =>
           totalSum += entry._2

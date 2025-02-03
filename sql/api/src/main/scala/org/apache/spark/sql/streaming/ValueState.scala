@@ -38,9 +38,6 @@ trait ValueState[S] extends Serializable {
   @throws[NoSuchElementException]
   def get(): S
 
-  /** Get the state if it exists as an option and None otherwise */
-  def getOption(): Option[S]
-
   /**
    * Update the value of the state.
    *
