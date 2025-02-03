@@ -22,7 +22,7 @@ import java.util.Locale
 import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.catalyst.plans.logical.HandlerType.HandlerType
+import org.apache.spark.sql.catalyst.plans.logical.ExceptionHandlerType.ExceptionHandlerType
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
 import org.apache.spark.sql.errors.SqlScriptingErrors
 
@@ -325,8 +325,8 @@ case class ErrorCondition(
       newChildren: IndexedSeq[LogicalPlan]): LogicalPlan = this.copy()
 }
 
-object HandlerType extends Enumeration {
-  type HandlerType = Value
+object ExceptionHandlerType extends Enumeration {
+  type ExceptionHandlerType = Value
   val EXIT, CONTINUE = Value
 }
 
@@ -391,7 +391,7 @@ class ExceptionHandlerTriggers(
 case class ExceptionHandler(
     exceptionHandlerTriggers: ExceptionHandlerTriggers,
     body: CompoundBody,
-    handlerType: HandlerType) extends CompoundPlanStatement {
+    handlerType: ExceptionHandlerType) extends CompoundPlanStatement {
   override def output: Seq[Attribute] = Seq.empty
 
   override def children: Seq[LogicalPlan] = Seq(body)

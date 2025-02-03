@@ -22,7 +22,7 @@ import scala.collection.mutable.HashMap
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.analysis.UnresolvedIdentifier
 import org.apache.spark.sql.catalyst.expressions.Expression
-import org.apache.spark.sql.catalyst.plans.logical.{CaseStatement, CompoundBody, CompoundPlanStatement, CreateVariable, DropVariable, ForStatement, HandlerType, IfElseStatement, IterateStatement, LeaveStatement, LogicalPlan, LoopStatement, RepeatStatement, SingleStatement, WhileStatement}
+import org.apache.spark.sql.catalyst.plans.logical.{CaseStatement, CompoundBody, CompoundPlanStatement, CreateVariable, DropVariable, ExceptionHandlerType, ForStatement, IfElseStatement, IterateStatement, LeaveStatement, LogicalPlan, LoopStatement, RepeatStatement, SingleStatement, WhileStatement}
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
 import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.errors.SqlScriptingErrors
@@ -96,13 +96,13 @@ case class SqlScriptingInterpreter(session: SparkSession) {
       .reverse
 
     // Map of conditions to their respective handlers.
-    val conditionToExceptionHandlerMap: HashMap[String, ErrorHandlerExec] = HashMap.empty
+    val conditionToExceptionHandlerMap: HashMap[String, ExceptionHandlerExec] = HashMap.empty
     // Map of SqlStates to their respective handlers.
-    val sqlStateToExceptionHandlerMap: HashMap[String, ErrorHandlerExec] = HashMap.empty
+    val sqlStateToExceptionHandlerMap: HashMap[String, ExceptionHandlerExec] = HashMap.empty
     // NOT FOUND handler.
-    var notFoundHandler: Option[ErrorHandlerExec] = None
+    var notFoundHandler: Option[ExceptionHandlerExec] = None
     // Get SQLEXCEPTION handler.
-    var sqlExceptionHandler: Option[ErrorHandlerExec] = None
+    var sqlExceptionHandler: Option[ExceptionHandlerExec] = None
 
     compoundBody.handlers.foreach(handler => {
       val handlerBodyExec =
@@ -112,13 +112,13 @@ case class SqlScriptingInterpreter(session: SparkSession) {
           context)
 
       // Execution node of handler.
-      val handlerScopeLabel = if (handler.handlerType == HandlerType.EXIT) {
+      val handlerScopeLabel = if (handler.handlerType == ExceptionHandlerType.EXIT) {
         Some(compoundBody.label.get)
       } else {
         None
       }
 
-      val handlerExec = new ErrorHandlerExec(
+      val handlerExec = new ExceptionHandlerExec(
         handlerBodyExec,
         handler.handlerType,
         handlerScopeLabel)
@@ -155,7 +155,7 @@ case class SqlScriptingInterpreter(session: SparkSession) {
       } else None
     })
 
-    // Create a trigger handler map for the current CompoundBody.
+    // Create a trigger to exception handler map for the current CompoundBody.
     val triggerToExceptionHandlerMap = new TriggerToExceptionHandlerMap(
       conditionToExceptionHandlerMap = conditionToExceptionHandlerMap.toMap,
       sqlStateToExceptionHandlerMap = sqlStateToExceptionHandlerMap.toMap,

@@ -25,7 +25,7 @@ import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.analysis.{NameParameterizedQuery, UnresolvedAttribute, UnresolvedIdentifier}
 import org.apache.spark.sql.catalyst.expressions.{Alias, CreateArray, CreateMap, CreateNamedStruct, Expression, Literal}
 import org.apache.spark.sql.catalyst.plans.logical.{CreateVariable, DefaultValueExpression, DropVariable, LogicalPlan, OneRowRelation, Project, SetVariable}
-import org.apache.spark.sql.catalyst.plans.logical.HandlerType.HandlerType
+import org.apache.spark.sql.catalyst.plans.logical.ExceptionHandlerType.ExceptionHandlerType
 import org.apache.spark.sql.catalyst.trees.{Origin, WithOrigin}
 import org.apache.spark.sql.classic.{DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.errors.SqlScriptingErrors
@@ -176,23 +176,36 @@ class NoOpStatementExec extends LeafStatementExec {
   override def reset(): Unit = ()
 }
 
+/**
+ * Class to hold mapping of condition names/sqlStates to exception handlers
+ * defined in a compound body.
+ *
+ * @param conditionToExceptionHandlerMap
+ *   Map of condition names to exception handlers.
+ * @param sqlStateToExceptionHandlerMap
+ *   Map of sqlStates to exception handlers.
+ * @param sqlExceptionHandler
+ *   "Catch-all" exception handler.
+ * @param notFoundHandler
+ *   NOT FOUND exception handler.
+ */
 class TriggerToExceptionHandlerMap(
-    conditionToExceptionHandlerMap: Map[String, ErrorHandlerExec],
-    sqlStateToExceptionHandlerMap: Map[String, ErrorHandlerExec],
-    sqlExceptionHandler: Option[ErrorHandlerExec],
-    notFoundHandler: Option[ErrorHandlerExec]) {
+    conditionToExceptionHandlerMap: Map[String, ExceptionHandlerExec],
+    sqlStateToExceptionHandlerMap: Map[String, ExceptionHandlerExec],
+    sqlExceptionHandler: Option[ExceptionHandlerExec],
+    notFoundHandler: Option[ExceptionHandlerExec]) {
 
-  def getHandlerForCondition(condition: String): Option[ErrorHandlerExec] = {
+  def getHandlerForCondition(condition: String): Option[ExceptionHandlerExec] = {
     conditionToExceptionHandlerMap.get(condition)
   }
 
-  def getHandlerForSqlState(sqlState: String): Option[ErrorHandlerExec] = {
+  def getHandlerForSqlState(sqlState: String): Option[ExceptionHandlerExec] = {
     sqlStateToExceptionHandlerMap.get(sqlState)
   }
 
-  def getSqlExceptionHandler: Option[ErrorHandlerExec] = sqlExceptionHandler
+  def getSqlExceptionHandler: Option[ExceptionHandlerExec] = sqlExceptionHandler
 
-  def getNotFoundHandler: Option[ErrorHandlerExec] = notFoundHandler
+  def getNotFoundHandler: Option[ExceptionHandlerExec] = notFoundHandler
 }
 
 /**
@@ -993,14 +1006,14 @@ class ForStatementExec(
 }
 
 /**
- * Executable node for ErrorHandlerStatement.
- * @param body Executable CompoundBody of the error handler.
+ * Executable node for ExceptionHandler.
+ * @param body Executable CompoundBody of the exception handler.
  * @param handlerType Handler type: EXIT, CONTINUE.
  * @param scopeLabel Label of the scope where handler is defined.
  */
-class ErrorHandlerExec(
+class ExceptionHandlerExec(
     val body: CompoundBodyExec,
-    val handlerType: HandlerType,
+    val handlerType: ExceptionHandlerType,
     val scopeLabel: Option[String]) extends NonLeafStatementExec {
 
   override def getTreeIterator: Iterator[CompoundStatementExec] = body.getTreeIterator

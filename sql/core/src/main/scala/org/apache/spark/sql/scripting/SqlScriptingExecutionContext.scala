@@ -48,7 +48,7 @@ class SqlScriptingExecutionContext {
     frames.last.exitScope(label)
   }
 
-  def findHandler(condition: String, sqlState: String): Option[ErrorHandlerExec] = {
+  def findHandler(condition: String, sqlState: String): Option[ExceptionHandlerExec] = {
     if (frames.isEmpty) {
       throw SparkException.internalError(s"Cannot find handler: no frames.")
     }
@@ -132,7 +132,7 @@ class SqlScriptingExecutionFrame(
   def findHandler(
       condition: String,
       sqlState: String,
-      firstHandlerScopeLabel: Option[String]): Option[ErrorHandlerExec] = {
+      firstHandlerScopeLabel: Option[String]): Option[ExceptionHandlerExec] = {
 
     val searchScopes = if (frameType == SqlScriptingFrameType.HANDLER) {
       // If the frame is a handler, search for the handler in its body. Don't skip any scopes.
@@ -189,9 +189,9 @@ class SqlScriptingExecutionScope(
    *
    * @return Handler for the given condition if exists.
    */
-  def findHandler(condition: String, sqlState: String): Option[ErrorHandlerExec] = {
+  def findHandler(condition: String, sqlState: String): Option[ExceptionHandlerExec] = {
     // Check if there is a specific handler for the given condition.
-    var errorHandler: Option[ErrorHandlerExec] = None
+    var errorHandler: Option[ExceptionHandlerExec] = None
     val uppercaseCondition = condition.toUpperCase(Locale.ROOT)
     val uppercaseSqlState = sqlState.toUpperCase(Locale.ROOT)
 

@@ -161,7 +161,7 @@ class AstBuilder extends DataTypeAstBuilder
 
   private def assertSqlState(sqlState: String): Unit = {
     val sqlStateRegex = "^[A-Za-z0-9]{5}$".r
-    if (sqlStateRegex.findFirstIn(sqlState).isEmpty
+    if (sqlStateRegex.findFirstIn(sqlState.toUpperCase(Locale.ROOT)).isEmpty
       || sqlState.startsWith("00")
       || sqlState.startsWith("01")
       || sqlState.startsWith("XX")) {
@@ -270,7 +270,7 @@ class AstBuilder extends DataTypeAstBuilder
       throw SqlScriptingErrors.continueHandlerNotSupported(CurrentOrigin.get)
     }
 
-    val handlerType = HandlerType.EXIT
+    val handlerType = ExceptionHandlerType.EXIT
     val body = if (Option(ctx.beginEndCompoundBlock()).isDefined) {
       visitBeginEndCompoundBlockImpl(
         ctx.beginEndCompoundBlock(),
