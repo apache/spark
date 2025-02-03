@@ -110,10 +110,11 @@ class ChiSquareTest:
 
             instance = JavaTransformer()
             instance._java_obj = "org.apache.spark.ml.stat.ChiSquareTestWrapper"
-            instance._serialized_ml_params = serialize_ml_params_values(  # type: ignore[attr-defined]
+            serialized_ml_params = serialize_ml_params_values(
                 {"featuresCol": featuresCol, "labelCol": labelCol, "flatten": flatten},
                 dataset.sparkSession.client,  # type: ignore[arg-type,operator]
             )
+            instance._serialized_ml_params = serialized_ml_params  # type: ignore[attr-defined]
             return instance.transform(dataset)
 
         else:
