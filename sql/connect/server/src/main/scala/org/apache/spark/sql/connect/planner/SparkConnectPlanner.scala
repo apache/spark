@@ -2545,7 +2545,7 @@ class SparkConnectPlanner(
     val result = executor.execute()
     executeHolder.eventsManager.postFinished(Some(result.size))
 
-    // Return a SQLCommand that contains a LocalRelation.
+    // Return a SQLCommandResult that contains a LocalRelation.
     val arrowData = ArrowSerializer.serialize(
       result.iterator,
       StringEncoder,
