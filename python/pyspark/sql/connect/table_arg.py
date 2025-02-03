@@ -27,7 +27,8 @@ from typing import (
 
 import pyspark.sql.connect.proto as proto
 from pyspark.sql.column import Column
-from pyspark.sql.connect.expressions import SubqueryExpression, SortOrder
+from pyspark.sql.table_arg import TableArg as CommonTableArg
+from pyspark.sql.connect.expressions import Expression, SubqueryExpression, SortOrder
 from pyspark.sql.connect.functions import builtin as F
 
 from pyspark.errors import IllegalArgumentException
@@ -43,7 +44,7 @@ def _to_cols(cols: Tuple[Union["ColumnOrName", Sequence["ColumnOrName"]], ...]) 
     return [F._to_col(c) for c in cast(Iterable["ColumnOrName"], cols)]
 
 
-class TableArg:
+class TableArg(CommonTableArg):
     def __init__(self, subquery_expr: SubqueryExpression):
         self._subquery_expr = subquery_expr
 
@@ -59,11 +60,13 @@ class TableArg:
                 "Cannot call partitionBy() after partitionBy() or "
                 "withSinglePartition() has been called."
             )
+        new_partition_spec = list(self._subquery_expr._partition_spec) + [
+            cast(Expression, c._expr) for c in _to_cols(cols)
+        ]
         new_expr = SubqueryExpression(
             plan=self._subquery_expr._plan,
             subquery_type=self._subquery_expr._subquery_type,
-            partition_spec=list(self._subquery_expr._partition_spec)
-            + [c._expr for c in _to_cols(cols)],
+            partition_spec=new_partition_spec,
             order_spec=self._subquery_expr._order_spec,
             with_single_partition=self._subquery_expr._with_single_partition,
         )
