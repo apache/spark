@@ -156,9 +156,14 @@ def try_remote_transform_relation(f: FuncT) -> FuncT:
 
             session = dataset.sparkSession
             assert session is not None
+
+            if hasattr(self, "_serialized_ml_params"):
+                params = self._serialized_ml_params
+            else:
+                params = serialize_ml_params(self, session.client)  # type: ignore[arg-type]
+
             # Model is also a Transformer, so we much match Model first
             if isinstance(self, Model):
-                params = serialize_ml_params(self, session.client)
                 from pyspark.ml.connect.proto import TransformerRelation
 
                 assert isinstance(self._java_obj, str)
@@ -169,7 +174,6 @@ def try_remote_transform_relation(f: FuncT) -> FuncT:
                     session,
                 )
             elif isinstance(self, Transformer):
-                params = serialize_ml_params(self, session.client)
                 from pyspark.ml.connect.proto import TransformerRelation
 
                 assert isinstance(self._java_obj, str)

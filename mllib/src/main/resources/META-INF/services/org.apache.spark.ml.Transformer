@@ -71,6 +71,7 @@ org.apache.spark.ml.recommendation.ALSModel
 
 # fpm
 org.apache.spark.ml.fpm.FPGrowthModel
+org.apache.spark.ml.fpm.PrefixSpanWrapper
 
 # feature
 org.apache.spark.ml.feature.RFormulaModel
