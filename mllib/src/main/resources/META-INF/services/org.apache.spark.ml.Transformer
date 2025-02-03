@@ -73,6 +73,9 @@ org.apache.spark.ml.recommendation.ALSModel
 org.apache.spark.ml.fpm.FPGrowthModel
 org.apache.spark.ml.fpm.PrefixSpanWrapper
 
+# stat
+org.apache.spark.ml.stat.ChiSquareTestWrapper
+
 # feature
 org.apache.spark.ml.feature.RFormulaModel
 org.apache.spark.ml.feature.ImputerModel

@@ -1130,6 +1130,7 @@ pyspark_ml_connect = Module(
         "pyspark.ml.tests.connect.test_parity_pipeline",
         "pyspark.ml.tests.connect.test_parity_tuning",
         "pyspark.ml.tests.connect.test_parity_ovr",
+        "pyspark.ml.tests.connect.test_parity_stat",
     ],
     excluded_python_implementations=[
         "PyPy"  # Skip these tests under PyPy since they require numpy, pandas, and pyarrow and
