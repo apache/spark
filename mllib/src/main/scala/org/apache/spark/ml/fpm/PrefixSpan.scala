@@ -18,6 +18,7 @@
 package org.apache.spark.ml.fpm
 
 import org.apache.spark.annotation.Since
+import org.apache.spark.ml.Transformer
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.util.Identifiable
 import org.apache.spark.ml.util.Instrumentation.instrumented
@@ -26,23 +27,7 @@ import org.apache.spark.sql.{DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.types.{ArrayType, LongType, StructField, StructType}
 
-/**
- * A parallel PrefixSpan algorithm to mine frequent sequential patterns.
- * The PrefixSpan algorithm is described in J. Pei, et al., PrefixSpan: Mining Sequential Patterns
- * Efficiently by Prefix-Projected Pattern Growth
- * (see <a href="https://doi.org/10.1109/ICDE.2001.914830">here</a>).
- * This class is not yet an Estimator/Transformer, use `findFrequentSequentialPatterns` method to
- * run the PrefixSpan algorithm.
- *
- * @see <a href="https://en.wikipedia.org/wiki/Sequential_Pattern_Mining">Sequential Pattern Mining
- * (Wikipedia)</a>
- */
-@Since("2.4.0")
-final class PrefixSpan(@Since("2.4.0") override val uid: String) extends Params {
-
-  @Since("2.4.0")
-  def this() = this(Identifiable.randomUID("prefixSpan"))
-
+private[fpm] trait PrefixSpanParams extends Params {
   /**
    * Param for the minimal support level (default: `0.1`).
    * Sequential patterns that appear more than (minSupport * size-of-the-dataset) times are
@@ -59,10 +44,6 @@ final class PrefixSpan(@Since("2.4.0") override val uid: String) extends Params 
   @Since("2.4.0")
   def getMinSupport: Double = $(minSupport)
 
-  /** @group setParam */
-  @Since("2.4.0")
-  def setMinSupport(value: Double): this.type = set(minSupport, value)
-
   /**
    * Param for the maximal pattern length (default: `10`).
    * @group param
@@ -76,10 +57,6 @@ final class PrefixSpan(@Since("2.4.0") override val uid: String) extends Params 
   @Since("2.4.0")
   def getMaxPatternLength: Int = $(maxPatternLength)
 
-  /** @group setParam */
-  @Since("2.4.0")
-  def setMaxPatternLength(value: Int): this.type = set(maxPatternLength, value)
-
   /**
    * Param for the maximum number of items (including delimiters used in the internal storage
    * format) allowed in a projected database before local processing (default: `32000000`).
@@ -90,17 +67,13 @@ final class PrefixSpan(@Since("2.4.0") override val uid: String) extends Params 
   @Since("2.4.0")
   val maxLocalProjDBSize = new LongParam(this, "maxLocalProjDBSize",
     "The maximum number of items (including delimiters used in the internal storage format) " +
-    "allowed in a projected database before local processing. If a projected database exceeds " +
-    "this size, another iteration of distributed prefix growth is run.",
+      "allowed in a projected database before local processing. If a projected database exceeds " +
+      "this size, another iteration of distributed prefix growth is run.",
     ParamValidators.gt(0))
 
   /** @group getParam */
   @Since("2.4.0")
   def getMaxLocalProjDBSize: Long = $(maxLocalProjDBSize)
-
-  /** @group setParam */
-  @Since("2.4.0")
-  def setMaxLocalProjDBSize(value: Long): this.type = set(maxLocalProjDBSize, value)
 
   /**
    * Param for the name of the sequence column in dataset (default "sequence"), rows with
@@ -115,12 +88,42 @@ final class PrefixSpan(@Since("2.4.0") override val uid: String) extends Params 
   @Since("2.4.0")
   def getSequenceCol: String = $(sequenceCol)
 
+  setDefault(minSupport -> 0.1, maxPatternLength -> 10, maxLocalProjDBSize -> 32000000,
+    sequenceCol -> "sequence")
+}
+
+/**
+ * A parallel PrefixSpan algorithm to mine frequent sequential patterns.
+ * The PrefixSpan algorithm is described in J. Pei, et al., PrefixSpan: Mining Sequential Patterns
+ * Efficiently by Prefix-Projected Pattern Growth
+ * (see <a href="https://doi.org/10.1109/ICDE.2001.914830">here</a>).
+ * This class is not yet an Estimator/Transformer, use `findFrequentSequentialPatterns` method to
+ * run the PrefixSpan algorithm.
+ *
+ * @see <a href="https://en.wikipedia.org/wiki/Sequential_Pattern_Mining">Sequential Pattern Mining
+ * (Wikipedia)</a>
+ */
+@Since("2.4.0")
+final class PrefixSpan(@Since("2.4.0") override val uid: String) extends PrefixSpanParams {
+
+  @Since("2.4.0")
+  def this() = this(Identifiable.randomUID("prefixSpan"))
+
+  /** @group setParam */
+  @Since("2.4.0")
+  def setMinSupport(value: Double): this.type = set(minSupport, value)
+
+  /** @group setParam */
+  @Since("2.4.0")
+  def setMaxPatternLength(value: Int): this.type = set(maxPatternLength, value)
+
+  /** @group setParam */
+  @Since("2.4.0")
+  def setMaxLocalProjDBSize(value: Long): this.type = set(maxLocalProjDBSize, value)
+
   /** @group setParam */
   @Since("2.4.0")
   def setSequenceCol(value: String): this.type = set(sequenceCol, value)
-
-  setDefault(minSupport -> 0.1, maxPatternLength -> 10, maxLocalProjDBSize -> 32000000,
-    sequenceCol -> "sequence")
 
   /**
    * Finds the complete set of frequent sequential patterns in the input sequences of itemsets.
@@ -166,4 +169,28 @@ final class PrefixSpan(@Since("2.4.0") override val uid: String) extends Params 
   @Since("2.4.0")
   override def copy(extra: ParamMap): PrefixSpan = defaultCopy(extra)
 
+}
+
+private[spark] class PrefixSpanWrapper(override val uid: String)
+  extends Transformer with PrefixSpanParams {
+
+  def this() = this(Identifiable.randomUID("prefixSpanWrapper"))
+
+  override def transformSchema(schema: StructType): StructType = {
+    new StructType()
+      .add("sequence", ArrayType(schema($(sequenceCol)).dataType), nullable = false)
+      .add("freq", LongType, nullable = false)
+  }
+
+  override def transform(dataset: Dataset[_]): DataFrame = {
+    val prefixSpan = new PrefixSpan(uid)
+    prefixSpan
+      .setMinSupport($(minSupport))
+      .setMaxPatternLength($(maxPatternLength))
+      .setMaxLocalProjDBSize($(maxLocalProjDBSize))
+      .setSequenceCol($(sequenceCol))
+      .findFrequentSequentialPatterns(dataset)
+  }
+
+  override def copy(extra: ParamMap): PrefixSpanWrapper = defaultCopy(extra)
 }
