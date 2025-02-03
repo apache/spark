@@ -61,6 +61,10 @@ trait MetadataMapSupport {
     jsonToString(toJsonLinkedHashMap)
   }
 
+  /**
+   * Some fields from JsonLinkedHashMap are reformatted for human readability in `describe table`.
+   * If a field does not require special re-formatting, it is simply handled by `jsonToString`.
+   */
   private def jsonToStringReformat(key: String, jValue: JValue): Option[(String, String)] = {
     val reformattedValue: Option[String] = key match {
       case "Statistics" =>
