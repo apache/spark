@@ -27,7 +27,7 @@ from typing import (
 
 import pyspark.sql.connect.proto as proto
 from pyspark.sql.column import Column
-from pyspark.sql.table_arg import TableArg as CommonTableArg
+from pyspark.sql.table_arg import TableArg as ParentTableArg
 from pyspark.sql.connect.expressions import Expression, SubqueryExpression, SortOrder
 from pyspark.sql.connect.functions import builtin as F
 
@@ -44,7 +44,7 @@ def _to_cols(cols: Tuple[Union["ColumnOrName", Sequence["ColumnOrName"]], ...]) 
     return [F._to_col(c) for c in cast(Iterable["ColumnOrName"], cols)]
 
 
-class TableArg(CommonTableArg):
+class TableArg(ParentTableArg):
     def __init__(self, subquery_expr: SubqueryExpression):
         self._subquery_expr = subquery_expr
 

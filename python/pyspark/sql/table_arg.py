@@ -18,38 +18,27 @@
 from typing import TYPE_CHECKING
 
 from pyspark.sql.tvf_argument import TableValuedFunctionArgument
-from pyspark.sql.utils import get_active_spark_context
 
 
 if TYPE_CHECKING:
-    from py4j.java_gateway import JavaObject
     from pyspark.sql._typing import ColumnOrName
 
 
 class TableArg(TableValuedFunctionArgument):
-    def __init__(self, j_table_arg: "JavaObject"):
-        self._j_table_arg = j_table_arg
-
     def partitionBy(self, *cols: "ColumnOrName") -> "TableArg":
-        from pyspark.sql.classic.column import _to_java_column, _to_seq
-
-        sc = get_active_spark_context()
-        if len(cols) == 1 and isinstance(cols[0], list):
-            cols = cols[0]
-        j_cols = _to_seq(sc, cols, _to_java_column)
-        new_j_table_arg = self._j_table_arg.partitionBy(j_cols)
-        return TableArg(new_j_table_arg)
+        """
+        Abstract method to partition data by specified columns.
+        """
+        pass
 
     def orderBy(self, *cols: "ColumnOrName") -> "TableArg":
-        from pyspark.sql.classic.column import _to_java_column, _to_seq
-
-        sc = get_active_spark_context()
-        if len(cols) == 1 and isinstance(cols[0], list):
-            cols = cols[0]
-        j_cols = _to_seq(sc, cols, _to_java_column)
-        new_j_table_arg = self._j_table_arg.orderBy(j_cols)
-        return TableArg(new_j_table_arg)
+        """
+        Abstract method to order data by specified columns.
+        """
+        pass
 
     def withSinglePartition(self) -> "TableArg":
-        new_j_table_arg = self._j_table_arg.withSinglePartition()
-        return TableArg(new_j_table_arg)
+        """
+        Abstract method to enforce a single partition.
+        """
+        pass
