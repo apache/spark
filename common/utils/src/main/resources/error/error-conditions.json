@@ -4669,6 +4669,13 @@
     ],
     "sqlState" : "42K06"
   },
+  "STATE_STORE_SCHEMA_MUST_BE_NULLABLE" : {
+    "message" : [
+      "If schema evolution is enabled, all the fields in the schema for column family <columnFamilyName> must be nullable.",
+      "Please make the schema nullable. Current schema: <schema>"
+    ],
+    "sqlState" : "XXKST"
+  },
   "STATE_STORE_STATE_SCHEMA_FILES_THRESHOLD_EXCEEDED" : {
     "message" : [
       "The number of state schema files <numStateSchemaFiles> exceeds the maximum number of state schema files for this query: <maxStateSchemaFiles>.",
@@ -4714,13 +4721,6 @@
       "Please set 'spark.sql.streaming.stateStore.valueStateSchemaEvolutionThreshold' to a higher number, or revert state schema modifications"
     ],
     "sqlState" : "42K06"
-  },
-  "STATE_STORE_SCHEMA_MUST_BE_NULLABLE" : {
-    "message" : [
-      "If schema evolution is enabled, all the fields in the schema for column family <columnFamilyName> must be nullable.",
-      "Please make the schema nullable. Current schema: <schema>"
-    ],
-    "sqlState" : "XXKST"
   },
   "STATE_STORE_VALUE_SCHEMA_NOT_COMPATIBLE" : {
     "message" : [
