@@ -53,6 +53,7 @@ from pyspark.ml.param.shared import (
 from pyspark.ml.util import JavaMLReadable, JavaMLWritable, try_remote_attribute_relation
 from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaParams, JavaTransformer, _jvm
 from pyspark.ml.common import inherit_doc
+from pyspark.sql.utils import is_remote
 
 if TYPE_CHECKING:
     from py4j.java_gateway import JavaObject
@@ -3754,6 +3755,23 @@ class QuantileDiscretizer(
         """
         Private method to convert the java_model to a Python model.
         """
+        if is_remote():
+            remote_model = JavaModel(java_model)
+            if self.isSet(self.inputCol):
+                return Bucketizer(
+                    splits=remote_model._call_java("getSplits"),
+                    inputCol=self.getInputCol(),
+                    outputCol=self.getOutputCol(),
+                    handleInvalid=self.getHandleInvalid(),
+                )
+            else:
+                return Bucketizer(
+                    splitsArray=remote_model._call_java("getSplitsArray"),
+                    inputCols=self.getInputCols(),
+                    outputCols=self.getOutputCols(),
+                    handleInvalid=self.getHandleInvalid(),
+                )
+
         if self.isSet(self.inputCol):
             return Bucketizer(
                 splits=list(java_model.getSplits()),
