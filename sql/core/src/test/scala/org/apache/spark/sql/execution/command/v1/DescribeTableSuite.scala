@@ -462,6 +462,21 @@ trait DescribeTableSuiteBase extends command.DescribeTableSuiteBase
     }
   }
 
+  test("DESCRIBE AS JSON for non-existent table throws in checkAnalysis") {
+    val tbl = "undefined"
+    val sqlStatement = s"DESCRIBE FORMATTED $tbl AS JSON"
+    val startPos = sqlStatement.indexOf(tbl)
+    val error = intercept[AnalysisException] {
+      spark.sql(s"DESCRIBE FORMATTED $tbl AS JSON")
+    }
+
+    checkError(
+      exception = error,
+      condition = "TABLE_OR_VIEW_NOT_FOUND",
+      parameters = Map("relationName" -> s"`$tbl`"),
+      context = ExpectedContext(tbl, startPos, startPos + tbl.length - 1))
+  }
+
   test("DESCRIBE AS JSON complex types") {
     withNamespaceAndTable("ns", "table") { t =>
       val tableCreationStr =
