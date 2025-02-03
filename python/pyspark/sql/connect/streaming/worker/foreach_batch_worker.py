@@ -66,10 +66,12 @@ def main(infile: IO, outfile: IO) -> None:
 
     def process(df_id, batch_id):  # type: ignore[no-untyped-def]
         global spark
-        print(f"{log_name} Started batch {batch_id} with DF id {df_id}")
+        print(f"{log_name} Started batch {batch_id} with DF id {df_id} and session id {session_id}")
         batch_df = spark_connect_session._create_remote_dataframe(df_id)
         func(batch_df, batch_id)
-        print(f"{log_name} Completed batch {batch_id} with DF id {df_id}")
+        print(
+            f"{log_name} Completed batch {batch_id} with DF id {df_id} and session id {session_id}"
+        )
 
     try:
         func = worker.read_command(pickle_ser, infile)
