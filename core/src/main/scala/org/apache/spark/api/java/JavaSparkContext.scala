@@ -555,7 +555,7 @@ class JavaSparkContext(val sc: SparkContext) extends Closeable {
   /**
    * Shut down the `JavaSparkContext` with given exit code that will be passed to scheduler backend.
    *
-   * @param exitCode Specified exit code that will passed to scheduler backend in client mode.
+   * @param exitCode Specified exit code that will be passed to scheduler backend in client mode.
    */
   def stop(exitCode: Int): Unit = {
     sc.stop(exitCode)
