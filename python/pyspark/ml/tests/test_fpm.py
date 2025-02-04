@@ -18,11 +18,12 @@
 import tempfile
 import unittest
 
-from pyspark.sql import SparkSession
+from pyspark.sql import SparkSession, Row
 import pyspark.sql.functions as sf
 from pyspark.ml.fpm import (
     FPGrowth,
     FPGrowthModel,
+    PrefixSpan,
 )
 
 
@@ -70,6 +71,32 @@ class FPMTestsMixin:
             model.write().overwrite().save(d)
             model2 = FPGrowthModel.load(d)
             self.assertEqual(str(model), str(model2))
+
+    def test_prefix_span(self):
+        spark = self.spark
+        df = spark.createDataFrame(
+            [
+                Row(sequence=[[1, 2], [3]]),
+                Row(sequence=[[1], [3, 2], [1, 2]]),
+                Row(sequence=[[1, 2], [5]]),
+                Row(sequence=[[6]]),
+            ]
+        )
+
+        ps = PrefixSpan()
+        ps.setMinSupport(0.5)
+        ps.setMaxPatternLength(5)
+
+        self.assertEqual(ps.getMinSupport(), 0.5)
+        self.assertEqual(ps.getMaxPatternLength(), 5)
+
+        output = ps.findFrequentSequentialPatterns(df)
+        self.assertEqual(output.columns, ["sequence", "freq"])
+        self.assertEqual(output.count(), 5)
+
+        head = output.sort("sequence").head()
+        self.assertEqual(head.sequence, [[1]])
+        self.assertEqual(head.freq, 3)
 
 
 class FPMTests(FPMTestsMixin, unittest.TestCase):

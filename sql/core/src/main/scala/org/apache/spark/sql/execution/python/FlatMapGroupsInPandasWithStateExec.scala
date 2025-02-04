@@ -50,6 +50,7 @@ import org.apache.spark.util.CompletionIterator
  * @param batchTimestampMs processing timestamp of the current batch.
  * @param eventTimeWatermarkForLateEvents event time watermark for filtering late events
  * @param eventTimeWatermarkForEviction event time watermark for state eviction
+ * @param skipEmittingInitialStateKeys whether to skip emitting initial state df keys
  * @param child logical plan of the underlying data
  */
 case class FlatMapGroupsInPandasWithStateExec(
@@ -64,6 +65,7 @@ case class FlatMapGroupsInPandasWithStateExec(
     batchTimestampMs: Option[Long],
     eventTimeWatermarkForLateEvents: Option[Long],
     eventTimeWatermarkForEviction: Option[Long],
+    skipEmittingInitialStateKeys: Boolean,
     child: SparkPlan) extends UnaryExecNode with FlatMapGroupsWithStateExecBase {
 
   // TODO(SPARK-40444): Add the support of initial state.
@@ -137,7 +139,8 @@ case class FlatMapGroupsInPandasWithStateExec(
 
     override def processNewDataWithInitialState(
         childDataIter: Iterator[InternalRow],
-        initStateIter: Iterator[InternalRow]): Iterator[InternalRow] = {
+        initStateIter: Iterator[InternalRow],
+        skipEmittingInitialStateKeys: Boolean): Iterator[InternalRow] = {
       throw SparkUnsupportedOperationException()
     }
 

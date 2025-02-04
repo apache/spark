@@ -1573,7 +1573,7 @@ object CopyDependencies {
             Files.createDirectories(destDir)
 
             val sourceAssemblyJar = Paths.get(
-              BuildCommons.sparkHome.getAbsolutePath, "connector", "connect", "client",
+              BuildCommons.sparkHome.getAbsolutePath, "sql", "connect", "client",
               "jvm", "target", s"scala-$scalaBinaryVer", s"spark-connect-client-jvm-assembly-$sparkVer.jar")
             val destAssemblyJar = Paths.get(destDir.toString, s"spark-connect-client-jvm-assembly-$sparkVer.jar")
             Files.copy(sourceAssemblyJar, destAssemblyJar, StandardCopyOption.REPLACE_EXISTING)

@@ -17,14 +17,14 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
-import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 
 import java.util.Locale
 
 import scala.collection.mutable.{HashMap, Set}
 
+import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.catalyst.plans.logical.HandlerType.HandlerType
+import org.apache.spark.sql.catalyst.plans.logical.ExceptionHandlerType.ExceptionHandlerType
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
 import org.apache.spark.sql.errors.SqlScriptingErrors
 
@@ -72,14 +72,15 @@ case class SingleStatement(parsedPlan: LogicalPlan)
  * @param isScope Flag indicating if the CompoundBody is a labeled scope.
  *                Scopes are used for grouping local variables and exception handlers.
  * @param handlers Collection of error handlers that are defined within the compound body.
- * @param conditions Collection of conditions that are defined within the compound body.
+ * @param conditions Collection of error conditions that are defined within the compound body.
  */
 case class CompoundBody(
     collection: Seq[CompoundPlanStatement],
     label: Option[String],
     isScope: Boolean,
     handlers: Seq[ExceptionHandler] = Seq.empty,
-    conditions: HashMap[String, String] = HashMap()) extends Command with CompoundPlanStatement {
+    conditions: mutable.Map[String, String] = mutable.HashMap())
+  extends Command with CompoundPlanStatement {
 
   override def children: Seq[LogicalPlan] = collection
 
@@ -92,9 +93,9 @@ case class CompoundBody(
 /**
  * Logical operator for IF ELSE statement.
  * @param conditions Collection of conditions. First condition corresponds to IF clause,
- *                   while others (if any) correspond to following ELSE IF clauses.
+ *                   while others (if any) correspond to following ELSEIF clauses.
  * @param conditionalBodies Collection of bodies that have a corresponding condition,
- *                          in IF or ELSE IF branches.
+ *                          in IF or ELSEIF branches.
  * @param elseBody Body that is executed if none of the conditions are met,
  *                          i.e. ELSE branch.
  */
@@ -326,8 +327,8 @@ case class ErrorCondition(
       newChildren: IndexedSeq[LogicalPlan]): LogicalPlan = this.copy()
 }
 
-object HandlerType extends Enumeration {
-  type HandlerType = Value
+object ExceptionHandlerType extends Enumeration {
+  type ExceptionHandlerType = Value
   val EXIT, CONTINUE = Value
 }
 
@@ -339,8 +340,8 @@ object HandlerType extends Enumeration {
  * @param notFound Flag indicating if the handler is triggered by NOT FOUND.
  */
 class ExceptionHandlerTriggers(
-    val sqlStates: Set[String] = Set.empty,
-    val conditions: Set[String] = Set.empty,
+    val sqlStates: mutable.Set[String] = mutable.Set.empty,
+    val conditions: mutable.Set[String] = mutable.Set.empty,
     var sqlException: Boolean = false,
     var notFound: Boolean = false) {
 
@@ -392,7 +393,7 @@ class ExceptionHandlerTriggers(
 case class ExceptionHandler(
     exceptionHandlerTriggers: ExceptionHandlerTriggers,
     body: CompoundBody,
-    handlerType: HandlerType) extends CompoundPlanStatement {
+    handlerType: ExceptionHandlerType) extends CompoundPlanStatement {
   override def output: Seq[Attribute] = Seq.empty
 
   override def children: Seq[LogicalPlan] = Seq(body)
@@ -422,5 +423,5 @@ case class SignalStatement(
   override def children: Seq[LogicalPlan] = Seq.empty
 
   override protected def withNewChildrenInternal(
-      newChildren: IndexedSeq[LogicalPlan]): LogicalPlan = this.copy()
+                                                  newChildren: IndexedSeq[LogicalPlan]): LogicalPlan = this.copy()
 }

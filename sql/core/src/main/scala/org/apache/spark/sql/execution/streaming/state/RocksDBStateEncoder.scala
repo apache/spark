@@ -516,6 +516,8 @@ class UnsafeRowDataEncoder(
     writer.resetRowWriter()
     rangeScanKeyFieldsWithOrdinal.zipWithIndex.foreach { case (fieldWithOrdinal, idx) =>
       val field = fieldWithOrdinal._1
+      // We must use idx here since we are already operating on the prefix which
+      // already has the relevant range ordinals projected to the front.
       val value = row.get(idx, field.dataType)
       // Note that we cannot allocate a smaller buffer here even if the value is null
       // because the effective byte array is considered variable size and needs to have

@@ -164,6 +164,16 @@ private[sql] object SqlScriptingErrors {
       messageParameters = Map("conditionName" -> toSQLId(conditionName)))
   }
 
+  def conditionDeclarationContainsSpecialCharacter(
+      origin: Origin,
+      conditionName: String): Throwable = {
+    new SqlScriptingException(
+      origin = origin,
+      errorClass = "INVALID_ERROR_CONDITION_DECLARATION.SPECIAL_CHARACTER_FOUND",
+      cause = null,
+      messageParameters = Map("conditionName" -> toSQLId(conditionName)))
+  }
+
   def duplicateConditionInScope(origin: Origin, condition: String): Throwable = {
     new SqlScriptingException(
       origin = origin,

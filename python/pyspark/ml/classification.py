@@ -22,6 +22,7 @@ import uuid
 import warnings
 from abc import ABCMeta, abstractmethod
 from multiprocessing.pool import ThreadPool
+from functools import cached_property
 from typing import (
     Any,
     Dict,
@@ -2290,10 +2291,12 @@ class RandomForestClassificationModel(
         """
         return self._call_java("featureImportances")
 
-    @property
+    @cached_property
     @since("2.0.0")
     def trees(self) -> List[DecisionTreeClassificationModel]:
         """Trees in this ensemble. Warning: These have null parent Estimators."""
+        if is_remote():
+            return [DecisionTreeClassificationModel(m) for m in self._call_java("trees").split(",")]
         return [DecisionTreeClassificationModel(m) for m in list(self._call_java("trees"))]
 
     @property
@@ -2778,10 +2781,12 @@ class GBTClassificationModel(
         """
         return self._call_java("featureImportances")
 
-    @property
+    @cached_property
     @since("2.0.0")
     def trees(self) -> List[DecisionTreeRegressionModel]:
         """Trees in this ensemble. Warning: These have null parent Estimators."""
+        if is_remote():
+            return [DecisionTreeRegressionModel(m) for m in self._call_java("trees").split(",")]
         return [DecisionTreeRegressionModel(m) for m in list(self._call_java("trees"))]
 
     def evaluateEachIteration(self, dataset: DataFrame) -> List[float]:

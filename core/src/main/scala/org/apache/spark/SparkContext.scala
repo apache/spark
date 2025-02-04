@@ -423,6 +423,10 @@ class SparkContext(config: SparkConf) extends Logging {
     if (!_conf.contains("spark.app.name")) {
       throw new SparkException("An application name must be set in your configuration")
     }
+    // HADOOP-19229 Vector IO on cloud storage: increase threshold for range merging
+    // We can remove this after Apache Hadoop 3.4.2 releases
+    conf.setIfMissing("spark.hadoop.fs.s3a.vectored.read.min.seek.size", "128K")
+    conf.setIfMissing("spark.hadoop.fs.s3a.vectored.read.max.merged.size", "2M")
     // This should be set as early as possible.
     SparkContext.fillMissingMagicCommitterConfsIfNeeded(_conf)
 

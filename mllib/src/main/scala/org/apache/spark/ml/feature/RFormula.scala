@@ -387,6 +387,10 @@ class RFormulaModel private[feature](
     s"RFormulaModel: uid=$uid, resolvedFormula=$resolvedFormula"
   }
 
+  // For ml connect only
+  @Since("4.0.0")
+  private[ml] def resolvedFormulaString: String = resolvedFormula.toString
+
   private def transformLabel(dataset: Dataset[_]): DataFrame = {
     val labelName = resolvedFormula.label
     if (labelName.isEmpty || hasLabelCol(dataset.schema)) {

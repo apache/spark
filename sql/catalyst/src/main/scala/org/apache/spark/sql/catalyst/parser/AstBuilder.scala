@@ -161,7 +161,7 @@ class AstBuilder extends DataTypeAstBuilder
 
   private def assertSqlState(sqlState: String): Unit = {
     val sqlStateRegex = "^[A-Za-z0-9]{5}$".r
-    if (sqlStateRegex.findFirstIn(sqlState).isEmpty
+    if (sqlStateRegex.findFirstIn(sqlState.toUpperCase(Locale.ROOT)).isEmpty
       || sqlState.startsWith("00")
       || sqlState.startsWith("01")
       || sqlState.startsWith("XX")) {
@@ -175,7 +175,7 @@ class AstBuilder extends DataTypeAstBuilder
     // Current element is SQLSTATE.
     Option(ctx.sqlStateValue())
       .foreach { sqlStateValueContext =>
-        val sqlState = sqlStateValueContext.getText.replace("'", "")
+        val sqlState = string(visitStringLit(sqlStateValueContext.stringLit()))
         assertSqlState(sqlState)
         handlerTriggers.addUniqueSqlState(sqlState)
       }
@@ -188,7 +188,7 @@ class AstBuilder extends DataTypeAstBuilder
         if (conditionNameParts.size > 1) {
           if (!SparkThrowableHelper.isValidErrorClass(conditionNameString)) {
             throw SqlScriptingErrors
-              .conditionCannotBeQualified(CurrentOrigin.get, conditionNameString)
+              .conditionNotFound(CurrentOrigin.get, conditionNameString)
           }
         }
         handlerTriggers.addUniqueCondition(conditionNameString)
@@ -228,21 +228,35 @@ class AstBuilder extends DataTypeAstBuilder
     handlerTriggers
   }
 
+  private def assertConditionName(condition: String): Unit = {
+    val conditionRegex = "^[A-Za-z0-9_]+$".r
+    if (conditionRegex.findFirstIn(condition).isEmpty) {
+      throw SqlScriptingErrors
+        .conditionDeclarationContainsSpecialCharacter(CurrentOrigin.get, condition)
+    }
+  }
+
   private def visitDeclareConditionStatementImpl(
       ctx: DeclareConditionStatementContext): ErrorCondition = {
-    val conditionName = ctx.multipartIdentifier().getText
 
     // Qualified user defined condition name is not allowed.
     if (ctx.multipartIdentifier().parts.size() > 1) {
       throw SqlScriptingErrors
-        .conditionCannotBeQualified(CurrentOrigin.get, conditionName)
+        .conditionCannotBeQualified(CurrentOrigin.get, ctx.multipartIdentifier().getText)
     }
 
     // If SQLSTATE is not provided, default to 45000.
     val sqlState = Option(ctx.sqlStateValue())
-      .map(_.getText.replace("'", "")).getOrElse("45000")
+      .map(sqlStateValueContext => string(visitStringLit(sqlStateValueContext.stringLit())))
+      .getOrElse("45000")
 
     assertSqlState(sqlState)
+
+    // Get condition name.
+    val conditionName = visitMultipartIdentifier(ctx.multipartIdentifier()).head
+
+    assertConditionName(conditionName)
+
     // Convert everything to upper case.
     ErrorCondition(conditionName.toUpperCase(Locale.ROOT), sqlState.toUpperCase(Locale.ROOT))
   }
@@ -256,7 +270,7 @@ class AstBuilder extends DataTypeAstBuilder
       throw SqlScriptingErrors.continueHandlerNotSupported(CurrentOrigin.get)
     }
 
-    val handlerType = HandlerType.EXIT
+    val handlerType = ExceptionHandlerType.EXIT
     val body = if (Option(ctx.beginEndCompoundBlock()).isDefined) {
       visitBeginEndCompoundBlockImpl(
         ctx.beginEndCompoundBlock(),
@@ -272,33 +286,6 @@ class AstBuilder extends DataTypeAstBuilder
     }
 
     ExceptionHandler(exceptionHandlerTriggers, body, handlerType)
-  }
-
-  override def visitSignalStatementWithCondition(
-      ctx: SignalStatementWithConditionContext): SignalStatement = {
-    val messageString = Option(ctx.msgStr)
-      .map(sl => Left(string(visitStringLit(sl)).replace("'", "")))
-    val messageVariable = Option(ctx.msgVar)
-      .map(mpi => Right(UnresolvedAttribute(visitMultipartIdentifier(mpi))))
-
-    SignalStatement(
-      errorCondition = Some(ctx.conditionName.getText),
-      message = messageVariable.getOrElse(messageString.getOrElse(Left(""))))
-  }
-
-  override def visitSignalStatementWithSqlState(
-      ctx: SignalStatementWithSqlStateContext): SignalStatement = {
-    val sqlState = visitStringLit(ctx.sqlState).getText.replace("'", "")
-    assertSqlState(sqlState)
-
-    val messageString = Option(ctx.msgStr)
-      .map(sl => Left(string(visitStringLit(sl)).replace("'", "")))
-    val messageVariable = Option(ctx.msgVar)
-      .map(mpi => Right(UnresolvedAttribute(visitMultipartIdentifier(mpi))))
-
-    SignalStatement(
-      sqlState = Some(sqlState),
-      message = messageVariable.getOrElse(messageString.getOrElse(Left(""))))
   }
 
   private def visitCompoundBodyImpl(

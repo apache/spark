@@ -79,6 +79,31 @@ trait DescribeTableSuiteBase extends command.DescribeTableSuiteBase
     }
   }
 
+  test("describe a non-existent table") {
+    val tbl = "undefined"
+    val statements = Seq(
+      s"DESCRIBE $tbl",
+      s"DESCRIBE EXTENDED $tbl",
+      s"DESCRIBE FORMATTED $tbl",
+      s"DESCRIBE EXTENDED $tbl AS JSON",
+      s"DESCRIBE FORMATTED $tbl AS JSON"
+    )
+
+    statements.foreach { sqlStatement =>
+      val startPos = sqlStatement.indexOf(tbl)
+      val error = intercept[AnalysisException] {
+        spark.sql(sqlStatement)
+      }
+
+      checkError(
+        exception = error,
+        condition = "TABLE_OR_VIEW_NOT_FOUND",
+        parameters = Map("relationName" -> s"`$tbl`"),
+        context = ExpectedContext(tbl, startPos, startPos + tbl.length - 1)
+      )
+    }
+  }
+
   test("describe a column in case insensitivity") {
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
       withNamespaceAndTable("ns", "tbl") { tbl =>
@@ -273,7 +298,7 @@ trait DescribeTableSuiteBase extends command.DescribeTableSuiteBase
     }
   }
 
-  test("DESCRIBE AS JSON partition spec") {
+  test("DESCRIBE AS JSON partition spec and statistics") {
     withNamespaceAndTable("ns", "table") { t =>
       val tableCreationStr =
         s"""
@@ -289,6 +314,7 @@ trait DescribeTableSuiteBase extends command.DescribeTableSuiteBase
            |""".stripMargin
       spark.sql(tableCreationStr)
       spark.sql(s"ALTER TABLE $t ADD PARTITION (region='USA', category='tech')")
+      spark.sql(s"ANALYZE TABLE $t COMPUTE STATISTICS FOR ALL COLUMNS")
 
       val descriptionDf =
         spark.sql(s"DESCRIBE FORMATTED $t PARTITION (region='USA', category='tech') AS JSON")
@@ -324,7 +350,11 @@ trait DescribeTableSuiteBase extends command.DescribeTableSuiteBase
         },
         partition_provider = Some("Catalog"),
         partition_columns = Some(List("region", "category")),
-        partition_values = Some(Map("region" -> "USA", "category" -> "tech"))
+        partition_values = Some(Map("region" -> "USA", "category" -> "tech")),
+        statistics = Some(Map(
+          "size_in_bytes" -> 0,
+          "num_rows" -> 0
+        ))
       )
 
       assert(parsedOutput.location.isDefined)
@@ -726,6 +756,7 @@ case class DescribeTableJson(
     partition_provider: Option[String] = None,
     partition_columns: Option[List[String]] = Some(Nil),
     partition_values: Option[Map[String, String]] = None,
+    statistics: Option[Map[String, Any]] = None,
     view_text: Option[String] = None,
     view_original_text: Option[String] = None,
     view_schema_mode: Option[String] = None,

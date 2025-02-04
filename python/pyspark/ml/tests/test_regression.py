@@ -508,8 +508,6 @@ class RegressionTestsMixin:
         model = gbt.fit(df)
         self.assertEqual(gbt.uid, model.uid)
         self.assertEqual(model.numFeatures, 2)
-        # TODO(SPARK-50843): Support access submodel in TreeEnsembleModel
-        # model.trees
         self.assertEqual(model.treeWeights, [1.0, 0.1, 0.1])
         self.assertEqual(model.totalNumNodes, 15)
 
@@ -554,6 +552,17 @@ class RegressionTestsMixin:
         self.assertEqual(output.columns, expected_cols)
         self.assertEqual(output.count(), 4)
 
+        trees = model.trees
+        self.assertEqual(len(trees), 3)
+        for tree in trees:
+            self.assertIsInstance(tree, DecisionTreeRegressionModel)
+            self.assertTrue(tree.predict(vec) > -10)
+            self.assertEqual(tree.transform(df).count(), 4)
+            self.assertEqual(
+                tree.transform(df).columns,
+                ["label", "weight", "features", "prediction", "leaf"],
+            )
+
         # save & load
         with tempfile.TemporaryDirectory(prefix="gbt_regression") as d:
             gbt.write().overwrite().save(d)
@@ -584,8 +593,6 @@ class RegressionTestsMixin:
         model = rf.fit(df)
         self.assertEqual(rf.uid, model.uid)
         self.assertEqual(model.numFeatures, 2)
-        # TODO(SPARK-50843): Support access submodel in TreeEnsembleModel
-        # model.trees
         self.assertEqual(model.treeWeights, [1.0, 1.0, 1.0])
         self.assertEqual(model.totalNumNodes, 11)
 
@@ -613,6 +620,17 @@ class RegressionTestsMixin:
         ]
         self.assertEqual(output.columns, expected_cols)
         self.assertEqual(output.count(), 4)
+
+        trees = model.trees
+        self.assertEqual(len(trees), 3)
+        for tree in trees:
+            self.assertIsInstance(tree, DecisionTreeRegressionModel)
+            self.assertTrue(tree.predict(vec) > -10)
+            self.assertEqual(tree.transform(df).count(), 4)
+            self.assertEqual(
+                tree.transform(df).columns,
+                ["label", "weight", "features", "prediction", "leaf"],
+            )
 
         with tempfile.TemporaryDirectory(prefix="random_forest_regression") as d:
             rf.write().overwrite().save(d)

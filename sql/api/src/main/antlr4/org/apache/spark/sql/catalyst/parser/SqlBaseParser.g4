@@ -116,7 +116,7 @@ whileStatement
 
 ifElseStatement
     : IF booleanExpression THEN conditionalBodies+=compoundBody
-        (ELSE IF booleanExpression THEN conditionalBodies+=compoundBody)*
+        (ELSEIF booleanExpression THEN conditionalBodies+=compoundBody)*
         (ELSE elseBody=compoundBody)? END IF
     ;
 
@@ -1675,6 +1675,7 @@ ansiNonReserved
     | DO
     | DOUBLE
     | DROP
+    | ELSEIF
     | ESCAPED
     | EVOLUTION
     | EXCHANGE
@@ -2030,6 +2031,7 @@ nonReserved
     | DOUBLE
     | DROP
     | ELSE
+    | ELSEIF
     | END
     | ESCAPE
     | ESCAPED

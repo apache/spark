@@ -2478,6 +2478,11 @@
         "message" : [
           "Condition <conditionName> cannot be qualified."
         ]
+      },
+      "SPECIAL_CHARACTER_FOUND" : {
+        "message" : [
+          "Special character found in condition name <conditionName>. Only alphanumeric characters and underscores are allowed."
+        ]
       }
     },
     "sqlState" : "42K0R"

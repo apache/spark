@@ -25,8 +25,8 @@ import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.analysis.{ColumnResolutionHelper, NameParameterizedQuery, UnresolvedAttribute, UnresolvedIdentifier}
 import org.apache.spark.sql.catalyst.expressions.{Alias, CreateArray, CreateMap, CreateNamedStruct, Expression, Literal, VariableReference}
 import org.apache.spark.sql.catalyst.plans.logical.{CreateVariable, DefaultValueExpression, DropVariable, LogicalPlan, OneRowRelation, Project, SetVariable}
-import org.apache.spark.sql.catalyst.plans.logical.HandlerType.HandlerType
-import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin, WithOrigin}
+import org.apache.spark.sql.catalyst.plans.logical.ExceptionHandlerType.ExceptionHandlerType
+import org.apache.spark.sql.catalyst.trees.{Origin, WithOrigin}
 import org.apache.spark.sql.classic.{DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.errors.{QueryCompilationErrors, SqlScriptingErrors}
@@ -179,23 +179,36 @@ class NoOpStatementExec extends LeafStatementExec {
   override def reset(): Unit = ()
 }
 
+/**
+ * Class to hold mapping of condition names/sqlStates to exception handlers
+ * defined in a compound body.
+ *
+ * @param conditionToExceptionHandlerMap
+ *   Map of condition names to exception handlers.
+ * @param sqlStateToExceptionHandlerMap
+ *   Map of sqlStates to exception handlers.
+ * @param sqlExceptionHandler
+ *   "Catch-all" exception handler.
+ * @param notFoundHandler
+ *   NOT FOUND exception handler.
+ */
 class TriggerToExceptionHandlerMap(
-    conditionToExceptionHandlerMap: Map[String, ErrorHandlerExec],
-    sqlStateToExceptionHandlerMap: Map[String, ErrorHandlerExec],
-    sqlExceptionHandler: Option[ErrorHandlerExec],
-    notFoundHandler: Option[ErrorHandlerExec]) {
+    conditionToExceptionHandlerMap: Map[String, ExceptionHandlerExec],
+    sqlStateToExceptionHandlerMap: Map[String, ExceptionHandlerExec],
+    sqlExceptionHandler: Option[ExceptionHandlerExec],
+    notFoundHandler: Option[ExceptionHandlerExec]) {
 
-  def getHandlerForCondition(condition: String): Option[ErrorHandlerExec] = {
+  def getHandlerForCondition(condition: String): Option[ExceptionHandlerExec] = {
     conditionToExceptionHandlerMap.get(condition)
   }
 
-  def getHandlerForSqlState(sqlState: String): Option[ErrorHandlerExec] = {
+  def getHandlerForSqlState(sqlState: String): Option[ExceptionHandlerExec] = {
     sqlStateToExceptionHandlerMap.get(sqlState)
   }
 
-  def getSqlExceptionHandler: Option[ErrorHandlerExec] = sqlExceptionHandler
+  def getSqlExceptionHandler: Option[ExceptionHandlerExec] = sqlExceptionHandler
 
-  def getNotFoundHandler: Option[ErrorHandlerExec] = notFoundHandler
+  def getNotFoundHandler: Option[ExceptionHandlerExec] = notFoundHandler
 }
 
 /**
@@ -237,7 +250,7 @@ class CompoundBodyExec(
    * iteration, but it should be executed only once when compound body that represent
    * scope is encountered for the first time.
    */
-  def enterScope(): Unit = {
+  private[scripting] def enterScope(): Unit = {
     // This check makes this operation idempotent.
     if (isScope && scopeStatus == ScopeStatus.NOT_ENTERED) {
       scopeStatus = ScopeStatus.INSIDE
@@ -250,7 +263,7 @@ class CompoundBodyExec(
    *
    * Even though this operation is called exactly once, we are making it idempotent.
    */
-  protected def exitScope(): Unit = {
+  private[scripting] def exitScope(): Unit = {
     // This check makes this operation idempotent.
     if (isScope && scopeStatus == ScopeStatus.INSIDE) {
       scopeStatus = ScopeStatus.EXITED
@@ -371,9 +384,9 @@ class CompoundBodyExec(
 /**
  * Executable node for IfElseStatement.
  * @param conditions Collection of executable conditions. First condition corresponds to IF clause,
- *                   while others (if any) correspond to following ELSE IF clauses.
+ *                   while others (if any) correspond to following ELSEIF clauses.
  * @param conditionalBodies Collection of executable bodies that have a corresponding condition,
-*                 in IF or ELSE IF branches.
+*                 in IF or ELSEIF branches.
  * @param elseBody Body that is executed if none of the conditions are met,
  *                          i.e. ELSE branch.
  * @param session Spark session that SQL script is executed within.
@@ -407,7 +420,7 @@ class IfElseStatementExec(
           } else {
             clauseIdx += 1
             if (clauseIdx < conditionsCount) {
-              // There are ELSE IF clauses remaining.
+              // There are ELSEIF clauses remaining.
               state = IfElseState.Condition
               curr = Some(conditions(clauseIdx))
             } else if (elseBody.isDefined) {
@@ -996,14 +1009,14 @@ class ForStatementExec(
 }
 
 /**
- * Executable node for ErrorHandlerStatement.
- * @param body Executable CompoundBody of the error handler.
+ * Executable node for ExceptionHandler.
+ * @param body Executable CompoundBody of the exception handler.
  * @param handlerType Handler type: EXIT, CONTINUE.
  * @param scopeLabel Label of the scope where handler is defined.
  */
-class ErrorHandlerExec(
+class ExceptionHandlerExec(
     val body: CompoundBodyExec,
-    val handlerType: HandlerType,
+    val handlerType: ExceptionHandlerType,
     val scopeLabel: Option[String]) extends NonLeafStatementExec {
 
   override def getTreeIterator: Iterator[CompoundStatementExec] = body.getTreeIterator

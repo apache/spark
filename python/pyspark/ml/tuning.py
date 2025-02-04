@@ -55,9 +55,10 @@ from pyspark.ml.util import (
     JavaMLWriter,
     try_remote_write,
     try_remote_read,
+    is_remote,
 )
 from pyspark.ml.wrapper import JavaParams, JavaEstimator, JavaWrapper
-from pyspark.sql.functions import col, lit, rand, UserDefinedFunction
+from pyspark.sql.functions import col, lit, rand
 from pyspark.sql.types import BooleanType
 from pyspark.sql.dataframe import DataFrame
 
@@ -901,16 +902,27 @@ class CrossValidator(
                     )
                 return True
 
+            if is_remote():
+                from pyspark.sql.connect.udf import UserDefinedFunction
+            else:
+                from pyspark.sql.functions import UserDefinedFunction  # type: ignore[assignment]
+
             checker_udf = UserDefinedFunction(checker, BooleanType())
             for i in range(nFolds):
                 training = dataset.filter(checker_udf(dataset[foldCol]) & (col(foldCol) != lit(i)))
                 validation = dataset.filter(
                     checker_udf(dataset[foldCol]) & (col(foldCol) == lit(i))
                 )
-                if training.rdd.getNumPartitions() == 0 or len(training.take(1)) == 0:
-                    raise ValueError("The training data at fold %s is empty." % i)
-                if validation.rdd.getNumPartitions() == 0 or len(validation.take(1)) == 0:
-                    raise ValueError("The validation data at fold %s is empty." % i)
+                if is_remote():
+                    if len(training.take(1)) == 0:
+                        raise ValueError("The training data at fold %s is empty." % i)
+                    if len(validation.take(1)) == 0:
+                        raise ValueError("The validation data at fold %s is empty." % i)
+                else:
+                    if training.rdd.getNumPartitions() == 0 or len(training.take(1)) == 0:
+                        raise ValueError("The training data at fold %s is empty." % i)
+                    if validation.rdd.getNumPartitions() == 0 or len(validation.take(1)) == 0:
+                        raise ValueError("The validation data at fold %s is empty." % i)
                 datasets.append((training, validation))
 
         return datasets

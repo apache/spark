@@ -20,11 +20,15 @@ package org.apache.spark.ml.stat
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.annotation.Since
+import org.apache.spark.ml._
 import org.apache.spark.ml.linalg.{SQLDataTypes, Vector}
+import org.apache.spark.ml.param._
+import org.apache.spark.ml.param.shared.HasFeaturesCol
+import org.apache.spark.ml.util.Identifiable
 import org.apache.spark.mllib.linalg.{Vectors => OldVectors}
 import org.apache.spark.mllib.stat.{Statistics => OldStatistics}
 import org.apache.spark.sql.{DataFrame, Dataset, Row}
-import org.apache.spark.sql.types.{StructField, StructType}
+import org.apache.spark.sql.types._
 
 /**
  * API for correlation functions in MLlib, compatible with DataFrames and Datasets.
@@ -81,4 +85,29 @@ object Correlation {
   def corr(dataset: Dataset[_], column: String): DataFrame = {
     corr(dataset, column, "pearson")
   }
+}
+
+/**
+ * [[Correlation]] is not an Estimator/Transformer and thus needs to be wrapped in a wrapper
+ * to be compatible with Spark Connect.
+ */
+private[spark] class CorrelationWrapper(override val uid: String)
+  extends Transformer with HasFeaturesCol {
+
+  val method = new Param[String](this, "method", "The correlation method to use")
+
+  setDefault(method -> "pearson")
+
+  def this() = this(Identifiable.randomUID("CorrelationWrapper"))
+
+  override def transformSchema(schema: StructType): StructType = {
+    val name = s"${$(method)}(${$(featuresCol)})"
+    StructType(Array(StructField(name, SQLDataTypes.MatrixType, nullable = false)))
+  }
+
+  override def transform(dataset: Dataset[_]): DataFrame = {
+    Correlation.corr(dataset, $(featuresCol), $(method))
+  }
+
+  override def copy(extra: ParamMap): CorrelationWrapper = defaultCopy(extra)
 }

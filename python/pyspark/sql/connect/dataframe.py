@@ -1812,11 +1812,9 @@ class DataFrame(ParentDataFrame):
         )
 
     def asTable(self) -> TableArg:
-        # TODO(SPARK-50393): Support DataFrame conversion to table argument in Spark Connect
-        raise PySparkNotImplementedError(
-            errorClass="NOT_IMPLEMENTED",
-            messageParameters={"feature": "asTable()"},
-        )
+        from pyspark.sql.connect.table_arg import TableArg as ConnectTableArg
+
+        return ConnectTableArg(SubqueryExpression(self._plan, subquery_type="table_arg"))
 
     def scalar(self) -> Column:
         from pyspark.sql.connect.column import Column as ConnectColumn

@@ -203,3 +203,12 @@ def serialize_ml_params(instance: "Params", client: "SparkConnectClient") -> pb2
         k.name: serialize_param(v, client) for k, v in instance._paramMap.items()
     }
     return pb2.MlParams(params=params)
+
+
+def serialize_ml_params_values(
+    values: Dict[str, Any], client: "SparkConnectClient"
+) -> pb2.MlParams:
+    params: Mapping[str, pb2.Expression.Literal] = {
+        k: serialize_param(v, client) for k, v in values.items()
+    }
+    return pb2.MlParams(params=params)
