@@ -60,8 +60,10 @@ COMPACTIONS	false
 COMPENSATION	false
 COMPUTE	false
 CONCATENATE	false
+CONDITION	false
 CONSTRAINT	true
 CONTAINS	false
+CONTINUE	false
 COST	false
 CREATE	true
 CROSS	true
@@ -114,6 +116,7 @@ EXCHANGE	false
 EXCLUDE	false
 EXECUTE	true
 EXISTS	false
+EXIT	false
 EXPLAIN	false
 EXPORT	false
 EXTEND	false
@@ -132,6 +135,7 @@ FOR	true
 FOREIGN	true
 FORMAT	false
 FORMATTED	false
+FOUND	false
 FROM	true
 FULL	true
 FUNCTION	false
@@ -141,6 +145,7 @@ GLOBAL	false
 GRANT	true
 GROUP	true
 GROUPING	false
+HANDLER	false
 HAVING	true
 HOUR	false
 HOURS	false
@@ -300,6 +305,8 @@ SORTED	false
 SOURCE	false
 SPECIFIC	false
 SQL	true
+SQLEXCEPTION	false
+SQLSTATE	false
 START	false
 STATISTICS	false
 STORED	false
@@ -351,6 +358,7 @@ UPDATE	false
 USE	false
 USER	true
 USING	true
+VALUE	false
 VALUES	false
 VAR	false
 VARCHAR	false

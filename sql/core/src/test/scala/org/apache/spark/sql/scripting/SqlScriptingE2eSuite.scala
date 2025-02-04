@@ -70,6 +70,33 @@ class SqlScriptingE2eSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("Scripting with exception handlers") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE OR REPLACE flag INT = -1;
+        |  DECLARE EXIT HANDLER FOR DIVIDE_BY_ZERO
+        |  BEGIN
+        |    SELECT flag;
+        |    SET VAR flag = 1;
+        |  END;
+        |  BEGIN
+        |    DECLARE EXIT HANDLER FOR SQLSTATE '22012'
+        |    BEGIN
+        |      SELECT flag;
+        |      SET VAR flag = 2;
+        |    END;
+        |    SELECT 5;
+        |    SELECT 1/0;
+        |    SELECT 6;
+        |  END;
+        |  SELECT 7;
+        |  SELECT flag;
+        |END
+        |""".stripMargin
+    verifySqlScriptResult(sqlScript, Seq(Row(2)))
+  }
+
   test("single select") {
     val sqlText = "SELECT 1;"
     verifySqlScriptResult(sqlText, Seq(Row(1)))
