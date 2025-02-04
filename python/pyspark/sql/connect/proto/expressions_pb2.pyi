@@ -1537,6 +1537,7 @@ class CommonInlineUserDefinedFunction(google.protobuf.message.Message):
     PYTHON_UDF_FIELD_NUMBER: builtins.int
     SCALAR_SCALA_UDF_FIELD_NUMBER: builtins.int
     JAVA_UDF_FIELD_NUMBER: builtins.int
+    IS_DISTINCT_FIELD_NUMBER: builtins.int
     function_name: builtins.str
     """(Required) Name of the user-defined function."""
     deterministic: builtins.bool
@@ -1552,6 +1553,8 @@ class CommonInlineUserDefinedFunction(google.protobuf.message.Message):
     def scalar_scala_udf(self) -> global___ScalarScalaUDF: ...
     @property
     def java_udf(self) -> global___JavaUDF: ...
+    is_distinct: builtins.bool
+    """(Required) Indicate if this function should be applied on distinct values."""
     def __init__(
         self,
         *,
@@ -1561,6 +1564,7 @@ class CommonInlineUserDefinedFunction(google.protobuf.message.Message):
         python_udf: global___PythonUDF | None = ...,
         scalar_scala_udf: global___ScalarScalaUDF | None = ...,
         java_udf: global___JavaUDF | None = ...,
+        is_distinct: builtins.bool = ...,
     ) -> None: ...
     def HasField(
         self,
@@ -1586,6 +1590,8 @@ class CommonInlineUserDefinedFunction(google.protobuf.message.Message):
             b"function",
             "function_name",
             b"function_name",
+            "is_distinct",
+            b"is_distinct",
             "java_udf",
             b"java_udf",
             "python_udf",

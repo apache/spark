@@ -142,6 +142,23 @@ case class OptionNestedGeneric[T](list: Option[T])
 case class MapNestedGenericKey[T](list: Map[T, Int])
 case class MapNestedGenericValue[T](list: Map[Int, T])
 
+class Wrapper[T](val value: T) {
+  override def hashCode(): Int = value.hashCode()
+  override def equals(obj: Any): Boolean = obj match {
+    case other: Wrapper[T @unchecked] => value == other.value
+    case _ => false
+  }
+}
+
+class WrapperCodec[T] extends Codec[Wrapper[T], T] {
+  override def encode(in: Wrapper[T]): T = in.value
+  override def decode(out: T): Wrapper[T] = new Wrapper(out)
+}
+
+class WrapperCodecProvider[T] extends (() => Codec[Wrapper[T], T]) {
+  override def apply(): Codec[Wrapper[T], T] = new WrapperCodec[T]
+}
+
 class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTest
   with QueryErrorsBase {
   OuterScopes.addOuterScope(this)
@@ -568,6 +585,7 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
   encodeDecodeTest(FooEnum.E1, "scala Enum")
 
 
+
   private def testTransformingEncoder(
       name: String,
       provider: () => Codec[Any, Array[Byte]]): Unit = test(name) {
@@ -584,6 +602,19 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
 
   testTransformingEncoder("transforming java serialization encoder", JavaSerializationCodec)
   testTransformingEncoder("transforming kryo encoder", KryoSerializationCodec)
+
+  test("transforming row encoder") {
+    val schema = new StructType().add("a", LongType).add("b", StringType)
+    val encoder = ExpressionEncoder(TransformingEncoder(
+      classTag[Wrapper[Row]],
+      RowEncoder.encoderFor(schema),
+      new WrapperCodecProvider[Row]))
+      .resolveAndBind()
+    val toRow = encoder.createSerializer()
+    val fromRow = encoder.createDeserializer()
+    assert(fromRow(toRow(new Wrapper(Row(9L, "x")))) == new Wrapper(Row(9L, "x")))
+  }
+
 
   // Scala / Java big decimals ----------------------------------------------------------
 

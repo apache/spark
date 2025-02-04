@@ -1814,7 +1814,7 @@ class SparkConnectPlanner(
       case udf: SparkUserDefinedFunction =>
         UserDefinedFunctionUtils.toScalaUDF(udf, children)
       case uda: UserDefinedAggregator[_, _, _] =>
-        ScalaAggregator(uda, children).toAggregateExpression()
+        ScalaAggregator(uda, children).toAggregateExpression(fun.getIsDistinct)
       case other =>
         throw InvalidPlanInput(
           s"Unsupported UserDefinedFunction implementation: ${other.getClass}")
