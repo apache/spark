@@ -20,7 +20,6 @@ package org.apache.spark.sql.collation
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row}
 import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.connector.DatasourceV2SQLBase
-import org.apache.spark.sql.internal.SqlApiConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StringType
 
@@ -30,28 +29,6 @@ abstract class DefaultCollationTestSuite extends QueryTest with SharedSparkSessi
   def testTable: String = "test_tbl"
   def testView: String = "test_view"
   protected val fullyQualifiedPrefix = s"${CollationFactory.CATALOG}.${CollationFactory.SCHEMA}."
-
-  def withSessionCollationAndTable(collation: String, testTables: String*)(f: => Unit): Unit = {
-    withTable(testTables: _*) {
-      withSessionCollation(collation) {
-        f
-      }
-    }
-  }
-
-  def withSessionCollationAndView(collation: String, viewNames: String*)(f: => Unit): Unit = {
-    withView(viewNames: _*) {
-      withSessionCollation(collation) {
-        f
-      }
-    }
-  }
-
-  def withSessionCollation(collation: String)(f: => Unit): Unit = {
-    withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collation) {
-      f
-    }
-  }
 
   def assertTableColumnCollation(
       table: String,
@@ -71,7 +48,7 @@ abstract class DefaultCollationTestSuite extends QueryTest with SharedSparkSessi
   // region DDL tests
 
   test("create/alter table") {
-    withSessionCollationAndTable("UTF8_LCASE", testTable) {
+    withTable(testTable) {
       // create table with implicit collation
       sql(s"CREATE TABLE $testTable (c1 STRING) USING $dataSource")
       assertTableColumnCollation(testTable, "c1", "UTF8_BINARY")
@@ -89,12 +66,12 @@ abstract class DefaultCollationTestSuite extends QueryTest with SharedSparkSessi
   }
 
   test("create table with explicit collation") {
-    withSessionCollationAndTable("UTF8_LCASE", testTable) {
+    withTable(testTable) {
       sql(s"CREATE TABLE $testTable (c1 STRING COLLATE UTF8_LCASE) USING $dataSource")
       assertTableColumnCollation(testTable, "c1", "UTF8_LCASE")
     }
 
-    withSessionCollationAndTable("UTF8_LCASE", testTable) {
+    withTable(testTable) {
       sql(s"CREATE TABLE $testTable (c1 STRING COLLATE UNICODE) USING $dataSource")
       assertTableColumnCollation(testTable, "c1", "UNICODE")
     }
@@ -102,7 +79,7 @@ abstract class DefaultCollationTestSuite extends QueryTest with SharedSparkSessi
 
   test("create table as select") {
     // literals in select do not pick up session collation
-    withSessionCollationAndTable("UTF8_LCASE", testTable) {
+    withTable(testTable) {
       sql(s"""
            |CREATE TABLE $testTable USING $dataSource AS SELECT
            |  'a' AS c1,
@@ -120,7 +97,7 @@ abstract class DefaultCollationTestSuite extends QueryTest with SharedSparkSessi
     }
 
     // literals in inline table do not pick up session collation
-    withSessionCollationAndTable("UTF8_LCASE", testTable) {
+    withTable(testTable) {
       sql(s"""
            |CREATE TABLE $testTable USING $dataSource AS
            |SELECT c1, c1 = 'A' as c2 FROM VALUES ('a'), ('A') AS vals(c1)
@@ -130,14 +107,14 @@ abstract class DefaultCollationTestSuite extends QueryTest with SharedSparkSessi
     }
 
     // cast in select does not pick up session collation
-    withSessionCollationAndTable("UTF8_LCASE", testTable) {
+    withTable(testTable) {
       sql(s"CREATE TABLE $testTable USING $dataSource AS SELECT cast('a' AS STRING) AS c1")
       assertTableColumnCollation(testTable, "c1", "UTF8_BINARY")
     }
   }
 
   test("ctas with complex types") {
-    withSessionCollationAndTable("UTF8_LCASE", testTable) {
+    withTable(testTable) {
       sql(s"""
            |CREATE TABLE $testTable USING $dataSource AS
            |SELECT
@@ -156,7 +133,7 @@ abstract class DefaultCollationTestSuite extends QueryTest with SharedSparkSessi
   }
 
   test("ctas with union") {
-    withSessionCollationAndTable("UTF8_LCASE", testTable) {
+    withTable(testTable) {
       sql(s"""
            |CREATE TABLE $testTable USING $dataSource AS
            |SELECT 'a' = 'A' AS c1
@@ -167,7 +144,7 @@ abstract class DefaultCollationTestSuite extends QueryTest with SharedSparkSessi
       checkAnswer(sql(s"SELECT * FROM $testTable"), Seq(Row(false)))
     }
 
-    withSessionCollationAndTable("UTF8_LCASE", testTable) {
+    withTable(testTable) {
       sql(s"""
            |CREATE TABLE $testTable USING $dataSource AS
            |SELECT 'a' = 'A' AS c1
@@ -180,7 +157,7 @@ abstract class DefaultCollationTestSuite extends QueryTest with SharedSparkSessi
   }
 
   test("add column") {
-    withSessionCollationAndTable("UTF8_LCASE", testTable) {
+    withTable(testTable) {
       sql(s"CREATE TABLE $testTable (c1 STRING COLLATE UTF8_LCASE) USING $dataSource")
       assertTableColumnCollation(testTable, "c1", "UTF8_LCASE")
 
@@ -193,7 +170,7 @@ abstract class DefaultCollationTestSuite extends QueryTest with SharedSparkSessi
   }
 
   test("inline table in CTAS") {
-    withSessionCollationAndTable("UTF8_LCASE", testTable) {
+    withTable(testTable) {
       sql(s"""
            |CREATE TABLE $testTable
            |USING $dataSource
@@ -211,7 +188,7 @@ abstract class DefaultCollationTestSuite extends QueryTest with SharedSparkSessi
     // since concat coercion happens after resolving default types this test
     // makes sure that we are correctly resolving the default string types
     // in subsequent analyzer iterations
-    withSessionCollationAndTable("UTF8_LCASE", testTable) {
+    withTable(testTable) {
       sql(s"""
            |CREATE TABLE $testTable
            |USING $dataSource AS
@@ -222,7 +199,7 @@ abstract class DefaultCollationTestSuite extends QueryTest with SharedSparkSessi
     }
 
     // ELT is similar
-    withSessionCollationAndTable("UTF8_LCASE", testTable) {
+    withTable(testTable) {
       sql(s"""
              |CREATE TABLE $testTable
              |USING $dataSource AS
@@ -234,169 +211,13 @@ abstract class DefaultCollationTestSuite extends QueryTest with SharedSparkSessi
   }
 
   // endregion
-
-  // region DML tests
-
-  test("literals with default collation") {
-    val sessionCollation = "UTF8_LCASE"
-    val sessionCollationFullyQualified = fullyQualifiedPrefix + sessionCollation
-      withSessionCollation(sessionCollation) {
-
-      // literal without collation
-      checkAnswer(sql("SELECT COLLATION('a')"), Seq(Row(sessionCollationFullyQualified)))
-
-      checkAnswer(sql("SELECT COLLATION(map('a', 'b')['a'])"),
-        Seq(Row(sessionCollationFullyQualified)))
-
-      checkAnswer(sql("SELECT COLLATION(array('a')[0])"), Seq(Row(sessionCollationFullyQualified)))
-
-      checkAnswer(sql("SELECT COLLATION(struct('a' as c)['c'])"),
-        Seq(Row(sessionCollationFullyQualified)))
-    }
-  }
-
-  test("literals with explicit collation") {
-    val unicodeCollation = fullyQualifiedPrefix + "UNICODE"
-    withSessionCollation("UTF8_LCASE") {
-      checkAnswer(sql("SELECT COLLATION('a' collate unicode)"), Seq(Row(unicodeCollation)))
-
-      checkAnswer(
-        sql("SELECT COLLATION(map('a', 'b' collate unicode)['a'])"),
-        Seq(Row(unicodeCollation)))
-
-      checkAnswer(sql("SELECT COLLATION(array('a' collate unicode)[0])"),
-        Seq(Row(unicodeCollation)))
-
-      checkAnswer(
-        sql("SELECT COLLATION(struct('a' collate unicode as c)['c'])"),
-        Seq(Row(unicodeCollation)))
-    }
-  }
-
-  test("cast is aware of session collation") {
-    val sessionCollation = "UTF8_LCASE"
-    val sessionCollationFullyQualified = fullyQualifiedPrefix + sessionCollation
-    withSessionCollation(sessionCollation) {
-      checkAnswer(sql("SELECT COLLATION(cast('a' as STRING))"),
-        Seq(Row(sessionCollationFullyQualified)))
-
-      checkAnswer(
-        sql("SELECT COLLATION(cast(map('a', 'b') as MAP<STRING, STRING>)['a'])"),
-        Seq(Row(sessionCollationFullyQualified)))
-
-      checkAnswer(
-        sql("SELECT COLLATION(map_keys(cast(map('a', 'b') as MAP<STRING, STRING>))[0])"),
-        Seq(Row(sessionCollationFullyQualified)))
-
-      checkAnswer(
-        sql("SELECT COLLATION(cast(array('a') as ARRAY<STRING>)[0])"),
-        Seq(Row(sessionCollationFullyQualified)))
-
-      checkAnswer(
-        sql("SELECT COLLATION(cast(struct('a' as c) as STRUCT<c: STRING>)['c'])"),
-        Seq(Row(sessionCollationFullyQualified)))
-    }
-  }
-
-  test("expressions in where are aware of session collation") {
-    withSessionCollation("UTF8_LCASE") {
-      // expression in where is aware of session collation
-      checkAnswer(sql("SELECT 1 WHERE 'a' = 'A'"), Seq(Row(1)))
-
-      checkAnswer(sql("SELECT 1 WHERE 'a' = cast('A' as STRING)"), Seq(Row(1)))
-    }
-  }
-
-  test("having group by is aware of session collation") {
-    withSessionCollationAndTable("UTF8_LCASE", testTable) {
-      sql(s"CREATE TABLE $testTable (c1 STRING) USING $dataSource")
-      sql(s"INSERT INTO $testTable VALUES ('a'), ('A')")
-
-      // having clause uses session (default) collation
-      checkAnswer(
-        sql(s"SELECT COUNT(*) FROM $testTable GROUP BY c1 HAVING 'a' = 'A'"),
-        Seq(Row(1), Row(1)))
-
-      // having clause uses column (implicit) collation
-      checkAnswer(
-        sql(s"SELECT COUNT(*) FROM $testTable GROUP BY c1 HAVING c1 = 'A'"),
-        Seq(Row(1)))
-    }
-  }
-
-  test("min/max are aware of session collation") {
-    // scalastyle:off nonascii
-    withSessionCollationAndTable("UNICODE", testTable) {
-      sql(s"CREATE TABLE $testTable (c1 STRING) USING $dataSource")
-      sql(s"INSERT INTO $testTable VALUES ('1'), ('½')")
-
-      checkAnswer(sql(s"SELECT MIN(c1) FROM $testTable"), Seq(Row("1")))
-
-      checkAnswer(sql(s"SELECT MAX(c1) FROM $testTable"), Seq(Row("½")))
-    }
-    // scalastyle:on nonascii
-  }
-
-  test("union operation with subqueries") {
-    withSessionCollation("UTF8_LCASE") {
-      checkAnswer(
-        sql(s"""
-             |SELECT 'a' = 'A'
-             |UNION
-             |SELECT 'b' = 'B'
-             |""".stripMargin),
-        Seq(Row(true)))
-
-      checkAnswer(
-        sql(s"""
-             |SELECT 'a' = 'A'
-             |UNION ALL
-             |SELECT 'b' = 'B'
-             |""".stripMargin),
-        Seq(Row(true), Row(true)))
-    }
-  }
-
-  test("inline table in SELECT") {
-    withSessionCollation("UTF8_LCASE") {
-      val df = s"""
-           |SELECT *
-           |FROM (VALUES ('a', 'a' = 'A'))
-           |""".stripMargin
-
-      checkAnswer(sql(df), Seq(Row("a", true)))
-    }
-  }
-
-  test("inline table in insert") {
-    withSessionCollationAndTable("UTF8_LCASE", testTable) {
-      sql(s"CREATE TABLE $testTable (c1 STRING, c2 BOOLEAN) USING $dataSource")
-
-      sql(s"INSERT INTO $testTable VALUES ('a', 'a' = 'A')")
-      checkAnswer(sql(s"SELECT * FROM $testTable"), Seq(Row("a", true)))
-    }
-  }
-
-  test("literals in insert inherit session level collation") {
-    withSessionCollationAndTable("UTF8_LCASE", testTable) {
-      sql(s"CREATE TABLE $testTable (c1 BOOLEAN) USING $dataSource")
-
-      sql(s"INSERT INTO $testTable VALUES ('a' = 'A')")
-      sql(s"INSERT INTO $testTable VALUES (array_contains(array('a'), 'A'))")
-      sql(s"INSERT INTO $testTable VALUES (CONCAT(X'68656C6C6F', 'world') = 'HELLOWORLD')")
-
-      checkAnswer(sql(s"SELECT COUNT(*) FROM $testTable WHERE c1"), Seq(Row(3)))
-    }
-  }
-
-  // endregion
 }
 
 class DefaultCollationTestSuiteV1 extends DefaultCollationTestSuite {
 
   test("create/alter view created from a table") {
     val sessionCollation = "UTF8_LCASE"
-    withSessionCollationAndTable(sessionCollation, testTable) {
+    withTable(testTable) {
       sql(s"CREATE TABLE $testTable (c1 STRING, c2 STRING COLLATE UNICODE_CI) USING $dataSource")
       sql(s"INSERT INTO $testTable VALUES ('a', 'a'), ('A', 'A')")
 
@@ -445,7 +266,7 @@ class DefaultCollationTestSuiteV1 extends DefaultCollationTestSuite {
     val joinTableName = "join_table"
     val sessionCollation = "sr"
 
-    withSessionCollationAndTable(sessionCollation, viewTableName, joinTableName) {
+    withView(viewTableName, joinTableName) {
       sql(s"CREATE TABLE $viewTableName (c1 STRING COLLATE UNICODE_CI) USING $dataSource")
       sql(s"CREATE TABLE $joinTableName (c1 STRING COLLATE UTF8_LCASE) USING $dataSource")
       sql(s"INSERT INTO $viewTableName VALUES ('a')")
@@ -475,7 +296,7 @@ class DefaultCollationTestSuiteV2 extends DefaultCollationTestSuite with Datasou
 
   // delete only works on v2
   test("delete behavior") {
-    withSessionCollationAndTable("UTF8_LCASE", testTable) {
+    withTable(testTable) {
       sql(s"CREATE TABLE $testTable (c1 STRING) USING $dataSource")
       sql(s"INSERT INTO $testTable VALUES ('a'), ('A')")
 
@@ -485,7 +306,7 @@ class DefaultCollationTestSuiteV2 extends DefaultCollationTestSuite with Datasou
   }
 
   test("inline table in RTAS") {
-    withSessionCollationAndTable("UTF8_LCASE", testTable) {
+    withTable(testTable) {
       sql(s"CREATE TABLE $testTable (c1 STRING, c2 BOOLEAN) USING $dataSource")
       sql(s"""
            |REPLACE TABLE $testTable
