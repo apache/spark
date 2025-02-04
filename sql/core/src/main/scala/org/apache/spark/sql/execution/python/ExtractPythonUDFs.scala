@@ -270,19 +270,21 @@ object ExtractPythonUDFs extends Rule[LogicalPlan] with Logging {
               evalTypes.mkString(","))
           }
           val evalType = evalTypes.head
+
+          val hasUDTInput = child.output.exists(
+            attr => attr.dataType.isInstanceOf[UserDefinedType[_]])
+          val hasUDTReturn = validUdfs.exists(udf => udf.dataType.isInstanceOf[UserDefinedType[_]])
+
           val evaluation = evalType match {
             case PythonEvalType.SQL_BATCHED_UDF =>
               BatchEvalPython(validUdfs, resultAttrs, child)
             case PythonEvalType.SQL_SCALAR_PANDAS_UDF | PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF =>
               ArrowEvalPython(validUdfs, resultAttrs, child, evalType)
             case PythonEvalType.SQL_ARROW_BATCHED_UDF =>
-              // Check if any input columns are UDTs for SQL_ARROW_BATCHED_UDF
-              val hasUDTInput = child.output.exists(
-                attr => attr.dataType.isInstanceOf[UserDefinedType[_]])
 
-              if (hasUDTInput) {
+              if (hasUDTInput || hasUDTReturn) {
                 // Use BatchEvalPython if UDT is detected
-                logWarning("Arrow optimization disabled due to UDT input. " +
+                logWarning("Arrow optimization disabled due to UDT input or return type. " +
                   "Falling back to non-Arrow-optimized UDF execution.")
                 BatchEvalPython(validUdfs, resultAttrs, child)
               } else {
