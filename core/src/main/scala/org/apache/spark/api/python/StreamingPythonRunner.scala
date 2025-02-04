@@ -84,7 +84,7 @@ private[spark] class StreamingPythonRunner(
     val dataOut = new DataOutputStream(stream)
 
     // Set timeout to 5 minute during initialization config transmission
-    socket.setSoTimeout(5 * 60 * 1000)
+    socket.setSoTimeout(5 * 1000)
 
     val resFromPython = try {
       PythonWorkerUtils.writePythonVersion(pythonVer, dataOut)
