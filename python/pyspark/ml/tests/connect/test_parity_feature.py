@@ -30,6 +30,14 @@ class FeatureParityTests(FeatureTestsMixin, ReusedConnectTestCase):
     def test_string_indexer_from_labels(self):
         super().test_string_indexer_from_labels()
 
+    @unittest.skip("Need to support.")
+    def test_stop_words_remover(self):
+        super().test_stop_words_remover()
+
+    @unittest.skip("Need to support.")
+    def test_stop_words_remover_II(self):
+        super().test_stop_words_remover_II()
+
 
 if __name__ == "__main__":
     from pyspark.ml.tests.connect.test_parity_feature import *  # noqa: F401
