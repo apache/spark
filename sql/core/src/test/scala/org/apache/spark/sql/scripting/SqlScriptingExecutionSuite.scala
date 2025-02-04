@@ -24,7 +24,7 @@ import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.logical.CompoundBody
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLId
-import org.apache.spark.sql.exceptions.{SqlScriptingException, SqlScriptingRuntimeException}
+import org.apache.spark.sql.exceptions.SqlScriptingException
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 

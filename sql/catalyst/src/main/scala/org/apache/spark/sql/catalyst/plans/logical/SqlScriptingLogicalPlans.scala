@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.plans.logical
 
 import java.util.Locale
 
-import scala.collection.mutable.{HashMap, Set}
+import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.expressions.Attribute
@@ -423,5 +423,5 @@ case class SignalStatement(
   override def children: Seq[LogicalPlan] = Seq.empty
 
   override protected def withNewChildrenInternal(
-                                                  newChildren: IndexedSeq[LogicalPlan]): LogicalPlan = this.copy()
+      newChildren: IndexedSeq[LogicalPlan]): LogicalPlan = this.copy()
 }
