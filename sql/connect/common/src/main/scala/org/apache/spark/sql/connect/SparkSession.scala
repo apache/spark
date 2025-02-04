@@ -204,8 +204,14 @@ class SparkSession private[sql] (
   override def executeCommand(
       runner: String,
       command: String,
-      options: Map[String, String]): DataFrame =
-    throw ConnectClientUnsupportedErrors.executeCommand()
+      options: Map[String, String]): DataFrame = {
+    executeCommandWithDataFrameReturn(newCommand { builder =>
+      builder.getExecuteExternalCommandBuilder
+        .setRunner(runner)
+        .setCommand(command)
+        .putAllOptions(options.asJava)
+    })
+  }
 
   /** @inheritdoc */
   def sql(sqlText: String, args: Array[_]): DataFrame = {
@@ -237,10 +243,13 @@ class SparkSession private[sql] (
     sql(query, Array.empty)
   }
 
-  private def sql(sqlCommand: proto.SqlCommand): DataFrame = newDataFrame { builder =>
+  private def sql(sqlCommand: proto.SqlCommand): DataFrame = {
     // Send the SQL once to the server and then check the output.
-    val cmd = newCommand(b => b.setSqlCommand(sqlCommand))
-    val plan = proto.Plan.newBuilder().setCommand(cmd)
+    executeCommandWithDataFrameReturn(newCommand(_.setSqlCommand(sqlCommand)))
+  }
+
+  private def executeCommandWithDataFrameReturn(command: proto.Command): DataFrame = {
+    val plan = proto.Plan.newBuilder().setCommand(command)
     val responseIter = client.execute(plan.build())
 
     try {
@@ -248,7 +257,7 @@ class SparkSession private[sql] (
         .find(_.hasSqlCommandResult)
         .getOrElse(throw new RuntimeException("SQLCommandResult must be present"))
       // Update the builder with the values from the result.
-      builder.mergeFrom(response.getSqlCommandResult.getRelation)
+      newDataFrame(_.mergeFrom(response.getSqlCommandResult.getRelation))
     } finally {
       // consume the rest of the iterator
       responseIter.foreach(_ => ())

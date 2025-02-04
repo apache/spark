@@ -5386,11 +5386,6 @@
           "Invoking SparkSession 'baseRelationToDataFrame'. This is server side developer API"
         ]
       },
-      "SESSION_EXECUTE_COMMAND" : {
-        "message" : [
-          "Invoking SparkSession 'executeCommand'."
-        ]
-      },
       "SESSION_EXPERIMENTAL_METHODS" : {
         "message" : [
           "Access to SparkSession Experimental (methods). This is server side developer API"
