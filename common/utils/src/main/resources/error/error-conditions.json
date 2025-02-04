@@ -4856,15 +4856,15 @@
     ],
     "sqlState" : "XXKST"
   },
-  "STREAMING_PYTHON_RUNNER_INITIALIZATION_TIMEOUT_FAILURE" : {
-    "message" : [
-      "Streaming Runner initialization failed. Socket connection timeout. Cause: <msg>"
-    ],
-    "sqlState" : "XXKST"
-  },
   "STREAMING_PYTHON_RUNNER_INITIALIZATION_FAILURE" : {
     "message" : [
       "Streaming Runner initialization failed, returned <resFromPython>. Cause: <msg>"
+    ],
+    "sqlState" : "XXKST"
+  },
+  "STREAMING_PYTHON_RUNNER_INITIALIZATION_TIMEOUT_FAILURE" : {
+    "message" : [
+      "Streaming Runner initialization failed. Socket connection timeout. Cause: <msg>"
     ],
     "sqlState" : "XXKST"
   },
