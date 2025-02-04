@@ -107,11 +107,11 @@ private[spark] class StreamingPythonRunner(
         throw new StreamingPythonRunnerInitializationTimeoutException(e.getMessage)
       case e: Exception =>
         throw new StreamingPythonRunnerInitializationCommunicationException(e.getMessage)
-    } finally {
-      // Set timeout back to the original timeout
-      // Should be infinity by default
-      socket.setSoTimeout(originalTimeout)
     }
+    
+    // Set timeout back to the original timeout
+    // Should be infinity by default
+    socket.setSoTimeout(originalTimeout)
 
     if (resFromPython != 0) {
       val errMessage = PythonWorkerUtils.readUTF(dataIn)
