@@ -2208,9 +2208,9 @@ class TransformWithStateSuite extends StateStoreMetricsTest
               t.asInstanceOf[SparkUnsupportedOperationException],
               condition = "STATE_STORE_VALUE_SCHEMA_NOT_COMPATIBLE",
               parameters = Map(
-                "storedValueSchema" -> "StructType(StructField(value,LongType,false))",
+                "storedValueSchema" -> "StructType(StructField(value,LongType,true))",
                 "newValueSchema" ->
-                  ("StructType(StructField(value,StructType(StructField(value,LongType,false))," +
+                  ("StructType(StructField(value,StructType(StructField(value,LongType,true))," +
                     "true),StructField(ttlExpirationMs,LongType,true))")
               )
             )
