@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.catalyst.expressions.{Cast, Expression, Literal}
 import org.apache.spark.sql.catalyst.plans.logical.{AddColumns, AlterColumns, AlterColumnSpec, AlterViewAs, ColumnDefinition, CreateView, LogicalPlan, QualifiedColType, ReplaceColumns, V1CreateTablePlan, V2CreateTablePlan}
-import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.rules.{Rule, RuleExecutor}
 import org.apache.spark.sql.types.{DataType, StringType}
 
 /**
@@ -30,10 +30,24 @@ import org.apache.spark.sql.types.{DataType, StringType}
  */
 object ResolveDefaultStringTypes extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = {
+    val newPlan = apply0(plan)
+    if (plan.ne(newPlan)) {
+      // Due to how tree transformations work and StringType object being equal to
+      // StringType("UTF8_BINARY"), we need to transform the plan twice
+      // to ensure the correct results for occurrences of default string type.
+      val finalPlan = apply0(newPlan)
+      RuleExecutor.forceAdditionalIteration(finalPlan)
+      finalPlan
+    } else {
+      newPlan
+    }
+  }
+
+  private def apply0(plan: LogicalPlan): LogicalPlan = {
     if (isDDLCommand(plan)) {
       transformDDL(plan)
     } else {
-      plan
+      transformPlan(plan, stringTypeForDML)
     }
   }
 
@@ -46,7 +60,23 @@ object ResolveDefaultStringTypes extends Rule[LogicalPlan] {
       return false
     }
 
-    plan.exists(node => node.expressions.exists(ex => transformExpression.isDefinedAt(ex)))
+    plan.exists(node => needsResolution(node.expressions))
+  }
+
+  /**
+   * Returns whether any of the given `expressions` needs to have its
+   * default string type resolved.
+   */
+  def needsResolution(expressions: Seq[Expression]): Boolean = {
+    expressions.exists(needsResolution)
+  }
+
+  /**
+   * Returns whether the given `expression` needs to have its
+   * default string type resolved.
+   */
+  def needsResolution(expression: Expression): Boolean = {
+    expression.exists(e => transformExpression.isDefinedAt(e))
   }
 
   /**
@@ -54,6 +84,10 @@ object ResolveDefaultStringTypes extends Rule[LogicalPlan] {
    * UTF8_BINARY).
    */
   private def stringTypeForDDLCommand(table: LogicalPlan): StringType =
+    StringType("UTF8_BINARY")
+
+  /** Returns the session default string type */
+  private def stringTypeForDML: StringType =
     StringType("UTF8_BINARY")
 
   private def isDDLCommand(plan: LogicalPlan): Boolean = plan exists {
