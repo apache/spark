@@ -58,7 +58,6 @@ private[sql] object SqlApiConf {
   val LOCAL_RELATION_CACHE_THRESHOLD_KEY: String = {
     SqlApiConfHelper.LOCAL_RELATION_CACHE_THRESHOLD_KEY
   }
-  val DEFAULT_COLLATION: String = ""
 
   def get: SqlApiConf = SqlApiConfHelper.getConfGetter.get()()
 
