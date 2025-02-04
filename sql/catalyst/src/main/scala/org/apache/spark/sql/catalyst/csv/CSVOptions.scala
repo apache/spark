@@ -306,6 +306,11 @@ class CSVOptions(
   private val isColumnPruningOptionEnabled: Boolean =
     getBool(COLUMN_PRUNING, !multiLine && columnPruning)
 
+  val singleVariantColumn: Option[String] = parameters.get(SINGLE_VARIANT_COLUMN)
+
+  def needHeaderForSingleVariantColumn: Boolean =
+    singleVariantColumn.isDefined && headerFlag
+
   def asWriterSettings: CsvWriterSettings = {
     val writerSettings = new CsvWriterSettings()
     val format = writerSettings.getFormat
@@ -407,4 +412,5 @@ object CSVOptions extends DataSourceOptions {
   val DELIMITER = "delimiter"
   newOption(SEP, DELIMITER)
   val COLUMN_PRUNING = newOption("columnPruning")
+  val SINGLE_VARIANT_COLUMN = newOption("singleVariantColumn")
 }

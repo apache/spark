@@ -734,7 +734,7 @@ class CsvFunctionsSuite extends QueryTest with SharedSparkSession {
     checkAnswer(actual, Row("-"))
   }
 
-  test("SPARK-47497: from_csv/to_csv does not support VariantType data") {
+  test("SPARK-47497: to_csv does not support VariantType data") {
     val rows = new java.util.ArrayList[Row]()
     rows.add(Row(1L, Row(2L, "Alice", new VariantVal(Array[Byte](1, 2, 3), Array[Byte](4, 5)))))
 
@@ -758,14 +758,6 @@ class CsvFunctionsSuite extends QueryTest with SharedSparkSession {
         "dataType" -> "\"STRUCT<age: BIGINT, name: STRING, v: VARIANT>\"",
         "sqlExpr" -> "\"to_csv(value)\""),
       context = ExpectedContext(fragment = "to_csv", getCurrentClassCallSitePattern)
-    )
-
-    checkError(
-      exception = intercept[SparkUnsupportedOperationException] {
-        df.select(from_csv(lit("data"), valueSchema, Map.empty[String, String])).collect()
-      },
-      condition = "UNSUPPORTED_DATATYPE",
-      parameters = Map("typeName" -> "\"VARIANT\"")
     )
   }
 

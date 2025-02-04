@@ -48,6 +48,7 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
       columnPruning = sparkSession.sessionState.conf.csvColumnPruning,
       sparkSession.sessionState.conf.sessionLocalTimeZone)
     val csvDataSource = CSVDataSource(parsedOptions)
+    !parsedOptions.needHeaderForSingleVariantColumn &&
     csvDataSource.isSplitable && super.isSplitable(sparkSession, options, path)
   }
 
@@ -68,6 +69,11 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
       job: Job,
       options: Map[String, String],
       dataSchema: StructType): OutputWriterFactory = {
+    dataSchema.foreach { field =>
+      if (!supportDataType(field.dataType, allowVariant = false)) {
+        throw QueryCompilationErrors.dataTypeUnsupportedByDataSourceError("CSV", field)
+      }
+    }
     val conf = job.getConfiguration
     val csvOptions = new CSVOptions(
       options,
@@ -154,8 +160,14 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
 
   override def equals(other: Any): Boolean = other.isInstanceOf[CSVFileFormat]
 
-  override def supportDataType(dataType: DataType): Boolean = dataType match {
-    case _: VariantType => false
+  override def supportDataType(dataType: DataType): Boolean =
+    supportDataType(dataType, allowVariant = false)
+
+  override def supportDataTypeReadOnly(dataType: DataType): Boolean =
+    supportDataType(dataType, allowVariant = true)
+
+  private def supportDataType(dataType: DataType, allowVariant: Boolean): Boolean = dataType match {
+    case _: VariantType => allowVariant
 
     case _: TimeType => false
     case _: AtomicType => true
