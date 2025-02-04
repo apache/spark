@@ -79,6 +79,31 @@ trait DescribeTableSuiteBase extends command.DescribeTableSuiteBase
     }
   }
 
+  test("describe a non-existent table") {
+    val tbl = "undefined"
+    val statements = Seq(
+      s"DESCRIBE $tbl",
+      s"DESCRIBE EXTENDED $tbl",
+      s"DESCRIBE FORMATTED $tbl",
+      s"DESCRIBE EXTENDED $tbl AS JSON",
+      s"DESCRIBE FORMATTED $tbl AS JSON"
+    )
+
+    statements.foreach { sqlStatement =>
+      val startPos = sqlStatement.indexOf(tbl)
+      val error = intercept[AnalysisException] {
+        spark.sql(sqlStatement)
+      }
+
+      checkError(
+        exception = error,
+        condition = "TABLE_OR_VIEW_NOT_FOUND",
+        parameters = Map("relationName" -> s"`$tbl`"),
+        context = ExpectedContext(tbl, startPos, startPos + tbl.length - 1)
+      )
+    }
+  }
+
   test("describe a column in case insensitivity") {
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
       withNamespaceAndTable("ns", "tbl") { tbl =>
