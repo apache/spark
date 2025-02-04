@@ -207,8 +207,8 @@ class TransformWithStateInPandasStateServerSuite extends SparkFunSuite with Befo
   test("value state get") {
     val message = ValueStateCall.newBuilder().setStateName(stateName)
       .setGet(Get.newBuilder().build()).build()
-    val schema = new StructType().add("value", "int")
     when(valueState.exists()).thenReturn(true)
+    when(valueState.get()).thenReturn(getIntegerRow(1))
     stateServer.handleValueStateRequest(message)
     verify(valueState).get()
     verify(outputStream).writeInt(argThat((x: Int) => x > 0))
@@ -219,7 +219,7 @@ class TransformWithStateInPandasStateServerSuite extends SparkFunSuite with Befo
       .setGet(Get.newBuilder().build()).build()
     when(valueState.exists()).thenReturn(false)
     stateServer.handleValueStateRequest(message)
-    verify(valueState).get()
+    verify(valueState, times(0)).get()
     // We don't throw exception when value doesn't exist.
     verify(outputStream).writeInt(0)
   }
