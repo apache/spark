@@ -384,6 +384,8 @@ message CommonInlineUserDefinedFunction {
     ScalarScalaUDF scalar_scala_udf = 5;
     JavaUDF java_udf = 6;
   }
+  // (Required) Indicate if this function should be applied on distinct values.
+  bool is_distinct = 7;
 }
 
 message PythonUDF {
