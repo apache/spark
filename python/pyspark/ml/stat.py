@@ -272,17 +272,38 @@ class KolmogorovSmirnovTest:
         >>> round(ksResult.statistic, 3)
         0.175
         """
-        from pyspark.core.context import SparkContext
+        if is_remote():
+            from pyspark.ml.wrapper import JavaTransformer
+            from pyspark.ml.connect.serialize import serialize_ml_params_values
 
-        sc = SparkContext._active_spark_context
-        assert sc is not None
+            instance = JavaTransformer()
+            instance._java_obj = "org.apache.spark.ml.stat.KolmogorovSmirnovTestWrapper"
+            serialized_ml_params = serialize_ml_params_values(
+                {"inputCol": sampleCol, "distName": distName, "paramsArray": list(params)},
+                dataset.sparkSession.client,  # type: ignore[arg-type,operator]
+            )
+            print(serialized_ml_params)
+            instance._serialized_ml_params = serialized_ml_params  # type: ignore[attr-defined]
+            return instance.transform(dataset)
 
-        javaTestObj = getattr(_jvm(), "org.apache.spark.ml.stat.KolmogorovSmirnovTest")
-        dataset = _py2java(sc, dataset)
-        params = [float(param) for param in params]  # type: ignore[assignment]
-        return _java2py(
-            sc, javaTestObj.test(dataset, sampleCol, distName, _jvm().PythonUtils.toSeq(params))
-        )
+        else:
+            from pyspark.core.context import SparkContext
+
+            sc = SparkContext._active_spark_context
+            assert sc is not None
+
+            javaTestObj = getattr(_jvm(), "org.apache.spark.ml.stat.KolmogorovSmirnovTest")
+            dataset = _py2java(sc, dataset)
+            params = [float(param) for param in params]  # type: ignore[assignment]
+            return _java2py(
+                sc,
+                javaTestObj.test(
+                    dataset,
+                    sampleCol,
+                    distName,
+                    _jvm().PythonUtils.toSeq(params),
+                ),
+            )
 
 
 class Summarizer:
