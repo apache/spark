@@ -443,15 +443,24 @@ class KeyValueGroupedDatasetE2ETestSuite extends QueryTest with RemoteSparkSessi
     checkDatasetUnorderly(agg, ((1, 2), 1L, 3L), ((2, 3), 2L, 4L), ((3, 4), 3L, 5L))
   }
 
-  // TODO(SPARK-50837): "ds.schema" is utterly wrong: the column is named as "iv.value".
-  //  "ds.collect()" is better as columns are named as "_1", "_2" but still incorrect.
-  ignore("SPARK-26085: fix key attribute name for atomic type for typed aggregation") {
+  test("SPARK-26085: fix key attribute name for atomic type for typed aggregation") {
     val ds = Seq(1, 2, 3).toDS()
     assert(ds.groupByKey(x => x).count().schema.head.name == "key")
 
     // Enable legacy flag to follow previous Spark behavior
     withSQLConf("spark.sql.legacy.dataset.nameNonStructGroupingKeyAsValue" -> "true") {
       assert(ds.groupByKey(x => x).count().schema.head.name == "value")
+    }
+  }
+
+  // TODO(SPARK-50837): "ds.schema" is wrong: the column is named as "iv.key".
+  ignore("SPARK-26085: fix key attribute name for atomic type for typed aggregation - mapValues") {
+    val ds = Seq(1, 2, 3).toDS()
+    assert(ds.groupByKey(x => x).mapValues(x => x).count().schema.head.name == "key")
+
+    // Enable legacy flag to follow previous Spark behavior
+    withSQLConf("spark.sql.legacy.dataset.nameNonStructGroupingKeyAsValue" -> "true") {
+      assert(ds.groupByKey(x => x).mapValues(x => x).count().schema.head.name == "value")
     }
   }
 

@@ -460,16 +460,37 @@ private class KeyValueGroupedDatasetImpl[K, V, IK, IV](
   }
 
   override protected def aggUntyped(columns: TypedColumn[_, _]*): Dataset[_] = {
+    // The proto Aggregate message does not support passing in a value map function, so we need to
+    // to transformation on the client side. We check if a value map function is defined and only
+    // if so we do some additional transformations.
+    if (valueMapFunc.isDefined) {
+      aggUntypedWithValueMapFunc(columns: _*)
+    } else {
+      aggUntypedWithoutValueMapFunc(columns: _*)
+    }
+  }
+
+  private def aggUntypedWithoutValueMapFunc(columns: TypedColumn[_, _]*): Dataset[_] = {
+    val rEnc = ProductEncoder.tuple(kEncoder +: columns.map(c => agnosticEncoderFor(c.encoder)))
+    sparkSession.newDataset(rEnc) { builder =>
+      builder.getAggregateBuilder
+        .setInput(plan.getRoot)
+        .setGroupType(proto.Aggregate.GroupType.GROUP_TYPE_GROUPBY)
+        .addAllGroupingExpressions(groupingExprs)
+        .addAllAggregateExpressions(columns.map(_.typedExpr(vEncoder)).asJava)
+    }
+  }
+
+  private def aggUntypedWithValueMapFunc(columns: TypedColumn[_, _]*): Dataset[_] = {
     val originalDs = sparkSession.newDataset(ivEncoder, plan)
 
     // Apply the value transformation, get a DS of two columns "iv" and "v".
     // If any of "iv" or "v" consists of a single primitive field, wrap it with a struct so it
     // would not be flattened.
-    val valueTransformedDf = applyValueMapFunc(originalDs)
-
-    // Restore column/field names, if this KVGDS is from a DF.
-    val (valueTransformedDfWithSchema, ivFields, vFields) =
-      restoreColumnNames(originalDs, valueTransformedDf)
+    // Also here we detect if the input "iv" is a single field struct. If yes, we rename the field
+    // to "key" to align with Spark behaviour.
+    val (valueTransformedDf, ivFields, vFields) =
+      renameSingleFieldStruct(applyValueMapFunc(originalDs))
 
     // Rewrite grouping expressions to use "iv" as input.
     val updatedGroupingExprs = groupingColumns
@@ -490,7 +511,7 @@ private class KeyValueGroupedDatasetImpl[K, V, IK, IV](
     val rEnc = ProductEncoder.tuple(kEncoder +: columns.map(c => agnosticEncoderFor(c.encoder)))
     sparkSession.newDataset(rEnc) { builder =>
       builder.getAggregateBuilder
-        .setInput(valueTransformedDfWithSchema.plan.getRoot)
+        .setInput(valueTransformedDf.plan.getRoot)
         .setGroupType(proto.Aggregate.GroupType.GROUP_TYPE_GROUPBY)
         .addAllGroupingExpressions(updatedGroupingExprs.asJava)
         .addAllAggregateExpressions(updatedAggTypedExprs.asJava)
@@ -498,6 +519,8 @@ private class KeyValueGroupedDatasetImpl[K, V, IK, IV](
   }
 
   private def applyValueMapFunc(ds: Dataset[IV]): DataFrame = {
+    require(valueMapFunc.isDefined, "valueMapFunc is not defined")
+
     val ivIsStruct = ivEncoder.isInstanceOf[StructEncoder[_]]
     val vIsStruct = vEncoder.isInstanceOf[StructEncoder[_]]
     val transformEncoder = {
@@ -511,35 +534,33 @@ private class KeyValueGroupedDatasetImpl[K, V, IK, IV](
         .tuple(Seq(wrappedIvEncoder, wrappedVEncoder))
         .asInstanceOf[AgnosticEncoder[(Any, Any)]]
     }
-    val transformFunc = UDFAdaptors.mapValues(valueMapFunc, ivIsStruct, vIsStruct)
+    val transformFunc = UDFAdaptors.mapValues(valueMapFunc.get, ivIsStruct, vIsStruct)
     ds.mapPartitions(transformFunc)(transformEncoder).toDF("iv", "v")
   }
 
   /**
-   * See the call site for explanation.
+   * Given a DF of two Struct columns "iv" and "v", rename the fields of "iv" if it consists of a
+   * single field. Also return the column names of "iv" and "v" to avoid recomputing them later.
    * @return
    *   (new dataframe, column names in IV, column names in V)
    */
-  private def restoreColumnNames(
-      dsWithNames: Dataset[_],
-      toBeRestored: Dataset[_]): (DataFrame, Seq[String], Seq[String]) = {
-    val newNames = dsWithNames.columns.toSeq
+  private def renameSingleFieldStruct(df: DataFrame): (DataFrame, Seq[String], Seq[String]) = {
+    val ivSchema = df.schema(0).dataType.asInstanceOf[StructType]
+    val vSchema = df.schema(1).dataType.asInstanceOf[StructType]
 
-    def withFieldRenamed(schema: StructType): StructType = {
-      StructType(schema.zip(newNames).map { case (field, name) => field.copy(name = name) })
-    }
-
-    val currentSchema = toBeRestored.schema
-    val newIVSchemaWithNames =
-      withFieldRenamed(currentSchema(0).dataType.asInstanceOf[StructType])
-    val newVSchemaWithNames = if (valueMapFunc.isDefined) {
-      currentSchema(1).dataType.asInstanceOf[StructType]
+    if (ivSchema.fields.length > 1) {
+      (df, ivSchema.fieldNames.toSeq, vSchema.fieldNames.toSeq)
     } else {
-      withFieldRenamed(currentSchema(1).dataType.asInstanceOf[StructType])
+      val newIVSchema = {
+        if (ivSchema.fields.length == 1) {
+          ivSchema.copy(fields = ivSchema.fields.map(_.copy(name = "key")))
+        } else {
+          ivSchema
+        }
+      }
+      val newDf = df.select(col("iv").cast(newIVSchema), col("v"))
+      (newDf, newIVSchema.fieldNames.toSeq, vSchema.fieldNames.toSeq)
     }
-    val df = toBeRestored
-      .select(col("iv").cast(newIVSchemaWithNames), col("v").cast(newVSchemaWithNames))
-    (df, newIVSchemaWithNames.fieldNames.toSeq, newVSchemaWithNames.fieldNames.toSeq)
   }
 
   private def rewriteInputColumnHook(
@@ -681,7 +702,7 @@ private object KeyValueGroupedDatasetImpl {
     val dummyGroupingFunc = SparkUserDefinedFunction(
       function = UdfUtils.noOp[V, K](),
       inputEncoders = vEncoder :: Nil,
-      outputEncoder = kEncoder).withName(DUMMY_UDF_NAME).apply(col("*"))
+      outputEncoder = kEncoder).apply(col("*"))
     val session = df.sparkSession
     new KeyValueGroupedDatasetImpl(
       session,
@@ -694,11 +715,9 @@ private object KeyValueGroupedDatasetImpl {
       () => df.select(groupingExprs: _*).as(kEncoder))
   }
 
-  val DUMMY_UDF_NAME = "__spark__connect__internal__dummy__"
-
-  def containsDummyUDF(col: ColumnNode): Boolean = col match {
+  def containsDummyUDF[K, V](col: ColumnNode): Boolean = col match {
     case InvokeInlineUserDefinedFunction(udf: SparkUserDefinedFunction, _, _, _) =>
-      udf.givenName.contains(DUMMY_UDF_NAME)
+      udf.f == UdfUtils.noOp[V, K]()
     case _ => false
   }
 }

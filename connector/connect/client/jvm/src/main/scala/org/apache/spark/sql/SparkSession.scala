@@ -432,7 +432,7 @@ class SparkSession private[sql] (
     new Dataset[T](this, plan, encoder)
   }
 
-  def newDataset[T](encoder: AgnosticEncoder[T], plan: proto.Plan): Dataset[T] = {
+  private[sql] def newDataset[T](encoder: AgnosticEncoder[T], plan: proto.Plan): Dataset[T] = {
     new Dataset[T](this, plan, encoder)
   }
 
