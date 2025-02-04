@@ -737,6 +737,39 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
     assert(!sourceFile2.exists())
   }
 
+  test("deleteRecursively throws InterruptedException") {
+    var gotInterruptedException = false
+
+    val thread = new Thread() {
+      override def run(): Unit = {
+        val tempDir = Utils.createTempDir()
+        assert(tempDir.exists())
+
+        try {
+          // scalastyle:off
+          Utils.deleteRecursively(tempDir)
+        } catch {
+          case _: InterruptedException =>
+            gotInterruptedException = true
+        }
+
+        System.out.println("8. Thread exiting")
+      }
+    }
+
+    System.out.println("1. Starting thread")
+    thread.start()
+    System.out.println("2. Waiting for it to get to its sleep")
+    Thread.sleep(5000)
+
+    System.out.println("6. Interrupting thread that is sleeping")
+    thread.interrupt()
+    thread.join()
+
+    System.out.println(s"9. gotInterruptedException = $gotInterruptedException")
+    assert(gotInterruptedException)
+  }
+
   test("SPARK-50716: deleteRecursively - SymbolicLink To File") {
     val tempDir = Utils.createTempDir()
     val sourceFile = new File(tempDir, "foo.txt")

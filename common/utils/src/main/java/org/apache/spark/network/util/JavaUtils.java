@@ -109,8 +109,7 @@ public class JavaUtils {
     // On Unix systems, use operating system command to run faster
     // If that does not work out, fallback to the Java IO way
     // We exclude Apple Silicon test environment due to the limited resource issues.
-    if (SystemUtils.IS_OS_UNIX && filter == null && !(SystemUtils.IS_OS_MAC_OSX &&
-        (System.getenv("SPARK_TESTING") != null || System.getProperty("spark.testing") != null))) {
+    if (SystemUtils.IS_OS_UNIX && filter == null) {
       try {
         deleteRecursivelyUsingUnixNative(file);
         return;
@@ -175,13 +174,19 @@ public class JavaUtils {
 
     try {
       // In order to avoid deadlocks, consume the stdout (and stderr) of the process
+      System.out.println("3. Going to spawn rm -rf");
       builder.redirectErrorStream(true);
       builder.redirectOutput(new File("/dev/null"));
 
       process = builder.start();
 
       exitCode = process.waitFor();
+      System.out.println("4. Finished deleting directory");
+
+      System.out.println("5. Sleeping for 10 seconds");
+      Thread.sleep(10000);
     } catch (InterruptedException e) {
+      System.out.println("7. Catching and rethrowing interrupted exception");
       throw e; // Specifically rethrow InterruptedException
     } catch (Exception e) {
       throw new IOException("Failed to delete: " + file.getAbsolutePath(), e);
