@@ -414,9 +414,7 @@ case class AdaptiveSparkPlanExec(
 
   // Use a lazy val to avoid this being called more than once.
   @transient private lazy val finalPlanUpdate: Unit = {
-    // Subqueries that don't belong to any query stage of the main query will execute after the
-    // last UI update in `getFinalPhysicalPlan`, so we need to update UI here again to make sure
-    // the newly generated nodes of those subqueries are updated.
+    // Do final plan update after result stage has materialized.
     if (shouldUpdatePlan) {
       getExecutionId.foreach(onUpdatePlan(_, Seq.empty))
     }
@@ -542,9 +540,9 @@ case class AdaptiveSparkPlanExec(
    * This method is a wrapper of `createQueryStagesInternal`, which deals with result stage creation
    */
   private def createQueryStages(
-    resultHandler: SparkPlan => Any,
-    plan: SparkPlan,
-    firstRun: Boolean): CreateStageResult = {
+      resultHandler: SparkPlan => Any,
+      plan: SparkPlan,
+      firstRun: Boolean): CreateStageResult = {
     plan match {
       case resultStage@ResultQueryStageExec(_, optimizedPlan, _) =>
         return if (firstRun) {
