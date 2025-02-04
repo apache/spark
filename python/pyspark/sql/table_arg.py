@@ -15,6 +15,8 @@
 # limitations under the License.
 #
 
+# mypy: disable-error-code="empty-body"
+
 from typing import TYPE_CHECKING
 
 from pyspark.sql.tvf_argument import TableValuedFunctionArgument
