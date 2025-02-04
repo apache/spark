@@ -1874,7 +1874,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
       HllSketchAggTestCase("UNICODE_CI_RTRIM", 3)
     )
     testCases.foreach(t => {
-      val q = "SELECT hll_sketch_estimate(hll_sketch_agg(col)) FROM " +
+      val q = s"SELECT hll_sketch_estimate(hll_sketch_agg(col collate ${t.c})) FROM " +
         "VALUES ('a'), ('A'), ('b'), ('b'), ('c'), ('c ') tab(col)"
       val df = sql(q)
       checkAnswer(df, Seq(Row(t.result)))
