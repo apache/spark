@@ -1469,6 +1469,7 @@ class TransformWithStateInPandasTestsMixin:
                     df,
                     check_exception=check_exception,
                 )
+
     def test_not_nullable_fails(self):
         with self.sql_conf({"spark.sql.streaming.stateStore.encodingFormat": "avro"}):
             with tempfile.TemporaryDirectory() as checkpoint_dir:
@@ -1493,13 +1494,15 @@ class TransformWithStateInPandasTestsMixin:
                         "[STATE_STORE_SCHEMA_MUST_BE_NULLABLE]" in error_msg
                         and "column family state must be nullable" in error_msg
                     )
+
                 self._run_evolution_test(
                     BasicProcessorNotNullable(),
                     checkpoint_dir,
                     check_basic_state,
                     df,
-                    check_exception=check_exception
+                    check_exception=check_exception,
                 )
+
 
 class SimpleStatefulProcessorWithInitialState(StatefulProcessor):
     # this dict is the same as input initial state dataframe
@@ -1921,6 +1924,7 @@ class BasicProcessor(StatefulProcessor):
 
     def close(self) -> None:
         pass
+
 
 class BasicProcessorNotNullable(StatefulProcessor):
     # Schema definitions
