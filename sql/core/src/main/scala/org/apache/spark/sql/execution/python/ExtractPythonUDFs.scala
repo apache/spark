@@ -22,7 +22,8 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.SparkException
 import org.apache.spark.api.python.PythonEvalType
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys.REASON
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -291,8 +292,9 @@ object ExtractPythonUDFs extends Rule[LogicalPlan] with Logging {
 
               if (hasUDTInput || hasUDTReturn) {
                 // Use BatchEvalPython if UDT is detected
-                logWarning("Arrow optimization disabled due to UDT input or return type. " +
-                  "Falling back to non-Arrow-optimized UDF execution.")
+                logWarning(log"Arrow optimization disabled due to " +
+                  log"${MDC(REASON, "UDT input or return type")}. " +
+                  log"Falling back to non-Arrow-optimized UDF execution.")
                 BatchEvalPython(validUdfs, resultAttrs, child)
               } else {
                 ArrowEvalPython(validUdfs, resultAttrs, child, evalType)
