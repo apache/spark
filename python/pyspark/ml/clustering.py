@@ -2152,8 +2152,17 @@ class PowerIterationClustering(
             - id: Long
             - cluster: Int
         """
-        self._transfer_params_to_java()
         assert self._java_obj is not None
+
+        if is_remote():
+            from python.pyspark.ml.wrapper import JavaTransformer
+
+            instance = JavaTransformer(self._java_obj)
+            instance._java_obj = "org.apache.spark.ml.clustering.PowerIterationClusteringWrapper"
+            instance._resetUid(self.uid)
+            return instance.transform(dataset)
+
+        self._transfer_params_to_java()
 
         jdf = self._java_obj.assignClusters(dataset._jdf)
         return DataFrame(jdf, dataset.sparkSession)
