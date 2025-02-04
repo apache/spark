@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.analysis.resolver
 
 import org.apache.spark.sql.catalyst.analysis.RelationResolution
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.connector.catalog.CatalogManager
 
 /**
@@ -32,19 +33,28 @@ class BridgedRelationMetadataProvider(
     override val relationResolution: RelationResolution,
     analyzerBridgeState: AnalyzerBridgeState
 ) extends RelationMetadataProvider {
-  override val relationsWithResolvedMetadata = getRelationsFromBridgeState(analyzerBridgeState)
+  override val relationsWithResolvedMetadata = new RelationsWithResolvedMetadata
+  updateRelationsWithResolvedMetadata()
 
-  private def getRelationsFromBridgeState(
-      analyzerBridgeState: AnalyzerBridgeState): RelationsWithResolvedMetadata = {
-    val result = new RelationsWithResolvedMetadata
+  /**
+   * We update relations on each [[resolve]] call, because relation IDs might have changed.
+   * This can happen for the nested views, since catalog name may differ, and expanded table name
+   * will differ for the same [[UnresolvedRelation]].
+   *
+   * See [[ViewResolver.resolve]] for more info on how SQL configs are propagated to nested views).
+   */
+  override def resolve(unresolvedPlan: LogicalPlan): Unit = {
+    updateRelationsWithResolvedMetadata()
+  }
+
+  private def updateRelationsWithResolvedMetadata(): Unit = {
     analyzerBridgeState.relationsWithResolvedMetadata.forEach(
       (unresolvedRelation, relationWithResolvedMetadata) => {
-        result.put(
+        relationsWithResolvedMetadata.put(
           relationIdFromUnresolvedRelation(unresolvedRelation),
           relationWithResolvedMetadata
         )
       }
     )
-    result
   }
 }
