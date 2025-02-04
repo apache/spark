@@ -205,39 +205,45 @@ class KafkaOffsetReaderSuite extends QueryTest with SharedSparkSession with Kafk
       KafkaOffsetRange(tp2, 0, 3, None)).sortBy(_.topicPartition.toString))
   }
 
-  testWithAllOffsetFetchingSQLConf(
-    "KAFKA_TIMESTAMP_OFFSET_DOES_NOT_MATCH_ASSIGNED error class"
-  ) {
-    val topic = newTopic()
-    testUtils.createTopic(topic, partitions = 3)
-    val reader = createKafkaReader(topic, minPartitions = Some(4))
+  Seq(2, 4).foreach { numSpecifiedPartitions =>
+    testWithAllOffsetFetchingSQLConf(
+      s"KAFKA_TIMESTAMP_OFFSET_DOES_NOT_MATCH_ASSIGNED error class " +
+        s"- partitions assigned: 3, specified: $numSpecifiedPartitions"
+    ) {
+      val topic = newTopic()
+      testUtils.createTopic(topic, partitions = 3)
+      val reader = createKafkaReader(topic, minPartitions = Some(4))
 
-    // There are three topic partitions, but we only include two in offsets.
-    val tp1 = new TopicPartition(topic, 0)
-    val tp2 = new TopicPartition(topic, 1)
-    val startingOffsets = SpecificTimestampRangeLimit(Map(tp1 -> EARLIEST, tp2 -> EARLIEST),
-      StrategyOnNoMatchStartingOffset.ERROR)
-    val endingOffsets = SpecificTimestampRangeLimit(Map(tp1 -> LATEST, tp2 -> 3),
-      StrategyOnNoMatchStartingOffset.ERROR)
+      // Specify partitions
+      val specifiedPartitions = (0 until numSpecifiedPartitions).map(new TopicPartition(topic, _))
+      val startingOffsets = SpecificTimestampRangeLimit(
+        specifiedPartitions.map(tp => tp -> EARLIEST).toMap,
+        StrategyOnNoMatchStartingOffset.ERROR
+      )
+      val endingOffsets = SpecificTimestampRangeLimit(
+        specifiedPartitions.map(tp => tp -> LATEST).toMap,
+        StrategyOnNoMatchStartingOffset.ERROR
+      )
 
-    val ex = if (reader.isInstanceOf[KafkaOffsetReaderConsumer]) {
-      intercept[SparkException] {
-        reader.getOffsetRangesFromUnresolvedOffsets(startingOffsets, endingOffsets)
-      }.getCause.asInstanceOf[KafkaIllegalStateException]
-    } else {
-      intercept[KafkaIllegalStateException] {
-        reader.getOffsetRangesFromUnresolvedOffsets(startingOffsets, endingOffsets)
+      val ex = if (reader.isInstanceOf[KafkaOffsetReaderConsumer]) {
+        intercept[SparkException] {
+          reader.getOffsetRangesFromUnresolvedOffsets(startingOffsets, endingOffsets)
+        }.getCause.asInstanceOf[KafkaIllegalStateException]
+      } else {
+        intercept[KafkaIllegalStateException] {
+          reader.getOffsetRangesFromUnresolvedOffsets(startingOffsets, endingOffsets)
+        }
       }
-    }
 
-    checkError(
-      exception = ex,
-      condition = "KAFKA_TIMESTAMP_OFFSET_DOES_NOT_MATCH_ASSIGNED",
-      parameters = Map(
-        "position" -> "start",
-        "specifiedPartitions" -> "Set\\(.*,.*\\)",
-        "assignedPartitions" -> "Set\\(.*,.*,.*\\)"),
-      matchPVals = true)
+      checkError(
+        exception = ex,
+        condition = "KAFKA_TIMESTAMP_OFFSET_DOES_NOT_MATCH_ASSIGNED",
+        parameters = Map(
+          "position" -> "start",
+          "specifiedPartitions" -> "Set\\(.*,.*\\)",
+          "assignedPartitions" -> "Set\\(.*,.*,.*\\)"),
+        matchPVals = true)
+    }
   }
 
   private def testWithAllOffsetFetchingSQLConf(name: String)(func: => Any): Unit = {
