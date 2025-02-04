@@ -85,7 +85,7 @@ class StreamTestHelper {
     if (tempDir != null) {
       try {
         JavaUtils.deleteRecursively(tempDir);
-      } catch (IOException io) {
+      } catch (Exception io) {
         throw new RuntimeException(io);
       }
     }
