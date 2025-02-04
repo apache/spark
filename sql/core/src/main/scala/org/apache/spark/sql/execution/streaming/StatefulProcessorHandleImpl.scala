@@ -552,7 +552,7 @@ class DriverStatefulProcessorHandleImpl(timeMode: TimeMode, keyExprEnc: Expressi
       elementKeySchema: StructType): StateStoreColFamilySchema = {
     val countIndexName = s"$$count_$stateName"
     val countValueSchema = StructType(Seq(
-      StructField("count", LongType, nullable = false)
+      StructField("count", LongType)
     ))
 
     StateStoreColFamilySchema(
