@@ -1437,7 +1437,11 @@ class FeatureTestsMixin:
             ["a", "b", "c"], inputCol="label", outputCol="indexed", handleInvalid="keep"
         )
         self.assertEqual(model.labels, ["a", "b", "c"])
-        self.assertEqual(model.labelsArray, [("a", "b", "c")])
+        self.assertEqual(model.labelsArray, [["a", "b", "c"]])
+
+        self.assertEqual(model.getInputCol(), "label")
+        self.assertEqual(model.getOutputCol(), "indexed")
+        self.assertEqual(model.getHandleInvalid(), "keep")
 
         df1 = self.spark.createDataFrame(
             [(0, "a"), (1, "c"), (2, None), (3, "b"), (4, "b")], ["id", "label"]
@@ -1478,6 +1482,20 @@ class FeatureTestsMixin:
             .collect()
         )
         self.assertEqual(len(transformed_list), 5)
+
+    def test_string_indexer_from_arrays_of_labels(self):
+        model = StringIndexerModel.from_arrays_of_labels(
+            [["a", "b", "c"], ["x", "y", "z"]],
+            inputCols=["label1", "label2"],
+            outputCols=["indexed1", "indexed2"],
+            handleInvalid="keep",
+        )
+
+        self.assertEqual(model.labelsArray, [["a", "b", "c"], ["x", "y", "z"]])
+
+        self.assertEqual(model.getInputCols(), ["label1", "label2"])
+        self.assertEqual(model.getOutputCols(), ["indexed1", "indexed2"])
+        self.assertEqual(model.getHandleInvalid(), "keep")
 
     def test_target_encoder_binary(self):
         df = self.spark.createDataFrame(

@@ -36,7 +36,7 @@ import org.apache.spark.ml.param.Params
 import org.apache.spark.ml.recommendation._
 import org.apache.spark.ml.regression._
 import org.apache.spark.ml.tree.{DecisionTreeModel, TreeEnsembleModel}
-import org.apache.spark.ml.util.{HasTrainingSummary, Identifiable, MLWritable}
+import org.apache.spark.ml.util.{ConnectHelper, HasTrainingSummary, Identifiable, MLWritable}
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.classic.Dataset
 import org.apache.spark.sql.connect.common.LiteralValueProtoConverter
@@ -650,7 +650,12 @@ private[ml] object MLUtils {
     (classOf[OneHotEncoderModel], Set("categorySizes")),
     (classOf[StringIndexerModel], Set("labels", "labelsArray")),
     (classOf[RFormulaModel], Set("resolvedFormulaString")),
-    (classOf[IDFModel], Set("idf", "docFreq", "numDocs")))
+    (classOf[IDFModel], Set("idf", "docFreq", "numDocs")),
+
+    // Utils
+    (
+      classOf[ConnectHelper],
+      Set("stringIndexerModelFromLabels", "stringIndexerModelFromLabelsArray")))
 
   private def validate(obj: Any, method: String): Unit = {
     assert(obj != null)
