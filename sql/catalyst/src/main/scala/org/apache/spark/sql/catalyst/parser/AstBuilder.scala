@@ -288,6 +288,54 @@ class AstBuilder extends DataTypeAstBuilder
     ExceptionHandler(exceptionHandlerTriggers, body, handlerType)
   }
 
+  override def visitSignalStatementWithCondition(
+      ctx: SignalStatementWithConditionContext): SignalStatement = {
+    val messageString = Option(ctx.msgStr)
+      .map(sl => Left(string(visitStringLit(sl)).replace("'", "")))
+    val messageVariable = Option(ctx.msgVar)
+      .map(mpi => Right(UnresolvedAttribute(visitMultipartIdentifier(mpi))))
+
+    val messageParameters: Map[String, String] = Map.empty
+
+    // If user did not define message, check if it is a spark defined error condition and get
+    // predefined message.
+    val builtinMessageText =
+      if (messageVariable.isEmpty
+        && messageString.isEmpty
+        && SparkThrowableHelper.isValidErrorClass(ctx.conditionName.getText)) {
+        SparkThrowableHelper.getMessage(ctx.conditionName.getText, messageParameters)
+      } else {
+        ""
+      }
+
+//    val messageArguments = Option(ctx.msgArg)
+//      .map(mpi => UnresolvedAttribute(visitMultipartIdentifier(mpi)))
+
+    SignalStatement(
+      errorCondition = Some(ctx.conditionName.getText.toUpperCase(Locale.ROOT)),
+      message = messageVariable.getOrElse(messageString.getOrElse(Left(builtinMessageText))),
+      messageArguments = None
+    )
+  }
+
+  override def visitSignalStatementWithSqlState(
+      ctx: SignalStatementWithSqlStateContext): SignalStatement = {
+    val sqlState = visitStringLit(ctx.sqlState).getText.replace("'", "")
+    assertSqlState(sqlState)
+
+    val messageString = Option(ctx.msgStr)
+      .map(sl => Left(string(visitStringLit(sl)).replace("'", "")))
+    val messageVariable = Option(ctx.msgVar)
+      .map(mpi => Right(UnresolvedAttribute(visitMultipartIdentifier(mpi))))
+
+    SignalStatement(
+      errorCondition = Some("USER_RAISED_EXCEPTION"),
+      sqlState = Some(sqlState.toUpperCase(Locale.ROOT)),
+      message = messageVariable.getOrElse(messageString.getOrElse(Left(""))),
+      messageArguments = None
+    )
+  }
+
   private def visitCompoundBodyImpl(
       ctx: CompoundBodyContext,
       label: Option[String],
@@ -329,6 +377,21 @@ class AstBuilder extends DataTypeAstBuilder
               .duplicateConditionInScope(CurrentOrigin.get, condition.conditionName)
           }
           conditions += condition.conditionName -> condition.sqlState
+        case signalStatement: SignalStatement if signalStatement.sqlState.isEmpty =>
+          // Try to get sqlState if condition is user defined.
+          var sqlState: Option[String] = conditions.get(signalStatement.errorCondition.get)
+          // If condition is not user defined, check if it is a spark defined error condition.
+          if (sqlState.isEmpty) {
+            if (SparkThrowableHelper.isValidErrorClass(signalStatement.errorCondition.get)) {
+              sqlState = Some(SparkThrowableHelper.getSqlState(signalStatement.errorCondition.get))
+            } else {
+              throw SqlScriptingErrors
+                .conditionNotFound(CurrentOrigin.get, signalStatement.errorCondition.get)
+            }
+          }
+          signalStatement.sqlState = sqlState
+          scriptingParserContext.statement()
+          buff += signalStatement
         case statement =>
           statement match {
             case SingleStatement(createVariable: CreateVariable) =>

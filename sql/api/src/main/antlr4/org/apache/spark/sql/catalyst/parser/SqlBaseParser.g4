@@ -106,7 +106,8 @@ declareHandlerStatement
     ;
 
 signalStatement
-    : SIGNAL conditionName=multipartIdentifier (SET MESSAGE_TEXT EQ (msgStr=stringLit|msgVar=multipartIdentifier))? #signalStatementWithCondition
+    : SIGNAL conditionName=multipartIdentifier
+      (SET (MESSAGE_TEXT EQ (msgStr=stringLit|msgVar=multipartIdentifier) | MESSAGE_PARMS EQ argVar=multipartIdentifier))? #signalStatementWithCondition
     | SIGNAL SQLSTATE VALUE? sqlState=stringLit (SET MESSAGE_TEXT EQ (msgStr=stringLit|msgVar=multipartIdentifier))? #signalStatementWithSqlState
     ;
 
@@ -1747,6 +1748,7 @@ ansiNonReserved
     | MAP
     | MATCHED
     | MERGE
+    | MESSAGE_PARMS
     | MESSAGE_TEXT
     | MICROSECOND
     | MICROSECONDS
@@ -2120,6 +2122,7 @@ nonReserved
     | MAP
     | MATCHED
     | MERGE
+    | MESSAGE_PARMS
     | MESSAGE_TEXT
     | MICROSECOND
     | MICROSECONDS

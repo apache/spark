@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
-
 import java.util.Locale
 
 import scala.collection.mutable
@@ -416,8 +415,9 @@ case class ExceptionHandler(
  */
 case class SignalStatement(
     errorCondition: Option[String] = None,
-    sqlState: Option[String] = None,
-    message: Either[String, UnresolvedAttribute]) extends CompoundPlanStatement {
+    var sqlState: Option[String] = None,
+    message: Either[String, UnresolvedAttribute],
+    messageArguments: Option[UnresolvedAttribute] = None) extends CompoundPlanStatement {
   override def output: Seq[Attribute] = Seq.empty
 
   override def children: Seq[LogicalPlan] = Seq.empty

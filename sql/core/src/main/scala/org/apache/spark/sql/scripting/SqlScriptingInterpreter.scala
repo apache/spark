@@ -279,6 +279,7 @@ case class SqlScriptingInterpreter(session: SparkSession) {
           errorCondition = signalStatement.errorCondition,
           sqlState = signalStatement.sqlState,
           message = signalStatement.message,
+          msgArguments = signalStatement.messageArguments,
           session = session)
 
       case sparkStatement: SingleStatement =>

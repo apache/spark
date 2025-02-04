@@ -1029,18 +1029,40 @@ class ExceptionHandlerExec(
  * @param errorCondition Name of the error condition/SQL State for error that will be thrown.
  * @param sqlState SQL State of the error that will be thrown.
  * @param message Error message (either string or variable name).
+ * @param msgArguments Error message parameters for builtin conditions.
  * @param session Spark session that SQL script is executed within.
  */
 class SignalStatementExec(
     val errorCondition: Option[String] = None,
     val sqlState: Option[String] = None,
     val message: Either[String, UnresolvedAttribute],
+    val msgArguments: Option[UnresolvedAttribute],
     val session: SparkSession)
   extends LeafStatementExec
     with ColumnResolutionHelper {
 
   override def catalogManager: CatalogManager = session.sessionState.catalogManager
   override def conf: SQLConf = session.sessionState.conf
+
+  def getMessageArgs: Map[String, String] = {
+    msgArguments match {
+      case Some(args) =>
+        val argsReference = getVariableReference(args, args.nameParts)
+
+        if (!argsReference.dataType.sameType(StringType)) {
+          throw QueryCompilationErrors.invalidExecuteImmediateVariableType(argsReference.dataType)
+        }
+
+        val argsValue = argsReference.eval(null)
+
+        if (argsValue == null) {
+          throw QueryCompilationErrors.nullSQLStringExecuteImmediate(args.name)
+        }
+
+        argsValue.asInstanceOf[Map[String, String]]
+      case None => Map.empty
+    }
+  }
 
   def getMessageText: String = {
     message match {
@@ -1083,7 +1105,8 @@ class SignalStatementExec(
       sqlState = sqlState,
       message = getMessageText,
       cause = null,
-      origin = CurrentOrigin.get
+      origin = CurrentOrigin.get,
+      messageParameters = getMessageArgs
     )
   }
 

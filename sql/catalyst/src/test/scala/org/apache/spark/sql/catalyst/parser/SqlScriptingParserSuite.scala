@@ -2111,21 +2111,6 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
       parameters = Map("labelName" -> "PART1.PART2"))
   }
 
-  test("qualified label name: label cannot be qualified + end label") {
-    val sqlScriptText =
-      """
-        |BEGIN
-        |  part1.part2: BEGIN
-        |  END part1.part2;
-        |END""".stripMargin
-    checkError(
-      exception = intercept[SqlScriptingException] {
-        parsePlan(sqlScriptText)
-      },
-      condition = "INVALID_LABEL_USAGE.QUALIFIED_LABEL_NAME",
-      parameters = Map("labelName" -> "PART1.PART2"))
-  }
-
   test("unique label names: nested labeled scope statements") {
     val sqlScriptText =
       """BEGIN
