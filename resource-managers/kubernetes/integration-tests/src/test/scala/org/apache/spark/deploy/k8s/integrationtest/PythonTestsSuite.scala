@@ -16,6 +16,8 @@
  */
 package org.apache.spark.deploy.k8s.integrationtest
 
+import org.apache.spark.internal.config.SPARK_API_MODE
+
 private[spark] trait PythonTestsSuite { k8sSuite: KubernetesSuite =>
 
   import PythonTestsSuite._
@@ -71,7 +73,7 @@ private[spark] trait PythonTestsSuite { k8sSuite: KubernetesSuite =>
   // Needs to install Spark Connect dependencies in Python Dockerfile, ignored for now.
   ignore("Run PySpark with Spark Connect", k8sTestTag) {
     sparkAppConf.set("spark.kubernetes.container.image", pyImage)
-    sparkAppConf.set("spark.api.mode", "connect")
+    sparkAppConf.set(SPARK_API_MODE.key, "connect")
     runSparkApplicationAndVerifyCompletion(
       appResource = PYSPARK_CONNECT_FILES,
       mainClass = "",

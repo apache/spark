@@ -20,7 +20,6 @@ package org.apache.spark.deploy
 import java.io.File
 import java.net.URI
 import java.nio.file.Files
-import java.util.Locale
 
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
@@ -53,8 +52,7 @@ object PythonRunner {
     // Format python file paths before adding them to the PYTHONPATH
     val formattedPythonFile = formatPath(pythonFile)
     val formattedPyFiles = resolvePyFiles(formatPaths(pyFiles))
-    lazy val apiMode = sparkConf.get(
-      "spark.api.mode", "classic").toLowerCase(Locale.ROOT)
+    lazy val apiMode = sparkConf.get(SPARK_API_MODE)
     lazy val isAPIModeClassic = apiMode == "classic"
     lazy val isAPIModeConnect = apiMode == "connect"
 

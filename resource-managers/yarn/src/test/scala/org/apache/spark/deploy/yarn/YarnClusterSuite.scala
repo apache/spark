@@ -86,7 +86,7 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
     |    sc.stop()
     """.stripMargin
 
-  private val TEST_CONNECT_PYFILE = """
+  private val TEST_CONNECT_PYFILE = s"""
     |import mod1, mod2
     |import sys
     |from operator import add
@@ -98,7 +98,7 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
     |        print >> sys.stderr, "Usage: test.py [result file]"
     |        exit(-1)
     |    spark = SparkSession.builder.config(
-    |        "spark.api.mode", "connect").master("yarn").getOrCreate()
+    |        "${SPARK_API_MODE.key}", "connect").master("yarn").getOrCreate()
     |    assert "connect" in str(spark)
     |    status = open(sys.argv[1],'w')
     |    result = "failure"
@@ -266,11 +266,13 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
   }
 
   test("run Python application with Spark Connect in yarn-client mode") {
-    testPySpark(true, extraConf = Map("spark.api.mode" -> "connect"), script = TEST_CONNECT_PYFILE)
+    testPySpark(
+      true, extraConf = Map(SPARK_API_MODE.key -> "connect"), script = TEST_CONNECT_PYFILE)
   }
 
   test("run Python application with Spark Connect in yarn-cluster mode") {
-    testPySpark(false, extraConf = Map("spark.api.mode" -> "connect"), script = TEST_CONNECT_PYFILE)
+    testPySpark(
+      false, extraConf = Map(SPARK_API_MODE.key -> "connect"), script = TEST_CONNECT_PYFILE)
   }
 
   test("run Python application in yarn-cluster mode using " +
@@ -757,7 +759,7 @@ private object YarnConnectTest extends Logging {
     val obj = moduleField.get(null)
     var builder = clz.getMethod("builder").invoke(obj)
     builder = builder.getClass().getMethod(
-      "config", classOf[String], classOf[String]).invoke(builder, "spark.api.mode", "connect")
+      "config", classOf[String], classOf[String]).invoke(builder, SPARK_API_MODE.key, "connect")
     builder = builder.getClass().getMethod("master", classOf[String]).invoke(builder, "yarn")
     val session = builder.getClass().getMethod("getOrCreate").invoke(builder)
 

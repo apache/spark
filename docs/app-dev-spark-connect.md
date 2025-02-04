@@ -60,8 +60,8 @@ with the custom logic/library.
 
 ## Spark API Mode: Spark Client and Spark Classic
 
-Spark provides API mode (`spark.api.mode`) configuration that can seamlessly start Spark Classic
-applications to use Spark Connect. Based on `spark.api.mode` configuration, the application either
+Spark provides API mode (`spark.api.mode`) configuration that can seamlessly let Spark
+applications use Spark Connect. Based on `spark.api.mode` configuration, the application either
 be executed in Spark Classic or Spark Connect mode. See the examples below:
 
 {% highlight python %}
