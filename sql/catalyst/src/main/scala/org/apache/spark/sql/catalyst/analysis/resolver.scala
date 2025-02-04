@@ -15,14 +15,12 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst.analysis.resolver
+package org.apache.spark.sql.catalyst.analysis
 
-import java.util.Locale
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 
-/**
- * The [[IdentifierMap]] is an implementation of a [[KeyTransformingMap]] that uses SQL/DataFrame
- * identifiers as keys. The implementation is case-insensitive for keys.
- */
-private class IdentifierMap[V] extends KeyTransformingMap[String, V] {
-  override def mapKey(key: String): String = key.toLowerCase(Locale.ROOT)
+package object resolver {
+
+  type LogicalPlanResolver = TreeNodeResolver[LogicalPlan, LogicalPlan]
+
 }

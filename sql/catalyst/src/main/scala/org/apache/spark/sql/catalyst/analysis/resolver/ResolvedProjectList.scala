@@ -17,12 +17,20 @@
 
 package org.apache.spark.sql.catalyst.analysis.resolver
 
-import java.util.Locale
+import org.apache.spark.sql.catalyst.expressions.NamedExpression
 
 /**
- * The [[IdentifierMap]] is an implementation of a [[KeyTransformingMap]] that uses SQL/DataFrame
- * identifiers as keys. The implementation is case-insensitive for keys.
+ * Structure used to return results of the resolved project list.
+ *  - expressions: The resolved expressions. It is resolved using the
+ *                 `resolveExpressionTreeInOperator`.
+ *  - hasAggregateExpressions: True if the resolved project list contains any aggregate
+ *                             expressions.
+ *  - hasAttributes: True if the resolved project list contains any attributes that are not under
+ *                   an aggregate expression.
+ *  - hasLateralColumnAlias: True if the resolved project list contains any lateral column aliases.
  */
-private class IdentifierMap[V] extends KeyTransformingMap[String, V] {
-  override def mapKey(key: String): String = key.toLowerCase(Locale.ROOT)
-}
+case class ResolvedProjectList(
+    expressions: Seq[NamedExpression],
+    hasAggregateExpressions: Boolean,
+    hasAttributes: Boolean,
+    hasLateralColumnAlias: Boolean)

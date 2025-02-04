@@ -17,12 +17,19 @@
 
 package org.apache.spark.sql.catalyst.analysis.resolver
 
-import java.util.Locale
+import org.apache.spark.SparkException
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 
 /**
- * The [[IdentifierMap]] is an implementation of a [[KeyTransformingMap]] that uses SQL/DataFrame
- * identifiers as keys. The implementation is case-insensitive for keys.
+ * This is a dummy [[LogicalPlanResolver]] whose [[resolve]] is not implemented and throws
+ * [[SparkException]].
+ *
+ * It's used by the [[MetadataResolver]] to pass it as an argument to
+ * [[tryDelegateResolutionToExtensions]], because unresolved subtree resolution doesn't make sense
+ * during metadata resolution traversal.
  */
-private class IdentifierMap[V] extends KeyTransformingMap[String, V] {
-  override def mapKey(key: String): String = key.toLowerCase(Locale.ROOT)
+class ProhibitedResolver extends LogicalPlanResolver {
+  def resolve(plan: LogicalPlan): LogicalPlan = {
+    throw SparkException.internalError("Resolver cannot be used here")
+  }
 }
