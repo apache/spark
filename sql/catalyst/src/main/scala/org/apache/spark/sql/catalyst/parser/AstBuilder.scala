@@ -2214,9 +2214,6 @@ class AstBuilder extends DataTypeAstBuilder
       table: UnresolvedInlineTable): Boolean = {
     if (!conf.getConf(SQLConf.EAGER_EVAL_OF_UNRESOLVED_INLINE_TABLE_ENABLED)) {
       return false
-    } else if (!ResolveDefaultStringTypes.needsResolution(table.expressions)) {
-      // if there are no strings to be resolved we can always evaluate eagerly
-      return true
     }
 
     !contextInsideCreate(ctx)
