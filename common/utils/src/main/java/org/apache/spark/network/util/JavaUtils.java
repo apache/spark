@@ -185,9 +185,6 @@ public class JavaUtils {
 
       System.out.println("5. Sleeping for 10 seconds");
       Thread.sleep(10000);
-    } catch (InterruptedException e) {
-      System.out.println("7. Catching and rethrowing interrupted exception");
-      throw e; // Specifically rethrow InterruptedException
     } catch (Exception e) {
       throw new IOException("Failed to delete: " + file.getAbsolutePath(), e);
     } finally {
