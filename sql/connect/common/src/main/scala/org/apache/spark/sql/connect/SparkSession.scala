@@ -18,6 +18,7 @@ package org.apache.spark.sql.connect
 
 import java.net.URI
 import java.nio.file.{Files, Paths}
+import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 
@@ -679,16 +680,28 @@ object SparkSession extends SparkSessionCompanion with Logging {
    */
   private[sql] def withLocalConnectServer[T](f: => T): T = {
     synchronized {
+      lazy val isAPIModeConnect =
+        Option(System.getProperty(org.apache.spark.sql.SparkSessionBuilder.API_MODE_KEY))
+          .getOrElse("classic")
+          .toLowerCase(Locale.ROOT) == "connect"
       val remoteString = sparkOptions
         .get("spark.remote")
         .orElse(Option(System.getProperty("spark.remote"))) // Set from Spark Submit
         .orElse(sys.env.get(SparkConnectClient.SPARK_REMOTE))
+        .orElse {
+          if (isAPIModeConnect) {
+            sparkOptions.get("spark.master").orElse(sys.env.get("MASTER"))
+          } else {
+            None
+          }
+        }
 
       val maybeConnectScript =
         Option(System.getenv("SPARK_HOME")).map(Paths.get(_, "sbin", "start-connect-server.sh"))
 
       if (server.isEmpty &&
-        remoteString.exists(_.startsWith("local")) &&
+        (remoteString.exists(_.startsWith("local")) ||
+          (remoteString.isDefined && isAPIModeConnect)) &&
         maybeConnectScript.exists(Files.exists(_))) {
         server = Some {
           val args =
@@ -739,8 +752,15 @@ object SparkSession extends SparkSessionCompanion with Logging {
     // Initialize the connection string of the Spark Connect client builder from SPARK_REMOTE
     // by default, if it exists. The connection string can be overridden using
     // the remote() function, as it takes precedence over the SPARK_REMOTE environment variable.
-    private val builder = SparkConnectClient.builder().loadFromEnvironment()
+    private var connectionString: Option[String] = None
+    private var interceptor: Option[ClientInterceptor] = None
     private var client: SparkConnectClient = _
+    private lazy val builder = {
+      val b = SparkConnectClient.builder().loadFromEnvironment()
+      connectionString.foreach(b.connectionString)
+      interceptor.foreach(b.interceptor)
+      b
+    }
 
     /** @inheritdoc */
     @deprecated("sparkContext does not work in Spark Connect")
@@ -756,7 +776,7 @@ object SparkSession extends SparkSessionCompanion with Logging {
      * @since 3.5.0
      */
     def interceptor(interceptor: ClientInterceptor): this.type = {
-      builder.interceptor(interceptor)
+      this.interceptor = Some(interceptor)
       this
     }
 
@@ -804,7 +824,7 @@ object SparkSession extends SparkSessionCompanion with Logging {
 
     override protected def handleBuilderConfig(key: String, value: String): Boolean = key match {
       case CONNECT_REMOTE_KEY =>
-        builder.connectionString(value)
+        connectionString = Some(value)
         true
       case APP_NAME_KEY | MASTER_KEY | CATALOG_IMPL_KEY | API_MODE_KEY =>
         logWarning(log"${MDC(CONFIG, key)} configuration is not supported in Connect mode.")

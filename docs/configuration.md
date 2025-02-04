@@ -3391,6 +3391,14 @@ They are typically set via the config file and command-line options with `--conf
 <table class="spark-config">
 <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
 <tr>
+  <td><code>spark.api.mode</code></td>
+  <td>
+    classic
+  </td>
+  <td>For Spark Classic applications, specify whether to automatically use Spark Connect by running a local Spark Connect server. The value can be <code>classic</code> or <code>connect</code>.</td>
+  <td>4.0.0</td>
+</tr>
+<tr>
   <td><code>spark.connect.grpc.binding.port</code></td>
   <td>
     15002
