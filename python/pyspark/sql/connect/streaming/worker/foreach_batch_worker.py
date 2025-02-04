@@ -43,24 +43,6 @@ spark = None
 
 def main(infile: IO, outfile: IO) -> None:
     global spark
-    check_python_version(infile)
-
-    # Enable Spark Connect Mode
-    os.environ["SPARK_CONNECT_MODE_ENABLED"] = "1"
-
-    connect_url = os.environ["SPARK_CONNECT_LOCAL_URL"]
-    session_id = utf8_deserializer.loads(infile)
-
-    print(
-        "Streaming foreachBatch worker is starting with "
-        f"url {connect_url} and sessionId {session_id}."
-    )
-
-    # To attach to the existing SparkSession, we're setting the session_id in the URL.
-    connect_url = connect_url + ";session_id=" + session_id
-    spark_connect_session = SparkSession.builder.remote(connect_url).getOrCreate()
-    assert spark_connect_session.session_id == session_id
-    spark = spark_connect_session
 
     log_name = "Streaming ForeachBatch worker"
 
@@ -72,6 +54,22 @@ def main(infile: IO, outfile: IO) -> None:
         print(f"{log_name} Completed batch {batch_id} with DF id {df_id}")
 
     try:
+        check_python_version(infile)
+
+        # Enable Spark Connect Mode
+        os.environ["SPARK_CONNECT_MODE_ENABLED"] = "1"
+
+        connect_url = os.environ["SPARK_CONNECT_LOCAL_URL"]
+        session_id = utf8_deserializer.loads(infile)
+
+        print(f"{log_name} is starting with " f"url {connect_url} and sessionId {session_id}.")
+
+        # To attach to the existing SparkSession, we're setting the session_id in the URL.
+        connect_url = connect_url + ";session_id=" + session_id
+        spark_connect_session = SparkSession.builder.remote(connect_url).getOrCreate()
+        assert spark_connect_session.session_id == session_id
+        spark = spark_connect_session
+
         func = worker.read_command(pickle_ser, infile)
         write_int(0, outfile)
         outfile.flush()
