@@ -25,6 +25,7 @@ from pyspark.ml.wrapper import JavaWrapper, _jvm
 from pyspark.sql.column import Column
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.functions import lit
+from pyspark.sql.utils import is_remote
 
 if TYPE_CHECKING:
     from py4j.java_gateway import JavaObject
@@ -102,8 +103,6 @@ class ChiSquareTest:
         >>> row[0].statistic
         4.0
         """
-        from pyspark.sql.utils import is_remote
-
         if is_remote():
             from pyspark.ml.wrapper import JavaTransformer
             from pyspark.ml.connect.serialize import serialize_ml_params_values
@@ -189,14 +188,28 @@ class Correlation:
                      [        NaN,         NaN,  1.        ,         NaN],
                      [ 0.4       ,  0.9486... ,         NaN,  1.        ]])
         """
-        from pyspark.core.context import SparkContext
+        if is_remote():
+            from pyspark.ml.wrapper import JavaTransformer
+            from pyspark.ml.connect.serialize import serialize_ml_params_values
 
-        sc = SparkContext._active_spark_context
-        assert sc is not None
+            instance = JavaTransformer()
+            instance._java_obj = "org.apache.spark.ml.stat.CorrelationWrapper"
+            serialized_ml_params = serialize_ml_params_values(
+                {"featuresCol": column, "method": method},
+                dataset.sparkSession.client,  # type: ignore[arg-type,operator]
+            )
+            instance._serialized_ml_params = serialized_ml_params  # type: ignore[attr-defined]
+            return instance.transform(dataset)
 
-        javaCorrObj = getattr(_jvm(), "org.apache.spark.ml.stat.Correlation")
-        args = [_py2java(sc, arg) for arg in (dataset, column, method)]
-        return _java2py(sc, javaCorrObj.corr(*args))
+        else:
+            from pyspark.core.context import SparkContext
+
+            sc = SparkContext._active_spark_context
+            assert sc is not None
+
+            javaCorrObj = getattr(_jvm(), "org.apache.spark.ml.stat.Correlation")
+            args = [_py2java(sc, arg) for arg in (dataset, column, method)]
+            return _java2py(sc, javaCorrObj.corr(*args))
 
 
 class KolmogorovSmirnovTest:
