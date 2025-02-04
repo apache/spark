@@ -3872,6 +3872,22 @@ class SparkConnectPlanner(
         UnresolvedScalarSubqueryPlanId(planId)
       case proto.SubqueryExpression.SubqueryType.SUBQUERY_TYPE_EXISTS =>
         UnresolvedExistsPlanId(planId)
+      case proto.SubqueryExpression.SubqueryType.SUBQUERY_TYPE_TABLE_ARG =>
+        if (getSubqueryExpression.hasTableArgOptions) {
+          val options = getSubqueryExpression.getTableArgOptions
+          UnresolvedTableArgPlanId(
+            planId,
+            partitionSpec = options.getPartitionSpecList.asScala
+              .map(transformExpression)
+              .toSeq,
+            orderSpec = options.getOrderSpecList.asScala
+              .map(transformSortOrder)
+              .toSeq,
+            withSinglePartition =
+              options.hasWithSinglePartition && options.getWithSinglePartition)
+        } else {
+          UnresolvedTableArgPlanId(planId)
+        }
       case other => throw InvalidPlanInput(s"Unknown SubqueryType $other")
     }
   }
