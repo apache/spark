@@ -1067,7 +1067,7 @@ class AstBuilder extends DataTypeAstBuilder
         } else {
           // TODO For v2 commands, we will cast the string back to its actual value,
           //  which is a waste and can be improved in the future.
-          Cast(l, conf.defaultStringType, Some(conf.sessionLocalTimeZone)).eval().toString
+          Cast(l, StringType, Some(conf.sessionLocalTimeZone)).eval().toString
         }
       case other =>
         throw new SparkIllegalArgumentException(
@@ -2219,11 +2219,7 @@ class AstBuilder extends DataTypeAstBuilder
       return true
     }
 
-    val isSessionCollationSet = conf.defaultStringType != StringType
-
-    // if either of these are true we need to resolve
-    // the string types first
-    !isSessionCollationSet && !contextInsideCreate(ctx)
+    !contextInsideCreate(ctx)
   }
 
   private def contextInsideCreate(ctx: ParserRuleContext): Boolean = {
