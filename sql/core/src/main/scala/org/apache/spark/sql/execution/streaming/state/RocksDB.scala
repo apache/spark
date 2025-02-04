@@ -194,14 +194,6 @@ class RocksDB(
   @GuardedBy("acquireLock")
   private val shouldForceSnapshot: AtomicBoolean = new AtomicBoolean(false)
 
-  /**
-   * Check whether the column family name is for internal column families.
-   *
-   * @param cfName - column family name
-   * @return - true if the column family is for internal use, false otherwise
-   */
-  private def checkInternalColumnFamilies(cfName: String): Boolean = cfName.charAt(0) == '_'
-
   private def getColumnFamilyInfo(cfName: String): ColumnFamilyInfo = {
     colFamilyNameToInfoMap.get(cfName)
   }
@@ -284,11 +276,7 @@ class RocksDB(
   }
 
   def getColFamilyCount(isInternal: Boolean): Long = {
-    if (isInternal) {
-      colFamilyNameToInfoMap.asScala.keys.toSeq.count(checkInternalColumnFamilies)
-    } else {
-      colFamilyNameToInfoMap.asScala.keys.toSeq.count(!checkInternalColumnFamilies(_))
-    }
+    colFamilyNameToInfoMap.asScala.values.toSeq.count(_.isInternal == isInternal)
   }
 
   // Mapping of local SST files to DFS files for file reuse.
