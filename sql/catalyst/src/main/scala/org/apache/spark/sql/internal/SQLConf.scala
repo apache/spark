@@ -301,19 +301,6 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
-  val ANALYZER_SINGLE_PASS_TRACK_RESOLVED_NODES_ENABLED =
-    buildConf("spark.sql.analyzer.singlePassResolver.trackResolvedNodes.enabled")
-      .internal()
-      .doc(
-        "When true, keep track of resolved nodes in order to assert that the single-pass " +
-        "invariant is never broken. While true, if a resolver attempts to resolve the same node " +
-        "twice, INTERNAL_ERROR exception is thrown. Used only for testing due to memory impact " +
-        "of storing each node in a HashSet."
-      )
-      .version("4.0.0")
-      .booleanConf
-      .createWithDefault(false)
-
   val ANALYZER_SINGLE_PASS_RESOLVER_RELATION_BRIDGING_ENABLED =
     buildConf("spark.sql.analyzer.singlePassResolver.relationBridging.enabled")
       .internal()
@@ -1729,7 +1716,7 @@ object SQLConf {
         "avoid shuffle if necessary.")
       .version("3.3.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   val V2_BUCKETING_PUSH_PART_VALUES_ENABLED =
     buildConf("spark.sql.sources.v2.bucketing.pushPartValues.enabled")
@@ -2291,6 +2278,15 @@ object SQLConf {
       .intConf
       .checkValue(v => Set(1, 2).contains(v), "Valid versions are 1 and 2")
       .createWithDefault(2)
+
+  val FLATMAPGROUPSWITHSTATE_SKIP_EMITTING_INITIAL_STATE_KEYS =
+    buildConf("spark.sql.streaming.flatMapGroupsWithState.skipEmittingInitialStateKeys")
+      .internal()
+      .doc("When true, the flatMapGroupsWithState operation in a streaming query will not emit " +
+        "results for the initial state keys of each group.")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(false)
 
   val CHECKPOINT_LOCATION = buildConf("spark.sql.streaming.checkpointLocation")
     .doc("The default location for storing checkpoint data for streaming queries.")
@@ -3474,6 +3470,15 @@ object SQLConf {
       .stringConf
       .checkValues(Set("legacy", "row", "dict"))
       .createWithDefaultString("legacy")
+
+  val PYSPARK_HIDE_TRACEBACK =
+    buildConf("spark.sql.execution.pyspark.udf.hideTraceback.enabled")
+      .doc(
+        "When true, only show the message of the exception from Python UDFs, " +
+        "hiding the stack trace. If this is enabled, simplifiedTraceback has no effect.")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(false)
 
   val PYSPARK_SIMPLIFIED_TRACEBACK =
     buildConf("spark.sql.execution.pyspark.udf.simplifiedTraceback.enabled")
@@ -6285,6 +6290,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def pandasUDFBufferSize: Int = getConf(PANDAS_UDF_BUFFER_SIZE)
 
   def pandasStructHandlingMode: String = getConf(PANDAS_STRUCT_HANDLING_MODE)
+
+  def pysparkHideTraceback: Boolean = getConf(PYSPARK_HIDE_TRACEBACK)
 
   def pysparkSimplifiedTraceback: Boolean = getConf(PYSPARK_SIMPLIFIED_TRACEBACK)
 

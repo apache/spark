@@ -17,10 +17,11 @@
 
 package org.apache.spark.sql.hive
 
+import org.apache.spark.sql.catalyst.analysis.resolver.LogicalPlanResolver
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.classic.SparkSession
-import org.apache.spark.sql.execution.datasources.{DataSourceResolver, LogicalRelation}
+import org.apache.spark.sql.execution.datasources.DataSourceResolver
 
 /**
  * [[DataSourceWithHiveResolver]] is a [[DataSourceResolver]] that additionally handles
@@ -34,24 +35,27 @@ class DataSourceWithHiveResolver(sparkSession: SparkSession, hiveCatalog: HiveSe
    * Invoke [[DataSourceResolver]] to resolve the input operator. If [[DataSourceResolver]] produces
    * [[HiveTableRelation]], convert it to [[LogicalRelation]] if possible.
    */
-  override def resolveOperator: PartialFunction[LogicalPlan, LogicalPlan] = {
-    case operator: LogicalPlan if super.resolveOperator.isDefinedAt(operator) =>
-      val relationAfterDataSourceResolver = super.resolveOperator(operator)
-
-      relationAfterDataSourceResolver match {
-        case hiveTableRelation: HiveTableRelation =>
-          resolveHiveTableRelation(hiveTableRelation)
-        case other => other
-      }
+  override def resolveOperator(
+      operator: LogicalPlan,
+      resolver: LogicalPlanResolver): Option[LogicalPlan] = {
+    super.resolveOperator(operator, resolver) match {
+      case Some(relationAfterDataSourceResolver) =>
+        val result = relationAfterDataSourceResolver match {
+          case hiveTableRelation: HiveTableRelation =>
+            resolveHiveTableRelation(hiveTableRelation)
+          case other => other
+        }
+        Some(result)
+      case _ =>
+        None
+    }
   }
 
   private def resolveHiveTableRelation(hiveTableRelation: HiveTableRelation): LogicalPlan = {
     if (relationConversions.doConvertHiveTableRelationForRead(hiveTableRelation)) {
-      val logicalRelation: LogicalRelation =
-        relationConversions.convertHiveTableRelationForRead(hiveTableRelation)
-      logicalRelation.newInstance()
+      relationConversions.convertHiveTableRelationForRead(hiveTableRelation)
     } else {
-      hiveTableRelation.newInstance()
+      hiveTableRelation
     }
   }
 }

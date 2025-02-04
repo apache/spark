@@ -23,6 +23,7 @@ import org.apache.spark.connect.proto
 import org.apache.spark.sql
 import org.apache.spark.sql.{functions, Column, Encoder}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.agnosticEncoderFor
+import org.apache.spark.sql.connect.ColumnNodeToProtoConverter.{toExpr, toTypedExpr}
 import org.apache.spark.sql.connect.ConnectConversions._
 
 /**
@@ -44,14 +45,13 @@ class RelationalGroupedDataset private[sql] (
     pivot: Option[proto.Aggregate.Pivot] = None,
     groupingSets: Option[Seq[proto.Aggregate.GroupingSets]] = None)
     extends sql.RelationalGroupedDataset {
-  import df.sparkSession.RichColumn
 
   protected def toDF(aggExprs: Seq[Column]): DataFrame = {
     df.sparkSession.newDataFrame(groupingExprs ++ aggExprs) { builder =>
       val aggBuilder = builder.getAggregateBuilder
         .setInput(df.plan.getRoot)
-      groupingExprs.foreach(c => aggBuilder.addGroupingExpressions(c.expr))
-      aggExprs.foreach(c => aggBuilder.addAggregateExpressions(c.typedExpr(df.encoder)))
+      groupingExprs.foreach(c => aggBuilder.addGroupingExpressions(toExpr(c)))
+      aggExprs.foreach(c => aggBuilder.addAggregateExpressions(toTypedExpr(c, df.encoder)))
 
       groupType match {
         case proto.Aggregate.GroupType.GROUP_TYPE_ROLLUP =>
@@ -152,10 +152,13 @@ class RelationalGroupedDataset private[sql] (
     groupType match {
       case proto.Aggregate.GroupType.GROUP_TYPE_GROUPBY =>
         val valueExprs = values.map {
-          case c: Column if c.expr.hasLiteral => c.expr.getLiteral
-          case c: Column if !c.expr.hasLiteral =>
-            throw new IllegalArgumentException("values only accept literal Column")
-          case v => functions.lit(v).expr.getLiteral
+          case c: Column =>
+            val e = toExpr(c)
+            if (!e.hasLiteral) {
+              throw new IllegalArgumentException("values only accept literal Column")
+            }
+            e.getLiteral
+          case v => toExpr(functions.lit(v)).getLiteral
         }
         new RelationalGroupedDataset(
           df,
@@ -164,7 +167,7 @@ class RelationalGroupedDataset private[sql] (
           Some(
             proto.Aggregate.Pivot
               .newBuilder()
-              .setCol(pivotColumn.expr)
+              .setCol(toExpr(pivotColumn))
               .addAllValues(valueExprs.asJava)
               .build()))
       case _ =>

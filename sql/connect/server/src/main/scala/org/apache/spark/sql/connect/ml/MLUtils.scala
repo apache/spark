@@ -602,7 +602,7 @@ private[ml] object MLUtils {
     (classOf[BisectingKMeansSummary], Set("trainingCost")),
     (
       classOf[GaussianMixtureModel],
-      Set("predict", "numFeatures", "weights", "gaussians", "predictProbability", "gaussiansDF")),
+      Set("predict", "numFeatures", "weights", "predictProbability", "gaussiansDF")),
     (classOf[GaussianMixtureSummary], Set("probability", "probabilityCol", "logLikelihood")),
     (
       classOf[LDAModel],
@@ -616,7 +616,7 @@ private[ml] object MLUtils {
     (classOf[LocalLDAModel], Set("vocabSize")),
     (
       classOf[DistributedLDAModel],
-      Set("trainingLogLikelihood", "logPrior", "getCheckpointFiles")),
+      Set("trainingLogLikelihood", "logPrior", "getCheckpointFiles", "toLocal")),
 
     // Recommendation Models
     (
@@ -634,11 +634,13 @@ private[ml] object MLUtils {
     (classOf[FPGrowthModel], Set("associationRules", "freqItemsets")),
 
     // Feature Models
+    (classOf[Bucketizer], Set("getSplits", "getSplitsArray")),
     (classOf[ImputerModel], Set("surrogateDF")),
     (classOf[StandardScalerModel], Set("mean", "std")),
     (classOf[MaxAbsScalerModel], Set("maxAbs")),
     (classOf[MinMaxScalerModel], Set("originalMax", "originalMin")),
     (classOf[RobustScalerModel], Set("range", "median")),
+    (classOf[VectorIndexerModel], Set("numFeatures")),
     (classOf[ChiSqSelectorModel], Set("selectedFeatures")),
     (classOf[UnivariateFeatureSelectorModel], Set("selectedFeatures")),
     (classOf[VarianceThresholdSelectorModel], Set("selectedFeatures")),
@@ -647,6 +649,7 @@ private[ml] object MLUtils {
     (classOf[CountVectorizerModel], Set("vocabulary")),
     (classOf[OneHotEncoderModel], Set("categorySizes")),
     (classOf[StringIndexerModel], Set("labels", "labelsArray")),
+    (classOf[RFormulaModel], Set("resolvedFormulaString")),
     (classOf[IDFModel], Set("idf", "docFreq", "numDocs")))
 
   private def validate(obj: Any, method: String): Unit = {

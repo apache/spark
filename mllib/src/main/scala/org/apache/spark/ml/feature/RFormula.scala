@@ -349,6 +349,8 @@ class RFormulaModel private[feature](
     private[ml] val pipelineModel: PipelineModel)
   extends Model[RFormulaModel] with RFormulaBase with MLWritable {
 
+  private[ml] def this() = this(Identifiable.randomUID("rFormula"), null, null)
+
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     checkCanTransform(dataset.schema)
@@ -384,6 +386,10 @@ class RFormulaModel private[feature](
   override def toString: String = {
     s"RFormulaModel: uid=$uid, resolvedFormula=$resolvedFormula"
   }
+
+  // For ml connect only
+  @Since("4.0.0")
+  private[ml] def resolvedFormulaString: String = resolvedFormula.toString
 
   private def transformLabel(dataset: Dataset[_]): DataFrame = {
     val labelName = resolvedFormula.label

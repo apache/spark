@@ -21,6 +21,7 @@ import java.io.{Externalizable, ObjectInput, ObjectOutput}
 import java.sql.{Date, Timestamp}
 
 import scala.collection.immutable.HashSet
+import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 import scala.util.Random
@@ -2801,6 +2802,44 @@ class DatasetSuite extends QueryTest
         assert(jobCounter === 0)
       }
     }
+  }
+
+  test("SPARK-49961: transform type should be consistent (classic)") {
+    val ds = Seq(1, 2).toDS()
+    val f: classic.Dataset[Int] => classic.Dataset[Int] =
+      d => d.selectExpr("(value + 1) value").as[Int]
+    val transformed = ds.transform(f)
+    assert(transformed.collect().sorted === Array(2, 3))
+  }
+
+  test("SPARK-49961: transform type should be consistent (base to classic)") {
+    val ds = Seq(1, 2).toDS()
+    val f: Dataset[Int] => classic.Dataset[Int] =
+      d => d.selectExpr("(value + 1) value").as[Int]
+    val transformed = ds.transform(f)
+    assert(transformed.collect().sorted === Array(2, 3))
+  }
+
+  test("SPARK-49961: transform type should be consistent (as base)") {
+    val ds = Seq(1, 2).toDS().asInstanceOf[Dataset[Int]]
+    val f: Dataset[Int] => Dataset[Int] =
+      d => d.selectExpr("(value + 1) value").as[Int]
+    val transformed = ds.transform(f)
+    assert(transformed.collect().sorted === Array(2, 3))
+  }
+
+  test("SPARK-51070: array/seq/map of mutable set") {
+    val set: collection.Set[Int] = mutable.Set(1, 2)
+
+    implicit val arrayEncoder = ExpressionEncoder[Array[collection.Set[Int]]]()
+
+    val arrayMutableSet = Array(set)
+    val seqMutableSet = Seq(set)
+    val mapMutableSet = Map(1 -> set)
+
+    checkDataset(Seq(arrayMutableSet).toDS(), arrayMutableSet)
+    checkDataset(Seq(seqMutableSet).toDS(), seqMutableSet)
+    checkDataset(Seq(mapMutableSet).toDS(), mapMutableSet)
   }
 }
 

@@ -43,11 +43,10 @@ import org.apache.spark.sql.{Column, Encoder, ExperimentalMethods, Observation, 
 import org.apache.spark.sql.catalyst.{JavaTypeInference, ScalaReflection}
 import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, RowEncoder}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{agnosticEncoderFor, BoxedLongEncoder, UnboundRowEncoder}
-import org.apache.spark.sql.connect.ColumnNodeToProtoConverter.{toExpr, toTypedExpr}
+import org.apache.spark.sql.connect.ColumnNodeToProtoConverter.toLiteral
 import org.apache.spark.sql.connect.client.{ClassFinder, CloseableIterator, SparkConnectClient, SparkResult}
 import org.apache.spark.sql.connect.client.SparkConnectClient.Configuration
 import org.apache.spark.sql.connect.client.arrow.ArrowSerializer
-import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.internal.{SessionState, SharedState, SqlApiConf}
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.types.StructType
@@ -205,15 +204,21 @@ class SparkSession private[sql] (
   override def executeCommand(
       runner: String,
       command: String,
-      options: Map[String, String]): DataFrame =
-    throw ConnectClientUnsupportedErrors.executeCommand()
+      options: Map[String, String]): DataFrame = {
+    executeCommandWithDataFrameReturn(newCommand { builder =>
+      builder.getExecuteExternalCommandBuilder
+        .setRunner(runner)
+        .setCommand(command)
+        .putAllOptions(options.asJava)
+    })
+  }
 
   /** @inheritdoc */
   def sql(sqlText: String, args: Array[_]): DataFrame = {
     val sqlCommand = proto.SqlCommand
       .newBuilder()
       .setSql(sqlText)
-      .addAllPosArguments(args.map(lit(_).expr).toImmutableArraySeq.asJava)
+      .addAllPosArguments(args.map(a => toLiteral(a)).toImmutableArraySeq.asJava)
       .build()
     sql(sqlCommand)
   }
@@ -228,7 +233,7 @@ class SparkSession private[sql] (
     val sqlCommand = proto.SqlCommand
       .newBuilder()
       .setSql(sqlText)
-      .putAllNamedArguments(args.asScala.map { case (k, v) => (k, lit(v).expr) }.asJava)
+      .putAllNamedArguments(args.asScala.map { case (k, v) => (k, toLiteral(v)) }.asJava)
       .build()
     sql(sqlCommand)
   }
@@ -238,10 +243,13 @@ class SparkSession private[sql] (
     sql(query, Array.empty)
   }
 
-  private def sql(sqlCommand: proto.SqlCommand): DataFrame = newDataFrame { builder =>
+  private def sql(sqlCommand: proto.SqlCommand): DataFrame = {
     // Send the SQL once to the server and then check the output.
-    val cmd = newCommand(b => b.setSqlCommand(sqlCommand))
-    val plan = proto.Plan.newBuilder().setCommand(cmd)
+    executeCommandWithDataFrameReturn(newCommand(_.setSqlCommand(sqlCommand)))
+  }
+
+  private def executeCommandWithDataFrameReturn(command: proto.Command): DataFrame = {
+    val plan = proto.Plan.newBuilder().setCommand(command)
     val responseIter = client.execute(plan.build())
 
     try {
@@ -249,7 +257,7 @@ class SparkSession private[sql] (
         .find(_.hasSqlCommandResult)
         .getOrElse(throw new RuntimeException("SQLCommandResult must be present"))
       // Update the builder with the values from the result.
-      builder.mergeFrom(response.getSqlCommandResult.getRelation)
+      newDataFrame(_.mergeFrom(response.getSqlCommandResult.getRelation))
     } finally {
       // consume the rest of the iterator
       responseIter.foreach(_ => ())
@@ -653,11 +661,6 @@ class SparkSession private[sql] (
   }
 
   override private[sql] def isUsable: Boolean = client.isSessionValid
-
-  implicit class RichColumn(c: Column) {
-    def expr: proto.Expression = toExpr(c)
-    def typedExpr[T](e: Encoder[T]): proto.Expression = toTypedExpr(c, e)
-  }
 }
 
 // The minimal builder needed to create a spark session.

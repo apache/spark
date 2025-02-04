@@ -57,7 +57,7 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.status.{AppStatusStore, ElementTrackingStore}
-import org.apache.spark.util.{AccumulatorMetadata, JsonProtocol, LongAccumulator, SerializableConfiguration, Utils}
+import org.apache.spark.util.{AccumulatorMetadata, JsonProtocol, LongAccumulator, MetricUtils, SerializableConfiguration, Utils}
 import org.apache.spark.util.kvstore.InMemoryStore
 
 
@@ -597,9 +597,9 @@ abstract class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTes
     val metrics = statusStore.executionMetrics(execId)
     val driverMetric = physicalPlan.metrics("dummy")
     val driverMetric2 = physicalPlan.metrics("dummy2")
-    val expectedValue = SQLMetrics.stringValue(driverMetric.metricType,
+    val expectedValue = MetricUtils.stringValue(driverMetric.metricType,
       Array(expectedAccumValue), Array.empty[Long])
-    val expectedValue2 = SQLMetrics.stringValue(driverMetric2.metricType,
+    val expectedValue2 = MetricUtils.stringValue(driverMetric2.metricType,
       Array(expectedAccumValue2), Array.empty[Long])
 
     assert(metrics.contains(driverMetric.id))

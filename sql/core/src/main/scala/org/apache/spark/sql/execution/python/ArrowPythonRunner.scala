@@ -50,6 +50,7 @@ abstract class BaseArrowPythonRunner(
 
   override val errorOnDuplicatedFieldNames: Boolean = true
 
+  override val hideTraceback: Boolean = SQLConf.get.pysparkHideTraceback
   override val simplifiedTraceback: Boolean = SQLConf.get.pysparkSimplifiedTraceback
 
   // Use lazy val to initialize the fields before these are accessed in [[PythonArrowInput]]'s

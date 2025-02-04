@@ -22,6 +22,7 @@ import uuid
 import warnings
 from abc import ABCMeta, abstractmethod
 from multiprocessing.pool import ThreadPool
+from functools import cached_property
 from typing import (
     Any,
     Dict,
@@ -35,6 +36,8 @@ from typing import (
     cast,
     overload,
     TYPE_CHECKING,
+    Tuple,
+    Callable,
 )
 
 from pyspark import keyword_only, since, inheritable_thread_target
@@ -85,6 +88,8 @@ from pyspark.ml.util import (
     MLWriter,
     MLWritable,
     HasTrainingSummary,
+    try_remote_read,
+    try_remote_write,
     try_remote_attribute_relation,
 )
 from pyspark.ml.wrapper import JavaParams, JavaPredictor, JavaPredictionModel, JavaWrapper
@@ -94,6 +99,7 @@ from pyspark.sql import DataFrame, Row, SparkSession
 from pyspark.sql.functions import udf, when
 from pyspark.sql.types import ArrayType, DoubleType
 from pyspark.storagelevel import StorageLevel
+from pyspark.sql.utils import is_remote
 
 if TYPE_CHECKING:
     from pyspark.ml._typing import P, ParamMap
@@ -2285,10 +2291,12 @@ class RandomForestClassificationModel(
         """
         return self._call_java("featureImportances")
 
-    @property
+    @cached_property
     @since("2.0.0")
     def trees(self) -> List[DecisionTreeClassificationModel]:
         """Trees in this ensemble. Warning: These have null parent Estimators."""
+        if is_remote():
+            return [DecisionTreeClassificationModel(m) for m in self._call_java("trees").split(",")]
         return [DecisionTreeClassificationModel(m) for m in list(self._call_java("trees"))]
 
     @property
@@ -2773,10 +2781,12 @@ class GBTClassificationModel(
         """
         return self._call_java("featureImportances")
 
-    @property
+    @cached_property
     @since("2.0.0")
     def trees(self) -> List[DecisionTreeRegressionModel]:
         """Trees in this ensemble. Warning: These have null parent Estimators."""
+        if is_remote():
+            return [DecisionTreeRegressionModel(m) for m in self._call_java("trees").split(",")]
         return [DecisionTreeRegressionModel(m) for m in list(self._call_java("trees"))]
 
     def evaluateEachIteration(self, dataset: DataFrame) -> List[float]:
@@ -3572,31 +3582,45 @@ class OneVsRest(
         if handlePersistence:
             multiclassLabeled.persist(StorageLevel.MEMORY_AND_DISK)
 
-        def trainSingleClass(index: int) -> CM:
-            binaryLabelCol = "mc2b$" + str(index)
-            trainingDataset = multiclassLabeled.withColumn(
-                binaryLabelCol,
-                when(multiclassLabeled[labelCol] == float(index), 1.0).otherwise(0.0),
-            )
-            paramMap = dict(
-                [
-                    (classifier.labelCol, binaryLabelCol),
-                    (classifier.featuresCol, featuresCol),
-                    (classifier.predictionCol, predictionCol),
-                ]
-            )
-            if weightCol:
-                paramMap[cast(HasWeightCol, classifier).weightCol] = weightCol
-            return classifier.fit(trainingDataset, paramMap)
+        def _oneClassFitTasks(numClasses: int) -> List[Callable[[], Tuple[int, CM]]]:
+            indices = iter(range(numClasses))
 
+            def trainSingleClass() -> Tuple[int, CM]:
+                index = next(indices)
+
+                binaryLabelCol = "mc2b$" + str(index)
+                trainingDataset = multiclassLabeled.withColumn(
+                    binaryLabelCol,
+                    when(multiclassLabeled[labelCol] == float(index), 1.0).otherwise(0.0),
+                )
+                paramMap = dict(
+                    [
+                        (classifier.labelCol, binaryLabelCol),
+                        (classifier.featuresCol, featuresCol),
+                        (classifier.predictionCol, predictionCol),
+                    ]
+                )
+                if weightCol:
+                    paramMap[cast(HasWeightCol, classifier).weightCol] = weightCol
+                return index, classifier.fit(trainingDataset, paramMap)
+
+            return [trainSingleClass] * numClasses
+
+        tasks = map(
+            inheritable_thread_target(dataset.sparkSession),
+            _oneClassFitTasks(numClasses),
+        )
         pool = ThreadPool(processes=min(self.getParallelism(), numClasses))
 
-        models = pool.map(inheritable_thread_target(trainSingleClass), range(numClasses))
+        subModels = [None] * numClasses
+        for j, subModel in pool.imap_unordered(lambda f: f(), tasks):
+            assert subModels is not None
+            subModels[j] = subModel
 
         if handlePersistence:
             multiclassLabeled.unpersist()
 
-        return self._copyValues(OneVsRestModel(models=models))
+        return self._copyValues(OneVsRestModel(models=cast(List[ClassificationModel], subModels)))
 
     def copy(self, extra: Optional["ParamMap"] = None) -> "OneVsRest":
         """
@@ -3671,9 +3695,11 @@ class OneVsRest(
         return _java_obj
 
     @classmethod
+    @try_remote_read
     def read(cls) -> "OneVsRestReader":
         return OneVsRestReader(cls)
 
+    @try_remote_write
     def write(self) -> MLWriter:
         if isinstance(self.getClassifier(), JavaMLWritable):
             return JavaMLWriter(self)  # type: ignore[arg-type]
@@ -3787,7 +3813,7 @@ class OneVsRestModel(
         from pyspark.core.context import SparkContext
 
         self.models = models
-        if not isinstance(models[0], JavaMLWritable):
+        if is_remote() or not isinstance(models[0], JavaMLWritable):
             return
         # set java instance
         java_models = [cast(_JavaClassificationModel, model)._to_java() for model in self.models]
@@ -3955,9 +3981,11 @@ class OneVsRestModel(
         return _java_obj
 
     @classmethod
+    @try_remote_read
     def read(cls) -> "OneVsRestModelReader":
         return OneVsRestModelReader(cls)
 
+    @try_remote_write
     def write(self) -> MLWriter:
         if all(
             map(

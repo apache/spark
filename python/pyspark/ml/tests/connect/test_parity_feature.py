@@ -23,36 +23,12 @@ from pyspark.testing.connectutils import ReusedConnectTestCase
 
 class FeatureParityTests(FeatureTestsMixin, ReusedConnectTestCase):
     @unittest.skip("Need to support.")
-    def test_count_vectorizer_with_binary(self):
-        super().test_count_vectorizer_with_binary()
-
-    @unittest.skip("Need to support.")
-    def test_count_vectorizer_with_maxDF(self):
-        super().test_count_vectorizer_with_maxDF()
-
-    @unittest.skip("Need to support.")
     def test_count_vectorizer_from_vocab(self):
         super().test_count_vectorizer_from_vocab()
 
     @unittest.skip("Need to support.")
-    def test_rformula_force_index_label(self):
-        super().test_rformula_force_index_label()
-
-    @unittest.skip("Need to support.")
-    def test_rformula_string_indexer_order_type(self):
-        super().test_rformula_string_indexer_order_type()
-
-    @unittest.skip("Need to support.")
-    def test_string_indexer_handle_invalid(self):
-        super().test_string_indexer_handle_invalid()
-
-    @unittest.skip("Need to support.")
     def test_string_indexer_from_labels(self):
         super().test_string_indexer_from_labels()
-
-    @unittest.skip("Need to support.")
-    def test_vector_size_hint(self):
-        super().test_vector_size_hint()
 
 
 if __name__ == "__main__":

@@ -117,6 +117,13 @@
     },
     "sqlState" : "42604"
   },
+  "AVRO_CANNOT_WRITE_NULL_FIELD" : {
+    "message" : [
+      "Cannot write null value for field <name> defined as non-null Avro data type <dataType>.",
+      "To allow null value for this field, specify its avro schema as a union type with \"null\" using `avroSchema` option."
+    ],
+    "sqlState" : "22004"
+  },
   "AVRO_INCOMPATIBLE_READ_TYPE" : {
     "message" : [
       "Cannot convert Avro <avroPath> to SQL <sqlPath> because the original encoded data type is <avroType>, however you're trying to read the field as <sqlType>, which would lead to an incorrect answer.",
@@ -1246,6 +1253,30 @@
       "Found duplicate clauses: <clauseName>. Please, remove one of them."
     ],
     "sqlState" : "42614"
+  },
+  "DUPLICATE_CONDITION_IN_SCOPE" : {
+    "message" : [
+      "Found duplicate condition <condition> in the scope. Please, remove one of them."
+    ],
+    "sqlState" : "42734"
+  },
+  "DUPLICATE_EXCEPTION_HANDLER" : {
+    "message" : [
+      "Found duplicate handlers. Please, remove one of them."
+    ],
+    "subClass" : {
+      "CONDITION" : {
+        "message" : [
+          "Found duplicate handlers for the same condition <condition>."
+        ]
+      },
+      "SQLSTATE" : {
+        "message" : [
+          "Found duplicate handlers for the same SQLSTATE <sqlState>."
+        ]
+      }
+    },
+    "sqlState" : "42734"
   },
   "DUPLICATE_KEY" : {
     "message" : [
@@ -2433,6 +2464,29 @@
     ],
     "sqlState" : "42K05"
   },
+  "INVALID_ERROR_CONDITION_DECLARATION" : {
+    "message" : [
+      "Invalid condition declaration."
+    ],
+    "subClass" : {
+      "ONLY_AT_BEGINNING" : {
+        "message" : [
+          "Condition <conditionName> can only be declared at the beginning of the compound."
+        ]
+      },
+      "QUALIFIED_CONDITION_NAME" : {
+        "message" : [
+          "Condition <conditionName> cannot be qualified."
+        ]
+      },
+      "SPECIAL_CHARACTER_FOUND" : {
+        "message" : [
+          "Special character found in condition name <conditionName>. Only alphanumeric characters and underscores are allowed."
+        ]
+      }
+    },
+    "sqlState" : "42K0R"
+  },
   "INVALID_ESC" : {
     "message" : [
       "Found an invalid escape string: <invalidEscape>. The escape string must contain only one character."
@@ -2600,6 +2654,39 @@
       }
     },
     "sqlState" : "HY000"
+  },
+  "INVALID_HANDLER_DECLARATION" : {
+    "message" : [
+      "Invalid handler declaration."
+    ],
+    "subClass" : {
+      "CONDITION_NOT_FOUND" : {
+        "message" : [
+          "Condition <condition> not found."
+        ]
+      },
+      "DUPLICATE_CONDITION_IN_HANDLER_DECLARATION" : {
+        "message" : [
+          "Found duplicate condition <condition> in the handler declaration. Please, remove one of them."
+        ]
+      },
+      "DUPLICATE_SQLSTATE_IN_HANDLER_DECLARATION" : {
+        "message" : [
+          "Found duplicate sqlState <sqlState> in the handler declaration. Please, remove one of them."
+        ]
+      },
+      "INVALID_CONDITION_COMBINATION" : {
+        "message" : [
+          "Invalid combination of conditions in the handler declaration. SQLEXCEPTION and NOT FOUND cannot be used together with other condition/sqlstate values."
+        ]
+      },
+      "WRONG_PLACE_OF_DECLARATION" : {
+        "message" : [
+          "Handlers must be declared after variable/condition declaration, and before other statements."
+        ]
+      }
+    },
+    "sqlState" : "42K0Q"
   },
   "INVALID_IDENTIFIER" : {
     "message" : [
@@ -3256,6 +3343,12 @@
       }
     },
     "sqlState" : "42616"
+  },
+  "INVALID_SQLSTATE" : {
+    "message" : [
+      "Invalid SQLSTATE value: '<sqlState>'. SQLSTATE must be exactly 5 characters long and contain only A-Z and 0-9. SQLSTATE must not start with '00', '01', or 'XX'."
+    ],
+    "sqlState" : "428B3"
   },
   "INVALID_SQL_ARG" : {
     "message" : [
@@ -5293,11 +5386,6 @@
           "Invoking SparkSession 'baseRelationToDataFrame'. This is server side developer API"
         ]
       },
-      "SESSION_EXECUTE_COMMAND" : {
-        "message" : [
-          "Invoking SparkSession 'executeCommand'."
-        ]
-      },
       "SESSION_EXPERIMENTAL_METHODS" : {
         "message" : [
           "Access to SparkSession Experimental (methods). This is server side developer API"
@@ -5483,6 +5571,11 @@
       "COMMENT_NAMESPACE" : {
         "message" : [
           "Attach a comment to the namespace <namespace>."
+        ]
+      },
+      "CONTINUE_EXCEPTION_HANDLER" : {
+        "message" : [
+          "CONTINUE exception handler is not supported. Use EXIT handler."
         ]
       },
       "DESC_TABLE_COLUMN_JSON" : {

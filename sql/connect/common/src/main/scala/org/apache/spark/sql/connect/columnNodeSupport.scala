@@ -24,11 +24,12 @@ import org.apache.spark.connect.proto.Expression
 import org.apache.spark.connect.proto.Expression.SortOrder.NullOrdering.{SORT_NULLS_FIRST, SORT_NULLS_LAST}
 import org.apache.spark.connect.proto.Expression.SortOrder.SortDirection.{SORT_DIRECTION_ASCENDING, SORT_DIRECTION_DESCENDING}
 import org.apache.spark.connect.proto.Expression.Window.WindowFrame.{FrameBoundary, FrameType}
-import org.apache.spark.sql.{Column, Encoder}
+import org.apache.spark.sql.{functions, Column, Encoder}
+import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
 import org.apache.spark.sql.connect.common.DataTypeProtoConverter
 import org.apache.spark.sql.connect.common.LiteralValueProtoConverter.toLiteralProtoBuilder
-import org.apache.spark.sql.expressions.{Aggregator, UserDefinedAggregator, UserDefinedFunction}
+import org.apache.spark.sql.expressions.{Aggregator, UserDefinedAggregateFunction, UserDefinedAggregator, UserDefinedFunction}
 import org.apache.spark.sql.internal.{Alias, CaseWhenOtherwise, Cast, ColumnNode, ColumnNodeLike, InvokeInlineUserDefinedFunction, LambdaFunction, LazyExpression, Literal, SortOrder, SqlExpression, UnresolvedAttribute, UnresolvedExtractValue, UnresolvedFunction, UnresolvedNamedLambdaVariable, UnresolvedRegex, UnresolvedStar, UpdateFields, Window, WindowFrame}
 
 /**
@@ -36,6 +37,8 @@ import org.apache.spark.sql.internal.{Alias, CaseWhenOtherwise, Cast, ColumnNode
  */
 object ColumnNodeToProtoConverter extends (ColumnNode => proto.Expression) {
   def toExpr(column: Column): proto.Expression = apply(column.node, None)
+
+  def toLiteral(v: Any): proto.Expression = apply(functions.lit(v).node, None)
 
   def toTypedExpr[I](column: Column, encoder: Encoder[I]): proto.Expression = {
     apply(column.node, Option(encoder))
@@ -148,16 +151,28 @@ object ColumnNodeToProtoConverter extends (ColumnNode => proto.Expression) {
       case InvokeInlineUserDefinedFunction(
             a: Aggregator[Any @unchecked, Any @unchecked, Any @unchecked],
             Nil,
-            false,
+            isDistinct,
             _) =>
         // TODO we should probably 'just' detect this particular scenario
         //  in the planner instead of wrapping it in a separate method.
-        val protoUdf = UdfToProtoUtils.toProto(UserDefinedAggregator(a, e.get))
+        val protoUdf = UdfToProtoUtils.toProto(UserDefinedAggregator(a, e.get), Nil, isDistinct)
         builder.getTypedAggregateExpressionBuilder.setScalarScalaUdf(protoUdf.getScalarScalaUdf)
 
-      case InvokeInlineUserDefinedFunction(udf: UserDefinedFunction, args, false, _) =>
+      case InvokeInlineUserDefinedFunction(
+            udaf: UserDefinedAggregateFunction,
+            arguments,
+            isDistinct,
+            _) =>
+        val wrapped = UserDefinedAggregator(
+          aggregator = new UserDefinedAggregateFunctionWrapper(udaf),
+          inputEncoder = RowEncoder.encoderFor(udaf.inputSchema),
+          deterministic = udaf.deterministic)
         builder.setCommonInlineUserDefinedFunction(
-          UdfToProtoUtils.toProto(udf, args.map(apply(_, e))))
+          UdfToProtoUtils.toProto(wrapped, arguments.map(apply(_, e)), isDistinct))
+
+      case InvokeInlineUserDefinedFunction(udf: UserDefinedFunction, args, isDistinct, _) =>
+        builder.setCommonInlineUserDefinedFunction(
+          UdfToProtoUtils.toProto(udf, args.map(apply(_, e)), isDistinct))
 
       case CaseWhenOtherwise(branches, otherwise, _) =>
         val b = builder.getUnresolvedFunctionBuilder

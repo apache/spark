@@ -53,6 +53,7 @@ from pyspark.ml.param.shared import (
 from pyspark.ml.util import JavaMLReadable, JavaMLWritable, try_remote_attribute_relation
 from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaParams, JavaTransformer, _jvm
 from pyspark.ml.common import inherit_doc
+from pyspark.sql.utils import is_remote
 
 if TYPE_CHECKING:
     from py4j.java_gateway import JavaObject
@@ -3754,6 +3755,23 @@ class QuantileDiscretizer(
         """
         Private method to convert the java_model to a Python model.
         """
+        if is_remote():
+            remote_model = JavaModel(java_model)
+            if self.isSet(self.inputCol):
+                return Bucketizer(
+                    splits=remote_model._call_java("getSplits"),
+                    inputCol=self.getInputCol(),
+                    outputCol=self.getOutputCol(),
+                    handleInvalid=self.getHandleInvalid(),
+                )
+            else:
+                return Bucketizer(
+                    splitsArray=remote_model._call_java("getSplitsArray"),
+                    inputCols=self.getInputCols(),
+                    outputCols=self.getOutputCols(),
+                    handleInvalid=self.getHandleInvalid(),
+                )
+
         if self.isSet(self.inputCol):
             return Bucketizer(
                 splits=list(java_model.getSplits()),
@@ -4974,7 +4992,7 @@ class StopWordsRemover(
     Notes
     -----
     - null values from input array are preserved unless adding null to stopWords explicitly.
-    - In Spark Connect Mode, the default value of parameter `locale` is not set.
+    - In Spark Connect Mode, the default value of parameter `locale` and `stopWords` are not set.
 
     Examples
     --------
@@ -5074,10 +5092,10 @@ class StopWordsRemover(
             "org.apache.spark.ml.feature.StopWordsRemover", self.uid
         )
         if isinstance(self._java_obj, str):
-            # Skip setting the default value of 'locale', which needs to invoke a JVM method.
-            # So if users don't explicitly set 'locale', then getLocale fails.
+            # Skip setting the default value of 'locale' and 'stopWords', which
+            # needs to invoke a JVM method.
+            # So if users don't explicitly set 'locale' and/or 'stopWords', then the getters fails.
             self._setDefault(
-                stopWords=StopWordsRemover.loadDefaultStopWords("english"),
                 caseSensitive=False,
             )
         else:
@@ -6841,7 +6859,7 @@ class RFormulaModel(JavaModel, _RFormulaParams, JavaMLReadable["RFormulaModel"],
     """
 
     def __str__(self) -> str:
-        resolvedFormula = self._call_java("resolvedFormula")
+        resolvedFormula = self._call_java("resolvedFormulaString")
         return "RFormulaModel(%s) (uid=%s)" % (resolvedFormula, self.uid)
 
 
