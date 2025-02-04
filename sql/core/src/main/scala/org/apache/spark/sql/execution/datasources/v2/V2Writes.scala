@@ -17,15 +17,14 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
-import java.util.{Optional, UUID}
+import java.util.UUID
 
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.sql.catalyst.expressions.PredicateHelper
-import org.apache.spark.sql.catalyst.plans.logical.{AppendData, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, Project, ReplaceData, WriteDelta}
+import org.apache.spark.sql.catalyst.plans.logical.{AppendData, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, ReplaceData, WriteDelta}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
-import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.WriteDeltaProjections
 import org.apache.spark.sql.connector.catalog.{SupportsWrite, Table}
 import org.apache.spark.sql.connector.expressions.filter.Predicate
@@ -95,7 +94,7 @@ object V2Writes extends Rule[LogicalPlan] with PredicateHelper {
         relationOpt, table, query, queryId, options, outputMode, Some(batchId)) =>
       val writeOptions = mergeOptions(
         options, relationOpt.map(r => r.options.asScala.toMap).getOrElse(Map.empty))
-      val writeBuilder = newWriteBuilder(table, writeOptions, query.schema, queryId)
+      val writeBuilder = newWriteBuilder(table, writeOptions, query.schema, queryId = queryId)
       val write = buildWriteForMicroBatch(table, writeBuilder, outputMode)
       val microBatchWrite = new MicroBatchWrite(batchId, write.toStreaming)
       val customMetrics = write.supportedCustomMetrics.toImmutableArraySeq
@@ -103,14 +102,14 @@ object V2Writes extends Rule[LogicalPlan] with PredicateHelper {
       val newQuery = DistributionAndOrderingUtils.prepareQuery(write, query, funCatalogOpt)
       WriteToDataSourceV2(relationOpt, microBatchWrite, newQuery, customMetrics)
 
-    case rd @ ReplaceData(r: DataSourceV2Relation, _, query, _, _, None) =>
-      val rowSchema = DataTypeUtils.fromAttributes(rd.dataInput)
+    case rd @ ReplaceData(r: DataSourceV2Relation, _, query, _, projections, _, None) =>
+      val rowSchema = projections.rowProjection.schema
+      val metadataSchema = projections.metadataProjection.map(_.schema)
       val writeOptions = mergeOptions(Map.empty, r.options.asScala.toMap)
-      val writeBuilder = newWriteBuilder(r.table, writeOptions, rowSchema)
+      val writeBuilder = newWriteBuilder(r.table, writeOptions, rowSchema, metadataSchema)
       val write = writeBuilder.build()
       val newQuery = DistributionAndOrderingUtils.prepareQuery(write, query, r.funCatalog)
-      // project away any metadata columns that could be used for distribution and ordering
-      rd.copy(write = Some(write), query = Project(rd.dataInput, newQuery))
+      rd.copy(write = Some(write), query = newQuery)
 
     case wd @ WriteDelta(r: DataSourceV2Relation, _, query, _, projections, None) =>
       val writeOptions = mergeOptions(Map.empty, r.options.asScala.toMap)
@@ -158,9 +157,15 @@ object V2Writes extends Rule[LogicalPlan] with PredicateHelper {
       table: Table,
       writeOptions: Map[String, String],
       rowSchema: StructType,
+      metadataSchema: Option[StructType] = None,
       queryId: String = UUID.randomUUID().toString): WriteBuilder = {
 
-    val info = LogicalWriteInfoImpl(queryId, rowSchema, writeOptions.asOptions)
+    val info = LogicalWriteInfoImpl(
+      queryId,
+      rowSchema,
+      writeOptions.asOptions,
+      rowIdSchema = None,
+      metadataSchema)
     table.asWritable.newWriteBuilder(info)
   }
 
@@ -171,15 +176,15 @@ object V2Writes extends Rule[LogicalPlan] with PredicateHelper {
       queryId: String = UUID.randomUUID().toString): DeltaWriteBuilder = {
 
     val rowSchema = projections.rowProjection.map(_.schema).getOrElse(StructType(Nil))
-    val rowIdSchema = projections.rowIdProjection.schema
+    val rowIdSchema = Some(projections.rowIdProjection.schema)
     val metadataSchema = projections.metadataProjection.map(_.schema)
 
     val info = LogicalWriteInfoImpl(
       queryId,
       rowSchema,
       writeOptions.asOptions,
-      Optional.of(rowIdSchema),
-      Optional.ofNullable(metadataSchema.orNull))
+      rowIdSchema,
+      metadataSchema)
 
     val writeBuilder = table.asWritable.newWriteBuilder(info)
     assert(writeBuilder.isInstanceOf[DeltaWriteBuilder], s"$writeBuilder must be DeltaWriteBuilder")

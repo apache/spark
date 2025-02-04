@@ -49,6 +49,7 @@ if TYPE_CHECKING:
     from pyspark.core.context import SparkContext
     from pyspark.sql.connect.dataframe import DataFrame as ConnectDataFrame
     from pyspark.ml.wrapper import JavaWrapper, JavaEstimator
+    from pyspark.ml.evaluation import JavaEvaluator
 
 T = TypeVar("T")
 RW = TypeVar("RW", bound="BaseReadWrite")
@@ -134,7 +135,10 @@ def try_remote_fit(f: FuncT) -> FuncT:
             (_, properties, _) = client.execute_command(command)
             model_info = deserialize(properties)
             client.add_ml_cache(model_info.obj_ref.id)
-            return model_info.obj_ref.id
+            model = self._create_model(model_info.obj_ref.id)
+            if model.__class__.__name__ not in ["Bucketizer"]:
+                model._resetUid(self.uid)
+            return self._copyValues(model)
         else:
             return f(self, dataset)
 
@@ -148,15 +152,19 @@ def try_remote_transform_relation(f: FuncT) -> FuncT:
     def wrapped(self: "JavaWrapper", dataset: "ConnectDataFrame") -> Any:
         if is_remote() and "PYSPARK_NO_NAMESPACE_SHARE" not in os.environ:
             from pyspark.ml import Model, Transformer
-            from pyspark.sql.connect.session import SparkSession
             from pyspark.sql.connect.dataframe import DataFrame as ConnectDataFrame
             from pyspark.ml.connect.serialize import serialize_ml_params
 
-            session = SparkSession.getActiveSession()
+            session = dataset.sparkSession
             assert session is not None
+
+            if hasattr(self, "_serialized_ml_params"):
+                params = self._serialized_ml_params
+            else:
+                params = serialize_ml_params(self, session.client)  # type: ignore[arg-type]
+
             # Model is also a Transformer, so we much match Model first
             if isinstance(self, Model):
-                params = serialize_ml_params(self, session.client)
                 from pyspark.ml.connect.proto import TransformerRelation
 
                 assert isinstance(self._java_obj, str)
@@ -167,7 +175,6 @@ def try_remote_transform_relation(f: FuncT) -> FuncT:
                     session,
                 )
             elif isinstance(self, Transformer):
-                params = serialize_ml_params(self, session.client)
                 from pyspark.ml.connect.proto import TransformerRelation
 
                 assert isinstance(self._java_obj, str)
@@ -217,6 +224,12 @@ def try_remote_call(f: FuncT) -> FuncT:
                 summary = ml_command_result.summary
                 session.client.add_ml_cache(summary)
                 return summary
+            elif ml_command_result.HasField("operator_info"):
+                model_info = deserialize(properties)
+                session._client.add_ml_cache(model_info.obj_ref.id)
+                # get a new model ref id from the existing model,
+                # it is up to the caller to build the model
+                return model_info.obj_ref.id
             else:
                 return deserialize(properties)
         else:
@@ -320,6 +333,37 @@ def try_remote_not_supporting(f: FuncT) -> FuncT:
             raise NotImplementedError("")
         else:
             return f(*args)
+
+    return cast(FuncT, wrapped)
+
+
+def try_remote_evaluate(f: FuncT) -> FuncT:
+    """Mark the evaluate function in Evaluator."""
+
+    @functools.wraps(f)
+    def wrapped(self: "JavaEvaluator", dataset: "ConnectDataFrame") -> Any:
+        if is_remote() and "PYSPARK_NO_NAMESPACE_SHARE" not in os.environ:
+            import pyspark.sql.connect.proto as pb2
+            from pyspark.ml.connect.serialize import serialize_ml_params, deserialize
+
+            client = dataset.sparkSession.client
+            input = dataset._plan.plan(client)
+            assert isinstance(self._java_obj, str)
+            evaluator = pb2.MlOperator(
+                name=self._java_obj, uid=self.uid, type=pb2.MlOperator.EVALUATOR
+            )
+            command = pb2.Command()
+            command.ml_command.evaluate.CopyFrom(
+                pb2.MlCommand.Evaluate(
+                    evaluator=evaluator,
+                    params=serialize_ml_params(self, client),
+                    dataset=input,
+                )
+            )
+            (_, properties, _) = client.execute_command(command)
+            return deserialize(properties)
+        else:
+            return f(self, dataset)
 
     return cast(FuncT, wrapped)
 
@@ -548,6 +592,7 @@ class GeneralJavaMLWritable(JavaMLWritable):
     (Private) Mixin for ML instances that provide :py:class:`GeneralJavaMLWriter`.
     """
 
+    @try_remote_write
     def write(self) -> GeneralJavaMLWriter:
         """Returns an GeneralMLWriter instance for this ML instance."""
         return GeneralJavaMLWriter(self)

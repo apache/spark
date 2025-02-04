@@ -154,6 +154,8 @@ class MinMaxScalerModel private[ml] (
 
   import MinMaxScalerModel._
 
+  private[ml] def this() = this(Identifiable.randomUID("minMaxScal"), Vectors.empty, Vectors.empty)
+
   /** @group setParam */
   @Since("1.5.0")
   def setInputCol(value: String): this.type = set(inputCol, value)

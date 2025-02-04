@@ -100,6 +100,7 @@ class PythonForeachWriter(func: PythonFunction, schema: StructType)
 
       override val faultHandlerEnabled: Boolean = SQLConf.get.pythonUDFWorkerFaulthandlerEnabled
 
+      override val hideTraceback: Boolean = SQLConf.get.pysparkHideTraceback
       override val simplifiedTraceback: Boolean = SQLConf.get.pysparkSimplifiedTraceback
     }
   }

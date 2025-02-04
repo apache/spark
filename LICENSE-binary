@@ -268,6 +268,8 @@ io.fabric8:kubernetes-model-storageclass
 io.fabric8:zjsonpatch
 io.github.java-diff-utils:java-diff-utils
 io.jsonwebtoken:jjwt-api
+io.jsonwebtoken:jjwt-impl
+io.jsonwebtoken:jjwt-jackson
 io.netty:netty-all
 io.netty:netty-buffer
 io.netty:netty-codec
@@ -294,7 +296,6 @@ jakarta.inject:jakarta.inject-api
 jakarta.validation:jakarta.validation-api
 javax.jdo:jdo-api
 joda-time:joda-time
-net.java.dev.jna:jna
 net.sf.opencsv:opencsv
 net.sf.supercsv:super-csv
 net.sf.jpam:jpam

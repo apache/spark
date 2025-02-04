@@ -17,16 +17,15 @@
 
 package org.apache.spark.sql.connect.ml
 
-import java.io.File
+import scala.jdk.CollectionConverters.ListHasAsScala
 
 import org.apache.spark.connect.proto
 import org.apache.spark.ml.classification.LogisticRegressionModel
-import org.apache.spark.ml.linalg.Vectors
+import org.apache.spark.ml.linalg.{Vectors, VectorUDT}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.util.Identifiable
 import org.apache.spark.sql.connect.SparkConnectTestUtils
 import org.apache.spark.sql.connect.service.SessionHolder
-import org.apache.spark.util.Utils
 
 trait FakeArrayParams extends Params {
   final val arrayString: StringArrayParam =
@@ -72,85 +71,39 @@ class MLSuite extends MLHelper {
     val fakedML = new FakedML
     val params = proto.MlParams
       .newBuilder()
-      .putParams(
-        "boolean",
-        proto.Param
-          .newBuilder()
-          .setLiteral(proto.Expression.Literal.newBuilder().setBoolean(true))
-          .build())
-      .putParams(
-        "double",
-        proto.Param
-          .newBuilder()
-          .setLiteral(proto.Expression.Literal.newBuilder().setDouble(1.0))
-          .build())
-      .putParams(
-        "int",
-        proto.Param
-          .newBuilder()
-          .setLiteral(proto.Expression.Literal.newBuilder().setInteger(10))
-          .build())
-      .putParams(
-        "float",
-        proto.Param
-          .newBuilder()
-          .setLiteral(proto.Expression.Literal.newBuilder().setFloat(10.0f))
-          .build())
-      .putParams(
-        "arrayString",
-        proto.Param
-          .newBuilder()
-          .setLiteral(
-            proto.Expression.Literal
-              .newBuilder()
-              .setArray(
-                proto.Expression.Literal.Array
-                  .newBuilder()
-                  .setElementType(proto.DataType
-                    .newBuilder()
-                    .setString(proto.DataType.String.getDefaultInstance)
-                    .build())
-                  .addElements(proto.Expression.Literal.newBuilder().setString("hello"))
-                  .addElements(proto.Expression.Literal.newBuilder().setString("world"))
-                  .build())
-              .build())
-          .build())
+      .putParams("boolean", proto.Expression.Literal.newBuilder().setBoolean(true).build())
+      .putParams("double", proto.Expression.Literal.newBuilder().setDouble(1.0).build())
+      .putParams("int", proto.Expression.Literal.newBuilder().setInteger(10).build())
+      .putParams("float", proto.Expression.Literal.newBuilder().setFloat(10.0f).build())
+      .putParams("arrayString", getArrayStrings)
       .putParams(
         "arrayInt",
-        proto.Param
+        proto.Expression.Literal
           .newBuilder()
-          .setLiteral(
-            proto.Expression.Literal
+          .setArray(
+            proto.Expression.Literal.Array
               .newBuilder()
-              .setArray(
-                proto.Expression.Literal.Array
-                  .newBuilder()
-                  .setElementType(proto.DataType
-                    .newBuilder()
-                    .setInteger(proto.DataType.Integer.getDefaultInstance)
-                    .build())
-                  .addElements(proto.Expression.Literal.newBuilder().setInteger(1))
-                  .addElements(proto.Expression.Literal.newBuilder().setInteger(2))
-                  .build())
+              .setElementType(proto.DataType
+                .newBuilder()
+                .setInteger(proto.DataType.Integer.getDefaultInstance)
+                .build())
+              .addElements(proto.Expression.Literal.newBuilder().setInteger(1))
+              .addElements(proto.Expression.Literal.newBuilder().setInteger(2))
               .build())
           .build())
       .putParams(
         "arrayDouble",
-        proto.Param
+        proto.Expression.Literal
           .newBuilder()
-          .setLiteral(
-            proto.Expression.Literal
+          .setArray(
+            proto.Expression.Literal.Array
               .newBuilder()
-              .setArray(
-                proto.Expression.Literal.Array
-                  .newBuilder()
-                  .setElementType(proto.DataType
-                    .newBuilder()
-                    .setDouble(proto.DataType.Double.getDefaultInstance)
-                    .build())
-                  .addElements(proto.Expression.Literal.newBuilder().setDouble(11.0))
-                  .addElements(proto.Expression.Literal.newBuilder().setDouble(12.0))
-                  .build())
+              .setElementType(proto.DataType
+                .newBuilder()
+                .setDouble(proto.DataType.Double.getDefaultInstance)
+                .build())
+              .addElements(proto.Expression.Literal.newBuilder().setDouble(11.0))
+              .addElements(proto.Expression.Literal.newBuilder().setDouble(12.0))
               .build())
           .build())
       .build()
@@ -159,20 +112,9 @@ class MLSuite extends MLHelper {
     assert(fakedML.getFloat === 10.0)
     assert(fakedML.getArrayInt === Array(1, 2))
     assert(fakedML.getArrayDouble === Array(11.0, 12.0))
-    assert(fakedML.getArrayString === Array("hello", "world"))
+    assert(fakedML.getArrayString === Array("a", "b", "c"))
     assert(fakedML.getBoolean === true)
     assert(fakedML.getDouble === 1.0)
-  }
-
-  def fetchCommand(modelId: String, method: String): proto.MlCommand = {
-    proto.MlCommand
-      .newBuilder()
-      .setFetch(
-        proto.Fetch
-          .newBuilder()
-          .setObjRef(proto.ObjectRef.newBuilder().setId(modelId))
-          .addMethods(proto.Fetch.Method.newBuilder().setMethod(method)))
-      .build()
   }
 
   def trainLogisticRegressionModel(sessionHolder: SessionHolder): String = {
@@ -182,30 +124,20 @@ class MLSuite extends MLHelper {
         proto.MlCommand.Fit
           .newBuilder()
           .setDataset(createLocalRelationProto)
-          .setEstimator(
-            proto.MlOperator
-              .newBuilder()
-              .setName("org.apache.spark.ml.classification.LogisticRegression")
-              .setUid("LogisticRegression")
-              .setType(proto.MlOperator.OperatorType.ESTIMATOR))
-          .setParams(
-            proto.MlParams
-              .newBuilder()
-              .putParams(
-                "maxIter",
-                proto.Param
-                  .newBuilder()
-                  .setLiteral(proto.Expression.Literal
-                    .newBuilder()
-                    .setInteger(2))
-                  .build())))
+          .setEstimator(getLogisticRegression)
+          .setParams(getMaxIter))
       .build()
     val fitResult = MLHandler.handleMlCommand(sessionHolder, fitCommand)
     fitResult.getOperatorInfo.getObjRef.getId
   }
 
+  // Estimator/Model works
   test("LogisticRegression works") {
     val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
+
+    // estimator read/write
+    val ret = readWrite(sessionHolder, getLogisticRegression, getMaxIter)
+    assert(ret.getOperatorInfo.getParams.getParamsMap.get("maxIter").getInteger == 2)
 
     def verifyModel(modelId: String, hasSummary: Boolean = false): Unit = {
       val model = sessionHolder.mlCache.get(modelId)
@@ -218,13 +150,13 @@ class MLSuite extends MLHelper {
       // Fetch double attribute
       val interceptCommand = fetchCommand(modelId, "intercept")
       val interceptResult = MLHandler.handleMlCommand(sessionHolder, interceptCommand)
-      assert(interceptResult.getParam.getLiteral.getDouble === lrModel.intercept)
+      assert(interceptResult.getParam.getDouble === lrModel.intercept)
 
       // Fetch Vector attribute
       val coefficientsCommand = fetchCommand(modelId, "coefficients")
       val coefficientsResult = MLHandler.handleMlCommand(sessionHolder, coefficientsCommand)
       val deserializedCoefficients =
-        MLUtils.deserializeVector(coefficientsResult.getParam.getVector)
+        MLUtils.deserializeVector(coefficientsResult.getParam.getStruct)
       assert(deserializedCoefficients === lrModel.coefficients)
 
       // Fetch Matrix attribute
@@ -232,7 +164,7 @@ class MLSuite extends MLHelper {
       val coefficientsMatrixResult =
         MLHandler.handleMlCommand(sessionHolder, coefficientsMatrixCommand)
       val deserializedCoefficientsMatrix =
-        MLUtils.deserializeMatrix(coefficientsMatrixResult.getParam.getMatrix)
+        MLUtils.deserializeMatrix(coefficientsMatrixResult.getParam.getStruct)
       assert(lrModel.coefficientMatrix === deserializedCoefficientsMatrix)
 
       // Predict with sparse vector
@@ -252,7 +184,7 @@ class MLSuite extends MLHelper {
                   .setParam(Serializer.serializeParam(sparseVector)))))
         .build()
       val predictResult = MLHandler.handleMlCommand(sessionHolder, predictCommand)
-      val predictValue = predictResult.getParam.getLiteral.getDouble
+      val predictValue = predictResult.getParam.getDouble
       assert(lrModel.predict(sparseVector) === predictValue)
 
       // The loaded model doesn't have summary
@@ -268,7 +200,7 @@ class MLSuite extends MLHelper {
               .addMethods(proto.Fetch.Method.newBuilder().setMethod("accuracy")))
           .build()
         val accuracyResult = MLHandler.handleMlCommand(sessionHolder, accuracyCommand)
-        assert(lrModel.summary.accuracy === accuracyResult.getParam.getLiteral.getDouble)
+        assert(lrModel.summary.accuracy === accuracyResult.getParam.getDouble)
 
         val weightedFMeasureCommand = proto.MlCommand
           .newBuilder()
@@ -289,52 +221,19 @@ class MLSuite extends MLHelper {
           MLHandler.handleMlCommand(sessionHolder, weightedFMeasureCommand)
         assert(
           lrModel.summary.weightedFMeasure(2.5) ===
-            weightedFMeasureResult.getParam.getLiteral.getDouble)
+            weightedFMeasureResult.getParam.getDouble)
       }
     }
 
-    try {
-      val modelId = trainLogisticRegressionModel(sessionHolder)
+    val modelId = trainLogisticRegressionModel(sessionHolder)
+    verifyModel(modelId, hasSummary = true)
 
-      verifyModel(modelId, true)
-
-      // read/write
-      val tempDir = Utils.createTempDir(namePrefix = this.getClass.getName)
-      try {
-        val path = new File(tempDir, Identifiable.randomUID("LogisticRegression")).getPath
-        val writeCmd = proto.MlCommand
-          .newBuilder()
-          .setWrite(
-            proto.MlCommand.Write
-              .newBuilder()
-              .setPath(path)
-              .setObjRef(proto.ObjectRef.newBuilder().setId(modelId)))
-          .build()
-        MLHandler.handleMlCommand(sessionHolder, writeCmd)
-
-        val readCmd = proto.MlCommand
-          .newBuilder()
-          .setRead(
-            proto.MlCommand.Read
-              .newBuilder()
-              .setOperator(
-                proto.MlOperator
-                  .newBuilder()
-                  .setName("org.apache.spark.ml.classification.LogisticRegressionModel")
-                  .setType(proto.MlOperator.OperatorType.MODEL))
-              .setPath(path))
-          .build()
-
-        val readResult = MLHandler.handleMlCommand(sessionHolder, readCmd)
-        verifyModel(readResult.getOperatorInfo.getObjRef.getId)
-
-      } finally {
-        Utils.deleteRecursively(tempDir)
-      }
-
-    } finally {
-      sessionHolder.mlCache.clear()
-    }
+    // model read/write
+    val ret1 = readWrite(
+      sessionHolder,
+      modelId,
+      "org.apache.spark.ml.classification.LogisticRegressionModel")
+    verifyModel(ret1.getOperatorInfo.getObjRef.getId)
   }
 
   test("Exception: Unsupported ML operator") {
@@ -367,7 +266,7 @@ class MLSuite extends MLHelper {
     }
   }
 
-  test("ML operator must implement MLReadable for loading") {
+  test("Model must be registered into ServiceLoader when loading") {
     val thrown = intercept[MlUnsupportedException] {
       val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
       val readCmd = proto.MlCommand
@@ -384,7 +283,68 @@ class MLSuite extends MLHelper {
       MLHandler.handleMlCommand(sessionHolder, readCmd)
     }
     assert(
-      thrown.message.contains("org.apache.spark.sql.connect.ml.NotImplementingMLReadble " +
-        "must implement MLReadable"))
+      thrown.message.contains("Unsupported read for " +
+        "org.apache.spark.sql.connect.ml.NotImplementingMLReadble"))
+  }
+
+  test("RegressionEvaluator works") {
+    val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
+
+    val evalCmd = proto.MlCommand
+      .newBuilder()
+      .setEvaluate(
+        proto.MlCommand.Evaluate
+          .newBuilder()
+          .setDataset(createRegressionEvaluationLocalRelationProto)
+          .setEvaluator(getRegressorEvaluator)
+          .setParams(
+            proto.MlParams
+              .newBuilder()
+              .putParams(
+                "predictionCol",
+                proto.Expression.Literal.newBuilder().setString("raw").build())))
+      .build()
+    val evalResult = MLHandler.handleMlCommand(sessionHolder, evalCmd)
+    assert(
+      evalResult.getParam.getDouble > 2.841 &&
+        evalResult.getParam.getDouble < 2.843)
+
+    val ret = readWrite(sessionHolder, getRegressorEvaluator, getMetricName)
+    assert(
+      ret.getOperatorInfo.getParams.getParamsMap.get("metricName").getString ==
+        "mae")
+  }
+
+  // Transformer works
+  test("VectorAssembler works") {
+    val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
+
+    val transformerRelation = proto.MlRelation
+      .newBuilder()
+      .setTransform(
+        proto.MlRelation.Transform
+          .newBuilder()
+          .setTransformer(getVectorAssembler)
+          .setParams(getVectorAssemblerParams)
+          .setInput(createMultiColumnLocalRelationProto))
+      .build()
+
+    val transRet = MLHandler.transformMLRelation(transformerRelation, sessionHolder)
+    Seq("a", "b", "c", "features").foreach(n => assert(transRet.schema.names.contains(n)))
+    assert(transRet.schema("features").dataType.isInstanceOf[VectorUDT])
+    val rows = transRet.collect()
+    assert(rows.mkString(",") === "[1,0,3,[1.0,0.0,3.0]]")
+
+    val ret = readWrite(sessionHolder, getVectorAssembler, getVectorAssemblerParams)
+    assert(ret.getOperatorInfo.getParams.getParamsMap.get("outputCol").getString == "features")
+    assert(ret.getOperatorInfo.getParams.getParamsMap.get("handleInvalid").getString == "skip")
+    assert(
+      ret.getOperatorInfo.getParams.getParamsMap
+        .get("inputCols")
+        .getArray
+        .getElementsList
+        .asScala
+        .map(_.getString)
+        .toArray sameElements Array("a", "b", "c"))
   }
 }

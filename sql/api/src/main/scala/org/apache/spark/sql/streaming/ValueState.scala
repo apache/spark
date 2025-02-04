@@ -19,14 +19,13 @@ package org.apache.spark.sql.streaming
 
 import java.io.Serializable
 
-import org.apache.spark.annotation.{Evolving, Experimental}
+import org.apache.spark.annotation.Evolving
 
-@Experimental
 @Evolving
 /**
  * Interface used for arbitrary stateful operations with the v2 API to capture single value state.
  */
-private[sql] trait ValueState[S] extends Serializable {
+trait ValueState[S] extends Serializable {
 
   /** Whether state exists or not. */
   def exists(): Boolean

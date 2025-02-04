@@ -19,15 +19,14 @@ package org.apache.spark.sql.streaming
 import java.io.Serializable
 import java.util.UUID
 
-import org.apache.spark.annotation.{Evolving, Experimental}
+import org.apache.spark.annotation.Evolving
 
 /**
  * Represents the query info provided to the stateful processor used in the arbitrary state API v2
  * to easily identify task retries on the same partition.
  */
-@Experimental
 @Evolving
-private[sql] trait QueryInfo extends Serializable {
+trait QueryInfo extends Serializable {
 
   /** Returns the streaming query id associated with stateful operator */
   def getQueryId: UUID

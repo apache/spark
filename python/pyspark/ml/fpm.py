@@ -20,7 +20,7 @@ from typing import Any, Dict, Optional, TYPE_CHECKING
 
 from pyspark import keyword_only, since
 from pyspark.sql import DataFrame
-from pyspark.ml.util import JavaMLWritable, JavaMLReadable
+from pyspark.ml.util import JavaMLWritable, JavaMLReadable, try_remote_attribute_relation
 from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaParams
 from pyspark.ml.param.shared import HasPredictionCol, Param, TypeConverters, Params
 
@@ -126,6 +126,7 @@ class FPGrowthModel(JavaModel, _FPGrowthParams, JavaMLWritable, JavaMLReadable["
 
     @property
     @since("2.2.0")
+    @try_remote_attribute_relation
     def freqItemsets(self) -> DataFrame:
         """
         DataFrame with two columns:
@@ -136,6 +137,7 @@ class FPGrowthModel(JavaModel, _FPGrowthParams, JavaMLWritable, JavaMLReadable["
 
     @property
     @since("2.2.0")
+    @try_remote_attribute_relation
     def associationRules(self) -> DataFrame:
         """
         DataFrame with four columns:
@@ -504,9 +506,25 @@ class PrefixSpan(JavaParams):
             - `sequence: ArrayType(ArrayType(T))` (T is the item type)
             - `freq: Long`
         """
+        from pyspark.sql.utils import is_remote
+
+        assert self._java_obj is not None
+
+        if is_remote():
+            from pyspark.ml.wrapper import JavaTransformer
+            from pyspark.ml.connect.serialize import serialize_ml_params
+
+            instance = JavaTransformer()
+            instance._java_obj = "org.apache.spark.ml.fpm.PrefixSpanWrapper"
+            # The helper object is just a JavaTransformer without any Param Mixin,
+            # copying the params by .copy() or directly assigning the _paramMap won't work
+            instance._serialized_ml_params = serialize_ml_params(  # type: ignore[attr-defined]
+                self,
+                dataset.sparkSession.client,  # type: ignore[arg-type,operator]
+            )
+            return instance.transform(dataset)
 
         self._transfer_params_to_java()
-        assert self._java_obj is not None
         jdf = self._java_obj.findFrequentSequentialPatterns(dataset._jdf)
         return DataFrame(jdf, dataset.sparkSession)
 

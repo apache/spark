@@ -68,6 +68,8 @@ class BucketedRandomProjectionLSHModel private[ml](
     private[ml] val randMatrix: Matrix)
   extends LSHModel[BucketedRandomProjectionLSHModel] with BucketedRandomProjectionLSHParams {
 
+  private[ml] def this() = this(Identifiable.randomUID("brp-lsh"), Matrices.empty)
+
   private[ml] def this(uid: String, randUnitVectors: Array[Vector]) = {
     this(uid, Matrices.fromVectors(randUnitVectors.toImmutableArraySeq))
   }

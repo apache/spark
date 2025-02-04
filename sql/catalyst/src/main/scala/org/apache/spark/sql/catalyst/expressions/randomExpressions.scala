@@ -313,15 +313,17 @@ object Uniform {
   group = "string_funcs")
 case class RandStr(
     length: Expression, override val seedExpression: Expression, hideSeed: Boolean)
-  extends ExpressionWithRandomSeed with BinaryLike[Expression] with Nondeterministic
-    with ExpectsInputTypes {
+  extends ExpressionWithRandomSeed
+  with BinaryLike[Expression]
+  with DefaultStringProducingExpression
+  with Nondeterministic
+  with ExpectsInputTypes {
   def this(length: Expression) =
     this(length, UnresolvedSeed, hideSeed = true)
   def this(length: Expression, seedExpression: Expression) =
     this(length, seedExpression, hideSeed = false)
 
   override def nullable: Boolean = false
-  override def dataType: DataType = StringType
   override def stateful: Boolean = true
   override def left: Expression = length
   override def right: Expression = seedExpression

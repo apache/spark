@@ -227,7 +227,7 @@ jobs:
     needs: precondition
     if: fromJson(needs.precondition.outputs.required).build == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 180
+    timeout-minutes: 120
     strategy:
       fail-fast: false
       matrix:
@@ -491,7 +491,7 @@ jobs:
     if: (!cancelled()) && (fromJson(needs.precondition.outputs.required).pyspark == 'true' || fromJson(needs.precondition.outputs.required).pyspark-pandas == 'true')
     name: "Build modules: ${{ matrix.modules }}"
     runs-on: ubuntu-latest
-    timeout-minutes: 180
+    timeout-minutes: 120
     container:
       image: ${{ needs.precondition.outputs.image_pyspark_url_link }}
     strategy:
@@ -654,7 +654,7 @@ jobs:
     if: (!cancelled()) && fromJson(needs.precondition.outputs.required).sparkr == 'true'
     name: "Build modules: sparkr"
     runs-on: ubuntu-latest
-    timeout-minutes: 180
+    timeout-minutes: 120
     container:
       image: ${{ needs.precondition.outputs.image_sparkr_url_link }}
     env:
@@ -776,7 +776,7 @@ jobs:
     if: (!cancelled()) && fromJson(needs.precondition.outputs.required).lint == 'true'
     name: Linters, licenses, and dependencies
     runs-on: ubuntu-latest
-    timeout-minutes: 180
+    timeout-minutes: 120
     env:
       LC_ALL: C.UTF-8
       LANG: C.UTF-8
@@ -907,7 +907,7 @@ jobs:
     if: (!cancelled()) && fromJson(needs.precondition.outputs.required).docs == 'true'
     name: Documentation generation
     runs-on: ubuntu-latest
-    timeout-minutes: 180
+    timeout-minutes: 120
     env:
       LC_ALL: C.UTF-8
       LANG: C.UTF-8
@@ -1030,7 +1030,7 @@ jobs:
     name: Run TPC-DS queries with SF=1
     # Pin to 'Ubuntu 20.04' due to 'databricks/tpcds-kit' compilation
     runs-on: ubuntu-20.04
-    timeout-minutes: 180
+    timeout-minutes: 120
     env:
       SPARK_LOCAL_IP: localhost
     steps:
@@ -1132,7 +1132,7 @@ jobs:
     if: fromJson(needs.precondition.outputs.required).docker-integration-tests == 'true'
     name: Run Docker integration tests
     runs-on: ubuntu-latest
-    timeout-minutes: 180
+    timeout-minutes: 120
     env:
       HADOOP_PROFILE: ${{ inputs.hadoop }}
       HIVE_PROFILE: hive2.3
@@ -1199,7 +1199,7 @@ jobs:
     if: fromJson(needs.precondition.outputs.required).k8s-integration-tests == 'true'
     name: Run Spark on Kubernetes Integration test
     runs-on: ubuntu-latest
-    timeout-minutes: 180
+    timeout-minutes: 120
     steps:
       - name: Checkout Spark repository
         uses: actions/checkout@v4
@@ -1278,7 +1278,7 @@ jobs:
     if: fromJson(needs.precondition.outputs.required).ui == 'true'
     name: Run Spark UI tests
     runs-on: ubuntu-latest
-    timeout-minutes: 180
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
       - name: Use Node.js
