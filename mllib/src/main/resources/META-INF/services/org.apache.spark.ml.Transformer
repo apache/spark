@@ -75,6 +75,7 @@ org.apache.spark.ml.fpm.PrefixSpanWrapper
 
 # stat
 org.apache.spark.ml.stat.ChiSquareTestWrapper
+org.apache.spark.ml.stat.CorrelationWrapper
 
 # feature
 org.apache.spark.ml.feature.RFormulaModel

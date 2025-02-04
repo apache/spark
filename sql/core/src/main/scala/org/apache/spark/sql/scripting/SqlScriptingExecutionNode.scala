@@ -25,6 +25,7 @@ import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.analysis.{NameParameterizedQuery, UnresolvedAttribute, UnresolvedIdentifier}
 import org.apache.spark.sql.catalyst.expressions.{Alias, CreateArray, CreateMap, CreateNamedStruct, Expression, Literal}
 import org.apache.spark.sql.catalyst.plans.logical.{CreateVariable, DefaultValueExpression, DropVariable, LogicalPlan, OneRowRelation, Project, SetVariable}
+import org.apache.spark.sql.catalyst.plans.logical.ExceptionHandlerType.ExceptionHandlerType
 import org.apache.spark.sql.catalyst.trees.{Origin, WithOrigin}
 import org.apache.spark.sql.classic.{DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.errors.SqlScriptingErrors
@@ -176,6 +177,38 @@ class NoOpStatementExec extends LeafStatementExec {
 }
 
 /**
+ * Class to hold mapping of condition names/sqlStates to exception handlers
+ * defined in a compound body.
+ *
+ * @param conditionToExceptionHandlerMap
+ *   Map of condition names to exception handlers.
+ * @param sqlStateToExceptionHandlerMap
+ *   Map of sqlStates to exception handlers.
+ * @param sqlExceptionHandler
+ *   "Catch-all" exception handler.
+ * @param notFoundHandler
+ *   NOT FOUND exception handler.
+ */
+class TriggerToExceptionHandlerMap(
+    conditionToExceptionHandlerMap: Map[String, ExceptionHandlerExec],
+    sqlStateToExceptionHandlerMap: Map[String, ExceptionHandlerExec],
+    sqlExceptionHandler: Option[ExceptionHandlerExec],
+    notFoundHandler: Option[ExceptionHandlerExec]) {
+
+  def getHandlerForCondition(condition: String): Option[ExceptionHandlerExec] = {
+    conditionToExceptionHandlerMap.get(condition)
+  }
+
+  def getHandlerForSqlState(sqlState: String): Option[ExceptionHandlerExec] = {
+    sqlStateToExceptionHandlerMap.get(sqlState)
+  }
+
+  def getSqlExceptionHandler: Option[ExceptionHandlerExec] = sqlExceptionHandler
+
+  def getNotFoundHandler: Option[ExceptionHandlerExec] = notFoundHandler
+}
+
+/**
  * Executable node for CompoundBody.
  * @param statements
  *   Executable nodes for nested statements within the CompoundBody.
@@ -186,12 +219,15 @@ class NoOpStatementExec extends LeafStatementExec {
  *   Scopes are used for grouping local variables and exception handlers.
  * @param context
  *   SqlScriptingExecutionContext keeps the execution state of current script.
+ * @param triggerToExceptionHandlerMap
+ *   Map of condition names/sqlstates to error handlers defined in this compound body.
  */
 class CompoundBodyExec(
     statements: Seq[CompoundStatementExec],
     label: Option[String] = None,
     isScope: Boolean,
-    context: SqlScriptingExecutionContext)
+    context: SqlScriptingExecutionContext,
+    triggerToExceptionHandlerMap: TriggerToExceptionHandlerMap)
   extends NonLeafStatementExec {
 
   private object ScopeStatus extends Enumeration {
@@ -200,7 +236,8 @@ class CompoundBodyExec(
   }
 
   private var localIterator = statements.iterator
-  private var curr = if (localIterator.hasNext) Some(localIterator.next()) else None
+  private[scripting] var curr: Option[CompoundStatementExec] =
+    if (localIterator.hasNext) Some(localIterator.next()) else None
   private var scopeStatus = ScopeStatus.NOT_ENTERED
 
   /**
@@ -210,11 +247,11 @@ class CompoundBodyExec(
    * iteration, but it should be executed only once when compound body that represent
    * scope is encountered for the first time.
    */
-  def enterScope(): Unit = {
+  private[scripting] def enterScope(): Unit = {
     // This check makes this operation idempotent.
     if (isScope && scopeStatus == ScopeStatus.NOT_ENTERED) {
       scopeStatus = ScopeStatus.INSIDE
-      context.enterScope(label.get)
+      context.enterScope(label.get, triggerToExceptionHandlerMap)
     }
   }
 
@@ -223,7 +260,7 @@ class CompoundBodyExec(
    *
    * Even though this operation is called exactly once, we are making it idempotent.
    */
-  protected def exitScope(): Unit = {
+  private[scripting] def exitScope(): Unit = {
     // This check makes this operation idempotent.
     if (isScope && scopeStatus == ScopeStatus.INSIDE) {
       scopeStatus = ScopeStatus.EXITED
@@ -918,7 +955,8 @@ class ForStatementExec(
         variablesMap.keys.toSeq.map(colName => createDropVarExec(colName)),
         None,
         isScope = false,
-        context
+        context,
+        new TriggerToExceptionHandlerMap(Map.empty, Map.empty, None, None)
       )
       ForState.VariableCleanup
     }
@@ -965,4 +1003,20 @@ class ForStatementExec(
     interrupted = false
     body.reset()
   }
+}
+
+/**
+ * Executable node for ExceptionHandler.
+ * @param body Executable CompoundBody of the exception handler.
+ * @param handlerType Handler type: EXIT, CONTINUE.
+ * @param scopeLabel Label of the scope where handler is defined.
+ */
+class ExceptionHandlerExec(
+    val body: CompoundBodyExec,
+    val handlerType: ExceptionHandlerType,
+    val scopeLabel: Option[String]) extends NonLeafStatementExec {
+
+  override def getTreeIterator: Iterator[CompoundStatementExec] = body.getTreeIterator
+
+  override def reset(): Unit = body.reset()
 }

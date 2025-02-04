@@ -165,6 +165,18 @@ object KafkaExceptions {
         "specifiedPartitions" -> specifiedPartitions.toString,
         "assignedPartitions" -> assignedPartitions.toString))
   }
+
+  def timestampOffsetDoesNotMatchAssigned(
+      isStartingOffsets: Boolean,
+      specifiedPartitions: Set[TopicPartition],
+      assignedPartitions: Set[TopicPartition]): KafkaIllegalStateException = {
+    new KafkaIllegalStateException(
+      errorClass = "KAFKA_TIMESTAMP_OFFSET_DOES_NOT_MATCH_ASSIGNED",
+      messageParameters = Map(
+        "position" -> (if (isStartingOffsets) "start" else "end"),
+        "specifiedPartitions" -> specifiedPartitions.toString,
+        "assignedPartitions" -> assignedPartitions.toString))
+  }
 }
 
 /**
