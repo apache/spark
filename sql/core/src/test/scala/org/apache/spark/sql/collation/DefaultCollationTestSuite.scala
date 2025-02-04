@@ -216,7 +216,6 @@ abstract class DefaultCollationTestSuite extends QueryTest with SharedSparkSessi
 class DefaultCollationTestSuiteV1 extends DefaultCollationTestSuite {
 
   test("create/alter view created from a table") {
-    val sessionCollation = "UTF8_LCASE"
     withTable(testTable) {
       sql(s"CREATE TABLE $testTable (c1 STRING, c2 STRING COLLATE UNICODE_CI) USING $dataSource")
       sql(s"INSERT INTO $testTable VALUES ('a', 'a'), ('A', 'A')")
@@ -228,10 +227,7 @@ class DefaultCollationTestSuiteV1 extends DefaultCollationTestSuite {
         assertTableColumnCollation(testView, "c2", "UNICODE_CI")
         checkAnswer(
           sql(s"SELECT DISTINCT COLLATION(c1), COLLATION('a') FROM $testView"),
-          Row(fullyQualifiedPrefix + "UTF8_BINARY", fullyQualifiedPrefix + sessionCollation))
-
-        // filter should use session collation
-        checkAnswer(sql(s"SELECT COUNT(*) FROM $testView WHERE 'a' = 'A'"), Row(2))
+          Row(fullyQualifiedPrefix + "UTF8_BINARY", fullyQualifiedPrefix + "UTF8_BINARY"))
 
         // filter should use column collation
         checkAnswer(sql(s"SELECT COUNT(*) FROM $testView WHERE c1 = 'A'"), Row(1))
@@ -253,7 +249,7 @@ class DefaultCollationTestSuiteV1 extends DefaultCollationTestSuite {
         assertTableColumnCollation(testView, "c2", "UNICODE_CI")
         checkAnswer(
           sql(s"SELECT DISTINCT COLLATION(c1), COLLATION('a') FROM $testView"),
-          Row(fullyQualifiedPrefix + "UNICODE_CI", fullyQualifiedPrefix + sessionCollation))
+          Row(fullyQualifiedPrefix + "UNICODE_CI", fullyQualifiedPrefix + "UTF8_BINARY"))
 
         // after alter both rows should be returned
         checkAnswer(sql(s"SELECT COUNT(*) FROM $testView WHERE c1 = 'A'"), Row(2))
@@ -266,7 +262,7 @@ class DefaultCollationTestSuiteV1 extends DefaultCollationTestSuite {
     val joinTableName = "join_table"
     val sessionCollation = "sr"
 
-    withView(viewTableName, joinTableName) {
+    withTable(viewTableName, joinTableName) {
       sql(s"CREATE TABLE $viewTableName (c1 STRING COLLATE UNICODE_CI) USING $dataSource")
       sql(s"CREATE TABLE $joinTableName (c1 STRING COLLATE UTF8_LCASE) USING $dataSource")
       sql(s"INSERT INTO $viewTableName VALUES ('a')")
@@ -293,17 +289,6 @@ class DefaultCollationTestSuiteV1 extends DefaultCollationTestSuite {
 class DefaultCollationTestSuiteV2 extends DefaultCollationTestSuite with DatasourceV2SQLBase {
   override def testTable: String = s"testcat.${super.testTable}"
   override def testView: String = s"testcat.${super.testView}"
-
-  // delete only works on v2
-  test("delete behavior") {
-    withTable(testTable) {
-      sql(s"CREATE TABLE $testTable (c1 STRING) USING $dataSource")
-      sql(s"INSERT INTO $testTable VALUES ('a'), ('A')")
-
-      sql(s"DELETE FROM $testTable WHERE 'a' = 'A'")
-      checkAnswer(sql(s"SELECT COUNT(*) FROM $testTable"), Seq(Row(0)))
-    }
-  }
 
   test("inline table in RTAS") {
     withTable(testTable) {
