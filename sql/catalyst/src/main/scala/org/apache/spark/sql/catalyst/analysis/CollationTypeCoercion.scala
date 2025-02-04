@@ -246,10 +246,6 @@ object CollationTypeCoercion {
     if (!expressions.exists(e => SchemaUtils.hasNonUTF8BinaryCollation(e.dataType))) {
       // if there are no collated types we don't need to do anything
       return None
-    } else if (ResolveDefaultStringTypes.needsResolution(expressions)) {
-      // if any of the strings types are still not resolved
-      // we need to wait for them to be resolved first
-      return None
     }
 
     val collationContextWinner = expressions.foldLeft(findCollationContext(expressions.head)) {
