@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern._
-import org.apache.spark.sql.types.UserDefinedType
+import org.apache.spark.sql.types._
 
 
 /**
@@ -234,6 +234,14 @@ object ExtractPythonUDFs extends Rule[LogicalPlan] with Logging {
     }
   }
 
+  private def containsUDT(dataType: DataType): Boolean = dataType match {
+    case _: UserDefinedType[_] => true
+    case ArrayType(elementType, _) => containsUDT(elementType)
+    case StructType(fields) => fields.exists(field => containsUDT(field.dataType))
+    case MapType(keyType, valueType, _) => containsUDT(keyType) || containsUDT(valueType)
+    case _ => false
+  }
+
   /**
    * Extract all the PythonUDFs from the current operator and evaluate them before the operator.
    */
@@ -271,9 +279,8 @@ object ExtractPythonUDFs extends Rule[LogicalPlan] with Logging {
           }
           val evalType = evalTypes.head
 
-          val hasUDTInput = child.output.exists(
-            attr => attr.dataType.isInstanceOf[UserDefinedType[_]])
-          val hasUDTReturn = validUdfs.exists(udf => udf.dataType.isInstanceOf[UserDefinedType[_]])
+          val hasUDTInput = validUdfs.exists(_.children.exists(expr => containsUDT(expr.dataType)))
+          val hasUDTReturn = validUdfs.exists(udf => containsUDT(udf.dataType))
 
           val evaluation = evalType match {
             case PythonEvalType.SQL_BATCHED_UDF =>
