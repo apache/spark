@@ -28,7 +28,7 @@ import org.apache.spark.sql.api.java.UDF2
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{PrimitiveIntEncoder, PrimitiveLongEncoder, StringEncoder}
 import org.apache.spark.sql.connect.test.{QueryTest, RemoteSparkSession}
 import org.apache.spark.sql.expressions.{Aggregator, MutableAggregationBuffer, UserDefinedAggregateFunction}
-import org.apache.spark.sql.functions.{call_function, col, struct, udaf, udf}
+import org.apache.spark.sql.functions.{call_function, col, count, lit, struct, udaf, udf}
 import org.apache.spark.sql.types.{DataType, IntegerType, LongType, StringType, StructField, StructType}
 
 /**
@@ -449,8 +449,19 @@ class UserDefinedFunctionE2ETestSuite extends QueryTest with RemoteSparkSession 
     val summer3 = new LongSummer(3)
     val ds = spark
       .range(10)
-      .select(summer0(), summer1(col("id")), summer3(col("id"), col("id") + 1, col("id") + 2))
-    checkDataset(ds, Row(10L, Row(45L, 10L), Row(45L, 55L, 65L, 10L)))
+      .select(
+        count(lit(1)),
+        summer0(),
+        summer1(col("id")),
+        summer3(col("id"), col("id") + 1, col("id") + 2))
+    checkDataset(ds, Row(10L, 10L, Row(45L, 10L), Row(45L, 55L, 65L, 10L)))
+  }
+
+  test("inline UserDefinedAggregateFunction distinct") {
+    val summer1 = new LongSummer(1)
+    val ds =
+      spark.range(10).union(spark.range(10)).select(count(lit(1)), summer1.distinct(col("id")))
+    checkDataset(ds, Row(20L, Row(45L, 10L)))
   }
 
   test("register UserDefinedAggregateFunction") {
@@ -460,10 +471,11 @@ class UserDefinedFunctionE2ETestSuite extends QueryTest with RemoteSparkSession 
     val ds = spark
       .range(10)
       .select(
+        count(lit(1)),
         call_function("s0"),
         call_function("s2", col("id"), col("id") + 1),
         call_function("s4", col("id"), col("id") + 1, col("id") + 2, col("id") + 3))
-    checkDataset(ds, Row(10L, Row(45L, 55L, 10L), Row(45L, 55L, 65L, 75L, 10L)))
+    checkDataset(ds, Row(10L, 10L, Row(45L, 55L, 10L), Row(45L, 55L, 65L, 75L, 10L)))
   }
 }
 
