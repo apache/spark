@@ -15,36 +15,38 @@
 # limitations under the License.
 #
 
-# mypy: disable-error-code="empty-body"
-
 from typing import TYPE_CHECKING
 
-from pyspark.sql.tvf_argument import TableValuedFunctionArgument
-from pyspark.sql.utils import dispatch_table_arg_method
+from pyspark.sql.classic.column import _to_java_column, _to_seq
+from pyspark.sql.table_arg import TableArg as ParentTableArg
+from pyspark.sql.utils import get_active_spark_context
 
 
 if TYPE_CHECKING:
+    from py4j.java_gateway import JavaObject
     from pyspark.sql._typing import ColumnOrName
 
 
-class TableArg(TableValuedFunctionArgument):
-    @dispatch_table_arg_method
+class TableArg(ParentTableArg):
+    def __init__(self, j_table_arg: "JavaObject"):
+        self._j_table_arg = j_table_arg
+
     def partitionBy(self, *cols: "ColumnOrName") -> "TableArg":
-        """
-        Partitions the data based on the specified columns.
-        """
-        ...
+        sc = get_active_spark_context()
+        if len(cols) == 1 and isinstance(cols[0], list):
+            cols = cols[0]
+        j_cols = _to_seq(sc, cols, _to_java_column)
+        new_j_table_arg = self._j_table_arg.partitionBy(j_cols)
+        return TableArg(new_j_table_arg)
 
-    @dispatch_table_arg_method
     def orderBy(self, *cols: "ColumnOrName") -> "TableArg":
-        """
-        Orders the data within each partition by the specified columns.
-        """
-        ...
+        sc = get_active_spark_context()
+        if len(cols) == 1 and isinstance(cols[0], list):
+            cols = cols[0]
+        j_cols = _to_seq(sc, cols, _to_java_column)
+        new_j_table_arg = self._j_table_arg.orderBy(j_cols)
+        return TableArg(new_j_table_arg)
 
-    @dispatch_table_arg_method
     def withSinglePartition(self) -> "TableArg":
-        """
-        Forces the data to be processed in a single partition.
-        """
-        ...
+        new_j_table_arg = self._j_table_arg.withSinglePartition()
+        return TableArg(new_j_table_arg)
