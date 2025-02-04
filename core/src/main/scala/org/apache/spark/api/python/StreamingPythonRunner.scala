@@ -83,6 +83,7 @@ private[spark] class StreamingPythonRunner(
     val dataIn = new DataInputStream(new BufferedInputStream(socket.getInputStream, bufferSize))
     val dataOut = new DataOutputStream(stream)
 
+    val originalTimeout = socket.getSoTimeout()
     // Set timeout to 5 minute during initialization config transmission
     socket.setSoTimeout(5 * 60 * 1000)
 
@@ -106,10 +107,11 @@ private[spark] class StreamingPythonRunner(
         throw new StreamingPythonRunnerInitializationTimeoutException(e.getMessage)
       case e: Exception =>
         throw new StreamingPythonRunnerInitializationCommunicationException(e.getMessage)
+    } finally {
+      // Set timeout back to the original timeout
+      // Should be infinity by default
+      socket.setSoTimeout(originalTimeout)
     }
-
-    // Set timeout back to infinite because code execution time can be arbitrary long
-    socket.setSoTimeout(0)
 
     if (resFromPython != 0) {
       val errMessage = PythonWorkerUtils.readUTF(dataIn)
