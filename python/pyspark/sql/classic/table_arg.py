@@ -17,6 +17,7 @@
 
 from typing import TYPE_CHECKING
 
+from pyspark.sql.classic.column import _to_java_column, _to_seq
 from pyspark.sql.table_arg import TableArg as ParentTableArg
 from pyspark.sql.utils import get_active_spark_context
 
@@ -31,8 +32,6 @@ class TableArg(ParentTableArg):
         self._j_table_arg = j_table_arg
 
     def partitionBy(self, *cols: "ColumnOrName") -> "TableArg":
-        from pyspark.sql.classic.column import _to_java_column, _to_seq
-
         sc = get_active_spark_context()
         if len(cols) == 1 and isinstance(cols[0], list):
             cols = cols[0]
@@ -41,8 +40,6 @@ class TableArg(ParentTableArg):
         return TableArg(new_j_table_arg)
 
     def orderBy(self, *cols: "ColumnOrName") -> "TableArg":
-        from pyspark.sql.classic.column import _to_java_column, _to_seq
-
         sc = get_active_spark_context()
         if len(cols) == 1 and isinstance(cols[0], list):
             cols = cols[0]

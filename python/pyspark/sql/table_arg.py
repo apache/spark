@@ -29,20 +29,20 @@ class TableArg(TableValuedFunctionArgument):
     @dispatch_table_arg_method
     def partitionBy(self, *cols: "ColumnOrName") -> "TableArg":
         """
-        Abstract method to partition data by specified columns.
+        Partitions the data based on the specified columns.
         """
         ...
 
     @dispatch_table_arg_method
     def orderBy(self, *cols: "ColumnOrName") -> "TableArg":
         """
-        Abstract method to order data by specified columns.
+        Orders the data within each partition by the specified columns.
         """
         ...
 
     @dispatch_table_arg_method
     def withSinglePartition(self) -> "TableArg":
         """
-        Abstract method to enforce a single partition.
+        Forces the data to be processed in a single partition.
         """
         ...
