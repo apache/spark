@@ -33,7 +33,6 @@ trait ValueState[S] extends Serializable {
   /**
    * Get the state value if it exists or return null otherwise.
    */
-  @throws[NoSuchElementException]
   def get(): S
 
   /**
