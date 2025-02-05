@@ -44,8 +44,8 @@ private[spark] class ConnectHelper(override val uid: String) extends Model[Conne
     StopWordsRemover.loadDefaultStopWords(language)
   }
 
-  def stopWordsRemoverGetLocale: String = {
-    new StopWordsRemover().getLocale
+  def stopWordsRemoverGetDefaultOrUS: String = {
+    StopWordsRemover.getDefaultOrUS.toString
   }
 
   override def copy(extra: ParamMap): ConnectHelper = defaultCopy(extra)

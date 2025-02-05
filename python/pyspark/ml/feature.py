@@ -5143,7 +5143,7 @@ class StopWordsRemover(
         )
         if is_remote():
             helper = JavaWrapper(java_obj=ML_CONNECT_HELPER_ID)
-            locale = helper._call_java("stopWordsRemoverGetLocale")
+            locale = helper._call_java("stopWordsRemoverGetDefaultOrUS")
         else:
             locale = self._java_obj.getLocale()
 
