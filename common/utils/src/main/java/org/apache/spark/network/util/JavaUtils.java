@@ -103,7 +103,8 @@ public class JavaUtils {
    *               are deleted.
    * @throws IOException if deletion is unsuccessful
    */
-  public static void deleteRecursively(File file, FilenameFilter filter) throws IOException, InterruptedException {
+  public static void deleteRecursively(File file, FilenameFilter filter)
+      throws IOException, InterruptedException {
     if (file == null) { return; }
 
     // On Unix systems, use operating system command to run faster
@@ -168,7 +169,8 @@ public class JavaUtils {
     }
   }
 
-  private static void deleteRecursivelyUsingUnixNative(File file) throws InterruptedException, IOException {
+  private static void deleteRecursivelyUsingUnixNative(File file)
+      throws InterruptedException, IOException {
     ProcessBuilder builder = new ProcessBuilder("rm", "-rf", file.getAbsolutePath());
     Process process = null;
     int exitCode = -1;

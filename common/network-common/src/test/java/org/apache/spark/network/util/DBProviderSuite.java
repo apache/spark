@@ -42,7 +42,8 @@ public class DBProviderSuite {
     testCheckVersionFailed(DBBackend.LEVELDB, "leveldb");
   }
 
-  private void testCheckVersionFailed(DBBackend dbBackend, String namePrefix) throws IOException, InterruptedException {
+  private void testCheckVersionFailed(DBBackend dbBackend, String namePrefix)
+      throws IOException, InterruptedException {
     String root = System.getProperty("java.io.tmpdir");
     File dbFile = JavaUtils.createDirectory(root, namePrefix);
     try {
