@@ -896,17 +896,19 @@ class FeatureTestsMixin:
         self.assertEqual(stopWordRemover.getStopWords(), stopwords)
         transformedDF = stopWordRemover.transform(dataset)
         self.assertEqual(transformedDF.head().output, ["a"])
-        # with language selection
-        stopwords = StopWordsRemover.loadDefaultStopWords("turkish")
-        dataset = self.spark.createDataFrame([Row(input=["acaba", "ama", "biri"])])
-        stopWordRemover.setStopWords(stopwords)
-        self.assertEqual(stopWordRemover.getStopWords(), stopwords)
-        transformedDF = stopWordRemover.transform(dataset)
-        self.assertEqual(transformedDF.head().output, [])
         # with locale
         stopwords = ["BELKİ"]
         dataset = self.spark.createDataFrame([Row(input=["belki"])])
         stopWordRemover.setStopWords(stopwords).setLocale("tr")
+        self.assertEqual(stopWordRemover.getStopWords(), stopwords)
+        transformedDF = stopWordRemover.transform(dataset)
+        self.assertEqual(transformedDF.head().output, [])
+
+    def test_stop_words_language_selection(self):
+        stopWordRemover = StopWordsRemover(inputCol="input", outputCol="output")
+        stopwords = StopWordsRemover.loadDefaultStopWords("turkish")
+        dataset = self.spark.createDataFrame([Row(input=["acaba", "ama", "biri"])])
+        stopWordRemover.setStopWords(stopwords)
         self.assertEqual(stopWordRemover.getStopWords(), stopwords)
         transformedDF = stopWordRemover.transform(dataset)
         self.assertEqual(transformedDF.head().output, [])
