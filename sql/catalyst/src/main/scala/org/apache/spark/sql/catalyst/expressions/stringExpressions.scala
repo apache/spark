@@ -296,7 +296,7 @@ case class Elt(
   override def nullable: Boolean = true
 
   override def dataType: DataType =
-    inputExprs.map(_.dataType).headOption.getOrElse(SQLConf.get.defaultStringType)
+    inputExprs.map(_.dataType).headOption.getOrElse(StringType)
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (children.size < 2) {
@@ -1996,7 +1996,7 @@ object RPadExpressionBuilder extends PadExpressionBuilderBase {
 case class StringRPad(
     str: Expression,
     len: Expression,
-    pad: Expression = Literal.create(" ", SQLConf.get.defaultStringType))
+    pad: Expression = Literal.create(" ", StringType))
   extends TernaryExpression with ImplicitCastInputTypes {
   override def nullIntolerant: Boolean = true
   override def first: Expression = str
@@ -3006,7 +3006,7 @@ object Decode {
         val input = params.head
         val other = params.tail
         val itr = other.iterator
-        var default: Expression = Literal.create(null, SQLConf.get.defaultStringType)
+        var default: Expression = Literal.create(null, StringType)
         val branches = ArrayBuffer.empty[(Expression, Expression)]
         while (itr.hasNext) {
           val search = itr.next()

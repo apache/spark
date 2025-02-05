@@ -47,7 +47,7 @@ object ResolveDefaultStringTypes extends Rule[LogicalPlan] {
     if (isDDLCommand(plan)) {
       transformDDL(plan)
     } else {
-      transformPlan(plan, sessionDefaultStringType)
+      transformPlan(plan, stringTypeForDML)
     }
   }
 
@@ -56,7 +56,7 @@ object ResolveDefaultStringTypes extends Rule[LogicalPlan] {
    * default string type resolved.
    */
   def needsResolution(plan: LogicalPlan): Boolean = {
-    if (!isDDLCommand(plan) && isDefaultSessionCollationUsed) {
+    if (!isDDLCommand(plan)) {
       return false
     }
 
@@ -79,8 +79,6 @@ object ResolveDefaultStringTypes extends Rule[LogicalPlan] {
     expression.exists(e => transformExpression.isDefinedAt(e))
   }
 
-  private def isDefaultSessionCollationUsed: Boolean = conf.defaultStringType == StringType
-
   /**
    * Returns the default string type that should be used in a given DDL command (for now always
    * UTF8_BINARY).
@@ -89,8 +87,8 @@ object ResolveDefaultStringTypes extends Rule[LogicalPlan] {
     StringType("UTF8_BINARY")
 
   /** Returns the session default string type */
-  private def sessionDefaultStringType: StringType =
-    StringType(conf.defaultStringType.collationId)
+  private def stringTypeForDML: StringType =
+    StringType("UTF8_BINARY")
 
   private def isDDLCommand(plan: LogicalPlan): Boolean = plan exists {
     case _: AddColumns | _: ReplaceColumns | _: AlterColumns => true
