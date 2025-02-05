@@ -39,20 +39,6 @@ Project [col1#x, col2#x]
 
 
 -- !query
-SELECT col1 AS k, SUM(col2) FROM testData AS t(col1, col2) GROUP BY k
--- !query analysis
-Aggregate [col1#x], [col1#x AS k#x, sum(col2#x) AS sum(col2)#xL]
-+- SubqueryAlias t
-   +- Project [a#x AS col1#x, b#x AS col2#x]
-      +- SubqueryAlias testdata
-         +- View (`testData`, [a#x, b#x])
-            +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
-               +- Project [a#x, b#x]
-                  +- SubqueryAlias testData
-                     +- LocalRelation [a#x, b#x]
-
-
--- !query
 SELECT * FROM testData AS t(col1, col2, col3)
 -- !query analysis
 org.apache.spark.sql.AnalysisException
