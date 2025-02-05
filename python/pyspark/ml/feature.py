@@ -65,6 +65,7 @@ from pyspark.ml.wrapper import (
     _jvm,
 )
 from pyspark.ml.common import inherit_doc
+from pyspark.sql.types import ArrayType, StringType
 from pyspark.sql.utils import is_remote
 
 if TYPE_CHECKING:
@@ -4829,12 +4830,12 @@ class StringIndexerModel(
         requires an active SparkContext.
         """
         if is_remote():
+            model = StringIndexerModel()
             helper = JavaWrapper(java_obj=ML_CONNECT_HELPER_ID)
-            model = StringIndexerModel(
-                helper._call_java(
-                    "stringIndexerModelFromLabels",
-                    list(labels),
-                )
+            model._java_obj = helper._call_java(
+                "stringIndexerModelFromLabels",
+                model.uid,
+                (list(labels), ArrayType(StringType(), False)),
             )
 
         else:
@@ -4869,12 +4870,15 @@ class StringIndexerModel(
         requires an active SparkContext.
         """
         if is_remote():
+            model = StringIndexerModel()
             helper = JavaWrapper(java_obj=ML_CONNECT_HELPER_ID)
-            model = StringIndexerModel(
-                helper._call_java(
-                    "stringIndexerModelFromLabelsArray",
+            model._java_obj = helper._call_java(
+                "stringIndexerModelFromLabelsArray",
+                model.uid,
+                (
                     [list(labels) for labels in arrayOfLabels],
-                )
+                    ArrayType(ArrayType(StringType(), False)),
+                ),
             )
 
         else:

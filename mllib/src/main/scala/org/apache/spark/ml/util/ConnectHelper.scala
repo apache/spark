@@ -25,12 +25,14 @@ import org.apache.spark.sql.types.StructType
 private[spark] class ConnectHelper(override val uid: String) extends Model[ConnectHelper] {
   def this() = this(Identifiable.randomUID("ConnectHelper"))
 
-  def stringIndexerModelFromLabels(labels: Array[String]): StringIndexerModel = {
-    new StringIndexerModel(labels)
+  def stringIndexerModelFromLabels(
+      uid: String, labels: Array[String]): StringIndexerModel = {
+    new StringIndexerModel(uid, labels)
   }
 
-  def stringIndexerModelFromLabelsArray(labelsArray: Array[Array[String]]): StringIndexerModel = {
-    new StringIndexerModel(labelsArray)
+  def stringIndexerModelFromLabelsArray(
+      uid: String, labelsArray: Array[Array[String]]): StringIndexerModel = {
+    new StringIndexerModel(uid, labelsArray)
   }
 
   override def copy(extra: ParamMap): ConnectHelper = defaultCopy(extra)
