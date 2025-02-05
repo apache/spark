@@ -286,7 +286,7 @@ case class AdaptiveSparkPlanExec(
     // created in the middle of the execution.
     context.session.withActive {
       val executionId = getExecutionId
-      var result = createQueryStages(fun, currentPhysicalPlan, true)
+      var result = createQueryStages(fun, currentPhysicalPlan, firstRun = true)
       val events = new LinkedBlockingQueue[StageMaterializationEvent]()
       val errors = new mutable.ArrayBuffer[Throwable]()
       while (!result.allChildStagesMaterialized) {
