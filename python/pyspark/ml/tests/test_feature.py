@@ -275,6 +275,9 @@ class FeatureTestsMixin:
         self.assertEqual(indexer.uid, model.uid)
         self.assertEqual(model.numFeatures, 2)
 
+        categoryMaps = model.categoryMaps
+        self.assertEqual(categoryMaps, {0: {0.0: 0, -1.0: 1}}, categoryMaps)
+
         output = model.transform(df)
         self.assertEqual(output.columns, ["a", "indexed"])
         self.assertEqual(output.count(), 3)

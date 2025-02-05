@@ -6016,13 +6016,26 @@ class VectorIndexerModel(
 
     @property
     @since("1.4.0")
-    def categoryMaps(self) -> Dict[int, Tuple[float, int]]:
+    def categoryMaps(self) -> Dict[int, Dict[float, int]]:
         """
         Feature value index.  Keys are categorical feature indices (column indices).
         Values are maps from original features values to 0-based category indices.
         If a feature is not in this map, it is treated as continuous.
         """
-        return self._call_java("javaCategoryMaps")
+
+        @try_remote_attribute_relation
+        def categoryMapsDF(m: VectorIndexerModel) -> DataFrame:
+            return m._call_java("categoryMapsDF")
+
+        res: Dict[int, Dict[float, int]] = {}
+        for row in categoryMapsDF(self).collect():
+            featureIndex = int(row.featureIndex)
+            originalValue = float(row.originalValue)
+            categoryIndex = int(row.categoryIndex)
+            if featureIndex not in res:
+                res[featureIndex] = {}
+            res[featureIndex][originalValue] = categoryIndex
+        return res
 
 
 @inherit_doc
