@@ -26,6 +26,10 @@ from pyspark.testing.connectutils import ReusedConnectTestCase
 class TransformWithStateInPandasParityTests(
     TransformWithStateInPandasTestsMixin, ReusedConnectTestCase
 ):
+    """
+    Spark connect parity tests for TransformWithStateInPandas. Run every test case in
+     `TransformWithStateInPandasTestsMixin` in spark connect mode.
+    """
     @classmethod
     def conf(cls):
         cfg = SparkConf(loadDefaults=False)

@@ -384,7 +384,6 @@ class GroupedData:
             )
             initial_state_plan = None
             initial_state_grouping_cols = None
-
         else:
             self._df._check_same_session(initialState._df)
             udf_obj = UserDefinedFunction(
