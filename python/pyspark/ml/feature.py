@@ -6029,9 +6029,9 @@ class VectorIndexerModel(
 
         res: Dict[int, Tuple[float, int]] = {}
         for row in categoryMapsDF(self).collect():
-            featureIndex = row.featureIndex
-            originalValue = row.originalValue
-            categoryIndex = row.categoryIndex
+            featureIndex = int(row.featureIndex)
+            originalValue = float(row.originalValue)
+            categoryIndex = int(row.categoryIndex)
             if featureIndex not in res:
                 res[featureIndex] = {}
             res[featureIndex][originalValue] = categoryIndex
