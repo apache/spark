@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.streaming
+package org.apache.spark.sql.connect.streaming
 
 import java.io.{BufferedWriter, FileWriter}
 import java.nio.file.{Files, Paths}
@@ -30,6 +30,7 @@ import org.apache.spark.sql.{DataFrame, Dataset, Encoders, Row}
 import org.apache.spark.sql.connect.SparkSession
 import org.apache.spark.sql.connect.test.{QueryTest, RemoteSparkSession}
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.streaming.{ListState, MapState, OutputMode, StatefulProcessor, StatefulProcessorWithInitialState, TimeMode, TimerValues, TTLConfig, ValueState}
 import org.apache.spark.sql.types._
 
 case class InputRowForConnectTest(key: String, value: String)
@@ -75,18 +76,18 @@ class TestInitialStatefulProcessor
   }
 
   override def handleInputRows(
-                                key: String,
-                                inputRows: Iterator[(String, String)],
-                                timerValues: TimerValues): Iterator[(String, String)] = {
+      key: String,
+      inputRows: Iterator[(String, String)],
+      timerValues: TimerValues): Iterator[(String, String)] = {
     val count = _countState.getOption().getOrElse(0L) + inputRows.toSeq.length
     _countState.update(count)
     Iterator((key, count.toString))
   }
 
   override def handleInitialState(
-                                   key: String,
-                                   initialState: (String, String, String),
-                                   timerValues: TimerValues): Unit = {
+      key: String,
+      initialState: (String, String, String),
+      timerValues: TimerValues): Unit = {
     val count = _countState.getOption().getOrElse(0L) + 1
     _countState.update(count)
   }
@@ -100,9 +101,9 @@ class ChainingOfOpsStatefulProcessor
   override def init(outputMode: OutputMode, timeMode: TimeMode): Unit = {}
 
   override def handleInputRows(
-                                key: String,
-                                inputRows: Iterator[(String, Timestamp)],
-                                timerValues: TimerValues): Iterator[OutputEventTimeRow] = {
+      key: String,
+      inputRows: Iterator[(String, Timestamp)],
+      timerValues: TimerValues): Iterator[OutputEventTimeRow] = {
     val timestamp = inputRows.next()._2
     Iterator(OutputEventTimeRow(key, timestamp))
   }
