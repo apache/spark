@@ -1037,6 +1037,7 @@ class SignalStatementExec(
     val sqlState: Option[String] = None,
     val message: Either[String, UnresolvedAttribute],
     val msgArguments: Option[UnresolvedAttribute],
+    val isBuiltinError: Boolean,
     val session: SparkSession,
     override val origin: Origin)
   extends LeafStatementExec
@@ -1112,12 +1113,13 @@ class SignalStatementExec(
 
   private[scripting] def getException: SqlScriptingRuntimeException = {
     new SqlScriptingRuntimeException(
-      condition = errorCondition.getOrElse("USER_RAISED_EXCEPTION"),
+      condition = errorCondition.get,
       sqlState = sqlState,
       message = getMessageText,
       cause = null,
       origin = origin,
-      messageParameters = getMessageArgs
+      messageParameters = getMessageArgs,
+      isBuiltinError = isBuiltinError
     )
   }
 

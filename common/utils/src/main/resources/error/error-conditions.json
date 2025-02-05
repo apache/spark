@@ -4187,15 +4187,15 @@
     ],
     "sqlState" : "2200E"
   },
-  "NULL_VARIABLE_SIGNAL_STATEMENT" : {
-    "message" : [
-      "Signal statement requires a non-null variable, but the provided variable <varName> is null."
-    ],
-    "sqlState" : "22004"
-  },
   "NULL_QUERY_STRING_EXECUTE_IMMEDIATE" : {
     "message" : [
       "Execute immediate requires a non-null variable as the query string, but the provided variable <varName> is null."
+    ],
+    "sqlState" : "22004"
+  },
+  "NULL_VARIABLE_SIGNAL_STATEMENT" : {
+    "message" : [
+      "Signal statement requires a non-null variable, but the provided variable <varName> is null."
     ],
     "sqlState" : "22004"
   },

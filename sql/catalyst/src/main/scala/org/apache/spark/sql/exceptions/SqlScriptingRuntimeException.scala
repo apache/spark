@@ -29,9 +29,16 @@ class SqlScriptingRuntimeException (
      message: String,
      cause: Throwable,
      val origin: Origin,
-     messageParameters: Map[String, String] = Map.empty)
+     messageParameters: Map[String, String] = Map.empty,
+     isBuiltinError: Boolean = false)
   extends Exception(
-    errorMessageWithLineNumber(Option(origin), condition, sqlState, message, messageParameters),
+    errorMessageWithLineNumber(
+      Option(origin),
+      condition,
+      sqlState,
+      message,
+      messageParameters,
+      isBuiltinError),
     cause)
     with SparkThrowable {
 
@@ -49,14 +56,15 @@ private object SqlScriptingRuntimeException {
       condition: String,
       sqlState: Option[String],
       message: String,
-      messageParameters: Map[String, String]): String = {
+      messageParameters: Map[String, String],
+      isBuiltinError: Boolean): String = {
 
-    val msgString = if (message.nonEmpty) {
-      s"[$condition] " + message + sqlState.map(s => s" SQLSTATE: $s").getOrElse("")
-    } else {
-      SparkThrowableHelper.getMessage(condition, messageParameters)
-    }
     val prefix = origin.flatMap(o => o.line.map(l => s"{LINE:$l} ")).getOrElse("")
+    val msgString = if (isBuiltinError) {
+      SparkThrowableHelper.getMessage(condition, messageParameters)
+    } else {
+      s"[$condition] " + message + sqlState.map(s => s" SQLSTATE: $s").getOrElse("")
+    }
     prefix + msgString
   }
 }

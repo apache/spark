@@ -280,6 +280,7 @@ case class SqlScriptingInterpreter(session: SparkSession) {
           sqlState = signalStatement.sqlState,
           message = signalStatement.message,
           msgArguments = signalStatement.messageArguments,
+          isBuiltinError = signalStatement.isBuiltinError,
           session = session,
           origin = signalStatement.origin)
 

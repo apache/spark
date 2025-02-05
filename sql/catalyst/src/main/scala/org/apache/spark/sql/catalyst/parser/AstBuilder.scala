@@ -316,6 +316,7 @@ class AstBuilder extends DataTypeAstBuilder
       .map(mpi => Right(UnresolvedAttribute(visitMultipartIdentifier(mpi))))
 
     SignalStatement(
+      isBuiltinError = false,
       errorCondition = Some("USER_RAISED_EXCEPTION"),
       sqlState = Some(sqlState.toUpperCase(Locale.ROOT)),
       message = messageVariable.getOrElse(messageString.getOrElse(Left(""))),
@@ -366,17 +367,19 @@ class AstBuilder extends DataTypeAstBuilder
           conditions += condition.conditionName -> condition.sqlState
         case signalStatement: SignalStatement if signalStatement.sqlState.isEmpty =>
           // Try to get sqlState if condition is user defined.
-          var sqlState: Option[String] = conditions.get(signalStatement.errorCondition.get)
+          signalStatement.sqlState = conditions.get(signalStatement.errorCondition.get)
+
           // If condition is not user defined, check if it is a spark defined error condition.
-          if (sqlState.isEmpty) {
+          if (signalStatement.sqlState.isEmpty) {
             if (SparkThrowableHelper.isValidErrorClass(signalStatement.errorCondition.get)) {
-              sqlState = Some(SparkThrowableHelper.getSqlState(signalStatement.errorCondition.get))
+              signalStatement.sqlState =
+                Some(SparkThrowableHelper.getSqlState(signalStatement.errorCondition.get))
+              signalStatement.isBuiltinError = true
             } else {
               throw SqlScriptingErrors
                 .conditionNotFound(CurrentOrigin.get, signalStatement.errorCondition.get)
             }
           }
-          signalStatement.sqlState = sqlState
           scriptingParserContext.statement()
           buff += signalStatement
         case statement =>

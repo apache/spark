@@ -2413,6 +2413,21 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
       head.asInstanceOf[SingleStatement].getText == "SELECT 3")
   }
 
+  test("signal statement - invalid sqlstate") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  SIGNAL SQLSTATE '123456';
+        |END
+        |""".stripMargin
+    checkError(
+      exception = intercept[SqlScriptingException] {
+        parsePlan(sqlScript)
+      },
+      condition = "INVALID_SQLSTATE",
+      parameters = Map("sqlState" -> "123456"))
+  }
+
   test("declare condition: custom sqlstate") {
     val sqlScriptText =
       """

@@ -409,11 +409,14 @@ case class ExceptionHandler(
 
 /**
  * Logical operator for Signal Statement.
+ * @param isBuiltinError Flag indicating if the error is a builtin error.
  * @param errorCondition Name of the error condition/SQL State for error that will be thrown.
  * @param sqlState SQL State for error that will be thrown.
  * @param message Error message (either string or variable name).
+ * @param messageArguments Arguments to fill builtin error message placeholders.
  */
 case class SignalStatement(
+    var isBuiltinError: Boolean = false,
     errorCondition: Option[String] = None,
     var sqlState: Option[String] = None,
     message: Either[String, UnresolvedAttribute],
