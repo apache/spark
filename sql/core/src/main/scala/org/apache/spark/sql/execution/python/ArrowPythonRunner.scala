@@ -120,6 +120,9 @@ object ArrowPythonRunner {
     val arrowAyncParallelism = conf.pythonUDFArrowConcurrencyLevel.map(v =>
       Seq(SQLConf.PYTHON_UDF_ARROW_CONCURRENCY_LEVEL.key -> v.toString)
     ).getOrElse(Seq.empty)
-    Map(timeZoneConf ++ pandasColsByName ++ arrowSafeTypeCheck ++ arrowAyncParallelism: _*)
+    val useLargeVarTypes = Seq(SQLConf.ARROW_EXECUTION_USE_LARGE_VAR_TYPES.key ->
+      conf.arrowUseLargeVarTypes.toString)
+    Map(timeZoneConf ++ pandasColsByName ++ arrowSafeTypeCheck ++
+      arrowAyncParallelism ++ useLargeVarTypes: _*)
   }
 }
