@@ -656,6 +656,7 @@ private[ml] object MLUtils {
     (
       classOf[ConnectHelper],
       Set(
+        "handleOverwrite",
         "stringIndexerModelFromLabels",
         "stringIndexerModelFromLabelsArray",
         "countVectorizerModelFromVocabulary")))
