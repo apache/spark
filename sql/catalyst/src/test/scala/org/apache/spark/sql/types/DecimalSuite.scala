@@ -20,6 +20,7 @@ package org.apache.spark.sql.types
 import org.scalatest.PrivateMethodTester
 
 import org.apache.spark.{SparkArithmeticException, SparkException, SparkFunSuite, SparkNumberFormatException}
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.Decimal._
@@ -103,6 +104,13 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester with SQLHelper
         "precision" -> "17",
         "scale" -> "0",
         "config" -> "\"spark.sql.ansi.enabled\""))
+    checkError(
+      exception = intercept[AnalysisException](Decimal(BigDecimal("10"), 2, -5)),
+      condition = "NEGATIVE_SCALE_DISALLOWED",
+      parameters = Map(
+        "scale" -> "-5",
+        "sqlConf" -> "\"spark.sql.legacy.allowNegativeScaleOfDecimal\""
+      ))
   }
 
   test("creating decimals with negative scale under legacy mode") {

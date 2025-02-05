@@ -1007,23 +1007,6 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
     }
   }
 
-  test("SPARK-51084: DecimalType negative scale not allowed") {
-    val exception = intercept[AnalysisException] {
-      Seq.empty[(java.math.BigDecimal, java.math.BigDecimal)]
-        .toDF("d1", "d2")
-        .select($"d1".cast(DecimalType(10, -5)).as("d"))
-        .createOrReplaceTempView("dn")
-    }
-    checkError(
-      exception = exception,
-      condition = "NEGATIVE_SCALE_DISALLOWED",
-      parameters = Map(
-        "scale" -> "-5",
-        "sqlConf" -> "\"spark.sql.legacy.allowNegativeScaleOfDecimal\""
-      )
-    )
-  }
-
   test("Star Expansion - script transform") {
     withTempView("script_trans") {
       assume(TestUtils.testCommandAvailable("/bin/bash"))
