@@ -23,10 +23,6 @@ from pyspark.testing.connectutils import ReusedConnectTestCase
 
 class FeatureParityTests(FeatureTestsMixin, ReusedConnectTestCase):
     @unittest.skip("Need to support.")
-    def test_count_vectorizer_from_vocab(self):
-        super().test_count_vectorizer_from_vocab()
-
-    @unittest.skip("Need to support.")
     def test_stop_words_lengague_selection(self):
         super().test_stop_words_lengague_selection()
 

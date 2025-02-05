@@ -1220,15 +1220,29 @@ class CountVectorizerModel(
         Construct the model directly from a vocabulary list of strings,
         requires an active SparkContext.
         """
-        from pyspark.core.context import SparkContext
+        if len(vocabulary) == 0:
+            raise ValueError("Vocabulary list cannot be empty")
 
-        sc = SparkContext._active_spark_context
-        assert sc is not None and sc._gateway is not None
-        java_class = getattr(sc._gateway.jvm, "java.lang.String")
-        jvocab = CountVectorizerModel._new_java_array(vocabulary, java_class)
-        model = CountVectorizerModel._create_from_java_class(
-            "org.apache.spark.ml.feature.CountVectorizerModel", jvocab
-        )
+        if is_remote():
+            model = CountVectorizerModel()
+            helper = JavaWrapper(java_obj=ML_CONNECT_HELPER_ID)
+            model._java_obj = helper._call_java(
+                "countVectorizerModelFromVocabulary",
+                model.uid,
+                list(vocabulary),
+            )
+
+        else:
+            from pyspark.core.context import SparkContext
+
+            sc = SparkContext._active_spark_context
+            assert sc is not None and sc._gateway is not None
+            java_class = getattr(sc._gateway.jvm, "java.lang.String")
+            jvocab = CountVectorizerModel._new_java_array(vocabulary, java_class)
+            model = CountVectorizerModel._create_from_java_class(
+                "org.apache.spark.ml.feature.CountVectorizerModel", jvocab
+            )
+
         model.setInputCol(inputCol)
         if outputCol is not None:
             model.setOutputCol(outputCol)
