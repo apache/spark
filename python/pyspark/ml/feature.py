@@ -6022,8 +6022,13 @@ class VectorIndexerModel(
         Values are maps from original features values to 0-based category indices.
         If a feature is not in this map, it is treated as continuous.
         """
+
+        @try_remote_attribute_relation
+        def categoryMapsDF(m: VectorIndexerModel) -> DataFrame:
+            return m._call_java("categoryMapsDF")
+
         res: Dict[int, Tuple[float, int]] = {}
-        for row in self._call_java("categoryMapsDF").collect():
+        for row in categoryMapsDF(self).collect():
             featureIndex = row.featureIndex
             originalValue = row.originalValue
             categoryIndex = row.categoryIndex
