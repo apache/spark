@@ -17,7 +17,7 @@
 package org.apache.spark.ml.util
 
 import org.apache.spark.ml.Model
-import org.apache.spark.ml.feature.{CountVectorizerModel, StringIndexerModel}
+import org.apache.spark.ml.feature._
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.types.StructType
@@ -44,6 +44,14 @@ private[spark] class ConnectHelper(override val uid: String) extends Model[Conne
   def countVectorizerModelFromVocabulary(
       uid: String, vocabulary: Array[String]): CountVectorizerModel = {
     new CountVectorizerModel(uid, vocabulary)
+  }
+
+  def stopWordsRemoverLoadDefaultStopWords(language: String): Array[String] = {
+    StopWordsRemover.loadDefaultStopWords(language)
+  }
+
+  def stopWordsRemoverGetDefaultOrUS: String = {
+    StopWordsRemover.getDefaultOrUS.toString
   }
 
   override def copy(extra: ParamMap): ConnectHelper = defaultCopy(extra)
