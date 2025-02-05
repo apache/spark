@@ -6027,7 +6027,7 @@ class VectorIndexerModel(
         def categoryMapsDF(m: VectorIndexerModel) -> DataFrame:
             return m._call_java("categoryMapsDF")
 
-        res: Dict[int, Tuple[float, int]] = {}
+        res: Dict[int, Dict[float, int]] = {}
         for row in categoryMapsDF(self).collect():
             featureIndex = int(row.featureIndex)
             originalValue = float(row.originalValue)
