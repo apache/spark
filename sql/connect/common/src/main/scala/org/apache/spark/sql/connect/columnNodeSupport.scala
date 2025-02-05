@@ -200,7 +200,8 @@ object ColumnNodeToProtoConverter extends (ColumnNode => proto.Expression) {
 
       case InvokeInlineUserDefinedFunction(udf: UserDefinedFunction, args, isDistinct, _) =>
         builder.setCommonInlineUserDefinedFunction(
-          UdfToProtoUtils.toProto(udf, args.map(apply(_, e, additionalTransformation)), isDistinct))
+          UdfToProtoUtils
+            .toProto(udf, args.map(apply(_, e, additionalTransformation)), isDistinct))
 
       case CaseWhenOtherwise(branches, otherwise, _) =>
         val b = builder.getUnresolvedFunctionBuilder

@@ -455,7 +455,8 @@ class KeyValueGroupedDatasetE2ETestSuite extends QueryTest with RemoteSparkSessi
   }
 
   // TODO(SPARK-50837): "ds.schema" is wrong: the column is named as "iv.key".
-  ignore("SPARK-26085: fix key attribute name for atomic type for typed aggregation - mapValues") {
+  ignore(
+    "SPARK-26085: fix key attribute name for atomic type for typed aggregation - mapValues") {
     val ds = Seq(1, 2, 3).toDS()
     assert(ds.groupByKey(x => x).mapValues(x => x).count().schema.head.name == "key")
 

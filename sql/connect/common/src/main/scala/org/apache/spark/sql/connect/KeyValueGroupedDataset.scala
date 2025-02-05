@@ -498,15 +498,14 @@ private class KeyValueGroupedDatasetImpl[K, V, IK, IV](
     // Rewrite grouping expressions to use "iv" as input.
     val updatedGroupingExprs = groupingColumns
       .filterNot(c => KeyValueGroupedDatasetImpl.containsDummyUDF(c.node))
-      .map(c => toExprWithTransformation(
-        c.node,
-        encoder = None,
-        rewriteInputColumnHook("iv", ivFields)))
+      .map(c =>
+        toExprWithTransformation(c.node, encoder = None, rewriteInputColumnHook("iv", ivFields)))
     // Rewrite aggregate columns to use "v" as input.
-    val updatedAggTypedExprs = columns.map(c => toExprWithTransformation(
-      c.node,
-      encoder = Some(vEncoder), // Pass encoder to convert it to a typed column.
-      rewriteInputColumnHook("v", vFields)))
+    val updatedAggTypedExprs = columns.map(c =>
+      toExprWithTransformation(
+        c.node,
+        encoder = Some(vEncoder), // Pass encoder to convert it to a typed column.
+        rewriteInputColumnHook("v", vFields)))
 
     val rEnc = ProductEncoder.tuple(kEncoder +: columns.map(c => agnosticEncoderFor(c.encoder)))
     sparkSession.newDataset(rEnc) { builder =>
