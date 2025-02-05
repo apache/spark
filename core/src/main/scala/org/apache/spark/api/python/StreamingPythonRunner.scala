@@ -108,7 +108,7 @@ private[spark] class StreamingPythonRunner(
       case e: Exception =>
         throw new StreamingPythonRunnerInitializationCommunicationException(e.getMessage)
     }
-    
+
     // Set timeout back to the original timeout
     // Should be infinity by default
     socket.setSoTimeout(originalTimeout)
