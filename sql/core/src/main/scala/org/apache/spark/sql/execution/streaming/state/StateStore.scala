@@ -504,9 +504,18 @@ trait StateStoreProvider {
    * (specifically, same names) through `StateStore.metrics`.
    */
   def supportedCustomMetrics: Seq[StateStoreCustomMetric] = Nil
+
+  /**
+   * Optional custom partition-specific metrics that the implementation may want to report.
+   * @note The StateStore objects created by this provider must report the same custom metrics
+   * (specifically, same names) through `StateStore.metrics`.
+   */
+  def supportedCustomPartitionMetrics: Seq[Long => StateStoreCustomMetric] = Nil
 }
 
 object StateStoreProvider {
+
+  val PARTITION_METRIC_SUFFIX = ".partition_"
 
   /**
    * Return a instance of the given provider class name. The instance will not be initialized.

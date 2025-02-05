@@ -320,11 +320,24 @@ trait StateStoreWriter
    * the driver after this SparkPlan has been executed and metrics have been updated.
    */
   def getProgress(): StateOperatorProgress = {
-    val customMetrics = (stateStoreCustomMetrics ++ statefulOperatorCustomMetrics)
+    val customPartitionMetrics = stateStoreCustomMetrics
       .map(entry => entry._1 -> longMetric(entry._1).value)
+      .filter(entry => entry._1.contains(StateStoreProvider.PARTITION_METRIC_SUFFIX) && entry._2 != 0)
+    // Only keep the smallest N custom partition metrics to report to driver.
+    // Note that because of how .value is implemented, any partition never uploaded
+    // is marked as 0 and will be filtered out.
+    val customPartitionMetricsToReport = customPartitionMetrics
+      .toSeq
+      .sortBy(_._2)
+      .take(conf.numPartitionMetricsToReport)
+      .toMap
+    val customMetrics = (stateStoreCustomMetrics ++ statefulOperatorCustomMetrics)
+      .filter(entry => !entry._1.contains(StateStoreProvider.PARTITION_METRIC_SUFFIX))
+      .map(entry => entry._1 -> longMetric(entry._1).value)
+    val allCustomMetrics = customMetrics ++ customPartitionMetricsToReport
 
     val javaConvertedCustomMetrics: java.util.HashMap[String, java.lang.Long] =
-      new java.util.HashMap(customMetrics.transform((_, v) => long2Long(v)).asJava)
+      new java.util.HashMap(allCustomMetrics.transform((_, v) => long2Long(v)).asJava)
 
     // We now don't report number of shuffle partitions inside the state operator. Instead,
     // it will be filled when the stream query progress is reported
@@ -393,9 +406,20 @@ trait StateStoreWriter
 
   private def stateStoreCustomMetrics: Map[String, SQLMetric] = {
     val provider = StateStoreProvider.create(conf.stateStoreProviderClass)
-    provider.supportedCustomMetrics.map {
+    val maxPartitions = conf.numShufflePartitionsForStreaming
+    val customMetricsMap = provider.supportedCustomMetrics.map {
       metric => (metric.name, metric.createSQLMetric(sparkContext))
     }.toMap
+    // Create metrics for all partitions
+    val customPartitionMetricsMap = provider.supportedCustomPartitionMetrics.map {
+        metricGen => (0 until maxPartitions).map { partitionId =>
+          {
+            val metric = metricGen(partitionId)
+            (metric.name, metric.createSQLMetric(sparkContext))
+          }
+        }
+    }.flatten.toMap
+    customMetricsMap ++ customPartitionMetricsMap
   }
 
   /**

@@ -30,6 +30,18 @@ import org.apache.spark.sql.streaming._
 import org.apache.spark.sql.streaming.OutputMode.Update
 import org.apache.spark.util.Utils
 
+// SkipMaintenanceOnCertainPartitionsProvider is a test-only provider that skips running
+// maintenance for partitions 0 and 1 (these are arbitrary choices). This is used to test
+// snapshot upload lag can be observed through StreamingQueryProgress metrics.
+class SkipMaintenanceOnCertainPartitionsProvider extends RocksDBStateStoreProvider {
+  override def doMaintenance(): Unit = {
+    if (stateStoreId.partitionId == 0 || stateStoreId.partitionId == 1) {
+      return
+    }
+    super.doMaintenance()
+  }
+}
+
 class RocksDBStateStoreIntegrationSuite extends StreamTest
   with AlsoTestWithRocksDBFeatures {
   import testImplicits._
@@ -217,6 +229,81 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest
           }
         } finally {
           query.stop()
+        }
+      }
+    }
+  }
+
+  Seq(
+    classOf[SkipMaintenanceOnCertainPartitionsProvider].getName,
+    classOf[RocksDBStateStoreProvider].getName
+  ).foreach { stateStoreClass =>
+    test(
+      s"Verify snapshot lag metric is updated correctly with stateStoreClass = $stateStoreClass"
+    ) {
+      withSQLConf(
+        SQLConf.STATE_STORE_PROVIDER_CLASS.key -> stateStoreClass,
+        SQLConf.STREAMING_MAINTENANCE_INTERVAL.key -> "500",
+        SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.key -> "1",
+        SQLConf.STATE_STORE_PARTITION_METRICS_REPORT_LIMIT.key -> "2",
+        // Set shuffle partitions to 15 so that 20% of shuffle partitions is above the report limit
+        SQLConf.SHUFFLE_PARTITIONS.key -> "15",
+        RocksDBConf.ROCKSDB_SQL_CONF_NAME_PREFIX + ".changelogCheckpointing.enabled" -> "true"
+      ) {
+        withTempDir { checkpointDir =>
+          val inputData = MemoryStream[String]
+          val result = inputData.toDS().dropDuplicates()
+
+          testStream(result, outputMode = OutputMode.Update)(
+            StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
+            AddData(inputData, "a"),
+            Execute { _ =>
+              Thread.sleep(500)
+            },
+            AddData(inputData, "b"),
+            Execute { _ =>
+              Thread.sleep(500)
+            },
+            AddData(inputData, "c"),
+            Execute { _ =>
+              Thread.sleep(500)
+            },
+            AddData(inputData, "d"),
+            CheckNewAnswer("a", "b", "c", "d"),
+            Execute { q =>
+              val metricNamePrefix =
+                "rocksdbSnapshotLastUploaded" + StateStoreProvider.PARTITION_METRIC_SUFFIX
+              if (stateStoreClass == classOf[SkipMaintenanceOnCertainPartitionsProvider].getName) {
+                // Partitions getting skipped (id 0 and 1) do not have an uploaded version, leaving
+                // the metric empty.
+                assert(
+                  q.lastProgress
+                    .stateOperators(0)
+                    .customMetrics
+                    .containsKey(metricNamePrefix + "0") === false
+                )
+                assert(
+                  q.lastProgress
+                    .stateOperators(0)
+                    .customMetrics
+                    .containsKey(metricNamePrefix + "1") === false
+                )
+              }
+              // Make sure only smallest K active metrics are published
+              val partitionMetrics = q.lastProgress
+                .stateOperators(0)
+                .customMetrics
+                .asScala
+                .filterKeys(_.startsWith(metricNamePrefix))
+              // Determined by STATE_STORE_PARTITION_METRICS_REPORT_LIMIT for this scenario
+              assert(
+                partitionMetrics.size == q.sparkSession.conf
+                  .get(SQLConf.STATE_STORE_PARTITION_METRICS_REPORT_LIMIT)
+              )
+              assert(partitionMetrics.forall(_._2 > 0))
+            },
+            StopStream
+          )
         }
       }
     }

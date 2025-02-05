@@ -146,6 +146,7 @@ class RocksDB(
   @volatile private var changelogWriter: Option[StateStoreChangelogWriter] = None
   private val enableChangelogCheckpointing: Boolean = conf.enableChangelogCheckpointing
   @volatile protected var loadedVersion: Long = -1L   // -1 = nothing valid is loaded
+  @volatile protected var lastUploadedVersion = -1L   // -1 = nothing has been uploaded
 
   // variables to manage checkpoint ID. Once a checkpointing finishes, it needs to return
   // `lastCommittedStateStoreCkptId` as the committed checkpointID, as well as
@@ -1072,6 +1073,7 @@ class RocksDB(
       bytesCopied = fileManagerMetrics.bytesCopied,
       filesCopied = fileManagerMetrics.filesCopied,
       filesReused = fileManagerMetrics.filesReused,
+      lastUploadedVersion = lastUploadedVersion,
       zipFileBytesUncompressed = fileManagerMetrics.zipFileBytesUncompressed,
       nativeOpsMetrics = nativeOpsMetrics)
   }
@@ -1239,6 +1241,7 @@ class RocksDB(
         log"with uniqueId: ${MDC(LogKeys.UUID, snapshot.uniqueId)} " +
         log"time taken: ${MDC(LogKeys.TIME_UNITS, uploadTime)} ms. " +
         log"Current lineage: ${MDC(LogKeys.LINEAGE, lineageManager)}")
+      lastUploadedVersion = version
     } finally {
       snapshot.close()
     }
@@ -1688,7 +1691,8 @@ case class RocksDBMetrics(
     bytesCopied: Long,
     filesReused: Long,
     zipFileBytesUncompressed: Option[Long],
-    nativeOpsMetrics: Map[String, Long]) {
+    nativeOpsMetrics: Map[String, Long],
+    lastUploadedVersion: Long) {
   def json: String = Serialization.write(this)(RocksDBMetrics.format)
 }
 
