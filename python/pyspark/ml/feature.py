@@ -6480,11 +6480,10 @@ class Word2VecModel(JavaModel, _Word2VecParams, JavaMLReadable["Word2VecModel"],
         Returns an array with two fields word and similarity (which
         gives the cosine similarity).
         """
-        if not isinstance(word, str):
-            word = _convert_to_vector(word)
-        assert self._java_obj is not None
-        tuples = self._java_obj.findSynonymsArray(word, num)
-        return list(map(lambda st: (st._1(), st._2()), list(tuples)))
+        res = []
+        for row in self.findSynonyms(word, num).collect():
+            res.append((str(row.word), float(row.similarity)))
+        return res
 
 
 class _PCAParams(HasInputCol, HasOutputCol):
