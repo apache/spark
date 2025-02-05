@@ -1352,7 +1352,6 @@ abstract class TransformWithStateSuite extends StateStoreMetricsTest
           TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString) {
         withTempDir { checkpointDir =>
           // When Avro is used, we want to set the StructFields to nullable
-          val shouldBeNullable = usingAvroEncoding()
           val metadataPathPostfix = "state/0/_stateSchema/default"
           val stateSchemaPath = new Path(checkpointDir.toString,
             s"$metadataPathPostfix")
@@ -1363,7 +1362,7 @@ abstract class TransformWithStateSuite extends StateStoreMetricsTest
           val schema0 = StateStoreColFamilySchema(
             "countState", 0,
             keySchema, 0,
-            new StructType().add("value", LongType, nullable = shouldBeNullable),
+            new StructType().add("value", LongType, nullable = true),
             Some(NoPrefixKeyStateEncoderSpec(keySchema)),
             None
           )
@@ -1371,7 +1370,7 @@ abstract class TransformWithStateSuite extends StateStoreMetricsTest
             "listState", 0,
             keySchema, 0,
             new StructType()
-              .add("id", LongType, nullable = shouldBeNullable)
+              .add("id", LongType, nullable = true)
               .add("name", StringType),
             Some(NoPrefixKeyStateEncoderSpec(keySchema)),
             None
@@ -1394,7 +1393,7 @@ abstract class TransformWithStateSuite extends StateStoreMetricsTest
           val schema3 = StateStoreColFamilySchema(
             "$rowCounter_listState", 0,
             keySchema, 0,
-            new StructType().add("count", LongType, nullable = shouldBeNullable),
+            new StructType().add("count", LongType, nullable = true),
             Some(NoPrefixKeyStateEncoderSpec(keySchema)),
             None
           )
