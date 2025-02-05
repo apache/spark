@@ -18,6 +18,7 @@ package org.apache.spark.sql.connect
 
 import java.net.URI
 import java.nio.file.{Files, Paths}
+import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 
@@ -469,7 +470,7 @@ class SparkSession private[sql] (
 
   private[sql] def timeZoneId: String = conf.get(SqlApiConf.SESSION_LOCAL_TIMEZONE_KEY)
   private[sql] def largeVarTypes: Boolean =
-    conf.get(SqlApiConf.ARROW_EXECUTION_USE_LARGE_VAR_TYPES).toBoolean
+    conf.get(SqlApiConf.ARROW_EXECUTION_USE_LARGE_VAR_TYPES).toLowerCase(Locale.ROOT).toBoolean
 
   private[sql] def execute[T](plan: proto.Plan, encoder: AgnosticEncoder[T]): SparkResult[T] = {
     val value = executeInternal(plan)

@@ -121,7 +121,7 @@ object ArrowPythonRunner {
       Seq(SQLConf.PYTHON_UDF_ARROW_CONCURRENCY_LEVEL.key -> v.toString)
     ).getOrElse(Seq.empty)
     val useLargeVarTypes = Seq(SQLConf.ARROW_EXECUTION_USE_LARGE_VAR_TYPES.key ->
-      conf.arrowSafeTypeConversion.toString)
+      conf.arrowUseLargeVarTypes.toString)
     Map(timeZoneConf ++ pandasColsByName ++ arrowSafeTypeCheck ++
       arrowAyncParallelism ++ useLargeVarTypes: _*)
   }

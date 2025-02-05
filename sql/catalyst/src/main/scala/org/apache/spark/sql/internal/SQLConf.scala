@@ -3423,7 +3423,7 @@ object SQLConf {
         "usage per value.")
       .version("3.5.0")
       .booleanConf
-      .createWithDefault(true)
+      .createWithDefault(false)
 
   val PYTHON_UDF_MAX_RECORDS_PER_BATCH =
     buildConf("spark.sql.execution.python.udf.maxRecordsPerBatch")
