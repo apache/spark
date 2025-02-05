@@ -124,15 +124,15 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester with SQLHelper
     }
   }
 
-  test("SPARK-30252: Negative scale is not allowed by default") {
+  test("SPARK-30252, SPARK-51084: Negative scale is not allowed by default") {
     def checkNegativeScaleDecimal(d: => Decimal): Unit = {
       checkError(
-        exception = intercept[SparkException] (d),
-        condition = "INTERNAL_ERROR",
-        parameters = Map("message" -> ("Negative scale is not allowed: -3. " +
-          "Set the config \"spark.sql.legacy.allowNegativeScaleOfDecimal\" " +
-          "to \"true\" to allow it."))
-      )
+        exception = intercept[AnalysisException](d),
+        condition = "NEGATIVE_SCALE_DISALLOWED",
+        parameters = Map(
+          "scale" -> "-3",
+          "sqlConf" -> "\"spark.sql.legacy.allowNegativeScaleOfDecimal\""
+        ))
     }
     checkNegativeScaleDecimal(Decimal(BigDecimal("98765"), 5, -3))
     checkNegativeScaleDecimal(Decimal(BigDecimal("98765").underlying(), 5, -3))
