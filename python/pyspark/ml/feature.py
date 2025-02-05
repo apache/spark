@@ -50,8 +50,20 @@ from pyspark.ml.param.shared import (
     Param,
     Params,
 )
-from pyspark.ml.util import JavaMLReadable, JavaMLWritable, try_remote_attribute_relation
-from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaParams, JavaTransformer, _jvm
+from pyspark.ml.util import (
+    JavaMLReadable,
+    JavaMLWritable,
+    try_remote_attribute_relation,
+    ML_CONNECT_HELPER_ID,
+)
+from pyspark.ml.wrapper import (
+    JavaWrapper,
+    JavaEstimator,
+    JavaModel,
+    JavaParams,
+    JavaTransformer,
+    _jvm,
+)
 from pyspark.ml.common import inherit_doc
 from pyspark.sql.utils import is_remote
 
@@ -4816,15 +4828,26 @@ class StringIndexerModel(
         Construct the model directly from an array of label strings,
         requires an active SparkContext.
         """
-        from pyspark.core.context import SparkContext
+        if is_remote():
+            helper = JavaWrapper(java_obj=ML_CONNECT_HELPER_ID)
+            model = StringIndexerModel(
+                helper._call_java(
+                    "stringIndexerModelFromLabels",
+                    list(labels),
+                )
+            )
 
-        sc = SparkContext._active_spark_context
-        assert sc is not None and sc._gateway is not None
-        java_class = getattr(sc._gateway.jvm, "java.lang.String")
-        jlabels = StringIndexerModel._new_java_array(labels, java_class)
-        model = StringIndexerModel._create_from_java_class(
-            "org.apache.spark.ml.feature.StringIndexerModel", jlabels
-        )
+        else:
+            from pyspark.core.context import SparkContext
+
+            sc = SparkContext._active_spark_context
+            assert sc is not None and sc._gateway is not None
+            java_class = getattr(sc._gateway.jvm, "java.lang.String")
+            jlabels = StringIndexerModel._new_java_array(labels, java_class)
+            model = StringIndexerModel._create_from_java_class(
+                "org.apache.spark.ml.feature.StringIndexerModel", jlabels
+            )
+
         model.setInputCol(inputCol)
         if outputCol is not None:
             model.setOutputCol(outputCol)
@@ -4845,15 +4868,25 @@ class StringIndexerModel(
         Construct the model directly from an array of array of label strings,
         requires an active SparkContext.
         """
-        from pyspark.core.context import SparkContext
+        if is_remote():
+            helper = JavaWrapper(java_obj=ML_CONNECT_HELPER_ID)
+            model = StringIndexerModel(
+                helper._call_java(
+                    "stringIndexerModelFromLabelsArray",
+                    [list(labels) for labels in arrayOfLabels],
+                )
+            )
 
-        sc = SparkContext._active_spark_context
-        assert sc is not None and sc._gateway is not None
-        java_class = getattr(sc._gateway.jvm, "java.lang.String")
-        jlabels = StringIndexerModel._new_java_array(arrayOfLabels, java_class)
-        model = StringIndexerModel._create_from_java_class(
-            "org.apache.spark.ml.feature.StringIndexerModel", jlabels
-        )
+        else:
+            from pyspark.core.context import SparkContext
+
+            sc = SparkContext._active_spark_context
+            assert sc is not None and sc._gateway is not None
+            java_class = getattr(sc._gateway.jvm, "java.lang.String")
+            jlabels = StringIndexerModel._new_java_array(arrayOfLabels, java_class)
+            model = StringIndexerModel._create_from_java_class(
+                "org.apache.spark.ml.feature.StringIndexerModel", jlabels
+            )
         model.setInputCols(inputCols)
         if outputCols is not None:
             model.setOutputCols(outputCols)
@@ -4874,12 +4907,12 @@ class StringIndexerModel(
 
     @property
     @since("3.0.2")
-    def labelsArray(self) -> List[str]:
+    def labelsArray(self) -> List[List[str]]:
         """
         Array of ordered list of labels, corresponding to indices to be assigned
         for each input column.
         """
-        return self._call_java("labelsArray")
+        return [list(labels) for labels in self._call_java("labelsArray")]
 
 
 @inherit_doc

@@ -61,6 +61,9 @@ JR = TypeVar("JR", bound="JavaMLReader")
 FuncT = TypeVar("FuncT", bound=Callable[..., Any])
 
 
+ML_CONNECT_HELPER_ID = "______ML_CONNECT_HELPER______"
+
+
 def try_remote_intermediate_result(f: FuncT) -> FuncT:
     """Mark the function/property that returns the intermediate result of the remote call.
     Eg, model.summary"""
