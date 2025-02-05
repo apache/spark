@@ -280,7 +280,8 @@ case class SqlScriptingInterpreter(session: SparkSession) {
           sqlState = signalStatement.sqlState,
           message = signalStatement.message,
           msgArguments = signalStatement.messageArguments,
-          session = session)
+          session = session,
+          origin = signalStatement.origin)
 
       case sparkStatement: SingleStatement =>
         new SingleStatementExec(

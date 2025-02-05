@@ -31,7 +31,7 @@ class SqlScriptingRuntimeException (
      val origin: Origin,
      messageParameters: Map[String, String] = Map.empty)
   extends Exception(
-    errorMessageWithLineNumber(Option(origin), condition, message, messageParameters),
+    errorMessageWithLineNumber(Option(origin), condition, sqlState, message, messageParameters),
     cause)
     with SparkThrowable {
 
@@ -47,11 +47,12 @@ private object SqlScriptingRuntimeException {
   private def errorMessageWithLineNumber(
       origin: Option[Origin],
       condition: String,
+      sqlState: Option[String],
       message: String,
       messageParameters: Map[String, String]): String = {
 
     val msgString = if (message.nonEmpty) {
-      message
+      s"[$condition] " + message + sqlState.map(s => s" SQLSTATE: $s").getOrElse("")
     } else {
       SparkThrowableHelper.getMessage(condition, messageParameters)
     }

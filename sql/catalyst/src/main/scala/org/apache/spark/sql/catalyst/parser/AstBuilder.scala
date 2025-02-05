@@ -294,27 +294,14 @@ class AstBuilder extends DataTypeAstBuilder
       .map(sl => Left(string(visitStringLit(sl)).replace("'", "")))
     val messageVariable = Option(ctx.msgVar)
       .map(mpi => Right(UnresolvedAttribute(visitMultipartIdentifier(mpi))))
-
-    val messageParameters: Map[String, String] = Map.empty
-
-    // If user did not define message, check if it is a spark defined error condition and get
-    // predefined message.
-    val builtinMessageText =
-      if (messageVariable.isEmpty
-        && messageString.isEmpty
-        && SparkThrowableHelper.isValidErrorClass(ctx.conditionName.getText)) {
-        SparkThrowableHelper.getMessage(ctx.conditionName.getText, messageParameters)
-      } else {
-        ""
-      }
-
-//    val messageArguments = Option(ctx.msgArg)
-//      .map(mpi => UnresolvedAttribute(visitMultipartIdentifier(mpi)))
+    val messageArguments = Option(ctx.argVar)
+      .map(mpi => UnresolvedAttribute(visitMultipartIdentifier(mpi)))
 
     SignalStatement(
       errorCondition = Some(ctx.conditionName.getText.toUpperCase(Locale.ROOT)),
-      message = messageVariable.getOrElse(messageString.getOrElse(Left(builtinMessageText))),
-      messageArguments = None
+      sqlState = None,
+      message = messageVariable.getOrElse(messageString.getOrElse(Left(""))),
+      messageArguments = messageArguments
     )
   }
 

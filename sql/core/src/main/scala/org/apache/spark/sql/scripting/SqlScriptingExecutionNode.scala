@@ -23,7 +23,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.analysis.{ColumnResolutionHelper, NameParameterizedQuery, UnresolvedAttribute, UnresolvedIdentifier}
-import org.apache.spark.sql.catalyst.expressions.{Alias, CreateArray, CreateMap, CreateNamedStruct, Expression, Literal, VariableReference}
+import org.apache.spark.sql.catalyst.expressions.{Alias, CreateArray, CreateMap, CreateNamedStruct, Expression, Literal, UnsafeMapData, VariableReference}
 import org.apache.spark.sql.catalyst.plans.logical.{CreateVariable, DefaultValueExpression, DropVariable, LogicalPlan, OneRowRelation, Project, SetVariable}
 import org.apache.spark.sql.catalyst.plans.logical.ExceptionHandlerType.ExceptionHandlerType
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin, WithOrigin}
@@ -32,7 +32,7 @@ import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.errors.{QueryCompilationErrors, SqlScriptingErrors}
 import org.apache.spark.sql.exceptions.SqlScriptingRuntimeException
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{BooleanType, StringType}
+import org.apache.spark.sql.types.{BooleanType, MapType, StringType}
 
 /**
  * Trait for all SQL scripting execution nodes used during interpretation phase.
@@ -1037,9 +1037,10 @@ class SignalStatementExec(
     val sqlState: Option[String] = None,
     val message: Either[String, UnresolvedAttribute],
     val msgArguments: Option[UnresolvedAttribute],
-    val session: SparkSession)
+    val session: SparkSession,
+    override val origin: Origin)
   extends LeafStatementExec
-    with ColumnResolutionHelper {
+    with ColumnResolutionHelper with WithOrigin {
 
   override def catalogManager: CatalogManager = session.sessionState.catalogManager
   override def conf: SQLConf = session.sessionState.conf
@@ -1049,18 +1050,26 @@ class SignalStatementExec(
       case Some(args) =>
         val argsReference = getVariableReference(args, args.nameParts)
 
-        if (!argsReference.dataType.sameType(StringType)) {
-          throw QueryCompilationErrors.invalidExecuteImmediateVariableType(argsReference.dataType)
+        if (!argsReference.dataType.sameType(MapType(StringType, StringType))) {
+          throw SqlScriptingErrors
+            .invalidSignalStatementVariableType(CurrentOrigin.get, argsReference.dataType)
         }
 
         val argsValue = argsReference.eval(null)
 
         if (argsValue == null) {
-          throw QueryCompilationErrors.nullSQLStringExecuteImmediate(args.name)
+          throw SqlScriptingErrors.nullVariableSignalStatement(CurrentOrigin.get, args.name)
         }
 
-        argsValue.asInstanceOf[Map[String, String]]
-      case None => Map.empty
+        val mapData = argsValue.asInstanceOf[UnsafeMapData]
+        (0 until mapData.numElements()).map { index =>
+          (
+            mapData.keyArray().get(index, StringType).toString,
+            mapData.valueArray().get(index, StringType).toString
+          )
+        }.toMap
+      case None =>
+        Map.empty
     }
   }
 
@@ -1071,7 +1080,8 @@ class SignalStatementExec(
         val varReference = getVariableReference(u, u.nameParts)
 
         if (!varReference.dataType.sameType(StringType)) {
-          throw QueryCompilationErrors.invalidExecuteImmediateVariableType(varReference.dataType)
+          throw SqlScriptingErrors
+            .invalidSignalStatementVariableType(CurrentOrigin.get, varReference.dataType)
         }
 
         // Call eval with null value passed instead of a row.
@@ -1080,7 +1090,8 @@ class SignalStatementExec(
         val varReferenceValue = varReference.eval(null)
 
         if (varReferenceValue == null) {
-          throw QueryCompilationErrors.nullSQLStringExecuteImmediate(u.name)
+          throw SqlScriptingErrors
+            .nullVariableSignalStatement(CurrentOrigin.get, u.name)
         }
 
         varReferenceValue.toString
@@ -1105,7 +1116,7 @@ class SignalStatementExec(
       sqlState = sqlState,
       message = getMessageText,
       cause = null,
-      origin = CurrentOrigin.get,
+      origin = origin,
       messageParameters = getMessageArgs
     )
   }

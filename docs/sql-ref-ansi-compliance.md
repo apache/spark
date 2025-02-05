@@ -600,7 +600,7 @@ Below is a list of all the keywords in Spark SQL.
 |MAP|non-reserved|non-reserved|non-reserved|
 |MATCHED|non-reserved|non-reserved|non-reserved|
 |MERGE|non-reserved|non-reserved|non-reserved|
-|MESSAGE_PARMS|non-reserved|non-reserved|non-reserved|
+|MESSAGE_ARGUMENTS|non-reserved|non-reserved|non-reserved|
 |MESSAGE_TEXT|non-reserved|non-reserved|non-reserved|
 |MICROSECOND|non-reserved|non-reserved|non-reserved|
 |MICROSECONDS|non-reserved|non-reserved|non-reserved|
