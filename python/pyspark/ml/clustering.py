@@ -2155,11 +2155,15 @@ class PowerIterationClustering(
         assert self._java_obj is not None
 
         if is_remote():
-            from python.pyspark.ml.wrapper import JavaTransformer
+            from pyspark.ml.wrapper import JavaTransformer
+            from pyspark.ml.connect.serialize import serialize_ml_params
 
-            instance = JavaTransformer(self._java_obj)
+            instance = JavaTransformer()
             instance._java_obj = "org.apache.spark.ml.clustering.PowerIterationClusteringWrapper"
-            instance._resetUid(self.uid)
+            instance._serialized_ml_params = serialize_ml_params(  # type: ignore[attr-defined]
+                self,
+                dataset.sparkSession.client,  # type: ignore[arg-type,operator]
+            )
             return instance.transform(dataset)
 
         self._transfer_params_to_java()
