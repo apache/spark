@@ -5043,7 +5043,6 @@ class StopWordsRemover(
     Notes
     -----
     - null values from input array are preserved unless adding null to stopWords explicitly.
-    - In Spark Connect Mode, the default value of parameter `locale` and `stopWords` are not set.
 
     Examples
     --------
@@ -5142,19 +5141,14 @@ class StopWordsRemover(
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.feature.StopWordsRemover", self.uid
         )
-        if isinstance(self._java_obj, str):
-            # Skip setting the default value of 'locale' and 'stopWords', which
-            # needs to invoke a JVM method.
-            # So if users don't explicitly set 'locale' and/or 'stopWords', then the getters fails.
-            self._setDefault(
-                caseSensitive=False,
-            )
+        if is_remote():
+            helper = JavaWrapper(java_obj=ML_CONNECT_HELPER_ID)
+            locale = helper._call_java("stopWordsRemoverGetLocale")
         else:
-            self._setDefault(
-                stopWords=StopWordsRemover.loadDefaultStopWords("english"),
-                caseSensitive=False,
-                locale=self._java_obj.getLocale(),
-            )
+            locale = self._java_obj.getLocale()
+
+        stopWords = StopWordsRemover.loadDefaultStopWords("english")
+        self._setDefault(stopWords=stopWords, caseSensitive=False, locale=locale)
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
@@ -5279,8 +5273,14 @@ class StopWordsRemover(
         Supported languages: danish, dutch, english, finnish, french, german, hungarian,
         italian, norwegian, portuguese, russian, spanish, swedish, turkish
         """
-        stopWordsObj = getattr(_jvm(), "org.apache.spark.ml.feature.StopWordsRemover")
-        return list(stopWordsObj.loadDefaultStopWords(language))
+        if is_remote():
+            helper = JavaWrapper(java_obj=ML_CONNECT_HELPER_ID)
+            stopWords = helper._call_java("stopWordsRemoverLoadDefaultStopWords", language)
+            return list(stopWords)
+
+        else:
+            stopWordsObj = getattr(_jvm(), "org.apache.spark.ml.feature.StopWordsRemover")
+            return list(stopWordsObj.loadDefaultStopWords(language))
 
 
 class _TargetEncoderParams(
