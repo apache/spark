@@ -22,6 +22,7 @@ import numpy as np
 
 from pyspark.sql import Window
 from pyspark.sql import functions as F
+from pyspark.sql.internal import InternalFunction as SF
 from pyspark.pandas.missing.window import (
     MissingPandasLikeRolling,
     MissingPandasLikeRollingGroupby,
@@ -34,7 +35,6 @@ from pyspark import pandas as ps  # noqa: F401
 from pyspark.pandas._typing import FrameLike
 from pyspark.pandas.groupby import GroupBy, DataFrameGroupBy
 from pyspark.pandas.internal import NATURAL_ORDER_COLUMN_NAME, SPARK_INDEX_NAME_FORMAT
-from pyspark.pandas.spark import functions as SF
 from pyspark.pandas.utils import scol_for
 from pyspark.sql.column import Column
 from pyspark.sql.types import (

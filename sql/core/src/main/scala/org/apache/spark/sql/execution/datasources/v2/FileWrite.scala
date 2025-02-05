@@ -49,7 +49,7 @@ trait FileWrite extends Write {
 
   private val schema = info.schema()
   private val queryId = info.queryId()
-  private val options = info.options()
+  val options = info.options()
 
   override def description(): String = formatName
 
@@ -96,7 +96,7 @@ trait FileWrite extends Write {
       SchemaUtils.checkColumnNameDuplication(
         schema.fields.map(_.name).toImmutableArraySeq, caseSensitiveAnalysis)
     }
-    DataSource.validateSchema(schema, sqlConf)
+    DataSource.validateSchema(formatName, schema, sqlConf)
 
     // TODO: [SPARK-36340] Unify check schema filed of DataSource V2 Insert.
     schema.foreach { field =>

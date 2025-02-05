@@ -71,7 +71,7 @@ private[spark] class TaskThreadDumpPage(
 
       <div class="row">
         <div class="col-12">
-          <p>Updated at{UIUtils.formatDate(time)}</p>
+          <p>Updated at {UIUtils.formatDate(time)}</p>
           <table class={UIUtils.TABLE_CLASS_NOT_STRIPED + " accordion-group"}>
             <thead>
               <th>Thread ID</th>

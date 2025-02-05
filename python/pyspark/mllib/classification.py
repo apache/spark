@@ -172,9 +172,9 @@ class LogisticRegressionModel(LinearClassificationModel):
     >>> path = tempfile.mkdtemp()
     >>> lrm.save(sc, path)
     >>> sameModel = LogisticRegressionModel.load(sc, path)
-    >>> sameModel.predict(numpy.array([0.0, 1.0]))
+    >>> int(sameModel.predict(numpy.array([0.0, 1.0])))
     1
-    >>> sameModel.predict(SparseVector(2, {0: 1.0}))
+    >>> int(sameModel.predict(SparseVector(2, {0: 1.0})))
     0
     >>> from shutil import rmtree
     >>> try:
@@ -555,7 +555,7 @@ class SVMModel(LinearClassificationModel):
     >>> svm.predict(sc.parallelize([[1.0]])).collect()
     [1]
     >>> svm.clearThreshold()
-    >>> svm.predict(numpy.array([1.0]))
+    >>> float(svm.predict(numpy.array([1.0])))
     1.44...
 
     >>> sparse_data = [
@@ -573,9 +573,9 @@ class SVMModel(LinearClassificationModel):
     >>> path = tempfile.mkdtemp()
     >>> svm.save(sc, path)
     >>> sameModel = SVMModel.load(sc, path)
-    >>> sameModel.predict(SparseVector(2, {1: 1.0}))
+    >>> int(sameModel.predict(SparseVector(2, {1: 1.0})))
     1
-    >>> sameModel.predict(SparseVector(2, {0: -1.0}))
+    >>> int(sameModel.predict(SparseVector(2, {0: -1.0})))
     0
     >>> from shutil import rmtree
     >>> try:
@@ -756,11 +756,11 @@ class NaiveBayesModel(Saveable, Loader["NaiveBayesModel"]):
     ...     LabeledPoint(1.0, [1.0, 0.0]),
     ... ]
     >>> model = NaiveBayes.train(sc.parallelize(data))
-    >>> model.predict(numpy.array([0.0, 1.0]))
+    >>> float(model.predict(numpy.array([0.0, 1.0])))
     0.0
-    >>> model.predict(numpy.array([1.0, 0.0]))
+    >>> float(model.predict(numpy.array([1.0, 0.0])))
     1.0
-    >>> model.predict(sc.parallelize([[1.0, 0.0]])).collect()
+    >>> list(map(float, model.predict(sc.parallelize([[1.0, 0.0]])).collect()))
     [1.0]
     >>> sparse_data = [
     ...     LabeledPoint(0.0, SparseVector(2, {1: 0.0})),
@@ -768,15 +768,18 @@ class NaiveBayesModel(Saveable, Loader["NaiveBayesModel"]):
     ...     LabeledPoint(1.0, SparseVector(2, {0: 1.0}))
     ... ]
     >>> model = NaiveBayes.train(sc.parallelize(sparse_data))
-    >>> model.predict(SparseVector(2, {1: 1.0}))
+    >>> float(model.predict(SparseVector(2, {1: 1.0})))
     0.0
-    >>> model.predict(SparseVector(2, {0: 1.0}))
+    >>> float(model.predict(SparseVector(2, {0: 1.0})))
     1.0
     >>> import os, tempfile
     >>> path = tempfile.mkdtemp()
     >>> model.save(sc, path)
     >>> sameModel = NaiveBayesModel.load(sc, path)
-    >>> sameModel.predict(SparseVector(2, {0: 1.0})) == model.predict(SparseVector(2, {0: 1.0}))
+    >>> bool((
+    ...     sameModel.predict(SparseVector(2, {0: 1.0})) ==
+    ...     model.predict(SparseVector(2, {0: 1.0}))
+    ... ))
     True
     >>> from shutil import rmtree
     >>> try:

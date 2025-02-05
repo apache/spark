@@ -60,6 +60,7 @@ from pyspark.sql import (
     DataFrame as SparkDataFrame,
     Window as PySparkWindow,
 )
+from pyspark.sql.internal import InternalFunction as SF
 from pyspark.sql.types import (
     ArrayType,
     BooleanType,
@@ -117,7 +118,6 @@ from pyspark.pandas.utils import (
     log_advice,
 )
 from pyspark.pandas.datetimes import DatetimeMethods
-from pyspark.pandas.spark import functions as SF
 from pyspark.pandas.spark.accessors import SparkSeriesMethods
 from pyspark.pandas.strings import StringMethods
 from pyspark.pandas.typedef import (
@@ -4558,7 +4558,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         C    2
         dtype: int64
 
-        >>> s.pop('A')
+        >>> int(s.pop('A'))
         0
 
         >>> s
@@ -5821,7 +5821,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         A scalar `where`.
 
-        >>> s.asof(20)
+        >>> float(s.asof(20))
         2.0
 
         For a sequence `where`, a Series is returned. The first value is
@@ -5836,12 +5836,12 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         Missing values are not considered. The following is ``2.0``, not
         NaN, even though NaN is at the index location for ``30``.
 
-        >>> s.asof(30)
+        >>> float(s.asof(30))
         2.0
 
         >>> s = ps.Series([1, 2, np.nan, 4], index=[10, 30, 20, 40])
         >>> with ps.option_context("compute.eager_check", False):
-        ...     s.asof(20)
+        ...     float(s.asof(20))
         ...
         1.0
         """

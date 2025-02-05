@@ -17,12 +17,9 @@
 
 import unittest
 
-from pyspark.testing.connectutils import (
-    should_test_connect,
-    have_graphviz,
-    graphviz_requirement_message,
-)
 from pyspark.sql.tests.connect.test_connect_basic import SparkConnectSQLTestCase
+from pyspark.testing.connectutils import should_test_connect
+from pyspark.testing.utils import have_graphviz, graphviz_requirement_message
 
 if should_test_connect:
     from pyspark.sql.connect.dataframe import DataFrame

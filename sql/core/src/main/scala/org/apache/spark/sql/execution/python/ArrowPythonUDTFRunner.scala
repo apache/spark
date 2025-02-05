@@ -43,7 +43,7 @@ class ArrowPythonUDTFRunner(
     jobArtifactUUID: Option[String])
   extends BasePythonRunner[Iterator[InternalRow], ColumnarBatch](
       Seq(ChainedPythonFunctions(Seq(udtf.func))), evalType, Array(argMetas.map(_.offset)),
-      jobArtifactUUID)
+      jobArtifactUUID, pythonMetrics)
   with BasicPythonArrowInput
   with BasicPythonArrowOutput {
 
@@ -59,6 +59,7 @@ class ArrowPythonUDTFRunner(
 
   override val errorOnDuplicatedFieldNames: Boolean = true
 
+  override val hideTraceback: Boolean = SQLConf.get.pysparkHideTraceback
   override val simplifiedTraceback: Boolean = SQLConf.get.pysparkSimplifiedTraceback
 
   override val bufferSize: Int = SQLConf.get.pandasUDFBufferSize

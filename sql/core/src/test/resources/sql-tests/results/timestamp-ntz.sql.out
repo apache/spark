@@ -67,9 +67,16 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT make_timestamp_ntz(2021, 07, 11, 6, 30, 60.007)
 -- !query schema
-struct<make_timestamp_ntz(2021, 7, 11, 6, 30, 60.007):timestamp_ntz>
+struct<>
 -- !query output
-NULL
+org.apache.spark.SparkDateTimeException
+{
+  "errorClass" : "INVALID_FRACTION_OF_SECOND",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "secAndMicros" : "60.007"
+  }
+}
 
 
 -- !query

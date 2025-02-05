@@ -17,12 +17,8 @@
 
 package org.apache.spark.sql.sources
 
-import scala.jdk.CollectionConverters._
-
 import org.apache.spark.sql.{QueryTest, Row}
-import org.apache.spark.sql.connector.ExternalCommandRunner
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 class ExternalCommandRunnerSuite extends QueryTest with SharedSparkSession {
   test("execute command") {
@@ -38,13 +34,5 @@ class ExternalCommandRunnerSuite extends QueryTest with SharedSparkSession {
     } finally {
       System.clearProperty("command")
     }
-  }
-}
-
-class FakeCommandRunner extends ExternalCommandRunner {
-
-  override def executeCommand(command: String, options: CaseInsensitiveStringMap): Array[String] = {
-    System.setProperty("command", command)
-    options.keySet().iterator().asScala.toSeq.sorted.toArray
   }
 }

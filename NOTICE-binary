@@ -448,27 +448,6 @@ which has the following notices:
      * Alec Wysoker
        * Performance and memory usage improvement
 
-The binary distribution of this product bundles binaries of
-Xerces2 Java Parser 2.9.1,
-which has the following notices:
- * =========================================================================
-   ==  NOTICE file corresponding to section 4(d) of the Apache License,   ==
-   ==  Version 2.0, in this case for the Apache Xerces Java distribution. ==
-   =========================================================================
-
-   Apache Xerces Java
-   Copyright 1999-2007 The Apache Software Foundation
-
-   This product includes software developed at
-   The Apache Software Foundation (http://www.apache.org/).
-
-   Portions of this software were originally based on the following:
-     - software copyright (c) 1999, IBM Corporation., http://www.ibm.com.
-     - software copyright (c) 1999, Sun Microsystems., http://www.sun.com.
-     - voluntary contributions made by Paul Eng on behalf of the
-       Apache Software Foundation that were originally developed at iClick, Inc.,
-       software copyright (c) 1999.
-
 Apache Commons Collections
 Copyright 2001-2015 The Apache Software Foundation
 

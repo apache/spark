@@ -457,19 +457,19 @@ class HDFSBackedStateDataSourceReadSuite extends StateDataSourceReadSuite {
     testSnapshotPartitionId()
   }
 
-  test("snapshotStatBatchId on limit state") {
+  test("snapshotStartBatchId on limit state") {
     testSnapshotOnLimitState("hdfs")
   }
 
-  test("snapshotStatBatchId on aggregation state") {
+  test("snapshotStartBatchId on aggregation state") {
     testSnapshotOnAggregateState("hdfs")
   }
 
-  test("snapshotStatBatchId on deduplication state") {
+  test("snapshotStartBatchId on deduplication state") {
     testSnapshotOnDeduplicateState("hdfs")
   }
 
-  test("snapshotStatBatchId on join state") {
+  test("snapshotStartBatchId on join state") {
     testSnapshotOnJoinState("hdfs", 1)
     testSnapshotOnJoinState("hdfs", 2)
   }
@@ -550,19 +550,19 @@ StateDataSourceReadSuite {
     testSnapshotPartitionId()
   }
 
-  test("snapshotStatBatchId on limit state") {
+  test("snapshotStartBatchId on limit state") {
     testSnapshotOnLimitState("rocksdb")
   }
 
-  test("snapshotStatBatchId on aggregation state") {
+  test("snapshotStartBatchId on aggregation state") {
     testSnapshotOnAggregateState("rocksdb")
   }
 
-  test("snapshotStatBatchId on deduplication state") {
+  test("snapshotStartBatchId on deduplication state") {
     testSnapshotOnDeduplicateState("rocksdb")
   }
 
-  test("snapshotStatBatchId on join state") {
+  test("snapshotStartBatchId on join state") {
     testSnapshotOnJoinState("rocksdb", 1)
     testSnapshotOnJoinState("rocksdb", 2)
   }

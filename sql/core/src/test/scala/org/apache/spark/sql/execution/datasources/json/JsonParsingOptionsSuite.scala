@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.json
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{StringType, StructType}
@@ -184,5 +185,15 @@ class JsonParsingOptionsSuite extends QueryTest with SharedSparkSession {
     assert(df.schema.last.name == "price")
     assert(df.first().getString(0) == "Cazen Lee")
     assert(df.first().getString(1) == "$10")
+  }
+
+  test("SPARK-49955: null string value does not mean corrupted file") {
+    val str = "{\"name\": \"someone\"}"
+    val stringDataset = Seq(str, null).toDS()
+    val df = spark.read.json(stringDataset)
+    checkAnswer(df, Seq(Row(null, "someone"), Row(null, null)))
+
+    val e = intercept[SparkException](spark.read.option("mode", "failfast").json(stringDataset))
+    assert(e.getCause.isInstanceOf[NullPointerException])
   }
 }

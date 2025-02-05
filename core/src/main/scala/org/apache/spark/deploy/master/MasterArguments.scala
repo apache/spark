@@ -33,12 +33,6 @@ private[master] class MasterArguments(args: Array[String], conf: SparkConf) exte
   var webUiPort = 8080
   var propertiesFile: String = null
 
-  // Check for settings in environment variables
-  if (System.getenv("SPARK_MASTER_IP") != null) {
-    logWarning("SPARK_MASTER_IP is deprecated, please use SPARK_MASTER_HOST")
-    host = System.getenv("SPARK_MASTER_IP")
-  }
-
   if (System.getenv("SPARK_MASTER_HOST") != null) {
     host = System.getenv("SPARK_MASTER_HOST")
   }
@@ -63,11 +57,6 @@ private[master] class MasterArguments(args: Array[String], conf: SparkConf) exte
 
   @tailrec
   private def parse(args: List[String]): Unit = args match {
-    case ("--ip" | "-i") :: value :: tail =>
-      Utils.checkHost(value)
-      host = value
-      parse(tail)
-
     case ("--host" | "-h") :: value :: tail =>
       Utils.checkHost(value)
       host = value
@@ -103,7 +92,6 @@ private[master] class MasterArguments(args: Array[String], conf: SparkConf) exte
       "Usage: Master [options]\n" +
       "\n" +
       "Options:\n" +
-      "  -i HOST, --ip HOST     Hostname to listen on (deprecated, please use --host or -h) \n" +
       "  -h HOST, --host HOST   Hostname to listen on\n" +
       "  -p PORT, --port PORT   Port to listen on (default: 7077)\n" +
       "  --webui-port PORT      Port for web UI (default: 8080)\n" +

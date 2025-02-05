@@ -98,7 +98,7 @@ public class V2ExpressionSQLBuilder {
         case "ENDS_WITH" -> visitEndsWith(build(e.children()[0]), build(e.children()[1]));
         case "CONTAINS" -> visitContains(build(e.children()[0]), build(e.children()[1]));
         case "=", "<>", "<=>", "<", "<=", ">", ">=" ->
-          visitBinaryComparison(name, inputToSQL(e.children()[0]), inputToSQL(e.children()[1]));
+          visitBinaryComparison(name, e.children()[0], e.children()[1]);
         case "+", "*", "/", "%", "&", "|", "^" ->
           visitBinaryArithmetic(name, inputToSQL(e.children()[0]), inputToSQL(e.children()[1]));
         case "-" -> {
@@ -118,7 +118,7 @@ public class V2ExpressionSQLBuilder {
           "COT", "ASIN", "ASINH", "ACOS", "ACOSH", "ATAN", "ATANH", "ATAN2", "CBRT", "DEGREES",
           "RADIANS", "SIGN", "WIDTH_BUCKET", "SUBSTRING", "UPPER", "LOWER", "TRANSLATE",
           "DATE_ADD", "DATE_DIFF", "TRUNC", "AES_ENCRYPT", "AES_DECRYPT", "SHA1", "SHA2", "MD5",
-          "CRC32", "BIT_LENGTH", "CHAR_LENGTH", "CONCAT" ->
+          "CRC32", "BIT_LENGTH", "CHAR_LENGTH", "CONCAT", "RPAD", "LPAD" ->
           visitSQLFunction(name, expressionsToStringArray(e.children()));
         case "CASE_WHEN" -> visitCaseWhen(expressionsToStringArray(e.children()));
         case "TRIM" -> visitTrim("BOTH", expressionsToStringArray(e.children()));
@@ -217,6 +217,10 @@ public class V2ExpressionSQLBuilder {
     } else {
       return build(input);
     }
+  }
+
+  protected String visitBinaryComparison(String name, Expression le, Expression re) {
+    return visitBinaryComparison(name, inputToSQL(le), inputToSQL(re));
   }
 
   protected String visitBinaryComparison(String name, String l, String r) {

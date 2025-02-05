@@ -44,6 +44,8 @@ import org.apache.spark.sql.internal.SQLConf
 case class InsertAdaptiveSparkPlan(
     adaptiveExecutionContext: AdaptiveExecutionContext) extends Rule[SparkPlan] {
 
+  override def conf: SQLConf = adaptiveExecutionContext.session.sessionState.conf
+
   override def apply(plan: SparkPlan): SparkPlan = applyInternal(plan, false)
 
   private def applyInternal(plan: SparkPlan, isSubquery: Boolean): SparkPlan = plan match {

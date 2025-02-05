@@ -29,11 +29,13 @@ import org.apache.spark.SparkException
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys.{CLASS_NAME, DATA_SOURCE, DATA_SOURCES, PATHS}
-import org.apache.spark.sql._
+import org.apache.spark.sql.{AnalysisException, SaveMode, SparkSession}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogUtils}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, TypeUtils}
+import org.apache.spark.sql.classic.ClassicConversions.castToImpl
+import org.apache.spark.sql.classic.Dataset
 import org.apache.spark.sql.connector.catalog.TableProvider
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.command.DataWritingCommand
@@ -466,7 +468,7 @@ case class DataSource(
 
     val fileIndex = catalogTable.map(_.identifier).map { tableIdent =>
       sparkSession.table(tableIdent).queryExecution.analyzed.collect {
-        case LogicalRelation(t: HadoopFsRelation, _, _, _) => t.location
+        case LogicalRelationWithTable(t: HadoopFsRelation, _) => t.location
       }.head
     }
     // For partitioned relation r, r.schema's column ordering can be different from the column
@@ -514,7 +516,8 @@ case class DataSource(
         dataSource.createRelation(
           sparkSession.sqlContext, mode, caseInsensitiveOptions, Dataset.ofRows(sparkSession, data))
       case format: FileFormat =>
-        disallowWritingIntervals(outputColumns.map(_.dataType), forbidAnsiIntervals = false)
+        disallowWritingIntervals(
+          outputColumns.toStructType.asNullable, format.toString, forbidAnsiIntervals = false)
         val cmd = planForWritingFileFormat(format, mode, data)
         val qe = sparkSession.sessionState.executePlan(cmd)
         qe.assertCommandExecuted()
@@ -539,8 +542,8 @@ case class DataSource(
         }
         SaveIntoDataSourceCommand(data, dataSource, caseInsensitiveOptions, mode)
       case format: FileFormat =>
-        disallowWritingIntervals(data.schema.map(_.dataType), forbidAnsiIntervals = false)
-        DataSource.validateSchema(data.schema, sparkSession.sessionState.conf)
+        disallowWritingIntervals(data.schema, format.toString, forbidAnsiIntervals = false)
+        DataSource.validateSchema(format.toString, data.schema, sparkSession.sessionState.conf)
         planForWritingFileFormat(format, mode, data)
       case _ => throw SparkException.internalError(
         s"${providingClass.getCanonicalName} does not allow create table as select.")
@@ -566,12 +569,15 @@ case class DataSource(
   }
 
   private def disallowWritingIntervals(
-      dataTypes: Seq[DataType],
+      outputColumns: Seq[StructField],
+      format: String,
       forbidAnsiIntervals: Boolean): Unit = {
-    dataTypes.foreach(
-      TypeUtils.invokeOnceForInterval(_, forbidAnsiIntervals) {
-      throw QueryCompilationErrors.cannotSaveIntervalIntoExternalStorageError()
-    })
+    outputColumns.foreach { field =>
+      TypeUtils.invokeOnceForInterval(field.dataType, forbidAnsiIntervals) {
+      throw QueryCompilationErrors.dataTypeUnsupportedByDataSourceError(
+        format, field
+      )}
+    }
   }
 }
 
@@ -678,11 +684,10 @@ object DataSource extends Logging {
                 throw e
               }
           }
-        case _ :: Nil if isUserDefinedDataSource =>
-          // There was DSv1 or DSv2 loaded, but the same name source was found
-          // in user defined data source.
-          throw QueryCompilationErrors.foundMultipleDataSources(provider)
         case head :: Nil =>
+          // We do not check whether the provider is a Python data source
+          // (isUserDefinedDataSource) to avoid the lookup cost. Java data sources
+          // always take precedence over Python user-defined data sources.
           head.getClass
         case sources =>
           // There are multiple registered aliases for the input. If there is single datasource
@@ -838,7 +843,7 @@ object DataSource extends Logging {
    * @param schema
    * @param conf
    */
-  def validateSchema(schema: StructType, conf: SQLConf): Unit = {
+  def validateSchema(formatName: String, schema: StructType, conf: SQLConf): Unit = {
     val shouldAllowEmptySchema = conf.getConf(SQLConf.ALLOW_EMPTY_SCHEMAS_FOR_WRITES)
     def hasEmptySchema(schema: StructType): Boolean = {
       schema.size == 0 || schema.exists {
@@ -849,7 +854,7 @@ object DataSource extends Logging {
 
 
     if (!shouldAllowEmptySchema && hasEmptySchema(schema)) {
-      throw QueryCompilationErrors.writeEmptySchemasUnsupportedByDataSourceError()
+      throw QueryCompilationErrors.writeEmptySchemasUnsupportedByDataSourceError(formatName)
     }
   }
 }

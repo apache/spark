@@ -93,6 +93,13 @@ abstract class QueryStageExec extends LeafExecNode {
   private[adaptive] def resultOption: AtomicReference[Option[Any]] = _resultOption
   final def isMaterialized: Boolean = resultOption.get().isDefined
 
+  @transient
+  @volatile
+  protected var _error = new AtomicReference[Option[Throwable]](None)
+
+  def error: AtomicReference[Option[Throwable]] = _error
+  final def hasFailed: Boolean = _error.get().isDefined
+
   override def output: Seq[Attribute] = plan.output
   override def outputPartitioning: Partitioning = plan.outputPartitioning
   override def outputOrdering: Seq[SortOrder] = plan.outputOrdering
@@ -203,6 +210,7 @@ case class ShuffleQueryStageExec(
       ReusedExchangeExec(newOutput, shuffle),
       _canonicalized)
     reuse._resultOption = this._resultOption
+    reuse._error = this._error
     reuse
   }
 
@@ -249,6 +257,7 @@ case class BroadcastQueryStageExec(
       ReusedExchangeExec(newOutput, broadcast),
       _canonicalized)
     reuse._resultOption = this._resultOption
+    reuse._error = this._error
     reuse
   }
 

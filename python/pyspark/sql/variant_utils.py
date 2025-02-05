@@ -21,12 +21,8 @@ import datetime
 import json
 import struct
 from array import array
-from decimal import Decimal
-from typing import Any, Callable, Dict, List, Tuple
-from pyspark.errors import (
-    PySparkNotImplementedError,
-    PySparkValueError,
-)
+from typing import Any, Callable, Dict, List, NamedTuple, Tuple
+from pyspark.errors import PySparkValueError
 from zoneinfo import ZoneInfo
 
 
@@ -111,14 +107,25 @@ class VariantUtils:
     # Long string value. The content is (4-byte little-endian unsigned integer representing the
     # string size) + (size bytes of string content).
     LONG_STR = 16
-    # year-month interval value. The content is one byte representing the start and end field values
-    # (1 bit each starting at least significant bits) and a 4-byte little-endian signed integer
-    YEAR_MONTH_INTERVAL = 19
-    # day-time interval value. The content is one byte representing the start and end field values
-    # (2 bits each starting at least significant bits) and an 8-byte little-endian signed integer
-    DAY_TIME_INTERVAL = 20
 
+    VERSION = 1
+    # The lower 4 bits of the first metadata byte contain the version.
+    VERSION_MASK = 0x0F
+
+    U8_MAX = 0xFF
+    U16_MAX = 0xFFFF
+    U24_MAX = 0xFFFFFF
+    U24_SIZE = 3
     U32_SIZE = 4
+
+    I8_MAX = 0x7F
+    I8_MIN = -0x80
+    I16_MAX = 0x7FFF
+    I16_MIN = -0x8000
+    I32_MAX = 0x7FFFFFFF
+    I32_MIN = -0x80000000
+    I64_MAX = 0x7FFFFFFFFFFFFFFF
+    I64_MIN = -0x8000000000000000
 
     EPOCH = datetime.datetime(
         year=1970, month=1, day=1, hour=0, minute=0, second=0, tzinfo=datetime.timezone.utc
@@ -131,11 +138,6 @@ class VariantUtils:
     MAX_DECIMAL8_VALUE = 10**MAX_DECIMAL8_PRECISION
     MAX_DECIMAL16_PRECISION = 38
     MAX_DECIMAL16_VALUE = 10**MAX_DECIMAL16_PRECISION
-
-    # There is no PySpark equivalent of the SQL year-month interval type. This class acts as a
-    # placeholder for this type
-    class _PlaceholderYearMonthIntervalInternalType:
-        pass
 
     @classmethod
     def to_json(cls, value: bytes, metadata: bytes, zone_id: str = "UTC") -> str:
@@ -156,6 +158,15 @@ class VariantUtils:
         return cls._to_python(value, metadata, 0)
 
     @classmethod
+    def parse_json(cls, json_str: str) -> Tuple[bytes, bytes]:
+        """
+        Parses the JSON string and creates the Variant binary (value, metadata)
+        :return: tuple of 2 binary values (value, metadata)
+        """
+        builder = VariantBuilder()
+        return builder.build(json_str)
+
+    @classmethod
     def _read_long(cls, data: bytes, pos: int, num_bytes: int, signed: bool) -> int:
         cls._check_index(pos, len(data))
         cls._check_index(pos + num_bytes - 1, len(data))
@@ -174,32 +185,6 @@ class VariantUtils:
         basic_type = value[pos] & VariantUtils.BASIC_TYPE_MASK
         type_info = (value[pos] >> VariantUtils.BASIC_TYPE_BITS) & VariantUtils.TYPE_INFO_MASK
         return (basic_type, type_info)
-
-    @classmethod
-    def _get_day_time_interval_fields(cls, value: bytes, pos: int) -> Tuple[int, int]:
-        """
-        Returns the (start_field, end_field) pair for a variant representing a day-time interval
-        value stored at a given position in the value.
-        """
-        cls._check_index(pos, len(value))
-        start_field = value[pos] & 0x3
-        end_field = (value[pos] >> 2) & 0x3
-        if end_field < start_field:
-            raise PySparkValueError(errorClass="MALFORMED_VARIANT", messageParameters={})
-        return (start_field, end_field)
-
-    @classmethod
-    def _get_year_month_interval_fields(cls, value: bytes, pos: int) -> Tuple[int, int]:
-        """
-        Returns the (start_field, end_field) paid for a variant representing a year-month interval
-        value stored at a given position in the value.
-        """
-        cls._check_index(pos, len(value))
-        start_field = value[pos] & 0x1
-        end_field = (value[pos] >> 1) & 0x1
-        if end_field < start_field:
-            raise PySparkValueError(errorClass="MALFORMED_VARIANT", messageParameters={})
-        return (start_field, end_field)
 
     @classmethod
     def _get_metadata_key(cls, metadata: bytes, id: int) -> str:
@@ -274,38 +259,6 @@ class VariantUtils:
             return (
                 VariantUtils.EPOCH + datetime.timedelta(microseconds=microseconds_since_epoch)
             ).astimezone(ZoneInfo(zone_id))
-        raise PySparkValueError(errorClass="MALFORMED_VARIANT", messageParameters={})
-
-    @classmethod
-    def _get_yminterval_info(cls, value: bytes, pos: int) -> Tuple[int, int, int]:
-        """
-        Returns the (months, start_field, end_field) tuple from a year-month interval value at a
-        given position in a variant.
-        """
-        cls._check_index(pos, len(value))
-        basic_type, type_info = cls._get_type_info(value, pos)
-        if basic_type != VariantUtils.PRIMITIVE:
-            raise PySparkValueError(errorClass="MALFORMED_VARIANT", messageParameters={})
-        if type_info == VariantUtils.YEAR_MONTH_INTERVAL:
-            months = cls._read_long(value, pos + 2, 4, signed=True)
-            start_field, end_field = cls._get_year_month_interval_fields(value, pos + 1)
-            return (months, start_field, end_field)
-        raise PySparkValueError(errorClass="MALFORMED_VARIANT", messageParameters={})
-
-    @classmethod
-    def _get_dtinterval_info(cls, value: bytes, pos: int) -> Tuple[int, int, int]:
-        """
-        Returns the (micros, start_field, end_field) tuple from a day-time interval value at a given
-        position in a variant.
-        """
-        cls._check_index(pos, len(value))
-        basic_type, type_info = cls._get_type_info(value, pos)
-        if basic_type != VariantUtils.PRIMITIVE:
-            raise PySparkValueError(errorClass="MALFORMED_VARIANT", messageParameters={})
-        if type_info == VariantUtils.DAY_TIME_INTERVAL:
-            micros = cls._read_long(value, pos + 2, 8, signed=True)
-            start_field, end_field = cls._get_day_time_interval_fields(value, pos + 1)
-            return (micros, start_field, end_field)
         raise PySparkValueError(errorClass="MALFORMED_VARIANT", messageParameters={})
 
     @classmethod
@@ -423,146 +376,7 @@ class VariantUtils:
             return datetime.datetime
         elif type_info == VariantUtils.LONG_STR:
             return str
-        elif type_info == VariantUtils.DAY_TIME_INTERVAL:
-            return datetime.timedelta
-        elif type_info == VariantUtils.YEAR_MONTH_INTERVAL:
-            return cls._PlaceholderYearMonthIntervalInternalType
         raise PySparkValueError(errorClass="MALFORMED_VARIANT", messageParameters={})
-
-    @classmethod
-    def _to_year_month_interval_ansi_string(
-        cls, months: int, start_field: int, end_field: int
-    ) -> str:
-        """
-        Used to convert months representing a year-month interval with given start and end
-        fields to its ANSI SQL string representation.
-        """
-        YEAR = 0
-        MONTHS_PER_YEAR = 12
-        sign = ""
-        abs_months = months
-        if months < 0:
-            sign = "-"
-            abs_months = -abs_months
-        year = sign + str(abs_months // MONTHS_PER_YEAR)
-        year_and_month = year + "-" + str(abs_months % MONTHS_PER_YEAR)
-        format_builder = ["INTERVAL '"]
-        if start_field == end_field:
-            if start_field == YEAR:
-                format_builder.append(year + "' YEAR")
-            else:
-                format_builder.append(str(months) + "' MONTH")
-        else:
-            format_builder.append(year_and_month + "' YEAR TO MONTH")
-        return "".join(format_builder)
-
-    @classmethod
-    def _to_day_time_interval_ansi_string(
-        cls, micros: int, start_field: int, end_field: int
-    ) -> str:
-        """
-        Used to convert microseconds representing a day-tine interval with given start and end
-        fields to its ANSI SQL string representation.
-        """
-        DAY = 0
-        HOUR = 1
-        MINUTE = 2
-        SECOND = 3
-        MIN_LONG_VALUE = -9223372036854775808
-        MAX_LONG_VALUE = 9223372036854775807
-        MICROS_PER_SECOND = 1000 * 1000
-        MICROS_PER_MINUTE = MICROS_PER_SECOND * 60
-        MICROS_PER_HOUR = MICROS_PER_MINUTE * 60
-        MICROS_PER_DAY = MICROS_PER_HOUR * 24
-        MAX_SECOND = MAX_LONG_VALUE // MICROS_PER_SECOND
-        MAX_MINUTE = MAX_LONG_VALUE // MICROS_PER_MINUTE
-        MAX_HOUR = MAX_LONG_VALUE // MICROS_PER_HOUR
-        MAX_DAY = MAX_LONG_VALUE // MICROS_PER_DAY
-
-        def field_to_string(field: int) -> str:
-            if field == DAY:
-                return "DAY"
-            elif field == HOUR:
-                return "HOUR"
-            elif field == MINUTE:
-                return "MINUTE"
-            elif field == SECOND:
-                return "SECOND"
-            raise PySparkValueError(errorClass="MALFORMED_VARIANT", messageParameters={})
-
-        if end_field < start_field:
-            raise PySparkValueError(errorClass="MALFORMED_VARIANT", messageParameters={})
-        sign = ""
-        rest = micros
-        from_str = field_to_string(start_field).upper()
-        to_str = field_to_string(end_field).upper()
-        prefix = "INTERVAL '"
-        postfix = f"' {from_str}" if (start_field == end_field) else f"' {from_str} TO {to_str}"
-        if micros < 0:
-            if micros == MIN_LONG_VALUE:
-                # Especial handling of minimum `Long` value because negate op overflows `Long`.
-                # seconds = 106751991 * (24 * 60 * 60) + 4 * 60 * 60 + 54 = 9223372036854
-                # microseconds = -9223372036854000000L-775808 == Long.MinValue
-                base_str = "-106751991 04:00:54.775808000"
-                first_str = "-" + (
-                    str(MAX_DAY)
-                    if (start_field == DAY)
-                    else (
-                        str(MAX_HOUR)
-                        if (start_field == HOUR)
-                        else (
-                            str(MAX_MINUTE)
-                            if (start_field == MINUTE)
-                            else str(MAX_SECOND) + ".775808"
-                        )
-                    )
-                )
-                if start_field == end_field:
-                    return prefix + first_str + postfix
-                else:
-                    substr_start = (
-                        10 if (start_field == DAY) else (13 if (start_field == HOUR) else 16)
-                    )
-                    substr_end = (
-                        13 if (end_field == HOUR) else (16 if (end_field == MINUTE) else 26)
-                    )
-                    return prefix + first_str + base_str[substr_start:substr_end] + postfix
-            else:
-                sign = "-"
-                rest = -rest
-        format_builder = [sign]
-        format_args = []
-        if start_field == DAY:
-            format_builder.append(str(rest // MICROS_PER_DAY))
-            rest %= MICROS_PER_DAY
-        elif start_field == HOUR:
-            format_builder.append("%02d")
-            format_args.append(rest // MICROS_PER_HOUR)
-            rest %= MICROS_PER_HOUR
-        elif start_field == MINUTE:
-            format_builder.append("%02d")
-            format_args.append(rest // MICROS_PER_MINUTE)
-            rest %= MICROS_PER_MINUTE
-        elif start_field == SECOND:
-            lead_zero = "0" if (rest < 10 * MICROS_PER_SECOND) else ""
-            format_builder.append(
-                lead_zero + (Decimal(rest) / Decimal(1000000)).normalize().to_eng_string()
-            )
-
-        if start_field < HOUR and HOUR <= end_field:
-            format_builder.append(" %02d")
-            format_args.append(rest // MICROS_PER_HOUR)
-            rest %= MICROS_PER_HOUR
-        if start_field < MINUTE and MINUTE <= end_field:
-            format_builder.append(":%02d")
-            format_args.append(rest // MICROS_PER_MINUTE)
-            rest %= MICROS_PER_MINUTE
-        if start_field < SECOND and SECOND <= end_field:
-            lead_zero = "0" if (rest < 10 * MICROS_PER_SECOND) else ""
-            format_builder.append(
-                ":" + lead_zero + (Decimal(rest) / Decimal(1000000)).normalize().to_eng_string()
-            )
-        return prefix + ("".join(format_builder) % tuple(format_args)) + postfix
 
     @classmethod
     def _to_json(cls, value: bytes, metadata: bytes, pos: int, zone_id: str) -> str:
@@ -587,14 +401,6 @@ class VariantUtils:
                 return "[" + ",".join(value_list) + "]"
 
             return cls._handle_array(value, pos, handle_array)
-        elif variant_type == datetime.timedelta:
-            micros, start_field, end_field = cls._get_dtinterval_info(value, pos)
-            return '"' + cls._to_day_time_interval_ansi_string(micros, start_field, end_field) + '"'
-        elif variant_type == cls._PlaceholderYearMonthIntervalInternalType:
-            months, start_field, end_field = cls._get_yminterval_info(value, pos)
-            return (
-                '"' + cls._to_year_month_interval_ansi_string(months, start_field, end_field) + '"'
-            )
         else:
             value = cls._get_scalar(variant_type, value, metadata, pos, zone_id)
             if value is None:
@@ -632,14 +438,6 @@ class VariantUtils:
                 return value_list
 
             return cls._handle_array(value, pos, handle_array)
-        elif variant_type == datetime.timedelta:
-            # day-time intervals are represented using timedelta in a trivial manner
-            return datetime.timedelta(microseconds=cls._get_dtinterval_info(value, pos)[0])
-        elif variant_type == cls._PlaceholderYearMonthIntervalInternalType:
-            raise PySparkNotImplementedError(
-                errorClass="NOT_IMPLEMENTED",
-                messageParameters={"feature": "VariantUtils.YEAR_MONTH_INTERVAL"},
-            )
         else:
             return cls._get_scalar(variant_type, value, metadata, pos, zone_id="UTC")
 
@@ -696,7 +494,10 @@ class VariantUtils:
                 value, offset_start + offset_size * i, offset_size, signed=False
             )
             value_pos = data_start + offset
-            key_value_pos_list.append((cls._get_metadata_key(metadata, id), value_pos))
+            if metadata is not None:
+                key_value_pos_list.append((cls._get_metadata_key(metadata, id), value_pos))
+            else:
+                key_value_pos_list.append(("", value_pos))
         return func(key_value_pos_list)
 
     @classmethod
@@ -724,3 +525,297 @@ class VariantUtils:
             element_pos = data_start + offset
             value_pos_list.append(element_pos)
         return func(value_pos_list)
+
+
+class FieldEntry(NamedTuple):
+    """
+    Info about an object field
+    """
+
+    key: str
+    id: int
+    offset: int
+
+
+class VariantBuilder:
+    """
+    A utility class for building VariantVal.
+    """
+
+    DEFAULT_SIZE_LIMIT = 16 * 1024 * 1024
+
+    def __init__(self, size_limit: int = DEFAULT_SIZE_LIMIT):
+        self.value = bytearray()
+        self.dictionary = dict[str, int]()
+        self.dictionary_keys = list[bytes]()
+        self.size_limit = size_limit
+
+    def build(self, json_str: str) -> Tuple[bytes, bytes]:
+        parsed = json.loads(json_str, parse_float=self._handle_float)
+        self._process_parsed_json(parsed)
+
+        num_keys = len(self.dictionary_keys)
+        dictionary_string_size = sum(len(key) for key in self.dictionary_keys)
+
+        # Determine the number of bytes required per offset entry.
+        # The largest offset is the one-past-the-end value, which is total string size. It's very
+        # unlikely that the number of keys could be larger, but incorporate that into the
+        # calculation in case of pathological data.
+        max_size = max(dictionary_string_size, num_keys)
+        if max_size > self.size_limit:
+            raise PySparkValueError(errorClass="VARIANT_SIZE_LIMIT_EXCEEDED", messageParameters={})
+        offset_size = self._get_integer_size(max_size)
+
+        offset_start = 1 + offset_size
+        string_start = offset_start + (num_keys + 1) * offset_size
+        metadata_size = string_start + dictionary_string_size
+        if metadata_size > self.size_limit:
+            raise PySparkValueError(errorClass="VARIANT_SIZE_LIMIT_EXCEEDED", messageParameters={})
+
+        metadata = bytearray()
+        header_byte = VariantUtils.VERSION | ((offset_size - 1) << 6)
+        metadata.extend(header_byte.to_bytes(1, byteorder="little"))
+        metadata.extend(num_keys.to_bytes(offset_size, byteorder="little"))
+        # write offsets
+        current_offset = 0
+        for key in self.dictionary_keys:
+            metadata.extend(current_offset.to_bytes(offset_size, byteorder="little"))
+            current_offset += len(key)
+        metadata.extend(current_offset.to_bytes(offset_size, byteorder="little"))
+        # write key data
+        for key in self.dictionary_keys:
+            metadata.extend(key)
+        return (bytes(self.value), bytes(metadata))
+
+    def _process_parsed_json(self, parsed: Any) -> None:
+        if type(parsed) is dict:
+            fields = list[FieldEntry]()
+            start = len(self.value)
+            for key, value in parsed.items():
+                id = self._add_key(key)
+                fields.append(FieldEntry(key, id, len(self.value) - start))
+                self._process_parsed_json(value)
+            self._finish_writing_object(start, fields)
+        elif type(parsed) is list:
+            offsets = []
+            start = len(self.value)
+            for elem in parsed:
+                offsets.append(len(self.value) - start)
+                self._process_parsed_json(elem)
+            self._finish_writing_array(start, offsets)
+        elif type(parsed) is str:
+            self._append_string(parsed)
+        elif type(parsed) is int:
+            if not self._append_int(parsed):
+                self._process_parsed_json(self._handle_float(str(parsed)))
+        elif type(parsed) is float:
+            self._append_float(parsed)
+        elif type(parsed) is decimal.Decimal:
+            self._append_decimal(parsed)
+        elif type(parsed) is bool:
+            self._append_boolean(parsed)
+        elif parsed is None:
+            self._append_null()
+        else:
+            raise PySparkValueError(errorClass="MALFORMED_VARIANT", messageParameters={})
+
+    # Choose the smallest unsigned integer type that can store `value`. It must be within
+    # [0, U24_MAX].
+    def _get_integer_size(self, value: int) -> int:
+        if value <= VariantUtils.U8_MAX:
+            return 1
+        if value <= VariantUtils.U16_MAX:
+            return 2
+        return VariantUtils.U24_SIZE
+
+    def _check_capacity(self, additional: int) -> None:
+        required = len(self.value) + additional
+        if required > self.size_limit:
+            raise PySparkValueError(errorClass="VARIANT_SIZE_LIMIT_EXCEEDED", messageParameters={})
+
+    def _primitive_header(self, type: int) -> bytes:
+        return bytes([(type << 2) | VariantUtils.PRIMITIVE])
+
+    def _short_string_header(self, size: int) -> bytes:
+        return bytes([size << 2 | VariantUtils.SHORT_STR])
+
+    def _array_header(self, large_size: bool, offset_size: int) -> bytes:
+        return bytes(
+            [
+                (
+                    (large_size << (VariantUtils.BASIC_TYPE_BITS + 2))
+                    | ((offset_size - 1) << VariantUtils.BASIC_TYPE_BITS)
+                    | VariantUtils.ARRAY
+                )
+            ]
+        )
+
+    def _object_header(self, large_size: bool, id_size: int, offset_size: int) -> bytes:
+        return bytes(
+            [
+                (
+                    (large_size << (VariantUtils.BASIC_TYPE_BITS + 4))
+                    | ((id_size - 1) << (VariantUtils.BASIC_TYPE_BITS + 2))
+                    | ((offset_size - 1) << VariantUtils.BASIC_TYPE_BITS)
+                    | VariantUtils.OBJECT
+                )
+            ]
+        )
+
+    # Add a key to the variant dictionary. If the key already exists, the dictionary is
+    # not modified. In either case, return the id of the key.
+    def _add_key(self, key: str) -> int:
+        if key in self.dictionary:
+            return self.dictionary[key]
+        id = len(self.dictionary_keys)
+        self.dictionary[key] = id
+        self.dictionary_keys.append(key.encode("utf-8"))
+        return id
+
+    def _handle_float(self, num_str: str) -> Any:
+        # a float can be a decimal if it only contains digits, '-', or '-'.
+        if all([ch.isdecimal() or ch == "-" or ch == "." for ch in num_str]):
+            dec = decimal.Decimal(num_str)
+            precision = len(dec.as_tuple().digits)
+            scale = -int(dec.as_tuple().exponent)
+
+            if (
+                scale <= VariantUtils.MAX_DECIMAL16_PRECISION
+                and precision <= VariantUtils.MAX_DECIMAL16_PRECISION
+            ):
+                return dec
+        return float(num_str)
+
+    def _append_boolean(self, b: bool) -> None:
+        self._check_capacity(1)
+        self.value.extend(self._primitive_header(VariantUtils.TRUE if b else VariantUtils.FALSE))
+
+    def _append_null(self) -> None:
+        self._check_capacity(1)
+        self.value.extend(self._primitive_header(VariantUtils.NULL))
+
+    def _append_string(self, s: str) -> None:
+        text = s.encode("utf-8")
+        long_str = len(text) > VariantUtils.MAX_SHORT_STR_SIZE
+        additional = (1 + VariantUtils.U32_SIZE) if long_str else 1
+        self._check_capacity(additional + len(text))
+        if long_str:
+            self.value.extend(self._primitive_header(VariantUtils.LONG_STR))
+            self.value.extend(len(text).to_bytes(VariantUtils.U32_SIZE, byteorder="little"))
+        else:
+            self.value.extend(self._short_string_header(len(text)))
+        self.value.extend(text)
+
+    def _append_int(self, i: int) -> bool:
+        self._check_capacity(1 + 8)
+        if i >= VariantUtils.I8_MIN and i <= VariantUtils.I8_MAX:
+            self.value.extend(self._primitive_header(VariantUtils.INT1))
+            self.value.extend(i.to_bytes(1, byteorder="little", signed=True))
+        elif i >= VariantUtils.I16_MIN and i <= VariantUtils.I16_MAX:
+            self.value.extend(self._primitive_header(VariantUtils.INT2))
+            self.value.extend(i.to_bytes(2, byteorder="little", signed=True))
+        elif i >= VariantUtils.I32_MIN and i <= VariantUtils.I32_MAX:
+            self.value.extend(self._primitive_header(VariantUtils.INT4))
+            self.value.extend(i.to_bytes(4, byteorder="little", signed=True))
+        elif i >= VariantUtils.I64_MIN and i <= VariantUtils.I64_MAX:
+            self.value.extend(self._primitive_header(VariantUtils.INT8))
+            self.value.extend(i.to_bytes(8, byteorder="little", signed=True))
+        else:
+            return False
+        return True
+
+    # Append a decimal value to the variant builder. The caller should guarantee that its precision
+    # and scale fit into `MAX_DECIMAL16_PRECISION`.
+    def _append_decimal(self, d: decimal.Decimal) -> None:
+        self._check_capacity(2 + 16)
+        precision = len(d.as_tuple().digits)
+        scale = -int(d.as_tuple().exponent)
+        unscaled = int("".join(map(str, d.as_tuple().digits)))
+        unscaled = -unscaled if d < 0 else unscaled
+        if (
+            scale <= VariantUtils.MAX_DECIMAL4_PRECISION
+            and precision <= VariantUtils.MAX_DECIMAL4_PRECISION
+        ):
+            self.value.extend(self._primitive_header(VariantUtils.DECIMAL4))
+            self.value.extend(scale.to_bytes(1, byteorder="little"))
+            self.value.extend(unscaled.to_bytes(4, byteorder="little", signed=True))
+        elif (
+            scale <= VariantUtils.MAX_DECIMAL8_PRECISION
+            and precision <= VariantUtils.MAX_DECIMAL8_PRECISION
+        ):
+            self.value.extend(self._primitive_header(VariantUtils.DECIMAL8))
+            self.value.extend(scale.to_bytes(1, byteorder="little"))
+            self.value.extend(unscaled.to_bytes(8, byteorder="little", signed=True))
+        else:
+            assert (
+                scale <= VariantUtils.MAX_DECIMAL16_PRECISION
+                and precision <= VariantUtils.MAX_DECIMAL16_PRECISION
+            )
+            self.value.extend(self._primitive_header(VariantUtils.DECIMAL16))
+            self.value.extend(scale.to_bytes(1, byteorder="little"))
+            self.value.extend(unscaled.to_bytes(16, byteorder="little", signed=True))
+
+    def _append_float(self, f: float) -> None:
+        self._check_capacity(1 + 8)
+        self.value.extend(self._primitive_header(VariantUtils.DOUBLE))
+        self.value.extend(struct.pack("<d", f))
+
+    # Finish writing a variant array after all of its elements have already been written.
+    def _finish_writing_array(self, start: int, offsets: List[int]) -> None:
+        data_size = len(self.value) - start
+        num_offsets = len(offsets)
+        large_size = num_offsets > VariantUtils.U8_MAX
+        size_bytes = VariantUtils.U32_SIZE if large_size else 1
+        offset_size = self._get_integer_size(data_size)
+        # The space for header byte, object size, and offset list.
+        header_size = 1 + size_bytes + (num_offsets + 1) * offset_size
+        self._check_capacity(header_size)
+        self.value.extend(bytearray(header_size))
+        # Shift the just-written element data to make room for the header section.
+        self.value[start + header_size :] = bytes(self.value[start : start + data_size])
+        # Write the header byte, num offsets
+        offset_start = start + 1 + size_bytes
+        self.value[start : start + 1] = self._array_header(large_size, offset_size)
+        self.value[start + 1 : offset_start] = num_offsets.to_bytes(size_bytes, byteorder="little")
+        # write offset list
+        offset_list = bytearray()
+        for offset in offsets:
+            offset_list.extend(offset.to_bytes(offset_size, byteorder="little"))
+        offset_list.extend(data_size.to_bytes(offset_size, byteorder="little"))
+        self.value[offset_start : offset_start + len(offset_list)] = offset_list
+
+    # Finish writing a variant object after all of its fields have already been written.
+    def _finish_writing_object(self, start: int, fields: List[FieldEntry]) -> None:
+        num_fields = len(fields)
+        # object fields are from a python dictionary, so keys are already distinct
+        fields.sort(key=lambda f: f.key)
+        max_id = 0
+        for field in fields:
+            max_id = max(max_id, field.id)
+
+        data_size = len(self.value) - start
+        large_size = num_fields > VariantUtils.U8_MAX
+        size_bytes = VariantUtils.U32_SIZE if large_size else 1
+        id_size = self._get_integer_size(max_id)
+        offset_size = self._get_integer_size(data_size)
+        # The space for header byte, object size, id list, and offset list.
+        header_size = 1 + size_bytes + num_fields * id_size + (num_fields + 1) * offset_size
+        self._check_capacity(header_size)
+        self.value.extend(bytearray(header_size))
+        # Shift the just-written field data to make room for the object header section.
+        self.value[start + header_size :] = self.value[start : start + data_size]
+        # Write the header byte, num fields, id list, offset list
+        self.value[start : start + 1] = self._object_header(large_size, id_size, offset_size)
+        self.value[start + 1 : start + 1 + size_bytes] = num_fields.to_bytes(
+            size_bytes, byteorder="little"
+        )
+        id_start = start + 1 + size_bytes
+        offset_start = id_start + num_fields * id_size
+        id_list = bytearray()
+        offset_list = bytearray()
+        for field in fields:
+            id_list.extend(field.id.to_bytes(id_size, byteorder="little"))
+            offset_list.extend(field.offset.to_bytes(offset_size, byteorder="little"))
+        offset_list.extend(data_size.to_bytes(offset_size, byteorder="little"))
+        self.value[id_start : id_start + len(id_list)] = id_list
+        self.value[offset_start : offset_start + len(offset_list)] = offset_list

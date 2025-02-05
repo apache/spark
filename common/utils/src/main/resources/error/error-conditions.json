@@ -70,11 +70,23 @@
     ],
     "sqlState" : "42000"
   },
+  "AMBIGUOUS_RESOLVER_EXTENSION" : {
+    "message" : [
+      "The single-pass analyzer cannot process this query or command because the extension choice for <operator> is ambiguous: <extensions>."
+    ],
+    "sqlState" : "XX000"
+  },
   "ARITHMETIC_OVERFLOW" : {
     "message" : [
       "<message>.<alternative> If necessary set <config> to \"false\" to bypass this error."
     ],
     "sqlState" : "22003"
+  },
+  "ARTIFACT_ALREADY_EXISTS" : {
+    "message" : [
+      "The artifact <normalizedRemoteRelativePath> already exists. Please choose a different name for the new artifact because it cannot be overwritten."
+    ],
+    "sqlState" : "42713"
   },
   "ASSIGNMENT_ARITY_MISMATCH" : {
     "message" : [
@@ -104,6 +116,13 @@
       }
     },
     "sqlState" : "42604"
+  },
+  "AVRO_CANNOT_WRITE_NULL_FIELD" : {
+    "message" : [
+      "Cannot write null value for field <name> defined as non-null Avro data type <dataType>.",
+      "To allow null value for this field, specify its avro schema as a union type with \"null\" using `avroSchema` option."
+    ],
+    "sqlState" : "22004"
   },
   "AVRO_INCOMPATIBLE_READ_TYPE" : {
     "message" : [
@@ -233,6 +252,11 @@
       "An error occurred during loading state."
     ],
     "subClass" : {
+      "CANNOT_FIND_BASE_SNAPSHOT_CHECKPOINT" : {
+        "message" : [
+          "Cannot find a base snapshot checkpoint with lineage: <lineage>."
+        ]
+      },
       "CANNOT_READ_CHECKPOINT" : {
         "message" : [
           "Cannot read RocksDB checkpoint metadata. Expected <expectedVersion>, but found <actualVersion>."
@@ -275,7 +299,7 @@
       },
       "INVALID_CHANGE_LOG_READER_VERSION" : {
         "message" : [
-          "The change log reader version cannot be <version>."
+          "The change log reader version cannot be <version>. The checkpoint probably is from a future Spark version, please upgrade your Spark."
         ]
       },
       "INVALID_CHANGE_LOG_WRITER_VERSION" : {
@@ -366,7 +390,7 @@
   },
   "CANNOT_PARSE_TIMESTAMP" : {
     "message" : [
-      "<message>. If necessary set <ansiConfig> to \"false\" to bypass this error."
+      "<message>. Use <func> to tolerate invalid input string and return NULL instead."
     ],
     "sqlState" : "22007"
   },
@@ -375,6 +399,12 @@
       "Cannot recognize hive type string: <fieldType>, column: <fieldName>. The specified data type for the field cannot be recognized by Spark SQL. Please check the data type of the specified field and ensure that it is a valid Spark SQL data type. Refer to the Spark SQL documentation for a list of valid data types and their format. If the data type is correct, please ensure that you are using a supported version of Spark SQL."
     ],
     "sqlState" : "429BB"
+  },
+  "CANNOT_REMOVE_RESERVED_PROPERTY" : {
+    "message" : [
+      "Cannot remove reserved property: <property>."
+    ],
+    "sqlState" : "42000"
   },
   "CANNOT_RENAME_ACROSS_SCHEMA" : {
     "message" : [
@@ -491,6 +521,12 @@
     ],
     "sqlState" : "56000"
   },
+  "CIRCULAR_CLASS_REFERENCE" : {
+    "message" : [
+      "Cannot have circular references in class, but got the circular reference of class <t>."
+    ],
+    "sqlState" : "42602"
+  },
   "CLASS_NOT_OVERRIDE_EXPECTED_METHOD" : {
     "message" : [
       "<className> must override either <method1> or <method2>."
@@ -565,7 +601,7 @@
       },
       "IMPLICIT" : {
         "message" : [
-          "Error occurred due to the mismatch between multiple implicit non-default collations. Use COLLATE function to set the collation explicitly."
+          "Error occurred due to the mismatch between implicit collations: [<implicitTypes>]. Use COLLATE function to set the collation explicitly."
         ]
       }
     },
@@ -605,6 +641,12 @@
       "The column <columnName> already exists. Choose another name or rename the existing column."
     ],
     "sqlState" : "42711"
+  },
+  "COLUMN_ARRAY_ELEMENT_TYPE_MISMATCH" : {
+    "message" : [
+      "Some values in field <pos> are incompatible with the column array type. Expected type <type>."
+    ],
+    "sqlState" : "0A000"
   },
   "COLUMN_NOT_DEFINED_IN_TABLE" : {
     "message" : [
@@ -723,11 +765,35 @@
     },
     "sqlState" : "56K00"
   },
+  "CONNECT_ML" : {
+    "message" : [
+      "Generic Spark Connect ML error."
+    ],
+    "subClass" : {
+      "ATTRIBUTE_NOT_ALLOWED" : {
+        "message" : [
+          "<attribute> is not allowed to be accessed."
+        ]
+      },
+      "UNSUPPORTED_EXCEPTION" : {
+        "message" : [
+          "<message>"
+        ]
+      }
+    },
+    "sqlState" : "XX000"
+  },
   "CONVERSION_INVALID_INPUT" : {
     "message" : [
       "The value <str> (<fmt>) cannot be converted to <targetType> because it is malformed. Correct the value as per the syntax, or change its format. Use <suggestion> to tolerate malformed input and return NULL instead."
     ],
     "sqlState" : "22018"
+  },
+  "CORRUPTED_CATALOG_FUNCTION" : {
+    "message" : [
+      "Cannot convert the catalog function '<identifier>' into a SQL function due to corrupted function information in catalog. If the function is not a SQL function, please make sure the class name '<className>' is loadable."
+    ],
+    "sqlState" : "0A000"
   },
   "CREATE_PERMANENT_VIEW_WITHOUT_ALIAS" : {
     "message" : [
@@ -935,6 +1001,11 @@
           "all arguments of the function <funcName> must be strings."
         ]
       },
+      "NON_STRUCT_TYPE" : {
+        "message" : [
+          "the input <inputName> should be a struct expression; however, got <inputType>."
+        ]
+      },
       "NULL_TYPE" : {
         "message" : [
           "Null typed values cannot be used as arguments of <functionName>."
@@ -947,7 +1018,7 @@
       },
       "RANGE_FRAME_INVALID_TYPE" : {
         "message" : [
-          "The data type <orderSpecType> used in the order specification does not match the data type <valueBoundaryType> which is used in the range frame."
+          "The data type <orderSpecType> used in the order specification does not support the data type <valueBoundaryType> which is used in the range frame."
         ]
       },
       "RANGE_FRAME_MULTI_ORDER" : {
@@ -1033,16 +1104,6 @@
           "The input of <functionName> can't be <dataType> type data."
         ]
       },
-      "UNSUPPORTED_UDF_INPUT_TYPE" : {
-        "message" : [
-          "UDFs do not support '<dataType>' as an input data type."
-        ]
-      },
-      "UNSUPPORTED_UDF_OUTPUT_TYPE" : {
-        "message" : [
-          "UDFs do not support '<dataType>' as an output data type."
-        ]
-      },
       "VALUE_OUT_OF_RANGE" : {
         "message" : [
           "The <exprName> must be between <valueRange> (current value = <currentValue>)."
@@ -1099,6 +1160,12 @@
     ],
     "sqlState" : "42K03"
   },
+  "DATETIME_FIELD_OUT_OF_BOUNDS" : {
+    "message" : [
+      "<rangeMessage>. If necessary set <ansiConfig> to \"false\" to bypass this error."
+    ],
+    "sqlState" : "22023"
+  },
   "DATETIME_OVERFLOW" : {
     "message" : [
       "Datetime operation overflow: <operation>."
@@ -1130,6 +1197,13 @@
     ],
     "sqlState" : "42623"
   },
+  "DESCRIBE_JSON_NOT_EXTENDED" : {
+    "message" : [
+      "DESCRIBE TABLE ... AS JSON only supported when [EXTENDED|FORMATTED] is specified.",
+      "For example: DESCRIBE EXTENDED <tableName> AS JSON is supported but DESCRIBE <tableName> AS JSON is not."
+    ],
+    "sqlState" : "0A000"
+  },
   "DISTINCT_WINDOW_FUNCTION_UNSUPPORTED" : {
     "message" : [
       "Distinct window functions are not supported: <windowExpr>."
@@ -1141,6 +1215,12 @@
       "Division by zero. Use `try_divide` to tolerate divisor being 0 and return NULL instead. If necessary set <config> to \"false\" to bypass this error."
     ],
     "sqlState" : "22012"
+  },
+  "DUPLICATED_CTE_NAMES" : {
+    "message" : [
+      "CTE definition can't have duplicate names: <duplicateNames>."
+    ],
+    "sqlState" : "42602"
   },
   "DUPLICATED_FIELD_NAME_IN_ARROW_STRUCT" : {
     "message" : [
@@ -1174,6 +1254,30 @@
     ],
     "sqlState" : "42614"
   },
+  "DUPLICATE_CONDITION_IN_SCOPE" : {
+    "message" : [
+      "Found duplicate condition <condition> in the scope. Please, remove one of them."
+    ],
+    "sqlState" : "42734"
+  },
+  "DUPLICATE_EXCEPTION_HANDLER" : {
+    "message" : [
+      "Found duplicate handlers. Please, remove one of them."
+    ],
+    "subClass" : {
+      "CONDITION" : {
+        "message" : [
+          "Found duplicate handlers for the same condition <condition>."
+        ]
+      },
+      "SQLSTATE" : {
+        "message" : [
+          "Found duplicate handlers for the same SQLSTATE <sqlState>."
+        ]
+      }
+    },
+    "sqlState" : "42734"
+  },
   "DUPLICATE_KEY" : {
     "message" : [
       "Found duplicate keys <keyColumn>."
@@ -1198,6 +1302,18 @@
     },
     "sqlState" : "4274K"
   },
+  "DUPLICATE_ROUTINE_PARAMETER_NAMES" : {
+    "message" : [
+      "Found duplicate name(s) in the parameter list of the user-defined routine <routineName>: <names>."
+    ],
+    "sqlState" : "42734"
+  },
+  "DUPLICATE_ROUTINE_RETURNS_COLUMNS" : {
+    "message" : [
+      "Found duplicate column(s) in the RETURNS clause column list of the user-defined routine <routineName>: <columns>."
+    ],
+    "sqlState" : "42711"
+  },
   "EMITTING_ROWS_OLDER_THAN_WATERMARK_NOT_ALLOWED" : {
     "message" : [
       "Previous node emitted a row with eventTime=<emittedRowEventTime> which is older than current_watermark_value=<currentWatermark>",
@@ -1211,6 +1327,12 @@
       "Failed to parse an empty string for data type <dataType>."
     ],
     "sqlState" : "42604"
+  },
+  "EMPTY_SCHEMA_NOT_SUPPORTED_FOR_DATASOURCE" : {
+    "message" : [
+      "The <format> datasource does not support writing empty or nested empty schemas. Please make sure the data schema has at least one or more column(s)."
+    ],
+    "sqlState" : "0A000"
   },
   "ENCODER_NOT_FOUND" : {
     "message" : [
@@ -1450,6 +1572,11 @@
         "message" : [
           "Data type mismatches when reading Parquet column <column>. Expected Spark type <expectedType>, actual Parquet type <actualType>."
         ]
+      },
+      "UNSUPPORTED_FILE_SYSTEM" : {
+        "message" : [
+          "The file system <fileSystemClass> hasn't implemented <method>."
+        ]
       }
     },
     "sqlState" : "KD001"
@@ -1605,6 +1732,12 @@
     ],
     "sqlState" : "42822"
   },
+  "HINT_UNSUPPORTED_FOR_JDBC_DIALECT" : {
+    "message" : [
+      "The option `hint` is not supported for <jdbcDialect> in JDBC data source. Supported dialects are `MySQLDialect`, `OracleDialect` and `DatabricksDialect`."
+    ],
+    "sqlState" : "42822"
+  },
   "HLL_INVALID_INPUT_SKETCH_BUFFER" : {
     "message" : [
       "Invalid call to <function>; only valid HLL sketch buffers are supported as inputs (such as those produced by the `hll_sketch_agg` function)."
@@ -1622,6 +1755,39 @@
       "Sketches have different `lgConfigK` values: <left> and <right>. Set the `allowDifferentLgConfigK` parameter to true to call <function> with different `lgConfigK` values."
     ],
     "sqlState" : "22000"
+  },
+  "HYBRID_ANALYZER_EXCEPTION" : {
+    "message" : [
+      "An failure occurred when attempting to resolve a query or command with both the legacy fixed-point analyzer as well as the single-pass resolver."
+    ],
+    "subClass" : {
+      "FIXED_POINT_FAILED_SINGLE_PASS_SUCCEEDED" : {
+        "message" : [
+          "Fixed-point resolution failed, but single-pass resolution succeeded.",
+          "Single-pass analyzer output:",
+          "<singlePassOutput>"
+        ]
+      },
+      "LOGICAL_PLAN_COMPARISON_MISMATCH" : {
+        "message" : [
+          "Outputs of fixed-point and single-pass analyzers do not match.",
+          "Fixed-point analyzer output:",
+          "<fixedPointOutput>",
+          "Single-pass analyzer output:",
+          "<singlePassOutput>"
+        ]
+      },
+      "OUTPUT_SCHEMA_COMPARISON_MISMATCH" : {
+        "message" : [
+          "Output schemas of fixed-point and single-pass analyzers do not match.",
+          "Fixed-point analyzer output schema:",
+          "<fixedPointOutputSchema>",
+          "Single-pass analyzer output schema:",
+          "<singlePassOutputSchema>"
+        ]
+      }
+    },
+    "sqlState" : "XX000"
   },
   "IDENTIFIER_TOO_MANY_NAME_PARTS" : {
     "message" : [
@@ -1845,7 +2011,19 @@
   },
   "INDETERMINATE_COLLATION" : {
     "message" : [
-      "Function called requires knowledge of the collation it should apply, but indeterminate collation was found. Use COLLATE function to set the collation explicitly."
+      "Could not determine which collation to use for string operation. Use COLLATE clause to set the collation explicitly."
+    ],
+    "sqlState" : "42P22"
+  },
+  "INDETERMINATE_COLLATION_IN_EXPRESSION" : {
+    "message" : [
+      "Data type of <expr> has indeterminate collation. Use COLLATE clause to set the collation explicitly."
+    ],
+    "sqlState" : "42P22"
+  },
+  "INDETERMINATE_COLLATION_IN_SCHEMA" : {
+    "message" : [
+      "Schema contains indeterminate collation at: [<columnPaths>]. Use COLLATE clause to set the collation explicitly."
     ],
     "sqlState" : "42P22"
   },
@@ -1998,8 +2176,20 @@
   },
   "INTERVAL_ARITHMETIC_OVERFLOW" : {
     "message" : [
-      "<message>.<alternative>"
+      "Integer overflow while operating with intervals."
     ],
+    "subClass" : {
+      "WITHOUT_SUGGESTION" : {
+        "message" : [
+          "Try devising appropriate values for the interval parameters."
+        ]
+      },
+      "WITH_SUGGESTION" : {
+        "message" : [
+          "Use <functionName> to tolerate overflow and return NULL instead."
+        ]
+      }
+    },
     "sqlState" : "22015"
   },
   "INTERVAL_DIVIDED_BY_ZERO" : {
@@ -2044,15 +2234,21 @@
   },
   "INVALID_ARRAY_INDEX" : {
     "message" : [
-      "The index <indexValue> is out of bounds. The array has <arraySize> elements. Use the SQL function `get()` to tolerate accessing element at invalid index and return NULL instead. If necessary set <ansiConfig> to \"false\" to bypass this error."
+      "The index <indexValue> is out of bounds. The array has <arraySize> elements. Use the SQL function `get()` to tolerate accessing element at invalid index and return NULL instead."
     ],
     "sqlState" : "22003"
   },
   "INVALID_ARRAY_INDEX_IN_ELEMENT_AT" : {
     "message" : [
-      "The index <indexValue> is out of bounds. The array has <arraySize> elements. Use `try_element_at` to tolerate accessing element at invalid index and return NULL instead. If necessary set <ansiConfig> to \"false\" to bypass this error."
+      "The index <indexValue> is out of bounds. The array has <arraySize> elements. Use `try_element_at` to tolerate accessing element at invalid index and return NULL instead."
     ],
     "sqlState" : "22003"
+  },
+  "INVALID_ATTRIBUTE_NAME_SYNTAX" : {
+    "message" : [
+      "Syntax error in the attribute name: <name>. Check that backticks appear in pairs, a quoted string is a complete name part and use a backtick only inside quoted name parts."
+    ],
+    "sqlState" : "42601"
   },
   "INVALID_BITMAP_POSITION" : {
     "message" : [
@@ -2124,6 +2320,11 @@
           "Cannot resolve the given default collation. Suggested valid collation names: ['<proposals>']?"
         ]
       },
+      "DEFAULT_COLLATION_NOT_SUPPORTED" : {
+        "message" : [
+          "Setting default session collation other than UTF8_BINARY is currently not supported."
+        ]
+      },
       "TIME_ZONE" : {
         "message" : [
           "Cannot resolve the given timezone."
@@ -2131,6 +2332,12 @@
       }
     },
     "sqlState" : "22022"
+  },
+  "INVALID_CORRUPT_RECORD_TYPE" : {
+    "message" : [
+      "The column <columnName> for corrupt records must have the nullable STRING type, but got <actualType>."
+    ],
+    "sqlState" : "42804"
   },
   "INVALID_CURSOR" : {
     "message" : [
@@ -2257,6 +2464,29 @@
     ],
     "sqlState" : "42K05"
   },
+  "INVALID_ERROR_CONDITION_DECLARATION" : {
+    "message" : [
+      "Invalid condition declaration."
+    ],
+    "subClass" : {
+      "ONLY_AT_BEGINNING" : {
+        "message" : [
+          "Condition <conditionName> can only be declared at the beginning of the compound."
+        ]
+      },
+      "QUALIFIED_CONDITION_NAME" : {
+        "message" : [
+          "Condition <conditionName> cannot be qualified."
+        ]
+      },
+      "SPECIAL_CHARACTER_FOUND" : {
+        "message" : [
+          "Special character found in condition name <conditionName>. Only alphanumeric characters and underscores are allowed."
+        ]
+      }
+    },
+    "sqlState" : "42K0R"
+  },
   "INVALID_ESC" : {
     "message" : [
       "Found an invalid escape string: <invalidEscape>. The escape string must contain only one character."
@@ -2377,7 +2607,8 @@
   },
   "INVALID_FRACTION_OF_SECOND" : {
     "message" : [
-      "The fraction of sec must be zero. Valid range is [0, 60]. If necessary set <ansiConfig> to \"false\" to bypass this error."
+      "Valid range for seconds is [0, 60] (inclusive), but the provided value is <secAndMicros>. To avoid this error, use `try_make_timestamp`, which returns NULL on error.",
+      "If you do not want to use the session default timestamp version of this function, use `try_make_timestamp_ntz` or `try_make_timestamp_ltz`."
     ],
     "sqlState" : "22023"
   },
@@ -2423,6 +2654,39 @@
       }
     },
     "sqlState" : "HY000"
+  },
+  "INVALID_HANDLER_DECLARATION" : {
+    "message" : [
+      "Invalid handler declaration."
+    ],
+    "subClass" : {
+      "CONDITION_NOT_FOUND" : {
+        "message" : [
+          "Condition <condition> not found."
+        ]
+      },
+      "DUPLICATE_CONDITION_IN_HANDLER_DECLARATION" : {
+        "message" : [
+          "Found duplicate condition <condition> in the handler declaration. Please, remove one of them."
+        ]
+      },
+      "DUPLICATE_SQLSTATE_IN_HANDLER_DECLARATION" : {
+        "message" : [
+          "Found duplicate sqlState <sqlState> in the handler declaration. Please, remove one of them."
+        ]
+      },
+      "INVALID_CONDITION_COMBINATION" : {
+        "message" : [
+          "Invalid combination of conditions in the handler declaration. SQLEXCEPTION and NOT FOUND cannot be used together with other condition/sqlstate values."
+        ]
+      },
+      "WRONG_PLACE_OF_DECLARATION" : {
+        "message" : [
+          "Handlers must be declared after variable/condition declaration, and before other statements."
+        ]
+      }
+    },
+    "sqlState" : "42K0Q"
   },
   "INVALID_IDENTIFIER" : {
     "message" : [
@@ -2570,28 +2834,18 @@
     },
     "sqlState" : "22006"
   },
-  "INVALID_INVERSE_DISTRIBUTION_FUNCTION" : {
+  "INVALID_INTERVAL_WITH_MICROSECONDS_ADDITION" : {
     "message" : [
-      "Invalid inverse distribution function <funcName>."
+      "Cannot add an interval to a date because its microseconds part is not 0. To resolve this, cast the input date to a timestamp, which supports the addition of intervals with non-zero microseconds."
     ],
-    "subClass" : {
-      "DISTINCT_UNSUPPORTED" : {
-        "message" : [
-          "Cannot use DISTINCT with WITHIN GROUP."
-        ]
-      },
-      "WITHIN_GROUP_MISSING" : {
-        "message" : [
-          "WITHIN GROUP is required for inverse distribution function."
-        ]
-      },
-      "WRONG_NUM_ORDERINGS" : {
-        "message" : [
-          "Requires <expectedNum> orderings in WITHIN GROUP but got <actualNum>."
-        ]
-      }
-    },
-    "sqlState" : "42K0K"
+    "sqlState" : "22006"
+  },
+  "INVALID_JAVA_IDENTIFIER_AS_FIELD_NAME" : {
+    "message" : [
+      "<fieldName> is not a valid identifier of Java and cannot be used as field name",
+      "<walkedTypePath>."
+    ],
+    "sqlState" : "46121"
   },
   "INVALID_JOIN_TYPE_FOR_JOINWITH" : {
     "message" : [
@@ -2610,6 +2864,12 @@
       "Collations can only be applied to string types, but the JSON data type is <jsonType>."
     ],
     "sqlState" : "2203G"
+  },
+  "INVALID_JSON_RECORD_TYPE" : {
+    "message" : [
+      "Detected an invalid type of a JSON record while inferring a common schema in the mode <failFastMode>. Expected a STRUCT type, but found <invalidType>."
+    ],
+    "sqlState" : "22023"
   },
   "INVALID_JSON_ROOT_FIELD" : {
     "message" : [
@@ -2642,6 +2902,11 @@
       "ITERATE_IN_COMPOUND" : {
         "message" : [
           "ITERATE statement cannot be used with a label that belongs to a compound (BEGIN...END) body."
+        ]
+      },
+      "QUALIFIED_LABEL_NAME" : {
+        "message" : [
+          "Label cannot be qualified."
         ]
       }
     },
@@ -2704,11 +2969,23 @@
     },
     "sqlState" : "42K0E"
   },
-  "INVALID_LOCATION" : {
+  "INVALID_LOG_VERSION" : {
     "message" : [
-      "The location name cannot be an invalid URI, but `<location>` was given."
+      "UnsupportedLogVersion."
     ],
-    "sqlState" : "42K05"
+    "subClass" : {
+      "EXACT_MATCH_VERSION" : {
+        "message" : [
+          "The only supported log version is v<matchVersion>, but encountered v<version>."
+        ]
+      },
+      "MAX_SUPPORTED_VERSION" : {
+        "message" : [
+          "The maximum supported log version is v<maxSupportedVersion>, but encountered v<version>. The log file was produced by a newer version of Spark and cannot be read by this version. You need to upgrade."
+        ]
+      }
+    },
+    "sqlState" : "KD002"
   },
   "INVALID_NON_DETERMINISTIC_EXPRESSIONS" : {
     "message" : [
@@ -2844,6 +3121,11 @@
           "Unsupported dtype: <invalidValue>. Valid values: float64, float32."
         ]
       },
+      "EXTENSION" : {
+        "message" : [
+          "Invalid extension: <invalidValue>. Extension is limited to exactly 3 letters (e.g. csv, tsv, etc...)"
+        ]
+      },
       "INTEGER" : {
         "message" : [
           "expects an integer literal, but got <invalidValue>."
@@ -2916,6 +3198,12 @@
     },
     "sqlState" : "42601"
   },
+  "INVALID_PARTITION_VALUE" : {
+    "message" : [
+      "Failed to cast value <value> to data type <dataType> for partition column <columnName>. Ensure the value matches the expected data type for this partition column."
+    ],
+    "sqlState" : "42846"
+  },
   "INVALID_PROPERTY_KEY" : {
     "message" : [
       "<key> is an invalid property key, please use quotes, e.g. SET <key>=<value>."
@@ -2933,6 +3221,42 @@
       "Parameterized query must either use positional, or named parameters, but not both."
     ],
     "sqlState" : "42613"
+  },
+  "INVALID_RECURSIVE_CTE" : {
+    "message" : [
+      "Invalid recursive definition found. Recursive queries must contain an UNION or an UNION ALL statement with 2 children. The first child needs to be the anchor term without any recursive references."
+    ],
+    "sqlState" : "42836"
+  },
+  "INVALID_RECURSIVE_REFERENCE" : {
+    "message" : [
+      "Invalid recursive reference found inside WITH RECURSIVE clause."
+    ],
+    "subClass" : {
+      "NUMBER" : {
+        "message" : [
+          "Multiple self-references to one recursive CTE are not allowed."
+        ]
+      },
+      "PLACE" : {
+        "message" : [
+          "Recursive references cannot be used on the right side of left outer/semi/anti joins, on the left side of right outer joins, in full outer joins, in aggregates, and in subquery expressions."
+        ]
+      }
+    },
+    "sqlState" : "42836"
+  },
+  "INVALID_REGEXP_REPLACE" : {
+    "message" : [
+      "Could not perform regexp_replace for source = \"<source>\", pattern = \"<pattern>\", replacement = \"<replacement>\" and position = <position>."
+    ],
+    "sqlState" : "22023"
+  },
+  "INVALID_RESET_COMMAND_FORMAT" : {
+    "message" : [
+      "Expected format is 'RESET' or 'RESET key'. If you want to include special characters in key, please use quotes, e.g., RESET `key`."
+    ],
+    "sqlState" : "42000"
   },
   "INVALID_SAVE_MODE" : {
     "message" : [
@@ -2982,11 +3306,62 @@
     ],
     "sqlState" : "42613"
   },
+  "INVALID_SPARK_CONFIG" : {
+    "message" : [
+      "Invalid Spark config:"
+    ],
+    "subClass" : {
+      "INVALID_EXECUTOR_HEARTBEAT_INTERVAL" : {
+        "message" : [
+          "The value of <networkTimeoutKey>=<networkTimeoutValue>ms must be greater than the value of <executorHeartbeatIntervalKey>=<executorHeartbeatIntervalValue>ms."
+        ]
+      },
+      "INVALID_EXECUTOR_MEMORY_OPTIONS" : {
+        "message" : [
+          "<executorOptsKey> is not allowed to specify max heap memory settings (was '<javaOpts>'). Use spark.executor.memory instead."
+        ]
+      },
+      "INVALID_EXECUTOR_SPARK_OPTIONS" : {
+        "message" : [
+          "<executorOptsKey> is not allowed to set Spark options (was '<javaOpts>'). Set them directly on a SparkConf or in a properties file when using ./bin/spark-submit."
+        ]
+      },
+      "INVALID_MEMORY_FRACTION" : {
+        "message" : [
+          "<memoryFractionKey> should be between 0 and 1 (was '<memoryFractionValue>')."
+        ]
+      },
+      "INVALID_SPARK_SUBMIT_DEPLOY_MODE_KEY" : {
+        "message" : [
+          "<sparkSubmitDeployModeKey> can only be \"cluster\" or \"client\"."
+        ]
+      },
+      "NETWORK_AUTH_MUST_BE_ENABLED" : {
+        "message" : [
+          "<networkAuthEnabledConf> must be enabled when enabling encryption."
+        ]
+      }
+    },
+    "sqlState" : "42616"
+  },
+  "INVALID_SQLSTATE" : {
+    "message" : [
+      "Invalid SQLSTATE value: '<sqlState>'. SQLSTATE must be exactly 5 characters long and contain only A-Z and 0-9. SQLSTATE must not start with '00', '01', or 'XX'."
+    ],
+    "sqlState" : "428B3"
+  },
   "INVALID_SQL_ARG" : {
     "message" : [
       "The argument <name> of `sql()` is invalid. Consider to replace it either by a SQL literal or by collection constructor functions such as `map()`, `array()`, `struct()`."
     ],
     "sqlState" : "42K08"
+  },
+  "INVALID_SQL_FUNCTION_PLAN_STRUCTURE" : {
+    "message" : [
+      "Invalid SQL function plan structure",
+      "<plan>"
+    ],
+    "sqlState" : "XXKD0"
   },
   "INVALID_SQL_SYNTAX" : {
     "message" : [
@@ -3088,6 +3463,11 @@
           "Unsupported function name <funcName>."
         ]
       },
+      "UNSUPPORTED_SQL_STATEMENT" : {
+        "message" : [
+          "Unsupported SQL statement: <sqlText>."
+        ]
+      },
       "VARIABLE_TYPE_OR_DEFAULT_REQUIRED" : {
         "message" : [
           "The definition of a SQL variable requires either a datatype or a DEFAULT clause.",
@@ -3182,7 +3562,7 @@
   },
   "INVALID_URL" : {
     "message" : [
-      "The url is invalid: <url>. If necessary set <ansiConfig> to \"false\" to bypass this error."
+      "The url is invalid: <url>. Use `try_parse_url` to tolerate invalid URL and return NULL instead."
     ],
     "sqlState" : "22P02"
   },
@@ -3258,6 +3638,12 @@
     ],
     "sqlState" : "22023"
   },
+  "INVALID_VARIANT_SHREDDING_SCHEMA" : {
+    "message" : [
+      "The schema `<schema>` is not a valid variant shredding schema."
+    ],
+    "sqlState" : "22023"
+  },
   "INVALID_WHERE_CONDITION" : {
     "message" : [
       "The WHERE condition <condition> contains invalid expressions: <expressionList>.",
@@ -3270,6 +3656,34 @@
       "Cannot specify ORDER BY or a window frame for <aggFunc>."
     ],
     "sqlState" : "42601"
+  },
+  "INVALID_WITHIN_GROUP_EXPRESSION" : {
+    "message" : [
+      "Invalid function <funcName> with WITHIN GROUP."
+    ],
+    "subClass" : {
+      "DISTINCT_UNSUPPORTED" : {
+        "message" : [
+          "The function does not support DISTINCT with WITHIN GROUP."
+        ]
+      },
+      "MISMATCH_WITH_DISTINCT_INPUT" : {
+        "message" : [
+          "The function is invoked with DISTINCT and WITHIN GROUP but expressions <funcArg> and <orderingExpr> do not match. The WITHIN GROUP ordering expression must be picked from the function inputs."
+        ]
+      },
+      "WITHIN_GROUP_MISSING" : {
+        "message" : [
+          "WITHIN GROUP is required for the function."
+        ]
+      },
+      "WRONG_NUM_ORDERINGS" : {
+        "message" : [
+          "The function requires <expectedNum> orderings in WITHIN GROUP but got <actualNum>."
+        ]
+      }
+    },
+    "sqlState" : "42K0K"
   },
   "INVALID_WRITER_COMMIT_MESSAGE" : {
     "message" : [
@@ -3318,6 +3732,12 @@
     ],
     "sqlState" : "42K0L"
   },
+  "LABEL_ALREADY_EXISTS" : {
+    "message" : [
+      "The label <label> already exists. Choose another name or rename the existing label."
+    ],
+    "sqlState" : "42K0L"
+  },
   "LOAD_DATA_PATH_NOT_EXISTS" : {
     "message" : [
       "LOAD DATA input path does not exist: <path>."
@@ -3347,6 +3767,12 @@
       "Malformed CSV record: <badRecord>"
     ],
     "sqlState" : "KD000"
+  },
+  "MALFORMED_LOG_FILE" : {
+    "message" : [
+      "Log file was malformed: failed to read correct log version from <text>."
+    ],
+    "sqlState" : "KD002"
   },
   "MALFORMED_PROTOBUF_MESSAGE" : {
     "message" : [
@@ -3391,6 +3817,12 @@
     ],
     "sqlState" : "23K01"
   },
+  "MERGE_WITHOUT_WHEN" : {
+    "message" : [
+      "There must be at least one WHEN clause in a MERGE statement."
+    ],
+    "sqlState" : "42601"
+  },
   "MISSING_AGGREGATION" : {
     "message" : [
       "The non-aggregating expression <expression> is based on columns which are not participating in the GROUP BY clause.",
@@ -3417,17 +3849,35 @@
     },
     "sqlState" : "XX000"
   },
+  "MISSING_DATABASE_FOR_V1_SESSION_CATALOG" : {
+    "message" : [
+      "Database name is not specified in the v1 session catalog. Please ensure to provide a valid database name when interacting with the v1 catalog."
+    ],
+    "sqlState" : "3F000"
+  },
   "MISSING_GROUP_BY" : {
     "message" : [
       "The query does not include a GROUP BY clause. Add GROUP BY or turn it into the window functions using OVER clauses."
     ],
     "sqlState" : "42803"
   },
+  "MISSING_TIMEOUT_CONFIGURATION" : {
+    "message" : [
+      "The operation has timed out, but no timeout duration is configured. To set a processing time-based timeout, use 'GroupState.setTimeoutDuration()' in your 'mapGroupsWithState' or 'flatMapGroupsWithState' operation. For event-time-based timeout, use 'GroupState.setTimeoutTimestamp()' and define a watermark using 'Dataset.withWatermark()'."
+    ],
+    "sqlState" : "HY000"
+  },
   "MISSING_WINDOW_SPECIFICATION" : {
     "message" : [
       "Window specification is not defined in the WINDOW clause for <windowName>. For more information about WINDOW clauses, please refer to '<docroot>/sql-ref-syntax-qry-select-window.html'."
     ],
     "sqlState" : "42P20"
+  },
+  "MULTIPLE_QUERY_RESULT_CLAUSES_WITH_PIPE_OPERATORS" : {
+    "message" : [
+      "<clause1> and <clause2> cannot coexist in the same SQL pipe operator using '|>'. Please separate the multiple result clauses into separate pipe operators and then retry the query again."
+    ],
+    "sqlState" : "42000"
   },
   "MULTIPLE_TIME_TRAVEL_SPEC" : {
     "message" : [
@@ -3440,6 +3890,12 @@
       "Detected multiple data sources with the name <provider> (<sourceNames>). Please specify the fully qualified class name or remove <externalSource> from the classpath."
     ],
     "sqlState" : "42710"
+  },
+  "MULTI_ALIAS_WITHOUT_GENERATOR" : {
+    "message" : [
+      "Multi part aliasing (<names>) is not supported with <expr> as it is not a generator function."
+    ],
+    "sqlState" : "42K0E"
   },
   "MULTI_SOURCES_UNSUPPORTED_FOR_EXPRESSION" : {
     "message" : [
@@ -3466,6 +3922,12 @@
       "Set \"spark.sql.allowNamedFunctionArguments\" to \"true\" to turn on feature."
     ],
     "sqlState" : "0A000"
+  },
+  "NEGATIVE_VALUES_IN_FREQUENCY_EXPRESSION" : {
+    "message" : [
+      "Found the negative value in <frequencyExpression>: <negativeValue>, but expected a positive integral value."
+    ],
+    "sqlState" : "22003"
   },
   "NESTED_AGGREGATE_FUNCTION" : {
     "message" : [
@@ -3551,6 +4013,19 @@
     },
     "sqlState" : "42601"
   },
+  "NOT_ALLOWED_IN_PIPE_OPERATOR_WHERE" : {
+    "message" : [
+      "Not allowed in the pipe WHERE clause:"
+    ],
+    "subClass" : {
+      "WINDOW_CLAUSE" : {
+        "message" : [
+          "WINDOW clause."
+        ]
+      }
+    },
+    "sqlState" : "42601"
+  },
   "NOT_A_CONSTANT_STRING" : {
     "message" : [
       "The expression <expr> used for the routine or clause <name> must be a constant STRING which is NOT NULL."
@@ -3607,6 +4082,12 @@
   "NOT_SUPPORTED_CHANGE_COLUMN" : {
     "message" : [
       "ALTER TABLE ALTER/CHANGE COLUMN is not supported for changing <table>'s column <originName> with type <originType> to <newName> with type <newType>."
+    ],
+    "sqlState" : "0A000"
+  },
+  "NOT_SUPPORTED_CHANGE_SAME_COLUMN" : {
+    "message" : [
+      "ALTER TABLE ALTER/CHANGE COLUMN is not supported for changing <table>'s column <fieldName> including its nested fields multiple times in the same command."
     ],
     "sqlState" : "0A000"
   },
@@ -3802,6 +4283,12 @@
     ],
     "sqlState" : "42617"
   },
+  "PARSE_MODE_UNSUPPORTED" : {
+    "message" : [
+      "The function <funcName> doesn't support the <mode> mode. Acceptable modes are PERMISSIVE and FAILFAST."
+    ],
+    "sqlState" : "42601"
+  },
   "PARSE_SYNTAX_ERROR" : {
     "message" : [
       "Syntax error at or near <error><hint>."
@@ -3847,9 +4334,15 @@
     ],
     "sqlState" : "42K03"
   },
-  "PIPE_OPERATOR_SELECT_CONTAINS_AGGREGATE_FUNCTION" : {
+  "PIPE_OPERATOR_AGGREGATE_EXPRESSION_CONTAINS_NO_AGGREGATE_FUNCTION" : {
     "message" : [
-      "Aggregate function <expr> is not allowed when using the pipe operator |> SELECT clause; please use the pipe operator |> AGGREGATE clause instead"
+      "Non-grouping expression <expr> is provided as an argument to the |> AGGREGATE pipe operator but does not contain any aggregate function; please update it to include an aggregate function and then retry the query again."
+    ],
+    "sqlState" : "0A000"
+  },
+  "PIPE_OPERATOR_CONTAINS_AGGREGATE_FUNCTION" : {
+    "message" : [
+      "Aggregate function <expr> is not allowed when using the pipe operator |> <clause> clause; please use the pipe operator |> AGGREGATE clause instead."
     ],
     "sqlState" : "0A000"
   },
@@ -3931,6 +4424,18 @@
       "Failed when Python streaming data source perform <action>: <msg>"
     ],
     "sqlState" : "38000"
+  },
+  "RECURSIVE_CTE_IN_LEGACY_MODE" : {
+    "message" : [
+      "Recursive definitions cannot be used in legacy CTE precedence mode (spark.sql.legacy.ctePrecedencePolicy=LEGACY)."
+    ],
+    "sqlState" : "42836"
+  },
+  "RECURSIVE_CTE_WHEN_INLINING_IS_FORCED" : {
+    "message" : [
+      "Recursive definitions cannot be used when CTE inlining is forced."
+    ],
+    "sqlState" : "42836"
   },
   "RECURSIVE_PROTOBUF_SCHEMA" : {
     "message" : [
@@ -4136,12 +4641,6 @@
     ],
     "sqlState" : "42802"
   },
-  "STATEFUL_PROCESSOR_CANNOT_REINITIALIZE_STATE_ON_KEY" : {
-    "message" : [
-      "Cannot re-initialize state on the same grouping key during initial state handling for stateful processor. Invalid grouping key=<groupingKey>."
-    ],
-    "sqlState" : "42802"
-  },
   "STATEFUL_PROCESSOR_DUPLICATE_STATE_VARIABLE_DEFINED" : {
     "message" : [
       "State variable with name <stateVarName> has already been defined in the StatefulProcessor."
@@ -4215,6 +4714,13 @@
     ],
     "sqlState" : "42K06"
   },
+  "STATE_STORE_INVALID_VALUE_SCHEMA_EVOLUTION" : {
+    "message" : [
+      "Schema evolution is not possible new value_schema=<newValueSchema> and old value_schema=<oldValueSchema>",
+      "Please check https://avro.apache.org/docs/1.11.1/specification/_print/#schema-resolution for valid schema evolution."
+    ],
+    "sqlState" : "XXKST"
+  },
   "STATE_STORE_INVALID_VARIABLE_TYPE_CHANGE" : {
     "message" : [
       "Cannot change <stateVarName> to <newType> between query restarts. Please set <stateVarName> to <oldType>, or restart with a new checkpoint directory."
@@ -4256,6 +4762,14 @@
     ],
     "sqlState" : "42K06"
   },
+  "STATE_STORE_STATE_SCHEMA_FILES_THRESHOLD_EXCEEDED" : {
+    "message" : [
+      "The number of state schema files <numStateSchemaFiles> exceeds the maximum number of state schema files for this query: <maxStateSchemaFiles>.",
+      "Added: <addedColumnFamilies>, Removed: <removedColumnFamilies>",
+      "Please set 'spark.sql.streaming.stateStore.stateSchemaFilesThreshold' to a higher number, or revert state schema modifications"
+    ],
+    "sqlState" : "42K06"
+  },
   "STATE_STORE_UNSUPPORTED_OPERATION" : {
     "message" : [
       "<operationType> operation not supported with <entity>"
@@ -4285,6 +4799,14 @@
       "to process the streaming state. Retrieved error_message=<errorMsg>"
     ],
     "sqlState" : "XX000"
+  },
+  "STATE_STORE_VALUE_SCHEMA_EVOLUTION_THRESHOLD_EXCEEDED" : {
+    "message" : [
+      "The number of state schema evolutions <numSchemaEvolutions> exceeds the maximum number of state schema evolutions, <maxSchemaEvolutions>, allowed for this column family.",
+      "Offending column family: <colFamilyName>",
+      "Please set 'spark.sql.streaming.stateStore.valueStateSchemaEvolutionThreshold' to a higher number, or revert state schema modifications"
+    ],
+    "sqlState" : "42K06"
   },
   "STATE_STORE_VALUE_SCHEMA_NOT_COMPATIBLE" : {
     "message" : [
@@ -4475,6 +4997,12 @@
     ],
     "sqlState" : "42P01"
   },
+  "TABLE_VALUED_ARGUMENTS_NOT_YET_IMPLEMENTED_FOR_SQL_FUNCTIONS" : {
+    "message" : [
+      "Cannot <action> SQL user-defined function <functionName> with TABLE arguments because this functionality is not yet implemented."
+    ],
+    "sqlState" : "0A000"
+  },
   "TABLE_VALUED_FUNCTION_FAILED_TO_ANALYZE_IN_PYTHON" : {
     "message" : [
       "Failed to analyze the Python user defined table function: <msg>"
@@ -4543,6 +5071,18 @@
       "Transpose requires non-index columns to share a least common type, but <dt1> and <dt2> do not."
     ],
     "sqlState" : "42K09"
+  },
+  "TUPLE_IS_EMPTY" : {
+    "message" : [
+      "Due to Scala's limited support of tuple, empty tuple is not supported."
+    ],
+    "sqlState" : "22004"
+  },
+  "TUPLE_SIZE_EXCEEDS_LIMIT" : {
+    "message" : [
+      "Due to Scala's limited support of tuple, tuples with more than 22 elements are not supported."
+    ],
+    "sqlState" : "54011"
   },
   "UDTF_ALIAS_NUMBER_MISMATCH" : {
     "message" : [
@@ -4663,6 +5203,12 @@
   "UNRECOGNIZED_SQL_TYPE" : {
     "message" : [
       "Unrecognized SQL type - name: <typeName>, id: <jdbcType>."
+    ],
+    "sqlState" : "42704"
+  },
+  "UNRECOGNIZED_STATISTIC" : {
+    "message" : [
+      "The statistic <stats> is not recognized. Valid statistics include `count`, `count_distinct`, `approx_count_distinct`, `mean`, `stddev`, `min`, `max`, and percentile values. Percentile must be a numeric value followed by '%', within the range 0% to 100%."
     ],
     "sqlState" : "42704"
   },
@@ -4815,6 +5361,59 @@
     },
     "sqlState" : "0A000"
   },
+  "UNSUPPORTED_CONNECT_FEATURE" : {
+    "message" : [
+      "Feature is not supported in Spark Connect:"
+    ],
+    "subClass" : {
+      "DATASET_QUERY_EXECUTION" : {
+        "message" : [
+          "Access to the Dataset Query Execution. This is server side developer API."
+        ]
+      },
+      "RDD" : {
+        "message" : [
+          "Resilient Distributed Datasets (RDDs)."
+        ]
+      },
+      "REGISTER_UDAF" : {
+        "message" : [
+          "Registering User Defined Aggregate Functions (UDAFs)."
+        ]
+      },
+      "SESSION_BASE_RELATION_TO_DATAFRAME" : {
+        "message" : [
+          "Invoking SparkSession 'baseRelationToDataFrame'. This is server side developer API"
+        ]
+      },
+      "SESSION_EXPERIMENTAL_METHODS" : {
+        "message" : [
+          "Access to SparkSession Experimental (methods). This is server side developer API"
+        ]
+      },
+      "SESSION_LISTENER_MANAGER" : {
+        "message" : [
+          "Access to the SparkSession Listener Manager. This is server side developer API"
+        ]
+      },
+      "SESSION_SESSION_STATE" : {
+        "message" : [
+          "Access to the SparkSession Session State. This is server side developer API."
+        ]
+      },
+      "SESSION_SHARED_STATE" : {
+        "message" : [
+          "Access to the SparkSession Shared State. This is server side developer API."
+        ]
+      },
+      "SESSION_SPARK_CONTEXT" : {
+        "message" : [
+          "Access to the SparkContext."
+        ]
+      }
+    },
+    "sqlState" : "0A000"
+  },
   "UNSUPPORTED_DATASOURCE_FOR_DIRECT_QUERY" : {
     "message" : [
       "Unsupported data source type for direct query on files: <dataSourceType>"
@@ -4929,6 +5528,11 @@
           "<functionName> with AES-<mode> does not support initialization vectors (IVs)."
         ]
       },
+      "ALTER_TABLE_SERDE_FOR_DATASOURCE_TABLE" : {
+        "message" : [
+          "ALTER TABLE SET SERDE is not supported for table <tableName> created with the datasource API. Consider using an external Hive table or updating the table properties with compatible options for your table format."
+        ]
+      },
       "ANALYZE_UNCACHED_TEMP_VIEW" : {
         "message" : [
           "The ANALYZE TABLE FOR COLUMNS command can operate on temporary views that have been cached already. Consider to cache the view <viewName>."
@@ -4949,6 +5553,16 @@
           "Catalog <catalogName> does not support <operation>."
         ]
       },
+      "CLAUSE_WITH_PIPE_OPERATORS" : {
+        "message" : [
+          "The SQL pipe operator syntax using |> does not support <clauses>."
+        ]
+      },
+      "COLLATIONS_IN_MAP_KEYS" : {
+        "message" : [
+          "Collated strings for keys of maps"
+        ]
+      },
       "COMBINATION_QUERY_RESULT_CLAUSES" : {
         "message" : [
           "Combination of ORDER BY/SORT BY/DISTRIBUTE BY/CLUSTER BY."
@@ -4957,6 +5571,16 @@
       "COMMENT_NAMESPACE" : {
         "message" : [
           "Attach a comment to the namespace <namespace>."
+        ]
+      },
+      "CONTINUE_EXCEPTION_HANDLER" : {
+        "message" : [
+          "CONTINUE exception handler is not supported. Use EXIT handler."
+        ]
+      },
+      "DESC_TABLE_COLUMN_JSON" : {
+        "message" : [
+          "DESC TABLE COLUMN AS JSON not supported for individual columns."
         ]
       },
       "DESC_TABLE_COLUMN_PARTITION" : {
@@ -5004,6 +5628,11 @@
           "Referencing lateral column alias <lca> in the aggregate query both with window expressions and with having clause. Please rewrite the aggregate query by removing the having clause or removing lateral alias reference in the SELECT list."
         ]
       },
+      "LATERAL_COLUMN_ALIAS_IN_GENERATOR" : {
+        "message" : [
+          "Referencing a lateral column alias <lca> in generator expression <generatorExpr>."
+        ]
+      },
       "LATERAL_COLUMN_ALIAS_IN_GROUP_BY" : {
         "message" : [
           "Referencing a lateral column alias via GROUP BY alias/ALL is not supported yet."
@@ -5034,6 +5663,11 @@
           "The target JDBC server hosting table <tableName> does not support ALTER TABLE with multiple actions. Split the ALTER TABLE up into individual actions to avoid this error."
         ]
       },
+      "OBJECT_LEVEL_COLLATIONS" : {
+        "message" : [
+          "Default collation for the specified object."
+        ]
+      },
       "ORC_TYPE_CAST" : {
         "message" : [
           "Unable to convert <orcType> of Orc to data type <toType>."
@@ -5054,9 +5688,19 @@
           "Parameter markers are not allowed in <statement>."
         ]
       },
+      "PARTITION_BY_VARIANT" : {
+        "message" : [
+          "Cannot use VARIANT producing expressions to partition a DataFrame, but the type of expression <expr> is <dataType>."
+        ]
+      },
       "PARTITION_WITH_NESTED_COLUMN_IS_UNSUPPORTED" : {
         "message" : [
           "Invalid partitioning: <cols> is missing or is in a map or array."
+        ]
+      },
+      "PIPE_OPERATOR_AGGREGATE_UNSUPPORTED_CASE" : {
+        "message" : [
+          "The SQL pipe operator syntax with aggregation (using |> AGGREGATE) does not support <case>."
         ]
       },
       "PIVOT_AFTER_GROUP_BY" : {
@@ -5088,12 +5732,12 @@
         "message" : [
           "Queries from raw JSON/CSV/XML files are disallowed when the",
           "referenced columns only include the internal corrupt record column",
-          "(named _corrupt_record by default). For example:",
-          "spark.read.schema(schema).json(file).filter($\"_corrupt_record\".isNotNull).count()",
-          "and spark.read.schema(schema).json(file).select(\"_corrupt_record\").show().",
+          "(named `_corrupt_record` by default). For example:",
+          "`spark.read.schema(schema).json(file).filter($\"_corrupt_record\".isNotNull).count()`",
+          "and `spark.read.schema(schema).json(file).select(\"_corrupt_record\").show()`.",
           "Instead, you can cache or save the parsed results and then send the same query.",
-          "For example, val df = spark.read.schema(schema).json(file).cache() and then",
-          "df.filter($\"_corrupt_record\".isNotNull).count()."
+          "For example, `val df = spark.read.schema(schema).json(file).cache()` and then",
+          "`df.filter($\"_corrupt_record\".isNotNull).count()`."
         ]
       },
       "REMOVE_NAMESPACE_COMMENT" : {
@@ -5116,6 +5760,11 @@
           "Cannot have MAP type columns in DataFrame which calls set operations (INTERSECT, EXCEPT, etc.), but the type of column <colName> is <dataType>."
         ]
       },
+      "SET_OPERATION_ON_VARIANT_TYPE" : {
+        "message" : [
+          "Cannot have VARIANT type columns in DataFrame which calls set operations (INTERSECT, EXCEPT, etc.), but the type of column <colName> is <dataType>."
+        ]
+      },
       "SET_PROPERTIES_AND_DBPROPERTIES" : {
         "message" : [
           "set PROPERTIES and DBPROPERTIES at the same time."
@@ -5129,6 +5778,16 @@
       "SET_VARIABLE_USING_SET" : {
         "message" : [
           "<variableName> is a VARIABLE and cannot be updated using the SET statement. Use SET VARIABLE <variableName> = ... instead."
+        ]
+      },
+      "SQL_SCRIPTING" : {
+        "message" : [
+          "SQL Scripting is under development and not all features are supported. SQL Scripting enables users to write procedural SQL including control flow and error handling. To enable existing features set <sqlScriptingEnabled> to `true`."
+        ]
+      },
+      "SQL_SCRIPTING_WITH_POSITIONAL_PARAMETERS" : {
+        "message" : [
+          "Positional parameters are not supported with SQL Scripting."
         ]
       },
       "STATE_STORE_MULTIPLE_COLUMN_FAMILIES" : {
@@ -5179,6 +5838,16 @@
       "TRIM_COLLATION" : {
         "message" : [
           "TRIM specifier in the collation."
+        ]
+      },
+      "UPDATE_COLUMN_NULLABILITY" : {
+        "message" : [
+          "Update column nullability for MySQL and MS SQL Server."
+        ]
+      },
+      "WRITE_FOR_BINARY_SOURCE" : {
+        "message" : [
+          "Write for the binary file data source."
         ]
       }
     },
@@ -5298,6 +5967,12 @@
     },
     "sqlState" : "42902"
   },
+  "UNSUPPORTED_PARTITION_TRANSFORM" : {
+    "message" : [
+      "Unsupported partition transform: <transform>. The supported transforms are `identity`, `bucket`, and `clusterBy`. Ensure your transform expression uses one of these."
+    ],
+    "sqlState" : "0A000"
+  },
   "UNSUPPORTED_SAVE_MODE" : {
     "message" : [
       "The save mode <saveMode> is not supported for:"
@@ -5351,6 +6026,18 @@
         ]
       }
     },
+    "sqlState" : "0A000"
+  },
+  "UNSUPPORTED_SINGLE_PASS_ANALYZER_FEATURE" : {
+    "message" : [
+      "The single-pass analyzer cannot process this query or command because it does not yet support <feature>."
+    ],
+    "sqlState" : "0A000"
+  },
+  "UNSUPPORTED_SQL_UDF_USAGE" : {
+    "message" : [
+      "Using SQL function <functionName> in <nodeName> is not supported."
+    ],
     "sqlState" : "0A000"
   },
   "UNSUPPORTED_STREAMING_OPERATOR_WITHOUT_WATERMARK" : {
@@ -5454,6 +6141,12 @@
     },
     "sqlState" : "0A000"
   },
+  "UNSUPPORTED_TABLE_CHANGE_IN_JDBC_CATALOG" : {
+    "message" : [
+      "The table change <change> is not supported for the JDBC catalog on table <tableName>. Supported changes include: AddColumn, RenameColumn, DeleteColumn, UpdateColumnType, UpdateColumnNullability."
+    ],
+    "sqlState" : "42000"
+  },
   "UNSUPPORTED_TYPED_LITERAL" : {
     "message" : [
       "Literals of the type <unsupportedType> are not supported. Supported types are <supportedTypes>."
@@ -5468,6 +6161,59 @@
       "3. set \"spark.sql.legacy.allowUntypedScalaUDF\" to \"true\" and use this API with caution."
     ],
     "sqlState" : "42K0E"
+  },
+  "USER_DEFINED_FUNCTIONS" : {
+    "message" : [
+      "User defined function is invalid:"
+    ],
+    "subClass" : {
+      "CANNOT_CONTAIN_COMPLEX_FUNCTIONS" : {
+        "message" : [
+          "SQL scalar function cannot contain aggregate/window/generate functions: <queryText>"
+        ]
+      },
+      "CANNOT_REPLACE_NON_SQL_UDF_WITH_SQL_UDF" : {
+        "message" : [
+          "Cannot replace the non-SQL function <name> with a SQL function."
+        ]
+      },
+      "NOT_A_VALID_DEFAULT_EXPRESSION" : {
+        "message" : [
+          "The DEFAULT expression of `<functionName>`.`<parameterName>` is not supported because it contains a subquery."
+        ]
+      },
+      "NOT_A_VALID_DEFAULT_PARAMETER_POSITION" : {
+        "message" : [
+          "In routine `<functionName>` parameter `<parameterName>` with DEFAULT must not be followed by parameter `<nextParameterName>` without DEFAULT."
+        ]
+      },
+      "NOT_NULL_ON_FUNCTION_PARAMETERS" : {
+        "message" : [
+          "Cannot specify NOT NULL on function parameters: <input>"
+        ]
+      },
+      "RETURN_COLUMN_COUNT_MISMATCH" : {
+        "message" : [
+          "The number of columns produced by the RETURN clause (num: `<outputSize>`) does not match the number of column names specified by the RETURNS clause (num: `<returnParamSize>`) of <name>."
+        ]
+      },
+      "ROUTINE_PROPERTY_TOO_LARGE" : {
+        "message" : [
+          "Cannot convert user defined routine <name> to catalog function: routine properties are too large."
+        ]
+      },
+      "SQL_TABLE_UDF_BODY_MUST_BE_A_QUERY" : {
+        "message" : [
+          "SQL table function <name> body must be a query."
+        ]
+      },
+      "SQL_TABLE_UDF_MISSING_COLUMN_NAMES" : {
+        "message" : [
+          "The relation returned by the query in the CREATE FUNCTION statement for <functionName> with RETURNS TABLE clause lacks explicit names for one or more output columns; please rewrite the function body to provide explicit column names or add column names to the RETURNS TABLE clause, and re-run the command."
+        ]
+      }
+    },
+    "sqlState" : "42601"
   },
   "USER_RAISED_EXCEPTION" : {
     "message" : [
@@ -5589,7 +6335,7 @@
   },
   "XML_ROW_TAG_MISSING" : {
     "message" : [
-      "<rowTag> option is required for reading files in XML format."
+      "<rowTag> option is required for reading/writing files in XML format."
     ],
     "sqlState" : "42KDF"
   },
@@ -5606,11 +6352,6 @@
   "_LEGACY_ERROR_TEMP_0006" : {
     "message" : [
       "The number of inserted values cannot match the fields."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_0008" : {
-    "message" : [
-      "There must be at least one WHEN clause in a MERGE statement."
     ]
   },
   "_LEGACY_ERROR_TEMP_0012" : {
@@ -5653,11 +6394,6 @@
       "The value of from-to unit must be a string."
     ]
   },
-  "_LEGACY_ERROR_TEMP_0028" : {
-    "message" : [
-      "Intervals FROM <from> TO <to> are not supported."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_0029" : {
     "message" : [
       "Cannot mix year-month and day-time fields: <literal>."
@@ -5691,21 +6427,6 @@
   "_LEGACY_ERROR_TEMP_0037" : {
     "message" : [
       "It is not allowed to add catalog/namespace prefix <quoted> to the table name in CACHE TABLE AS SELECT."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_0038" : {
-    "message" : [
-      "CTE definition can't have duplicate names: <duplicateNames>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_0039" : {
-    "message" : [
-      "Unsupported SQL statement."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_0043" : {
-    "message" : [
-      "Expected format is 'RESET' or 'RESET key'. If you want to include special characters in key, please use quotes, e.g., RESET `key`."
     ]
   },
   "_LEGACY_ERROR_TEMP_0045" : {
@@ -5900,11 +6621,6 @@
       "<hintName> Hint expects a partition number as a parameter."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1049" : {
-    "message" : [
-      "Syntax error in attribute name: <name>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1050" : {
     "message" : [
       "Can only star expand struct data types. Attribute: `<attributes>`."
@@ -6005,19 +6721,9 @@
       "Column statistics serialization is not supported for column <colName> of data type: <dataType>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1097" : {
-    "message" : [
-      "The field for corrupt records must be string type and nullable."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1098" : {
     "message" : [
       "DataType '<x>' is not supported by <className>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1099" : {
-    "message" : [
-      "<funcName>() doesn't support the <mode> mode. Acceptable modes are <permissiveMode> and <failFastMode>."
     ]
   },
   "_LEGACY_ERROR_TEMP_1103" : {
@@ -6082,11 +6788,6 @@
       "Cannot rename a table with ALTER VIEW. Please use ALTER TABLE instead."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1125" : {
-    "message" : [
-      "Database from v1 session catalog is not specified."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1126" : {
     "message" : [
       "Nested databases are not supported by v1 session catalog: <catalog>."
@@ -6125,11 +6826,6 @@
       "<className> is not a valid Spark SQL Data Source."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1136" : {
-    "message" : [
-      "Cannot save interval data type into external storage."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1137" : {
     "message" : [
       "Unable to resolve <name> given [<outputStr>]."
@@ -6153,11 +6849,6 @@
   "_LEGACY_ERROR_TEMP_1141" : {
     "message" : [
       "Multiple sources found for <provider> (<sourceNames>), please specify the fully qualified class name."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1142" : {
-    "message" : [
-      "Datasource does not support writing empty or nested empty schemas. Please make sure the data schema has at least one or more column(s)."
     ]
   },
   "_LEGACY_ERROR_TEMP_1143" : {
@@ -6198,11 +6889,6 @@
   "_LEGACY_ERROR_TEMP_1155" : {
     "message" : [
       "Partition column `<col>` not found in schema <schemaCatalog>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1156" : {
-    "message" : [
-      "Column <colName> not found in schema <tableSchema>."
     ]
   },
   "_LEGACY_ERROR_TEMP_1158" : {
@@ -6449,11 +7135,6 @@
       "Decimal scale (<scale>) cannot be greater than precision (<precision>)."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1231" : {
-    "message" : [
-      "<key> is not a valid partition column in table <tblName>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1232" : {
     "message" : [
       "Partition spec is invalid. The spec (<specKeys>) must match the partition spec (<partitionColumnNames>) defined in table '<tableName>'."
@@ -6484,11 +7165,6 @@
       "Operation not allowed: ALTER TABLE SET [SERDE | SERDEPROPERTIES] for a specific partition is not supported for tables created with the datasource API."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1248" : {
-    "message" : [
-      "Operation not allowed: ALTER TABLE SET SERDE is not supported for tables created with the datasource API."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1250" : {
     "message" : [
       "<action> is not allowed on <tableName> since filesource partition management is disabled (spark.sql.hive.manageFilesourcePartitions = false)."
@@ -6497,16 +7173,6 @@
   "_LEGACY_ERROR_TEMP_1251" : {
     "message" : [
       "<action> is not allowed on <tableName> since its partition metadata is not stored in the Hive metastore. To import this information into the metastore, run `msck repair table <tableName>`."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1252" : {
-    "message" : [
-      "Cannot alter a view with ALTER TABLE. Please use ALTER VIEW instead."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1253" : {
-    "message" : [
-      "Cannot alter a table with ALTER VIEW. Please use ALTER TABLE instead."
     ]
   },
   "_LEGACY_ERROR_TEMP_1255" : {
@@ -6649,11 +7315,6 @@
       "Unable to find the column `<colName>` given [<actualColumns>]."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1305" : {
-    "message" : [
-      "Unsupported TableChange <change> in JDBC catalog."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1306" : {
     "message" : [
       "There is a 'path' or 'paths' option set and load() is called with path parameters. Either remove the path option if it's the same as the path parameter, or add it to the load() parameter if you do want to read multiple paths. To ignore this check, set '<config>' to 'true'."
@@ -6744,11 +7405,6 @@
       "Sinks cannot request distribution and ordering in continuous execution mode."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2000" : {
-    "message" : [
-      "<message>. If necessary set <ansiConfig> to false to bypass this error."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2003" : {
     "message" : [
       "Unsuccessful try to zip maps with <size> unique keys due to exceeding the array size limit <maxRoundedArrayLength>."
@@ -6757,11 +7413,6 @@
   "_LEGACY_ERROR_TEMP_2005" : {
     "message" : [
       "Type <dataType> does not support ordered operations."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2013" : {
-    "message" : [
-      "Negative values found in <frequencyExpression>"
     ]
   },
   "_LEGACY_ERROR_TEMP_2017" : {
@@ -6844,11 +7495,6 @@
       "<methodName> is not implemented."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2042" : {
-    "message" : [
-      "<message>. If necessary set <ansiConfig> to false to bypass this error."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2045" : {
     "message" : [
       "Unsupported table change: <message>"
@@ -6899,11 +7545,6 @@
       "Unable to clear partition directory <path> prior to writing to it."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2058" : {
-    "message" : [
-      "Failed to cast value `<value>` to `<dataType>` for partition column `<columnName>`."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2059" : {
     "message" : [
       "End of stream."
@@ -6931,19 +7572,9 @@
       "Invalid namespace name: <namespace>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2067" : {
-    "message" : [
-      "Unsupported partition transform: <transform>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2068" : {
     "message" : [
       "Missing database location."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2069" : {
-    "message" : [
-      "Cannot remove reserved property: <property>."
     ]
   },
   "_LEGACY_ERROR_TEMP_2070" : {
@@ -6964,11 +7595,6 @@
   "_LEGACY_ERROR_TEMP_2074" : {
     "message" : [
       "user-specified schema."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2075" : {
-    "message" : [
-      "Write is not supported for binary file data source."
     ]
   },
   "_LEGACY_ERROR_TEMP_2076" : {
@@ -7063,7 +7689,7 @@
   },
   "_LEGACY_ERROR_TEMP_2097" : {
     "message" : [
-      "Could not execute broadcast in <timeout> secs. You can increase the timeout for broadcasts via <broadcastTimeout> or disable broadcast join by setting <autoBroadcastJoinThreshold> to -1."
+      "Could not execute broadcast in <timeout> secs. You can increase the timeout for broadcasts via <broadcastTimeout> or disable broadcast join by setting <autoBroadcastJoinThreshold> to -1 or remove the broadcast hint if it exists in your code."
     ]
   },
   "_LEGACY_ERROR_TEMP_2098" : {
@@ -7084,11 +7710,6 @@
   "_LEGACY_ERROR_TEMP_2103" : {
     "message" : [
       "Dictionary encoding should not be used because of dictionary overflow."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2104" : {
-    "message" : [
-      "End of the iterator."
     ]
   },
   "_LEGACY_ERROR_TEMP_2105" : {
@@ -7129,16 +7750,6 @@
   "_LEGACY_ERROR_TEMP_2112" : {
     "message" : [
       "Unexpected window function frame <frame>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2113" : {
-    "message" : [
-      "Unable to parse <stats> as a percentile."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2114" : {
-    "message" : [
-      "<stats> is not a recognised statistic."
     ]
   },
   "_LEGACY_ERROR_TEMP_2115" : {
@@ -7191,22 +7802,6 @@
       "Exception when registering StreamingQueryListener."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2138" : {
-    "message" : [
-      "Cannot have circular references in bean class, but got the circular reference of class <clazz>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2139" : {
-    "message" : [
-      "cannot have circular references in class, but got the circular reference of class <t>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2140" : {
-    "message" : [
-      "`<fieldName>` is not a valid identifier of Java and cannot be used as field name",
-      "<walkedTypePath>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2144" : {
     "message" : [
       "Unable to find constructor for <tpe>. This could happen if <tpe> is an interface, or a trait without companion object constructor."
@@ -7232,11 +7827,6 @@
       "null value found but field <name> is not nullable."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2150" : {
-    "message" : [
-      "Due to Scala's limited support of tuple, tuple with more than 22 elements are not supported."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2154" : {
     "message" : [
       "Failed to get outer pointer for <innerCls>."
@@ -7257,19 +7847,9 @@
       "Initial type <dataType> must be an <arrayType>, a <structType> or a <mapType>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2165" : {
-    "message" : [
-      "Malformed records are detected in schema inference. Parse Mode: <failFastMode>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2166" : {
     "message" : [
       "Malformed JSON."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2167" : {
-    "message" : [
-      "Malformed records are detected in schema inference. Parse Mode: <failFastMode>. Reasons: Failed to infer a common schema. Struct types are expected, but `<dataType>` was found."
     ]
   },
   "_LEGACY_ERROR_TEMP_2168" : {
@@ -7695,11 +8275,6 @@
       "comment on table is not supported."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2271" : {
-    "message" : [
-      "UpdateColumnNullability is not supported."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2272" : {
     "message" : [
       "Rename column is only supported for MySQL version 8.0 and above."
@@ -8097,11 +8672,6 @@
       "No handler for UDF/UDAF/UDTF '<clazz>': <e>"
     ]
   },
-  "_LEGACY_ERROR_TEMP_3085" : {
-    "message" : [
-      "from_avro() doesn't support the <name> mode. Acceptable modes are <permissiveMode> and <failFastMode>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_3086" : {
     "message" : [
       "Cannot persist <tableName> into Hive metastore as table property keys may not start with 'spark.sql.': <invalidKeys>"
@@ -8387,11 +8957,6 @@
       "continuous mode is not supported!"
     ]
   },
-  "_LEGACY_ERROR_TEMP_3168" : {
-    "message" : [
-      "hasTimedOut is true however there's no timeout configured"
-    ]
-  },
   "_LEGACY_ERROR_TEMP_3169" : {
     "message" : [
       "AcceptsLatestSeenOffset is not supported with DSv1 streaming source: <unsupportedSources>"
@@ -8612,11 +9177,6 @@
       "Cannot delete map key"
     ]
   },
-  "_LEGACY_ERROR_TEMP_3227" : {
-    "message" : [
-      "Cannot find field: <fieldName>"
-    ]
-  },
   "_LEGACY_ERROR_TEMP_3228" : {
     "message" : [
       "AFTER column not found: <afterCol>"
@@ -8705,6 +9265,21 @@
   "_LEGACY_ERROR_TEMP_3262" : {
     "message" : [
       "Doesn't support month or year interval: <interval>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3300" : {
+    "message" : [
+      "error while calling spill() on <consumerToSpill> : <message>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3301" : {
+    "message" : [
+      "Not enough memory to grow pointer array"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3302" : {
+    "message" : [
+      "No enough memory for aggregation"
     ]
   },
   "_LEGACY_ERROR_USER_RAISED_EXCEPTION" : {

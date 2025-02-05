@@ -210,25 +210,73 @@ false
 -- !query
 select 2 > '1.0'
 -- !query schema
-struct<(2 > 1.0):boolean>
+struct<>
 -- !query output
-true
+org.apache.spark.SparkNumberFormatException
+{
+  "errorClass" : "CAST_INVALID_INPUT",
+  "sqlState" : "22018",
+  "messageParameters" : {
+    "expression" : "'1.0'",
+    "sourceType" : "\"STRING\"",
+    "targetType" : "\"BIGINT\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 16,
+    "fragment" : "2 > '1.0'"
+  } ]
+}
 
 
 -- !query
 select 2 > '2.0'
 -- !query schema
-struct<(2 > 2.0):boolean>
+struct<>
 -- !query output
-false
+org.apache.spark.SparkNumberFormatException
+{
+  "errorClass" : "CAST_INVALID_INPUT",
+  "sqlState" : "22018",
+  "messageParameters" : {
+    "expression" : "'2.0'",
+    "sourceType" : "\"STRING\"",
+    "targetType" : "\"BIGINT\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 16,
+    "fragment" : "2 > '2.0'"
+  } ]
+}
 
 
 -- !query
 select 2 > '2.2'
 -- !query schema
-struct<(2 > 2.2):boolean>
+struct<>
 -- !query output
-false
+org.apache.spark.SparkNumberFormatException
+{
+  "errorClass" : "CAST_INVALID_INPUT",
+  "sqlState" : "22018",
+  "messageParameters" : {
+    "expression" : "'2.2'",
+    "sourceType" : "\"STRING\"",
+    "targetType" : "\"BIGINT\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 16,
+    "fragment" : "2 > '2.2'"
+  } ]
+}
 
 
 -- !query
@@ -266,17 +314,49 @@ true
 -- !query
 select 2 >= '1.0'
 -- !query schema
-struct<(2 >= 1.0):boolean>
+struct<>
 -- !query output
-true
+org.apache.spark.SparkNumberFormatException
+{
+  "errorClass" : "CAST_INVALID_INPUT",
+  "sqlState" : "22018",
+  "messageParameters" : {
+    "expression" : "'1.0'",
+    "sourceType" : "\"STRING\"",
+    "targetType" : "\"BIGINT\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 17,
+    "fragment" : "2 >= '1.0'"
+  } ]
+}
 
 
 -- !query
 select 2 >= '2.0'
 -- !query schema
-struct<(2 >= 2.0):boolean>
+struct<>
 -- !query output
-true
+org.apache.spark.SparkNumberFormatException
+{
+  "errorClass" : "CAST_INVALID_INPUT",
+  "sqlState" : "22018",
+  "messageParameters" : {
+    "expression" : "'2.0'",
+    "sourceType" : "\"STRING\"",
+    "targetType" : "\"BIGINT\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 17,
+    "fragment" : "2 >= '2.0'"
+  } ]
+}
 
 
 -- !query
@@ -322,17 +402,49 @@ false
 -- !query
 select 2 < '1.0'
 -- !query schema
-struct<(2 < 1.0):boolean>
+struct<>
 -- !query output
-false
+org.apache.spark.SparkNumberFormatException
+{
+  "errorClass" : "CAST_INVALID_INPUT",
+  "sqlState" : "22018",
+  "messageParameters" : {
+    "expression" : "'1.0'",
+    "sourceType" : "\"STRING\"",
+    "targetType" : "\"BIGINT\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 16,
+    "fragment" : "2 < '1.0'"
+  } ]
+}
 
 
 -- !query
 select 2 < '2.0'
 -- !query schema
-struct<(2 < 2.0):boolean>
+struct<>
 -- !query output
-false
+org.apache.spark.SparkNumberFormatException
+{
+  "errorClass" : "CAST_INVALID_INPUT",
+  "sqlState" : "22018",
+  "messageParameters" : {
+    "expression" : "'2.0'",
+    "sourceType" : "\"STRING\"",
+    "targetType" : "\"BIGINT\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 16,
+    "fragment" : "2 < '2.0'"
+  } ]
+}
 
 
 -- !query
@@ -378,17 +490,49 @@ true
 -- !query
 select 2 <= '1.0'
 -- !query schema
-struct<(2 <= 1.0):boolean>
+struct<>
 -- !query output
-false
+org.apache.spark.SparkNumberFormatException
+{
+  "errorClass" : "CAST_INVALID_INPUT",
+  "sqlState" : "22018",
+  "messageParameters" : {
+    "expression" : "'1.0'",
+    "sourceType" : "\"STRING\"",
+    "targetType" : "\"BIGINT\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 17,
+    "fragment" : "2 <= '1.0'"
+  } ]
+}
 
 
 -- !query
 select 2 <= '2.0'
 -- !query schema
-struct<(2 <= 2.0):boolean>
+struct<>
 -- !query output
-true
+org.apache.spark.SparkNumberFormatException
+{
+  "errorClass" : "CAST_INVALID_INPUT",
+  "sqlState" : "22018",
+  "messageParameters" : {
+    "expression" : "'2.0'",
+    "sourceType" : "\"STRING\"",
+    "targetType" : "\"BIGINT\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 17,
+    "fragment" : "2 <= '2.0'"
+  } ]
+}
 
 
 -- !query

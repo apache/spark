@@ -325,7 +325,7 @@ private[spark] class TaskSchedulerImpl(
         }
         tsm.suspend()
         logInfo(log"Stage ${MDC(LogKeys.STAGE_ID, stageId)}." +
-          log"${MDC(LogKeys.STAGE_ATTEMPT, tsm.taskSet.stageAttemptId)} was cancelled")
+          log"${MDC(LogKeys.STAGE_ATTEMPT_ID, tsm.taskSet.stageAttemptId)} was cancelled")
       }
     }
   }

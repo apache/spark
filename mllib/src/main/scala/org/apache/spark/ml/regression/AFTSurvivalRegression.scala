@@ -371,6 +371,9 @@ class AFTSurvivalRegressionModel private[ml] (
   extends RegressionModel[Vector, AFTSurvivalRegressionModel] with AFTSurvivalRegressionParams
   with MLWritable {
 
+  private[ml] def this() = this(Identifiable.randomUID("aftSurvReg"),
+    Vectors.empty, Double.NaN, Double.NaN)
+
   @Since("3.0.0")
   override def numFeatures: Int = coefficients.size
 

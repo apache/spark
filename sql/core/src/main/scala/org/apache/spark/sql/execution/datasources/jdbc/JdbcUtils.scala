@@ -35,7 +35,7 @@ import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys.{DEFAULT_ISOLATION_LEVEL, ISOLATION_LEVEL}
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.catalyst.{InternalRow, SQLConfHelper}
-import org.apache.spark.sql.catalyst.analysis.{DecimalPrecision, Resolver}
+import org.apache.spark.sql.catalyst.analysis.{DecimalPrecisionTypeCoercion, Resolver}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.SpecificInternalRow
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
@@ -127,7 +127,8 @@ object JdbcUtils extends Logging with SQLConfHelper {
       // RDD column names for user convenience.
       rddSchema.fields.map { col =>
         tableSchema.get.find(f => conf.resolver(f.name, col.name)).getOrElse {
-          throw QueryCompilationErrors.columnNotFoundInSchemaError(col, tableSchema)
+          throw QueryCompilationErrors.columnNotFoundInSchemaError(
+            col.dataType, col.name, table, rddSchema.fieldNames)
         }
       }
     }
@@ -202,7 +203,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
     case java.sql.Types.DECIMAL | java.sql.Types.NUMERIC if scale < 0 =>
       DecimalType.bounded(precision - scale, 0)
     case java.sql.Types.DECIMAL | java.sql.Types.NUMERIC =>
-      DecimalPrecision.bounded(precision, scale)
+      DecimalPrecisionTypeCoercion.bounded(precision, scale)
     case java.sql.Types.DOUBLE => DoubleType
     case java.sql.Types.FLOAT => FloatType
     case java.sql.Types.INTEGER => if (signed) IntegerType else LongType
@@ -585,14 +586,26 @@ object JdbcUtils extends Logging with SQLConfHelper {
             arr => new GenericArrayData(elementConversion(et0)(arr))
           }
 
+        case IntegerType => arrayConverter[Int]((i: Int) => i)
+        case FloatType => arrayConverter[Float]((f: Float) => f)
+        case DoubleType => arrayConverter[Double]((d: Double) => d)
+        case ShortType => arrayConverter[Short]((s: Short) => s)
+        case BooleanType => arrayConverter[Boolean]((b: Boolean) => b)
+        case LongType => arrayConverter[Long]((l: Long) => l)
+
         case _ => (array: Object) => array.asInstanceOf[Array[Any]]
       }
 
       (rs: ResultSet, row: InternalRow, pos: Int) =>
-        val array = nullSafeConvert[java.sql.Array](
-          input = rs.getArray(pos + 1),
-          array => new GenericArrayData(elementConversion(et)(array.getArray)))
-        row.update(pos, array)
+        try {
+          val array = nullSafeConvert[java.sql.Array](
+            input = rs.getArray(pos + 1),
+            array => new GenericArrayData(elementConversion(et)(array.getArray())))
+          row.update(pos, array)
+        } catch {
+          case e: java.lang.ClassCastException =>
+            throw QueryExecutionErrors.wrongDatatypeInSomeRows(pos, dt)
+        }
 
     case NullType =>
       (_: ResultSet, row: InternalRow, pos: Int) => row.update(pos, null)

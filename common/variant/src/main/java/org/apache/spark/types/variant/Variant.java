@@ -34,9 +34,6 @@ import java.util.Arrays;
 import java.util.Base64;
 import java.util.Locale;
 
-import org.apache.spark.util.DayTimeIntervalUtils;
-import org.apache.spark.util.YearMonthIntervalUtils;
-
 import static org.apache.spark.types.variant.VariantUtil.*;
 
 /**
@@ -89,16 +86,6 @@ public final class Variant {
   // Get a long value from the variant.
   public long getLong() {
     return VariantUtil.getLong(value, pos);
-  }
-
-  // Get the start and end fields of a year-month interval from the variant.
-  public IntervalFields getYearMonthIntervalFields() {
-    return VariantUtil.getYearMonthIntervalFields(value, pos);
-  }
-
-  // Get the start and end fields of a day-time interval from the variant.
-  public IntervalFields getDayTimeIntervalFields() {
-    return VariantUtil.getDayTimeIntervalFields(value, pos);
   }
 
   // Get a double value from the variant.
@@ -203,6 +190,18 @@ public final class Variant {
       String key = getMetadataKey(metadata, id);
       Variant v = new Variant(value, metadata, dataStart + offset);
       return new ObjectField(key, v);
+    });
+  }
+
+  // Get the dictionary ID for the object field at the `index` slot. Throws malformedVariant if
+  // `index` is out of the bound of `[0, objectSize())`.
+  // It is only legal to call it when `getType()` is `Type.OBJECT`.
+  public int getDictionaryIdAtIndex(int index) {
+    return handleObject(value, pos, (size, idSize, offsetSize, idStart, offsetStart, dataStart) -> {
+      if (index < 0 || index >= size) {
+        throw malformedVariant();
+      }
+      return readUnsigned(value, idStart + idSize * index, idSize);
     });
   }
 
@@ -333,22 +332,6 @@ public final class Variant {
         break;
       case BINARY:
         appendQuoted(sb, Base64.getEncoder().encodeToString(VariantUtil.getBinary(value, pos)));
-        break;
-      case YEAR_MONTH_INTERVAL:
-        IntervalFields ymFields = VariantUtil.getYearMonthIntervalFields(value, pos);
-        int ymValue = (int) VariantUtil.getLong(value, pos);
-        appendQuoted(sb, YearMonthIntervalUtils
-                .toYearMonthIntervalANSIString(ymValue, ymFields.startField, ymFields.endField));
-        break;
-      case DAY_TIME_INTERVAL:
-        IntervalFields dtFields = VariantUtil.getDayTimeIntervalFields(value, pos);
-        long dtValue = VariantUtil.getLong(value, pos);
-        try {
-          appendQuoted(sb, DayTimeIntervalUtils.toDayTimeIntervalANSIString(dtValue,
-                  dtFields.startField, dtFields.endField));
-        } catch(Exception e) {
-          throw malformedVariant();
-        }
         break;
     }
   }

@@ -17,8 +17,9 @@
 import os
 import sys
 import warnings
+import filecmp
 from collections.abc import Sized
-from functools import reduce
+from functools import reduce, cached_property
 from threading import RLock
 from types import TracebackType
 from typing import (
@@ -58,15 +59,19 @@ from pyspark.sql.types import (
     _has_nulltype,
     _merge_type,
     _create_converter,
-    _parse_datatype_string,
     _from_numpy_type,
 )
 from pyspark.errors.exceptions.captured import install_exception_handler
-from pyspark.sql.utils import is_timestamp_ntz_preferred, to_str, try_remote_session_classmethod
+from pyspark.sql.utils import (
+    is_timestamp_ntz_preferred,
+    to_str,
+    try_remote_session_classmethod,
+    remote_only,
+)
 from pyspark.errors import PySparkValueError, PySparkTypeError, PySparkRuntimeError
 
 if TYPE_CHECKING:
-    from py4j.java_gateway import JavaObject
+    from py4j.java_gateway import JavaClass, JavaObject, JVMView
     import pyarrow as pa
     from pyspark.core.context import SparkContext
     from pyspark.core.rdd import RDD
@@ -74,6 +79,7 @@ if TYPE_CHECKING:
     from pyspark.sql.catalog import Catalog
     from pyspark.sql.pandas._typing import ArrayLike, DataFrameLike as PandasDataFrameLike
     from pyspark.sql.streaming import StreamingQueryManager
+    from pyspark.sql.tvf import TableValuedFunction
     from pyspark.sql.udf import UDFRegistration
     from pyspark.sql.udtf import UDTFRegistration
     from pyspark.sql.datasource import DataSourceRegistration
@@ -84,12 +90,6 @@ if TYPE_CHECKING:
     from pyspark.sql.connect.client import SparkConnectClient
     from pyspark.sql.connect.shell.progress import ProgressHandler
 
-try:
-    import memory_profiler  # noqa: F401
-
-    has_memory_profiler = True
-except Exception:
-    has_memory_profiler = False
 
 __all__ = ["SparkSession"]
 
@@ -138,15 +138,6 @@ def _monkey_patch_RDD(sparkSession: "SparkSession") -> None:
         RDD.toDF = toDF  # type: ignore[method-assign]
 
 
-# TODO(SPARK-38912): This method can be dropped once support for Python 3.8 is dropped
-# In Python 3.9, the @property decorator has been made compatible with the
-# @classmethod decorator (https://docs.python.org/3.9/library/functions.html#classmethod)
-#
-# @classmethod + @property is also affected by a bug in Python's docstring which was backported
-# to Python 3.9.6 (https://github.com/python/cpython/pull/28838)
-#
-# Python 3.9 with MyPy complains about @classmethod + @property combination. We should fix
-# it together with MyPy.
 class classproperty(property):
     """Same as Python's @property decorator, but for class attributes.
 
@@ -551,12 +542,12 @@ class SparkSession(SparkConversionMixin):
                     # by all sessions.
                     session = SparkSession(sc, options=self._options)
                 else:
-                    getattr(
-                        getattr(session._jvm, "SparkSession$"), "MODULE$"
-                    ).applyModifiableSettings(session._jsparkSession, self._options)
+                    module = SparkSession._get_j_spark_session_module(session._jvm)
+                    module.applyModifiableSettings(session._jsparkSession, self._options)
                 return session
 
         # Spark Connect-specific API
+        @remote_only
         def create(self) -> "SparkSession":
             """Creates a new SparkSession. Can only be used in the context of Spark Connect
             and will throw an exception otherwise.
@@ -596,15 +587,6 @@ class SparkSession(SparkConversionMixin):
                     messageParameters={"feature": "SparkSession.builder.create"},
                 )
 
-    # TODO(SPARK-38912): Replace classproperty with @classmethod + @property once support for
-    # Python 3.8 is dropped.
-    #
-    # In Python 3.9, the @property decorator has been made compatible with the
-    # @classmethod decorator (https://docs.python.org/3.9/library/functions.html#classmethod)
-    #
-    # @classmethod + @property is also affected by a bug in Python's docstring which was backported
-    # to Python 3.9.6 (https://github.com/python/cpython/pull/28838)
-    #
     # SPARK-47544: Explicitly declaring this as an identifier instead of a method.
     # If changing, make sure this bug is not reintroduced.
     builder: Builder = classproperty(lambda cls: cls.Builder())  # type: ignore
@@ -629,38 +611,49 @@ class SparkSession(SparkConversionMixin):
 
         assert self._jvm is not None
 
+        jSparkSessionClass = SparkSession._get_j_spark_session_class(self._jvm)
+        jSparkSessionModule = SparkSession._get_j_spark_session_module(self._jvm)
+
         if jsparkSession is None:
             if (
-                self._jvm.SparkSession.getDefaultSession().isDefined()
-                and not self._jvm.SparkSession.getDefaultSession().get().sparkContext().isStopped()
+                jSparkSessionClass.getDefaultSession().isDefined()
+                and not jSparkSessionClass.getDefaultSession().get().sparkContext().isStopped()
             ):
-                jsparkSession = self._jvm.SparkSession.getDefaultSession().get()
-                getattr(getattr(self._jvm, "SparkSession$"), "MODULE$").applyModifiableSettings(
-                    jsparkSession, options
-                )
+                jsparkSession = jSparkSessionClass.getDefaultSession().get()
+                jSparkSessionModule.applyModifiableSettings(jsparkSession, options)
             else:
-                jsparkSession = self._jvm.SparkSession(self._jsc.sc(), options)
+                jsparkSession = jSparkSessionClass(self._jsc.sc(), options)
         else:
-            getattr(getattr(self._jvm, "SparkSession$"), "MODULE$").applyModifiableSettings(
-                jsparkSession, options
-            )
+            jSparkSessionModule.applyModifiableSettings(jsparkSession, options)
         self._jsparkSession = jsparkSession
         _monkey_patch_RDD(self)
         install_exception_handler()
         # If we had an instantiated SparkSession attached with a SparkContext
         # which is stopped now, we need to renew the instantiated SparkSession.
         # Otherwise, we will use invalid SparkSession when we call Builder.getOrCreate.
-        if (
-            SparkSession._instantiatedSession is None
-            or SparkSession._instantiatedSession._sc._jsc is None
-        ):
+        if SparkSession._should_update_active_session():
             SparkSession._instantiatedSession = self
             SparkSession._activeSession = self
             assert self._jvm is not None
-            self._jvm.SparkSession.setDefaultSession(self._jsparkSession)
-            self._jvm.SparkSession.setActiveSession(self._jsparkSession)
+            jSparkSessionClass.setDefaultSession(self._jsparkSession)
+            jSparkSessionClass.setActiveSession(self._jsparkSession)
 
         self._profiler_collector = AccumulatorProfilerCollector()
+
+    @staticmethod
+    def _should_update_active_session() -> bool:
+        return (
+            SparkSession._instantiatedSession is None
+            or SparkSession._instantiatedSession._sc._jsc is None
+        )
+
+    @staticmethod
+    def _get_j_spark_session_class(jvm: "JVMView") -> "JavaClass":
+        return getattr(jvm, "org.apache.spark.sql.classic.SparkSession")
+
+    @staticmethod
+    def _get_j_spark_session_module(jvm: "JVMView") -> "JavaObject":
+        return getattr(getattr(jvm, "org.apache.spark.sql.classic.SparkSession$"), "MODULE$")
 
     def _repr_html_(self) -> str:
         return """
@@ -734,8 +727,10 @@ class SparkSession(SparkConversionMixin):
             return None
         else:
             assert sc._jvm is not None
-            if sc._jvm.SparkSession.getActiveSession().isDefined():
-                SparkSession(sc, sc._jvm.SparkSession.getActiveSession().get())
+            jSparkSessionClass = SparkSession._get_j_spark_session_class(sc._jvm)
+            if jSparkSessionClass.getActiveSession().isDefined():
+                if SparkSession._should_update_active_session():
+                    SparkSession(sc, jSparkSessionClass.getActiveSession().get())
                 return SparkSession._activeSession
             else:
                 return None
@@ -790,7 +785,7 @@ class SparkSession(SparkConversionMixin):
             """
             return self._sc
 
-    @property
+    @cached_property
     def version(self) -> str:
         """
         The version of Spark on which this application is running.
@@ -811,7 +806,7 @@ class SparkSession(SparkConversionMixin):
         """
         return self._jsparkSession.version()
 
-    @property
+    @cached_property
     def conf(self) -> RuntimeConfig:
         """Runtime configuration interface for Spark.
 
@@ -839,11 +834,9 @@ class SparkSession(SparkConversionMixin):
         >>> spark.conf.get("key")
         'value'
         """
-        if not hasattr(self, "_conf"):
-            self._conf = RuntimeConfig(self._jsparkSession.conf())
-        return self._conf
+        return RuntimeConfig(self._jsparkSession.conf())
 
-    @property
+    @cached_property
     def catalog(self) -> "Catalog":
         """Interface through which the user may create, drop, alter or query underlying
         databases, tables, functions, etc.
@@ -871,9 +864,7 @@ class SparkSession(SparkConversionMixin):
         """
         from pyspark.sql.catalog import Catalog
 
-        if not hasattr(self, "_catalog"):
-            self._catalog = Catalog(self)
-        return self._catalog
+        return Catalog(self)
 
     @property
     def udf(self) -> "UDFRegistration":
@@ -1489,7 +1480,9 @@ class SparkSession(SparkConversionMixin):
         +-----+---+
         |Alice|  1|
         +-----+---+
-        >>> spark.createDataFrame(pandas.DataFrame([[1, 2]])).collect()  # doctest: +SKIP
+
+        >>> pdf = pandas.DataFrame([[1, 2]])  # doctest: +SKIP
+        >>> spark.createDataFrame(pdf).show()  # doctest: +SKIP
         +---+---+
         |  0|  1|
         +---+---+
@@ -1504,8 +1497,9 @@ class SparkSession(SparkConversionMixin):
         +-----+---+
         |Alice|  1|
         +-----+---+
+
         >>> table = pyarrow.table({'0': [1], '1': [2]})  # doctest: +SKIP
-        >>> spark.createDataFrame(table).collect()  # doctest: +SKIP
+        >>> spark.createDataFrame(table).show()  # doctest: +SKIP
         +---+---+
         |  0|  1|
         +---+---+
@@ -1514,7 +1508,7 @@ class SparkSession(SparkConversionMixin):
         """
         SparkSession._activeSession = self
         assert self._jvm is not None
-        self._jvm.SparkSession.setActiveSession(self._jsparkSession)
+        SparkSession._get_j_spark_session_class(self._jvm).setActiveSession(self._jsparkSession)
         if isinstance(data, DataFrame):
             raise PySparkTypeError(
                 errorClass="INVALID_TYPE",
@@ -1522,7 +1516,7 @@ class SparkSession(SparkConversionMixin):
             )
 
         if isinstance(schema, str):
-            schema = cast(Union[AtomicType, StructType, str], _parse_datatype_string(schema))
+            schema = cast(Union[AtomicType, StructType, str], self._parse_ddl(schema))
         elif isinstance(schema, (list, tuple)):
             # Must re-encode any unicode strings to be consistent with StructField names
             schema = [x.encode("utf-8") if not isinstance(x, str) else x for x in schema]
@@ -1924,7 +1918,7 @@ class SparkSession(SparkConversionMixin):
         """
         return DataStreamReader(self)
 
-    @property
+    @cached_property
     def streams(self) -> "StreamingQueryManager":
         """Returns a :class:`StreamingQueryManager` that allows managing all the
         :class:`StreamingQuery` instances active on `this` context.
@@ -1958,10 +1952,42 @@ class SparkSession(SparkConversionMixin):
         """
         from pyspark.sql.streaming import StreamingQueryManager
 
-        if hasattr(self, "_sqm"):
-            return self._sqm
-        self._sqm: StreamingQueryManager = StreamingQueryManager(self._jsparkSession.streams())
-        return self._sqm
+        return StreamingQueryManager(self._jsparkSession.streams())
+
+    @property
+    def tvf(self) -> "TableValuedFunction":
+        """
+        Returns a :class:`TableValuedFunction` that can be used to call a table-valued function
+        (TVF).
+
+        .. versionadded:: 4.0.0
+
+        Notes
+        -----
+        This API is evolving.
+
+        Returns
+        -------
+        :class:`TableValuedFunction`
+
+        Examples
+        --------
+        >>> spark.tvf
+        <pyspark...TableValuedFunction object ...>
+
+        >>> import pyspark.sql.functions as sf
+        >>> spark.tvf.explode(sf.array(sf.lit(1), sf.lit(2), sf.lit(3))).show()
+        +---+
+        |col|
+        +---+
+        |  1|
+        |  2|
+        |  3|
+        +---+
+        """
+        from pyspark.sql.tvf import TableValuedFunction
+
+        return TableValuedFunction(self)
 
     def stop(self) -> None:
         """
@@ -1981,8 +2007,9 @@ class SparkSession(SparkConversionMixin):
         self._sc.stop()
         # We should clean the default session up. See SPARK-23228.
         assert self._jvm is not None
-        self._jvm.SparkSession.clearDefaultSession()
-        self._jvm.SparkSession.clearActiveSession()
+        jSparkSessionClass = SparkSession._get_j_spark_session_class(self._jvm)
+        jSparkSessionClass.clearDefaultSession()
+        jSparkSessionClass.clearActiveSession()
         SparkSession._instantiatedSession = None
         SparkSession._activeSession = None
         SQLContext._instantiatedContext = None
@@ -2040,6 +2067,7 @@ class SparkSession(SparkConversionMixin):
 
     # SparkConnect-specific API
     @property
+    @remote_only
     def client(self) -> "SparkConnectClient":
         """
         Gives access to the Spark Connect client. In normal cases this is not necessary to be used
@@ -2071,6 +2099,9 @@ class SparkSession(SparkConversionMixin):
 
         .. versionadded:: 3.5.0
 
+        .. versionchanged:: 4.0.0
+            Supports Spark Classic.
+
         Parameters
         ----------
         *path : tuple of str
@@ -2085,19 +2116,44 @@ class SparkSession(SparkConversionMixin):
         file : bool
             Add a file to be downloaded with this Spark job on every node.
             The ``path`` passed can only be a local file for now.
-
-        Notes
-        -----
-        This is an API dedicated to Spark Connect client only. With regular Spark Session, it throws
-        an exception.
         """
-        raise PySparkRuntimeError(
-            errorClass="ONLY_SUPPORTED_WITH_SPARK_CONNECT",
-            messageParameters={"feature": "SparkSession.addArtifact(s)"},
-        )
+        from pyspark.core.files import SparkFiles
+
+        if sum([file, pyfile, archive]) > 1:
+            raise PySparkValueError(
+                errorClass="INVALID_MULTIPLE_ARGUMENT_CONDITIONS",
+                messageParameters={
+                    "arg_names": "'pyfile', 'archive' and/or 'file'",
+                    "condition": "True together",
+                },
+            )
+        for p in path:
+            normalized_path = os.path.abspath(p)
+            target_dir = os.path.join(
+                SparkFiles.getRootDirectory(), os.path.basename(normalized_path)
+            )
+
+            # Check if the target path already exists
+            if os.path.exists(target_dir):
+                # Compare the contents of the files. If identical, skip adding this file.
+                # If different, raise an exception.
+                if filecmp.cmp(normalized_path, target_dir, shallow=False):
+                    continue
+                else:
+                    raise PySparkRuntimeError(
+                        errorClass="DUPLICATED_ARTIFACT",
+                        messageParameters={"normalized_path": normalized_path},
+                    )
+        if archive:
+            self._sc.addArchive(*path)
+        elif pyfile:
+            self._sc.addPyFile(*path)
+        elif file:
+            self._sc.addFile(*path)  # type: ignore[arg-type]
 
     addArtifact = addArtifacts
 
+    @remote_only
     def registerProgressHandler(self, handler: "ProgressHandler") -> None:
         """
         Register a progress handler to be called when a progress update is received from the server.
@@ -2126,6 +2182,7 @@ class SparkSession(SparkConversionMixin):
             messageParameters={"feature": "SparkSession.registerProgressHandler"},
         )
 
+    @remote_only
     def removeProgressHandler(self, handler: "ProgressHandler") -> None:
         """
         Remove a progress handler that was previously registered.
@@ -2142,6 +2199,7 @@ class SparkSession(SparkConversionMixin):
             messageParameters={"feature": "SparkSession.removeProgressHandler"},
         )
 
+    @remote_only
     def clearProgressHandlers(self) -> None:
         """
         Clear all registered progress handlers.
@@ -2153,6 +2211,7 @@ class SparkSession(SparkConversionMixin):
             messageParameters={"feature": "SparkSession.clearProgressHandlers"},
         )
 
+    @remote_only
     def copyFromLocalToFs(self, local_path: str, dest_path: str) -> None:
         """
         Copy file from local to cloud storage file system.
@@ -2187,6 +2246,9 @@ class SparkSession(SparkConversionMixin):
 
         .. versionadded:: 3.5.0
 
+        .. versionchanged:: 4.0.0
+            Supports Spark Classic.
+
         Returns
         -------
         list of str
@@ -2196,10 +2258,15 @@ class SparkSession(SparkConversionMixin):
         -----
         There is still a possibility of operation finishing just as it is interrupted.
         """
-        raise PySparkRuntimeError(
-            errorClass="ONLY_SUPPORTED_WITH_SPARK_CONNECT",
-            messageParameters={"feature": "SparkSession.interruptAll"},
-        )
+        java_list = self._jsparkSession.interruptAll()
+        python_list = list()
+
+        # Use iterator to manually iterate through Java list
+        java_iterator = java_list.iterator()
+        while java_iterator.hasNext():
+            python_list.append(str(java_iterator.next()))
+
+        return python_list
 
     def interruptTag(self, tag: str) -> List[str]:
         """
@@ -2207,6 +2274,9 @@ class SparkSession(SparkConversionMixin):
 
         .. versionadded:: 3.5.0
 
+        .. versionchanged:: 4.0.0
+            Supports Spark Classic.
+
         Returns
         -------
         list of str
@@ -2216,10 +2286,15 @@ class SparkSession(SparkConversionMixin):
         -----
         There is still a possibility of operation finishing just as it is interrupted.
         """
-        raise PySparkRuntimeError(
-            errorClass="ONLY_SUPPORTED_WITH_SPARK_CONNECT",
-            messageParameters={"feature": "SparkSession.interruptTag"},
-        )
+        java_list = self._jsparkSession.interruptTag(tag)
+        python_list = list()
+
+        # Use iterator to manually iterate through Java list
+        java_iterator = java_list.iterator()
+        while java_iterator.hasNext():
+            python_list.append(str(java_iterator.next()))
+
+        return python_list
 
     def interruptOperation(self, op_id: str) -> List[str]:
         """
@@ -2227,6 +2302,9 @@ class SparkSession(SparkConversionMixin):
 
         .. versionadded:: 3.5.0
 
+        .. versionchanged:: 4.0.0
+            Supports Spark Classic.
+
         Returns
         -------
         list of str
@@ -2236,10 +2314,15 @@ class SparkSession(SparkConversionMixin):
         -----
         There is still a possibility of operation finishing just as it is interrupted.
         """
-        raise PySparkRuntimeError(
-            errorClass="ONLY_SUPPORTED_WITH_SPARK_CONNECT",
-            messageParameters={"feature": "SparkSession.interruptOperation"},
-        )
+        java_list = self._jsparkSession.interruptOperation(op_id)
+        python_list = list()
+
+        # Use iterator to manually iterate through Java list
+        java_iterator = java_list.iterator()
+        while java_iterator.hasNext():
+            python_list.append(str(java_iterator.next()))
+
+        return python_list
 
     def addTag(self, tag: str) -> None:
         """
@@ -2255,15 +2338,15 @@ class SparkSession(SparkConversionMixin):
 
         .. versionadded:: 3.5.0
 
+        .. versionchanged:: 4.0.0
+            Supports Spark Classic.
+
         Parameters
         ----------
         tag : str
             The tag to be added. Cannot contain ',' (comma) character or be an empty string.
         """
-        raise PySparkRuntimeError(
-            errorClass="ONLY_SUPPORTED_WITH_SPARK_CONNECT",
-            messageParameters={"feature": "SparkSession.addTag"},
-        )
+        self._jsparkSession.addTag(tag)
 
     def removeTag(self, tag: str) -> None:
         """
@@ -2272,15 +2355,15 @@ class SparkSession(SparkConversionMixin):
 
         .. versionadded:: 3.5.0
 
+        .. versionchanged:: 4.0.0
+            Supports Spark Classic.
+
         Parameters
         ----------
         tag : list of str
             The tag to be removed. Cannot contain ',' (comma) character or be an empty string.
         """
-        raise PySparkRuntimeError(
-            errorClass="ONLY_SUPPORTED_WITH_SPARK_CONNECT",
-            messageParameters={"feature": "SparkSession.removeTag"},
-        )
+        self._jsparkSession.removeTag(tag)
 
     def getTags(self) -> Set[str]:
         """
@@ -2289,26 +2372,40 @@ class SparkSession(SparkConversionMixin):
 
         .. versionadded:: 3.5.0
 
+        .. versionchanged:: 4.0.0
+            Supports Spark Classic.
+
         Returns
         -------
         set of str
             Set of tags of interrupted operations.
         """
-        raise PySparkRuntimeError(
-            errorClass="ONLY_SUPPORTED_WITH_SPARK_CONNECT",
-            messageParameters={"feature": "SparkSession.getTags"},
-        )
+        java_set = self._jsparkSession.getTags()
+        python_set = set()
+
+        # Use iterator to manually iterate through Java Set
+        java_iterator = java_set.iterator()
+        while java_iterator.hasNext():
+            python_set.add(str(java_iterator.next()))
+
+        return python_set
 
     def clearTags(self) -> None:
         """
         Clear the current thread's operation tags.
 
         .. versionadded:: 3.5.0
+
+        .. versionchanged:: 4.0.0
+            Supports Spark Classic.
         """
-        raise PySparkRuntimeError(
-            errorClass="ONLY_SUPPORTED_WITH_SPARK_CONNECT",
-            messageParameters={"feature": "SparkSession.clearTags"},
-        )
+        self._jsparkSession.clearTags()
+
+    def _to_ddl(self, struct: StructType) -> str:
+        return self._sc._to_ddl(struct)
+
+    def _parse_ddl(self, ddl: str) -> DataType:
+        return self._sc._parse_ddl(ddl)
 
 
 def _test() -> None:

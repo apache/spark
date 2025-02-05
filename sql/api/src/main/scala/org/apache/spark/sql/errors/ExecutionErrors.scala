@@ -116,10 +116,10 @@ private[sql] trait ExecutionErrors extends DataTypeErrorsBase {
 
   def arithmeticOverflowError(
       message: String,
-      hint: String = "",
+      suggestedFunc: String = "",
       context: QueryContext = null): ArithmeticException = {
-    val alternative = if (hint.nonEmpty) {
-      s" Use '$hint' to tolerate overflow and return NULL instead."
+    val alternative = if (suggestedFunc.nonEmpty) {
+      s" Use '$suggestedFunc' to tolerate overflow and return NULL instead."
     } else ""
     new SparkArithmeticException(
       errorClass = "ARITHMETIC_OVERFLOW",
@@ -175,8 +175,8 @@ private[sql] trait ExecutionErrors extends DataTypeErrorsBase {
   def cannotHaveCircularReferencesInBeanClassError(
       clazz: Class[_]): SparkUnsupportedOperationException = {
     new SparkUnsupportedOperationException(
-      errorClass = "_LEGACY_ERROR_TEMP_2138",
-      messageParameters = Map("clazz" -> clazz.toString))
+      errorClass = "CIRCULAR_CLASS_REFERENCE",
+      messageParameters = Map("t" -> toSQLValue(clazz.toString)))
   }
 
   def cannotFindConstructorForTypeError(tpe: String): SparkUnsupportedOperationException = {
@@ -187,17 +187,17 @@ private[sql] trait ExecutionErrors extends DataTypeErrorsBase {
 
   def cannotHaveCircularReferencesInClassError(t: String): SparkUnsupportedOperationException = {
     new SparkUnsupportedOperationException(
-      errorClass = "_LEGACY_ERROR_TEMP_2139",
-      messageParameters = Map("t" -> t))
+      errorClass = "CIRCULAR_CLASS_REFERENCE",
+      messageParameters = Map("t" -> toSQLValue(t)))
   }
 
   def cannotUseInvalidJavaIdentifierAsFieldNameError(
       fieldName: String,
       walkedTypePath: WalkedTypePath): SparkUnsupportedOperationException = {
     new SparkUnsupportedOperationException(
-      errorClass = "_LEGACY_ERROR_TEMP_2140",
+      errorClass = "INVALID_JAVA_IDENTIFIER_AS_FIELD_NAME",
       messageParameters =
-        Map("fieldName" -> fieldName, "walkedTypePath" -> walkedTypePath.toString))
+        Map("fieldName" -> toSQLId(fieldName), "walkedTypePath" -> walkedTypePath.toString))
   }
 
   def primaryConstructorNotFoundError(cls: Class[_]): SparkRuntimeException = {
@@ -228,7 +228,11 @@ private[sql] trait ExecutionErrors extends DataTypeErrorsBase {
   }
 
   def elementsOfTupleExceedLimitError(): SparkUnsupportedOperationException = {
-    new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_2150")
+    new SparkUnsupportedOperationException("TUPLE_SIZE_EXCEEDS_LIMIT")
+  }
+
+  def emptyTupleNotSupportedError(): SparkUnsupportedOperationException = {
+    new SparkUnsupportedOperationException("TUPLE_IS_EMPTY")
   }
 
   def invalidAgnosticEncoderError(encoder: AnyRef): Throwable = {

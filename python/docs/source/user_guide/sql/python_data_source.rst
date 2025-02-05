@@ -516,3 +516,8 @@ The following example demonstrates how to implement a basic Data Source using Ar
     df = spark.read.format("arrowbatch").load()
 
     df.show()
+
+Usage Notes
+-----------
+
+- During Data Source resolution, built-in and Scala/Java Data Sources take precedence over Python Data Sources with the same name; to explicitly use a Python Data Source, make sure its name does not conflict with the other Data Sources.

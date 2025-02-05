@@ -26,7 +26,7 @@ license: |
 
 Asynchronous progress tracking allows streaming queries to checkpoint progress asynchronously and in parallel to the actual data processing within a micro-batch, reducing latency associated with maintaining the offset log and commit log.
 
-![Async Progress Tracking](/img/async-progress.png)
+![Async Progress Tracking](../img/async-progress.png)
 
 ## How does it work?
 
@@ -43,9 +43,9 @@ val stream = spark.readStream
       .load()
 val query = stream.writeStream
      .format("kafka")
-	.option("topic", "out")
+     .option("topic", "out")
      .option("checkpointLocation", "/tmp/checkpoint")
-	.option("asyncProgressTrackingEnabled", "true")
+     .option("asyncProgressTrackingEnabled", "true")
      .start()
 ```
 

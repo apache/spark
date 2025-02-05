@@ -281,8 +281,8 @@ Note, arithmetic operations have special rules to calculate the least common typ
 | Operation  | Result precision                         | Result scale        |
 |------------|------------------------------------------|---------------------|
 | e1 + e2    | max(s1, s2) + max(p1 - s1, p2 - s2) + 1  | max(s1, s2)         |
-| e1 - e2    | max(s1, s2) + max(p1 - s1, p2 - s2) + 1	| max(s1, s2)         |
-| e1 * e2    | p1 + p2 + 1	                        | s1 + s2             |
+| e1 - e2    | max(s1, s2) + max(p1 - s1, p2 - s2) + 1  | max(s1, s2)         |
+| e1 * e2    | p1 + p2 + 1                              | s1 + s2             |
 | e1 / e2    | p1 - s1 + s2 + max(6, s1 + p2 + 1)       | max(6, s1 + p2 + 1) |
 | e1 % e2    | min(p1 - s1, p2 - s2) + max(s1, s2)      | max(s1, s2)         |
 
@@ -379,6 +379,11 @@ When ANSI mode is on, it throws exceptions for invalid operations. You can use t
   - `try_avg`: identical to the function `avg`, except that it returns `NULL` result instead of throwing an exception on decimal/interval value overflow.
   - `try_element_at`: identical to the function `element_at`, except that it returns `NULL` result instead of throwing an exception on array's index out of bound.
   - `try_to_timestamp`: identical to the function `to_timestamp`, except that it returns `NULL` result instead of throwing an exception on string parsing error.
+  - `try_parse_url`: identical to the function `parse_url`, except that it returns `NULL` result instead of throwing an exception on url parsing error.
+  - `try_make_timestamp`: identical to the function `make_timestamp`, except that it returns `NULL` result instead of throwing an exception on error.
+  - `try_make_timestamp_ltz`: identical to the function `make_timestamp_ltz`, except that it returns `NULL` result instead of throwing an exception on error.
+  - `try_make_timestamp_ntz`: identical to the function `make_timestamp_ntz`, except that it returns `NULL` result instead of throwing an exception on error.
+  - `try_make_interval`: identical to the function `make_interval`, except that it returns `NULL` result instead of throwing an exception on invalid interval.
 
 ### SQL Keywords (optional, disabled by default)
 
@@ -400,6 +405,7 @@ Below is a list of all the keywords in Spark SQL.
 |--|----------------------|-------------------------|--------|
 |ADD|non-reserved|non-reserved|non-reserved|
 |AFTER|non-reserved|non-reserved|non-reserved|
+|AGGREGATE|non-reserved|non-reserved|non-reserved|
 |ALL|reserved|non-reserved|reserved|
 |ALTER|non-reserved|non-reserved|reserved|
 |ALWAYS|non-reserved|non-reserved|non-reserved|
@@ -453,8 +459,10 @@ Below is a list of all the keywords in Spark SQL.
 |COMPENSATION|non-reserved|non-reserved|non-reserved|
 |COMPUTE|non-reserved|non-reserved|non-reserved|
 |CONCATENATE|non-reserved|non-reserved|non-reserved|
+|CONDITION|non-reserved|non-reserved|non-reserved|
 |CONSTRAINT|reserved|non-reserved|reserved|
 |CONTAINS|non-reserved|non-reserved|non-reserved|
+|CONTINUE|non-reserved|non-reserved|non-reserved|
 |COST|non-reserved|non-reserved|non-reserved|
 |CREATE|reserved|non-reserved|reserved|
 |CROSS|reserved|strict-non-reserved|reserved|
@@ -497,6 +505,7 @@ Below is a list of all the keywords in Spark SQL.
 |DOUBLE|non-reserved|non-reserved|reserved|
 |DROP|non-reserved|non-reserved|reserved|
 |ELSE|reserved|non-reserved|reserved|
+|ELSEIF|non-reserved|non-reserved|non-reserved|
 |END|reserved|non-reserved|reserved|
 |ESCAPE|reserved|non-reserved|reserved|
 |ESCAPED|non-reserved|non-reserved|non-reserved|
@@ -506,8 +515,10 @@ Below is a list of all the keywords in Spark SQL.
 |EXCLUDE|non-reserved|non-reserved|non-reserved|
 |EXECUTE|reserved|non-reserved|reserved|
 |EXISTS|non-reserved|non-reserved|reserved|
+|EXIT|non-reserved|non-reserved|non-reserved|
 |EXPLAIN|non-reserved|non-reserved|non-reserved|
 |EXPORT|non-reserved|non-reserved|non-reserved|
+|EXTEND|non-reserved|non-reserved|non-reserved|
 |EXTENDED|non-reserved|non-reserved|non-reserved|
 |EXTERNAL|non-reserved|non-reserved|reserved|
 |EXTRACT|non-reserved|non-reserved|reserved|
@@ -523,6 +534,7 @@ Below is a list of all the keywords in Spark SQL.
 |FOREIGN|reserved|non-reserved|reserved|
 |FORMAT|non-reserved|non-reserved|non-reserved|
 |FORMATTED|non-reserved|non-reserved|non-reserved|
+|FOUND|non-reserved|non-reserved|non-reserved|
 |FROM|reserved|non-reserved|reserved|
 |FULL|reserved|strict-non-reserved|reserved|
 |FUNCTION|non-reserved|non-reserved|reserved|
@@ -532,6 +544,7 @@ Below is a list of all the keywords in Spark SQL.
 |GRANT|reserved|non-reserved|reserved|
 |GROUP|reserved|non-reserved|reserved|
 |GROUPING|non-reserved|non-reserved|reserved|
+|HANDLER|non-reserved|non-reserved|non-reserved|
 |HAVING|reserved|non-reserved|reserved|
 |HOUR|non-reserved|non-reserved|non-reserved|
 |HOURS|non-reserved|non-reserved|non-reserved|
@@ -561,6 +574,7 @@ Below is a list of all the keywords in Spark SQL.
 |ITEMS|non-reserved|non-reserved|non-reserved|
 |ITERATE|non-reserved|non-reserved|non-reserved|
 |JOIN|reserved|strict-non-reserved|reserved|
+|JSON|non-reserved|non-reserved|non-reserved|
 |KEYS|non-reserved|non-reserved|non-reserved|
 |LANGUAGE|non-reserved|non-reserved|reserved|
 |LAST|non-reserved|non-reserved|non-reserved|
@@ -644,6 +658,7 @@ Below is a list of all the keywords in Spark SQL.
 |RECORDREADER|non-reserved|non-reserved|non-reserved|
 |RECORDWRITER|non-reserved|non-reserved|non-reserved|
 |RECOVER|non-reserved|non-reserved|non-reserved|
+|RECURSIVE|reserved|non-reserved|reserved|
 |REDUCE|non-reserved|non-reserved|non-reserved|
 |REFERENCES|reserved|non-reserved|reserved|
 |REFRESH|non-reserved|non-reserved|non-reserved|
@@ -691,6 +706,8 @@ Below is a list of all the keywords in Spark SQL.
 |SOURCE|non-reserved|non-reserved|non-reserved|
 |SPECIFIC|non-reserved|non-reserved|reserved|
 |SQL|reserved|non-reserved|reserved|
+|SQLEXCEPTION|non-reserved|non-reserved|non-reserved|
+|SQLSTATE|non-reserved|non-reserved|non-reserved|
 |START|non-reserved|non-reserved|reserved|
 |STATISTICS|non-reserved|non-reserved|non-reserved|
 |STORED|non-reserved|non-reserved|non-reserved|
@@ -744,6 +761,7 @@ Below is a list of all the keywords in Spark SQL.
 |USE|non-reserved|non-reserved|non-reserved|
 |USER|reserved|non-reserved|reserved|
 |USING|reserved|strict-non-reserved|reserved|
+|VALUE|non-reserved|non-reserved|non-reserved|
 |VALUES|non-reserved|non-reserved|reserved|
 |VARCHAR|non-reserved|non-reserved|reserved|
 |VAR|non-reserved|non-reserved|non-reserved|

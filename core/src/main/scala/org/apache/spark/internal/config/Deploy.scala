@@ -45,7 +45,7 @@ private[spark] object Deploy {
 
   val RECOVERY_TIMEOUT = ConfigBuilder("spark.deploy.recoveryTimeout")
     .doc("Configures the timeout for recovery process. The default value is the same " +
-      "with ${WORKER_TIMEOUT.key}.")
+      s"with ${Worker.WORKER_TIMEOUT.key}.")
     .version("4.0.0")
     .timeConf(TimeUnit.SECONDS)
     .checkValue(_ > 0, "spark.deploy.recoveryTimeout must be positive.")

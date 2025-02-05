@@ -16,10 +16,11 @@
  */
 package org.apache.spark.deploy.k8s.features
 
+import io.fabric8.kubernetes.api.model.PodSpec
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
-import org.apache.spark.deploy.k8s.{KubernetesExecutorConf, KubernetesTestConf, SparkPod}
+import org.apache.spark.deploy.k8s.{KubernetesTestConf, SparkPod}
 import org.apache.spark.deploy.k8s.Config._
 
 class ExecutorKubernetesCredentialsFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
@@ -30,58 +31,40 @@ class ExecutorKubernetesCredentialsFeatureStepSuite extends SparkFunSuite with B
     baseConf = new SparkConf(false)
   }
 
-  private def newExecutorConf(environment: Map[String, String] = Map.empty):
-  KubernetesExecutorConf = {
-    KubernetesTestConf.createExecutorConf(
-      sparkConf = baseConf,
-      environment = environment)
-  }
-
   test("configure spark pod with executor service account") {
     baseConf.set(KUBERNETES_EXECUTOR_SERVICE_ACCOUNT_NAME, "executor-name")
-    val step = new ExecutorKubernetesCredentialsFeatureStep(newExecutorConf())
-    val spec = step
-      .configurePod(SparkPod.initialPod())
-      .pod
-      .getSpec
-
-    val serviceAccountName = spec.getServiceAccountName
-    val accountName = spec.getServiceAccount
-    assertSAName(serviceAccountName, accountName)
+    val spec = evaluateStep()
+    assertSAName("executor-name", spec)
   }
 
   test("configure spark pod with with driver service account " +
     "and without executor service account") {
     baseConf.set(KUBERNETES_DRIVER_SERVICE_ACCOUNT_NAME, "driver-name")
-    val step = new ExecutorKubernetesCredentialsFeatureStep(newExecutorConf())
-    val spec = step
-      .configurePod(SparkPod.initialPod())
-      .pod
-      .getSpec
-
-    val serviceAccountName = spec.getServiceAccountName
-    val accountName = spec.getServiceAccount
-    assertSAName(serviceAccountName, accountName)
+    val spec = evaluateStep()
+    assertSAName("driver-name", spec)
   }
 
   test("configure spark pod with with driver service account " +
     "and with executor service account") {
     baseConf.set(KUBERNETES_DRIVER_SERVICE_ACCOUNT_NAME, "driver-name")
     baseConf.set(KUBERNETES_EXECUTOR_SERVICE_ACCOUNT_NAME, "executor-name")
+    val spec = evaluateStep()
+    assertSAName("executor-name", spec)
+  }
 
-    val step = new ExecutorKubernetesCredentialsFeatureStep(newExecutorConf())
-    val spec = step
+  private def assertSAName(expectedServiceAccountName: String,
+      spec: PodSpec): Unit = {
+    assert(spec.getServiceAccountName.equals(expectedServiceAccountName))
+    assert(spec.getServiceAccount.equals(expectedServiceAccountName))
+  }
+
+  private def evaluateStep(): PodSpec = {
+    val executorConf = KubernetesTestConf.createExecutorConf(
+        sparkConf = baseConf)
+    val step = new ExecutorKubernetesCredentialsFeatureStep(executorConf)
+    step
       .configurePod(SparkPod.initialPod())
       .pod
       .getSpec
-
-    val serviceAccountName = spec.getServiceAccountName
-    val accountName = spec.getServiceAccount
-    assertSAName(serviceAccountName, accountName)
-  }
-
-  def assertSAName(serviceAccountName: String, accountName: String): Unit = {
-    assert(serviceAccountName.equals(serviceAccountName))
-    assert(accountName.equals(accountName))
   }
 }

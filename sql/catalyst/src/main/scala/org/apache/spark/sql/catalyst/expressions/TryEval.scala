@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGe
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.types.{DataType, NumericType}
 
-case class TryEval(child: Expression) extends UnaryExpression with NullIntolerant {
+case class TryEval(child: Expression) extends UnaryExpression {
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val childGen = child.genCode(ctx)
     ev.copy(code = code"""
@@ -48,6 +48,7 @@ case class TryEval(child: Expression) extends UnaryExpression with NullIntoleran
   override def dataType: DataType = child.dataType
 
   override def nullable: Boolean = true
+  override def nullIntolerant: Boolean = true
 
   override protected def withNewChildInternal(newChild: Expression): Expression =
     copy(child = newChild)

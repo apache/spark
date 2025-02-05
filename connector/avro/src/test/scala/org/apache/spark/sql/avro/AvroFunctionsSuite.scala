@@ -106,6 +106,17 @@ class AvroFunctionsSuite extends QueryTest with SharedSparkSession {
        functions.from_avro(
           $"avro", avroTypeStruct, Map("mode" -> "PERMISSIVE").asJava)),
       expected)
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        avroStructDF.select(
+          functions.from_avro(
+            $"avro", avroTypeStruct, Map("mode" -> "DROPMALFORMED").asJava)).collect()
+      },
+      condition = "PARSE_MODE_UNSUPPORTED",
+      parameters = Map(
+        "funcName" -> "`from_avro`",
+        "mode" -> "DROPMALFORMED"))
   }
 
   test("roundtrip in to_avro and from_avro - array with null") {
@@ -617,5 +628,41 @@ class AvroFunctionsSuite extends QueryTest with SharedSparkSession {
       assert(readbackPerson2.get(1).asInstanceOf[Int] === person2.get(1).asInstanceOf[Int])
       assert(readbackPerson2.get(2).toString === person2.get(2))
     }
+  }
+
+  test("schema_of_avro") {
+    val df = spark.range(1)
+    val avroIntType = s"""
+      |{
+      |  "type": "int",
+      |  "name": "id"
+      |}""".stripMargin
+    checkAnswer(df.select(functions.schema_of_avro(avroIntType)), Row("INT"))
+
+    val avroStructType =
+      """
+        |{
+        |  "type": "record",
+        |  "name": "person",
+        |  "fields": [
+        |    {"name": "name", "type": "string"},
+        |    {"name": "age", "type": "int"},
+        |    {"name": "country", "type": "string"}
+        |  ]
+        |}""".stripMargin
+    checkAnswer(df.select(functions.schema_of_avro(avroStructType)),
+      Row("STRUCT<name: STRING NOT NULL, age: INT NOT NULL, country: STRING NOT NULL>"))
+
+    val avroMultiType =
+      """
+        |{
+        |  "type": "record",
+        |  "name": "person",
+        |  "fields": [
+        |     {"name": "u", "type": ["int", "string"]}
+        |  ]
+        |}""".stripMargin
+    checkAnswer(df.select(functions.schema_of_avro(avroMultiType)),
+      Row("STRUCT<u: STRUCT<member0: INT, member1: STRING> NOT NULL>"))
   }
 }

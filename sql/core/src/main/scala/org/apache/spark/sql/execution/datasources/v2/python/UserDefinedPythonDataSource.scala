@@ -307,7 +307,7 @@ case class PythonDataSourceReadInfo(
 /**
  * Send information to a Python process to plan a Python data source read.
  *
- * @param func an Python data source instance
+ * @param func a Python data source instance
  * @param inputSchema input schema to the data source read from its child plan
  * @param outputSchema output schema of the Python data source
  */
@@ -342,7 +342,7 @@ private class UserDefinedPythonDataSourceReadRunner(
     if (length == SpecialLengths.PYTHON_EXCEPTION_THROWN) {
       val msg = PythonWorkerUtils.readUTF(dataIn)
       throw QueryCompilationErrors.pythonDataSourceError(
-        action = "plan", tpe = "read", msg = msg)
+        action = "initialize", tpe = "reader", msg = msg)
     }
 
     // Receive the pickled 'read' function.
@@ -354,7 +354,7 @@ private class UserDefinedPythonDataSourceReadRunner(
     if (numPartitions == SpecialLengths.PYTHON_EXCEPTION_THROWN) {
       val msg = PythonWorkerUtils.readUTF(dataIn)
       throw QueryCompilationErrors.pythonDataSourceError(
-        action = "plan", tpe = "read", msg = msg)
+        action = "generate", tpe = "read partitions", msg = msg)
     }
     for (_ <- 0 until numPartitions) {
       val pickledPartition: Array[Byte] = PythonWorkerUtils.readBytes(dataIn)
@@ -420,7 +420,7 @@ private class UserDefinedPythonDataSourceWriteRunner(
     if (length == SpecialLengths.PYTHON_EXCEPTION_THROWN) {
       val msg = PythonWorkerUtils.readUTF(dataIn)
       throw QueryCompilationErrors.pythonDataSourceError(
-        action = "plan", tpe = "write", msg = msg)
+        action = "initialize", tpe = "writer", msg = msg)
     }
 
     // Receive the pickled data source write function.

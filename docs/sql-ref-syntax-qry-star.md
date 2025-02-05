@@ -21,7 +21,7 @@ license: |
 
 ### Description
 
-A shorthand to name all the referencable columns in the FROM clause or a specific table reference's columns or fields in the FROM clause.
+A shorthand to name all the referenceable columns in the FROM clause or a specific table reference's columns or fields in the FROM clause.
 The star clause is most frequently used in the SELECT list.
 Spark also supports its use in function invocation and certain n-ary operations within the SELECT list and WHERE clause.
 
@@ -38,11 +38,11 @@ except_clause
 
 * **name**
 
-  If present limits the columns or fields to be named to those in the specified referencable field, column, or table.
+  If present limits the columns or fields to be named to those in the specified referenceable field, column, or table.
 
 * **except_clause**
 
-  Optionally prunes columns or fields from the referencable set of columns identified in the select_star clause.
+  Optionally prunes columns or fields from the referenceable set of columns identified in the select_star clause.
 
   * **column_name**
 

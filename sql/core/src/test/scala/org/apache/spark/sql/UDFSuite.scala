@@ -1109,7 +1109,8 @@ class UDFSuite extends QueryTest with SharedSparkSession {
     spark.udf.register("dummyUDF", (x: Int) => x + 1)
     val expressionInfo = spark.sessionState.catalog
       .lookupFunctionInfo(FunctionIdentifier("dummyUDF"))
-    assert(expressionInfo.getClassName.contains("org.apache.spark.sql.UDFRegistration$$Lambda"))
+    assert(expressionInfo.getClassName.contains(
+      "org.apache.spark.sql.classic.UDFRegistration$$Lambda"))
   }
 
   test("SPARK-11725: correctly handle null inputs for ScalaUDF") {
@@ -1205,7 +1206,7 @@ class UDFSuite extends QueryTest with SharedSparkSession {
         dt
       )
       checkError(
-        intercept[AnalysisException](spark.range(1).select(f())),
+        intercept[AnalysisException](spark.range(1).select(f()).encoder),
         condition = "UNSUPPORTED_DATA_TYPE_FOR_ENCODER",
         sqlState = "0A000",
         parameters = Map("dataType" -> s"\"${dt.sql}\"")

@@ -18,6 +18,7 @@
 import sys
 from typing import Any, Dict, Generic, List, Optional, TypeVar, TYPE_CHECKING
 from abc import ABCMeta
+from functools import cached_property
 
 from pyspark import keyword_only, since
 from pyspark.ml import Predictor, PredictionModel
@@ -44,6 +45,7 @@ from pyspark.ml.param.shared import (
     HasLoss,
     HasVarianceCol,
 )
+from pyspark.ml.util import try_remote_attribute_relation
 from pyspark.ml.tree import (
     _DecisionTreeModel,
     _DecisionTreeParams,
@@ -70,6 +72,7 @@ from pyspark.ml.wrapper import (
 )
 from pyspark.ml.common import inherit_doc
 from pyspark.sql import DataFrame
+from pyspark.sql.utils import is_remote
 
 if TYPE_CHECKING:
     from py4j.java_gateway import JavaObject
@@ -266,7 +269,7 @@ class LinearRegression(
     True
     >>> abs(model.transform(test0).head().newPrediction - (-1.0)) < 0.001
     True
-    >>> abs(model.coefficients[0] - 1.0) < 0.001
+    >>> bool(abs(model.coefficients[0] - 1.0) < 0.001)
     True
     >>> abs(model.intercept - 0.0) < 0.001
     True
@@ -283,11 +286,11 @@ class LinearRegression(
     >>> model_path = temp_path + "/lr_model"
     >>> model.save(model_path)
     >>> model2 = LinearRegressionModel.load(model_path)
-    >>> model.coefficients[0] == model2.coefficients[0]
+    >>> bool(model.coefficients[0] == model2.coefficients[0])
     True
-    >>> model.intercept == model2.intercept
+    >>> bool(model.intercept == model2.intercept)
     True
-    >>> model.transform(test0).take(1) == model2.transform(test0).take(1)
+    >>> bool(model.transform(test0).take(1) == model2.transform(test0).take(1))
     True
     >>> model.numFeatures
     1
@@ -517,6 +520,7 @@ class LinearRegressionSummary(JavaWrapper):
 
     @property
     @since("2.0.0")
+    @try_remote_attribute_relation
     def predictions(self) -> DataFrame:
         """
         Dataframe outputted by the model's `transform` method.
@@ -651,6 +655,7 @@ class LinearRegressionSummary(JavaWrapper):
 
     @property
     @since("2.0.0")
+    @try_remote_attribute_relation
     def residuals(self) -> DataFrame:
         """
         Residuals (label - predicted value)
@@ -1598,10 +1603,12 @@ class RandomForestRegressionModel(
     .. versionadded:: 1.4.0
     """
 
-    @property
+    @cached_property
     @since("2.0.0")
     def trees(self) -> List[DecisionTreeRegressionModel]:
         """Trees in this ensemble. Warning: These have null parent Estimators."""
+        if is_remote():
+            return [DecisionTreeRegressionModel(m) for m in self._call_java("trees").split(",")]
         return [DecisionTreeRegressionModel(m) for m in list(self._call_java("trees"))]
 
     @property
@@ -1987,10 +1994,12 @@ class GBTRegressionModel(
         """
         return self._call_java("featureImportances")
 
-    @property
+    @cached_property
     @since("2.0.0")
     def trees(self) -> List[DecisionTreeRegressionModel]:
         """Trees in this ensemble. Warning: These have null parent Estimators."""
+        if is_remote():
+            return [DecisionTreeRegressionModel(m) for m in self._call_java("trees").split(",")]
         return [DecisionTreeRegressionModel(m) for m in list(self._call_java("trees"))]
 
     def evaluateEachIteration(self, dataset: DataFrame, loss: str) -> List[float]:
@@ -2542,7 +2551,7 @@ class GeneralizedLinearRegression(
     >>> model2 = GeneralizedLinearRegressionModel.load(model_path)
     >>> model.intercept == model2.intercept
     True
-    >>> model.coefficients[0] == model2.coefficients[0]
+    >>> bool(model.coefficients[0] == model2.coefficients[0])
     True
     >>> model.transform(df).take(1) == model2.transform(df).take(1)
     True
@@ -2792,6 +2801,7 @@ class GeneralizedLinearRegressionSummary(JavaWrapper):
 
     @property
     @since("2.0.0")
+    @try_remote_attribute_relation
     def predictions(self) -> DataFrame:
         """
         Predictions output by the model's `transform` method.
@@ -2847,6 +2857,7 @@ class GeneralizedLinearRegressionSummary(JavaWrapper):
         """
         return self._call_java("residualDegreeOfFreedomNull")
 
+    @try_remote_attribute_relation
     def residuals(self, residualsType: str = "deviance") -> DataFrame:
         """
         Get the residuals of the fitted model by type.

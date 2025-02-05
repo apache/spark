@@ -178,7 +178,7 @@ CREATE EXTERNAL TABLE family (id INT, name STRING)
 CREATE TABLE clustered_by_test1 (ID INT, AGE STRING)
     CLUSTERED BY (ID)
     INTO 4 BUCKETS
-    STORED AS ORC
+    STORED AS ORC;
 
 --Use `CLUSTERED BY` clause to create bucket table with `SORTED BY`
 CREATE TABLE clustered_by_test2 (ID INT, NAME STRING)
@@ -186,7 +186,7 @@ CREATE TABLE clustered_by_test2 (ID INT, NAME STRING)
     CLUSTERED BY (ID, NAME)
     SORTED BY (ID ASC)
     INTO 3 BUCKETS
-    STORED AS PARQUET
+    STORED AS PARQUET;
 ```
 
 ### Related Statements

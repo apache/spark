@@ -21,6 +21,14 @@ ALTER TABLE t ADD PARTITION (c='Us', d=1);
 
 DESCRIBE t;
 
+DESCRIBE EXTENDED t AS JSON;
+
+-- AnalysisException: describe table as json must be extended
+DESCRIBE t AS JSON;
+
+-- AnalysisException: describe col as json unsupported
+DESC FORMATTED t a AS JSON;
+
 DESC default.t;
 
 DESC TABLE t;
@@ -38,6 +46,8 @@ ALTER TABLE t UNSET TBLPROPERTIES (comment);
 DESC EXTENDED t;
 
 DESC t PARTITION (c='Us', d=1);
+
+DESC EXTENDED t PARTITION (c='Us', d=1) AS JSON;
 
 DESC EXTENDED t PARTITION (c='Us', d=1);
 
@@ -88,6 +98,7 @@ EXPLAIN DESC EXTENDED t;
 EXPLAIN EXTENDED DESC t;
 EXPLAIN DESCRIBE t b;
 EXPLAIN DESCRIBE t PARTITION (c='Us', d=2);
+EXPLAIN DESCRIBE EXTENDED t PARTITION (c='Us', d=2) AS JSON;
 
 -- DROP TEST TABLES/VIEWS
 DROP TABLE t;
@@ -119,3 +130,4 @@ DESC EXTENDED e;
 DESC TABLE EXTENDED e;
 
 DESC FORMATTED e;
+

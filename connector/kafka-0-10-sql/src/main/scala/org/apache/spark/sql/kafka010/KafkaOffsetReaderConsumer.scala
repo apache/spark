@@ -98,8 +98,11 @@ private[kafka010] class KafkaOffsetReaderConsumer(
    */
   private val minPartitions =
     readerOptions.get(KafkaSourceProvider.MIN_PARTITIONS_OPTION_KEY).map(_.toInt)
+  private val maxRecordsPerPartition =
+    readerOptions.get(KafkaSourceProvider.MAX_RECORDS_PER_PARTITION_OPTION_KEY).map(_.toLong)
 
-  private val rangeCalculator = new KafkaOffsetRangeCalculator(minPartitions)
+  private val rangeCalculator =
+    new KafkaOffsetRangeCalculator(minPartitions, maxRecordsPerPartition)
 
   private[kafka010] val offsetFetchAttemptIntervalMs =
     readerOptions.getOrElse(KafkaSourceProvider.FETCH_OFFSET_RETRY_INTERVAL_MS, "1000").toLong
@@ -107,8 +110,9 @@ private[kafka010] class KafkaOffsetReaderConsumer(
   /**
    * Whether we should divide Kafka TopicPartitions with a lot of data into smaller Spark tasks.
    */
-  private def shouldDivvyUpLargePartitions(numTopicPartitions: Int): Boolean = {
-    minPartitions.map(_ > numTopicPartitions).getOrElse(false)
+  private def shouldDivvyUpLargePartitions(offsetRanges: Seq[KafkaOffsetRange]): Boolean = {
+    minPartitions.map(_ > offsetRanges.size).getOrElse(false) ||
+    offsetRanges.exists(_.size > maxRecordsPerPartition.getOrElse(Long.MaxValue))
   }
 
   private def nextGroupId(): String = {
@@ -209,9 +213,12 @@ private[kafka010] class KafkaOffsetReaderConsumer(
     : KafkaSourceOffset = {
 
     val fnAssertParametersWithPartitions: ju.Set[TopicPartition] => Unit = { partitions =>
-      assert(partitions.asScala == partitionTimestamps.keySet,
-        "If starting/endingOffsetsByTimestamp contains specific offsets, you must specify all " +
-          s"topics. Specified: ${partitionTimestamps.keySet} Assigned: ${partitions.asScala}")
+      val specifiedPartitions = partitionTimestamps.keySet
+      val assignedPartitions = partitions.asScala.toSet
+      if (specifiedPartitions != assignedPartitions) {
+        throw KafkaExceptions.timestampOffsetDoesNotMatchAssigned(
+          isStartingOffsets, specifiedPartitions, assignedPartitions)
+      }
       logDebug(s"Partitions assigned to consumer: $partitions. Seeking to $partitionTimestamps")
     }
 
@@ -446,7 +453,7 @@ private[kafka010] class KafkaOffsetReaderConsumer(
       KafkaOffsetRange(tp, fromOffset, untilOffset, None)
     }.toSeq
 
-    if (shouldDivvyUpLargePartitions(offsetRangesBase.size)) {
+    if (shouldDivvyUpLargePartitions(offsetRangesBase)) {
       val fromOffsetsMap =
         offsetRangesBase.map(range => (range.topicPartition, range.fromOffset)).toMap
       val untilOffsetsMap =

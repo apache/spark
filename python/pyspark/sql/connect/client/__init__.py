@@ -20,4 +20,4 @@ from pyspark.sql.connect.utils import check_dependencies
 check_dependencies(__name__)
 
 from pyspark.sql.connect.client.core import *  # noqa: F401,F403
-from pyspark.sql.connect.client.logging import getLogLevel  # noqa: F401
+from pyspark.sql.connect.logging import getLogLevel  # noqa: F401

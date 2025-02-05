@@ -33,6 +33,7 @@ import org.apache.spark.sql.protobuf.utils.ProtobufOptions
 import org.apache.spark.sql.protobuf.utils.ProtobufUtils
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.util.{ProtobufUtils => CommonProtobufUtils}
 
 class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with ProtobufTestBase
   with Serializable {
@@ -40,11 +41,11 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
   import testImplicits._
 
   val testFileDescFile = protobufDescriptorFile("functions_suite.desc")
-  private val testFileDesc = ProtobufUtils.readDescriptorFileContent(testFileDescFile)
+  private val testFileDesc = CommonProtobufUtils.readDescriptorFileContent(testFileDescFile)
   private val javaClassNamePrefix = "org.apache.spark.sql.protobuf.protos.SimpleMessageProtos$"
 
   val proto2FileDescFile = protobufDescriptorFile("proto2_messages.desc")
-  val proto2FileDesc = ProtobufUtils.readDescriptorFileContent(proto2FileDescFile)
+  val proto2FileDesc = CommonProtobufUtils.readDescriptorFileContent(proto2FileDescFile)
   private val proto2JavaClassNamePrefix = "org.apache.spark.sql.protobuf.protos.Proto2Messages$"
 
   private def emptyBinaryDF = Seq(Array[Byte]()).toDF("binary")
@@ -467,7 +468,7 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
 
   test("Handle extra fields : oldProducer -> newConsumer") {
     val catalystTypesFile = protobufDescriptorFile("catalyst_types.desc")
-    val descBytes = ProtobufUtils.readDescriptorFileContent(catalystTypesFile)
+    val descBytes = CommonProtobufUtils.readDescriptorFileContent(catalystTypesFile)
 
     val oldProducer = ProtobufUtils.buildDescriptor(descBytes, "oldProducer")
     val newConsumer = ProtobufUtils.buildDescriptor(descBytes, "newConsumer")
@@ -509,7 +510,7 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
 
   test("Handle extra fields : newProducer -> oldConsumer") {
     val catalystTypesFile = protobufDescriptorFile("catalyst_types.desc")
-    val descBytes = ProtobufUtils.readDescriptorFileContent(catalystTypesFile)
+    val descBytes = CommonProtobufUtils.readDescriptorFileContent(catalystTypesFile)
 
     val newProducer = ProtobufUtils.buildDescriptor(descBytes, "newProducer")
     val oldConsumer = ProtobufUtils.buildDescriptor(descBytes, "oldConsumer")
@@ -1718,6 +1719,33 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
           "data" -> "9999",
           "enumString" -> "0, 1, 2"))
     }
+  }
+
+  test("non-struct SQL type") {
+    val dfWithInt = spark
+      .range(1)
+      .select(
+        lit(9999).as("int_col")
+      )
+
+    val parseError = intercept[AnalysisException] {
+      dfWithInt.select(
+        to_protobuf_wrapper($"int_col", "SimpleMessageEnum", Some(testFileDesc))).collect()
+    }
+    val descMsg = testFileDesc.map("%02X".format(_)).mkString("")
+    checkError(
+      exception = parseError,
+      condition = "DATATYPE_MISMATCH.NON_STRUCT_TYPE",
+      parameters = Map(
+        "inputName" -> "data",
+        "inputType" -> "\"INT\"",
+        "sqlExpr" ->
+          s"""\"to_protobuf(int_col, SimpleMessageEnum, X'$descMsg', NULL)\""""
+      ),
+      queryContext = Array(ExpectedContext(
+        fragment = "fn",
+        callSitePattern = ".*"))
+    )
   }
 
   test("test unsigned integer types") {

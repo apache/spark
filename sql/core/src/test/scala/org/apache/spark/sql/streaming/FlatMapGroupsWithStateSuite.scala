@@ -1177,6 +1177,7 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest {
             Some(currentBatchTimestamp), Some(0), Some(currentBatchWatermark),
             RDDScanExec(g, emptyRdd, "rdd"),
             hasInitialState,
+            false,
             RDDScanExec(g, emptyRdd, "rdd"))
       }.get
   }
