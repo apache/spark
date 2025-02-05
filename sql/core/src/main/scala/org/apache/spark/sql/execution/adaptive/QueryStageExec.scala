@@ -310,9 +310,9 @@ case class TableCacheQueryStageExec(
 }
 
 case class ResultQueryStageExec(
-  override val id: Int,
-  override val plan: SparkPlan,
-  resultHandler: SparkPlan => Any) extends QueryStageExec {
+    override val id: Int,
+    override val plan: SparkPlan,
+    resultHandler: SparkPlan => Any) extends QueryStageExec {
 
   override def resetMetrics(): Unit = {
     plan.resetMetrics()

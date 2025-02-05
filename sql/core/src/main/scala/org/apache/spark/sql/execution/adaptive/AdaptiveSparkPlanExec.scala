@@ -362,8 +362,8 @@ case class AdaptiveSparkPlanExec(
           // the current physical plan. Once a new plan is adopted and both logical and physical
           // plans are updated, we can clear the query stage list because at this point the two
           // plans are semantically and physically in sync again.
-          val logicalPlan = replaceWithQueryStagesInLogicalPlan(currentLogicalPlan,
-            stagesToReplace.toSeq)
+          val logicalPlan = replaceWithQueryStagesInLogicalPlan(
+            currentLogicalPlan, stagesToReplace.toSeq)
           val afterReOptimize = reOptimize(logicalPlan)
           if (afterReOptimize.isDefined) {
             val (newPhysicalPlan, newLogicalPlan) = afterReOptimize.get
@@ -525,6 +525,7 @@ case class AdaptiveSparkPlanExec(
       case resultStage@ResultQueryStageExec(_, optimizedPlan, _) =>
         return if (firstRun) {
           // There is already an existing ResultQueryStage created in previous `withFinalPlanUpdate`
+          // e.g, when we do `df.collect` multiple times
           val newResultStage = ResultQueryStageExec(currentStageId, optimizedPlan, resultHandler)
           currentStageId += 1
           setLogicalLinkForNewQueryStage(newResultStage, optimizedPlan)
