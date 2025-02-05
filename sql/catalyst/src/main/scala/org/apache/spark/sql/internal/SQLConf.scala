@@ -301,19 +301,6 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
-  val ANALYZER_SINGLE_PASS_TRACK_RESOLVED_NODES_ENABLED =
-    buildConf("spark.sql.analyzer.singlePassResolver.trackResolvedNodes.enabled")
-      .internal()
-      .doc(
-        "When true, keep track of resolved nodes in order to assert that the single-pass " +
-        "invariant is never broken. While true, if a resolver attempts to resolve the same node " +
-        "twice, INTERNAL_ERROR exception is thrown. Used only for testing due to memory impact " +
-        "of storing each node in a HashSet."
-      )
-      .version("4.0.0")
-      .booleanConf
-      .createWithDefault(false)
-
   val ANALYZER_SINGLE_PASS_RESOLVER_RELATION_BRIDGING_ENABLED =
     buildConf("spark.sql.analyzer.singlePassResolver.relationBridging.enabled")
       .internal()
@@ -1729,7 +1716,7 @@ object SQLConf {
         "avoid shuffle if necessary.")
       .version("3.3.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   val V2_BUCKETING_PUSH_PART_VALUES_ENABLED =
     buildConf("spark.sql.sources.v2.bucketing.pushPartValues.enabled")
