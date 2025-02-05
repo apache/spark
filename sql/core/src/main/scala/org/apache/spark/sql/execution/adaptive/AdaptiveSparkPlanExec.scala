@@ -382,7 +382,7 @@ case class AdaptiveSparkPlanExec(
           }
         }
         // Now that some stages have finished, we can try creating new stages.
-        result = createQueryStages(fun, currentPhysicalPlan, false)
+        result = createQueryStages(fun, currentPhysicalPlan, firstRun = false)
       }
     }
     _isFinalPlan = true
