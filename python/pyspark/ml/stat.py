@@ -282,7 +282,6 @@ class KolmogorovSmirnovTest:
                 {"inputCol": sampleCol, "distName": distName, "paramsArray": list(params)},
                 dataset.sparkSession.client,  # type: ignore[arg-type,operator]
             )
-            print(serialized_ml_params)
             instance._serialized_ml_params = serialized_ml_params  # type: ignore[attr-defined]
             return instance.transform(dataset)
 
