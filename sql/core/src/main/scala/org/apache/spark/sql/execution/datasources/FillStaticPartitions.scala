@@ -64,6 +64,7 @@ object FillStaticPartitions extends Rule[LogicalPlan] with PredicateHelper {
               _),
             _,
             _,
+            _,
             _))
             if filters.nonEmpty && fsRelation.partitionSchema.nonEmpty =>
             val normalizedFilters = DataSourceStrategy.normalizeExprs(
