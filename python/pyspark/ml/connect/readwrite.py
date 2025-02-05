@@ -195,8 +195,9 @@ class RemoteMLWriter(MLWriter):
     def handleOverwrite(path: str, shouldOverwrite: bool) -> None:
         from pyspark.ml.util import ML_CONNECT_HELPER_ID
 
-        helper = JavaWrapper(java_obj=ML_CONNECT_HELPER_ID)
-        helper._call_java("handleOverwrite", path, shouldOverwrite)
+        if shouldOverwrite:
+            helper = JavaWrapper(java_obj=ML_CONNECT_HELPER_ID)
+            helper._call_java("handleOverwrite", path, shouldOverwrite)
 
 
 class RemoteMLReader(MLReader[RL]):
