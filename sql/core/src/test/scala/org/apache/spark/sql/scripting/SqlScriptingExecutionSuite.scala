@@ -94,9 +94,9 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
     val sqlScript =
       """
         |BEGIN
-        |  declare or replace var params MAP<STRING, STRING>;
-        |  set params = map('errorMessage', 'This is user raised error.');
-        |  signal USER_RAISED_EXCEPTION SET MESSAGE_PARMS = params;
+        |  declare or replace var args MAP<STRING, STRING>;
+        |  set args = map('errorMessage', 'This is user raised error.');
+        |  signal USER_RAISED_EXCEPTION SET MESSAGE_ARGUMENTS = args;
         |END
         |""".stripMargin
     val exception = intercept[SqlScriptingRuntimeException] {
@@ -113,9 +113,9 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
     val sqlScript =
       """
         |BEGIN
-        |  declare or replace var params MAP<STRING, STRING>;
-        |  set params = null;
-        |  signal USER_RAISED_EXCEPTION SET MESSAGE_PARMS = params;
+        |  declare or replace var args MAP<STRING, STRING>;
+        |  set args = null;
+        |  signal USER_RAISED_EXCEPTION SET MESSAGE_ARGUMENTS = args;
         |END
         |""".stripMargin
     checkError(
@@ -123,16 +123,16 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
         verifySqlScriptResult(sqlScript, Seq.empty)
       },
       condition = "NULL_VARIABLE_SIGNAL_STATEMENT",
-      parameters = Map("varName" -> toSQLId("params")))
+      parameters = Map("varName" -> toSQLId("args")))
   }
 
   test("signal statement - MESSAGE_ARGS variable invalid type") {
     val sqlScript =
       """
         |BEGIN
-        |  declare or replace var params STRING;
-        |  set params = "string_type_variable";
-        |  signal USER_RAISED_EXCEPTION SET MESSAGE_PARMS = params;
+        |  declare or replace var args STRING;
+        |  set args = "string_type_variable";
+        |  signal USER_RAISED_EXCEPTION SET MESSAGE_ARGUMENTS = args;
         |END
         |""".stripMargin
     checkError(
