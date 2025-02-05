@@ -510,8 +510,9 @@ class SparkSession:
         )
         timezone = configs["spark.sql.session.timeZone"]
         prefer_timestamp = configs["spark.sql.timestampType"]
-        prefers_large_types: bool = configs[
-            "spark.sql.execution.arrow.useLargeVarTypes"].lower() == "true"
+        prefers_large_types: bool = (
+            configs["spark.sql.execution.arrow.useLargeVarTypes"].lower() == "true"
+        )
 
         _table: Optional[pa.Table] = None
 
