@@ -661,7 +661,12 @@ private[ml] object MLUtils {
         "stringIndexerModelFromLabelsArray",
         "countVectorizerModelFromVocabulary",
         "stopWordsRemoverLoadDefaultStopWords",
-        "stopWordsRemoverGetDefaultOrUS")))
+        "stopWordsRemoverGetDefaultOrUS",
+        "chiSquareTest",
+        "correlation",
+        "kolmogorovSmirnovTest",
+        "powerIterationClusteringAssignClusters",
+        "prefixSpanFindFrequentSequentialPatterns")))
 
   private def validate(obj: Any, method: String): Unit = {
     assert(obj != null)

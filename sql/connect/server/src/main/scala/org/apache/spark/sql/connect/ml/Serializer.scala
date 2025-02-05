@@ -167,6 +167,8 @@ private[ml] object Serializer {
           case proto.Expression.Literal.LiteralTypeCase.ARRAY =>
             val array = literal.getArray
             array.getElementType.getKindCase match {
+              case proto.DataType.KindCase.DOUBLE =>
+                (parseDoubleArray(array), classOf[Array[Double]])
               case proto.DataType.KindCase.STRING =>
                 (parseStringArray(array), classOf[Array[String]])
               case proto.DataType.KindCase.ARRAY =>
@@ -189,6 +191,16 @@ private[ml] object Serializer {
         throw MlUnsupportedException(s"$arg not supported")
       }
     }
+  }
+
+  private def parseDoubleArray(array: proto.Expression.Literal.Array): Array[Double] = {
+    val values = new Array[Double](array.getElementsCount)
+    var i = 0
+    while (i < array.getElementsCount) {
+      values(i) = array.getElements(i).getDouble
+      i += 1
+    }
+    values
   }
 
   private def parseStringArray(array: proto.Expression.Literal.Array): Array[String] = {

@@ -18,7 +18,6 @@
 package org.apache.spark.ml.fpm
 
 import org.apache.spark.annotation.Since
-import org.apache.spark.ml.Transformer
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.util.Identifiable
 import org.apache.spark.ml.util.Instrumentation.instrumented
@@ -168,29 +167,4 @@ final class PrefixSpan(@Since("2.4.0") override val uid: String) extends PrefixS
 
   @Since("2.4.0")
   override def copy(extra: ParamMap): PrefixSpan = defaultCopy(extra)
-
-}
-
-private[spark] class PrefixSpanWrapper(override val uid: String)
-  extends Transformer with PrefixSpanParams {
-
-  def this() = this(Identifiable.randomUID("prefixSpanWrapper"))
-
-  override def transformSchema(schema: StructType): StructType = {
-    new StructType()
-      .add("sequence", ArrayType(schema($(sequenceCol)).dataType), nullable = false)
-      .add("freq", LongType, nullable = false)
-  }
-
-  override def transform(dataset: Dataset[_]): DataFrame = {
-    val prefixSpan = new PrefixSpan(uid)
-    prefixSpan
-      .setMinSupport($(minSupport))
-      .setMaxPatternLength($(maxPatternLength))
-      .setMaxLocalProjDBSize($(maxLocalProjDBSize))
-      .setSequenceCol($(sequenceCol))
-      .findFrequentSequentialPatterns(dataset)
-  }
-
-  override def copy(extra: ParamMap): PrefixSpanWrapper = defaultCopy(extra)
 }
