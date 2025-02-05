@@ -19,7 +19,7 @@ import numpy as np
 import unittest
 
 from pyspark.ml.linalg import Vectors
-from pyspark.ml.stat import ChiSquareTest, Correlation
+from pyspark.ml.stat import ChiSquareTest, Correlation, KolmogorovSmirnovTest
 from pyspark.sql import DataFrame
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 
@@ -94,6 +94,42 @@ class StatTestsMixin:
                 equal_nan=True,
             ),
             corr2,
+        )
+
+    def test_kolmogorov_smirnov(self):
+        spark = self.spark
+
+        data = [[-1.0], [0.0], [1.0]]
+        df = spark.createDataFrame(data, ["sample"])
+
+        res1 = KolmogorovSmirnovTest.test(df, "sample", "norm", 0.0, 1.0)
+        self.assertEqual(res1.columns, ["pValue", "statistic"])
+        self.assertEqual(res1.count(), 1)
+
+        row = res1.head()
+        self.assertTrue(
+            np.allclose(row.pValue, 0.9999753186701124, atol=1e-4),
+            row.pValue,
+        )
+        self.assertTrue(
+            np.allclose(row.statistic, 0.1746780794018764, atol=1e-4),
+            row.statistic,
+        )
+
+        data2 = [[2.0], [3.0], [4.0]]
+        df2 = spark.createDataFrame(data2, ["sample"])
+        res2 = KolmogorovSmirnovTest.test(df2, "sample", "norm", 3, 1)
+        self.assertEqual(res2.columns, ["pValue", "statistic"])
+        self.assertEqual(res2.count(), 1)
+
+        row2 = res2.head()
+        self.assertTrue(
+            np.allclose(row2.pValue, 0.9999753186701124, atol=1e-4),
+            row2.pValue,
+        )
+        self.assertTrue(
+            np.allclose(row2.statistic, 0.1746780794018764, atol=1e-4),
+            row2.statistic,
         )
 
 

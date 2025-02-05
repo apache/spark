@@ -83,7 +83,6 @@ from pyspark.ml.feature import (
 )
 from pyspark.ml.linalg import DenseVector, SparseVector, Vectors
 from pyspark.sql import Row
-from pyspark.testing.utils import QuietTest
 from pyspark.testing.mlutils import SparkSessionTestCase
 
 
@@ -275,6 +274,9 @@ class FeatureTestsMixin:
         model = indexer.fit(df)
         self.assertEqual(indexer.uid, model.uid)
         self.assertEqual(model.numFeatures, 2)
+
+        categoryMaps = model.categoryMaps
+        self.assertEqual(categoryMaps, {0: {0.0: 0, -1.0: 1}}, categoryMaps)
 
         output = model.transform(df)
         self.assertEqual(output.columns, ["a", "indexed"])
@@ -678,13 +680,12 @@ class FeatureTestsMixin:
         self.assertEqual(synonyms.columns, ["word", "similarity"])
         self.assertEqual(synonyms.count(), 2)
 
-        # TODO(SPARK-50958): Support Word2VecModel.findSynonymsArray
-        # synonyms = model.findSynonymsArray("a", 2)
-        # self.assertEqual(len(synonyms), 2)
-        # self.assertEqual(synonyms[0][0], "b")
-        # self.assertTrue(np.allclose(synonyms[0][1], -0.024012837558984756, atol=1e-4))
-        # self.assertEqual(synonyms[1][0], "c")
-        # self.assertTrue(np.allclose(synonyms[1][1], -0.19355154037475586, atol=1e-4))
+        synonyms = model.findSynonymsArray("a", 2)
+        self.assertEqual(len(synonyms), 2)
+        self.assertEqual(synonyms[0][0], "b")
+        self.assertTrue(np.allclose(synonyms[0][1], -0.024012837558984756, atol=1e-4))
+        self.assertEqual(synonyms[1][0], "c")
+        self.assertTrue(np.allclose(synonyms[1][1], -0.19355154037475586, atol=1e-4))
 
         output = model.transform(df)
         self.assertEqual(output.columns, ["sentence", "model"])
@@ -1357,9 +1358,8 @@ class FeatureTestsMixin:
             self.assertEqual(feature, expected)
 
         # Test an empty vocabulary
-        with QuietTest(self.sc):
-            with self.assertRaisesRegex(Exception, "vocabSize.*invalid.*0"):
-                CountVectorizerModel.from_vocabulary([], inputCol="words")
+        with self.assertRaisesRegex(Exception, "Vocabulary list cannot be empty"):
+            CountVectorizerModel.from_vocabulary([], inputCol="words")
 
         # Test model with default settings can transform
         model_default = CountVectorizerModel.from_vocabulary(["a", "b", "c"], inputCol="words")
@@ -1439,7 +1439,11 @@ class FeatureTestsMixin:
             ["a", "b", "c"], inputCol="label", outputCol="indexed", handleInvalid="keep"
         )
         self.assertEqual(model.labels, ["a", "b", "c"])
-        self.assertEqual(model.labelsArray, [("a", "b", "c")])
+        self.assertEqual(model.labelsArray, [["a", "b", "c"]])
+
+        self.assertEqual(model.getInputCol(), "label")
+        self.assertEqual(model.getOutputCol(), "indexed")
+        self.assertEqual(model.getHandleInvalid(), "keep")
 
         df1 = self.spark.createDataFrame(
             [(0, "a"), (1, "c"), (2, None), (3, "b"), (4, "b")], ["id", "label"]
@@ -1480,6 +1484,20 @@ class FeatureTestsMixin:
             .collect()
         )
         self.assertEqual(len(transformed_list), 5)
+
+    def test_string_indexer_from_arrays_of_labels(self):
+        model = StringIndexerModel.from_arrays_of_labels(
+            [["a", "b", "c"], ["x", "y", "z"]],
+            inputCols=["label1", "label2"],
+            outputCols=["indexed1", "indexed2"],
+            handleInvalid="keep",
+        )
+
+        self.assertEqual(model.labelsArray, [["a", "b", "c"], ["x", "y", "z"]])
+
+        self.assertEqual(model.getInputCols(), ["label1", "label2"])
+        self.assertEqual(model.getOutputCols(), ["indexed1", "indexed2"])
+        self.assertEqual(model.getHandleInvalid(), "keep")
 
     def test_target_encoder_binary(self):
         df = self.spark.createDataFrame(
