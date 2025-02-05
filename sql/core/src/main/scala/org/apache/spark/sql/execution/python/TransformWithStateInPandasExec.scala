@@ -114,8 +114,10 @@ case class TransformWithStateInPandasExec(
 
   override def operatorStateMetadataVersion: Int = 2
 
-  override def getColFamilySchemas(): Map[String, StateStoreColFamilySchema] = {
-    driverProcessorHandle.getColumnFamilySchemas
+  override def getColFamilySchemas(
+      setNullableFields: Boolean
+  ): Map[String, StateStoreColFamilySchema] = {
+    driverProcessorHandle.getColumnFamilySchemas(setNullableFields)
   }
 
   override def getStateVariableInfos(): Map[String, TransformWithStateVariableInfo] = {
@@ -149,7 +151,7 @@ case class TransformWithStateInPandasExec(
     initialStateGroupingAttrs.map(SortOrder(_, Ascending)))
 
   override def operatorStateMetadata(
-      stateSchemaPaths: List[String]): OperatorStateMetadata = {
+      stateSchemaPaths: List[List[String]]): OperatorStateMetadata = {
     getOperatorStateMetadata(stateSchemaPaths, getStateInfo, shortName, timeMode, outputMode)
   }
 
@@ -184,7 +186,8 @@ case class TransformWithStateInPandasExec(
     runner.stop()
 
     validateAndWriteStateSchema(hadoopConf, batchId, stateSchemaVersion, getStateInfo,
-      session, operatorStateMetadataVersion)
+      session, operatorStateMetadataVersion, stateStoreEncodingFormat =
+        conf.stateStoreEncodingFormat)
   }
 
   override def shouldRunAnotherBatch(newInputWatermark: Long): Boolean = {
@@ -255,7 +258,7 @@ case class TransformWithStateInPandasExec(
           schemaForValueRow,
           NoPrefixKeyStateEncoderSpec(schemaForKeyRow),
           session.sqlContext.sessionState,
-          Some(session.sqlContext.streams.stateStoreCoordinator),
+          Some(session.streams.stateStoreCoordinator),
           useColumnFamilies = true,
           useMultipleValuesPerKey = true
         ) {
@@ -284,7 +287,7 @@ case class TransformWithStateInPandasExec(
         initialState.execute(),
         getStateInfo,
         storeNames = Seq(),
-        session.sqlContext.streams.stateStoreCoordinator) {
+        session.streams.stateStoreCoordinator) {
         // The state store aware zip partitions will provide us with two iterators,
         // child data iterator and the initial state iterator per partition.
         case (partitionId, childDataIterator, initStateIterator) =>
@@ -299,6 +302,7 @@ case class TransformWithStateInPandasExec(
               NoPrefixKeyStateEncoderSpec(schemaForKeyRow),
               version = stateInfo.get.storeVersion,
               stateStoreCkptId = stateInfo.get.getStateStoreCkptId(partitionId).map(_.head),
+              stateSchemaBroadcast = stateInfo.get.stateSchemaMetadata,
               useColumnFamilies = true,
               storeConf = storeConf,
               hadoopConf = hadoopConfBroadcast.value.value
@@ -342,7 +346,8 @@ case class TransformWithStateInPandasExec(
       useColumnFamilies = true,
       storeConf = storeConf,
       hadoopConf = hadoopConfBroadcast.value.value,
-      useMultipleValuesPerKey = true)
+      useMultipleValuesPerKey = true,
+      stateSchemaProvider = getStateInfo.stateSchemaMetadata)
 
     val store = stateStoreProvider.getStore(0, None)
     val outputIterator = f(store)
@@ -352,6 +357,8 @@ case class TransformWithStateInPandasExec(
       row
     }
   }
+
+  override def supportsSchemaEvolution: Boolean = true
 
   private def processDataWithPartition(
       store: StateStore,

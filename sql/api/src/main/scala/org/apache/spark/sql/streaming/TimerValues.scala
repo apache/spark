@@ -19,15 +19,14 @@ package org.apache.spark.sql.streaming
 
 import java.io.Serializable
 
-import org.apache.spark.annotation.{Evolving, Experimental}
+import org.apache.spark.annotation.Evolving
 
 /**
  * Class used to provide access to timer values for processing and event time populated before
  * method invocations using the arbitrary state API v2.
  */
-@Experimental
 @Evolving
-private[sql] trait TimerValues extends Serializable {
+trait TimerValues extends Serializable {
 
   /**
    * Get the current processing time as milliseconds in epoch time.

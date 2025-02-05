@@ -3087,6 +3087,18 @@ private[spark] object Utils
   }
 
   /**
+   * Create a resource uninterruptibly if we are in a task thread (i.e., TaskContext.get() != null).
+   * Otherwise, create the resource normally. This is mainly used in the situation where we want to
+   * create a multi-layer resource in a task thread. The uninterruptible behavior ensures we don't
+   * leak the underlying resources when there is a task cancellation request,
+   */
+  def createResourceUninterruptiblyIfInTaskThread[R <: Closeable](createResource: => R): R = {
+    Option(TaskContext.get()).map(_.createResourceUninterruptibly {
+      createResource
+    }).getOrElse(createResource)
+  }
+
+  /**
    * Return the median number of a long array
    *
    * @param sizes

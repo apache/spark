@@ -57,7 +57,7 @@ object ReplaceNullWithFalseInPredicate extends Rule[LogicalPlan] {
     _.containsAnyPattern(NULL_LITERAL, TRUE_OR_FALSE_LITERAL, INSET), ruleId) {
     case f @ Filter(cond, _) => f.copy(condition = replaceNullWithFalse(cond))
     case j @ Join(_, _, _, Some(cond), _) => j.copy(condition = Some(replaceNullWithFalse(cond)))
-    case rd @ ReplaceData(_, cond, _, _, groupFilterCond, _) =>
+    case rd @ ReplaceData(_, cond, _, _, _, groupFilterCond, _) =>
       val newCond = replaceNullWithFalse(cond)
       val newGroupFilterCond = groupFilterCond.map(replaceNullWithFalse)
       rd.copy(condition = newCond, groupFilterCondition = newGroupFilterCond)

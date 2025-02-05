@@ -45,6 +45,7 @@ private case class MsSqlServerDialect() extends JdbcDialect with NoLegacyJDBCErr
   // scalastyle:on line.size.limit
   override def compileValue(value: Any): Any = value match {
     case booleanValue: Boolean => if (booleanValue) 1 else 0
+    case binaryValue: Array[Byte] => binaryValue.map("%02X".format(_)).mkString("0x", "", "")
     case other => super.compileValue(other)
   }
 
@@ -248,7 +249,7 @@ private case class MsSqlServerDialect() extends JdbcDialect with NoLegacyJDBCErr
       val limitClause = dialect.getLimitClause(limit)
 
       options.prepareQuery +
-        s"SELECT $limitClause $columnList FROM ${options.tableOrQuery} $tableSampleClause" +
+        s"SELECT $limitClause $columnList FROM ${options.tableOrQuery}" +
         s" $whereClause $groupByClause $orderByClause"
     }
   }

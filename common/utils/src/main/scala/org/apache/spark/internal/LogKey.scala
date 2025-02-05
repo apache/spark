@@ -331,6 +331,7 @@ private[spark] object LogKeys {
   case object INPUT extends LogKey
   case object INPUT_SPLIT extends LogKey
   case object INTEGRAL extends LogKey
+  case object INTERRUPT_THREAD extends LogKey
   case object INTERVAL extends LogKey
   case object INVALID_PARAMS extends LogKey
   case object ISOLATION_LEVEL extends LogKey
@@ -549,6 +550,7 @@ private[spark] object LogKeys {
   case object NUM_ROWS extends LogKey
   case object NUM_RULE_OF_RUNS extends LogKey
   case object NUM_SEQUENCES extends LogKey
+  case object NUM_SKIPPED extends LogKey
   case object NUM_SLOTS extends LogKey
   case object NUM_SPILLS extends LogKey
   case object NUM_SPILL_WRITERS extends LogKey

@@ -374,6 +374,7 @@ abstract class JdbcDialect extends Serializable with Logging {
     case dateValue: Date => "'" + dateValue + "'"
     case dateValue: LocalDate => s"'${DateFormatter().format(dateValue)}'"
     case arrayValue: Array[Any] => arrayValue.map(compileValue).mkString(", ")
+    case binaryValue: Array[Byte] => binaryValue.map("%02X".format(_)).mkString("X'", "", "'")
     case _ => value
   }
 
@@ -626,7 +627,7 @@ abstract class JdbcDialect extends Serializable with Logging {
           val name = updateNull.fieldNames
           updateClause += getUpdateColumnNullabilityQuery(tableName, name(0), updateNull.nullable())
         case _ =>
-          throw QueryCompilationErrors.unsupportedTableChangeInJDBCCatalogError(change)
+          throw QueryCompilationErrors.unsupportedTableChangeInJDBCCatalogError(change, tableName)
       }
     }
     updateClause.result()
@@ -824,6 +825,8 @@ abstract class JdbcDialect extends Serializable with Logging {
 
   def getTableSample(sample: TableSampleInfo): String =
     throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3183")
+
+  def supportsHint: Boolean = false
 
   /**
    * Return the DB-specific quoted and fully qualified table name

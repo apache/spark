@@ -211,6 +211,8 @@ class Word2VecModel private[ml] (
 
   import Word2VecModel._
 
+  private[ml] def this() = this(Identifiable.randomUID("w2v"), null)
+
   /**
    * Returns a dataframe with two fields, "word" and "vector", with "word" being a String and
    * and the vector the DenseVector that it is mapped to.
