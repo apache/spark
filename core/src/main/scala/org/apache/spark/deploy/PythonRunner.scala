@@ -53,9 +53,9 @@ object PythonRunner {
     // Format python file paths before adding them to the PYTHONPATH
     val formattedPythonFile = formatPath(pythonFile)
     val formattedPyFiles = resolvePyFiles(formatPaths(pyFiles))
-    lazy val apiMode = sparkConf.get(SPARK_API_MODE).toLowerCase(Locale.ROOT)
-    lazy val isAPIModeClassic = apiMode == "classic"
-    lazy val isAPIModeConnect = apiMode == "connect"
+    val apiMode = sparkConf.get(SPARK_API_MODE).toLowerCase(Locale.ROOT)
+    val isAPIModeClassic = apiMode == "classic"
+    val isAPIModeConnect = apiMode == "connect"
 
     var gatewayServer: Option[Py4JServer] = None
     if (sparkConf.getOption("spark.remote").isEmpty || isAPIModeClassic) {

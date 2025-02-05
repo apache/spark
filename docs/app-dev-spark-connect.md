@@ -60,31 +60,6 @@ with the custom logic/library.
 
 ## Spark API Mode: Spark Client and Spark Classic
 
-Spark provides API mode (`spark.api.mode`) configuration that can seamlessly let Spark
-applications use Spark Connect. Based on `spark.api.mode` configuration, the application either
-be executed in Spark Classic or Spark Connect mode. See the examples below:
-
-{% highlight python %}
-from pyspark.sql import SparkSession
-
-SparkSession.builder.config("spark.api.mode", "connect").master("...").getOrCreate()
-{% endhighlight %}
-
-
-This configuration can be also effectively set for both Scala Spark application and PySpark
-applications via Spark submission:
-
-{% highlight bash %}
-spark-submit --master "..." --conf spark.api.mode=connect
-{% endhighlight %}
-
-In addition, Spark Connect provides convient special cases for you to locally test. `spark.remote`
-can be set as `local[...]` and `local-cluster[...]`. In this case, it creates a locally running
-Spark Connect server, and provide users the Spark Connect session. This is similar when
-`--conf spark.api.mode=connect` and `--master ...` are set together. However `spark.remote`
-and `--remote` only supports `local*` whereas `--conf spark.api.mode=connect` and `--master ...`
-allow other Spark cluster URLs such as `spark://` for better compatibility.
-
 Spark provides the API mode, `spark.api.mode` configuration, enabling Spark Classic applications
 to seamlessly switch to Spark Connect. Depending on the value of `spark.api.mode`, the application
 can run in either Spark Classic or Spark Connect mode. Here is an example:
@@ -109,7 +84,6 @@ This is similar to using `--conf spark.api.mode=connect` with `--master ...`. Ho
 `spark.remote` and `--remote` are limited to `local*` values, while `--conf spark.api.mode=connect`
 with `--master ...` supports additional cluster URLs, such as spark://, for broader compatibility with
 Spark Classic.
-
 
 ## Spark Client Applications
 

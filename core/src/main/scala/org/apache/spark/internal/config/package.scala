@@ -2824,11 +2824,12 @@ package object config {
 
   private[spark] val SPARK_API_MODE =
     ConfigBuilder("spark.api.mode")
-      .doc("For Spark Classic applications, specify whether to automatically use Spark Connect by" +
-        "running a local Spark Connect server. The value can be `classic` or `connect`.")
+      .doc("For Spark Classic applications, specify whether to automatically use Spark Connect " +
+        "by running a local Spark Connect server dedicated to the application. The server is " +
+        "terminated when the application is terminated. The value can be `classic` or `connect`.")
       .version("4.0.0")
       .stringConf
-      .transform(_.toUpperCase(Locale.ROOT))
+      .transform(_.toLowerCase(Locale.ROOT))
       .checkValues(Set("connect", "classic"))
       .createWithDefault("classic")
 }
