@@ -655,7 +655,10 @@ private[ml] object MLUtils {
     // Utils
     (
       classOf[ConnectHelper],
-      Set("stringIndexerModelFromLabels", "stringIndexerModelFromLabelsArray")))
+      Set(
+        "stringIndexerModelFromLabels",
+        "stringIndexerModelFromLabelsArray",
+        "countVectorizerModelFromVocabulary")))
 
   private def validate(obj: Any, method: String): Unit = {
     assert(obj != null)

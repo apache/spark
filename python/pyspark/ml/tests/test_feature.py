@@ -83,7 +83,6 @@ from pyspark.ml.feature import (
 )
 from pyspark.ml.linalg import DenseVector, SparseVector, Vectors
 from pyspark.sql import Row
-from pyspark.testing.utils import QuietTest
 from pyspark.testing.mlutils import SparkSessionTestCase
 
 
@@ -1357,9 +1356,8 @@ class FeatureTestsMixin:
             self.assertEqual(feature, expected)
 
         # Test an empty vocabulary
-        with QuietTest(self.sc):
-            with self.assertRaisesRegex(Exception, "vocabSize.*invalid.*0"):
-                CountVectorizerModel.from_vocabulary([], inputCol="words")
+        with self.assertRaisesRegex(Exception, "Vocabulary list cannot be empty"):
+            CountVectorizerModel.from_vocabulary([], inputCol="words")
 
         # Test model with default settings can transform
         model_default = CountVectorizerModel.from_vocabulary(["a", "b", "c"], inputCol="words")
