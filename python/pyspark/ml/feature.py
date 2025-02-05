@@ -65,6 +65,7 @@ from pyspark.ml.wrapper import (
     _jvm,
 )
 from pyspark.ml.common import inherit_doc
+from pyspark.sql.types import ArrayType, StringType
 from pyspark.sql.utils import is_remote
 
 if TYPE_CHECKING:
@@ -4829,13 +4830,19 @@ class StringIndexerModel(
         requires an active SparkContext.
         """
         if is_remote():
+            uid = StringIndexerModel().uid
             helper = JavaWrapper(java_obj=ML_CONNECT_HELPER_ID)
             model = StringIndexerModel(
                 helper._call_java(
                     "stringIndexerModelFromLabels",
-                    list(labels),
+                    uid,
+                    (list(labels), ArrayType(StringType(), False)),
                 )
             )
+            model._resetUid(uid)
+            # reset uid won't automatically update the default value of outputCol
+            # should set it manually
+            model._setDefault(outputCol=model.uid + "__output")
 
         else:
             from pyspark.core.context import SparkContext
@@ -4869,13 +4876,22 @@ class StringIndexerModel(
         requires an active SparkContext.
         """
         if is_remote():
+            uid = StringIndexerModel().uid
             helper = JavaWrapper(java_obj=ML_CONNECT_HELPER_ID)
             model = StringIndexerModel(
                 helper._call_java(
                     "stringIndexerModelFromLabelsArray",
-                    [list(labels) for labels in arrayOfLabels],
+                    uid,
+                    (
+                        [list(labels) for labels in arrayOfLabels],
+                        ArrayType(ArrayType(StringType(), False)),
+                    ),
                 )
             )
+            model._resetUid(uid)
+            # reset uid won't automatically update the default value of outputCol
+            # should set it manually
+            model._setDefault(outputCol=model.uid + "__output")
 
         else:
             from pyspark.core.context import SparkContext
