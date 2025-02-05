@@ -30,7 +30,7 @@ import org.apache.spark.sql.expressions.{ReduceAggregator, SparkUserDefinedFunct
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.internal.{ColumnNode, ColumnNodeToProtoConverter, InvokeInlineUserDefinedFunction, UDFAdaptors, UnresolvedAttribute, UnresolvedFunction, UnresolvedStar}
 import org.apache.spark.sql.streaming.{GroupState, GroupStateTimeout, OutputMode, StatefulProcessor, StatefulProcessorWithInitialState, TimeMode}
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{StructField, StructType}
 
 /**
  * A [[Dataset]] has been logically grouped by a user specified grouping key. Users should not
@@ -489,8 +489,9 @@ private class KeyValueGroupedDatasetImpl[K, V, IK, IV](
     // would not be flattened.
     // Also here we detect if the input "iv" is a single field struct. If yes, we rename the field
     // to "key" to align with Spark behaviour.
-    val (valueTransformedDf, ivFields, vFields) =
-      renameSingleFieldStruct(applyValueMapFunc(originalDs))
+    val valueTransformedDf = renamePrimitiveIV(applyValueMapFunc(originalDs))
+    val ivFields = extractColumnNamesFromEnc(ivEncoder)
+    val vFields = extractColumnNamesFromEnc(vEncoder, namePrimitiveAsKey = false)
 
     // Rewrite grouping expressions to use "iv" as input.
     val updatedGroupingExprs = groupingColumns
@@ -539,28 +540,22 @@ private class KeyValueGroupedDatasetImpl[K, V, IK, IV](
   }
 
   /**
-   * Given a DF of two Struct columns "iv" and "v", rename the fields of "iv" if it consists of a
-   * single field. Also return the column names of "iv" and "v" to avoid recomputing them later.
-   * @return
-   *   (new dataframe, column names in IV, column names in V)
+   * Rename the field name in the "iv" column to "key" if the "iv" column is actually a primitive
+   * field.
    */
-  private def renameSingleFieldStruct(df: DataFrame): (DataFrame, Seq[String], Seq[String]) = {
-    val ivSchema = df.schema(0).dataType.asInstanceOf[StructType]
-    val vSchema = df.schema(1).dataType.asInstanceOf[StructType]
+  private def renamePrimitiveIV(df: DataFrame): DataFrame = if (ivEncoder.isPrimitive) {
+    val ivSchema = StructType(Seq(StructField("key", ivEncoder.dataType, nullable = false)))
+    df.select(col("iv").cast(ivSchema), col("v"))
+  } else {
+    df
+  }
 
-    if (ivSchema.fields.length > 1) {
-      (df, ivSchema.fieldNames.toSeq, vSchema.fieldNames.toSeq)
-    } else {
-      val newIVSchema = {
-        if (ivSchema.fields.length == 1) {
-          ivSchema.copy(fields = ivSchema.fields.map(_.copy(name = "key")))
-        } else {
-          ivSchema
-        }
-      }
-      val newDf = df.select(col("iv").cast(newIVSchema), col("v"))
-      (newDf, newIVSchema.fieldNames.toSeq, vSchema.fieldNames.toSeq)
-    }
+  private def extractColumnNamesFromEnc(
+      enc: AgnosticEncoder[_],
+      namePrimitiveAsKey: Boolean = true): Seq[String] = enc match {
+    case e if e.isPrimitive => if (namePrimitiveAsKey) Seq("key") else Seq("_1")
+    case se: StructEncoder[_] => se.schema.fieldNames.toSeq
+    case _ => throw new IllegalArgumentException(s"Unsupported encoder type: ${enc}")
   }
 
   private def rewriteInputColumnHook(
