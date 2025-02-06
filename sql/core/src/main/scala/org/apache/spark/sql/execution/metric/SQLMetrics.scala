@@ -198,6 +198,12 @@ object SQLMetrics {
     acc
   }
 
+  def createPartitionMetric(sc: SparkContext, name: String, initValue: Long = -1L): SQLMetric = {
+    val acc = new SQLMetric(SIZE_METRIC, initValue)
+    acc.register(sc, name = metricsCache.get(name), countFailedValues = false)
+    acc
+  }
+
   def postDriverMetricsUpdatedByValue(
       sc: SparkContext,
       executionId: String,

@@ -329,7 +329,8 @@ private[sql] class RocksDBStateStoreProvider
           CUSTOM_METRIC_PINNED_BLOCKS_MEM_USAGE -> rocksDBMetrics.pinnedBlocksMemUsage,
           CUSTOM_METRIC_NUM_EXTERNAL_COL_FAMILIES -> internalColFamilyCnt(),
           CUSTOM_METRIC_NUM_INTERNAL_COL_FAMILIES -> externalColFamilyCnt(),
-          CUSTOM_METRIC_SNAPSHOT_LAST_UPLOADED(id.partitionId) -> rocksDBMetrics.lastUploadedVersion
+          CUSTOM_METRIC_SNAPSHOT_LAST_UPLOADED.withPartition(id.partitionId) ->
+            rocksDBMetrics.lastUploadedVersion
         ) ++ rocksDBMetrics.zipFileBytesUncompressed.map(bytes =>
           Map(CUSTOM_METRIC_ZIP_FILE_BYTES_UNCOMPRESSED -> bytes)).getOrElse(Map())
 
@@ -525,7 +526,7 @@ private[sql] class RocksDBStateStoreProvider
 
   override def supportedCustomMetrics: Seq[StateStoreCustomMetric] = ALL_CUSTOM_METRICS
 
-  override def supportedCustomPartitionMetrics: Seq[Long => StateStoreCustomMetric] =
+  override def supportedCustomPartitionMetrics: Seq[StateStoreCustomPartitionMetric] =
     ALL_CUSTOM_PARTITION_METRICS
 
   private[state] def latestVersion: Long = rocksDB.getLatestVersion()
@@ -697,12 +698,10 @@ object RocksDBStateStoreProvider {
       expireAfterAccessTimeUnit = TimeUnit.HOURS
     )
 
-  val CUSTOM_METRIC_SNAPSHOT_LAST_UPLOADED = (partitionId: Long) => {
-    StateStoreCustomSumMetric(
-      "rocksdbSnapshotLastUploaded" + StateStoreProvider.PARTITION_METRIC_SUFFIX + partitionId,
-      "RocksDB: the last uploaded version of the snapshot for partition " + partitionId
-    )
-  }
+  val CUSTOM_METRIC_SNAPSHOT_LAST_UPLOADED = StateStoreCustomPartitionMetric(
+    "rocksdbSnapshotLastUploaded",
+    "RocksDB: the last uploaded version of the snapshot for a partition"
+  )
 
   val ALL_CUSTOM_PARTITION_METRICS = Seq(CUSTOM_METRIC_SNAPSHOT_LAST_UPLOADED)
 

@@ -1241,7 +1241,7 @@ class RocksDB(
         log"with uniqueId: ${MDC(LogKeys.UUID, snapshot.uniqueId)} " +
         log"time taken: ${MDC(LogKeys.TIME_UNITS, uploadTime)} ms. " +
         log"Current lineage: ${MDC(LogKeys.LINEAGE, lineageManager)}")
-      lastUploadedVersion = version
+      lastUploadedVersion = snapshot.version
     } finally {
       snapshot.close()
     }

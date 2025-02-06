@@ -2254,16 +2254,18 @@ object SQLConf {
   val STATE_STORE_PARTITION_METRICS_REPORT_LIMIT =
     buildConf("spark.sql.streaming.stateStore.numPartitionMetricsToReport")
       .internal()
-      .doc("Maximum number of partition-level metrics to include in state store progress " +
-        "reporting.  The actual limit used will be the minimum of this configuration and " +
-        "20% of the total number of partitions (with a minimum of 1 partition). This limits " +
-        "the metrics to the N partitions with the smallest values to prevent the progress " +
-        "report from becoming too large.")
-      .version("1.0.0")
-      .owner("streaming-engine")
+      .doc(
+        "Maximum number of partition-level metrics to include in state store progress " +
+          "reporting. The default limit is 20% of the number of cores (with a minimum of 1 " +
+          "partition) and with a cap of 10. This limits the metrics to the N partitions with " +
+          "the smallest values to prevent the progress report from becoming too large."
+      )
+      .version("4.0.0")
       .intConf
       .checkValue(k => k >= 0, "Must be greater than or equal to 0")
-      .createWithDefault(10)
+      .createWithDefault(
+        Math.min(10, Math.min(1, SHUFFLE_PARTITIONS.defaultValue.getOrElse(200) / 5))
+      )
 
   val STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT =
     buildConf("spark.sql.streaming.stateStore.minDeltasForSnapshot")
@@ -5747,13 +5749,7 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def numStateStoreMaintenanceThreads: Int = getConf(NUM_STATE_STORE_MAINTENANCE_THREADS)
 
-  def numPartitionMetricsToReport: Int = {
-    // Use the minimum between the report limit and 20% of number of partitions
-    Math.min(
-      getConf(STATE_STORE_PARTITION_METRICS_REPORT_LIMIT),
-      Math.max(1, numShufflePartitionsForStreaming / 5)
-    )
-  }
+  def numPartitionMetricsToReport: Int = getConf(STATE_STORE_PARTITION_METRICS_REPORT_LIMIT)
 
   def stateStoreMinDeltasForSnapshot: Int = getConf(STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT)
 
