@@ -320,9 +320,11 @@ trait StateStoreWriter
    * the driver after this SparkPlan has been executed and metrics have been updated.
    */
   def getProgress(): StateOperatorProgress = {
-    val customPartitionMetrics = stateStoreCustomPartitionMetrics
-      .filter(entry => longMetric(entry._1).isZero == false)
-      .map(entry => entry._1 -> longMetric(entry._1).value)
+    // Still publish custom partition metrics that are marked as unpopulated,
+    // as they represent partitions that never uploaded a snapshot.
+    val customPartitionMetrics = stateStoreCustomPartitionMetrics.map { entry =>
+      entry._1 -> (if (longMetric(entry._1).isZero) -1L else longMetric(entry._1).value)
+    }
     // Only keep the smallest N custom partition metrics to report to driver.
     val customPartitionMetricsToReport = customPartitionMetrics.toSeq
       .sortBy(_._2)
@@ -414,7 +416,8 @@ trait StateStoreWriter
   private def stateStoreCustomPartitionMetrics: Map[String, SQLMetric] = {
     val provider = StateStoreProvider.create(conf.stateStoreProviderClass)
     val maxPartitions = conf.defaultNumShufflePartitions
-    // Initialize metrics across all partitions
+    // Initialize metrics across all partitions, because partitions can come from various state
+    // stores, we need to reserve metrics for all partition ids.
     (0 until maxPartitions).flatMap { partitionId =>
       provider.supportedCustomPartitionMetrics.map { metric =>
         val metricWithPartition = metric.withPartition(partitionId)

@@ -46,6 +46,9 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest
   with AlsoTestWithRocksDBFeatures {
   import testImplicits._
 
+  private val SNAPSHOT_LAG_METRIC_PREFIX =
+    ("rocksdbSnapshotLastUploaded" + StateStoreProvider.PARTITION_METRIC_SUFFIX)
+
   testWithColumnFamilies("RocksDBStateStore",
     TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
     withTempDir { dir =>
@@ -284,17 +287,16 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest
     assert(snapshotVersionsPresent(dirForPartition0).contains(5L))
   }
 
-  private val snapshotLagMetricPrefix =
-    "rocksdbSnapshotLastUploaded" + StateStoreProvider.PARTITION_METRIC_SUFFIX
   private def snapshotLagMetricName(partitionId: Long): String =
-    snapshotLagMetricPrefix + partitionId
+    (SNAPSHOT_LAG_METRIC_PREFIX + partitionId)
 
   testWithChangelogCheckpointingEnabled(
     "SPARK-51097: Verify snapshot lag metric is updated correctly with RocksDBStateStoreProvider"
   ) {
     withSQLConf(
       SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[RocksDBStateStoreProvider].getName,
-      SQLConf.STREAMING_MAINTENANCE_INTERVAL.key -> "500",
+      SQLConf.STREAMING_MAINTENANCE_INTERVAL.key -> "100",
+      SQLConf.STREAMING_NO_DATA_PROGRESS_EVENT_INTERVAL.key -> "10",
       SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.key -> "1",
       SQLConf.STATE_STORE_PARTITION_METRICS_REPORT_LIMIT.key -> "5"
     ) {
@@ -306,22 +308,9 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest
           StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
           AddData(inputData, "a"),
           ProcessAllAvailable(),
-          Execute { _ =>
-            Thread.sleep(500)
-          },
           AddData(inputData, "b"),
           ProcessAllAvailable(),
-          Execute { _ =>
-            Thread.sleep(500)
-          },
-          AddData(inputData, "c"),
-          ProcessAllAvailable(),
-          Execute { _ =>
-            Thread.sleep(500)
-          },
-          AddData(inputData, "d"),
-          ProcessAllAvailable(),
-          CheckNewAnswer("a", "b", "c", "d"),
+          CheckNewAnswer("a", "b"),
           Execute { q =>
             // Make sure only smallest K active metrics are published
             eventually(timeout(Span(10, Seconds))) {
@@ -330,15 +319,13 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest
                 .customMetrics
                 .asScala
                 .view
-                .filterKeys(_.startsWith(snapshotLagMetricPrefix))
+                .filterKeys(_.startsWith(SNAPSHOT_LAG_METRIC_PREFIX))
               // Determined by STATE_STORE_PARTITION_METRICS_REPORT_LIMIT for this scenario
               assert(
                 partitionMetrics.size == q.sparkSession.conf
                   .get(SQLConf.STATE_STORE_PARTITION_METRICS_REPORT_LIMIT)
               )
-              assert(partitionMetrics.forall(_._2 >= 0))
-              // Should all be the same in this situation
-              assert(partitionMetrics.values.toSet.size == 1)
+              assert(partitionMetrics.forall(_._2 == 1))
             }
           },
           StopStream
@@ -354,9 +341,10 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest
     withSQLConf(
       SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
         classOf[SkipMaintenanceOnCertainPartitionsProvider].getName,
-      SQLConf.STREAMING_MAINTENANCE_INTERVAL.key -> "500",
+      SQLConf.STREAMING_MAINTENANCE_INTERVAL.key -> "100",
+      SQLConf.STREAMING_NO_DATA_PROGRESS_EVENT_INTERVAL.key -> "10",
       SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.key -> "1",
-      SQLConf.STATE_STORE_PARTITION_METRICS_REPORT_LIMIT.key -> "2"
+      SQLConf.STATE_STORE_PARTITION_METRICS_REPORT_LIMIT.key -> "3"
     ) {
       withTempDir { checkpointDir =>
         val inputData = MemoryStream[String]
@@ -366,37 +354,24 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest
           StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
           AddData(inputData, "a"),
           ProcessAllAvailable(),
-          Execute { _ =>
-            Thread.sleep(500)
-          },
           AddData(inputData, "b"),
           ProcessAllAvailable(),
-          Execute { _ =>
-            Thread.sleep(500)
-          },
-          AddData(inputData, "c"),
-          ProcessAllAvailable(),
-          Execute { _ =>
-            Thread.sleep(500)
-          },
-          AddData(inputData, "d"),
-          ProcessAllAvailable(),
-          CheckNewAnswer("a", "b", "c", "d"),
+          CheckNewAnswer("a", "b"),
           Execute { q =>
             // Partitions getting skipped (id 0 and 1) do not have an uploaded version, leaving
-            // the metric empty.
+            // the metric as -1.
             eventually(timeout(Span(10, Seconds))) {
               assert(
                 q.lastProgress
                   .stateOperators(0)
                   .customMetrics
-                  .containsKey(snapshotLagMetricName(0)) === false
+                  .get(snapshotLagMetricName(0)) === -1
               )
               assert(
                 q.lastProgress
                   .stateOperators(0)
                   .customMetrics
-                  .containsKey(snapshotLagMetricName(1)) === false
+                  .get(snapshotLagMetricName(1)) === -1
               )
               // Make sure only smallest K active metrics are published
               val partitionMetrics = q.lastProgress
@@ -404,13 +379,18 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest
                 .customMetrics
                 .asScala
                 .view
-                .filterKeys(_.startsWith(snapshotLagMetricPrefix))
+                .filterKeys(_.startsWith(SNAPSHOT_LAG_METRIC_PREFIX))
               // Determined by STATE_STORE_PARTITION_METRICS_REPORT_LIMIT for this scenario
               assert(
                 partitionMetrics.size == q.sparkSession.conf
                   .get(SQLConf.STATE_STORE_PARTITION_METRICS_REPORT_LIMIT)
               )
-              assert(partitionMetrics.forall(_._2 >= 0))
+              // Two metrics published are -1, the remainder should all be 1 as they
+              // uploaded properly.
+              assert(
+                partitionMetrics.filter(_._2 == 1).size == q.sparkSession.conf
+                  .get(SQLConf.STATE_STORE_PARTITION_METRICS_REPORT_LIMIT) - 2
+              )
             }
           },
           StopStream

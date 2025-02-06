@@ -322,16 +322,16 @@ case class StateStoreCustomTimingMetric(name: String, desc: String) extends Stat
 }
 
 case class StateStoreCustomPartitionMetric(
-    namePrefix: String,
+    metricPrefix: String,
     descPrefix: String,
     partitionId: Option[Int] = None)
     extends StateStoreCustomMetric {
   override def name: String = {
     partitionId
       .map { id =>
-        s"$namePrefix${StateStoreProvider.PARTITION_METRIC_SUFFIX}$id"
+        s"$metricPrefix${StateStoreProvider.PARTITION_METRIC_SUFFIX}$id"
       }
-      .getOrElse(namePrefix)
+      .getOrElse(metricPrefix)
   }
 
   override def desc: String = {
@@ -541,7 +541,7 @@ trait StateStoreProvider {
    * @note The StateStore objects created by this provider must report the same custom metrics
    * (specifically, same names) through `StateStore.metrics`.
    */
-  def supportedCustomPartitionMetrics: Seq[StateStoreCustomPartitionMetric] = Nil
+  def supportedCustomPartitionMetrics: Seq[StateStoreCustomPartitionMetric] = Seq.empty
 }
 
 object StateStoreProvider {
