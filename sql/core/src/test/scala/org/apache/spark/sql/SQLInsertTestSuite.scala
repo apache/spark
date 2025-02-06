@@ -629,7 +629,7 @@ class FileSourceSQLInsertTestSuite extends SQLInsertTestSuite with SharedSparkSe
 
   def getInsertIntoHadoopFsRelationCommandPartitionMembers(df: DataFrame):
   (Seq[CatalogTablePartition], TablePartitionSpec, Map[String, String], Boolean) = {
-    val commandResults = df.asInstanceOf[org.apache.spark.sql.classic.Dataset].queryExecution
+    val commandResults = df.asInstanceOf[org.apache.spark.sql.classic.Dataset[Row]].queryExecution
       .optimizedPlan.collect {
         case _ @ CommandResult(_, _, commandPhysicalPlan, _) =>
           commandPhysicalPlan match {
@@ -651,6 +651,7 @@ class FileSourceSQLInsertTestSuite extends SQLInsertTestSuite with SharedSparkSe
     (matchingPartitions, staticPartitions, fillStaticPartitions, dynamicPartitionOverwrite)
   }
 
+  
   test("SPARK-48881: test some dynamic partitions can be compensated to " +
     "specific partition values") {
     withTable("A", "B") {
