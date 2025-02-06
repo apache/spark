@@ -217,9 +217,8 @@ class TransformWithStateInPandasStateServerSuite extends SparkFunSuite with Befo
   test("value state get - not exist") {
     val message = ValueStateCall.newBuilder().setStateName(stateName)
       .setGet(Get.newBuilder().build()).build()
-    when(valueState.exists()).thenReturn(false)
     stateServer.handleValueStateRequest(message)
-    verify(valueState, times(0)).get()
+    verify(valueState).get()
     // We don't throw exception when value doesn't exist.
     verify(outputStream).writeInt(0)
   }
