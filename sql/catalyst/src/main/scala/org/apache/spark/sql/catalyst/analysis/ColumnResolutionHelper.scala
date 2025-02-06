@@ -303,7 +303,7 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
           varDef)
       }
       .orElse(
-        Option.when(maybeTempVariableName(nameParts)) {
+        if (maybeTempVariableName(nameParts)) {
           catalogManager.tempVariableManager
             .get(namePartsCaseAdjusted)
             .map { varDef =>
@@ -311,9 +311,11 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
                 nameParts,
                 FakeSystemCatalog,
                 Identifier.of(Array(CatalogManager.SESSION_NAMESPACE), namePartsCaseAdjusted.last),
-                varDef)
-            }
-        }.flatten
+                varDef
+              )}
+        } else {
+          None
+        }
       )
   }
 

@@ -1842,6 +1842,22 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
     verifySqlScriptResult(sqlScript, expected)
   }
 
+  test("local variable - execute immediate create qualified session var") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  EXECUTE IMMEDIATE 'DECLARE system.session.sessionVar = 5';
+        |  SELECT system.session.sessionVar;
+        |  SELECT sessionVar;
+        |END
+        |""".stripMargin
+    val expected = Seq(
+      Seq(Row(5)), // select system.session.sessionVar
+      Seq(Row(5)) // select sessionVar
+    )
+    verifySqlScriptResult(sqlScript, expected)
+  }
+
   test("local variable - execute immediate set session var") {
     withSessionVariable("testVar") {
       spark.sql("DECLARE testVar = 0")

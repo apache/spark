@@ -40,7 +40,8 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
     case c @ CreateVariable(UnresolvedIdentifier(nameParts, _), _, _, _) =>
       // From scripts we can only create local variables, which must be unqualified,
       // and must not be DECLARE OR REPLACE.
-      if (SqlScriptingLocalVariableManager.get().isDefined) {
+      if (SqlScriptingLocalVariableManager.get().isDefined &&
+        !AnalysisContext.get.isExecuteImmediate) {
         // TODO [SPARK-50785]: Uncomment this when For Statement starts properly using local vars.
 //        if (c.replace) {
 //          throw new AnalysisException(
@@ -96,6 +97,7 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
 
   private def resolveCreateVariableName(nameParts: Seq[String]): ResolvedIdentifier = {
     val ident = SqlScriptingLocalVariableManager.get()
+      .filterNot(AnalysisContext.get.isExecuteImmediate)
       .getOrElse(catalogManager.tempVariableManager)
       .createIdentifier(nameParts.last)
 
