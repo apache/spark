@@ -647,7 +647,7 @@ UDF, UDTF and UDT
 
 
 ======================
-Table Valued Functions
+Table-Valued Functions
 ======================
 .. currentmodule:: pyspark.sql.tvf
 
