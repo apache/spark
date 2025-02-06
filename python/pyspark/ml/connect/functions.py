@@ -31,3 +31,43 @@ def array_to_vector(col: Column) -> Column:
 
 
 array_to_vector.__doc__ = PyMLFunctions.array_to_vector.__doc__
+
+
+# predict_batch_udf is compatible with Spark Connect,
+# add it here to reuse the doctest.
+def _predict_batch_udf(model, input_col, output_col, *args, **kwargs) -> Column:
+    raise NotImplementedError()
+
+
+_predict_batch_udf.__doc__ = PyMLFunctions.predict_batch_udf.__doc__
+
+
+def _test() -> None:
+    import os
+    import sys
+    import doctest
+    from pyspark.sql import SparkSession as PySparkSession
+    import pyspark.ml.connect.functions
+
+    globs = pyspark.ml.connect.functions.__dict__.copy()
+
+    globs["spark"] = (
+        PySparkSession.builder.appName("ml.connect.functions tests")
+        .remote(os.environ.get("SPARK_CONNECT_TESTING_REMOTE", "local[4]"))
+        .getOrCreate()
+    )
+
+    (failure_count, test_count) = doctest.testmod(
+        pyspark.ml.connect.functions,
+        globs=globs,
+        optionflags=doctest.ELLIPSIS
+        | doctest.NORMALIZE_WHITESPACE
+        | doctest.IGNORE_EXCEPTION_DETAIL,
+    )
+    globs["spark"].stop()
+    if failure_count:
+        sys.exit(-1)
+
+
+if __name__ == "__main__":
+    _test()
