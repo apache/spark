@@ -650,7 +650,7 @@ class FileSourceSQLInsertTestSuite extends SQLInsertTestSuite with SharedSparkSe
     val dynamicPartitionOverwrite = insertIntoHadoopFsRelationCommand.dynamicPartitionOverwrite
     (matchingPartitions, staticPartitions, fillStaticPartitions, dynamicPartitionOverwrite)
   }
-  
+
   test("SPARK-48881: test some dynamic partitions can be compensated to " +
     "specific partition values") {
     withTable("A", "B") {
