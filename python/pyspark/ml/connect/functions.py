@@ -14,6 +14,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+
+from typing import Any
 from pyspark.ml import functions as PyMLFunctions
 from pyspark.sql.column import Column
 from pyspark.sql.connect.functions.builtin import _invoke_function, _to_col, lit
@@ -33,13 +35,11 @@ def array_to_vector(col: Column) -> Column:
 array_to_vector.__doc__ = PyMLFunctions.array_to_vector.__doc__
 
 
-# predict_batch_udf is compatible with Spark Connect,
-# add it here to reuse the doctest.
-def _predict_batch_udf() -> Column:
-    raise NotImplementedError()
+def predict_batch_udf(*args: Any, **kwargs: Any) -> Column:
+    raise PyMLFunctions.predict_batch_udf(*args, **kwargs)
 
 
-_predict_batch_udf.__doc__ = PyMLFunctions.predict_batch_udf.__doc__
+predict_batch_udf.__doc__ = PyMLFunctions.predict_batch_udf.__doc__
 
 
 def _test() -> None:
@@ -48,6 +48,21 @@ def _test() -> None:
     import doctest
     from pyspark.sql import SparkSession as PySparkSession
     import pyspark.ml.connect.functions
+
+    from pyspark.sql.pandas.utils import (
+        require_minimum_pandas_version,
+        require_minimum_pyarrow_version,
+    )
+
+    try:
+        require_minimum_pandas_version()
+        require_minimum_pyarrow_version()
+    except Exception as e:
+        print(
+            f"Skipping pyspark.ml.functions doctests: {e}",
+            file=sys.stderr,
+        )
+        sys.exit(0)
 
     globs = pyspark.ml.connect.functions.__dict__.copy()
 
