@@ -1127,6 +1127,7 @@ pyspark_ml_connect = Module(
         "pyspark.ml.tests.connect.test_parity_clustering",
         "pyspark.ml.tests.connect.test_parity_evaluation",
         "pyspark.ml.tests.connect.test_parity_feature",
+        "pyspark.ml.tests.connect.test_parity_functions",
         "pyspark.ml.tests.connect.test_parity_pipeline",
         "pyspark.ml.tests.connect.test_parity_tuning",
         "pyspark.ml.tests.connect.test_parity_ovr",
