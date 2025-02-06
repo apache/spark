@@ -150,6 +150,12 @@ DataFrame
     DataFrameStatFunctions.crosstab
     DataFrameStatFunctions.freqItems
     DataFrameStatFunctions.sampleBy
+
+.. currentmodule:: pyspark.sql.table_arg
+
+.. autosummary::
+    :toctree: api/
+
     TableArg.partitionBy
     TableArg.orderBy
     TableArg.withSinglePartition
