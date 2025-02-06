@@ -5375,11 +5375,6 @@
           "Resilient Distributed Datasets (RDDs)."
         ]
       },
-      "REGISTER_UDAF" : {
-        "message" : [
-          "Registering User Defined Aggregate Functions (UDAFs)."
-        ]
-      },
       "SESSION_BASE_RELATION_TO_DATAFRAME" : {
         "message" : [
           "Invoking SparkSession 'baseRelationToDataFrame'. This is server side developer API"
