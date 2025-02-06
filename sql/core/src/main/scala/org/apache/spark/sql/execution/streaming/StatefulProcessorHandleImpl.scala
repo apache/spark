@@ -365,13 +365,13 @@ class DriverStatefulProcessorHandleImpl(timeMode: TimeMode, keyExprEnc: Expressi
 
   /**
    * This method returns all column family schemas, and checks and enforces nullability
-   * if need be.
+   * if need be. The nullability check and set is only set to true when Avro is enabled.
    * @param shouldCheckNullable Whether we need to check the nullability. This is set to
    *                            true when using Python, as this is the only avenue through
    *                            which users can set nullability
    * @param shouldSetNullable Whether we need to set the fields as nullable. This is set to
-   *                          true when using Scala, as case classes are set to non-nullable
-   *                          by default.
+   *                          true when using Scala, as case classes are set to
+   *                          non-nullable by default.
    * @return column family schemas used by this stateful processor.
    */
   def getColumnFamilySchemas(
