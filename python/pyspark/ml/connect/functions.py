@@ -36,7 +36,7 @@ array_to_vector.__doc__ = PyMLFunctions.array_to_vector.__doc__
 
 
 def predict_batch_udf(*args: Any, **kwargs: Any) -> Column:
-    raise PyMLFunctions.predict_batch_udf(*args, **kwargs)
+    return PyMLFunctions.predict_batch_udf(*args, **kwargs)
 
 
 predict_batch_udf.__doc__ = PyMLFunctions.predict_batch_udf.__doc__
