@@ -224,20 +224,19 @@
                 script.type = 'text/javascript';
                 script.async = true;
                 script.onload = function(){
-                    window.MathJax = {
-                        tex: {
-                            inlineMath: [['$', '$'], ['\\(', '\\)']],
-                            displayMath: [['$$', '$$'], ['\\[', '\\]']],
+                    MathJax.Hub.Config({
+                        tex2jax: {
+                            inlineMath: [ ["$", "$"], ["\\\\(","\\\\)"] ],
+                            displayMath: [ ["$$","$$"], ["\\[", "\\]"] ],
                             processEscapes: true,
                             skipTags: ['script', 'noscript', 'style', 'textarea', 'pre']
                         }
-                    };
+                    });
                 };
                 script.src = ('https:' == document.location.protocol ? 'https://' : 'http://') +
-                    'cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js' +
+                    'cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js' +
                     '?config=TeX-AMS-MML_HTMLorMML';
                 d.getElementsByTagName('head')[0].appendChild(script);
             }(document));
-        </script>
     </body>
 </html>
