@@ -61,6 +61,9 @@ JR = TypeVar("JR", bound="JavaMLReader")
 FuncT = TypeVar("FuncT", bound=Callable[..., Any])
 
 
+ML_CONNECT_HELPER_ID = "______ML_CONNECT_HELPER______"
+
+
 def try_remote_intermediate_result(f: FuncT) -> FuncT:
     """Mark the function/property that returns the intermediate result of the remote call.
     Eg, model.summary"""
@@ -75,6 +78,37 @@ def try_remote_intermediate_result(f: FuncT) -> FuncT:
     return cast(FuncT, wrapped)
 
 
+def invoke_helper_relation(method: str, *args: Any) -> "ConnectDataFrame":
+    from pyspark.ml.wrapper import JavaWrapper
+
+    helper = JavaWrapper(java_obj=ML_CONNECT_HELPER_ID)
+    return invoke_remote_attribute_relation(helper, method, *args)
+
+
+def invoke_remote_attribute_relation(
+    instance: "JavaWrapper", method: str, *args: Any
+) -> "ConnectDataFrame":
+    import pyspark.sql.connect.proto as pb2
+    from pyspark.ml.connect.util import _extract_id_methods
+    from pyspark.ml.connect.serialize import serialize
+
+    # The attribute returns a dataframe, we need to wrap it
+    # in the AttributeRelation
+    from pyspark.ml.connect.proto import AttributeRelation
+    from pyspark.sql.connect.session import SparkSession
+    from pyspark.sql.connect.dataframe import DataFrame as ConnectDataFrame
+
+    session = SparkSession.getActiveSession()
+    assert session is not None
+
+    assert isinstance(instance._java_obj, str)
+
+    methods, obj_ref = _extract_id_methods(instance._java_obj)
+    methods.append(pb2.Fetch.Method(method=method, args=serialize(session.client, *args)))
+    plan = AttributeRelation(obj_ref, methods)
+    return ConnectDataFrame(plan, session)
+
+
 def try_remote_attribute_relation(f: FuncT) -> FuncT:
     """Mark the function/property that returns a Relation.
     Eg, model.summary.roc"""
@@ -82,27 +116,7 @@ def try_remote_attribute_relation(f: FuncT) -> FuncT:
     @functools.wraps(f)
     def wrapped(self: "JavaWrapper", *args: Any, **kwargs: Any) -> Any:
         if is_remote() and "PYSPARK_NO_NAMESPACE_SHARE" not in os.environ:
-            import pyspark.sql.connect.proto as pb2
-            from pyspark.ml.connect.util import _extract_id_methods
-            from pyspark.ml.connect.serialize import serialize
-
-            # The attribute returns a dataframe, we need to wrap it
-            # in the AttributeRelation
-            from pyspark.ml.connect.proto import AttributeRelation
-            from pyspark.sql.connect.session import SparkSession
-            from pyspark.sql.connect.dataframe import DataFrame as ConnectDataFrame
-
-            session = SparkSession.getActiveSession()
-            assert session is not None
-
-            assert isinstance(self._java_obj, str)
-
-            methods, obj_ref = _extract_id_methods(self._java_obj)
-            methods.append(
-                pb2.Fetch.Method(method=f.__name__, args=serialize(session.client, *args))
-            )
-            plan = AttributeRelation(obj_ref, methods)
-            return ConnectDataFrame(plan, session)
+            return invoke_remote_attribute_relation(self, f.__name__, *args)
         else:
             return f(self, *args, **kwargs)
 
@@ -136,7 +150,8 @@ def try_remote_fit(f: FuncT) -> FuncT:
             model_info = deserialize(properties)
             client.add_ml_cache(model_info.obj_ref.id)
             model = self._create_model(model_info.obj_ref.id)
-            model._resetUid(self.uid)
+            if model.__class__.__name__ not in ["Bucketizer"]:
+                model._resetUid(self.uid)
             return self._copyValues(model)
         else:
             return f(self, dataset)
@@ -156,12 +171,13 @@ def try_remote_transform_relation(f: FuncT) -> FuncT:
 
             session = dataset.sparkSession
             assert session is not None
+
             # Model is also a Transformer, so we much match Model first
             if isinstance(self, Model):
-                params = serialize_ml_params(self, session.client)
                 from pyspark.ml.connect.proto import TransformerRelation
 
                 assert isinstance(self._java_obj, str)
+                params = serialize_ml_params(self, session.client)
                 return ConnectDataFrame(
                     TransformerRelation(
                         child=dataset._plan, name=self._java_obj, ml_params=params, is_model=True
@@ -169,10 +185,10 @@ def try_remote_transform_relation(f: FuncT) -> FuncT:
                     session,
                 )
             elif isinstance(self, Transformer):
-                params = serialize_ml_params(self, session.client)
                 from pyspark.ml.connect.proto import TransformerRelation
 
                 assert isinstance(self._java_obj, str)
+                params = serialize_ml_params(self, session.client)
                 return ConnectDataFrame(
                     TransformerRelation(
                         child=dataset._plan,
@@ -219,6 +235,12 @@ def try_remote_call(f: FuncT) -> FuncT:
                 summary = ml_command_result.summary
                 session.client.add_ml_cache(summary)
                 return summary
+            elif ml_command_result.HasField("operator_info"):
+                model_info = deserialize(properties)
+                session._client.add_ml_cache(model_info.obj_ref.id)
+                # get a new model ref id from the existing model,
+                # it is up to the caller to build the model
+                return model_info.obj_ref.id
             else:
                 return deserialize(properties)
         else:

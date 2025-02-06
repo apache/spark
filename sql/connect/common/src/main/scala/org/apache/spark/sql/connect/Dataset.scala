@@ -36,6 +36,7 @@ import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders._
 import org.apache.spark.sql.catalyst.expressions.OrderUtils
+import org.apache.spark.sql.connect.ColumnNodeToProtoConverter.{toExpr, toLiteral, toTypedExpr}
 import org.apache.spark.sql.connect.ConnectConversions._
 import org.apache.spark.sql.connect.client.SparkResult
 import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, StorageLevelProtoConverter}
@@ -140,7 +141,6 @@ class Dataset[T] private[sql] (
     @DeveloperApi val plan: proto.Plan,
     val encoder: Encoder[T])
     extends sql.Dataset[T] {
-  import sparkSession.RichColumn
 
   // Make sure we don't forget to set plan id.
   assert(plan.getRoot.getCommon.hasPlanId)
@@ -336,7 +336,7 @@ class Dataset[T] private[sql] (
     buildJoin(right, Seq(joinExprs)) { builder =>
       builder
         .setJoinType(toJoinType(joinType))
-        .setJoinCondition(joinExprs.expr)
+        .setJoinCondition(toExpr(joinExprs))
     }
   }
 
@@ -375,7 +375,7 @@ class Dataset[T] private[sql] (
         .setLeft(plan.getRoot)
         .setRight(other.plan.getRoot)
         .setJoinType(joinTypeValue)
-        .setJoinCondition(condition.expr)
+        .setJoinCondition(toExpr(condition))
         .setJoinDataType(joinBuilder.getJoinDataTypeBuilder
           .setIsLeftStruct(this.agnosticEncoder.isStruct)
           .setIsRightStruct(other.agnosticEncoder.isStruct))
@@ -396,7 +396,7 @@ class Dataset[T] private[sql] (
     sparkSession.newDataFrame(joinExprs.toSeq) { builder =>
       val lateralJoinBuilder = builder.getLateralJoinBuilder
       lateralJoinBuilder.setLeft(plan.getRoot).setRight(right.plan.getRoot)
-      joinExprs.foreach(c => lateralJoinBuilder.setJoinCondition(c.expr))
+      joinExprs.foreach(c => lateralJoinBuilder.setJoinCondition(toExpr(c)))
       lateralJoinBuilder.setJoinType(joinTypeValue)
     }
   }
@@ -440,7 +440,7 @@ class Dataset[T] private[sql] (
       builder.getHintBuilder
         .setInput(plan.getRoot)
         .setName(name)
-        .addAllParameters(parameters.map(p => functions.lit(p).expr).asJava)
+        .addAllParameters(parameters.map(p => toLiteral(p)).asJava)
     }
 
   private def getPlanId: Option[Long] =
@@ -486,7 +486,7 @@ class Dataset[T] private[sql] (
     sparkSession.newDataset(encoder) { builder =>
       builder.getProjectBuilder
         .setInput(plan.getRoot)
-        .addExpressions(col.typedExpr(this.encoder))
+        .addExpressions(toTypedExpr(col, this.encoder))
     }
   }
 
@@ -504,14 +504,14 @@ class Dataset[T] private[sql] (
     sparkSession.newDataset(encoder, cols) { builder =>
       builder.getProjectBuilder
         .setInput(plan.getRoot)
-        .addAllExpressions(cols.map(_.typedExpr(this.encoder)).asJava)
+        .addAllExpressions(cols.map(c => toTypedExpr(c, this.encoder)).asJava)
     }
   }
 
   /** @inheritdoc */
   def filter(condition: Column): Dataset[T] = {
     sparkSession.newDataset(agnosticEncoder, Seq(condition)) { builder =>
-      builder.getFilterBuilder.setInput(plan.getRoot).setCondition(condition.expr)
+      builder.getFilterBuilder.setInput(plan.getRoot).setCondition(toExpr(condition))
     }
   }
 
@@ -523,12 +523,12 @@ class Dataset[T] private[sql] (
     sparkSession.newDataFrame(ids.toSeq ++ valuesOption.toSeq.flatten) { builder =>
       val unpivot = builder.getUnpivotBuilder
         .setInput(plan.getRoot)
-        .addAllIds(ids.toImmutableArraySeq.map(_.expr).asJava)
+        .addAllIds(ids.toImmutableArraySeq.map(toExpr).asJava)
         .setVariableColumnName(variableColumnName)
         .setValueColumnName(valueColumnName)
       valuesOption.foreach { values =>
         unpivot.getValuesBuilder
-          .addAllValues(values.toImmutableArraySeq.map(_.expr).asJava)
+          .addAllValues(values.toImmutableArraySeq.map(toExpr).asJava)
       }
     }
   }
@@ -537,7 +537,7 @@ class Dataset[T] private[sql] (
     sparkSession.newDataFrame(indices) { builder =>
       val transpose = builder.getTransposeBuilder.setInput(plan.getRoot)
       indices.foreach { indexColumn =>
-        transpose.addIndexColumns(indexColumn.expr)
+        transpose.addIndexColumns(toExpr(indexColumn))
       }
     }
 
@@ -553,7 +553,7 @@ class Dataset[T] private[sql] (
       function = func,
       inputEncoders = agnosticEncoder :: agnosticEncoder :: Nil,
       outputEncoder = agnosticEncoder)
-    val reduceExpr = Column.fn("reduce", udf.apply(col("*"), col("*"))).expr
+    val reduceExpr = toExpr(Column.fn("reduce", udf.apply(col("*"), col("*"))))
 
     val result = sparkSession
       .newDataset(agnosticEncoder) { builder =>
@@ -590,7 +590,7 @@ class Dataset[T] private[sql] (
     val groupingSetMsgs = groupingSets.map { groupingSet =>
       val groupingSetMsg = proto.Aggregate.GroupingSets.newBuilder()
       for (groupCol <- groupingSet) {
-        groupingSetMsg.addGroupingSet(groupCol.expr)
+        groupingSetMsg.addGroupingSet(toExpr(groupCol))
       }
       groupingSetMsg.build()
     }
@@ -779,7 +779,7 @@ class Dataset[T] private[sql] (
       s"The size of column names: ${names.size} isn't equal to " +
         s"the size of columns: ${values.size}")
     val aliases = values.zip(names).map { case (value, name) =>
-      value.name(name).expr.getAlias
+      toExpr(value.name(name)).getAlias
     }
     sparkSession.newDataFrame(values) { builder =>
       builder.getWithColumnsBuilder
@@ -812,7 +812,7 @@ class Dataset[T] private[sql] (
   def withMetadata(columnName: String, metadata: Metadata): DataFrame = {
     val newAlias = proto.Expression.Alias
       .newBuilder()
-      .setExpr(col(columnName).expr)
+      .setExpr(toExpr(col(columnName)))
       .addName(columnName)
       .setMetadata(metadata.json)
     sparkSession.newDataFrame { builder =>
@@ -845,7 +845,7 @@ class Dataset[T] private[sql] (
     sparkSession.newDataFrame(cols) { builder =>
       builder.getDropBuilder
         .setInput(plan.getRoot)
-        .addAllColumns(cols.map(_.expr).asJava)
+        .addAllColumns(cols.map(toExpr).asJava)
     }
   }
 
@@ -915,7 +915,7 @@ class Dataset[T] private[sql] (
     sparkSession.newDataset[T](agnosticEncoder) { builder =>
       builder.getFilterBuilder
         .setInput(plan.getRoot)
-        .setCondition(udf.apply(col("*")).expr)
+        .setCondition(toExpr(udf.apply(col("*"))))
     }
   }
 
@@ -944,7 +944,7 @@ class Dataset[T] private[sql] (
     sparkSession.newDataset(outputEncoder) { builder =>
       builder.getMapPartitionsBuilder
         .setInput(plan.getRoot)
-        .setFunc(udf.apply(col("*")).expr.getCommonInlineUserDefinedFunction)
+        .setFunc(toExpr(udf.apply(col("*"))).getCommonInlineUserDefinedFunction)
     }
   }
 
@@ -1020,7 +1020,7 @@ class Dataset[T] private[sql] (
     sparkSession.newDataset(agnosticEncoder, partitionExprs) { builder =>
       val repartitionBuilder = builder.getRepartitionByExpressionBuilder
         .setInput(plan.getRoot)
-        .addAllPartitionExprs(partitionExprs.map(_.expr).asJava)
+        .addAllPartitionExprs(partitionExprs.map(toExpr).asJava)
       numPartitions.foreach(repartitionBuilder.setNumPartitions)
     }
   }
@@ -1036,7 +1036,7 @@ class Dataset[T] private[sql] (
     // The underlying `LogicalPlan` operator special-cases all-`SortOrder` arguments.
     // However, we don't want to complicate the semantics of this API method.
     // Instead, let's give users a friendly error message, pointing them to the new method.
-    val sortOrders = partitionExprs.filter(_.expr.hasSortOrder)
+    val sortOrders = partitionExprs.filter(e => toExpr(e).hasSortOrder)
     if (sortOrders.nonEmpty) {
       throw new IllegalArgumentException(
         s"Invalid partitionExprs specified: $sortOrders\n" +
@@ -1050,7 +1050,7 @@ class Dataset[T] private[sql] (
       partitionExprs: Seq[Column]): Dataset[T] = {
     require(partitionExprs.nonEmpty, "At least one partition-by expression must be specified.")
     val sortExprs = partitionExprs.map {
-      case e if e.expr.hasSortOrder => e
+      case e if toExpr(e).hasSortOrder => e
       case e => e.asc
     }
     buildRepartitionByExpression(numPartitions, sortExprs)
@@ -1158,7 +1158,7 @@ class Dataset[T] private[sql] (
       builder.getCollectMetricsBuilder
         .setInput(plan.getRoot)
         .setName(name)
-        .addAllMetrics((expr +: exprs).map(_.expr).asJava)
+        .addAllMetrics((expr +: exprs).map(toExpr).asJava)
     }
   }
 

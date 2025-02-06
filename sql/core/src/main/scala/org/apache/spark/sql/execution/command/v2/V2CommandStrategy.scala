@@ -17,10 +17,10 @@
 
 package org.apache.spark.sql.execution.command.v2
 
-import org.apache.spark.sql.Strategy
 import org.apache.spark.sql.catalyst.analysis.ResolvedIdentifier
 import org.apache.spark.sql.catalyst.expressions.VariableReference
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.classic.Strategy
 import org.apache.spark.sql.execution.SparkPlan
 
 object V2CommandStrategy extends Strategy {

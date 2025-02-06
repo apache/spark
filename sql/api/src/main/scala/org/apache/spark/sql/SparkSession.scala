@@ -1065,7 +1065,7 @@ private[sql] abstract class SparkSessionCompanion {
 /**
  * This object keeps track of the global (default) and the thread-local SparkSession.
  */
-object SparkSessionCompanion {
+private[sql] object SparkSessionCompanion {
 
   /** The active SparkSession for the current thread. */
   private val activeThreadSession = new InheritableThreadLocal[SparkSession]
@@ -1078,7 +1078,7 @@ object SparkSessionCompanion {
  * Builder for [[SparkSession]].
  */
 @Stable
-abstract class SparkSessionBuilder {
+private[sql] abstract class SparkSessionBuilder {
   import SparkSessionBuilder._
   protected val options = new scala.collection.mutable.HashMap[String, String]
 
@@ -1248,7 +1248,7 @@ abstract class SparkSessionBuilder {
   def create(): SparkSession
 }
 
-object SparkSessionBuilder {
+private[sql] object SparkSessionBuilder {
   val MASTER_KEY = "spark.master"
   val APP_NAME_KEY = "spark.app.name"
   val CATALOG_IMPL_KEY = "spark.sql.catalogImplementation"

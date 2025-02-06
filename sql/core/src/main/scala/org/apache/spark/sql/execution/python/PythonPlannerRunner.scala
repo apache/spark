@@ -52,6 +52,7 @@ abstract class PythonPlannerRunner[T](func: PythonFunction) {
     val reuseWorker = env.conf.get(PYTHON_WORKER_REUSE)
     val localdir = env.blockManager.diskBlockManager.localDirs.map(f => f.getPath()).mkString(",")
     val faultHandlerEnabled: Boolean = SQLConf.get.pythonUDFWorkerFaulthandlerEnabled
+    val hideTraceback: Boolean = SQLConf.get.pysparkHideTraceback
     val simplifiedTraceback: Boolean = SQLConf.get.pysparkSimplifiedTraceback
     val workerMemoryMb = SQLConf.get.pythonPlannerExecMemory
 
@@ -67,6 +68,9 @@ abstract class PythonPlannerRunner[T](func: PythonFunction) {
     envVars.put("SPARK_LOCAL_DIRS", localdir)
     if (reuseWorker) {
       envVars.put("SPARK_REUSE_WORKER", "1")
+    }
+    if (hideTraceback) {
+      envVars.put("SPARK_HIDE_TRACEBACK", "1")
     }
     if (simplifiedTraceback) {
       envVars.put("SPARK_SIMPLIFIED_TRACEBACK", "1")

@@ -980,6 +980,12 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       messageParameters = Map("content" -> content))
   }
 
+  def hintUnsupportedForJdbcDialectError(jdbcDialect: String): SparkIllegalArgumentException = {
+    new SparkIllegalArgumentException(
+      errorClass = "HINT_UNSUPPORTED_FOR_JDBC_DIALECT",
+      messageParameters = Map("jdbcDialect" -> jdbcDialect))
+  }
+
   def unsupportedArrayElementTypeBasedOnBinaryError(dt: DataType): SparkIllegalArgumentException = {
     new SparkIllegalArgumentException(
       errorClass = "_LEGACY_ERROR_TEMP_2084",

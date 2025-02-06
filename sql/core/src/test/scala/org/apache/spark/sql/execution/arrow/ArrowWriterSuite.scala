@@ -158,7 +158,8 @@ class ArrowWriterSuite extends SparkFunSuite {
         schema: StructType,
         timeZoneId: String): (ArrowWriter, Int) = {
       val arrowSchema =
-        ArrowUtils.toArrowSchema(schema, timeZoneId, errorOnDuplicatedFieldNames = true)
+        ArrowUtils.toArrowSchema(
+          schema, timeZoneId, errorOnDuplicatedFieldNames = true, largeVarTypes = false)
       val root = VectorSchemaRoot.create(arrowSchema, ArrowUtils.rootAllocator)
       val vector = root.getFieldVectors.get(0)
       vector.allocateNew()

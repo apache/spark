@@ -384,6 +384,8 @@ message CommonInlineUserDefinedFunction {
     ScalarScalaUDF scalar_scala_udf = 5;
     JavaUDF java_udf = 6;
   }
+  // (Required) Indicate if this function should be applied on distinct values.
+  bool is_distinct = 7;
 }
 
 message PythonUDF {
@@ -478,15 +480,31 @@ message LazyExpression {
 }
 
 message SubqueryExpression {
-  // (Required) The id of corresponding connect plan.
+  // (Required) The ID of the corresponding connect plan.
   int64 plan_id = 1;
 
   // (Required) The type of the subquery.
   SubqueryType subquery_type = 2;
 
+  // (Optional) Options specific to table arguments.
+  optional TableArgOptions table_arg_options = 3;
+
   enum SubqueryType {
     SUBQUERY_TYPE_UNKNOWN = 0;
     SUBQUERY_TYPE_SCALAR = 1;
     SUBQUERY_TYPE_EXISTS = 2;
+    SUBQUERY_TYPE_TABLE_ARG = 3;
+  }
+
+  // Nested message for table argument options.
+  message TableArgOptions {
+    // (Optional) The way that input rows are partitioned.
+    repeated Expression partition_spec = 1;
+
+    // (Optional) Ordering of rows in a partition.
+    repeated Expression.SortOrder order_spec = 2;
+
+    // (Optional) Whether this is a single partition.
+    optional bool with_single_partition = 3;
   }
 }

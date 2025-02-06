@@ -26,12 +26,3 @@ import java.util.Locale
 private class IdentifierMap[V] extends KeyTransformingMap[String, V] {
   override def mapKey(key: String): String = key.toLowerCase(Locale.ROOT)
 }
-
-/**
- * The [[OptionalIdentifierMap]] is an implementation of a [[KeyTransformingMap]] that uses optional
- * SQL/DataFrame identifiers as keys. The implementation is case-insensitive for non-empty keys.
- */
-private class OptionalIdentifierMap[V] extends KeyTransformingMap[Option[String], V] {
-  override def mapKey(key: Option[String]): Option[String] =
-    key.map(_.toLowerCase(Locale.ROOT))
-}

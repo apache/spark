@@ -29,11 +29,13 @@ import org.apache.avro.Schema.Type._
 import org.apache.avro.generic.GenericData.{EnumSymbol, Fixed, Record}
 import org.apache.avro.util.Utf8
 
+import org.apache.spark.SparkRuntimeException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.avro.AvroUtils.{nonNullUnionBranches, toFieldStr, AvroMatchedField}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{SpecializedGetters, SpecificInternalRow}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.errors.DataTypeErrors.toSQLId
 import org.apache.spark.sql.execution.datasources.DataSourceUtils
 import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
 import org.apache.spark.sql.types._
@@ -282,11 +284,20 @@ private[sql] class AvroSerializer(
     }.toArray.unzip
 
     val numFields = catalystStruct.length
+    val avroFields = avroStruct.getFields()
+    val isSchemaNullable = avroFields.asScala.map(_.schema().isNullable)
     row: InternalRow =>
       val result = new Record(avroStruct)
       var i = 0
       while (i < numFields) {
         if (row.isNullAt(i)) {
+          if (!isSchemaNullable(i)) {
+            throw new SparkRuntimeException(
+              errorClass = "AVRO_CANNOT_WRITE_NULL_FIELD",
+              messageParameters = Map(
+                "name" -> toSQLId(avroFields.get(i).name),
+                "dataType" -> avroFields.get(i).schema().toString))
+          }
           result.put(avroIndices(i), null)
         } else {
           result.put(avroIndices(i), fieldConverters(i).apply(row, i))

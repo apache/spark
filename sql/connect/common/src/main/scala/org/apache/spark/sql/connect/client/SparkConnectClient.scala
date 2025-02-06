@@ -620,8 +620,19 @@ object SparkConnectClient {
      * Configure the builder using the env SPARK_REMOTE environment variable.
      */
     def loadFromEnvironment(): Builder = {
+      lazy val isAPIModeConnect =
+        Option(System.getProperty(org.apache.spark.sql.SparkSessionBuilder.API_MODE_KEY))
+          .getOrElse("classic")
+          .toLowerCase(Locale.ROOT) == "connect"
       Option(System.getProperty("spark.remote")) // Set from Spark Submit
         .orElse(sys.env.get(SparkConnectClient.SPARK_REMOTE))
+        .orElse {
+          if (isAPIModeConnect) {
+            Option(System.getProperty("spark.master")).orElse(sys.env.get("MASTER"))
+          } else {
+            None
+          }
+        }
         .foreach(connectionString)
       this
     }

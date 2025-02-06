@@ -124,10 +124,9 @@ private[sql] object DataTypeErrors extends DataTypeErrorsBase {
 
   def negativeScaleNotAllowedError(scale: Int): Throwable = {
     val sqlConf = QuotingUtils.toSQLConf("spark.sql.legacy.allowNegativeScaleOfDecimal")
-    SparkException.internalError(
-      s"Negative scale is not allowed: ${scale.toString}." +
-        s" Set the config ${sqlConf}" +
-        " to \"true\" to allow it.")
+    new AnalysisException(
+      errorClass = "NEGATIVE_SCALE_DISALLOWED",
+      messageParameters = Map("scale" -> toSQLValue(scale), "sqlConf" -> sqlConf))
   }
 
   def attributeNameSyntaxError(name: String): Throwable = {

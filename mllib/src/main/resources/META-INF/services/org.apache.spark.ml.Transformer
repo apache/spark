@@ -26,13 +26,17 @@ org.apache.spark.ml.feature.Interaction
 org.apache.spark.ml.feature.Binarizer
 org.apache.spark.ml.feature.Bucketizer
 org.apache.spark.ml.feature.VectorAssembler
+org.apache.spark.ml.feature.VectorSlicer
+org.apache.spark.ml.feature.VectorSizeHint
 org.apache.spark.ml.feature.Tokenizer
 org.apache.spark.ml.feature.RegexTokenizer
 org.apache.spark.ml.feature.SQLTransformer
 org.apache.spark.ml.feature.StopWordsRemover
 org.apache.spark.ml.feature.FeatureHasher
+org.apache.spark.ml.feature.ElementwiseProduct
 org.apache.spark.ml.feature.HashingTF
 org.apache.spark.ml.feature.IndexToString
+org.apache.spark.ml.feature.PolynomialExpansion
 
 ########### Model for loading
 # classification
@@ -69,6 +73,7 @@ org.apache.spark.ml.recommendation.ALSModel
 org.apache.spark.ml.fpm.FPGrowthModel
 
 # feature
+org.apache.spark.ml.feature.RFormulaModel
 org.apache.spark.ml.feature.ImputerModel
 org.apache.spark.ml.feature.StandardScalerModel
 org.apache.spark.ml.feature.MaxAbsScalerModel
@@ -78,6 +83,7 @@ org.apache.spark.ml.feature.ChiSqSelectorModel
 org.apache.spark.ml.feature.UnivariateFeatureSelectorModel
 org.apache.spark.ml.feature.VarianceThresholdSelectorModel
 org.apache.spark.ml.feature.StringIndexerModel
+org.apache.spark.ml.feature.VectorIndexerModel
 org.apache.spark.ml.feature.PCAModel
 org.apache.spark.ml.feature.IDFModel
 org.apache.spark.ml.feature.Word2VecModel

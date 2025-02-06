@@ -47,7 +47,7 @@ import org.apache.spark.sql.{Column, Encoders, ForeachWriter, Observation, Row}
 import org.apache.spark.sql.catalyst.{expressions, AliasIdentifier, FunctionIdentifier, QueryPlanningTracker}
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, GlobalTempView, LazyExpression, LocalTempView, MultiAlias, NameParameterizedQuery, PosParameterizedQuery, UnresolvedAlias, UnresolvedAttribute, UnresolvedDataFrameStar, UnresolvedDeserializer, UnresolvedExtractValue, UnresolvedFunction, UnresolvedPlanId, UnresolvedRegex, UnresolvedRelation, UnresolvedStar, UnresolvedStarWithColumns, UnresolvedStarWithColumnsRenames, UnresolvedSubqueryColumnAliases, UnresolvedTableValuedFunction, UnresolvedTranspose}
 import org.apache.spark.sql.catalyst.encoders.{encoderFor, AgnosticEncoder, ExpressionEncoder, RowEncoder}
-import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.UnboundRowEncoder
+import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{ProductEncoder, RowEncoder => AgnosticRowEncoder, StringEncoder, UnboundRowEncoder}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.parser.{ParseException, ParserUtils}
@@ -60,6 +60,7 @@ import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CharVarcharUtils}
 import org.apache.spark.sql.classic.{Catalog, Dataset, MergeIntoWriter, RelationalGroupedDataset, SparkSession, TypedAggUtils, UserDefinedFunctionUtils}
 import org.apache.spark.sql.classic.ClassicConversions._
+import org.apache.spark.sql.connect.client.arrow.ArrowSerializer
 import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, ForeachWriterPacket, InvalidCommandInput, InvalidPlanInput, LiteralValueProtoConverter, StorageLevelProtoConverter, StreamingListenerPacket, UdfPacket}
 import org.apache.spark.sql.connect.config.Connect.CONNECT_GRPC_ARROW_MAX_BATCH_SIZE
 import org.apache.spark.sql.connect.ml.MLHandler
@@ -70,7 +71,7 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.aggregate.{ScalaAggregator, TypedAggregateExpression}
 import org.apache.spark.sql.execution.arrow.ArrowConverters
-import org.apache.spark.sql.execution.command.CreateViewCommand
+import org.apache.spark.sql.execution.command.{CreateViewCommand, ExternalCommandExecutor}
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JDBCPartition, JDBCRelation}
 import org.apache.spark.sql.execution.datasources.v2.python.UserDefinedPythonDataSource
@@ -81,7 +82,7 @@ import org.apache.spark.sql.execution.streaming.StreamingQueryWrapper
 import org.apache.spark.sql.expressions.{Aggregator, ReduceAggregator, SparkUserDefinedFunction, UserDefinedAggregator, UserDefinedFunction}
 import org.apache.spark.sql.streaming.{GroupStateTimeout, OutputMode, StreamingQuery, StreamingQueryListener, StreamingQueryProgress, Trigger}
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.sql.util.{ArrowUtils, CaseInsensitiveStringMap}
 import org.apache.spark.storage.CacheId
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
@@ -949,7 +950,7 @@ class SparkConnectPlanner(
     def inputDeserializer(inputAttributes: Seq[Attribute] = Nil): Expression =
       UnresolvedDeserializer(inEnc.deserializer, inputAttributes)
 
-    def outEnc: ExpressionEncoder[_] = encoderFor(funcOutEnc, "output")
+    def outEnc: ExpressionEncoder[_] = encoderFor(funcOutEnc, "output", inputAttrs)
     def outputObjAttr: Attribute = generateObjAttr(outEnc)
     def inEnc: ExpressionEncoder[_] = encoderFor(funcInEnc, "input", inputAttrs)
     def inputObjAttr: Attribute = generateObjAttr(inEnc)
@@ -986,7 +987,6 @@ class SparkConnectPlanner(
         encoder: AgnosticEncoder[_],
         errorType: String,
         inputAttrs: Option[Seq[Attribute]] = None): ExpressionEncoder[_] = {
-      // TODO: handle nested unbound row encoders
       if (encoder == UnboundRowEncoder) {
         inputAttrs
           .map(attrs =>
@@ -995,7 +995,19 @@ class SparkConnectPlanner(
           .getOrElse(
             throw InvalidPlanInput(s"Row is not a supported $errorType type for this UDF."))
       } else {
-        ExpressionEncoder(encoder)
+        // Nested unbound row encoders
+        val unboundTransformed = encoder match {
+          case pe: ProductEncoder[_] =>
+            pe.copy(fields = pe.fields.map { field =>
+              field.copy(enc = encoderFor(field.enc, errorType, inputAttrs).encoder)
+            })
+          case re: AgnosticRowEncoder =>
+            re.copy(fields = re.fields.map { field =>
+              field.copy(enc = encoderFor(field.enc, errorType, inputAttrs).encoder)
+            })
+          case _ => encoder
+        }
+        ExpressionEncoder(unboundTransformed)
       }
     }
   }
@@ -1813,7 +1825,7 @@ class SparkConnectPlanner(
       case udf: SparkUserDefinedFunction =>
         UserDefinedFunctionUtils.toScalaUDF(udf, children)
       case uda: UserDefinedAggregator[_, _, _] =>
-        ScalaAggregator(uda, children).toAggregateExpression()
+        ScalaAggregator(uda, children).toAggregateExpression(fun.getIsDistinct)
       case other =>
         throw InvalidPlanInput(
           s"Unsupported UserDefinedFunction implementation: ${other.getClass}")
@@ -2372,6 +2384,7 @@ class SparkConnectPlanner(
     }
   }
 
+  @deprecated("TypedReduce is now implemented using a normal UDAF aggregator.", "4.0.0")
   private def transformTypedReduceExpression(
       fun: proto.Expression.UnresolvedFunction,
       dataAttributes: Seq[Attribute]): Expression = {
@@ -2396,7 +2409,8 @@ class SparkConnectPlanner(
     expr.getExprTypeCase match {
       case proto.Expression.ExprTypeCase.UNRESOLVED_FUNCTION
           if expr.getUnresolvedFunction.getFunctionName == "reduce" =>
-        // The reduce func needs the input data attribute, thus handle it specially here
+        // The reduce func needs the input data attribute, thus handle it specially here.
+        // This special handling is now deprecated and will be removed in the future.
         transformTypedReduceExpression(expr.getUnresolvedFunction, plan.output)
       case _ => transformExpression(expr, Some(plan))
     }
@@ -2506,6 +2520,8 @@ class SparkConnectPlanner(
         handleMergeIntoTableCommand(command.getMergeIntoTableCommand)
       case proto.Command.CommandTypeCase.ML_COMMAND =>
         handleMlCommand(command.getMlCommand, responseObserver)
+      case proto.Command.CommandTypeCase.EXECUTE_EXTERNAL_COMMAND =>
+        handleExecuteExternalCommand(command.getExecuteExternalCommand, responseObserver)
 
       case _ => throw new UnsupportedOperationException(s"$command not supported.")
     }
@@ -2522,6 +2538,41 @@ class SparkConnectPlanner(
         .setSessionId(sessionId)
         .setServerSideSessionId(sessionHolder.serverSessionId)
         .setMlCommandResult(result)
+        .build())
+  }
+
+  private def handleExecuteExternalCommand(
+      command: proto.ExecuteExternalCommand,
+      responseObserver: StreamObserver[proto.ExecutePlanResponse]): Unit = {
+    if (command.getRunner.isEmpty) {
+      throw InvalidPlanInput("runner cannot be empty in executeExternalCommand")
+    }
+    if (command.getCommand.isEmpty) {
+      throw InvalidPlanInput("command cannot be empty in executeExternalCommand")
+    }
+    val executor = ExternalCommandExecutor(
+      session,
+      command.getRunner,
+      command.getCommand,
+      command.getOptionsMap.asScala.toMap)
+    val result = executor.execute()
+    executeHolder.eventsManager.postFinished(Some(result.size))
+
+    // Return a SQLCommandResult that contains a LocalRelation.
+    val arrowData = ArrowSerializer.serialize(
+      result.iterator,
+      StringEncoder,
+      ArrowUtils.rootAllocator,
+      session.sessionState.conf.sessionLocalTimeZone,
+      session.sessionState.conf.arrowUseLargeVarTypes)
+    val sqlCommandResult = SqlCommandResult.newBuilder()
+    sqlCommandResult.getRelationBuilder.getLocalRelationBuilder.setData(arrowData)
+    responseObserver.onNext(
+      ExecutePlanResponse
+        .newBuilder()
+        .setSessionId(sessionId)
+        .setServerSideSessionId(sessionHolder.serverSessionId)
+        .setSqlCommandResult(sqlCommandResult)
         .build())
   }
 
@@ -2576,13 +2627,15 @@ class SparkConnectPlanner(
       val schema = df.schema
       val maxBatchSize = (SparkEnv.get.conf.get(CONNECT_GRPC_ARROW_MAX_BATCH_SIZE) * 0.7).toLong
       val timeZoneId = session.sessionState.conf.sessionLocalTimeZone
+      val largeVarTypes = session.sessionState.conf.arrowUseLargeVarTypes
 
       // Convert the data.
       val bytes = if (rows.isEmpty) {
         ArrowConverters.createEmptyArrowBatch(
           schema,
           timeZoneId,
-          errorOnDuplicatedFieldNames = false)
+          errorOnDuplicatedFieldNames = false,
+          largeVarTypes = largeVarTypes)
       } else {
         val batches = ArrowConverters.toBatchWithSchemaIterator(
           rowIter = rows.iterator,
@@ -2590,7 +2643,8 @@ class SparkConnectPlanner(
           maxRecordsPerBatch = -1,
           maxEstimatedBatchSize = maxBatchSize,
           timeZoneId = timeZoneId,
-          errorOnDuplicatedFieldNames = false)
+          errorOnDuplicatedFieldNames = false,
+          largeVarTypes = largeVarTypes)
         assert(batches.hasNext)
         val bytes = batches.next()
         assert(!batches.hasNext, s"remaining batches: ${batches.size}")
@@ -3835,6 +3889,22 @@ class SparkConnectPlanner(
         UnresolvedScalarSubqueryPlanId(planId)
       case proto.SubqueryExpression.SubqueryType.SUBQUERY_TYPE_EXISTS =>
         UnresolvedExistsPlanId(planId)
+      case proto.SubqueryExpression.SubqueryType.SUBQUERY_TYPE_TABLE_ARG =>
+        if (getSubqueryExpression.hasTableArgOptions) {
+          val options = getSubqueryExpression.getTableArgOptions
+          UnresolvedTableArgPlanId(
+            planId,
+            partitionSpec = options.getPartitionSpecList.asScala
+              .map(transformExpression)
+              .toSeq,
+            orderSpec = options.getOrderSpecList.asScala
+              .map(transformSortOrder)
+              .toSeq,
+            withSinglePartition =
+              options.hasWithSinglePartition && options.getWithSinglePartition)
+        } else {
+          UnresolvedTableArgPlanId(planId)
+        }
       case other => throw InvalidPlanInput(s"Unknown SubqueryType $other")
     }
   }

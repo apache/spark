@@ -18,8 +18,9 @@
 package org.apache.spark.sql
 
 import org.apache.spark.sql.catalyst.expressions.{Ascending, Expression, FunctionTableSubqueryArgumentExpression, SortOrder}
+import org.apache.spark.sql.internal.TableValuedFunctionArgument
 
-class TableArg(
+private[sql] class TableArg(
     private[sql] val expression: FunctionTableSubqueryArgumentExpression,
     sparkSession: classic.SparkSession)
   extends TableValuedFunctionArgument {
