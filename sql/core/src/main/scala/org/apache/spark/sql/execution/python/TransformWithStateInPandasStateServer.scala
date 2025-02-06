@@ -415,9 +415,10 @@ class TransformWithStateInPandasStateServer(
           sendResponse(2, s"state $stateName doesn't exist")
         }
       case ValueStateCall.MethodCase.GET =>
-        if (valueStateInfo.valueState.exists()) {
+        val valueOption = Option(valueStateInfo.valueState.get())
+        if (valueOption.isDefined) {
           // Serialize the value row as a byte array
-          val valueBytes = PythonSQLUtils.toPyRow(valueStateInfo.valueState.get())
+          val valueBytes = PythonSQLUtils.toPyRow(valueOption.get)
           val byteString = ByteString.copyFrom(valueBytes)
           sendResponse(0, null, byteString)
         } else {
