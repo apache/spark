@@ -371,7 +371,7 @@ class DriverStatefulProcessorHandleImpl(timeMode: TimeMode, keyExprEnc: Expressi
       // assert that each field is nullable if schema evolution is enabled
       schema.valueSchema.fields.foreach { field =>
         if (!field.nullable && shouldCheckNullable) {
-          throw StateStoreErrors.stateStoreSchemaMustBeNullable(
+          throw StateStoreErrors.twsSchemaMustBeNullable(
             schema.colFamilyName, schema.valueSchema.toString())
         }
       }

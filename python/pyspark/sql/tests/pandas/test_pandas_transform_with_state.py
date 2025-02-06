@@ -1491,7 +1491,7 @@ class TransformWithStateInPandasTestsMixin:
 
                     error_msg = str(error)
                     return (
-                        "[STATE_STORE_SCHEMA_MUST_BE_NULLABLE]" in error_msg
+                        "[TRANSFORM_WITH_STATE_SCHEMA_MUST_BE_NULLABLE]" in error_msg
                         and "column family state must be nullable" in error_msg
                     )
 

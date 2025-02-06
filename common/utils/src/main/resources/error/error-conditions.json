@@ -4768,13 +4768,6 @@
     ],
     "sqlState" : "42K06"
   },
-  "STATE_STORE_SCHEMA_MUST_BE_NULLABLE" : {
-    "message" : [
-      "If schema evolution is enabled, all the fields in the schema for column family <columnFamilyName> must be nullable.",
-      "Please make the schema nullable. Current schema: <schema>"
-    ],
-    "sqlState" : "XXKST"
-  },
   "STATE_STORE_STATE_SCHEMA_FILES_THRESHOLD_EXCEEDED" : {
     "message" : [
       "The number of state schema files <numStateSchemaFiles> exceeds the maximum number of state schema files for this query: <maxStateSchemaFiles>.",
@@ -5078,6 +5071,14 @@
       "Trailing comma detected in SELECT clause. Remove the trailing comma before the FROM clause."
     ],
     "sqlState" : "42601"
+  },
+  "TRANSFORM_WITH_STATE_SCHEMA_MUST_BE_NULLABLE" : {
+    "message" : [
+      "If schema evolution is enabled, all the fields in the schema for column family <columnFamilyName> must be nullable ",
+      "when using the TransformWithState operator.",
+      "Please make the schema nullable. Current schema: <schema>"
+    ],
+    "sqlState" : "XXKST"
   },
   "TRANSPOSE_EXCEED_ROW_LIMIT" : {
     "message" : [
