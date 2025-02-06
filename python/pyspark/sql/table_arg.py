@@ -33,8 +33,9 @@ class TableArg(TableValuedFunctionArgument):
 
     This class provides methods to specify partitioning, ordering, and
     single-partition constraints when passing a DataFrame as a table argument
-    to a UDTF (User-Defined Table Function).
+    to TVF(Table Valued Function)s including UDTF(User-Defined Table Function)s.
     """
+
     @dispatch_table_arg_method
     def partitionBy(self, *cols: "ColumnOrName") -> "TableArg":
         """

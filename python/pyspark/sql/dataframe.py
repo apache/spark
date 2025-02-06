@@ -6604,7 +6604,7 @@ class DataFrame:
     def asTable(self) -> TableArg:
         """
         Converts the DataFrame into a :class:`TableArg` object, which can be used as a table argument
-        in a user-defined table function (UDTF).
+        in a TVF(Table Valued Function) including UDTF(User-Defined Table Function).
 
         After obtaining a TableArg from a DataFrame using this method, you can specify partitioning
         and ordering for the table argument by calling methods such as `partitionBy`, `orderBy`, and
