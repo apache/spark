@@ -22,12 +22,22 @@ from pyspark.ml.tests.test_functions import (
     PredictBatchUDFTestsMixin,
 )
 from pyspark.testing.connectutils import ReusedConnectTestCase
+from pyspark.testing.sqlutils import (
+    have_pandas,
+    have_pyarrow,
+    pandas_requirement_message,
+    pyarrow_requirement_message,
+)
 
 
 class ArrayVectorConversionParityTests(ArrayVectorConversionTestsMixin, ReusedConnectTestCase):
     pass
 
 
+@unittest.skipIf(
+    not have_pandas or not have_pyarrow,
+    pandas_requirement_message or pyarrow_requirement_message,
+)
 class PredictBatchUDFParityTests(PredictBatchUDFTestsMixin, ReusedConnectTestCase):
     pass
 
