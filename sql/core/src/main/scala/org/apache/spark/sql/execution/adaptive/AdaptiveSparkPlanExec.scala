@@ -515,75 +515,36 @@ case class AdaptiveSparkPlanExec(
   }
 
   /**
-   * This method is a wrapper of `createQueryStagesInternal`, which deals with result stage creation
-   */
-  private def createQueryStages(
-      resultHandler: SparkPlan => Any,
-      plan: SparkPlan,
-      firstRun: Boolean): CreateStageResult = {
-    plan match {
-      case resultStage@ResultQueryStageExec(_, optimizedPlan, _) =>
-        return if (firstRun) {
-          // There is already an existing ResultQueryStage created in previous `withFinalPlanUpdate`
-          // e.g, when we do `df.collect` multiple times
-          val newResultStage = ResultQueryStageExec(currentStageId, optimizedPlan, resultHandler)
-          currentStageId += 1
-          setLogicalLinkForNewQueryStage(newResultStage, optimizedPlan)
-          stagesToReplace.append(newResultStage)
-          CreateStageResult(newPlan = newResultStage,
-            allChildStagesMaterialized = false,
-            newStages = Seq(newResultStage))
-        } else {
-          // result stage already created, do nothing
-          CreateStageResult(newPlan = plan,
-            allChildStagesMaterialized = resultStage.isMaterialized,
-            newStages = Seq.empty)
-        }
-      case _ =>
-    }
-    val result = createQueryStagesInternal(plan)
-    var allNewStages = result.newStages
-    var newPlan = result.newPlan
-    var allChildStagesMaterialized = result.allChildStagesMaterialized
-    // Create result stage
-    if (allNewStages.isEmpty && allChildStagesMaterialized) {
-      val resultStage = createResultQueryStage(resultHandler, newPlan)
-      stagesToReplace.append(resultStage)
-      newPlan = resultStage
-      allChildStagesMaterialized = false
-      allNewStages :+= resultStage
-    }
-    CreateStageResult(
-      newPlan = newPlan,
-      allChildStagesMaterialized = allChildStagesMaterialized,
-      newStages = allNewStages)
-  }
-
-  private def createResultQueryStage(
-      resultHandler: SparkPlan => Any,
-      plan: SparkPlan): ResultQueryStageExec = {
-    // Run the final plan when there's no more unfinished stages.
-    val optimizedRootPlan = applyPhysicalRules(
-      optimizeQueryStage(plan, isFinalStage = true),
-      postStageCreationRules(supportsColumnar),
-      Some((planChangeLogger, "AQE Post Stage Creation")))
-    val resultStage = ResultQueryStageExec(currentStageId, optimizedRootPlan, resultHandler)
-    currentStageId += 1
-    setLogicalLinkForNewQueryStage(resultStage, plan)
-    resultStage
-  }
-
-  /**
    * This method is called recursively to traverse the plan tree bottom-up and create a new query
-   * stage or try reusing an existing stage if the current node is an [[Exchange]] node and all of
-   * its child stages have been materialized.
+   * stage or try reusing an existing stage if the current node is an [[Exchange]] node or root node
+   * and all of its child stages have been materialized.
    *
    * With each call, it returns:
    * 1) The new plan replaced with [[QueryStageExec]] nodes where new stages are created.
    * 2) Whether the child query stages (if any) of the current node have all been materialized.
    * 3) A list of the new query stages that have been created.
    */
-  private def createQueryStagesInternal(plan: SparkPlan): CreateStageResult = plan match {
+  private def createQueryStages(
+      resultHandler: SparkPlan => Any,
+      plan: SparkPlan,
+      firstRun: Boolean): CreateStageResult = plan match {
+    case resultStage@ResultQueryStageExec(_, optimizedPlan, _) =>
+      if (firstRun) {
+        // There is already an existing ResultQueryStage created in previous `withFinalPlanUpdate`
+        // e.g, when we do `df.collect` multiple times
+        val newResultStage = ResultQueryStageExec(currentStageId, optimizedPlan, resultHandler)
+        currentStageId += 1
+        setLogicalLinkForNewQueryStage(newResultStage, optimizedPlan)
+        stagesToReplace.append(newResultStage)
+        CreateStageResult(newPlan = newResultStage,
+          allChildStagesMaterialized = false,
+          newStages = Seq(newResultStage))
+      } else {
+        // result stage already created, do nothing
+        CreateStageResult(newPlan = plan,
+          allChildStagesMaterialized = resultStage.isMaterialized,
+          newStages = Seq.empty)
+      }
     case e: Exchange =>
       // First have a quick check in the `stageCache` without having to traverse down the node.
       context.stageCache.get(e.canonicalized) match {
@@ -596,7 +557,7 @@ case class AdaptiveSparkPlanExec(
             newStages = if (isMaterialized) Seq.empty else Seq(stage))
 
         case _ =>
-          val result = createQueryStagesInternal(e.child)
+          val result = createQueryStages(resultHandler, e.child, firstRun)
           val newPlan = e.withNewChildren(Seq(result.newPlan)).asInstanceOf[Exchange]
           // Create a query stage only when all the child query stages are ready.
           if (result.allChildStagesMaterialized) {
@@ -631,21 +592,50 @@ case class AdaptiveSparkPlanExec(
         allChildStagesMaterialized = false,
         newStages = Seq(newStage))
 
-    case q: QueryStageExec =>
+    case q: QueryStageExec if q ne currentPhysicalPlan =>
       assertStageNotFailed(q)
       CreateStageResult(newPlan = q,
         allChildStagesMaterialized = q.isMaterialized, newStages = Seq.empty)
 
     case _ =>
-      if (plan.children.isEmpty) {
-        CreateStageResult(newPlan = plan, allChildStagesMaterialized = true, newStages = Seq.empty)
-      } else {
-        val results = plan.children.map(createQueryStagesInternal)
+      // This includes cases where root node is QueryStageExec
+      val results = plan.children.map(createQueryStages(resultHandler, _, firstRun))
+      val allChildStagesMaterialized = results.forall(_.allChildStagesMaterialized)
+      val newStages = results.flatMap(_.newStages)
+      if ((plan eq currentPhysicalPlan) && allChildStagesMaterialized && newStages.isEmpty) {
+        // Create result stage if the plan is root plan and all children stages are materialized
+        // and no new stages are created.
+        val resultStage = createResultQueryStage(resultHandler, plan)
+        stagesToReplace.append(resultStage)
         CreateStageResult(
-          newPlan = plan.withNewChildren(results.map(_.newPlan)),
-          allChildStagesMaterialized = results.forall(_.allChildStagesMaterialized),
-          newStages = results.flatMap(_.newStages))
+          newPlan = resultStage,
+          allChildStagesMaterialized = false,
+          newStages = Seq(resultStage))
+      } else {
+        val newPlan = if (results.isEmpty) {
+          plan
+        } else {
+          plan.withNewChildren(results.map(_.newPlan))
+        }
+        CreateStageResult(
+          newPlan = newPlan,
+          allChildStagesMaterialized = allChildStagesMaterialized,
+          newStages = newStages)
       }
+  }
+
+  private def createResultQueryStage(
+    resultHandler: SparkPlan => Any,
+    plan: SparkPlan): ResultQueryStageExec = {
+    // Run the final plan when there's no more unfinished stages.
+    val optimizedRootPlan = applyPhysicalRules(
+      optimizeQueryStage(plan, isFinalStage = true),
+      postStageCreationRules(supportsColumnar),
+      Some((planChangeLogger, "AQE Post Stage Creation")))
+    val resultStage = ResultQueryStageExec(currentStageId, optimizedRootPlan, resultHandler)
+    currentStageId += 1
+    setLogicalLinkForNewQueryStage(resultStage, plan)
+    resultStage
   }
 
   private def newQueryStage(plan: SparkPlan): QueryStageExec = {
