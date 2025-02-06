@@ -27,6 +27,7 @@ DataFrame
 
     DataFrame.__getattr__
     DataFrame.__getitem__
+    DataFrame.asTable
     DataFrame.agg
     DataFrame.alias
     DataFrame.approxQuantile
@@ -123,6 +124,7 @@ DataFrame
     DataFrame.toPandas
     DataFrame.transform
     DataFrame.transpose
+    DataFrame.tvf
     DataFrame.union
     DataFrame.unionAll
     DataFrame.unionByName
