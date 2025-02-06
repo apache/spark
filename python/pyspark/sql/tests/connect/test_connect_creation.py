@@ -706,6 +706,28 @@ class SparkConnectCreationTests(SparkConnectSQLTestCase):
 
             self.assertEqual(cdf.schema, sdf.schema)
 
+    def test_empty_df_with_nested_array_columns_conversion_to_pandas_df(self):
+        # SPARK-51112: Segfault must not occur when converting empty DataFrame with nested array
+        # columns to pandas DataFrame.
+        df = self.connect.createDataFrame(
+            data = [],
+            schema=StructType(
+                [
+                    StructField(
+                        name='b_int',
+                        dataType=IntegerType(),
+                        nullable=False,
+                    ),
+                    StructField(
+                        name='b',
+                        dataType=ArrayType(ArrayType(StringType(), True), True),
+                        nullable=True,
+                    ),
+                ]
+            )
+        )
+        df.toPandas()
+
 
 if __name__ == "__main__":
     from pyspark.sql.tests.connect.test_connect_creation import *  # noqa: F401

@@ -958,8 +958,14 @@ class SparkConnectClient(object):
                     "coerce_temporal_nanoseconds": True,
                 }
             )
-        pdf = renamed_table.to_pandas(**pandas_options)
-        pdf.columns = schema.names
+        # SPARK-51112: If the table is empty, we avoid using pyarrow to_pandas to create the
+        # DataFrame, as it may fail with a segmentation fault. Instead, we create an empty pandas
+        # DataFrame manually with the correct schema.
+        if table.num_rows == 0:
+            pdf = pd.DataFrame(columns=[field.name for field in schema.fields])
+        else:
+            pdf = renamed_table.to_pandas(**pandas_options)
+            pdf.columns = schema.names
 
         if len(pdf.columns) > 0:
             timezone: Optional[str] = None
