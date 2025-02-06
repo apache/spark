@@ -415,13 +415,12 @@ trait StateStoreWriter
     val provider = StateStoreProvider.create(conf.stateStoreProviderClass)
     val maxPartitions = conf.defaultNumShufflePartitions
     // Initialize metrics across all partitions
-    (0 until maxPartitions)
-      .flatMap { partitionId =>
-        provider.supportedCustomPartitionMetrics.map { metric =>
-          val metricWithPartition = metric.withPartition(partitionId)
-          (metricWithPartition.name, metricWithPartition.createSQLMetric(sparkContext))
-        }
-      }.toMap
+    (0 until maxPartitions).flatMap { partitionId =>
+      provider.supportedCustomPartitionMetrics.map { metric =>
+        val metricWithPartition = metric.withPartition(partitionId)
+        (metricWithPartition.name, metricWithPartition.createSQLMetric(sparkContext))
+      }
+    }.toMap
   }
 
   /**
