@@ -222,7 +222,8 @@ public class UnsafeShuffleWriterSuite implements ShuffleChecksumTestHelper {
           if ((boolean) conf.get(package$.MODULE$.SHUFFLE_COMPRESS())) {
             in = CompressionCodec$.MODULE$.createCodec(conf).compressedInputStream(in);
           }
-          try (DeserializationStream recordsStream = serializer.newInstance().deserializeStream(in)) {
+          try (
+            DeserializationStream recordsStream = serializer.newInstance().deserializeStream(in)) {
             Iterator<Tuple2<Object, Object>> records = recordsStream.asKeyValueIterator();
             while (records.hasNext()) {
               Tuple2<Object, Object> record = records.next();
