@@ -15,10 +15,14 @@
 # limitations under the License.
 #
 
-from typing import Any
+from typing import Any, TYPE_CHECKING
+
 from pyspark.ml import functions as PyMLFunctions
 from pyspark.sql.column import Column
 from pyspark.sql.connect.functions.builtin import _invoke_function, _to_col, lit
+
+if TYPE_CHECKING:
+    from pyspark.sql._typing import UserDefinedFunctionLike
 
 
 def vector_to_array(col: Column, dtype: str = "float64") -> Column:
@@ -35,7 +39,7 @@ def array_to_vector(col: Column) -> Column:
 array_to_vector.__doc__ = PyMLFunctions.array_to_vector.__doc__
 
 
-def predict_batch_udf(*args: Any, **kwargs: Any) -> Column:
+def predict_batch_udf(*args: Any, **kwargs: Any) -> "UserDefinedFunctionLike":
     return PyMLFunctions.predict_batch_udf(*args, **kwargs)
 
 
