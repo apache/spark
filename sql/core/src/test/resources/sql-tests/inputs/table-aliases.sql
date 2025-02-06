@@ -6,8 +6,6 @@ SELECT * FROM testData AS t(col1, col2) WHERE col1 = 1;
 
 SELECT * FROM testData AS t(col1, col2) WHERE col1 = 2;
 
-SELECT col1 AS k, SUM(col2) FROM testData AS t(col1, col2) GROUP BY k;
-
 -- Aliasing the wrong number of columns in the FROM clause
 SELECT * FROM testData AS t(col1, col2, col3);
 

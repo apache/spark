@@ -754,7 +754,7 @@ private[ml] object MetaAlgorithmReadWrite {
   }
 }
 
-private[ml] class FileSystemOverwrite extends Logging {
+private[spark] class FileSystemOverwrite extends Logging {
 
   def handleOverwrite(path: String, shouldOverwrite: Boolean, session: SparkSession): Unit = {
     val hadoopConf = session.sessionState.newHadoopConf()

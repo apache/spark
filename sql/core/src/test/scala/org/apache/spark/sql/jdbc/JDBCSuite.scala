@@ -1107,7 +1107,7 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
         .withLimit(123)
         .build()
         .trim() ==
-      "SELECT a,b FROM test      FETCH FIRST 123 ROWS ONLY")
+      "SELECT a,b FROM test     FETCH FIRST 123 ROWS ONLY")
   }
 
   test("table exists query by jdbc dialect") {
@@ -2222,10 +2222,8 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
     val baseParameters = CaseInsensitiveMap(
       Map("dbtable" -> "test", "hint" -> "/*+ INDEX(test idx1) */"))
     // supported
-    Seq(
-      "jdbc:oracle:thin:@//host:port",
-      "jdbc:mysql://host:port",
-      "jdbc:databricks://host:port").foreach { url =>
+    Seq("jdbc:oracle:thin:@", "jdbc:mysql:", "jdbc:databricks:").foreach { prefix =>
+      val url = s"$prefix//host:port"
       val options = new JDBCOptions(baseParameters + ("url" -> url))
       val dialect = JdbcDialects.get(url)
       assert(dialect.getJdbcSQLQueryBuilder(options)

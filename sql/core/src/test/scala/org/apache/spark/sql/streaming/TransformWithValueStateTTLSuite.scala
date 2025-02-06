@@ -36,7 +36,7 @@ object TTLInputProcessFunction {
     var results = List[OutputEvent]()
     val key = row.key
     if (row.action == "get") {
-      val currState = valueState.getOption()
+      val currState = Option(valueState.get())
       if (currState.isDefined) {
         results = OutputEvent(key, currState.get, isTTLValue = false, -1) :: results
       }
@@ -72,7 +72,7 @@ object TTLInputProcessFunction {
     var results = List[OutputEvent]()
     val key = row.key
     if (row.action == "get") {
-      val currState = valueState.getOption()
+      val currState = Option(valueState.get())
       if (currState.isDefined) {
         results = OutputEvent(key, currState.get, isTTLValue = false, -1) :: results
       }

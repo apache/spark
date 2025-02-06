@@ -18,6 +18,7 @@
 import sys
 import warnings
 from typing import Any, Dict, List, Optional, TYPE_CHECKING
+import functools
 
 import numpy as np
 
@@ -45,12 +46,14 @@ from pyspark.ml.util import (
     GeneralJavaMLWritable,
     HasTrainingSummary,
     try_remote_attribute_relation,
+    invoke_helper_relation,
 )
 from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaParams, JavaWrapper
-from pyspark.ml.common import inherit_doc, _java2py
+from pyspark.ml.common import inherit_doc
 from pyspark.ml.stat import MultivariateGaussian
 from pyspark.sql import DataFrame
 from pyspark.ml.linalg import Vector, Matrix
+from pyspark.sql.utils import is_remote
 
 if TYPE_CHECKING:
     from pyspark.ml._typing import M
@@ -228,15 +231,9 @@ class GaussianMixtureModel(
         Array of :py:class:`MultivariateGaussian` where gaussians[i] represents
         the Multivariate Gaussian (Normal) Distribution for Gaussian i
         """
-        from pyspark.core.context import SparkContext
-
-        sc = SparkContext._active_spark_context
-        assert sc is not None and self._java_obj is not None
-
-        jgaussians = self._java_obj.gaussians()
         return [
-            MultivariateGaussian(_java2py(sc, jgaussian.mean()), _java2py(sc, jgaussian.cov()))
-            for jgaussian in jgaussians
+            MultivariateGaussian(row.mean.asML(), row.cov.asML())
+            for row in self.gaussiansDF.collect()
         ]
 
     @property
@@ -353,15 +350,15 @@ class GaussianMixture(
     >>> gaussians[0].mean
     DenseVector([0.825, 0.8675])
     >>> gaussians[0].cov
-    DenseMatrix(2, 2, [0.0056, -0.0051, -0.0051, 0.0046], 0)
+    DenseMatrix(2, 2, [0.0056, -0.0051, -0.0051, 0.0046], False)
     >>> gaussians[1].mean
     DenseVector([-0.87, -0.72])
     >>> gaussians[1].cov
-    DenseMatrix(2, 2, [0.0016, 0.0016, 0.0016, 0.0016], 0)
+    DenseMatrix(2, 2, [0.0016, 0.0016, 0.0016, 0.0016], False)
     >>> gaussians[2].mean
     DenseVector([-0.055, -0.075])
     >>> gaussians[2].cov
-    DenseMatrix(2, 2, [0.002, -0.0011, -0.0011, 0.0006], 0)
+    DenseMatrix(2, 2, [0.002, -0.0011, -0.0011, 0.0006], False)
     >>> model.gaussiansDF.select("mean").head()
     Row(mean=DenseVector([0.825, 0.8675]))
     >>> model.gaussiansDF.select("cov").head()
@@ -1542,6 +1539,7 @@ class DistributedLDAModel(LDAModel, JavaMLReadable["DistributedLDAModel"], JavaM
     .. versionadded:: 2.0.0
     """
 
+    @functools.cache
     @since("2.0.0")
     def toLocal(self) -> "LocalLDAModel":
         """
@@ -1551,6 +1549,8 @@ class DistributedLDAModel(LDAModel, JavaMLReadable["DistributedLDAModel"], JavaM
         .. warning:: This involves collecting a large :py:func:`topicsMatrix` to the driver.
         """
         model = LocalLDAModel(self._call_java("toLocal"))
+        if is_remote():
+            return model
 
         # SPARK-10931: Temporary fix to be removed once LDAModel defines Params
         model._create_params_from_java()
@@ -2153,8 +2153,21 @@ class PowerIterationClustering(
             - id: Long
             - cluster: Int
         """
-        self._transfer_params_to_java()
         assert self._java_obj is not None
+
+        if is_remote():
+            return invoke_helper_relation(
+                "powerIterationClusteringAssignClusters",
+                dataset,
+                self.getK(),
+                self.getMaxIter(),
+                self.getInitMode(),
+                self.getSrcCol(),
+                self.getDstCol(),
+                self.getWeightCol() if self.isDefined(self.weightCol) else "",
+            )
+
+        self._transfer_params_to_java()
 
         jdf = self._java_obj.assignClusters(dataset._jdf)
         return DataFrame(jdf, dataset.sparkSession)

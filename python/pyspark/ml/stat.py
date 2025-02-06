@@ -22,9 +22,12 @@ from pyspark import since
 from pyspark.ml.common import _java2py, _py2java
 from pyspark.ml.linalg import Matrix, Vector
 from pyspark.ml.wrapper import JavaWrapper, _jvm
+from pyspark.ml.util import invoke_helper_relation
 from pyspark.sql.column import Column
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.functions import lit
+from pyspark.sql.types import ArrayType, DoubleType
+from pyspark.sql.utils import is_remote
 
 if TYPE_CHECKING:
     from py4j.java_gateway import JavaObject
@@ -102,14 +105,18 @@ class ChiSquareTest:
         >>> row[0].statistic
         4.0
         """
-        from pyspark.core.context import SparkContext
+        if is_remote():
+            return invoke_helper_relation("chiSquareTest", dataset, featuresCol, labelCol, flatten)
 
-        sc = SparkContext._active_spark_context
-        assert sc is not None
+        else:
+            from pyspark.core.context import SparkContext
 
-        javaTestObj = getattr(_jvm(), "org.apache.spark.ml.stat.ChiSquareTest")
-        args = [_py2java(sc, arg) for arg in (dataset, featuresCol, labelCol, flatten)]
-        return _java2py(sc, javaTestObj.test(*args))
+            sc = SparkContext._active_spark_context
+            assert sc is not None
+
+            javaTestObj = getattr(_jvm(), "org.apache.spark.ml.stat.ChiSquareTest")
+            args = [_py2java(sc, arg) for arg in (dataset, featuresCol, labelCol, flatten)]
+            return _java2py(sc, javaTestObj.test(*args))
 
 
 class Correlation:
@@ -173,14 +180,18 @@ class Correlation:
                      [        NaN,         NaN,  1.        ,         NaN],
                      [ 0.4       ,  0.9486... ,         NaN,  1.        ]])
         """
-        from pyspark.core.context import SparkContext
+        if is_remote():
+            return invoke_helper_relation("correlation", dataset, column, method)
 
-        sc = SparkContext._active_spark_context
-        assert sc is not None
+        else:
+            from pyspark.core.context import SparkContext
 
-        javaCorrObj = getattr(_jvm(), "org.apache.spark.ml.stat.Correlation")
-        args = [_py2java(sc, arg) for arg in (dataset, column, method)]
-        return _java2py(sc, javaCorrObj.corr(*args))
+            sc = SparkContext._active_spark_context
+            assert sc is not None
+
+            javaCorrObj = getattr(_jvm(), "org.apache.spark.ml.stat.Correlation")
+            args = [_py2java(sc, arg) for arg in (dataset, column, method)]
+            return _java2py(sc, javaCorrObj.corr(*args))
 
 
 class KolmogorovSmirnovTest:
@@ -243,17 +254,33 @@ class KolmogorovSmirnovTest:
         >>> round(ksResult.statistic, 3)
         0.175
         """
-        from pyspark.core.context import SparkContext
+        if is_remote():
+            return invoke_helper_relation(
+                "kolmogorovSmirnovTest",
+                dataset,
+                sampleCol,
+                distName,
+                ([float(p) for p in params], ArrayType(DoubleType())),
+            )
 
-        sc = SparkContext._active_spark_context
-        assert sc is not None
+        else:
+            from pyspark.core.context import SparkContext
 
-        javaTestObj = getattr(_jvm(), "org.apache.spark.ml.stat.KolmogorovSmirnovTest")
-        dataset = _py2java(sc, dataset)
-        params = [float(param) for param in params]  # type: ignore[assignment]
-        return _java2py(
-            sc, javaTestObj.test(dataset, sampleCol, distName, _jvm().PythonUtils.toSeq(params))
-        )
+            sc = SparkContext._active_spark_context
+            assert sc is not None
+
+            javaTestObj = getattr(_jvm(), "org.apache.spark.ml.stat.KolmogorovSmirnovTest")
+            dataset = _py2java(sc, dataset)
+            params = [float(param) for param in params]  # type: ignore[assignment]
+            return _java2py(
+                sc,
+                javaTestObj.test(
+                    dataset,
+                    sampleCol,
+                    distName,
+                    _jvm().PythonUtils.toSeq(params),
+                ),
+            )
 
 
 class Summarizer:

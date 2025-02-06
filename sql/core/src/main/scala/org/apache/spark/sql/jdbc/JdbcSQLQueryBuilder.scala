@@ -69,7 +69,7 @@ class JdbcSQLQueryBuilder(dialect: JdbcDialect, options: JDBCOptions) {
   protected var tableSampleClause: String = ""
 
   /**
-   * A hint sample clause representing query hints.
+   * A hint clause representing query hints.
    */
   protected val hintClause: String = {
     if (options.hint == "" || dialect.supportsHint) {

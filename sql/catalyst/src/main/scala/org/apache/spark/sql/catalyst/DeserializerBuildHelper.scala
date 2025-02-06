@@ -406,14 +406,20 @@ object DeserializerBuildHelper {
         NewInstance(cls, arguments, Nil, propagateNull = false, dt, outerPointerGetter))
 
     case AgnosticEncoders.RowEncoder(fields) =>
+      val isExternalRow = !path.dataType.isInstanceOf[StructType]
       val convertedFields = fields.zipWithIndex.map { case (f, i) =>
         val newTypePath = walkedTypePath.recordField(
           f.enc.clsTag.runtimeClass.getName,
           f.name)
-        exprs.If(
-          Invoke(path, "isNullAt", BooleanType, exprs.Literal(i) :: Nil),
-          exprs.Literal.create(null, externalDataTypeFor(f.enc)),
-          createDeserializer(f.enc, GetStructField(path, i), newTypePath))
+        val deserializer = createDeserializer(f.enc, GetStructField(path, i), newTypePath)
+        if (isExternalRow) {
+          exprs.If(
+            Invoke(path, "isNullAt", BooleanType, exprs.Literal(i) :: Nil),
+            exprs.Literal.create(null, externalDataTypeFor(f.enc)),
+            deserializer)
+        } else {
+          deserializer
+        }
       }
       exprs.If(IsNull(path),
         exprs.Literal.create(null, externalDataTypeFor(enc)),
