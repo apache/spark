@@ -18,7 +18,6 @@
 package org.apache.spark.ml.clustering
 
 import org.apache.spark.annotation.Since
-import org.apache.spark.ml.Transformer
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
@@ -191,31 +190,4 @@ object PowerIterationClustering extends DefaultParamsReadable[PowerIterationClus
 
   @Since("2.4.0")
   override def load(path: String): PowerIterationClustering = super.load(path)
-}
-
-private[spark] class PowerIterationClusteringWrapper(override val uid: String)
-  extends Transformer with PowerIterationClusteringParams with DefaultParamsWritable {
-
-  def this() = this(Identifiable.randomUID("PowerIterationClusteringWrapper"))
-
-  override def transform(dataset: Dataset[_]): DataFrame = {
-    val pic = new PowerIterationClustering()
-      .setK($(k))
-      .setInitMode($(initMode))
-      .setMaxIter($(maxIter))
-      .setSrcCol($(srcCol))
-      .setDstCol($(dstCol))
-    get(weightCol) match {
-      case Some(w) if w.nonEmpty => pic.setWeightCol(w)
-      case _ =>
-    }
-    pic.assignClusters(dataset)
-  }
-
-  override def transformSchema(schema: StructType): StructType =
-    new StructType()
-      .add(StructField("id", LongType, nullable = false))
-      .add(StructField("cluster", IntegerType, nullable = false))
-
-  override def copy(extra: ParamMap): PowerIterationClusteringWrapper = defaultCopy(extra)
 }

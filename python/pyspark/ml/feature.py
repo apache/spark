@@ -4849,7 +4849,7 @@ class StringIndexerModel(
             model._java_obj = helper._call_java(
                 "stringIndexerModelFromLabels",
                 model.uid,
-                (list(labels), ArrayType(StringType(), False)),
+                (list(labels), ArrayType(StringType())),
             )
 
         else:
@@ -4891,7 +4891,7 @@ class StringIndexerModel(
                 model.uid,
                 (
                     [list(labels) for labels in arrayOfLabels],
-                    ArrayType(ArrayType(StringType(), False)),
+                    ArrayType(ArrayType(StringType())),
                 ),
             )
 

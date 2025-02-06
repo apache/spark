@@ -17,8 +17,11 @@
 package org.apache.spark.ml.util
 
 import org.apache.spark.ml.Model
+import org.apache.spark.ml.clustering.PowerIterationClustering
 import org.apache.spark.ml.feature._
+import org.apache.spark.ml.fpm.PrefixSpan
 import org.apache.spark.ml.param.ParamMap
+import org.apache.spark.ml.stat._
 import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.types.StructType
 
@@ -53,6 +56,64 @@ private[spark] class ConnectHelper(override val uid: String) extends Model[Conne
   def stopWordsRemoverGetDefaultOrUS: String = {
     StopWordsRemover.getDefaultOrUS.toString
   }
+
+  def chiSquareTest(
+      dataset: DataFrame,
+      featuresCol: String,
+      labelCol: String,
+      flatten: Boolean): DataFrame = {
+    ChiSquareTest.test(dataset, featuresCol, labelCol, flatten)
+  }
+
+  def correlation(
+      dataset: DataFrame,
+      column: String,
+      method: String): DataFrame = {
+    Correlation.corr(dataset, column, method)
+  }
+
+  def kolmogorovSmirnovTest(
+      dataset: DataFrame,
+      sampleCol: String,
+      distName: String,
+      params: Array[Double]): DataFrame = {
+    KolmogorovSmirnovTest.test(dataset, sampleCol, distName, params.toIndexedSeq: _*)
+  }
+
+  def powerIterationClusteringAssignClusters(
+      dataset: DataFrame,
+      k: Int,
+      maxIter: Int,
+      initMode: String,
+      srcCol: String,
+      dstCol: String,
+      weightCol: String): DataFrame = {
+    val pic = new PowerIterationClustering()
+      .setK(k)
+      .setMaxIter(maxIter)
+      .setInitMode(initMode)
+      .setSrcCol(srcCol)
+      .setDstCol(dstCol)
+    if (weightCol.nonEmpty) {
+      pic.setWeightCol(weightCol)
+    }
+    pic.assignClusters(dataset)
+  }
+
+  def prefixSpanFindFrequentSequentialPatterns(
+      dataset: DataFrame,
+      minSupport: Double,
+      maxPatternLength: Int,
+      maxLocalProjDBSize: Long,
+      sequenceCol: String): DataFrame = {
+    val prefixSpan = new PrefixSpan()
+      .setMinSupport(minSupport)
+      .setMaxPatternLength(maxPatternLength)
+      .setMaxLocalProjDBSize(maxLocalProjDBSize)
+      .setSequenceCol(sequenceCol)
+    prefixSpan.findFrequentSequentialPatterns(dataset)
+  }
+
 
   override def copy(extra: ParamMap): ConnectHelper = defaultCopy(extra)
 
