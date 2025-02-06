@@ -36,8 +36,9 @@ object TTLInputProcessFunction {
     var results = List[OutputEvent]()
     val key = row.key
     if (row.action == "get") {
-      if (valueState.exists()) {
-        results = OutputEvent(key, valueState.get(), isTTLValue = false, -1) :: results
+      val currState = Option(valueState.get())
+      if (currState.isDefined) {
+        results = OutputEvent(key, currState.get, isTTLValue = false, -1) :: results
       }
     } else if (row.action == "get_without_enforcing_ttl") {
       val currState = valueState.getWithoutEnforcingTTL()
@@ -71,8 +72,9 @@ object TTLInputProcessFunction {
     var results = List[OutputEvent]()
     val key = row.key
     if (row.action == "get") {
-      if (valueState.exists()) {
-        results = OutputEvent(key, valueState.get(), isTTLValue = false, -1) :: results
+      val currState = Option(valueState.get())
+      if (currState.isDefined) {
+        results = OutputEvent(key, currState.get, isTTLValue = false, -1) :: results
       }
     } else if (row.action == "put") {
       valueState.update(row.value)
