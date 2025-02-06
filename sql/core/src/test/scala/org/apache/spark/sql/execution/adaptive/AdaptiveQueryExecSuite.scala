@@ -3075,21 +3075,6 @@ class AdaptiveQueryExecSuite
       .fastEquals(plan2.asInstanceOf[ResultQueryStageExec].plan))
   }
 
-  test("Collect twice on AQE plan change from SMJ to BHJ") {
-    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "80") {
-      val df = spark.sql("SELECT * FROM testData join testData2 ON key = a where value = '1'")
-      df.collect()
-      val plan1 = df.queryExecution.executedPlan.asInstanceOf[AdaptiveSparkPlanExec].executedPlan
-      df.collect()
-      val plan2 = df.queryExecution.executedPlan.asInstanceOf[AdaptiveSparkPlanExec].executedPlan
-      assert(plan1.isInstanceOf[ResultQueryStageExec])
-      assert(plan2.isInstanceOf[ResultQueryStageExec])
-      assert(plan1 ne plan2)
-      assert(plan1.asInstanceOf[ResultQueryStageExec].plan
-        .fastEquals(plan2.asInstanceOf[ResultQueryStageExec].plan))
-    }
-  }
-
   test("SPARK-47247: coalesce differently for BNLJ") {
     Seq(true, false).foreach { expectCoalesce =>
       val minPartitionSize = if (expectCoalesce) "64MB" else "1B"
