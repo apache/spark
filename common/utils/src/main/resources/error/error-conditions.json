@@ -3923,6 +3923,12 @@
     ],
     "sqlState" : "0A000"
   },
+  "NEGATIVE_SCALE_DISALLOWED" : {
+    "message" : [
+      "Negative scale is not allowed: '<scale>'. Set the config <sqlConf> to \"true\" to allow it."
+    ],
+    "sqlState" : "0A000"
+  },
   "NEGATIVE_VALUES_IN_FREQUENCY_EXPRESSION" : {
     "message" : [
       "Found the negative value in <frequencyExpression>: <negativeValue>, but expected a positive integral value."
