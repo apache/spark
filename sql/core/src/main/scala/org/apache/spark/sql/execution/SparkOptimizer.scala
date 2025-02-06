@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.optimizer._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.catalog.CatalogManager
-import org.apache.spark.sql.execution.datasources.{PruneFileSourcePartitions, PushVariantIntoScan, SchemaPruning, V1Writes}
+import org.apache.spark.sql.execution.datasources.{FillStaticPartitions, PruneFileSourcePartitions, PushVariantIntoScan, SchemaPruning, V1Writes}
 import org.apache.spark.sql.execution.datasources.v2.{GroupBasedRowLevelOperationScanPlanning, OptimizeMetadataOnlyDeleteFromTable, V2ScanPartitioningAndOrdering, V2ScanRelationPushDown, V2Writes}
 import org.apache.spark.sql.execution.dynamicpruning.{CleanupDynamicPruningFilters, PartitionPruning, RowLevelOperationRuntimeGroupFiltering}
 import org.apache.spark.sql.execution.python.{ExtractGroupingPythonUDFFromAggregate, ExtractPythonUDFFromAggregate, ExtractPythonUDFs, ExtractPythonUDTFs}
@@ -96,7 +96,8 @@ class SparkOptimizer(
       EliminateLimits,
       ConstantFolding),
     Batch("User Provided Optimizers", fixedPoint, experimentalMethods.extraOptimizations: _*),
-    Batch("Replace CTE with Repartition", Once, ReplaceCTERefWithRepartition)))
+    Batch("Replace CTE with Repartition", Once, ReplaceCTERefWithRepartition),
+    Batch("Fill Static Partitions from Dynamic Partitions", Once, FillStaticPartitions)))
 
   override def nonExcludableRules: Seq[String] = super.nonExcludableRules ++
     Seq(
