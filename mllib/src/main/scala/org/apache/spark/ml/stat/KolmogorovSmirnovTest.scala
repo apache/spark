@@ -21,15 +21,11 @@ import scala.annotation.varargs
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.function.Function
-import org.apache.spark.ml._
-import org.apache.spark.ml.param._
-import org.apache.spark.ml.param.shared.HasInputCol
 import org.apache.spark.ml.util._
 import org.apache.spark.mllib.stat.{Statistics => OldStatistics}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.functions.col
-import org.apache.spark.sql.types._
 
 /**
  * Conduct the two-sided Kolmogorov Smirnov (KS) test for data sampled from a
@@ -117,35 +113,4 @@ object KolmogorovSmirnovTest {
     spark.createDataFrame(Seq(KolmogorovSmirnovTestResult(
       testResult.pValue, testResult.statistic)))
   }
-}
-
-
-/**
- * [[KolmogorovSmirnovTest]] is not an Estimator/Transformer and thus needs to be wrapped
- * in a wrapper to be compatible with Spark Connect.
- */
-private[spark] class KolmogorovSmirnovTestWrapper(override val uid: String)
-  extends Transformer with HasInputCol {
-
-  val paramsArray = new DoubleArrayParam(this, "paramsArray",
-    "The parameters to be used for the theoretical distribution.")
-
-  val distName = new Param[String](this, "distName",
-    "The name of the theoretical distribution to test against")
-
-  setDefault(paramsArray -> Array.emptyDoubleArray)
-
-  def this() = this(Identifiable.randomUID("KolmogorovSmirnovTestWrapper"))
-
-  override def transformSchema(schema: StructType): StructType = {
-    new StructType()
-      .add("pValue", DoubleType, nullable = false)
-      .add("statistic", DoubleType, nullable = false)
-  }
-
-  override def transform(dataset: Dataset[_]): DataFrame = {
-    KolmogorovSmirnovTest.test(dataset, $(inputCol), $(distName), $(paramsArray).toIndexedSeq: _*)
-  }
-
-  override def copy(extra: ParamMap): KolmogorovSmirnovTestWrapper = defaultCopy(extra)
 }
