@@ -139,9 +139,7 @@ case class TransformWithStateExec(
    * Fetching the columnFamilySchemas from the StatefulProcessorHandle
    * after init is called.
    */
-  override def getColFamilySchemas(
-      setNullableFields: Boolean
-  ): Map[String, StateStoreColFamilySchema] = {
+  override def getColFamilySchemas(): Map[String, StateStoreColFamilySchema] = {
     val keySchema = keyExpressions.toStructType
     // we have to add the default column family schema because the RocksDBStateEncoder
     // expects this entry to be present in the stateSchemaProvider.
@@ -149,8 +147,10 @@ case class TransformWithStateExec(
       0, keyExpressions.toStructType, 0, DUMMY_VALUE_ROW_SCHEMA,
       Some(NoPrefixKeyStateEncoderSpec(keySchema)))
 
+    // For Scala, the user can't explicitly set nullability on schema, so there is
+    // no reason to throw an error, and we can simply set the schema to nullable.
     val columnFamilySchemas = getDriverProcessorHandle()
-      .getColumnFamilySchemas(false) ++
+      .getColumnFamilySchemas(shouldCheckNullable = false) ++
         Map(StateStore.DEFAULT_COL_FAMILY_NAME -> defaultSchema)
     closeProcessorHandle()
     columnFamilySchemas

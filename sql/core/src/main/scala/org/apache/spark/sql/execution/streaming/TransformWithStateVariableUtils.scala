@@ -175,7 +175,7 @@ object TransformWithStateOperatorProperties extends Logging {
  */
 trait TransformWithStateMetadataUtils extends Logging {
 
-  def getColFamilySchemas(setNullableFields: Boolean): Map[String, StateStoreColFamilySchema]
+  def getColFamilySchemas(): Map[String, StateStoreColFamilySchema]
 
   def getStateVariableInfos(): Map[String, TransformWithStateVariableInfo]
 
@@ -209,7 +209,7 @@ trait TransformWithStateMetadataUtils extends Logging {
       stateStoreEncodingFormat: String = UnsafeRow.toString): List[StateSchemaValidationResult] = {
     assert(stateSchemaVersion >= 3)
     val usingAvro = stateStoreEncodingFormat == Avro.toString
-    val newSchemas = getColFamilySchemas(usingAvro)
+    val newSchemas = getColFamilySchemas()
     val stateSchemaDir = stateSchemaDirPath(info)
     val newStateSchemaFilePath =
       new Path(stateSchemaDir, s"${batchId}_${UUID.randomUUID().toString}")
