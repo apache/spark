@@ -28,6 +28,13 @@ if TYPE_CHECKING:
 
 
 class TableArg(TableValuedFunctionArgument):
+    """
+    Represents a table argument in PySpark.
+
+    This class provides methods to specify partitioning, ordering, and
+    single-partition constraints when passing a DataFrame as a table argument
+    to a UDTF (User-Defined Table Function).
+    """
     @dispatch_table_arg_method
     def partitionBy(self, *cols: "ColumnOrName") -> "TableArg":
         """

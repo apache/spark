@@ -27,7 +27,6 @@ DataFrame
 
     DataFrame.__getattr__
     DataFrame.__getitem__
-    DataFrame.asTable
     DataFrame.agg
     DataFrame.alias
     DataFrame.approxQuantile
@@ -151,3 +150,19 @@ DataFrame
     DataFrameStatFunctions.freqItems
     DataFrameStatFunctions.sampleBy
 
+
+Table Argument
+--------------
+``DataFrame.asTable`` returns a table argument in PySpark.
+
+This class provides methods to specify partitioning, ordering, and single-partition constraints
+when passing a DataFrame as a table argument to a UDTF (User-Defined Table Function).
+
+.. currentmodule:: pyspark.sql.table_arg
+
+.. autosummary::
+    :toctree: api/
+
+    TableArg.partitionBy
+    TableArg.orderBy
+    TableArg.withSinglePartition
