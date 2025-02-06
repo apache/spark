@@ -1343,103 +1343,108 @@ abstract class TransformWithStateSuite extends StateStoreMetricsTest
     }
   }
 
-  Seq(false, true).foreach { useImplicits =>
-    test("transformWithState - verify StateSchemaV3 writes " +
-      s"correct SQL schema of key/value with useImplicits=$useImplicits") {
-      withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
-        classOf[RocksDBStateStoreProvider].getName,
-        SQLConf.SHUFFLE_PARTITIONS.key ->
-          TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString) {
-        withTempDir { checkpointDir =>
-          // When Avro is used, we want to set the StructFields to nullable
-          val metadataPathPostfix = "state/0/_stateSchema/default"
-          val stateSchemaPath = new Path(checkpointDir.toString,
-            s"$metadataPathPostfix")
-          val hadoopConf = spark.sessionState.newHadoopConf()
-          val fm = CheckpointFileManager.create(stateSchemaPath, hadoopConf)
+  Seq("unsaferow", "avro").foreach { encoding =>
+    Seq(false, true).foreach { useImplicits =>
+      test("transformWithState - verify StateSchemaV3 writes " +
+        s"correct SQL schema of key/value with useImplicits=$useImplicits " +
+        s"(encoding = $encoding)") {
+        withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+          classOf[RocksDBStateStoreProvider].getName,
+          SQLConf.SHUFFLE_PARTITIONS.key ->
+            TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString,
+          SQLConf.STREAMING_STATE_STORE_ENCODING_FORMAT.key -> encoding) {
+          withTempDir { checkpointDir =>
+            // When Avro is used, we want to set the StructFields to nullable
+            val shouldBeNullable = encoding == "avro"
+            val metadataPathPostfix = "state/0/_stateSchema/default"
+            val stateSchemaPath = new Path(checkpointDir.toString,
+              s"$metadataPathPostfix")
+            val hadoopConf = spark.sessionState.newHadoopConf()
+            val fm = CheckpointFileManager.create(stateSchemaPath, hadoopConf)
 
-          val keySchema = new StructType().add("value", StringType)
-          val schema0 = StateStoreColFamilySchema(
-            "countState", 0,
-            keySchema, 0,
-            new StructType().add("value", LongType, nullable = true),
-            Some(NoPrefixKeyStateEncoderSpec(keySchema)),
-            None
-          )
-          val schema1 = StateStoreColFamilySchema(
-            "listState", 0,
-            keySchema, 0,
-            new StructType()
-              .add("id", LongType, nullable = true)
-              .add("name", StringType),
-            Some(NoPrefixKeyStateEncoderSpec(keySchema)),
-            None
-          )
+            val keySchema = new StructType().add("value", StringType)
+            val schema0 = StateStoreColFamilySchema(
+              "countState", 0,
+              keySchema, 0,
+              new StructType().add("value", LongType, nullable = shouldBeNullable),
+              Some(NoPrefixKeyStateEncoderSpec(keySchema)),
+              None
+            )
+            val schema1 = StateStoreColFamilySchema(
+              "listState", 0,
+              keySchema, 0,
+              new StructType()
+                .add("id", LongType, nullable = shouldBeNullable)
+                .add("name", StringType),
+              Some(NoPrefixKeyStateEncoderSpec(keySchema)),
+              None
+            )
 
-          val userKeySchema = new StructType()
-            .add("id", IntegerType, false)
-            .add("name", StringType)
-          val compositeKeySchema = new StructType()
-            .add("key", new StructType().add("value", StringType))
-            .add("userKey", userKeySchema)
-          val schema2 = StateStoreColFamilySchema(
-            "mapState", 0,
-            compositeKeySchema, 0,
-            new StructType().add("value", StringType),
-            Some(PrefixKeyScanStateEncoderSpec(compositeKeySchema, 1)),
-            Option(userKeySchema)
-          )
+            val userKeySchema = new StructType()
+              .add("id", IntegerType, false)
+              .add("name", StringType)
+            val compositeKeySchema = new StructType()
+              .add("key", new StructType().add("value", StringType))
+              .add("userKey", userKeySchema)
+            val schema2 = StateStoreColFamilySchema(
+              "mapState", 0,
+              compositeKeySchema, 0,
+              new StructType().add("value", StringType),
+              Some(PrefixKeyScanStateEncoderSpec(compositeKeySchema, 1)),
+              Option(userKeySchema)
+            )
 
-          val schema3 = StateStoreColFamilySchema(
-            "$rowCounter_listState", 0,
-            keySchema, 0,
-            new StructType().add("count", LongType, nullable = true),
-            Some(NoPrefixKeyStateEncoderSpec(keySchema)),
-            None
-          )
+            val schema3 = StateStoreColFamilySchema(
+              "$rowCounter_listState", 0,
+              keySchema, 0,
+              new StructType().add("count", LongType, nullable = shouldBeNullable),
+              Some(NoPrefixKeyStateEncoderSpec(keySchema)),
+              None
+            )
 
-          val schema4 = StateStoreColFamilySchema(
-            "default", 0,
-            keySchema, 0,
-            new StructType().add("value", BinaryType),
-            Some(NoPrefixKeyStateEncoderSpec(keySchema)),
-            None
-          )
+            val schema4 = StateStoreColFamilySchema(
+              "default", 0,
+              keySchema, 0,
+              new StructType().add("value", BinaryType),
+              Some(NoPrefixKeyStateEncoderSpec(keySchema)),
+              None
+            )
 
-          val inputData = MemoryStream[String]
-          val result = inputData.toDS()
-            .groupByKey(x => x)
-            .transformWithState(new StatefulProcessorWithCompositeTypes(useImplicits),
-              TimeMode.None(),
-              OutputMode.Update())
+            val inputData = MemoryStream[String]
+            val result = inputData.toDS()
+              .groupByKey(x => x)
+              .transformWithState(new StatefulProcessorWithCompositeTypes(useImplicits),
+                TimeMode.None(),
+                OutputMode.Update())
 
-          testStream(result, OutputMode.Update())(
-            StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
-            AddData(inputData, "a", "b"),
-            CheckNewAnswer(("a", "1"), ("b", "1")),
-            Execute { q =>
-              q.lastProgress.runId
-              val schemaFilePath = fm.list(stateSchemaPath).toSeq.head.getPath
-              val providerId = StateStoreProviderId(StateStoreId(
-                checkpointDir.getCanonicalPath, 0, 0), q.lastProgress.runId)
-              val checker = new StateSchemaCompatibilityChecker(providerId,
-                hadoopConf, List(schemaFilePath))
-              val colFamilySeq = checker.readSchemaFile()
+            testStream(result, OutputMode.Update())(
+              StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
+              AddData(inputData, "a", "b"),
+              CheckNewAnswer(("a", "1"), ("b", "1")),
+              Execute { q =>
+                q.lastProgress.runId
+                val schemaFilePath = fm.list(stateSchemaPath).toSeq.head.getPath
+                val providerId = StateStoreProviderId(StateStoreId(
+                  checkpointDir.getCanonicalPath, 0, 0), q.lastProgress.runId)
+                val checker = new StateSchemaCompatibilityChecker(providerId,
+                  hadoopConf, List(schemaFilePath))
+                val colFamilySeq = checker.readSchemaFile()
 
-              assert(TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS ==
-                q.lastProgress.stateOperators.head.customMetrics.get("numValueStateVars").toInt)
-              assert(TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS ==
-                q.lastProgress.stateOperators.head.customMetrics.get("numListStateVars").toInt)
-              assert(TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS ==
-                q.lastProgress.stateOperators.head.customMetrics.get("numMapStateVars").toInt)
+                assert(TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS ==
+                  q.lastProgress.stateOperators.head.customMetrics.get("numValueStateVars").toInt)
+                assert(TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS ==
+                  q.lastProgress.stateOperators.head.customMetrics.get("numListStateVars").toInt)
+                assert(TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS ==
+                  q.lastProgress.stateOperators.head.customMetrics.get("numMapStateVars").toInt)
 
-              assert(colFamilySeq.length == 5)
-              assert(colFamilySeq.map(_.toString).toSet == Set(
-                schema0, schema1, schema2, schema3, schema4
-              ).map(_.toString))
-            },
-            StopStream
-          )
+                assert(colFamilySeq.length == 5)
+                assert(colFamilySeq.map(_.toString).toSet == Set(
+                  schema0, schema1, schema2, schema3, schema4
+                ).map(_.toString))
+              },
+              StopStream
+            )
+          }
         }
       }
     }
