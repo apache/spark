@@ -114,10 +114,15 @@ case class TransformWithStateInPandasExec(
 
   override def operatorStateMetadataVersion: Int = 2
 
-  override def getColFamilySchemas(): Map[String, StateStoreColFamilySchema] = {
+  override def getColFamilySchemas(
+      shouldBeNullable: Boolean
+  ): Map[String, StateStoreColFamilySchema] = {
     // For Python, the user can explicitly set nullability on schema, so
     // we need to throw an error if the schema is nullable
-    driverProcessorHandle.getColumnFamilySchemas(shouldCheckNullable = true)
+    driverProcessorHandle.getColumnFamilySchemas(
+      shouldCheckNullable = shouldBeNullable,
+      shouldSetNullable = shouldBeNullable
+    )
   }
 
   override def getStateVariableInfos(): Map[String, TransformWithStateVariableInfo] = {

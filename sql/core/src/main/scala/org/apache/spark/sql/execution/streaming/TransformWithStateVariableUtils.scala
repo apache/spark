@@ -175,7 +175,9 @@ object TransformWithStateOperatorProperties extends Logging {
  */
 trait TransformWithStateMetadataUtils extends Logging {
 
-  def getColFamilySchemas(): Map[String, StateStoreColFamilySchema]
+  // This method will return the column family schemas, and check whether the fields in the
+  // schema are nullable. If Avro encoding is used, we want to enforce nullability
+  def getColFamilySchemas(shouldBeNullable: Boolean): Map[String, StateStoreColFamilySchema]
 
   def getStateVariableInfos(): Map[String, TransformWithStateVariableInfo]
 
@@ -209,7 +211,7 @@ trait TransformWithStateMetadataUtils extends Logging {
       stateStoreEncodingFormat: String = UnsafeRow.toString): List[StateSchemaValidationResult] = {
     assert(stateSchemaVersion >= 3)
     val usingAvro = stateStoreEncodingFormat == Avro.toString
-    val newSchemas = getColFamilySchemas()
+    val newSchemas = getColFamilySchemas(usingAvro)
     val stateSchemaDir = stateSchemaDirPath(info)
     val newStateSchemaFilePath =
       new Path(stateSchemaDir, s"${batchId}_${UUID.randomUUID().toString}")

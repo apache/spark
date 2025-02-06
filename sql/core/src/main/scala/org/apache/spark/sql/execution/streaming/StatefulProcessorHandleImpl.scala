@@ -363,21 +363,36 @@ class DriverStatefulProcessorHandleImpl(timeMode: TimeMode, keyExprEnc: Expressi
     addTimerColFamily()
   }
 
+  /**
+   * This method returns all column family schemas, and checks and enforces nullability
+   * if need be.
+   * @param shouldCheckNullable Whether we need to check the nullability. This is set to
+   *                            true when using Python, as this is the only avenue through
+   *                            which users can set nullability
+   * @param shouldSetNullable Whether we need to set the fields as nullable. This is set to
+   *                          true when using Scala, as case classes are set to non-nullable
+   *                          by default.
+   * @return column family schemas used by this stateful processor.
+   */
   def getColumnFamilySchemas(
-      shouldCheckNullable: Boolean
+      shouldCheckNullable: Boolean,
+      shouldSetNullable: Boolean
   ): Map[String, StateStoreColFamilySchema] = {
     val schemas = columnFamilySchemas.toMap
     schemas.map { case (colFamilyName, schema) =>
-      // assert that each field is nullable if schema evolution is enabled
       schema.valueSchema.fields.foreach { field =>
         if (!field.nullable && shouldCheckNullable) {
           throw StateStoreErrors.twsSchemaMustBeNullable(
             schema.colFamilyName, schema.valueSchema.toString())
         }
       }
-      colFamilyName -> schema.copy(
-        valueSchema = schema.valueSchema.toNullable
-      )
+      if (shouldSetNullable) {
+        colFamilyName -> schema.copy(
+          valueSchema = schema.valueSchema.toNullable
+        )
+      } else {
+        colFamilyName -> schema
+      }
     }
   }
 
