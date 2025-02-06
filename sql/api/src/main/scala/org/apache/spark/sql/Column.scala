@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.parser.DataTypeParser
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin.withOrigin
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions.{lit, map}
-import org.apache.spark.sql.internal.ColumnNode
+import org.apache.spark.sql.internal.{ColumnNode, TableValuedFunctionArgument}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.ArrayImplicits._
 

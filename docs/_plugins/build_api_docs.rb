@@ -149,11 +149,9 @@ def build_scala_and_java_docs
   # Copy over the unified ScalaDoc for all projects to api/scala.
   # This directory will be copied over to _site when `jekyll` command is run.
   copy_and_update_scala_docs("../target/scala-2.13/unidoc", "api/scala")
-  # copy_and_update_scala_docs("../sql/connect/client/jvm/target/scala-2.13/unidoc", "api/connect/scala")
 
   # Copy over the unified JavaDoc for all projects to api/java.
   copy_and_update_java_docs("../target/javaunidoc", "api/java", "api/scala")
-  # copy_and_update_java_docs("../sql/connect/client/jvm/target/javaunidoc", "api/connect/java", "api/connect/scala")
 end
 
 def build_python_docs
