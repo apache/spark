@@ -50,3 +50,4 @@ Core Classes
     datasource.InputPartition
     datasource.WriterCommitMessage
     VariantVal
+    table_arg.TableArg
