@@ -35,7 +35,7 @@ array_to_vector.__doc__ = PyMLFunctions.array_to_vector.__doc__
 
 # predict_batch_udf is compatible with Spark Connect,
 # add it here to reuse the doctest.
-def _predict_batch_udf(model, input_col, output_col, *args, **kwargs) -> Column:
+def _predict_batch_udf() -> Column:
     raise NotImplementedError()
 
 
