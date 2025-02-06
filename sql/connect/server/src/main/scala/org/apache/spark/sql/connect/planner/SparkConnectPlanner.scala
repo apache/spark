@@ -47,7 +47,7 @@ import org.apache.spark.sql.{Column, Encoders, ForeachWriter, Observation, Row}
 import org.apache.spark.sql.catalyst.{expressions, AliasIdentifier, FunctionIdentifier, QueryPlanningTracker}
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, GlobalTempView, LazyExpression, LocalTempView, MultiAlias, NameParameterizedQuery, PosParameterizedQuery, UnresolvedAlias, UnresolvedAttribute, UnresolvedDataFrameStar, UnresolvedDeserializer, UnresolvedExtractValue, UnresolvedFunction, UnresolvedPlanId, UnresolvedRegex, UnresolvedRelation, UnresolvedStar, UnresolvedStarWithColumns, UnresolvedStarWithColumnsRenames, UnresolvedSubqueryColumnAliases, UnresolvedTableValuedFunction, UnresolvedTranspose}
 import org.apache.spark.sql.catalyst.encoders.{encoderFor, AgnosticEncoder, ExpressionEncoder, RowEncoder}
-import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{StringEncoder, UnboundRowEncoder}
+import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{ProductEncoder, RowEncoder => AgnosticRowEncoder, StringEncoder, UnboundRowEncoder}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.parser.{ParseException, ParserUtils}
@@ -950,7 +950,7 @@ class SparkConnectPlanner(
     def inputDeserializer(inputAttributes: Seq[Attribute] = Nil): Expression =
       UnresolvedDeserializer(inEnc.deserializer, inputAttributes)
 
-    def outEnc: ExpressionEncoder[_] = encoderFor(funcOutEnc, "output")
+    def outEnc: ExpressionEncoder[_] = encoderFor(funcOutEnc, "output", inputAttrs)
     def outputObjAttr: Attribute = generateObjAttr(outEnc)
     def inEnc: ExpressionEncoder[_] = encoderFor(funcInEnc, "input", inputAttrs)
     def inputObjAttr: Attribute = generateObjAttr(inEnc)
@@ -987,7 +987,6 @@ class SparkConnectPlanner(
         encoder: AgnosticEncoder[_],
         errorType: String,
         inputAttrs: Option[Seq[Attribute]] = None): ExpressionEncoder[_] = {
-      // TODO: handle nested unbound row encoders
       if (encoder == UnboundRowEncoder) {
         inputAttrs
           .map(attrs =>
@@ -996,7 +995,19 @@ class SparkConnectPlanner(
           .getOrElse(
             throw InvalidPlanInput(s"Row is not a supported $errorType type for this UDF."))
       } else {
-        ExpressionEncoder(encoder)
+        // Nested unbound row encoders
+        val unboundTransformed = encoder match {
+          case pe: ProductEncoder[_] =>
+            pe.copy(fields = pe.fields.map { field =>
+              field.copy(enc = encoderFor(field.enc, errorType, inputAttrs).encoder)
+            })
+          case re: AgnosticRowEncoder =>
+            re.copy(fields = re.fields.map { field =>
+              field.copy(enc = encoderFor(field.enc, errorType, inputAttrs).encoder)
+            })
+          case _ => encoder
+        }
+        ExpressionEncoder(unboundTransformed)
       }
     }
   }
@@ -2373,6 +2384,7 @@ class SparkConnectPlanner(
     }
   }
 
+  @deprecated("TypedReduce is now implemented using a normal UDAF aggregator.", "4.0.0")
   private def transformTypedReduceExpression(
       fun: proto.Expression.UnresolvedFunction,
       dataAttributes: Seq[Attribute]): Expression = {
@@ -2397,7 +2409,8 @@ class SparkConnectPlanner(
     expr.getExprTypeCase match {
       case proto.Expression.ExprTypeCase.UNRESOLVED_FUNCTION
           if expr.getUnresolvedFunction.getFunctionName == "reduce" =>
-        // The reduce func needs the input data attribute, thus handle it specially here
+        // The reduce func needs the input data attribute, thus handle it specially here.
+        // This special handling is now deprecated and will be removed in the future.
         transformTypedReduceExpression(expr.getUnresolvedFunction, plan.output)
       case _ => transformExpression(expr, Some(plan))
     }

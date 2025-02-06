@@ -31,15 +31,9 @@ trait ValueState[S] extends Serializable {
   def exists(): Boolean
 
   /**
-   * Get the state value if it exists
-   * @throws java.util.NoSuchElementException
-   *   if the state does not exist
+   * Get the state value if it exists or return null otherwise.
    */
-  @throws[NoSuchElementException]
   def get(): S
-
-  /** Get the state if it exists as an option and None otherwise */
-  def getOption(): Option[S]
 
   /**
    * Update the value of the state.
