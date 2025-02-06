@@ -3810,11 +3810,12 @@ class OneVsRestModel(
 
     def __init__(self, models: List[ClassificationModel]):
         super(OneVsRestModel, self).__init__()
-        from pyspark.core.context import SparkContext
-
         self.models = models
         if is_remote() or not isinstance(models[0], JavaMLWritable):
             return
+
+        from pyspark.core.context import SparkContext
+
         # set java instance
         java_models = [cast(_JavaClassificationModel, model)._to_java() for model in self.models]
         sc = SparkContext._active_spark_context
