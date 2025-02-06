@@ -816,6 +816,24 @@ abstract class CTEInlineSuiteBase
     val inlined = InlineCTE().apply(query)
     assert(!inlined.exists(_.isInstanceOf[WithCTE]))
   }
+
+  test("SPARK-51109: CTE in subquery expression as grouping column") {
+    withTable("t") {
+      Seq(1 -> 1).toDF("c1", "c2").write.saveAsTable("t")
+      withView("v") {
+        sql(
+          """
+            |CREATE VIEW v AS
+            |WITH r AS (SELECT c1 + c2 AS c FROM t)
+            |SELECT * FROM r
+            |""".stripMargin)
+        checkAnswer(
+          sql("SELECT (SELECT max(c) FROM v WHERE c > id) FROM range(1) GROUP BY 1"),
+          Row(2)
+        )
+      }
+    }
+  }
 }
 
 class CTEInlineSuiteAEOff extends CTEInlineSuiteBase with DisableAdaptiveExecutionSuite
