@@ -52,6 +52,17 @@ object ResolveDefaultColumns extends QueryErrorsBase
   // CURRENT_DEFAULT_COLUMN_METADATA.
   val CURRENT_DEFAULT_COLUMN_NAME = "DEFAULT"
 
+  var defaultColumnAnalyzer: Analyzer = DefaultColumnAnalyzer
+  var defaultColumnOptimizer: Optimizer = DefaultColumnOptimizer
+
+  /**
+   * Visible for testing
+   */
+  def setAnalyzerAndOptimizer(analyzer: Analyzer, optimizer: Optimizer): Unit = {
+    this.defaultColumnAnalyzer = analyzer
+    this.defaultColumnOptimizer = optimizer
+  }
+
   /**
    * Finds "current default" expressions in CREATE/REPLACE TABLE columns and constant-folds them.
    *
@@ -287,12 +298,12 @@ object ResolveDefaultColumns extends QueryErrorsBase
 
     // Analyze the parse result.
     val plan = try {
-      val analyzer: Analyzer = DefaultColumnAnalyzer
+      val analyzer: Analyzer = defaultColumnAnalyzer
       val analyzed = analyzer.execute(Project(Seq(Alias(parsed, colName)()), OneRowRelation()))
       analyzer.checkAnalysis(analyzed)
       // Eagerly execute finish-analysis and constant-folding rules before checking whether the
       // expression is foldable and resolved.
-      ConstantFolding(DefaultColumnOptimizer.FinishAnalysis(analyzed))
+      ConstantFolding(defaultColumnOptimizer.FinishAnalysis(analyzed))
     } catch {
       case ex: AnalysisException =>
         throw QueryCompilationErrors.defaultValuesUnresolvedExprError(
@@ -318,6 +329,67 @@ object ResolveDefaultColumns extends QueryErrorsBase
 
     // Perform implicit coercion from the provided expression type to the required column type.
     coerceDefaultValue(analyzed, dataType, statementType, colName, defaultSQL)
+  }
+
+  /**
+   * Analyze EXISTS_DEFAULT value.  This skips some steps of analyze as most of the
+   * analysis has been done before.
+   *
+   * VisibleForTesting
+   */
+  def analyzeExistingDefault(field: StructField,
+      analyzer: Analyzer = DefaultColumnAnalyzer): Expression = {
+    val colName = field.name
+    val dataType = field.dataType
+    val defaultSQL = field.metadata.getString(EXISTS_DEFAULT_COLUMN_METADATA_KEY)
+
+    // Parse the expression.
+    lazy val parser = new CatalystSqlParser()
+    val parsed: Expression = try {
+      parser.parseExpression(defaultSQL)
+    } catch {
+      case ex: ParseException =>
+        throw QueryCompilationErrors.defaultValuesUnresolvedExprError(
+          "", colName, defaultSQL, ex)
+    }
+    // Check invariants before moving on to analysis.
+    if (parsed.containsPattern(PLAN_EXPRESSION)) {
+      throw QueryCompilationErrors.defaultValuesMayNotContainSubQueryExpressions(
+        "", colName, defaultSQL)
+    }
+
+    // Analyze the parse result.
+    val plan = try {
+      val analyzer: Analyzer = defaultColumnAnalyzer
+      val analyzed = analyzer.execute(Project(Seq(Alias(parsed, colName)()), OneRowRelation()))
+      analyzer.checkAnalysis(analyzed)
+      // Eagerly execute constant-folding rules before checking whether the
+      // expression is foldable and resolved.
+      ConstantFolding(analyzed)
+    } catch {
+      case ex: AnalysisException =>
+        throw QueryCompilationErrors.defaultValuesUnresolvedExprError(
+          "", colName, defaultSQL, ex)
+    }
+    val analyzed: Expression = plan.collectFirst {
+      case Project(Seq(a: Alias), OneRowRelation()) => a.child
+    }.get
+
+    // Extra check, expressions should already be resolved and foldable
+    if (!analyzed.foldable) {
+      throw QueryCompilationErrors.defaultValueNotConstantError(defaultSQL, colName, defaultSQL)
+    }
+
+    if (!analyzed.resolved) {
+      throw QueryCompilationErrors.defaultValuesUnresolvedExprError(
+        "",
+        colName,
+        defaultSQL,
+        cause = null)
+    }
+
+    // Perform implicit coercion from the provided expression type to the required column type.
+    coerceDefaultValue(analyzed, dataType, defaultSQL, colName, defaultSQL)
   }
 
   /**
@@ -407,7 +479,7 @@ object ResolveDefaultColumns extends QueryErrorsBase
       val defaultValue: Option[String] = field.getExistenceDefaultValue()
       defaultValue.map { text: String =>
         val expr = try {
-          val expr = analyze(field, "", EXISTS_DEFAULT_COLUMN_METADATA_KEY)
+          val expr = analyzeExistingDefault(field)
           expr match {
             case _: ExprLiteral | _: Cast => expr
           }
