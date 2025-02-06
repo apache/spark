@@ -59,6 +59,8 @@ private[spark] class StreamingPythonRunner(
    * to be used with the functions.
    */
   def init(): (DataOutputStream, DataInputStream) = {
+    logInfo(log"[session: ${MDC(SESSION_ID, sessionId)}] Sending necessary information to the " +
+      log"Python worker")
     val env = SparkEnv.get
 
     val localdir = env.blockManager.diskBlockManager.localDirs.map(f => f.getPath()).mkString(",")
@@ -76,36 +78,44 @@ private[spark] class StreamingPythonRunner(
     pythonWorker = Some(worker)
     pythonWorkerFactory = Some(workerFactory)
 
-    logInfo(log"[session: ${MDC(SESSION_ID, sessionId)}] Python worker created")
-
-    val stream = new BufferedOutputStream(
-      pythonWorker.get.channel.socket().getOutputStream, bufferSize)
+    val socket = pythonWorker.get.channel.socket()
+    val stream = new BufferedOutputStream(socket.getOutputStream, bufferSize)
+    val dataIn = new DataInputStream(new BufferedInputStream(socket.getInputStream, bufferSize))
     val dataOut = new DataOutputStream(stream)
 
-    logInfo(log"[session: ${MDC(SESSION_ID, sessionId)}] Sending necessary information to the " +
-      log"Python worker")
+    val originalTimeout = socket.getSoTimeout()
+    // Set timeout to 5 minute during initialization config transmission
+    socket.setSoTimeout(5 * 60 * 1000)
 
-    PythonWorkerUtils.writePythonVersion(pythonVer, dataOut)
+    val resFromPython = try {
+      PythonWorkerUtils.writePythonVersion(pythonVer, dataOut)
 
-    // Send sessionId
-    if (!sessionId.isEmpty) {
-      PythonRDD.writeUTF(sessionId, dataOut)
+      // Send sessionId
+      if (!sessionId.isEmpty) {
+        PythonRDD.writeUTF(sessionId, dataOut)
+      }
+
+      // Send the user function to python process
+      PythonWorkerUtils.writePythonFunction(func, dataOut)
+      dataOut.flush()
+
+      logInfo(log"[session: ${MDC(SESSION_ID, sessionId)}] Reading initialization response from " +
+        log"Python runner.")
+      dataIn.readInt()
+    } catch {
+      case e: java.net.SocketTimeoutException =>
+        throw new StreamingPythonRunnerInitializationTimeoutException(e.getMessage)
+      case e: Exception =>
+        throw new StreamingPythonRunnerInitializationCommunicationException(e.getMessage)
     }
 
-    // Send the user function to python process
-    PythonWorkerUtils.writePythonFunction(func, dataOut)
-    dataOut.flush()
+    // Set timeout back to the original timeout
+    // Should be infinity by default
+    socket.setSoTimeout(originalTimeout)
 
-    logInfo(log"[session: ${MDC(SESSION_ID, sessionId)}] Reading initialization response from " +
-      log"Python runner.")
-
-    val dataIn = new DataInputStream(
-      new BufferedInputStream(pythonWorker.get.channel.socket().getInputStream, bufferSize))
-
-    val resFromPython = dataIn.readInt()
     if (resFromPython != 0) {
       val errMessage = PythonWorkerUtils.readUTF(dataIn)
-      throw streamingPythonRunnerInitializationFailure(resFromPython, errMessage)
+      throw new StreamingPythonRunnerInitializationException(resFromPython, errMessage)
     }
     logInfo(log"[session: ${MDC(SESSION_ID, sessionId)}] Runner initialization succeeded " +
       log"(returned ${MDC(PYTHON_WORKER_RESPONSE, resFromPython)}).")
@@ -113,10 +123,15 @@ private[spark] class StreamingPythonRunner(
     (dataOut, dataIn)
   }
 
-  def streamingPythonRunnerInitializationFailure(resFromPython: Int, errMessage: String):
-    StreamingPythonRunnerInitializationException = {
-    new StreamingPythonRunnerInitializationException(resFromPython, errMessage)
-  }
+  class StreamingPythonRunnerInitializationCommunicationException(errMessage: String)
+    extends SparkPythonException(
+      errorClass = "STREAMING_PYTHON_RUNNER_INITIALIZATION_COMMUNICATION_FAILURE",
+      messageParameters = Map("msg" -> errMessage))
+
+  class StreamingPythonRunnerInitializationTimeoutException(errMessage: String)
+    extends SparkPythonException(
+      errorClass = "STREAMING_PYTHON_RUNNER_INITIALIZATION_TIMEOUT_FAILURE",
+      messageParameters = Map("msg" -> errMessage))
 
   class StreamingPythonRunnerInitializationException(resFromPython: Int, errMessage: String)
     extends SparkPythonException(

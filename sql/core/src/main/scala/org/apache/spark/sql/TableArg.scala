@@ -18,6 +18,7 @@
 package org.apache.spark.sql
 
 import org.apache.spark.sql.catalyst.expressions.{Ascending, Expression, FunctionTableSubqueryArgumentExpression, SortOrder}
+import org.apache.spark.sql.internal.TableValuedFunctionArgument
 
 /**
  * Represents a table argument, providing methods to specify partitioning, ordering, and
@@ -26,7 +27,7 @@ import org.apache.spark.sql.catalyst.expressions.{Ascending, Expression, Functio
  *
  * @since 4.0.0
  */
-class TableArg(
+private[sql] class TableArg(
     private[sql] val expression: FunctionTableSubqueryArgumentExpression,
     sparkSession: classic.SparkSession)
   extends TableValuedFunctionArgument {

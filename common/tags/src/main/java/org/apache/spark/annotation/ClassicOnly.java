@@ -15,34 +15,14 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.streaming
+package org.apache.spark.annotation;
 
-import java.io.Serializable
+import java.lang.annotation.*;
 
-import org.apache.spark.annotation.Evolving
-
-@Evolving
 /**
- * Interface used for arbitrary stateful operations with the v2 API to capture single value state.
+ * This method is only available in the Classic implementation of the Scala/Java SQL API.
  */
-trait ValueState[S] extends Serializable {
-
-  /** Whether state exists or not. */
-  def exists(): Boolean
-
-  /**
-   * Get the state value if it exists or return null otherwise.
-   */
-  def get(): S
-
-  /**
-   * Update the value of the state.
-   *
-   * @param newState
-   *   the new value
-   */
-  def update(newState: S): Unit
-
-  /** Remove this state. */
-  def clear(): Unit
-}
+@Documented
+@Retention(RetentionPolicy.RUNTIME)
+@Target(ElementType.METHOD)
+public @interface ClassicOnly { }

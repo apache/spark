@@ -18,9 +18,6 @@
 # Spark Connect ML uses ServiceLoader to find out the supported Spark Ml non-model transformer.
 # So register the supported transformer here if you're trying to add a new one.
 
-########### Helper Model
-org.apache.spark.ml.util.ConnectHelper
-
 ########### Transformers
 org.apache.spark.ml.feature.DCT
 org.apache.spark.ml.feature.NGram
@@ -68,19 +65,12 @@ org.apache.spark.ml.clustering.BisectingKMeansModel
 org.apache.spark.ml.clustering.GaussianMixtureModel
 org.apache.spark.ml.clustering.DistributedLDAModel
 org.apache.spark.ml.clustering.LocalLDAModel
-org.apache.spark.ml.clustering.PowerIterationClusteringWrapper
 
 # recommendation
 org.apache.spark.ml.recommendation.ALSModel
 
 # fpm
 org.apache.spark.ml.fpm.FPGrowthModel
-org.apache.spark.ml.fpm.PrefixSpanWrapper
-
-# stat
-org.apache.spark.ml.stat.ChiSquareTestWrapper
-org.apache.spark.ml.stat.CorrelationWrapper
-org.apache.spark.ml.stat.KolmogorovSmirnovTestWrapper
 
 # feature
 org.apache.spark.ml.feature.RFormulaModel

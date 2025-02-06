@@ -55,7 +55,7 @@ class FruitCountStatefulProcessor(useImplicits: Boolean)
 
   override def handleInputRows(key: String, inputRows: Iterator[String], timerValues: TimerValues):
     Iterator[(String, Long, String)] = {
-    val new_cnt = _fruitState.getOption().map(x => x.count).getOrElse(0L) + inputRows.size
+    val new_cnt = Option(_fruitState.get()).map(x => x.count).getOrElse(0L) + inputRows.size
     val family = getFamily(key)
     _fruitState.update(FruitState(key, new_cnt, family))
     Iterator.single((key, new_cnt, family))
@@ -87,14 +87,14 @@ class FruitCountStatefulProcessorWithInitialState(useImplicits: Boolean)
 
   override def handleInitialState(key: String, initialState: String,
     timerValues: TimerValues): Unit = {
-    val new_cnt = _fruitState.getOption().map(x => x.count).getOrElse(0L) + 1
+    val new_cnt = Option(_fruitState.get()).map(x => x.count).getOrElse(0L) + 1
     val family = getFamily(key)
     _fruitState.update(FruitState(key, new_cnt, family))
   }
 
   override def handleInputRows(key: String, inputRows: Iterator[String], timerValues: TimerValues):
     Iterator[(String, Long, String)] = {
-    val new_cnt = _fruitState.getOption().map(x => x.count).getOrElse(0L) + inputRows.size
+    val new_cnt = Option(_fruitState.get()).map(x => x.count).getOrElse(0L) + inputRows.size
     val family = getFamily(key)
     _fruitState.update(FruitState(key, new_cnt, family))
     Iterator.single((key, new_cnt, family))

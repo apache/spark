@@ -106,7 +106,8 @@ class ArrowEncoderSuite extends ConnectFunSuite with BeforeAndAfterAll {
       maxRecordsPerBatch = maxRecordsPerBatch,
       maxBatchSize = maxBatchSize,
       batchSizeCheckInterval = batchSizeCheckInterval,
-      timeZoneId = "UTC")
+      timeZoneId = "UTC",
+      largeVarTypes = false)
 
     val inspectedIterator = if (inspectBatch != null) {
       arrowIterator.map { batch =>
@@ -183,7 +184,8 @@ class ArrowEncoderSuite extends ConnectFunSuite with BeforeAndAfterAll {
       allocator,
       maxRecordsPerBatch = 1024,
       maxBatchSize = 8 * 1024,
-      timeZoneId = "UTC")
+      timeZoneId = "UTC",
+      largeVarTypes = false)
   }
 
   private def compareIterators[T](expected: Iterator[T], actual: Iterator[T]): Unit = {
@@ -626,7 +628,8 @@ class ArrowEncoderSuite extends ConnectFunSuite with BeforeAndAfterAll {
         allocator,
         maxRecordsPerBatch = 128,
         maxBatchSize = 1024,
-        timeZoneId = "UTC")
+        timeZoneId = "UTC",
+        largeVarTypes = false)
       intercept[NullPointerException] {
         iterator.next()
       }

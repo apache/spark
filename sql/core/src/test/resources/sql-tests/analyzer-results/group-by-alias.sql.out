@@ -13,6 +13,18 @@ AS testData(a, b), false, true, LocalTempView, UNSUPPORTED, true
 
 
 -- !query
+SELECT a from testData GROUP BY A
+-- !query analysis
+Aggregate [A#x], [a#x]
++- SubqueryAlias testdata
+   +- View (`testData`, [a#x, b#x])
+      +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
+         +- Project [a#x, b#x]
+            +- SubqueryAlias testData
+               +- LocalRelation [a#x, b#x]
+
+
+-- !query
 SELECT a AS k, COUNT(b) FROM testData GROUP BY k
 -- !query analysis
 Aggregate [a#x], [a#x AS k#x, count(b#x) AS count(b)#xL]
@@ -49,6 +61,233 @@ Aggregate [col1#x], [col1#x AS k#x, sum(col2#x) AS sum(col2)#xL]
                +- Project [a#x, b#x]
                   +- SubqueryAlias testData
                      +- LocalRelation [a#x, b#x]
+
+
+-- !query
+SELECT a as alias FROM testData GROUP BY ALIAS
+-- !query analysis
+Aggregate [a#x], [a#x AS alias#x]
++- SubqueryAlias testdata
+   +- View (`testData`, [a#x, b#x])
+      +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
+         +- Project [a#x, b#x]
+            +- SubqueryAlias testData
+               +- LocalRelation [a#x, b#x]
+
+
+-- !query
+SELECT a AS k FROM testData GROUP BY 'k'
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "MISSING_AGGREGATION",
+  "sqlState" : "42803",
+  "messageParameters" : {
+    "expression" : "\"a\"",
+    "expressionAnyValue" : "\"any_value(a)\""
+  }
+}
+
+
+-- !query
+SELECT 1 AS k FROM testData GROUP BY 'k'
+-- !query analysis
+Aggregate [k], [1 AS k#x]
++- SubqueryAlias testdata
+   +- View (`testData`, [a#x, b#x])
+      +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
+         +- Project [a#x, b#x]
+            +- SubqueryAlias testData
+               +- LocalRelation [a#x, b#x]
+
+
+-- !query
+SELECT concat_ws(' ', a, b) FROM testData GROUP BY `concat_ws( , a, b)`
+-- !query analysis
+Aggregate [concat_ws( , cast(a#x as string), cast(b#x as string))], [concat_ws( , cast(a#x as string), cast(b#x as string)) AS concat_ws( , a, b)#x]
++- SubqueryAlias testdata
+   +- View (`testData`, [a#x, b#x])
+      +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
+         +- Project [a#x, b#x]
+            +- SubqueryAlias testData
+               +- LocalRelation [a#x, b#x]
+
+
+-- !query
+SELECT 1 AS a FROM testData GROUP BY a
+-- !query analysis
+Aggregate [a#x], [1 AS a#x]
++- SubqueryAlias testdata
+   +- View (`testData`, [a#x, b#x])
+      +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
+         +- Project [a#x, b#x]
+            +- SubqueryAlias testData
+               +- LocalRelation [a#x, b#x]
+
+
+-- !query
+SELECT 1 AS a FROM testData GROUP BY `a`
+-- !query analysis
+Aggregate [a#x], [1 AS a#x]
++- SubqueryAlias testdata
+   +- View (`testData`, [a#x, b#x])
+      +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
+         +- Project [a#x, b#x]
+            +- SubqueryAlias testData
+               +- LocalRelation [a#x, b#x]
+
+
+-- !query
+SELECT 1 GROUP BY `1`
+-- !query analysis
+Aggregate [1], [1 AS 1#x]
++- OneRowRelation
+
+
+-- !query
+SELECT (SELECT a FROM testData) + (SELECT b FROM testData) group by `(scalarsubquery() + scalarsubquery())`
+-- !query analysis
+Aggregate [(scalar-subquery#x [] + scalar-subquery#x [])], [(scalar-subquery#x [] + scalar-subquery#x []) AS (scalarsubquery() + scalarsubquery())#x]
+:  :- Project [a#x]
+:  :  +- SubqueryAlias testdata
+:  :     +- View (`testData`, [a#x, b#x])
+:  :        +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
+:  :           +- Project [a#x, b#x]
+:  :              +- SubqueryAlias testData
+:  :                 +- LocalRelation [a#x, b#x]
+:  :- Project [b#x]
+:  :  +- SubqueryAlias testdata
+:  :     +- View (`testData`, [a#x, b#x])
+:  :        +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
+:  :           +- Project [a#x, b#x]
+:  :              +- SubqueryAlias testData
+:  :                 +- LocalRelation [a#x, b#x]
+:  :- Project [a#x]
+:  :  +- SubqueryAlias testdata
+:  :     +- View (`testData`, [a#x, b#x])
+:  :        +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
+:  :           +- Project [a#x, b#x]
+:  :              +- SubqueryAlias testData
+:  :                 +- LocalRelation [a#x, b#x]
+:  +- Project [b#x]
+:     +- SubqueryAlias testdata
+:        +- View (`testData`, [a#x, b#x])
+:           +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
+:              +- Project [a#x, b#x]
+:                 +- SubqueryAlias testData
+:                    +- LocalRelation [a#x, b#x]
++- OneRowRelation
+
+
+-- !query
+SELECT a, count(*) FROM testData GROUP BY (SELECT b FROM testData)
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "MISSING_AGGREGATION",
+  "sqlState" : "42803",
+  "messageParameters" : {
+    "expression" : "\"a\"",
+    "expressionAnyValue" : "\"any_value(a)\""
+  }
+}
+
+
+-- !query
+SELECT a, count(*) FROM testData GROUP BY a, (SELECT b FROM testData)
+-- !query analysis
+Aggregate [a#x, scalar-subquery#x []], [a#x, count(1) AS count(1)#xL]
+:  +- Project [b#x]
+:     +- SubqueryAlias testdata
+:        +- View (`testData`, [a#x, b#x])
+:           +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
+:              +- Project [a#x, b#x]
+:                 +- SubqueryAlias testData
+:                    +- LocalRelation [a#x, b#x]
++- SubqueryAlias testdata
+   +- View (`testData`, [a#x, b#x])
+      +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
+         +- Project [a#x, b#x]
+            +- SubqueryAlias testData
+               +- LocalRelation [a#x, b#x]
+
+
+-- !query
+SELECT a, count(*) FROM testData GROUP BY a, (SELECT b FROM testData LIMIT 1)
+-- !query analysis
+Aggregate [a#x, scalar-subquery#x []], [a#x, count(1) AS count(1)#xL]
+:  +- GlobalLimit 1
+:     +- LocalLimit 1
+:        +- Project [b#x]
+:           +- SubqueryAlias testdata
+:              +- View (`testData`, [a#x, b#x])
+:                 +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
+:                    +- Project [a#x, b#x]
+:                       +- SubqueryAlias testData
+:                          +- LocalRelation [a#x, b#x]
++- SubqueryAlias testdata
+   +- View (`testData`, [a#x, b#x])
+      +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
+         +- Project [a#x, b#x]
+            +- SubqueryAlias testData
+               +- LocalRelation [a#x, b#x]
+
+
+-- !query
+SELECT a, count(*) FROM testData GROUP BY a, b IN (SELECT a FROM testData)
+-- !query analysis
+Aggregate [a#x, b#x IN (list#x [])], [a#x, count(1) AS count(1)#xL]
+:  +- Project [a#x]
+:     +- SubqueryAlias testdata
+:        +- View (`testData`, [a#x, b#x])
+:           +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
+:              +- Project [a#x, b#x]
+:                 +- SubqueryAlias testData
+:                    +- LocalRelation [a#x, b#x]
++- SubqueryAlias testdata
+   +- View (`testData`, [a#x, b#x])
+      +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
+         +- Project [a#x, b#x]
+            +- SubqueryAlias testData
+               +- LocalRelation [a#x, b#x]
+
+
+-- !query
+SELECT a, count(*) FROM testData GROUP BY a, a IN (SELECT b FROM testData)
+-- !query analysis
+Aggregate [a#x, a#x IN (list#x [])], [a#x, count(1) AS count(1)#xL]
+:  +- Project [b#x]
+:     +- SubqueryAlias testdata
+:        +- View (`testData`, [a#x, b#x])
+:           +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
+:              +- Project [a#x, b#x]
+:                 +- SubqueryAlias testData
+:                    +- LocalRelation [a#x, b#x]
++- SubqueryAlias testdata
+   +- View (`testData`, [a#x, b#x])
+      +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
+         +- Project [a#x, b#x]
+            +- SubqueryAlias testData
+               +- LocalRelation [a#x, b#x]
+
+
+-- !query
+SELECT a, count(*) FROM testData GROUP BY a, EXISTS(SELECT b FROM testData)
+-- !query analysis
+Aggregate [a#x, exists#x []], [a#x, count(1) AS count(1)#xL]
+:  +- Project [b#x]
+:     +- SubqueryAlias testdata
+:        +- View (`testData`, [a#x, b#x])
+:           +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
+:              +- Project [a#x, b#x]
+:                 +- SubqueryAlias testData
+:                    +- LocalRelation [a#x, b#x]
++- SubqueryAlias testdata
+   +- View (`testData`, [a#x, b#x])
+      +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
+         +- Project [a#x, b#x]
+            +- SubqueryAlias testData
+               +- LocalRelation [a#x, b#x]
 
 
 -- !query
@@ -117,3 +356,56 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "fragment" : "k"
   } ]
 }
+
+
+-- !query
+SELECT 1 GROUP BY `1`
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`1`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 19,
+    "stopIndex" : 21,
+    "fragment" : "`1`"
+  } ]
+}
+
+
+-- !query
+SELECT 1 AS col FROM testData GROUP BY `col`
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`col`",
+    "proposal" : "`a`, `b`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 40,
+    "stopIndex" : 44,
+    "fragment" : "`col`"
+  } ]
+}
+
+
+-- !query
+SELECT 1 AS a FROM testData GROUP BY `a`
+-- !query analysis
+Aggregate [a#x], [1 AS a#x]
++- SubqueryAlias testdata
+   +- View (`testData`, [a#x, b#x])
+      +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
+         +- Project [a#x, b#x]
+            +- SubqueryAlias testData
+               +- LocalRelation [a#x, b#x]
