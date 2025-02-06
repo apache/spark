@@ -77,6 +77,7 @@ private[spark] object Python {
       "(e.g., data transfer or communication) from a Python worker before considering it " +
       "potentially idle or unresponsive. When the timeout is triggered, " +
       "Spark will log the network-related status for debugging purposes. " +
+      "However, the Python worker will remain active and continue waiting for communication. " +
       "The default is `0` that means no timeout.")
     .version("4.0.0")
     .timeConf(TimeUnit.SECONDS)
