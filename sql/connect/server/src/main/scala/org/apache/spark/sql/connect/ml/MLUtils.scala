@@ -640,7 +640,7 @@ private[ml] object MLUtils {
     (classOf[MaxAbsScalerModel], Set("maxAbs")),
     (classOf[MinMaxScalerModel], Set("originalMax", "originalMin")),
     (classOf[RobustScalerModel], Set("range", "median")),
-    (classOf[VectorIndexerModel], Set("numFeatures")),
+    (classOf[VectorIndexerModel], Set("numFeatures", "categoryMapsDF")),
     (classOf[ChiSqSelectorModel], Set("selectedFeatures")),
     (classOf[UnivariateFeatureSelectorModel], Set("selectedFeatures")),
     (classOf[VarianceThresholdSelectorModel], Set("selectedFeatures")),
@@ -656,9 +656,17 @@ private[ml] object MLUtils {
     (
       classOf[ConnectHelper],
       Set(
+        "handleOverwrite",
         "stringIndexerModelFromLabels",
         "stringIndexerModelFromLabelsArray",
-        "countVectorizerModelFromVocabulary")))
+        "countVectorizerModelFromVocabulary",
+        "stopWordsRemoverLoadDefaultStopWords",
+        "stopWordsRemoverGetDefaultOrUS",
+        "chiSquareTest",
+        "correlation",
+        "kolmogorovSmirnovTest",
+        "powerIterationClusteringAssignClusters",
+        "prefixSpanFindFrequentSequentialPatterns")))
 
   private def validate(obj: Any, method: String): Unit = {
     assert(obj != null)

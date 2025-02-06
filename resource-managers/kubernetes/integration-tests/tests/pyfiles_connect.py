@@ -14,24 +14,30 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import sys
 
-import unittest
-
-from pyspark.ml.tests.test_feature import FeatureTestsMixin
-from pyspark.testing.connectutils import ReusedConnectTestCase
-
-
-class FeatureParityTests(FeatureTestsMixin, ReusedConnectTestCase):
-    pass
+from pyspark.sql import SparkSession
+from pyspark.sql.types import StringType
 
 
 if __name__ == "__main__":
-    from pyspark.ml.tests.connect.test_parity_feature import *  # noqa: F401
+    """
+        Usage: pyfiles
+    """
+    spark = SparkSession \
+        .builder \
+        .appName("PyFilesTest") \
+        .config("spark.api.mode", "connect") \
+        .master(sys.argv[1]) \
+        .getOrCreate()
 
-    try:
-        import xmlrunner  # type: ignore[import]
+    assert "connect" in str(spark)
 
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    # Check python executable at executors
+    spark.udf.register("get_sys_ver",
+                       lambda: "%d.%d" % sys.version_info[:2], StringType())
+    [row] = spark.sql("SELECT get_sys_ver()").collect()
+    driver_version = "%d.%d" % sys.version_info[:2]
+    print("Python runtime version check for executor is: " + str(row[0] == driver_version))
+
+    spark.stop()

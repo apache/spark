@@ -4849,7 +4849,7 @@ class StringIndexerModel(
             model._java_obj = helper._call_java(
                 "stringIndexerModelFromLabels",
                 model.uid,
-                (list(labels), ArrayType(StringType(), False)),
+                (list(labels), ArrayType(StringType())),
             )
 
         else:
@@ -4891,7 +4891,7 @@ class StringIndexerModel(
                 model.uid,
                 (
                     [list(labels) for labels in arrayOfLabels],
-                    ArrayType(ArrayType(StringType(), False)),
+                    ArrayType(ArrayType(StringType())),
                 ),
             )
 
@@ -5043,7 +5043,6 @@ class StopWordsRemover(
     Notes
     -----
     - null values from input array are preserved unless adding null to stopWords explicitly.
-    - In Spark Connect Mode, the default value of parameter `locale` and `stopWords` are not set.
 
     Examples
     --------
@@ -5142,19 +5141,14 @@ class StopWordsRemover(
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.feature.StopWordsRemover", self.uid
         )
-        if isinstance(self._java_obj, str):
-            # Skip setting the default value of 'locale' and 'stopWords', which
-            # needs to invoke a JVM method.
-            # So if users don't explicitly set 'locale' and/or 'stopWords', then the getters fails.
-            self._setDefault(
-                caseSensitive=False,
-            )
+        if is_remote():
+            helper = JavaWrapper(java_obj=ML_CONNECT_HELPER_ID)
+            locale = helper._call_java("stopWordsRemoverGetDefaultOrUS")
         else:
-            self._setDefault(
-                stopWords=StopWordsRemover.loadDefaultStopWords("english"),
-                caseSensitive=False,
-                locale=self._java_obj.getLocale(),
-            )
+            locale = self._java_obj.getLocale()
+
+        stopWords = StopWordsRemover.loadDefaultStopWords("english")
+        self._setDefault(stopWords=stopWords, caseSensitive=False, locale=locale)
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
@@ -5279,8 +5273,14 @@ class StopWordsRemover(
         Supported languages: danish, dutch, english, finnish, french, german, hungarian,
         italian, norwegian, portuguese, russian, spanish, swedish, turkish
         """
-        stopWordsObj = getattr(_jvm(), "org.apache.spark.ml.feature.StopWordsRemover")
-        return list(stopWordsObj.loadDefaultStopWords(language))
+        if is_remote():
+            helper = JavaWrapper(java_obj=ML_CONNECT_HELPER_ID)
+            stopWords = helper._call_java("stopWordsRemoverLoadDefaultStopWords", language)
+            return list(stopWords)
+
+        else:
+            stopWordsObj = getattr(_jvm(), "org.apache.spark.ml.feature.StopWordsRemover")
+            return list(stopWordsObj.loadDefaultStopWords(language))
 
 
 class _TargetEncoderParams(
@@ -6016,13 +6016,26 @@ class VectorIndexerModel(
 
     @property
     @since("1.4.0")
-    def categoryMaps(self) -> Dict[int, Tuple[float, int]]:
+    def categoryMaps(self) -> Dict[int, Dict[float, int]]:
         """
         Feature value index.  Keys are categorical feature indices (column indices).
         Values are maps from original features values to 0-based category indices.
         If a feature is not in this map, it is treated as continuous.
         """
-        return self._call_java("javaCategoryMaps")
+
+        @try_remote_attribute_relation
+        def categoryMapsDF(m: VectorIndexerModel) -> DataFrame:
+            return m._call_java("categoryMapsDF")
+
+        res: Dict[int, Dict[float, int]] = {}
+        for row in categoryMapsDF(self).collect():
+            featureIndex = int(row.featureIndex)
+            originalValue = float(row.originalValue)
+            categoryIndex = int(row.categoryIndex)
+            if featureIndex not in res:
+                res[featureIndex] = {}
+            res[featureIndex][originalValue] = categoryIndex
+        return res
 
 
 @inherit_doc

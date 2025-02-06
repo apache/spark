@@ -268,7 +268,7 @@ class TransformWithStateInPandasPythonPreInitRunner(
     val resFromPython = dataIn.readInt()
     if (resFromPython != 0) {
       val errMessage = PythonWorkerUtils.readUTF(dataIn)
-      throw streamingPythonRunnerInitializationFailure(resFromPython, errMessage)
+      throw new StreamingPythonRunnerInitializationException(resFromPython, errMessage)
     }
   }
 

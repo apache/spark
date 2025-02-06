@@ -275,6 +275,9 @@ class FeatureTestsMixin:
         self.assertEqual(indexer.uid, model.uid)
         self.assertEqual(model.numFeatures, 2)
 
+        categoryMaps = model.categoryMaps
+        self.assertEqual(categoryMaps, {0: {0.0: 0, -1.0: 1}}, categoryMaps)
+
         output = model.transform(df)
         self.assertEqual(output.columns, ["a", "indexed"])
         self.assertEqual(output.count(), 3)
@@ -880,8 +883,9 @@ class FeatureTestsMixin:
             remover2 = StopWordsRemover.load(d)
             self.assertEqual(str(remover), str(remover2))
 
-    def test_stop_words_remover_II(self):
-        dataset = self.spark.createDataFrame([Row(input=["a", "panda"])])
+    def test_stop_words_remover_with_given_words(self):
+        spark = self.spark
+        dataset = spark.createDataFrame([Row(input=["a", "panda"])])
         stopWordRemover = StopWordsRemover(inputCol="input", outputCol="output")
         # Default
         self.assertEqual(stopWordRemover.getInputCol(), "input")
@@ -902,14 +906,29 @@ class FeatureTestsMixin:
         transformedDF = stopWordRemover.transform(dataset)
         self.assertEqual(transformedDF.head().output, [])
 
-    def test_stop_words_language_selection(self):
+    def test_stop_words_remover_with_turkish(self):
+        spark = self.spark
+        dataset = spark.createDataFrame([Row(input=["acaba", "ama", "biri"])])
         stopWordRemover = StopWordsRemover(inputCol="input", outputCol="output")
         stopwords = StopWordsRemover.loadDefaultStopWords("turkish")
-        dataset = self.spark.createDataFrame([Row(input=["acaba", "ama", "biri"])])
         stopWordRemover.setStopWords(stopwords)
         self.assertEqual(stopWordRemover.getStopWords(), stopwords)
         transformedDF = stopWordRemover.transform(dataset)
         self.assertEqual(transformedDF.head().output, [])
+
+    def test_stop_words_remover_default(self):
+        stopWordRemover = StopWordsRemover(inputCol="input", outputCol="output")
+
+        # check the default value of local
+        locale = stopWordRemover.getLocale()
+        self.assertIsInstance(locale, str)
+        self.assertTrue(len(locale) > 0)
+
+        # check the default value of stop words
+        stopwords = stopWordRemover.getStopWords()
+        self.assertIsInstance(stopwords, list)
+        self.assertTrue(len(stopwords) > 0)
+        self.assertTrue(all(isinstance(word, str) for word in stopwords))
 
     def test_binarizer(self):
         b0 = Binarizer()
