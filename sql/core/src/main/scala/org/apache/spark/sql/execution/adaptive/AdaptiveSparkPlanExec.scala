@@ -531,7 +531,8 @@ case class AdaptiveSparkPlanExec(
     case resultStage@ResultQueryStageExec(_, optimizedPlan, _) =>
       if (firstRun) {
         // There is already an existing ResultQueryStage created in previous `withFinalPlanUpdate`
-        // e.g, when we do `df.collect` multiple times
+        // e.g, when we do `df.collect` multiple times. Here we create a new result stage to
+        // execute it again, as the handler function can be different.
         val newResultStage = ResultQueryStageExec(currentStageId, optimizedPlan, resultHandler)
         currentStageId += 1
         setLogicalLinkForNewQueryStage(newResultStage, optimizedPlan)
@@ -625,8 +626,8 @@ case class AdaptiveSparkPlanExec(
   }
 
   private def createResultQueryStage(
-    resultHandler: SparkPlan => Any,
-    plan: SparkPlan): ResultQueryStageExec = {
+      resultHandler: SparkPlan => Any,
+      plan: SparkPlan): ResultQueryStageExec = {
     // Run the final plan when there's no more unfinished stages.
     val optimizedRootPlan = applyPhysicalRules(
       optimizeQueryStage(plan, isFinalStage = true),
