@@ -97,7 +97,7 @@ class SparkOptimizer(
       ConstantFolding),
     Batch("User Provided Optimizers", fixedPoint, experimentalMethods.extraOptimizations: _*),
     Batch("Replace CTE with Repartition", Once, ReplaceCTERefWithRepartition),
-    Batch("Fill Static Partitions from Dynamic Partitions", Once, FillStaticPartitions)))
+    Batch("Fill Static Partitions from DynamicPartitions", Once, FillStaticPartitions)))
 
   override def nonExcludableRules: Seq[String] = super.nonExcludableRules ++
     Seq(
