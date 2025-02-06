@@ -906,8 +906,10 @@ class CrossValidator(
                 from pyspark.sql.connect.udf import UserDefinedFunction
             else:
                 from pyspark.sql.functions import UserDefinedFunction  # type: ignore[assignment]
+            from pyspark.util import PythonEvalType
 
-            checker_udf = UserDefinedFunction(checker, BooleanType())
+            # TODO(SPARK-48515): Use Arrow UDF for CrossValidator Fit
+            checker_udf = UserDefinedFunction(checker, BooleanType(), evalType=PythonEvalType.SQL_BATCHED_UDF)
             for i in range(nFolds):
                 training = dataset.filter(checker_udf(dataset[foldCol]) & (col(foldCol) != lit(i)))
                 validation = dataset.filter(
