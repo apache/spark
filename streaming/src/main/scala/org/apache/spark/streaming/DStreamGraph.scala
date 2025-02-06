@@ -18,6 +18,7 @@
 package org.apache.spark.streaming
 
 import java.io.{IOException, ObjectInputStream, ObjectOutputStream}
+import java.util.concurrent.CountDownLatch
 
 import scala.collection.mutable
 import scala.collection.parallel.immutable.ParVector
@@ -25,7 +26,7 @@ import scala.collection.parallel.immutable.ParVector
 import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.streaming.dstream.{DStream, InputDStream, ReceiverInputDStream}
 import org.apache.spark.streaming.scheduler.Job
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{ThreadUtils, Utils}
 
 final private[streaming] class DStreamGraph extends Serializable with Logging {
 
@@ -52,9 +53,18 @@ final private[streaming] class DStreamGraph extends Serializable with Logging {
       outputStreams.foreach(_.validateAtStart())
       numReceivers = inputStreams.count(_.isInstanceOf[ReceiverInputDStream[_]])
       inputStreamNameAndID = inputStreams.map(is => (is.name, is.id)).toSeq
-      // scalastyle:off parvector
-      new ParVector(inputStreams.toVector).foreach(_.start())
-      // scalastyle:on parvector
+      val threadPool =
+        ThreadUtils.newDaemonFixedThreadPool(inputStreams.length, "input-stream-start-executor")
+      val finishLatch = new CountDownLatch(inputStreams.length)
+      inputStreams.foreach(is => {
+        threadPool.submit(new Runnable {
+          override def run(): Unit = {
+            is.start()
+            finishLatch.countDown()
+          }
+        })
+      })
+      finishLatch.await()
     }
   }
 
