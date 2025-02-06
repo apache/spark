@@ -124,7 +124,6 @@ DataFrame
     DataFrame.toPandas
     DataFrame.transform
     DataFrame.transpose
-    DataFrame.tvf
     DataFrame.union
     DataFrame.unionAll
     DataFrame.unionByName
@@ -151,3 +150,6 @@ DataFrame
     DataFrameStatFunctions.crosstab
     DataFrameStatFunctions.freqItems
     DataFrameStatFunctions.sampleBy
+    TableArg.partitionBy
+    TableArg.orderBy
+    TableArg.withSinglePartition
