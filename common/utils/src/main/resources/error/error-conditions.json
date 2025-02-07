@@ -4629,6 +4629,12 @@
     ],
     "sqlState" : "42K0I"
   },
+  "SQL_SCRIPT_IN_EXECUTE_IMMEDIATE" : {
+    "message" : [
+      "SQL Scripts in EXECUTE IMMEDIATE commands are not allowed. Please ensure that the SQL query provided (<sqlString>) is not SQL Script."
+    ],
+    "sqlState" : "07501"
+  },
   "STAR_GROUP_BY_POS" : {
     "message" : [
       "Star (*) is not allowed in a select list when GROUP BY an ordinal position is used."
@@ -5802,12 +5808,6 @@
         "message" : [
           "Positional parameters are not supported with SQL Scripting."
         ]
-      },
-      "SQL_SCRIPT_IN_EXECUTE_IMMEDIATE" : {
-        "message" : [
-          "SQL Scripts in EXECUTE IMMEDIATE commands are not allowed. Please ensure that the SQL query provided (<sqlString>) is not SQL Script."
-        ],
-        "sqlState" : "07501"
       },
       "STATE_STORE_MULTIPLE_COLUMN_FAMILIES" : {
         "message" : [

@@ -917,6 +917,22 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
       ))
   }
 
+  test("EXEC IMMEDIATE - SQL Script as sqlString parameter") {
+    withSQLConf(SQLConf.SQL_SCRIPTING_ENABLED.key -> "true") {
+      val execImmediatePlan = ExecuteImmediateQuery(
+        Seq.empty,
+        scala.util.Left("BEGIN SELECT 1; END"),
+        Seq.empty)
+
+      assertAnalysisErrorCondition(
+        inputPlan = execImmediatePlan,
+        expectedErrorCondition = "SQL_SCRIPT_IN_EXECUTE_IMMEDIATE",
+        expectedMessageParameters = Map(
+          "sqlString" -> "BEGIN SELECT 1; END"
+        ))
+    }
+  }
+
   test("SPARK-6452 regression test") {
     // CheckAnalysis should throw AnalysisException when Aggregate contains missing attribute(s)
     // Since we manually construct the logical plan at here and Sum only accept
