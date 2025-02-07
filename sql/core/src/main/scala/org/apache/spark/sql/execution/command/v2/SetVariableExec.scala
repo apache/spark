@@ -71,7 +71,13 @@ case class SetVariableExec(
     val variableManager = scriptingVariableManager
       .filter(_ => variable.catalog == FakeLocalCatalog)
       // If a local variable with nameParts exists, set it using scriptingVariableManager.
-      .filter(_.get(namePartsCaseAdjusted).isDefined)
+//      .filter(_.get(namePartsCaseAdjusted).isDefined)
+      .map(varManager => if (varManager.get(namePartsCaseAdjusted).isEmpty) {
+        throw SparkException.internalError("Local variable should be present in SetVariableExec" +
+          "because ResolveSetVariable has already determined it is a local variable")
+      } else {
+        varManager
+      })
       // If a local variable with nameParts doesn't exist, check if a session variable exists
       // with those nameParts and set it using tempVariableManager.
       .orElse(
