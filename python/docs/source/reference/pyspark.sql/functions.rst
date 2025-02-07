@@ -646,9 +646,8 @@ UDF, UDTF and UDT
     unwrap_udt
 
 
-======================
 Table-Valued Functions
-======================
+----------------------
 .. currentmodule:: pyspark.sql.tvf
 
 .. autosummary::
