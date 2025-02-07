@@ -382,7 +382,11 @@ case class AdaptiveSparkPlanExec(
     }
     _isFinalPlan = true
     finalPlanUpdate
-    currentPhysicalPlan.asInstanceOf[ResultQueryStageExec].resultOption.get().get.asInstanceOf[T]
+    // Dereference the result so it can be GCed. After this resultStage.isMaterialized will return
+    // false, which is expected. If we want to collect result again, we should invoke
+    // `withFinalPlanUpdate` and pass another result handler and we will create a new result stage.
+    currentPhysicalPlan.asInstanceOf[ResultQueryStageExec].resultOption.getAndUpdate(_ => None)
+      .get.asInstanceOf[T]
   }
 
   // Use a lazy val to avoid this being called more than once.
@@ -531,6 +535,7 @@ case class AdaptiveSparkPlanExec(
     // 1. Early return if ResultQueryStageExec is already created
     plan match {
       case resultStage@ResultQueryStageExec(_, optimizedPlan, _) =>
+        assertStageNotFailed(resultStage)
         return if (firstRun) {
           // There is already an existing ResultQueryStage created in previous `withFinalPlanUpdate`
           // e.g, when we do `df.collect` multiple times. Here we create a new result stage to
@@ -542,8 +547,9 @@ case class AdaptiveSparkPlanExec(
             allChildStagesMaterialized = false,
             newStages = Seq(newResultStage))
         } else {
-          // result stage already created, do nothing
-          CreateStageResult(newPlan = plan,
+          // We will hit this branch after we've created result query stage in the AQE loop, we
+          // should do nothing.
+          CreateStageResult(newPlan = resultStage,
             allChildStagesMaterialized = resultStage.isMaterialized,
             newStages = Seq.empty)
         }
