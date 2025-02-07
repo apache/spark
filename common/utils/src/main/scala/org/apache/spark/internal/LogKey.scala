@@ -635,8 +635,16 @@ private[spark] object LogKeys {
   case object PYTHON_EXEC extends LogKey
   case object PYTHON_PACKAGES extends LogKey
   case object PYTHON_VERSION extends LogKey
+  case object PYTHON_WORKER_CHANNEL_IS_BLOCKING_MODE extends LogKey
+  case object PYTHON_WORKER_CHANNEL_IS_CONNECTED extends LogKey
+  case object PYTHON_WORKER_HAS_INPUTS extends LogKey
+  case object PYTHON_WORKER_IDLE_TIMEOUT extends LogKey
+  case object PYTHON_WORKER_IS_ALIVE extends LogKey
   case object PYTHON_WORKER_MODULE extends LogKey
   case object PYTHON_WORKER_RESPONSE extends LogKey
+  case object PYTHON_WORKER_SELECTION_KEY_INTERESTS extends LogKey
+  case object PYTHON_WORKER_SELECTION_KEY_IS_VALID extends LogKey
+  case object PYTHON_WORKER_SELECTOR_IS_OPEN extends LogKey
   case object QUANTILES extends LogKey
   case object QUERY_CACHE_VALUE extends LogKey
   case object QUERY_HINT extends LogKey

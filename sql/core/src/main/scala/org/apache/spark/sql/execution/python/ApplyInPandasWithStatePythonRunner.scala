@@ -75,6 +75,7 @@ class ApplyInPandasWithStatePythonRunner(
       funcs.head._1.funcs.head.pythonExec)
 
   override val faultHandlerEnabled: Boolean = SQLConf.get.pythonUDFWorkerFaulthandlerEnabled
+  override val idleTimeoutSeconds: Long = SQLConf.get.pythonUDFWorkerIdleTimeoutSeconds
 
   private val sqlConf = SQLConf.get
 
