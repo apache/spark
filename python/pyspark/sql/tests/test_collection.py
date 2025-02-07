@@ -289,6 +289,28 @@ class DataFrameCollectionTestsMixin:
         else:
             self.assertEqual(type(pdf["array_struct_col"][0]), list)
 
+    def check_to_pandas_for_empty_df_with_nested_array_columns(self):
+        # SPARK-51112: Segfault must not occur when converting empty DataFrame with nested array
+        # columns to pandas DataFrame.
+        df = self.spark.createDataFrame(
+            data=[],
+            schema=StructType(
+                [
+                    StructField(
+                        name="b_int",
+                        dataType=IntegerType(),
+                        nullable=False,
+                    ),
+                    StructField(
+                        name="b",
+                        dataType=ArrayType(ArrayType(StringType(), True), True),
+                        nullable=True,
+                    ),
+                ]
+            ),
+        )
+        df.toPandas()
+
     def test_to_local_iterator(self):
         df = self.spark.range(8, numPartitions=4)
         expected = df.collect()
