@@ -19,12 +19,13 @@ package org.apache.spark.sql.execution.streaming.state
 
 import java.io.File
 
+import scala.concurrent.duration.DurationInt
 import scala.jdk.CollectionConverters.{MapHasAsScala, SetHasAsScala}
 
-import org.scalatest.time.{Minute, Seconds, Span}
+import org.scalatest.time.{Minute, Span}
 
 import org.apache.spark.sql.execution.streaming.{MemoryStream, StreamingQueryWrapper}
-import org.apache.spark.sql.functions.count
+import org.apache.spark.sql.functions.{count, expr}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming._
 import org.apache.spark.sql.streaming.OutputMode.Update
@@ -287,8 +288,10 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest
     assert(snapshotVersionsPresent(dirForPartition0).contains(5L))
   }
 
-  private def snapshotLagMetricName(partitionId: Long): String =
-    (SNAPSHOT_LAG_METRIC_PREFIX + partitionId)
+  private def snapshotLagMetricName(
+      partitionId: Long,
+      storeName: String = StateStoreId.DEFAULT_STORE_NAME): String =
+    (s"$SNAPSHOT_LAG_METRIC_PREFIX${partitionId}_$storeName")
 
   testWithChangelogCheckpointingEnabled(
     "SPARK-51097: Verify snapshot lag metric is updated correctly with RocksDBStateStoreProvider"
@@ -313,17 +316,17 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest
           CheckNewAnswer("a", "b"),
           Execute { q =>
             // Make sure only smallest K active metrics are published
-            eventually(timeout(Span(10, Seconds))) {
+            eventually(timeout(10.seconds)) {
               val partitionMetrics = q.lastProgress
                 .stateOperators(0)
                 .customMetrics
                 .asScala
                 .view
                 .filterKeys(_.startsWith(SNAPSHOT_LAG_METRIC_PREFIX))
-              // Determined by STATE_STORE_PARTITION_METRICS_REPORT_LIMIT for this scenario
+              // Determined by numPartitionMetricsToReport
               assert(
-                partitionMetrics.size == q.sparkSession.conf
-                  .get(SQLConf.STATE_STORE_PARTITION_METRICS_REPORT_LIMIT)
+                partitionMetrics.size ==
+                  q.sparkSession.sessionState.conf.numPartitionMetricsToReport
               )
               assert(partitionMetrics.forall(_._2 == 1))
             }
@@ -360,7 +363,7 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest
           Execute { q =>
             // Partitions getting skipped (id 0 and 1) do not have an uploaded version, leaving
             // the metric as -1.
-            eventually(timeout(Span(10, Seconds))) {
+            eventually(timeout(10.seconds)) {
               assert(
                 q.lastProgress
                   .stateOperators(0)
@@ -380,17 +383,131 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest
                 .asScala
                 .view
                 .filterKeys(_.startsWith(SNAPSHOT_LAG_METRIC_PREFIX))
-              // Determined by STATE_STORE_PARTITION_METRICS_REPORT_LIMIT for this scenario
+              // Determined by numPartitionMetricsToReport for this scenario
               assert(
-                partitionMetrics.size == q.sparkSession.conf
-                  .get(SQLConf.STATE_STORE_PARTITION_METRICS_REPORT_LIMIT)
+                partitionMetrics.size ==
+                q.sparkSession.sessionState.conf.numPartitionMetricsToReport
               )
               // Two metrics published are -1, the remainder should all be 1 as they
               // uploaded properly.
               assert(
-                partitionMetrics.filter(_._2 == 1).size == q.sparkSession.conf
-                  .get(SQLConf.STATE_STORE_PARTITION_METRICS_REPORT_LIMIT) - 2
+                partitionMetrics.count(_._2 == 1) ==
+                q.sparkSession.sessionState.conf.numPartitionMetricsToReport - 2
               )
+            }
+          },
+          StopStream
+        )
+      }
+    }
+  }
+
+  testWithChangelogCheckpointingEnabled(
+    "SPARK-51097: Verify snapshot lag metric is updated correctly for join queries with " +
+    "RocksDBStateStoreProvider"
+  ) {
+    withSQLConf(
+      SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+        classOf[RocksDBStateStoreProvider].getName,
+      SQLConf.STREAMING_MAINTENANCE_INTERVAL.key -> "100",
+      SQLConf.STREAMING_NO_DATA_PROGRESS_EVENT_INTERVAL.key -> "10",
+      SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.key -> "1",
+      SQLConf.STATE_STORE_PARTITION_METRICS_REPORT_LIMIT.key -> "10"
+    ) {
+      withTempDir { checkpointDir =>
+        val input1 = MemoryStream[Int]
+        val input2 = MemoryStream[Int]
+
+        val df1 = input1.toDF().select($"value" as "leftKey", ($"value" * 2) as "leftValue")
+        val df2 = input2
+          .toDF()
+          .select($"value" as "rightKey", ($"value" * 3) as "rightValue")
+        val joined = df1.join(df2, expr("leftKey = rightKey"))
+
+        testStream(joined)(
+          StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
+          AddData(input1, 1, 5),
+          ProcessAllAvailable(),
+          AddData(input2, 1, 5, 10),
+          ProcessAllAvailable(),
+          CheckNewAnswer((1, 2, 1, 3), (5, 10, 5, 15)),
+          Execute { q =>
+            eventually(timeout(10.seconds)) {
+              // Make sure only smallest K active metrics are published.
+              // There are 5 * 4 = 20 metrics in total because of join, but only 10 are published.
+              val partitionMetrics = q.lastProgress
+                .stateOperators(0)
+                .customMetrics
+                .asScala
+                .view
+                .filterKeys(_.startsWith(SNAPSHOT_LAG_METRIC_PREFIX))
+              // Determined by numPartitionMetricsToReport
+              assert(
+                partitionMetrics.size ==
+                  q.sparkSession.sessionState.conf.numPartitionMetricsToReport
+              )
+              // All partitions should have uploaded a version
+              assert(partitionMetrics.forall(_._2 == 1))
+            }
+          },
+          StopStream
+        )
+      }
+    }
+  }
+
+  testWithChangelogCheckpointingEnabled(
+    "SPARK-51097: Verify snapshot lag metric is updated correctly for join queries with " +
+    "SkipMaintenanceOnCertainPartitionsProvider"
+  ) {
+    withSQLConf(
+      SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+        classOf[SkipMaintenanceOnCertainPartitionsProvider].getName,
+      SQLConf.STREAMING_MAINTENANCE_INTERVAL.key -> "100",
+      SQLConf.STREAMING_NO_DATA_PROGRESS_EVENT_INTERVAL.key -> "10",
+      SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.key -> "1",
+      SQLConf.STATE_STORE_PARTITION_METRICS_REPORT_LIMIT.key -> "10"
+    ) {
+      withTempDir { checkpointDir =>
+        val input1 = MemoryStream[Int]
+        val input2 = MemoryStream[Int]
+
+        val df1 = input1.toDF().select($"value" as "leftKey", ($"value" * 2) as "leftValue")
+        val df2 = input2
+          .toDF()
+          .select($"value" as "rightKey", ($"value" * 3) as "rightValue")
+        val joined = df1.join(df2, expr("leftKey = rightKey"))
+
+        testStream(joined)(
+          StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
+          AddData(input1, 1, 5),
+          ProcessAllAvailable(),
+          AddData(input2, 1, 5, 10),
+          ProcessAllAvailable(),
+          CheckNewAnswer((1, 2, 1, 3), (5, 10, 5, 15)),
+          Execute { q =>
+            eventually(timeout(10.seconds)) {
+              // Make sure only smallest K active metrics are published.
+              // There are 5 * 4 = 20 metrics in total because of join, but only 10 are published.
+              val partitionMetrics = q.lastProgress
+                .stateOperators(0)
+                .customMetrics
+                .asScala
+                .view
+                .filterKeys(_.startsWith(SNAPSHOT_LAG_METRIC_PREFIX))
+              val badPartitionMetrics = partitionMetrics.filterKeys(
+                k =>
+                  k.startsWith(snapshotLagMetricName(0, "")) ||
+                  k.startsWith(snapshotLagMetricName(1, ""))
+              )
+              val numPartitionMetricsToReport =
+                q.sparkSession.sessionState.conf.numPartitionMetricsToReport
+              // Determined by numPartitionMetricsToReport
+              assert(partitionMetrics.size == numPartitionMetricsToReport)
+              // Two ids are blocked, each with four state stores
+              assert(badPartitionMetrics.count(_._2 == -1) == 2 * 4)
+              // The rest should have uploaded a version
+              assert(partitionMetrics.count(_._2 == 1) == numPartitionMetricsToReport - 2 * 4)
             }
           },
           StopStream

@@ -324,12 +324,13 @@ case class StateStoreCustomTimingMetric(name: String, desc: String) extends Stat
 case class StateStoreCustomPartitionMetric(
     metricPrefix: String,
     descPrefix: String,
-    partitionId: Option[Int] = None)
+    partitionId: Option[Int] = None,
+    storeName: String = StateStoreId.DEFAULT_STORE_NAME)
     extends StateStoreCustomMetric {
   override def name: String = {
     partitionId
       .map { id =>
-        s"$metricPrefix${StateStoreProvider.PARTITION_METRIC_SUFFIX}$id"
+        s"$metricPrefix${StateStoreProvider.PARTITION_METRIC_SUFFIX}${id}_${storeName}"
       }
       .getOrElse(metricPrefix)
   }
@@ -337,7 +338,7 @@ case class StateStoreCustomPartitionMetric(
   override def desc: String = {
     partitionId
       .map { id =>
-        s"$descPrefix (partitionId = $id)"
+        s"$descPrefix (partitionId = $id, storeName = ${storeName})"
       }
       .getOrElse(descPrefix)
   }
@@ -347,8 +348,8 @@ case class StateStoreCustomPartitionMetric(
   override def createSQLMetric(sparkContext: SparkContext): SQLMetric =
     SQLMetrics.createPartitionMetric(sparkContext, desc)
 
-  def withPartition(partitionId: Int): StateStoreCustomPartitionMetric = {
-    copy(partitionId = Some(partitionId))
+  def withNewPartition(partitionId: Int, storeName: String): StateStoreCustomPartitionMetric = {
+    copy(partitionId = Some(partitionId), storeName = storeName)
   }
 }
 

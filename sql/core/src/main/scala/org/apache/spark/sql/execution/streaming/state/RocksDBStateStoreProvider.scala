@@ -329,7 +329,7 @@ private[sql] class RocksDBStateStoreProvider
           CUSTOM_METRIC_PINNED_BLOCKS_MEM_USAGE -> rocksDBMetrics.pinnedBlocksMemUsage,
           CUSTOM_METRIC_NUM_EXTERNAL_COL_FAMILIES -> internalColFamilyCnt(),
           CUSTOM_METRIC_NUM_INTERNAL_COL_FAMILIES -> externalColFamilyCnt(),
-          CUSTOM_METRIC_SNAPSHOT_LAST_UPLOADED.withPartition(id.partitionId) ->
+          CUSTOM_METRIC_SNAPSHOT_LAST_UPLOADED.withNewPartition(id.partitionId, id.storeName) ->
             rocksDBMetrics.lastUploadedVersion
         ) ++ rocksDBMetrics.zipFileBytesUncompressed.map(bytes =>
           Map(CUSTOM_METRIC_ZIP_FILE_BYTES_UNCOMPRESSED -> bytes)).getOrElse(Map())

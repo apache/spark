@@ -2255,17 +2255,14 @@ object SQLConf {
     buildConf("spark.sql.streaming.stateStore.numPartitionMetricsToReport")
       .internal()
       .doc(
-        "Maximum number of partition-level metrics to include in state store progress " +
-          "reporting. The default limit is 20% of the number of cores (with a minimum of 1 " +
-          "partition) and with a cap of 10. This limits the metrics to the N partitions with " +
-          "the smallest values to prevent the progress report from becoming too large."
+        "Number of partition-level metrics to include in state store progress reporting. The " +
+        "default limit is 20% of partitions clamped between 1 and 10 (please refer to " +
+        "numPartitionMetricsToReport for details)."
       )
       .version("4.0.0")
       .intConf
       .checkValue(k => k >= 0, "Must be greater than or equal to 0")
-      .createWithDefault(
-        Math.min(10, Math.min(1, SHUFFLE_PARTITIONS.defaultValue.getOrElse(200) / 5))
-      )
+      .createOptional
 
   val STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT =
     buildConf("spark.sql.streaming.stateStore.minDeltasForSnapshot")
@@ -5749,7 +5746,11 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def numStateStoreMaintenanceThreads: Int = getConf(NUM_STATE_STORE_MAINTENANCE_THREADS)
 
-  def numPartitionMetricsToReport: Int = getConf(STATE_STORE_PARTITION_METRICS_REPORT_LIMIT)
+  def numPartitionMetricsToReport: Int = {
+    getConf(STATE_STORE_PARTITION_METRICS_REPORT_LIMIT).getOrElse(
+      Math.min(10, Math.max(1, defaultNumShufflePartitions / 5))
+    )
+  }
 
   def stateStoreMinDeltasForSnapshot: Int = getConf(STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT)
 

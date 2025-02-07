@@ -41,6 +41,7 @@ import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.execution.python.PythonSQLMetrics
+import org.apache.spark.sql.execution.streaming.StreamingSymmetricHashJoinHelper.{LeftSide, RightSide}
 import org.apache.spark.sql.execution.streaming.state._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.{OutputMode, StateOperatorProgress}
@@ -104,6 +105,8 @@ object StatefulOperatorStateInfo {
  * [[IncrementalExecution]].
  */
 trait StatefulOperator extends SparkPlan {
+  val isJoinOperator: Boolean = false
+
   def stateInfo: Option[StatefulOperatorStateInfo]
 
   def getStateInfo: StatefulOperatorStateInfo = {
@@ -387,7 +390,11 @@ trait StateStoreWriter
     storeMetrics.customMetrics.foreach {
       // Set for custom partition metrics
       case (metric: StateStoreCustomPartitionMetric, value) =>
-        longMetric(metric.name).set(value)
+        // Check for cases where value < 0 and .value converts metric to 0
+        longMetric(metric.name).set(
+          if (longMetric(metric.name).isZero) value
+          else Math.max(value, longMetric(metric.name).value)
+        )
       case (metric, value) =>
         longMetric(metric.name) += value
     }
@@ -416,12 +423,18 @@ trait StateStoreWriter
   private def stateStoreCustomPartitionMetrics: Map[String, SQLMetric] = {
     val provider = StateStoreProvider.create(conf.stateStoreProviderClass)
     val maxPartitions = conf.defaultNumShufflePartitions
-    // Initialize metrics across all partitions, because partitions can come from various state
-    // stores, we need to reserve metrics for all partition ids.
+
     (0 until maxPartitions).flatMap { partitionId =>
-      provider.supportedCustomPartitionMetrics.map { metric =>
-        val metricWithPartition = metric.withPartition(partitionId)
-        (metricWithPartition.name, metricWithPartition.createSQLMetric(sparkContext))
+      provider.supportedCustomPartitionMetrics.flatMap { metric =>
+        val storeNames = if (isJoinOperator) {
+          SymmetricHashJoinStateManager.allStateStoreNames(LeftSide, RightSide)
+        } else {
+          Seq(StateStoreId.DEFAULT_STORE_NAME)
+        }
+        storeNames.map { storeName =>
+          val metricWithPartition = metric.withNewPartition(partitionId, storeName)
+          (metricWithPartition.name, metricWithPartition.createSQLMetric(sparkContext))
+        }
       }
     }.toMap
   }
