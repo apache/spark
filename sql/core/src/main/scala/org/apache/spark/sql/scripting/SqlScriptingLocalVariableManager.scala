@@ -60,9 +60,14 @@ class SqlScriptingLocalVariableManager(context: SqlScriptingExecutionContext)
       initValue: Literal,
       identifier: Identifier): Unit = {
     def varDef = VariableDefinition(identifier, defaultValueSQL, initValue)
-    findScopeOfVariable(nameParts)
+    val scope = findScopeOfVariable(nameParts)
       .getOrElse(throw unresolvedVariableError(nameParts, identifier.namespace().toIndexedSeq))
-      .variables.put(nameParts.last, varDef)
+
+    if (!scope.variables.contains(nameParts.last)) {
+      throw unresolvedVariableError(nameParts, identifier.namespace().toIndexedSeq)
+    }
+
+    scope.variables.put(nameParts.last, varDef)
     }
 
   override def get(nameParts: Seq[String]): Option[VariableDefinition] = {
@@ -93,7 +98,11 @@ class SqlScriptingLocalVariableManager(context: SqlScriptingExecutionContext)
     // should not access variables from scopes which are nested below it's definition.
     var previousFrameDefinitionLabel = context.currentFrame.scopeLabel
 
+    // dropRight(1) removes the current frame, which we already checked above.
     context.frames.dropRight(1).reverseIterator.foreach(frame => {
+      // Drop scopes until we encounter the scope in which the previously checked
+      // frame was defined. If it was not defined in this scope candidateScopes will be
+      // empty.
       val candidateScopes = frame.scopes.reverse.dropWhile(
         scope => !previousFrameDefinitionLabel.contains(scope.label))
 
@@ -101,6 +110,9 @@ class SqlScriptingLocalVariableManager(context: SqlScriptingExecutionContext)
       if (scope.isDefined) {
         return scope
       }
+      // If candidateScopes is nonEmpty that means that we found the previous frame definition
+      // in this frame. If we still have not found the variable, we now have to find the definition
+      // of this new frame, so we reassign the frame definition label to search for.
       if (candidateScopes.nonEmpty) {
         previousFrameDefinitionLabel = frame.scopeLabel
       }
