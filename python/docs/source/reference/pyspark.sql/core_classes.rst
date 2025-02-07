@@ -49,4 +49,5 @@ Core Classes
     datasource.DataSourceRegistration
     datasource.InputPartition
     datasource.WriterCommitMessage
+    tvf.TableValuedFunction
     VariantVal
