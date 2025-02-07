@@ -282,7 +282,7 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
     }
 
     SqlScriptingLocalVariableManager.get()
-      // If sessionOnly is set to true lookup only session variables.
+      // If we are in EXECUTE IMMEDIATE lookup only session variables.
       .filterNot(_ => AnalysisContext.get.isExecuteImmediate)
       // If variable name is qualified with system.session.<varName> treat it as a session variable.
       .filterNot(_ =>
@@ -298,7 +298,7 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
       .map { varDef =>
         VariableReference(
           nameParts,
-          FakeSystemCatalog,
+          FakeLocalCatalog,
           Identifier.of(Array(varDef.identifier.namespace().last), namePartsCaseAdjusted.last),
           varDef)
       }

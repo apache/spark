@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.command.v2
 import java.util.Locale
 
 import org.apache.spark.sql.catalyst.{InternalRow, SqlScriptingLocalVariableManager}
+import org.apache.spark.sql.catalyst.analysis.{FakeLocalCatalog, ResolvedIdentifier}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, ExpressionsEvaluator, Literal}
 import org.apache.spark.sql.catalyst.plans.logical.DefaultValueExpression
 import org.apache.spark.sql.connector.catalog.Identifier
@@ -29,10 +30,9 @@ import org.apache.spark.sql.execution.datasources.v2.LeafV2CommandExec
  * Physical plan node for creating a variable.
  */
 case class CreateVariableExec(
-    identifier: Identifier,
+    resolvedIdentifier: ResolvedIdentifier,
     defaultExpr: DefaultValueExpression,
-    replace: Boolean,
-    sessionVariablesOnly: Boolean) extends LeafV2CommandExec with ExpressionsEvaluator {
+    replace: Boolean) extends LeafV2CommandExec with ExpressionsEvaluator {
 
   override protected def run(): Seq[InternalRow] = {
     val scriptingVariableManager = SqlScriptingLocalVariableManager.get()
@@ -43,16 +43,16 @@ case class CreateVariableExec(
     val initValue = Literal(exprs.head.eval(), defaultExpr.dataType)
 
     val normalizedIdentifier = if (session.sessionState.conf.caseSensitiveAnalysis) {
-      identifier
+      resolvedIdentifier.identifier
     } else {
       Identifier.of(
-        identifier.namespace().map(_.toLowerCase(Locale.ROOT)),
-        identifier.name().toLowerCase(Locale.ROOT))
+        resolvedIdentifier.identifier.namespace().map(_.toLowerCase(Locale.ROOT)),
+        resolvedIdentifier.identifier.name().toLowerCase(Locale.ROOT))
     }
 
     // create local variable if we are in a script, otherwise create session variable
     scriptingVariableManager
-      .filterNot(_ => sessionVariablesOnly)
+      .filter(_ => resolvedIdentifier.catalog == FakeLocalCatalog)
       .getOrElse(tempVariableManager)
       .create(
         normalizedIdentifier,

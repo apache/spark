@@ -37,7 +37,7 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperatorsDown {
     // We only support temp variables for now and the system catalog is not properly implemented
     // yet. We need to resolve `UnresolvedIdentifier` for variable commands specially.
-    case c @ CreateVariable(UnresolvedIdentifier(nameParts, _), _, _, _) =>
+    case c @ CreateVariable(UnresolvedIdentifier(nameParts, _), _, _) =>
       // From scripts we can only create local variables, which must be unqualified,
       // and must not be DECLARE OR REPLACE.
       if (SqlScriptingLocalVariableManager.get().isDefined &&
@@ -58,7 +58,7 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
       }
 
       val resolved = resolveCreateVariableName(nameParts)
-      c.copy(name = resolved, sessionVariablesOnly = AnalysisContext.get.isExecuteImmediate)
+      c.copy(name = resolved)
     case d @ DropVariable(UnresolvedIdentifier(nameParts, _), _) =>
       val resolved = resolveDropVariableName(nameParts)
       d.copy(name = resolved)
@@ -96,39 +96,48 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
   }
 
   private def resolveCreateVariableName(nameParts: Seq[String]): ResolvedIdentifier = {
-    val ident = SqlScriptingLocalVariableManager.get()
+    val resolvedIdentifier = SqlScriptingLocalVariableManager.get()
       .filterNot(_ => AnalysisContext.get.isExecuteImmediate)
       .getOrElse(catalogManager.tempVariableManager)
-      .createIdentifier(nameParts.last)
+      .resolveIdentifier(nameParts.last)
 
-    resolveVariableName(nameParts, ident)
+    assertValidVariableNameParts(nameParts, resolvedIdentifier)
+    resolvedIdentifier
   }
 
   private def resolveDropVariableName(nameParts: Seq[String]): ResolvedIdentifier = {
     // Only session variables can be dropped, so catalogManager.scriptingLocalVariableManager
     // is not checked in the case of DropVariable.
-    val ident = catalogManager.tempVariableManager.createIdentifier(nameParts.last)
-    resolveVariableName(nameParts, ident)
+    val resolvedIdentifier = catalogManager.tempVariableManager.resolveIdentifier(nameParts.last)
+    assertValidVariableNameParts(nameParts, resolvedIdentifier)
+    resolvedIdentifier
   }
 
-  private def resolveVariableName(
+  private def assertValidVariableNameParts(
       nameParts: Seq[String],
-      ident: Identifier): ResolvedIdentifier = nameParts.length match {
-    case 1 => ResolvedIdentifier(FakeSystemCatalog, ident)
-
-    // On declare variable, local variables support only unqualified names.
-    // On drop variable, local variables are not supported at all.
-    case 2 if nameParts.head.equalsIgnoreCase(CatalogManager.SESSION_NAMESPACE) =>
-      ResolvedIdentifier(FakeSystemCatalog, ident)
-
-    // When there are 3 nameParts the variable must be a fully qualified session variable
-    // i.e. "system.session.<varName>"
-    case 3 if nameParts(0).equalsIgnoreCase(CatalogManager.SYSTEM_CATALOG_NAME) &&
-      nameParts(1).equalsIgnoreCase(CatalogManager.SESSION_NAMESPACE) =>
-      ResolvedIdentifier(FakeSystemCatalog, ident)
-
-    case _ =>
+      resolvedIdentifier: ResolvedIdentifier): Unit = {
+    if (!validVariableNameParts(nameParts)) {
       throw QueryCompilationErrors.unresolvedVariableError(
-        nameParts, Seq(CatalogManager.SYSTEM_CATALOG_NAME, ident.namespace().head))
+        nameParts,
+        Seq(
+          resolvedIdentifier.catalog.name(),
+          resolvedIdentifier.identifier.namespace().head)
+      )
+    }
+
+    def validVariableNameParts(nameParts: Seq[String]): Boolean = nameParts.length match {
+      case 1 => true
+
+      // On declare variable, local variables support only unqualified names.
+      // On drop variable, local variables are not supported at all.
+      case 2 if nameParts.head.equalsIgnoreCase(CatalogManager.SESSION_NAMESPACE) => true
+
+      // When there are 3 nameParts the variable must be a fully qualified session variable
+      // i.e. "system.session.<varName>"
+      case 3 if nameParts(0).equalsIgnoreCase(CatalogManager.SYSTEM_CATALOG_NAME) &&
+        nameParts(1).equalsIgnoreCase(CatalogManager.SESSION_NAMESPACE) => true
+
+      case _ => false
+    }
   }
 }

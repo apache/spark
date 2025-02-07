@@ -61,9 +61,7 @@ class ResolveSetVariable(val catalogManager: CatalogManager) extends Rule[Logica
             dups.keys.map(key => toSQLId(key.name())).mkString(", ")))
       }
 
-      setVariable.copy(
-        targetVariables = resolvedVars,
-        sessionVariablesOnly = AnalysisContext.get.isExecuteImmediate)
+      setVariable.copy(targetVariables = resolvedVars)
 
     case setVariable: SetVariable
         if setVariable.targetVariables.forall(_.isInstanceOf[VariableReference]) &&

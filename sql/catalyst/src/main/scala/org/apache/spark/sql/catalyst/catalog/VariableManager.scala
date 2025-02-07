@@ -22,6 +22,7 @@ import javax.annotation.concurrent.GuardedBy
 import scala.collection.mutable
 
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.analysis.{FakeSystemCatalog, ResolvedIdentifier}
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.connector.catalog.{CatalogManager, Identifier}
 import org.apache.spark.sql.connector.catalog.CatalogManager.{SESSION_NAMESPACE, SYSTEM_CATALOG_NAME}
@@ -80,7 +81,7 @@ trait VariableManager {
    * Create an identifier for the provided variable name. Could be context dependent.
    * @param name Name for which an identifier is created.
    */
-  def createIdentifier(name: String): Identifier
+  def resolveIdentifier(name: String): ResolvedIdentifier
 
   /**
    * Delete all variables.
@@ -146,8 +147,11 @@ class TempVariableManager extends VariableManager with DataTypeErrorsBase {
     variables.remove(nameParts.last).isDefined
   }
 
-  override def createIdentifier(name: String): Identifier =
-    Identifier.of(Array(CatalogManager.SESSION_NAMESPACE), name)
+  override def resolveIdentifier(name: String): ResolvedIdentifier =
+    ResolvedIdentifier(
+      FakeSystemCatalog,
+      Identifier.of(Array(CatalogManager.SESSION_NAMESPACE), name)
+    )
 
   override def clear(): Unit = synchronized {
     variables.clear()

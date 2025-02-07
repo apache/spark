@@ -19,6 +19,7 @@ package org.apache.spark.sql.scripting
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.analysis.{FakeLocalCatalog, ResolvedIdentifier}
 import org.apache.spark.sql.catalyst.catalog.{VariableDefinition, VariableManager}
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.connector.catalog.Identifier
@@ -68,13 +69,14 @@ class SqlScriptingLocalVariableManager(context: SqlScriptingExecutionContext)
     }
 
     scope.variables.put(nameParts.last, varDef)
-    }
+  }
 
   override def get(nameParts: Seq[String]): Option[VariableDefinition] = {
     findScopeOfVariable(nameParts).flatMap(_.variables.get(nameParts.last))
   }
 
   private def findScopeOfVariable(nameParts: Seq[String]): Option[SqlScriptingExecutionScope] = {
+    // TODO: Update logic and comments once stored procedures are introduced.
     def isScopeOfVar(
         nameParts: Seq[String],
         scope: SqlScriptingExecutionScope
@@ -94,8 +96,9 @@ class SqlScriptingLocalVariableManager(context: SqlScriptingExecutionContext)
     }
 
     // When searching in previous frames, for each frame we have to check only scopes before and
-    // including the scope where the previously checked frame is defined, as the frames
-    // should not access variables from scopes which are nested below it's definition.
+    // including the scope where the previously checked exception handler frame is defined.
+    // Exception handler frames should not have access to variables from scopes
+    // which are nested below the scope where the handler is defined.
     var previousFrameDefinitionLabel = context.currentFrame.scopeLabel
 
     // dropRight(1) removes the current frame, which we already checked above.
@@ -120,8 +123,8 @@ class SqlScriptingLocalVariableManager(context: SqlScriptingExecutionContext)
     None
   }
 
-  override def createIdentifier(name: String): Identifier =
-    Identifier.of(Array(context.currentScope.label), name)
+  override def resolveIdentifier(name: String): ResolvedIdentifier =
+    ResolvedIdentifier(FakeLocalCatalog, Identifier.of(Array(context.currentScope.label), name))
 
   override def remove(nameParts: Seq[String]): Boolean = {
     throw SparkException.internalError(

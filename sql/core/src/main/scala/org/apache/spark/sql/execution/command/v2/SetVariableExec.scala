@@ -21,6 +21,7 @@ import java.util.Locale
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.{InternalRow, SqlScriptingLocalVariableManager}
+import org.apache.spark.sql.catalyst.analysis.FakeLocalCatalog
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Literal, VariableReference}
 import org.apache.spark.sql.catalyst.trees.UnaryLike
 import org.apache.spark.sql.errors.QueryCompilationErrors.unresolvedVariableError
@@ -32,14 +33,13 @@ import org.apache.spark.sql.execution.datasources.v2.V2CommandExec
  */
 case class SetVariableExec(
     variables: Seq[VariableReference],
-    query: SparkPlan,
-    sessionVariablesOnly: Boolean) extends V2CommandExec with UnaryLike[SparkPlan] {
+    query: SparkPlan) extends V2CommandExec with UnaryLike[SparkPlan] {
 
   override protected def run(): Seq[InternalRow] = {
     val values = query.executeCollect()
     if (values.length == 0) {
       variables.foreach { v =>
-        setVariable(v, null, sessionVariablesOnly)
+        setVariable(v, null)
       }
     } else if (values.length > 1) {
       throw new SparkException(
@@ -50,7 +50,7 @@ case class SetVariableExec(
       val row = values(0)
       variables.zipWithIndex.foreach { case (v, index) =>
         val value = row.get(index, v.dataType)
-        setVariable(v, value, sessionVariablesOnly)
+        setVariable(v, value)
       }
     }
     Seq.empty
@@ -58,8 +58,7 @@ case class SetVariableExec(
 
   private def setVariable(
       variable: VariableReference,
-      value: Any,
-      sessionVariablesOnly: Boolean): Unit = {
+      value: Any): Unit = {
     val namePartsCaseAdjusted = if (session.sessionState.conf.caseSensitiveAnalysis) {
       variable.originalNameParts
     } else {
@@ -70,7 +69,7 @@ case class SetVariableExec(
     val scriptingVariableManager = SqlScriptingLocalVariableManager.get()
 
     val variableManager = scriptingVariableManager
-      .filterNot(_ => sessionVariablesOnly)
+      .filter(_ => variable.catalog == FakeLocalCatalog)
       // If a local variable with nameParts exists, set it using scriptingVariableManager.
       .filter(_.get(namePartsCaseAdjusted).isDefined)
       // If a local variable with nameParts doesn't exist, check if a session variable exists
