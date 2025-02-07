@@ -284,16 +284,10 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
     SqlScriptingLocalVariableManager.get()
       // If we are in EXECUTE IMMEDIATE lookup only session variables.
       .filterNot(_ => AnalysisContext.get.isExecuteImmediate)
-      // If variable name is qualified with system.session.<varName> treat it as a session variable.
-      .filterNot(_ =>
-        nameParts.length == 3
-          && nameParts.take(2).map(_.toLowerCase(Locale.ROOT)) == Seq("system", "session"))
-      // If variable name is qualified with session.<varName> treat it as a session variable.
-      .filterNot(_ =>
-        nameParts.length == 2
-          && nameParts.head.toLowerCase(Locale.ROOT) == "session")
-      // Local variable must be in format <varName> or <label>.<varName>
-      .filter(_ => namePartsCaseAdjusted.nonEmpty && namePartsCaseAdjusted.length <= 2)
+      // If variable name is qualified with system.session.<varName> or session.<varName>
+      // treat it as a session variable.
+      .filter(_ =>
+        nameParts.length <= 2 && nameParts.init.map(_.toLowerCase(Locale.ROOT)) != Seq("session"))
       .flatMap(_.get(namePartsCaseAdjusted))
       .map { varDef =>
         VariableReference(

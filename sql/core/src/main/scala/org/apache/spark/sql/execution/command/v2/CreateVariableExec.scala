@@ -53,12 +53,15 @@ case class CreateVariableExec(
     // create local variable if we are in a script, otherwise create session variable
     scriptingVariableManager
       .filter(_ => resolvedIdentifier.catalog == FakeLocalCatalog)
+      // If resolvedIdentifier.catalog is FakeLocalCatalog, scriptingVariableManager
+      // will always be present.
       .getOrElse(tempVariableManager)
       .create(
-        normalizedIdentifier,
+        normalizedIdentifier.namespace().toSeq :+ normalizedIdentifier.name(),
         defaultExpr.originalSQL,
         initValue,
-        replace)
+        replace,
+        normalizedIdentifier)
 
     Nil
   }

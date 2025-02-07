@@ -88,11 +88,11 @@ trait AnalysisTest extends PlanTest {
       overrideIfExists = true)
     new Analyzer(catalog) {
       catalogManager.tempVariableManager.create(
-        Identifier.of(Array("testA"), "testVarA"), "1", Literal(1),
-        overrideIfExists = true)
+        Seq("testA", "testVarA"), "1", Literal(1),
+        overrideIfExists = true, Identifier.of(Array("testA"), "testVarA"))
       catalogManager.tempVariableManager.create(
-        Identifier.of(Array("testVarNull"), "testVarNull"), null, Literal(null, StringType),
-        overrideIfExists = true)
+        Seq("testVarNull", "testVarNull"), null, Literal(null, StringType),
+        overrideIfExists = true, Identifier.of(Array("testVarNull"), "testVarNull"))
       override val extendedResolutionRules = extendedAnalysisRules
     }
   }

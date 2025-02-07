@@ -44,10 +44,11 @@ trait VariableManager {
    *                         with the same identifier, if it exists.
    */
   def create(
-      identifier: Identifier,
+      nameParts: Seq[String],
       defaultValueSQL: String,
       initValue: Literal,
-      overrideIfExists: Boolean): Unit
+      overrideIfExists: Boolean,
+      identifier: Identifier): Unit
 
   /**
    * Set an existing variable to a new value.
@@ -112,11 +113,12 @@ class TempVariableManager extends VariableManager with DataTypeErrorsBase {
   private val variables = new mutable.HashMap[String, VariableDefinition]
 
   override def create(
-      identifier: Identifier,
+      nameParts: Seq[String],
       defaultValueSQL: String,
       initValue: Literal,
-      overrideIfExists: Boolean): Unit = synchronized {
-    val name = identifier.name()
+      overrideIfExists: Boolean,
+      identifier: Identifier): Unit = synchronized {
+    val name = nameParts.last
     if (!overrideIfExists && variables.contains(name)) {
       throw new AnalysisException(
         errorClass = "VARIABLE_ALREADY_EXISTS",

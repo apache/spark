@@ -34,9 +34,7 @@ object V2CommandStrategy extends Strategy {
       DropVariableExec(ident.identifier.name, ifExists) :: Nil
 
     case SetVariable(variables, query) =>
-      SetVariableExec(
-        variables.map(_.asInstanceOf[VariableReference]),
-        planLater(query)) :: Nil
+      SetVariableExec(variables.map(_.asInstanceOf[VariableReference]), planLater(query)) :: Nil
 
     case _ => Nil
   }

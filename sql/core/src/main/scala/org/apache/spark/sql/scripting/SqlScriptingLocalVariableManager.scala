@@ -30,11 +30,12 @@ class SqlScriptingLocalVariableManager(context: SqlScriptingExecutionContext)
   extends VariableManager with DataTypeErrorsBase {
 
   override def create(
-      identifier: Identifier,
+      nameParts: Seq[String],
       defaultValueSQL: String,
       initValue: Literal,
-      overrideIfExists: Boolean): Unit = {
-    val name = identifier.name()
+      overrideIfExists: Boolean,
+      identifier: Identifier): Unit = {
+    val name = nameParts.last
 
     // overrideIfExists should not be supported because local variables don't support
     // DECLARE OR REPLACE. However ForStatementExec currently uses this to handle local vars,
