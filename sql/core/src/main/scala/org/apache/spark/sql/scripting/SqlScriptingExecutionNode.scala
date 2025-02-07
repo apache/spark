@@ -23,10 +23,11 @@ import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.analysis.{ColumnResolutionHelper, NameParameterizedQuery, UnresolvedAttribute, UnresolvedIdentifier}
-import org.apache.spark.sql.catalyst.expressions.{Alias, CreateArray, CreateMap, CreateNamedStruct, Expression, Literal, UnsafeMapData, VariableReference}
+import org.apache.spark.sql.catalyst.expressions.{Alias, CreateArray, CreateMap, CreateNamedStruct, Expression, Literal, VariableReference}
 import org.apache.spark.sql.catalyst.plans.logical.{CreateVariable, DefaultValueExpression, DropVariable, LogicalPlan, OneRowRelation, Project, SetVariable}
 import org.apache.spark.sql.catalyst.plans.logical.ExceptionHandlerType.ExceptionHandlerType
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin, WithOrigin}
+import org.apache.spark.sql.catalyst.util.MapData
 import org.apache.spark.sql.classic.{DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.errors.{QueryCompilationErrors, SqlScriptingErrors}
@@ -1062,7 +1063,7 @@ class SignalStatementExec(
           throw SqlScriptingErrors.nullVariableSignalStatement(CurrentOrigin.get, args.name)
         }
 
-        val mapData = argsValue.asInstanceOf[UnsafeMapData]
+        val mapData = argsValue.asInstanceOf[MapData]
         (0 until mapData.numElements()).map { index =>
           (
             mapData.keyArray().get(index, StringType).toString,

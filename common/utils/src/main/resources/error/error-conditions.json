@@ -3604,7 +3604,7 @@
   },
   "INVALID_VARIABLE_TYPE_FOR_SIGNAL_STATEMENT" : {
     "message" : [
-      "Variable type must be Map<String, String> type but got <varType>."
+      "Variable type must be \"MAP<STRING, STRING>\" type but got <varType>."
     ],
     "sqlState" : "42K09"
   },
