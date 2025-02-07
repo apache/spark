@@ -97,7 +97,7 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
 
   private def resolveCreateVariableName(nameParts: Seq[String]): ResolvedIdentifier = {
     val ident = SqlScriptingLocalVariableManager.get()
-      .filterNot(AnalysisContext.get.isExecuteImmediate)
+      .filterNot(_ => AnalysisContext.get.isExecuteImmediate)
       .getOrElse(catalogManager.tempVariableManager)
       .createIdentifier(nameParts.last)
 

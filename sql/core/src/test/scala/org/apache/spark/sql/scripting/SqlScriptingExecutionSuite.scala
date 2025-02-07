@@ -2381,22 +2381,25 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
   }
 
   test("local variable - execute immediate create session var") {
-    val sqlScript =
-      """
-        |BEGIN
-        |  EXECUTE IMMEDIATE 'DECLARE sessionVar = 5';
-        |  SELECT system.session.sessionVar;
-        |  SELECT sessionVar;
-        |END
-        |""".stripMargin
-    val expected = Seq(
-      Seq(Row(5)), // select system.session.sessionVar
-      Seq(Row(5)) // select sessionVar
-    )
-    verifySqlScriptResult(sqlScript, expected)
+    withSessionVariable("sessionVar") {
+      val sqlScript =
+        """
+          |BEGIN
+          |  EXECUTE IMMEDIATE 'DECLARE sessionVar = 5';
+          |  SELECT system.session.sessionVar;
+          |  SELECT sessionVar;
+          |END
+          |""".stripMargin
+      val expected = Seq(
+        Seq(Row(5)), // select system.session.sessionVar
+        Seq(Row(5)) // select sessionVar
+      )
+      verifySqlScriptResult(sqlScript, expected)
+    }
   }
 
   test("local variable - execute immediate create qualified session var") {
+    withSessionVariable("sessionVar") {
     val sqlScript =
       """
         |BEGIN
@@ -2410,6 +2413,7 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
       Seq(Row(5)) // select sessionVar
     )
     verifySqlScriptResult(sqlScript, expected)
+      }
   }
 
   test("local variable - execute immediate set session var") {
@@ -2434,5 +2438,60 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
       )
       verifySqlScriptResult(sqlScript, expected)
     }
+  }
+
+  test("local variable - handlers - triple chained handlers") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE OR REPLACE VARIABLE varOuter INT = 0;
+        |  l1: BEGIN
+        |    DECLARE OR REPLACE VARIABLE varL1 INT = 1;
+        |    DECLARE EXIT HANDLER FOR SQLEXCEPTION
+        |    BEGIN
+        |      SELECT varOuter;
+        |      SELECT varL1;
+        |    END;
+        |    l2: BEGIN
+        |      DECLARE OR REPLACE VARIABLE varL2 = 2;
+        |      DECLARE EXIT HANDLER FOR SQLEXCEPTION
+        |      BEGIN
+        |        SELECT varOuter;
+        |        SELECT varL1;
+        |        SELECT varL2;
+        |        SELECT 1/0;
+        |      END;
+        |      l3: BEGIN
+        |        DECLARE OR REPLACE VARIABLE varL3 = 3;
+        |        DECLARE EXIT HANDLER FOR SQLEXCEPTION
+        |        BEGIN
+        |          SELECT varOuter;
+        |          SELECT varL1;
+        |          SELECT varL2;
+        |          SELECT varL3;
+        |          SELECT 1/0;
+        |        END;
+
+        |        SELECT 5;
+        |        SELECT 1/0;
+        |        SELECT 6;
+        |      END;
+        |    END;
+        |  END;
+        |END
+        |""".stripMargin
+    val expected = Seq(
+      Seq(Row(5)),
+      Seq(Row(0)),
+      Seq(Row(1)),
+      Seq(Row(2)),
+      Seq(Row(3)),
+      Seq(Row(0)),
+      Seq(Row(1)),
+      Seq(Row(2)),
+      Seq(Row(0)),
+      Seq(Row(1))
+    )
+    verifySqlScriptResult(sqlScript, expected = expected)
   }
 }

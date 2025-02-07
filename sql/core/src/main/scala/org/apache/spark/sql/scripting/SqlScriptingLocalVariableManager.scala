@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.catalog.{VariableDefinition, VariableManage
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.errors.DataTypeErrorsBase
- import org.apache.spark.sql.errors.QueryCompilationErrors.unresolvedVariableError
+import org.apache.spark.sql.errors.QueryCompilationErrors.unresolvedVariableError
 
 class SqlScriptingLocalVariableManager(context: SqlScriptingExecutionContext)
   extends VariableManager with DataTypeErrorsBase {
@@ -60,42 +60,52 @@ class SqlScriptingLocalVariableManager(context: SqlScriptingExecutionContext)
       initValue: Literal,
       identifier: Identifier): Unit = {
     def varDef = VariableDefinition(identifier, defaultValueSQL, initValue)
-    nameParts match {
-      // Unqualified case.
-      case Seq(name) =>
-        context.currentFrame.scopes
-          .findLast(_.variables.contains(name))
-          // Throw error if variable is not found. This shouldn't happen as the check is already
-          // done in SetVariableExec.
-          .orElse(throw unresolvedVariableError(nameParts, identifier.namespace().toIndexedSeq))
-          .map(_.variables.put(name, varDef))
-      // Qualified case.
-      case Seq(label, name) =>
-        context.currentFrame.scopes
-          .findLast(_.label == label)
-          .filter(_.variables.contains(name))
-          // Throw error if variable is not found. This shouldn't happen as the check is already
-          // done in SetVariableExec.
-          .orElse(throw unresolvedVariableError(nameParts, identifier.namespace().toIndexedSeq))
-          .map(_.variables.put(name, varDef))
-      case _ =>
-        throw SparkException.internalError("ScriptingVariableManager.set expects 1 or 2 nameParts.")
+    findScopeOfVariable(nameParts)
+      .getOrElse(throw unresolvedVariableError(nameParts, identifier.namespace().toIndexedSeq))
+      .variables.put(nameParts.last, varDef)
     }
+
+  override def get(nameParts: Seq[String]): Option[VariableDefinition] = {
+    findScopeOfVariable(nameParts).flatMap(_.variables.get(nameParts.last))
   }
 
-  override def get(nameParts: Seq[String]): Option[VariableDefinition] = nameParts match {
-    // Unqualified case.
-    case Seq(name) =>
-      context.currentFrame.scopes
-      .findLast(_.variables.contains(name))
-      .flatMap(_.variables.get(name))
-    // Qualified case.
-    case Seq(label, name) =>
-      context.currentFrame.scopes
-      .findLast(_.label == label)
-      .flatMap(_.variables.get(name))
-    case _ =>
-      throw SparkException.internalError("ScriptingVariableManager.get expects 1 or 2 nameParts.")
+  private def findScopeOfVariable(nameParts: Seq[String]): Option[SqlScriptingExecutionScope] = {
+    def isScopeOfVar(
+        nameParts: Seq[String],
+        scope: SqlScriptingExecutionScope
+    ): Boolean = nameParts match {
+      case Seq(name) => scope.variables.contains(name)
+      // Qualified case.
+      case Seq(label, _) => scope.label == label
+      case _ =>
+        throw SparkException.internalError("ScriptingVariableManager expects 1 or 2 nameParts.")
+    }
+
+    // First search for variable in entire current frame.
+    val resCurrentFrame = context.currentFrame.scopes
+      .findLast(scope => isScopeOfVar(nameParts, scope))
+    if (resCurrentFrame.isDefined) {
+      return resCurrentFrame
+    }
+
+    // When searching in previous frames, for each frame we have to check only scopes before and
+    // including the scope where the previously checked frame is defined, as the frames
+    // should not access variables from scopes which are nested below it's definition.
+    var previousFrameDefinitionLabel = context.currentFrame.scopeLabel
+
+    context.frames.dropRight(1).reverseIterator.foreach(frame => {
+      val candidateScopes = frame.scopes.reverse.dropWhile(
+        scope => !previousFrameDefinitionLabel.contains(scope.label))
+
+      val scope = candidateScopes.findLast(scope => isScopeOfVar(nameParts, scope))
+      if (scope.isDefined) {
+        return scope
+      }
+      if (candidateScopes.nonEmpty) {
+        previousFrameDefinitionLabel = frame.scopeLabel
+      }
+    })
+    None
   }
 
   override def createIdentifier(name: String): Identifier =
