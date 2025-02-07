@@ -215,14 +215,6 @@ case class AdaptiveSparkPlanExec(
 
   @volatile private var currentPhysicalPlan = initialPlan
 
-  // Use inputPlan logicalLink here in case some top level physical nodes may be removed
-  // during `initialPlan`
-  @transient @volatile private var currentLogicalPlan: LogicalPlan = {
-    inputPlan.logicalLink.get
-  }
-
-  val stagesToReplace = mutable.ArrayBuffer.empty[QueryStageExec]
-
   @volatile private var _isFinalPlan = false
 
   private var currentStageId = 0
@@ -286,13 +278,17 @@ case class AdaptiveSparkPlanExec(
     // created in the middle of the execution.
     context.session.withActive {
       val executionId = getExecutionId
+      // Use inputPlan logicalLink here in case some top level physical nodes may be removed
+      // during `initialPlan`
+      var currentLogicalPlan = inputPlan.logicalLink.get
       var result = createQueryStages(fun, currentPhysicalPlan, firstRun = true)
       val events = new LinkedBlockingQueue[StageMaterializationEvent]()
       val errors = new mutable.ArrayBuffer[Throwable]()
+      var stagesToReplace = Seq.empty[QueryStageExec]
       while (!result.allChildStagesMaterialized) {
         currentPhysicalPlan = result.newPlan
         if (result.newStages.nonEmpty) {
-          stagesToReplace ++= result.newStages
+          stagesToReplace = result.newStages ++ stagesToReplace
           executionId.foreach(onUpdatePlan(_, result.newStages.map(_.plan)))
 
           // SPARK-33933: we should submit tasks of broadcast stages first, to avoid waiting
@@ -362,8 +358,7 @@ case class AdaptiveSparkPlanExec(
           // the current physical plan. Once a new plan is adopted and both logical and physical
           // plans are updated, we can clear the query stage list because at this point the two
           // plans are semantically and physically in sync again.
-          val logicalPlan = replaceWithQueryStagesInLogicalPlan(
-            currentLogicalPlan, stagesToReplace.toSeq)
+          val logicalPlan = replaceWithQueryStagesInLogicalPlan(currentLogicalPlan, stagesToReplace)
           val afterReOptimize = reOptimize(logicalPlan)
           if (afterReOptimize.isDefined) {
             val (newPhysicalPlan, newLogicalPlan) = afterReOptimize.get
@@ -377,7 +372,7 @@ case class AdaptiveSparkPlanExec(
               cleanUpTempTags(newPhysicalPlan)
               currentPhysicalPlan = newPhysicalPlan
               currentLogicalPlan = newLogicalPlan
-              stagesToReplace.clear()
+              stagesToReplace = Seq.empty[QueryStageExec]
             }
           }
         }
