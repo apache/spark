@@ -33,8 +33,10 @@ object ArrowWriter {
   def create(
       schema: StructType,
       timeZoneId: String,
-      errorOnDuplicatedFieldNames: Boolean = true): ArrowWriter = {
-    val arrowSchema = ArrowUtils.toArrowSchema(schema, timeZoneId, errorOnDuplicatedFieldNames)
+      errorOnDuplicatedFieldNames: Boolean = true,
+      largeVarTypes: Boolean = false): ArrowWriter = {
+    val arrowSchema = ArrowUtils.toArrowSchema(
+      schema, timeZoneId, errorOnDuplicatedFieldNames, largeVarTypes)
     val root = VectorSchemaRoot.create(arrowSchema, ArrowUtils.rootAllocator)
     create(root)
   }

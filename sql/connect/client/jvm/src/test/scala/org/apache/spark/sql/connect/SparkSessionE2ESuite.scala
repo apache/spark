@@ -26,6 +26,7 @@ import scala.util.{Failure, Success}
 import org.scalatest.concurrent.Eventually._
 
 import org.apache.spark.SparkException
+import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.StringEncoder
 import org.apache.spark.sql.connect.test.{ConnectFunSuite, RemoteSparkSession}
 import org.apache.spark.util.SparkThreadUtils.awaitResult
 
@@ -440,4 +441,11 @@ class SparkSessionE2ESuite extends ConnectFunSuite with RemoteSparkSession {
     session.stop()
   }
 
+  test("executeCommand") {
+    val df = spark.executeCommand(
+      "org.apache.spark.sql.sources.FakeCommandRunner",
+      "command",
+      Map("one" -> "1", "two" -> "2"))
+    assert(df.as(StringEncoder).collect().toSet == Set("one", "two"))
+  }
 }

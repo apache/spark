@@ -36,6 +36,7 @@ from pyspark.ml.clustering import (
     LDAModel,
     LocalLDAModel,
     DistributedLDAModel,
+    PowerIterationClustering,
 )
 
 
@@ -192,8 +193,9 @@ class ClusteringTestsMixin:
             self.assertEqual(str(model), str(model2))
 
     def test_gaussian_mixture(self):
+        spark = self.spark
         df = (
-            self.spark.createDataFrame(
+            spark.createDataFrame(
                 [
                     (1, 1.0, Vectors.dense([-0.1, -0.05])),
                     (2, 2.0, Vectors.dense([-0.01, -0.1])),
@@ -229,8 +231,43 @@ class ClusteringTestsMixin:
             np.allclose(model.weights, [0.541014115744985, 0.4589858842550149], atol=1e-4),
             model.weights,
         )
-        # TODO: support GMM.gaussians on connect
-        # self.assertEqual(model.gaussians, xxx)
+
+        # check the gaussians
+        gaussians = model.gaussians
+        self.assertEqual(len(gaussians), 2)
+        self.assertTrue(
+            np.allclose(
+                gaussians[0].mean.toArray(),
+                [0.28586084899633746, 0.28513455726904297],
+                atol=1e-4,
+            ),
+            gaussians[0].mean,
+        )
+        self.assertTrue(
+            np.allclose(
+                gaussians[0].cov.toArray(),
+                [[0.41732752, 0.38378601], [0.38378601, 0.36454957]],
+                atol=1e-4,
+            ),
+            gaussians[0].cov,
+        )
+        self.assertTrue(
+            np.allclose(
+                gaussians[1].mean.toArray(),
+                [0.04795771063097124, 0.06212817950777127],
+                atol=1e-4,
+            ),
+            gaussians[1].mean,
+        )
+        self.assertTrue(
+            np.allclose(
+                gaussians[1].cov.toArray(),
+                [[0.50359595, 0.44696663], [0.44696663, 0.40424231]],
+                atol=1e-4,
+            ),
+            gaussians[1].cov,
+        )
+
         self.assertEqual(model.gaussiansDF.columns, ["mean", "cov"])
         self.assertEqual(model.gaussiansDF.count(), 2)
 
@@ -424,6 +461,40 @@ class ClusteringTestsMixin:
             model.write().overwrite().save(d)
             model2 = DistributedLDAModel.load(d)
             self.assertEqual(str(model), str(model2))
+
+    # TODO(SPARK-51080): Fix save/load for PowerIterationClustering
+    def test_power_iteration_clustering(self):
+        spark = self.spark
+
+        data = [
+            (1, 0, 0.5),
+            (2, 0, 0.5),
+            (2, 1, 0.7),
+            (3, 0, 0.5),
+            (3, 1, 0.7),
+            (3, 2, 0.9),
+            (4, 0, 0.5),
+            (4, 1, 0.7),
+            (4, 2, 0.9),
+            (4, 3, 1.1),
+            (5, 0, 0.5),
+            (5, 1, 0.7),
+            (5, 2, 0.9),
+            (5, 3, 1.1),
+            (5, 4, 1.3),
+        ]
+        df = spark.createDataFrame(data, ["src", "dst", "weight"]).repartition(1)
+
+        pic = PowerIterationClustering(k=2, weightCol="weight")
+        pic.setMaxIter(40)
+
+        self.assertEqual(pic.getK(), 2)
+        self.assertEqual(pic.getMaxIter(), 40)
+        self.assertEqual(pic.getWeightCol(), "weight")
+
+        assignments = pic.assignClusters(df)
+        self.assertEqual(assignments.columns, ["id", "cluster"])
+        self.assertEqual(assignments.count(), 6)
 
 
 class ClusteringTests(ClusteringTestsMixin, unittest.TestCase):

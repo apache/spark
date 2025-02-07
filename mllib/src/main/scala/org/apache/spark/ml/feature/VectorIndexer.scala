@@ -32,9 +32,10 @@ import org.apache.spark.ml.linalg.{DenseVector, SparseVector, Vector, VectorUDT}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
-import org.apache.spark.sql.{DataFrame, Dataset, Row}
+import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
 import org.apache.spark.sql.functions.udf
 import org.apache.spark.sql.types.{StructField, StructType}
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.collection.{OpenHashSet, Utils}
 
 /** Private trait for params for VectorIndexer and VectorIndexerModel */
@@ -304,6 +305,14 @@ class VectorIndexerModel private[ml] (
   def javaCategoryMaps: JMap[JInt, JMap[JDouble, JInt]] = {
     categoryMaps.map { case (k, v) => (k, v.asJava) }
       .asJava.asInstanceOf[JMap[JInt, JMap[JDouble, JInt]]]
+  }
+
+  private[spark] def categoryMapsDF: DataFrame = {
+    val data = categoryMaps.iterator.flatMap {
+      case (idx, map) => map.iterator.map(t => (idx, t._1, t._2))
+    }.toArray.toImmutableArraySeq
+    SparkSession.builder().getOrCreate().createDataFrame(data)
+      .toDF("featureIndex", "originalValue", "categoryIndex")
   }
 
   /**

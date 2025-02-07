@@ -207,19 +207,18 @@ class TransformWithStateInPandasStateServerSuite extends SparkFunSuite with Befo
   test("value state get") {
     val message = ValueStateCall.newBuilder().setStateName(stateName)
       .setGet(Get.newBuilder().build()).build()
-    val schema = new StructType().add("value", "int")
-    when(valueState.getOption()).thenReturn(Some(getIntegerRow(1)))
+    when(valueState.exists()).thenReturn(true)
+    when(valueState.get()).thenReturn(getIntegerRow(1))
     stateServer.handleValueStateRequest(message)
-    verify(valueState).getOption()
+    verify(valueState).get()
     verify(outputStream).writeInt(argThat((x: Int) => x > 0))
   }
 
   test("value state get - not exist") {
     val message = ValueStateCall.newBuilder().setStateName(stateName)
       .setGet(Get.newBuilder().build()).build()
-    when(valueState.getOption()).thenReturn(None)
     stateServer.handleValueStateRequest(message)
-    verify(valueState).getOption()
+    verify(valueState).get()
     // We don't throw exception when value doesn't exist.
     verify(outputStream).writeInt(0)
   }
@@ -228,7 +227,7 @@ class TransformWithStateInPandasStateServerSuite extends SparkFunSuite with Befo
     val nonExistMessage = ValueStateCall.newBuilder().setStateName("nonExist")
       .setGet(Get.newBuilder().build()).build()
     stateServer.handleValueStateRequest(nonExistMessage)
-    verify(valueState, times(0)).getOption()
+    verify(valueState, times(0)).get()
     verify(outputStream).writeInt(argThat((x: Int) => x > 0))
   }
 

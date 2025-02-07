@@ -49,11 +49,10 @@ import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.classic.SparkSession.applyAndLoadExtensions
-import org.apache.spark.sql.connector.ExternalCommandRunner
-import org.apache.spark.sql.errors.{QueryCompilationErrors, SqlScriptingErrors}
+import org.apache.spark.sql.errors.SqlScriptingErrors
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.command.ExternalCommandExecutor
-import org.apache.spark.sql.execution.datasources.{DataSource, LogicalRelation}
+import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.internal._
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
@@ -583,15 +582,7 @@ class SparkSession private(
    */
   @Unstable
   def executeCommand(runner: String, command: String, options: Map[String, String]): DataFrame = {
-    DataSource.lookupDataSource(runner, sessionState.conf) match {
-      case source if classOf[ExternalCommandRunner].isAssignableFrom(source) =>
-        Dataset.ofRows(self, ExternalCommandExecutor(
-          source.getDeclaredConstructor().newInstance()
-            .asInstanceOf[ExternalCommandRunner], command, options))
-
-      case _ =>
-        throw QueryCompilationErrors.commandExecutionInRunnerUnsupportedError(runner)
-    }
+    Dataset.ofRows(self, ExternalCommandExecutor(this, runner, command, options))
   }
 
   /** @inheritdoc */

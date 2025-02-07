@@ -71,7 +71,7 @@ from pyspark.sql.utils import (
 from pyspark.errors import PySparkValueError, PySparkTypeError, PySparkRuntimeError
 
 if TYPE_CHECKING:
-    from py4j.java_gateway import JavaObject
+    from py4j.java_gateway import JavaClass, JavaObject, JVMView
     import pyarrow as pa
     from pyspark.core.context import SparkContext
     from pyspark.core.rdd import RDD
@@ -473,12 +473,6 @@ class SparkSession(SparkConversionMixin):
 
                 url = opts.get("spark.remote", os.environ.get("SPARK_REMOTE"))
 
-                if url is None:
-                    raise PySparkRuntimeError(
-                        errorClass="CONNECT_URL_NOT_SET",
-                        messageParameters={},
-                    )
-
                 os.environ["SPARK_CONNECT_MODE_ENABLED"] = "1"
                 opts["spark.remote"] = url
                 return RemoteSparkSession.builder.config(map=opts).getOrCreate()  # type: ignore
@@ -486,10 +480,13 @@ class SparkSession(SparkConversionMixin):
             from pyspark.core.context import SparkContext
 
             with self._lock:
+                is_api_mode_connect = opts.get("spark.api.mode", "classic").lower() == "connect"
+
                 if (
                     "SPARK_CONNECT_MODE_ENABLED" in os.environ
                     or "SPARK_REMOTE" in os.environ
                     or "spark.remote" in opts
+                    or is_api_mode_connect
                 ):
                     with SparkContext._lock:
                         from pyspark.sql.connect.session import SparkSession as RemoteSparkSession
@@ -498,7 +495,10 @@ class SparkSession(SparkConversionMixin):
                             SparkContext._active_spark_context is None
                             and SparkSession._instantiatedSession is None
                         ):
-                            url = opts.get("spark.remote", os.environ.get("SPARK_REMOTE"))
+                            if is_api_mode_connect:
+                                url = opts.get("spark.master", os.environ.get("MASTER"))
+                            else:
+                                url = opts.get("spark.remote", os.environ.get("SPARK_REMOTE"))
 
                             if url is None:
                                 raise PySparkRuntimeError(
@@ -506,7 +506,7 @@ class SparkSession(SparkConversionMixin):
                                     messageParameters={},
                                 )
 
-                            if url.startswith("local"):
+                            if url.startswith("local") or is_api_mode_connect:
                                 os.environ["SPARK_LOCAL_REMOTE"] = "1"
                                 RemoteSparkSession._start_connect_server(url, opts)
                                 url = "sc://localhost"
@@ -542,9 +542,8 @@ class SparkSession(SparkConversionMixin):
                     # by all sessions.
                     session = SparkSession(sc, options=self._options)
                 else:
-                    getattr(
-                        getattr(session._jvm, "SparkSession$"), "MODULE$"
-                    ).applyModifiableSettings(session._jsparkSession, self._options)
+                    module = SparkSession._get_j_spark_session_module(session._jvm)
+                    module.applyModifiableSettings(session._jsparkSession, self._options)
                 return session
 
         # Spark Connect-specific API
@@ -612,21 +611,20 @@ class SparkSession(SparkConversionMixin):
 
         assert self._jvm is not None
 
+        jSparkSessionClass = SparkSession._get_j_spark_session_class(self._jvm)
+        jSparkSessionModule = SparkSession._get_j_spark_session_module(self._jvm)
+
         if jsparkSession is None:
             if (
-                self._jvm.SparkSession.getDefaultSession().isDefined()
-                and not self._jvm.SparkSession.getDefaultSession().get().sparkContext().isStopped()
+                jSparkSessionClass.getDefaultSession().isDefined()
+                and not jSparkSessionClass.getDefaultSession().get().sparkContext().isStopped()
             ):
-                jsparkSession = self._jvm.SparkSession.getDefaultSession().get()
-                getattr(getattr(self._jvm, "SparkSession$"), "MODULE$").applyModifiableSettings(
-                    jsparkSession, options
-                )
+                jsparkSession = jSparkSessionClass.getDefaultSession().get()
+                jSparkSessionModule.applyModifiableSettings(jsparkSession, options)
             else:
-                jsparkSession = self._jvm.SparkSession(self._jsc.sc(), options)
+                jsparkSession = jSparkSessionClass(self._jsc.sc(), options)
         else:
-            getattr(getattr(self._jvm, "SparkSession$"), "MODULE$").applyModifiableSettings(
-                jsparkSession, options
-            )
+            jSparkSessionModule.applyModifiableSettings(jsparkSession, options)
         self._jsparkSession = jsparkSession
         _monkey_patch_RDD(self)
         install_exception_handler()
@@ -637,8 +635,8 @@ class SparkSession(SparkConversionMixin):
             SparkSession._instantiatedSession = self
             SparkSession._activeSession = self
             assert self._jvm is not None
-            self._jvm.SparkSession.setDefaultSession(self._jsparkSession)
-            self._jvm.SparkSession.setActiveSession(self._jsparkSession)
+            jSparkSessionClass.setDefaultSession(self._jsparkSession)
+            jSparkSessionClass.setActiveSession(self._jsparkSession)
 
         self._profiler_collector = AccumulatorProfilerCollector()
 
@@ -648,6 +646,14 @@ class SparkSession(SparkConversionMixin):
             SparkSession._instantiatedSession is None
             or SparkSession._instantiatedSession._sc._jsc is None
         )
+
+    @staticmethod
+    def _get_j_spark_session_class(jvm: "JVMView") -> "JavaClass":
+        return getattr(jvm, "org.apache.spark.sql.classic.SparkSession")
+
+    @staticmethod
+    def _get_j_spark_session_module(jvm: "JVMView") -> "JavaObject":
+        return getattr(getattr(jvm, "org.apache.spark.sql.classic.SparkSession$"), "MODULE$")
 
     def _repr_html_(self) -> str:
         return """
@@ -721,9 +727,10 @@ class SparkSession(SparkConversionMixin):
             return None
         else:
             assert sc._jvm is not None
-            if sc._jvm.SparkSession.getActiveSession().isDefined():
+            jSparkSessionClass = SparkSession._get_j_spark_session_class(sc._jvm)
+            if jSparkSessionClass.getActiveSession().isDefined():
                 if SparkSession._should_update_active_session():
-                    SparkSession(sc, sc._jvm.SparkSession.getActiveSession().get())
+                    SparkSession(sc, jSparkSessionClass.getActiveSession().get())
                 return SparkSession._activeSession
             else:
                 return None
@@ -1501,7 +1508,7 @@ class SparkSession(SparkConversionMixin):
         """
         SparkSession._activeSession = self
         assert self._jvm is not None
-        self._jvm.SparkSession.setActiveSession(self._jsparkSession)
+        SparkSession._get_j_spark_session_class(self._jvm).setActiveSession(self._jsparkSession)
         if isinstance(data, DataFrame):
             raise PySparkTypeError(
                 errorClass="INVALID_TYPE",
@@ -2000,8 +2007,9 @@ class SparkSession(SparkConversionMixin):
         self._sc.stop()
         # We should clean the default session up. See SPARK-23228.
         assert self._jvm is not None
-        self._jvm.SparkSession.clearDefaultSession()
-        self._jvm.SparkSession.clearActiveSession()
+        jSparkSessionClass = SparkSession._get_j_spark_session_class(self._jvm)
+        jSparkSessionClass.clearDefaultSession()
+        jSparkSessionClass.clearActiveSession()
         SparkSession._instantiatedSession = None
         SparkSession._activeSession = None
         SQLContext._instantiatedContext = None

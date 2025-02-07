@@ -36,7 +36,7 @@ import org.apache.spark.ml.param.Params
 import org.apache.spark.ml.recommendation._
 import org.apache.spark.ml.regression._
 import org.apache.spark.ml.tree.{DecisionTreeModel, TreeEnsembleModel}
-import org.apache.spark.ml.util.{HasTrainingSummary, Identifiable, MLWritable}
+import org.apache.spark.ml.util.{ConnectHelper, HasTrainingSummary, Identifiable, MLWritable}
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.classic.Dataset
 import org.apache.spark.sql.connect.common.LiteralValueProtoConverter
@@ -602,7 +602,7 @@ private[ml] object MLUtils {
     (classOf[BisectingKMeansSummary], Set("trainingCost")),
     (
       classOf[GaussianMixtureModel],
-      Set("predict", "numFeatures", "weights", "gaussians", "predictProbability", "gaussiansDF")),
+      Set("predict", "numFeatures", "weights", "predictProbability", "gaussiansDF")),
     (classOf[GaussianMixtureSummary], Set("probability", "probabilityCol", "logLikelihood")),
     (
       classOf[LDAModel],
@@ -640,17 +640,33 @@ private[ml] object MLUtils {
     (classOf[MaxAbsScalerModel], Set("maxAbs")),
     (classOf[MinMaxScalerModel], Set("originalMax", "originalMin")),
     (classOf[RobustScalerModel], Set("range", "median")),
-    (classOf[VectorIndexerModel], Set("numFeatures")),
+    (classOf[VectorIndexerModel], Set("numFeatures", "categoryMapsDF")),
     (classOf[ChiSqSelectorModel], Set("selectedFeatures")),
     (classOf[UnivariateFeatureSelectorModel], Set("selectedFeatures")),
     (classOf[VarianceThresholdSelectorModel], Set("selectedFeatures")),
     (classOf[PCAModel], Set("pc", "explainedVariance")),
-    (classOf[Word2VecModel], Set("getVectors", "findSynonyms", "findSynonymsArray")),
+    (classOf[Word2VecModel], Set("getVectors", "findSynonyms")),
     (classOf[CountVectorizerModel], Set("vocabulary")),
     (classOf[OneHotEncoderModel], Set("categorySizes")),
     (classOf[StringIndexerModel], Set("labels", "labelsArray")),
     (classOf[RFormulaModel], Set("resolvedFormulaString")),
-    (classOf[IDFModel], Set("idf", "docFreq", "numDocs")))
+    (classOf[IDFModel], Set("idf", "docFreq", "numDocs")),
+
+    // Utils
+    (
+      classOf[ConnectHelper],
+      Set(
+        "handleOverwrite",
+        "stringIndexerModelFromLabels",
+        "stringIndexerModelFromLabelsArray",
+        "countVectorizerModelFromVocabulary",
+        "stopWordsRemoverLoadDefaultStopWords",
+        "stopWordsRemoverGetDefaultOrUS",
+        "chiSquareTest",
+        "correlation",
+        "kolmogorovSmirnovTest",
+        "powerIterationClusteringAssignClusters",
+        "prefixSpanFindFrequentSequentialPatterns")))
 
   private def validate(obj: Any, method: String): Unit = {
     assert(obj != null)

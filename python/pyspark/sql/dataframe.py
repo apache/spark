@@ -756,6 +756,10 @@ class DataFrame:
         -------
         :class:`DataFrame`
 
+        See Also
+        --------
+        DataFrame.subtract : Similar to `exceptAll`, but eliminates duplicates.
+
         Examples
         --------
         >>> df1 = spark.createDataFrame(
@@ -4761,6 +4765,10 @@ class DataFrame:
         Notes
         -----
         This is equivalent to `EXCEPT DISTINCT` in SQL.
+
+        See Also
+        --------
+        DataFrame.exceptAll : Similar to `subtract`, but preserves duplicates.
 
         Examples
         --------

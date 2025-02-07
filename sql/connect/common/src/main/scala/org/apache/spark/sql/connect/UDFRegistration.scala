@@ -19,8 +19,9 @@ package org.apache.spark.sql.connect
 
 import org.apache.spark.connect.proto
 import org.apache.spark.sql
+import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.connect.common.DataTypeProtoConverter
-import org.apache.spark.sql.expressions.{UserDefinedAggregateFunction, UserDefinedFunction}
+import org.apache.spark.sql.expressions.{UserDefinedAggregateFunction, UserDefinedAggregator, UserDefinedFunction}
 import org.apache.spark.sql.types.DataType
 
 /**
@@ -55,6 +56,13 @@ class UDFRegistration(session: SparkSession) extends sql.UDFRegistration {
   /** @inheritdoc */
   override def register(
       name: String,
-      udaf: UserDefinedAggregateFunction): UserDefinedAggregateFunction =
-    throw ConnectClientUnsupportedErrors.registerUdaf()
+      udaf: UserDefinedAggregateFunction): UserDefinedAggregateFunction = {
+    val wrapped = UserDefinedAggregator(
+      aggregator = new UserDefinedAggregateFunctionWrapper(udaf),
+      inputEncoder = RowEncoder.encoderFor(udaf.inputSchema),
+      givenName = Option(name),
+      deterministic = udaf.deterministic)
+    register(name, wrapped, "scala_udf", validateParameterCount = false)
+    udaf
+  }
 }

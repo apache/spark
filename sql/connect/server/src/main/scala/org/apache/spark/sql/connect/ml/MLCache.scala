@@ -20,11 +20,15 @@ import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.ml.util.ConnectHelper
 
 /**
  * MLCache is for caching ML objects, typically for models and summaries evaluated by a model.
  */
 private[connect] class MLCache extends Logging {
+  private val helper = new ConnectHelper()
+  private val helperID = "______ML_CONNECT_HELPER______"
+
   private val cachedModel: ConcurrentHashMap[String, Object] =
     new ConcurrentHashMap[String, Object]()
 
@@ -49,7 +53,11 @@ private[connect] class MLCache extends Logging {
    *   the cached object
    */
   def get(refId: String): Object = {
-    cachedModel.get(refId)
+    if (refId == helperID) {
+      helper
+    } else {
+      cachedModel.get(refId)
+    }
   }
 
   /**

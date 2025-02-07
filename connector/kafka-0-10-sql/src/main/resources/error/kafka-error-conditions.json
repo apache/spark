@@ -30,6 +30,13 @@
       "Specified: <specifiedPartitions> Assigned: <assignedPartitions>"
     ]
   },
+  "KAFKA_TIMESTAMP_OFFSET_DOES_NOT_MATCH_ASSIGNED" : {
+    "message" : [
+      "Partitions specified for Kafka timestamp based <position> offsets don't match what are assigned. Maybe topic partitions are created ",
+      "or deleted while the query is running, or you didn't specify all the partitions.",
+      "Specified: <specifiedPartitions> Assigned: <assignedPartitions>"
+    ]
+  },
   "KAFKA_DATA_LOSS" : {
     "message" : [
       "Some data may have been lost because they are not available in Kafka any more;",
