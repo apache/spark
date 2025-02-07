@@ -38,7 +38,9 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
 
   // Tests setup
   override protected def sparkConf: SparkConf = {
-    super.sparkConf.set(SQLConf.SQL_SCRIPTING_ENABLED.key, "true")
+    super.sparkConf
+      .set(SQLConf.ANSI_ENABLED.key, "true")
+      .set(SQLConf.SQL_SCRIPTING_ENABLED.key, "true")
   }
 
   // Helpers
