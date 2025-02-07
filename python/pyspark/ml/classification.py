@@ -3834,12 +3834,13 @@ class OneVsRestModel(
         )
 
     def _transform(self, dataset: DataFrame) -> DataFrame:
+        # TODO(SPARK-48515): Use Arrow Python UDF
         # determine the input columns: these need to be passed through
         origCols = dataset.columns
 
         # add an accumulator column to store predictions of all the models
         accColName = "mbc$acc" + str(uuid.uuid4())
-        initUDF = udf(lambda _: [], ArrayType(DoubleType()))
+        initUDF = udf(lambda _: [], ArrayType(DoubleType()), useArrow=False)
         newDataset = dataset.withColumn(accColName, initUDF(dataset[origCols[0]]))
 
         # persist if underlying dataset is not persistent.
@@ -3859,6 +3860,7 @@ class OneVsRestModel(
             updateUDF = udf(
                 lambda predictions, prediction: predictions + [prediction.tolist()[1]],
                 ArrayType(DoubleType()),
+                useArrow=False,
             )
             transformedDataset = model.transform(aggregatedDataset).select(*columns)
             updatedDataset = transformedDataset.withColumn(
@@ -3883,7 +3885,7 @@ class OneVsRestModel(
                     predArray.append(x)
                 return Vectors.dense(predArray)
 
-            rawPredictionUDF = udf(func, VectorUDT())
+            rawPredictionUDF = udf(func, VectorUDT(), useArrow=False)
             aggregatedDataset = aggregatedDataset.withColumn(
                 self.getRawPredictionCol(), rawPredictionUDF(aggregatedDataset[accColName])
             )
@@ -3895,6 +3897,7 @@ class OneVsRestModel(
                     max(enumerate(predictions), key=operator.itemgetter(1))[0]
                 ),
                 DoubleType(),
+                useArrow=False,
             )
             aggregatedDataset = aggregatedDataset.withColumn(
                 self.getPredictionCol(), labelUDF(aggregatedDataset[accColName])
