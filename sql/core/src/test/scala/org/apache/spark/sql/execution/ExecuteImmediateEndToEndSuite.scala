@@ -16,7 +16,7 @@
  */
 package org.apache.spark.sql.execution
 
-import org.apache.spark.sql.{QueryTest}
+import org.apache.spark.sql.{AnalysisException, QueryTest}
 import org.apache.spark.sql.test.SharedSparkSession
 
 class ExecuteImmediateEndToEndSuite extends QueryTest with SharedSparkSession {
@@ -34,6 +34,18 @@ class ExecuteImmediateEndToEndSuite extends QueryTest with SharedSparkSession {
       checkAnswer(originalQuery, newQuery.collect().toIndexedSeq)
     } finally {
       spark.sql("DROP TEMPORARY VARIABLE IF EXISTS parm;")
+    }
+  }
+
+  test("SQL Scripting not supported inside EXECUTE IMMEDIATE") {
+    withSQLConf("spark.sql.scripting.enabled" -> "true") {
+      val executeImmediateText = "EXECUTE IMMEDIATE 'BEGIN SELECT 1; END'"
+      checkError(
+        exception = intercept[AnalysisException ] {
+          spark.sql(executeImmediateText)
+        },
+        condition = "SQL_SCRIPT_IN_EXECUTE_IMMEDIATE",
+        parameters = Map("sqlString" -> "BEGIN SELECT 1; END"))
     }
   }
 }
