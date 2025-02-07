@@ -2239,7 +2239,7 @@ class AstBuilder extends DataTypeAstBuilder
 
     false
   }
-
+  
   /**
    * Create an alias (SubqueryAlias) for a join relation. This is practically the same as
    * visitAliasedQuery and visitNamedExpression, ANTLR4 however requires us to use 3 different
