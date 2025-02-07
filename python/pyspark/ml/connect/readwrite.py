@@ -262,10 +262,6 @@ class RemoteMLReader(MLReader[RL]):
                 clazz.__module__.replace("pyspark", "org.apache.spark") + "." + clazz.__name__
             )
 
-            print()
-            print(java_qualified_class_name)
-            print()
-
             command = pb2.Command()
             command.ml_command.read.CopyFrom(
                 pb2.MlCommand.Read(
