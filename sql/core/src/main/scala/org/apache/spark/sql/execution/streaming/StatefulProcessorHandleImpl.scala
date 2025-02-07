@@ -371,7 +371,9 @@ class DriverStatefulProcessorHandleImpl(timeMode: TimeMode, keyExprEnc: Expressi
    *                            which users can set nullability
    * @param shouldSetNullable Whether we need to set the fields as nullable. This is set to
    *                          true when using Scala, as primitive type encoders set the field
-   *                          to non-nullable by default
+   *                          to non-nullable. Changing fields from non-nullable to nullable
+   *                          does not break anything (and is required for Avro encoding), so
+   *                          we can safely make this change.
    * @return column family schemas used by this stateful processor.
    */
   def getColumnFamilySchemas(
