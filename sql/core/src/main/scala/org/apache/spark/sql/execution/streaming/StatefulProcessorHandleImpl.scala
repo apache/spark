@@ -370,8 +370,8 @@ class DriverStatefulProcessorHandleImpl(timeMode: TimeMode, keyExprEnc: Expressi
    *                            true when using Python, as this is the only avenue through
    *                            which users can set nullability
    * @param shouldSetNullable Whether we need to set the fields as nullable. This is set to
-   *                          true when using Scala, as case classes are set to
-   *                          non-nullable by default.
+   *                          true when using Scala, as primitive type encoders set the field
+   *                          to non-nullable by default
    * @return column family schemas used by this stateful processor.
    */
   def getColumnFamilySchemas(
