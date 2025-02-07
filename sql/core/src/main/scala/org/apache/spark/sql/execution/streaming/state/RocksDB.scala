@@ -916,10 +916,13 @@ class RocksDB(
           iter.next()
         }
       } else {
+        var currCfInfoOpt: Option[(String, ColumnFamilyInfo)] = None
         while (iter.isValid) {
           val (_, cfName) = decodeStateRowWithPrefix(iter.key)
-          val cfInfo = getColumnFamilyInfo(cfName)
-          if (cfInfo.isInternal) {
+          if (currCfInfoOpt.isEmpty || currCfInfoOpt.get._1 != cfName) {
+            currCfInfoOpt = Some((cfName, getColumnFamilyInfo(cfName)))
+          }
+          if (currCfInfoOpt.get._2.isInternal) {
             internalKeys += 1
           } else {
             keys += 1
