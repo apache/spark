@@ -4631,7 +4631,7 @@
   },
   "SQL_SCRIPT_IN_EXECUTE_IMMEDIATE" : {
     "message" : [
-      "SQL Scripts in EXECUTE IMMEDIATE commands are not allowed. Please ensure that the SQL query provided (<sqlString>) is not SQL Script."
+      "SQL Scripts in EXECUTE IMMEDIATE commands are not allowed. Please ensure that the SQL query provided (<sqlString>) is not SQL Script. Make sure the sql_string is a well-formed SQL statement and does not contain BEGIN and END."
     ],
     "sqlState" : "07501"
   },
