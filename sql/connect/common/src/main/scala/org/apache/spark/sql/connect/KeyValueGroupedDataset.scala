@@ -153,7 +153,7 @@ class KeyValueGroupedDataset[K, V] private[sql] () extends sql.KeyValueGroupedDa
       outputMode: OutputMode,
       initialState: sql.KeyValueGroupedDataset[K, S]): Dataset[U] =
     transformWithStateHelper(
-      statefulProcessor.asInstanceOf[StatefulProcessor[K, V, U]],
+      statefulProcessor,
       timeMode,
       outputMode,
       Some(initialState))
@@ -184,7 +184,7 @@ class KeyValueGroupedDataset[K, V] private[sql] () extends sql.KeyValueGroupedDa
 
   // This is an interface, and it should not be used. The real implementation is in the
   // inherited class.
-  private[sql] def transformWithStateHelper[U: Encoder, S: Encoder](
+  protected[sql] def transformWithStateHelper[U: Encoder, S: Encoder](
       statefulProcessor: StatefulProcessor[K, V, U],
       timeMode: TimeMode,
       outputMode: OutputMode,
@@ -673,6 +673,7 @@ private class KeyValueGroupedDatasetImpl[K, V, IK, IV](
       function = UdfUtils.noOp[K, U](),
       inputEncoders = inputEncoders,
       outputEncoder = outputEncoder)
+    // This dummy udf is an no-op and only used for transmitting encoders
     val udf = toExpr(
       dummyGroupingFunc.apply(
         inputEncoders.map(_ => col("*")): _*)).getCommonInlineUserDefinedFunction
@@ -683,14 +684,8 @@ private class KeyValueGroupedDatasetImpl[K, V, IK, IV](
     } else {
       null
     }
-
-    val statefulProcessorStr = if (!initialState.isDefined) {
+    val statefulProcessorByteStr =
       ByteString.copyFrom(SparkSerDeUtils.serialize(statefulProcessor))
-    } else {
-      ByteString.copyFrom(
-        SparkSerDeUtils.serialize(
-          statefulProcessor.asInstanceOf[StatefulProcessorWithInitialState[K, V, U, S]]))
-    }
 
     val twsDataset = sparkSession.newDataset[U](outputEncoder) { builder =>
       val twsBuilder = builder.getGroupMapBuilder
@@ -704,7 +699,7 @@ private class KeyValueGroupedDatasetImpl[K, V, IK, IV](
             .setOutputMode(outputMode.toString)
             // we pass time mode as string here and restore it in planner
             .setTimeMode(timeMode.toString)
-            .setStatefulProcessorPayload(statefulProcessorStr)
+            .setStatefulProcessorPayload(statefulProcessorByteStr)
             .build())
       if (initialStateImpl != null) {
         twsBuilder

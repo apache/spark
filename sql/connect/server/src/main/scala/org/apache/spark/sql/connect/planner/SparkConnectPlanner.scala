@@ -685,7 +685,7 @@ class SparkConnectPlanner(
       val hasInitialState = !rel.getInitialGroupingExpressionsList.isEmpty && rel.hasInitialInput
 
       val twsInfo = rel.getTransformWithStateInfo
-      val statefulProcessorStr = twsInfo.getStatefulProcessorPayload
+      val statefulProcessorByteStr = twsInfo.getStatefulProcessorPayload
       val keyDeserializer = udf.inputDeserializer(ds.groupingAttributes)
       val outputAttr = udf.outputObjAttr
 
@@ -695,7 +695,7 @@ class SparkConnectPlanner(
       val node = if (hasInitialState) {
         val statefulProcessor =
           Utils.deserialize[StatefulProcessorWithInitialState[Any, Any, Any, Any]](
-            statefulProcessorStr.toByteArray,
+            statefulProcessorByteStr.toByteArray,
             Utils.getContextOrSparkClassLoader)
         val initDs = UntypedKeyValueGroupedDataset(
           rel.getInitialInput,
@@ -719,7 +719,7 @@ class SparkConnectPlanner(
           initDs.analyzed)
       } else {
         val statefulProcessor = Utils.deserialize[StatefulProcessor[Any, Any, Any]](
-          statefulProcessorStr.toByteArray,
+          statefulProcessorByteStr.toByteArray,
           Utils.getContextOrSparkClassLoader)
         new TransformWithState(
           keyDeserializer,
@@ -738,10 +738,8 @@ class SparkConnectPlanner(
           keyDeserializer,
           LocalRelation(ds.vEncoder.schema))
       }
-      return SerializeFromObject(udf.outputNamedExpression, node)
-    }
-
-    if (rel.hasIsMapGroupsWithState) {
+      SerializeFromObject(udf.outputNamedExpression, node)
+    } else if (rel.hasIsMapGroupsWithState) {
       val hasInitialState = !rel.getInitialGroupingExpressionsList.isEmpty && rel.hasInitialInput
       val initialDs = if (hasInitialState) {
         UntypedKeyValueGroupedDataset(

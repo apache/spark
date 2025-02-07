@@ -1045,9 +1045,10 @@ message UpdateEventTimeWatermarkColumn {
   Relation input = 1;
 
   // (Required) Event time column name.
-  string event_time_col_name = 3;
+  string event_time_col_name = 2;
 }
 
+// This is only used for Scala TWS. Python requires a different API and it is in separate proto schema.
 message TransformWithStateInfo {
   // (Required) Bytes for java serialized user-defined stateful processor.
   bytes stateful_processor_payload = 1;

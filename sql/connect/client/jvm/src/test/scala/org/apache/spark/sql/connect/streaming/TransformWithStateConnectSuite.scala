@@ -118,6 +118,7 @@ class TTLTestStatefulProcessor
   @transient protected var ttlCountState: ValueState[Int] = _
   @transient protected var ttlListState: ListState[Int] = _
   @transient protected var ttlMapState: MapState[String, Int] = _
+
   override def init(outputMode: OutputMode, timeMode: TimeMode): Unit = {
     countState = getHandle.getValueState[Int]("countState", Encoders.scalaInt, TTLConfig.NONE)
     ttlCountState = getHandle
@@ -130,6 +131,7 @@ class TTLTestStatefulProcessor
       Encoders.scalaInt,
       TTLConfig(Duration.ofMillis(1000)))
   }
+
   override def handleInputRows(
       key: String,
       inputRows: Iterator[(String, String)],
@@ -219,8 +221,8 @@ class TransformWithStateConnectSuite extends QueryTest with RemoteSparkSession w
         try {
           q.processAllAvailable()
           eventually(timeout(30.seconds)) {
-            checkDataset(
-              spark.table("my_sink").toDF().as[(String, String)].orderBy("key"),
+            checkDatasetUnorderly(
+              spark.table("my_sink").toDF().as[(String, String)],
               ("a", "1"),
               ("a", "2"),
               ("b", "1"))
@@ -276,8 +278,8 @@ class TransformWithStateConnectSuite extends QueryTest with RemoteSparkSession w
         try {
           q.processAllAvailable()
           eventually(timeout(30.seconds)) {
-            checkDataset(
-              spark.table("my_sink").toDF().as[(String, String)].orderBy("_1"),
+            checkDatasetUnorderly(
+              spark.table("my_sink").toDF().as[(String, String)],
               ("a", "2"),
               ("a", "3"),
               ("b", "2"))
@@ -355,7 +357,7 @@ class TransformWithStateConnectSuite extends QueryTest with RemoteSparkSession w
 
       val checkResultFunc = (batchDF: Dataset[(String, String)], batchId: Long) => {
         if (batchId == 0) {
-          val expectedDF = Seq(
+          val expectedDF = Set(
             ("count-0", "1"),
             ("ttlCount-0", "1"),
             ("ttlListState-0", "1"),
@@ -363,13 +365,13 @@ class TransformWithStateConnectSuite extends QueryTest with RemoteSparkSession w
             ("count-1", "1"),
             ("ttlCount-1", "1"),
             ("ttlListState-1", "1"),
-            ("ttlMapState-1", "1")).toSet
+            ("ttlMapState-1", "1"))
 
           val realDf = batchDF.collect().toSet
           assert(realDf == expectedDF)
 
         } else if (batchId == 1) {
-          val expectedDF = Seq(
+          val expectedDF = Set(
             ("count-0", "2"),
             ("ttlCount-0", "1"),
             ("ttlListState-0", "1"),
@@ -377,7 +379,7 @@ class TransformWithStateConnectSuite extends QueryTest with RemoteSparkSession w
             ("count-1", "2"),
             ("ttlCount-1", "1"),
             ("ttlListState-1", "1"),
-            ("ttlMapState-1", "1")).toSet
+            ("ttlMapState-1", "1"))
 
           val realDf = batchDF.collect().toSet
           assert(realDf == expectedDF)
@@ -446,8 +448,8 @@ class TransformWithStateConnectSuite extends QueryTest with RemoteSparkSession w
           .write
           .saveAsTable("my_sink")
 
-        checkDataset(
-          spark.table("my_sink").toDF().as[(String, String)].orderBy("key"),
+        checkDatasetUnorderly(
+          spark.table("my_sink").toDF().as[(String, String)],
           ("a", "2"),
           ("b", "1"))
       }
