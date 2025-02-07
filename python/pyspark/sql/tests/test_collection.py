@@ -18,9 +18,11 @@
 import unittest
 
 from pyspark.sql.types import (
+    ArrayType,
     StringType,
     IntegerType,
     StructType,
+    StructField,
     BooleanType,
     DateType,
     TimestampType,
