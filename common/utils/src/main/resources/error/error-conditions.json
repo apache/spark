@@ -5074,7 +5074,7 @@
   },
   "TRANSFORM_WITH_STATE_SCHEMA_MUST_BE_NULLABLE" : {
     "message" : [
-      "If schema evolution is enabled, all the fields in the schema for column family <columnFamilyName> must be nullable",
+      "If Avro encoding is enabled, all the fields in the schema for column family <columnFamilyName> must be nullable",
       " when using the TransformWithState operator.",
       " Please make the schema nullable. Current schema: <schema>"
     ],
