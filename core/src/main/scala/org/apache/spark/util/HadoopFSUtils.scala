@@ -255,7 +255,7 @@ private[spark] object HadoopFSUtils extends Logging {
         statuses.filterNot(status => shouldFilterOutPathName(status.getPath.getName))
       } catch {
         case e: Exception =>
-          logError(s"Failed to filter out path names from ${path.toString}", e)
+          logError(log"Failed to filter out path names from ${MDC(PATH, path)}", e)
           throw SparkException.internalError(s"Unexpected statuses for path ${path.toString}", e)
       }
     }
