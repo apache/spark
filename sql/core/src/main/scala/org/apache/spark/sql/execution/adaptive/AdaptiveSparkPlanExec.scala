@@ -538,7 +538,6 @@ case class AdaptiveSparkPlanExec(
           val newResultStage = ResultQueryStageExec(currentStageId, optimizedPlan, resultHandler)
           currentStageId += 1
           setLogicalLinkForNewQueryStage(newResultStage, optimizedPlan)
-          stagesToReplace.append(newResultStage)
           CreateStageResult(newPlan = newResultStage,
             allChildStagesMaterialized = false,
             newStages = Seq(newResultStage))
@@ -558,7 +557,6 @@ case class AdaptiveSparkPlanExec(
     // 3. Create result stage
     if (allNewStages.isEmpty && allChildStagesMaterialized) {
       val resultStage = newResultQueryStage(resultHandler, newPlan)
-      stagesToReplace.append(resultStage)
       newPlan = resultStage
       allChildStagesMaterialized = false
       allNewStages :+= resultStage
