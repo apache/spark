@@ -81,9 +81,10 @@ object ResolveDefaultStringTypes extends Rule[LogicalPlan] {
   /**
    * Returns the default string type that should be used in a given DDL command.
    */
-  private def stringTypeForDDLCommand(table: LogicalPlan): StringType =
+  private def stringTypeForDDLCommand(table: LogicalPlan): StringType = {
     // TODO: Change this to use object level collation.
     StringType("UTF8_BINARY")
+  }
 
   private def isDDLCommand(plan: LogicalPlan): Boolean = plan exists {
     case _: AddColumns | _: ReplaceColumns | _: AlterColumns => true
