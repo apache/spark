@@ -941,6 +941,7 @@ class SparkConnectClient(object):
         else:
             # Rename columns to avoid duplicated column names.
             renamed_table = table.rename_columns([f"col_{i}" for i in range(table.num_columns)])
+
             pandas_options = {}
             if self_destruct:
                 # Configure PyArrow to use as little memory as possible:
