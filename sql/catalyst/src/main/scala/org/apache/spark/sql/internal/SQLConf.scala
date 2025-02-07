@@ -5859,7 +5859,7 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
     if (getConf(DEFAULT_COLLATION).toUpperCase(Locale.ROOT) == CollationNames.UTF8_BINARY) {
       StringType
     } else {
-      StringType(CollationFactory.collationNameToId(getConf(DEFAULT_COLLATION)))
+      StringType(getConf(DEFAULT_COLLATION))
     }
   }
 
