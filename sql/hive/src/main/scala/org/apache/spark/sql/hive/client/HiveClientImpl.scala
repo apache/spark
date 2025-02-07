@@ -176,7 +176,7 @@ private[hive] class HiveClientImpl(
     // so we need to reset it back to the DRIVER
     new CallerContext("DRIVER",
       sparkConf.get(APP_CALLER_CONTEXT),
-      Option(sparkConf.getOption("spark.app.id").getOrElse(""))).setCurrentContext()
+      Some(sparkConf.getOption("spark.app.id").getOrElse(""))).setCurrentContext()
     if (clientLoader.cachedHive != null) {
       Hive.set(clientLoader.cachedHive.asInstanceOf[Hive])
     }

@@ -724,7 +724,7 @@ class SparkContext(config: SparkConf) extends Logging {
     _plugins.foreach(_.registerMetrics(applicationId))
 
     new CallerContext("DRIVER", config.get(APP_CALLER_CONTEXT),
-      Option(applicationId), applicationAttemptId).setCurrentContext()
+      Some(applicationId), applicationAttemptId).setCurrentContext()
   } catch {
     case NonFatal(e) =>
       logError("Error initializing SparkContext.", e)
