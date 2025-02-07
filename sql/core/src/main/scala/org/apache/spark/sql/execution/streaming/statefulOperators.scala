@@ -105,6 +105,8 @@ object StatefulOperatorStateInfo {
  * [[IncrementalExecution]].
  */
 trait StatefulOperator extends SparkPlan {
+  // Used to determine state store names used when allocation metric names,
+  // since join operations use multiple state stores with non-default names.
   val isJoinOperator: Boolean = false
 
   def stateInfo: Option[StatefulOperatorStateInfo]
