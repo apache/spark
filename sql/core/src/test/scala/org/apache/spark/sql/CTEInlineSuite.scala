@@ -333,14 +333,14 @@ abstract class CTEInlineSuiteBase
 
   test("CTE Predicate push-down and column pruning - combined predicate") {
     withTempView("t") {
-      Seq((0, 1, 2), (1, 2, 3)).toDF("c1", "c2", "c3").createOrReplaceTempView("t")
+      Seq((0, 1, 2, 3), (1, 2, 3, 4)).toDF("c1", "c2", "c3", "c4").createOrReplaceTempView("t")
       val df = sql(
         s"""with
            |v as (
-           |  select c1, c2, c3, rand() c4 from t
+           |  select c1, c2, c3, c4, rand() c5 from t
            |),
            |vv as (
-           |  select v1.c1, v1.c2, rand() c5 from v v1, v v2
+           |  select v1.c1, v1.c2, rand() c6 from v v1, v v2
            |  where v1.c1 > 0 and v2.c3 < 5 and v1.c2 = v2.c2
            |)
            |select vv1.c1, vv1.c2, vv2.c1, vv2.c2 from vv vv1, vv vv2
