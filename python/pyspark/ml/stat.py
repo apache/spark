@@ -525,7 +525,7 @@ class SummaryBuilder(JavaWrapper):
             from pyspark.sql.connect.functions import builtin as F
 
             return F._invoke_function(
-                "ml_aggregate_metrics",
+                "aggregate_metrics",
                 F.array([F.lit(m) for m in self._metrics]),  # type: ignore[attr-defined]
                 featuresCol,
                 weightCol if weightCol is not None else F.lit(1.0),

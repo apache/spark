@@ -99,7 +99,7 @@ object InternalFunctionRegistration {
   }
 
   FunctionRegistry
-    .registerInternalExpression[SummaryBuilderImpl.MetricsAggregate]("ml_aggregate_metrics")
+    .registerInternalExpression[SummaryBuilderImpl.MetricsAggregate]("aggregate_metrics")
 }
 
 class InternalFunctionRegistration extends SparkSessionExtensionsProvider {
