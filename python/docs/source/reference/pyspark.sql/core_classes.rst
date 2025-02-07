@@ -51,3 +51,4 @@ Core Classes
     datasource.WriterCommitMessage
     tvf.TableValuedFunction
     VariantVal
+    table_arg.TableArg
