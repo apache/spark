@@ -69,4 +69,18 @@ private[spark] object Python {
     .version("3.2.0")
     .booleanConf
     .createWithDefault(false)
+
+  private val PYTHON_WORKER_IDLE_TIMEOUT_SECONDS_KEY = "spark.python.worker.idleTimeoutSeconds"
+
+  val PYTHON_WORKER_IDLE_TIMEOUT_SECONDS = ConfigBuilder(PYTHON_WORKER_IDLE_TIMEOUT_SECONDS_KEY)
+    .doc("The time (in seconds) Spark will wait for activity " +
+      "(e.g., data transfer or communication) from a Python worker before considering it " +
+      "potentially idle or unresponsive. When the timeout is triggered, " +
+      "Spark will log the network-related status for debugging purposes. " +
+      "However, the Python worker will remain active and continue waiting for communication. " +
+      "The default is `0` that means no timeout.")
+    .version("4.0.0")
+    .timeConf(TimeUnit.SECONDS)
+    .checkValue(_ >= 0, "The idle timeout should be 0 or positive.")
+    .createWithDefault(0)
 }
