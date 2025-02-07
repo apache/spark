@@ -5803,6 +5803,12 @@
           "Positional parameters are not supported with SQL Scripting."
         ]
       },
+      "SQL_SCRIPT_IN_EXECUTE_IMMEDIATE" : {
+        "message" : [
+          "SQL Scripts in EXECUTE IMMEDIATE commands are not allowed. Please ensure that the SQL query provided (<sqlString>) is not SQL Script."
+        ],
+        "sqlState" : "07501"
+      },
       "STATE_STORE_MULTIPLE_COLUMN_FAMILIES" : {
         "message" : [
           "Creating multiple column families with <stateStoreProvider> is not supported."
