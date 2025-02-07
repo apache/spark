@@ -273,6 +273,7 @@ class TransformWithValueStateTTLSuite extends TransformWithStateTTLTest {
     ) {
       withTempDir { checkpointDir =>
         // When Avro is used, we want to set the StructFields to nullable
+        val shouldBeNullable = usingAvroEncoding()
         val metadataPathPostfix = "state/0/_stateSchema/default"
         val stateSchemaPath = new Path(checkpointDir.toString, s"$metadataPathPostfix")
         val hadoopConf = spark.sessionState.newHadoopConf()
@@ -408,7 +409,7 @@ class TransformWithValueStateTTLSuite extends TransformWithStateTTLTest {
           "valueStateTTL", 0,
           keySchema, 0,
           new StructType()
-            .add("value", new StructType().add("value", IntegerType, nullable = true))
+            .add("value", new StructType().add("value", IntegerType, nullable = shouldBeNullable))
             .add("ttlExpirationMs", LongType),
           Some(NoPrefixKeyStateEncoderSpec(keySchema)),
           None
@@ -417,7 +418,7 @@ class TransformWithValueStateTTLSuite extends TransformWithStateTTLTest {
         val schema10 = StateStoreColFamilySchema(
           "valueState", 0,
           keySchema, 0,
-          new StructType().add("value", IntegerType, nullable = true),
+          new StructType().add("value", IntegerType, nullable = shouldBeNullable),
           Some(NoPrefixKeyStateEncoderSpec(keySchema)),
           None
         )
@@ -427,7 +428,7 @@ class TransformWithValueStateTTLSuite extends TransformWithStateTTLTest {
           keySchema, 0,
           new StructType()
             .add("value", new StructType()
-              .add("id", LongType, nullable = true)
+              .add("id", LongType, nullable = shouldBeNullable)
               .add("name", StringType))
             .add("ttlExpirationMs", LongType),
           Some(NoPrefixKeyStateEncoderSpec(keySchema)),
