@@ -247,6 +247,7 @@ core/src/main/resources/org/apache/spark/ui/static/sorttable.js
 docs/js/vendor/anchor.min.js
 docs/js/vendor/jquery*
 docs/js/vendor/modernizer*
+docs/js/vendor/docsearch.min.js
 
 ISC License
 -----------

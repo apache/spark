@@ -3923,6 +3923,12 @@
     ],
     "sqlState" : "0A000"
   },
+  "NEGATIVE_SCALE_DISALLOWED" : {
+    "message" : [
+      "Negative scale is not allowed: '<scale>'. Set the config <sqlConf> to \"true\" to allow it."
+    ],
+    "sqlState" : "0A000"
+  },
   "NEGATIVE_VALUES_IN_FREQUENCY_EXPRESSION" : {
     "message" : [
       "Found the negative value in <frequencyExpression>: <negativeValue>, but expected a positive integral value."
@@ -4936,9 +4942,21 @@
     },
     "sqlState" : "42KDE"
   },
+  "STREAMING_PYTHON_RUNNER_INITIALIZATION_COMMUNICATION_FAILURE" : {
+    "message" : [
+      "Streaming Runner initialization failed during initial config communication. Cause: <msg>"
+    ],
+    "sqlState" : "XXKST"
+  },
   "STREAMING_PYTHON_RUNNER_INITIALIZATION_FAILURE" : {
     "message" : [
       "Streaming Runner initialization failed, returned <resFromPython>. Cause: <msg>"
+    ],
+    "sqlState" : "XXKST"
+  },
+  "STREAMING_PYTHON_RUNNER_INITIALIZATION_TIMEOUT_FAILURE" : {
+    "message" : [
+      "Streaming Runner initialization failed. Socket connection timeout. Cause: <msg>"
     ],
     "sqlState" : "XXKST"
   },
@@ -5374,11 +5392,6 @@
       "RDD" : {
         "message" : [
           "Resilient Distributed Datasets (RDDs)."
-        ]
-      },
-      "REGISTER_UDAF" : {
-        "message" : [
-          "Registering User Defined Aggregate Functions (UDAFs)."
         ]
       },
       "SESSION_BASE_RELATION_TO_DATAFRAME" : {

@@ -23,15 +23,16 @@ import java.nio.ByteBuffer
 import java.nio.channels.SelectionKey
 import java.nio.charset.StandardCharsets.UTF_8
 import java.nio.file.{Files => JavaFiles, Path}
-import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
 import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.jdk.CollectionConverters._
+import scala.util.{Success, Try}
 import scala.util.control.NonFatal
 
 import org.apache.spark._
 import org.apache.spark.api.python.PythonFunction.PythonAccumulator
-import org.apache.spark.internal.{Logging, LogKeys, MDC}
+import org.apache.spark.internal.{Logging, LogKeys, MDC, MessageWithContext}
 import org.apache.spark.internal.LogKeys.TASK_NAME
 import org.apache.spark.internal.config.{BUFFER_SIZE, EXECUTOR_CORES}
 import org.apache.spark.internal.config.Python._
@@ -90,12 +91,43 @@ private[spark] object PythonEvalType {
   }
 }
 
-private[spark] object BasePythonRunner {
+private[spark] object BasePythonRunner extends Logging {
 
   private[spark] lazy val faultHandlerLogDir = Utils.createTempDir(namePrefix = "faulthandler")
 
   private[spark] def faultHandlerLogPath(pid: Int): Path = {
     new File(faultHandlerLogDir, pid.toString).toPath
+  }
+
+  private[spark] def pythonWorkerStatusMessageWithContext(
+      handle: Option[ProcessHandle],
+      worker: PythonWorker,
+      hasInputs: Boolean): MessageWithContext = {
+    log"handle.map(_.isAlive) = " +
+    log"${MDC(LogKeys.PYTHON_WORKER_IS_ALIVE, handle.map(_.isAlive))}, " +
+    log"channel.isConnected = " +
+    log"${MDC(LogKeys.PYTHON_WORKER_CHANNEL_IS_CONNECTED, worker.channel.isConnected)}, " +
+    log"channel.isBlocking = " +
+    log"${
+      MDC(LogKeys.PYTHON_WORKER_CHANNEL_IS_BLOCKING_MODE,
+        worker.channel.isBlocking)
+    }, " +
+      (if (!worker.channel.isBlocking) {
+        log"selector.isOpen = " +
+        log"${MDC(LogKeys.PYTHON_WORKER_SELECTOR_IS_OPEN, worker.selector.isOpen)}, " +
+        log"selectionKey.isValid = " +
+        log"${
+          MDC(LogKeys.PYTHON_WORKER_SELECTION_KEY_IS_VALID,
+            worker.selectionKey.isValid)
+        }, " +
+        (Try(worker.selectionKey.interestOps()) match {
+          case Success(ops) =>
+            log"selectionKey.interestOps = " +
+              log"${MDC(LogKeys.PYTHON_WORKER_SELECTION_KEY_INTERESTS, ops)}, "
+          case _ => log""
+        })
+      } else log"") +
+    log"hasInputs = ${MDC(LogKeys.PYTHON_WORKER_HAS_INPUTS, hasInputs)}"
   }
 }
 
@@ -112,6 +144,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
     protected val jobArtifactUUID: Option[String],
     protected val metrics: Map[String, AccumulatorV2[Long, Long]])
   extends Logging {
+  import BasePythonRunner._
 
   require(funcs.length == argOffsets.length, "argOffsets should have the same length as funcs")
 
@@ -122,6 +155,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
   protected val authSocketTimeout = conf.get(PYTHON_AUTH_SOCKET_TIMEOUT)
   private val reuseWorker = conf.get(PYTHON_WORKER_REUSE)
   protected val faultHandlerEnabled: Boolean = conf.get(PYTHON_WORKER_FAULTHANLDER_ENABLED)
+  protected val idleTimeoutSeconds: Long = conf.get(PYTHON_WORKER_IDLE_TIMEOUT_SECONDS)
   protected val hideTraceback: Boolean = false
   protected val simplifiedTraceback: Boolean = false
 
@@ -216,14 +250,14 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
     envVars.put("SPARK_AUTH_SOCKET_TIMEOUT", authSocketTimeout.toString)
     envVars.put("SPARK_BUFFER_SIZE", bufferSize.toString)
     if (faultHandlerEnabled) {
-      envVars.put("PYTHON_FAULTHANDLER_DIR", BasePythonRunner.faultHandlerLogDir.toString)
+      envVars.put("PYTHON_FAULTHANDLER_DIR", faultHandlerLogDir.toString)
     }
     // allow the user to set the batch size for the BatchedSerializer on UDFs
     envVars.put("PYTHON_UDF_BATCH_SIZE", batchSizeForPythonUDF.toString)
 
     envVars.put("SPARK_JOB_ARTIFACT_UUID", jobArtifactUUID.getOrElse("default"))
 
-    val (worker: PythonWorker, pid: Option[Int]) = env.createPythonWorker(
+    val (worker: PythonWorker, handle: Option[ProcessHandle]) = env.createPythonWorker(
       pythonExec, workerModule, daemonModule, envVars.asScala.toMap)
     // Whether is the worker released into idle pool or closed. When any codes try to release or
     // close a worker, they should use `releasedOrClosed.compareAndSet` to flip the state to make
@@ -256,10 +290,11 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
     }
 
     // Return an iterator that read lines from the process's stdout
-    val dataIn = new DataInputStream(
-      new BufferedInputStream(new ReaderInputStream(worker, writer), bufferSize))
+    val dataIn = new DataInputStream(new BufferedInputStream(
+      new ReaderInputStream(worker, writer, handle, idleTimeoutSeconds),
+      bufferSize))
     val stdoutIterator = newReaderIterator(
-      dataIn, writer, startTime, env, worker, pid, releasedOrClosed, context)
+      dataIn, writer, startTime, env, worker, handle.map(_.pid.toInt), releasedOrClosed, context)
     new InterruptibleIterator(context, stdoutIterator)
   }
 
@@ -572,8 +607,8 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
         throw writer.exception.get
 
       case e: IOException if faultHandlerEnabled && pid.isDefined &&
-          JavaFiles.exists(BasePythonRunner.faultHandlerLogPath(pid.get)) =>
-        val path = BasePythonRunner.faultHandlerLogPath(pid.get)
+          JavaFiles.exists(faultHandlerLogPath(pid.get)) =>
+        val path = faultHandlerLogPath(pid.get)
         val error = String.join("\n", JavaFiles.readAllLines(path)) + "\n"
         JavaFiles.deleteIfExists(path)
         throw new SparkException(s"Python worker exited unexpectedly (crashed): $error", e)
@@ -640,7 +675,11 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
     }
   }
 
-  class ReaderInputStream(worker: PythonWorker, writer: Writer) extends InputStream {
+  class ReaderInputStream(
+      worker: PythonWorker,
+      writer: Writer,
+      handle: Option[ProcessHandle],
+      idleTimeoutSeconds: Long) extends InputStream {
     private[this] var writerIfbhThreadLocalValue: Object = null
     private[this] val temp = new Array[Byte](1)
     private[this] val bufferStream = new DirectByteBufferOutputStream()
@@ -699,7 +738,13 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
       val buf = ByteBuffer.wrap(b, off, len)
       var n = 0
       while (n == 0) {
-        worker.selector.select()
+        val selected = worker.selector.select(TimeUnit.SECONDS.toMillis(idleTimeoutSeconds))
+        if (selected == 0) {
+          logWarning(log"Idle timeout reached for Python worker (timeout: " +
+            log"${MDC(LogKeys.PYTHON_WORKER_IDLE_TIMEOUT, idleTimeoutSeconds)} seconds). " +
+            log"No data received from the worker process: " +
+            pythonWorkerStatusMessageWithContext(handle, worker, hasInput || buffer.hasRemaining))
+        }
         if (worker.selectionKey.isReadable) {
           n = worker.channel.read(buf)
         }

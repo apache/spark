@@ -51,9 +51,11 @@ private[sql] class ArrowBatchStreamWriter(
     schema: StructType,
     out: OutputStream,
     timeZoneId: String,
-    errorOnDuplicatedFieldNames: Boolean) {
+    errorOnDuplicatedFieldNames: Boolean,
+    largeVarTypes: Boolean) {
 
-  val arrowSchema = ArrowUtils.toArrowSchema(schema, timeZoneId, errorOnDuplicatedFieldNames)
+  val arrowSchema = ArrowUtils.toArrowSchema(
+    schema, timeZoneId, errorOnDuplicatedFieldNames, largeVarTypes)
   val writeChannel = new WriteChannel(Channels.newChannel(out))
 
   // Write the Arrow schema first, before batches
@@ -81,10 +83,11 @@ private[sql] object ArrowConverters extends Logging {
       maxRecordsPerBatch: Long,
       timeZoneId: String,
       errorOnDuplicatedFieldNames: Boolean,
+      largeVarTypes: Boolean,
       context: TaskContext) extends Iterator[Array[Byte]] with AutoCloseable {
 
     protected val arrowSchema =
-      ArrowUtils.toArrowSchema(schema, timeZoneId, errorOnDuplicatedFieldNames)
+      ArrowUtils.toArrowSchema(schema, timeZoneId, errorOnDuplicatedFieldNames, largeVarTypes)
     private val allocator =
       ArrowUtils.rootAllocator.newChildAllocator(
         s"to${this.getClass.getSimpleName}", 0, Long.MaxValue)
@@ -137,9 +140,16 @@ private[sql] object ArrowConverters extends Logging {
       maxEstimatedBatchSize: Long,
       timeZoneId: String,
       errorOnDuplicatedFieldNames: Boolean,
+      largeVarTypes: Boolean,
       context: TaskContext)
     extends ArrowBatchIterator(
-      rowIter, schema, maxRecordsPerBatch, timeZoneId, errorOnDuplicatedFieldNames, context) {
+      rowIter,
+      schema,
+      maxRecordsPerBatch,
+      timeZoneId,
+      errorOnDuplicatedFieldNames,
+      largeVarTypes,
+      context) {
 
     private val arrowSchemaSize = SizeEstimator.estimate(arrowSchema)
     var rowCountInLastBatch: Long = 0
@@ -205,9 +215,16 @@ private[sql] object ArrowConverters extends Logging {
       maxRecordsPerBatch: Long,
       timeZoneId: String,
       errorOnDuplicatedFieldNames: Boolean,
+      largeVarTypes: Boolean,
       context: TaskContext): ArrowBatchIterator = {
     new ArrowBatchIterator(
-      rowIter, schema, maxRecordsPerBatch, timeZoneId, errorOnDuplicatedFieldNames, context)
+      rowIter,
+      schema,
+      maxRecordsPerBatch,
+      timeZoneId,
+      errorOnDuplicatedFieldNames,
+      largeVarTypes,
+      context)
   }
 
   /**
@@ -220,19 +237,21 @@ private[sql] object ArrowConverters extends Logging {
       maxRecordsPerBatch: Long,
       maxEstimatedBatchSize: Long,
       timeZoneId: String,
-      errorOnDuplicatedFieldNames: Boolean): ArrowBatchWithSchemaIterator = {
+      errorOnDuplicatedFieldNames: Boolean,
+      largeVarTypes: Boolean): ArrowBatchWithSchemaIterator = {
     new ArrowBatchWithSchemaIterator(
       rowIter, schema, maxRecordsPerBatch, maxEstimatedBatchSize,
-      timeZoneId, errorOnDuplicatedFieldNames, TaskContext.get())
+      timeZoneId, errorOnDuplicatedFieldNames, largeVarTypes, TaskContext.get())
   }
 
   private[sql] def createEmptyArrowBatch(
       schema: StructType,
       timeZoneId: String,
-      errorOnDuplicatedFieldNames: Boolean): Array[Byte] = {
+      errorOnDuplicatedFieldNames: Boolean,
+      largeVarTypes: Boolean): Array[Byte] = {
     val batches = new ArrowBatchWithSchemaIterator(
         Iterator.empty, schema, 0L, 0L,
-        timeZoneId, errorOnDuplicatedFieldNames, TaskContext.get()) {
+        timeZoneId, errorOnDuplicatedFieldNames, largeVarTypes, TaskContext.get()) {
       override def hasNext: Boolean = true
     }
     Utils.tryWithSafeFinally {
@@ -299,12 +318,13 @@ private[sql] object ArrowConverters extends Logging {
       schema: StructType,
       timeZoneId: String,
       errorOnDuplicatedFieldNames: Boolean,
+      largeVarTypes: Boolean,
       context: TaskContext)
       extends InternalRowIterator(arrowBatchIter, context) {
 
     override def nextBatch(): (Iterator[InternalRow], StructType) = {
       val arrowSchema =
-        ArrowUtils.toArrowSchema(schema, timeZoneId, errorOnDuplicatedFieldNames)
+        ArrowUtils.toArrowSchema(schema, timeZoneId, errorOnDuplicatedFieldNames, largeVarTypes)
       val root = VectorSchemaRoot.create(arrowSchema, allocator)
       resources.append(root)
       val arrowRecordBatch = ArrowConverters.loadBatch(arrowBatchIter.next(), allocator)
@@ -344,9 +364,12 @@ private[sql] object ArrowConverters extends Logging {
       schema: StructType,
       timeZoneId: String,
       errorOnDuplicatedFieldNames: Boolean,
-      context: TaskContext): Iterator[InternalRow] = new InternalRowIteratorWithoutSchema(
-    arrowBatchIter, schema, timeZoneId, errorOnDuplicatedFieldNames, context
-  )
+      largeVarTypes: Boolean,
+      context: TaskContext): Iterator[InternalRow] = {
+    new InternalRowIteratorWithoutSchema(
+      arrowBatchIter, schema, timeZoneId, errorOnDuplicatedFieldNames, largeVarTypes, context
+    )
+  }
 
   /**
    * Maps iterator from serialized ArrowRecordBatches to InternalRows. Different from
@@ -393,6 +416,7 @@ private[sql] object ArrowConverters extends Logging {
     val schema = DataType.fromJson(schemaString).asInstanceOf[StructType]
     val attrs = toAttributes(schema)
     val batchesInDriver = arrowBatches.toArray
+    val largeVarTypes = session.sessionState.conf.arrowUseLargeVarTypes
     val shouldUseRDD = session.sessionState.conf
       .arrowLocalRelationThreshold < batchesInDriver.map(_.length.toLong).sum
 
@@ -407,6 +431,7 @@ private[sql] object ArrowConverters extends Logging {
             schema,
             timezone,
             errorOnDuplicatedFieldNames = false,
+            largeVarTypes = largeVarTypes,
             TaskContext.get())
         }
       session.internalCreateDataFrame(rdd.setName("arrow"), schema)
@@ -417,6 +442,7 @@ private[sql] object ArrowConverters extends Logging {
         schema,
         session.sessionState.conf.sessionLocalTimeZone,
         errorOnDuplicatedFieldNames = false,
+        largeVarTypes = largeVarTypes,
         TaskContext.get())
 
       // Project/copy it. Otherwise, the Arrow column vectors will be closed and released out.

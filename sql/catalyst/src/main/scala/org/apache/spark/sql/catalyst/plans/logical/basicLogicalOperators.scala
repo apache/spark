@@ -593,6 +593,29 @@ case class Union(
     copy(children = newChildren)
 }
 
+object Join {
+  def computeOutput(
+    joinType: JoinType,
+    leftOutput: Seq[Attribute],
+    rightOutput: Seq[Attribute]
+  ): Seq[Attribute] = {
+    joinType match {
+      case j: ExistenceJoin =>
+        leftOutput :+ j.exists
+      case LeftExistence(_) =>
+        leftOutput
+      case LeftOuter | LeftSingle =>
+        leftOutput ++ rightOutput.map(_.withNullability(true))
+      case RightOuter =>
+        leftOutput.map(_.withNullability(true)) ++ rightOutput
+      case FullOuter =>
+        leftOutput.map(_.withNullability(true)) ++ rightOutput.map(_.withNullability(true))
+      case _ =>
+        leftOutput ++ rightOutput
+    }
+  }
+}
+
 case class Join(
     left: LogicalPlan,
     right: LogicalPlan,
@@ -628,22 +651,7 @@ case class Join(
     }
   }
 
-  override def output: Seq[Attribute] = {
-    joinType match {
-      case j: ExistenceJoin =>
-        left.output :+ j.exists
-      case LeftExistence(_) =>
-        left.output
-      case LeftOuter | LeftSingle =>
-        left.output ++ right.output.map(_.withNullability(true))
-      case RightOuter =>
-        left.output.map(_.withNullability(true)) ++ right.output
-      case FullOuter =>
-        left.output.map(_.withNullability(true)) ++ right.output.map(_.withNullability(true))
-      case _ =>
-        left.output ++ right.output
-    }
-  }
+  override def output: Seq[Attribute] = Join.computeOutput(joinType, left.output, right.output)
 
   override def metadataOutput: Seq[Attribute] = {
     joinType match {

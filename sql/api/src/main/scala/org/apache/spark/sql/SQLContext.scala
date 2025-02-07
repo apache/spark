@@ -978,7 +978,7 @@ abstract class SQLContext private[sql] (val sparkSession: SparkSession)
  * scenario, setActive could set a SQLContext for current thread, which will be returned by
  * getOrCreate instead of the global one.
  */
-trait SQLContextCompanion {
+private[sql] trait SQLContextCompanion {
   private[sql] type SQLContextImpl <: SQLContext
   private[sql] type SparkContextImpl <: SparkContext
 

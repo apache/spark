@@ -15,7 +15,6 @@
 # limitations under the License.
 #
 
-import os
 import tempfile
 import unittest
 
@@ -73,16 +72,14 @@ class TuningTestsMixin:
 
         # save & load
         with tempfile.TemporaryDirectory(prefix="train_validation_split") as d:
-            path1 = os.path.join(d, "tvs")
-            tvs.write().save(path1)
-            tvs2 = TrainValidationSplit.load(path1)
+            tvs.write().overwrite().save(d)
+            tvs2 = TrainValidationSplit.load(d)
             self.assertEqual(str(tvs), str(tvs2))
             self.assertEqual(str(tvs.getEstimator()), str(tvs2.getEstimator()))
             self.assertEqual(str(tvs.getEvaluator()), str(tvs2.getEvaluator()))
 
-            path2 = os.path.join(d, "tvsm")
-            tvs_model.write().save(path2)
-            model2 = TrainValidationSplitModel.load(path2)
+            tvs_model.write().overwrite().save(d)
+            model2 = TrainValidationSplitModel.load(d)
             self.assertEqual(str(tvs_model), str(model2))
             self.assertEqual(str(tvs_model.getEstimator()), str(model2.getEstimator()))
             self.assertEqual(str(tvs_model.getEvaluator()), str(model2.getEvaluator()))
@@ -142,24 +139,21 @@ class TuningTestsMixin:
 
         # save & load
         with tempfile.TemporaryDirectory(prefix="cv") as d:
-            path1 = os.path.join(d, "cv")
-            cv.write().save(path1)
-            cv2 = CrossValidator.load(path1)
+            cv.write().overwrite().save(d)
+            cv2 = CrossValidator.load(d)
             self.assertEqual(str(cv), str(cv2))
             self.assertEqual(str(cv.getEstimator()), str(cv2.getEstimator()))
             self.assertEqual(str(cv.getEvaluator()), str(cv2.getEvaluator()))
 
-            path2 = os.path.join(d, "cv_model")
-            model.write().save(path2)
-            model2 = CrossValidatorModel.load(path2)
+            model.write().overwrite().save(d)
+            model2 = CrossValidatorModel.load(d)
             checkSubModels(model2.subModels)
             self.assertEqual(str(model), str(model2))
             self.assertEqual(str(model.getEstimator()), str(model2.getEstimator()))
             self.assertEqual(str(model.getEvaluator()), str(model2.getEvaluator()))
 
-            path2 = os.path.join(d, "cv_model2")
-            model.write().option("persistSubModels", "false").save(path2)
-            cvModel2 = CrossValidatorModel.load(path2)
+            model.write().overwrite().option("persistSubModels", "false").save(d)
+            cvModel2 = CrossValidatorModel.load(d)
             self.assertEqual(cvModel2.subModels, None)
 
             model3 = model2.copy()

@@ -58,6 +58,33 @@ to the client via the blue box as part of the Spark Connect API. The client uses
 alongside PySpark or the Spark Scala client, making it easy for Spark client applications to work
 with the custom logic/library. 
 
+## Spark API Mode: Spark Client and Spark Classic
+
+Spark provides the API mode, `spark.api.mode` configuration, enabling Spark Classic applications
+to seamlessly switch to Spark Connect. Depending on the value of `spark.api.mode`, the application
+can run in either Spark Classic or Spark Connect mode. Here is an example:
+
+{% highlight python %}
+from pyspark.sql import SparkSession
+
+SparkSession.builder.config("spark.api.mode", "connect").master("...").getOrCreate()
+{% endhighlight %}
+
+You can also apply this configuration to both Scala and PySpark applications when submitting yours:
+
+{% highlight bash %}
+spark-submit --master "..." --conf spark.api.mode=connect
+{% endhighlight %}
+
+Additionally, Spark Connect offers convenient options for local testing. By setting `spark.remote`
+to `local[...]` or `local-cluster[...]`, you can start a local Spark Connect server and access a Spark
+Connect session.
+
+This is similar to using `--conf spark.api.mode=connect` with `--master ...`. However, note that
+`spark.remote` and `--remote` are limited to `local*` values, while `--conf spark.api.mode=connect`
+with `--master ...` supports additional cluster URLs, such as spark://, for broader compatibility with
+Spark Classic.
+
 ## Spark Client Applications
 
 Spark Client Applications are the _regular Spark applications_ that Spark users develop today, e.g.,

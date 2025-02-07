@@ -210,7 +210,7 @@ case class AlterColumnSpec(
     newPosition: Option[FieldPosition],
     newDefaultExpression: Option[String]) extends Expression with Unevaluable {
 
-  override def children: Seq[Expression] = Seq(column)
+  override def children: Seq[Expression] = Seq(column) ++ newPosition.toSeq
   override def nullable: Boolean = false
   override def dataType: DataType = throw new UnresolvedException("dataType")
   override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Expression =
