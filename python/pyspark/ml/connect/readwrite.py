@@ -96,6 +96,7 @@ class RemoteMLWriter(MLWriter):
         from pyspark.ml.pipeline import Pipeline, PipelineModel
         from pyspark.ml.tuning import CrossValidator, TrainValidationSplit
         from pyspark.ml.classification import OneVsRest, OneVsRestModel
+        from pyspark.ml.clustering import PowerIterationClustering
 
         # Spark Connect ML is built on scala Spark.ML, that means we're only
         # supporting JavaModel or JavaEstimator or JavaEvaluator
@@ -188,6 +189,21 @@ class RemoteMLWriter(MLWriter):
             ovrm_writer = OneVsRestModelWriter(instance)
             ovrm_writer.session(session)  # type: ignore[arg-type]
             ovrm_writer.save(path)
+
+        elif isinstance(instance, PowerIterationClustering):
+            transformer = JavaTransformer(
+                "org.apache.spark.ml.clustering.PowerIterationClusteringWrapper"
+            )
+            transformer._resetUid(instance.uid)
+            transformer._paramMap = instance._paramMap
+            RemoteMLWriter.saveInstance(
+                transformer,  # type: ignore[arg-type]
+                path,
+                session,
+                shouldOverwrite,
+                optionMap,
+            )
+
         else:
             raise NotImplementedError(f"Unsupported write for {instance.__class__}")
 
@@ -224,6 +240,7 @@ class RemoteMLReader(MLReader[RL]):
         from pyspark.ml.pipeline import Pipeline, PipelineModel
         from pyspark.ml.tuning import CrossValidator, TrainValidationSplit
         from pyspark.ml.classification import OneVsRest, OneVsRestModel
+        from pyspark.ml.clustering import PowerIterationClustering
 
         if (
             issubclass(clazz, JavaModel)
@@ -331,6 +348,29 @@ class RemoteMLReader(MLReader[RL]):
             ovrm_reader = OneVsRestModelReader(OneVsRestModel)
             ovrm_reader.session(session)
             return ovrm_reader.load(path)
+
+        elif issubclass(clazz, PowerIterationClustering):
+            java_qualified_class_name = (
+                "org.apache.spark.ml.clustering.PowerIterationClusteringWrapper"
+            )
+
+            command = pb2.Command()
+            command.ml_command.read.CopyFrom(
+                pb2.MlCommand.Read(
+                    operator=pb2.MlOperator(
+                        name=java_qualified_class_name, type=pb2.MlOperator.TRANSFORMER
+                    ),
+                    path=path,
+                )
+            )
+            (_, properties, _) = session.client.execute_command(command)
+            result = deserialize(properties)
+
+            instance = PowerIterationClustering()
+            instance._resetUid(result.uid)
+            params = {k: deserialize_param(v) for k, v in result.params.params.items()}
+            instance._set(**params)
+            return instance  # type: ignore[return-value]
 
         else:
             raise RuntimeError(f"Unsupported read for {clazz}")

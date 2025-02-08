@@ -462,7 +462,6 @@ class ClusteringTestsMixin:
             model2 = DistributedLDAModel.load(d)
             self.assertEqual(str(model), str(model2))
 
-    # TODO(SPARK-51080): Fix save/load for PowerIterationClustering
     def test_power_iteration_clustering(self):
         spark = self.spark
 
@@ -495,6 +494,16 @@ class ClusteringTestsMixin:
         assignments = pic.assignClusters(df)
         self.assertEqual(assignments.columns, ["id", "cluster"])
         self.assertEqual(assignments.count(), 6)
+
+        # save & load
+        with tempfile.TemporaryDirectory(prefix="power_iteration_clustering") as d:
+            pic.write().overwrite().save(d)
+            pic2 = PowerIterationClustering.load(d)
+            self.assertEqual(str(pic), str(pic2))
+            self.assertEqual(pic.uid, pic2.uid)
+            self.assertEqual(pic.getK(), pic2.getK())
+            self.assertEqual(pic.getMaxIter(), pic2.getMaxIter())
+            self.assertEqual(pic.getWeightCol(), pic2.getWeightCol())
 
 
 class ClusteringTests(ClusteringTestsMixin, unittest.TestCase):
