@@ -25,7 +25,7 @@ import java.util.{Locale, Properties, ServiceConfigurationError}
 import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 
-import org.apache.hadoop.fs.{LocalFileSystem, Path}
+import org.apache.hadoop.fs.{FileStatus, LocalFileSystem, Path}
 import org.apache.hadoop.fs.permission.FsPermission
 import org.mockito.Mockito.{mock, spy, when}
 import org.scalatest.time.SpanSugar._
@@ -1274,6 +1274,28 @@ class QueryExecutionErrorsSuite
       sql("ALTER TABLE t SET LOCATION '/mister/spark'")
     }
   }
+
+  test("SPARK-51110: Proper error handling for file status when reading files") {
+    sql("CREATE TABLE t(c String) USING parquet partitioned by (dt string)")
+    sql("insert into t partition(dt='08') values('a')")
+    withTable("t") {
+      withSQLConf(
+        "fs.file.impl" -> classOf[FakeFileSystemListStatus].getName,
+        // FileSystem caching could cause a different implementation of fs.file to be used
+        "fs.file.impl.disable.cache" -> "true"
+      ) {
+        checkError(
+          exception = intercept[SparkException] {
+            sql("select count(*) from t where dt='08'").show()
+          },
+          condition = "INTERNAL_ERROR",
+          parameters = Map(
+            "message" -> "Unexpected statuses for path .+"
+          ),
+          matchPVals = true)
+      }
+    }
+  }
 }
 
 class FakeFileSystemSetPermission extends LocalFileSystem {
@@ -1285,4 +1307,8 @@ class FakeFileSystemSetPermission extends LocalFileSystem {
 
 class FakeFileSystemNeverExists extends DebugFilesystem {
   override def exists(f: Path): Boolean = false
+}
+
+class FakeFileSystemListStatus extends LocalFileSystem {
+  override def listStatus(path: Path): Array[FileStatus] = null
 }
