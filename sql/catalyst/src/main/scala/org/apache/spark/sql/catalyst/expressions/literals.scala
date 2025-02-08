@@ -271,9 +271,13 @@ object Literal {
   def fromSQL(sql: String): Expression = {
     CatalystSqlParser.parseExpression(sql).transformUp {
       case u: UnresolvedFunction =>
-          assert(u.nameParts.length == 1)
-          assert(!u.isDistinct)
-          FunctionRegistry.builtin.lookupFunction(FunctionIdentifier(u.nameParts.head), u.arguments)
+        assert(u.nameParts.length == 1)
+        assert(!u.isDistinct)
+        assert(u.filter.isEmpty)
+        assert(!u.ignoreNulls)
+        assert(u.orderingWithinGroup.isEmpty)
+        assert(!u.isInternal)
+        FunctionRegistry.builtin.lookupFunction(FunctionIdentifier(u.nameParts.head), u.arguments)
     }
   }
 }

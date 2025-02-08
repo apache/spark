@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.util
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.{SparkException, SparkThrowable, SparkUnsupportedOperationException}
+import org.apache.spark.{SparkThrowable, SparkUnsupportedOperationException}
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.sql.AnalysisException
@@ -323,7 +323,7 @@ object ResolveDefaultColumns extends QueryErrorsBase
    * Analyze EXISTS_DEFAULT value.  This skips some steps of analyze as most of the
    * analysis has been done before.
    */
-  def analyzeExistingDefault(field: StructField, defaultSQL: String): Expression = {
+  private def analyzeExistingDefault(field: StructField): Expression = {
     val defaultSQL = field.metadata.getString(EXISTS_DEFAULT_COLUMN_METADATA_KEY)
 
     // Parse the expression.
@@ -339,7 +339,7 @@ object ResolveDefaultColumns extends QueryErrorsBase
         "", field.name, defaultSQL, null)
     }
 
-    expr
+    coerceDefaultValue(expr, field.dataType, "", field.name, defaultSQL)
   }
 
   /**
@@ -427,16 +427,9 @@ object ResolveDefaultColumns extends QueryErrorsBase
   def getExistenceDefaultValues(schema: StructType): Array[Any] = {
     schema.fields.map { field: StructField =>
       val defaultValue: Option[String] = field.getExistenceDefaultValue()
-      defaultValue.map { text: String =>
-        val expr = try {
-          analyzeExistingDefault(field, text)
-        } catch {
-          // AnalysisException thrown from analyze is already formatted, throw it directly.
-          case ae: AnalysisException => throw ae
-          case _: MatchError =>
-            throw SparkException.internalError(s"parse existence default as literal err," +
-            s" field name: ${field.name}, value: $text")
-        }
+      defaultValue.map { _: String =>
+        val expr = analyzeExistingDefault(field)
+
         // The expression should be a literal value by this point, possibly wrapped in a cast
         // function. This is enforced by the execution of commands that assign default values.
         expr.eval()
