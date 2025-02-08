@@ -18,19 +18,14 @@
 package org.apache.spark.sql.types
 
 import com.fasterxml.jackson.databind.ObjectMapper
-import org.mockito.Mockito.withSettings
-import org.mockito.stubbing.Answer
-import org.scalatestplus.mockito.MockitoSugar.mock
 
 import org.apache.spark.{SparkException, SparkFunSuite, SparkIllegalArgumentException}
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.analysis.{caseInsensitiveResolution, caseSensitiveResolution, Analyzer}
-import org.apache.spark.sql.catalyst.optimizer.Optimizer
+import org.apache.spark.sql.catalyst.analysis.{caseInsensitiveResolution, caseSensitiveResolution}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns
-import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DayTimeIntervalType => DT}
 import org.apache.spark.sql.types.{YearMonthIntervalType => YM}
@@ -802,45 +797,5 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
 
     assert(
       mapper.readTree(mapWithNestedArray.json) == mapper.readTree(expectedJson))
-  }
-
-  test("SPARK-51119: Readers on executors resolving EXISTS_DEFAULT should not call catalogs") {
-    val failingAnswer: Answer[Any] = m => {
-      if (!(m.getMethod.getName == "v1SessionCatalog")) {
-        fail("should not be called")
-      } else {
-        null
-      }
-    }
-
-    val dummyCatalogManager = mock[CatalogManager](withSettings().defaultAnswer(failingAnswer))
-    val dummyAnalyzer = new Analyzer(dummyCatalogManager)
-    val dummyOptimizer = new Optimizer(dummyCatalogManager) {}
-
-    val source1 = StructType(Array(
-      StructField("c1", LongType, true,
-        new MetadataBuilder()
-          .putString(ResolveDefaultColumns.EXISTS_DEFAULT_COLUMN_METADATA_KEY, "CAST(42 AS BIGINT)")
-          .putString(
-            ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY, "CAST(42 AS BIGINT)")
-          .build()),
-      StructField("c2", StringType, true,
-        new MetadataBuilder()
-          .putString(ResolveDefaultColumns.EXISTS_DEFAULT_COLUMN_METADATA_KEY, "'abc'")
-          .putString(ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY, "'abc'")
-          .build()),
-      StructField("c3", BooleanType)))
-    ResolveDefaultColumns.setAnalyzerAndOptimizer(dummyAnalyzer, dummyOptimizer)
-    try {
-      assert(ResolveDefaultColumns.existenceDefaultValues(source1).length == 3)
-      assert(ResolveDefaultColumns.existenceDefaultValues(source1)(0) == 42)
-      assert(ResolveDefaultColumns.existenceDefaultValues(source1)(1)
-        == UTF8String.fromString("abc"))
-      assert(ResolveDefaultColumns.existenceDefaultValues(source1)(2) == null)
-    } finally {
-      ResolveDefaultColumns.setAnalyzerAndOptimizer(
-        ResolveDefaultColumns.DefaultColumnAnalyzer,
-        ResolveDefaultColumns.DefaultColumnOptimizer)
-    }
   }
 }

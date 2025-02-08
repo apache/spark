@@ -51,17 +51,6 @@ object ResolveDefaultColumns extends QueryErrorsBase
   // CURRENT_DEFAULT_COLUMN_METADATA.
   val CURRENT_DEFAULT_COLUMN_NAME = "DEFAULT"
 
-  var defaultColumnAnalyzer: Analyzer = DefaultColumnAnalyzer
-  var defaultColumnOptimizer: Optimizer = DefaultColumnOptimizer
-
-  /**
-   * Visible for testing
-   */
-  def setAnalyzerAndOptimizer(analyzer: Analyzer, optimizer: Optimizer): Unit = {
-    this.defaultColumnAnalyzer = analyzer
-    this.defaultColumnOptimizer = optimizer
-  }
-
   /**
    * Finds "current default" expressions in CREATE/REPLACE TABLE columns and constant-folds them.
    *
@@ -297,12 +286,12 @@ object ResolveDefaultColumns extends QueryErrorsBase
 
     // Analyze the parse result.
     val plan = try {
-      val analyzer: Analyzer = defaultColumnAnalyzer
+      val analyzer: Analyzer = DefaultColumnAnalyzer
       val analyzed = analyzer.execute(Project(Seq(Alias(parsed, colName)()), OneRowRelation()))
       analyzer.checkAnalysis(analyzed)
       // Eagerly execute finish-analysis and constant-folding rules before checking whether the
       // expression is foldable and resolved.
-      ConstantFolding(defaultColumnOptimizer.FinishAnalysis(analyzed))
+      ConstantFolding(DefaultColumnOptimizer.FinishAnalysis(analyzed))
     } catch {
       case ex: AnalysisException =>
         throw QueryCompilationErrors.defaultValuesUnresolvedExprError(
