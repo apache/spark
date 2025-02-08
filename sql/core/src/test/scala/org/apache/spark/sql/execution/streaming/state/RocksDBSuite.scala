@@ -381,7 +381,7 @@ class RocksDBStateEncoderSuite extends SparkFunSuite {
       keyStateEncoderSpec,
       valueSchema,
       Some(testProvider),
-      Some(StateStore.DEFAULT_COL_FAMILY_NAME))
+      StateStore.DEFAULT_COL_FAMILY_NAME)
   }
 
   private def createNoPrefixKeyEncoder(): RocksDBDataEncoder = {
@@ -426,7 +426,7 @@ class RocksDBStateEncoderSuite extends SparkFunSuite {
     withClue("Testing prefix scan encoding: ") {
       val prefixKeySpec = PrefixKeyScanStateEncoderSpec(keySchema, numColsPrefixKey = 2)
       val encoder = new AvroStateEncoder(prefixKeySpec, valueSchema, Some(testProvider),
-        Some(StateStore.DEFAULT_COL_FAMILY_NAME))
+        StateStore.DEFAULT_COL_FAMILY_NAME)
 
       // Then encode just the remaining key portion (which should include schema ID)
       val remainingKeyRow = keyProj.apply(InternalRow(null, null, 3.14))
@@ -450,7 +450,7 @@ class RocksDBStateEncoderSuite extends SparkFunSuite {
     withClue("Testing range scan encoding: ") {
       val rangeScanSpec = RangeKeyScanStateEncoderSpec(keySchema, orderingOrdinals = Seq(0, 1))
       val encoder = new AvroStateEncoder(rangeScanSpec, valueSchema, Some(testProvider),
-        Some(StateStore.DEFAULT_COL_FAMILY_NAME))
+        StateStore.DEFAULT_COL_FAMILY_NAME)
 
       // Encode remaining key (non-ordering columns)
       // For range scan, the remaining key schema only contains columns NOT in orderingOrdinals
@@ -558,7 +558,7 @@ class RocksDBStateEncoderSuite extends SparkFunSuite {
       val keySpec = NoPrefixKeyStateEncoderSpec(keySchema)
       val stateSchemaInfo = Some(StateSchemaInfo(keySchemaId = 0, valueSchemaId = 42))
       val avroEncoder = new AvroStateEncoder(keySpec, valueSchema, Some(testProvider),
-        Some(StateStore.DEFAULT_COL_FAMILY_NAME))
+        StateStore.DEFAULT_COL_FAMILY_NAME)
       val valueEncoder = new SingleValueStateEncoder(avroEncoder, valueSchema)
 
       // Encode value

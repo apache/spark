@@ -719,27 +719,27 @@ class UnsafeRowDataEncoder(
  *
  * @param keyStateEncoderSpec Specification for how to encode keys (prefix/range scan)
  * @param valueSchema Schema for the values to be encoded
- * @param stateSchemaInfo Schema version information for both keys and values
+ * @param stateSchemaProvider Optional state schema provider
+ * @param columnFamilyName Column family name to be used
  */
 class AvroStateEncoder(
     keyStateEncoderSpec: KeyStateEncoderSpec,
     valueSchema: StructType,
     stateSchemaProvider: Option[StateSchemaProvider],
-    columnFamilyName: Option[String]
+    columnFamilyName: String
 ) extends RocksDBDataEncoder(keyStateEncoderSpec, valueSchema) with Logging {
-  assert(columnFamilyName.isDefined)
 
   private val avroEncoder = createAvroEnc(keyStateEncoderSpec, valueSchema)
 
   // current schema IDs instantiated lazily
   // schema information
   private lazy val currentKeySchemaId: Short = getStateSchemaProvider.getCurrentStateSchemaId(
-    columnFamilyName.get,
+    columnFamilyName,
     isKey = true
   )
 
   private lazy val currentValSchemaId: Short = getStateSchemaProvider.getCurrentStateSchemaId(
-    columnFamilyName.get,
+    columnFamilyName,
     isKey = false
   )
 
@@ -1261,7 +1261,7 @@ class AvroStateEncoder(
     val schemaIdRow = decodeStateSchemaIdRow(bytes)
     val writerSchema = getStateSchemaProvider.getSchemaMetadataValue(
       StateSchemaMetadataKey(
-        columnFamilyName.get,
+        columnFamilyName,
         schemaIdRow.schemaId,
         isKey = false
       )

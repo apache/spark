@@ -646,7 +646,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
       NoPrefixKeyStateEncoderSpec(keySchema),
       initialValueSchema,
       Some(testProvider),
-      Some(StateStore.DEFAULT_COL_FAMILY_NAME)
+      StateStore.DEFAULT_COL_FAMILY_NAME
     )
 
     // Create test data
@@ -669,7 +669,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
       NoPrefixKeyStateEncoderSpec(keySchema),
       evolvedValueSchema,
       Some(testProvider),
-      Some(StateStore.DEFAULT_COL_FAMILY_NAME)
+      StateStore.DEFAULT_COL_FAMILY_NAME
     )
 
     // Decode with evolved schema
@@ -720,7 +720,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
       NoPrefixKeyStateEncoderSpec(keySchema),
       initialValueSchema,
       Some(testProvider),
-      Some(StateStore.DEFAULT_COL_FAMILY_NAME)
+      StateStore.DEFAULT_COL_FAMILY_NAME
     )
 
     // Create test data with null value
@@ -747,7 +747,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
       NoPrefixKeyStateEncoderSpec(keySchema),
       evolvedValueSchema,
       Some(testProvider),
-      Some(StateStore.DEFAULT_COL_FAMILY_NAME)
+      StateStore.DEFAULT_COL_FAMILY_NAME
     )
 
     // Decode original value with evolved schema
@@ -801,7 +801,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
       NoPrefixKeyStateEncoderSpec(keySchema),
       initialValueSchema,
       Some(testProvider),
-      Some(StateStore.DEFAULT_COL_FAMILY_NAME)
+      StateStore.DEFAULT_COL_FAMILY_NAME
     )
 
     val proj = UnsafeProjection.create(initialValueSchema)
@@ -819,7 +819,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
       NoPrefixKeyStateEncoderSpec(keySchema),
       evolvedValueSchema,
       Some(testProvider),
-      Some(StateStore.DEFAULT_COL_FAMILY_NAME)
+      StateStore.DEFAULT_COL_FAMILY_NAME
     )
 
     val decoded = encoder2.decodeValue(encoded)
@@ -866,7 +866,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
       NoPrefixKeyStateEncoderSpec(keySchema),
       initialValueSchema,
       Some(testProvider),
-      Some(StateStore.DEFAULT_COL_FAMILY_NAME)
+      StateStore.DEFAULT_COL_FAMILY_NAME
     )
 
     val proj = UnsafeProjection.create(initialValueSchema)
@@ -884,7 +884,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
       NoPrefixKeyStateEncoderSpec(keySchema),
       evolvedValueSchema,
       Some(testProvider),
-      Some(StateStore.DEFAULT_COL_FAMILY_NAME)
+      StateStore.DEFAULT_COL_FAMILY_NAME
     )
 
     val decoded = encoder2.decodeValue(encoded)
@@ -935,7 +935,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
       NoPrefixKeyStateEncoderSpec(keySchema),
       initialValueSchema,
       Some(testProvider),
-      Some(StateStore.DEFAULT_COL_FAMILY_NAME)
+      StateStore.DEFAULT_COL_FAMILY_NAME
     )
 
     // Create test data
@@ -958,7 +958,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
       NoPrefixKeyStateEncoderSpec(keySchema),
       evolvedValueSchema,
       Some(testProvider),
-      Some(StateStore.DEFAULT_COL_FAMILY_NAME)
+      StateStore.DEFAULT_COL_FAMILY_NAME
     )
 
     // Decode with evolved schema
@@ -1015,7 +1015,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
       NoPrefixKeyStateEncoderSpec(keySchema),
       initialValueSchema,
       Some(testProvider),
-      Some(StateStore.DEFAULT_COL_FAMILY_NAME)
+      StateStore.DEFAULT_COL_FAMILY_NAME
     )
 
     // Create and encode data with initial schema (IntegerType)
@@ -1035,7 +1035,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
       NoPrefixKeyStateEncoderSpec(keySchema),
       evolvedValueSchema,
       Some(testProvider),
-      Some(StateStore.DEFAULT_COL_FAMILY_NAME)
+      StateStore.DEFAULT_COL_FAMILY_NAME
     )
 
     // Should successfully decode IntegerType as LongType
@@ -1082,7 +1082,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
       NoPrefixKeyStateEncoderSpec(keySchema),
       initialValueSchema,
       Some(testProvider),
-      Some(StateStore.DEFAULT_COL_FAMILY_NAME)
+      StateStore.DEFAULT_COL_FAMILY_NAME
     )
 
     // Create and encode data with initial order
@@ -1102,7 +1102,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
       NoPrefixKeyStateEncoderSpec(keySchema),
       evolvedValueSchema,
       Some(testProvider),
-      Some(StateStore.DEFAULT_COL_FAMILY_NAME)
+      StateStore.DEFAULT_COL_FAMILY_NAME
     )
 
     // Should decode with correct field values despite reordering
@@ -1153,7 +1153,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
       NoPrefixKeyStateEncoderSpec(keySchema),
       initialValueSchema,
       Some(testProvider),
-      Some(StateStore.DEFAULT_COL_FAMILY_NAME)
+      StateStore.DEFAULT_COL_FAMILY_NAME
     )
 
     // Create and encode data with initial schema (LongType)
@@ -1173,7 +1173,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
       NoPrefixKeyStateEncoderSpec(keySchema),
       evolvedValueSchema,
       Some(testProvider),
-      Some(StateStore.DEFAULT_COL_FAMILY_NAME)
+      StateStore.DEFAULT_COL_FAMILY_NAME
     )
 
     // Attempting to decode Long as Int should fail

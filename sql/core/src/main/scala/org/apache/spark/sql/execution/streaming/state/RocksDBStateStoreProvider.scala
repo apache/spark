@@ -699,11 +699,13 @@ object RocksDBStateStoreProvider {
       new java.util.concurrent.Callable[RocksDBDataEncoder] {
         override def call(): RocksDBDataEncoder = {
           if (stateStoreEncoding == Avro.toString) {
+            assert(columnFamilyName.isDefined,
+              "Column family name must be defined for Avro encoding")
             new AvroStateEncoder(
               keyStateEncoderSpec,
               valueSchema,
               stateSchemaProvider,
-              columnFamilyName
+              columnFamilyName.get
             )
           } else {
             new UnsafeRowDataEncoder(
