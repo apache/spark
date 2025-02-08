@@ -22,6 +22,7 @@ import java.util.UUID
 import scala.collection.immutable
 import scala.util.Random
 
+import org.apache.avro.AvroTypeException
 import org.apache.hadoop.conf.Configuration
 import org.scalatest.BeforeAndAfter
 
@@ -29,6 +30,7 @@ import org.apache.spark.{SparkConf, SparkUnsupportedOperationException}
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.sql.LocalSparkSession.withSparkSession
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.util.quietly
 import org.apache.spark.sql.execution.streaming.StatefulOperatorStateInfo
@@ -42,8 +44,8 @@ import org.apache.spark.util.Utils
 
 @ExtendedSQLTest
 class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvider]
-  with AlsoTestWithRocksDBFeatures
   with AlsoTestWithEncodingTypes
+  with AlsoTestWithRocksDBFeatures
   with SharedSparkSession
   with BeforeAndAfter {
 
@@ -341,6 +343,63 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
     }
   }
 
+  Seq(true, false).foreach { colFamiliesEnabled =>
+    test(s"rocksdb range scan - variable size non-ordering columns with non-zero start ordinal " +
+      s"with colFamiliesEnabled=$colFamiliesEnabled") {
+
+      tryWithProviderResource(newStoreProvider(keySchema,
+        RangeKeyScanStateEncoderSpec(
+          keySchema, Seq(1)), colFamiliesEnabled)) { provider =>
+
+        def getRandStr(): String = Random.alphanumeric.filter(_.isLetter)
+          .take(Random.nextInt() % 10 + 1).mkString
+
+        val store = provider.getStore(0)
+
+        // use non-default col family if column families are enabled
+        val cfName = if (colFamiliesEnabled) "testColFamily" else "default"
+        if (colFamiliesEnabled) {
+          store.createColFamilyIfAbsent(cfName,
+            keySchema, valueSchema,
+            RangeKeyScanStateEncoderSpec(keySchema, Seq(1)))
+        }
+
+        val timerTimestamps = Seq(931, 8000, 452300, 4200, -1, 90, 1, 2, 8,
+          -230, -14569, -92, -7434253, 35, 6, 9, -323, 5)
+        timerTimestamps.foreach { ts =>
+          val keyRow = dataToKeyRow(getRandStr(), ts)
+          val valueRow = dataToValueRow(1)
+          store.put(keyRow, valueRow, cfName)
+          assert(valueRowToData(store.get(keyRow, cfName)) === 1)
+        }
+
+        val result = store.iterator(cfName).map { kv =>
+          val key = keyRowToData(kv.key)
+          key._2
+        }.toSeq
+        assert(result === timerTimestamps.sorted)
+        store.commit()
+
+        // test with a different set of power of 2 timestamps
+        val store1 = provider.getStore(1)
+        val timerTimestamps1 = Seq(-32, -64, -256, 64, 32, 1024, 4096, 0)
+        timerTimestamps1.foreach { ts =>
+          val keyRow = dataToKeyRow(getRandStr(), ts)
+          val valueRow = dataToValueRow(1)
+          store1.put(keyRow, valueRow, cfName)
+          assert(valueRowToData(store1.get(keyRow, cfName)) === 1)
+        }
+
+        val result1 = store1.iterator(cfName).map { kv =>
+          val key = keyRowToData(kv.key)
+          key._2
+        }.toSeq
+        assert(result1 === (timerTimestamps ++ timerTimestamps1).sorted)
+        store1.commit()
+      }
+    }
+  }
+
   testWithColumnFamiliesAndEncodingTypes(
     "rocksdb range scan - variable size non-ordering columns with " +
     "double type values are supported",
@@ -451,6 +510,67 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
     }
   }
 
+  Seq(true, false).foreach { colFamiliesEnabled =>
+    Seq(Seq(1, 2), Seq(2, 1)).foreach { sortIndexes =>
+      test(s"rocksdb range scan multiple ordering columns - with non-zero start ordinal - " +
+        s"variable size non-ordering columns with colFamiliesEnabled=$colFamiliesEnabled " +
+        s"sortIndexes=${sortIndexes.mkString(",")}") {
+
+        val testSchema: StructType = StructType(
+          Seq(StructField("key1", StringType, false),
+            StructField("key2", LongType, false),
+            StructField("key3", IntegerType, false)))
+
+        val schemaProj = UnsafeProjection.create(Array[DataType](StringType, LongType, IntegerType))
+
+        tryWithProviderResource(newStoreProvider(testSchema,
+          RangeKeyScanStateEncoderSpec(testSchema, sortIndexes), colFamiliesEnabled)) { provider =>
+          val store = provider.getStore(0)
+
+          val cfName = if (colFamiliesEnabled) "testColFamily" else "default"
+          if (colFamiliesEnabled) {
+            store.createColFamilyIfAbsent(cfName,
+              testSchema, valueSchema,
+              RangeKeyScanStateEncoderSpec(testSchema, sortIndexes))
+          }
+
+          val timerTimestamps = Seq((931L, 10), (8000L, 40), (452300L, 1), (4200L, 68), (90L, 2000),
+            (1L, 27), (1L, 394), (1L, 5), (3L, 980),
+            (-1L, 232), (-1L, 3455), (-6109L, 921455), (-9808344L, 1), (-1020L, 2),
+            (35L, 2112), (6L, 90118), (9L, 95118), (6L, 87210), (-4344L, 2323), (-3122L, 323))
+          timerTimestamps.foreach { ts =>
+            // order by long col first and then by int col
+            val keyRow = schemaProj.apply(new GenericInternalRow(Array[Any](UTF8String
+              .fromString(Random.alphanumeric.take(Random.nextInt(20) + 1).mkString), ts._1,
+              ts._2)))
+            val valueRow = dataToValueRow(1)
+            store.put(keyRow, valueRow, cfName)
+            assert(valueRowToData(store.get(keyRow, cfName)) === 1)
+          }
+
+          val result = store.iterator(cfName).map { kv =>
+            val keyRow = kv.key
+            (keyRow.getLong(1), keyRow.getInt(2))
+          }.toSeq
+
+          def getOrderedTs(
+              orderedInput: Seq[(Long, Int)],
+              sortIndexes: Seq[Int]): Seq[(Long, Int)] = {
+            sortIndexes match {
+              case Seq(1, 2) => orderedInput.sortBy(x => (x._1, x._2))
+              case Seq(2, 1) => orderedInput.sortBy(x => (x._2, x._1))
+              case _ => throw new IllegalArgumentException(s"Invalid sortIndexes: " +
+                s"${sortIndexes.mkString(",")}")
+            }
+          }
+
+          assert(result === getOrderedTs(timerTimestamps, sortIndexes))
+          store.commit()
+        }
+      }
+    }
+  }
+
   testWithColumnFamiliesAndEncodingTypes(
     "rocksdb range scan multiple ordering columns - variable size " +
     s"non-ordering columns",
@@ -496,96 +616,679 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
     }
   }
 
-  testWithColumnFamiliesAndEncodingTypes(
-    "rocksdb range scan multiple non-contiguous ordering columns",
-    TestWithBothChangelogCheckpointingEnabledAndDisabled ) { colFamiliesEnabled =>
-    val testSchema: StructType = StructType(
-      Seq(
-        StructField("ordering1", LongType, false),
-        StructField("key2", StringType, false),
-        StructField("ordering2", IntegerType, false),
-        StructField("string2", StringType, false),
-        StructField("ordering3", DoubleType, false)
-      )
+  test("AvroStateEncoder - add field") {
+    val keySchema = StructType(Seq(
+      StructField("k", StringType)
+    ))
+
+    val initialValueSchema = StructType(Seq(
+      StructField("value", IntegerType, true)
+    ))
+
+    val evolvedValueSchema = StructType(Seq(
+      StructField("value", IntegerType, true),
+      StructField("timestamp", LongType, true)
+    ))
+
+    // Create test state schema provider
+    val testProvider = new TestStateSchemaProvider()
+
+    // Add initial schema version
+    testProvider.captureSchema(
+      StateStore.DEFAULT_COL_FAMILY_NAME,
+      keySchema,
+      initialValueSchema,
+      valueSchemaId = 0
     )
 
-    val testSchemaProj = UnsafeProjection.create(Array[DataType](
-        immutable.ArraySeq.unsafeWrapArray(testSchema.fields.map(_.dataType)): _*))
-    val rangeScanOrdinals = Seq(0, 2, 4)
+    // Create encoder with initial schema
+    val encoder1 = new AvroStateEncoder(
+      NoPrefixKeyStateEncoderSpec(keySchema),
+      initialValueSchema,
+      Some(testProvider),
+      Some(ColumnFamilyInfo(StateStore.DEFAULT_COL_FAMILY_NAME, 1))
+    )
 
-    tryWithProviderResource(
-      newStoreProvider(
-        testSchema,
-        RangeKeyScanStateEncoderSpec(testSchema, rangeScanOrdinals),
-        colFamiliesEnabled
-      )
-    ) { provider =>
-      val store = provider.getStore(0)
+    // Create test data
+    val proj = UnsafeProjection.create(initialValueSchema)
+    val row1 = proj.apply(InternalRow(1))
 
-      val cfName = if (colFamiliesEnabled) "testColFamily" else "default"
-      if (colFamiliesEnabled) {
-        store.createColFamilyIfAbsent(
-          cfName,
-          testSchema,
-          valueSchema,
-          RangeKeyScanStateEncoderSpec(testSchema, rangeScanOrdinals)
-        )
-      }
+    // Encode with schema v0
+    val encoded = encoder1.encodeValue(row1)
 
-      val orderedInput = Seq(
-        // Make sure that the first column takes precedence, even if the
-        // later columns are greater
-        (-2L, 0, 99.0),
-        (-1L, 0, 98.0),
-        (0L, 0, 97.0),
-        (2L, 0, 96.0),
-        // Make sure that the second column takes precedence, when the first
-        // column is all the same
-        (3L, -2, -1.0),
-        (3L, -1, -2.0),
-        (3L, 0, -3.0),
-        (3L, 2, -4.0),
-        // Finally, make sure that the third column takes precedence, when the
-        // first two ordering columns are the same.
-        (4L, -1, -127.0),
-        (4L, -1, 0.0),
-        (4L, -1, 64.0),
-        (4L, -1, 127.0)
-      )
-      val scrambledInput = Random.shuffle(orderedInput)
+    // Add evolved schema
+    testProvider.captureSchema(
+      StateStore.DEFAULT_COL_FAMILY_NAME,
+      keySchema,
+      evolvedValueSchema,
+      valueSchemaId = 1
+    )
 
-      scrambledInput.foreach { record =>
-        val keyRow = testSchemaProj.apply(
-          new GenericInternalRow(
-            Array[Any](
-              record._1,
-              UTF8String.fromString(Random.alphanumeric.take(Random.nextInt(20) + 1).mkString),
-              record._2,
-              UTF8String.fromString(Random.alphanumeric.take(Random.nextInt(20) + 1).mkString),
-              record._3
-            )
-          )
-        )
+    // Create encoder with initial schema
+    val encoder2 = new AvroStateEncoder(
+      NoPrefixKeyStateEncoderSpec(keySchema),
+      evolvedValueSchema,
+      Some(testProvider),
+      Some(ColumnFamilyInfo(StateStore.DEFAULT_COL_FAMILY_NAME, 1))
+    )
 
-        // The value is just a "dummy" value of 1
-        val valueRow = dataToValueRow(1)
-        store.put(keyRow, valueRow, cfName)
-        assert(valueRowToData(store.get(keyRow, cfName)) === 1)
-      }
+    // Decode with evolved schema
+    val decoded = encoder2.decodeValue(encoded)
 
-      val result = store
-        .iterator(cfName)
-        .map { kv =>
-          val keyRow = kv.key
-          val key = (keyRow.getLong(0), keyRow.getInt(2), keyRow.getDouble(4))
-          (key._1, key._2, key._3)
-        }
-        .toSeq
+    // Should be able to read old format
+    assert(decoded.getInt(0) === 1)
+    assert(decoded.isNullAt(1)) // New field should be null
 
-      assert(result === orderedInput)
-    }
+    // Encode with new schema
+    val proj2 = UnsafeProjection.create(evolvedValueSchema)
+    val row2 = proj2.apply(InternalRow(2, 100L))
+    val encoded2 = encoder2.encodeValue(row2)
+
+    // Should write with new schema version
+    val decoded2 = encoder2.decodeValue(encoded2)
+    assert(decoded2.getInt(0) === 2)
+    assert(decoded2.getLong(1) === 100L)
   }
 
+  test("AvroStateEncoder - add field with null") {
+    val keySchema = StructType(Seq(
+      StructField("k", StringType)
+    ))
+
+    val initialValueSchema = StructType(Seq(
+      StructField("value", IntegerType) // Made nullable
+    ))
+
+    val evolvedValueSchema = StructType(Seq(
+      StructField("value", IntegerType), // Made nullable
+      StructField("timestamp", LongType)
+    ))
+
+    // Create test state schema provider
+    val testProvider = new TestStateSchemaProvider()
+
+    // Add initial schema version
+    testProvider.captureSchema(
+      StateStore.DEFAULT_COL_FAMILY_NAME,
+      keySchema,
+      initialValueSchema,
+      valueSchemaId = 0
+    )
+
+    // Create encoder with initial schema
+    val encoder1 = new AvroStateEncoder(
+      NoPrefixKeyStateEncoderSpec(keySchema),
+      initialValueSchema,
+      Some(testProvider),
+      Some(ColumnFamilyInfo(StateStore.DEFAULT_COL_FAMILY_NAME, 1))
+    )
+
+    // Create test data with null value
+    val proj = UnsafeProjection.create(initialValueSchema)
+    val row1 = proj.apply(InternalRow(null))
+
+    // Encode with schema v0
+    val encoded = encoder1.encodeValue(row1)
+
+    // Read back the encoded value to verify null handling
+    val decodedWithOriginalSchema = encoder1.decodeValue(encoded)
+    assert(decodedWithOriginalSchema.isNullAt(0))
+
+    // Add evolved schema
+    testProvider.captureSchema(
+      StateStore.DEFAULT_COL_FAMILY_NAME,
+      keySchema,
+      evolvedValueSchema,
+      valueSchemaId = 1
+    )
+
+    // Create encoder with evolved schema
+    val encoder2 = new AvroStateEncoder(
+      NoPrefixKeyStateEncoderSpec(keySchema),
+      evolvedValueSchema,
+      Some(testProvider),
+      Some(ColumnFamilyInfo(StateStore.DEFAULT_COL_FAMILY_NAME, 1))
+    )
+
+    // Decode original value with evolved schema
+    val decoded = encoder2.decodeValue(encoded)
+
+    // Should be able to read old format with null value
+    assert(decoded.isNullAt(0))
+    assert(decoded.isNullAt(1)) // New field should be null
+
+    // Encode with new schema, including null value
+    val proj2 = UnsafeProjection.create(evolvedValueSchema)
+    val row2 = proj2.apply(InternalRow(null, 100L))
+    val encoded2 = encoder2.encodeValue(row2)
+
+    // Should write with new schema version
+    val decoded2 = encoder2.decodeValue(encoded2)
+    assert(decoded2.isNullAt(0))
+    assert(decoded2.getLong(1) === 100L)
+
+    // Test mix of null and non-null values
+    val row3 = proj2.apply(InternalRow(2, null))
+    val encoded3 = encoder2.encodeValue(row3)
+    val decoded3 = encoder2.decodeValue(encoded3)
+    assert(decoded3.getInt(0) === 2)
+    assert(decoded3.isNullAt(1))
+  }
+
+  test("AvroStateEncoder - remove field") {
+    val keySchema = StructType(Seq(
+      StructField("k", StringType)
+    ))
+
+    val initialValueSchema = StructType(Seq(
+      StructField("value", IntegerType, true),
+      StructField("timestamp", LongType, true)
+    ))
+
+    val evolvedValueSchema = StructType(Seq(
+      StructField("value", IntegerType, true)
+    ))
+
+    val testProvider = new TestStateSchemaProvider()
+    testProvider.captureSchema(
+      StateStore.DEFAULT_COL_FAMILY_NAME,
+      keySchema,
+      initialValueSchema,
+      valueSchemaId = 0
+    )
+
+    val encoder1 = new AvroStateEncoder(
+      NoPrefixKeyStateEncoderSpec(keySchema),
+      initialValueSchema,
+      Some(testProvider),
+      Some(ColumnFamilyInfo(StateStore.DEFAULT_COL_FAMILY_NAME, 1))
+    )
+
+    val proj = UnsafeProjection.create(initialValueSchema)
+    val row1 = proj.apply(InternalRow(1, 100L))
+    val encoded = encoder1.encodeValue(row1)
+
+    testProvider.captureSchema(
+      StateStore.DEFAULT_COL_FAMILY_NAME,
+      keySchema,
+      evolvedValueSchema,
+      valueSchemaId = 1
+    )
+
+    val encoder2 = new AvroStateEncoder(
+      NoPrefixKeyStateEncoderSpec(keySchema),
+      evolvedValueSchema,
+      Some(testProvider),
+      Some(ColumnFamilyInfo(StateStore.DEFAULT_COL_FAMILY_NAME, 1))
+    )
+
+    val decoded = encoder2.decodeValue(encoded)
+    assert(decoded.numFields() === 1)
+    assert(decoded.getInt(0) === 1)
+
+    val proj2 = UnsafeProjection.create(evolvedValueSchema)
+    val row2 = proj2.apply(InternalRow(2))
+    val encoded2 = encoder2.encodeValue(row2)
+
+    val decoded2 = encoder2.decodeValue(encoded2)
+    assert(decoded2.getInt(0) === 2)
+  }
+
+  test("AvroStateEncoder - nested struct evolution") {
+    val keySchema = StructType(Seq(
+      StructField("k", StringType)
+    ))
+
+    val initialValueSchema = StructType(Seq(
+      StructField("metadata", StructType(Seq(
+        StructField("id", IntegerType, true),
+        StructField("name", StringType, true)
+      )))
+    ))
+
+    val evolvedValueSchema = StructType(Seq(
+      StructField("metadata", StructType(Seq(
+        StructField("id", IntegerType, true),
+        StructField("name", StringType, true),
+        StructField("timestamp", LongType, true)
+      )))
+    ))
+
+    val testProvider = new TestStateSchemaProvider()
+    testProvider.captureSchema(
+      StateStore.DEFAULT_COL_FAMILY_NAME,
+      keySchema,
+      initialValueSchema,
+      valueSchemaId = 0
+    )
+
+    val encoder1 = new AvroStateEncoder(
+      NoPrefixKeyStateEncoderSpec(keySchema),
+      initialValueSchema,
+      Some(testProvider),
+      Some(ColumnFamilyInfo(StateStore.DEFAULT_COL_FAMILY_NAME, 1))
+    )
+
+    val proj = UnsafeProjection.create(initialValueSchema)
+    val row1 = proj.apply(InternalRow(InternalRow(1, UTF8String.fromString("test"))))
+    val encoded = encoder1.encodeValue(row1)
+
+    testProvider.captureSchema(
+      StateStore.DEFAULT_COL_FAMILY_NAME,
+      keySchema,
+      evolvedValueSchema,
+      valueSchemaId = 1
+    )
+
+    val encoder2 = new AvroStateEncoder(
+      NoPrefixKeyStateEncoderSpec(keySchema),
+      evolvedValueSchema,
+      Some(testProvider),
+      Some(ColumnFamilyInfo(StateStore.DEFAULT_COL_FAMILY_NAME, 1))
+    )
+
+    val decoded = encoder2.decodeValue(encoded)
+    assert(decoded.getStruct(0, 3).getInt(0) === 1)
+    assert(decoded.getStruct(0, 3).getString(1) === "test")
+    assert(decoded.getStruct(0, 3).isNullAt(2))
+
+    val proj2 = UnsafeProjection.create(evolvedValueSchema)
+    val row2 = proj2.apply(InternalRow(InternalRow(2, UTF8String.fromString("test2"), 100L)))
+    val encoded2 = encoder2.encodeValue(row2)
+
+    val decoded2 = encoder2.decodeValue(encoded2)
+    assert(decoded2.getStruct(0, 3).getInt(0) === 2)
+    assert(decoded2.getStruct(0, 3).getString(1) === "test2")
+    assert(decoded2.getStruct(0, 3).getLong(2) === 100L)
+  }
+
+  test("AvroStateEncoder - add nested struct field") {
+    val keySchema = StructType(Seq(
+      StructField("k", StringType)
+    ))
+
+    val initialValueSchema = StructType(Seq(
+      StructField("value", IntegerType, true)
+    ))
+
+    val evolvedValueSchema = StructType(Seq(
+      StructField("value", IntegerType, true),
+      StructField("metadata", StructType(Seq(
+        StructField("id", IntegerType, true),
+        StructField("count", IntegerType, true)
+      )), true)
+    ))
+
+    // Create test state schema provider
+    val testProvider = new TestStateSchemaProvider()
+
+    // Add initial schema version
+    testProvider.captureSchema(
+      StateStore.DEFAULT_COL_FAMILY_NAME,
+      keySchema,
+      initialValueSchema,
+      valueSchemaId = 0
+    )
+
+    // Create encoder with initial schema
+    val encoder1 = new AvroStateEncoder(
+      NoPrefixKeyStateEncoderSpec(keySchema),
+      initialValueSchema,
+      Some(testProvider),
+      Some(ColumnFamilyInfo(StateStore.DEFAULT_COL_FAMILY_NAME, 1))
+    )
+
+    // Create test data
+    val proj = UnsafeProjection.create(initialValueSchema)
+    val row1 = proj.apply(InternalRow(1))
+
+    // Encode with schema v0
+    val encoded = encoder1.encodeValue(row1)
+
+    // Add evolved schema
+    testProvider.captureSchema(
+      StateStore.DEFAULT_COL_FAMILY_NAME,
+      keySchema,
+      evolvedValueSchema,
+      valueSchemaId = 1
+    )
+
+    // Create encoder with evolved schema
+    val encoder2 = new AvroStateEncoder(
+      NoPrefixKeyStateEncoderSpec(keySchema),
+      evolvedValueSchema,
+      Some(testProvider),
+      Some(ColumnFamilyInfo(StateStore.DEFAULT_COL_FAMILY_NAME, 1))
+    )
+
+    // Decode with evolved schema
+    val decoded = encoder2.decodeValue(encoded)
+
+    // Should be able to read old format
+    assert(decoded.getInt(0) === 1)
+    assert(decoded.isNullAt(1)) // New nested struct field should be null
+
+    // Encode with new schema including nested struct
+    val proj2 = UnsafeProjection.create(evolvedValueSchema)
+    val row2 = proj2.apply(InternalRow(2, InternalRow(10, 20)))
+    val encoded2 = encoder2.encodeValue(row2)
+
+    // Should write with new schema version
+    val decoded2 = encoder2.decodeValue(encoded2)
+    assert(decoded2.getInt(0) === 2)
+    assert(!decoded2.isNullAt(1)) // Nested struct should not be null
+    assert(decoded2.getStruct(1, 2).getInt(0) === 10)
+    assert(decoded2.getStruct(1, 2).getInt(1) === 20)
+
+    // Test with null nested struct
+    val row3 = proj2.apply(InternalRow(3, null))
+    val encoded3 = encoder2.encodeValue(row3)
+    val decoded3 = encoder2.decodeValue(encoded3)
+    assert(decoded3.getInt(0) === 3)
+    assert(decoded3.isNullAt(1)) // Nested struct should be null
+  }
+
+  test("AvroStateEncoder - upcast field type") {
+    val keySchema = StructType(Seq(
+      StructField("k", StringType)
+    ))
+
+    // Initial schema with IntegerType
+    val initialValueSchema = StructType(Seq(
+      StructField("value", IntegerType, false)
+    ))
+
+    // Evolved schema with LongType (upcast)
+    val evolvedValueSchema = StructType(Seq(
+      StructField("value", LongType, false)
+    ))
+
+    val testProvider = new TestStateSchemaProvider()
+    testProvider.captureSchema(
+      StateStore.DEFAULT_COL_FAMILY_NAME,
+      keySchema,
+      initialValueSchema,
+      valueSchemaId = 0
+    )
+
+    val encoder1 = new AvroStateEncoder(
+      NoPrefixKeyStateEncoderSpec(keySchema),
+      initialValueSchema,
+      Some(testProvider),
+      Some(ColumnFamilyInfo(StateStore.DEFAULT_COL_FAMILY_NAME, 1))
+    )
+
+    // Create and encode data with initial schema (IntegerType)
+    val proj = UnsafeProjection.create(initialValueSchema)
+    val row1 = proj.apply(InternalRow(42))
+    val encoded = encoder1.encodeValue(row1)
+
+    // Add evolved schema with LongType
+    testProvider.captureSchema(
+      StateStore.DEFAULT_COL_FAMILY_NAME,
+      keySchema,
+      evolvedValueSchema,
+      valueSchemaId = 1
+    )
+
+    val encoder2 = new AvroStateEncoder(
+      NoPrefixKeyStateEncoderSpec(keySchema),
+      evolvedValueSchema,
+      Some(testProvider),
+      Some(ColumnFamilyInfo(StateStore.DEFAULT_COL_FAMILY_NAME, 1))
+    )
+
+    // Should successfully decode IntegerType as LongType
+    val decoded = encoder2.decodeValue(encoded)
+    assert(decoded.getLong(0) === 42L)
+
+    // Write with new schema
+    val proj2 = UnsafeProjection.create(evolvedValueSchema)
+    val row2 = proj2.apply(InternalRow(9999999999L))  // Value too large for IntegerType
+    val encoded2 = encoder2.encodeValue(row2)
+
+    val decoded2 = encoder2.decodeValue(encoded2)
+    assert(decoded2.getLong(0) === 9999999999L)
+  }
+
+  test("AvroStateEncoder - reorder fields") {
+    val keySchema = StructType(Seq(
+      StructField("k", StringType)
+    ))
+
+    // Initial schema with fields in original order
+    val initialValueSchema = StructType(Seq(
+      StructField("first", IntegerType, false),
+      StructField("second", StringType, true),
+      StructField("third", LongType, true)
+    ))
+
+    // Evolved schema with reordered fields
+    val evolvedValueSchema = StructType(Seq(
+      StructField("second", StringType, true),
+      StructField("third", LongType, true),
+      StructField("first", IntegerType, false)
+    ))
+
+    val testProvider = new TestStateSchemaProvider()
+    testProvider.captureSchema(
+      StateStore.DEFAULT_COL_FAMILY_NAME,
+      keySchema,
+      initialValueSchema,
+      valueSchemaId = 0
+    )
+
+    val encoder1 = new AvroStateEncoder(
+      NoPrefixKeyStateEncoderSpec(keySchema),
+      initialValueSchema,
+      Some(testProvider),
+      Some(ColumnFamilyInfo(StateStore.DEFAULT_COL_FAMILY_NAME, 1))
+    )
+
+    // Create and encode data with initial order
+    val proj = UnsafeProjection.create(initialValueSchema)
+    val row1 = proj.apply(InternalRow(1, UTF8String.fromString("test"), 100L))
+    val encoded = encoder1.encodeValue(row1)
+
+    // Add evolved schema with reordered fields
+    testProvider.captureSchema(
+      StateStore.DEFAULT_COL_FAMILY_NAME,
+      keySchema,
+      evolvedValueSchema,
+      valueSchemaId = 1
+    )
+
+    val encoder2 = new AvroStateEncoder(
+      NoPrefixKeyStateEncoderSpec(keySchema),
+      evolvedValueSchema,
+      Some(testProvider),
+      Some(ColumnFamilyInfo(StateStore.DEFAULT_COL_FAMILY_NAME, 1))
+    )
+
+    // Should decode with correct field values despite reordering
+    val decoded = encoder2.decodeValue(encoded)
+    assert(decoded.getString(0) === "test")  // second field now first
+    assert(decoded.getLong(1) === 100L)      // third field now second
+    assert(decoded.getInt(2) === 1)          // first field now third
+
+    // Write with new field order
+    val proj2 = UnsafeProjection.create(evolvedValueSchema)
+    val row2 = proj2.apply(InternalRow(
+      UTF8String.fromString("test2"),
+      200L,
+      2
+    ))
+    val encoded2 = encoder2.encodeValue(row2)
+
+    val decoded2 = encoder2.decodeValue(encoded2)
+    assert(decoded2.getString(0) === "test2")
+    assert(decoded2.getLong(1) === 200L)
+    assert(decoded2.getInt(2) === 2)
+  }
+
+  test("AvroStateEncoder - downcast field type throws exception on read") {
+    val keySchema = StructType(Seq(
+      StructField("k", StringType)
+    ))
+
+    // Initial schema with LongType
+    val initialValueSchema = StructType(Seq(
+      StructField("value", LongType, false)
+    ))
+
+    // Evolved schema with IntegerType (downcast - should fail)
+    val evolvedValueSchema = StructType(Seq(
+      StructField("value", IntegerType, false)
+    ))
+
+    val testProvider = new TestStateSchemaProvider()
+    testProvider.captureSchema(
+      StateStore.DEFAULT_COL_FAMILY_NAME,
+      keySchema,
+      initialValueSchema,
+      valueSchemaId = 0
+    )
+
+    val encoder1 = new AvroStateEncoder(
+      NoPrefixKeyStateEncoderSpec(keySchema),
+      initialValueSchema,
+      Some(testProvider),
+      Some(ColumnFamilyInfo(StateStore.DEFAULT_COL_FAMILY_NAME, 1))
+    )
+
+    // Create and encode data with initial schema (LongType)
+    val proj = UnsafeProjection.create(initialValueSchema)
+    val row1 = proj.apply(InternalRow(9999999999L))  // Value too large for IntegerType
+    val encoded = encoder1.encodeValue(row1)
+
+    // Add evolved schema with IntegerType
+    testProvider.captureSchema(
+      StateStore.DEFAULT_COL_FAMILY_NAME,
+      keySchema,
+      evolvedValueSchema,
+      valueSchemaId = 1
+    )
+
+    val encoder2 = new AvroStateEncoder(
+      NoPrefixKeyStateEncoderSpec(keySchema),
+      evolvedValueSchema,
+      Some(testProvider),
+      Some(ColumnFamilyInfo(StateStore.DEFAULT_COL_FAMILY_NAME, 1))
+    )
+
+    // Attempting to decode Long as Int should fail
+    val exception = intercept[AvroTypeException] {
+      encoder2.decodeValue(encoded)
+    }
+    assert(exception.getMessage.contains("Found long, expecting union"))
+  }
+
+  Seq(Seq(0, 1, 2), Seq(0, 2, 1), Seq(2, 1, 0), Seq(2, 0, 1)).foreach { sortIndexes =>
+    testWithColumnFamiliesAndEncodingTypes(
+      s"rocksdb range scan multiple non-contiguous ordering columns " +
+        s"and sortIndexes=${sortIndexes.mkString(",")}",
+      TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
+      val testSchema: StructType = StructType(
+        Seq(
+          StructField("ordering1", LongType, false),
+          StructField("key2", StringType, false),
+          StructField("ordering2", IntegerType, false),
+          StructField("string2", StringType, false),
+          StructField("ordering3", DoubleType, false)
+        )
+      )
+
+      val testSchemaProj = UnsafeProjection.create(Array[DataType](
+        immutable.ArraySeq.unsafeWrapArray(testSchema.fields.map(_.dataType)): _*))
+      // Multiply by 2 to get the actual ordinals in the row
+      val rangeScanOrdinals = sortIndexes.map(_ * 2)
+
+      tryWithProviderResource(
+        newStoreProvider(
+          testSchema,
+          RangeKeyScanStateEncoderSpec(testSchema, rangeScanOrdinals),
+          colFamiliesEnabled
+        )
+      ) { provider =>
+        val store = provider.getStore(0)
+
+        val cfName = if (colFamiliesEnabled) "testColFamily" else "default"
+        if (colFamiliesEnabled) {
+          store.createColFamilyIfAbsent(
+            cfName,
+            testSchema,
+            valueSchema,
+            RangeKeyScanStateEncoderSpec(testSchema, rangeScanOrdinals)
+          )
+        }
+
+        val orderedInput = Seq(
+          // Make sure that the first column takes precedence, even if the
+          // later columns are greater
+          (-2L, 0, 99.0),
+          (-1L, 0, 98.0),
+          (0L, 0, 97.0),
+          (2L, 0, 96.0),
+          // Make sure that the second column takes precedence, when the first
+          // column is all the same
+          (3L, -2, -1.0),
+          (3L, -1, -2.0),
+          (3L, 0, -3.0),
+          (3L, 2, -4.0),
+          // Finally, make sure that the third column takes precedence, when the
+          // first two ordering columns are the same.
+          (4L, -1, -127.0),
+          (4L, -1, 0.0),
+          (4L, -1, 64.0),
+          (4L, -1, 127.0)
+        )
+        val scrambledInput = Random.shuffle(orderedInput)
+
+        scrambledInput.foreach { record =>
+          val keyRow = testSchemaProj.apply(
+            new GenericInternalRow(
+              Array[Any](
+                record._1,
+                UTF8String.fromString(Random.alphanumeric.take(Random.nextInt(20) + 1).mkString),
+                record._2,
+                UTF8String.fromString(Random.alphanumeric.take(Random.nextInt(20) + 1).mkString),
+                record._3
+              )
+            )
+          )
+
+          // The value is just a "dummy" value of 1
+          val valueRow = dataToValueRow(1)
+          store.put(keyRow, valueRow, cfName)
+          assert(valueRowToData(store.get(keyRow, cfName)) === 1)
+        }
+
+        val result = store
+          .iterator(cfName)
+          .map { kv =>
+            val keyRow = kv.key
+            (keyRow.getLong(0), keyRow.getInt(2), keyRow.getDouble(4))
+          }
+          .toSeq
+
+        def getOrderedInput(
+          orderedInput: Seq[(Long, Int, Double)],
+          sortIndexes: Seq[Int]): Seq[(Long, Int, Double)] = {
+          sortIndexes match {
+            case Seq(0, 1, 2) => orderedInput.sortBy(x => (x._1, x._2, x._3))
+            case Seq(0, 2, 1) => orderedInput.sortBy(x => (x._1, x._3, x._2))
+            case Seq(2, 1, 0) => orderedInput.sortBy(x => (x._3, x._2, x._1))
+            case Seq(2, 0, 1) => orderedInput.sortBy(x => (x._3, x._1, x._2))
+            case _ => throw new IllegalArgumentException(s"Invalid sortIndexes: " +
+              s"${sortIndexes.mkString(",")}")
+          }
+        }
+
+        assert(result === getOrderedInput(orderedInput, sortIndexes))
+        store.commit()
+      }
+    }
+  }
 
   testWithColumnFamiliesAndEncodingTypes(
     "rocksdb range scan multiple ordering columns - variable size " +
@@ -1323,6 +2026,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
       useColumnFamilies: Boolean = false,
       useMultipleValuesPerKey: Boolean = false): RocksDBStateStoreProvider = {
     val provider = new RocksDBStateStoreProvider()
+    val testStateSchemaProvider = new TestStateSchemaProvider
     provider.init(
       storeId,
       keySchema,
@@ -1331,7 +2035,8 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
       useColumnFamilies,
       new StateStoreConf(sqlConf.getOrElse(SQLConf.get)),
       conf,
-      useMultipleValuesPerKey)
+      useMultipleValuesPerKey,
+      stateSchemaProvider = Some(testStateSchemaProvider))
     provider
   }
 

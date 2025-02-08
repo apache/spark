@@ -18,10 +18,11 @@
 package org.apache.spark.sql.scripting
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.{DataFrame, Row, SparkSession}
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Literal}
 import org.apache.spark.sql.catalyst.plans.logical.{DropVariable, LeafNode, OneRowRelation, Project}
 import org.apache.spark.sql.catalyst.trees.Origin
+import org.apache.spark.sql.classic.{DataFrame, SparkSession}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 
@@ -36,8 +37,9 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
       statements: Seq[CompoundStatementExec],
       label: Option[String] = None,
       isScope: Boolean = false,
-      context: SqlScriptingExecutionContext = null)
-    extends CompoundBodyExec(statements, label, isScope, context) {
+      context: SqlScriptingExecutionContext = null,
+      triggerToExceptionHandlerMap: TriggerToExceptionHandlerMap = null)
+    extends CompoundBodyExec(statements, label, isScope, context, triggerToExceptionHandlerMap) {
 
     // No-op to remove unnecessary logic for these tests.
     override def enterScope(): Unit = ()

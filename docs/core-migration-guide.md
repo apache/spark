@@ -36,6 +36,8 @@ license: |
 
 - In Spark 4.0, support for Apache Mesos as a resource manager was removed.
 
+- Since Spark 4.0, Spark will allocate executor pods with a batch size of `10`. To restore the legacy behavior, you can set `spark.kubernetes.allocation.batch.size` to `5`.
+
 - Since Spark 4.0, Spark uses `ReadWriteOncePod` instead of `ReadWriteOnce` access mode in persistence volume claims. To restore the legacy behavior, you can set `spark.kubernetes.legacy.useReadWriteOnceAccessMode` to `true`.
 
 - Since Spark 4.0, Spark reports its executor pod status by checking all containers of that pod. To restore the legacy behavior, you can set `spark.kubernetes.executor.checkAllContainers` to `false`.

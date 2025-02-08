@@ -18,10 +18,11 @@
 package org.apache.spark.sql.scripting
 
 import org.apache.spark.{SparkConf, SparkException, SparkNumberFormatException}
-import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, QueryTest, Row}
+import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.QueryPlanningTracker
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.logical.CompoundBody
+import org.apache.spark.sql.classic.{DataFrame, Dataset}
 import org.apache.spark.sql.exceptions.SqlScriptingException
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -49,7 +50,8 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
     // Initialize context so scopes can be entered correctly.
     val context = new SqlScriptingExecutionContext()
     val executionPlan = interpreter.buildExecutionPlan(compoundBody, args, context)
-    context.frames.append(new SqlScriptingExecutionFrame(executionPlan.getTreeIterator))
+    context.frames.append(new SqlScriptingExecutionFrame(
+      executionPlan, SqlScriptingFrameType.SQL_SCRIPT))
     executionPlan.enterScope()
 
     executionPlan.getTreeIterator.flatMap {
@@ -369,14 +371,14 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
     verifySqlScriptResult(commands, expected)
   }
 
-  test("if else if going in else if") {
+  test("if elseif going in elseif") {
     val commands =
       """
         |BEGIN
         |  IF 1=2
         |  THEN
         |    SELECT 42;
-        |  ELSE IF 1=1
+        |  ELSEIF 1=1
         |  THEN
         |    SELECT 43;
         |  ELSE
@@ -406,14 +408,14 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
     verifySqlScriptResult(commands, expected)
   }
 
-  test("if else if going in else") {
+  test("if elseif going in else") {
     val commands =
       """
         |BEGIN
         |  IF 1=2
         |  THEN
         |    SELECT 42;
-        |  ELSE IF 1=3
+        |  ELSEIF 1=3
         |  THEN
         |    SELECT 43;
         |  ELSE
@@ -447,7 +449,7 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("if else if with count") {
+  test("if elseif with count") {
     withTable("t") {
       val commands =
         """
@@ -457,7 +459,7 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
           |  INSERT INTO t VALUES (1, 'a', 1.0);
           |  IF (SELECT COUNT(*) > 2 FROM t) THEN
           |    SELECT 42;
-          |  ELSE IF (SELECT COUNT(*) > 1 FROM t) THEN
+          |  ELSEIF (SELECT COUNT(*) > 1 FROM t) THEN
           |    SELECT 43;
           |  ELSE
           |    SELECT 44;

@@ -566,8 +566,8 @@ class PandasGroupedOpsMixin:
                     statefulProcessorApiClient.set_implicit_key(key_obj)
                     for pd in statefulProcessor.handleExpiredTimer(
                         key=key_obj,
-                        timer_values=TimerValues(batch_timestamp, watermark_timestamp),
-                        expired_timer_info=ExpiredTimerInfo(expiry_timestamp),
+                        timerValues=TimerValues(batch_timestamp, watermark_timestamp),
+                        expiredTimerInfo=ExpiredTimerInfo(expiry_timestamp),
                     ):
                         yield pd
                     statefulProcessorApiClient.delete_timer(expiry_timestamp)

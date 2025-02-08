@@ -75,6 +75,8 @@ class ApplyInPandasWithStatePythonRunner(
       funcs.head._1.funcs.head.pythonExec)
 
   override val faultHandlerEnabled: Boolean = SQLConf.get.pythonUDFWorkerFaulthandlerEnabled
+  override val idleTimeoutSeconds: Long = SQLConf.get.pythonUDFWorkerIdleTimeoutSeconds
+  override val killOnIdleTimeout: Boolean = SQLConf.get.pythonUDFWorkerKillOnIdleTimeout
 
   private val sqlConf = SQLConf.get
 
@@ -84,6 +86,7 @@ class ApplyInPandasWithStatePythonRunner(
   override protected lazy val timeZoneId: String = _timeZoneId
   override val errorOnDuplicatedFieldNames: Boolean = true
 
+  override val hideTraceback: Boolean = sqlConf.pysparkHideTraceback
   override val simplifiedTraceback: Boolean = sqlConf.pysparkSimplifiedTraceback
 
   override protected val largeVarTypes: Boolean = sqlConf.arrowUseLargeVarTypes

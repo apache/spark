@@ -17,19 +17,14 @@
 
 package org.apache.spark.sql.execution.metric
 
-import java.text.NumberFormat
-import java.util.{Arrays, Locale}
-
-import scala.concurrent.duration._
-
 import com.google.common.cache.{CacheBuilder, CacheLoader, LoadingCache}
 
-import org.apache.spark.{SparkContext, SparkException}
+import org.apache.spark.SparkContext
 import org.apache.spark.scheduler.AccumulableInfo
 import org.apache.spark.sql.connector.metric.CustomMetric
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.ui.SparkListenerDriverAccumUpdates
-import org.apache.spark.util.{AccumulatorContext, AccumulatorV2, Utils}
+import org.apache.spark.util.{AccumulatorContext, AccumulatorV2}
 import org.apache.spark.util.AccumulatorContext.internOption
 
 /**
@@ -72,7 +67,7 @@ class SQLMetric(
 
   // This is used to filter out metrics. Metrics with value equal to initValue should
   // be filtered out, since they are either invalid or safe to filter without changing
-  // the aggregation defined in [[SQLMetrics.stringValue]].
+  // the aggregation defined in [[MetricUtils.stringValue]].
   // Note that we don't use 0 here since we may want to collect 0 metrics for
   // calculating min, max, etc. See SPARK-11013.
   override def isZero: Boolean = _value == initValue
@@ -106,8 +101,8 @@ class SQLMetric(
       SQLMetrics.cachedSQLAccumIdentifier)
   }
 
-  // We should provide the raw value which can be -1, so that `SQLMetrics.stringValue` can correctly
-  // filter out the invalid -1 values.
+  // We should provide the raw value which can be -1, so that `MetricUtils.stringValue` can
+  // correctly filter out the invalid -1 values.
   override def toInfoUpdate: AccumulableInfo = {
     AccumulableInfo(id, name, internOption(Some(_value)), None, true, true,
       SQLMetrics.cachedSQLAccumIdentifier)
@@ -201,77 +196,6 @@ object SQLMetrics {
     val acc = new SQLMetric(AVERAGE_METRIC)
     acc.register(sc, name = metricsCache.get(name), countFailedValues = false)
     acc
-  }
-
-  private def toNumberFormat(value: Long): String = {
-    val numberFormat = NumberFormat.getNumberInstance(Locale.US)
-    numberFormat.format(value.toDouble / baseForAvgMetric)
-  }
-
-  def metricNeedsMax(metricsType: String): Boolean = {
-    metricsType != SUM_METRIC
-  }
-
-  private val METRICS_NAME_SUFFIX = "(min, med, max (stageId: taskId))"
-
-  /**
-   * A function that defines how we aggregate the final accumulator results among all tasks,
-   * and represent it in string for a SQL physical operator.
-    */
-  def stringValue(metricsType: String, values: Array[Long], maxMetrics: Array[Long]): String = {
-    // taskInfo = "(driver)" OR (stage ${stageId}.${attemptId}: task $taskId)
-    val taskInfo = if (maxMetrics.isEmpty) {
-      "(driver)"
-    } else {
-      s"(stage ${maxMetrics(1)}.${maxMetrics(2)}: task ${maxMetrics(3)})"
-    }
-    if (metricsType == SUM_METRIC) {
-      val numberFormat = NumberFormat.getIntegerInstance(Locale.US)
-      numberFormat.format(values.sum)
-    } else if (metricsType == AVERAGE_METRIC) {
-      val validValues = values.filter(_ > 0)
-      // When there are only 1 metrics value (or None), no need to display max/min/median. This is
-      // common for driver-side SQL metrics.
-      if (validValues.length <= 1) {
-        toNumberFormat(validValues.headOption.getOrElse(0))
-      } else {
-        val Seq(min, med, max) = {
-          Arrays.sort(validValues)
-          Seq(
-            toNumberFormat(validValues(0)),
-            toNumberFormat(validValues(validValues.length / 2)),
-            toNumberFormat(validValues(validValues.length - 1)))
-        }
-        s"$METRICS_NAME_SUFFIX:\n($min, $med, $max $taskInfo)"
-      }
-    } else {
-      val strFormat: Long => String = if (metricsType == SIZE_METRIC) {
-        Utils.bytesToString
-      } else if (metricsType == TIMING_METRIC) {
-        Utils.msDurationToString
-      } else if (metricsType == NS_TIMING_METRIC) {
-        duration => Utils.msDurationToString(duration.nanos.toMillis)
-      } else {
-        throw SparkException.internalError(s"unexpected metrics type: $metricsType")
-      }
-
-      val validValues = values.filter(_ >= 0)
-      // When there are only 1 metrics value (or None), no need to display max/min/median. This is
-      // common for driver-side SQL metrics.
-      if (validValues.length <= 1) {
-        strFormat(validValues.headOption.getOrElse(0))
-      } else {
-        val Seq(sum, min, med, max) = {
-          Arrays.sort(validValues)
-          Seq(
-            strFormat(validValues.sum),
-            strFormat(validValues(0)),
-            strFormat(validValues(validValues.length / 2)),
-            strFormat(validValues(validValues.length - 1)))
-        }
-        s"total $METRICS_NAME_SUFFIX\n$sum ($min, $med, $max $taskInfo)"
-      }
-    }
   }
 
   def postDriverMetricsUpdatedByValue(

@@ -441,7 +441,7 @@ The following SQL properties enable Storage Partition Join in different join que
     <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
     <tr>
       <td><code>spark.sql.sources.v2.bucketing.enabled</code></td>
-      <td>false</td>
+      <td>true</td>
       <td>
         When true, try to eliminate shuffle by using the partitioning reported by a compatible V2 data source.
       </td>

@@ -32,6 +32,8 @@ from pyspark.ml.util import (
     MLReader,
     JavaMLReadable,
     JavaMLWritable,
+    try_remote_read,
+    try_remote_write,
 )
 from pyspark.ml.wrapper import JavaParams
 from pyspark.ml.common import inherit_doc
@@ -164,6 +166,7 @@ class Pipeline(Estimator["PipelineModel"], MLReadable["Pipeline"], MLWritable):
         return that.setStages(stages)
 
     @since("2.0.0")
+    @try_remote_write
     def write(self) -> MLWriter:
         """Returns an MLWriter instance for this ML instance."""
         allStagesAreJava = PipelineSharedReadWrite.checkStagesForJava(self.getStages())
@@ -173,6 +176,7 @@ class Pipeline(Estimator["PipelineModel"], MLReadable["Pipeline"], MLWritable):
 
     @classmethod
     @since("2.0.0")
+    @try_remote_read
     def read(cls) -> "PipelineReader":
         """Returns an MLReader instance for this class."""
         return PipelineReader(cls)
@@ -322,6 +326,7 @@ class PipelineModel(Model, MLReadable["PipelineModel"], MLWritable):
         return PipelineModel(stages)
 
     @since("2.0.0")
+    @try_remote_write
     def write(self) -> MLWriter:
         """Returns an MLWriter instance for this ML instance."""
         allStagesAreJava = PipelineSharedReadWrite.checkStagesForJava(
@@ -333,6 +338,7 @@ class PipelineModel(Model, MLReadable["PipelineModel"], MLWritable):
 
     @classmethod
     @since("2.0.0")
+    @try_remote_read
     def read(cls) -> PipelineModelReader:
         """Returns an MLReader instance for this class."""
         return PipelineModelReader(cls)

@@ -49,6 +49,9 @@ public class SparkLauncher extends AbstractLauncher<SparkLauncher> {
   public static final String SPARK_REMOTE = "spark.remote";
   public static final String SPARK_LOCAL_REMOTE = "spark.local.connect";
 
+  /** The Spark API mode. */
+  public static final String SPARK_API_MODE = "spark.api.mode";
+
   /** The Spark deploy mode. */
   public static final String DEPLOY_MODE = "spark.submit.deployMode";
 

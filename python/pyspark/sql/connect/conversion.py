@@ -323,7 +323,7 @@ class LocalDataToArrowConversion:
             return lambda value: value
 
     @staticmethod
-    def convert(data: Sequence[Any], schema: StructType) -> "pa.Table":
+    def convert(data: Sequence[Any], schema: StructType, use_large_var_types: bool) -> "pa.Table":
         assert isinstance(data, list) and len(data) > 0
 
         assert schema is not None and isinstance(schema, StructType)
@@ -340,6 +340,8 @@ class LocalDataToArrowConversion:
         pylist: List[List] = [[] for _ in range(len(column_names))]
 
         for item in data:
+            if isinstance(item, VariantVal):
+                raise PySparkValueError("Rows cannot be of type VariantVal")
             if (
                 not isinstance(item, Row)
                 and not isinstance(item, tuple)  # inherited namedtuple
@@ -370,7 +372,8 @@ class LocalDataToArrowConversion:
                     )
                     for field in schema.fields
                 ]
-            )
+            ),
+            prefers_large_types=use_large_var_types,
         )
 
         return pa.Table.from_arrays(pylist, schema=pa_schema)

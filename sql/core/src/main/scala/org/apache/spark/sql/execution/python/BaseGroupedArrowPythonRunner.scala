@@ -57,7 +57,10 @@ abstract class BaseGroupedArrowPythonRunner[IN](
       funcs.head._1.funcs.head.pythonExec)
 
   override val faultHandlerEnabled: Boolean = SQLConf.get.pythonUDFWorkerFaulthandlerEnabled
+  override val idleTimeoutSeconds: Long = SQLConf.get.pythonUDFWorkerIdleTimeoutSeconds
+  override val killOnIdleTimeout: Boolean = SQLConf.get.pythonUDFWorkerKillOnIdleTimeout
 
+  override val hideTraceback: Boolean = SQLConf.get.pysparkHideTraceback
   override val simplifiedTraceback: Boolean = SQLConf.get.pysparkSimplifiedTraceback
 
   override protected def newWriter(
@@ -104,7 +107,7 @@ abstract class BaseGroupedArrowPythonRunner[IN](
       dataOut: DataOutputStream,
       name: Option[String] = None): Unit = {
     val arrowSchema = ArrowUtils.toArrowSchema(
-      schema, timeZoneId, errorOnDuplicatedFieldNames = true, largeVarTypes)
+      schema, timeZoneId, errorOnDuplicatedFieldNames = true, largeVarTypes = largeVarTypes)
     val allocator = ArrowUtils.rootAllocator.newChildAllocator(
       s"stdout writer for $pythonExec ($name)", 0, Long.MaxValue)
     val root = VectorSchemaRoot.create(arrowSchema, allocator)

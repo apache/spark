@@ -19,9 +19,9 @@ package org.apache.spark.sql.streaming
 
 import java.io.File
 
-import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.catalyst.plans.logical.Range
 import org.apache.spark.sql.catalyst.util.stringToFile
+import org.apache.spark.sql.classic.{DataFrame, Dataset}
 import org.apache.spark.sql.connector.read.streaming
 import org.apache.spark.sql.connector.read.streaming.{ReadLimit, SupportsAdmissionControl}
 import org.apache.spark.sql.execution.streaming.{LongOffset, MemoryStream, MicroBatchExecution, MultiBatchExecutor, Offset, SerializedOffset, SingleBatchExecutor, Source, StreamingExecutionRelation, StreamingQueryWrapper}
@@ -59,7 +59,7 @@ class TriggerAvailableNowSuite extends FileStreamSourceTest {
         start.map(getOffsetValue).getOrElse(0L) + 1L, getOffsetValue(end) + 1L, 1, None,
         // Intentionally set isStreaming to false; we only use RDD plan in below.
         isStreaming = false)
-      sqlContext.internalCreateDataFrame(
+      sqlContext.sparkSession.internalCreateDataFrame(
         plan.queryExecution.toRdd, plan.schema, isStreaming = true)
     }
 

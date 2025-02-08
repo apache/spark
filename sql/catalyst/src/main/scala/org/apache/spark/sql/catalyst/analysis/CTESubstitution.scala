@@ -316,7 +316,9 @@ object CTESubstitution extends Rule[LogicalPlan] {
       // CTE definition can reference a previous one or itself if recursion allowed.
       val substituted = substituteCTE(innerCTEResolved, alwaysInline,
         resolvedCTERelations, recursiveCTERelation)
-      val cteRelation = CTERelationDef(substituted)
+      val cteRelation = recursiveCTERelation
+        .map(_._2.copy(child = substituted))
+        .getOrElse(CTERelationDef(substituted))
       if (!alwaysInline) {
         cteDefs += cteRelation
       }
@@ -400,7 +402,7 @@ object CTESubstitution extends Rule[LogicalPlan] {
         other.transformExpressionsWithPruning(_.containsPattern(PLAN_EXPRESSION)) {
           case e: SubqueryExpression =>
             e.withNewPlan(
-              apply(substituteCTE(e.plan, alwaysInline, cteRelations, None)))
+              apply(substituteCTE(e.plan, alwaysInline, cteRelations, recursiveCTERelation)))
         }
     }
   }

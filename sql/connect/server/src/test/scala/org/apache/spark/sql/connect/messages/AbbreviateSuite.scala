@@ -231,21 +231,22 @@ class AbbreviateSuite extends SparkFunSuite {
     val sql = proto.SQL
       .newBuilder()
       .setQuery("SELECT * FROM T")
-      .putAllNamedArguments(Map(
-        "k1" -> proto.Expression
-          .newBuilder()
-          .setUnresolvedAttribute(proto.Expression.UnresolvedAttribute
+      .putAllNamedArguments(
+        Map(
+          "k1" -> proto.Expression
             .newBuilder()
-            .setUnparsedIdentifier("v1" * 4096)
-            .build())
-          .build(),
-        "k2" -> proto.Expression
-          .newBuilder()
-          .setUnresolvedAttribute(proto.Expression.UnresolvedAttribute
+            .setUnresolvedAttribute(proto.Expression.UnresolvedAttribute
+              .newBuilder()
+              .setUnparsedIdentifier("v1" * 4096)
+              .build())
+            .build(),
+          "k2" -> proto.Expression
             .newBuilder()
-            .setUnparsedIdentifier("v2" * 4096)
-            .build())
-          .build()).asJava)
+            .setUnresolvedAttribute(proto.Expression.UnresolvedAttribute
+              .newBuilder()
+              .setUnparsedIdentifier("v2" * 4096)
+              .build())
+            .build()).asJava)
       .build()
 
     val threshold = 1024

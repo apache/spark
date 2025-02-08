@@ -17,15 +17,20 @@
 
 package org.apache.spark.sql.catalyst.analysis.resolver
 
-import org.apache.spark.sql.catalyst.SQLConfHelper
+import java.util.Locale
+
+import org.apache.spark.sql.catalyst.{FunctionIdentifier, SQLConfHelper}
 import org.apache.spark.sql.catalyst.analysis.{
+  FunctionRegistry,
+  GetViewColumnByNameAndOrdinal,
   ResolvedInlineTable,
   UnresolvedAlias,
   UnresolvedAttribute,
   UnresolvedFunction,
   UnresolvedInlineTable,
   UnresolvedRelation,
-  UnresolvedStar
+  UnresolvedStar,
+  UnresolvedSubqueryColumnAliases
 }
 import org.apache.spark.sql.catalyst.expressions.{
   Alias,
@@ -37,9 +42,11 @@ import org.apache.spark.sql.catalyst.expressions.{
   Expression,
   Literal,
   Predicate,
-  SubqueryExpression
+  SubqueryExpression,
+  UpCast
 }
 import org.apache.spark.sql.catalyst.plans.logical.{
+  Distinct,
   Filter,
   GlobalLimit,
   LocalLimit,
@@ -47,9 +54,13 @@ import org.apache.spark.sql.catalyst.plans.logical.{
   LogicalPlan,
   OneRowRelation,
   Project,
-  SubqueryAlias
+  SubqueryAlias,
+  Union,
+  UnresolvedWith,
+  View
 }
 import org.apache.spark.sql.connector.catalog.CatalogManager
+import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
 import org.apache.spark.sql.internal.SQLConf.HiveCaseSensitiveInferenceMode
 
 /**
@@ -72,16 +83,24 @@ class ResolverGuard(catalogManager: CatalogManager) extends SQLConfHelper {
    * their children. For unimplemented ones, return false.
    */
   private def checkOperator(operator: LogicalPlan): Boolean = operator match {
+    case unresolvedWith: UnresolvedWith =>
+      checkUnresolvedWith(unresolvedWith)
     case project: Project =>
       checkProject(project)
     case filter: Filter =>
       checkFilter(filter)
+    case unresolvedSubqueryColumnAliases: UnresolvedSubqueryColumnAliases =>
+      checkUnresolvedSubqueryColumnAliases(unresolvedSubqueryColumnAliases)
     case subqueryAlias: SubqueryAlias =>
       checkSubqueryAlias(subqueryAlias)
     case globalLimit: GlobalLimit =>
       checkGlobalLimit(globalLimit)
     case localLimit: LocalLimit =>
       checkLocalLimit(localLimit)
+    case distinct: Distinct =>
+      checkDistinct(distinct)
+    case view: View =>
+      checkView(view)
     case unresolvedRelation: UnresolvedRelation =>
       checkUnresolvedRelation(unresolvedRelation)
     case unresolvedInlineTable: UnresolvedInlineTable =>
@@ -92,6 +111,8 @@ class ResolverGuard(catalogManager: CatalogManager) extends SQLConfHelper {
       checkLocalRelation(localRelation)
     case oneRowRelation: OneRowRelation =>
       checkOneRowRelation(oneRowRelation)
+    case union: Union =>
+      checkUnion(union)
     case _ =>
       false
   }
@@ -110,6 +131,8 @@ class ResolverGuard(catalogManager: CatalogManager) extends SQLConfHelper {
         checkUnresolvedConditionalExpression(unresolvedConditionalExpression)
       case unresolvedCast: Cast =>
         checkUnresolvedCast(unresolvedCast)
+      case unresolvedUpCast: UpCast =>
+        checkUnresolvedUpCast(unresolvedUpCast)
       case unresolvedStar: UnresolvedStar =>
         checkUnresolvedStar(unresolvedStar)
       case unresolvedAlias: UnresolvedAlias =>
@@ -126,9 +149,18 @@ class ResolverGuard(catalogManager: CatalogManager) extends SQLConfHelper {
         checkCreateNamedStruct(createNamedStruct)
       case unresolvedFunction: UnresolvedFunction =>
         checkUnresolvedFunction(unresolvedFunction)
+      case getViewColumnByNameAndOrdinal: GetViewColumnByNameAndOrdinal =>
+        checkGetViewColumnBynameAndOrdinal(getViewColumnByNameAndOrdinal)
       case _ =>
         false
     }
+  }
+
+  private def checkUnresolvedWith(unresolvedWith: UnresolvedWith) = {
+    !unresolvedWith.allowRecursion && unresolvedWith.cteRelations.forall {
+      case (cteName, ctePlan) =>
+        checkOperator(ctePlan)
+    } && checkOperator(unresolvedWith.child)
   }
 
   private def checkProject(project: Project) = {
@@ -138,14 +170,23 @@ class ResolverGuard(catalogManager: CatalogManager) extends SQLConfHelper {
   private def checkFilter(unresolvedFilter: Filter) =
     checkOperator(unresolvedFilter.child) && checkExpression(unresolvedFilter.condition)
 
+  private def checkUnresolvedSubqueryColumnAliases(
+      unresolvedSubqueryColumnAliases: UnresolvedSubqueryColumnAliases) =
+    checkOperator(unresolvedSubqueryColumnAliases.child)
+
   private def checkSubqueryAlias(subqueryAlias: SubqueryAlias) =
-    subqueryAlias.identifier.qualifier.isEmpty && checkOperator(subqueryAlias.child)
+    checkOperator(subqueryAlias.child)
 
   private def checkGlobalLimit(globalLimit: GlobalLimit) =
     checkOperator(globalLimit.child) && checkExpression(globalLimit.limitExpr)
 
   private def checkLocalLimit(localLimit: LocalLimit) =
     checkOperator(localLimit.child) && checkExpression(localLimit.limitExpr)
+
+  private def checkDistinct(distinct: Distinct) =
+    checkOperator(distinct.child)
+
+  private def checkView(view: View) = checkOperator(view.child)
 
   private def checkUnresolvedInlineTable(unresolvedInlineTable: UnresolvedInlineTable) =
     unresolvedInlineTable.rows.forall(_.forall(checkExpression))
@@ -159,6 +200,9 @@ class ResolverGuard(catalogManager: CatalogManager) extends SQLConfHelper {
   // [[LocalRelation]] is resolved in the parser.
   private def checkLocalRelation(localRelation: LocalRelation) =
     localRelation.output.forall(checkExpression)
+
+  private def checkUnion(union: Union) =
+    !union.byName && !union.allowMissingCol && union.children.forall(checkOperator)
 
   private def checkOneRowRelation(oneRowRelation: OneRowRelation) = true
 
@@ -174,13 +218,16 @@ class ResolverGuard(catalogManager: CatalogManager) extends SQLConfHelper {
 
   private def checkUnresolvedCast(cast: Cast) = checkExpression(cast.child)
 
+  private def checkUnresolvedUpCast(upCast: UpCast) = checkExpression(upCast.child)
+
   private def checkUnresolvedStar(unresolvedStar: UnresolvedStar) = true
 
   private def checkUnresolvedAlias(unresolvedAlias: UnresolvedAlias) =
     checkExpression(unresolvedAlias.child)
 
   private def checkUnresolvedAttribute(unresolvedAttribute: UnresolvedAttribute) =
-    !ResolverGuard.UNSUPPORTED_ATTRIBUTE_NAMES.contains(unresolvedAttribute.nameParts.head)
+    !ResolverGuard.UNSUPPORTED_ATTRIBUTE_NAMES.contains(unresolvedAttribute.nameParts.head) &&
+    !unresolvedAttribute.getTagValue(LogicalPlan.PLAN_ID_TAG).isDefined
 
   private def checkUnresolvedPredicate(unresolvedPredicate: Predicate) = {
     unresolvedPredicate match {
@@ -197,17 +244,27 @@ class ResolverGuard(catalogManager: CatalogManager) extends SQLConfHelper {
   }
 
   private def checkUnresolvedFunction(unresolvedFunction: UnresolvedFunction) =
-    ResolverGuard.SUPPORTED_FUNCTION_NAMES.contains(
-      unresolvedFunction.nameParts.head
-    ) && unresolvedFunction.children.forall(checkExpression)
+    !ResolverGuard.UNSUPPORTED_FUNCTION_NAMES.contains(unresolvedFunction.nameParts.head) &&
+    // UDFs are not supported
+    FunctionRegistry.functionSet.contains(
+      FunctionIdentifier(unresolvedFunction.nameParts.head.toLowerCase(Locale.ROOT))
+    ) &&
+    unresolvedFunction.children.forall(checkExpression)
 
   private def checkLiteral(literal: Literal) = true
+
+  private def checkGetViewColumnBynameAndOrdinal(
+      getViewColumnByNameAndOrdinal: GetViewColumnByNameAndOrdinal) = true
 
   private def checkConfValues() =
     // Case sensitive analysis is not supported.
     !conf.caseSensitiveAnalysis &&
     // Case-sensitive inference is not supported for Hive table schema.
-    conf.caseSensitiveInferenceMode == HiveCaseSensitiveInferenceMode.NEVER_INFER
+    conf.caseSensitiveInferenceMode == HiveCaseSensitiveInferenceMode.NEVER_INFER &&
+    // Legacy CTE resolution modes are not supported.
+    !conf.getConf(SQLConf.LEGACY_INLINE_CTE_IN_COMMANDS) &&
+    LegacyBehaviorPolicy.withName(conf.getConf(SQLConf.LEGACY_CTE_PRECEDENCE_POLICY)) ==
+    LegacyBehaviorPolicy.CORRECTED
 
   private def checkVariables() = catalogManager.tempVariableManager.isEmpty
 }
@@ -237,47 +294,34 @@ object ResolverGuard {
     map
   }
 
-  /**
-   * Most of the functions are not supported, but we allow some explicitly supported ones.
-   */
-  private val SUPPORTED_FUNCTION_NAMES = {
+  private val UNSUPPORTED_FUNCTION_NAMES = {
     val map = new IdentifierMap[Unit]()
-    map += ("array", ())
-    // map += ("array_agg", ()) - until aggregate expressions are supported
-    map += ("array_append", ())
-    map += ("array_compact", ())
-    map += ("array_contains", ())
-    map += ("array_distinct", ())
-    map += ("array_except", ())
-    map += ("array_insert", ())
-    map += ("array_intersect", ())
-    map += ("array_join", ())
-    map += ("array_max", ())
-    map += ("array_min", ())
-    map += ("array_position", ())
-    map += ("array_prepend", ())
-    map += ("array_remove", ())
-    map += ("array_repeat", ())
-    map += ("array_size", ())
-    // map += ("array_sort", ()) - until lambda functions are supported
-    map += ("array_union", ())
-    map += ("arrays_overlap", ())
-    map += ("arrays_zip", ())
-    map += ("coalesce", ())
-    map += ("if", ())
-    map += ("map", ())
-    map += ("map_concat", ())
-    map += ("map_contains_key", ())
-    map += ("map_entries", ())
-    // map += ("map_filter", ()) - until lambda functions are supported
-    map += ("map_from_arrays", ())
-    map += ("map_from_entries", ())
-    map += ("map_keys", ())
-    map += ("map_values", ())
-    // map += ("map_zip_with", ()) - until lambda functions are supported
-    map += ("named_struct", ())
-    map += ("sort_array", ())
-    map += ("str_to_map", ())
-    map
+    // User info functions are not supported.
+    map += ("current_user", ())
+    map += ("session_user", ())
+    map += ("user", ())
+    // Functions that require lambda support.
+    map += ("array_sort", ())
+    map += ("transform", ())
+    // Functions that require generator support.
+    map += ("explode", ())
+    map += ("explode_outer", ())
+    map += ("inline", ())
+    map += ("inline_outer", ())
+    map += ("posexplode", ())
+    map += ("posexplode_outer", ())
+    // Functions that require session/time window resolution.
+    map += ("session_window", ())
+    map += ("window", ())
+    map += ("window_time", ())
+    // Functions that are not resolved properly.
+    map += ("collate", ())
+    map += ("json_tuple", ())
+    map += ("schema_of_unstructured_agg", ())
+    // Functions that produce wrong schemas/plans because of alias assignment.
+    map += ("from_json", ())
+    map += ("schema_of_json", ())
+    // Function for which we don't handle exceptions properly.
+    map += ("schema_of_xml", ())
   }
 }
