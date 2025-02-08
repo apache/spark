@@ -18,8 +18,8 @@
 package org.apache.spark.ml
 
 import org.apache.spark.annotation.Since
+import org.apache.spark.sql.{functions => sf}
 import org.apache.spark.sql.Column
-import org.apache.spark.sql.functions.lit
 
 // scalastyle:off
 @Since("3.0.0")
@@ -34,7 +34,7 @@ object functions {
    * @since 3.0.0
    */
   def vector_to_array(v: Column, dtype: String = "float64"): Column =
-    Column.internalFn("vector_to_array", v, lit(dtype))
+    Column.internalFn("vector_to_array", v, sf.lit(dtype))
 
   /**
    * Converts a column of array of numeric type into a column of dense vectors in MLlib.
@@ -43,4 +43,43 @@ object functions {
    * @since 3.1.0
    */
   def array_to_vector(v: Column): Column = Column.internalFn("array_to_vector", v)
+
+  private[ml] def array_binary_search(a: Column, v: Column): Column =
+    Column.internalFn("array_binary_search", a, v)
+
+  // input: vector, output: double
+  private[ml] def get_vector(v: Column, index: Column): Column = {
+    val unwrapped = sf.unwrap_udt(v)
+    val size = unwrapped.getField("size")
+    val values = unwrapped.getField("values")
+    val isDense = unwrapped.getField("type") === sf.lit(1)
+    val sparseIdx = array_binary_search(unwrapped.getField("indices"), index)
+
+    sf.when(sf.not(index >= 0 && index < size),
+      sf.raise_error(sf.printf(
+        sf.lit(s"Vector index must be in [0, %s), but got %s"), size, index)))
+      .when(isDense, sf.get(unwrapped.getField("values"), index))
+      .when(sparseIdx >= 0, sf.get(values, sparseIdx))
+      .otherwise(sf.lit(0))
+      .cast("double")
+  }
+
+  // input: array<double>, output: int
+  private[ml] def array_argmax(v: Column): Column = {
+    sf.aggregate(
+      v,
+      sf.struct(
+        sf.lit(Double.NegativeInfinity).alias("v"), // max value
+        sf.lit(-1).alias("i"),              // index of max value
+        sf.lit(0).alias("j")),              // current index
+      (acc, vv) => {
+        val v = acc.getField("v")
+        val i = acc.getField("i")
+        val j = acc.getField("j")
+        sf.when(vv > v, sf.struct(vv.alias("v"), j.alias("i"), j + 1))
+          .otherwise(sf.struct(v.alias("v"), i.alias("i"), j + 1))
+      },
+      acc => acc.getField("i")
+    )
+  }
 }

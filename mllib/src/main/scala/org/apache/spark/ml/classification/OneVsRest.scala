@@ -32,7 +32,7 @@ import org.apache.spark.annotation.Since
 import org.apache.spark.internal.{LogKeys, MDC}
 import org.apache.spark.ml._
 import org.apache.spark.ml.attribute._
-import org.apache.spark.ml.linalg.{Vector, Vectors}
+import org.apache.spark.ml.functions._
 import org.apache.spark.ml.param.{Param, ParamMap, ParamPair, Params}
 import org.apache.spark.ml.param.shared.{HasParallelism, HasWeightCol}
 import org.apache.spark.ml.util._
@@ -176,6 +176,8 @@ final class OneVsRestModel private[ml] (
 
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
+    import org.apache.spark.util.ArrayImplicits._
+
     // Check schema
     val outputSchema = transformSchema(dataset.schema, logging = true)
 
@@ -194,7 +196,6 @@ final class OneVsRestModel private[ml] (
     val accColName = "mbc$acc" + UUID.randomUUID().toString
     val newDataset = dataset.withColumn(accColName, lit(Array.emptyDoubleArray))
     val columns = newDataset.schema.fieldNames.map(col)
-    val updateUDF = udf { (preds: Array[Double], pred: Vector) => preds :+ pred(1) }
 
     // persist if underlying dataset is not persistent.
     val handlePersistence = !dataset.isStreaming && dataset.storageLevel == StorageLevel.NONE
@@ -212,10 +213,9 @@ final class OneVsRestModel private[ml] (
       if (isProbModel) {
         tmpModel.asInstanceOf[ProbabilisticClassificationModel[_, _]].setProbabilityCol("")
       }
-
-      import org.apache.spark.util.ArrayImplicits._
       tmpModel.transform(df)
-        .withColumn(accColName, updateUDF(col(accColName), col(tmpRawPredName)))
+        .withColumn(accColName, array_append(
+          col(accColName), get_vector(col(tmpRawPredName), lit(1))))
         .select(columns.toImmutableArraySeq: _*)
     }
 
@@ -228,18 +228,17 @@ final class OneVsRestModel private[ml] (
 
     if (getRawPredictionCol.nonEmpty) {
       // output the RawPrediction as vector
-      val rawPredictionUDF = udf { preds: Array[Double] => Vectors.dense(preds) }
       predictionColNames :+= getRawPredictionCol
-      predictionColumns :+= rawPredictionUDF(col(accColName))
+      predictionColumns :+= array_to_vector(col(accColName))
         .as($(rawPredictionCol), outputSchema($(rawPredictionCol)).metadata)
     }
 
     if (getPredictionCol.nonEmpty) {
       // output the index of the classifier with highest confidence as prediction
-      val labelUDF = udf { (preds: Array[Double]) => preds.indices.maxBy(preds.apply).toDouble }
       predictionColNames :+= getPredictionCol
-      predictionColumns :+= labelUDF(col(accColName))
-        .as(getPredictionCol, labelMetadata)
+
+      predictionColumns :+= array_argmax(col(accColName))
+        .cast(DoubleType).as(getPredictionCol, labelMetadata)
     }
 
     aggregatedDataset
