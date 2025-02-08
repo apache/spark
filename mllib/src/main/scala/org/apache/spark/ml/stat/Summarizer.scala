@@ -26,13 +26,15 @@ import org.apache.spark.ml.linalg.{Vector, Vectors, VectorUDT}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.Column
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Expression, ImplicitCastInputTypes}
+import org.apache.spark.sql.catalyst.expressions.{Expression, ImplicitCastInputTypes, Literal}
 import org.apache.spark.sql.catalyst.expressions.aggregate.TypedImperativeAggregate
 import org.apache.spark.sql.catalyst.trees.BinaryLike
+import org.apache.spark.sql.catalyst.util.ArrayData
 import org.apache.spark.sql.classic.ClassicConversions.ColumnConstructorExt
 import org.apache.spark.sql.classic.ExpressionUtils.expression
 import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
 
 /**
@@ -290,6 +292,14 @@ private[spark] object SummaryBuilderImpl extends Logging {
     StructType(fields)
   }
 
+  private def extractRequestedMetrics(metrics: Expression): (Seq[Metric], Seq[ComputeMetric]) = {
+    metrics.eval() match {
+      case arrayData: ArrayData =>
+        val requested = arrayData.toSeq[UTF8String](StringType)
+        getRelevantMetrics(requested.map(_.toString))
+    }
+  }
+
   private val vectorUDT = new VectorUDT
 
   /**
@@ -342,7 +352,7 @@ private[spark] object SummaryBuilderImpl extends Logging {
   private[stat] case object ComputeMin extends ComputeMetric
 
 
-  private case class MetricsAggregate(
+  private[spark] case class MetricsAggregate(
       requestedMetrics: Seq[Metric],
       requestedComputeMetrics: Seq[ComputeMetric],
       featuresExpr: Expression,
@@ -352,6 +362,27 @@ private[spark] object SummaryBuilderImpl extends Logging {
     extends TypedImperativeAggregate[SummarizerBuffer]
     with ImplicitCastInputTypes
     with BinaryLike[Expression] {
+
+    // helper constructor
+    def this(
+        metrics: (Seq[Metric], Seq[ComputeMetric]),
+        featuresExpr: Expression,
+        weightExpr: Expression) = {
+      this(metrics._1, metrics._2, featuresExpr, weightExpr, 0, 0)
+    }
+
+    def this(
+        requestedMetrics: Expression,
+        featuresExpr: Expression,
+        weightExpr: Expression) = {
+      this(extractRequestedMetrics(requestedMetrics), featuresExpr, weightExpr)
+    }
+
+    def this(
+        requestedMetrics: Expression,
+        featuresExpr: Expression) = {
+      this(requestedMetrics, featuresExpr, Literal(1.0))
+    }
 
     override def eval(state: SummarizerBuffer): Any = {
       val metrics = requestedMetrics.map {
