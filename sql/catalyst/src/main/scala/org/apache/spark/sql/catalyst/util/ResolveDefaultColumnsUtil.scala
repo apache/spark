@@ -27,7 +27,6 @@ import org.apache.spark.sql.catalyst.{InternalRow, SQLConfHelper}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.{Literal => ExprLiteral}
 import org.apache.spark.sql.catalyst.optimizer.{ConstantFolding, Optimizer}
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -334,62 +333,24 @@ object ResolveDefaultColumns extends QueryErrorsBase
   /**
    * Analyze EXISTS_DEFAULT value.  This skips some steps of analyze as most of the
    * analysis has been done before.
-   *
-   * VisibleForTesting
    */
-  def analyzeExistingDefault(field: StructField,
-      analyzer: Analyzer = DefaultColumnAnalyzer): Expression = {
-    val colName = field.name
-    val dataType = field.dataType
+  def analyzeExistingDefault(field: StructField, defaultSQL: String): Expression = {
     val defaultSQL = field.metadata.getString(EXISTS_DEFAULT_COLUMN_METADATA_KEY)
 
     // Parse the expression.
-    lazy val parser = new CatalystSqlParser()
-    val parsed: Expression = try {
-      parser.parseExpression(defaultSQL)
-    } catch {
-      case ex: ParseException =>
-        throw QueryCompilationErrors.defaultValuesUnresolvedExprError(
-          "", colName, defaultSQL, ex)
-    }
-    // Check invariants before moving on to analysis.
-    if (parsed.containsPattern(PLAN_EXPRESSION)) {
+    val expr = Literal.fromSQL(defaultSQL)
+
+    // Check invariants
+    if (expr.containsPattern(PLAN_EXPRESSION)) {
       throw QueryCompilationErrors.defaultValuesMayNotContainSubQueryExpressions(
-        "", colName, defaultSQL)
+        "", field.name, defaultSQL)
     }
-
-    // Analyze the parse result.
-    val plan = try {
-      val analyzer: Analyzer = defaultColumnAnalyzer
-      val analyzed = analyzer.execute(Project(Seq(Alias(parsed, colName)()), OneRowRelation()))
-      analyzer.checkAnalysis(analyzed)
-      // Eagerly execute constant-folding rules before checking whether the
-      // expression is foldable and resolved.
-      ConstantFolding(analyzed)
-    } catch {
-      case ex: AnalysisException =>
-        throw QueryCompilationErrors.defaultValuesUnresolvedExprError(
-          "", colName, defaultSQL, ex)
-    }
-    val analyzed: Expression = plan.collectFirst {
-      case Project(Seq(a: Alias), OneRowRelation()) => a.child
-    }.get
-
-    // Extra check, expressions should already be resolved and foldable
-    if (!analyzed.foldable) {
-      throw QueryCompilationErrors.defaultValueNotConstantError(defaultSQL, colName, defaultSQL)
-    }
-
-    if (!analyzed.resolved) {
+    if (!expr.resolved) {
       throw QueryCompilationErrors.defaultValuesUnresolvedExprError(
-        "",
-        colName,
-        defaultSQL,
-        cause = null)
+        "", field.name, defaultSQL, null)
     }
 
-    // Perform implicit coercion from the provided expression type to the required column type.
-    coerceDefaultValue(analyzed, dataType, defaultSQL, colName, defaultSQL)
+    expr
   }
 
   /**
@@ -479,10 +440,7 @@ object ResolveDefaultColumns extends QueryErrorsBase
       val defaultValue: Option[String] = field.getExistenceDefaultValue()
       defaultValue.map { text: String =>
         val expr = try {
-          val expr = analyzeExistingDefault(field)
-          expr match {
-            case _: ExprLiteral | _: Cast => expr
-          }
+          analyzeExistingDefault(field, text)
         } catch {
           // AnalysisException thrown from analyze is already formatted, throw it directly.
           case ae: AnalysisException => throw ae
