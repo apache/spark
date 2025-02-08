@@ -167,3 +167,25 @@ UDTF(User-Defined Table Function)s.
     TableArg.partitionBy
     TableArg.orderBy
     TableArg.withSinglePartition
+
+
+Plotting
+--------
+The ``DataFrame.plot`` attribute serves both as a callable method and a namespace, providing access to various
+plotting functions via the ``PySparkPlotAccessor``. Users can call specific plotting methods in the format
+``DataFrame.plot.<kind>``.
+
+.. currentmodule:: pyspark.sql.plot.core
+
+.. autosummary::
+    :toctree: api/
+
+    PySparkPlotAccessor.area
+    PySparkPlotAccessor.bar
+    PySparkPlotAccessor.barh
+    PySparkPlotAccessor.line
+    PySparkPlotAccessor.pie
+    PySparkPlotAccessor.scatter
+    PySparkPlotAccessor.box
+    PySparkPlotAccessor.kde
+    PySparkPlotAccessor.hist
