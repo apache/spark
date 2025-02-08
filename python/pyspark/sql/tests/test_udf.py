@@ -23,6 +23,7 @@ import tempfile
 import unittest
 import datetime
 import io
+import time
 from contextlib import redirect_stdout
 
 from pyspark.sql import SparkSession, Column, Row
@@ -1189,6 +1190,22 @@ class BaseUDFTestsMixin(object):
                 import ctypes
 
                 self.spark.range(1).select(udf(lambda x: ctypes.string_at(0))("id")).collect()
+
+    def test_udf_kill_on_timeout(self):
+        with self.sql_conf(
+            {
+                "spark.sql.execution.pyspark.udf.idleTimeoutSeconds": "1s",
+                "spark.sql.execution.pyspark.udf.killOnIdleTimeout": "true",
+            }
+        ):
+
+            @udf
+            def f(x):
+                time.sleep(2)
+                return str(x)
+
+            with self.assertRaisesRegex(Exception, "Python worker exited unexpectedly"):
+                self.spark.range(1).select(f("id")).show()
 
     def test_err_udf_init(self):
         with self.quiet():

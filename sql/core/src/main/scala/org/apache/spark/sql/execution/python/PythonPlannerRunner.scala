@@ -56,6 +56,7 @@ abstract class PythonPlannerRunner[T](func: PythonFunction) extends Logging {
     val localdir = env.blockManager.diskBlockManager.localDirs.map(f => f.getPath()).mkString(",")
     val faultHandlerEnabled: Boolean = SQLConf.get.pythonUDFWorkerFaulthandlerEnabled
     val idleTimeoutSeconds: Long = SQLConf.get.pythonUDFWorkerIdleTimeoutSeconds
+    val killOnIdleTimeout: Boolean = SQLConf.get.pythonUDFWorkerKillOnIdleTimeout
     val hideTraceback: Boolean = SQLConf.get.pysparkHideTraceback
     val simplifiedTraceback: Boolean = SQLConf.get.pysparkSimplifiedTraceback
     val workerMemoryMb = SQLConf.get.pythonPlannerExecMemory
@@ -112,7 +113,8 @@ abstract class PythonPlannerRunner[T](func: PythonFunction) extends Logging {
       dataOut.flush()
 
       val dataIn = new DataInputStream(new BufferedInputStream(
-        new WorkerInputStream(worker, bufferStream.toByteBuffer, handle, idleTimeoutSeconds),
+        new WorkerInputStream(
+          worker, bufferStream.toByteBuffer, handle, idleTimeoutSeconds, killOnIdleTimeout),
         bufferSize))
 
       val res = receiveFromPython(dataIn)
@@ -170,7 +172,8 @@ abstract class PythonPlannerRunner[T](func: PythonFunction) extends Logging {
       worker: PythonWorker,
       buffer: ByteBuffer,
       handle: Option[ProcessHandle],
-      idleTimeoutSeconds: Long) extends InputStream {
+      idleTimeoutSeconds: Long,
+      killOnIdleTimeout: Boolean) extends InputStream {
 
     private[this] val temp = new Array[Byte](1)
 
@@ -184,16 +187,35 @@ abstract class PythonPlannerRunner[T](func: PythonFunction) extends Logging {
       }
     }
 
+    private[this] var pythonWorkerKilled: Boolean = false
+
     override def read(b: Array[Byte], off: Int, len: Int): Int = {
       val buf = ByteBuffer.wrap(b, off, len)
       var n = 0
       while (n == 0) {
         val selected = worker.selector.select(TimeUnit.SECONDS.toMillis(idleTimeoutSeconds))
         if (selected == 0) {
-          logWarning(log"Idle timeout reached for Python planner worker (timeout: " +
-            log"${MDC(LogKeys.PYTHON_WORKER_IDLE_TIMEOUT, idleTimeoutSeconds)} seconds). " +
-            log"No data received from the worker process: " +
-            pythonWorkerStatusMessageWithContext(handle, worker, buffer.hasRemaining))
+          if (pythonWorkerKilled) {
+            logWarning(
+              log"Waiting for Python planner worker process to terminate after idle timeout: " +
+              pythonWorkerStatusMessageWithContext(handle, worker, buffer.hasRemaining))
+          } else {
+            logWarning(
+              log"Idle timeout reached for Python planner worker (timeout: " +
+              log"${MDC(LogKeys.PYTHON_WORKER_IDLE_TIMEOUT, idleTimeoutSeconds)} seconds). " +
+              log"No data received from the worker process: " +
+              pythonWorkerStatusMessageWithContext(handle, worker, buffer.hasRemaining))
+            if (killOnIdleTimeout) {
+              handle.foreach { handle =>
+                if (handle.isAlive) {
+                  logWarning(
+                    log"Terminating Python planner worker process due to idle timeout (timeout: " +
+                    log"${MDC(LogKeys.PYTHON_WORKER_IDLE_TIMEOUT, idleTimeoutSeconds)} seconds)")
+                  pythonWorkerKilled = handle.destroy()
+                }
+              }
+            }
+          }
         }
         if (worker.selectionKey.isReadable) {
           n = worker.channel.read(buf)
