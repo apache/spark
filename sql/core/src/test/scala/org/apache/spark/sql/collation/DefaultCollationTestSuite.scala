@@ -77,6 +77,29 @@ abstract class DefaultCollationTestSuite extends QueryTest with SharedSparkSessi
     }
   }
 
+  test("create/alter table with table level collation") {
+    withTable(testTable) {
+      // create table with default table level collation
+      sql(s"CREATE TABLE $testTable (c1 STRING) USING $dataSource DEFAULT COLLATION UTF8_LCASE")
+      assertTableColumnCollation(testTable, "c1", "UTF8_LCASE")
+
+      // alter table add column
+      sql(s"ALTER TABLE $testTable ADD COLUMN c2 STRING")
+      assertTableColumnCollation(testTable, "c2", "UTF8_LCASE")
+
+      // alter table default collation should not affect existing colums
+      sql(s"ALTER TABLE $testTable DEFAULT COLLATION UNICODE")
+      assertTableColumnCollation(testTable, "c1", "UTF8_LCASE")
+      assertTableColumnCollation(testTable, "c2", "UTF8_LCASE")
+
+      // alter table add column, where the new column should pick up new collation
+      sql(s"ALTER TABLE $testTable ADD COLUMN c3 STRING")
+      assertTableColumnCollation(testTable, "c1", "UTF8_LCASE")
+      assertTableColumnCollation(testTable, "c2", "UTF8_LCASE")
+      assertTableColumnCollation(testTable, "c3", "UNICODE")
+    }
+  }
+
   test("create table as select") {
     // literals in select do not pick up session collation
     withTable(testTable) {

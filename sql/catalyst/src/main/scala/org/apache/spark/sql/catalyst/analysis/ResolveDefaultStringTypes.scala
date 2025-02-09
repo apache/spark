@@ -18,15 +18,15 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.catalyst.expressions.{Cast, Expression, Literal}
-import org.apache.spark.sql.catalyst.plans.logical.{AddColumns, AlterColumns, AlterColumnSpec, AlterViewAs, ColumnDefinition, CreateView, LogicalPlan, QualifiedColType, ReplaceColumns, V1CreateTablePlan, V2CreateTablePlan}
+import org.apache.spark.sql.catalyst.plans.logical.{AddColumns, AlterColumns, AlterColumnSpec, AlterTableCommand, AlterViewAs, ColumnDefinition, CreateTable, CreateView, LogicalPlan, QualifiedColType, ReplaceColumns, V1CreateTablePlan, V2CreateTablePlan}
 import org.apache.spark.sql.catalyst.rules.{Rule, RuleExecutor}
+import org.apache.spark.sql.connector.catalog.TableCatalog
 import org.apache.spark.sql.types.{DataType, StringType}
 
 /**
  * Resolves default string types in queries and commands. For queries, the default string type is
- * determined by the session's default string type. For DDL, the default string type is the
- * default type of the object (table -> schema -> catalog). However, this is not implemented yet.
- * So, we will just use UTF8_BINARY for now.
+ * determined by the default string type, which is UTF8_BINARY. For DDL, the default string type
+ * is the default type of the object (table/view -> schema -> catalog).
  */
 object ResolveDefaultStringTypes extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = {
@@ -79,16 +79,37 @@ object ResolveDefaultStringTypes extends Rule[LogicalPlan] {
     expression.exists(e => transformExpression.isDefinedAt(e))
   }
 
-  /**
-   * Returns the default string type that should be used in a given DDL command (for now always
-   * UTF8_BINARY).
-   */
-  private def stringTypeForDDLCommand(table: LogicalPlan): StringType =
-    StringType("UTF8_BINARY")
+  /** Default string type is UTF8_BINARY */
+  private def defaultStringType: StringType = StringType("UTF8_BINARY")
 
-  /** Returns the session default string type */
+  /** Returns the default string type that should be used in a given DDL command */
+  private def stringTypeForDDLCommand(table: LogicalPlan): StringType = {
+    if (table.isInstanceOf[CreateTable]) {
+      if (table.asInstanceOf[CreateTable].tableSpec.collation.isDefined) {
+        return StringType(table.asInstanceOf[CreateTable].tableSpec.collation.get)
+      }
+    }
+    else if (table.isInstanceOf[CreateView]) {
+      if (table.asInstanceOf[CreateView].collation.isDefined) {
+        return StringType(table.asInstanceOf[CreateView].collation.get)
+      }
+    }
+    else if (table.isInstanceOf[AlterTableCommand]) {
+      if (table.asInstanceOf[AlterTableCommand].table.resolved) {
+        val collation = Option(table.asInstanceOf[AlterTableCommand]
+          .table.asInstanceOf[ResolvedTable]
+          .table.properties.get(TableCatalog.PROP_COLLATION))
+        if (collation.isDefined) {
+          return StringType(collation.get)
+        }
+      }
+    }
+    defaultStringType
+  }
+
+  /** Returns the session default string type used for DML queries */
   private def stringTypeForDML: StringType =
-    StringType("UTF8_BINARY")
+    defaultStringType
 
   private def isDDLCommand(plan: LogicalPlan): Boolean = plan exists {
     case _: AddColumns | _: ReplaceColumns | _: AlterColumns => true
