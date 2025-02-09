@@ -97,6 +97,12 @@ abstract class DefaultCollationTestSuite extends QueryTest with SharedSparkSessi
       assertTableColumnCollation(testTable, "c1", "UTF8_LCASE")
       assertTableColumnCollation(testTable, "c2", "UTF8_LCASE")
       assertTableColumnCollation(testTable, "c3", "UNICODE")
+
+      // alter table alter column with explicit collation change
+      sql(s"ALTER TABLE $testTable ALTER COLUMN c1 TYPE STRING COLLATE UNICODE_CI")
+      assertTableColumnCollation(testTable, "c1", "UNICODE_CI")
+      assertTableColumnCollation(testTable, "c2", "UTF8_LCASE")
+      assertTableColumnCollation(testTable, "c3", "UNICODE")
     }
   }
 
