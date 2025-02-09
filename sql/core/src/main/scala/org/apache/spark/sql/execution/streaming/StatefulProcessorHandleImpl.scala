@@ -363,18 +363,38 @@ class DriverStatefulProcessorHandleImpl(timeMode: TimeMode, keyExprEnc: Expressi
     addTimerColFamily()
   }
 
+  /**
+   * This method returns all column family schemas, and checks and enforces nullability
+   * if need be. The nullability check and set is only set to true when Avro is enabled.
+   * @param shouldCheckNullable Whether we need to check the nullability. This is set to
+   *                            true when using Python, as this is the only avenue through
+   *                            which users can set nullability
+   * @param shouldSetNullable Whether we need to set the fields as nullable. This is set to
+   *                          true when using Scala, as primitive type encoders set the field
+   *                          to non-nullable. Changing fields from non-nullable to nullable
+   *                          does not break anything (and is required for Avro encoding), so
+   *                          we can safely make this change.
+   * @return column family schemas used by this stateful processor.
+   */
   def getColumnFamilySchemas(
-      setNullableFields: Boolean
+      shouldCheckNullable: Boolean,
+      shouldSetNullable: Boolean
   ): Map[String, StateStoreColFamilySchema] = {
     val schemas = columnFamilySchemas.toMap
-    if (setNullableFields) {
-      schemas.map { case (colFamilyName, stateStoreColFamilySchema) =>
-        colFamilyName -> stateStoreColFamilySchema.copy(
-          valueSchema = stateStoreColFamilySchema.valueSchema.toNullable
-        )
+    schemas.map { case (colFamilyName, schema) =>
+      schema.valueSchema.fields.foreach { field =>
+        if (!field.nullable && shouldCheckNullable) {
+          throw StateStoreErrors.twsSchemaMustBeNullable(
+            schema.colFamilyName, schema.valueSchema.toString())
+        }
       }
-    } else {
-      schemas
+      if (shouldSetNullable) {
+        colFamilyName -> schema.copy(
+          valueSchema = schema.valueSchema.toNullable
+        )
+      } else {
+        colFamilyName -> schema
+      }
     }
   }
 
@@ -549,7 +569,7 @@ class DriverStatefulProcessorHandleImpl(timeMode: TimeMode, keyExprEnc: Expressi
       elementKeySchema: StructType): StateStoreColFamilySchema = {
     val countIndexName = s"$$count_$stateName"
     val countValueSchema = StructType(Seq(
-      StructField("count", LongType, nullable = false)
+      StructField("count", LongType)
     ))
 
     StateStoreColFamilySchema(
