@@ -415,7 +415,8 @@ object CrossValidatorModel extends MLReadable[CrossValidatorModel] {
           val splitPath = new Path(subModelsPath, s"fold${splitIndex.toString}")
           for (paramIndex <- instance.getEstimatorParamMaps.indices) {
             val modelPath = new Path(splitPath, paramIndex.toString).toString
-            instance.subModels(splitIndex)(paramIndex).asInstanceOf[MLWritable].save(modelPath)
+            instance.subModels(splitIndex)(paramIndex).asInstanceOf[MLWritable]
+              .write.session(sparkSession).save(modelPath)
           }
         }
       }

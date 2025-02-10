@@ -378,7 +378,8 @@ object TrainValidationSplitModel extends MLReadable[TrainValidationSplitModel] {
         val subModelsPath = new Path(path, "subModels")
         for (paramIndex <- instance.getEstimatorParamMaps.indices) {
           val modelPath = new Path(subModelsPath, paramIndex.toString).toString
-          instance.subModels(paramIndex).asInstanceOf[MLWritable].save(modelPath)
+          instance.subModels(paramIndex).asInstanceOf[MLWritable]
+            .write.session(sparkSession).save(modelPath)
         }
       }
     }
