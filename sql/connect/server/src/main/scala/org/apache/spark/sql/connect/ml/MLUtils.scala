@@ -674,7 +674,7 @@ private[ml] object MLUtils {
       cls.isInstance(obj) && methods.contains(method)
     }
     if (!valid) {
-      throw MLAttributeNotAllowedException(method)
+      throw MLAttributeNotAllowedException(obj.getClass.getName, method)
     }
   }
 

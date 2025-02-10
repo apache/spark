@@ -772,7 +772,7 @@
     "subClass" : {
       "ATTRIBUTE_NOT_ALLOWED" : {
         "message" : [
-          "<attribute> is not allowed to be accessed."
+          "<attribute> in <className> is not allowed to be accessed."
         ]
       },
       "UNSUPPORTED_EXCEPTION" : {

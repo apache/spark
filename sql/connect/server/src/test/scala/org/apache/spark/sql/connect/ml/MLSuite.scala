@@ -261,9 +261,12 @@ class MLSuite extends MLHelper {
     val modelId = trainLogisticRegressionModel(sessionHolder)
 
     val fakeAttributeCmd = fetchCommand(modelId, "notExistingAttribute")
-    intercept[MLAttributeNotAllowedException] {
+    val e = intercept[MLAttributeNotAllowedException] {
       MLHandler.handleMlCommand(sessionHolder, fakeAttributeCmd)
     }
+    val msg = e.getMessage
+    assert(msg.contains("notExistingAttribute"))
+    assert(msg.contains("org.apache.spark.ml.classification.LogisticRegressionModel"))
   }
 
   test("Model must be registered into ServiceLoader when loading") {
