@@ -32,12 +32,12 @@ from pyspark.sql.types import (
 )
 from pyspark.testing.sqlutils import (
     ReusedSQLTestCase,
-    assertDataFrameEqual,
     have_pyarrow,
     have_pandas,
     pandas_requirement_message,
     pyarrow_requirement_message,
 )
+from pyspark.testing.utils import assertDataFrameEqual
 
 
 class DataFrameCollectionTestsMixin:
@@ -304,6 +304,7 @@ class DataFrameCollectionTestsMixin:
     def check_to_pandas_for_empty_df_with_nested_array_columns(self):
         # SPARK-51112: Segfault must not occur when converting empty DataFrame with nested array
         # columns to pandas DataFrame.
+        import pandas as pd
         df = self.spark.createDataFrame(
             data=[],
             schema=StructType(
