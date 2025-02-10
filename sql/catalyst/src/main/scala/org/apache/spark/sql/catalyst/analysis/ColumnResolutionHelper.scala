@@ -284,8 +284,7 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
     SqlScriptingLocalVariableManager.get()
       // If we are in EXECUTE IMMEDIATE lookup only session variables.
       .filterNot(_ => AnalysisContext.get.isExecuteImmediate)
-      // If variable name is qualified with system.session.<varName> or session.<varName>
-      // treat it as a session variable.
+      // If variable name is qualified with session.<varName> treat it as a session variable.
       .filter(_ =>
         nameParts.length <= 2 && nameParts.init.map(_.toLowerCase(Locale.ROOT)) != Seq("session"))
       .flatMap(_.get(namePartsCaseAdjusted))

@@ -31,9 +31,8 @@ import org.apache.spark.sql.execution.datasources.v2.V2CommandExec
 /**
  * Physical plan node for setting a variable.
  */
-case class SetVariableExec(
-    variables: Seq[VariableReference],
-    query: SparkPlan) extends V2CommandExec with UnaryLike[SparkPlan] {
+case class SetVariableExec(variables: Seq[VariableReference], query: SparkPlan)
+  extends V2CommandExec with UnaryLike[SparkPlan] {
 
   override protected def run(): Seq[InternalRow] = {
     val values = query.executeCollect()
@@ -71,7 +70,6 @@ case class SetVariableExec(
     val variableManager = scriptingVariableManager
       .filter(_ => variable.catalog == FakeLocalCatalog)
       // If a local variable with nameParts exists, set it using scriptingVariableManager.
-//      .filter(_.get(namePartsCaseAdjusted).isDefined)
       .map(varManager => if (varManager.get(namePartsCaseAdjusted).isEmpty) {
         throw SparkException.internalError("Local variable should be present in SetVariableExec" +
           "because ResolveSetVariable has already determined it is a local variable")
