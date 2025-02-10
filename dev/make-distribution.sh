@@ -35,6 +35,7 @@ DISTDIR="$SPARK_HOME/dist"
 MAKE_TGZ=false
 MAKE_PIP=false
 MAKE_R=false
+MAKE_SPARK_CONNECT=false
 NAME=none
 MVN="$SPARK_HOME/build/mvn"
 
@@ -43,7 +44,7 @@ function exit_with_usage {
   echo "make-distribution.sh - tool for making binary distributions of Spark"
   echo ""
   echo "usage:"
-  cl_options="[--name] [--tgz] [--pip] [--r] [--mvn <mvn-command>]"
+  cl_options="[--name] [--tgz] [--pip] [--r] [--connect] [--mvn <mvn-command>]"
   echo "make-distribution.sh $cl_options <maven build options>"
   echo "See Spark's \"Building Spark\" doc for correct Maven options."
   echo ""
@@ -61,6 +62,9 @@ while (( "$#" )); do
       ;;
     --r)
       MAKE_R=true
+      ;;
+    --connect)
+      MAKE_SPARK_CONNECT=true
       ;;
     --mvn)
       MVN="$2"
@@ -308,4 +312,18 @@ if [ "$MAKE_TGZ" == "true" ]; then
   fi
   $TAR -czf "spark-$VERSION-bin-$NAME.tgz" -C "$SPARK_HOME" "$TARDIR_NAME"
   rm -rf "$TARDIR"
+  if [[ "$MAKE_SPARK_CONNECT" == "true" ]]; then
+    TARDIR_NAME=spark-$VERSION-bin-$NAME-spark-connect
+    TARDIR="$SPARK_HOME/$TARDIR_NAME"
+    rm -rf "$TARDIR"
+    cp -r "$DISTDIR" "$TARDIR"
+    sed -i -e '$s/.*/export SPARK_CONNECT_MODE=1\
+    &/' "$TARDIR/bin/pyspark"
+    sed -i -e '$s/.*/export SPARK_CONNECT_MODE=1\
+    &/' "$TARDIR/bin/spark-shell"
+    sed -i -e '$s/.*/export SPARK_CONNECT_MODE=1\
+    &/' "$TARDIR/bin/spark-submit"
+    $TAR -czf "$TARDIR_NAME.tgz" -C "$SPARK_HOME" "$TARDIR_NAME"
+    rm -rf "$TARDIR"
+  fi
 fi
