@@ -17,76 +17,62 @@
 
 package org.apache.spark.sql.analysis.resolver
 
-import org.apache.spark.sql.{AnalysisException, QueryTest}
-import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
+import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
-import org.apache.spark.sql.catalyst.analysis.resolver.{MetadataResolver, Resolver}
-import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference, Cast}
-import org.apache.spark.sql.catalyst.plans.logical.{
-  LocalRelation,
-  LogicalPlan,
-  OneRowRelation,
-  Project,
-  SubqueryAlias,
-  View
-}
+import org.apache.spark.sql.catalyst.analysis.resolver.{MetadataResolver, Resolver, ResolverRunner}
+import org.apache.spark.sql.catalyst.dsl.expressions._
+import org.apache.spark.sql.catalyst.dsl.plans._
+import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{IntegerType, StringType}
+import org.apache.spark.sql.types._
 
 class ViewResolverSuite extends QueryTest with SharedSparkSession {
   private val catalogName =
     "spark_catalog"
-  private val col1Integer =
-    AttributeReference(name = "col1", dataType = IntegerType, nullable = false)()
-  private val col2String =
-    AttributeReference(name = "col2", dataType = StringType, nullable = false)()
+  private val col1Integer = "col1".attr.int.withNullability(false)
+  private val col2String = "col2".attr.string.withNullability(false)
+  private val testTable = LocalRelation.fromExternalRows(
+    Seq(col1Integer, col2String),
+    Seq(Row(1, "a"))
+  )
 
   test("Temporary view") {
-    withView("temporary_view") {
-      spark.sql("CREATE TEMPORARY VIEW temporary_view AS SELECT col1, col2 FROM VALUES (1, 'a');")
+    withView("v1") {
+      spark.sql("CREATE TEMPORARY VIEW v1 AS SELECT col1, col2 FROM VALUES (1, 'a')")
 
       checkViewResolution(
-        "SELECT * FROM temporary_view",
-        expectedChild = Project(
-          projectList = Seq(
-            Alias(Cast(col1Integer, IntegerType).withTimeZone(conf.sessionLocalTimeZone), "col1")(),
-            Alias(Cast(col2String, StringType).withTimeZone(conf.sessionLocalTimeZone), "col2")()
-          ),
-          child = Project(
-            projectList = Seq(col1Integer, col2String),
-            child = LocalRelation(
-              output = Seq(col1Integer, col2String),
-              data = Seq(
-                InternalRow.fromSeq(Seq(1, "a").map(CatalystTypeConverters.convertToCatalyst))
-              )
-            )
+        "SELECT * FROM v1",
+        expectedChild = testTable
+          .select(col1Integer, col2String)
+          .select(
+            cast(col1Integer, IntegerType).as("col1"),
+            cast(col2String, StringType).as("col2")
           )
-        )
       )
     }
   }
 
   test("Persistent view") {
-    withView("persistent_view") {
-      spark.sql("CREATE VIEW persistent_view AS SELECT col1, col2 FROM VALUES (1, 'a');")
+    withView("v1") {
+      spark.sql("CREATE VIEW v1 AS SELECT col1, col2 FROM VALUES (1, 'a')")
 
       checkViewResolution(
-        "SELECT * FROM persistent_view",
-        expectedChild = Project(
-          projectList = Seq(
-            Alias(Cast(col1Integer, IntegerType).withTimeZone(conf.sessionLocalTimeZone), "col1")(),
-            Alias(Cast(col2String, StringType).withTimeZone(conf.sessionLocalTimeZone), "col2")()
-          ),
-          child = Project(
-            projectList = Seq(col1Integer, col2String),
-            child = LocalRelation(
-              output = Seq(col1Integer, col2String),
-              data = Seq(
-                InternalRow.fromSeq(Seq(1, "a").map(CatalystTypeConverters.convertToCatalyst))
-              )
-            )
+        "SELECT * FROM v1",
+        expectedChild = testTable
+          .select(col1Integer, col2String)
+          .select(
+            cast(
+              col1Integer,
+              IntegerType,
+              ansiEnabled = conf.ansiEnabled || conf.viewSchemaCompensation
+            ).as("col1"),
+            cast(
+              col2String,
+              StringType,
+              ansiEnabled = conf.ansiEnabled || conf.viewSchemaCompensation
+            ).as("col2")
           )
-        )
       )
     }
   }
@@ -173,10 +159,10 @@ class ViewResolverSuite extends QueryTest with SharedSparkSession {
       .child
       .asInstanceOf[View]
 
-    val resolver = new Resolver(spark.sessionState.catalogManager)
+    val resolverRunner = new ResolverRunner(new Resolver(spark.sessionState.catalogManager))
 
-    val resolvedView = resolver
-      .lookupMetadataAndResolve(unresolvedPlan)
+    val resolvedView = resolverRunner
+      .resolve(unresolvedPlan)
       .asInstanceOf[Project]
       .child
       .asInstanceOf[SubqueryAlias]
@@ -184,5 +170,12 @@ class ViewResolverSuite extends QueryTest with SharedSparkSession {
       .asInstanceOf[View]
     assert(resolvedView.isTempView == unresolvedView.isTempView)
     assert(normalizeExprIds(resolvedView.child) == normalizeExprIds(expectedChild))
+  }
+
+  private def cast(
+      child: Expression,
+      dataType: DataType,
+      ansiEnabled: Boolean = conf.ansiEnabled): Expression = {
+    Cast(child, dataType, ansiEnabled).withTimeZone(conf.sessionLocalTimeZone)
   }
 }
