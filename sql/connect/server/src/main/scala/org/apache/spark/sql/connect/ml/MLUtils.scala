@@ -693,7 +693,7 @@ private[ml] object MLUtils {
   }
 
   def write(instance: MLWritable, writeProto: proto.MlCommand.Write): Unit = {
-    val writer = if (writeProto.getShouldOverwrite) {
+    val writer = if (writeProto.hasShouldOverwrite && writeProto.getShouldOverwrite) {
       instance.write.overwrite()
     } else {
       instance.write

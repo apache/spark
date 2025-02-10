@@ -43,7 +43,6 @@ from pyspark.util import VersionUtils
 
 if TYPE_CHECKING:
     from py4j.java_gateway import JavaGateway, JavaObject
-    from pyspark.ml._typing import PipelineStage
     from pyspark.ml.base import Params
     from pyspark.ml.wrapper import JavaWrapper
     from pyspark.core.context import SparkContext
@@ -136,7 +135,7 @@ def try_remote_fit(f: FuncT) -> FuncT:
             input = dataset._plan.plan(client)
             assert isinstance(self._java_obj, str)
             estimator = pb2.MlOperator(
-                name=self._java_obj, uid=self.uid, type=pb2.MlOperator.ESTIMATOR
+                name=self._java_obj, uid=self.uid, type=pb2.MlOperator.OPERATOR_TYPE_ESTIMATOR
             )
             command = pb2.Command()
             command.ml_command.fit.CopyFrom(
@@ -361,7 +360,7 @@ def try_remote_evaluate(f: FuncT) -> FuncT:
             input = dataset._plan.plan(client)
             assert isinstance(self._java_obj, str)
             evaluator = pb2.MlOperator(
-                name=self._java_obj, uid=self.uid, type=pb2.MlOperator.EVALUATOR
+                name=self._java_obj, uid=self.uid, type=pb2.MlOperator.OPERATOR_TYPE_EVALUATOR
             )
             command = pb2.Command()
             command.ml_command.evaluate.CopyFrom(
