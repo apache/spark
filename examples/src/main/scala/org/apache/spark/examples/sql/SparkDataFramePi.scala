@@ -16,13 +16,13 @@
  */
 
 // scalastyle:off println
-package org.apache.spark.examples.sql.connect
+package org.apache.spark.examples.sql
 
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.functions._
 
 /** Computes an approximation to pi with SparkSession/DataFrame APIs */
-object SparkConnectPi {
+object SparkDataFramePi {
   def main(args: Array[String]): Unit = {
     val spark = SparkSession
       .builder()
