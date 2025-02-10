@@ -629,7 +629,6 @@ private class KeyValueGroupedDatasetImpl[K, V, IK, IV](
     }
 
     val initialStateImpl = if (initialState.isDefined) {
-      assert(initialState.get.isInstanceOf[KeyValueGroupedDatasetImpl[K, S, _, _]])
       initialState.get.asInstanceOf[KeyValueGroupedDatasetImpl[K, S, _, _]]
     } else {
       null
@@ -679,7 +678,6 @@ private class KeyValueGroupedDatasetImpl[K, V, IK, IV](
         inputEncoders.map(_ => col("*")): _*)).getCommonInlineUserDefinedFunction
 
     val initialStateImpl = if (initialState.isDefined) {
-      assert(initialState.get.isInstanceOf[KeyValueGroupedDatasetImpl[K, S, _, _]])
       initialState.get.asInstanceOf[KeyValueGroupedDatasetImpl[K, S, _, _]]
     } else {
       null
@@ -687,35 +685,29 @@ private class KeyValueGroupedDatasetImpl[K, V, IK, IV](
     val statefulProcessorByteStr =
       ByteString.copyFrom(SparkSerDeUtils.serialize(statefulProcessor))
 
-    val twsDataset = sparkSession.newDataset[U](outputEncoder) { builder =>
+    sparkSession.newDataset[U](outputEncoder) { builder =>
       val twsBuilder = builder.getGroupMapBuilder
+      val twsInfoBuilder = proto.TransformWithStateInfo.newBuilder()
+      if (!eventTimeColumnName.isEmpty) {
+        twsInfoBuilder.setEventTimeColumnName(eventTimeColumnName)
+      }
       twsBuilder
         .setInput(plan.getRoot)
         .addAllGroupingExpressions(groupingExprs)
         .setFunc(udf)
         .setTransformWithStateInfo(
-          proto.TransformWithStateInfo
-            .newBuilder()
+          twsInfoBuilder
             .setOutputMode(outputMode.toString)
             // we pass time mode as string here and restore it in planner
             .setTimeMode(timeMode.toString)
             .setStatefulProcessorPayload(statefulProcessorByteStr)
-            .build())
+            .build()
+        )
       if (initialStateImpl != null) {
         twsBuilder
           .addAllInitialGroupingExpressions(initialStateImpl.groupingExprs)
           .setInitialInput(initialStateImpl.plan.getRoot)
       }
-    }
-
-    if (!eventTimeColumnName.isEmpty()) {
-      sparkSession.newDataset[U](outputEncoder) { builder =>
-        builder.getUpdateEventTimeWatermarkColumnBuilder
-          .setInput(twsDataset.plan.getRoot)
-          .setEventTimeColName(eventTimeColumnName)
-      }
-    } else {
-      twsDataset
     }
   }
 

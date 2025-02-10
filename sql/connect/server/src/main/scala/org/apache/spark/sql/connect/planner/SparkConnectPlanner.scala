@@ -218,8 +218,6 @@ class SparkConnectPlanner(
           transformCachedRemoteRelation(rel.getCachedRemoteRelation)
         case proto.Relation.RelTypeCase.COLLECT_METRICS =>
           transformCollectMetrics(rel.getCollectMetrics, rel.getCommon.getPlanId)
-        case proto.Relation.RelTypeCase.UPDATE_EVENT_TIME_WATERMARK_COLUMN =>
-          transformUpdateEventTimeWatermarkColumn(rel.getUpdateEventTimeWatermarkColumn)
         case proto.Relation.RelTypeCase.PARSE => transformParse(rel.getParse)
         case proto.Relation.RelTypeCase.RELTYPE_NOT_SET =>
           throw new IndexOutOfBoundsException("Expected Relation to be set, but is empty.")
@@ -692,7 +690,7 @@ class SparkConnectPlanner(
       val timeMode = TimeModes(twsInfo.getTimeMode, isScala = true)
       val outputMode = InternalOutputModes(twsInfo.getOutputMode)
 
-      val node = if (hasInitialState) {
+      val twsNode = if (hasInitialState) {
         val statefulProcessor =
           Utils.deserialize[StatefulProcessorWithInitialState[Any, Any, Any, Any]](
             statefulProcessorByteStr.toByteArray,
@@ -738,7 +736,18 @@ class SparkConnectPlanner(
           keyDeserializer,
           LocalRelation(ds.vEncoder.schema))
       }
-      SerializeFromObject(udf.outputNamedExpression, node)
+      val serializedPlan = SerializeFromObject(udf.outputNamedExpression, twsNode)
+
+      if (twsInfo.hasEventTimeColumnName) {
+        val eventTimeWrappedPlan = UpdateEventTimeWatermarkColumn(
+          UnresolvedAttribute(twsInfo.getEventTimeColumnName),
+          None,
+          serializedPlan
+        )
+        eventTimeWrappedPlan
+      } else {
+        serializedPlan
+      }
     } else if (rel.hasIsMapGroupsWithState) {
       val hasInitialState = !rel.getInitialGroupingExpressionsList.isEmpty && rel.hasInitialInput
       val initialDs = if (hasInitialState) {
@@ -827,15 +836,6 @@ class SparkConnectPlanner(
         ds.analyzed)
       SerializeFromObject(udf.outputNamedExpression, mapped)
     }
-  }
-
-  private def transformUpdateEventTimeWatermarkColumn(
-      rel: proto.UpdateEventTimeWatermarkColumn): LogicalPlan = {
-    val eventTimeColName = rel.getEventTimeColName
-    UpdateEventTimeWatermarkColumn(
-      UnresolvedAttribute(eventTimeColName),
-      None,
-      transformRelation(rel.getInput))
   }
 
   private def transformCoGroupMap(rel: proto.CoGroupMap): LogicalPlan = {

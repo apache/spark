@@ -80,7 +80,6 @@ message Relation {
     Transpose transpose = 42;
     UnresolvedTableValuedFunction unresolved_table_valued_function = 43;
     LateralJoin lateral_join = 44;
-    UpdateEventTimeWatermarkColumn update_event_time_watermark_column= 45;
 
     // NA functions
     NAFill fill_na = 90;
@@ -1039,15 +1038,6 @@ message GroupMap {
   optional TransformWithStateInfo transformWithStateInfo = 11;
 }
 
-// Event time rule needed for chaining of operator of TransformWithState
-message UpdateEventTimeWatermarkColumn {
-  // (Required) Input relation.
-  Relation input = 1;
-
-  // (Required) Event time column name.
-  string event_time_col_name = 2;
-}
-
 // This is only used for Scala TWS. Python requires a different API and it is in separate proto schema.
 message TransformWithStateInfo {
   // (Required) Bytes for java serialized user-defined stateful processor.
@@ -1058,6 +1048,9 @@ message TransformWithStateInfo {
 
   // (Required) Output mode string for transformWithState.
   string output_mode = 3;
+
+  // (Optional) Event time column name.
+  optional string event_time_column_name = 4;
 }
 
 message CoGroupMap {
