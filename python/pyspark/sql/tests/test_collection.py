@@ -32,6 +32,7 @@ from pyspark.sql.types import (
 )
 from pyspark.testing.sqlutils import (
     ReusedSQLTestCase,
+    assertDataFrameEqual,
     have_pyarrow,
     have_pandas,
     pandas_requirement_message,
@@ -320,7 +321,8 @@ class DataFrameCollectionTestsMixin:
                 ]
             ),
         )
-        df.toPandas()
+        expected_pdf = pd.DataFrame(columns=["b_int", "b"])
+        assertDataFrameEqual(df.toPandas(), expected_pdf)
 
     def test_to_local_iterator(self):
         df = self.spark.range(8, numPartitions=4)
