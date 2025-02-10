@@ -291,6 +291,15 @@ class DataFrameCollectionTestsMixin:
         else:
             self.assertEqual(type(pdf["array_struct_col"][0]), list)
 
+    @unittest.skipIf(
+        not have_pandas or not have_pyarrow,
+        pandas_requirement_message or pyarrow_requirement_message,
+    )
+    def test_to_pandas_for_empty_df_with_nested_array_columns(self):
+        for arrow_enabled in [False, True]:
+            with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": arrow_enabled}):
+                self.check_to_pandas_for_empty_df_with_nested_array_columns()
+
     def check_to_pandas_for_empty_df_with_nested_array_columns(self):
         # SPARK-51112: Segfault must not occur when converting empty DataFrame with nested array
         # columns to pandas DataFrame.
