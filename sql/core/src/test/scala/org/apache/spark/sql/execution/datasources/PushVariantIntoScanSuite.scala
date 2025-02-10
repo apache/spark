@@ -129,13 +129,18 @@ class PushVariantIntoScanSuite extends SharedSparkSession {
       failOnError = true,
       timeZoneId = Some(localTimeZone))
 
+    def replace(e: Expression): Expression = e match {
+      case r: RuntimeReplaceable => replace(r.replacement)
+      case _ => e.mapChildren(replace)
+    }
+
     // No push down if the struct containing variant is used.
     sql("select vs, variant_get(vs.v1, '$.a') as a from T").queryExecution.optimizedPlan match {
       case Project(projectList, l: LogicalRelation) =>
         val output = l.output
         val vs = output(1)
         assert(projectList(0) == vs)
-        checkAlias(projectList(1), "a", variantGet(GetStructField(vs, 0, Some("v1"))))
+        checkAlias(projectList(1), "a", replace(variantGet(GetStructField(vs, 0, Some("v1")))))
         assert(vs.dataType == StructType(Array(
           StructField("v1", VariantType),
           StructField("v2", VariantType),
@@ -148,7 +153,7 @@ class PushVariantIntoScanSuite extends SharedSparkSession {
       case Project(projectList, l: LogicalRelation) =>
         val output = l.output
         val va = output(2)
-        checkAlias(projectList(0), "a", variantGet(GetArrayItem(va, Literal(0))))
+        checkAlias(projectList(0), "a", replace(variantGet(GetArrayItem(va, Literal(0)))))
         assert(va.dataType == ArrayType(VariantType))
       case _ => fail()
     }
@@ -158,7 +163,7 @@ class PushVariantIntoScanSuite extends SharedSparkSession {
       case Project(projectList, l: LogicalRelation) =>
         val output = l.output
         val vd = output(3)
-        checkAlias(projectList(0), "a", variantGet(vd))
+        checkAlias(projectList(0), "a", replace(variantGet(vd)))
         assert(vd.dataType == VariantType)
       case _ => fail()
     }
