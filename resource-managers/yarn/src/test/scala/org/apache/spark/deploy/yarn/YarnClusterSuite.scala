@@ -266,11 +266,13 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
   }
 
   test("run Python application with Spark Connect in yarn-client mode") {
+    assume(sys.env.contains("GITHUB_ACTIONS"))
     testPySpark(
       true, extraConf = Map(SPARK_API_MODE.key -> "connect"), script = TEST_CONNECT_PYFILE)
   }
 
   test("run Python application with Spark Connect in yarn-cluster mode") {
+    assume(sys.env.contains("GITHUB_ACTIONS"))
     testPySpark(
       false, extraConf = Map(SPARK_API_MODE.key -> "connect"), script = TEST_CONNECT_PYFILE)
   }

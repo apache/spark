@@ -149,3 +149,21 @@ DataFrame
     DataFrameStatFunctions.crosstab
     DataFrameStatFunctions.freqItems
     DataFrameStatFunctions.sampleBy
+
+
+Table Argument
+--------------
+``DataFrame.asTable`` returns a table argument in PySpark.
+
+This class provides methods to specify partitioning, ordering, and single-partition constraints
+when passing a DataFrame as a table argument to TVF(Table-Valued Function)s including
+UDTF(User-Defined Table Function)s.
+
+.. currentmodule:: pyspark.sql.table_arg
+
+.. autosummary::
+    :toctree: api/
+
+    TableArg.partitionBy
+    TableArg.orderBy
+    TableArg.withSinglePartition

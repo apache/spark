@@ -772,7 +772,7 @@
     "subClass" : {
       "ATTRIBUTE_NOT_ALLOWED" : {
         "message" : [
-          "<attribute> is not allowed to be accessed."
+          "<attribute> in <className> is not allowed to be accessed."
         ]
       },
       "UNSUPPORTED_EXCEPTION" : {
@@ -4619,6 +4619,12 @@
     ],
     "sqlState" : "42K0I"
   },
+  "SQL_SCRIPT_IN_EXECUTE_IMMEDIATE" : {
+    "message" : [
+      "SQL Scripts in EXECUTE IMMEDIATE commands are not allowed. Please ensure that the SQL query provided (<sqlString>) is not SQL Script. Make sure the sql_string is a well-formed SQL statement and does not contain BEGIN and END."
+    ],
+    "sqlState" : "07501"
+  },
   "STAR_GROUP_BY_POS" : {
     "message" : [
       "Star (*) is not allowed in a select list when GROUP BY an ordinal position is used."
@@ -5061,6 +5067,14 @@
       "Trailing comma detected in SELECT clause. Remove the trailing comma before the FROM clause."
     ],
     "sqlState" : "42601"
+  },
+  "TRANSFORM_WITH_STATE_SCHEMA_MUST_BE_NULLABLE" : {
+    "message" : [
+      "If Avro encoding is enabled, all the fields in the schema for column family <columnFamilyName> must be nullable",
+      "when using the TransformWithState operator.",
+      "Please make the schema nullable. Current schema: <schema>"
+    ],
+    "sqlState" : "XXKST"
   },
   "TRANSPOSE_EXCEED_ROW_LIMIT" : {
     "message" : [

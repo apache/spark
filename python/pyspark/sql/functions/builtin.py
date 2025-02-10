@@ -20427,7 +20427,7 @@ def is_variant_null(v: "ColumnOrName") -> Column:
 
 
 @_try_remote_functions
-def variant_get(v: "ColumnOrName", path: str, targetType: str) -> Column:
+def variant_get(v: "ColumnOrName", path: Union[Column, str], targetType: str) -> Column:
     """
     Extracts a sub-variant from `v` according to `path`, and then cast the sub-variant to
     `targetType`. Returns null if the path does not exist. Throws an exception if the cast fails.
@@ -20438,9 +20438,10 @@ def variant_get(v: "ColumnOrName", path: str, targetType: str) -> Column:
     ----------
     v : :class:`~pyspark.sql.Column` or str
         a variant column or column name
-    path : str
-        the extraction path. A valid path should start with `$` and is followed by zero or more
-        segments like `[123]`, `.name`, `['name']`, or `["name"]`.
+    path : :class:`~pyspark.sql.Column` or str
+        a column containing the extraction path strings or a string representing the extraction
+        path. A valid path should start with `$` and is followed by zero or more segments like
+        `[123]`, `.name`, `['name']`, or `["name"]`.
     targetType : str
         the target data type to cast into, in a DDL-formatted string
 
@@ -20451,21 +20452,29 @@ def variant_get(v: "ColumnOrName", path: str, targetType: str) -> Column:
 
     Examples
     --------
-    >>> df = spark.createDataFrame([ {'json': '''{ "a" : 1 }'''} ])
+    >>> df = spark.createDataFrame([ {'json': '''{ "a" : 1 }''', 'path': '$.a'} ])
     >>> df.select(variant_get(parse_json(df.json), "$.a", "int").alias("r")).collect()
     [Row(r=1)]
     >>> df.select(variant_get(parse_json(df.json), "$.b", "int").alias("r")).collect()
     [Row(r=None)]
+    >>> df.select(variant_get(parse_json(df.json), df.path, "int").alias("r")).collect()
+    [Row(r=1)]
     """
     from pyspark.sql.classic.column import _to_java_column
 
-    return _invoke_function(
-        "variant_get", _to_java_column(v), _enum_to_value(path), _enum_to_value(targetType)
-    )
+    assert isinstance(path, (Column, str))
+    if isinstance(path, str):
+        return _invoke_function(
+            "variant_get", _to_java_column(v), _enum_to_value(path), _enum_to_value(targetType)
+        )
+    else:
+        return _invoke_function(
+            "variant_get", _to_java_column(v), _to_java_column(path), _enum_to_value(targetType)
+        )
 
 
 @_try_remote_functions
-def try_variant_get(v: "ColumnOrName", path: str, targetType: str) -> Column:
+def try_variant_get(v: "ColumnOrName", path: Union[Column, str], targetType: str) -> Column:
     """
     Extracts a sub-variant from `v` according to `path`, and then cast the sub-variant to
     `targetType`. Returns null if the path does not exist or the cast fails.
@@ -20476,9 +20485,10 @@ def try_variant_get(v: "ColumnOrName", path: str, targetType: str) -> Column:
     ----------
     v : :class:`~pyspark.sql.Column` or str
         a variant column or column name
-    path : str
-        the extraction path. A valid path should start with `$` and is followed by zero or more
-        segments like `[123]`, `.name`, `['name']`, or `["name"]`.
+    path : :class:`~pyspark.sql.Column` or str
+        a column containing the extraction path strings or a string representing the extraction
+        path. A valid path should start with `$` and is followed by zero or more segments like
+        `[123]`, `.name`, `['name']`, or `["name"]`.
     targetType : str
         the target data type to cast into, in a DDL-formatted string
 
@@ -20489,19 +20499,26 @@ def try_variant_get(v: "ColumnOrName", path: str, targetType: str) -> Column:
 
     Examples
     --------
-    >>> df = spark.createDataFrame([ {'json': '''{ "a" : 1 }'''} ])
+    >>> df = spark.createDataFrame([ {'json': '''{ "a" : 1 }''', 'path': '$.a'} ])
     >>> df.select(try_variant_get(parse_json(df.json), "$.a", "int").alias("r")).collect()
     [Row(r=1)]
     >>> df.select(try_variant_get(parse_json(df.json), "$.b", "int").alias("r")).collect()
     [Row(r=None)]
     >>> df.select(try_variant_get(parse_json(df.json), "$.a", "binary").alias("r")).collect()
     [Row(r=None)]
+    >>> df.select(try_variant_get(parse_json(df.json), df.path, "int").alias("r")).collect()
+    [Row(r=1)]
     """
     from pyspark.sql.classic.column import _to_java_column
 
-    return _invoke_function(
-        "try_variant_get", _to_java_column(v), _enum_to_value(path), _enum_to_value(targetType)
-    )
+    if isinstance(path, str):
+        return _invoke_function(
+            "try_variant_get", _to_java_column(v), _enum_to_value(path), _enum_to_value(targetType)
+        )
+    else:
+        return _invoke_function(
+            "try_variant_get", _to_java_column(v), _to_java_column(path), _enum_to_value(targetType)
+        )
 
 
 @_try_remote_functions

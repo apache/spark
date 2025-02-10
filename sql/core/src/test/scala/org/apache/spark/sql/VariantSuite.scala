@@ -29,6 +29,8 @@ import org.apache.spark.SparkRuntimeException
 import org.apache.spark.sql.catalyst.expressions.{CodegenObjectFactoryMode, ExpressionEvalHelper, Literal}
 import org.apache.spark.sql.catalyst.expressions.variant.{VariantExpressionEvalUtils, VariantGet}
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, DateTimeUtils, GenericArrayData}
+import org.apache.spark.sql.errors.QueryExecutionErrors.toSQLId
+import org.apache.spark.sql.execution.WholeStageCodegenExec
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -106,6 +108,92 @@ class VariantSuite extends QueryTest with SharedSparkSession with ExpressionEval
     checkAnswer(df.select(try_variant_get(v, "$.b", "int")), rows(null, 2))
     checkAnswer(df.select(try_variant_get(v, "$.a", "double")), rows(1.0, null))
     checkAnswer(df.select(try_variant_get(v, "$.a", "binary")), rows(null, null))
+  }
+
+  test("non-literal variant_get") {
+    def rows(results: Any*): Seq[Row] = results.map(Row(_))
+
+    Seq("CODEGEN_ONLY", "NO_CODEGEN").foreach { codegenMode =>
+      withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> codegenMode) {
+        // The first three rows have valid paths while the final row has an invalid path
+        val df = Seq(("""{"a" : 1}""", "$.a", 2), ("""{"b" : 2}""", "$", 1),
+          ("""{"c" : 3}""", null, 1), (null, null, 1), (null, "$.a", 1),
+          ("""{"d" : 3}""", "abc", 0)).toDF("json", "path", "valid")
+        val v = parse_json(col("json"))
+        val df1 = df.where($"valid" > 0).select(variant_get(v, col("path"), "string"))
+        checkAnswer(df1, rows("1", """{"b":2}""", null, null, null))
+        assert(df1.queryExecution.executedPlan.isInstanceOf[WholeStageCodegenExec] ==
+          (codegenMode == "CODEGEN_ONLY"))
+        // Invalid path
+        val df2 = df.select(variant_get(v, col("path"), "string"))
+        checkError(
+          exception = intercept[SparkRuntimeException] { df2.collect() },
+          condition = "INVALID_VARIANT_GET_PATH",
+          parameters = Map("path" -> "abc", "functionName" -> toSQLId("variant_get")))
+        assert(df2.queryExecution.executedPlan.isInstanceOf[WholeStageCodegenExec] ==
+          (codegenMode == "CODEGEN_ONLY"))
+        // Invalid cast
+        val df3 = df.where($"valid" > 1).select(variant_get(v, col("path"), "binary"))
+        checkError(
+          exception = intercept[SparkRuntimeException] { df3.collect() },
+          condition = "INVALID_VARIANT_CAST",
+          parameters = Map("value" -> "1", "dataType" -> "\"BINARY\"")
+        )
+        assert(df3.queryExecution.executedPlan.isInstanceOf[WholeStageCodegenExec] ==
+          (codegenMode == "CODEGEN_ONLY"))
+
+        // try_variant_get
+        val df4 = df.where($"valid" > 0).select(try_variant_get(v, col("path"), "string"))
+        checkAnswer(df4, rows("1", """{"b":2}""", null, null, null))
+        assert(df4.queryExecution.executedPlan.isInstanceOf[WholeStageCodegenExec] ==
+          (codegenMode == "CODEGEN_ONLY"))
+        // Invalid path
+        val df5 = df.select(try_variant_get(v, col("path"), "string"))
+        checkError(
+          exception = intercept[SparkRuntimeException] { df5.collect() },
+          condition = "INVALID_VARIANT_GET_PATH",
+          parameters = Map("path" -> "abc", "functionName" -> toSQLId("try_variant_get")))
+        assert(df5.queryExecution.executedPlan.isInstanceOf[WholeStageCodegenExec] ==
+          (codegenMode == "CODEGEN_ONLY"))
+        // Invalid cast
+        val df6 = df.where($"valid" > 1).select(try_variant_get(v, col("path"), "binary"))
+        checkAnswer(df6, rows(null))
+        assert(df6.queryExecution.executedPlan.isInstanceOf[WholeStageCodegenExec] ==
+          (codegenMode == "CODEGEN_ONLY"))
+
+        // SQL API
+        withTable("t") {
+          df.withColumn("v", parse_json(col("json"))).write.saveAsTable("t")
+          // variant_get
+          checkAnswer(sql("select variant_get(v, path, 'string') from t where valid > 0"),
+            rows("1", """{"b":2}""", null, null, null))
+          checkError(
+            exception = intercept[SparkRuntimeException] {
+              sql("select variant_get(v, path, 'string') from t").collect()
+            },
+            condition = "INVALID_VARIANT_GET_PATH",
+            parameters = Map("path" -> "abc", "functionName" -> toSQLId("variant_get")))
+          checkError(
+            exception = intercept[SparkRuntimeException] {
+              sql("select variant_get(v, path, 'binary') from t where valid > 1").collect()
+            },
+            condition = "INVALID_VARIANT_CAST",
+            parameters = Map("value" -> "1", "dataType" -> "\"BINARY\"")
+          )
+          // try_variant_get
+          checkAnswer(sql("select try_variant_get(v, path, 'string') from t where valid > 0"),
+            rows("1", """{"b":2}""", null, null, null))
+          checkError(
+            exception = intercept[SparkRuntimeException] {
+              sql("select try_variant_get(v, path, 'string') from t").collect()
+            },
+            condition = "INVALID_VARIANT_GET_PATH",
+            parameters = Map("path" -> "abc", "functionName" -> toSQLId("try_variant_get")))
+          checkAnswer(sql("select try_variant_get(v, path, 'binary') from t where valid > 1"),
+            rows(null))
+        }
+      }
+    }
   }
 
   test("round trip tests") {

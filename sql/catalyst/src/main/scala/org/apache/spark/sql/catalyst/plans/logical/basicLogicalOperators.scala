@@ -89,6 +89,21 @@ case class Project(projectList: Seq[NamedExpression], child: LogicalPlan)
     expressions.forall(_.resolved) && childrenResolved && !hasSpecialExpressions
   }
 
+  override protected def doCanonicalize(): LogicalPlan = {
+    // During canonicalization, the name and exprId of Alias and Attributes will be
+    // erased and normalized. If the Project only changes name and exprId, then it
+    // can be striped as it doesn't change the semantic.
+    val noSemanticChange = projectList.length == child.output.length &&
+      projectList.zip(child.output).forall {
+        case (alias: Alias, attr) =>
+          alias.child.semanticEquals(attr) && alias.explicitMetadata.isEmpty &&
+            alias.qualifier.isEmpty && alias.nonInheritableMetadataKeys.isEmpty
+        case (attr1: Attribute, attr2) => attr1.semanticEquals(attr2)
+        case _ => false
+      }
+    if (noSemanticChange) child.canonicalized else super.doCanonicalize()
+  }
+
   override lazy val validConstraints: ExpressionSet =
     getAllValidConstraints(projectList)
 

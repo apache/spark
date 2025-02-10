@@ -156,6 +156,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
   private val reuseWorker = conf.get(PYTHON_WORKER_REUSE)
   protected val faultHandlerEnabled: Boolean = conf.get(PYTHON_WORKER_FAULTHANLDER_ENABLED)
   protected val idleTimeoutSeconds: Long = conf.get(PYTHON_WORKER_IDLE_TIMEOUT_SECONDS)
+  protected val killOnIdleTimeout: Boolean = conf.get(PYTHON_WORKER_KILL_ON_IDLE_TIMEOUT)
   protected val hideTraceback: Boolean = false
   protected val simplifiedTraceback: Boolean = false
 
@@ -291,7 +292,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
 
     // Return an iterator that read lines from the process's stdout
     val dataIn = new DataInputStream(new BufferedInputStream(
-      new ReaderInputStream(worker, writer, handle, idleTimeoutSeconds),
+      new ReaderInputStream(worker, writer, handle, idleTimeoutSeconds, killOnIdleTimeout),
       bufferSize))
     val stdoutIterator = newReaderIterator(
       dataIn, writer, startTime, env, worker, handle.map(_.pid.toInt), releasedOrClosed, context)
@@ -679,7 +680,8 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
       worker: PythonWorker,
       writer: Writer,
       handle: Option[ProcessHandle],
-      idleTimeoutSeconds: Long) extends InputStream {
+      idleTimeoutSeconds: Long,
+      killOnIdleTimeout: Boolean) extends InputStream {
     private[this] var writerIfbhThreadLocalValue: Object = null
     private[this] val temp = new Array[Byte](1)
     private[this] val bufferStream = new DirectByteBufferOutputStream()
@@ -704,6 +706,8 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
         temp(0) & 0xff
       }
     }
+
+    private[this] var pythonWorkerKilled: Boolean = false
 
     override def read(b: Array[Byte], off: Int, len: Int): Int = {
       // The code below manipulates the InputFileBlockHolder thread local in order
@@ -740,10 +744,27 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
       while (n == 0) {
         val selected = worker.selector.select(TimeUnit.SECONDS.toMillis(idleTimeoutSeconds))
         if (selected == 0) {
-          logWarning(log"Idle timeout reached for Python worker (timeout: " +
-            log"${MDC(LogKeys.PYTHON_WORKER_IDLE_TIMEOUT, idleTimeoutSeconds)} seconds). " +
-            log"No data received from the worker process: " +
-            pythonWorkerStatusMessageWithContext(handle, worker, hasInput || buffer.hasRemaining))
+          if (pythonWorkerKilled) {
+            logWarning(
+              log"Waiting for Python worker process to terminate after idle timeout: " +
+              pythonWorkerStatusMessageWithContext(handle, worker, hasInput || buffer.hasRemaining))
+          } else {
+            logWarning(
+              log"Idle timeout reached for Python worker (timeout: " +
+              log"${MDC(LogKeys.PYTHON_WORKER_IDLE_TIMEOUT, idleTimeoutSeconds)} seconds). " +
+              log"No data received from the worker process: " +
+              pythonWorkerStatusMessageWithContext(handle, worker, hasInput || buffer.hasRemaining))
+            if (killOnIdleTimeout) {
+              handle.foreach { handle =>
+                if (handle.isAlive) {
+                  logWarning(
+                    log"Terminating Python worker process due to idle timeout (timeout: " +
+                    log"${MDC(LogKeys.PYTHON_WORKER_IDLE_TIMEOUT, idleTimeoutSeconds)} seconds)")
+                  pythonWorkerKilled = handle.destroy()
+                }
+              }
+            }
+          }
         }
         if (worker.selectionKey.isReadable) {
           n = worker.channel.read(buf)

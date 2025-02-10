@@ -193,7 +193,7 @@
     <!-- org.apache.commons/commons-lang3/-->
     <commons-lang3.version>3.17.0</commons-lang3.version>
     <!-- org.apache.commons/commons-pool2/-->
-    <commons-pool2.version>2.12.0</commons-pool2.version>
+    <commons-pool2.version>2.12.1</commons-pool2.version>
     <datanucleus-core.version>4.1.17</datanucleus-core.version>
     <guava.version>33.4.0-jre</guava.version>
     <gson.version>2.11.0</gson.version>
