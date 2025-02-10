@@ -316,14 +316,14 @@ case class ExpressionStats(expr: Expression)(
 
 /**
  * A wrapper for the different types of children of expressions.
- * 
+ *
  * `alwaysChildren` are child expressions that will always be evaluated and should be considered
  * for subexpressions.
- * 
+ *
  * `commonChildren` are children such that each of the children might be evaluated, but at last once
  * will definitely be evaluated. If there are any common expressions among them, those expressions
  * will definitely be evaluated and should be considered for subexpressions.
- * 
+ *
  * `conditionalChildren` are children that are conditionally evaluated, such as in If, CaseWhen,
  * or Coalesce expressions, and should only be considered for subexpressions if they are evaluated
  * non-conditionally elsewhere.
