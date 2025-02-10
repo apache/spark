@@ -278,6 +278,10 @@ object Literal {
         assert(u.orderingWithinGroup.isEmpty)
         assert(!u.isInternal)
         FunctionRegistry.builtin.lookupFunction(FunctionIdentifier(u.nameParts.head), u.arguments)
+    } match {
+      case c: Cast if c.needsTimeZone =>
+        c.withTimeZone(SQLConf.get.sessionLocalTimeZone)
+      case e: Expression => e
     }
   }
 }

@@ -323,7 +323,7 @@ object ResolveDefaultColumns extends QueryErrorsBase
    * Analyze EXISTS_DEFAULT value.  This skips some steps of analyze as most of the
    * analysis has been done before.
    */
-  private def analyzeExistingDefault(field: StructField): Expression = {
+  private def analyzeExistenceDefaultValue(field: StructField): Expression = {
     val defaultSQL = field.metadata.getString(EXISTS_DEFAULT_COLUMN_METADATA_KEY)
 
     // Parse the expression.
@@ -428,7 +428,7 @@ object ResolveDefaultColumns extends QueryErrorsBase
     schema.fields.map { field: StructField =>
       val defaultValue: Option[String] = field.getExistenceDefaultValue()
       defaultValue.map { _: String =>
-        val expr = analyzeExistingDefault(field)
+        val expr = analyzeExistenceDefaultValue(field)
 
         // The expression should be a literal value by this point, possibly wrapped in a cast
         // function. This is enforced by the execution of commands that assign default values.
